@@ -21,7 +21,7 @@ nb::ndarray<nb::numpy, double, nb::ndim<2>> overlap(const Basis& basis1, const B
 
     const auto nb1 = basis1.size();
     const auto nb2 = basis2.size();
-    // auto vec = new std::vector<double>(nb1 * nb2, 0.0);
+
     auto vec = std::make_unique<std::vector<double>>(nb1 * nb2, 0.0);
     auto data = vec->data();
 
@@ -52,8 +52,6 @@ nb::ndarray<nb::numpy, double, nb::ndim<2>> overlap(const Basis& basis1, const B
                         const auto i1 = offset1 + f1;
                         const auto i2 = offset2 + f2;
                         data[i1 * nb2 + i2] = double(ints_shellset[f1 * n2 + f2]);
-                        std::cout << "  " << i1 << " " << i2 << " " << data[i1 * nb2 + i2]
-                                  << std::endl;
                     }
             }
             offset2 += n2;
@@ -67,6 +65,6 @@ nb::ndarray<nb::numpy, double, nb::ndim<2>> overlap(const Basis& basis1, const B
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     std::cout << "Time taken: " << duration.count() << " µs" << std::endl;
 
-    return make_ndarray<double, 2>(std::move(vec), {nb1, nb2});
+    return make_ndarray<nb::numpy, double, 2>(std::move(vec), {nb1, nb2});
 }
 } // namespace forte2

@@ -1,6 +1,7 @@
 import numpy as np
 import json
 import forte2
+import itertools
 
 from .atom_data import ATOM_SYMBOL_TO_Z
 
@@ -36,8 +37,11 @@ class System:
                 for shell in atom_basis:
                     angular_momentum = list(map(int, shell["angular_momentum"]))
                     exponents = list(map(float, shell["exponents"]))
-                    for l, subshell_coefficients in zip(
-                        angular_momentum, shell["coefficients"]
+
+                    for l, subshell_coefficients in itertools.zip_longest(
+                        angular_momentum,
+                        shell["coefficients"],
+                        fillvalue=angular_momentum[-1],
                     ):
                         coefficients = list(map(float, subshell_coefficients))
                         print(

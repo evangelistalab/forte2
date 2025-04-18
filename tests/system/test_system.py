@@ -7,9 +7,10 @@ Li 0.0 0.0 3.0
 """
 
 system = forte2.System(xyz=xyz, basis="sto-6g")
+system_large_basis = forte2.System(xyz=xyz, basis="cc-pvdz")
 print(system)
 
-S = forte2.overlap(system.basis)
+S = forte2.overlap(system.basis, system_large_basis.basis)
 print(S)
 
 # # C++ (calls to libint2)
