@@ -4,6 +4,7 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/array.h>
 #include <nanobind/stl/vector.h>
+// #include <nanobind/ndarray.h>
 
 #include "ints/basis.h"
 #include "ints/overlap.h"
