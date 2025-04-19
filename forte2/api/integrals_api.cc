@@ -4,10 +4,11 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/array.h>
 #include <nanobind/stl/vector.h>
+#include <nanobind/stl/pair.h>
 // #include <nanobind/ndarray.h>
 
 #include "ints/basis.h"
-#include "ints/overlap.h"
+#include "ints/one_electron.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -41,5 +42,77 @@ void export_integrals_api(nb::module_& m) {
         "basis1"_a, "basis2"_a);
     m.def(
         "overlap", [](const Basis& basis) { return overlap(basis, basis); }, "basis"_a);
+
+    m.def(
+        "kinetic", [](const Basis& basis1, const Basis& basis2) { return kinetic(basis1, basis2); },
+        "basis1"_a, "basis2"_a);
+    m.def(
+        "kinetic", [](const Basis& basis) { return kinetic(basis, basis); }, "basis"_a);
+
+    m.def(
+        "nuclear",
+        [](const Basis& basis1, const Basis& basis2,
+           std::vector<std::pair<double, std::array<double, 3>>> charges) {
+            return nuclear(basis1, basis2, charges);
+        },
+        "basis1"_a, "basis2"_a, "charges"_a);
+    m.def(
+        "nuclear",
+        [](const Basis& basis, std::vector<std::pair<double, std::array<double, 3>>> charges) {
+            return nuclear(basis, basis, charges);
+        },
+        "basis"_a, "charges"_a);
+
+    m.def(
+        "emultipole1",
+        [](const Basis& basis1, const Basis& basis2, std::array<double, 3> origin) {
+            return emultipole1(basis1, basis2, origin);
+        },
+        "basis1"_a, "basis2"_a, "origin"_a = std::array<double, 3>{0.0, 0.0, 0.0});
+
+    m.def(
+        "emultipole1",
+        [](const Basis& basis, std::array<double, 3> origin) {
+            return emultipole1(basis, basis, origin);
+        },
+        "basis"_a, "origin"_a = std::array<double, 3>{0.0, 0.0, 0.0});
+
+    m.def(
+        "emultipole2",
+        [](const Basis& basis1, const Basis& basis2, std::array<double, 3> origin) {
+            return emultipole2(basis1, basis2, origin);
+        },
+        "basis1"_a, "basis2"_a, "origin"_a = std::array<double, 3>{0.0, 0.0, 0.0});
+    m.def(
+        "emultipole2",
+        [](const Basis& basis, std::array<double, 3> origin) {
+            return emultipole2(basis, basis, origin);
+        },
+        "basis"_a, "origin"_a = std::array<double, 3>{0.0, 0.0, 0.0});
+    m.def(
+        "emultipole3",
+        [](const Basis& basis1, const Basis& basis2, std::array<double, 3> origin) {
+            return emultipole3(basis1, basis2, origin);
+        },
+        "basis1"_a, "basis2"_a, "origin"_a = std::array<double, 3>{0.0, 0.0, 0.0});
+    m.def(
+        "emultipole3",
+        [](const Basis& basis, std::array<double, 3> origin) {
+            return emultipole3(basis, basis, origin);
+        },
+        "basis"_a, "origin"_a = std::array<double, 3>{0.0, 0.0, 0.0});
+    m.def(
+        "opVop",
+        [](const Basis& basis1, const Basis& basis2,
+           std::vector<std::pair<double, std::array<double, 3>>> charges) {
+            return opVop(basis1, basis2, charges);
+        },
+        "basis1"_a, "basis2"_a, "charges"_a);
+    m.def(
+        "opVop",
+        [](const Basis& basis, std::vector<std::pair<double, std::array<double, 3>>> charges) {
+            return opVop(basis, basis, charges);
+        },
+        "basis"_a, "charges"_a);
 }
 } // namespace forte2

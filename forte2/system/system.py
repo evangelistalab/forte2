@@ -18,8 +18,7 @@ class System:
         # Parse the XYZ string into a list of atoms
         lines = xyz.split("\n")
         self.atoms = []
-        for line in lines[2:]:
-            print(line)
+        for line in lines:
             parts = line.split()
             if len(parts) < 4:
                 continue
@@ -44,7 +43,4 @@ class System:
                         fillvalue=angular_momentum[-1],
                     ):
                         coefficients = list(map(float, subshell_coefficients))
-                        print(
-                            f"\nAtom: {atomic_number}, l: {l}\nExponents: {exponents}\nCoefficients: {coefficients}"
-                        )
                         self.basis.add(forte2.Shell(l, exponents, coefficients, xyz))

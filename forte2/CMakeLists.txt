@@ -69,7 +69,7 @@ nanobind_add_module(
   api/forte2_api.cc
   api/integrals_api.cc
   ints/basis.cc
-  ints/overlap.cc
+  ints/one_electron.cc
 )
 
 target_link_libraries(_forte2 PRIVATE Libint2::int2)

@@ -1,4 +1,15 @@
-template <typename Type = nb::numpy, typename T, int N>
+#pragma once
+
+#include <array>
+#include <memory>
+#include <vector>
+
+#include <nanobind/nanobind.h>
+#include <nanobind/ndarray.h>
+
+using numpy_matrix = nb::ndarray<nb::numpy, double, nb::ndim<2>>;
+
+template <typename Type, typename T, int N>
 nb::ndarray<Type, T, nb::ndim<N>> make_ndarray(std::unique_ptr<std::vector<T>> vec,
                                                const std::array<size_t, N>& shape) {
     // raw pointer to the data
