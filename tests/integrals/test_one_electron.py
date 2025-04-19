@@ -6,9 +6,9 @@ def test_one_electron_integrals():
 
     system = forte2.System(xyz=xyz, basis="cc-pvdz")
 
-    S = forte2.overlap(system.basis)
-    T = forte2.kinetic(system.basis)
-    V = forte2.nuclear(system.basis, system.atoms)
+    S = forte2.ints.overlap(system.basis)
+    T = forte2.ints.kinetic(system.basis)
+    V = forte2.ints.nuclear(system.basis, system.atoms)
 
     H = T + V
 

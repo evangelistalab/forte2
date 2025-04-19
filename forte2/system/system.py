@@ -27,7 +27,7 @@ class System:
             self.atoms.append((atomic_number, coords))
 
     def parse_basis(self, basis):
-        self.basis = forte2.Basis()
+        self.basis = forte2.ints.Basis()
         with open(f"{basis}.json", "r") as f:
             basis = json.load(f)
             for atomic_number, xyz in self.atoms:
@@ -43,4 +43,6 @@ class System:
                         fillvalue=angular_momentum[-1],
                     ):
                         coefficients = list(map(float, subshell_coefficients))
-                        self.basis.add(forte2.Shell(l, exponents, coefficients, xyz))
+                        self.basis.add(
+                            forte2.ints.Shell(l, exponents, coefficients, xyz)
+                        )

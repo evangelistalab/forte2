@@ -5,7 +5,6 @@
 #include <nanobind/stl/array.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/pair.h>
-// #include <nanobind/ndarray.h>
 
 #include "ints/basis.h"
 #include "ints/one_electron.h"
@@ -16,7 +15,9 @@ using namespace nb::literals;
 namespace forte2 {
 
 void export_integrals_api(nb::module_& m) {
-    nb::class_<libint2::Shell>(m, "Shell")
+    nb::module_ sub_m = m.def_submodule("ints", "Integrals submodule");
+
+    nb::class_<libint2::Shell>(sub_m, "Shell")
         .def(nb::init<>())
         .def(
             "__init__",
@@ -32,83 +33,83 @@ void export_integrals_api(nb::module_& m) {
         .def_prop_ro("ncontr", [](libint2::Shell& s) { return s.ncontr(); })
         .def_prop_ro("nprim", [](libint2::Shell& s) { return s.nprim(); });
 
-    nb::class_<Basis>(m, "Basis")
+    nb::class_<Basis>(sub_m, "Basis")
         .def(nb::init<>())
         .def("add", &Basis::add, "shell"_a)
         .def_prop_ro("nshells", &Basis::nshells);
 
-    m.def(
+    sub_m.def(
         "overlap", [](const Basis& basis1, const Basis& basis2) { return overlap(basis1, basis2); },
         "basis1"_a, "basis2"_a);
-    m.def(
+    sub_m.def(
         "overlap", [](const Basis& basis) { return overlap(basis, basis); }, "basis"_a);
 
-    m.def(
+    sub_m.def(
         "kinetic", [](const Basis& basis1, const Basis& basis2) { return kinetic(basis1, basis2); },
         "basis1"_a, "basis2"_a);
-    m.def(
+    sub_m.def(
         "kinetic", [](const Basis& basis) { return kinetic(basis, basis); }, "basis"_a);
 
-    m.def(
+    sub_m.def(
         "nuclear",
         [](const Basis& basis1, const Basis& basis2,
            std::vector<std::pair<double, std::array<double, 3>>> charges) {
             return nuclear(basis1, basis2, charges);
         },
         "basis1"_a, "basis2"_a, "charges"_a);
-    m.def(
+    sub_m.def(
         "nuclear",
         [](const Basis& basis, std::vector<std::pair<double, std::array<double, 3>>> charges) {
             return nuclear(basis, basis, charges);
         },
         "basis"_a, "charges"_a);
 
-    m.def(
+    sub_m.def(
         "emultipole1",
         [](const Basis& basis1, const Basis& basis2, std::array<double, 3> origin) {
             return emultipole1(basis1, basis2, origin);
         },
         "basis1"_a, "basis2"_a, "origin"_a = std::array<double, 3>{0.0, 0.0, 0.0});
 
-    m.def(
+    sub_m.def(
         "emultipole1",
         [](const Basis& basis, std::array<double, 3> origin) {
             return emultipole1(basis, basis, origin);
         },
         "basis"_a, "origin"_a = std::array<double, 3>{0.0, 0.0, 0.0});
 
-    m.def(
+    sub_m.def(
         "emultipole2",
         [](const Basis& basis1, const Basis& basis2, std::array<double, 3> origin) {
             return emultipole2(basis1, basis2, origin);
         },
         "basis1"_a, "basis2"_a, "origin"_a = std::array<double, 3>{0.0, 0.0, 0.0});
-    m.def(
+    sub_m.def(
         "emultipole2",
         [](const Basis& basis, std::array<double, 3> origin) {
             return emultipole2(basis, basis, origin);
         },
         "basis"_a, "origin"_a = std::array<double, 3>{0.0, 0.0, 0.0});
-    m.def(
+    sub_m.def(
         "emultipole3",
         [](const Basis& basis1, const Basis& basis2, std::array<double, 3> origin) {
             return emultipole3(basis1, basis2, origin);
         },
         "basis1"_a, "basis2"_a, "origin"_a = std::array<double, 3>{0.0, 0.0, 0.0});
-    m.def(
+    sub_m.def(
         "emultipole3",
         [](const Basis& basis, std::array<double, 3> origin) {
             return emultipole3(basis, basis, origin);
         },
         "basis"_a, "origin"_a = std::array<double, 3>{0.0, 0.0, 0.0});
-    m.def(
+    sub_m.def(
         "opVop",
         [](const Basis& basis1, const Basis& basis2,
            std::vector<std::pair<double, std::array<double, 3>>> charges) {
             return opVop(basis1, basis2, charges);
         },
         "basis1"_a, "basis2"_a, "charges"_a);
-    m.def(
+    sub_m.def(
         "opVop",
         [](const Basis& basis, std::vector<std::pair<double, std::array<double, 3>>> charges) {
             return opVop(basis, basis, charges);
