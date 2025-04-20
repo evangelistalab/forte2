@@ -17,9 +17,9 @@ void Basis::add(const libint2::Shell& shell) {
     size_ += shell.contr[0].size();
 }
 
-size_t Basis::size() const { return size_; }
+std::size_t Basis::size() const { return size_; }
 
-size_t Basis::nshells() const { return shells_.size(); }
+std::size_t Basis::nshells() const { return shells_.size(); }
 
 const libint2::Shell& Basis::operator[](size_t i) const {
     if (i >= shells_.size()) {
@@ -30,6 +30,17 @@ const libint2::Shell& Basis::operator[](size_t i) const {
 
 int Basis::max_l() const { return max_l_; }
 
-size_t Basis::max_nprim() const { return max_nprim_; }
+std::size_t Basis::max_nprim() const { return max_nprim_; }
+
+std::vector<std::pair<std::size_t, std::size_t>> Basis::shell_first_and_size() const {
+    std::vector<std::pair<std::size_t, std::size_t>> result;
+    result.reserve(shells_.size());
+    std::size_t first = 0;
+    for (const auto& shell : shells_) {
+        result.emplace_back(first, shell.size());
+        first += shell.size();
+    }
+    return result;
+}
 
 } // namespace forte2

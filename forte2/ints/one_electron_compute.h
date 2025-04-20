@@ -35,25 +35,27 @@ template <libint2::Operator Op, std::size_t M, typename Params = NoParams>
     const std::size_t nb1 = basis1.size();
     const std::size_t nb2 = basis2.size();
 
+    // Loop over shell pairs and fill each buffer
+    auto nshells1 = basis1.nshells();
+    auto nshells2 = basis2.nshells();
+
+    // Get arrays of indices of the first basis in a shell and the size of each shell
+    const auto first_size1 = basis1.shell_first_and_size();
+    const auto first_size2 = basis2.shell_first_and_size();
+
     // Allocate M separate flat buffers
     std::array<std::unique_ptr<std::vector<double>>, M> buffers;
     for (auto& ptr : buffers) {
         ptr = std::make_unique<std::vector<double>>(nb1 * nb2, 0.0);
     }
 
-    // Loop over shell pairs and fill each buffer
-    std::size_t off1 = 0;
-    auto nshells1 = basis1.nshells();
-    auto nshells2 = basis2.nshells();
-
     for (std::size_t s1 = 0; s1 < nshells1; ++s1) {
         const auto& shell1 = basis1[s1];
-        const std::size_t n1 = shell1.size();
-        std::size_t off2 = 0;
+        const auto [f1, n1] = first_size1[s1];
 
         for (std::size_t s2 = 0; s2 < nshells2; ++s2) {
             const auto& shell2 = basis2[s2];
-            const std::size_t n2 = shell2.size();
+            const auto [f2, n2] = first_size2[s2];
 
             // Compute the integrals for this shell pair
             engine.compute(shell1, shell2);
@@ -65,15 +67,12 @@ template <libint2::Operator Op, std::size_t M, typename Params = NoParams>
                     auto& data = *buffers[comp];
                     for (std::size_t i = 0; i < n1; ++i) {
                         for (std::size_t j = 0; j < n2; ++j) {
-                            data[(off1 + i) * nb2 + (off2 + j)] =
-                                static_cast<double>(buf[i * n2 + j]);
+                            data[(f1 + i) * nb2 + (f2 + j)] = static_cast<double>(buf[i * n2 + j]);
                         }
                     }
                 }
             }
-            off2 += n2;
         }
-        off1 += n1;
     }
 
     libint2::finalize();

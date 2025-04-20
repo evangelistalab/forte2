@@ -15,15 +15,19 @@ class Basis {
     void add(const libint2::Shell& shell);
 
     /// @return the number of basis functions in the basis set
-    size_t size() const;
+    std::size_t size() const;
     /// @return the number of shells in the basis set
-    size_t nshells() const;
+    std::size_t nshells() const;
     /// @return the max angular momentum of the basis set
     int max_l() const;
     /// @return the max number of primitives in a shell
-    size_t max_nprim() const;
+    std::size_t max_nprim() const;
     /// @return the i-th shell in the basis set
     const libint2::Shell& operator[](size_t i) const;
+    /// @return a vector of pairs of the first index and size of each shell
+    ///         in the basis set. The first index is the index of the first basis function
+    ///         in the shell, and the size is the number of basis functions in the shell.
+    std::vector<std::pair<std::size_t, std::size_t>> shell_first_and_size() const;
 
   private:
     std::vector<libint2::Shell> shells_;

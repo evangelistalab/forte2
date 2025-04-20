@@ -8,6 +8,7 @@
 
 #include "ints/basis.h"
 #include "ints/one_electron.h"
+#include "ints/two_electron.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -36,6 +37,12 @@ void export_integrals_api(nb::module_& m) {
     nb::class_<Basis>(sub_m, "Basis")
         .def(nb::init<>())
         .def("add", &Basis::add, "shell"_a)
+        .def("__getitem__", &Basis::operator[], "i"_a)
+        .def_prop_ro("shell_first_and_size", &Basis::shell_first_and_size)
+        .def_prop_ro("size", &Basis::size)
+        .def_prop_ro("max_l", &Basis::max_l)
+        .def_prop_ro("max_nprim", &Basis::max_nprim)
+        .def_prop_ro("nprim", &Basis::max_nprim)
         .def_prop_ro("nshells", &Basis::nshells);
 
     sub_m.def(
@@ -115,5 +122,29 @@ void export_integrals_api(nb::module_& m) {
             return opVop(basis, basis, charges);
         },
         "basis"_a, "charges"_a);
+
+    sub_m.def(
+        "coulomb_4c",
+        [](const Basis& basis1, const Basis& basis2, const Basis& basis3, const Basis& basis4) {
+            return coulomb_4c(basis1, basis2, basis3, basis4);
+        },
+        "basis1"_a, "basis2"_a, "basis3"_a, "basis4"_a);
+    sub_m.def(
+        "coulomb_4c", [](const Basis& basis) { return coulomb_4c(basis, basis, basis, basis); },
+        "basis"_a);
+
+    sub_m.def(
+        "coulomb_3c",
+        [](const Basis& basis1, const Basis& basis2, const Basis& basis3) {
+            return coulomb_3c(basis1, basis2, basis3);
+        },
+        "basis1"_a, "basis2"_a, "basis3"_a);
+
+    sub_m.def(
+        "coulomb_2c",
+        [](const Basis& basis1, const Basis& basis2) { return coulomb_2c(basis1, basis2); },
+        "basis1"_a, "basis2"_a);
+    sub_m.def(
+        "coulomb_2c", [](const Basis& basis) { return coulomb_2c(basis, basis); }, "basis"_a);
 }
 } // namespace forte2

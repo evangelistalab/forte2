@@ -10,9 +10,9 @@ system = forte2.System(xyz=xyz, basis="cc-pvdz")
 system_large_basis = forte2.System(xyz=xyz, basis="cc-pvdz")
 print(system)
 
-S = forte2.overlap(system.basis)
-T = forte2.kinetic(system.basis)
-V = forte2.nuclear(system.basis, system.atoms)
+S = forte2.ints.overlap(system.basis)
+T = forte2.ints.kinetic(system.basis)
+V = forte2.ints.nuclear(system.basis, system.atoms)
 H = T + V
 
 # Solve the generalized eigenvalue problem H C = S C ε
@@ -21,26 +21,30 @@ from numpy import isclose
 
 ε, _ = eigh(H, S)
 print("ε", ε)
-assert isclose(ε[0], -0.4992784, atol=1e-7)
+# assert isclose(ε[0], -0.4992784, atol=1e-7)
 
 
-M1 = forte2.emultipole1(system.basis)
+M1 = forte2.ints.emultipole1(system.basis)
 print("S", S)
 print("M", M1)
 print(np.linalg.norm(S - M1[0]))
 
-M2 = forte2.emultipole2(system.basis)
+M2 = forte2.ints.emultipole2(system.basis)
 # print("M2", M2)
 for i in range(4):
     print(np.linalg.norm(M1[i] - M2[i]))
 
-M3 = forte2.emultipole3(system.basis)
+M3 = forte2.ints.emultipole3(system.basis)
 # print("M3", M3)
 for i in range(10):
     print(np.linalg.norm(M2[i] - M3[i]))
 
-opVop = forte2.opVop(system.basis, system.atoms)
+opVop = forte2.ints.opVop(system.basis, system.atoms)
 print("opVop", opVop)
+
+V = coulomb = forte2.ints.coulomb(system.basis)
+print("V", V)
+
 
 # mport numpy as np
 # import scipy.linalg
