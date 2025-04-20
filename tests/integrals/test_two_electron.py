@@ -41,5 +41,17 @@ H  0.000000000000  1.344768070168  0.924701488984
     assert isclose(V[0, 5, 5, 3], 0.012314281459575225, atol=1e-10)
 
 
+def test_two_electron_integrals_timing():
+    xyz = """
+O  0.000000000000  0.000000000000 -0.116529200700
+H  0.000000000000 -1.344768070168  0.924701488984
+H  0.000000000000  1.344768070168  0.924701488984
+"""
+
+    system = forte2.System(xyz=xyz, basis="cc-pvqz")
+    V = forte2.ints.coulomb_4c(system.basis)
+
+
 if __name__ == "__main__":
     test_two_electron_integrals()
+    test_two_electron_integrals_timing()
