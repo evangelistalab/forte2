@@ -69,6 +69,8 @@ nanobind_add_module(
   api/forte2_api.cc
   api/integrals_api.cc
   ints/basis.cc
+  ints/fock_builder.cc
+  ints/nuclear_repulsion.cc
   ints/one_electron.cc
   ints/two_electron.cc
 )

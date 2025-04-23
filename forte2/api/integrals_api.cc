@@ -7,6 +7,8 @@
 #include <nanobind/stl/pair.h>
 
 #include "ints/basis.h"
+#include "ints/fock_builder.h"
+#include "ints/nuclear_repulsion.h"
 #include "ints/one_electron.h"
 #include "ints/two_electron.h"
 
@@ -44,6 +46,17 @@ void export_integrals_api(nb::module_& m) {
         .def_prop_ro("max_nprim", &Basis::max_nprim)
         .def_prop_ro("nprim", &Basis::max_nprim)
         .def_prop_ro("nshells", &Basis::nshells);
+
+    nb::class_<FockBuilder>(sub_m, "FockBuilder")
+        .def(nb::init<const Basis&, const Basis&>(), "basis"_a, "auxiliary_basis"_a = Basis())
+        .def("build", &FockBuilder::build);
+
+    sub_m.def(
+        "nuclear_repulsion",
+        [](std::vector<std::pair<double, std::array<double, 3>>> charges) {
+            return nuclear_repulsion(charges);
+        },
+        "charges"_a);
 
     sub_m.def(
         "overlap", [](const Basis& basis1, const Basis& basis2) { return overlap(basis1, basis2); },

@@ -62,12 +62,11 @@ template <libint2::Operator Op, std::size_t M, typename Params = NoParams>
 
             // Loop over the components of this operator and fill the buffers
             for (std::size_t comp = 0; comp < M; ++comp) {
-                const auto buf = results[comp];
-                if (buf) {
+                if (const auto buf = results[comp]; buf) {
                     auto& data = *buffers[comp];
-                    for (std::size_t i = 0; i < n1; ++i) {
-                        for (std::size_t j = 0; j < n2; ++j) {
-                            data[(f1 + i) * nb2 + (f2 + j)] = static_cast<double>(buf[i * n2 + j]);
+                    for (std::size_t i = 0, ij = 0; i != n1; ++i) {
+                        for (std::size_t j = 0; j != n2; ++j, ++ij) {
+                            data[(f1 + i) * nb2 + (f2 + j)] = static_cast<double>(buf[ij]);
                         }
                     }
                 }
@@ -80,12 +79,12 @@ template <libint2::Operator Op, std::size_t M, typename Params = NoParams>
     const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     std::cout << "[forte2] One-electron integrals timing: " << elapsed.count() << " µs\n";
 
-    // Wrap each buffer into a Python-owned ndarray
-    std::array<nb::ndarray<nb::numpy, double, nb::ndim<2>>, M> mats;
+    // Wrap each buffer into an ndarray with memory management
+    std::array<nb::ndarray<nb::numpy, double, nb::ndim<2>>, M> ints;
     for (std::size_t k = 0; k < M; ++k) {
-        mats[k] = make_ndarray<nb::numpy, double, 2>(std::move(buffers[k]),
+        ints[k] = make_ndarray<nb::numpy, double, 2>(std::move(buffers[k]),
                                                      std::array<std::size_t, 2>{nb1, nb2});
     }
-    return mats;
+    return ints;
 }
 } // namespace forte2
