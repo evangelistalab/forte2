@@ -44,9 +44,10 @@ template <libint2::Operator Op, std::size_t M, typename Params = NoParams>
     const auto first_size2 = basis2.shell_first_and_size();
 
     // Allocate M separate flat buffers
-    std::array<std::unique_ptr<std::vector<double>>, M> buffers;
-    for (auto& ptr : buffers) {
-        ptr = std::make_unique<std::vector<double>>(nb1 * nb2, 0.0);
+    // Wrap each buffer into an ndarray with memory management
+    std::array<np_matrix, M> ints;
+    for (std::size_t k = 0; k < M; ++k) {
+        ints[k] = make_ndarray<nb::numpy, double, 2>({nb1, nb2});
     }
 
     for (std::size_t s1 = 0; s1 < nshells1; ++s1) {
@@ -61,12 +62,12 @@ template <libint2::Operator Op, std::size_t M, typename Params = NoParams>
             engine.compute(shell1, shell2);
 
             // Loop over the components of this operator and fill the buffers
-            for (std::size_t comp = 0; comp < M; ++comp) {
-                if (const auto buf = results[comp]; buf) {
-                    auto& data = *buffers[comp];
+            for (std::size_t k = 0; k < M; ++k) {
+                if (const auto buf = results[k]; buf) {
+                    auto ints_view = ints[k].view();
                     for (std::size_t i = 0, ij = 0; i != n1; ++i) {
                         for (std::size_t j = 0; j != n2; ++j, ++ij) {
-                            data[(f1 + i) * nb2 + (f2 + j)] = static_cast<double>(buf[ij]);
+                            ints_view(f1 + i, f2 + j) = static_cast<double>(buf[ij]);
                         }
                     }
                 }
@@ -76,15 +77,9 @@ template <libint2::Operator Op, std::size_t M, typename Params = NoParams>
 
     libint2::finalize();
     const auto end = std::chrono::high_resolution_clock::now();
-    const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    std::cout << "[forte2] One-electron integrals timing: " << elapsed.count() << " µs\n";
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    std::cout << "[forte2] One-electron integrals timing: " << elapsed.count() / 1000.0 << " s\n";
 
-    // Wrap each buffer into an ndarray with memory management
-    std::array<nb::ndarray<nb::numpy, double, nb::ndim<2>>, M> ints;
-    for (std::size_t k = 0; k < M; ++k) {
-        ints[k] = make_ndarray<nb::numpy, double, 2>(std::move(buffers[k]),
-                                                     std::array<std::size_t, 2>{nb1, nb2});
-    }
     return ints;
 }
 } // namespace forte2

@@ -39,8 +39,9 @@ class DFFockBuilder:
         J = [np.einsum("Pmn,Prs,rs->mn", self.B, self.B, Di, optimize=True) for Di in D]
         return J
 
-    def build_K(self, D):
-        K = [np.einsum("Pmr,Pns,rs->mn", self.B, self.B, Di, optimize=True) for Di in D]
+    def build_K(self, C):
+        Y = [np.einsum("Pmr,ri->Pmi", self.B, Ci, optimize=True) for Ci in C]
+        K = [np.einsum("Pmi,Pni->mn", Yi, Yi, optimize=True) for Yi in Y]
         return K
 
 
@@ -88,7 +89,11 @@ class RHF:
 
             # Build the Fock matrix
             J = fock_builder.build_J([D])[0]
-            K = fock_builder.build_K([D])[0]
+            K = (
+                fock_builder.build_K([C[:, : self.na]])[0]
+                if i > 0
+                else np.zeros((self.nbasis, self.nbasis))
+            )
             F = H + 2.0 * J - K
 
             # Diagonalize the Fock matrix
@@ -117,7 +122,7 @@ class RHF:
         print(f"SCF time: {end - start:.2f} seconds")
 
     def _initial_guess(self):
-        D = np.eye(self.nbasis) * self.na / self.nbasis
+        D = 0.5 * np.eye(self.nbasis) * self.na / self.nbasis
         return D
 
     def _build_density_matrix(self, C):
@@ -131,28 +136,10 @@ H            0.000000000000    -0.711620616369     0.489330954643
 H            0.000000000000     0.711620616369     0.489330954643
 """
 
-xyz = """
-C       -1.4673039985      0.0443760540      0.0000000000                 
-H       -0.3973039985      0.0443760540      0.0000000000                 
-H       -1.8239667805      0.8034320279      0.6644739938                 
-H       -1.8239716364     -0.9106014748      0.3251247691                 
-H       -1.8239729313      0.2402972533     -0.9895969665                 
-C        2.4352320922      2.2159584601      0.0000000000                 
-H        3.5052320922      2.2159584601      0.0000000000                 
-H        2.0785693103      3.0860994010     -0.5104374623                 
-H        2.0785644544      2.2229403819      1.0087811700                 
-H        2.0785631595      1.3388371896     -0.4983428030                 
-C        4.4796330122     -2.1633110744      0.0000000000                 
-H        5.5496330122     -2.1633110744      0.0000000000                 
-H        4.1229702303     -2.7611381762      0.8125850210                 
-H        4.1229653744     -2.5681166504     -0.9240241565                 
-H        4.1229640795     -1.1606802168      0.1114389332                 
-"""
-
 system = forte2.System(xyz=xyz, basis="cc-pVQZ")
 
 scf = RHF(charge=0, auxiliary_basis="cc-pVQZ-JKFIT")
 scf.run(system)
-# assert np.isclose(
-#     scf.E, -76.0217495631851676, atol=1e-10
-# ), f"SCF energy {scf.E} is not close to expected value -2.861"
+assert np.isclose(
+    scf.E, -76.0614664043887672, atol=1e-10
+), f"SCF energy {scf.E} is not close to expected value -2.861"

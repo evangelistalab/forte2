@@ -7,11 +7,8 @@ def test_df():
 C 0.000000000000  0.000000000000  0.000000000000
 O 2.500000000000  0.000000000000  0.000000000000
 """
-    # O  0.000000000000  0.000000000000 -0.116529200700
-    # H  0.000000000000 -1.344768070168  0.924701488984
-    # H  0.000000000000  1.344768070168  0.924701488984
 
-    system = forte2.System(xyz=xyz, basis="cc-pVDZ.opt")
+    system = forte2.System(xyz=xyz, basis="cc-pVDZ")
     jkfit_basis = forte2.system.build_basis("cc-pVQZ-jkfit", system.atoms)
 
     # def2-universal-jkfit

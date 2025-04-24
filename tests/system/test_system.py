@@ -41,30 +41,3 @@ for i in range(10):
 
 opVop = forte2.ints.opVop(system.basis, system.atoms)
 print("opVop", opVop)
-
-V = coulomb = forte2.ints.coulomb(system.basis)
-print("V", V)
-
-
-# mport numpy as np
-# import scipy.linalg
-# import scipy.linalg as linalg
-# import scipy.linalg.eig as eig
-
-
-# # C++ (calls to libint2)
-# aoints = fortecore.AOIntegrals(system.shells, True)
-# print(aoints)
-
-# # C++ (calls to libint2)
-# aoints.overlap()
-# # T = aoints.ints("kinetic")
-# # V = aoints.ints("nuclear")
-# # [Dx,Dy,Dz] = aoints.ints("dipole") ? tuple(tensors), 3D tensor?
-
-# # DF-based
-# # J, K = aoints.jk(D)
-
-# # J, K = aoints.jk(C[0:10])
-
-# # AO to MO ?
