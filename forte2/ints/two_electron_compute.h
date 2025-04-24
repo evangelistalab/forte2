@@ -14,8 +14,7 @@ struct NoParams {};
 template <libint2::Operator Op, typename Params = NoParams>
 [[nodiscard]] auto compute_two_electron_4c_multi(const Basis& basis1, const Basis& basis2,
                                                  const Basis& basis3, const Basis& basis4,
-                                                 Params const& params = Params{})
-    -> nb::ndarray<nb::numpy, double, nb::ndim<4>> {
+                                                 Params const& params = Params{}) -> np_tensor4 {
     const auto start = std::chrono::high_resolution_clock::now();
 
     // Initialize libint2
@@ -112,8 +111,7 @@ template <libint2::Operator Op, typename Params = NoParams>
 template <libint2::Operator Op, typename Params = NoParams>
 [[nodiscard]] auto compute_two_electron_3c_multi(const Basis& basis1, const Basis& basis2,
                                                  const Basis& basis3,
-                                                 Params const& params = Params{})
-    -> nb::ndarray<nb::numpy, double, nb::ndim<3>> {
+                                                 Params const& params = Params{}) -> np_tensor3 {
     const auto start = std::chrono::high_resolution_clock::now();
 
     // Initialize libint2
@@ -194,8 +192,7 @@ template <libint2::Operator Op, typename Params = NoParams>
 
 template <libint2::Operator Op, typename Params = NoParams>
 [[nodiscard]] auto compute_two_electron_2c_multi(const Basis& basis1, const Basis& basis2,
-                                                 Params const& params = Params{})
-    -> nb::ndarray<nb::numpy, double, nb::ndim<2>> {
+                                                 Params const& params = Params{}) -> np_matrix {
     const auto start = std::chrono::high_resolution_clock::now();
 
     // Initialize libint2

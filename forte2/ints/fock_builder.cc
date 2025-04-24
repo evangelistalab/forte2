@@ -30,8 +30,8 @@ FockBuilder::build(std::vector<np_matrix>& density_matrices) {
 }
 
 void FockBuilder::naive_fock_build(const std::vector<np_matrix>& density_matrices,
-                                   const nb::ndarray<nb::numpy, double, nb::ndim<4>>& integrals,
-                                   std::vector<np_matrix>& J, std::vector<np_matrix>& K) {
+                                   const np_tensor4& integrals, std::vector<np_matrix>& J,
+                                   std::vector<np_matrix>& K) {
     const std::size_t nd = density_matrices.size();
 
     // Compute the J and K matrices
@@ -57,8 +57,8 @@ void FockBuilder::naive_fock_build(const std::vector<np_matrix>& density_matrice
 }
 
 void FockBuilder::opt_fock_build(const std::vector<np_matrix>& density_matrices,
-                                 const nb::ndarray<nb::numpy, double, nb::ndim<4>>& integrals,
-                                 std::vector<np_matrix>& J, std::vector<np_matrix>& K) {
+                                 const np_tensor4& integrals, std::vector<np_matrix>& J,
+                                 std::vector<np_matrix>& K) {
     const std::size_t nd = density_matrices.size();
 
     // Compute the J and K matrices

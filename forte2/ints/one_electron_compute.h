@@ -14,7 +14,7 @@ struct NoParams {};
 template <libint2::Operator Op, std::size_t M, typename Params = NoParams>
 [[nodiscard]] auto compute_one_electron_multi(const Basis& basis1, const Basis& basis2,
                                               Params const& params = Params{})
-    -> std::array<nb::ndarray<nb::numpy, double, nb::ndim<2>>, M> {
+    -> std::array<np_matrix, M> {
     const auto start = std::chrono::high_resolution_clock::now();
 
     // Initialize libint2
@@ -47,7 +47,7 @@ template <libint2::Operator Op, std::size_t M, typename Params = NoParams>
     // Wrap each buffer into an ndarray with memory management
     std::array<np_matrix, M> ints;
     for (std::size_t k = 0; k < M; ++k) {
-        ints[k] = make_ndarray<nb::numpy, double, 2>({nb1, nb2});
+        ints[k] = make_zeros<nb::numpy, double, 2>({nb1, nb2});
     }
 
     for (std::size_t s1 = 0; s1 < nshells1; ++s1) {

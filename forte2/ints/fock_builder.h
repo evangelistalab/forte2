@@ -24,21 +24,20 @@ class FockBuilder {
   private:
     Basis basis_;
     Basis auxiliary_basis_;
-    nb::ndarray<nb::numpy, double, nb::ndim<4>> integrals_;
-    nb::ndarray<nb::numpy, double, nb::ndim<2>> PQ;
-    nb::ndarray<nb::numpy, double, nb::ndim<3>> mnP;
+    np_tensor4 integrals_;
+    np_matrix PQ;
+    np_tensor3 mnP;
 
     void naive_fock_build(const std::vector<np_matrix>& density_matrices,
-                          const nb::ndarray<nb::numpy, double, nb::ndim<4>>& integrals,
-                          std::vector<np_matrix>& J, std::vector<np_matrix>& K);
+                          const np_tensor4& integrals, std::vector<np_matrix>& J,
+                          std::vector<np_matrix>& K);
 
-    void opt_fock_build(const std::vector<np_matrix>& density_matrices,
-                        const nb::ndarray<nb::numpy, double, nb::ndim<4>>& integrals,
+    void opt_fock_build(const std::vector<np_matrix>& density_matrices, const np_tensor4& integrals,
                         std::vector<np_matrix>& J, std::vector<np_matrix>& K);
 
     // void df_fock_build(const std::vector<np_matrix>& density_matrices,
-    //                    nb::ndarray<nb::numpy, double, nb::ndim<2>>& PQ,
-    //                    nb::ndarray<nb::numpy, double, nb::ndim<3>>& mnP, std::vector<np_matrix>&
+    //                    np_matrix& PQ,
+    //                    np_tensor3& mnP, std::vector<np_matrix>&
     //                    J, std::vector<np_matrix>& K);
 };
 

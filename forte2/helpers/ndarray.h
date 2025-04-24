@@ -10,7 +10,10 @@
 
 namespace nb = nanobind;
 
+using np_vector = nb::ndarray<nb::numpy, double, nb::ndim<1>>;
 using np_matrix = nb::ndarray<nb::numpy, double, nb::ndim<2>>;
+using np_tensor3 = nb::ndarray<nb::numpy, double, nb::ndim<3>>;
+using np_tensor4 = nb::ndarray<nb::numpy, double, nb::ndim<4>>;
 
 template <typename Type, typename T, int N>
 nb::ndarray<Type, T, nb::ndim<N>> make_ndarray(std::unique_ptr<std::vector<T>> vec,
@@ -30,23 +33,60 @@ nb::ndarray<Type, T, nb::ndim<N>> make_ndarray(std::unique_ptr<std::vector<T>> v
                                              std::move(deleter));
 }
 
+/// @brief Allocates the memory for an ndarray of the given shape and type.
+/// @details The memory is allocated on the heap and will be freed when the ndarray
+/// is deleted via a deleter capsule passed to the ndarray constructor.
+/// @tparam Type The type of the ndarray (e.g. nb::numpy, nb::pytorch, etc.)
+/// @tparam T The type of the data (e.g. double, float, etc.)
+/// @tparam N The number of dimensions of the ndarray
+/// @param shape The shape of the ndarray as an array of size N.
+/// @details The shape is a list of size N, where N is the number of dimensions.
+/// @return An ndarray of the given shape and type.
+/// @throws std::runtime_error if the size of the ndarray is 0.
+/// @note The ndarray is not initialized, so the data is not set to any value.
 template <typename Type, typename T, int N>
 nb::ndarray<Type, T, nb::ndim<N>> make_ndarray(const std::array<size_t, N>& shape) {
+    // compute the number of elements in the array
+    const auto size = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<size_t>());
+
+    // check if the size is 0
+    if (size == 0) {
+        throw std::runtime_error("Cannot create an empty ndarray");
+    }
+
     // allocate a vector of the right size
-    auto vec = std::make_unique<std::vector<T>>(
-        std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<size_t>()));
+    T* array_ptr = new T[size];
 
-    // raw pointer to the data
-    T* data_ptr = vec->data();
+    // define a capsule to delete the data when the ndarray dies
+    nb::capsule deleter(array_ptr, [](void* p) noexcept { delete[] static_cast<T*>(p); });
 
-    // release ownership of the vector onto the heap
-    // so we can delete it when Python is done
-    auto* heap_vec = vec.release(); // a std::vector<T>*
-
-    // capsule will call delete on the vector when the array dies
-    nb::capsule deleter(heap_vec, [](void* p) noexcept { delete static_cast<std::vector<T>*>(p); });
-
-    // construct the ndarray(view) with shape and the deleter capsule
-    return nb::ndarray<Type, T, nb::ndim<N>>(data_ptr, static_cast<size_t>(N), shape.data(),
+    // construct the ndarray (a view on the array data) with shape and the deleter capsule
+    return nb::ndarray<Type, T, nb::ndim<N>>(array_ptr, static_cast<size_t>(N), shape.data(),
                                              std::move(deleter));
+}
+
+/// @brief Creates an ndarray of a given shape and type set to zero.
+/// @details The memory is allocated on the heap and will be freed when the ndarray
+/// is deleted via a deleter capsule passed to the ndarray constructor.
+/// @tparam Type The type of the ndarray (e.g. nb::numpy, nb::pytorch, etc.)
+/// @tparam T The type of the data (e.g. double, float, etc.)
+/// @tparam N The number of dimensions of the ndarray
+/// @param shape The shape of the ndarray as an array of size N.
+/// @details The shape is a list of size N, where N is the number of dimensions.
+/// @return An ndarray of the given shape and type.
+/// @throws std::runtime_error if the size of the ndarray is 0.
+/// @note The ndarray is not initialized, so the data is not set to any value.
+template <typename Type, typename T, int N>
+nb::ndarray<Type, T, nb::ndim<N>> make_zeros(const std::array<size_t, N>& shape) {
+    // allocate the ndarray
+    auto array = make_ndarray<Type, T, N>(shape);
+
+    // get the data pointer and size
+    auto data_ptr = array.data();
+    auto size = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<size_t>());
+
+    // fill the data with zeros
+    std::fill(data_ptr, data_ptr + size, static_cast<T>(0));
+
+    return array;
 }
