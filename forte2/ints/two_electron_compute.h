@@ -38,9 +38,6 @@ template <libint2::Operator Op, typename Params = NoParams>
     const std::size_t nb2 = basis2.size();
     const std::size_t nb3 = basis3.size();
     const std::size_t nb4 = basis4.size();
-    const std::size_t nb1234 = nb1 * nb2 * nb3 * nb4;
-    const std::size_t nb34 = nb3 * nb4;
-    const std::size_t nb234 = nb2 * nb3 * nb4;
 
     // Get the number of shells in each basis
     auto nshells1 = basis1.nshells();
@@ -54,9 +51,9 @@ template <libint2::Operator Op, typename Params = NoParams>
     const auto first_size3 = basis3.shell_first_and_size();
     const auto first_size4 = basis4.shell_first_and_size();
 
-    // Allocate a flat buffer
-    auto buffer = std::make_unique<std::vector<double>>(nb1234, 0.0);
-    auto& data = *buffer;
+    // Allocate a four index tensor
+    auto ints = make_zeros<nb::numpy, double, 4>({nb1, nb2, nb3, nb4});
+    auto v = ints.view();
 
     // Loop over shell quartets and fill each buffer
     for (std::size_t s1 = 0; s1 < nshells1; ++s1) {
@@ -83,10 +80,9 @@ template <libint2::Operator Op, typename Params = NoParams>
                         for (std::size_t i = 0, ijkl = 0; i != n1; ++i) {
                             for (std::size_t j = 0; j != n2; ++j) {
                                 for (std::size_t k = 0; k != n3; ++k) {
-                                    const auto f1234 =
-                                        (f1 + i) * nb234 + (f2 + j) * nb34 + (f3 + k) * nb4 + f4;
                                     for (std::size_t l = 0; l != n4; ++l, ++ijkl) {
-                                        data[f1234 + l] = static_cast<double>(buf[ijkl]);
+                                        v(f1 + i, f2 + j, f3 + k, f4 + l) =
+                                            static_cast<double>(buf[ijkl]);
                                     }
                                 }
                             }
@@ -104,8 +100,7 @@ template <libint2::Operator Op, typename Params = NoParams>
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     std::cout << "[forte2] Two-electron integrals timing: " << elapsed.count() << " ms\n";
 
-    return make_ndarray<nb::numpy, double, 4>(std::move(buffer),
-                                              std::array<std::size_t, 4>{nb1, nb2, nb3, nb4});
+    return ints;
 }
 
 template <libint2::Operator Op, typename Params = NoParams>
@@ -146,7 +141,7 @@ template <libint2::Operator Op, typename Params = NoParams>
     const auto first_size3 = basis3.shell_first_and_size();
 
     // Allocate three index tensor
-    auto ints = make_ndarray<nb::numpy, double, 3>({nb1, nb2, nb3});
+    auto ints = make_zeros<nb::numpy, double, 3>({nb1, nb2, nb3});
     auto v = ints.view();
 
     // Loop over the shell triplets and fill the buffer
@@ -222,7 +217,7 @@ template <libint2::Operator Op, typename Params = NoParams>
     const auto first_size_1 = basis1.shell_first_and_size();
     const auto first_size_2 = basis2.shell_first_and_size();
 
-    auto ints = make_ndarray<nb::numpy, double, 2>({nb1, nb2});
+    auto ints = make_zeros<nb::numpy, double, 2>({nb1, nb2});
     auto v = ints.view();
 
     // Loop over the shell pairs and fill the buffer
@@ -234,7 +229,7 @@ template <libint2::Operator Op, typename Params = NoParams>
         for (std::size_t s2 = 0; s2 < nshells2; ++s2) {
             const auto& shell2 = basis2[s2];
 
-            // Compute the integrals for this shell triplet
+            // Compute the integrals for this shell pair
             engine.compute(shell1, shell2);
 
             // Loop over the components of this operator and fill the buffers

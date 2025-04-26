@@ -60,8 +60,6 @@ class RHF:
         self.nbasis = system.basis.size
         Zsum = np.sum([x[0] for x in system.atoms])
         nel = Zsum - self.charge
-        # multiplicity = (na - nb) + 1
-        # nel = na + nb
         self.na = nel // 2
         self.nb = nel // 2
 
@@ -79,8 +77,16 @@ class RHF:
         fock_builder = DFFockBuilder(system, self.auxiliary_basis)
 
         H = T + V
-
         D = self._initial_guess()
+
+        k = 1.75
+        # Build the GWH matrix
+        GWH = np.zeros((self.nbasis, self.nbasis))
+        for i in range(self.nbasis):
+            for j in range(self.nbasis):
+                GWH[i, j] = 0.5 * k * (H[i, i] + H[j, j]) * S[i, j]
+            GWH[i, i] = H[i, i]
+
         E = 2.0 * np.sum(D * H)
 
         for i in range(self.maxiter):
@@ -94,16 +100,16 @@ class RHF:
                 if i > 0
                 else np.zeros((self.nbasis, self.nbasis))
             )
-            F = H + 2.0 * J - K
+            F = H + 2.0 * J - K if i > 0 else GWH
+
+            # Compute the energy
+            E = Vnn + np.sum(D * (H + F))
 
             # Diagonalize the Fock matrix
             eps, C = sp.linalg.eigh(F, S)
 
             # Build the density matrix
             D = self._build_density_matrix(C)
-
-            # Compute the energy
-            E = Vnn + np.sum(D * (H + F))
 
             # check for convergence of both energy and density matrix
             print(
@@ -122,7 +128,7 @@ class RHF:
         print(f"SCF time: {end - start:.2f} seconds")
 
     def _initial_guess(self):
-        D = 0.5 * np.eye(self.nbasis) * self.na / self.nbasis
+        D = np.zeros((self.nbasis, self.nbasis))
         return D
 
     def _build_density_matrix(self, C):
@@ -142,4 +148,4 @@ scf = RHF(charge=0, auxiliary_basis="cc-pVQZ-JKFIT")
 scf.run(system)
 assert np.isclose(
     scf.E, -76.0614664043887672, atol=1e-10
-), f"SCF energy {scf.E} is not close to expected value -2.861"
+), f"SCF energy {scf.E} is not close to expected value -76.0614664043887672"

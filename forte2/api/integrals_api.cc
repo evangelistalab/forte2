@@ -142,6 +142,7 @@ void export_integrals_api(nb::module_& m) {
             return coulomb_4c(basis1, basis2, basis3, basis4);
         },
         "basis1"_a, "basis2"_a, "basis3"_a, "basis4"_a);
+
     sub_m.def(
         "coulomb_4c", [](const Basis& basis) { return coulomb_4c(basis, basis, basis, basis); },
         "basis"_a);

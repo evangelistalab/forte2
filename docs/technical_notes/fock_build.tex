@@ -55,8 +55,8 @@ The Coulomb matrix can be computed efficiently as
 \begin{equation}
 \begin{split}
 J_{\mu \nu} = \sum_{P} B^{P}_{\mu \nu}
-\underbrace{\left( \sum_{\rho \sigma}B^{P}_{\rho \sigma} D_{\rho \sigma} \right)}_{B^P}=
-\sum_{P} B^{P}_{\mu \nu} B^P.
+\underbrace{\left( \sum_{\rho \sigma}B^{P}_{\rho \sigma} D_{\rho \sigma} \right)}_{b^P}=
+\sum_{P} B^{P}_{\mu \nu} b^P.
 \end{split}
 \end{equation}
 If we cannot store the B tensors, then we can do the following:
@@ -150,6 +150,50 @@ X_{Q \mu [i]_\alpha} = \sum_{\rho} (Q | \mu \rho) C_{\rho [i]_\alpha}\sqrt{n_{[i
 \end{equation}
 which is then transformed to $Y$ and accumulated into the exchange matrix.
 Since we need to do two passes for the Coulomb matrix, we can go ahead and use these two passes to compute both $J$ and $K$ at the same time reducing the storage cost of the exchange algorithm to $N_\mathrm{aux} N O/2$.
+
+\section{Integral screening}
+
+Consider the Taylor expansion of the Coulomb operator
+\begin{equation}
+\frac{1}{r} = \frac{1}{\sqrt{\mathbf{r}\cdot \mathbf{r}}}    
+\end{equation}
+
+\begin{equation}
+\frac{1}{r} = \frac{1}{r_0}
++ \left. \frac{\partial}{\partial x}\frac{1}{r} \right|_{x = x_0} (x - x_0) + \cdots
++ \frac{1}{2}\left. \frac{\partial^2}{\partial x^2}\frac{1}{r} \right|_{x = x_0} (x - x_0)^2
++ \frac{1}{2}\left. \frac{\partial^2}{\partial x \partial y}\frac{1}{r} \right|_{x = x_0} (x - x_0)(y - y_0) + \cdots.
+\end{equation}
+We have 
+\begin{equation}
+\left. \frac{\partial}{\partial x}\frac{1}{r} \right|_{x = x_0}
+=    
+\left. \frac{\partial}{\partial x}(x^2 + y^2 + z^2)^{-1/2} \right|_{x = x_0}
+=  -  
+\left. \frac{1}{2}(x^2 + y^2 + z^2)^{-3/2} 2 x \right|_{x = x_0}
+=-\frac{1}{r_0^3} x_0
+\end{equation}
+We have 
+\begin{equation}
+\begin{split}
+\left. \frac{\partial^2}{\partial x^2}\frac{1}{r} \right|_{x = x_0}
+& = -
+\left. \frac{\partial}{\partial x}(x^2 + y^2 + z^2)^{-3/2} x_0 \right|_{x = x_0} \\
+& = \frac{3}{2}\left. (x^2 + y^2 + z^2)^{-5/2} 2 x^2_0 \right|_{x = x_0}
+ -
+\left. (x^2 + y^2 + z^2)^{-3/2} \right|_{x = x_0} \\
+&= \frac{3}{r_0^5} x^2 - \frac{1}{r_0^3}
+\end{split}
+\end{equation}
+
+
+\begin{equation}
+\frac{1}{r} = \frac{1}{r_0} - \frac{1}{r_0^3} \mathbf{r}_0 \cdot (\mathbf{r} - \mathbf{r}_0) + \cdots
+=\frac{1}{r_0} - \frac{\mathbf{r}_0 \cdot \mathbf{r}}{r_0^3}
++ \frac{1}{r_0} + \cdots
+= \frac{2}{r_0} - \frac{\mathbf{r}_0 \cdot \mathbf{r}}{r_0^3}
+ + \cdots 
+\end{equation}
 
 \end{document}
 
