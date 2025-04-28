@@ -15,4 +15,20 @@ np_matrix coulomb_2c(const Basis& b1, const Basis& b2) {
     return compute_two_electron_2c_multi<libint2::Operator::coulomb>(b1, b2);
 }
 
+np_tensor3 erf_coulomb_3c(const Basis& b1, const Basis& b2, const Basis& b3, double omega) {
+    return compute_two_electron_3c_multi<libint2::Operator::erf_coulomb>(b1, b2, b3, omega);
+}
+
+np_matrix erf_coulomb_2c(const Basis& b1, const Basis& b2, double omega) {
+    return compute_two_electron_2c_multi<libint2::Operator::erf_coulomb>(b1, b2, omega);
+}
+
+np_tensor3 erfc_coulomb_3c(const Basis& b1, const Basis& b2, const Basis& b3, double omega) {
+    return compute_two_electron_3c_multi<libint2::Operator::erfc_coulomb>(b1, b2, b3, omega);
+}
+
+np_matrix erfc_coulomb_2c(const Basis& b1, const Basis& b2, double omega) {
+    return compute_two_electron_2c_multi<libint2::Operator::erfc_coulomb>(b1, b2, omega);
+}
+
 } // namespace forte2

@@ -58,15 +58,13 @@ void export_integrals_api(nb::module_& m) {
         },
         "charges"_a);
 
-    sub_m.def(
-        "overlap", [](const Basis& basis1, const Basis& basis2) { return overlap(basis1, basis2); },
-        "basis1"_a, "basis2"_a);
+    sub_m.def("overlap", &overlap, "basis1"_a, "basis2"_a);
+
     sub_m.def(
         "overlap", [](const Basis& basis) { return overlap(basis, basis); }, "basis"_a);
 
-    sub_m.def(
-        "kinetic", [](const Basis& basis1, const Basis& basis2) { return kinetic(basis1, basis2); },
-        "basis1"_a, "basis2"_a);
+    sub_m.def("kinetic", &kinetic, "basis1"_a, "basis2"_a);
+
     sub_m.def(
         "kinetic", [](const Basis& basis) { return kinetic(basis, basis); }, "basis"_a);
 
@@ -137,6 +135,20 @@ void export_integrals_api(nb::module_& m) {
         "basis"_a, "charges"_a);
 
     sub_m.def(
+        "erf_nuclear",
+        [](const Basis& basis1, const Basis& basis2,
+           std::tuple<double, std::vector<std::pair<double, std::array<double, 3>>>>
+               omega_charges) { return erf_nuclear(basis1, basis2, omega_charges); },
+        "basis1"_a, "basis2"_a, "omega_charges"_a);
+
+    sub_m.def(
+        "erfc_nuclear",
+        [](const Basis& basis1, const Basis& basis2,
+           std::tuple<double, std::vector<std::pair<double, std::array<double, 3>>>>
+               omega_charges) { return erfc_nuclear(basis1, basis2, omega_charges); },
+        "basis1"_a, "basis2"_a, "omega_charges"_a);
+
+    sub_m.def(
         "coulomb_4c",
         [](const Basis& basis1, const Basis& basis2, const Basis& basis3, const Basis& basis4) {
             return coulomb_4c(basis1, basis2, basis3, basis4);
@@ -160,5 +172,33 @@ void export_integrals_api(nb::module_& m) {
         "basis1"_a, "basis2"_a);
     sub_m.def(
         "coulomb_2c", [](const Basis& basis) { return coulomb_2c(basis, basis); }, "basis"_a);
+
+    sub_m.def(
+        "erf_coulomb_3c",
+        [](const Basis& basis1, const Basis& basis2, const Basis& basis3, double omega) {
+            return erf_coulomb_3c(basis1, basis2, basis3, omega);
+        },
+        "basis1"_a, "basis2"_a, "basis3"_a, "omega"_a);
+
+    sub_m.def(
+        "erf_coulomb_2c",
+        [](const Basis& basis1, const Basis& basis2, double omega) {
+            return erf_coulomb_2c(basis1, basis2, omega);
+        },
+        "basis1"_a, "basis2"_a, "omega"_a);
+
+    sub_m.def(
+        "erfc_coulomb_3c",
+        [](const Basis& basis1, const Basis& basis2, const Basis& basis3, double omega) {
+            return erfc_coulomb_3c(basis1, basis2, basis3, omega);
+        },
+        "basis1"_a, "basis2"_a, "basis3"_a, "omega"_a);
+
+    sub_m.def(
+        "erfc_coulomb_2c",
+        [](const Basis& basis1, const Basis& basis2, double omega) {
+            return erfc_coulomb_2c(basis1, basis2, omega);
+        },
+        "basis1"_a, "basis2"_a, "omega"_a);
 }
 } // namespace forte2

@@ -35,4 +35,18 @@ std::array<np_matrix, 4> opVop(const Basis& basis1, const Basis& basis2,
     return compute_one_electron_multi<libint2::Operator::opVop, 4>(basis1, basis2, charges);
 }
 
+np_matrix erf_nuclear(
+    const Basis& basis1, const Basis& basis2,
+    std::tuple<double, std::vector<std::pair<double, std::array<double, 3>>>>& omega_charges) {
+    return compute_one_electron_multi<libint2::Operator::erf_nuclear, 1>(basis1, basis2,
+                                                                         omega_charges)[0];
+}
+
+np_matrix erfc_nuclear(
+    const Basis& basis1, const Basis& basis2,
+    std::tuple<double, std::vector<std::pair<double, std::array<double, 3>>>>& omega_charges) {
+    return compute_one_electron_multi<libint2::Operator::erfc_nuclear, 1>(basis1, basis2,
+                                                                          omega_charges)[0];
+}
+
 } // namespace forte2

@@ -1,43 +1,87 @@
+import pytest
 import forte2
 import numpy as np
 
-xyz = """
 
-H  0.0 0.0 0.0
-"""
+def test_system():
+    xyz = """
 
-system = forte2.System(xyz=xyz, basis="cc-pvdz")
-system_large_basis = forte2.System(xyz=xyz, basis="cc-pvdz")
-print(system)
+    H  0.0 0.0 0.0
+    """
 
-S = forte2.ints.overlap(system.basis)
-T = forte2.ints.kinetic(system.basis)
-V = forte2.ints.nuclear(system.basis, system.atoms)
-H = T + V
+    system = forte2.System(xyz=xyz, basis="cc-pvdz")
+    system_large_basis = forte2.System(xyz=xyz, basis="cc-pvdz")
+    print(system)
 
-# Solve the generalized eigenvalue problem H C = S C ε
-from scipy.linalg import eigh
-from numpy import isclose
+    S = forte2.ints.overlap(system.basis)
+    T = forte2.ints.kinetic(system.basis)
+    V = forte2.ints.nuclear(system.basis, system.atoms)
+    H = T + V
 
-ε, _ = eigh(H, S)
-print("ε", ε)
-# assert isclose(ε[0], -0.4992784, atol=1e-7)
+    # Solve the generalized eigenvalue problem H C = S C ε
+    from scipy.linalg import eigh
+    from numpy import isclose
+
+    ε, _ = eigh(H, S)
+    print("ε", ε)
+    # assert isclose(ε[0], -0.4992784, atol=1e-7)
+
+    M1 = forte2.ints.emultipole1(system.basis)
+    print("S", S)
+    print("M", M1)
+    print(np.linalg.norm(S - M1[0]))
+
+    M2 = forte2.ints.emultipole2(system.basis)
+    # print("M2", M2)
+    for i in range(4):
+        print(np.linalg.norm(M1[i] - M2[i]))
+
+    M3 = forte2.ints.emultipole3(system.basis)
+    # print("M3", M3)
+    for i in range(10):
+        print(np.linalg.norm(M2[i] - M3[i]))
+
+    opVop = forte2.ints.opVop(system.basis, system.atoms)
+    print("opVop", opVop)
 
 
-M1 = forte2.ints.emultipole1(system.basis)
-print("S", S)
-print("M", M1)
-print(np.linalg.norm(S - M1[0]))
+def test_xyz_comment():
+    # Test an XYZ string with commented lines
+    xyz = """
+    #U 0.0 0.0 0.0
+    @U 0.0 0.0 0.0
+    H 0.0 0.0 0.0
+    """
 
-M2 = forte2.ints.emultipole2(system.basis)
-# print("M2", M2)
-for i in range(4):
-    print(np.linalg.norm(M1[i] - M2[i]))
+    # expect an exception to be raised
+    system = forte2.System(xyz=xyz, basis="cc-pvdz")
 
-M3 = forte2.ints.emultipole3(system.basis)
-# print("M3", M3)
-for i in range(10):
-    print(np.linalg.norm(M2[i] - M3[i]))
+    assert len(system.atoms) == 1
 
-opVop = forte2.ints.opVop(system.basis, system.atoms)
-print("opVop", opVop)
+
+def test_missing_atom():
+    # Test for missing atom in the basis set
+    with pytest.raises(Exception) as excinfo:
+        forte2.System(xyz="U 0.0 0.0 0.0", basis="cc-pvdz")
+        assert (
+            str(excinfo.value)
+            == "[forte2] Basis set cc-pvdz does not contain element 92."
+        )
+
+
+def test_missing_coordinate():
+    # Test for missing coordinates in the XYZ string
+    with pytest.raises(ValueError) as excinfo:
+        forte2.System(xyz="C 0.0 0.0", basis="cc-pvdz")
+
+    with pytest.raises(ValueError) as excinfo:
+        forte2.System(xyz="C 0.0", basis="cc-pvdz")
+
+
+if __name__ == "__main__":
+    # Run the tests
+    test_system()
+    test_xyz_comment()
+    test_missing_atom()
+    test_missing_coordinate()
+    print("Test passed.")

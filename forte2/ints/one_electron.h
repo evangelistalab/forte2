@@ -115,4 +115,32 @@ std::array<np_matrix, 20> emultipole3(const Basis& basis1, const Basis& basis2,
 std::array<np_matrix, 4> opVop(const Basis& basis1, const Basis& basis2,
                                std::vector<std::pair<double, std::array<double, 3>>>& charges);
 
+/// @brief Compute the nuclear attraction integrals with the error function attenuation
+///        between two basis sets (<b1|V|b2>, with
+///             V = \sum_a Z_a erf(-omega * |r - R_a|) / |r - R_a|).
+/// @param basis1 The basis set in the bra.
+/// @param basis2 The basis set in the ket.
+/// @param omega_charges A tuple of the form (alpha, charges), where alpha is the
+///                      attenuation parameter and charges is a vector of pairs of charge
+///                      and position.
+/// @return A 2D ndarray of shape (n1, n2), where n1 is the number of basis functions in
+///         basis1 and n2 is the number of basis functions in basis2.
+np_matrix erf_nuclear(
+    const Basis& basis1, const Basis& basis2,
+    std::tuple<double, std::vector<std::pair<double, std::array<double, 3>>>>& omega_charges);
+
+/// @brief Compute the nuclear attraction integrals with the complementary error function
+///        between two basis sets (<b1|V|b2>, with
+///             V = \sum_a Z_a erfc(-omega * |r - R_a|) / |r - R_a|).
+/// @param basis1 The basis set in the bra.
+/// @param basis2 The basis set in the ket.
+/// @param omega_charges A tuple of the form (alpha, charges), where alpha is the
+///                      attenuation parameter and charges is a vector of pairs of charge
+///                      and position.
+/// @return A 2D ndarray of shape (n1, n2), where n1 is the number of basis functions in
+///         basis1 and n2 is the number of basis functions in basis2.
+np_matrix erfc_nuclear(
+    const Basis& basis1, const Basis& basis2,
+    std::tuple<double, std::vector<std::pair<double, std::array<double, 3>>>>& omega_charges);
+
 } // namespace forte2
