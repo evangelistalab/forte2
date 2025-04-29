@@ -15,11 +15,9 @@ def test_scf():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = forte2.System(
-        xyz=xyz, charge=0, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT"
-    )
+    system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
 
-    scf = RHF()
+    scf = RHF(charge=0)
     scf.run(system)
     assert np.isclose(
         scf.E, -76.0614664043887672, atol=1e-10

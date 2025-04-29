@@ -10,22 +10,22 @@ from forte2.jkbuilder.jkbuilder import DFFockBuilder
 
 @dataclass
 class RHF:
+    charge: int
     econv: float = 1e-8
     dconv: float = 1e-4
     maxiter: int = 100
-    charge: int = field(init=False)
 
     def run(self, system):
         start = time.monotonic()
         Zsum = np.sum([x[0] for x in system.atoms])
-        nel = Zsum - system.charge
+        nel = Zsum - self.charge
         self.nbasis = system.basis.size
         self.na = nel // 2
         self.nb = nel // 2
 
         print(f"Number of alpha electrons: {self.na}")
         print(f"Number of beta electrons: {self.nb}")
-        print(f"Total charge: {system.charge}")
+        print(f"Total charge: {self.charge}")
 
         print(f"Number of electrons: {nel}")
         print(f"Number of basis functions: {self.nbasis}")

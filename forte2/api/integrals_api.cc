@@ -31,21 +31,38 @@ void export_integrals_api(nb::module_& m) {
                 new (t) libint2::Shell{
                     l2_exponents, {{l, is_pure, l2_coeffs}}, {origin[0], origin[1], origin[2]}};
             },
-            "l"_a, "exponents"_a, "coeffs"_a, "centers"_a, "is_pure"_a = true)
+            "l"_a, "exponents"_a, "coeffs"_a, "center"_a, "is_pure"_a = true)
         .def_prop_ro("size", [](libint2::Shell& s) { return s.size(); })
         .def_prop_ro("ncontr", [](libint2::Shell& s) { return s.ncontr(); })
-        .def_prop_ro("nprim", [](libint2::Shell& s) { return s.nprim(); });
+        .def_prop_ro("nprim", [](libint2::Shell& s) { return s.nprim(); })
+        .def_prop_ro("coeff",
+                     [](libint2::Shell& s) {
+                         return std::vector<double>(s.contr[0].coeff.begin(),
+                                                    s.contr[0].coeff.end());
+                     })
+        .def_prop_ro("exponents", [](libint2::Shell& s) {
+            return std::vector<double>(s.alpha.begin(), s.alpha.end());
+        });
 
     nb::class_<Basis>(sub_m, "Basis")
         .def(nb::init<>())
         .def("add", &Basis::add, "shell"_a)
         .def("__getitem__", &Basis::operator[], "i"_a)
         .def_prop_ro("shell_first_and_size", &Basis::shell_first_and_size)
+        .def_prop_ro("center_first_and_last", &Basis::center_first_and_last)
         .def_prop_ro("size", &Basis::size)
         .def_prop_ro("max_l", &Basis::max_l)
         .def_prop_ro("max_nprim", &Basis::max_nprim)
         .def_prop_ro("nprim", &Basis::max_nprim)
-        .def_prop_ro("nshells", &Basis::nshells);
+        .def_prop_ro("nshells", &Basis::nshells)
+        .def(
+            "value_at_points",
+            [](const Basis& basis, const std::vector<std::array<double, 3>>& points) {
+                std::vector<double> out(basis.size() * points.size());
+                basis.value_at_points(points, out);
+                return out;
+            },
+            "points"_a);
 
     nb::class_<FockBuilder>(sub_m, "FockBuilder")
         .def(nb::init<const Basis&, const Basis&>(), "basis"_a, "auxiliary_basis"_a = Basis())
@@ -58,7 +75,22 @@ void export_integrals_api(nb::module_& m) {
         },
         "charges"_a);
 
-    sub_m.def("overlap", &overlap, "basis1"_a, "basis2"_a);
+    sub_m.def("overlap", &overlap, "basis1"_a, "basis2"_a,
+              R"pbdoc(
+    Compute the overlap integral matrix.
+
+    Parameters
+    ----------
+    b1 : forte2.Basis
+        First basis set.
+    b2 : forte2.Basis
+        Second basis set.
+
+    Returns
+    -------
+    ndarray, shape = (nb1, nb2)
+        Overlap integrals matrix.
+    )pbdoc");
 
     sub_m.def(
         "overlap", [](const Basis& basis) { return overlap(basis, basis); }, "basis"_a);
