@@ -1,3 +1,5 @@
+#pragma once
+
 namespace forte2::ints {
 
 // Values of square roots of small integers computed with Mathematica and 20 digits of precision

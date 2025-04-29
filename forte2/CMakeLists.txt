@@ -73,6 +73,7 @@ nanobind_add_module(
   ints/nuclear_repulsion.cc
   ints/one_electron.cc
   ints/two_electron.cc
+  ints/value_at_points.cc
 )
 
 target_link_libraries(_forte2 PRIVATE Libint2::int2)

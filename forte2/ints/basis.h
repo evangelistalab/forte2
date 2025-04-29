@@ -29,25 +29,11 @@ class Basis {
     /// @return the max number of primitives in a shell
     std::size_t max_nprim() const;
 
+    /// @return a vector of shells in the basis set
+    const std::vector<libint2::Shell>& shells() const;
+
     /// @return the i-th shell in the basis set
     const libint2::Shell& operator[](size_t i) const;
-
-    /// @brief Evaluate the basis functions at the given points.
-    /// @param points a vector of points at which to evaluate the basis functions
-    /// @return a 2D array of shape (npoints, nbasis) containing the values of the basis
-    /// functions
-    np_matrix value_at_points(const std::vector<std::array<double, 3>>& points) const;
-
-    /// @brief Evaluate the product of basis functions times a coefficient matrix at the given
-    /// points.
-    /// @param points a vector of points at which to evaluate the basis functions
-    /// @param C a 2D array of shape (nbasis, norb) containing the coefficients
-    /// @return a 2D array of shape (npoints, norb) containing the values of the basis
-    /// functions times the coefficients
-    /// @note The shape of C must be (nbasis, norb), where nbasis is the number of basis
-    /// functions in the basis set and norb is the number of orbitals.
-    np_matrix value_at_points_C(const std::vector<std::array<double, 3>>& points,
-                                np_matrix C) const;
 
     /// @return a vector of pairs of the first index and size of each shell
     ///         in the basis set. The first index is the index of the first basis function

@@ -11,6 +11,7 @@
 #include "ints/nuclear_repulsion.h"
 #include "ints/one_electron.h"
 #include "ints/two_electron.h"
+#include "ints/value_at_points.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -54,11 +55,13 @@ void export_integrals_api(nb::module_& m) {
         .def_prop_ro("max_l", &Basis::max_l)
         .def_prop_ro("max_nprim", &Basis::max_nprim)
         .def_prop_ro("nprim", &Basis::max_nprim)
-        .def_prop_ro("nshells", &Basis::nshells)
-        .def("value_at_points", &Basis::value_at_points, "points"_a)
-        .def("value_at_points_C", &Basis::value_at_points_C, "points"_a, "C"_a,
-             "Compute the value of the basis functions at the given points and multiply by the "
-             "coefficients matrix C. Returns a 2D array of shape (npoints, norb).");
+        .def_prop_ro("nshells", &Basis::nshells);
+
+    sub_m.def("basis_at_points", &basis_at_points, "basis"_a, "points"_a);
+
+    sub_m.def(
+        "orbitals_at_points", &orbitals_at_points, "basis"_a, "points"_a, "C"_a,
+        "Evaluate the orbitals on a set of points. Returns a 2D array of shape (npoints, norb).");
 
     nb::class_<FockBuilder>(sub_m, "FockBuilder")
         .def(nb::init<const Basis&, const Basis&>(), "basis"_a, "auxiliary_basis"_a = Basis())
