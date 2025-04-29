@@ -39,7 +39,7 @@ void compute_real_spherical_harmonic_2(double x, double y, double z, double* buf
     // Compute the spherical harmonic for l = 2
     buffer[0] = sqrt_3 * x * y;
     buffer[1] = sqrt_3 * y * z;
-    buffer[2] = (z * z - 0.5 * x * x - 0.5 * y * y);
+    buffer[2] = (z * z - 0.5 * (x * x + y * y));
     buffer[3] = sqrt_3 * x * z;
     buffer[4] = 0.5 * sqrt_3 * (x * x - y * y);
 }
@@ -48,9 +48,9 @@ void compute_real_spherical_harmonic_3(double x, double y, double z, double* buf
     // Compute the spherical harmonic for l = 3
     buffer[0] = sqrt_10 * y * (0.75 * x * x - 0.25 * y * y);
     buffer[1] = sqrt_15 * x * y * z;
-    buffer[2] = sqrt_6 * y * (-0.25 * x * x - 0.25 * y * y + z * z);
-    buffer[3] = z * (-1.5 * x * x - 1.5 * y * y + z * z);
-    buffer[4] = sqrt_6 * x * (-0.25 * x * x - 0.25 * y * y + z * z);
+    buffer[2] = sqrt_6 * y * (z * z - 0.25 * (x * x + y * y));
+    buffer[3] = z * (z * z - 1.5 * (x * x + y * y));
+    buffer[4] = sqrt_6 * x * (z * z - 0.25 * (x * x + y * y));
     buffer[5] = 0.5 * sqrt_15 * z * (x * x - y * y);
     buffer[6] = sqrt_10 * x * (0.25 * x * x - 0.75 * y * y);
 }

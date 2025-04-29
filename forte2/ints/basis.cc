@@ -10,7 +10,13 @@ Basis::Basis(const std::vector<libint2::Shell>& shells) : shells_(shells) {}
 
 void Basis::add(const libint2::Shell& shell) {
     if (shell.contr.size() != 1) {
-        throw std::runtime_error("Only pure shells are supported");
+        throw std::runtime_error("Only single shells are supported");
+    }
+    if (shell.contr[0].pure == false) {
+        std::cout
+            << "[forte2] Warning: Cartesian Gaussians have limited support.\n"
+               "         It is recommended to use Solid-Harmonic Gaussians instead (is_pure=True)."
+            << std::endl;
     }
     shells_.push_back(shell);
     max_l_ = std::max(max_l_, shell.contr[0].l);
@@ -77,6 +83,9 @@ np_matrix Basis::value_at_points(const std::vector<std::array<double, 3>>& point
     std::size_t first_basis = 0;
     for (const auto& shell : shells_) {
         const auto shell_size = shell.size();
+        if (shell.contr[0].pure == false) {
+            throw std::runtime_error("[forte2] value_at_points: Only pure shells are supported");
+        }
         std::size_t p = 0;
         for (const auto& point : points) {
             evaluate_shell(shell, point, buffer.data());
@@ -98,6 +107,9 @@ np_matrix Basis::value_at_points_C(const std::vector<std::array<double, 3>>& poi
     std::vector<double> buffer(16);
     std::size_t first_basis = 0;
     for (const auto& shell : shells_) {
+        if (shell.contr[0].pure == false) {
+            throw std::runtime_error("[forte2] value_at_points_C: Only pure shells are supported");
+        }
         const auto shell_size = shell.size();
         std::size_t p = 0;
         for (const auto& point : points) {
