@@ -5,11 +5,13 @@ import numpy as np
 import scipy as sp
 import time
 
+
 from forte2.jkbuilder.jkbuilder import DFFockBuilder
+from forte2.helpers.mixins import MOs
 
 
 @dataclass
-class RHF:
+class RHF(MOs):
     charge: int
     econv: float = 1e-8
     dconv: float = 1e-4

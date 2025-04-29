@@ -87,4 +87,30 @@ np_matrix orbitals_at_points(const Basis& basis, const std::vector<std::array<do
     return values;
 }
 
+std::vector<std::array<double, 3>> regular_grid(const std::array<double, 3> min,
+                                                const std::array<size_t, 3> npoints,
+                                                const std::vector<std::array<double, 3>> axis) {
+    std::vector<std::array<double, 3>> points;
+    points.reserve(npoints[0] * npoints[1] * npoints[2]);
+    for (size_t i = 0; i < npoints[0]; ++i) {
+        for (size_t j = 0; j < npoints[1]; ++j) {
+            for (size_t k = 0; k < npoints[2]; ++k) {
+                const double x = min[0] + i * axis[0][0] + j * axis[1][0] + k * axis[2][0];
+                const double y = min[1] + i * axis[0][1] + j * axis[1][1] + k * axis[2][1];
+                const double z = min[2] + i * axis[0][2] + j * axis[1][2] + k * axis[2][2];
+                points.emplace_back(std::array<double, 3>{x, y, z});
+            }
+        }
+    }
+    return points;
+}
+
+np_matrix orbitals_on_grid(const Basis& basis, np_matrix C, const std::array<double, 3> min,
+                           const std::array<size_t, 3> npoints,
+                           const std::vector<std::array<double, 3>> axis) {
+    auto points = regular_grid(min, npoints, axis);
+    auto values = orbitals_at_points(basis, points, C);
+    return values;
+}
+
 } // namespace forte2

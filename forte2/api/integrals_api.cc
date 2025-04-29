@@ -63,6 +63,9 @@ void export_integrals_api(nb::module_& m) {
         "orbitals_at_points", &orbitals_at_points, "basis"_a, "points"_a, "C"_a,
         "Evaluate the orbitals on a set of points. Returns a 2D array of shape (npoints, norb).");
 
+    sub_m.def("orbitals_on_grid", &orbitals_on_grid, "basis"_a, "C"_a, "min"_a, "npoints"_a,
+              "axis"_a);
+
     nb::class_<FockBuilder>(sub_m, "FockBuilder")
         .def(nb::init<const Basis&, const Basis&>(), "basis"_a, "auxiliary_basis"_a = Basis())
         .def("build", &FockBuilder::build);
