@@ -55,14 +55,10 @@ void export_integrals_api(nb::module_& m) {
         .def_prop_ro("max_nprim", &Basis::max_nprim)
         .def_prop_ro("nprim", &Basis::max_nprim)
         .def_prop_ro("nshells", &Basis::nshells)
-        .def(
-            "value_at_points",
-            [](const Basis& basis, const std::vector<std::array<double, 3>>& points) {
-                std::vector<double> out(basis.size() * points.size());
-                basis.value_at_points(points, out);
-                return out;
-            },
-            "points"_a);
+        .def("value_at_points", &Basis::value_at_points, "points"_a)
+        .def("value_at_points_C", &Basis::value_at_points_C, "points"_a, "C"_a,
+             "Compute the value of the basis functions at the given points and multiply by the "
+             "coefficients matrix C. Returns a 2D array of shape (npoints, norb).");
 
     nb::class_<FockBuilder>(sub_m, "FockBuilder")
         .def(nb::init<const Basis&, const Basis&>(), "basis"_a, "auxiliary_basis"_a = Basis())

@@ -70,38 +70,79 @@ std::vector<std::pair<std::size_t, std::size_t>> Basis::center_first_and_last() 
     return result;
 }
 
-void Basis::value_at_points(const std::vector<std::array<double, 3>>& points,
-                            std::vector<double>& out) const {
-    if (out.size() < size() * points.size()) {
-        throw std::runtime_error("Output vector is too small");
-    }
-    std::fill(out.begin(), out.end(), 0.0);
+np_matrix Basis::value_at_points(const std::vector<std::array<double, 3>>& points) const {
+    auto values = make_zeros<nb::numpy, double, 2>({points.size(), size()});
+    auto v = values.view();
+    std::vector<double> buffer(64);
+    std::size_t first_basis = 0;
     for (const auto& shell : shells_) {
-        evaluate_shell(shell, points, out);
+        const auto shell_size = shell.size();
+        std::size_t p = 0;
+        for (const auto& point : points) {
+            evaluate_shell(shell, point, buffer.data());
+            for (std::size_t i = 0; i < shell_size; ++i) {
+                v(p, first_basis + i) += buffer[i];
+            }
+            ++p;
+        }
+        first_basis += shell_size;
     }
+    return values;
 }
 
-void evaluate_shell(const libint2::Shell& shell, const std::vector<std::array<double, 3>>& points,
-                    std::vector<double>& buffer) { // Evaluate the shell at the given points
+np_matrix Basis::value_at_points_C(const std::vector<std::array<double, 3>>& points,
+                                   np_matrix C) const {
+    auto norb = C.shape(1);
+    auto values = make_zeros<nb::numpy, double, 2>({points.size(), norb});
+    auto v = values.view();
+    std::vector<double> buffer(16);
+    std::size_t first_basis = 0;
+    for (const auto& shell : shells_) {
+        const auto shell_size = shell.size();
+        std::size_t p = 0;
+        for (const auto& point : points) {
+            evaluate_shell(shell, point, buffer.data());
+            for (std::size_t i = 0; i < shell_size; ++i) {
+                for (std::size_t j = 0; j < norb; ++j) {
+                    v(p, j) += buffer[i] * C(first_basis + i, j);
+                }
+            }
+            ++p;
+        }
+        first_basis += shell_size;
+    }
+    return values;
+}
+
+void evaluate_shell(const libint2::Shell& shell, const std::array<double, 3>& point,
+                    double* buffer) {
+    // Evaluate the shell at the given points
     const auto& contr = shell.contr[0];
     const auto& [x0, y0, z0] = shell.O;
-    const auto l = contr.l;
+    const auto& [x, y, z] = point;
     const auto& exponents = shell.alpha;
-    const auto& coeffs = contr.coeff;
     const auto nprim = shell.nprim();
+    const auto l = contr.l;
+    const auto& coeffs = contr.coeff;
+    const auto size = contr.size();
 
-    auto compute = ints::compute_real_spherical_harmonic[l];
+    if (l > 7) {
+        throw std::runtime_error("[forte2] evaluate_shell with l > 7 is not supported");
+    }
 
-    std::size_t k = 0;
-    for (const auto& point : points) {
-        double g_val = 0.0;
-        const auto& [x, y, z] = point;
-        const auto r2 = (x - x0) * (x - x0) + (y - y0) * (y - y0) + (z - z0) * (z - z0);
-        for (std::size_t i = 0; i < nprim; ++i) {
-            g_val += coeffs[i] * std::exp(-exponents[i] * r2);
-        }
-        compute(g_val, x - x0, y - y0, z - z0, buffer.data() + k);
-        k += nprim;
+    const auto r2 = (x - x0) * (x - x0) + (y - y0) * (y - y0) + (z - z0) * (z - z0);
+
+    double g_sum = 0.0; // sum of Gaussian functions
+    for (std::size_t i = 0; i < nprim; ++i) {
+        g_sum += coeffs[i] * std::exp(-exponents[i] * r2);
+    }
+
+    // Use the appropriate function to compute the spherical harmonics
+    // based on the angular momentum l
+    ints::compute_real_spherical_harmonic[l](x - x0, y - y0, z - z0, buffer);
+
+    for (std::size_t i = 0; i < size; ++i) {
+        buffer[i] *= g_sum;
     }
 }
 
