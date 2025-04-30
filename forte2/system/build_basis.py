@@ -2,6 +2,11 @@ import forte2
 import json
 import itertools
 from importlib import resources
+try:
+    import basis_set_exchange as bse
+    BSE_AVAILABLE = True
+except ImportError:
+    BSE_AVAILABLE = False
 
 
 def parse_basis_json(basis_name: str) -> dict:
@@ -21,9 +26,13 @@ def parse_basis_json(basis_name: str) -> dict:
         with resources.files("forte2.data.basis").joinpath(f"{basis_name}.json").open(
             "r"
         ) as f:
-            basis_json = json.load(f)
+            return json.load(f)
     except OSError:
-        raise Exception(
+        if BSE_AVAILABLE:
+            print(f"[forte2] Basis {basis_name.lower()} not found locally. Using Basis Set Exchange.")
+            return None
+        else:
+            raise Exception(
             f"[forte2] Basis file {basis_name.lower()}.json could not be opened."
         )
     return basis_json
@@ -31,14 +40,13 @@ def parse_basis_json(basis_name: str) -> dict:
 
 def assemble_basis(
     basis_name: str,
-    basis_json: dict,
     atoms: list[tuple[int, tuple[float, float, float]]],
 ) -> forte2.ints.Basis:
     """
-    Assemble the basis set from the JSON data and the list of atoms.
+    Assemble the basis set from JSON data or Basis Set Exchange, depending on availability.
+    Caches BSE lookups per atomic number to avoid repeated queries.
     Args:
         basis_name (str): The name of the basis set.
-        basis_json (dict): The basis set JSON data.
         atoms (list[tuple[int, list[float]]]): A list of tuples containing atomic numbers and coordinates.
     Returns:
         forte2.ints.Basis: The basis set.
@@ -46,14 +54,35 @@ def assemble_basis(
         Exception: If the basis set file cannot be opened or if an element is not in the basis set.
     """
     basis = forte2.ints.Basis()
+    basis_json = parse_basis_json(basis_name)
+
+    # Cache for BSE queries to avoid repeated downloads
+    bse_cache = {}
 
     for atomic_number, xyz in atoms:
-        # check if the atom is in the basis set
-        if str(atomic_number) not in basis_json["elements"]:
-            raise Exception(
-                f"[forte2] Basis set {basis_name} does not contain element {atomic_number}."
-            )
-        atom_basis = basis_json["elements"][f"{atomic_number}"]["electron_shells"]
+
+        if basis_json is None:
+            # Fetch and cache element data from Basis Set Exchange
+            if atomic_number not in bse_cache:
+                # bse will throw a KeyError if this fails
+                try:
+                    element_data = bse.get_basis(basis_name, elements=atomic_number)
+                except KeyError:
+                    raise Exception(
+                        f"[forte2] Basis Set Exchange does not have data for element Z={atomic_number} in basis set {basis_name}!"
+                    )
+                bse_cache[atomic_number] = element_data["elements"][str(atomic_number)]
+            atom_basis = bse_cache[atomic_number]["electron_shells"]
+        else:
+            # Load element data from local JSON
+            elements = basis_json["elements"]
+            # check if the atom is in the basis set
+            if str(atomic_number) not in basis_json["elements"]:
+                raise Exception(
+                    f"[forte2] Basis set {basis_name} does not contain element {atomic_number}."
+                )
+            atom_basis = basis_json["elements"][f"{atomic_number}"]["electron_shells"]
+
         for shell in atom_basis:
             angular_momentum = list(map(int, shell["angular_momentum"]))
             exponents = list(map(float, shell["exponents"]))
@@ -81,7 +110,4 @@ def build_basis(
     Raises:
         Exception: If the basis set file cannot be opened or if an element is not in the basis set.
     """
-
-    basis_json = parse_basis_json(basis_name)
-
-    return assemble_basis(basis_name, basis_json, atoms)
+    return assemble_basis(basis_name, atoms)
