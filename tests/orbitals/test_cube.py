@@ -16,16 +16,13 @@ def test_cube():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = forte2.System(xyz=xyz, basis="sto-6g", auxiliary_basis="cc-pVTZ-JKFIT")
+    system = forte2.System(xyz=xyz, basis="cc-pVDZ", auxiliary_basis="cc-pVTZ-JKFIT")
 
     scf = RHF(charge=0)
     scf.run(system)
-    # assert np.isclose(
-    #     scf.E, escf, atol=1e-10
-    # ), f"SCF energy {scf.E} is not close to expected value -76.0614664043887672"
 
     cube = Cube()
-    cube.run(system, scf.C[:, [4, 5]])
+    cube.run(system, scf.C)
 
 
 if __name__ == "__main__":
