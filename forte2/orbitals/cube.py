@@ -39,7 +39,7 @@ class Cube:
         self.spacing = [spacing, spacing, spacing]
         self.overage = [overage, overage, overage]
 
-    def run(self, system, C, indices=None):
+    def run(self, system, C, indices=None, prefix="orbital"):
         # determine the indices of the orbitals to generate
         indices = indices if indices is not None else range(C.shape[1])
         max_index = max(indices)
@@ -64,7 +64,7 @@ class Cube:
             cube = self._make_cube(
                 values[:, i], grid_origin, npoints, scaled_axes, system
             )
-            with open(f"orbital_{index + 1:0{number_of_digits}d}.cube", "w") as f:
+            with open(f"{prefix}_{index + 1:0{number_of_digits}d}.cube", "w") as f:
                 f.write(cube)
 
     def _make_cube(self, values, minr, npoints, axis, system):
