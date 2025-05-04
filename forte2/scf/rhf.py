@@ -99,3 +99,5 @@ class RHF(MOs):
     def _initial_guess(self, system, H, S):
         # Use the minao initial guess
         return minao_initial_guess(system, H, S)
+
+
