@@ -5,9 +5,13 @@
 #include <cassert>
 #include <complex>
 #include <cmath>
-#include <concepts>
 #include <unordered_map>
 #include <vector>
+
+#if __cplusplus >= 202002L
+  // C++20 or later
+  #include <concepts>
+#endif
 
 namespace forte2 {
 
