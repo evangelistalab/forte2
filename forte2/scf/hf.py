@@ -42,16 +42,16 @@ class RHF(MOs):
         fock_builder = DFFockBuilder(system)
 
         H = T + V
+
         self.C = self._initial_guess(system, H, S)
         D = self._build_density_matrix(self.C)
 
         Eold = 0.0
+        Dold = D
 
         diis = forte2.helpers.DIIS()
 
         for iter in range(self.maxiter):
-            Dold = D
-
             # Build the Fock matrix
             J = fock_builder.build_J([D])[0]
             K = fock_builder.build_K([self.C[:, : self.na]])[0]
@@ -87,6 +87,7 @@ class RHF(MOs):
                 break
 
             Eold = self.E
+            Dold = D
 
         end = time.monotonic()
         print(f"SCF time: {end - start:.2f} seconds")
