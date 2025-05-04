@@ -1,4 +1,4 @@
-//#include <format>
+#include <format>
 
 #include <libint2.hpp>
 #include <libint2/shell.h>
@@ -67,16 +67,16 @@ void export_shell_api(nb::module_& sub_m) {
             "embed_normalization_into_coefficients"_a = true,
             "Construct a shell from the angular momentum (l) and a list of exponents and "
             "coefficients.")
-        //.def("__repr__",
-        //     [](const libint2::Shell& s) {
-        //         std::string str;
-        //         str = "l = " + std::to_string(s.contr[0].l) +
-        //               " nprim = " + std::to_string(s.nprim());
-        //         for (std::size_t i = 0; i < s.nprim(); ++i) {
-        //             str += std::format("\n  {0:10.6f} {1:10.6f}", s.alpha[i], s.contr[0].coeff[i]);
-        //         }
-        //         return str;
-        //     })
+        .def("__repr__",
+             [](const libint2::Shell& s) {
+                 std::string str;
+                 str = "l = " + std::to_string(s.contr[0].l) +
+                       " nprim = " + std::to_string(s.nprim());
+                 for (std::size_t i = 0; i < s.nprim(); ++i) {
+                     str += std::format("\n  {0:10.6f} {1:10.6f}", s.alpha[i], s.contr[0].coeff[i]);
+                 }
+                 return str;
+             })
         .def_prop_ro(
             "size", [](libint2::Shell& s) { return s.size(); },
             "The number of basis functions in the shell (e.g., for l = 2, size = 5).")
