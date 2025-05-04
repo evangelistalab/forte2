@@ -48,6 +48,18 @@ void export_integrals_api(nb::module_& m) {
 }
 
 void export_shell_api(nb::module_& sub_m) {
+    /// @brief Shell class bindings
+    /// @details The Shell class is a wrapper around libint2::Shell and provides
+    ///          a Python interface to create and manipulate Gaussian shells.
+    ///          The Shell class represents a collection of Gaussian primitives (contractions)
+    ///          with the same angular momentum and center. In forte2, we assume
+    ///          that a shell is a single contraction with multiple primitives.
+    ///          The general form of a shell is:
+    ///          \f[\chi_\mu(r) = SH(x,y,z,l,m) \sum_{i=1}^{n} c_{i} e^{-\alpha_i (r - O)^2} \f]
+    ///          where SH is a solid harmonic, \f$ c_i \f$ are the contraction coefficients,
+    ///          \f$ \alpha_i \f$ are the Gaussian exponents, \f$ O \f$ is center of the shell.
+    ///          \f$ l \f$ is the angular momentum of the shell and \f$ m \f$ is the magnetic
+    ///          quantum number, which can take value of m = -l, -l+1, ..., l.
     nb::class_<libint2::Shell>(sub_m, "Shell")
         .def(nb::init<>())
         .def(
