@@ -54,6 +54,8 @@ tests/pytest/.cache/
 doc/doxygen/html
 doc/doxygen/latex
 docs/sphinx/_*
+**_build
+**notebooks
 
 forte.egg-info/*
 
