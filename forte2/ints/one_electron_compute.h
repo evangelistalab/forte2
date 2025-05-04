@@ -15,7 +15,6 @@ template <libint2::Operator Op, std::size_t M, typename Params = NoParams>
 [[nodiscard]] auto compute_one_electron_multi(const Basis& basis1, const Basis& basis2,
                                               Params const& params = Params{})
     -> std::array<np_matrix, M> {
-    const auto start = std::chrono::high_resolution_clock::now();
 
     // Initialize libint2
     libint2::initialize();
@@ -76,9 +75,6 @@ template <libint2::Operator Op, std::size_t M, typename Params = NoParams>
     }
 
     libint2::finalize();
-    const auto end = std::chrono::high_resolution_clock::now();
-    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    std::cout << "[forte2] One-electron integrals timing: " << elapsed.count() / 1000.0 << " s\n";
 
     return ints;
 }

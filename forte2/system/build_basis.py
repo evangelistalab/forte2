@@ -2,8 +2,10 @@ import forte2
 import json
 import itertools
 from importlib import resources
+
 try:
     import basis_set_exchange as bse
+
     BSE_AVAILABLE = True
 except ImportError:
     BSE_AVAILABLE = False
@@ -29,18 +31,21 @@ def parse_basis_json(basis_name: str) -> dict:
             return json.load(f)
     except OSError:
         if BSE_AVAILABLE:
-            print(f"[forte2] Basis {basis_name.lower()} not found locally. Using Basis Set Exchange.")
+            print(
+                f"[forte2] Basis {basis_name.lower()} not found locally. Using Basis Set Exchange."
+            )
             return None
         else:
             raise Exception(
-            f"[forte2] Basis file {basis_name.lower()}.json could not be opened."
-        )
+                f"[forte2] Basis file {basis_name.lower()}.json could not be opened."
+            )
     return basis_json
 
 
 def assemble_basis(
     basis_name: str,
     atoms: list[tuple[int, tuple[float, float, float]]],
+    embed_normalization_into_coefficients: bool = True,
 ) -> forte2.ints.Basis:
     """
     Assemble the basis set from JSON data or Basis Set Exchange, depending on availability.
@@ -93,12 +98,22 @@ def assemble_basis(
                 fillvalue=angular_momentum[-1],
             ):
                 coefficients = list(map(float, subshell_coefficients))
-                basis.add(forte2.ints.Shell(l, exponents, coefficients, xyz))
+                basis.add(
+                    forte2.ints.Shell(
+                        l,
+                        exponents,
+                        coefficients,
+                        xyz,
+                        embed_normalization_into_coefficients=embed_normalization_into_coefficients,
+                    )
+                )
     return basis
 
 
 def build_basis(
-    basis_name: str, atoms: list[tuple[int, tuple[float, float, float]]]
+    basis_name: str,
+    atoms: list[tuple[int, tuple[float, float, float]]],
+    embed_normalization_into_coefficients: bool = True,
 ) -> forte2.ints.Basis:
     """
     Build a basis set from a basis name and a list of atoms.

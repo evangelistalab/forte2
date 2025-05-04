@@ -29,11 +29,17 @@ class Basis {
     /// @return the max number of primitives in a shell
     std::size_t max_nprim() const;
 
-    /// @return a vector of shells in the basis set
+    /// @return the vector of shells in the basis set
     const std::vector<libint2::Shell>& shells() const;
+
+    /// @return the vector of shells in the basis set
+    std::vector<libint2::Shell>& shells();
 
     /// @return the i-th shell in the basis set
     const libint2::Shell& operator[](size_t i) const;
+
+    /// @return Return a new basis set with the shells decontracted into single Gaussians.
+    Basis decontract() const;
 
     /// @return a vector of pairs of the first index and size of each shell
     ///         in the basis set. The first index is the index of the first basis function

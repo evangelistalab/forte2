@@ -68,12 +68,16 @@ nanobind_add_module(
   # Source code goes here
   api/forte2_api.cc
   api/integrals_api.cc
+  api/determinant_api.cc
+  api/state_api.cc
   ints/basis.cc
   ints/fock_builder.cc
   ints/nuclear_repulsion.cc
   ints/one_electron.cc
   ints/two_electron.cc
   ints/value_at_points.cc
+  ci/determinant.cc
+  ci/state.cc
 )
 
 target_link_libraries(_forte2 PRIVATE Libint2::int2)
