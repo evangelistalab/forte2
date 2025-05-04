@@ -1,6 +1,8 @@
 #pragma once
 
+#include <functional>
 #include <tuple>
+
 #include "ci/occupation_vector.h"
 
 namespace forte2 {
@@ -21,13 +23,21 @@ struct Determinant {
     }
 
     static constexpr int norb = OccupationVector::N;
+
     bool get_a(int p) const { return a_[p]; }
+
     bool get_b(int p) const { return b_[p]; }
+
     void set_a(int p, bool value) { a_.set(p, value); }
+
     void set_b(int p, bool value) { b_.set(p, value); }
+
     int count() const noexcept { return a_.count() + b_.count(); }
+
     int count_a() const noexcept { return a_.count(); }
+
     int count_b() const noexcept { return b_.count(); }
+
     bool operator==(const Determinant& other) const noexcept {
         return a_ == other.a_ and b_ == other.b_;
     }
@@ -47,3 +57,11 @@ struct Determinant {
 
 std::string str(const Determinant& d, int n = OccupationVector::N);
 } // namespace forte2
+
+namespace std {
+template <> struct hash<forte2::Determinant> {
+    std::size_t operator()(const forte2::Determinant& d) const noexcept {
+        return forte2::hash_combine(d.a_.raw(), d.b_.raw());
+    }
+};
+} // namespace std

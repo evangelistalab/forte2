@@ -12,7 +12,6 @@ namespace forte2 {
 
 void export_determinant_api(nb::module_& m) {
     nb::class_<Determinant>(m, "Determinant")
-        .def(nb::init<>())
         .def("__init__",
              [](Determinant* d, std::string str) {
                  new (d) Determinant{};
@@ -34,6 +33,8 @@ void export_determinant_api(nb::module_& m) {
              })
         // define a static method to create a zero determinant
         .def_static("zero", &Determinant::zero)
+        .def(nb::init<const Determinant&>())
+        .def("__eq__", &Determinant::operator==)
         .def("__repr__", [](Determinant& d) { return str(d); })
         .def("set_a", &Determinant::set_a)
         .def("set_b", &Determinant::set_b)
