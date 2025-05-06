@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.linalg
 
 MACHEPS = np.finfo(float).eps
 
@@ -52,3 +53,34 @@ def canonical_orth(S, tol=1e-7):
     trunc_indices = np.where(sevals > tol * max_eval)[0]
     X = sevecs[:, trunc_indices] / np.sqrt(sevals[trunc_indices])
     return X
+
+
+def eigh_gen(A, B, tol=1e-7, orth="canonical"):
+    """
+    Solve the generalized eigenvalue problem A @ x = lambda * B @ x.
+
+    Args:
+        A (np.ndarray): The matrix A.
+        B (np.ndarray): The matrix B.
+        tol (float): Eigenvalue threshold below which values are treated as zero.
+        orth (str): Orthogonalization method. Options are "canonical" or "symmetric".
+
+    Returns:
+        tuple: A tuple containing the eigenvalues and eigenvectors.
+    """
+    try:
+        return scipy.linalg.eigh(A, B)
+    except scipy.linalg.LinAlgError:
+        print(
+            f"Linear dependency detected in the generalized eigenvalue problem! Using orthogonalization method {orth}."
+        )
+        if orth == "canonical":
+            X = canonical_orth(B, tol)
+        elif orth == "symmetric":
+            X = invsqrt_matrix(B, tol)
+        else:
+            raise ValueError("Invalid orthogonalization method.")
+
+        A = X.T @ A @ X
+        e, c = np.linalg.eigh(A)
+        return e, X @ c

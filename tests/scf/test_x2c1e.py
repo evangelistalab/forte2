@@ -1,11 +1,11 @@
 import forte2
+
 # import forte2.ints
 import numpy as np
 import scipy as sp
 import time
 
-from forte2.scf import RHF
-from forte2.scf import X2C1E
+from forte2.scf import RHF, get_hcore_sfx2c1e
 
 
 def test_sfx2c1e():
@@ -16,11 +16,12 @@ def test_sfx2c1e():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = forte2.System(xyz=xyz, basis_name="cc-pVQZ", auxiliary_basis_name="cc-pVQZ-JKFIT")
+    system = forte2.System(
+        xyz=xyz, basis_name="cc-pVQZ", auxiliary_basis_name="cc-pVQZ-JKFIT"
+    )
 
-    x2c = X2C1E(system)
     scf = RHF(charge=0)
-    scf._get_hcore = x2c._get_hcore
+    scf._get_hcore = get_hcore_sfx2c1e
     scf.run(system)
     assert np.isclose(
         scf.E, -76.110651355917, atol=1e-10
