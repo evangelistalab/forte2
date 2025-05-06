@@ -7,16 +7,10 @@
     "revision_date": "2018-10-03",
     "elements": {
         "1": {
-            "references": [
-                {
-                    "reference_description": "The cc-pVDZ basis set",
-                    "reference_keys": [
-                        "dunning1989a"
-                    ]
-                }
-            ],
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -31,7 +25,7 @@
                             "1.968500E-02",
                             "1.379770E-01",
                             "4.781480E-01",
-                            "0.0000000E+00"
+                            "5.012400E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -39,11 +33,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -54,23 +48,23 @@
                         [
                             "1.0000000"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 }
-            ]
-        },
-        "2": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
                     "reference_keys": [
-                        "woon1994a"
+                        "dunning1989a"
                     ]
                 }
-            ],
+            ]
+        },
+        "2": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -85,7 +79,7 @@
                             "2.380900E-02",
                             "1.548910E-01",
                             "4.699870E-01",
-                            "0.0000000E+00"
+                            "5.130270E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -93,11 +87,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -108,23 +102,23 @@
                         [
                             "1.0000000"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
+                }
+            ],
+            "references": [
+                {
+                    "reference_description": "The cc-pVDZ basis set",
+                    "reference_keys": [
+                        "woon1994a"
+                    ]
                 }
             ]
         },
         "3": {
-            "references": [
-                {
-                    "reference_description": "Common functions for cc-pVDZ and similar",
-                    "reference_keys": [
-                        "prascher2011a"
-                    ]
-                }
-            ],
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -149,7 +143,7 @@
                             "4.531230E-01",
                             "2.747740E-01",
                             "9.751000E-03",
-                            "0.0000000E+00"
+                            "-3.180000E-03"
                         ],
                         [
                             "-1.200000E-04",
@@ -160,7 +154,7 @@
                             "-9.600900E-02",
                             "-1.363800E-01",
                             "5.751020E-01",
-                            "0.0000000E+00"
+                            "5.176610E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -173,11 +167,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -192,7 +186,7 @@
                             "2.278400E-02",
                             "1.391070E-01",
                             "5.003750E-01",
-                            "0.0000000E+00"
+                            "5.084740E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -200,11 +194,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -215,13 +209,9 @@
                         [
                             "1.0000000"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "4": {
+            ],
             "references": [
                 {
                     "reference_description": "Common functions for cc-pVDZ and similar",
@@ -229,9 +219,13 @@
                         "prascher2011a"
                     ]
                 }
-            ],
+            ]
+        },
+        "4": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -256,7 +250,7 @@
                             "4.514690E-01",
                             "2.950740E-01",
                             "1.258700E-02",
-                            "0.0000000E+00"
+                            "-3.756000E-03"
                         ],
                         [
                             "-1.230000E-04",
@@ -267,7 +261,7 @@
                             "-1.207230E-01",
                             "-1.334350E-01",
                             "5.307670E-01",
-                            "0.0000000E+00"
+                            "5.801170E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -280,11 +274,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -299,7 +293,7 @@
                             "2.911100E-02",
                             "1.693650E-01",
                             "5.134580E-01",
-                            "0.0000000E+00"
+                            "4.793380E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -307,11 +301,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -322,23 +316,23 @@
                         [
                             "1.0000000"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
+                }
+            ],
+            "references": [
+                {
+                    "reference_description": "Common functions for cc-pVDZ and similar",
+                    "reference_keys": [
+                        "prascher2011a"
+                    ]
                 }
             ]
         },
         "5": {
-            "references": [
-                {
-                    "reference_description": "The cc-pVDZ basis set",
-                    "reference_keys": [
-                        "dunning1989a"
-                    ]
-                }
-            ],
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -363,7 +357,7 @@
                             "4.484030E-01",
                             "2.901230E-01",
                             "1.432200E-02",
-                            "0.0000000E+00"
+                            "-3.486000E-03"
                         ],
                         [
                             "-1.390000E-04",
@@ -374,7 +368,7 @@
                             "-1.387320E-01",
                             "-1.314820E-01",
                             "5.395260E-01",
-                            "0.0000000E+00"
+                            "5.807740E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -387,11 +381,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -406,7 +400,7 @@
                             "3.548100E-02",
                             "1.980720E-01",
                             "5.052300E-01",
-                            "0.0000000E+00"
+                            "4.794990E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -414,11 +408,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -429,13 +423,9 @@
                         [
                             "1.0000000"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "6": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
@@ -443,9 +433,13 @@
                         "dunning1989a"
                     ]
                 }
-            ],
+            ]
+        },
+        "6": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -470,7 +464,7 @@
                             "4.485640E-01",
                             "2.850740E-01",
                             "1.520400E-02",
-                            "0.0000000E+00"
+                            "-3.191000E-03"
                         ],
                         [
                             "-1.460000E-04",
@@ -481,7 +475,7 @@
                             "-1.499810E-01",
                             "-1.272620E-01",
                             "5.445290E-01",
-                            "0.0000000E+00"
+                            "5.804960E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -494,11 +488,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -513,7 +507,7 @@
                             "3.810900E-02",
                             "2.094800E-01",
                             "5.085570E-01",
-                            "0.0000000E+00"
+                            "4.688420E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -521,11 +515,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -536,13 +530,9 @@
                         [
                             "1.0000000"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "7": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
@@ -550,9 +540,13 @@
                         "dunning1989a"
                     ]
                 }
-            ],
+            ]
+        },
+        "7": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -577,7 +571,7 @@
                             "4.485400E-01",
                             "2.782380E-01",
                             "1.544000E-02",
-                            "0.0000000E+00"
+                            "-2.864000E-03"
                         ],
                         [
                             "-1.530000E-04",
@@ -588,7 +582,7 @@
                             "-1.580780E-01",
                             "-1.218310E-01",
                             "5.490030E-01",
-                            "0.0000000E+00"
+                            "5.788150E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -601,11 +595,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -620,7 +614,7 @@
                             "3.991900E-02",
                             "2.171690E-01",
                             "5.103190E-01",
-                            "0.0000000E+00"
+                            "4.622140E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -628,11 +622,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -643,13 +637,9 @@
                         [
                             "1.0000000"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "8": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
@@ -657,9 +647,13 @@
                         "dunning1989a"
                     ]
                 }
-            ],
+            ]
+        },
+        "8": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -684,7 +678,7 @@
                             "4.487190E-01",
                             "2.709520E-01",
                             "1.545800E-02",
-                            "0.0000000E+00"
+                            "-2.585000E-03"
                         ],
                         [
                             "-1.600000E-04",
@@ -695,7 +689,7 @@
                             "-1.654110E-01",
                             "-1.169550E-01",
                             "5.573680E-01",
-                            "0.0000000E+00"
+                            "5.727590E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -708,11 +702,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -727,7 +721,7 @@
                             "4.301800E-02",
                             "2.289130E-01",
                             "5.087280E-01",
-                            "0.0000000E+00"
+                            "4.605310E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -735,11 +729,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -750,13 +744,9 @@
                         [
                             "1.0000000"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "9": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
@@ -764,9 +754,13 @@
                         "dunning1989a"
                     ]
                 }
-            ],
+            ]
+        },
+        "9": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -791,7 +785,7 @@
                             "4.486410E-01",
                             "2.647610E-01",
                             "1.533300E-02",
-                            "0.0000000E+00"
+                            "-2.332000E-03"
                         ],
                         [
                             "-1.650000E-04",
@@ -802,7 +796,7 @@
                             "-1.707760E-01",
                             "-1.123270E-01",
                             "5.628140E-01",
-                            "0.0000000E+00"
+                            "5.687780E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -815,11 +809,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -834,7 +828,7 @@
                             "4.487800E-02",
                             "2.357180E-01",
                             "5.085210E-01",
-                            "0.0000000E+00"
+                            "4.581200E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -842,11 +836,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -857,13 +851,9 @@
                         [
                             "1.0000000"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "10": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
@@ -871,9 +861,13 @@
                         "dunning1989a"
                     ]
                 }
-            ],
+            ]
+        },
+        "10": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -898,7 +892,7 @@
                             "4.483240E-01",
                             "2.580260E-01",
                             "1.506300E-02",
-                            "0.0000000E+00"
+                            "-2.100000E-03"
                         ],
                         [
                             "-1.720000E-04",
@@ -909,7 +903,7 @@
                             "-1.752270E-01",
                             "-1.070380E-01",
                             "5.670500E-01",
-                            "0.0000000E+00"
+                            "5.652160E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -922,11 +916,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -941,7 +935,7 @@
                             "4.608700E-02",
                             "2.401810E-01",
                             "5.087440E-01",
-                            "0.0000000E+00"
+                            "4.556600E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -949,11 +943,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -964,29 +958,23 @@
                         [
                             "1.0000000"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
+                }
+            ],
+            "references": [
+                {
+                    "reference_description": "The cc-pVDZ basis set",
+                    "reference_keys": [
+                        "dunning1989a"
+                    ]
                 }
             ]
         },
         "11": {
-            "references": [
-                {
-                    "reference_description": "Common functions for cc-pVDZ and similar",
-                    "reference_keys": [
-                        "prascher2011a"
-                    ]
-                },
-                {
-                    "reference_description": "Additional functions to form cc-pVDZ",
-                    "reference_keys": [
-                        "prascher2011a"
-                    ]
-                }
-            ],
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -1017,7 +1005,7 @@
                             "-6.245320E-03",
                             "2.433740E-03",
                             "-4.423810E-04",
-                            "0.0000000E+00"
+                            "2.419240E-04"
                         ],
                         [
                             "-1.121620E-04",
@@ -1031,7 +1019,7 @@
                             "6.044190E-01",
                             "4.417190E-01",
                             "1.305470E-02",
-                            "0.0000000E+00"
+                            "-5.680850E-03"
                         ],
                         [
                             "1.701600E-05",
@@ -1045,7 +1033,7 @@
                             "-1.025950E-01",
                             "-1.989450E-01",
                             "6.559520E-01",
-                            "0.0000000E+00"
+                            "4.311530E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -1061,11 +1049,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -1088,7 +1076,7 @@
                             "4.499880E-01",
                             "2.275070E-01",
                             "8.082470E-03",
-                            "0.0000000E+00"
+                            "-1.962930E-03"
                         ],
                         [
                             "-5.815310E-04",
@@ -1098,7 +1086,7 @@
                             "-5.219710E-02",
                             "-1.683590E-02",
                             "4.346130E-01",
-                            "0.0000000E+00"
+                            "6.582180E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -1110,11 +1098,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -1125,13 +1113,9 @@
                         [
                             "1.0000000"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "12": {
+            ],
             "references": [
                 {
                     "reference_description": "Common functions for cc-pVDZ and similar",
@@ -1145,9 +1129,13 @@
                         "prascher2011a"
                     ]
                 }
-            ],
+            ]
+        },
+        "12": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -1178,7 +1166,7 @@
                             "4.908840E-03",
                             "2.864600E-04",
                             "2.645900E-05",
-                            "0.0000000E+00"
+                            "-1.127080E-05"
                         ],
                         [
                             "-8.778390E-05",
@@ -1192,7 +1180,7 @@
                             "5.704540E-01",
                             "5.423090E-01",
                             "2.181280E-02",
-                            "0.0000000E+00"
+                            "-8.277000E-03"
                         ],
                         [
                             "1.696280E-05",
@@ -1206,7 +1194,7 @@
                             "-1.340120E-01",
                             "-2.561760E-01",
                             "6.058560E-01",
-                            "0.0000000E+00"
+                            "5.094460E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -1222,11 +1210,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -1249,7 +1237,7 @@
                             "4.572260E-01",
                             "2.159180E-01",
                             "6.649480E-03",
-                            "0.0000000E+00"
+                            "-1.253040E-04"
                         ],
                         [
                             "-8.659480E-04",
@@ -1259,7 +1247,7 @@
                             "-8.739060E-02",
                             "-1.229900E-02",
                             "5.020850E-01",
-                            "0.0000000E+00"
+                            "5.972450E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -1271,11 +1259,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -1286,29 +1274,29 @@
                         [
                             "1.0000000"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "13": {
+            ],
             "references": [
                 {
                     "reference_description": "Common functions for cc-pVDZ and similar",
                     "reference_keys": [
-                        "woon1993a"
+                        "prascher2011a"
                     ]
                 },
                 {
                     "reference_description": "Additional functions to form cc-pVDZ",
                     "reference_keys": [
-                        "woon1993a"
+                        "prascher2011a"
                     ]
                 }
-            ],
+            ]
+        },
+        "13": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -1339,7 +1327,7 @@
                             "1.158890E-02",
                             "-1.283850E-03",
                             "4.258830E-04",
-                            "0.0000000E+00"
+                            "-1.992800E-04"
                         ],
                         [
                             "-7.580480E-05",
@@ -1353,7 +1341,7 @@
                             "5.410400E-01",
                             "5.787960E-01",
                             "2.881470E-02",
-                            "0.0000000E+00"
+                            "-9.537950E-03"
                         ],
                         [
                             "1.750780E-05",
@@ -1367,7 +1355,7 @@
                             "-1.587880E-01",
                             "-3.116940E-01",
                             "6.201470E-01",
-                            "0.0000000E+00"
+                            "5.209430E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -1383,11 +1371,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -1410,7 +1398,7 @@
                             "4.538150E-01",
                             "2.750660E-01",
                             "1.908070E-02",
-                            "0.0000000E+00"
+                            "-3.128480E-03"
                         ],
                         [
                             "-7.480530E-04",
@@ -1420,7 +1408,7 @@
                             "-9.837560E-02",
                             "-2.600640E-02",
                             "4.640200E-01",
-                            "0.0000000E+00"
+                            "6.488700E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -1432,11 +1420,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -1447,13 +1435,9 @@
                         [
                             "1.0000000"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "14": {
+            ],
             "references": [
                 {
                     "reference_description": "Common functions for cc-pVDZ and similar",
@@ -1467,9 +1451,13 @@
                         "woon1993a"
                     ]
                 }
-            ],
+            ]
+        },
+        "14": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -1500,7 +1488,7 @@
                             "1.449520E-02",
                             "-2.035900E-03",
                             "6.241860E-04",
-                            "0.0000000E+00"
+                            "-2.828720E-04"
                         ],
                         [
                             "-7.231770E-05",
@@ -1514,7 +1502,7 @@
                             "5.271900E-01",
                             "5.932510E-01",
                             "3.326520E-02",
-                            "0.0000000E+00"
+                            "-9.736620E-03"
                         ],
                         [
                             "1.851130E-05",
@@ -1528,7 +1516,7 @@
                             "-1.780030E-01",
                             "-3.468740E-01",
                             "6.230200E-01",
-                            "0.0000000E+00"
+                            "5.377120E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -1544,11 +1532,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -1571,7 +1559,7 @@
                             "4.554290E-01",
                             "2.685630E-01",
                             "1.883360E-02",
-                            "0.0000000E+00"
+                            "-2.624310E-03"
                         ],
                         [
                             "-8.583020E-04",
@@ -1581,7 +1569,7 @@
                             "-1.194930E-01",
                             "-1.995810E-02",
                             "5.102680E-01",
-                            "0.0000000E+00"
+                            "6.003820E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -1593,11 +1581,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -1608,13 +1596,9 @@
                         [
                             "1.0000000"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "15": {
+            ],
             "references": [
                 {
                     "reference_description": "Common functions for cc-pVDZ and similar",
@@ -1628,9 +1612,13 @@
                         "woon1993a"
                     ]
                 }
-            ],
+            ]
+        },
+        "15": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -1661,7 +1649,7 @@
                             "1.640350E-02",
                             "-2.542550E-03",
                             "7.480500E-04",
-                            "0.0000000E+00"
+                            "-3.309630E-04"
                         ],
                         [
                             "-6.969390E-05",
@@ -1675,7 +1663,7 @@
                             "5.185950E-01",
                             "6.018470E-01",
                             "3.686120E-02",
-                            "0.0000000E+00"
+                            "-9.707590E-03"
                         ],
                         [
                             "1.911990E-05",
@@ -1689,7 +1677,7 @@
                             "-1.933870E-01",
                             "-3.720970E-01",
                             "6.242460E-01",
-                            "0.0000000E+00"
+                            "5.517210E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -1705,11 +1693,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -1732,7 +1720,7 @@
                             "4.569920E-01",
                             "2.530860E-01",
                             "1.687980E-02",
-                            "0.0000000E+00"
+                            "-2.070930E-03"
                         ],
                         [
                             "-9.598320E-04",
@@ -1742,7 +1730,7 @@
                             "-1.350160E-01",
                             "-9.105850E-03",
                             "5.378020E-01",
-                            "0.0000000E+00"
+                            "5.690660E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -1754,11 +1742,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -1769,13 +1757,9 @@
                         [
                             "1.0000000"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "16": {
+            ],
             "references": [
                 {
                     "reference_description": "Common functions for cc-pVDZ and similar",
@@ -1789,9 +1773,13 @@
                         "woon1993a"
                     ]
                 }
-            ],
+            ]
+        },
+        "16": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -1822,7 +1810,7 @@
                             "1.789710E-02",
                             "-2.975160E-03",
                             "8.495220E-04",
-                            "0.0000000E+00"
+                            "-3.679360E-04"
                         ],
                         [
                             "-6.870390E-05",
@@ -1836,7 +1824,7 @@
                             "5.131940E-01",
                             "6.071200E-01",
                             "3.967530E-02",
-                            "0.0000000E+00"
+                            "-9.468640E-03"
                         ],
                         [
                             "1.990770E-05",
@@ -1850,7 +1838,7 @@
                             "-2.074740E-01",
                             "-3.928890E-01",
                             "6.328400E-01",
-                            "0.0000000E+00"
+                            "5.569240E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -1866,11 +1854,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -1893,7 +1881,7 @@
                             "4.590850E-01",
                             "2.063830E-01",
                             "1.021410E-02",
-                            "0.0000000E+00"
+                            "-6.031220E-05"
                         ],
                         [
                             "-1.162510E-03",
@@ -1903,7 +1891,7 @@
                             "-1.479940E-01",
                             "3.019040E-02",
                             "5.615730E-01",
-                            "0.0000000E+00"
+                            "5.347760E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -1915,11 +1903,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -1930,13 +1918,9 @@
                         [
                             "1.0000000"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "17": {
+            ],
             "references": [
                 {
                     "reference_description": "Common functions for cc-pVDZ and similar",
@@ -1950,9 +1934,13 @@
                         "woon1993a"
                     ]
                 }
-            ],
+            ]
+        },
+        "17": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -1983,7 +1971,7 @@
                             "1.915310E-02",
                             "-3.347920E-03",
                             "9.298830E-04",
-                            "0.0000000E+00"
+                            "-3.963790E-04"
                         ],
                         [
                             "-6.789220E-05",
@@ -1997,7 +1985,7 @@
                             "5.094430E-01",
                             "6.107250E-01",
                             "4.215490E-02",
-                            "0.0000000E+00"
+                            "-9.234270E-03"
                         ],
                         [
                             "2.049860E-05",
@@ -2011,7 +1999,7 @@
                             "-2.193120E-01",
                             "-4.087730E-01",
                             "6.384650E-01",
-                            "0.0000000E+00"
+                            "5.623620E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -2027,11 +2015,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -2054,7 +2042,7 @@
                             "4.570720E-01",
                             "1.516360E-01",
                             "1.816150E-03",
-                            "0.0000000E+00"
+                            "1.882960E-03"
                         ],
                         [
                             "-1.435700E-03",
@@ -2064,7 +2052,7 @@
                             "-1.532750E-01",
                             "8.946090E-02",
                             "5.794440E-01",
-                            "0.0000000E+00"
+                            "4.832720E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -2076,11 +2064,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -2091,13 +2079,9 @@
                         [
                             "1.0000000"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "18": {
+            ],
             "references": [
                 {
                     "reference_description": "Common functions for cc-pVDZ and similar",
@@ -2111,9 +2095,13 @@
                         "woon1993a"
                     ]
                 }
-            ],
+            ]
+        },
+        "18": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -2144,7 +2132,7 @@
                             "2.005090E-02",
                             "-3.610000E-03",
                             "9.756070E-04",
-                            "0.0000000E+00"
+                            "-4.113160E-04"
                         ],
                         [
                             "-6.749100E-05",
@@ -2158,7 +2146,7 @@
                             "5.071950E-01",
                             "6.128980E-01",
                             "4.429680E-02",
-                            "0.0000000E+00"
+                            "-8.992780E-03"
                         ],
                         [
                             "2.104570E-05",
@@ -2172,7 +2160,7 @@
                             "-2.297690E-01",
                             "-4.210060E-01",
                             "6.423310E-01",
-                            "0.0000000E+00"
+                            "5.675400E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -2188,11 +2176,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -2215,7 +2203,7 @@
                             "4.525490E-01",
                             "1.228010E-01",
                             "-4.459960E-03",
-                            "0.0000000E+00"
+                            "2.052250E-03"
                         ],
                         [
                             "-1.606550E-03",
@@ -2225,7 +2213,7 @@
                             "-1.516190E-01",
                             "1.424250E-01",
                             "5.845010E-01",
-                            "0.0000000E+00"
+                            "4.375400E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -2237,11 +2225,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -2252,23 +2240,29 @@
                         [
                             "1.0000000"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
+                }
+            ],
+            "references": [
+                {
+                    "reference_description": "Common functions for cc-pVDZ and similar",
+                    "reference_keys": [
+                        "woon1993a"
+                    ]
+                },
+                {
+                    "reference_description": "Additional functions to form cc-pVDZ",
+                    "reference_keys": [
+                        "woon1993a"
+                    ]
                 }
             ]
         },
         "20": {
-            "references": [
-                {
-                    "reference_description": "The cc-pVDZ basis set",
-                    "reference_keys": [
-                        "koput2002a"
-                    ]
-                }
-            ],
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -2303,7 +2297,7 @@
                             "1.717790E-03",
                             "-8.920900E-04",
                             "2.451000E-04",
-                            "0.0000000E+00"
+                            "-1.239500E-04"
                         ],
                         [
                             "-6.453000E-05",
@@ -2319,7 +2313,7 @@
                             "6.164842E-02",
                             "-1.479971E-02",
                             "3.610890E-03",
-                            "0.0000000E+00"
+                            "-1.792730E-03"
                         ],
                         [
                             "2.223000E-05",
@@ -2335,7 +2329,7 @@
                             "5.650280E-01",
                             "6.557439E-01",
                             "2.672894E-02",
-                            "0.0000000E+00"
+                            "-9.999590E-03"
                         ],
                         [
                             "5.310000E-06",
@@ -2351,7 +2345,7 @@
                             "1.736069E-01",
                             "3.782294E-01",
                             "-6.596470E-01",
-                            "0.0000000E+00"
+                            "-4.902216E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -2369,11 +2363,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -2402,7 +2396,7 @@
                             "-5.999270E-03",
                             "2.642570E-03",
                             "-8.569400E-04",
-                            "0.0000000E+00"
+                            "3.314700E-04"
                         ],
                         [
                             "-6.489100E-04",
@@ -2415,7 +2409,7 @@
                             "5.872407E-01",
                             "3.037256E-01",
                             "1.416451E-02",
-                            "0.0000000E+00"
+                            "-1.152240E-03"
                         ],
                         [
                             "1.359500E-04",
@@ -2428,7 +2422,7 @@
                             "-1.587612E-01",
                             "-8.554523E-02",
                             "5.446467E-01",
-                            "0.0000000E+00"
+                            "5.663128E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -2443,11 +2437,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -2464,7 +2458,7 @@
                             "1.481920E-01",
                             "3.109210E-01",
                             "4.521950E-01",
-                            "0.0000000E+00"
+                            "4.808650E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -2473,24 +2467,23 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "21": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
                     "reference_keys": [
-                        "balabanov2005a",
-                        "balabanov2006a"
+                        "koput2002a"
                     ]
                 }
-            ],
+            ]
+        },
+        "21": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -2537,7 +2530,7 @@
                             "2.435774E-04",
                             "-8.796617E-05",
                             "7.878246E-05",
-                            "0.0000000E+00"
+                            "-1.637155E-05"
                         ],
                         [
                             "-4.722109E-06",
@@ -2559,7 +2552,7 @@
                             "8.812836E-04",
                             "-7.605536E-04",
                             "6.340116E-04",
-                            "0.0000000E+00"
+                            "-1.556163E-04"
                         ],
                         [
                             "9.139905E-07",
@@ -2581,7 +2574,7 @@
                             "4.515562E-01",
                             "3.011910E-02",
                             "-1.329480E-02",
-                            "0.0000000E+00"
+                            "4.633679E-03"
                         ],
                         [
                             "-2.201951E-07",
@@ -2603,7 +2596,7 @@
                             "-3.073539E-01",
                             "2.544054E-01",
                             "5.981590E-01",
-                            "0.0000000E+00"
+                            "3.115202E-01"
                         ],
                         [
                             "-3.757238E-07",
@@ -2625,7 +2618,7 @@
                             "2.114597E-02",
                             "2.275498E+00",
                             "-1.190770E+00",
-                            "0.0000000E+00"
+                            "-7.674257E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -2649,11 +2642,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -2692,7 +2685,7 @@
                             "-1.326000E-03",
                             "-2.800000E-04",
                             "3.400000E-05",
-                            "0.0000000E+00"
+                            "-1.300000E-05"
                         ],
                         [
                             "-1.500000E-05",
@@ -2710,7 +2703,7 @@
                             "3.049570E-01",
                             "5.087800E-02",
                             "-4.493000E-03",
-                            "0.0000000E+00"
+                            "1.832000E-03"
                         ],
                         [
                             "-4.000000E-06",
@@ -2728,7 +2721,7 @@
                             "9.717000E-02",
                             "-2.569380E-01",
                             "-5.878150E-01",
-                            "0.0000000E+00"
+                            "-3.054210E-01"
                         ],
                         [
                             "4.000000E-06",
@@ -2746,7 +2739,7 @@
                             "-1.824820E-01",
                             "3.886110E-01",
                             "6.911000E-01",
-                            "0.0000000E+00"
+                            "7.960400E-02"
                         ],
                         [
                             "0.000000E+00",
@@ -2766,11 +2759,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -2793,7 +2786,7 @@
                             "3.460330E-01",
                             "3.733740E-01",
                             "2.642880E-01",
-                            "0.0000000E+00"
+                            "6.366700E-02"
                         ],
                         [
                             "-4.389000E-03",
@@ -2803,7 +2796,7 @@
                             "-3.246090E-01",
                             "-6.428900E-02",
                             "6.017490E-01",
-                            "0.0000000E+00"
+                            "3.903000E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -2815,11 +2808,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         3
                     ],
@@ -2832,13 +2825,9 @@
                             "3.617450E-01",
                             "8.218680E-01"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "22": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
@@ -2847,9 +2836,13 @@
                         "balabanov2006a"
                     ]
                 }
-            ],
+            ]
+        },
+        "22": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -2896,7 +2889,7 @@
                             "2.217859E-04",
                             "-7.636896E-05",
                             "7.719539E-05",
-                            "0.0000000E+00"
+                            "-1.149056E-05"
                         ],
                         [
                             "-4.630486E-06",
@@ -2918,7 +2911,7 @@
                             "8.085624E-04",
                             "-6.918459E-04",
                             "6.086512E-04",
-                            "0.0000000E+00"
+                            "-1.313842E-04"
                         ],
                         [
                             "9.230559E-07",
@@ -2940,7 +2933,7 @@
                             "4.413892E-01",
                             "2.799769E-02",
                             "-1.210790E-02",
-                            "0.0000000E+00"
+                            "4.324762E-03"
                         ],
                         [
                             "-2.180323E-07",
@@ -2962,7 +2955,7 @@
                             "-2.928115E-01",
                             "2.665300E-01",
                             "5.912406E-01",
-                            "0.0000000E+00"
+                            "3.037229E-01"
                         ],
                         [
                             "-3.975126E-07",
@@ -2984,7 +2977,7 @@
                             "1.489721E-01",
                             "2.191179E+00",
                             "-1.243325E+00",
-                            "0.0000000E+00"
+                            "-6.711916E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -3008,11 +3001,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -3051,7 +3044,7 @@
                             "-1.324000E-03",
                             "-2.710000E-04",
                             "3.200000E-05",
-                            "0.0000000E+00"
+                            "-1.200000E-05"
                         ],
                         [
                             "-1.500000E-05",
@@ -3069,7 +3062,7 @@
                             "2.998560E-01",
                             "5.000000E-02",
                             "-4.230000E-03",
-                            "0.0000000E+00"
+                            "1.725000E-03"
                         ],
                         [
                             "4.000000E-06",
@@ -3087,7 +3080,7 @@
                             "-9.422700E-02",
                             "2.508460E-01",
                             "5.866430E-01",
-                            "0.0000000E+00"
+                            "3.135350E-01"
                         ],
                         [
                             "4.000000E-06",
@@ -3105,7 +3098,7 @@
                             "-1.659320E-01",
                             "3.914030E-01",
                             "6.818400E-01",
-                            "0.0000000E+00"
+                            "8.403100E-02"
                         ],
                         [
                             "0.000000E+00",
@@ -3125,11 +3118,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -3152,7 +3145,7 @@
                             "3.531520E-01",
                             "3.721860E-01",
                             "2.476720E-01",
-                            "0.0000000E+00"
+                            "5.823600E-02"
                         ],
                         [
                             "-3.970000E-03",
@@ -3162,7 +3155,7 @@
                             "-3.121140E-01",
                             "-4.237800E-02",
                             "5.886580E-01",
-                            "0.0000000E+00"
+                            "4.103020E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -3174,11 +3167,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         3
                     ],
@@ -3191,13 +3184,9 @@
                             "3.581580E-01",
                             "8.257940E-01"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "23": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
@@ -3206,9 +3195,13 @@
                         "balabanov2006a"
                     ]
                 }
-            ],
+            ]
+        },
+        "23": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -3255,7 +3248,7 @@
                             "1.861606E-04",
                             "-6.208598E-05",
                             "7.295314E-05",
-                            "0.0000000E+00"
+                            "-6.362062E-06"
                         ],
                         [
                             "-4.503003E-06",
@@ -3277,7 +3270,7 @@
                             "7.102380E-04",
                             "-6.363128E-04",
                             "5.979932E-04",
-                            "0.0000000E+00"
+                            "-1.100879E-04"
                         ],
                         [
                             "9.320648E-07",
@@ -3299,7 +3292,7 @@
                             "4.309274E-01",
                             "2.604589E-02",
                             "-1.101049E-02",
-                            "0.0000000E+00"
+                            "4.106300E-03"
                         ],
                         [
                             "-2.158944E-07",
@@ -3321,7 +3314,7 @@
                             "-2.793991E-01",
                             "2.771165E-01",
                             "5.852999E-01",
-                            "0.0000000E+00"
+                            "2.963946E-01"
                         ],
                         [
                             "-4.093416E-07",
@@ -3343,7 +3336,7 @@
                             "2.308810E-01",
                             "2.113321E+00",
                             "-1.253048E+00",
-                            "0.0000000E+00"
+                            "-6.139502E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -3367,11 +3360,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -3410,7 +3403,7 @@
                             "-1.353000E-03",
                             "-2.650000E-04",
                             "2.900000E-05",
-                            "0.0000000E+00"
+                            "-1.100000E-05"
                         ],
                         [
                             "-1.500000E-05",
@@ -3428,7 +3421,7 @@
                             "2.953460E-01",
                             "4.904600E-02",
                             "-3.824000E-03",
-                            "0.0000000E+00"
+                            "1.585000E-03"
                         ],
                         [
                             "4.000000E-06",
@@ -3446,7 +3439,7 @@
                             "-8.364400E-02",
                             "2.493390E-01",
                             "5.805150E-01",
-                            "0.0000000E+00"
+                            "3.223800E-01"
                         ],
                         [
                             "4.000000E-06",
@@ -3464,7 +3457,7 @@
                             "-1.553740E-01",
                             "3.950220E-01",
                             "6.789080E-01",
-                            "0.0000000E+00"
+                            "8.312200E-02"
                         ],
                         [
                             "0.000000E+00",
@@ -3484,11 +3477,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -3511,7 +3504,7 @@
                             "3.528940E-01",
                             "3.704140E-01",
                             "2.457180E-01",
-                            "0.0000000E+00"
+                            "6.099300E-02"
                         ],
                         [
                             "-3.818000E-03",
@@ -3521,7 +3514,7 @@
                             "-3.115230E-01",
                             "-2.282700E-02",
                             "5.697260E-01",
-                            "0.0000000E+00"
+                            "4.194930E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -3533,11 +3526,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         3
                     ],
@@ -3550,13 +3543,9 @@
                             "3.900680E-01",
                             "8.008410E-01"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "24": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
@@ -3565,9 +3554,13 @@
                         "balabanov2006a"
                     ]
                 }
-            ],
+            ]
+        },
+        "24": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -3614,7 +3607,7 @@
                             "-3.546048E-04",
                             "1.057311E-04",
                             "1.114640E-05",
-                            "0.0000000E+00"
+                            "2.661387E-05"
                         ],
                         [
                             "-2.301772E-06",
@@ -3636,7 +3629,7 @@
                             "-4.374537E-03",
                             "3.204035E-04",
                             "-5.142077E-05",
-                            "0.0000000E+00"
+                            "1.584134E-04"
                         ],
                         [
                             "4.862957E-07",
@@ -3658,7 +3651,7 @@
                             "7.175950E-01",
                             "3.020814E-01",
                             "7.749514E-03",
-                            "0.0000000E+00"
+                            "2.696096E-04"
                         ],
                         [
                             "-1.102451E-07",
@@ -3680,7 +3673,7 @@
                             "-2.783262E-01",
                             "-1.830071E-01",
                             "6.790937E-01",
-                            "0.0000000E+00"
+                            "4.672953E-01"
                         ],
                         [
                             "2.179893E-07",
@@ -3702,7 +3695,7 @@
                             "1.443061E+00",
                             "-1.029318E+00",
                             "-1.307667E+00",
-                            "0.0000000E+00"
+                            "1.503842E+00"
                         ],
                         [
                             "0.000000E+00",
@@ -3726,11 +3719,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -3769,7 +3762,7 @@
                             "-1.195000E-03",
                             "-1.970000E-04",
                             "2.300000E-05",
-                            "0.0000000E+00"
+                            "-9.000000E-06"
                         ],
                         [
                             "-1.500000E-05",
@@ -3787,7 +3780,7 @@
                             "2.812900E-01",
                             "4.184300E-02",
                             "-4.002000E-03",
-                            "0.0000000E+00"
+                            "1.521000E-03"
                         ],
                         [
                             "4.000000E-06",
@@ -3805,7 +3798,7 @@
                             "-6.723400E-02",
                             "2.707590E-01",
                             "5.758070E-01",
-                            "0.0000000E+00"
+                            "3.011210E-01"
                         ],
                         [
                             "4.000000E-06",
@@ -3823,7 +3816,7 @@
                             "-1.238650E-01",
                             "4.297220E-01",
                             "6.507860E-01",
-                            "0.0000000E+00"
+                            "6.417100E-02"
                         ],
                         [
                             "0.000000E+00",
@@ -3843,11 +3836,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -3870,7 +3863,7 @@
                             "3.582860E-01",
                             "3.685430E-01",
                             "2.354940E-01",
-                            "0.0000000E+00"
+                            "5.315600E-02"
                         ],
                         [
                             "-4.122000E-03",
@@ -3880,7 +3873,7 @@
                             "-3.144230E-01",
                             "4.209700E-02",
                             "5.914030E-01",
-                            "0.0000000E+00"
+                            "3.582150E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -3892,11 +3885,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         3
                     ],
@@ -3909,13 +3902,9 @@
                             "4.235450E-01",
                             "7.741140E-01"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "25": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
@@ -3924,9 +3913,13 @@
                         "balabanov2006a"
                     ]
                 }
-            ],
+            ]
+        },
+        "25": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -3973,7 +3966,7 @@
                             "-2.503203E-05",
                             "-2.421517E-05",
                             "3.462071E-05",
-                            "0.0000000E+00"
+                            "4.261482E-07"
                         ],
                         [
                             "-3.936095E-06",
@@ -3995,7 +3988,7 @@
                             "-1.912925E-04",
                             "-6.032312E-04",
                             "5.621608E-04",
-                            "0.0000000E+00"
+                            "-1.021109E-04"
                         ],
                         [
                             "9.462709E-07",
@@ -4017,7 +4010,7 @@
                             "4.092712E-01",
                             "2.221969E-02",
                             "-9.011202E-03",
-                            "0.0000000E+00"
+                            "3.691727E-03"
                         ],
                         [
                             "-2.095391E-07",
@@ -4039,7 +4032,7 @@
                             "-2.544359E-01",
                             "2.865866E-01",
                             "5.755741E-01",
-                            "0.0000000E+00"
+                            "2.898778E-01"
                         ],
                         [
                             "-4.121231E-07",
@@ -4061,7 +4054,7 @@
                             "2.980372E-01",
                             "1.971989E+00",
                             "-1.179253E+00",
-                            "0.0000000E+00"
+                            "-5.837703E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -4085,11 +4078,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -4128,7 +4121,7 @@
                             "-2.027000E-03",
                             "-3.600000E-04",
                             "3.400000E-05",
-                            "0.0000000E+00"
+                            "-1.300000E-05"
                         ],
                         [
                             "-1.500000E-05",
@@ -4146,7 +4139,7 @@
                             "2.889080E-01",
                             "4.743300E-02",
                             "-3.522000E-03",
-                            "0.0000000E+00"
+                            "1.456000E-03"
                         ],
                         [
                             "3.000000E-06",
@@ -4164,7 +4157,7 @@
                             "-7.796500E-02",
                             "2.295600E-01",
                             "5.761220E-01",
-                            "0.0000000E+00"
+                            "3.485380E-01"
                         ],
                         [
                             "4.000000E-06",
@@ -4182,7 +4175,7 @@
                             "-1.291700E-01",
                             "4.003480E-01",
                             "6.696460E-01",
-                            "0.0000000E+00"
+                            "8.273200E-02"
                         ],
                         [
                             "0.000000E+00",
@@ -4202,11 +4195,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -4229,7 +4222,7 @@
                             "3.587070E-01",
                             "3.650920E-01",
                             "2.337380E-01",
-                            "0.0000000E+00"
+                            "5.661800E-02"
                         ],
                         [
                             "-3.454000E-03",
@@ -4239,7 +4232,7 @@
                             "-2.923500E-01",
                             "-4.973000E-03",
                             "5.065880E-01",
-                            "0.0000000E+00"
+                            "4.979510E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -4251,11 +4244,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         3
                     ],
@@ -4268,13 +4261,9 @@
                             "4.267760E-01",
                             "7.697990E-01"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "26": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
@@ -4283,9 +4272,13 @@
                         "balabanov2006a"
                     ]
                 }
-            ],
+            ]
+        },
+        "26": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -4332,7 +4325,7 @@
                             "5.376318E-05",
                             "-3.816654E-05",
                             "4.319603E-05",
-                            "0.0000000E+00"
+                            "-3.401019E-06"
                         ],
                         [
                             "-4.155954E-06",
@@ -4354,7 +4347,7 @@
                             "2.312454E-04",
                             "-5.643680E-04",
                             "4.992260E-04",
-                            "0.0000000E+00"
+                            "-1.015293E-04"
                         ],
                         [
                             "9.532178E-07",
@@ -4376,7 +4369,7 @@
                             "4.051743E-01",
                             "2.168227E-02",
                             "-8.343566E-03",
-                            "0.0000000E+00"
+                            "3.658979E-03"
                         ],
                         [
                             "-2.063008E-07",
@@ -4398,7 +4391,7 @@
                             "-2.465135E-01",
                             "2.731435E-01",
                             "5.748321E-01",
-                            "0.0000000E+00"
+                            "3.012713E-01"
                         ],
                         [
                             "-4.009367E-07",
@@ -4420,7 +4413,7 @@
                             "2.586813E-01",
                             "1.834049E+00",
                             "-9.333240E-01",
-                            "0.0000000E+00"
+                            "-6.981605E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -4444,11 +4437,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -4487,7 +4480,7 @@
                             "-1.739000E-03",
                             "-3.000000E-04",
                             "2.900000E-05",
-                            "0.0000000E+00"
+                            "-1.100000E-05"
                         ],
                         [
                             "-1.500000E-05",
@@ -4505,7 +4498,7 @@
                             "2.850510E-01",
                             "4.614400E-02",
                             "-3.249000E-03",
-                            "0.0000000E+00"
+                            "1.357000E-03"
                         ],
                         [
                             "3.000000E-06",
@@ -4523,7 +4516,7 @@
                             "-7.693700E-02",
                             "2.126610E-01",
                             "5.730610E-01",
-                            "0.0000000E+00"
+                            "3.696510E-01"
                         ],
                         [
                             "5.000000E-06",
@@ -4541,7 +4534,7 @@
                             "-1.073990E-01",
                             "4.448630E-01",
                             "6.402390E-01",
-                            "0.0000000E+00"
+                            "6.445700E-02"
                         ],
                         [
                             "0.000000E+00",
@@ -4561,11 +4554,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -4588,7 +4581,7 @@
                             "3.571990E-01",
                             "3.621880E-01",
                             "2.364610E-01",
-                            "0.0000000E+00"
+                            "6.011800E-02"
                         ],
                         [
                             "-3.890000E-03",
@@ -4598,7 +4591,7 @@
                             "-3.155460E-01",
                             "5.710900E-02",
                             "5.636040E-01",
-                            "0.0000000E+00"
+                            "3.846370E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -4610,11 +4603,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         3
                     ],
@@ -4627,13 +4620,9 @@
                             "4.222490E-01",
                             "7.714680E-01"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "27": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
@@ -4642,9 +4631,13 @@
                         "balabanov2006a"
                     ]
                 }
-            ],
+            ]
+        },
+        "27": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -4691,7 +4684,7 @@
                             "5.113519E-05",
                             "-4.174508E-05",
                             "4.027577E-05",
-                            "0.0000000E+00"
+                            "-5.789067E-06"
                         ],
                         [
                             "-4.200240E-06",
@@ -4713,7 +4706,7 @@
                             "2.175362E-04",
                             "-5.480155E-04",
                             "4.525804E-04",
-                            "0.0000000E+00"
+                            "-1.066748E-04"
                         ],
                         [
                             "9.592692E-07",
@@ -4735,7 +4728,7 @@
                             "3.992579E-01",
                             "2.079933E-02",
                             "-7.820663E-03",
-                            "0.0000000E+00"
+                            "3.533911E-03"
                         ],
                         [
                             "-2.028840E-07",
@@ -4757,7 +4750,7 @@
                             "-2.381360E-01",
                             "2.650788E-01",
                             "5.722774E-01",
-                            "0.0000000E+00"
+                            "3.091556E-01"
                         ],
                         [
                             "-3.863053E-07",
@@ -4779,7 +4772,7 @@
                             "2.143530E-01",
                             "1.711865E+00",
                             "-7.140037E-01",
-                            "0.0000000E+00"
+                            "-8.027727E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -4803,11 +4796,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -4846,7 +4839,7 @@
                             "-1.697000E-03",
                             "-2.800000E-04",
                             "2.600000E-05",
-                            "0.0000000E+00"
+                            "-1.000000E-05"
                         ],
                         [
                             "-1.500000E-05",
@@ -4864,7 +4857,7 @@
                             "2.797930E-01",
                             "4.477600E-02",
                             "-3.151000E-03",
-                            "0.0000000E+00"
+                            "1.317000E-03"
                         ],
                         [
                             "-3.000000E-06",
@@ -4882,7 +4875,7 @@
                             "7.180800E-02",
                             "-2.216580E-01",
                             "-5.710250E-01",
-                            "0.0000000E+00"
+                            "-3.637890E-01"
                         ],
                         [
                             "5.000000E-06",
@@ -4900,7 +4893,7 @@
                             "-7.978300E-02",
                             "4.590350E-01",
                             "6.174950E-01",
-                            "0.0000000E+00"
+                            "6.469000E-02"
                         ],
                         [
                             "0.000000E+00",
@@ -4920,11 +4913,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -4947,7 +4940,7 @@
                             "3.568430E-01",
                             "3.595790E-01",
                             "2.366290E-01",
-                            "0.0000000E+00"
+                            "6.212900E-02"
                         ],
                         [
                             "-4.067000E-03",
@@ -4957,7 +4950,7 @@
                             "-3.180480E-01",
                             "9.169800E-02",
                             "5.608230E-01",
-                            "0.0000000E+00"
+                            "3.586780E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -4969,11 +4962,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         3
                     ],
@@ -4986,13 +4979,9 @@
                             "4.239660E-01",
                             "7.684290E-01"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "28": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
@@ -5001,9 +4990,13 @@
                         "balabanov2006a"
                     ]
                 }
-            ],
+            ]
+        },
+        "28": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -5050,7 +5043,7 @@
                             "-5.932767E-05",
                             "-1.158562E-05",
                             "8.115109E-06",
-                            "0.0000000E+00"
+                            "-1.681699E-06"
                         ],
                         [
                             "-3.657849E-06",
@@ -5072,7 +5065,7 @@
                             "-4.339167E-04",
                             "-5.831711E-04",
                             "4.228788E-04",
-                            "0.0000000E+00"
+                            "-1.266714E-04"
                         ],
                         [
                             "9.594149E-07",
@@ -5094,7 +5087,7 @@
                             "3.976063E-01",
                             "2.295523E-02",
                             "-9.151758E-03",
-                            "0.0000000E+00"
+                            "3.875414E-03"
                         ],
                         [
                             "-2.013753E-07",
@@ -5116,7 +5109,7 @@
                             "-2.310271E-01",
                             "2.590532E-01",
                             "5.691426E-01",
-                            "0.0000000E+00"
+                            "3.158125E-01"
                         ],
                         [
                             "-3.924245E-07",
@@ -5138,7 +5131,7 @@
                             "2.486892E-01",
                             "1.613012E+00",
                             "-5.990277E-01",
-                            "0.0000000E+00"
+                            "-8.369078E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -5162,11 +5155,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -5205,7 +5198,7 @@
                             "-1.998000E-03",
                             "-3.380000E-04",
                             "3.500000E-05",
-                            "0.0000000E+00"
+                            "-1.200000E-05"
                         ],
                         [
                             "-1.500000E-05",
@@ -5223,7 +5216,7 @@
                             "2.817830E-01",
                             "4.789800E-02",
                             "-2.987000E-03",
-                            "0.0000000E+00"
+                            "1.309000E-03"
                         ],
                         [
                             "3.000000E-06",
@@ -5241,7 +5234,7 @@
                             "-7.279500E-02",
                             "1.956400E-01",
                             "5.670990E-01",
-                            "0.0000000E+00"
+                            "3.952700E-01"
                         ],
                         [
                             "6.000000E-06",
@@ -5259,7 +5252,7 @@
                             "-2.232000E-03",
                             "5.214350E-01",
                             "5.455400E-01",
-                            "0.0000000E+00"
+                            "4.362200E-02"
                         ],
                         [
                             "0.000000E+00",
@@ -5279,11 +5272,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -5306,7 +5299,7 @@
                             "3.469450E-01",
                             "3.510680E-01",
                             "2.502550E-01",
-                            "0.0000000E+00"
+                            "1.000820E-01"
                         ],
                         [
                             "-3.495000E-03",
@@ -5316,7 +5309,7 @@
                             "-2.945800E-01",
                             "1.152000E-03",
                             "4.385890E-01",
-                            "0.0000000E+00"
+                            "5.436260E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -5328,11 +5321,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         3
                     ],
@@ -5345,13 +5338,9 @@
                             "4.174290E-01",
                             "7.714830E-01"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "29": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
@@ -5360,9 +5349,13 @@
                         "balabanov2006a"
                     ]
                 }
-            ],
+            ]
+        },
+        "29": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -5409,7 +5402,7 @@
                             "5.092245E-05",
                             "-5.540730E-05",
                             "3.969482E-05",
-                            "0.0000000E+00"
+                            "-1.269538E-05"
                         ],
                         [
                             "-4.404706E-06",
@@ -5431,7 +5424,7 @@
                             "2.013508E-04",
                             "-5.182553E-04",
                             "3.731503E-04",
-                            "0.0000000E+00"
+                            "-1.193171E-04"
                         ],
                         [
                             "9.704682E-07",
@@ -5453,7 +5446,7 @@
                             "3.885122E-01",
                             "1.924326E-02",
                             "-7.103807E-03",
-                            "0.0000000E+00"
+                            "3.272906E-03"
                         ],
                         [
                             "-1.959354E-07",
@@ -5475,7 +5468,7 @@
                             "-2.230022E-01",
                             "2.517975E-01",
                             "5.650091E-01",
-                            "0.0000000E+00"
+                            "3.247243E-01"
                         ],
                         [
                             "-3.532229E-07",
@@ -5497,7 +5490,7 @@
                             "1.244367E-01",
                             "1.510110E+00",
                             "-3.477122E-01",
-                            "0.0000000E+00"
+                            "-9.774169E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -5521,11 +5514,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -5564,7 +5557,7 @@
                             "-1.516000E-03",
                             "-2.420000E-04",
                             "2.300000E-05",
-                            "0.0000000E+00"
+                            "-9.000000E-06"
                         ],
                         [
                             "-1.500000E-05",
@@ -5582,7 +5575,7 @@
                             "2.770540E-01",
                             "4.388500E-02",
                             "-2.802000E-03",
-                            "0.0000000E+00"
+                            "1.152000E-03"
                         ],
                         [
                             "3.000000E-06",
@@ -5600,7 +5593,7 @@
                             "-7.173200E-02",
                             "1.879300E-01",
                             "5.646290E-01",
-                            "0.0000000E+00"
+                            "4.070000E-01"
                         ],
                         [
                             "5.000000E-06",
@@ -5618,7 +5611,7 @@
                             "-3.963300E-02",
                             "5.021300E-01",
                             "5.811110E-01",
-                            "0.0000000E+00"
+                            "4.566600E-02"
                         ],
                         [
                             "0.000000E+00",
@@ -5638,11 +5631,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -5665,7 +5658,7 @@
                             "3.359800E-01",
                             "3.573010E-01",
                             "2.645780E-01",
-                            "0.0000000E+00"
+                            "1.039720E-01"
                         ],
                         [
                             "-3.363000E-03",
@@ -5675,7 +5668,7 @@
                             "-3.471900E-01",
                             "2.671100E-02",
                             "4.920470E-01",
-                            "0.0000000E+00"
+                            "4.384220E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -5687,11 +5680,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         3
                     ],
@@ -5704,13 +5697,9 @@
                             "4.242800E-01",
                             "7.630250E-01"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "30": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
@@ -5719,9 +5708,13 @@
                         "balabanov2006a"
                     ]
                 }
-            ],
+            ]
+        },
+        "30": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -5768,7 +5761,7 @@
                             "-1.401399E-04",
                             "4.757132E-05",
                             "-3.642711E-05",
-                            "0.0000000E+00"
+                            "1.153248E-05"
                         ],
                         [
                             "-2.640069E-06",
@@ -5790,7 +5783,7 @@
                             "2.112113E-03",
                             "-4.133980E-04",
                             "3.209752E-04",
-                            "0.0000000E+00"
+                            "-1.016140E-04"
                         ],
                         [
                             "9.967103E-07",
@@ -5812,7 +5805,7 @@
                             "3.769751E-01",
                             "1.433224E-02",
                             "-6.671210E-03",
-                            "0.0000000E+00"
+                            "1.766214E-03"
                         ],
                         [
                             "1.995818E-07",
@@ -5834,7 +5827,7 @@
                             "2.220163E-01",
                             "-3.114776E-01",
                             "-5.693429E-01",
-                            "0.0000000E+00"
+                            "-2.678440E-01"
                         ],
                         [
                             "-5.435910E-07",
@@ -5856,7 +5849,7 @@
                             "8.182926E-01",
                             "1.695036E+00",
                             "-1.388656E+00",
-                            "0.0000000E+00"
+                            "-2.188900E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -5880,11 +5873,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -5941,7 +5934,7 @@
                             "2.685940E-01",
                             "3.886800E-02",
                             "-2.492000E-03",
-                            "0.0000000E+00"
+                            "1.014000E-03"
                         ],
                         [
                             "3.000000E-06",
@@ -5959,7 +5952,7 @@
                             "-6.888300E-02",
                             "1.843850E-01",
                             "5.617880E-01",
-                            "0.0000000E+00"
+                            "4.144160E-01"
                         ],
                         [
                             "5.000000E-06",
@@ -5977,7 +5970,7 @@
                             "-8.499500E-02",
                             "4.508130E-01",
                             "6.408690E-01",
-                            "0.0000000E+00"
+                            "5.417200E-02"
                         ],
                         [
                             "0.000000E+00",
@@ -5997,11 +5990,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -6024,7 +6017,7 @@
                             "3.294540E-01",
                             "3.609760E-01",
                             "2.716570E-01",
-                            "0.0000000E+00"
+                            "1.049810E-01"
                         ],
                         [
                             "3.279000E-03",
@@ -6034,7 +6027,7 @@
                             "3.862990E-01",
                             "-5.837500E-02",
                             "-5.388760E-01",
-                            "0.0000000E+00"
+                            "-3.454730E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -6046,11 +6039,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         3
                     ],
@@ -6063,23 +6056,24 @@
                             "4.311320E-01",
                             "7.546420E-01"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "31": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
                     "reference_keys": [
-                        "wilson1999a"
+                        "balabanov2005a",
+                        "balabanov2006a"
                     ]
                 }
-            ],
+            ]
+        },
+        "31": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -6114,7 +6108,7 @@
                             "2.060600E-03",
                             "-9.269000E-04",
                             "2.273000E-04",
-                            "0.0000000E+00"
+                            "-1.063000E-04"
                         ],
                         [
                             "-6.430000E-05",
@@ -6130,7 +6124,7 @@
                             "6.849420E-02",
                             "-1.187120E-02",
                             "2.665200E-03",
-                            "0.0000000E+00"
+                            "-1.225100E-03"
                         ],
                         [
                             "2.450000E-05",
@@ -6146,7 +6140,7 @@
                             "5.864249E-01",
                             "6.726347E-01",
                             "2.761230E-02",
-                            "0.0000000E+00"
+                            "-9.365100E-03"
                         ],
                         [
                             "-5.700000E-06",
@@ -6162,7 +6156,7 @@
                             "-1.831929E-01",
                             "-3.571308E-01",
                             "6.246013E-01",
-                            "0.0000000E+00"
+                            "5.238430E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -6180,11 +6174,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -6213,7 +6207,7 @@
                             "-7.203000E-04",
                             "2.095000E-03",
                             "-3.290000E-04",
-                            "0.0000000E+00"
+                            "1.162000E-04"
                         ],
                         [
                             "-5.803000E-04",
@@ -6226,7 +6220,7 @@
                             "5.820587E-01",
                             "3.366619E-01",
                             "1.719120E-02",
-                            "0.0000000E+00"
+                            "-3.326500E-03"
                         ],
                         [
                             "9.500000E-05",
@@ -6239,7 +6233,7 @@
                             "-1.265661E-01",
                             "-4.994440E-02",
                             "4.494199E-01",
-                            "0.0000000E+00"
+                            "6.718899E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -6254,11 +6248,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -6287,13 +6281,9 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "32": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
@@ -6301,9 +6291,13 @@
                         "wilson1999a"
                     ]
                 }
-            ],
+            ]
+        },
+        "32": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -6338,7 +6332,7 @@
                             "2.243000E-03",
                             "-1.038200E-03",
                             "2.695000E-04",
-                            "0.0000000E+00"
+                            "-1.228000E-04"
                         ],
                         [
                             "-6.380000E-05",
@@ -6354,7 +6348,7 @@
                             "7.221740E-02",
                             "-1.272650E-02",
                             "2.960800E-03",
-                            "0.0000000E+00"
+                            "-1.329200E-03"
                         ],
                         [
                             "2.460000E-05",
@@ -6370,7 +6364,7 @@
                             "5.637985E-01",
                             "6.947182E-01",
                             "3.157300E-02",
-                            "0.0000000E+00"
+                            "-9.894900E-03"
                         ],
                         [
                             "-6.300000E-06",
@@ -6386,7 +6380,7 @@
                             "-1.980528E-01",
                             "-4.073954E-01",
                             "6.477288E-01",
-                            "0.0000000E+00"
+                            "5.222033E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -6404,11 +6398,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -6437,7 +6431,7 @@
                             "7.680000E-05",
                             "2.126300E-03",
                             "-3.744000E-04",
-                            "0.0000000E+00"
+                            "1.321000E-04"
                         ],
                         [
                             "-5.630000E-04",
@@ -6450,7 +6444,7 @@
                             "5.820239E-01",
                             "3.477720E-01",
                             "1.924550E-02",
-                            "0.0000000E+00"
+                            "-3.482500E-03"
                         ],
                         [
                             "1.115000E-04",
@@ -6463,7 +6457,7 @@
                             "-1.559804E-01",
                             "-6.323700E-02",
                             "5.040819E-01",
-                            "0.0000000E+00"
+                            "6.182200E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -6478,11 +6472,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -6511,13 +6505,9 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "33": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
@@ -6525,9 +6515,13 @@
                         "wilson1999a"
                     ]
                 }
-            ],
+            ]
+        },
+        "33": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -6562,7 +6556,7 @@
                             "2.424000E-03",
                             "-1.149100E-03",
                             "3.095000E-04",
-                            "0.0000000E+00"
+                            "-1.377000E-04"
                         ],
                         [
                             "-6.340000E-05",
@@ -6578,7 +6572,7 @@
                             "7.581070E-02",
                             "-1.352780E-02",
                             "3.197000E-03",
-                            "0.0000000E+00"
+                            "-1.405600E-03"
                         ],
                         [
                             "2.460000E-05",
@@ -6594,7 +6588,7 @@
                             "5.438738E-01",
                             "7.143591E-01",
                             "3.534430E-02",
-                            "0.0000000E+00"
+                            "-1.028920E-02"
                         ],
                         [
                             "-6.800000E-06",
@@ -6610,7 +6604,7 @@
                             "-2.091425E-01",
                             "-4.500918E-01",
                             "6.603978E-01",
-                            "0.0000000E+00"
+                            "5.284152E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -6628,11 +6622,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -6661,7 +6655,7 @@
                             "6.918000E-04",
                             "2.163300E-03",
                             "-4.150000E-04",
-                            "0.0000000E+00"
+                            "1.452000E-04"
                         ],
                         [
                             "-5.519000E-04",
@@ -6674,7 +6668,7 @@
                             "5.823622E-01",
                             "3.537465E-01",
                             "2.064390E-02",
-                            "0.0000000E+00"
+                            "-3.638200E-03"
                         ],
                         [
                             "1.236000E-04",
@@ -6687,7 +6681,7 @@
                             "-1.791667E-01",
                             "-7.404770E-02",
                             "5.358094E-01",
-                            "0.0000000E+00"
+                            "5.888104E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -6702,11 +6696,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -6735,13 +6729,9 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "34": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
@@ -6749,9 +6739,13 @@
                         "wilson1999a"
                     ]
                 }
-            ],
+            ]
+        },
+        "34": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -6786,7 +6780,7 @@
                             "2.602200E-03",
                             "-1.258300E-03",
                             "3.465000E-04",
-                            "0.0000000E+00"
+                            "-1.503000E-04"
                         ],
                         [
                             "-6.290000E-05",
@@ -6802,7 +6796,7 @@
                             "7.925690E-02",
                             "-1.426970E-02",
                             "3.379200E-03",
-                            "0.0000000E+00"
+                            "-1.453700E-03"
                         ],
                         [
                             "2.470000E-05",
@@ -6818,7 +6812,7 @@
                             "5.261436E-01",
                             "7.320371E-01",
                             "3.882460E-02",
-                            "0.0000000E+00"
+                            "-1.050360E-02"
                         ],
                         [
                             "-7.200000E-06",
@@ -6834,7 +6828,7 @@
                             "-2.188461E-01",
                             "-4.896524E-01",
                             "6.775818E-01",
-                            "0.0000000E+00"
+                            "5.296721E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -6852,11 +6846,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -6885,7 +6879,7 @@
                             "2.219000E-04",
                             "2.283800E-03",
                             "-4.756000E-04",
-                            "0.0000000E+00"
+                            "1.516000E-04"
                         ],
                         [
                             "-5.610000E-04",
@@ -6898,7 +6892,7 @@
                             "5.850099E-01",
                             "3.416816E-01",
                             "1.991250E-02",
-                            "0.0000000E+00"
+                            "-2.613100E-03"
                         ],
                         [
                             "1.366000E-04",
@@ -6911,7 +6905,7 @@
                             "-2.014663E-01",
                             "-6.878210E-02",
                             "5.595944E-01",
-                            "0.0000000E+00"
+                            "5.709784E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -6926,11 +6920,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -6959,13 +6953,9 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "35": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
@@ -6973,9 +6963,13 @@
                         "wilson1999a"
                     ]
                 }
-            ],
+            ]
+        },
+        "35": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -7010,7 +7004,7 @@
                             "2.772800E-03",
                             "-1.363500E-03",
                             "3.812000E-04",
-                            "0.0000000E+00"
+                            "-1.615000E-04"
                         ],
                         [
                             "-6.250000E-05",
@@ -7026,7 +7020,7 @@
                             "8.255020E-02",
                             "-1.496940E-02",
                             "3.528800E-03",
-                            "0.0000000E+00"
+                            "-1.490900E-03"
                         ],
                         [
                             "2.480000E-05",
@@ -7042,7 +7036,7 @@
                             "5.105658E-01",
                             "7.477214E-01",
                             "4.215120E-02",
-                            "0.0000000E+00"
+                            "-1.066120E-02"
                         ],
                         [
                             "-7.600000E-06",
@@ -7058,7 +7052,7 @@
                             "-2.266693E-01",
                             "-5.241165E-01",
                             "6.889865E-01",
-                            "0.0000000E+00"
+                            "5.344331E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -7076,11 +7070,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -7109,7 +7103,7 @@
                             "-9.090000E-04",
                             "2.483200E-03",
                             "-5.744000E-04",
-                            "0.0000000E+00"
+                            "1.691000E-04"
                         ],
                         [
                             "-5.819000E-04",
@@ -7122,7 +7116,7 @@
                             "5.898400E-01",
                             "3.171944E-01",
                             "1.798330E-02",
-                            "0.0000000E+00"
+                            "-1.468300E-03"
                         ],
                         [
                             "1.518000E-04",
@@ -7135,7 +7129,7 @@
                             "-2.232540E-01",
                             "-5.641790E-02",
                             "5.808079E-01",
-                            "0.0000000E+00"
+                            "5.508132E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -7150,11 +7144,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -7183,13 +7177,9 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
                 }
-            ]
-        },
-        "36": {
+            ],
             "references": [
                 {
                     "reference_description": "The cc-pVDZ basis set",
@@ -7197,9 +7187,13 @@
                         "wilson1999a"
                     ]
                 }
-            ],
+            ]
+        },
+        "36": {
             "electron_shells": [
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         0
                     ],
@@ -7234,7 +7228,7 @@
                             "2.939300E-03",
                             "-1.466200E-03",
                             "4.144000E-04",
-                            "0.0000000E+00"
+                            "-1.720000E-04"
                         ],
                         [
                             "-6.220000E-05",
@@ -7250,7 +7244,7 @@
                             "8.565790E-02",
                             "-1.561230E-02",
                             "3.649000E-03",
-                            "0.0000000E+00"
+                            "-1.518900E-03"
                         ],
                         [
                             "2.490000E-05",
@@ -7266,7 +7260,7 @@
                             "4.968578E-01",
                             "7.616895E-01",
                             "4.532670E-02",
-                            "0.0000000E+00"
+                            "-1.077220E-02"
                         ],
                         [
                             "-7.900000E-06",
@@ -7282,7 +7276,7 @@
                             "-2.332471E-01",
                             "-5.546497E-01",
                             "6.969522E-01",
-                            "0.0000000E+00"
+                            "5.408152E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -7300,11 +7294,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto",
+                    "region": "",
                     "angular_momentum": [
                         1
                     ],
@@ -7333,7 +7327,7 @@
                             "-2.507800E-03",
                             "2.713900E-03",
                             "-6.977000E-04",
-                            "0.0000000E+00"
+                            "2.107000E-04"
                         ],
                         [
                             "-6.208000E-04",
@@ -7346,7 +7340,7 @@
                             "5.981592E-01",
                             "2.750453E-01",
                             "1.277060E-02",
-                            "0.0000000E+00"
+                            "-1.013500E-03"
                         ],
                         [
                             "1.701000E-04",
@@ -7359,7 +7353,7 @@
                             "-2.440586E-01",
                             "-2.950070E-02",
                             "6.012295E-01",
-                            "0.0000000E+00"
+                            "5.254807E-01"
                         ],
                         [
                             "0.000000E+00",
@@ -7374,11 +7368,11 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto"
+                    ]
                 },
                 {
+                    "function_type": "gto_spherical",
+                    "region": "",
                     "angular_momentum": [
                         2
                     ],
@@ -7407,9 +7401,15 @@
                             "0.000000E+00",
                             "1.000000E+00"
                         ]
-                    ],
-                    "region": "",
-                    "function_type": "gto_spherical"
+                    ]
+                }
+            ],
+            "references": [
+                {
+                    "reference_description": "The cc-pVDZ basis set",
+                    "reference_keys": [
+                        "wilson1999a"
+                    ]
                 }
             ]
         }
