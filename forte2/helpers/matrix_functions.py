@@ -1,6 +1,6 @@
 import numpy as np
 
-MACHEPS = 1e-15
+MACHEPS = np.finfo(float).eps
 
 
 def invsqrt_matrix(M, tol=1e-7):

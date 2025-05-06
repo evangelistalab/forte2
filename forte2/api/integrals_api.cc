@@ -176,11 +176,9 @@ Returns
 ndarray, shape = (nb1, nb2)
     Overlap integrals matrix.
 )pbdoc");
-
     sub_m.def("overlap", [](const Basis& basis) { return overlap(basis, basis); }, "basis"_a);
 
     sub_m.def("kinetic", &kinetic, "basis1"_a, "basis2"_a);
-
     sub_m.def("kinetic", [](const Basis& basis) { return kinetic(basis, basis); }, "basis"_a);
 
     sub_m.def(
@@ -196,6 +194,7 @@ ndarray, shape = (nb1, nb2)
             return nuclear(basis, basis, charges);
         },
         "basis"_a, "charges"_a);
+
     sub_m.def(
         "emultipole1",
         [](const Basis& basis1, const Basis& basis2, std::array<double, 3> origin) {
@@ -208,6 +207,7 @@ ndarray, shape = (nb1, nb2)
             return emultipole1(basis, basis, origin);
         },
         "basis"_a, "origin"_a = std::array<double, 3>{0.0, 0.0, 0.0});
+
     sub_m.def(
         "emultipole2",
         [](const Basis& basis1, const Basis& basis2, std::array<double, 3> origin) {
@@ -220,6 +220,7 @@ ndarray, shape = (nb1, nb2)
             return emultipole2(basis, basis, origin);
         },
         "basis"_a, "origin"_a = std::array<double, 3>{0.0, 0.0, 0.0});
+
     sub_m.def(
         "emultipole3",
         [](const Basis& basis1, const Basis& basis2, std::array<double, 3> origin) {
@@ -232,6 +233,7 @@ ndarray, shape = (nb1, nb2)
             return emultipole3(basis, basis, origin);
         },
         "basis"_a, "origin"_a = std::array<double, 3>{0.0, 0.0, 0.0});
+
     sub_m.def(
         "opVop",
         [](const Basis& basis1, const Basis& basis2,
