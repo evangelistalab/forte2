@@ -3,7 +3,7 @@ import numpy as np
 import scipy as sp
 import time
 
-from forte2.scf import RHF, UHF, ROHF, CUHF
+from forte2.scf import RHF, ROHF, UHF, CUHF
 
 
 def test_rhf():
