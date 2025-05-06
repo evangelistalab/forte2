@@ -38,9 +38,6 @@ class Basis {
     /// @return the i-th shell in the basis set
     const libint2::Shell& operator[](size_t i) const;
 
-    /// @return Return a new basis set with the shells decontracted into single Gaussians.
-    Basis decontract() const;
-
     /// @return a vector of pairs of the first index and size of each shell
     ///         in the basis set. The first index is the index of the first basis function
     ///         in the shell, and the size is the number of basis functions in the shell.

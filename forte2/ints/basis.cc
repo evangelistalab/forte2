@@ -77,23 +77,4 @@ std::vector<std::pair<std::size_t, std::size_t>> Basis::center_first_and_last() 
     return result;
 }
 
-Basis Basis::decontract() const {
-    Basis result;
-    for (const auto& shell : shells_) {
-        const auto n = shell.nprim();
-        const auto& alpha = shell.alpha;
-        const auto& contr = shell.contr[0];
-        const auto l = contr.l;
-        const auto is_pure = contr.pure;
-        const auto& coeff = contr.coeff;
-        const auto& O = shell.O;
-        // loop over the primitives and create a new shell for each one
-        for (std::size_t i = 0; i < n; ++i) {
-            libint2::Shell new_shell{alpha, {{l, is_pure, coeff}}, O};
-            result.add(new_shell);
-        }
-    }
-    return result;
-}
-
 } // namespace forte2

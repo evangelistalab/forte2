@@ -19,6 +19,11 @@ class RHF(MOs):
     dconv: float = 10**-3
     maxiter: int = 100
 
+    def _get_hcore(self, system):
+        T = forte2.ints.kinetic(system.basis)
+        V = forte2.ints.nuclear(system.basis, system.atoms)
+        return T + V
+
     def run(self, system):
         start = time.monotonic()
         Zsum = np.sum([x[0] for x in system.atoms])
@@ -37,11 +42,10 @@ class RHF(MOs):
 
         Vnn = forte2.ints.nuclear_repulsion(system.atoms)
         S = forte2.ints.overlap(system.basis)
-        T = forte2.ints.kinetic(system.basis)
-        V = forte2.ints.nuclear(system.basis, system.atoms)
+        
         fock_builder = DFFockBuilder(system)
 
-        H = T + V
+        H = self._get_hcore(system)
 
         self.C = self._initial_guess(system, H, S)
         D = self._build_density_matrix(self.C)
