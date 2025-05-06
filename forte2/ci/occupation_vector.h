@@ -1,7 +1,10 @@
 #pragma once
 
 #include <bit>
+#include <functional>
 #include <string>
+
+#include "helpers/hash_combine.h"
 
 namespace forte2 {
 
@@ -59,3 +62,11 @@ std::string str(const OccupationVector& ov, int n = OccupationVector::N) {
 }
 
 } // namespace forte2
+
+namespace std {
+template <> struct hash<forte2::OccupationVector> {
+    std::size_t operator()(const forte2::OccupationVector& ov) const noexcept {
+        return std::hash<forte2::OccupationVector::bits_t>()(ov.raw());
+    }
+};
+} // namespace std
