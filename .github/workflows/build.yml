@@ -1,0 +1,43 @@
+name: build
+
+on: 
+  push:
+  pull_request:
+  schedule:
+    - cron: '0 15 * * *'
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}   
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: 'true'
+
+    - name: Setup Conda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        activate-environment: forte
+        environment-file: environment.yml
+        channels: conda-forge
+        show-channel-urls: true
+        python-version: '3.11'
+        auto-activate-base: false
+        add-pip-as-python-dependency: true
+
+    - name: Compile Forte2
+      id: compile-forte2
+      run: |
+        pip install --no-build-isolation -ve .
+        pip list
+
+    - name: Run Forte2 pytest tests
+      if: steps.compile-forte2.outcome == 'success' && '!cancelled()'
+      run: |
+        cd $HOME/work/forte/forte/tests
+        pytest -v

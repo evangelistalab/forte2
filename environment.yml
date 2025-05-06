@@ -1,0 +1,16 @@
+name: forte
+
+dependencies:
+    - python=3.11
+    - pip
+    - nanobind>=1.3.2
+    - cxx-compiler
+    - mkl
+    - cmake
+    - numpy
+    - scipy
+    - eigen
+    - boost
+    - scikit-build-core>=0.10
+    - pytest
+    - conda-forge::libint
