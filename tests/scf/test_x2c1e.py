@@ -5,7 +5,7 @@ import numpy as np
 import scipy as sp
 import time
 
-from forte2.scf import RHF, get_hcore_sfx2c1e
+from forte2.scf import RHF, get_hcore_x2c
 
 
 def test_sfx2c1e():
@@ -21,7 +21,7 @@ def test_sfx2c1e():
     )
 
     scf = RHF(charge=0)
-    scf._get_hcore = get_hcore_sfx2c1e
+    scf._get_hcore = lambda x: get_hcore_x2c(x, x2c_type="sf")
     scf.run(system)
     assert np.isclose(
         scf.E, -76.110651355917, atol=1e-10
