@@ -40,5 +40,5 @@ jobs:
     - name: Run Forte2 pytest tests
       if: steps.compile-forte2.outcome == 'success' && '!cancelled()'
       run: |
-        cd $HOME/work/forte/forte/tests
+        cd $HOME/work/forte2/forte2/tests
         pytest -v
