@@ -33,7 +33,7 @@ jobs:
     - name: Compile Forte2
       id: compile-forte2
       run: |
-        export CNAKE_GENERATOR="Unix Makefiles"
+        export CMAKE_GENERATOR="Unix Makefiles"
         pip install --no-build-isolation -ve .
         pip list
 
