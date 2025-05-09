@@ -123,18 +123,20 @@ void export_basis_api(nb::module_& sub_m) {
     nb::class_<Basis>(sub_m, "Basis")
         .def(nb::init<>())
         .def("add", &Basis::add, "shell"_a)
+        .def("set_name", &Basis::set_name, "name"_a)
         .def("__getitem__", &Basis::operator[], "i"_a)
         .def("__len__", &Basis::size)
         .def_prop_ro("shell_first_and_size", &Basis::shell_first_and_size)
         .def_prop_ro("center_first_and_last", &Basis::center_first_and_last)
         .def_prop_ro("size", &Basis::size)
         .def_prop_ro("max_l", &Basis::max_l)
+        .def_prop_ro("name", &Basis::name)
         .def_prop_ro("max_nprim", &Basis::max_nprim)
         .def_prop_ro("nprim", &Basis::max_nprim)
         .def_prop_ro("nshells", &Basis::nshells)
         .def("__repr__", [](const Basis& b) {
             std::ostringstream oss;
-            oss << "<Basis with " << b.size() << " basis functions>";
+            oss << "<Basis '" << b.name() <<"' with " << b.size() << " basis functions>";
             return oss.str();
         });
 }

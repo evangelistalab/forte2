@@ -60,6 +60,8 @@ def assemble_basis(
         Exception: If the basis set file cannot be opened or if an element is not in the basis set.
     """
     basis = forte2.ints.Basis()
+    prefix = "dec-" if decontract else ""
+    basis.set_name(prefix+basis_name)
     basis_json = parse_basis_json(basis_name)
 
     # Cache for BSE queries to avoid repeated downloads

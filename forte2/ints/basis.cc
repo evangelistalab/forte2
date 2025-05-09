@@ -38,6 +38,8 @@ const libint2::Shell& Basis::operator[](size_t i) const {
 
 int Basis::max_l() const { return max_l_; }
 
+std::string Basis::name() const { return name_; }
+
 std::size_t Basis::max_nprim() const { return max_nprim_; }
 
 std::vector<std::pair<std::size_t, std::size_t>> Basis::shell_first_and_size() const {

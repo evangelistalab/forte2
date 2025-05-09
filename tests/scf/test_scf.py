@@ -14,7 +14,7 @@ def test_scf():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = forte2.System(xyz=xyz, basis_name="cc-pVQZ", auxiliary_basis_name="cc-pVQZ-JKFIT")
+    system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
 
     scf = RHF(charge=0)
     scf.run(system)

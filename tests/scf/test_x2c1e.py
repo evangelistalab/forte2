@@ -16,7 +16,7 @@ def test_sfx2c1e():
     """
 
     system = forte2.System(
-        xyz=xyz, basis_name="cc-pVQZ", auxiliary_basis_name="cc-pVQZ-JKFIT"
+        xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT"
     )
 
     scf = RHF(charge=0, econv=1e-10, dconv=1e-8)
@@ -30,7 +30,7 @@ def test_sfx2c1e():
 def test_sox2c1e():
     xyz = "Ne 0 0 0"
 
-    system = forte2.System(xyz=xyz, basis_name="cc-pvdz")
+    system = forte2.System(xyz=xyz, basis="cc-pvdz")
 
     hcore = get_hcore_x2c(system, x2c_type="so")
     assert np.isclose(np.linalg.eigvalsh(hcore)[1], -51.969286062806205, atol=1e-10)
