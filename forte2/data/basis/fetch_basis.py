@@ -28,8 +28,7 @@ BASIS_NAMES = [
 def fetch_basis():
     for basis_name in BASIS_NAMES:
         try:
-            # optimize_general = bse.get_basis_family(basis_name).lower() == "dunning"
-            optimize_general = False
+            optimize_general = bse.get_basis_family(basis_name).lower() == "dunning"
             if optimize_general:
                 print(f"Optimizing general contraction for {basis_name}")
             basis = bse.get_basis(basis_name, fmt="json", optimize_general=optimize_general)
