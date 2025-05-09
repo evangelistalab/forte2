@@ -29,7 +29,7 @@ def parse_basis_json(basis_name: str) -> dict:
             "r"
         ) as f:
             return json.load(f)
-    except OSError:
+    except FileNotFoundError:
         if BSE_AVAILABLE:
             print(
                 f"[forte2] Basis {basis_name.lower()} not found locally. Using Basis Set Exchange."

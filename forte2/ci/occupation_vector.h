@@ -47,19 +47,19 @@ struct OccupationVector {
     }
 };
 
-std::string str(const OccupationVector& ov, int n = OccupationVector::N) {
-    std::string s;
-    s += "|";
-    for (int p = 0; p < n; ++p) {
-        if (ov[p]) {
-            s += "1";
-        } else {
-            s += "0";
-        }
-    }
-    s += ">";
-    return s;
-}
+// std::string str(const OccupationVector& ov, int n = OccupationVector::N) {
+//     std::string s;
+//     s += "|";
+//     for (int p = 0; p < n; ++p) {
+//         if (ov[p]) {
+//             s += "1";
+//         } else {
+//             s += "0";
+//         }
+//     }
+//     s += ">";
+//     return s;
+// }
 
 } // namespace forte2
 
