@@ -42,7 +42,7 @@ def parse_basis_json(basis_name: str) -> dict:
     return basis_json
 
 
-def assemble_basis(
+def build_basis(
     basis_name: str,
     atoms: list[tuple[int, tuple[float, float, float]]],
     embed_normalization_into_coefficients: bool = True,
@@ -108,21 +108,3 @@ def assemble_basis(
                     )
                 )
     return basis
-
-
-def build_basis(
-    basis_name: str,
-    atoms: list[tuple[int, tuple[float, float, float]]],
-    embed_normalization_into_coefficients: bool = True,
-) -> forte2.ints.Basis:
-    """
-    Build a basis set from a basis name and a list of atoms.
-    Args:
-        basis_name (str): The name of the basis set.
-        atoms (list[tuple[int, tuple[float, float, float]]]): A list of tuples containing atomic numbers and coordinates.
-    Returns:
-        forte2.ints.Basis: The basis set.
-    Raises:
-        Exception: If the basis set file cannot be opened or if an element is not in the basis set.
-    """
-    return assemble_basis(basis_name, atoms)
