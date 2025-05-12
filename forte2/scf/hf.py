@@ -118,6 +118,9 @@ class RHF(SCFMixin, MOs):
     dconv: float = 1e-3
     maxiter: int = 100
 
+    def run(self, system):
+        self.run_scf(system)
+
     def _build_fock(self, H, fock_builder, S):
         J = fock_builder.build_J(self.D)[0]
         K = fock_builder.build_K([self.C[0][:, : self.na]])[0]

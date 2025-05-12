@@ -25,7 +25,7 @@ def test_cube():
     assert np.isclose(scf.E, escf, atol=1e-10), f"SCF energy {scf.E} is not close to expected value {escf}"
 
     cube = Cube()
-    cube.run(system, scf.C)
+    cube.run(system, scf.C[0])
     # assert if 24 cube files are created using glob
     assert len(glob.glob("*.cube")) == 24
     # clean up the cube files
