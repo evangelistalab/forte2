@@ -5,7 +5,7 @@ import numpy as np
 import scipy as sp
 import time
 
-from forte2.scf import RHF, get_hcore_x2c
+from forte2.scf import RHF, GHF, get_hcore_x2c
 
 
 def test_sfx2c1e():
@@ -15,9 +15,7 @@ def test_sfx2c1e():
     Br 0 0 1.2
     """
 
-    system = forte2.System(
-        xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT"
-    )
+    system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
 
     scf = RHF(charge=0, econv=1e-10, dconv=1e-8)
     scf._get_hcore = lambda x: get_hcore_x2c(x, x2c_type="sf")
@@ -28,14 +26,20 @@ def test_sfx2c1e():
 
 
 def test_sox2c1e():
+    eghf = -128.61570430672734
     xyz = "Ne 0 0 0"
 
-    system = forte2.System(xyz=xyz, basis="cc-pvdz")
-
-    hcore = get_hcore_x2c(system, x2c_type="so")
-    assert np.isclose(np.linalg.eigvalsh(hcore)[1], -54.52590104174125, atol=1e-10)
+    system = forte2.System(
+        xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit"
+    )
+    scf = GHF(charge=0, econv=1e-10, dconv=1e-8)
+    scf._get_hcore = lambda x: get_hcore_x2c(x, x2c_type="so")
+    scf.run(system, diis_start=-1)
+    assert np.isclose(
+        scf.E, eghf, atol=1e-8, rtol=1e-6
+    ), f"SCF energy {scf.E} is not close to expected value eghf"
 
 
 if __name__ == "__main__":
-    test_sfx2c1e()
+    # test_sfx2c1e()
     test_sox2c1e()

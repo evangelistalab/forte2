@@ -10,13 +10,6 @@ from .initial_guess import minao_initial_guess
 
 
 class SCFMixin:
-
-    def _get_hcore(self, system):
-        T = forte2.ints.kinetic(system.basis)
-        V = forte2.ints.nuclear(system.basis, system.atoms)
-        H = T + V
-        return H
-
     def _check_scf_params(self):
         pass
 
@@ -24,24 +17,26 @@ class SCFMixin:
         return type(self).__name__.upper()
 
     def _check_parameters(self):
+        assert self.mult > 0
+        assert self.charge <= self.nel
         scftyp = self._scf_type()
         if scftyp == "RHF":
             assert self.na == self.nb
 
-    def run_scf(self, system):
+    def run(self, system, diis_start=4, diis_nvec=8):
         start = time.monotonic()
 
         method = self._scf_type().upper()
         Zsum = np.sum([x[0] for x in system.atoms])
-        nel = Zsum - self.charge
+        self.nel = Zsum - self.charge
         self.nbasis = system.basis.size
-        self.na = (nel + self.mult - 1) // 2
-        self.nb = (nel - self.mult + 1) // 2
+        self.na = (self.nel + self.mult - 1) // 2
+        self.nb = (self.nel - self.mult + 1) // 2
         self.sz = (self.na - self.nb) / 2.0
 
         self._check_parameters()
 
-        diis = forte2.helpers.DIIS()
+        diis = forte2.helpers.DIIS(diis_start=diis_start, diis_nvec=diis_nvec)
 
         print(f"Number of alpha electrons: {self.na}")
         print(f"Number of beta electrons: {self.nb}")
@@ -74,7 +69,9 @@ class SCFMixin:
 
             # 1. Build the Fock matrix
             # (there is a slot for canonicalized F to accommodate ROHF and CUHF methods - admittedly weird for RHF/UHF)
-            F, F_canon = self._build_fock(H, fock_builder, S)
+            F, F_canon = self._build_fock(
+                H, fock_builder, S, bootstrap=iter == 0 and method == "GHF"
+            )
             # 2. Build the orbital gradient (DIIS residual)
             AO_grad = self._build_ao_grad(S, F_canon)
             # 3. Perform DIIS update of Fock
@@ -125,10 +122,13 @@ class RHF(SCFMixin, MOs):
     dconv: float = 1e-3
     maxiter: int = 100
 
-    def run(self, system):
-        self.run_scf(system)
+    def _get_hcore(self, system):
+        T = forte2.ints.kinetic(system.basis)
+        V = forte2.ints.nuclear(system.basis, system.atoms)
+        H = T + V
+        return H
 
-    def _build_fock(self, H, fock_builder, S):
+    def _build_fock(self, H, fock_builder, S, bootstrap=False):
         J = fock_builder.build_J(self.D)[0]
         K = fock_builder.build_K([self.C[0][:, : self.na]])[0]
         F = H + 2.0 * J - K
@@ -171,10 +171,13 @@ class ROHF(SCFMixin, MOs):
     dconv: float = 1e-3
     maxiter: int = 100
 
-    def run(self, system):
-        self.run_scf(system)
+    def _get_hcore(self, system):
+        T = forte2.ints.kinetic(system.basis)
+        V = forte2.ints.nuclear(system.basis, system.atoms)
+        H = T + V
+        return H
 
-    def _build_fock(self, H, fock_builder, S):
+    def _build_fock(self, H, fock_builder, S, bootstrap=False):
         Ja, Jb = fock_builder.build_J(self.D)
         K = fock_builder.build_K([self.C[0][:, : self.na], self.C[0][:, : self.nb]])
         F = [H + Ja + Jb - k for k in K]
@@ -243,6 +246,94 @@ class ROHF(SCFMixin, MOs):
 
 
 @dataclass
+class GHF(SCFMixin, MOs):
+    charge: int
+    mult: int = 1
+    econv: float = 1e-6
+    dconv: float = 1e-3
+    maxiter: int = 100
+
+    def _get_hcore(self, system):
+        T = forte2.ints.kinetic(system.basis)
+        V = forte2.ints.nuclear(system.basis, system.atoms)
+        H = T + V
+        return sp.linalg.block_diag(H, H)
+
+    def _get_hcore_ao(self, system):
+        T = forte2.ints.kinetic(system.basis)
+        V = forte2.ints.nuclear(system.basis, system.atoms)
+        H = T + V
+        return H
+
+    def _build_fock(self, H, fock_builder, S, bootstrap=False):
+        Jaa, Jbb = fock_builder.build_J([self.D[0], self.D[3]])
+        nbf = Jaa.shape[0]
+        if bootstrap:
+            Kaa, Kab, Kba, Kbb = fock_builder.build_K_density(self.D)
+        else:
+            Kaa, Kab, Kba, Kbb = fock_builder.build_K(
+                [self.C[0][:nbf, : self.nel], self.C[0][nbf:, : self.nel]], ghf=True
+            )
+        F = H.copy()
+        F[:nbf, :nbf] += Jaa + Jbb - Kaa
+        F[:nbf, nbf:] += -Kab
+        F[nbf:, :nbf] += -Kba
+        F[nbf:, nbf:] += Jaa + Jbb - Kbb
+
+        F_canon = F
+
+        return F, F_canon
+
+    def _build_density_matrix(self):
+        D = np.einsum(
+            "mi,ni->mn",
+            self.C[0][:, : self.nel].conj(),
+            self.C[0][:, : self.nel],
+        )
+        nbf = D.shape[0] // 2
+        Daa = D[:nbf, :nbf]
+        Dab = D[:nbf, nbf:]
+        Dba = D[nbf:, :nbf]
+        Dbb = D[nbf:, nbf:]
+        return Daa, Dab, Dba, Dbb
+
+    def _initial_guess(self, system, H, S):
+        H_ao = self._get_hcore_ao(system)
+        return minao_initial_guess(system, H_ao, S)
+
+    def _build_initial_density_matrix(self):
+        Daa = np.einsum("mi,ni->mn", self.C[:, : self.na].conj(), self.C[:, : self.na])
+        Dbb = np.einsum("mi,ni->mn", self.C[:, : self.nb].conj(), self.C[:, : self.nb])
+        return Daa, np.zeros_like(Daa), np.zeros_like(Daa), Dbb
+
+    def _build_ao_grad(self, S, F):
+        Daa, Dab, Dba, Dbb = self.D
+        D_spinor = np.block([[Daa, Dab], [Dba, Dbb]])
+        S_spinor = np.block([[S, np.zeros_like(S)], [np.zeros_like(S), S]])
+        AO_grad = F @ D_spinor @ S_spinor - S_spinor @ D_spinor @ F
+        return AO_grad
+
+    def _diagonalize_fock(self, F, S):
+        S_spinor = np.block([[S, np.zeros_like(S)], [np.zeros_like(S), S]])
+        eps, C = sp.linalg.eigh(F, S_spinor)
+        return [eps], [C]
+
+    def _spin(self, S):
+        return 0.0
+
+    def _energy(self, H, F):
+        Daa, Dab, Dba, Dbb = self.D
+        D_spinor = np.block([[Daa, Dab], [Dba, Dbb]])
+        energy = 0.5 * np.einsum("vu,uv->", D_spinor, H) + 0.5 * np.einsum(
+            "vu,uv->", D_spinor, F
+        )
+        return energy.real
+
+    def _diis_update(self, diis, F, AO_grad):
+        return diis.update(F, AO_grad)
+
+
+@dataclass
 class UHF(SCFMixin, MOs):
     charge: int
     mult: int
@@ -250,10 +341,13 @@ class UHF(SCFMixin, MOs):
     dconv: float = 1e-3
     maxiter: int = 100
 
-    def run(self, system):
-        self.run_scf(system)
+    def _get_hcore(self, system):
+        T = forte2.ints.kinetic(system.basis)
+        V = forte2.ints.nuclear(system.basis, system.atoms)
+        H = T + V
+        return H
 
-    def _build_fock(self, H, fock_builder, S):
+    def _build_fock(self, H, fock_builder, S, bootstrap=False):
         Ja, Jb = fock_builder.build_J(self.D)
         K = fock_builder.build_K([self.C[0][:, : self.na], self.C[1][:, : self.nb]])
         F = [H + Ja + Jb - k for k in K]
@@ -330,10 +424,13 @@ class CUHF(SCFMixin, MOs):
     dconv: float = 1e-3
     maxiter: int = 100
 
-    def run(self, system):
-        self.run_scf(system)
+    def _get_hcore(self, system):
+        T = forte2.ints.kinetic(system.basis)
+        V = forte2.ints.nuclear(system.basis, system.atoms)
+        H = T + V
+        return H
 
-    def _build_fock(self, H, fock_builder, S):
+    def _build_fock(self, H, fock_builder, S, bootstrap=False):
         Ja, Jb = fock_builder.build_J(self.D)
         K = fock_builder.build_K([self.C[0][:, : self.na], self.C[1][:, : self.nb]])
         F = [H + Ja + Jb - k for k in K]

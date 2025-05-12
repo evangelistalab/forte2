@@ -16,7 +16,7 @@ class DIIS:
         The number of vectors to keep in the DIIS (default = 8)
     """
 
-    def __init__(self, diis_start: int = 4, diis_nvec: int = 6):
+    def __init__(self, diis_start: int = 4, diis_nvec: int = 8):
         self.do_diis = not ((diis_start < 1) or (diis_nvec < 1))
         if self.do_diis:
             # Initialize the parameter and error deques
@@ -61,11 +61,12 @@ class DIIS:
         bsol[-1] = -1.0
         for i in range(diis_dim):
             for j in range(i, diis_dim):
-                B[i, j] = np.dot(self.e_diis[i].flatten(), self.e_diis[j].flatten())
+                B[i, j] = np.dot(
+                    self.e_diis[i].flatten().conj(), self.e_diis[j].flatten()
+                )
                 if i != j:
                     B[j, i] = B[i, j]
 
-        #
         B[:-1, :-1] /= np.abs(B[:-1, :-1]).max()
         x = np.linalg.solve(B, bsol)
         p_new = np.zeros_like(p)

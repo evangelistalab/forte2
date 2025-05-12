@@ -40,10 +40,21 @@ class DFFockBuilder:
         J = [np.einsum("Pmn,Prs,rs->mn", self.B, self.B, Di, optimize=True) for Di in D]
         return J
 
-    def build_K(self, C):
+    def build_K(self, C, ghf=False):
         Y = [np.einsum("Pmr,ri->Pmi", self.B, Ci, optimize=True) for Ci in C]
-        K = [np.einsum("Pmi,Pni->mn", Yi, Yi, optimize=True) for Yi in Y]
+        if ghf:
+            K = []
+            for Yi in Y:
+                for Yj in Y:
+                    K.append(np.einsum("Pmi,Pni->mn", Yi.conj(), Yj, optimize=True))
+        else:
+            K = [np.einsum("Pmi,Pni->mn", Yi.conj(), Yi, optimize=True) for Yi in Y]
         return K
+    
+    def build_K_density(self, D):
+        K = [np.einsum("Pms,Prn,rs->mn", self.B, self.B, Di, optimize=True) for Di in D]
+        return K
+
 
     def build_JK(self, C):
         D = [np.einsum("mi,ni->mn", Ci, Ci, optimize=True) for Ci in C]

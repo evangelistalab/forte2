@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include <algorithm>
@@ -7,11 +6,7 @@
 #include <cmath>
 #include <unordered_map>
 #include <vector>
-
-#if __cplusplus >= 202002L
-  // C++20 or later
-  #include <concepts>
-#endif
+#include <concepts>
 
 namespace forte2 {
 

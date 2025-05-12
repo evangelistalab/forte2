@@ -23,6 +23,7 @@ BASIS_NAMES = [
     "cc-pvqz-rifit",
     "cc-pv5z-rifit",
     "sap_helfem_large",
+    "def2-universal-jkfit",
 ]
 
 def fetch_basis():

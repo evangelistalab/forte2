@@ -1,7 +1,4 @@
-#if __cplusplus >= 202002L
-  // C++20 or later
-  #include <format>
-#endif
+#include <format>
 
 #include <libint2.hpp>
 #include <libint2/shell.h>
@@ -82,8 +79,6 @@ void export_shell_api(nb::module_& sub_m) {
             "embed_normalization_into_coefficients"_a = true,
             "Construct a shell from the angular momentum (l) and a list of exponents and "
             "coefficients.")
-	 #if __cplusplus >= 202002L
-  	     // C++20 or later
 	     .def("__repr__",
 		     [](const libint2::Shell& s) {
 			 std::string str;
@@ -94,7 +89,6 @@ void export_shell_api(nb::module_& sub_m) {
 			 }
 			 return str;
               })
-	#endif
         .def_prop_ro(
             "size", [](libint2::Shell& s) { return s.size(); },
             "The number of basis functions in the shell (e.g., for l = 2, size = 5).")
