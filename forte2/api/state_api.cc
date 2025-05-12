@@ -11,7 +11,7 @@ using namespace nb::literals;
 namespace forte2 {
 
 void export_sparsestate_api(nb::module_& m) {
-    nb::class_<State>(m, "State")
+    nb::class_<State>(m, "SparseState")
         .def(nb::init<>(), "Default constructor")
         .def(nb::init<const State&>(), "Copy constructor")
         .def(nb::init<const State::container&>(), "Create a State from a container of Determinants")

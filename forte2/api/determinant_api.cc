@@ -35,6 +35,7 @@ void export_determinant_api(nb::module_& m) {
         .def_static("zero", &Determinant::zero)
         .def(nb::init<const Determinant&>())
         .def("__eq__", &Determinant::operator==)
+        .def("__lt__", &Determinant::operator<)
         .def("__repr__", [](Determinant& d) { return str(d); })
         .def("set_a", &Determinant::set_a)
         .def("set_b", &Determinant::set_b)

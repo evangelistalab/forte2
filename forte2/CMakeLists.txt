@@ -69,7 +69,9 @@ nanobind_add_module(
   api/forte2_api.cc
   api/integrals_api.cc
   api/determinant_api.cc
+  api/determinant_helpers_api.cc
   api/state_api.cc
+  helpers/determinant_helpers.cc
   ints/basis.cc
   ints/fock_builder.cc
   ints/nuclear_repulsion.cc
