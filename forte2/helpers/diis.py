@@ -23,6 +23,7 @@ class DIIS:
             self.p_diis = deque(maxlen=diis_nvec)
             self.e_diis = deque(maxlen=diis_nvec)
             self.diis_start = diis_start
+            self.diis_nvec = diis_nvec
             self.iter = -1
 
     def update(self, p: NDArray, e: NDArray) -> NDArray:
