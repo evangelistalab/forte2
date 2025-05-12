@@ -55,6 +55,13 @@ class RHF(MOs):
 
         diis = forte2.helpers.DIIS()
 
+        width = 88
+        print("=" * width)
+        print(
+            f"{'Iter':<4} {'Energy':>20} {'deltaE':>20} {'||deltaD||':>20} {'||orbgrad||':>20}"
+        )
+        print("-" * width)
+
         for iter in range(self.maxiter):
             # Build the Fock matrix
             J = fock_builder.build_J([D])[0]
@@ -81,13 +88,16 @@ class RHF(MOs):
 
             # check for convergence of both energy and density matrix
             print(
-                f"{iter + 1:4d} {self.E:20.12f} {self.E - Eold:20.12f} {np.linalg.norm(D - Dold):20.12f} {AO_gradient_norm:20.12f}"
+                f"{iter + 1:<4d} {self.E:>+20.12f} {self.E - Eold:>+20.12f} {np.linalg.norm(D - Dold):>20.12f} {AO_gradient_norm:>20.12f}"
             )
 
             if (np.abs(self.E - Eold) < self.econv) and (
                 np.linalg.norm(D - Dold) < self.dconv
             ):
-                print("SCF iterations converged")
+                print("=" * width)
+                print(
+                    f"SCF iterations converged to deltaE < {self.econv:.2e} and ||deltaD|| < {self.dconv:.2e}"
+                )
                 break
 
             Eold = self.E
@@ -95,6 +105,7 @@ class RHF(MOs):
 
         end = time.monotonic()
         print(f"SCF time: {end - start:.2f} seconds")
+        print(f"Converged SCF energy: {self.E:.12f} Eh")
 
     def _build_density_matrix(self, C):
         D = np.einsum("mi,ni->mn", C[:, 0 : self.na], C[:, 0 : self.na])
