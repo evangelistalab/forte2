@@ -17,6 +17,8 @@ struct OccupationVector {
 
     OccupationVector() noexcept {}
 
+    OccupationVector(bits_t bits) noexcept : bits_(bits) {}
+
     static OccupationVector zero() noexcept {
         OccupationVector ov;
         ov.clear();
@@ -31,6 +33,8 @@ struct OccupationVector {
     // compare two occupation vectors
     bool operator==(const OccupationVector& other) const noexcept { return bits_ == other.bits_; }
 
+    bool operator<(const OccupationVector& other) const noexcept { return bits_ < other.bits_; }
+
     bits_t raw() const noexcept { return bits_; }
 
     // the number of bits in the vector set to 1
@@ -44,6 +48,12 @@ struct OccupationVector {
     /// set bit in position pos to the value val
     void set(size_t pos, bool val) {
         bits_ ^= (-val ^ bits_) & maskbit(pos); // if-free implementation
+    }
+    int count_diff(const OccupationVector& other) const noexcept {
+        return std::popcount(bits_ ^ other.bits_);
+    }
+    int count_same(const OccupationVector& other) const noexcept {
+        return std::popcount(bits_ & other.bits_);
     }
 };
 
@@ -64,6 +74,7 @@ struct OccupationVector {
 } // namespace forte2
 
 namespace std {
+// specialization of std::hash for forte2::OccupationVector
 template <> struct hash<forte2::OccupationVector> {
     std::size_t operator()(const forte2::OccupationVector& ov) const noexcept {
         return std::hash<forte2::OccupationVector::bits_t>()(ov.raw());
