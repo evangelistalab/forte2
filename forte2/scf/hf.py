@@ -10,15 +10,32 @@ from .initial_guess import minao_initial_guess
 
 
 class SCFMixin:
+
+    def _check_scf_params(self):
+        pass
+
+    def _scf_type(self):
+        return type(self).__name__.upper()
+
+    def _check_parameters(self):
+        scftyp = self._scf_type()
+        if scftyp == 'RHF':
+            assert self.na == self.nb
+
     def run_scf(self, system):
         start = time.monotonic()
 
+        method = self._scf_type().upper()
         Zsum = np.sum([x[0] for x in system.atoms])
         nel = Zsum - self.charge
         self.nbasis = system.basis.size
         self.na = (nel + self.mult - 1) // 2 
         self.nb = (nel - self.mult + 1) // 2
         self.sz = (self.na - self.nb) / 2.0
+
+        self._check_parameters()
+
+        diis = forte2.helpers.DIIS()
 
         print(f"Number of alpha electrons: {self.na}")
         print(f"Number of beta electrons: {self.nb}")
@@ -27,6 +44,8 @@ class SCFMixin:
         print(f"Number of basis functions: {self.nbasis}")
         print(f"Energy convergence criterion: {self.econv:e}")
         print(f"Density convergence criterion: {self.dconv:e}")
+        print(f"DIIS acceleration: {diis.do_diis}")
+        print(f"\n==> {method} SCF ROUTINE <==")
 
         Vnn = forte2.ints.nuclear_repulsion(system.atoms)
         S = forte2.ints.overlap(system.basis)
@@ -42,9 +61,6 @@ class SCFMixin:
         Eold = 0.0
         Dold = self.D
 
-        diis = forte2.helpers.DIIS()
-
-        print(f"==> {self.method.upper()} SCF ROUTINE <==")
         print(f"{'Iter':>4s} {'Energy':>20s} {'deltaE':>20s} {'|deltaD|':>20s} {'|AO grad|':>20s} {'<S^2>':>20s}")
         for iter in range(self.maxiter):
 
@@ -73,27 +89,33 @@ class SCFMixin:
             )
 
             if np.abs(deltaE) < self.econv and deltaD < self.dconv:
-                print("SCF iterations converged")
+                print(f"{method} iterations converged\n")
+                # perform final iteration 
+                F, F_canon = self._build_fock(H, fock_builder, S)
+                self.eps, self.C = self._diagonalize_fock(F_canon, S)
+                self.D = self._build_density_matrix()
+                self.E = Vnn + self._energy(H, F)
+                print(f"Final {method} Energy: {self.E:20.12f}")
                 break
             
             # reset old parameters
             Eold = self.E
             Dold = self.D
         else:
-            print("SCF iterations not converged!")
+            print(f"{method} iterations not converged!")
 
         end = time.monotonic()
-        print(f"SCF time: {end - start:.2f} seconds")
+        print(f"{method} time: {end - start:.2f} seconds")
 
 
 @dataclass
 class RHF(SCFMixin, MOs):
+
     charge: int
     mult: int = 1
     econv: float = 1e-6
     dconv: float = 1e-3
     maxiter: int = 100
-    method: str = "RHF"
 
     def run(self, system):
         self.run_scf(system)
@@ -140,7 +162,6 @@ class ROHF(SCFMixin, MOs):
     econv: float = 1e-6
     dconv: float = 1e-3
     maxiter: int = 100
-    method: str = "ROHF"
 
     def run(self, system):
         self.run_scf(system)
@@ -220,7 +241,6 @@ class UHF(SCFMixin, MOs):
     econv: float = 1e-6
     dconv: float = 1e-3
     maxiter: int = 100
-    method: str = "UHF"
 
     def run(self, system):
         self.run_scf(system)
@@ -290,7 +310,6 @@ class CUHF(SCFMixin, MOs):
     econv: float = 1e-6
     dconv: float = 1e-3
     maxiter: int = 100
-    method: str = "CUHF"
 
     def run(self, system):
         self.run_scf(system)
