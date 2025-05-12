@@ -62,6 +62,7 @@ class SCFMixin:
         Dold = self.D
 
         print(f"{'Iter':>4s} {'Energy':>20s} {'deltaE':>20s} {'|deltaD|':>20s} {'|AO grad|':>20s} {'<S^2>':>20s}")
+
         for iter in range(self.maxiter):
 
             # 1. Build the Fock matrix 
@@ -116,9 +117,6 @@ class RHF(SCFMixin, MOs):
     econv: float = 1e-6
     dconv: float = 1e-3
     maxiter: int = 100
-
-    def run(self, system):
-        self.run_scf(system)
 
     def _build_fock(self, H, fock_builder, S):
         J = fock_builder.build_J(self.D)[0]

@@ -2,7 +2,7 @@ import numpy as np
 from numpy.typing import NDArray
 import scipy as sp
 
-from forte2.system.build_basis import assemble_basis
+from forte2.system.build_basis import build_basis
 import forte2
 
 
@@ -27,7 +27,7 @@ def minao_initial_guess(system: forte2.System, H: NDArray, S: NDArray) -> NDArra
     """
 
     # generate the SAP basis from the initial guess file. Skip normalization
-    sap_basis = assemble_basis(
+    sap_basis = build_basis(
         "sap_helfem_large", system.atoms, embed_normalization_into_coefficients=False
     )
 
