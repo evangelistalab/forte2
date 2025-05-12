@@ -33,11 +33,11 @@ def test_mp2():
     nocc = scf.na
     nvir = scf.nbasis - nocc
     nbasis = scf.nbasis
-    Co = scf.C[:, :nocc]
-    Cv = scf.C[:, nocc:]
+    Co = scf.C[0][:, :nocc]
+    Cv = scf.C[0][:, nocc:]
     V = jkbuilder.two_electron_integrals_gen_block(Co, Co, Cv, Cv)
-    epso = scf.eps[:nocc]
-    epsv = scf.eps[nocc:]
+    epso = scf.eps[0][:nocc]
+    epsv = scf.eps[0][nocc:]
 
     # Compute the MP2 energy
     start = time.monotonic()
