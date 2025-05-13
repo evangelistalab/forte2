@@ -30,6 +30,7 @@ class SCFMixin:
         Zsum = np.sum([x[0] for x in system.atoms])
         self.nel = Zsum - self.charge
         self.nbasis = system.basis.size
+        self.naux = system.auxiliary_basis.size
         self.na = (self.nel + self.mult - 1) // 2
         self.nb = (self.nel - self.mult + 1) // 2
         self.sz = (self.na - self.nb) / 2.0
@@ -43,6 +44,7 @@ class SCFMixin:
         print(f"Total charge: {self.charge}")
         print(f"Spin multiplicity: {self.mult}")
         print(f"Number of basis functions: {self.nbasis}")
+        print(f"Number of auxiliary basis functions: {self.naux}")
         print(f"Energy convergence criterion: {self.econv:e}")
         print(f"Density convergence criterion: {self.dconv:e}")
         print(f"DIIS acceleration: {diis.do_diis}")
@@ -51,7 +53,7 @@ class SCFMixin:
         Vnn = forte2.ints.nuclear_repulsion(system.atoms)
         S = forte2.ints.overlap(system.basis)
 
-        fock_builder = DFFockBuilder(system)
+        self.fock_builder = DFFockBuilder(system)
 
         H = self._get_hcore(system)
 
@@ -70,7 +72,7 @@ class SCFMixin:
             # 1. Build the Fock matrix
             # (there is a slot for canonicalized F to accommodate ROHF and CUHF methods - admittedly weird for RHF/UHF)
             F, F_canon = self._build_fock(
-                H, fock_builder, S, bootstrap=iter == 0 and method == "GHF"
+                H, self.fock_builder, S, bootstrap=iter == 0 and method == "GHF"
             )
             # 2. Build the orbital gradient (DIIS residual)
             AO_grad = self._build_ao_grad(S, F_canon)
@@ -96,7 +98,7 @@ class SCFMixin:
             if np.abs(deltaE) < self.econv and deltaD < self.dconv:
                 print(f"{method} iterations converged\n")
                 # perform final iteration
-                F, F_canon = self._build_fock(H, fock_builder, S)
+                F, F_canon = self._build_fock(H, self.fock_builder, S)
                 self.eps, self.C = self._diagonalize_fock(F_canon, S)
                 self.D = self._build_density_matrix()
                 self.E = Vnn + self._energy(H, F)
@@ -247,6 +249,19 @@ class ROHF(SCFMixin, MOs):
 
 @dataclass
 class GHF(SCFMixin, MOs):
+    """
+    Generalized Hartree-Fock (GHF) method.
+    The GHF spinor basis is a direct product of the atomic basis and {|\alpha>, |\beta>}
+    |\psi_i> = \sum_{\mu} \sum_{\sigma\in\{\alpha,\beta\}} c_{\mu\sigma} |\chi_{\mu}>|\sigma>
+    The MO coefficients are stored in a square array
+    [------MOs------]
+    [alpha basis    ]
+    [               ]
+    [               ]
+    [beta basis     ]
+    [               ]
+    """
+
     charge: int
     mult: int = 1
     econv: float = 1e-6
@@ -319,7 +334,27 @@ class GHF(SCFMixin, MOs):
         return [eps], [C]
 
     def _spin(self, S):
-        return 0.0
+        """
+        S^2 = 0.5 * (S+S- + S-S+) + Sz^2, S+ = \sum_i si+, S- = \sum_i si-
+        We make use of the Slater-Condon rules to compute <GHF|S^2|GHF>
+        """
+        mo_a = self.C[0][: self.nbasis, : self.nel]
+        mo_b = self.C[0][self.nbasis :, : self.nel]
+
+        # MO basis overlap matrices
+        saa = mo_a.conj().T @ S @ mo_a
+        sbb = mo_b.conj().T @ S @ mo_b
+        sab = mo_a.conj().T @ S @ mo_b
+        sba = sab.conj().T
+
+        na = saa.trace()
+        nb = sbb.trace()
+
+        S2_diag = (na + nb) * 0.5
+        S2_offdiag = sba.trace() * sab.trace() - np.einsum("ij,ji->", sba, sab)
+        Sz2_diag = (na + nb) * 0.25
+        Sz2_offdiag = 0.25 * ((na - nb) ** 2 - ((saa - sbb) ** 2).sum())
+        return S2_diag + S2_offdiag + Sz2_diag + Sz2_offdiag
 
     def _energy(self, H, F):
         Daa, Dab, Dba, Dbb = self.D
