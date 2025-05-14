@@ -37,11 +37,11 @@ class DFFockBuilder:
         del Pmn
 
     def build_J(self, D):
-        J = [np.einsum("Pmn,Prs,rs->mn", self.B, self.B, Di, optimize=True) for Di in D]
+        J = [np.einsum("Pmn,Prs,sr->mn", self.B, self.B, Di, optimize=True) for Di in D]
         return J
 
     def build_K(self, C, ghf=False):
-        Y = [np.einsum("Pmr,ri->Pmi", self.B, Ci, optimize=True) for Ci in C]
+        Y = [np.einsum("Pmr,mi->Pri", self.B, Ci.conj(), optimize=True) for Ci in C]
         if ghf:
             K = []
             for Yi in Y:

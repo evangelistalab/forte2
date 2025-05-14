@@ -3,7 +3,7 @@ import numpy as np
 import scipy as sp
 import time
 
-from forte2.scf import RHF, ROHF, UHF, CUHF, GHF
+from forte2.scf import GHF
 
 
 def test_ghf():
@@ -17,8 +17,8 @@ def test_ghf():
         xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit"
     )
 
-    scf = GHF(charge=0, mult=1, econv=1e-8, dconv=1e-6)
-    scf.run(system)
+    scf = GHF(charge=0, mult=1)
+    scf.run(system, econv=1e-8, dconv=1e-6)
     assert np.isclose(
         scf.E, e_ghf, atol=1e-6
     ), f"RHF energy mismatch: {scf.E} vs {e_ghf}"
@@ -37,13 +37,28 @@ def test_ghf2():
 
     system = forte2.System(xyz=xyz, basis="cc-pvqz", auxiliary_basis="cc-pvqz-jkfit")
 
-    scf = GHF(charge=1, mult=2, econv=1e-10, dconv=1e-6)
-    scf.run(system)
+    scf = GHF(charge=1, mult=2)
+    scf.run(system, econv=1e-10, dconv=1e-8)
     assert np.isclose(
         scf.E, e_ghf, atol=1e-6
     ), f"GHF energy mismatch: {scf.E} vs {e_ghf}"
 
 
+def test_ghf3():
+
+    xyz = f"""
+    H 0 0 0
+    H 1 0 0
+    H 0.5 {0.5*np.sqrt(3)} 0
+    """
+
+    system = forte2.System(xyz=xyz, basis="cc-pvqz", auxiliary_basis="cc-pvqz-jkfit")
+
+    scf = GHF(charge=0, mult=2)
+    scf.run(system, econv=1e-10, dconv=1e-8)
+
+
 if __name__ == "__main__":
     test_ghf()
     test_ghf2()
+    test_ghf3()

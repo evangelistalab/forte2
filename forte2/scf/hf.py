@@ -23,7 +23,9 @@ class SCFMixin:
         if scftyp == "RHF":
             assert self.na == self.nb
 
-    def run(self, system, diis_start=4, diis_nvec=8):
+    def run(
+        self, system, diis_start=4, diis_nvec=8, econv=1e-6, dconv=1e-3, maxiter=100
+    ):
         start = time.monotonic()
 
         method = self._scf_type().upper()
@@ -45,8 +47,8 @@ class SCFMixin:
         print(f"Spin multiplicity: {self.mult}")
         print(f"Number of basis functions: {self.nbasis}")
         print(f"Number of auxiliary basis functions: {self.naux}")
-        print(f"Energy convergence criterion: {self.econv:e}")
-        print(f"Density convergence criterion: {self.dconv:e}")
+        print(f"Energy convergence criterion: {econv:e}")
+        print(f"Density convergence criterion: {dconv:e}")
         print(f"DIIS acceleration: {diis.do_diis}")
         print(f"\n==> {method} SCF ROUTINE <==")
 
@@ -58,7 +60,7 @@ class SCFMixin:
         H = self._get_hcore(system)
 
         self.C = self._initial_guess(system, H, S)
-        self.D = self._build_initial_density_matrix()
+        self.D = self._build_initial_density_matrix(break_symmetry=method == "GHF")
 
         Eold = 0.0
         Dold = self.D
@@ -67,7 +69,7 @@ class SCFMixin:
             f"{'Iter':>4s} {'Energy':>20s} {'deltaE':>20s} {'|deltaD|':>20s} {'|AO grad|':>20s} {'<S^2>':>20s}"
         )
 
-        for iter in range(self.maxiter):
+        for iter in range(maxiter):
 
             # 1. Build the Fock matrix
             # (there is a slot for canonicalized F to accommodate ROHF and CUHF methods - admittedly weird for RHF/UHF)
@@ -95,7 +97,7 @@ class SCFMixin:
                 f"{iter + 1:4d} {self.E:20.12f} {deltaE:20.12f} {deltaD:20.12f} {np.linalg.norm(AO_grad):20.12f} {spin2:20.12f}"
             )
 
-            if np.abs(deltaE) < self.econv and deltaD < self.dconv:
+            if np.abs(deltaE) < econv and deltaD < dconv:
                 print(f"{method} iterations converged\n")
                 # perform final iteration
                 F, F_canon = self._build_fock(H, self.fock_builder, S)
@@ -120,9 +122,6 @@ class RHF(SCFMixin, MOs):
 
     charge: int
     mult: int = 1
-    econv: float = 1e-6
-    dconv: float = 1e-3
-    maxiter: int = 100
 
     def _get_hcore(self, system):
         T = forte2.ints.kinetic(system.basis)
@@ -144,7 +143,7 @@ class RHF(SCFMixin, MOs):
         C = minao_initial_guess(system, H, S)
         return [C]
 
-    def _build_initial_density_matrix(self):
+    def _build_initial_density_matrix(self, break_symmetry=False):
         return self._build_density_matrix()
 
     def _build_ao_grad(self, S, F):
@@ -166,221 +165,11 @@ class RHF(SCFMixin, MOs):
 
 
 @dataclass
-class ROHF(SCFMixin, MOs):
-    charge: int
-    mult: int
-    econv: float = 1e-6
-    dconv: float = 1e-3
-    maxiter: int = 100
-
-    def _get_hcore(self, system):
-        T = forte2.ints.kinetic(system.basis)
-        V = forte2.ints.nuclear(system.basis, system.atoms)
-        H = T + V
-        return H
-
-    def _build_fock(self, H, fock_builder, S, bootstrap=False):
-        Ja, Jb = fock_builder.build_J(self.D)
-        K = fock_builder.build_K([self.C[0][:, : self.na], self.C[0][:, : self.nb]])
-        F = [H + Ja + Jb - k for k in K]
-
-        F_canon = self._build_canonical_fock(F, S)
-
-        return F, F_canon
-
-    def _build_canonical_fock(self, F, S):
-
-        # Projection matrices for core (doubly occupied), open (singly occupied, alpha), and virtual (unoccupied) MO spaces
-        U_core = np.dot(self.D[1], S)
-        U_open = np.dot(self.D[0] - self.D[1], S)
-        U_virt = np.eye(self.nbasis) - np.dot(self.D[0], S)
-
-        # Closed-shell Fock
-        F_cs = 0.5 * (F[0] + F[1])
-
-        def _project(u, v, f):
-            return np.einsum("ur,uv,vt->rt", u, f, v, optimize=True)
-
-        # these are scaled by 0.5 to account for fock + fock.T below
-        fock = _project(U_core, U_core, F_cs) * 0.5
-        fock += _project(U_open, U_open, F_cs) * 0.5
-        fock += _project(U_virt, U_virt, F_cs) * 0.5
-        # off-diagonal blocks
-        fock += _project(U_open, U_core, F[1])
-        fock += _project(U_open, U_virt, F[0])
-        fock += _project(U_virt, U_core, F_cs)
-        fock = fock + fock.conj().T
-        return fock
-
-    def _build_density_matrix(self):
-        D_a = np.einsum("mi,ni->mn", self.C[0][:, : self.na], self.C[0][:, : self.na])
-        D_b = np.einsum("mi,ni->mn", self.C[0][:, : self.nb], self.C[0][:, : self.nb])
-        return D_a, D_b
-
-    def _initial_guess(self, system, H, S):
-        C = minao_initial_guess(system, H, S)
-        return [C]
-
-    def _build_initial_density_matrix(self):
-        return self._build_density_matrix()
-
-    def _build_ao_grad(self, S, F):
-        Deff = 0.5 * (self.D[0] + self.D[1])
-        return F @ Deff @ S - S @ Deff @ F
-
-    def _diagonalize_fock(self, F, S):
-        eps, C = sp.linalg.eigh(F, S)
-        return [eps], [C]
-
-    def _spin(self, S):
-        return self.sz * (self.sz + 1)
-
-    def _energy(self, H, F):
-        energy = 0.5 * (
-            np.einsum("vu,uv->", self.D[0] + self.D[1], H)
-            + np.einsum("vu,uv->", self.D[0], F[0])
-            + np.einsum("vu,uv->", self.D[1], F[1])
-        )
-        return energy
-
-    def _diis_update(self, diis, F, AO_grad):
-        return diis.update(F, AO_grad)
-
-
-@dataclass
-class GHF(SCFMixin, MOs):
-    """
-    Generalized Hartree-Fock (GHF) method.
-    The GHF spinor basis is a direct product of the atomic basis and {|\alpha>, |\beta>}
-    |\psi_i> = \sum_{\mu} \sum_{\sigma\in\{\alpha,\beta\}} c_{\mu\sigma} |\chi_{\mu}>|\sigma>
-    The MO coefficients are stored in a square array
-    [------MOs------]
-    [alpha basis    ]
-    [               ]
-    [               ]
-    [beta basis     ]
-    [               ]
-    """
-
-    charge: int
-    mult: int = 1
-    econv: float = 1e-6
-    dconv: float = 1e-3
-    maxiter: int = 100
-
-    def _get_hcore(self, system):
-        T = forte2.ints.kinetic(system.basis)
-        V = forte2.ints.nuclear(system.basis, system.atoms)
-        H = T + V
-        return sp.linalg.block_diag(H, H)
-
-    def _get_hcore_ao(self, system):
-        T = forte2.ints.kinetic(system.basis)
-        V = forte2.ints.nuclear(system.basis, system.atoms)
-        H = T + V
-        return H
-
-    def _build_fock(self, H, fock_builder, S, bootstrap=False):
-        Jaa, Jbb = fock_builder.build_J([self.D[0], self.D[3]])
-        nbf = Jaa.shape[0]
-        if bootstrap:
-            Kaa, Kab, Kba, Kbb = fock_builder.build_K_density(self.D)
-        else:
-            Kaa, Kab, Kba, Kbb = fock_builder.build_K(
-                [self.C[0][:nbf, : self.nel], self.C[0][nbf:, : self.nel]], ghf=True
-            )
-        F = H.copy()
-        F[:nbf, :nbf] += Jaa + Jbb - Kaa
-        F[:nbf, nbf:] += -Kab
-        F[nbf:, :nbf] += -Kba
-        F[nbf:, nbf:] += Jaa + Jbb - Kbb
-
-        F_canon = F
-
-        return F, F_canon
-
-    def _build_density_matrix(self):
-        D = np.einsum(
-            "mi,ni->mn",
-            self.C[0][:, : self.nel].conj(),
-            self.C[0][:, : self.nel],
-        )
-        nbf = D.shape[0] // 2
-        Daa = D[:nbf, :nbf]
-        Dab = D[:nbf, nbf:]
-        Dba = D[nbf:, :nbf]
-        Dbb = D[nbf:, nbf:]
-        return Daa, Dab, Dba, Dbb
-
-    def _initial_guess(self, system, H, S):
-        H_ao = self._get_hcore_ao(system)
-        return minao_initial_guess(system, H_ao, S)
-
-    def _build_initial_density_matrix(self):
-        Daa = np.einsum("mi,ni->mn", self.C[:, : self.na].conj(), self.C[:, : self.na])
-        Dbb = np.einsum("mi,ni->mn", self.C[:, : self.nb].conj(), self.C[:, : self.nb])
-        return Daa, np.zeros_like(Daa), np.zeros_like(Daa), Dbb
-
-    def _build_ao_grad(self, S, F):
-        Daa, Dab, Dba, Dbb = self.D
-        D_spinor = np.block([[Daa, Dab], [Dba, Dbb]])
-        S_spinor = np.block([[S, np.zeros_like(S)], [np.zeros_like(S), S]])
-        AO_grad = F @ D_spinor @ S_spinor - S_spinor @ D_spinor @ F
-        return AO_grad
-
-    def _diagonalize_fock(self, F, S):
-        S_spinor = np.block([[S, np.zeros_like(S)], [np.zeros_like(S), S]])
-        eps, C = sp.linalg.eigh(F, S_spinor)
-        return [eps], [C]
-
-    def _spin(self, S):
-        """
-        S^2 = 0.5 * (S+S- + S-S+) + Sz^2, S+ = \sum_i si+, S- = \sum_i si-
-        We make use of the Slater-Condon rules to compute <GHF|S^2|GHF>
-        """
-        mo_a = self.C[0][: self.nbasis, : self.nel]
-        mo_b = self.C[0][self.nbasis :, : self.nel]
-
-        # MO basis overlap matrices
-        saa = mo_a.conj().T @ S @ mo_a
-        sbb = mo_b.conj().T @ S @ mo_b
-        sab = mo_a.conj().T @ S @ mo_b
-        sba = sab.conj().T
-
-        na = saa.trace()
-        nb = sbb.trace()
-
-        S2_diag = (na + nb) * 0.5
-        S2_offdiag = sba.trace() * sab.trace() - np.einsum("ij,ji->", sba, sab)
-        Sz2_diag = (na + nb) * 0.25
-        Sz2_offdiag = 0.25 * ((na - nb) ** 2 - ((saa - sbb) ** 2).sum())
-        return S2_diag + S2_offdiag + Sz2_diag + Sz2_offdiag
-
-    def _energy(self, H, F):
-        Daa, Dab, Dba, Dbb = self.D
-        D_spinor = np.block([[Daa, Dab], [Dba, Dbb]])
-        energy = 0.5 * np.einsum("vu,uv->", D_spinor, H) + 0.5 * np.einsum(
-            "vu,uv->", D_spinor, F
-        )
-        return energy.real
-
-    def _diis_update(self, diis, F, AO_grad):
-        return diis.update(F, AO_grad)
-
-
-@dataclass
 class UHF(SCFMixin, MOs):
     charge: int
     mult: int
-    econv: float = 1e-6
-    dconv: float = 1e-3
-    maxiter: int = 100
 
-    def _get_hcore(self, system):
-        T = forte2.ints.kinetic(system.basis)
-        V = forte2.ints.nuclear(system.basis, system.atoms)
-        H = T + V
-        return H
+    _get_hcore = RHF._get_hcore
 
     def _build_fock(self, H, fock_builder, S, bootstrap=False):
         Ja, Jb = fock_builder.build_J(self.D)
@@ -400,7 +189,7 @@ class UHF(SCFMixin, MOs):
         C = minao_initial_guess(system, H, S)
         return [C, C]
 
-    def _build_initial_density_matrix(self):
+    def _build_initial_density_matrix(self, break_symmetry=False):
         D_a, D_b = self._build_density_matrix()
         if self.mult != 1:
             D_b *= 0.0
@@ -452,23 +241,76 @@ class UHF(SCFMixin, MOs):
 
 
 @dataclass
-class CUHF(SCFMixin, MOs):
+class ROHF(SCFMixin, MOs):
     charge: int
     mult: int
-    econv: float = 1e-6
-    dconv: float = 1e-3
-    maxiter: int = 100
 
-    def _get_hcore(self, system):
-        T = forte2.ints.kinetic(system.basis)
-        V = forte2.ints.nuclear(system.basis, system.atoms)
-        H = T + V
-        return H
+    _get_hcore = RHF._get_hcore
 
     def _build_fock(self, H, fock_builder, S, bootstrap=False):
         Ja, Jb = fock_builder.build_J(self.D)
-        K = fock_builder.build_K([self.C[0][:, : self.na], self.C[1][:, : self.nb]])
+        K = fock_builder.build_K([self.C[0][:, : self.na], self.C[0][:, : self.nb]])
         F = [H + Ja + Jb - k for k in K]
+
+        F_canon = self._build_canonical_fock(F, S)
+
+        return F, F_canon
+
+    def _build_canonical_fock(self, F, S):
+
+        # Projection matrices for core (doubly occupied), open (singly occupied, alpha), and virtual (unoccupied) MO spaces
+        U_core = np.dot(self.D[1], S)
+        U_open = np.dot(self.D[0] - self.D[1], S)
+        U_virt = np.eye(self.nbasis) - np.dot(self.D[0], S)
+
+        # Closed-shell Fock
+        F_cs = 0.5 * (F[0] + F[1])
+
+        def _project(u, v, f):
+            return np.einsum("ur,uv,vt->rt", u, f, v, optimize=True)
+
+        # these are scaled by 0.5 to account for fock + fock.T below
+        fock = _project(U_core, U_core, F_cs) * 0.5
+        fock += _project(U_open, U_open, F_cs) * 0.5
+        fock += _project(U_virt, U_virt, F_cs) * 0.5
+        # off-diagonal blocks
+        fock += _project(U_open, U_core, F[1])
+        fock += _project(U_open, U_virt, F[0])
+        fock += _project(U_virt, U_core, F_cs)
+        fock = fock + fock.conj().T
+        return fock
+
+    def _build_density_matrix(self):
+        D_a = np.einsum("mi,ni->mn", self.C[0][:, : self.na], self.C[0][:, : self.na])
+        D_b = np.einsum("mi,ni->mn", self.C[0][:, : self.nb], self.C[0][:, : self.nb])
+        return D_a, D_b
+
+    _initial_guess = RHF._initial_guess
+
+    _build_initial_density_matrix = UHF._build_initial_density_matrix
+
+    def _build_ao_grad(self, S, F):
+        Deff = 0.5 * (self.D[0] + self.D[1])
+        return F @ Deff @ S - S @ Deff @ F
+
+    _diagonalize_fock = RHF._diagonalize_fock
+
+    _spin = RHF._spin
+
+    _energy = UHF._energy
+
+    _diis_update = RHF._diis_update
+
+
+@dataclass
+class CUHF(SCFMixin, MOs):
+    charge: int
+    mult: int
+
+    _get_hcore = RHF._get_hcore
+
+    def _build_fock(self, H, fock_builder, S, bootstrap=False):
+        F, _ = UHF._build_fock(self, H, fock_builder, S, bootstrap=bootstrap)
 
         F_canon = self._build_canonical_fock(F, S)
 
@@ -501,59 +343,149 @@ class CUHF(SCFMixin, MOs):
 
         return [_build_fock_eff(f) for f in F]
 
+    _build_density_matrix = UHF._build_density_matrix
+
+    _initial_guess = UHF._initial_guess
+
+    _build_initial_density_matrix = UHF._build_initial_density_matrix
+
+    _build_ao_grad = UHF._build_ao_grad
+
+    _diagonalize_fock = UHF._diagonalize_fock
+
+    _spin = UHF._spin
+
+    _energy = UHF._energy
+
+    _diis_update = UHF._diis_update
+
+
+@dataclass
+class GHF(SCFMixin, MOs):
+    """
+    Generalized Hartree-Fock (GHF) method.
+    The GHF spinor basis is a direct product of the atomic basis and {|\alpha>, |\beta>}
+    |\psi_i> = \sum_{\mu} \sum_{\sigma\in\{\alpha,\beta\}} c_{\mu\sigma} |\chi_{\mu}>|\sigma>
+    The MO coefficients are stored in a square array
+    [------MOs------]
+    [alpha basis    ]
+    [               ]
+    [               ]
+    [beta basis     ]
+    [               ]
+    """
+
+    charge: int
+    mult: int = 1
+
+    def _get_hcore(self, system):
+        H = RHF._get_hcore(self, system)
+        return sp.linalg.block_diag(H, H)
+
+    _get_hcore_ao = RHF._get_hcore
+
+    def _build_fock(self, H, fock_builder, S, bootstrap=False):
+        Jaa, Jbb = fock_builder.build_J([self.D[0], self.D[3]])
+        nbf = Jaa.shape[0]
+        if bootstrap:
+            Kaa, Kab, Kba, Kbb = fock_builder.build_K_density(self.D)
+        else:
+            Kaa, Kab, Kba, Kbb = fock_builder.build_K(
+                [self.C[0][:nbf, : self.nel], self.C[0][nbf:, : self.nel]], ghf=True
+            )
+        F = H.copy().astype(np.complex128)
+        F[:nbf, :nbf] += Jaa + Jbb - Kaa
+        F[:nbf, nbf:] += -Kab
+        F[nbf:, :nbf] += -Kba
+        F[nbf:, nbf:] += Jaa + Jbb - Kbb
+
+        F_canon = F
+
+        return F, F_canon
+
     def _build_density_matrix(self):
-        D_a = np.einsum("mi,ni->mn", self.C[0][:, : self.na], self.C[0][:, : self.na])
-        D_b = np.einsum("mi,ni->mn", self.C[1][:, : self.nb], self.C[1][:, : self.nb])
-        return D_a, D_b
+        # D = Cocc Cocc^+
+        D = np.einsum(
+            "mi,ni->mn",
+            self.C[0][:, : self.nel],
+            self.C[0][:, : self.nel].conj(),
+        )
+        nbf = self.nbasis
+        Daa = D[:nbf, :nbf]
+        Dab = D[:nbf, nbf:]
+        Dba = D[nbf:, :nbf]
+        Dbb = D[nbf:, nbf:]
+        return Daa, Dab, Dba, Dbb
 
     def _initial_guess(self, system, H, S):
-        C = minao_initial_guess(system, H, S)
-        return [C, C]
+        # Here we return the initial guess in the AO basis (half the size of spinor basis)
+        H_ao = self._get_hcore_ao(system)
+        return minao_initial_guess(system, H_ao, S).astype(np.complex128)
 
-    def _build_initial_density_matrix(self):
-        D_a, D_b = self._build_density_matrix()
-        return D_a, D_b
+    def _build_initial_density_matrix(self, break_symmetry=False):
+        # half of the RHF density matrix
+        dm = np.einsum(
+            "mi,ni->mn", self.C[:, : self.nel // 2], self.C[:, : self.nel // 2].conj()
+        )
+
+        diag = np.diag(dm)
+        D_spinor = np.block([[dm, np.diag(diag) * 0.05], [np.diag(diag) * 0.05, dm]])
+        if break_symmetry:
+            pass
+            D_spinor[:, 0] -= 0.05j
+            D_spinor[0, :] += 0.05j
+
+        nbf = self.nbasis
+        return (
+            D_spinor[:nbf, :nbf],
+            D_spinor[:nbf, nbf:],
+            D_spinor[nbf:, :nbf],
+            D_spinor[nbf:, nbf:],
+        )
 
     def _build_ao_grad(self, S, F):
-        AO_grad = np.hstack(
-            [(f @ d @ S - S @ d @ f).flatten() for d, f in zip(self.D, F)]
-        )
+        Daa, Dab, Dba, Dbb = self.D
+        D_spinor = np.block([[Daa, Dab], [Dba, Dbb]])
+        S_spinor = np.block([[S, np.zeros_like(S)], [np.zeros_like(S), S]])
+        sdf = S_spinor @ D_spinor @ F
+        AO_grad = sdf.conj().T - sdf
+
         return AO_grad
 
     def _diagonalize_fock(self, F, S):
-        eps_a, C_a = sp.linalg.eigh(F[0], S)
-        eps_b, C_b = sp.linalg.eigh(F[1], S)
-        return [eps_a, eps_b], [C_a, C_b]
+        S_spinor = np.block([[S, np.zeros_like(S)], [np.zeros_like(S), S]])
+        eps, C = sp.linalg.eigh(F, S_spinor)
+        return [eps], [C]
 
     def _spin(self, S):
-        # alpha-beta orbital overlap matrix
-        # S_ij = < psi_i | psi_j >, i,j=occ
-        #      = \sum_{uv} c_ui^* c_vj <u|v>
-        S_ij = np.einsum(
-            "ui,uv,vj->ij",
-            self.C[0][:, : self.na].conj(),
-            S,
-            self.C[1][:, : self.nb],
-            optimize=True,
-        )
-        # Spin contamination: <s^2> - <s^2>_exact = N_b - \sum_{ij} |S_ij|^2
-        ds2 = self.nb - np.einsum("ij,ij->", S_ij.conj(), S_ij)
-        # <S^2> value
-        s2 = self.sz * (self.sz + 1) + ds2
-        return s2
+        """
+        S^2 = 0.5 * (S+S- + S-S+) + Sz^2, S+ = \sum_i si+, S- = \sum_i si-
+        We make use of the Slater-Condon rules to compute <GHF|S^2|GHF>
+        """
+        mo_a = self.C[0][: self.nbasis, : self.nel]
+        mo_b = self.C[0][self.nbasis :, : self.nel]
+
+        # MO basis overlap matrices
+        saa = mo_a.conj().T @ S @ mo_a
+        sbb = mo_b.conj().T @ S @ mo_b
+        sab = mo_a.conj().T @ S @ mo_b
+        sba = sab.conj().T
+
+        na = saa.trace()
+        nb = sbb.trace()
+
+        S2_diag = (na + nb) * 0.5
+        S2_offdiag = sba.trace() * sab.trace() - np.einsum("ij,ji->", sba, sab)
+        Sz2_diag = (na + nb) * 0.25
+        Sz2_offdiag = 0.25 * ((na - nb) ** 2 - np.linalg.norm(saa - sbb) ** 2)
+        return (S2_diag + S2_offdiag + Sz2_diag + Sz2_offdiag).real
 
     def _energy(self, H, F):
-        energy = 0.5 * (
-            np.einsum("vu,uv->", self.D[0] + self.D[1], H)
-            + np.einsum("vu,uv->", self.D[0], F[0])
-            + np.einsum("vu,uv->", self.D[1], F[1])
+        Daa, Dab, Dba, Dbb = self.D
+        D_spinor = np.block([[Daa, Dab], [Dba, Dbb]])
+        energy = 0.5 * np.einsum("vu,uv->", D_spinor, H) + 0.5 * np.einsum(
+            "vu,uv->", D_spinor, F
         )
-        return energy
+        return energy.real
 
-    def _diis_update(self, diis, F, AO_grad):
-        F_flat = diis.update(np.hstack([f.flatten() for f in F]), AO_grad)
-        F = [
-            F_flat[: self.nbasis**2].reshape(self.nbasis, self.nbasis),
-            F_flat[self.nbasis**2 :].reshape(self.nbasis, self.nbasis),
-        ]
-        return F
+    _diis_update = RHF._diis_update

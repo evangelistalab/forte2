@@ -55,9 +55,9 @@ class DIIS:
 
         diis_dim = len(self.p_diis)
         # construct diis B matrix (following Crawford Group github tutorial)
-        B = np.ones((diis_dim + 1, diis_dim + 1)) * -1.0
+        B = np.ones((diis_dim + 1, diis_dim + 1), dtype=p.dtype) * -1.0
         B[-1, -1] = 0.0
-        bsol = np.zeros(diis_dim + 1)
+        bsol = np.zeros(diis_dim + 1, dtype=p.dtype)
         bsol[-1] = -1.0
         for i in range(diis_dim):
             for j in range(i, diis_dim):
@@ -65,7 +65,7 @@ class DIIS:
                     self.e_diis[i].flatten().conj(), self.e_diis[j].flatten()
                 )
                 if i != j:
-                    B[j, i] = B[i, j]
+                    B[j, i] = B[i, j].conj()
 
         B[:-1, :-1] /= np.abs(B[:-1, :-1]).max()
         x = np.linalg.solve(B, bsol)

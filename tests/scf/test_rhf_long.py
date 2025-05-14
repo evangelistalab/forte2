@@ -6,7 +6,7 @@ import time
 from forte2.scf import RHF
 
 
-def test_scf():
+def test_rhf_long():
     # Test the SCF implementation with a simple example
     xyz = """
 C       -1.6896697203      2.2905259736      0.0275805886                 
@@ -39,4 +39,4 @@ H       -0.8580037770      4.8559228717     -0.0859634340
 
 
 if __name__ == "__main__":
-    test_scf()
+    test_rhf_long()
