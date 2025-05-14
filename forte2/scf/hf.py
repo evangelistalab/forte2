@@ -59,12 +59,10 @@ class SCFMixin:
         print(f"DIIS acceleration: {diis.do_diis}")
         print(f"\n==> {method} SCF ROUTINE <==")
 
-        Vnn = forte2.ints.nuclear_repulsion(system.atoms)
-        S = forte2.ints.overlap(system.basis)
-
-        fock_builder = DFFockBuilder(system)
-
+        Vnn = self._get_nuclear_repulsion(system.atoms)
+        S = self._get_overlap(system.basis)
         H = self._get_hcore(system)
+        fock_builder = DFFockBuilder(system)
 
         self.C = self._initial_guess(system, H, S)
         self.D = self._build_initial_density_matrix(**kwargs)
@@ -78,14 +76,12 @@ class SCFMixin:
             f"{'Iter':>4s} {'Energy':>20s} {'deltaE':>20s} {'|deltaD|':>20s} {'|AO grad|':>20s} {'<S^2>':>20s}"
         )
         print("-" * width)
-
+        self.iter = 0
         for iter in range(maxiter):
 
             # 1. Build the Fock matrix
             # (there is a slot for canonicalized F to accommodate ROHF and CUHF methods - admittedly weird for RHF/UHF)
-            F, F_canon = self._build_fock(
-                H, fock_builder, S, bootstrap=iter == 0 and method == "GHF"
-            )
+            F, F_canon = self._build_fock(H, fock_builder, S)
             # 2. Build the orbital gradient (DIIS residual)
             AO_grad = self._build_ao_grad(S, F_canon)
             # 3. Perform DIIS update of Fock
@@ -121,6 +117,7 @@ class SCFMixin:
             # reset old parameters
             Eold = self.E
             Dold = self.D
+            self.iter += 1
         else:
             print("-" * width)
             print(f"{method} iterations not converged!")
@@ -149,7 +146,6 @@ class SCFMixin:
         if x2c_type == "sf":
             if self._scf_type() in ["RHF", "UHF", "CUHF"]:
                 self._get_hcore = lambda system: get_hcore_x2c(system, x2c_type="sf")
-                print("Here!")
             elif self._scf_type() == "GHF":
 
                 def _get_hcore(system):
@@ -175,7 +171,15 @@ class RHF(SCFMixin, MOs):
         H = T + V
         return H
 
-    def _build_fock(self, H, fock_builder, S, bootstrap=False):
+    def _get_overlap(self, basis):
+        S = forte2.ints.overlap(basis)
+        return S
+
+    def _get_nuclear_repulsion(self, atoms):
+        Vnn = forte2.ints.nuclear_repulsion(atoms)
+        return Vnn
+
+    def _build_fock(self, H, fock_builder, S):
         J = fock_builder.build_J(self.D)[0]
         K = fock_builder.build_K([self.C[0][:, : self.na]])[0]
         F = H + 2.0 * J - K
@@ -216,8 +220,10 @@ class UHF(SCFMixin, MOs):
     mult: int
 
     _get_hcore = RHF._get_hcore
+    _get_overlap = RHF._get_overlap
+    _get_nuclear_repulsion = RHF._get_nuclear_repulsion
 
-    def _build_fock(self, H, fock_builder, S, bootstrap=False):
+    def _build_fock(self, H, fock_builder, S):
         Ja, Jb = fock_builder.build_J(self.D)
         K = fock_builder.build_K([self.C[0][:, : self.na], self.C[1][:, : self.nb]])
         F = [H + Ja + Jb - k for k in K]
@@ -292,6 +298,8 @@ class ROHF(SCFMixin, MOs):
     mult: int
 
     _get_hcore = RHF._get_hcore
+    _get_overlap = RHF._get_overlap
+    _get_nuclear_repulsion = RHF._get_nuclear_repulsion
     _initial_guess = RHF._initial_guess
     _build_initial_density_matrix = UHF._build_initial_density_matrix
     _diagonalize_fock = RHF._diagonalize_fock
@@ -299,7 +307,7 @@ class ROHF(SCFMixin, MOs):
     _energy = UHF._energy
     _diis_update = RHF._diis_update
 
-    def _build_fock(self, H, fock_builder, S, bootstrap=False):
+    def _build_fock(self, H, fock_builder, S):
         Ja, Jb = fock_builder.build_J(self.D)
         K = fock_builder.build_K([self.C[0][:, : self.na], self.C[0][:, : self.nb]])
         F = [H + Ja + Jb - k for k in K]
@@ -348,6 +356,8 @@ class CUHF(SCFMixin, MOs):
     mult: int
 
     _get_hcore = RHF._get_hcore
+    _get_overlap = RHF._get_overlap
+    _get_nuclear_repulsion = RHF._get_nuclear_repulsion
     _build_density_matrix = UHF._build_density_matrix
     _initial_guess = UHF._initial_guess
     _build_initial_density_matrix = UHF._build_initial_density_matrix
@@ -357,8 +367,8 @@ class CUHF(SCFMixin, MOs):
     _energy = UHF._energy
     _diis_update = UHF._diis_update
 
-    def _build_fock(self, H, fock_builder, S, bootstrap=False):
-        F, _ = UHF._build_fock(self, H, fock_builder, S, bootstrap=bootstrap)
+    def _build_fock(self, H, fock_builder, S):
+        F, _ = UHF._build_fock(self, H, fock_builder, S)
 
         F_canon = self._build_canonical_fock(F, S)
 
@@ -411,22 +421,24 @@ class GHF(SCFMixin, MOs):
     mult: int = 1
 
     _get_hcore_ao = RHF._get_hcore
+    _get_overlap = RHF._get_overlap
+    _get_nuclear_repulsion = RHF._get_nuclear_repulsion
     _diis_update = RHF._diis_update
 
     def _get_hcore(self, system):
-        H = RHF._get_hcore(self, system)
+        H = RHF._get_hcore(self, system).astype(complex)
         return sp.linalg.block_diag(H, H)
 
-    def _build_fock(self, H, fock_builder, S, bootstrap=False):
+    def _build_fock(self, H, fock_builder, S):
         Jaa, Jbb = fock_builder.build_J([self.D[0], self.D[3]])
         nbf = Jaa.shape[0]
-        if bootstrap:
+        if self.iter == 0:
             Kaa, Kab, Kba, Kbb = fock_builder.build_K_density(self.D)
         else:
             Kaa, Kab, Kba, Kbb = fock_builder.build_K(
                 [self.C[0][:nbf, : self.nel], self.C[0][nbf:, : self.nel]], ghf=True
             )
-        F = H.copy().astype(np.complex128)
+        F = H.copy()
         F[:nbf, :nbf] += Jaa + Jbb - Kaa
         F[:nbf, nbf:] += -Kab
         F[nbf:, :nbf] += -Kba
@@ -451,38 +463,35 @@ class GHF(SCFMixin, MOs):
         return Daa, Dab, Dba, Dbb
 
     def _initial_guess(self, system, H, S):
-        # Here we return the initial guess in the AO basis (half the size of spinor basis)
         H_ao = self._get_hcore_ao(system)
-        return minao_initial_guess(system, H_ao, S).astype(np.complex128)
+        return [minao_initial_guess(system, H_ao, S).astype(complex)]
 
     def _build_initial_density_matrix(self, **kwargs):
         break_spin_symmetry = kwargs.get("break_spin_symmetry", True)
         break_complex_symmetry = kwargs.get("break_complex_symmetry", True)
 
-        # half of the RHF density matrix
-        dm = np.einsum(
-            "mi,ni->mn", self.C[:, : self.nel // 2], self.C[:, : self.nel // 2].conj()
+        Daa = np.einsum(
+            "mi,ni->mn",
+            self.C[0][:, : self.nel // 2],
+            self.C[0][:, : self.nel // 2].conj(),
         )
+        Dab = np.zeros_like(Daa)
+        Dba = np.zeros_like(Daa)
+        Dbb = Daa.copy()
 
         if break_spin_symmetry:
-            diag = np.diag(dm)
-            D_spinor = np.block(
-                [[dm, np.diag(diag) * 0.05], [np.diag(diag) * 0.05, dm]]
-            )
-        else:
-            D_spinor = np.block([[dm, np.zeros_like(dm)], [np.zeros_like(dm), dm]])
+            diag = np.diag(Daa)
+            Dab = np.diag(diag) * 0.05
+            Dba = np.diag(diag) * 0.05
         if break_complex_symmetry:
-            pass
-            D_spinor[:, 0] -= 0.05j
-            D_spinor[0, :] += 0.05j
+            Daa[0, :] += 0.05j
+            Dab[0, :] += 0.05j
+            Daa[:, 0] -= 0.05j
+            Dba[:, 0] -= 0.05j
+            Dbb[0, :] += 0.05j
+            Dbb[:, 0] -= 0.05j
 
-        nbf = self.nbasis
-        return (
-            D_spinor[:nbf, :nbf],
-            D_spinor[:nbf, nbf:],
-            D_spinor[nbf:, :nbf],
-            D_spinor[nbf:, nbf:],
-        )
+        return Daa, Dab, Dba, Dbb
 
     def _build_ao_grad(self, S, F):
         Daa, Dab, Dba, Dbb = self.D

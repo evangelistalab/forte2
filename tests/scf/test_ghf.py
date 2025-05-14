@@ -75,10 +75,10 @@ def test_ghf3():
 
     assert np.isclose(
         scf.E, eghf_real, atol=1e-8, rtol=1e-6
-    ), f"GHF energy mismatch: {scf.E} vs {eghf}"
+    ), f"GHF energy mismatch: {scf.E} vs {eghf_real}"
     assert np.isclose(
         scf.S2, s2ghf_real, atol=1e-8, rtol=1e-6
-    ), f"GHF S2 mismatch: {scf.S2} vs {s2ghf}"
+    ), f"GHF S2 mismatch: {scf.S2} vs {s2ghf_real}"
 
     scf.run(
         system,
