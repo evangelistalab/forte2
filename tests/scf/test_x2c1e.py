@@ -3,9 +3,8 @@ import forte2
 # import forte2.ints
 import numpy as np
 import scipy as sp
-import time
 
-from forte2.scf import RHF, GHF, get_hcore_x2c
+from forte2.scf import RHF, GHF
 
 
 def test_sfx2c1e():

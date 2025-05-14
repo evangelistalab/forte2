@@ -1,9 +1,8 @@
 import forte2
 import numpy as np
 import scipy as sp
-import time
 
-from forte2.scf import GHF, UHF
+from forte2.scf import GHF
 
 
 def test_ghf():

@@ -1,5 +1,4 @@
-from dataclasses import dataclass, field
-import forte2
+from dataclasses import dataclass
 
 from .build_basis import build_basis
 from .parse_xyz import parse_xyz

@@ -1,7 +1,6 @@
 import forte2, forte2.helpers
 import numpy as np
 import scipy, scipy.constants
-import functools
 
 X2C_LINDEP_TOL = 1e-9
 LIGHT_SPEED = scipy.constants.physical_constants["inverse fine-structure constant"][0]

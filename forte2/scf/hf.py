@@ -62,7 +62,7 @@ class SCFMixin:
         Vnn = forte2.ints.nuclear_repulsion(system.atoms)
         S = forte2.ints.overlap(system.basis)
 
-        self.fock_builder = DFFockBuilder(system)
+        fock_builder = DFFockBuilder(system)
 
         H = self._get_hcore(system)
 
@@ -84,7 +84,7 @@ class SCFMixin:
             # 1. Build the Fock matrix
             # (there is a slot for canonicalized F to accommodate ROHF and CUHF methods - admittedly weird for RHF/UHF)
             F, F_canon = self._build_fock(
-                H, self.fock_builder, S, bootstrap=iter == 0 and method == "GHF"
+                H, fock_builder, S, bootstrap=iter == 0 and method == "GHF"
             )
             # 2. Build the orbital gradient (DIIS residual)
             AO_grad = self._build_ao_grad(S, F_canon)
@@ -111,7 +111,7 @@ class SCFMixin:
                 print("-" * width)
                 print(f"{method} iterations converged\n")
                 # perform final iteration
-                F, F_canon = self._build_fock(H, self.fock_builder, S)
+                F, F_canon = self._build_fock(H, fock_builder, S)
                 self.eps, self.C = self._diagonalize_fock(F_canon, S)
                 self.D = self._build_density_matrix()
                 self.E = Vnn + self._energy(H, F)
@@ -292,6 +292,12 @@ class ROHF(SCFMixin, MOs):
     mult: int
 
     _get_hcore = RHF._get_hcore
+    _initial_guess = RHF._initial_guess
+    _build_initial_density_matrix = UHF._build_initial_density_matrix
+    _diagonalize_fock = RHF._diagonalize_fock
+    _spin = RHF._spin
+    _energy = UHF._energy
+    _diis_update = RHF._diis_update
 
     def _build_fock(self, H, fock_builder, S, bootstrap=False):
         Ja, Jb = fock_builder.build_J(self.D)
@@ -331,21 +337,9 @@ class ROHF(SCFMixin, MOs):
         D_b = np.einsum("mi,ni->mn", self.C[0][:, : self.nb], self.C[0][:, : self.nb])
         return D_a, D_b
 
-    _initial_guess = RHF._initial_guess
-
-    _build_initial_density_matrix = UHF._build_initial_density_matrix
-
     def _build_ao_grad(self, S, F):
         Deff = 0.5 * (self.D[0] + self.D[1])
         return F @ Deff @ S - S @ Deff @ F
-
-    _diagonalize_fock = RHF._diagonalize_fock
-
-    _spin = RHF._spin
-
-    _energy = UHF._energy
-
-    _diis_update = RHF._diis_update
 
 
 @dataclass
@@ -354,6 +348,14 @@ class CUHF(SCFMixin, MOs):
     mult: int
 
     _get_hcore = RHF._get_hcore
+    _build_density_matrix = UHF._build_density_matrix
+    _initial_guess = UHF._initial_guess
+    _build_initial_density_matrix = UHF._build_initial_density_matrix
+    _build_ao_grad = UHF._build_ao_grad
+    _diagonalize_fock = UHF._diagonalize_fock
+    _spin = UHF._spin
+    _energy = UHF._energy
+    _diis_update = UHF._diis_update
 
     def _build_fock(self, H, fock_builder, S, bootstrap=False):
         F, _ = UHF._build_fock(self, H, fock_builder, S, bootstrap=bootstrap)
@@ -389,22 +391,6 @@ class CUHF(SCFMixin, MOs):
 
         return [_build_fock_eff(f) for f in F]
 
-    _build_density_matrix = UHF._build_density_matrix
-
-    _initial_guess = UHF._initial_guess
-
-    _build_initial_density_matrix = UHF._build_initial_density_matrix
-
-    _build_ao_grad = UHF._build_ao_grad
-
-    _diagonalize_fock = UHF._diagonalize_fock
-
-    _spin = UHF._spin
-
-    _energy = UHF._energy
-
-    _diis_update = UHF._diis_update
-
 
 @dataclass
 class GHF(SCFMixin, MOs):
@@ -424,11 +410,12 @@ class GHF(SCFMixin, MOs):
     charge: int
     mult: int = 1
 
+    _get_hcore_ao = RHF._get_hcore
+    _diis_update = RHF._diis_update
+
     def _get_hcore(self, system):
         H = RHF._get_hcore(self, system)
         return sp.linalg.block_diag(H, H)
-
-    _get_hcore_ao = RHF._get_hcore
 
     def _build_fock(self, H, fock_builder, S, bootstrap=False):
         Jaa, Jbb = fock_builder.build_J([self.D[0], self.D[3]])
@@ -541,5 +528,3 @@ class GHF(SCFMixin, MOs):
             "vu,uv->", D_spinor, F
         )
         return energy.real
-
-    _diis_update = RHF._diis_update

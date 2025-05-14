@@ -1,7 +1,6 @@
 import forte2
 import numpy as np
 import scipy as sp
-import time
 
 from forte2.scf import ROHF
 

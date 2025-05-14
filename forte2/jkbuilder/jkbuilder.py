@@ -1,7 +1,6 @@
 import numpy as np
 import scipy as sp
 
-from forte2.system import build_basis
 from forte2 import ints
 
 
@@ -50,14 +49,13 @@ class DFFockBuilder:
         else:
             K = [np.einsum("Pmi,Pni->mn", Yi.conj(), Yi, optimize=True) for Yi in Y]
         return K
-    
+
     def build_K_density(self, D):
-        K = [np.einsum("Pms,Prn,rs->mn", self.B, self.B, Di, optimize=True) for Di in D]
+        K = [np.einsum("Pms,Prn,sr->mn", self.B, self.B, Di, optimize=True) for Di in D]
         return K
 
-
     def build_JK(self, C):
-        D = [np.einsum("mi,ni->mn", Ci, Ci, optimize=True) for Ci in C]
+        D = [np.einsum("mi,ni->mn", Ci, Ci.conj(), optimize=True) for Ci in C]
         J = self.build_J(D)
         K = self.build_K(C)
         return J, K
@@ -67,8 +65,8 @@ class DFFockBuilder:
             "Pmn,Prs,mi,rj,nk,sl->ijkl",
             self.B,
             self.B,
-            C1,
-            C2,
+            C1.conj(),
+            C2.conj(),
             C3,
             C4,
             optimize=True,

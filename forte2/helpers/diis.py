@@ -1,5 +1,4 @@
 from collections import deque
-import copy
 import numpy as np
 from numpy.typing import NDArray
 
