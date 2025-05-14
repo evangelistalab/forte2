@@ -17,8 +17,7 @@ def test_sfx2c1e():
 
     system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
 
-    scf = RHF(charge=0)
-    scf._get_hcore = lambda x: get_hcore_x2c(x, x2c_type="sf")
+    scf = RHF(charge=0).x2c()
     scf.run(system, econv=1e-10, dconv=1e-8)
     assert np.isclose(
         scf.E, escf, atol=1e-10
@@ -33,7 +32,7 @@ def test_sox2c1e():
         xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit"
     )
     scf = GHF(charge=0)
-    scf._get_hcore = lambda x: get_hcore_x2c(x, x2c_type="so")
+    scf = scf.x2c(x2c_type="so")
     scf.run(system, econv=1e-10, dconv=1e-8)
     assert np.isclose(
         scf.E, eghf, atol=1e-8, rtol=1e-6

@@ -24,7 +24,14 @@ class SCFMixin:
             assert self.na == self.nb
 
     def run(
-        self, system, diis_start=4, diis_nvec=8, econv=1e-6, dconv=1e-3, maxiter=100
+        self,
+        system,
+        diis_start=4,
+        diis_nvec=8,
+        econv=1e-6,
+        dconv=1e-3,
+        maxiter=100,
+        **kwargs,
     ):
         start = time.monotonic()
 
@@ -60,7 +67,7 @@ class SCFMixin:
         H = self._get_hcore(system)
 
         self.C = self._initial_guess(system, H, S)
-        self.D = self._build_initial_density_matrix(break_symmetry=method == "GHF")
+        self.D = self._build_initial_density_matrix(**kwargs)
 
         Eold = 0.0
         Dold = self.D
@@ -121,6 +128,40 @@ class SCFMixin:
         end = time.monotonic()
         print(f"{method} time: {end - start:.2f} seconds")
 
+        return self
+
+    def x2c(self, x2c_type="sf", **kwargs):
+        """
+        X2C transformation for the RHF/UHF methods.
+        """
+        from forte2.scf.x2c import get_hcore_x2c
+
+        assert x2c_type in [
+            "sf",
+            "so",
+        ], f"Invalid x2c_type: {x2c_type}. Must be 'sf' or 'so'."
+
+        if self._scf_type() != "GHF" and x2c_type == "so":
+            raise ValueError(
+                "SO-X2C is only available for GHF. Use SF-X2C for RHF/UHF."
+            )
+
+        if x2c_type == "sf":
+            if self._scf_type() in ["RHF", "UHF", "CUHF"]:
+                self._get_hcore = lambda system: get_hcore_x2c(system, x2c_type="sf")
+                print("Here!")
+            elif self._scf_type() == "GHF":
+
+                def _get_hcore(system):
+                    H = get_hcore_x2c(system, x2c_type="sf")
+                    return sp.linalg.block_diag(H, H)
+
+                self._get_hcore = _get_hcore
+        elif x2c_type == "so":
+            self._get_hcore = lambda system: get_hcore_x2c(system, x2c_type="so")
+
+        return self
+
 
 @dataclass
 class RHF(SCFMixin, MOs):
@@ -148,7 +189,7 @@ class RHF(SCFMixin, MOs):
         C = minao_initial_guess(system, H, S)
         return [C]
 
-    def _build_initial_density_matrix(self, break_symmetry=False):
+    def _build_initial_density_matrix(self, **kwargs):
         return self._build_density_matrix()
 
     def _build_ao_grad(self, S, F):
@@ -194,7 +235,7 @@ class UHF(SCFMixin, MOs):
         C = minao_initial_guess(system, H, S)
         return [C, C]
 
-    def _build_initial_density_matrix(self, break_symmetry=False):
+    def _build_initial_density_matrix(self, **kwargs):
         D_a, D_b = self._build_density_matrix()
         if self.mult != 1:
             D_b *= 0.0
@@ -427,15 +468,23 @@ class GHF(SCFMixin, MOs):
         H_ao = self._get_hcore_ao(system)
         return minao_initial_guess(system, H_ao, S).astype(np.complex128)
 
-    def _build_initial_density_matrix(self, break_symmetry=False):
+    def _build_initial_density_matrix(self, **kwargs):
+        break_spin_symmetry = kwargs.get("break_spin_symmetry", True)
+        break_complex_symmetry = kwargs.get("break_complex_symmetry", True)
+
         # half of the RHF density matrix
         dm = np.einsum(
             "mi,ni->mn", self.C[:, : self.nel // 2], self.C[:, : self.nel // 2].conj()
         )
 
-        diag = np.diag(dm)
-        D_spinor = np.block([[dm, np.diag(diag) * 0.05], [np.diag(diag) * 0.05, dm]])
-        if break_symmetry:
+        if break_spin_symmetry:
+            diag = np.diag(dm)
+            D_spinor = np.block(
+                [[dm, np.diag(diag) * 0.05], [np.diag(diag) * 0.05, dm]]
+            )
+        else:
+            D_spinor = np.block([[dm, np.zeros_like(dm)], [np.zeros_like(dm), dm]])
+        if break_complex_symmetry:
             pass
             D_spinor[:, 0] -= 0.05j
             D_spinor[0, :] += 0.05j

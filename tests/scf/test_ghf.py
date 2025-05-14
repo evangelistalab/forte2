@@ -3,7 +3,7 @@ import numpy as np
 import scipy as sp
 import time
 
-from forte2.scf import GHF
+from forte2.scf import GHF, UHF
 
 
 def test_ghf():
@@ -52,9 +52,10 @@ def test_ghf2():
 
 
 def test_ghf3():
+    eghf_real = -1.513661163386
+    s2ghf_real = 0.755337181051
     eghf = -1.516054958886
     s2ghf = 0.776532390615
-
 
     xyz = f"""
     H 0 0 0
@@ -65,8 +66,28 @@ def test_ghf3():
     system = forte2.System(xyz=xyz, basis="cc-pvqz", auxiliary_basis="cc-pvqz-jkfit")
 
     scf = GHF(charge=0, mult=2)
-    scf.run(system, econv=1e-10, dconv=1e-8)
+    scf.run(
+        system,
+        econv=1e-10,
+        dconv=1e-8,
+        break_spin_symmetry=False,
+        break_complex_symmetry=False,
+    )
 
+    assert np.isclose(
+        scf.E, eghf_real, atol=1e-8, rtol=1e-6
+    ), f"GHF energy mismatch: {scf.E} vs {eghf}"
+    assert np.isclose(
+        scf.S2, s2ghf_real, atol=1e-8, rtol=1e-6
+    ), f"GHF S2 mismatch: {scf.S2} vs {s2ghf}"
+
+    scf.run(
+        system,
+        econv=1e-10,
+        dconv=1e-8,
+        break_spin_symmetry=True,
+        break_complex_symmetry=True,
+    )
     assert np.isclose(
         scf.E, eghf, atol=1e-8, rtol=1e-6
     ), f"GHF energy mismatch: {scf.E} vs {eghf}"
