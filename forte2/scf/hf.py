@@ -65,9 +65,12 @@ class SCFMixin:
         Eold = 0.0
         Dold = self.D
 
+        width = 109
+        print("=" * width)
         print(
             f"{'Iter':>4s} {'Energy':>20s} {'deltaE':>20s} {'|deltaD|':>20s} {'|AO grad|':>20s} {'<S^2>':>20s}"
         )
+        print("-" * width)
 
         for iter in range(maxiter):
 
@@ -90,14 +93,15 @@ class SCFMixin:
             # check convergence parameters
             deltaE = self.E - Eold
             deltaD = sum([np.linalg.norm(d - dold) for d, dold in zip(self.D, Dold)])
-            spin2 = self._spin(S)
+            self.S2 = self._spin(S)
 
             # print iteration
             print(
-                f"{iter + 1:4d} {self.E:20.12f} {deltaE:20.12f} {deltaD:20.12f} {np.linalg.norm(AO_grad):20.12f} {spin2:20.12f}"
+                f"{iter + 1:4d} {self.E:20.12f} {deltaE:20.12f} {deltaD:20.12f} {np.linalg.norm(AO_grad):20.12f} {self.S2:20.12f}"
             )
 
             if np.abs(deltaE) < econv and deltaD < dconv:
+                print("-" * width)
                 print(f"{method} iterations converged\n")
                 # perform final iteration
                 F, F_canon = self._build_fock(H, self.fock_builder, S)
@@ -111,6 +115,7 @@ class SCFMixin:
             Eold = self.E
             Dold = self.D
         else:
+            print("-" * width)
             print(f"{method} iterations not converged!")
 
         end = time.monotonic()

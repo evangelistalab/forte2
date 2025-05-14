@@ -9,6 +9,7 @@ from forte2.scf import GHF
 def test_ghf():
     # Test the RHF implementation with a simple example
     e_ghf = -128.48875618899837
+    s2_ghf = 0.0
     xyz = """
     Ne 0 0 0
     """
@@ -20,8 +21,11 @@ def test_ghf():
     scf = GHF(charge=0, mult=1)
     scf.run(system, econv=1e-8, dconv=1e-6)
     assert np.isclose(
-        scf.E, e_ghf, atol=1e-6
+        scf.E, e_ghf, atol=1e-8, rtol=1e-6
     ), f"RHF energy mismatch: {scf.E} vs {e_ghf}"
+    assert np.isclose(
+        scf.S2, s2_ghf, atol=1e-8, rtol=1e-6
+    ), f"RHF S2 mismatch: {scf.S2} vs {s2_ghf}"
 
 
 def test_ghf2():
@@ -40,11 +44,17 @@ def test_ghf2():
     scf = GHF(charge=1, mult=2)
     scf.run(system, econv=1e-10, dconv=1e-8)
     assert np.isclose(
-        scf.E, e_ghf, atol=1e-6
+        scf.E, e_ghf, atol=1e-8, rtol=1e-6
     ), f"GHF energy mismatch: {scf.E} vs {e_ghf}"
+    assert np.isclose(
+        scf.S2, s2_ghf, atol=1e-8, rtol=1e-6
+    ), f"GHF S2 mismatch: {scf.s2} vs {s2_ghf}"
 
 
 def test_ghf3():
+    eghf = -1.516054958886
+    s2ghf = 0.776532390615
+
 
     xyz = f"""
     H 0 0 0
@@ -56,6 +66,13 @@ def test_ghf3():
 
     scf = GHF(charge=0, mult=2)
     scf.run(system, econv=1e-10, dconv=1e-8)
+
+    assert np.isclose(
+        scf.E, eghf, atol=1e-8, rtol=1e-6
+    ), f"GHF energy mismatch: {scf.E} vs {eghf}"
+    assert np.isclose(
+        scf.S2, s2ghf, atol=1e-8, rtol=1e-6
+    ), f"GHF S2 mismatch: {scf.S2} vs {s2ghf}"
 
 
 if __name__ == "__main__":
