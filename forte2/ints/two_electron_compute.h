@@ -1,5 +1,7 @@
 #pragma once
 
+#include <future>
+
 #include <libint2.hpp>
 
 #include "ints/basis.h"
@@ -172,6 +174,105 @@ template <libint2::Operator Op, typename Params = NoParams>
                 }
             }
         }
+    }
+
+    // Finalize libint2
+    libint2::finalize();
+
+    const auto end = std::chrono::high_resolution_clock::now();
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    std::cout << "[forte2] Three-center two-electron integrals timing: " << elapsed.count() / 1000.0
+              << " s\n";
+
+    return ints;
+}
+
+template <libint2::Operator Op, typename Params = NoParams>
+[[nodiscard]] auto compute_two_electron_3c_multi_async(const Basis& basis1, const Basis& basis2,
+                                                       const Basis& basis3,
+                                                       Params const& params = Params{})
+    -> np_tensor3 {
+    const auto start = std::chrono::high_resolution_clock::now();
+
+    // Initialize libint2
+    libint2::initialize();
+
+    const auto max_nprim =
+        std::max(std::max(basis1.max_nprim(), basis2.max_nprim()), basis3.max_nprim());
+    const auto max_l = std::max(std::max(basis1.max_l(), basis2.max_l()), basis3.max_l());
+
+    const std::size_t nb1 = basis1.size();
+    const std::size_t nb2 = basis2.size();
+    const std::size_t nb3 = basis3.size();
+
+    const std::size_t nshells1 = basis1.nshells();
+    const std::size_t nshells2 = basis2.nshells();
+    const std::size_t nshells3 = basis3.nshells();
+
+    const auto first_size1 = basis1.shell_first_and_size();
+    const auto first_size2 = basis2.shell_first_and_size();
+    const auto first_size3 = basis3.shell_first_and_size();
+
+    auto ints = make_zeros<nb::numpy, double, 3>({nb1, nb2, nb3});
+    auto v = ints.view();
+
+    const std::size_t num_threads = std::thread::hardware_concurrency();
+    std::vector<std::future<void>> tasks;
+
+    /// This lambda function computes the integrals for a given range of shells
+    /// in the first basis and fills the buffer.
+    auto kernel = [&](std::size_t s1_begin, std::size_t s1_end) {
+        libint2::Engine engine(Op, max_nprim, max_l);
+        engine.set(libint2::BraKet::xs_xx);
+        if constexpr (!std::is_same_v<Params, NoParams>) {
+            engine.set_params(params);
+        }
+        const auto& results = engine.results();
+
+        // Loop over the given range of shells in basis1
+        for (std::size_t s1 = s1_begin; s1 < s1_end; ++s1) {
+            const auto& shell1 = basis1[s1];
+            const auto [f1, n1] = first_size1[s1];
+
+            // Loop over the shells in basis2 and basis3
+            for (std::size_t s2 = 0; s2 < nshells2; ++s2) {
+                const auto& shell2 = basis2[s2];
+                const auto [f2, n2] = first_size2[s2];
+                for (std::size_t s3 = 0; s3 < nshells3; ++s3) {
+                    const auto& shell3 = basis3[s3];
+
+                    // Compute the integrals for this shell triplet
+                    engine.compute(shell1, shell2, shell3);
+
+                    // Loop over the components of this operator and fill the buffers
+                    if (const auto buf = results[0]; buf) {
+                        const auto [f3, n3] = first_size3[s3];
+                        for (std::size_t i = 0, ijk = 0; i < n1; ++i) {
+                            for (std::size_t j = 0; j < n2; ++j) {
+                                for (std::size_t k = 0; k < n3; ++k, ++ijk) {
+                                    v(f1 + i, f2 + j, f3 + k) = static_cast<double>(buf[ijk]);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    /// Divide the work among threads in contiguous blocks of first shells
+    const std::size_t block_size = (nshells1 + num_threads - 1) / num_threads;
+    for (std::size_t t = 0; t < num_threads; ++t) {
+        std::size_t begin = t * block_size;
+        std::size_t end = std::min(begin + block_size, nshells1);
+        if (begin < end) {
+            tasks.emplace_back(std::async(std::launch::async, kernel, begin, end));
+        }
+    }
+
+    // Wait for all tasks to finish
+    for (auto& task : tasks) {
+        task.get();
     }
 
     // Finalize libint2

@@ -8,7 +8,7 @@ np_tensor4 coulomb_4c(const Basis& b1, const Basis& b2, const Basis& b3, const B
 }
 
 np_tensor3 coulomb_3c(const Basis& b1, const Basis& b2, const Basis& b3) {
-    return compute_two_electron_3c_multi<libint2::Operator::coulomb>(b1, b2, b3);
+    return compute_two_electron_3c_multi_async<libint2::Operator::coulomb>(b1, b2, b3);
 }
 
 np_matrix coulomb_2c(const Basis& b1, const Basis& b2) {
