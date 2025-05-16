@@ -20,8 +20,8 @@ def test_mp2():
 
     system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
 
-    scf = RHF(charge=0)
-    scf.run(system)
+    scf = RHF(system, charge=0, mult=1)
+    scf.run()
 
     print(f"RHF energy: {scf.E:.10f} [Eh]")
 
