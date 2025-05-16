@@ -378,8 +378,8 @@ class CUHF(SCFMixin, MOs):
 class GHF(SCFMixin, MOs):
     """
     Generalized Hartree-Fock (GHF) method.
-    The GHF spinor basis is a direct product of the atomic basis and {|\alpha>, |\beta>}
-    |\psi_i> = \sum_{\mu} \sum_{\sigma\in\{\alpha,\beta\}} c_{\mu\sigma} |\chi_{\mu}>|\sigma>
+    The GHF spinor basis is a direct product of the atomic basis and {|alpha>, |beta>}
+    |psi_i> = sum_{mu} sum_{sigmain{alpha,beta}} c_{musigma} |chi_{mu}>|sigma>
     The MO coefficients are stored in a square array
     [------MOs------]
     [alpha basis    ]
