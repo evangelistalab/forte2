@@ -30,8 +30,8 @@ H       -0.8580037770      4.8559228717     -0.0859634340
 
     system = forte2.System(xyz=xyz, basis="cc-pVTZ", auxiliary_basis="cc-pVTZ-JKFIT")
 
-    scf = RHF(charge=0)
-    scf.run(system)
+    scf = RHF(system, charge=0, mult=1)
+    scf.run()
     assert np.isclose(
         scf.E, -383.4701768569434535, atol=1e-10
     ), f"SCF energy {scf.E} is not close to expected value -76.0614664043887672"

@@ -6,10 +6,49 @@ import scipy as sp
 import forte2
 from forte2.jkbuilder.jkbuilder import DFFockBuilder
 from forte2.helpers.mixins import MOs
+from forte2.scf.x2c import get_hcore_x2c
 from .initial_guess import minao_initial_guess
 
 
+@dataclass
 class SCFMixin:
+    system: forte2.System
+    charge: int
+    mult: int
+    diis_start: int = 4
+    diis_nvec: int = 8
+    econv: float = 1e-6
+    dconv: float = 1e-3
+    maxiter: int = 100
+
+    def __post_init__(self):
+        self.method = self._scf_type().upper()
+        Zsum = np.sum([x[0] for x in self.system.atoms])
+        self.nel = Zsum - self.charge
+        self.nbasis = self.system.basis.size
+        self.naux = self.system.auxiliary_basis.size
+        self.na = (self.nel + self.mult - 1) // 2
+        self.nb = (self.nel - self.mult + 1) // 2
+        self.sz = (self.na - self.nb) / 2.0
+
+        self._check_parameters()
+
+        self._init_x2c()
+
+    def _init_x2c(self):
+        if self.system.x2c_type is None:
+            return
+
+        if self.method != "GHF" and self.system.x2c_type == "so":
+            raise ValueError(
+                "SO-X2C is only available for GHF. Use SF-X2C for RHF/UHF."
+            )
+
+        if self.system.x2c_type == "sf":
+            if self._scf_type() in ["RHF", "UHF", "CUHF"]:
+                self._get_hcore = lambda: get_hcore_x2c(self.system, x2c_type="sf")
+        # GHF _init_x2c is called separately in the GHF class as _get_hcore will be overridden in GHF
+
     def _check_scf_params(self):
         pass
 
@@ -25,28 +64,11 @@ class SCFMixin:
 
     def run(
         self,
-        system,
-        diis_start=4,
-        diis_nvec=8,
-        econv=1e-6,
-        dconv=1e-3,
-        maxiter=100,
         **kwargs,
     ):
         start = time.monotonic()
 
-        method = self._scf_type().upper()
-        Zsum = np.sum([x[0] for x in system.atoms])
-        self.nel = Zsum - self.charge
-        self.nbasis = system.basis.size
-        self.naux = system.auxiliary_basis.size
-        self.na = (self.nel + self.mult - 1) // 2
-        self.nb = (self.nel - self.mult + 1) // 2
-        self.sz = (self.na - self.nb) / 2.0
-
-        self._check_parameters()
-
-        diis = forte2.helpers.DIIS(diis_start=diis_start, diis_nvec=diis_nvec)
+        diis = forte2.helpers.DIIS(diis_start=self.diis_start, diis_nvec=self.diis_nvec)
 
         print(f"Number of alpha electrons: {self.na}")
         print(f"Number of beta electrons: {self.nb}")
@@ -54,17 +76,17 @@ class SCFMixin:
         print(f"Spin multiplicity: {self.mult}")
         print(f"Number of basis functions: {self.nbasis}")
         print(f"Number of auxiliary basis functions: {self.naux}")
-        print(f"Energy convergence criterion: {econv:e}")
-        print(f"Density convergence criterion: {dconv:e}")
+        print(f"Energy convergence criterion: {self.econv:e}")
+        print(f"Density convergence criterion: {self.dconv:e}")
         print(f"DIIS acceleration: {diis.do_diis}")
-        print(f"\n==> {method} SCF ROUTINE <==")
+        print(f"\n==> {self.method} SCF ROUTINE <==")
 
-        Vnn = self._get_nuclear_repulsion(system.atoms)
-        S = self._get_overlap(system.basis)
-        H = self._get_hcore(system)
-        fock_builder = DFFockBuilder(system)
+        Vnn = self._get_nuclear_repulsion()
+        S = self._get_overlap()
+        H = self._get_hcore()
+        fock_builder = DFFockBuilder(self.system)
 
-        self.C = self._initial_guess(system, H, S)
+        self.C = self._initial_guess(self.system, H, S)
         self.D = self._build_initial_density_matrix(**kwargs)
 
         Eold = 0.0
@@ -77,7 +99,7 @@ class SCFMixin:
         )
         print("-" * width)
         self.iter = 0
-        for iter in range(maxiter):
+        for iter in range(self.maxiter):
 
             # 1. Build the Fock matrix
             # (there is a slot for canonicalized F to accommodate ROHF and CUHF methods - admittedly weird for RHF/UHF)
@@ -103,15 +125,15 @@ class SCFMixin:
                 f"{iter + 1:4d} {self.E:20.12f} {deltaE:20.12f} {deltaD:20.12f} {np.linalg.norm(AO_grad):20.12f} {self.S2:20.12f}"
             )
 
-            if np.abs(deltaE) < econv and deltaD < dconv:
+            if np.abs(deltaE) < self.econv and deltaD < self.dconv:
                 print("-" * width)
-                print(f"{method} iterations converged\n")
+                print(f"{self.method} iterations converged\n")
                 # perform final iteration
                 F, F_canon = self._build_fock(H, fock_builder, S)
                 self.eps, self.C = self._diagonalize_fock(F_canon, S)
                 self.D = self._build_density_matrix()
                 self.E = Vnn + self._energy(H, F)
-                print(f"Final {method} Energy: {self.E:20.12f}")
+                print(f"Final {self.method} Energy: {self.E:20.12f}")
                 break
 
             # reset old parameters
@@ -120,64 +142,30 @@ class SCFMixin:
             self.iter += 1
         else:
             print("-" * width)
-            print(f"{method} iterations not converged!")
+            print(f"{self.method} iterations not converged!")
 
         end = time.monotonic()
-        print(f"{method} time: {end - start:.2f} seconds")
+        print(f"{self.method} time: {end - start:.2f} seconds")
 
         return self
 
-    def x2c(self, x2c_type="sf", **kwargs):
-        """
-        X2C transformation for the RHF/UHF methods.
-        """
-        from forte2.scf.x2c import get_hcore_x2c
+    def _get_hcore(self):
+        T = forte2.ints.kinetic(self.system.basis)
+        V = forte2.ints.nuclear(self.system.basis, self.system.atoms)
+        H = T + V
+        return H
 
-        assert x2c_type in [
-            "sf",
-            "so",
-        ], f"Invalid x2c_type: {x2c_type}. Must be 'sf' or 'so'."
+    def _get_overlap(self):
+        S = forte2.ints.overlap(self.system.basis)
+        return S
 
-        if self._scf_type() != "GHF" and x2c_type == "so":
-            raise ValueError(
-                "SO-X2C is only available for GHF. Use SF-X2C for RHF/UHF."
-            )
-
-        if x2c_type == "sf":
-            if self._scf_type() in ["RHF", "UHF", "CUHF"]:
-                self._get_hcore = lambda system: get_hcore_x2c(system, x2c_type="sf")
-            elif self._scf_type() == "GHF":
-
-                def _get_hcore(system):
-                    H = get_hcore_x2c(system, x2c_type="sf")
-                    return sp.linalg.block_diag(H, H)
-
-                self._get_hcore = _get_hcore
-        elif x2c_type == "so":
-            self._get_hcore = lambda system: get_hcore_x2c(system, x2c_type="so")
-
-        return self
+    def _get_nuclear_repulsion(self):
+        Vnn = forte2.ints.nuclear_repulsion(self.system.atoms)
+        return Vnn
 
 
 @dataclass
 class RHF(SCFMixin, MOs):
-
-    charge: int
-    mult: int = 1
-
-    def _get_hcore(self, system):
-        T = forte2.ints.kinetic(system.basis)
-        V = forte2.ints.nuclear(system.basis, system.atoms)
-        H = T + V
-        return H
-
-    def _get_overlap(self, basis):
-        S = forte2.ints.overlap(basis)
-        return S
-
-    def _get_nuclear_repulsion(self, atoms):
-        Vnn = forte2.ints.nuclear_repulsion(atoms)
-        return Vnn
 
     def _build_fock(self, H, fock_builder, S):
         J = fock_builder.build_J(self.D)[0]
@@ -216,12 +204,6 @@ class RHF(SCFMixin, MOs):
 
 @dataclass
 class UHF(SCFMixin, MOs):
-    charge: int
-    mult: int
-
-    _get_hcore = RHF._get_hcore
-    _get_overlap = RHF._get_overlap
-    _get_nuclear_repulsion = RHF._get_nuclear_repulsion
 
     def _build_fock(self, H, fock_builder, S):
         Ja, Jb = fock_builder.build_J(self.D)
@@ -294,12 +276,7 @@ class UHF(SCFMixin, MOs):
 
 @dataclass
 class ROHF(SCFMixin, MOs):
-    charge: int
-    mult: int
 
-    _get_hcore = RHF._get_hcore
-    _get_overlap = RHF._get_overlap
-    _get_nuclear_repulsion = RHF._get_nuclear_repulsion
     _initial_guess = RHF._initial_guess
     _build_initial_density_matrix = UHF._build_initial_density_matrix
     _diagonalize_fock = RHF._diagonalize_fock
@@ -352,12 +329,7 @@ class ROHF(SCFMixin, MOs):
 
 @dataclass
 class CUHF(SCFMixin, MOs):
-    charge: int
-    mult: int
 
-    _get_hcore = RHF._get_hcore
-    _get_overlap = RHF._get_overlap
-    _get_nuclear_repulsion = RHF._get_nuclear_repulsion
     _build_density_matrix = UHF._build_density_matrix
     _initial_guess = UHF._initial_guess
     _build_initial_density_matrix = UHF._build_initial_density_matrix
@@ -417,16 +389,28 @@ class GHF(SCFMixin, MOs):
     [               ]
     """
 
-    charge: int
-    mult: int = 1
+    break_spin_symmetry: bool = True
+    break_complex_symmetry: bool = False
 
     _get_hcore_ao = RHF._get_hcore
-    _get_overlap = RHF._get_overlap
-    _get_nuclear_repulsion = RHF._get_nuclear_repulsion
     _diis_update = RHF._diis_update
 
-    def _get_hcore(self, system):
-        H = RHF._get_hcore(self, system).astype(complex)
+    def __post_init__(self):
+        super().__post_init__()
+        self._init_x2c()
+
+    def _init_x2c(self):
+        def _get_hcore_sf():
+            H = get_hcore_x2c(self.system, x2c_type="sf")
+            return sp.linalg.block_diag(H, H)
+
+        if self.system.x2c_type == "sf":
+            self._get_hcore = _get_hcore_sf
+        elif self.system.x2c_type == "so":
+            self._get_hcore = lambda: get_hcore_x2c(self.system, x2c_type="so")
+
+    def _get_hcore(self):
+        H = RHF._get_hcore(self).astype(complex)
         return sp.linalg.block_diag(H, H)
 
     def _build_fock(self, H, fock_builder, S):
@@ -463,13 +447,10 @@ class GHF(SCFMixin, MOs):
         return Daa, Dab, Dba, Dbb
 
     def _initial_guess(self, system, H, S):
-        H_ao = self._get_hcore_ao(system)
+        H_ao = self._get_hcore_ao()
         return [minao_initial_guess(system, H_ao, S).astype(complex)]
 
     def _build_initial_density_matrix(self, **kwargs):
-        break_spin_symmetry = kwargs.get("break_spin_symmetry", True)
-        break_complex_symmetry = kwargs.get("break_complex_symmetry", True)
-
         Daa = np.einsum(
             "mi,ni->mn",
             self.C[0][:, : self.nel // 2],
@@ -479,11 +460,11 @@ class GHF(SCFMixin, MOs):
         Dba = np.zeros_like(Daa)
         Dbb = Daa.copy()
 
-        if break_spin_symmetry:
+        if self.break_spin_symmetry:
             diag = np.diag(Daa)
             Dab = np.diag(diag) * 0.05
             Dba = np.diag(diag) * 0.05
-        if break_complex_symmetry:
+        if self.break_complex_symmetry:
             Daa[0, :] += 0.05j
             Dab[0, :] += 0.05j
             Daa[:, 0] -= 0.05j

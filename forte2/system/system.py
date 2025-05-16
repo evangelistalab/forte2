@@ -11,6 +11,7 @@ class System:
     auxiliary_basis: str = None
     atoms: list[tuple[float, tuple[float, float, float]]] = None
     minao_basis: str = None
+    x2c_type: str = None
 
     def __post_init__(self):
         self.atoms = parse_xyz(self.xyz)
@@ -28,6 +29,12 @@ class System:
         print(
             f"Parsed {len(self.atoms)} atoms with basis set of {self.basis.size} functions."
         )
+
+        if self.x2c_type is not None:
+            assert self.x2c_type in [
+                "sf",
+                "so",
+            ], f"x2c_type {self.x2c_type} is not supported. Use None, 'sf' or 'so'."
 
     def __repr__(self):
         return f"System(atoms={self.atoms}, basis={self.basis}, auxiliary_basis={self.auxiliary_basis})"

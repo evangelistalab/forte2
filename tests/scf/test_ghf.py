@@ -17,8 +17,10 @@ def test_ghf():
         xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit"
     )
 
-    scf = GHF(charge=0, mult=1)
-    scf.run(system, econv=1e-8, dconv=1e-6)
+    scf = GHF(system, charge=0, mult=1)
+    scf.econv = 1e-8
+    scf.dconv = 1e-6
+    scf.run()
     assert np.isclose(
         scf.E, e_ghf, atol=1e-8, rtol=1e-6
     ), f"RHF energy mismatch: {scf.E} vs {e_ghf}"
@@ -40,8 +42,10 @@ def test_ghf2():
 
     system = forte2.System(xyz=xyz, basis="cc-pvqz", auxiliary_basis="cc-pvqz-jkfit")
 
-    scf = GHF(charge=1, mult=2)
-    scf.run(system, econv=1e-10, dconv=1e-8)
+    scf = GHF(system, charge=1, mult=2)
+    scf.econv = 1e-10
+    scf.dconv = 1e-8
+    scf.run()
     assert np.isclose(
         scf.E, e_ghf, atol=1e-8, rtol=1e-6
     ), f"GHF energy mismatch: {scf.E} vs {e_ghf}"
@@ -64,14 +68,12 @@ def test_ghf3():
 
     system = forte2.System(xyz=xyz, basis="cc-pvqz", auxiliary_basis="cc-pvqz-jkfit")
 
-    scf = GHF(charge=0, mult=2)
-    scf.run(
-        system,
-        econv=1e-10,
-        dconv=1e-8,
-        break_spin_symmetry=False,
-        break_complex_symmetry=False,
-    )
+    scf = GHF(system, charge=0, mult=2)
+    scf.econv = 1e-10
+    scf.dconv = 1e-8
+    scf.break_spin_symmetry = False
+    scf.break_complex_symmetry = False
+    scf.run()
 
     assert np.isclose(
         scf.E, eghf_real, atol=1e-8, rtol=1e-6
@@ -80,13 +82,9 @@ def test_ghf3():
         scf.S2, s2ghf_real, atol=1e-8, rtol=1e-6
     ), f"GHF S2 mismatch: {scf.S2} vs {s2ghf_real}"
 
-    scf.run(
-        system,
-        econv=1e-10,
-        dconv=1e-8,
-        break_spin_symmetry=True,
-        break_complex_symmetry=True,
-    )
+    scf.break_spin_symmetry = True
+    scf.break_complex_symmetry = True
+    scf.run()
     assert np.isclose(
         scf.E, eghf, atol=1e-8, rtol=1e-6
     ), f"GHF energy mismatch: {scf.E} vs {eghf}"

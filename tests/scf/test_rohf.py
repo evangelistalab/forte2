@@ -17,8 +17,8 @@ def test_rohf_singlet():
 
     system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
 
-    scf = ROHF(charge=0, mult=1)
-    scf.run(system)
+    scf = ROHF(system, charge=0, mult=1)
+    scf.run()
     assert np.isclose(
         scf.E, erohf, atol=1e-10, rtol=1e-6
     ), f"SCF energy {scf.E} is not close to expected value {erohf}"
@@ -40,8 +40,8 @@ def test_rohf_triplet():
 
     system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
 
-    scf = ROHF(charge=0, mult=3)
-    scf.run(system)
+    scf = ROHF(system, charge=0, mult=3)
+    scf.run()
     assert np.isclose(
         scf.E, erohf, atol=1e-10
     ), f"SCF energy {scf.E} is not close to expected value {erohf}"

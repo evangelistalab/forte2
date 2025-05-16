@@ -17,8 +17,8 @@ def test_uhf_triplet():
 
     system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
 
-    scf = UHF(charge=0, mult=3)
-    scf.run(system)
+    scf = UHF(system, charge=0, mult=3)
+    scf.run()
     assert np.isclose(
         scf.E, euhf, atol=1e-10
     ), f"SCF energy {scf.E} is not close to expected value {euhf}"
@@ -39,8 +39,8 @@ def test_uhf_singlet():
 
     system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
 
-    scf = UHF(charge=0, mult=1)
-    scf.run(system)
+    scf = UHF(system, charge=0, mult=1)
+    scf.run()
     assert np.isclose(
         scf.E, euhf, atol=1e-10
     ), f"SCF energy {scf.E} is not close to expected value {euhf}"
