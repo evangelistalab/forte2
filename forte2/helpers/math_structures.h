@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include <algorithm>
@@ -9,8 +8,8 @@
 #include <vector>
 
 #if __cplusplus >= 202002L
-  // C++20 or later
-  #include <concepts>
+// C++20 or later
+#include <concepts>
 #endif
 
 namespace forte2 {

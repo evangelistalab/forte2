@@ -1,5 +1,4 @@
-from dataclasses import dataclass, field
-import forte2
+from dataclasses import dataclass
 
 from .build_basis import build_basis
 from .parse_xyz import parse_xyz
@@ -8,10 +7,10 @@ from .parse_xyz import parse_xyz
 @dataclass
 class System:
     xyz: str
-    basis: forte2.ints.Basis
-    auxiliary_basis: forte2.ints.Basis = None
+    basis: str
+    auxiliary_basis: str = None
     atoms: list[tuple[float, tuple[float, float, float]]] = None
-    minao_basis: forte2.ints.Basis = None
+    minao_basis: str = None
 
     def __post_init__(self):
         self.atoms = parse_xyz(self.xyz)
@@ -32,3 +31,44 @@ class System:
 
     def __repr__(self):
         return f"System(atoms={self.atoms}, basis={self.basis}, auxiliary_basis={self.auxiliary_basis})"
+
+    def nao(self):
+        """
+        Get the number of atomic orbitals in the system.
+
+        Returns:
+            int: Number of atomic orbitals.
+        """
+        return self.basis.size
+
+    def naux(self):
+        """
+        Get the number of auxiliary basis functions in the system.
+
+        Returns:
+            int: Number of auxiliary basis functions.
+        """
+        return self.auxiliary_basis.size if self.auxiliary_basis else 0
+
+    def nminao(self):
+        """
+        Get the number of minao basis functions in the system.
+
+        Returns:
+            int: Number of minao basis functions.
+        """
+        return self.minao_basis.size if self.minao_basis else 0
+
+    def decontract(self):
+        """
+        Decontract the basis set.
+
+        Returns:
+            forte2.ints.Basis: Decontracted basis set.
+        """
+        return build_basis(
+            self.basis.name,
+            self.atoms,
+            embed_normalization_into_coefficients=True,
+            decontract=True,
+        )

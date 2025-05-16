@@ -1,7 +1,6 @@
 import numpy as np
 import scipy as sp
 
-from forte2.system import build_basis
 from forte2 import ints
 
 
@@ -37,16 +36,26 @@ class DFFockBuilder:
         del Pmn
 
     def build_J(self, D):
-        J = [np.einsum("Pmn,Prs,rs->mn", self.B, self.B, Di, optimize=True) for Di in D]
+        J = [np.einsum("Pmn,Prs,sr->mn", self.B, self.B, Di, optimize=True) for Di in D]
         return J
 
-    def build_K(self, C):
-        Y = [np.einsum("Pmr,ri->Pmi", self.B, Ci, optimize=True) for Ci in C]
-        K = [np.einsum("Pmi,Pni->mn", Yi, Yi, optimize=True) for Yi in Y]
+    def build_K(self, C, ghf=False):
+        Y = [np.einsum("Pmr,mi->Pri", self.B, Ci.conj(), optimize=True) for Ci in C]
+        if ghf:
+            K = []
+            for Yi in Y:
+                for Yj in Y:
+                    K.append(np.einsum("Pmi,Pni->mn", Yi.conj(), Yj, optimize=True))
+        else:
+            K = [np.einsum("Pmi,Pni->mn", Yi.conj(), Yi, optimize=True) for Yi in Y]
+        return K
+
+    def build_K_density(self, D):
+        K = [np.einsum("Pms,Prn,sr->mn", self.B, self.B, Di, optimize=True) for Di in D]
         return K
 
     def build_JK(self, C):
-        D = [np.einsum("mi,ni->mn", Ci, Ci, optimize=True) for Ci in C]
+        D = [np.einsum("mi,ni->mn", Ci, Ci.conj(), optimize=True) for Ci in C]
         J = self.build_J(D)
         K = self.build_K(C)
         return J, K
@@ -56,8 +65,8 @@ class DFFockBuilder:
             "Pmn,Prs,mi,rj,nk,sl->ijkl",
             self.B,
             self.B,
-            C1,
-            C2,
+            C1.conj(),
+            C2.conj(),
             C3,
             C4,
             optimize=True,

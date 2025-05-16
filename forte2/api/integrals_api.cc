@@ -1,6 +1,6 @@
 #if __cplusplus >= 202002L
-  // C++20 or later
-  #include <format>
+// C++20 or later
+#include <format>
 #endif
 
 #include <libint2.hpp>
@@ -82,19 +82,19 @@ void export_shell_api(nb::module_& sub_m) {
             "embed_normalization_into_coefficients"_a = true,
             "Construct a shell from the angular momentum (l) and a list of exponents and "
             "coefficients.")
-	 #if __cplusplus >= 202002L
-  	     // C++20 or later
-	     .def("__repr__",
-		     [](const libint2::Shell& s) {
-			 std::string str;
-			 str = "l = " + std::to_string(s.contr[0].l) +
-			       " nprim = " + std::to_string(s.nprim());
-			 for (std::size_t i = 0; i < s.nprim(); ++i) {
-			     str += std::format("\n  {0:10.6f} {1:10.6f}", s.alpha[i], s.contr[0].coeff[i]);
-			 }
-			 return str;
-              })
-	#endif
+#if __cplusplus >= 202002L
+        // C++20 or later
+        .def("__repr__",
+             [](const libint2::Shell& s) {
+                 std::string str;
+                 str = "l = " + std::to_string(s.contr[0].l) +
+                       " nprim = " + std::to_string(s.nprim());
+                 for (std::size_t i = 0; i < s.nprim(); ++i) {
+                     str += std::format("\n  {0:10.6f} {1:10.6f}", s.alpha[i], s.contr[0].coeff[i]);
+                 }
+                 return str;
+             })
+#endif
         .def_prop_ro(
             "size", [](libint2::Shell& s) { return s.size(); },
             "The number of basis functions in the shell (e.g., for l = 2, size = 5).")
@@ -129,18 +129,20 @@ void export_basis_api(nb::module_& sub_m) {
     nb::class_<Basis>(sub_m, "Basis")
         .def(nb::init<>())
         .def("add", &Basis::add, "shell"_a)
+        .def("set_name", &Basis::set_name, "name"_a)
         .def("__getitem__", &Basis::operator[], "i"_a)
         .def("__len__", &Basis::size)
         .def_prop_ro("shell_first_and_size", &Basis::shell_first_and_size)
         .def_prop_ro("center_first_and_last", &Basis::center_first_and_last)
         .def_prop_ro("size", &Basis::size)
         .def_prop_ro("max_l", &Basis::max_l)
+        .def_prop_ro("name", &Basis::name)
         .def_prop_ro("max_nprim", &Basis::max_nprim)
         .def_prop_ro("nprim", &Basis::max_nprim)
         .def_prop_ro("nshells", &Basis::nshells)
         .def("__repr__", [](const Basis& b) {
             std::ostringstream oss;
-            oss << "<Basis with " << b.size() << " basis functions>";
+            oss << "<Basis '" << b.name() << "' with " << b.size() << " basis functions>";
             return oss.str();
         });
 }
@@ -182,14 +184,10 @@ Returns
 ndarray, shape = (nb1, nb2)
     Overlap integrals matrix.
 )pbdoc");
-
-    sub_m.def(
-        "overlap", [](const Basis& basis) { return overlap(basis, basis); }, "basis"_a);
+    sub_m.def("overlap", [](const Basis& basis) { return overlap(basis, basis); }, "basis"_a);
 
     sub_m.def("kinetic", &kinetic, "basis1"_a, "basis2"_a);
-
-    sub_m.def(
-        "kinetic", [](const Basis& basis) { return kinetic(basis, basis); }, "basis"_a);
+    sub_m.def("kinetic", [](const Basis& basis) { return kinetic(basis, basis); }, "basis"_a);
 
     sub_m.def(
         "nuclear",
@@ -211,7 +209,6 @@ ndarray, shape = (nb1, nb2)
             return emultipole1(basis1, basis2, origin);
         },
         "basis1"_a, "basis2"_a, "origin"_a = std::array<double, 3>{0.0, 0.0, 0.0});
-
     sub_m.def(
         "emultipole1",
         [](const Basis& basis, std::array<double, 3> origin) {
@@ -231,6 +228,7 @@ ndarray, shape = (nb1, nb2)
             return emultipole2(basis, basis, origin);
         },
         "basis"_a, "origin"_a = std::array<double, 3>{0.0, 0.0, 0.0});
+
     sub_m.def(
         "emultipole3",
         [](const Basis& basis1, const Basis& basis2, std::array<double, 3> origin) {
@@ -243,6 +241,7 @@ ndarray, shape = (nb1, nb2)
             return emultipole3(basis, basis, origin);
         },
         "basis"_a, "origin"_a = std::array<double, 3>{0.0, 0.0, 0.0});
+
     sub_m.def(
         "opVop",
         [](const Basis& basis1, const Basis& basis2,
@@ -295,8 +294,7 @@ void export_two_electron_api(nb::module_& sub_m) {
         "coulomb_2c",
         [](const Basis& basis1, const Basis& basis2) { return coulomb_2c(basis1, basis2); },
         "basis1"_a, "basis2"_a);
-    sub_m.def(
-        "coulomb_2c", [](const Basis& basis) { return coulomb_2c(basis, basis); }, "basis"_a);
+    sub_m.def("coulomb_2c", [](const Basis& basis) { return coulomb_2c(basis, basis); }, "basis"_a);
 
     sub_m.def(
         "erf_coulomb_3c",

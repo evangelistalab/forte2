@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <string>
 
 #include <libint2/shell.h>
 
@@ -17,6 +18,9 @@ class Basis {
     // Add shells
     void add(const libint2::Shell& shell);
 
+    /// Set the name of the basis set
+    void set_name(const std::string& name) { name_ = name; }
+
     /// @return the number of basis functions in the basis set
     std::size_t size() const;
 
@@ -25,6 +29,9 @@ class Basis {
 
     /// @return the max angular momentum of the basis set
     int max_l() const;
+
+    /// @return the name of the basis set
+    std::string name() const;
 
     /// @return the max number of primitives in a shell
     std::size_t max_nprim() const;
@@ -37,9 +44,6 @@ class Basis {
 
     /// @return the i-th shell in the basis set
     const libint2::Shell& operator[](size_t i) const;
-
-    /// @return Return a new basis set with the shells decontracted into single Gaussians.
-    Basis decontract() const;
 
     /// @return a vector of pairs of the first index and size of each shell
     ///         in the basis set. The first index is the index of the first basis function
@@ -55,6 +59,7 @@ class Basis {
     size_t size_ = 0;      // total number of basis functions
     size_t max_nprim_ = 0; // max number of primitives in shells
     int max_l_ = 0;        // max angular momentum of shells
+    std::string name_ = "unnamed basis"; // name of the basis set
 };
 
 void evaluate_shell(const libint2::Shell& shell, const std::array<double, 3>& point,

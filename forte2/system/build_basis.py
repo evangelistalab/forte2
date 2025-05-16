@@ -46,6 +46,7 @@ def build_basis(
     basis_name: str,
     atoms: list[tuple[int, tuple[float, float, float]]],
     embed_normalization_into_coefficients: bool = True,
+    decontract: bool = False,
 ) -> forte2.ints.Basis:
     """
     Assemble the basis set from JSON data or Basis Set Exchange, depending on availability.
@@ -59,6 +60,8 @@ def build_basis(
         Exception: If the basis set file cannot be opened or if an element is not in the basis set.
     """
     basis = forte2.ints.Basis()
+    prefix = "decon-" if decontract else ""
+    basis.set_name(prefix + basis_name)
     basis_json = parse_basis_json(basis_name)
 
     # Cache for BSE queries to avoid repeated downloads
@@ -88,23 +91,40 @@ def build_basis(
                 )
             atom_basis = basis_json["elements"][f"{atomic_number}"]["electron_shells"]
 
-        for shell in atom_basis:
-            angular_momentum = list(map(int, shell["angular_momentum"]))
-            exponents = list(map(float, shell["exponents"]))
+        if decontract:
+            for shell in atom_basis:
+                angular_momentum = list(map(int, shell["angular_momentum"]))
+                exponents = list(map(float, shell["exponents"]))
 
-            for l, subshell_coefficients in itertools.zip_longest(
-                angular_momentum,
-                shell["coefficients"],
-                fillvalue=angular_momentum[-1],
-            ):
-                coefficients = list(map(float, subshell_coefficients))
-                basis.add(
-                    forte2.ints.Shell(
-                        l,
-                        exponents,
-                        coefficients,
-                        xyz,
-                        embed_normalization_into_coefficients=embed_normalization_into_coefficients,
+                for l in angular_momentum:
+                    for alpha in exponents:
+                        basis.add(
+                            forte2.ints.Shell(
+                                l,
+                                [alpha],
+                                [1.0],
+                                xyz,
+                                embed_normalization_into_coefficients=embed_normalization_into_coefficients,
+                            )
+                        )
+        else:
+            for shell in atom_basis:
+                angular_momentum = list(map(int, shell["angular_momentum"]))
+                exponents = list(map(float, shell["exponents"]))
+
+                for l, subshell_coefficients in itertools.zip_longest(
+                    angular_momentum,
+                    shell["coefficients"],
+                    fillvalue=angular_momentum[-1],
+                ):
+                    coefficients = list(map(float, subshell_coefficients))
+                    basis.add(
+                        forte2.ints.Shell(
+                            l,
+                            exponents,
+                            coefficients,
+                            xyz,
+                            embed_normalization_into_coefficients=embed_normalization_into_coefficients,
+                        )
                     )
-                )
     return basis

@@ -38,6 +38,8 @@ const libint2::Shell& Basis::operator[](size_t i) const {
 
 int Basis::max_l() const { return max_l_; }
 
+std::string Basis::name() const { return name_; }
+
 std::size_t Basis::max_nprim() const { return max_nprim_; }
 
 std::vector<std::pair<std::size_t, std::size_t>> Basis::shell_first_and_size() const {
@@ -74,25 +76,6 @@ std::vector<std::pair<std::size_t, std::size_t>> Basis::center_first_and_last() 
         last += shell.size();
     }
     result.emplace_back(first, last);
-    return result;
-}
-
-Basis Basis::decontract() const {
-    Basis result;
-    for (const auto& shell : shells_) {
-        const auto n = shell.nprim();
-        const auto& alpha = shell.alpha;
-        const auto& contr = shell.contr[0];
-        const auto l = contr.l;
-        const auto is_pure = contr.pure;
-        const auto& coeff = contr.coeff;
-        const auto& O = shell.O;
-        // loop over the primitives and create a new shell for each one
-        for (std::size_t i = 0; i < n; ++i) {
-            libint2::Shell new_shell{alpha, {{l, is_pure, coeff}}, O};
-            result.add(new_shell);
-        }
-    }
     return result;
 }
 
