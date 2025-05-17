@@ -1,10 +1,11 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import forte2
 from .build_basis import build_basis
 from .parse_xyz import parse_xyz
 
 import numpy as np
+from numpy.typing import NDArray
 
 
 @dataclass
@@ -109,6 +110,10 @@ class System:
 
 @dataclass
 class ModelSystem:
+    overlap: NDArray = field(init=False)
+    hcore: NDArray = field(init=False)
+    eri: NDArray = field(init=False)
+
     def __post_init__(self):
         self.Zsum = 0  # total nuclear charge, here set to zero, so charge can be set to -nel later
         self.x2c_type = None
