@@ -5,7 +5,6 @@ from .build_basis import build_basis
 from .parse_xyz import parse_xyz
 
 import numpy as np
-from numpy.typing import NDArray
 
 
 @dataclass
@@ -110,15 +109,10 @@ class System:
 
 @dataclass
 class ModelSystem:
-    model_name: str
-    hcore: NDArray
-    overlap: NDArray
-    eri: NDArray
-    nuclear_repulsion: float = 0.0
-
     def __post_init__(self):
         self.Zsum = 0  # total nuclear charge, here set to zero, so charge can be set to -nel later
         self.x2c_type = None
+        self.nuclear_repulsion = 0.0
 
     def get_ints(self, int_type):
         """
@@ -152,3 +146,26 @@ class ModelSystem:
 
     def naux(self):
         return 0
+
+
+@dataclass
+class HubbardModel1D(ModelSystem):
+    t: float
+    U: float
+    nsites: int
+    pbc: bool = False
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        self.hcore = np.zeros((self.nsites, self.nsites))
+        for i in range(self.nsites - 1):
+            self.hcore[i, i + 1] = self.hcore[i + 1, i] = -self.t
+        # periodic boundary conditions
+        if self.pbc:
+            self.hcore[0, self.nsites - 1] = self.hcore[self.nsites - 1, 0] = -self.t
+        self.overlap = np.eye(self.nsites)
+
+        self.eri = np.zeros((self.nsites,) * 4)
+        for i in range(self.nsites):
+            self.eri[i, i, i, i] = self.U
