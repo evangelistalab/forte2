@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import time
 import numpy as np
 import scipy as sp
+import copy
 
 import forte2
 from forte2.jkbuilder.jkbuilder import DFFockBuilder
@@ -62,7 +63,15 @@ class SCFMixin:
         if scftyp == "RHF":
             assert self.na == self.nb
 
-    def run(self):
+    def run(self, c0=None):
+        """
+        Run the SCF calculation.
+        Args:
+            c0 (np.ndarray, optional): Initial guess for the MO coefficients.
+            Defaults to None, in which case the guess is generated based on the guess_type.
+        Returns:
+            self: The SCF object.
+        """
         start = time.monotonic()
 
         diis = forte2.helpers.DIIS(diis_start=self.diis_start, diis_nvec=self.diis_nvec)
@@ -83,7 +92,10 @@ class SCFMixin:
         H = self._get_hcore()
         fock_builder = DFFockBuilder(self.system)
 
-        self.C = self._initial_guess(H, S, guess_type=self.guess_type)
+        if c0 is not None:
+            self.C = c0
+        else:
+            self.C = self._initial_guess(H, S, guess_type=self.guess_type)
         self.D = self._build_initial_density_matrix()
 
         Eold = 0.0
