@@ -31,8 +31,8 @@ def test_mp2():
 
     jkbuilder = DFFockBuilder(system)
     nocc = scf.na
-    nvir = scf.nbasis - nocc
-    nbasis = scf.nbasis
+    nvir = scf.nbf - nocc
+    nbasis = scf.nbf
     Co = scf.C[0][:, :nocc]
     Cv = scf.C[0][:, nocc:]
     V = jkbuilder.two_electron_integrals_gen_block(Co, Co, Cv, Cv)

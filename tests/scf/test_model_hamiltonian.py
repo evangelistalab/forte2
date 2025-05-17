@@ -1,6 +1,5 @@
 import forte2
 import numpy as np
-import scipy as sp
 
 from forte2.scf import RHF, UHF
 
