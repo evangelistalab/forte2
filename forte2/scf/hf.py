@@ -7,12 +7,12 @@ import forte2
 from forte2.jkbuilder.jkbuilder import DFFockBuilder
 from forte2.helpers.mixins import MOs
 from forte2.scf.x2c import get_hcore_x2c
-from .initial_guess import minao_initial_guess
+from .initial_guess import minao_initial_guess, core_initial_guess
 
 
 @dataclass
 class SCFMixin:
-    system: forte2.System
+    system: forte2.System | forte2.ModelSystem
     charge: int
     mult: int
     diis_start: int = 4
@@ -20,13 +20,13 @@ class SCFMixin:
     econv: float = 1e-6
     dconv: float = 1e-3
     maxiter: int = 100
+    guess_type: str = "minao"
 
     def __post_init__(self):
         self.method = self._scf_type().upper()
-        Zsum = np.sum([x[0] for x in self.system.atoms])
-        self.nel = Zsum - self.charge
-        self.nbasis = self.system.basis.size
-        self.naux = self.system.auxiliary_basis.size
+        self.nel = self.system.Zsum - self.charge
+        self.nbf = self.system.nbf()
+        self.naux = self.system.naux()
         self.na = (self.nel + self.mult - 1) // 2
         self.nb = (self.nel - self.mult + 1) // 2
         self.sz = (self.na - self.nb) / 2.0
@@ -62,10 +62,7 @@ class SCFMixin:
         if scftyp == "RHF":
             assert self.na == self.nb
 
-    def run(
-        self,
-        **kwargs,
-    ):
+    def run(self):
         start = time.monotonic()
 
         diis = forte2.helpers.DIIS(diis_start=self.diis_start, diis_nvec=self.diis_nvec)
@@ -74,7 +71,7 @@ class SCFMixin:
         print(f"Number of beta electrons: {self.nb}")
         print(f"Total charge: {self.charge}")
         print(f"Spin multiplicity: {self.mult}")
-        print(f"Number of basis functions: {self.nbasis}")
+        print(f"Number of basis functions: {self.nbf}")
         print(f"Number of auxiliary basis functions: {self.naux}")
         print(f"Energy convergence criterion: {self.econv:e}")
         print(f"Density convergence criterion: {self.dconv:e}")
@@ -86,8 +83,8 @@ class SCFMixin:
         H = self._get_hcore()
         fock_builder = DFFockBuilder(self.system)
 
-        self.C = self._initial_guess(self.system, H, S)
-        self.D = self._build_initial_density_matrix(**kwargs)
+        self.C = self._initial_guess(H, S, guess_type=self.guess_type)
+        self.D = self._build_initial_density_matrix()
 
         Eold = 0.0
         Dold = self.D
@@ -150,18 +147,13 @@ class SCFMixin:
         return self
 
     def _get_hcore(self):
-        T = forte2.ints.kinetic(self.system.basis)
-        V = forte2.ints.nuclear(self.system.basis, self.system.atoms)
-        H = T + V
-        return H
+        return self.system.get_ints("hcore")
 
     def _get_overlap(self):
-        S = forte2.ints.overlap(self.system.basis)
-        return S
+        return self.system.get_ints("overlap")
 
     def _get_nuclear_repulsion(self):
-        Vnn = forte2.ints.nuclear_repulsion(self.system.atoms)
-        return Vnn
+        return self.system.get_ints("nuclear_repulsion")
 
 
 @dataclass
@@ -177,11 +169,18 @@ class RHF(SCFMixin, MOs):
         D = np.einsum("mi,ni->mn", self.C[0][:, : self.na], self.C[0][:, : self.na])
         return [D]
 
-    def _initial_guess(self, system, H, S):
-        C = minao_initial_guess(system, H, S)
+    def _initial_guess(self, H, S, guess_type="minao"):
+        match guess_type:
+            case "minao":
+                C = minao_initial_guess(self.system, H, S)
+            case "hcore":
+                C = core_initial_guess(self.system, H, S)
+            case _:
+                raise RuntimeError(f"Unknown initial guess type: {guess_type}")
+
         return [C]
 
-    def _build_initial_density_matrix(self, **kwargs):
+    def _build_initial_density_matrix(self):
         return self._build_density_matrix()
 
     def _build_ao_grad(self, S, F):
@@ -219,11 +218,11 @@ class UHF(SCFMixin, MOs):
         D_b = np.einsum("mi,ni->mn", self.C[1][:, : self.nb], self.C[1][:, : self.nb])
         return D_a, D_b
 
-    def _initial_guess(self, system, H, S):
-        C = minao_initial_guess(system, H, S)
+    def _initial_guess(self, H, S, guess_type="minao"):
+        C = RHF._initial_guess(self, H, S, guess_type=guess_type)[0]
         return [C, C]
 
-    def _build_initial_density_matrix(self, **kwargs):
+    def _build_initial_density_matrix(self):
         D_a, D_b = self._build_density_matrix()
         if self.mult != 1:
             D_b *= 0.0
@@ -268,8 +267,8 @@ class UHF(SCFMixin, MOs):
     def _diis_update(self, diis, F, AO_grad):
         F_flat = diis.update(np.hstack([f.flatten() for f in F]), AO_grad)
         F = [
-            F_flat[: self.nbasis**2].reshape(self.nbasis, self.nbasis),
-            F_flat[self.nbasis**2 :].reshape(self.nbasis, self.nbasis),
+            F_flat[: self.nbf**2].reshape(self.nbf, self.nbf),
+            F_flat[self.nbf**2 :].reshape(self.nbf, self.nbf),
         ]
         return F
 
@@ -298,7 +297,7 @@ class ROHF(SCFMixin, MOs):
         # Projection matrices for core (doubly occupied), open (singly occupied, alpha), and virtual (unoccupied) MO spaces
         U_core = np.dot(self.D[1], S)
         U_open = np.dot(self.D[0] - self.D[1], S)
-        U_virt = np.eye(self.nbasis) - np.dot(self.D[0], S)
+        U_virt = np.eye(self.nbf) - np.dot(self.D[0], S)
 
         # Closed-shell Fock
         F_cs = 0.5 * (F[0] + F[1])
@@ -351,7 +350,7 @@ class CUHF(SCFMixin, MOs):
         # Projection matrices for core (doubly occupied), open (singly occupied, alpha), and virtual (unoccupied) MO spaces
         U_core = np.dot(self.D[1], S)
         U_open = np.dot(self.D[0] - self.D[1], S)
-        U_virt = np.eye(self.nbasis) - np.dot(self.D[0], S)
+        U_virt = np.eye(self.nbf) - np.dot(self.D[0], S)
 
         # Closed-shell Fock
         F_cs = 0.5 * (F[0] + F[1])
@@ -439,18 +438,18 @@ class GHF(SCFMixin, MOs):
             self.C[0][:, : self.nel],
             self.C[0][:, : self.nel].conj(),
         )
-        nbf = self.nbasis
+        nbf = self.nbf
         Daa = D[:nbf, :nbf]
         Dab = D[:nbf, nbf:]
         Dba = D[nbf:, :nbf]
         Dbb = D[nbf:, nbf:]
         return Daa, Dab, Dba, Dbb
 
-    def _initial_guess(self, system, H, S):
+    def _initial_guess(self, H, S, guess_type="minao"):
         H_ao = self._get_hcore_ao()
-        return [minao_initial_guess(system, H_ao, S).astype(complex)]
+        return [RHF._initial_guess(self, H_ao, S, guess_type)[0].astype(complex)]
 
-    def _build_initial_density_matrix(self, **kwargs):
+    def _build_initial_density_matrix(self):
         Daa = np.einsum(
             "mi,ni->mn",
             self.C[0][:, : self.nel // 2],
@@ -493,8 +492,8 @@ class GHF(SCFMixin, MOs):
         S^2 = 0.5 * (S+S- + S-S+) + Sz^2, S+ = \sum_i si+, S- = \sum_i si-
         We make use of the Slater-Condon rules to compute <GHF|S^2|GHF>
         """
-        mo_a = self.C[0][: self.nbasis, : self.nel]
-        mo_b = self.C[0][self.nbasis :, : self.nel]
+        mo_a = self.C[0][: self.nbf, : self.nel]
+        mo_b = self.C[0][self.nbf :, : self.nel]
 
         # MO basis overlap matrices
         saa = mo_a.conj().T @ S @ mo_a

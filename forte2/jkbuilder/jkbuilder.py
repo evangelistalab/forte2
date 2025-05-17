@@ -2,10 +2,17 @@ import numpy as np
 import scipy as sp
 
 from forte2 import ints
+from forte2.system import ModelSystem
 
 
 class DFFockBuilder:
     def __init__(self, system):
+        if isinstance(system, ModelSystem):
+            self.eri = system.get_ints("eri")
+            self.build_J = self.build_J_full
+            self.build_K = self.build_K_full
+            return
+
         self.basis = system.basis
         self.auxiliary_basis = system.auxiliary_basis
 
@@ -39,6 +46,10 @@ class DFFockBuilder:
         J = [np.einsum("Pmn,Prs,sr->mn", self.B, self.B, Di, optimize=True) for Di in D]
         return J
 
+    def build_J_full(self, D):
+        J = [np.einsum("mnrs,sr->mn", self.eri, Di, optimize=True) for Di in D]
+        return J
+
     def build_K(self, C, ghf=False):
         Y = [np.einsum("Pmr,mi->Pri", self.B, Ci.conj(), optimize=True) for Ci in C]
         if ghf:
@@ -48,6 +59,23 @@ class DFFockBuilder:
                     K.append(np.einsum("Pmi,Pni->mn", Yi.conj(), Yj, optimize=True))
         else:
             K = [np.einsum("Pmi,Pni->mn", Yi.conj(), Yi, optimize=True) for Yi in Y]
+        return K
+
+    def build_K_full(self, C, ghf=False):
+        K = []
+        if ghf:
+            for Ci in C:
+                for Cj in C:
+                    K.append(
+                        np.einsum(
+                            "msrn,si,ri->mn", self.eri, Ci, Cj.conj(), optimize=True
+                        )
+                    )
+        else:
+            for Ci in C:
+                K.append(
+                    np.einsum("msrn,si,ri->mn", self.eri, Ci, Ci.conj(), optimize=True)
+                )
         return K
 
     def build_K_density(self, D):

@@ -60,3 +60,7 @@ def minao_initial_guess(system: forte2.System, H: NDArray, S: NDArray) -> NDArra
     eps, C = sp.linalg.eigh(H_SAP, S)
 
     return C
+
+
+def core_initial_guess(system: forte2.System, H: NDArray, S: NDArray) -> NDArray:
+    return np.zeros((system.nbf(),) * 2)

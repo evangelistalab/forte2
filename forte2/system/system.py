@@ -1,7 +1,11 @@
 from dataclasses import dataclass
 
+import forte2
 from .build_basis import build_basis
 from .parse_xyz import parse_xyz
+
+import numpy as np
+from numpy.typing import NDArray
 
 
 @dataclass
@@ -30,6 +34,8 @@ class System:
             f"Parsed {len(self.atoms)} atoms with basis set of {self.basis.size} functions."
         )
 
+        self.Zsum = np.sum([x[0] for x in self.atoms])
+
         if self.x2c_type is not None:
             assert self.x2c_type in [
                 "sf",
@@ -39,12 +45,12 @@ class System:
     def __repr__(self):
         return f"System(atoms={self.atoms}, basis={self.basis}, auxiliary_basis={self.auxiliary_basis})"
 
-    def nao(self):
+    def nbf(self):
         """
-        Get the number of atomic orbitals in the system.
+        Get the number of basis functions in the system.
 
         Returns:
-            int: Number of atomic orbitals.
+            int: Number of basis functions.
         """
         return self.basis.size
 
@@ -79,3 +85,70 @@ class System:
             embed_normalization_into_coefficients=True,
             decontract=True,
         )
+
+    def get_ints(self, int_type):
+        """
+        Get the integrals of the specified type.
+
+        Args:
+            int_type (str): Type of integrals to compute. Options are "overlap", "kinetic", "nuclear", "coulomb".
+
+        Returns:
+            np.ndarray: Computed integrals.
+        """
+        if int_type == "overlap":
+            return forte2.ints.overlap(self.basis)
+        elif int_type == "hcore":
+            return forte2.ints.kinetic(self.basis) + forte2.ints.nuclear(
+                self.basis, self.atoms
+            )
+        elif int_type == "nuclear_repulsion":
+            return forte2.ints.nuclear_repulsion(self.atoms)
+        else:
+            raise ValueError(f"Unknown integral type: {int_type}")
+
+
+@dataclass
+class ModelSystem:
+    model_name: str
+    hcore: NDArray
+    overlap: NDArray
+    eri: NDArray
+    nuclear_repulsion: float = 0.0
+
+    def __post_init__(self):
+        self.Zsum = 0  # total nuclear charge, here set to zero, so charge can be set to -nel later
+        self.x2c_type = None
+
+    def get_ints(self, int_type):
+        """
+        Get the integrals of the specified type.
+
+        Args:
+            int_type (str): Type of integrals to compute. Options are "overlap", "kinetic", "nuclear", "coulomb".
+
+        Returns:
+            np.ndarray: Computed integrals.
+        """
+        if int_type == "overlap":
+            return self.overlap
+        elif int_type == "hcore":
+            return self.hcore
+        elif int_type == "eri":
+            return self.eri
+        elif int_type == "nuclear_repulsion":
+            return self.nuclear_repulsion
+        else:
+            raise ValueError(f"Unknown integral type: {int_type}")
+
+    def nbf(self):
+        """
+        Get the number of basis functions in the system.
+
+        Returns:
+            int: Number of basis functions.
+        """
+        return self.hcore.shape[0]
+
+    def naux(self):
+        return 0
