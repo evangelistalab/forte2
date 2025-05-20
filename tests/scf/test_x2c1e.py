@@ -37,7 +37,26 @@ def test_sox2c1e():
         scf.E, eghf, atol=1e-8, rtol=1e-6
     ), f"SCF energy {scf.E} is not close to expected value eghf"
 
+def test_snso():
+    eghf = -128.615699916705
+    emo = -0.83044548
+    xyz = "Ne 0 0 0"
+
+    system = forte2.System(
+        xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit"
+    )
+    scf = GHF(charge=0)
+    scf = scf.x2c(x2c_type="so", snso_type="boettger")
+    scf.run(system, econv=1e-10, dconv=1e-8)
+    assert np.isclose(
+        scf.E, eghf, atol=1e-8, rtol=1e-6
+    ), f"SCF energy {scf.E} is not close to expected value {eghf}"
+    assert np.isclose(
+        scf.eps[0][9], emo, atol=1e-8, rtol=1e-6
+    ), f"MO energy {scf.eps[0][9]} is not close to expected value {emo}"
+
 
 if __name__ == "__main__":
-    test_sfx2c1e()
-    test_sox2c1e()
+    # test_sfx2c1e()
+    # test_sox2c1e()
+    test_snso()

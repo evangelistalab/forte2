@@ -127,7 +127,7 @@ class SCFMixin:
 
         return self
 
-    def x2c(self, x2c_type="sf", **kwargs):
+    def x2c(self, x2c_type="sf", snso_type=None):
         """
         X2C transformation for the RHF/UHF methods.
         """
@@ -154,7 +154,7 @@ class SCFMixin:
 
                 self._get_hcore = _get_hcore
         elif x2c_type == "so":
-            self._get_hcore = lambda system: get_hcore_x2c(system, x2c_type="so")
+            self._get_hcore = lambda system: get_hcore_x2c(system, x2c_type="so", snso_type=snso_type)
 
         return self
 

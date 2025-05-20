@@ -14,7 +14,11 @@ class System:
 
     def __post_init__(self):
         self.atoms = parse_xyz(self.xyz)
-        self.basis = build_basis(self.basis, self.atoms)
+        if 'decon-' in self.basis:
+            # decontract the basis set
+            self.basis = build_basis(self.basis.replace('decon-',''), self.atoms, decontract=True)
+        else:
+            self.basis = build_basis(self.basis, self.atoms)
         self.auxiliary_basis = (
             build_basis(self.auxiliary_basis, self.atoms)
             if self.auxiliary_basis is not None
