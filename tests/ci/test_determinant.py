@@ -7,8 +7,8 @@ def test_determinant():
     d = forte2.Determinant.zero()
 
     for i in range(1, 64):
-        assert d.get_a(i) == False
-        assert d.get_b(i) == False
+        assert d.na(i) == False
+        assert d.nb(i) == False
 
     assert (
         str(d) == "|0000000000000000000000000000000000000000000000000000000000000000>"
@@ -22,8 +22,8 @@ def test_determinant():
     d = forte2.Determinant("")
 
     for i in range(1, 64):
-        assert d.get_a(i) == False
-        assert d.get_b(i) == False
+        assert d.na(i) == False
+        assert d.nb(i) == False
 
     assert (
         str(d) == "|0000000000000000000000000000000000000000000000000000000000000000>"
@@ -38,20 +38,20 @@ def test_determinant_set_get():
     # Test the determinant class set and get methods
     d = forte2.Determinant.zero()
     for i in range(1, 64):
-        assert d.get_a(i) == False
-        assert d.get_b(i) == False
+        assert d.na(i) == False
+        assert d.nb(i) == False
 
     set_a = [1, 2, 3, 4, 5, 63]
     set_b = [6, 7, 8, 9, 10]
     for i in set_a:
-        d.set_a(i, True)
+        d.set_na(i, True)
     for i in set_b:
-        d.set_b(i, True)
+        d.set_nb(i, True)
 
     # Test the determinant class get methods after setting values
     for i in range(64):
-        assert d.get_a(i) == (i in set_a)
-        assert d.get_b(i) == (i in set_b)
+        assert d.na(i) == (i in set_a)
+        assert d.nb(i) == (i in set_b)
 
     assert d.count() == len(set_a) + len(set_b)
     assert d.count_a() == len(set_a)
@@ -60,8 +60,8 @@ def test_determinant_set_get():
     # Test the determinant copy constructor
     d2 = forte2.Determinant(d)
     for i in range(64):
-        assert d2.get_a(i) == (i in set_a)
-        assert d2.get_b(i) == (i in set_b)
+        assert d2.na(i) == (i in set_a)
+        assert d2.nb(i) == (i in set_b)
 
 
 if __name__ == "__main__":
