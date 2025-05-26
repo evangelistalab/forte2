@@ -15,7 +15,7 @@ namespace forte2 {
 /// @brief Build the S^2 operator matrix in the given basis of determinants (multithreaded)
 /// @param dets A vector of determinants
 /// @return A matrix of size (num_dets, num_dets) with the S^2 operator matrix
-std::shared_ptr<psi::Matrix> make_s2_matrix(const std::vector<Determinant>& dets);
+// std::shared_ptr<psi::Matrix> make_s2_matrix(const std::vector<Determinant>& dets);
 
 /// @brief Build the Hamiltonian operator matrix in the given basis of determinants (multithreaded)
 /// @param dets A vector of determinants
