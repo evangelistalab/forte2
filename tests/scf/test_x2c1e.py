@@ -18,7 +18,7 @@ def test_sfx2c1e():
         xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT", x2c_type="sf"
     )
 
-    scf = RHF(system, charge=0)
+    scf = RHF(charge=0)(system)
     scf.econv = 1e-10
     scf.dconv = 1e-8
     scf.run()
@@ -34,7 +34,7 @@ def test_sox2c1e():
     system = forte2.System(
         xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit", x2c_type="so"
     )
-    scf = GHF(system, charge=0)
+    scf = GHF(charge=0)(system)
     scf.econv = 1e-10
     scf.dconv = 1e-8
     scf.run()

@@ -17,7 +17,7 @@ def test_rohf_singlet():
 
     system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
 
-    scf = ROHF(system, charge=0, ms=0)
+    scf = ROHF(charge=0, ms=0)(system)
     scf.run()
     assert np.isclose(
         scf.E, erohf, atol=1e-10, rtol=1e-6
@@ -40,7 +40,7 @@ def test_rohf_triplet():
 
     system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
 
-    scf = ROHF(system, charge=0, ms=1)
+    scf = ROHF(charge=0, ms=1)(system)
     scf.run()
     assert np.isclose(
         scf.E, erohf, atol=1e-10

@@ -39,7 +39,7 @@ def test_cuhf_triplet():
 
     system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
 
-    scf = CUHF(system, charge=0, ms=1)
+    scf = CUHF(charge=0, ms=1)(system)
     scf.run()
     assert np.isclose(
         scf.E, ecuhf, atol=1e-10
