@@ -526,7 +526,7 @@ class GHF(SCFMixin, MOs):
 
     def _spin(self, S):
         """
-        S^2 = 0.5 * (S+S- + S-S+) + Sz^2, S+ = \sum_i si+, S- = \sum_i si-
+        S^2 = 0.5 * (S+S- + S-S+) + Sz^2, S+ = sum_i si+, S- = sum_i si-
         We make use of the Slater-Condon rules to compute <GHF|S^2|GHF>
         """
         mo_a = self.C[0][: self.nbf, : self.nel]
