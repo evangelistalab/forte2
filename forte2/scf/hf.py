@@ -15,7 +15,6 @@ from .initial_guess import minao_initial_guess, core_initial_guess
 class SCFMixin:
     system: forte2.System | forte2.ModelSystem
     charge: int
-    mult: int
     diis_start: int = 4
     diis_nvec: int = 8
     econv: float = 1e-6
@@ -26,13 +25,10 @@ class SCFMixin:
     def __post_init__(self):
         self.method = self._scf_type().upper()
         self.nel = self.system.Zsum - self.charge
+        assert self.nel >= 0, "Number of electrons must be non-negative."
+
         self.nbf = self.system.nbf()
         self.naux = self.system.naux()
-        self.na = (self.nel + self.mult - 1) // 2
-        self.nb = (self.nel - self.mult + 1) // 2
-        self.sz = (self.na - self.nb) / 2.0
-
-        self._check_parameters()
 
         self._init_x2c()
 
@@ -50,18 +46,8 @@ class SCFMixin:
                 self._get_hcore = lambda: get_hcore_x2c(self.system, x2c_type="sf")
         # GHF _init_x2c is called separately in the GHF class as _get_hcore will be overridden in GHF
 
-    def _check_scf_params(self):
-        pass
-
     def _scf_type(self):
         return type(self).__name__.upper()
-
-    def _check_parameters(self):
-        assert self.mult > 0
-        assert self.charge <= self.nel
-        scftyp = self._scf_type()
-        if scftyp == "RHF":
-            assert self.na == self.nb
 
     def run(self, c0=None):
         """
@@ -76,10 +62,12 @@ class SCFMixin:
 
         diis = forte2.helpers.DIIS(diis_start=self.diis_start, diis_nvec=self.diis_nvec)
 
-        print(f"Number of alpha electrons: {self.na}")
-        print(f"Number of beta electrons: {self.nb}")
+        print(f"Number of electrons: {self.nel}")
+        if self._scf_type() != "GHF":
+            print(f"Number of alpha electrons: {self.na}")
+            print(f"Number of beta electrons: {self.nb}")
+            print(f"Ms: {self.ms}")
         print(f"Total charge: {self.charge}")
-        print(f"Spin multiplicity: {self.mult}")
         print(f"Number of basis functions: {self.nbf}")
         print(f"Number of auxiliary basis functions: {self.naux}")
         print(f"Energy convergence criterion: {self.econv:e}")
@@ -171,6 +159,12 @@ class SCFMixin:
 @dataclass
 class RHF(SCFMixin, MOs):
 
+    def __post_init__(self):
+        super().__post_init__()
+        assert self.nel % 2 == 0, "RHF requires an even number of electrons."
+        self.ms = 0
+        self.na = self.nb = self.nel // 2
+
     def _build_fock(self, H, fock_builder, S):
         J = fock_builder.build_J(self.D)[0]
         K = fock_builder.build_K([self.C[0][:, : self.na]])[0]
@@ -207,7 +201,7 @@ class RHF(SCFMixin, MOs):
         return [eps], [C]
 
     def _spin(self, S):
-        return self.sz * (self.sz + 1)
+        return self.ms * (self.ms + 1)
 
     def _diis_update(self, diis, F, AO_grad):
         return diis.update(F, AO_grad)
@@ -215,6 +209,15 @@ class RHF(SCFMixin, MOs):
 
 @dataclass
 class UHF(SCFMixin, MOs):
+    ms: int = 0
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.na = int(round(self.nel + 2 * self.ms) / 2)
+        self.nb = int(round(self.nel - 2 * self.ms) / 2)
+        assert (
+            self.na >= 0 and self.nb >= 0
+        ), "UHF requires non-negative number of alpha and beta electrons."
 
     def _build_fock(self, H, fock_builder, S):
         Ja, Jb = fock_builder.build_J(self.D)
@@ -236,7 +239,7 @@ class UHF(SCFMixin, MOs):
 
     def _build_initial_density_matrix(self):
         D_a, D_b = self._build_density_matrix()
-        if self.mult != 1:
+        if self.ms != 1:
             D_b *= 0.0
         return D_a, D_b
 
@@ -265,7 +268,7 @@ class UHF(SCFMixin, MOs):
         # Spin contamination: <s^2> - <s^2>_exact = N_b - \sum_{ij} |S_ij|^2
         ds2 = self.nb - np.einsum("ij,ij->", S_ij.conj(), S_ij)
         # <S^2> value
-        s2 = self.sz * (self.sz + 1) + ds2
+        s2 = self.ms * (self.ms + 1) + ds2
         return s2
 
     def _energy(self, H, F):
@@ -287,6 +290,15 @@ class UHF(SCFMixin, MOs):
 
 @dataclass
 class ROHF(SCFMixin, MOs):
+    ms: int = 0
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.na = int(round(self.nel + 2 * self.ms) / 2)
+        self.nb = int(round(self.nel - 2 * self.ms) / 2)
+        assert (
+            self.na >= 0 and self.nb >= 0
+        ), "ROHF requires non-negative number of alpha and beta electrons."
 
     _initial_guess = RHF._initial_guess
     _build_initial_density_matrix = UHF._build_initial_density_matrix
@@ -340,6 +352,15 @@ class ROHF(SCFMixin, MOs):
 
 @dataclass
 class CUHF(SCFMixin, MOs):
+    ms: int = 0
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.na = int(round(self.nel + 2 * self.ms) / 2)
+        self.nb = int(round(self.nel - 2 * self.ms) / 2)
+        assert (
+            self.na >= 0 and self.nb >= 0
+        ), "CUHF requires non-negative number of alpha and beta electrons."
 
     _build_density_matrix = UHF._build_density_matrix
     _initial_guess = UHF._initial_guess
@@ -431,7 +452,7 @@ class GHF(SCFMixin, MOs):
             Kaa, Kab, Kba, Kbb = fock_builder.build_K_density(self.D)
         else:
             Kaa, Kab, Kba, Kbb = fock_builder.build_K(
-                [self.C[0][:nbf, : self.nel], self.C[0][nbf:, : self.nel]], ghf=True
+                [self.C[0][:nbf, : self.nel], self.C[0][nbf:, : self.nel]], cross=True
             )
         F = H.copy()
         F[:nbf, :nbf] += Jaa + Jbb - Kaa

@@ -9,7 +9,7 @@ def test_hubbard_rhf():
 
     system = forte2.system.HubbardModel1D(t=1.0, U=4.0, nsites=10, pbc=True)
 
-    scf = RHF(system, charge=-10, mult=1)
+    scf = RHF(system, charge=-10)
     scf.guess_type = "hcore"
     scf = scf.run()
     assert np.isclose(
@@ -23,7 +23,7 @@ def test_hubbard_uhf():
 
     system = forte2.system.HubbardModel1D(t=1.0, U=4.0, nsites=10, pbc=True)
 
-    scf = UHF(system, charge=-10, mult=3)
+    scf = UHF(system, charge=-10, ms=1)
     scf.guess_type = "hcore"
     scf = scf.run()
     assert np.isclose(

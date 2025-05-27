@@ -16,7 +16,7 @@ def test_read_wfn():
 
     system1 = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
 
-    scf1 = RHF(system1, charge=0, mult=1)
+    scf1 = RHF(system1, charge=0)
     scf1.run()
     assert np.isclose(
         scf1.E, -76.0614664043887672, atol=1e-10, rtol=1e-8
@@ -31,7 +31,7 @@ def test_read_wfn():
     """
 
     system2 = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
-    scf2 = RHF(system2, charge=0, mult=1)
+    scf2 = RHF(system2, charge=0)
     scf2.run()
     assert np.isclose(
         scf2.E, e_newgeom, atol=1e-10, rtol=1e-8

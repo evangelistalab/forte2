@@ -50,9 +50,9 @@ class DFFockBuilder:
         J = [np.einsum("Pmn,Prs,sr->mn", self.B, self.B, Di, optimize=True) for Di in D]
         return J
 
-    def build_K(self, C, ghf=False):
+    def build_K(self, C, cross=False):
         Y = [np.einsum("Pmr,mi->Pri", self.B, Ci.conj(), optimize=True) for Ci in C]
-        if ghf:
+        if cross:
             K = []
             for Yi in Y:
                 for Yj in Y:

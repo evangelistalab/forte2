@@ -17,7 +17,7 @@ def test_ghf():
         xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit"
     )
 
-    scf = GHF(system, charge=0, mult=1)
+    scf = GHF(system, charge=0)
     scf.econv = 1e-8
     scf.dconv = 1e-6
     scf.run()
@@ -42,7 +42,7 @@ def test_ghf2():
 
     system = forte2.System(xyz=xyz, basis="cc-pvqz", auxiliary_basis="cc-pvqz-jkfit")
 
-    scf = GHF(system, charge=1, mult=2)
+    scf = GHF(system, charge=1)
     scf.econv = 1e-10
     scf.dconv = 1e-8
     scf.run()
@@ -68,7 +68,7 @@ def test_ghf3():
 
     system = forte2.System(xyz=xyz, basis="cc-pvqz", auxiliary_basis="cc-pvqz-jkfit")
 
-    scf = GHF(system, charge=0, mult=2)
+    scf = GHF(system, charge=0)
     scf.econv = 1e-10
     scf.dconv = 1e-8
     scf.break_spin_symmetry = False

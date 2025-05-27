@@ -15,7 +15,7 @@ def test_rhf():
 
     system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
 
-    scf = RHF(system, charge=0, mult=1)
+    scf = RHF(system, charge=0)
     scf.run()
     assert np.isclose(
         scf.E, -76.0614664043887672, atol=1e-10
