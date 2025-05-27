@@ -20,7 +20,7 @@ def test_cube():
 
     system = forte2.System(xyz=xyz, basis="cc-pVDZ", auxiliary_basis="cc-pVTZ-JKFIT")
 
-    scf = RHF(system, charge=0, mult=1)
+    scf = RHF(system, charge=0)
     scf.run()
     assert np.isclose(scf.E, escf, atol=1e-10), f"SCF energy {scf.E} is not close to expected value {escf}"
 
