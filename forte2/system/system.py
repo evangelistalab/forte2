@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 import forte2
 from .build_basis import build_basis
 from .parse_xyz import parse_xyz
+from forte2.x2c import get_hcore_x2c
 
 import numpy as np
 from numpy.typing import NDArray
@@ -36,11 +37,20 @@ class System:
 
         self.Zsum = np.sum([x[0] for x in self.atoms])
 
+        self._init_x2c()
+
+    def _init_x2c(self):
         if self.x2c_type is not None:
             assert self.x2c_type in [
                 "sf",
                 "so",
             ], f"x2c_type {self.x2c_type} is not supported. Use None, 'sf' or 'so'."
+        else:
+            return
+        if self.x2c_type == "sf":
+            self.ints_hcore = lambda: get_hcore_x2c(self, x2c_type="sf")
+        elif self.x2c_type == "so":
+            self.ints_hcore = lambda: get_hcore_x2c(self, x2c_type="so")
 
     def __repr__(self):
         return f"System(atoms={self.atoms}, basis={self.basis}, auxiliary_basis={self.auxiliary_basis})"

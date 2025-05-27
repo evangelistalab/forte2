@@ -5,7 +5,7 @@ import scipy as sp
 from forte2.scf import GHF
 
 
-def test_ghf():
+def test_ghf1():
     e_ghf = -128.48875618899837
     s2_ghf = 0.0
     xyz = """
@@ -93,6 +93,6 @@ def test_ghf3():
 
 
 if __name__ == "__main__":
-    test_ghf()
+    test_ghf1()
     test_ghf2()
     test_ghf3()

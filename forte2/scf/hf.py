@@ -7,7 +7,6 @@ import copy
 import forte2
 from forte2.jkbuilder.jkbuilder import DFFockBuilder
 from forte2.helpers.mixins import MOs
-from forte2.scf.x2c import get_hcore_x2c
 from .initial_guess import minao_initial_guess, core_initial_guess
 
 
@@ -27,27 +26,17 @@ class SCFMixin:
         self.nel = self.system.Zsum - self.charge
         assert self.nel >= 0, "Number of electrons must be non-negative."
 
-        self.nbf = self.system.nbf()
-        self.naux = self.system.naux()
-
-        self.C = None
-
-        self._init_x2c()
-        return self
-
-    def _init_x2c(self):
-        if self.system.x2c_type is None:
-            return
-
         if self.method != "GHF" and self.system.x2c_type == "so":
             raise ValueError(
                 "SO-X2C is only available for GHF. Use SF-X2C for RHF/UHF."
             )
 
-        if self.system.x2c_type == "sf":
-            if self._scf_type() in ["RHF", "UHF", "CUHF"]:
-                self._get_hcore = lambda: get_hcore_x2c(self.system, x2c_type="sf")
-        # GHF _init_x2c is called separately in the GHF class as _get_hcore will be overridden in GHF
+        self.nbf = self.system.nbf()
+        self.naux = self.system.naux()
+
+        self.C = None
+
+        return self
 
     def _scf_type(self):
         return type(self).__name__.upper()
@@ -82,7 +71,6 @@ class SCFMixin:
 
         if self.C is None:
             self.C = self._initial_guess(H, S, guess_type=self.guess_type)
-        print(self.C[0].shape)
         self.D = self._build_initial_density_matrix()
 
         Eold = 0.0
@@ -445,27 +433,14 @@ class GHF(SCFMixin, MOs):
     break_spin_symmetry: bool = True
     break_complex_symmetry: bool = False
 
-    _get_hcore_ao = RHF._get_hcore
     _diis_update = RHF._diis_update
 
     def __call__(self, system):
         self = super().__call__(system)
-        self._init_x2c()
+        if self.system.x2c_type == "sf" or self.system.x2c_type == None:
+            H = self._get_hcore().astype(complex)
+            self._get_hcore = lambda: sp.linalg.block_diag(H, H)
         return self
-
-    def _init_x2c(self):
-        def _get_hcore_sf():
-            H = get_hcore_x2c(self.system, x2c_type="sf")
-            return sp.linalg.block_diag(H, H)
-
-        if self.system.x2c_type == "sf":
-            self._get_hcore = _get_hcore_sf
-        elif self.system.x2c_type == "so":
-            self._get_hcore = lambda: get_hcore_x2c(self.system, x2c_type="so")
-
-    def _get_hcore(self):
-        H = RHF._get_hcore(self).astype(complex)
-        return sp.linalg.block_diag(H, H)
 
     def _build_fock(self, H, fock_builder, S):
         Jaa, Jbb = fock_builder.build_J([self.D[0], self.D[3]])
@@ -501,7 +476,9 @@ class GHF(SCFMixin, MOs):
         return Daa, Dab, Dba, Dbb
 
     def _initial_guess(self, H, S, guess_type="minao"):
-        H_ao = self._get_hcore_ao()
+        H_ao = forte2.ints.kinetic(self.system.basis) + forte2.ints.nuclear(
+            self.system.basis, self.system.atoms
+        )
         return [RHF._initial_guess(self, H_ao, S, guess_type)[0].astype(complex)]
 
     def _build_initial_density_matrix(self):

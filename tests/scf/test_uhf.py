@@ -81,6 +81,12 @@ def test_coulson_fischer():
     scf.dconv = 1e-8
     scf.guess_mix = True
     scf.run()
+    assert np.isclose(
+        scf.E, euhf, atol=1e-10, rtol=1e-6
+    ), f"SCF energy {scf.E} is not close to expected value {euhf}"
+    assert np.isclose(
+        scf.S2, s2uhf, atol=1e-10, rtol=1e-6
+    ), f"SCF S2 {scf.S2} is not close to expected value {s2uhf}"
 
 
 if __name__ == "__main__":
