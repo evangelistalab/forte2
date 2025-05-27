@@ -49,6 +49,42 @@ def test_uhf_singlet():
     ), f"SCF S2 {scf.S2} is not close to expected value {s2uhf}"
 
 
+def test_uhf_one_electron():
+    euhf = -0.601864064744
+    s2uhf = 0.75
+    xyz = """
+    H           0.000000000000     0.000000000000     0.000000000000
+    H           0.000000000000     0.000000000000     1.000000000000
+    """
+    system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
+    scf = UHF(charge=1, ms=-0.5)(system)
+    scf.econv = 1e-10
+    scf.dconv = 1e-8
+    scf.run()
+    assert np.isclose(
+        scf.E, euhf, atol=1e-10, rtol=1e-6
+    ), f"SCF energy {scf.E} is not close to expected value {euhf}"
+    assert np.isclose(
+        scf.S2, s2uhf, atol=1e-10, rtol=1e-6
+    ), f"SCF S2 {scf.S2} is not close to expected value {s2uhf}"
+
+
+def test_coulson_fischer():
+    euhf = -1.000297175136
+    s2uhf = 0.987426195958
+    xyz = """
+    H 0 0 0
+    H 0 0 2.7"""
+    system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
+    scf = UHF(charge=0, ms=0)(system)
+    scf.econv = 1e-10
+    scf.dconv = 1e-8
+    scf.guess_mix = True
+    scf.run()
+
+
 if __name__ == "__main__":
     test_uhf_triplet()
     test_uhf_singlet()
+    test_uhf_one_electron()
+    test_coulson_fischer()

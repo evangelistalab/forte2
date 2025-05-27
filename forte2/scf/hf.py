@@ -210,6 +210,7 @@ class RHF(SCFMixin, MOs):
 @dataclass
 class UHF(SCFMixin, MOs):
     ms: int = 0
+    guess_mix: bool = False  # only used if ms == 0
 
     def __call__(self, system):
         self = super().__call__(system)
@@ -236,12 +237,28 @@ class UHF(SCFMixin, MOs):
 
     def _initial_guess(self, H, S, guess_type="minao"):
         C = RHF._initial_guess(self, H, S, guess_type=guess_type)[0]
+
+        if self.ms == 0 and self.guess_mix:
+            homo_idx = self.nel // 2 - 1
+            homo = C[:, homo_idx].copy()
+            lumo = C[:, homo_idx + 1].copy()
+            q = np.pi / 4  # maximum mixing
+            homo_a = np.cos(q) * homo + np.sin(q) * lumo
+            homo_b = np.cos(q) * homo - np.sin(q) * lumo
+            lumo_a = -np.sin(q) * homo + np.cos(q) * lumo
+            lumo_b = np.sin(q) * homo + np.cos(q) * lumo
+            Ca = C.copy()
+            Cb = C.copy()
+            Ca[:, homo_idx] = homo_a
+            Ca[:, homo_idx + 1] = lumo_a
+            Cb[:, homo_idx] = homo_b
+            Cb[:, homo_idx + 1] = lumo_b
+            return [Ca, Cb]
+
         return [C, C]
 
     def _build_initial_density_matrix(self):
         D_a, D_b = self._build_density_matrix()
-        if self.ms != 1:
-            D_b *= 0.0
         return D_a, D_b
 
     def _build_ao_grad(self, S, F):
