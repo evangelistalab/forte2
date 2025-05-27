@@ -37,7 +37,8 @@ def test_read_wfn():
         scf2.E, e_newgeom, atol=1e-10, rtol=1e-8
     ), f"SCF energy {scf2.E} is not close to expected value {e_newgeom}"
 
-    scf2.run(c0)
+    scf2.C = c0
+    scf2.run()
     assert np.isclose(
         scf2.E, e_newgeom, atol=1e-10, rtol=1e-8
     ), f"SCF energy {scf2.E} is not close to expected value {e_newgeom}"

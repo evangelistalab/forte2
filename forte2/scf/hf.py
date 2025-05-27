@@ -30,6 +30,8 @@ class SCFMixin:
         self.nbf = self.system.nbf()
         self.naux = self.system.naux()
 
+        self.C = None
+
         self._init_x2c()
 
     def _init_x2c(self):
@@ -49,12 +51,9 @@ class SCFMixin:
     def _scf_type(self):
         return type(self).__name__.upper()
 
-    def run(self, c0=None):
+    def run(self):
         """
         Run the SCF calculation.
-        Args:
-            c0 (np.ndarray, optional): Initial guess for the MO coefficients.
-            Defaults to None, in which case the guess is generated based on the guess_type.
         Returns:
             self: The SCF object.
         """
@@ -80,9 +79,7 @@ class SCFMixin:
         H = self._get_hcore()
         fock_builder = DFFockBuilder(self.system)
 
-        if c0 is not None:
-            self.C = c0
-        else:
+        if self.C is None:
             self.C = self._initial_guess(H, S, guess_type=self.guess_type)
         self.D = self._build_initial_density_matrix()
 
