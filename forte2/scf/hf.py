@@ -372,6 +372,7 @@ class ROHF(SCFMixin, MOs):
 @dataclass
 class CUHF(SCFMixin, MOs):
     ms: int = 0
+    guess_mix: bool = False  # only used if ms == 0
 
     def __call__(self, system):
         self = super().__call__(system)
