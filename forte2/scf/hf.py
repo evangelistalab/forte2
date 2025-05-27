@@ -81,6 +81,7 @@ class SCFMixin:
 
         if self.C is None:
             self.C = self._initial_guess(H, S, guess_type=self.guess_type)
+        print(self.C[0].shape)
         self.D = self._build_initial_density_matrix()
 
         Eold = 0.0
@@ -144,13 +145,13 @@ class SCFMixin:
         return self
 
     def _get_hcore(self):
-        return self.system.get_ints("hcore")
+        return self.system.ints_hcore()
 
     def _get_overlap(self):
-        return self.system.get_ints("overlap")
+        return self.system.ints_overlap()
 
     def _get_nuclear_repulsion(self):
-        return self.system.get_ints("nuclear_repulsion")
+        return self.system.nuclear_repulsion_energy()
 
 
 @dataclass

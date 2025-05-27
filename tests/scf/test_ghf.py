@@ -6,7 +6,6 @@ from forte2.scf import GHF
 
 
 def test_ghf():
-    # Test the RHF implementation with a simple example
     e_ghf = -128.48875618899837
     s2_ghf = 0.0
     xyz = """
@@ -30,7 +29,6 @@ def test_ghf():
 
 
 def test_ghf2():
-    # Test the RHF implementation with a simple example
     e_ghf = -75.64927791393633
     s2_ghf = 0.756178428697
 
@@ -84,6 +82,7 @@ def test_ghf3():
 
     scf.break_spin_symmetry = True
     scf.break_complex_symmetry = True
+    scf.C = None
     scf.run()
     assert np.isclose(
         scf.E, eghf, atol=1e-8, rtol=1e-6
@@ -94,6 +93,6 @@ def test_ghf3():
 
 
 if __name__ == "__main__":
-    test_ghf()
-    test_ghf2()
+    # test_ghf()
+    # test_ghf2()
     test_ghf3()

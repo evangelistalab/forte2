@@ -86,26 +86,16 @@ class System:
             decontract=True,
         )
 
-    def get_ints(self, int_type):
-        """
-        Get the integrals of the specified type.
+    def ints_overlap(self):
+        return forte2.ints.overlap(self.basis)
 
-        Args:
-            int_type (str): Type of integrals to compute. Options are "overlap", "kinetic", "nuclear", "coulomb".
+    def ints_hcore(self):
+        T = forte2.ints.kinetic(self.basis)
+        V = forte2.ints.nuclear(self.basis, self.atoms)
+        return T + V
 
-        Returns:
-            np.ndarray: Computed integrals.
-        """
-        if int_type == "overlap":
-            return forte2.ints.overlap(self.basis)
-        elif int_type == "hcore":
-            return forte2.ints.kinetic(self.basis) + forte2.ints.nuclear(
-                self.basis, self.atoms
-            )
-        elif int_type == "nuclear_repulsion":
-            return forte2.ints.nuclear_repulsion(self.atoms)
-        else:
-            raise ValueError(f"Unknown integral type: {int_type}")
+    def nuclear_repulsion_energy(self):
+        return forte2.ints.nuclear_repulsion(self.atoms)
 
 
 @dataclass
@@ -119,26 +109,14 @@ class ModelSystem:
         self.x2c_type = None
         self.nuclear_repulsion = 0.0
 
-    def get_ints(self, int_type):
-        """
-        Get the integrals of the specified type.
+    def ints_overlap(self):
+        return self.overlap
 
-        Args:
-            int_type (str): Type of integrals to compute. Options are "overlap", "kinetic", "nuclear", "coulomb".
+    def ints_hcore(self):
+        return self.hcore
 
-        Returns:
-            np.ndarray: Computed integrals.
-        """
-        if int_type == "overlap":
-            return self.overlap
-        elif int_type == "hcore":
-            return self.hcore
-        elif int_type == "eri":
-            return self.eri
-        elif int_type == "nuclear_repulsion":
-            return self.nuclear_repulsion
-        else:
-            raise ValueError(f"Unknown integral type: {int_type}")
+    def nuclear_repulsion_energy(self):
+        return self.nuclear_repulsion
 
     def nbf(self):
         """
