@@ -97,19 +97,40 @@ class System:
         )
 
     def ints_overlap(self):
+        """
+        Return the overlap integrals for the system.
+        Returns:
+            NDArray: Overlap integrals matrix.
+        """
         return forte2.ints.overlap(self.basis)
 
     def ints_hcore(self):
+        """
+        Return the core Hamiltonian integrals for the system.
+        Returns:
+            NDArray: Core Hamiltonian integrals matrix.
+        """
         T = forte2.ints.kinetic(self.basis)
         V = forte2.ints.nuclear(self.basis, self.atoms)
         return T + V
 
     def nuclear_repulsion_energy(self):
+        """
+        Return the nuclear repulsion energy for the system.
+        Returns:
+            float: Nuclear repulsion energy.
+        """
         return forte2.ints.nuclear_repulsion(self.atoms)
 
 
 @dataclass
 class ModelSystem:
+    """
+    A base class for model systems.
+    One needs to spefify the overlap, hcore, and eri tensors.
+    The number of electrons needs be set by setting charge to -nel at runtime.
+    """
+
     overlap: NDArray = field(init=False)
     hcore: NDArray = field(init=False)
     eri: NDArray = field(init=False)
@@ -129,12 +150,6 @@ class ModelSystem:
         return self.nuclear_repulsion
 
     def nbf(self):
-        """
-        Get the number of basis functions in the system.
-
-        Returns:
-            int: Number of basis functions.
-        """
         return self.hcore.shape[0]
 
     def naux(self):
@@ -143,6 +158,16 @@ class ModelSystem:
 
 @dataclass
 class HubbardModel1D(ModelSystem):
+    """
+    A 1D Hubbard model system.
+    H = -t * (c_{i,sigma}^+ c_{i+1,sigma} + c_{i+1,sigma}^+ c_{i,sigma}) + U * n_{i,alpha} n_{i,beta}
+    Attributes:
+        t (float): Hopping parameter.
+        U (float): On-site interaction strength.
+        nsites (int): Number of sites in the 1D chain.
+        pbc (bool): Whether to apply 1D periodic boundary conditions.
+    """
+
     t: float
     U: float
     nsites: int

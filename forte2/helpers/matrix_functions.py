@@ -84,3 +84,32 @@ def eigh_gen(A, B, tol=1e-7, orth="canonical"):
         A = X.T @ A @ X
         e, c = np.linalg.eigh(A)
         return e, X @ c
+
+
+def givens_rotation(A, c, s, i, j, column=True):
+    """
+    Apply a Givens rotation to the matrix A.
+
+    Args:
+        A (np.ndarray): The matrix to apply the rotation to.
+        c (float): The cosine of the rotation angle.
+        s (float): The sine of the rotation angle.
+        i (int): The index of the first row/column to rotate.
+        j (int): The index of the second row/column to rotate.
+        column (bool): If True, apply the rotation to columns; if False, to rows.
+
+    Returns:
+        np.ndarray: The rotated matrix.
+    """
+    M = A.copy()
+    if column:
+        Ai = A[:, i]
+        Aj = A[:, j]
+        M[:, i] = c * Ai + np.conjugate(s) * Aj
+        M[:, j] = -s * Ai + c * Aj
+    else:
+        Ai = A[i, :]
+        Aj = A[j, :]
+        M[i, :] = c * Ai - s * Aj
+        M[j, :] = np.conjugate(s) * Ai + c * Aj
+    return M

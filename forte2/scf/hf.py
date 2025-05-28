@@ -7,7 +7,16 @@ import copy
 import forte2
 from forte2.jkbuilder.jkbuilder import DFFockBuilder
 from forte2.helpers.mixins import MOs
+from forte2.helpers.matrix_functions import givens_rotation
 from .initial_guess import minao_initial_guess, core_initial_guess
+
+
+def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4):
+    cosq = np.cos(mixing_parameter)
+    sinq = np.sin(mixing_parameter)
+    Ca = givens_rotation(C, cosq, sinq, homo_idx, homo_idx + 1)
+    Cb = givens_rotation(C, cosq, -sinq, homo_idx, homo_idx + 1)
+    return [Ca, Cb]
 
 
 @dataclass
@@ -52,7 +61,7 @@ class SCFMixin:
         diis = forte2.helpers.DIIS(diis_start=self.diis_start, diis_nvec=self.diis_nvec)
 
         print(f"Number of electrons: {self.nel}")
-        if self._scf_type() != "GHF":
+        if self._scf_type() != "GHF":  # not good quantum numbers for GHF
             print(f"Number of alpha electrons: {self.na}")
             print(f"Number of beta electrons: {self.nb}")
             print(f"Ms: {self.ms}")
@@ -227,21 +236,7 @@ class UHF(SCFMixin, MOs):
         C = RHF._initial_guess(self, H, S, guess_type=guess_type)[0]
 
         if self.ms == 0 and self.guess_mix:
-            homo_idx = self.nel // 2 - 1
-            homo = C[:, homo_idx].copy()
-            lumo = C[:, homo_idx + 1].copy()
-            q = np.pi / 4  # maximum mixing
-            homo_a = np.cos(q) * homo + np.sin(q) * lumo
-            homo_b = np.cos(q) * homo - np.sin(q) * lumo
-            lumo_a = -np.sin(q) * homo + np.cos(q) * lumo
-            lumo_b = np.sin(q) * homo + np.cos(q) * lumo
-            Ca = C.copy()
-            Cb = C.copy()
-            Ca[:, homo_idx] = homo_a
-            Ca[:, homo_idx + 1] = lumo_a
-            Cb[:, homo_idx] = homo_b
-            Cb[:, homo_idx + 1] = lumo_b
-            return [Ca, Cb]
+            return guess_mix(C, self.nel // 2 - 1)
 
         return [C, C]
 
@@ -430,7 +425,7 @@ class GHF(SCFMixin, MOs):
     [               ]
     """
 
-    break_spin_symmetry: bool = True
+    guess_mix: bool = False  # only used if nel is even
     break_complex_symmetry: bool = False
 
     _diis_update = RHF._diis_update
@@ -445,7 +440,7 @@ class GHF(SCFMixin, MOs):
     def _build_fock(self, H, fock_builder, S):
         Jaa, Jbb = fock_builder.build_J([self.D[0], self.D[3]])
         nbf = Jaa.shape[0]
-        if self.iter == 0:
+        if self.iter == 0 and self.break_complex_symmetry:
             Kaa, Kab, Kba, Kbb = fock_builder.build_K_density(self.D)
         else:
             Kaa, Kab, Kba, Kbb = fock_builder.build_K(
@@ -479,22 +474,17 @@ class GHF(SCFMixin, MOs):
         H_ao = forte2.ints.kinetic(self.system.basis) + forte2.ints.nuclear(
             self.system.basis, self.system.atoms
         )
-        return [RHF._initial_guess(self, H_ao, S, guess_type)[0].astype(complex)]
+        Ca = Cb = RHF._initial_guess(self, H_ao, S, guess_type)[0].astype(complex)
+        if self.nel % 2 == 0 and self.guess_mix:
+            Ca, Cb = guess_mix(Ca, self.nel // 2 - 1)
+        C_spinor = np.zeros((self.nbf * 2,) * 2, dtype=complex)
+        C_spinor[: self.nbf, ::2] = Ca
+        C_spinor[self.nbf :, 1::2] = Cb
+        return [C_spinor]
 
     def _build_initial_density_matrix(self):
-        Daa = np.einsum(
-            "mi,ni->mn",
-            self.C[0][:, : self.nel // 2],
-            self.C[0][:, : self.nel // 2].conj(),
-        )
-        Dab = np.zeros_like(Daa)
-        Dba = np.zeros_like(Daa)
-        Dbb = Daa.copy()
+        Daa, Dab, Dba, Dbb = self._build_density_matrix()
 
-        if self.break_spin_symmetry:
-            diag = np.diag(Daa)
-            Dab = np.diag(diag) * 0.05
-            Dba = np.diag(diag) * 0.05
         if self.break_complex_symmetry:
             Daa[0, :] += 0.05j
             Dab[0, :] += 0.05j

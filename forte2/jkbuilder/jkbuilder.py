@@ -8,9 +8,12 @@ from forte2.system import ModelSystem
 class DFFockBuilder:
     def __init__(self, system):
         if isinstance(system, ModelSystem):
+            # special handling for ModelSystem
             eri = system.eri
             nbf = system.nbf()
             eri = eri.reshape((nbf**2,) * 2)
+            # dpstrf: Cholesky decomposition with complete pivoting
+            # tol=-1 ~machine precision tolerance
             C, piv, rank, _ = sp.linalg.lapack.dpstrf(eri, tol=-1)
             piv = piv - 1  # convert to 0-based indexing
             self.B = C[:rank, piv].reshape((rank, nbf, nbf))
