@@ -99,7 +99,7 @@ def test_coulson_fischer():
 
 
 if __name__ == "__main__":
-    # test_uhf_triplet()
-    # test_uhf_singlet()
-    # test_uhf_one_electron()
+    test_uhf_triplet()
+    test_uhf_singlet()
+    test_uhf_one_electron()
     test_coulson_fischer()
