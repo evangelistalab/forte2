@@ -61,7 +61,7 @@ class Integrals:
 
             self.H += np.einsum("mi,mn,nj->ij", C, 2 * Jcore - Kcore, C)
 
-        self.V = jkbuilder.two_electron_integrals_gen_block(C, C, C, C)
+        self.V = jkbuilder.two_electron_integrals_block(C)
 
 
 class SelectedCI:
@@ -86,6 +86,12 @@ class SelectedCI:
         ints.run(system)
         print(ints.Ecore + 2 * ints.H[0, 0] + ints.V[0, 0, 0, 0])
 
+        H = forte2.sparse_operator_hamiltonian(self.norb, ints.Ecore, ints.H, ints.V)
+        Hmat = H.matrix(dets)
+        print("Hamiltonian matrix size:", Hmat)
+        eig = np.linalg.eigh(Hmat)[0]
+        print("Eigenvalues:", eig)
+
 
 def test_sci1():
     xyz = """
@@ -102,7 +108,7 @@ def test_sci1():
 
     sci = SelectedCI(
         method=scf,
-        orbitals=[4],
+        orbitals=[4, 5],
         core=range(4),
         state={"nel": 2, "multiplicity": 1, "ms": 0.0},
         nroot=1,

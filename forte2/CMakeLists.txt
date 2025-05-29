@@ -82,6 +82,7 @@ nanobind_add_module(
   ints/value_at_points.cc
   ci/determinant_helpers.cc
   ci/sparse_operator.cc
+  ci/sparse_operator_hamiltonian.cc
   ci/sparse_state_functions.cc
   ci/sparse_state.cc
   ci/sq_operator_string.cc

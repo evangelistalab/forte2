@@ -72,14 +72,6 @@ void SparseOperator::add_term_from_str(const std::string& s, sparse_scalar_t coe
     add(sqop, phase * coefficient);
 }
 
-SparseOperator SparseOperatorList::to_operator() const {
-    SparseOperator op;
-    for (const auto& [sqop, c] : elements()) {
-        op.add(sqop, c);
-    }
-    return op;
-}
-
 SparseOperator operator*(const SparseOperator& lhs, const SparseOperator& rhs) {
     SparseOperator result;
     for (const auto& [sqop_lhs, c_lhs] : lhs.elements()) {
@@ -120,28 +112,6 @@ SparseOperator commutator(const SparseOperator& lhs, const SparseOperator& rhs) 
         }
     }
     return C;
-}
-
-void SparseOperatorList::add_term_from_str(std::string str, sparse_scalar_t coefficient,
-                                           bool allow_reordering) {
-    auto [sqop, phase] = make_sq_operator_string(str, allow_reordering);
-    add(sqop, phase * coefficient);
-}
-
-std::vector<std::string> SparseOperatorList::str() const {
-    std::vector<std::string> v;
-    for (const auto& [sqop, c] : this->elements()) {
-        if (std::abs(c) < 1.0e-12)
-            continue;
-        v.push_back(format_term_in_sum(c, sqop.str()));
-    }
-    return v;
-}
-
-void SparseOperatorList::add_term(const std::vector<std::tuple<bool, bool, int>>& op_list,
-                                  double coefficient, bool allow_reordering) {
-    auto [sqop, sign] = make_sq_operator_string_from_list(op_list, allow_reordering);
-    add(sqop, sign * coefficient);
 }
 
 } // namespace forte2
