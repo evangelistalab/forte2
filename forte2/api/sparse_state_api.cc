@@ -11,7 +11,7 @@ using namespace nb::literals;
 
 namespace forte2 {
 
-void export_sparsestate_api(nb::module_& m) {
+void export_sparse_state_api(nb::module_& m) {
     nb::class_<SparseState>(m, "SparseState", "A class to represent a vector of determinants")
         .def(nb::init<>(), "Default constructor")
         .def(nb::init<const SparseState&>(), "Copy constructor")

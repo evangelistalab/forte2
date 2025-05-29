@@ -8,15 +8,21 @@ namespace forte2 {
 void export_determinant_api(nb::module_& m);
 void export_determinant_helpers_api(nb::module_& m);
 void export_integrals_api(nb::module_& m);
-void export_sparsestate_api(nb::module_& m);
-void export_sparseoperator_api(nb::module_& m);
+void export_sparse_state_api(nb::module_& m);
+void export_sparse_operator_api(nb::module_& m);
+void export_sparse_operator_list_api(nb::module_& m);
+void export_sparse_exp_api(nb::module_& m);
+void export_sparse_fact_exp_api(nb::module_& m);
 
 NB_MODULE(_forte2, m) {
     export_integrals_api(m);
     export_determinant_api(m);
     export_determinant_helpers_api(m);
-    export_sparsestate_api(m);
-    export_sparseoperator_api(m);
+    export_sparse_state_api(m);
+    export_sparse_operator_api(m);
+    export_sparse_operator_list_api(m);
+    export_sparse_exp_api(m);
+    export_sparse_fact_exp_api(m);
     m.attr("__version__") = "0.1.0";
     m.attr("__author__") = "Forte2 Developers";
 }

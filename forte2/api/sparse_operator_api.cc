@@ -16,7 +16,7 @@ using namespace nb::literals;
 
 namespace forte2 {
 
-void export_sparseoperator_api(nb::module_& m) {
+void export_sparse_operator_api(nb::module_& m) {
     nb::class_<SparseOperator>(m, "SparseOperator", "A class to represent a sparse operator")
         // Constructors
         .def(nb::init<>(), "Default constructor")
@@ -300,10 +300,6 @@ void export_sparseoperator_api(nb::module_& m) {
         },
         "list"_a, "Create a SparseOperator object from a list of Tuple[SQOperatorString, complex]");
 
-    // m.def("sparse_operator_hamiltonian", &sparse_operator_hamiltonian,
-    //       "Create a SparseOperator object from an ActiveSpaceIntegrals object", "as_ints"_a,
-    //       "screen_thresh"_a = 1.0e-12);
-
     m.def("new_product", [](const SparseOperator A, const SparseOperator B) {
         SparseOperator C;
         SQOperatorProductComputer computer;
@@ -328,10 +324,135 @@ void export_sparseoperator_api(nb::module_& m) {
     //     return C;
     // });
 
-    m.def("sparse_operator_hamiltonian",
-          &sparse_operator_hamiltonian,
+    // m.def("sparse_operator_hamiltonian", &sparse_operator_hamiltonian,
+    //       "Create a SparseOperator object from an ActiveSpaceIntegrals object", "as_ints"_a,
+    //       "screen_thresh"_a = 1.0e-12);
+
+    m.def("sparse_operator_hamiltonian", &sparse_operator_hamiltonian,
           "Create a SparseOperator object from integrals", "scalar"_a, "oei_a"_a, "oei_b"_a,
           "tei_aa"_a, "tei_ab"_a, "tei_bb"_a, "screen_thresh"_a = 1.0e-12,
           "Create a SparseOperator object from one-electron and two-electron integrals");
 }
+
+void export_sparse_operator_list_api(nb::module_& m) {
+    nb::class_<SparseOperatorList>(m, "SparseOperatorList",
+                                   "A class to represent a list of sparse operators")
+        .def(nb::init<>())
+        .def(nb::init<SparseOperatorList>())
+        .def("add", &SparseOperatorList::add)
+        .def("add", &SparseOperatorList::add_term_from_str, "str"_a,
+             "coefficient"_a = sparse_scalar_t(1), "allow_reordering"_a = false)
+        // .def("add",
+        //      [](SparseOperatorList& op, const, sparse_scalar_t value, bool allow_reordering) {
+        //          make_sq_operator_string_from_list op.add(sqop, value);
+        //      })
+        .def("add_term",
+             nb::overload_cast<const std::vector<std::tuple<bool, bool, int>>&, double, bool>(
+                 &SparseOperatorList::add_term),
+             "op_list"_a, "value"_a = 0.0, "allow_reordering"_a = false)
+        .def(
+            "add",
+            [](SparseOperatorList& op, const std::vector<size_t>& acre,
+               const std::vector<size_t>& bcre, const std::vector<size_t>& aann,
+               const std::vector<size_t>& bann, sparse_scalar_t coeff) {
+                op.add(SQOperatorString({acre.begin(), acre.end()}, {bcre.begin(), bcre.end()},
+                                        {aann.begin(), aann.end()}, {bann.begin(), bann.end()}),
+                       coeff);
+            },
+            "acre"_a, "bcre"_a, "aann"_a, "bann"_a, "coeff"_a = sparse_scalar_t(1),
+            "Add a term to the operator by passing lists of creation and annihilation indices. "
+            "This version is faster than the string version and does not check for reordering")
+        .def("to_operator", &SparseOperatorList::to_operator)
+        .def(
+            "remove",
+            [](SparseOperatorList& op, const std::string& s) {
+                const auto [sqop, _] = make_sq_operator_string(s, false);
+                op.remove(sqop);
+            },
+            "Remove a specific element from the vector space")
+        .def("__len__", &SparseOperatorList::size)
+        .def(
+            "__iter__",
+            [](const SparseOperatorList& v) {
+                return nb::make_iterator(nb::type<SparseOperatorList>(), "item_iterator",
+                                         v.elements().begin(), v.elements().end());
+            },
+            nb::keep_alive<0, 1>())
+        .def("__repr__", [](const SparseOperatorList& op) { return join(op.str(), "\n"); })
+        .def("__str__", [](const SparseOperatorList& op) { return join(op.str(), "\n"); })
+        .def(
+            "__getitem__", [](const SparseOperatorList& op, const size_t n) { return op[n]; },
+            "Get the coefficient of a term")
+        .def(
+            "__getitem__",
+            [](const SparseOperatorList& op, const std::string& s) {
+                const auto [sqop, factor] = make_sq_operator_string(s, false);
+                return factor * op[sqop];
+            },
+            "Get the coefficient of a term")
+        .def(
+            "__setitem__",
+            [](SparseOperatorList& op, const size_t n, sparse_scalar_t value) { op[n] = value; },
+            "Set the coefficient of a term")
+        .def("coefficients",
+             [](SparseOperatorList& op) {
+                 std::vector<sparse_scalar_t> values(op.size());
+                 for (size_t i = 0, max = op.size(); i < max; ++i) {
+                     values[i] = op[i];
+                 }
+                 return values;
+             })
+        .def("set_coefficients",
+             [](SparseOperatorList& op, const std::vector<sparse_scalar_t>& values) {
+                 if (op.size() != values.size()) {
+                     throw std::invalid_argument(
+                         "The size of the list of coefficients must match the "
+                         "size of the operator list");
+                 }
+                 for (size_t i = 0; i < op.size(); ++i) {
+                     op[i] = values[i];
+                 }
+             })
+        .def("reverse", &SparseOperatorList::reverse, "Reverse the order of the operators")
+        .def(
+            "__call__",
+            [](const SparseOperatorList& op, const size_t n) {
+                if (n >= op.size()) {
+                    throw std::out_of_range("Index out of range");
+                }
+                return op(n);
+            },
+            "Get the nth operator")
+        .def(
+            "__matmul__",
+            [](const SparseOperatorList& op, const SparseState& st) {
+                // form a temporary SparseOperator from the list of operators
+                auto sop = op.to_operator();
+                return apply_operator_lin(sop, st);
+            },
+            "Multiply a SparseOperator and a SparseState")
+        .def(
+            "__add__",
+            [](const SparseOperatorList& op1, const SparseOperatorList& op2) {
+                SparseOperatorList result = op1;
+                result += op2;
+                return result;
+            },
+            "Add (concatenate) two SparseOperatorList objects")
+        .def(
+            "__iadd__",
+            [](SparseOperatorList& op1, const SparseOperatorList& op2) {
+                op1 += op2;
+                return op1;
+            },
+            "Add (concatenate) a SparseOperatorList object to this SparseOperatorList object")
+        .def(
+            "apply_to_state",
+            [](const SparseOperatorList& op, const SparseState& state, double screen_thresh) {
+                auto sop = op.to_operator();
+                return apply_operator_lin(sop, state, screen_thresh);
+            },
+            "state"_a, "screen_thresh"_a = 1.0e-12, "Apply the operator to a state");
+}
+
 } // namespace forte2

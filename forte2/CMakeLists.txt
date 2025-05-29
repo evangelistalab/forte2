@@ -72,6 +72,7 @@ nanobind_add_module(
   api/determinant_helpers_api.cc
   api/sparse_operator_api.cc
   api/sparse_state_api.cc
+  api/sparse_exp_api.cc
   helpers/string_algorithms.cc
   helpers/combinatorial.cc
   ints/basis.cc
@@ -81,6 +82,7 @@ nanobind_add_module(
   ints/two_electron.cc
   ints/value_at_points.cc
   ci/determinant_helpers.cc
+  ci/sparse_exp.cc
   ci/sparse_operator.cc
   ci/sparse_state_functions.cc
   ci/sparse_state.cc
