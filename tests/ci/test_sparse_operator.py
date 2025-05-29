@@ -425,7 +425,7 @@ def test_sparse_operator_product():
 def test_sparse_operator_hamiltonian():
     from forte2.jkbuilder.jkbuilder import DFFockBuilder
 
-    erhf = -76.021765826425
+    erhf = -76.021765988335
     xyz = """
     O            0.000000000000     0.000000000000    -0.061664597388
     H            0.000000000000    -0.711620616369     0.489330954643
@@ -434,8 +434,10 @@ def test_sparse_operator_hamiltonian():
 
     system = forte2.System(xyz=xyz, basis="cc-pVDZ", auxiliary_basis="cc-pVTZ-JKFIT")
 
-    scf = forte2.scf.RHF(charge=0)
-    scf.run(system)
+    scf = forte2.scf.RHF(charge=0)(system)
+    scf.econv = 1e-10
+    scf.dconv = 1e-8
+    scf.run()
     assert np.isclose(
         scf.E, erhf, atol=1e-10
     ), f"SCF energy {scf.E} is not close to expected value {erhf}"
@@ -460,10 +462,11 @@ def test_sparse_operator_hamiltonian():
         scalar, oei_mo, oei_mo, eri_aa, eri_ab, eri_aa
     )
     Href = forte2.apply_op(ham, hf_state)
-    energy = forte2.overlap(hf_state, Href)
+    energy = forte2.overlap(hf_state, Href).real
+    print(f"Energy from SparseOperator Hamiltonian: {energy}")
 
     assert energy == pytest.approx(
-        scf.E, abs=1e-6
+        scf.E, abs=1e-8
     ), f"Hamiltonian energy {energy} is not close to SCF energy {scf.E}"
 
 
