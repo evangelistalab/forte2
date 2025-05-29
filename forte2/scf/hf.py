@@ -211,8 +211,10 @@ class UHF(SCFMixin, MOs):
 
     def __call__(self, system):
         self = super().__call__(system)
-        self.na = int(round(self.nel + 2 * self.ms) / 2)
-        self.nb = int(round(self.nel - 2 * self.ms) / 2)
+        assert np.isclose(int(round(self.ms*2)), self.ms*2), "ms must be an integer multiple of 0.5."
+        self.twicems = int(round(self.ms * 2))
+        self.na = int(round(self.nel + self.twicems) / 2)
+        self.nb = int(round(self.nel - self.twicems) / 2)
         assert (
             self.na >= 0 and self.nb >= 0
         ), "UHF requires non-negative number of alpha and beta electrons."
@@ -235,7 +237,7 @@ class UHF(SCFMixin, MOs):
     def _initial_guess(self, H, S, guess_type="minao"):
         C = RHF._initial_guess(self, H, S, guess_type=guess_type)[0]
 
-        if np.isclose(self.ms, 0.) and self.guess_mix:
+        if self.twicems == 0 and self.guess_mix:
             return guess_mix(C, self.nel // 2 - 1)
 
         return [C, C]
@@ -295,8 +297,10 @@ class ROHF(SCFMixin, MOs):
 
     def __call__(self, system):
         self = super().__call__(system)
-        self.na = int(round(self.nel + 2 * self.ms) / 2)
-        self.nb = int(round(self.nel - 2 * self.ms) / 2)
+        assert np.isclose(int(round(self.ms*2)), self.ms*2), "ms must be an integer multiple of 0.5."
+        self.twicems = int(round(self.ms * 2))
+        self.na = int(round(self.nel + self.twicems) / 2)
+        self.nb = int(round(self.nel - self.twicems) / 2)
         assert (
             self.na >= 0 and self.nb >= 0
         ), "ROHF requires non-negative number of alpha and beta electrons."
@@ -359,8 +363,10 @@ class CUHF(SCFMixin, MOs):
 
     def __call__(self, system):
         self = super().__call__(system)
-        self.na = int(round(self.nel + 2 * self.ms) / 2)
-        self.nb = int(round(self.nel - 2 * self.ms) / 2)
+        assert np.isclose(int(round(self.ms*2)), self.ms*2), "ms must be an integer multiple of 0.5."
+        self.twicems = int(round(self.ms * 2))
+        self.na = int(round(self.nel + self.twicems) / 2)
+        self.nb = int(round(self.nel - self.twicems) / 2)
         assert (
             self.na >= 0 and self.nb >= 0
         ), "CUHF requires non-negative number of alpha and beta electrons."
