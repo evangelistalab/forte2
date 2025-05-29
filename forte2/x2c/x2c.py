@@ -12,11 +12,11 @@ def get_hcore_x2c(system, x2c_type="sf"):
         "so",
     ], f"Invalid x2c_type: {x2c_type}. Must be 'sf' or 'so'."
 
-    print("Number of contracted basis functions: ", system.nao())
+    print("Number of contracted basis functions: ", system.nbf())
     xbasis = system.decontract()
-    nao = len(xbasis)
-    print(f"Number of decontracted basis functions: {nao}")
-    nbf = nao if x2c_type == "sf" else nao * 2
+    nbf_decon = len(xbasis)
+    print(f"Number of decontracted basis functions: {nbf_decon}")
+    nbf = nbf_decon if x2c_type == "sf" else nbf_decon * 2
     # expensive way to get this for now but works for all types of contraction schemes
     proj = _get_projection_matrix(xbasis, system.basis, x2c_type=x2c_type)
 
