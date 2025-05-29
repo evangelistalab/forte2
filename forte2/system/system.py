@@ -127,7 +127,7 @@ class System:
 class ModelSystem:
     """
     A base class for model systems.
-    One needs to spefify the overlap, hcore, and eri tensors.
+    One needs to specify the overlap, hcore, and eri tensors.
     The number of electrons needs be set by setting charge to -nel at runtime.
     """
 
