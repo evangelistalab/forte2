@@ -206,7 +206,7 @@ class RHF(SCFMixin, MOs):
 
 @dataclass
 class UHF(SCFMixin, MOs):
-    ms: int = 0
+    ms: float = 0.
     guess_mix: bool = False  # only used if ms == 0
 
     def __call__(self, system):
@@ -235,7 +235,7 @@ class UHF(SCFMixin, MOs):
     def _initial_guess(self, H, S, guess_type="minao"):
         C = RHF._initial_guess(self, H, S, guess_type=guess_type)[0]
 
-        if self.ms == 0 and self.guess_mix:
+        if np.isclose(self.ms, 0.) and self.guess_mix:
             return guess_mix(C, self.nel // 2 - 1)
 
         return [C, C]
@@ -291,7 +291,7 @@ class UHF(SCFMixin, MOs):
 
 @dataclass
 class ROHF(SCFMixin, MOs):
-    ms: int = 0
+    ms: float = 0.
 
     def __call__(self, system):
         self = super().__call__(system)
@@ -354,7 +354,7 @@ class ROHF(SCFMixin, MOs):
 
 @dataclass
 class CUHF(SCFMixin, MOs):
-    ms: int = 0
+    ms: float = 0.
     guess_mix: bool = False  # only used if ms == 0
 
     def __call__(self, system):
