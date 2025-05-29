@@ -327,5 +327,11 @@ void export_sparseoperator_api(nb::module_& m) {
     //     }
     //     return C;
     // });
+
+    m.def("sparse_operator_hamiltonian",
+          &sparse_operator_hamiltonian,
+          "Create a SparseOperator object from integrals", "scalar"_a, "oei_a"_a, "oei_b"_a,
+          "tei_aa"_a, "tei_ab"_a, "tei_bb"_a, "screen_thresh"_a = 1.0e-12,
+          "Create a SparseOperator object from one-electron and two-electron integrals");
 }
 } // namespace forte2

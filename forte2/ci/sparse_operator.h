@@ -6,6 +6,7 @@
 
 #include "ci/sparse.h"
 #include "ci/sq_operator_string.h"
+#include "helpers/ndarray.h"
 
 namespace forte2 {
 
@@ -143,4 +144,7 @@ void fact_unitary_trans_antiherm_grad(SparseOperator& O, const SparseOperatorLis
 void fact_unitary_trans_imagherm(SparseOperator& O, const SparseOperatorList& T,
                                  bool reverse = false, double screen_threshold = 1e-12);
 
+SparseOperator sparse_operator_hamiltonian(double scalar, np_matrix& oei_a, np_matrix& oei_b,
+                                           np_tensor4& tei_aa, np_tensor4& tei_ab,
+                                           np_tensor4& tei_bb, double screen_thresh = 1e-12);
 } // namespace forte2

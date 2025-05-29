@@ -144,4 +144,56 @@ void SparseOperatorList::add_term(const std::vector<std::tuple<bool, bool, int>>
     add(sqop, sign * coefficient);
 }
 
+SparseOperator sparse_operator_hamiltonian(double scalar, np_matrix& oei_a, np_matrix& oei_b,
+                                           np_tensor4& tei_aa, np_tensor4& tei_ab,
+                                           np_tensor4& tei_bb, double screen_thresh) {
+    SparseOperator H;
+    auto oei_a_view = oei_a.view();
+    auto oei_b_view = oei_b.view();
+    auto tei_aa_view = tei_aa.view();
+    auto tei_ab_view = tei_ab.view();
+    auto tei_bb_view = tei_bb.view();
+    size_t nmo = oei_a.shape(0);
+
+    H.add_term_from_str("[]", scalar);
+
+    for (size_t p = 0; p < nmo; p++) {
+        for (size_t q = 0; q < nmo; q++) {
+            // std::abs used to handle complex numbers
+            if (std::abs(oei_a_view(p, q)) > screen_thresh) {
+                H.add(SQOperatorString({p}, {}, {q}, {}), oei_a_view(p, q));
+            }
+            if (std::abs(oei_b_view(p, q)) > screen_thresh) {
+                H.add(SQOperatorString({}, {p}, {}, {q}), oei_b_view(p, q));
+            }
+        }
+    }
+    for (size_t p = 0; p < nmo; p++) {
+        for (size_t q = p + 1; q < nmo; q++) {
+            for (size_t r = 0; r < nmo; r++) {
+                for (size_t s = r + 1; s < nmo; s++) {
+                    if (std::abs(tei_aa_view(p, q, r, s)) > screen_thresh) {
+                        H.add(SQOperatorString({p, q}, {}, {s, r}, {}), tei_aa_view(p, q, r, s));
+                    }
+                    if (std::abs(tei_bb_view(p, q, r, s)) > screen_thresh) {
+                        H.add(SQOperatorString({}, {p, q}, {}, {s, r}), tei_bb_view(p, q, r, s));
+                    }
+                }
+            }
+        }
+    }
+    for (size_t p = 0; p < nmo; p++) {
+        for (size_t q = 0; q < nmo; q++) {
+            for (size_t r = 0; r < nmo; r++) {
+                for (size_t s = 0; s < nmo; s++) {
+                    if (std::abs(tei_ab_view(p, q, r, s)) > screen_thresh) {
+                        H.add(SQOperatorString({p}, {q}, {r}, {s}), tei_ab_view(p, q, r, s));
+                    }
+                }
+            }
+        }
+    }
+    return H;
+}
+
 } // namespace forte2

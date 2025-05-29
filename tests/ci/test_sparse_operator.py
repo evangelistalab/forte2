@@ -1,4 +1,5 @@
 import forte2
+import numpy as np
 import pytest
 
 
@@ -421,7 +422,53 @@ def test_sparse_operator_product():
     assert sop3.str() == sop3_test.str()
 
 
+def test_sparse_operator_hamiltonian():
+    from forte2.jkbuilder.jkbuilder import DFFockBuilder
+
+    erhf = -76.021765826425
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.061664597388
+    H            0.000000000000    -0.711620616369     0.489330954643
+    H            0.000000000000     0.711620616369     0.489330954643
+    """
+
+    system = forte2.System(xyz=xyz, basis="cc-pVDZ", auxiliary_basis="cc-pVTZ-JKFIT")
+
+    scf = forte2.scf.RHF(charge=0)
+    scf.run(system)
+    assert np.isclose(
+        scf.E, erhf, atol=1e-10
+    ), f"SCF energy {scf.E} is not close to expected value {erhf}"
+
+    hf_reference = forte2.Determinant("22222")
+    print(f"\n  Hartree-Fock determinant: {hf_reference}")
+
+    # Compute the energy using the sparse operator
+    hf_state = forte2.SparseState({hf_reference: 1.0})
+    scalar = forte2.ints.nuclear_repulsion(system.atoms)
+    oei = forte2.ints.kinetic(system.basis) + forte2.ints.nuclear(
+        system.basis, system.atoms
+    )
+    C = scf.C[0]
+    oei_mo = np.einsum("pq,pi,qj->ij", oei, C, C, optimize=True)
+    jkbuilder = DFFockBuilder(system)
+    eri_ab = jkbuilder.two_electron_integrals_block(C)
+    eri_aa = eri_ab.copy()
+    eri_aa -= eri_aa.swapaxes(2, 3)
+
+    ham = forte2.sparse_operator_hamiltonian(
+        scalar, oei_mo, oei_mo, eri_aa, eri_ab, eri_aa
+    )
+    Href = forte2.apply_op(ham, hf_state)
+    energy = forte2.overlap(hf_state, Href)
+
+    assert energy == pytest.approx(
+        scf.E, abs=1e-6
+    ), f"Hamiltonian energy {energy} is not close to SCF energy {scf.E}"
+
+
 if __name__ == "__main__":
     test_sparse_operator_creation()
     test_sparse_operator()
     test_sparse_operator_product()
+    test_sparse_operator_hamiltonian()
