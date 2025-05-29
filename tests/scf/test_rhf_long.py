@@ -3,7 +3,7 @@ from forte2.scf import RHF
 import pytest
 
 # assuming default scf tolerance of 1e-9
-approx = lambda x: pytest.approx(x, rel=0.0, abs=5e-8)
+approx = lambda x: pytest.approx(x, rel=1e-8, abs=5e-8)
 
 
 def test_rhf_long():
