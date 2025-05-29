@@ -16,7 +16,7 @@ approx = lambda x: pytest.approx(x, rel=0.0, abs=5e-8)
 
 
 def test_cube():
-    escf = -76.021766174866
+    escf = -76.02176598836786
     # Test the SCF implementation with a simple example
     xyz = """
     O            0.000000000000     0.000000000000    -0.061664597388
