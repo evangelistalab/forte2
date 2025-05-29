@@ -1,10 +1,10 @@
 import forte2
-
-# import forte2.ints
-import numpy as np
-import scipy as sp
-
 from forte2.scf import RHF, GHF
+import numpy as np
+import pytest
+
+# assuming default scf tolerance of 1e-9
+approx = lambda x: pytest.approx(x, rel=0.0, abs=5e-8)
 
 
 def test_sfx2c1e():
@@ -19,12 +19,8 @@ def test_sfx2c1e():
     )
 
     scf = RHF(charge=0)(system)
-    scf.econv = 1e-10
-    scf.dconv = 1e-8
     scf.run()
-    assert np.isclose(
-        scf.E, escf, atol=1e-10
-    ), f"SCF energy {scf.E} is not close to expected value escf"
+    assert scf.E == approx(escf)
 
 
 def test_sox2c1e():
@@ -35,12 +31,8 @@ def test_sox2c1e():
         xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit", x2c_type="so"
     )
     scf = GHF(charge=0)(system)
-    scf.econv = 1e-10
-    scf.dconv = 1e-8
     scf.run()
-    assert np.isclose(
-        scf.E, eghf, atol=1e-8, rtol=1e-6
-    ), f"SCF energy {scf.E} is not close to expected value eghf"
+    assert scf.E == approx(eghf)
 
 
 if __name__ == "__main__":

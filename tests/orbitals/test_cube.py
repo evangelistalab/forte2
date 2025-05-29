@@ -8,6 +8,12 @@ import glob
 from forte2.scf import RHF
 from forte2.orbitals.cube import Cube
 
+import pytest
+
+# assuming default scf tolerance of 1e-9
+approx = lambda x: pytest.approx(x, rel=0.0, abs=5e-8)
+
+
 
 def test_cube():
     escf = -76.021766174866
@@ -22,7 +28,7 @@ def test_cube():
 
     scf = RHF(charge=0)(system)
     scf.run()
-    assert np.isclose(scf.E, escf, atol=1e-10), f"SCF energy {scf.E} is not close to expected value {escf}"
+    assert scf.E == approx(escf)
 
     cube = Cube()
     cube.run(system, scf.C[0])

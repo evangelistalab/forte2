@@ -24,8 +24,8 @@ class SCFMixin:
     charge: int
     diis_start: int = 4
     diis_nvec: int = 8
-    econv: float = 1e-6
-    dconv: float = 1e-3
+    econv: float = 1e-9
+    dconv: float = 1e-6
     maxiter: int = 100
     guess_type: str = "minao"
 

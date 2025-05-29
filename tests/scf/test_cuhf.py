@@ -1,13 +1,14 @@
 import forte2
-import numpy as np
-import scipy as sp
-
 from forte2.scf import CUHF
+import pytest
+
+# assuming default scf tolerance of 1e-9
+approx = lambda x: pytest.approx(x, rel=0.0, abs=5e-8)
 
 
 def test_cuhf_singlet():
     # Test the CUHF implementation with a simple example (this is equivalent to RHF)
-    ecuhf = -76.0614664043887672
+    ecuhf = -76.061466407194
     s2cuhf = 0.0
     xyz = """
     O            0.000000000000     0.000000000000    -0.061664597388
@@ -19,17 +20,13 @@ def test_cuhf_singlet():
 
     scf = CUHF(charge=0, ms=0)(system)
     scf.run()
-    assert np.isclose(
-        scf.E, ecuhf, atol=1e-10
-    ), f"SCF energy {scf.E} is not close to expected value {ecuhf}"
-    assert np.isclose(
-        scf.S2, s2cuhf, atol=1e-10
-    ), f"SCF S2 {scf.S2} is not close to expected value {s2cuhf}"
+    assert scf.E == approx(ecuhf)
+    assert scf.S2 == approx(s2cuhf)
 
 
 def test_cuhf_triplet():
     # Test the CUHF implementation with a simple example (this is equivalent to ROHF)
-    ecuhf = -75.8051090240099
+    ecuhf = -75.805109024111
     s2cuhf = 2.0
     xyz = """
     O            0.000000000000     0.000000000000    -0.061664597388
@@ -41,12 +38,8 @@ def test_cuhf_triplet():
 
     scf = CUHF(charge=0, ms=1)(system)
     scf.run()
-    assert np.isclose(
-        scf.E, ecuhf, atol=1e-10
-    ), f"SCF energy {scf.E} is not close to expected value {ecuhf}"
-    assert np.isclose(
-        scf.S2, s2cuhf, atol=1e-10
-    ), f"SCF S2 {scf.S2} is not close to expected value {s2cuhf}"
+    assert scf.E == approx(ecuhf)
+    assert scf.S2 == approx(s2cuhf)
 
 
 if __name__ == "__main__":
