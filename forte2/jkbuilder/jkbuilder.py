@@ -2,10 +2,24 @@ import numpy as np
 import scipy as sp
 
 from forte2 import ints
+from forte2.system import ModelSystem
 
 
 class DFFockBuilder:
     def __init__(self, system):
+        if isinstance(system, ModelSystem):
+            # special handling for ModelSystem
+            eri = system.eri
+            nbf = system.nbf()
+            eri = eri.reshape((nbf**2,) * 2)
+            # dpstrf: Cholesky decomposition with complete pivoting
+            # tol=-1 ~machine precision tolerance
+            C, piv, rank, _ = sp.linalg.lapack.dpstrf(eri, tol=-1)
+            piv = piv - 1  # convert to 0-based indexing
+            self.B = C[:rank, piv].reshape((rank, nbf, nbf))
+            system.naux = lambda: rank
+            return
+
         self.basis = system.basis
         self.auxiliary_basis = system.auxiliary_basis
 
@@ -39,9 +53,9 @@ class DFFockBuilder:
         J = [np.einsum("Pmn,Prs,sr->mn", self.B, self.B, Di, optimize=True) for Di in D]
         return J
 
-    def build_K(self, C, ghf=False):
+    def build_K(self, C, cross=False):
         Y = [np.einsum("Pmr,mi->Pri", self.B, Ci.conj(), optimize=True) for Ci in C]
-        if ghf:
+        if cross:
             K = []
             for Yi in Y:
                 for Yj in Y:

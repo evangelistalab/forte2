@@ -20,8 +20,8 @@ def test_mp2():
 
     system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
 
-    scf = RHF(charge=0)
-    scf.run(system)
+    scf = RHF(charge=0)(system)
+    scf.run()
 
     print(f"RHF energy: {scf.E:.10f} [Eh]")
 
@@ -31,8 +31,8 @@ def test_mp2():
 
     jkbuilder = DFFockBuilder(system)
     nocc = scf.na
-    nvir = scf.nbasis - nocc
-    nbasis = scf.nbasis
+    nvir = scf.nbf - nocc
+    nbasis = scf.nbf
     Co = scf.C[0][:, :nocc]
     Cv = scf.C[0][:, nocc:]
     V = jkbuilder.two_electron_integrals_gen_block(Co, Co, Cv, Cv)

@@ -96,8 +96,9 @@ def test_sci1():
 
     system = forte2.System(xyz=xyz, basis="cc-pVDZ", auxiliary_basis="cc-pVTZ-JKFIT")
 
-    scf = RHF(charge=0)
-    scf.run(system, econv=1e-12)
+    scf = RHF(charge=0)(system)
+    scf.econv = 1e-12
+    scf.run()
 
     sci = SelectedCI(
         method=scf,
