@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include "string_list_defs.h"
 #include "ci_string_address.h"
 
