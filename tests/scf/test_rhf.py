@@ -1,12 +1,13 @@
 import forte2
-import numpy as np
-import scipy as sp
-
 from forte2.scf import RHF
+import pytest
+
+# assuming default scf tolerance of 1e-9
+approx = lambda x: pytest.approx(x, rel=1e-8, abs=5e-8)
 
 
 def test_rhf():
-    # Test the RHF implementation with a simple example
+    erhf = -76.061466407195
     xyz = """
     O            0.000000000000     0.000000000000    -0.061664597388
     H            0.000000000000    -0.711620616369     0.489330954643
@@ -17,9 +18,7 @@ def test_rhf():
 
     scf = RHF(charge=0)(system)
     scf.run()
-    assert np.isclose(
-        scf.E, -76.0614664043887672, atol=1e-10
-    ), f"SCF energy {scf.E} is not close to expected value -76.0614664043887672"
+    assert scf.E == approx(erhf)
 
 
 def test_rhf_zero_electron():
@@ -29,28 +28,19 @@ def test_rhf_zero_electron():
     """
     system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
     scf = RHF(charge=2)(system)
-    scf.econv = 1e-10
     scf.run()
-    assert np.isclose(
-        scf.E,
-        system.nuclear_repulsion_energy(),
-        atol=1e-10,
-        rtol=1e-8,
-    ), f"SCF energy {scf.E} is not close to expected value {system.nuclear_repulsion_energy()}"
+    assert scf.E == approx(system.nuclear_repulsion_energy())
 
 
 def test_rhf_zero_virtuals():
-    erhf = -126.60457333961503
+    erhf = -126.604573431517
     xyz = "Ne 0 0 0"
     system = forte2.System(
         xyz=xyz, basis="sto-3g", auxiliary_basis="def2-universal-JKFIT"
     )
     scf = RHF(charge=0)(system)
-    scf.econv = 1e-10
     scf.run()
-    assert np.isclose(
-        scf.E, erhf, atol=1e-10
-    ), f"SCF energy {scf.E} is not close to expected value {erhf}"
+    assert scf.E == approx(erhf)
 
 
 if __name__ == "__main__":

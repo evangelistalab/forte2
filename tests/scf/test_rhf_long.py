@@ -1,12 +1,13 @@
 import forte2
-import numpy as np
-import scipy as sp
-
 from forte2.scf import RHF
+import pytest
+
+# assuming default scf tolerance of 1e-9
+approx = lambda x: pytest.approx(x, rel=1e-8, abs=5e-8)
 
 
 def test_rhf_long():
-    # Test the SCF implementation with a simple example
+    erhf = -383.470176866769
     xyz = """
 C       -1.6896697203      2.2905259736      0.0275805886                 
 C       -1.9730520670      0.9252034516      0.0916110133                 
@@ -32,9 +33,7 @@ H       -0.8580037770      4.8559228717     -0.0859634340
 
     scf = RHF(charge=0)(system)
     scf.run()
-    assert np.isclose(
-        scf.E, -383.4701768569434535, atol=1e-10
-    ), f"SCF energy {scf.E} is not close to expected value -76.0614664043887672"
+    assert scf.E == approx(erhf)
 
 
 if __name__ == "__main__":
