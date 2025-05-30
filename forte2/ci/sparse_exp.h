@@ -8,7 +8,7 @@
 namespace forte2 {
 
 /**
- * @brief The SparseFactExp class
+ * @brief The SparseExp class
  * This class implements an algorithm to apply the exponential of an operator to a state
  *
  *    |state> -> exp(op) |state>
@@ -73,6 +73,8 @@ class SparseExp {
     SparseState apply_exp_operator(OperatorType op_type, const SparseOperator& sop,
                                    const SparseState& state, double scaling_factor);
 };
+
+/// @brief This class implements an algorithm to apply a factorized exponential operator to a state
 
 class SparseFactExp {
   public:
