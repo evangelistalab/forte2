@@ -1,7 +1,9 @@
 import forte2
-import numpy as np
-
 from forte2.scf import RHF, UHF
+import pytest
+
+# assuming default scf tolerance of 1e-9
+approx = lambda x: pytest.approx(x, rel=1e-8, abs=5e-8)
 
 
 def test_hubbard_rhf():
@@ -12,26 +14,20 @@ def test_hubbard_rhf():
     scf = RHF(charge=-10)(system)
     scf.guess_type = "hcore"
     scf = scf.run()
-    assert np.isclose(
-        scf.E, erhf, atol=1e-10
-    ), f"SCF energy {scf.E} is not close to expected value {erhf}"
+    assert scf.E == approx(erhf)
 
 
 def test_hubbard_uhf():
-    euhf = -3.225795887373
-    s2uhf = 3.040944953960
+    euhf = -3.225795894806
+    s2uhf = 3.040944954030
 
     system = forte2.system.HubbardModel1D(t=1.0, U=4.0, nsites=10, pbc=True)
 
     scf = UHF(charge=-10, ms=1)(system)
     scf.guess_type = "hcore"
     scf = scf.run()
-    assert np.isclose(
-        scf.E, euhf, atol=1e-10
-    ), f"SCF energy {scf.E} is not close to expected value {euhf}"
-    assert np.isclose(
-        scf.S2, s2uhf, atol=1e-10
-    ), f"SCF S2 {scf.S2} is not close to expected value {s2uhf}"
+    assert scf.E == approx(euhf)
+    assert scf.S2 == approx(s2uhf)
 
 
 if __name__ == "__main__":

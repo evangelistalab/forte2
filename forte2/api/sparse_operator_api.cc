@@ -5,10 +5,13 @@
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/pair.h>
 #include <nanobind/make_iterator.h>
+#include <nanobind/ndarray.h>
 
 #include "ci/sparse_operator.h"
 #include "ci/sparse_state.h"
+#include "ci/sparse_operator_hamiltonian.h"
 
+#include "helpers/ndarray.h"
 #include "helpers/string_algorithms.h"
 
 namespace nb = nanobind;
@@ -243,14 +246,17 @@ void export_sparse_operator_api(nb::module_& m) {
             "matrix",
             [](const SparseOperator& sop, const std::vector<Determinant>& dets,
                double screen_thresh) {
-                std::vector<sparse_scalar_t> elements;
-                for (const auto& deti : dets) {
+                auto elements = make_zeros<nb::numpy, std::complex<double>, 2>(
+                    std::array<size_t, 2>({dets.size(), dets.size()}));
+                for (size_t i = 0; const auto& deti : dets) {
                     SparseState deti_state;
                     deti_state.add(deti, 1.0);
                     auto op_deti = apply_operator_lin(sop, deti_state, screen_thresh);
-                    for (const auto& detj : dets) {
-                        elements.push_back(op_deti[detj]);
+                    for (size_t j = 0; const auto& detj : dets) {
+                        elements(i, j) = op_deti[detj];
+                        ++j;
                     }
+                    ++i;
                 }
                 return elements;
             },
@@ -324,14 +330,10 @@ void export_sparse_operator_api(nb::module_& m) {
     //     return C;
     // });
 
-    // m.def("sparse_operator_hamiltonian", &sparse_operator_hamiltonian,
-    //       "Create a SparseOperator object from an ActiveSpaceIntegrals object", "as_ints"_a,
-    //       "screen_thresh"_a = 1.0e-12);
-
     m.def("sparse_operator_hamiltonian", &sparse_operator_hamiltonian,
-          "Create a SparseOperator object from integrals", "scalar"_a, "oei_a"_a, "oei_b"_a,
-          "tei_aa"_a, "tei_ab"_a, "tei_bb"_a, "screen_thresh"_a = 1.0e-12,
-          "Create a SparseOperator object from one-electron and two-electron integrals");
+          "Create a SparseOperator object representing the Hamiltonian from integrals", "nmo"_a,
+          "scalar_energy"_a, "one_electron_integrals"_a, "two_electron_integrals"_a,
+          "screen_thresh"_a = 1.0e-12);
 }
 
 void export_sparse_operator_list_api(nb::module_& m) {

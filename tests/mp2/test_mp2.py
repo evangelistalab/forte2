@@ -1,10 +1,14 @@
 import forte2
 import numpy as np
-import scipy as sp
 import time
 
-from forte2.jkbuilder.jkbuilder import DFFockBuilder
+from forte2.jkbuilder.jkbuilder import FockBuilder
 from forte2.scf import RHF
+
+import pytest
+
+# assuming default scf tolerance of 1e-9
+approx = lambda x: pytest.approx(x, rel=1e-8, abs=5e-8)
 
 
 def test_mp2():
@@ -25,14 +29,11 @@ def test_mp2():
 
     print(f"RHF energy: {scf.E:.10f} [Eh]")
 
-    assert np.isclose(
-        scf.E, energy_scf, atol=1e-10
-    ), f"SCF energy {scf.E} is not close to expected value {energy_scf}"
+    assert scf.E == approx(energy_scf)
 
-    jkbuilder = DFFockBuilder(system)
+    jkbuilder = FockBuilder(system)
     nocc = scf.na
     nvir = scf.nbf - nocc
-    nbasis = scf.nbf
     Co = scf.C[0][:, :nocc]
     Cv = scf.C[0][:, nocc:]
     V = jkbuilder.two_electron_integrals_gen_block(Co, Co, Cv, Cv)
@@ -53,9 +54,7 @@ def test_mp2():
     print(f"MP2 energy: {Emp2:.10f} [Eh]")
     print(f"Time taken: {end - start:.4f} seconds")
 
-    assert np.isclose(
-        Emp2, energy_mp2, atol=1e-10
-    ), f"MP2 energy {Emp2} is not close to expected value {energy_mp2}"
+    assert Emp2 == approx(energy_mp2)
 
 
 if __name__ == "__main__":

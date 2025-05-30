@@ -56,24 +56,9 @@ void export_sparse_state_api(nb::module_& m) {
             },
             "Apply an operator to this SparseState and return a new SparseState")
         .def(
-            "apply",
-            [](const SparseState& v, const SparseOperatorList& op) {
-                auto sop = op.to_operator();
-                return apply_operator_lin(sop, v);
-            },
-            "Apply an operator to this SparseState and return a new SparseState")
-        .def(
             "apply_antiherm",
             [](const SparseState& v, const SparseOperator& op) {
                 return apply_operator_antiherm(op, v);
-            },
-            "Apply the antihermitian combination of the operator (op - op^dagger) to this "
-            "SparseState and return a new SparseState")
-        .def(
-            "apply_antiherm",
-            [](const SparseState& v, const SparseOperatorList& op) {
-                auto sop = op.to_operator();
-                return apply_operator_antiherm(sop, v);
             },
             "Apply the antihermitian combination of the operator (op - op^dagger) to this "
             "SparseState and return a new SparseState")
@@ -94,7 +79,7 @@ void export_sparse_state_api(nb::module_& m) {
 
     m.def("apply_number_projector", &apply_number_projector);
 
-    m.def("get_projection", &get_projection);
+    // m.def("get_projection", &get_projection);
 
     // there's already a function called spin2, overload the spin2 function
     m.def(
