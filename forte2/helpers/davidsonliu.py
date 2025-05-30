@@ -35,31 +35,40 @@ class DavidsonLiuSolver:
 
         # fixed subspace and collapse dims
         self.collapse_size = min(collapse_per_root * nroot, size)
-        self.subspace_size = min(subspace_per_root * nroot, size)
+        self.max_subspace_size = min(subspace_per_root * nroot, size)
 
         # allocate all arrays as (size, subspace_size) so each column is a vector
-        self.b = np.zeros((size, self.subspace_size))  # basis
-        self.sigma = np.zeros((size, self.subspace_size))  # H·basis
-        self.r = np.zeros((size, self.subspace_size))  # residuals
-        self.h_diag = None  # shape (size,)
+        self.b = np.zeros((size, self.max_subspace_size))  # basis
+        self.sigma = np.zeros((size, self.max_subspace_size))  # H·basis
+        self.r = np.zeros((size, self.max_subspace_size))  # residuals
+        self.h_diag = None  # matrix diagonal, shape (size,)
 
-        # working mini-space
-        self.G = np.zeros((self.subspace_size, self.subspace_size))
+        ## subspace Hamiltonian and eigenpairs
+        self.G = np.zeros((self.max_subspace_size, self.max_subspace_size))
         # eigenpairs of G
         self.alpha = np.zeros_like(self.G)
-        self.lam = np.zeros(self.subspace_size)
+        self.lam = np.zeros(self.max_subspace_size)
         self.lam_old = np.zeros_like(self.lam)
 
-        # convergence & control
+        ## configuration parameters
+        # convergence tolerance for eigenvalues
         self.e_tol = 1e-12
+        # convergence tolerance for residuals
         self.r_tol = 1e-6
+        # maximum number of iterations
         self.maxiter = 100
+        # The threshold used to discard correction vectors
+        self.schmidt_discard_threshold = 1e-7
+        # The threshold used to guarantee orthogonality among the roots
+        self.schmidt_orthogonality_threshold = 1e-12
 
-        # bookkeeping
+        ## bookkeeping
+        # size of the basis block
         self.basis_size = 0
+        # size of the sigma block
         self.sigma_size = 0
 
-        # function to build sigma block
+        ## function to build sigma block
         self._build_sigma = None
 
     def add_sigma_builder(self, sigma_builder):
@@ -95,6 +104,8 @@ class DavidsonLiuSolver:
         self._proj_out = [np.asarray(v, float) for v in project_out]
 
     def solve(self):
+
+        self._print_information()
 
         # 0. sanity checks
         if self._build_sigma is None:
@@ -160,7 +171,7 @@ class DavidsonLiuSolver:
             max_de = np.max(np.abs(lamr - self.lam_old[: self.nroot]))
             max_r = rnorms.max()
             print(
-                f"Iter {it:3d}  ⟨E⟩={avg_e:.8e}  ΔE={max_de:.3e}  Res={max_r:.3e}  subsp={self.basis_size}"
+                f"Iter {it:3d}  ⟨E⟩={avg_e:20.12f}  max(ΔE)={max_de:20.12f}  max(r)={max_r:20.12f}  basis size={self.basis_size}"
             )
 
             conv_e = np.all(np.abs(lamr - self.lam_old[: self.nroot]) < self.e_tol)
@@ -171,7 +182,7 @@ class DavidsonLiuSolver:
 
             # ——— 5. collapse if needed ———
             if not self.disable_collapse and (
-                self.basis_size + self.nroot > self.subspace_size
+                self.basis_size + self.nroot > self.max_subspace_size
             ):
                 self._collapse(alpha)
                 continue
@@ -195,7 +206,7 @@ class DavidsonLiuSolver:
             # 6c. re-orthonormalize trial vectors
             Qc, _ = qr(R0, mode="reduced")
 
-            to_add = min(self.nroot, self.subspace_size - self.basis_size)
+            to_add = min(self.nroot, self.max_subspace_size - self.basis_size)
             if to_add == 0:
                 break
             print(
@@ -250,3 +261,12 @@ class DavidsonLiuSolver:
             print(f"S = {b.T @ b}")
             raise ValueError("Columns of b are not orthonormal.")
         print("Orthonormality check passed.")
+
+    def _print_information(self):
+        print(f"\nDavidson-Liu solver configuration:")
+        print(f"  Size of the space:        {self.size}")
+        print(f"  Number of roots:          {self.nroot}")
+        print(f"  Collapse size:            {self.collapse_size}")
+        print(f"  Maximum subspace size:    {self.max_subspace_size}")
+        print(f"  Disable collapse:         {self.disable_collapse}")
+        print(f"  Maximum iterations:       {self.maxiter}\n")
