@@ -16,7 +16,7 @@ namespace forte2 {
 /// This avoids the need to reallocate memory for each new buffer.
 /// Here is an example of how to use the buffer class:
 /// @code
-/// forte::Buffer<int> buffer(10);
+/// forte2::Buffer<int> buffer(10);
 /// for (int i = 0; i < 10; ++i) {
 ///     buffer.push_back(i);
 /// }
