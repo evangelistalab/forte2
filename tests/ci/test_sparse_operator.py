@@ -454,7 +454,7 @@ def test_sparse_operator_list_add():
 
 
 def test_sparse_operator_hamiltonian():
-    from forte2.jkbuilder.jkbuilder import DFFockBuilder
+    from forte2.jkbuilder.jkbuilder import FockBuilder
 
     erhf = -76.021765988335
     xyz = """
@@ -483,15 +483,11 @@ def test_sparse_operator_hamiltonian():
         system.basis, system.atoms
     )
     C = scf.C[0]
-    oei_mo = np.einsum("pq,pi,qj->ij", oei, C, C, optimize=True)
-    jkbuilder = DFFockBuilder(system)
-    eri_ab = jkbuilder.two_electron_integrals_block(C)
-    eri_aa = eri_ab.copy()
-    eri_aa -= eri_aa.swapaxes(2, 3)
+    oei = np.einsum("pq,pi,qj->ij", oei, C, C, optimize=True)
+    jkbuilder = FockBuilder(system)
+    eri = jkbuilder.two_electron_integrals_block(C)
 
-    ham = forte2.sparse_operator_hamiltonian(
-        scalar, oei_mo, oei_mo, eri_aa, eri_ab, eri_aa
-    )
+    ham = forte2.sparse_operator_hamiltonian(scalar, oei, eri)
     Href = forte2.apply_op(ham, hf_state)
     energy = forte2.overlap(hf_state, Href).real
     print(f"Energy from SparseOperator Hamiltonian: {energy}")

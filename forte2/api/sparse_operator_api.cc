@@ -331,7 +331,7 @@ void export_sparse_operator_api(nb::module_& m) {
     // });
 
     m.def("sparse_operator_hamiltonian", &sparse_operator_hamiltonian,
-          "Create a SparseOperator object representing the Hamiltonian from integrals", "nmo"_a,
+          "Create a SparseOperator object representing the Hamiltonian from integrals",
           "scalar_energy"_a, "one_electron_integrals"_a, "two_electron_integrals"_a,
           "screen_thresh"_a = 1.0e-12);
 }
