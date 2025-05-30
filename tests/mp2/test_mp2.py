@@ -2,7 +2,7 @@ import forte2
 import numpy as np
 import time
 
-from forte2.jkbuilder.jkbuilder import DFFockBuilder
+from forte2.jkbuilder.jkbuilder import FockBuilder
 from forte2.scf import RHF
 
 import pytest
@@ -31,7 +31,7 @@ def test_mp2():
 
     assert scf.E == approx(energy_scf)
 
-    jkbuilder = DFFockBuilder(system)
+    jkbuilder = FockBuilder(system)
     nocc = scf.na
     nvir = scf.nbf - nocc
     Co = scf.C[0][:, :nocc]
