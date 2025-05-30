@@ -68,7 +68,7 @@ class SelectedCI(MOsMixin, SystemMixin):
         ints = MOIntegrals(self.C[0], self.orbitals, self.core_orbitals)
         ints.run(self.system)
 
-        H = forte2.sparse_operator_hamiltonian(self.norb, ints.E, ints.H, ints.V)
+        H = forte2.sparse_operator_hamiltonian(ints.E, ints.H, ints.V)
         ndocc = min(self.state.na, self.state.nb)
         nsocc = max(self.state.na, self.state.nb) - ndocc
         aufbau = forte2.Determinant("2" * ndocc + "1" * nsocc)
