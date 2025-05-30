@@ -430,8 +430,8 @@ def test_sparse_operator_list_reverse():
     assert len(sopl) == 2
     assert reversed_sopl[0] == 2.0
     assert reversed_sopl[1] == 1.0
-    # assert reversed_sopl(0)[0].str() == "[0a+ 0a-]"
-    # assert reversed_sopl(1)[0].str() == "[1a+ 1a-]"
+    assert reversed_sopl(0)[0].str() == "[0a+ 0a-]"
+    assert reversed_sopl(1)[0].str() == "[1a+ 1a-]"
 
 
 def test_sparse_operator_list_remove():
@@ -449,8 +449,8 @@ def test_sparse_operator_list_add():
     sop2.add("[0a+ 0a-]", 1.0)
     sop3 = sop1 + sop2
     assert len(sop3) == 2
-    # assert sop3(0)[0].str() == "[1a+ 1a-]"
-    # assert sop3(1)[0].str() == "[0a+ 0a-]"
+    assert sop3(0)[0].str() == "[1a+ 1a-]"
+    assert sop3(1)[0].str() == "[0a+ 0a-]"
 
 
 def test_sparse_operator_hamiltonian():

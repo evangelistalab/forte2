@@ -41,8 +41,6 @@ void export_sq_operator_string_api(nb::module_& m) {
         .def("__eq__", &SQOperatorString::operator==, "Check if two operator strings are equal")
         .def("__lt__", &SQOperatorString::operator<,
              "Check if an operator string is less than another")
-        .def("__repr__", &SQOperatorString::str,
-             "Get the string representation of the operator string")
         .def(
             "__mul__",
             [](const SQOperatorString& sqop, const sparse_scalar_t& scalar) {
