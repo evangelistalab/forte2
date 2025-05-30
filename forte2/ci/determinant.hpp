@@ -169,7 +169,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     }
 
     void set(std::initializer_list<size_t> alfa_list, std::initializer_list<size_t> beta_list) {
-        zero();
+        clear();
         for (auto i : alfa_list) {
             set_na(i, true);
         }
@@ -648,7 +648,7 @@ template <size_t N> std::ostream& operator<<(std::ostream& os, const Determinant
 
 template <size_t N> void set_str(DeterminantImpl<N>& d, const std::string& str) {
     // zero all the bits and set the bits passed as a string
-    d.zero();
+    d.clear();
     if (str.size() <= DeterminantImpl<N>::nbits) {
         size_t k = 0;
         for (auto c : str) {

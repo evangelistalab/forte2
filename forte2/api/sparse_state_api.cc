@@ -2,6 +2,7 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/complex.h>
 #include <nanobind/stl/unordered_map.h>
+#include <nanobind/stl/vector.h> 
 #include <nanobind/make_iterator.h>
 
 #include "ci/sparse_state.h"
