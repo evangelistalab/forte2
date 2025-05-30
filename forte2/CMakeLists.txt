@@ -73,6 +73,7 @@ nanobind_add_module(
   api/sparse_operator_api.cc
   api/sparse_state_api.cc
   api/sparse_exp_api.cc
+  api/sq_operator_string_api.cc
   helpers/string_algorithms.cc
   helpers/combinatorial.cc
   ints/basis.cc
