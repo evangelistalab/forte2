@@ -67,10 +67,11 @@ nanobind_add_module(
 
   # Source code goes here
   api/forte2_api.cc
-  api/integrals_api.cc
+  api/ci_api.cc
   api/determinant_api.cc
   api/determinant_helpers_api.cc
   api/sparse_operator_api.cc
+  api/integrals_api.cc
   api/sparse_state_api.cc
   helpers/string_algorithms.cc
   helpers/combinatorial.cc
@@ -80,6 +81,10 @@ nanobind_add_module(
   ints/one_electron.cc
   ints/two_electron.cc
   ints/value_at_points.cc
+  ci/ci_string_lists.cc
+  ci/ci_string_lists_makers.cc
+  ci/ci_string_address.cc
+  ci/ci_occupation.cc
   ci/determinant_helpers.cc
   ci/sparse_operator.cc
   ci/sparse_operator_hamiltonian.cc

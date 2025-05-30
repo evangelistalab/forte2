@@ -1,7 +1,5 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
-// #include <nanobind/stl/vector.h>
-// #include <nanobind/stl/pair.h>
 
 #include "ci/determinant.h"
 
@@ -36,7 +34,9 @@ void export_determinant_api(nb::module_& m) {
         .def_static("zero", &Determinant::zero)
         .def("__eq__", [](const Determinant& a, const Determinant& b) { return a == b; })
         .def("__lt__", [](const Determinant& a, const Determinant& b) { return a < b; })
-        .def("__repr__", [](Determinant& d) { return str(d); })
+        .def(
+            "__repr__", [](Determinant& d, int n) { return str(d, n); }, "n"_a = 0,
+            "String representation of the determinant with n orbitals")
         .def("set_na", &Determinant::set_na)
         .def("set_nb", &Determinant::set_nb)
         .def("na", &Determinant::na)
