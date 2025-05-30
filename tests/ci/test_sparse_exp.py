@@ -42,15 +42,6 @@ def test_sparse_exp_1():
     assert wfn[Determinant("+0-2")] == pytest.approx(-0.0077, abs=1e-9)
     assert wfn[Determinant("-0+2")] == pytest.approx(-0.0077, abs=1e-9)
 
-    wfn = exp.apply_op(op, ref)
-    assert wfn[Determinant("2200")] == pytest.approx(1.0, abs=1e-9)
-    assert wfn[Determinant("0220")] == pytest.approx(0.16, abs=1e-9)
-    assert wfn[Determinant("+2-0")] == pytest.approx(-0.1, abs=1e-9)
-    assert wfn[Determinant("-2+0")] == pytest.approx(-0.1, abs=1e-9)
-    assert wfn[Determinant("2002")] == pytest.approx(-0.077, abs=1e-9)
-    assert wfn[Determinant("+0-2")] == pytest.approx(-0.0077, abs=1e-9)
-    assert wfn[Determinant("-0+2")] == pytest.approx(-0.0077, abs=1e-9)
-
     ### Test the exponential operator with antihermitian operator ###
     op = forte2.SparseOperator()
     ref = forte2.SparseState({Determinant("22"): 1.0})
@@ -127,7 +118,6 @@ def test_sparse_exp_2():
     # when the operator all commute with each other
     norb = 10
     nocc = 5
-    nvir = norb - nocc
     amp = 0.1
 
     # Create a random operator
@@ -171,7 +161,7 @@ def test_sparse_exp_2():
     exp = forte2.SparseFactExp()
     B = exp.apply_op(oplist, ref)
     end = time.time()
-    print(f"Time to apply operator: {end - start:.8f} (SparsFactExp)")
+    print(f"Time to apply operator: {end - start:.8f} (SparseFactExp)")
 
     # Check that the two methods give the same result
     AmB = forte2.SparseState(A)

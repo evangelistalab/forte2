@@ -422,6 +422,37 @@ def test_sparse_operator_product():
     assert sop3.str() == sop3_test.str()
 
 
+def test_sparse_operator_list_reverse():
+    sopl = forte2.SparseOperatorList()
+    sopl.add("[1a+ 1a-]", 1.0)
+    sopl.add("[0a+ 0a-]", 2.0)
+    reversed_sopl = sopl.reverse()
+    assert len(sopl) == 2
+    assert reversed_sopl[0] == 2.0
+    assert reversed_sopl[1] == 1.0
+    # assert reversed_sopl(0)[0].str() == "[0a+ 0a-]"
+    # assert reversed_sopl(1)[0].str() == "[1a+ 1a-]"
+
+
+def test_sparse_operator_list_remove():
+    sopl = forte2.SparseOperatorList()
+    sopl.add("[1a+ 1a-]", 1.0)
+    sopl.add("[0a+ 0a-]", 1.0)
+    sopl.remove("[1a+ 1a-]")
+    assert len(sopl) == 1
+
+
+def test_sparse_operator_list_add():
+    sop1 = forte2.SparseOperatorList()
+    sop1.add("[1a+ 1a-]", 1.0)
+    sop2 = forte2.SparseOperatorList()
+    sop2.add("[0a+ 0a-]", 1.0)
+    sop3 = sop1 + sop2
+    assert len(sop3) == 2
+    # assert sop3(0)[0].str() == "[1a+ 1a-]"
+    # assert sop3(1)[0].str() == "[0a+ 0a-]"
+
+
 def test_sparse_operator_hamiltonian():
     from forte2.jkbuilder.jkbuilder import DFFockBuilder
 
@@ -474,4 +505,7 @@ if __name__ == "__main__":
     test_sparse_operator_creation()
     test_sparse_operator()
     test_sparse_operator_product()
+    test_sparse_operator_list_reverse()
+    test_sparse_operator_list_remove()
+    test_sparse_operator_list_add()
     test_sparse_operator_hamiltonian()

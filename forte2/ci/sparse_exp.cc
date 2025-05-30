@@ -6,9 +6,6 @@
 
 namespace forte2 {
 
-size_t num_attempts_ = 0;
-size_t num_success_ = 0;
-
 SparseExp::SparseExp(int maxk, double screen_thresh) : maxk_(maxk), screen_thresh_(screen_thresh) {}
 
 SparseState SparseExp::apply_op(const SparseOperator& sop, const SparseState& state,
