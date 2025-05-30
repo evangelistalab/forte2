@@ -1,10 +1,17 @@
+from dataclasses import dataclass, field
+
 import numpy as np
 
 import forte2
 
 from forte2.scf import RHF
-from forte2.jkbuilder.jkbuilder import DFFockBuilder
+from forte2.jkbuilder import FockBuilder
+from forte2.jkbuilder import MOIntegrals
+from forte2.state.state import State
 from forte2 import ints
+
+from forte2.helpers.mixins import MOsMixin
+from forte2.helpers.mixins import SystemMixin
 
 
 def parse_state(state: dict) -> tuple:
@@ -36,84 +43,92 @@ def parse_state(state: dict) -> tuple:
     return (na, nb, multiplicity, twoms)
 
 
-class Integrals:
-    def __init__(self, method, orbitals, core=None):
-        self.orbitals = orbitals
-        self.method = method
-        self.core = core
+@dataclass
+class SelectedCI(MOsMixin, SystemMixin):
+    orbitals: list[int] | list[list[int]]
+    norb: int = field(init=False)
+    state: State
+    nroot: int
+    core_orbitals: list[int] = field(default_factory=list)
+    max_iter: int = 2
 
-    def run(self, system):
-        jkbuilder = DFFockBuilder(system)
-        C = self.method.C[0][:, self.orbitals]
-
-        self.basis = system.basis
-        T = ints.kinetic(system.basis, system.basis)
-        V = ints.nuclear(system.basis, system.basis, system.atoms)
-        self.H = np.einsum("mi,mn,nj->ij", C, T + V, C)
-        if self.core:
-            Ccore = self.method.C[0][:, self.core]
-            J, K = jkbuilder.build_JK([Ccore])
-            Jcore = J[0]
-            Kcore = K[0]
-            self.Ecore = forte2.ints.nuclear_repulsion(system.atoms)
-            self.Ecore += 2.0 * np.einsum("mi,mn,ni->", Ccore, T + V, Ccore)
-            self.Ecore += np.einsum("mi,mn,ni->", Ccore, 2 * Jcore - Kcore, Ccore)
-
-            self.H += np.einsum("mi,mn,nj->ij", C, 2 * Jcore - Kcore, C)
-
-        self.V = jkbuilder.two_electron_integrals_block(C)
-
-
-class SelectedCI:
-    def __init__(self, method, orbitals, core, state, nroot):
-        self.method = method
-        self.orbitals = orbitals
-        self.core = core
+    def __post_init__(self):
         self.norb = len(self.orbitals)
-        na, nb, multiplicity, twoms = parse_state(state)
-        self.na = na
-        self.nb = nb
-        self.multiplicity = multiplicity
-        self.twoms = twoms
-        self.nroot = nroot
 
-    def run(self, system):
+    def __call__(self, method):
+        SystemMixin.copy_from_upstream(self, method)
+        MOsMixin.copy_from_upstream(self, method)
+
+        return self
+
+    def run(self):
         print("\nSelected configuration interaction")
 
-        state = forte2.SparseState()
-        dets = forte2.hilbert_space(self.norb, self.na, self.nb)
-        ints = Integrals(self.method, self.orbitals, self.core)
-        ints.run(system)
-        print(ints.Ecore + 2 * ints.H[0, 0] + ints.V[0, 0, 0, 0])
+        # dets = forte2.hilbert_space(self.norb, self.state.na, self.state.nb)
+        ints = MOIntegrals(self.C[0], self.orbitals, self.core_orbitals)
+        ints.run(self.system)
 
-        H = forte2.sparse_operator_hamiltonian(self.norb, ints.Ecore, ints.H, ints.V)
-        Hmat = H.matrix(dets)
-        print("Hamiltonian matrix size:", Hmat)
-        eig = np.linalg.eigh(Hmat)[0]
-        print("Eigenvalues:", eig)
+        H = forte2.sparse_operator_hamiltonian(self.norb, ints.E, ints.H, ints.V)
+        ndocc = min(self.state.na, self.state.nb)
+        nsocc = max(self.state.na, self.state.nb) - ndocc
+        aufbau = forte2.Determinant("2" * ndocc + "1" * nsocc)
+        self.P = forte2.SparseState(aufbau, 1.0)
+        # Hmat = H.matrix(dets)
+        # eig = np.linalg.eigh(Hmat)[0]
+        # print("Eigenvalues:", eig)
+
+        # print(eig[0] + 1.096071975854)
+
+        # pre_iter_preparation()
+
+        for cycle in range(self.max_iter):
+            print(f"\nCycle {cycle + 1}")
+            # Step 1. Diagonalize the Hamiltonian in the P space
+            self._diagonalize_P_space()
+
+            # # Step 2. Find determinants in the Q space
+            # find_q_space()
+
+            # # Step 3. Diagonalize the Hamiltonian in the P + Q space
+            # diagonalize_PQ_space()
+
+            # # Step 4. Check convergence and break if needed
+            # if check_convergence():
+            #     break
+
+            # # Step 5. Prune the P + Q space to get an updated P space
+            # prune_PQ_to_P()
+
+    # if one_cycle_:
+    #     diagonalize_PQ_space()
+
+    # # Post-iter process
+    # post_iter_process()
+
+    def _diagonalize_P_space(self):
+        """Diagonalize the Hamiltonian in the P space."""
+        print(str(self.P))
 
 
 def test_sci1():
-    xyz = """
-    O            0.000000000000     0.000000000000    -0.061664597388
-    H            0.000000000000    -0.711620616369     0.489330954643
-    H            0.000000000000     0.711620616369     0.489330954643
+    xyz = f"""
+    H 0.0 0.0 0.0
+    H 0.0 0.0 {0.529177210903 * 2}
     """
 
-    system = forte2.System(xyz=xyz, basis="cc-pVDZ", auxiliary_basis="cc-pVTZ-JKFIT")
+    system = forte2.System(xyz=xyz, basis="sto-6g", auxiliary_basis="cc-pVTZ-JKFIT")
 
     scf = RHF(charge=0)(system)
     scf.econv = 1e-12
     scf.run()
 
     sci = SelectedCI(
-        method=scf,
-        orbitals=[4, 5],
-        core=range(4),
-        state={"nel": 2, "multiplicity": 1, "ms": 0.0},
+        orbitals=[0, 1],
+        state=State(nel=2, multiplicity=1, ms=0.0),
         nroot=1,
-    )
-    sci.run(system)
+    )(scf)
+
+    sci.run()
 
 
 if __name__ == "__main__":
