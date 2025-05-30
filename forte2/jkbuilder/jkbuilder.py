@@ -5,7 +5,7 @@ from forte2 import ints
 from forte2.system import ModelSystem
 
 
-class DFFockBuilder:
+class FockBuilder:
     def __init__(self, system):
         if isinstance(system, ModelSystem):
             # special handling for ModelSystem
@@ -75,6 +75,23 @@ class DFFockBuilder:
         return J, K
 
     def two_electron_integrals_gen_block(self, C1, C2, C3, C4, antisymmetrize=False):
+        """Compute the two-electron integrals for a given set of orbitals. This method is
+        general and can handle different sets of orbitals for each index (p, q, r, s).
+
+        The resulting integrals are stored in a 4D array with the following convention:
+            V[p,q,r,s] = <pq|rs> = ∫∫ φ*_p(r1) φ*_q(r2) (1/r12) φ_r(r1) φ_s(r2) dr1 dr2
+
+        Args:
+            C1 (ndarray): Coefficient matrix for the first set of orbitals (index p).
+            C2 (ndarray): Coefficient matrix for the second set of orbitals (index q).
+            C3 (ndarray): Coefficient matrix for the third set of orbitals (index r).
+            C4 (ndarray): Coefficient matrix for the fourth set of orbitals (index s).
+            antisymmetrize (bool): Whether to antisymmetrize the integrals.
+        Returns:
+            V (ndarray): The two-electron integrals in the form of a 4D array.
+                If antisymmetrize is True, the integrals are antisymmetrized as:
+                V[p,q,r,s] = <pq||rs> = <pq|rs> - <pq|rs>
+        """
         V = np.einsum(
             "Pmn,Prs,mi,rj,nk,sl->ijkl",
             self.B,
@@ -90,4 +107,17 @@ class DFFockBuilder:
         return V
 
     def two_electron_integrals_block(self, C, antisymmetrize=False):
+        """Compute the two-electron integrals for a given set of orbitals.
+
+        The resulting integrals are stored in a 4D array with the following convention:
+            V[p,q,r,s] = <pq|rs> = ∫∫ φ*_p(r1) φ*_q(r2) (1/r12) φ_r(r1) φ_s(r2) dr1 dr2
+
+        Args:
+            C (ndarray): Coefficient matrix for the set of orbitals.
+            antisymmetrize (bool): Whether to antisymmetrize the integrals.
+        Returns:
+            V (ndarray): The two-electron integrals in the form of a 4D array.
+                If antisymmetrize is True, the integrals are antisymmetrized as:
+                V[p,q,r,s] = <pq||rs> = <pq|rs> - <pq|rs>
+        """
         return self.two_electron_integrals_gen_block(C, C, C, C, antisymmetrize)

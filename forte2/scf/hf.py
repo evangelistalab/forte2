@@ -5,8 +5,8 @@ import scipy as sp
 import copy
 
 import forte2
-from forte2.jkbuilder.jkbuilder import DFFockBuilder
-from forte2.helpers.mixins import MOs
+from forte2.jkbuilder import FockBuilder
+from forte2.helpers.mixins import MOsMixin
 from forte2.helpers.matrix_functions import givens_rotation
 from .initial_guess import minao_initial_guess, core_initial_guess
 
@@ -76,7 +76,7 @@ class SCFMixin:
         Vnn = self._get_nuclear_repulsion()
         S = self._get_overlap()
         H = self._get_hcore()
-        fock_builder = DFFockBuilder(self.system)
+        fock_builder = FockBuilder(self.system)
 
         if self.C is None:
             self.C = self._initial_guess(H, S, guess_type=self.guess_type)
@@ -153,7 +153,7 @@ class SCFMixin:
 
 
 @dataclass
-class RHF(SCFMixin, MOs):
+class RHF(SCFMixin, MOsMixin):
 
     def __call__(self, system):
         self = super().__call__(system)
@@ -205,13 +205,15 @@ class RHF(SCFMixin, MOs):
 
 
 @dataclass
-class UHF(SCFMixin, MOs):
-    ms: float = 0.
+class UHF(SCFMixin, MOsMixin):
+    ms: float = 0.0
     guess_mix: bool = False  # only used if ms == 0
 
     def __call__(self, system):
         self = super().__call__(system)
-        assert np.isclose(int(round(self.ms*2)), self.ms*2), "ms must be an integer multiple of 0.5."
+        assert np.isclose(
+            int(round(self.ms * 2)), self.ms * 2
+        ), "ms must be an integer multiple of 0.5."
         self.twicems = int(round(self.ms * 2))
         self.na = int(round(self.nel + self.twicems) / 2)
         self.nb = int(round(self.nel - self.twicems) / 2)
@@ -292,12 +294,14 @@ class UHF(SCFMixin, MOs):
 
 
 @dataclass
-class ROHF(SCFMixin, MOs):
-    ms: float = 0.
+class ROHF(SCFMixin, MOsMixin):
+    ms: float = 0.0
 
     def __call__(self, system):
         self = super().__call__(system)
-        assert np.isclose(int(round(self.ms*2)), self.ms*2), "ms must be an integer multiple of 0.5."
+        assert np.isclose(
+            int(round(self.ms * 2)), self.ms * 2
+        ), "ms must be an integer multiple of 0.5."
         self.twicems = int(round(self.ms * 2))
         self.na = int(round(self.nel + self.twicems) / 2)
         self.nb = int(round(self.nel - self.twicems) / 2)
@@ -357,13 +361,15 @@ class ROHF(SCFMixin, MOs):
 
 
 @dataclass
-class CUHF(SCFMixin, MOs):
-    ms: float = 0.
+class CUHF(SCFMixin, MOsMixin):
+    ms: float = 0.0
     guess_mix: bool = False  # only used if ms == 0
 
     def __call__(self, system):
         self = super().__call__(system)
-        assert np.isclose(int(round(self.ms*2)), self.ms*2), "ms must be an integer multiple of 0.5."
+        assert np.isclose(
+            int(round(self.ms * 2)), self.ms * 2
+        ), "ms must be an integer multiple of 0.5."
         self.twicems = int(round(self.ms * 2))
         self.na = int(round(self.nel + self.twicems) / 2)
         self.nb = int(round(self.nel - self.twicems) / 2)
@@ -417,7 +423,7 @@ class CUHF(SCFMixin, MOs):
 
 
 @dataclass
-class GHF(SCFMixin, MOs):
+class GHF(SCFMixin, MOsMixin):
     """
     Generalized Hartree-Fock (GHF) method.
     The GHF spinor basis is a direct product of the atomic basis and {|alpha>, |beta>}

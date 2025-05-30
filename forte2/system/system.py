@@ -8,6 +8,8 @@ from forte2.x2c import get_hcore_x2c
 import numpy as np
 from numpy.typing import NDArray
 
+from copy import deepcopy
+
 
 @dataclass
 class System:
