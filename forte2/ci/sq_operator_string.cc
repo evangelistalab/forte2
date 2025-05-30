@@ -703,7 +703,7 @@ void SQOperatorProductComputer::commutator(
 
 void compute_sign_mask(const Determinant& cre, const Determinant& ann, Determinant& sign_mask,
                        Determinant& idx) {
-    sign_mask.zero();
+    sign_mask.clear();
     idx = ann; // temp is for looping over the operators
     for (size_t i = idx.fast_find_and_clear_first_one(0); i != ~0ULL;
          i = idx.fast_find_and_clear_first_one(i)) {
