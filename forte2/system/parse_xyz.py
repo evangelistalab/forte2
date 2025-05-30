@@ -5,7 +5,7 @@ import numpy as np
 from .atom_data import ATOM_SYMBOL_TO_Z, ANGSTROM_TO_BOHR
 
 
-def parse_xyz(xyz):
+def parse_xyz(xyz, unit):
     # Parse an XYZ string into a list of atoms
     atoms = []
     for line in xyz.split("\n"):
@@ -32,7 +32,8 @@ def parse_xyz(xyz):
 
         parts = m.groups()
         atomic_number = ATOM_SYMBOL_TO_Z[parts[0].upper()]
-        coords = np.array([float(x) * ANGSTROM_TO_BOHR for x in parts[1:]])
+        conv = 1.0 if unit == "bohr" else ANGSTROM_TO_BOHR
+        coords = np.array([float(x) * conv for x in parts[1:]])
         atoms.append((atomic_number, coords))
 
     return atoms
