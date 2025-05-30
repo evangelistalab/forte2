@@ -27,7 +27,7 @@ void export_sq_operator_string_api(nb::module_& m) {
              "Get the non-number component of the operator string")
         .def("__str__", &SQOperatorString::str,
              "Get the string representation of the operator string")
-        .def("__repr___", &SQOperatorString::str,
+        .def("__repr__", &SQOperatorString::str,
              "Get the string representation of the operator string")
         .def("latex", &SQOperatorString::latex,
              "Get the LaTeX representation of the operator string")
@@ -41,8 +41,6 @@ void export_sq_operator_string_api(nb::module_& m) {
         .def("__eq__", &SQOperatorString::operator==, "Check if two operator strings are equal")
         .def("__lt__", &SQOperatorString::operator<,
              "Check if an operator string is less than another")
-        .def("__str__", &SQOperatorString::str,
-             "Get the string representation of the operator string")
         .def("__repr__", &SQOperatorString::str,
              "Get the string representation of the operator string")
         .def(
