@@ -5,7 +5,7 @@ import forte2
 from forte2.state.state import State
 from forte2.helpers.mixins import MOsMixin, SystemMixin
 
-from forte2.jkbuilder.mointegrals import MOIntegrals
+from forte2.jkbuilder import RestrictedMOIntegrals
 from forte2.system.system import System
 
 
@@ -17,6 +17,9 @@ class CI(MOsMixin, SystemMixin):
     core_orbitals: list[int] = field(default_factory=list)
 
     def __call__(self, method):
+        if not method.executed:
+            method.run()
+
         SystemMixin.copy_from_upstream(self, method)
         MOsMixin.copy_from_upstream(self, method)
 
@@ -36,8 +39,9 @@ class CI(MOsMixin, SystemMixin):
             f"\nRunning CI with orbitals: {self.orbitals}, state: {self.state}, nroot: {self.nroot}"
         )
         flattened_orbitals = [orb for sublist in self.orbitals for orb in sublist]
-        ints = MOIntegrals(self.C[0], flattened_orbitals, self.core_orbitals)
-        ints.run(self.system)
+        ints = RestrictedMOIntegrals(
+            self.system, self.C[0], flattened_orbitals, self.core_orbitals
+        )
 
         # 1. Create the string lists
         orbital_spaces = [[0] * len(x) for x in self.orbitals]
@@ -59,7 +63,7 @@ class CI(MOsMixin, SystemMixin):
         # TODO: optionally create the spin adapter
 
         # 2. Allocate memory for the CI vectors
-        forte2.GenCIVector.allocate_temp_space(ci_strings, print_)
+        # forte2.GenCIVector.allocate_temp_space(ci_strings, print_)
 
         # 3. Build initial guess vectors
 
