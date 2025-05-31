@@ -6,6 +6,7 @@
 #include <libint2/shell.h>
 
 #include "helpers/ndarray.h"
+
 namespace forte2 {
 class Basis {
   public:
@@ -55,14 +56,22 @@ class Basis {
     std::vector<std::pair<std::size_t, std::size_t>> center_first_and_last() const;
 
   private:
-    std::vector<libint2::Shell> shells_;
-    size_t size_ = 0;      // total number of basis functions
-    size_t max_nprim_ = 0; // max number of primitives in shells
-    int max_l_ = 0;        // max angular momentum of shells
+    std::vector<libint2::Shell> shells_; // vector of shells in the basis set
+    size_t size_ = 0;                    // total number of basis functions
+    size_t max_nprim_ = 0;               // max number of primitives in shells
+    int max_l_ = 0;                      // max angular momentum of shells
     std::string name_ = "unnamed basis"; // name of the basis set
 };
 
+/// @brief Evaluate a shell at a given point in space.
+/// @param shell The shell to evaluate.
+/// @param point The point in space (x, y, z) at which to evaluate the shell.
+/// @param buffer A pointer to a buffer where the results will be stored.
 void evaluate_shell(const libint2::Shell& shell, const std::array<double, 3>& point,
                     double* buffer);
+
+/// @brief The atomic orbital label for a given angular momentum (l) and index (idx) matching the
+/// forte2/libint2 convention.
+std::string shell_label(int l, int idx);
 
 } // namespace forte2

@@ -16,6 +16,15 @@ class CI(MOsMixin, SystemMixin):
     nroot: int
     core_orbitals: list[int] = field(default_factory=list)
 
+    # The number of guess vectors for each root
+    guess_per_root: int = 2
+    # The number of determinants per guess vector
+    ndets_per_guess: int = 10
+    # The number of roots to collapse per root
+    collapse_per_root: int = 2
+    # The number of subspace vectors per root
+    max_subspace_per_root: int = 4
+
     def __call__(self, method):
         if not method.executed:
             method.run()
@@ -38,20 +47,23 @@ class CI(MOsMixin, SystemMixin):
         print(
             f"\nRunning CI with orbitals: {self.orbitals}, state: {self.state}, nroot: {self.nroot}"
         )
+        # Generate the integrals with all the orbital spaces flattened
         flattened_orbitals = [orb for sublist in self.orbitals for orb in sublist]
-        ints = RestrictedMOIntegrals(
+        self.ints = RestrictedMOIntegrals(
             self.system, self.C[0], flattened_orbitals, self.core_orbitals
         )
 
         # 1. Create the string lists
-        orbital_spaces = [[0] * len(x) for x in self.orbitals]
+        orbital_symmetry = [[0] * len(x) for x in self.orbitals]
+        gas_min = []
+        gas_max = []
         ci_strings = forte2.CIStrings(
             self.state.na,
             self.state.nb,
             self.state.symmetry,
-            orbital_spaces,
-            [],
-            [],
+            orbital_symmetry,
+            gas_min,
+            gas_max,
         )
 
         print(f"\nNumber of α electrons: {ci_strings.na}")
@@ -61,11 +73,62 @@ class CI(MOsMixin, SystemMixin):
         print(f"Number of determinants: {ci_strings.ndet}")
 
         # TODO: optionally create the spin adapter
+        # local_timer t;
+        # startup();
 
         # 2. Allocate memory for the CI vectors
-        # forte2.GenCIVector.allocate_temp_space(ci_strings, print_)
+        forte2.CIVector.allocate_temp_space(ci_strings)
+
+        C = forte2.CIVector(ci_strings)
+        T = forte2.CIVector(ci_strings)
+
+        det_size = ci_strings.ndet
+        # basis_size = spin_adapt_ ? spin_adapter_->ncsf() : det_size; TODO:spin_adapter_
+        basis_size = det_size
+
+        # // Create the vectors that stores the b and sigma vectors in the determinant basis
+        # auto b = std::make_shared<psi::Vector>("b", det_size);
+        # auto sigma = std::make_shared<psi::Vector>("sigma", det_size);
+
+        # // Optionally create the vectors that stores the b and sigma vectors in the CSF basis
+        # auto b_basis = b;
+        # auto sigma_basis = sigma;
+
+        # if (spin_adapt_) {
+        #     b_basis = std::make_shared<psi::Vector>("b", basis_size);
+        #     sigma_basis = std::make_shared<psi::Vector>("sigma", basis_size);
+        # }
+
+        # 3. Instantiate and configure solver
+        self.solver = DavidsonLiuSolver(
+            size=basis_size,
+            nroot=self.nroot,
+            collapse_per_root=self.collapse_per_root,
+            subspace_per_root=self.max_subspace_per_root,
+        )
+
+        # Hdiag = form Hamiltonian_diagonal()
+
+        # solver.add_h_diag(np.diag(H))
+        # solver.add_sigma_builder(sigma_builder)
+
+        # 4. Run Davidson
+        # evals, evecs = solver.solve()
+
+        # // if not allocate, create the DL solver
+        # bool first_run = false;
+        # if (dl_solver_ == nullptr) {
+        #     dl_solver_ = std::make_shared<DavidsonLiuSolver>(basis_size, nroot_, collapse_per_root_,
+        #                                                      subspace_per_root_);
+        #     dl_solver_->set_e_convergence(e_convergence_);
+        #     dl_solver_->set_r_convergence(r_convergence_);
+        #     dl_solver_->set_print_level(print_);
+        #     dl_solver_->set_maxiter(maxiter_davidson_);
+        #     first_run = true;
+        # }
 
         # 3. Build initial guess vectors
+        # self._build_initial_guess()
 
         # 4. Run the iterative solver
 
@@ -73,46 +136,12 @@ class CI(MOsMixin, SystemMixin):
 
         # 6. Compute the final energy and properties
 
-    # local_timer t;
-    # startup();
+        forte2.CIVector.release_temp_space()
 
-    # GenCIVector::allocate_temp_space(lists_, print_);
-
-    # C_ = std::make_shared<GenCIVector>(lists_);
-    # T_ = std::make_shared<GenCIVector>(lists_);
-    # C_->set_print(print_);
-
-    # // Compute the size of the determinant space and the basis used by the Davidson solver
-    # size_t det_size = C_->size();
-    # size_t basis_size = spin_adapt_ ? spin_adapter_->ncsf() : det_size;
-
-    # // Create the vectors that stores the b and sigma vectors in the determinant basis
-    # auto b = std::make_shared<psi::Vector>("b", det_size);
-    # auto sigma = std::make_shared<psi::Vector>("sigma", det_size);
-
-    # // Optionally create the vectors that stores the b and sigma vectors in the CSF basis
-    # auto b_basis = b;
-    # auto sigma_basis = sigma;
-
-    # if (spin_adapt_) {
-    #     b_basis = std::make_shared<psi::Vector>("b", basis_size);
-    #     sigma_basis = std::make_shared<psi::Vector>("sigma", basis_size);
-    # }
-
-    # // if not allocate, create the DL solver
-    # bool first_run = false;
-    # if (dl_solver_ == nullptr) {
-    #     dl_solver_ = std::make_shared<DavidsonLiuSolver>(basis_size, nroot_, collapse_per_root_,
-    #                                                      subspace_per_root_);
-    #     dl_solver_->set_e_convergence(e_convergence_);
-    #     dl_solver_->set_r_convergence(r_convergence_);
-    #     dl_solver_->set_print_level(print_);
-    #     dl_solver_->set_maxiter(maxiter_davidson_);
-    #     first_run = true;
-    # }
-
-    # // determine the number of guess vectors
-    # const size_t num_guess_states = std::min(guess_per_root_ * nroot_, basis_size);
+    # def _build_initial_guess(self):
+    #     print("Building initial guess vectors...")
+    #     # determine the number of guess vectors
+    #     self.num_guess_states = min(self.guess_per_root * self.nroot, self.C.size)
 
     # auto Hdiag_vec =
     #     spin_adapt_ ? form_Hdiag_csf(as_ints_, spin_adapter_) : form_Hdiag_det(as_ints_);

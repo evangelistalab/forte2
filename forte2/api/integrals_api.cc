@@ -145,6 +145,21 @@ void export_basis_api(nb::module_& sub_m) {
             oss << "<Basis '" << b.name() << "' with " << b.size() << " basis functions>";
             return oss.str();
         });
+
+    sub_m.def("shell_label", shell_label, "l"_a, "idx"_a,
+              "Returns a label for a given angular momentum (l) and index (idx).");
+
+    sub_m.def(
+        "evaluate_shell",
+        [](const libint2::Shell& shell, const std::array<double, 3>& point) {
+            // Allocate a buffer for the result
+            std::vector<double> buffer(shell.size());
+            // Evaluate the shell at the given point
+            evaluate_shell(shell, point, buffer.data());
+            return buffer;
+        },
+        "shell"_a, "point"_a,
+        "Evaluate the shell at a given point. Returns a list of values for each basis function.");
 }
 
 void export_value_at_points_api(nb::module_& sub_m) {
@@ -184,10 +199,12 @@ Returns
 ndarray, shape = (nb1, nb2)
     Overlap integrals matrix.
 )pbdoc");
-    sub_m.def("overlap", [](const Basis& basis) { return overlap(basis, basis); }, "basis"_a);
+    sub_m.def(
+        "overlap", [](const Basis& basis) { return overlap(basis, basis); }, "basis"_a);
 
     sub_m.def("kinetic", &kinetic, "basis1"_a, "basis2"_a);
-    sub_m.def("kinetic", [](const Basis& basis) { return kinetic(basis, basis); }, "basis"_a);
+    sub_m.def(
+        "kinetic", [](const Basis& basis) { return kinetic(basis, basis); }, "basis"_a);
 
     sub_m.def(
         "nuclear",
@@ -294,7 +311,8 @@ void export_two_electron_api(nb::module_& sub_m) {
         "coulomb_2c",
         [](const Basis& basis1, const Basis& basis2) { return coulomb_2c(basis1, basis2); },
         "basis1"_a, "basis2"_a);
-    sub_m.def("coulomb_2c", [](const Basis& basis) { return coulomb_2c(basis, basis); }, "basis"_a);
+    sub_m.def(
+        "coulomb_2c", [](const Basis& basis) { return coulomb_2c(basis, basis); }, "basis"_a);
 
     sub_m.def(
         "erf_coulomb_3c",

@@ -89,6 +89,8 @@ nanobind_add_module(
   ci/ci_occupation.cc
   ci/determinant_helpers.cc
   ci/sparse_exp.cc
+  ci/ci_vector.cc
+  ci/slater_rules.cc
   ci/sparse_operator.cc
   ci/sparse_operator_hamiltonian.cc
   ci/sparse_state_functions.cc

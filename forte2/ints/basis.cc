@@ -79,4 +79,26 @@ std::vector<std::pair<std::size_t, std::size_t>> Basis::center_first_and_last() 
     return result;
 }
 
+std::string shell_label(int l, int idx) {
+    static const std::vector<std::vector<std::string>> labels{
+        {"s"},
+        {"py", "pz", "px"},
+        {"dxy", "dyz", "dz2", "dxz", "dx2-y2"},
+        {"fy(3x2-y2)", "fxyz", "fyz2", "fz3", "fxz2", "fz(x2-y2)", "fx(x2-3y2)"}};
+    static const std::vector<std::string> general_labels{"s", "p", "d", "f", "g", "h",
+                                                         "i", "j", "k", "l", "m", "n"};
+    // Validate that the provided indices are within the expected ranges.
+    if (l < 0) {
+        throw std::out_of_range("Invalid angular momentum index: " + std::to_string(l));
+    }
+    if (idx < 0) {
+        throw std::out_of_range("Invalid index for angular momentum " + std::to_string(l) + ": " +
+                                std::to_string(idx));
+    }
+    if (l < static_cast<int>(labels.size()) and idx < static_cast<int>(labels[l].size())) {
+        return labels[l][idx];
+    }
+    return general_labels[l] + "(" + std::to_string(idx) + ")";
+}
+
 } // namespace forte2

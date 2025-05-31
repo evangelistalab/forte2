@@ -3,6 +3,7 @@
 
 #include "ci/ci_string_lists.h"
 #include "ci/ci_string_address.h"
+#include "ci/ci_vector.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -24,5 +25,13 @@ void export_ci_strings_api(nb::module_& m) {
     // .def_prop_ro("orbital_symmetry", &CIStrings::orbital_symmetry)
     // .def_prop_ro("gas_min", &CIStrings::gas_min)
     // .def_prop_ro("gas_max", &CIStrings::gas_max);
+}
+
+void export_ci_vector_api(nb::module_& m) {
+    nb::class_<CIVector>(m, "CIVector")
+        .def(nb::init<const CIStrings&>(), "lists"_a)
+        .def_static("allocate_temp_space", &CIVector::allocate_temp_space, "lists"_a,
+                    nb::rv_policy::reference_internal)
+        .def_static("release_temp_space", &CIVector::release_temp_space);
 }
 } // namespace forte2
