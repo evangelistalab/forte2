@@ -5,8 +5,7 @@ import numpy as np
 import forte2
 
 from forte2.scf import RHF
-from forte2.jkbuilder import FockBuilder
-from forte2.jkbuilder import MOIntegrals
+from forte2.jkbuilder import RestrictedMOIntegrals
 from forte2.state.state import State
 from forte2 import ints
 
@@ -65,8 +64,9 @@ class SelectedCI(MOsMixin, SystemMixin):
         print("\nSelected configuration interaction")
 
         # dets = forte2.hilbert_space(self.norb, self.state.na, self.state.nb)
-        ints = MOIntegrals(self.C[0], self.orbitals, self.core_orbitals)
-        ints.run(self.system)
+        ints = RestrictedMOIntegrals(
+            self.system, self.C[0], self.orbitals, self.core_orbitals
+        )
 
         H = forte2.sparse_operator_hamiltonian(ints.E, ints.H, ints.V)
         ndocc = min(self.state.na, self.state.nb)

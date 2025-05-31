@@ -2,7 +2,7 @@ import forte2
 import numpy as np
 import time
 
-from forte2.jkbuilder.jkbuilder import FockBuilder
+from forte2.jkbuilder import FockBuilder
 from forte2.scf import RHF
 
 import pytest

@@ -19,9 +19,11 @@ class System:
     atoms: list[tuple[float, tuple[float, float, float]]] = None
     minao_basis: str = None
     x2c_type: str = None
+    unit: str = "angstrom"
 
     def __post_init__(self):
-        self.atoms = parse_xyz(self.xyz)
+        assert self.unit in ["angstrom", "bohr"], f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'."
+        self.atoms = parse_xyz(self.xyz, self.unit)
         self.basis = build_basis(self.basis, self.atoms)
         self.auxiliary_basis = (
             build_basis(self.auxiliary_basis, self.atoms)

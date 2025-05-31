@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import time
 import numpy as np
 import scipy as sp
@@ -28,6 +28,8 @@ class SCFMixin:
     dconv: float = 1e-6
     maxiter: int = 100
     guess_type: str = "minao"
+
+    executed: bool = field(default=False, init=False)
 
     def __call__(self, system):
         self.system = system
@@ -140,6 +142,7 @@ class SCFMixin:
         end = time.monotonic()
         print(f"{self.method} time: {end - start:.2f} seconds")
 
+        self.executed = True
         return self
 
     def _get_hcore(self):
@@ -171,6 +174,9 @@ class RHF(SCFMixin, MOsMixin):
     def _build_density_matrix(self):
         D = np.einsum("mi,ni->mn", self.C[0][:, : self.na], self.C[0][:, : self.na])
         return [D]
+
+    def Dao(self):
+        return self._build_density_matrix()[0]
 
     def _initial_guess(self, H, S, guess_type="minao"):
         match guess_type:
@@ -235,6 +241,10 @@ class UHF(SCFMixin, MOsMixin):
         D_a = np.einsum("mi,ni->mn", self.C[0][:, : self.na], self.C[0][:, : self.na])
         D_b = np.einsum("mi,ni->mn", self.C[1][:, : self.nb], self.C[1][:, : self.nb])
         return D_a, D_b
+
+    def Dao(self):
+        D_a, D_b = self._build_density_matrix()
+        return D_a + D_b
 
     def _initial_guess(self, H, S, guess_type="minao"):
         C = RHF._initial_guess(self, H, S, guess_type=guess_type)[0]
@@ -316,6 +326,7 @@ class ROHF(SCFMixin, MOsMixin):
     _spin = RHF._spin
     _energy = UHF._energy
     _diis_update = RHF._diis_update
+    Dao = UHF.Dao
 
     def _build_fock(self, H, fock_builder, S):
         Ja, Jb = fock_builder.build_J(self.D)
@@ -386,6 +397,7 @@ class CUHF(SCFMixin, MOsMixin):
     _spin = UHF._spin
     _energy = UHF._energy
     _diis_update = UHF._diis_update
+    Dao = UHF.Dao
 
     def _build_fock(self, H, fock_builder, S):
         F, _ = UHF._build_fock(self, H, fock_builder, S)
@@ -481,6 +493,10 @@ class GHF(SCFMixin, MOsMixin):
         Dba = D[nbf:, :nbf]
         Dbb = D[nbf:, nbf:]
         return Daa, Dab, Dba, Dbb
+
+    def Dao(self):
+        Daa, _, _, Dbb = self._build_density_matrix()
+        return Daa + Dbb
 
     def _initial_guess(self, H, S, guess_type="minao"):
         H_ao = forte2.ints.kinetic(self.system.basis) + forte2.ints.nuclear(

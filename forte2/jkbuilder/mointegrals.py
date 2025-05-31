@@ -1,13 +1,16 @@
+from dataclasses import dataclass, field
+
 import numpy as np
 from numpy.typing import NDArray
 
 from forte2 import ints
 from forte2.jkbuilder.jkbuilder import FockBuilder
+from forte2.system.system import System
 
 
-class MOIntegrals:
-    """Class to compute molecular orbital integrals for a given set of orbitals.
-
+@dataclass
+class RestrictedMOIntegrals:
+    """Class to compute molecular orbital integrals for a given set of restricted orbitals.
 
     Args:
         C (ndarray): The coefficient matrix for the molecular orbitals.
@@ -21,21 +24,22 @@ class MOIntegrals:
         V (ndarray): The two-electron integrals stored in physics convention: V[p,q,r,s] = <pq|rs>
     """
 
-    def __init__(self, C: NDArray, orbitals: list, core_orbitals: list = None) -> None:
-        self.C = C
-        self.orbitals = orbitals
-        self.core_orbitals = core_orbitals
+    system: System
+    C: NDArray
+    orbitals: list
+    core_orbitals: list = field(default_factory=list)
 
-    def run(self, system) -> None:
-        jkbuilder = FockBuilder(system)
+    def __post_init__(self):
+        jkbuilder = FockBuilder(self.system)
         C = self.C[:, self.orbitals]
 
-        self.basis = system.basis
-        T = ints.kinetic(system.basis, system.basis)
-        V = ints.nuclear(system.basis, system.basis, system.atoms)
+        basis = self.system.basis
+        atoms = self.system.atoms
+        T = ints.kinetic(basis)
+        V = ints.nuclear(basis, atoms)
 
         # nuclear repulsion energy contribution to the energy
-        self.E = ints.nuclear_repulsion(system.atoms)
+        self.E = ints.nuclear_repulsion(atoms)
 
         # one-electron contributions to the one-electron integrals
         self.H = np.einsum("mi,mn,nj->ij", C, T + V, C)
@@ -43,10 +47,11 @@ class MOIntegrals:
         if self.core_orbitals:
             # compute the J and K matrices contributions from the core orbitals
             Ccore = self.C[:, self.core_orbitals]
-            J, K = jkbuilder.build_JK([Ccore])
 
             # one-electron contributions to the energy
             self.E += 2.0 * np.einsum("mi,mn,ni->", Ccore, T + V, Ccore)
+
+            J, K = jkbuilder.build_JK([Ccore])
 
             # two-electron contributions to the energy
             self.E += np.einsum("mi,mn,ni->", Ccore, 2 * J[0] - K[0], Ccore)
