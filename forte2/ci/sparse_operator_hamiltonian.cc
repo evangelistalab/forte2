@@ -5,7 +5,6 @@ namespace forte2 {
 SparseOperator sparse_operator_hamiltonian(double scalar_energy, np_matrix one_electron_integrals,
                                            np_tensor4 two_electron_integrals,
                                            double screen_thresh) {
-    SparseOperator H;
     size_t nmo = one_electron_integrals.shape(0);
     if (one_electron_integrals.shape(1) != nmo || two_electron_integrals.shape(0) != nmo ||
         two_electron_integrals.shape(1) != nmo || two_electron_integrals.shape(2) != nmo ||
@@ -13,6 +12,7 @@ SparseOperator sparse_operator_hamiltonian(double scalar_energy, np_matrix one_e
         throw std::runtime_error("One-electron and two-electron integrals must be square matrices "
                                  "of the same size.");
     }
+    SparseOperator H;
     auto oei_view = one_electron_integrals.view();
     auto tei_view = two_electron_integrals.view();
 
