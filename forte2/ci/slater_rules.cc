@@ -1,6 +1,3 @@
-
-// #define FAST_SLATER_RULES 0
-
 #include "slater_rules.h"
 
 namespace forte2 {
@@ -54,21 +51,21 @@ double SlaterRules::energy(const Determinant& det) const {
     return energy;
 }
 
-/*
-double ActiveSpaceIntegrals::slater_rules(const Determinant& lhs, const Determinant& rhs) const {
+double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs) const {
     // we first check that the two determinants have equal Ms
-    if ((lhs.count_alfa() != rhs.count_alfa()) or (lhs.count_beta() != rhs.count_beta()))
+    if ((lhs.count_a() != rhs.count_a()) or (lhs.count_b() != rhs.count_b()))
         return 0.0;
 
-#if FAST_SLATER_RULES
-#else
+    auto h = one_electron_integrals_.view();
+    auto v = two_electron_integrals_.view();
+
     int nadiff = 0;
     int nbdiff = 0;
     // Count how many differences in mos are there
-    for (size_t n = 0; n < nmo_; ++n) {
-        if (lhs.get_alfa_bit(n) != rhs.get_alfa_bit(n))
+    for (size_t n = 0; n < norb_; ++n) {
+        if (lhs.na(n) != rhs.na(n))
             nadiff++;
-        if (lhs.get_beta_bit(n) != rhs.get_beta_bit(n))
+        if (lhs.nb(n) != rhs.nb(n))
             nbdiff++;
         if (nadiff + nbdiff > 4)
             return 0.0; // Get out of this as soon as possible
@@ -79,20 +76,19 @@ double ActiveSpaceIntegrals::slater_rules(const Determinant& lhs, const Determin
     double matrix_element = 0.0;
     // Slater rule 1 PhiI = PhiJ
     if ((nadiff == 0) and (nbdiff == 0)) {
-        // matrix_element += frozen_core_energy_ + this->energy(rhs);
-        matrix_element = frozen_core_energy_;
-        for (size_t p = 0; p < nmo_; ++p) {
-            if (lhs.get_alfa_bit(p))
-                matrix_element += oei_a_[p * nmo_ + p];
-            if (lhs.get_beta_bit(p))
-                matrix_element += oei_b_[p * nmo_ + p];
-            for (size_t q = 0; q < nmo_; ++q) {
-                if (lhs.get_alfa_bit(p) and lhs.get_alfa_bit(q))
-                    matrix_element += 0.5 * tei_aa_[p * nmo3_ + q * nmo2_ + p * nmo_ + q];
-                if (lhs.get_beta_bit(p) and lhs.get_beta_bit(q))
-                    matrix_element += 0.5 * tei_bb_[p * nmo3_ + q * nmo2_ + p * nmo_ + q];
-                if (lhs.get_alfa_bit(p) and lhs.get_beta_bit(q))
-                    matrix_element += tei_ab_[p * nmo3_ + q * nmo2_ + p * nmo_ + q];
+        matrix_element = scalar_energy_;
+        for (size_t p = 0; p < norb_; ++p) {
+            if (lhs.na(p))
+                matrix_element += h(p, p);
+            if (lhs.nb(p))
+                matrix_element += h(p, p);
+            for (size_t q = 0; q < norb_; ++q) {
+                if (lhs.na(p) and lhs.na(q))
+                    matrix_element += 0.5 * (v(p, q, p, q) - v(p, q, q, p)); // <pq||pq> - <pq|qp>
+                if (lhs.nb(p) and lhs.nb(q))
+                    matrix_element += 0.5 * (v(p, q, p, q) - v(p, q, q, p)); // <pq||pq> - <pq|qp>
+                if (lhs.na(p) and lhs.nb(q))
+                    matrix_element += v(p, q, p, q);
             }
         }
     }
@@ -102,21 +98,21 @@ double ActiveSpaceIntegrals::slater_rules(const Determinant& lhs, const Determin
         // Diagonal contribution
         size_t i = 0;
         size_t j = 0;
-        for (size_t p = 0; p < nmo_; ++p) {
-            if ((lhs.get_alfa_bit(p) != rhs.get_alfa_bit(p)) and lhs.get_alfa_bit(p))
+        for (size_t p = 0; p < norb_; ++p) {
+            if ((lhs.na(p) != rhs.na(p)) and lhs.na(p))
                 i = p;
-            if ((lhs.get_alfa_bit(p) != rhs.get_alfa_bit(p)) and rhs.get_alfa_bit(p))
+            if ((lhs.na(p) != rhs.na(p)) and rhs.na(p))
                 j = p;
         }
         // double sign = SlaterSign(I, i, j);
         double sign = lhs.slater_sign_aa(i, j);
-        matrix_element = sign * oei_a_[i * nmo_ + j];
-        for (size_t p = 0; p < nmo_; ++p) {
-            if (lhs.get_alfa_bit(p) and rhs.get_alfa_bit(p)) {
-                matrix_element += sign * tei_aa_[i * nmo3_ + p * nmo2_ + j * nmo_ + p];
+        matrix_element = sign * h(i, j);
+        for (size_t p = 0; p < norb_; ++p) {
+            if (lhs.na(p) and rhs.na(p)) {
+                matrix_element += sign * (v(i, p, j, p) - v(i, p, p, j)); // <ip|jp> - <ip|pj>
             }
-            if (lhs.get_beta_bit(p) and rhs.get_beta_bit(p)) {
-                matrix_element += sign * tei_ab_[i * nmo3_ + p * nmo2_ + j * nmo_ + p];
+            if (lhs.nb(p) and rhs.nb(p)) {
+                matrix_element += sign * v(i, p, j, p); // <ip|jp>
             }
         }
     }
@@ -125,21 +121,21 @@ double ActiveSpaceIntegrals::slater_rules(const Determinant& lhs, const Determin
         // Diagonal contribution
         size_t i = 0;
         size_t j = 0;
-        for (size_t p = 0; p < nmo_; ++p) {
-            if ((lhs.get_beta_bit(p) != rhs.get_beta_bit(p)) and lhs.get_beta_bit(p))
+        for (size_t p = 0; p < norb_; ++p) {
+            if ((lhs.nb(p) != rhs.nb(p)) and lhs.nb(p))
                 i = p;
-            if ((lhs.get_beta_bit(p) != rhs.get_beta_bit(p)) and rhs.get_beta_bit(p))
+            if ((lhs.nb(p) != rhs.nb(p)) and rhs.nb(p))
                 j = p;
         }
-        // double sign = SlaterSign(I, nmo_ + i, nmo_ + j);
+        // double sign = SlaterSign(I, norb_ + i, norb_ + j);
         double sign = lhs.slater_sign_bb(i, j);
-        matrix_element = sign * oei_b_[i * nmo_ + j];
-        for (size_t p = 0; p < nmo_; ++p) {
-            if (lhs.get_alfa_bit(p) and rhs.get_alfa_bit(p)) {
-                matrix_element += sign * tei_ab_[p * nmo3_ + i * nmo2_ + p * nmo_ + j];
+        matrix_element = sign * h(i, j); // oei_b_[i * norb_ + j];
+        for (size_t p = 0; p < norb_; ++p) {
+            if (lhs.na(p) and rhs.na(p)) {
+                matrix_element += sign * v(p, i, p, j); // <pi|pj>
             }
-            if (lhs.get_beta_bit(p) and rhs.get_beta_bit(p)) {
-                matrix_element += sign * tei_bb_[i * nmo3_ + p * nmo2_ + j * nmo_ + p];
+            if (lhs.nb(p) and rhs.nb(p)) {
+                matrix_element += sign * (v(i, p, j, p) - v(i, p, p, j)); // <ip|jp> - <ip|pj>
             }
         }
     }
@@ -151,15 +147,15 @@ double ActiveSpaceIntegrals::slater_rules(const Determinant& lhs, const Determin
         int j = 0;
         int k = -1;
         int l = 0;
-        for (size_t p = 0; p < nmo_; ++p) {
-            if ((lhs.get_alfa_bit(p) != rhs.get_alfa_bit(p)) and lhs.get_alfa_bit(p)) {
+        for (size_t p = 0; p < norb_; ++p) {
+            if ((lhs.na(p) != rhs.na(p)) and lhs.na(p)) {
                 if (i == -1) {
                     i = p;
                 } else {
                     j = p;
                 }
             }
-            if ((lhs.get_alfa_bit(p) != rhs.get_alfa_bit(p)) and rhs.get_alfa_bit(p)) {
+            if ((lhs.na(p) != rhs.na(p)) and rhs.na(p)) {
                 if (k == -1) {
                     k = p;
                 } else {
@@ -168,7 +164,7 @@ double ActiveSpaceIntegrals::slater_rules(const Determinant& lhs, const Determin
             }
         }
         double sign = lhs.slater_sign_aaaa(i, j, k, l);
-        matrix_element = sign * tei_aa_[i * nmo3_ + j * nmo2_ + k * nmo_ + l];
+        matrix_element = sign * (v(i, j, k, l) - v(i, j, l, k)); // <ij||kl>
     }
 
     // Slater rule 3 PhiI = k_a^+ l_a^+ j_a i_a PhiJ
@@ -179,15 +175,15 @@ double ActiveSpaceIntegrals::slater_rules(const Determinant& lhs, const Determin
         j = -1;
         k = -1;
         l = -1;
-        for (size_t p = 0; p < nmo_; ++p) {
-            if ((lhs.get_beta_bit(p) != rhs.get_beta_bit(p)) and lhs.get_beta_bit(p)) {
+        for (size_t p = 0; p < norb_; ++p) {
+            if ((lhs.nb(p) != rhs.nb(p)) and lhs.nb(p)) {
                 if (i == -1) {
                     i = p;
                 } else {
                     j = p;
                 }
             }
-            if ((lhs.get_beta_bit(p) != rhs.get_beta_bit(p)) and rhs.get_beta_bit(p)) {
+            if ((lhs.nb(p) != rhs.nb(p)) and rhs.nb(p)) {
                 if (k == -1) {
                     k = p;
                 } else {
@@ -196,7 +192,7 @@ double ActiveSpaceIntegrals::slater_rules(const Determinant& lhs, const Determin
             }
         }
         double sign = lhs.slater_sign_bbbb(i, j, k, l);
-        matrix_element = sign * tei_bb_[i * nmo3_ + j * nmo2_ + k * nmo_ + l];
+        matrix_element = sign * (v(i, j, k, l) - v(i, j, l, k)); // <ij||kl>
     }
 
     // Slater rule 3 PhiI = j_a^+ i_a PhiJ
@@ -204,24 +200,25 @@ double ActiveSpaceIntegrals::slater_rules(const Determinant& lhs, const Determin
         // Diagonal contribution
         int i, j, k, l;
         i = j = k = l = -1;
-        for (size_t p = 0; p < nmo_; ++p) {
-            if ((lhs.get_alfa_bit(p) != rhs.get_alfa_bit(p)) and lhs.get_alfa_bit(p))
+        for (size_t p = 0; p < norb_; ++p) {
+            if ((lhs.na(p) != rhs.na(p)) and lhs.na(p))
                 i = p;
-            if ((lhs.get_beta_bit(p) != rhs.get_beta_bit(p)) and lhs.get_beta_bit(p))
+            if ((lhs.nb(p) != rhs.nb(p)) and lhs.nb(p))
                 j = p;
-            if ((lhs.get_alfa_bit(p) != rhs.get_alfa_bit(p)) and rhs.get_alfa_bit(p))
+            if ((lhs.na(p) != rhs.na(p)) and rhs.na(p))
                 k = p;
-            if ((lhs.get_beta_bit(p) != rhs.get_beta_bit(p)) and rhs.get_beta_bit(p))
+            if ((lhs.nb(p) != rhs.nb(p)) and rhs.nb(p))
                 l = p;
         }
         double sign = lhs.slater_sign_aa(i, k) * lhs.slater_sign_bb(j, l);
-        matrix_element = sign * tei_ab_[i * nmo3_ + j * nmo2_ + k * nmo_ + l];
+        matrix_element = sign * v(i, j, k, l); // <ij|kl>
     }
-#endif
+
     return (matrix_element);
 }
 
-double ActiveSpaceIntegrals::slater_rules_single_alpha(const Determinant& det, int i, int a) const {
+/*double ActiveSpaceIntegrals::slater_rules_single_alpha(const Determinant& det, int i, int a) const
+{
     // Slater rule 2 PhiI = j_a^+ i_a PhiJ
     double sign = det.slater_sign_aa(i, a);
     double matrix_element = oei_a_[i * nmo_ + a];

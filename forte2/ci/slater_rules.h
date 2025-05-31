@@ -19,6 +19,9 @@ class SlaterRules {
     /// Compute a determinant's energy
     double energy(const Determinant& det) const;
 
+    /// Compute the matrix element of the Hamiltonian between two determinants
+    double slater_rules(const Determinant& lhs, const Determinant& rhs) const;
+
   private:
     /// Number of orbitals
     int norb_;
