@@ -36,7 +36,7 @@ void export_determinant_api(nb::module_& m) {
         .def("__lt__", [](const Determinant& a, const Determinant& b) { return a < b; })
         .def(
             "__repr__", [](Determinant& d) { return str(d); },
-            "String representation of the determinant with n orbitals")
+            "String representation of the determinant")
         .def("set_na", &Determinant::set_na)
         .def("set_nb", &Determinant::set_nb)
         .def("na", &Determinant::na)

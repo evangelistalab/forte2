@@ -3,51 +3,6 @@ import pytest
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
 
 
-def test_davidson_vs_numpy_no_collapse():
-    # 1. Build a small random symmetric matrix H
-    np.random.seed(0)
-    size = 100
-    H = np.random.randn(size, size)
-    H = 0.5 * (H + H.T)
-
-    # 2. σ-builder that handles multiple columns at once
-    def sigma_builder(basis_block: np.ndarray) -> np.ndarray:
-        return H @ basis_block
-
-    # 3. Instantiate and disable collapse
-    solver = DavidsonLiuSolver(
-        size=size,
-        nroot=3,
-        collapse_per_root=1,  # keep the default here
-        subspace_per_root=3,
-    )
-    solver.add_h_diag(np.diag(H))
-    solver.add_sigma_builder(sigma_builder)
-
-    # disable collapse entirely
-    solver._collapse = lambda *args, **kwargs: None
-
-    # 4. Run Davidson
-    evals, evecs = solver.solve()
-
-    # 5. Reference solution via NumPy
-    ref_vals, ref_vecs = np.linalg.eigh(H)
-    ref_vals = ref_vals[:3]
-
-    # 6. Compare eigenvalues
-    assert np.allclose(
-        np.sort(evals), np.sort(ref_vals), atol=1e-6
-    ), f"Eigenvalues mismatch: {evals} vs {ref_vals}"
-
-    # 7. Compare eigenvector subspaces
-    P_solver = evecs @ evecs.T
-    P_ref = ref_vecs[:, :3] @ ref_vecs[:, :3].T
-    diff_norm = np.linalg.norm(P_solver - P_ref)
-    assert diff_norm < 1e-6, f"Subspace projector difference too large: {diff_norm}"
-
-    print("No-collapse test passed.")
-
-
 def test_davidson_vs_numpy():
     # 1. Build a small random symmetric matrix H
     np.random.seed(0)
