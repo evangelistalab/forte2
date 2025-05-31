@@ -78,10 +78,23 @@ def test_missing_coordinate():
         forte2.System(xyz="C 0.0", basis="cc-pvdz")
 
 
+def test_units():
+    # Test for different units
+    xyz = """
+    H 0.0 0.0 0.0
+    H 0.0 0.0 1.0
+    """
+    system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="angstrom")
+    assert system.unit == "angstrom"
+    assert system.atoms[1][1][2] == pytest.approx(1.88972612)
+    system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="bohr")
+    assert system.unit == "bohr"
+    assert system.atoms[1][1][2] == pytest.approx(1.0)
+
+
 if __name__ == "__main__":
-    # Run the tests
     test_system()
     test_xyz_comment()
     test_missing_atom()
     test_missing_coordinate()
-    print("Test passed.")
+    test_units()
