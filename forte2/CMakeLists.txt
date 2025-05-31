@@ -73,6 +73,8 @@ nanobind_add_module(
   api/sparse_operator_api.cc
   api/integrals_api.cc
   api/sparse_state_api.cc
+  api/sparse_exp_api.cc
+  api/sq_operator_string_api.cc
   helpers/string_algorithms.cc
   helpers/combinatorial.cc
   ints/basis.cc
@@ -86,6 +88,7 @@ nanobind_add_module(
   ci/ci_string_address.cc
   ci/ci_occupation.cc
   ci/determinant_helpers.cc
+  ci/sparse_exp.cc
   ci/sparse_operator.cc
   ci/sparse_operator_hamiltonian.cc
   ci/sparse_state_functions.cc

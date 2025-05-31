@@ -2,6 +2,7 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/complex.h>
 #include <nanobind/stl/unordered_map.h>
+#include <nanobind/stl/vector.h> 
 #include <nanobind/make_iterator.h>
 
 #include "ci/sparse_state.h"
@@ -11,7 +12,7 @@ using namespace nb::literals;
 
 namespace forte2 {
 
-void export_sparsestate_api(nb::module_& m) {
+void export_sparse_state_api(nb::module_& m) {
     nb::class_<SparseState>(m, "SparseState", "A class to represent a vector of determinants")
         .def(nb::init<>(), "Default constructor")
         .def(nb::init<const SparseState&>(), "Copy constructor")
