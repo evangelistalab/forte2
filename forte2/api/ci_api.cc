@@ -1,5 +1,6 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/vector.h>
+#include <nanobind/ndarray.h>
 
 #include "ci/ci_string_lists.h"
 #include "ci/ci_string_address.h"
@@ -45,7 +46,13 @@ void export_ci_sigma_builder_api(nb::module_& m) {
                     nb::rv_policy::reference_internal)
         .def_static("release_temp_space", &CISigmaBuilder::release_temp_space)
         .def("form_Hdiag_det", &CISigmaBuilder::form_Hdiag_det)
-        .def("Hamiltonian", &CISigmaBuilder::Hamiltonian)
+        .def(
+            "Hamiltonian",
+            [](const CISigmaBuilder& self, CIVector& basis, CIVector& sigma) {
+                self.Hamiltonian(basis, sigma);
+            },
+            "basis"_a, "sigma"_a)
+        .def("Hamiltonian2", &CISigmaBuilder::Hamiltonian2, "basis"_a, "sigma"_a)
         .def("avg_build_time", &CISigmaBuilder::avg_build_time);
 }
 

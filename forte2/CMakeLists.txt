@@ -78,6 +78,7 @@ nanobind_add_module(
   api/sq_operator_string_api.cc
   helpers/combinatorial.cc
   helpers/np_matrix_functions.cc
+  helpers/np_vector_functions.cc
   helpers/string_algorithms.cc
   ints/basis.cc
   ints/fock_builder.cc

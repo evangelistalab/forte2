@@ -31,6 +31,11 @@ class CISigmaBuilder {
     /// @param sigma The resulting sigma vector |sigma> = H |basis>
     void Hamiltonian(CIVector& basis, CIVector& sigma) const;
 
+    /// @brief Apply the Hamiltonian to the wave function
+    /// @param basis The basis vector
+    /// @param sigma The resulting sigma vector |sigma> = H |basis>
+    void Hamiltonian2(np_vector basis, np_vector sigma) const;
+
     double avg_build_time() const {
         return build_count_ > 0 ? hdiag_timer_ / static_cast<double>(build_count_) : 0.0;
     }
@@ -63,6 +68,20 @@ class CISigmaBuilder {
     void H1(CIVector& basis, CIVector& sigma, bool alfa) const;
     void H2_aaaa(CIVector& basis, CIVector& sigma, bool alfa) const;
     void H2_aabb(CIVector& basis, CIVector& sigma) const;
+
+    void H0(np_vector basis, np_vector sigma) const;
+    void H1(np_vector basis, np_vector sigma, bool alfa) const;
+    void H2_aaaa(np_vector basis, np_vector sigma, bool alfa) const;
+    void H2_aabb(np_vector basis, np_vector sigma) const;
+
+    static void gather_C_block(np_vector source, np_matrix dest, bool alfa, const CIStrings& lists,
+                               int class_Ia, int class_Ib);
+
+    static void zero_block(np_matrix dest, bool alfa, const CIStrings& lists, int class_Ia,
+                           int class_Ib);
+
+    static void scatter_C_block(np_matrix source, np_vector dest, bool alfa, const CIStrings& lists,
+                                int class_Ia, int class_Ib);
 };
 
 } // namespace forte2

@@ -152,8 +152,9 @@ class DavidsonLiuSolver:
             m_new = self.basis_size - self.sigma_size
             if m_new > 0:
                 Bblock = self.b[:, self.sigma_size : self.basis_size]
-                Sblock = self._build_sigma(Bblock)
-                self.sigma[:, self.sigma_size : self.basis_size] = Sblock
+                Sblock = self.sigma[:, self.sigma_size : self.basis_size]
+                self._build_sigma(Bblock, Sblock)
+                # self.sigma[:, self.sigma_size : self.basis_size] = Sblock
                 self.sigma_size = self.basis_size
 
             # 3. form and diagonalize subspace Hamiltonian

@@ -1,10 +1,6 @@
-// #include "integrals/active_space_integrals.h"
-// #include "genci_vector.h"
-// #include "genci_string_lists.h"
-// #include "genci_string_address.h"
-
 #include "helpers/timer.hpp"
 #include "helpers/np_matrix_functions.h"
+#include "helpers/np_vector_functions.h"
 
 #include "ci_sigma_builder.h"
 
@@ -412,4 +408,247 @@ void CISigmaBuilder::H2_aabb(CIVector& basis, CIVector& sigma) const {
 //         }
 //     }
 // }
+
+void CISigmaBuilder::Hamiltonian2(np_vector basis, np_vector sigma) const {
+    local_timer t;
+    vector::zero(sigma);
+
+    H0(basis, sigma);
+    H1(basis, sigma, true);
+    H1(basis, sigma, false);
+
+    H2_aabb(basis, sigma);
+    H2_aaaa(basis, sigma, true);
+    H2_aaaa(basis, sigma, false);
+    hdiag_timer_ += t.elapsed_seconds();
+    build_count_++;
+}
+
+void CISigmaBuilder::H0(np_vector basis, np_vector sigma) const {
+    vector::copy(basis, sigma);
+    vector::scale(sigma, E_);
+}
+
+void CISigmaBuilder::gather_C_block(np_vector source, np_matrix dest, bool alfa,
+                                    const CIStrings& lists, int class_Ia, int class_Ib) {
+    const auto block_index = lists.string_class()->block_index(class_Ia, class_Ib);
+    const auto offset = lists.block_offset(block_index);
+    const auto maxIa = lists.alfa_address()->strpcls(class_Ia);
+    const auto maxIb = lists.beta_address()->strpcls(class_Ib);
+    auto m = dest.view();
+    const auto c = source.view();
+
+    if (alfa) {
+        for (size_t Ia{0}; Ia < maxIa; ++Ia)
+            for (size_t Ib{0}; Ib < maxIb; ++Ib)
+                m(Ia, Ib) = c(offset + Ia * maxIb + Ib);
+    } else {
+        for (size_t Ia{0}; Ia < maxIa; ++Ia)
+            for (size_t Ib{0}; Ib < maxIb; ++Ib)
+                m(Ib, Ia) = c(offset + Ia * maxIb + Ib);
+    }
+}
+
+void CISigmaBuilder::zero_block(np_matrix dest, bool alfa, const CIStrings& lists, int class_Ia,
+                                int class_Ib) {
+    const auto maxIa = lists.alfa_address()->strpcls(class_Ia);
+    const auto maxIb = lists.beta_address()->strpcls(class_Ib);
+    auto m = dest.view();
+    if (alfa) {
+        for (size_t Ia{0}; Ia < maxIa; ++Ia)
+            for (size_t Ib{0}; Ib < maxIb; ++Ib)
+                m(Ia, Ib) = 0.0;
+    } else {
+        for (size_t Ib{0}; Ib < maxIb; ++Ib)
+            for (size_t Ia{0}; Ia < maxIa; ++Ia)
+                m(Ib, Ia) = 0.0;
+    }
+}
+
+void CISigmaBuilder::scatter_C_block(np_matrix source, np_vector dest, bool alfa,
+                                     const CIStrings& lists, int class_Ia, int class_Ib) {
+    size_t maxIa = lists.alfa_address()->strpcls(class_Ia);
+    size_t maxIb = lists.beta_address()->strpcls(class_Ib);
+
+    auto block_index = lists.string_class()->block_index(class_Ia, class_Ib);
+    auto offset = lists.block_offset(block_index);
+
+    auto m = source.view();
+    auto c = dest.view();
+
+    if (alfa) {
+        // Add m to C
+        for (size_t Ia{0}; Ia < maxIa; ++Ia)
+            for (size_t Ib{0}; Ib < maxIb; ++Ib)
+                c(offset + Ia * maxIb + Ib) += m(Ia, Ib);
+    } else {
+        // Add m transposed to C
+        for (size_t Ia{0}; Ia < maxIa; ++Ia)
+            for (size_t Ib{0}; Ib < maxIb; ++Ib)
+                c(offset + Ia * maxIb + Ib) += m(Ib, Ia);
+    }
+}
+
+void CISigmaBuilder::H1(np_vector basis, np_vector sigma, bool alfa) const {
+    auto h = H_.view();
+    // loop over blocks of matrix C
+    for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
+        if (lists_.detpblk(nI) == 0)
+            continue;
+
+        gather_C_block(basis, CR, alfa, lists_, class_Ia, class_Ib);
+
+        for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
+            if (lists_.detpblk(nJ) == 0)
+                continue;
+
+            // If we act on the alpha string, the beta string classes must be the same
+            if (alfa and (class_Ib != class_Jb))
+                continue;
+            // If we act on the beta string, the alpha string classes must be the same
+            if (not alfa and (class_Ia != class_Ja))
+                continue;
+
+            zero_block(CL, alfa, lists_, class_Ja, class_Jb);
+
+            size_t maxL = alfa ? lists_.beta_address()->strpcls(class_Ib)
+                               : lists_.alfa_address()->strpcls(class_Ia);
+
+            const auto& pq_vo_list = alfa ? lists_.get_alfa_vo_list(class_Ia, class_Ja)
+                                          : lists_.get_beta_vo_list(class_Ib, class_Jb);
+
+            for (const auto& [pq, vo_list] : pq_vo_list) {
+                const auto& [p, q] = pq;
+                const double Hpq = alfa ? h(p, q) : h(p, q);
+                for (const auto& [sign, I, J] : vo_list) {
+                    matrix::daxpy_rows(sign * Hpq, CR, I, CL, J);
+                }
+            }
+            scatter_C_block(CL, sigma, alfa, lists_, class_Ja, class_Jb);
+        }
+    }
+}
+
+void CISigmaBuilder::H2_aaaa(np_vector basis, np_vector sigma, bool alfa) const {
+    auto v = V_.view();
+    for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
+        if (lists_.detpblk(nI) == 0)
+            continue;
+
+        gather_C_block(basis, CR, alfa, lists_, class_Ia, class_Ib);
+
+        for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
+            // The string class on which we don't act must be the same for I and J
+            if ((alfa and (class_Ib != class_Jb)) or (not alfa and (class_Ia != class_Ja)))
+                continue;
+            if (lists_.detpblk(nJ) == 0)
+                continue;
+
+            zero_block(CL, alfa, lists_, class_Ja, class_Jb);
+
+            // get the size of the string of spin opposite to the one we are acting on
+            size_t maxL = alfa ? lists_.beta_address()->strpcls(class_Ib)
+                               : lists_.alfa_address()->strpcls(class_Ia);
+
+            if ((class_Ia == class_Ja) and (class_Ib == class_Jb)) {
+                // OO terms
+                // Loop over (p>q) == (p>q)
+                const auto& pq_oo_list =
+                    alfa ? lists_.get_alfa_oo_list(class_Ia) : lists_.get_beta_oo_list(class_Ib);
+                for (const auto& [pq, oo_list] : pq_oo_list) {
+                    const auto& [p, q] = pq;
+                    const double integral =
+                        alfa ? v(p, q, p, q) - v(p, q, q, p) : v(p, q, p, q) - v(p, q, q, p);
+
+                    for (const auto& I : oo_list) {
+                        matrix::daxpy_rows(integral, CR, I, CL, I);
+                    }
+                }
+            }
+
+            // VVOO terms
+            const auto& pqrs_vvoo_list = alfa ? lists_.get_alfa_vvoo_list(class_Ia, class_Ja)
+                                              : lists_.get_beta_vvoo_list(class_Ib, class_Jb);
+            for (const auto& [pqrs, vvoo_list] : pqrs_vvoo_list) {
+                const auto& [p, q, r, s] = pqrs;
+                const double integral1 =
+                    alfa ? v(p, q, r, s) - v(p, q, s, r) : v(p, q, r, s) - v(p, q, s, r);
+                for (const auto& [sign, I, J] : vvoo_list) {
+                    matrix::daxpy_rows(sign * integral1, CR, I, CL, J);
+                }
+            }
+            scatter_C_block(CL, sigma, alfa, lists_, class_Ja, class_Jb);
+        }
+    }
+}
+
+// no gather / scatter implementation of H2_aabb 2
+void CISigmaBuilder::H2_aabb(np_vector basis, np_vector sigma) const {
+    auto v = V_.view();
+    const auto& mo_sym = lists_.string_class()->mo_sym();
+
+    auto C_view = basis.view();
+    auto HC_view = sigma.view();
+
+    // Loop over blocks of matrix C
+    for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
+        if (lists_.detpblk(nI) == 0)
+            continue;
+
+        const auto C_offset = lists_.block_offset(nI);
+        const size_t maxIb = lists_.beta_address()->strpcls(class_Ib);
+
+        const auto h_Ib = lists_.string_class()->beta_string_classes()[class_Ib].second;
+
+        for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
+            if (lists_.detpblk(nJ) == 0)
+                continue;
+
+            const auto HC_offset = lists_.block_offset(nJ);
+            const auto maxJb = lists_.beta_address()->strpcls(class_Jb);
+
+            const auto h_Jb = lists_.string_class()->beta_string_classes()[class_Jb].second;
+
+            const auto& pq_vo_alfa = lists_.get_alfa_vo_list(class_Ia, class_Ja);
+            const auto& rs_vo_beta = lists_.get_beta_vo_list(class_Ib, class_Jb);
+
+            for (const auto& [rs, vo_beta_list] : rs_vo_beta) {
+                const auto beta_list_size = vo_beta_list.size();
+                if (beta_list_size == 0)
+                    continue;
+
+                const auto& [r, s] = rs;
+                const auto rs_sym = mo_sym[r] ^ mo_sym[s];
+
+                // Make sure that the symmetry of the J beta string is the same as the symmetry
+                // of the I beta string times the symmetry of the rs product
+                if (h_Jb != (h_Ib ^ rs_sym))
+                    continue;
+
+                for (const auto& [pq, vo_alfa_list] : pq_vo_alfa) {
+                    const auto a_list_size = vo_alfa_list.size();
+                    if (a_list_size == 0)
+                        continue;
+
+                    const auto& [p, q] = pq;
+                    const auto pq_sym = mo_sym[p] ^ mo_sym[q];
+                    // ensure that the product pqrs is totally symmetric
+                    if (pq_sym != rs_sym)
+                        continue;
+
+                    // Grab the integral
+                    const auto integral = v(p, r, q, s);
+
+                    for (const auto& [sign_a, Ia, Ja] : vo_alfa_list) {
+                        for (const auto& [sign_b, Ib, Jb] : vo_beta_list) {
+                            HC_view(HC_offset + Ja * maxJb + Jb) +=
+                                C_view(C_offset + Ia * maxIb + Ib) * integral * sign_a * sign_b;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 } // namespace forte2

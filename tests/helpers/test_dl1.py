@@ -12,9 +12,8 @@ def test_davidson_vs_numpy():
     H = 0.5 * (H + H.T)
 
     # 2. σ-builder that handles multiple columns at once
-    def sigma_builder(basis_block: np.ndarray) -> np.ndarray:
-        # basis_block.shape = (size, m)
-        return H @ basis_block
+    def sigma_builder(basis_block: np.ndarray, sigma_block: np.ndarray) -> None:
+        sigma_block[:] = H @ basis_block
 
     # 3. Instantiate and configure solver
     solver = DavidsonLiuSolver(
@@ -53,8 +52,8 @@ def test_dl_1():
     ref_vals, _ = np.linalg.eigh(matrix)
 
     # 2. Build the sigma-builder function
-    def sigma_builder(basis_block: np.ndarray) -> np.ndarray:
-        return matrix @ basis_block
+    def sigma_builder(basis_block: np.ndarray, sigma_block: np.ndarray) -> None:
+        sigma_block[:] = matrix @ basis_block
 
     # 3. Instantiate the solver and add diagonal elements
     solver = DavidsonLiuSolver(
@@ -87,8 +86,8 @@ def test_dl_2():
     ref_vals, _ = np.linalg.eigh(matrix)
 
     # Build the sigma-builder function
-    def sigma_builder(basis_block: np.ndarray) -> np.ndarray:
-        return matrix @ basis_block
+    def sigma_builder(basis_block: np.ndarray, sigma_block: np.ndarray) -> None:
+        sigma_block[:] = matrix @ basis_block
 
     # Instantiate and configure the solver
     solver = DavidsonLiuSolver(
@@ -125,8 +124,8 @@ def solve_dl(size, nroot):
     ref_evals, _ = np.linalg.eigh(matrix)
 
     # Define sigma-builder function as in the tests above
-    def sigma_builder(basis_block: np.ndarray) -> np.ndarray:
-        return matrix @ basis_block
+    def sigma_builder(basis_block: np.ndarray, sigma_block: np.ndarray) -> None:
+        sigma_block[:] = matrix @ basis_block
 
     # Instantiate and configure the DavidsonLiuSolver
     solver = DavidsonLiuSolver(
@@ -178,8 +177,8 @@ def test_dl_no_guess():
     matrix = np.array([[-1, 1, 1, 1], [1, 0, 1, 1], [1, 1, 0, 1], [1, 1, 1, 0]])
     ref_evals, _ = np.linalg.eigh(matrix)
 
-    def sigma_builder(basis_block: np.ndarray) -> np.ndarray:
-        return matrix @ basis_block
+    def sigma_builder(basis_block: np.ndarray, sigma_block: np.ndarray) -> None:
+        sigma_block[:] = matrix @ basis_block
 
     # Instantiate the solver without an explicit guess.
     solver = DavidsonLiuSolver(
@@ -205,8 +204,8 @@ def test_project_out():
     # Project out the first eigenvector
     proj_out = ref_evecs[:, 0]  # .reshape(-1, 1)
 
-    def sigma_builder(basis_block: np.ndarray) -> np.ndarray:
-        return matrix @ basis_block
+    def sigma_builder(basis_block: np.ndarray, sigma_block: np.ndarray) -> None:
+        sigma_block[:] = matrix @ basis_block
 
     solver = DavidsonLiuSolver(
         size=size, nroot=nroot, collapse_per_root=1, subspace_per_root=5
@@ -230,8 +229,8 @@ def test_dl_restart_1():
     matrix = np.array([[-1, 1, 1, 1], [1, 0, 1, 1], [1, 1, 0, 1], [1, 1, 1, 0]])
     ref_evals, _ = np.linalg.eigh(matrix)
 
-    def sigma_builder(basis_block: np.ndarray) -> np.ndarray:
-        return matrix @ basis_block
+    def sigma_builder(basis_block: np.ndarray, sigma_block: np.ndarray) -> None:
+        sigma_block[:] = matrix @ basis_block
 
     solver = DavidsonLiuSolver(
         size=size, nroot=nroot, collapse_per_root=1, subspace_per_root=5
@@ -257,8 +256,8 @@ def test_dl_restart_2():
     matrix = np.array([[-1, 1, 1, 1], [1, 0, 1, 1], [1, 1, 0, 1], [1, 1, 1, 0]])
     ref_evals, _ = np.linalg.eigh(matrix)
 
-    def sigma_builder(basis_block: np.ndarray) -> np.ndarray:
-        return matrix @ basis_block
+    def sigma_builder(basis_block: np.ndarray, sigma_block: np.ndarray) -> None:
+        sigma_block[:] = matrix @ basis_block
 
     solver = DavidsonLiuSolver(
         size=size, nroot=nroot, collapse_per_root=1, subspace_per_root=5
@@ -273,8 +272,8 @@ def test_dl_restart_2():
     matrix2 = np.array([[-2, 1, 1, 1], [1, 0, 1, 1], [1, 1, 0, 1], [1, 1, 1, 0]])
     ref_evals2, _ = np.linalg.eigh(matrix2)
 
-    def sigma_builder2(basis_block: np.ndarray) -> np.ndarray:
-        return matrix2 @ basis_block
+    def sigma_builder2(basis_block: np.ndarray, sigma_block: np.ndarray) -> None:
+        sigma_block[:] = matrix2 @ basis_block
 
     solver.add_h_diag(np.diag(matrix2))
     solver.add_sigma_builder(sigma_builder2)

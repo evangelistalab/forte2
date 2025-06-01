@@ -167,15 +167,15 @@ class CI(MOsMixin, SystemMixin):
 
         print(f"Spin complete guess determinants: {len(spin_complete_guess)}")
 
-        def sigma_builder(Bblock):
+        def sigma_builder(Bblock, Sblock):
             # Compute the sigma block from the basis block
             ncols = Bblock.shape[1]
-            Sblock = np.zeros_like(Bblock)
             for i in range(ncols):
                 # copy the b vector to the C
-                C.copy(Bblock[:, i])
-                ci_sigma_builder.Hamiltonian(C, T)
-                T.copy_to(Sblock[:, i])
+                # C.copy(Bblock[:, i])
+                # ci_sigma_builder.Hamiltonian(C, T)
+                # T.copy_to(Sblock[:, i])
+                ci_sigma_builder.Hamiltonian2(Bblock[:, i], Sblock[:, i])
             #     size_t basis_size = b_span.size();
             #     for (size_t I = 0; I < basis_size; ++I) {
             #         b_basis->set(I, b_span[I]);

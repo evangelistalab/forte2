@@ -97,7 +97,11 @@ class CIStrings {
     /// @return the alpha/beta string classes
     const auto& determinant_classes() const { return string_class_->determinant_classes(); }
 
+    /// @return the number of determinants in a given block
     size_t detpblk(size_t block) const { return detpblk_[block]; }
+
+    /// @return the offset of a given block in the CI vector
+    size_t block_offset(size_t block) const { return detpblk_offset_[block]; }
 
     //   /// @return the list of determinants with a given symmetry
     //   std::vector<Determinant> make_determinants() const;

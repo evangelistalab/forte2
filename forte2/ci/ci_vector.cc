@@ -190,7 +190,8 @@ np_matrix CIVector::gather_C_block(np_matrix M, bool alfa,
                                    std::shared_ptr<StringAddress> beta_address, int class_Ia,
                                    int class_Ib, bool zero) {
     // if alfa is true just return the pointer to the block
-    int block_idx = lists_.string_class()->block_index(class_Ia, class_Ib);
+    auto block_idx = lists_.string_class()->block_index(class_Ia, class_Ib);
+    auto block_offset_ = lists_.block_offset(block_idx);
     auto c = C(block_idx);
     if (alfa) {
         if (zero)
