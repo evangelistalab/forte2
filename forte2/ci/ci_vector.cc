@@ -1,5 +1,5 @@
 
-// #include "helpers/helpers.h"
+#include "helpers/np_matrix_functions.h"
 
 #include "ci_vector.h"
 #include "ci_string_lists.h"
@@ -16,45 +16,6 @@ template <typename Func> void debug(Func func) {
         func();
     }
 }
-
-np_matrix CIVector::CR;
-np_matrix CIVector::CL;
-
-// double CIVector::hdiag_timer = 0.0;
-// double CIVector::h1_aa_timer = 0.0;
-// double CIVector::h1_bb_timer = 0.0;
-// double CIVector::h2_aaaa_timer = 0.0;
-// double CIVector::h2_aabb_timer = 0.0;
-// double CIVector::h2_bbbb_timer = 0.0;
-
-void CIVector::allocate_temp_space(const CIStrings& lists) {
-    // if CR is already allocated (e.g., because we computed several roots) make sure
-    // we do not allocate a matrix of smaller size. So let's find out the size of the current CR
-    // size_t current_size = CR ? CR->rowdim() : 0;
-
-    // // Find the largest size of the symmetry blocks
-    size_t max_size = 0;
-
-    for (int class_Ia = 0; class_Ia < lists.alfa_address()->nclasses(); ++class_Ia) {
-        max_size = std::max(max_size, lists.alfa_address()->strpcls(class_Ia));
-    }
-    for (int class_Ib = 0; class_Ib < lists.beta_address()->nclasses(); ++class_Ib) {
-        max_size = std::max(max_size, lists.beta_address()->strpcls(class_Ib));
-    }
-
-    // Allocate the temporary arrays CR and CL with the largest block size
-    // if (max_size > current_size) {
-    CR = make_zeros<nb::numpy, double, 2>({max_size, max_size});
-    CL = make_zeros<nb::numpy, double, 2>({max_size, max_size});
-}
-
-void CIVector::release_temp_space() {
-    CR = np_matrix();
-    CL = np_matrix();
-}
-
-// std::shared_ptr<psi::Matrix> CIVector::get_CR() { return CR; }
-// std::shared_ptr<psi::Matrix> CIVector::get_CL() { return CL; }
 
 CIVector::CIVector(const CIStrings& lists)
     : symmetry_(lists.symmetry()), lists_(lists), alfa_address_(lists_.alfa_address()),
@@ -77,28 +38,13 @@ void CIVector::startup() {
     //     detpcls_.push_back(detpcls);
     // }
 
+    ndet_ = lists_.ndet();
     // Allocate the wave function
     for (const auto& [_, class_Ia, class_Ib] : lists_.determinant_classes()) {
         C_.push_back(make_zeros<nb::numpy, double, 2>(
             {alfa_address_->strpcls(class_Ia), beta_address_->strpcls(class_Ib)}));
     }
 }
-
-// std::shared_ptr<psi::Vector> GenCISolver::form_Hdiag_det(SlaterRules& slater_rules) {
-//     const double E0 = fci_ints->nuclear_repulsion_energy() + fci_ints->scalar_energy();
-//     CIVector Hdiag(lists_);
-//     Determinant I;
-//     Hdiag.for_each_element([&](const size_t& /*n*/, const int& class_Ia, const int& class_Ib,
-//                                const size_t& Ia, const size_t& Ib, double& c) {
-//         I.set_str(lists_->alfa_str(class_Ia, Ia), lists_->beta_str(class_Ib, Ib));
-//         c = E0 + fci_ints->energy(I);
-//     });
-//     Hdiag.size();
-
-//     auto Hdiag_det = std::make_shared<psi::Vector>(nfci_dets_);
-//     Hdiag.copy_to(Hdiag_det);
-//     return Hdiag_det;
-// }
 
 // size_t CIVector::symmetry() const { return symmetry_; }
 
@@ -146,13 +92,15 @@ void CIVector::startup() {
 //     }
 // }
 
-// void CIVector::copy(std::shared_ptr<psi::Vector> vec) {
-//     for_each_index_element([&](const size_t& I, double& c) { c = vec->get(I); });
-// }
+void CIVector::copy(np_vector vec) {
+    auto v = vec.view();
+    for_each_index_element([&](const size_t& I, double& c) { c = v(I); });
+}
 
-// void CIVector::copy_to(std::shared_ptr<psi::Vector> vec) {
-//     const_for_each_index_element([&](const size_t& I, const double& c) { vec->set(I, c); });
-// }
+void CIVector::copy_to(np_vector vec) const {
+    auto v = vec.view();
+    const_for_each_index_element([&](const size_t& I, const double& c) { v(I) = c; });
+}
 
 // void CIVector::set_to(double value) {
 //     for_each_index_element([&](const size_t& /*I*/, double& c) { c = value; });
@@ -184,10 +132,10 @@ void CIVector::startup() {
 //         c->scale(1.0 / factor);
 // }
 
-// void CIVector::zero() {
-//     for (auto& c : C_)
-//         c->zero();
-// }
+void CIVector::zero() {
+    for (auto& c : C_)
+        matrix::zero(c);
+}
 
 // void CIVector::print_natural_orbitals(std::shared_ptr<MOSpaceInfo> mo_space_info,
 //                                       std::shared_ptr<RDMs> rdms) {
@@ -237,49 +185,49 @@ void CIVector::startup() {
 //     psi::outfile->Printf("\n");
 // }
 
-// double** CIVector::gather_C_block(std::shared_ptr<psi::Matrix> M, bool alfa,
-//                                   std::shared_ptr<StringAddress> alfa_address,
-//                                   std::shared_ptr<StringAddress> beta_address, int class_Ia,
-//                                   int class_Ib, bool zero) {
-//     // if alfa is true just return the pointer to the block
-//     int block_idx = lists_.string_class()->block_index(class_Ia, class_Ib);
-//     auto c = C(block_idx)->pointer();
-//     if (alfa) {
-//         if (zero)
-//             C(block_idx)->zero();
-//         return c;
-//     }
-//     // if alfa is false
-//     size_t maxIa = alfa_address->strpcls(class_Ia);
-//     size_t maxIb = beta_address->strpcls(class_Ib);
-//     auto m = M->pointer();
-//     if (zero) {
-//         for (size_t Ib = 0; Ib < maxIb; ++Ib)
-//             for (size_t Ia = 0; Ia < maxIa; ++Ia)
-//                 m[Ib][Ia] = 0.0;
-//     } else {
-//         for (size_t Ia = 0; Ia < maxIa; ++Ia)
-//             for (size_t Ib = 0; Ib < maxIb; ++Ib)
-//                 m[Ib][Ia] = c[Ia][Ib];
-//     }
-//     return m;
-// }
+np_matrix CIVector::gather_C_block(np_matrix M, bool alfa,
+                                   std::shared_ptr<StringAddress> alfa_address,
+                                   std::shared_ptr<StringAddress> beta_address, int class_Ia,
+                                   int class_Ib, bool zero) {
+    // if alfa is true just return the pointer to the block
+    int block_idx = lists_.string_class()->block_index(class_Ia, class_Ib);
+    auto c = C(block_idx);
+    if (alfa) {
+        if (zero)
+            matrix::zero(c);
+        return c;
+    }
+    // if alfa is false
+    size_t maxIa = alfa_address->strpcls(class_Ia);
+    size_t maxIb = beta_address->strpcls(class_Ib);
+    auto m = M.view();
+    if (zero) {
+        for (size_t Ib = 0; Ib < maxIb; ++Ib)
+            for (size_t Ia = 0; Ia < maxIa; ++Ia)
+                m(Ib, Ia) = 0.0;
+    } else {
+        for (size_t Ia = 0; Ia < maxIa; ++Ia)
+            for (size_t Ib = 0; Ib < maxIb; ++Ib)
+                m(Ib, Ia) = c(Ia, Ib);
+    }
+    return M;
+}
 
-// void CIVector::scatter_C_block(double** m, bool alfa, std::shared_ptr<StringAddress>
-// alfa_address,
-//                                std::shared_ptr<StringAddress> beta_address, int class_Ia,
-//                                int class_Ib) {
-//     if (!alfa) {
-//         size_t maxIa = alfa_address->strpcls(class_Ia);
-//         size_t maxIb = beta_address->strpcls(class_Ib);
+void CIVector::scatter_C_block(np_matrix M, bool alfa, std::shared_ptr<StringAddress> alfa_address,
+                               std::shared_ptr<StringAddress> beta_address, int class_Ia,
+                               int class_Ib) {
+    if (!alfa) {
+        size_t maxIa = alfa_address->strpcls(class_Ia);
+        size_t maxIb = beta_address->strpcls(class_Ib);
 
-//         int block_idx = lists_.string_class()->block_index(class_Ia, class_Ib);
-//         auto c = C(block_idx)->pointer();
-//         // Add m transposed to C
-//         for (size_t Ia = 0; Ia < maxIa; ++Ia)
-//             for (size_t Ib = 0; Ib < maxIb; ++Ib)
-//                 c[Ia][Ib] += m[Ib][Ia];
-//     }
-// }
+        int block_idx = lists_.string_class()->block_index(class_Ia, class_Ib);
+        auto m = M.view();
+        auto c = C(block_idx).view();
+        // Add m transposed to C
+        for (size_t Ia = 0; Ia < maxIa; ++Ia)
+            for (size_t Ib = 0; Ib < maxIb; ++Ib)
+                c(Ia, Ib) += m(Ib, Ia);
+    }
+}
 
 } // namespace forte2

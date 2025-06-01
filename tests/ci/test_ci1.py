@@ -3,7 +3,7 @@ from numpy import isclose
 from forte2 import *
 
 
-def test_ci1():
+def test_ci_1():
     xyz = f"""
     H 0.0 0.0 0.0
     H 0.0 0.0 {0.529177210903 * 2}
@@ -11,29 +11,39 @@ def test_ci1():
 
     system = System(xyz=xyz, basis="sto-6g", auxiliary_basis="cc-pVTZ-JKFIT")
 
-    # scf = RHF(charge=0, econv=1e-12)(system)
-    # scf.run()
-    # ci = CI(
-    #     orbitals=[0, 1],
-    #     state=State(nel=2, multiplicity=1, ms=0.0),
-    #     nroot=1,
-    # )(scf)
-    workflow = [
-        RHF(charge=0, econv=1e-12),
-        CI(
-            orbitals=[0, 1],
-            state=State(nel=2, multiplicity=1, ms=0.0),
-            nroot=1,
-        ),
-    ]
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    ci = CI(
+        orbitals=[0, 1],
+        state=State(nel=2, multiplicity=1, ms=0.0),
+        nroot=1,
+    )(rhf)
+    ci.run()
 
-    x = system
-    for method in workflow:
-        x = method(x)
-    x.run()
+    assert isclose(rhf.E, -1.05643120731551)
+    assert isclose(ci.E[0], -1.096071975854)
 
-    assert isclose(workflow[0].E, -1.05643120731551)
+
+def test_ci_2():
+    xyz = f"""
+    H 0.0 0.0 0.0
+    F 0.0 0.0 2.0
+    """
+
+    system = System(
+        xyz=xyz, basis="cc-pVDZ", auxiliary_basis="cc-pVTZ-JKFIT", unit="bohr"
+    )
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    ci = CI(
+        orbitals=[1, 2, 3, 4, 5, 6],
+        core_orbitals=[0],
+        state=State(nel=10, multiplicity=1, ms=0.0),
+        nroot=1,
+    )(rhf)
+    ci.run()
+
+    assert isclose(ci.E[0], -100.019788438077)
 
 
 if __name__ == "__main__":
-    test_ci1()
+    test_ci_1()
+    test_ci_2()

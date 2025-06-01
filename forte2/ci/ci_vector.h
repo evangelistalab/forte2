@@ -12,6 +12,7 @@
 
 // #include "base_classes/rdms.h"
 #include "ci_string_lists.h"
+#include "ci/slater_rules.h"
 // #include "sparse_ci/sparse_state.h"
 
 namespace forte2 {
@@ -44,8 +45,8 @@ class CIVector {
     //     /// @brief return the string lists object
     //     const CIStrings& cistrings() const;
 
-    //     /// @brief zero the vector
-    //     void zero();
+    /// @brief zero the vector
+    void zero();
 
     //     /// @brief print the vector
     //     void print(double threshold = 1e-9) const;
@@ -56,11 +57,11 @@ class CIVector {
     //     /// copy the wave function object
     //     void copy(CIVector& wfn);
 
-    //     /// copy the coefficient from a Vector object
-    //     void copy(std::shared_ptr<psi::Vector> vec);
+    /// copy the coefficient from a np_vector
+    void copy(np_vector vec);
 
-    //     /// copy the wave function object
-    //     void copy_to(std::shared_ptr<psi::Vector> vec);
+    /// copy the wave function object to a np_vector
+    void copy_to(np_vector vec) const;
 
     //     /// @brief set the vector from a list of tuples
     //     /// @param sparse_vec a list of tuples (block, Ia, Ib, coefficient)
@@ -86,7 +87,7 @@ class CIVector {
     //     // return beta_address_
     //     std::shared_ptr<StringAddress> beta_address() { return beta_address_; }
 
-    //     std::shared_ptr<psi::Matrix>& C(int irrep) { return C_[irrep]; }
+    np_matrix C(int block) { return C_[block]; }
 
     //     // Operations on the wave function
     //     void Hamiltonian(CIVector& result, std::shared_ptr<ActiveSpaceIntegrals> fci_ints);
@@ -113,11 +114,7 @@ class CIVector {
     //     /// Return the elements with the largest absolute value
     //     /// This function returns the tuple (|C_I|,C_I,class_Ia, class_Ib,Ia,Ib)
     //     std::vector<std::tuple<double, double, int, int, size_t, size_t>>
-    //     max_abs_elements(size_t num_dets);
-
-    // Temporary memory allocation
-    static void allocate_temp_space(const CIStrings& lists);
-    static void release_temp_space();
+    //     max_abs_elements(size_t num_dets) const;
 
     //     /// Return the print level
     //     void set_print(PrintLevel print) { print_ = print; }
@@ -127,81 +124,80 @@ class CIVector {
     //     max_order,
     //                                               RDMsType type);
 
-    /// Return the temporary matrix CR
-    static np_matrix get_CR();
-    /// Return the temporary matrix CL
-    static np_matrix get_CL();
+    // /// Return the temporary matrix CR
+    // static np_matrix get_CR();
+    // /// Return the temporary matrix CL
+    // static np_matrix get_CL();
 
-    //     void for_each_element(std::function<void(const size_t&, const int&, const int&, const
-    //     size_t&,
-    //                                              const size_t&, double&)>
-    //                               lambda) const {
-    //         for (const auto& [n, class_Ia, class_Ib] : lists_->determinant_classes()) {
-    //             const auto c = C_[n]->pointer();
-    //             const auto& nIa = alfa_address_->strpcls(class_Ia);
-    //             const auto& nIb = beta_address_->strpcls(class_Ib);
-    //             if (nIa == 0 or nIb == 0)
-    //                 continue;
-    //             for (size_t Ia = 0; Ia < nIa; ++Ia) {
-    //                 for (size_t Ib = 0; Ib < nIb; ++Ib) {
-    //                     lambda(n, class_Ia, class_Ib, Ia, Ib, c[Ia][Ib]);
-    //                 }
-    //             }
-    //         }
-    //     }
+    void for_each_element(std::function<void(const size_t&, const int&, const int&, const size_t&,
+                                             const size_t&, double&)>
+                              lambda) const {
+        for (const auto& [n, class_Ia, class_Ib] : lists_.determinant_classes()) {
+            const auto c = C_[n].view();
+            const auto& nIa = alfa_address_->strpcls(class_Ia);
+            const auto& nIb = beta_address_->strpcls(class_Ib);
+            if (nIa == 0 or nIb == 0)
+                continue;
+            for (size_t Ia = 0; Ia < nIa; ++Ia) {
+                for (size_t Ib = 0; Ib < nIb; ++Ib) {
+                    lambda(n, class_Ia, class_Ib, Ia, Ib, c(Ia, Ib));
+                }
+            }
+        }
+    }
 
-    //     void const_for_each_element(std::function<void(const size_t&, const int&, const int&,
-    //                                                    const size_t&, const size_t&, const
-    //                                                    double&)>
-    //                                     lambda) const {
-    //         for (const auto& [n, class_Ia, class_Ib] : lists_->determinant_classes()) {
-    //             const auto& nIa = alfa_address_->strpcls(class_Ia);
-    //             const auto& nIb = beta_address_->strpcls(class_Ib);
-    //             if (nIa == 0 or nIb == 0)
-    //                 continue;
-    //             const auto c = C_[n]->pointer();
-    //             for (size_t Ia = 0; Ia < nIa; ++Ia) {
-    //                 for (size_t Ib = 0; Ib < nIb; ++Ib) {
-    //                     lambda(n, class_Ia, class_Ib, Ia, Ib, c[Ia][Ib]);
-    //                 }
-    //             }
-    //         }
-    //     }
+    void const_for_each_element(std::function<void(const size_t&, const int&, const int&,
+                                                   const size_t&, const size_t&, const double&)>
+                                    lambda) const {
+        for (const auto& [n, class_Ia, class_Ib] : lists_.determinant_classes()) {
+            const auto& nIa = alfa_address_->strpcls(class_Ia);
+            const auto& nIb = beta_address_->strpcls(class_Ib);
+            if (nIa == 0 or nIb == 0)
+                continue;
+            const auto c = C_[n].view();
+            for (size_t Ia = 0; Ia < nIa; ++Ia) {
+                for (size_t Ib = 0; Ib < nIb; ++Ib) {
+                    lambda(n, class_Ia, class_Ib, Ia, Ib, c(Ia, Ib));
+                }
+            }
+        }
+    }
 
-    //     void for_each_index_element(std::function<void(const size_t&, double&)> lambda) {
-    //         size_t I = 0;
-    //         for (const auto& [n, class_Ia, class_Ib] : lists_->determinant_classes()) {
-    //             const auto& nIa = alfa_address_->strpcls(class_Ia);
-    //             const auto& nIb = beta_address_->strpcls(class_Ib);
-    //             if (nIa == 0 or nIb == 0)
-    //                 continue;
-    //             const auto c = C_[n]->pointer();
-    //             for (size_t Ia = 0; Ia < nIa; ++Ia) {
-    //                 for (size_t Ib = 0; Ib < nIb; ++Ib) {
-    //                     lambda(I, c[Ia][Ib]);
-    //                     I++;
-    //                 }
-    //             }
-    //         }
-    //     }
+    void for_each_index_element(std::function<void(const size_t&, double&)> lambda) {
+        size_t I = 0;
+        for (const auto& [n, class_Ia, class_Ib] : lists_.determinant_classes()) {
+            const auto& nIa = alfa_address_->strpcls(class_Ia);
+            const auto& nIb = beta_address_->strpcls(class_Ib);
+            if (nIa == 0 or nIb == 0)
+                continue;
+            const auto c = C_[n].view();
+            for (size_t Ia = 0; Ia < nIa; ++Ia) {
+                for (size_t Ib = 0; Ib < nIb; ++Ib) {
+                    lambda(I, c(Ia, Ib));
+                    I++;
+                }
+            }
+        }
+    }
 
-    //     void const_for_each_index_element(std::function<void(const size_t&, const double&)>
-    //     lambda) {
-    //         size_t I = 0;
-    //         for (const auto& [n, class_Ia, class_Ib] : lists_->determinant_classes()) {
-    //             const auto& nIa = alfa_address_->strpcls(class_Ia);
-    //             const auto& nIb = beta_address_->strpcls(class_Ib);
-    //             if (nIa == 0 or nIb == 0)
-    //                 continue;
-    //             const auto c = C_[n]->pointer();
-    //             for (size_t Ia = 0; Ia < nIa; ++Ia) {
-    //                 for (size_t Ib = 0; Ib < nIb; ++Ib) {
-    //                     lambda(I, c[Ia][Ib]);
-    //                     I++;
-    //                 }
-    //             }
-    //         }
-    //     }
+    void
+    const_for_each_index_element(std::function<void(const size_t&, const double&)> lambda) const {
+        size_t I = 0;
+        for (const auto& [n, class_Ia, class_Ib] : lists_.determinant_classes()) {
+            const auto& nIa = alfa_address_->strpcls(class_Ia);
+            const auto& nIb = beta_address_->strpcls(class_Ib);
+            if (nIa == 0 or nIb == 0)
+                continue;
+            const auto c = C_[n].view();
+            // Loop over the indices Ia and Ib
+            for (size_t Ia = 0; Ia < nIa; ++Ia) {
+                for (size_t Ib = 0; Ib < nIb; ++Ib) {
+                    lambda(I, c(Ia, Ib));
+                    I++;
+                }
+            }
+        }
+    }
 
   private:
     // ==> Class Data <==
@@ -215,8 +211,8 @@ class CIVector {
     //     psi::Dimension cmopi_;
     //     /// The offset array for cmopi_
     //     std::vector<size_t> cmopi_offset_;
-    //     /// The number of determinants
-    //     size_t ndet_;
+    /// The number of determinants
+    size_t ndet_;
     //     /// The number of determinants per class
     //     std::vector<size_t> detpcls_;
     //     /// The number of determinants per class
@@ -232,15 +228,6 @@ class CIVector {
     std::shared_ptr<StringAddress> beta_address_;
     /// Coefficient matrix stored in block-matrix form
     std::vector<np_matrix> C_;
-
-    // ==> Class Static Data <==
-
-    // Temporary matrix of size as large as the largest block of C. Used to store the right
-    // coefficient vector
-    static np_matrix CR;
-    // Temporary matrix of size as large as the largest block of C. Used to store the left
-    // coefficient vector
-    static np_matrix CL;
 
     //     // Timers
     //     static double hdiag_timer;
@@ -278,16 +265,16 @@ class CIVector {
     //     /// @param alfa flag for alfa or beta component, true = alfa, false = beta
     //     void H1(CIVector& result, std::shared_ptr<ActiveSpaceIntegrals> fci_ints, bool alfa);
 
-    //     /// @brief Apply the same-spin two-particle Hamiltonian to this vector and add it to the
-    //     result
+    //     /// @brief Apply the same-spin two-particle Hamiltonian to this vector and add it to
+    //     the result
     //     /// @param result The wave function to add the result to
     //     /// @param fci_ints The integrals object
     //     /// @param alfa flag for alfa or beta component, true = alfa, false = beta
     //     void H2_aaaa2(CIVector& result, std::shared_ptr<ActiveSpaceIntegrals> fci_ints, bool
     //     alfa);
 
-    //     /// @brief Apply the different-spin component of two-particle Hamiltonian to this vector
-    //     and add
+    //     /// @brief Apply the different-spin component of two-particle Hamiltonian to this
+    //     vector and add
     //     /// it to the result
     //     /// @param result The wave function to add the result to
     //     /// @param fci_ints The integrals object/
@@ -297,71 +284,70 @@ class CIVector {
     //     // <a^+_{pa} a^+_{qb} a_{sb} a_ra> -> rdm[oei_index(p,q)]
 
     //     /// Compute the matrix elements of the same 1-RDM <a^+_{p} a_{q}>
-    //     static ambit::Tensor compute_1rdm_same_irrep(CIVector& C_left, CIVector& C_right, bool
-    //     alfa);
+    //     static ambit::Tensor compute_1rdm_same_irrep(CIVector& C_left, CIVector& C_right,
+    //     bool alfa);
 
     //     // 2-RDM elements are stored in the format
     //     // <a^+_{p} a^+_{q} a_{s} a_r> -> rdm[tei_index(p,q,r,s)]
 
-    //     /// Compute the matrix elements of the same spin 2-RDM <a^+_p a^+_q a_s a_r> (with all
+    //     /// Compute the matrix elements of the same spin 2-RDM <a^+_p a^+_q a_s a_r> (with
+    //     all
     //     /// indices alpha or beta)
-    //     static ambit::Tensor compute_2rdm_aa_same_irrep(CIVector& C_left, CIVector& C_right, bool
-    //     alfa);
-    //     /// Compute the matrix elements of the alpha-beta 2-RDM <a^+_{pa} a^+_{qb} a_{sb} a_{ra}>
-    //     static ambit::Tensor compute_2rdm_ab_same_irrep(CIVector& C_left, CIVector& C_right);
+    //     static ambit::Tensor compute_2rdm_aa_same_irrep(CIVector& C_left, CIVector& C_right,
+    //     bool alfa);
+    //     /// Compute the matrix elements of the alpha-beta 2-RDM <a^+_{pa} a^+_{qb} a_{sb}
+    //     a_{ra}> static ambit::Tensor compute_2rdm_ab_same_irrep(CIVector& C_left, CIVector&
+    //     C_right);
 
     //     // 3-RDM elements are stored in the format
     //     // <a^+_p a^+_q a^+_r a_u a_t a_s> -> rdm[six_index(p,q,r,s,t,u)]
 
-    //     /// Compute the matrix elements of the same spin 3-RDM <a^+_p a^+_q a_s a_r> (with all
-    //     indices
+    //     /// Compute the matrix elements of the same spin 3-RDM <a^+_p a^+_q a_s a_r> (with
+    //     all indices
     //     /// alpha or beta)
     //     static ambit::Tensor compute_3rdm_aaa_same_irrep(CIVector& C_left, CIVector& C_right,
     //                                                      bool alfa);
-    //     /// Compute the matrix elements of the alpha-alpha-beta 3-RDM <a^+_{pa} a^+_{qa} a^+_{rb}
-    //     a_{ub}
+    //     /// Compute the matrix elements of the alpha-alpha-beta 3-RDM <a^+_{pa} a^+_{qa}
+    //     a^+_{rb} a_{ub}
     //     /// a_{ta} a_{sa}>
-    //     static ambit::Tensor compute_3rdm_aab_same_irrep(CIVector& C_left, CIVector& C_right);
-    //     /// Compute the matrix elements of the alpha-beta-beta 3-RDM <a^+_{pa} a^+_{qb} a^+_{rb}
-    //     a_{ub}
+    //     static ambit::Tensor compute_3rdm_aab_same_irrep(CIVector& C_left, CIVector&
+    //     C_right);
+    //     /// Compute the matrix elements of the alpha-beta-beta 3-RDM <a^+_{pa} a^+_{qb}
+    //     a^+_{rb} a_{ub}
     //     /// a_{tb} a_{sa}>
-    //     static ambit::Tensor compute_3rdm_abb_same_irrep(CIVector& C_left, CIVector& C_right);
+    //     static ambit::Tensor compute_3rdm_abb_same_irrep(CIVector& C_left, CIVector&
+    //     C_right);
 
-    //   public:
-    //     /// @brief Provide a pointer to the a block of the coefficient matrix in such a way that
-    //     we can
-    //     /// use its content in several algorithms (sigma vector, RDMs, etc.)
-    //     /// @param C The fci vector
-    //     /// @param M The matrix that might hold the data it if is transposed
-    //     /// @param alfa flag for alfa or beta component, true = alfa, false = beta. This affects
-    //     /// transposition
-    //     /// @param alfa_address The addressing object for the alfa component
-    //     /// @param beta_address The addressing object for the beta component
-    //     /// @param ha The string class of the alfa component (a generalization of the irrep)
-    //     /// @param hb The string class of the beta component (a generalization of the irrep)
-    //     /// @param zero If true, zero the matrix before returning it
-    //     /// @return A pointer to the block of the coefficient matrix
-    //     double** gather_C_block(std::shared_ptr<psi::Matrix> M, bool alfa,
-    //                             std::shared_ptr<StringAddress> alfa_address,
-    //                             std::shared_ptr<StringAddress> beta_address, int ha, int hb, bool
-    //                             zero);
+  public:
+    /// @brief Provide a pointer to the a block of the coefficient matrix in such a way that we can
+    /// use its content in several algorithms (sigma vector, RDMs, etc.)
+    /// @param C The fci vector
+    /// @param M The matrix that might hold the data it if is transposed
+    /// @param alfa flag for alfa or beta component, true = alfa, false = beta. This affects
+    /// transposition
+    /// @param alfa_address The addressing object for the alfa component
+    /// @param beta_address The addressing object for the beta component
+    /// @param ha The string class of the alfa component (a generalization of the irrep)
+    /// @param hb The string class of the beta component (a generalization of the irrep)
+    /// @param zero If true, zero the matrix before returning it
+    /// @return A pointer to the block of the coefficient matrix
+    np_matrix gather_C_block(np_matrix M, bool alfa, std::shared_ptr<StringAddress> alfa_address,
+                             std::shared_ptr<StringAddress> beta_address, int ha, int hb,
+                             bool zero);
 
-    //     /// @brief Scatter the data from a matrix to the coefficient matrix. This is used in the
-    //     sigma
-    //     /// vector algorithm
-    //     /// @param C The fci vector
-    //     /// @param m The matrix that holds the data
-    //     /// @param alfa flag for alfa or beta component, true = alfa, false = beta. If true, the
-    //     data is
-    //     /// already in place and this function does nothing. If false, the data is transposed
-    //     before
-    //     /// being added.
-    //     /// @param alfa_address The addressing object for the alfa component
-    //     /// @param beta_address The addressing object for the beta component
-    //     /// @param ha The string class of the alfa component (a generalization of the irrep)
-    //     /// @param hb The string class of the beta component (a generalization of the irrep)
-    //     void scatter_C_block(double** m, bool alfa, std::shared_ptr<StringAddress> alfa_address,
-    //                          std::shared_ptr<StringAddress> beta_address, int ha, int hb);
+    /// @brief Scatter the data from a matrix to the coefficient matrix. This is used in the sigma
+    /// vector algorithm
+    /// @param C The fci vector
+    /// @param m The matrix that holds the data
+    /// @param alfa flag for alfa or beta component, true = alfa, false = beta. If true, the data is
+    /// already in place and this function does nothing. If false, the data is transposed before
+    /// being added.
+    /// @param alfa_address The addressing object for the alfa component
+    /// @param beta_address The addressing object for the beta component
+    /// @param ha The string class of the alfa component (a generalization of the irrep)
+    /// @param hb The string class of the beta component (a generalization of the irrep)
+    void scatter_C_block(np_matrix M, bool alfa, std::shared_ptr<StringAddress> alfa_address,
+                         std::shared_ptr<StringAddress> beta_address, int ha, int hb);
 };
 
 // std::shared_ptr<RDMs> compute_transition_rdms(CIVector& C_left, CIVector& C_right,
@@ -373,5 +359,7 @@ class CIVector {
 // /// @param alfa flag for alfa or beta component, true = alfa, false = beta
 // /// @return The one-particle density matrix as a tensor
 // ambit::Tensor compute_1rdm_different_irrep(CIVector& C_left, CIVector& C_right, bool alfa);
+
+// np_vector form_Hdiag_det(const CIStrings& lists, const SlaterRules& slater_rules);
 
 } // namespace forte2

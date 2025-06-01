@@ -44,8 +44,8 @@ class CIStrings {
     //   /// @return the number of irreps
     //   int nirrep() const { return nirrep_; }
 
-    //   /// @return the number of correlated MOs
-    //   size_t ncmo() const { return ncmo_; }
+    /// @return the number of correlated MOs
+    size_t norb() const { return norb_; }
 
     //   /// @return the number of correlated MOs per irrep
     //   psi::Dimension cmopi() const { return cmopi_; }
@@ -74,19 +74,19 @@ class CIStrings {
     //   /// @return the beta string address object for N - 3 electrons
     //   auto beta_address_3h() { return beta_address_3h_; }
 
-    //   /// @return the address of a determinant in the CI vector
-    //   size_t determinant_address(const Determinant& d) const;
-    //   /// @return the determinant corresponding to an address in the CI vector of a given
-    //   symmetry Determinant determinant(size_t address) const;
+    /// @return the address of a determinant in the CI vector
+    size_t determinant_address(const Determinant& d) const;
+    /// @return the determinant corresponding to an address in the CI vector of a given symmetry
+    Determinant determinant(size_t address) const;
 
     /// @return the alpha string list
     const auto& alfa_strings() const { return alfa_strings_; }
     /// @return the beta string list
     const auto& beta_strings() const { return beta_strings_; }
-    //   /// @return the alpha string in irrep h and index I
-    //   String alfa_str(size_t h, size_t I) const { return alfa_strings_[h][I]; }
-    //   /// @return the beta string in irrep h and index I
-    //   String beta_str(size_t h, size_t I) const { return beta_strings_[h][I]; }
+    /// @return the alpha string in irrep h and index I
+    String alfa_str(size_t h, size_t I) const { return alfa_strings_[h][I]; }
+    /// @return the beta string in irrep h and index I
+    String beta_str(size_t h, size_t I) const { return beta_strings_[h][I]; }
 
     /// @return the string class object
     const auto& string_class() const { return string_class_; }
@@ -97,19 +97,19 @@ class CIStrings {
     /// @return the alpha/beta string classes
     const auto& determinant_classes() const { return string_class_->determinant_classes(); }
 
-    //   size_t detpblk(size_t block) const { return detpblk_[block]; }
+    size_t detpblk(size_t block) const { return detpblk_[block]; }
 
     //   /// @return the list of determinants with a given symmetry
     //   std::vector<Determinant> make_determinants() const;
 
-    //   const VOListElement& get_alfa_vo_list(int class_I, int class_J) const;
-    //   const VOListElement& get_beta_vo_list(int class_I, int class_J) const;
+    const VOListElement& get_alfa_vo_list(int class_I, int class_J) const;
+    const VOListElement& get_beta_vo_list(int class_I, int class_J) const;
 
-    //   const OOListElement& get_alfa_oo_list(int class_I) const;
-    //   const OOListElement& get_beta_oo_list(int class_I) const;
+    const OOListElement& get_alfa_oo_list(int class_I) const;
+    const OOListElement& get_beta_oo_list(int class_I) const;
 
-    //   const VVOOListElement& get_alfa_vvoo_list(int class_I, int class_J) const;
-    //   const VVOOListElement& get_beta_vvoo_list(int class_I, int class_J) const;
+    const VVOOListElement& get_alfa_vvoo_list(int class_I, int class_J) const;
+    const VVOOListElement& get_beta_vvoo_list(int class_I, int class_J) const;
 
     //   std::vector<H1StringSubstitution>& get_alfa_1h_list(int h_I, size_t add_I, int h_J);
     //   std::vector<H1StringSubstitution>& get_beta_1h_list(int h_I, size_t add_I, int h_J);
@@ -135,7 +135,7 @@ class CIStrings {
     /// The number of irreps
     size_t nirrep_;
     /// The total number of correlated molecular orbitals
-    size_t ncmo_;
+    size_t norb_;
     /// The symmetry of the correlated molecular orbitals
     std::vector<int> cmo_sym_;
     /// The offset array for cmopi_
@@ -206,10 +206,10 @@ class CIStrings {
     /// The VVOO string lists
     VVOOListMap alfa_vvoo_list;
     VVOOListMap beta_vvoo_list;
-    //   // Empty lists
-    //   const VOListElement empty_vo_list;
-    //   const OOListElement empty_oo_list;
-    //   const VVOOListElement empty_vvoo_list;
+    // Empty lists
+    const VOListElement empty_vo_list;
+    const OOListElement empty_oo_list;
+    const VVOOListElement empty_vvoo_list;
 
     /// The 1-hole lists
     H1List alfa_1h_list;

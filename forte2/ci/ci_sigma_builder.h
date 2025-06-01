@@ -1,0 +1,68 @@
+#pragma once
+
+#include <functional>
+#include <vector>
+#include <cmath>
+
+#include "helpers/ndarray.h"
+
+// #include "helpers/printing.h"
+
+// #include "base_classes/rdms.h"
+#include "ci_string_lists.h"
+#include "ci/slater_rules.h"
+#include "ci/ci_vector.h"
+// #include "sparse_ci/sparse_state.h"
+
+namespace forte2 {
+
+class CISigmaBuilder {
+  public:
+    // == Class Constructor ==
+    CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V);
+
+    // == Class Public Functions ==
+    /// @brief Form the diagonal of the Hamiltonian matrix in the CI basis
+    /// @return The diagonal elements of the Hamiltonian matrix
+    np_vector form_Hdiag_det();
+
+    /// @brief Apply the Hamiltonian to the wave function
+    /// @param basis The basis vector
+    /// @param sigma The resulting sigma vector |sigma> = H |basis>
+    void Hamiltonian(CIVector& basis, CIVector& sigma) const;
+
+    double avg_build_time() const {
+        return build_count_ > 0 ? hdiag_timer_ / static_cast<double>(build_count_) : 0.0;
+    }
+
+    // == Class Static Functions ==
+    // Temporary memory allocation
+    static void allocate_temp_space(const CIStrings& lists);
+    static void release_temp_space();
+
+  private:
+    // == Class Private Variables ==
+    const CIStrings& lists_;
+    double E_;
+    np_matrix H_;
+    np_tensor4 V_;
+    SlaterRules slater_rules_;
+
+    // == Class Mutable Variables ==
+    mutable double hdiag_timer_ = 0.0;
+    mutable int build_count_ = 0;
+
+    // == Class Static Variables ==
+    /// Temporary matrix as large as the largest block of C for the right coefficient vector
+    static np_matrix CR;
+    /// Temporary matrix as large as the largest block of C for the left coefficient vector
+    static np_matrix CL;
+
+    // == Class Private Functions ==
+    void H0(CIVector& basis, CIVector& sigma) const;
+    void H1(CIVector& basis, CIVector& sigma, bool alfa) const;
+    void H2_aaaa(CIVector& basis, CIVector& sigma, bool alfa) const;
+    void H2_aabb(CIVector& basis, CIVector& sigma) const;
+};
+
+} // namespace forte2

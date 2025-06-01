@@ -4,6 +4,7 @@
 #include "ci/ci_string_lists.h"
 #include "ci/ci_string_address.h"
 #include "ci/ci_vector.h"
+#include "ci/ci_sigma_builder.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -20,7 +21,9 @@ void export_ci_strings_api(nb::module_& m) {
         .def_prop_ro("symmetry", &CIStrings::symmetry)
         .def_prop_ro("nas", &CIStrings::nas)
         .def_prop_ro("nbs", &CIStrings::nbs)
-        .def_prop_ro("ndet", &CIStrings::ndet);
+        .def_prop_ro("ndet", &CIStrings::ndet)
+        .def("determinant", &CIStrings::determinant, "address"_a)
+        .def("determinant_index", &CIStrings::determinant_address, "d"_a);
     // .def_prop_ro("orbitals", &CIStrings::orbitals)
     // .def_prop_ro("orbital_symmetry", &CIStrings::orbital_symmetry)
     // .def_prop_ro("gas_min", &CIStrings::gas_min)
@@ -30,8 +33,20 @@ void export_ci_strings_api(nb::module_& m) {
 void export_ci_vector_api(nb::module_& m) {
     nb::class_<CIVector>(m, "CIVector")
         .def(nb::init<const CIStrings&>(), "lists"_a)
-        .def_static("allocate_temp_space", &CIVector::allocate_temp_space, "lists"_a,
-                    nb::rv_policy::reference_internal)
-        .def_static("release_temp_space", &CIVector::release_temp_space);
+        .def("copy", &CIVector::copy, "vec"_a)
+        .def("copy_to", &CIVector::copy_to, "vec"_a);
 }
+
+void export_ci_sigma_builder_api(nb::module_& m) {
+    nb::class_<CISigmaBuilder>(m, "CISigmaBuilder")
+        .def(nb::init<const CIStrings&, double, np_matrix&, np_tensor4&>(), "lists"_a, "E"_a, "H"_a,
+             "V"_a)
+        .def_static("allocate_temp_space", &CISigmaBuilder::allocate_temp_space, "lists"_a,
+                    nb::rv_policy::reference_internal)
+        .def_static("release_temp_space", &CISigmaBuilder::release_temp_space)
+        .def("form_Hdiag_det", &CISigmaBuilder::form_Hdiag_det)
+        .def("Hamiltonian", &CISigmaBuilder::Hamiltonian)
+        .def("avg_build_time", &CISigmaBuilder::avg_build_time);
+}
+
 } // namespace forte2

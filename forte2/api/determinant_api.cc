@@ -34,6 +34,11 @@ void export_determinant_api(nb::module_& m) {
         .def_static("zero", &Determinant::zero)
         .def("__eq__", [](const Determinant& a, const Determinant& b) { return a == b; })
         .def("__lt__", [](const Determinant& a, const Determinant& b) { return a < b; })
+        .def("__hash__",
+             [](const Determinant& d) {
+                 // Use the hash function defined in the Determinant class
+                 return Determinant::Hash{}(d);
+             })
         .def(
             "__repr__", [](Determinant& d) { return str(d); },
             "String representation of the determinant")
@@ -43,6 +48,8 @@ void export_determinant_api(nb::module_& m) {
         .def("nb", &Determinant::nb)
         .def("count_a", &Determinant::count_a)
         .def("count_b", &Determinant::count_b)
-        .def("count", [](Determinant& d) { return d.count_a() + d.count_b(); });
+        .def("count", [](Determinant& d) { return d.count_a() + d.count_b(); })
+        .def("spin_flip", &Determinant::spin_flip,
+             "Spin flip the determinant, i.e., swap alpha and beta orbitals");
 }
 } // namespace forte2

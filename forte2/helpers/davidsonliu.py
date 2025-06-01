@@ -7,15 +7,29 @@ class DavidsonLiuSolver:
         self,
         size: int,
         nroot: int,
-        collapse_per_root: int = 1,
-        subspace_per_root: int = 5,
+        collapse_per_root: int = 2,
+        subspace_per_root: int = 4,
+        maxiter: int = 100,
+        e_tol: float = 1e-12,
+        r_tol: float = 1e-6,
         disable_collapse: bool = False,
     ):
+        # size of the space
         self.size = size
+        # number of roots to find
         self.nroot = nroot
+        # number of vectors to collapse per root
         self.collapse_per_root = collapse_per_root
+        # subspace size per root
         self.subspace_per_root = subspace_per_root
+        # disable collapse if True
         self.disable_collapse = disable_collapse
+        # maximum number of iterations
+        self.maxiter = maxiter
+        # convergence tolerance for eigenvalues
+        self.e_tol = e_tol
+        # convergence tolerance for residuals
+        self.r_tol = r_tol
 
         # sanity checks
         if size <= 0:
@@ -51,12 +65,6 @@ class DavidsonLiuSolver:
         self.lam_old = np.zeros_like(self.lam)
 
         ## configuration parameters
-        # convergence tolerance for eigenvalues
-        self.e_tol = 1e-12
-        # convergence tolerance for residuals
-        self.r_tol = 1e-6
-        # maximum number of iterations
-        self.maxiter = 100
         # The threshold used to discard correction vectors
         self.schmidt_discard_threshold = 1e-7
         # The threshold used to guarantee orthogonality among the roots

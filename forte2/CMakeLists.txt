@@ -76,8 +76,9 @@ nanobind_add_module(
   api/sparse_state_api.cc
   api/sparse_exp_api.cc
   api/sq_operator_string_api.cc
-  helpers/string_algorithms.cc
   helpers/combinatorial.cc
+  helpers/np_matrix_functions.cc
+  helpers/string_algorithms.cc
   ints/basis.cc
   ints/fock_builder.cc
   ints/nuclear_repulsion.cc
@@ -87,6 +88,7 @@ nanobind_add_module(
   ci/ci_string_lists.cc
   ci/ci_string_lists_makers.cc
   ci/ci_string_address.cc
+  ci/ci_sigma_builder.cc
   ci/ci_occupation.cc
   ci/determinant_helpers.cc
   ci/sparse_exp.cc

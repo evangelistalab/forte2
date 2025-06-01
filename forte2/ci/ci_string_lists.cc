@@ -35,6 +35,7 @@ CIStrings::CIStrings(size_t na, size_t nb, int symmetry,
                 k++;
             }
         }
+        norb_ = k;
     }
 
     {
@@ -196,102 +197,100 @@ CIStrings::CIStrings(size_t na, size_t nb, int symmetry,
 //     return dets;
 // }
 
-// size_t CIStrings::determinant_address(const Determinant& d) const {
-//     const auto Ia = d.get_alfa_bits();
-//     const auto Ib = d.get_beta_bits();
+size_t CIStrings::determinant_address(const Determinant& d) const {
+    const auto Ia = d.get_alfa_bits();
+    const auto Ib = d.get_beta_bits();
 
-//     const auto& [addIa, class_Ia] = alfa_address_->address_and_class(Ia);
-//     const auto& [addIb, class_Ib] = beta_address_->address_and_class(Ib);
-//     size_t addI = addIa * beta_address_->strpcls(class_Ib) + addIb;
-//     int n = string_class_->block_index(class_Ia, class_Ib);
-//     addI += detpblk_offset_[n];
-//     return addI;
-// }
+    const auto& [addIa, class_Ia] = alfa_address_->address_and_class(Ia);
+    const auto& [addIb, class_Ib] = beta_address_->address_and_class(Ib);
+    size_t addI = addIa * beta_address_->strpcls(class_Ib) + addIb;
+    int n = string_class_->block_index(class_Ia, class_Ib);
+    addI += detpblk_offset_[n];
+    return addI;
+}
 
-// Determinant CIStrings::determinant(size_t address) const {
-//     // find the irreps of alpha and beta strings
-//     size_t n = 0;
-//     size_t addI = 0;
-//     // keep adding the number of determinants in each irrep until we reach the right one
-//     for (size_t maxh = determinant_classes().size(); n < maxh; n++) {
-//         if (addI + detpblk_[n] > address) {
-//             break;
-//         }
-//         addI += detpblk_[n];
-//     }
-//     const size_t shift = address - addI;
-//     const auto& [_, class_Ia, class_Ib] = determinant_classes().at(n);
-//     const size_t beta_size = beta_address_->strpcls(class_Ib);
-//     const size_t addIa = shift / beta_size;
-//     const size_t addIb = shift % beta_size;
-//     String Ia = alfa_str(class_Ia, addIa);
-//     String Ib = beta_str(class_Ib, addIb);
-//     return Determinant(Ia, Ib);
-// }
+Determinant CIStrings::determinant(size_t address) const {
+    // find the irreps of alpha and beta strings
+    size_t n = 0;
+    size_t addI = 0;
+    // keep adding the number of determinants in each irrep until we reach the right one
+    for (size_t maxh = determinant_classes().size(); n < maxh; n++) {
+        if (addI + detpblk_[n] > address) {
+            break;
+        }
+        addI += detpblk_[n];
+    }
+    const size_t shift = address - addI;
+    const auto& [_, class_Ia, class_Ib] = determinant_classes().at(n);
+    const size_t beta_size = beta_address_->strpcls(class_Ib);
+    const size_t addIa = shift / beta_size;
+    const size_t addIb = shift % beta_size;
+    String Ia = alfa_str(class_Ia, addIa);
+    String Ib = beta_str(class_Ib, addIb);
+    return Determinant(Ia, Ib);
+}
 
-// const OOListElement& CIStrings::get_alfa_oo_list(int class_I) const {
-//     // check if the key exists, if not return an empty list
-//     if (auto it = alfa_oo_list.find(class_I); it != alfa_oo_list.end()) {
-//         return it->second;
-//     }
-//     return empty_oo_list;
-// }
+const OOListElement& CIStrings::get_alfa_oo_list(int class_I) const {
+    // check if the key exists, if not return an empty list
+    if (auto it = alfa_oo_list.find(class_I); it != alfa_oo_list.end()) {
+        return it->second;
+    }
+    return empty_oo_list;
+}
 
-// const OOListElement& CIStrings::get_beta_oo_list(int class_I) const {
-//     // check if the key exists, if not return an empty list
-//     if (auto it = beta_oo_list.find(class_I); it != beta_oo_list.end()) {
-//         return it->second;
-//     }
-//     return empty_oo_list;
-// }
+const OOListElement& CIStrings::get_beta_oo_list(int class_I) const {
+    // check if the key exists, if not return an empty list
+    if (auto it = beta_oo_list.find(class_I); it != beta_oo_list.end()) {
+        return it->second;
+    }
+    return empty_oo_list;
+}
 
-// /**
-//  * Returns a vector of tuples containing the sign, I, and J connected by a^{+}_p
-//  * a_q
-//  * that is: J = ± a^{+}_p a_q I. p and q are absolute indices and I belongs to
-//  * the irrep h.
-//  */
-// const VOListElement& CIStrings::get_alfa_vo_list(int class_I, int class_J) const {
-//     // check if the key exists, if not return an empty list
-//     if (auto it = alfa_vo_list.find(std::make_pair(class_I, class_J)); it != alfa_vo_list.end())
-//     {
-//         return it->second;
-//     }
-//     return empty_vo_list;
-// }
+/**
+ * Returns a vector of tuples containing the sign, I, and J connected by a^{+}_p
+ * a_q
+ * that is: J = ± a^{+}_p a_q I. p and q are absolute indices and I belongs to
+ * the irrep h.
+ */
+const VOListElement& CIStrings::get_alfa_vo_list(int class_I, int class_J) const {
+    // check if the key exists, if not return an empty list
+    if (auto it = alfa_vo_list.find(std::make_pair(class_I, class_J)); it != alfa_vo_list.end()) {
+        return it->second;
+    }
+    return empty_vo_list;
+}
 
-// /**
-//  * Returns a vector of tuples containing the sign,I, and J connected by a^{+}_p
-//  * a_q
-//  * that is: J = ± a^{+}_p a_q I. p and q are absolute indices and I belongs to
-//  * the irrep h.
-//  */
-// const VOListElement& CIStrings::get_beta_vo_list(int class_I, int class_J) const {
-//     // check if the key exists, if not return an empty list
-//     if (auto it = beta_vo_list.find(std::make_pair(class_I, class_J)); it != beta_vo_list.end())
-//     {
-//         return it->second;
-//     }
-//     return empty_vo_list;
-// }
+/**
+ * Returns a vector of tuples containing the sign,I, and J connected by a^{+}_p
+ * a_q
+ * that is: J = ± a^{+}_p a_q I. p and q are absolute indices and I belongs to
+ * the irrep h.
+ */
+const VOListElement& CIStrings::get_beta_vo_list(int class_I, int class_J) const {
+    // check if the key exists, if not return an empty list
+    if (auto it = beta_vo_list.find(std::make_pair(class_I, class_J)); it != beta_vo_list.end()) {
+        return it->second;
+    }
+    return empty_vo_list;
+}
 
-// const VVOOListElement& CIStrings::get_alfa_vvoo_list(int class_I, int class_J) const {
-//     // check if the key exists, if not return an empty list
-//     if (auto it = alfa_vvoo_list.find(std::make_pair(class_I, class_J));
-//         it != alfa_vvoo_list.end()) {
-//         return it->second;
-//     }
-//     return empty_vvoo_list;
-// }
+const VVOOListElement& CIStrings::get_alfa_vvoo_list(int class_I, int class_J) const {
+    // check if the key exists, if not return an empty list
+    if (auto it = alfa_vvoo_list.find(std::make_pair(class_I, class_J));
+        it != alfa_vvoo_list.end()) {
+        return it->second;
+    }
+    return empty_vvoo_list;
+}
 
-// const VVOOListElement& CIStrings::get_beta_vvoo_list(int class_I, int class_J) const {
-//     // check if the key exists, if not return an empty list
-//     if (auto it = beta_vvoo_list.find(std::make_pair(class_I, class_J));
-//         it != beta_vvoo_list.end()) {
-//         return it->second;
-//     }
-//     return empty_vvoo_list;
-// }
+const VVOOListElement& CIStrings::get_beta_vvoo_list(int class_I, int class_J) const {
+    // check if the key exists, if not return an empty list
+    if (auto it = beta_vvoo_list.find(std::make_pair(class_I, class_J));
+        it != beta_vvoo_list.end()) {
+        return it->second;
+    }
+    return empty_vvoo_list;
+}
 
 // std::vector<H1StringSubstitution>& CIStrings::get_alfa_1h_list(int class_I, size_t add_I,
 //                                                                int class_J) {
