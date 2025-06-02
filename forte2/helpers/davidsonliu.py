@@ -7,12 +7,11 @@ class DavidsonLiuSolver:
         self,
         size: int,
         nroot: int,
+        basis_per_root: int = 4,
         collapse_per_root: int = 2,
-        subspace_per_root: int = 4,
         maxiter: int = 100,
         e_tol: float = 1e-12,
         r_tol: float = 1e-6,
-        disable_collapse: bool = False,
     ):
         # size of the space
         self.size = size
@@ -20,10 +19,8 @@ class DavidsonLiuSolver:
         self.nroot = nroot
         # number of vectors to collapse per root
         self.collapse_per_root = collapse_per_root
-        # subspace size per root
-        self.subspace_per_root = subspace_per_root
-        # disable collapse if True
-        self.disable_collapse = disable_collapse
+        # basis size per root
+        self.basis_per_root = basis_per_root
         # maximum number of iterations
         self.maxiter = maxiter
         # convergence tolerance for eigenvalues
@@ -42,14 +39,14 @@ class DavidsonLiuSolver:
             raise ValueError(
                 f"Davidson-Liu solver: collapse_per_root ({collapse_per_root}) must be greater than or equal to 1."
             )
-        if subspace_per_root < collapse_per_root + 1:
+        if basis_per_root < collapse_per_root + 1:
             raise ValueError(
-                f"Davidson-Liu solver: subspace_per_root ({subspace_per_root}) must be greater than or equal to collapse_per_root + 1 ({collapse_per_root + 1})."
+                f"Davidson-Liu solver: basis_per_root ({basis_per_root}) must be greater than or equal to collapse_per_root + 1 ({collapse_per_root + 1})."
             )
 
         # fixed subspace and collapse dims
         self.collapse_size = min(collapse_per_root * nroot, size)
-        self.max_subspace_size = min(subspace_per_root * nroot, size)
+        self.max_subspace_size = min(basis_per_root * nroot, size)
 
         # allocate all arrays as (size, subspace_size) so each column is a vector
         self.b = np.zeros((size, self.max_subspace_size))  # basis
@@ -194,13 +191,11 @@ class DavidsonLiuSolver:
                 break
             self.lam_old[: self.nroot] = lamr
 
-            # ——— 5. collapse if needed ———
-            if not self.disable_collapse and (
-                self.basis_size + self.nroot > self.max_subspace_size
-            ):
+            # 5. collapse if we cannot add more vectors
+            if self.basis_size + self.nroot > self.max_subspace_size:
                 self._collapse(alpha)
 
-            # ——— 6. add correction vectors ———
+            # 6. add correction vectors
             # 6a. orthogonalize residuals against current basis
             R0 = self.r[:, : self.nroot]
             # subtract projection onto existing basis
@@ -220,7 +215,7 @@ class DavidsonLiuSolver:
             if to_add == 0:
                 break
 
-            # attempt to add directly from R0
+            # attempt to add new basis vectors from R0
             added = self.add_rows_and_orthonormalize(
                 self.b[:, : self.basis_size],
                 R0[:, :to_add],
@@ -430,7 +425,8 @@ class DavidsonLiuSolver:
         print(f"\nDavidson-Liu solver configuration:")
         print(f"  Size of the space:        {self.size}")
         print(f"  Number of roots:          {self.nroot}")
-        print(f"  Collapse size:            {self.collapse_size}")
-        print(f"  Maximum subspace size:    {self.max_subspace_size}")
-        print(f"  Disable collapse:         {self.disable_collapse}")
+        print(f"  Maximum size of subspace: {self.max_subspace_size}")
+        print(f"  Size of collapsed space:  {self.collapse_size}")
+        print(f"  Energy convergence:       {self.e_tol}")
+        print(f"  Residual convergence:     {self.r_tol}")
         print(f"  Maximum iterations:       {self.maxiter}\n")

@@ -2,6 +2,7 @@
 #include <nanobind/stl/string.h>
 
 #include "ci/determinant.h"
+#include "ci/configuration.hpp"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -51,5 +52,56 @@ void export_determinant_api(nb::module_& m) {
         .def("count", [](Determinant& d) { return d.count_a() + d.count_b(); })
         .def("spin_flip", &Determinant::spin_flip,
              "Spin flip the determinant, i.e., swap alpha and beta orbitals");
+}
+
+void export_configuration_api(nb::module_& m) {
+    nb::class_<Configuration>(m, "Configuration")
+        .def(nb::init<>(), "Build an empty configuration")
+        .def(nb::init<const Determinant&>(), "Build a configuration from a determinant")
+        .def(
+            "str", [](const Configuration& a, int n) { return str(a, n); },
+            "n"_a = Configuration::norb(),
+            "Get the string representation of the Slater determinant")
+        .def("is_empt", &Configuration::is_empt, "n"_a, "Is orbital n empty?")
+        .def("is_docc", &Configuration::is_docc, "n"_a, "Is orbital n doubly occupied?")
+        .def("is_socc", &Configuration::is_socc, "n"_a, "Is orbital n singly occupied?")
+        .def("set_occ", &Configuration::set_occ, "n"_a, "value"_a, "Set the value of an alpha bit")
+        .def("count_docc", &Configuration::count_docc,
+             "Count the number of doubly occupied orbitals")
+        .def("count_socc", &Configuration::count_socc,
+             "Count the number of singly occupied orbitals")
+        .def(
+            "get_docc_vec",
+            [](const Configuration& c) {
+                int dim = c.count_docc();
+                std::vector<int> l(dim);
+                c.get_docc_vec(Configuration::norb(), l);
+                return l;
+            },
+            "Get a list of the doubly occupied orbitals")
+        .def(
+            "get_socc_vec",
+            [](const Configuration& c) {
+                int dim = c.count_socc();
+                std::vector<int> l(dim);
+                c.get_socc_vec(Configuration::norb(), l);
+                return l;
+            },
+            "Get a list of the singly occupied orbitals")
+        .def(
+            "__repr__", [](const Configuration& a) { return str(a); },
+            "Get the string representation of the configuration")
+        .def(
+            "__str__", [](const Configuration& a) { return str(a); },
+            "Get the string representation of the configuration")
+        .def(
+            "__eq__", [](const Configuration& a, const Configuration& b) { return a == b; },
+            "Check if two configurations are equal")
+        .def(
+            "__lt__", [](const Configuration& a, const Configuration& b) { return a < b; },
+            "Check if a configuration is less than another configuration")
+        .def(
+            "__hash__", [](const Configuration& a) { return Configuration::Hash()(a); },
+            "Get the hash of the configuration");
 }
 } // namespace forte2

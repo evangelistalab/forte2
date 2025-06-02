@@ -80,44 +80,4 @@ sparse_mat GenCISolver::initial_guess_csf(std::shared_ptr<psi::Vector> diag,
                                   print_ >= PrintLevel::Default);
 }
 
-std::shared_ptr<psi::Vector>
-GenCISolver::form_Hdiag_csf(std::shared_ptr<ActiveSpaceIntegrals> fci_ints,
-                            std::shared_ptr<SpinAdapter> spin_adapter) {
-    auto Hdiag_csf = std::make_shared<psi::Vector>(spin_adapter->ncsf());
-    // Compute the diagonal elements of the Hamiltonian in the CSF basis
-    double E0 = fci_ints->nuclear_repulsion_energy() + fci_ints->scalar_energy();
-    // Compute the diagonal elements of the Hamiltonian in the CSF basis
-    if (spin_adapt_full_preconditioner_) {
-        for (size_t i = 0, imax = spin_adapter->ncsf(); i < imax; ++i) {
-            double energy = E0;
-            int I = 0;
-            for (const auto& [det_add_I, c_I] : spin_adapter_->csf(i)) {
-                int J = 0;
-                for (const auto& [det_add_J, c_J] : spin_adapter_->csf(i)) {
-                    if (I == J) {
-                        energy += c_I * c_J * fci_ints->energy(dets_[det_add_I]);
-                    } else if (I < J) {
-                        if (c_I * c_J != 0.0) {
-                            energy += 2.0 * c_I * c_J *
-                                      fci_ints->slater_rules(dets_[det_add_I], dets_[det_add_J]);
-                        }
-                    }
-                    J++;
-                }
-                I++;
-            }
-            Hdiag_csf->set(i, energy);
-        }
-    } else {
-        for (size_t i = 0, imax = spin_adapter->ncsf(); i < imax; ++i) {
-            double energy = E0;
-            for (const auto& [det_add_I, c_I] : spin_adapter_->csf(i)) {
-                energy += c_I * c_I * fci_ints->energy(dets_[det_add_I]);
-            }
-            Hdiag_csf->set(i, energy);
-        }
-    }
-    return Hdiag_csf;
-}
-
 } // namespace forte

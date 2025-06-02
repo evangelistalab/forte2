@@ -6,6 +6,7 @@
 #include "ci/ci_string_address.h"
 #include "ci/ci_vector.h"
 #include "ci/ci_sigma_builder.h"
+#include "ci/ci_spin_adapter.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -24,7 +25,8 @@ void export_ci_strings_api(nb::module_& m) {
         .def_prop_ro("nbs", &CIStrings::nbs)
         .def_prop_ro("ndet", &CIStrings::ndet)
         .def("determinant", &CIStrings::determinant, "address"_a)
-        .def("determinant_index", &CIStrings::determinant_address, "d"_a);
+        .def("determinant_index", &CIStrings::determinant_address, "d"_a)
+        .def("make_determinants", &CIStrings::make_determinants);
     // .def_prop_ro("orbitals", &CIStrings::orbitals)
     // .def_prop_ro("orbital_symmetry", &CIStrings::orbital_symmetry)
     // .def_prop_ro("gas_min", &CIStrings::gas_min)
@@ -46,14 +48,21 @@ void export_ci_sigma_builder_api(nb::module_& m) {
                     nb::rv_policy::reference_internal)
         .def_static("release_temp_space", &CISigmaBuilder::release_temp_space)
         .def("form_Hdiag_det", &CISigmaBuilder::form_Hdiag_det)
-        .def(
-            "Hamiltonian",
-            [](const CISigmaBuilder& self, CIVector& basis, CIVector& sigma) {
-                self.Hamiltonian(basis, sigma);
-            },
-            "basis"_a, "sigma"_a)
-        .def("Hamiltonian2", &CISigmaBuilder::Hamiltonian2, "basis"_a, "sigma"_a)
+        .def("form_Hdiag_csf", &CISigmaBuilder::form_Hdiag_csf, "dets"_a, "spin_adapter"_a,
+             "spin_adapt_full_preconditioner"_a = false)
+        .def("slater_rules_csf", &CISigmaBuilder::slater_rules_csf, "dets"_a, "spin_adapter"_a,
+             "I"_a, "J"_a)
+        .def("Hamiltonian", &CISigmaBuilder::Hamiltonian, "basis"_a, "sigma"_a)
         .def("avg_build_time", &CISigmaBuilder::avg_build_time);
 }
 
+void export_ci_spin_adapter_api(nb::module_& m) {
+    nb::class_<CISpinAdapter>(m, "CISpinAdapter")
+        .def(nb::init<int, int, int>(), "twoS"_a, "twoMs"_a, "norb"_a)
+        .def("prepare_couplings", &CISpinAdapter::prepare_couplings, "dets"_a)
+        .def("csf_C_to_det_C", &CISpinAdapter::csf_C_to_det_C, "csf_C"_a, "det_C"_a)
+        .def("det_C_to_csf_C", &CISpinAdapter::det_C_to_csf_C, "det_C"_a, "csf_C"_a)
+        .def("ncsf", [](CISpinAdapter& self) { return self.ncsf(); });
+    // .def("ndet", &CISpinAdapter::ndet);
+}
 } // namespace forte2

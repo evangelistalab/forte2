@@ -103,8 +103,8 @@ class CIStrings {
     /// @return the offset of a given block in the CI vector
     size_t block_offset(size_t block) const { return detpblk_offset_[block]; }
 
-    //   /// @return the list of determinants with a given symmetry
-    //   std::vector<Determinant> make_determinants() const;
+    /// @return the list of determinants
+    std::vector<Determinant> make_determinants() const;
 
     const VOListElement& get_alfa_vo_list(int class_I, int class_J) const;
     const VOListElement& get_beta_vo_list(int class_I, int class_J) const;
@@ -125,6 +125,24 @@ class CIStrings {
     //   std::vector<H3StringSubstitution>& get_beta_3h_list(int h_I, size_t add_I, int h_J);
 
     //   Pair get_pair_list(int h, int n) const { return pair_list_[h][n]; }
+
+    void for_each_element(std::function<void(const size_t&, const int&, const int&, const size_t&,
+                                             const size_t&, const size_t&)>
+                              lambda) const {
+        size_t idx{0};
+        for (const auto& [block, class_Ia, class_Ib] : this->determinant_classes()) {
+            const auto& nIa = this->alfa_address()->strpcls(class_Ia);
+            const auto& nIb = this->beta_address()->strpcls(class_Ib);
+            if (nIa == 0 or nIb == 0)
+                continue;
+            for (size_t Ia{0}; Ia < nIa; ++Ia) {
+                for (size_t Ib{0}; Ib < nIb; ++Ib) {
+                    lambda(block, class_Ia, class_Ib, Ia, Ib, idx);
+                    ++idx;
+                }
+            }
+        }
+    }
 
   private:
     // ==> Class Data <==

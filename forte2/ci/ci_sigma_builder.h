@@ -6,13 +6,9 @@
 
 #include "helpers/ndarray.h"
 
-// #include "helpers/printing.h"
-
-// #include "base_classes/rdms.h"
 #include "ci_string_lists.h"
 #include "ci/slater_rules.h"
-#include "ci/ci_vector.h"
-// #include "sparse_ci/sparse_state.h"
+#include "ci_spin_adapter.h"
 
 namespace forte2 {
 
@@ -24,17 +20,21 @@ class CISigmaBuilder {
     // == Class Public Functions ==
     /// @brief Form the diagonal of the Hamiltonian matrix in the CI basis
     /// @return The diagonal elements of the Hamiltonian matrix
-    np_vector form_Hdiag_det();
+    np_vector form_Hdiag_det() const;
+
+    /// @brief Form the diagonal of the Hamiltonian matrix in the CI basis
+    /// @return The diagonal elements of the Hamiltonian matrix
+    np_vector form_Hdiag_csf(const std::vector<Determinant>& dets,
+                             const CISpinAdapter& spin_adapter,
+                             bool spin_adapt_full_preconditioner) const;
+
+    double slater_rules_csf(const std::vector<Determinant>& dets, const CISpinAdapter& spin_adapter,
+                            size_t I, size_t J) const;
 
     /// @brief Apply the Hamiltonian to the wave function
     /// @param basis The basis vector
     /// @param sigma The resulting sigma vector |sigma> = H |basis>
-    void Hamiltonian(CIVector& basis, CIVector& sigma) const;
-
-    /// @brief Apply the Hamiltonian to the wave function
-    /// @param basis The basis vector
-    /// @param sigma The resulting sigma vector |sigma> = H |basis>
-    void Hamiltonian2(np_vector basis, np_vector sigma) const;
+    void Hamiltonian(np_vector basis, np_vector sigma) const;
 
     double avg_build_time() const {
         return build_count_ > 0 ? hdiag_timer_ / static_cast<double>(build_count_) : 0.0;
@@ -64,15 +64,11 @@ class CISigmaBuilder {
     static np_matrix CL;
 
     // == Class Private Functions ==
-    void H0(CIVector& basis, CIVector& sigma) const;
-    void H1(CIVector& basis, CIVector& sigma, bool alfa) const;
-    void H2_aaaa(CIVector& basis, CIVector& sigma, bool alfa) const;
-    void H2_aabb(CIVector& basis, CIVector& sigma) const;
-
     void H0(np_vector basis, np_vector sigma) const;
     void H1(np_vector basis, np_vector sigma, bool alfa) const;
     void H2_aaaa(np_vector basis, np_vector sigma, bool alfa) const;
     void H2_aabb(np_vector basis, np_vector sigma) const;
+    void H2_aabb_gather_scatter(np_vector basis, np_vector sigma) const;
 
     static void gather_C_block(np_vector source, np_matrix dest, bool alfa, const CIStrings& lists,
                                int class_Ia, int class_Ib);

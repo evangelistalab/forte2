@@ -86,10 +86,11 @@ nanobind_add_module(
   ints/one_electron.cc
   ints/two_electron.cc
   ints/value_at_points.cc
+  ci/ci_sigma_builder.cc
+  ci/ci_spin_adapter.cc
   ci/ci_string_lists.cc
   ci/ci_string_lists_makers.cc
   ci/ci_string_address.cc
-  ci/ci_sigma_builder.cc
   ci/ci_occupation.cc
   ci/determinant_helpers.cc
   ci/sparse_exp.cc

@@ -18,16 +18,22 @@ class CI(MOsMixin, SystemMixin):
     nroot: int
     core_orbitals: list[int] = field(default_factory=list)
 
+    # Spin adaptation flag
+    spin_adapt: bool = True
     # The number of guess vectors for each root
     guess_per_root: int = 2
     # The number of determinants per guess vector
     ndets_per_guess: int = 10
     # The number of roots to collapse per root
     collapse_per_root: int = 2
-    # The number of subspace vectors per root
-    max_subspace_per_root: int = 4
+    # The maximum number of basis vectors per root
+    basis_per_root: int = 4
     # The number of iterations for the Davidson-Liu solver
     maxiter: int = 100
+    # The energy convergence threshold
+    econv: float = 1e-10
+    # The residual convergence threshold
+    rconv: float = 1e-5
 
     def __call__(self, method):
         if not method.executed:
@@ -65,6 +71,7 @@ class CI(MOsMixin, SystemMixin):
         orbital_symmetry = [[0] * len(x) for x in self.orbitals]
         gas_min = []
         gas_max = []
+
         ci_strings = forte2.CIStrings(
             self.state.na - len(self.core_orbitals),
             self.state.nb - len(self.core_orbitals),
@@ -74,57 +81,59 @@ class CI(MOsMixin, SystemMixin):
             gas_max,
         )
 
-        forte2.CISigmaBuilder.allocate_temp_space(ci_strings)
-
-        ci_sigma_builder = forte2.CISigmaBuilder(
-            ci_strings, self.ints.E, self.ints.H, self.ints.V
-        )
-
         print(f"\nNumber of α electrons: {ci_strings.na}")
         print(f"Number of β electrons: {ci_strings.nb}")
         print(f"Number of α strings: {ci_strings.nas}")
         print(f"Number of β strings: {ci_strings.nbs}")
         print(f"Number of determinants: {ci_strings.ndet}")
 
-        # TODO: optionally create the spin adapter
-        # local_timer t;
-        # startup();
+        if self.spin_adapt:
+            self.spin_adapter = forte2.CISpinAdapter(
+                self.state.multiplicity - 1, self.state.twice_ms, self.norb
+            )
+            self.dets = ci_strings.make_determinants()
+            self.spin_adapter.prepare_couplings(self.dets)
+            print(f"Number of CSFs: {self.spin_adapter.ncsf()}")
+
+        # Allocate temporary space for the CISigmaBuilder
+        # (this must be done before creating the CISigmaBuilder)
+        forte2.CISigmaBuilder.allocate_temp_space(ci_strings)
+
+        # Create the CISigmaBuilder from the CI strings and integrals
+        ci_sigma_builder = forte2.CISigmaBuilder(
+            ci_strings, self.ints.E, self.ints.H, self.ints.V
+        )
 
         # 2. Allocate memory for the CI vectors
-
-        C = forte2.CIVector(ci_strings)
-        T = forte2.CIVector(ci_strings)
-
         det_size = ci_strings.ndet
-        # basis_size = spin_adapt_ ? spin_adapter_->ncsf() : det_size; TODO:spin_adapter_
-        basis_size = det_size
+        basis_size = self.spin_adapter.ncsf() if self.spin_adapt else det_size
 
-        # // Create the vectors that stores the b and sigma vectors in the determinant basis
-        # auto b = std::make_shared<psi::Vector>("b", det_size);
-        # auto sigma = std::make_shared<psi::Vector>("sigma", det_size);
+        # Create the CI vectors that will hold the results of the sigma builder in the
+        # determinant basis
+        b_det = np.zeros((det_size)) if self.spin_adapt else None
+        sigma_det = np.zeros((det_size)) if self.spin_adapt else None
 
-        # // Optionally create the vectors that stores the b and sigma vectors in the CSF basis
-        # auto b_basis = b;
-        # auto sigma_basis = sigma;
-
-        # if (spin_adapt_) {
-        #     b_basis = std::make_shared<psi::Vector>("b", basis_size);
-        #     sigma_basis = std::make_shared<psi::Vector>("sigma", basis_size);
-        # }
-
-        Hdiag = ci_sigma_builder.form_Hdiag_det()
+        Hdiag = (
+            ci_sigma_builder.form_Hdiag_csf(self.dets, self.spin_adapter, True)
+            if self.spin_adapt
+            else ci_sigma_builder.form_Hdiag_det()
+        )
 
         # 3. Instantiate and configure solver
         self.first_run = False
         if self.solver is None:
             self.solver = DavidsonLiuSolver(
-                size=basis_size,
+                size=basis_size,  # size of the basis (number of CSF if we spin adapt)
                 nroot=self.nroot,
                 collapse_per_root=self.collapse_per_root,
-                subspace_per_root=self.max_subspace_per_root,
+                basis_per_root=self.basis_per_root,
+                e_tol=self.econv,  # eigenvalue convergence
+                r_tol=self.rconv,  # residual convergence
+                maxiter=self.maxiter,
             )
             self.first_run = True
 
+        # 3. Build initial guess vectors
         self.solver.add_h_diag(Hdiag)
 
         self.num_guess_states = min(self.guess_per_root * self.nroot, basis_size)
@@ -134,69 +143,66 @@ class CI(MOsMixin, SystemMixin):
 
         # find the indices of the elements of Hdiag with the lowest values
         indices = np.argsort(Hdiag)[:nguess_dets]
-        print(f"Indices of the lowest Hdiag elements: {indices}")
 
-        spin_complete_guess = []
-        for i in indices:
-            d = ci_strings.determinant(i)
-            spin_complete_guess.append(d)
-            spin_complete_guess.append(d.spin_flip())
-        spin_complete_guess = list(set(spin_complete_guess))  # remove duplicates
+        if self.spin_adapt:
+            Hguess = np.zeros((nguess_dets, nguess_dets))
+            for i, I in enumerate(indices):
+                for j, J in enumerate(indices):
+                    Hguess[i, j] = ci_sigma_builder.slater_rules_csf(
+                        self.dets, self.spin_adapter, I, J
+                    )
 
-        # form the Hamiltonian for the guess determinants
-        print(f"Number of guess determinants: {len(spin_complete_guess)}")
-        slater_rules = forte2.SlaterRules(
-            self.norb, self.ints.E, self.ints.H, self.ints.V
-        )
-        num_guess_dets = len(spin_complete_guess)
-        Hguess = np.zeros((num_guess_dets, num_guess_dets))
-        for i, I in enumerate(spin_complete_guess):
-            for j, J in enumerate(spin_complete_guess):
-                Hguess[i, j] = slater_rules.slater_rules(I, J)
+            evals_guess, evecs_guess = np.linalg.eigh(Hguess)
 
-        evals_guess, evecs_guess = np.linalg.eigh(Hguess)
+            guess_mat = np.zeros((basis_size, self.num_guess_states))
+            for i in range(self.num_guess_states):
+                guess = evecs_guess[:, i]
+                for j, d in enumerate(indices):
+                    guess_mat[d, i] = guess[j]
+            # for i in range(self.num_guess_states):
+            #     guess_mat[indices[i], i] = 1.0
 
-        guess_mat = np.zeros((basis_size, self.num_guess_states))
-        for i in range(self.num_guess_states):
-            guess = evecs_guess[:, i]
-            for j, d in enumerate(spin_complete_guess):
-                det_index = ci_strings.determinant_index(d)
-                guess_mat[det_index, i] = guess[j]
+        else:
+            spin_complete_guess = []
+            for i in indices:
+                d = ci_strings.determinant(i)
+                spin_complete_guess.append(d)
+                spin_complete_guess.append(d.spin_flip())
+            spin_complete_guess = list(set(spin_complete_guess))  # remove duplicates
+
+            # form the Hamiltonian for the guess determinants
+            print(f"Number of guess determinants: {len(spin_complete_guess)}")
+            slater_rules = forte2.SlaterRules(
+                self.norb, self.ints.E, self.ints.H, self.ints.V
+            )
+            num_guess_dets = len(spin_complete_guess)
+            Hguess = np.zeros((num_guess_dets, num_guess_dets))
+            for i, I in enumerate(spin_complete_guess):
+                for j, J in enumerate(spin_complete_guess):
+                    Hguess[i, j] = slater_rules.slater_rules(I, J)
+
+            evals_guess, evecs_guess = np.linalg.eigh(Hguess)
+
+            guess_mat = np.zeros((basis_size, self.num_guess_states))
+            for i in range(self.num_guess_states):
+                guess = evecs_guess[:, i]
+                for j, d in enumerate(spin_complete_guess):
+                    det_index = ci_strings.determinant_index(d)
+                    guess_mat[det_index, i] = guess[j]
+            print(f"Spin complete guess determinants: {len(spin_complete_guess)}")
 
         self.solver.add_guesses(guess_mat)
-
-        print(f"Spin complete guess determinants: {len(spin_complete_guess)}")
 
         def sigma_builder(Bblock, Sblock):
             # Compute the sigma block from the basis block
             ncols = Bblock.shape[1]
             for i in range(ncols):
-                # copy the b vector to the C
-                # C.copy(Bblock[:, i])
-                # ci_sigma_builder.Hamiltonian(C, T)
-                # T.copy_to(Sblock[:, i])
-                ci_sigma_builder.Hamiltonian2(Bblock[:, i], Sblock[:, i])
-            #     size_t basis_size = b_span.size();
-            #     for (size_t I = 0; I < basis_size; ++I) {
-            #         b_basis->set(I, b_span[I]);
-            #     }
-            #     if (spin_adapt_) {
-            #         // Compute sigma in the CSF basis and convert it to the determinant basis
-            #         spin_adapter_->csf_C_to_det_C(b_basis, b);
-            #         C_->copy(b);
-            #         C_->Hamiltonian(*T_, as_ints_);
-            #         T_->copy_to(sigma);
-            #         spin_adapter_->det_C_to_csf_C(sigma, sigma_basis);
-            #     } else {
-            #         // Compute sigma in the determinant basis
-            #         C_->copy(b_basis);
-            #         C_->Hamiltonian(*T_, as_ints_);
-            #         T_->copy_to(sigma_basis);
-            #     }
-            #     for (size_t I = 0; I < basis_size; ++I) {
-            #         sigma_span[I] = sigma_basis->get(I);
-            #     }
-            return Sblock
+                if self.spin_adapt:
+                    self.spin_adapter.csf_C_to_det_C(Bblock[:, i], b_det)
+                    ci_sigma_builder.Hamiltonian(b_det, sigma_det)
+                    self.spin_adapter.det_C_to_csf_C(sigma_det, Sblock[:, i])
+                else:
+                    ci_sigma_builder.Hamiltonian(Bblock[:, i], Sblock[:, i])
 
         self.solver.add_sigma_builder(sigma_builder)
 
@@ -205,15 +211,12 @@ class CI(MOsMixin, SystemMixin):
         self.E = evals
         print(f"Eigenvalues: {evals}")
 
-        # 3. Build initial guess vectors
-        # self._build_initial_guess()
-
-        # 4. Run the iterative solver
-
         # 5. Compute the final CI vectors
 
         # 6. Compute the final energy and properties
 
+        # Deallocate temporary space for the CI strings
+        # (this must be done after running the CISigmaBuilder to avoid memory leaks)
         forte2.CISigmaBuilder.release_temp_space()
 
         print(
@@ -244,35 +247,6 @@ class CI(MOsMixin, SystemMixin):
     #         dl_solver_->add_project_out_vectors(bad_roots);
     #     }
     # }
-
-    # // Print the initial guess
-    # auto sigma_builder = [this, &b_basis, &b, &sigma, &sigma_basis](std::span<double> b_span,
-    #                                                                 std::span<double> sigma_span) {
-    #     // copy the b vector
-    #     size_t basis_size = b_span.size();
-    #     for (size_t I = 0; I < basis_size; ++I) {
-    #         b_basis->set(I, b_span[I]);
-    #     }
-    #     if (spin_adapt_) {
-    #         // Compute sigma in the CSF basis and convert it to the determinant basis
-    #         spin_adapter_->csf_C_to_det_C(b_basis, b);
-    #         C_->copy(b);
-    #         C_->Hamiltonian(*T_, as_ints_);
-    #         T_->copy_to(sigma);
-    #         spin_adapter_->det_C_to_csf_C(sigma, sigma_basis);
-    #     } else {
-    #         // Compute sigma in the determinant basis
-    #         C_->copy(b_basis);
-    #         C_->Hamiltonian(*T_, as_ints_);
-    #         T_->copy_to(sigma_basis);
-    #     }
-    #     for (size_t I = 0; I < basis_size; ++I) {
-    #         sigma_span[I] = sigma_basis->get(I);
-    #     }
-    # };
-
-    # // Run the Davidson-Liu solver
-    # dl_solver_->add_sigma_builder(sigma_builder);
 
     # auto converged = dl_solver_->solve();
     # if (not converged) {

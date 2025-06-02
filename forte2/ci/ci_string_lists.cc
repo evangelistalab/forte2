@@ -181,21 +181,36 @@ CIStrings::CIStrings(size_t na, size_t nb, int symmetry,
     beta_3h_list = make_3h_list(beta_strings_, beta_address_, beta_address_3h_);
 }
 
-// std::vector<Determinant> CIStrings::make_determinants() const {
-//     std::vector<Determinant> dets(ndet_);
-//     for (size_t add_I{0}; const auto& [n, class_Ia, class_Ib] : determinant_classes()) {
-//         const auto nIa = alfa_address_->strpcls(class_Ia);
-//         const auto nIb = beta_address_->strpcls(class_Ib);
-//         for (size_t Ia = 0; Ia < nIa; ++Ia) {
-//             for (size_t Ib = 0; Ib < nIb; ++Ib) {
-//                 Determinant I(alfa_str(class_Ia, Ia), beta_str(class_Ib, Ib));
-//                 dets[add_I] = I;
-//                 add_I++;
-//             }
-//         }
-//     }
-//     return dets;
-// }
+std::vector<Determinant> CIStrings::make_determinants() const {
+    std::vector<Determinant> dets(ndet_);
+    this->for_each_element([&](const size_t& block, const int& class_Ia, const int& class_Ib,
+                               const size_t& Ia, const size_t& Ib, const size_t& idx) {
+        Determinant I(alfa_str(class_Ia, Ia), beta_str(class_Ib, Ib));
+        dets[idx] = I;
+    });
+    // this->for_each_element([&](size_t add_I, const auto& [n, class_Ia, class_Ib]) {
+    //     const auto nIa = alfa_address_->strpcls(class_Ia);
+    //     const auto nIb = beta_address_->strpcls(class_Ib);
+    //     for (size_t Ia = 0; Ia < nIa; ++Ia) {
+    //         for (size_t Ib = 0; Ib < nIb; ++Ib) {
+    //             dets[add_I] = I;
+    //             add_I++;
+    //         }
+    //     }
+    // });
+    // for (size_t add_I{0}; const auto& [n, class_Ia, class_Ib] : determinant_classes()) {
+    //     const auto nIa = alfa_address_->strpcls(class_Ia);
+    //     const auto nIb = beta_address_->strpcls(class_Ib);
+    //     for (size_t Ia = 0; Ia < nIa; ++Ia) {
+    //         for (size_t Ib = 0; Ib < nIb; ++Ib) {
+    //             Determinant I(alfa_str(class_Ia, Ia), beta_str(class_Ib, Ib));
+    //             dets[add_I] = I;
+    //             add_I++;
+    //         }
+    //     }
+    // }
+    return dets;
+}
 
 size_t CIStrings::determinant_address(const Determinant& d) const {
     const auto Ia = d.get_alfa_bits();
@@ -304,22 +319,26 @@ const VVOOListElement& CIStrings::get_beta_vvoo_list(int class_I, int class_J) c
 //     return beta_1h_list[I_tuple];
 // }
 
-// std::vector<H2StringSubstitution>& CIStrings::get_alfa_2h_list(int h_I, size_t add_I, int h_J) {
+// std::vector<H2StringSubstitution>& CIStrings::get_alfa_2h_list(int h_I, size_t add_I, int
+// h_J) {
 //     std::tuple<int, size_t, int> I_tuple(h_I, add_I, h_J);
 //     return alfa_2h_list[I_tuple];
 // }
 
-// std::vector<H2StringSubstitution>& CIStrings::get_beta_2h_list(int h_I, size_t add_I, int h_J) {
+// std::vector<H2StringSubstitution>& CIStrings::get_beta_2h_list(int h_I, size_t add_I, int
+// h_J) {
 //     std::tuple<int, size_t, int> I_tuple(h_I, add_I, h_J);
 //     return beta_2h_list[I_tuple];
 // }
 
-// std::vector<H3StringSubstitution>& CIStrings::get_alfa_3h_list(int h_I, size_t add_I, int h_J) {
+// std::vector<H3StringSubstitution>& CIStrings::get_alfa_3h_list(int h_I, size_t add_I, int
+// h_J) {
 //     std::tuple<int, size_t, int> I_tuple(h_I, add_I, h_J);
 //     return alfa_3h_list[I_tuple];
 // }
 
-// std::vector<H3StringSubstitution>& CIStrings::get_beta_3h_list(int h_I, size_t add_I, int h_J) {
+// std::vector<H3StringSubstitution>& CIStrings::get_beta_3h_list(int h_I, size_t add_I, int
+// h_J) {
 //     std::tuple<int, size_t, int> I_tuple(h_I, add_I, h_J);
 //     return beta_3h_list[I_tuple];
 // }
