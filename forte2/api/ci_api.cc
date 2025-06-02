@@ -47,7 +47,7 @@ void export_ci_sigma_builder_api(nb::module_& m) {
         .def_static("allocate_temp_space", &CISigmaBuilder::allocate_temp_space, "lists"_a,
                     nb::rv_policy::reference_internal)
         .def_static("release_temp_space", &CISigmaBuilder::release_temp_space)
-        .def("form_Hdiag_det", &CISigmaBuilder::form_Hdiag_det)
+        // .def("form_Hdiag_det", &CISigmaBuilder::form_Hdiag_det)
         .def("form_Hdiag_csf", &CISigmaBuilder::form_Hdiag_csf, "dets"_a, "spin_adapter"_a,
              "spin_adapt_full_preconditioner"_a = false)
         .def("slater_rules_csf", &CISigmaBuilder::slater_rules_csf, "dets"_a, "spin_adapter"_a,

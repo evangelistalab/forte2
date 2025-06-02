@@ -1,14 +1,11 @@
 #pragma once
 
+#include <functional>
 #include <map>
-#include <vector>
-#include <utility>
 #include <memory>
+#include <utility>
+#include <vector>
 
-// #include "helpers/timer.h"
-// #include "helpers/printing.h"
-
-// #include "sparse_ci/determinant.h"
 #include "string_list_defs.h"
 #include "ci_string_address.h"
 
@@ -115,30 +112,30 @@ class CIStrings {
     const VVOOListElement& get_alfa_vvoo_list(int class_I, int class_J) const;
     const VVOOListElement& get_beta_vvoo_list(int class_I, int class_J) const;
 
-    //   std::vector<H1StringSubstitution>& get_alfa_1h_list(int h_I, size_t add_I, int h_J);
-    //   std::vector<H1StringSubstitution>& get_beta_1h_list(int h_I, size_t add_I, int h_J);
+    std::vector<H1StringSubstitution>& get_alfa_1h_list(int h_I, size_t add_I, int h_J);
+    std::vector<H1StringSubstitution>& get_beta_1h_list(int h_I, size_t add_I, int h_J);
 
-    //   std::vector<H2StringSubstitution>& get_alfa_2h_list(int h_I, size_t add_I, int h_J);
-    //   std::vector<H2StringSubstitution>& get_beta_2h_list(int h_I, size_t add_I, int h_J);
+    std::vector<H2StringSubstitution>& get_alfa_2h_list(int h_I, size_t add_I, int h_J);
+    std::vector<H2StringSubstitution>& get_beta_2h_list(int h_I, size_t add_I, int h_J);
 
-    //   std::vector<H3StringSubstitution>& get_alfa_3h_list(int h_I, size_t add_I, int h_J);
-    //   std::vector<H3StringSubstitution>& get_beta_3h_list(int h_I, size_t add_I, int h_J);
+    std::vector<H3StringSubstitution>& get_alfa_3h_list(int h_I, size_t add_I, int h_J);
+    std::vector<H3StringSubstitution>& get_beta_3h_list(int h_I, size_t add_I, int h_J);
 
     //   Pair get_pair_list(int h, int n) const { return pair_list_[h][n]; }
 
-    void for_each_element(std::function<void(const size_t&, const int&, const int&, const size_t&,
-                                             const size_t&, const size_t&)>
-                              lambda) const {
-        size_t idx{0};
-        for (const auto& [block, class_Ia, class_Ib] : this->determinant_classes()) {
-            const auto& nIa = this->alfa_address()->strpcls(class_Ia);
-            const auto& nIb = this->beta_address()->strpcls(class_Ib);
+    template <typename Func> void for_each_element(Func&& func) const {
+        std::size_t idx = 0;
+
+        for (auto const& [block, class_Ia, class_Ib] : determinant_classes()) {
+            auto const nIa = alfa_address()->strpcls(class_Ia);
+            auto const nIb = beta_address()->strpcls(class_Ib);
+
             if (nIa == 0 or nIb == 0)
                 continue;
-            for (size_t Ia{0}; Ia < nIa; ++Ia) {
-                for (size_t Ib{0}; Ib < nIb; ++Ib) {
-                    lambda(block, class_Ia, class_Ib, Ia, Ib, idx);
-                    ++idx;
+
+            for (std::size_t Ia = 0; Ia < nIa; ++Ia) {
+                for (std::size_t Ib = 0; Ib < nIb; ++Ib) {
+                    func(block, class_Ia, class_Ib, Ia, Ib, idx++);
                 }
             }
         }
@@ -260,6 +257,12 @@ class CIStrings {
     std::shared_ptr<StringAddress> alfa_address_3h_;
     /// The beta string address for N - 3 electrons
     std::shared_ptr<StringAddress> beta_address_3h_;
+
+    // == Private Functions ==
+    template <typename HListT>
+    auto& lookup_hole_list(HListT& map_ref, int i, size_t add, int j) const {
+        return map_ref[{i, add, j}];
+    }
 };
 
 // std::map<std::pair<int, int>, std::vector<std::pair<int, int>>>

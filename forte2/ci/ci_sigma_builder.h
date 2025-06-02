@@ -18,9 +18,9 @@ class CISigmaBuilder {
     CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V);
 
     // == Class Public Functions ==
-    /// @brief Form the diagonal of the Hamiltonian matrix in the CI basis
-    /// @return The diagonal elements of the Hamiltonian matrix
-    np_vector form_Hdiag_det() const;
+    // /// @brief Form the diagonal of the Hamiltonian matrix in the CI basis
+    // /// @return The diagonal elements of the Hamiltonian matrix
+    // np_vector form_Hdiag_det() const;
 
     /// @brief Form the diagonal of the Hamiltonian matrix in the CI basis
     /// @return The diagonal elements of the Hamiltonian matrix

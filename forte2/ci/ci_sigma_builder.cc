@@ -38,21 +38,21 @@ void CISigmaBuilder::release_temp_space() {
 CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V)
     : lists_(lists), E_(E), H_(H), V_(V), slater_rules_(lists.norb(), E, H, V) {}
 
-np_vector CISigmaBuilder::form_Hdiag_det() const {
-    auto Hdiag = make_zeros<nb::numpy, double, 1>({lists_.ndet()});
-    auto Hdiag_view = Hdiag.view();
-    Determinant I;
-    lists_.for_each_element([&](const size_t& block, const int& class_Ia, const int& class_Ib,
-                                const size_t& Ia, const size_t& Ib, const size_t& idx) {
-        // Create the determinant I from the strings
-        I.set_str(lists_.alfa_str(class_Ia, Ia), lists_.beta_str(class_Ib, Ib));
-        // Compute the energy for the determinant I
-        const double energy = slater_rules_.energy(I);
-        // Store the energy in the Hdiag vector
-        Hdiag_view(idx) = energy;
-    });
-    return Hdiag;
-}
+// np_vector CISigmaBuilder::form_Hdiag_det() const {
+//     auto Hdiag = make_zeros<nb::numpy, double, 1>({lists_.ndet()});
+//     auto Hdiag_view = Hdiag.view();
+//     Determinant I;
+//     lists_.for_each_element([&](const size_t& block, const int& class_Ia, const int& class_Ib,
+//                                 const size_t& Ia, const size_t& Ib, const size_t& idx) {
+//         // Create the determinant I from the strings
+//         I.set_str(lists_.alfa_str(class_Ia, Ia), lists_.beta_str(class_Ib, Ib));
+//         // Compute the energy for the determinant I
+//         const double energy = slater_rules_.energy(I);
+//         // Store the energy in the Hdiag vector
+//         Hdiag_view(idx) = energy;
+//     });
+//     return Hdiag;
+// }
 
 np_vector CISigmaBuilder::form_Hdiag_csf(const std::vector<Determinant>& dets,
                                          const CISpinAdapter& spin_adapter,

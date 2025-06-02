@@ -73,17 +73,19 @@ using OOList = std::map<std::tuple<int, size_t, int>, std::vector<StringSubstitu
 using OOListElement = std::map<std::tuple<int, int>, std::vector<uint32_t>>;
 using OOListMap = std::map<int, OOListElement>;
 
+using HListKey = std::tuple<int, size_t, int>;
+
 /// Maps the integers (h_J, add_J, h_I) to list of strings connected by a_p, where the string
 /// I belongs to the irrep h_I and J belongs to the irrep h_J and add_J is the address of J
-using H1List = std::map<std::tuple<int, size_t, int>, std::vector<H1StringSubstitution>>;
+using H1List = std::map<HListKey, std::vector<H1StringSubstitution>>;
 
 /// Maps the integers (h_J, add_J, h_I) to list of strings connected by a_p a_q, where the string
 /// I belongs to the irrep h_I and J belongs to the irrep h_J and add_J is the address of J
-using H2List = std::map<std::tuple<int, size_t, int>, std::vector<H2StringSubstitution>>;
+using H2List = std::map<HListKey, std::vector<H2StringSubstitution>>;
 
 /// Maps the integers (h_J, add_J, h_I) to list of strings connected by a_p a_q a_r, where the
 /// string I belongs to the irrep h_I and J belongs to the irrep h_J and add_J is the address of J
-using H3List = std::map<std::tuple<int, size_t, int>, std::vector<H3StringSubstitution>>;
+using H3List = std::map<HListKey, std::vector<H3StringSubstitution>>;
 
 using Pair = std::pair<int, int>;
 using PairList = std::vector<std::vector<std::pair<int, int>>>;

@@ -18,8 +18,6 @@ class CI(MOsMixin, SystemMixin):
     nroot: int
     core_orbitals: list[int] = field(default_factory=list)
 
-    # Spin adaptation flag
-    spin_adapt: bool = True
     # The number of guess vectors for each root
     guess_per_root: int = 2
     # The number of determinants per guess vector
@@ -87,13 +85,12 @@ class CI(MOsMixin, SystemMixin):
         print(f"Number of β strings: {ci_strings.nbs}")
         print(f"Number of determinants: {ci_strings.ndet}")
 
-        if self.spin_adapt:
-            self.spin_adapter = forte2.CISpinAdapter(
-                self.state.multiplicity - 1, self.state.twice_ms, self.norb
-            )
-            self.dets = ci_strings.make_determinants()
-            self.spin_adapter.prepare_couplings(self.dets)
-            print(f"Number of CSFs: {self.spin_adapter.ncsf()}")
+        self.spin_adapter = forte2.CISpinAdapter(
+            self.state.multiplicity - 1, self.state.twice_ms, self.norb
+        )
+        self.dets = ci_strings.make_determinants()
+        self.spin_adapter.prepare_couplings(self.dets)
+        print(f"Number of CSFs: {self.spin_adapter.ncsf()}")
 
         # Allocate temporary space for the CISigmaBuilder
         # (this must be done before creating the CISigmaBuilder)
@@ -106,18 +103,14 @@ class CI(MOsMixin, SystemMixin):
 
         # 2. Allocate memory for the CI vectors
         det_size = ci_strings.ndet
-        basis_size = self.spin_adapter.ncsf() if self.spin_adapt else det_size
+        basis_size = self.spin_adapter.ncsf()
 
         # Create the CI vectors that will hold the results of the sigma builder in the
         # determinant basis
-        b_det = np.zeros((det_size)) if self.spin_adapt else None
-        sigma_det = np.zeros((det_size)) if self.spin_adapt else None
+        b_det = np.zeros((det_size))
+        sigma_det = np.zeros((det_size))
 
-        Hdiag = (
-            ci_sigma_builder.form_Hdiag_csf(self.dets, self.spin_adapter, True)
-            if self.spin_adapt
-            else ci_sigma_builder.form_Hdiag_det()
-        )
+        Hdiag = ci_sigma_builder.form_Hdiag_csf(self.dets, self.spin_adapter, True)
 
         # 3. Instantiate and configure solver
         self.first_run = False
@@ -144,52 +137,26 @@ class CI(MOsMixin, SystemMixin):
         # find the indices of the elements of Hdiag with the lowest values
         indices = np.argsort(Hdiag)[:nguess_dets]
 
-        if self.spin_adapt:
-            Hguess = np.zeros((nguess_dets, nguess_dets))
-            for i, I in enumerate(indices):
-                for j, J in enumerate(indices):
-                    Hguess[i, j] = ci_sigma_builder.slater_rules_csf(
+        # create the Hamiltonian matrix in the basis of the guess CSFs
+        Hguess = np.zeros((nguess_dets, nguess_dets))
+        for i, I in enumerate(indices):
+            for j, J in enumerate(indices):
+                if i >= j:
+                    Hij = ci_sigma_builder.slater_rules_csf(
                         self.dets, self.spin_adapter, I, J
                     )
+                    Hguess[i, j] = Hij
+                    Hguess[j, i] = Hij
 
-            evals_guess, evecs_guess = np.linalg.eigh(Hguess)
+        # Diagonalize the Hamiltonian to get the initial guess vectors
+        evals_guess, evecs_guess = np.linalg.eigh(Hguess)
 
-            guess_mat = np.zeros((basis_size, self.num_guess_states))
-            for i in range(self.num_guess_states):
-                guess = evecs_guess[:, i]
-                for j, d in enumerate(indices):
-                    guess_mat[d, i] = guess[j]
-            # for i in range(self.num_guess_states):
-            #     guess_mat[indices[i], i] = 1.0
-
-        else:
-            spin_complete_guess = []
-            for i in indices:
-                d = ci_strings.determinant(i)
-                spin_complete_guess.append(d)
-                spin_complete_guess.append(d.spin_flip())
-            spin_complete_guess = list(set(spin_complete_guess))  # remove duplicates
-
-            # form the Hamiltonian for the guess determinants
-            print(f"Number of guess determinants: {len(spin_complete_guess)}")
-            slater_rules = forte2.SlaterRules(
-                self.norb, self.ints.E, self.ints.H, self.ints.V
-            )
-            num_guess_dets = len(spin_complete_guess)
-            Hguess = np.zeros((num_guess_dets, num_guess_dets))
-            for i, I in enumerate(spin_complete_guess):
-                for j, J in enumerate(spin_complete_guess):
-                    Hguess[i, j] = slater_rules.slater_rules(I, J)
-
-            evals_guess, evecs_guess = np.linalg.eigh(Hguess)
-
-            guess_mat = np.zeros((basis_size, self.num_guess_states))
-            for i in range(self.num_guess_states):
-                guess = evecs_guess[:, i]
-                for j, d in enumerate(spin_complete_guess):
-                    det_index = ci_strings.determinant_index(d)
-                    guess_mat[det_index, i] = guess[j]
-            print(f"Spin complete guess determinants: {len(spin_complete_guess)}")
+        # Select the lowest eigenvalues and their corresponding eigenvectors
+        guess_mat = np.zeros((basis_size, self.num_guess_states))
+        for i in range(self.num_guess_states):
+            guess = evecs_guess[:, i]
+            for j, d in enumerate(indices):
+                guess_mat[d, i] = guess[j]
 
         self.solver.add_guesses(guess_mat)
 
@@ -197,12 +164,9 @@ class CI(MOsMixin, SystemMixin):
             # Compute the sigma block from the basis block
             ncols = Bblock.shape[1]
             for i in range(ncols):
-                if self.spin_adapt:
-                    self.spin_adapter.csf_C_to_det_C(Bblock[:, i], b_det)
-                    ci_sigma_builder.Hamiltonian(b_det, sigma_det)
-                    self.spin_adapter.det_C_to_csf_C(sigma_det, Sblock[:, i])
-                else:
-                    ci_sigma_builder.Hamiltonian(Bblock[:, i], Sblock[:, i])
+                self.spin_adapter.csf_C_to_det_C(Bblock[:, i], b_det)
+                ci_sigma_builder.Hamiltonian(b_det, sigma_det)
+                self.spin_adapter.det_C_to_csf_C(sigma_det, Sblock[:, i])
 
         self.solver.add_sigma_builder(sigma_builder)
 
