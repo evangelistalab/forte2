@@ -100,7 +100,8 @@ class SparseFactExp {
     ///
     ///             exp(-op1) exp(-op2) ... |state>
     ///
-    SparseState apply_op(const SparseOperatorList& sop, const SparseState& state, bool inverse);
+    SparseState apply_op(const SparseOperatorList& sop, const SparseState& state,
+                         bool inverse = false, bool reverse = false);
 
     /// @brief Compute the factorized exponential applied to a state using an exact algorithm
     ///
@@ -119,7 +120,7 @@ class SparseFactExp {
     ///             exp(-op1 + op1^dagger) exp(-op2 + op2^dagger) ... |state>
     ///
     SparseState apply_antiherm(const SparseOperatorList& sop, const SparseState& state,
-                               bool inverse);
+                               bool inverse = false, bool reverse = false);
 
   private:
     double screen_thresh_;
