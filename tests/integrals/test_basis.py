@@ -15,7 +15,3 @@ def test_basis_center_first_and_last():
     basis.add(forte2.ints.Shell(1, [1.0], [1.0], [1.0, 0.0, 0.0]))
     print(basis.center_first_and_last)
     assert basis.center_first_and_last == [(0, 4), (4, 10), (10, 13)]
-
-
-if __name__ == "__main__":
-    test_basis_center_first_and_last()

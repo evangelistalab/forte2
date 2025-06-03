@@ -40,8 +40,3 @@ def test_rohf_triplet():
     scf.run()
     assert scf.E == approx(erohf)
     assert scf.S2 == approx(s2rohf)
-
-
-if __name__ == "__main__":
-    test_rohf_singlet()
-    test_rohf_triplet()

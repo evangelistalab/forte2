@@ -8,7 +8,3 @@ def test_shell():
     assert shell.size == 1
     assert shell.nprim == 1
     assert shell.ncontr == 1
-
-
-if __name__ == "__main__":
-    test_shell()

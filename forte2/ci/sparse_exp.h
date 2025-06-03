@@ -100,6 +100,7 @@ class SparseFactExp {
     ///
     ///             exp(-op1) exp(-op2) ... |state>
     ///
+    /// @param reverse If true, apply the operators in reverse order
     SparseState apply_op(const SparseOperatorList& sop, const SparseState& state,
                          bool inverse = false, bool reverse = false);
 
@@ -119,6 +120,7 @@ class SparseFactExp {
     ///
     ///             exp(-op1 + op1^dagger) exp(-op2 + op2^dagger) ... |state>
     ///
+    /// @param reverse If true, apply the operators in reverse order
     SparseState apply_antiherm(const SparseOperatorList& sop, const SparseState& state,
                                bool inverse = false, bool reverse = false);
 

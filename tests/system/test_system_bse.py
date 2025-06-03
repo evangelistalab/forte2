@@ -51,10 +51,3 @@ def test_2e_eri():
     eri = forte2.ints.coulomb_4c(system.basis)
     assert np.allclose(np.linalg.norm(eri.flatten()), 20.21663398506663, atol=1.0e-09)
     print("Passed ERI test.")
-
-
-if __name__ == "__main__":
-    # Run the tests
-    test_1e_ovlp()
-    test_1e_hcore()
-    test_2e_eri()

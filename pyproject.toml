@@ -45,3 +45,12 @@ test-skip="cp38-macosx_*:arm64"
 # Needed for full C++17 support
 [tool.cibuildwheel.macos.environment]
 MACOSX_DEPLOYMENT_TARGET = "10.14"
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+testpaths = [
+    "tests",
+]
+python_functions = [
+    "test_*",
+]

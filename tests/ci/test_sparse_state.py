@@ -49,7 +49,3 @@ def test_sparse_vector():
 
     ref5 = forte2.SparseState({det("2"): 1})
     assert forte2.spin2(ref5, ref5) == pytest.approx(0, abs=1e-9)
-
-
-if __name__ == "__main__":
-    test_sparse_vector()

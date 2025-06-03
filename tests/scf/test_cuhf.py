@@ -40,8 +40,3 @@ def test_cuhf_triplet():
     scf.run()
     assert scf.E == approx(ecuhf)
     assert scf.S2 == approx(s2cuhf)
-
-
-if __name__ == "__main__":
-    test_cuhf_singlet()
-    test_cuhf_triplet()

@@ -79,8 +79,3 @@ def test_slater_rules_2():
     assert np.isclose(
         E, -100.019788438077, atol=1e-9
     ), "Slater rules test failed for HF molecule"
-
-
-if __name__ == "__main__":
-    test_slater_rules_1()
-    test_slater_rules_2()

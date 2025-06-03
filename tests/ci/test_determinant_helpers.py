@@ -122,8 +122,3 @@ def test_determinant_hilbert_space_edge_cases():
     expected = [det("++00"), det("+0+0"), det("+00+"), det("0++0"), det("0+0+")]
     assert len(dets) == 5
     assert sorted(dets) == sorted(expected)
-
-
-if __name__ == "__main__":
-    test_determinant_hilbert_space()
-    test_determinant_hilbert_space_edge_cases()

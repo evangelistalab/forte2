@@ -55,7 +55,3 @@ def test_mp2():
     print(f"Time taken: {end - start:.4f} seconds")
 
     assert Emp2 == approx(energy_mp2)
-
-
-if __name__ == "__main__":
-    test_mp2()

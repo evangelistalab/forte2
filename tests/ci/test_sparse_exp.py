@@ -253,16 +253,3 @@ def test_exp_apply_complex():
     s1 = factexp.apply_antiherm(op, ref, inverse=True)
     s2 = factexp.apply_antiherm(op_inv, ref, inverse=False)
     assert s1 == s2
-
-
-if __name__ == "__main__":
-    test_linear_apply_op()
-    test_exp_apply_op()
-    test_exp_apply_antiherm()
-    test_exp_apply_antiherm_scale()
-    test_fact_exp_apply_antiherm_1()
-    test_fact_exp_apply_antiherm_2()
-    test_fact_exp_reverse()
-    test_equivalence_between_exp_and_factexp()
-    test_idempotent_complex()
-    test_exp_apply_complex()

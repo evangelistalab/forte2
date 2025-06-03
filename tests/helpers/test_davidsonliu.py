@@ -282,15 +282,3 @@ def test_dl_restart_2():
     assert np.isclose(
         evals[0], ref_evals2[0], atol=1e-6
     ), f"Expected {ref_evals2[0]}, got {evals[0]}"
-
-
-if __name__ == "__main__":
-    test_dl_1()
-    test_dl_2()
-    test_dl_3()
-    test_dl_4()
-    test_dl_no_guess()
-    test_project_out()
-    test_dl_restart_1()
-    test_dl_restart_2()
-    test_davidson_vs_numpy()

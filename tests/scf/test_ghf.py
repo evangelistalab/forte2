@@ -92,10 +92,3 @@ def test_break_complex_symmetry():
     scf.run()
     assert scf.E == approx(eghf)
     assert scf.S2 == approx(s2ghf)
-
-
-if __name__ == "__main__":
-    test_equivalence_to_rhf()
-    test_equivalence_to_uhf()
-    test_ghf()
-    test_break_complex_symmetry()
