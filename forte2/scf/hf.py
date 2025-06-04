@@ -175,8 +175,9 @@ class RHF(SCFMixin, MOsMixin):
         D = np.einsum("mi,ni->mn", self.C[0][:, : self.na], self.C[0][:, : self.na])
         return [D]
 
-    def Dao(self):
-        return self._build_density_matrix()[0]
+    def _build_total_density_matrix(self):
+        # returns the total density matrix (Daa + Dbb)
+        return 2 * self._build_density_matrix()[0]
 
     def _initial_guess(self, H, S, guess_type="minao"):
         match guess_type:
@@ -242,7 +243,7 @@ class UHF(SCFMixin, MOsMixin):
         D_b = np.einsum("mi,ni->mn", self.C[1][:, : self.nb], self.C[1][:, : self.nb])
         return D_a, D_b
 
-    def Dao(self):
+    def _build_total_density_matrix(self):
         D_a, D_b = self._build_density_matrix()
         return D_a + D_b
 
@@ -326,7 +327,7 @@ class ROHF(SCFMixin, MOsMixin):
     _spin = RHF._spin
     _energy = UHF._energy
     _diis_update = RHF._diis_update
-    Dao = UHF.Dao
+    _build_total_density_matrix = UHF._build_total_density_matrix
 
     def _build_fock(self, H, fock_builder, S):
         Ja, Jb = fock_builder.build_J(self.D)
@@ -397,7 +398,7 @@ class CUHF(SCFMixin, MOsMixin):
     _spin = UHF._spin
     _energy = UHF._energy
     _diis_update = UHF._diis_update
-    Dao = UHF.Dao
+    _build_total_density_matrix = UHF._build_total_density_matrix
 
     def _build_fock(self, H, fock_builder, S):
         F, _ = UHF._build_fock(self, H, fock_builder, S)
@@ -494,8 +495,8 @@ class GHF(SCFMixin, MOsMixin):
         Dbb = D[nbf:, nbf:]
         return Daa, Dab, Dba, Dbb
 
-    def Dao(self):
-        Daa, _, _, Dbb = self._build_density_matrix()
+    def _build_total_density_matrix(self):
+        Daa, *_, Dbb = self._build_density_matrix()
         return Daa + Dbb
 
     def _initial_guess(self, H, S, guess_type="minao"):

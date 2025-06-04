@@ -92,9 +92,51 @@ def test_units():
     assert system.atoms[1][1][2] == pytest.approx(1.0)
 
 
+def test_nuclear_dipole():
+    # Test for nuclear dipole calculation
+    xyz = """
+    O 0.0 0.0 0.0
+    H 0.0 0.0 1.0
+    Li 2.0 0.0 0.0
+    """
+    system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="bohr")
+
+    nucdip = system.nuclear_dipole()
+    assert nucdip == pytest.approx([6.0, 0.0, 1.0])
+
+
+def test_center_of_mass():
+    # Test for center of mass calculation
+    xyz = """
+    O 0.0 0.0 0.0
+    H 0.0 0.0 1.0
+    Li 2.0 0.0 0.0
+    """
+    system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="bohr")
+    com = system.center_of_mass()
+    assert com == pytest.approx([0.57948887, 0, 0.04208937])
+
+    # This also incidentally tests the input of geometry with signed integers
+    xyz = """
+    Mn  1  1  1
+    Mn  1  1 -1
+    Mn  1 -1  1
+    Mn  1 -1 -1
+    Mn -1  1  1
+    Mn -1  1 -1
+    Mn -1 -1  1
+    Mn -1 -1 -1 
+    """
+    system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="bohr")
+    com = system.center_of_mass()
+    assert com == pytest.approx([0.0, 0.0, 0.0], abs=1e-10)
+
+
 if __name__ == "__main__":
     test_system()
     test_xyz_comment()
     test_missing_atom()
     test_missing_coordinate()
     test_units()
+    test_nuclear_dipole()
+    test_center_of_mass()

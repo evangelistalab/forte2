@@ -1,9 +1,10 @@
 from dataclasses import dataclass, field
 
 import forte2
+from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
 from .parse_xyz import parse_xyz
-from forte2.x2c import get_hcore_x2c
+from .atom_data import ATOM_DATA
 
 import numpy as np
 from numpy.typing import NDArray
@@ -22,7 +23,10 @@ class System:
     unit: str = "angstrom"
 
     def __post_init__(self):
-        assert self.unit in ["angstrom", "bohr"], f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'."
+        assert self.unit in [
+            "angstrom",
+            "bohr",
+        ], f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'."
         self.atoms = parse_xyz(self.xyz, self.unit)
         self.basis = build_basis(self.basis, self.atoms)
         self.auxiliary_basis = (
@@ -125,6 +129,29 @@ class System:
             float: Nuclear repulsion energy.
         """
         return forte2.ints.nuclear_repulsion(self.atoms)
+
+    def nuclear_dipole(self, origin=None):
+        charges = np.array([atom[0] for atom in self.atoms])
+        positions = np.array([atom[1] for atom in self.atoms])
+        if origin is not None:
+            assert len(origin) == 3, "Origin must be a 3-element vector."
+            positions -= np.array(origin)[np.newaxis, :]
+        return np.einsum("a,ax->x", charges, positions)
+
+    def atomic_masses(self):
+        return np.array([ATOM_DATA[atom[0]]["mass"] for atom in self.atoms])
+
+    def center_of_mass(self):
+        """
+        Calculate the center of mass of the system.
+        Uses average atomic masses for the calculation.
+
+        Returns:
+            tuple: Center of mass coordinates (x, y, z).
+        """
+        masses = self.atomic_masses()
+        positions = np.array([atom[1] for atom in self.atoms])
+        return np.einsum("a,ax->x", masses, positions) / np.sum(masses)
 
 
 @dataclass

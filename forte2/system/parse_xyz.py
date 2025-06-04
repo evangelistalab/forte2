@@ -12,7 +12,7 @@ def parse_xyz(xyz, unit):
         # look for lines of th form "Li 0.0 0.0 0.0" or "N 10.0 0.0 0.0" and capture the element symbol and coordinates
         # Use regex to match the expected format
         m = re.match(
-            r"^\s*([A-Z][a-z]?)\s+([-+]?\d*\.\d+|\d+)\s+([-+]?\d*\.\d+|\d+)\s+([-+]?\d*\.\d+|\d+)\s*$",
+            r"^\s*([A-Z][a-z]?)\s+([-+]?\d*\.\d+|[-+]?\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)\s*$",
             line,
         )
         # Skip lines that do not match the expected format
@@ -20,7 +20,7 @@ def parse_xyz(xyz, unit):
             # Test if one or two coordinates are missing, e.g., "Li 0.0 0.0" or "Li 0.0"
             # This regex captures the element symbol and up to three coordinates
             check_missing_coordinate = re.match(
-                r"^\s*([A-Z][a-z]?)\s+([-+]?\d*\.\d+|\d+)(?:\s+([-+]?\d*\.\d+|\d+))?(?:\s+([-+]?\d*\.\d+|\d+))?\s*$",
+                r"^\s*([A-Z][a-z]?)\s+([-+]?\d*\.\d+|[-+]?\d+)(?:\s+([-+]?\d*\.\d+|[-+]?\d+))?(?:\s+([-+]?\d*\.\d+|[-+]?\d+))?\s*$",
                 line,
             )
             if check_missing_coordinate:
