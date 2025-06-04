@@ -76,11 +76,11 @@ def test_mulliken_rhf():
     scf.run()
     assert scf.E == approx(erhf)
     mp = forte2.mulliken_population(scf)
-    assert mp == pytest.approx([-0.4620044, 0.2310022, 0.2310022])
-
+    assert mp[1] == pytest.approx([-0.4620044, 0.2310022, 0.2310022])
+    print(mp[0])
 
 if __name__ == "__main__":
-    test_core_energy()
-    test_dipole_rhf()
-    test_dipole_uhf()
+    # test_core_energy()
+    # test_dipole_rhf()
+    # test_dipole_uhf()
     test_mulliken_rhf()

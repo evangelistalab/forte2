@@ -1,6 +1,6 @@
 import forte2
 import numpy as np
-import forte2
+import scipy.linalg
 
 
 def _spin_independent_property_1e(dm_tot, ints):
@@ -72,7 +72,7 @@ def mulliken_population(method):
     Args:
         method: A method object that has been run and contains the necessary data.
     Returns:
-        np.ndarray: The Mulliken population for each atom in the system.
+        Tuple(np.ndarray, np.ndarray): The Mulliken population for each basis function and the atomic charges.
     """
     if not method.executed:
         method.run()
@@ -87,4 +87,4 @@ def mulliken_population(method):
     center_first_and_last = system.basis.center_first_and_last
     charges = np.array([atom[0] for atom in system.atoms])
     pop = np.array([psdiag[_[0] : _[1]].sum() for _ in center_first_and_last])
-    return charges - pop
+    return (psdiag, charges - pop)
