@@ -93,9 +93,23 @@ void CISigmaBuilder::Hamiltonian(np_vector basis, np_vector sigma) const {
     H1(true);
     H1(false);
 
-    H2_aabb();
-    H2_aaaa(true);
-    H2_aaaa(false);
+    {
+        local_timer t_h2;
+        H2_aabb();
+        haabb_timer_ += t_h2.elapsed_seconds();
+    }
+
+    {
+        local_timer t_h2;
+        H2_aaaa(true);
+        haaaa_timer_ += t_h2.elapsed_seconds();
+    }
+
+    {
+        local_timer t_h2;
+        H2_aaaa(false);
+        hbbbb_timer_ += t_h2.elapsed_seconds();
+    }
 
     auto S_view = sigma.view();
     for (size_t i{0}, imax{S.size()}; i < imax; ++i) {

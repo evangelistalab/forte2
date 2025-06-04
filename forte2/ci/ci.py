@@ -153,9 +153,13 @@ class CI(MOsMixin, SystemMixin):
         for i, e in enumerate(self.evals):
             print(f"Final CI Energy Root {i}: {e:20.12f} [Eh]")
 
-        print(
-            f"Average CI Sigma Builder build time: {self.ci_sigma_builder.avg_build_time():.3f} s/build"
-        )
+        h_tot, h_aabb, h_aaaa, h_bbbb = self.ci_sigma_builder.avg_build_time()
+        print("Average CI Sigma Builder time summary:")
+        print(f"h_aabb time:    {h_aabb:.3f} s/build")
+        print(f"h_aaaa time:    {h_aaaa:.3f} s/build")
+        print(f"h_bbbb time:    {h_bbbb:.3f} s/build")
+        print(f"total time:     {h_tot:.3f} s/build")
+
 
         rdms = {}
         for root in range(self.nroot):

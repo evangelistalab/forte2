@@ -32,8 +32,15 @@ class CISigmaBuilder {
     /// @param sigma The resulting sigma vector |sigma> = H |basis>
     void Hamiltonian(np_vector basis, np_vector sigma) const;
 
-    double avg_build_time() const {
-        return build_count_ > 0 ? hdiag_timer_ / static_cast<double>(build_count_) : 0.0;
+    std::vector<double> avg_build_time() const {
+        if (build_count_ == 0) {
+            return {0.0, 0.0, 0.0, 0.0};
+        } else {
+            return {hdiag_timer_ / static_cast<double>(build_count_),
+                    haabb_timer_ / static_cast<double>(build_count_),
+                    haaaa_timer_ / static_cast<double>(build_count_),
+                    hbbbb_timer_ / static_cast<double>(build_count_)};
+        }
     }
 
     np_matrix compute_1rdm_same_irrep(np_vector C_left, np_vector C_right, bool alfa);
@@ -51,6 +58,9 @@ class CISigmaBuilder {
 
     // == Class Mutable Variables ==
     mutable double hdiag_timer_ = 0.0;
+    mutable double haaaa_timer_ = 0.0;
+    mutable double haabb_timer_ = 0.0;
+    mutable double hbbbb_timer_ = 0.0;
     mutable int build_count_ = 0;
 
     // == Class Static Variables ==
