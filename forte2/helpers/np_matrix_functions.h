@@ -20,8 +20,14 @@ void copy(np_matrix src, np_matrix dest);
 /// @param factor The scaling factor
 void scale(np_matrix mat, double factor);
 
-/// @brief Perform the operation y = a * x + y for specific rows in two matrices
+/// @brief Perform the operation y[:,:] = a * x[:,:] + y[:,:]
+void daxpy(double a, np_matrix x, np_matrix y);
+
+/// @brief Perform the operation y[row_y,:] = a * x[row_x,:] + y[row_y,:]
 void daxpy_rows(double a, np_matrix x, int row_x, np_matrix y, int row_y);
+
+/// @brief Perform the operation dot(x[row_x,:],y[row_y,:])
+double dot_rows(np_matrix x, int row_x, np_matrix y, int row_y, size_t max_col = 0);
 
 /// @brief Print the contents of a np_matrix to standard output
 void print(np_matrix mat, std::string label = "Matrix");

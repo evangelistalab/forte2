@@ -18,10 +18,6 @@ class CISigmaBuilder {
     CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V);
 
     // == Class Public Functions ==
-    // /// @brief Form the diagonal of the Hamiltonian matrix in the CI basis
-    // /// @return The diagonal elements of the Hamiltonian matrix
-    // np_vector form_Hdiag_det() const;
-
     /// @brief Form the diagonal of the Hamiltonian matrix in the CI basis
     /// @return The diagonal elements of the Hamiltonian matrix
     np_vector form_Hdiag_csf(const std::vector<Determinant>& dets,
@@ -40,10 +36,10 @@ class CISigmaBuilder {
         return build_count_ > 0 ? hdiag_timer_ / static_cast<double>(build_count_) : 0.0;
     }
 
-    // == Class Static Functions ==
-    // Temporary memory allocation
-    static void allocate_temp_space(const CIStrings& lists);
-    static void release_temp_space();
+    np_matrix compute_1rdm_same_irrep(np_vector C_left, np_vector C_right, bool alfa);
+    np_matrix compute_sf_1rdm_same_irrep(np_vector C_left, np_vector C_right);
+    np_matrix compute_2rdm_aa_same_irrep(np_vector C_left, np_vector C_right, bool alfa) const;
+    np_tensor4 compute_2rdm_ab_same_irrep(np_vector C_left, np_vector C_right);
 
   private:
     // == Class Private Variables ==
@@ -58,26 +54,35 @@ class CISigmaBuilder {
     mutable int build_count_ = 0;
 
     // == Class Static Variables ==
-    /// Temporary matrix as large as the largest block of C for the right coefficient vector
-    static np_matrix CR;
-    /// Temporary matrix as large as the largest block of C for the left coefficient vector
-    static np_matrix CL;
+
+    mutable std::vector<double> TR;
+    mutable std::vector<double> TL;
+    mutable std::vector<double> C;
+    mutable std::vector<double> S;
 
     // == Class Private Functions ==
-    void H0(np_vector basis, np_vector sigma) const;
-    void H1(np_vector basis, np_vector sigma, bool alfa) const;
-    void H2_aaaa(np_vector basis, np_vector sigma, bool alfa) const;
-    void H2_aabb(np_vector basis, np_vector sigma) const;
-    void H2_aabb_gather_scatter(np_vector basis, np_vector sigma) const;
-
-    static void gather_C_block(np_vector source, np_matrix dest, bool alfa, const CIStrings& lists,
-                               int class_Ia, int class_Ib);
-
-    static void zero_block(np_matrix dest, bool alfa, const CIStrings& lists, int class_Ia,
-                           int class_Ib);
-
-    static void scatter_C_block(np_matrix source, np_vector dest, bool alfa, const CIStrings& lists,
-                                int class_Ia, int class_Ib);
+    void H0() const;
+    void H1(bool alfa) const;
+    void H2_aaaa(bool alfa) const;
+    void H2_aabb() const;
+    void H2_aabb_gather_scatter() const;
 };
+
+void gather_block(np_vector source, np_matrix dest, bool alfa, const CIStrings& lists, int class_Ia,
+                  int class_Ib);
+
+void zero_block(np_matrix dest, bool alfa, const CIStrings& lists, int class_Ia, int class_Ib);
+
+void scatter_block(np_matrix source, np_vector dest, bool alfa, const CIStrings& lists,
+                   int class_Ia, int class_Ib);
+
+void gather_block2(std::vector<double>& source, std::vector<double>& dest, bool alfa,
+                   const CIStrings& lists, int class_Ia, int class_Ib);
+
+void zero_block2(std::vector<double>& dest, bool alfa, const CIStrings& lists, int class_Ia,
+                 int class_Ib);
+
+void scatter_block2(std::vector<double>& source, std::vector<double>& dest, bool alfa,
+                    const CIStrings& lists, int class_Ia, int class_Ib);
 
 } // namespace forte2

@@ -286,33 +286,33 @@ const VVOOListElement& CIStrings::get_beta_vvoo_list(int class_I, int class_J) c
     return empty_vvoo_list;
 }
 
-std::vector<H1StringSubstitution>& CIStrings::get_alfa_1h_list(int class_I, size_t add_I,
-                                                               int class_J) {
+const std::vector<H1StringSubstitution>& CIStrings::get_alfa_1h_list(int class_I, size_t add_I,
+                                                                     int class_J) const {
     return lookup_hole_list(alfa_1h_list, class_I, add_I, class_J);
 }
 
-std::vector<H1StringSubstitution>& CIStrings::get_beta_1h_list(int class_I, size_t add_I,
-                                                               int class_J) {
+const std::vector<H1StringSubstitution>& CIStrings::get_beta_1h_list(int class_I, size_t add_I,
+                                                                     int class_J) const {
     return lookup_hole_list(beta_1h_list, class_I, add_I, class_J);
 }
 
-std::vector<H2StringSubstitution>& CIStrings::get_alfa_2h_list(int class_I, size_t add_I,
-                                                               int class_J) {
+const std::vector<H2StringSubstitution>& CIStrings::get_alfa_2h_list(int class_I, size_t add_I,
+                                                                     int class_J) const {
     return lookup_hole_list(alfa_2h_list, class_I, add_I, class_J);
 }
 
-std::vector<H2StringSubstitution>& CIStrings::get_beta_2h_list(int class_I, size_t add_I,
-                                                               int class_J) {
+const std::vector<H2StringSubstitution>& CIStrings::get_beta_2h_list(int class_I, size_t add_I,
+                                                                     int class_J) const {
     return lookup_hole_list(beta_2h_list, class_I, add_I, class_J);
 }
 
-std::vector<H3StringSubstitution>& CIStrings::get_alfa_3h_list(int class_I, size_t add_I,
-                                                               int class_J) {
+const std::vector<H3StringSubstitution>& CIStrings::get_alfa_3h_list(int class_I, size_t add_I,
+                                                                     int class_J) const {
     return lookup_hole_list(alfa_3h_list, class_I, add_I, class_J);
 }
 
-std::vector<H3StringSubstitution>& CIStrings::get_beta_3h_list(int class_I, size_t add_I,
-                                                               int class_J) {
+const std::vector<H3StringSubstitution>& CIStrings::get_beta_3h_list(int class_I, size_t add_I,
+                                                                     int class_J) const {
     return lookup_hole_list(beta_3h_list, class_I, add_I, class_J);
 }
 

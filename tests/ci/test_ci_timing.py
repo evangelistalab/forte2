@@ -47,7 +47,7 @@ def test_ci_timing():
 
     ci_timing = []
     energies = []
-    for n in range(2, 12, 2):
+    for n in range(2, 14, 2):
         elapsed, energy = timing(n)
         ci_timing.append((n, elapsed, energy))
         energies.append(energy)

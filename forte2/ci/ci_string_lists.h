@@ -58,18 +58,18 @@ class CIStrings {
     /// @return the beta string address object
     const auto& beta_address() const { return beta_address_; }
 
-    //   /// @return the alpha string address object for N - 1 electrons
-    //   auto alfa_address_1h() { return alfa_address_1h_; }
-    //   /// @return the beta string address object for N - 1 electrons
-    //   auto beta_address_1h() { return beta_address_1h_; }
-    //   /// @return the alpha string address object for N - 2 electrons
-    //   auto alfa_address_2h() { return alfa_address_2h_; }
-    //   /// @return the beta string address object for N - 2 electrons
-    //   auto beta_address_2h() { return beta_address_2h_; }
-    //   /// @return the alpha string address object for N - 3 electrons
-    //   auto alfa_address_3h() { return alfa_address_3h_; }
-    //   /// @return the beta string address object for N - 3 electrons
-    //   auto beta_address_3h() { return beta_address_3h_; }
+    /// @return the alpha string address object for N - 1 electrons
+    auto alfa_address_1h() const { return alfa_address_1h_; }
+    /// @return the beta string address object for N - 1 electrons
+    auto beta_address_1h() const { return beta_address_1h_; }
+    /// @return the alpha string address object for N - 2 electrons
+    auto alfa_address_2h() const { return alfa_address_2h_; }
+    /// @return the beta string address object for N - 2 electrons
+    auto beta_address_2h() const { return beta_address_2h_; }
+    /// @return the alpha string address object for N - 3 electrons
+    auto alfa_address_3h() const { return alfa_address_3h_; }
+    /// @return the beta string address object for N - 3 electrons
+    auto beta_address_3h() const { return beta_address_3h_; }
 
     /// @return the address of a determinant in the CI vector
     size_t determinant_address(const Determinant& d) const;
@@ -112,14 +112,14 @@ class CIStrings {
     const VVOOListElement& get_alfa_vvoo_list(int class_I, int class_J) const;
     const VVOOListElement& get_beta_vvoo_list(int class_I, int class_J) const;
 
-    std::vector<H1StringSubstitution>& get_alfa_1h_list(int h_I, size_t add_I, int h_J);
-    std::vector<H1StringSubstitution>& get_beta_1h_list(int h_I, size_t add_I, int h_J);
+    const std::vector<H1StringSubstitution>& get_alfa_1h_list(int h_I, size_t add_I, int h_J) const;
+    const std::vector<H1StringSubstitution>& get_beta_1h_list(int h_I, size_t add_I, int h_J) const;
 
-    std::vector<H2StringSubstitution>& get_alfa_2h_list(int h_I, size_t add_I, int h_J);
-    std::vector<H2StringSubstitution>& get_beta_2h_list(int h_I, size_t add_I, int h_J);
+    const std::vector<H2StringSubstitution>& get_alfa_2h_list(int h_I, size_t add_I, int h_J) const;
+    const std::vector<H2StringSubstitution>& get_beta_2h_list(int h_I, size_t add_I, int h_J) const;
 
-    std::vector<H3StringSubstitution>& get_alfa_3h_list(int h_I, size_t add_I, int h_J);
-    std::vector<H3StringSubstitution>& get_beta_3h_list(int h_I, size_t add_I, int h_J);
+    const std::vector<H3StringSubstitution>& get_alfa_3h_list(int h_I, size_t add_I, int h_J) const;
+    const std::vector<H3StringSubstitution>& get_beta_3h_list(int h_I, size_t add_I, int h_J) const;
 
     //   Pair get_pair_list(int h, int n) const { return pair_list_[h][n]; }
 
@@ -260,8 +260,9 @@ class CIStrings {
 
     // == Private Functions ==
     template <typename HListT>
-    auto& lookup_hole_list(HListT& map_ref, int i, size_t add, int j) const {
-        return map_ref[{i, add, j}];
+    auto& lookup_hole_list(const HListT& map_ref, int i, size_t add, int j) const {
+        HListKey key{i, add, j};
+        return map_ref.at(key);
     }
 };
 

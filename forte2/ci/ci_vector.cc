@@ -185,10 +185,10 @@ void CIVector::zero() {
 //     psi::outfile->Printf("\n");
 // }
 
-np_matrix CIVector::gather_C_block(np_matrix M, bool alfa,
-                                   std::shared_ptr<StringAddress> alfa_address,
-                                   std::shared_ptr<StringAddress> beta_address, int class_Ia,
-                                   int class_Ib, bool zero) {
+np_matrix CIVector::gather_block(np_matrix M, bool alfa,
+                                 std::shared_ptr<StringAddress> alfa_address,
+                                 std::shared_ptr<StringAddress> beta_address, int class_Ia,
+                                 int class_Ib, bool zero) {
     // if alfa is true just return the pointer to the block
     auto block_idx = lists_.string_class()->block_index(class_Ia, class_Ib);
     auto block_offset_ = lists_.block_offset(block_idx);
@@ -214,9 +214,9 @@ np_matrix CIVector::gather_C_block(np_matrix M, bool alfa,
     return M;
 }
 
-void CIVector::scatter_C_block(np_matrix M, bool alfa, std::shared_ptr<StringAddress> alfa_address,
-                               std::shared_ptr<StringAddress> beta_address, int class_Ia,
-                               int class_Ib) {
+void CIVector::scatter_block(np_matrix M, bool alfa, std::shared_ptr<StringAddress> alfa_address,
+                             std::shared_ptr<StringAddress> beta_address, int class_Ia,
+                             int class_Ib) {
     if (!alfa) {
         size_t maxIa = alfa_address->strpcls(class_Ia);
         size_t maxIb = beta_address->strpcls(class_Ib);

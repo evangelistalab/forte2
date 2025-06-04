@@ -87,6 +87,8 @@ nanobind_add_module(
   ints/two_electron.cc
   ints/value_at_points.cc
   ci/ci_sigma_builder.cc
+  ci/ci_sigma_builder_1rdm.cc
+  ci/ci_sigma_builder_2rdm.cc
   ci/ci_spin_adapter.cc
   ci/ci_string_lists.cc
   ci/ci_string_lists_makers.cc
@@ -113,3 +115,11 @@ target_include_directories(_forte2
 
 # Install directive for scikit-build-core
 install(TARGETS _forte2 LIBRARY DESTINATION forte2)
+
+# Enable Release build with high optimization flags if not already set
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
+endif()
+
+# Optional: explicitly define optimization flags
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")

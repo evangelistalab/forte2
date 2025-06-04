@@ -34,7 +34,19 @@ void scale(np_matrix mat, double factor) {
     }
 }
 
-/// @brief Perform the operation y = a * x + y for specific rows in two matrices
+void daxpy(double a, np_matrix x, np_matrix y) {
+    if (x.shape(0) != y.shape(0) || x.shape(1) != y.shape(1)) {
+        throw std::runtime_error("Source and destination matrices must have the same shape.");
+    }
+    auto x_view = x.view();
+    auto y_view = y.view();
+    for (size_t i{0}, maxi{x.shape(0)}; i < maxi; ++i) {
+        for (size_t j{0}, maxj{x.shape(1)}; j < maxj; ++j) {
+            y_view(i, j) += a * x_view(i, j);
+        }
+    }
+}
+
 void daxpy_rows(double a, np_matrix x, int row_x, np_matrix y, int row_y) {
     if (x.shape(1) != y.shape(1)) {
         throw std::runtime_error("Source and destination matrices must have the same shape.");
@@ -44,6 +56,21 @@ void daxpy_rows(double a, np_matrix x, int row_x, np_matrix y, int row_y) {
     for (size_t i{0}, maxi{x.shape(1)}; i < maxi; ++i) {
         y_view(row_y, i) += a * x_view(row_x, i);
     }
+}
+
+double dot_rows(np_matrix x, int row_x, np_matrix y, int row_y, size_t max_col) {
+    if (x.shape(1) != y.shape(1)) {
+        throw std::runtime_error(
+            "Source and destination matrices must have the same number of columns.");
+    }
+    auto x_view = x.view();
+    auto y_view = y.view();
+    double result = 0.0;
+    max_col = (max_col == 0 ? x.shape(1) : max_col);
+    for (size_t i{0}; i < max_col; ++i) {
+        result += x_view(row_x, i) * y_view(row_y, i);
+    }
+    return result;
 }
 
 void print(np_matrix mat, std::string label) {

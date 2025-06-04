@@ -32,6 +32,10 @@ class CI(MOsMixin, SystemMixin):
     econv: float = 1e-10
     # The residual convergence threshold
     rconv: float = 1e-5
+    # First run flag
+    first_run: bool = field(default=True, init=False)
+    # The number of determinants
+    ndef: int = field(default=None, init=False)
 
     def __call__(self, method):
         if not method.executed:
@@ -61,11 +65,12 @@ class CI(MOsMixin, SystemMixin):
         # Generate the integrals with all the orbital spaces flattened
         flattened_orbitals = [orb for sublist in self.orbitals for orb in sublist]
 
+        # 1. Transform the orbitals to the MO basis
         self.ints = RestrictedMOIntegrals(
             self.system, self.C[0], flattened_orbitals, self.core_orbitals
         )
 
-        # 1. Create the string lists
+        # 2. Create the string lists
         orbital_symmetry = [[0] * len(x) for x in self.orbitals]
         gas_min = []
         gas_max = []
@@ -92,31 +97,28 @@ class CI(MOsMixin, SystemMixin):
         self.spin_adapter.prepare_couplings(self.dets)
         print(f"Number of CSFs: {self.spin_adapter.ncsf()}")
 
-        # Allocate temporary space for the CISigmaBuilder
-        # (this must be done before creating the CISigmaBuilder)
-        forte2.CISigmaBuilder.allocate_temp_space(ci_strings)
-
         # Create the CISigmaBuilder from the CI strings and integrals
-        ci_sigma_builder = forte2.CISigmaBuilder(
+        # This object handles some temporary memory deallocated at destruction
+        # and is used to compute the Hamiltonian matrix elements in the determinant basis
+        self.ci_sigma_builder = forte2.CISigmaBuilder(
             ci_strings, self.ints.E, self.ints.H, self.ints.V
         )
 
         # 2. Allocate memory for the CI vectors
-        det_size = ci_strings.ndet
-        basis_size = self.spin_adapter.ncsf()
+        self.ndet = ci_strings.ndet
+        self.basis_size = self.spin_adapter.ncsf()
 
         # Create the CI vectors that will hold the results of the sigma builder in the
         # determinant basis
-        b_det = np.zeros((det_size))
-        sigma_det = np.zeros((det_size))
+        b_det = np.zeros((self.ndet))
+        sigma_det = np.zeros((self.ndet))
 
-        Hdiag = ci_sigma_builder.form_Hdiag_csf(self.dets, self.spin_adapter, True)
+        Hdiag = self.ci_sigma_builder.form_Hdiag_csf(self.dets, self.spin_adapter, True)
 
         # 3. Instantiate and configure solver
-        self.first_run = False
         if self.solver is None:
             self.solver = DavidsonLiuSolver(
-                size=basis_size,  # size of the basis (number of CSF if we spin adapt)
+                size=self.basis_size,  # size of the basis (number of CSF if we spin adapt)
                 nroot=self.nroot,
                 collapse_per_root=self.collapse_per_root,
                 basis_per_root=self.basis_per_root,
@@ -124,14 +126,95 @@ class CI(MOsMixin, SystemMixin):
                 r_tol=self.rconv,  # residual convergence
                 maxiter=self.maxiter,
             )
-            self.first_run = True
 
-        # 3. Build initial guess vectors
+        # 4. Compute diagonal of the Hamiltonian
         self.solver.add_h_diag(Hdiag)
 
-        self.num_guess_states = min(self.guess_per_root * self.nroot, basis_size)
+        # 5. Build the guess vectors if this is the first run
+        if self.first_run:
+            self._build_guess_vectors(Hdiag)
+            self.first_run = False
+
+        def sigma_builder(Bblock, Sblock):
+            # Compute the sigma block from the basis block
+            ncols = Bblock.shape[1]
+            for i in range(ncols):
+                self.spin_adapter.csf_C_to_det_C(Bblock[:, i], b_det)
+                self.ci_sigma_builder.Hamiltonian(b_det, sigma_det)
+                self.spin_adapter.det_C_to_csf_C(sigma_det, Sblock[:, i])
+
+        self.solver.add_sigma_builder(sigma_builder)
+
+        # 6. Run Davidson
+        self.evals, self.evecs = self.solver.solve()
+
+        # 7. Store the final energy and properties
+        self.E = self.evals
+        for i, e in enumerate(self.evals):
+            print(f"Final CI Energy Root {i}: {e:20.12f} [Eh]")
+
+        print(
+            f"Average CI Sigma Builder build time: {self.ci_sigma_builder.avg_build_time():.3f} s/build"
+        )
+
+        rdms = {}
+        for root in range(self.nroot):
+            root_rdms = {}
+            root_det = np.zeros((self.ndet))
+            self.spin_adapter.csf_C_to_det_C(self.evecs[:, root], root_det)
+            root_rdms["rdm1"] = self.ci_sigma_builder.rdm1_sf(root_det, root_det)
+            root_rdms["rdm2_aa"] = self.ci_sigma_builder.rdm2_aa(
+                root_det, root_det, True
+            )
+            root_rdms["rdm2_ab"] = self.ci_sigma_builder.rdm2_ab(root_det, root_det)
+            root_rdms["rdm2_bb"] = self.ci_sigma_builder.rdm2_aa(
+                root_det, root_det, False
+            )
+
+            rdms[root] = root_rdms
+            # tr_rdm1 = np.einsum("ii", self.rdm1)
+            # print(f"Trace of RDM1: {tr_rdm1:.6f}")
+
+            # Compute the energy from the RDMs
+            # from the numpy tensor V[i, j, k, l] = <ij|kl> make the np matrix with indices
+            # V[i > j, k > l] = <ij|kl>
+            i_idx, j_idx = np.tril_indices(self.norb, k=-1)
+
+            # broadcast into a 2D matrix
+            i_row = i_idx[:, None]
+            j_row = j_idx[:, None]
+            i_col = i_idx[None, :]
+            j_col = j_idx[None, :]
+
+            # Create the antisymmetrized two electron integrals matrix
+            A = self.ints.V.copy()
+            A -= np.einsum("ijkl->ijlk", self.ints.V)
+
+            M = A[i_row, j_row, i_col, j_col]
+
+            rdms_energy = (
+                self.ints.E
+                + np.einsum("ij,ij", root_rdms["rdm1"], self.ints.H)
+                + np.einsum("ij,ij", root_rdms["rdm2_aa"], M)
+                + np.einsum("ijkl,ijkl", root_rdms["rdm2_ab"], self.ints.V)
+                + np.einsum("ij,ij", root_rdms["rdm2_bb"], M)
+            )
+            print(f"CI energy from RDMs: {rdms_energy:.6f} Eh")
+
+        self.rdms = rdms
+
+        return self.rdms
+
+    def _build_guess_vectors(self, Hdiag):
+        """
+        Build the guess vectors for the CI calculation.
+        This method is a placeholder and should be implemented in subclasses.
+        """
+
+        # determine the number of guess vectors
+        self.num_guess_states = min(self.guess_per_root * self.nroot, self.basis_size)
         print(f"Number of guess states: {self.num_guess_states}")
-        nguess_dets = min(self.ndets_per_guess * self.num_guess_states, basis_size)
+        nguess_dets = min(self.ndets_per_guess * self.num_guess_states, self.basis_size)
         print(f"Number of guess basis: {nguess_dets}")
 
         # find the indices of the elements of Hdiag with the lowest values
@@ -142,7 +225,7 @@ class CI(MOsMixin, SystemMixin):
         for i, I in enumerate(indices):
             for j, J in enumerate(indices):
                 if i >= j:
-                    Hij = ci_sigma_builder.slater_rules_csf(
+                    Hij = self.ci_sigma_builder.slater_rules_csf(
                         self.dets, self.spin_adapter, I, J
                     )
                     Hguess[i, j] = Hij
@@ -152,111 +235,10 @@ class CI(MOsMixin, SystemMixin):
         evals_guess, evecs_guess = np.linalg.eigh(Hguess)
 
         # Select the lowest eigenvalues and their corresponding eigenvectors
-        guess_mat = np.zeros((basis_size, self.num_guess_states))
+        guess_mat = np.zeros((self.basis_size, self.num_guess_states))
         for i in range(self.num_guess_states):
             guess = evecs_guess[:, i]
             for j, d in enumerate(indices):
                 guess_mat[d, i] = guess[j]
 
         self.solver.add_guesses(guess_mat)
-
-        def sigma_builder(Bblock, Sblock):
-            # Compute the sigma block from the basis block
-            ncols = Bblock.shape[1]
-            for i in range(ncols):
-                self.spin_adapter.csf_C_to_det_C(Bblock[:, i], b_det)
-                ci_sigma_builder.Hamiltonian(b_det, sigma_det)
-                self.spin_adapter.det_C_to_csf_C(sigma_det, Sblock[:, i])
-
-        self.solver.add_sigma_builder(sigma_builder)
-
-        # 4. Run Davidson
-        evals, evecs = self.solver.solve()
-        self.E = evals
-        print(f"Eigenvalues: {evals}")
-
-        # 5. Compute the final CI vectors
-
-        # 6. Compute the final energy and properties
-
-        # Deallocate temporary space for the CI strings
-        # (this must be done after running the CISigmaBuilder to avoid memory leaks)
-        forte2.CISigmaBuilder.release_temp_space()
-
-        print(
-            f"Average CI Sigma Builder build time: {ci_sigma_builder.avg_build_time():.3f} s/build"
-        )
-
-    # def _build_initial_guess(self):
-    #     print("Building initial guess vectors...")
-    #     # determine the number of guess vectors
-    #     self.num_guess_states = min(self.guess_per_root * self.nroot, self.C.size)
-
-    # auto Hdiag_vec =
-    #     spin_adapt_ ? form_Hdiag_csf(as_ints_, spin_adapter_) : form_Hdiag_det(as_ints_);
-    # dl_solver_->add_h_diag(Hdiag_vec);
-
-    # // The first time we run Form the diagonal of the Hamiltonian and the initial guess
-    # if (spin_adapt_) {
-    #     if (first_run) {
-    #         auto guesses = initial_guess_csf(Hdiag_vec, num_guess_states);
-    #         dl_solver_->add_guesses(guesses);
-    #     }
-    # } else {
-    #     bool use_initial_guess = (num_guess_states * ndets_per_guess_ >= det_size);
-    #     if (first_run or use_initial_guess) {
-    #         dl_solver_->reset();
-    #         auto [guesses, bad_roots] = initial_guess_det(Hdiag_vec, num_guess_states, as_ints_);
-    #         dl_solver_->add_guesses(guesses);
-    #         dl_solver_->add_project_out_vectors(bad_roots);
-    #     }
-    # }
-
-    # auto converged = dl_solver_->solve();
-    # if (not converged) {
-    #     throw std::runtime_error(
-    #         "Davidson-Liu solver did not converge.\nPlease try to increase the number of "
-    #         "Davidson-Liu iterations (DL_MAXITER). You can also try to increase:\n - the "
-    #         "maximum "
-    #         "size of the subspace (DL_SUBSPACE_PER_ROOT)"
-    #         "\n - the number of guess states (DL_GUESS_PER_ROOT)");
-    #     return false;
-    # }
-
-    # // Copy eigenvalues and eigenvectors from the Davidson-Liu solver
-    # evals_ = dl_solver_->eigenvalues();
-    # energies_ = std::vector<double>(nroot_, 0.0);
-    # spin2_ = std::vector<double>(nroot_, 0.0);
-    # for (size_t r = 0; r < nroot_; r++) {
-    #     energies_[r] = evals_->get(r);
-    #     b_basis = dl_solver_->eigenvector(r);
-    #     if (spin_adapt_) {
-    #         spin_adapter_->csf_C_to_det_C(b_basis, b);
-    #     } else {
-    #         b = b_basis;
-    #     }
-    #     C_->copy(b);
-    #     spin2_[r] = C_->compute_spin2();
-    # }
-    # eigen_vecs_ = dl_solver_->eigenvectors();
-
-    # if (print_ >= PrintLevel::Default) {
-    #     print_timing("CI", t.get());
-    # }
-
-    # // Print determinants
-    # if (print_ >= PrintLevel::Default) {
-    #     print_solutions(100, b, b_basis, dl_solver_);
-    # }
-
-    # // Optionally, test the RDMs
-    # if (test_rdms_) {
-    #     test_rdms(b, b_basis, dl_solver_);
-    # }
-
-    # energy_ = dl_solver_->eigenvalues()->get(root_);
-    # psi::Process::environment.globals["CURRENT ENERGY"] = energy_;
-    # psi::Process::environment.globals["CI ENERGY"] = energy_;
-
-    # // GenCIVector::release_temp_space();
-    # return energy_;

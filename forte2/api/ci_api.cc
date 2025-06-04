@@ -44,15 +44,16 @@ void export_ci_sigma_builder_api(nb::module_& m) {
     nb::class_<CISigmaBuilder>(m, "CISigmaBuilder")
         .def(nb::init<const CIStrings&, double, np_matrix&, np_tensor4&>(), "lists"_a, "E"_a, "H"_a,
              "V"_a)
-        .def_static("allocate_temp_space", &CISigmaBuilder::allocate_temp_space, "lists"_a,
-                    nb::rv_policy::reference_internal)
-        .def_static("release_temp_space", &CISigmaBuilder::release_temp_space)
-        // .def("form_Hdiag_det", &CISigmaBuilder::form_Hdiag_det)
         .def("form_Hdiag_csf", &CISigmaBuilder::form_Hdiag_csf, "dets"_a, "spin_adapter"_a,
              "spin_adapt_full_preconditioner"_a = false)
         .def("slater_rules_csf", &CISigmaBuilder::slater_rules_csf, "dets"_a, "spin_adapter"_a,
              "I"_a, "J"_a)
         .def("Hamiltonian", &CISigmaBuilder::Hamiltonian, "basis"_a, "sigma"_a)
+        .def("rdm1_a", &CISigmaBuilder::compute_1rdm_same_irrep, "C_left"_a, "C_right"_a, "alfa"_a)
+        .def("rdm2_aa", &CISigmaBuilder::compute_2rdm_aa_same_irrep, "C_left"_a, "C_right"_a,
+             "alfa"_a)
+        .def("rdm2_ab", &CISigmaBuilder::compute_2rdm_ab_same_irrep, "C_left"_a, "C_right"_a)
+        .def("rdm1_sf", &CISigmaBuilder::compute_sf_1rdm_same_irrep, "C_left"_a, "C_right"_a)
         .def("avg_build_time", &CISigmaBuilder::avg_build_time);
 }
 
