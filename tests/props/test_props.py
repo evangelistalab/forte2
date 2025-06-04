@@ -62,7 +62,25 @@ def test_dipole_uhf():
     assert dip == approx([-3.05009553, 1.77922239, -0.23558438])
 
 
+def test_mulliken_rhf():
+    erhf = -76.061466407195
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.061664597388
+    H            0.000000000000    -0.711620616369     0.489330954643
+    H            0.000000000000     0.711620616369     0.489330954643
+    """
+
+    system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
+
+    scf = RHF(charge=0)(system)
+    scf.run()
+    assert scf.E == approx(erhf)
+    mp = forte2.mulliken_population(scf)
+    assert mp == pytest.approx([-0.4620044, 0.2310022, 0.2310022])
+
+
 if __name__ == "__main__":
     test_core_energy()
     test_dipole_rhf()
     test_dipole_uhf()
+    test_mulliken_rhf()
