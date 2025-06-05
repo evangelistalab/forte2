@@ -166,23 +166,33 @@ class System:
         positions = np.array([atom[1] for atom in self.atoms])
         return np.einsum("a,ax->x", masses, positions) / np.sum(masses)
 
-    def nuclear_dipole(self, origin=None):
+    def nuclear_dipole(self, origin=None, unit="debye"):
+        assert unit in ["debye", "au"], f"Invalid unit: {unit}. Use 'debye' or 'au'."
         charges = self.atomic_charges()
         positions = self.atomic_positions()
         if origin is not None:
             assert len(origin) == 3, "Origin must be a 3-element vector."
             positions -= np.array(origin)[np.newaxis, :]
-        return np.einsum("a,ax->x", charges, positions)
+        conversion_factor = (
+            1.0 / forte2.atom_data.DEBYE_TO_AU if unit == "debye" else 1.0
+        )
+        return np.einsum("a,ax->x", charges, positions) * conversion_factor
 
-    def nuclear_quadrupole(self, origin=None):
+    def nuclear_quadrupole(self, origin=None, unit="debye"):
+        assert unit in ["debye", "au"], f"Invalid unit: {unit}. Use 'debye' or 'au'."
         charges = self.atomic_charges()
         positions = self.atomic_positions()
         if origin is not None:
             assert len(origin) == 3, "Origin must be a 3-element vector."
             positions -= np.array(origin)[np.newaxis, :]
         nuc_quad = np.einsum("a,ax,ay->xy", charges, positions, positions)
-        nuc_quad = 3 * nuc_quad - np.eye(3) * nuc_quad.trace()
-        return nuc_quad / 2
+        nuc_quad = 0.5 * (3 * nuc_quad - np.eye(3) * nuc_quad.trace())
+        conversion_factor = (
+            1.0 / (forte2.atom_data.DEBYE_TO_AU * forte2.atom_data.ANGSTROM_TO_BOHR)
+            if unit == "debye"
+            else 1.0
+        )
+        return nuc_quad * conversion_factor
 
 
 @dataclass

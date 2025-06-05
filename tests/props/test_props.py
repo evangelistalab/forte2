@@ -58,7 +58,7 @@ def test_dipole_uhf():
     e_dip = forte2.get_property(scf, "electric_dipole")
     # get_property will run the scf if not already run
     assert scf.E == approx(euhf)
-    assert e_dip == pytest.approx([0, 0, 1.01026978e-02])
+    assert e_dip == pytest.approx([0, 0, -2.56784946e-02])
     dip = forte2.get_property(scf, "dipole", origin=[1.2, -0.7, 1])
     assert dip == approx([-3.05009553, 1.77922239, -0.23558438])
 

@@ -101,7 +101,7 @@ def test_nuclear_dipole():
     """
     system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="bohr")
 
-    nucdip = system.nuclear_dipole()
+    nucdip = system.nuclear_dipole(unit="au")
     assert nucdip == pytest.approx([6.0, 0.0, 1.0])
 
 
@@ -114,7 +114,7 @@ def test_nuclear_quadrupole():
     """
     system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="bohr")
 
-    nucquad = system.nuclear_quadrupole()
+    nucquad = system.nuclear_quadrupole(unit="au")
     assert np.trace(nucquad) == pytest.approx(0.0)
     assert np.diag(nucquad) == pytest.approx([11.5, -6.5, -5.0])
 

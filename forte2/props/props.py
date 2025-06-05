@@ -3,24 +3,24 @@ import numpy as np
 import scipy.linalg
 
 
-def _spin_independent_property_1e(dm_tot, ints):
+def _spin_independent_property_1e(dm_tot, ints, factor=1.0):
     """Calculate a one-electron spin-independent property using the total density matrix and integrals."""
     if not isinstance(ints, list):
-        return np.einsum("pq,qp->", dm_tot, ints)
-    return np.array([np.einsum("pq,qp->", dm_tot, _) for _ in ints])
+        return np.einsum("pq,qp->", dm_tot, ints) * factor
+    return np.array([np.einsum("pq,qp->", dm_tot, _) for _ in ints]) * factor
 
 
-def get_property(method, property_name, origin=None):
+def get_property(method, property_name, origin=None, unit="debye"):
     """
     Calculate a property of the system using the given method.
     Args:
         method: A method object that has been run and contains the necessary data.
         property_name: The name of the property to calculate (e.g., "kinetic_energy", "nuclear_attraction_energy", "electric_dipole").
         origin: Optional; the origin point for properties that depend on it (e.g., electric dipole moment).
+        unit: Optional; the unit for the property value, either "debye" or "au". Default is "debye".
+                Only used for multipole moments. For quadrupole moments, "debye" stands for debye * angstrom, etc.
     Returns:
         The calculated property value.
-    Raises:
-        ValueError: If the property name is not supported or if the method has not been executed.
     """
 
     def _origin_check(origin):
@@ -55,6 +55,8 @@ def get_property(method, property_name, origin=None):
         )
         dm = method._build_total_density_matrix()
 
+    factor = 1.0
+
     match property_name:
         case "kinetic_energy":
             ints = forte2.ints.kinetic(method.system.basis)
@@ -63,31 +65,35 @@ def get_property(method, property_name, origin=None):
         case "electric_dipole":
             origin = _origin_check(origin)
             _, *ints = forte2.ints.emultipole1(method.system.basis, origin=origin)
+            factor = -1.0 / forte2.atom_data.DEBYE_TO_AU if unit == "debye" else -1.0
         case "dipole":
-            e_dip = get_property(method, "electric_dipole", origin=origin)
-            nuc_dip = method.system.nuclear_dipole(origin=origin)
-            return (-e_dip + nuc_dip) / forte2.atom_data.DEBYE_TO_AU
+            e_dip = get_property(method, "electric_dipole", origin=origin, unit=unit)
+            nuc_dip = method.system.nuclear_dipole(origin=origin, unit=unit)
+            return e_dip + nuc_dip
         case "electric_quadrupole":
             origin = _origin_check(origin)
             *_, xx, xy, xz, yy, yz, zz = forte2.ints.emultipole2(
                 method.system.basis, origin=origin
             )
             ints = [xx, xy, xz, yy, yz, zz]
+            factor = (
+                -1.0
+                / (forte2.atom_data.DEBYE_TO_AU * forte2.atom_data.ANGSTROM_TO_BOHR)
+                if unit == "debye"
+                else -1.0
+            )
         case "quadrupole":
             xx, xy, xz, yy, yz, zz = get_property(
-                method, "electric_quadrupole", origin=origin
+                method, "electric_quadrupole", origin=origin, unit=unit
             )
             e_quad = np.array([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])
             e_quad = 0.5 * (3 * e_quad - np.trace(e_quad) * np.eye(3))
-            nuc_quad = method.system.nuclear_quadrupole(origin=origin)
-            return (-e_quad + nuc_quad) / (
-                forte2.atom_data.DEBYE_TO_AU * forte2.atom_data.ANGSTROM_TO_BOHR
-            )
-
+            nuc_quad = method.system.nuclear_quadrupole(origin=origin, unit=unit)
+            return e_quad + nuc_quad
         case _:
             raise ValueError(f"Property '{property_name}' is not supported.")
 
-    return propfunc(dm, ints)
+    return propfunc(dm, ints, factor=factor)
 
 
 def mulliken_population(method):
