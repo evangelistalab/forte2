@@ -9,7 +9,7 @@ def parse_xyz(xyz, unit):
     # Parse an XYZ string into a list of atoms
     atoms = []
     for line in xyz.split("\n"):
-        # look for lines of th form "Li 0.0 0.0 0.0" or "N 10.0 0.0 0.0" and capture the element symbol and coordinates
+        # look for lines of th form "Li 0.0 0.0 0.0" or "N -10 0 0" and capture the element symbol and coordinates
         # Use regex to match the expected format
         m = re.match(
             r"^\s*([A-Z][a-z]?)\s+([-+]?\d*\.\d+|[-+]?\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)\s*$",

@@ -105,6 +105,20 @@ def test_nuclear_dipole():
     assert nucdip == pytest.approx([6.0, 0.0, 1.0])
 
 
+def test_nuclear_quadrupole():
+    # Test for nuclear quadrupole calculation
+    xyz = """
+    O 0.0 0.0 0.0
+    H 0.0 0.0 1.0
+    Li 2.0 0.0 0.0
+    """
+    system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="bohr")
+
+    nucquad = system.nuclear_quadrupole()
+    assert np.trace(nucquad) == pytest.approx(0.0)
+    assert np.diag(nucquad) == pytest.approx([11.5, -6.5, -5.0])
+
+
 def test_center_of_mass():
     # Test for center of mass calculation
     xyz = """
@@ -118,14 +132,14 @@ def test_center_of_mass():
 
     # This also incidentally tests the input of geometry with signed integers
     xyz = """
-    Mn  1  1  1
-    Mn  1  1 -1
-    Mn  1 -1  1
+    H  1  1  1
+    P  1  1 -1
+    V  1 -1  1
     Mn  1 -1 -1
     Mn -1  1  1
-    Mn -1  1 -1
-    Mn -1 -1  1
-    Mn -1 -1 -1 
+    V -1  1 -1
+    P -1 -1  1
+    H -1 -1 -1 
     """
     system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="bohr")
     com = system.center_of_mass()
@@ -139,4 +153,5 @@ if __name__ == "__main__":
     test_missing_coordinate()
     test_units()
     test_nuclear_dipole()
+    test_nuclear_quadrupole()
     test_center_of_mass()
