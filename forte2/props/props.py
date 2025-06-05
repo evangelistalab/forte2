@@ -4,7 +4,14 @@ import scipy.linalg
 
 
 def _spin_independent_property_1e(dm_tot, ints, factor=1.0):
-    """Calculate a one-electron spin-independent property using the total density matrix and integrals."""
+    """Calculate a one-electron spin-independent property using the total density matrix and integrals.
+    Args:
+        dm_tot (NDArray): The total density matrix (dm_aa + dm_bb)
+        ints (NDArray or list): The integrals for the property.
+        factor (float): A scaling factor for the property value.
+    Returns:
+        float or NDArray: The calculated property value, either a single value or an array if multiple integrals are provided.
+    """
     if not isinstance(ints, list):
         return np.einsum("pq,qp->", dm_tot, ints) * factor
     return np.array([np.einsum("pq,qp->", dm_tot, _) for _ in ints]) * factor
@@ -28,7 +35,7 @@ def get_property(method, property_name, origin=None, unit="debye"):
             origin = [0.0, 0.0, 0.0]
             if method.charge != 0:
                 print(
-                    "Warning: Electric dipole moment for a charged system is "
+                    "Warning: Electric multipole moment for a charged system is "
                     "origin-dependent. Using center of mass as origin."
                 )
                 origin = method.system.center_of_mass()
