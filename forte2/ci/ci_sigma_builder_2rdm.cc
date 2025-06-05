@@ -125,7 +125,8 @@ np_tensor4 CISigmaBuilder::compute_2rdm_ab_same_irrep(np_vector C_left, np_vecto
                                     for (const auto& [sign_x, x, Ia] : Ka_right_list) {
                                         for (const auto& [sign_y, y, Ib] : Kb_right_list) {
                                             rdm_view(u, v, x, y) +=
-                                                sign_x * sign_y * ClJ * Cr_span[Ia * maxIb + Ib];
+                                                sign_x * sign_y * ClJ *
+                                                Cr_span[Cr_offset + Ia * maxIb + Ib];
                                         }
                                     }
                                 }

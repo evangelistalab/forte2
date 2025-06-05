@@ -184,8 +184,6 @@ class CI(MOsMixin, SystemMixin):
             )
 
             rdms[root] = root_rdms
-            # tr_rdm1 = np.einsum("ii", self.rdm1)
-            # print(f"Trace of RDM1: {tr_rdm1:.6f}")
 
             # Compute the energy from the RDMs
             # from the numpy tensor V[i, j, k, l] = <ij|kl> make the np matrix with indices
