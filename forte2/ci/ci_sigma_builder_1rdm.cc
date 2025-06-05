@@ -27,7 +27,7 @@ np_matrix CISigmaBuilder::compute_1rdm_same_irrep(np_vector C_left, np_vector C_
         if (lists_.detpblk(nI) == 0)
             continue;
 
-        gather_block(Cr_span, TR, alfa, lists_, class_Ia, class_Ib);
+        auto tr = gather_block(Cr_span, TR, alfa, lists_, class_Ia, class_Ib);
 
         // loop over blocks of the left state
         for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
@@ -37,7 +37,7 @@ np_matrix CISigmaBuilder::compute_1rdm_same_irrep(np_vector C_left, np_vector C_
             if (lists_.detpblk(nJ) == 0)
                 continue;
 
-            gather_block(Cl_span, TL, alfa, lists_, class_Ja, class_Jb);
+            auto tl = gather_block(Cl_span, TL, alfa, lists_, class_Ja, class_Jb);
 
             const size_t maxL =
                 alfa ? beta_address->strpcls(class_Ib) : alfa_address->strpcls(class_Ia);
@@ -51,7 +51,7 @@ np_matrix CISigmaBuilder::compute_1rdm_same_irrep(np_vector C_left, np_vector C_
                 for (const auto& [sign, I, J] : vo_list) {
                     // Compute the RDM element contribution
                     for (size_t idx{0}; idx != maxL; ++idx) {
-                        rdm_element += sign * TR[I * maxL + idx] * TL[J * maxL + idx];
+                        rdm_element += sign * tr[I * maxL + idx] * tl[J * maxL + idx];
                     }
                 }
                 rdm_view(p, q) += rdm_element;

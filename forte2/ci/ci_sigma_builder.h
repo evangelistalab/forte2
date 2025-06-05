@@ -86,8 +86,9 @@ class CISigmaBuilder {
     void H2_aabb_gemm(std::span<double> basis, std::span<double> sigma) const;
 };
 
-void gather_block(std::span<double> source, std::span<double> dest, bool alfa,
-                  const CIStrings& lists, int class_Ia, int class_Ib);
+[[nodiscard]] std::span<double> gather_block(std::span<double> source, std::span<double> dest,
+                                             bool alfa, const CIStrings& lists, int class_Ia,
+                                             int class_Ib);
 
 void zero_block(std::span<double> dest, bool alfa, const CIStrings& lists, int class_Ia,
                 int class_Ib);

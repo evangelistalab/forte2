@@ -150,19 +150,23 @@ class CI(MOsMixin, SystemMixin):
         # 6. Run Davidson
         self.evals, self.evecs = self.solver.solve()
 
+        print(f"\nDavidson-Liu solver converged.\n")
+
         # 7. Store the final energy and properties
         self.E = self.evals
         for i, e in enumerate(self.evals):
             print(f"Final CI Energy Root {i}: {e:20.12f} [Eh]")
 
         h_tot, h_aabb, h_aaaa, h_bbbb = self.ci_sigma_builder.avg_build_time()
-        print("Average CI Sigma Builder time summary:")
+        print("\nAverage CI Sigma Builder time summary:")
         print(f"h_aabb time:    {h_aabb:.3f} s/build")
         print(f"h_aaaa time:    {h_aaaa:.3f} s/build")
         print(f"h_bbbb time:    {h_bbbb:.3f} s/build")
         print(f"total time:     {h_tot:.3f} s/build")
 
-
+        # 8. Compute the RDMs from the CI vectors
+        # and verify the energy from the RDMs matches the CI energy
+        print("\nComputing RDMs from CI vectors.\n")
         rdms = {}
         for root in range(self.nroot):
             root_rdms = {}
@@ -206,6 +210,9 @@ class CI(MOsMixin, SystemMixin):
                 + np.einsum("ij,ij", root_rdms["rdm2_bb"], M)
             )
             print(f"CI energy from RDMs: {rdms_energy:.6f} Eh")
+            assert np.isclose(
+                self.E[root], rdms_energy
+            ), f"CI energy {self.E[root]} Eh does not match RDMs energy {rdms_energy} Eh"
 
         self.rdms = rdms
 

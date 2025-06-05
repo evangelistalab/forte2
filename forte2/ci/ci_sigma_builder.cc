@@ -155,9 +155,18 @@ void CISigmaBuilder::Hamiltonian(np_vector basis, np_vector sigma) const {
     H0(b_span, s_span);
     H1_aa_gemm(b_span, s_span, true);
     H1_aa_gemm(b_span, s_span, false);
+
+    local_timer h_aabb_timer;
     H2_aabb_gemm(b_span, s_span);
+    haaaa_timer_ += h_aabb_timer.elapsed_seconds();
+
+    local_timer h_aaaa_timer;
     H2_aaaa_gemm(b_span, s_span, true);
+    haaaa_timer_ += h_aaaa_timer.elapsed_seconds();
+
+    local_timer h_bbbb_timer;
     H2_aaaa_gemm(b_span, s_span, false);
+    hbbbb_timer_ += h_bbbb_timer.elapsed_seconds();
 
     hdiag_timer_ += t.elapsed_seconds();
     build_count_++;
@@ -169,22 +178,21 @@ void CISigmaBuilder::H0(std::span<double> basis, std::span<double> sigma) const 
     }
 }
 
-void gather_block(std::span<double> source, std::span<double> dest, bool alfa,
-                  const CIStrings& lists, int class_Ia, int class_Ib) {
+std::span<double> gather_block(std::span<double> source, std::span<double> dest, bool alfa,
+                               const CIStrings& lists, int class_Ia, int class_Ib) {
     const auto block_index = lists.string_class()->block_index(class_Ia, class_Ib);
     const auto offset = lists.block_offset(block_index);
     const auto maxIa = lists.alfa_address()->strpcls(class_Ia);
     const auto maxIb = lists.beta_address()->strpcls(class_Ib);
 
     if (alfa) {
-        for (size_t Ia{0}; Ia < maxIa; ++Ia)
-            for (size_t Ib{0}; Ib < maxIb; ++Ib)
-                dest[Ia * maxIb + Ib] = source[offset + Ia * maxIb + Ib];
-    } else {
-        for (size_t Ia{0}; Ia < maxIa; ++Ia)
-            for (size_t Ib{0}; Ib < maxIb; ++Ib)
-                dest[Ib * maxIa + Ia] = source[offset + Ia * maxIb + Ib];
+        std::span<double> dest_span(source.data() + offset, maxIa * maxIb);
+        return dest_span;
     }
+    for (size_t Ia{0}; Ia < maxIa; ++Ia)
+        for (size_t Ib{0}; Ib < maxIb; ++Ib)
+            dest[Ib * maxIa + Ia] = source[offset + Ia * maxIb + Ib];
+    return dest;
 }
 
 void zero_block(std::span<double> dest, bool alfa, const CIStrings& lists, int class_Ia,
@@ -232,7 +240,7 @@ void CISigmaBuilder::H1(std::span<double> basis, std::span<double> sigma, bool a
         if (lists_.detpblk(nI) == 0)
             continue;
 
-        gather_block(basis, TR, alfa, lists_, class_Ia, class_Ib);
+        auto tr = gather_block(basis, TR, alfa, lists_, class_Ia, class_Ib);
 
         for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
             if (lists_.detpblk(nJ) == 0)
@@ -258,7 +266,7 @@ void CISigmaBuilder::H1(std::span<double> basis, std::span<double> sigma, bool a
                 const double Hpq = alfa ? h(p, q) : h(p, q);
                 for (const auto& [sign, I, J] : vo_list) {
                     for (size_t idx{0}; idx != maxL; ++idx) {
-                        TL[J * maxL + idx] += sign * Hpq * TR[I * maxL + idx];
+                        TL[J * maxL + idx] += sign * Hpq * tr[I * maxL + idx];
                     }
                 }
             }
@@ -275,7 +283,7 @@ void CISigmaBuilder::H2_aaaa(std::span<double> basis, std::span<double> sigma, b
         if (lists_.detpblk(nI) == 0)
             continue;
 
-        gather_block(basis, TR, alfa, lists_, class_Ia, class_Ib);
+        auto tr = gather_block(basis, TR, alfa, lists_, class_Ia, class_Ib);
 
         for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
             // The string class on which we don't act must be the same for I and J
@@ -302,7 +310,7 @@ void CISigmaBuilder::H2_aaaa(std::span<double> basis, std::span<double> sigma, b
 
                     for (const auto& I : oo_list) {
                         for (size_t idx{0}; idx != maxL; ++idx) {
-                            TL[I * maxL + idx] += integral * TR[I * maxL + idx];
+                            TL[I * maxL + idx] += integral * tr[I * maxL + idx];
                         }
                     }
                 }
@@ -535,14 +543,14 @@ void CISigmaBuilder::H1_aa_gemm(std::span<double> basis, std::span<double> sigma
                 std::fill_n(TL.begin(), temp_dim, 0.0);
                 std::fill_n(TR.begin(), temp_dim, 0.0);
 
-                gather_block(basis, TR, alfa, lists_, class_Ia, class_Ib);
+                auto tr = gather_block(basis, TR, alfa, lists_, class_Ia, class_Ib);
 
                 for (size_t K = 0; K < maxK; ++K) {
                     auto& Krlist = alfa ? lists_.get_alfa_1h_list(class_K, K, class_Ia)
                                         : lists_.get_beta_1h_list(class_K, K, class_Ib);
                     for (const auto& [sign_K, q, I] : Krlist) {
                         for (size_t idx{0}; idx != maxL; ++idx) {
-                            TL[q * dimKL + K * maxL + idx] += sign_K * TR[I * maxL + idx];
+                            TL[q * dimKL + K * maxL + idx] += sign_K * tr[I * maxL + idx];
                         }
                     }
                 }
@@ -603,7 +611,7 @@ void CISigmaBuilder::H2_aaaa_gemm(std::span<double> basis, std::span<double> sig
                 // We use TL to store the result of the transformation to the 2h basis
                 std::fill_n(TL.begin(), temp_dim, 0.0);
 
-                gather_block(basis, TR, alfa, lists_, class_Ia, class_Ib);
+                auto tr = gather_block(basis, TR, alfa, lists_, class_Ia, class_Ib);
 
                 for (size_t K = 0; K < maxK; ++K) {
                     auto& Krlist = alfa ? lists_.get_alfa_2h_list(class_K, K, class_Ia)
@@ -611,7 +619,7 @@ void CISigmaBuilder::H2_aaaa_gemm(std::span<double> basis, std::span<double> sig
                     for (const auto& [sign_K, q, s, I] : Krlist) {
                         const size_t qs_index = q * (q - 1) / 2 + s;
                         for (size_t idx{0}; idx != maxL; ++idx) {
-                            TL[qs_index * dimKL + K * maxL + idx] += sign_K * TR[I * maxL + idx];
+                            TL[qs_index * dimKL + K * maxL + idx] += sign_K * tr[I * maxL + idx];
                         }
                     }
                 }
