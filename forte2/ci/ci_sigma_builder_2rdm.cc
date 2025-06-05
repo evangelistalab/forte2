@@ -20,13 +20,8 @@ np_matrix CISigmaBuilder::compute_2rdm_aa_same_irrep(np_vector C_left, np_vector
     if ((alfa and (na < 2)) or ((!alfa) and (nb < 2)))
         return rdm;
 
-    auto Cl_view = C_left.view();
-    auto Cr_view = C_right.view();
-    // Copy Cr to C and Cl to S
-    for (size_t i{0}, imax{C.size()}; i < imax; ++i) {
-        C[i] = Cr_view(i);
-        S[i] = Cl_view(i);
-    }
+    auto Cl_span = vector::as_span(C_left);
+    auto Cr_span = vector::as_span(C_right);
 
     auto rdm_view = rdm.view();
 
@@ -42,7 +37,7 @@ np_matrix CISigmaBuilder::compute_2rdm_aa_same_irrep(np_vector C_left, np_vector
             if (lists_.detpblk(nI) == 0)
                 continue;
 
-            gather_block2(C, TR, alfa, lists_, class_Ia, class_Ib);
+            gather_block(Cr_span, TR, alfa, lists_, class_Ia, class_Ib);
 
             for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
                 // The string class on which we don't act must be the same for I and J
@@ -52,7 +47,7 @@ np_matrix CISigmaBuilder::compute_2rdm_aa_same_irrep(np_vector C_left, np_vector
                     continue;
 
                 // Get a pointer to the correct block of matrix C
-                gather_block2(S, TL, alfa, lists_, class_Ja, class_Jb);
+                gather_block(Cl_span, TL, alfa, lists_, class_Ja, class_Jb);
 
                 size_t maxL =
                     alfa ? beta_address->strpcls(class_Ib) : alfa_address->strpcls(class_Ia);
@@ -93,24 +88,16 @@ np_tensor4 CISigmaBuilder::compute_2rdm_ab_same_irrep(np_vector C_left, np_vecto
 
     auto rdm_view = rdm.view();
 
-    auto Cl_view = C_left.view();
-    auto Cr_view = C_right.view();
-    // Copy Cr to C and Cl to S
-    auto& L = S;
-    for (size_t i{0}, imax{C.size()}; i < imax; ++i) {
-        C[i] = Cr_view(i);
-        L[i] = Cl_view(i);
-    }
+    auto Cl_span = vector::as_span(C_left);
+    auto Cr_span = vector::as_span(C_right);
 
     const int num_1h_class_Ka = lists_.alfa_address_1h()->nclasses();
     const int num_1h_class_Kb = lists_.beta_address_1h()->nclasses();
 
     for (int class_Ka = 0; class_Ka < num_1h_class_Ka; ++class_Ka) {
-        size_t maxKa = lists_.alfa_address_1h()->strpcls(class_Ka);
-
+        const auto maxKa = lists_.alfa_address_1h()->strpcls(class_Ka);
         for (int class_Kb = 0; class_Kb < num_1h_class_Kb; ++class_Kb) {
-            size_t maxKb = lists_.beta_address_1h()->strpcls(class_Kb);
-
+            const auto maxKb = lists_.beta_address_1h()->strpcls(class_Kb);
             // loop over blocks of matrix C
             for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
                 if (lists_.detpblk(nI) == 0)
@@ -135,11 +122,11 @@ np_tensor4 CISigmaBuilder::compute_2rdm_ab_same_irrep(np_vector C_left, np_vecto
                             for (const auto& [sign_u, u, Ja] : Ka_left_list) {
                                 for (const auto& [sign_v, v, Jb] : Kb_left_list) {
                                     const auto ClJ =
-                                        sign_u * sign_v * L[Cl_offset + Ja * maxJb + Jb];
+                                        sign_u * sign_v * Cl_span[Cl_offset + Ja * maxJb + Jb];
                                     for (const auto& [sign_x, x, Ia] : Ka_right_list) {
                                         for (const auto& [sign_y, y, Ib] : Kb_right_list) {
-                                            rdm_view(u, v, x, y) += sign_x * sign_y * ClJ *
-                                                                    C[Cr_offset + Ia * maxIb + Ib];
+                                            rdm_view(u, v, x, y) +=
+                                                sign_x * sign_y * ClJ * Cr_span[Ia * maxIb + Ib];
                                         }
                                     }
                                 }

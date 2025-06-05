@@ -32,6 +32,10 @@ class CI(MOsMixin, SystemMixin):
     econv: float = 1e-10
     # The residual convergence threshold
     rconv: float = 1e-5
+    # The minimum number of orbitals in each general orbital space
+    gas_min: list[int] = field(default_factory=list)
+    # The maximum number of orbitals in each general orbital space
+    gas_max: list[int] = field(default_factory=list)
     # First run flag
     first_run: bool = field(default=True, init=False)
     # The number of determinants
@@ -72,16 +76,14 @@ class CI(MOsMixin, SystemMixin):
 
         # 2. Create the string lists
         orbital_symmetry = [[0] * len(x) for x in self.orbitals]
-        gas_min = []
-        gas_max = []
 
         ci_strings = forte2.CIStrings(
             self.state.na - len(self.core_orbitals),
             self.state.nb - len(self.core_orbitals),
             self.state.symmetry,
             orbital_symmetry,
-            gas_min,
-            gas_max,
+            self.gas_min,
+            self.gas_max,
         )
 
         print(f"\nNumber of α electrons: {ci_strings.na}")

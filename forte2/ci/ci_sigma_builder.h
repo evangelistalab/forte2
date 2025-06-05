@@ -3,12 +3,13 @@
 #include <functional>
 #include <vector>
 #include <cmath>
+#include <span>
 
 #include "helpers/ndarray.h"
 
-#include "ci_string_lists.h"
+#include "ci/ci_string_lists.h"
 #include "ci/slater_rules.h"
-#include "ci_spin_adapter.h"
+#include "ci/ci_spin_adapter.h"
 
 namespace forte2 {
 
@@ -18,6 +19,9 @@ class CISigmaBuilder {
     CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V);
 
     // == Class Public Functions ==
+    void set_H(np_matrix H);
+    void set_V(np_tensor4 V);
+
     /// @brief Form the diagonal of the Hamiltonian matrix in the CI basis
     /// @return The diagonal elements of the Hamiltonian matrix
     np_vector form_Hdiag_csf(const std::vector<Determinant>& dets,
@@ -67,32 +71,24 @@ class CISigmaBuilder {
 
     mutable std::vector<double> TR;
     mutable std::vector<double> TL;
-    mutable std::vector<double> C;
-    mutable std::vector<double> S;
+    mutable std::vector<double> v_pr_qs;
 
     // == Class Private Functions ==
-    void H0() const;
-    void H1(bool alfa) const;
-    void H2_aaaa(bool alfa) const;
-    void H2_aabb() const;
-    void H2_aabb_gather_scatter() const;
+    void H0(std::span<double> basis, std::span<double> sigma) const;
+    void H1(std::span<double> basis, std::span<double> sigma, bool alfa) const;
+    void H2_aaaa(std::span<double> basis, std::span<double> sigma, bool alfa) const;
+    void H2_aabb(std::span<double> basis, std::span<double> sigma) const;
+    void H2_aabb_gather_scatter(std::span<double> basis, std::span<double> sigma) const;
+    void H2_aabb_gemm(std::span<double> basis, std::span<double> sigma) const;
 };
 
-void gather_block(np_vector source, np_matrix dest, bool alfa, const CIStrings& lists, int class_Ia,
-                  int class_Ib);
+void gather_block(std::span<double> source, std::span<double> dest, bool alfa,
+                  const CIStrings& lists, int class_Ia, int class_Ib);
 
-void zero_block(np_matrix dest, bool alfa, const CIStrings& lists, int class_Ia, int class_Ib);
+void zero_block(std::span<double> dest, bool alfa, const CIStrings& lists, int class_Ia,
+                int class_Ib);
 
-void scatter_block(np_matrix source, np_vector dest, bool alfa, const CIStrings& lists,
-                   int class_Ia, int class_Ib);
-
-void gather_block2(std::vector<double>& source, std::vector<double>& dest, bool alfa,
+void scatter_block(std::span<double> source, std::span<double> dest, bool alfa,
                    const CIStrings& lists, int class_Ia, int class_Ib);
-
-void zero_block2(std::vector<double>& dest, bool alfa, const CIStrings& lists, int class_Ia,
-                 int class_Ib);
-
-void scatter_block2(std::vector<double>& source, std::vector<double>& dest, bool alfa,
-                    const CIStrings& lists, int class_Ia, int class_Ib);
 
 } // namespace forte2

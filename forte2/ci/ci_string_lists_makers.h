@@ -2,8 +2,8 @@
 
 #include <memory>
 
-#include "string_list_defs.h"
-#include "ci_string_address.h"
+#include "ci/ci_string_defs.h"
+#include "ci/ci_string_address.h"
 
 namespace forte2 {
 
@@ -24,6 +24,13 @@ VOListMap make_vo_list(const StringList& strings, const std::shared_ptr<StringAd
 
 void make_vo(const StringList& strings, const std::shared_ptr<StringAddress>& I_addresser,
              const std::shared_ptr<StringAddress>& J_addresser, VOListMap& list, int p, int q);
+
+VOListMap2 make_vo_list2(const StringList& strings,
+                         const std::shared_ptr<StringAddress>& I_addresser,
+                         const std::shared_ptr<StringAddress>& J_addresser);
+
+void make_vo2(const StringList& strings, const std::shared_ptr<StringAddress>& I_addresser,
+              const std::shared_ptr<StringAddress>& J_addresser, VOListMap2& list, int p, int q);
 
 OOListMap make_oo_list(const StringList& strings, std::shared_ptr<StringAddress> addresser);
 

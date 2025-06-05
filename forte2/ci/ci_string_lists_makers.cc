@@ -1,8 +1,8 @@
 #include <algorithm>
 
-#include "ci_string_address.h"
-#include "ci_string_lists.h"
-#include "ci_string_lists_makers.h"
+#include "ci/ci_string_address.h"
+#include "ci/ci_string_lists.h"
+#include "ci/ci_string_lists_makers.h"
 
 #include "helpers/cartesian_product.hpp"
 
@@ -173,6 +173,43 @@ void make_vo(const StringList& strings, const std::shared_ptr<StringAddress>& I_
     }
 }
 
+VOListMap2 make_vo_list2(const StringList& strings,
+                         const std::shared_ptr<StringAddress>& I_addresser,
+                         const std::shared_ptr<StringAddress>& J_addresser) {
+    VOListMap2 list;
+    const int nmo = I_addresser->nbits();
+    for (int p = 0; p < nmo; p++) {
+        for (int q = 0; q < nmo; q++) {
+            make_vo2(strings, I_addresser, J_addresser, list, p, q);
+        }
+    }
+    return list;
+}
+
+void make_vo2(const StringList& strings, const std::shared_ptr<StringAddress>& I_addresser,
+              const std::shared_ptr<StringAddress>& J_addresser, VOListMap2& list, int p, int q) {
+    for (const auto& string_class : strings) {
+        for (const auto& I : string_class) {
+            const auto& [add_I, class_I] = I_addresser->address_and_class(I);
+            auto J = I;
+            double sign = 1.0;
+            if (J[q]) {
+                sign *= J.slater_sign(q);
+                J[q] = false;
+                if (!J[p]) {
+                    sign *= J.slater_sign(p);
+                    J[p] = true;
+                    if (auto it = J_addresser->find(J); it != J_addresser->end()) {
+                        const auto& [add_J, class_J] = it->second;
+                        auto& list_IJ = list[std::make_pair(class_I, class_J)];
+                        list_IJ[add_I].push_back(StringSubstitution2(sign, p, q, add_J));
+                    }
+                }
+            }
+        }
+    }
+}
+
 VVOOListMap make_vvoo_list(const StringList& strings, std::shared_ptr<StringAddress> addresser,
                            const std::vector<std::pair<int, int>>& orbital_index_and_symmetry) {
     VVOOListMap list;
@@ -310,8 +347,6 @@ H2List make_2h_list(const StringList& strings, std::shared_ptr<StringAddress> ad
                                 const auto& [add_J, class_J] = it->second;
                                 std::tuple<int, size_t, int> I_tuple(class_J, add_J, class_I);
                                 list[I_tuple].push_back(H2StringSubstitution(sign, p, q, add_I));
-                                // list[I_tuple].push_back(H2StringSubstitution(-sign, q, p,
-                                // add_I));
                             }
                         }
                     }

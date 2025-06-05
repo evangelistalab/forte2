@@ -47,6 +47,10 @@ endif()
 # Import nanobind through CMake's find_package mechanism
 find_package(nanobind CONFIG REQUIRED)
 
+# Find BLAS and LAPACK
+find_package(BLAS REQUIRED)
+find_package(LAPACK REQUIRED)
+
 # We are now ready to compile the actual extension module
 nanobind_add_module(
   # Name of the extension
@@ -107,6 +111,7 @@ nanobind_add_module(
 
 target_link_libraries(_forte2 PRIVATE Libint2::int2)
 target_link_libraries(_forte2 PRIVATE Eigen3::Eigen)
+target_link_libraries(_forte2 PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
 
 target_include_directories(_forte2
   PUBLIC

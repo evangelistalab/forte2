@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <span>
 
 #include "ndarray.h"
 
@@ -25,6 +26,9 @@ void scale(np_vector vec, double factor);
 /// @param x The source vector to multiply
 /// @param y The destination vector to add to
 void daxpy(double a, np_vector x, np_vector y);
+
+/// @brief Check np_vector for contiguity and make a std::span from it
+std::span<double> as_span(np_vector vec);
 
 /// @brief Print the contents of a np_vector to standard output
 void print(np_vector vec, std::string label = "Vector");

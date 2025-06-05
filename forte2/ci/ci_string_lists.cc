@@ -165,6 +165,9 @@ CIStrings::CIStrings(size_t na, size_t nb, int symmetry,
     alfa_vo_list = make_vo_list(alfa_strings_, alfa_address_, alfa_address_);
     beta_vo_list = make_vo_list(beta_strings_, beta_address_, beta_address_);
 
+    alfa_vo_list2 = make_vo_list2(alfa_strings_, alfa_address_, alfa_address_);
+    beta_vo_list2 = make_vo_list2(beta_strings_, beta_address_, beta_address_);
+
     alfa_oo_list = make_oo_list(alfa_strings_, alfa_address_);
     beta_oo_list = make_oo_list(beta_strings_, beta_address_);
 
@@ -268,6 +271,34 @@ const VOListElement& CIStrings::get_beta_vo_list(int class_I, int class_J) const
     return empty_vo_list;
 }
 
+/**
+ * Returns a vector of tuples containing the sign, I, and J connected by a^{+}_p
+ * a_q
+ * that is: J = ± a^{+}_p a_q I. p and q are absolute indices and I belongs to
+ * the irrep h.
+ */
+const VOListElement2& CIStrings::get_alfa_vo_list2(int class_I, int class_J) const {
+    // check if the key exists, if not return an empty list
+    if (auto it = alfa_vo_list2.find(std::make_pair(class_I, class_J)); it != alfa_vo_list2.end()) {
+        return it->second;
+    }
+    return empty_vo_list2;
+}
+
+/**
+ * Returns a vector of tuples containing the sign,I, and J connected by a^{+}_p
+ * a_q
+ * that is: J = ± a^{+}_p a_q I. p and q are absolute indices and I belongs to
+ * the irrep h.
+ */
+const VOListElement2& CIStrings::get_beta_vo_list2(int class_I, int class_J) const {
+    // check if the key exists, if not return an empty list
+    if (auto it = beta_vo_list2.find(std::make_pair(class_I, class_J)); it != beta_vo_list2.end()) {
+        return it->second;
+    }
+    return empty_vo_list2;
+}
+
 const VVOOListElement& CIStrings::get_alfa_vvoo_list(int class_I, int class_J) const {
     // check if the key exists, if not return an empty list
     if (auto it = alfa_vvoo_list.find(std::make_pair(class_I, class_J));
@@ -288,32 +319,32 @@ const VVOOListElement& CIStrings::get_beta_vvoo_list(int class_I, int class_J) c
 
 const std::vector<H1StringSubstitution>& CIStrings::get_alfa_1h_list(int class_I, size_t add_I,
                                                                      int class_J) const {
-    return lookup_hole_list(alfa_1h_list, class_I, add_I, class_J);
+    return lookup_hole_list<H1List, H1StringSubstitution>(alfa_1h_list, class_I, add_I, class_J);
 }
 
 const std::vector<H1StringSubstitution>& CIStrings::get_beta_1h_list(int class_I, size_t add_I,
                                                                      int class_J) const {
-    return lookup_hole_list(beta_1h_list, class_I, add_I, class_J);
+    return lookup_hole_list<H1List, H1StringSubstitution>(beta_1h_list, class_I, add_I, class_J);
 }
 
 const std::vector<H2StringSubstitution>& CIStrings::get_alfa_2h_list(int class_I, size_t add_I,
                                                                      int class_J) const {
-    return lookup_hole_list(alfa_2h_list, class_I, add_I, class_J);
+    return lookup_hole_list<H2List, H2StringSubstitution>(alfa_2h_list, class_I, add_I, class_J);
 }
 
 const std::vector<H2StringSubstitution>& CIStrings::get_beta_2h_list(int class_I, size_t add_I,
                                                                      int class_J) const {
-    return lookup_hole_list(beta_2h_list, class_I, add_I, class_J);
+    return lookup_hole_list<H2List, H2StringSubstitution>(beta_2h_list, class_I, add_I, class_J);
 }
 
 const std::vector<H3StringSubstitution>& CIStrings::get_alfa_3h_list(int class_I, size_t add_I,
                                                                      int class_J) const {
-    return lookup_hole_list(alfa_3h_list, class_I, add_I, class_J);
+    return lookup_hole_list<H3List, H3StringSubstitution>(alfa_3h_list, class_I, add_I, class_J);
 }
 
 const std::vector<H3StringSubstitution>& CIStrings::get_beta_3h_list(int class_I, size_t add_I,
                                                                      int class_J) const {
-    return lookup_hole_list(beta_3h_list, class_I, add_I, class_J);
+    return lookup_hole_list<H3List, H3StringSubstitution>(beta_3h_list, class_I, add_I, class_J);
 }
 
 } // namespace forte2

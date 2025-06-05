@@ -6,8 +6,8 @@
 #include <utility>
 #include <vector>
 
-#include "string_list_defs.h"
-#include "ci_string_address.h"
+#include "ci/ci_string_defs.h"
+#include "ci/ci_string_address.h"
 
 namespace forte2 {
 
@@ -105,6 +105,9 @@ class CIStrings {
 
     const VOListElement& get_alfa_vo_list(int class_I, int class_J) const;
     const VOListElement& get_beta_vo_list(int class_I, int class_J) const;
+
+    const VOListElement2& get_alfa_vo_list2(int class_I, int class_J) const;
+    const VOListElement2& get_beta_vo_list2(int class_I, int class_J) const;
 
     const OOListElement& get_alfa_oo_list(int class_I) const;
     const OOListElement& get_beta_oo_list(int class_I) const;
@@ -218,6 +221,10 @@ class CIStrings {
     VOListMap alfa_vo_list;
     VOListMap beta_vo_list;
 
+    /// The VO string lists
+    VOListMap2 alfa_vo_list2;
+    VOListMap2 beta_vo_list2;
+
     /// The OO string lists
     OOListMap alfa_oo_list;
     OOListMap beta_oo_list;
@@ -227,6 +234,7 @@ class CIStrings {
     VVOOListMap beta_vvoo_list;
     // Empty lists
     const VOListElement empty_vo_list;
+    const VOListElement2 empty_vo_list2;
     const OOListElement empty_oo_list;
     const VVOOListElement empty_vvoo_list;
 
@@ -239,6 +247,10 @@ class CIStrings {
     /// The 3-hole lists
     H3List alfa_3h_list;
     H3List beta_3h_list;
+
+    const std::vector<H1StringSubstitution> empty_1h_list;
+    const std::vector<H2StringSubstitution> empty_2h_list;
+    const std::vector<H3StringSubstitution> empty_3h_list;
 
     /// Addressers
     /// The alpha string address
@@ -259,9 +271,21 @@ class CIStrings {
     std::shared_ptr<StringAddress> beta_address_3h_;
 
     // == Private Functions ==
-    template <typename HListT>
-    auto& lookup_hole_list(const HListT& map_ref, int i, size_t add, int j) const {
+    template <typename HListT, typename T>
+    const std::vector<T>& lookup_hole_list(const HListT& map_ref, int i, size_t add, int j) const {
         HListKey key{i, add, j};
+        if (!map_ref.contains(key)) {
+            if constexpr (std::is_same_v<T, H1StringSubstitution>) {
+                // If the key is not found in the map, return an empty vector
+                return empty_1h_list;
+            } else if constexpr (std::is_same_v<T, H2StringSubstitution>) {
+                return empty_2h_list;
+            } else if constexpr (std::is_same_v<T, H3StringSubstitution>) {
+                return empty_3h_list;
+            } else {
+                throw std::runtime_error("Unsupported HList type");
+            }
+        }
         return map_ref.at(key);
     }
 };

@@ -39,6 +39,16 @@ void daxpy(double a, np_vector x, np_vector y) {
     }
 }
 
+std::span<double> as_span(np_vector vec) {
+    if (vec.ndim() != 1) {
+        throw std::runtime_error("np_vector must be 1-dimensional to convert to std::span.");
+    }
+    if (vec.stride(0) != 1) {
+        throw std::runtime_error("np_vector must have stride 1 to convert to std::span.");
+    }
+    return std::span<double>(vec.data(), vec.shape(0));
+}
+
 void print(np_vector vec, std::string label) {
     std::cout << label << ":" << std::endl;
     auto vec_view = vec.view();
