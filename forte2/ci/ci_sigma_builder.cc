@@ -158,7 +158,7 @@ void CISigmaBuilder::Hamiltonian(np_vector basis, np_vector sigma) const {
 
     local_timer h_aabb_timer;
     H2_aabb_gemm(b_span, s_span);
-    haaaa_timer_ += h_aabb_timer.elapsed_seconds();
+    haabb_timer_ += h_aabb_timer.elapsed_seconds();
 
     local_timer h_aaaa_timer;
     H2_aaaa_gemm(b_span, s_span, true);
