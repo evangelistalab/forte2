@@ -10,8 +10,6 @@ np_matrix CISigmaBuilder::compute_2rdm_aa_same_irrep(np_vector C_left, np_vector
                                                      bool alfa) const {
     const size_t norb = lists_.norb();
     const size_t npairs = (norb * (norb - 1)) / 2;
-    const auto& alfa_address = lists_.alfa_address();
-    const auto& beta_address = lists_.beta_address();
 
     auto rdm = make_zeros<nb::numpy, double, 2>({npairs, npairs});
 
@@ -24,6 +22,9 @@ np_matrix CISigmaBuilder::compute_2rdm_aa_same_irrep(np_vector C_left, np_vector
     auto Cr_span = vector::as_span(C_right);
 
     auto rdm_view = rdm.view();
+
+    const auto& alfa_address = lists_.alfa_address();
+    const auto& beta_address = lists_.beta_address();
 
     int num_2h_classes =
         alfa ? lists_.alfa_address_2h()->nclasses() : lists_.beta_address_2h()->nclasses();
@@ -46,12 +47,11 @@ np_matrix CISigmaBuilder::compute_2rdm_aa_same_irrep(np_vector C_left, np_vector
                 if (lists_.detpblk(nJ) == 0)
                     continue;
 
-                // Get a pointer to the correct block of matrix C
-                gather_block(Cl_span, TL, alfa, lists_, class_Ja, class_Jb);
-
                 size_t maxL =
                     alfa ? beta_address->strpcls(class_Ib) : alfa_address->strpcls(class_Ia);
                 if (maxL > 0) {
+                    // Get a pointer to the correct block of matrix C
+                    gather_block(Cl_span, TL, alfa, lists_, class_Ja, class_Jb);
                     for (size_t K = 0; K < maxK; ++K) {
                         auto& Krlist = alfa ? lists_.get_alfa_2h_list(class_K, K, class_Ia)
                                             : lists_.get_beta_2h_list(class_K, K, class_Ib);

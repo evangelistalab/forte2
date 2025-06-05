@@ -5,10 +5,9 @@
 #include <algorithm>
 #include <thread>
 
-#include "helpers/blas.h"
 #include "helpers/timer.hpp"
-#include "helpers/np_matrix_functions.h"
 #include "helpers/np_vector_functions.h"
+#include "helpers/blas.h"
 
 #include "ci_sigma_builder.h"
 
@@ -153,24 +152,12 @@ void CISigmaBuilder::Hamiltonian(np_vector basis, np_vector sigma) const {
     auto b_span = vector::as_span(basis);
     auto s_span = vector::as_span(sigma);
 
-    local_timer t_h0;
     H0(b_span, s_span);
-    std::cout << "H0 time: " << t_h0.elapsed_seconds() << " seconds\n";
-
-    local_timer t_h1;
     H1_aa_gemm(b_span, s_span, true);
     H1_aa_gemm(b_span, s_span, false);
-    std::cout << "H1 time: " << t_h1.elapsed_seconds() << " seconds\n";
-
-    // H2_aabb(b_span, s_span);
-    local_timer t_h2_aabb;
     H2_aabb_gemm(b_span, s_span);
-    std::cout << "H2_aabb time: " << t_h2_aabb.elapsed_seconds() << " seconds\n";
-
-    local_timer t_h2_aaaa;
     H2_aaaa_gemm(b_span, s_span, true);
     H2_aaaa_gemm(b_span, s_span, false);
-    std::cout << "H2_aaaa time: " << t_h2_aaaa.elapsed_seconds() << " seconds\n";
 
     hdiag_timer_ += t.elapsed_seconds();
     build_count_++;
@@ -630,6 +617,7 @@ void CISigmaBuilder::H2_aaaa_gemm(std::span<double> basis, std::span<double> sig
                 }
                 matrix_product('N', 'N', npairs, dimKL, npairs, 1.0, v_pr_qs_a.data(), npairs,
                                TL.data(), dimKL, 0.0, TR.data(), dimKL);
+
                 std::fill_n(TL.begin(), temp_dim, 0.0);
 
                 for (size_t K = 0; K < maxK; ++K) {

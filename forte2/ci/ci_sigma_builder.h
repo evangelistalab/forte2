@@ -71,7 +71,9 @@ class CISigmaBuilder {
 
     mutable std::vector<double> TR;
     mutable std::vector<double> TL;
+    mutable std::vector<double> h_pq;
     mutable std::vector<double> v_pr_qs;
+    mutable std::vector<double> v_pr_qs_a;
 
     // == Class Private Functions ==
     void H0(std::span<double> basis, std::span<double> sigma) const;
@@ -79,6 +81,8 @@ class CISigmaBuilder {
     void H2_aaaa(std::span<double> basis, std::span<double> sigma, bool alfa) const;
     void H2_aabb(std::span<double> basis, std::span<double> sigma) const;
     void H2_aabb_gather_scatter(std::span<double> basis, std::span<double> sigma) const;
+    void H1_aa_gemm(std::span<double> basis, std::span<double> sigma, bool alfa) const;
+    void H2_aaaa_gemm(std::span<double> basis, std::span<double> sigma, bool alfa) const;
     void H2_aabb_gemm(std::span<double> basis, std::span<double> sigma) const;
 };
 
