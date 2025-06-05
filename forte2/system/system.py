@@ -130,16 +130,29 @@ class System:
         """
         return forte2.ints.nuclear_repulsion(self.atoms)
 
-    def nuclear_dipole(self, origin=None):
-        charges = np.array([atom[0] for atom in self.atoms])
-        positions = np.array([atom[1] for atom in self.atoms])
-        if origin is not None:
-            assert len(origin) == 3, "Origin must be a 3-element vector."
-            positions -= np.array(origin)[np.newaxis, :]
-        return np.einsum("a,ax->x", charges, positions)
+    def atomic_charges(self):
+        """
+        Return the atomic charges for the system.
+        Returns:
+            NDArray: Array of atomic charges, shape (N,) where N is the number of atoms.
+        """
+        return np.array([atom[0] for atom in self.atoms])
 
     def atomic_masses(self):
+        """
+        Return the average atomic masses for the system.
+        Returns:
+            NDArray: Array of atomic masses, shape (N,) where N is the number of atoms.
+        """
         return np.array([ATOM_DATA[atom[0]]["mass"] for atom in self.atoms])
+
+    def atomic_positions(self):
+        """
+        Return the atomic positions (in bohr) for the system.
+        Returns:
+            NDArray: Array of atomic positions, shape (N, 3) where N is the number of atoms.
+        """
+        return np.array([atom[1] for atom in self.atoms])
 
     def center_of_mass(self):
         """
@@ -152,6 +165,24 @@ class System:
         masses = self.atomic_masses()
         positions = np.array([atom[1] for atom in self.atoms])
         return np.einsum("a,ax->x", masses, positions) / np.sum(masses)
+
+    def nuclear_dipole(self, origin=None):
+        charges = self.atomic_charges()
+        positions = self.atomic_positions()
+        if origin is not None:
+            assert len(origin) == 3, "Origin must be a 3-element vector."
+            positions -= np.array(origin)[np.newaxis, :]
+        return np.einsum("a,ax->x", charges, positions)
+
+    def nuclear_quadrupole(self, origin=None):
+        charges = self.atomic_charges()
+        positions = self.atomic_positions()
+        if origin is not None:
+            assert len(origin) == 3, "Origin must be a 3-element vector."
+            positions -= np.array(origin)[np.newaxis, :]
+        nuc_quad = np.einsum("a,ax,ay->xy", charges, positions, positions)
+        nuc_quad = 3 * nuc_quad - np.eye(3) * nuc_quad.trace()
+        return nuc_quad / 2
 
 
 @dataclass

@@ -22,6 +22,20 @@ def get_property(method, property_name, origin=None):
     Raises:
         ValueError: If the property name is not supported or if the method has not been executed.
     """
+
+    def _origin_check(origin):
+        if origin is None:
+            origin = [0.0, 0.0, 0.0]
+            if method.charge != 0:
+                print(
+                    "Warning: Electric dipole moment for a charged system is "
+                    "origin-dependent. Using center of mass as origin."
+                )
+                origin = method.system.center_of_mass()
+                print(f"Center-of-mass origin: {origin}")
+        assert len(origin) == 3, "Origin must be a 3-element vector."
+        return origin
+
     if not method.executed:
         method.run()
 
@@ -29,6 +43,9 @@ def get_property(method, property_name, origin=None):
         "kinetic_energy",
         "nuclear_attraction_energy",
         "electric_dipole",
+        "dipole",
+        "electric_quadrupole",
+        "quadrupole",
     ]
     if property_name in spin_independent_properties:
         propfunc = _spin_independent_property_1e
@@ -44,21 +61,29 @@ def get_property(method, property_name, origin=None):
         case "nuclear_attraction_energy":
             ints = forte2.ints.nuclear(method.system.basis, method.system.atoms)
         case "electric_dipole":
-            if origin is None:
-                origin = [0.0, 0.0, 0.0]
-                if method.charge != 0:
-                    print(
-                        "Warning: Electric dipole moment for a charged system is "
-                        "origin-dependent. Using center of mass as origin."
-                    )
-                    origin = method.system.center_of_mass()
-                    print(f"Center-of-mass origin: {origin}")
-            assert len(origin) == 3, "Origin must be a 3-element vector."
+            origin = _origin_check(origin)
             _, *ints = forte2.ints.emultipole1(method.system.basis, origin=origin)
         case "dipole":
             e_dip = get_property(method, "electric_dipole", origin=origin)
             nuc_dip = method.system.nuclear_dipole(origin=origin)
             return (-e_dip + nuc_dip) / forte2.atom_data.DEBYE_TO_AU
+        case "electric_quadrupole":
+            origin = _origin_check(origin)
+            *_, xx, xy, xz, yy, yz, zz = forte2.ints.emultipole2(
+                method.system.basis, origin=origin
+            )
+            ints = [xx, xy, xz, yy, yz, zz]
+        case "quadrupole":
+            xx, xy, xz, yy, yz, zz = get_property(
+                method, "electric_quadrupole", origin=origin
+            )
+            e_quad = np.array([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])
+            e_quad = 0.5 * (3 * e_quad - np.trace(e_quad) * np.eye(3))
+            nuc_quad = method.system.nuclear_quadrupole(origin=origin)
+            return (-e_quad + nuc_quad) / (
+                forte2.atom_data.DEBYE_TO_AU * forte2.atom_data.ANGSTROM_TO_BOHR
+            )
+
         case _:
             raise ValueError(f"Property '{property_name}' is not supported.")
 
@@ -85,6 +110,6 @@ def mulliken_population(method):
     ovlp = forte2.ints.overlap(system.basis)
     psdiag = np.einsum("pq,qp->p", dm, ovlp)
     center_first_and_last = system.basis.center_first_and_last
-    charges = np.array([atom[0] for atom in system.atoms])
+    charges = system.atomic_charges()
     pop = np.array([psdiag[_[0] : _[1]].sum() for _ in center_first_and_last])
     return (psdiag, charges - pop)
