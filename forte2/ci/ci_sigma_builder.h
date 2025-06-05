@@ -77,10 +77,6 @@ class CISigmaBuilder {
 
     // == Class Private Functions ==
     void H0(std::span<double> basis, std::span<double> sigma) const;
-    void H1(std::span<double> basis, std::span<double> sigma, bool alfa) const;
-    void H2_aaaa(std::span<double> basis, std::span<double> sigma, bool alfa) const;
-    void H2_aabb(std::span<double> basis, std::span<double> sigma) const;
-    void H2_aabb_gather_scatter(std::span<double> basis, std::span<double> sigma) const;
     void H1_aa_gemm(std::span<double> basis, std::span<double> sigma, bool alfa) const;
     void H2_aaaa_gemm(std::span<double> basis, std::span<double> sigma, bool alfa) const;
     void H2_aabb_gemm(std::span<double> basis, std::span<double> sigma) const;

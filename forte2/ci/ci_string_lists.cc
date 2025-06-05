@@ -160,19 +160,8 @@ CIStrings::CIStrings(size_t na, size_t nb, int symmetry,
         ndet_ += nI;
     }
 
-    pair_list_ = make_pair_list(nirrep_, orbital_index_and_symmetry);
-
     alfa_vo_list = make_vo_list(alfa_strings_, alfa_address_, alfa_address_);
     beta_vo_list = make_vo_list(beta_strings_, beta_address_, beta_address_);
-
-    alfa_vo_list2 = make_vo_list2(alfa_strings_, alfa_address_, alfa_address_);
-    beta_vo_list2 = make_vo_list2(beta_strings_, beta_address_, beta_address_);
-
-    alfa_oo_list = make_oo_list(alfa_strings_, alfa_address_);
-    beta_oo_list = make_oo_list(beta_strings_, beta_address_);
-
-    alfa_vvoo_list = make_vvoo_list(alfa_strings_, alfa_address_, orbital_index_and_symmetry);
-    beta_vvoo_list = make_vvoo_list(beta_strings_, beta_address_, orbital_index_and_symmetry);
 
     alfa_1h_list = make_1h_list(alfa_strings_, alfa_address_, alfa_address_1h_);
     beta_1h_list = make_1h_list(beta_strings_, beta_address_, beta_address_1h_);
@@ -227,21 +216,21 @@ Determinant CIStrings::determinant(size_t address) const {
     return Determinant(Ia, Ib);
 }
 
-const OOListElement& CIStrings::get_alfa_oo_list(int class_I) const {
-    // check if the key exists, if not return an empty list
-    if (auto it = alfa_oo_list.find(class_I); it != alfa_oo_list.end()) {
-        return it->second;
-    }
-    return empty_oo_list;
-}
+// const OOListElement& CIStrings::get_alfa_oo_list(int class_I) const {
+//     // check if the key exists, if not return an empty list
+//     if (auto it = alfa_oo_list.find(class_I); it != alfa_oo_list.end()) {
+//         return it->second;
+//     }
+//     return empty_oo_list;
+// }
 
-const OOListElement& CIStrings::get_beta_oo_list(int class_I) const {
-    // check if the key exists, if not return an empty list
-    if (auto it = beta_oo_list.find(class_I); it != beta_oo_list.end()) {
-        return it->second;
-    }
-    return empty_oo_list;
-}
+// const OOListElement& CIStrings::get_beta_oo_list(int class_I) const {
+//     // check if the key exists, if not return an empty list
+//     if (auto it = beta_oo_list.find(class_I); it != beta_oo_list.end()) {
+//         return it->second;
+//     }
+//     return empty_oo_list;
+// }
 
 /**
  * Returns a vector of tuples containing the sign, I, and J connected by a^{+}_p
@@ -271,51 +260,53 @@ const VOListElement& CIStrings::get_beta_vo_list(int class_I, int class_J) const
     return empty_vo_list;
 }
 
-/**
- * Returns a vector of tuples containing the sign, I, and J connected by a^{+}_p
- * a_q
- * that is: J = ± a^{+}_p a_q I. p and q are absolute indices and I belongs to
- * the irrep h.
- */
-const VOListElement2& CIStrings::get_alfa_vo_list2(int class_I, int class_J) const {
-    // check if the key exists, if not return an empty list
-    if (auto it = alfa_vo_list2.find(std::make_pair(class_I, class_J)); it != alfa_vo_list2.end()) {
-        return it->second;
-    }
-    return empty_vo_list2;
-}
+// /**
+//  * Returns a vector of tuples containing the sign, I, and J connected by a^{+}_p
+//  * a_q
+//  * that is: J = ± a^{+}_p a_q I. p and q are absolute indices and I belongs to
+//  * the irrep h.
+//  */
+// const VOListElement2& CIStrings::get_alfa_vo_list2(int class_I, int class_J) const {
+//     // check if the key exists, if not return an empty list
+//     if (auto it = alfa_vo_list2.find(std::make_pair(class_I, class_J)); it !=
+//     alfa_vo_list2.end()) {
+//         return it->second;
+//     }
+//     return empty_vo_list2;
+// }
 
-/**
- * Returns a vector of tuples containing the sign,I, and J connected by a^{+}_p
- * a_q
- * that is: J = ± a^{+}_p a_q I. p and q are absolute indices and I belongs to
- * the irrep h.
- */
-const VOListElement2& CIStrings::get_beta_vo_list2(int class_I, int class_J) const {
-    // check if the key exists, if not return an empty list
-    if (auto it = beta_vo_list2.find(std::make_pair(class_I, class_J)); it != beta_vo_list2.end()) {
-        return it->second;
-    }
-    return empty_vo_list2;
-}
+// /**
+//  * Returns a vector of tuples containing the sign,I, and J connected by a^{+}_p
+//  * a_q
+//  * that is: J = ± a^{+}_p a_q I. p and q are absolute indices and I belongs to
+//  * the irrep h.
+//  */
+// const VOListElement2& CIStrings::get_beta_vo_list2(int class_I, int class_J) const {
+//     // check if the key exists, if not return an empty list
+//     if (auto it = beta_vo_list2.find(std::make_pair(class_I, class_J)); it !=
+//     beta_vo_list2.end()) {
+//         return it->second;
+//     }
+//     return empty_vo_list2;
+// }
 
-const VVOOListElement& CIStrings::get_alfa_vvoo_list(int class_I, int class_J) const {
-    // check if the key exists, if not return an empty list
-    if (auto it = alfa_vvoo_list.find(std::make_pair(class_I, class_J));
-        it != alfa_vvoo_list.end()) {
-        return it->second;
-    }
-    return empty_vvoo_list;
-}
+// const VVOOListElement& CIStrings::get_alfa_vvoo_list(int class_I, int class_J) const {
+//     // check if the key exists, if not return an empty list
+//     if (auto it = alfa_vvoo_list.find(std::make_pair(class_I, class_J));
+//         it != alfa_vvoo_list.end()) {
+//         return it->second;
+//     }
+//     return empty_vvoo_list;
+// }
 
-const VVOOListElement& CIStrings::get_beta_vvoo_list(int class_I, int class_J) const {
-    // check if the key exists, if not return an empty list
-    if (auto it = beta_vvoo_list.find(std::make_pair(class_I, class_J));
-        it != beta_vvoo_list.end()) {
-        return it->second;
-    }
-    return empty_vvoo_list;
-}
+// const VVOOListElement& CIStrings::get_beta_vvoo_list(int class_I, int class_J) const {
+//     // check if the key exists, if not return an empty list
+//     if (auto it = beta_vvoo_list.find(std::make_pair(class_I, class_J));
+//         it != beta_vvoo_list.end()) {
+//         return it->second;
+//     }
+//     return empty_vvoo_list;
+// }
 
 const std::vector<H1StringSubstitution>& CIStrings::get_alfa_1h_list(int class_I, size_t add_I,
                                                                      int class_J) const {

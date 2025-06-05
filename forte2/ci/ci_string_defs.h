@@ -19,15 +19,6 @@ struct StringSubstitution {
         : sign(sign_), I(I_), J(J_) {}
 };
 
-struct StringSubstitution2 {
-    const int16_t p;
-    const int16_t q;
-    const int32_t sign;
-    const uint32_t J;
-    StringSubstitution2(int16_t p_, int16_t q_, int32_t sign_, uint32_t J_)
-        : p(p_), q(q_), sign(sign_), J(J_) {}
-};
-
 /// 1-hole string substitution
 struct H1StringSubstitution {
     const int16_t sign;
@@ -68,22 +59,7 @@ using VOList = std::map<std::tuple<size_t, size_t, int>, std::vector<StringSubst
 /// list of strings connected by a^{+}_p a_q, where the string I belongs to class_I and J belongs to
 /// class_J
 using VOListElement = std::map<std::tuple<int, int>, std::vector<StringSubstitution>>;
-using VOListElement2 = std::map<size_t, std::vector<StringSubstitution2>>;
 using VOListMap = std::map<std::pair<int, int>, VOListElement>;
-using VOListMap2 = std::map<std::pair<int, int>, VOListElement2>;
-
-/// Maps the integers (p,q,r,s,h) to list of strings connected by a^{+}_p a^{+}_q a_s a_r, where the
-/// string I belongs to the irrep h
-using VVOOList =
-    std::map<std::tuple<size_t, size_t, size_t, size_t, int>, std::vector<StringSubstitution>>;
-using VVOOListElement = std::map<std::tuple<int, int, int, int>, std::vector<StringSubstitution>>;
-using VVOOListMap = std::map<std::pair<int, int>, VVOOListElement>;
-
-/// Maps the integers (pq_sym, pq, h) to list of strings connected by a^{+}_p a^{+}_q a_q a_p where
-/// the string I belongs to the irrep h
-using OOList = std::map<std::tuple<int, size_t, int>, std::vector<StringSubstitution>>;
-using OOListElement = std::map<std::tuple<int, int>, std::vector<uint32_t>>;
-using OOListMap = std::map<int, OOListElement>;
 
 using HListKey = std::tuple<int, size_t, int>;
 
@@ -98,8 +74,5 @@ using H2List = std::map<HListKey, std::vector<H2StringSubstitution>>;
 /// Maps the integers (h_J, add_J, h_I) to list of strings connected by a_p a_q a_r, where the
 /// string I belongs to the irrep h_I and J belongs to the irrep h_J and add_J is the address of J
 using H3List = std::map<HListKey, std::vector<H3StringSubstitution>>;
-
-using Pair = std::pair<int, int>;
-using PairList = std::vector<std::vector<std::pair<int, int>>>;
 
 } // namespace forte2

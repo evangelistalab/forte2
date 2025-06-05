@@ -106,15 +106,6 @@ class CIStrings {
     const VOListElement& get_alfa_vo_list(int class_I, int class_J) const;
     const VOListElement& get_beta_vo_list(int class_I, int class_J) const;
 
-    const VOListElement2& get_alfa_vo_list2(int class_I, int class_J) const;
-    const VOListElement2& get_beta_vo_list2(int class_I, int class_J) const;
-
-    const OOListElement& get_alfa_oo_list(int class_I) const;
-    const OOListElement& get_beta_oo_list(int class_I) const;
-
-    const VVOOListElement& get_alfa_vvoo_list(int class_I, int class_J) const;
-    const VVOOListElement& get_beta_vvoo_list(int class_I, int class_J) const;
-
     const std::vector<H1StringSubstitution>& get_alfa_1h_list(int h_I, size_t add_I, int h_J) const;
     const std::vector<H1StringSubstitution>& get_beta_1h_list(int h_I, size_t add_I, int h_J) const;
 
@@ -123,8 +114,6 @@ class CIStrings {
 
     const std::vector<H3StringSubstitution>& get_alfa_3h_list(int h_I, size_t add_I, int h_J) const;
     const std::vector<H3StringSubstitution>& get_beta_3h_list(int h_I, size_t add_I, int h_J) const;
-
-    //   Pair get_pair_list(int h, int n) const { return pair_list_[h][n]; }
 
     template <typename Func> void for_each_element(Func&& func) const {
         std::size_t idx = 0;
@@ -213,30 +202,14 @@ class CIStrings {
     StringList alfa_strings_;
     /// The beta strings stored by class and address
     StringList beta_strings_;
-    /// The pair string list
-    PairList pair_list_;
 
     // String lists
     /// The VO string lists
     VOListMap alfa_vo_list;
     VOListMap beta_vo_list;
 
-    /// The VO string lists
-    VOListMap2 alfa_vo_list2;
-    VOListMap2 beta_vo_list2;
-
-    /// The OO string lists
-    OOListMap alfa_oo_list;
-    OOListMap beta_oo_list;
-
-    /// The VVOO string lists
-    VVOOListMap alfa_vvoo_list;
-    VVOOListMap beta_vvoo_list;
     // Empty lists
     const VOListElement empty_vo_list;
-    const VOListElement2 empty_vo_list2;
-    const OOListElement empty_oo_list;
-    const VVOOListElement empty_vvoo_list;
 
     /// The 1-hole lists
     H1List alfa_1h_list;
