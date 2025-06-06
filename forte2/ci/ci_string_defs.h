@@ -15,8 +15,19 @@ struct StringSubstitution {
     const double sign;
     const uint32_t I;
     const uint32_t J;
-    StringSubstitution(const double& sign_, const uint32_t& I_, const uint32_t& J_)
+    StringSubstitution(const double sign_, const uint32_t I_, const uint32_t J_)
         : sign(sign_), I(I_), J(J_) {}
+};
+
+/// A structure to store how the string J is connected to the string I and the corresponding sign
+/// |I> = sign a^{+}_p a_q |J>
+struct StringSubstitution2 {
+    const double sign;
+    const int p;
+    const int q;
+    const size_t J;
+    StringSubstitution2(const double sign_, const int p_, const int q_, const size_t J_)
+        : sign(sign_), p(p_), q(q_), J(J_) {}
 };
 
 /// 1-hole string substitution
@@ -61,11 +72,18 @@ using VOList = std::map<std::tuple<size_t, size_t, int>, std::vector<StringSubst
 using VOListElement = std::map<std::tuple<int, int>, std::vector<StringSubstitution>>;
 using VOListMap = std::map<std::pair<int, int>, VOListElement>;
 
+using VOListElement2 = std::vector<std::vector<StringSubstitution2>>;
+using VOListMap2 = std::map<std::pair<int, int>, VOListElement2>;
+
 using HListKey = std::tuple<int, size_t, int>;
 
 /// Maps the integers (h_J, add_J, h_I) to list of strings connected by a_p, where the string
 /// I belongs to the irrep h_I and J belongs to the irrep h_J and add_J is the address of J
 using H1List = std::map<HListKey, std::vector<H1StringSubstitution>>;
+
+/// Maps the integers (h_J, add_J, h_I) to list of strings connected by a_p, where the string
+/// I belongs to the irrep h_I and J belongs to the irrep h_J and add_J is the address of J
+using H1List2 = std::map<std::pair<size_t, size_t>, std::vector<std::vector<H1StringSubstitution>>>;
 
 /// Maps the integers (h_J, add_J, h_I) to list of strings connected by a_p a_q, where the string
 /// I belongs to the irrep h_I and J belongs to the irrep h_J and add_J is the address of J

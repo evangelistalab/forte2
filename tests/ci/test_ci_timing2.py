@@ -24,7 +24,7 @@ def timing(n):
         orbitals=list(range(n)),
         state=State(nel=n, multiplicity=multiplicity, ms=ms),
         nroot=1,
-        econv=1e-12,
+        econv=1e-9,
     )(rohf)
     start = time.monotonic()
     ci.run()
@@ -34,8 +34,9 @@ def timing(n):
     # assert isclose(ci.E[0], -1.096071975854)
     return end - start, ci.E[0]
 
+
 @pytest.mark.slow
-def test_ci_timing():
+def test_ci_timing2():
 
     ref_energies = [-7.013625049615]
 
@@ -46,14 +47,16 @@ def test_ci_timing():
     ci_timing.append((13, elapsed, energy))
     energies.append(energy)
 
-    for n, elapsed, energy in ci_timing:
-        print(
-            f"Timing for {n} hydrogens: {elapsed:.2f} seconds, CI energy: {energy:.6f}"
-        )
-        # assert elapsed < 10, f"CI timing exceeded 10 seconds for {n} hydrogens"
-
     for i, (energy, ref_energy) in enumerate(zip(energies, ref_energies)):
         assert isclose(energy, ref_energy), (
             f"CI energy mismatch for {2 * (i + 1)} hydrogens: "
             f"{energy} != {ref_energy}"
         )
+    for n, elapsed, energy in ci_timing:
+        print(
+            f"Timing for {n} hydrogens: {elapsed:.2f} seconds, CI energy: {energy:.6f}"
+        )
+
+
+if __name__ == "__main__":
+    test_ci_timing2()

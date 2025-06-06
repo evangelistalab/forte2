@@ -106,8 +106,14 @@ class CIStrings {
     const VOListElement& get_alfa_vo_list(int class_I, int class_J) const;
     const VOListElement& get_beta_vo_list(int class_I, int class_J) const;
 
+    const VOListElement2& get_alfa_vo_list2(int class_I, int class_J) const;
+    const VOListElement2& get_beta_vo_list2(int class_I, int class_J) const;
+
     const std::vector<H1StringSubstitution>& get_alfa_1h_list(int h_I, size_t add_I, int h_J) const;
     const std::vector<H1StringSubstitution>& get_beta_1h_list(int h_I, size_t add_I, int h_J) const;
+
+    const std::vector<std::vector<H1StringSubstitution>>& get_alfa_1h_list2(int h_I, int h_J) const;
+    const std::vector<std::vector<H1StringSubstitution>>& get_beta_1h_list2(int h_I, int h_J) const;
 
     const std::vector<H2StringSubstitution>& get_alfa_2h_list(int h_I, size_t add_I, int h_J) const;
     const std::vector<H2StringSubstitution>& get_beta_2h_list(int h_I, size_t add_I, int h_J) const;
@@ -207,13 +213,19 @@ class CIStrings {
     /// The VO string lists
     VOListMap alfa_vo_list;
     VOListMap beta_vo_list;
+    VOListMap2 alfa_vo_list2;
+    VOListMap2 beta_vo_list2;
 
     // Empty lists
     const VOListElement empty_vo_list;
+    const VOListElement2 empty_vo_list2;
 
     /// The 1-hole lists
     H1List alfa_1h_list;
     H1List beta_1h_list;
+    /// The 1-hole lists
+    H1List2 alfa_1h_list2;
+    H1List2 beta_1h_list2;
     /// The 2-hole lists
     H2List alfa_2h_list;
     H2List beta_2h_list;
@@ -222,6 +234,7 @@ class CIStrings {
     H3List beta_3h_list;
 
     const std::vector<H1StringSubstitution> empty_1h_list;
+    const std::vector<std::vector<H1StringSubstitution>> empty_1h_list2;
     const std::vector<H2StringSubstitution> empty_2h_list;
     const std::vector<H3StringSubstitution> empty_3h_list;
 

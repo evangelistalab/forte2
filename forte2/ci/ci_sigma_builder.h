@@ -19,8 +19,7 @@ class CISigmaBuilder {
     CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V);
 
     // == Class Public Functions ==
-    void set_H(np_matrix H);
-    void set_V(np_tensor4 V);
+    void set_Hamiltonian(np_matrix H, np_tensor4 V);
 
     /// @brief Form the diagonal of the Hamiltonian matrix in the CI basis
     /// @return The diagonal elements of the Hamiltonian matrix
@@ -57,6 +56,7 @@ class CISigmaBuilder {
     const CIStrings& lists_;
     double E_;
     np_matrix H_;
+    // Two-electron integrals in the form of a tensor V[p][q][r][s] = <pq|rs> = (pr|qs)
     np_tensor4 V_;
     SlaterRules slater_rules_;
 
@@ -75,11 +75,17 @@ class CISigmaBuilder {
     mutable std::vector<double> v_pr_qs;
     mutable std::vector<double> v_pr_qs_a;
 
+    // Effective one-electron integrals used in the Handy-Knowles algorithm
+    mutable std::vector<double> h_pq_hk;
+    // Two-electron integrals used in the Handy-Knowles algorithm
+    mutable std::vector<double> v_ij_kl_hk;
+
     // == Class Private Functions ==
     void H0(std::span<double> basis, std::span<double> sigma) const;
     void H1_aa_gemm(std::span<double> basis, std::span<double> sigma, bool alfa) const;
     void H2_aaaa_gemm(std::span<double> basis, std::span<double> sigma, bool alfa) const;
     void H2_aabb_gemm(std::span<double> basis, std::span<double> sigma) const;
+    void H2(std::span<double> basis, std::span<double> sigma) const;
 };
 
 [[nodiscard]] std::span<double> gather_block(std::span<double> source, std::span<double> dest,
