@@ -6,6 +6,7 @@
 #include "ci/ci_string_lists_makers.h"
 
 #include "helpers/cartesian_product.hpp"
+#include "helpers/indexing.hpp"
 
 namespace forte2 {
 
@@ -149,7 +150,11 @@ void make_vo2(const StringList& strings, const std::shared_ptr<StringAddress>& I
                     if (auto it = J_addresser->find(J); it != J_addresser->end()) {
                         const auto& [add_J, class_J] = it->second;
                         auto& list_IJ = list[std::make_pair(class_I, class_J)];
-                        list_IJ[add_I].push_back(StringSubstitution2(sign, p, q, add_J));
+                        // cast sign to integer and scale if diagonal
+                        double scaled_sign = sign * (p == q ? 2. : 1.);
+                        // use a single index for (p, q)
+                        size_t pq = static_cast<size_t>(pair_index_geq(p, q));
+                        list_IJ[add_I].push_back(StringSubstitution2(scaled_sign, pq, add_J));
                     }
                 }
             }

@@ -23,11 +23,9 @@ struct StringSubstitution {
 /// |I> = sign a^{+}_p a_q |J>
 struct StringSubstitution2 {
     const double sign;
-    const int p;
-    const int q;
+    const size_t pq;
     const size_t J;
-    StringSubstitution2(const double sign_, const int p_, const int q_, const size_t J_)
-        : sign(sign_), p(p_), q(q_), J(J_) {}
+    StringSubstitution2(double sign_, size_t pq_, size_t J_) : sign(sign_), pq(pq_), J(J_) {}
 };
 
 /// 1-hole string substitution

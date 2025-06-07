@@ -17,6 +17,7 @@ class CISigmaBuilder {
   public:
     // == Class Constructor ==
     CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V);
+    ~CISigmaBuilder();
 
     // == Class Public Functions ==
     void set_Hamiltonian(np_matrix H, np_tensor4 V);
@@ -79,6 +80,7 @@ class CISigmaBuilder {
     mutable std::vector<double> h_pq_hk;
     // Two-electron integrals used in the Handy-Knowles algorithm
     mutable std::vector<double> v_ij_kl_hk;
+    mutable std::vector<double> v_ij_kl_hk_pairs;
 
     // == Class Private Functions ==
     void H0(std::span<double> basis, std::span<double> sigma) const;
