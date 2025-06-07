@@ -1,5 +1,6 @@
 import time
 from numpy import isclose
+import pytest
 
 from forte2 import *
 
@@ -33,7 +34,7 @@ def timing(n):
     # assert isclose(ci.E[0], -1.096071975854)
     return end - start, ci.E[0]
 
-
+@pytest.mark.slow
 def test_ci_timing():
 
     ref_energies = [-7.013625049615]
@@ -56,7 +57,3 @@ def test_ci_timing():
             f"CI energy mismatch for {2 * (i + 1)} hydrogens: "
             f"{energy} != {ref_energy}"
         )
-
-
-if __name__ == "__main__":
-    test_ci_timing()

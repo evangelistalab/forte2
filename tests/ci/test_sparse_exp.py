@@ -182,8 +182,3 @@ def test_sparse_exp_2():
     print(f"Time to apply operator: {end - start:.8f} (SparsFactExp::antiherm)")
     print(f"|C| = {C.norm()}")
     assert abs(C.norm() - 1) < 1.0e-10
-
-
-if __name__ == "__main__":
-    test_sparse_exp_1()
-    test_sparse_exp_2()

@@ -62,7 +62,3 @@ def test_determinant_set_get():
     for i in range(64):
         assert d2.na(i) == (i in set_a)
         assert d2.nb(i) == (i in set_b)
-
-
-if __name__ == "__main__":
-    test_determinant()

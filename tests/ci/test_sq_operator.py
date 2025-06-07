@@ -164,9 +164,3 @@ def test_sq_operator_commutator():
     op3 = op1.commutator(op2)
     op3_test = forte2.sparse_operator([("[0b+ 0b-]", -1.0), ("[1a+ 1a-]", 1.0)])
     assert op3 == op3_test
-
-
-if __name__ == "__main__":
-    test_sq_operator()
-    test_sq_operator_product()
-    test_sq_operator_commutator()

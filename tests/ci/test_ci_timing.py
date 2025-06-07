@@ -63,7 +63,3 @@ def test_ci_timing():
             f"CI energy mismatch for {2 * (i + 1)} hydrogens: "
             f"{energy} != {ref_energy}"
         )
-
-
-if __name__ == "__main__":
-    test_ci_timing()

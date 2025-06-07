@@ -50,8 +50,3 @@ H  0.000000000000  1.344768070168  0.924701488984
 
     system = forte2.System(xyz=xyz, basis="cc-pvqz")
     V = forte2.ints.coulomb_4c(system.basis)
-
-
-if __name__ == "__main__":
-    test_two_electron_integrals()
-    test_two_electron_integrals_timing()

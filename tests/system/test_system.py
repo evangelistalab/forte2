@@ -90,11 +90,3 @@ def test_units():
     system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="bohr")
     assert system.unit == "bohr"
     assert system.atoms[1][1][2] == pytest.approx(1.0)
-
-
-if __name__ == "__main__":
-    test_system()
-    test_xyz_comment()
-    test_missing_atom()
-    test_missing_coordinate()
-    test_units()

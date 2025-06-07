@@ -43,8 +43,3 @@ def test_rohf_ci_2():
     ci.run()
 
     assert isclose(ci.E[0], -99.510706628367)
-
-
-if __name__ == "__main__":
-    test_rohf_ci_1()
-    test_rohf_ci_2()

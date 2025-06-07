@@ -47,8 +47,3 @@ def test_gasci_rhf_2():
     assert isclose(ci.E[0], -1.089283671174)
     # TODO: Add assertion for second root when the one below is externally verified
     # assert isclose(ci.E[1], -0.671622137375)
-
-
-if __name__ == "__main__":
-    test_gasci_rhf_1()
-    test_gasci_rhf_2()

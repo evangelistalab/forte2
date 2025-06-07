@@ -37,7 +37,3 @@ def test_read_wfn():
     scf2.C = c0
     scf2.run()
     assert scf2.E == approx(e_newgeom)
-
-
-if __name__ == "__main__":
-    test_read_wfn()

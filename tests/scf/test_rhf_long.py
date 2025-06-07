@@ -34,7 +34,3 @@ H       -0.8580037770      4.8559228717     -0.0859634340
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)
-
-
-if __name__ == "__main__":
-    test_rhf_long()

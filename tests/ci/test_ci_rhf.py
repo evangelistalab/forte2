@@ -42,8 +42,3 @@ def test_ci_2():
     ci.run()
 
     assert isclose(ci.E[0], -100.019788438077)
-
-
-if __name__ == "__main__":
-    test_ci_1()
-    test_ci_2()

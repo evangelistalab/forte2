@@ -28,8 +28,3 @@ def test_hubbard_uhf():
     scf = scf.run()
     assert scf.E == approx(euhf)
     assert scf.S2 == approx(s2uhf)
-
-
-if __name__ == "__main__":
-    test_hubbard_rhf()
-    test_hubbard_uhf()

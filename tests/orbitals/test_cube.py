@@ -14,7 +14,6 @@ import pytest
 approx = lambda x: pytest.approx(x, rel=1e-8, abs=5e-8)
 
 
-
 def test_cube():
     escf = -76.02176598836786
     # Test the SCF implementation with a simple example
@@ -37,6 +36,3 @@ def test_cube():
     # clean up the cube files
     for file in glob.glob("*.cube"):
         os.remove(file)
-
-if __name__ == "__main__":
-    test_cube()
