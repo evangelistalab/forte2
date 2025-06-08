@@ -44,6 +44,8 @@ void export_ci_sigma_builder_api(nb::module_& m) {
     nb::class_<CISigmaBuilder>(m, "CISigmaBuilder")
         .def(nb::init<const CIStrings&, double, np_matrix&, np_tensor4&>(), "lists"_a, "E"_a, "H"_a,
              "V"_a)
+        .def("set_memory", &CISigmaBuilder::set_memory, "memory"_a,
+             "Set the memory limit for the builder (in MB)")
         .def("form_Hdiag_csf", &CISigmaBuilder::form_Hdiag_csf, "dets"_a, "spin_adapter"_a,
              "spin_adapt_full_preconditioner"_a = false)
         .def("slater_rules_csf", &CISigmaBuilder::slater_rules_csf, "dets"_a, "spin_adapter"_a,

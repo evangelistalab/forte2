@@ -1,14 +1,8 @@
-#include <vector>
+#include <algorithm>
 #include <future>
 #include <iostream>
-#include <cassert>
-#include <algorithm>
-#include <thread>
-#include <algorithm>
 
 #include "helpers/timer.hpp"
-#include "helpers/np_vector_functions.h"
-#include "helpers/indexing.hpp"
 #include "helpers/blas.h"
 
 #include "ci_sigma_builder.h"
@@ -108,8 +102,48 @@ void CISigmaBuilder::H2_kh(std::span<double> basis, std::span<double> sigma) con
     }
 }
 
+std::tuple<std::span<double>, std::span<double>, size_t>
+CISigmaBuilder::get_Kblock_spans(size_t dim, size_t maxKa) const {
+    // calculate the amount needed to store the Kblock1_ and Kblock2_ buffers fully in core.
+    const size_t temp_full_size = dim * maxKa;
+
+    // Ensure that Kblock1_ and Kblock2_ are allocated with the requested memory size
+    std::size_t temp_memory_size = std::min(memory_size_ / (2 * sizeof(double)), temp_full_size);
+    if (Kblock1_.size() < temp_memory_size) {
+        std::cout << "Allocating Knowles-Handy temporary buffers of size 2 x " << temp_memory_size
+                  << " (" << 2 * temp_memory_size * sizeof(double) / (1024 * 1024) << " MB).\n"
+                  << std::endl;
+        Kblock1_.resize(temp_memory_size);
+        Kblock2_.resize(temp_memory_size);
+    }
+
+    // Derive Ka_max_size from our preallocated buffers:
+    size_t available = Kblock1_.size(); // assume Kblock2_ same size
+    size_t Ka_max_size = std::min(available / dim, maxKa);
+    if (Ka_max_size < 1) {
+        // too small for even one row of Ka => resize to hold a reasonable minimum
+        Ka_max_size = std::min(static_cast<size_t>(64), maxKa); // 64 is a reasonable minimum size
+        size_t new_dim = Ka_max_size * dim;
+        Kblock1_.resize(new_dim);
+        Kblock2_.resize(new_dim);
+        auto available_MB = 2 * available / (1024 * 1024 * sizeof(double));
+        auto new_dim_MB = 2 * new_dim / (1024 * 1024 * sizeof(double));
+        std::cerr << "Warning: Knowles-Handy temporary buffers too small (" << 2 * available
+                  << " elements; " << available_MB << " MB); resized to " << 2 * new_dim
+                  << " elements; " << new_dim_MB << " MB.\n"
+                  << "For best performance, set the memory size via the "
+                     "CISigmaBuilder::set_memory() function.\n";
+    }
+
+    size_t max_temp_dim = dim * Ka_max_size;
+
+    return {std::span<double>{Kblock1_.data(), max_temp_dim},
+            std::span<double>{Kblock2_.data(), max_temp_dim}, Ka_max_size};
+}
+
 // The following functions are used to gather and scatter blocks of data and are relevant only to
-// this file.
+// this file. They live in the anonymous namespace to avoid polluting the global namespace.
+
 namespace {
 /// @brief Cyclic multithreaded transpose of indices 2 and 3 of a 3D tensor
 /// in[i][j][k] -> out[i][k][j]
@@ -270,40 +304,4 @@ void scatter_alpha_block(const CIStrings& lists, size_t class_Ka, size_t class_K
     }
 }
 } // namespace
-
-std::tuple<std::span<double>, std::span<double>, size_t>
-CISigmaBuilder::get_Kblock_spans(size_t dim, size_t maxKa) const {
-    // Ensure that Kblock1_ and Kblock2_ are allocated with at least requested memory size
-    std::size_t size = memory_size_ / (2 * sizeof(double));
-    if (Kblock1_.size() < size) {
-        std::cout << "Resizing Knowles-Handy temporary buffers to " << 2 * size << " elements ("
-                  << 2 * size * sizeof(double) / (1024 * 1024) << " MB).\n"
-                  << std::endl;
-        Kblock1_.resize(size);
-        Kblock2_.resize(size);
-    }
-
-    // Derive Ka_max_size from our preallocated buffers:
-    size_t available = Kblock1_.size(); // assume Kblock2_ same size
-    size_t Ka_max_size = std::min(available / dim, maxKa);
-    if (Ka_max_size < 1) {
-        // too small for even one row of Ka => resize to hold a reasonable minimum
-        Ka_max_size = std::min(static_cast<size_t>(64), maxKa); // 64 is a reasonable minimum size
-        size_t new_dim = Ka_max_size * dim;
-        Kblock1_.resize(new_dim);
-        Kblock2_.resize(new_dim);
-        auto available_MB = 2 * available / (1024 * 1024 * sizeof(double));
-        auto new_dim_MB = 2 * new_dim / (1024 * 1024 * sizeof(double));
-        std::cerr << "Warning: Knowles-Handy temporary buffers too small (" << 2 * available
-                  << " elements; " << available_MB << " MB); resized to " << 2 * new_dim
-                  << " elements; " << new_dim_MB << " MB.\n"
-                  << "For best performance, set the memory size via the "
-                     "CISigmaBuilder::set_memory() function.\n";
-    }
-
-    size_t max_temp_dim = dim * Ka_max_size;
-
-    return {std::span<double>{Kblock1_.data(), max_temp_dim},
-            std::span<double>{Kblock2_.data(), max_temp_dim}, Ka_max_size};
-}
 } // namespace forte2

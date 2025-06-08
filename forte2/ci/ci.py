@@ -41,6 +41,9 @@ class CI(MOsMixin, SystemMixin):
     # The number of determinants
     ndef: int = field(default=None, init=False)
 
+    ## Options that control the CI calculation
+    ci_builder_memory: int = field(default=1024, init=False)  # in MB
+
     def __call__(self, method):
         if not method.executed:
             method.run()
@@ -105,6 +108,7 @@ class CI(MOsMixin, SystemMixin):
         self.ci_sigma_builder = forte2.CISigmaBuilder(
             ci_strings, self.ints.E, self.ints.H, self.ints.V
         )
+        self.ci_sigma_builder.set_memory(self.ci_builder_memory)
 
         # 2. Allocate memory for the CI vectors
         self.ndet = ci_strings.ndet

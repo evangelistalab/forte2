@@ -34,11 +34,11 @@ CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, n
         max_size = std::max(lists.detpblk(nI), max_size);
     }
 
-    std::cout << "Allocating CI temporary buffers of " << 2 * max_size << " elements ("
+    std::cout << "\nAllocating CI temporary buffers of size 2 x " << max_size << " ("
               << 2 * max_size * sizeof(double) / (1024 * 1024) << " MB).\n"
               << std::endl;
 
-    // Resize the TR and TL vectors to the maximum size found
+    // Resize the TR and TL vectors to the maximum block size
     TR.resize(max_size);
     TL.resize(max_size);
 
