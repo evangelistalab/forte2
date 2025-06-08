@@ -16,6 +16,101 @@
 namespace forte2 {
 
 namespace {
+void transpose_23(std::span<double> in, std::span<double> out, size_t dim1, size_t dim2,
+                  size_t dim3);
+void gather_alpha_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb, size_t Ka_start,
+                        size_t Ka_size, size_t Kdim, size_t maxKb, std::span<const double> basis,
+                        std::span<double> Kblock);
+void gather_beta_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb, size_t Ka_start,
+                       size_t Ka_size, size_t Kdim, size_t maxKb, std::span<double> basis,
+                       std::span<double> TR, std::span<double> Kblock2);
+void scatter_beta_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb, size_t Ka_start,
+                        size_t Ka_size, size_t Kdim, size_t maxKb, std::span<const double> Kblock1,
+                        std::span<double> TR, std::span<double> sigma);
+void scatter_alpha_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb, size_t Ka_start,
+                         size_t Ka_size, size_t Kdim, size_t maxKb, std::span<const double> Kblock2,
+                         std::span<double> sigma);
+} // namespace
+
+void CISigmaBuilder::H2_kh(std::span<double> basis, std::span<double> sigma) const {
+    size_t norb = lists_.norb();
+    const auto npairs = norb * (norb + 1) / 2; // Number of pairs (p, r) with p >= r
+
+    const int num_class_Ka = lists_.alfa_address()->nclasses();
+    const int num_class_Kb = lists_.beta_address()->nclasses();
+
+    // Loop over the Ka and Kb string classes of the D([qs],[Ka Kb]) matrix
+    for (size_t class_Ka = 0; class_Ka < num_class_Ka; ++class_Ka) {
+        for (size_t class_Kb = 0; class_Kb < num_class_Kb; ++class_Kb) {
+            const auto maxKa = lists_.alfa_address()->strpcls(class_Ka);
+            const auto maxKb = lists_.beta_address()->strpcls(class_Kb);
+
+            // Set the size of the Kb range. Here we process all Kb values.
+            const size_t Kb_start = 0;
+            const size_t Kb_end = maxKb;
+            const size_t Kb_size = Kb_end - Kb_start;
+
+            // Grab the temporary buffers that will hold intermediates like D([i>=j],[Ka Kb])
+            // where the indices range as
+            // [i>=j] all values
+            // Ka in chunks of maximum size Ka_max_size
+            // Kb in [0, maxKb)
+            // Ka_max_size is the maximum size of the Ka range that we can process in one go
+            // without exceeding the memory limit, set via the set_memory() function.
+            auto [Kblock1, Kblock2, Ka_max_size] = get_Kblock_spans(npairs * Kb_size, maxKa);
+
+            // Loop over ranges of Ka indices in chuncks of size Ka_max_size
+            for (size_t Ka_start = 0; Ka_start < maxKa; Ka_start += Ka_max_size) {
+                size_t Ka_end = std::min(Ka_start + Ka_max_size, maxKa);
+                // size of the Ka range, which may be smaller than Ka_max_size
+                size_t Ka_size = Ka_end - Ka_start;
+                // dimensions of the matrix we are going to use for this Ka chunk
+                const size_t Kdim = Ka_size * Kb_size;
+                // dimension of the D([i<=j],[Ka Kb]) tensor we are going to use
+                const size_t temp_dim = npairs * Kdim;
+
+                // skip empty blocks
+                if (temp_dim == 0)
+                    continue;
+
+                // zero out the block that will hold the D([i>=j],[Ka Kb]) tensor
+                std::fill_n(Kblock1.begin(), temp_dim, 0.0);
+
+                // alpha contribution to the D matrix D([i>=j],[Ka Kb])
+                gather_alpha_block(lists_, class_Ka, class_Kb, Ka_start, Ka_size, Kdim, maxKb,
+                                   basis, std::span{Kblock1.data(), temp_dim});
+
+                // cyclic transpose of the D matrix D([i>=j],[Ka Kb]) to D([i>=j],[Kb Ka])
+                transpose_23(Kblock1, Kblock2, npairs, Ka_size, maxKb);
+
+                // beta contribution to the D matrix D([i>=j],[Kb Ka])
+                gather_beta_block(lists_, class_Ka, class_Kb, Ka_start, Ka_size, Kdim, maxKb, basis,
+                                  TR, std::span{Kblock2.data(), temp_dim});
+
+                // matrix-matrix multiplication 0.5 * V([k>=l][i>=j]) * D([i>=j],[Kb Ka])
+                // The result is the matrix E([k>=l],[Kb Ka])
+                // [note that the Ka/Kb indices are still transposed]
+                matrix_product('N', 'N', npairs, Kdim, npairs, 0.5, v_ijkl_hk.data(), npairs,
+                               Kblock2.data(), Kdim, 0.0, Kblock1.data(), Kdim);
+
+                // beta contribution from the matrix E([k>=l],[Kb Ka]) to sigma([Ib Ia])
+                scatter_beta_block(lists_, class_Ka, class_Kb, Ka_start, Ka_size, Kdim, maxKb,
+                                   std::span{Kblock1.data(), temp_dim}, TR, sigma);
+
+                // cyclic transpose of E([k>=l],[Kb Ka]) to E([k>=l],[Ka Kb])
+                transpose_23(Kblock1, Kblock2, npairs, maxKb, Ka_size);
+
+                // alpha contribution from the matrix E([k>=l],[Ka Kb]) to sigma([Ia Ib])
+                scatter_alpha_block(lists_, class_Ka, class_Kb, Ka_start, Ka_size, Kdim, maxKb,
+                                    std::span{Kblock2.data(), temp_dim}, sigma);
+            }
+        }
+    }
+}
+
+// The following functions are used to gather and scatter blocks of data and are relevant only to
+// this file.
+namespace {
 /// @brief Cyclic multithreaded transpose of indices 2 and 3 of a 3D tensor
 /// in[i][j][k] -> out[i][k][j]
 /// @param in Input tensor as a 1D span
@@ -182,7 +277,8 @@ CISigmaBuilder::get_Kblock_spans(size_t dim, size_t maxKa) const {
     std::size_t size = memory_size_ / (2 * sizeof(double));
     if (Kblock1_.size() < size) {
         std::cout << "Resizing Knowles-Handy temporary buffers to " << 2 * size << " elements ("
-                  << 2 * size * sizeof(double) / (1024 * 1024) << " MB).\n\n";
+                  << 2 * size * sizeof(double) / (1024 * 1024) << " MB).\n"
+                  << std::endl;
         Kblock1_.resize(size);
         Kblock2_.resize(size);
     }
@@ -210,95 +306,4 @@ CISigmaBuilder::get_Kblock_spans(size_t dim, size_t maxKa) const {
     return {std::span<double>{Kblock1_.data(), max_temp_dim},
             std::span<double>{Kblock2_.data(), max_temp_dim}, Ka_max_size};
 }
-
-void CISigmaBuilder::H2(std::span<double> basis, std::span<double> sigma) const {
-    size_t norb = lists_.norb();
-    const auto npairs = norb * (norb + 1) / 2; // Number of pairs (p, r) with p >= r
-
-    const int num_class_Ka = lists_.alfa_address()->nclasses();
-    const int num_class_Kb = lists_.beta_address()->nclasses();
-
-    // Loop over the Ka and Kb classes of the D([qs],[Ka Kb]) matrix
-    for (size_t class_Ka = 0; class_Ka < num_class_Ka; ++class_Ka) {
-        for (size_t class_Kb = 0; class_Kb < num_class_Kb; ++class_Kb) {
-            const auto maxKa = lists_.alfa_address()->strpcls(class_Ka);
-            const auto maxKb = lists_.beta_address()->strpcls(class_Kb);
-
-            // We fix the size of the Kb range
-            const size_t Kb_start = 0;
-            const size_t Kb_end = maxKb;
-            const size_t Kb_size = Kb_end - Kb_start;
-
-            // // Derive Ka_max_size from our preallocated buffers:
-            // size_t available = Kblock1_.size(); // assume Kblock2_ same size
-            // size_t Ka_max_size = available / (npairs * Kb_size);
-            // if (Ka_max_size < 1) {
-            //     // too small for even one Ka => resize to hold 1
-            //     Ka_max_size = 64; // 64 is a reasonable minimum size
-            //     size_t new_dim = npairs * Ka_max_size * Kb_size;
-            //     Kblock1_.resize(new_dim);
-            //     Kblock2_.resize(new_dim);
-            //     auto available_MB = 2 * available / (1024 * 1024 * sizeof(double));
-            //     auto new_dim_MB = 2 * new_dim / (1024 * 1024 * sizeof(double));
-            //     std::cerr << "Warning: temporary buffers too small (" << available_MB
-            //               << " MB); resized to " << new_dim_MB << " MB\n";
-            // }
-            // // Ensure Ka_max_size is not larger than maxKa
-            // Ka_max_size = std::min(Ka_max_size, maxKa);
-
-            // size_t max_temp_dim = npairs * Ka_max_size * Kb_size;
-            // std::span<double> Kblock1{Kblock1_.data(), max_temp_dim};
-            // std::span<double> Kblock2{Kblock2_.data(), max_temp_dim};
-
-            auto [Kblock1, Kblock2, Ka_max_size] = get_Kblock_spans(npairs * Kb_size, maxKa);
-
-            // Loop over values of Ka in blocks
-            for (size_t Ka_start = 0; Ka_start < maxKa; Ka_start += Ka_max_size) {
-                size_t Ka_end = std::min(Ka_start + Ka_max_size, maxKa);
-                size_t Ka_size = Ka_end - Ka_start;
-
-                // dimensions of the matrix we are going to build
-                const auto Kdim = Ka_size * Kb_size;
-                // dimension of the D([i<=j],[Ka Kb]) tensor
-                const auto temp_dim = npairs * Kdim;
-
-                // skip empty blocks
-                if (temp_dim == 0)
-                    continue;
-
-                // Zero out the blocks
-                std::fill_n(Kblock1.begin(), temp_dim, 0.0);
-
-                // Alpha contribution to the D matrix D([i>=j],[Ka Kb])
-                gather_alpha_block(lists_, class_Ka, class_Kb, Ka_start, Ka_size, Kdim, maxKb,
-                                   basis, std::span{Kblock1.data(), temp_dim});
-
-                // Cyclic transpose of the D matrix D([i>=j],[Ka Kb]) to D([i>=j],[Kb Ka])
-                transpose_23(Kblock1, Kblock2, npairs, Ka_size, maxKb);
-
-                // Beta contribution to the D matrix D([i>=j],[Kb Ka])
-                gather_beta_block(lists_, class_Ka, class_Kb, Ka_start, Ka_size, Kdim, maxKb, basis,
-                                  TR, std::span{Kblock2.data(), temp_dim});
-
-                // Perform the matrix product 0.5 * V([k>=l][i>=j]) * D([i>=j],[Kb Ka])
-                // The result is the matrix E([k>=l],[Kb Ka])
-                // [note that the Ka/Kb indices are transposed]
-                matrix_product('N', 'N', npairs, Kdim, npairs, 0.5, v_ijkl_hk.data(), npairs,
-                               Kblock2.data(), Kdim, 0.0, Kblock1.data(), Kdim);
-
-                // Beta contribution from the matrix E([k>=l],[Kb Ka]) to sigma([Ib Ia])
-                scatter_beta_block(lists_, class_Ka, class_Kb, Ka_start, Ka_size, Kdim, maxKb,
-                                   std::span{Kblock1.data(), temp_dim}, TR, sigma);
-
-                // Cyclic transpose of E([k>=l],[Kb Ka]) to E([k>=l],[Ka Kb])
-                transpose_23(Kblock1, Kblock2, npairs, maxKb, Ka_size);
-
-                // Alpha contribution from the matrix E([k>=l],[Ka Kb]) to sigma([Ia Ib])
-                scatter_alpha_block(lists_, class_Ka, class_Kb, Ka_start, Ka_size, Kdim, maxKb,
-                                    std::span{Kblock2.data(), temp_dim}, sigma);
-            }
-        }
-    }
-}
-
 } // namespace forte2

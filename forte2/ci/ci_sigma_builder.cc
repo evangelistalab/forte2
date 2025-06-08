@@ -34,35 +34,24 @@ CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, n
         max_size = std::max(lists.detpblk(nI), max_size);
     }
 
+    std::cout << "Allocating CI temporary buffers of " << 2 * max_size << " elements ("
+              << 2 * max_size * sizeof(double) / (1024 * 1024) << " MB).\n"
+              << std::endl;
+
     // Resize the TR and TL vectors to the maximum size found
     TR.resize(max_size);
     TL.resize(max_size);
 
-    set_Hamiltonian(H, V);
-}
-
-CISigmaBuilder::~CISigmaBuilder() {
-    // std::cout << "Gather A time:          " << gather_a_time << " seconds\n";
-    // std::cout << "Gather B time:          " << gather_b_time << " seconds\n";
-    // std::cout << "Gather B time (read):   " << gather_b_time_read << " seconds\n";
-    // std::cout << "Transpose 1 time:       " << transpose_1_time << " seconds\n";
-    // std::cout << "Transpose 2 time:       " << transpose_2_time << " seconds\n";
-    // std::cout << "DGEMM time:             " << dgemm_time << " seconds\n";
-    // std::cout << "Scatter A time:         " << scatter_a_time << " seconds\n";
-    // std::cout << "Scatter B time:         " << scatter_b_time << " seconds\n";
-    // std::cout << "Scatter B time (write): " << scatter_b_time_write << " seconds\n";
-    // std::cout << "Total time:             "
-    //           << gather_a_time + gather_b_time + dgemm_time + scatter_a_time + scatter_b_time
-    //           +
-    //                  transpose_1_time + transpose_2_time
-    //           << " seconds\n";
+    set_Hamiltonian(E, H, V);
 }
 
 void CISigmaBuilder::set_memory(int mb) {
     memory_size_ = mb * 1024 * 1024; // Convert MB to bytes
 }
 
-void CISigmaBuilder::set_Hamiltonian(np_matrix H, np_tensor4 V) {
+void CISigmaBuilder::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
+    E_ = E;
+
     if (H.ndim() != 2) {
         throw std::runtime_error("H must be a 2D matrix.");
     }
@@ -70,21 +59,25 @@ void CISigmaBuilder::set_Hamiltonian(np_matrix H, np_tensor4 V) {
         throw std::runtime_error("H shape does not match the number of orbitals.");
     }
     H_ = H;
+
+    // Initialize the one-electron integrals h_hz and h_kh
+
     const size_t norb = lists_.norb();
+    h_kh.resize(norb * norb);
     h_hz.resize(norb * norb);
-    h_hk.resize(norb * norb);
     auto h = H.view();
     auto v = V.view();
     for (size_t p = 0; p < norb; ++p) {
         for (size_t q = 0; q < norb; ++q) {
             h_hz[p * norb + q] = h(p, q);
-            h_hk[p * norb + q] = h(p, q);
+            h_kh[p * norb + q] = h(p, q);
             for (size_t r = 0; r < norb; ++r) {
-                h_hk[p * norb + q] -= 0.5 * v(p, q, r, r);
+                h_kh[p * norb + q] -= 0.5 * v(p, q, r, r);
             }
         }
     }
 
+    // Initialize the two-electron integrals v_pr_qs and v_pr_qs_a
     if (V.ndim() != 4) {
         throw std::runtime_error("V must be a 4D tensor.");
     }
@@ -101,6 +94,7 @@ void CISigmaBuilder::set_Hamiltonian(np_matrix H, np_tensor4 V) {
     v_pr_qs_a.resize(npairs * npairs);
     v_ijkl_hk.resize(ngeqpairs * ngeqpairs);
 
+    // Loop over all pairs (p, r) and (q, s) to fill v_pr_qs
     for (size_t p = 0; p < norb; ++p) {
         for (size_t r = 0; r < norb; ++r) {
             const auto pr_index = p * norb + r;
@@ -112,6 +106,7 @@ void CISigmaBuilder::set_Hamiltonian(np_matrix H, np_tensor4 V) {
             }
         }
     }
+    // Loop over all pairs (p, r) and (q, s) to fill v_pr_qs_a with p > r and q > s
     for (int p = 1; p < norb; ++p) {
         for (int r = 0; r < p; ++r) {
             const auto pr_index = (p * (p - 1)) / 2 + r;
@@ -123,29 +118,16 @@ void CISigmaBuilder::set_Hamiltonian(np_matrix H, np_tensor4 V) {
             }
         }
     }
+    // Loop over all pairs (i, j) and (k, l) to fill v_ijkl_hk with i >= j and k >= l
     for (size_t i = 0; i < norb; ++i) {
-        for (size_t j = 0; j < norb; ++j) {
+        for (size_t j = 0; j <= i; ++j) {
             const auto ij_index = pair_index_geq(i, j);
             for (size_t k = 0; k < norb; ++k) {
-                for (size_t l = 0; l < norb; ++l) {
+                for (size_t l = 0; l <= k; ++l) {
                     const auto kl_index = pair_index_geq(k, l);
-                    if (i >= j and k >= l) {
-                        double dij = (i == j ? 2 : 1);
-                        double dkl = (k == l ? 2 : 1);
-                        v_ijkl_hk[ij_index * ngeqpairs + kl_index] = v(i, k, j, l) / (dij * dkl);
-                    }
-                    // if (i > j and k > l) {
-                    //     v_ijkl_hk[ij_index * ngeqpairs + kl_index] = v(i, k, j, l);
-                    // }
-                    // if (i == j and k > l) {
-                    //     v_ijkl_hk[ij_index * ngeqpairs + kl_index] = v(i, k, j, l) / 2;
-                    // }
-                    // if (i > j and k == l) {
-                    //     v_ijkl_hk[ij_index * ngeqpairs + kl_index] = v(i, k, j, l) / 2;
-                    // }
-                    // if (i == j and k == l) {
-                    //     v_ijkl_hk[ij_index * ngeqpairs + kl_index] = v(i, k, j, l) / 4;
-                    // }
+                    double dij = (i == j ? 2 : 1);
+                    double dkl = (k == l ? 2 : 1);
+                    v_ijkl_hk[ij_index * ngeqpairs + kl_index] = v(i, k, j, l) / (dij * dkl);
                 }
             }
         }
@@ -176,10 +158,10 @@ void CISigmaBuilder::Hamiltonian(np_vector basis, np_vector sigma) const {
         hbbbb_timer_ += h_bbbb_timer.elapsed_seconds();
     } else {
         H0(b_span, s_span);
-        H1_aa_gemm(b_span, s_span, true, h_hk);
-        H1_aa_gemm(b_span, s_span, false, h_hk);
+        H1_aa_gemm(b_span, s_span, true, h_kh);
+        H1_aa_gemm(b_span, s_span, false, h_kh);
         local_timer h_aabb_timer;
-        H2(b_span, s_span);
+        H2_kh(b_span, s_span);
         haabb_timer_ += h_aabb_timer.elapsed_seconds();
     }
 

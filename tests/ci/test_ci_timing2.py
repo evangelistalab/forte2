@@ -56,7 +56,3 @@ def test_ci_timing2():
         print(
             f"Timing for {n} hydrogens: {elapsed:.2f} seconds, CI energy: {energy:.6f}"
         )
-
-
-if __name__ == "__main__":
-    test_ci_timing2()
