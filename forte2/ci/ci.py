@@ -116,7 +116,7 @@ class CI(MOsMixin, SystemMixin):
         sigma_det = np.zeros((self.ndet))
 
         Hdiag = self.ci_sigma_builder.form_Hdiag_csf(
-            self.dets, self.spin_adapter, spin_adapt_full_preconditioner=True
+            self.dets, self.spin_adapter, spin_adapt_full_preconditioner=False
         )
 
         # 3. Instantiate and configure solver

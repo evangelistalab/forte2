@@ -19,6 +19,8 @@ class CISigmaBuilder {
     CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V);
     ~CISigmaBuilder();
 
+    void set_memory(int mb);
+
     // == Class Public Functions ==
     void set_Hamiltonian(np_matrix H, np_tensor4 V);
 
@@ -60,6 +62,7 @@ class CISigmaBuilder {
     // Two-electron integrals in the form of a tensor V[p][q][r][s] = <pq|rs> = (pr|qs)
     np_tensor4 V_;
     SlaterRules slater_rules_;
+    size_t memory_size_ = 1073741824; // bytes, 1 GB default memory size
 
     // == Class Mutable Variables ==
     mutable double hdiag_timer_ = 0.0;
@@ -68,26 +71,44 @@ class CISigmaBuilder {
     mutable double hbbbb_timer_ = 0.0;
     mutable int build_count_ = 0;
 
-    // == Class Static Variables ==
-
+    /// @brief Temporary vectors used for gathering and scattering blocks of the CI matrix
+    /// These vectors are allocated when the class is constructed and resized as needed
     mutable std::vector<double> TR;
     mutable std::vector<double> TL;
-    mutable std::vector<double> h_pq;
+
+    /// @brief Temporary vectors used for the Knowles-Handy algorithm
+    /// These vectors are allocated on the first call to the Hamiltonian function
+    /// and resized as needed
+    mutable std::vector<double> Kblock1_;
+    mutable std::vector<double> Kblock2_;
+
+    // == Class Static Variables ==
+
+    /// @brief One-electron integrals in the form of a tensor H[p][q] = <p|H|q> = h_pq
+    mutable std::vector<double> h_hz;
+    /// @brief Two-electron integrals in the form of a tensor V[p][q][r][s] = <pq|rs> = (pr|qs)
     mutable std::vector<double> v_pr_qs;
+    /// @brief Two-electron integrals in the form of a tensor V[p][q][r][s] = <pq||rs> = (pr|qs) -
+    /// (ps|qr)
     mutable std::vector<double> v_pr_qs_a;
 
-    // Effective one-electron integrals used in the Handy-Knowles algorithm
-    mutable std::vector<double> h_pq_hk;
-    // Two-electron integrals used in the Handy-Knowles algorithm
-    mutable std::vector<double> v_ij_kl_hk;
-    mutable std::vector<double> v_ij_kl_hk_pairs;
+    // Modified one-electron integrals used in the Knowles-Handy algorithm
+    mutable std::vector<double> h_hk;
+    // Modified two-electron integrals used in the Knowles-Handy algorithm
+    mutable std::vector<double> v_ijkl_hk;
 
     // == Class Private Functions ==
     void H0(std::span<double> basis, std::span<double> sigma) const;
-    void H1_aa_gemm(std::span<double> basis, std::span<double> sigma, bool alfa) const;
+    void H1_aa_gemm(std::span<double> basis, std::span<double> sigma, bool alfa,
+                    std::span<double> h) const;
     void H2_aaaa_gemm(std::span<double> basis, std::span<double> sigma, bool alfa) const;
     void H2_aabb_gemm(std::span<double> basis, std::span<double> sigma) const;
+
+    /// @brief Builds the two-electron contribution to the sigma vector using the Knowles-Handy
+    /// algorithm.
     void H2(std::span<double> basis, std::span<double> sigma) const;
+    std::tuple<std::span<double>, std::span<double>, size_t> get_Kblock_spans(size_t dim,
+                                                                              size_t maxKa) const;
 };
 
 [[nodiscard]] std::span<double> gather_block(std::span<double> source, std::span<double> dest,
