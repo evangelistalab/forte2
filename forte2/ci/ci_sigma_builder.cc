@@ -1,10 +1,5 @@
-#include <vector>
-#include <future>
 #include <iostream>
-#include <cassert>
-#include <algorithm>
-#include <thread>
-#include <algorithm>
+#include <iomanip>
 
 #include "helpers/timer.hpp"
 #include "helpers/np_vector_functions.h"
@@ -43,6 +38,13 @@ CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, n
     TL.resize(max_size);
 
     set_Hamiltonian(E, H, V);
+}
+
+CISigmaBuilder::~CISigmaBuilder() {
+    // Destructor does not need to do anything special
+    std::cout << std::fixed << std::setprecision(3);
+    std::cout << "\nTiming for 2RDM(aa):" << rdm2_aa_timer_ << " seconds" << std::endl;
+    std::cout << "Timing for 2RDM(ab):" << rdm2_ab_timer_ << " seconds" << std::endl;
 }
 
 void CISigmaBuilder::set_memory(int mb) {

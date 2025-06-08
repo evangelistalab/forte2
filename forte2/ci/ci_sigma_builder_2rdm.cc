@@ -1,6 +1,7 @@
 #include "helpers/timer.hpp"
 #include "helpers/np_matrix_functions.h"
 #include "helpers/np_vector_functions.h"
+#include "helpers/blas.h"
 
 #include "ci_sigma_builder.h"
 
@@ -8,6 +9,8 @@ namespace forte2 {
 
 np_matrix CISigmaBuilder::compute_2rdm_aa_same_irrep(np_vector C_left, np_vector C_right,
                                                      bool alfa) const {
+    local_timer timer;
+
     const size_t norb = lists_.norb();
     const size_t npairs = (norb * (norb - 1)) / 2;
 
@@ -61,10 +64,8 @@ np_matrix CISigmaBuilder::compute_2rdm_aa_same_irrep(np_vector C_left, np_vector
                             for (const auto& [sign_L, r, s, J] : Kllist) {
                                 const size_t pq_index = p * (p - 1) / 2 + q;
                                 const size_t rs_index = r * (r - 1) / 2 + s;
-                                double rdm_element = 0.0;
-                                for (size_t idx{0}; idx != maxL; ++idx) {
-                                    rdm_element += tr[I * maxL + idx] * tl[J * maxL + idx];
-                                }
+                                double rdm_element =
+                                    dot(maxL, tr.data() + I * maxL, 1, tl.data() + J * maxL, 1);
                                 rdm_view(pq_index, rs_index) += sign_K * sign_L * rdm_element;
                             }
                         }
@@ -73,12 +74,20 @@ np_matrix CISigmaBuilder::compute_2rdm_aa_same_irrep(np_vector C_left, np_vector
             }
         }
     }
+    rdm2_aa_timer_ += timer.elapsed_seconds();
     return rdm;
 }
 
 np_tensor4 CISigmaBuilder::compute_2rdm_ab_same_irrep(np_vector C_left, np_vector C_right) {
+    local_timer timer;
     size_t norb = lists_.norb();
     auto rdm = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
+
+    auto norb2 = norb * norb;
+    auto norb3 = norb2 * norb;
+    auto index = [norb, norb2, norb3](size_t p, size_t q, size_t r, size_t s) {
+        return p * norb3 + q * norb2 + r * norb + s;
+    };
 
     const auto na = lists_.na();
     const auto nb = lists_.nb();
@@ -86,6 +95,7 @@ np_tensor4 CISigmaBuilder::compute_2rdm_ab_same_irrep(np_vector C_left, np_vecto
         return rdm;
 
     auto rdm_view = rdm.view();
+    auto rdm_data = rdm.data();
 
     auto Cl_span = vector::as_span(C_left);
     auto Cr_span = vector::as_span(C_right);
@@ -123,10 +133,10 @@ np_tensor4 CISigmaBuilder::compute_2rdm_ab_same_irrep(np_vector C_left, np_vecto
                                     const auto ClJ =
                                         sign_u * sign_v * Cl_span[Cl_offset + Ja * maxJb + Jb];
                                     for (const auto& [sign_x, x, Ia] : Ka_right_list) {
+                                        const auto Cr_Ia_offset = Cr_offset + Ia * maxIb;
                                         for (const auto& [sign_y, y, Ib] : Kb_right_list) {
-                                            rdm_view(u, v, x, y) +=
-                                                sign_x * sign_y * ClJ *
-                                                Cr_span[Cr_offset + Ia * maxIb + Ib];
+                                            rdm_data[index(u, v, x, y)] +=
+                                                sign_x * sign_y * ClJ * Cr_span[Cr_Ia_offset + Ib];
                                         }
                                     }
                                 }
@@ -137,6 +147,7 @@ np_tensor4 CISigmaBuilder::compute_2rdm_ab_same_irrep(np_vector C_left, np_vecto
             }
         }
     }
+    rdm2_ab_timer_ += timer.elapsed_seconds();
     return rdm;
 }
 } // namespace forte2

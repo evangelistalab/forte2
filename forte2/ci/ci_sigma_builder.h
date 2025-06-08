@@ -17,6 +17,7 @@ class CISigmaBuilder {
   public:
     // == Class Constructor ==
     CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V);
+    ~CISigmaBuilder();
 
     // == Class Public Functions ==
 
@@ -111,6 +112,9 @@ class CISigmaBuilder {
     mutable double haaaa_timer_ = 0.0;
     mutable double haabb_timer_ = 0.0;
     mutable double hbbbb_timer_ = 0.0;
+    mutable double rdm1_timer_ = 0.0;
+    mutable double rdm2_aa_timer_ = 0.0;
+    mutable double rdm2_ab_timer_ = 0.0;
     mutable int build_count_ = 0;
 
     // == Class Private Functions/Data ==
