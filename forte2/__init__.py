@@ -6,3 +6,4 @@ from .ci import CI
 from .orbitals.cube import Cube
 from .x2c import x2c
 from .props import *
+from .orbopt import OrbitalOptimizer

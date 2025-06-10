@@ -220,7 +220,7 @@ class CI(MOsMixin, SystemMixin):
 
         self.rdms = rdms
 
-        return self.rdms
+        return self
 
     def _build_guess_vectors(self, Hdiag):
         """
