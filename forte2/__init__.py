@@ -5,3 +5,4 @@ from .scf import RHF, ROHF, UHF, CUHF, GHF
 from .ci import CI
 from .orbitals.cube import Cube
 from .x2c import x2c
+from .props import *

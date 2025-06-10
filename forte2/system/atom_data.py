@@ -4,6 +4,7 @@ A map from atom symbols to atomic number
 
 BOHR_TO_ANGSTROM = 0.529177210903
 ANGSTROM_TO_BOHR = 1.0 / BOHR_TO_ANGSTROM
+DEBYE_TO_AU = 0.3934303
 
 ATOM_SYMBOL_TO_Z = {
     "X": 0,
