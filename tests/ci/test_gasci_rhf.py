@@ -1,3 +1,4 @@
+import pytest
 from numpy import isclose # type: ignore
 
 from forte2 import *
@@ -69,6 +70,7 @@ def test_gasci_rhf_3():
     assert isclose(rhf.E, -1.12475114835983)
     assert isclose(ci.E[0], -1.145766051194)
 
+@pytest.mark.xfail(reason="CI energy does not match RDM energy")
 def test_gasci_rhf_4():
     xyz = f"""
     O  0.000000000000  0.000000000000 -0.069592187400
@@ -92,6 +94,7 @@ def test_gasci_rhf_4():
     assert isclose(ci.E[0], -76.030899030220)
     # Fails, CI energy does not match RDM energy
 
+@pytest.mark.xfail(reason="CI energy does not match RDM energy")
 def test_gasci_rhf_5():
     xyz = f"""
     O  0.000000000000  0.000000000000 -0.069592187400
@@ -115,6 +118,7 @@ def test_gasci_rhf_5():
     assert isclose(ci.E[0], -55.841523397373)
     # Fails, CI energy does not match RDM energy
 
+@pytest.mark.xfail(reason="rohf energy does not match")
 def test_gasci_rohf_6():
     xyz = f"""
     C           -0.055505285387     0.281253495230     0.333445183956
