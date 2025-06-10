@@ -223,9 +223,24 @@ class RHF(SCFMixin, MOsMixin):
         return diis.update(F, AO_grad)
 
     def _print_orbital_energies(self):
-        print("\nOrbital Energies:")
-        for i, eps in enumerate(self.eps[0]):
-            print(f"  Orbital {i + 1}: {eps:.6f} Hartree")
+        ndocc = self.na
+        nuocc = self.nbf - ndocc
+        orb_per_row = 5
+        print("\nOrbital Energies [Eh]")
+        print("---------------------")
+        print("\nDoubly Occupied:")
+        for i in range(ndocc):
+            if i % orb_per_row == 0:
+                print()
+            print(f"{i+1:<4d} {self.eps[0][i]:<12.6f}", end=" ")
+
+        print("\n\nVirtual:")
+        for i in range(nuocc):
+            idx = ndocc + i
+            if idx % orb_per_row == 0:
+                print()
+            print(f"{idx+1:<4d} {self.eps[0][idx]:<12.6f}", end=" ")
+        print()
 
 
 @dataclass
@@ -326,6 +341,42 @@ class UHF(SCFMixin, MOsMixin):
         ]
         return F
 
+    def _print_orbital_energies(self):
+        naocc = self.na
+        naucc = self.nbf - naocc
+        nbocc = self.nb
+        nbucc = self.nbf - nbocc
+        orb_per_row = 5
+        print("\nOrbital Energies [Eh]")
+        print("---------------------")
+        print("\nAlpha Occupied:")
+        for i in range(naocc):
+            if i % orb_per_row == 0 and i > 0:
+                print()
+            print(f"{i+1:<4d} {self.eps[0][i]:<12.6f}", end=" ")
+
+        print("\n\nAlpha Virtual:")
+        for i in range(naucc):
+            idx = naocc + i
+            if i % orb_per_row == 0 and i > naocc:
+                print()
+            print(f"{idx+1:<4d} {self.eps[0][idx]:<12.6f}", end=" ")
+        print()
+
+        print("\nBeta Occupied:")
+        for i in range(nbocc):
+            if i % orb_per_row == 0 and i > 0:
+                print()
+            print(f"{i+1:<4d} {self.eps[1][i]:<12.6f}", end=" ")
+
+        print("\n\nBeta Virtual:")
+        for i in range(nbucc):
+            idx = nbocc + i
+            if i % orb_per_row == 0 and i > nbocc:
+                print()
+            print(f"{i+1:<4d} {self.eps[1][i]:<12.6f}", end=" ")
+        print()
+
 
 @dataclass
 class ROHF(SCFMixin, MOsMixin):
@@ -347,7 +398,6 @@ class ROHF(SCFMixin, MOsMixin):
     _initial_guess = RHF._initial_guess
     _build_initial_density_matrix = UHF._build_initial_density_matrix
     _diagonalize_fock = RHF._diagonalize_fock
-    _print_orbital_energies = RHF._print_orbital_energies
     _spin = RHF._spin
     _energy = UHF._energy
     _diis_update = RHF._diis_update
@@ -395,6 +445,34 @@ class ROHF(SCFMixin, MOsMixin):
         Deff = 0.5 * (self.D[0] + self.D[1])
         return F @ Deff @ S - S @ Deff @ F
 
+    def _print_orbital_energies(self):
+        ndocc = min(self.na, self.nb)
+        nsocc = abs(self.na - self.nb)
+        nuocc = self.nbf - ndocc - nsocc
+        orb_per_row = 5
+        print("\nOrbital Energies [Eh]")
+        print("---------------------")
+        print("\nDoubly Occupied:")
+        for i in range(ndocc):
+            if i % orb_per_row == 0:
+                print()
+            print(f"{i+1:<4d} {self.eps[0][i]:<12.6f}", end=" ")
+        if nsocc > 0:
+            print("\n\nSingly Occupied:")
+            for i in range(nsocc):
+                idx = ndocc + i
+                if i % orb_per_row == 0:
+                    print()
+                print(f"{idx+1:<4d} {self.eps[0][idx]:<12.6f}", end=" ")
+
+        print("\n\nVirtual:")
+        for i in range(nuocc):
+            idx = ndocc + nsocc + i
+            if i % orb_per_row == 0:
+                print()
+            print(f"{idx+1:<4d} {self.eps[0][idx]:<12.6f}", end=" ")
+        print()
+
 
 @dataclass
 class CUHF(SCFMixin, MOsMixin):
@@ -424,6 +502,7 @@ class CUHF(SCFMixin, MOsMixin):
     _energy = UHF._energy
     _diis_update = UHF._diis_update
     _build_total_density_matrix = UHF._build_total_density_matrix
+    _print_orbital_energies = UHF._print_orbital_energies
 
     def _build_fock(self, H, fock_builder, S):
         F, _ = UHF._build_fock(self, H, fock_builder, S)
@@ -598,3 +677,23 @@ class GHF(SCFMixin, MOsMixin):
             "vu,uv->", D_spinor, F
         )
         return energy.real
+
+    def _print_orbital_energies(self):
+        nocc = self.nel
+        nuocc = self.nbf - nocc
+        orb_per_row = 5
+        print("\nSpinor Energies [Eh]")
+        print("---------------------")
+        print("\Occupied:")
+        for i in range(nocc):
+            if i % orb_per_row == 0:
+                print()
+            print(f"{i+1:<4d} {self.eps[0][i]:<12.6f}", end=" ")
+
+        print("\n\nVirtual:")
+        for i in range(nuocc):
+            idx = nocc + i
+            if idx % orb_per_row == 0:
+                print()
+            print(f"{idx+1:<4d} {self.eps[0][idx]:<12.6f}", end=" ")
+        print()
