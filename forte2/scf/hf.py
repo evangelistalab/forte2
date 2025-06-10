@@ -30,6 +30,7 @@ class SCFMixin:
     guess_type: str = "minao"
 
     executed: bool = field(default=False, init=False)
+    converged: bool = field(default=False, init=False)
 
     def __call__(self, system):
         self.system = system
@@ -129,6 +130,7 @@ class SCFMixin:
                 self.D = self._build_density_matrix()
                 self.E = Vnn + self._energy(H, F)
                 print(f"Final {self.method} Energy: {self.E:20.12f}")
+                self.converged = True
                 break
 
             # reset old parameters
@@ -142,6 +144,9 @@ class SCFMixin:
         end = time.monotonic()
         print(f"{self.method} time: {end - start:.2f} seconds")
 
+        if self.converged:
+            self._post_process()
+
         self.executed = True
         return self
 
@@ -153,6 +158,13 @@ class SCFMixin:
 
     def _get_nuclear_repulsion(self):
         return self.system.nuclear_repulsion_energy()
+
+    def _post_process(self):
+        """
+        Post-process the SCF results.
+        This method can be overridden by subclasses to perform additional calculations.
+        """
+        self._print_orbital_energies()
 
 
 @dataclass
@@ -175,8 +187,9 @@ class RHF(SCFMixin, MOsMixin):
         D = np.einsum("mi,ni->mn", self.C[0][:, : self.na], self.C[0][:, : self.na])
         return [D]
 
-    def Dao(self):
-        return self._build_density_matrix()[0]
+    def _build_total_density_matrix(self):
+        # returns the total density matrix (Daa + Dbb)
+        return 2 * self._build_density_matrix()[0]
 
     def _initial_guess(self, H, S, guess_type="minao"):
         match guess_type:
@@ -208,6 +221,11 @@ class RHF(SCFMixin, MOsMixin):
 
     def _diis_update(self, diis, F, AO_grad):
         return diis.update(F, AO_grad)
+
+    def _print_orbital_energies(self):
+        print("\nOrbital Energies:")
+        for i, eps in enumerate(self.eps[0]):
+            print(f"  Orbital {i + 1}: {eps:.6f} Hartree")
 
 
 @dataclass
@@ -242,7 +260,7 @@ class UHF(SCFMixin, MOsMixin):
         D_b = np.einsum("mi,ni->mn", self.C[1][:, : self.nb], self.C[1][:, : self.nb])
         return D_a, D_b
 
-    def Dao(self):
+    def _build_total_density_matrix(self):
         D_a, D_b = self._build_density_matrix()
         return D_a + D_b
 
@@ -268,6 +286,12 @@ class UHF(SCFMixin, MOsMixin):
         eps_a, C_a = sp.linalg.eigh(F[0], S)
         eps_b, C_b = sp.linalg.eigh(F[1], S)
         return [eps_a, eps_b], [C_a, C_b]
+
+    def _print_orbital_energies(self):
+        print("\nOrbital Energies:")
+        print("#    Alpha    Beta")
+        for idx, (epa, epb) in enumerate(zip(self.eps[0], self.eps[1])):
+            print(f"{idx + 1:>2d}: {epa:.6f} {epb:.6f}")
 
     def _spin(self, S):
         # alpha-beta orbital overlap matrix
@@ -323,10 +347,11 @@ class ROHF(SCFMixin, MOsMixin):
     _initial_guess = RHF._initial_guess
     _build_initial_density_matrix = UHF._build_initial_density_matrix
     _diagonalize_fock = RHF._diagonalize_fock
+    _print_orbital_energies = RHF._print_orbital_energies
     _spin = RHF._spin
     _energy = UHF._energy
     _diis_update = RHF._diis_update
-    Dao = UHF.Dao
+    _build_total_density_matrix = UHF._build_total_density_matrix
 
     def _build_fock(self, H, fock_builder, S):
         Ja, Jb = fock_builder.build_J(self.D)
@@ -394,10 +419,11 @@ class CUHF(SCFMixin, MOsMixin):
     _build_initial_density_matrix = UHF._build_initial_density_matrix
     _build_ao_grad = UHF._build_ao_grad
     _diagonalize_fock = UHF._diagonalize_fock
+    _print_orbital_energies = UHF._print_orbital_energies
     _spin = UHF._spin
     _energy = UHF._energy
     _diis_update = UHF._diis_update
-    Dao = UHF.Dao
+    _build_total_density_matrix = UHF._build_total_density_matrix
 
     def _build_fock(self, H, fock_builder, S):
         F, _ = UHF._build_fock(self, H, fock_builder, S)
@@ -494,8 +520,8 @@ class GHF(SCFMixin, MOsMixin):
         Dbb = D[nbf:, nbf:]
         return Daa, Dab, Dba, Dbb
 
-    def Dao(self):
-        Daa, _, _, Dbb = self._build_density_matrix()
+    def _build_total_density_matrix(self):
+        Daa, *_, Dbb = self._build_density_matrix()
         return Daa + Dbb
 
     def _initial_guess(self, H, S, guess_type="minao"):
@@ -536,6 +562,11 @@ class GHF(SCFMixin, MOsMixin):
         S_spinor = np.block([[S, np.zeros_like(S)], [np.zeros_like(S), S]])
         eps, C = sp.linalg.eigh(F, S_spinor)
         return [eps], [C]
+
+    def _print_orbital_energies(self):
+        print("\nOrbital Energies:")
+        for i, eps in enumerate(self.eps[0]):
+            print(f"  Spinor {i + 1}: {eps:.6f} Hartree")
 
     def _spin(self, S):
         """
