@@ -2,20 +2,14 @@
 A map from atom symbols to atomic number
 """
 
-import scipy.constants
-
-BOHR_TO_ANGSTROM = scipy.constants.physical_constants["Bohr radius"][0] * 1.0e10
+BOHR_TO_ANGSTROM = 0.529177210903
 ANGSTROM_TO_BOHR = 1.0 / BOHR_TO_ANGSTROM
 DEBYE_TO_AU = 0.3934303
 DEBYE_ANGSTROM_TO_AU = DEBYE_TO_AU * ANGSTROM_TO_BOHR
-EH_TO_EV = scipy.constants.physical_constants["hartree-electron volt relationship"][0]
-EV_TO_EH = scipy.constants.physical_constants["electron volt-hartree relationship"][0]
-EH_TO_WN = (
-    scipy.constants.physical_constants["hartree-inverse meter relationship"][0] / 100
-)
-WN_TO_EH = (
-    scipy.constants.physical_constants["inverse meter-hartree relationship"][0] * 100
-)
+EH_TO_EV = 27.211386245988
+EV_TO_EH = 0.03674932217565499
+EH_TO_WN = 219474.6313632
+WN_TO_EH = 4.556335252912e-06
 
 ATOM_SYMBOL_TO_Z = {
     "X": 0,
