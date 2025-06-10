@@ -54,6 +54,3 @@ def test_mcscf_2():
 
     assert isclose(rhf.E, erhf)
     assert isclose(oo.E[0], emcscf)
-
-
-test_mcscf_1()

@@ -188,9 +188,7 @@ class System:
         nuc_quad = np.einsum("a,ax,ay->xy", charges, positions, positions)
         nuc_quad = 0.5 * (3 * nuc_quad - np.eye(3) * nuc_quad.trace())
         conversion_factor = (
-            1.0 / (forte2.atom_data.DEBYE_TO_AU * forte2.atom_data.ANGSTROM_TO_BOHR)
-            if unit == "debye"
-            else 1.0
+            1.0 / forte2.atom_data.DEBYE_ANGSTROM_TO_AU if unit == "debye" else 1.0
         )
         return nuc_quad * conversion_factor
 
