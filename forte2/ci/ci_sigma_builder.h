@@ -84,6 +84,15 @@ class CISigmaBuilder {
     ///        with p > q, and r > s orbitals of spin sigma
     np_matrix compute_2rdm_aa_same_irrep(np_vector C_left, np_vector C_right, bool alfa) const;
 
+    /// @brief Compute the two-electron same-spin two-electron reduced density matrix
+    /// @param C_left The left-hand side coefficients
+    /// @param C_right The right-hand side coefficients
+    /// @param alfa If true, compute the alpha contribution, otherwise the beta
+    /// @return The two-electron same-spin reduced density matrix stored as a tensor
+    ///        gamma[p][q][r][s] = <L| a^+_p a^+_q a_s a_r |R>
+    np_tensor4 compute_2rdm_aa_same_irrep_full(np_vector C_left, np_vector C_right,
+                                                              bool alfa) const;
+
     /// @brief Compute the mixed-spin two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
     /// @param C_right The right-hand side coefficients

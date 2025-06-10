@@ -54,6 +54,8 @@ void export_ci_sigma_builder_api(nb::module_& m) {
         .def("rdm1_a", &CISigmaBuilder::compute_1rdm_same_irrep, "C_left"_a, "C_right"_a, "alfa"_a)
         .def("rdm2_aa", &CISigmaBuilder::compute_2rdm_aa_same_irrep, "C_left"_a, "C_right"_a,
              "alfa"_a)
+        .def("rdm2_aa_full", &CISigmaBuilder::compute_2rdm_aa_same_irrep_full, "C_left"_a,
+             "C_right"_a, "alfa"_a)
         .def("rdm2_ab", &CISigmaBuilder::compute_2rdm_ab_same_irrep, "C_left"_a, "C_right"_a)
         .def("rdm1_sf", &CISigmaBuilder::compute_sf_1rdm_same_irrep, "C_left"_a, "C_right"_a)
         .def("rdm2_sf", &CISigmaBuilder::compute_sf_2rdm_same_irrep, "C_left"_a, "C_right"_a)

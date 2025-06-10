@@ -189,6 +189,13 @@ class CI(MOsMixin, SystemMixin):
             root_rdms["rdm2_bb"] = self.ci_sigma_builder.rdm2_aa(
                 root_det, root_det, False
             )
+            root_rdms["rdm2_aa_full"] = self.ci_sigma_builder.rdm2_aa_full(
+                root_det, root_det, True
+            )
+            root_rdms["rdm2_bb_full"] = self.ci_sigma_builder.rdm2_aa_full(
+                root_det, root_det, False
+            )
+            root_rdms["rdm2_sf"] = self.ci_sigma_builder.rdm2_sf(root_det, root_det)
 
             rdms[root] = root_rdms
 
@@ -224,9 +231,9 @@ class CI(MOsMixin, SystemMixin):
             rdms_energy = (
                 self.ints.E
                 + np.einsum("ij,ij", root_rdms["rdm1"], self.ints.H)
-                + np.einsum("ijkl,ijkl", expand_rdm2(root_rdms["rdm2_aa"]), A) * 0.25
+                + np.einsum("ijkl,ijkl", root_rdms["rdm2_aa_full"], A) * 0.25
                 + np.einsum("ijkl,ijkl", root_rdms["rdm2_ab"], self.ints.V)
-                + np.einsum("ijkl,ijkl", expand_rdm2(root_rdms["rdm2_bb"]), A) * 0.25
+                + np.einsum("ijkl,ijkl", root_rdms["rdm2_bb_full"], A) * 0.25
             )
             print(f"CI energy from expanded RDMs: {rdms_energy:.6f} Eh")
 
@@ -238,7 +245,9 @@ class CI(MOsMixin, SystemMixin):
                 self.ints.E
                 + np.einsum("ij,ij", root_rdms["rdm1"], self.ints.H)
                 + np.einsum(
-                    "ijkl,ijkl", make_sf_rdm2(root_rdms), self.ints.V.swapaxes(1, 2)
+                    "ijkl,ijkl",
+                    0.5 * root_rdms["rdm2_sf"].swapaxes(1, 2),
+                    self.ints.V.swapaxes(1, 2),
                 )
             )
             print(f"CI energy from spin-free RDMs: {rdms_energy:.6f} Eh")
