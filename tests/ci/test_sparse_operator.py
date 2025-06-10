@@ -495,13 +495,3 @@ def test_sparse_operator_hamiltonian():
     assert energy == pytest.approx(
         scf.E, abs=1e-8
     ), f"Hamiltonian energy {energy} is not close to SCF energy {scf.E}"
-
-
-if __name__ == "__main__":
-    test_sparse_operator_creation()
-    test_sparse_operator()
-    test_sparse_operator_product()
-    test_sparse_operator_list_reverse()
-    test_sparse_operator_list_remove()
-    test_sparse_operator_list_add()
-    test_sparse_operator_hamiltonian()

@@ -47,6 +47,10 @@ endif()
 # Import nanobind through CMake's find_package mechanism
 find_package(nanobind CONFIG REQUIRED)
 
+# Find BLAS and LAPACK
+find_package(BLAS REQUIRED)
+find_package(LAPACK REQUIRED)
+
 # We are now ready to compile the actual extension module
 nanobind_add_module(
   # Name of the extension
@@ -89,6 +93,8 @@ nanobind_add_module(
   ci/ci_sigma_builder.cc
   ci/ci_sigma_builder_1rdm.cc
   ci/ci_sigma_builder_2rdm.cc
+  ci/ci_sigma_builder_harrison_zarrabian.cc
+  ci/ci_sigma_builder_knowles_handy.cc
   ci/ci_spin_adapter.cc
   ci/ci_string_lists.cc
   ci/ci_string_lists_makers.cc
@@ -107,6 +113,7 @@ nanobind_add_module(
 
 target_link_libraries(_forte2 PRIVATE Libint2::int2)
 target_link_libraries(_forte2 PRIVATE Eigen3::Eigen)
+target_link_libraries(_forte2 PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
 
 target_include_directories(_forte2
   PUBLIC

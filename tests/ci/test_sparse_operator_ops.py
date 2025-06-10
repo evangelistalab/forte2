@@ -371,10 +371,3 @@ def test_sparse_operator_fast_product():
     # assert D == E
     end = time.time()
     print(f"Time elapsed: {end - start}")
-
-
-if __name__ == "__main__":
-    test_sparse_operator_ops_1()
-    test_sparse_operator_ops_2()
-    test_sparse_operator_commutator()
-    test_sparse_operator_fast_product()

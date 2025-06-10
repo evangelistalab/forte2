@@ -18,7 +18,3 @@ def test_one_electron_integrals():
 
     ε, _ = eigh(H, S)
     assert isclose(ε[0], -0.4992784, atol=1e-7)
-
-
-if __name__ == "__main__":
-    test_one_electron_integrals()

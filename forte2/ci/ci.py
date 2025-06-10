@@ -32,10 +32,17 @@ class CI(MOsMixin, SystemMixin):
     econv: float = 1e-10
     # The residual convergence threshold
     rconv: float = 1e-5
+    # The minimum number of orbitals in each general orbital space
+    gas_min: list[int] = field(default_factory=list)
+    # The maximum number of orbitals in each general orbital space
+    gas_max: list[int] = field(default_factory=list)
     # First run flag
     first_run: bool = field(default=True, init=False)
     # The number of determinants
     ndef: int = field(default=None, init=False)
+
+    ## Options that control the CI calculation
+    ci_builder_memory: int = field(default=1024, init=False)  # in MB
 
     def __call__(self, method):
         if not method.executed:
@@ -72,16 +79,14 @@ class CI(MOsMixin, SystemMixin):
 
         # 2. Create the string lists
         orbital_symmetry = [[0] * len(x) for x in self.orbitals]
-        gas_min = []
-        gas_max = []
 
         ci_strings = forte2.CIStrings(
             self.state.na - len(self.core_orbitals),
             self.state.nb - len(self.core_orbitals),
             self.state.symmetry,
             orbital_symmetry,
-            gas_min,
-            gas_max,
+            self.gas_min,
+            self.gas_max,
         )
 
         print(f"\nNumber of α electrons: {ci_strings.na}")
@@ -103,6 +108,7 @@ class CI(MOsMixin, SystemMixin):
         self.ci_sigma_builder = forte2.CISigmaBuilder(
             ci_strings, self.ints.E, self.ints.H, self.ints.V
         )
+        self.ci_sigma_builder.set_memory(self.ci_builder_memory)
 
         # 2. Allocate memory for the CI vectors
         self.ndet = ci_strings.ndet
@@ -113,7 +119,9 @@ class CI(MOsMixin, SystemMixin):
         b_det = np.zeros((self.ndet))
         sigma_det = np.zeros((self.ndet))
 
-        Hdiag = self.ci_sigma_builder.form_Hdiag_csf(self.dets, self.spin_adapter, True)
+        Hdiag = self.ci_sigma_builder.form_Hdiag_csf(
+            self.dets, self.spin_adapter, spin_adapt_full_preconditioner=False
+        )
 
         # 3. Instantiate and configure solver
         if self.solver is None:
@@ -148,19 +156,23 @@ class CI(MOsMixin, SystemMixin):
         # 6. Run Davidson
         self.evals, self.evecs = self.solver.solve()
 
+        print(f"\nDavidson-Liu solver converged.\n")
+
         # 7. Store the final energy and properties
         self.E = self.evals
         for i, e in enumerate(self.evals):
             print(f"Final CI Energy Root {i}: {e:20.12f} [Eh]")
 
         h_tot, h_aabb, h_aaaa, h_bbbb = self.ci_sigma_builder.avg_build_time()
-        print("Average CI Sigma Builder time summary:")
+        print("\nAverage CI Sigma Builder time summary:")
         print(f"h_aabb time:    {h_aabb:.3f} s/build")
         print(f"h_aaaa time:    {h_aaaa:.3f} s/build")
         print(f"h_bbbb time:    {h_bbbb:.3f} s/build")
         print(f"total time:     {h_tot:.3f} s/build")
 
-
+        # 8. Compute the RDMs from the CI vectors
+        # and verify the energy from the RDMs matches the CI energy
+        print("\nComputing RDMs from CI vectors.\n")
         rdms = {}
         for root in range(self.nroot):
             root_rdms = {}
@@ -176,8 +188,6 @@ class CI(MOsMixin, SystemMixin):
             )
 
             rdms[root] = root_rdms
-            # tr_rdm1 = np.einsum("ii", self.rdm1)
-            # print(f"Trace of RDM1: {tr_rdm1:.6f}")
 
             # Compute the energy from the RDMs
             # from the numpy tensor V[i, j, k, l] = <ij|kl> make the np matrix with indices
@@ -204,6 +214,9 @@ class CI(MOsMixin, SystemMixin):
                 + np.einsum("ij,ij", root_rdms["rdm2_bb"], M)
             )
             print(f"CI energy from RDMs: {rdms_energy:.6f} Eh")
+            assert np.isclose(
+                self.E[root], rdms_energy
+            ), f"CI energy {self.E[root]} Eh does not match RDMs energy {rdms_energy} Eh"
 
         self.rdms = rdms
 

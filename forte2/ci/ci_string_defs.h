@@ -15,25 +15,35 @@ struct StringSubstitution {
     const double sign;
     const uint32_t I;
     const uint32_t J;
-    StringSubstitution(const double& sign_, const uint32_t& I_, const uint32_t& J_)
+    StringSubstitution(const double sign_, const uint32_t I_, const uint32_t J_)
         : sign(sign_), I(I_), J(J_) {}
+};
+
+/// A structure to store how the string J is connected to the string I and the corresponding sign
+/// |I> = sign a^{+}_p a_q |J>
+struct StringSubstitution2 {
+    const double sign;
+    const size_t pq;
+    const size_t J;
+    StringSubstitution2(double sign_, size_t pq_, size_t J_) : sign(sign_), pq(pq_), J(J_) {}
 };
 
 /// 1-hole string substitution
 struct H1StringSubstitution {
     const int16_t sign;
     const int16_t p;
-    const size_t J;
-    H1StringSubstitution(int16_t sign_, int16_t p_, size_t J_) : sign(sign_), p(p_), J(J_) {}
+    const uint32_t J;
+    constexpr H1StringSubstitution(int16_t sign_, int16_t p_, uint32_t J_) noexcept
+        : sign(sign_), p(p_), J(J_) {}
 };
 
 /// 2-hole string substitution
 struct H2StringSubstitution {
     const int16_t sign;
-    const int16_t p;
-    const int16_t q;
+    const uint8_t p;
+    const uint8_t q;
     size_t J;
-    H2StringSubstitution(int16_t sign_, int16_t p_, int16_t q_, size_t J_)
+    H2StringSubstitution(int16_t sign_, uint8_t p_, uint8_t q_, size_t J_)
         : sign(sign_), p(p_), q(q_), J(J_) {}
 };
 
@@ -60,24 +70,18 @@ using VOList = std::map<std::tuple<size_t, size_t, int>, std::vector<StringSubst
 using VOListElement = std::map<std::tuple<int, int>, std::vector<StringSubstitution>>;
 using VOListMap = std::map<std::pair<int, int>, VOListElement>;
 
-/// Maps the integers (p,q,r,s,h) to list of strings connected by a^{+}_p a^{+}_q a_s a_r, where the
-/// string I belongs to the irrep h
-using VVOOList =
-    std::map<std::tuple<size_t, size_t, size_t, size_t, int>, std::vector<StringSubstitution>>;
-using VVOOListElement = std::map<std::tuple<int, int, int, int>, std::vector<StringSubstitution>>;
-using VVOOListMap = std::map<std::pair<int, int>, VVOOListElement>;
-
-/// Maps the integers (pq_sym, pq, h) to list of strings connected by a^{+}_p a^{+}_q a_q a_p where
-/// the string I belongs to the irrep h
-using OOList = std::map<std::tuple<int, size_t, int>, std::vector<StringSubstitution>>;
-using OOListElement = std::map<std::tuple<int, int>, std::vector<uint32_t>>;
-using OOListMap = std::map<int, OOListElement>;
+using VOListElement2 = std::vector<std::vector<StringSubstitution2>>;
+using VOListMap2 = std::map<std::pair<int, int>, VOListElement2>;
 
 using HListKey = std::tuple<int, size_t, int>;
 
 /// Maps the integers (h_J, add_J, h_I) to list of strings connected by a_p, where the string
 /// I belongs to the irrep h_I and J belongs to the irrep h_J and add_J is the address of J
 using H1List = std::map<HListKey, std::vector<H1StringSubstitution>>;
+
+/// Maps the integers (h_J, add_J, h_I) to list of strings connected by a_p, where the string
+/// I belongs to the irrep h_I and J belongs to the irrep h_J and add_J is the address of J
+using H1List2 = std::map<std::pair<size_t, size_t>, std::vector<std::vector<H1StringSubstitution>>>;
 
 /// Maps the integers (h_J, add_J, h_I) to list of strings connected by a_p a_q, where the string
 /// I belongs to the irrep h_I and J belongs to the irrep h_J and add_J is the address of J
@@ -86,8 +90,5 @@ using H2List = std::map<HListKey, std::vector<H2StringSubstitution>>;
 /// Maps the integers (h_J, add_J, h_I) to list of strings connected by a_p a_q a_r, where the
 /// string I belongs to the irrep h_I and J belongs to the irrep h_J and add_J is the address of J
 using H3List = std::map<HListKey, std::vector<H3StringSubstitution>>;
-
-using Pair = std::pair<int, int>;
-using PairList = std::vector<std::vector<std::pair<int, int>>>;
 
 } // namespace forte2

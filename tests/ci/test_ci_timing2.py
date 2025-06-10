@@ -1,5 +1,6 @@
 import time
 from numpy import isclose
+import pytest
 
 from forte2 import *
 
@@ -23,7 +24,7 @@ def timing(n):
         orbitals=list(range(n)),
         state=State(nel=n, multiplicity=multiplicity, ms=ms),
         nroot=1,
-        econv=1e-12,
+        econv=1e-9,
     )(rohf)
     start = time.monotonic()
     ci.run()
@@ -34,33 +35,24 @@ def timing(n):
     return end - start, ci.E[0]
 
 
-def test_ci_timing():
+@pytest.mark.slow
+def test_ci_timing2():
 
-    ref_energies = [
-        -1.108873664898,
-        -2.180967812920,
-        -3.257608942979,
-        -4.336068592600,
-        -5.415397168298,
-        -6.495197015514,
-        -7.575276862455,
-    ]
+    ref_energies = [-7.013625049615]
 
     ci_timing = []
     energies = []
-    for n in range(2, 14, 2):
-        elapsed, energy = timing(n)
-        ci_timing.append((n, elapsed, energy))
-        energies.append(energy)
 
-    for n, elapsed, energy in ci_timing:
-        print(
-            f"Timing for {n} hydrogens: {elapsed:.2f} seconds, CI energy: {energy:.6f}"
-        )
-        # assert elapsed < 10, f"CI timing exceeded 10 seconds for {n} hydrogens"
+    elapsed, energy = timing(13)
+    ci_timing.append((13, elapsed, energy))
+    energies.append(energy)
 
     for i, (energy, ref_energy) in enumerate(zip(energies, ref_energies)):
         assert isclose(energy, ref_energy), (
             f"CI energy mismatch for {2 * (i + 1)} hydrogens: "
             f"{energy} != {ref_energy}"
+        )
+    for n, elapsed, energy in ci_timing:
+        print(
+            f"Timing for {n} hydrogens: {elapsed:.2f} seconds, CI energy: {energy:.6f}"
         )

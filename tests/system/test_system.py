@@ -144,14 +144,3 @@ def test_center_of_mass():
     system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="bohr")
     com = system.center_of_mass()
     assert com == pytest.approx([0.0, 0.0, 0.0], abs=1e-10)
-
-
-if __name__ == "__main__":
-    test_system()
-    test_xyz_comment()
-    test_missing_atom()
-    test_missing_coordinate()
-    test_units()
-    test_nuclear_dipole()
-    test_nuclear_quadrupole()
-    test_center_of_mass()

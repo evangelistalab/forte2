@@ -33,8 +33,3 @@ def test_sox2c1e():
     scf = GHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(eghf)
-
-
-if __name__ == "__main__":
-    test_sfx2c1e()
-    test_sox2c1e()

@@ -129,7 +129,3 @@ def test_sci1():
     )(scf)
 
     sci.run()
-
-
-if __name__ == "__main__":
-    test_sci1()

@@ -41,9 +41,3 @@ def test_rhf_zero_virtuals():
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)
-
-
-if __name__ == "__main__":
-    test_rhf()
-    test_rhf_zero_electron()
-    test_rhf_zero_virtuals()
