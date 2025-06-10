@@ -43,52 +43,52 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
         print(f'{"Iteration":>10} {"CI Energy":>20} {"E_casci":>20} {"norm(g)":>20} ')
         while self.iter < self.maxiter:
             Dcore = np.einsum(
-                "pi,qi->pq", self.mo_coeff[:, self.core], self.mo_coeff[:, self.core]
+                "pi,qi->pq", self.C[0][:, self.core_orbitals], self.C[0][:, self.core_orbitals]
             )
             vj, vk = self.mf.get_jk(self.mol, Dcore)
             Ecore = np.einsum(
                 "pi,qi,pq->",
-                self.mo_coeff[:, self.core],
-                self.mo_coeff[:, self.core],
+                self.C[0][:, self.core_orbitals],
+                self.C[0][:, self.core_orbitals],
                 2 * self.hcore + 2 * vj - vk,
             )
             Fcore = np.einsum(
-                "ip,jq,ij->pq", self.mo_coeff, self.mo_coeff, self.hcore + 2 * vj - vk
+                "ip,jq,ij->pq", self.C[0], self.C[0], self.hcore + 2 * vj - vk
             )
             for v in range(self.ncore, self.ncore + self.ncas):
                 for w in range(self.ncore, self.ncore + self.ncas):
-                    Pact = np.outer(self.mo_coeff[:, v], self.mo_coeff[:, w])
+                    Pact = np.outer(self.C[0][:, v], self.C[0][:, w])
                     vj = self.mf.get_j(self.mol, Pact)
                     self.eri_gaaa[:, :, v - self.ncore, w - self.ncore] = np.einsum(
-                        "ip,ju,ij->pu", self.mo_coeff, self.mo_coeff[:, self.act], vj
+                        "ip,ju,ij->pu", self.C[0], self.C[0][:, self.act], vj
                     )
             dm1 = self.method.make_rdm1()
             dm2 = self.method.make_rdm2()
 
             dm1_ao = np.einsum(
                 "it,ju,tu->ij",
-                self.mo_coeff[:, self.act],
-                self.mo_coeff[:, self.act],
+                self.C[0][:, self.act],
+                self.C[0][:, self.act],
                 dm1,
             )
             vj = fock_builder.build_J(dm1_ao)[0]
             # todo: change to coefficient-based K
             vk = fock_builder.build_K_density(dm1_ao)[0]
-            Fact = np.einsum("ip,jq,ij->pq", self.mo_coeff, self.mo_coeff, 2 * vj - vk)
+            Fact = np.einsum("ip,jq,ij->pq", self.C[0], self.C[0], 2 * vj - vk)
             Y = np.einsum("pu,tu->pt", Fcore[:, self.act], dm1)
             Z = np.einsum("puvw,tuvw->pt", self.eri_gaaa, dm2)
 
-            self.orbgrad[self.core, self.virt] = (
-                4 * Fcore[self.core, self.virt] + 2 * Fact[self.core, self.virt]
+            self.orbgrad[self.core_orbitals, self.virt] = (
+                4 * Fcore[self.core_orbitals, self.virt] + 2 * Fact[self.core_orbitals, self.virt]
             )
             self.orbgrad[self.act, self.virt] = (
                 2 * Y[self.virt, :].T + 4 * Z[self.virt, :].T
             )
-            self.orbgrad[self.core, self.act] = (
-                4 * Fcore[self.core, self.act]
-                + 2 * Fact[self.core, self.act]
-                - 2 * Y[self.core, :]
-                - 4 * Z[self.core, :]
+            self.orbgrad[self.core_orbitals, self.act] = (
+                4 * Fcore[self.core_orbitals, self.act]
+                + 2 * Fact[self.core_orbitals, self.act]
+                - 2 * Y[self.core_orbitals, :]
+                - 4 * Z[self.core_orbitals, :]
             )
 
             print(
