@@ -227,9 +227,22 @@ class CI(MOsMixin, SystemMixin):
                 + np.einsum("ijkl,ijkl", expand_rdm2(root_rdms["rdm2_bb"]), A)*0.25
             )
             print(f"CI energy from expanded RDMs: {rdms_energy:.6f} Eh")
+
             assert np.isclose(
                 self.E[root], rdms_energy
             ), f"CI energy {self.E[root]} Eh does not match RDMs energy {rdms_energy} Eh"
+
+            rdms_energy = (
+                self.ints.E
+                + np.einsum("ij,ij", root_rdms["rdm1"], self.ints.H)
+                + np.einsum("ijkl,ijkl", make_sf_rdm2(root_rdms), self.ints.V.swapaxes(1, 2))
+            )
+            print(f"CI energy from spin-free RDMs: {rdms_energy:.6f} Eh")
+
+            assert np.isclose(
+                self.E[root], rdms_energy
+            ), f"CI energy {self.E[root]} Eh does not match RDMs energy {rdms_energy} Eh"
+
 
         self.rdms = rdms
 
