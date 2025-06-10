@@ -56,6 +56,7 @@ void export_ci_sigma_builder_api(nb::module_& m) {
              "alfa"_a)
         .def("rdm2_ab", &CISigmaBuilder::compute_2rdm_ab_same_irrep, "C_left"_a, "C_right"_a)
         .def("rdm1_sf", &CISigmaBuilder::compute_sf_1rdm_same_irrep, "C_left"_a, "C_right"_a)
+        .def("rdm2_sf", &CISigmaBuilder::compute_sf_2rdm_same_irrep, "C_left"_a, "C_right"_a)
         .def("avg_build_time", &CISigmaBuilder::avg_build_time);
 }
 

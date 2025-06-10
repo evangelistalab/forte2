@@ -3,6 +3,7 @@ import pytest
 from numpy import isclose
 from forte2 import *
 
+
 @pytest.mark.skip(reason="no working mcscf solver yet")
 def test_mcscf_1():
     erhf = -1.08928367118043
@@ -26,6 +27,7 @@ def test_mcscf_1():
 
     assert isclose(rhf.E, erhf)
     assert isclose(oo.E[0], emcscf)
+
 
 @pytest.mark.skip(reason="no working mcscf solver yet")
 def test_mcscf_2():
@@ -52,3 +54,6 @@ def test_mcscf_2():
 
     assert isclose(rhf.E, erhf)
     assert isclose(oo.E[0], emcscf)
+
+
+test_mcscf_1()
