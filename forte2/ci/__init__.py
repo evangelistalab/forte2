@@ -1,1 +1,1 @@
-from .ci import CI, CASCI
+from .ci import CI, CASCI, CISD

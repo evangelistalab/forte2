@@ -293,3 +293,41 @@ class CASCI(CI):
         )
         self = super().__call__(method)
         return self
+
+
+class CISD(CI):
+    def __init__(self, charge=0, multiplicity=1, ms=0.0, nroot=1, frozen_core=0):
+        """
+        Initialize a CISD object with the given charge, multiplicity, and number of roots.
+        Args:
+            charge (int, optional): Charge of the system. Defaults to 0.
+            multiplicity (int, optional): Multiplicity of the system. Defaults to 1.
+            ms (float, optional): Spin quantum number. Defaults to 0.0.
+            nroot (int, optional): Number of roots to compute. Defaults to 1.
+        """
+        self.charge = charge
+        self.multiplicity = multiplicity
+        self.ms = ms
+        self.nroot = nroot
+        self.frozen_core = frozen_core
+
+    def __call__(self, method):
+        nel = method.system.Zsum - self.charge
+        # TODO: Lift this restriction (for ROHF, etc.)
+        assert nel % 2 == 0, "Number of electrons must be even."
+        orbitals = [
+            list(range(self.frozen_core, nel // 2)),
+            list(range(nel // 2, method.system.nbf())),
+        ]
+        core_orbitals = list(range(self.frozen_core))
+        nel_corr = nel - 2 * self.frozen_core
+        super().__init__(
+            orbitals=orbitals,
+            core_orbitals=core_orbitals,
+            state=State(nel=nel, multiplicity=self.multiplicity, ms=self.ms),
+            nroot=self.nroot,
+            gas_min=[nel_corr - 2, 0],
+            gas_max=[nel_corr, 2],
+        )
+        self = super().__call__(method)
+        return self
