@@ -49,6 +49,31 @@ class CI(MOsMixin, SystemMixin):
 
     def __call__(self, method):
         self.parent_method = method
+        return self
+
+    def __post_init__(self):
+        # handle multiple orbitals formats
+        if isinstance(self.orbitals, list) and all(
+            isinstance(x, int) for x in self.orbitals
+        ):
+            self.orbitals = [self.orbitals]
+        elif not all(isinstance(x, list) for x in self.orbitals):
+            raise ValueError("Invalid orbitals format")
+
+        self.norb = sum(len(x) for x in self.orbitals)
+        self.solver = None
+
+    def _ci_solver_startup(self):
+        """
+        Initialize the CI solver with the necessary parameters and data structures.
+        If the CI solver is used in an iterative context, this method is only called
+        ocne at the beginning of the iteration."""
+        if not self.parent_method.executed:
+            self.parent_method.run()
+
+        SystemMixin.copy_from_upstream(self, self.parent_method)
+        MOsMixin.copy_from_upstream(self, self.parent_method)
+
         # Generate the integrals with all the orbital spaces flattened
         self.flattened_orbitals = [orb for sublist in self.orbitals for orb in sublist]
 
@@ -91,26 +116,9 @@ class CI(MOsMixin, SystemMixin):
         self.b_det = np.zeros((self.ndet))
         self.sigma_det = np.zeros((self.ndet))
 
-        return self
-
-    def __post_init__(self):
-        # handle multiple orbitals formats
-        if isinstance(self.orbitals, list) and all(
-            isinstance(x, int) for x in self.orbitals
-        ):
-            self.orbitals = [self.orbitals]
-        elif not all(isinstance(x, list) for x in self.orbitals):
-            raise ValueError("Invalid orbitals format")
-
-        self.norb = sum(len(x) for x in self.orbitals)
-        self.solver = None
-
     def run(self):
-        if not self.parent_method.executed:
-            self.parent_method.run()
-
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
+        if not self.executed:
+            self._ci_solver_startup()
 
         print(
             f"\nRunning CI with orbitals: {self.orbitals}, state: {self.state}, nroot: {self.nroot}"
