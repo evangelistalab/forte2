@@ -15,16 +15,20 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
     max_step_size: float = 0.1
 
     def __call__(self, method):
-        if not method.executed:
-            method.run()
-
-        SystemMixin.copy_from_upstream(self, method)
-        MOsMixin.copy_from_upstream(self, method)
         self.parent_method = method
+        return self
+
+    def run(self):
+        # TODO: skip the first CI step in the MCSCF
+        if not self.parent_method.executed:
+            self.parent_method.run()
+
+        SystemMixin.copy_from_upstream(self, self.parent_method)
+        MOsMixin.copy_from_upstream(self, self.parent_method)
 
         # [todo] handle GAS/RHF/ROHF cases
-        self.core_orbitals = method.core_orbitals
-        self.orbitals = method.flattened_orbitals
+        self.core_orbitals = self.parent_method.core_orbitals
+        self.orbitals = self.parent_method.flattened_orbitals
         self.virtual_orbitals = sorted(
             list(
                 set(range(self.system.nbf()))
@@ -33,9 +37,6 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
             )
         )
 
-        return self
-
-    def run(self):
         fock_builder = FockBuilder(self.system)
         Hcore = self.system.ints_hcore()  # hcore in AO basis (even 1e-sf-X2C)
         nbf = self.system.nbf()
@@ -59,24 +60,29 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
             Ccore = self.C[0][:, self.core_orbitals]
             Cact = self.C[0][:, self.active_orbitals]
 
+            # Algorithm 1, line 4
             Ecore, Fcore = self._compute_Fcore(fock_builder, Ccore, Cgen, Hcore)
 
+            # Algorithm 1, line 5
             # TODO: use Eq. (22)?
             eri_gaaa = fock_builder.two_electron_integrals_gen_block(Cgen, *(Cact,) * 3)
 
+            # Algorithm 1, line 6
             # Set integrals in the CI solver
             self.parent_method.ints.E = Ecore + self.system.nuclear_repulsion_energy()
             self.parent_method.ints.H = Fcore[aa].copy()
             self.parent_method.ints.V = eri_gaaa[self.active_orbitals, ...].copy()
-
             # Solve the CI problem
             self.parent_method.run()
             ci_vecs = self.parent_method.evecs
 
-            # Compute the active Fock matrix [Eq. (10)]
+            # Algorithm 1, line 7
             # TODO: generalize to multiple states
             g1_act = self.parent_method.make_rdm1_sf(ci_vecs[:, 0])
+            # [Eq. (5)] has a factor of 0.5
+            g2_act = 0.5 * self.parent_method.make_rdm2_sf(ci_vecs[:, 0])
 
+            # Algorithm 1, line 9
             Fact = self._compute_Fact(fock_builder, g1_act, Cact, Cgen)
 
             # compute the Y intermediate [Algorithm 1, line 10]
@@ -84,8 +90,6 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
             Y_ca = Y[self.core_orbitals]
             Y_aa = Y[self.active_orbitals]
             Y_va = Y[self.virtual_orbitals]
-            # [Eq. (5)] has a factor of 0.5
-            g2_act = 0.5 * self.parent_method.make_rdm2_sf(ci_vecs[:, 0])
             # compute the Z intermediate [Algorithm 1, line 11]
             Z = np.einsum("puvw,tuvw->pt", eri_gaaa, g2_act)
 
@@ -98,6 +102,7 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
             Fact_cv = Fact[cv]
             Fact_ca = Fact[ca]
 
+            # Algorithm 1, lines 13-15
             self.orbgrad[cv] = 4 * Fcore_cv + 2 * Fact_cv
             self.orbgrad[av] = 2 * Y_va.T + 4 * Z_va.T
             self.orbgrad[ca] = 4 * Fcore_ca + 2 * Fact_ca - 2 * Y_ca - 4 * Z_ca
@@ -118,20 +123,23 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
             Fact_vv = np.diag(Fact[vv])
             g1_diag = np.diag(g1_act)
 
+            # Algorithm 1, line 20
             vdiag = 4 * Fcore_vv + 2 * Fact_vv
             cdiag = 4 * Fcore_cc + 2 * Fact_cc
-
             self.orbhess[cv] = vdiag - cdiag[:, None]
 
+            # Algorithm 1, line 21
             av_diag = 2 * np.outer(g1_diag, Fcore_vv) + np.outer(g1_diag, Fact_vv)
             aa_diag = 2 * np.diag(Y_aa) + 4 * np.diag(Z_aa)
             self.orbhess[av] = av_diag - aa_diag[:, None]
 
+            # Algorithm 1, line 22
             ca_diag = 2 * np.outer(Fcore_cc, g1_diag) + np.outer(Fact_cc, g1_diag)
             aa_diag = 4 * Fcore_aa + 2 * Fact_aa - 2 * np.diag(Y_aa) - 4 * np.diag(Z_aa)
             cc_diag = -4 * Fcore_cc - 2 * Fact_cc
             self.orbhess[ca] = ca_diag + aa_diag[None, :] + cc_diag[:, None]
 
+            # Algorithm 1, line 24
             orbrot = np.triu(
                 np.divide(
                     self.orbgrad,
@@ -150,6 +158,7 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
                 -1,
             )
 
+            # Algorithm 1, line 25
             self.C[0] = self.C[0] @ (sp.linalg.expm(orbrot))
             self.iter += 1
 
