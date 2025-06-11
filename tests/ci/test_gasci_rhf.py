@@ -78,23 +78,22 @@ def test_gasci_rhf_4():
     H  0.000000000000  0.783151105291  0.552239257834
     """
 
-    system = System(xyz=xyz, basis="6-31G**", auxiliary_basis="def2-universal-jkfit")
+    system = System(xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit")
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-8, guess_type='hcore')(system)
     ci = CI(
         orbitals=[[0,1,2,3,4], [5,6]],
         state=State(nel=10, multiplicity=1, ms=0.0),
         nroot=1,
-        gas_min=[7,0],
+        gas_min=[6,0],
         gas_max=[10,4],
     )(rhf)
     ci.run()
 
-    assert isclose(rhf.E, -76.01726423763337)
-    assert isclose(ci.E[0], -76.030899030220)
-    # Fails, CI energy does not match RDM energy
+    assert isclose(rhf.E, -76.02146209548764)
+    assert isclose(ci.E[0], -76.030555835340)
 
-@pytest.mark.xfail(reason="Exception: [forte2] Basis Set Exchange does not have data for element Z=8 in basis set cc-pvdz-jkfit!")
+@pytest.mark.xfail(reason="Fails, CI energy does not match RDM energy")
 def test_gasci_rhf_5():
     xyz = f"""
     O  0.000000000000  0.000000000000 -0.069592187400
@@ -102,7 +101,7 @@ def test_gasci_rhf_5():
     H  0.000000000000  0.783151105291  0.552239257834
     """
 
-    system = System(xyz=xyz, basis="6-31G**", auxiliary_basis="cc-pvdz-jkfit")
+    system = System(xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit")
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-8, guess_type='hcore')(system)
     ci = CI(
@@ -114,11 +113,10 @@ def test_gasci_rhf_5():
     )(rhf)
     ci.run()
 
-    assert isclose(rhf.E, -76.01725998416885)
-    assert isclose(ci.E[0], -55.841523397373)
-    # Exception: [forte2] Basis Set Exchange does not have data for element Z=8 in basis set cc-pvdz-jkfit!
+    assert isclose(rhf.E, -76.02146209548764)
+    assert isclose(ci.E[0], -55.818855513012)
 
-@pytest.mark.xfail(reason="CI energy does not match RDM energy")
+@pytest.mark.xfail(reason="uhf energy does not match reference value")
 def test_gasci_rhf_6():
     xyz = f"""
     O  0.000000000000  0.000000000000 -0.069592187400
@@ -126,23 +124,22 @@ def test_gasci_rhf_6():
     H  0.000000000000  0.783151105291  0.552239257834
     """
 
-    system = System(xyz=xyz, basis="6-31G**", auxiliary_basis="def2-universal-jkfit")
+    system = System(xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit")
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-8, guess_type='hcore')(system)
+    rhf = UHF(charge=0, econv=1e-12, dconv=1e-8, guess_type='hcore')(system)
     ci = CI(
         orbitals=[[0], [1,2,3,4,5,6]],
-        state=State(nel=10, multiplicity=1, ms=0.0),
+        state=State(nel=10, multiplicity=3, ms=1.0),
         nroot=1,
         gas_min=[0],
         gas_max=[1],
     )(rhf)
     ci.run()
 
-    assert isclose(rhf.E, -76.01726423763337)
-    assert isclose(ci.E[0], -55.841496017363)
-    # Fails, CI energy does not match RDM energy
+    assert isclose(rhf.E, -75.70155175095266)
+    assert isclose(ci.E[0], -56.129450806753)
 
-@pytest.mark.xfail(reason="CI root 2 does not match reference value")
+@pytest.mark.xfail(reason="CI root 1 does not match reference value")
 def test_gasci_rhf_7():
     xyz = f"""
     O  0.000000000000  0.000000000000 -0.069592187400
@@ -150,7 +147,7 @@ def test_gasci_rhf_7():
     H  0.000000000000  0.783151105291  0.552239257834
     """
 
-    system = System(xyz=xyz, basis="6-31G**", auxiliary_basis="def2-universal-jkfit")
+    system = System(xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit")
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-8, guess_type='hcore')(system)
     ci = CI(
@@ -162,10 +159,9 @@ def test_gasci_rhf_7():
     )(rhf)
     ci.run()
 
-    assert isclose(rhf.E, -76.01726423763337)
-    assert isclose(ci.E[0], -55.840353918103)
-    assert isclose(ci.E[1], -55.767946273823) # fails
-
+    assert isclose(rhf.E, -76.02146209548764)
+    assert isclose(ci.E[0], -55.817934328246)
+    assert isclose(ci.E[1], -55.740177190272)
 
 def test_gasci_rhf_8():
     xyz = f"""
@@ -214,9 +210,8 @@ def test_gasci_rohf_1():
 
     assert isclose(rhf.E, -39.66353334247484)
     assert isclose(ci.E[0], -29.237219037891)
-    # rohf energy does not match
 
-@pytest.mark.xfail(reason="Exception: [forte2] Basis set cc-pcvtz does not contain element 1.")
+@pytest.mark.xfail(reason="rohf energy does not match reference value")
 def test_gasci_rohf_2():
     xyz = f"""
     C           -0.055505285387     0.281253495230     0.333445183956
@@ -226,7 +221,7 @@ def test_gasci_rohf_2():
     H           -0.035109236026    -1.797124531812    -0.544640316685
     """
 
-    system = System(xyz=xyz, basis="cc-pcvtz", auxiliary_basis="def2-universal-jkfit", unit="bohr")
+    system = System(xyz=xyz, basis="cc-pvtz", auxiliary_basis="def2-universal-jkfit", unit="bohr")
 
     rhf = ROHF(charge=1, econv=1e-12, dconv=1e-8, guess_type='hcore')(system)
     ci = CI(
@@ -238,6 +233,5 @@ def test_gasci_rohf_2():
     )(rhf)
     ci.run()
 
-    assert isclose(rhf.E, -39.7798679697753528)
-    assert isclose(ci.E[0], -29.205450125466)
-    # Exception: [forte2] Basis set cc-pcvtz does not contain element 1.
+    assert isclose(rhf.E, -39.77974100479403)
+    assert isclose(ci.E[0], -29.204823485711)
