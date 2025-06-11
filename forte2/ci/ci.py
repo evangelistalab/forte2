@@ -250,8 +250,8 @@ class CI(MOsMixin, SystemMixin):
                 + np.einsum("ij,ij", root_rdms["rdm1"], self.ints.H)
                 + np.einsum(
                     "ijkl,ijkl",
-                    0.5 * root_rdms["rdm2_sf"].swapaxes(1, 2),
-                    self.ints.V.swapaxes(1, 2),
+                    0.5 * root_rdms["rdm2_sf"],
+                    self.ints.V,
                 )
             )
             print(f"CI energy from spin-free RDMs: {rdms_energy:.6f} Eh")

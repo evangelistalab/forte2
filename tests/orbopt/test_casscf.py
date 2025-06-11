@@ -4,7 +4,6 @@ from numpy import isclose
 from forte2 import *
 
 
-@pytest.mark.skip(reason="no working mcscf solver yet")
 def test_mcscf_1():
     erhf = -1.08928367118043
     emcscf = -1.11873740345286
@@ -29,7 +28,6 @@ def test_mcscf_1():
     assert isclose(oo.E[0], emcscf)
 
 
-@pytest.mark.skip(reason="no working mcscf solver yet")
 def test_mcscf_2():
     erhf = -99.9977252002946
     emcscf = -100.043501894947
@@ -54,3 +52,26 @@ def test_mcscf_2():
 
     assert isclose(rhf.E, erhf)
     assert isclose(oo.E[0], emcscf)
+
+
+def test_mcscf_3():
+    erhf = -108.761639873604
+    ecasscf = -108.9800484156
+
+    xyz = f"""
+    N 0.0 0.0 0.0
+    N 0.0 0.0 1.4
+    """
+
+    system = System(xyz=xyz, basis="cc-pVDZ", auxiliary_basis="cc-pVTZ-JKFIT")
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    ci = CI(
+        orbitals=[4, 5, 6, 7, 8, 9],
+        core_orbitals=[0, 1, 2, 3],
+        state=State(nel=14, multiplicity=1, ms=0.0),
+        nroot=1,
+    )(rhf)
+    oo = OrbitalOptimizer()(ci)
+    oo.run()
+    assert isclose(rhf.E, erhf)
+    assert isclose(oo.E[0], ecasscf)
