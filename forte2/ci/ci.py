@@ -48,12 +48,7 @@ class CI(MOsMixin, SystemMixin):
     executed: bool = field(default=False, init=False)
 
     def __call__(self, method):
-        if not method.executed:
-            method.run()
-
-        SystemMixin.copy_from_upstream(self, method)
-        MOsMixin.copy_from_upstream(self, method)
-
+        self.parent_method = method
         # Generate the integrals with all the orbital spaces flattened
         self.flattened_orbitals = [orb for sublist in self.orbitals for orb in sublist]
 
@@ -111,6 +106,12 @@ class CI(MOsMixin, SystemMixin):
         self.solver = None
 
     def run(self):
+        if not self.parent_method.executed:
+            self.parent_method.run()
+
+        SystemMixin.copy_from_upstream(self, self.parent_method)
+        MOsMixin.copy_from_upstream(self, self.parent_method)
+
         print(
             f"\nRunning CI with orbitals: {self.orbitals}, state: {self.state}, nroot: {self.nroot}"
         )
