@@ -259,3 +259,37 @@ class CI(MOsMixin, SystemMixin):
                 guess_mat[d, i] = guess[j]
 
         self.solver.add_guesses(guess_mat)
+
+
+class CASCI(CI):
+    def __init__(self, ncasorb, ncaselec, charge=0, multiplicity=1, ms=0.0, nroot=1):
+        """
+        Initialize a CASCI object with the given CAS orbitals and number of electrons.
+
+        Args:
+            norb (int): Number of orbitals in the CAS.
+            nelec (int): Number of electrons in the CAS.
+            charge (int, optional): Charge of the system. Defaults to 0.
+        """
+        self.ncasorb = ncasorb
+        self.ncaselec = ncaselec
+        self.charge = charge
+        self.multiplicity = multiplicity
+        self.ms = ms
+        self.nroot = nroot
+
+    def __call__(self, method):
+        nel = method.system.Zsum - self.charge
+        nelec_core = nel - self.ncaselec
+        assert nelec_core % 2 == 0, "Number of core electrons must be even."
+        ncore = nelec_core // 2
+        core_orbitals = list(range(ncore))
+        actv_orbitals = list(range(ncore, ncore + self.ncasorb))
+        super().__init__(
+            orbitals=actv_orbitals,
+            core_orbitals=core_orbitals,
+            state=State(nel=nel, multiplicity=self.multiplicity, ms=self.ms),
+            nroot=self.nroot,
+        )
+        self = super().__call__(method)
+        return self
