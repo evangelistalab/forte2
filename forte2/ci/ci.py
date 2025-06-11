@@ -45,12 +45,7 @@ class CI(MOsMixin, SystemMixin):
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
 
     def __call__(self, method):
-        if not method.executed:
-            method.run()
-
-        SystemMixin.copy_from_upstream(self, method)
-        MOsMixin.copy_from_upstream(self, method)
-
+        self.parent_method = method
         return self
 
     def __post_init__(self):
@@ -66,6 +61,12 @@ class CI(MOsMixin, SystemMixin):
         self.solver = None
 
     def run(self):
+        if not self.parent_method.executed:
+            self.parent_method.run()
+
+        SystemMixin.copy_from_upstream(self, self.parent_method)
+        MOsMixin.copy_from_upstream(self, self.parent_method)
+
         print(
             f"\nRunning CI with orbitals: {self.orbitals}, state: {self.state}, nroot: {self.nroot}"
         )
