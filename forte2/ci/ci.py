@@ -262,6 +262,15 @@ class CI(MOsMixin, SystemMixin):
 
         return self
 
+    def _test_compact_rdms(self):
+        pass
+
+    def _test_full_rdms(self):
+        pass
+
+    def _test_sf_rdms(self):
+        pass
+
     def _build_guess_vectors(self, Hdiag):
         """
         Build the guess vectors for the CI calculation.
@@ -300,59 +309,54 @@ class CI(MOsMixin, SystemMixin):
 
         self.solver.add_guesses(guess_mat)
 
+    def make_rdm1_sf(self, ci_vec):
+        ci_vec_det = np.zeros((self.ndet))
+        self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
+        return self.ci_sigma_builder.rdm1_sf(ci_vec_det, ci_vec_det)
 
-def expand_rdm2(rdm2):
-    """
-    Expand the RDM2 to a full matrix.
+    def make_tdm1_sf(self, ci_l, ci_r):
+        ci_l_det = np.zeros((self.ndet))
+        ci_r_det = np.zeros((self.ndet))
+        self.spin_adapter.csf_C_to_det_C(ci_l, ci_l_det)
+        self.spin_adapter.csf_C_to_det_C(ci_r, ci_r_det)
+        return self.ci_sigma_builder.rdm1_sf(ci_l_det, ci_r_det)
 
-    Args:
-        rdm2 (np.ndarray): The 2-RDM in a compact, lower triangular form (i>j, k>l)
-    Returns:
-        np.ndarray: The expanded 2-RDM in a full 4D tensor (i, j, k, l)
-    """
-    n = int((1 + np.sqrt(1 + 8 * rdm2.shape[0])) / 2)
-    full_rdm2 = np.zeros((n, n, n, n))
+    def make_rdm2_sd(self, ci_vec, full=True):
+        ci_vec_det = np.zeros((self.ndet))
+        self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
+        aa_build = (
+            self.ci_sigma_builder.rdm2_aa_full
+            if full
+            else self.ci_sigma_builder.rdm2_aa
+        )
+        aa = aa_build(ci_vec_det, ci_vec_det, True)
+        bb = aa_build(ci_vec_det, ci_vec_det, False)
+        ab = self.ci_sigma_builder.rdm2_ab(ci_vec_det, ci_vec_det)
+        return aa, ab, bb
 
-    # Create arrays of lower triangular indices, excluding diagonal
-    i_vals, j_vals = np.tril_indices(n, k=-1)
+    def make_tdm2_sd(self, ci_l, ci_r, full=True):
+        ci_l_det = np.zeros((self.ndet))
+        ci_r_det = np.zeros((self.ndet))
+        self.spin_adapter.csf_C_to_det_C(ci_l, ci_l_det)
+        self.spin_adapter.csf_C_to_det_C(ci_r, ci_r_det)
+        aa_build = (
+            self.ci_sigma_builder.rdm2_aa_full
+            if full
+            else self.ci_sigma_builder.rdm2_aa
+        )
+        aa = aa_build(ci_l_det, ci_r_det, True)
+        bb = aa_build(ci_l_det, ci_r_det, False)
+        ab = self.ci_sigma_builder.rdm2_ab(ci_l_det, ci_r_det)
+        return aa, ab, bb
 
-    i_idx = i_vals[:, None]
-    j_idx = j_vals[:, None]
-    k_idx = i_vals[None, :]
-    l_idx = j_vals[None, :]
+    def make_rdm2_sf(self, ci_vec):
+        ci_vec_det = np.zeros((self.ndet))
+        self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
+        return self.ci_sigma_builder.rdm2_sf(ci_vec_det, ci_vec_det)
 
-    # Assign values using broadcasting
-    # this is eqvivalent to
-    # for i in range(n):
-    #     for j in range(i):
-    #         ij = i * (i - 1) // 2 + j
-    #         for k in range(n):
-    #             for l in range(k):
-    #                 kl = k * (k - 1) // 2 + l
-    #                 element = rdm2[ij, kl]
-    #                 full_rdm2[i, j, k, l] = element
-    #                 full_rdm2[j, i, k, l] = -element
-    #                 full_rdm2[i, j, l, k] = -element
-    #                 full_rdm2[j, i, l, k] = element
-
-    full_rdm2[i_idx, j_idx, k_idx, l_idx] = rdm2  # +element
-    full_rdm2[j_idx, i_idx, k_idx, l_idx] = -rdm2  # -element
-    full_rdm2[i_idx, j_idx, l_idx, k_idx] = -rdm2  # -element
-    full_rdm2[j_idx, i_idx, l_idx, k_idx] = rdm2  # +element
-
-    return full_rdm2
-
-
-def make_sf_rdm2(rdms):
-    """
-    Returns the spin-free 2-RDM defined as
-    \Gamma_{pqrs} = 0.5 * \sum_{IJ} c_I c_J <\Phi_I| E_{pq} E_{rs} - \delta_{qr} E_{ps} | \Phi_J>,
-    which in spin-dependent rdms is given by
-    \Gamma_{pqrs} = 0.5 * (D^{aa}+ D^{bb} + D^{ab} + D^{ba})_{prsq} <- note the transpose here
-                  = 0.5 * (D^{aa}+ D^{bb} + D^{ab} + D^{ab}.swapaxes(1,0,3,2))_{prsq}
-    """
-    dm2_aa = expand_rdm2(rdms["rdm2_aa"])
-    dm2_ab = rdms["rdm2_ab"]
-    dm2_bb = expand_rdm2(rdms["rdm2_bb"])
-    dm2_sf = dm2_aa + dm2_ab + dm2_ab.transpose(1, 0, 3, 2) + dm2_bb
-    return 0.5 * dm2_sf.swapaxes(1, 2)
+    def make_tdm2_sf(self, ci_l, ci_r):
+        ci_l_det = np.zeros((self.ndet))
+        ci_r_det = np.zeros((self.ndet))
+        self.spin_adapter.csf_C_to_det_C(ci_l, ci_l_det)
+        self.spin_adapter.csf_C_to_det_C(ci_r, ci_r_det)
+        return self.ci_sigma_builder.rdm2_sf(ci_l_det, ci_r_det)
