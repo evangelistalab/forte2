@@ -24,57 +24,65 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
 
         # [todo] handle GAS/RHF/ROHF cases
         self.core_orbitals = method.core_orbitals
-        self.orbitals = method.orbitals
-        # self.virtual_orbitals = sorted(
-        #     list(
-        #         set(range(self.system.nbf()))
-        #         - set(self.core_orbitals)
-        #         - set(self.orbitals)
-        #     )
-        # )
+        self.orbitals = method.flattened_orbitals
+        print(self.orbitals)
+        self.virtual_orbitals = sorted(
+            list(
+                set(range(self.system.nbf()))
+                - set(self.core_orbitals)
+                - set(self.orbitals)
+            )
+        )
+        print(self.virtual_orbitals)
 
         return self
 
     def run(self):
         fock_builder = FockBuilder(self.system)
         h = self.system.ints_hcore()  # hcore in AO basis (even 1e-sf-X2C)
-        Cgen = self.C[0]
         self.active_orbitals = np.array(self.orbitals).flatten()
-        Cact = self.C[0][:, self.active_orbitals]
         # gaaa = fock_builder.two_electron_integrals_gen_block(
         #     c_gen, c_act, c_act, c_act
         # ).swapaxes(1, 2)
         print(f'{"Iteration":>10} {"CI Energy":>20} {"E_casci":>20} {"norm(g)":>20} ')
         self.iter = 0
         while self.iter < self.maxiter:
+            Cgen = self.C[0]
             Ccore = self.C[0][:, self.core_orbitals]
+            Cact = self.C[0][:, self.active_orbitals]
 
             # Compute the core Fock matrix [Eq. (9)]
             Jcore, Kcore = fock_builder.build_JK([Ccore])
             Fcore = np.einsum(
                 "mp,mn,nq->pq",
-                Ccore.conj(),
+                Cgen.conj(),
                 h + 2 * Jcore[0] - Kcore[0],  # Fcore
-                Ccore,
+                Cgen,
                 optimize=True,
             )
             Ecore = np.einsum(
                 "pi,qi,pq->", Ccore.conj(), Ccore, 2 * h + 2 * Jcore[0] - Kcore[0]
             )
-            eri_gaaa = NotImplemented
+
+            # TODO: use Eq. (22)?
+            eri_gaaa = fock_builder.two_electron_integrals_gen_block(
+                Cgen, Cact, Cact, Cact
+            ).swapaxes(1, 2)
 
             self.parent_method.ints.E = Ecore
             self.parent_method.ints.H = Fcore[self.active_orbitals, :][
                 :, self.active_orbitals
             ]
-            self.parent_method.ints.V = eri_gaaa[self.active_orbitals, ...]
+            self.parent_method.ints.V = eri_gaaa[self.active_orbitals, ...].swapaxes(
+                1, 2
+            )
             self.parent_method.run()
-            ci_vecs = self.parent_methd.evecs
+            ci_vecs = self.parent_method.evecs
 
             # Compute the active Fock matrix [Eq. (10)]
             # TODO: generalize to multiple states
-            g1_act = self.parent_method.make_rdm1(ci_vecs[:, 0])
-            
+            g1_act = self.parent_method.make_rdm1_sf(ci_vecs[:, 0])
+
             # compute the active Fock matrix [Algorithm 1, line 9]
             # gamma_act (nmo * nmo) is defined in [Eq. (19)]
             # as (gamma_act)_pq = C_pt C_qu g1_tu
@@ -96,44 +104,14 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
             # compute the Y intermediate [Algorithm 1, line 10]
             Y = np.einsum("pu,tu->pt", Fcore[:, self.active_orbitals], g1_act)
 
-            # [Eq. (5)] has a factor of 0.5, and differ from our definition of rdm2_sf 
+            # [Eq. (5)] has a factor of 0.5, and differ from our definition of rdm2_sf
             # by a transposition of the middle two indices
             g2_act = 0.5 * self.parent_method.make_rdm2_sf(ci_vecs[:, 0]).swapaxes(1, 2)
             # compute the Z intermediate [Algorithm 1, line 11]
-            Z = np.einsum("puvw,tuvw->pt", self.eri_gaaa, g2_act)
+            Z = np.einsum("puvw,tuvw->pt", eri_gaaa, g2_act)
+
             ### PROGRESS SO FAR ###
-
-
-            vj, vk = self.mf.get_jk(self.mol, Dcore)
-            Ecore = np.einsum(
-                "pi,qi,pq->",
-                self.C[0][:, self.core_orbitals],
-                self.C[0][:, self.core_orbitals],
-                2 * self.hcore + 2 * vj - vk,
-            )
-            Fcore = np.einsum(
-                "ip,jq,ij->pq", self.C[0], self.C[0], self.hcore + 2 * vj - vk
-            )
-            for v in range(self.ncore, self.ncore + self.ncas):
-                for w in range(self.ncore, self.ncore + self.ncas):
-                    Pact = np.outer(self.C[0][:, v], self.C[0][:, w])
-                    vj = self.mf.get_j(self.mol, Pact)
-                    self.eri_gaaa[:, :, v - self.ncore, w - self.ncore] = np.einsum(
-                        "ip,ju,ij->pu", self.C[0], self.C[0][:, self.act], vj
-                    )
-            dm1 = self.method.make_rdm1()
-            dm2 = self.method.make_rdm2()
-
-            dm1_ao = np.einsum(
-                "it,ju,tu->ij",
-                self.C[0][:, self.act],
-                self.C[0][:, self.act],
-                dm1,
-            )
-            vj = fock_builder.build_J(dm1_ao)[0]
-            # todo: change to coefficient-based K
-            vk = fock_builder.build_K_density(dm1_ao)[0]
-            Fact = np.einsum("ip,jq,ij->pq", self.C[0], self.C[0], 2 * vj - vk)
+            return
 
             self.orbgrad[self.core_orbitals, self.virt] = (
                 4 * Fcore[self.core_orbitals, self.virt]
