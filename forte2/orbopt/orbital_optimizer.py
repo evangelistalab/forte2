@@ -20,8 +20,6 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
 
         SystemMixin.copy_from_upstream(self, method)
         MOsMixin.copy_from_upstream(self, method)
-        # assert hasattr(method, "make_rdm1"), "Method must have a make_rdm1 method"
-        # assert hasattr(method, "make_rdm2"), "Method must have a make_rdm2 method"
         self.parent_method = method
 
         # [todo] handle GAS/RHF/ROHF cases
@@ -60,14 +58,33 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
                 Ccore,
                 optimize=True,
             )
+            Ecore = np.einsum(
+                "pi,qi,pq->", Ccore.conj(), Ccore, 2 * h + 2 * Jcore[0] - Kcore[0]
+            )
+            eri_gaaa = NotImplemented
+
+            self.parent_method.ints.E = Ecore
+            self.parent_method.ints.H = Fcore[self.active_orbitals, :][
+                :, self.active_orbitals
+            ]
+            self.parent_method.ints.V = eri_gaaa[self.active_orbitals, ...]
+            self.parent_method.run()
+            ci_vecs = self.parent_methd.evecs
 
             # Compute the active Fock matrix [Eq. (10)]
             # TODO: generalize to multiple states
-            g1_act = self.parent_method.rdms[0]["rdm1"]
+            g1_act = self.parent_method.make_rdm1(ci_vecs[:, 0])
+            
+            # compute the active Fock matrix [Algorithm 1, line 9]
+            # gamma_act (nmo * nmo) is defined in [Eq. (19)]
+            # as (gamma_act)_pq = C_pt C_qu g1_tu
+            # we decompose g1 and contract it into the coefficients
+            # so more efficient coefficient-based J-builder can be used
             n, L = np.linalg.eigh(g1_act)
             Cp = Cact @ L @ np.diag(np.sqrt(n))
             Jact, Kact = fock_builder.build_JK([Cp])
 
+            # [Eq. (20)]
             Fact = np.einsum(
                 "mp,mn,nq->pq",
                 Cact.conj(),
@@ -79,7 +96,13 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
             # compute the Y intermediate [Algorithm 1, line 10]
             Y = np.einsum("pu,tu->pt", Fcore[:, self.active_orbitals], g1_act)
 
-            Z = np.einsum("puvw,tuvw->pt", self.eri_gaaa, dm2)
+            # [Eq. (5)] has a factor of 0.5, and differ from our definition of rdm2_sf 
+            # by a transposition of the middle two indices
+            g2_act = 0.5 * self.parent_method.make_rdm2_sf(ci_vecs[:, 0]).swapaxes(1, 2)
+            # compute the Z intermediate [Algorithm 1, line 11]
+            Z = np.einsum("puvw,tuvw->pt", self.eri_gaaa, g2_act)
+            ### PROGRESS SO FAR ###
+
 
             vj, vk = self.mf.get_jk(self.mol, Dcore)
             Ecore = np.einsum(
