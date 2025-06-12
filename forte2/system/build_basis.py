@@ -21,20 +21,24 @@ def get_atom_basis(basis_per_atom: dict) -> dict:
     """
 
     # invert the basis_per_atom dictionary to get a list of atoms per basis set
+    # E.g. {1:"cc-pvdz", 2:"cc-pvdz", 8:"sto-6g"} -> {"cc-pvdz":[1, 2], "sto-6g":[8]}
     atoms_per_basis = {}
     for atomic_number, basis_name in basis_per_atom.items():
         if basis_name not in atoms_per_basis:
             atoms_per_basis[basis_name] = []
         atoms_per_basis[basis_name].append(atomic_number)
 
+    # stores the basis set data for each atom
     atom_basis = {}
     for basis_name in atoms_per_basis.keys():
+        # check if this basis is locally available
         if resources.is_resource("forte2.data.basis", f"{basis_name}.json"):
             with resources.files("forte2.data.basis").joinpath(
                 f"{basis_name}.json"
             ).open("r") as f:
                 bfile = json.load(f)
                 for atomic_number in atoms_per_basis[basis_name]:
+                    # check if the atomic number is in the basis set
                     assert (
                         str(atomic_number) in bfile["elements"]
                     ), f"Element {atomic_number} not found in basis set {basis_name}."
@@ -72,11 +76,16 @@ def parse_custom_basis_assignment(unique_atoms: set, basis_assignment: dict) -> 
     Returns:
         dict: A dictionary mapping all unique atomic numbers to their assigned basis set names.
     """
+
     default_basis = basis_assignment.pop("default", None)
+
+    # convert atom symbols to atomic numbers
     basis_assignment = {
         forte2.ATOM_SYMBOL_TO_Z[atom.upper()]: basis
         for atom, basis in basis_assignment.items()
     }
+
+    # ensure all unique atoms in the system have a basis set assigned
     provided_atoms = set([atom_number for atom_number in basis_assignment.keys()])
     if not provided_atoms.issuperset(unique_atoms) and default_basis is None:
         raise Exception(
@@ -84,6 +93,8 @@ def parse_custom_basis_assignment(unique_atoms: set, basis_assignment: dict) -> 
             f"Provided: {list(provided_atoms)}, Required: {list(unique_atoms)}."
             "Please provide them or supply a default basis set."
         )
+
+    # dictionary for all unique atoms with their basis set assignments
     basis_per_atom = {
         atom_number: basis_assignment.get(atom_number, default_basis)
         for atom_number in unique_atoms
@@ -99,9 +110,14 @@ def build_basis(
 ) -> forte2.ints.Basis:
     """
     Assemble the basis set from JSON data or Basis Set Exchange, depending on availability.
-    Caches BSE lookups per atomic number to avoid repeated queries.
     Args:
         basis_assignment (str | dict): The basis set name or a dictionary with per-atom basis assignments.
+            The dictionary should be in the format:
+            {
+                "H": "cc-pvtz",
+                "O": "cc-pvqz",
+                "default": "cc-pvdz"
+            }, where "default" is used for atoms not explicitly listed.
         atoms (list[tuple[int, list[float]]]): A list of tuples containing atomic numbers and coordinates.
     Returns:
         forte2.ints.Basis: The basis set.
@@ -111,6 +127,8 @@ def build_basis(
     basis = forte2.ints.Basis()
     prefix = "decon-" if decontract else ""
     unique_atoms = set([atomic_number for atomic_number, _ in atoms])
+
+    # get the mapping of atomic numbers to basis set names
     if isinstance(basis_assignment, str):
         basis_name = basis_assignment
         basis_per_atom = {atom: basis_name for atom in unique_atoms}
@@ -124,14 +142,15 @@ def build_basis(
         )
 
     basis.set_name(prefix + basis_name)
+    # get the basis set data for each atom
     atom_basis = get_atom_basis(basis_per_atom)
 
-    for atomic_number, xyz in atoms:
-        if decontract:
+    if decontract:
+        # the decontracted is simply a double loop over l and alpha for each shell, with unit coefficients
+        for atomic_number, xyz in atoms:
             for shell in atom_basis[atomic_number]:
                 angular_momentum = list(map(int, shell["angular_momentum"]))
                 exponents = list(map(float, shell["exponents"]))
-
                 for l in angular_momentum:
                     for alpha in exponents:
                         basis.add(
@@ -143,7 +162,8 @@ def build_basis(
                                 embed_normalization_into_coefficients=embed_normalization_into_coefficients,
                             )
                         )
-        else:
+    else:
+        for atomic_number, xyz in atoms:
             for shell in atom_basis[atomic_number]:
                 angular_momentum = list(map(int, shell["angular_momentum"]))
                 exponents = list(map(float, shell["exponents"]))

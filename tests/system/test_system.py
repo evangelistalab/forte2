@@ -174,8 +174,8 @@ def test_custom_basis_rhf():
     system = forte2.System(
         xyz=xyz,
         basis={"C": "cc-pvdz", "O": "sto-6g"},
-        auxiliary_basis="cc-pVTZ-JKFIT",
+        auxiliary_basis={"C": "cc-pVQZ-JKFIT", "O": "def2-universal-JKFIT"},
     )
     scf = forte2.scf.RHF(charge=0)(system)
     scf.run()
-    assert scf.E == pytest.approx(-112.484127914220, rel=1e-8, abs=1e-8)
+    assert scf.E == pytest.approx(-112.484140615262, rel=1e-8, abs=1e-8)
