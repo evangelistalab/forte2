@@ -26,15 +26,12 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
         SystemMixin.copy_from_upstream(self, self.parent_method)
         MOsMixin.copy_from_upstream(self, self.parent_method)
 
-        nbf = self.system.nbf()
         Hcore = self.system.ints_hcore()  # hcore in AO basis (even 1e-sf-X2C)
         fock_builder = FockBuilder(self.system)
 
         self._make_spaces_contiguous()
         self.nrr = self._get_nonredundant_rotations()
 
-        self.orbgrad = np.zeros((nbf, nbf))
-        self.orbhess = np.zeros((nbf, nbf))
         print(f'{"Iteration":>10} {"CI Energy":>20} {"norm(g)":>20} ')
         self.iter = 0
         self.E = np.zeros(self.parent_method.nroot)
@@ -64,18 +61,18 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
             # compute the Y and Z intermediates [Algorithm 1, line 10-11]
             Y, Z = self._compute_YZ_intermediates(Fcore, eri_gaaa, g1_act, g2_act)
 
-            self._compute_orbgrad(Fcore, Fact, Y, Z)
+            orbgrad = self._compute_orbgrad(Fcore, Fact, Y, Z)
 
             print(
-                f"{self.iter:>10d} {self.E[0]:>20.10f} {abs(np.linalg.norm(self.orbgrad, np.inf)):>20.10f}"
+                f"{self.iter:>10d} {self.E[0]:>20.10f} {abs(np.linalg.norm(orbgrad, np.inf)):>20.10f}"
             )
 
-            if abs(np.linalg.norm(self.orbgrad, np.inf)) < self.gradtol:
+            if abs(np.linalg.norm(orbgrad, np.inf)) < self.gradtol:
                 break
 
-            self._compute_orbhess(Fcore, Fact, g1_act, Y, Z)
+            orbhess = self._compute_orbhess(Fcore, Fact, g1_act, Y, Z)
 
-            self._rotate_orbitals(self.orbgrad, self.orbhess, self.nrr)
+            self.C[0] = self._rotate_orbitals(self.C[0], orbgrad, orbhess, self.nrr)
             self.iter += 1
 
     def _compute_Fcore(self, fock_builder, Ccore, Cgen, Hcore):
@@ -159,6 +156,8 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
         return Y, Z
 
     def _compute_orbgrad(self, Fcore, Fact, Y, Z):
+        orbgrad = np.zeros_like(Fcore)
+
         Fcore_cv = Fcore[self.core, self.virt]
         Fcore_ca = Fcore[self.core, self.actv]
         Fact_cv = Fact[self.core, self.virt]
@@ -170,13 +169,15 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
         Z_ca = Z[self.core, :]
 
         # Algorithm 1, lines 13-15
-        self.orbgrad[self.core, self.virt] = 4 * Fcore_cv + 2 * Fact_cv
-        self.orbgrad[self.actv, self.virt] = 2 * Y_va.T + 4 * Z_va.T
-        self.orbgrad[self.core, self.actv] = (
-            4 * Fcore_ca + 2 * Fact_ca - 2 * Y_ca - 4 * Z_ca
-        )
+        orbgrad[self.core, self.virt] = 4 * Fcore_cv + 2 * Fact_cv
+        orbgrad[self.actv, self.virt] = 2 * Y_va.T + 4 * Z_va.T
+        orbgrad[self.core, self.actv] = 4 * Fcore_ca + 2 * Fact_ca - 2 * Y_ca - 4 * Z_ca
+
+        return orbgrad
 
     def _compute_orbhess(self, Fcore, Fact, g1_act, Y, Z):
+        orbhess = np.zeros_like(Fcore)
+
         Fcore_cc = np.diag(Fcore[self.core, self.core])
         Fcore_aa = np.diag(Fcore[self.actv, self.actv])
         Fcore_vv = np.diag(Fcore[self.virt, self.virt])
@@ -190,22 +191,23 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
         # Algorithm 1, line 20
         vdiag = 4 * Fcore_vv + 2 * Fact_vv
         cdiag = 4 * Fcore_cc + 2 * Fact_cc
-        self.orbhess[self.core, self.virt] = vdiag - cdiag[:, None]
+        orbhess[self.core, self.virt] = vdiag - cdiag[:, None]
 
         # Algorithm 1, line 21
         av_diag = 2 * np.outer(g1_diag, Fcore_vv) + np.outer(g1_diag, Fact_vv)
         aa_diag = 2 * Y_aa + 4 * Z_aa
-        self.orbhess[self.actv, self.virt] = av_diag - aa_diag[:, None]
+        orbhess[self.actv, self.virt] = av_diag - aa_diag[:, None]
 
         # Algorithm 1, line 22
         ca_diag = 2 * np.outer(Fcore_cc, g1_diag) + np.outer(Fact_cc, g1_diag)
         aa_diag = 4 * Fcore_aa + 2 * Fact_aa - 2 * Y_aa - 4 * Z_aa
         cc_diag = -4 * Fcore_cc - 2 * Fact_cc
-        self.orbhess[self.core, self.actv] = (
-            ca_diag + aa_diag[None, :] + cc_diag[:, None]
-        )
+        orbhess[self.core, self.actv] = ca_diag + aa_diag[None, :] + cc_diag[:, None]
 
-    def _rotate_orbitals(self, orbgrad, orbhess, nrr):
+        return orbhess
+
+    @staticmethod
+    def _rotate_orbitals(C, orbgrad, orbhess, nrr):
         # Algorithm 1, line 24
         update = np.divide(
             orbgrad,
@@ -216,7 +218,7 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
         orbrot = np.triu(update, 1) - np.tril(update.T, -1)
 
         # Algorithm 1, line 25
-        self.C[0] = self.C[0] @ (sp.linalg.expm(orbrot))
+        return C @ (sp.linalg.expm(orbrot))
 
     def _get_nonredundant_rotations(self):
         nrr = np.zeros((self.system.nbf(), self.system.nbf()), dtype=bool)
