@@ -144,3 +144,38 @@ def test_center_of_mass():
     system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="bohr")
     com = system.center_of_mass()
     assert com == pytest.approx([0.0, 0.0, 0.0], abs=1e-10)
+
+
+def test_custom_basis_assignment():
+    # Test for custom basis assignment
+    xyz = """
+    H  1  1  1
+    P  1  1 -1
+    V  1 -1  1
+    Mn  1 -1 -1
+    Mn -1  1  1
+    V -1  1 -1
+    P -1 -1  1
+    H -1 -1 -1 
+    """
+    system = forte2.System(
+        xyz=xyz,
+        basis={"H": "cc-pvdz", "P": "ano-pv5z", "default": "sap_helfem_large"},
+        unit="bohr",
+    )
+    assert system.nbf() == 204
+
+
+def test_custom_basis_rhf():
+    xyz = """
+    C 0 0 0
+    O 0 0 1.2
+    """
+    system = forte2.System(
+        xyz=xyz,
+        basis={"C": "cc-pvdz", "O": "sto-6g"},
+        auxiliary_basis="cc-pVTZ-JKFIT",
+    )
+    scf = forte2.scf.RHF(charge=0)(system)
+    scf.run()
+    assert scf.E == pytest.approx(-112.484127914220, rel=1e-8, abs=1e-8)

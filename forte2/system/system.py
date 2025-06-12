@@ -15,7 +15,7 @@ from copy import deepcopy
 @dataclass
 class System:
     xyz: str
-    basis: str
+    basis: str | dict
     auxiliary_basis: str = None
     atoms: list[tuple[float, tuple[float, float, float]]] = None
     minao_basis: str = None
