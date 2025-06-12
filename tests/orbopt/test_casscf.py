@@ -75,3 +75,40 @@ def test_mcscf_3():
     oo.run()
     assert isclose(rhf.E, erhf)
     assert isclose(oo.E[0], ecasscf)
+
+
+def test_mcscf_noncontiguous_spaces():
+    # The results of this test should be strictly identical to test_mcscf_3
+    import numpy as np
+
+    erhf = -108.761639873604
+    eci = -108.916505576963
+    ecasscf = -108.9800484156
+
+    xyz = f"""
+    N 0.0 0.0 0.0
+    N 0.0 0.0 1.4
+    """
+
+    system = System(xyz=xyz, basis="cc-pVDZ", auxiliary_basis="cc-pVTZ-JKFIT")
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf.run()
+    assert isclose(rhf.E, erhf)
+
+    # swap orbitals to make them non-contiguous
+    core = [0, 1, 3, 6]
+    actv = [2, 4, 5, 7, 8, 11]
+    virt = sorted(set(range(system.nbf())) - set(core + actv))
+    rhf.C[0][:, core + actv + virt] = rhf.C[0]
+    ci = CI(
+        orbitals=actv,
+        core_orbitals=core,
+        state=State(nel=14, multiplicity=1, ms=0.0),
+        nroot=1,
+    )(rhf)
+    ci.run()
+    assert isclose(ci.E[0], eci)
+
+    oo = OrbitalOptimizer()(ci)
+    oo.run()
+    assert isclose(oo.E[0], ecasscf)

@@ -143,9 +143,9 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
         # [todo] handle GAS/RHF/ROHF cases
         core = self.parent_method.core_orbitals
         actv = self.parent_method.flattened_orbitals
-        virt = list(set(range(self.system.nbf())) - set(core) - set(actv))
-        argssort = np.argsort(core + actv + virt)
-        self.C[0] = self.C[0][:, argssort].copy()
+        virt = sorted(list(set(range(self.system.nbf())) - set(core) - set(actv)))
+        argsort = np.argsort(core + actv + virt)
+        self.C[0][:, argsort] = self.C[0].copy()
         self.core = slice(0, len(core))
         self.actv = slice(len(core), len(core) + len(actv))
         self.virt = slice(len(core) + len(actv), None)
