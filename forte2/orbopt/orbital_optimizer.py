@@ -31,27 +31,13 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
         fock_builder = FockBuilder(self.system)
 
         self._make_spaces_contiguous()
+        self.nrr = self._get_nonredundant_rotations()
 
         self.orbgrad = np.zeros((nbf, nbf))
         self.orbhess = np.zeros((nbf, nbf))
         print(f'{"Iteration":>10} {"CI Energy":>20} {"norm(g)":>20} ')
         self.iter = 0
         self.E = np.zeros(self.parent_method.nroot)
-
-        # # these slicers ensure that no copies will be made
-        # # inter-space
-        # cv = np.ix_(self.core_orbitals, self.virtual_orbitals)
-        # ca = np.ix_(self.core_orbitals, self.active_orbitals)
-        # av = np.ix_(self.active_orbitals, self.virtual_orbitals)
-        # # intra-space
-        # cc = np.ix_(self.core_orbitals, self.core_orbitals)
-        # aa = np.ix_(self.active_orbitals, self.active_orbitals)
-        # vv = np.ix_(self.virtual_orbitals, self.virtual_orbitals)
-
-        # nonredundant_rotations = np.zeros((nbf, nbf), dtype=bool)
-        # nonredundant_rotations[cv] = True
-        # nonredundant_rotations[ca] = True
-        # nonredundant_rotations[av] = True
 
         while self.iter < self.maxiter:
             Cgen = self.C[0]
@@ -89,7 +75,7 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
 
             self._compute_orbhess(Fcore, Fact, g1_act, Y, Z)
 
-            self._rotate_orbitals(self.orbgrad, self.orbhess)
+            self._rotate_orbitals(self.orbgrad, self.orbhess, self.nrr)
             self.iter += 1
 
     def _compute_Fcore(self, fock_builder, Ccore, Cgen, Hcore):
@@ -219,15 +205,27 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
             ca_diag + aa_diag[None, :] + cc_diag[:, None]
         )
 
-    def _rotate_orbitals(self, orbgrad, orbhess):
+    def _rotate_orbitals(self, orbgrad, orbhess, nrr):
         # Algorithm 1, line 24
         update = np.divide(
             orbgrad,
             orbhess,
             out=np.zeros_like(orbgrad),
-            where=(~np.isclose(orbhess, 0)),
+            where=(~np.isclose(orbhess, 0)) & nrr,
         )
         orbrot = np.triu(update, 1) - np.tril(update.T, -1)
 
         # Algorithm 1, line 25
         self.C[0] = self.C[0] @ (sp.linalg.expm(orbrot))
+
+    def _get_nonredundant_rotations(self):
+        nrr = np.zeros((self.system.nbf(), self.system.nbf()), dtype=bool)
+
+        # TODO: handle GAS/RHF/ROHF cases
+        nrr[self.core, self.virt] = True
+        nrr[self.actv, self.virt] = True
+        nrr[self.core, self.actv] = True
+        # make sure the rotations are symmetric
+        nrr = nrr | nrr.T
+
+        return nrr
