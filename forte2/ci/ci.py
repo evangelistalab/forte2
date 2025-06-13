@@ -47,6 +47,9 @@ class CI(MOsMixin, SystemMixin):
     ## Options that control the CI calculation
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
 
+    # Flag for whether the method has been executed
+    executed: bool = field(default=False, init=False)
+
     def __call__(self, method):
         self.parent_method = method
         return self
@@ -63,7 +66,11 @@ class CI(MOsMixin, SystemMixin):
         self.norb = sum(len(x) for x in self.orbitals)
         self.solver = None
 
-    def run(self):
+    def _ci_solver_startup(self):
+        """
+        Initialize the CI solver with the necessary parameters and data structures.
+        If the CI solver is used in an iterative context, this method is only called
+        ocne at the beginning of the iteration."""
         if not self.parent_method.executed:
             self.parent_method.run()
 
@@ -71,60 +78,65 @@ class CI(MOsMixin, SystemMixin):
         MOsMixin.copy_from_upstream(self, self.parent_method)
 
         logger.log(
-            f"\nRunning CI with orbitals: {self.orbitals}, state: {self.state}, nroot: {self.nroot}"
+            f"\nRunning CI with orbitals: {self.orbitals}, state: {self.state}, nroot: {self.nroot}",
+            self.log_level,
         )
         # Generate the integrals with all the orbital spaces flattened
-        flattened_orbitals = [orb for sublist in self.orbitals for orb in sublist]
+        self.flattened_orbitals = [orb for sublist in self.orbitals for orb in sublist]
 
         # 1. Transform the orbitals to the MO basis
         self.ints = RestrictedMOIntegrals(
-            self.system, self.C[0], flattened_orbitals, self.core_orbitals
+            self.system, self.C[0], self.flattened_orbitals, self.core_orbitals
         )
 
         # 2. Create the string lists
-        orbital_symmetry = [[0] * len(x) for x in self.orbitals]
+        self.orbital_symmetry = [[0] * len(x) for x in self.orbitals]
 
-        ci_strings = forte2.CIStrings(
+        self.ci_strings = forte2.CIStrings(
             self.state.na - len(self.core_orbitals),
             self.state.nb - len(self.core_orbitals),
             self.state.symmetry,
-            orbital_symmetry,
+            self.orbital_symmetry,
             self.gas_min,
             self.gas_max,
         )
-        ci_strings.set_log_level(self.log_level)
+        self.ci_strings.set_log_level(self.log_level)
 
-        logger.log(f"\nNumber of α electrons: {ci_strings.na}", self.log_level)
-        logger.log(f"Number of β electrons: {ci_strings.nb}", self.log_level)
-        logger.log(f"Number of α strings: {ci_strings.nas}", self.log_level)
-        logger.log(f"Number of β strings: {ci_strings.nbs}", self.log_level)
-        logger.log(f"Number of determinants: {ci_strings.ndet}", self.log_level)
+        logger.log(f"\nNumber of α electrons: {self.ci_strings.na}", self.log_level)
+        logger.log(f"Number of β electrons: {self.ci_strings.nb}", self.log_level)
+        logger.log(f"Number of α strings: {self.ci_strings.nas}", self.log_level)
+        logger.log(f"Number of β strings: {self.ci_strings.nbs}", self.log_level)
+        logger.log(f"Number of determinants: {self.ci_strings.ndet}", self.log_level)
 
         self.spin_adapter = forte2.CISpinAdapter(
             self.state.multiplicity - 1, self.state.twice_ms, self.norb
         )
         self.spin_adapter.set_log_level(self.log_level)
-        self.dets = ci_strings.make_determinants()
+        self.dets = self.ci_strings.make_determinants()
+
         self.spin_adapter.prepare_couplings(self.dets)
         logger.log(f"Number of CSFs: {self.spin_adapter.ncsf()}", self.log_level)
+
+        # 1. Allocate memory for the CI vectors
+        self.ndet = self.ci_strings.ndet
+        self.basis_size = self.spin_adapter.ncsf()
+
+        # Create the CI vectors that will hold the results of the sigma builder in the
+        # determinant basis
+        self.b_det = np.zeros((self.ndet))
+        self.sigma_det = np.zeros((self.ndet))
+
+    def run(self):
+        if not self.executed:
+            self._ci_solver_startup()
 
         # Create the CISigmaBuilder from the CI strings and integrals
         # This object handles some temporary memory deallocated at destruction
         # and is used to compute the Hamiltonian matrix elements in the determinant basis
         self.ci_sigma_builder = forte2.CISigmaBuilder(
-            ci_strings, self.ints.E, self.ints.H, self.ints.V
+            self.ci_strings, self.ints.E, self.ints.H, self.ints.V, self.log_level
         )
         self.ci_sigma_builder.set_memory(self.ci_builder_memory)
-        self.ci_sigma_builder.set_log_level(self.log_level)
-
-        # 2. Allocate memory for the CI vectors
-        self.ndet = ci_strings.ndet
-        self.basis_size = self.spin_adapter.ncsf()
-
-        # Create the CI vectors that will hold the results of the sigma builder in the
-        # determinant basis
-        b_det = np.zeros((self.ndet))
-        sigma_det = np.zeros((self.ndet))
 
         Hdiag = self.ci_sigma_builder.form_Hdiag_csf(
             self.dets, self.spin_adapter, spin_adapt_full_preconditioner=False
@@ -140,6 +152,7 @@ class CI(MOsMixin, SystemMixin):
                 e_tol=self.econv,  # eigenvalue convergence
                 r_tol=self.rconv,  # residual convergence
                 maxiter=self.maxiter,
+                log_level=self.log_level,
             )
 
         # 4. Compute diagonal of the Hamiltonian
@@ -154,9 +167,9 @@ class CI(MOsMixin, SystemMixin):
             # Compute the sigma block from the basis block
             ncols = Bblock.shape[1]
             for i in range(ncols):
-                self.spin_adapter.csf_C_to_det_C(Bblock[:, i], b_det)
-                self.ci_sigma_builder.Hamiltonian(b_det, sigma_det)
-                self.spin_adapter.det_C_to_csf_C(sigma_det, Sblock[:, i])
+                self.spin_adapter.csf_C_to_det_C(Bblock[:, i], self.b_det)
+                self.ci_sigma_builder.Hamiltonian(self.b_det, self.sigma_det)
+                self.spin_adapter.det_C_to_csf_C(self.sigma_det, Sblock[:, i])
 
         self.solver.add_sigma_builder(sigma_builder)
 
@@ -177,42 +190,48 @@ class CI(MOsMixin, SystemMixin):
         logger.log(f"h_bbbb time:    {h_bbbb:.3f} s/build", self.log_level)
         logger.log(f"total time:     {h_tot:.3f} s/build", self.log_level)
 
-        # 8. Compute the RDMs from the CI vectors
+        # TODO: Make this optional in production code
+        self._test_rdms()
+
+        self.executed = True
+
+        return self
+
+    def _test_rdms(self):
+        # Compute the RDMs from the CI vectors
         # and verify the energy from the RDMs matches the CI energy
         logger.log("\nComputing RDMs from CI vectors.\n", self.log_level)
-        rdms = {}
         for root in range(self.nroot):
             root_rdms = {}
-            root_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(self.evecs[:, root], root_det)
-            root_rdms["rdm1"] = self.ci_sigma_builder.rdm1_sf(root_det, root_det)
-            root_rdms["rdm2_aa"] = self.ci_sigma_builder.rdm2_aa(
-                root_det, root_det, True
+            root_rdms["rdm1"] = self.make_rdm1_sf(self.evecs[:, root])
+            rdm2_aa, rdm2_ab, rdm2_bb = self.make_rdm2_sd(
+                self.evecs[:, root], full=False
             )
-            root_rdms["rdm2_ab"] = self.ci_sigma_builder.rdm2_ab(root_det, root_det)
-            root_rdms["rdm2_bb"] = self.ci_sigma_builder.rdm2_aa(
-                root_det, root_det, False
-            )
+            root_rdms["rdm2_aa"] = rdm2_aa
+            root_rdms["rdm2_ab"] = rdm2_ab
+            root_rdms["rdm2_bb"] = rdm2_bb
 
-            rdms[root] = root_rdms
+            rdm2_aa_full, _, rdm2_bb_full = self.make_rdm2_sd(
+                self.evecs[:, root], full=True
+            )
+            root_rdms["rdm2_aa_full"] = rdm2_aa_full
+            root_rdms["rdm2_bb_full"] = rdm2_bb_full
+
+            root_rdms["rdm2_sf"] = self.make_rdm2_sf(self.evecs[:, root])
 
             # Compute the energy from the RDMs
             # from the numpy tensor V[i, j, k, l] = <ij|kl> make the np matrix with indices
             # V[i > j, k > l] = <ij|kl>
             i_idx, j_idx = np.tril_indices(self.norb, k=-1)
-
             # broadcast into a 2D matrix
             i_row = i_idx[:, None]
             j_row = j_idx[:, None]
             i_col = i_idx[None, :]
             j_col = j_idx[None, :]
-
             # Create the antisymmetrized two electron integrals matrix
             A = self.ints.V.copy()
             A -= np.einsum("ijkl->ijlk", self.ints.V)
-
             M = A[i_row, j_row, i_col, j_col]
-
             rdms_energy = (
                 self.ints.E
                 + np.einsum("ij,ij", root_rdms["rdm1"], self.ints.H)
@@ -225,9 +244,41 @@ class CI(MOsMixin, SystemMixin):
                 self.E[root], rdms_energy
             ), f"CI energy {self.E[root]} Eh does not match RDMs energy {rdms_energy} Eh"
 
-        self.rdms = rdms
+            rdms_energy = (
+                self.ints.E
+                + np.einsum("ij,ij", root_rdms["rdm1"], self.ints.H)
+                + np.einsum("ijkl,ijkl", root_rdms["rdm2_aa_full"], A) * 0.25
+                + np.einsum("ijkl,ijkl", root_rdms["rdm2_ab"], self.ints.V)
+                + np.einsum("ijkl,ijkl", root_rdms["rdm2_bb_full"], A) * 0.25
+            )
+            logger.log(
+                f"CI energy from expanded RDMs: {rdms_energy:.6f} Eh", self.log_level
+            )
 
-        return self.rdms
+            assert np.isclose(
+                self.E[root], rdms_energy
+            ), f"CI energy {self.E[root]} Eh does not match RDMs energy {rdms_energy} Eh"
+
+            rdms_energy = (
+                self.ints.E
+                + np.einsum("ij,ij", root_rdms["rdm1"], self.ints.H)
+                + np.einsum(
+                    "ijkl,ijkl",
+                    0.5 * root_rdms["rdm2_sf"],
+                    self.ints.V,
+                )
+            )
+            logger.log(
+                f"CI energy from spin-free RDMs: {rdms_energy:.6f} Eh", self.log_level
+            )
+
+            assert np.isclose(
+                self.E[root], rdms_energy
+            ), f"CI energy {self.E[root]} Eh does not match RDMs energy {rdms_energy} Eh"
+
+            logger.log(
+                f"RDMs for root {root} validated successfully.\n", self.log_level
+            )
 
     def _build_guess_vectors(self, Hdiag):
         """
@@ -266,6 +317,104 @@ class CI(MOsMixin, SystemMixin):
                 guess_mat[d, i] = guess[j]
 
         self.solver.add_guesses(guess_mat)
+
+    def make_rdm1_sf(self, ci_vec):
+        """
+        Make the spin-free one-particle RDM from a CI vector.
+        Args:
+            ci_vec (ndarray): CI vector in the CSF basis.
+        Returns:
+            ndarray: Spin-free one-particle RDM."""
+        ci_vec_det = np.zeros((self.ndet))
+        self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
+        return self.ci_sigma_builder.rdm1_sf(ci_vec_det, ci_vec_det)
+
+    def make_tdm1_sf(self, ci_l, ci_r):
+        """
+        Make the spin-free one-particle transition density matrix from two CI vectors.
+        Args:
+            ci_l (ndarray): Left CI vector in the CSF basis.
+            ci_r (ndarray): Right CI vector in the CSF basis.
+        Returns:
+            ndarray: Spin-free one-particle transition density matrix."""
+        ci_l_det = np.zeros((self.ndet))
+        ci_r_det = np.zeros((self.ndet))
+        self.spin_adapter.csf_C_to_det_C(ci_l, ci_l_det)
+        self.spin_adapter.csf_C_to_det_C(ci_r, ci_r_det)
+        return self.ci_sigma_builder.rdm1_sf(ci_l_det, ci_r_det)
+
+    def make_rdm2_sd(self, ci_vec, full=True):
+        """
+        Make the spin-dependent two-particle RDMs (aa, ab, bb) from a CI vector in the CSF basis.
+        Args:
+            ci_vec (ndarray): CI vector in the CSF basis.
+            full (bool): If True, compute the full-dimension RDMs,
+                otherwise compute compact aa and bb RDMs. Defaults to True.
+        Returns:
+            tuple: Spin-dependent two-particle RDMs (aa, ab, bb).
+        """
+        ci_vec_det = np.zeros((self.ndet))
+        self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
+        aa_build = (
+            self.ci_sigma_builder.rdm2_aa_full
+            if full
+            else self.ci_sigma_builder.rdm2_aa
+        )
+        aa = aa_build(ci_vec_det, ci_vec_det, True)
+        bb = aa_build(ci_vec_det, ci_vec_det, False)
+        ab = self.ci_sigma_builder.rdm2_ab(ci_vec_det, ci_vec_det)
+        return aa, ab, bb
+
+    def make_tdm2_sd(self, ci_l, ci_r, full=True):
+        """
+        Make the spin-dependent two-particle transition density matrices (aa, ab, bb)
+        from two CI vectors in the CSF basis.
+        Args:
+            ci_l (ndarray): Left CI vector in the CSF basis.
+            ci_r (ndarray): Right CI vector in the CSF basis.
+            full (bool): If True, compute the full-dimension RDMs,
+                otherwise compute compact aa and bb RDMs. Defaults to True.
+        Returns:
+            tuple: Spin-dependent two-particle transition density matrices (aa, ab, bb).
+        """
+        ci_l_det = np.zeros((self.ndet))
+        ci_r_det = np.zeros((self.ndet))
+        self.spin_adapter.csf_C_to_det_C(ci_l, ci_l_det)
+        self.spin_adapter.csf_C_to_det_C(ci_r, ci_r_det)
+        aa_build = (
+            self.ci_sigma_builder.rdm2_aa_full
+            if full
+            else self.ci_sigma_builder.rdm2_aa
+        )
+        aa = aa_build(ci_l_det, ci_r_det, True)
+        bb = aa_build(ci_l_det, ci_r_det, False)
+        ab = self.ci_sigma_builder.rdm2_ab(ci_l_det, ci_r_det)
+        return aa, ab, bb
+
+    def make_rdm2_sf(self, ci_vec):
+        """
+        Make the spin-free two-particle RDM from a CI vector in the CSF basis.
+        Args:
+            ci_vec (ndarray): CI vector in the CSF basis.
+        Returns:
+            ndarray: Spin-free two-particle RDM."""
+        ci_vec_det = np.zeros((self.ndet))
+        self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
+        return self.ci_sigma_builder.rdm2_sf(ci_vec_det, ci_vec_det)
+
+    def make_tdm2_sf(self, ci_l, ci_r):
+        """
+        Make the spin-free two-particle transition density matrix from two CI vectors in the CSF basis.
+        Args:
+            ci_l (ndarray): Left CI vector in the CSF basis.
+            ci_r (ndarray): Right CI vector in the CSF basis.
+        Returns:
+            ndarray: Spin-free two-particle transition density matrix."""
+        ci_l_det = np.zeros((self.ndet))
+        ci_r_det = np.zeros((self.ndet))
+        self.spin_adapter.csf_C_to_det_C(ci_l, ci_l_det)
+        self.spin_adapter.csf_C_to_det_C(ci_r, ci_r_det)
+        return self.ci_sigma_builder.rdm2_sf(ci_l_det, ci_r_det)
 
 
 class CASCI(CI):

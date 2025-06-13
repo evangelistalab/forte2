@@ -1,6 +1,7 @@
 #include "helpers/timer.hpp"
 #include "helpers/np_matrix_functions.h"
 #include "helpers/np_vector_functions.h"
+#include "helpers/indexing.hpp"
 #include "helpers/blas.h"
 
 #include "ci_sigma_builder.h"
@@ -150,6 +151,57 @@ np_tensor4 CISigmaBuilder::compute_2rdm_ab_same_irrep(np_vector C_left, np_vecto
     rdm2_ab_timer_ += timer.elapsed_seconds();
     return rdm;
 }
+
+np_tensor4 CISigmaBuilder::compute_sf_2rdm_same_irrep(np_vector C_left, np_vector C_right) {
+    auto rdm_sf = compute_2rdm_aa_same_irrep_full(C_left, C_right, true);
+    auto rdm_bb = compute_2rdm_aa_same_irrep_full(C_left, C_right, false);
+    auto rdm_ab = compute_2rdm_ab_same_irrep(C_left, C_right);
+
+    auto norb = lists_.norb();
+    auto rdm_sf_v = rdm_sf.view();
+    auto rdm_ab_v = rdm_ab.view();
+    auto rdm_bb_v = rdm_bb.view();
+
+    for (size_t p{0}; p < norb; ++p) {
+        for (size_t q{0}; q < norb; ++q) {
+            for (size_t r{0}; r < norb; ++r) {
+                for (size_t s{0}; s < norb; ++s) {
+                    rdm_sf_v(p, q, r, s) +=
+                        rdm_bb_v(p, q, r, s) + rdm_ab_v(p, q, r, s) + rdm_ab_v(q, p, s, r);
+                }
+            }
+        }
+    }
+
+    return rdm_sf;
+}
+
+np_tensor4 CISigmaBuilder::compute_2rdm_aa_same_irrep_full(np_vector C_left, np_vector C_right,
+                                                           bool alfa) const {
+    auto rdm = compute_2rdm_aa_same_irrep(C_left, C_right, alfa);
+    auto norb = lists_.norb();
+    auto rdm_full = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
+    auto rdm_v = rdm.view();
+    auto rdm_full_v = rdm_full.view();
+
+    for (size_t p{1}; p < norb; ++p) {
+        for (size_t q{0}; q < p; ++q) { // p > q
+            auto pq = pair_index_gt(p, q);
+            for (size_t r{1}; r < norb; ++r) {
+                for (size_t s{0}; s < r; ++s) { // r > s
+                    auto rs = pair_index_gt(r, s);
+                    auto element = rdm_v(pq, rs);
+                    rdm_full_v(p, q, r, s) = element;
+                    rdm_full_v(q, p, r, s) = -element;
+                    rdm_full_v(p, q, s, r) = -element;
+                    rdm_full_v(q, p, s, r) = element;
+                }
+            }
+        }
+    }
+    return rdm_full;
+}
+
 } // namespace forte2
 
 // /**

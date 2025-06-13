@@ -44,8 +44,9 @@ void export_ci_vector_api(nb::module_& m) {
 
 void export_ci_sigma_builder_api(nb::module_& m) {
     nb::class_<CISigmaBuilder>(m, "CISigmaBuilder")
-        .def(nb::init<const CIStrings&, double, np_matrix&, np_tensor4&>(), "lists"_a, "E"_a, "H"_a,
-             "V"_a)
+        .def(nb::init<const CIStrings&, double, np_matrix&, np_tensor4&, int>(), "lists"_a, "E"_a,
+             "H"_a, "V"_a, "log_level"_a = 3,
+             "Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals")
         .def("set_memory", &CISigmaBuilder::set_memory, "memory"_a,
              "Set the memory limit for the builder (in MB)")
         .def("form_Hdiag_csf", &CISigmaBuilder::form_Hdiag_csf, "dets"_a, "spin_adapter"_a,
@@ -56,8 +57,11 @@ void export_ci_sigma_builder_api(nb::module_& m) {
         .def("rdm1_a", &CISigmaBuilder::compute_1rdm_same_irrep, "C_left"_a, "C_right"_a, "alfa"_a)
         .def("rdm2_aa", &CISigmaBuilder::compute_2rdm_aa_same_irrep, "C_left"_a, "C_right"_a,
              "alfa"_a)
+        .def("rdm2_aa_full", &CISigmaBuilder::compute_2rdm_aa_same_irrep_full, "C_left"_a,
+             "C_right"_a, "alfa"_a)
         .def("rdm2_ab", &CISigmaBuilder::compute_2rdm_ab_same_irrep, "C_left"_a, "C_right"_a)
         .def("rdm1_sf", &CISigmaBuilder::compute_sf_1rdm_same_irrep, "C_left"_a, "C_right"_a)
+        .def("rdm2_sf", &CISigmaBuilder::compute_sf_2rdm_same_irrep, "C_left"_a, "C_right"_a)
         .def("avg_build_time", &CISigmaBuilder::avg_build_time)
         .def("set_log_level", &CISigmaBuilder::set_log_level, "level"_a,
              "Set the logging level for the class");

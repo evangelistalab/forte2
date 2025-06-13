@@ -21,9 +21,10 @@ double scatter_b_time_write = 0.0;
 double transpose_1_time = 0.0;
 double transpose_2_time = 0.0;
 
-CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V)
-    : lists_(lists), E_(E), H_(H), V_(V), slater_rules_(lists.norb(), E, H, V) {
-
+CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V,
+                               int log_level)
+    : lists_(lists), E_(E), H_(H), V_(V), slater_rules_(lists.norb(), E, H, V),
+      log_level_(log_level) {
     // Find the size of the largest symmetry block
     size_t max_size = 0;
     for (auto const& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
@@ -31,7 +32,7 @@ CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, n
     }
 
     LOG(log_level_) << "\nAllocating CI temporary buffers of size 2 x " << max_size << " ("
-             << 2 * max_size * sizeof(double) / (1024 * 1024) << " MB).\n";
+                    << 2 * max_size * sizeof(double) / (1024 * 1024) << " MB).\n";
 
     // Resize the TR and TL vectors to the maximum block size
     TR.resize(max_size);

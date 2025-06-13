@@ -7,7 +7,7 @@ LOGGING_LEVEL = {
     1: logging.CRITICAL,  # Warning
     2: logging.WARNING,  # Essential
     3: logging.INFO,  # Info1
-    4: logging.INFO + 1,  # Info2
+    4: logging.INFO - 1,  # Info2
     5: logging.DEBUG,
 }
 
@@ -16,7 +16,7 @@ class LoggerConfig:
     """Centralized logging configuration that matches C++ behavior"""
 
     _initialized = False
-    _verbosity_level = 2
+    _verbosity_level = 3
 
     @classmethod
     def setup(cls):
@@ -80,7 +80,7 @@ def log_info1(message):
 
 
 def log_info2(message):
-    logging.log(logging.INFO + 1, message)
+    logging.log(logging.INFO - 1, message)
 
 
 def log_debug(message):
