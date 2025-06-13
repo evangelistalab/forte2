@@ -1,6 +1,7 @@
 import pytest
 import forte2
 import numpy as np
+from forte2.helpers.comparisons import approx
 
 
 def test_1e_ovlp():
@@ -15,7 +16,7 @@ def test_1e_ovlp():
     system = forte2.System(xyz=xyz, basis="6-31g*", auxiliary_basis=None)
     # Forte2 integrals
     S = forte2.ints.overlap(system.basis)
-    assert np.allclose(np.linalg.norm(S), 5.550074629204314, atol=1.0e-09)
+    assert np.linalg.norm(S) == approx(5.550074629204314)
     print("Passed overlap test.")
 
 
@@ -33,7 +34,7 @@ def test_1e_hcore():
     T = forte2.ints.kinetic(system.basis)
     V = forte2.ints.nuclear(system.basis, system.atoms)
     H = T + V
-    assert np.allclose(np.linalg.norm(H), 50.50852825093756, atol=1.0e-09)
+    assert np.linalg.norm(H) == approx(50.50852825093756)
     print("Passed Hcore test.")
 
 
@@ -49,5 +50,5 @@ def test_2e_eri():
     system = forte2.System(xyz=xyz, basis="6-31g*", auxiliary_basis=None)
     # Forte2 integrals
     eri = forte2.ints.coulomb_4c(system.basis)
-    assert np.allclose(np.linalg.norm(eri.flatten()), 20.21663398506663, atol=1.0e-09)
+    assert np.linalg.norm(eri.flatten()) == approx(20.21663398506663)
     print("Passed ERI test.")

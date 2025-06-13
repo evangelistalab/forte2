@@ -1,5 +1,7 @@
 import pytest
 from forte2 import *
+from forte2.helpers.comparisons import approx
+
 
 @pytest.mark.xfail(reason="CISD energy does not match RDM energy")
 def test_cisd_1():
@@ -14,4 +16,4 @@ def test_cisd_1():
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CISD()(rhf)
     ci.run()
-    assert ci.E[0] == pytest.approx(-100.2050066538116)
+    assert ci.E[0] == approx(-100.2050066538116)
