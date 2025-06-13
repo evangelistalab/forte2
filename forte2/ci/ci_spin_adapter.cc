@@ -156,9 +156,9 @@ void CISpinAdapter::prepare_couplings(const std::vector<Determinant>& dets) {
     csf_to_det_bounds_.resize(ncsf + 1);
 
     confs_ = std::vector<Configuration>(confs.begin(), confs.end());
-    // LOG_INFO << "Number of configuration state functions: " << ncsf;
-    LOG_INFO << "Number of couplings: " << ncoupling;
-    LOG_INFO << "Timing for identifying configurations: " << std::fixed << std::setprecision(3)
+    // LOG(log_level_) << "Number of configuration state functions: " << ncsf;
+    LOG(log_level_) << "Number of couplings: " << ncoupling;
+    LOG(log_level_) << "Timing for identifying configurations: " << std::fixed << std::setprecision(3)
              << t1.elapsed_seconds() << " s";
 
     // loop over all the configurations and find the CSFs
@@ -170,7 +170,7 @@ void CISpinAdapter::prepare_couplings(const std::vector<Determinant>& dets) {
             conf_to_csfs(conf, det_hash);
         }
     }
-    LOG_INFO << "Timing for finding the CSFs: " << std::fixed << std::setprecision(3)
+    LOG(log_level_) << "Timing for finding the CSFs: " << std::fixed << std::setprecision(3)
              << t2.elapsed_seconds() << " s";
 
     // check that the number of couplings and CSFs is correct

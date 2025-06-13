@@ -2,12 +2,12 @@ from dataclasses import dataclass, field
 import time
 import numpy as np
 import scipy as sp
-import copy
 
 import forte2
 from forte2.jkbuilder import FockBuilder
 from forte2.helpers.mixins import MOsMixin
 from forte2.helpers.matrix_functions import givens_rotation
+from forte2.helpers import logger
 from .initial_guess import minao_initial_guess, core_initial_guess
 
 
@@ -63,18 +63,18 @@ class SCFMixin:
 
         diis = forte2.helpers.DIIS(diis_start=self.diis_start, diis_nvec=self.diis_nvec)
 
-        print(f"Number of electrons: {self.nel}")
+        logger.log_info1(f"Number of electrons: {self.nel}")
         if self._scf_type() != "GHF":  # not good quantum numbers for GHF
-            print(f"Number of alpha electrons: {self.na}")
-            print(f"Number of beta electrons: {self.nb}")
-            print(f"Ms: {self.ms}")
-        print(f"Total charge: {self.charge}")
-        print(f"Number of basis functions: {self.nbf}")
-        print(f"Number of auxiliary basis functions: {self.naux}")
-        print(f"Energy convergence criterion: {self.econv:e}")
-        print(f"Density convergence criterion: {self.dconv:e}")
-        print(f"DIIS acceleration: {diis.do_diis}")
-        print(f"\n==> {self.method} SCF ROUTINE <==")
+            logger.log_info1(f"Number of alpha electrons: {self.na}")
+            logger.log_info1(f"Number of beta electrons: {self.nb}")
+            logger.log_info1(f"Ms: {self.ms}")
+        logger.log_info1(f"Total charge: {self.charge}")
+        logger.log_info1(f"Number of basis functions: {self.nbf}")
+        logger.log_info1(f"Number of auxiliary basis functions: {self.naux}")
+        logger.log_info1(f"Energy convergence criterion: {self.econv:e}")
+        logger.log_info1(f"Density convergence criterion: {self.dconv:e}")
+        logger.log_info1(f"DIIS acceleration: {diis.do_diis}")
+        logger.log_info1(f"\n==> {self.method} SCF ROUTINE <==")
 
         Vnn = self._get_nuclear_repulsion()
         S = self._get_overlap()
@@ -122,14 +122,14 @@ class SCFMixin:
             )
 
             if np.abs(deltaE) < self.econv and deltaD < self.dconv:
-                print("-" * width)
-                print(f"{self.method} iterations converged\n")
+                logger.log_info1("-" * width)
+                logger.log_info1(f"{self.method} iterations converged\n")
                 # perform final iteration
                 F, F_canon = self._build_fock(H, fock_builder, S)
                 self.eps, self.C = self._diagonalize_fock(F_canon, S)
                 self.D = self._build_density_matrix()
                 self.E = Vnn + self._energy(H, F)
-                print(f"Final {self.method} Energy: {self.E:20.12f}")
+                logger.log_info1(f"Final {self.method} Energy: {self.E:20.12f}")
                 self.converged = True
                 break
 

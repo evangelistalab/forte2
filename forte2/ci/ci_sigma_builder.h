@@ -28,6 +28,11 @@ class CISigmaBuilder {
     /// @brief Set the one and two-electron integrals for the Hamiltonian
     void set_Hamiltonian(double E, np_matrix H, np_tensor4 V);
 
+    /// @brief Set the logging level for the class
+    void set_log_level(int level) {
+        log_level_ = level;
+    }
+
     /// @brief Form the diagonal of the Hamiltonian matrix in the CI basis
     /// @return The diagonal elements of the Hamiltonian matrix
     np_vector form_Hdiag_csf(const std::vector<Determinant>& dets,
@@ -107,6 +112,8 @@ class CISigmaBuilder {
     SlaterRules slater_rules_;
     /// @brief Memory size for temporary buffers in bytes (default 1 GB)
     size_t memory_size_ = 1073741824;
+    /// @brief logging level for the class
+    int log_level_ = 3;
 
     mutable double hdiag_timer_ = 0.0;
     mutable double haaaa_timer_ = 0.0;

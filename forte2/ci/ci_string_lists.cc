@@ -57,7 +57,7 @@ CIStrings::CIStrings(size_t na, size_t nb, int symmetry,
     for (const auto& space : orbital_symmetry_) {
         const auto size = space.size();
         gas_size_.push_back(size);
-        LOG_INFO << "\n    GAS space size: " << size;
+        LOG(log_level_) << "\n    GAS space size: " << size;
         for (const auto& s : space) {
             nirrep_ = std::max(nirrep_, static_cast<size_t>(std::abs(s + 1)));
         }
@@ -69,7 +69,7 @@ CIStrings::CIStrings(size_t na, size_t nb, int symmetry,
     // print_h2("Possible Electron Occupations");
     auto table = occupation_table(ngas_spaces_, gas_alfa_occupations_, gas_beta_occupations_,
                                   gas_occupations_);
-    LOG_INFO << table;
+    LOG(log_level_) << table;
 
     // local_timers
     double str_list_timer = 0.0;

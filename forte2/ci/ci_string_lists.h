@@ -44,6 +44,9 @@ class CIStrings {
     /// @return the number of correlated MOs
     size_t norb() const { return norb_; }
 
+    /// @brief Set the printing level for the class
+    void set_log_level(int level) { log_level_ = level; }
+
     //   /// @return the number of correlated MOs per irrep
     //   psi::Dimension cmopi() const { return cmopi_; }
 
@@ -168,9 +171,9 @@ class CIStrings {
     std::vector<int> pairpi_;
     /// The offset array for pairpi
     std::vector<int> pair_offset_;
-    //   /// The print level
-    //   PrintLevel print_ = PrintLevel::Default;
-
+    /// The logging level for the class
+    int log_level_ = 3;
+    
     //   // GAS specific data
 
     std::vector<std::array<int, 6>> gas_alfa_occupations_;
