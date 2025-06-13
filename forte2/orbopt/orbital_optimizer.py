@@ -22,6 +22,10 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
         return self
 
     def run(self):
+        # TODO: skip the first CI step in the MCSCF
+        if not self.parent_method.executed:
+            self.parent_method.run()
+
         current_verbosity = logger.get_verbosity_level()
         # only log subproblem if the verbosity is higher than INFO1
         if current_verbosity > 3:
@@ -29,9 +33,6 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
         else:
             self.parent_method.log_level = current_verbosity + 1
             self.parent_method.solver.log_level = current_verbosity + 1
-        # TODO: skip the first CI step in the MCSCF
-        if not self.parent_method.executed:
-            self.parent_method.run()
 
         SystemMixin.copy_from_upstream(self, self.parent_method)
         MOsMixin.copy_from_upstream(self, self.parent_method)
