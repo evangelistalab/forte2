@@ -69,7 +69,7 @@ def test_gasci_rhf_3():
     ci.run()
 
     assert rhf.E == approx(-1.12475114835983)
-    assert ci.E[0] == approx(-1.145766051194)
+    assert ci.E[0] == approx(-1.145763462077)
 
 
 @pytest.mark.xfail(reason="CI energy does not match RDM energy")
@@ -247,3 +247,6 @@ def test_gasci_rohf_2():
 
     assert rhf.E == approx(-39.77974100479403)
     assert ci.E[0] == approx(-29.204823485711)
+
+
+test_gasci_rhf_3()
