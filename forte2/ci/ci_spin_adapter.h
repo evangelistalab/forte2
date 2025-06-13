@@ -75,6 +75,9 @@ class CISpinAdapter {
     /// @brief Return the number of determinants
     size_t ndet() const;
 
+    /// @brief Set the logging level for the class
+    void set_log_level(int level) { log_level_ = level; }
+
     /// @brief An const interator for the expansion coefficients of a CSF in the determinant
     /// basis
     class const_iterator {
@@ -170,6 +173,9 @@ class CISpinAdapter {
     std::vector<std::pair<size_t, double>> csf_to_det_coeff_;
     /// @brief A vector used to store the configurations
     std::vector<Configuration> confs_;
+
+    /// @brief The logging level for the class
+    int log_level_ = 3;
 
     /// @bried A vector with the number of CSFs with a given number of unpaired electrons (N)
     std::vector<size_t> N_ncsf_;

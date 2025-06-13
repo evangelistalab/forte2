@@ -8,7 +8,7 @@
 namespace forte2 {
 class Logger {
   public:
-    enum Level { NONE = 0, ERROR = 1, WARNING = 2, INFO = 3, DEBUG = 4 };
+    enum Level { NONE = 0, WARNING = 1, ESSENTIAL = 2, INFO1 = 3, INFO2 = 4, DEBUG = 5 };
 
     static Logger& getInstance() {
         static Logger instance;
@@ -28,26 +28,28 @@ class Logger {
     void log(Level level, const std::string& message) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (level <= current_level_) {
-            auto& stream = (level == ERROR) ? std::cerr : std::cout;
-            stream << "[" << levelToString(level) << "] " << message << std::endl;
+            auto& stream = std::cout;
+            stream << message << std::endl;
         }
     }
 
   private:
     Logger() = default;
-    Level current_level_ = INFO; // Default to INFO level
+    Level current_level_ = INFO1; // Default to INFO level
     mutable std::mutex mutex_;
 
     std::string levelToString(Level level) const {
         switch (level) {
         case NONE:
             return "NONE";
-        case ERROR:
-            return "ERROR";
         case WARNING:
             return "WARNING";
-        case INFO:
-            return "INFO";
+        case ESSENTIAL:
+            return "ESSENTIAL";
+        case INFO1:
+            return "INFO1";
+        case INFO2:
+            return "INFO2";
         case DEBUG:
             return "DEBUG";
         default:
@@ -88,8 +90,10 @@ class LogStream {
     }
 };
 
-#define LOG_ERROR LogStream(Logger::ERROR)
+#define LOG(level) LogStream(static_cast<Logger::Level>(level))
 #define LOG_WARNING LogStream(Logger::WARNING)
-#define LOG_INFO LogStream(Logger::INFO)
+#define LOG_ESSENTIAL LogStream(Logger::ESSENTIAL)
+#define LOG_INFO1 LogStream(Logger::INFO1)
+#define LOG_INFO2 LogStream(Logger::INFO2)
 #define LOG_DEBUG LogStream(Logger::DEBUG)
 } // namespace forte2

@@ -16,7 +16,8 @@ namespace forte2 {
 class CISigmaBuilder {
   public:
     // == Class Constructor ==
-    CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V);
+    CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V,
+                   int log_level = 3);
     ~CISigmaBuilder();
 
     // == Class Public Functions ==
@@ -27,6 +28,9 @@ class CISigmaBuilder {
 
     /// @brief Set the one and two-electron integrals for the Hamiltonian
     void set_Hamiltonian(double E, np_matrix H, np_tensor4 V);
+
+    /// @brief Set the logging level for the class
+    void set_log_level(int level) { log_level_ = level; }
 
     /// @brief Form the diagonal of the Hamiltonian matrix in the CI basis
     /// @return The diagonal elements of the Hamiltonian matrix
@@ -91,7 +95,7 @@ class CISigmaBuilder {
     /// @return The two-electron same-spin reduced density matrix stored as a tensor
     ///        gamma[p][q][r][s] = <L| a^+_p a^+_q a_s a_r |R>
     np_tensor4 compute_2rdm_aa_same_irrep_full(np_vector C_left, np_vector C_right,
-                                                              bool alfa) const;
+                                               bool alfa) const;
 
     /// @brief Compute the mixed-spin two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -127,6 +131,8 @@ class CISigmaBuilder {
     SlaterRules slater_rules_;
     /// @brief Memory size for temporary buffers in bytes (default 1 GB)
     size_t memory_size_ = 1073741824;
+    /// @brief logging level for the class
+    int log_level_ = 3;
 
     mutable double hdiag_timer_ = 0.0;
     mutable double haaaa_timer_ = 0.0;

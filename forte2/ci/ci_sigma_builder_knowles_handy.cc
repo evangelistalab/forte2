@@ -111,8 +111,9 @@ CISigmaBuilder::get_Kblock_spans(size_t dim, size_t maxKa) const {
     // Ensure that Kblock1_ and Kblock2_ are allocated with the requested memory size
     std::size_t temp_memory_size = std::min(memory_size_ / (2 * sizeof(double)), temp_full_size);
     if (Kblock1_.size() < temp_memory_size) {
-        LOG_INFO << "Allocating Knowles-Handy temporary buffers of size 2 x " << temp_memory_size
-                 << " (" << 2 * temp_memory_size * sizeof(double) / (1024 * 1024) << " MB).\n";
+        LOG(log_level_) << "Allocating Knowles-Handy temporary buffers of size 2 x "
+                        << temp_memory_size << " ("
+                        << 2 * temp_memory_size * sizeof(double) / (1024 * 1024) << " MB).\n";
         Kblock1_.resize(temp_memory_size);
         Kblock2_.resize(temp_memory_size);
     }

@@ -21,8 +21,9 @@ double scatter_b_time_write = 0.0;
 double transpose_1_time = 0.0;
 double transpose_2_time = 0.0;
 
-CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V)
-    : lists_(lists), E_(E), H_(H), V_(V), slater_rules_(lists.norb(), E, H, V) {
+CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V, 
+                               int log_level)
+    : lists_(lists), E_(E), H_(H), V_(V), slater_rules_(lists.norb(), E, H, V), log_level_(log_level) {
 
     // Find the size of the largest symmetry block
     size_t max_size = 0;
@@ -30,7 +31,7 @@ CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, n
         max_size = std::max(lists.detpblk(nI), max_size);
     }
 
-    LOG_INFO << "\nAllocating CI temporary buffers of size 2 x " << max_size << " ("
+    LOG(log_level_) << "\nAllocating CI temporary buffers of size 2 x " << max_size << " ("
              << 2 * max_size * sizeof(double) / (1024 * 1024) << " MB).\n";
 
     // Resize the TR and TL vectors to the maximum block size
@@ -42,9 +43,9 @@ CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, n
 
 CISigmaBuilder::~CISigmaBuilder() {
     // Destructor does not need to do anything special
-    LOG_INFO << std::fixed << std::setprecision(3);
-    LOG_INFO << "\nTiming for 2RDM(aa):" << rdm2_aa_timer_ << " seconds";
-    LOG_INFO << "Timing for 2RDM(ab):" << rdm2_ab_timer_ << " seconds";
+    LOG(log_level_) << std::fixed << std::setprecision(3);
+    LOG(log_level_) << "\nTiming for 2RDM(aa):" << rdm2_aa_timer_ << " seconds";
+    LOG(log_level_) << "Timing for 2RDM(ab):" << rdm2_ab_timer_ << " seconds";
 }
 
 void CISigmaBuilder::set_memory(int mb) {

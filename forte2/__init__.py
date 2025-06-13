@@ -7,4 +7,4 @@ from .orbitals.cube import Cube
 from .x2c import x2c
 from .orbopt import OrbitalOptimizer
 from .props import get_property, mulliken_population
-from .helpers import set_verbosity_level
+from .helpers import logger, set_verbosity_level

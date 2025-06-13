@@ -2,11 +2,11 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import forte2
-import logging
 
 from forte2.state.state import State
 from forte2.helpers.mixins import MOsMixin, SystemMixin
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
+from forte2.helpers import logger
 
 from forte2.jkbuilder import RestrictedMOIntegrals
 from forte2.system.system import System
@@ -41,6 +41,8 @@ class CI(MOsMixin, SystemMixin):
     first_run: bool = field(default=True, init=False)
     # The number of determinants
     ndef: int = field(default=None, init=False)
+    # logging level, default is 2 (INFO)
+    log_level: int = field(default=logger.get_verbosity_level(), init=False)
 
     ## Options that control the CI calculation
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
@@ -75,8 +77,9 @@ class CI(MOsMixin, SystemMixin):
         SystemMixin.copy_from_upstream(self, self.parent_method)
         MOsMixin.copy_from_upstream(self, self.parent_method)
 
-        logging.info(
-            f"\nRunning CI with orbitals: {self.orbitals}, state: {self.state}, nroot: {self.nroot}"
+        logger.log(
+            f"\nRunning CI with orbitals: {self.orbitals}, state: {self.state}, nroot: {self.nroot}",
+            self.log_level,
         )
         # Generate the integrals with all the orbital spaces flattened
         self.flattened_orbitals = [orb for sublist in self.orbitals for orb in sublist]
@@ -97,19 +100,22 @@ class CI(MOsMixin, SystemMixin):
             self.gas_min,
             self.gas_max,
         )
+        self.ci_strings.set_log_level(self.log_level)
 
-        logging.info(f"\nNumber of α electrons: {self.ci_strings.na}")
-        logging.info(f"Number of β electrons: {self.ci_strings.nb}")
-        logging.info(f"Number of α strings: {self.ci_strings.nas}")
-        logging.info(f"Number of β strings: {self.ci_strings.nbs}")
-        logging.info(f"Number of determinants: {self.ci_strings.ndet}")
+        logger.log(f"\nNumber of α electrons: {self.ci_strings.na}", self.log_level)
+        logger.log(f"Number of β electrons: {self.ci_strings.nb}", self.log_level)
+        logger.log(f"Number of α strings: {self.ci_strings.nas}", self.log_level)
+        logger.log(f"Number of β strings: {self.ci_strings.nbs}", self.log_level)
+        logger.log(f"Number of determinants: {self.ci_strings.ndet}", self.log_level)
 
         self.spin_adapter = forte2.CISpinAdapter(
             self.state.multiplicity - 1, self.state.twice_ms, self.norb
         )
+        self.spin_adapter.set_log_level(self.log_level)
         self.dets = self.ci_strings.make_determinants()
+
         self.spin_adapter.prepare_couplings(self.dets)
-        logging.info(f"Number of CSFs: {self.spin_adapter.ncsf()}")
+        logger.log(f"Number of CSFs: {self.spin_adapter.ncsf()}", self.log_level)
 
         # 1. Allocate memory for the CI vectors
         self.ndet = self.ci_strings.ndet
@@ -128,7 +134,7 @@ class CI(MOsMixin, SystemMixin):
         # This object handles some temporary memory deallocated at destruction
         # and is used to compute the Hamiltonian matrix elements in the determinant basis
         self.ci_sigma_builder = forte2.CISigmaBuilder(
-            self.ci_strings, self.ints.E, self.ints.H, self.ints.V
+            self.ci_strings, self.ints.E, self.ints.H, self.ints.V, self.log_level
         )
         self.ci_sigma_builder.set_memory(self.ci_builder_memory)
 
@@ -146,6 +152,7 @@ class CI(MOsMixin, SystemMixin):
                 e_tol=self.econv,  # eigenvalue convergence
                 r_tol=self.rconv,  # residual convergence
                 maxiter=self.maxiter,
+                log_level=self.log_level,
             )
 
         # 4. Compute diagonal of the Hamiltonian
@@ -169,19 +176,19 @@ class CI(MOsMixin, SystemMixin):
         # 6. Run Davidson
         self.evals, self.evecs = self.solver.solve()
 
-        logging.info(f"\nDavidson-Liu solver converged.\n")
+        logger.log(f"\nDavidson-Liu solver converged.\n", self.log_level)
 
         # 7. Store the final energy and properties
         self.E = self.evals
         for i, e in enumerate(self.evals):
-            logging.info(f"Final CI Energy Root {i}: {e:20.12f} [Eh]")
+            logger.log(f"Final CI Energy Root {i}: {e:20.12f} [Eh]", self.log_level)
 
         h_tot, h_aabb, h_aaaa, h_bbbb = self.ci_sigma_builder.avg_build_time()
-        logging.info("\nAverage CI Sigma Builder time summary:")
-        logging.info(f"h_aabb time:    {h_aabb:.3f} s/build")
-        logging.info(f"h_aaaa time:    {h_aaaa:.3f} s/build")
-        logging.info(f"h_bbbb time:    {h_bbbb:.3f} s/build")
-        logging.info(f"total time:     {h_tot:.3f} s/build")
+        logger.log("\nAverage CI Sigma Builder time summary:", self.log_level)
+        logger.log(f"h_aabb time:    {h_aabb:.3f} s/build", self.log_level)
+        logger.log(f"h_aaaa time:    {h_aaaa:.3f} s/build", self.log_level)
+        logger.log(f"h_bbbb time:    {h_bbbb:.3f} s/build", self.log_level)
+        logger.log(f"total time:     {h_tot:.3f} s/build", self.log_level)
 
         # TODO: Make this optional in production code
         self._test_rdms()
@@ -193,7 +200,7 @@ class CI(MOsMixin, SystemMixin):
     def _test_rdms(self):
         # Compute the RDMs from the CI vectors
         # and verify the energy from the RDMs matches the CI energy
-        logging.info("\nComputing RDMs from CI vectors.\n")
+        logger.log("\nComputing RDMs from CI vectors.\n", self.log_level)
         for root in range(self.nroot):
             root_rdms = {}
             root_rdms["rdm1"] = self.make_rdm1_sf(self.evecs[:, root])
@@ -236,7 +243,7 @@ class CI(MOsMixin, SystemMixin):
                 + np.einsum("ijkl,ijkl", root_rdms["rdm2_ab"], self.ints.V)
                 + np.einsum("ij,ij", root_rdms["rdm2_bb"], M)
             )
-            logging.info(f"CI energy from RDMs: {rdms_energy:.6f} Eh")
+            logger.log(f"CI energy from RDMs: {rdms_energy:.6f} Eh", self.log_level)
             assert np.isclose(
                 self.E[root], rdms_energy
             ), f"CI energy {self.E[root]} Eh does not match RDMs energy {rdms_energy} Eh"
@@ -248,7 +255,9 @@ class CI(MOsMixin, SystemMixin):
                 + np.einsum("ijkl,ijkl", root_rdms["rdm2_ab"], self.ints.V)
                 + np.einsum("ijkl,ijkl", root_rdms["rdm2_bb_full"], A) * 0.25
             )
-            logging.info(f"CI energy from expanded RDMs: {rdms_energy:.6f} Eh")
+            logger.log(
+                f"CI energy from expanded RDMs: {rdms_energy:.6f} Eh", self.log_level
+            )
 
             assert np.isclose(
                 self.E[root], rdms_energy
@@ -263,13 +272,17 @@ class CI(MOsMixin, SystemMixin):
                     self.ints.V,
                 )
             )
-            logging.info(f"CI energy from spin-free RDMs: {rdms_energy:.6f} Eh")
+            logger.log(
+                f"CI energy from spin-free RDMs: {rdms_energy:.6f} Eh", self.log_level
+            )
 
             assert np.isclose(
                 self.E[root], rdms_energy
             ), f"CI energy {self.E[root]} Eh does not match RDMs energy {rdms_energy} Eh"
 
-            logging.info(f"RDMs for root {root} validated successfully.\n")
+            logger.log(
+                f"RDMs for root {root} validated successfully.\n", self.log_level
+            )
 
     def _build_guess_vectors(self, Hdiag):
         """
@@ -279,9 +292,9 @@ class CI(MOsMixin, SystemMixin):
 
         # determine the number of guess vectors
         self.num_guess_states = min(self.guess_per_root * self.nroot, self.basis_size)
-        logging.info(f"Number of guess states: {self.num_guess_states}")
+        logger.log(f"Number of guess states: {self.num_guess_states}", self.log_level)
         nguess_dets = min(self.ndets_per_guess * self.num_guess_states, self.basis_size)
-        logging.info(f"Number of guess basis: {nguess_dets}")
+        logger.log(f"Number of guess basis: {nguess_dets}", self.log_level)
 
         # find the indices of the elements of Hdiag with the lowest values
         indices = np.argsort(Hdiag)[:nguess_dets]

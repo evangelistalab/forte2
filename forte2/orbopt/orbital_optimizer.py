@@ -1,10 +1,10 @@
-import logging
 import numpy as np
 import scipy as sp
 from dataclasses import dataclass, field
 
 from forte2.jkbuilder import FockBuilder
 from forte2.helpers.mixins import MOsMixin, SystemMixin
+from forte2.helpers import logger
 
 
 @dataclass
@@ -15,11 +15,20 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
     optimizer: str = "L-BFGS"
     max_step_size: float = 0.1
 
+    executed: bool = field(default=False, init=False)
+
     def __call__(self, method):
         self.parent_method = method
         return self
 
     def run(self):
+        current_verbosity = logger.get_verbosity_level()
+        # only log subproblem if the verbosity is higher than INFO1
+        if current_verbosity > 3:
+            self.parent_method.log_level = current_verbosity
+        else:
+            self.parent_method.log_level = current_verbosity + 1
+            self.parent_method.solver.log_level = current_verbosity + 1
         # TODO: skip the first CI step in the MCSCF
         if not self.parent_method.executed:
             self.parent_method.run()
@@ -33,7 +42,7 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
         self._make_spaces_contiguous()
         self.nrr = self._get_nonredundant_rotations()
 
-        logging.warning(f'{"Iteration":>10} {"CI Energy":>20} {"norm(g)":>20} ')
+        logger.log_info1(f'{"Iteration":>10} {"CI Energy":>20} {"norm(g)":>20} ')
         self.iter = 0
         self.E = np.zeros(self.parent_method.nroot)
 
@@ -64,7 +73,7 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
 
             orbgrad = self._compute_orbgrad(Fcore, Fact, Y, Z)
 
-            logging.warning(
+            logger.log_info1(
                 f"{self.iter:>10d} {self.E[0]:>20.10f} {abs(np.linalg.norm(orbgrad, np.inf)):>20.10f}"
             )
 
@@ -75,6 +84,12 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
 
             self.C[0] = self._rotate_orbitals(self.C[0], orbgrad, orbhess, self.nrr)
             self.iter += 1
+
+        logger.log_info1(f"Orbital optimization converged in {self.iter} iterations.")
+        logger.log_info1(f"Final orbital optimized energy: {self.E[0]:.10f}")
+        self.parent_method.log_level = current_verbosity
+        self.parent_method.solver.log_level = current_verbosity
+        self.executed = True
 
     def _compute_Fcore(self, fock_builder, Ccore, Cgen, Hcore):
         # Compute the core Fock matrix [Eq. (9)], also return the core energy
