@@ -79,7 +79,7 @@ class CISigmaBuilder {
     ///        Gamma[p][q] = gamma(alpha)[p][q] + gamma(beta)[p][q]
     np_matrix compute_sf_1rdm_same_irrep(np_vector C_left, np_vector C_right);
 
-    /// @brief Compute the two-electron same-spin two-electron reduced density matrix
+    /// @brief Compute the two-electron same-spin reduced density matrix
     /// @param C_left The left-hand side coefficients
     /// @param C_right The right-hand side coefficients
     /// @param alfa If true, compute the alpha contribution, otherwise the beta

@@ -44,8 +44,8 @@ void export_ci_vector_api(nb::module_& m) {
 
 void export_ci_sigma_builder_api(nb::module_& m) {
     nb::class_<CISigmaBuilder>(m, "CISigmaBuilder")
-        .def(nb::init<const CIStrings&, double, np_matrix&, np_tensor4&, int>(), "lists"_a, "E"_a, "H"_a,
-             "V"_a, "log_level"_a = 3,
+        .def(nb::init<const CIStrings&, double, np_matrix&, np_tensor4&, int>(), "lists"_a, "E"_a,
+             "H"_a, "V"_a, "log_level"_a = 3,
              "Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals")
         .def("set_memory", &CISigmaBuilder::set_memory, "memory"_a,
              "Set the memory limit for the builder (in MB)")

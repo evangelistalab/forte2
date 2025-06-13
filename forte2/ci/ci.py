@@ -223,19 +223,15 @@ class CI(MOsMixin, SystemMixin):
             # from the numpy tensor V[i, j, k, l] = <ij|kl> make the np matrix with indices
             # V[i > j, k > l] = <ij|kl>
             i_idx, j_idx = np.tril_indices(self.norb, k=-1)
-
             # broadcast into a 2D matrix
             i_row = i_idx[:, None]
             j_row = j_idx[:, None]
             i_col = i_idx[None, :]
             j_col = j_idx[None, :]
-
             # Create the antisymmetrized two electron integrals matrix
             A = self.ints.V.copy()
             A -= np.einsum("ijkl->ijlk", self.ints.V)
-
             M = A[i_row, j_row, i_col, j_col]
-
             rdms_energy = (
                 self.ints.E
                 + np.einsum("ij,ij", root_rdms["rdm1"], self.ints.H)
