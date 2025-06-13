@@ -6,6 +6,7 @@
 
 #include "helpers/timer.hpp"
 #include "helpers/np_vector_functions.h"
+#include "helpers/logger.h"
 
 #include "ci_spin_adapter.h"
 
@@ -155,10 +156,10 @@ void CISpinAdapter::prepare_couplings(const std::vector<Determinant>& dets) {
     csf_to_det_bounds_.resize(ncsf + 1);
 
     confs_ = std::vector<Configuration>(confs.begin(), confs.end());
-    // std::cout << "Number of configuration state functions: " << ncsf << std::endl;
-    std::cout << "Number of couplings: " << ncoupling << std::endl;
-    std::cout << "Timing for identifying configurations: " << std::fixed << std::setprecision(3)
-              << t1.elapsed_seconds() << " s" << std::endl;
+    // LOG_INFO << "Number of configuration state functions: " << ncsf;
+    LOG_INFO << "Number of couplings: " << ncoupling;
+    LOG_INFO << "Timing for identifying configurations: " << std::fixed << std::setprecision(3)
+             << t1.elapsed_seconds() << " s";
 
     // loop over all the configurations and find the CSFs
     local_timer t2;
@@ -169,8 +170,8 @@ void CISpinAdapter::prepare_couplings(const std::vector<Determinant>& dets) {
             conf_to_csfs(conf, det_hash);
         }
     }
-    std::cout << "Timing for finding the CSFs: " << std::fixed << std::setprecision(3)
-              << t2.elapsed_seconds() << " s" << std::endl;
+    LOG_INFO << "Timing for finding the CSFs: " << std::fixed << std::setprecision(3)
+             << t2.elapsed_seconds() << " s";
 
     // check that the number of couplings and CSFs is correct
     assert(ncsf_ == ncsf);

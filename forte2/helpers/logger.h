@@ -27,7 +27,7 @@ class Logger {
 
     void log(Level level, const std::string& message) {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (level <= current_level_) { // Changed: now <= instead of >=
+        if (level <= current_level_) {
             auto& stream = (level == ERROR) ? std::cerr : std::cout;
             stream << "[" << levelToString(level) << "] " << message << std::endl;
         }
@@ -64,8 +64,7 @@ class LogStream {
 
   public:
     LogStream(Logger::Level level)
-        : level_(level), should_log_(level <= Logger::getInstance().getLevel()) {
-    } // Changed: <= instead of >=
+        : level_(level), should_log_(level <= Logger::getInstance().getLevel()) {}
 
     template <typename T> LogStream& operator<<(const T& value) {
         if (should_log_) {
