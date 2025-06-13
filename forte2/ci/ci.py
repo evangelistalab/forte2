@@ -124,10 +124,6 @@ class CI(MOsMixin, SystemMixin):
         if not self.executed:
             self._ci_solver_startup()
 
-        print(
-            f"\nRunning CI with orbitals: {self.orbitals}, state: {self.state}, nroot: {self.nroot}"
-        )
-
         # Create the CISigmaBuilder from the CI strings and integrals
         # This object handles some temporary memory deallocated at destruction
         # and is used to compute the Hamiltonian matrix elements in the determinant basis
@@ -252,7 +248,7 @@ class CI(MOsMixin, SystemMixin):
                 + np.einsum("ijkl,ijkl", root_rdms["rdm2_ab"], self.ints.V)
                 + np.einsum("ijkl,ijkl", root_rdms["rdm2_bb_full"], A) * 0.25
             )
-            print(f"CI energy from expanded RDMs: {rdms_energy:.6f} Eh")
+            logging.info(f"CI energy from expanded RDMs: {rdms_energy:.6f} Eh")
 
             assert np.isclose(
                 self.E[root], rdms_energy
@@ -267,13 +263,13 @@ class CI(MOsMixin, SystemMixin):
                     self.ints.V,
                 )
             )
-            print(f"CI energy from spin-free RDMs: {rdms_energy:.6f} Eh")
+            logging.info(f"CI energy from spin-free RDMs: {rdms_energy:.6f} Eh")
 
             assert np.isclose(
                 self.E[root], rdms_energy
             ), f"CI energy {self.E[root]} Eh does not match RDMs energy {rdms_energy} Eh"
 
-            print(f"RDMs for root {root} validated successfully.\n")
+            logging.info(f"RDMs for root {root} validated successfully.\n")
 
     def _build_guess_vectors(self, Hdiag):
         """

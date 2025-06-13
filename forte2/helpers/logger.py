@@ -15,7 +15,7 @@ class LoggerConfig:
             return
 
         # Create formatter
-        formatter = logging.Formatter("[%(levelname)s] %(message)s")
+        formatter = logging.Formatter("%(message)s")
 
         # Setup console handler
         console_handler = logging.StreamHandler(sys.stdout)

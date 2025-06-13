@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import scipy as sp
 from dataclasses import dataclass, field
@@ -32,7 +33,7 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
         self._make_spaces_contiguous()
         self.nrr = self._get_nonredundant_rotations()
 
-        print(f'{"Iteration":>10} {"CI Energy":>20} {"norm(g)":>20} ')
+        logging.warning(f'{"Iteration":>10} {"CI Energy":>20} {"norm(g)":>20} ')
         self.iter = 0
         self.E = np.zeros(self.parent_method.nroot)
 
@@ -63,7 +64,7 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
 
             orbgrad = self._compute_orbgrad(Fcore, Fact, Y, Z)
 
-            print(
+            logging.warning(
                 f"{self.iter:>10d} {self.E[0]:>20.10f} {abs(np.linalg.norm(orbgrad, np.inf)):>20.10f}"
             )
 
