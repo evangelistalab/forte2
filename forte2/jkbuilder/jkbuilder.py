@@ -1,6 +1,6 @@
 import numpy as np
 import scipy as sp
-
+import logging
 from forte2 import ints
 from forte2.system import ModelSystem
 
@@ -27,9 +27,9 @@ class FockBuilder:
         nb = self.basis.size
         naux = self.auxiliary_basis.size
         memory_gb = 8 * (naux**2 + naux * nb**2) / (1024**3)
-        print(f"Memory requirements: {memory_gb:.2f} GB")
-        print(f"Number of system basis functions: {nb}")
-        print(f"Number of auxiliary basis functions: {naux}")
+        logging.info(f"Memory requirements: {memory_gb:.2f} GB")
+        logging.info(f"Number of system basis functions: {nb}")
+        logging.info(f"Number of auxiliary basis functions: {naux}")
 
         # Compute the integrals (P|Q) with P, Q in the auxiliary basis
         M = ints.coulomb_2c(self.auxiliary_basis, self.auxiliary_basis)
