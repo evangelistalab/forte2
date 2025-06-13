@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import forte2
+import logging
 
 from forte2.state.state import State
 from forte2.helpers.mixins import MOsMixin, SystemMixin
@@ -74,6 +75,9 @@ class CI(MOsMixin, SystemMixin):
         SystemMixin.copy_from_upstream(self, self.parent_method)
         MOsMixin.copy_from_upstream(self, self.parent_method)
 
+        logging.info(
+            f"\nRunning CI with orbitals: {self.orbitals}, state: {self.state}, nroot: {self.nroot}"
+        )
         # Generate the integrals with all the orbital spaces flattened
         self.flattened_orbitals = [orb for sublist in self.orbitals for orb in sublist]
 
@@ -94,18 +98,18 @@ class CI(MOsMixin, SystemMixin):
             self.gas_max,
         )
 
-        print(f"\nNumber of α electrons: {self.ci_strings.na}")
-        print(f"Number of β electrons: {self.ci_strings.nb}")
-        print(f"Number of α strings: {self.ci_strings.nas}")
-        print(f"Number of β strings: {self.ci_strings.nbs}")
-        print(f"Number of determinants: {self.ci_strings.ndet}")
+        logging.info(f"\nNumber of α electrons: {self.ci_strings.na}")
+        logging.info(f"Number of β electrons: {self.ci_strings.nb}")
+        logging.info(f"Number of α strings: {self.ci_strings.nas}")
+        logging.info(f"Number of β strings: {self.ci_strings.nbs}")
+        logging.info(f"Number of determinants: {self.ci_strings.ndet}")
 
         self.spin_adapter = forte2.CISpinAdapter(
             self.state.multiplicity - 1, self.state.twice_ms, self.norb
         )
         self.dets = self.ci_strings.make_determinants()
         self.spin_adapter.prepare_couplings(self.dets)
-        print(f"Number of CSFs: {self.spin_adapter.ncsf()}")
+        logging.info(f"Number of CSFs: {self.spin_adapter.ncsf()}")
 
         # 1. Allocate memory for the CI vectors
         self.ndet = self.ci_strings.ndet
@@ -169,19 +173,19 @@ class CI(MOsMixin, SystemMixin):
         # 6. Run Davidson
         self.evals, self.evecs = self.solver.solve()
 
-        print(f"\nDavidson-Liu solver converged.\n")
+        logging.info(f"\nDavidson-Liu solver converged.\n")
 
         # 7. Store the final energy and properties
         self.E = self.evals
         for i, e in enumerate(self.evals):
-            print(f"Final CI Energy Root {i}: {e:20.12f} [Eh]")
+            logging.info(f"Final CI Energy Root {i}: {e:20.12f} [Eh]")
 
         h_tot, h_aabb, h_aaaa, h_bbbb = self.ci_sigma_builder.avg_build_time()
-        print("\nAverage CI Sigma Builder time summary:")
-        print(f"h_aabb time:    {h_aabb:.3f} s/build")
-        print(f"h_aaaa time:    {h_aaaa:.3f} s/build")
-        print(f"h_bbbb time:    {h_bbbb:.3f} s/build")
-        print(f"total time:     {h_tot:.3f} s/build")
+        logging.info("\nAverage CI Sigma Builder time summary:")
+        logging.info(f"h_aabb time:    {h_aabb:.3f} s/build")
+        logging.info(f"h_aaaa time:    {h_aaaa:.3f} s/build")
+        logging.info(f"h_bbbb time:    {h_bbbb:.3f} s/build")
+        logging.info(f"total time:     {h_tot:.3f} s/build")
 
         # TODO: Make this optional in production code
         self._test_rdms()
@@ -193,7 +197,7 @@ class CI(MOsMixin, SystemMixin):
     def _test_rdms(self):
         # Compute the RDMs from the CI vectors
         # and verify the energy from the RDMs matches the CI energy
-        print("\nComputing RDMs from CI vectors.\n")
+        logging.info("\nComputing RDMs from CI vectors.\n")
         for root in range(self.nroot):
             root_rdms = {}
             root_rdms["rdm1"] = self.make_rdm1_sf(self.evecs[:, root])
@@ -236,7 +240,7 @@ class CI(MOsMixin, SystemMixin):
                 + np.einsum("ijkl,ijkl", root_rdms["rdm2_ab"], self.ints.V)
                 + np.einsum("ij,ij", root_rdms["rdm2_bb"], M)
             )
-            print(f"CI energy from RDMs: {rdms_energy:.6f} Eh")
+            logging.info(f"CI energy from RDMs: {rdms_energy:.6f} Eh")
             assert np.isclose(
                 self.E[root], rdms_energy
             ), f"CI energy {self.E[root]} Eh does not match RDMs energy {rdms_energy} Eh"
@@ -279,9 +283,9 @@ class CI(MOsMixin, SystemMixin):
 
         # determine the number of guess vectors
         self.num_guess_states = min(self.guess_per_root * self.nroot, self.basis_size)
-        print(f"Number of guess states: {self.num_guess_states}")
+        logging.info(f"Number of guess states: {self.num_guess_states}")
         nguess_dets = min(self.ndets_per_guess * self.num_guess_states, self.basis_size)
-        print(f"Number of guess basis: {nguess_dets}")
+        logging.info(f"Number of guess basis: {nguess_dets}")
 
         # find the indices of the elements of Hdiag with the lowest values
         indices = np.argsort(Hdiag)[:nguess_dets]

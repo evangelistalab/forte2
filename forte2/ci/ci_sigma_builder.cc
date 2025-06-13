@@ -5,6 +5,7 @@
 #include "helpers/np_vector_functions.h"
 #include "helpers/indexing.hpp"
 #include "helpers/blas.h"
+#include "helpers/logger.h"
 
 #include "ci_sigma_builder.h"
 
@@ -29,9 +30,8 @@ CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, n
         max_size = std::max(lists.detpblk(nI), max_size);
     }
 
-    std::cout << "\nAllocating CI temporary buffers of size 2 x " << max_size << " ("
-              << 2 * max_size * sizeof(double) / (1024 * 1024) << " MB).\n"
-              << std::endl;
+    LOG_INFO << "\nAllocating CI temporary buffers of size 2 x " << max_size << " ("
+             << 2 * max_size * sizeof(double) / (1024 * 1024) << " MB).\n";
 
     // Resize the TR and TL vectors to the maximum block size
     TR.resize(max_size);
@@ -42,9 +42,9 @@ CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, n
 
 CISigmaBuilder::~CISigmaBuilder() {
     // Destructor does not need to do anything special
-    std::cout << std::fixed << std::setprecision(3);
-    std::cout << "\nTiming for 2RDM(aa):" << rdm2_aa_timer_ << " seconds" << std::endl;
-    std::cout << "Timing for 2RDM(ab):" << rdm2_ab_timer_ << " seconds" << std::endl;
+    LOG_INFO << std::fixed << std::setprecision(3);
+    LOG_INFO << "\nTiming for 2RDM(aa):" << rdm2_aa_timer_ << " seconds";
+    LOG_INFO << "Timing for 2RDM(ab):" << rdm2_ab_timer_ << " seconds";
 }
 
 void CISigmaBuilder::set_memory(int mb) {

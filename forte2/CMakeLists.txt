@@ -76,6 +76,7 @@ nanobind_add_module(
   api/determinant_helpers_api.cc
   api/sparse_operator_api.cc
   api/integrals_api.cc
+  api/logging_api.cc
   api/slater_rules_api.cc
   api/sparse_state_api.cc
   api/sparse_exp_api.cc

@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 from numpy.linalg import eigh, qr, norm
 
@@ -244,7 +245,7 @@ class DavidsonLiuSolver:
                 )
                 self.basis_size += added2
                 msg = f" <- +{added2} random"
-            print(
+            logging.info(
                 f"{it:4d}  ⟨E⟩ ={avg_e:18.12f}  max(ΔE) ={max_de:18.12f}  max(r) ={max_r:12.9f}  basis = {self.basis_size:4d} {msg}"
             )
 
@@ -422,11 +423,11 @@ class DavidsonLiuSolver:
             raise ValueError(msg)
 
     def _print_information(self):
-        print(f"\nDavidson-Liu solver configuration:")
-        print(f"  Size of the space:        {self.size}")
-        print(f"  Number of roots:          {self.nroot}")
-        print(f"  Maximum size of subspace: {self.max_subspace_size}")
-        print(f"  Size of collapsed space:  {self.collapse_size}")
-        print(f"  Energy convergence:       {self.e_tol}")
-        print(f"  Residual convergence:     {self.r_tol}")
-        print(f"  Maximum iterations:       {self.maxiter}\n")
+        logging.info(f"\nDavidson-Liu solver configuration:")
+        logging.info(f"  Size of the space:        {self.size}")
+        logging.info(f"  Number of roots:          {self.nroot}")
+        logging.info(f"  Maximum size of subspace: {self.max_subspace_size}")
+        logging.info(f"  Size of collapsed space:  {self.collapse_size}")
+        logging.info(f"  Energy convergence:       {self.e_tol}")
+        logging.info(f"  Residual convergence:     {self.r_tol}")
+        logging.info(f"  Maximum iterations:       {self.maxiter}\n")
