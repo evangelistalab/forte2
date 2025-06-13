@@ -188,9 +188,14 @@ class CISigmaBuilder {
     mutable std::vector<double> Kblock1_;
     mutable std::vector<double> Kblock2_;
 
+    /// @brief Builds the one-electron contribution to the sigma vector using the Knowles-Handy
+    /// algorithm.
+    void H1_kh(std::span<double> basis, std::span<double> sigma, bool alpha) const;
+
     /// @brief Builds the two-electron contribution to the sigma vector using the Knowles-Handy
     /// algorithm.
     void H2_kh(std::span<double> basis, std::span<double> sigma) const;
+
     std::tuple<std::span<double>, std::span<double>, size_t> get_Kblock_spans(size_t dim,
                                                                               size_t maxKa) const;
 };

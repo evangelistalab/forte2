@@ -3,6 +3,7 @@
 
 #include "helpers/timer.hpp"
 #include "helpers/np_vector_functions.h"
+#include "helpers/np_matrix_functions.h"
 #include "helpers/indexing.hpp"
 #include "helpers/blas.h"
 #include "helpers/logger.h"
@@ -143,8 +144,25 @@ void CISigmaBuilder::Hamiltonian(np_vector basis, np_vector sigma) const {
     auto b_span = vector::as_span(basis);
     auto s_span = vector::as_span(sigma);
 
+    for (size_t i = 0; i < s_span.size(); ++i) {
+        s_span[i] = 0.0;
+    }
+    // for (size_t i = 0; i < s_span.size(); ++i) {
+    //     b_span[i] = 0.0;
+    // }
+    // b_span[35] = 1.0; // Set a specific element to 1.0 for testing
+
+    // for (size_t i = 0; i < b_span.size(); ++i) {
+    //     if (fabs(b_span[i]) > 1e-9) {
+    //         std::cout << "basis[" << i << "] = " << b_span[i] << " " << lists_.determinant(i)
+    //                   << std::endl;
+    //     }
+    // }
+
     if (false) {
         H0(b_span, s_span);
+        // H1_kh(b_span, s_span, true);
+        // H1_kh(b_span, s_span, false);
         H1_aa_gemm(b_span, s_span, true, h_hz);
         H1_aa_gemm(b_span, s_span, false, h_hz);
 
@@ -161,12 +179,21 @@ void CISigmaBuilder::Hamiltonian(np_vector basis, np_vector sigma) const {
         hbbbb_timer_ += h_bbbb_timer.elapsed_seconds();
     } else {
         H0(b_span, s_span);
-        H1_aa_gemm(b_span, s_span, true, h_kh);
-        H1_aa_gemm(b_span, s_span, false, h_kh);
+        // H1_aa_gemm(b_span, s_span, true, h_kh);
+        // H1_aa_gemm(b_span, s_span, false, h_kh);
+        H1_kh(b_span, s_span, true);
+        H1_kh(b_span, s_span, false);
         local_timer h_aabb_timer;
         H2_kh(b_span, s_span);
         haabb_timer_ += h_aabb_timer.elapsed_seconds();
     }
+
+    // for (size_t i = 0; i < s_span.size(); ++i) {
+    //     if (fabs(s_span[i]) < 1e-9)
+    //         continue; // Skip small contributions
+    //     std::cout << "sigma[" << i << "] = " << s_span[i] << " " << lists_.determinant(i)
+    //               << std::endl;
+    // }
 
     hdiag_timer_ += t.elapsed_seconds();
     build_count_++;
@@ -219,9 +246,9 @@ void scatter_block(std::span<double> source, std::span<double> dest, bool alfa,
 
     if (alfa) {
         // Add m to C
-        for (size_t Ia{0}; Ia < maxIa; ++Ia)
-            for (size_t Ib{0}; Ib < maxIb; ++Ib)
-                dest[offset + Ia * maxIb + Ib] += source[Ia * maxIb + Ib];
+        for (size_t I{0}, maxI{maxIa * maxIb}; I < maxI; ++I)
+            // for (size_t Ib{0}; Ib < maxIb; ++Ib)
+            dest[offset + I] += source[I];
     } else {
         // Add m transposed to C
         for (size_t Ia{0}; Ia < maxIa; ++Ia)
