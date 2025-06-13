@@ -29,7 +29,7 @@ class Logger {
         std::lock_guard<std::mutex> lock(mutex_);
         if (level <= current_level_) {
             auto& stream = (level == ERROR) ? std::cerr : std::cout;
-            stream << "[" << levelToString(level) << "] " << message << std::endl;
+            stream << message << std::endl;
         }
     }
 
