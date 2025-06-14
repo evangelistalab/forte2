@@ -1,8 +1,9 @@
 #include <algorithm>
 #include <format>
 #include <string>
+#include <iostream>
 
-// #include "helpers/printing.h"
+#include "helpers/printing.hpp"
 
 #include "ci_occupation.h"
 
@@ -368,7 +369,11 @@ generate_1h_occupations(const std::vector<std::array<int, 6>>& gas_occupations) 
                 // If so, remove it and store the new occupation
                 std::array<int, 6> new_occ = gas_occupation;
                 new_occ[n] -= 1;
-                one_hole_occ.push_back(new_occ);
+                // Check if the new occupation is already in the list
+                auto it = std::find(one_hole_occ.begin(), one_hole_occ.end(), new_occ);
+                if (it == one_hole_occ.end()) {
+                    one_hole_occ.push_back(new_occ);
+                }
             }
         }
     }

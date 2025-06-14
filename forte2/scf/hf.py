@@ -380,10 +380,12 @@ class UHF(SCFMixin, MOsMixin):
 
 @dataclass
 class ROHF(SCFMixin, MOsMixin):
-    ms: float = 0.0
+    ms: float = field(default=None, init=True)
 
     def __call__(self, system):
         self = super().__call__(system)
+        if self.ms is None:
+            raise ValueError("ROHF requires a specified ms value.")
         assert np.isclose(
             int(round(self.ms * 2)), self.ms * 2
         ), "ms must be an integer multiple of 0.5."
