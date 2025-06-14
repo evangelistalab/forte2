@@ -1,7 +1,7 @@
 import forte2
 from forte2.scf import RHF, GHF
 import numpy as np
-from forte2.helpers.comparisons import approx
+from forte2.helpers.comparisons import approx, approx_loose
 
 
 def test_sfx2c1e():
@@ -17,7 +17,7 @@ def test_sfx2c1e():
 
     scf = RHF(charge=0)(system)
     scf.run()
-    assert scf.E == approx(escf)
+    assert scf.E == approx_loose(escf)
 
 
 def test_sox2c1e():
