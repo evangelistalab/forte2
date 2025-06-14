@@ -13,6 +13,11 @@
 
 namespace forte2 {
 
+enum class CIAlgorithm {
+    Knowles_Handy,     // Knowles-Handy algorithm
+    Harrison_Zarrabian // Harrison-Zarrabian algorithm
+};
+
 class CISigmaBuilder {
   public:
     // == Class Constructor ==
@@ -25,6 +30,11 @@ class CISigmaBuilder {
     /// @brief Set the memory size for temporary buffers in bytes. Use before calling Hamiltonian().
     /// @param mb Memory size in megabytes (default is 1 GB)
     void set_memory(int mb);
+
+    /// @brief Set the CI algorithm to use for building the Hamiltonian
+    /// @param algorithm The CI algorithm to use (default is "knowles-handy")
+    /// Supported algorithms: "kh", "hz", "knowles-handy", "harrison-zarrabian"
+    void set_algorithm(const std::string& algorithm);
 
     /// @brief Set the one and two-electron integrals for the Hamiltonian
     void set_Hamiltonian(double E, np_matrix H, np_tensor4 V);
@@ -119,6 +129,8 @@ class CISigmaBuilder {
   private:
     // == Class Private Variables ==
 
+    /// @brief The CI algorithm to use for building the Hamiltonian
+    CIAlgorithm algorithm_ = CIAlgorithm::Knowles_Handy; // Default to Knowles-Handy algorithm
     /// @brief The CIStrings object containing the determinant classes and their properties
     const CIStrings& lists_;
     /// @brief The scalar energy

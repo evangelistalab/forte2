@@ -3,6 +3,9 @@ from numpy import isclose  # type: ignore
 
 from forte2 import *
 
+# assuming scf tolerance of 1e-12
+approx = lambda x: pytest.approx(x, abs=1e-9)
+
 
 def test_gasci_rhf_1():
     xyz = f"""
@@ -19,11 +22,12 @@ def test_gasci_rhf_1():
         nroot=1,
         gas_min=[0],
         gas_max=[2],
+        econv=1e-12,
     )(rhf)
     ci.run()
 
-    assert isclose(rhf.E, -1.05643120731551)
-    assert isclose(ci.E[0], -1.096071975854)
+    assert rhf.E == approx(-1.05643120731551)
+    assert ci.E[0] == approx(-1.096071975854)
 
 
 def test_gasci_rhf_2():
@@ -44,10 +48,10 @@ def test_gasci_rhf_2():
     )(rhf)
     ci.run()
 
-    assert isclose(rhf.E, -1.089283671174)
-    assert isclose(ci.E[0], -1.089283671174)
+    assert rhf.E == approx(-1.089283671174)
+    assert ci.E[0] == approx(-1.089283671174)
     # TODO: Add assertion for second root when the one below is externally verified
-    # assert isclose(ci.E[1], -0.671622137375)
+    # assert ci.E[1] == approx(-0.671622137375)
 
 
 def test_gasci_rhf_3():
@@ -68,8 +72,8 @@ def test_gasci_rhf_3():
     )(rhf)
     ci.run()
 
-    assert isclose(rhf.E, -1.12475114835983)
-    assert isclose(ci.E[0], -1.145766051194)
+    assert rhf.E == approx(-1.124751148359)
+    assert ci.E[0] == approx(-1.145763462068)
 
 
 def test_gasci_rhf_4():
@@ -88,14 +92,15 @@ def test_gasci_rhf_4():
         nroot=1,
         gas_min=[6, 0],
         gas_max=[10, 4],
+        econv=1e-12,
         # orbitals=[[0, 1, 2, 3, 4, 5, 6]],
         # state=State(nel=10, multiplicity=1, ms=0.0),
         # nroot=1,
     )(rhf)
     ci.run()
 
-    assert isclose(rhf.E, -76.02146209548764)
-    assert isclose(ci.E[0], -76.029447292646)
+    assert rhf.E == approx(-76.02146209548764)
+    assert ci.E[0] == approx(-76.029447292783)
 
 
 def test_gasci_rhf_5():
@@ -107,18 +112,19 @@ def test_gasci_rhf_5():
 
     system = System(xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit")
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-8)(system)
+    rhf = RHF(charge=0, econv=1e-14, dconv=1e-8)(system)
     ci = CI(
         orbitals=[[0], [1, 2, 3, 4, 5, 6]],
         state=State(nel=10, multiplicity=1, ms=0.0),
         nroot=1,
         gas_min=[0],
         gas_max=[1],
+        econv=1e-14,
     )(rhf)
     ci.run()
 
-    assert isclose(rhf.E, -76.02146209548764)
-    assert isclose(ci.E[0], -55.819535364689976)
+    assert rhf.E == approx(-76.02146209548764)
+    assert ci.E[0] == approx(-55.819535370117)
 
 
 @pytest.mark.xfail(reason="uhf energy does not match reference value")
@@ -141,8 +147,8 @@ def test_gasci_rhf_6():
     )(rhf)
     ci.run()
 
-    assert isclose(rhf.E, -75.70155175095266)
-    assert isclose(ci.E[0], -56.129450806753)
+    assert rhf.E == approx(-75.70155175095266)
+    assert ci.E[0] == approx(-56.129450806753)
 
 
 def test_gasci_rhf_7():
@@ -161,12 +167,13 @@ def test_gasci_rhf_7():
         nroot=2,
         gas_min=[1],
         gas_max=[1],
+        econv=1e-12,
     )(rhf)
     ci.run()
 
-    assert isclose(rhf.E, -76.02146209548764)
-    assert isclose(ci.E[0], -55.818614245733)
-    assert isclose(ci.E[1], -55.740542167167)
+    assert rhf.E == approx(-76.02146209548764)
+    assert ci.E[0] == approx(-55.818614251158)
+    assert ci.E[1] == approx(-55.740542172622)
 
 
 def test_gasci_rhf_8():
@@ -185,15 +192,15 @@ def test_gasci_rhf_8():
         nroot=2,
         gas_min=[1],
         gas_max=[1],
+        econv=1e-12,
     )(rhf)
     ci.run()
 
-    assert isclose(rhf.E, -75.68026686304654)
-    assert isclose(ci.E[0], -55.598001374143)
-    assert isclose(ci.E[1], -55.525624692892)
+    assert rhf.E == approx(-75.68026686304654)
+    assert ci.E[0] == approx(-55.598443621487)
+    assert ci.E[1] == approx(-55.526088426266)
 
 
-@pytest.mark.xfail(reason="GASCI energy does not match reference value")
 def test_gasci_rohf_1():
     xyz = f"""
     C           -0.055505285387     0.281253495230     0.333445183956
@@ -207,22 +214,22 @@ def test_gasci_rohf_1():
         xyz=xyz, basis="sto-6g", auxiliary_basis="def2-universal-jkfit", unit="bohr"
     )
 
-    rhf = ROHF(charge=1, econv=1e-12, dconv=1e-8)(system)
+    rhf = ROHF(charge=1, ms=0.5, econv=1e-12, dconv=1e-8)(system)
     ci = CI(
         orbitals=[[0], [1, 2, 3, 4, 5, 6, 7, 8]],
         state=State(nel=9, multiplicity=2, ms=0.5),
         nroot=1,
         gas_min=[1],
         gas_max=[1],
+        econv=1e-12,
     )(rhf)
     ci.run()
 
     print(f"{ci.E[0]:.12f}")
-    assert isclose(rhf.E, -39.66353334247423)
-    assert isclose(ci.E[0], -29.237267496782)
+    assert rhf.E == approx(-39.66353334247423)
+    assert ci.E[0] == approx(-29.237267496782)
 
 
-@pytest.mark.xfail(reason="rohf energy does not match reference value")
 def test_gasci_rohf_2():
     xyz = f"""
     C           -0.055505285387     0.281253495230     0.333445183956
@@ -236,18 +243,16 @@ def test_gasci_rohf_2():
         xyz=xyz, basis="cc-pvtz", auxiliary_basis="def2-universal-jkfit", unit="bohr"
     )
 
-    rhf = ROHF(charge=1, econv=1e-12, dconv=1e-8)(system)
+    rhf = ROHF(charge=1, ms=0.5, econv=1e-12, dconv=1e-8)(system)
     ci = CI(
         orbitals=[[0], [1, 2, 3, 4, 5, 6, 7, 8]],
         state=State(nel=9, multiplicity=2, ms=0.5),
         nroot=1,
         gas_min=[1],
         gas_max=[1],
+        econv=1e-12,
     )(rhf)
     ci.run()
 
-    assert isclose(rhf.E, -39.77974100479403)
-    assert isclose(ci.E[0], -29.204823485711)
-
-
-test_gasci_rohf_1()
+    assert rhf.E == approx(-39.779741004794)
+    assert ci.E[0] == approx(-29.204808393068)

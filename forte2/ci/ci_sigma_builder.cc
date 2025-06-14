@@ -144,25 +144,15 @@ void CISigmaBuilder::Hamiltonian(np_vector basis, np_vector sigma) const {
     auto b_span = vector::as_span(basis);
     auto s_span = vector::as_span(sigma);
 
-    for (size_t i = 0; i < s_span.size(); ++i) {
-        s_span[i] = 0.0;
-    }
-    // for (size_t i = 0; i < s_span.size(); ++i) {
-    //     b_span[i] = 0.0;
-    // }
-    // b_span[35] = 1.0; // Set a specific element to 1.0 for testing
-
-    // for (size_t i = 0; i < b_span.size(); ++i) {
-    //     if (fabs(b_span[i]) > 1e-9) {
-    //         std::cout << "basis[" << i << "] = " << b_span[i] << " " << lists_.determinant(i)
-    //                   << std::endl;
-    //     }
-    // }
-
-    if (false) {
+    if (algorithm_ == CIAlgorithm::Knowles_Handy) {
         H0(b_span, s_span);
-        // H1_kh(b_span, s_span, true);
-        // H1_kh(b_span, s_span, false);
+        H1_kh(b_span, s_span, true);
+        H1_kh(b_span, s_span, false);
+        local_timer h_aabb_timer;
+        H2_kh(b_span, s_span);
+        haabb_timer_ += h_aabb_timer.elapsed_seconds();
+    } else {
+        H0(b_span, s_span);
         H1_aa_gemm(b_span, s_span, true, h_hz);
         H1_aa_gemm(b_span, s_span, false, h_hz);
 
@@ -177,24 +167,7 @@ void CISigmaBuilder::Hamiltonian(np_vector basis, np_vector sigma) const {
         local_timer h_bbbb_timer;
         H2_aaaa_gemm(b_span, s_span, false);
         hbbbb_timer_ += h_bbbb_timer.elapsed_seconds();
-    } else {
-        H0(b_span, s_span);
-        // H1_aa_gemm(b_span, s_span, true, h_kh);
-        // H1_aa_gemm(b_span, s_span, false, h_kh);
-        H1_kh(b_span, s_span, true);
-        H1_kh(b_span, s_span, false);
-        local_timer h_aabb_timer;
-        H2_kh(b_span, s_span);
-        haabb_timer_ += h_aabb_timer.elapsed_seconds();
     }
-
-    // for (size_t i = 0; i < s_span.size(); ++i) {
-    //     if (fabs(s_span[i]) < 1e-9)
-    //         continue; // Skip small contributions
-    //     std::cout << "sigma[" << i << "] = " << s_span[i] << " " << lists_.determinant(i)
-    //               << std::endl;
-    // }
-
     hdiag_timer_ += t.elapsed_seconds();
     build_count_++;
 }

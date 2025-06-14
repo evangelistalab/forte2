@@ -36,20 +36,15 @@ void CISigmaBuilder::H1_kh(std::span<double> basis, std::span<double> sigma, boo
         auto Cr = gather_block(basis, TR, alfa, lists_, class_Ia, class_Ib);
 
         for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
-
-            // If we act on the alpha string, the beta string classes of the
-            // result must be the same
+            // For alpha operator, the beta string classes of the result must be the same
             if (alfa and (class_Ib != class_Jb))
                 continue;
-            // If we act on the beta string, the alpha string classes of the
-            // result must be the same
+            // For beta operator, the alpha string classes of the result must be the same
             if (not alfa and (class_Ia != class_Ja))
                 continue;
-
             if (lists_.detpblk(nJ) == 0)
                 continue;
 
-            // auto Cl = gather_block(sigma, TL, alfa, lists_, class_Ja, class_Jb, !alfa);
             std::fill_n(TL.begin(), lists_.detpblk(nJ), 0.0);
 
             size_t maxL = alfa ? lists_.beta_address()->strpcls(class_Ib)
@@ -68,7 +63,7 @@ void CISigmaBuilder::H1_kh(std::span<double> basis, std::span<double> sigma, boo
             scatter_block(TL, sigma, alfa, lists_, class_Ja, class_Jb);
         }
     }
-} // End loop over h
+}
 
 void CISigmaBuilder::H2_kh(std::span<double> basis, std::span<double> sigma) const {
     size_t norb = lists_.norb();

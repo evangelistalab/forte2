@@ -163,6 +163,19 @@ class CI(MOsMixin, SystemMixin):
             self._build_guess_vectors(Hdiag)
             self.first_run = False
 
+        # Hex = np.zeros((self.basis_size, self.basis_size))
+        # for i in range(self.basis_size):
+        #     for j in range(self.basis_size):
+        #         Hij = self.ci_sigma_builder.slater_rules_csf(
+        #             self.dets, self.spin_adapter, i, j
+        #         )
+        #         Hex[i, j] = Hij
+        # # find the lowest 5 eigenvalues of the Hamiltonian
+        # e, _ = np.linalg.eigh(Hex)
+        # print(f"\nLowest 5 eigenvalues of the Hamiltonian:")
+        # for i in range(5):
+        #     print(f"Eigenvalue {i}: {e[i]:20.12f} [Eh]")
+
         def sigma_builder(Bblock, Sblock):
             # Compute the sigma block from the basis block
             ncols = Bblock.shape[1]
