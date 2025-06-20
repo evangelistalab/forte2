@@ -163,6 +163,27 @@ class CI(MOsMixin, SystemMixin):
             self._build_guess_vectors(Hdiag)
             self.first_run = False
 
+        # TODO: remove this once the CIStrings are fully implemented
+
+        # V0 = np.zeros((self.norb, self.norb, self.norb, self.norb))
+        # slater_rules = forte2.SlaterRules(self.norb, self.ints.E, self.ints.H, V0)
+        # Hex = np.zeros((self.ndet, self.ndet))
+        # for i in range(self.ndet):
+        #     for j in range(self.ndet):
+        #         if i >= j:
+        #             Hij = slater_rules.slater_rules(self.dets[i], self.dets[j])
+        #             Hex[i, j] = Hij
+        #             Hex[j, i] = Hij
+
+        # e = np.linalg.eigvalsh(Hex)
+        # print(f"\nLowest 5 eigenvalues of the Hamiltonian:")
+        # for i in range(5):
+        #     print(f"Eigenvalue {i}: {e[i]:20.12f} [Eh]")
+
+        # one body only -152.695278969574
+        #               -152.695278969574
+        #               -152.695278969574
+
         # Hex = np.zeros((self.basis_size, self.basis_size))
         # for i in range(self.basis_size):
         #     for j in range(self.basis_size):
@@ -172,9 +193,6 @@ class CI(MOsMixin, SystemMixin):
         #         Hex[i, j] = Hij
         # # find the lowest 5 eigenvalues of the Hamiltonian
         # e, _ = np.linalg.eigh(Hex)
-        # print(f"\nLowest 5 eigenvalues of the Hamiltonian:")
-        # for i in range(5):
-        #     print(f"Eigenvalue {i}: {e[i]:20.12f} [Eh]")
 
         def sigma_builder(Bblock, Sblock):
             # Compute the sigma block from the basis block
@@ -182,6 +200,7 @@ class CI(MOsMixin, SystemMixin):
             for i in range(ncols):
                 self.spin_adapter.csf_C_to_det_C(Bblock[:, i], self.b_det)
                 self.ci_sigma_builder.Hamiltonian(self.b_det, self.sigma_det)
+                # self.sigma_det = np.dot(Hex, self.b_det)
                 self.spin_adapter.det_C_to_csf_C(self.sigma_det, Sblock[:, i])
 
         self.solver.add_sigma_builder(sigma_builder)
