@@ -14,6 +14,7 @@ jobs:
         shell: bash -el {0}   
 
     strategy:
+      fail-fast: false
       matrix:
         include:
           - name: 'with_bse'

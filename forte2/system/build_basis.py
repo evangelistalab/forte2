@@ -141,6 +141,9 @@ def build_basis(
             "Expected str or dict."
         )
 
+    # convert the basis set names to lowercase
+    basis_per_atom = {atom: basis_name.lower() for atom, basis_name in basis_per_atom.items()}
+    # set the basis name
     basis.set_name(prefix + basis_name)
     # get the basis set data for each atom
     atom_basis = get_atom_basis(basis_per_atom)
