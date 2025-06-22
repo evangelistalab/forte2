@@ -1,6 +1,7 @@
 import pytest
 from forte2 import *
 from forte2.helpers.comparisons import approx
+from forte2.system.build_basis import BSE_AVAILABLE
 
 
 def test_gasci_rhf_1():
@@ -50,13 +51,19 @@ def test_gasci_rhf_2():
     # assert ci.E[1] == approx(-0.671622137375)
 
 
+@pytest.mark.skipif(not BSE_AVAILABLE, reason="Basis set exchange is not available")
 def test_gasci_rhf_3():
     xyz = f"""
     H  0.000000000000  0.000000000000 -0.375000000000
     H  0.000000000000  0.000000000000  0.375000000000
     """
 
-    system = System(xyz=xyz, basis="sto-6g", auxiliary_basis="def2-universal-jkfit")
+    system = System(
+        xyz=xyz,
+        basis="sto-6g",
+        auxiliary_basis="def2-universal-jkfit",
+        auxiliary_basis_mp2="def2-svp-rifit",
+    )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CI(
@@ -69,7 +76,7 @@ def test_gasci_rhf_3():
     ci.run()
 
     assert rhf.E == approx(-1.124751148359)
-    assert ci.E[0] == approx(-1.145763462068)
+    assert ci.E[0] == approx(-1.145766051194)
 
 
 def test_gasci_rhf_4():
