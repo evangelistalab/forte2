@@ -86,7 +86,7 @@ class CI(MOsMixin, SystemMixin):
 
         # 1. Transform the orbitals to the MO basis
         self.ints = RestrictedMOIntegrals(
-            self.system, self.C[0], self.flattened_orbitals, self.core_orbitals
+            self.system, self.C[0], self.flattened_orbitals, self.core_orbitals, use_jkfit=False
         )
 
         # 2. Create the string lists
