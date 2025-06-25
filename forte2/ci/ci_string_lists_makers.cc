@@ -1,47 +1,14 @@
 #include <algorithm>
+#include <numeric>
 
-#include "ci_string_address.h"
-#include "ci_string_lists.h"
-#include "ci_string_lists_makers.h"
+#include "ci/ci_string_address.h"
+#include "ci/ci_string_lists.h"
+#include "ci/ci_string_lists_makers.h"
 
 #include "helpers/cartesian_product.hpp"
+#include "helpers/indexing.hpp"
 
 namespace forte2 {
-
-/**
- * Generate all the pairs p > q with pq in pq_sym
- * these are stored as pair<int,int> in pair_list[pq_sym][pairpi]
- */
-PairList make_pair_list(size_t nirrep,
-                        const std::vector<std::pair<int, int>>& orbital_index_and_symmetry) {
-    PairList list(nirrep);
-
-    for (const auto& [p, p_sym] : orbital_index_and_symmetry) {
-        for (const auto& [q, q_sym] : orbital_index_and_symmetry) {
-            if (p > q) {
-                auto pq_sym = p_sym ^ q_sym;
-                list[pq_sym].emplace_back(p, q);
-            }
-        }
-    }
-
-    // // Loop over irreps of the pair pq
-    // for (size_t pq_sym = 0; pq_sym < nirrep; ++pq_sym) {
-    //     // Loop over irreps of p
-    //     for (size_t p_sym = 0; p_sym < nirrep; ++p_sym) {
-    //         int q_sym = pq_sym ^ p_sym;
-    //         for (int p_rel = 0; p_rel < mopi[p_sym]; ++p_rel) {
-    //             for (int q_rel = 0; q_rel < mopi[q_sym]; ++q_rel) {
-    //                 int p_abs = p_rel + mopi_offset[p_sym];
-    //                 int q_abs = q_rel + mopi_offset[q_sym];
-    //                 if (p_abs > q_abs)
-    //                     list[pq_sym].push_back(std::make_pair(p_abs, q_abs));
-    //             }
-    //         }
-    //     }
-    // }
-    return list;
-}
 
 StringList make_strings_with_occupation(size_t num_spaces, int nirrep,
                                         const std::vector<int>& space_size,
@@ -107,35 +74,6 @@ StringList make_strings_with_occupation(size_t num_spaces, int nirrep,
     return list;
 }
 
-OOListMap make_oo_list(const StringList& strings, std::shared_ptr<StringAddress> addresser) {
-    OOListMap list;
-    const int nmo = addresser->nbits();
-    int k = addresser->nones() - 2;
-    if (k >= 0) {
-        // Loop over irreps of the pair pq
-        for (int p = 0; p < nmo; p++) {
-            for (int q = 0; q < p; q++) {
-                make_oo(strings, list, p, q);
-            }
-        }
-    }
-    return list;
-}
-
-void make_oo(const StringList& strings, OOListMap& list, int p, int q) {
-    for (int class_I{0}; const auto& string_class : strings) {
-        for (u_int32_t add_I{0}; const auto& I : string_class) {
-            // find the strings where both p and q are occupied
-            if (I[p] and I[q]) {
-                auto& list_oo = list[class_I];
-                list_oo[std::make_tuple(p, q)].push_back(add_I);
-            }
-            add_I++;
-        }
-        class_I++;
-    }
-}
-
 VOListMap make_vo_list(const StringList& strings, const std::shared_ptr<StringAddress>& I_addresser,
                        const std::shared_ptr<StringAddress>& J_addresser) {
     VOListMap list;
@@ -173,85 +111,50 @@ void make_vo(const StringList& strings, const std::shared_ptr<StringAddress>& I_
     }
 }
 
-VVOOListMap make_vvoo_list(const StringList& strings, std::shared_ptr<StringAddress> addresser,
-                           const std::vector<std::pair<int, int>>& orbital_index_and_symmetry) {
-    VVOOListMap list;
-    for (const auto& [p, p_sym] : orbital_index_and_symmetry) {
-        for (const auto& [q, q_sym] : orbital_index_and_symmetry) {
-            for (const auto& [r, r_sym] : orbital_index_and_symmetry) {
-                for (const auto& [s, s_sym] : orbital_index_and_symmetry) {
-                    if ((p > q) and (r > s) and ((p_sym ^ q_sym) == (r_sym ^ s_sym))) {
-                        // Avoid double counting
-                        if ((not((p == r) and (q == s))) and (not((p == s) and (q == r)))) {
-                            make_vvoo(strings, addresser, list, p, q, r, s);
-                        }
-                    }
-                }
-            }
+VOListMap2 make_vo_list2(const StringList& strings,
+                         const std::shared_ptr<StringAddress>& I_addresser,
+                         const std::shared_ptr<StringAddress>& J_addresser) {
+    VOListMap2 list;
+    auto nclasses_I = I_addresser->nclasses();
+    auto nclasses_J = J_addresser->nclasses();
+    for (size_t class_I = 0; class_I < nclasses_I; ++class_I) {
+        size_t nstr = I_addresser->strpcls(class_I); // ensure that the addresser has all classes
+        for (size_t class_J = 0; class_J < nclasses_J; ++class_J) {
+            list[std::make_pair(class_I, class_J)] =
+                std::vector<std::vector<StringSubstitution2>>(nstr);
         }
     }
-    // if ((p_abs > q_abs) && (r_abs > s_abs)) {
-    //     // Avoid
-    //     if ((not((p_abs == r_abs) and (q_abs == s_abs))) and
-    //         (not((p_abs == s_abs) and (q_abs == r_abs)))) {
-    //         make_vvoo(strings, addresser, list, p_abs, q_abs, r_abs, s_abs);
-    //     }
-    // }
-
-    // // Loop over irreps of the pair pq
-    // for (size_t pq_sym = 0; pq_sym < nirrep; ++pq_sym) {
-    //     int rs_sym = pq_sym;
-    //     // Loop over irreps of p,r
-    //     for (size_t p_sym = 0; p_sym < nirrep; ++p_sym) {
-    //         int q_sym = pq_sym ^ p_sym;
-    //         for (size_t r_sym = 0; r_sym < nirrep; ++r_sym) {
-    //             size_t s_sym = rs_sym ^ r_sym;
-    //             for (int p_rel = 0; p_rel < mopi[p_sym]; ++p_rel) {
-    //                 for (int q_rel = 0; q_rel < mopi[q_sym]; ++q_rel) {
-    //                     for (int r_rel = 0; r_rel < mopi[r_sym]; ++r_rel) {
-    //                         for (int s_rel = 0; s_rel < mopi[s_sym]; ++s_rel) {
-    //                             int p_abs = p_rel + mopi_offset[p_sym];
-    //                             int q_abs = q_rel + mopi_offset[q_sym];
-    //                             int r_abs = r_rel + mopi_offset[r_sym];
-    //                             int s_abs = s_rel + mopi_offset[s_sym];
-
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
+    const int nmo = I_addresser->nbits();
+    for (int p = 0; p < nmo; p++) {
+        for (int q = 0; q < nmo; q++) {
+            make_vo2(strings, I_addresser, J_addresser, list, p, q);
+        }
+    }
     return list;
 }
 
-void make_vvoo(const StringList& strings, std::shared_ptr<StringAddress> addresser,
-               VVOOListMap& list, int p, int q, int r, int s) {
+void make_vo2(const StringList& strings, const std::shared_ptr<StringAddress>& I_addresser,
+              const std::shared_ptr<StringAddress>& J_addresser, VOListMap2& list, int p, int q) {
+
     for (const auto& string_class : strings) {
         for (const auto& I : string_class) {
+            const auto& [add_I, class_I] = I_addresser->address_and_class(I);
             auto J = I;
             double sign = 1.0;
-            // Apply a^{+}_p a^{+}_q a_s a_r to I
-            if (J[r]) {
-                sign *= J.slater_sign(r);
-                J[r] = false;
-                if (J[s]) {
-                    sign *= J.slater_sign(s);
-                    J[s] = false;
-                    if (!J[q]) {
-                        sign *= J.slater_sign(q);
-                        J[q] = true;
-                        if (!J[p]) {
-                            sign *= J.slater_sign(p);
-                            J[p] = true;
-                            if (auto it = addresser->find(J); it != addresser->end()) {
-                                const auto& [add_I, class_I] = addresser->address_and_class(I);
-                                const auto& [add_J, class_J] = it->second;
-                                auto& list_IJ = list[std::make_pair(class_I, class_J)];
-                                list_IJ[std::make_tuple(p, q, r, s)].push_back(
-                                    StringSubstitution(sign, add_I, add_J));
-                            }
-                        }
+            if (J[q]) {
+                sign *= J.slater_sign(q);
+                J[q] = false;
+                if (!J[p]) {
+                    sign *= J.slater_sign(p);
+                    J[p] = true;
+                    if (auto it = J_addresser->find(J); it != J_addresser->end()) {
+                        const auto& [add_J, class_J] = it->second;
+                        auto& list_IJ = list[std::make_pair(class_I, class_J)];
+                        // cast sign to integer and scale if diagonal
+                        double scaled_sign = sign * (p == q ? 2. : 1.);
+                        // use a single index for (p, q)
+                        size_t pq = static_cast<size_t>(pair_index_geq(p, q));
+                        list_IJ[add_I].push_back(StringSubstitution2(scaled_sign, pq, add_J));
                     }
                 }
             }
@@ -268,6 +171,7 @@ H1List make_1h_list(const StringList& strings, std::shared_ptr<StringAddress> ad
     if ((k >= 0) and (k <= n)) { // check that (n > 0) makes sense.
         for (const auto& string_class : strings) {
             for (const auto& I : string_class) {
+                // std::cout << "String " < < < < std::endl;
                 const auto& [add_I, class_I] = addresser->address_and_class(I);
                 for (size_t p = 0; p < nmo; ++p) {
                     if (I[p]) {
@@ -278,6 +182,54 @@ H1List make_1h_list(const StringList& strings, std::shared_ptr<StringAddress> ad
                             const auto& [add_J, class_J] = it->second;
                             std::tuple<int, size_t, int> I_tuple(class_J, add_J, class_I);
                             list[I_tuple].push_back(H1StringSubstitution(sign, p, add_I));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return list;
+}
+
+H1List2 make_1h_list2(const StringList& strings, std::shared_ptr<StringAddress> addresser,
+                      std::shared_ptr<StringAddress> addresser_1h) {
+    H1List2 list;
+    int n = addresser->nbits();
+    int k = addresser->nones();
+    size_t nmo = addresser->nbits();
+
+    // for (const auto& string_class_I : strings) {
+    //     for (const auto& I : string_class_I) {
+    //         const auto& [add_I, class_I] = addresser->address_and_class(I);
+    //         for (const auto& string_class_J : strings) {
+    //             for (const auto& J : string_class_J) {
+    //                 const auto& [add_J, class_J] = addresser->address_and_class(J);
+    //             }
+    //         }
+    //     }
+    // }
+    auto nclasses_1h = addresser_1h->nclasses();
+    auto nclasses = addresser->nclasses();
+    for (size_t h = 0; h < nclasses_1h; ++h) {
+        size_t nstr_1h = addresser_1h->strpcls(h); // ensure that the addresser_1h has all classes
+        for (size_t h2 = 0; h2 < nclasses; ++h2) {
+            list[std::make_pair(h, h2)] = std::vector<std::vector<H1StringSubstitution>>(nstr_1h);
+        }
+    }
+
+    if ((k >= 0) and (k <= n)) { // check that (n > 0) makes sense.
+        for (const auto& string_class : strings) {
+            for (const auto& I : string_class) {
+                const auto& [add_I, class_I] = addresser->address_and_class(I);
+                for (size_t p = 0; p < nmo; ++p) {
+                    if (I[p]) {
+                        auto J = I;
+                        const auto sign = J.slater_sign(p);
+                        J[p] = false;
+                        if (auto it = addresser_1h->find(J); it != addresser_1h->end()) {
+                            const auto& [add_J, class_J] = it->second;
+                            std::pair<size_t, size_t> I_tuple(class_J, class_I);
+                            list[I_tuple][add_J].push_back(H1StringSubstitution(sign, p, add_I));
                         }
                     }
                 }
@@ -310,8 +262,6 @@ H2List make_2h_list(const StringList& strings, std::shared_ptr<StringAddress> ad
                                 const auto& [add_J, class_J] = it->second;
                                 std::tuple<int, size_t, int> I_tuple(class_J, add_J, class_I);
                                 list[I_tuple].push_back(H2StringSubstitution(sign, p, q, add_I));
-                                // list[I_tuple].push_back(H2StringSubstitution(-sign, q, p,
-                                // add_I));
                             }
                         }
                     }
@@ -334,12 +284,6 @@ H3List make_3h_list(const StringList& strings, std::shared_ptr<StringAddress> ad
     int n = addresser->nbits();
     int k = addresser->nones();
     size_t nmo = addresser->nbits();
-    // int num_occ;
-    // std::vector<int> occ(n);
-    //             find_set_bits(occ, num_occ);
-    //             for (size_t r = 0; r < nmo; ++r) {
-    //                 for (size_t q = r + 1; q < nmo; ++q) {
-    //                     for (size_t p = q + 1; p < nmo; ++p) {
     if ((k >= 0) and (k <= n)) { // check that (n > 0) makes sense.
         for (const auto& string_class : strings) {
             for (const auto& I : string_class) {
@@ -391,7 +335,8 @@ find_string_map(const CIStrings& list_left, const CIStrings& list_right, bool al
     for (int class_I{0}; const auto& string_class_right : strings_right) {
         // loop over all the right strings (I)
         for (size_t addI{0}; const auto& I : string_class_right) {
-            // find the left string class (class_J) and string address (addJ) of the string J = I
+            // find the left string class (class_J) and string address (addJ) of the
+            // string J = I
             if (auto it = address_left->find(I); it != address_left->end()) {
                 const auto& [addJ, class_J] = it->second;
                 m[std::make_pair(class_I, class_J)].push_back(std::make_pair(addI, addJ));

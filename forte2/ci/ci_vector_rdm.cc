@@ -1,40 +1,7 @@
-/*
- * @BEGIN LICENSE
- *
- * Forte: an open-source plugin to Psi4 (https://github.com/psi4/psi4)
- * that implements a variety of quantum chemistry methods for strongly
- * correlated electrons.
- *
- * Copyright (c) 2012-2025 by its authors (see COPYING, COPYING.LESSER, AUTHORS).
- *
- * The copyrights for code used from other parties are included in
- * the corresponding files.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this program.  If not, see http://www.gnu.org/licenses/.
- *
- * @END LICENSE
- */
+#include "ci_string_lists.h"
+#include "ci_string_address.h"
 
-#include "psi4/libpsi4util/process.h"
-#include "psi4/libmints/matrix.h"
-
-#include "genci_string_lists.h"
-#include "genci_string_address.h"
-
-#include "genci_vector.h"
-
-namespace forte {
+namespace forte2 {
 
 /**
  * Compute the one-particle density matrix for a given wave function
@@ -157,7 +124,7 @@ std::shared_ptr<RDMs> CIVector::compute_rdms(CIVector& C_left, CIVector& C_right
  * Compute the one-particle density matrix for a given wave function
  * @param alfa flag for alfa or beta component, true = alfa, false = beta
  */
-ambit::Tensor CIVector::compute_1rdm_same_irrep(CIVector& C_left, CIVector& C_right, bool alfa) {
+np_matrix CIVector::compute_1rdm_same_irrep(CIVector& C_left, CIVector& C_right, bool alfa) {
     size_t ncmo = C_left.ncmo_;
     const auto& alfa_address = C_left.alfa_address_;
     const auto& beta_address = C_left.beta_address_;
@@ -178,7 +145,7 @@ ambit::Tensor CIVector::compute_1rdm_same_irrep(CIVector& C_left, CIVector& C_ri
             continue;
 
         auto Cr =
-            C_right.gather_C_block(CR, alfa, alfa_address, beta_address, class_Ia, class_Ib, false);
+            C_right.gather_block(CR, alfa, alfa_address, beta_address, class_Ia, class_Ib, false);
 
         for (const auto& [nJ, class_Ja, class_Jb] : lists->determinant_classes()) {
             // The string class on which we don't act must be the same for I and J
@@ -187,8 +154,8 @@ ambit::Tensor CIVector::compute_1rdm_same_irrep(CIVector& C_left, CIVector& C_ri
             if (lists->detpblk(nJ) == 0)
                 continue;
 
-            auto Cl = C_left.gather_C_block(CL, alfa, alfa_address, beta_address, class_Ja,
-                                            class_Jb, false);
+            auto Cl = C_left.gather_block(CL, alfa, alfa_address, beta_address, class_Ja, class_Jb,
+                                          false);
 
             size_t maxL = alfa ? beta_address->strpcls(class_Ib) : alfa_address->strpcls(class_Ia);
 
@@ -234,7 +201,7 @@ ambit::Tensor CIVector::compute_2rdm_aa_same_irrep(CIVector& C_left, CIVector& C
             continue;
 
         const auto Cr =
-            C_right.gather_C_block(CR, alfa, alfa_address, beta_address, class_Ia, class_Ib, false);
+            C_right.gather_block(CR, alfa, alfa_address, beta_address, class_Ia, class_Ib, false);
 
         for (const auto& [nJ, class_Ja, class_Jb] : lists->determinant_classes()) {
             // The string class on which we don't act must be the same for I and J
@@ -243,8 +210,8 @@ ambit::Tensor CIVector::compute_2rdm_aa_same_irrep(CIVector& C_left, CIVector& C
             if (lists->detpblk(nJ) == 0)
                 continue;
 
-            const auto Cl = C_left.gather_C_block(CL, alfa, alfa_address, beta_address, class_Ja,
-                                                  class_Jb, false);
+            const auto Cl = C_left.gather_block(CL, alfa, alfa_address, beta_address, class_Ja,
+                                                class_Jb, false);
 
             // get the size of the string of spin opposite to the one we are acting on
             size_t maxL = alfa ? beta_address->strpcls(class_Ib) : alfa_address->strpcls(class_Ia);
@@ -414,8 +381,8 @@ ambit::Tensor CIVector::compute_3rdm_aaa_same_irrep(CIVector& C_left, CIVector& 
             if (lists->detpblk(nI) == 0)
                 continue;
 
-            auto Cr = C_right.gather_C_block(CR, alfa, alfa_address, beta_address, class_Ia,
-                                             class_Ib, false);
+            auto Cr = C_right.gather_block(CR, alfa, alfa_address, beta_address, class_Ia, class_Ib,
+                                           false);
 
             for (const auto& [nJ, class_Ja, class_Jb] : lists->determinant_classes()) {
                 // The string class on which we don't act must be the same for I and J
@@ -425,8 +392,8 @@ ambit::Tensor CIVector::compute_3rdm_aaa_same_irrep(CIVector& C_left, CIVector& 
                     continue;
 
                 // Get a pointer to the correct block of matrix C
-                auto Cl = C_left.gather_C_block(CL, alfa, alfa_address, beta_address, class_Ja,
-                                                class_Jb, false);
+                auto Cl = C_left.gather_block(CL, alfa, alfa_address, beta_address, class_Ja,
+                                              class_Jb, false);
 
                 size_t maxL =
                     alfa ? beta_address->strpcls(class_Ib) : alfa_address->strpcls(class_Ia);
@@ -940,4 +907,4 @@ void CIVector::test_rdms(CIVector& Cl, CIVector& Cr, int max_rdm_level, RDMsType
     }
 }
 
-} // namespace forte
+} // namespace forte2

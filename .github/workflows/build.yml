@@ -13,6 +13,15 @@ jobs:
       run:
         shell: bash -el {0}   
 
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: 'with_bse'
+            extra_dependencies: 'conda-forge::basis_set_exchange'
+          - name: 'without_bse'
+            extra_dependencies: ''
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -36,6 +45,9 @@ jobs:
         export CMAKE_GENERATOR="Unix Makefiles"
         pip install --no-build-isolation -ve .
         pip list
+        if [ -n "${{ matrix.extra_dependencies }}" ]; then
+          conda install -y ${{ matrix.extra_dependencies }}
+        fi
 
     - name: Run Forte2 pytest tests
       if: steps.compile-forte2.outcome == 'success' && '!cancelled()'

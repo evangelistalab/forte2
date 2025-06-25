@@ -1,12 +1,22 @@
 import numpy as np
 import scipy as sp
-
 from forte2 import ints
 from forte2.system import ModelSystem
+from forte2.helpers import logger
 
 
 class FockBuilder:
-    def __init__(self, system):
+    """Class to build the Fock matrix using the Cholesky decomposition of the auxiliary basis integrals.
+    This class computes the atomic Coulomb (J) and exchange (K) matrices
+    using the auxiliary basis functions.
+
+    Args:
+        system (System or ModelSystem): The system for which to build the Fock matrix.
+            If a ModelSystem is provided, it will decompose the 4D ERI tensor using Cholesky decomposition with complete pivoting.
+        use_jkfit (bool): Whether to use the jkfit auxiliary basis or the MP2 auxiliary basis of the System object.
+    """
+
+    def __init__(self, system, use_jkfit=True):
         if isinstance(system, ModelSystem):
             # special handling for ModelSystem
             eri = system.eri
@@ -21,15 +31,17 @@ class FockBuilder:
             return
 
         self.basis = system.basis
-        self.auxiliary_basis = system.auxiliary_basis
+        self.auxiliary_basis = (
+            system.auxiliary_basis if use_jkfit else system.auxiliary_basis_mp2
+        )
 
         # Compute the memory requirements
         nb = self.basis.size
         naux = self.auxiliary_basis.size
         memory_gb = 8 * (naux**2 + naux * nb**2) / (1024**3)
-        print(f"Memory requirements: {memory_gb:.2f} GB")
-        print(f"Number of system basis functions: {nb}")
-        print(f"Number of auxiliary basis functions: {naux}")
+        logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
+        logger.log_info1(f"Number of system basis functions: {nb}")
+        logger.log_info1(f"Number of auxiliary basis functions: {naux}")
 
         # Compute the integrals (P|Q) with P, Q in the auxiliary basis
         M = ints.coulomb_2c(self.auxiliary_basis, self.auxiliary_basis)

@@ -47,6 +47,10 @@ endif()
 # Import nanobind through CMake's find_package mechanism
 find_package(nanobind CONFIG REQUIRED)
 
+# Find BLAS and LAPACK
+find_package(BLAS REQUIRED)
+find_package(LAPACK REQUIRED)
+
 # We are now ready to compile the actual extension module
 nanobind_add_module(
   # Name of the extension
@@ -72,6 +76,7 @@ nanobind_add_module(
   api/determinant_helpers_api.cc
   api/sparse_operator_api.cc
   api/integrals_api.cc
+  api/logging_api.cc
   api/slater_rules_api.cc
   api/sparse_state_api.cc
   api/sparse_exp_api.cc
@@ -87,6 +92,10 @@ nanobind_add_module(
   ints/two_electron.cc
   ints/value_at_points.cc
   ci/ci_sigma_builder.cc
+  ci/ci_sigma_builder_1rdm.cc
+  ci/ci_sigma_builder_2rdm.cc
+  ci/ci_sigma_builder_harrison_zarrabian.cc
+  ci/ci_sigma_builder_knowles_handy.cc
   ci/ci_spin_adapter.cc
   ci/ci_string_lists.cc
   ci/ci_string_lists_makers.cc
@@ -105,6 +114,7 @@ nanobind_add_module(
 
 target_link_libraries(_forte2 PRIVATE Libint2::int2)
 target_link_libraries(_forte2 PRIVATE Eigen3::Eigen)
+target_link_libraries(_forte2 PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
 
 target_include_directories(_forte2
   PUBLIC
@@ -113,3 +123,11 @@ target_include_directories(_forte2
 
 # Install directive for scikit-build-core
 install(TARGETS _forte2 LIBRARY DESTINATION forte2)
+
+# Enable Release build with high optimization flags if not already set
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
+endif()
+
+# Optional: explicitly define optimization flags
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")

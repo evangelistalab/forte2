@@ -331,9 +331,8 @@ class CIVector {
     /// @param hb The string class of the beta component (a generalization of the irrep)
     /// @param zero If true, zero the matrix before returning it
     /// @return A pointer to the block of the coefficient matrix
-    np_matrix gather_C_block(np_matrix M, bool alfa, std::shared_ptr<StringAddress> alfa_address,
-                             std::shared_ptr<StringAddress> beta_address, int ha, int hb,
-                             bool zero);
+    np_matrix gather_block(np_matrix M, bool alfa, std::shared_ptr<StringAddress> alfa_address,
+                           std::shared_ptr<StringAddress> beta_address, int ha, int hb, bool zero);
 
     /// @brief Scatter the data from a matrix to the coefficient matrix. This is used in the sigma
     /// vector algorithm
@@ -346,8 +345,8 @@ class CIVector {
     /// @param beta_address The addressing object for the beta component
     /// @param ha The string class of the alfa component (a generalization of the irrep)
     /// @param hb The string class of the beta component (a generalization of the irrep)
-    void scatter_C_block(np_matrix M, bool alfa, std::shared_ptr<StringAddress> alfa_address,
-                         std::shared_ptr<StringAddress> beta_address, int ha, int hb);
+    void scatter_block(np_matrix M, bool alfa, std::shared_ptr<StringAddress> alfa_address,
+                       std::shared_ptr<StringAddress> beta_address, int ha, int hb);
 };
 
 // std::shared_ptr<RDMs> compute_transition_rdms(CIVector& C_left, CIVector& C_right,

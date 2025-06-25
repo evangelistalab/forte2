@@ -90,3 +90,72 @@ def test_units():
     system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="bohr")
     assert system.unit == "bohr"
     assert system.atoms[1][1][2] == pytest.approx(1.0)
+
+
+def test_nuclear_dipole():
+    # Test for nuclear dipole calculation
+    xyz = """
+    O 0.0 0.0 0.0
+    H 0.0 0.0 1.0
+    Li 2.0 0.0 0.0
+    """
+    system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="bohr")
+
+    nucdip = system.nuclear_dipole(unit="au")
+    assert nucdip == pytest.approx([6.0, 0.0, 1.0])
+
+
+def test_nuclear_quadrupole():
+    # Test for nuclear quadrupole calculation
+    xyz = """
+    O 0.0 0.0 0.0
+    H 0.0 0.0 1.0
+    Li 2.0 0.0 0.0
+    """
+    system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="bohr")
+
+    nucquad = system.nuclear_quadrupole(unit="au")
+    assert np.trace(nucquad) == pytest.approx(0.0)
+    assert np.diag(nucquad) == pytest.approx([11.5, -6.5, -5.0])
+
+
+def test_center_of_mass():
+    # Test for center of mass calculation
+    xyz = """
+    O 0.0 0.0 0.0
+    H 0.0 0.0 1.0
+    Li 2.0 0.0 0.0
+    """
+    system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="bohr")
+    com = system.center_of_mass()
+    assert com == pytest.approx([0.57948887, 0, 0.04208937])
+
+    # This also incidentally tests the input of geometry with signed integers
+    xyz = """
+    H  1  1  1
+    P  1  1 -1
+    V  1 -1  1
+    Mn  1 -1 -1
+    Mn -1  1  1
+    V -1  1 -1
+    P -1 -1  1
+    H -1 -1 -1 
+    """
+    system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="bohr")
+    com = system.center_of_mass()
+    assert com == pytest.approx([0.0, 0.0, 0.0], abs=1e-10)
+
+
+def test_custom_basis_rhf():
+    xyz = """
+    C 0 0 0
+    O 0 0 1.2
+    """
+    system = forte2.System(
+        xyz=xyz,
+        basis={"C": "cc-pvdz", "O": "sto-6g"},
+        auxiliary_basis={"C": "cc-pVQZ-JKFIT", "O": "def2-universal-JKFIT"},
+    )
+    scf = forte2.scf.RHF(charge=0)(system)
+    scf.run()
+    assert scf.E == pytest.approx(-112.484140615262, rel=1e-8, abs=1e-8)

@@ -1,9 +1,10 @@
 from dataclasses import dataclass, field
 
 import forte2
+from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
 from .parse_xyz import parse_xyz
-from forte2.x2c import get_hcore_x2c
+from .atom_data import ATOM_DATA
 
 import numpy as np
 from numpy.typing import NDArray
@@ -14,15 +15,19 @@ from copy import deepcopy
 @dataclass
 class System:
     xyz: str
-    basis: str
-    auxiliary_basis: str = None
+    basis: str | dict
+    auxiliary_basis: str | dict = None
+    auxiliary_basis_mp2: str | dict = None
     atoms: list[tuple[float, tuple[float, float, float]]] = None
     minao_basis: str = None
     x2c_type: str = None
     unit: str = "angstrom"
 
     def __post_init__(self):
-        assert self.unit in ["angstrom", "bohr"], f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'."
+        assert self.unit in [
+            "angstrom",
+            "bohr",
+        ], f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'."
         self.atoms = parse_xyz(self.xyz, self.unit)
         self.basis = build_basis(self.basis, self.atoms)
         self.auxiliary_basis = (
@@ -30,6 +35,10 @@ class System:
             if self.auxiliary_basis is not None
             else None
         )
+        if self.auxiliary_basis_mp2 is not None:
+            self.auxiliary_basis_mp2 = build_basis(self.auxiliary_basis_mp2, self.atoms)
+        else:
+            self.auxiliary_basis_mp2 = self.auxiliary_basis
         self.minao_basis = (
             build_basis("cc-pvtz-minao", self.atoms)
             if self.minao_basis is not None
@@ -125,6 +134,68 @@ class System:
             float: Nuclear repulsion energy.
         """
         return forte2.ints.nuclear_repulsion(self.atoms)
+
+    def atomic_charges(self):
+        """
+        Return the atomic charges for the system.
+        Returns:
+            NDArray: Array of atomic charges, shape (N,) where N is the number of atoms.
+        """
+        return np.array([atom[0] for atom in self.atoms])
+
+    def atomic_masses(self):
+        """
+        Return the average atomic masses for the system.
+        Returns:
+            NDArray: Array of atomic masses, shape (N,) where N is the number of atoms.
+        """
+        return np.array([ATOM_DATA[atom[0]]["mass"] for atom in self.atoms])
+
+    def atomic_positions(self):
+        """
+        Return the atomic positions (in bohr) for the system.
+        Returns:
+            NDArray: Array of atomic positions, shape (N, 3) where N is the number of atoms.
+        """
+        return np.array([atom[1] for atom in self.atoms])
+
+    def center_of_mass(self):
+        """
+        Calculate the center of mass of the system.
+        Uses average atomic masses for the calculation.
+
+        Returns:
+            tuple: Center of mass coordinates (x, y, z).
+        """
+        masses = self.atomic_masses()
+        positions = np.array([atom[1] for atom in self.atoms])
+        return np.einsum("a,ax->x", masses, positions) / np.sum(masses)
+
+    def nuclear_dipole(self, origin=None, unit="debye"):
+        assert unit in ["debye", "au"], f"Invalid unit: {unit}. Use 'debye' or 'au'."
+        charges = self.atomic_charges()
+        positions = self.atomic_positions()
+        if origin is not None:
+            assert len(origin) == 3, "Origin must be a 3-element vector."
+            positions -= np.array(origin)[np.newaxis, :]
+        conversion_factor = (
+            1.0 / forte2.atom_data.DEBYE_TO_AU if unit == "debye" else 1.0
+        )
+        return np.einsum("a,ax->x", charges, positions) * conversion_factor
+
+    def nuclear_quadrupole(self, origin=None, unit="debye"):
+        assert unit in ["debye", "au"], f"Invalid unit: {unit}. Use 'debye' or 'au'."
+        charges = self.atomic_charges()
+        positions = self.atomic_positions()
+        if origin is not None:
+            assert len(origin) == 3, "Origin must be a 3-element vector."
+            positions -= np.array(origin)[np.newaxis, :]
+        nuc_quad = np.einsum("a,ax,ay->xy", charges, positions, positions)
+        nuc_quad = 0.5 * (3 * nuc_quad - np.eye(3) * nuc_quad.trace())
+        conversion_factor = (
+            1.0 / forte2.atom_data.DEBYE_ANGSTROM_TO_AU if unit == "debye" else 1.0
+        )
+        return nuc_quad * conversion_factor
 
 
 @dataclass

@@ -2,12 +2,12 @@ from dataclasses import dataclass, field
 import time
 import numpy as np
 import scipy as sp
-import copy
 
 import forte2
 from forte2.jkbuilder import FockBuilder
 from forte2.helpers.mixins import MOsMixin
 from forte2.helpers.matrix_functions import givens_rotation
+from forte2.helpers import logger
 from .initial_guess import minao_initial_guess, core_initial_guess
 
 
@@ -30,6 +30,7 @@ class SCFMixin:
     guess_type: str = "minao"
 
     executed: bool = field(default=False, init=False)
+    converged: bool = field(default=False, init=False)
 
     def __call__(self, system):
         self.system = system
@@ -62,18 +63,18 @@ class SCFMixin:
 
         diis = forte2.helpers.DIIS(diis_start=self.diis_start, diis_nvec=self.diis_nvec)
 
-        print(f"Number of electrons: {self.nel}")
+        logger.log_info1(f"Number of electrons: {self.nel}")
         if self._scf_type() != "GHF":  # not good quantum numbers for GHF
-            print(f"Number of alpha electrons: {self.na}")
-            print(f"Number of beta electrons: {self.nb}")
-            print(f"Ms: {self.ms}")
-        print(f"Total charge: {self.charge}")
-        print(f"Number of basis functions: {self.nbf}")
-        print(f"Number of auxiliary basis functions: {self.naux}")
-        print(f"Energy convergence criterion: {self.econv:e}")
-        print(f"Density convergence criterion: {self.dconv:e}")
-        print(f"DIIS acceleration: {diis.do_diis}")
-        print(f"\n==> {self.method} SCF ROUTINE <==")
+            logger.log_info1(f"Number of alpha electrons: {self.na}")
+            logger.log_info1(f"Number of beta electrons: {self.nb}")
+            logger.log_info1(f"Ms: {self.ms}")
+        logger.log_info1(f"Total charge: {self.charge}")
+        logger.log_info1(f"Number of basis functions: {self.nbf}")
+        logger.log_info1(f"Number of auxiliary basis functions: {self.naux}")
+        logger.log_info1(f"Energy convergence criterion: {self.econv:e}")
+        logger.log_info1(f"Density convergence criterion: {self.dconv:e}")
+        logger.log_info1(f"DIIS acceleration: {diis.do_diis}")
+        logger.log_info1(f"\n==> {self.method} SCF ROUTINE <==")
 
         Vnn = self._get_nuclear_repulsion()
         S = self._get_overlap()
@@ -121,14 +122,15 @@ class SCFMixin:
             )
 
             if np.abs(deltaE) < self.econv and deltaD < self.dconv:
-                print("-" * width)
-                print(f"{self.method} iterations converged\n")
+                logger.log_info1("-" * width)
+                logger.log_info1(f"{self.method} iterations converged\n")
                 # perform final iteration
                 F, F_canon = self._build_fock(H, fock_builder, S)
                 self.eps, self.C = self._diagonalize_fock(F_canon, S)
                 self.D = self._build_density_matrix()
                 self.E = Vnn + self._energy(H, F)
-                print(f"Final {self.method} Energy: {self.E:20.12f}")
+                logger.log_info1(f"Final {self.method} Energy: {self.E:20.12f}")
+                self.converged = True
                 break
 
             # reset old parameters
@@ -142,6 +144,9 @@ class SCFMixin:
         end = time.monotonic()
         print(f"{self.method} time: {end - start:.2f} seconds")
 
+        if self.converged:
+            self._post_process()
+
         self.executed = True
         return self
 
@@ -153,6 +158,13 @@ class SCFMixin:
 
     def _get_nuclear_repulsion(self):
         return self.system.nuclear_repulsion_energy()
+
+    def _post_process(self):
+        """
+        Post-process the SCF results.
+        This method can be overridden by subclasses to perform additional calculations.
+        """
+        self._print_orbital_energies()
 
 
 @dataclass
@@ -175,8 +187,9 @@ class RHF(SCFMixin, MOsMixin):
         D = np.einsum("mi,ni->mn", self.C[0][:, : self.na], self.C[0][:, : self.na])
         return [D]
 
-    def Dao(self):
-        return self._build_density_matrix()[0]
+    def _build_total_density_matrix(self):
+        # returns the total density matrix (Daa + Dbb)
+        return 2 * self._build_density_matrix()[0]
 
     def _initial_guess(self, H, S, guess_type="minao"):
         match guess_type:
@@ -208,6 +221,26 @@ class RHF(SCFMixin, MOsMixin):
 
     def _diis_update(self, diis, F, AO_grad):
         return diis.update(F, AO_grad)
+
+    def _print_orbital_energies(self):
+        ndocc = self.na
+        nuocc = self.nbf - ndocc
+        orb_per_row = 5
+        print("\nOrbital Energies [Eh]")
+        print("---------------------")
+        print("\nDoubly Occupied:")
+        for i in range(ndocc):
+            if i % orb_per_row == 0:
+                print()
+            print(f"{i+1:<4d} {self.eps[0][i]:<12.6f}", end=" ")
+
+        print("\n\nVirtual:")
+        for i in range(nuocc):
+            idx = ndocc + i
+            if idx % orb_per_row == 0:
+                print()
+            print(f"{idx+1:<4d} {self.eps[0][idx]:<12.6f}", end=" ")
+        print()
 
 
 @dataclass
@@ -242,7 +275,7 @@ class UHF(SCFMixin, MOsMixin):
         D_b = np.einsum("mi,ni->mn", self.C[1][:, : self.nb], self.C[1][:, : self.nb])
         return D_a, D_b
 
-    def Dao(self):
+    def _build_total_density_matrix(self):
         D_a, D_b = self._build_density_matrix()
         return D_a + D_b
 
@@ -268,6 +301,12 @@ class UHF(SCFMixin, MOsMixin):
         eps_a, C_a = sp.linalg.eigh(F[0], S)
         eps_b, C_b = sp.linalg.eigh(F[1], S)
         return [eps_a, eps_b], [C_a, C_b]
+
+    def _print_orbital_energies(self):
+        print("\nOrbital Energies:")
+        print("#    Alpha    Beta")
+        for idx, (epa, epb) in enumerate(zip(self.eps[0], self.eps[1])):
+            print(f"{idx + 1:>2d}: {epa:.6f} {epb:.6f}")
 
     def _spin(self, S):
         # alpha-beta orbital overlap matrix
@@ -302,13 +341,51 @@ class UHF(SCFMixin, MOsMixin):
         ]
         return F
 
+    def _print_orbital_energies(self):
+        naocc = self.na
+        naucc = self.nbf - naocc
+        nbocc = self.nb
+        nbucc = self.nbf - nbocc
+        orb_per_row = 5
+        print("\nOrbital Energies [Eh]")
+        print("---------------------")
+        print("\nAlpha Occupied:")
+        for i in range(naocc):
+            if i % orb_per_row == 0 and i > 0:
+                print()
+            print(f"{i+1:<4d} {self.eps[0][i]:<12.6f}", end=" ")
+
+        print("\n\nAlpha Virtual:")
+        for i in range(naucc):
+            idx = naocc + i
+            if i % orb_per_row == 0 and i > naocc:
+                print()
+            print(f"{idx+1:<4d} {self.eps[0][idx]:<12.6f}", end=" ")
+        print()
+
+        print("\nBeta Occupied:")
+        for i in range(nbocc):
+            if i % orb_per_row == 0 and i > 0:
+                print()
+            print(f"{i+1:<4d} {self.eps[1][i]:<12.6f}", end=" ")
+
+        print("\n\nBeta Virtual:")
+        for i in range(nbucc):
+            idx = nbocc + i
+            if i % orb_per_row == 0 and i > nbocc:
+                print()
+            print(f"{i+1:<4d} {self.eps[1][i]:<12.6f}", end=" ")
+        print()
+
 
 @dataclass
 class ROHF(SCFMixin, MOsMixin):
-    ms: float = 0.0
+    ms: float = field(default=None, init=True)
 
     def __call__(self, system):
         self = super().__call__(system)
+        if self.ms is None:
+            raise ValueError("ROHF requires a specified ms value.")
         assert np.isclose(
             int(round(self.ms * 2)), self.ms * 2
         ), "ms must be an integer multiple of 0.5."
@@ -326,7 +403,7 @@ class ROHF(SCFMixin, MOsMixin):
     _spin = RHF._spin
     _energy = UHF._energy
     _diis_update = RHF._diis_update
-    Dao = UHF.Dao
+    _build_total_density_matrix = UHF._build_total_density_matrix
 
     def _build_fock(self, H, fock_builder, S):
         Ja, Jb = fock_builder.build_J(self.D)
@@ -370,6 +447,34 @@ class ROHF(SCFMixin, MOsMixin):
         Deff = 0.5 * (self.D[0] + self.D[1])
         return F @ Deff @ S - S @ Deff @ F
 
+    def _print_orbital_energies(self):
+        ndocc = min(self.na, self.nb)
+        nsocc = abs(self.na - self.nb)
+        nuocc = self.nbf - ndocc - nsocc
+        orb_per_row = 5
+        print("\nOrbital Energies [Eh]")
+        print("---------------------")
+        print("\nDoubly Occupied:")
+        for i in range(ndocc):
+            if i % orb_per_row == 0:
+                print()
+            print(f"{i+1:<4d} {self.eps[0][i]:<12.6f}", end=" ")
+        if nsocc > 0:
+            print("\n\nSingly Occupied:")
+            for i in range(nsocc):
+                idx = ndocc + i
+                if i % orb_per_row == 0:
+                    print()
+                print(f"{idx+1:<4d} {self.eps[0][idx]:<12.6f}", end=" ")
+
+        print("\n\nVirtual:")
+        for i in range(nuocc):
+            idx = ndocc + nsocc + i
+            if i % orb_per_row == 0:
+                print()
+            print(f"{idx+1:<4d} {self.eps[0][idx]:<12.6f}", end=" ")
+        print()
+
 
 @dataclass
 class CUHF(SCFMixin, MOsMixin):
@@ -394,10 +499,12 @@ class CUHF(SCFMixin, MOsMixin):
     _build_initial_density_matrix = UHF._build_initial_density_matrix
     _build_ao_grad = UHF._build_ao_grad
     _diagonalize_fock = UHF._diagonalize_fock
+    _print_orbital_energies = UHF._print_orbital_energies
     _spin = UHF._spin
     _energy = UHF._energy
     _diis_update = UHF._diis_update
-    Dao = UHF.Dao
+    _build_total_density_matrix = UHF._build_total_density_matrix
+    _print_orbital_energies = UHF._print_orbital_energies
 
     def _build_fock(self, H, fock_builder, S):
         F, _ = UHF._build_fock(self, H, fock_builder, S)
@@ -494,8 +601,8 @@ class GHF(SCFMixin, MOsMixin):
         Dbb = D[nbf:, nbf:]
         return Daa, Dab, Dba, Dbb
 
-    def Dao(self):
-        Daa, _, _, Dbb = self._build_density_matrix()
+    def _build_total_density_matrix(self):
+        Daa, *_, Dbb = self._build_density_matrix()
         return Daa + Dbb
 
     def _initial_guess(self, H, S, guess_type="minao"):
@@ -537,6 +644,11 @@ class GHF(SCFMixin, MOsMixin):
         eps, C = sp.linalg.eigh(F, S_spinor)
         return [eps], [C]
 
+    def _print_orbital_energies(self):
+        print("\nOrbital Energies:")
+        for i, eps in enumerate(self.eps[0]):
+            print(f"  Spinor {i + 1}: {eps:.6f} Hartree")
+
     def _spin(self, S):
         """
         S^2 = 0.5 * (S+S- + S-S+) + Sz^2, S+ = sum_i si+, S- = sum_i si-
@@ -567,3 +679,23 @@ class GHF(SCFMixin, MOsMixin):
             "vu,uv->", D_spinor, F
         )
         return energy.real
+
+    def _print_orbital_energies(self):
+        nocc = self.nel
+        nuocc = self.nbf - nocc
+        orb_per_row = 5
+        print("\nSpinor Energies [Eh]")
+        print("---------------------")
+        print("\Occupied:")
+        for i in range(nocc):
+            if i % orb_per_row == 0:
+                print()
+            print(f"{i+1:<4d} {self.eps[0][i]:<12.6f}", end=" ")
+
+        print("\n\nVirtual:")
+        for i in range(nuocc):
+            idx = nocc + i
+            if idx % orb_per_row == 0:
+                print()
+            print(f"{idx+1:<4d} {self.eps[0][idx]:<12.6f}", end=" ")
+        print()

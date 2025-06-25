@@ -1,7 +1,7 @@
 import time
-from numpy import isclose
-
+import pytest
 from forte2 import *
+from forte2.helpers.comparisons import approx
 
 
 def molecule(n, r=1.0):
@@ -34,6 +34,7 @@ def timing(n):
     return end - start, ci.E[0]
 
 
+@pytest.mark.slow
 def test_ci_timing():
 
     ref_energies = [
@@ -43,11 +44,12 @@ def test_ci_timing():
         -4.336068592600,
         -5.415397168298,
         -6.495197015514,
+        -7.575276862455,
     ]
 
     ci_timing = []
     energies = []
-    for n in range(2, 12, 2):
+    for n in range(2, 14, 2):
         elapsed, energy = timing(n)
         ci_timing.append((n, elapsed, energy))
         energies.append(energy)
@@ -59,7 +61,7 @@ def test_ci_timing():
         # assert elapsed < 10, f"CI timing exceeded 10 seconds for {n} hydrogens"
 
     for i, (energy, ref_energy) in enumerate(zip(energies, ref_energies)):
-        assert isclose(energy, ref_energy), (
+        assert energy == approx(ref_energy), (
             f"CI energy mismatch for {2 * (i + 1)} hydrogens: "
             f"{energy} != {ref_energy}"
         )

@@ -1,5 +1,7 @@
 #include <algorithm>
 
+#include "helpers/logger.h"
+
 #include "basis.h"
 
 namespace forte2 {
@@ -12,10 +14,9 @@ void Basis::add(const libint2::Shell& shell) {
         throw std::runtime_error("Only single shells are supported");
     }
     if (shell.contr[0].pure == false) {
-        std::cout
+        LOG_WARNING
             << "[forte2] Warning: Cartesian Gaussians have limited support.\n"
-               "         It is recommended to use Solid-Harmonic Gaussians instead (is_pure=True)."
-            << std::endl;
+               "         It is recommended to use Solid-Harmonic Gaussians instead (is_pure=True).";
     }
     shells_.push_back(shell);
     max_l_ = std::max(max_l_, shell.contr[0].l);

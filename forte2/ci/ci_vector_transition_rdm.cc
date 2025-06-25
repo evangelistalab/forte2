@@ -136,8 +136,8 @@ ambit::Tensor compute_1rdm_different_irrep(CIVector& C_left, CIVector& C_right, 
         if (lists_right->detpblk(nI) == 0)
             continue;
 
-        auto Cr = C_right.gather_C_block(CIVector::get_CR(), alfa, alfa_address_right,
-                                         beta_address_right, class_Ia, class_Ib, false);
+        auto Cr = C_right.gather_block(CIVector::get_CR(), alfa, alfa_address_right,
+                                       beta_address_right, class_Ia, class_Ib, false);
 
         for (const auto& [nJ, class_Ja, class_Jb] : lists_left->determinant_classes()) {
             // check if the string class on which we don't act is the same for I and J
@@ -154,8 +154,8 @@ ambit::Tensor compute_1rdm_different_irrep(CIVector& C_left, CIVector& C_right, 
             if (lists_left->detpblk(nJ) == 0)
                 continue;
 
-            auto Cl = C_left.gather_C_block(CIVector::get_CL(), alfa, alfa_address_left,
-                                            beta_address_left, class_Ja, class_Jb, false);
+            auto Cl = C_left.gather_block(CIVector::get_CL(), alfa, alfa_address_left,
+                                          beta_address_left, class_Ja, class_Jb, false);
 
             const auto& string_list_block = alfa ? string_list[std::make_pair(class_Ib, class_Jb)]
                                                  : string_list[std::make_pair(class_Ia, class_Ja)];

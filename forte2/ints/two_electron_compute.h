@@ -1,12 +1,11 @@
 #pragma once
-
 #include <future>
-
 #include <libint2.hpp>
 
-#include "ints/basis.h"
-
 #include "helpers/ndarray.h"
+#include "helpers/logger.h"
+
+#include "ints/basis.h"
 
 namespace forte2 {
 
@@ -100,7 +99,7 @@ template <libint2::Operator Op, typename Params = NoParams>
 
     const auto end = std::chrono::high_resolution_clock::now();
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    std::cout << "[forte2] Two-electron integrals timing: " << elapsed.count() << " ms\n";
+    LOG_INFO1 << "[forte2] Two-electron integrals timing: " << elapsed.count() << " ms\n";
 
     return ints;
 }
@@ -181,8 +180,8 @@ template <libint2::Operator Op, typename Params = NoParams>
 
     const auto end = std::chrono::high_resolution_clock::now();
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    std::cout << "[forte2] Three-center two-electron integrals timing: " << elapsed.count() / 1000.0
-              << " s\n";
+    LOG_INFO1 << "[forte2] Three-center two-electron integrals timing: " << elapsed.count() / 1000.0
+             << " s\n";
 
     return ints;
 }
@@ -280,8 +279,8 @@ template <libint2::Operator Op, typename Params = NoParams>
 
     const auto end = std::chrono::high_resolution_clock::now();
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    std::cout << "[forte2] Three-center two-electron integrals timing: " << elapsed.count() / 1000.0
-              << " s\n";
+    LOG_INFO1 << "[forte2] Three-center two-electron integrals timing: " << elapsed.count() / 1000.0
+             << " s\n";
 
     return ints;
 }
@@ -350,8 +349,8 @@ template <libint2::Operator Op, typename Params = NoParams>
 
     const auto end = std::chrono::high_resolution_clock::now();
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    std::cout << "[forte2] Two-center two-electron integrals timing: " << elapsed.count() / 1000.0
-              << " s\n";
+    LOG_INFO1 << "[forte2] Two-center two-electron integrals timing: " << elapsed.count() / 1000.0
+             << " s\n";
 
     return ints;
 }

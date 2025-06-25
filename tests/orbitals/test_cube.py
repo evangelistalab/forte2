@@ -7,12 +7,7 @@ import glob
 
 from forte2.scf import RHF
 from forte2.orbitals.cube import Cube
-
-import pytest
-
-# assuming default scf tolerance of 1e-9
-approx = lambda x: pytest.approx(x, rel=1e-8, abs=5e-8)
-
+from forte2.helpers.comparisons import approx
 
 def test_cube():
     escf = -76.02176598836786

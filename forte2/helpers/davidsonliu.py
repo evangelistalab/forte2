@@ -1,3 +1,4 @@
+from forte2.helpers import logger
 import numpy as np
 from numpy.linalg import eigh, qr, norm
 
@@ -12,6 +13,7 @@ class DavidsonLiuSolver:
         maxiter: int = 100,
         e_tol: float = 1e-12,
         r_tol: float = 1e-6,
+        log_level: int = logger.get_verbosity_level(),
     ):
         # size of the space
         self.size = size
@@ -27,6 +29,8 @@ class DavidsonLiuSolver:
         self.e_tol = e_tol
         # convergence tolerance for residuals
         self.r_tol = r_tol
+        # logging level
+        self.log_level = log_level
 
         # sanity checks
         if size <= 0:
@@ -244,8 +248,9 @@ class DavidsonLiuSolver:
                 )
                 self.basis_size += added2
                 msg = f" <- +{added2} random"
-            print(
-                f"{it:4d}  ⟨E⟩ ={avg_e:18.12f}  max(ΔE) ={max_de:18.12f}  max(r) ={max_r:12.9f}  basis = {self.basis_size:4d} {msg}"
+            logger.log(
+                f"{it:4d}  ⟨E⟩ ={avg_e:18.12f}  max(ΔE) ={max_de:18.12f}  max(r) ={max_r:12.9f}  basis = {self.basis_size:4d} {msg}",
+                self.log_level,
             )
 
         # compute final eigenpairs
@@ -422,11 +427,13 @@ class DavidsonLiuSolver:
             raise ValueError(msg)
 
     def _print_information(self):
-        print(f"\nDavidson-Liu solver configuration:")
-        print(f"  Size of the space:        {self.size}")
-        print(f"  Number of roots:          {self.nroot}")
-        print(f"  Maximum size of subspace: {self.max_subspace_size}")
-        print(f"  Size of collapsed space:  {self.collapse_size}")
-        print(f"  Energy convergence:       {self.e_tol}")
-        print(f"  Residual convergence:     {self.r_tol}")
-        print(f"  Maximum iterations:       {self.maxiter}\n")
+        logger.log(f"\nDavidson-Liu solver configuration:", self.log_level)
+        logger.log(f"  Size of the space:        {self.size}", self.log_level)
+        logger.log(f"  Number of roots:          {self.nroot}", self.log_level)
+        logger.log(
+            f"  Maximum size of subspace: {self.max_subspace_size}", self.log_level
+        )
+        logger.log(f"  Size of collapsed space:  {self.collapse_size}", self.log_level)
+        logger.log(f"  Energy convergence:       {self.e_tol}", self.log_level)
+        logger.log(f"  Residual convergence:     {self.r_tol}", self.log_level)
+        logger.log(f"  Maximum iterations:       {self.maxiter}\n", self.log_level)

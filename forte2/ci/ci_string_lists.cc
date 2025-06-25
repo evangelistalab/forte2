@@ -3,6 +3,8 @@
 #include <cmath>
 #include <iostream>
 
+#include "helpers/logger.h"
+
 #include "ci_occupation.h"
 #include "ci_string_address.h"
 #include "ci_string_lists_makers.h"
@@ -55,7 +57,7 @@ CIStrings::CIStrings(size_t na, size_t nb, int symmetry,
     for (const auto& space : orbital_symmetry_) {
         const auto size = space.size();
         gas_size_.push_back(size);
-        std::cout << "\n    GAS space size: " << size << std::endl;
+        LOG(log_level_) << "\n    GAS space size: " << size;
         for (const auto& s : space) {
             nirrep_ = std::max(nirrep_, static_cast<size_t>(std::abs(s + 1)));
         }
@@ -67,7 +69,7 @@ CIStrings::CIStrings(size_t na, size_t nb, int symmetry,
     // print_h2("Possible Electron Occupations");
     auto table = occupation_table(ngas_spaces_, gas_alfa_occupations_, gas_beta_occupations_,
                                   gas_occupations_);
-    std::cout << table << std::endl;
+    LOG(log_level_) << table;
 
     // local_timers
     double str_list_timer = 0.0;
@@ -160,19 +162,17 @@ CIStrings::CIStrings(size_t na, size_t nb, int symmetry,
         ndet_ += nI;
     }
 
-    pair_list_ = make_pair_list(nirrep_, orbital_index_and_symmetry);
-
     alfa_vo_list = make_vo_list(alfa_strings_, alfa_address_, alfa_address_);
     beta_vo_list = make_vo_list(beta_strings_, beta_address_, beta_address_);
 
-    alfa_oo_list = make_oo_list(alfa_strings_, alfa_address_);
-    beta_oo_list = make_oo_list(beta_strings_, beta_address_);
-
-    alfa_vvoo_list = make_vvoo_list(alfa_strings_, alfa_address_, orbital_index_and_symmetry);
-    beta_vvoo_list = make_vvoo_list(beta_strings_, beta_address_, orbital_index_and_symmetry);
+    alfa_vo_list2 = make_vo_list2(alfa_strings_, alfa_address_, alfa_address_);
+    beta_vo_list2 = make_vo_list2(beta_strings_, beta_address_, beta_address_);
 
     alfa_1h_list = make_1h_list(alfa_strings_, alfa_address_, alfa_address_1h_);
     beta_1h_list = make_1h_list(beta_strings_, beta_address_, beta_address_1h_);
+
+    alfa_1h_list2 = make_1h_list2(alfa_strings_, alfa_address_, alfa_address_1h_);
+    beta_1h_list2 = make_1h_list2(beta_strings_, beta_address_, beta_address_1h_);
 
     alfa_2h_list = make_2h_list(alfa_strings_, alfa_address_, alfa_address_2h_);
     beta_2h_list = make_2h_list(beta_strings_, beta_address_, beta_address_2h_);
@@ -224,21 +224,21 @@ Determinant CIStrings::determinant(size_t address) const {
     return Determinant(Ia, Ib);
 }
 
-const OOListElement& CIStrings::get_alfa_oo_list(int class_I) const {
-    // check if the key exists, if not return an empty list
-    if (auto it = alfa_oo_list.find(class_I); it != alfa_oo_list.end()) {
-        return it->second;
-    }
-    return empty_oo_list;
-}
+// const OOListElement& CIStrings::get_alfa_oo_list(int class_I) const {
+//     // check if the key exists, if not return an empty list
+//     if (auto it = alfa_oo_list.find(class_I); it != alfa_oo_list.end()) {
+//         return it->second;
+//     }
+//     return empty_oo_list;
+// }
 
-const OOListElement& CIStrings::get_beta_oo_list(int class_I) const {
-    // check if the key exists, if not return an empty list
-    if (auto it = beta_oo_list.find(class_I); it != beta_oo_list.end()) {
-        return it->second;
-    }
-    return empty_oo_list;
-}
+// const OOListElement& CIStrings::get_beta_oo_list(int class_I) const {
+//     // check if the key exists, if not return an empty list
+//     if (auto it = beta_oo_list.find(class_I); it != beta_oo_list.end()) {
+//         return it->second;
+//     }
+//     return empty_oo_list;
+// }
 
 /**
  * Returns a vector of tuples containing the sign, I, and J connected by a^{+}_p
@@ -268,52 +268,100 @@ const VOListElement& CIStrings::get_beta_vo_list(int class_I, int class_J) const
     return empty_vo_list;
 }
 
-const VVOOListElement& CIStrings::get_alfa_vvoo_list(int class_I, int class_J) const {
+/**
+ * Returns a vector of tuples containing the sign, I, and J connected by a^{+}_p
+ * a_q
+ * that is: J = ± a^{+}_p a_q I. p and q are absolute indices and I belongs to
+ * the irrep h.
+ */
+const VOListElement2& CIStrings::get_alfa_vo_list2(int class_I, int class_J) const {
     // check if the key exists, if not return an empty list
-    if (auto it = alfa_vvoo_list.find(std::make_pair(class_I, class_J));
-        it != alfa_vvoo_list.end()) {
+    if (auto it = alfa_vo_list2.find(std::make_pair(class_I, class_J)); it != alfa_vo_list2.end()) {
         return it->second;
     }
-    return empty_vvoo_list;
+    return empty_vo_list2;
 }
 
-const VVOOListElement& CIStrings::get_beta_vvoo_list(int class_I, int class_J) const {
+/**
+ * Returns a vector of tuples containing the sign,I, and J connected by a^{+}_p
+ * a_q
+ * that is: J = ± a^{+}_p a_q I. p and q are absolute indices and I belongs to
+ * the irrep h.
+ */
+const VOListElement2& CIStrings::get_beta_vo_list2(int class_I, int class_J) const {
     // check if the key exists, if not return an empty list
-    if (auto it = beta_vvoo_list.find(std::make_pair(class_I, class_J));
-        it != beta_vvoo_list.end()) {
+    if (auto it = beta_vo_list2.find(std::make_pair(class_I, class_J)); it != beta_vo_list2.end()) {
         return it->second;
     }
-    return empty_vvoo_list;
+    return empty_vo_list2;
 }
 
-std::vector<H1StringSubstitution>& CIStrings::get_alfa_1h_list(int class_I, size_t add_I,
-                                                               int class_J) {
-    return lookup_hole_list(alfa_1h_list, class_I, add_I, class_J);
+// const VVOOListElement& CIStrings::get_alfa_vvoo_list(int class_I, int class_J) const {
+//     // check if the key exists, if not return an empty list
+//     if (auto it = alfa_vvoo_list.find(std::make_pair(class_I, class_J));
+//         it != alfa_vvoo_list.end()) {
+//         return it->second;
+//     }
+//     return empty_vvoo_list;
+// }
+
+// const VVOOListElement& CIStrings::get_beta_vvoo_list(int class_I, int class_J) const {
+//     // check if the key exists, if not return an empty list
+//     if (auto it = beta_vvoo_list.find(std::make_pair(class_I, class_J));
+//         it != beta_vvoo_list.end()) {
+//         return it->second;
+//     }
+//     return empty_vvoo_list;
+// }
+
+const std::vector<H1StringSubstitution>& CIStrings::get_alfa_1h_list(int class_I, size_t add_I,
+                                                                     int class_J) const {
+    return lookup_hole_list<H1List, H1StringSubstitution>(alfa_1h_list, class_I, add_I, class_J);
 }
 
-std::vector<H1StringSubstitution>& CIStrings::get_beta_1h_list(int class_I, size_t add_I,
-                                                               int class_J) {
-    return lookup_hole_list(beta_1h_list, class_I, add_I, class_J);
+const std::vector<H1StringSubstitution>& CIStrings::get_beta_1h_list(int class_I, size_t add_I,
+                                                                     int class_J) const {
+    return lookup_hole_list<H1List, H1StringSubstitution>(beta_1h_list, class_I, add_I, class_J);
 }
 
-std::vector<H2StringSubstitution>& CIStrings::get_alfa_2h_list(int class_I, size_t add_I,
-                                                               int class_J) {
-    return lookup_hole_list(alfa_2h_list, class_I, add_I, class_J);
+const std::vector<std::vector<H1StringSubstitution>>&
+CIStrings::get_alfa_1h_list2(int class_I, int class_J) const {
+    // find the key in the map
+    std::pair<size_t, size_t> key{class_I, class_J};
+    if (auto it = alfa_1h_list2.find(key); it != alfa_1h_list2.end()) {
+        return it->second;
+    }
+    return empty_1h_list2;
 }
 
-std::vector<H2StringSubstitution>& CIStrings::get_beta_2h_list(int class_I, size_t add_I,
-                                                               int class_J) {
-    return lookup_hole_list(beta_2h_list, class_I, add_I, class_J);
+const std::vector<std::vector<H1StringSubstitution>>&
+CIStrings::get_beta_1h_list2(int class_I, int class_J) const {
+    // find the key in the map
+    std::pair<size_t, size_t> key{class_I, class_J};
+    if (auto it = beta_1h_list2.find(key); it != beta_1h_list2.end()) {
+        return it->second;
+    }
+    return empty_1h_list2;
 }
 
-std::vector<H3StringSubstitution>& CIStrings::get_alfa_3h_list(int class_I, size_t add_I,
-                                                               int class_J) {
-    return lookup_hole_list(alfa_3h_list, class_I, add_I, class_J);
+const std::vector<H2StringSubstitution>& CIStrings::get_alfa_2h_list(int class_I, size_t add_I,
+                                                                     int class_J) const {
+    return lookup_hole_list<H2List, H2StringSubstitution>(alfa_2h_list, class_I, add_I, class_J);
 }
 
-std::vector<H3StringSubstitution>& CIStrings::get_beta_3h_list(int class_I, size_t add_I,
-                                                               int class_J) {
-    return lookup_hole_list(beta_3h_list, class_I, add_I, class_J);
+const std::vector<H2StringSubstitution>& CIStrings::get_beta_2h_list(int class_I, size_t add_I,
+                                                                     int class_J) const {
+    return lookup_hole_list<H2List, H2StringSubstitution>(beta_2h_list, class_I, add_I, class_J);
+}
+
+const std::vector<H3StringSubstitution>& CIStrings::get_alfa_3h_list(int class_I, size_t add_I,
+                                                                     int class_J) const {
+    return lookup_hole_list<H3List, H3StringSubstitution>(alfa_3h_list, class_I, add_I, class_J);
+}
+
+const std::vector<H3StringSubstitution>& CIStrings::get_beta_3h_list(int class_I, size_t add_I,
+                                                                     int class_J) const {
+    return lookup_hole_list<H3List, H3StringSubstitution>(beta_3h_list, class_I, add_I, class_J);
 }
 
 } // namespace forte2
