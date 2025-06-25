@@ -9,7 +9,6 @@ from forte2.scf import RHF
 from forte2.orbitals.cube import Cube
 from forte2.helpers.comparisons import approx
 
-
 def test_cube():
     escf = -76.02176598836786
     # Test the SCF implementation with a simple example
