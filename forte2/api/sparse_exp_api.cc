@@ -64,7 +64,9 @@ void export_sparse_fact_exp_api(nb::module_& m) {
              "Apply the factorized antihermitian "
              "exponential of a SparseOperator to a state: "
              "... exp(op2 - op2^dagger) exp(op1 - op1^dagger) |state>. inverse=True computes the "
-             "inverse, and reverse=True applies the operators in reverse order");
+             "inverse, and reverse=True applies the operators in reverse order")
+        .def("apply_antiherm_deriv", &SparseFactExp::apply_antiherm_deriv, "sqop"_a, "t"_a,
+             "state"_a);
 }
 
 } // namespace forte2

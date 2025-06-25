@@ -253,3 +253,83 @@ def test_exp_apply_complex():
     s1 = factexp.apply_antiherm(op, ref, inverse=True)
     s2 = factexp.apply_antiherm(op_inv, ref, inverse=False)
     assert s1 == s2
+
+
+def test_fact_exp_deriv():
+    # Test a general case
+    factexp = forte2.SparseFactExp()
+    exp = forte2.SparseExp(maxk=100, screen_thresh=1e-15)
+    theta = 0.271 + 0.829j
+    t = forte2.SparseOperatorList()
+    t.add("[1a+ 0a-]", theta)
+    psi = forte2.SparseState({Determinant("2"): 0.866, Determinant("-+"): 0.5})
+
+    res = exp.apply_antiherm(t, psi)
+    deriv = factexp.apply_antiherm_deriv(*t(0), psi)
+
+    dt = 1e-6
+    tdt = forte2.SparseOperatorList()
+    tdt.add("[1a+ 0a-]", theta + dt)
+    res2 = exp.apply_antiherm(tdt, psi)
+
+    dx1 = (res2[Determinant("2")] - res[Determinant("2")]) / dt
+    assert deriv[0][Determinant("2")] == pytest.approx(dx1, abs=1e-6)
+    dx2 = (res2[Determinant("-+")] - res[Determinant("-+")]) / dt
+    assert deriv[0][Determinant("-+")] == pytest.approx(dx2, abs=1e-6)
+
+    dt = 1e-6 * 1j
+    tdt = forte2.SparseOperatorList()
+    tdt.add("[1a+ 0a-]", theta + dt)
+    res2 = exp.apply_antiherm(tdt, psi)
+
+    dy1 = (res2[Determinant("2")] - res[Determinant("2")]) / dt.imag
+    assert deriv[1][Determinant("2")] == pytest.approx(dy1, abs=1e-6)
+    dy2 = (res2[Determinant("-+")] - res[Determinant("-+")]) / dt.imag
+    assert deriv[1][Determinant("-+")] == pytest.approx(dy2, abs=1e-6)
+
+    # Test the antiherm case
+    factexp = forte2.SparseFactExp()
+    theta = 0.176
+    t = forte2.SparseOperatorList()
+    t.add("[1a+ 0a-]", theta)
+    psi = forte2.SparseState({Determinant("2"): 1.0})
+
+    deriv = factexp.apply_antiherm_deriv(*t(0), psi)
+    assert deriv[0][Determinant("2")] == pytest.approx(-np.sin(theta), abs=1e-6)
+    assert deriv[0][Determinant("-+")] == pytest.approx(np.cos(theta), abs=1e-6)
+    assert deriv[1][Determinant("2")] == pytest.approx(0.0, abs=1e-6)
+    assert deriv[1][Determinant("-+")] == pytest.approx(
+        1j * np.sin(theta) / theta, abs=1e-6
+    )
+
+    # Test the imagherm case
+    factexp = forte2.SparseFactExp()
+    theta = 0.127
+    t = forte2.SparseOperatorList()
+    t.add("[1a+ 0a-]", theta * 1j)
+    psi = forte2.SparseState({Determinant("2"): 1.0})
+
+    deriv = factexp.apply_antiherm_deriv(*t(0), psi)
+    assert deriv[1][Determinant("2")] == pytest.approx(-np.sin(theta), abs=1e-6)
+    assert deriv[1][Determinant("-+")] == pytest.approx(1j * np.cos(theta), abs=1e-6)
+
+    # Make sure there's no division by zero errors
+    factexp = forte2.SparseFactExp()
+    exp = forte2.SparseExp(maxk=100, screen_thresh=1e-15)
+    theta = 0
+    t = forte2.SparseOperatorList()
+    t.add("[1a+ 0a-]", theta)
+    psi = forte2.SparseState({Determinant("2"): 0.866, Determinant("-+"): 0.5})
+
+    res = exp.apply_antiherm(t, psi)
+    deriv = factexp.apply_antiherm_deriv(*t(0), psi)
+
+    dt = 1e-6
+    tdt = forte2.SparseOperatorList()
+    tdt.add("[1a+ 0a-]", theta + dt)
+    res2 = exp.apply_antiherm(tdt, psi)
+
+    dx1 = (res2[Determinant("2")] - res[Determinant("2")]) / dt
+    assert deriv[0][Determinant("2")] == pytest.approx(dx1, abs=1e-6)
+    dx2 = (res2[Determinant("-+")] - res[Determinant("-+")]) / dt
+    assert deriv[0][Determinant("-+")] == pytest.approx(dx2, abs=1e-6)
