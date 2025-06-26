@@ -255,39 +255,50 @@ def test_exp_apply_complex():
     assert s1 == s2
 
 
-def test_fact_exp_deriv():
-    # Test a general case
+def test_fact_exp_deriv_complex():
     factexp = forte2.SparseFactExp()
     exp = forte2.SparseExp(maxk=100, screen_thresh=1e-15)
+
+    # create an operator with a general complex coefficient
     theta = 0.271 + 0.829j
     t = forte2.SparseOperatorList()
     t.add("[1a+ 0a-]", theta)
+
+    # create a state with two determinants
     psi = forte2.SparseState({Determinant("2"): 0.866, Determinant("-+"): 0.5})
 
+    # SparseExp will compute the action of the exponential operator numerically using Taylor expansion
     res = exp.apply_antiherm(t, psi)
-    deriv = factexp.apply_antiherm_deriv(*t(0), psi)
-
+    # finite difference derivatives wrt the real part
     dt = 1e-6
     tdt = forte2.SparseOperatorList()
     tdt.add("[1a+ 0a-]", theta + dt)
     res2 = exp.apply_antiherm(tdt, psi)
 
+    # analytical derivatives from SparseFactExp
+    deriv = factexp.apply_antiherm_deriv(*t(0), psi)
+
+    # assert the analytical derivatives match the finite difference derivatives
     dx1 = (res2[Determinant("2")] - res[Determinant("2")]) / dt
     assert deriv[0][Determinant("2")] == pytest.approx(dx1, abs=1e-6)
     dx2 = (res2[Determinant("-+")] - res[Determinant("-+")]) / dt
     assert deriv[0][Determinant("-+")] == pytest.approx(dx2, abs=1e-6)
 
+    # finite difference derivatives wrt the imaginary part
     dt = 1e-6 * 1j
     tdt = forte2.SparseOperatorList()
     tdt.add("[1a+ 0a-]", theta + dt)
     res2 = exp.apply_antiherm(tdt, psi)
 
+    # assert the analytical derivatives match the finite difference derivatives
     dy1 = (res2[Determinant("2")] - res[Determinant("2")]) / dt.imag
     assert deriv[1][Determinant("2")] == pytest.approx(dy1, abs=1e-6)
     dy2 = (res2[Determinant("-+")] - res[Determinant("-+")]) / dt.imag
     assert deriv[1][Determinant("-+")] == pytest.approx(dy2, abs=1e-6)
 
-    # Test the antiherm case
+
+def test_fact_exp_deriv_real_antiherm():
+    # test that the derivatives of a real antihermitian operator are as expected
     factexp = forte2.SparseFactExp()
     theta = 0.176
     t = forte2.SparseOperatorList()
@@ -302,7 +313,9 @@ def test_fact_exp_deriv():
         1j * np.sin(theta) / theta, abs=1e-6
     )
 
-    # Test the imagherm case
+
+def test_fact_exp_deriv_imagherm():
+    # Test a simple imagherm case
     factexp = forte2.SparseFactExp()
     theta = 0.127
     t = forte2.SparseOperatorList()
@@ -313,7 +326,10 @@ def test_fact_exp_deriv():
     assert deriv[1][Determinant("2")] == pytest.approx(-np.sin(theta), abs=1e-6)
     assert deriv[1][Determinant("-+")] == pytest.approx(1j * np.cos(theta), abs=1e-6)
 
-    # Make sure there's no division by zero errors
+
+def test_fact_exp_deriv_zero_division():
+    # test the analytical derivatives at theta = 0
+    # to make sure there's no division by zero errors
     factexp = forte2.SparseFactExp()
     exp = forte2.SparseExp(maxk=100, screen_thresh=1e-15)
     theta = 0
