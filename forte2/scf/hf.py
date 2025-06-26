@@ -28,7 +28,13 @@ class SCFMixin:
     dconv: float = 1e-6
     maxiter: int = 100
     guess_type: str = "minao"
-    linear_dep_thresh: float = 1e-8
+    
+    # If the min/max eigenvalue of the overlap matrix falls below
+    # this trigger, linear dependency will be removed
+    linear_dep_trigger: float = 1e-10
+    # This is the threshold below which the eigenvalues of
+    # the overlap matrix will be removed
+    ortho_thresh: float = 1e-8
 
     executed: bool = field(default=False, init=False)
     converged: bool = field(default=False, init=False)
@@ -58,22 +64,23 @@ class SCFMixin:
         e, _ = np.linalg.eigh(S)
         self._eigh = sp.linalg.eigh
         self.nmo = self.nbf
-        if np.any(e < self.linear_dep_thresh):
-            logger.log_warning(
-                f"Linear dependencies detected in overlap matrix S. "
-                f"Condition number: {np.linalg.cond(S):.2e}. "
-                f"Removing linear dependencies with relative threshold {self.linear_dep_thresh:.2e}."
+        if min(e) / max(e) < self.linear_dep_trigger:
+            logger.log_warning(f"Linear dependencies detected in overlap matrix S!")
+            logger.log_debug(
+                f"Max eigenvalue: {np.max(e):.2e}. \n"
+                f"Min eigenvalue: {np.min(e):.2e}. \n"
+                f"Condition number: {max(e)/min(e):.2e}. \n"
+                f"Removing linear dependencies with threshold {self.ortho_thresh:.2e}."
             )
-            max_eval = np.max(np.abs(e))
-            self.nmo -= np.sum(e < self.linear_dep_thresh * max_eval)
+            self.nmo -= np.sum(e < self.ortho_thresh)
             logger.log_warning(
-                f"Reduced number of basis functions from {self.nbf} to {self.nmo}."
+                f"Reduced number of basis functions from {self.nbf} to {self.nmo} due to linear dependencies."
             )
             self._eigh = lambda A, B: eigh_gen(
                 A,
                 B,
                 remove_lindep=True,
-                orth_tol=self.linear_dep_thresh,
+                orth_tol=self.ortho_thresh,
                 orth_method="canonical",
             )
 

@@ -16,6 +16,7 @@ def test_lindep_rhf():
     assert np.linalg.cond(ovlp) > 1e14
 
     scf = RHF(charge=0)(system)
+    scf.ortho_thresh = 2e-7
     scf.run()
     assert scf.nbf == 90
     assert scf.nmo == 81
@@ -34,6 +35,7 @@ def test_lindep_ghf():
     assert np.linalg.cond(ovlp) > 1e14
 
     scf = GHF(charge=0)(system)
+    scf.ortho_thresh = 2e-7
     scf.run()
     assert scf.nbf == 90
     assert scf.nmo == 81

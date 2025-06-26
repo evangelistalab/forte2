@@ -20,11 +20,10 @@ def invsqrt_matrix(M, tol=1e-7):
     evals, evecs = np.linalg.eigh(M)
     if np.any(evals < -MACHEPS):
         raise ValueError("Matrix must be positive semi-definite.")
-    max_eval = np.max(np.abs(evals))
     # Inverse sqrt eigenvalues with threshold
     invsqrt_evals = np.zeros_like(evals)
     for i, val in enumerate(evals):
-        if val > tol * max_eval:
+        if val > tol:
             invsqrt_evals[i] = 1.0 / np.sqrt(val)
         else:
             invsqrt_evals[i] = 0.0  # treat small/singular values carefully
@@ -40,7 +39,7 @@ def canonical_orth(S, tol=1e-7):
 
     Args:
         S (np.ndarray): S symmetric matrix.
-        tol (float): Relative threshold for eigenvalues. Eigenvalues below tol * max_eigval are treated as zero.
+        tol (float): Eigenvalue threshold below which values are treated as zero.
 
     Returns:
         np.ndarray: The (possibly rectangular) canonical orthogonalization matrix X, such that X.T @ S @ X = I.
@@ -49,8 +48,7 @@ def canonical_orth(S, tol=1e-7):
     sevals, sevecs = np.linalg.eigh(S)
     if np.any(sevals < 0):
         raise ValueError("Matrix must be positive semi-definite.")
-    max_eval = np.max(np.abs(sevals))
-    trunc_indices = np.where(sevals > tol * max_eval)[0]
+    trunc_indices = np.where(sevals > tol)[0]
     X = sevecs[:, trunc_indices] / np.sqrt(sevals[trunc_indices])
     return X
 
@@ -62,7 +60,7 @@ def eigh_gen(A, B=None, remove_lindep=True, orth_tol=1e-7, orth_method="canonica
     Args:
         A (np.ndarray): The matrix A.
         B (np.ndarray): The matrix B. If None, the identity matrix is used.
-        remove_lindep (bool): If True, perform orthogonalization to remove linear dependencies.
+        remove_lindep (bool): If True, perform orthogonalization to remove linear dependencies, else use scipy's eigh.
         orth_tol (float): Eigenvalue threshold below which values are treated as zero.
         orth_method (str): Orthogonalization method. Options are "canonical" or "symmetric".
 
@@ -77,7 +75,7 @@ def eigh_gen(A, B=None, remove_lindep=True, orth_tol=1e-7, orth_method="canonica
             X = canonical_orth(B, orth_tol)
         elif orth_method == "symmetric":
             X = invsqrt_matrix(B, orth_tol)
-        else:
+        else:  # TODO: add partial cholesky: 10.1063/1.5139948
             raise ValueError("Invalid orthogonalization method.")
 
         A = X.T @ A @ X

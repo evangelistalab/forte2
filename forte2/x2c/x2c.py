@@ -27,7 +27,9 @@ def get_hcore_x2c(system, x2c_type="sf"):
 
     # diagonalize the Dirac equation
     # TODO: handle linear dependencies
-    e_dirac, c_dirac = scipy.linalg.eigh(D, M)
+    e_dirac, c_dirac = forte2.helpers.eigh_gen(
+        D, M, remove_lindep=True, orth_tol=X2C_LINDEP_TOL, orth_method="symmetric"
+    )
 
     # build the decoupling matrix X
     X = _get_decoupling_matrix(c_dirac, nbf)
@@ -98,8 +100,9 @@ def _get_transformation_matrix(S, T, X, tol=1e-9):
     which avoids doing matrix inversions and leads to a more numerically stable transformation.
     """
     S_tilde = S + (0.5 / LIGHT_SPEED**2) * X.conj().T @ T @ X
-    # TODO: handle linear dependencies
-    lam, z = scipy.linalg.eigh(S_tilde, S)
+    lam, z = forte2.helpers.eigh_gen(
+        S_tilde, S, remove_lindep=True, orth_tol=tol, orth_method="symmetric"
+    )
     idx = lam > 1e-14
     R = (z[:, idx] / np.sqrt(lam[idx])) @ z[:, idx].T.conj() @ S
     return R
