@@ -40,7 +40,7 @@ def canonical_orth(S, tol=1e-7):
 
     Args:
         S (np.ndarray): S symmetric matrix.
-        tol (float): Eigenvalue threshold below which values are treated as zero.
+        tol (float): Relative threshold for eigenvalues. Eigenvalues below tol * max_eigval are treated as zero.
 
     Returns:
         np.ndarray: The (possibly rectangular) canonical orthogonalization matrix X, such that X.T @ S @ X = I.
@@ -55,35 +55,36 @@ def canonical_orth(S, tol=1e-7):
     return X
 
 
-def eigh_gen(A, B, tol=1e-7, orth="canonical"):
+def eigh_gen(A, B=None, remove_lindep=True, orth_tol=1e-7, orth_method="canonical"):
     """
     Solve the generalized eigenvalue problem A @ x = lambda * B @ x.
 
     Args:
         A (np.ndarray): The matrix A.
-        B (np.ndarray): The matrix B.
-        tol (float): Eigenvalue threshold below which values are treated as zero.
-        orth (str): Orthogonalization method. Options are "canonical" or "symmetric".
+        B (np.ndarray): The matrix B. If None, the identity matrix is used.
+        remove_lindep (bool): If True, perform orthogonalization to remove linear dependencies.
+        orth_tol (float): Eigenvalue threshold below which values are treated as zero.
+        orth_method (str): Orthogonalization method. Options are "canonical" or "symmetric".
 
     Returns:
         tuple: A tuple containing the eigenvalues and eigenvectors.
     """
-    try:
-        return scipy.linalg.eigh(A, B)
-    except scipy.linalg.LinAlgError:
-        print(
-            f"Linear dependency detected in the generalized eigenvalue problem! Using orthogonalization method {orth}."
-        )
-        if orth == "canonical":
-            X = canonical_orth(B, tol)
-        elif orth == "symmetric":
-            X = invsqrt_matrix(B, tol)
+    if B is None:
+        B = np.eye(A.shape[0])
+
+    if remove_lindep:
+        if orth_method == "canonical":
+            X = canonical_orth(B, orth_tol)
+        elif orth_method == "symmetric":
+            X = invsqrt_matrix(B, orth_tol)
         else:
             raise ValueError("Invalid orthogonalization method.")
 
         A = X.T @ A @ X
         e, c = np.linalg.eigh(A)
         return e, X @ c
+    else:
+        return scipy.linalg.eigh(A, B)
 
 
 def givens_rotation(A, c, s, i, j, column=True):

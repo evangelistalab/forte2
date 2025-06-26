@@ -6,7 +6,7 @@ import scipy as sp
 import forte2
 from forte2.jkbuilder import FockBuilder
 from forte2.helpers.mixins import MOsMixin
-from forte2.helpers.matrix_functions import givens_rotation
+from forte2.helpers.matrix_functions import givens_rotation, eigh_gen
 from forte2.helpers import logger
 from .initial_guess import minao_initial_guess, core_initial_guess
 
@@ -28,6 +28,7 @@ class SCFMixin:
     dconv: float = 1e-6
     maxiter: int = 100
     guess_type: str = "minao"
+    linear_dep_thresh: float = 1e-8
 
     executed: bool = field(default=False, init=False)
     converged: bool = field(default=False, init=False)
@@ -52,6 +53,29 @@ class SCFMixin:
 
     def _scf_type(self):
         return type(self).__name__.upper()
+
+    def _check_linear_dependencies(self, S):
+        e, _ = np.linalg.eigh(S)
+        self._eigh = sp.linalg.eigh
+        self.nmo = self.nbf
+        if np.any(e < self.linear_dep_thresh):
+            logger.log_warning(
+                f"Linear dependencies detected in overlap matrix S. "
+                f"Condition number: {np.linalg.cond(S):.2e}. "
+                f"Removing linear dependencies with relative threshold {self.linear_dep_thresh:.2e}."
+            )
+            max_eval = np.max(np.abs(e))
+            self.nmo -= np.sum(e < self.linear_dep_thresh * max_eval)
+            logger.log_warning(
+                f"Reduced number of basis functions from {self.nbf} to {self.nmo}."
+            )
+            self._eigh = lambda A, B: eigh_gen(
+                A,
+                B,
+                remove_lindep=True,
+                orth_tol=self.linear_dep_thresh,
+                orth_method="canonical",
+            )
 
     def run(self):
         """
@@ -78,6 +102,7 @@ class SCFMixin:
 
         Vnn = self._get_nuclear_repulsion()
         S = self._get_overlap()
+        self._check_linear_dependencies(S)
         H = self._get_hcore()
         fock_builder = FockBuilder(self.system)
 
@@ -213,7 +238,7 @@ class RHF(SCFMixin, MOsMixin):
         return np.sum(self.D[0] * (H + F))
 
     def _diagonalize_fock(self, F, S):
-        eps, C = sp.linalg.eigh(F, S)
+        eps, C = self._eigh(F, S)
         return [eps], [C]
 
     def _spin(self, S):
@@ -224,7 +249,7 @@ class RHF(SCFMixin, MOsMixin):
 
     def _print_orbital_energies(self):
         ndocc = self.na
-        nuocc = self.nbf - ndocc
+        nuocc = self.nmo - ndocc
         orb_per_row = 5
         print("\nOrbital Energies [Eh]")
         print("---------------------")
@@ -298,15 +323,9 @@ class UHF(SCFMixin, MOsMixin):
         return AO_grad
 
     def _diagonalize_fock(self, F, S):
-        eps_a, C_a = sp.linalg.eigh(F[0], S)
-        eps_b, C_b = sp.linalg.eigh(F[1], S)
+        eps_a, C_a = self._eigh(F[0], S)
+        eps_b, C_b = self._eigh(F[1], S)
         return [eps_a, eps_b], [C_a, C_b]
-
-    def _print_orbital_energies(self):
-        print("\nOrbital Energies:")
-        print("#    Alpha    Beta")
-        for idx, (epa, epb) in enumerate(zip(self.eps[0], self.eps[1])):
-            print(f"{idx + 1:>2d}: {epa:.6f} {epb:.6f}")
 
     def _spin(self, S):
         # alpha-beta orbital overlap matrix
@@ -343,9 +362,9 @@ class UHF(SCFMixin, MOsMixin):
 
     def _print_orbital_energies(self):
         naocc = self.na
-        naucc = self.nbf - naocc
+        naucc = self.nmo - naocc
         nbocc = self.nb
-        nbucc = self.nbf - nbocc
+        nbucc = self.nmo - nbocc
         orb_per_row = 5
         print("\nOrbital Energies [Eh]")
         print("---------------------")
@@ -450,7 +469,7 @@ class ROHF(SCFMixin, MOsMixin):
     def _print_orbital_energies(self):
         ndocc = min(self.na, self.nb)
         nsocc = abs(self.na - self.nb)
-        nuocc = self.nbf - ndocc - nsocc
+        nuocc = self.nmo - ndocc - nsocc
         orb_per_row = 5
         print("\nOrbital Energies [Eh]")
         print("---------------------")
@@ -499,7 +518,6 @@ class CUHF(SCFMixin, MOsMixin):
     _build_initial_density_matrix = UHF._build_initial_density_matrix
     _build_ao_grad = UHF._build_ao_grad
     _diagonalize_fock = UHF._diagonalize_fock
-    _print_orbital_energies = UHF._print_orbital_energies
     _spin = UHF._spin
     _energy = UHF._energy
     _diis_update = UHF._diis_update
@@ -641,13 +659,8 @@ class GHF(SCFMixin, MOsMixin):
 
     def _diagonalize_fock(self, F, S):
         S_spinor = np.block([[S, np.zeros_like(S)], [np.zeros_like(S), S]])
-        eps, C = sp.linalg.eigh(F, S_spinor)
+        eps, C = self._eigh(F, S_spinor)
         return [eps], [C]
-
-    def _print_orbital_energies(self):
-        print("\nOrbital Energies:")
-        for i, eps in enumerate(self.eps[0]):
-            print(f"  Spinor {i + 1}: {eps:.6f} Hartree")
 
     def _spin(self, S):
         """
@@ -682,11 +695,11 @@ class GHF(SCFMixin, MOsMixin):
 
     def _print_orbital_energies(self):
         nocc = self.nel
-        nuocc = self.nbf - nocc
+        nuocc = self.nmo * 2 - nocc
         orb_per_row = 5
         print("\nSpinor Energies [Eh]")
         print("---------------------")
-        print("\Occupied:")
+        print("Occupied:")
         for i in range(nocc):
             if i % orb_per_row == 0:
                 print()
