@@ -46,6 +46,7 @@ class CI(MOsMixin, SystemMixin):
 
     ## Options that control the CI calculation
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
+    ci_algorithm: str = "hz"
 
     # Flag for whether the method has been executed
     executed: bool = field(default=False, init=False)
@@ -137,6 +138,7 @@ class CI(MOsMixin, SystemMixin):
             self.ci_strings, self.ints.E, self.ints.H, self.ints.V, self.log_level
         )
         self.ci_sigma_builder.set_memory(self.ci_builder_memory)
+        self.ci_sigma_builder.set_algorithm(self.ci_algorithm)
 
         Hdiag = self.ci_sigma_builder.form_Hdiag_csf(
             self.dets, self.spin_adapter, spin_adapt_full_preconditioner=False
