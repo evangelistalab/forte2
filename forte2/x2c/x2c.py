@@ -2,7 +2,7 @@ import forte2, forte2.helpers
 import numpy as np
 import scipy, scipy.constants
 
-X2C_LINDEP_TOL = 1e-9
+X2C_LINDEP_TOL = 1e-10
 LIGHT_SPEED = scipy.constants.physical_constants["inverse fine-structure constant"][0]
 
 
@@ -26,9 +26,8 @@ def get_hcore_x2c(system, x2c_type="sf"):
     D, M = _build_dirac_eq(S, T, V, W, nbf, x2c_type)
 
     # diagonalize the Dirac equation
-    e_dirac, c_dirac = forte2.helpers.eigh_gen(
-        D, M, tol=X2C_LINDEP_TOL, orth="symmetric"
-    )
+    # TODO: handle linear dependencies
+    e_dirac, c_dirac = scipy.linalg.eigh(D, M)
 
     # build the decoupling matrix X
     X = _get_decoupling_matrix(c_dirac, nbf)
@@ -99,7 +98,8 @@ def _get_transformation_matrix(S, T, X, tol=1e-9):
     which avoids doing matrix inversions and leads to a more numerically stable transformation.
     """
     S_tilde = S + (0.5 / LIGHT_SPEED**2) * X.conj().T @ T @ X
-    lam, z = forte2.helpers.eigh_gen(S_tilde, S, tol=tol, orth="symmetric")
+    # TODO: handle linear dependencies
+    lam, z = scipy.linalg.eigh(S_tilde, S)
     idx = lam > 1e-14
     R = (z[:, idx] / np.sqrt(lam[idx])) @ z[:, idx].T.conj() @ S
     return R
