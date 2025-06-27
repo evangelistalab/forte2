@@ -274,7 +274,7 @@ class RHF(SCFMixin, MOsMixin):
         print("\n\nVirtual:")
         for i in range(nuocc):
             idx = ndocc + i
-            if idx % orb_per_row == 0:
+            if i % orb_per_row == 0:
                 print()
             print(f"{idx+1:<4d} {self.eps[0][idx]:<12.6f}", end=" ")
         print()
@@ -720,7 +720,7 @@ class GHF(SCFMixin, MOsMixin):
         print("\n\nVirtual:")
         for i in range(nuocc):
             idx = nocc + i
-            if idx % orb_per_row == 0:
+            if i % orb_per_row == 0:
                 print()
             print(f"{idx+1:<4d} {self.eps[0][idx]:<12.6f}", end=" ")
         print()

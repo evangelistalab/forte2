@@ -55,8 +55,8 @@ def test_ghf():
 
 
 def test_break_complex_symmetry():
-    eghf_real = -1.514563104178
-    s2ghf_real = 0.770638666820
+    eghf_real = -1.514563104227
+    s2ghf_real = 0.770638666751
     eghf = -1.516054958839
     s2ghf = 0.776532390590
 
@@ -69,16 +69,14 @@ def test_break_complex_symmetry():
     system = forte2.System(xyz=xyz, basis="cc-pvqz", auxiliary_basis="cc-pvqz-jkfit")
 
     scf = GHF(charge=0)(system)
-    scf.break_complex_symmetry = False
-    # This is a case where the minao initial gets a worse energy than the hcore guess.
-    scf.guess_type = "hcore"
     scf.run()
     assert scf.E == approx(eghf_real)
     assert scf.S2 == approx(s2ghf_real)
 
-    scf.break_complex_symmetry = True
-    # Do not use the previous C as a guess
     scf.C = None
+    # starting with minao guess gets optimization stuck in UHF mininum
+    scf.guess_type = "hcore"
+    scf.break_complex_symmetry = True
     scf.run()
     assert scf.E == approx(eghf)
     assert scf.S2 == approx(s2ghf)

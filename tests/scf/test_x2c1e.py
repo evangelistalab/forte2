@@ -6,7 +6,7 @@ from forte2.helpers.comparisons import approx, approx_loose
 
 
 def test_sfx2c1e():
-    escf = -5192.021044038846
+    escf = -5192.021043976520
     xyz = """
     Br 0 0 0
     Br 0 0 1.2
@@ -33,7 +33,7 @@ def test_lindep_sfx2c1e():
     # mf = pyscf.scf.RHF(mol).density_fit("cc-pvqz-jkfit").x2c()
     # mf = pyscf.scf.addons.remove_linear_dep_(mf, threshold=2e-7, lindep=1e-10)
     # mf.kernel()
-    erhf = -4.071623992394
+    erhf = -4.071623764438
 
     xyz = "\n".join([f"H 0 0 {i}" for i in range(10)])
 

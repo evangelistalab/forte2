@@ -1,8 +1,9 @@
+import pytest
 import forte2
 from forte2.scf import RHF
 from forte2.helpers.comparisons import approx
 
-
+@pytest.mark.slow
 def test_rhf_long():
     erhf = -383.470176866769
     xyz = """
