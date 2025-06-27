@@ -68,12 +68,12 @@ def test_break_complex_symmetry():
 
     system = forte2.System(xyz=xyz, basis="cc-pvqz", auxiliary_basis="cc-pvqz-jkfit")
 
-    scf = GHF(charge=0)(system)
+    scf = UHF(charge=0, ms=0.5)(system)
     scf.run()
     assert scf.E == approx(eghf_real)
     assert scf.S2 == approx(s2ghf_real)
 
-    scf.C = None
+    scf = GHF(charge=0)(system)
     # starting with minao guess gets optimization stuck in UHF mininum
     scf.guess_type = "hcore"
     scf.break_complex_symmetry = True
