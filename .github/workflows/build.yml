@@ -37,6 +37,7 @@ jobs:
         python-version: '3.12'
         channels: conda-forge
         channel-priority: true
+        add-pip-as-python-dependency: false
 
     - name: Configure conda for macos
       if: matrix.os == 'macos-latest'
