@@ -50,9 +50,6 @@ class SCFMixin:
                 "SO-X2C is only available for GHF. Use SF-X2C for RHF/UHF."
             )
 
-        self.nbf = self.system.nbf()
-        self.naux = self.system.naux()
-
         self.C = None
 
         return self
@@ -96,6 +93,15 @@ class SCFMixin:
         start = time.monotonic()
 
         diis = forte2.helpers.DIIS(diis_start=self.diis_start, diis_nvec=self.diis_nvec)
+        Vnn = self._get_nuclear_repulsion()
+        S = self._get_overlap()
+        H = self._get_hcore()
+        fock_builder = FockBuilder(self.system)
+
+        self.nbf = self.system.nbf()
+        self.naux = self.system.naux()
+
+        self._check_linear_dependencies(S)
 
         logger.log_info1(f"Number of electrons: {self.nel}")
         if self._scf_type() != "GHF":  # not good quantum numbers for GHF
@@ -109,12 +115,6 @@ class SCFMixin:
         logger.log_info1(f"Density convergence criterion: {self.dconv:e}")
         logger.log_info1(f"DIIS acceleration: {diis.do_diis}")
         logger.log_info1(f"\n==> {self.method} SCF ROUTINE <==")
-
-        Vnn = self._get_nuclear_repulsion()
-        S = self._get_overlap()
-        self._check_linear_dependencies(S)
-        H = self._get_hcore()
-        fock_builder = FockBuilder(self.system)
 
         if self.C is None:
             self.C = self._initial_guess(H, S, guess_type=self.guess_type)

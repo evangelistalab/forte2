@@ -24,9 +24,15 @@ class FockBuilder:
             eri = eri.reshape((nbf**2,) * 2)
             # dpstrf: Cholesky decomposition with complete pivoting
             # tol=-1 ~machine precision tolerance
-            C, piv, rank, _ = sp.linalg.lapack.dpstrf(eri, tol=-1)
+            C, piv, rank, info = sp.linalg.lapack.dpstrf(eri, tol=-1)
+            if info < 0:
+                raise ValueError(
+                    f"dpstrf failed with info={info}, indicating the {-info}-th argument had an illegal value."
+                )
+
             piv = piv - 1  # convert to 0-based indexing
             self.B = C[:rank, piv].reshape((rank, nbf, nbf))
+            print(self.B)
             system.naux = lambda: rank
             return
 
