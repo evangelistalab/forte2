@@ -30,24 +30,21 @@ jobs:
       with:
         submodules: 'true'
 
+    - name: Configure osx-64 for macOS before setup
+      if: matrix.os == 'macos-latest'
+      run: |
+        conda config --set subdir osx-64
+
     - name: Setup Conda
       uses: conda-incubator/setup-miniconda@v3
       with:
         activate-environment: forte
+        environment-file: environment.yml
         channels: conda-forge
         show-channel-urls: true
         python-version: '3.12'
         auto-activate-base: false
         add-pip-as-python-dependency: true
-
-    - name: Configure osx-64 environment for macOS
-      if: matrix.os == 'macos-latest'
-      run: |
-        conda config --env --set subdir osx-64
-
-    - name: Install environment packages
-      run: |
-        conda env update -f environment.yml
 
     - name: Compile Forte2
       id: compile-forte2
