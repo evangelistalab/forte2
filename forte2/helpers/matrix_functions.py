@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.linalg
 
-MACHEPS = np.finfo(float).eps
+MACHEPS = 1e-14
 
 
 def invsqrt_matrix(M, tol=1e-7):
@@ -46,7 +46,7 @@ def canonical_orth(S, tol=1e-7):
     """
     # Compute the inverse square root of S
     sevals, sevecs = np.linalg.eigh(S)
-    if np.any(sevals < 0):
+    if np.any(sevals < -MACHEPS):
         raise ValueError("Matrix must be positive semi-definite.")
     trunc_indices = np.where(sevals > tol)[0]
     X = sevecs[:, trunc_indices] / np.sqrt(sevals[trunc_indices])
@@ -63,6 +63,7 @@ def eigh_gen(A, B=None, remove_lindep=True, orth_tol=1e-7, orth_method="canonica
         remove_lindep (bool): If True, perform orthogonalization to remove linear dependencies, else use scipy's eigh.
         orth_tol (float): Eigenvalue threshold below which values are treated as zero.
         orth_method (str): Orthogonalization method. Options are "canonical" or "symmetric".
+            "canonical" should be used when there are linear dependencies in the basis functions.
 
     Returns:
         tuple: A tuple containing the eigenvalues and eigenvectors.

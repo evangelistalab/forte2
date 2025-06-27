@@ -1,8 +1,10 @@
-import forte2, forte2.helpers
 import numpy as np
 import scipy, scipy.constants
+import forte2
+import forte2.helpers
+from forte2.helpers import logger
 
-X2C_LINDEP_TOL = 1e-10
+X2C_LINDEP_TOL = 5e-8
 LIGHT_SPEED = scipy.constants.physical_constants["inverse fine-structure constant"][0]
 
 
@@ -12,24 +14,18 @@ def get_hcore_x2c(system, x2c_type="sf"):
         "so",
     ], f"Invalid x2c_type: {x2c_type}. Must be 'sf' or 'so'."
 
-    print("Number of contracted basis functions: ", system.nbf())
+    logger.log_info1(f"Number of contracted basis functions: {system.nbf()}")
     xbasis = system.decontract()
     nbf_decon = len(xbasis)
-    print(f"Number of decontracted basis functions: {nbf_decon}")
+    logger.log_info1(f"Number of decontracted basis functions: {nbf_decon}")
     nbf = nbf_decon if x2c_type == "sf" else nbf_decon * 2
     # expensive way to get this for now but works for all types of contraction schemes
     proj = _get_projection_matrix(xbasis, system.basis, x2c_type=x2c_type)
 
     S, T, V, W = _get_integrals(xbasis, system.atoms, x2c_type=x2c_type)
 
-    # build the one-electron matrix Dirac equation
-    D, M = _build_dirac_eq(S, T, V, W, nbf, x2c_type)
-
-    # diagonalize the Dirac equation
-    # TODO: handle linear dependencies
-    e_dirac, c_dirac = forte2.helpers.eigh_gen(
-        D, M, remove_lindep=True, orth_tol=X2C_LINDEP_TOL, orth_method="symmetric"
-    )
+    # build and solve the one-electron matrix Dirac equation
+    _, c_dirac = _solve_dirac_eq(S, T, V, W, nbf, x2c_type)
 
     # build the decoupling matrix X
     X = _get_decoupling_matrix(c_dirac, nbf)
@@ -75,7 +71,7 @@ def _get_integrals(xbasis, atoms, x2c_type):
         return _block_diag(S), _block_diag(T), _block_diag(V), _i_sigma_dot(W)
 
 
-def _build_dirac_eq(S, T, V, W, nbf, x2c_type):
+def _solve_dirac_eq(S, T, V, W, nbf, x2c_type):
     dtype = np.float64 if x2c_type == "sf" else np.complex128
     D = np.zeros((nbf * 2,) * 2, dtype=dtype)
     M = np.zeros((nbf * 2,) * 2, dtype=dtype)
@@ -85,7 +81,12 @@ def _build_dirac_eq(S, T, V, W, nbf, x2c_type):
     D[nbf:, :nbf] = T
     M[:nbf, :nbf] = S
     M[nbf:, nbf:] = (0.5 / LIGHT_SPEED**2) * T
-    return D, M
+
+    # TODO: handle scipy.LinAlgError when it arises
+    # haven't seen it even with some very ill-conditioned systems
+    # (H10, aug-dz, cond number ~ 2e14), gives sensible results
+    # trying to remove ANY linear dependencies seems to break variationality
+    return scipy.linalg.eigh(D, M)
 
 
 def _get_decoupling_matrix(c_dirac, nbf):
@@ -101,7 +102,7 @@ def _get_transformation_matrix(S, T, X, tol=1e-9):
     """
     S_tilde = S + (0.5 / LIGHT_SPEED**2) * X.conj().T @ T @ X
     lam, z = forte2.helpers.eigh_gen(
-        S_tilde, S, remove_lindep=True, orth_tol=tol, orth_method="symmetric"
+        S_tilde, S, remove_lindep=True, orth_tol=tol, orth_method="canonical"
     )
     idx = lam > 1e-14
     R = (z[:, idx] / np.sqrt(lam[idx])) @ z[:, idx].T.conj() @ S
