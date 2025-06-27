@@ -7,8 +7,8 @@ on:
     - cron: '0 15 * * *'
 
 jobs:
-  build-linux:
-    runs-on: ubuntu-latest
+  build:
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         shell: bash -el {0}   
@@ -16,10 +16,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest]
+        bse: [with_bse, without_bse]
         include:
-          - name: 'with_bse'
+          - bse: with_bse
             extra_dependencies: 'conda-forge::basis_set_exchange'
-          - name: 'without_bse'
+          - bse: without_bse
             extra_dependencies: ''
 
     steps:
