@@ -291,8 +291,13 @@ class UHF(SCFMixin, MOsMixin):
             int(round(self.ms * 2)), self.ms * 2
         ), "ms must be an integer multiple of 0.5."
         self.twicems = int(round(self.ms * 2))
+        if self.nel % 2 == 1 and self.twicems % 2 == 0:
+            raise ValueError(f"{self.nel} electrons is incompatible with ms={self.ms}!")
         self.na = int(round(self.nel + self.twicems) / 2)
         self.nb = int(round(self.nel - self.twicems) / 2)
+        assert (
+            self.nel == self.na + self.nb
+        ), f"Number of electrons {self.nel} does not match na + nb = {self.na} + {self.nb}."
         assert (
             self.na >= 0 and self.nb >= 0
         ), "UHF requires non-negative number of alpha and beta electrons."
