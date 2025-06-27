@@ -6,7 +6,7 @@ import scipy as sp
 import forte2
 from forte2.jkbuilder import FockBuilder
 from forte2.helpers.mixins import MOsMixin
-from forte2.helpers.matrix_functions import givens_rotation, eigh_gen
+from forte2.helpers.matrix_functions import givens_rotation, eigh_gen, canonical_orth
 from forte2.helpers import logger
 from .initial_guess import minao_initial_guess, core_initial_guess
 
@@ -28,7 +28,7 @@ class SCFMixin:
     dconv: float = 1e-6
     maxiter: int = 100
     guess_type: str = "minao"
-    
+
     # If the min/max eigenvalue of the overlap matrix falls below
     # this trigger, linear dependency will be removed
     linear_dep_trigger: float = 1e-10
@@ -64,7 +64,9 @@ class SCFMixin:
         e, _ = np.linalg.eigh(S)
         self._eigh = sp.linalg.eigh
         self.nmo = self.nbf
+        self.lindep = False
         if min(e) / max(e) < self.linear_dep_trigger:
+            self.lindep = True
             logger.log_warning(f"Linear dependencies detected in overlap matrix S!")
             logger.log_debug(
                 f"Max eigenvalue: {np.max(e):.2e}. \n"
@@ -83,6 +85,7 @@ class SCFMixin:
                 orth_tol=self.ortho_thresh,
                 orth_method="canonical",
             )
+            self.xorth = canonical_orth(S, tol=self.ortho_thresh)
 
     def run(self):
         """
@@ -239,6 +242,8 @@ class RHF(SCFMixin, MOsMixin):
 
     def _build_ao_grad(self, S, F):
         ao_grad = F @ self.D[0] @ S - S @ self.D[0] @ F
+        if self.lindep:
+            ao_grad = self.xorth.T.conj() @ ao_grad @ self.xorth
         return ao_grad
 
     def _energy(self, H, F):

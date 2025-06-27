@@ -5,7 +5,7 @@ from forte2.helpers.comparisons import approx
 
 
 def test_lindep_rhf():
-    erhf = -4.071545223158
+    erhf = -4.071545222979
     xyz = "\n".join([f"H 0 0 {i}" for i in range(10)])
 
     system = forte2.System(
@@ -15,7 +15,8 @@ def test_lindep_rhf():
     ovlp = system.ints_overlap()
     assert np.linalg.cond(ovlp) > 1e14
 
-    scf = RHF(charge=0)(system)
+    # test diis with linear dependency as well with tight convergence
+    scf = RHF(charge=0, econv=1e-10, dconv=1e-8)(system)
     scf.ortho_thresh = 2e-7
     scf.run()
     assert scf.nbf == 90

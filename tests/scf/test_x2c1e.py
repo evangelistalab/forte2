@@ -33,7 +33,7 @@ def test_lindep_sfx2c1e():
     # mf = pyscf.scf.RHF(mol).density_fit("cc-pvqz-jkfit").x2c()
     # mf = pyscf.scf.addons.remove_linear_dep_(mf, threshold=2e-7, lindep=1e-10)
     # mf.kernel()
-    erhf = -4.071623992532
+    erhf = -4.071623992394
 
     xyz = "\n".join([f"H 0 0 {i}" for i in range(10)])
 
@@ -45,7 +45,7 @@ def test_lindep_sfx2c1e():
         x2c_type="sf",
     )
 
-    scf = RHF(charge=0)(system)
+    scf = RHF(charge=0, econv=1e-10, dconv=1e-8)(system)
     scf.ortho_thresh = 2e-7
     scf.run()
     assert scf.E == approx(erhf)
