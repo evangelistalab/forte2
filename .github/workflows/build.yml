@@ -55,6 +55,7 @@ jobs:
     - name: Compile Forte2
       id: compile-forte2
       run: |
+        conda activate forte
         export CMAKE_GENERATOR="Unix Makefiles"
         pip install --no-build-isolation -ve .
         pip list
@@ -65,5 +66,6 @@ jobs:
     - name: Run Forte2 pytest tests
       if: steps.compile-forte2.outcome == 'success' && '!cancelled()'
       run: |
+        conda activate forte
         cd $HOME/work/forte2/forte2/tests
         pytest -v
