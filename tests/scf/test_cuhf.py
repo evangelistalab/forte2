@@ -1,3 +1,4 @@
+import pytest
 import forte2
 from forte2.scf import CUHF
 from forte2.helpers.comparisons import approx
@@ -37,3 +38,21 @@ def test_cuhf_triplet():
     scf.run()
     assert scf.E == approx(ecuhf)
     assert scf.S2 == approx(s2cuhf)
+
+
+def test_cuhf_incompatible_params():
+    xyz = """
+    H 0 0 0
+    H 0 0 1
+    """
+
+    system = forte2.System(
+        xyz=xyz, basis="sto-6g", auxiliary_basis="def2-universal-jkfit"
+    )
+    with pytest.raises(ValueError):
+        scf = CUHF(charge=1)(system)
+    with pytest.raises(ValueError):
+        scf = CUHF(charge=-3, ms=0)(system)
+    with pytest.raises(ValueError):
+        scf = CUHF(charge=1, ms=1.0)(system)
+    scf = CUHF(charge=-5, ms=0.5)(system)

@@ -1,3 +1,4 @@
+import pytest
 import forte2
 from forte2.scf import ROHF
 from forte2.helpers.comparisons import approx
@@ -37,3 +38,21 @@ def test_rohf_triplet():
     scf.run()
     assert scf.E == approx(erohf)
     assert scf.S2 == approx(s2rohf)
+
+
+def test_rohf_incompatible_params():
+    xyz = """
+    H 0 0 0
+    H 0 0 1
+    """
+
+    system = forte2.System(
+        xyz=xyz, basis="sto-6g", auxiliary_basis="def2-universal-jkfit"
+    )
+    with pytest.raises(ValueError):
+        scf = ROHF(charge=1)(system)
+    with pytest.raises(ValueError):
+        scf = ROHF(charge=-3, ms=0)(system)
+    with pytest.raises(ValueError):
+        scf = ROHF(charge=1, ms=1.0)(system)
+    scf = ROHF(charge=-5, ms=0.5)(system)

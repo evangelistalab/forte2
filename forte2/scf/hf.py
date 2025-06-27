@@ -207,10 +207,13 @@ class RHF(SCFMixin, MOsMixin):
 
     def __call__(self, system):
         self = super().__call__(system)
+        self._parse_state()
+        return self
+
+    def _parse_state(self):
         assert self.nel % 2 == 0, "RHF requires an even number of electrons."
         self.ms = 0
         self.na = self.nb = self.nel // 2
-        return self
 
     def _build_fock(self, H, fock_builder, S):
         J = fock_builder.build_J(self.D)[0]
@@ -282,11 +285,17 @@ class RHF(SCFMixin, MOsMixin):
 
 @dataclass
 class UHF(SCFMixin, MOsMixin):
-    ms: float = 0.0
+    ms: float = field(default=None, init=True)
     guess_mix: bool = False  # only used if ms == 0
 
     def __call__(self, system):
         self = super().__call__(system)
+        self._parse_state()
+        return self
+
+    def _parse_state(self):
+        if self.ms is None:
+            raise ValueError(f"Spin multiplicity ms must be set for {self._scf_type()}.")
         assert np.isclose(
             int(round(self.ms * 2)), self.ms * 2
         ), "ms must be an integer multiple of 0.5."
@@ -300,8 +309,7 @@ class UHF(SCFMixin, MOsMixin):
         ), f"Number of electrons {self.nel} does not match na + nb = {self.na} + {self.nb}."
         assert (
             self.na >= 0 and self.nb >= 0
-        ), "UHF requires non-negative number of alpha and beta electrons."
-        return self
+        ), f"{self._scf_type} requires non-negative number of alpha and beta electrons."
 
     def _build_fock(self, H, fock_builder, S):
         Ja, Jb = fock_builder.build_J(self.D)
@@ -418,21 +426,7 @@ class UHF(SCFMixin, MOsMixin):
 class ROHF(SCFMixin, MOsMixin):
     ms: float = field(default=None, init=True)
 
-    def __call__(self, system):
-        self = super().__call__(system)
-        if self.ms is None:
-            raise ValueError("ROHF requires a specified ms value.")
-        assert np.isclose(
-            int(round(self.ms * 2)), self.ms * 2
-        ), "ms must be an integer multiple of 0.5."
-        self.twicems = int(round(self.ms * 2))
-        self.na = int(round(self.nel + self.twicems) / 2)
-        self.nb = int(round(self.nel - self.twicems) / 2)
-        assert (
-            self.na >= 0 and self.nb >= 0
-        ), "ROHF requires non-negative number of alpha and beta electrons."
-        return self
-
+    _parse_state = UHF._parse_state
     _initial_guess = RHF._initial_guess
     _build_initial_density_matrix = UHF._build_initial_density_matrix
     _diagonalize_fock = RHF._diagonalize_fock
@@ -440,6 +434,11 @@ class ROHF(SCFMixin, MOsMixin):
     _energy = UHF._energy
     _diis_update = RHF._diis_update
     _build_total_density_matrix = UHF._build_total_density_matrix
+
+    def __call__(self, system):
+        self = super().__call__(system)
+        self._parse_state()
+        return self
 
     def _build_fock(self, H, fock_builder, S):
         Ja, Jb = fock_builder.build_J(self.D)
@@ -514,22 +513,10 @@ class ROHF(SCFMixin, MOsMixin):
 
 @dataclass
 class CUHF(SCFMixin, MOsMixin):
-    ms: float = 0.0
+    ms: float = field(default=None, init=True)
     guess_mix: bool = False  # only used if ms == 0
 
-    def __call__(self, system):
-        self = super().__call__(system)
-        assert np.isclose(
-            int(round(self.ms * 2)), self.ms * 2
-        ), "ms must be an integer multiple of 0.5."
-        self.twicems = int(round(self.ms * 2))
-        self.na = int(round(self.nel + self.twicems) / 2)
-        self.nb = int(round(self.nel - self.twicems) / 2)
-        assert (
-            self.na >= 0 and self.nb >= 0
-        ), "CUHF requires non-negative number of alpha and beta electrons."
-        return self
-
+    _parse_state = UHF._parse_state
     _build_density_matrix = UHF._build_density_matrix
     _initial_guess = UHF._initial_guess
     _build_initial_density_matrix = UHF._build_initial_density_matrix
@@ -540,6 +527,11 @@ class CUHF(SCFMixin, MOsMixin):
     _diis_update = UHF._diis_update
     _build_total_density_matrix = UHF._build_total_density_matrix
     _print_orbital_energies = UHF._print_orbital_energies
+
+    def __call__(self, system):
+        self = super().__call__(system)
+        self._parse_state()
+        return self
 
     def _build_fock(self, H, fock_builder, S):
         F, _ = UHF._build_fock(self, H, fock_builder, S)
