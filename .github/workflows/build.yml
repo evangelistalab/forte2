@@ -41,20 +41,6 @@ jobs:
         auto-activate-base: false
         add-pip-as-python-dependency: true
 
-    - name: Configure conda for macos
-      if: matrix.os == 'macos-latest'
-      run: |
-        conda activate forte
-        conda uninstall -y mkl
-        conda install -y conda-forge::openblas
-        conda activate forte
-    
-    - name: Configure conda for linux
-      if: matrix.os == 'ubuntu-latest'
-      run: |
-        conda env create -f environment.yml
-        conda activate forte
-
     - name: Compile Forte2
       id: compile-forte2
       run: |
