@@ -33,18 +33,21 @@ jobs:
     - name: Setup Conda
       uses: conda-incubator/setup-miniconda@v3
       with:
-        auto-activate-base: false
-        python-version: '3.12'
+        activate-environment: forte
+        environment-file: environment.yml
         channels: conda-forge
-        channel-priority: true
-        add-pip-as-python-dependency: false
+        show-channel-urls: true
+        python-version: '3.12'
+        auto-activate-base: false
+        add-pip-as-python-dependency: true
 
     - name: Configure conda for macos
       if: matrix.os == 'macos-latest'
       run: |
-        CONDA_SUBDIR=osx-64 conda env create -f environment.yml
         conda activate forte
-        conda config --env --set subdir osx-64
+        conda uninstall -y mkl
+        conda install -y conda-forge::openblas
+        conda activate forte
     
     - name: Configure conda for linux
       if: matrix.os == 'ubuntu-latest'
