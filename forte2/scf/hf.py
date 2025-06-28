@@ -295,7 +295,9 @@ class UHF(SCFMixin, MOsMixin):
 
     def _parse_state(self):
         if self.ms is None:
-            raise ValueError(f"Spin multiplicity ms must be set for {self._scf_type()}.")
+            raise ValueError(
+                f"Spin multiplicity ms must be set for {self._scf_type()}."
+            )
         assert np.isclose(
             int(round(self.ms * 2)), self.ms * 2
         ), "ms must be an integer multiple of 0.5."

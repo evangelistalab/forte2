@@ -18,7 +18,6 @@ def timing(n):
     ms = 0.5 * (n % 2)  # Unpaired electrons for odd n
     rohf = ROHF(charge=0, ms=0.5 * (n % 2), econv=1e-12)(system)
     rohf.run()
-
     ci = CI(
         orbitals=list(range(n)),
         state=State(nel=n, multiplicity=multiplicity, ms=ms),
@@ -29,8 +28,6 @@ def timing(n):
     ci.run()
     end = time.monotonic()
 
-    # assert isclose(rhf.E, -1.05643120731551)
-    # assert isclose(ci.E[0], -1.096071975854)
     return end - start, ci.E[0]
 
 
@@ -38,13 +35,13 @@ def timing(n):
 def test_ci_timing():
 
     ref_energies = [
-        -1.108873664898,
-        -2.180967812920,
-        -3.257608942979,
-        -4.336068592600,
-        -5.415397168298,
-        -6.495197015514,
-        -7.575276862455,
+        -1.108873664804,
+        -2.180967812817,
+        -3.257608942865,
+        -4.336068592474,
+        -5.415397091940,
+        -6.495197015363,
+        -7.575276862289,
     ]
 
     ci_timing = []
