@@ -1,10 +1,8 @@
-#include <vector>
+#include <algorithm>
 #include <future>
 #include <iostream>
-#include <cassert>
-#include <algorithm>
 #include <thread>
-#include <algorithm>
+#include <vector>
 
 #include "helpers/timer.hpp"
 #include "helpers/np_vector_functions.h"
@@ -35,8 +33,6 @@ void CISigmaBuilder::H1_aa_gemm(std::span<double> basis, std::span<double> sigma
         size_t maxK = alfa ? lists_.alfa_address_1h()->strpcls(class_K)
                            : lists_.beta_address_1h()->strpcls(class_K);
 
-        std::cout << "Processing class_K = " << class_K << ", maxK = " << maxK << std::endl;
-
         // loop over blocks of matrix C
         for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
             if (lists_.detpblk(nI) == 0)
@@ -64,53 +60,27 @@ void CISigmaBuilder::H1_aa_gemm(std::span<double> basis, std::span<double> sigma
                     auto& Klist = alfa ? lists_.get_alfa_1h_list(class_K, K, class_Ia)
                                        : lists_.get_beta_1h_list(class_K, K, class_Ib);
                     for (const auto& [sign_K, q, I] : Klist) {
-                        for (size_t idx{0}; idx != maxL; ++idx) {
-                            if (std::fabs(sign_K * tr[I * maxL + idx]) < 1e-8)
-                                continue; // Skip small contributions
-                            std::cout << "Adding to TL[" << q * dimKL + K * maxL + idx
-                                      << "] = " << sign_K << " * " << tr[I * maxL + idx] << " =  "
-                                      << sign_K * tr[I * maxL + idx] << " q = " << q << std::endl;
-                            TL[q * dimKL + K * maxL + idx] += sign_K * tr[I * maxL + idx];
-                        }
-                        // add(maxL, sign_K, &tr[I * maxL], 1, &TL[q * dimKL + K * maxL], 1);
+                        add(maxL, sign_K, &tr[I * maxL], 1, &TL[q * dimKL + K * maxL], 1);
                     }
                 }
-                std::fill_n(TR.begin(), temp_dim, 0.0);
-                for (size_t p = 0; p < norb; ++p) {
-                    for (size_t q = 0; q < norb; ++q) {
-                        for (size_t KL = 0; KL < dimKL; ++KL) {
-                            if (std::fabs(TL[q * dimKL + KL]) < 1e-8)
-                                continue; // Skip small contributions
-                            std::cout << "Adding to TR[" << p * dimKL + KL
-                                      << "] = " << h.data()[p * norb + q] << " * "
-                                      << TL[q * dimKL + KL] << " = "
-                                      << h.data()[p * norb + q] * TL[q * dimKL + KL] << " p = " << p
-                                      << ", q = " << q << ", KL = " << KL << std::endl;
-                            TR[p * dimKL + KL] += h.data()[p * norb + q] * TL[q * dimKL + KL];
-                        }
-                    }
-                }
-                // matrix_product('N', 'N', norb, dimKL, norb, 1.0, h.data(), norb, TL.data(),
-                // dimKL,
-                //                0.0, TR.data(), dimKL);
-                std::fill_n(TL.begin(), temp_dim, 0.0);
 
-                for (size_t K = 0; K < maxK; ++K) {
-                    auto& Klist = alfa ? lists_.get_alfa_1h_list(class_K, K, class_Ia)
-                                       : lists_.get_beta_1h_list(class_K, K, class_Ib);
-                    for (const auto& [sign_K, p, I] : Klist) {
-                        // add(maxL, sign_K, &TR[p * dimKL + K * maxL], 1, &TL[I * maxL], 1);
-                        for (size_t idx{0}; idx != maxL; ++idx) {
-                            if (std::fabs(sign_K * TR[p * dimKL + K * maxL + idx]) < 1e-8)
-                                continue; // Skip small contributions
-                            std::cout << "Adding to TL[" << I * maxL + idx
-                                      << "] = " << sign_K * TR[p * dimKL + K * maxL + idx]
-                                      << std::endl;
-                            TL[I * maxL + idx] += sign_K * TR[p * dimKL + K * maxL + idx];
+                matrix_product('N', 'N', norb, dimKL, norb, 1.0, h.data(), norb, TL.data(), dimKL,
+                               0.0, TR.data(), dimKL);
+
+                for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
+                    if ((alfa) and (class_Ib != class_Jb) or ((!alfa) and (class_Ia != class_Ja)))
+                        continue;
+
+                    std::fill_n(TL.begin(), temp_dim, 0.0);
+                    for (size_t K = 0; K < maxK; ++K) {
+                        auto& Klist = alfa ? lists_.get_alfa_1h_list(class_K, K, class_Ja)
+                                           : lists_.get_beta_1h_list(class_K, K, class_Jb);
+                        for (const auto& [sign_K, p, I] : Klist) {
+                            add(maxL, sign_K, &TR[p * dimKL + K * maxL], 1, &TL[I * maxL], 1);
                         }
                     }
+                    scatter_block(TL, sigma, alfa, lists_, class_Ja, class_Jb);
                 }
-                scatter_block(TL, sigma, alfa, lists_, class_Ia, class_Ib);
             }
         }
     }
@@ -170,19 +140,36 @@ void CISigmaBuilder::H2_aaaa_gemm(std::span<double> basis, std::span<double> sig
                 matrix_product('N', 'N', npairs, dimKL, npairs, 1.0, v_pr_qs_a.data(), npairs,
                                TL.data(), dimKL, 0.0, TR.data(), dimKL);
 
-                std::fill_n(TL.begin(), temp_dim, 0.0);
+                for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
+                    if ((alfa) and (class_Ib != class_Jb) or ((!alfa) and (class_Ia != class_Ja)))
+                        continue;
 
-                for (size_t K = 0; K < maxK; ++K) {
-                    auto& Krlist = alfa ? lists_.get_alfa_2h_list(class_K, K, class_Ia)
-                                        : lists_.get_beta_2h_list(class_K, K, class_Ib);
-                    for (const auto& [sign_K, p, r, I] : Krlist) {
-                        const size_t pr_index = p * (p - 1) / 2 + r;
-                        for (size_t idx{0}; idx != maxL; ++idx) {
-                            TL[I * maxL + idx] += sign_K * TR[pr_index * dimKL + K * maxL + idx];
+                    std::fill_n(TL.begin(), temp_dim, 0.0);
+                    for (size_t K = 0; K < maxK; ++K) {
+                        auto& Klist = alfa ? lists_.get_alfa_2h_list(class_K, K, class_Ja)
+                                           : lists_.get_beta_2h_list(class_K, K, class_Jb);
+                        for (const auto& [sign_K, p, r, I] : Klist) {
+                            const size_t pr_index = p * (p - 1) / 2 + r;
+                            add(maxL, sign_K, &TR[pr_index * dimKL + K * maxL], 1, &TL[I * maxL],
+                                1);
                         }
                     }
+                    scatter_block(TL, sigma, alfa, lists_, class_Ja, class_Jb);
                 }
-                scatter_block(TL, sigma, alfa, lists_, class_Ia, class_Ib);
+
+                // std::fill_n(TL.begin(), temp_dim, 0.0);
+
+                // for (size_t K = 0; K < maxK; ++K) {
+                //     auto& Krlist = alfa ? lists_.get_alfa_2h_list(class_K, K, class_Ia)
+                //                         : lists_.get_beta_2h_list(class_K, K, class_Ib);
+                //     for (const auto& [sign_K, p, r, I] : Krlist) {
+                //         const size_t pr_index = p * (p - 1) / 2 + r;
+                //         for (size_t idx{0}; idx != maxL; ++idx) {
+                //             TL[I * maxL + idx] += sign_K * TR[pr_index * dimKL + K * maxL + idx];
+                //         }
+                //     }
+                // }
+                // scatter_block(TL, sigma, alfa, lists_, class_Ia, class_Ib);
             }
         }
     }

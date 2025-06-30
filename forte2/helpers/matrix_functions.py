@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.linalg
 
-MACHEPS = np.finfo(float).eps
+MACHEPS = 1e-14
 
 
 def invsqrt_matrix(M, tol=1e-7):
@@ -20,11 +20,10 @@ def invsqrt_matrix(M, tol=1e-7):
     evals, evecs = np.linalg.eigh(M)
     if np.any(evals < -MACHEPS):
         raise ValueError("Matrix must be positive semi-definite.")
-    max_eval = np.max(np.abs(evals))
     # Inverse sqrt eigenvalues with threshold
     invsqrt_evals = np.zeros_like(evals)
     for i, val in enumerate(evals):
-        if val > tol * max_eval:
+        if val > tol:
             invsqrt_evals[i] = 1.0 / np.sqrt(val)
         else:
             invsqrt_evals[i] = 0.0  # treat small/singular values carefully
@@ -47,43 +46,44 @@ def canonical_orth(S, tol=1e-7):
     """
     # Compute the inverse square root of S
     sevals, sevecs = np.linalg.eigh(S)
-    if np.any(sevals < 0):
+    if np.any(sevals < -MACHEPS):
         raise ValueError("Matrix must be positive semi-definite.")
-    max_eval = np.max(np.abs(sevals))
-    trunc_indices = np.where(sevals > tol * max_eval)[0]
+    trunc_indices = np.where(sevals > tol)[0]
     X = sevecs[:, trunc_indices] / np.sqrt(sevals[trunc_indices])
     return X
 
 
-def eigh_gen(A, B, tol=1e-7, orth="canonical"):
+def eigh_gen(A, B=None, remove_lindep=True, orth_tol=1e-7, orth_method="canonical"):
     """
     Solve the generalized eigenvalue problem A @ x = lambda * B @ x.
 
     Args:
         A (np.ndarray): The matrix A.
-        B (np.ndarray): The matrix B.
-        tol (float): Eigenvalue threshold below which values are treated as zero.
-        orth (str): Orthogonalization method. Options are "canonical" or "symmetric".
+        B (np.ndarray): The matrix B. If None, the identity matrix is used.
+        remove_lindep (bool): If True, perform orthogonalization to remove linear dependencies, else use scipy's eigh.
+        orth_tol (float): Eigenvalue threshold below which values are treated as zero.
+        orth_method (str): Orthogonalization method. Options are "canonical" or "symmetric".
+            "canonical" should be used when there are linear dependencies in the basis functions.
 
     Returns:
         tuple: A tuple containing the eigenvalues and eigenvectors.
     """
-    try:
-        return scipy.linalg.eigh(A, B)
-    except scipy.linalg.LinAlgError:
-        print(
-            f"Linear dependency detected in the generalized eigenvalue problem! Using orthogonalization method {orth}."
-        )
-        if orth == "canonical":
-            X = canonical_orth(B, tol)
-        elif orth == "symmetric":
-            X = invsqrt_matrix(B, tol)
-        else:
+    if B is None:
+        B = np.eye(A.shape[0])
+
+    if remove_lindep:
+        if orth_method == "canonical":
+            X = canonical_orth(B, orth_tol)
+        elif orth_method == "symmetric":
+            X = invsqrt_matrix(B, orth_tol)
+        else:  # TODO: add partial cholesky: 10.1063/1.5139948
             raise ValueError("Invalid orthogonalization method.")
 
         A = X.T @ A @ X
         e, c = np.linalg.eigh(A)
         return e, X @ c
+    else:
+        return scipy.linalg.eigh(A, B)
 
 
 def givens_rotation(A, c, s, i, j, column=True):

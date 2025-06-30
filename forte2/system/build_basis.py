@@ -2,6 +2,7 @@ import forte2
 import json
 import itertools
 from importlib import resources
+from collections import defaultdict
 
 try:
     import basis_set_exchange as bse
@@ -22,11 +23,10 @@ def get_atom_basis(basis_per_atom: dict) -> dict:
 
     # invert the basis_per_atom dictionary to get a list of atoms per basis set
     # E.g. {1:"cc-pvdz", 2:"cc-pvdz", 8:"sto-6g"} -> {"cc-pvdz":[1, 2], "sto-6g":[8]}
-    atoms_per_basis = {}
+    atoms_per_basis = defaultdict(list)
+
     for atomic_number, basis_name in basis_per_atom.items():
-        if basis_name not in atoms_per_basis:
-            atoms_per_basis[basis_name] = []
-        atoms_per_basis[basis_name].append(atomic_number)
+        atoms_per_basis[basis_name.lower()].append(atomic_number)
 
     # stores the basis set data for each atom
     atom_basis = {}
@@ -48,7 +48,7 @@ def get_atom_basis(basis_per_atom: dict) -> dict:
         else:
             if BSE_AVAILABLE:
                 print(
-                    f"[forte2] Basis {basis_name.lower()} not found locally. Using Basis Set Exchange."
+                    f"[forte2] Basis {basis_name} not found locally. Using Basis Set Exchange."
                 )
                 for atomic_number in atoms_per_basis[basis_name]:
                     try:
@@ -62,7 +62,7 @@ def get_atom_basis(basis_per_atom: dict) -> dict:
                     ]["electron_shells"]
             else:
                 raise Exception(
-                    f"[forte2] Basis file {basis_name.lower()}.json could not be found, and Basis Set Exchange is not available. "
+                    f"[forte2] Basis file {basis_name}.json could not be found, and Basis Set Exchange is not available. "
                 )
     return atom_basis
 

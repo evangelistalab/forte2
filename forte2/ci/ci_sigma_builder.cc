@@ -49,6 +49,16 @@ CISigmaBuilder::~CISigmaBuilder() {
     LOG(log_level_) << "Timing for 2RDM(ab):" << rdm2_ab_timer_ << " seconds";
 }
 
+void CISigmaBuilder::set_algorithm(const std::string& algorithm) {
+    if (algorithm == "kh" or algorithm == "knowles-handy") {
+        algorithm_ = CIAlgorithm::Knowles_Handy;
+    } else if (algorithm == "hz" or algorithm == "harrison-zarrabian") {
+        algorithm_ = CIAlgorithm::Harrison_Zarrabian;
+    } else {
+        throw std::runtime_error("CI algorithm " + algorithm + " not valid.");
+    }
+}
+
 void CISigmaBuilder::set_memory(int mb) {
     memory_size_ = mb * 1024 * 1024; // Convert MB to bytes
 }
@@ -144,15 +154,14 @@ void CISigmaBuilder::Hamiltonian(np_vector basis, np_vector sigma) const {
     auto b_span = vector::as_span(basis);
     auto s_span = vector::as_span(sigma);
 
+    H0(b_span, s_span);
     if (algorithm_ == CIAlgorithm::Knowles_Handy) {
-        H0(b_span, s_span);
         H1_kh(b_span, s_span, true);
         H1_kh(b_span, s_span, false);
         local_timer h_aabb_timer;
         H2_kh(b_span, s_span);
         haabb_timer_ += h_aabb_timer.elapsed_seconds();
     } else {
-        H0(b_span, s_span);
         H1_aa_gemm(b_span, s_span, true, h_hz);
         H1_aa_gemm(b_span, s_span, false, h_hz);
 

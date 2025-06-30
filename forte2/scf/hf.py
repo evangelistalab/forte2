@@ -6,7 +6,7 @@ import scipy as sp
 import forte2
 from forte2.jkbuilder import FockBuilder
 from forte2.helpers.mixins import MOsMixin
-from forte2.helpers.matrix_functions import givens_rotation
+from forte2.helpers.matrix_functions import givens_rotation, eigh_gen, canonical_orth
 from forte2.helpers import logger
 from .initial_guess import minao_initial_guess, core_initial_guess
 
@@ -29,6 +29,13 @@ class SCFMixin:
     maxiter: int = 100
     guess_type: str = "minao"
 
+    # If the min/max eigenvalue of the overlap matrix falls below
+    # this trigger, linear dependency will be removed
+    linear_dep_trigger: float = 1e-10
+    # This is the threshold below which the eigenvalues of
+    # the overlap matrix will be removed
+    ortho_thresh: float = 1e-8
+
     executed: bool = field(default=False, init=False)
     converged: bool = field(default=False, init=False)
 
@@ -43,15 +50,39 @@ class SCFMixin:
                 "SO-X2C is only available for GHF. Use SF-X2C for RHF/UHF."
             )
 
-        self.nbf = self.system.nbf()
-        self.naux = self.system.naux()
-
         self.C = None
 
         return self
 
     def _scf_type(self):
         return type(self).__name__.upper()
+
+    def _check_linear_dependencies(self, S):
+        e, _ = np.linalg.eigh(S)
+        self._eigh = sp.linalg.eigh
+        self.nmo = self.nbf
+        self.lindep = False
+        if min(e) / max(e) < self.linear_dep_trigger:
+            self.lindep = True
+            logger.log_warning(f"Linear dependencies detected in overlap matrix S!")
+            logger.log_debug(
+                f"Max eigenvalue: {np.max(e):.2e}. \n"
+                f"Min eigenvalue: {np.min(e):.2e}. \n"
+                f"Condition number: {max(e)/min(e):.2e}. \n"
+                f"Removing linear dependencies with threshold {self.ortho_thresh:.2e}."
+            )
+            self.nmo -= np.sum(e < self.ortho_thresh)
+            logger.log_warning(
+                f"Reduced number of basis functions from {self.nbf} to {self.nmo} due to linear dependencies."
+            )
+            self._eigh = lambda A, B: eigh_gen(
+                A,
+                B,
+                remove_lindep=True,
+                orth_tol=self.ortho_thresh,
+                orth_method="canonical",
+            )
+            self.xorth = canonical_orth(S, tol=self.ortho_thresh)
 
     def run(self):
         """
@@ -62,6 +93,15 @@ class SCFMixin:
         start = time.monotonic()
 
         diis = forte2.helpers.DIIS(diis_start=self.diis_start, diis_nvec=self.diis_nvec)
+        Vnn = self._get_nuclear_repulsion()
+        S = self._get_overlap()
+        H = self._get_hcore()
+        fock_builder = FockBuilder(self.system)
+
+        self.nbf = self.system.nbf()
+        self.naux = self.system.naux()
+
+        self._check_linear_dependencies(S)
 
         logger.log_info1(f"Number of electrons: {self.nel}")
         if self._scf_type() != "GHF":  # not good quantum numbers for GHF
@@ -75,11 +115,6 @@ class SCFMixin:
         logger.log_info1(f"Density convergence criterion: {self.dconv:e}")
         logger.log_info1(f"DIIS acceleration: {diis.do_diis}")
         logger.log_info1(f"\n==> {self.method} SCF ROUTINE <==")
-
-        Vnn = self._get_nuclear_repulsion()
-        S = self._get_overlap()
-        H = self._get_hcore()
-        fock_builder = FockBuilder(self.system)
 
         if self.C is None:
             self.C = self._initial_guess(H, S, guess_type=self.guess_type)
@@ -172,10 +207,13 @@ class RHF(SCFMixin, MOsMixin):
 
     def __call__(self, system):
         self = super().__call__(system)
+        self._parse_state()
+        return self
+
+    def _parse_state(self):
         assert self.nel % 2 == 0, "RHF requires an even number of electrons."
         self.ms = 0
         self.na = self.nb = self.nel // 2
-        return self
 
     def _build_fock(self, H, fock_builder, S):
         J = fock_builder.build_J(self.D)[0]
@@ -207,13 +245,15 @@ class RHF(SCFMixin, MOsMixin):
 
     def _build_ao_grad(self, S, F):
         ao_grad = F @ self.D[0] @ S - S @ self.D[0] @ F
+        if self.lindep:
+            ao_grad = self.xorth.T.conj() @ ao_grad @ self.xorth
         return ao_grad
 
     def _energy(self, H, F):
         return np.sum(self.D[0] * (H + F))
 
     def _diagonalize_fock(self, F, S):
-        eps, C = sp.linalg.eigh(F, S)
+        eps, C = self._eigh(F, S)
         return [eps], [C]
 
     def _spin(self, S):
@@ -224,7 +264,7 @@ class RHF(SCFMixin, MOsMixin):
 
     def _print_orbital_energies(self):
         ndocc = self.na
-        nuocc = self.nbf - ndocc
+        nuocc = self.nmo - ndocc
         orb_per_row = 5
         print("\nOrbital Energies [Eh]")
         print("---------------------")
@@ -237,7 +277,7 @@ class RHF(SCFMixin, MOsMixin):
         print("\n\nVirtual:")
         for i in range(nuocc):
             idx = ndocc + i
-            if idx % orb_per_row == 0:
+            if i % orb_per_row == 0:
                 print()
             print(f"{idx+1:<4d} {self.eps[0][idx]:<12.6f}", end=" ")
         print()
@@ -245,21 +285,33 @@ class RHF(SCFMixin, MOsMixin):
 
 @dataclass
 class UHF(SCFMixin, MOsMixin):
-    ms: float = 0.0
+    ms: float = field(default=None, init=True)
     guess_mix: bool = False  # only used if ms == 0
 
     def __call__(self, system):
         self = super().__call__(system)
+        self._parse_state()
+        return self
+
+    def _parse_state(self):
+        if self.ms is None:
+            raise ValueError(
+                f"Spin multiplicity ms must be set for {self._scf_type()}."
+            )
         assert np.isclose(
             int(round(self.ms * 2)), self.ms * 2
         ), "ms must be an integer multiple of 0.5."
         self.twicems = int(round(self.ms * 2))
+        if self.nel % 2 == 1 and self.twicems % 2 == 0:
+            raise ValueError(f"{self.nel} electrons is incompatible with ms={self.ms}!")
         self.na = int(round(self.nel + self.twicems) / 2)
         self.nb = int(round(self.nel - self.twicems) / 2)
         assert (
+            self.nel == self.na + self.nb
+        ), f"Number of electrons {self.nel} does not match na + nb = {self.na} + {self.nb}."
+        assert (
             self.na >= 0 and self.nb >= 0
-        ), "UHF requires non-negative number of alpha and beta electrons."
-        return self
+        ), f"{self._scf_type} requires non-negative number of alpha and beta electrons."
 
     def _build_fock(self, H, fock_builder, S):
         Ja, Jb = fock_builder.build_J(self.D)
@@ -298,15 +350,9 @@ class UHF(SCFMixin, MOsMixin):
         return AO_grad
 
     def _diagonalize_fock(self, F, S):
-        eps_a, C_a = sp.linalg.eigh(F[0], S)
-        eps_b, C_b = sp.linalg.eigh(F[1], S)
+        eps_a, C_a = self._eigh(F[0], S)
+        eps_b, C_b = self._eigh(F[1], S)
         return [eps_a, eps_b], [C_a, C_b]
-
-    def _print_orbital_energies(self):
-        print("\nOrbital Energies:")
-        print("#    Alpha    Beta")
-        for idx, (epa, epb) in enumerate(zip(self.eps[0], self.eps[1])):
-            print(f"{idx + 1:>2d}: {epa:.6f} {epb:.6f}")
 
     def _spin(self, S):
         # alpha-beta orbital overlap matrix
@@ -343,9 +389,9 @@ class UHF(SCFMixin, MOsMixin):
 
     def _print_orbital_energies(self):
         naocc = self.na
-        naucc = self.nbf - naocc
+        naucc = self.nmo - naocc
         nbocc = self.nb
-        nbucc = self.nbf - nbocc
+        nbucc = self.nmo - nbocc
         orb_per_row = 5
         print("\nOrbital Energies [Eh]")
         print("---------------------")
@@ -382,21 +428,7 @@ class UHF(SCFMixin, MOsMixin):
 class ROHF(SCFMixin, MOsMixin):
     ms: float = field(default=None, init=True)
 
-    def __call__(self, system):
-        self = super().__call__(system)
-        if self.ms is None:
-            raise ValueError("ROHF requires a specified ms value.")
-        assert np.isclose(
-            int(round(self.ms * 2)), self.ms * 2
-        ), "ms must be an integer multiple of 0.5."
-        self.twicems = int(round(self.ms * 2))
-        self.na = int(round(self.nel + self.twicems) / 2)
-        self.nb = int(round(self.nel - self.twicems) / 2)
-        assert (
-            self.na >= 0 and self.nb >= 0
-        ), "ROHF requires non-negative number of alpha and beta electrons."
-        return self
-
+    _parse_state = UHF._parse_state
     _initial_guess = RHF._initial_guess
     _build_initial_density_matrix = UHF._build_initial_density_matrix
     _diagonalize_fock = RHF._diagonalize_fock
@@ -404,6 +436,11 @@ class ROHF(SCFMixin, MOsMixin):
     _energy = UHF._energy
     _diis_update = RHF._diis_update
     _build_total_density_matrix = UHF._build_total_density_matrix
+
+    def __call__(self, system):
+        self = super().__call__(system)
+        self._parse_state()
+        return self
 
     def _build_fock(self, H, fock_builder, S):
         Ja, Jb = fock_builder.build_J(self.D)
@@ -450,7 +487,7 @@ class ROHF(SCFMixin, MOsMixin):
     def _print_orbital_energies(self):
         ndocc = min(self.na, self.nb)
         nsocc = abs(self.na - self.nb)
-        nuocc = self.nbf - ndocc - nsocc
+        nuocc = self.nmo - ndocc - nsocc
         orb_per_row = 5
         print("\nOrbital Energies [Eh]")
         print("---------------------")
@@ -478,33 +515,25 @@ class ROHF(SCFMixin, MOsMixin):
 
 @dataclass
 class CUHF(SCFMixin, MOsMixin):
-    ms: float = 0.0
+    ms: float = field(default=None, init=True)
     guess_mix: bool = False  # only used if ms == 0
 
-    def __call__(self, system):
-        self = super().__call__(system)
-        assert np.isclose(
-            int(round(self.ms * 2)), self.ms * 2
-        ), "ms must be an integer multiple of 0.5."
-        self.twicems = int(round(self.ms * 2))
-        self.na = int(round(self.nel + self.twicems) / 2)
-        self.nb = int(round(self.nel - self.twicems) / 2)
-        assert (
-            self.na >= 0 and self.nb >= 0
-        ), "CUHF requires non-negative number of alpha and beta electrons."
-        return self
-
+    _parse_state = UHF._parse_state
     _build_density_matrix = UHF._build_density_matrix
     _initial_guess = UHF._initial_guess
     _build_initial_density_matrix = UHF._build_initial_density_matrix
     _build_ao_grad = UHF._build_ao_grad
     _diagonalize_fock = UHF._diagonalize_fock
-    _print_orbital_energies = UHF._print_orbital_energies
     _spin = UHF._spin
     _energy = UHF._energy
     _diis_update = UHF._diis_update
     _build_total_density_matrix = UHF._build_total_density_matrix
     _print_orbital_energies = UHF._print_orbital_energies
+
+    def __call__(self, system):
+        self = super().__call__(system)
+        self._parse_state()
+        return self
 
     def _build_fock(self, H, fock_builder, S):
         F, _ = UHF._build_fock(self, H, fock_builder, S)
@@ -641,13 +670,8 @@ class GHF(SCFMixin, MOsMixin):
 
     def _diagonalize_fock(self, F, S):
         S_spinor = np.block([[S, np.zeros_like(S)], [np.zeros_like(S), S]])
-        eps, C = sp.linalg.eigh(F, S_spinor)
+        eps, C = self._eigh(F, S_spinor)
         return [eps], [C]
-
-    def _print_orbital_energies(self):
-        print("\nOrbital Energies:")
-        for i, eps in enumerate(self.eps[0]):
-            print(f"  Spinor {i + 1}: {eps:.6f} Hartree")
 
     def _spin(self, S):
         """
@@ -682,11 +706,11 @@ class GHF(SCFMixin, MOsMixin):
 
     def _print_orbital_energies(self):
         nocc = self.nel
-        nuocc = self.nbf - nocc
+        nuocc = self.nmo * 2 - nocc
         orb_per_row = 5
         print("\nSpinor Energies [Eh]")
         print("---------------------")
-        print("\Occupied:")
+        print("Occupied:")
         for i in range(nocc):
             if i % orb_per_row == 0:
                 print()
@@ -695,7 +719,7 @@ class GHF(SCFMixin, MOsMixin):
         print("\n\nVirtual:")
         for i in range(nuocc):
             idx = nocc + i
-            if idx % orb_per_row == 0:
+            if i % orb_per_row == 0:
                 print()
             print(f"{idx+1:<4d} {self.eps[0][idx]:<12.6f}", end=" ")
         print()

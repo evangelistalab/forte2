@@ -1,3 +1,4 @@
+import pytest
 import forte2
 from forte2.scf import UHF, RHF
 from forte2.helpers.comparisons import approx
@@ -51,6 +52,21 @@ def test_uhf_one_electron():
     scf.run()
     assert scf.E == approx(euhf)
     assert scf.S2 == approx(s2uhf)
+
+
+def test_uhf_imcompatible_params():
+    xyz = """
+    H 0 0 0
+    H 0 0 1
+    """
+    system = forte2.System(
+        xyz=xyz, basis="sto-6g", auxiliary_basis="def2-universal-jkfit"
+    )
+    with pytest.raises(ValueError):
+        scf = UHF(charge=-3, ms=1.0)(system)  # 5 electron, ms=1.0 should not be allowed
+    with pytest.raises(ValueError):
+        scf = UHF(charge=0)(system)  # ms must be explicitly set for UHF
+    scf = UHF(charge=-3, ms=0.5)(system)
 
 
 def test_coulson_fischer():

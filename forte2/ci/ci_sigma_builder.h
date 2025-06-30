@@ -130,7 +130,7 @@ class CISigmaBuilder {
     // == Class Private Variables ==
 
     /// @brief The CI algorithm to use for building the Hamiltonian
-    CIAlgorithm algorithm_ = CIAlgorithm::Knowles_Handy; // Default to Knowles-Handy algorithm
+    CIAlgorithm algorithm_ = CIAlgorithm::Harrison_Zarrabian; // Default to Knowles-Handy algorithm
     /// @brief The CIStrings object containing the determinant classes and their properties
     const CIStrings& lists_;
     /// @brief The scalar energy
