@@ -79,7 +79,7 @@ void export_sparse_state_api(nb::module_& m) {
 
     m.def("apply_number_projector", &apply_number_projector);
 
-    // m.def("get_projection", &get_projection);
+    m.def("get_projection", &get_projection);
 
     // there's already a function called spin2, overload the spin2 function
     m.def(
