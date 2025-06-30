@@ -495,3 +495,26 @@ def test_sparse_operator_hamiltonian():
     assert energy == pytest.approx(
         scf.E, abs=1e-8
     ), f"Hamiltonian energy {energy} is not close to SCF energy {scf.E}"
+
+
+def test_sparse_operator_list_pop():
+    sop = forte2.SparseOperatorList()
+    sop.add("[1a+ 1a-]", 1.0)
+    sop.add("[0a+ 0a-]", 1.0)
+    sop.add("[1a+ 1a-]", 1.0)
+    assert len(sop) == 3
+    sop = sop.pop_left()
+    assert len(sop) == 2
+    sop = sop.pop_right()
+    assert len(sop) == 1
+    assert sop(0)[0].str() == "[0a+ 0a-]"
+
+
+def test_sparse_operator_list_slice():
+    sop = forte2.SparseOperatorList()
+    sop.add("[1a+ 1a-]", 1.0)
+    sop.add("[0a+ 0a-]", 1.0)
+    sop.add("[1a+ 1a-]", 1.0)
+    sop_sl = sop.slice(1, 2)
+    assert len(sop_sl) == 1
+    assert sop_sl(0)[0].str() == "[0a+ 0a-]"
