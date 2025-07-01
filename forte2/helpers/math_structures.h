@@ -256,14 +256,23 @@ class VectorSpace {
         return result;
     }
 
-    /// @brief Calculate the dot product of two vectors
+    /// @brief Calculate the dot product of two vectors <this|other>Add commentMore actions
     F dot(const Derived& other) const {
         F result{0};
-        const auto& smaller = size() < other.size() ? elements() : other.elements();
-        const auto& larger = size() < other.size() ? other.elements() : elements();
-        for (const auto& [e, c] : smaller) {
-            if (const auto it = larger.find(e); it != larger.end()) {
-                result += conjugate(c) * it->second;
+        bool self_smaller = size() < other.size();
+        const auto& smaller = self_smaller ? elements() : other.elements();
+        const auto& larger = self_smaller ? other.elements() : elements();
+        if (self_smaller) {
+            for (const auto& [e, c] : smaller) {
+                if (const auto it = larger.find(e); it != larger.end()) {
+                    result += conjugate(c) * it->second;
+                }
+            }
+        } else {
+            for (const auto& [e, c] : smaller) {
+                if (const auto it = larger.find(e); it != larger.end()) {
+                    result += conjugate(it->second) * c;
+                }
             }
         }
         return result;
@@ -276,18 +285,18 @@ class VectorSpace {
     container elements_;
 };
 
-/// @brief A template class to define an ordered list of vector space elements over a field F for a
-/// given type T
+/// @brief A template class to define an ordered list of vector space elements over a field F
+/// for a given type T
 /// @tparam Derived The derived class
 /// @tparam T The type of the vector space
 /// @tparam F The field of the vector space
 /// @tparam Hash The hash function for the unordered_map
 /// @details The class uses a std::vector to store the elements of the list.
 /// Here we use the Curiously Recurring Template Pattern (CRTP) to define a template class
-/// VectorSpaceList that supports basic operations for vector spaces over a field F for a given type
-/// T. The class is templated over the derived class, the type T, the field F, and an optional hash
-/// function.
-/// To use the class, the derived class should be implemented in the following way:
+/// VectorSpaceList that supports basic operations for vector spaces over a field F for a given
+/// type T. The class is templated over the derived class, the type T, the field F, and an
+/// optional hash function. To use the class, the derived class should be implemented in the
+/// following way:
 ///
 /// class Derived : public VectorSpace<Derived, T, F> {
 ///     // Implement the derived class here
