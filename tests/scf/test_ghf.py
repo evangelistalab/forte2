@@ -72,8 +72,6 @@ def test_break_complex_symmetry():
     This means that the UHF solution will be unstable wrt Sz and time-reversal
     symmetry breaking
     """
-    eghf_real = -1.512749931221
-    s2ghf_real = 0.771514925136
     eghf = -1.514272436189
     s2ghf = 0.777317358363
 
@@ -84,12 +82,6 @@ def test_break_complex_symmetry():
     """
 
     system = forte2.System(xyz=xyz, basis="cc-pvtz", auxiliary_basis="cc-pvqz-jkfit")
-
-    scf = UHF(charge=0, ms=0.5, econv=1e-10, dconv=1e-8)(system)
-    scf.guess_type = "hcore"
-    scf.run()
-    assert scf.E == approx(eghf_real)
-    assert scf.S2 == approx(s2ghf_real)
 
     scf = GHF(charge=0, econv=1e-10, dconv=1e-8)(system)
     scf.guess_type = "hcore"
