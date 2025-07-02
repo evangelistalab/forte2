@@ -20,4 +20,26 @@ std::string SparseState::str(int n) const {
     return s;
 }
 
+std::vector<SparseStateView> split_sparse_state(const SparseState& state, size_t n) {
+    std::vector<SparseStateView> views;
+    if (n == 1 || state.size() <= n) {
+        views.emplace_back(state.begin(), state.end());
+        return views;
+    }
+    views.reserve(n);
+    
+    auto it = state.begin();
+    size_t chunk_size = state.size() / n;
+    size_t remainder = state.size() % n;
+
+    for (size_t i = 0; i < n; ++i) {
+        size_t current_chunk_size = chunk_size + (i < remainder ? 1 : 0);
+        auto end_it = it;
+        std::advance(end_it, current_chunk_size);
+        views.emplace_back(it, end_it);
+        it = end_it;
+    }
+    return views;
+}
+
 } // namespace forte2

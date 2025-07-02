@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <numeric>
 #include <cmath>
+#include <thread>
+#include <future>
 
 #include "ci/sparse_exp.h"
 
@@ -106,8 +108,9 @@ SparseState SparseFactExp::apply_op(const SparseOperatorList& sop, const SparseS
     return result;
 }
 
-SparseState SparseFactExp::apply_antiherm(const SparseOperatorList& sop, const SparseState& state,
-                                          bool inverse, bool reverse) {
+SparseState SparseFactExp::apply_antiherm_serial(const SparseOperatorList& sop,
+                                                 const SparseState& state, bool inverse,
+                                                 bool reverse) {
     // initialize a state object
     SparseState result(state);
     Buffer<std::pair<Determinant, sparse_scalar_t>> new_terms;
@@ -157,6 +160,81 @@ SparseState SparseFactExp::apply_antiherm(const SparseOperatorList& sop, const S
         new_terms.reset();
     }
     return result;
+}
+
+SparseState SparseFactExp::apply_antiherm(const SparseOperatorList& sop, const SparseState& state,
+                                          bool inverse, bool reverse) {
+    // initialize a state object
+    SparseState result(state);
+
+    Determinant sign_mask;
+    Determinant idx;
+    size_t num_threads = std::thread::hardware_concurrency();
+
+    for (size_t m = 0, nterms = sop.size(); m < nterms; m++) {
+        size_t n = (inverse ^ reverse) ? nterms - m - 1 : m;
+
+        const auto& [sqop, coefficient] = sop(n);
+        bool is_idempotent = !sqop.is_nilpotent();
+
+        compute_sign_mask(sqop.cre(), sqop.ann(), sign_mask, idx);
+        const auto t = (inverse ? -1.0 : 1.0) * coefficient;
+        const auto screen_thresh_div_t = screen_thresh_ / std::abs(t);
+
+        auto result_views = split_sparse_state(result, num_threads);
+        std::vector<std::future<Buffer<std::pair<Determinant, sparse_scalar_t>>>> futures;
+
+        for (auto& view : result_views) {
+            futures.emplace_back(
+                std::async(std::launch::async, [this, &sqop, &view, t, &sign_mask,
+                                                screen_thresh_div_t, is_idempotent]() {
+                    return apply_antiherm_kernel(sqop, view, t, sign_mask, screen_thresh_div_t,
+                                                 is_idempotent);
+                }));
+        }
+
+        for (auto& future : futures) {
+            auto new_terms = future.get();
+            for (const auto& [det, c] : new_terms) {
+                result[det] += c;
+            }
+        }
+    }
+    return result;
+}
+
+Buffer<std::pair<Determinant, sparse_scalar_t>>
+SparseFactExp::apply_antiherm_kernel(const SQOperatorString& sqop, const SparseStateView& chunk,
+                                     const sparse_scalar_t t, const Determinant& sign_mask,
+                                     double screen_thresh_div_t, bool is_idempotent) {
+    Buffer<std::pair<Determinant, sparse_scalar_t>> new_terms;
+    Determinant new_det;
+
+    for (const auto& [det, c] : chunk) {
+        // do not apply this operator to this determinant if we expect the new determinant
+        // to have an amplitude less than screen_thresh
+        // (here we use the approximation sin(x) ~ x, for x small)
+        if (std::abs(c) > screen_thresh_div_t) {
+            if (is_idempotent and det.faster_can_apply_operator(sqop.cre(), sqop.ann())) {
+                new_terms.emplace_back(det, c * (std::polar(1.0, 2.0 * std::imag(t)) - 1.0));
+            } else {
+                if (det.faster_can_apply_operator(sqop.cre(), sqop.ann())) {
+                    const auto sign = faster_apply_operator_to_det(det, new_det, sqop.cre(),
+                                                                   sqop.ann(), sign_mask);
+                    new_terms.emplace_back(det, c * (std::cos(std::abs(t)) - 1.0));
+                    new_terms.emplace_back(new_det, sign * c * std::polar(1.0, std::arg(t)) *
+                                                        std::sin(std::abs(t)));
+                } else if (det.faster_can_apply_operator(sqop.ann(), sqop.cre())) {
+                    const auto sign = faster_apply_operator_to_det(det, new_det, sqop.ann(),
+                                                                   sqop.cre(), sign_mask);
+                    new_terms.emplace_back(det, c * (std::cos(std::abs(t)) - 1.0));
+                    new_terms.emplace_back(new_det, -sign * c * std::polar(1.0, -std::arg(t)) *
+                                                        std::sin(std::abs(t)));
+                }
+            }
+        }
+    }
+    return new_terms;
 }
 
 std::pair<SparseState, SparseState>
