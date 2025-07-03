@@ -24,7 +24,7 @@ void export_sparse_operator_api(nb::module_& m) {
         // Constructors
         .def(nb::init<>(), "Default constructor")
         .def(nb::init<SparseOperator>(), "Copy constructor")
-        .def(nb::init<const SparseOperator::container&>(),
+        .def(nb::init<const SparseOperator::old_container&>(),
              "Create a SparseOperator from a container of terms")
         .def(nb::init<const SQOperatorString&, sparse_scalar_t>(), "sqop"_a,
              "coefficient"_a = sparse_scalar_t(1), "Create a SparseOperator with a single term")

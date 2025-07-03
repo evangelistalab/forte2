@@ -16,7 +16,7 @@ void export_sparse_state_api(nb::module_& m) {
     nb::class_<SparseState>(m, "SparseState", "A class to represent a vector of determinants")
         .def(nb::init<>(), "Default constructor")
         .def(nb::init<const SparseState&>(), "Copy constructor")
-        .def(nb::init<const SparseState::container&>(),
+        .def(nb::init<const SparseState::old_container&>(),
              "Create a SparseState from a container of Determinants")
         .def(nb::init<const Determinant&, sparse_scalar_t>(), "det"_a, "val"_a = 1,
              "Create a SparseState with a single determinant")

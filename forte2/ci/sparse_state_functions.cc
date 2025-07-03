@@ -142,7 +142,11 @@ SparseState apply_operator_impl_grouped(bool is_antihermitian, const SparseOpera
 
     // make a copy of the state with the determinants sorted
     // somehow this makes the code faster
-    std::vector<std::pair<Determinant, sparse_scalar_t>> state_sorted(state.begin(), state.end());
+    std::vector<std::pair<Determinant, sparse_scalar_t>> state_sorted;
+    state_sorted.reserve(state.size());
+    for (const auto& [det, c] : state) {
+        state_sorted.emplace_back(det, c);
+    }
     std::sort(state_sorted.begin(), state_sorted.end(),
               [](const auto& a, const auto& b) { return a.first < b.first; });
 

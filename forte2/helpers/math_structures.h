@@ -43,14 +43,21 @@ template <typename Real> std::complex<Real> conjugate(const std::complex<Real>& 
 template <typename Derived, typename T, typename F, typename Hash = std::hash<T>>
 class VectorSpace {
   public:
-    using container = std::unordered_map<T, F, Hash>;
+    using container = robin_hood::unordered_flat_map<T, F, Hash>;
+    using old_container = std::unordered_map<T, F, Hash>;
 
     /// @brief Constructor
     VectorSpace() = default;
     /// @brief Copy constructor
     VectorSpace(const VectorSpace& other) : elements_(other.elements_) {}
-    /// @brief Constructor from a map/dictionary (python friendly)
+    /// @brief Constructor from a robin_hood::unordered_flat_map
     VectorSpace(const container& elements) : elements_(elements) {}
+    /// @brief Constructor from a std::unordered_map (python friendly)
+    VectorSpace(const old_container& elements) {
+        for (const auto& [key, value] : elements) {
+            elements_[key] = value;
+        }
+    }
     /// Move constructor
     VectorSpace(VectorSpace&& other) : elements_(std::move(other.elements_)) {}
     /// Constructor from a single element
