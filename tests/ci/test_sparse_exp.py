@@ -249,7 +249,7 @@ def test_factexp_timing():
     print(f"Time to apply operator (serial SparseExp): {end - start:.8f}")
     print(f"|C| = {C.norm()}")
     assert C.norm() == pytest.approx(1.0, abs=1e-8)
-test_factexp_timing()
+
 
 def test_idempotent_complex():
     op = forte2.SparseOperatorList()
