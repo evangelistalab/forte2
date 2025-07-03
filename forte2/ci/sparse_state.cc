@@ -20,29 +20,26 @@ std::string SparseState::str(int n) const {
     return s;
 }
 
-std::vector<std::pair<size_t, size_t>> split_sparse_state_by_buckets(const SparseState& state,
-                                                                     size_t n) {
-    std::vector<std::pair<size_t, size_t>> buckets;
-    size_t num_buckets = state.bucket_count();
-
+std::vector<SparseStateView> split_sparse_state(const SparseState& state, size_t n) {
+    std::vector<SparseStateView> views;
     if (n == 1 || state.size() <= n) {
-        buckets.emplace_back(0, num_buckets);
-        return buckets;
+        views.emplace_back(state.begin(), state.end());
+        return views;
     }
-    buckets.reserve(num_buckets);
-    size_t chunk_size = num_buckets / n;
-    size_t remainder = num_buckets % n;
-    size_t start = 0;
+    views.reserve(n);
+
+    auto it = state.begin();
+    size_t chunk_size = state.size() / n;
+    size_t remainder = state.size() % n;
+
     for (size_t i = 0; i < n; ++i) {
         size_t current_chunk_size = chunk_size + (i < remainder ? 1 : 0);
-        size_t end = start + current_chunk_size;
-        if (end > num_buckets) {
-            end = num_buckets;
-        }
-        buckets.emplace_back(start, end);
-        start = end;
+        auto end_it = it;
+        std::advance(end_it, current_chunk_size);
+        views.emplace_back(it, end_it);
+        it = end_it;
     }
-    return buckets;
+    return views;
 }
 
 } // namespace forte2

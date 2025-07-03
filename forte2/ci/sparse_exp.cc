@@ -187,19 +187,19 @@ SparseState SparseFactExp::apply_antiherm_impl(const SparseOperatorList& sop,
         const auto t = (inverse ? -1.0 : 1.0) * coefficient;
         const auto screen_thresh_div_t = screen_thresh_ / std::abs(t);
 
-        auto result_buckets = split_sparse_state_by_buckets(result, num_threads);
+        auto result_views = split_sparse_state(result, num_threads);
 
         std::vector<std::future<void>> futures;
         local_timer parallel_timer;
 
-        for (size_t i = 0; i < result_buckets.size(); ++i) {
-            auto& bucket = result_buckets[i];
+        for (size_t i = 0; i < result_views.size(); ++i) {
+            auto& view = result_views[i];
             auto& buffer = buffers[i];
             futures.emplace_back(
-                std::async(std::launch::async, [this, &result, &sqop, &bucket, &sign_mask, &buffer,
-                                                t, screen_thresh_div_t, is_idempotent]() {
-                    apply_antiherm_kernel(result, sqop, bucket, sign_mask, buffer, t,
-                                          screen_thresh_div_t, is_idempotent);
+                std::async(std::launch::async, [this, &view, &sqop, &sign_mask, &buffer, t,
+                                                screen_thresh_div_t, is_idempotent]() {
+                    apply_antiherm_kernel(view, sqop, sign_mask, buffer, t, screen_thresh_div_t,
+                                          is_idempotent);
                 }));
         }
 
@@ -208,7 +208,7 @@ SparseState SparseFactExp::apply_antiherm_impl(const SparseOperatorList& sop,
         }
         parallel_time += parallel_timer.elapsed_seconds();
         local_timer serial_timer;
-        for (size_t i = 0; i < result_buckets.size(); ++i) {
+        for (size_t i = 0; i < result_views.size(); ++i) {
             auto& buffer = buffers[i];
             for (const auto& [det, c] : buffer) {
                 result[det] += c;
@@ -224,37 +224,32 @@ SparseState SparseFactExp::apply_antiherm_impl(const SparseOperatorList& sop,
 }
 
 void SparseFactExp::apply_antiherm_kernel(
-    const SparseState& result, const SQOperatorString& sqop,
-    const std::pair<size_t, size_t>& bucket_range, const Determinant& sign_mask,
+    const SparseStateView& view, const SQOperatorString& sqop, const Determinant& sign_mask,
     Buffer<std::pair<Determinant, sparse_scalar_t>>& new_terms, const sparse_scalar_t t,
     double screen_thresh_div_t, bool is_idempotent) {
     Determinant new_det;
     new_terms.reset();
 
-    for (size_t i = bucket_range.first; i < bucket_range.second; ++i) {
-        for (auto it = result.begin(i); it != result.end(i); ++it) {
-            const auto& [det, c] = *it;
-
-            // do not apply this operator to this determinant if we expect the new determinant
-            // to have an amplitude less than screen_thresh
-            // (here we use the approximation sin(x) ~ x, for x small)
-            if (std::abs(c) > screen_thresh_div_t) {
-                if (is_idempotent and det.faster_can_apply_operator(sqop.cre(), sqop.ann())) {
-                    new_terms.emplace_back(det, c * (std::polar(1.0, 2.0 * std::imag(t)) - 1.0));
-                } else {
-                    if (det.faster_can_apply_operator(sqop.cre(), sqop.ann())) {
-                        const auto sign = faster_apply_operator_to_det(det, new_det, sqop.cre(),
-                                                                       sqop.ann(), sign_mask);
-                        new_terms.emplace_back(det, c * (std::cos(std::abs(t)) - 1.0));
-                        new_terms.emplace_back(new_det, sign * c * std::polar(1.0, std::arg(t)) *
-                                                            std::sin(std::abs(t)));
-                    } else if (det.faster_can_apply_operator(sqop.ann(), sqop.cre())) {
-                        const auto sign = faster_apply_operator_to_det(det, new_det, sqop.ann(),
-                                                                       sqop.cre(), sign_mask);
-                        new_terms.emplace_back(det, c * (std::cos(std::abs(t)) - 1.0));
-                        new_terms.emplace_back(new_det, -sign * c * std::polar(1.0, -std::arg(t)) *
-                                                            std::sin(std::abs(t)));
-                    }
+    for (const auto& [det, c] : view) {
+        // do not apply this operator to this determinant if we expect the new determinant
+        // to have an amplitude less than screen_thresh
+        // (here we use the approximation sin(x) ~ x, for x small)
+        if (std::abs(c) > screen_thresh_div_t) {
+            if (is_idempotent and det.faster_can_apply_operator(sqop.cre(), sqop.ann())) {
+                new_terms.emplace_back(det, c * (std::polar(1.0, 2.0 * std::imag(t)) - 1.0));
+            } else {
+                if (det.faster_can_apply_operator(sqop.cre(), sqop.ann())) {
+                    const auto sign = faster_apply_operator_to_det(det, new_det, sqop.cre(),
+                                                                   sqop.ann(), sign_mask);
+                    new_terms.emplace_back(det, c * (std::cos(std::abs(t)) - 1.0));
+                    new_terms.emplace_back(new_det, sign * c * std::polar(1.0, std::arg(t)) *
+                                                        std::sin(std::abs(t)));
+                } else if (det.faster_can_apply_operator(sqop.ann(), sqop.cre())) {
+                    const auto sign = faster_apply_operator_to_det(det, new_det, sqop.ann(),
+                                                                   sqop.cre(), sign_mask);
+                    new_terms.emplace_back(det, c * (std::cos(std::abs(t)) - 1.0));
+                    new_terms.emplace_back(new_det, -sign * c * std::polar(1.0, -std::arg(t)) *
+                                                        std::sin(std::abs(t)));
                 }
             }
         }

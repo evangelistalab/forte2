@@ -12,7 +12,7 @@
 #include <concepts>
 #endif
 
-#include "helpers/robin_hood.h"
+#include "helpers/unordered_dense.h"
 
 namespace forte2 {
 
@@ -43,7 +43,7 @@ template <typename Real> std::complex<Real> conjugate(const std::complex<Real>& 
 template <typename Derived, typename T, typename F, typename Hash = std::hash<T>>
 class VectorSpace {
   public:
-    using container = robin_hood::unordered_flat_map<T, F, Hash>;
+    using container = ankerl::unordered_dense::map<T, F, Hash>;
     using old_container = std::unordered_map<T, F, Hash>;
 
     /// @brief Constructor

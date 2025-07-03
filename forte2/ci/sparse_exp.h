@@ -132,8 +132,7 @@ class SparseFactExp {
     SparseState apply_antiherm_impl(const SparseOperatorList& sop, const SparseState& state,
                                     bool inverse = false, bool reverse = false);
 
-    void apply_antiherm_kernel(const SparseState& result, const SQOperatorString& sqop,
-                               const std::pair<size_t, size_t>& bucket_range,
+    void apply_antiherm_kernel(const SparseStateView& view, const SQOperatorString& sqop,
                                const Determinant& sign_mask,
                                Buffer<std::pair<Determinant, sparse_scalar_t>>& new_terms,
                                const sparse_scalar_t t, double screen_thresh_div_t,
