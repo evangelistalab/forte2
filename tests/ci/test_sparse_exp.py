@@ -216,8 +216,8 @@ def test_factexp_unitarity():
 
 
 def test_factexp_timing():
-    norb = 30
-    nocc = 2
+    norb = 12
+    nocc = 6
     amp = 0.1
     oplist = set_up_operator(norb=norb, nocc=nocc, amp=amp)
 
@@ -249,7 +249,7 @@ def test_factexp_timing():
     print(f"Time to apply operator (serial SparseExp): {end - start:.8f}")
     print(f"|C| = {C.norm()}")
     assert C.norm() == pytest.approx(1.0, abs=1e-8)
-
+test_factexp_timing()
 
 def test_idempotent_complex():
     op = forte2.SparseOperatorList()

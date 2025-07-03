@@ -120,6 +120,8 @@ SparseState SparseFactExp::apply_antiherm_serial(const SparseOperatorList& sop,
     Determinant new_det;
     Determinant sign_mask;
     Determinant idx;
+    double merging_time = 0.0;
+
     for (size_t m = 0, nterms = sop.size(); m < nterms; m++) {
         size_t n = (inverse ^ reverse) ? nterms - m - 1 : m;
 
@@ -154,13 +156,17 @@ SparseState SparseFactExp::apply_antiherm_serial(const SparseOperatorList& sop,
                 }
             }
         }
+        local_timer merge_timer;
         for (const auto& [det, c] : new_terms) {
             result[det] += c;
         }
+        merging_time += merge_timer.elapsed_seconds();
 
         // reset the buffer
         new_terms.reset();
     }
+    // Print timing information
+    LOG_INFO1 << "Merging time: " << merging_time << " seconds";
     return result;
 }
 
@@ -226,8 +232,8 @@ SparseState SparseFactExp::apply_antiherm_impl(const SparseOperatorList& sop,
     }
     // TODO: remove
     // Print timing information
-    LOG_INFO1 << "Parallel time: " << parallel_time << " seconds";
-    LOG_INFO1 << "Serial time: " << serial_time << " seconds\n";
+    LOG_INFO1 << "Async time: " << parallel_time << " seconds";
+    LOG_INFO1 << "Merging time: " << serial_time << " seconds";
 
     return result;
 }
