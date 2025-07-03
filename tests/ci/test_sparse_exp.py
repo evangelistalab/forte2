@@ -234,6 +234,7 @@ def test_factexp_timing():
     print(f"|C| = {C.norm()}")
     assert C.norm() == pytest.approx(1.0, abs=1e-8)
 
+    start = time.time()
     C = factexp.apply_antiherm_serial(oplist, ref)
     print(f"Size of C = {len(C)}")
     end = time.time()
@@ -241,6 +242,7 @@ def test_factexp_timing():
     print(f"|C| = {C.norm()}")
     assert C.norm() == pytest.approx(1.0, abs=1e-8)
 
+    start = time.time()
     C = exp.apply_antiherm(oplist, ref)
     print(f"Size of C = {len(C)}")
     end = time.time()
