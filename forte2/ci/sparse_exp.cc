@@ -172,8 +172,11 @@ SparseState SparseFactExp::apply_antiherm_impl(const SparseOperatorList& sop,
 
     Determinant sign_mask;
     Determinant idx;
+
     size_t num_threads = std::max<size_t>(1, std::thread::hardware_concurrency());
+    // it would be inefficient to allocate and deallocate buffers for each thread per operator
     std::vector<Buffer<std::pair<Determinant, sparse_scalar_t>>> buffers(num_threads);
+    // TODO: remove
     double parallel_time = 0.0;
     double serial_time = 0.0;
 
@@ -190,6 +193,7 @@ SparseState SparseFactExp::apply_antiherm_impl(const SparseOperatorList& sop,
         auto result_views = split_sparse_state(result, num_threads);
 
         std::vector<std::future<void>> futures;
+        // TODO: remove
         local_timer parallel_timer;
 
         for (size_t i = 0; i < result_views.size(); ++i) {
@@ -206,16 +210,21 @@ SparseState SparseFactExp::apply_antiherm_impl(const SparseOperatorList& sop,
         for (auto& future : futures) {
             future.get(); // wait for all threads to finish
         }
+        // TODO: remove
         parallel_time += parallel_timer.elapsed_seconds();
         local_timer serial_timer;
+
+        // merge the buffers from all tasks serially
         for (size_t i = 0; i < result_views.size(); ++i) {
             auto& buffer = buffers[i];
             for (const auto& [det, c] : buffer) {
                 result[det] += c;
             }
         }
+        // TODO: remove
         serial_time += serial_timer.elapsed_seconds();
     }
+    // TODO: remove
     // Print timing information
     LOG_INFO1 << "Parallel time: " << parallel_time << " seconds";
     LOG_INFO1 << "Serial time: " << serial_time << " seconds\n";
@@ -228,6 +237,7 @@ void SparseFactExp::apply_antiherm_kernel(
     Buffer<std::pair<Determinant, sparse_scalar_t>>& new_terms, const sparse_scalar_t t,
     double screen_thresh_div_t, bool is_idempotent) {
     Determinant new_det;
+    // reset counter but do not deallocate the buffer
     new_terms.reset();
 
     for (const auto& [det, c] : view) {

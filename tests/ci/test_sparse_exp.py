@@ -223,19 +223,28 @@ def test_factexp_timing():
 
     # Apply the operator to the reference state timing it
     ref = forte2.SparseState({Determinant("2" * nocc): 1.0})
-    exp = forte2.SparseFactExp(screen_thresh=1.0e-14)
+    factexp = forte2.SparseFactExp(screen_thresh=1.0e-14)
+    exp = forte2.SparseExp(maxk=100, screen_thresh=1.0e-14)
+
     start = time.time()
-    C = exp.apply_antiherm(oplist, ref)
+    C = factexp.apply_antiherm(oplist, ref)
     print(f"Size of C = {len(C)}")
     end = time.time()
     print(f"Time to apply operator (async): {end - start:.8f}")
     print(f"|C| = {C.norm()}")
     assert C.norm() == pytest.approx(1.0, abs=1e-8)
 
-    C = exp.apply_antiherm_serial(oplist, ref)
+    C = factexp.apply_antiherm_serial(oplist, ref)
     print(f"Size of C = {len(C)}")
     end = time.time()
     print(f"Time to apply operator (serial): {end - start:.8f}")
+    print(f"|C| = {C.norm()}")
+    assert C.norm() == pytest.approx(1.0, abs=1e-8)
+
+    C = exp.apply_antiherm(oplist, ref)
+    print(f"Size of C = {len(C)}")
+    end = time.time()
+    print(f"Time to apply operator (serial SparseExp): {end - start:.8f}")
     print(f"|C| = {C.norm()}")
     assert C.norm() == pytest.approx(1.0, abs=1e-8)
 

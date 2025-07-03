@@ -35,6 +35,9 @@ std::vector<SparseStateView> split_sparse_state(const SparseState& state, size_t
     for (size_t i = 0; i < n; ++i) {
         size_t current_chunk_size = chunk_size + (i < remainder ? 1 : 0);
         auto end_it = it;
+        // this would be extremely inefficient for std::unordered_map
+        // but SparseState uses ankerl::unordered_dense::map which 
+        // uses a flat layout internally, so iterators are very efficient
         std::advance(end_it, current_chunk_size);
         views.emplace_back(it, end_it);
         it = end_it;
