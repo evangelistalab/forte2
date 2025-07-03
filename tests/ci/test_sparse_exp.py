@@ -215,23 +215,31 @@ def test_factexp_unitarity():
     assert C.norm() == pytest.approx(1.0, abs=1e-8)
 
 
-@pytest.mark.slow
 def test_factexp_timing():
-    norb = 12
-    nocc = 6
+    norb = 30
+    nocc = 2
     amp = 0.1
     oplist = set_up_operator(norb=norb, nocc=nocc, amp=amp)
 
     # Apply the operator to the reference state timing it
     ref = forte2.SparseState({Determinant("2" * nocc): 1.0})
-    start = time.time()
     exp = forte2.SparseFactExp(screen_thresh=1.0e-14)
+    start = time.time()
     C = exp.apply_antiherm(oplist, ref)
     print(f"Size of C = {len(C)}")
     end = time.time()
-    print(f"Time to apply operator: {end - start:.8f} (SparsFactExp::antiherm)")
+    print(f"Time to apply operator (async): {end - start:.8f}")
     print(f"|C| = {C.norm()}")
     assert C.norm() == pytest.approx(1.0, abs=1e-8)
+
+    C = exp.apply_antiherm_serial(oplist, ref)
+    print(f"Size of C = {len(C)}")
+    end = time.time()
+    print(f"Time to apply operator (serial): {end - start:.8f}")
+    print(f"|C| = {C.norm()}")
+    assert C.norm() == pytest.approx(1.0, abs=1e-8)
+
+test_factexp_timing()
 
 
 def test_idempotent_complex():

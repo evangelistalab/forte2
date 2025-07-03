@@ -3,7 +3,6 @@
 #include <cmath>
 #include <thread>
 #include <future>
-#include <chrono>
 
 #include "ci/sparse_exp.h"
 #include "helpers/logger.h"
@@ -165,8 +164,9 @@ SparseState SparseFactExp::apply_antiherm_serial(const SparseOperatorList& sop,
     return result;
 }
 
-SparseState SparseFactExp::apply_antiherm(const SparseOperatorList& sop, const SparseState& state,
-                                          bool inverse, bool reverse) {
+SparseState SparseFactExp::apply_antiherm_impl(const SparseOperatorList& sop,
+                                               const SparseState& state, bool inverse,
+                                               bool reverse) {
     // initialize a state object
     SparseState result(state);
 
@@ -174,10 +174,8 @@ SparseState SparseFactExp::apply_antiherm(const SparseOperatorList& sop, const S
     Determinant idx;
     size_t num_threads = std::max<size_t>(1, std::thread::hardware_concurrency());
     std::vector<Buffer<std::pair<Determinant, sparse_scalar_t>>> buffers(num_threads);
-    double prepping_time = 0.0;
     double parallel_time = 0.0;
     double serial_time = 0.0;
-    size_t num_dets = 0;
 
     for (size_t m = 0, nterms = sop.size(); m < nterms; m++) {
         size_t n = (inverse ^ reverse) ? nterms - m - 1 : m;
@@ -189,24 +187,18 @@ SparseState SparseFactExp::apply_antiherm(const SparseOperatorList& sop, const S
         const auto t = (inverse ? -1.0 : 1.0) * coefficient;
         const auto screen_thresh_div_t = screen_thresh_ / std::abs(t);
 
-        local_timer prep_timer;
-
-        auto result_views = split_sparse_state_buckets(result, num_threads);
-        if (result_views.size() != 1) {
-            num_dets += result.size();
-        }
-        prepping_time += prep_timer.elapsed_seconds();
+        auto result_buckets = split_sparse_state_by_buckets(result, num_threads);
 
         std::vector<std::future<void>> futures;
         local_timer parallel_timer;
 
-        for (size_t i = 0; i < result_views.size(); ++i) {
-            auto& view = result_views[i];
+        for (size_t i = 0; i < result_buckets.size(); ++i) {
+            auto& bucket = result_buckets[i];
             auto& buffer = buffers[i];
             futures.emplace_back(
-                std::async(std::launch::async, [this, &result, &sqop, &view, &buffer, t, &sign_mask,
-                                                screen_thresh_div_t, is_idempotent]() {
-                    apply_antiherm_kernel(result, sqop, view, buffer, t, sign_mask,
+                std::async(std::launch::async, [this, &result, &sqop, &bucket, &sign_mask, &buffer,
+                                                t, screen_thresh_div_t, is_idempotent]() {
+                    apply_antiherm_kernel(result, sqop, bucket, sign_mask, buffer, t,
                                           screen_thresh_div_t, is_idempotent);
                 }));
         }
@@ -216,7 +208,7 @@ SparseState SparseFactExp::apply_antiherm(const SparseOperatorList& sop, const S
         }
         parallel_time += parallel_timer.elapsed_seconds();
         local_timer serial_timer;
-        for (size_t i = 0; i < result_views.size(); ++i) {
+        for (size_t i = 0; i < result_buckets.size(); ++i) {
             auto& buffer = buffers[i];
             for (const auto& [det, c] : buffer) {
                 result[det] += c;
@@ -225,19 +217,17 @@ SparseState SparseFactExp::apply_antiherm(const SparseOperatorList& sop, const S
         serial_time += serial_timer.elapsed_seconds();
     }
     // Print timing information
-    LOG_INFO1 << "Prepping time: " << prepping_time << " seconds\n";
-    LOG_INFO1 << "Parallel time: " << parallel_time << " seconds\n";
+    LOG_INFO1 << "Parallel time: " << parallel_time << " seconds";
     LOG_INFO1 << "Serial time: " << serial_time << " seconds\n";
-    LOG_INFO1 << "Number of determinants processed for async: " << num_dets << "\n";
 
     return result;
 }
 
 void SparseFactExp::apply_antiherm_kernel(
     const SparseState& result, const SQOperatorString& sqop,
-    const std::pair<size_t, size_t>& bucket_range,
+    const std::pair<size_t, size_t>& bucket_range, const Determinant& sign_mask,
     Buffer<std::pair<Determinant, sparse_scalar_t>>& new_terms, const sparse_scalar_t t,
-    const Determinant& sign_mask, double screen_thresh_div_t, bool is_idempotent) {
+    double screen_thresh_div_t, bool is_idempotent) {
     Determinant new_det;
     new_terms.reset();
 

@@ -65,6 +65,10 @@ void export_sparse_fact_exp_api(nb::module_& m) {
              "exponential of a SparseOperator to a state: "
              "... exp(op2 - op2^dagger) exp(op1 - op1^dagger) |state>. inverse=True computes the "
              "inverse, and reverse=True applies the operators in reverse order")
+        .def("apply_antiherm_serial", &SparseFactExp::apply_antiherm_serial, "sop"_a, "state"_a,
+             "inverse"_a = false, "reverse"_a = false,
+             "Apply the factorized antihermitian "
+             "exponential of a SparseOperator to a state using a serial algorithm.")
         .def("apply_antiherm_deriv", &SparseFactExp::apply_antiherm_deriv, "sqop"_a, "t"_a,
              "state"_a);
 }

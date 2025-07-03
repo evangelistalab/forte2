@@ -12,6 +12,8 @@
 #include <concepts>
 #endif
 
+#include "helpers/robin_hood.h"
+
 namespace forte2 {
 
 // Defining a function to calculate the conjugate of a value that works both for real/complex fields

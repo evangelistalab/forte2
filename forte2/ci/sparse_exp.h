@@ -121,17 +121,23 @@ class SparseFactExp {
     ///             exp(-op1 + op1^dagger) exp(-op2 + op2^dagger) ... |state>
     ///
     /// @param reverse If true, apply the operators in reverse order
+    SparseState apply_antiherm(const SparseOperatorList& sop, const SparseState& state,
+                               bool inverse = false, bool reverse = false) {
+        return apply_antiherm_impl(sop, state, inverse, reverse);
+    }
+
     SparseState apply_antiherm_serial(const SparseOperatorList& sop, const SparseState& state,
                                       bool inverse = false, bool reverse = false);
 
-    SparseState apply_antiherm(const SparseOperatorList& sop, const SparseState& state,
-                               bool inverse = false, bool reverse = false);
+    SparseState apply_antiherm_impl(const SparseOperatorList& sop, const SparseState& state,
+                                    bool inverse = false, bool reverse = false);
 
     void apply_antiherm_kernel(const SparseState& result, const SQOperatorString& sqop,
                                const std::pair<size_t, size_t>& bucket_range,
+                               const Determinant& sign_mask,
                                Buffer<std::pair<Determinant, sparse_scalar_t>>& new_terms,
-                               const sparse_scalar_t t, const Determinant& sign_mask,
-                               double screen_thresh_div_t, bool is_idempotent);
+                               const sparse_scalar_t t, double screen_thresh_div_t,
+                               bool is_idempotent);
 
     std::pair<SparseState, SparseState> apply_antiherm_deriv(const SQOperatorString& sqop,
                                                              const sparse_scalar_t t,
