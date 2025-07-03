@@ -3,8 +3,11 @@
 #include <cmath>
 #include <thread>
 #include <future>
+#include <chrono>
 
 #include "ci/sparse_exp.h"
+#include "helpers/logger.h"
+#include "helpers/timer.hpp"
 
 namespace forte2 {
 
@@ -169,7 +172,12 @@ SparseState SparseFactExp::apply_antiherm(const SparseOperatorList& sop, const S
 
     Determinant sign_mask;
     Determinant idx;
-    size_t num_threads = std::thread::hardware_concurrency();
+    size_t num_threads = std::max<size_t>(1, std::thread::hardware_concurrency());
+    std::vector<Buffer<std::pair<Determinant, sparse_scalar_t>>> buffers(num_threads);
+    double prepping_time = 0.0;
+    double parallel_time = 0.0;
+    double serial_time = 0.0;
+    size_t num_dets = 0;
 
     for (size_t m = 0, nterms = sop.size(); m < nterms; m++) {
         size_t n = (inverse ^ reverse) ? nterms - m - 1 : m;
@@ -181,60 +189,86 @@ SparseState SparseFactExp::apply_antiherm(const SparseOperatorList& sop, const S
         const auto t = (inverse ? -1.0 : 1.0) * coefficient;
         const auto screen_thresh_div_t = screen_thresh_ / std::abs(t);
 
-        auto result_views = split_sparse_state(result, num_threads);
-        std::vector<std::future<Buffer<std::pair<Determinant, sparse_scalar_t>>>> futures;
+        local_timer prep_timer;
 
-        for (auto& view : result_views) {
+        auto result_views = split_sparse_state_buckets(result, num_threads);
+        if (result_views.size() != 1) {
+            num_dets += result.size();
+        }
+        prepping_time += prep_timer.elapsed_seconds();
+
+        std::vector<std::future<void>> futures;
+        local_timer parallel_timer;
+
+        for (size_t i = 0; i < result_views.size(); ++i) {
+            auto& view = result_views[i];
+            auto& buffer = buffers[i];
             futures.emplace_back(
-                std::async(std::launch::async, [this, &sqop, &view, t, &sign_mask,
+                std::async(std::launch::async, [this, &result, &sqop, &view, &buffer, t, &sign_mask,
                                                 screen_thresh_div_t, is_idempotent]() {
-                    return apply_antiherm_kernel(sqop, view, t, sign_mask, screen_thresh_div_t,
-                                                 is_idempotent);
+                    apply_antiherm_kernel(result, sqop, view, buffer, t, sign_mask,
+                                          screen_thresh_div_t, is_idempotent);
                 }));
         }
 
         for (auto& future : futures) {
-            auto new_terms = future.get();
-            for (const auto& [det, c] : new_terms) {
+            future.get(); // wait for all threads to finish
+        }
+        parallel_time += parallel_timer.elapsed_seconds();
+        local_timer serial_timer;
+        for (size_t i = 0; i < result_views.size(); ++i) {
+            auto& buffer = buffers[i];
+            for (const auto& [det, c] : buffer) {
                 result[det] += c;
             }
         }
+        serial_time += serial_timer.elapsed_seconds();
     }
+    // Print timing information
+    LOG_INFO1 << "Prepping time: " << prepping_time << " seconds\n";
+    LOG_INFO1 << "Parallel time: " << parallel_time << " seconds\n";
+    LOG_INFO1 << "Serial time: " << serial_time << " seconds\n";
+    LOG_INFO1 << "Number of determinants processed for async: " << num_dets << "\n";
+
     return result;
 }
 
-Buffer<std::pair<Determinant, sparse_scalar_t>>
-SparseFactExp::apply_antiherm_kernel(const SQOperatorString& sqop, const SparseStateView& chunk,
-                                     const sparse_scalar_t t, const Determinant& sign_mask,
-                                     double screen_thresh_div_t, bool is_idempotent) {
-    Buffer<std::pair<Determinant, sparse_scalar_t>> new_terms;
+void SparseFactExp::apply_antiherm_kernel(
+    const SparseState& result, const SQOperatorString& sqop,
+    const std::pair<size_t, size_t>& bucket_range,
+    Buffer<std::pair<Determinant, sparse_scalar_t>>& new_terms, const sparse_scalar_t t,
+    const Determinant& sign_mask, double screen_thresh_div_t, bool is_idempotent) {
     Determinant new_det;
+    new_terms.reset();
 
-    for (const auto& [det, c] : chunk) {
-        // do not apply this operator to this determinant if we expect the new determinant
-        // to have an amplitude less than screen_thresh
-        // (here we use the approximation sin(x) ~ x, for x small)
-        if (std::abs(c) > screen_thresh_div_t) {
-            if (is_idempotent and det.faster_can_apply_operator(sqop.cre(), sqop.ann())) {
-                new_terms.emplace_back(det, c * (std::polar(1.0, 2.0 * std::imag(t)) - 1.0));
-            } else {
-                if (det.faster_can_apply_operator(sqop.cre(), sqop.ann())) {
-                    const auto sign = faster_apply_operator_to_det(det, new_det, sqop.cre(),
-                                                                   sqop.ann(), sign_mask);
-                    new_terms.emplace_back(det, c * (std::cos(std::abs(t)) - 1.0));
-                    new_terms.emplace_back(new_det, sign * c * std::polar(1.0, std::arg(t)) *
-                                                        std::sin(std::abs(t)));
-                } else if (det.faster_can_apply_operator(sqop.ann(), sqop.cre())) {
-                    const auto sign = faster_apply_operator_to_det(det, new_det, sqop.ann(),
-                                                                   sqop.cre(), sign_mask);
-                    new_terms.emplace_back(det, c * (std::cos(std::abs(t)) - 1.0));
-                    new_terms.emplace_back(new_det, -sign * c * std::polar(1.0, -std::arg(t)) *
-                                                        std::sin(std::abs(t)));
+    for (size_t i = bucket_range.first; i < bucket_range.second; ++i) {
+        for (auto it = result.begin(i); it != result.end(i); ++it) {
+            const auto& [det, c] = *it;
+
+            // do not apply this operator to this determinant if we expect the new determinant
+            // to have an amplitude less than screen_thresh
+            // (here we use the approximation sin(x) ~ x, for x small)
+            if (std::abs(c) > screen_thresh_div_t) {
+                if (is_idempotent and det.faster_can_apply_operator(sqop.cre(), sqop.ann())) {
+                    new_terms.emplace_back(det, c * (std::polar(1.0, 2.0 * std::imag(t)) - 1.0));
+                } else {
+                    if (det.faster_can_apply_operator(sqop.cre(), sqop.ann())) {
+                        const auto sign = faster_apply_operator_to_det(det, new_det, sqop.cre(),
+                                                                       sqop.ann(), sign_mask);
+                        new_terms.emplace_back(det, c * (std::cos(std::abs(t)) - 1.0));
+                        new_terms.emplace_back(new_det, sign * c * std::polar(1.0, std::arg(t)) *
+                                                            std::sin(std::abs(t)));
+                    } else if (det.faster_can_apply_operator(sqop.ann(), sqop.cre())) {
+                        const auto sign = faster_apply_operator_to_det(det, new_det, sqop.ann(),
+                                                                       sqop.cre(), sign_mask);
+                        new_terms.emplace_back(det, c * (std::cos(std::abs(t)) - 1.0));
+                        new_terms.emplace_back(new_det, -sign * c * std::polar(1.0, -std::arg(t)) *
+                                                            std::sin(std::abs(t)));
+                    }
                 }
             }
         }
     }
-    return new_terms;
 }
 
 std::pair<SparseState, SparseState>

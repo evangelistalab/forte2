@@ -62,10 +62,9 @@ struct SparseStateView {
 
     iterator begin() const { return begin_it; }
     iterator end() const { return end_it; }
-
-    size_t size() const { return std::distance(begin_it, end_it); }
 };
 
 std::vector<SparseStateView> split_sparse_state(const SparseState& state, size_t n);
+std::vector<std::pair<size_t, size_t>> split_sparse_state_buckets(const SparseState& state, size_t n);
 
 } // namespace forte2

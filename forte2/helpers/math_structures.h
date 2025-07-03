@@ -79,6 +79,9 @@ class VectorSpace {
     /// @return the number of elements in the vector space
     size_t size() const { return elements_.size(); }
 
+    /// @return the number of buckets in the unordered_map
+    size_t bucket_count() const { return elements_.bucket_count(); }
+
     /// @return an iterator to the beginning of the object
     inline auto begin() { return elements_.begin(); }
     /// @return an iterator to the beginning of the object (const)
@@ -87,6 +90,10 @@ class VectorSpace {
     inline auto end() { return elements_.end(); }
     /// @return an iterator to the end of the object (const)
     inline auto end() const { return elements_.end(); }
+    inline auto begin(size_t bucket) { return elements_.begin(bucket); }
+    inline auto end(size_t bucket) { return elements_.end(bucket); }
+    inline auto begin(size_t bucket) const { return elements_.begin(bucket); }
+    inline auto end(size_t bucket) const { return elements_.end(bucket); }
 
     /// @return the element corresponding to the key e
     const F& operator[](const T& e) const {

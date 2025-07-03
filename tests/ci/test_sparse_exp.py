@@ -131,13 +131,7 @@ def test_fact_exp_reverse():
     assert wfn[Determinant("-+0")] == pytest.approx(0.016058887563, abs=1e-9)
 
 
-def test_equivalence_between_exp_and_factexp():
-    # Compare the performance of the two methods to apply an operator to a state
-    # when the operator all commute with each other
-    norb = 10
-    nocc = 5
-    amp = 0.1
-
+def set_up_operator(norb, nocc, amp=0.1):
     # Create a random operator
     oplist = forte2.SparseOperatorList()
 
@@ -162,7 +156,18 @@ def test_equivalence_between_exp_and_factexp():
                     oplist.add(
                         f"[{a}a+ {b}b+ {j}b- {i}a-]", amp / (1 + (a + b - i - j) ** 2)
                     )
+    print(f"Number of terms in the operator list: {len(oplist)}")
+    return oplist
 
+
+def test_equivalence_exp_and_factexp():
+    # Compare the performance of the two methods to apply an operator to a state
+    # when the operator all commute with each other
+
+    norb = 10
+    nocc = 5
+    amp = 0.1
+    oplist = set_up_operator(norb=norb, nocc=nocc, amp=amp)
     op = oplist.to_operator()
 
     # Apply the operator to the reference state timing it
@@ -191,15 +196,42 @@ def test_equivalence_between_exp_and_factexp():
     print(f"|A - B| = {AmB.norm()}")
     assert abs(AmB.norm()) < 1e-9
 
+
+def test_factexp_unitarity():
+    norb = 10
+    nocc = 5
+    amp = 0.1
+    oplist = set_up_operator(norb=norb, nocc=nocc, amp=amp)
+
     # Apply the operator to the reference state timing it
     ref = forte2.SparseState({Determinant("2" * nocc): 1.0})
     start = time.time()
     exp = forte2.SparseFactExp(screen_thresh=1.0e-14)
     C = exp.apply_antiherm(oplist, ref)
+    print(f"Size of C = {len(C)}")
     end = time.time()
     print(f"Time to apply operator: {end - start:.8f} (SparsFactExp::antiherm)")
     print(f"|C| = {C.norm()}")
-    assert abs(C.norm() - 1) < 1.0e-10
+    assert C.norm() == pytest.approx(1.0, abs=1e-8)
+
+
+@pytest.mark.slow
+def test_factexp_timing():
+    norb = 12
+    nocc = 6
+    amp = 0.1
+    oplist = set_up_operator(norb=norb, nocc=nocc, amp=amp)
+
+    # Apply the operator to the reference state timing it
+    ref = forte2.SparseState({Determinant("2" * nocc): 1.0})
+    start = time.time()
+    exp = forte2.SparseFactExp(screen_thresh=1.0e-14)
+    C = exp.apply_antiherm(oplist, ref)
+    print(f"Size of C = {len(C)}")
+    end = time.time()
+    print(f"Time to apply operator: {end - start:.8f} (SparsFactExp::antiherm)")
+    print(f"|C| = {C.norm()}")
+    assert C.norm() == pytest.approx(1.0, abs=1e-8)
 
 
 def test_idempotent_complex():
