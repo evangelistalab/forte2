@@ -22,7 +22,7 @@ std::string SparseState::str(int n) const {
 
 std::vector<SparseStateView> split_sparse_state(const SparseState& state, size_t n) {
     std::vector<SparseStateView> views;
-    if (n == 1 || state.size() <= n) {
+    if (n == 1 || state.size() <= 200000) {
         views.emplace_back(state.begin(), state.end());
         return views;
     }
