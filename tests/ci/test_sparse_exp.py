@@ -215,16 +215,40 @@ def test_factexp_unitarity():
     assert C.norm() == pytest.approx(1.0, abs=1e-8)
 
 
-def test_factexp_timing():
-    norb = 12
-    nocc = 6
-    amp = 0.1
-    oplist = set_up_operator(norb=norb, nocc=nocc, amp=amp)
+def test_factexp_timing_small_ops():
+    norb = 16
+    nocc = 1
 
-    # Apply the operator to the reference state timing it
     ref = forte2.SparseState({Determinant("2" * nocc): 1.0})
     factexp = forte2.SparseFactExp(screen_thresh=1.0e-14)
     exp = forte2.SparseExp(maxk=100, screen_thresh=1.0e-14)
+    oplist = set_up_operator(norb=norb, nocc=nocc, amp=0.1)
+    # Apply the operator to the reference state timing it
+
+    nrep = 10
+
+    start = time.time()
+    for _ in range(nrep):
+        C = factexp.apply_antiherm(oplist, ref)
+    end = time.time()
+    print(f"Avg time to apply operator (async): {(end - start)/nrep:.8f}")
+
+    start = time.time()
+    for _ in range(nrep):
+        C = factexp.apply_antiherm_serial(oplist, ref)
+    end = time.time()
+    print(f"Avg time to apply operator (serial): {(end - start)/nrep:.8f}")
+
+
+def test_factexp_timing_large_ops():
+    norb = 12
+    nocc = 6
+
+    ref = forte2.SparseState({Determinant("2" * nocc): 1.0})
+    factexp = forte2.SparseFactExp(screen_thresh=1.0e-14)
+    exp = forte2.SparseExp(maxk=100, screen_thresh=1.0e-14)
+
+    oplist = set_up_operator(norb=norb, nocc=nocc, amp=0.1)
 
     start = time.time()
     C = factexp.apply_antiherm(oplist, ref)

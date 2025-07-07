@@ -53,9 +53,7 @@ def test_xyz_comment():
     H 0.0 0.0 0.0
     """
 
-    # expect an exception to be raised
     system = forte2.System(xyz=xyz, basis="cc-pvdz")
-
     assert len(system.atoms) == 1
 
 

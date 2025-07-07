@@ -6,6 +6,7 @@
 #include "ci/sparse.h"
 #include "ci/determinant.h"
 #include "ci/sparse_operator.h"
+#include "helpers/unordered_dense.h"
 
 namespace forte2 {
 
@@ -55,15 +56,13 @@ sparse_scalar_t spin2(const SparseState& left_state, const SparseState& right_st
 SparseState normalize(const SparseState& state);
 
 struct SparseStateView {
-    using iterator = typename SparseState::container::const_iterator;
+    using iterator = typename std::vector<std::pair<Determinant, sparse_scalar_t>>::const_iterator;
     iterator begin_it, end_it;
 
     SparseStateView(iterator b, iterator e) : begin_it(b), end_it(e) {}
 
     iterator begin() const { return begin_it; }
     iterator end() const { return end_it; }
-
-    size_t size() const { return std::distance(begin_it, end_it); }
 };
 
 std::vector<SparseStateView> split_sparse_state(const SparseState& state, size_t n);

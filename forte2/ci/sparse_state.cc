@@ -22,25 +22,23 @@ std::string SparseState::str(int n) const {
 
 std::vector<SparseStateView> split_sparse_state(const SparseState& state, size_t n) {
     std::vector<SparseStateView> views;
-    if (n == 1 || state.size() <= 200000) {
-        views.emplace_back(state.begin(), state.end());
+    // underlying std::vector
+    auto& values = state.values();
+
+    if (n == 1 || state.size() <= 100000) {
+        views.emplace_back(values.begin(), values.end());
         return views;
     }
     views.reserve(n);
 
-    auto it = state.begin();
+    auto it = values.begin();
     size_t chunk_size = state.size() / n;
     size_t remainder = state.size() % n;
 
     for (size_t i = 0; i < n; ++i) {
         size_t current_chunk_size = chunk_size + (i < remainder ? 1 : 0);
-        auto end_it = it;
-        // this would be extremely inefficient for std::unordered_map
-        // but SparseState uses ankerl::unordered_dense::map which 
-        // uses a flat layout internally, so iterators are very efficient
-        std::advance(end_it, current_chunk_size);
-        views.emplace_back(it, end_it);
-        it = end_it;
+        views.emplace_back(it, it + current_chunk_size);
+        it += current_chunk_size;
     }
     return views;
 }

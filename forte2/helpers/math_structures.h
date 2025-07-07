@@ -71,6 +71,9 @@ class VectorSpace {
     /// @return the list of operators
     const container& elements() const { return elements_; }
 
+    /// @return the data container underlying the unordered_dense::map
+    const auto& values() const { return elements_.values(); }
+
     /// @return convert this object to the derived class
     inline auto self() { return static_cast<Derived&>(*this); }
     /// @return convert this object to the derived class (const)
@@ -272,7 +275,7 @@ class VectorSpace {
         return result;
     }
 
-    /// @brief Calculate the dot product of two vectors <this|other>Add commentMore actions
+    /// @brief Calculate the dot product of two vectors <this|other>
     F dot(const Derived& other) const {
         F result{0};
         bool self_smaller = size() < other.size();
