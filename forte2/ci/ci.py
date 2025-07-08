@@ -43,6 +43,8 @@ class CI(MOsMixin, SystemMixin):
     ndef: int = field(default=None, init=False)
     # logging level, default is 2 (INFO)
     log_level: int = field(default=logger.get_verbosity_level(), init=False)
+    # find roots around the energy shift
+    energy_shift: float = None
 
     ## Options that control the CI calculation
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
@@ -154,6 +156,7 @@ class CI(MOsMixin, SystemMixin):
                 e_tol=self.econv,  # eigenvalue convergence
                 r_tol=self.rconv,  # residual convergence
                 maxiter=self.maxiter,
+                eta=self.energy_shift,
                 log_level=self.log_level,
             )
 
@@ -327,7 +330,10 @@ class CI(MOsMixin, SystemMixin):
         logger.log(f"Number of guess basis: {nguess_dets}", self.log_level)
 
         # find the indices of the elements of Hdiag with the lowest values
-        indices = np.argsort(Hdiag)[:nguess_dets]
+        if self.energy_shift is not None:
+            indices = np.argsort(np.abs(Hdiag - self.energy_shift))[:nguess_dets]
+        else:
+            indices = np.argsort(Hdiag)[:nguess_dets]
 
         # create the Hamiltonian matrix in the basis of the guess CSFs
         Hguess = np.zeros((nguess_dets, nguess_dets))
