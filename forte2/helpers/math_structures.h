@@ -50,7 +50,7 @@ class VectorSpace {
     VectorSpace() = default;
     /// @brief Copy constructor
     VectorSpace(const VectorSpace& other) : elements_(other.elements_) {}
-    /// @brief Constructor from a robin_hood::unordered_flat_map
+    /// @brief Constructor from a ankerl::unordered_dense::map
     VectorSpace(const container& elements) : elements_(elements) {}
     /// @brief Constructor from a std::unordered_map (python friendly)
     VectorSpace(const old_container& elements) {
@@ -70,6 +70,8 @@ class VectorSpace {
 
     /// @return the list of operators
     const container& elements() const { return elements_; }
+    /// @return the std::vector underlying the unordered_dense::map
+    const auto& values() const { return elements_.values(); }
 
     /// @return convert this object to the derived class
     inline auto self() { return static_cast<Derived&>(*this); }
