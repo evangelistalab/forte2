@@ -12,6 +12,8 @@
 #include <concepts>
 #endif
 
+#include "helpers/unordered_dense.h"
+
 namespace forte2 {
 
 // Defining a function to calculate the conjugate of a value that works both for real/complex fields
@@ -41,14 +43,21 @@ template <typename Real> std::complex<Real> conjugate(const std::complex<Real>& 
 template <typename Derived, typename T, typename F, typename Hash = std::hash<T>>
 class VectorSpace {
   public:
-    using container = std::unordered_map<T, F, Hash>;
+    using container = ankerl::unordered_dense::map<T, F, Hash>;
+    using old_container = std::unordered_map<T, F, Hash>;
 
     /// @brief Constructor
     VectorSpace() = default;
     /// @brief Copy constructor
     VectorSpace(const VectorSpace& other) : elements_(other.elements_) {}
-    /// @brief Constructor from a map/dictionary (python friendly)
+    /// @brief Constructor from a ankerl::unordered_dense::map
     VectorSpace(const container& elements) : elements_(elements) {}
+    /// @brief Constructor from a std::unordered_map (python friendly)
+    VectorSpace(const old_container& elements) {
+        for (const auto& [key, value] : elements) {
+            elements_[key] = value;
+        }
+    }
     /// Move constructor
     VectorSpace(VectorSpace&& other) : elements_(std::move(other.elements_)) {}
     /// Constructor from a single element
@@ -61,6 +70,8 @@ class VectorSpace {
 
     /// @return the list of operators
     const container& elements() const { return elements_; }
+    /// @return the std::vector underlying the unordered_dense::map
+    const auto& values() const { return elements_.values(); }
 
     /// @return convert this object to the derived class
     inline auto self() { return static_cast<Derived&>(*this); }
