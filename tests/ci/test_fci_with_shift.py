@@ -3,7 +3,7 @@ from forte2.helpers.comparisons import approx
 
 
 def test_fci_co_o_core_exc():
-    efci = -94.522656092534
+    efci = -92.133019235463
     xyz = f"""
     C 0 0 0
     O 0 0 1
@@ -16,7 +16,7 @@ def test_fci_co_o_core_exc():
         orbitals=list(range(system.nbf())),
         state=State(nel=14, multiplicity=1, ms=0.0),
         nroot=1,
-        energy_shift=-93,
+        energy_shift=-92,
     )(rhf)
     ci.run()
     assert ci.E[0] == approx(efci)
