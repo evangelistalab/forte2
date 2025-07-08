@@ -13,6 +13,7 @@ class DavidsonLiuSolver:
         maxiter: int = 100,
         e_tol: float = 1e-12,
         r_tol: float = 1e-6,
+        eta: float | None = None,
         log_level: int = logger.get_verbosity_level(),
     ):
         # size of the space
@@ -29,6 +30,8 @@ class DavidsonLiuSolver:
         self.e_tol = e_tol
         # convergence tolerance for residuals
         self.r_tol = r_tol
+        # eigenvalue target shift 
+        self.eta = eta
         # logging level
         self.log_level = log_level
 
@@ -164,6 +167,13 @@ class DavidsonLiuSolver:
             Gm = Bblk.T @ Sblk
             Gm = 0.5 * (Gm + Gm.T)  # symmetrize
             lam, alpha = eigh(Gm)
+
+            # sort eigenpair around user-specified shift
+            if self.eta is not None:
+                idx = np.argsort(np.abs(lam - self.eta)) 
+                lam = lam[idx]
+                alpha = alpha[:, idx]
+
             self.lam[: self.basis_size] = lam
             self.alpha[: self.basis_size, : self.basis_size] = alpha
 
@@ -436,4 +446,6 @@ class DavidsonLiuSolver:
         logger.log(f"  Size of collapsed space:  {self.collapse_size}", self.log_level)
         logger.log(f"  Energy convergence:       {self.e_tol}", self.log_level)
         logger.log(f"  Residual convergence:     {self.r_tol}", self.log_level)
+        if self.eta is not None:
+            logger.log(f"  Target eigenval shift:    {self.eta}", self.log_level)
         logger.log(f"  Maximum iterations:       {self.maxiter}\n", self.log_level)
