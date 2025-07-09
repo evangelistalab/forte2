@@ -2,7 +2,7 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/complex.h>
 #include <nanobind/stl/unordered_map.h>
-#include <nanobind/stl/vector.h> 
+#include <nanobind/stl/vector.h>
 #include <nanobind/make_iterator.h>
 
 #include "ci/sparse_state.h"
@@ -16,7 +16,7 @@ void export_sparse_state_api(nb::module_& m) {
     nb::class_<SparseState>(m, "SparseState", "A class to represent a vector of determinants")
         .def(nb::init<>(), "Default constructor")
         .def(nb::init<const SparseState&>(), "Copy constructor")
-        .def(nb::init<const SparseState::container&>(),
+        .def(nb::init<const SparseState::old_container&>(),
              "Create a SparseState from a container of Determinants")
         .def(nb::init<const Determinant&, sparse_scalar_t>(), "det"_a, "val"_a = 1,
              "Create a SparseState with a single determinant")
@@ -36,6 +36,8 @@ void export_sparse_state_api(nb::module_& m) {
         .def(
             "__sub__", [](const SparseState& a, const SparseState& b) { return a - b; },
             "Subtract two SparseStates")
+        .def("__mul__", &SparseState::operator*, "Multiply this SparseState by a scalar")
+        .def("__rmul__", &SparseState::operator*, "Multiply a scalar by this SparseState")
         .def("__iadd__", &SparseState::operator+=, "Add a SparseState to this SparseState")
         .def("__isub__", &SparseState::operator-=, "Subtract a SparseState from this SparseState")
         .def("__imul__", &SparseState::operator*=, "Multiply this SparseState by a scalar")
@@ -79,7 +81,7 @@ void export_sparse_state_api(nb::module_& m) {
 
     m.def("apply_number_projector", &apply_number_projector);
 
-    // m.def("get_projection", &get_projection);
+    m.def("get_projection", &get_projection);
 
     // there's already a function called spin2, overload the spin2 function
     m.def(

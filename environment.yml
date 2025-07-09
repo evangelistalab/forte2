@@ -1,11 +1,11 @@
-name: forte
+name: forte2
 
 dependencies:
     - python=3.12
     - pip
     - nanobind>=1.3.2
     - cxx-compiler
-    - mkl
+    - openblas
     - cmake=3.26
     - numpy
     - scipy
@@ -15,4 +15,3 @@ dependencies:
     - pytest
     - conda-forge::libint
     - conda-forge::regex
-    - conda-forge::basis_set_exchange

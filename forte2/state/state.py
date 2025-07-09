@@ -31,6 +31,11 @@ class State:
 
     def __post_init__(self):
         self.twice_ms = int(round(self.ms * 2))
+        # Validate multiplicity (multiplicity = 2 S + 1 >= 2 M_S + 1)
+        if self.twice_ms + 1 > self.multiplicity:
+            raise ValueError(
+                f"Spin multiplicity (ms = {self.ms}) must be less than multiplicity (2S+1 = {self.multiplicity})."
+            )
         self.na = int(round(self.nel + self.twice_ms) / 2)
         self.nb = int(round(self.nel - self.twice_ms) / 2)
 

@@ -1,6 +1,8 @@
 import time
 from numpy import isclose
 import pytest
+from forte2.helpers.comparisons import approx
+
 
 from forte2 import *
 
@@ -48,7 +50,7 @@ def test_ci_timing2():
     energies.append(energy)
 
     for i, (energy, ref_energy) in enumerate(zip(energies, ref_energies)):
-        assert isclose(energy, ref_energy), (
+        assert energy == approx(ref_energy), (
             f"CI energy mismatch for {2 * (i + 1)} hydrogens: "
             f"{energy} != {ref_energy}"
         )

@@ -1,6 +1,5 @@
-from numpy import isclose
-
 from forte2 import *
+from forte2.helpers.comparisons import approx
 
 
 def test_ci_1():
@@ -19,8 +18,8 @@ def test_ci_1():
     )(rhf)
     ci.run()
 
-    assert isclose(rhf.E, -1.05643120731551)
-    assert isclose(ci.E[0], -1.096071975854)
+    assert rhf.E == approx(-1.05643120731551)
+    assert ci.E[0] == approx(-1.096071975854)
 
 
 def test_ci_2():
@@ -41,4 +40,4 @@ def test_ci_2():
     )(rhf)
     ci.run()
 
-    assert isclose(ci.E[0], -100.019788438077)
+    assert ci.E[0] == approx(-100.019788438077)

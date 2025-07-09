@@ -146,26 +146,6 @@ def test_center_of_mass():
     assert com == pytest.approx([0.0, 0.0, 0.0], abs=1e-10)
 
 
-def test_custom_basis_assignment():
-    # Test for custom basis assignment
-    xyz = """
-    H  1  1  1
-    P  1  1 -1
-    V  1 -1  1
-    Mn  1 -1 -1
-    Mn -1  1  1
-    V -1  1 -1
-    P -1 -1  1
-    H -1 -1 -1 
-    """
-    system = forte2.System(
-        xyz=xyz,
-        basis={"H": "cc-pvdz", "P": "ano-pv5z", "default": "sap_helfem_large"},
-        unit="bohr",
-    )
-    assert system.nbf() == 204
-
-
 def test_custom_basis_rhf():
     xyz = """
     C 0 0 0

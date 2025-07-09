@@ -171,6 +171,7 @@ H1List make_1h_list(const StringList& strings, std::shared_ptr<StringAddress> ad
     if ((k >= 0) and (k <= n)) { // check that (n > 0) makes sense.
         for (const auto& string_class : strings) {
             for (const auto& I : string_class) {
+                // std::cout << "String " < < < < std::endl;
                 const auto& [add_I, class_I] = addresser->address_and_class(I);
                 for (size_t p = 0; p < nmo; ++p) {
                     if (I[p]) {

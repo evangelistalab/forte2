@@ -12,6 +12,8 @@
 #include <concepts>
 #endif
 
+#include "helpers/unordered_dense.h"
+
 namespace forte2 {
 
 // Defining a function to calculate the conjugate of a value that works both for real/complex fields
@@ -41,14 +43,21 @@ template <typename Real> std::complex<Real> conjugate(const std::complex<Real>& 
 template <typename Derived, typename T, typename F, typename Hash = std::hash<T>>
 class VectorSpace {
   public:
-    using container = std::unordered_map<T, F, Hash>;
+    using container = ankerl::unordered_dense::map<T, F, Hash>;
+    using old_container = std::unordered_map<T, F, Hash>;
 
     /// @brief Constructor
     VectorSpace() = default;
     /// @brief Copy constructor
     VectorSpace(const VectorSpace& other) : elements_(other.elements_) {}
-    /// @brief Constructor from a map/dictionary (python friendly)
+    /// @brief Constructor from a ankerl::unordered_dense::map
     VectorSpace(const container& elements) : elements_(elements) {}
+    /// @brief Constructor from a std::unordered_map (python friendly)
+    VectorSpace(const old_container& elements) {
+        for (const auto& [key, value] : elements) {
+            elements_[key] = value;
+        }
+    }
     /// Move constructor
     VectorSpace(VectorSpace&& other) : elements_(std::move(other.elements_)) {}
     /// Constructor from a single element
@@ -61,6 +70,8 @@ class VectorSpace {
 
     /// @return the list of operators
     const container& elements() const { return elements_; }
+    /// @return the std::vector underlying the unordered_dense::map
+    const auto& values() const { return elements_.values(); }
 
     /// @return convert this object to the derived class
     inline auto self() { return static_cast<Derived&>(*this); }
@@ -256,14 +267,23 @@ class VectorSpace {
         return result;
     }
 
-    /// @brief Calculate the dot product of two vectors
+    /// @brief Calculate the dot product of two vectors <this|other>Add commentMore actions
     F dot(const Derived& other) const {
         F result{0};
-        const auto& smaller = size() < other.size() ? elements() : other.elements();
-        const auto& larger = size() < other.size() ? other.elements() : elements();
-        for (const auto& [e, c] : smaller) {
-            if (const auto it = larger.find(e); it != larger.end()) {
-                result += conjugate(c) * it->second;
+        bool self_smaller = size() < other.size();
+        const auto& smaller = self_smaller ? elements() : other.elements();
+        const auto& larger = self_smaller ? other.elements() : elements();
+        if (self_smaller) {
+            for (const auto& [e, c] : smaller) {
+                if (const auto it = larger.find(e); it != larger.end()) {
+                    result += conjugate(c) * it->second;
+                }
+            }
+        } else {
+            for (const auto& [e, c] : smaller) {
+                if (const auto it = larger.find(e); it != larger.end()) {
+                    result += conjugate(it->second) * c;
+                }
             }
         }
         return result;
@@ -276,18 +296,18 @@ class VectorSpace {
     container elements_;
 };
 
-/// @brief A template class to define an ordered list of vector space elements over a field F for a
-/// given type T
+/// @brief A template class to define an ordered list of vector space elements over a field F
+/// for a given type T
 /// @tparam Derived The derived class
 /// @tparam T The type of the vector space
 /// @tparam F The field of the vector space
 /// @tparam Hash The hash function for the unordered_map
 /// @details The class uses a std::vector to store the elements of the list.
 /// Here we use the Curiously Recurring Template Pattern (CRTP) to define a template class
-/// VectorSpaceList that supports basic operations for vector spaces over a field F for a given type
-/// T. The class is templated over the derived class, the type T, the field F, and an optional hash
-/// function.
-/// To use the class, the derived class should be implemented in the following way:
+/// VectorSpaceList that supports basic operations for vector spaces over a field F for a given
+/// type T. The class is templated over the derived class, the type T, the field F, and an
+/// optional hash function. To use the class, the derived class should be implemented in the
+/// following way:
 ///
 /// class Derived : public VectorSpace<Derived, T, F> {
 ///     // Implement the derived class here
@@ -347,6 +367,20 @@ template <typename Derived, typename T, typename F> class VectorSpaceList {
             return zero_;
         }
         return it->second;
+    }
+
+    /// @return a copy of the list with the leftmost element removed
+    Derived pop_left() {
+        assert(!elements_.empty());
+        elements_.erase(elements_.begin());
+        return static_cast<Derived&>(*this);
+    }
+
+    /// @return a copy of the list with the rightmost element removed
+    Derived pop_right() {
+        assert(!elements_.empty());
+        elements_.pop_back();
+        return static_cast<Derived&>(*this);
     }
 
     /// @return the norm of the vector space
@@ -421,6 +455,18 @@ template <typename Derived, typename T, typename F> class VectorSpaceList {
         // avoid issues with const
         Derived result = static_cast<Derived&>(*this);
         std::reverse(result.elements_.begin(), result.elements_.end());
+        return result;
+    }
+
+    /// @brief Return a slice of the vector
+    Derived slice(size_t start, size_t end) {
+        // assert that the slice is within the bounds
+        assert(start <= end);
+        assert(end <= size());
+        Derived result;
+        for (size_t i = start; i < end; ++i) {
+            result.add(elements_[i].first, elements_[i].second);
+        }
         return result;
     }
 

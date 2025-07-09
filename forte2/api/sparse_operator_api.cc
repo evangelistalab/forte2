@@ -24,7 +24,7 @@ void export_sparse_operator_api(nb::module_& m) {
         // Constructors
         .def(nb::init<>(), "Default constructor")
         .def(nb::init<SparseOperator>(), "Copy constructor")
-        .def(nb::init<const SparseOperator::container&>(),
+        .def(nb::init<const SparseOperator::old_container&>(),
              "Create a SparseOperator from a container of terms")
         .def(nb::init<const SQOperatorString&, sparse_scalar_t>(), "sqop"_a,
              "coefficient"_a = sparse_scalar_t(1), "Create a SparseOperator with a single term")
@@ -416,6 +416,10 @@ void export_sparse_operator_list_api(nb::module_& m) {
                  }
              })
         .def("reverse", &SparseOperatorList::reverse, "Reverse the order of the operators")
+        .def("pop_left", &SparseOperatorList::pop_left, "Remove the leftmost operator")
+        .def("pop_right", &SparseOperatorList::pop_right, "Remove the rightmost operator")
+        .def("slice", &SparseOperatorList::slice, "start"_a, "end"_a,
+             "Return a slice of the operator")
         .def(
             "__call__",
             [](const SparseOperatorList& op, const size_t n) {

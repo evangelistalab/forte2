@@ -1,4 +1,5 @@
 import forte2
+from forte2.helpers.comparisons import approx
 
 
 def test_one_electron_integrals():
@@ -17,4 +18,4 @@ def test_one_electron_integrals():
     from numpy import isclose
 
     ε, _ = eigh(H, S)
-    assert isclose(ε[0], -0.4992784, atol=1e-7)
+    assert ε[0] == approx(-0.4992784)

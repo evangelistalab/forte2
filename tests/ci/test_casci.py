@@ -1,6 +1,6 @@
 import pytest
 from forte2 import *
-
+from forte2.helpers.comparisons import approx
 
 # equivalence to test_ci_rhf.py::test_ci_2
 def test_casci_1():
@@ -16,4 +16,4 @@ def test_casci_1():
     ci = CASCI(6, 8)(rhf)
     ci.run()
 
-    assert ci.E[0] == pytest.approx(-100.019788438077)
+    assert ci.E[0] == approx(-100.019788438077)

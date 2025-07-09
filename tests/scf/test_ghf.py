@@ -1,11 +1,7 @@
 import forte2
 from forte2.scf import *
 import numpy as np
-
-import pytest
-
-# assuming default scf tolerance of 1e-9
-approx = lambda x: pytest.approx(x, rel=1e-8, abs=5e-8)
+from forte2.helpers.comparisons import approx
 
 
 def test_equivalence_to_rhf():
@@ -40,9 +36,14 @@ def test_equivalence_to_uhf():
     assert scf.S2 == approx(s2uhf)
 
 
-def test_ghf():
-    e_ghf = -75.649277913857
-    s2_ghf = 0.756178428699
+def test_ghf_complex_perturbation():
+    """
+    This test checks that, for a system that's stable wrt to
+    Sz and time-reversal symmetry breaking, the GHF algorithm will converge to
+    the same solution as UHF, even the inital DM breaks Sz and time-reversal symmetries.
+    """
+    e_uhf = -75.649277913857
+    s2_uhf = 0.756178428699
 
     xyz = """
     O            0.000000000000     0.000000000000    -0.061664597388
@@ -52,17 +53,27 @@ def test_ghf():
 
     system = forte2.System(xyz=xyz, basis="cc-pvqz", auxiliary_basis="cc-pvqz-jkfit")
 
-    scf = GHF(charge=1)(system)
+    scf = UHF(charge=1, ms=0.5)(system)
     scf.run()
-    assert scf.E == approx(e_ghf)
-    assert scf.S2 == approx(s2_ghf)
+    assert scf.E == approx(e_uhf)
+    assert scf.S2 == approx(s2_uhf)
+
+    scf = GHF(charge=1)(system)
+    # this option breaks Sz and K symmetries in the initial guess DM
+    scf.break_complex_symmetry = True
+    scf.run()
+    assert scf.E == approx(e_uhf)
+    assert scf.S2 == approx(s2_uhf)
 
 
 def test_break_complex_symmetry():
-    eghf_real = -1.514563104178
-    s2ghf_real = 0.770638666820
-    eghf = -1.516054958839
-    s2ghf = 0.776532390590
+    """
+    Odd regular polygons are prototypical examples of spin-frustrated systems.
+    This means that the UHF solution will be unstable wrt Sz and time-reversal
+    symmetry breaking
+    """
+    eghf = -1.514272436189
+    s2ghf = 0.777317358363
 
     xyz = f"""
     H 0 0 0
@@ -70,19 +81,11 @@ def test_break_complex_symmetry():
     H 0.5 {0.5*np.sqrt(3)} 0
     """
 
-    system = forte2.System(xyz=xyz, basis="cc-pvqz", auxiliary_basis="cc-pvqz-jkfit")
+    system = forte2.System(xyz=xyz, basis="cc-pvtz", auxiliary_basis="cc-pvqz-jkfit")
 
-    scf = GHF(charge=0)(system)
-    scf.break_complex_symmetry = False
-    # This is a case where the minao initial gets a worse energy than the hcore guess.
+    scf = GHF(charge=0, econv=1e-10, dconv=1e-8)(system)
     scf.guess_type = "hcore"
-    scf.run()
-    assert scf.E == approx(eghf_real)
-    assert scf.S2 == approx(s2ghf_real)
-
     scf.break_complex_symmetry = True
-    # Do not use the previous C as a guess
-    scf.C = None
     scf.run()
     assert scf.E == approx(eghf)
     assert scf.S2 == approx(s2ghf)

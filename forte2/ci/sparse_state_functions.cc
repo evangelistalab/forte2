@@ -120,7 +120,7 @@ void apply_operator_kernel(const auto& sop_groups, const auto& state_sorted,
                             if constexpr (positive) {
                                 new_terms[new_det] += value * t * c;
                             } else {
-                                new_terms[new_det] -= value * t * c;
+                                new_terms[new_det] -= value * std::conj(t) * c;
                             }
                         }
                     }
@@ -142,7 +142,11 @@ SparseState apply_operator_impl_grouped(bool is_antihermitian, const SparseOpera
 
     // make a copy of the state with the determinants sorted
     // somehow this makes the code faster
-    std::vector<std::pair<Determinant, sparse_scalar_t>> state_sorted(state.begin(), state.end());
+    std::vector<std::pair<Determinant, sparse_scalar_t>> state_sorted;
+    state_sorted.reserve(state.size());
+    for (const auto& [det, c] : state) {
+        state_sorted.emplace_back(det, c);
+    }
     std::sort(state_sorted.begin(), state_sorted.end(),
               [](const auto& a, const auto& b) { return a.first < b.first; });
 
@@ -197,7 +201,7 @@ void apply_operator_kernel_string(const auto& sop_groups, const auto& state_grou
                                 if constexpr (positive) {
                                     new_terms[new_det] += value * t * c;
                                 } else {
-                                    new_terms[new_det] -= value * t * c;
+                                    new_terms[new_det] -= value * std::conj(t) * c;
                                 }
                             }
                         }
@@ -254,6 +258,32 @@ SparseState apply_operator_impl_grouped_string(bool is_antihermitian, const Spar
     apply_operator_kernel_string<false>(sop_groups, state_groups, screen_thresh, new_terms);
 
     return new_terms;
+}
+
+std::vector<sparse_scalar_t> get_projection(const SparseOperatorList& sop, const SparseState& ref,
+                                            const SparseState& state) {
+    std::vector<sparse_scalar_t> proj(sop.size(), 0.0);
+
+    Determinant d = Determinant::zero();
+
+    // loop over all the operators
+    for (size_t n = 0; const auto& [sqop, coefficient] : sop.elements()) {
+        sparse_scalar_t value = 0.0;
+        // apply the operator op_n
+        for (const auto& [det, c] : ref) {
+            d = det;
+            const auto sign = apply_operator_to_det(d, sqop);
+            if (sign != 0.0) {
+                auto search = state.find(d);
+                if (search != state.end()) {
+                    value += sign * c * search->second;
+                }
+            }
+        }
+        proj[n] = value;
+        n++;
+    }
+    return proj;
 }
 
 SparseState apply_number_projector(int na, int nb, const SparseState& state) {

@@ -3,6 +3,7 @@
 
 #include "helpers/timer.hpp"
 #include "helpers/np_vector_functions.h"
+#include "helpers/np_matrix_functions.h"
 #include "helpers/indexing.hpp"
 #include "helpers/blas.h"
 #include "helpers/logger.h"
@@ -46,6 +47,16 @@ CISigmaBuilder::~CISigmaBuilder() {
     LOG(log_level_) << std::fixed << std::setprecision(3);
     LOG(log_level_) << "\nTiming for 2RDM(aa):" << rdm2_aa_timer_ << " seconds";
     LOG(log_level_) << "Timing for 2RDM(ab):" << rdm2_ab_timer_ << " seconds";
+}
+
+void CISigmaBuilder::set_algorithm(const std::string& algorithm) {
+    if (algorithm == "kh" or algorithm == "knowles-handy") {
+        algorithm_ = CIAlgorithm::Knowles_Handy;
+    } else if (algorithm == "hz" or algorithm == "harrison-zarrabian") {
+        algorithm_ = CIAlgorithm::Harrison_Zarrabian;
+    } else {
+        throw std::runtime_error("CI algorithm " + algorithm + " not valid.");
+    }
 }
 
 void CISigmaBuilder::set_memory(int mb) {
@@ -143,8 +154,14 @@ void CISigmaBuilder::Hamiltonian(np_vector basis, np_vector sigma) const {
     auto b_span = vector::as_span(basis);
     auto s_span = vector::as_span(sigma);
 
-    if (false) {
-        H0(b_span, s_span);
+    H0(b_span, s_span);
+    if (algorithm_ == CIAlgorithm::Knowles_Handy) {
+        H1_kh(b_span, s_span, true);
+        H1_kh(b_span, s_span, false);
+        local_timer h_aabb_timer;
+        H2_kh(b_span, s_span);
+        haabb_timer_ += h_aabb_timer.elapsed_seconds();
+    } else {
         H1_aa_gemm(b_span, s_span, true, h_hz);
         H1_aa_gemm(b_span, s_span, false, h_hz);
 
@@ -159,15 +176,7 @@ void CISigmaBuilder::Hamiltonian(np_vector basis, np_vector sigma) const {
         local_timer h_bbbb_timer;
         H2_aaaa_gemm(b_span, s_span, false);
         hbbbb_timer_ += h_bbbb_timer.elapsed_seconds();
-    } else {
-        H0(b_span, s_span);
-        H1_aa_gemm(b_span, s_span, true, h_kh);
-        H1_aa_gemm(b_span, s_span, false, h_kh);
-        local_timer h_aabb_timer;
-        H2_kh(b_span, s_span);
-        haabb_timer_ += h_aabb_timer.elapsed_seconds();
     }
-
     hdiag_timer_ += t.elapsed_seconds();
     build_count_++;
 }
@@ -219,9 +228,9 @@ void scatter_block(std::span<double> source, std::span<double> dest, bool alfa,
 
     if (alfa) {
         // Add m to C
-        for (size_t Ia{0}; Ia < maxIa; ++Ia)
-            for (size_t Ib{0}; Ib < maxIb; ++Ib)
-                dest[offset + Ia * maxIb + Ib] += source[Ia * maxIb + Ib];
+        for (size_t I{0}, maxI{maxIa * maxIb}; I < maxI; ++I)
+            // for (size_t Ib{0}; Ib < maxIb; ++Ib)
+            dest[offset + I] += source[I];
     } else {
         // Add m transposed to C
         for (size_t Ia{0}; Ia < maxIa; ++Ia)

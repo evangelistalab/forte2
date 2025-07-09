@@ -43,9 +43,12 @@ class CI(MOsMixin, SystemMixin):
     ndef: int = field(default=None, init=False)
     # logging level, default is 2 (INFO)
     log_level: int = field(default=logger.get_verbosity_level(), init=False)
+    # find roots around the energy shift
+    energy_shift: float = None
 
     ## Options that control the CI calculation
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
+    ci_algorithm: str = "hz"
 
     # Flag for whether the method has been executed
     executed: bool = field(default=False, init=False)
@@ -86,7 +89,7 @@ class CI(MOsMixin, SystemMixin):
 
         # 1. Transform the orbitals to the MO basis
         self.ints = RestrictedMOIntegrals(
-            self.system, self.C[0], self.flattened_orbitals, self.core_orbitals
+            self.system, self.C[0], self.flattened_orbitals, self.core_orbitals, use_jkfit=False
         )
 
         # 2. Create the string lists
@@ -137,6 +140,7 @@ class CI(MOsMixin, SystemMixin):
             self.ci_strings, self.ints.E, self.ints.H, self.ints.V, self.log_level
         )
         self.ci_sigma_builder.set_memory(self.ci_builder_memory)
+        self.ci_sigma_builder.set_algorithm(self.ci_algorithm)
 
         Hdiag = self.ci_sigma_builder.form_Hdiag_csf(
             self.dets, self.spin_adapter, spin_adapt_full_preconditioner=False
@@ -152,6 +156,7 @@ class CI(MOsMixin, SystemMixin):
                 e_tol=self.econv,  # eigenvalue convergence
                 r_tol=self.rconv,  # residual convergence
                 maxiter=self.maxiter,
+                eta=self.energy_shift,
                 log_level=self.log_level,
             )
 
@@ -163,12 +168,44 @@ class CI(MOsMixin, SystemMixin):
             self._build_guess_vectors(Hdiag)
             self.first_run = False
 
+        # TODO: remove this once the CIStrings are fully implemented
+
+        # V0 = np.zeros((self.norb, self.norb, self.norb, self.norb))
+        # slater_rules = forte2.SlaterRules(self.norb, self.ints.E, self.ints.H, V0)
+        # Hex = np.zeros((self.ndet, self.ndet))
+        # for i in range(self.ndet):
+        #     for j in range(self.ndet):
+        #         if i >= j:
+        #             Hij = slater_rules.slater_rules(self.dets[i], self.dets[j])
+        #             Hex[i, j] = Hij
+        #             Hex[j, i] = Hij
+
+        # e = np.linalg.eigvalsh(Hex)
+        # print(f"\nLowest 5 eigenvalues of the Hamiltonian:")
+        # for i in range(5):
+        #     print(f"Eigenvalue {i}: {e[i]:20.12f} [Eh]")
+
+        # one body only -152.695278969574
+        #               -152.695278969574
+        #               -152.695278969574
+
+        # Hex = np.zeros((self.basis_size, self.basis_size))
+        # for i in range(self.basis_size):
+        #     for j in range(self.basis_size):
+        #         Hij = self.ci_sigma_builder.slater_rules_csf(
+        #             self.dets, self.spin_adapter, i, j
+        #         )
+        #         Hex[i, j] = Hij
+        # # find the lowest 5 eigenvalues of the Hamiltonian
+        # e, _ = np.linalg.eigh(Hex)
+
         def sigma_builder(Bblock, Sblock):
             # Compute the sigma block from the basis block
             ncols = Bblock.shape[1]
             for i in range(ncols):
                 self.spin_adapter.csf_C_to_det_C(Bblock[:, i], self.b_det)
                 self.ci_sigma_builder.Hamiltonian(self.b_det, self.sigma_det)
+                # self.sigma_det = np.dot(Hex, self.b_det)
                 self.spin_adapter.det_C_to_csf_C(self.sigma_det, Sblock[:, i])
 
         self.solver.add_sigma_builder(sigma_builder)
@@ -293,7 +330,10 @@ class CI(MOsMixin, SystemMixin):
         logger.log(f"Number of guess basis: {nguess_dets}", self.log_level)
 
         # find the indices of the elements of Hdiag with the lowest values
-        indices = np.argsort(Hdiag)[:nguess_dets]
+        if self.energy_shift is not None:
+            indices = np.argsort(np.abs(Hdiag - self.energy_shift))[:nguess_dets]
+        else:
+            indices = np.argsort(Hdiag)[:nguess_dets]
 
         # create the Hamiltonian matrix in the basis of the guess CSFs
         Hguess = np.zeros((nguess_dets, nguess_dets))

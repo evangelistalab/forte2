@@ -1,11 +1,9 @@
+import pytest
 import forte2
 from forte2.scf import RHF
-import pytest
+from forte2.helpers.comparisons import approx
 
-# assuming default scf tolerance of 1e-9
-approx = lambda x: pytest.approx(x, rel=1e-8, abs=5e-8)
-
-
+@pytest.mark.slow
 def test_rhf_long():
     erhf = -383.470176866769
     xyz = """

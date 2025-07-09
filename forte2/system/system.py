@@ -17,6 +17,7 @@ class System:
     xyz: str
     basis: str | dict
     auxiliary_basis: str | dict = None
+    auxiliary_basis_mp2: str | dict = None
     atoms: list[tuple[float, tuple[float, float, float]]] = None
     minao_basis: str = None
     x2c_type: str = None
@@ -34,6 +35,10 @@ class System:
             if self.auxiliary_basis is not None
             else None
         )
+        if self.auxiliary_basis_mp2 is not None:
+            self.auxiliary_basis_mp2 = build_basis(self.auxiliary_basis_mp2, self.atoms)
+        else:
+            self.auxiliary_basis_mp2 = self.auxiliary_basis
         self.minao_basis = (
             build_basis("cc-pvtz-minao", self.atoms)
             if self.minao_basis is not None

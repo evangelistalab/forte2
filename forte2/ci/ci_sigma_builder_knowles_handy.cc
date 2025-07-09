@@ -27,6 +27,44 @@ void scatter_alpha_block(const CIStrings& lists, size_t class_Ka, size_t class_K
                          std::span<double> sigma);
 } // namespace
 
+void CISigmaBuilder::H1_kh(std::span<double> basis, std::span<double> sigma, bool alfa) const {
+    size_t norb = lists_.norb();
+    // loop over blocks of matrix C
+    for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
+        if (lists_.detpblk(nI) == 0)
+            continue;
+        auto Cr = gather_block(basis, TR, alfa, lists_, class_Ia, class_Ib);
+
+        for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
+            // For alpha operator, the beta string classes of the result must be the same
+            if (alfa and (class_Ib != class_Jb))
+                continue;
+            // For beta operator, the alpha string classes of the result must be the same
+            if (not alfa and (class_Ia != class_Ja))
+                continue;
+            if (lists_.detpblk(nJ) == 0)
+                continue;
+
+            std::fill_n(TL.begin(), lists_.detpblk(nJ), 0.0);
+
+            size_t maxL = alfa ? lists_.beta_address()->strpcls(class_Ib)
+                               : lists_.alfa_address()->strpcls(class_Ia);
+
+            const auto& pq_vo_list = alfa ? lists_.get_alfa_vo_list(class_Ia, class_Ja)
+                                          : lists_.get_beta_vo_list(class_Ib, class_Jb);
+
+            for (const auto& [pq, vo_list] : pq_vo_list) {
+                const auto& [p, q] = pq;
+                const double Hpq = h_kh[p * norb + q];
+                for (const auto& [sign, I, J] : vo_list) {
+                    add(maxL, sign * Hpq, &Cr[I * maxL], 1, &TL[J * maxL], 1);
+                }
+            }
+            scatter_block(TL, sigma, alfa, lists_, class_Ja, class_Jb);
+        }
+    }
+}
+
 void CISigmaBuilder::H2_kh(std::span<double> basis, std::span<double> sigma) const {
     size_t norb = lists_.norb();
     const auto npairs = norb * (norb + 1) / 2; // Number of pairs (p, r) with p >= r
@@ -45,13 +83,13 @@ void CISigmaBuilder::H2_kh(std::span<double> basis, std::span<double> sigma) con
             const size_t Kb_end = maxKb;
             const size_t Kb_size = Kb_end - Kb_start;
 
-            // Grab the temporary buffers that will hold intermediates like D([i>=j],[Ka Kb])
-            // where the indices range as
-            // [i>=j] all values
+            // Grab the temporary buffers that will hold intermediates like
+            // D([i>=j],[Ka Kb]) where the indices range as [i>=j] all values
             // Ka in chunks of maximum size Ka_max_size
             // Kb in [0, maxKb)
-            // Ka_max_size is the maximum size of the Ka range that we can process in one go
-            // without exceeding the memory limit, set via the set_memory() function.
+            // Ka_max_size is the maximum size of the Ka range that we can
+            // process in one go without exceeding the memory limit, set via
+            // the set_memory() function.
             auto [Kblock1, Kblock2, Ka_max_size] = get_Kblock_spans(npairs * Kb_size, maxKa);
 
             // Loop over ranges of Ka indices in chuncks of size Ka_max_size
@@ -59,43 +97,49 @@ void CISigmaBuilder::H2_kh(std::span<double> basis, std::span<double> sigma) con
                 size_t Ka_end = std::min(Ka_start + Ka_max_size, maxKa);
                 // size of the Ka range, which may be smaller than Ka_max_size
                 size_t Ka_size = Ka_end - Ka_start;
-                // dimensions of the matrix we are going to use for this Ka chunk
+                // dimensions of the matrix we are going to use for this Ka
+                // chunk
                 const size_t Kdim = Ka_size * Kb_size;
-                // dimension of the D([i<=j],[Ka Kb]) tensor we are going to use
+                // dimension of the D([i<=j],[Ka Kb]) tensor we are going to
+                // use
                 const size_t temp_dim = npairs * Kdim;
 
                 // skip empty blocks
                 if (temp_dim == 0)
                     continue;
 
-                // zero out the block that will hold the D([i>=j],[Ka Kb]) tensor
+                // zero out the block that will hold the D([i>=j],[Ka Kb])
+                // tensor
                 std::fill_n(Kblock1.begin(), temp_dim, 0.0);
 
                 // alpha contribution to the D matrix D([i>=j],[Ka Kb])
                 gather_alpha_block(lists_, class_Ka, class_Kb, Ka_start, Ka_size, Kdim, maxKb,
                                    basis, std::span{Kblock1.data(), temp_dim});
 
-                // cyclic transpose of the D matrix D([i>=j],[Ka Kb]) to D([i>=j],[Kb Ka])
+                // cyclic transpose of the D matrix D([i>=j],[Ka Kb]) to
+                // D([i>=j],[Kb Ka])
                 transpose_23(Kblock1, Kblock2, npairs, Ka_size, maxKb);
 
                 // beta contribution to the D matrix D([i>=j],[Kb Ka])
                 gather_beta_block(lists_, class_Ka, class_Kb, Ka_start, Ka_size, Kdim, maxKb, basis,
                                   TR, std::span{Kblock2.data(), temp_dim});
 
-                // matrix-matrix multiplication 0.5 * V([k>=l][i>=j]) * D([i>=j],[Kb Ka])
-                // The result is the matrix E([k>=l],[Kb Ka])
+                // matrix-matrix multiplication 0.5 * V([k>=l][i>=j]) *
+                // D([i>=j],[Kb Ka]) The result is the matrix E([k>=l],[Kb Ka])
                 // [note that the Ka/Kb indices are still transposed]
                 matrix_product('N', 'N', npairs, Kdim, npairs, 0.5, v_ijkl_hk.data(), npairs,
                                Kblock2.data(), Kdim, 0.0, Kblock1.data(), Kdim);
 
-                // beta contribution from the matrix E([k>=l],[Kb Ka]) to sigma([Ib Ia])
+                // beta contribution from the matrix E([k>=l],[Kb Ka]) to
+                // sigma([Ib Ia])
                 scatter_beta_block(lists_, class_Ka, class_Kb, Ka_start, Ka_size, Kdim, maxKb,
                                    std::span{Kblock1.data(), temp_dim}, TR, sigma);
 
                 // cyclic transpose of E([k>=l],[Kb Ka]) to E([k>=l],[Ka Kb])
                 transpose_23(Kblock1, Kblock2, npairs, maxKb, Ka_size);
 
-                // alpha contribution from the matrix E([k>=l],[Ka Kb]) to sigma([Ia Ib])
+                // alpha contribution from the matrix E([k>=l],[Ka Kb]) to
+                // sigma([Ia Ib])
                 scatter_alpha_block(lists_, class_Ka, class_Kb, Ka_start, Ka_size, Kdim, maxKb,
                                     std::span{Kblock2.data(), temp_dim}, sigma);
             }
@@ -105,10 +149,12 @@ void CISigmaBuilder::H2_kh(std::span<double> basis, std::span<double> sigma) con
 
 std::tuple<std::span<double>, std::span<double>, size_t>
 CISigmaBuilder::get_Kblock_spans(size_t dim, size_t maxKa) const {
-    // calculate the amount needed to store the Kblock1_ and Kblock2_ buffers fully in core.
+    // calculate the amount needed to store the Kblock1_ and Kblock2_ buffers
+    // fully in core.
     const size_t temp_full_size = dim * maxKa;
 
-    // Ensure that Kblock1_ and Kblock2_ are allocated with the requested memory size
+    // Ensure that Kblock1_ and Kblock2_ are allocated with the requested
+    // memory size
     std::size_t temp_memory_size = std::min(memory_size_ / (2 * sizeof(double)), temp_full_size);
     if (Kblock1_.size() < temp_memory_size) {
         LOG(log_level_) << "Allocating Knowles-Handy temporary buffers of size 2 x "
@@ -122,8 +168,10 @@ CISigmaBuilder::get_Kblock_spans(size_t dim, size_t maxKa) const {
     size_t available = Kblock1_.size(); // assume Kblock2_ same size
     size_t Ka_max_size = std::min(available / dim, maxKa);
     if (Ka_max_size < 1) {
-        // too small for even one row of Ka => resize to hold a reasonable minimum
-        Ka_max_size = std::min(static_cast<size_t>(64), maxKa); // 64 is a reasonable minimum size
+        // too small for even one row of Ka => resize to hold a reasonable
+        // minimum
+        Ka_max_size = std::min(static_cast<size_t>(64),
+                               maxKa); // 64 is a reasonable minimum size
         size_t new_dim = Ka_max_size * dim;
         Kblock1_.resize(new_dim);
         Kblock2_.resize(new_dim);
@@ -142,8 +190,9 @@ CISigmaBuilder::get_Kblock_spans(size_t dim, size_t maxKa) const {
             std::span<double>{Kblock2_.data(), max_temp_dim}, Ka_max_size};
 }
 
-// The following functions are used to gather and scatter blocks of data and are relevant only to
-// this file. They live in the anonymous namespace to avoid polluting the global namespace.
+// The following functions are used to gather and scatter blocks of data and
+// are relevant only to this file. They live in the anonymous namespace to
+// avoid polluting the global namespace.
 
 namespace {
 /// @brief Cyclic multithreaded transpose of indices 2 and 3 of a 3D tensor
@@ -155,7 +204,8 @@ namespace {
 /// @param dim3 Size of the input third dimension [k]
 void transpose_23(std::span<double> in, std::span<double> out, size_t dim1, size_t dim2,
                   size_t dim3) {
-    // Kernel for transposing indices 2 and 3 of a 3D tensor for all i in the range [i_begin, i_end)
+    // Kernel for transposing indices 2 and 3 of a 3D tensor for all i in the
+    // range [i_begin, i_end)
     auto kernel = [=, &in, &out](size_t i_begin, size_t i_end) {
         const size_t block_size = dim2 * dim3;
         for (size_t i = i_begin; i < i_end; ++i) {

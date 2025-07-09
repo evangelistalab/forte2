@@ -38,6 +38,10 @@ SparseState apply_operator_lin(const SparseOperator& op, const SparseState& stat
 SparseState apply_operator_antiherm(const SparseOperator& op, const SparseState& state,
                                     double screen_thresh = 1.0e-12);
 
+/// compute the projection  <state0 | op | ref>, for each operator op in gop
+std::vector<sparse_scalar_t> get_projection(const SparseOperatorList& sop, const SparseState& ref,
+                                            const SparseState& state0);
+
 /// apply the number projection operator P^alpha_na P^beta_nb |state>
 SparseState apply_number_projector(int na, int nb, const SparseState& state);
 

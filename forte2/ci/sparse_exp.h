@@ -100,7 +100,9 @@ class SparseFactExp {
     ///
     ///             exp(-op1) exp(-op2) ... |state>
     ///
-    SparseState apply_op(const SparseOperatorList& sop, const SparseState& state, bool inverse);
+    /// @param reverse If true, apply the operators in reverse order
+    SparseState apply_op(const SparseOperatorList& sop, const SparseState& state,
+                         bool inverse = false, bool reverse = false);
 
     /// @brief Compute the factorized exponential applied to a state using an exact algorithm
     ///
@@ -118,8 +120,29 @@ class SparseFactExp {
     ///
     ///             exp(-op1 + op1^dagger) exp(-op2 + op2^dagger) ... |state>
     ///
+    /// @param reverse If true, apply the operators in reverse order
     SparseState apply_antiherm(const SparseOperatorList& sop, const SparseState& state,
-                               bool inverse);
+                               bool inverse = false, bool reverse = false);
+
+    std::pair<SparseState, SparseState> apply_antiherm_deriv(const SQOperatorString& sqop,
+                                                             const sparse_scalar_t t,
+                                                             const SparseState& state);
+
+    double sinc_taylor(double x) const {
+        int taylor_order = 5;
+        double taylor_thresh = 1.0e-3;
+        if (std::abs(x) < taylor_thresh) {
+            double result = 1.0;
+            double x_squared = x * x;
+            double term = 1.0;
+            for (int i = 1; i < taylor_order; i++) {
+                term *= -x_squared / (2 * i * (2 * i + 1));
+                result += term;
+            }
+            return result;
+        }
+        return std::sin(x) / x;
+    }
 
   private:
     double screen_thresh_;

@@ -6,7 +6,17 @@ from forte2.helpers import logger
 
 
 class FockBuilder:
-    def __init__(self, system):
+    """Class to build the Fock matrix using the Cholesky decomposition of the auxiliary basis integrals.
+    This class computes the atomic Coulomb (J) and exchange (K) matrices
+    using the auxiliary basis functions.
+
+    Args:
+        system (System or ModelSystem): The system for which to build the Fock matrix.
+            If a ModelSystem is provided, it will decompose the 4D ERI tensor using Cholesky decomposition with complete pivoting.
+        use_jkfit (bool): Whether to use the jkfit auxiliary basis or the MP2 auxiliary basis of the System object.
+    """
+
+    def __init__(self, system, use_jkfit=True):
         if isinstance(system, ModelSystem):
             # special handling for ModelSystem
             eri = system.eri
@@ -14,14 +24,22 @@ class FockBuilder:
             eri = eri.reshape((nbf**2,) * 2)
             # dpstrf: Cholesky decomposition with complete pivoting
             # tol=-1 ~machine precision tolerance
-            C, piv, rank, _ = sp.linalg.lapack.dpstrf(eri, tol=-1)
+            C, piv, rank, info = sp.linalg.lapack.dpstrf(eri, tol=-1)
+            if info < 0:
+                raise ValueError(
+                    f"dpstrf failed with info={info}, indicating the {-info}-th argument had an illegal value."
+                )
+
             piv = piv - 1  # convert to 0-based indexing
             self.B = C[:rank, piv].reshape((rank, nbf, nbf))
+            print(self.B)
             system.naux = lambda: rank
             return
 
         self.basis = system.basis
-        self.auxiliary_basis = system.auxiliary_basis
+        self.auxiliary_basis = (
+            system.auxiliary_basis if use_jkfit else system.auxiliary_basis_mp2
+        )
 
         # Compute the memory requirements
         nb = self.basis.size

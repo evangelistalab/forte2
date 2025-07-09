@@ -4,11 +4,7 @@ import time
 
 from forte2.jkbuilder import FockBuilder
 from forte2.scf import RHF
-
-import pytest
-
-# assuming default scf tolerance of 1e-9
-approx = lambda x: pytest.approx(x, rel=1e-8, abs=5e-8)
+from forte2.helpers.comparisons import approx
 
 
 def test_mp2():
