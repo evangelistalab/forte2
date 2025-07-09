@@ -45,6 +45,8 @@ class CI(MOsMixin, SystemMixin):
     log_level: int = field(default=logger.get_verbosity_level(), init=False)
     # find roots around the energy shift
     energy_shift: float = None
+    # whether to test the rdms
+    do_test_rdms: bool = False
 
     ## Options that control the CI calculation
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
@@ -89,7 +91,11 @@ class CI(MOsMixin, SystemMixin):
 
         # 1. Transform the orbitals to the MO basis
         self.ints = RestrictedMOIntegrals(
-            self.system, self.C[0], self.flattened_orbitals, self.core_orbitals, use_jkfit=False
+            self.system,
+            self.C[0],
+            self.flattened_orbitals,
+            self.core_orbitals,
+            use_jkfit=False,
         )
 
         # 2. Create the string lists
@@ -228,7 +234,8 @@ class CI(MOsMixin, SystemMixin):
         logger.log(f"total time:     {h_tot:.3f} s/build", self.log_level)
 
         # TODO: Make this optional in production code
-        self._test_rdms()
+        if self.do_test_rdms:
+            self._test_rdms()
 
         self.executed = True
 

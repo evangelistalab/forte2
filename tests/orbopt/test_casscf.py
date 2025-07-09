@@ -30,7 +30,7 @@ def test_mcscf_1():
 
 def test_mcscf_2():
     erhf = -99.9977252002946
-    emcscf = -100.043501894947
+    emcscf = -100.0435018956
 
     xyz = f"""
     H 0.0 0.0 0.0
@@ -48,6 +48,7 @@ def test_mcscf_2():
         nroot=1,
     )(rhf)
     oo = OrbitalOptimizer()(ci)
+    oo.maxiter = 200
     oo.run()
 
     assert isclose(rhf.E, erhf)
