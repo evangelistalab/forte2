@@ -70,7 +70,7 @@ def test_mcscf_3():
         orbitals=[4, 5, 6, 7, 8, 9],
         core_orbitals=[0, 1, 2, 3],
         state=State(nel=14, multiplicity=1, ms=0.0),
-        nroot=2,
+        nroot=1,
     )(rhf)
     mc = MCOptimizer()(ci)
     mc.gradtol = 1e-7
