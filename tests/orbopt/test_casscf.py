@@ -2,6 +2,7 @@ import pytest
 
 from numpy import isclose
 from forte2 import *
+from forte2.helpers.comparisons import approx
 
 
 def test_mcscf_1():
@@ -21,11 +22,11 @@ def test_mcscf_1():
         state=State(nel=2, multiplicity=1, ms=0.0),
         nroot=1,
     )(rhf)
-    oo = OrbitalOptimizer()(ci)
-    oo.run()
+    mc = MCOptimizer()(ci)
+    mc.run()
 
-    assert isclose(rhf.E, erhf)
-    assert isclose(oo.E[0], emcscf)
+    assert rhf.E == approx(erhf)
+    assert mc.E == approx(emcscf)
 
 
 def test_mcscf_2():
@@ -47,12 +48,12 @@ def test_mcscf_2():
         state=State(nel=10, multiplicity=1, ms=0.0),
         nroot=1,
     )(rhf)
-    oo = OrbitalOptimizer()(ci)
-    oo.maxiter = 200
-    oo.run()
+    mc = MCOptimizer()(ci)
+    mc.maxiter = 200
+    mc.run()
 
-    assert isclose(rhf.E, erhf)
-    assert isclose(oo.E[0], emcscf)
+    assert rhf.E == approx(erhf)
+    assert mc.E == approx(emcscf)
 
 
 def test_mcscf_3():
@@ -72,10 +73,10 @@ def test_mcscf_3():
         state=State(nel=14, multiplicity=1, ms=0.0),
         nroot=1,
     )(rhf)
-    oo = OrbitalOptimizer()(ci)
-    oo.run()
-    assert isclose(rhf.E, erhf)
-    assert isclose(oo.E[0], ecasscf)
+    mc = MCOptimizer()(ci)
+    mc.run()
+    assert rhf.E == approx(erhf)
+    assert mc.E == approx(ecasscf)
 
 
 def test_mcscf_noncontiguous_spaces():
@@ -94,7 +95,7 @@ def test_mcscf_noncontiguous_spaces():
     system = System(xyz=xyz, basis="cc-pVDZ", auxiliary_basis="cc-pVTZ-JKFIT")
     rhf = RHF(charge=0, econv=1e-12)(system)
     rhf.run()
-    assert isclose(rhf.E, erhf)
+    assert rhf.E == approx(erhf)
 
     # swap orbitals to make them non-contiguous
     core = [0, 1, 3, 6]
@@ -108,8 +109,8 @@ def test_mcscf_noncontiguous_spaces():
         nroot=1,
     )(rhf)
     ci.run()
-    assert isclose(ci.E[0], eci)
+    assert ci.E[0] == approx(eci)
 
-    oo = OrbitalOptimizer()(ci)
-    oo.run()
-    assert isclose(oo.E[0], ecasscf)
+    mc = MCOptimizer()(ci)
+    mc.run()
+    assert mc.E == approx(ecasscf)

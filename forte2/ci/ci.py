@@ -17,6 +17,7 @@ class CI(MOsMixin, SystemMixin):
     orbitals: list[int] | list[list[int]]
     state: State
     nroot: int
+    weights: list[float] = field(default_factory=list)
     core_orbitals: list[int] = field(default_factory=list)
 
     # The number of guess vectors for each root
@@ -70,6 +71,13 @@ class CI(MOsMixin, SystemMixin):
 
         self.norb = sum(len(x) for x in self.orbitals)
         self.solver = None
+        if len(self.weights) == 0:
+            self.weights = np.ones(self.nroot) / self.nroot
+        else:
+            self.weights = np.array(self.weights, dtype=float)
+        assert len(self.weights) == self.nroot, "Weights must match the number of roots"
+        assert np.all(self.weights >= 0), "Weights must be non-negative"
+        assert np.isclose(self.weights.sum(), 1), "Weights must sum to 1"
 
     def _ci_solver_startup(self):
         """
@@ -233,7 +241,6 @@ class CI(MOsMixin, SystemMixin):
         logger.log(f"h_bbbb time:    {h_bbbb:.3f} s/build", self.log_level)
         logger.log(f"total time:     {h_tot:.3f} s/build", self.log_level)
 
-        # TODO: Make this optional in production code
         if self.do_test_rdms:
             self._test_rdms()
 
@@ -364,6 +371,29 @@ class CI(MOsMixin, SystemMixin):
                 guess_mat[d, i] = guess[j]
 
         self.solver.add_guesses(guess_mat)
+
+    def compute_average_energy(self):
+        return np.dot(self.weights, self.E)
+
+    def make_average_rdm1_sf(self):
+        """
+        Make the average spin-free one-particle RDM from the CI vectors.
+        Returns:
+            ndarray: Average spin-free one-particle RDM."""
+        rdm1 = np.zeros((self.norb,) * 2)
+        for i in range(self.nroot):
+            rdm1 += self.make_rdm1_sf(self.evecs[:, i]) * self.weights[i]
+        return rdm1
+
+    def make_average_rdm2_sf(self):
+        """
+        Make the average spin-free two-particle RDM from the CI vectors.
+        Returns:
+            ndarray: Average spin-free two-particle RDM."""
+        rdm2 = np.zeros((self.norb,) * 4)
+        for i in range(self.nroot):
+            rdm2 += self.make_rdm2_sf(self.evecs[:, i]) * self.weights[i]
+        return rdm2
 
     def make_rdm1_sf(self, ci_vec):
         """

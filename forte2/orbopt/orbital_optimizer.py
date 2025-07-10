@@ -8,10 +8,15 @@ from forte2.helpers import logger
 
 
 @dataclass
-class OrbitalOptimizer(MOsMixin, SystemMixin):
+class MCOptimizer(MOsMixin, SystemMixin):
+    """
+    Two-step optimizer for multi-configurational wavefunctions.
+    """
+
     # placeholder optimization parameters
     maxiter: int = 50
     gradtol: float = 1e-6
+    etol: float = 1e-8
     optimizer: str = "L-BFGS"
     max_step_size: float = 0.1
 
@@ -22,10 +27,13 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
         return self
 
     def run(self):
-        # TODO: skip the first CI step in the MCSCF
         if not self.parent_method.executed:
             self.parent_method.run()
 
+        SystemMixin.copy_from_upstream(self, self.parent_method)
+        MOsMixin.copy_from_upstream(self, self.parent_method)
+
+        ### make sure we don't print the CI output at INFO1 level
         current_verbosity = logger.get_verbosity_level()
         # only log subproblem if the verbosity is higher than INFO1
         if current_verbosity > 3:
@@ -34,16 +42,21 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
             self.parent_method.log_level = current_verbosity + 1
             self.parent_method.solver.log_level = current_verbosity + 1
 
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
-
         self.Hcore = self.system.ints_hcore()  # hcore in AO basis (even 1e-sf-X2C)
         fock_builder = FockBuilder(self.system)
 
         self._make_spaces_contiguous()
         self.nrr = self._get_nonredundant_rotations()
 
-        self.cas_grad = OrbitalGradient(
+        # Intialize the two central objects for the two-step orbital-CI optimization:
+        # orbital optimizer and CI optimizer
+        # the loop simply proceeds as follows:
+        # for i in range(max_macro_iter):
+        #     1. minimize energy wrt orbital rotations at current CI expansion
+        #       (this is typically done iteratively with micro-iterations using L-BFGS)
+        #     2. minimize energy wrt CI expansion at current orbitals
+        #       (this is just the diagonalization of the active-space CI Hamiltonian)
+        self.orb_opt = OrbOptimizer(
             self.C[0],
             (self.core, self.actv, self.virt),
             fock_builder,
@@ -51,39 +64,47 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
             self.system.nuclear_repulsion_energy(),
             self.nrr,
         )
-        self.as_solver = ActiveSpaceSolver(self.parent_method)
+        self.ci_opt = CIOptimizer(self.parent_method)
 
         logger.log_info1(
-            f'{"Iteration":>10} {"E_orb":>20} {"E_CI":>20} {"norm(g)":>20} '
+            f'{"Iteration":>10} {"E_orb":>20} {"E_CI":>20} {"norm(g)":>20} {"Conv":>10}'
         )
-        self.iter = 0
-        self.E = self.E_orb = self.E_as = self.parent_method.E
 
-        g1_act, g2_act = self.as_solver.make_rdm12()
-        eri_gaaa = self.cas_grad.get_eri_gaaa()
+        # iteration 0: one step of CI is already done, just grab the results
+        self.iter = 0
+
+        # E_ci: list[float],CI eigenvalues,
+        # E_avg: float, ensemble average energy,
+        # E_orb: float, energy after orbital optimization
+        self.E_ci = self.parent_method.E.copy()
+        self.E_avg = self.E_orb = self.parent_method.compute_average_energy()
+        self.E_ci_old = self.E_ci.copy()
+        self.E_avg_old = self.E_avg
+        self.E_orb_old = self.E_orb
+
+        g1_act, g2_act = self.ci_opt.make_rdm12()
+        eri_gaaa = self.orb_opt.get_eri_gaaa()
 
         while self.iter < self.maxiter:
-            # Algorithm 1, line 4
-            self.cas_grad.set_rdms(g1_act, g2_act)
-
-            self.E_orb = self.cas_grad.run()
-
+            self.orb_opt.set_rdms(g1_act, g2_act)
+            self.E_orb = self.orb_opt.run()
+            
+            conv, conv_str = self.check_convergence()
             logger.log_info1(
-                f"{self.iter:>10d} {self.E_orb:>20.10f} {self.E_as[0]:>20.10f} {abs(np.linalg.norm(self.cas_grad.orbgrad, np.inf)):>20.10f}"
+                f"{self.iter:>10d} {self.E_orb:>20.10f} {self.E_avg:>20.10f} {abs(np.linalg.norm(self.orb_opt.orbgrad, np.inf)):>20.10f} {conv_str:>10s}"
             )
-
-            if abs(np.linalg.norm(self.cas_grad.orbgrad, np.inf)) < self.gradtol:
+            if conv:
                 break
 
-            # Algorithm 1, line 6-7 - solve the subproblem and get the energies and RDMs
-            self.as_solver.set_active_space_ints(
-                self.cas_grad.Ecore + self.system.nuclear_repulsion_energy(),
-                self.cas_grad.Fcore[self.actv, self.actv].copy(),
+            self.ci_opt.set_active_space_ints(
+                self.orb_opt.Ecore + self.system.nuclear_repulsion_energy(),
+                self.orb_opt.Fcore[self.actv, self.actv].copy(),
                 eri_gaaa[self.actv, ...].copy(),
             )
-            self.E_as = self.E = self.as_solver.run()
-            g1_act, g2_act = self.as_solver.make_rdm12()
-            eri_gaaa = self.cas_grad.get_eri_gaaa()
+            self.E_avg, self.E_ci = self.ci_opt.run()
+            self.E = self.E_avg
+            g1_act, g2_act = self.ci_opt.make_rdm12()
+            eri_gaaa = self.orb_opt.get_eri_gaaa()
             self.iter += 1
         else:
             logger.log_info1(
@@ -94,7 +115,7 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
             return
 
         logger.log_info1(f"Orbital optimization converged in {self.iter} iterations.")
-        logger.log_info1(f"Final orbital optimized energy: {self.E[0]:.10f}")
+        logger.log_info1(f"Final orbital optimized energy: {self.E_avg:.10f}")
         self.parent_method.log_level = current_verbosity
         self.parent_method.solver.log_level = current_verbosity
         self.executed = True
@@ -123,11 +144,31 @@ class OrbitalOptimizer(MOsMixin, SystemMixin):
         nrr[self.core, self.actv] = True
         # make sure the rotations are symmetric
         nrr = nrr | nrr.T
-
         return nrr
 
+    def check_convergence(self):
+        is_grad_conv = abs(np.linalg.norm(self.orb_opt.orbgrad, np.inf)) < self.gradtol
+        is_ci_orb_conv = abs(self.E_orb - self.E_avg) < self.etol
+        is_ci_eigval_conv = np.all(abs(self.E_ci - self.E_ci_old) < self.etol)
+        is_ci_avg_conv = abs(self.E_avg - self.E_avg_old) < self.etol
+        is_orb_conv = abs(self.E_orb - self.E_orb_old) < self.etol
+        self.E_ci_old = self.E_ci.copy()
+        self.E_avg_old = self.E_avg
+        self.E_orb_old = self.E_orb
+        criteria = [
+            is_grad_conv,
+            is_ci_orb_conv,
+            is_ci_eigval_conv,
+            is_ci_avg_conv,
+            is_orb_conv,
+        ]
 
-class OrbitalGradient:
+        conv = all(criteria)
+        conv_str = "".join(["." if _ else "x" for _ in criteria])
+        return conv, conv_str
+
+
+class OrbOptimizer:
     def __init__(self, C, extents, fock_builder, hcore, e_nuc, nrr):
         self.core, self.actv, self.virt = extents
         self.C = C
@@ -290,7 +331,7 @@ class OrbitalGradient:
         return self.C @ (sp.linalg.expm(orbrot))
 
 
-class ActiveSpaceSolver:
+class CIOptimizer:
     def __init__(self, solver):
         self.solver = solver
         self.nroot = self.solver.nroot
@@ -302,10 +343,11 @@ class ActiveSpaceSolver:
 
     def run(self):
         self.solver.run()
-        return self.solver.E
+        E_avg = self.solver.compute_average_energy()
+        return E_avg, self.solver.E
 
     def make_rdm12(self):
-        g1 = self.solver.make_rdm1_sf(self.solver.evecs[:, 0])
+        g1 = self.solver.make_average_rdm1_sf()
         # [Eq. (5)] has a factor of 0.5
-        g2 = 0.5 * self.solver.make_rdm2_sf(self.solver.evecs[:, 0])
+        g2 = 0.5 * self.solver.make_average_rdm2_sf()
         return g1, g2

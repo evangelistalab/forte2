@@ -1,1 +1,1 @@
-from .orbital_optimizer import OrbitalOptimizer
+from .orbital_optimizer import MCOptimizer
