@@ -70,8 +70,8 @@ class VectorSpace {
 
     /// @return the list of operators
     const container& elements() const { return elements_; }
-    /// @return the std::vector underlying the unordered_dense::map
-    const auto& values() const { return elements_.values(); }
+    /// @return the std::vector<std::pair<T,F>> underlying the unordered_dense::map
+    const auto& elements_as_vec() const { return elements_.values(); }
 
     /// @return convert this object to the derived class
     inline auto self() { return static_cast<Derived&>(*this); }
