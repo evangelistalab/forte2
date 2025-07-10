@@ -31,10 +31,14 @@ class State:
 
     def __post_init__(self):
         self.twice_ms = int(round(self.ms * 2))
-        # Validate multiplicity (multiplicity = 2 S + 1 >= 2 M_S + 1)
-        if self.twice_ms + 1 > self.multiplicity:
+        # multiplicity = 2 S + 1
+        # Ms \in [-S, -S+1, ..., S-1, S]
+        twice_S = self.multiplicity - 1
+        allowed_twice_ms_values = [i for i in range(-twice_S, twice_S + 1, 2)]
+        print(f"Allowed values for 2 Ms: {allowed_twice_ms_values}")
+        if self.twice_ms not in allowed_twice_ms_values:
             raise ValueError(
-                f"Spin multiplicity (ms = {self.ms}) must be less than multiplicity (2S+1 = {self.multiplicity})."
+                f"Requested Ms ({self.ms}) incompatible with multiplicity ({self.multiplicity}). Change the value of Ms."
             )
         self.na = int(round(self.nel + self.twice_ms) / 2)
         self.nb = int(round(self.nel - self.twice_ms) / 2)

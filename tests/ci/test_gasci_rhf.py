@@ -142,7 +142,6 @@ def test_gasci_rhf_6():
     ci = CI(
         orbitals=[[0, 1, 2], [3, 4, 5, 6], [7, 8, 9]],
         state=State(nel=10, multiplicity=1, ms=0.0),
-        # state=State(nel=10, multiplicity=1, ms=1.0), is a BUG
         nroot=1,
         gas_min=[4, 0, 0],
         gas_max=[6, 8, 2],
@@ -151,30 +150,6 @@ def test_gasci_rhf_6():
 
     assert rhf.E == approx(-100.00984797870581)
     assert ci.E[0] == approx(-100.088791333620)
-
-
-# @pytest.mark.xfail(reason="uhf energy does not match reference value")
-# def test_gasci_rhf_6():
-#     xyz = f"""
-#     O  0.000000000000  0.000000000000 -0.069592187400
-#     H  0.000000000000 -0.783151105291  0.552239257834
-#     H  0.000000000000  0.783151105291  0.552239257834
-#     """
-
-#     system = System(xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit")
-
-#     rhf = UHF(charge=0, econv=1e-12, dconv=1e-8)(system)
-#     ci = CI(
-#         orbitals=[[0], [1, 2, 3, 4, 5, 6]],
-#         state=State(nel=10, multiplicity=3, ms=1.0),
-#         nroot=1,
-#         gas_min=[0],
-#         gas_max=[1],
-#     )(rhf)
-#     ci.run()
-
-#     assert rhf.E == approx(-75.70155175095266)
-#     assert ci.E[0] == approx(-56.129450806753)
 
 
 def test_gasci_rhf_7():
@@ -283,4 +258,27 @@ def test_gasci_rohf_2():
     assert ci.E[0] == approx(-29.204808393068)
 
 
-test_gasci_rhf_6()
+def test_gasci_rohf_3():
+    xyz = f"""
+    O  0.000000000000  0.000000000000 -0.069592187400
+    H  0.000000000000 -0.783151105291  0.552239257834
+    H  0.000000000000  0.783151105291  0.552239257834
+    """
+
+    system = System(xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit")
+
+    rhf = ROHF(charge=0, econv=1e-12, dconv=1e-8, ms=1.0)(system)
+    ci = CI(
+        orbitals=[[0], [1, 2, 3, 4, 5, 6]],
+        state=State(nel=10, multiplicity=3, ms=1.0),
+        nroot=1,
+        gas_min=[0],
+        gas_max=[1],
+    )(rhf)
+    ci.run()
+
+    assert rhf.E == approx(-75.78642207312076)
+    assert ci.E[0] == approx(-56.130750582569)
+
+
+test_gasci_rohf_3()

@@ -296,7 +296,7 @@ class UHF(SCFMixin, MOsMixin):
     def _parse_state(self):
         if self.ms is None:
             raise ValueError(
-                f"Spin multiplicity ms must be set for {self._scf_type()}."
+                f"Spin projection (ms) must be set for {self._scf_type()}."
             )
         assert np.isclose(
             int(round(self.ms * 2)), self.ms * 2
