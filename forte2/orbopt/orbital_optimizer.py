@@ -2,6 +2,7 @@ import numpy as np
 import scipy as sp
 from dataclasses import dataclass, field
 
+from forte2.ci import CI
 from forte2.jkbuilder import FockBuilder
 from forte2.helpers.mixins import MOsMixin, SystemMixin
 from forte2.helpers import logger
@@ -88,7 +89,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
         while self.iter < self.maxiter:
             self.orb_opt.set_rdms(g1_act, g2_act)
             self.E_orb = self.orb_opt.run()
-            
+
             conv, conv_str = self.check_convergence()
             logger.log_info1(
                 f"{self.iter:>10d} {self.E_orb:>20.10f} {self.E_avg:>20.10f} {abs(np.linalg.norm(self.orb_opt.orbgrad, np.inf)):>20.10f} {conv_str:>10s}"

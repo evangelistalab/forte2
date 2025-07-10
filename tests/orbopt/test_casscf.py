@@ -1,6 +1,5 @@
 import pytest
 
-from numpy import isclose
 from forte2 import *
 from forte2.helpers.comparisons import approx
 
@@ -71,9 +70,34 @@ def test_mcscf_3():
         orbitals=[4, 5, 6, 7, 8, 9],
         core_orbitals=[0, 1, 2, 3],
         state=State(nel=14, multiplicity=1, ms=0.0),
-        nroot=1,
+        nroot=2,
     )(rhf)
     mc = MCOptimizer()(ci)
+    mc.gradtol = 1e-7
+    mc.run()
+    assert rhf.E == approx(erhf)
+    assert mc.E == approx(ecasscf)
+
+
+def test_mcscf_sa_same_mult():
+    erhf = -108.761639873604
+    ecasscf = -108.8592663803
+
+    xyz = f"""
+    N 0.0 0.0 0.0
+    N 0.0 0.0 1.4
+    """
+
+    system = System(xyz=xyz, basis="cc-pVDZ", auxiliary_basis="cc-pVTZ-JKFIT")
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    ci = CI(
+        orbitals=[4, 5, 6, 7, 8, 9],
+        core_orbitals=[0, 1, 2, 3],
+        state=State(nel=14, multiplicity=1, ms=0.0),
+        nroot=2,
+    )(rhf)
+    mc = MCOptimizer()(ci)
+    mc.gradtol = 1e-7
     mc.run()
     assert rhf.E == approx(erhf)
     assert mc.E == approx(ecasscf)
