@@ -54,8 +54,7 @@ StringList make_strings_with_occupation(size_t num_spaces, int nirrep,
         }
 
         auto product_strings = math::cartesian_product(gas_space_string);
-        // print product_strings
-        // psi::outfile->Printf("\n\n  GAS product strings (size = %d):", product_strings.size());
+
         for (const auto& strings : product_strings) {
             String I;
             I.clear();
@@ -63,7 +62,6 @@ StringList make_strings_with_occupation(size_t num_spaces, int nirrep,
                 I |= J;
             }
             size_t sym_I = string_class->symmetry(I);
-            // psi::outfile->Printf("\n    %s", str(I, ncmo_).c_str());
             full_strings[sym_I].push_back(I);
         }
 

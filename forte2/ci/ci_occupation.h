@@ -25,8 +25,16 @@ std::tuple<std::vector<occupation_t>, std::vector<occupation_t>,
 generate_gas_occupations(int na, int nb, const occupation_t& gas_min_el,
                          const occupation_t& gas_max_el, const occupation_t& gas_size);
 
+/// @brief Generates 1h occupations from the given gas occupations. This function is used when
+/// making lists of coupling coefficients for 1h, 2h, and 3h strings.
 std::vector<std::array<int, 6>>
 generate_1h_occupations(const std::vector<std::array<int, 6>>& gas_occupations);
+
+/// @brief Generates 1h1p occupations from the given gas occupations. This function is used when
+/// making lists of coupling coefficients for 1h1p strings and it is needed because in GAS it is
+/// possible to have intermediate states that fall outside of the GAS occupation constraints.
+std::vector<std::array<int, 6>>
+generate_1h1p_occupations(const std::vector<std::array<int, 6>>& gas_occupations);
 
 std::string occupation_table(size_t num_spaces,
                              const std::vector<std::array<int, 6>>& alfa_occupation,
