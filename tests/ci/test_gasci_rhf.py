@@ -62,7 +62,7 @@ def test_gasci_rhf_3():
         xyz=xyz,
         basis="sto-6g",
         auxiliary_basis="def2-universal-jkfit",
-        auxiliary_basis_mp2="def2-svp-rifit",
+        auxiliary_basis_corr="def2-svp-rifit",
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)

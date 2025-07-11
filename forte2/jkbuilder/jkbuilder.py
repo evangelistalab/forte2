@@ -13,10 +13,10 @@ class FockBuilder:
     Args:
         system (System or ModelSystem): The system for which to build the Fock matrix.
             If a ModelSystem is provided, it will decompose the 4D ERI tensor using Cholesky decomposition with complete pivoting.
-        use_jkfit (bool): Whether to use the jkfit auxiliary basis or the MP2 auxiliary basis of the System object.
+        use_aux_corr (bool): Whether to use 'auxiliary_basis' or 'auxiliary_basis_corr'. Default is False.
     """
 
-    def __init__(self, system, use_jkfit=True):
+    def __init__(self, system, use_aux_corr=False):
         if isinstance(system, ModelSystem):
             # special handling for ModelSystem
             eri = system.eri
@@ -38,7 +38,7 @@ class FockBuilder:
 
         self.basis = system.basis
         self.auxiliary_basis = (
-            system.auxiliary_basis if use_jkfit else system.auxiliary_basis_mp2
+            system.auxiliary_basis_corr if use_aux_corr else system.auxiliary_basis
         )
 
         # Compute the memory requirements

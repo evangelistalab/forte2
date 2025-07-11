@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 
 import forte2
+from forte2.helpers import logger
 from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
 from .parse_xyz import parse_xyz
@@ -17,7 +18,7 @@ class System:
     xyz: str
     basis: str | dict
     auxiliary_basis: str | dict = None
-    auxiliary_basis_mp2: str | dict = None
+    auxiliary_basis_corr: str | dict = None
     atoms: list[tuple[float, tuple[float, float, float]]] = None
     minao_basis: str = None
     x2c_type: str = None
@@ -35,10 +36,13 @@ class System:
             if self.auxiliary_basis is not None
             else None
         )
-        if self.auxiliary_basis_mp2 is not None:
-            self.auxiliary_basis_mp2 = build_basis(self.auxiliary_basis_mp2, self.atoms)
+        if self.auxiliary_basis_corr is not None:
+            logger.log_warning(f"Using a separate auxiliary basis is not recommended!")
+            self.auxiliary_basis_corr = build_basis(
+                self.auxiliary_basis_corr, self.atoms
+            )
         else:
-            self.auxiliary_basis_mp2 = self.auxiliary_basis
+            self.auxiliary_basis_corr = self.auxiliary_basis
         self.minao_basis = (
             build_basis("cc-pvtz-minao", self.atoms)
             if self.minao_basis is not None

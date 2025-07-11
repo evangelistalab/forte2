@@ -15,7 +15,7 @@ def test_cisd_1():
         xyz=xyz,
         basis="cc-pVDZ",
         auxiliary_basis="cc-pVTZ-JKFIT",
-        auxiliary_basis_mp2="cc-pVTZ-RIFIT",
+        auxiliary_basis_corr="cc-pVTZ-RIFIT",
         unit="bohr",
     )
     rhf = RHF(charge=0, econv=1e-12)(system)

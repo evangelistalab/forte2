@@ -16,7 +16,7 @@ class RestrictedMOIntegrals:
         C (ndarray): The coefficient matrix for the molecular orbitals.
         orbitals (list): Subspace of the orbitals for which to compute the integrals.
         core_orbitals (list, optional): Subspace of doubly occupied orbitals. Defaults to None.
-        use_jkfit (bool, optional): Whether to use jkfit or rifit auxiliary basis. Defaults to True.
+        use_aux_corr (bool, optional): If True, use 'auxiliary_basis_corr', else use 'auxiliary_basis'. Defaults to False
     Returns:
         None
     Attributes:
@@ -29,10 +29,10 @@ class RestrictedMOIntegrals:
     C: NDArray
     orbitals: list
     core_orbitals: list = field(default_factory=list)
-    use_jkfit: bool = True
+    use_aux_corr: bool = False
 
     def __post_init__(self):
-        jkbuilder = FockBuilder(self.system, self.use_jkfit)
+        jkbuilder = FockBuilder(self.system, self.use_aux_corr)
         C = self.C[:, self.orbitals]
 
         basis = self.system.basis
