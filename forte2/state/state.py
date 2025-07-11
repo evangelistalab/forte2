@@ -34,11 +34,17 @@ class State:
 
         ### Sanity checks
         # 1. Basic checks
-        assert isinstance(self.nel, int), "Number of electrons must be an integer!"
+        assert np.isclose(
+            int(round(self.nel)), self.nel
+        ), "Number of electrons must be an integer!"
+        self.nel = int(round(self.nel))
         assert (
             self.nel >= 0
         ), f"Number of electrons must be non-negative, got {self.nel}."
-        assert isinstance(self.multiplicity, int), "Multiplicity must be an integer!"
+        assert np.isclose(
+            int(round(self.multiplicity)), self.multiplicity
+        ), "Multiplicity must be an integer!"
+        self.multiplicity = int(round(self.multiplicity))
         assert (
             self.multiplicity >= 1
         ), f"Multiplicity must be at least 1! Got {self.multiplicity}."
