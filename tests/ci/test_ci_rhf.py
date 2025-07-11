@@ -71,8 +71,8 @@ def test_multici_1():
     eref_triplet1 = -108.779926502402
     eref_triplet2 = -108.733907910380
     assert ci.E[0] == approx(eref_singlet)
-    assert ci.E[1] == approx(eref_triplet1)
-    assert ci.E[2] == approx(eref_triplet2)
+    assert ci.E[1][0] == approx(eref_triplet1)
+    assert ci.E[1][1] == approx(eref_triplet2)
     assert ci.E_avg[0] == approx(eref_singlet)
     assert ci.E_avg[1] == approx(0.85 * eref_triplet1 + 0.15 * eref_triplet2)
     assert ci.compute_average_energy() == approx(
