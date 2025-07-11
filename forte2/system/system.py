@@ -1,7 +1,9 @@
+import scipy as sp
 from dataclasses import dataclass, field
 
 import forte2
 from forte2.helpers import logger
+from forte2.helpers.matrix_functions import invsqrt_matrix, canonical_orth
 from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
 from .parse_xyz import parse_xyz
@@ -23,6 +25,12 @@ class System:
     minao_basis: str = None
     x2c_type: str = None
     unit: str = "angstrom"
+    # If the min/max eigenvalue of the overlap matrix falls below
+    # this trigger, linear dependency will be removed
+    linear_dep_trigger: float = 1e-10
+    # This is the threshold below which the eigenvalues of
+    # the overlap matrix will be removed
+    ortho_thresh: float = 1e-8
 
     def __post_init__(self):
         assert self.unit in [
@@ -55,6 +63,7 @@ class System:
         self.Zsum = np.sum([x[0] for x in self.atoms])
 
         self._init_x2c()
+        self.check_linear_dependencies()
 
     def _init_x2c(self):
         if self.x2c_type is not None:
@@ -201,6 +210,33 @@ class System:
         )
         return nuc_quad * conversion_factor
 
+    def check_linear_dependencies(self):
+        S = self.ints_overlap()
+        e, _ = np.linalg.eigh(S)
+        self._eigh = sp.linalg.eigh
+        self.nmo = self.nbf()
+        if min(e) / max(e) < self.linear_dep_trigger:
+            logger.log_warning(f"Linear dependencies detected in overlap matrix S!")
+            logger.log_debug(
+                f"Max eigenvalue: {np.max(e):.2e}. \n"
+                f"Min eigenvalue: {np.min(e):.2e}. \n"
+                f"Condition number: {max(e)/min(e):.2e}. \n"
+                f"Removing linear dependencies with threshold {self.ortho_thresh:.2e}."
+            )
+            self.nmo -= np.sum(e < self.ortho_thresh)
+            if self.nmo < self.nbf():
+                logger.log_warning(
+                    f"Reduced number of basis functions from {self.nbf()} to {self.nmo} due to linear dependencies."
+                )
+            else:
+                logger.log_warning(
+                    f"Linear dependencies detected, but no basis functions were removed. Consider changing linear_dep_trigger or ortho_thresh."
+                )
+            self.Xorth = canonical_orth(S, tol=self.ortho_thresh)
+        else:
+            # no linear dependencies, use symmetric orthogonalization
+            self.Xorth = invsqrt_matrix(S, tol=1e-13)
+
 
 @dataclass
 class ModelSystem:
@@ -218,6 +254,8 @@ class ModelSystem:
         self.Zsum = 0  # total nuclear charge, here set to zero, so charge can be set to -nel later
         self.x2c_type = None
         self.nuclear_repulsion = 0.0
+        self.nmo = self.nbf()
+        self.Xorth = invsqrt_matrix(self.ints_overlap(), tol=1e-13)
 
     def ints_overlap(self):
         return self.overlap
@@ -253,8 +291,6 @@ class HubbardModel1D(ModelSystem):
     pbc: bool = False
 
     def __post_init__(self):
-        super().__post_init__()
-
         self.hcore = np.zeros((self.nsites, self.nsites))
         for i in range(self.nsites - 1):
             self.hcore[i, i + 1] = self.hcore[i + 1, i] = -self.t
@@ -266,3 +302,5 @@ class HubbardModel1D(ModelSystem):
         self.eri = np.zeros((self.nsites,) * 4)
         for i in range(self.nsites):
             self.eri[i, i, i, i] = self.U
+
+        super().__post_init__()
