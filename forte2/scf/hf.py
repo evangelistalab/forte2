@@ -277,7 +277,7 @@ class UHF(SCFMixin, MOsMixin):
             )
         assert np.isclose(
             int(round(self.ms * 2)), self.ms * 2
-        ), "ms must be an integer multiple of 0.5."
+        ), "ms must be a multiple of 0.5."
         self.twicems = int(round(self.ms * 2))
         if self.nel % 2 != self.twicems % 2:
             raise ValueError(f"{self.nel} electrons is incompatible with ms={self.ms}!")

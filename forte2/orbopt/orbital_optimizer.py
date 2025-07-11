@@ -139,8 +139,9 @@ class MCOptimizer(MOsMixin, SystemMixin):
             irrep = [pm.state.symmetry]
             state_weights = [1.0]
             nroots = [pm.nroot]
-            weights = [[pm.weights]]
-            eigvals = [[pm.E]]
+            weights = [pm.weights]
+            eigvals = [pm.E]
+            print(eigvals)
         elif isinstance(pm, MultiCI):
             ncis = len(pm.CIs)
             mult = [ci.state.multiplicity for ci in pm.CIs]
@@ -161,7 +162,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
         iroot = 0
         for i in range(ncis):
             for j in range(nroots[i]):
-                solver_weight = f"{state_weights[i]:15.5f}" if j == 0 else " " * 10
+                solver_weight = f"{state_weights[i]:15.5f}" if j == 0 else " " * 15
                 logger.log_info1(
                     f"{iroot:>6d} {mult[i]:>6d} {ms[i]:>6.1f} {irrep[i]:>6d} {eigvals[i][j]:>20.10f} {weights[i][j]:>15.5f} {solver_weight}"
                 )

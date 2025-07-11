@@ -50,7 +50,7 @@ class State:
         ), f"Multiplicity must be at least 1! Got {self.multiplicity}."
         assert np.isclose(
             int(round(self.ms * 2)), self.ms * 2
-        ), "ms must be an integer multiple of 0.5."
+        ), "ms must be a multiple of 0.5."
 
         # 2. Is the multiplicity compatible with the number of electrons?
         assert (
