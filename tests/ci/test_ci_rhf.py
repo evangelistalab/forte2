@@ -41,3 +41,40 @@ def test_ci_2():
     ci.run()
 
     assert ci.E[0] == approx(-100.019788438077)
+
+
+def test_multici_1():
+    xyz = f"""
+    N 0.0 0.0 0.0
+    N 0.0 0.0 1.2
+    """
+
+    system = System(xyz=xyz, basis="cc-pvdz", auxiliary_basis="cc-pVTZ-JKFIT")
+
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    ci_singlet = CI(
+        core_orbitals=[0, 1, 2, 3],
+        orbitals=[4, 5, 6, 7, 8, 9],
+        state=State(14, multiplicity=1, ms=0.0),
+        nroot=1,
+    )
+    ci_triplet = CI(
+        core_orbitals=[0, 1, 2, 3],
+        orbitals=[4, 5, 6, 7, 8, 9],
+        state=State(14, multiplicity=3, ms=0.0),
+        nroot=2,
+        weights=[0.85, 0.15],
+    )
+    ci = MultiCI([ci_singlet, ci_triplet], weights=[0.25, 0.75])(rhf)
+    ci.run()
+    eref_singlet = -109.004622061660
+    eref_triplet1 = -108.779926502402
+    eref_triplet2 = -108.733907910380
+    assert ci.E[0] == approx(eref_singlet)
+    assert ci.E[1] == approx(eref_triplet1)
+    assert ci.E[2] == approx(eref_triplet2)
+    assert ci.E_avg[0] == approx(eref_singlet)
+    assert ci.E_avg[1] == approx(0.85 * eref_triplet1 + 0.15 * eref_triplet2)
+    assert ci.compute_average_energy() == approx(
+        0.25 * eref_singlet + 0.75 * (0.85 * eref_triplet1 + 0.15 * eref_triplet2)
+    )
