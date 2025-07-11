@@ -20,7 +20,7 @@ class FockBuilder:
         if isinstance(system, ModelSystem):
             # special handling for ModelSystem
             eri = system.eri
-            nbf = system.nbf()
+            nbf = system.nbf
             eri = eri.reshape((nbf**2,) * 2)
             # dpstrf: Cholesky decomposition with complete pivoting
             # tol=-1 ~machine precision tolerance
@@ -33,7 +33,7 @@ class FockBuilder:
             piv = piv - 1  # convert to 0-based indexing
             self.B = C[:rank, piv].reshape((rank, nbf, nbf))
             print(self.B)
-            system.naux = lambda: rank
+            system.naux = rank
             return
 
         self.basis = system.basis

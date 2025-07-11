@@ -13,7 +13,7 @@ def test_fci_co_o_core_exc():
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CI(
-        orbitals=list(range(system.nbf())),
+        orbitals=list(range(system.nbf)),
         state=State(nel=14, multiplicity=1, ms=0.0),
         nroot=1,
         energy_shift=-92,
@@ -33,7 +33,7 @@ def test_fci_co_c_core_exc():
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CI(
-        orbitals=list(range(system.nbf())),
+        orbitals=list(range(system.nbf)),
         state=State(nel=14, multiplicity=1, ms=0.0),
         nroot=1,
         energy_shift=-102,

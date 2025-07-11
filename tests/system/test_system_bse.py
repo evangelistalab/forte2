@@ -73,4 +73,4 @@ def test_custom_basis_assignment():
         basis={"H": "cc-pvdz", "P": "ano-pv5z", "default": "sap_helfem_large"},
         unit="bohr",
     )
-    assert system.nbf() == 204
+    assert system.nbf == 204

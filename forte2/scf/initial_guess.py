@@ -63,4 +63,4 @@ def minao_initial_guess(system: forte2.System, H: NDArray, S: NDArray) -> NDArra
 
 
 def core_initial_guess(system: forte2.System, H: NDArray, S: NDArray) -> NDArray:
-    return np.zeros((system.nbf(),) * 2)
+    return np.zeros((system.nbf,) * 2)

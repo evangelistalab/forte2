@@ -32,6 +32,14 @@ class System:
     # the overlap matrix will be removed
     ortho_thresh: float = 1e-8
 
+    # Non-init attributes
+    Zsum: float = field(init=False, default=None)
+    nbf: int = field(init=False, default=None)
+    nmo: int = field(init=False, default=None)
+    naux: int = field(init=False, default=None)
+    nminao: int = field(init=False, default=None)
+    Xorth: NDArray = field(init=False, default=None)
+
     def __post_init__(self):
         assert self.unit in [
             "angstrom",
@@ -61,6 +69,9 @@ class System:
         )
 
         self.Zsum = np.sum([x[0] for x in self.atoms])
+        self.nbf = self.basis.size
+        self.naux = self.auxiliary_basis.size if self.auxiliary_basis else 0
+        self.nminao = self.minao_basis.size if self.minao_basis else 0
 
         self._init_x2c()
         self.check_linear_dependencies()
@@ -80,33 +91,6 @@ class System:
 
     def __repr__(self):
         return f"System(atoms={self.atoms}, basis={self.basis}, auxiliary_basis={self.auxiliary_basis})"
-
-    def nbf(self):
-        """
-        Get the number of basis functions in the system.
-
-        Returns:
-            int: Number of basis functions.
-        """
-        return self.basis.size
-
-    def naux(self):
-        """
-        Get the number of auxiliary basis functions in the system.
-
-        Returns:
-            int: Number of auxiliary basis functions.
-        """
-        return self.auxiliary_basis.size if self.auxiliary_basis else 0
-
-    def nminao(self):
-        """
-        Get the number of minao basis functions in the system.
-
-        Returns:
-            int: Number of minao basis functions.
-        """
-        return self.minao_basis.size if self.minao_basis else 0
 
     def decontract(self):
         """
@@ -214,7 +198,7 @@ class System:
         S = self.ints_overlap()
         e, _ = np.linalg.eigh(S)
         self._eigh = sp.linalg.eigh
-        self.nmo = self.nbf()
+        self.nmo = self.nbf
         if min(e) / max(e) < self.linear_dep_trigger:
             logger.log_warning(f"Linear dependencies detected in overlap matrix S!")
             logger.log_debug(
@@ -224,9 +208,9 @@ class System:
                 f"Removing linear dependencies with threshold {self.ortho_thresh:.2e}."
             )
             self.nmo -= np.sum(e < self.ortho_thresh)
-            if self.nmo < self.nbf():
+            if self.nmo < self.nbf:
                 logger.log_warning(
-                    f"Reduced number of basis functions from {self.nbf()} to {self.nmo} due to linear dependencies."
+                    f"Reduced number of basis functions from {self.nbf} to {self.nmo} due to linear dependencies."
                 )
             else:
                 logger.log_warning(
@@ -254,7 +238,9 @@ class ModelSystem:
         self.Zsum = 0  # total nuclear charge, here set to zero, so charge can be set to -nel later
         self.x2c_type = None
         self.nuclear_repulsion = 0.0
-        self.nmo = self.nbf()
+        self.nbf = self.hcore.shape[0]
+        self.nmo = self.nbf
+        self.naux = 0
         self.Xorth = invsqrt_matrix(self.ints_overlap(), tol=1e-13)
 
     def ints_overlap(self):
@@ -265,12 +251,6 @@ class ModelSystem:
 
     def nuclear_repulsion_energy(self):
         return self.nuclear_repulsion
-
-    def nbf(self):
-        return self.hcore.shape[0]
-
-    def naux(self):
-        return 0
 
 
 @dataclass

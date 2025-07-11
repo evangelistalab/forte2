@@ -76,8 +76,8 @@ class SCFMixin:
         H = self._get_hcore()
         fock_builder = FockBuilder(self.system)
 
-        self.nbf = self.system.nbf()
-        self.naux = self.system.naux()
+        self.nbf = self.system.nbf
+        self.naux = self.system.naux
         self.nmo = self.system.nmo
 
         logger.log_info1(f"Number of electrons: {self.nel}")
