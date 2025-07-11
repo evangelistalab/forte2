@@ -61,3 +61,4 @@ jobs:
           pytest -v
         else
           pytest -v -m "not slow"
+        fi
