@@ -66,7 +66,6 @@ CIStrings::CIStrings(size_t na, size_t nb, int symmetry,
     std::tie(ngas_spaces_, gas_alfa_occupations_, gas_beta_occupations_, gas_occupations_) =
         get_ci_occupation_patterns(na_, nb_, gas_min_, gas_max_, gas_size_);
 
-    // print_h2("Possible Electron Occupations");
     auto table = occupation_table(ngas_spaces_, gas_alfa_occupations_, gas_beta_occupations_,
                                   gas_occupations_);
     LOG(log_level_) << table;
@@ -94,14 +93,23 @@ CIStrings::CIStrings(size_t na, size_t nb, int symmetry,
                                                      gas_alfa_occupations_, string_class_);
         beta_strings_ = make_strings_with_occupation(ngas_spaces_, nirrep_, gas_size_, gas_mos_,
                                                      gas_beta_occupations_, string_class_);
-
         alfa_address_ = std::make_shared<StringAddress>(gas_size_, na_, alfa_strings_);
         beta_address_ = std::make_shared<StringAddress>(gas_size_, nb_, beta_strings_);
-
         // str_list_timer += t.get();
     }
 
-    // // from here down the code has to be rewritten to use the new StringAddress class
+    gas_alfa_1h1p_occupations_ = generate_1h1p_occupations(gas_alfa_occupations_);
+    gas_beta_1h1p_occupations_ = generate_1h1p_occupations(gas_beta_occupations_);
+
+    auto alfa_strings_1h1p_ = make_strings_with_occupation(
+        ngas_spaces_, nirrep_, gas_size_, gas_mos_, gas_alfa_1h1p_occupations_, string_class_);
+    auto beta_strings_1h1p_ = make_strings_with_occupation(
+        ngas_spaces_, nirrep_, gas_size_, gas_mos_, gas_beta_1h1p_occupations_, string_class_);
+
+    alfa_address_1h1p_ = std::make_shared<StringAddress>(gas_size_, na_, alfa_strings_1h1p_);
+    beta_address_1h1p_ = std::make_shared<StringAddress>(gas_size_, nb_, beta_strings_1h1p_);
+
+    // from here down the code has to be rewritten to use the new StringAddress class
 
     gas_alfa_1h_occupations_ = generate_1h_occupations(gas_alfa_occupations_);
     gas_beta_1h_occupations_ = generate_1h_occupations(gas_beta_occupations_);
@@ -165,8 +173,8 @@ CIStrings::CIStrings(size_t na, size_t nb, int symmetry,
     alfa_vo_list = make_vo_list(alfa_strings_, alfa_address_, alfa_address_);
     beta_vo_list = make_vo_list(beta_strings_, beta_address_, beta_address_);
 
-    alfa_vo_list2 = make_vo_list2(alfa_strings_, alfa_address_, alfa_address_);
-    beta_vo_list2 = make_vo_list2(beta_strings_, beta_address_, beta_address_);
+    alfa_vo_list2 = make_vo_list2(alfa_strings_1h1p_, alfa_address_1h1p_, alfa_address_);
+    beta_vo_list2 = make_vo_list2(beta_strings_1h1p_, beta_address_1h1p_, beta_address_);
 
     alfa_1h_list = make_1h_list(alfa_strings_, alfa_address_, alfa_address_1h_);
     beta_1h_list = make_1h_list(beta_strings_, beta_address_, beta_address_1h_);

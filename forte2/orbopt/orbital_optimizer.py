@@ -129,7 +129,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
         # [todo] handle GAS/RHF/ROHF cases
         core = self.parent_method.core_orbitals
         actv = self.parent_method.flattened_orbitals
-        virt = sorted(list(set(range(self.system.nbf())) - set(core) - set(actv)))
+        virt = sorted(list(set(range(self.system.nbf)) - set(core) - set(actv)))
         argsort = np.argsort(core + actv + virt)
         self.C[0][:, argsort] = self.C[0].copy()
         self.core = slice(0, len(core))
@@ -137,7 +137,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
         self.virt = slice(len(core) + len(actv), None)
 
     def _get_nonredundant_rotations(self):
-        nrr = np.zeros((self.system.nbf(), self.system.nbf()), dtype=bool)
+        nrr = np.zeros((self.system.nbf, self.system.nbf), dtype=bool)
 
         # TODO: handle GAS/RHF/ROHF cases
         nrr[self.core, self.virt] = True

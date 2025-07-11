@@ -124,7 +124,7 @@ def test_mcscf_noncontiguous_spaces():
     # swap orbitals to make them non-contiguous
     core = [0, 1, 3, 6]
     actv = [2, 4, 5, 7, 8, 11]
-    virt = sorted(set(range(system.nbf())) - set(core + actv))
+    virt = sorted(set(range(system.nbf)) - set(core + actv))
     rhf.C[0][:, core + actv + virt] = rhf.C[0]
     ci = CI(
         orbitals=actv,

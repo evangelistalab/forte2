@@ -2,7 +2,7 @@ import pytest
 from forte2 import *
 from forte2.helpers.comparisons import approx
 
-
+@pytest.mark.slow
 def test_cisd_1():
     escf = -99.9977252002953492
     ecisd = -100.204959657944
@@ -15,7 +15,7 @@ def test_cisd_1():
         xyz=xyz,
         basis="cc-pVDZ",
         auxiliary_basis="cc-pVTZ-JKFIT",
-        auxiliary_basis_mp2="cc-pVTZ-RIFIT",
+        auxiliary_basis_corr="cc-pVTZ-RIFIT",
         unit="bohr",
     )
     rhf = RHF(charge=0, econv=1e-12)(system)

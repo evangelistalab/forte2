@@ -1,5 +1,5 @@
+import numpy as np
 from dataclasses import dataclass, field
-
 from forte2.helpers.multiplicity_labels import multiplicity_labels
 
 
@@ -10,7 +10,7 @@ class State:
     Attributes:
         nel (int): Total number of electrons.
         multiplicity (int): Multiplicity of the state (2S+1).
-        ms (float): Spin multiplicity (M_S).
+        ms (float): Spin projection (Ms) of the state.
         irrep (int, optional): Irreducible representation of the state in Cotton ordering.
         gas_min (list[int], optional): Minimum GAS restrictions.
         gas_max (list[int], optional): Maximum GAS restrictions.
@@ -31,13 +31,55 @@ class State:
 
     def __post_init__(self):
         self.twice_ms = int(round(self.ms * 2))
-        # Validate multiplicity (multiplicity = 2 S + 1 >= 2 M_S + 1)
-        if self.twice_ms + 1 > self.multiplicity:
+
+        ### Sanity checks
+        # 1. Basic checks
+        assert np.isclose(
+            int(round(self.nel)), self.nel
+        ), "Number of electrons must be an integer!"
+        self.nel = int(round(self.nel))
+        assert (
+            self.nel >= 0
+        ), f"Number of electrons must be non-negative, got {self.nel}."
+        assert np.isclose(
+            int(round(self.multiplicity)), self.multiplicity
+        ), "Multiplicity must be an integer!"
+        self.multiplicity = int(round(self.multiplicity))
+        assert (
+            self.multiplicity >= 1
+        ), f"Multiplicity must be at least 1! Got {self.multiplicity}."
+        assert np.isclose(
+            int(round(self.ms * 2)), self.ms * 2
+        ), "ms must be an integer multiple of 0.5."
+
+        # 2. Is the multiplicity compatible with the number of electrons?
+        assert (
+            self.multiplicity <= self.nel + 1
+        ), f"Multiplicity {self.multiplicity} is incompatible with {self.nel} electrons."
+
+        # 3. Is the Ms compatible with the number of electrons?
+        if self.nel % 2 != self.twice_ms % 2:
+            raise ValueError(f"{self.nel} electrons is incompatible with ms={self.ms}!")
+
+        # 4. Is the Ms compatible with the multiplicity?
+        # multiplicity = 2 S + 1
+        # Ms \in [-S, -S+1, ..., S-1, S]
+        twice_S = self.multiplicity - 1
+        allowed_twice_ms_values = [i for i in range(-twice_S, twice_S + 1, 2)]
+        if self.twice_ms not in allowed_twice_ms_values:
             raise ValueError(
-                f"Spin multiplicity (ms = {self.ms}) must be less than multiplicity (2S+1 = {self.multiplicity})."
+                f"Requested Ms ({self.ms}) incompatible with multiplicity ({self.multiplicity}). Change the value of Ms."
             )
+        ###
+
         self.na = int(round(self.nel + self.twice_ms) / 2)
         self.nb = int(round(self.nel - self.twice_ms) / 2)
+        assert (
+            self.nel == self.na + self.nb
+        ), f"Number of electrons {self.nel} does not match na + nb = {self.na} + {self.nb}."
+        assert (
+            self.na >= 0 and self.nb >= 0
+        ), f"Non-negative number of alpha and beta electrons is required."
 
     def multiplicity_label(self) -> str:
         return multiplicity_labels[self.multiplicity - 1]

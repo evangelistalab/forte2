@@ -8,6 +8,7 @@
 
 #include "ci/ci_string_defs.h"
 #include "ci/ci_string_address.h"
+#include "ci/ci_string_class.h"
 
 namespace forte2 {
 
@@ -38,8 +39,8 @@ class CIStrings {
     /// @return the symmetry of the state
     int symmetry() const { return symmetry_; }
 
-    //   /// @return the number of irreps
-    //   int nirrep() const { return nirrep_; }
+    /// @return the number of irreps
+    int nirrep() const { return nirrep_; }
 
     /// @return the number of correlated MOs
     size_t norb() const { return norb_; }
@@ -60,6 +61,11 @@ class CIStrings {
     const auto& alfa_address() const { return alfa_address_; }
     /// @return the beta string address object
     const auto& beta_address() const { return beta_address_; }
+
+    /// @return the alpha string address object
+    const auto& alfa_address_1h1p() const { return alfa_address_1h1p_; }
+    /// @return the beta string address object
+    const auto& beta_address_1h1p() const { return beta_address_1h1p_; }
 
     /// @return the alpha string address object for N - 1 electrons
     auto alfa_address_1h() const { return alfa_address_1h_; }
@@ -96,6 +102,15 @@ class CIStrings {
     const auto& beta_string_classes() const { return string_class_->beta_string_classes(); }
     /// @return the alpha/beta string classes
     const auto& determinant_classes() const { return string_class_->determinant_classes(); }
+
+    /// @return the alpha GAS occupations
+    const auto& gas_alfa_occupations() const { return gas_alfa_occupations_; }
+    /// @return the beta GAS occupations
+    const auto& gas_beta_occupations() const { return gas_beta_occupations_; }
+    /// @return the alpha GAS 1h1p occupations
+    const auto& gas_alfa_1h1p_occupations() const { return gas_alfa_1h1p_occupations_; }
+    /// @return the beta GAS 1h1p occupations
+    const auto& gas_beta_1h1p_occupations() const { return gas_beta_1h1p_occupations_; }
 
     /// @return the number of determinants in a given block
     size_t detpblk(size_t block) const { return detpblk_[block]; }
@@ -173,11 +188,13 @@ class CIStrings {
     std::vector<int> pair_offset_;
     /// The logging level for the class
     int log_level_ = 3;
-    
+
     //   // GAS specific data
 
     std::vector<std::array<int, 6>> gas_alfa_occupations_;
     std::vector<std::array<int, 6>> gas_beta_occupations_;
+    std::vector<std::array<int, 6>> gas_alfa_1h1p_occupations_;
+    std::vector<std::array<int, 6>> gas_beta_1h1p_occupations_;
     std::vector<std::array<int, 6>> gas_alfa_1h_occupations_;
     std::vector<std::array<int, 6>> gas_beta_1h_occupations_;
     std::vector<std::array<int, 6>> gas_alfa_2h_occupations_;
@@ -246,6 +263,11 @@ class CIStrings {
     std::shared_ptr<StringAddress> alfa_address_;
     /// The beta string address
     std::shared_ptr<StringAddress> beta_address_;
+    /// The alpha string address for 1h1p substitutions
+    std::shared_ptr<StringAddress> alfa_address_1h1p_;
+    /// The beta string address for 1h1p substitutions
+    std::shared_ptr<StringAddress> beta_address_1h1p_;
+
     /// The alpha string address for N - 1 electrons
     std::shared_ptr<StringAddress> alfa_address_1h_;
     /// The beta string address for N - 1 electrons

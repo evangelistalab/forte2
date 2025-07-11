@@ -14,7 +14,7 @@ def get_hcore_x2c(system, x2c_type="sf"):
         "so",
     ], f"Invalid x2c_type: {x2c_type}. Must be 'sf' or 'so'."
 
-    logger.log_info1(f"Number of contracted basis functions: {system.nbf()}")
+    logger.log_info1(f"Number of contracted basis functions: {system.nbf}")
     xbasis = system.decontract()
     nbf_decon = len(xbasis)
     logger.log_info1(f"Number of decontracted basis functions: {nbf_decon}")

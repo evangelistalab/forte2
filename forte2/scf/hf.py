@@ -29,13 +29,6 @@ class SCFMixin:
     maxiter: int = 100
     guess_type: str = "minao"
 
-    # If the min/max eigenvalue of the overlap matrix falls below
-    # this trigger, linear dependency will be removed
-    linear_dep_trigger: float = 1e-10
-    # This is the threshold below which the eigenvalues of
-    # the overlap matrix will be removed
-    ortho_thresh: float = 1e-8
-
     executed: bool = field(default=False, init=False)
     converged: bool = field(default=False, init=False)
 
@@ -51,38 +44,23 @@ class SCFMixin:
             )
 
         self.C = None
+        self.Xorth = self.system.Xorth
 
         return self
 
+    def _eigh(self, F):
+        Ftilde = self.Xorth.T @ F @ self.Xorth
+        e, c = np.linalg.eigh(Ftilde)
+        return e, self.Xorth @ c
+
+    def _eigh_spinor(self, F):
+        Xorth = sp.linalg.block_diag(self.Xorth, self.Xorth)
+        Ftilde = Xorth.T @ F @ Xorth
+        e, c = np.linalg.eigh(Ftilde)
+        return e, Xorth @ c
+
     def _scf_type(self):
         return type(self).__name__.upper()
-
-    def _check_linear_dependencies(self, S):
-        e, _ = np.linalg.eigh(S)
-        self._eigh = sp.linalg.eigh
-        self.nmo = self.nbf
-        self.lindep = False
-        if min(e) / max(e) < self.linear_dep_trigger:
-            self.lindep = True
-            logger.log_warning(f"Linear dependencies detected in overlap matrix S!")
-            logger.log_debug(
-                f"Max eigenvalue: {np.max(e):.2e}. \n"
-                f"Min eigenvalue: {np.min(e):.2e}. \n"
-                f"Condition number: {max(e)/min(e):.2e}. \n"
-                f"Removing linear dependencies with threshold {self.ortho_thresh:.2e}."
-            )
-            self.nmo -= np.sum(e < self.ortho_thresh)
-            logger.log_warning(
-                f"Reduced number of basis functions from {self.nbf} to {self.nmo} due to linear dependencies."
-            )
-            self._eigh = lambda A, B: eigh_gen(
-                A,
-                B,
-                remove_lindep=True,
-                orth_tol=self.ortho_thresh,
-                orth_method="canonical",
-            )
-            self.xorth = canonical_orth(S, tol=self.ortho_thresh)
 
     def run(self):
         """
@@ -98,10 +76,9 @@ class SCFMixin:
         H = self._get_hcore()
         fock_builder = FockBuilder(self.system)
 
-        self.nbf = self.system.nbf()
-        self.naux = self.system.naux()
-
-        self._check_linear_dependencies(S)
+        self.nbf = self.system.nbf
+        self.naux = self.system.naux
+        self.nmo = self.system.nmo
 
         logger.log_info1(f"Number of electrons: {self.nel}")
         if self._scf_type() != "GHF":  # not good quantum numbers for GHF
@@ -110,6 +87,7 @@ class SCFMixin:
             logger.log_info1(f"Ms: {self.ms}")
         logger.log_info1(f"Total charge: {self.charge}")
         logger.log_info1(f"Number of basis functions: {self.nbf}")
+        logger.log_info1(f"Number of orthogonalized basis functions: {self.nmo}")
         logger.log_info1(f"Number of auxiliary basis functions: {self.naux}")
         logger.log_info1(f"Energy convergence criterion: {self.econv:e}")
         logger.log_info1(f"Density convergence criterion: {self.dconv:e}")
@@ -140,7 +118,7 @@ class SCFMixin:
             # 3. Perform DIIS update of Fock
             F_canon = self._diis_update(diis, F_canon, AO_grad)
             # 4. Diagonalize updated Fock
-            self.eps, self.C = self._diagonalize_fock(F_canon, S)
+            self.eps, self.C = self._diagonalize_fock(F_canon)
             # 5. Build new density matrix
             self.D = self._build_density_matrix()
             # 6. Compute new HF energy
@@ -161,7 +139,7 @@ class SCFMixin:
                 logger.log_info1(f"{self.method} iterations converged\n")
                 # perform final iteration
                 F, F_canon = self._build_fock(H, fock_builder, S)
-                self.eps, self.C = self._diagonalize_fock(F_canon, S)
+                self.eps, self.C = self._diagonalize_fock(F_canon)
                 self.D = self._build_density_matrix()
                 self.E = Vnn + self._energy(H, F)
                 logger.log_info1(f"Final {self.method} Energy: {self.E:20.12f}")
@@ -245,15 +223,14 @@ class RHF(SCFMixin, MOsMixin):
 
     def _build_ao_grad(self, S, F):
         ao_grad = F @ self.D[0] @ S - S @ self.D[0] @ F
-        if self.lindep:
-            ao_grad = self.xorth.T.conj() @ ao_grad @ self.xorth
+        ao_grad = self.Xorth.T @ ao_grad @ self.Xorth
         return ao_grad
 
     def _energy(self, H, F):
         return np.sum(self.D[0] * (H + F))
 
-    def _diagonalize_fock(self, F, S):
-        eps, C = self._eigh(F, S)
+    def _diagonalize_fock(self, F):
+        eps, C = self._eigh(F)
         return [eps], [C]
 
     def _spin(self, S):
@@ -296,13 +273,13 @@ class UHF(SCFMixin, MOsMixin):
     def _parse_state(self):
         if self.ms is None:
             raise ValueError(
-                f"Spin multiplicity ms must be set for {self._scf_type()}."
+                f"Spin projection (ms) must be set for {self._scf_type()}."
             )
         assert np.isclose(
             int(round(self.ms * 2)), self.ms * 2
         ), "ms must be an integer multiple of 0.5."
         self.twicems = int(round(self.ms * 2))
-        if self.nel % 2 == 1 and self.twicems % 2 == 0:
+        if self.nel % 2 != self.twicems % 2:
             raise ValueError(f"{self.nel} electrons is incompatible with ms={self.ms}!")
         self.na = int(round(self.nel + self.twicems) / 2)
         self.nb = int(round(self.nel - self.twicems) / 2)
@@ -349,9 +326,9 @@ class UHF(SCFMixin, MOsMixin):
         )
         return AO_grad
 
-    def _diagonalize_fock(self, F, S):
-        eps_a, C_a = self._eigh(F[0], S)
-        eps_b, C_b = self._eigh(F[1], S)
+    def _diagonalize_fock(self, F):
+        eps_a, C_a = self._eigh(F[0])
+        eps_b, C_b = self._eigh(F[1])
         return [eps_a, eps_b], [C_a, C_b]
 
     def _spin(self, S):
@@ -668,9 +645,8 @@ class GHF(SCFMixin, MOsMixin):
 
         return AO_grad
 
-    def _diagonalize_fock(self, F, S):
-        S_spinor = np.block([[S, np.zeros_like(S)], [np.zeros_like(S), S]])
-        eps, C = self._eigh(F, S_spinor)
+    def _diagonalize_fock(self, F):
+        eps, C = self._eigh_spinor(F)
         return [eps], [C]
 
     def _spin(self, S):

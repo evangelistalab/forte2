@@ -103,7 +103,7 @@ class CI(MOsMixin, SystemMixin):
             self.C[0],
             self.flattened_orbitals,
             self.core_orbitals,
-            use_jkfit=False,
+            use_aux_corr=True,
         )
 
         # 2. Create the string lists
@@ -550,7 +550,7 @@ class CISD(CI):
         assert nel % 2 == 0, "Number of electrons must be even."
         orbitals = [
             list(range(self.frozen_core, nel // 2)),
-            list(range(nel // 2, method.system.nbf())),
+            list(range(nel // 2, method.system.nbf)),
         ]
         core_orbitals = list(range(self.frozen_core))
         nel_corr = nel - 2 * self.frozen_core

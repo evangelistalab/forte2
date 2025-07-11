@@ -1,6 +1,9 @@
+import scipy as sp
 from dataclasses import dataclass, field
 
 import forte2
+from forte2.helpers import logger
+from forte2.helpers.matrix_functions import invsqrt_matrix, canonical_orth
 from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
 from .parse_xyz import parse_xyz
@@ -17,11 +20,25 @@ class System:
     xyz: str
     basis: str | dict
     auxiliary_basis: str | dict = None
-    auxiliary_basis_mp2: str | dict = None
+    auxiliary_basis_corr: str | dict = None
     atoms: list[tuple[float, tuple[float, float, float]]] = None
     minao_basis: str = None
     x2c_type: str = None
     unit: str = "angstrom"
+    # If the min/max eigenvalue of the overlap matrix falls below
+    # this trigger, linear dependency will be removed
+    linear_dep_trigger: float = 1e-10
+    # This is the threshold below which the eigenvalues of
+    # the overlap matrix will be removed
+    ortho_thresh: float = 1e-8
+
+    # Non-init attributes
+    Zsum: float = field(init=False, default=None)
+    nbf: int = field(init=False, default=None)
+    nmo: int = field(init=False, default=None)
+    naux: int = field(init=False, default=None)
+    nminao: int = field(init=False, default=None)
+    Xorth: NDArray = field(init=False, default=None)
 
     def __post_init__(self):
         assert self.unit in [
@@ -35,10 +52,13 @@ class System:
             if self.auxiliary_basis is not None
             else None
         )
-        if self.auxiliary_basis_mp2 is not None:
-            self.auxiliary_basis_mp2 = build_basis(self.auxiliary_basis_mp2, self.atoms)
+        if self.auxiliary_basis_corr is not None:
+            logger.log_warning(f"Using a separate auxiliary basis is not recommended!")
+            self.auxiliary_basis_corr = build_basis(
+                self.auxiliary_basis_corr, self.atoms
+            )
         else:
-            self.auxiliary_basis_mp2 = self.auxiliary_basis
+            self.auxiliary_basis_corr = self.auxiliary_basis
         self.minao_basis = (
             build_basis("cc-pvtz-minao", self.atoms)
             if self.minao_basis is not None
@@ -49,8 +69,12 @@ class System:
         )
 
         self.Zsum = np.sum([x[0] for x in self.atoms])
+        self.nbf = self.basis.size
+        self.naux = self.auxiliary_basis.size if self.auxiliary_basis else 0
+        self.nminao = self.minao_basis.size if self.minao_basis else 0
 
         self._init_x2c()
+        self.check_linear_dependencies()
 
     def _init_x2c(self):
         if self.x2c_type is not None:
@@ -67,33 +91,6 @@ class System:
 
     def __repr__(self):
         return f"System(atoms={self.atoms}, basis={self.basis}, auxiliary_basis={self.auxiliary_basis})"
-
-    def nbf(self):
-        """
-        Get the number of basis functions in the system.
-
-        Returns:
-            int: Number of basis functions.
-        """
-        return self.basis.size
-
-    def naux(self):
-        """
-        Get the number of auxiliary basis functions in the system.
-
-        Returns:
-            int: Number of auxiliary basis functions.
-        """
-        return self.auxiliary_basis.size if self.auxiliary_basis else 0
-
-    def nminao(self):
-        """
-        Get the number of minao basis functions in the system.
-
-        Returns:
-            int: Number of minao basis functions.
-        """
-        return self.minao_basis.size if self.minao_basis else 0
 
     def decontract(self):
         """
@@ -197,6 +194,33 @@ class System:
         )
         return nuc_quad * conversion_factor
 
+    def check_linear_dependencies(self):
+        S = self.ints_overlap()
+        e, _ = np.linalg.eigh(S)
+        self._eigh = sp.linalg.eigh
+        self.nmo = self.nbf
+        if min(e) / max(e) < self.linear_dep_trigger:
+            logger.log_warning(f"Linear dependencies detected in overlap matrix S!")
+            logger.log_debug(
+                f"Max eigenvalue: {np.max(e):.2e}. \n"
+                f"Min eigenvalue: {np.min(e):.2e}. \n"
+                f"Condition number: {max(e)/min(e):.2e}. \n"
+                f"Removing linear dependencies with threshold {self.ortho_thresh:.2e}."
+            )
+            self.nmo -= np.sum(e < self.ortho_thresh)
+            if self.nmo < self.nbf:
+                logger.log_warning(
+                    f"Reduced number of basis functions from {self.nbf} to {self.nmo} due to linear dependencies."
+                )
+            else:
+                logger.log_warning(
+                    f"Linear dependencies detected, but no basis functions were removed. Consider changing linear_dep_trigger or ortho_thresh."
+                )
+            self.Xorth = canonical_orth(S, tol=self.ortho_thresh)
+        else:
+            # no linear dependencies, use symmetric orthogonalization
+            self.Xorth = invsqrt_matrix(S, tol=1e-13)
+
 
 @dataclass
 class ModelSystem:
@@ -214,6 +238,10 @@ class ModelSystem:
         self.Zsum = 0  # total nuclear charge, here set to zero, so charge can be set to -nel later
         self.x2c_type = None
         self.nuclear_repulsion = 0.0
+        self.nbf = self.hcore.shape[0]
+        self.nmo = self.nbf
+        self.naux = 0
+        self.Xorth = invsqrt_matrix(self.ints_overlap(), tol=1e-13)
 
     def ints_overlap(self):
         return self.overlap
@@ -223,12 +251,6 @@ class ModelSystem:
 
     def nuclear_repulsion_energy(self):
         return self.nuclear_repulsion
-
-    def nbf(self):
-        return self.hcore.shape[0]
-
-    def naux(self):
-        return 0
 
 
 @dataclass
@@ -249,8 +271,6 @@ class HubbardModel1D(ModelSystem):
     pbc: bool = False
 
     def __post_init__(self):
-        super().__post_init__()
-
         self.hcore = np.zeros((self.nsites, self.nsites))
         for i in range(self.nsites - 1):
             self.hcore[i, i + 1] = self.hcore[i + 1, i] = -self.t
@@ -262,3 +282,5 @@ class HubbardModel1D(ModelSystem):
         self.eri = np.zeros((self.nsites,) * 4)
         for i in range(self.nsites):
             self.eri[i, i, i, i] = self.U
+
+        super().__post_init__()
