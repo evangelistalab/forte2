@@ -4,7 +4,7 @@ on:
   push:
   pull_request:
   schedule:
-    - cron: '0 15 * * *'
+    - cron: '30 15 * * *'
 
 jobs:
   build:
@@ -57,4 +57,7 @@ jobs:
       run: |
         conda activate forte
         cd $HOME/work/forte2/forte2/tests
-        pytest -v
+        if [ "${{ github.event_name }}" == "schedule" ]; then
+          pytest -v
+        else
+          pytest -v -m "not slow"
