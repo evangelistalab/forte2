@@ -103,6 +103,44 @@ def test_mcscf_sa_same_mult():
     assert mc.E == approx(ecasscf)
 
 
+def test_mcscf_sa_diff_mult():
+    xyz = f"""
+    N 0.0 0.0 0.0
+    N 0.0 0.0 1.2
+    """
+
+    system = System(xyz=xyz, basis="cc-pvdz", auxiliary_basis="cc-pVTZ-JKFIT")
+
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    ci_singlet = CI(
+        core_orbitals=[0, 1, 2, 3],
+        orbitals=[4, 5, 6, 7, 8, 9],
+        state=State(14, multiplicity=1, ms=0.0),
+        nroot=1,
+    )
+    ci_triplet = CI(
+        core_orbitals=[0, 1, 2, 3],
+        orbitals=[4, 5, 6, 7, 8, 9],
+        state=State(14, multiplicity=3, ms=0.0),
+        nroot=2,
+        weights=[0.85, 0.15],
+    )
+    ci = MultiCI([ci_singlet, ci_triplet], weights=[0.25, 0.75])(rhf)
+    mc = MCOptimizer()(ci)
+    mc.run()
+
+    eref_singlet = -109.0664322107
+    eref_triplet1 = -108.8450131892
+    eref_triplet2 = -108.7888580871
+
+    assert mc.E_ci[0] == approx(eref_singlet)
+    assert mc.E_ci[1] == approx(eref_triplet1)
+    assert mc.E_ci[2] == approx(eref_triplet2)
+    assert mc.E == approx(
+        0.25 * eref_singlet + 0.75 * (eref_triplet1 * 0.85 + eref_triplet2 * 0.15)
+    )
+
+
 def test_mcscf_noncontiguous_spaces():
     # The results of this test should be strictly identical to test_mcscf_3
     import numpy as np

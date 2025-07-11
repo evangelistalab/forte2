@@ -497,6 +497,16 @@ class CI(MOsMixin, SystemMixin):
         self.spin_adapter.csf_C_to_det_C(ci_r, ci_r_det)
         return self.ci_sigma_builder.rdm2_sf(ci_l_det, ci_r_det)
 
+    def set_verbosity_level(self, level):
+        self.log_level = level
+        if self.solver is not None:
+            self.solver.log_level = level
+
+    def set_ints(self, scalar, oei, tei):
+        self.ints.E = scalar
+        self.ints.H = oei
+        self.ints.V = tei
+
 
 @dataclass
 class MultiCI(MOsMixin, SystemMixin):
@@ -504,6 +514,7 @@ class MultiCI(MOsMixin, SystemMixin):
     weights: list[float] = None
 
     executed: bool = field(default=False, init=False)
+    log_level: int = field(default=logger.get_verbosity_level(), init=False)
 
     def __call__(self, method):
         self.parent_method = method
@@ -533,6 +544,9 @@ class MultiCI(MOsMixin, SystemMixin):
             assert np.all(self.weights >= 0), "Weights must be non-negative"
             assert np.isclose(self.weights.sum(), 1), "Weights must sum to 1"
 
+        for ci in self.CIs:
+            ci.log_level = self.log_level
+
     def _ci_solver_startup(self):
         if not self.parent_method.executed:
             self.parent_method.run()
@@ -552,7 +566,10 @@ class MultiCI(MOsMixin, SystemMixin):
             self.E.append(ci.E)
             self.E_avg.append(ci.compute_average_energy())
 
-        self.E = np.array([_ for sublist in self.E for _ in sublist])
+        # TODO: these might be different for each CI
+        self.flattened_orbitals = self.CIs[0].flattened_orbitals.copy()
+        self.core_orbitals = self.CIs[0].core_orbitals.copy()
+
         self.executed = True
         return self
 
@@ -570,6 +587,15 @@ class MultiCI(MOsMixin, SystemMixin):
         for i, ci in enumerate(self.CIs):
             rdm2 += ci.make_average_rdm2_sf() * self.weights[i]
         return rdm2
+
+    def set_verbosity_level(self, level):
+        self.log_level = level
+        for ci in self.CIs:
+            ci.set_verbosity_level(level)
+
+    def set_ints(self, scalar, oei, tei):
+        for ci in self.CIs:
+            ci.set_ints(scalar, oei, tei)
 
 
 class CASCI(CI):

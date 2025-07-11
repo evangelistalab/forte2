@@ -2,7 +2,7 @@ import numpy as np
 import scipy as sp
 from dataclasses import dataclass, field
 
-from forte2.ci import CI
+from forte2.ci import CI, MultiCI
 from forte2.jkbuilder import FockBuilder
 from forte2.helpers.mixins import MOsMixin, SystemMixin
 from forte2.helpers import logger
@@ -25,23 +25,23 @@ class MCOptimizer(MOsMixin, SystemMixin):
 
     def __call__(self, method):
         self.parent_method = method
+        ### make sure we don't print the CI output at INFO1 level
+        current_verbosity = logger.get_verbosity_level()
+        # only log subproblem if the verbosity is higher than INFO1
+        if current_verbosity > 3:
+            self.parent_method.set_verbosity_level(current_verbosity)
+        else:
+            self.parent_method.set_verbosity_level(current_verbosity + 1)
         return self
 
     def run(self):
         if not self.parent_method.executed:
             self.parent_method.run()
 
+        current_verbosity = logger.get_verbosity_level()
+        self.parent_method.set_verbosity_level(current_verbosity + 1)
         SystemMixin.copy_from_upstream(self, self.parent_method)
         MOsMixin.copy_from_upstream(self, self.parent_method)
-
-        ### make sure we don't print the CI output at INFO1 level
-        current_verbosity = logger.get_verbosity_level()
-        # only log subproblem if the verbosity is higher than INFO1
-        if current_verbosity > 3:
-            self.parent_method.log_level = current_verbosity
-        else:
-            self.parent_method.log_level = current_verbosity + 1
-            self.parent_method.solver.log_level = current_verbosity + 1
 
         self.Hcore = self.system.ints_hcore()  # hcore in AO basis (even 1e-sf-X2C)
         fock_builder = FockBuilder(self.system)
@@ -67,9 +67,12 @@ class MCOptimizer(MOsMixin, SystemMixin):
         )
         self.ci_opt = CIOptimizer(self.parent_method)
 
+        width = 84
+        logger.log_info1("=" * width)
         logger.log_info1(
-            f'{"Iteration":>10} {"E_orb":>20} {"E_CI":>20} {"norm(g)":>20} {"Conv":>10}'
+            f'{"Iteration":>10} {"E_CI":>20} {"E_orb":>20} {"||grad||":>20} {"Conv":>10}'
         )
+        logger.log_info1("-" * width)
 
         # iteration 0: one step of CI is already done, just grab the results
         self.iter = 0
@@ -77,7 +80,12 @@ class MCOptimizer(MOsMixin, SystemMixin):
         # E_ci: list[float],CI eigenvalues,
         # E_avg: float, ensemble average energy,
         # E_orb: float, energy after orbital optimization
-        self.E_ci = self.parent_method.E.copy()
+        if isinstance(self.parent_method, MultiCI):
+            self.E_ci = np.array(
+                [_ for sublist in self.parent_method.E for _ in sublist]
+            )
+        else:
+            self.E_ci = np.array(self.parent_method.E)
         self.E_avg = self.E_orb = self.parent_method.compute_average_energy()
         self.E_ci_old = self.E_ci.copy()
         self.E_avg_old = self.E_avg
@@ -92,7 +100,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
 
             conv, conv_str = self.check_convergence()
             logger.log_info1(
-                f"{self.iter:>10d} {self.E_orb:>20.10f} {self.E_avg:>20.10f} {abs(np.linalg.norm(self.orb_opt.orbgrad, np.inf)):>20.10f} {conv_str:>10s}"
+                f"{self.iter:>10d} {self.E_avg:>20.10f} {self.E_orb:>20.10f} {abs(np.linalg.norm(self.orb_opt.orbgrad, np.inf)):>20.10f} {conv_str:>10s}"
             )
             if conv:
                 break
@@ -108,18 +116,58 @@ class MCOptimizer(MOsMixin, SystemMixin):
             eri_gaaa = self.orb_opt.get_eri_gaaa()
             self.iter += 1
         else:
+            logger.log_info1("=" * width)
             logger.log_info1(
                 f"Orbital optimization did not converge in {self.maxiter} iterations."
             )
-            self.parent_method.log_level = current_verbosity
-            self.parent_method.solver.log_level = current_verbosity
+            self.parent_method.set_verbosity_level(current_verbosity)
             return
 
+        logger.log_info1("=" * width)
         logger.log_info1(f"Orbital optimization converged in {self.iter} iterations.")
         logger.log_info1(f"Final orbital optimized energy: {self.E_avg:.10f}")
-        self.parent_method.log_level = current_verbosity
-        self.parent_method.solver.log_level = current_verbosity
+        self.post_process()
+        self.parent_method.set_verbosity_level(current_verbosity)
         self.executed = True
+
+    def post_process(self):
+        pm = self.parent_method
+        if isinstance(pm, CI):
+            ncis = 1
+            mult = [pm.state.multiplicity]
+            ms = [pm.state.ms]
+            irrep = [pm.state.symmetry]
+            state_weights = [1.0]
+            nroots = [pm.nroot]
+            weights = [[pm.weights]]
+            eigvals = [[pm.E]]
+        elif isinstance(pm, MultiCI):
+            ncis = len(pm.CIs)
+            mult = [ci.state.multiplicity for ci in pm.CIs]
+            ms = [ci.state.ms for ci in pm.CIs]
+            irrep = [ci.state.symmetry for ci in pm.CIs]
+            state_weights = pm.weights
+            nroots = [ci.nroot for ci in pm.CIs]
+            weights = [ci.weights for ci in pm.CIs]
+            eigvals = pm.E
+
+        logger.log_info1("Orbital optimization summary:")
+        width = 80
+        logger.log_info1("=" * width)
+        logger.log_info1(
+            f"{'Root':>6} {'Mult.':>6} {'Ms':>6} {'Irrep':>6} {'Energy':>20} {'Root weight':>15} {'Solver weight':>15}"
+        )
+        logger.log_info1("-" * width)
+        iroot = 0
+        for i in range(ncis):
+            for j in range(nroots[i]):
+                solver_weight = f"{state_weights[i]:15.5f}" if j == 0 else " " * 10
+                logger.log_info1(
+                    f"{iroot:>6d} {mult[i]:>6d} {ms[i]:>6.1f} {irrep[i]:>6d} {eigvals[i][j]:>20.10f} {weights[i][j]:>15.5f} {solver_weight}"
+                )
+                iroot += 1
+            sep = "-" if i < ncis - 1 else "="
+            logger.log_info1(sep * width)
 
     def _make_spaces_contiguous(self):
         """
@@ -335,17 +383,18 @@ class OrbOptimizer:
 class CIOptimizer:
     def __init__(self, solver):
         self.solver = solver
-        self.nroot = self.solver.nroot
 
     def set_active_space_ints(self, scalar, oei, tei):
-        self.solver.ints.E = scalar
-        self.solver.ints.H = oei
-        self.solver.ints.V = tei
+        self.solver.set_ints(scalar, oei, tei)
 
     def run(self):
         self.solver.run()
         E_avg = self.solver.compute_average_energy()
-        return E_avg, self.solver.E
+        if isinstance(self.solver, MultiCI):
+            E_ci = np.array([_ for sublist in self.solver.E for _ in sublist])
+        else:
+            E_ci = np.array(self.solver.E)
+        return E_avg, E_ci
 
     def make_rdm12(self):
         g1 = self.solver.make_average_rdm1_sf()
