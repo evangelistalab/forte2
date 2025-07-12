@@ -12,10 +12,6 @@ class ROSENBROCK:
         self.n = n
 
     def evaluate(self, x, g, do_g=True):
-        self.check_dim(x)
-        if do_g:
-            self.check_dim(g)
-
         fx = 0.0
         for i in range(0, self.n, 2):
             xi = x[i]
@@ -25,25 +21,17 @@ class ROSENBROCK:
                 g[i + 1] = -20 * t2
                 g[i] = 2.0 * (t1 - g[i + 1] * xi)
             fx += t1 * t1 + t2 * t2
-        return fx
+        return fx, g
 
-    def hess_diag(self, x, h0):
-        self.check_dim(x)
-        self.check_dim(h0)
+    def hess_diag(self, x):
+        h0 = np.zeros_like(x)
 
         for i in range(0, self.n, 2):
             xi = x[i]
             t2 = 10 * (xi * xi - x[i + 1])
             h0[i + 1] = 200
             h0[i] = 2.0 * (1 + 400 * xi * xi + 20 * t2)
-
-    def check_dim(self, x):
-        if x.ndim != 1:
-            raise ValueError("Irrep not supported for Rosenbrock tests")
-        if x.shape[0] != self.n:
-            raise ValueError(
-                f"Inconsistent dimension for vector, expected {self.n} but get {x.shape[0]}"
-            )
+        return h0
 
 
 def scipy_minimize():

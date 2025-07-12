@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from forte2.ci import CI, MultiCI
 from forte2.jkbuilder import FockBuilder
 from forte2.helpers.mixins import MOsMixin, SystemMixin
-from forte2.helpers import logger
+from forte2.helpers import logger, LBFGS
 
 
 @dataclass
@@ -66,11 +66,14 @@ class MCOptimizer(MOsMixin, SystemMixin):
             self.nrr,
         )
         self.ci_opt = CIOptimizer(self.parent_method)
+        self.lbfgs_solver = LBFGS(
+            epsilon=self.gradtol, max_dir=0.2, step_length_method="max_correction"
+        )
 
-        width = 84
+        width = 95
         logger.log_info1("=" * width)
         logger.log_info1(
-            f'{"Iteration":>10} {"E_CI":>20} {"E_orb":>20} {"||grad||":>20} {"Conv":>10}'
+            f'{"Iteration":>10} {"E_CI":>20} {"E_orb":>20} {"||grad||":>20} {"#micro":>10} {"Conv":>10}'
         )
         logger.log_info1("-" * width)
 
@@ -86,21 +89,31 @@ class MCOptimizer(MOsMixin, SystemMixin):
             )
         else:
             self.E_ci = np.array(self.parent_method.E)
-        self.E_avg = self.E_orb = self.parent_method.compute_average_energy()
+        self.E_avg = self.parent_method.compute_average_energy()
         self.E_ci_old = self.E_ci.copy()
         self.E_avg_old = self.E_avg
-        self.E_orb_old = self.E_orb
 
         g1_act, g2_act = self.ci_opt.make_rdm12()
-        eri_gaaa = self.orb_opt.get_eri_gaaa()
+        self.orb_opt.set_rdms(g1_act, g2_act)
+        self.orb_opt.compute_Fcore()
+        self.orb_opt.get_eri_gaaa()
+        self.E_orb = self.E_avg
+        self.E_orb_old = self.E_orb
+        # self.g_old = np.zeros_like(self.C[0])
+        self.g_old = np.zeros(self.orb_opt.nrot, dtype=float)
+        R = np.zeros(self.orb_opt.nrot, dtype=float)
 
         while self.iter < self.maxiter:
             self.orb_opt.set_rdms(g1_act, g2_act)
-            self.E_orb = self.orb_opt.run()
+            self.E_orb = self.lbfgs_solver.minimize(self.orb_opt, R)
+            # self.E_orb = self.orb_opt.run()
+
+            self.g_rms = np.linalg.norm(self.lbfgs_solver.g - self.g_old)
+            self.g_old = self.lbfgs_solver.g.copy()
 
             conv, conv_str = self.check_convergence()
             logger.log_info1(
-                f"{self.iter:>10d} {self.E_avg:>20.10f} {self.E_orb:>20.10f} {abs(np.linalg.norm(self.orb_opt.orbgrad, np.inf)):>20.10f} {conv_str:>10s}"
+                f"{self.iter:>10d} {self.E_avg:>20.10f} {self.E_orb:>20.10f} {self.g_rms:>20.10f} {self.lbfgs_solver.iter:>10d} {conv_str:>10s}"
             )
             if conv:
                 break
@@ -108,12 +121,12 @@ class MCOptimizer(MOsMixin, SystemMixin):
             self.ci_opt.set_active_space_ints(
                 self.orb_opt.Ecore + self.system.nuclear_repulsion_energy(),
                 self.orb_opt.Fcore[self.actv, self.actv].copy(),
-                eri_gaaa[self.actv, ...].copy(),
+                self.orb_opt.get_active_space_ints().copy(),
             )
             self.E_avg, self.E_ci = self.ci_opt.run()
             self.E = self.E_avg
             g1_act, g2_act = self.ci_opt.make_rdm12()
-            eri_gaaa = self.orb_opt.get_eri_gaaa()
+
             self.iter += 1
         else:
             logger.log_info1("=" * width)
@@ -192,12 +205,10 @@ class MCOptimizer(MOsMixin, SystemMixin):
         nrr[self.core, self.virt] = True
         nrr[self.actv, self.virt] = True
         nrr[self.core, self.actv] = True
-        # make sure the rotations are symmetric
-        nrr = nrr | nrr.T
         return nrr
 
     def check_convergence(self):
-        is_grad_conv = abs(np.linalg.norm(self.orb_opt.orbgrad, np.inf)) < self.gradtol
+        is_grad_conv = self.g_rms < self.gradtol
         is_ci_orb_conv = abs(self.E_orb - self.E_avg) < self.etol
         is_ci_eigval_conv = np.all(abs(self.E_ci - self.E_ci_old) < self.etol)
         is_ci_avg_conv = abs(self.E_avg - self.E_avg_old) < self.etol
@@ -222,13 +233,21 @@ class OrbOptimizer:
     def __init__(self, C, extents, fock_builder, hcore, e_nuc, nrr):
         self.core, self.actv, self.virt = extents
         self.C = C
+        self.C0 = C.copy()
         self.Cgen = C
         self.Cact = C[:, self.actv]
         self.Ccore = C[:, self.core]
+        self.ncore = self.Ccore.shape[1]
+        self.nact = self.Cact.shape[1]
+        self.nvirt = self.C.shape[1] - self.ncore - self.nact
         self.fock_builder = fock_builder
         self.hcore = hcore
         self.nrr = nrr
+        self.nrot = self.nrr.sum()
         self.e_nuc = e_nuc
+
+        self.R = np.zeros(self.nrot, dtype=float)
+        self.U = np.eye(self.C.shape[1], dtype=float)
 
     def get_eri_gaaa(self):
         self.eri_gaaa = self.fock_builder.two_electron_integrals_gen_block(
@@ -255,6 +274,69 @@ class OrbOptimizer:
         self.Ccore = self.C[:, self.core]
         self.Cact = self.C[:, self.actv]
         return self.compute_reference_energy()
+
+    def evaluate(self, x, g, do_g=True):
+        do_update_integrals = self.update_orbitals(x)
+        if do_update_integrals:
+            self.get_eri_gaaa()
+
+        E_orb = self.compute_reference_energy()
+
+        if do_g:
+            self.compute_Fcore()
+            grad = -self.compute_orbgrad()
+            g = self.mat_to_vec(grad)
+
+        return E_orb, g
+
+    def hess_diag(self, x):
+        hess = self.compute_orbhess()
+        h0 = self.mat_to_vec(hess)
+        return h0
+
+    def update_orbitals(self, R):
+        dR = R - self.R
+        if np.max(np.abs(dR)) < 1e-12:
+            # no change in orbitals, skip the update
+            return False
+        self.R += dR
+        self.U = self.U @ self.expm(dR)
+
+        self.C = self.C0 @ self.U
+        self.Cgen = self.C
+        self.Ccore = self.C[:, self.core]
+        self.Cact = self.C[:, self.actv]
+        return True
+
+    def expm(self, vec):
+        M = self.vec_to_mat(vec)
+        eM = sp.linalg.expm(M)
+        return eM
+
+    def vec_to_mat(self, x):
+        R = np.zeros_like(self.C)
+        # [cv, av, ca]
+        x_cv = x[: self.ncore * self.nvirt].reshape(self.ncore, self.nvirt)
+        x_av = x[
+            self.ncore * self.nvirt : self.ncore * self.nvirt + self.nact * self.nvirt
+        ].reshape(self.nact, self.nvirt)
+        x_ca = x[self.ncore * self.nvirt + self.nact * self.nvirt :].reshape(
+            self.ncore, self.nact
+        )
+        R[self.core, self.virt] = x_cv
+        R[self.actv, self.virt] = x_av
+        R[self.core, self.actv] = x_ca
+        R[self.virt, self.core] = -x_cv.T
+        R[self.virt, self.actv] = -x_av.T
+        R[self.actv, self.core] = -x_ca.T
+        return R
+
+    def mat_to_vec(self, R):
+        # [cv, av, ca]
+        x_cv = R[self.core, self.virt].flatten()
+        x_av = R[self.actv, self.virt].flatten()
+        x_ca = R[self.core, self.actv].flatten()
+        return np.concatenate((x_cv, x_av, x_ca))
 
     def compute_reference_energy(self):
         energy = self.Ecore + self.e_nuc

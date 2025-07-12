@@ -7,19 +7,42 @@ from enum import Enum
 
 @dataclass
 class LBFGS:
-    # L-BFGS parameters
+    """
+    Limited-memory Broyden-Fletcher-Goldfarb-Shanno (L-BFGS) optimizer.
+    Translated into Python from Forte v1: https://github.com/evangelistalab/forte/tree/main/forte/helpers/lbfgs
+    Implementation notes:
+        See Wikipedia https://en.wikipedia.org/wiki/Limited-memory_BFGS
+        and <Numerical Optimization> 2nd Ed. by Jorge Nocedal and Stephen J. Wright
+    """
+
+    ### L-BFGS parameters
+    # verbosity
     print: int = 1
+    # The number of vectors kept
     m: int = 6
+    # Convergence threshold to terminate the minimization: |g| < ε * max(1, |x|)
     epsilon: float = 1.0e-5
+    # Max number of iterations
     maxiter: int = 20
+    # Frequency of updating diagonal Hessian if exact formula is preferred
+    # = 0 for just compute it for the initial iteration
+    # < 0 for using the adaptive inverse Hessian (gamma_k in L-BFGS Wikipedia)
     h0_freq: int = 0
+    # Max number of trials for line search of optimal step length
     maxiter_linesearch: int = 5
+    # Max absolute value allowed in direction vector
     max_dir: float = 1.0e15
+    # Condition to terminate line search backtracking
     line_search_condition: str = "strong_wolfe"
+    # Schemes to determine step lengths
     step_length_method: str = "line_bracketing_zoom"
+    # Minimal step length allowed
     min_step: float = 1.0e-15
+    # Maximal step length allowed
     max_step: float = 1.0e15
+    # Parameter for Armijo condition
     c1: float = 1.0e-4
+    # Parameter for Wolfe curvature condition
     c2: float = 0.9
 
     ### Non-init params
@@ -68,9 +91,20 @@ class LBFGS:
         if not (self.c1 < self.c2 < 1):
             raise ValueError("Parameter c2 must lie in (c1, 1.0)")
 
-    def minimize(self, func, x):
+    def minimize(self, obj, x):
+        """
+        The minimization for the objective function
+        Args:
+            obj: Target function should be encapsulated in a class that has the following methods:
+                fx = obj.evaluate(x, g, do_g=True) where gradient g is modified by the function,
+                fx is the function return value, and g is computed when do_g is true.
+                If diagonal Hessian is specified, obj.hess_diag(x, h0) should be available.
+            x: The initial value of x as input, the final value of x as output.
+        Returns:
+            the function value of at optimized x
+        """
         self.g = np.zeros_like(x)
-        fx = func.evaluate(x, self.g)
+        fx, self.g = obj.evaluate(x, self.g)
         x_norm = np.linalg.norm(x)
         g_norm = np.linalg.norm(self.g)
 
@@ -80,8 +114,7 @@ class LBFGS:
             return fx
 
         def compute_h0(x_vec):
-            self.h0 = np.zeros_like(x_vec)
-            func.hess_diag(x_vec, self.h0)
+            self.h0 = obj.hess_diag(x_vec)
             if self.print > 3:
                 print(f"Diagonal Hessian at Iter. {self.iter}")
                 print(self.h0)
@@ -103,7 +136,7 @@ class LBFGS:
             self.update()
 
             step = 1.0
-            fx, step = self.next_step(func, x, fx, step)
+            fx, step = self.next_step(obj, x, fx, step)
 
             g_norm = np.linalg.norm(self.g)
             if self.print > 2:
@@ -180,7 +213,7 @@ class LBFGS:
         step = min(1.0, self.max_dir / p_max) if p_max > self.max_dir else 1.0
         x += step * self.p
         do_grad = self.iter - self.iter_shift_ + 1 < self.maxiter
-        fx = func.evaluate(x, self.g, do_grad)
+        fx, self.g = func.evaluate(x, self.g, do_grad)
         return fx, step
 
     def line_search_backtracking(self, func, x, fx, step):
@@ -194,7 +227,7 @@ class LBFGS:
 
         for i in range(self.maxiter_linesearch + 1):
             x[:] = x0 + step * self.p
-            fx = func.evaluate(x, self.g)
+            fx, self.g = func.evaluate(x, self.g)
 
             if i == self.maxiter_linesearch:
                 break
@@ -242,7 +275,7 @@ class LBFGS:
 
         for i in range(self.maxiter_linesearch):
             x[:] = x0 + step * self.p
-            fx = func.evaluate(x, self.g)
+            fx, self.g = func.evaluate(x, self.g)
 
             if fx - fx0 > w1 * step or (fx >= fx_low and i > 0):
                 step_high = step
@@ -270,7 +303,7 @@ class LBFGS:
         for i in range(self.maxiter_linesearch + 1):
             step = 0.5 * (step_low + step_high)
             x[:] = x0 + step * self.p
-            fx = func.evaluate(x, self.g)
+            fx, self.g = func.evaluate(x, self.g)
 
             if i == self.maxiter_linesearch:
                 break
