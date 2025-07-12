@@ -12,6 +12,19 @@ from forte2.helpers import logger, LBFGS
 class MCOptimizer(MOsMixin, SystemMixin):
     """
     Two-step optimizer for multi-configurational wavefunctions.
+
+    Parameters
+    ----------
+        maxiter : int
+            Maximum number of macroiterations.
+        gradtol : float
+            Gradient convergence tolerance.
+        etol : float
+            Energy convergence tolerance.
+        micro_maxiter : int
+            Maximum number of microiterations for L-BFGS.
+        max_rotation : float
+            Maximum orbital rotation size for L-BFGS.
     """
 
     ### Macroiteration parameters
@@ -454,6 +467,16 @@ class OrbOptimizer:
 
 
 class CIOptimizer:
+    """
+    A wrapper for the CI solver that provides a consistent interface
+    for the MCOptimizer.
+
+    Parameters
+    ----------
+        solver : CI or MultiCI
+            The CI solver instance to be used for the optimization.
+    """
+
     def __init__(self, solver):
         self.solver = solver
 

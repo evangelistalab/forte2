@@ -569,17 +569,21 @@ class CUHF(SCFMixin, MOsMixin):
 
 @dataclass
 class GHF(SCFMixin, MOsMixin):
-    """
+    r"""
     Generalized Hartree-Fock (GHF) method.
-    The GHF spinor basis is a direct product of the atomic basis and {|alpha>, |beta>}
-    |psi_i> = sum_{mu} sum_{sigmain{alpha,beta}} c_{musigma} |chi_{mu}>|sigma>
+    The GHF spinor basis is a direct product of the atomic basis and :math:`\{|\alpha\rangle, |\beta\rangle\}`:
+    
+    .. math::
+    
+        |\psi_i\rangle = \sum_{\mu} \sum_{\sigma\in\{\alpha,\beta\}} c_{\mu,\sigma} |\chi_{\mu}\rangle|\sigma\rangle
+
     The MO coefficients are stored in a square array
-    [------MOs------]
-    [alpha basis    ]
-    [               ]
-    [               ]
-    [beta basis     ]
-    [               ]
+
+    .. math::
+        C = \begin{bmatrix}
+        C_{\alpha,i} \\
+        C_{\beta,i}
+        \end{bmatrix}
     """
 
     guess_mix: bool = False  # only used if nel is even
