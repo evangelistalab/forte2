@@ -102,11 +102,11 @@ class SCFMixin:
         Dold = self.D
 
         width = 109
-        print("=" * width)
-        print(
+        logger.log_info1("=" * width)
+        logger.log_info1(
             f"{'Iter':>4s} {'Energy':>20s} {'deltaE':>20s} {'|deltaD|':>20s} {'|AO grad|':>20s} {'<S^2>':>20s}"
         )
-        print("-" * width)
+        logger.log_info1("-" * width)
         self.iter = 0
         for iter in range(self.maxiter):
 
@@ -130,12 +130,12 @@ class SCFMixin:
             self.S2 = self._spin(S)
 
             # print iteration
-            print(
+            logger.log_info1(
                 f"{iter + 1:4d} {self.E:20.12f} {deltaE:20.12f} {deltaD:20.12f} {np.linalg.norm(AO_grad):20.12f} {self.S2:20.12f}"
             )
 
             if np.abs(deltaE) < self.econv and deltaD < self.dconv:
-                logger.log_info1("-" * width)
+                logger.log_info1("=" * width)
                 logger.log_info1(f"{self.method} iterations converged\n")
                 # perform final iteration
                 F, F_canon = self._build_fock(H, fock_builder, S)
@@ -151,11 +151,13 @@ class SCFMixin:
             Dold = self.D
             self.iter += 1
         else:
-            print("-" * width)
-            print(f"{self.method} iterations not converged!")
+            logger.log_info1("=" * width)
+            raise RuntimeError(
+                f"{self.method} did not converge in {self.maxiter} iterations."
+            )
 
         end = time.monotonic()
-        print(f"{self.method} time: {end - start:.2f} seconds")
+        logger.log_info1(f"{self.method} time: {end - start:.2f} seconds")
 
         if self.converged:
             self._post_process()
@@ -243,21 +245,25 @@ class RHF(SCFMixin, MOsMixin):
         ndocc = self.na
         nuocc = self.nmo - ndocc
         orb_per_row = 5
-        print("\nOrbital Energies [Eh]")
-        print("---------------------")
-        print("\nDoubly Occupied:")
+        logger.log_info1("---------------------")
+        logger.log_info1("Orbital Energies [Eh]")
+        logger.log_info1("---------------------")
+        logger.log_info1("Doubly Occupied:")
+        string = ""
         for i in range(ndocc):
             if i % orb_per_row == 0:
-                print()
-            print(f"{i+1:<4d} {self.eps[0][i]:<12.6f}", end=" ")
+                string += "\n"
+            string += f"{i+1:<4d} {self.eps[0][i]:<12.6f} "
+        logger.log_info1(string)
 
-        print("\n\nVirtual:")
+        logger.log_info1("\nVirtual:")
+        string = ""
         for i in range(nuocc):
             idx = ndocc + i
             if i % orb_per_row == 0:
-                print()
-            print(f"{idx+1:<4d} {self.eps[0][idx]:<12.6f}", end=" ")
-        print()
+                string += "\n"
+            string += f"{idx+1:<4d} {self.eps[0][idx]:<12.6f} "
+        logger.log_info1(string)
 
 
 @dataclass
@@ -370,35 +376,42 @@ class UHF(SCFMixin, MOsMixin):
         nbocc = self.nb
         nbucc = self.nmo - nbocc
         orb_per_row = 5
-        print("\nOrbital Energies [Eh]")
-        print("---------------------")
-        print("\nAlpha Occupied:")
+        logger.log_info1("---------------------")
+        logger.log_info1("Orbital Energies [Eh]")
+        logger.log_info1("---------------------")
+        logger.log_info1("Alpha Occupied:")
+        string = ""
         for i in range(naocc):
-            if i % orb_per_row == 0 and i > 0:
-                print()
-            print(f"{i+1:<4d} {self.eps[0][i]:<12.6f}", end=" ")
+            if i % orb_per_row == 0:
+                string += "\n"
+            string += f"{i+1:<4d} {self.eps[0][i]:<12.6f} "
+        logger.log_info1(string)
 
-        print("\n\nAlpha Virtual:")
+        logger.log_info1("\nAlpha Virtual:")
+        string = ""
         for i in range(naucc):
             idx = naocc + i
-            if i % orb_per_row == 0 and i > naocc:
-                print()
-            print(f"{idx+1:<4d} {self.eps[0][idx]:<12.6f}", end=" ")
-        print()
+            if i % orb_per_row == 0:
+                string += "\n"
+            string += f"{idx+1:<4d} {self.eps[0][idx]:<12.6f} "
+        logger.log_info1(string)
 
-        print("\nBeta Occupied:")
+        logger.log_info1("\nBeta Occupied:")
+        string = ""
         for i in range(nbocc):
-            if i % orb_per_row == 0 and i > 0:
-                print()
-            print(f"{i+1:<4d} {self.eps[1][i]:<12.6f}", end=" ")
+            if i % orb_per_row == 0:
+                string += "\n"
+            string += f"{i+1:<4d} {self.eps[1][i]:<12.6f} "
+        logger.log_info1(string)
 
-        print("\n\nBeta Virtual:")
+        logger.log_info1("\nBeta Virtual:")
+        string = ""
         for i in range(nbucc):
             idx = nbocc + i
-            if i % orb_per_row == 0 and i > nbocc:
-                print()
-            print(f"{i+1:<4d} {self.eps[1][i]:<12.6f}", end=" ")
-        print()
+            if i % orb_per_row == 0:
+                string += "\n"
+            string += f"{idx+1:<4d} {self.eps[1][i]:<12.6f} "
+        logger.log_info1(string)
 
 
 @dataclass
@@ -466,28 +479,35 @@ class ROHF(SCFMixin, MOsMixin):
         nsocc = abs(self.na - self.nb)
         nuocc = self.nmo - ndocc - nsocc
         orb_per_row = 5
-        print("\nOrbital Energies [Eh]")
-        print("---------------------")
-        print("\nDoubly Occupied:")
+        logger.log_info1("---------------------")
+        logger.log_info1("Orbital Energies [Eh]")
+        logger.log_info1("---------------------")
+        logger.log_info1("Doubly Occupied:")
+        string = ""
         for i in range(ndocc):
             if i % orb_per_row == 0:
-                print()
-            print(f"{i+1:<4d} {self.eps[0][i]:<12.6f}", end=" ")
+                string += "\n"
+            string += f"{i+1:<4d} {self.eps[0][i]:<12.6f} "
+        logger.log_info1(string)
+
         if nsocc > 0:
-            print("\n\nSingly Occupied:")
+            logger.log_info1("\nSingly Occupied:")
+            string = ""
             for i in range(nsocc):
                 idx = ndocc + i
                 if i % orb_per_row == 0:
-                    print()
-                print(f"{idx+1:<4d} {self.eps[0][idx]:<12.6f}", end=" ")
+                    string += "\n"
+                string += f"{idx+1:<4d} {self.eps[0][idx]:<12.6f} "
+            logger.log_info1(string)
 
-        print("\n\nVirtual:")
+        logger.log_info1("\nVirtual:")
+        string = ""
         for i in range(nuocc):
             idx = ndocc + nsocc + i
             if i % orb_per_row == 0:
-                print()
-            print(f"{idx+1:<4d} {self.eps[0][idx]:<12.6f}", end=" ")
-        print()
+                string += "\n"
+            string += f"{idx+1:<4d} {self.eps[0][idx]:<12.6f} "
+        logger.log_info1(string)
 
 
 @dataclass
@@ -684,18 +704,22 @@ class GHF(SCFMixin, MOsMixin):
         nocc = self.nel
         nuocc = self.nmo * 2 - nocc
         orb_per_row = 5
-        print("\nSpinor Energies [Eh]")
-        print("---------------------")
-        print("Occupied:")
+        logger.log_info1("---------------------")
+        logger.log_info1("Spinor Energies [Eh]")
+        logger.log_info1("---------------------")
+        logger.log_info1("Occupied:")
+        string = ""
         for i in range(nocc):
             if i % orb_per_row == 0:
-                print()
-            print(f"{i+1:<4d} {self.eps[0][i]:<12.6f}", end=" ")
+                string += "\n"
+            string += f"{i+1:<4d} {self.eps[0][i]:<12.6f} "
+        logger.log_info1(string)
 
-        print("\n\nVirtual:")
+        logger.log_info1("\nVirtual:")
+        string = ""
         for i in range(nuocc):
             idx = nocc + i
             if i % orb_per_row == 0:
-                print()
-            print(f"{idx+1:<4d} {self.eps[0][idx]:<12.6f}", end=" ")
-        print()
+                string += "\n"
+            string += f"{idx+1:<4d} {self.eps[0][idx]:<12.6f} "
+        logger.log_info1(string)

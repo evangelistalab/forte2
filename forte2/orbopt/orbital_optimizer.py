@@ -14,13 +14,16 @@ class MCOptimizer(MOsMixin, SystemMixin):
     Two-step optimizer for multi-configurational wavefunctions.
     """
 
-    # placeholder optimization parameters
+    ### Macroiteration parameters
     maxiter: int = 50
     gradtol: float = 1e-6
     etol: float = 1e-8
-    optimizer: str = "L-BFGS"
-    max_step_size: float = 0.1
 
+    ### L-BFGS solver (microiteration) parameters
+    micro_maxiter: int = 6
+    max_rotation: float = 0.2
+
+    ### Non-init attributes
     executed: bool = field(default=False, init=False)
 
     def __call__(self, method):
@@ -66,8 +69,14 @@ class MCOptimizer(MOsMixin, SystemMixin):
             self.nrr,
         )
         self.ci_opt = CIOptimizer(self.parent_method)
+
+        # Initialize the LBFGS solver that finds the optimal orbital
+        # at fixed CI expansion using the gradient and diagonal Hessian
         self.lbfgs_solver = LBFGS(
-            epsilon=self.gradtol, max_dir=0.2, step_length_method="max_correction"
+            epsilon=self.gradtol,
+            max_dir=self.max_rotation,
+            step_length_method="max_correction",
+            maxiter=self.micro_maxiter,
         )
 
         width = 95
@@ -89,28 +98,33 @@ class MCOptimizer(MOsMixin, SystemMixin):
             )
         else:
             self.E_ci = np.array(self.parent_method.E)
-        self.E_avg = self.parent_method.compute_average_energy()
         self.E_ci_old = self.E_ci.copy()
+        self.E_avg = self.E_orb = self.parent_method.compute_average_energy()
+        self.E_orb_old = self.E_orb
         self.E_avg_old = self.E_avg
 
         g1_act, g2_act = self.ci_opt.make_rdm12()
+
+        # Prepare the orbital optimizer
         self.orb_opt.set_rdms(g1_act, g2_act)
         self.orb_opt.compute_Fcore()
         self.orb_opt.get_eri_gaaa()
         self.E_orb = self.E_avg
         self.E_orb_old = self.E_orb
-        # self.g_old = np.zeros_like(self.C[0])
+
         self.g_old = np.zeros(self.orb_opt.nrot, dtype=float)
+
+        # This holds the *overall* orbital rotation, C_current = C_0 @ exp(R)
+        # It's only used as the intial guess at the start of each orbital optimization and not accessed elsewhere
         R = np.zeros(self.orb_opt.nrot, dtype=float)
 
         while self.iter < self.maxiter:
-            self.orb_opt.set_rdms(g1_act, g2_act)
+            # 1. Optimize orbitals at fixed CI expansion
             self.E_orb = self.lbfgs_solver.minimize(self.orb_opt, R)
-            # self.E_orb = self.orb_opt.run()
 
+            # 2. Convergence checks
             self.g_rms = np.linalg.norm(self.lbfgs_solver.g - self.g_old)
             self.g_old = self.lbfgs_solver.g.copy()
-
             conv, conv_str = self.check_convergence()
             logger.log_info1(
                 f"{self.iter:>10d} {self.E_avg:>20.10f} {self.E_orb:>20.10f} {self.g_rms:>20.10f} {self.lbfgs_solver.iter:>10d} {conv_str:>10s}"
@@ -118,23 +132,22 @@ class MCOptimizer(MOsMixin, SystemMixin):
             if conv:
                 break
 
+            # 3. Optimize CI expansion at fixed orbitals
             self.ci_opt.set_active_space_ints(
                 self.orb_opt.Ecore + self.system.nuclear_repulsion_energy(),
-                self.orb_opt.Fcore[self.actv, self.actv].copy(),
-                self.orb_opt.get_active_space_ints().copy(),
+                self.orb_opt.Fcore[self.actv, self.actv],
+                self.orb_opt.get_active_space_ints(),
             )
             self.E_avg, self.E_ci = self.ci_opt.run()
             self.E = self.E_avg
             g1_act, g2_act = self.ci_opt.make_rdm12()
-
+            self.orb_opt.set_rdms(g1_act, g2_act)
             self.iter += 1
         else:
             logger.log_info1("=" * width)
-            logger.log_info1(
+            raise RuntimeError(
                 f"Orbital optimization did not converge in {self.maxiter} iterations."
             )
-            self.parent_method.set_verbosity_level(current_verbosity)
-            return
 
         logger.log_info1("=" * width)
         logger.log_info1(f"Orbital optimization converged in {self.iter} iterations.")
@@ -264,16 +277,6 @@ class OrbOptimizer:
         Returns the active space integrals.
         """
         return self.eri_gaaa[self.actv, ...]
-
-    def run(self):
-        self.compute_Fcore()
-        self.orbgrad = self.compute_orbgrad()
-        self.orbhess = self.compute_orbhess()
-        self.C = self.rotate_orbitals()
-        self.Cgen = self.C
-        self.Ccore = self.C[:, self.core]
-        self.Cact = self.C[:, self.actv]
-        return self.compute_reference_energy()
 
     def evaluate(self, x, g, do_g=True):
         do_update_integrals = self.update_orbitals(x)
@@ -448,19 +451,6 @@ class OrbOptimizer:
         orbhess[self.core, self.actv] = ca_diag + aa_diag[None, :] + cc_diag[:, None]
 
         return orbhess
-
-    def rotate_orbitals(self):
-        # Algorithm 1, line 24
-        update = np.divide(
-            self.orbgrad,
-            self.orbhess,
-            out=np.zeros_like(self.orbgrad),
-            where=(~np.isclose(self.orbhess, 0)) & self.nrr,
-        )
-        orbrot = np.triu(update, 1) - np.tril(update.T, -1)
-
-        # Algorithm 1, line 25
-        return self.C @ (sp.linalg.expm(orbrot))
 
 
 class CIOptimizer:
