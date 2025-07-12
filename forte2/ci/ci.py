@@ -17,6 +17,7 @@ class CI(MOsMixin, SystemMixin):
     orbitals: list[int] | list[list[int]]
     state: State
     nroot: int
+    weights: list[float] = None
     core_orbitals: list[int] = field(default_factory=list)
 
     # The number of guess vectors for each root
@@ -45,6 +46,8 @@ class CI(MOsMixin, SystemMixin):
     log_level: int = field(default=logger.get_verbosity_level(), init=False)
     # find roots around the energy shift
     energy_shift: float = None
+    # whether to test the rdms
+    do_test_rdms: bool = False
 
     ## Options that control the CI calculation
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
@@ -68,6 +71,17 @@ class CI(MOsMixin, SystemMixin):
 
         self.norb = sum(len(x) for x in self.orbitals)
         self.solver = None
+        if self.weights is None:
+            self.weights = np.ones(self.nroot) / self.nroot
+        else:
+            assert isinstance(self.weights, list), "Weights must be a list"
+            self.weights = np.array(self.weights, dtype=float)
+            assert (
+                len(self.weights) == self.nroot
+            ), "Weights must match the number of roots"
+            assert np.all(self.weights >= 0), "Weights must be non-negative"
+            assert np.isclose(self.weights.sum(), 1), "Weights must sum to 1"
+            self.weights = np.array(self.weights, dtype=float)
 
     def _ci_solver_startup(self):
         """
@@ -231,8 +245,8 @@ class CI(MOsMixin, SystemMixin):
         logger.log(f"h_bbbb time:    {h_bbbb:.3f} s/build", self.log_level)
         logger.log(f"total time:     {h_tot:.3f} s/build", self.log_level)
 
-        # TODO: Make this optional in production code
-        self._test_rdms()
+        if self.do_test_rdms:
+            self._test_rdms()
 
         self.executed = True
 
@@ -362,6 +376,29 @@ class CI(MOsMixin, SystemMixin):
 
         self.solver.add_guesses(guess_mat)
 
+    def compute_average_energy(self):
+        return np.dot(self.weights, self.E)
+
+    def make_average_rdm1_sf(self):
+        """
+        Make the average spin-free one-particle RDM from the CI vectors.
+        Returns:
+            ndarray: Average spin-free one-particle RDM."""
+        rdm1 = np.zeros((self.norb,) * 2)
+        for i in range(self.nroot):
+            rdm1 += self.make_rdm1_sf(self.evecs[:, i]) * self.weights[i]
+        return rdm1
+
+    def make_average_rdm2_sf(self):
+        """
+        Make the average spin-free two-particle RDM from the CI vectors.
+        Returns:
+            ndarray: Average spin-free two-particle RDM."""
+        rdm2 = np.zeros((self.norb,) * 4)
+        for i in range(self.nroot):
+            rdm2 += self.make_rdm2_sf(self.evecs[:, i]) * self.weights[i]
+        return rdm2
+
     def make_rdm1_sf(self, ci_vec):
         """
         Make the spin-free one-particle RDM from a CI vector.
@@ -459,6 +496,106 @@ class CI(MOsMixin, SystemMixin):
         self.spin_adapter.csf_C_to_det_C(ci_l, ci_l_det)
         self.spin_adapter.csf_C_to_det_C(ci_r, ci_r_det)
         return self.ci_sigma_builder.rdm2_sf(ci_l_det, ci_r_det)
+
+    def set_verbosity_level(self, level):
+        self.log_level = level
+        if self.solver is not None:
+            self.solver.log_level = level
+
+    def set_ints(self, scalar, oei, tei):
+        self.ints.E = scalar
+        self.ints.H = oei
+        self.ints.V = tei
+
+
+@dataclass
+class MultiCI(MOsMixin, SystemMixin):
+    CIs: list[CI]
+    weights: list[float] = None
+
+    executed: bool = field(default=False, init=False)
+    log_level: int = field(default=logger.get_verbosity_level(), init=False)
+
+    def __call__(self, method):
+        self.parent_method = method
+        return self
+
+    def __post_init__(self):
+        assert all(
+            isinstance(ci, CI) for ci in self.CIs
+        ), "All elements of CIs must be CI instances"
+        assert len(self.CIs) > 0, "CIs list cannot be empty"
+        self.ncis = len(self.CIs)
+
+        assert (
+            len(set(ci.norb for ci in self.CIs)) == 1
+        ), "All CIs must have the same number of active orbitals"
+
+        self.norb = self.CIs[0].norb
+
+        if self.weights is None:
+            self.weights = np.ones(self.ncis) / self.ncis
+        else:
+            assert isinstance(self.weights, list)
+            assert (
+                len(self.weights) == self.ncis
+            ), "Weights must match the number of CIs"
+            self.weights = np.array(self.weights, dtype=float)
+            assert np.all(self.weights >= 0), "Weights must be non-negative"
+            assert np.isclose(self.weights.sum(), 1), "Weights must sum to 1"
+
+        for ci in self.CIs:
+            ci.log_level = self.log_level
+
+    def _ci_solver_startup(self):
+        if not self.parent_method.executed:
+            self.parent_method.run()
+        self.CIs = [ci(self.parent_method) for ci in self.CIs]
+        SystemMixin.copy_from_upstream(self, self.parent_method)
+        MOsMixin.copy_from_upstream(self, self.parent_method)
+
+    def run(self):
+        if not self.executed:
+            self._ci_solver_startup()
+
+        self.E = []
+        self.E_avg = []
+        for ci in self.CIs:
+            # Run each CI and collect results
+            ci.run()
+            self.E.append(ci.E)
+            self.E_avg.append(ci.compute_average_energy())
+
+        # TODO: these might be different for each CI
+        self.flattened_orbitals = self.CIs[0].flattened_orbitals.copy()
+        self.core_orbitals = self.CIs[0].core_orbitals.copy()
+
+        self.executed = True
+        return self
+
+    def compute_average_energy(self):
+        return np.dot(self.weights, self.E_avg)
+
+    def make_average_rdm1_sf(self):
+        rdm1 = np.zeros((self.norb,) * 2)
+        for i, ci in enumerate(self.CIs):
+            rdm1 += ci.make_average_rdm1_sf() * self.weights[i]
+        return rdm1
+
+    def make_average_rdm2_sf(self):
+        rdm2 = np.zeros((self.norb,) * 4)
+        for i, ci in enumerate(self.CIs):
+            rdm2 += ci.make_average_rdm2_sf() * self.weights[i]
+        return rdm2
+
+    def set_verbosity_level(self, level):
+        self.log_level = level
+        for ci in self.CIs:
+            ci.set_verbosity_level(level)
+
+    def set_ints(self, scalar, oei, tei):
+        for ci in self.CIs:
+            ci.set_ints(scalar, oei, tei)
 
 
 class CASCI(CI):
