@@ -4,7 +4,7 @@ import sys
 # Add the project root to the system path
 sys.path.insert(0, os.path.abspath("../"))
 
-project = "Forte2 Python API Reference"
+project = "Forte2 Documentation"
 copyright = "2025, Evangelista Lab"
 author = "Evangelista Lab"
 release = "0.0.1"

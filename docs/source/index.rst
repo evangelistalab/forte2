@@ -5,8 +5,8 @@ Forte2 documentation
    :maxdepth: 1
    :caption: Contents:
 
-   modules
-   api
+   api_python
+   api_cpp
 
 Indices and tables
 ==================
