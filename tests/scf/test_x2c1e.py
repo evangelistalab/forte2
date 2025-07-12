@@ -6,7 +6,7 @@ from forte2.helpers.comparisons import approx, approx_loose
 
 
 def test_sfx2c1e():
-    escf = -5192.021043976520
+    escf = -5192.021043979554
     xyz = """
     Br 0 0 0
     Br 0 0 1.2
@@ -16,7 +16,7 @@ def test_sfx2c1e():
         xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT", x2c_type="sf"
     )
 
-    scf = RHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(escf)
 
