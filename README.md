@@ -5,5 +5,10 @@
 Compile with `pip install --no-build-isolation -ve .`
 
 ## Documentation
-
-`pip install sphinx breathe sphinx-rtd-theme`
+In the root directory, run:
+```bash
+pip install sphinx sphinx-rtd-theme sphinx-autodoc-typehints
+sphinx-apidoc -o docs/source forte2/.
+cd docs
+make html
+```

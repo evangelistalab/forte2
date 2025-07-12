@@ -67,3 +67,5 @@ CMakeFiles/
 forte/CMakeFiles
 cmake_install.cmake
 *.DS_Store
+*.rst
+*.bat
