@@ -14,46 +14,69 @@ from forte2.system.system import System
 
 @dataclass
 class CI(MOsMixin, SystemMixin):
+    """
+    A general configuration interaction (CI) solver class.
+
+    Parameters
+    ----------
+    orbitals : list[int] | list[list[int]]
+        A list of active orbitals or a list of lists of active orbitals for each GAS
+    state : State
+        The electronic state of the system, including number of electrons, multiplicity, and ms.
+    nroot : int
+        The number of roots to compute.
+    weights : list[float], optional, default=None
+        Weights for each root, must sum to 1. If None, equal weights are assigned to each root.
+    core_orbitals : list[int], optional, default=[]
+        A list of core orbitals to be excluded from the active space.
+    guess_per_root : int, optional, default=2
+        The number of guess vectors for each root.
+    ndets_per_guess : int, optional, default=10
+        The number of determinants per guess vector.
+    collapse_per_root : int, optional, default=2
+        The number of determinants to collapse per root.
+    basis_per_root : int, optional, default=4
+        The maximum number of basis vectors per root.
+    maxiter : int, optional, default=100
+        The maximum number of iterations for the Davidson-Liu solver.
+    econv : float, optional, default=1e-10
+        The energy convergence threshold for the solver.
+    rconv : float, optional, default=1e-5
+        The residual convergence threshold for the solver.
+    gas_min : list[int], optional, default=[]
+        The minimum number of orbitals in each general orbital space (GAS).
+    gas_max : list[int], optional, default=[]
+        The maximum number of orbitals in each general orbital space (GAS).
+    energy_shift : float, optional, default=None
+        An energy shift to find roots around. If None, no shift is applied.
+    do_test_rdms : bool, optional, default=False
+        Whether to compute and test the reduced density matrices (RDMs) after the CI calculation.
+    ci_algorithm : str, optional, default="hz"
+        The algorithm to use for the CI calculation.
+    """
+
     orbitals: list[int] | list[list[int]]
     state: State
     nroot: int
     weights: list[float] = None
     core_orbitals: list[int] = field(default_factory=list)
-
-    # The number of guess vectors for each root
     guess_per_root: int = 2
-    # The number of determinants per guess vector
     ndets_per_guess: int = 10
-    # The number of roots to collapse per root
     collapse_per_root: int = 2
-    # The maximum number of basis vectors per root
     basis_per_root: int = 4
-    # The number of iterations for the Davidson-Liu solver
     maxiter: int = 100
-    # The energy convergence threshold
     econv: float = 1e-10
-    # The residual convergence threshold
     rconv: float = 1e-5
-    # The minimum number of orbitals in each general orbital space
     gas_min: list[int] = field(default_factory=list)
-    # The maximum number of orbitals in each general orbital space
     gas_max: list[int] = field(default_factory=list)
-    # First run flag
-    first_run: bool = field(default=True, init=False)
-    # The number of determinants
-    ndef: int = field(default=None, init=False)
-    # logging level, default is 2 (INFO)
-    log_level: int = field(default=logger.get_verbosity_level(), init=False)
-    # find roots around the energy shift
     energy_shift: float = None
-    # whether to test the rdms
     do_test_rdms: bool = False
-
-    ## Options that control the CI calculation
-    ci_builder_memory: int = field(default=1024, init=False)  # in MB
     ci_algorithm: str = "hz"
 
-    # Flag for whether the method has been executed
+    ### Non-init attributes
+    ci_builder_memory: int = field(default=1024, init=False)  # in MB
+    first_run: bool = field(default=True, init=False)
+    log_level: int = field(default=logger.get_verbosity_level(), init=False)
     executed: bool = field(default=False, init=False)
 
     def __call__(self, method):
@@ -377,13 +400,25 @@ class CI(MOsMixin, SystemMixin):
         self.solver.add_guesses(guess_mat)
 
     def compute_average_energy(self):
+        """
+        Compute the average energy from the CI roots using the weights.
+
+        Returns
+        -------
+            float
+                Average energy of the CI roots.
+        """
         return np.dot(self.weights, self.E)
 
     def make_average_rdm1_sf(self):
         """
         Make the average spin-free one-particle RDM from the CI vectors.
-        Returns:
-            ndarray: Average spin-free one-particle RDM."""
+
+        Returns
+        -------
+            NDArray
+                Average spin-free one-particle RDM.
+        """
         rdm1 = np.zeros((self.norb,) * 2)
         for i in range(self.nroot):
             rdm1 += self.make_rdm1_sf(self.evecs[:, i]) * self.weights[i]
@@ -392,8 +427,11 @@ class CI(MOsMixin, SystemMixin):
     def make_average_rdm2_sf(self):
         """
         Make the average spin-free two-particle RDM from the CI vectors.
-        Returns:
-            ndarray: Average spin-free two-particle RDM."""
+
+        Returns
+        -------
+            NDArray
+                Average spin-free two-particle RDM."""
         rdm2 = np.zeros((self.norb,) * 4)
         for i in range(self.nroot):
             rdm2 += self.make_rdm2_sf(self.evecs[:, i]) * self.weights[i]
@@ -402,10 +440,15 @@ class CI(MOsMixin, SystemMixin):
     def make_rdm1_sf(self, ci_vec):
         """
         Make the spin-free one-particle RDM from a CI vector.
-        Args:
-            ci_vec (ndarray): CI vector in the CSF basis.
-        Returns:
-            ndarray: Spin-free one-particle RDM."""
+
+        Args
+        ----
+            ci_vec : NDArray
+                CI vector in the CSF basis.
+        Returns
+        -------
+            NDArray
+                Spin-free one-particle RDM."""
         ci_vec_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
         return self.ci_sigma_builder.rdm1_sf(ci_vec_det, ci_vec_det)
@@ -413,11 +456,19 @@ class CI(MOsMixin, SystemMixin):
     def make_tdm1_sf(self, ci_l, ci_r):
         """
         Make the spin-free one-particle transition density matrix from two CI vectors.
-        Args:
-            ci_l (ndarray): Left CI vector in the CSF basis.
-            ci_r (ndarray): Right CI vector in the CSF basis.
-        Returns:
-            ndarray: Spin-free one-particle transition density matrix."""
+
+        Args
+        ----
+            ci_l : NDArray
+                Left CI vector in the CSF basis.
+            ci_r : NDArray
+                Right CI vector in the CSF basis.
+
+        Returns
+        -------
+            NDArray
+                Spin-free one-particle transition density matrix.
+        """
         ci_l_det = np.zeros((self.ndet))
         ci_r_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_l, ci_l_det)
@@ -427,12 +478,18 @@ class CI(MOsMixin, SystemMixin):
     def make_rdm2_sd(self, ci_vec, full=True):
         """
         Make the spin-dependent two-particle RDMs (aa, ab, bb) from a CI vector in the CSF basis.
-        Args:
-            ci_vec (ndarray): CI vector in the CSF basis.
-            full (bool): If True, compute the full-dimension RDMs,
-                otherwise compute compact aa and bb RDMs. Defaults to True.
-        Returns:
-            tuple: Spin-dependent two-particle RDMs (aa, ab, bb).
+
+        Args
+        ----
+            ci_vec : ndarray
+                CI vector in the CSF basis.
+            full : bool, optional, default=True
+                If True, compute the full-dimension RDMs, otherwise compute compact aa and bb RDMs.
+
+        Returns
+        -------
+            tuple :
+                Spin-dependent two-particle RDMs (aa, ab, bb).
         """
         ci_vec_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
@@ -450,13 +507,20 @@ class CI(MOsMixin, SystemMixin):
         """
         Make the spin-dependent two-particle transition density matrices (aa, ab, bb)
         from two CI vectors in the CSF basis.
-        Args:
-            ci_l (ndarray): Left CI vector in the CSF basis.
-            ci_r (ndarray): Right CI vector in the CSF basis.
-            full (bool): If True, compute the full-dimension RDMs,
-                otherwise compute compact aa and bb RDMs. Defaults to True.
-        Returns:
-            tuple: Spin-dependent two-particle transition density matrices (aa, ab, bb).
+
+        Args
+        ----
+            ci_l : NDArray
+                Left CI vector in the CSF basis.
+            ci_r : NDArray
+                Right CI vector in the CSF basis.
+            full : bool, optional, default=True
+                If True, compute the full-dimension RDMs, otherwise compute compact aa and bb RDMs.
+
+        Returns
+        -------
+            tuple
+                Spin-dependent two-particle transition density matrices (aa, ab, bb).
         """
         ci_l_det = np.zeros((self.ndet))
         ci_r_det = np.zeros((self.ndet))
@@ -475,10 +539,16 @@ class CI(MOsMixin, SystemMixin):
     def make_rdm2_sf(self, ci_vec):
         """
         Make the spin-free two-particle RDM from a CI vector in the CSF basis.
-        Args:
-            ci_vec (ndarray): CI vector in the CSF basis.
-        Returns:
-            ndarray: Spin-free two-particle RDM."""
+
+        Args
+        ----
+            ci_vec : NDArray
+                CI vector in the CSF basis.
+        Returns
+        -------
+            NDArray
+                Spin-free two-particle RDM.
+        """
         ci_vec_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
         return self.ci_sigma_builder.rdm2_sf(ci_vec_det, ci_vec_det)
@@ -486,11 +556,19 @@ class CI(MOsMixin, SystemMixin):
     def make_tdm2_sf(self, ci_l, ci_r):
         """
         Make the spin-free two-particle transition density matrix from two CI vectors in the CSF basis.
-        Args:
-            ci_l (ndarray): Left CI vector in the CSF basis.
-            ci_r (ndarray): Right CI vector in the CSF basis.
-        Returns:
-            ndarray: Spin-free two-particle transition density matrix."""
+
+        Args
+        ----
+            ci_l : NDArray
+                Left CI vector in the CSF basis.
+            ci_r : NDArray
+                Right CI vector in the CSF basis.
+
+        Returns
+        -------
+            NDArray
+                Spin-free two-particle transition density matrix.
+        """
         ci_l_det = np.zeros((self.ndet))
         ci_r_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_l, ci_l_det)
@@ -498,11 +576,31 @@ class CI(MOsMixin, SystemMixin):
         return self.ci_sigma_builder.rdm2_sf(ci_l_det, ci_r_det)
 
     def set_verbosity_level(self, level):
+        """
+        Set the verbosity level for logging.
+
+        Parameters
+        ----------
+        level : int
+            The verbosity level to set.
+        """
         self.log_level = level
         if self.solver is not None:
             self.solver.log_level = level
 
     def set_ints(self, scalar, oei, tei):
+        """
+        Set the active-space integrals for the CI solver.
+
+        Parameters
+        ----------
+        scalar : float
+            The scalar energy term.
+        oei : NDArray
+            One-electron active-space integrals in the MO basis.
+        tei : NDArray
+            Two-electron active-space integrals in the MO basis.
+        """
         self.ints.E = scalar
         self.ints.H = oei
         self.ints.V = tei
@@ -510,6 +608,17 @@ class CI(MOsMixin, SystemMixin):
 
 @dataclass
 class MultiCI(MOsMixin, SystemMixin):
+    """
+    A class for mixing multiple CI solvers into the same interface as the CI class.
+
+    Parameters
+    ----------
+    CIs : list[CI]
+        A list of CI instances to be mixed together.
+    weights : list[float], optional, default=None
+        Weights for each CI instance, must sum to 1. If None, equal weights are assigned to each CI.
+    """
+
     CIs: list[CI]
     weights: list[float] = None
 
@@ -599,15 +708,20 @@ class MultiCI(MOsMixin, SystemMixin):
 
 
 class CASCI(CI):
-    def __init__(self, ncasorb, ncaselec, charge=0, multiplicity=1, ms=0.0, nroot=1):
-        """
-        Initialize a CASCI object with the given CAS orbitals and number of electrons.
+    """
+    A convenience class for performing CASCI calculations.
 
-        Args:
-            norb (int): Number of orbitals in the CAS.
-            nelec (int): Number of electrons in the CAS.
-            charge (int, optional): Charge of the system. Defaults to 0.
-        """
+    Parameters
+    ----------
+        norb : int
+            Number of orbitals in the CAS.
+        nelec : int
+            Number of electrons in the CAS.
+        charge : int, optional, default=0.
+            Charge of the system.
+    """
+
+    def __init__(self, ncasorb, ncaselec, charge=0, multiplicity=1, ms=0.0, nroot=1):
         self.ncasorb = ncasorb
         self.ncaselec = ncaselec
         self.charge = charge
@@ -633,15 +747,22 @@ class CASCI(CI):
 
 
 class CISD(CI):
+    """
+    A convenience class for performing CISD calculations.
+
+    Parameters
+    ----------
+        charge : int, optional, default=0
+            Charge of the system.
+        multiplicity : int, optional, default=1
+            Multiplicity of the system.
+        ms : float, optional, default=0.0
+            Spin quantum number.
+        nroot : int, optional, default=0
+            Number of roots to compute.
+    """
+
     def __init__(self, charge=0, multiplicity=1, ms=0.0, nroot=1, frozen_core=0):
-        """
-        Initialize a CISD object with the given charge, multiplicity, and number of roots.
-        Args:
-            charge (int, optional): Charge of the system. Defaults to 0.
-            multiplicity (int, optional): Multiplicity of the system. Defaults to 1.
-            ms (float, optional): Spin quantum number. Defaults to 0.0.
-            nroot (int, optional): Number of roots to compute. Defaults to 1.
-        """
         self.charge = charge
         self.multiplicity = multiplicity
         self.ms = ms

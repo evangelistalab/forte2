@@ -12,9 +12,17 @@ release = "0.0.1"
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.viewcode",
-    "sphinx.ext.napoleon",  # for Google/NumPy style docstrings
+    "numpydoc",  # for NumPy style docstrings
     "sphinx_autodoc_typehints",  # for type hints
     "sphinx_rtd_theme",
 ]
 
 html_theme = "sphinx_rtd_theme"
+autodoc_default_options = {
+    "members": True,
+    "private-members": False,
+    "member-order": "bysource",
+    "show-inheritance": True,
+}
+
+numpydoc_show_class_members = False

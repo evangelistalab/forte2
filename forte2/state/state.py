@@ -7,13 +7,24 @@ from forte2.helpers.multiplicity_labels import multiplicity_labels
 class State:
     """Class to represent a state of a quantum system.
 
-    Attributes:
-        nel (int): Total number of electrons.
-        multiplicity (int): Multiplicity of the state (2S+1).
-        ms (float): Spin projection (Ms) of the state.
-        irrep (int, optional): Irreducible representation of the state in Cotton ordering.
-        gas_min (list[int], optional): Minimum GAS restrictions.
-        gas_max (list[int], optional): Maximum GAS restrictions.
+    Parameters
+    ----------
+        nel : int
+            Total number of electrons.
+        multiplicity : int
+            Multiplicity of the state (2S+1).
+        ms : float
+            Spin projection (Ms) of the state.
+        irrep : int, optional
+            Irreducible representation of the state in Cotton ordering.
+        gas_min : list[int], optional, default=[]
+            Minimum GAS restrictions.
+        gas_max : list[int], optional, default=[]
+            Maximum GAS restrictions.
+        symmetry: int, optional, default=0
+            Symmetry of the state.
+        symmetry_label: str, optional, default=None
+            Label for the symmetry of the state.
     """
 
     nel: int
@@ -21,10 +32,10 @@ class State:
     ms: float
     gas_min: list[int] = field(default_factory=list)
     gas_max: list[int] = field(default_factory=list)
-
-    # Values derived from the above
     symmetry: int = field(default=0)
     symmetry_label: str = field(default=None)
+
+    # Values derived from the above
     na: int = field(init=False)
     nb: int = field(init=False)
     twice_ms: int = field(init=False)
@@ -82,9 +93,11 @@ class State:
         ), f"Non-negative number of alpha and beta electrons is required."
 
     def multiplicity_label(self) -> str:
+        """Return the label for the multiplicity of the state."""
         return multiplicity_labels[self.multiplicity - 1]
 
     def str_minimum(self) -> str:
+        """Return a minimal string representation of the state."""
         symmetry_label1 = (
             self.symmetry_label if self.symmetry_label else f"Irrep {self.symmetry}"
         )
@@ -103,6 +116,7 @@ class State:
         return self.str_minimum() + gas_restrictions
 
     def str_short(self) -> str:
+        """Return a short string representation of the state."""
         multi = f"m{self.multiplicity}.z{self.twice_ms}"
         sym = f".h{self.irrep}"
         gmin = ".g" + "".join(f"_{i}" for i in self.gas_min) if self.gas_min else ""
@@ -119,4 +133,5 @@ class State:
 
     @staticmethod
     def get_ms_string(twice_ms: int) -> str:
+        """Return a string representation of Ms based on its value."""
         return str(twice_ms // 2) if twice_ms % 2 == 0 else f"{twice_ms}/2"

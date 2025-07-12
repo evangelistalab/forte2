@@ -17,22 +17,49 @@ from copy import deepcopy
 
 @dataclass
 class System:
+    """
+    A class to represent a quantum chemical system.
+
+    Parameters
+    ----------
+    xyz : str
+        A XYZ string representing the atomic coordinates.
+    basis : str | dict
+        The basis set to be used, either as a string (e.g. "cc-pvdz") or as a dictionary
+        assigning potentially different basis sets to each atom (e.g. {"H": "sto-3g", "O": "cc-pvdz"}).
+    auxiliary_basis : str | dict, optional
+        The auxiliary basis set, either as a string or a dictionary (see `basis`).
+    auxiliary_basis_corr : str | dict, optional
+        A separate auxiliary basis set for all correlated calculations, either as a string or a dictionary (see `basis`).
+    minao_basis : str | dict, optional, default="cc-pvtz-minao"
+        The minimal atomic orbital basis set, used in IAO calculations, either as a string or a dictionary (see `basis`).
+    x2c_type : str, optional
+        The type of X2C transformation to be used. Options are "sf" for scalar
+        relativistic effects or "so" for spin-orbit coupling. If None, no X2C transformation is applied.
+    unit : str, optional, default="angstrom"
+        The unit for the atomic coordinates. Can be "angstrom" or "bohr".
+    linear_dep_trigger : float, optional, default=1e-10
+        The trigger for detecting linear dependencies in the overlap matrix. If the ratio of the minimum to
+        maximum eigenvalue of the overlap matrix falls below this value, linear dependencies will be removed.
+    ortho_thresh : float, optional, default=1e-8
+        Linear combinations of AO basis functions with overlap eigenvalues below this threshold will be removed
+        during orthogonalization.
+    """
+
     xyz: str
     basis: str | dict
     auxiliary_basis: str | dict = None
     auxiliary_basis_corr: str | dict = None
-    atoms: list[tuple[float, tuple[float, float, float]]] = None
-    minao_basis: str = None
+    minao_basis: str | dict = "cc-pvtz-minao"
     x2c_type: str = None
     unit: str = "angstrom"
-    # If the min/max eigenvalue of the overlap matrix falls below
-    # this trigger, linear dependency will be removed
     linear_dep_trigger: float = 1e-10
-    # This is the threshold below which the eigenvalues of
-    # the overlap matrix will be removed
     ortho_thresh: float = 1e-8
 
-    # Non-init attributes
+    ### Non-init attributes
+    atoms: list[tuple[float, tuple[float, float, float]]] = field(
+        init=False, default=None
+    )
     Zsum: float = field(init=False, default=None)
     nbf: int = field(init=False, default=None)
     nmo: int = field(init=False, default=None)
@@ -60,7 +87,7 @@ class System:
         else:
             self.auxiliary_basis_corr = self.auxiliary_basis
         self.minao_basis = (
-            build_basis("cc-pvtz-minao", self.atoms)
+            build_basis(self.minao_basis, self.atoms)
             if self.minao_basis is not None
             else None
         )
@@ -74,7 +101,7 @@ class System:
         self.nminao = self.minao_basis.size if self.minao_basis else 0
 
         self._init_x2c()
-        self.check_linear_dependencies()
+        self._check_linear_dependencies()
 
     def _init_x2c(self):
         if self.x2c_type is not None:
@@ -96,8 +123,10 @@ class System:
         """
         Decontract the basis set.
 
-        Returns:
-            forte2.ints.Basis: Decontracted basis set.
+        Returns
+        -------
+            forte2.ints.Basis
+                Decontracted basis set.
         """
         return build_basis(
             self.basis.name,
@@ -109,16 +138,22 @@ class System:
     def ints_overlap(self):
         """
         Return the overlap integrals for the system.
-        Returns:
-            NDArray: Overlap integrals matrix.
+
+        Returns
+        -------
+            NDArray
+                Overlap integrals matrix.
         """
         return forte2.ints.overlap(self.basis)
 
     def ints_hcore(self):
         """
         Return the core Hamiltonian integrals for the system.
-        Returns:
-            NDArray: Core Hamiltonian integrals matrix.
+
+        Returns
+        -------
+            NDArray
+                Core Hamiltonian integrals matrix.
         """
         T = forte2.ints.kinetic(self.basis)
         V = forte2.ints.nuclear(self.basis, self.atoms)
@@ -127,32 +162,44 @@ class System:
     def nuclear_repulsion_energy(self):
         """
         Return the nuclear repulsion energy for the system.
-        Returns:
-            float: Nuclear repulsion energy.
+
+        Returns
+        -------
+            float
+                Nuclear repulsion energy.
         """
         return forte2.ints.nuclear_repulsion(self.atoms)
 
     def atomic_charges(self):
         """
         Return the atomic charges for the system.
-        Returns:
-            NDArray: Array of atomic charges, shape (N,) where N is the number of atoms.
+
+        Returns
+        -------
+            NDArray
+                Array of atomic charges, shape (N,) where N is the number of atoms.
         """
         return np.array([atom[0] for atom in self.atoms])
 
     def atomic_masses(self):
         """
         Return the average atomic masses for the system.
-        Returns:
-            NDArray: Array of atomic masses, shape (N,) where N is the number of atoms.
+
+        Returns
+        -------
+            NDArray
+                Array of atomic masses, shape (N,) where N is the number of atoms.
         """
         return np.array([ATOM_DATA[atom[0]]["mass"] for atom in self.atoms])
 
     def atomic_positions(self):
         """
         Return the atomic positions (in bohr) for the system.
-        Returns:
-            NDArray: Array of atomic positions, shape (N, 3) where N is the number of atoms.
+
+        Returns
+        -------
+            NDArray
+                Array of atomic positions, shape (N, 3) where N is the number of atoms.
         """
         return np.array([atom[1] for atom in self.atoms])
 
@@ -161,14 +208,31 @@ class System:
         Calculate the center of mass of the system.
         Uses average atomic masses for the calculation.
 
-        Returns:
-            tuple: Center of mass coordinates (x, y, z).
+        Returns
+        -------
+            tuple
+                Center of mass coordinates (x, y, z).
         """
         masses = self.atomic_masses()
         positions = np.array([atom[1] for atom in self.atoms])
         return np.einsum("a,ax->x", masses, positions) / np.sum(masses)
 
     def nuclear_dipole(self, origin=None, unit="debye"):
+        """
+        Calculate the nuclear dipole moment of the system.
+
+        Args
+        ----
+            origin : tuple[float, float, float], optional
+                The origin point for the dipole calculation. If None, the center of mass of the system is used.
+            unit : str, optional, default="debye"
+                The unit for the dipole moment. Can be "debye" or "au".
+
+        Returns
+        -------
+            NDArray
+                Nuclear dipole moment vector, shape (3,).
+        """
         assert unit in ["debye", "au"], f"Invalid unit: {unit}. Use 'debye' or 'au'."
         charges = self.atomic_charges()
         positions = self.atomic_positions()
@@ -181,6 +245,20 @@ class System:
         return np.einsum("a,ax->x", charges, positions) * conversion_factor
 
     def nuclear_quadrupole(self, origin=None, unit="debye"):
+        """
+        Calculate the nuclear quadrupole moment of the system.
+
+        Args
+        ----
+            origin : tuple[float, float, float], optional
+                The origin point for the quadrupole calculation. If None, the center of mass of the system is used.
+            unit : str, optional, default="debye"
+                The unit for the quadrupole moment. Can be "debye" or "au".
+        Returns
+        -------
+            NDArray
+                Nuclear quadrupole moment tensor, shape (3, 3).
+        """
         assert unit in ["debye", "au"], f"Invalid unit: {unit}. Use 'debye' or 'au'."
         charges = self.atomic_charges()
         positions = self.atomic_positions()
@@ -194,7 +272,7 @@ class System:
         )
         return nuc_quad * conversion_factor
 
-    def check_linear_dependencies(self):
+    def _check_linear_dependencies(self):
         S = self.ints_overlap()
         e, _ = np.linalg.eigh(S)
         self._eigh = sp.linalg.eigh
@@ -255,14 +333,27 @@ class ModelSystem:
 
 @dataclass
 class HubbardModel1D(ModelSystem):
-    """
+    r"""
     A 1D Hubbard model system.
-    H = -t * (c_{i,sigma}^+ c_{i+1,sigma} + c_{i+1,sigma}^+ c_{i,sigma}) + U * n_{i,alpha} n_{i,beta}
-    Attributes:
-        t (float): Hopping parameter.
-        U (float): On-site interaction strength.
-        nsites (int): Number of sites in the 1D chain.
-        pbc (bool): Whether to apply 1D periodic boundary conditions.
+
+    .. math::
+        \hat{H} =
+        -t \sum_i\sum_{\sigma\in\{\alpha,\beta\}}(\hat{a}_{i,\sigma}^{\dagger} \hat{a}_{i+1,\sigma}
+            + \hat{a}_{i+1,\sigma}^{\dagger} \hat{a}_{i,\sigma})
+        + U \sum_i \hat{n}_{i,\alpha} \hat{n}_{i,\beta},
+
+    where :math:`\hat{a}_{i,\sigma}^{\dagger}` and :math:`\hat{a}_{i,\sigma}` and :math:`\hat{n}_{i,\sigma} = \hat{a}_{i,\sigma}^{\dagger} \hat{a}_{i,\sigma}` are the creation, annihilation, and number operator for spin :math:`\sigma` at site :math:`i`.
+
+    Parameters
+    ----------
+        t : float
+            Hopping parameter.
+        U : float
+            On-site interaction strength.
+        nsites : int
+            Number of sites in the 1D chain.
+        pbc : bool, optional, default=False
+            Whether to apply 1D periodic boundary conditions.
     """
 
     t: float

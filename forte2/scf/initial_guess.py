@@ -1,12 +1,11 @@
 import numpy as np
-from numpy.typing import NDArray
 import scipy as sp
 
 from forte2.system.build_basis import build_basis
 import forte2
 
 
-def minao_initial_guess(system: forte2.System, H: NDArray, S: NDArray) -> NDArray:
+def minao_initial_guess(system, H, S):
     """
     Generate a superposition of atomic potentials (SAP) initial guess for the SCF procedure
     S. Lehtola, J. Chem. Theory Comput. 15, 1593-1604 (2019), arXiv:1810.11659.
@@ -16,13 +15,14 @@ def minao_initial_guess(system: forte2.System, H: NDArray, S: NDArray) -> NDArra
     ----------
     system : forte2.System
         The system object containing the atoms and basis set.
-    H : np.ndarray
+    H : NDArray
         The Fock matrix.
-    S : np.ndarray
+    S : NDArray
         The overlap matrix.
+
     Returns
     -------
-    np.ndarray
+    NDArray
         The initial MO guess for the SCF procedure.
     """
 
@@ -62,5 +62,5 @@ def minao_initial_guess(system: forte2.System, H: NDArray, S: NDArray) -> NDArra
     return C
 
 
-def core_initial_guess(system: forte2.System, H: NDArray, S: NDArray) -> NDArray:
+def core_initial_guess(system: forte2.System, H, S):
     return np.zeros((system.nbf,) * 2)

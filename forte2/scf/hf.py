@@ -1,32 +1,62 @@
 from dataclasses import dataclass, field
+from abc import ABC, abstractmethod
 import time
+
 import numpy as np
 import scipy as sp
 
 import forte2
 from forte2.jkbuilder import FockBuilder
 from forte2.helpers.mixins import MOsMixin
-from forte2.helpers.matrix_functions import givens_rotation, eigh_gen, canonical_orth
+from forte2.helpers.matrix_functions import givens_rotation
 from forte2.helpers import logger
 from .initial_guess import minao_initial_guess, core_initial_guess
 
 
-def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4):
-    cosq = np.cos(mixing_parameter)
-    sinq = np.sin(mixing_parameter)
-    Ca = givens_rotation(C, cosq, sinq, homo_idx, homo_idx + 1)
-    Cb = givens_rotation(C, cosq, -sinq, homo_idx, homo_idx + 1)
-    return [Ca, Cb]
-
-
 @dataclass
-class SCFMixin:
+class SCFBase(ABC):
+    """
+    Abstract base class for SCF calculations.
+
+    Parameters
+    ----------
+    charge : int
+        Charge of the system.
+    diis_start : int, optional, default=4
+        Which iteration to start collecting DIIS error vectors.
+    diis_nvec : int, optional, default=8
+        How many DIIS error vectors to keep.
+    econv : float, optional, default=1e-9
+        Energy convergence threshold.
+    dconv : float, optional, default=1e-6
+        RMS density change convergence threshold.
+    maxiter : int, optional, default=100
+        Maximum iteration for SCF.
+
+    Attributes
+    ----------
+    C : list[NDArray]
+        The MO coefficients.
+    D : list[NDArray]
+        The density matrices.
+    E : float
+        The total energy of the system.
+    eps : list[NDArray]
+        The orbital energies.
+
+    Raises
+    ------
+    RuntimeError
+        If the SCF calculation does not converge within the maximum number of iterations.
+    """
+
     charge: int
     diis_start: int = 4
     diis_nvec: int = 8
     econv: float = 1e-9
     dconv: float = 1e-6
     maxiter: int = 100
+    #: Initial guess algorithm. Can be "minao" or "hcore".
     guess_type: str = "minao"
 
     executed: bool = field(default=False, init=False)
@@ -65,8 +95,11 @@ class SCFMixin:
     def run(self):
         """
         Run the SCF calculation.
-        Returns:
-            self: The SCF object.
+
+        Returns
+        -------
+            self : SCFBase
+                The SCF object.
         """
         start = time.monotonic()
 
@@ -175,15 +208,54 @@ class SCFMixin:
         return self.system.nuclear_repulsion_energy()
 
     def _post_process(self):
-        """
-        Post-process the SCF results.
-        This method can be overridden by subclasses to perform additional calculations.
-        """
         self._print_orbital_energies()
+
+    @abstractmethod
+    def _build_fock(self, H, fock_builder, S):
+        pass
+
+    @abstractmethod
+    def _build_density_matrix(self):
+        pass
+
+    @abstractmethod
+    def _build_initial_density_matrix(self):
+        pass
+
+    @abstractmethod
+    def _initial_guess(self, H, S, guess_type="minao"):
+        pass
+
+    @abstractmethod
+    def _build_ao_grad(self, S, F):
+        pass
+
+    @abstractmethod
+    def _diagonalize_fock(self, F):
+        pass
+
+    @abstractmethod
+    def _spin(self, S):
+        pass
+
+    @abstractmethod
+    def _energy(self, H, F):
+        pass
+
+    @abstractmethod
+    def _diis_update(self, diis, F, AO_grad):
+        pass
+
+    @abstractmethod
+    def _print_orbital_energies(self):
+        pass
 
 
 @dataclass
-class RHF(SCFMixin, MOsMixin):
+class RHF(SCFBase, MOsMixin):
+    """
+    A class that runs restricted Hartree-Fock calculations.
+    """
 
     def __call__(self, system):
         self = super().__call__(system)
@@ -267,8 +339,19 @@ class RHF(SCFMixin, MOsMixin):
 
 
 @dataclass
-class UHF(SCFMixin, MOsMixin):
-    ms: float = field(default=None, init=True)
+class UHF(SCFBase, MOsMixin):
+    """
+    A class that runs unrestricted Hartree-Fock calculations.
+
+    Parameters
+    ----------
+    ms : float
+        Spin projection. Must be a multiple of 0.5.
+    guess_mix : bool, optional, default=False
+        If True, will mix the HOMO and LUMO orbitals to try to break alpha-beta degeneracy if ms is 0.0.
+    """
+
+    ms: float = None
     guess_mix: bool = False  # only used if ms == 0
 
     def __call__(self, system):
@@ -415,8 +498,17 @@ class UHF(SCFMixin, MOsMixin):
 
 
 @dataclass
-class ROHF(SCFMixin, MOsMixin):
-    ms: float = field(default=None, init=True)
+class ROHF(SCFBase, MOsMixin):
+    """
+    A class that runs restricted open-shell Hartree-Fock calculations.
+
+    Parameters
+    ----------
+    ms : float
+        Spin projection. Must be a multiple of 0.5.
+    """
+
+    ms: float = None
 
     _parse_state = UHF._parse_state
     _initial_guess = RHF._initial_guess
@@ -511,8 +603,21 @@ class ROHF(SCFMixin, MOsMixin):
 
 
 @dataclass
-class CUHF(SCFMixin, MOsMixin):
-    ms: float = field(default=None, init=True)
+class CUHF(SCFBase, MOsMixin):
+    """
+    A class that runs constrained unrestricted Hartree-Fock calculations.
+    Equivalent to ROHF but uses UHF machinery.
+    See J. Chem. Phys. 133, 141102 (2010) (10.1063/1.3503173)
+
+    Parameters
+    ----------
+    ms : float
+        Spin projection. Must be a multiple of 0.5.
+    guess_mix : bool, optional, default=False
+        If True, will mix the HOMO and LUMO orbitals to try to break alpha-beta degeneracy if ms is 0.0.
+    """
+
+    ms: float = None
     guess_mix: bool = False  # only used if ms == 0
 
     _parse_state = UHF._parse_state
@@ -568,22 +673,30 @@ class CUHF(SCFMixin, MOsMixin):
 
 
 @dataclass
-class GHF(SCFMixin, MOsMixin):
+class GHF(SCFBase, MOsMixin):
     r"""
     Generalized Hartree-Fock (GHF) method.
     The GHF spinor basis is a direct product of the atomic basis and :math:`\{|\alpha\rangle, |\beta\rangle\}`:
     
     .. math::
     
-        |\psi_i\rangle = \sum_{\mu} \sum_{\sigma\in\{\alpha,\beta\}} c_{\mu,\sigma} |\chi_{\mu}\rangle|\sigma\rangle
+        |\psi_i\rangle = \sum_{\mu} \sum_{\sigma\in\{\alpha,\beta\}} c^{\sigma}_{\mu i} |\chi_{\mu}\rangle\otimes|\sigma\rangle
 
     The MO coefficients are stored in a square array
 
     .. math::
-        C = \begin{bmatrix}
-        C_{\alpha,i} \\
-        C_{\beta,i}
+        \mathbf{C} = \begin{bmatrix}
+        \mathbf{c}^{\alpha}_0 & \mathbf{c}^{\alpha}_1 & \dots\\
+        \mathbf{c}^{\beta}_0 & \mathbf{c}^{\beta}_1 & \dots
         \end{bmatrix}
+
+    Parameters
+    ----------
+    guess_mix : bool, optional, default=False
+        If True, will mix the HOMO and LUMO orbitals to try to break alpha-beta degeneracy if nel is even.
+    break_complex_symmetry : bool, optional, default=False
+        If True, will add a small complex perturbation to the initial density matrix. This will both break
+        the complex conjugation symmetry and Sz symmetry (allowing alpha-beta density matrix blocks to be nonzero)
     """
 
     guess_mix: bool = False  # only used if nel is even
@@ -727,3 +840,11 @@ class GHF(SCFMixin, MOsMixin):
                 string += "\n"
             string += f"{idx+1:<4d} {self.eps[0][idx]:<12.6f} "
         logger.log_info1(string)
+
+
+def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4):
+    cosq = np.cos(mixing_parameter)
+    sinq = np.sin(mixing_parameter)
+    Ca = givens_rotation(C, cosq, sinq, homo_idx, homo_idx + 1)
+    Cb = givens_rotation(C, cosq, -sinq, homo_idx, homo_idx + 1)
+    return [Ca, Cb]
