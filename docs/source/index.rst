@@ -7,6 +7,7 @@ Forte2 documentation
 
    api_python
    api_cpp
+   contributor
 
 Indices and tables
 ==================
