@@ -1,6 +1,15 @@
 Contributor Guide
 =================
 
+Code Standards
+--------------
+Forte2 uses the `functional composition <https://en.wikipedia.org/wiki/Function_composition_(computer_science)>`_ style (like the `TensorFlow functional API <https://www.tensorflow.org/guide/keras/functional_api>`_) for most quantum chemical methods, with the following flow:
+
+>>> rhf = forte2.scf.RHF(charge=0)(system)
+>>> ci = forte2.ci.CI(state=state, orbitals=[...], ...)(rhf)
+>>> ci.run()
+-0.75102385
+
 Style Guide
 -----------
 Forte2 uses ``Black Formatter`` for Python code and ``Clang-Format`` for C++ code. Both can be obtained in VSCode via the extensions marketplace or via the command line.
