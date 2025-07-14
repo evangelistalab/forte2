@@ -4,6 +4,32 @@ from numpy.linalg import eigh, qr, norm
 
 
 class DavidsonLiuSolver:
+    """
+    Davidson-Liu solver for iterative diagonalization of Hermitian matrices.
+
+    Parameters
+    ----------
+    size : int
+        Dimension of the matrix / number of basis vectors.
+    nroot : int
+        Number of roots to find.
+    basis_per_root : int, optional, default=4
+        Number of basis vectors to keep per root.
+    collapse_per_root : int, optional, default=2
+        Number of vectors to collapse to per root.
+    maxiter : int, optional, default=100
+        Maximum number of iterations to perform.
+    e_tol : float, optional, default=1e-12
+        Convergence tolerance for eigenvalues.
+    r_tol : float, optional, default=1e-6
+        Convergence tolerance for residuals.
+    eta : float, optional
+        Target eigenvalue shift for sorting eigenpairs.
+        If None, no shift is applied.
+    log_level : int, optional, default=logger.get_verbosity_level()
+        Logging level for output messages.
+    """
+
     def __init__(
         self,
         size: int,
@@ -30,7 +56,7 @@ class DavidsonLiuSolver:
         self.e_tol = e_tol
         # convergence tolerance for residuals
         self.r_tol = r_tol
-        # eigenvalue target shift 
+        # eigenvalue target shift
         self.eta = eta
         # logging level
         self.log_level = log_level
@@ -86,12 +112,15 @@ class DavidsonLiuSolver:
 
     def add_sigma_builder(self, sigma_builder):
         """
-        sigma_builder should have signature
-            sigma_block = sigma_builder(basis_block)
-        where
-            basis_block.shape = (size, m)
-        and it returns
-            sigma_block.shape = (size, m).
+        Add the function that builds the matrix-vector product.
+
+        Parameters
+        ----------
+        sigma_builder : callable
+            This function should have signature ``sigma_builder(basis_block, sigma_block) -> None``,
+            where ``basis_block.shape == (size, m)`` and ``sigma_block.shape == (size, m)``.
+            and it modifies ``sigma_block`` in place, performing the operation
+            ``sigma_block = matrix @ basis_block``.
         """
         self._build_sigma = sigma_builder
 
@@ -103,7 +132,12 @@ class DavidsonLiuSolver:
 
     def add_guesses(self, guesses):
         """
-        guesses: array shape (size, n_guess), with n_guess between 1 and subspace_size.
+        Add initial guesses for the eigenvectors.
+
+        Parameters
+        ----------
+        guesses: NDArray
+            ``guesses.shape == (size, n_guess)``, with n_guess between 1 and subspace_size.
         """
         G = np.asarray(guesses, float)
         if G.ndim != 2 or G.shape[0] != self.size:
@@ -170,7 +204,7 @@ class DavidsonLiuSolver:
 
             # sort eigenpair around user-specified shift
             if self.eta is not None:
-                idx = np.argsort(np.abs(lam - self.eta)) 
+                idx = np.argsort(np.abs(lam - self.eta))
                 lam = lam[idx]
                 alpha = alpha[:, idx]
 

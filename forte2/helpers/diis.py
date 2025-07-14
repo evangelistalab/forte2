@@ -4,21 +4,27 @@ from numpy.typing import NDArray
 
 
 class DIIS:
-    """A class that implements DIIS
+    """
+    A class that implements the direct inversion in the iterative subspace (DIIS) method.
 
     Parameters
     ----------
-    diis_start : int
-        Start the iterations when the DIIS dimension is greater than this parameter (default = 3)
+    diis_start : int, optional, default=3
+        Start saving DIIS vectors after this many iterations.
         A value less than 1 means no DIIS
-    diis_nvec : int
-        The number of vectors to keep in the DIIS (default = 8)
+    diis_nvec : int, optional, default=8
+        The number of vectors to keep in the DIIS.
+
+    Notes
+    -----
+    The currently implemented DIIS method is Pulay's original method (https://doi.org/10.1016/0009-2614(80)80396-4), which is also known as CDIIS.
+    The error vector is the AO-basis (we use the orthonormal basis in actual implementation) orbital gradient: FDS-SDF (https://doi.org/10.1080/00268976900100941).
     """
 
     def __init__(self, diis_start: int = 4, diis_nvec: int = 8):
         self.do_diis = not ((diis_start < 1) or (diis_nvec < 1))
         if self.do_diis:
-            # Initialize the parameter and error deques
+            # Initialize the parameter and error double-ended queues (deques)
             self.p_diis = deque(maxlen=diis_nvec)
             self.e_diis = deque(maxlen=diis_nvec)
             self.diis_start = diis_start
@@ -26,18 +32,19 @@ class DIIS:
             self.iter = -1
 
     def update(self, p: NDArray, e: NDArray) -> NDArray:
-        """Update the DIIS object and return extrapolated parameters
+        """
+        Update the DIIS object and return extrapolated parameters
 
         Parameters
         ----------
-        p : ndarray
-            The updated parameters
-        p_old : list
-            The previous set of parameters
+        p : NDArray
+            The current set of parameters
+        e : NDArray
+            The current error vector
 
         Returns
         -------
-        list
+        NDArray
             The extrapolated parameters
         """
 

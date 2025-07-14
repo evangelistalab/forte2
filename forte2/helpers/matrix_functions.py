@@ -9,12 +9,22 @@ def invsqrt_matrix(M, tol=1e-7):
     Compute the inverse square root of a symmetric (Hermitian) matrix A.
     Small eigenvalues below 'tol' are treated as zero (pseudo-inverse style).
 
-    Args:
-        M (np.ndarray): M symmetric matrix.
-        tol (float): Eigenvalue threshold below which values are treated as zero.
+    Parameters
+    ----------
+        M : NDArray
+            A symmetric matrix (must be positive semi-definite).
+        tol : float, optional, default=1e-7
+            Eigenvalue threshold below which values are treated as zero.
 
-    Returns:
-        np.ndarray: The inverse square root of A.
+    Returns
+    -------
+        invsqrt_M : NDArray
+            The inverse square root of A.
+
+    Raises
+    ------
+        ValueError
+            If the matrix M is not positive semi-definite.
     """
     # Symmetric eigenvalue decomposition
     evals, evecs = np.linalg.eigh(M)
@@ -35,14 +45,24 @@ def invsqrt_matrix(M, tol=1e-7):
 
 def canonical_orth(S, tol=1e-7):
     """
-    Compute the canonical orthogonalization of a symmetric matrix S.
+    Compute the canonical orthogonalization given the metric matrix S.
 
-    Args:
-        S (np.ndarray): S symmetric matrix.
-        tol (float): Eigenvalue threshold below which values are treated as zero.
+    Parameters
+    ----------
+        S : NDArray
+            Metric matrix (must be positive semi-definite).
+        tol : float, optional, default=1e-7
+            Eigenvalue threshold below which values are treated as zero.
 
-    Returns:
-        np.ndarray: The (possibly rectangular) canonical orthogonalization matrix X, such that X.T @ S @ X = I.
+    Returns
+    -------
+        X : NDArray
+            The (possibly rectangular) canonical orthogonalization matrix X, such that ``X.T @ S @ X = I``.
+
+    Raises
+    ------
+        ValueError
+            If the matrix S is not positive semi-definite.
     """
     # Compute the inverse square root of S
     sevals, sevecs = np.linalg.eigh(S)
@@ -55,18 +75,26 @@ def canonical_orth(S, tol=1e-7):
 
 def eigh_gen(A, B=None, remove_lindep=True, orth_tol=1e-7, orth_method="canonical"):
     """
-    Solve the generalized eigenvalue problem A @ x = lambda * B @ x.
+    Solve the generalized eigenvalue problem ``A @ x = lambda * B @ x``.
 
-    Args:
-        A (np.ndarray): The matrix A.
-        B (np.ndarray): The matrix B. If None, the identity matrix is used.
-        remove_lindep (bool): If True, perform orthogonalization to remove linear dependencies, else use scipy's eigh.
-        orth_tol (float): Eigenvalue threshold below which values are treated as zero.
-        orth_method (str): Orthogonalization method. Options are "canonical" or "symmetric".
+    Parameters
+    ----------
+        A : NDArray
+            The matrix A.
+        B : NDArray
+            The matrix B. If None, the identity matrix is used.
+        remove_lindep : bool, optional, default=True
+            If True, perform orthogonalization to remove linear dependencies, else use ``scipy.linalg.eigh``.
+        orth_tol : float, optional, default=1e-7
+            Eigenvalue threshold below which values are treated as zero.
+        orth_method : str, optional, default="canonical"
+            Orthogonalization method. Options are "canonical" or "symmetric".
             "canonical" should be used when there are linear dependencies in the basis functions.
 
-    Returns:
-        tuple: A tuple containing the eigenvalues and eigenvectors.
+    Returns
+    -------
+        tuple(NDArray, NDArray)
+            A tuple containing the eigenvalues and eigenvectors.
     """
     if B is None:
         B = np.eye(A.shape[0])
@@ -90,16 +118,25 @@ def givens_rotation(A, c, s, i, j, column=True):
     """
     Apply a Givens rotation to the matrix A.
 
-    Args:
-        A (np.ndarray): The matrix to apply the rotation to.
-        c (float): The cosine of the rotation angle.
-        s (float): The sine of the rotation angle.
-        i (int): The index of the first row/column to rotate.
-        j (int): The index of the second row/column to rotate.
-        column (bool): If True, apply the rotation to columns; if False, to rows.
+    Parameters
+    ----------
+        A : NDArray
+            The matrix to apply the rotation to.
+        c : float
+            The cosine of the rotation angle.
+        s : float
+            The sine of the rotation angle.
+        i : int
+            The index of the first row/column to rotate.
+        j : int
+            The index of the second row/column to rotate.
+        column : bool, optional, default=True
+            If True, apply the rotation to columns; if False, to rows.
 
-    Returns:
-        np.ndarray: The rotated matrix.
+    Returns
+    -------
+        NDArray
+            The rotated matrix.
     """
     M = A.copy()
     if column:

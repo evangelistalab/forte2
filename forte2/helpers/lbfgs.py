@@ -9,40 +9,59 @@ from enum import Enum
 class LBFGS:
     """
     Limited-memory Broyden-Fletcher-Goldfarb-Shanno (L-BFGS) optimizer.
+
+    Parameters
+    ----------
+    print : int, optional, default=1
+        Verbosity level for logging. Higher values produce more output.
+    m : int, optional, default=6
+        The number of vectors to keep in memory for the L-BFGS update.
+    epsilon : float, optional, default=1.0e-5
+        Convergence threshold to terminate the minimization: |g| < ε * max(1, |x|).
+    maxiter : int, optional, default=20
+        Maximum number of iterations for the optimization.
+    h0_freq : int, optional, default=0
+        Frequency of updating the diagonal Hessian. If 0, it is computed only for the
+        initial iteration. If < 0, uses the adaptive inverse Hessian.
+    maxiter_linesearch : int, optional, default=5
+        Maximum number of trials for line search to find the optimal step length.
+    max_dir : float, optional, default=1.0e15
+        Maximum absolute value allowed in the direction vector.
+    line_search_condition : str, optional, default='strong_wolfe'
+        Condition to terminate line search backtracking. Options are 'armijo', 'wolfe',
+        or 'strong_wolfe'.
+    step_length_method : str, optional, default='line_bracketing_zoom'
+        Method to determine step lengths. Options are 'max_correction',
+        'line_backtracking', or 'line_bracketing_zoom'.
+    min_step : float, optional, default=1.0e-15
+        Minimum step length allowed during line search.
+    max_step : float, optional, default=1.0e15
+        Maximum step length allowed during line search.
+    c1 : float, optional, default=1.0e-4
+        Parameter for the Armijo condition in line search.
+    c2 : float, optional, default=0.9
+        Parameter for the Wolfe curvature condition in line search.
+
+    Notes
+    -----
     Translated into Python from Forte v1: https://github.com/evangelistalab/forte/tree/main/forte/helpers/lbfgs
-    Implementation notes:
-        See Wikipedia https://en.wikipedia.org/wiki/Limited-memory_BFGS
-        and <Numerical Optimization> 2nd Ed. by Jorge Nocedal and Stephen J. Wright
+    For implementation details, see Wikipedia https://en.wikipedia.org/wiki/Limited-memory_BFGS
+    and Numerical Optimization 2nd Ed. by Jorge Nocedal and Stephen J. Wright
     """
 
     ### L-BFGS parameters
-    # verbosity
     print: int = 1
-    # The number of vectors kept
     m: int = 6
-    # Convergence threshold to terminate the minimization: |g| < ε * max(1, |x|)
     epsilon: float = 1.0e-5
-    # Max number of iterations
     maxiter: int = 20
-    # Frequency of updating diagonal Hessian if exact formula is preferred
-    # = 0 for just compute it for the initial iteration
-    # < 0 for using the adaptive inverse Hessian (gamma_k in L-BFGS Wikipedia)
     h0_freq: int = 0
-    # Max number of trials for line search of optimal step length
     maxiter_linesearch: int = 5
-    # Max absolute value allowed in direction vector
     max_dir: float = 1.0e15
-    # Condition to terminate line search backtracking
     line_search_condition: str = "strong_wolfe"
-    # Schemes to determine step lengths
     step_length_method: str = "line_bracketing_zoom"
-    # Minimal step length allowed
     min_step: float = 1.0e-15
-    # Maximal step length allowed
     max_step: float = 1.0e15
-    # Parameter for Armijo condition
     c1: float = 1.0e-4
-    # Parameter for Wolfe curvature condition
     c2: float = 0.9
 
     ### Non-init params
@@ -52,9 +71,9 @@ class LBFGS:
     p: NDArray = field(default_factory=lambda: np.array([]))
 
     def __post_init__(self):
-        self.check_param()
+        self._check_param()
 
-    def check_param(self):
+    def _check_param(self):
         assert self.line_search_condition.lower() in [
             "armijo",
             "wolfe",
@@ -94,14 +113,21 @@ class LBFGS:
     def minimize(self, obj, x):
         """
         The minimization for the objective function
-        Args:
-            obj: Target function should be encapsulated in a class that has the following methods:
-                fx = obj.evaluate(x, g, do_g=True) where gradient g is modified by the function,
-                fx is the function return value, and g is computed when do_g is true.
-                If diagonal Hessian is specified, obj.hess_diag(x, h0) should be available.
-            x: The initial value of x as input, the final value of x as output.
-        Returns:
-            the function value of at optimized x
+
+        Parameters
+        ----------
+            obj : object
+                Target function to minimize, it should should be encapsulated in a class that has the following methods:
+                ``fx, g = obj.evaluate(x, g, do_g=True)`` where gradient ``g`` is modified by the function,
+                ``fx`` is the function return value, and ``g`` is computed when ``do_g==True``.
+                If diagonal Hessian is specified, ``h0 = obj.hess_diag(x)`` should be available.
+            x : NDArray
+                The initial value of ``x`` as input, the final value of ``x`` as output.
+
+        Returns
+        -------
+            fx : float
+                The function value at optimized ``x``.
         """
         self.g = np.zeros_like(x)
         fx, self.g = obj.evaluate(x, self.g)
@@ -119,7 +145,7 @@ class LBFGS:
                 print(f"Diagonal Hessian at Iter. {self.iter}")
                 print(self.h0)
 
-        self.reset()
+        self._reset()
         self.p = np.zeros_like(x)
         self.x_last = x.copy()
         self.g_last = self.g.copy()
@@ -133,10 +159,10 @@ class LBFGS:
                 if self.iter % self.h0_freq == 0:
                     compute_h0(x)
 
-            self.update()
+            self._update()
 
             step = 1.0
-            fx, step = self.next_step(obj, x, fx, step)
+            fx, step = self._next_step(obj, x, fx, step)
 
             g_norm = np.linalg.norm(self.g)
             if self.print > 2:
@@ -178,7 +204,7 @@ class LBFGS:
 
         return fx
 
-    def update(self):
+    def _update(self):
         self.p[:] = self.g
         m = min(self.iter - self.iter_shift_, self.m)
         end = (self.iter - self.iter_shift_ - 1) % m if m else 0
@@ -188,7 +214,7 @@ class LBFGS:
             self.alpha[i] = self.rho[i] * np.dot(self.s[i], self.p)
             self.p -= self.alpha[i] * self.y[i]
 
-        self.apply_h0(self.p)
+        self._apply_h0(self.p)
 
         for k in range(m):
             i = (end + k + 1) % m
@@ -199,16 +225,16 @@ class LBFGS:
         if self.print > 3:
             print(self.p)
 
-    def next_step(self, foo, x, fx, step):
+    def _next_step(self, foo, x, fx, step):
         match self.step_length_method:
             case "max_correction":
-                return self.scale_direction_vector(foo, x, fx, step)
+                return self._scale_direction_vector(foo, x, fx, step)
             case "line_backtracking":
-                return self.line_search_backtracking(foo, x, fx, step)
+                return self._line_search_backtracking(foo, x, fx, step)
             case "line_bracketing_zoom":
-                return self.line_search_bracketing_zoom(foo, x, fx, step)
+                return self._line_search_bracketing_zoom(foo, x, fx, step)
 
-    def scale_direction_vector(self, func, x, fx, step):
+    def _scale_direction_vector(self, func, x, fx, step):
         p_max = np.max(np.abs(self.p))
         step = min(1.0, self.max_dir / p_max) if p_max > self.max_dir else 1.0
         x += step * self.p
@@ -216,14 +242,14 @@ class LBFGS:
         fx, self.g = func.evaluate(x, self.g, do_grad)
         return fx, step
 
-    def line_search_backtracking(self, func, x, fx, step):
+    def _line_search_backtracking(self, func, x, fx, step):
         dg0 = np.dot(self.g, self.p)
         fx0 = fx
         x0 = x.copy()
 
         if dg0 >= 0:
             print("  Warning: Direction increases the energy. Reset L-BFGS.")
-            self.reset()
+            self._reset()
 
         for i in range(self.maxiter_linesearch + 1):
             x[:] = x0 + step * self.p
@@ -259,7 +285,7 @@ class LBFGS:
                 break
         return fx, step
 
-    def line_search_bracketing_zoom(self, func, x, fx, step):
+    def _line_search_bracketing_zoom(self, func, x, fx, step):
         dg0 = np.dot(self.g, self.p)
         fx0 = fx
         x0 = x.copy()
@@ -338,9 +364,9 @@ class LBFGS:
             step = self.min_step
         return fx, step
 
-    def apply_h0(self, q):
+    def _apply_h0(self, q):
         if self.h0_freq < 0:
-            gamma = self.compute_gamma()
+            gamma = self._compute_gamma()
             if self.print > 3:
                 print(f"    gamma for H0: {gamma:.15f}")
             q *= gamma
@@ -351,7 +377,7 @@ class LBFGS:
             if self.print > 1 and not np.all(mask):
                 print(f"    Zero diagonal Hessian element")
 
-    def compute_gamma(self):
+    def _compute_gamma(self):
         if self.iter - self.iter_shift_ == 0:
             return 1.0
         end = (self.iter - self.iter_shift_ - 1) % min(
@@ -359,13 +385,13 @@ class LBFGS:
         )
         return np.dot(self.s[end], self.y[end]) / np.dot(self.y[end], self.y[end])
 
-    def resize(self, m):
+    def _resize(self, m):
         self.y = [np.array([]) for _ in range(m)]
         self.s = [np.array([]) for _ in range(m)]
         self.alpha = np.zeros(m)
         self.rho = np.zeros(m)
 
-    def reset(self):
-        self.resize(self.m)
+    def _reset(self):
+        self._resize(self.m)
         self.iter = 0
         self.iter_shift_ = 0

@@ -6,14 +6,18 @@ from forte2.helpers import logger
 
 
 class FockBuilder:
-    """Class to build the Fock matrix using the Cholesky decomposition of the auxiliary basis integrals.
+    """
+    Class to build the Fock matrix using the Cholesky decomposition of the auxiliary basis integrals.
     This class computes the atomic Coulomb (J) and exchange (K) matrices
     using the auxiliary basis functions.
 
-    Args:
-        system (System or ModelSystem): The system for which to build the Fock matrix.
-            If a ModelSystem is provided, it will decompose the 4D ERI tensor using Cholesky decomposition with complete pivoting.
-        use_aux_corr (bool): Whether to use 'auxiliary_basis' or 'auxiliary_basis_corr'. Default is False.
+    Parameters
+    ----------
+    system : System or ModelSystem
+        The system for which to build the Fock matrix.
+        If a ModelSystem is provided, it will decompose the 4D ERI tensor using Cholesky decomposition with complete pivoting.
+    use_aux_corr : bool, optional, default=False
+        If True, uses ``system.auxiliary_basis_corr`` instead of ``system.auxiliary_basis``.
     """
 
     def __init__(self, system, use_aux_corr=False):
@@ -93,22 +97,36 @@ class FockBuilder:
         return J, K
 
     def two_electron_integrals_gen_block(self, C1, C2, C3, C4, antisymmetrize=False):
-        """Compute the two-electron integrals for a given set of orbitals. This method is
+        r"""
+        Compute the two-electron integrals for a given set of orbitals. This method is
         general and can handle different sets of orbitals for each index (p, q, r, s).
 
         The resulting integrals are stored in a 4D array with the following convention:
-            V[p,q,r,s] = <pq|rs> = ∫∫ φ*_p(r1) φ*_q(r2) (1/r12) φ_r(r1) φ_s(r2) dr1 dr2
+        V[p,q,r,s] = :math:`\langle pq | rs \rangle`, where
 
-        Args:
-            C1 (ndarray): Coefficient matrix for the first set of orbitals (index p).
-            C2 (ndarray): Coefficient matrix for the second set of orbitals (index q).
-            C3 (ndarray): Coefficient matrix for the third set of orbitals (index r).
-            C4 (ndarray): Coefficient matrix for the fourth set of orbitals (index s).
-            antisymmetrize (bool): Whether to antisymmetrize the integrals.
-        Returns:
-            V (ndarray): The two-electron integrals in the form of a 4D array.
-                If antisymmetrize is True, the integrals are antisymmetrized as:
-                V[p,q,r,s] = <pq||rs> = <pq|rs> - <pq|rs>
+        .. math::
+
+            \langle pq | rs \rangle = \iint \phi^*_p(r_1) \phi^*_q(r_2) \frac{1}{r_{12}} \phi_r(r_1) \phi_s(r_2) dr_1 dr_2
+
+
+        Parameters
+        ----------
+        C1 : NDArray
+            Coefficient matrix for the first set of orbitals (index p).
+        C2 : NDArray
+            Coefficient matrix for the second set of orbitals (index q).
+        C3 : NDArray
+            Coefficient matrix for the third set of orbitals (index r).
+        C4 : NDArray
+            Coefficient matrix for the fourth set of orbitals (index s).
+        antisymmetrize : bool, optional, default=False
+            Whether to antisymmetrize the integrals. If True, the integrals are antisymmetrized as:
+            V[p,q,r,s] = :math:`\langle pq || rs \rangle = \langle pq | rs \rangle - \langle pq | sr \rangle`
+
+        Returns
+        -------
+        V : NDArray
+            The two-electron integrals in the form of a 4D array.
         """
         V = np.einsum(
             "Pmn,Prs,mi,rj,nk,sl->ijkl",
@@ -125,17 +143,27 @@ class FockBuilder:
         return V
 
     def two_electron_integrals_block(self, C, antisymmetrize=False):
-        """Compute the two-electron integrals for a given set of orbitals.
+        r"""
+        Compute the two-electron integrals for a given set of orbitals.
 
         The resulting integrals are stored in a 4D array with the following convention:
-            V[p,q,r,s] = <pq|rs> = ∫∫ φ*_p(r1) φ*_q(r2) (1/r12) φ_r(r1) φ_s(r2) dr1 dr2
+        V[p,q,r,s] = :math:`\langle pq | rs \rangle`, where
 
-        Args:
-            C (ndarray): Coefficient matrix for the set of orbitals.
-            antisymmetrize (bool): Whether to antisymmetrize the integrals.
-        Returns:
-            V (ndarray): The two-electron integrals in the form of a 4D array.
-                If antisymmetrize is True, the integrals are antisymmetrized as:
-                V[p,q,r,s] = <pq||rs> = <pq|rs> - <pq|rs>
+        .. math::
+
+            \langle pq | rs \rangle = \iint \phi^*_p(r_1) \phi^*_q(r_2) \frac{1}{r_{12}} \phi_r(r_1) \phi_s(r_2) dr_1 dr_2
+
+        Parameters
+        ----------
+        C : NDArray
+            Coefficient matrix for the set of orbitals.
+        antisymmetrize : bool, optional, default=False
+            Whether to antisymmetrize the integrals. If True, the integrals are antisymmetrized as:
+            V[p,q,r,s] = :math:`\langle pq || rs \rangle = \langle pq | rs \rangle - \langle pq | sr \rangle`
+
+        Returns
+        -------
+        V : NDArray
+            The two-electron integrals in the form of a 4D array.
         """
         return self.two_electron_integrals_gen_block(C, C, C, C, antisymmetrize)

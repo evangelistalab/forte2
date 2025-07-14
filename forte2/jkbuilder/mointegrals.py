@@ -10,19 +10,28 @@ from forte2.system.system import System
 
 @dataclass
 class RestrictedMOIntegrals:
-    """Class to compute molecular orbital integrals for a given set of restricted orbitals.
+    r"""
+    Class to compute molecular orbital integrals for a given set of restricted orbitals.
 
-    Args:
-        C (ndarray): The coefficient matrix for the molecular orbitals.
-        orbitals (list): Subspace of the orbitals for which to compute the integrals.
-        core_orbitals (list, optional): Subspace of doubly occupied orbitals. Defaults to None.
-        use_aux_corr (bool, optional): If True, use 'auxiliary_basis_corr', else use 'auxiliary_basis'. Defaults to False
-    Returns:
-        None
-    Attributes:
-        E (float): Nuclear repulsion plus the core energy contribution.
-        H (ndarray): The effective one-electron integrals.
-        V (ndarray): The two-electron integrals stored in physics convention: V[p,q,r,s] = <pq|rs>
+    Parameters
+    ----------
+        C : NDArray
+            The coefficient matrix for the molecular orbitals.
+        orbitals : list[int]
+            Subspace of the orbitals for which to compute the integrals.
+        core_orbitals : list[int], optional
+            Subspace of doubly occupied orbitals. Defaults to None.
+        use_aux_corr : bool, optional, default=False
+            If True, use ``system.auxiliary_basis_corr``, else use ``system.auxiliary_basis``.
+
+    Attributes
+    ----------
+        E : float
+            Nuclear repulsion plus the core energy contribution.
+        H : NDArray
+            The effective one-electron integrals.
+        V : NDArray
+            The two-electron integrals stored in physics convention: V[p,q,r,s] = :math:`\langle pq | rs \rangle`.
     """
 
     system: System

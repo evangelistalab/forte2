@@ -4,13 +4,22 @@ import scipy.linalg
 
 
 def _spin_independent_property_1e(dm_tot, ints, factor=1.0):
-    """Calculate a one-electron spin-independent property using the total density matrix and integrals.
-    Args:
-        dm_tot (NDArray): The total density matrix (dm_aa + dm_bb)
-        ints (NDArray or list): The integrals for the property.
-        factor (float): A scaling factor for the property value.
-    Returns:
-        float or NDArray: The calculated property value, either a single value or an array if multiple integrals are provided.
+    """
+    Calculate a one-electron spin-independent property using the total density matrix and integrals.
+
+    Parameters
+    ----------
+        dm_tot : NDArray
+            The total density matrix (dm_aa + dm_bb)
+        ints : NDArray or list[NDArray]
+            The integrals for the property.
+        factor : float, optional, default=1.0
+            A scaling factor for the property value.
+
+    Returns
+    -------
+        float or NDArray
+            The calculated property value, either a single value or an array if multiple integrals are provided.
     """
     if not isinstance(ints, list):
         return np.einsum("pq,qp->", dm_tot, ints) * factor
@@ -20,13 +29,22 @@ def _spin_independent_property_1e(dm_tot, ints, factor=1.0):
 def get_property(method, property_name, origin=None, unit="debye"):
     """
     Calculate a property of the system using the given method.
-    Args:
-        method: A method object that has been run and contains the necessary data.
-        property_name: The name of the property to calculate (e.g., "kinetic_energy", "nuclear_attraction_energy", "electric_dipole").
-        origin: Optional; the origin point for properties that depend on it (e.g., electric dipole moment).
-        unit: Optional; the unit for the property value, either "debye" or "au". Default is "debye".
-                Only used for multipole moments. For quadrupole moments, "debye" stands for debye * angstrom, etc.
-    Returns:
+
+    Parameters
+    ----------
+    method : object
+        A method object that has been run and contains the necessary data.
+    property_name : str
+        The name of the property to calculate (e.g., "kinetic_energy", "nuclear_attraction_energy", "electric_dipole").
+    origin: list[float], optional
+        The origin point for properties that depend on it (e.g., electric dipole moment).
+    unit: str, optional, default="debye"
+        The unit for the property value, either "debye" or "au". Default is "debye".
+        Only used for multipole moments. For quadrupole moments, "debye" stands for debye * angstrom, etc.
+
+    Returns
+    -------
+    float or NDArray
         The calculated property value.
     """
 
@@ -106,11 +124,20 @@ def get_property(method, property_name, origin=None, unit="debye"):
 def mulliken_population(method):
     """
     Perform Mulliken population analysis on the system using the given method.
+
+    Parameters
+    ----------
+    method : object
+        A method object that has a ``_build_total_density_matrix`` method.
+
+    Returns
+    -------
+    tuple(NDArray, NDArray)
+        The Mulliken population for each basis function and the atomic charges.
+
+    Notes
+    -----
     See eq 3.196 in Szabo and Ostlund.
-    Args:
-        method: A method object that has been run and contains the necessary data.
-    Returns:
-        Tuple(np.ndarray, np.ndarray): The Mulliken population for each basis function and the atomic charges.
     """
     if not method.executed:
         method.run()

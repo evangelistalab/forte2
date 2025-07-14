@@ -9,6 +9,27 @@ LIGHT_SPEED = scipy.constants.physical_constants["inverse fine-structure constan
 
 
 def get_hcore_x2c(system, x2c_type="sf"):
+    """
+    Return the one-electron X2C core Hamiltonian matrix for the given system.
+
+    Parameters
+    ----------
+    system : forte2.system.System
+        The system for which to compute the X2C core Hamiltonian.
+    x2c_type : str, optional, default="sf"
+        The type of X2C to use, either "sf" or "so" (spin-orbit).
+
+    Returns
+    -------
+    NDArray
+        The X2C core Hamiltonian matrix in the contracted basis.
+
+    Notes
+    -----
+    Implementation follows the general algorithm of J. Chem. Phys. 135, 084114 (2011),
+    but adopts some numerical tricks from J. Chem. Phys. 131, 031104 (2009), especially
+    for the spin-orbit case. See also PySCF's x2c module for reference.
+    """
     assert x2c_type in [
         "sf",
         "so",

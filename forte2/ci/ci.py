@@ -441,10 +441,11 @@ class CI(MOsMixin, SystemMixin):
         """
         Make the spin-free one-particle RDM from a CI vector.
 
-        Args
-        ----
+        Parameters
+        ----------
             ci_vec : NDArray
                 CI vector in the CSF basis.
+
         Returns
         -------
             NDArray
@@ -457,8 +458,8 @@ class CI(MOsMixin, SystemMixin):
         """
         Make the spin-free one-particle transition density matrix from two CI vectors.
 
-        Args
-        ----
+        Parameters
+        ----------
             ci_l : NDArray
                 Left CI vector in the CSF basis.
             ci_r : NDArray
@@ -479,8 +480,8 @@ class CI(MOsMixin, SystemMixin):
         """
         Make the spin-dependent two-particle RDMs (aa, ab, bb) from a CI vector in the CSF basis.
 
-        Args
-        ----
+        Parameters
+        ----------
             ci_vec : ndarray
                 CI vector in the CSF basis.
             full : bool, optional, default=True
@@ -508,8 +509,8 @@ class CI(MOsMixin, SystemMixin):
         Make the spin-dependent two-particle transition density matrices (aa, ab, bb)
         from two CI vectors in the CSF basis.
 
-        Args
-        ----
+        Parameters
+        ----------
             ci_l : NDArray
                 Left CI vector in the CSF basis.
             ci_r : NDArray
@@ -540,10 +541,11 @@ class CI(MOsMixin, SystemMixin):
         """
         Make the spin-free two-particle RDM from a CI vector in the CSF basis.
 
-        Args
-        ----
+        Parameters
+        ----------
             ci_vec : NDArray
                 CI vector in the CSF basis.
+
         Returns
         -------
             NDArray
@@ -557,8 +559,8 @@ class CI(MOsMixin, SystemMixin):
         """
         Make the spin-free two-particle transition density matrix from two CI vectors in the CSF basis.
 
-        Args
-        ----
+        Parameters
+        ----------
             ci_l : NDArray
                 Left CI vector in the CSF basis.
             ci_r : NDArray
