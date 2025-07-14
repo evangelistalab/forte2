@@ -317,7 +317,9 @@ class CI(MOsMixin, SystemMixin):
                 + np.einsum("ijkl,ijkl", root_rdms["rdm2_ab"], self.ints.V)
                 + np.einsum("ij,ij", root_rdms["rdm2_bb"], M)
             )
-            logger.log(f"CI energy from RDMs: {rdms_energy:.6f} Eh", self.log_level)
+            logger.log(
+                f"CI energy from RDMs:           {rdms_energy:.12f} Eh", self.log_level
+            )
             assert np.isclose(
                 self.E[root], rdms_energy
             ), f"CI energy {self.E[root]} Eh does not match RDMs energy {rdms_energy} Eh"
@@ -330,12 +332,12 @@ class CI(MOsMixin, SystemMixin):
                 + np.einsum("ijkl,ijkl", root_rdms["rdm2_bb_full"], A) * 0.25
             )
             logger.log(
-                f"CI energy from expanded RDMs: {rdms_energy:.6f} Eh", self.log_level
+                f"CI energy from expanded RDMs:  {rdms_energy:.12f} Eh", self.log_level
             )
 
-            assert np.isclose(
-                self.E[root], rdms_energy
-            ), f"CI energy {self.E[root]} Eh does not match RDMs energy {rdms_energy} Eh"
+            from forte2.helpers.comparisons import approx
+
+            assert self.E[root] == approx(rdms_energy)
 
             rdms_energy = (
                 self.ints.E
@@ -347,12 +349,10 @@ class CI(MOsMixin, SystemMixin):
                 )
             )
             logger.log(
-                f"CI energy from spin-free RDMs: {rdms_energy:.6f} Eh", self.log_level
+                f"CI energy from spin-free RDMs: {rdms_energy:.12f} Eh", self.log_level
             )
 
-            assert np.isclose(
-                self.E[root], rdms_energy
-            ), f"CI energy {self.E[root]} Eh does not match RDMs energy {rdms_energy} Eh"
+            assert self.E[root] == approx(rdms_energy)
 
             logger.log(
                 f"RDMs for root {root} validated successfully.\n", self.log_level
@@ -453,6 +453,17 @@ class CI(MOsMixin, SystemMixin):
         ci_vec_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
         return self.ci_sigma_builder.rdm1_sf(ci_vec_det, ci_vec_det)
+
+    def make_rdm1_a(self, ci_vec, spin):
+        """
+        Make the spin-free one-particle RDM from a CI vector.
+        Args:
+            ci_vec (ndarray): CI vector in the CSF basis.
+        Returns:
+            ndarray: Spin-free one-particle RDM."""
+        ci_vec_det = np.zeros((self.ndet))
+        self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
+        return self.ci_sigma_builder.rdm1_a(ci_vec_det, ci_vec_det, spin)
 
     def make_tdm1_sf(self, ci_l, ci_r):
         """

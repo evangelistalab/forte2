@@ -63,11 +63,48 @@ void export_ci_sigma_builder_api(nb::module_& m) {
         .def("rdm2_aa_full", &CISigmaBuilder::compute_2rdm_aa_same_irrep_full, "C_left"_a,
              "C_right"_a, "alfa"_a)
         .def("rdm2_ab", &CISigmaBuilder::compute_2rdm_ab_same_irrep, "C_left"_a, "C_right"_a)
+        .def("rdm3_aaa", &CISigmaBuilder::compute_3rdm_aaa_same_irrep, "C_left"_a, "C_right"_a,
+             "alfa"_a)
+        .def("rdm3_aab", &CISigmaBuilder::compute_3rdm_aab_same_irrep, "C_left"_a, "C_right"_a)
+        .def("rdm3_abb", &CISigmaBuilder::compute_3rdm_abb_same_irrep, "C_left"_a, "C_right"_a)
         .def("rdm1_sf", &CISigmaBuilder::compute_sf_1rdm_same_irrep, "C_left"_a, "C_right"_a)
         .def("rdm2_sf", &CISigmaBuilder::compute_sf_2rdm_same_irrep, "C_left"_a, "C_right"_a)
         .def("avg_build_time", &CISigmaBuilder::avg_build_time)
         .def("set_log_level", &CISigmaBuilder::set_log_level, "level"_a,
-             "Set the logging level for the class");
+             "Set the logging level for the class")
+        // The following methods are for debugging purposes
+        .def("rdm1_a_debug", &CISigmaBuilder::compute_1rdm_a_debug, "C_left"_a, "C_right"_a,
+             "alfa"_a)
+        .def("rdm2_aa_debug", &CISigmaBuilder::compute_2rdm_aa_debug, "C_left"_a, "C_right"_a,
+             "alfa"_a,
+             "Compute the two-electron same-spin reduced density matrix for debugging purposes")
+        .def("rdm2_ab_debug", &CISigmaBuilder::compute_2rdm_ab_debug, "C_left"_a, "C_right"_a,
+             "Compute the two-electron mixed-spin reduced density matrix for debugging purposes")
+        .def("rdm3_aaa_debug", &CISigmaBuilder::compute_3rdm_aaa_debug, "C_left"_a, "C_right"_a,
+             "alfa"_a,
+             "Compute the three-electron same-spin reduced density matrix for debugging purposes")
+        .def("rdm3_aab_debug", &CISigmaBuilder::compute_3rdm_aab_debug, "C_left"_a, "C_right"_a,
+             "Compute the aab mixed-spin three-electron reduced density matrix for debugging "
+             "purposes")
+        .def("rdm3_abb_debug", &CISigmaBuilder::compute_3rdm_abb_debug, "C_left"_a, "C_right"_a,
+             "Compute the abb mixed-spin three-electron reduced density matrix for debugging "
+             "purposes")
+        .def("rdm4_aaaa_debug", &CISigmaBuilder::compute_4rdm_aaaa_debug, "C_left"_a, "C_right"_a,
+             "alfa"_a,
+             "Compute the four-electron same-spin reduced density matrix for debugging purposes")
+        .def("rdm4_aaab_debug", &CISigmaBuilder::compute_4rdm_aaab_debug, "C_left"_a, "C_right"_a,
+             "Compute the aaab mixed-spin four-electron reduced density matrix for debugging "
+             "purposes")
+        .def("rdm4_aabb_debug", &CISigmaBuilder::compute_4rdm_aabb_debug, "C_left"_a, "C_right"_a,
+             "Compute the aabb mixed-spin four-electron reduced density matrix for debugging "
+             "purposes")
+        .def("rdm4_abbb_debug", &CISigmaBuilder::compute_4rdm_abbb_debug, "C_left"_a, "C_right"_a,
+             "Compute the abbb mixed-spin four-electron reduced density matrix for debugging "
+             "purposes")
+        .def("rdm1_sf_debug", &CISigmaBuilder::compute_sf_1rdm_debug, "C_left"_a, "C_right"_a,
+             "Compute the spin-free one-electron reduced density matrix for debugging purposes")
+        .def("rdm2_sf_debug", &CISigmaBuilder::compute_sf_2rdm_debug, "C_left"_a, "C_right"_a,
+             "Compute the spin-free two-electron reduced density matrix for debugging purposes");
 }
 
 void export_ci_spin_adapter_api(nb::module_& m) {

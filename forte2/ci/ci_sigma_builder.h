@@ -94,7 +94,7 @@ class CISigmaBuilder {
     /// @param C_right The right-hand side coefficients
     /// @param alfa If true, compute the alpha contribution, otherwise the beta
     /// @return The two-electron same-spin reduced density matrix stored as a matrix
-    ///        gamma(sigma)[p][q][r][s] = <L| a^+_p a^+_q a_s a_r |R>
+    ///        gamma(sigma)[p>q][r>s] = <L| a^+_p a^+_q a_s a_r |R>
     ///        with p > q, and r > s orbitals of spin sigma
     np_matrix compute_2rdm_aa_same_irrep(np_vector C_left, np_vector C_right, bool alfa) const;
 
@@ -119,12 +119,55 @@ class CISigmaBuilder {
     /// @param C_left The left-hand side coefficients
     /// @param C_right The right-hand side coefficients
     /// @return The two-electron spin-free reduced density matrix stored as a tensor
-    ///        gamma[p][q][r][s] = gamma(alpha)[p][q][r][s] +
-    ///                            gamma(beta)[p][q][r][s] +
-    ///                            gamma[p][q][r][s]
-    ///                            gamma[q][p][s][r]
-    ///        with p,r orbitals of spin alpha and q,s orbitals of spin beta
+    ///        gamma[p][q][r][s] = gamma(aa)[p][q][r][s] +
+    ///                            gamma(bb)[p][q][r][s] +
+    ///                            gamma(ab)[p][q][r][s]
+    ///                            gamma(ab)[q][p][s][r]
     np_tensor4 compute_sf_2rdm_same_irrep(np_vector C_left, np_vector C_right);
+
+    /// @brief Compute the three-electron same-spin reduced density matrix
+    /// @param C_left The left-hand side coefficients
+    /// @param C_right The right-hand side coefficients
+    /// @param alfa If true, compute the alpha contribution, otherwise the beta
+    /// @return The three-electron same-spin reduced density matrix stored as a matrix
+    ///        gamma(sigma)[p>q>r][s>t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
+    ///        with p > q > r, and s > t > u orbitals of spin sigma
+    np_matrix compute_3rdm_aaa_same_irrep(np_vector C_left, np_vector C_right, bool alfa) const;
+
+    /// @brief Compute the aab mixed-spin three-electron reduced density matrix
+    /// @param C_left The left-hand side coefficients
+    /// @param C_right The right-hand side coefficients
+    /// @return The three-electron mixed-spin reduced density matrix stored as a tensor
+    ///        gamma[p>q][r][s>t][u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
+    ///        with p > q and s > t are alpha spin orbitals and r,u are beta spin orbitals
+    np_tensor4 compute_3rdm_aab_same_irrep(np_vector C_left, np_vector C_right) const;
+
+    /// @brief Compute the abb mixed-spin three-electron reduced density matrix
+    /// @param C_left The left-hand side coefficients
+    /// @param C_right The right-hand side coefficients
+    /// @return The three-electron mixed-spin reduced density matrix stored as a tensor
+    ///        gamma[p][q>r][s][t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
+    ///        with p and s are alpha spin orbitals and q > r and u > t are beta spin orbitals
+    np_tensor4 compute_3rdm_abb_same_irrep(np_vector C_left, np_vector C_right) const;
+
+    // The following are debugging functions that compute reduced density matrices that parallel the
+    // definition of the functions above.
+    np_matrix compute_1rdm_a_debug(np_vector C_left, np_vector C_right, bool alfa);
+
+    np_matrix compute_2rdm_aa_debug(np_vector C_left, np_vector C_right, bool alfa);
+    np_tensor4 compute_2rdm_ab_debug(np_vector C_left, np_vector C_right);
+
+    np_matrix compute_3rdm_aaa_debug(np_vector C_left, np_vector C_right, bool alfa);
+    np_tensor4 compute_3rdm_aab_debug(np_vector C_left, np_vector C_right);
+    np_tensor4 compute_3rdm_abb_debug(np_vector C_left, np_vector C_right);
+
+    np_matrix compute_4rdm_aaaa_debug(np_vector C_left, np_vector C_right, bool alfa);
+    np_tensor4 compute_4rdm_aaab_debug(np_vector C_left, np_vector C_right);
+    np_tensor4 compute_4rdm_aabb_debug(np_vector C_left, np_vector C_right);
+    np_tensor4 compute_4rdm_abbb_debug(np_vector C_left, np_vector C_right);
+
+    np_matrix compute_sf_1rdm_debug(np_vector C_left, np_vector C_right);
+    np_tensor4 compute_sf_2rdm_debug(np_vector C_left, np_vector C_right);
 
   private:
     // == Class Private Variables ==

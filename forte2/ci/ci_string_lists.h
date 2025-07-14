@@ -48,15 +48,6 @@ class CIStrings {
     /// @brief Set the printing level for the class
     void set_log_level(int level) { log_level_ = level; }
 
-    //   /// @return the number of correlated MOs per irrep
-    //   psi::Dimension cmopi() const { return cmopi_; }
-
-    //   /// @return the offset of correlated MOs per irrep
-    //   std::vector<size_t> cmopi_offset() const { return cmopi_offset_; }
-
-    //   // /// @return the number of pairs per irrep
-    //   // size_t pairpi(int h) const { return pairpi_[h]; }
-
     /// @return the alpha string address object
     const auto& alfa_address() const { return alfa_address_; }
     /// @return the beta string address object

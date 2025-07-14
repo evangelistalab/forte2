@@ -160,35 +160,6 @@ void make_vo2(const StringList& strings, const std::shared_ptr<StringAddress>& I
     }
 }
 
-H1List make_1h_list(const StringList& strings, std::shared_ptr<StringAddress> addresser,
-                    std::shared_ptr<StringAddress> addresser_1h) {
-    H1List list;
-    int n = addresser->nbits();
-    int k = addresser->nones();
-    size_t nmo = addresser->nbits();
-    if ((k >= 0) and (k <= n)) { // check that (n > 0) makes sense.
-        for (const auto& string_class : strings) {
-            for (const auto& I : string_class) {
-                // std::cout << "String " < < < < std::endl;
-                const auto& [add_I, class_I] = addresser->address_and_class(I);
-                for (size_t p = 0; p < nmo; ++p) {
-                    if (I[p]) {
-                        auto J = I;
-                        const auto sign = J.slater_sign(p);
-                        J[p] = false;
-                        if (auto it = addresser_1h->find(J); it != addresser_1h->end()) {
-                            const auto& [add_J, class_J] = it->second;
-                            std::tuple<int, size_t, int> I_tuple(class_J, add_J, class_I);
-                            list[I_tuple].push_back(H1StringSubstitution(sign, p, add_I));
-                        }
-                    }
-                }
-            }
-        }
-    }
-    return list;
-}
-
 H1List2 make_1h_list2(const StringList& strings, std::shared_ptr<StringAddress> addresser,
                       std::shared_ptr<StringAddress> addresser_1h) {
     H1List2 list;
@@ -237,6 +208,35 @@ H1List2 make_1h_list2(const StringList& strings, std::shared_ptr<StringAddress> 
     return list;
 }
 
+H1List make_1h_list(const StringList& strings, std::shared_ptr<StringAddress> addresser,
+                    std::shared_ptr<StringAddress> addresser_1h) {
+    H1List list;
+    int n = addresser->nbits();
+    int k = addresser->nones();
+    size_t nmo = addresser->nbits();
+    if ((k >= 0) and (k <= n)) { // check that (n > 0) makes sense.
+        for (const auto& string_class : strings) {
+            for (const auto& I : string_class) {
+                // std::cout << "String " < < < < std::endl;
+                const auto& [add_I, class_I] = addresser->address_and_class(I);
+                for (size_t p = 0; p < nmo; ++p) {
+                    if (I[p]) {
+                        auto J = I;
+                        const auto sign = J.slater_sign(p);
+                        J[p] = false;
+                        if (auto it = addresser_1h->find(J); it != addresser_1h->end()) {
+                            const auto& [add_J, class_J] = it->second;
+                            std::tuple<int, size_t, int> I_tuple(class_J, add_J, class_I);
+                            list[I_tuple].push_back(H1StringSubstitution(sign, p, add_I));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return list;
+}
+
 H2List make_2h_list(const StringList& strings, std::shared_ptr<StringAddress> addresser,
                     std::shared_ptr<StringAddress> addresser_2h) {
     H2List list;
@@ -270,12 +270,6 @@ H2List make_2h_list(const StringList& strings, std::shared_ptr<StringAddress> ad
     return list;
 }
 
-/**
- * Generate all the pairs of strings I,J connected
- * by a^{+}_p a_q
- * that is: J = ± a^{+}_p a_q I. p and q are
- * absolute indices and I belongs to the irrep h.
- */
 H3List make_3h_list(const StringList& strings, std::shared_ptr<StringAddress> addresser,
                     std::shared_ptr<StringAddress> addresser_3h) {
     H3List list;
@@ -302,17 +296,17 @@ H3List make_3h_list(const StringList& strings, std::shared_ptr<StringAddress> ad
                                     const auto& [add_J, class_J] = it->second;
                                     std::tuple<int, size_t, int> I_tuple(class_J, add_J, class_I);
                                     list[I_tuple].push_back(
-                                        H3StringSubstitution(+sign, p, q, r, add_I));
-                                    list[I_tuple].push_back(
-                                        H3StringSubstitution(-sign, p, r, q, add_I));
-                                    list[I_tuple].push_back(
-                                        H3StringSubstitution(-sign, q, p, r, add_I));
-                                    list[I_tuple].push_back(
-                                        H3StringSubstitution(+sign, q, r, p, add_I));
-                                    list[I_tuple].push_back(
-                                        H3StringSubstitution(-sign, r, q, p, add_I));
-                                    list[I_tuple].push_back(
-                                        H3StringSubstitution(+sign, r, p, q, add_I));
+                                        H3StringSubstitution(sign, p, q, r, add_I));
+                                    // list[I_tuple].push_back(
+                                    //     H3StringSubstitution(-sign, p, r, q, add_I));
+                                    // list[I_tuple].push_back(
+                                    //     H3StringSubstitution(-sign, q, p, r, add_I));
+                                    // list[I_tuple].push_back(
+                                    //     H3StringSubstitution(+sign, q, r, p, add_I));
+                                    // list[I_tuple].push_back(
+                                    //     H3StringSubstitution(-sign, r, q, p, add_I));
+                                    // list[I_tuple].push_back(
+                                    //     H3StringSubstitution(+sign, r, p, q, add_I));
                                 }
                             }
                         }

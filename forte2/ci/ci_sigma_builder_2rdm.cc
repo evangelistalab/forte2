@@ -25,7 +25,7 @@ np_matrix CISigmaBuilder::compute_2rdm_aa_same_irrep(np_vector C_left, np_vector
     auto Cl_span = vector::as_span(C_left);
     auto Cr_span = vector::as_span(C_right);
 
-    auto rdm_view = rdm.view();
+    auto rdm_data = rdm.data();
 
     const auto& alfa_address = lists_.alfa_address();
     const auto& beta_address = lists_.beta_address();
@@ -51,23 +51,24 @@ np_matrix CISigmaBuilder::compute_2rdm_aa_same_irrep(np_vector C_left, np_vector
                 if (lists_.detpblk(nJ) == 0)
                     continue;
 
-                size_t maxL =
+                const size_t maxL =
                     alfa ? beta_address->strpcls(class_Ib) : alfa_address->strpcls(class_Ia);
                 if (maxL > 0) {
                     // Get a pointer to the correct block of matrix C
                     auto tl = gather_block(Cl_span, TL, alfa, lists_, class_Ja, class_Jb);
-                    for (size_t K = 0; K < maxK; ++K) {
+                    for (size_t K{0}; K < maxK; ++K) {
                         auto& Krlist = alfa ? lists_.get_alfa_2h_list(class_K, K, class_Ia)
                                             : lists_.get_beta_2h_list(class_K, K, class_Ib);
                         auto& Kllist = alfa ? lists_.get_alfa_2h_list(class_K, K, class_Ja)
                                             : lists_.get_beta_2h_list(class_K, K, class_Jb);
                         for (const auto& [sign_K, p, q, I] : Krlist) {
+                            const size_t pq_index = pair_index_gt(p, q);
                             for (const auto& [sign_L, r, s, J] : Kllist) {
-                                const size_t pq_index = p * (p - 1) / 2 + q;
-                                const size_t rs_index = r * (r - 1) / 2 + s;
-                                double rdm_element =
+                                const size_t rs_index = pair_index_gt(r, s);
+                                const double rdm_element =
                                     dot(maxL, tr.data() + I * maxL, 1, tl.data() + J * maxL, 1);
-                                rdm_view(pq_index, rs_index) += sign_K * sign_L * rdm_element;
+                                rdm_data[pq_index * npairs + rs_index] +=
+                                    sign_K * sign_L * rdm_element;
                             }
                         }
                     }
@@ -95,7 +96,6 @@ np_tensor4 CISigmaBuilder::compute_2rdm_ab_same_irrep(np_vector C_left, np_vecto
     if ((na < 1) or (nb < 1))
         return rdm;
 
-    auto rdm_view = rdm.view();
     auto rdm_data = rdm.data();
 
     auto Cl_span = vector::as_span(C_left);
@@ -201,6 +201,17 @@ np_tensor4 CISigmaBuilder::compute_2rdm_aa_same_irrep_full(np_vector C_left, np_
     }
     return rdm_full;
 }
+
+// ambit::Tensor RDMs::SF_L2() const {
+//     _test_rdm_level(2, "L2");
+//     timer t("make_cumulant_L2");
+//     auto G1 = SF_G1();
+//     auto L2 = SF_G2().clone();
+//     L2("pqrs") -= G1("pr") * G1("qs");
+//     L2("pqrs") += 0.5 * G1("ps") * G1("qr");
+//     L2.set_name("SF_L2");
+//     return L2;
+// }
 
 } // namespace forte2
 

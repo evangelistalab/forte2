@@ -31,19 +31,43 @@ VOListMap2 make_vo_list2(const StringList& strings,
 void make_vo2(const StringList& strings, const std::shared_ptr<StringAddress>& I_addresser,
               const std::shared_ptr<StringAddress>& J_addresser, VOListMap2& list, int p, int q);
 
-/// Make 1-hole lists (I -> a_p I = sgn J)
+/// Make 1-hole lists  a_p |I> = sign |J>
+/// @param strings the list of strings {|I>}
+/// @param address the addresser for the |I> strings
+/// @param address_1h the addresser for the |J> strings
+/// @return a map from (g_J, add_J, g_I) where g_J is the irrep of J, add_J is the address of a
+///         string |J> and g_I is the irrep of the strings {|I>} to a list of substitutions of the
+///         form (sign, p, add_I) where sign is the sign of the substitution, p is the index of the
+///         orbital that is removed from |I> and add_I is the address of the string |I>.
 H1List make_1h_list(const StringList& strings, std::shared_ptr<StringAddress> address,
                     std::shared_ptr<StringAddress> address_1h);
+
+/// Make 2-hole lists a_p a_q |I> = sign |J> with p > q
+/// @param strings the list of strings {|I>}
+/// @param address the addresser for the |I> strings
+/// @param address_2h the addresser for the |J> strings
+/// @return a map from (g_J, add_J, g_I) where g_J is the irrep of J, add_J is the address of a
+///         string |J> and g_I is the irrep of the strings {|I>} to a list of substitutions of the
+///         form (sign, p, q, add_I) where sign is the sign of the substitution, p and q are the
+///         indices of the orbitals that are removed from |I> and add_I is the address of the string
+///         |I>.
+H2List make_2h_list(const StringList& strings, std::shared_ptr<StringAddress> address,
+                    std::shared_ptr<StringAddress> address_2h);
+
+/// Make 3-hole lists a_p a_q a_r |I> = sign |J> with p > q > r
+/// @param strings the list of strings {|I>}
+/// @param address the addresser for the |I> strings
+/// @param address_3h the addresser for the |J> strings
+/// @return a map from (g_J, add_J, g_I) where g_J is the irrep of J, add_J is the address of a
+///         string |J> and g_I is the irrep of the strings {|I>} to a list of substitutions of the
+///         form (sign, p, q, r, add_I) where sign is the sign of the substitution, p, q, and r are
+///         the indices of the orbitals that are removed from |I> and add_I is the address of the
+///         string |I>.
+H3List make_3h_list(const StringList& strings, std::shared_ptr<StringAddress> address,
+                    std::shared_ptr<StringAddress> address_3h);
 
 /// Make 1-hole lists (I -> a_p I = sgn J)
 H1List2 make_1h_list2(const StringList& strings, std::shared_ptr<StringAddress> address,
                       std::shared_ptr<StringAddress> address_1h);
-
-/// Make 2-hole lists (I -> a_p a_q I = sgn J)
-H2List make_2h_list(const StringList& strings, std::shared_ptr<StringAddress> address,
-                    std::shared_ptr<StringAddress> address_2h);
-/// Make 3-hole lists (I -> a_p a_q a_r I = sgn J)
-H3List make_3h_list(const StringList& strings, std::shared_ptr<StringAddress> address,
-                    std::shared_ptr<StringAddress> address_3h);
 
 } // namespace forte2
