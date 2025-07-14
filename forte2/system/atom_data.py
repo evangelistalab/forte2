@@ -114,6 +114,7 @@ ATOM_SYMBOL_TO_Z = {
     "ES": 99,
     "FM": 100,
 }
+Z_TO_ATOM_SYMBOL = {v: k for k, v in ATOM_SYMBOL_TO_Z.items()}
 """
     A map from atom symbols to atomic data
 """

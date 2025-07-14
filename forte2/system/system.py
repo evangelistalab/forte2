@@ -44,6 +44,10 @@ class System:
     ortho_thresh : float, optional, default=1e-8
         Linear combinations of AO basis functions with overlap eigenvalues below this threshold will be removed
         during orthogonalization.
+
+    Attributes
+    ----------
+    atoms : list[tuple[float, tuple[float, float, float]]]
     """
 
     xyz: str
@@ -73,6 +77,7 @@ class System:
             "bohr",
         ], f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'."
         self.atoms = parse_xyz(self.xyz, self.unit)
+        self.natoms = len(self.atoms[0])
         self.basis = build_basis(self.basis, self.atoms)
         self.auxiliary_basis = (
             build_basis(self.auxiliary_basis, self.atoms)
