@@ -12,7 +12,9 @@ def test_read_wfn():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system1 = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
+    system1 = forte2.System(
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+    )
 
     scf1 = RHF(charge=0)(system1)
     scf1.run()
@@ -26,7 +28,9 @@ def test_read_wfn():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system2 = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
+    system2 = forte2.System(
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+    )
     scf2 = RHF(charge=0)(system2)
     scf2.run()
     assert scf2.E == approx(e_newgeom)

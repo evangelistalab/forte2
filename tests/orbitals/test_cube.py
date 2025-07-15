@@ -9,6 +9,7 @@ from forte2.scf import RHF
 from forte2.orbitals.cube import Cube
 from forte2.helpers.comparisons import approx
 
+
 def test_cube():
     escf = -76.02176598836786
     # Test the SCF implementation with a simple example
@@ -18,7 +19,9 @@ def test_cube():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = forte2.System(xyz=xyz, basis="cc-pVDZ", auxiliary_basis="cc-pVTZ-JKFIT")
+    system = forte2.System(
+        xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT"
+    )
 
     scf = RHF(charge=0)(system)
     scf.run()

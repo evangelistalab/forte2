@@ -14,7 +14,9 @@ def test_uhf_triplet():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
+    system = forte2.System(
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+    )
 
     scf = UHF(charge=0, ms=1)(system)
     scf.run()
@@ -32,7 +34,9 @@ def test_uhf_singlet():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
+    system = forte2.System(
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+    )
 
     scf = UHF(charge=0, ms=0)(system)
     scf.run()
@@ -47,7 +51,9 @@ def test_uhf_one_electron():
     H           0.000000000000     0.000000000000     0.000000000000
     H           0.000000000000     0.000000000000     1.000000000000
     """
-    system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
+    system = forte2.System(
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+    )
     scf = UHF(charge=1, ms=-0.5)(system)
     scf.run()
     assert scf.E == approx(euhf)
@@ -60,7 +66,7 @@ def test_uhf_imcompatible_params():
     H 0 0 1
     """
     system = forte2.System(
-        xyz=xyz, basis="sto-6g", auxiliary_basis="def2-universal-jkfit"
+        xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="def2-universal-jkfit"
     )
     with pytest.raises(ValueError):
         scf = UHF(charge=-3, ms=1.0)(system)  # 5 electron, ms=1.0 should not be allowed
@@ -76,7 +82,9 @@ def test_coulson_fischer():
     xyz = """
     H 0 0 0
     H 0 0 2.7"""
-    system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
+    system = forte2.System(
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+    )
     rhf = RHF(charge=0)(system)
     rhf.run()
     assert rhf.E == approx(erhf)

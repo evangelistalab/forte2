@@ -5,7 +5,7 @@ from forte2.helpers.comparisons import approx
 def test_one_electron_integrals():
     xyz = "H  0.0 0.0 0.0"
 
-    system = forte2.System(xyz=xyz, basis="cc-pvdz")
+    system = forte2.System(xyz=xyz, basis_set="cc-pvdz")
 
     S = forte2.ints.overlap(system.basis)
     T = forte2.ints.kinetic(system.basis)

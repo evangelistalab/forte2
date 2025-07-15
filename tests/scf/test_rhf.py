@@ -11,7 +11,9 @@ def test_rhf():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
+    system = forte2.System(
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+    )
 
     scf = RHF(charge=0)(system)
     scf.run()
@@ -23,7 +25,9 @@ def test_rhf_zero_electron():
     H           0.000000000000     0.000000000000     0.000000000000
     H           0.000000000000     0.000000000000     1.000000000000
     """
-    system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
+    system = forte2.System(
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+    )
     scf = RHF(charge=2)(system)
     scf.run()
     assert scf.E == approx(system.nuclear_repulsion_energy())
@@ -33,7 +37,7 @@ def test_rhf_zero_virtuals():
     erhf = -126.604573431517
     xyz = "Ne 0 0 0"
     system = forte2.System(
-        xyz=xyz, basis="sto-3g", auxiliary_basis="def2-universal-JKFIT"
+        xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="def2-universal-JKFIT"
     )
     scf = RHF(charge=0)(system)
     scf.run()

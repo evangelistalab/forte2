@@ -15,7 +15,7 @@ def test_1e_ovlp():
     """
 
     # Create system in Forte2
-    system = forte2.System(xyz=xyz, basis="ano-rcc", auxiliary_basis=None)
+    system = forte2.System(xyz=xyz, basis_set="ano-rcc", auxiliary_basis_set=None)
     # Forte2 integrals
     S = forte2.ints.overlap(system.basis)
     assert np.linalg.norm(S) == approx(16.59004845412261)
@@ -31,7 +31,7 @@ def test_1e_hcore():
     """
 
     # Create system in Forte2
-    system = forte2.System(xyz=xyz, basis="ano-pvtz", auxiliary_basis=None)
+    system = forte2.System(xyz=xyz, basis_set="ano-pvtz", auxiliary_basis_set=None)
     # Forte2 integrals
     T = forte2.ints.kinetic(system.basis)
     V = forte2.ints.nuclear(system.basis, system.atoms)
@@ -49,7 +49,9 @@ def test_2e_eri():
     """
 
     # Create system in Forte2
-    system = forte2.System(xyz=xyz, basis="DZ (Dunning-Hay)", auxiliary_basis=None)
+    system = forte2.System(
+        xyz=xyz, basis_set="DZ (Dunning-Hay)", auxiliary_basis_set=None
+    )
     # Forte2 integrals
     eri = forte2.ints.coulomb_4c(system.basis)
     assert np.linalg.norm(eri.flatten()) == approx(25.67187172762279)
@@ -70,7 +72,7 @@ def test_custom_basis_assignment():
     """
     system = forte2.System(
         xyz=xyz,
-        basis={"H": "cc-pvdz", "P": "ano-pv5z", "default": "sap_helfem_large"},
+        basis_set={"H": "cc-pvdz", "P": "ano-pv5z", "default": "sap_helfem_large"},
         unit="bohr",
     )
     assert system.nbf == 204

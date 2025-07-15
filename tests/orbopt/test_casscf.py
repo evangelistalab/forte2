@@ -13,7 +13,7 @@ def test_mcscf_1():
     H 0.0 0.0 {0.529177210903 * 2}
     """
 
-    system = System(xyz=xyz, basis="cc-pvdz", auxiliary_basis="cc-pVTZ-JKFIT")
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CI(
@@ -38,7 +38,7 @@ def test_mcscf_2():
     """
 
     system = System(
-        xyz=xyz, basis="cc-pVDZ", auxiliary_basis="cc-pVTZ-JKFIT", unit="bohr"
+        xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CI(
@@ -64,7 +64,7 @@ def test_mcscf_3():
     N 0.0 0.0 1.4
     """
 
-    system = System(xyz=xyz, basis="cc-pVDZ", auxiliary_basis="cc-pVTZ-JKFIT")
+    system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CI(
         orbitals=[4, 5, 6, 7, 8, 9],
@@ -88,7 +88,7 @@ def test_mcscf_sa_same_mult():
     N 0.0 0.0 1.4
     """
 
-    system = System(xyz=xyz, basis="cc-pVDZ", auxiliary_basis="cc-pVTZ-JKFIT")
+    system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CI(
         orbitals=[4, 5, 6, 7, 8, 9],
@@ -109,7 +109,7 @@ def test_mcscf_sa_diff_mult():
     N 0.0 0.0 1.2
     """
 
-    system = System(xyz=xyz, basis="cc-pvdz", auxiliary_basis="cc-pVTZ-JKFIT")
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci_singlet = CI(
@@ -154,7 +154,7 @@ def test_mcscf_noncontiguous_spaces():
     N 0.0 0.0 1.4
     """
 
-    system = System(xyz=xyz, basis="cc-pVDZ", auxiliary_basis="cc-pVTZ-JKFIT")
+    system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
     rhf = RHF(charge=0, econv=1e-12)(system)
     rhf.run()
     assert rhf.E == approx(erhf)

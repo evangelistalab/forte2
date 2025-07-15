@@ -3,6 +3,7 @@ import forte2
 from forte2.scf import RHF
 from forte2.helpers.comparisons import approx
 
+
 @pytest.mark.slow
 def test_rhf_long():
     erhf = -383.470176866769
@@ -27,7 +28,9 @@ H        1.4847817094      5.6210259948     -0.0887939559
 H       -0.8580037770      4.8559228717     -0.0859634340
     """
 
-    system = forte2.System(xyz=xyz, basis="cc-pVTZ", auxiliary_basis="cc-pVTZ-JKFIT")
+    system = forte2.System(
+        xyz=xyz, basis_set="cc-pVTZ", auxiliary_basis_set="cc-pVTZ-JKFIT"
+    )
 
     scf = RHF(charge=0)(system)
     scf.run()

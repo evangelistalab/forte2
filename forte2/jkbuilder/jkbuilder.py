@@ -17,7 +17,7 @@ class FockBuilder:
         The system for which to build the Fock matrix.
         If a ModelSystem is provided, it will decompose the 4D ERI tensor using Cholesky decomposition with complete pivoting.
     use_aux_corr : bool, optional, default=False
-        If True, uses ``system.auxiliary_basis_corr`` instead of ``system.auxiliary_basis``.
+        If True, uses ``system.auxiliary_basis_set_corr`` instead of ``system.auxiliary_basis``.
     """
 
     def __init__(self, system, use_aux_corr=False):
@@ -42,7 +42,7 @@ class FockBuilder:
 
         self.basis = system.basis
         self.auxiliary_basis = (
-            system.auxiliary_basis_corr if use_aux_corr else system.auxiliary_basis
+            system.auxiliary_basis_set_corr if use_aux_corr else system.auxiliary_basis
         )
 
         # Compute the memory requirements

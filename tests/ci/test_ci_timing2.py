@@ -15,7 +15,7 @@ def molecule(n, r=1.0):
 def timing(n):
     xyz = "\n".join(molecule(n))
 
-    system = System(xyz=xyz, basis="sto-6g", auxiliary_basis="cc-pVTZ-JKFIT")
+    system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     multiplicity = 1 + (n % 2)  # Singlet for even n, doublet for odd n
     ms = 0.5 * (n % 2)  # Unpaired electrons for odd n

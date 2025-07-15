@@ -9,8 +9,8 @@ def test_system():
     H  0.0 0.0 0.0
     """
 
-    system = forte2.System(xyz=xyz, basis="cc-pvdz")
-    system_large_basis = forte2.System(xyz=xyz, basis="cc-pvdz")
+    system = forte2.System(xyz=xyz, basis_set="cc-pvdz")
+    system_large_basis = forte2.System(xyz=xyz, basis_set="cc-pvdz")
     print(system)
 
     S = forte2.ints.overlap(system.basis)
@@ -54,7 +54,7 @@ def test_xyz_comment():
     """
 
     # expect an exception to be raised
-    system = forte2.System(xyz=xyz, basis="cc-pvdz")
+    system = forte2.System(xyz=xyz, basis_set="cc-pvdz")
 
     assert len(system.atoms) == 1
 
@@ -62,7 +62,7 @@ def test_xyz_comment():
 def test_missing_atom():
     # Test for missing atom in the basis set
     with pytest.raises(Exception) as excinfo:
-        forte2.System(xyz="U 0.0 0.0 0.0", basis="cc-pvdz")
+        forte2.System(xyz="U 0.0 0.0 0.0", basis_set="cc-pvdz")
         assert (
             str(excinfo.value)
             == "[forte2] Basis set cc-pvdz does not contain element 92."
@@ -72,10 +72,10 @@ def test_missing_atom():
 def test_missing_coordinate():
     # Test for missing coordinates in the XYZ string
     with pytest.raises(ValueError) as excinfo:
-        forte2.System(xyz="C 0.0 0.0", basis="cc-pvdz")
+        forte2.System(xyz="C 0.0 0.0", basis_set="cc-pvdz")
 
     with pytest.raises(ValueError) as excinfo:
-        forte2.System(xyz="C 0.0", basis="cc-pvdz")
+        forte2.System(xyz="C 0.0", basis_set="cc-pvdz")
 
 
 def test_units():
@@ -84,10 +84,10 @@ def test_units():
     H 0.0 0.0 0.0
     H 0.0 0.0 1.0
     """
-    system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="angstrom")
+    system = forte2.System(xyz=xyz, basis_set="cc-pvdz", unit="angstrom")
     assert system.unit == "angstrom"
     assert system.atoms[1][1][2] == pytest.approx(1.88972612)
-    system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="bohr")
+    system = forte2.System(xyz=xyz, basis_set="cc-pvdz", unit="bohr")
     assert system.unit == "bohr"
     assert system.atoms[1][1][2] == pytest.approx(1.0)
 
@@ -99,7 +99,7 @@ def test_nuclear_dipole():
     H 0.0 0.0 1.0
     Li 2.0 0.0 0.0
     """
-    system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="bohr")
+    system = forte2.System(xyz=xyz, basis_set="cc-pvdz", unit="bohr")
 
     nucdip = system.nuclear_dipole(unit="au")
     assert nucdip == pytest.approx([6.0, 0.0, 1.0])
@@ -112,7 +112,7 @@ def test_nuclear_quadrupole():
     H 0.0 0.0 1.0
     Li 2.0 0.0 0.0
     """
-    system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="bohr")
+    system = forte2.System(xyz=xyz, basis_set="cc-pvdz", unit="bohr")
 
     nucquad = system.nuclear_quadrupole(unit="au")
     assert np.trace(nucquad) == pytest.approx(0.0)
@@ -126,7 +126,7 @@ def test_center_of_mass():
     H 0.0 0.0 1.0
     Li 2.0 0.0 0.0
     """
-    system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="bohr")
+    system = forte2.System(xyz=xyz, basis_set="cc-pvdz", unit="bohr")
     com = system.center_of_mass()
     assert com == pytest.approx([0.57948887, 0, 0.04208937])
 
@@ -141,7 +141,7 @@ def test_center_of_mass():
     P -1 -1  1
     H -1 -1 -1 
     """
-    system = forte2.System(xyz=xyz, basis="cc-pvdz", unit="bohr")
+    system = forte2.System(xyz=xyz, basis_set="cc-pvdz", unit="bohr")
     com = system.center_of_mass()
     assert com == pytest.approx([0.0, 0.0, 0.0], abs=1e-10)
 
@@ -153,8 +153,8 @@ def test_custom_basis_rhf():
     """
     system = forte2.System(
         xyz=xyz,
-        basis={"C": "cc-pvdz", "O": "sto-6g"},
-        auxiliary_basis={"C": "cc-pVQZ-JKFIT", "O": "def2-universal-JKFIT"},
+        basis_set={"C": "cc-pvdz", "O": "sto-6g"},
+        auxiliary_basis_set={"C": "cc-pVQZ-JKFIT", "O": "def2-universal-JKFIT"},
     )
     scf = forte2.scf.RHF(charge=0)(system)
     scf.run()

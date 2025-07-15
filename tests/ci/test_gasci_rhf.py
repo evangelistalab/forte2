@@ -10,7 +10,7 @@ def test_gasci_rhf_1():
     H 0.0 0.0 {0.529177210903 * 2}
     """
 
-    system = System(xyz=xyz, basis="sto-6g", auxiliary_basis="cc-pVTZ-JKFIT")
+    system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CI(
@@ -33,7 +33,7 @@ def test_gasci_rhf_2():
     H 0.0 0.0 {0.529177210903 * 2}
     """
 
-    system = System(xyz=xyz, basis="cc-pVDZ", auxiliary_basis="cc-pVTZ-JKFIT")
+    system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CI(
@@ -60,9 +60,9 @@ def test_gasci_rhf_3():
 
     system = System(
         xyz=xyz,
-        basis="sto-6g",
-        auxiliary_basis="def2-universal-jkfit",
-        auxiliary_basis_corr="def2-svp-rifit",
+        basis_set="sto-6g",
+        auxiliary_basis_set="def2-universal-jkfit",
+        auxiliary_basis_set_corr="def2-svp-rifit",
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
@@ -86,7 +86,9 @@ def test_gasci_rhf_4():
     H  0.000000000000  0.783151105291  0.552239257834
     """
 
-    system = System(xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit")
+    system = System(
+        xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="def2-universal-jkfit"
+    )
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-8)(system)
     ci = CI(
@@ -113,7 +115,9 @@ def test_gasci_rhf_5():
     H  0.000000000000  0.783151105291  0.552239257834
     """
 
-    system = System(xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit")
+    system = System(
+        xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="def2-universal-jkfit"
+    )
 
     rhf = RHF(charge=0, econv=1e-14, dconv=1e-8)(system)
     ci = CI(
@@ -136,7 +140,9 @@ def test_gasci_rhf_6():
     F 0.0 0.0 1.0
     """
 
-    system = System(xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit")
+    system = System(
+        xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="def2-universal-jkfit"
+    )
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-8)(system)
     ci = CI(
@@ -159,7 +165,9 @@ def test_gasci_rhf_7():
     H  0.000000000000  0.783151105291  0.552239257834
     """
 
-    system = System(xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit")
+    system = System(
+        xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="def2-universal-jkfit"
+    )
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-8)(system)
     ci = CI(
@@ -184,7 +192,9 @@ def test_gasci_rhf_8():
     H  0.000000000000  0.783151105291  0.552239257834
     """
 
-    system = System(xyz=xyz, basis="sto-6g", auxiliary_basis="def2-universal-jkfit")
+    system = System(
+        xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="def2-universal-jkfit"
+    )
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-8)(system)
     ci = CI(
@@ -212,7 +222,10 @@ def test_gasci_rohf_1():
     """
 
     system = System(
-        xyz=xyz, basis="sto-6g", auxiliary_basis="def2-universal-jkfit", unit="bohr"
+        xyz=xyz,
+        basis_set="sto-6g",
+        auxiliary_basis_set="def2-universal-jkfit",
+        unit="bohr",
     )
 
     rhf = ROHF(charge=1, ms=0.5, econv=1e-12, dconv=1e-8)(system)
@@ -240,7 +253,10 @@ def test_gasci_rohf_2():
     """
 
     system = System(
-        xyz=xyz, basis="cc-pvtz", auxiliary_basis="def2-universal-jkfit", unit="bohr"
+        xyz=xyz,
+        basis_set="cc-pvtz",
+        auxiliary_basis_set="def2-universal-jkfit",
+        unit="bohr",
     )
 
     rhf = ROHF(charge=1, ms=0.5, econv=1e-12, dconv=1e-8)(system)
@@ -265,7 +281,9 @@ def test_gasci_rohf_3():
     H  0.000000000000  0.783151105291  0.552239257834
     """
 
-    system = System(xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit")
+    system = System(
+        xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="def2-universal-jkfit"
+    )
 
     rhf = ROHF(charge=0, econv=1e-12, dconv=1e-8, ms=1.0)(system)
     ci = CI(

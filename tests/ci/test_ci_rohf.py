@@ -9,7 +9,7 @@ def test_rohf_ci_1():
     """
 
     system = System(
-        xyz=xyz, basis="cc-pVDZ", auxiliary_basis="cc-pVTZ-JKFIT", unit="bohr"
+        xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     rhf = ROHF(charge=1, ms=0.5, econv=1e-12)(system)
     ci = CI(
@@ -30,7 +30,7 @@ def test_rohf_ci_2():
     """
 
     system = System(
-        xyz=xyz, basis="cc-pVDZ", auxiliary_basis="cc-pVTZ-JKFIT", unit="bohr"
+        xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     rhf = ROHF(charge=1, ms=-0.5, econv=1e-12)(system)
     ci = CI(
