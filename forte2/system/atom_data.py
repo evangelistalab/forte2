@@ -1,7 +1,3 @@
-"""
-A map from atom symbols to atomic number
-"""
-
 BOHR_TO_ANGSTROM = 0.529177210903
 ANGSTROM_TO_BOHR = 1.0 / BOHR_TO_ANGSTROM
 DEBYE_TO_AU = 0.3934303
@@ -114,9 +110,6 @@ ATOM_SYMBOL_TO_Z = {
     "ES": 99,
     "FM": 100,
 }
-"""
-    A map from atom symbols to atomic data
-"""
 ATOM_DATA = [
     {
         "symbol": "X",

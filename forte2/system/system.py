@@ -44,6 +44,23 @@ class System:
     ortho_thresh : float, optional, default=1e-8
         Linear combinations of AO basis functions with overlap eigenvalues below this threshold will be removed
         during orthogonalization.
+
+    Attributes
+    ----------
+    atoms : list[tuple[float, tuple[float, float, float]]]
+        A list of tuples representing the atoms in the system, where each tuple contains the atomic charge and a tuple of coordinates (x, y, z).
+    Zsum : float
+        The total nuclear charge of the system, calculated as the sum of atomic charges.
+    nbf : int
+        The number of basis functions in the system.
+    nmo : int
+        The number of linearly independent combinations of atomic orbitals in the system.
+    naux : int
+        The number of auxiliary basis functions in the system.
+    nminao : int
+        The number of minimal atomic orbital basis functions in the system.
+    Xorth : NDArray
+        The orthogonalization matrix for the basis functions.
     """
 
     xyz: str
