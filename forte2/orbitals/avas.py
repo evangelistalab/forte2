@@ -65,6 +65,39 @@ class AVAS(MOsMixin, SystemMixin):
         self.parent_method = parent_method
         self._check_parameters()
 
+    # def _process_minao_basis(self):
+    #     basis = self.system.minao_basis
+    #     charges = self.system.atomic_charges()
+    #     self._atom_counts = {}
+    #     for i in charges:
+    #         if i in self._atom_counts:
+    #             self._atom_counts[i] += 1
+    #         else:
+    #             self._atom_counts[i] = 1
+    #     xyz = self.system.atomic_positions()
+    #     shell_first_and_size = basis.shell_first_and_size
+
+    #     ao_info = []
+    #     atom_am_to_f = {}
+    #     element_count = {}
+    #     count = 0
+    #     for iatom in range(self.system.natoms):
+    #         Z = charges[iatom]
+    #         first = shell_first_and_size[iatom][0]
+    #         size = shell_first_and_size[iatom][1]
+    #         ao_list = []
+    #         for ishell in range(first, first + size):
+    #             shell = basis[ishell]
+    #             nprim = shell.nprim
+    #             l = shell.l
+    #             for m in range(nprim):
+    #                 ao_info.append((iatom, Z, element_count.get(Z, 0), l, m))
+    #                 ao_list.append(count)
+    #                 count += 1
+
+    def _process_minao_basis(self):
+        pass
+
     def _parse_subspace(self, ss_str):
         m = re.match(
             "([a-zA-Z]{1,2})([0-9]+)?-?([0-9]+)?\\(?((?:\\/?[1-9]{1}[SPDFGHspdfgh]{1}[a-zA-Z0-9-]*)*)\\)?",
@@ -82,7 +115,27 @@ class AVAS(MOsMixin, SystemMixin):
             )
 
         # m[1] is the start index, m[2] is the end index
-        start = 0 if m[1] is None else int(m[1]) - 1
+        if m[1] is None and m[2] is None:
+            # no index specified, use all atoms of the element
+            start = 0
+            end = self._atom_counts[Z]
+        elif m[1] is None and m[2] is not None:
+            # catches the edge case of "C-3"
+            raise ValueError(
+                "Invalid subspace specification: start index is not specified but end index is."
+            )
+        else:
+            # if only start is specified, only one atom is selected
+            # if both start and end are specified, use the range
+            start = 0 if m[1] is None else int(m[1]) - 1
+            end = start + 1 if m[2] is None else int(m[2])
+
+        # m[3] contains the subset of AOs e.g. "2p", "2pz", "3dz2" etc.
+        if m[3] is None:
+            # select all AOs of the element, subject to subspace_planes
+            ...
+        else:
+            ...
 
         pass
         # re.match("([a-zA-Z]{1,2})([0-9]+)?-?([0-9]+)?\\(?((?:\\/?[1-9]{1}[SPDFGH]{1}[a-zA-Z0-9-]*)*)\\)?")

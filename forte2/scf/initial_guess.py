@@ -1,7 +1,7 @@
 import numpy as np
 import scipy as sp
 
-from forte2.system.build_basis import build_basis
+from forte2.system.basis_utils import build_basis
 import forte2
 
 

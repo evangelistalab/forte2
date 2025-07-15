@@ -2,7 +2,7 @@ import pytest
 import forte2
 import numpy as np
 from forte2.helpers.comparisons import approx
-from forte2.system.build_basis import BSE_AVAILABLE
+from forte2.system.basis_utils import BSE_AVAILABLE
 
 
 @pytest.mark.skipif(not BSE_AVAILABLE, reason="basis_set_exchange not installed")

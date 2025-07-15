@@ -5,7 +5,7 @@ import forte2
 from forte2.helpers import logger
 from forte2.helpers.matrix_functions import invsqrt_matrix, canonical_orth
 from forte2.x2c import get_hcore_x2c
-from .build_basis import build_basis
+from .basis_utils import build_basis
 from .parse_xyz import parse_xyz
 from .atom_data import ATOM_DATA
 
@@ -99,7 +99,7 @@ class System:
             "bohr",
         ], f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'."
         self.atoms = parse_xyz(self.xyz, self.unit)
-        self.natoms = len(self.atoms[0])
+        self.natoms = len(self.atoms)
         self.basis = build_basis(self.basis_set, self.atoms)
         self.auxiliary_basis = (
             build_basis(self.auxiliary_basis_set, self.atoms)
