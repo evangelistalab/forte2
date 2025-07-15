@@ -48,6 +48,7 @@ class System:
     Attributes
     ----------
     atoms : list[tuple[float, tuple[float, float, float]]]
+        A list of tuples representing the atoms in the system, where each tuple contains the atomic charge and a tuple of coordinates (x, y, z).
     basis : forte2.ints.Basis
         The basis set for the system, built from the provided `basis_set`.
     auxiliary_basis : forte2.ints.Basis
@@ -56,6 +57,18 @@ class System:
         The auxiliary basis set for correlated calculations, built from the provided `auxiliary_basis_set_corr`.
     minao_basis : forte2.ints.Basis
         The minimal atomic orbital basis set, built from the provided `minao_basis_set`.
+    Zsum : float
+        The total nuclear charge of the system, calculated as the sum of atomic charges.
+    nbf : int
+        The number of basis functions in the system.
+    nmo : int
+        The number of linearly independent combinations of atomic orbitals in the system.
+    naux : int
+        The number of auxiliary basis functions in the system.
+    nminao : int
+        The number of minimal atomic orbital basis functions in the system.
+    Xorth : NDArray
+        The orthogonalization matrix for the basis functions.
 
     """
 

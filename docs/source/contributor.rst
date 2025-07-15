@@ -3,12 +3,14 @@ Contributor Guide
 
 Code Standards
 --------------
-Forte2 uses the `functional composition <https://en.wikipedia.org/wiki/Function_composition_(computer_science)>`_ style (like the `TensorFlow functional API <https://www.tensorflow.org/guide/keras/functional_api>`_) for most quantum chemical methods, with the following flow:
+Forte2 uses the `functional composition <https://en.wikipedia.org/wiki/Function_composition_(computer_science)>`_ style (like the `TensorFlow functional API <https://www.tensorflow.org/guide/keras/functional_api>`_) for most quantum chemical methods, with the following programmatic flow:
 
 >>> rhf = forte2.scf.RHF(charge=0)(system)
 >>> ci = forte2.ci.CI(state=state, orbitals=[...], ...)(rhf)
 >>> ci.run()
 -0.75102385
+
+This means that most methods should be a class with a ``__call__`` method that takes the previous method as an argument, and returns a new instance. Each method should also have a ``run`` method that executes the method and returns the result. This allows for easy chaining of methods, as shown in the example above.
 
 Style Guide
 -----------
@@ -60,7 +62,7 @@ For example::
     -42.0000000000
     """
 
-A few notes on the docstring style:
+A few notes on the docstring style (for more, see the Numpy style guide linked above):
 
 - Classes should have a docstring directly after the class definition, and not under the ``__init__`` method.
 - The first line should be a brief summary of the class or function.

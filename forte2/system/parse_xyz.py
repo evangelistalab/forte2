@@ -6,7 +6,38 @@ from .atom_data import ATOM_SYMBOL_TO_Z, ANGSTROM_TO_BOHR
 
 
 def parse_xyz(xyz, unit):
-    # Parse an XYZ string into a list of atoms
+    r"""
+    Parse an XYZ string into a list of atoms.
+
+    Parameters
+    ----------
+    xyz : str
+        The XYZ formatted string containing atom symbols and coordinates.
+    unit : str
+        The unit of the coordinates, either "bohr" or "angstrom".
+
+    Returns
+    -------
+    atoms : list[tuple(int, NDArray)]
+        A list of tuples, each containing the atomic number and a numpy array of coordinates.
+
+    Raises
+    ------
+    ValueError
+        If a line in the XYZ string does not match the expected format or has an incorrect number of coordinates.
+
+    Examples
+    --------
+    >>> xyz = "Li 0.0 0.0 0.0\nN -10 0 0\n"
+    >>> parse_xyz(xyz, "bohr")
+    [(3, array([0., 0., 0.])), (7, array([-10., 0., 0.]))]
+
+    >>> xyz = "Li 0.0 0.0\nN -10 0\n"
+    >>> parse_xyz(xyz, "angstrom")
+    Traceback (most recent call last):
+        ... ValueError: Invalid line in XYZ file: Li 0.0 0.0. Expected 3 coordinates, found 2.
+
+    """
     atoms = []
     for line in xyz.split("\n"):
         # look for lines of th form "Li 0.0 0.0 0.0" or "N -10 0 0" and capture the element symbol and coordinates
