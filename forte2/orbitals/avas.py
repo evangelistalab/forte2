@@ -348,5 +348,32 @@ class AVAS(MOsMixin, SystemMixin):
 
         return atom_dirs
 
-    def _make_ao_space_projector():
-        pass
+    def _make_ao_space_projector(self):
+        # Overlap Matrix in Minimal AO Basis
+        Smm = forte2.ints.overlap(self.system.minao_basis)
+        nbf_m = Smm.shape[0]
+        # Build Cms: minimal AO basis to subspace AO basis
+        nbf_s = self.subspace_counter 
+        Cms = np.zeros((nbf_m, nbf_s))
+        for m, s, c in self.subspace:
+            # m is the index of the minimal AO
+            # s is the index of the subspace AO
+            # c is the coefficient of the subspace AO in the minimal AO basis
+            Cms[m, s] = c
+        # Subspace overlap matrix 
+        Sss = Cms.T @ (Smm @ Cms)
+        # Orthogonalize Sss: Xss = Sss^(-1/2)
+        evals, evecs = np.linalg.eigh(Sss)
+        Xss = evecs @ np.diag(evals ** (-0.5)) @ evecs.T
+        # Build overlap matrix between subspace and large basis  
+        Sml = forte2.ints.overlap(self.system.minao_basis, self.system.large_basis)
+        # Project into subspace
+        Ssl = Cms.T @ Sml
+        # AO projector 
+        # Pao = Ssl^T Sss^-1 Ssl = (Cms^T Sml)^T (Xss^T Xss) (Cms^T Sml)
+        Xsl = Xss @ Ssl 
+        Pao = Xsl.T @ Xsl
+        return Pao
+
+
+
