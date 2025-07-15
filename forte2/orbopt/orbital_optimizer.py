@@ -15,16 +15,16 @@ class MCOptimizer(MOsMixin, SystemMixin):
 
     Parameters
     ----------
-        maxiter : int
-            Maximum number of macroiterations.
-        gradtol : float
-            Gradient convergence tolerance.
-        etol : float
-            Energy convergence tolerance.
-        micro_maxiter : int
-            Maximum number of microiterations for L-BFGS.
-        max_rotation : float
-            Maximum orbital rotation size for L-BFGS.
+    maxiter : int
+        Maximum number of macroiterations.
+    gradtol : float
+        Gradient convergence tolerance.
+    etol : float
+        Energy convergence tolerance.
+    micro_maxiter : int
+        Maximum number of microiterations for L-BFGS.
+    max_rotation : float
+        Maximum orbital rotation size for L-BFGS.
     """
 
     ### Macroiteration parameters
@@ -51,6 +51,14 @@ class MCOptimizer(MOsMixin, SystemMixin):
         return self
 
     def run(self):
+        """
+        Run the two-step orbital-CI optimization.
+
+        Returns
+        -------
+        self : MCOptimizer
+            The instance of the optimizer with the results stored in its attributes.
+        """
         if not self.parent_method.executed:
             self.parent_method.run()
 
@@ -120,7 +128,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
 
         # Prepare the orbital optimizer
         self.orb_opt.set_rdms(g1_act, g2_act)
-        self.orb_opt.compute_Fcore()
+        self.orb_opt._compute_Fcore()
         self.orb_opt.get_eri_gaaa()
         self.E_orb = self.E_avg
         self.E_orb_old = self.E_orb
@@ -138,7 +146,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
             # 2. Convergence checks
             self.g_rms = np.linalg.norm(self.lbfgs_solver.g - self.g_old)
             self.g_old = self.lbfgs_solver.g.copy()
-            conv, conv_str = self.check_convergence()
+            conv, conv_str = self._check_convergence()
             logger.log_info1(
                 f"{self.iter:>10d} {self.E_avg:>20.10f} {self.E_orb:>20.10f} {self.g_rms:>20.10f} {self.lbfgs_solver.iter:>10d} {conv_str:>10s}"
             )
@@ -165,11 +173,11 @@ class MCOptimizer(MOsMixin, SystemMixin):
         logger.log_info1("=" * width)
         logger.log_info1(f"Orbital optimization converged in {self.iter} iterations.")
         logger.log_info1(f"Final orbital optimized energy: {self.E_avg:.10f}")
-        self.post_process()
+        self._post_process()
         self.parent_method.set_verbosity_level(current_verbosity)
         self.executed = True
 
-    def post_process(self):
+    def _post_process(self):
         pm = self.parent_method
         if isinstance(pm, CI):
             ncis = 1
@@ -233,7 +241,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
         nrr[self.core, self.actv] = True
         return nrr
 
-    def check_convergence(self):
+    def _check_convergence(self):
         is_grad_conv = self.g_rms < self.gradtol
         is_ci_orb_conv = abs(self.E_orb - self.E_avg) < self.etol
         is_ci_eigval_conv = np.all(abs(self.E_ci - self.E_ci_old) < self.etol)
@@ -292,31 +300,31 @@ class OrbOptimizer:
         return self.eri_gaaa[self.actv, ...]
 
     def evaluate(self, x, g, do_g=True):
-        do_update_integrals = self.update_orbitals(x)
+        do_update_integrals = self._update_orbitals(x)
         if do_update_integrals:
             self.get_eri_gaaa()
 
-        E_orb = self.compute_reference_energy()
+        E_orb = self._compute_reference_energy()
 
         if do_g:
-            self.compute_Fcore()
-            grad = -self.compute_orbgrad()
-            g = self.mat_to_vec(grad)
+            self._compute_Fcore()
+            grad = -self._compute_orbgrad()
+            g = self._mat_to_vec(grad)
 
         return E_orb, g
 
     def hess_diag(self, x):
-        hess = self.compute_orbhess()
-        h0 = self.mat_to_vec(hess)
+        hess = self._compute_orbhess()
+        h0 = self._mat_to_vec(hess)
         return h0
 
-    def update_orbitals(self, R):
+    def _update_orbitals(self, R):
         dR = R - self.R
         if np.max(np.abs(dR)) < 1e-12:
             # no change in orbitals, skip the update
             return False
         self.R += dR
-        self.U = self.U @ self.expm(dR)
+        self.U = self.U @ self._expm(dR)
 
         self.C = self.C0 @ self.U
         self.Cgen = self.C
@@ -324,12 +332,12 @@ class OrbOptimizer:
         self.Cact = self.C[:, self.actv]
         return True
 
-    def expm(self, vec):
-        M = self.vec_to_mat(vec)
+    def _expm(self, vec):
+        M = self._vec_to_mat(vec)
         eM = sp.linalg.expm(M)
         return eM
 
-    def vec_to_mat(self, x):
+    def _vec_to_mat(self, x):
         R = np.zeros_like(self.C)
         # [cv, av, ca]
         x_cv = x[: self.ncore * self.nvirt].reshape(self.ncore, self.nvirt)
@@ -347,21 +355,21 @@ class OrbOptimizer:
         R[self.actv, self.core] = -x_ca.T
         return R
 
-    def mat_to_vec(self, R):
+    def _mat_to_vec(self, R):
         # [cv, av, ca]
         x_cv = R[self.core, self.virt].flatten()
         x_av = R[self.actv, self.virt].flatten()
         x_ca = R[self.core, self.actv].flatten()
         return np.concatenate((x_cv, x_av, x_ca))
 
-    def compute_reference_energy(self):
+    def _compute_reference_energy(self):
         energy = self.Ecore + self.e_nuc
         energy += np.einsum("uv,uv->", self.Fcore[self.actv, self.actv], self.g1)
         # factor of 0.5 already included in g2
         energy += np.einsum("uvxy,uvxy->", self.get_active_space_ints(), self.g2)
         return energy
 
-    def compute_Fcore(self):
+    def _compute_Fcore(self):
         # Compute the core Fock matrix [Eq. (9)], also return the core energy
         Jcore, Kcore = self.fock_builder.build_JK([self.Ccore])
         self.Fcore = np.einsum(
@@ -378,7 +386,7 @@ class OrbOptimizer:
             2 * self.hcore + 2 * Jcore[0] - Kcore[0],
         )
 
-    def compute_Fact(self):
+    def _compute_Fact(self):
         # compute the active Fock matrix [Algorithm 1, line 9]
         # gamma_act (nmo * nmo) is defined in [Eq. (19)]
         # as (gamma_act)_pq = C_pt C_qu g1_tu
@@ -405,17 +413,17 @@ class OrbOptimizer:
             optimize=True,
         )
 
-    def compute_YZ_intermediates(self):
+    def _compute_YZ_intermediates(self):
         # compute the Y intermediate [Algorithm 1, line 10]
         Y = np.einsum("pu,tu->pt", self.Fcore[:, self.actv], self.g1)
         # compute the Z intermediate [Algorithm 1, line 11]
         Z = np.einsum("puvw,tuvw->pt", self.eri_gaaa, self.g2)
         return Y, Z
 
-    def compute_orbgrad(self):
-        self.compute_Fact()
+    def _compute_orbgrad(self):
+        self._compute_Fact()
 
-        self.Y, self.Z = self.compute_YZ_intermediates()
+        self.Y, self.Z = self._compute_YZ_intermediates()
         orbgrad = np.zeros_like(self.Fcore)
 
         Fcore_cv = self.Fcore[self.core, self.virt]
@@ -434,7 +442,7 @@ class OrbOptimizer:
 
         return orbgrad
 
-    def compute_orbhess(self):
+    def _compute_orbhess(self):
         orbhess = np.zeros_like(self.Fcore)
 
         Fcore_cc = np.diag(self.Fcore[self.core, self.core])
@@ -473,8 +481,8 @@ class CIOptimizer:
 
     Parameters
     ----------
-        solver : CI or MultiCI
-            The CI solver instance to be used for the optimization.
+    solver : CI or MultiCI
+        The CI solver instance to be used for the optimization.
     """
 
     def __init__(self, solver):
