@@ -159,18 +159,3 @@ def test_custom_basis_rhf():
     scf = forte2.scf.RHF(charge=0)(system)
     scf.run()
     assert scf.E == pytest.approx(-112.484140615262, rel=1e-8, abs=1e-8)
-
-
-def test_basis_labels():
-    xyz = """
-    C 0 0 0
-    O 0 0 1.2
-    N 0 0 2.4
-    O 2 1 0
-    """
-    system = forte2.System(
-        xyz=xyz,
-        basis_set={"C": "cc-pvtz", "O": "sto-6g", "default": "sto-3g"},
-    )
-    basis_labels = forte2.basis_utils.label_basis_functions(system, system.basis)
-    forte2.basis_utils.print_basis_labels(basis_labels)

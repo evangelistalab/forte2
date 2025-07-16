@@ -5,9 +5,9 @@ import forte2
 from forte2.helpers import logger
 from forte2.helpers.matrix_functions import invsqrt_matrix, canonical_orth
 from forte2.x2c import get_hcore_x2c
-from .basis_utils import build_basis
+from .build_basis import build_basis
 from .parse_xyz import parse_xyz
-from .atom_data import ATOM_DATA
+from .atom_data import ATOM_DATA, Z_TO_ATOM_SYMBOL
 
 import numpy as np
 from numpy.typing import NDArray
@@ -49,6 +49,8 @@ class System:
     ----------
     atoms : list[tuple[float, tuple[float, float, float]]]
         A list of tuples representing the atoms in the system, where each tuple contains the atomic charge and a tuple of coordinates (x, y, z).
+    atom_counts : dict[int : int]
+        A dictionary mapping atomic numbers to their numbers in the system.
     basis : forte2.ints.Basis
         The basis set for the system, built from the provided `basis_set`.
     auxiliary_basis : forte2.ints.Basis
@@ -100,6 +102,11 @@ class System:
         ], f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'."
         self.atoms = parse_xyz(self.xyz, self.unit)
         self.natoms = len(self.atoms)
+        self.atom_counts = {}
+        for atom in self.atoms:
+            if atom[0] not in self.atom_counts:
+                self.atom_counts[atom[0]] = 0
+            self.atom_counts[atom[0]] += 1
         self.basis = build_basis(self.basis_set, self.atoms)
         self.auxiliary_basis = (
             build_basis(self.auxiliary_basis_set, self.atoms)

@@ -1,7 +1,7 @@
 import pytest
 from forte2 import *
 from forte2.helpers.comparisons import approx
-from forte2.system.basis_utils import BSE_AVAILABLE
+from forte2.system.build_basis import BSE_AVAILABLE
 
 
 def test_gasci_rhf_1():

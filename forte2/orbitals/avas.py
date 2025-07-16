@@ -65,47 +65,12 @@ class AVAS(MOsMixin, SystemMixin):
         self.parent_method = parent_method
         self._check_parameters()
 
-    # def _process_minao_basis(self):
-    #     basis = self.system.minao_basis
-    #     charges = self.system.atomic_charges()
-    #     self._atom_counts = {}
-    #     for i in charges:
-    #         if i in self._atom_counts:
-    #             self._atom_counts[i] += 1
-    #         else:
-    #             self._atom_counts[i] = 1
-    #     xyz = self.system.atomic_positions()
-    #     shell_first_and_size = basis.shell_first_and_size
-
-    #     ao_info = []
-    #     atom_am_to_f = {}
-    #     element_count = {}
-    #     count = 0
-    #     for iatom in range(self.system.natoms):
-    #         Z = charges[iatom]
-    #         first = shell_first_and_size[iatom][0]
-    #         size = shell_first_and_size[iatom][1]
-    #         ao_list = []
-    #         for ishell in range(first, first + size):
-    #             shell = basis[ishell]
-    #             nprim = shell.nprim
-    #             l = shell.l
-    #             for m in range(nprim):
-    #                 ao_info.append((iatom, Z, element_count.get(Z, 0), l, m))
-    #                 ao_list.append(count)
-    #                 count += 1
-
-    def _process_minao_basis(self):
-        pass
-
     def _parse_subspace(self, ss_str):
         m = re.match(
             "([a-zA-Z]{1,2})([0-9]+)?-?([0-9]+)?\\(?((?:\\/?[1-9]{1}[SPDFGHspdfgh]{1}[a-zA-Z0-9-]*)*)\\)?",
             ss_str,
         ).groups()
 
-        basis = self.system.minao_basis
-        center_first_and_last = basis.center_first_and_last()
         # m[0] is the element symbol
         try:
             Z = ATOM_SYMBOL_TO_Z[m[0].upper()]
@@ -118,7 +83,7 @@ class AVAS(MOsMixin, SystemMixin):
         if m[1] is None and m[2] is None:
             # no index specified, use all atoms of the element
             start = 0
-            end = self._atom_counts[Z]
+            end = self.system.atom_counts[Z]
         elif m[1] is None and m[2] is not None:
             # catches the edge case of "C-3"
             raise ValueError(
@@ -133,12 +98,34 @@ class AVAS(MOsMixin, SystemMixin):
         # m[3] contains the subset of AOs e.g. "2p", "2pz", "3dz2" etc.
         if m[3] is None:
             # select all AOs of the element, subject to subspace_planes
-            ...
+            for A in range(start, end):
+                in_plane = (Z, A) in self.atom_normals
+                for pos in self.atom_to_aos[Z][A]:
+                    if self.minao_labels[pos].l == 1 and in_plane:
+                        raise NotImplementedError(
+                            "Subspace selection for p orbitals in a plane is not implemented yet."
+                        )
+                    else:
+                        self.minao_subspace.append(pos, self.subspace_counter, 1.0)
+                        self.subspace_counter += 1
         else:
-            ...
-
-        pass
-        # re.match("([a-zA-Z]{1,2})([0-9]+)?-?([0-9]+)?\\(?((?:\\/?[1-9]{1}[SPDFGH]{1}[a-zA-Z0-9-]*)*)\\)?")
+            n = int(m[3][0])
+            for A in range(start, end):
+                if m[3][1:].lower() == "p" and (Z, A) in self.atom_normals:
+                    raise NotImplementedError(
+                        "Subspace selection for p orbitals in a plane is not implemented yet."
+                    )
+                else:
+                    lm = forte2.basis_utils.shell_label_to_lm(m[3][1:].lower())
+                    for l, m in lm:
+                        for pos in self.atom_to_aos[Z][A]:
+                            if (
+                                self.minao_labels[pos].n == n
+                                and self.minao_labels[pos].l == l
+                                and self.minao_labels[pos].m == m
+                            ):
+                                self.minao_subspace.append(pos, self.subspace_counter, 1.0)
+                                self.subspace_counter += 1
 
     def _check_parameters(self):
         for subspace in self.subspace:
@@ -159,26 +146,23 @@ class AVAS(MOsMixin, SystemMixin):
             raise ValueError("Invalid AVAS selection criteria.")
 
     def _startup(self):
-        l_labels = ["S", "P", "D", "F", "G", "H", "I", "K", "L", "M"]
-        lm_labels_spherical = [
-            ["S"],
-            ["PZ", "PX", "PY"],
-            ["DZ2", "DXZ", "DYZ", "DX2-Y2", "DXY"],
-            ["FZ3", "FXZ2", "FYZ2", "FZX2-ZY2", "FXYZ", "FX3-3XY2", "F3X2Y-Y3"],
-            ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9"],
-            ["H1", "H2", "H3", "H4", "H5", "H6", "H7", "H8", "H9", "H10", "H11"],
-        ]
-        self.labels_spherical_to_lm = {}
-        for l in range(len(lm_labels_spherical)):
-            for m in range(len(lm_labels_spherical[l])):
-                self.labels_spherical_to_lm[lm_labels_spherical[l][m]] = (l, m)
+        if not self.parent_method.executed:
+            self.parent_method.run()
+        SystemMixin.copy_from_upstream(self, self.parent_method)
+        MOsMixin.copy_from_upstream(self, self.parent_method)
+
+        minao_info = forte2.system.BasisInfo(self.system, self.system.minao_basis)
+        self.minao_labels = minao_info.basis_labels
+        self.atom_to_aos = minao_info.atom_to_aos()
+
+        self.atom_normals = self._parse_subspace_pi_planes()
+        self.subspace_counter = 0
+        self.minao_subspace = []
+        for subspace in self.subspace:
+            self._parse_subspace(subspace)
 
     def run(self):
-        if self.subspace_pi_planes is not None:
-            # parse the subspace pi planes and get the direction vectors
-            self.pi_planes = self._parse_subspace_pi_planes()
-        else:
-            self.pi_planes = {}
+        self._startup()
 
     def _parse_subspace_pi_planes(self):
         """
@@ -353,27 +337,24 @@ class AVAS(MOsMixin, SystemMixin):
         Smm = forte2.ints.overlap(self.system.minao_basis)
         nbf_m = Smm.shape[0]
         # Build Cms: minimal AO basis to subspace AO basis
-        nbf_s = self.subspace_counter 
+        nbf_s = self.subspace_counter
         Cms = np.zeros((nbf_m, nbf_s))
         for m, s, c in self.subspace:
             # m is the index of the minimal AO
             # s is the index of the subspace AO
             # c is the coefficient of the subspace AO in the minimal AO basis
             Cms[m, s] = c
-        # Subspace overlap matrix 
+        # Subspace overlap matrix
         Sss = Cms.T @ (Smm @ Cms)
         # Orthogonalize Sss: Xss = Sss^(-1/2)
         evals, evecs = np.linalg.eigh(Sss)
         Xss = evecs @ np.diag(evals ** (-0.5)) @ evecs.T
-        # Build overlap matrix between subspace and large basis  
+        # Build overlap matrix between subspace and large basis
         Sml = forte2.ints.overlap(self.system.minao_basis, self.system.large_basis)
         # Project into subspace
         Ssl = Cms.T @ Sml
-        # AO projector 
+        # AO projector
         # Pao = Ssl^T Sss^-1 Ssl = (Cms^T Sml)^T (Xss^T Xss) (Cms^T Sml)
-        Xsl = Xss @ Ssl 
+        Xsl = Xss @ Ssl
         Pao = Xsl.T @ Xsl
         return Pao
-
-
-
