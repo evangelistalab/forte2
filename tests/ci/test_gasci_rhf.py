@@ -297,6 +297,3 @@ def test_gasci_rohf_3():
 
     assert rhf.E == approx(-75.78642207312076)
     assert ci.E[0] == approx(-56.130750582569)
-
-
-test_gasci_rohf_3()

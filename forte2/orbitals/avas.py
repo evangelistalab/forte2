@@ -62,6 +62,9 @@ class AVAS(MOsMixin, SystemMixin):
     num_active_vir: int = 0
 
     def __call__(self, parent_method):
+        assert isinstance(
+            parent_method, (forte2.methods.RHF, forte2.methods.ROHF)
+        ), f"Parent method must be RHF or ROHF, got {type(parent_method)}"
         self.parent_method = parent_method
         self._check_parameters()
 
@@ -124,7 +127,9 @@ class AVAS(MOsMixin, SystemMixin):
                                 and self.minao_labels[pos].l == l
                                 and self.minao_labels[pos].m == m
                             ):
-                                self.minao_subspace.append(pos, self.subspace_counter, 1.0)
+                                self.minao_subspace.append(
+                                    pos, self.subspace_counter, 1.0
+                                )
                                 self.subspace_counter += 1
 
     def _check_parameters(self):
@@ -145,7 +150,7 @@ class AVAS(MOsMixin, SystemMixin):
         else:
             raise ValueError("Invalid AVAS selection criteria.")
 
-    def _startup(self):
+    def run(self):
         if not self.parent_method.executed:
             self.parent_method.run()
         SystemMixin.copy_from_upstream(self, self.parent_method)
@@ -161,8 +166,7 @@ class AVAS(MOsMixin, SystemMixin):
         for subspace in self.subspace:
             self._parse_subspace(subspace)
 
-    def run(self):
-        self._startup()
+        self.ao_projector = self._make_ao_space_projector()
 
     def _parse_subspace_pi_planes(self):
         """
@@ -210,7 +214,7 @@ class AVAS(MOsMixin, SystemMixin):
         PR #261: https://github.com/evangelistalab/forte/pull/261
         """
         planes_expr = self.subspace_pi_planes
-        system = self.parent_method.system
+        system = self.system
 
         # return empty dictionary if no planes are defined
         if not planes_expr:
@@ -349,8 +353,8 @@ class AVAS(MOsMixin, SystemMixin):
         # Orthogonalize Sss: Xss = Sss^(-1/2)
         evals, evecs = np.linalg.eigh(Sss)
         Xss = evecs @ np.diag(evals ** (-0.5)) @ evecs.T
-        # Build overlap matrix between subspace and large basis
-        Sml = forte2.ints.overlap(self.system.minao_basis, self.system.large_basis)
+        # Build overlap matrix between subspace and computational (large) basis
+        Sml = forte2.ints.overlap(self.system.minao_basis, self.system.basis)
         # Project into subspace
         Ssl = Cms.T @ Sml
         # AO projector
@@ -358,3 +362,13 @@ class AVAS(MOsMixin, SystemMixin):
         Xsl = Xss @ Ssl
         Pao = Xsl.T @ Xsl
         return Pao
+
+    def _make_avas_orbitals(self):
+        ndocc = self.parent_method.ndocc
+        nsocc = (
+            0 if not hasattr(self.parent_method, "nsocc") else self.parent_method.nsocc
+        )
+        nuocc = self.parent_method.nuocc
+
+        CpsC = self.ao_projector.T @ self.parent_method.C[0] @ self.ao_projector
+

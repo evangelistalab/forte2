@@ -1,5 +1,7 @@
 from dataclasses import dataclass
+
 import numpy as np
+
 import forte2
 from forte2.system import System
 from forte2.helpers import logger
@@ -11,6 +13,11 @@ SPH_LABELS = [
     ["dxy", "dyz", "dz2", "dxz", "dx2-y2"],
     ["fy(3x2-y2)", "fxyz", "fyz2", "fz3", "fxz2", "fz(x2-y2)", "fx(x2-3y2)"],
 ]
+"""
+The labels for spherical harmonics up to f orbitals.
+We follow the `Libint2 convention <https://github.com/evaleev/libint/wiki/using-modern-CPlusPlus-API#solid-harmonic-gaussians-ordering-and-normalization>`_.
+"""
+
 AM_LABELS = ["s", "p", "d", "f", "g", "h", "i", "j", "k", "l", "m", "n"]
 
 
