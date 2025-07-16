@@ -9,7 +9,7 @@ H                     0.000000000000    -0.711620616370     0.489330954643
 H                     0.000000000000     0.711620616370     0.489330954643
 """
 
-    system = forte2.System(xyz=xyz, basis="sto-3g")
+    system = forte2.System(xyz=xyz, basis_set="sto-3g")
 
     V = forte2.ints.coulomb_4c(system.basis)
 
@@ -48,5 +48,5 @@ H  0.000000000000 -1.344768070168  0.924701488984
 H  0.000000000000  1.344768070168  0.924701488984
 """
 
-    system = forte2.System(xyz=xyz, basis="cc-pvqz")
+    system = forte2.System(xyz=xyz, basis_set="cc-pvqz")
     V = forte2.ints.coulomb_4c(system.basis)

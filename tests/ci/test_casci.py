@@ -2,6 +2,7 @@ import pytest
 from forte2 import *
 from forte2.helpers.comparisons import approx
 
+
 # equivalence to test_ci_rhf.py::test_ci_2
 def test_casci_1():
     xyz = f"""
@@ -10,7 +11,7 @@ def test_casci_1():
     """
 
     system = System(
-        xyz=xyz, basis="cc-pVDZ", auxiliary_basis="cc-pVTZ-JKFIT", unit="bohr"
+        xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CASCI(6, 8)(rhf)

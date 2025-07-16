@@ -116,7 +116,9 @@ def test_sci1():
     H 0.0 0.0 {0.529177210903 * 2}
     """
 
-    system = forte2.System(xyz=xyz, basis="sto-6g", auxiliary_basis="cc-pVTZ-JKFIT")
+    system = forte2.System(
+        xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT"
+    )
 
     scf = RHF(charge=0)(system)
     scf.econv = 1e-12

@@ -11,7 +11,7 @@ def test_slater_rules_1():
     """
 
     system = System(
-        xyz=xyz, basis="sto-6g", auxiliary_basis="cc-pVTZ-JKFIT", unit="bohr"
+        xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     scf = RHF(charge=0, econv=1e-12)(system)
     scf.run()
@@ -49,7 +49,7 @@ def test_slater_rules_2():
     """
 
     system = System(
-        xyz=xyz, basis="cc-pvdz", auxiliary_basis="cc-pVTZ-JKFIT", unit="bohr"
+        xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     scf = RHF(charge=0, econv=1e-10)(system)
     scf.run()

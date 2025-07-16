@@ -8,7 +8,7 @@ def test_ci_1():
     H 0.0 0.0 {0.529177210903 * 2}
     """
 
-    system = System(xyz=xyz, basis="sto-6g", auxiliary_basis="cc-pVTZ-JKFIT")
+    system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CI(
@@ -29,7 +29,7 @@ def test_ci_2():
     """
 
     system = System(
-        xyz=xyz, basis="cc-pVDZ", auxiliary_basis="cc-pVTZ-JKFIT", unit="bohr"
+        xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CI(
@@ -49,7 +49,7 @@ def test_multici_1():
     N 0.0 0.0 1.2
     """
 
-    system = System(xyz=xyz, basis="cc-pvdz", auxiliary_basis="cc-pVTZ-JKFIT")
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci_singlet = CI(

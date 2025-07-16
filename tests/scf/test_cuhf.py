@@ -14,7 +14,9 @@ def test_cuhf_singlet():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
+    system = forte2.System(
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+    )
 
     scf = CUHF(charge=0, ms=0)(system)
     scf.run()
@@ -31,8 +33,7 @@ def test_cuhf_triplet():
     H            0.000000000000    -0.711620616369     0.489330954643
     H            0.000000000000     0.711620616369     0.489330954643
     """
-
-    system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
+    system = forte2.System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
 
     scf = CUHF(charge=0, ms=1)(system)
     scf.run()
@@ -45,9 +46,8 @@ def test_cuhf_incompatible_params():
     H 0 0 0
     H 0 0 1
     """
-
     system = forte2.System(
-        xyz=xyz, basis="sto-6g", auxiliary_basis="def2-universal-jkfit"
+        xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="def2-universal-jkfit"
     )
     with pytest.raises(ValueError):
         scf = CUHF(charge=1)(system)

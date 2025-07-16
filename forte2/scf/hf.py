@@ -208,47 +208,41 @@ class SCFBase(ABC):
         return self.system.nuclear_repulsion_energy()
 
     def _post_process(self):
+        self._get_occupation()
         self._print_orbital_energies()
 
     @abstractmethod
-    def _build_fock(self, H, fock_builder, S):
-        pass
+    def _build_fock(self, H, fock_builder, S): ...
 
     @abstractmethod
-    def _build_density_matrix(self):
-        pass
+    def _build_density_matrix(self): ...
 
     @abstractmethod
-    def _build_initial_density_matrix(self):
-        pass
+    def _build_initial_density_matrix(self): ...
 
     @abstractmethod
-    def _initial_guess(self, H, S, guess_type="minao"):
-        pass
+    def _initial_guess(self, H, S, guess_type="minao"): ...
 
     @abstractmethod
-    def _build_ao_grad(self, S, F):
-        pass
+    def _build_ao_grad(self, S, F): ...
 
     @abstractmethod
-    def _diagonalize_fock(self, F):
-        pass
+    def _diagonalize_fock(self, F): ...
 
     @abstractmethod
-    def _spin(self, S):
-        pass
+    def _spin(self, S): ...
 
     @abstractmethod
-    def _energy(self, H, F):
-        pass
+    def _energy(self, H, F): ...
 
     @abstractmethod
-    def _diis_update(self, diis, F, AO_grad):
-        pass
+    def _diis_update(self, diis, F, AO_grad): ...
 
     @abstractmethod
-    def _print_orbital_energies(self):
-        pass
+    def _get_occupation(self): ...
+
+    @abstractmethod
+    def _print_orbital_energies(self): ...
 
 
 @dataclass
@@ -312,6 +306,10 @@ class RHF(SCFBase, MOsMixin):
 
     def _diis_update(self, diis, F, AO_grad):
         return diis.update(F, AO_grad)
+
+    def _get_occupation(self):
+        self.ndocc = self.na
+        self.nuocc = self.nmo - self.ndocc
 
     def _print_orbital_energies(self):
         ndocc = self.na
@@ -453,6 +451,12 @@ class UHF(SCFBase, MOsMixin):
         ]
         return F
 
+    def _get_occupation(self):
+        self.aocc = self.na
+        self.auocc = self.nmo - self.aocc
+        self.bocc = self.nb
+        self.buocc = self.nmo - self.bocc
+
     def _print_orbital_energies(self):
         naocc = self.na
         naucc = self.nmo - naocc
@@ -566,6 +570,11 @@ class ROHF(SCFBase, MOsMixin):
         Deff = 0.5 * (self.D[0] + self.D[1])
         return F @ Deff @ S - S @ Deff @ F
 
+    def _get_occupation(self):
+        self.ndocc = min(self.na, self.nb)
+        self.nsocc = abs(self.na - self.nb)
+        self.nuocc = self.nmo - self.ndocc - self.nsocc
+
     def _print_orbital_energies(self):
         ndocc = min(self.na, self.nb)
         nsocc = abs(self.na - self.nb)
@@ -630,6 +639,7 @@ class CUHF(SCFBase, MOsMixin):
     _energy = UHF._energy
     _diis_update = UHF._diis_update
     _build_total_density_matrix = UHF._build_total_density_matrix
+    _get_occupation = UHF._get_occupation
     _print_orbital_energies = UHF._print_orbital_energies
 
     def __call__(self, system):
@@ -816,6 +826,10 @@ class GHF(SCFBase, MOsMixin):
             "vu,uv->", D_spinor, F
         )
         return energy.real
+
+    def _get_occupation(self):
+        self.nocc = self.nel
+        self.nuocc = self.nmo * 2 - self.nocc
 
     def _print_orbital_energies(self):
         nocc = self.nel

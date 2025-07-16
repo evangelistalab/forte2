@@ -13,7 +13,7 @@ def test_sfx2c1e():
     """
 
     system = forte2.System(
-        xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT", x2c_type="sf"
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT", x2c_type="sf"
     )
 
     scf = RHF(charge=0)(system)
@@ -27,7 +27,7 @@ def test_lindep_sfx2c1e():
     # mol = pyscf.gto.M(
     #     atom=["H 0 0 %f" % i for i in range(10)],
     #     unit="Bohr",
-    #     basis="aug-cc-pvdz",
+    #     basis_set="aug-cc-pvdz",
     #     symmetry=False,
     # )
     # mf = pyscf.scf.RHF(mol).density_fit("cc-pvqz-jkfit").x2c()
@@ -39,8 +39,8 @@ def test_lindep_sfx2c1e():
 
     system = forte2.System(
         xyz=xyz,
-        basis="aug-cc-pvdz",
-        auxiliary_basis="cc-pVQZ-JKFIT",
+        basis_set="aug-cc-pvdz",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
         unit="bohr",
         x2c_type="sf",
         ortho_thresh=2e-7,
@@ -58,7 +58,10 @@ def test_sox2c1e():
     xyz = "Ne 0 0 0"
 
     system = forte2.System(
-        xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit", x2c_type="so"
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="def2-universal-jkfit",
+        x2c_type="so",
     )
     scf = GHF(charge=0)(system)
     scf.run()

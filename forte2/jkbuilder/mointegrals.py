@@ -22,7 +22,7 @@ class RestrictedMOIntegrals:
         core_orbitals : list[int], optional
             Subspace of doubly occupied orbitals. Defaults to None.
         use_aux_corr : bool, optional, default=False
-            If True, use ``system.auxiliary_basis_corr``, else use ``system.auxiliary_basis``.
+            If True, use ``system.auxiliary_basis_set_corr``, else use ``system.auxiliary_basis``.
 
     Attributes
     ----------

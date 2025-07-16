@@ -12,7 +12,7 @@ def test_equivalence_to_rhf():
     """
 
     system = forte2.System(
-        xyz=xyz, basis="cc-pvdz", auxiliary_basis="def2-universal-jkfit"
+        xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="def2-universal-jkfit"
     )
 
     scf = GHF(charge=0)(system)
@@ -28,7 +28,9 @@ def test_equivalence_to_uhf():
     xyz = """
     H 0 0 0
     H 0 0 2.7"""
-    system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
+    system = forte2.System(
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+    )
     scf = GHF(charge=0)(system)
     scf.guess_mix = True
     scf.run()
@@ -51,7 +53,9 @@ def test_ghf_complex_perturbation():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = forte2.System(xyz=xyz, basis="cc-pvqz", auxiliary_basis="cc-pvqz-jkfit")
+    system = forte2.System(
+        xyz=xyz, basis_set="cc-pvqz", auxiliary_basis_set="cc-pvqz-jkfit"
+    )
 
     scf = UHF(charge=1, ms=0.5)(system)
     scf.run()
@@ -81,7 +85,9 @@ def test_break_complex_symmetry():
     H 0.5 {0.5*np.sqrt(3)} 0
     """
 
-    system = forte2.System(xyz=xyz, basis="cc-pvtz", auxiliary_basis="cc-pvqz-jkfit")
+    system = forte2.System(
+        xyz=xyz, basis_set="cc-pvtz", auxiliary_basis_set="cc-pvqz-jkfit"
+    )
 
     scf = GHF(charge=0, econv=1e-10, dconv=1e-8)(system)
     scf.guess_type = "hcore"

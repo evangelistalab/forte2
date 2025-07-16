@@ -13,7 +13,9 @@ def test_core_energy():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
+    system = forte2.System(
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+    )
 
     scf = RHF(charge=0)(system)
     scf.run()
@@ -31,7 +33,9 @@ def test_dipole_rhf():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
+    system = forte2.System(
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+    )
 
     scf = RHF(charge=0)(system)
     scf.run()
@@ -49,7 +53,9 @@ def test_dipole_uhf():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
+    system = forte2.System(
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+    )
 
     scf = UHF(charge=1, ms=0.5)(system)
     e_dip = forte2.get_property(scf, "electric_dipole")
@@ -68,7 +74,9 @@ def test_quadrupole_rhf():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
+    system = forte2.System(
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+    )
 
     scf = RHF(charge=0)(system)
     scf.run()
@@ -87,7 +95,9 @@ def test_mulliken_rhf():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = forte2.System(xyz=xyz, basis="cc-pVQZ", auxiliary_basis="cc-pVQZ-JKFIT")
+    system = forte2.System(
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+    )
 
     scf = RHF(charge=0)(system)
     scf.run()

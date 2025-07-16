@@ -67,7 +67,7 @@ A few notes on the docstring style (for more, see the Numpy style guide linked a
 - Classes should have a docstring directly after the class definition, and not under the ``__init__`` method.
 - The first line should be a brief summary of the class or function.
 - Display-style LaTeX equations can be included using the ``.. math::`` directive, note the indentation and newlines before and after the equation. If you use LaTeX, the docstring should be a raw string (i.e., prefixed with ``r"""``). Inline equations can be included like ``:math:\`\eta\```.
-- The ``Parameters`` section should include all parameters (arguments for functions, init arguments for classes), their types, and whether they are optional, with default values if applicable. If the default value is ``None`` or other placeholder (*i.e.* not used as a value), then only ```optional`` is needed.
+- The ``Parameters`` section should include all parameters (arguments for functions, init arguments for classes), their types, and whether they are optional, with default values if applicable. If the default value is ``None`` or other placeholder (*i.e.* not used as a value), then only ``optional`` is needed.
 - The ``Attributes`` section should include public attributes of the class, their types, and a brief description.
 - The return should have the type but not necessarily the name.
 - Only public methods and functions *need* to be documented (all functions with a leading underscore, like ``_my_private_function`` are considered private), however private functions should still be well documented for clarity.

@@ -7,7 +7,7 @@ from forte2.helpers.matrix_functions import invsqrt_matrix, canonical_orth
 from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
 from .parse_xyz import parse_xyz
-from .atom_data import ATOM_DATA
+from .atom_data import ATOM_DATA, Z_TO_ATOM_SYMBOL
 
 import numpy as np
 from numpy.typing import NDArray
@@ -29,7 +29,7 @@ class System:
         assigning potentially different basis sets to each atom (e.g. {"H": "sto-3g", "O": "cc-pvdz"}).
     auxiliary_basis : str | dict, optional
         The auxiliary basis set, either as a string or a dictionary (see `basis`).
-    auxiliary_basis_corr : str | dict, optional
+    auxiliary_basis_set_corr : str | dict, optional
         A separate auxiliary basis set for all correlated calculations, either as a string or a dictionary (see `basis`).
     minao_basis : str | dict, optional, default="cc-pvtz-minao"
         The minimal atomic orbital basis set, used in IAO calculations, either as a string or a dictionary (see `basis`).
@@ -49,6 +49,16 @@ class System:
     ----------
     atoms : list[tuple[float, tuple[float, float, float]]]
         A list of tuples representing the atoms in the system, where each tuple contains the atomic charge and a tuple of coordinates (x, y, z).
+    atom_counts : dict[int : int]
+        A dictionary mapping atomic numbers to their numbers in the system.
+    basis : forte2.ints.Basis
+        The basis set for the system, built from the provided `basis_set`.
+    auxiliary_basis : forte2.ints.Basis
+        The auxiliary basis set for the system, built from the provided `auxiliary_basis_set`.
+    auxiliary_basis_set_corr : forte2.ints.Basis
+        The auxiliary basis set for correlated calculations, built from the provided `auxiliary_basis_set_corr`.
+    minao_basis : forte2.ints.Basis
+        The minimal atomic orbital basis set, built from the provided `minao_basis_set`.
     Zsum : float
         The total nuclear charge of the system, calculated as the sum of atomic charges.
     nbf : int
@@ -61,13 +71,14 @@ class System:
         The number of minimal atomic orbital basis functions in the system.
     Xorth : NDArray
         The orthogonalization matrix for the basis functions.
+
     """
 
     xyz: str
-    basis: str | dict
-    auxiliary_basis: str | dict = None
-    auxiliary_basis_corr: str | dict = None
-    minao_basis: str | dict = "cc-pvtz-minao"
+    basis_set: str | dict
+    auxiliary_basis_set: str | dict = None
+    auxiliary_basis_set_corr: str | dict = None
+    minao_basis_set: str | dict = "cc-pvtz-minao"
     x2c_type: str = None
     unit: str = "angstrom"
     linear_dep_trigger: float = 1e-10
@@ -90,22 +101,28 @@ class System:
             "bohr",
         ], f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'."
         self.atoms = parse_xyz(self.xyz, self.unit)
-        self.basis = build_basis(self.basis, self.atoms)
+        self.natoms = len(self.atoms)
+        self.atom_counts = {}
+        for atom in self.atoms:
+            if atom[0] not in self.atom_counts:
+                self.atom_counts[atom[0]] = 0
+            self.atom_counts[atom[0]] += 1
+        self.basis = build_basis(self.basis_set, self.atoms)
         self.auxiliary_basis = (
-            build_basis(self.auxiliary_basis, self.atoms)
-            if self.auxiliary_basis is not None
+            build_basis(self.auxiliary_basis_set, self.atoms)
+            if self.auxiliary_basis_set is not None
             else None
         )
-        if self.auxiliary_basis_corr is not None:
+        if self.auxiliary_basis_set_corr is not None:
             logger.log_warning(f"Using a separate auxiliary basis is not recommended!")
-            self.auxiliary_basis_corr = build_basis(
-                self.auxiliary_basis_corr, self.atoms
+            self.auxiliary_basis_set_corr = build_basis(
+                self.auxiliary_basis_set_corr, self.atoms
             )
         else:
-            self.auxiliary_basis_corr = self.auxiliary_basis
+            self.auxiliary_basis_set_corr = self.auxiliary_basis
         self.minao_basis = (
-            build_basis(self.minao_basis, self.atoms)
-            if self.minao_basis is not None
+            build_basis(self.minao_basis_set, self.atoms)
+            if self.minao_basis_set is not None
             else None
         )
         print(
@@ -134,7 +151,7 @@ class System:
             self.ints_hcore = lambda: get_hcore_x2c(self, x2c_type="so")
 
     def __repr__(self):
-        return f"System(atoms={self.atoms}, basis={self.basis}, auxiliary_basis={self.auxiliary_basis})"
+        return f"System(atoms={self.atoms}, basis_set={self.basis}, auxiliary_basis_set={self.auxiliary_basis})"
 
     def decontract(self):
         """

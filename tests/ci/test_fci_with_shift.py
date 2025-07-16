@@ -9,7 +9,7 @@ def test_fci_co_o_core_exc():
     O 0 0 1
     """
 
-    system = System(xyz=xyz, basis="sto-6g", auxiliary_basis="cc-pVTZ-JKFIT")
+    system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CI(
@@ -29,7 +29,7 @@ def test_fci_co_c_core_exc():
     O 0 0 1
     """
 
-    system = System(xyz=xyz, basis="sto-6g", auxiliary_basis="cc-pVTZ-JKFIT")
+    system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CI(

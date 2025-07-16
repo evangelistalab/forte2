@@ -10,8 +10,8 @@ def test_lindep_rhf():
 
     system = forte2.System(
         xyz=xyz,
-        basis="aug-cc-pvdz",
-        auxiliary_basis="cc-pVQZ-JKFIT",
+        basis_set="aug-cc-pvdz",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
         unit="bohr",
         ortho_thresh=2e-7,
     )
@@ -33,8 +33,8 @@ def test_lindep_ghf():
 
     system = forte2.System(
         xyz=xyz,
-        basis="aug-cc-pvdz",
-        auxiliary_basis="cc-pVQZ-JKFIT",
+        basis_set="aug-cc-pvdz",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
         unit="bohr",
         ortho_thresh=2e-7,
     )
