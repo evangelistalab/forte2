@@ -44,7 +44,8 @@ class AVAS(MOsMixin, SystemMixin):
 
     Notes
     -----
-    The allow subspace specification is a list of strings, non-exhaustive examples:
+    The allow subspace specification is a list of strings, non-exhaustive examples::
+
     - ["C"]              # all carbon atoms
     - ["C","N"]          # all carbon and nitrogen atoms
     - ["C1"]             # carbon atom #1
