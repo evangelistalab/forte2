@@ -39,7 +39,7 @@ def test_avas_inputs():
         )(rhf)
 
 
-def test_avas_1():
+def test_avas_separate_n2():
     eref_casci = -109.00462206150347
     eref_casci_avas = -109.005019207444
     eref_casci_avas_diagonalize = -109.061384781471
@@ -63,7 +63,7 @@ def test_avas_1():
 
     avas = AVAS(
         selection_method="separate",
-        subspace=["N(2p)"],
+        subspace=["N1-2(2p)"],
         num_active_occ=3,
         num_active_vir=3,
         diagonalize=False,
@@ -92,3 +92,93 @@ def test_avas_1():
     )(avas)
     casci.run()
     assert casci.E[0] == approx(eref_casci_avas_diagonalize)
+
+
+def test_avas_cumulative_h2co_all():
+    eref_avas_all = -113.909850012095
+
+    xyz = f"""
+    C           -0.000000000000    -0.000000000006    -0.599542970149
+    O           -0.000000000000     0.000000000001     0.599382404096
+    H           -0.000000000000    -0.938817812172    -1.186989139808
+    H            0.000000000000     0.938817812225    -1.186989139839
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = RHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    avas = AVAS(
+        selection_method="cumulative",
+        subspace=["C1(2px)", "O(2px)"],
+        sigma=1.0,
+        diagonalize=True,
+    )(rhf)
+    casci = CI(
+        orbitals=[7, 8, 9],
+        core_orbitals=[0, 1, 2, 3, 4, 5, 6],
+        state=State(nel=16, multiplicity=1, ms=0.0),
+        nroot=1,
+    )(avas)
+    casci.run()
+
+    assert casci.E[0] == approx(eref_avas_all)
+
+
+def test_avas_cumulative_h2co_98pc():
+    eref_avas_98pc = -113.90837340149
+
+    xyz = f"""
+    C           -0.000000000000    -0.000000000006    -0.599542970149
+    O           -0.000000000000     0.000000000001     0.599382404096
+    H           -0.000000000000    -0.938817812172    -1.186989139808
+    H            0.000000000000     0.938817812225    -1.186989139839
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = RHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    avas = AVAS(
+        selection_method="cumulative",
+        subspace=["C(2px)", "O1(2px)"],
+        sigma=0.98,
+        diagonalize=True,
+    )(rhf)
+    casci = CI(
+        orbitals=[7, 8],
+        core_orbitals=[0, 1, 2, 3, 4, 5, 6],
+        state=State(nel=16, multiplicity=1, ms=0.0),
+        nroot=1,
+    )(avas)
+    casci.run()
+    assert casci.E[0] == approx(eref_avas_98pc)
+
+
+def test_avas_separate_h2co():
+    # this test should be equivlent to test_avas_cumulative_h2co_all
+    eref_avas = -113.909850012095
+
+    xyz = f"""
+    C           -0.000000000000    -0.000000000006    -0.599542970149
+    O           -0.000000000000     0.000000000001     0.599382404096
+    H           -0.000000000000    -0.938817812172    -1.186989139808
+    H            0.000000000000     0.938817812225    -1.186989139839
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = RHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    avas = AVAS(
+        selection_method="separate",
+        subspace=["C(2px)", "O(2px)"],
+        num_active_occ=1,
+        num_active_vir=2,
+        diagonalize=True,
+    )(rhf)
+    casci = CI(
+        orbitals=[7, 8, 9],
+        core_orbitals=[0, 1, 2, 3, 4, 5, 6],
+        state=State(nel=16, multiplicity=1, ms=0.0),
+        nroot=1,
+    )(avas)
+    casci.run()
+    assert casci.E[0] == approx(eref_avas)

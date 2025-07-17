@@ -114,8 +114,8 @@ class AVAS(MOsMixin, SystemMixin):
 
         if self.selection_method == "cumulative":
             assert (
-                self.sigma > 0.0 and self.sigma < 1.0
-            ), f"Sigma must be in (0, 1), got {self.sigma}"
+                self.sigma >= 0.0 and self.sigma <= 1.0 + 1e-10
+            ), f"Sigma must be in [0, 1], got {self.sigma}"
         elif self.selection_method == "cutoff":
             assert self.cutoff > 0.0, f"Cutoff must be positive, got {self.cutoff}"
             assert (
@@ -229,6 +229,11 @@ class AVAS(MOsMixin, SystemMixin):
 
         CpsC = self.parent_method.C[0].T @ self.ao_projector @ self.parent_method.C[0]
 
+        logger.log_info1("MOs with significant overlap with the subspace (> 1.00e-3):")
+        for i in range(nmo):
+            if CpsC[i, i] > 1.0e-3:
+                logger.log_info1(f"{i:3d} {CpsC[i, i]:.6f}")
+
         docc_sl = slice(0, ndocc)
         uocc_sl = slice(ndocc + nsocc, nmo)
 
@@ -246,7 +251,7 @@ class AVAS(MOsMixin, SystemMixin):
         s_sum = np.sum(s_docc) + np.sum(s_uocc)
         logger.log_info1(f"Sum of eigenvalues of the projected overlap: {s_sum:.6f}")
         argsort = np.argsort(np.concatenate((s_docc, s_uocc)))[::-1]
-        s_all = np.zeros((ndocc + nuocc, 3))
+        s_all = np.zeros((ndocc + nuocc, 3), dtype=float)
         s_all[:, 0] = np.concatenate((s_docc, s_uocc))
         s_all[:, 1] = np.concatenate(([1] * ndocc, [0] * nuocc))
         s_all[:, 2] = np.concatenate(
@@ -281,13 +286,13 @@ class AVAS(MOsMixin, SystemMixin):
                         inact_uocc.append(imo[2])
         elif self.selection_method == "cutoff":
             for imo in s_all:
-                sigma = imo[0]
-                if sigma > self.cutoff and sigma > self.evals_threshold:
+                sig = imo[0]
+                if sig > self.cutoff and sig > self.evals_threshold:
                     if imo[1] == 1:
                         act_docc.append(imo[2])
                     else:
                         act_uocc.append(imo[2])
-                    s_act_sum += sigma
+                    s_act_sum += sig
                 else:
                     if imo[1] == 1:
                         inact_docc.append(imo[2])
@@ -295,13 +300,13 @@ class AVAS(MOsMixin, SystemMixin):
                         inact_uocc.append(imo[2])
         elif self.selection_method == "cumulative":
             for imo in s_all:
-                sigma = imo[0]
-                if s_act_sum / s_sum <= self.sigma and sigma >= self.evals_threshold:
+                sig = imo[0]
+                if s_act_sum / s_sum <= self.sigma and sig >= self.evals_threshold:
                     if imo[1] == 1:
                         act_docc.append(imo[2])
                     else:
                         act_uocc.append(imo[2])
-                    s_act_sum += sigma
+                    s_act_sum += sig
                 else:
                     if imo[1] == 1:
                         inact_docc.append(imo[2])
@@ -314,6 +319,12 @@ class AVAS(MOsMixin, SystemMixin):
         act_uocc = np.array(act_uocc, dtype=int)
 
         logger.log_info1(f"AVAS covers {100*s_act_sum/s_sum:.2f}% of the subspace.")
+
+        logger.log_info1("Chosen active orbitals:")
+        for i in act_docc:
+            logger.log_info1(f"  {i:3d} {s_docc[i]:.6f} (occ)")
+        for i in act_uocc:
+            logger.log_info1(f"  {i:3d} {s_uocc[i - ndocc - nsocc]:.6f} (virt)")
 
         # reminder that C_tilde will have zero SOCC coefficients, if ROHF
         C_tilde = self.C[0] @ U
