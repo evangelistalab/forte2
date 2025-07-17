@@ -563,7 +563,7 @@ class ROHF(SCFBase, MOsMixin):
         fock += _project(U_open, U_virt, F[0])
         fock += _project(U_virt, U_core, F_cs)
         fock = fock + fock.conj().T
-        return fock
+        return [fock]
 
     def _build_density_matrix(self):
         D_a = np.einsum("mi,ni->mn", self.C[0][:, : self.na], self.C[0][:, : self.na])
@@ -742,7 +742,7 @@ class GHF(SCFBase, MOsMixin):
 
         F_canon = F
 
-        return F, F_canon
+        return [F], [F_canon]
 
     def _build_density_matrix(self):
         # D = Cocc Cocc^+
@@ -791,13 +791,13 @@ class GHF(SCFBase, MOsMixin):
         Daa, Dab, Dba, Dbb = self.D
         D_spinor = np.block([[Daa, Dab], [Dba, Dbb]])
         S_spinor = np.block([[S, np.zeros_like(S)], [np.zeros_like(S), S]])
-        sdf = S_spinor @ D_spinor @ F
+        sdf = S_spinor @ D_spinor @ F[0]
         AO_grad = sdf.conj().T - sdf
 
         return AO_grad
 
     def _diagonalize_fock(self, F):
-        eps, C = self._eigh_spinor(F)
+        eps, C = self._eigh_spinor(F[0])
         return [eps], [C]
 
     def _spin(self, S):
@@ -827,7 +827,7 @@ class GHF(SCFBase, MOsMixin):
         Daa, Dab, Dba, Dbb = self.D
         D_spinor = np.block([[Daa, Dab], [Dba, Dbb]])
         energy = 0.5 * np.einsum("vu,uv->", D_spinor, H) + 0.5 * np.einsum(
-            "vu,uv->", D_spinor, F
+            "vu,uv->", D_spinor, F[0]
         )
         return energy.real
 
