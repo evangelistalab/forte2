@@ -56,7 +56,7 @@ def get_property(method, property_name, origin=None, unit="debye"):
                     "Warning: Electric multipole moment for a charged system is "
                     "origin-dependent. Using center of mass as origin."
                 )
-                origin = method.system.center_of_mass()
+                origin = method.system.center_of_mass
                 print(f"Center-of-mass origin: {origin}")
         assert len(origin) == 3, "Origin must be a 3-element vector."
         return origin
@@ -150,6 +150,6 @@ def mulliken_population(method):
     ovlp = forte2.ints.overlap(system.basis)
     psdiag = np.einsum("pq,qp->p", dm, ovlp)
     center_first_and_last = system.basis.center_first_and_last
-    charges = system.atomic_charges()
+    charges = system.atomic_charges
     pop = np.array([psdiag[_[0] : _[1]].sum() for _ in center_first_and_last])
     return (psdiag, charges - pop)

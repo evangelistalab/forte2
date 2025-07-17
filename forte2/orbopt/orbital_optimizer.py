@@ -86,7 +86,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
             (self.core, self.actv, self.virt),
             fock_builder,
             self.Hcore,
-            self.system.nuclear_repulsion_energy(),
+            self.system.nuclear_repulsion,
             self.nrr,
         )
         self.ci_opt = CIOptimizer(self.parent_method)
@@ -155,7 +155,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
 
             # 3. Optimize CI expansion at fixed orbitals
             self.ci_opt.set_active_space_ints(
-                self.orb_opt.Ecore + self.system.nuclear_repulsion_energy(),
+                self.orb_opt.Ecore + self.system.nuclear_repulsion,
                 self.orb_opt.Fcore[self.actv, self.actv],
                 self.orb_opt.get_active_space_ints(),
             )

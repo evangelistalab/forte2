@@ -120,12 +120,16 @@ class BasisInfo:
 
     @dataclass
     class _AOLabel:
+        abs_idx: int
         iatom: int
         Z: int
         Zidx: int
         n: int
         l: int
         m: int
+
+        def __str__(self):
+            return f"{self.abs_idx:<5} {self.iatom:<5} {Z_TO_ATOM_SYMBOL[self.Z]+str(self.Zidx):<5} {str(self.n)+get_shell_label(self.l,self.m):<10}"
 
     def __post_init__(self):
         self.basis_labels = self._label_basis_functions()
@@ -139,7 +143,7 @@ class BasisInfo:
         center_given_shell = (
             lambda ishell: np.searchsorted(center_first, ishell, side="right") - 1
         )
-        charges = self.system.atomic_charges()
+        charges = self.system.atomic_charges
         Z_counts = {}
         center_to_atom_label = []
         for i in range(self.system.natoms):
@@ -156,6 +160,7 @@ class BasisInfo:
                 center_to_shell[center] = []
             center_to_shell[center].append(ishell)
 
+        ibasis = 0
         for iatom in range(self.system.natoms):
             n_count = list(range(1, 11))
             Z, Zidx = center_to_atom_label[iatom]
@@ -163,8 +168,9 @@ class BasisInfo:
                 l = self.basis[ishell].l
                 size = self.basis[ishell].size
                 for i in range(size):
-                    label = self._AOLabel(iatom, Z, Zidx, n_count[l], l, i)
+                    label = self._AOLabel(ibasis, iatom, Z, Zidx, n_count[l], l, i)
                     basis_labels.append(label)
+                    ibasis += 1
                 n_count[l] += 1
 
         return basis_labels
@@ -185,10 +191,8 @@ class BasisInfo:
         """
         width = 30
         logger.log_info1("=" * width)
-        logger.log_info1(f"{'#':<4} {'Center':<8} {'Atom':<5} {'AO label':<10}")
+        logger.log_info1(f"{'AO':<5} {'Atom':<5} {'Label':<5} {'AO label':<10}")
         logger.log_info1("-" * width)
-        for idx, label in enumerate(self.basis_labels):
-            logger.log_info1(
-                f"{idx:<4d} {label.iatom:<8} {Z_TO_ATOM_SYMBOL[label.Z]+str(label.Zidx):<5} {str(label.n)+get_shell_label(label.l,label.m):<10}"
-            )
+        for label in self.basis_labels:
+            logger.log_info1(label)
         logger.log_info1("=" * width)

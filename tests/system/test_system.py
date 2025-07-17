@@ -127,7 +127,7 @@ def test_center_of_mass():
     Li 2.0 0.0 0.0
     """
     system = forte2.System(xyz=xyz, basis_set="cc-pvdz", unit="bohr")
-    com = system.center_of_mass()
+    com = system.center_of_mass
     assert com == pytest.approx([0.57948887, 0, 0.04208937])
 
     # This also incidentally tests the input of geometry with signed integers
@@ -142,7 +142,7 @@ def test_center_of_mass():
     H -1 -1 -1 
     """
     system = forte2.System(xyz=xyz, basis_set="cc-pvdz", unit="bohr")
-    com = system.center_of_mass()
+    com = system.center_of_mass
     assert com == pytest.approx([0.0, 0.0, 0.0], abs=1e-10)
 
 

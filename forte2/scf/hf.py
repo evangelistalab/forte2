@@ -209,7 +209,7 @@ class SCFBase(ABC):
         return self.system.ints_overlap()
 
     def _get_nuclear_repulsion(self):
-        return self.system.nuclear_repulsion_energy()
+        return self.system.nuclear_repulsion
 
     def _post_process(self):
         self._get_occupation()

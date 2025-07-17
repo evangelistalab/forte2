@@ -92,13 +92,16 @@ class AVAS(MOsMixin, SystemMixin):
         self.minao_labels = minao_info.basis_labels
         self.atom_to_aos = minao_info.atom_to_aos
 
+        logger.log_info1("\nEntering Atomic Valence Active Space (AVAS) procedure")
+        logger.log_info1("\n1. The subspace of minimal AOs will be parsed and selected")
         self.atom_normals = self._parse_subspace_pi_planes()
         self.subspace_counter = 0
         self.minao_subspace = []
         for subspace in self.subspace:
             self._parse_subspace(subspace)
-        print(self.minao_subspace)
+        self._print_subspace_info()
 
+        logger.log_info1("\n2. The AVAS projector will be built")
         self.ao_projector = self._make_ao_space_projector()
         self._make_avas_orbitals()
         self.executed = True
@@ -142,6 +145,8 @@ class AVAS(MOsMixin, SystemMixin):
             raise ValueError(
                 f"Invalid element symbol in subspace specification: {mgroups[0]}"
             )
+        if Z not in self.system.atom_counts:
+            raise ValueError(f"Element {mgroups[0]} is not present in the system.")
 
         # m[1] is the start index, m[2] is the end index
         if mgroups[1] is None and mgroups[2] is None:
@@ -161,13 +166,20 @@ class AVAS(MOsMixin, SystemMixin):
 
         # mgroups[3] contains the subset of AOs e.g. "2p", "2pz", "3dz2" etc.
         if mgroups[3] is None:
+            # no subset specified (e.g. "C")
             # select all AOs of the element, subject to subspace_planes
             for A in range(start, end):
                 in_plane = (Z, A) in self.atom_normals
                 for pos in self.atom_to_aos[Z][A]:
                     if self.minao_labels[pos].l == 1 and in_plane:
-                        raise NotImplementedError(
-                            "Subspace selection for p orbitals in a plane is not implemented yet."
+                        # plane normal is defined [x,y,z], AOs are defined [y,z,x]
+                        m = (self.minao_labels[pos].m + 1) % 3
+                        c = self.atom_normals[(Z, A)][m]
+                        self.minao_subspace.append((pos, self.subspace_counter, c))
+                        # Only add 1 to subspace_counter for an entire set of p orbitals
+                        # here we use m=2 arbitrarily
+                        self.subspace_counter += (
+                            1 if self.minao_labels[pos].m == 2 else 0
                         )
                     else:
                         self.minao_subspace.append((pos, self.subspace_counter, 1.0))
@@ -175,10 +187,23 @@ class AVAS(MOsMixin, SystemMixin):
         else:
             n = int(mgroups[3][0])
             for A in range(start, end):
+                # if the subset is e.g., "C(2p)" and subspace_pi_planes is specified,
+                # we need to check if the atom is in the plane,
+                # and only add one linear combination of the p orbitals
                 if mgroups[3][1:].lower() == "p" and (Z, A) in self.atom_normals:
-                    raise NotImplementedError(
-                        "Subspace selection for p orbitals in a plane is not implemented yet."
-                    )
+                    for pos in self.atom_to_aos[Z][A]:
+                        if (
+                            self.minao_labels[pos].n == n
+                            and self.minao_labels[pos].l == 1
+                        ):
+                            # plane normal is defined [x,y,z], AOs are defined [y,z,x]
+                            m = (self.minao_labels[pos].m + 1) % 3
+                            c = self.atom_normals[(Z, A)][m]
+                            self.minao_subspace.append((pos, self.subspace_counter, c))
+                    # Only add 1 to subspace_counter for an entire set of p orbitals
+                    self.subspace_counter += 1
+                # if the subset is completely specified, e.g., "C2-3(3dz2)",
+                # we disregard the planes (if any), we only add the specified AO
                 else:
                     lm = forte2.basis_utils.shell_label_to_lm(mgroups[3][1:].lower())
                     for l, m in lm:
@@ -192,6 +217,32 @@ class AVAS(MOsMixin, SystemMixin):
                                     (pos, self.subspace_counter, 1.0)
                                 )
                                 self.subspace_counter += 1
+
+    def _print_subspace_info(self):
+        logger.log_info1(
+            "AO and atom labels are 0-indexed, "
+            "whereas relative atom indices are 1-indexed (e.g., C1 is the first carbon atom)."
+        )
+        logger.log_info1("=" * 41)
+        logger.log_info1(
+            f"{'AO':<5} {'Atom':<5} {'Label':<5} {'AO label':<10} {'Coefficient':<12}"
+        )
+        logger.log_info1("-" * 41)
+        for i in self.minao_subspace:
+            label = self.minao_labels[i[0]]
+            logger.log_info1(f"{label} {self.minao_subspace[1][2]:<12.6f}")
+        logger.log_info1("-" * 41)
+        expl = self.subspace_counter < len(self.minao_subspace)
+        logger.log_info1(
+            f"Number of subspace orbitals: {self.subspace_counter} {'*' if expl else ''}"
+        )
+        logger.log_info1("=" * 41)
+        if self.subspace_counter < len(self.minao_subspace):
+            logger.log_info1(
+                "* Number of subspace orbitals is smaller than the number of minimal AO basis functions due \n"
+                "  to the specification of the subspace_pi_planes. Fixed linear combinations of p orbitals \n"
+                "  specified by the coefficients will be used to build the AVAS projector."
+            )
 
     def _make_ao_space_projector(self):
         # Overlap Matrix in Minimal AO Basis
@@ -231,9 +282,14 @@ class AVAS(MOsMixin, SystemMixin):
         CpsC = self.parent_method.C[0].T @ self.ao_projector @ self.parent_method.C[0]
 
         logger.log_info1("MOs with significant overlap with the subspace (> 1.00e-3):")
+        logger.log_info1("MOs are 0-indexed")
+        logger.log_info1("=" * 18)
+        logger.log_info1(f"{'# MO':<5} {'<phi|P|phi>':<12}")
+        logger.log_info1("-" * 18)
         for i in range(nmo):
             if CpsC[i, i] > 1.0e-3:
-                logger.log_info1(f"{i:3d} {CpsC[i, i]:.6f}")
+                logger.log_info1(f"{i:<5d} {CpsC[i, i]:<12.6f}")
+        logger.log_info1("=" * 18)
 
         docc_sl = slice(0, ndocc)
         uocc_sl = slice(ndocc + nsocc, nmo)
@@ -244,13 +300,17 @@ class AVAS(MOsMixin, SystemMixin):
             U[docc_sl, docc_sl] = Udocc
             s_uocc, Uuocc = np.linalg.eigh(CpsC[uocc_sl, uocc_sl])
             U[uocc_sl, uocc_sl] = Uuocc
+            sigma_type = "eigen"
         else:
             s_docc = CpsC[docc_sl, docc_sl].diagonal()
             s_uocc = CpsC[uocc_sl, uocc_sl].diagonal()
             U = np.eye(nmo)
+            sigma_type = "diagonal "
 
         s_sum = np.sum(s_docc) + np.sum(s_uocc)
-        logger.log_info1(f"Sum of eigenvalues of the projected overlap: {s_sum:.6f}")
+        logger.log_info1(
+            f"Sum of {sigma_type}values of the projected overlap: {s_sum:.6f}"
+        )
         argsort = np.argsort(np.concatenate((s_docc, s_uocc)))[::-1]
         s_all = np.zeros((ndocc + nuocc, 3), dtype=float)
         s_all[:, 0] = np.concatenate((s_docc, s_uocc))
@@ -267,6 +327,7 @@ class AVAS(MOsMixin, SystemMixin):
 
         s_act_sum = 0.0
 
+        logger.log_info1("\n3. The AVAS orbitals will be constructed")
         if self.selection_method == "separate":
             nact_docc = nact_uocc = 0
 
@@ -321,11 +382,33 @@ class AVAS(MOsMixin, SystemMixin):
 
         logger.log_info1(f"AVAS covers {100*s_act_sum/s_sum:.2f}% of the subspace.")
 
-        logger.log_info1("Chosen active orbitals:")
+        logger.log_info1("AVAS has chosen the following orbitals:")
+        logger.log_info1("=" * 25)
+        logger.log_info1(f"{'# MO':<5} {sigma_type+' *':<12} {'occ':<6}")
+        logger.log_info1("-" * 25)
         for i in act_docc:
-            logger.log_info1(f"  {i:3d} {s_docc[i]:.6f} (occ)")
+            logger.log_info1(f"{i:<5d} {s_docc[i]:<12.6f} {'2':<6}")
+        for i in range(ndocc, ndocc + nsocc):
+            logger.log_info1(f"{i:<5d} {'-':<12} {'1 **':<6}")
         for i in act_uocc:
-            logger.log_info1(f"  {i:3d} {s_uocc[i - ndocc - nsocc]:.6f} (virt)")
+            logger.log_info1(f"{i:<5d} {s_uocc[i - ndocc - nsocc]:<12.6f} {'0':<6}")
+        logger.log_info1("=" * 25)
+        if sigma_type == "eigen":
+            logger.log_info1("* 'eigen': eigenvalue of the projected overlap matrix")
+        if sigma_type == "diagonal ":
+            logger.log_info1(
+                "* 'diagonal': diagonal element of the projected overlap matrix"
+            )
+        if nsocc > 0:
+            logger.log_info1(
+                "** Singly occupied orbitals (occ = 1) are always selected!"
+            )
+        self.nactv = len(act_docc) + len(act_uocc) + nsocc
+        self.ncore = len(inact_docc)
+        self.core_orbitals = list(range(self.ncore))
+        self.active_orbitals = list(range(self.ncore, self.ncore + self.nactv))
+        logger.log_info1(f"Number of core orbitals:      {self.ncore}")
+        logger.log_info1(f"Number of active orbitals:    {self.nactv}")
 
         # reminder that C_tilde will have zero SOCC coefficients, if ROHF
         C_tilde = self.C[0] @ U
@@ -408,13 +491,10 @@ class AVAS(MOsMixin, SystemMixin):
         # return empty dictionary if no planes are defined
         if not planes_expr:
             return {}
-        else:
-            raise NotImplementedError("Subspace pi-planes are not implemented yet.")
 
         # test input
         if not isinstance(system, forte2.System):
             raise ValueError("Invalid argument for system!")
-
         if not isinstance(planes_expr, list):
             raise ValueError("Invalid plane expressions: layer 1 not a list!")
         else:
@@ -427,39 +507,15 @@ class AVAS(MOsMixin, SystemMixin):
                             "Invalid plane expressions: atom expressions not string!"
                         )
 
-        # print requested planes
-        logger.log_info1("\n  ==> List of Planes Requested <==\n")
-        for i, plane in enumerate(planes_expr):
-            logger.log_info1(f"\n    Plane {i + 1:2d}")
-            for j, atom in enumerate(plane):
-                if j % 10 == 0:
-                    logger.log_info1("\n    ")
-                logger.log_info1(f"{atom:>8s}")
-
-        # create index map {'C': [absolute indices in molecule], 'BE': [...], ...}
-        charges = system.atomic_charges()
-        abs_indices = {}
-        for i in range(system.natoms):
-            try:
-                abs_indices[Z_TO_ATOM_SYMBOL[charges[i]].upper()].append(i)
-            except KeyError:
-                abs_indices[Z_TO_ATOM_SYMBOL[charges[i]].upper()] = [i]
-        logger.log_debug(f"Index map: {abs_indices}")
-
-        # put molecular geometry (Bohr) in numpy array format
-        xyz = system.atomic_positions()
-
-        # centroid (geometric center) of the molecule
-        centroid = np.mean(xyz, axis=0)
-        logger.log_debug(f"Molecule centroid (Bohr): {centroid}")
+        xyz = system.atomic_positions
+        centroid = system.centroid
+        atom_to_center = system.atom_to_center
 
         # parse planes
         atom_dirs = {}
         atom_regex = r"([A-Za-z]{1,2})\s*(\d*)\s*-?\s*(\d*)"
 
         for n, plane_atoms in enumerate(planes_expr):
-            logger.log_debug(f"Process plane {n + 1}")
-
             plane = []  # absolute index for atoms forming the plane
             plane_z = []  # pair of atomic number and relative index
 
@@ -472,31 +528,25 @@ class AVAS(MOsMixin, SystemMixin):
                     raise ValueError("Invalid expression of atoms!")
 
                 atom, start_str, end_str = m.groups()
-                if atom not in abs_indices:
+                Z = ATOM_SYMBOL_TO_Z[atom]
+                if Z not in atom_to_center:
                     raise ValueError(f"Atom '{atom}' not in molecule!")
 
                 start = 1
-                end = int(end_str) if end_str else len(abs_indices[atom])
+                end = int(end_str) if end_str else len(atom_to_center[Z])
                 if start_str:
                     start = int(start_str)
                     end = int(end_str) if end_str else start
 
-                z = ATOM_SYMBOL_TO_Z[atom]
                 for i in range(start - 1, end):
-                    plane.append(abs_indices[atom][i])
-                    plane_z.append((z, i))
-                logger.log_debug(f"  parsed entry: {atom:2s} {start:>3d} - {end:d}")
-
-            logger.log_debug(f"  atom indices of the plane: {plane}")
+                    plane.append(atom_to_center[Z][i])
+                    # relative index is 1-indexed (e.g. C1 is the first carbon atom)
+                    plane_z.append((Z, i + 1))
 
             # compute the plane unit normal (smallest principal axis)
             plane_xyz = xyz[plane]
             plane_centroid = np.mean(plane_xyz, axis=0)
             plane_xyz = plane_xyz - plane_centroid
-            logger.log_debug(f"  plane centroid (Bohr): {plane_centroid}")
-            logger.log_debug(f"  shifted plane xyz (Bohr):")
-            for x, y, z in plane_xyz:
-                logger.log_debug(f"    {x:13.10f}  {y:13.10f}  {z:13.10f}")
 
             # SVD the xyz coordinate
             u, s, vh = np.linalg.svd(plane_xyz)
@@ -504,8 +554,6 @@ class AVAS(MOsMixin, SystemMixin):
             # fix phase
             p = plane_centroid - centroid
             plane_normal = vh[2] if np.inner(vh[2], p) >= 0.0 else vh[2] * -1.0
-            logger.log_debug(f"  singular values: {s}")
-            logger.log_debug(f"  plane unit normal: {plane_normal}")
 
             # attach each atom to the unit normal
             for z_i in plane_z:
@@ -516,13 +564,5 @@ class AVAS(MOsMixin, SystemMixin):
 
         # normalize the directions on each requested atom
         atom_dirs = {z_i: n / np.linalg.norm(n) for z_i, n in atom_dirs.items()}
-        logger.log_debug(
-            "Averaged vector perpendicular to the requested planes on each atom"
-        )
-        for z, i in sorted(atom_dirs.keys()):
-            n_str = " ".join(f"{i:15.10f}" for i in atom_dirs[(z, i)])
-            logger.log_debug(
-                f"  Atom Z: {z:3d}, relative index: {i:3d}, direction: {n_str}"
-            )
 
         return atom_dirs

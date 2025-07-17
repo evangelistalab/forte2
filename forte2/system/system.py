@@ -49,8 +49,22 @@ class System:
     ----------
     atoms : list[tuple[float, tuple[float, float, float]]]
         A list of tuples representing the atoms in the system, where each tuple contains the atomic charge and a tuple of coordinates (x, y, z).
+    natoms : int
+        The number of atoms in the system.
+    atomic_charges : NDArray
+        An array of atomic charges, shape (N,) where N is the number of atoms.
+    atomic_positions : NDArray
+        An array of atomic positions, shape (N, 3) where N is the number of atoms.
+    center_of_mass : NDArray
+        The center of mass of the system, shape (3,).
+    centroid : NDArray
+        The centroid (geometric center) of the system, shape (3,).
+    nuclear_repulsion : float
+        The nuclear repulsion energy of the system.
     atom_counts : dict[int : int]
         A dictionary mapping atomic numbers to their numbers in the system.
+    atom_to_center : dict[int : list[int]]
+        A dictionary mapping atomic numbers to a list of (0-based) indices of atoms of that type in the system.
     basis : forte2.ints.Basis
         The basis set for the system, built from the provided `basis_set`.
     auxiliary_basis : forte2.ints.Basis
@@ -102,11 +116,30 @@ class System:
         ], f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'."
         self.atoms = parse_xyz(self.xyz, self.unit)
         self.natoms = len(self.atoms)
+        self.atomic_charges = np.array([atom[0] for atom in self.atoms])
+        self.atomic_masses = np.array(
+            [ATOM_DATA[Z]["mass"] for Z in self.atomic_charges]
+        )
+        self.atomic_positions = np.array([atom[1] for atom in self.atoms])
+        self.centroid = np.mean(self.atomic_positions, axis=0)
+        self.nuclear_repulsion = forte2.ints.nuclear_repulsion(self.atoms)
+
+        self.center_of_mass = np.einsum(
+            "a,ax->x", self.atomic_masses, self.atomic_positions
+        ) / np.sum(self.atomic_masses)
+
         self.atom_counts = {}
         for atom in self.atoms:
             if atom[0] not in self.atom_counts:
                 self.atom_counts[atom[0]] = 0
             self.atom_counts[atom[0]] += 1
+
+        self.atom_to_center = {}
+        for i, atom in enumerate(self.atoms):
+            if atom[0] not in self.atom_to_center:
+                self.atom_to_center[atom[0]] = []
+            self.atom_to_center[atom[0]].append(i)
+
         self.basis = build_basis(self.basis_set, self.atoms)
         self.auxiliary_basis = (
             build_basis(self.auxiliary_basis_set, self.atoms)
@@ -159,8 +192,8 @@ class System:
 
         Returns
         -------
-            forte2.ints.Basis
-                Decontracted basis set.
+        forte2.ints.Basis
+            Decontracted basis set.
         """
         return build_basis(
             self.basis.name,
@@ -175,8 +208,8 @@ class System:
 
         Returns
         -------
-            NDArray
-                Overlap integrals matrix.
+        NDArray
+            Overlap integrals matrix.
         """
         return forte2.ints.overlap(self.basis)
 
@@ -186,70 +219,12 @@ class System:
 
         Returns
         -------
-            NDArray
-                Core Hamiltonian integrals matrix.
+        NDArray
+            Core Hamiltonian integrals matrix.
         """
         T = forte2.ints.kinetic(self.basis)
         V = forte2.ints.nuclear(self.basis, self.atoms)
         return T + V
-
-    def nuclear_repulsion_energy(self):
-        """
-        Return the nuclear repulsion energy for the system.
-
-        Returns
-        -------
-            float
-                Nuclear repulsion energy.
-        """
-        return forte2.ints.nuclear_repulsion(self.atoms)
-
-    def atomic_charges(self):
-        """
-        Return the atomic charges for the system.
-
-        Returns
-        -------
-            NDArray
-                Array of atomic charges, shape (N,) where N is the number of atoms.
-        """
-        return np.array([atom[0] for atom in self.atoms])
-
-    def atomic_masses(self):
-        """
-        Return the average atomic masses for the system.
-
-        Returns
-        -------
-            NDArray
-                Array of atomic masses, shape (N,) where N is the number of atoms.
-        """
-        return np.array([ATOM_DATA[atom[0]]["mass"] for atom in self.atoms])
-
-    def atomic_positions(self):
-        """
-        Return the atomic positions (in bohr) for the system.
-
-        Returns
-        -------
-            NDArray
-                Array of atomic positions, shape (N, 3) where N is the number of atoms.
-        """
-        return np.array([atom[1] for atom in self.atoms])
-
-    def center_of_mass(self):
-        """
-        Calculate the center of mass of the system.
-        Uses average atomic masses for the calculation.
-
-        Returns
-        -------
-            tuple
-                Center of mass coordinates (x, y, z).
-        """
-        masses = self.atomic_masses()
-        positions = np.array([atom[1] for atom in self.atoms])
-        return np.einsum("a,ax->x", masses, positions) / np.sum(masses)
 
     def nuclear_dipole(self, origin=None, unit="debye"):
         """
@@ -257,19 +232,19 @@ class System:
 
         Args
         ----
-            origin : tuple[float, float, float], optional
-                The origin point for the dipole calculation. If None, the center of mass of the system is used.
-            unit : str, optional, default="debye"
-                The unit for the dipole moment. Can be "debye" or "au".
+        origin : tuple[float, float, float], optional
+            The origin point for the dipole calculation. If None, the center of mass of the system is used.
+        unit : str, optional, default="debye"
+            The unit for the dipole moment. Can be "debye" or "au".
 
         Returns
         -------
-            NDArray
-                Nuclear dipole moment vector, shape (3,).
+        NDArray
+            Nuclear dipole moment vector, shape (3,).
         """
         assert unit in ["debye", "au"], f"Invalid unit: {unit}. Use 'debye' or 'au'."
-        charges = self.atomic_charges()
-        positions = self.atomic_positions()
+        charges = self.atomic_charges
+        positions = self.atomic_positions
         if origin is not None:
             assert len(origin) == 3, "Origin must be a 3-element vector."
             positions -= np.array(origin)[np.newaxis, :]
@@ -284,18 +259,19 @@ class System:
 
         Args
         ----
-            origin : tuple[float, float, float], optional
-                The origin point for the quadrupole calculation. If None, the center of mass of the system is used.
-            unit : str, optional, default="debye"
-                The unit for the quadrupole moment. Can be "debye" or "au".
+        origin : tuple[float, float, float], optional
+            The origin point for the quadrupole calculation. If None, the center of mass of the system is used.
+        unit : str, optional, default="debye"
+            The unit for the quadrupole moment. Can be "debye" or "au".
+
         Returns
         -------
-            NDArray
-                Nuclear quadrupole moment tensor, shape (3, 3).
+        NDArray
+            Nuclear quadrupole moment tensor, shape (3, 3).
         """
         assert unit in ["debye", "au"], f"Invalid unit: {unit}. Use 'debye' or 'au'."
-        charges = self.atomic_charges()
-        positions = self.atomic_positions()
+        charges = self.atomic_charges
+        positions = self.atomic_positions
         if origin is not None:
             assert len(origin) == 3, "Origin must be a 3-element vector."
             positions -= np.array(origin)[np.newaxis, :]

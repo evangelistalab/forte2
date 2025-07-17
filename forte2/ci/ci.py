@@ -715,12 +715,12 @@ class CASCI(CI):
 
     Parameters
     ----------
-        norb : int
-            Number of orbitals in the CAS.
-        nelec : int
-            Number of electrons in the CAS.
-        charge : int, optional, default=0.
-            Charge of the system.
+    norb : int
+        Number of orbitals in the CAS.
+    nelec : int
+        Number of electrons in the CAS.
+    charge : int, optional, default=0.
+        Charge of the system.
     """
 
     def __init__(self, ncasorb, ncaselec, charge=0, multiplicity=1, ms=0.0, nroot=1):
@@ -745,6 +745,50 @@ class CASCI(CI):
             nroot=self.nroot,
         )
         self = super().__call__(method)
+        return self
+
+
+class AutoCI(CI):
+    """
+    A convenience class for initializing a CI calculations with automatic CAS selection using AVAS.
+
+    Parameters
+    ----------
+    charge : int, optional, default=0.
+        Charge of the system.
+    multiplicity : int, optional, default=1.
+        Multiplicity of the system.
+    ms : float, optional, default=0.0.
+        Spin quantum number.
+    nroot : int, optional, default=1.
+        Number of roots to compute.
+    """
+
+    def __init__(self, charge=0, multiplicity=1, ms=0.0, nroot=1):
+        self.charge = charge
+        self.multiplicity = multiplicity
+        self.ms = ms
+        self.nroot = nroot
+
+    def __call__(self, method):
+        assert isinstance(method, forte2.AVAS), "Method must be an instance of AVAS"
+        self.parent_method = method
+        return self
+
+    def run(self):
+        if not self.parent_method.executed:
+            self.parent_method.run()
+        nel = self.parent_method.system.Zsum - self.charge
+        core_orbitals = self.parent_method.core_orbitals
+        actv_orbitals = self.parent_method.active_orbitals
+        super().__init__(
+            orbitals=actv_orbitals,
+            core_orbitals=core_orbitals,
+            state=State(nel=nel, multiplicity=self.multiplicity, ms=self.ms),
+            nroot=self.nroot,
+        )
+        self = super().__call__(self.parent_method)
+        super().run()
         return self
 
 
