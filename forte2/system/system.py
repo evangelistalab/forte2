@@ -24,10 +24,10 @@ class System:
     ----------
     xyz : str
         A XYZ string representing the atomic coordinates.
-    basis : str | dict
+    basis_set : str | dict
         The basis set to be used, either as a string (e.g. "cc-pvdz") or as a dictionary
         assigning potentially different basis sets to each atom (e.g. {"H": "sto-3g", "O": "cc-pvdz"}).
-    auxiliary_basis : str | dict, optional
+    auxiliary_basis_set : str | dict, optional
         The auxiliary basis set, either as a string or a dictionary (see `basis`).
     auxiliary_basis_set_corr : str | dict, optional
         A separate auxiliary basis set for all correlated calculations, either as a string or a dictionary (see `basis`).
