@@ -41,6 +41,8 @@ class SCFBase(ABC):
         The density matrices.
     E : float
         The total energy of the system.
+    F : list[NDArray]
+        The Fock matrices.
     eps : list[NDArray]
         The orbital energies.
 
@@ -146,6 +148,7 @@ class SCFBase(ABC):
             # 1. Build the Fock matrix
             # (there is a slot for canonicalized F to accommodate ROHF and CUHF methods - admittedly weird for RHF/UHF)
             F, F_canon = self._build_fock(H, fock_builder, S)
+            self.F = F_canon
             # 2. Build the orbital gradient (DIIS residual)
             AO_grad = self._build_ao_grad(S, F_canon)
             # 3. Perform DIIS update of Fock
@@ -172,6 +175,7 @@ class SCFBase(ABC):
                 logger.log_info1(f"{self.method} iterations converged\n")
                 # perform final iteration
                 F, F_canon = self._build_fock(H, fock_builder, S)
+                self.F = F_canon
                 self.eps, self.C = self._diagonalize_fock(F_canon)
                 self.D = self._build_density_matrix()
                 self.E = Vnn + self._energy(H, F)
@@ -265,7 +269,7 @@ class RHF(SCFBase, MOsMixin):
         J = fock_builder.build_J(self.D)[0]
         K = fock_builder.build_K([self.C[0][:, : self.na]])[0]
         F = H + 2.0 * J - K
-        return F, F
+        return [F], [F]
 
     def _build_density_matrix(self):
         D = np.einsum("mi,ni->mn", self.C[0][:, : self.na], self.C[0][:, : self.na])
@@ -290,22 +294,22 @@ class RHF(SCFBase, MOsMixin):
         return self._build_density_matrix()
 
     def _build_ao_grad(self, S, F):
-        ao_grad = F @ self.D[0] @ S - S @ self.D[0] @ F
+        ao_grad = F[0] @ self.D[0] @ S - S @ self.D[0] @ F[0]
         ao_grad = self.Xorth.T @ ao_grad @ self.Xorth
         return ao_grad
 
     def _energy(self, H, F):
-        return np.sum(self.D[0] * (H + F))
+        return np.sum(self.D[0] * (H + F[0]))
 
     def _diagonalize_fock(self, F):
-        eps, C = self._eigh(F)
+        eps, C = self._eigh(F[0])
         return [eps], [C]
 
     def _spin(self, S):
         return self.ms * (self.ms + 1)
 
     def _diis_update(self, diis, F, AO_grad):
-        return diis.update(F, AO_grad)
+        return [diis.update(F[0], AO_grad)]
 
     def _get_occupation(self):
         self.ndocc = self.na

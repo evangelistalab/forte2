@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import numpy as np
 import re
 
@@ -19,6 +19,12 @@ class AVAS(MOsMixin, SystemMixin):
         The subspace of orbitals to be considered for AVAS selection.
     subspace_pi_planes : list, optional
         A list of planes defined by atoms in the molecule, used to determine π orbitals.
+    selection_method : str, optional, default="cumulative"
+        The method for selecting active orbitals. Options are "cumulative", "cutoff", "separate", and "total".
+        - "cumulative": Selects orbitals based on cumulative eigenvalues of the overlap matrix. Must define `sigma`.
+        - "cutoff": Selects orbitals based on a cutoff value for eigenvalues of the overlap matrix. Must define `cutoff`.
+        - "separate": Selects occupied and virtual orbitals separately. Must define `num_active_occ` and `num_active_vir`.
+        - "total": Selects a total number of active orbitals. Must define `num_active`.
     diagonalize : bool, optional, default=True
         Whether to diagonalize the occupied and virtual space overlap matrices.
     sigma : float, optional, default=0.98
@@ -53,6 +59,7 @@ class AVAS(MOsMixin, SystemMixin):
 
     subspace: list
     subspace_pi_planes: list = None
+    selection_method: str = "cumulative"
     diagonalize: bool = True
     sigma: float = 0.98
     cutoff: float = 1.0
@@ -61,33 +68,86 @@ class AVAS(MOsMixin, SystemMixin):
     num_active_occ: int = 0
     num_active_vir: int = 0
 
-    def __call__(self, parent_method):
-        assert isinstance(
-            parent_method, (forte2.methods.RHF, forte2.methods.ROHF)
-        ), f"Parent method must be RHF or ROHF, got {type(parent_method)}"
-        self.parent_method = parent_method
+    executed: bool = field(init=False, default=False)
+
+    def __post_init__(self):
+        self._regex = "([a-zA-Z]{1,2})([0-9]+)?-?([0-9]+)?\\(?((?:\\/?[1-9]{1}[spdfgh]{1}[a-zA-Z0-9-]*)*)\\)?"
         self._check_parameters()
 
+    def __call__(self, parent_method):
+        assert isinstance(
+            parent_method, (forte2.scf.RHF, forte2.scf.ROHF)
+        ), f"Parent method must be RHF or ROHF, got {type(parent_method)}"
+        self.parent_method = parent_method
+        return self
+
+    def run(self):
+        if not self.parent_method.executed:
+            self.parent_method.run()
+        SystemMixin.copy_from_upstream(self, self.parent_method)
+        MOsMixin.copy_from_upstream(self, self.parent_method)
+
+        minao_info = forte2.basis_utils.BasisInfo(self.system, self.system.minao_basis)
+        self.minao_labels = minao_info.basis_labels
+        self.atom_to_aos = minao_info.atom_to_aos
+
+        self.atom_normals = self._parse_subspace_pi_planes()
+        self.subspace_counter = 0
+        self.minao_subspace = []
+        for subspace in self.subspace:
+            self._parse_subspace(subspace)
+        print(self.minao_subspace)
+
+        self.ao_projector = self._make_ao_space_projector()
+        self._make_avas_orbitals()
+        self.executed = True
+        return self
+
+    def _check_parameters(self):
+        self.selection_method = self.selection_method.lower()
+        assert self.selection_method in [
+            "cumulative",
+            "cutoff",
+            "separate",
+            "total",
+        ], f"Invalid selection method: {self.selection_method}"
+
+        if self.selection_method == "cumulative":
+            assert (
+                self.sigma > 0.0 and self.sigma < 1.0
+            ), f"Sigma must be in (0, 1), got {self.sigma}"
+        elif self.selection_method == "cutoff":
+            assert self.cutoff > 0.0, f"Cutoff must be positive, got {self.cutoff}"
+            assert (
+                1.0 - self.cutoff > self.evals_threshold
+            ), f"Cutoff {self.cutoff} is smaller than 1-evals_threshold, {1-self.evals_threshold}, no orbitals will be selected."
+        elif self.selection_method == "separate":
+            assert (
+                self.num_active_occ > 0 and self.num_active_vir > 0
+            ), "Number of active occupied and virtual orbitals must be positive."
+        elif self.selection_method == "total":
+            raise NotImplementedError(
+                "'Total' AVAS selection is not implemented yet. Use 'cumulative', 'cutoff', or 'separate'."
+            )
+            assert self.num_active > 0, "Number of active orbitals must be positive."
+
     def _parse_subspace(self, ss_str):
-        m = re.match(
-            "([a-zA-Z]{1,2})([0-9]+)?-?([0-9]+)?\\(?((?:\\/?[1-9]{1}[SPDFGHspdfgh]{1}[a-zA-Z0-9-]*)*)\\)?",
-            ss_str,
-        ).groups()
+        mgroups = re.match(self._regex, ss_str).groups()
 
         # m[0] is the element symbol
         try:
-            Z = ATOM_SYMBOL_TO_Z[m[0].upper()]
+            Z = ATOM_SYMBOL_TO_Z[mgroups[0].upper()]
         except KeyError:
             raise ValueError(
-                f"Invalid element symbol in subspace specification: {m[0]}"
+                f"Invalid element symbol in subspace specification: {mgroups[0]}"
             )
 
         # m[1] is the start index, m[2] is the end index
-        if m[1] is None and m[2] is None:
+        if mgroups[1] is None and mgroups[2] is None:
             # no index specified, use all atoms of the element
-            start = 0
-            end = self.system.atom_counts[Z]
-        elif m[1] is None and m[2] is not None:
+            start = 1
+            end = self.system.atom_counts[Z] + 1
+        elif mgroups[1] is None and mgroups[2] is not None:
             # catches the edge case of "C-3"
             raise ValueError(
                 "Invalid subspace specification: start index is not specified but end index is."
@@ -95,11 +155,11 @@ class AVAS(MOsMixin, SystemMixin):
         else:
             # if only start is specified, only one atom is selected
             # if both start and end are specified, use the range
-            start = 0 if m[1] is None else int(m[1]) - 1
-            end = start + 1 if m[2] is None else int(m[2])
+            start = 1 if mgroups[1] is None else int(mgroups[1])
+            end = start + 1 if mgroups[2] is None else int(mgroups[2]) + 1
 
-        # m[3] contains the subset of AOs e.g. "2p", "2pz", "3dz2" etc.
-        if m[3] is None:
+        # mgroups[3] contains the subset of AOs e.g. "2p", "2pz", "3dz2" etc.
+        if mgroups[3] is None:
             # select all AOs of the element, subject to subspace_planes
             for A in range(start, end):
                 in_plane = (Z, A) in self.atom_normals
@@ -109,17 +169,17 @@ class AVAS(MOsMixin, SystemMixin):
                             "Subspace selection for p orbitals in a plane is not implemented yet."
                         )
                     else:
-                        self.minao_subspace.append(pos, self.subspace_counter, 1.0)
+                        self.minao_subspace.append((pos, self.subspace_counter, 1.0))
                         self.subspace_counter += 1
         else:
-            n = int(m[3][0])
+            n = int(mgroups[3][0])
             for A in range(start, end):
-                if m[3][1:].lower() == "p" and (Z, A) in self.atom_normals:
+                if mgroups[3][1:].lower() == "p" and (Z, A) in self.atom_normals:
                     raise NotImplementedError(
                         "Subspace selection for p orbitals in a plane is not implemented yet."
                     )
                 else:
-                    lm = forte2.basis_utils.shell_label_to_lm(m[3][1:].lower())
+                    lm = forte2.basis_utils.shell_label_to_lm(mgroups[3][1:].lower())
                     for l, m in lm:
                         for pos in self.atom_to_aos[Z][A]:
                             if (
@@ -128,45 +188,162 @@ class AVAS(MOsMixin, SystemMixin):
                                 and self.minao_labels[pos].m == m
                             ):
                                 self.minao_subspace.append(
-                                    pos, self.subspace_counter, 1.0
+                                    (pos, self.subspace_counter, 1.0)
                                 )
                                 self.subspace_counter += 1
 
-    def _check_parameters(self):
-        for subspace in self.subspace:
-            m = re.match(
-                "([a-zA-Z]{1,2})([0-9]+)?-?([0-9]+)?\\(?((?:\\/?[1-9]{1}[SPDFGHspdfgh]{1}[a-zA-Z0-9-]*)*)\\)?",
-                subspace,
-            )
-            if not m:
-                raise ValueError(f"Invalid subspace specification: {subspace}")
+    def _make_ao_space_projector(self):
+        # Overlap Matrix in Minimal AO Basis
+        Smm = forte2.ints.overlap(self.system.minao_basis)
+        nbf_m = Smm.shape[0]
+        # Build Cms: minimal AO basis to subspace AO basis
+        nbf_s = self.subspace_counter
+        Cms = np.zeros((nbf_m, nbf_s))
+        for m, s, c in self.minao_subspace:
+            # m is the index of the minimal AO
+            # s is the index of the subspace AO
+            # c is the coefficient of the subspace AO in the minimal AO basis
+            Cms[m, s] = c
+        # Subspace overlap matrix
+        Sss = Cms.T @ Smm @ Cms
+        # Orthogonalize Sss: Xss = Sss^(-1/2)
+        evals, evecs = np.linalg.eigh(Sss)
+        Xss = evecs @ np.diag((1.0 / np.sqrt(evals))) @ evecs.T
+        # Build overlap matrix between subspace and computational (large) basis
+        Sml = forte2.ints.overlap(self.system.minao_basis, self.system.basis)
+        # Project into subspace
+        Ssl = Cms.T @ Sml
+        # AO projector
+        # Pao = Ssl^T Sss^-1 Ssl = (Cms^T Sml)^T (Xss^T Xss) (Cms^T Sml)
+        Xsl = Xss @ Ssl
+        Pao = Xsl.T @ Xsl
+        return Pao
 
-        if self.num_active_occ + self.num_active_vir > 0:
-            self.avas_selection = "separate"
-        elif self.num_active > 0:
-            self.avas_selection = "total"
-        elif 1.0 - self.cutoff > self.evals_threshold:
-            self.avas_selection = "cutoff"
+    def _make_avas_orbitals(self):
+        ndocc = self.parent_method.ndocc
+        nsocc = (
+            0 if not hasattr(self.parent_method, "nsocc") else self.parent_method.nsocc
+        )
+        nuocc = self.parent_method.nuocc
+        nmo = self.system.nmo
+
+        CpsC = self.parent_method.C[0].T @ self.ao_projector @ self.parent_method.C[0]
+
+        docc_sl = slice(0, ndocc)
+        uocc_sl = slice(ndocc + nsocc, nmo)
+
+        if self.diagonalize:
+            U = np.zeros((nmo, nmo))
+            s_docc, Udocc = np.linalg.eigh(CpsC[docc_sl, docc_sl])
+            U[docc_sl, docc_sl] = Udocc
+            s_uocc, Uuocc = np.linalg.eigh(CpsC[uocc_sl, uocc_sl])
+            U[uocc_sl, uocc_sl] = Uuocc
         else:
-            raise ValueError("Invalid AVAS selection criteria.")
+            s_docc = CpsC[docc_sl, docc_sl].diagonal()
+            s_uocc = CpsC[uocc_sl, uocc_sl].diagonal()
+            U = np.eye(nmo)
 
-    def run(self):
-        if not self.parent_method.executed:
-            self.parent_method.run()
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
+        s_sum = np.sum(s_docc) + np.sum(s_uocc)
+        logger.log_info1(f"Sum of eigenvalues of the projected overlap: {s_sum:.6f}")
+        argsort = np.argsort(np.concatenate((s_docc, s_uocc)))[::-1]
+        s_all = np.zeros((ndocc + nuocc, 3))
+        s_all[:, 0] = np.concatenate((s_docc, s_uocc))
+        s_all[:, 1] = np.concatenate(([1] * ndocc, [0] * nuocc))
+        s_all[:, 2] = np.concatenate(
+            (np.arange(ndocc), np.arange(nuocc) + ndocc + nsocc)
+        )
+        s_all = s_all[argsort]
 
-        minao_info = forte2.system.BasisInfo(self.system, self.system.minao_basis)
-        self.minao_labels = minao_info.basis_labels
-        self.atom_to_aos = minao_info.atom_to_aos()
+        act_docc = []
+        act_uocc = []
+        inact_docc = []
+        inact_uocc = []
 
-        self.atom_normals = self._parse_subspace_pi_planes()
-        self.subspace_counter = 0
-        self.minao_subspace = []
-        for subspace in self.subspace:
-            self._parse_subspace(subspace)
+        s_act_sum = 0.0
 
-        self.ao_projector = self._make_ao_space_projector()
+        if self.selection_method == "separate":
+            nact_docc = nact_uocc = 0
+
+            for imo in s_all:
+                if imo[1] == 1:  # occupied
+                    if nact_docc < self.num_active_occ:
+                        act_docc.append(imo[2])
+                        s_act_sum += imo[0]
+                        nact_docc += 1
+                    else:
+                        inact_docc.append(imo[2])
+                else:  # unoccupied
+                    if nact_uocc < self.num_active_vir:
+                        act_uocc.append(imo[2])
+                        s_act_sum += imo[0]
+                        nact_uocc += 1
+                    else:
+                        inact_uocc.append(imo[2])
+        elif self.selection_method == "cutoff":
+            for imo in s_all:
+                sigma = imo[0]
+                if sigma > self.cutoff and sigma > self.evals_threshold:
+                    if imo[1] == 1:
+                        act_docc.append(imo[2])
+                    else:
+                        act_uocc.append(imo[2])
+                    s_act_sum += sigma
+                else:
+                    if imo[1] == 1:
+                        inact_docc.append(imo[2])
+                    else:
+                        inact_uocc.append(imo[2])
+        elif self.selection_method == "cumulative":
+            for imo in s_all:
+                sigma = imo[0]
+                if s_act_sum / s_sum <= self.sigma and sigma >= self.evals_threshold:
+                    if imo[1] == 1:
+                        act_docc.append(imo[2])
+                    else:
+                        act_uocc.append(imo[2])
+                    s_act_sum += sigma
+                else:
+                    if imo[1] == 1:
+                        inact_docc.append(imo[2])
+                    else:
+                        inact_uocc.append(imo[2])
+
+        inact_docc = np.array(inact_docc, dtype=int)
+        inact_uocc = np.array(inact_uocc, dtype=int)
+        act_docc = np.array(act_docc, dtype=int)
+        act_uocc = np.array(act_uocc, dtype=int)
+
+        logger.log_info1(f"AVAS covers {100*s_act_sum/s_sum:.2f}% of the subspace.")
+
+        # reminder that C_tilde will have zero SOCC coefficients, if ROHF
+        C_tilde = self.C[0] @ U
+        fock = self.parent_method.F[0]
+        C_inact_docc = self._canonicalize_block(fock, C_tilde, inact_docc)
+        C_inact_uocc = self._canonicalize_block(fock, C_tilde, inact_uocc)
+        C_act_docc = self._canonicalize_block(fock, C_tilde, act_docc)
+        C_act_uocc = self._canonicalize_block(fock, C_tilde, act_uocc)
+
+        # fill the C matrix as follows:
+        # [C_inact_docc, C_act_docc, !!C_socc!!, C_act_uocc, C_inact_uocc]
+        # !! C_socc has not been changed since parent_method.
+        n_inact_docc = len(inact_docc)
+        n_act_docc = len(act_docc)
+        n_act_uocc = len(act_uocc)
+        id_sl = slice(0, n_inact_docc)
+        ad_sl = slice(id_sl.stop, n_inact_docc + n_act_docc)
+        au_sl = slice(ad_sl.stop + nsocc, ad_sl.stop + nsocc + n_act_uocc)
+        iu_sl = slice(au_sl.stop, nmo)
+
+        self.C[0][:, id_sl] = C_inact_docc
+        self.C[0][:, ad_sl] = C_act_docc
+        self.C[0][:, au_sl] = C_act_uocc
+        self.C[0][:, iu_sl] = C_inact_uocc
+
+    def _canonicalize_block(self, F, C, mos):
+        C_sub = C[:, mos]
+        F_sub = C_sub.T @ F @ C_sub
+        _, U_sub = np.linalg.eigh(F_sub)
+        return C_sub @ U_sub
 
     def _parse_subspace_pi_planes(self):
         """
@@ -219,6 +396,8 @@ class AVAS(MOsMixin, SystemMixin):
         # return empty dictionary if no planes are defined
         if not planes_expr:
             return {}
+        else:
+            raise NotImplementedError("Subspace pi-planes are not implemented yet.")
 
         # test input
         if not isinstance(system, forte2.System):
@@ -335,40 +514,3 @@ class AVAS(MOsMixin, SystemMixin):
             )
 
         return atom_dirs
-
-    def _make_ao_space_projector(self):
-        # Overlap Matrix in Minimal AO Basis
-        Smm = forte2.ints.overlap(self.system.minao_basis)
-        nbf_m = Smm.shape[0]
-        # Build Cms: minimal AO basis to subspace AO basis
-        nbf_s = self.subspace_counter
-        Cms = np.zeros((nbf_m, nbf_s))
-        for m, s, c in self.subspace:
-            # m is the index of the minimal AO
-            # s is the index of the subspace AO
-            # c is the coefficient of the subspace AO in the minimal AO basis
-            Cms[m, s] = c
-        # Subspace overlap matrix
-        Sss = Cms.T @ (Smm @ Cms)
-        # Orthogonalize Sss: Xss = Sss^(-1/2)
-        evals, evecs = np.linalg.eigh(Sss)
-        Xss = evecs @ np.diag(evals ** (-0.5)) @ evecs.T
-        # Build overlap matrix between subspace and computational (large) basis
-        Sml = forte2.ints.overlap(self.system.minao_basis, self.system.basis)
-        # Project into subspace
-        Ssl = Cms.T @ Sml
-        # AO projector
-        # Pao = Ssl^T Sss^-1 Ssl = (Cms^T Sml)^T (Xss^T Xss) (Cms^T Sml)
-        Xsl = Xss @ Ssl
-        Pao = Xsl.T @ Xsl
-        return Pao
-
-    def _make_avas_orbitals(self):
-        ndocc = self.parent_method.ndocc
-        nsocc = (
-            0 if not hasattr(self.parent_method, "nsocc") else self.parent_method.nsocc
-        )
-        nuocc = self.parent_method.nuocc
-
-        CpsC = self.ao_projector.T @ self.parent_method.C[0] @ self.ao_projector
-
