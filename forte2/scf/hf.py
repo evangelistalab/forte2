@@ -10,6 +10,7 @@ from forte2.jkbuilder import FockBuilder
 from forte2.helpers.mixins import MOsMixin
 from forte2.helpers.matrix_functions import givens_rotation
 from forte2.helpers import logger
+from forte2.system.atom_data import Z_TO_ATOM_SYMBOL
 from .initial_guess import minao_initial_guess, core_initial_guess
 
 
@@ -41,6 +42,8 @@ class SCFBase(ABC):
         The density matrices.
     E : float
         The total energy of the system.
+    F : list[NDArray]
+        The Fock matrices.
     eps : list[NDArray]
         The orbital energies.
 
@@ -63,6 +66,7 @@ class SCFBase(ABC):
     converged: bool = field(default=False, init=False)
 
     def __call__(self, system):
+        assert isinstance(system, (forte2.System, forte2.ModelSystem)), "System must be an instance of forte2.System"
         self.system = system
         self.method = self._scf_type().upper()
         self.nel = self.system.Zsum - self.charge
@@ -146,6 +150,7 @@ class SCFBase(ABC):
             # 1. Build the Fock matrix
             # (there is a slot for canonicalized F to accommodate ROHF and CUHF methods - admittedly weird for RHF/UHF)
             F, F_canon = self._build_fock(H, fock_builder, S)
+            self.F = F_canon
             # 2. Build the orbital gradient (DIIS residual)
             AO_grad = self._build_ao_grad(S, F_canon)
             # 3. Perform DIIS update of Fock
@@ -172,6 +177,7 @@ class SCFBase(ABC):
                 logger.log_info1(f"{self.method} iterations converged\n")
                 # perform final iteration
                 F, F_canon = self._build_fock(H, fock_builder, S)
+                self.F = F_canon
                 self.eps, self.C = self._diagonalize_fock(F_canon)
                 self.D = self._build_density_matrix()
                 self.E = Vnn + self._energy(H, F)
@@ -205,7 +211,7 @@ class SCFBase(ABC):
         return self.system.ints_overlap()
 
     def _get_nuclear_repulsion(self):
-        return self.system.nuclear_repulsion_energy()
+        return self.system.nuclear_repulsion
 
     def _post_process(self):
         self._get_occupation()
@@ -265,7 +271,7 @@ class RHF(SCFBase, MOsMixin):
         J = fock_builder.build_J(self.D)[0]
         K = fock_builder.build_K([self.C[0][:, : self.na]])[0]
         F = H + 2.0 * J - K
-        return F, F
+        return [F], [F]
 
     def _build_density_matrix(self):
         D = np.einsum("mi,ni->mn", self.C[0][:, : self.na], self.C[0][:, : self.na])
@@ -290,22 +296,22 @@ class RHF(SCFBase, MOsMixin):
         return self._build_density_matrix()
 
     def _build_ao_grad(self, S, F):
-        ao_grad = F @ self.D[0] @ S - S @ self.D[0] @ F
+        ao_grad = F[0] @ self.D[0] @ S - S @ self.D[0] @ F[0]
         ao_grad = self.Xorth.T @ ao_grad @ self.Xorth
         return ao_grad
 
     def _energy(self, H, F):
-        return np.sum(self.D[0] * (H + F))
+        return np.sum(self.D[0] * (H + F[0]))
 
     def _diagonalize_fock(self, F):
-        eps, C = self._eigh(F)
+        eps, C = self._eigh(F[0])
         return [eps], [C]
 
     def _spin(self, S):
         return self.ms * (self.ms + 1)
 
     def _diis_update(self, diis, F, AO_grad):
-        return diis.update(F, AO_grad)
+        return [diis.update(F[0], AO_grad)]
 
     def _get_occupation(self):
         self.ndocc = self.na
@@ -335,6 +341,16 @@ class RHF(SCFBase, MOsMixin):
             string += f"{idx+1:<4d} {self.eps[0][idx]:<12.6f} "
         logger.log_info1(string)
 
+    def _post_process(self):
+        super()._post_process()
+        self._print_ao_composition()
+
+    def _print_ao_composition(self):
+        if isinstance(self.system, forte2.ModelSystem):
+            return
+        basis_info = forte2.basis_utils.BasisInfo(self.system, self.system.basis)
+        logger.log_info1("AO Composition of MOs:")
+        basis_info.print_ao_composition(self.C[0], list(range(self.nmo)))
 
 @dataclass
 class UHF(SCFBase, MOsMixin):
@@ -559,7 +575,7 @@ class ROHF(SCFBase, MOsMixin):
         fock += _project(U_open, U_virt, F[0])
         fock += _project(U_virt, U_core, F_cs)
         fock = fock + fock.conj().T
-        return fock
+        return [fock]
 
     def _build_density_matrix(self):
         D_a = np.einsum("mi,ni->mn", self.C[0][:, : self.na], self.C[0][:, : self.na])
@@ -738,7 +754,7 @@ class GHF(SCFBase, MOsMixin):
 
         F_canon = F
 
-        return F, F_canon
+        return [F], [F_canon]
 
     def _build_density_matrix(self):
         # D = Cocc Cocc^+
@@ -787,13 +803,13 @@ class GHF(SCFBase, MOsMixin):
         Daa, Dab, Dba, Dbb = self.D
         D_spinor = np.block([[Daa, Dab], [Dba, Dbb]])
         S_spinor = np.block([[S, np.zeros_like(S)], [np.zeros_like(S), S]])
-        sdf = S_spinor @ D_spinor @ F
+        sdf = S_spinor @ D_spinor @ F[0]
         AO_grad = sdf.conj().T - sdf
 
         return AO_grad
 
     def _diagonalize_fock(self, F):
-        eps, C = self._eigh_spinor(F)
+        eps, C = self._eigh_spinor(F[0])
         return [eps], [C]
 
     def _spin(self, S):
@@ -823,7 +839,7 @@ class GHF(SCFBase, MOsMixin):
         Daa, Dab, Dba, Dbb = self.D
         D_spinor = np.block([[Daa, Dab], [Dba, Dbb]])
         energy = 0.5 * np.einsum("vu,uv->", D_spinor, H) + 0.5 * np.einsum(
-            "vu,uv->", D_spinor, F
+            "vu,uv->", D_spinor, F[0]
         )
         return energy.real
 

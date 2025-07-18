@@ -30,7 +30,7 @@ def test_rhf_zero_electron():
     )
     scf = RHF(charge=2)(system)
     scf.run()
-    assert scf.E == approx(system.nuclear_repulsion_energy())
+    assert scf.E == approx(system.nuclear_repulsion)
 
 
 def test_rhf_zero_virtuals():
