@@ -2,6 +2,7 @@ import numpy as np
 import scipy as sp
 from dataclasses import dataclass, field
 
+import forte2
 from forte2.ci import CI, MultiCI
 from forte2.jkbuilder import FockBuilder
 from forte2.helpers.mixins import MOsMixin, SystemMixin
@@ -142,6 +143,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
         while self.iter < self.maxiter:
             # 1. Optimize orbitals at fixed CI expansion
             self.E_orb = self.lbfgs_solver.minimize(self.orb_opt, R)
+            self.C[0] = self.orb_opt.C.copy()
 
             # 2. Convergence checks
             self.g_rms = np.linalg.norm(self.lbfgs_solver.g - self.g_old)
@@ -178,6 +180,21 @@ class MCOptimizer(MOsMixin, SystemMixin):
         self.executed = True
 
     def _post_process(self):
+        self._pretty_print_energies()
+        self._print_ao_composition()
+
+    def _print_ao_composition(self):
+        basis_info = forte2.basis_utils.BasisInfo(self.system, self.system.basis)
+        logger.log_info1("\nAO Composition of core MOs:")
+        basis_info.print_ao_composition(
+            self.C[0], list(range(self.core.start, self.core.stop))
+        )
+        logger.log_info1("\nAO Composition of active MOs:")
+        basis_info.print_ao_composition(
+            self.C[0], list(range(self.actv.start, self.actv.stop))
+        )
+
+    def _pretty_print_energies(self):
         pm = self.parent_method
         if isinstance(pm, CI):
             ncis = 1
