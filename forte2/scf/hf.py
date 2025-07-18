@@ -10,6 +10,7 @@ from forte2.jkbuilder import FockBuilder
 from forte2.helpers.mixins import MOsMixin
 from forte2.helpers.matrix_functions import givens_rotation
 from forte2.helpers import logger
+from forte2.system.atom_data import Z_TO_ATOM_SYMBOL
 from .initial_guess import minao_initial_guess, core_initial_guess
 
 
@@ -65,6 +66,7 @@ class SCFBase(ABC):
     converged: bool = field(default=False, init=False)
 
     def __call__(self, system):
+        assert isinstance(system, forte2.System), "System must be an instance of forte2.System"
         self.system = system
         self.method = self._scf_type().upper()
         self.nel = self.system.Zsum - self.charge
@@ -339,6 +341,14 @@ class RHF(SCFBase, MOsMixin):
             string += f"{idx+1:<4d} {self.eps[0][idx]:<12.6f} "
         logger.log_info1(string)
 
+    def _post_process(self):
+        super()._post_process()
+        self._print_ao_composition()
+
+    def _print_ao_composition(self):
+        basis_info = forte2.basis_utils.BasisInfo(self.system, self.system.basis)
+        logger.log_info1("AO Composition of MOs:")
+        basis_info.print_ao_composition(self.C[0], list(range(self.nmo)))
 
 @dataclass
 class UHF(SCFBase, MOsMixin):

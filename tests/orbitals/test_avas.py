@@ -107,7 +107,7 @@ def test_avas_cumulative_h2co_all():
     casci.run()
 
     assert casci.E[0] == approx(eref_avas_all)
-
+test_avas_cumulative_h2co_all()
 
 def test_avas_cumulative_h2co_98pc():
     eref_avas_98pc = -113.90837340149
@@ -161,6 +161,7 @@ def test_avas_separate_h2co():
 
 def test_avas_subspace_planes_h2co():
     # this test should be equivlent to test_avas_cumulative_h2co_all
+    # the xyz has been rotated (plane normal: [1,1,1])
     eref_avas = -113.909850012095
 
     xyz = f"""

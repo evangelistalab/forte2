@@ -196,3 +196,24 @@ class BasisInfo:
         for label in self.basis_labels:
             logger.log_info1(label)
         logger.log_info1("=" * width)
+
+    def print_ao_composition(self, coeff, idx, nprint=5, thres=1e-3):
+        logger.log_info1(f"{'# MO':<5} {'(AO) label : coeff':40}")
+        for imo in idx:
+            c = coeff[:, imo]
+            c_argsort = np.argsort(np.abs(c))[::-1][:nprint]
+            string = f"{imo:<5d}"
+            for iao in range(nprint):
+                if np.abs(c[c_argsort[iao]]) < thres:
+                    continue
+                label = self.basis_labels[c_argsort[iao]]
+                abs_ao_idx = "(" + str(label.abs_idx) + ")"
+                atom_label = f"{Z_TO_ATOM_SYMBOL[label.Z]}{label.Zidx}"
+                shell_label = str(label.n) + forte2.basis_utils.get_shell_label(
+                    label.l, label.m
+                )
+                ao_coeff = f"{c[c_argsort[iao]]:<+6.4f}"
+                ao_label = f"{atom_label+' '+shell_label+' '+abs_ao_idx}"
+                lc = ao_label + ": " + ao_coeff
+                string += f" {lc:<25}"
+            logger.log_info1(string)

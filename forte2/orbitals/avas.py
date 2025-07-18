@@ -88,6 +88,7 @@ class AVAS(MOsMixin, SystemMixin):
         SystemMixin.copy_from_upstream(self, self.parent_method)
         MOsMixin.copy_from_upstream(self, self.parent_method)
 
+        self.basis_info = forte2.basis_utils.BasisInfo(self.system, self.system.basis)
         minao_info = forte2.basis_utils.BasisInfo(self.system, self.system.minao_basis)
         self.minao_labels = minao_info.basis_labels
         self.atom_to_aos = minao_info.atom_to_aos
@@ -279,17 +280,23 @@ class AVAS(MOsMixin, SystemMixin):
         nuocc = self.parent_method.nuocc
         nmo = self.system.nmo
 
-        CpsC = self.parent_method.C[0].T @ self.ao_projector @ self.parent_method.C[0]
+        CpsC = self.C[0].T @ self.ao_projector @ self.C[0]
 
         logger.log_info1("MOs with significant overlap with the subspace (> 1.00e-3):")
         logger.log_info1("MOs are 0-indexed")
         logger.log_info1("=" * 18)
         logger.log_info1(f"{'# MO':<5} {'<phi|P|phi>':<12}")
         logger.log_info1("-" * 18)
+        print_mos = []
         for i in range(nmo):
             if CpsC[i, i] > 1.0e-3:
+                print_mos.append(i)
                 logger.log_info1(f"{i:<5d} {CpsC[i, i]:<12.6f}")
         logger.log_info1("=" * 18)
+        logger.log_info1("AO Composition of MOs with significant overlap:")
+        self.basis_info.print_ao_composition(
+            self.C[0], print_mos, nprint=5, thres=1.0e-3
+        )
 
         docc_sl = slice(0, ndocc)
         uocc_sl = slice(ndocc + nsocc, nmo)
@@ -384,7 +391,7 @@ class AVAS(MOsMixin, SystemMixin):
 
         logger.log_info1("AVAS has chosen the following orbitals:")
         logger.log_info1("=" * 25)
-        logger.log_info1(f"{'# MO':<5} {sigma_type+' *':<12} {'occ':<6}")
+        logger.log_info1(f"{'# ^':<5} {sigma_type+' *':<12} {'occ':<6}")
         logger.log_info1("-" * 25)
         for i in act_docc:
             logger.log_info1(f"{i:<5d} {s_docc[i]:<12.6f} {'2':<6}")
@@ -393,6 +400,9 @@ class AVAS(MOsMixin, SystemMixin):
         for i in act_uocc:
             logger.log_info1(f"{i:<5d} {s_uocc[i - ndocc - nsocc]:<12.6f} {'0':<6}")
         logger.log_info1("=" * 25)
+        logger.log_info1(
+            "^ These indices are internal to the re-sorted AVAS orbitals, and do not correspond to the original MOs."
+        )
         if sigma_type == "eigen":
             logger.log_info1("* 'eigen': eigenvalue of the projected overlap matrix")
         if sigma_type == "diagonal ":
@@ -433,6 +443,11 @@ class AVAS(MOsMixin, SystemMixin):
         self.C[0][:, ad_sl] = C_act_docc
         self.C[0][:, au_sl] = C_act_uocc
         self.C[0][:, iu_sl] = C_inact_uocc
+
+        logger.log_info1("AO composition of final active MOs prepared by AVAS:")
+        self.basis_info.print_ao_composition(
+            self.C[0], list(range(ad_sl.start, au_sl.stop))
+        )
 
     def _canonicalize_block(self, F, C, mos):
         C_sub = C[:, mos]
