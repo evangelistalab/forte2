@@ -66,7 +66,7 @@ class SCFBase(ABC):
     converged: bool = field(default=False, init=False)
 
     def __call__(self, system):
-        assert isinstance(system, forte2.System), "System must be an instance of forte2.System"
+        assert isinstance(system, (forte2.System, forte2.ModelSystem)), "System must be an instance of forte2.System"
         self.system = system
         self.method = self._scf_type().upper()
         self.nel = self.system.Zsum - self.charge
@@ -346,6 +346,8 @@ class RHF(SCFBase, MOsMixin):
         self._print_ao_composition()
 
     def _print_ao_composition(self):
+        if isinstance(self.system, forte2.ModelSystem):
+            return
         basis_info = forte2.basis_utils.BasisInfo(self.system, self.system.basis)
         logger.log_info1("AO Composition of MOs:")
         basis_info.print_ao_composition(self.C[0], list(range(self.nmo)))

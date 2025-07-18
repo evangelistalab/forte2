@@ -731,6 +731,8 @@ class CASCI(CI):
         self.ms = ms
         self.nroot = nroot
 
+        self.solver = None
+
     def __call__(self, method):
         nel = method.system.Zsum - self.charge
         nelec_core = nel - self.ncaselec
@@ -764,7 +766,7 @@ class AutoCI(CI):
         Number of roots to compute.
     """
 
-    def __init__(self, charge=0, multiplicity=1, ms=0.0, nroot=1):
+    def __init__(self, charge, multiplicity, ms, nroot=1):
         self.charge = charge
         self.multiplicity = multiplicity
         self.ms = ms

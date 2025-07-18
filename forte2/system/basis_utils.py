@@ -199,11 +199,12 @@ class BasisInfo:
 
     def print_ao_composition(self, coeff, idx, nprint=5, thres=1e-3):
         logger.log_info1(f"{'# MO':<5} {'(AO) label : coeff':40}")
+        nprint_ = min(nprint, len(self.basis_labels))
         for imo in idx:
             c = coeff[:, imo]
-            c_argsort = np.argsort(np.abs(c))[::-1][:nprint]
+            c_argsort = np.argsort(np.abs(c))[::-1][:nprint_]
             string = f"{imo:<5d}"
-            for iao in range(nprint):
+            for iao in range(nprint_):
                 if np.abs(c[c_argsort[iao]]) < thres:
                     continue
                 label = self.basis_labels[c_argsort[iao]]
