@@ -409,3 +409,74 @@ class HubbardModel1D(ModelSystem):
             self.eri[i, i, i, i] = self.U
 
         super().__post_init__()
+
+@dataclass
+class HubbardModel2D(ModelSystem):
+    """
+    A 2D Hubbard model system.
+
+    Parameters
+    ----------
+        t : float
+            Hopping parameter.
+        U : float
+            On-site interaction strength.
+        nsites_x : int
+            Number of sites in the x-direction.
+        nsites_y : int
+            Number of sites in the y-direction.
+        pbc_x : bool, optional, default=False
+            Whether to apply periodic boundary conditions in the x-direction.
+        pbc_y : bool, optional, default=False
+            Whether to apply periodic boundary conditions in the y-direction.
+    """
+
+    t: float
+    U: float
+    nsites_x: int
+    nsites_y: int
+    pbc_x: bool = False
+    pbc_y: bool = False
+
+    def __post_init__(self):
+        self.nsites = self.nsites_x * self.nsites_y
+
+        # helper to map 2D coordinates to 1D index
+        def site_index(i, j):
+            return i * self.nsites_y + j
+        
+        # Hopping 
+        self.hcore = np.zeros((self.nsites, self.nsites))
+        for i in range(self.nsites_x):
+            for j in range(self.nsites_y):
+                idx = site_index(i, j)
+                if i < self.nsites_x - 1:
+                    right_idx = site_index(i + 1, j)
+                    self.hcore[idx, right_idx] = self.hcore[right_idx, idx] = -self.t
+                if j < self.nsites_y - 1:
+                    up_idx = site_index(i, j + 1)
+                    self.hcore[idx, up_idx] = self.hcore[up_idx, idx] = -self.t
+
+        # periodic boundary conditions, x-direction
+        if self.pbc_x:
+            for j in range(self.nsites_y):
+                left_idx = site_index(self.nsites_x - 1, j)
+                right_idx = site_index(0, j)
+                self.hcore[left_idx, right_idx] = self.hcore[right_idx, left_idx] = -self.t
+
+        # periodic boundary conditions, y-direction
+        if self.pbc_y:
+            for i in range(self.nsites_x):
+                down_idx = site_index(i, self.nsites_y - 1)
+                up_idx = site_index(i, 0)
+                self.hcore[down_idx, up_idx] = self.hcore[up_idx, down_idx] = -self.t
+
+        # Overlap
+        self.overlap = np.eye(self.nsites)
+        
+        # On-site interaction
+        self.eri = np.zeros((self.nsites,) * 4)
+        for i in range(self.nsites):
+            self.eri[i, i, i, i] = self.U
+
+        super().__post_init__()
