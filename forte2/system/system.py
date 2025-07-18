@@ -158,7 +158,7 @@ class System:
             if self.minao_basis_set is not None
             else None
         )
-        print(
+        logger.log_info1(
             f"Parsed {len(self.atoms)} atoms with basis set of {self.basis.size} functions."
         )
 

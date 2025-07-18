@@ -188,7 +188,6 @@ class MCOptimizer(MOsMixin, SystemMixin):
             nroots = [pm.nroot]
             weights = [pm.weights]
             eigvals = [pm.E]
-            print(eigvals)
         elif isinstance(pm, MultiCI):
             ncis = len(pm.CIs)
             mult = [ci.state.multiplicity for ci in pm.CIs]

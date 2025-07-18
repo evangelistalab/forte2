@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 
 import forte2
+from forte2.helpers import logger
 
 try:
     import basis_set_exchange as bse
@@ -62,7 +63,7 @@ def get_atom_basis(basis_per_atom: dict) -> dict:
                     ]
         else:
             if BSE_AVAILABLE:
-                print(
+                logger.log_info1(
                     f"[forte2] Basis {basis_name} not found locally. Using Basis Set Exchange."
                 )
                 for atomic_number in atoms_per_basis[basis_name]:
