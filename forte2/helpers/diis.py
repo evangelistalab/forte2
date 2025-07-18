@@ -74,7 +74,12 @@ class DIIS:
                     B[j, i] = B[i, j].conj()
 
         B[:-1, :-1] /= np.abs(B[:-1, :-1]).max()
-        x = np.linalg.solve(B, bsol)
+        try:
+            x = np.linalg.solve(B, bsol)
+        except np.linalg.LinAlgError:
+            print("DIIS matrix is singular, skipping DIIS update.")
+            return p
+
         p_new = np.zeros_like(p)
         for l in range(diis_dim):
             p_new += x[l] * self.p_diis[l]

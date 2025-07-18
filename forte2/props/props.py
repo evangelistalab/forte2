@@ -1,7 +1,8 @@
-import forte2
 import numpy as np
 import scipy.linalg
 
+import forte2
+from forte2.helpers import logger
 
 def _spin_independent_property_1e(dm_tot, ints, factor=1.0):
     """
@@ -52,12 +53,12 @@ def get_property(method, property_name, origin=None, unit="debye"):
         if origin is None:
             origin = [0.0, 0.0, 0.0]
             if method.charge != 0:
-                print(
+                logger.log_info1(
                     "Warning: Electric multipole moment for a charged system is "
                     "origin-dependent. Using center of mass as origin."
                 )
                 origin = method.system.center_of_mass
-                print(f"Center-of-mass origin: {origin}")
+                logger.log_info1(f"Center-of-mass origin: {origin}")
         assert len(origin) == 3, "Origin must be a 3-element vector."
         return origin
 

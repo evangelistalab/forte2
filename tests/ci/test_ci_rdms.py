@@ -100,5 +100,3 @@ def test_ci_rdms_1():
 
     assert ci.E[0] == approx(-100.019788438077)
 
-
-test_ci_rdms_1()
