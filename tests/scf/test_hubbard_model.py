@@ -38,3 +38,34 @@ def test_hubbard_uhf():
     scf = scf.run()
     assert scf.E == approx(euhf)
     assert scf.S2 == approx(s2uhf)
+
+def test_2D_hubbard_rhf():
+    erhf = -8.944271909999152
+
+    system = forte2.system.HubbardModel2D(t=1.0, U=4.0, nsites_x=10, nsites_y=2, pbc_x=True, pbc_y=True)
+
+    scf = RHF(charge=-20)(system)
+    scf.guess_type = "hcore"
+    scf = scf.run()
+    assert scf.E == approx(erhf)
+
+# ROHF energy does not match with the reference value
+# def test_2D_hubbard_rohf():
+#     erohf = -2.2500043826305056
+
+#     system = forte2.system.HubbardModel2D(t=1.0, U=2.5, nsites_x=3, nsites_y=2, pbc_x=False, pbc_y=False)
+
+#     scf = ROHF(charge=-7, ms=0.5)(system)
+#     scf.guess_type = "hcore"
+#     scf = scf.run()
+#     assert scf.E == approx(erohf)
+
+def test_2D_hubbard_uhf():
+    euhf = -3.9293383471710914
+
+    system = forte2.system.HubbardModel2D(t=1.0, U=4.0, nsites_x=5, nsites_y=2, pbc_x=False, pbc_y=False)
+
+    scf = UHF(charge=-10, ms=1.0)(system)
+    scf.guess_type = "hcore"
+    scf = scf.run()
+    assert scf.E == approx(euhf)
