@@ -356,14 +356,14 @@ class HubbardModel1D(ModelSystem):
 
     Parameters
     ----------
-        t : float
-            Hopping parameter.
-        U : float
-            On-site interaction strength.
-        nsites : int
-            Number of sites in the 1D chain.
-        pbc : bool, optional, default=False
-            Whether to apply 1D periodic boundary conditions.
+    t : float
+        Hopping parameter.
+    U : float
+        On-site interaction strength.
+    nsites : int
+        Number of sites in the 1D chain.
+    pbc : bool, optional, default=False
+        Whether to apply 1D periodic boundary conditions.
     """
 
     t: float
@@ -386,6 +386,7 @@ class HubbardModel1D(ModelSystem):
 
         super().__post_init__()
 
+
 @dataclass
 class HubbardModel2D(ModelSystem):
     """
@@ -393,18 +394,18 @@ class HubbardModel2D(ModelSystem):
 
     Parameters
     ----------
-        t : float
-            Hopping parameter.
-        U : float
-            On-site interaction strength.
-        nsites_x : int
-            Number of sites in the x-direction.
-        nsites_y : int
-            Number of sites in the y-direction.
-        pbc_x : bool, optional, default=False
-            Whether to apply periodic boundary conditions in the x-direction.
-        pbc_y : bool, optional, default=False
-            Whether to apply periodic boundary conditions in the y-direction.
+    t : float
+        Hopping parameter.
+    U : float
+        On-site interaction strength.
+    nsites_x : int
+        Number of sites in the x-direction.
+    nsites_y : int
+        Number of sites in the y-direction.
+    pbc_x : bool, optional, default=False
+        Whether to apply periodic boundary conditions in the x-direction.
+    pbc_y : bool, optional, default=False
+        Whether to apply periodic boundary conditions in the y-direction.
     """
 
     t: float
@@ -420,8 +421,8 @@ class HubbardModel2D(ModelSystem):
         # helper to map 2D coordinates to 1D index
         def site_index(i, j):
             return i * self.nsites_y + j
-        
-        # Hopping 
+
+        # Hopping
         self.hcore = np.zeros((self.nsites, self.nsites))
         for i in range(self.nsites_x):
             for j in range(self.nsites_y):
@@ -438,7 +439,9 @@ class HubbardModel2D(ModelSystem):
             for j in range(self.nsites_y):
                 left_idx = site_index(self.nsites_x - 1, j)
                 right_idx = site_index(0, j)
-                self.hcore[left_idx, right_idx] = self.hcore[right_idx, left_idx] = -self.t
+                self.hcore[left_idx, right_idx] = self.hcore[right_idx, left_idx] = (
+                    -self.t
+                )
 
         # periodic boundary conditions, y-direction
         if self.pbc_y:
@@ -449,7 +452,7 @@ class HubbardModel2D(ModelSystem):
 
         # Overlap
         self.overlap = np.eye(self.nsites)
-        
+
         # On-site interaction
         self.eri = np.zeros((self.nsites,) * 4)
         for i in range(self.nsites):

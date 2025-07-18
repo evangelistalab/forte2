@@ -72,6 +72,19 @@ def test_2D_hubbard_rhf():
     assert scf.E == approx(erhf)
 
 
+def test_2d_hubbard_equivalence_to_1d():
+    erhf = -2.944271909999
+
+    system = forte2.system.HubbardModel2D(
+        t=1.0, U=4.0, nsites_x=10, nsites_y=1, pbc_x=True, pbc_y=False
+    )
+
+    scf = RHF(charge=-10)(system)
+    scf.guess_type = "hcore"
+    scf = scf.run()
+    assert scf.E == approx(erhf)
+
+
 def test_2D_hubbard_rhf_fci():
     erhf = -2.472135955000
     efci = -5.012503152630
