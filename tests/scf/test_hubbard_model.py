@@ -102,12 +102,12 @@ def test_2D_hubbard_rhf_fci():
 def test_2D_hubbard_rohf():
     erohf = -2.252765000467
 
-    system = forte2.system.HubbardModel2D(t=1.0, U=2.5, nsites_x=3, nsites_y=2, pbc_x=False, pbc_y=False)
+    system = forte2.system.HubbardModel(t=1.0, U=2.5, nsites=(3, 2), pbc=False)
 
-#     scf = ROHF(charge=-7, ms=0.5)(system)
-#     scf.guess_type = "hcore"
-#     scf = scf.run()
-#     assert scf.E == approx(erohf)
+    scf = ROHF(charge=-7, ms=0.5)(system)
+    scf.guess_type = "hcore"
+    scf = scf.run()
+    assert scf.E == approx(erohf)
 
 
 def test_2D_hubbard_uhf():
