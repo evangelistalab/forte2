@@ -342,9 +342,10 @@ class ModelSystem:
 
 
 @dataclass
-class HubbardModel1D(ModelSystem):
+class HubbardModel(ModelSystem):
     r"""
-    A 1D Hubbard model system.
+    A Hubbard model system.
+    For a 1D chain, the Hamiltonian is given by:
 
     .. math::
         \hat{H} =
@@ -356,22 +357,39 @@ class HubbardModel1D(ModelSystem):
 
     Parameters
     ----------
-        t : float
-            Hopping parameter.
-        U : float
-            On-site interaction strength.
-        nsites : int
-            Number of sites in the 1D chain.
-        pbc : bool, optional, default=False
-            Whether to apply 1D periodic boundary conditions.
+    t : float
+        Hopping parameter.
+    U : float
+        On-site interaction strength.
+    nsites : int | tuple[int, int]
+        Number of sites in the 1D chain, or a tuple for number of sites in the x and y directions.
+    pbc : bool | tuple[bool, bool], optional, default=False
+        Whether to apply 1D periodic boundary conditions. If a bool is provided but a 2D system is specified, it will be applied in both directions.
     """
 
     t: float
     U: float
-    nsites: int
-    pbc: bool = False
+    nsites: int | tuple[int, int]
+    pbc: bool | tuple[bool, bool] = False
 
     def __post_init__(self):
+        if isinstance(self.nsites, int):
+            self.ndim = 1
+        elif isinstance(self.nsites, tuple) and len(self.nsites) == 2:
+            self.ndim = 2
+        else:
+            raise ValueError(
+                "nsites must be an int for 1D or a tuple of two ints for 2D."
+            )
+
+        if self.ndim == 1:
+            self._init_1d_hubbard_ints()
+        elif self.ndim == 2:
+            self._init_2d_hubbard_ints()
+
+        super().__post_init__()
+
+    def _init_1d_hubbard_ints(self):
         self.hcore = np.zeros((self.nsites, self.nsites))
         for i in range(self.nsites - 1):
             self.hcore[i, i + 1] = self.hcore[i + 1, i] = -self.t
@@ -384,75 +402,55 @@ class HubbardModel1D(ModelSystem):
         for i in range(self.nsites):
             self.eri[i, i, i, i] = self.U
 
-        super().__post_init__()
+    def _init_2d_hubbard_ints(self):
+        nsites_x, nsites_y = self.nsites
+        nsites_flat = nsites_x * nsites_y
 
-@dataclass
-class HubbardModel2D(ModelSystem):
-    """
-    A 2D Hubbard model system.
-
-    Parameters
-    ----------
-        t : float
-            Hopping parameter.
-        U : float
-            On-site interaction strength.
-        nsites_x : int
-            Number of sites in the x-direction.
-        nsites_y : int
-            Number of sites in the y-direction.
-        pbc_x : bool, optional, default=False
-            Whether to apply periodic boundary conditions in the x-direction.
-        pbc_y : bool, optional, default=False
-            Whether to apply periodic boundary conditions in the y-direction.
-    """
-
-    t: float
-    U: float
-    nsites_x: int
-    nsites_y: int
-    pbc_x: bool = False
-    pbc_y: bool = False
-
-    def __post_init__(self):
-        self.nsites = self.nsites_x * self.nsites_y
+        if isinstance(self.pbc, bool):
+            pbc_x = pbc_y = self.pbc
+        elif isinstance(self.pbc, tuple) and len(self.pbc) == 2:
+            pbc_x, pbc_y = self.pbc
+        else:
+            raise ValueError(
+                "pbc must be a bool or a tuple of two bools for 2D systems."
+            )
 
         # helper to map 2D coordinates to 1D index
         def site_index(i, j):
-            return i * self.nsites_y + j
-        
-        # Hopping 
-        self.hcore = np.zeros((self.nsites, self.nsites))
-        for i in range(self.nsites_x):
-            for j in range(self.nsites_y):
+            return i * nsites_y + j
+
+        # Hopping
+        self.hcore = np.zeros((nsites_flat, nsites_flat))
+        for i in range(nsites_x):
+            for j in range(nsites_y):
                 idx = site_index(i, j)
-                if i < self.nsites_x - 1:
+                if i < nsites_x - 1:
                     right_idx = site_index(i + 1, j)
                     self.hcore[idx, right_idx] = self.hcore[right_idx, idx] = -self.t
-                if j < self.nsites_y - 1:
+                if j < nsites_y - 1:
                     up_idx = site_index(i, j + 1)
                     self.hcore[idx, up_idx] = self.hcore[up_idx, idx] = -self.t
 
         # periodic boundary conditions, x-direction
-        if self.pbc_x:
-            for j in range(self.nsites_y):
-                left_idx = site_index(self.nsites_x - 1, j)
+        if pbc_x:
+            for j in range(nsites_y):
+                left_idx = site_index(nsites_x - 1, j)
                 right_idx = site_index(0, j)
-                self.hcore[left_idx, right_idx] = self.hcore[right_idx, left_idx] = -self.t
+                self.hcore[left_idx, right_idx] = self.hcore[right_idx, left_idx] = (
+                    -self.t
+                )
 
         # periodic boundary conditions, y-direction
-        if self.pbc_y:
-            for i in range(self.nsites_x):
-                down_idx = site_index(i, self.nsites_y - 1)
+        if pbc_y:
+            for i in range(nsites_x):
+                down_idx = site_index(i, nsites_y - 1)
                 up_idx = site_index(i, 0)
                 self.hcore[down_idx, up_idx] = self.hcore[up_idx, down_idx] = -self.t
 
         # Overlap
-        self.overlap = np.eye(self.nsites)
-        
-        # On-site interaction
-        self.eri = np.zeros((self.nsites,) * 4)
-        for i in range(self.nsites):
-            self.eri[i, i, i, i] = self.U
+        self.overlap = np.eye(nsites_flat)
 
-        super().__post_init__()
+        # On-site interaction
+        self.eri = np.zeros((nsites_flat,) * 4)
+        for i in range(nsites_flat):
+            self.eri[i, i, i, i] = self.U
