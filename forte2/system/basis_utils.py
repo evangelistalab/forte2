@@ -218,6 +218,3 @@ class BasisInfo:
                 lc = ao_label + ": " + ao_coeff
                 string += f" {lc:<25}"
             logger.log_info1(string)
-
-@dataclass
-class BasisInfoHubbard: ...
