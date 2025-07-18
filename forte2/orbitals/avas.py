@@ -79,7 +79,9 @@ class AVAS(MOsMixin, SystemMixin):
             parent_method, (forte2.scf.RHF, forte2.scf.ROHF)
         ), f"Parent method must be RHF or ROHF, got {type(parent_method)}"
         if isinstance(parent_method, forte2.scf.ROHF):
-            logger.log_info1("*** AVAS will take all singly occupied orbitals to be active! ***")
+            logger.log_info1(
+                "*** AVAS will take all singly occupied orbitals to be active! ***"
+            )
         self.parent_method = parent_method
         return self
 
@@ -95,7 +97,7 @@ class AVAS(MOsMixin, SystemMixin):
         self.atom_to_aos = minao_info.atom_to_aos
 
         logger.log_info1("\nEntering Atomic Valence Active Space (AVAS) procedure")
-        logger.log_info1("\n1. The subspace of minimal AOs will be parsed and selected")
+        logger.log_info1("\n1. Parsing the subspace specification")
         self.atom_normals = self._parse_subspace_pi_planes()
         self.subspace_counter = 0
         self.minao_subspace = []
@@ -103,7 +105,7 @@ class AVAS(MOsMixin, SystemMixin):
             self._parse_subspace(subspace)
         self._print_subspace_info()
 
-        logger.log_info1("\n2. The AVAS projector will be built")
+        logger.log_info1("\n2. Building the AVAS projector")
         self.ao_projector = self._make_ao_space_projector()
         self._make_avas_orbitals()
         self.executed = True
@@ -219,8 +221,11 @@ class AVAS(MOsMixin, SystemMixin):
 
     def _print_subspace_info(self):
         logger.log_info1(
-            "AO and atom labels are 0-indexed, "
-            "whereas relative atom indices are 1-indexed (e.g., C1 is the first carbon atom)."
+            "The following AOs from the minimal AO basis will be used to build the AVAS projector:"
+        )
+        logger.log_info1(
+            "(AO and atom labels are 0-indexed, "
+            "whereas relative atom indices are 1-indexed, e.g., C1 is the first carbon atom.)"
         )
         logger.log_info1("=" * 41)
         logger.log_info1(
@@ -280,8 +285,15 @@ class AVAS(MOsMixin, SystemMixin):
 
         CpsC = self.C[0].T @ self.ao_projector @ self.C[0]
 
-        logger.log_info1("MOs with significant overlap with the subspace (> 1.00e-3):")
-        logger.log_info1("MOs are 0-indexed")
+        logger.log_info1(
+            "\nMOs with significant overlap with the subspace (> 1.00e-3):"
+        )
+        logger.log_info1("(MOs are 0-indexed)")
+        logger.log_info1(
+            "These are the diagonal elements of C.T @ Pao @ C (the projected overlap matrix),\n"
+            "which will be used to select the AVAS orbitals if diagonalize=False, \n"
+            "otherwise the eigenvalues of the projected overlap matrix will be used.)\n"
+        )
         logger.log_info1("=" * 18)
         logger.log_info1(f"{'# MO':<5} {'<phi|P|phi>':<12}")
         logger.log_info1("-" * 18)
@@ -300,6 +312,12 @@ class AVAS(MOsMixin, SystemMixin):
         uocc_sl = slice(ndocc + nsocc, nmo)
 
         if self.diagonalize:
+            logger.log_info1(
+                "\ndiagonalize=True, diagonalizing the projected overlap matrix"
+            )
+            logger.log_info1(
+                "The eigenvalues of the projected overlap matrix will be used to select the AVAS orbitals."
+            )
             U = np.zeros((nmo, nmo))
             s_docc, Udocc = np.linalg.eigh(CpsC[docc_sl, docc_sl])
             U[docc_sl, docc_sl] = Udocc
@@ -307,6 +325,12 @@ class AVAS(MOsMixin, SystemMixin):
             U[uocc_sl, uocc_sl] = Uuocc
             sigma_type = "eigen"
         else:
+            logger.log_info1(
+                "\ndiagonalize=False, collecting the diagonal elements of the projected overlap matrix"
+            )
+            logger.log_info1(
+                "The diagonal elements of the projected overlap matrix will be used to select the AVAS orbitals."
+            )
             s_docc = CpsC[docc_sl, docc_sl].diagonal()
             s_uocc = CpsC[uocc_sl, uocc_sl].diagonal()
             U = np.eye(nmo)
@@ -338,7 +362,9 @@ class AVAS(MOsMixin, SystemMixin):
 
         s_act_sum = 0.0
 
-        logger.log_info1("\n3. The AVAS orbitals will be constructed")
+        logger.log_info1(
+            f"\n3. Constructing AVAS orbitals using the {self.selection_method} selection method"
+        )
         if self.selection_method == "separate":
             nact_docc = nact_uocc = 0
             for imo in range(nsig):
@@ -402,7 +428,14 @@ class AVAS(MOsMixin, SystemMixin):
         act_docc = np.array(act_docc, dtype=int)
         act_uocc = np.array(act_uocc, dtype=int)
 
-        logger.log_info1(f"AVAS covers {100*s_act_sum/s_sum:.2f}% of the subspace.")
+        logger.log_info1(
+            f"\nSum of {sigma_type}values of selected orbitals:\t{s_act_sum:.6f}"
+        )
+        logger.log_info1(f"Sum of {sigma_type}values of all orbitals:\t\t{s_sum:.6f}")
+        logger.log_info1("-" * 60)
+        logger.log_info1(
+            f"AVAS coverage of the subspace:\t\t\t{100*s_act_sum/s_sum:.2f}%\n"
+        )
 
         logger.log_info1("AVAS has chosen the following orbitals:")
         logger.log_info1("=" * 25)
@@ -432,9 +465,10 @@ class AVAS(MOsMixin, SystemMixin):
         self.ncore = len(inact_docc)
         self.core_orbitals = list(range(self.ncore))
         self.active_orbitals = list(range(self.ncore, self.ncore + self.nactv))
-        logger.log_info1(f"Number of core orbitals:      {self.ncore}")
+        logger.log_info1(f"\nNumber of core orbitals:      {self.ncore}")
         logger.log_info1(f"Number of active orbitals:    {self.nactv}")
 
+        logger.log_info1("\n4. Canonicalizing the AVAS orbitals")
         # reminder that C_tilde will have zero SOCC coefficients, if ROHF
         C_tilde = self.C[0] @ U
         fock = self.parent_method.F[0]
@@ -459,7 +493,7 @@ class AVAS(MOsMixin, SystemMixin):
         self.C[0][:, au_sl] = C_act_uocc
         self.C[0][:, iu_sl] = C_inact_uocc
 
-        logger.log_info1("AO composition of final active MOs prepared by AVAS:")
+        logger.log_info1("\nAO composition of final canonicalized active MOs prepared by AVAS:")
         self.basis_info.print_ao_composition(
             self.C[0], list(range(ad_sl.start, au_sl.stop))
         )
