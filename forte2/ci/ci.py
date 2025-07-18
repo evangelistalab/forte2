@@ -770,6 +770,8 @@ class AutoCI(CI):
         self.ms = ms
         self.nroot = nroot
 
+        self.solver = None
+
     def __call__(self, method):
         assert isinstance(method, forte2.AVAS), "Method must be an instance of AVAS"
         self.parent_method = method

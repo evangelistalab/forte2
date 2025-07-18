@@ -16,7 +16,7 @@ def test_basis_info():
     )
     basis_info = forte2.basis_utils.BasisInfo(system, system.basis)
     assert basis_info.basis_labels[23] == forte2.basis_utils.BasisInfo._AOLabel(
-        0, 6, 1, 4, 3, 0
+        23, 0, 6, 1, 4, 3, 0
     )
     assert basis_info.atom_to_aos[8][2] == list(range(40, 45))
 

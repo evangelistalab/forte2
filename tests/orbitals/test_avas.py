@@ -68,12 +68,7 @@ def test_avas_separate_n2():
         num_active_vir=3,
         diagonalize=False,
     )(rhf)
-    casci = CI(
-        orbitals=[4, 5, 6, 7, 8, 9],
-        core_orbitals=[0, 1, 2, 3],
-        state=State(nel=14, multiplicity=1, ms=0.0),
-        nroot=1,
-    )(avas)
+    casci = AutoCI()(avas)
     casci.run()
     assert casci.E[0] == approx(eref_casci_avas)
 
@@ -84,12 +79,7 @@ def test_avas_separate_n2():
         num_active_vir=3,
         diagonalize=True,
     )(rhf)
-    casci = CI(
-        orbitals=[4, 5, 6, 7, 8, 9],
-        core_orbitals=[0, 1, 2, 3],
-        state=State(nel=14, multiplicity=1, ms=0.0),
-        nroot=1,
-    )(avas)
+    casci = AutoCI()(avas)
     casci.run()
     assert casci.E[0] == approx(eref_casci_avas_diagonalize)
 
@@ -113,12 +103,7 @@ def test_avas_cumulative_h2co_all():
         sigma=1.0,
         diagonalize=True,
     )(rhf)
-    casci = CI(
-        orbitals=[7, 8, 9],
-        core_orbitals=[0, 1, 2, 3, 4, 5, 6],
-        state=State(nel=16, multiplicity=1, ms=0.0),
-        nroot=1,
-    )(avas)
+    casci = AutoCI()(avas)
     casci.run()
 
     assert casci.E[0] == approx(eref_avas_all)
@@ -143,12 +128,7 @@ def test_avas_cumulative_h2co_98pc():
         sigma=0.98,
         diagonalize=True,
     )(rhf)
-    casci = CI(
-        orbitals=[7, 8],
-        core_orbitals=[0, 1, 2, 3, 4, 5, 6],
-        state=State(nel=16, multiplicity=1, ms=0.0),
-        nroot=1,
-    )(avas)
+    casci = AutoCI()(avas)
     casci.run()
     assert casci.E[0] == approx(eref_avas_98pc)
 
@@ -174,12 +154,7 @@ def test_avas_separate_h2co():
         num_active_vir=2,
         diagonalize=True,
     )(rhf)
-    casci = CI(
-        orbitals=[7, 8, 9],
-        core_orbitals=[0, 1, 2, 3, 4, 5, 6],
-        state=State(nel=16, multiplicity=1, ms=0.0),
-        nroot=1,
-    )(avas)
+    casci = AutoCI()(avas)
     casci.run()
     assert casci.E[0] == approx(eref_avas)
 
@@ -207,4 +182,31 @@ def test_avas_subspace_planes_h2co():
     )(rhf)
     casci = AutoCI()(avas)
     casci.run()
+    assert casci.E[0] == approx(eref_avas)
+
+
+def test_avas_subspace_planes_h2co_casscf():
+    # this test should be equivlent to test_avas_cumulative_h2co_all
+    eref_avas = -113.9136335342
+
+    xyz = f"""
+    C        0.346146295209737    0.126698337466632   -0.472844632676369
+    O       -0.346053592352928   -0.126664405871036    0.472717998223964
+    H        1.227335215970831   -0.489581944167415   -0.737753271803415
+    H        0.143281782803090    0.991262584630455   -1.134544367433545
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = RHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    avas = AVAS(
+        selection_method="cumulative",
+        subspace=["C(2p)", "O(2p)"],
+        subspace_pi_planes=[["C", "O", "H"]],
+        sigma=1.0,
+        diagonalize=True,
+    )(rhf)
+    casci = AutoCI()(avas)
+    mc = MCOptimizer()(casci)
+    mc.run()
     assert casci.E[0] == approx(eref_avas)
