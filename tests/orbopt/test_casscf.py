@@ -27,7 +27,6 @@ def test_mcscf_1():
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
 
-
 def test_mcscf_2():
     erhf = -99.9977252002946
     emcscf = -100.0435018956
