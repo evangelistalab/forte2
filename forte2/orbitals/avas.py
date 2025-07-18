@@ -23,7 +23,7 @@ class AVAS(MOsMixin, SystemMixin):
         The method for selecting active orbitals. Options are "cumulative", "cutoff", "separate", and "total".
         - "cumulative": Selects orbitals based on cumulative eigenvalues of the overlap matrix. Must define `sigma`.
         - "cutoff": Selects orbitals based on a cutoff value for eigenvalues of the overlap matrix. Must define `cutoff`.
-        - "separate": Selects occupied and virtual orbitals separately. Must define `num_active_occ` and `num_active_vir`.
+        - "separate": Selects occupied and virtual orbitals separately. Must define `num_active_docc` and `num_active_uocc`.
         - "total": Selects a total number of active orbitals. Must define `num_active`.
     diagonalize : bool, optional, default=True
         Whether to diagonalize the occupied and virtual space overlap matrices.
@@ -33,14 +33,13 @@ class AVAS(MOsMixin, SystemMixin):
         Cutoff for the eigenvalues of the overlap matrix; eigenvalues greater than this value are considered active.
     evals_threshold : float, optional, default=1.0e-6
         Threshold below which an eigenvalue of the projected overlap is considered zero.
+    num_active_docc : int, optional, default=0
+        Number of active doubly occupied orbitals. This is on top of any singly occupied orbitals if an ROHF reference is used.
+    num_active_uocc : int, optional, default=0
+        Number of active unoccupied orbitals.
     num_active : int, optional, default=0
-        Total number of active orbitals. If set, it takes priority over threshold-based selections.
-    num_active_occ : int, optional, default=0
-        Number of active occupied orbitals. If set, it takes priority over cutoff-based selections and
-        that based on the total number of active orbitals.
-    num_active_vir : int, optional, default=0
-        Number of active virtual orbitals. If set, it takes priority over cutoff-based selections and
-        that based on the total number of active orbitals.
+        Total number of active orbitals. Again, this is on top of any singly occupied orbitals if an ROHF reference is used.
+
 
     Notes
     -----
@@ -66,8 +65,8 @@ class AVAS(MOsMixin, SystemMixin):
     cutoff: float = 1.0
     evals_threshold: float = 1.0e-6
     num_active: int = 0
-    num_active_occ: int = 0
-    num_active_vir: int = 0
+    num_active_docc: int = 0
+    num_active_uocc: int = 0
 
     executed: bool = field(init=False, default=False)
 
@@ -79,6 +78,8 @@ class AVAS(MOsMixin, SystemMixin):
         assert isinstance(
             parent_method, (forte2.scf.RHF, forte2.scf.ROHF)
         ), f"Parent method must be RHF or ROHF, got {type(parent_method)}"
+        if isinstance(parent_method, forte2.scf.ROHF):
+            logger.log_info1("*** AVAS will take all singly occupied orbitals to be active! ***")
         self.parent_method = parent_method
         return self
 
@@ -128,12 +129,9 @@ class AVAS(MOsMixin, SystemMixin):
             ), f"Cutoff {self.cutoff} is smaller than 1-evals_threshold, {1-self.evals_threshold}, no orbitals will be selected."
         elif self.selection_method == "separate":
             assert (
-                self.num_active_occ > 0 and self.num_active_vir > 0
+                self.num_active_docc > 0 and self.num_active_uocc > 0
             ), "Number of active occupied and virtual orbitals must be positive."
         elif self.selection_method == "total":
-            raise NotImplementedError(
-                "'Total' AVAS selection is not implemented yet. Use 'cumulative', 'cutoff', or 'separate'."
-            )
             assert self.num_active > 0, "Number of active orbitals must be positive."
 
     def _parse_subspace(self, ss_str):
@@ -319,13 +317,19 @@ class AVAS(MOsMixin, SystemMixin):
             f"Sum of {sigma_type}values of the projected overlap: {s_sum:.6f}"
         )
         argsort = np.argsort(np.concatenate((s_docc, s_uocc)))[::-1]
-        s_all = np.zeros((ndocc + nuocc, 3), dtype=float)
-        s_all[:, 0] = np.concatenate((s_docc, s_uocc))
-        s_all[:, 1] = np.concatenate(([1] * ndocc, [0] * nuocc))
-        s_all[:, 2] = np.concatenate(
-            (np.arange(ndocc), np.arange(nuocc) + ndocc + nsocc)
-        )
-        s_all = s_all[argsort]
+        sigmas = np.concatenate((s_docc, s_uocc))[argsort]
+        occupations = np.concatenate(([1] * ndocc, [0] * nuocc), dtype=int)[argsort]
+        indices = np.concatenate(
+            (np.arange(ndocc), np.arange(nuocc) + ndocc + nsocc), dtype=int
+        )[argsort]
+        nsig = len(sigmas)
+        # s_all = np.zeros((ndocc + nuocc, 3), dtype=float)
+        # s_all[:, 0] = np.concatenate((s_docc, s_uocc))
+        # s_all[:, 1] = np.concatenate(([1] * ndocc, [0] * nuocc))
+        # s_all[:, 2] = np.concatenate(
+        #     (np.arange(ndocc), np.arange(nuocc) + ndocc + nsocc)
+        # )
+        # s_all = s_all[argsort]
 
         act_docc = []
         act_uocc = []
@@ -337,50 +341,61 @@ class AVAS(MOsMixin, SystemMixin):
         logger.log_info1("\n3. The AVAS orbitals will be constructed")
         if self.selection_method == "separate":
             nact_docc = nact_uocc = 0
-
-            for imo in s_all:
-                if imo[1] == 1:  # occupied
-                    if nact_docc < self.num_active_occ:
-                        act_docc.append(imo[2])
-                        s_act_sum += imo[0]
+            for imo in range(nsig):
+                if occupations[imo] == 1:  # doubly occupied
+                    if nact_docc < self.num_active_docc:
+                        act_docc.append(indices[imo])
+                        s_act_sum += sigmas[imo]
                         nact_docc += 1
                     else:
-                        inact_docc.append(imo[2])
+                        inact_docc.append(indices[imo])
                 else:  # unoccupied
-                    if nact_uocc < self.num_active_vir:
-                        act_uocc.append(imo[2])
-                        s_act_sum += imo[0]
+                    if nact_uocc < self.num_active_uocc:
+                        act_uocc.append(indices[imo])
+                        s_act_sum += sigmas[imo]
                         nact_uocc += 1
                     else:
-                        inact_uocc.append(imo[2])
+                        inact_uocc.append(indices[imo])
         elif self.selection_method == "cutoff":
-            for imo in s_all:
-                sig = imo[0]
+            for imo in range(nsig):
+                sig = sigmas[imo]
                 if sig > self.cutoff and sig > self.evals_threshold:
-                    if imo[1] == 1:
-                        act_docc.append(imo[2])
+                    if occupations[imo] == 1:
+                        act_docc.append(indices[imo])
                     else:
-                        act_uocc.append(imo[2])
+                        act_uocc.append(indices[imo])
                     s_act_sum += sig
                 else:
-                    if imo[1] == 1:
-                        inact_docc.append(imo[2])
+                    if occupations[imo] == 1:
+                        inact_docc.append(indices[imo])
                     else:
-                        inact_uocc.append(imo[2])
+                        inact_uocc.append(indices[imo])
+        elif self.selection_method == "total":
+            for imo in range(self.num_active):
+                if occupations[imo] == 1:
+                    act_docc.append(indices[imo])
+                else:
+                    act_uocc.append(indices[imo])
+                s_act_sum += sigmas[imo]
+            for imo in range(self.num_active, nsig):
+                if occupations[imo] == 1:
+                    inact_docc.append(indices[imo])
+                else:
+                    inact_uocc.append(indices[imo])
         elif self.selection_method == "cumulative":
-            for imo in s_all:
-                sig = imo[0]
+            for imo in range(nsig):
+                sig = sigmas[imo]
                 if s_act_sum / s_sum <= self.sigma and sig >= self.evals_threshold:
-                    if imo[1] == 1:
-                        act_docc.append(imo[2])
+                    if occupations[imo] == 1:
+                        act_docc.append(indices[imo])
                     else:
-                        act_uocc.append(imo[2])
+                        act_uocc.append(indices[imo])
                     s_act_sum += sig
                 else:
-                    if imo[1] == 1:
-                        inact_docc.append(imo[2])
+                    if occupations[imo] == 1:
+                        inact_docc.append(indices[imo])
                     else:
-                        inact_uocc.append(imo[2])
+                        inact_uocc.append(indices[imo])
 
         inact_docc = np.array(inact_docc, dtype=int)
         inact_uocc = np.array(inact_uocc, dtype=int)

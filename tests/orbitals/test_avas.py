@@ -14,7 +14,7 @@ def test_avas_inputs():
 
     rhf = RHF(charge=0, econv=1e-12)(system)
 
-    # raise if num_active_occ/vir <= 0
+    # raise if num_active_docc/vir <= 0
     with pytest.raises(Exception):
         avas = AVAS(
             selection_method="separate",
@@ -64,8 +64,8 @@ def test_avas_separate_n2():
     avas = AVAS(
         selection_method="separate",
         subspace=["N1-2(2p)"],
-        num_active_occ=3,
-        num_active_vir=3,
+        num_active_docc=3,
+        num_active_uocc=3,
         diagonalize=False,
     )(rhf)
     casci = AutoCI(charge=0, multiplicity=1, ms=0.0)(avas)
@@ -75,8 +75,8 @@ def test_avas_separate_n2():
     avas = AVAS(
         selection_method="separate",
         subspace=["N(2p)"],
-        num_active_occ=3,
-        num_active_vir=3,
+        num_active_docc=3,
+        num_active_uocc=3,
         diagonalize=True,
     )(rhf)
     casci = AutoCI(charge=0, multiplicity=1, ms=0.0)(avas)
@@ -84,7 +84,7 @@ def test_avas_separate_n2():
     assert casci.E[0] == approx(eref_casci_avas_diagonalize)
 
 
-def test_avas_rohf_n2():
+def test_avas_rohf_n2plus():
     eref_avas = -108.475829170054
 
     xyz = f"""
@@ -98,11 +98,34 @@ def test_avas_rohf_n2():
     avas = AVAS(
         selection_method="separate",
         subspace=["N(2p)"],
-        num_active_occ=2,
-        num_active_vir=3,
+        num_active_docc=2,
+        num_active_uocc=3,
         diagonalize=True,
     )(rhf)
     casci = AutoCI(charge=1, multiplicity=2, ms=0.5)(avas)
+    casci.run()
+    assert casci.E[0] == approx(eref_avas)
+
+
+def test_avas_rohf_n2minus():
+    eref_avas = -108.913294924545
+
+    xyz = f"""
+    N 0.0 0.0 0.0
+    N 0.0 0.0 1.2
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = ROHF(charge=-1, ms=0.5, econv=1e-12)(system)
+    avas = AVAS(
+        selection_method="separate",
+        subspace=["N(2p)"],
+        num_active_docc=3,
+        num_active_uocc=2,
+        diagonalize=True,
+    )(rhf)
+    casci = AutoCI(charge=-1, multiplicity=2, ms=0.5)(avas)
     casci.run()
     assert casci.E[0] == approx(eref_avas)
 
@@ -156,6 +179,30 @@ def test_avas_cumulative_h2co_98pc():
     assert casci.E[0] == approx(eref_avas_98pc)
 
 
+def test_avas_total_h2co():
+    eref_avas_98pc = -113.90837340149
+
+    xyz = f"""
+    C           -0.000000000000    -0.000000000006    -0.599542970149
+    O           -0.000000000000     0.000000000001     0.599382404096
+    H           -0.000000000000    -0.938817812172    -1.186989139808
+    H            0.000000000000     0.938817812225    -1.186989139839
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = RHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    avas = AVAS(
+        selection_method="total",
+        subspace=["C(2px)", "O1(2px)"],
+        num_active=2,
+        diagonalize=True,
+    )(rhf)
+    casci = AutoCI(charge=0, multiplicity=1, ms=0.0)(avas)
+    casci.run()
+    assert casci.E[0] == approx(eref_avas_98pc)
+
+
 def test_avas_separate_h2co():
     # this test should be equivlent to test_avas_cumulative_h2co_all
     eref_avas = -113.909850012095
@@ -173,8 +220,8 @@ def test_avas_separate_h2co():
     avas = AVAS(
         selection_method="separate",
         subspace=["C(2px)", "O(2px)"],
-        num_active_occ=1,
-        num_active_vir=2,
+        num_active_docc=1,
+        num_active_uocc=2,
         diagonalize=True,
     )(rhf)
     casci = AutoCI(charge=0, multiplicity=1, ms=0.0)(avas)
