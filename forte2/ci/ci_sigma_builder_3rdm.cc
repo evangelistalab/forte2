@@ -246,140 +246,139 @@ np_tensor4 CISigmaBuilder::compute_3rdm_abb_same_irrep(np_vector C_left, np_vect
     return rdm;
 }
 
-np_tensor6 CISigmaBuilder::compute_sf_3rdm_same_irrep(np_vector C_left, np_vector C_right) {
-    auto norb = lists_.norb();
-    auto rdm_sf = make_zeros<nb::numpy, double, 6>({norb, norb, norb, norb, norb, norb});
+// np_tensor6 CISigmaBuilder::compute_sf_3rdm_same_irrep(np_vector C_left, np_vector C_right) {
+//     auto norb = lists_.norb();
+//     auto rdm_sf = make_zeros<nb::numpy, double, 6>({norb, norb, norb, norb, norb, norb});
 
-    auto rdm_aaa = compute_3rdm_aaa_same_irrep_full(C_left, C_right, true);
-    auto rdm_bbb = compute_3rdm_aaa_same_irrep_full(C_left, C_right, false);
-    auto rdm_aab = compute_3rdm_aab_same_irrep(C_left, C_right);
-    auto rdm_abb = compute_3rdm_abb_same_irrep(C_left, C_right);
+//     auto rdm_aaa = compute_3rdm_aaa_same_irrep_full(C_left, C_right, true);
+//     auto rdm_bbb = compute_3rdm_aaa_same_irrep_full(C_left, C_right, false);
+//     auto rdm_aab = compute_3rdm_aab_same_irrep(C_left, C_right);
+//     auto rdm_abb = compute_3rdm_abb_same_irrep(C_left, C_right);
 
-    auto norb = lists_.norb();
-    auto rdm_sf_v = rdm_sf.view();
-    auto rdm_aaa_v = rdm_aaa.view();
-    auto rdm_bbb_v = rdm_bbb.view();
-    auto rdm_aab_v = rdm_aab.view();
-    auto rdm_abb_v = rdm_abb.view();
+//     auto rdm_sf_v = rdm_sf.view();
+//     auto rdm_aaa_v = rdm_aaa.view();
+//     auto rdm_bbb_v = rdm_bbb.view();
+//     auto rdm_aab_v = rdm_aab.view();
+//     auto rdm_abb_v = rdm_abb.view();
 
-    for (size_t p{2}, pqr{0}; p < norb; ++p) {
-        for (size_t q{1}; q < p; ++q) {
-            for (size_t r{0}; r < q; ++r, ++pqr) {
-                for (size_t s{2}, stu{0}; s < norb; ++s) {
-                    for (size_t t{1}; t < s; ++t) {
-                        for (size_t u{0}; u < t; ++u, ++stu) {
-                            const auto el = rdm_aaa_v(pqr, stu) + rdm_bbb_v(pqr, stu);
-                            rdm_sf_v(p, q, r, s, t, u) += el;
-                            rdm_sf_v(p, q, r, s, u, t) -= el;
-                            rdm_sf_v(p, q, r, u, s, t) += el;
-                            rdm_sf_v(p, q, r, u, t, s) -= el;
-                            rdm_sf_v(p, q, r, t, u, s) += el;
-                            rdm_sf_v(p, q, r, t, s, u) -= el;
+//     for (size_t p{2}, pqr{0}; p < norb; ++p) {
+//         for (size_t q{1}; q < p; ++q) {
+//             for (size_t r{0}; r < q; ++r, ++pqr) {
+//                 for (size_t s{2}, stu{0}; s < norb; ++s) {
+//                     for (size_t t{1}; t < s; ++t) {
+//                         for (size_t u{0}; u < t; ++u, ++stu) {
+//                             const auto el = rdm_aaa_v(pqr, stu) + rdm_bbb_v(pqr, stu);
+//                             rdm_sf_v(p, q, r, s, t, u) += el;
+//                             rdm_sf_v(p, q, r, s, u, t) -= el;
+//                             rdm_sf_v(p, q, r, u, s, t) += el;
+//                             rdm_sf_v(p, q, r, u, t, s) -= el;
+//                             rdm_sf_v(p, q, r, t, u, s) += el;
+//                             rdm_sf_v(p, q, r, t, s, u) -= el;
 
-                            rdm_sf_v(p, r, q, s, t, u) -= el;
-                            rdm_sf_v(p, r, q, s, u, t) += el;
-                            rdm_sf_v(p, r, q, u, s, t) -= el;
-                            rdm_sf_v(p, r, q, u, t, s) += el;
-                            rdm_sf_v(p, r, q, t, u, s) -= el;
-                            rdm_sf_v(p, r, q, t, s, u) += el;
+//                             rdm_sf_v(p, r, q, s, t, u) -= el;
+//                             rdm_sf_v(p, r, q, s, u, t) += el;
+//                             rdm_sf_v(p, r, q, u, s, t) -= el;
+//                             rdm_sf_v(p, r, q, u, t, s) += el;
+//                             rdm_sf_v(p, r, q, t, u, s) -= el;
+//                             rdm_sf_v(p, r, q, t, s, u) += el;
 
-                            rdm_sf_v(r, p, q, s, t, u) += el;
-                            rdm_sf_v(r, p, q, s, u, t) -= el;
-                            rdm_sf_v(r, p, q, u, s, t) += el;
-                            rdm_sf_v(r, p, q, u, t, s) -= el;
-                            rdm_sf_v(r, p, q, t, u, s) += el;
-                            rdm_sf_v(r, p, q, t, s, u) -= el;
+//                             rdm_sf_v(r, p, q, s, t, u) += el;
+//                             rdm_sf_v(r, p, q, s, u, t) -= el;
+//                             rdm_sf_v(r, p, q, u, s, t) += el;
+//                             rdm_sf_v(r, p, q, u, t, s) -= el;
+//                             rdm_sf_v(r, p, q, t, u, s) += el;
+//                             rdm_sf_v(r, p, q, t, s, u) -= el;
 
-                            rdm_sf_v(r, q, p, s, t, u) -= el;
-                            rdm_sf_v(r, q, p, s, u, t) += el;
-                            rdm_sf_v(r, q, p, u, s, t) -= el;
-                            rdm_sf_v(r, q, p, u, t, s) += el;
-                            rdm_sf_v(r, q, p, t, u, s) -= el;
-                            rdm_sf_v(r, q, p, t, s, u) += el;
+//                             rdm_sf_v(r, q, p, s, t, u) -= el;
+//                             rdm_sf_v(r, q, p, s, u, t) += el;
+//                             rdm_sf_v(r, q, p, u, s, t) -= el;
+//                             rdm_sf_v(r, q, p, u, t, s) += el;
+//                             rdm_sf_v(r, q, p, t, u, s) -= el;
+//                             rdm_sf_v(r, q, p, t, s, u) += el;
 
-                            rdm_sf_v(q, r, p, s, t, u) += el;
-                            rdm_sf_v(q, r, p, s, u, t) -= el;
-                            rdm_sf_v(q, r, p, u, s, t) += el;
-                            rdm_sf_v(q, r, p, u, t, s) -= el;
-                            rdm_sf_v(q, r, p, t, u, s) += el;
-                            rdm_sf_v(q, r, p, t, s, u) -= el;
+//                             rdm_sf_v(q, r, p, s, t, u) += el;
+//                             rdm_sf_v(q, r, p, s, u, t) -= el;
+//                             rdm_sf_v(q, r, p, u, s, t) += el;
+//                             rdm_sf_v(q, r, p, u, t, s) -= el;
+//                             rdm_sf_v(q, r, p, t, u, s) += el;
+//                             rdm_sf_v(q, r, p, t, s, u) -= el;
 
-                            rdm_sf_v(q, p, r, s, t, u) -= el;
-                            rdm_sf_v(q, p, r, s, u, t) += el;
-                            rdm_sf_v(q, p, r, u, s, t) -= el;
-                            rdm_sf_v(q, p, r, u, t, s) += el;
-                            rdm_sf_v(q, p, r, t, u, s) -= el;
-                            rdm_sf_v(q, p, r, t, s, u) += el;
-                        }
-                    }
-                }
-            }
-        }
-    }
+//                             rdm_sf_v(q, p, r, s, t, u) -= el;
+//                             rdm_sf_v(q, p, r, s, u, t) += el;
+//                             rdm_sf_v(q, p, r, u, s, t) -= el;
+//                             rdm_sf_v(q, p, r, u, t, s) += el;
+//                             rdm_sf_v(q, p, r, t, u, s) -= el;
+//                             rdm_sf_v(q, p, r, t, s, u) += el;
+//                         }
+//                     }
+//                 }
+//             }
+//         }
+//     }
 
-    for (size_t p{1}, pq{0}; p < norb; ++p) {
-        for (size_t q{0}; q < p; ++q, ++pq) {
-            for (size_t r{0}; r < norb; ++r) {
-                for (size_t s{1}, st{0}; s < norb; ++s) {
-                    for (size_t t{0}; t < s; ++t, ++st) {
-                        for (size_t u{0}; u < norb; ++u) {
-                            const auto el = rdm_aab_v(pq, r, st, u);
-                            // G3("pqrstu") += g3aab_("pqrstu");
-                            rdm_sf_v(p, q, r, s, t, u) += el;
-                            rdm_sf_v(p, q, r, t, s, u) -= el;
-                            rdm_sf_v(q, p, r, s, t, u) -= el;
-                            rdm_sf_v(q, p, r, t, s, u) += el;
+//     for (size_t p{1}, pq{0}; p < norb; ++p) {
+//         for (size_t q{0}; q < p; ++q, ++pq) {
+//             for (size_t r{0}; r < norb; ++r) {
+//                 for (size_t s{1}, st{0}; s < norb; ++s) {
+//                     for (size_t t{0}; t < s; ++t, ++st) {
+//                         for (size_t u{0}; u < norb; ++u) {
+//                             const auto el = rdm_aab_v(pq, r, st, u);
+//                             // G3("pqrstu") += g3aab_("pqrstu");
+//                             rdm_sf_v(p, q, r, s, t, u) += el;
+//                             rdm_sf_v(p, q, r, t, s, u) -= el;
+//                             rdm_sf_v(q, p, r, s, t, u) -= el;
+//                             rdm_sf_v(q, p, r, t, s, u) += el;
 
-                            // G3("prqsut") += g3aab_("pqrstu");
-                            rdm_sf_v(p, r, q, s, u, t) += el;
-                            rdm_sf_v(p, r, q, t, u, s) -= el;
-                            rdm_sf_v(q, r, p, s, u, t) -= el;
-                            rdm_sf_v(q, r, p, t, u, s) += el;
+//                             // G3("prqsut") += g3aab_("pqrstu");
+//                             rdm_sf_v(p, r, q, s, u, t) += el;
+//                             rdm_sf_v(p, r, q, t, u, s) -= el;
+//                             rdm_sf_v(q, r, p, s, u, t) -= el;
+//                             rdm_sf_v(q, r, p, t, u, s) += el;
 
-                            // G3("rpqust") += g3aab_("pqrstu");
-                            rdm_sf_v(r, p, q, u, s, t) += el;
-                            rdm_sf_v(r, p, q, t, s, u) -= el;
-                            rdm_sf_v(r, q, p, u, s, t) -= el;
-                            rdm_sf_v(r, q, p, t, s, u) += el;
-                        }
-                    }
-                }
-            }
-        }
-    }
+//                             // G3("rpqust") += g3aab_("pqrstu");
+//                             rdm_sf_v(r, p, q, u, s, t) += el;
+//                             rdm_sf_v(r, p, q, t, s, u) -= el;
+//                             rdm_sf_v(r, q, p, u, s, t) -= el;
+//                             rdm_sf_v(r, q, p, t, s, u) += el;
+//                         }
+//                     }
+//                 }
+//             }
+//         }
+//     }
 
-    for (size_t p{0}; p < norb; ++p) {
-        for (size_t q{1}, qr{0}; q < norb; ++q) {
-            for (size_t r{0}; r < q; ++r, ++qr) {
-                for (size_t s{0}; s < norb; ++s) {
-                    for (size_t t{1}, tu{0}; t < norb; ++t) {
-                        for (size_t u{0}; u < t; ++u, ++tu) {
-                            const auto el = rdm_abb_v(p, qr, s, tu);
-                            // G3("pqrstu") += g3abb_("pqrstu");
-                            rdm_sf_v(p, q, r, s, t, u) += el;
-                            rdm_sf_v(p, q, r, s, u, t) -= el;
-                            rdm_sf_v(p, r, q, s, t, u) -= el;
-                            rdm_sf_v(p, r, q, s, u, t) += el;
+//     for (size_t p{0}; p < norb; ++p) {
+//         for (size_t q{1}, qr{0}; q < norb; ++q) {
+//             for (size_t r{0}; r < q; ++r, ++qr) {
+//                 for (size_t s{0}; s < norb; ++s) {
+//                     for (size_t t{1}, tu{0}; t < norb; ++t) {
+//                         for (size_t u{0}; u < t; ++u, ++tu) {
+//                             const auto el = rdm_abb_v(p, qr, s, tu);
+//                             // G3("pqrstu") += g3abb_("pqrstu");
+//                             rdm_sf_v(p, q, r, s, t, u) += el;
+//                             rdm_sf_v(p, q, r, s, u, t) -= el;
+//                             rdm_sf_v(p, r, q, s, t, u) -= el;
+//                             rdm_sf_v(p, r, q, s, u, t) += el;
 
-                            // G3("qprtsu") += g3abb_("pqrstu");
-                            rdm_sf_v(q, p, r, t, s, u) += el;
-                            rdm_sf_v(q, p, r, u, s, t) -= el;
-                            rdm_sf_v(r, p, q, t, s, u) -= el;
-                            rdm_sf_v(r, p, q, u, s, t) += el;
+//                             // G3("qprtsu") += g3abb_("pqrstu");
+//                             rdm_sf_v(q, p, r, t, s, u) += el;
+//                             rdm_sf_v(q, p, r, u, s, t) -= el;
+//                             rdm_sf_v(r, p, q, t, s, u) -= el;
+//                             rdm_sf_v(r, p, q, u, s, t) += el;
 
-                            // G3("qrptus") += g3abb_("pqrstu");
-                            rdm_sf_v(q, r, p, t, u, s) += el;
-                            rdm_sf_v(q, r, p, u, t, s) -= el;
-                            rdm_sf_v(r, q, p, t, u, s) -= el;
-                            rdm_sf_v(r, q, p, u, t, s) += el
-                        }
-                    }
-                }
-            }
-        }
-    }
-    return rdm_sf;
-}
+//                             // G3("qrptus") += g3abb_("pqrstu");
+//                             rdm_sf_v(q, r, p, t, u, s) += el;
+//                             rdm_sf_v(q, r, p, u, t, s) -= el;
+//                             rdm_sf_v(r, q, p, t, u, s) -= el;
+//                             rdm_sf_v(r, q, p, u, t, s) += el;
+//                         }
+//                     }
+//                 }
+//             }
+//         }
+//     }
+//     return rdm_sf;
+// }
 
 // ambit::Tensor RDMs::SF_L3() const {
 //     _test_rdm_level(3, "SF_L3");
