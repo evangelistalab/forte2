@@ -44,23 +44,19 @@ class RestrictedMOIntegrals:
         jkbuilder = FockBuilder(self.system, self.use_aux_corr)
         C = self.C[:, self.orbitals]
 
-        basis = self.system.basis
-        atoms = self.system.atoms
-        T = ints.kinetic(basis)
-        V = ints.nuclear(basis, atoms)
-
         # nuclear repulsion energy contribution to the energy
-        self.E = ints.nuclear_repulsion(atoms)
+        self.E = self.system.nuclear_repulsion
 
+        H_ao = self.system.ints_hcore()
         # one-electron contributions to the one-electron integrals
-        self.H = np.einsum("mi,mn,nj->ij", C, T + V, C)
+        self.H = np.einsum("mi,mn,nj->ij", C, H_ao, C)
 
         if self.core_orbitals:
             # compute the J and K matrices contributions from the core orbitals
             Ccore = self.C[:, self.core_orbitals]
 
             # one-electron contributions to the energy
-            self.E += 2.0 * np.einsum("mi,mn,ni->", Ccore, T + V, Ccore)
+            self.E += 2.0 * np.einsum("mi,mn,ni->", Ccore, H_ao, Ccore)
 
             J, K = jkbuilder.build_JK([Ccore])
 

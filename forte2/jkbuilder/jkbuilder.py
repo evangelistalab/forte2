@@ -36,7 +36,6 @@ class FockBuilder:
 
             piv = piv - 1  # convert to 0-based indexing
             self.B = C[:rank, piv].reshape((rank, nbf, nbf))
-            print(self.B)
             system.naux = rank
             return
 
