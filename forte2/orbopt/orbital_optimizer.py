@@ -7,6 +7,7 @@ from forte2.ci import CI, MultiCI
 from forte2.jkbuilder import FockBuilder
 from forte2.helpers.mixins import MOsMixin, SystemMixin
 from forte2.helpers import logger, LBFGS
+from forte2.system.basis_utils import BasisInfo
 
 
 @dataclass
@@ -172,6 +173,9 @@ class MCOptimizer(MOsMixin, SystemMixin):
                 f"Orbital optimization did not converge in {self.maxiter} iterations."
             )
 
+        # Copy the optimized orbitals to the parent method
+        self.C[0] = self.orb_opt.C.copy()
+
         logger.log_info1("=" * width)
         logger.log_info1(f"Orbital optimization converged in {self.iter} iterations.")
         logger.log_info1(f"Final orbital optimized energy: {self.E_avg:.10f}")
@@ -232,6 +236,17 @@ class MCOptimizer(MOsMixin, SystemMixin):
                 iroot += 1
             sep = "-" if i < ncis - 1 else "="
             logger.log_info1(sep * width)
+
+        # Print the AO composition of the active orbitals
+        basis_info = BasisInfo(self.system, self.system.basis)
+        logger.log_info1("AO Composition of core MOs:")
+        basis_info.print_ao_composition(
+            self.C[0], list(range(self.core.start, self.core.stop))
+        )
+        logger.log_info1("AO Composition of active MOs:")
+        basis_info.print_ao_composition(
+            self.C[0], list(range(self.actv.start, self.actv.stop))
+        )
 
     def _make_spaces_contiguous(self):
         """
