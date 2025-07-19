@@ -144,6 +144,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
         while self.iter < self.maxiter:
             # 1. Optimize orbitals at fixed CI expansion
             self.E_orb = self.lbfgs_solver.minimize(self.orb_opt, R)
+            # Copy the optimized orbitals to the parent method
             self.C[0] = self.orb_opt.C.copy()
 
             # 2. Convergence checks
@@ -172,9 +173,6 @@ class MCOptimizer(MOsMixin, SystemMixin):
             raise RuntimeError(
                 f"Orbital optimization did not converge in {self.maxiter} iterations."
             )
-
-        # Copy the optimized orbitals to the parent method
-        self.C[0] = self.orb_opt.C.copy()
 
         logger.log_info1("=" * width)
         logger.log_info1(f"Orbital optimization converged in {self.iter} iterations.")
@@ -236,17 +234,6 @@ class MCOptimizer(MOsMixin, SystemMixin):
                 iroot += 1
             sep = "-" if i < ncis - 1 else "="
             logger.log_info1(sep * width)
-
-        # Print the AO composition of the active orbitals
-        basis_info = BasisInfo(self.system, self.system.basis)
-        logger.log_info1("AO Composition of core MOs:")
-        basis_info.print_ao_composition(
-            self.C[0], list(range(self.core.start, self.core.stop))
-        )
-        logger.log_info1("AO Composition of active MOs:")
-        basis_info.print_ao_composition(
-            self.C[0], list(range(self.actv.start, self.actv.stop))
-        )
 
     def _make_spaces_contiguous(self):
         """
