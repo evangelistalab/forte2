@@ -1,6 +1,6 @@
 import pytest
 
-from forte2 import *
+from forte2 import System, RHF, CI, MCOptimizer, State
 from forte2.helpers.comparisons import approx
 
 
@@ -37,3 +37,6 @@ H         0.000000000000    -1.390000000000     2.500000000000
 
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
+
+
+test_casscf_1()
