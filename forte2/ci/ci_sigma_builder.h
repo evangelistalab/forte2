@@ -150,6 +150,14 @@ class CISigmaBuilder {
     ///        with p and s are alpha spin orbitals and q > r and u > t are beta spin orbitals
     np_tensor4 compute_3rdm_abb_same_irrep(np_vector C_left, np_vector C_right) const;
 
+    /// @brief Compute the spin-free three-electron reduced density matrix
+    /// @param C_left The left-hand side coefficients
+    /// @param C_right The right-hand side coefficients
+    /// @return The three-electron spin-free reduced density matrix stored as a tensor
+    ///        gamma[p][q][r][s][t][u] = gamma(aaa)[p][q][r][s][t][u] +
+    ///                                  gamma(bbb)[p][q][r][s][t][u] + ...
+    np_tensor6 compute_sf_3rdm_same_irrep(np_vector C_left, np_vector C_right) const;
+
     // The following are debugging functions that compute reduced density matrices that parallel the
     // definition of the functions above.
     np_matrix compute_1rdm_a_debug(np_vector C_left, np_vector C_right, bool alfa);
