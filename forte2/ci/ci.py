@@ -784,13 +784,14 @@ class AutoCI(CI):
         self.nroot = nroot
 
         self.solver = None
+        self._autoci_first_run = True
 
     def __call__(self, method):
         assert isinstance(method, forte2.AVAS), "Method must be an instance of AVAS"
         self.parent_method = method
         return self
 
-    def run(self):
+    def _autoci_startup(self):
         if not self.parent_method.executed:
             self.parent_method.run()
         nel = self.parent_method.system.Zsum - self.charge
@@ -803,6 +804,11 @@ class AutoCI(CI):
             nroot=self.nroot,
         )
         self = super().__call__(self.parent_method)
+
+    def run(self):
+        if self._autoci_first_run:
+            self._autoci_startup()
+            self._autoci_first_run = False
         super().run()
         return self
 

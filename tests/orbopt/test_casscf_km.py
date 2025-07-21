@@ -13,14 +13,16 @@ def test_mcscf_casscf_2():
     H            0.000000000000     0.000000000000     1.424436653745
     """
 
-    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="def2-universal-jkfit")
+    system = System(
+        xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="def2-universal-jkfit"
+    )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CI(
-        orbitals=[4,5],
-        core_orbitals=[0,1,2,3],
+        orbitals=[4, 5],
+        core_orbitals=[0, 1, 2, 3],
         state=State(nel=10, multiplicity=1, ms=0.0),
-        nroot=1
+        nroot=1,
     )(rhf)
     mc = MCOptimizer()(ci)
     mc.maxiter = 400
@@ -47,13 +49,18 @@ def test_mcscf_casscf_5():
     H  -4.0782187459   2.3208602146   0.0000000000
     """
 
-    system = System(xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="def2-universal-jkfit", unit="bohr")
+    system = System(
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-jkfit",
+        unit="bohr",
+    )
 
     rhf = RHF(charge=0, econv=1)(system)
     ci = CI(
         # frozen_core=[0,1,2,3,4,5],
-        core_orbitals=[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18],
-        orbitals=[19,20],
+        core_orbitals=list(range(19)),
+        orbitals=[19, 20],
         state=State(nel=40, multiplicity=1, ms=0.0),
         nroot=1,
     )(rhf)
@@ -81,11 +88,11 @@ def test_mcscf_casscf_9():
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CI(
-        orbitals=[0,1,2,3,4,5],
+        orbitals=[0, 1, 2, 3, 4, 5],
         state=State(nel=10, multiplicity=1, ms=0.0),
         nroot=4,
     )(rhf)
-    mc = MCOptimizer(etol=1e-12,gradtol=1e-12)(ci)
+    mc = MCOptimizer(econv=1e-12, gconv=1e-12)(ci)
     mc.run()
 
     assert rhf.E == approx(erhf)

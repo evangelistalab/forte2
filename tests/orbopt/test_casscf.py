@@ -73,7 +73,7 @@ def test_mcscf_3():
         nroot=1,
     )(rhf)
     mc = MCOptimizer()(ci)
-    mc.gradtol = 1e-7
+    mc.gconv = 1e-7
     mc.run()
     assert rhf.E == approx(erhf)
     assert mc.E == approx(ecasscf)
@@ -97,7 +97,7 @@ def test_mcscf_sa_same_mult():
         nroot=2,
     )(rhf)
     mc = MCOptimizer()(ci)
-    mc.gradtol = 1e-7
+    mc.gconv = 1e-7
     mc.run()
     assert rhf.E == approx(erhf)
     assert mc.E == approx(ecasscf)
@@ -175,4 +175,37 @@ def test_mcscf_noncontiguous_spaces():
 
     mc = MCOptimizer()(ci)
     mc.run()
+    assert mc.E == approx(ecasscf)
+
+
+def test_sa_casscf_c2():
+    """Test CASSCF with C2 molecule."""
+
+    erhf = -75.382486499716
+    ecasscf = -75.5580517997
+
+    xyz = f"""
+    C 0.0 0.0 0.0
+    C 0.0 0.0 1.2
+    """
+    # forte2.helpers.logger.set_verbosity_level(4)
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+    )
+
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    avas = AVAS(
+        selection_method="separate",
+        num_active_docc=4,
+        num_active_uocc=4,
+        subspace=["C(2s)", "C(2p)"],
+    )(rhf)
+    ci = AutoCI(charge=0, multiplicity=1, ms=0.0, nroot=3)(avas)
+    mc = MCOptimizer()(ci)
+    mc.run()
+
+    assert rhf.E == approx(erhf)
     assert mc.E == approx(ecasscf)
