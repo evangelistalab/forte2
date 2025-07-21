@@ -649,11 +649,14 @@ class MultiCI(MOsMixin, SystemMixin):
         assert len(self.CIs) > 0, "CIs list cannot be empty"
         self.ncis = len(self.CIs)
 
-        assert (
-            len(set(ci.norb for ci in self.CIs)) == 1
-        ), "All CIs must have the same number of active orbitals"
+        self.cis_are_autoci = all(isinstance(ci, AutoCI) for ci in self.CIs)
 
-        self.norb = self.CIs[0].norb
+        # this check needs to be deferred until AVAS gets called for AutoCI
+        if not self.cis_are_autoci:
+            assert (
+                len(set(ci.norb for ci in self.CIs)) == 1
+            ), "All CIs must have the same number of active orbitals"
+            self.norb = self.CIs[0].norb
 
         if self.weights is None:
             self.weights = np.ones(self.ncis) / self.ncis
@@ -673,6 +676,11 @@ class MultiCI(MOsMixin, SystemMixin):
         if not self.parent_method.executed:
             self.parent_method.run()
         self.CIs = [ci(self.parent_method) for ci in self.CIs]
+        if self.cis_are_autoci:
+            assert (
+                len(set(ci.norb for ci in self.CIs)) == 1
+            ), "All CIs must have the same number of active orbitals"
+            self.norb = self.CIs[0].norb
         SystemMixin.copy_from_upstream(self, self.parent_method)
         MOsMixin.copy_from_upstream(self, self.parent_method)
 
@@ -775,13 +783,16 @@ class AutoCI(CI):
         Spin quantum number.
     nroot : int, optional, default=1.
         Number of roots to compute.
+    weights : list[float], optional.
+        Weights for each root, must sum to 1. If None, equal weights are assigned to each root.
     """
 
-    def __init__(self, charge, multiplicity, ms, nroot=1):
+    def __init__(self, charge, multiplicity, ms, nroot=1, weights=None):
         self.charge = charge
         self.multiplicity = multiplicity
         self.ms = ms
         self.nroot = nroot
+        self.weights = weights
 
         self.solver = None
         self._autoci_first_run = True
@@ -789,6 +800,10 @@ class AutoCI(CI):
     def __call__(self, method):
         assert isinstance(method, forte2.AVAS), "Method must be an instance of AVAS"
         self.parent_method = method
+        # This is for compatibility with MultiCI
+        if self.parent_method.executed:
+            self._autoci_startup()
+            self._autoci_first_run = False
         return self
 
     def _autoci_startup(self):
@@ -802,6 +817,7 @@ class AutoCI(CI):
             core_orbitals=core_orbitals,
             state=State(nel=nel, multiplicity=self.multiplicity, ms=self.ms),
             nroot=self.nroot,
+            weights=self.weights,
         )
         self = super().__call__(self.parent_method)
 
