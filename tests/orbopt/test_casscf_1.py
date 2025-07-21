@@ -10,12 +10,12 @@ def test_casscf_1():
     """
 
     erhf = -15.59967761106774
-    emcscf = -15.628401913762644
+    emcscf = -15.6284020142
 
     xyz = f"""
-Be        0.000000000000     0.000000000000     0.000000000000
-H         0.000000000000     1.390000000000     2.500000000000
-H         0.000000000000    -1.390000000000     2.500000000000
+    Be        0.000000000000     0.000000000000     0.000000000000
+    H         0.000000000000     1.389990000000     2.500000000000
+    H         0.000000000000    -1.390010000000     2.500000000000
     """
 
     system = System(
@@ -32,11 +32,8 @@ H         0.000000000000    -1.390000000000     2.500000000000
         state=State(nel=6, multiplicity=1, ms=0.0),
         nroot=1,
     )(rhf)
-    mc = MCOptimizer(maxiter=1000, etol=1e-9)(ci)
+    mc = MCOptimizer(maxiter=50, etol=1e-9, do_diis=True)(ci)
     mc.run()
 
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
-
-
-test_casscf_1()
