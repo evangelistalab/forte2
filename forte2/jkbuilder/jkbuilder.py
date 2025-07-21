@@ -3,6 +3,7 @@ import scipy as sp
 from forte2 import ints
 from forte2.system import ModelSystem
 from forte2.helpers import logger
+from forte2.helpers.matrix_functions import cholesky_wrapper
 
 
 class FockBuilder:
@@ -26,34 +27,63 @@ class FockBuilder:
             eri = system.eri
             nbf = system.nbf
             eri = eri.reshape((nbf**2,) * 2)
-            # dpstrf: Cholesky decomposition with complete pivoting
-            # tol=-1 ~machine precision tolerance
-            C, piv, rank, info = sp.linalg.lapack.dpstrf(eri, tol=-1)
-            if info < 0:
-                raise ValueError(
-                    f"dpstrf failed with info={info}, indicating the {-info}-th argument had an illegal value."
-                )
-
-            piv = piv - 1  # convert to 0-based indexing
-            self.B = C[:rank, piv].reshape((rank, nbf, nbf))
-            system.naux = rank
+            self.B = cholesky_wrapper(eri, tol=-1)
+            self.B = self.B.reshape((self.B.shape[0], nbf, nbf))
+            system.naux = self.B.shape[0]
             return
 
-        self.basis = system.basis
-        self.auxiliary_basis = (
-            system.auxiliary_basis_set_corr if use_aux_corr else system.auxiliary_basis
-        )
+        if not system.cholesky_tei:
+            basis = system.basis
+            if use_aux_corr:
+                assert hasattr(
+                    system, "auxiliary_basis_set_corr"
+                ), "The system does not have an auxiliary_basis_set_corr defined."
+                aux_basis = system.auxiliary_basis_set_corr
+            else:
+                assert hasattr(
+                    system, "auxiliary_basis"
+                ), "The system does not have an auxiliary_basis defined."
+                aux_basis = system.auxiliary_basis
+            self.B = self._build_B_density_fitting(basis, aux_basis)
+        else:
+            self.B, system.naux = self._build_B_cholesky(
+                system.basis, system.cholesky_tol
+            )
 
+    @staticmethod
+    def _build_B_cholesky(basis, cholesky_tol):
         # Compute the memory requirements
-        nb = self.basis.size
-        naux = self.auxiliary_basis.size
+        nbf = basis.size
+        memory_gb = 8 * (nbf**4) / (1024**3)
+        logger.log_info1("Building B tensor using Cholesky decomposition")
+        logger.log_info1(f"Temporary memory requirements: {memory_gb:.2f} GB")
+        eri_full = ints.coulomb_4c(basis)
+        eri = eri_full.reshape((nbf**2,) * 2)
+
+        B = cholesky_wrapper(eri, tol=cholesky_tol)
+        B = B.reshape((B.shape[0], nbf, nbf))
+
+        naux = B.shape[0]
+
+        memory_gb = 8 * (naux * nbf**2) / (1024**3)
+        logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
+        logger.log_info1(f"Number of system basis functions: {nbf}")
+        logger.log_info1(f"Number of auxiliary basis functions: {naux}")
+
+        return B, naux
+
+    @staticmethod
+    def _build_B_density_fitting(basis, auxiliary_basis):
+        # Compute the memory requirements
+        nb = basis.size
+        naux = auxiliary_basis.size
         memory_gb = 8 * (naux**2 + naux * nb**2) / (1024**3)
         logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
         logger.log_info1(f"Number of system basis functions: {nb}")
         logger.log_info1(f"Number of auxiliary basis functions: {naux}")
 
         # Compute the integrals (P|Q) with P, Q in the auxiliary basis
-        M = ints.coulomb_2c(self.auxiliary_basis, self.auxiliary_basis)
+        M = ints.coulomb_2c(auxiliary_basis, auxiliary_basis)
 
         # Decompose M = L L.T
         L = sp.linalg.cholesky(M)
@@ -63,12 +93,13 @@ class FockBuilder:
         M_inv_sqrt = sp.linalg.solve_triangular(L.T, I, lower=True)
 
         # Compute the integrals (P|mn) with P in the auxiliary basis and m, n in the system basis
-        Pmn = ints.coulomb_3c(self.auxiliary_basis, system.basis, system.basis)
+        Pmn = ints.coulomb_3c(auxiliary_basis, basis, basis)
 
         # Compute B[P|mn] = M^{-1/2}[P|Q] (Q|mn)
-        self.B = np.einsum("PQ,Qmn->Pmn", M_inv_sqrt, Pmn, optimize=True)
-
+        B = np.einsum("PQ,Qmn->Pmn", M_inv_sqrt, Pmn, optimize=True)
         del Pmn
+
+        return B
 
     def build_J(self, D):
         J = [np.einsum("Pmn,Prs,sr->mn", self.B, self.B, Di, optimize=True) for Di in D]
@@ -166,3 +197,5 @@ class FockBuilder:
             The two-electron integrals in the form of a 4D array.
         """
         return self.two_electron_integrals_gen_block(C, C, C, C, antisymmetrize)
+
+

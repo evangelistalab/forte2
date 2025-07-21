@@ -466,8 +466,8 @@ class DavidsonLiuSolver:
         Check if the columns of b are orthonormal.
         """
         if not np.allclose(b.T @ b, np.eye(b.shape[1]), atol=1e-12):
-            print(f"{msg}")
-            print(f"S = {b.T @ b}")
+            logger.log_warning(f"{msg}")
+            logger.log_warning(f"S = {b.T @ b}")
             raise ValueError(msg)
 
     def _print_information(self):

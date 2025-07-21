@@ -150,3 +150,35 @@ def givens_rotation(A, c, s, i, j, column=True):
         M[i, :] = c * Ai - s * Aj
         M[j, :] = np.conjugate(s) * Ai + c * Aj
     return M
+
+
+def cholesky_wrapper(M, tol):
+    """
+    Perform a Cholesky decomposition with complete pivoting, works with any symmetric positive semi-definite matrix.
+
+    Parameters
+    ----------
+    M : NDArray
+        The matrix to decompose.
+    tol : float
+        The tolerance for the decomposition.
+
+    Returns
+    -------
+    B : NDArray
+        The Cholesky factor such that ``B.T @ B = M``.
+    """
+    # dpstrf: Cholesky decomposition with complete pivoting
+    # tol=-1 ~machine precision tolerance
+    C, piv, rank, info = scipy.linalg.lapack.dpstrf(M, tol=tol, lower=False)
+    if info < 0:
+        raise ValueError(
+            f"dpstrf failed with info={info}, indicating the {-info}-th argument had an illegal value."
+        )
+    piv = piv - 1  # convert to 0-based indexing
+
+    inv_piv = np.zeros_like(piv)
+    inv_piv[piv] = np.arange(len(piv))
+
+    B = np.triu(C)[:rank, inv_piv]
+    return B
