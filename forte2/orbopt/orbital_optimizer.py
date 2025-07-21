@@ -19,10 +19,10 @@ class MCOptimizer(MOsMixin, SystemMixin):
     ----------
     maxiter : int, optional, default=50
         Maximum number of macroiterations.
-    gradtol : float, optional, default=1e-7
-        Gradient convergence tolerance.
-    etol : float, optional, default=1e-8
+    econv : float, optional, default=1e-8
         Energy convergence tolerance.
+    gconv : float, optional, default=1e-7
+        Gradient convergence tolerance.
     micro_maxiter : int, optional, default=6
         Maximum number of microiterations for L-BFGS.
     max_rotation : float, optional, default=0.2
@@ -39,8 +39,8 @@ class MCOptimizer(MOsMixin, SystemMixin):
 
     ### Macroiteration parameters
     maxiter: int = 50
-    gradtol: float = 1e-7
-    etol: float = 1e-8
+    econv: float = 1e-8
+    gconv: float = 1e-7
 
     ### L-BFGS solver (microiteration) parameters
     micro_maxiter: int = 6
@@ -110,7 +110,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
         # Initialize the LBFGS solver that finds the optimal orbital
         # at fixed CI expansion using the gradient and diagonal Hessian
         self.lbfgs_solver = LBFGS(
-            epsilon=self.gradtol,
+            epsilon=self.gconv,
             max_dir=self.max_rotation,
             step_length_method="max_correction",
             maxiter=self.micro_maxiter,
@@ -126,11 +126,11 @@ class MCOptimizer(MOsMixin, SystemMixin):
         width = 101
         logger.log_info1("Entering orbital optimization loop")
         logger.log_info1("\nConvergence criteria ('.' if satisfied, 'x' otherwise):")
-        logger.log_info1(f"  {'1. RMS(grad - grad_old)':<25} < {self.gradtol:.1e}")
-        logger.log_info1(f"  {'2. ||E_CI - E_orb||':<25} < {self.etol:.1e}")
-        logger.log_info1(f"  {'3. ||E_CI - E_CI_old||':<25} < {self.etol:.1e}")
-        logger.log_info1(f"  {'4. ||E_avg - E_avg_old||':<25} < {self.etol:.1e}")
-        logger.log_info1(f"  {'5. ||E_orb - E_orb_old||':<25} < {self.etol:.1e}\n")
+        logger.log_info1(f"  {'1. RMS(grad - grad_old)':<25} < {self.gconv:.1e}")
+        logger.log_info1(f"  {'2. ||E_CI - E_orb||':<25} < {self.econv:.1e}")
+        logger.log_info1(f"  {'3. ||E_CI - E_CI_old||':<25} < {self.econv:.1e}")
+        logger.log_info1(f"  {'4. ||E_avg - E_avg_old||':<25} < {self.econv:.1e}")
+        logger.log_info1(f"  {'5. ||E_orb - E_orb_old||':<25} < {self.econv:.1e}\n")
 
         logger.log_info1("=" * width)
         logger.log_info1(
@@ -189,8 +189,10 @@ class MCOptimizer(MOsMixin, SystemMixin):
             R = diis.update(R, self.g_old)
             iter_info += f" {diis.status:>5s}"
             logger.log_info1(iter_info)
-            # orb_opt.evaluate() updates the 1 and 2-electron integrals for CI
-            _ = self.orb_opt.evaluate(R, self.lbfgs_solver.g, do_g=False)
+            # if diis has performed extrapolation
+            if "E" in diis.status:
+                # orb_opt.evaluate() updates the 1 and 2-electron integrals for CI
+                _ = self.orb_opt.evaluate(R, self.lbfgs_solver.g, do_g=False)
 
             # 4. Optimize CI expansion at fixed orbitals
             self.ci_opt.set_active_space_ints(
@@ -295,11 +297,11 @@ class MCOptimizer(MOsMixin, SystemMixin):
         return nrr
 
     def _check_convergence(self):
-        is_grad_conv = self.g_rms < self.gradtol
-        is_ci_orb_conv = abs(self.E_orb - self.E_avg) < self.etol
-        is_ci_eigval_conv = np.all(abs(self.E_ci - self.E_ci_old) < self.etol)
-        is_ci_avg_conv = abs(self.E_avg - self.E_avg_old) < self.etol
-        is_orb_conv = abs(self.E_orb - self.E_orb_old) < self.etol
+        is_grad_conv = self.g_rms < self.gconv
+        is_ci_orb_conv = abs(self.E_orb - self.E_avg) < self.econv
+        is_ci_eigval_conv = np.all(abs(self.E_ci - self.E_ci_old) < self.econv)
+        is_ci_avg_conv = abs(self.E_avg - self.E_avg_old) < self.econv
+        is_orb_conv = abs(self.E_orb - self.E_orb_old) < self.econv
         self.E_ci_old = self.E_ci.copy()
         self.E_avg_old = self.E_avg
         self.E_orb_old = self.E_orb

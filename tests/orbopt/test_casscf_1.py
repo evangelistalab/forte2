@@ -32,7 +32,7 @@ def test_casscf_1():
         state=State(nel=6, multiplicity=1, ms=0.0),
         nroot=1,
     )(rhf)
-    mc = MCOptimizer(maxiter=50, etol=1e-9, do_diis=True)(ci)
+    mc = MCOptimizer(maxiter=50, econv=1e-9)(ci)
     mc.run()
 
     assert rhf.E == approx(erhf)
