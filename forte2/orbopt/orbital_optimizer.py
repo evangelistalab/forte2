@@ -17,26 +17,40 @@ class MCOptimizer(MOsMixin, SystemMixin):
 
     Parameters
     ----------
-    maxiter : int
+    maxiter : int, optional, default=50
         Maximum number of macroiterations.
-    gradtol : float
+    gradtol : float, optional, default=1e-7
         Gradient convergence tolerance.
-    etol : float
+    etol : float, optional, default=1e-8
         Energy convergence tolerance.
-    micro_maxiter : int
+    micro_maxiter : int, optional, default=6
         Maximum number of microiterations for L-BFGS.
-    max_rotation : float
+    max_rotation : float, optional, default=0.2
         Maximum orbital rotation size for L-BFGS.
+    do_diis : bool, optional
+        Whether DIIS acceleration is used.
+    diis_start : int, optional, default=15
+        Start saving DIIS vectors after this many iterations.
+    diis_nvec : int, optional, default=8
+        The number of vectors to keep in the DIIS.
+    diis_min : int, optional, default=4
+        The minimum number of vectors to perform extrapolation.
     """
 
     ### Macroiteration parameters
     maxiter: int = 50
-    gradtol: float = 1e-6
+    gradtol: float = 1e-7
     etol: float = 1e-8
 
     ### L-BFGS solver (microiteration) parameters
     micro_maxiter: int = 6
     max_rotation: float = 0.2
+
+    ### DIIS parameters
+    do_diis: bool = None
+    diis_start: int = 15
+    diis_nvec: int = 8
+    diis_min: int = 4
 
     ### Non-init attributes
     executed: bool = field(default=False, init=False)
@@ -102,10 +116,12 @@ class MCOptimizer(MOsMixin, SystemMixin):
             maxiter=self.micro_maxiter,
         )
 
-        width = 95
+        diis = forte2.helpers.DIIS(diis_start=self.diis_start, diis_nvec=self.diis_nvec, diis_min=self.diis_min, do_diis=self.do_diis)
+
+        width = 101
         logger.log_info1("=" * width)
         logger.log_info1(
-            f'{"Iteration":>10} {"E_CI":>20} {"E_orb":>20} {"||grad||":>20} {"#micro":>10} {"Conv":>10}'
+            f'{"Iteration":>10} {"E_CI":>20} {"E_orb":>20} {"||grad||":>20} {"#micro":>10} {"Conv":>10} {"DIIS":>5}'
         )
         logger.log_info1("-" * width)
 
@@ -148,14 +164,21 @@ class MCOptimizer(MOsMixin, SystemMixin):
             self.C[0] = self.orb_opt.C.copy()
 
             # 2. Convergence checks
-            self.g_rms = np.linalg.norm(self.lbfgs_solver.g - self.g_old)
+            self.g_rms = np.sqrt(np.mean((self.lbfgs_solver.g - self.g_old)**2))
             self.g_old = self.lbfgs_solver.g.copy()
             conv, conv_str = self._check_convergence()
-            logger.log_info1(
+            iter_info = (
                 f"{self.iter:>10d} {self.E_avg:>20.10f} {self.E_orb:>20.10f} {self.g_rms:>20.10f} {self.lbfgs_solver.iter:>10d} {conv_str:>10s}"
             )
             if conv:
+                logger.log_info1(iter_info)
                 break
+
+            # 3. DIIS Extrapolation
+            R = diis.update(R, self.g_old)
+            iter_info += f" {diis.status:>5s}"
+            logger.log_info1(iter_info)
+            _ = self.orb_opt.evaluate(R, self.lbfgs_solver.g, do_g=False)
 
             # 3. Optimize CI expansion at fixed orbitals
             self.ci_opt.set_active_space_ints(
@@ -320,12 +343,12 @@ class OrbOptimizer:
     def evaluate(self, x, g, do_g=True):
         do_update_integrals = self._update_orbitals(x)
         if do_update_integrals:
+            self._compute_Fcore()
             self.get_eri_gaaa()
 
         E_orb = self._compute_reference_energy()
 
         if do_g:
-            self._compute_Fcore()
             grad = -self._compute_orbgrad()
             g = self._mat_to_vec(grad)
 
