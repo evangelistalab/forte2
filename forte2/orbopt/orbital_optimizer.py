@@ -116,12 +116,25 @@ class MCOptimizer(MOsMixin, SystemMixin):
             maxiter=self.micro_maxiter,
         )
 
-        diis = forte2.helpers.DIIS(diis_start=self.diis_start, diis_nvec=self.diis_nvec, diis_min=self.diis_min, do_diis=self.do_diis)
+        diis = forte2.helpers.DIIS(
+            diis_start=self.diis_start,
+            diis_nvec=self.diis_nvec,
+            diis_min=self.diis_min,
+            do_diis=self.do_diis,
+        )
 
         width = 101
+        logger.log_info1("Entering orbital optimization loop")
+        logger.log_info1("\nConvergence criteria ('.' if satisfied, 'x' otherwise):")
+        logger.log_info1(f"  {'1. RMS(grad - grad_old)':<25} < {self.gradtol:.1e}")
+        logger.log_info1(f"  {'2. ||E_CI - E_orb||':<25} < {self.etol:.1e}")
+        logger.log_info1(f"  {'3. ||E_CI - E_CI_old||':<25} < {self.etol:.1e}")
+        logger.log_info1(f"  {'4. ||E_avg - E_avg_old||':<25} < {self.etol:.1e}")
+        logger.log_info1(f"  {'5. ||E_orb - E_orb_old||':<25} < {self.etol:.1e}\n")
+
         logger.log_info1("=" * width)
         logger.log_info1(
-            f'{"Iteration":>10} {"E_CI":>20} {"E_orb":>20} {"||grad||":>20} {"#micro":>10} {"Conv":>10} {"DIIS":>5}'
+            f'{"Iteration":>10} {"E_CI":>20} {"E_orb":>20} {"RMS(Δgrad)":>20} {"#micro":>10} {"Conv":>10} {"DIIS":>5}'
         )
         logger.log_info1("-" * width)
 
@@ -164,12 +177,10 @@ class MCOptimizer(MOsMixin, SystemMixin):
             self.C[0] = self.orb_opt.C.copy()
 
             # 2. Convergence checks
-            self.g_rms = np.sqrt(np.mean((self.lbfgs_solver.g - self.g_old)**2))
+            self.g_rms = np.sqrt(np.mean((self.lbfgs_solver.g - self.g_old) ** 2))
             self.g_old = self.lbfgs_solver.g.copy()
             conv, conv_str = self._check_convergence()
-            iter_info = (
-                f"{self.iter:>10d} {self.E_avg:>20.10f} {self.E_orb:>20.10f} {self.g_rms:>20.10f} {self.lbfgs_solver.iter:>10d} {conv_str:>10s}"
-            )
+            iter_info = f"{self.iter:>10d} {self.E_avg:>20.10f} {self.E_orb:>20.10f} {self.g_rms:>20.10f} {self.lbfgs_solver.iter:>10d} {conv_str:>10s}"
             if conv:
                 logger.log_info1(iter_info)
                 break
@@ -178,9 +189,10 @@ class MCOptimizer(MOsMixin, SystemMixin):
             R = diis.update(R, self.g_old)
             iter_info += f" {diis.status:>5s}"
             logger.log_info1(iter_info)
+            # orb_opt.evaluate() updates the 1 and 2-electron integrals for CI
             _ = self.orb_opt.evaluate(R, self.lbfgs_solver.g, do_g=False)
 
-            # 3. Optimize CI expansion at fixed orbitals
+            # 4. Optimize CI expansion at fixed orbitals
             self.ci_opt.set_active_space_ints(
                 self.orb_opt.Ecore + self.system.nuclear_repulsion,
                 self.orb_opt.Fcore[self.actv, self.actv],
