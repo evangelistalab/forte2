@@ -65,11 +65,12 @@ def test_mcscf_casscf_5():
 
 
 def test_mcscf_casscf_9():
-    erhf = -100.00987356244829
-    emcscf_root_1 = -100.038638058262
-    emcscf_root_2 = -99.004019251301
-    emcscf_root_3 = -98.457781187985
-    emcscf_root_4 = -98.427043646164
+    erhf = -100.00987356244831
+    emcscf_root_1 = -99.996420746310
+    emcscf_root_2 = -99.688682892330
+    emcscf_root_3 = -99.688682892330
+    emcscf_root_4 = -99.470229157315
+    emcscf_avg = -99.71100392207127
 
     xyz = f"""
     H            0.000000000000     0.000000000000    -0.949624435830
@@ -84,12 +85,12 @@ def test_mcscf_casscf_9():
         state=State(nel=10, multiplicity=1, ms=0.0),
         nroot=4,
     )(rhf)
-    mc = MCOptimizer()(ci)
+    mc = MCOptimizer(etol=1e-12,gradtol=1e-12)(ci)
     mc.run()
 
     assert rhf.E == approx(erhf)
-    assert mc.E == approx(emcscf_root_1)
-    # assert mc.E[0] == approx(emcscf_root_1)
-    # assert mc.E[1] == approx(emcscf_root_2)
-    # assert mc.E[2] == approx(emcscf_root_3)
-    # assert mc.E[3] == approx(emcscf_root_4)
+    assert mc.E == approx(emcscf_avg)
+    assert mc.E_ci[0] == approx(emcscf_root_1)
+    assert mc.E_ci[1] == approx(emcscf_root_2)
+    assert mc.E_ci[2] == approx(emcscf_root_3)
+    assert mc.E_ci[3] == approx(emcscf_root_4)
