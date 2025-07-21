@@ -70,8 +70,6 @@ class FockBuilder:
         logger.log_info1(f"Number of system basis functions: {nbf}")
         logger.log_info1(f"Number of auxiliary basis functions: {naux}")
 
-        print(np.linalg.norm(np.einsum("Bpq,Brs->pqrs", B, B, optimize=True) - eri_full))
-
         return B, naux
 
     @staticmethod

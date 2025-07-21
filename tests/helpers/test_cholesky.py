@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from forte2 import System, ints
 from forte2.helpers.matrix_functions import cholesky_wrapper
@@ -25,3 +26,6 @@ def test_cholesky_random_matrix():
     M[-1, :] = 0
     B = cholesky_wrapper(M, tol=1e-14)
     assert np.linalg.norm(B.T @ B - M) < 1e-10
+
+    with pytest.raises(Exception):
+        _ = np.linalg.cholesky(M)  # Should fail since M is not positive definite
