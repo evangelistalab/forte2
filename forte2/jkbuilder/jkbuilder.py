@@ -24,8 +24,8 @@ class FockBuilder:
     def __init__(self, system, use_aux_corr=False):
         if isinstance(system, ModelSystem):
             # special handling for ModelSystem
-            eri = system.eri.reshape((nbf**2,) * 2)
             nbf = system.nbf
+            eri = system.eri.reshape((nbf**2,) * 2)
             self.B = cholesky_wrapper(eri, tol=-1)
             self.B = self.B.reshape((self.B.shape[0], nbf, nbf))
             system.naux = self.B.shape[0]
