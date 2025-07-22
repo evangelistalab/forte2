@@ -380,38 +380,65 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm_same_irrep(np_vector C_left, np_vecto
     return rdm_sf;
 }
 
-// ambit::Tensor RDMs::SF_L3() const {
-//     _test_rdm_level(3, "SF_L3");
-//     timer t("make_cumulant_L3");
+np_tensor6 CISigmaBuilder::compute_sf_3cumulant_same_irrep(np_vector C_left,
+                                                           np_vector C_right) const {
+    // Compute the spin-free 1-RDM
+    auto G1 = compute_sf_1rdm_same_irrep(C_left, C_right);
+    // Compute the spin-free 2-RDM
+    auto G2 = compute_sf_2rdm_same_irrep(C_left, C_right);
+    // Compute the spin-free 3-RDM (this will hold the cumulant)
+    auto L3 = compute_sf_3rdm_same_irrep(C_left, C_right);
 
-//     auto G1 = SF_G1();
-//     auto G2 = SF_G2();
-//     auto L3 = SF_G3().clone();
+    // Evaluate L3[p,q,r,s,t,u] = G3[p,q,r,s,t,u]
+    //                            - G1[p,s] * G2[q,r,t,u]
+    //                            - G1[q,t] * G2[p,r,s,u]
+    //                            - G1[r,u] * G2[p,q,s,t]
+    //                            + 0.5 * G1[p,t] * G2[q,r,s,u]
+    //                            + 0.5 * G1[p,u] * G2[q,r,t,s]
+    //                            + 0.5 * G1[q,s] * G2[p,r,t,u]
+    //                            + 0.5 * G1[q,u] * G2[p,r,s,t]
+    //                            + 0.5 * G1[r,s] * G2[p,q,u,t]
+    //                            + 0.5 * G1[r,t] * G2[p,q,s,u]
+    //                            + 2.0 * G1[p,s] * G1[q,t] * G1[r,u]
+    //                            - G1[p,s] * G1[q,u] * G1[r,t]
+    //                            - G1[p,u] * G1[q,t] * G1[r,s]
+    //                            - G1[p,t] * G1[q,s] * G1[r,u]
+    //                            + 0.5 * G1[p,t] * G1[q,u] * G1[r,s]
+    //                            + 0.5 * G1[p,u] * G1[q,s] * G1[r,t];
 
-//     L3("pqrstu") -= G1("ps") * G2("qrtu");
-//     L3("pqrstu") -= G1("qt") * G2("prsu");
-//     L3("pqrstu") -= G1("ru") * G2("pqst");
+    auto G1_v = G1.view();
+    auto G2_v = G2.view();
+    auto L3_v = L3.view();
 
-//     L3("pqrstu") += 0.5 * G1("pt") * G2("qrsu");
-//     L3("pqrstu") += 0.5 * G1("pu") * G2("qrts");
-
-//     L3("pqrstu") += 0.5 * G1("qs") * G2("prtu");
-//     L3("pqrstu") += 0.5 * G1("qu") * G2("prst");
-
-//     L3("pqrstu") += 0.5 * G1("rs") * G2("pqut");
-//     L3("pqrstu") += 0.5 * G1("rt") * G2("pqsu");
-
-//     L3("pqrstu") += 2.0 * G1("ps") * G1("qt") * G1("ru");
-
-//     L3("pqrstu") -= G1("ps") * G1("qu") * G1("rt");
-//     L3("pqrstu") -= G1("pu") * G1("qt") * G1("rs");
-//     L3("pqrstu") -= G1("pt") * G1("qs") * G1("ru");
-
-//     L3("pqrstu") += 0.5 * G1("pt") * G1("qu") * G1("rs");
-//     L3("pqrstu") += 0.5 * G1("pu") * G1("qs") * G1("rt");
-
-//     L3.set_name("SF_L3");
-//     return L3;
-// }
+    const auto norb = lists_.norb();
+    for (size_t p{0}; p < norb; ++p) {
+        for (size_t q{0}; q < norb; ++q) {
+            for (size_t r{0}; r < norb; ++r) {
+                for (size_t s{0}; s < norb; ++s) {
+                    for (size_t t{0}; t < norb; ++t) {
+                        for (size_t u{0}; u < norb; ++u) {
+                            L3_v(p, q, r, s, t, u) += -G1_v(p, s) * G2_v(q, r, t, u) -
+                                                      G1_v(q, t) * G2_v(p, r, s, u) -
+                                                      G1_v(r, u) * G2_v(p, q, s, t) +
+                                                      0.5 * G1_v(p, t) * G2_v(q, r, s, u) +
+                                                      0.5 * G1_v(p, u) * G2_v(q, r, t, s) +
+                                                      0.5 * G1_v(q, s) * G2_v(p, r, t, u) +
+                                                      0.5 * G1_v(q, u) * G2_v(p, r, s, t) +
+                                                      0.5 * G1_v(r, s) * G2_v(p, q, u, t) +
+                                                      0.5 * G1_v(r, t) * G2_v(p, q, s, u) +
+                                                      2.0 * G1_v(p, s) * G1_v(q, t) * G1_v(r, u) -
+                                                      G1_v(p, s) * G1_v(q, u) * G1_v(r, t) -
+                                                      G1_v(p, u) * G1_v(q, t) * G1_v(r, s) -
+                                                      G1_v(p, t) * G1_v(q, s) * G1_v(r, u) +
+                                                      0.5 * G1_v(p, t) * G1_v(q, u) * G1_v(r, s) +
+                                                      0.5 * G1_v(p, u) * G1_v(q, s) * G1_v(r, t);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return L3;
+}
 
 } // namespace forte2

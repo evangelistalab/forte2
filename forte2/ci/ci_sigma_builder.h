@@ -166,6 +166,14 @@ class CISigmaBuilder {
     ///                                  gamma(bbb)[p][q][r][s][t][u] + ...
     np_tensor6 compute_sf_3rdm_same_irrep(np_vector C_left, np_vector C_right) const;
 
+    /// @brief Compute the cumulant of the spin-free three-electron reduced density matrix
+    /// @param C_left The left-hand side coefficients
+    /// @param C_right The right-hand side coefficients
+    /// @return The cumulant of the three-electron spin-free reduced density matrix stored as a
+    /// tensor
+    ///        lambda[p][q][r][s][t][u] = gamma[p][q][r][s][t][u] + ...
+    np_tensor6 compute_sf_3cumulant_same_irrep(np_vector C_left, np_vector C_right) const;
+
     // == Debugging Functions ==
     // The following are debugging functions that compute reduced density matrices that parallel
     // the definition of the functions above.
