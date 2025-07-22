@@ -618,6 +618,29 @@ class CI(MOsMixin, SystemMixin):
         self.ints.H = oei
         self.ints.V = tei
 
+    def set_maxiter(self, maxiter):
+        """
+        Set the maximum number of iterations for the CI solver.
+
+        Parameters
+        ----------
+        maxiter : int
+            The maximum number of iterations to set.
+        """
+        self.maxiter = maxiter
+        if self.solver is not None:
+            self.solver.maxiter = maxiter
+
+    def get_maxiter(self):
+        """
+        Get the maximum number of iterations for the CI solver.
+
+        Returns
+        -------
+        int
+            The maximum number of iterations.
+        """
+        return self.maxiter
 
 @dataclass
 class MultiCI(MOsMixin, SystemMixin):
@@ -726,6 +749,29 @@ class MultiCI(MOsMixin, SystemMixin):
     def set_ints(self, scalar, oei, tei):
         for ci in self.CIs:
             ci.set_ints(scalar, oei, tei)
+    
+    def set_maxiter(self, maxiter):
+        """
+        Set the maximum number of iterations for all CI solvers.
+
+        Parameters
+        ----------
+        maxiter : int
+            The maximum number of iterations to set.
+        """
+        for ci in self.CIs:
+            ci.set_maxiter(maxiter)
+    
+    def get_maxiter(self):
+        """
+        Get the maximum number of iterations for the CI solvers.
+
+        Returns
+        -------
+        int
+            The maximum number of iterations.
+        """
+        return self.CIs[0].get_maxiter()
 
 
 class CASCI(CI):
