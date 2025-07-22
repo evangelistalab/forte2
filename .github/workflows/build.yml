@@ -17,7 +17,6 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        # bse: [with_bse, without_bse]
         bse: [with_bse]
         include:
           - bse: with_bse
