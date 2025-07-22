@@ -80,14 +80,14 @@ class CISigmaBuilder {
     /// @param alfa If true, compute the alpha contribution, otherwise the beta
     /// @return The one-electron reduced density matrix stored as
     ///        gamma(sigma)[p][q] = <L| a^+_p a_q |R> with p,q orbitals of spin sigma
-    np_matrix compute_1rdm_same_irrep(np_vector C_left, np_vector C_right, bool alfa);
+    np_matrix compute_1rdm_same_irrep(np_vector C_left, np_vector C_right, bool alfa) const;
 
     /// @brief Compute the spin-free one-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
     /// @param C_right The right-hand side coefficients
     /// @return The spin-free one-electron reduced density matrix stored as
     ///        Gamma[p][q] = gamma(alpha)[p][q] + gamma(beta)[p][q]
-    np_matrix compute_sf_1rdm_same_irrep(np_vector C_left, np_vector C_right);
+    np_matrix compute_sf_1rdm_same_irrep(np_vector C_left, np_vector C_right) const;
 
     /// @brief Compute the two-electron same-spin reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -113,7 +113,7 @@ class CISigmaBuilder {
     /// @return The two-electron mixed-spin reduced density matrix stored as a tensor
     ///        gamma[p][q][r][s] = <L| a^+_p a^+_q a_s a_r |R>
     ///        with p,r orbitals of spin alpha and q,s orbitals of spin beta
-    np_tensor4 compute_2rdm_ab_same_irrep(np_vector C_left, np_vector C_right);
+    np_tensor4 compute_2rdm_ab_same_irrep(np_vector C_left, np_vector C_right) const;
 
     /// @brief Compute the spin-free two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -123,7 +123,15 @@ class CISigmaBuilder {
     ///                            gamma(bb)[p][q][r][s] +
     ///                            gamma(ab)[p][q][r][s]
     ///                            gamma(ab)[q][p][s][r]
-    np_tensor4 compute_sf_2rdm_same_irrep(np_vector C_left, np_vector C_right);
+    np_tensor4 compute_sf_2rdm_same_irrep(np_vector C_left, np_vector C_right) const;
+
+    /// @brief Compute the cumulant of the spin-free two-electron reduced density matrix
+    /// @param C_left The left-hand side coefficients
+    /// @param C_right The right-hand side coefficients
+    /// @return The cumulant of the two-electron spin-free reduced density matrix stored as a tensor
+    ///        lambda[p][q][r][s] = gamma[p][q][r][s] - gamma[p][r] * gamma[q][s] +
+    ///                              0.5 * gamma[p][s] * gamma[q][r]
+    np_tensor4 compute_sf_2cumulant_same_irrep(np_vector C_left, np_vector C_right) const;
 
     /// @brief Compute the three-electron same-spin reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -158,8 +166,9 @@ class CISigmaBuilder {
     ///                                  gamma(bbb)[p][q][r][s][t][u] + ...
     np_tensor6 compute_sf_3rdm_same_irrep(np_vector C_left, np_vector C_right) const;
 
-    // The following are debugging functions that compute reduced density matrices that parallel the
-    // definition of the functions above.
+    // == Debugging Functions ==
+    // The following are debugging functions that compute reduced density matrices that parallel
+    // the definition of the functions above.
     np_matrix compute_1rdm_a_debug(np_vector C_left, np_vector C_right, bool alfa);
 
     np_matrix compute_2rdm_aa_debug(np_vector C_left, np_vector C_right, bool alfa);

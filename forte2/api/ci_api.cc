@@ -69,6 +69,7 @@ void export_ci_sigma_builder_api(nb::module_& m) {
         .def("rdm3_abb", &CISigmaBuilder::compute_3rdm_abb_same_irrep, "C_left"_a, "C_right"_a)
         .def("rdm1_sf", &CISigmaBuilder::compute_sf_1rdm_same_irrep, "C_left"_a, "C_right"_a)
         .def("rdm2_sf", &CISigmaBuilder::compute_sf_2rdm_same_irrep, "C_left"_a, "C_right"_a)
+        .def("rdm3_sf", &CISigmaBuilder::compute_sf_3rdm_same_irrep, "C_left"_a, "C_right"_a)
         .def("avg_build_time", &CISigmaBuilder::avg_build_time)
         .def("set_log_level", &CISigmaBuilder::set_log_level, "level"_a,
              "Set the logging level for the class")

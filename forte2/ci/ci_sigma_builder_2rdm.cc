@@ -80,7 +80,7 @@ np_matrix CISigmaBuilder::compute_2rdm_aa_same_irrep(np_vector C_left, np_vector
     return rdm;
 }
 
-np_tensor4 CISigmaBuilder::compute_2rdm_ab_same_irrep(np_vector C_left, np_vector C_right) {
+np_tensor4 CISigmaBuilder::compute_2rdm_ab_same_irrep(np_vector C_left, np_vector C_right) const {
     local_timer timer;
     size_t norb = lists_.norb();
     auto rdm = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
@@ -152,22 +152,41 @@ np_tensor4 CISigmaBuilder::compute_2rdm_ab_same_irrep(np_vector C_left, np_vecto
     return rdm;
 }
 
-np_tensor4 CISigmaBuilder::compute_sf_2rdm_same_irrep(np_vector C_left, np_vector C_right) {
-    auto rdm_sf = compute_2rdm_aa_same_irrep_full(C_left, C_right, true);
-    auto rdm_bb = compute_2rdm_aa_same_irrep_full(C_left, C_right, false);
-    auto rdm_ab = compute_2rdm_ab_same_irrep(C_left, C_right);
+np_tensor4 CISigmaBuilder::compute_sf_2rdm_same_irrep(np_vector C_left, np_vector C_right) const {
+    size_t norb = lists_.norb();
+    auto rdm_sf = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
 
-    auto norb = lists_.norb();
     auto rdm_sf_v = rdm_sf.view();
+
+    // To reduce the  memory footprint, we compute the aa and bb contributions in a packed format
+    // and one at a time.
+    for (auto spin : {true, false}) {
+        auto rdm_ss = compute_2rdm_aa_same_irrep(C_left, C_right, spin);
+        auto rdm_ss_v = rdm_ss.view();
+        for (size_t p{1}, pq{0}; p < norb; ++p) {
+            for (size_t q{0}; q < p; ++q, ++pq) { // p > q
+                for (size_t r{1}, rs{0}; r < norb; ++r) {
+                    for (size_t s{0}; s < r; ++s, ++rs) { // r > s
+                        auto element = rdm_ss_v(pq, rs);
+                        rdm_sf_v(p, q, r, s) += element;
+                        rdm_sf_v(q, p, r, s) -= element;
+                        rdm_sf_v(p, q, s, r) -= element;
+                        rdm_sf_v(q, p, s, r) += element;
+                    }
+                }
+            }
+        }
+    }
+
+    // Now we compute the mixed-spin contribution
+    auto rdm_ab = compute_2rdm_ab_same_irrep(C_left, C_right);
     auto rdm_ab_v = rdm_ab.view();
-    auto rdm_bb_v = rdm_bb.view();
 
     for (size_t p{0}; p < norb; ++p) {
         for (size_t q{0}; q < norb; ++q) {
             for (size_t r{0}; r < norb; ++r) {
                 for (size_t s{0}; s < norb; ++s) {
-                    rdm_sf_v(p, q, r, s) +=
-                        rdm_bb_v(p, q, r, s) + rdm_ab_v(p, q, r, s) + rdm_ab_v(q, p, s, r);
+                    rdm_sf_v(p, q, r, s) += rdm_ab_v(p, q, r, s) + rdm_ab_v(q, p, s, r);
                 }
             }
         }
@@ -179,7 +198,7 @@ np_tensor4 CISigmaBuilder::compute_sf_2rdm_same_irrep(np_vector C_left, np_vecto
 np_tensor4 CISigmaBuilder::compute_2rdm_aa_same_irrep_full(np_vector C_left, np_vector C_right,
                                                            bool alfa) const {
     auto rdm = compute_2rdm_aa_same_irrep(C_left, C_right, alfa);
-    auto norb = lists_.norb();
+    const auto norb = lists_.norb();
     auto rdm_full = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
     auto rdm_v = rdm.view();
     auto rdm_full_v = rdm_full.view();
@@ -202,16 +221,29 @@ np_tensor4 CISigmaBuilder::compute_2rdm_aa_same_irrep_full(np_vector C_left, np_
     return rdm_full;
 }
 
-// ambit::Tensor RDMs::SF_L2() const {
-//     _test_rdm_level(2, "L2");
-//     timer t("make_cumulant_L2");
-//     auto G1 = SF_G1();
-//     auto L2 = SF_G2().clone();
-//     L2("pqrs") -= G1("pr") * G1("qs");
-//     L2("pqrs") += 0.5 * G1("ps") * G1("qr");
-//     L2.set_name("SF_L2");
-//     return L2;
-// }
+np_tensor4 CISigmaBuilder::compute_sf_2cumulant_same_irrep(np_vector C_left,
+                                                           np_vector C_right) const {
+    // Compute the spin-free 1-RDM
+    auto G1 = compute_sf_1rdm_same_irrep(C_left, C_right);
+    // Compute the spin-free 2-RDM (this will hold the cumulant)
+    auto L2 = compute_sf_2rdm_same_irrep(C_left, C_right);
+
+    // Evaluate L2[p,q,r,s] = G2[p,q,r,s] - G1[p,r] * G1[q,s] + 0.5 * G1[p,s] * G1[q,r]
+    auto G1_v = G1.view();
+    auto L2_v = L2.view();
+
+    const auto norb = lists_.norb();
+    for (size_t p{0}; p < norb; ++p) {
+        for (size_t q{0}; q < norb; ++q) {
+            for (size_t r{0}; r < norb; ++r) {
+                for (size_t s{0}; s < norb; ++s) {
+                    L2_v(p, q, r, s) += -G1_v(p, r) * G1_v(q, s) + 0.5 * G1_v(p, s) * G1_v(q, r);
+                }
+            }
+        }
+    }
+    return L2;
+}
 
 } // namespace forte2
 

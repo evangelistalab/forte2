@@ -246,12 +246,12 @@ np_tensor4 CISigmaBuilder::compute_3rdm_abb_same_irrep(np_vector C_left, np_vect
     return rdm;
 }
 
-np_tensor6 CISigmaBuilder::compute_sf_3rdm_same_irrep(np_vector C_left, np_vector C_right) {
+np_tensor6 CISigmaBuilder::compute_sf_3rdm_same_irrep(np_vector C_left, np_vector C_right) const {
     auto norb = lists_.norb();
     auto rdm_sf = make_zeros<nb::numpy, double, 6>({norb, norb, norb, norb, norb, norb});
 
-    auto rdm_aaa = compute_3rdm_aaa_same_irrep_full(C_left, C_right, true);
-    auto rdm_bbb = compute_3rdm_aaa_same_irrep_full(C_left, C_right, false);
+    auto rdm_aaa = compute_3rdm_aaa_same_irrep(C_left, C_right, true);
+    auto rdm_bbb = compute_3rdm_aaa_same_irrep(C_left, C_right, false);
     auto rdm_aab = compute_3rdm_aab_same_irrep(C_left, C_right);
     auto rdm_abb = compute_3rdm_abb_same_irrep(C_left, C_right);
 

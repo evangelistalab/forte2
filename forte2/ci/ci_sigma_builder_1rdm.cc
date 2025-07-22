@@ -6,7 +6,7 @@
 
 namespace forte2 {
 
-np_matrix CISigmaBuilder::compute_1rdm_same_irrep(np_vector C_left, np_vector C_right, bool alfa) {
+np_matrix CISigmaBuilder::compute_1rdm_same_irrep(np_vector C_left, np_vector C_right, bool alfa) const {
     size_t norb = lists_.norb();
     auto rdm = make_zeros<nb::numpy, double, 2>({norb, norb});
     auto na = lists_.na();
@@ -61,7 +61,7 @@ np_matrix CISigmaBuilder::compute_1rdm_same_irrep(np_vector C_left, np_vector C_
     return rdm;
 }
 
-np_matrix CISigmaBuilder::compute_sf_1rdm_same_irrep(np_vector C_left, np_vector C_right) {
+np_matrix CISigmaBuilder::compute_sf_1rdm_same_irrep(np_vector C_left, np_vector C_right) const {
     auto rdm_a = compute_1rdm_same_irrep(C_left, C_right, true);
     auto rdm_b = compute_1rdm_same_irrep(C_left, C_right, false);
     matrix::daxpy(1.0, rdm_a, rdm_b);
