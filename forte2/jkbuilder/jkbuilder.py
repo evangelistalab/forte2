@@ -24,9 +24,8 @@ class FockBuilder:
     def __init__(self, system, use_aux_corr=False):
         if isinstance(system, ModelSystem):
             # special handling for ModelSystem
-            eri = system.eri
+            eri = system.eri.reshape((nbf**2,) * 2)
             nbf = system.nbf
-            eri = eri.reshape((nbf**2,) * 2)
             self.B = cholesky_wrapper(eri, tol=-1)
             self.B = self.B.reshape((self.B.shape[0], nbf, nbf))
             system.naux = self.B.shape[0]
@@ -56,7 +55,7 @@ class FockBuilder:
         nbf = basis.size
         memory_gb = 8 * (nbf**4) / (1024**3)
         logger.log_info1("Building B tensor using Cholesky decomposition")
-        logger.log_info1(f"Temporary memory requirements: {memory_gb:.2f} GB")
+        logger.log_info1(f"Temporary memory requirement for 4-index integrals: {memory_gb:.2f} GB")
         eri_full = ints.coulomb_4c(basis)
         eri = eri_full.reshape((nbf**2,) * 2)
 

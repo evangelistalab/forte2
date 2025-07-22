@@ -15,23 +15,23 @@ class RestrictedMOIntegrals:
 
     Parameters
     ----------
-        C : NDArray
-            The coefficient matrix for the molecular orbitals.
-        orbitals : list[int]
-            Subspace of the orbitals for which to compute the integrals.
-        core_orbitals : list[int], optional
-            Subspace of doubly occupied orbitals. Defaults to None.
-        use_aux_corr : bool, optional, default=False
-            If True, use ``system.auxiliary_basis_set_corr``, else use ``system.auxiliary_basis``.
+    C : NDArray
+        The coefficient matrix for the molecular orbitals.
+    orbitals : list[int]
+        Subspace of the orbitals for which to compute the integrals.
+    core_orbitals : list[int], optional
+        Subspace of doubly occupied orbitals. Defaults to None.
+    use_aux_corr : bool, optional, default=False
+        If True, use ``system.auxiliary_basis_set_corr``, else use ``system.auxiliary_basis``.
 
     Attributes
     ----------
-        E : float
-            Nuclear repulsion plus the core energy contribution.
-        H : NDArray
-            The effective one-electron integrals.
-        V : NDArray
-            The two-electron integrals stored in physics convention: V[p,q,r,s] = :math:`\langle pq | rs \rangle`.
+    E : float
+        Nuclear repulsion plus the core energy contribution.
+    H : NDArray
+        The effective one-electron integrals.
+    V : NDArray
+        The two-electron integrals stored in physics convention: V[p,q,r,s] = :math:`\langle pq | rs \rangle`.
     """
 
     system: System
