@@ -24,6 +24,7 @@ BASIS_NAMES = [
     "cc-pv5z-rifit",
     "sap_helfem_large",
     "def2-universal-jkfit",
+    "ano-r0",
 ]
 
 def fetch_basis():

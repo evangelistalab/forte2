@@ -449,7 +449,7 @@ class AVAS(MOsMixin, SystemMixin):
             logger.log_info1(f"{i:<5d} {s_uocc[i - ndocc - nsocc]:<12.6f} {'0':<6}")
         logger.log_info1("=" * 25)
         logger.log_info1(
-            "^ These indices are internal to the re-sorted AVAS orbitals, and do not correspond to the original MOs."
+            "^ These indices are internal to the re-sorted AVAS orbitals, and may not correspond to the original MOs."
         )
         if sigma_type == "eigen":
             logger.log_info1("* 'eigen': eigenvalue of the projected overlap matrix")

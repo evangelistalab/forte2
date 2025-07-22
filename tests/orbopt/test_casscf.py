@@ -106,6 +106,29 @@ def test_casscf_n2():
     assert mc.E == approx(ecasscf)
 
 
+def test_casscf_n2_cholesky():
+    erhf = -108.761717999901
+    ecasscf = -108.9801054579
+
+    xyz = f"""
+    N 0.0 0.0 0.0
+    N 0.0 0.0 1.4
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pVDZ", cholesky_tei=True, cholesky_tol=1e-10)
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    ci = CI(
+        orbitals=[4, 5, 6, 7, 8, 9],
+        core_orbitals=[0, 1, 2, 3],
+        state=State(nel=14, multiplicity=1, ms=0.0),
+        nroot=1,
+    )(rhf)
+    mc = MCOptimizer(gconv=1e-7)(ci)
+    mc.run()
+    assert rhf.E == approx(erhf)
+    assert mc.E == approx(ecasscf)
+
+
 def test_mcscf_noncontiguous_spaces():
     # The results of this test should be strictly identical to test_mcscf_3
 

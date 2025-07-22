@@ -150,10 +150,10 @@ class SCFBase(ABC):
         Eold = 0.0
         Dold = self.D
 
-        width = 115
+        width = 81
         logger.log_info1("=" * width)
         logger.log_info1(
-            f"{'Iter':>4s} {'Energy':>20s} {'deltaE':>20s} {'|deltaD|':>20s} {'|AO grad|':>20s} {'<S^2>':>20s} {'DIIS':>5s}"
+            f"{'Iter':>4s} {'Energy':>20s} {'ΔE':>12} {'||ΔD||':>12} {'||AO grad||':>12} {'<S^2>':>10} {'DIIS':>5s}"
         )
         logger.log_info1("-" * width)
         self.iter = 0
@@ -181,7 +181,7 @@ class SCFBase(ABC):
 
             # print iteration
             logger.log_info1(
-                f"{iter + 1:4d} {self.E:20.12f} {deltaE:20.12f} {deltaD:20.12f} {np.linalg.norm(AO_grad):20.12f} {self.S2:20.12f} {diis.status:>5s}"
+                f"{iter + 1:4d} {self.E:20.12f} {deltaE:12.4e} {deltaD:12.4e} {np.linalg.norm(AO_grad):12.4e} {self.S2:10.5f} {diis.status:>5s}"
             )
 
             if np.abs(deltaE) < self.econv and deltaD < self.dconv:

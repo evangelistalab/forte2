@@ -20,7 +20,8 @@ def test_cholesky_tei():
 
 
 def test_cholesky_random_matrix():
-    M = np.random.rand(10, 10)
+    generator = np.random.default_rng(42)
+    M = generator.random((50, 50))
     M = M @ M.T  # Make it symmetric positive semi-definite
     M[:, -1] = 0
     M[-1, :] = 0
