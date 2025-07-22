@@ -23,10 +23,14 @@ class SCFBase(ABC):
     ----------
     charge : int
         Charge of the system.
+    do_diis : bool, optional, default=True
+        Whether to perform DIIS acceleration.
     diis_start : int, optional, default=4
         Which iteration to start collecting DIIS error vectors.
     diis_nvec : int, optional, default=8
         How many DIIS error vectors to keep.
+    diis_min : int, optional, default=3
+        Minimum number of DIIS vectors to perform extrapolation.
     econv : float, optional, default=1e-9
         Energy convergence threshold.
     dconv : float, optional, default=1e-6
@@ -54,8 +58,10 @@ class SCFBase(ABC):
     """
 
     charge: int
+    do_diis: bool = True
     diis_start: int = 4
     diis_nvec: int = 8
+    diis_min: int = 3
     econv: float = 1e-9
     dconv: float = 1e-6
     maxiter: int = 100
@@ -66,7 +72,9 @@ class SCFBase(ABC):
     converged: bool = field(default=False, init=False)
 
     def __call__(self, system):
-        assert isinstance(system, (forte2.System, forte2.ModelSystem)), "System must be an instance of forte2.System"
+        assert isinstance(
+            system, (forte2.System, forte2.ModelSystem)
+        ), "System must be an instance of forte2.System"
         self.system = system
         self.method = self._scf_type().upper()
         self.nel = self.system.Zsum - self.charge
@@ -107,7 +115,11 @@ class SCFBase(ABC):
         """
         start = time.monotonic()
 
-        diis = forte2.helpers.DIIS(diis_start=self.diis_start, diis_nvec=self.diis_nvec)
+        diis = forte2.helpers.DIIS(
+            diis_start=self.diis_start,
+            diis_nvec=self.diis_nvec,
+            do_diis=self.do_diis,
+        )
         Vnn = self._get_nuclear_repulsion()
         S = self._get_overlap()
         H = self._get_hcore()
@@ -138,10 +150,10 @@ class SCFBase(ABC):
         Eold = 0.0
         Dold = self.D
 
-        width = 109
+        width = 81
         logger.log_info1("=" * width)
         logger.log_info1(
-            f"{'Iter':>4s} {'Energy':>20s} {'deltaE':>20s} {'|deltaD|':>20s} {'|AO grad|':>20s} {'<S^2>':>20s}"
+            f"{'Iter':>4s} {'Energy':>20s} {'ΔE':>12} {'||ΔD||':>12} {'||AO grad||':>12} {'<S^2>':>10} {'DIIS':>5s}"
         )
         logger.log_info1("-" * width)
         self.iter = 0
@@ -169,7 +181,7 @@ class SCFBase(ABC):
 
             # print iteration
             logger.log_info1(
-                f"{iter + 1:4d} {self.E:20.12f} {deltaE:20.12f} {deltaD:20.12f} {np.linalg.norm(AO_grad):20.12f} {self.S2:20.12f}"
+                f"{iter + 1:4d} {self.E:20.12f} {deltaE:12.4e} {deltaD:12.4e} {np.linalg.norm(AO_grad):12.4e} {self.S2:10.5f} {diis.status:>5s}"
             )
 
             if np.abs(deltaE) < self.econv and deltaD < self.dconv:
@@ -351,6 +363,7 @@ class RHF(SCFBase, MOsMixin):
         basis_info = forte2.basis_utils.BasisInfo(self.system, self.system.basis)
         logger.log_info1("AO Composition of MOs:")
         basis_info.print_ao_composition(self.C[0], list(range(self.nmo)))
+
 
 @dataclass
 class UHF(SCFBase, MOsMixin):

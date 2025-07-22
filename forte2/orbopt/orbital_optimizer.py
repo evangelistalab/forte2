@@ -17,26 +17,45 @@ class MCOptimizer(MOsMixin, SystemMixin):
 
     Parameters
     ----------
-    maxiter : int
+    maxiter : int, optional, default=50
         Maximum number of macroiterations.
-    gradtol : float
-        Gradient convergence tolerance.
-    etol : float
+    econv : float, optional, default=1e-8
         Energy convergence tolerance.
-    micro_maxiter : int
+    gconv : float, optional, default=1e-7
+        Gradient convergence tolerance.
+    micro_maxiter : int, optional, default=6
         Maximum number of microiterations for L-BFGS.
-    max_rotation : float
+    ci_maxiter : int, optional, default=50
+        Maximum number of iterations for CI optimization.
+    max_rotation : float, optional, default=0.2
         Maximum orbital rotation size for L-BFGS.
+    do_diis : bool, optional
+        Whether DIIS acceleration is used.
+    diis_start : int, optional, default=15
+        Start saving DIIS vectors after this many iterations.
+    diis_nvec : int, optional, default=8
+        The number of vectors to keep in the DIIS.
+    diis_min : int, optional, default=4
+        The minimum number of vectors to perform extrapolation.
     """
 
     ### Macroiteration parameters
     maxiter: int = 50
-    gradtol: float = 1e-6
-    etol: float = 1e-8
+    econv: float = 1e-8
+    gconv: float = 1e-7
 
     ### L-BFGS solver (microiteration) parameters
     micro_maxiter: int = 6
     max_rotation: float = 0.2
+
+    ### CI solver parameters
+    ci_maxiter: int = 50
+
+    ### DIIS parameters
+    do_diis: bool = None
+    diis_start: int = 15
+    diis_nvec: int = 8
+    diis_min: int = 4
 
     ### Non-init attributes
     executed: bool = field(default=False, init=False)
@@ -96,16 +115,31 @@ class MCOptimizer(MOsMixin, SystemMixin):
         # Initialize the LBFGS solver that finds the optimal orbital
         # at fixed CI expansion using the gradient and diagonal Hessian
         self.lbfgs_solver = LBFGS(
-            epsilon=self.gradtol,
+            epsilon=self.gconv,
             max_dir=self.max_rotation,
             step_length_method="max_correction",
             maxiter=self.micro_maxiter,
         )
 
-        width = 95
+        diis = forte2.helpers.DIIS(
+            diis_start=self.diis_start,
+            diis_nvec=self.diis_nvec,
+            diis_min=self.diis_min,
+            do_diis=self.do_diis,
+        )
+
+        width = 115
+        logger.log_info1("Entering orbital optimization loop")
+        logger.log_info1("\nConvergence criteria ('.' if satisfied, 'x' otherwise):")
+        logger.log_info1(f"  {'1. RMS(grad - grad_old)':<25} < {self.gconv:.1e}")
+        logger.log_info1(f"  {'2. ||E_CI - E_orb||':<25} < {self.econv:.1e}")
+        logger.log_info1(f"  {'3. ||E_CI - E_CI_old||':<25} < {self.econv:.1e}")
+        logger.log_info1(f"  {'4. ||E_avg - E_avg_old||':<25} < {self.econv:.1e}")
+        logger.log_info1(f"  {'5. ||E_orb - E_orb_old||':<25} < {self.econv:.1e}\n")
+
         logger.log_info1("=" * width)
         logger.log_info1(
-            f'{"Iteration":>10} {"E_CI":>20} {"E_orb":>20} {"||grad||":>20} {"#micro":>10} {"Conv":>10}'
+            f'{"Iteration":>10} {"E_CI":>20} {"ΔE_CI":>12} {"E_orb":>20} {"ΔE_orb":>12} {"RMS(Δgrad)":>12} {"#micro":>8} {"Conv":>8} {"DIIS":>5}'
         )
         logger.log_info1("-" * width)
 
@@ -122,11 +156,13 @@ class MCOptimizer(MOsMixin, SystemMixin):
         else:
             self.E_ci = np.array(self.parent_method.E)
         self.E_ci_old = self.E_ci.copy()
-        self.E_avg = self.E_orb = self.parent_method.compute_average_energy()
+        self.E_avg = self.E_orb = self.ci_opt.solver.compute_average_energy()
         self.E_orb_old = self.E_orb
         self.E_avg_old = self.E_avg
 
         g1_act, g2_act = self.ci_opt.make_rdm12()
+        ci_maxiter_save = self.ci_opt.get_maxiter()
+        self.ci_opt.set_maxiter(self.ci_maxiter)
 
         # Prepare the orbital optimizer
         self.orb_opt.set_rdms(g1_act, g2_act)
@@ -138,7 +174,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
         self.g_old = np.zeros(self.orb_opt.nrot, dtype=float)
 
         # This holds the *overall* orbital rotation, C_current = C_0 @ exp(R)
-        # It's only used as the intial guess at the start of each orbital optimization and not accessed elsewhere
+        # It's as the intial guess at the start of each orbital optimization and for DIIS
         R = np.zeros(self.orb_opt.nrot, dtype=float)
 
         while self.iter < self.maxiter:
@@ -148,16 +184,25 @@ class MCOptimizer(MOsMixin, SystemMixin):
             self.C[0] = self.orb_opt.C.copy()
 
             # 2. Convergence checks
-            self.g_rms = np.linalg.norm(self.lbfgs_solver.g - self.g_old)
+            self.g_rms = np.sqrt(np.mean((self.lbfgs_solver.g - self.g_old) ** 2))
             self.g_old = self.lbfgs_solver.g.copy()
             conv, conv_str = self._check_convergence()
-            logger.log_info1(
-                f"{self.iter:>10d} {self.E_avg:>20.10f} {self.E_orb:>20.10f} {self.g_rms:>20.10f} {self.lbfgs_solver.iter:>10d} {conv_str:>10s}"
-            )
+            lbfgs_str = f"{self.lbfgs_solver.iter}/{'Y' if self.lbfgs_solver.converged else 'N'}"
+            iter_info = f"{self.iter:>10d} {self.E_avg:>20.10f} {self.delta_ci_avg:>12.4e} {self.E_orb:>20.10f} {self.delta_orb:>12.4e} {self.g_rms:>12.4e} {lbfgs_str:>8} {conv_str:>8}"
             if conv:
+                logger.log_info1(iter_info)
                 break
 
-            # 3. Optimize CI expansion at fixed orbitals
+            # 3. DIIS Extrapolation
+            R = diis.update(R, self.g_old)
+            iter_info += f" {diis.status:>5s}"
+            logger.log_info1(iter_info)
+            # if diis has performed extrapolation
+            if "E" in diis.status:
+                # orb_opt.evaluate updates the 1 and 2-electron integrals for CI
+                _ = self.orb_opt.evaluate(R, self.lbfgs_solver.g, do_g=False)
+
+            # 4. Optimize CI expansion at fixed orbitals
             self.ci_opt.set_active_space_ints(
                 self.orb_opt.Ecore + self.system.nuclear_repulsion,
                 self.orb_opt.Fcore[self.actv, self.actv],
@@ -173,6 +218,16 @@ class MCOptimizer(MOsMixin, SystemMixin):
             raise RuntimeError(
                 f"Orbital optimization did not converge in {self.maxiter} iterations."
             )
+        self.ci_opt.set_maxiter(ci_maxiter_save)
+        self.ci_opt.set_active_space_ints(
+            self.orb_opt.Ecore + self.system.nuclear_repulsion,
+            self.orb_opt.Fcore[self.actv, self.actv],
+            self.orb_opt.get_active_space_ints(),
+        )
+        self.E_avg, self.E_ci = self.ci_opt.run()
+        logger.log_info1(
+            f"{'Final CI':>10} {self.E_avg:>20.10f} {'-':>12} {self.E_orb:>20.10f} {'-':>12} {'-':>12} {'-':>6} {conv_str:>10s}"
+        )
 
         logger.log_info1("=" * width)
         logger.log_info1(f"Orbital optimization converged in {self.iter} iterations.")
@@ -180,6 +235,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
         self._post_process()
         self.parent_method.set_verbosity_level(current_verbosity)
         self.executed = True
+        return self
 
     def _post_process(self):
         self._pretty_print_energies()
@@ -260,14 +316,16 @@ class MCOptimizer(MOsMixin, SystemMixin):
         return nrr
 
     def _check_convergence(self):
-        is_grad_conv = self.g_rms < self.gradtol
-        is_ci_orb_conv = abs(self.E_orb - self.E_avg) < self.etol
-        is_ci_eigval_conv = np.all(abs(self.E_ci - self.E_ci_old) < self.etol)
-        is_ci_avg_conv = abs(self.E_avg - self.E_avg_old) < self.etol
-        is_orb_conv = abs(self.E_orb - self.E_orb_old) < self.etol
-        self.E_ci_old = self.E_ci.copy()
-        self.E_avg_old = self.E_avg
-        self.E_orb_old = self.E_orb
+        is_grad_conv = self.g_rms < self.gconv
+        is_ci_orb_conv = abs(self.E_orb - self.E_avg) < self.econv
+        is_ci_eigval_conv = np.all(abs(self.E_ci - self.E_ci_old) < self.econv)
+
+        self.delta_ci_avg = self.E_avg - self.E_avg_old
+        is_ci_avg_conv = abs(self.delta_ci_avg) < self.econv
+
+        self.delta_orb = self.E_orb - self.E_orb_old
+        is_orb_conv = abs(self.E_orb - self.E_orb_old) < self.econv
+
         criteria = [
             is_grad_conv,
             is_ci_orb_conv,
@@ -278,6 +336,10 @@ class MCOptimizer(MOsMixin, SystemMixin):
 
         conv = all(criteria)
         conv_str = "".join(["." if _ else "x" for _ in criteria])
+
+        self.E_ci_old = self.E_ci.copy()
+        self.E_avg_old = self.E_avg
+        self.E_orb_old = self.E_orb
         return conv, conv_str
 
 
@@ -320,12 +382,12 @@ class OrbOptimizer:
     def evaluate(self, x, g, do_g=True):
         do_update_integrals = self._update_orbitals(x)
         if do_update_integrals:
+            self._compute_Fcore()
             self.get_eri_gaaa()
 
         E_orb = self._compute_reference_energy()
 
         if do_g:
-            self._compute_Fcore()
             grad = -self._compute_orbgrad()
             g = self._mat_to_vec(grad)
 
@@ -523,3 +585,15 @@ class CIOptimizer:
         # [Eq. (5)] has a factor of 0.5
         g2 = 0.5 * self.solver.make_average_rdm2_sf()
         return g1, g2
+
+    def set_maxiter(self, maxiter):
+        """
+        Set the maximum number of iterations for the CI solver.
+        """
+        self.solver.set_maxiter(maxiter)
+
+    def get_maxiter(self):
+        """
+        Get the maximum number of iterations for the CI solver.
+        """
+        return self.solver.get_maxiter()

@@ -618,6 +618,29 @@ class CI(MOsMixin, SystemMixin):
         self.ints.H = oei
         self.ints.V = tei
 
+    def set_maxiter(self, maxiter):
+        """
+        Set the maximum number of iterations for the CI solver.
+
+        Parameters
+        ----------
+        maxiter : int
+            The maximum number of iterations to set.
+        """
+        self.maxiter = maxiter
+        if self.solver is not None:
+            self.solver.maxiter = maxiter
+
+    def get_maxiter(self):
+        """
+        Get the maximum number of iterations for the CI solver.
+
+        Returns
+        -------
+        int
+            The maximum number of iterations.
+        """
+        return self.maxiter
 
 @dataclass
 class MultiCI(MOsMixin, SystemMixin):
@@ -649,11 +672,14 @@ class MultiCI(MOsMixin, SystemMixin):
         assert len(self.CIs) > 0, "CIs list cannot be empty"
         self.ncis = len(self.CIs)
 
-        assert (
-            len(set(ci.norb for ci in self.CIs)) == 1
-        ), "All CIs must have the same number of active orbitals"
+        self.cis_are_autoci = all(isinstance(ci, AutoCI) for ci in self.CIs)
 
-        self.norb = self.CIs[0].norb
+        # this check needs to be deferred until AVAS gets called for AutoCI
+        if not self.cis_are_autoci:
+            assert (
+                len(set(ci.norb for ci in self.CIs)) == 1
+            ), "All CIs must have the same number of active orbitals"
+            self.norb = self.CIs[0].norb
 
         if self.weights is None:
             self.weights = np.ones(self.ncis) / self.ncis
@@ -673,6 +699,11 @@ class MultiCI(MOsMixin, SystemMixin):
         if not self.parent_method.executed:
             self.parent_method.run()
         self.CIs = [ci(self.parent_method) for ci in self.CIs]
+        if self.cis_are_autoci:
+            assert (
+                len(set(ci.norb for ci in self.CIs)) == 1
+            ), "All CIs must have the same number of active orbitals"
+            self.norb = self.CIs[0].norb
         SystemMixin.copy_from_upstream(self, self.parent_method)
         MOsMixin.copy_from_upstream(self, self.parent_method)
 
@@ -718,6 +749,29 @@ class MultiCI(MOsMixin, SystemMixin):
     def set_ints(self, scalar, oei, tei):
         for ci in self.CIs:
             ci.set_ints(scalar, oei, tei)
+    
+    def set_maxiter(self, maxiter):
+        """
+        Set the maximum number of iterations for all CI solvers.
+
+        Parameters
+        ----------
+        maxiter : int
+            The maximum number of iterations to set.
+        """
+        for ci in self.CIs:
+            ci.set_maxiter(maxiter)
+    
+    def get_maxiter(self):
+        """
+        Get the maximum number of iterations for the CI solvers.
+
+        Returns
+        -------
+        int
+            The maximum number of iterations.
+        """
+        return self.CIs[0].get_maxiter()
 
 
 class CASCI(CI):
@@ -775,22 +829,30 @@ class AutoCI(CI):
         Spin quantum number.
     nroot : int, optional, default=1.
         Number of roots to compute.
+    weights : list[float], optional.
+        Weights for each root, must sum to 1. If None, equal weights are assigned to each root.
     """
 
-    def __init__(self, charge, multiplicity, ms, nroot=1):
+    def __init__(self, charge, multiplicity, ms, nroot=1, weights=None):
         self.charge = charge
         self.multiplicity = multiplicity
         self.ms = ms
         self.nroot = nroot
+        self.weights = weights
 
         self.solver = None
+        self._autoci_first_run = True
 
     def __call__(self, method):
         assert isinstance(method, forte2.AVAS), "Method must be an instance of AVAS"
         self.parent_method = method
+        # This is for compatibility with MultiCI
+        if self.parent_method.executed:
+            self._autoci_startup()
+            self._autoci_first_run = False
         return self
 
-    def run(self):
+    def _autoci_startup(self):
         if not self.parent_method.executed:
             self.parent_method.run()
         nel = self.parent_method.system.Zsum - self.charge
@@ -801,8 +863,14 @@ class AutoCI(CI):
             core_orbitals=core_orbitals,
             state=State(nel=nel, multiplicity=self.multiplicity, ms=self.ms),
             nroot=self.nroot,
+            weights=self.weights,
         )
         self = super().__call__(self.parent_method)
+
+    def run(self):
+        if self._autoci_first_run:
+            self._autoci_startup()
+            self._autoci_first_run = False
         super().run()
         return self
 
