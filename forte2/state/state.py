@@ -5,26 +5,27 @@ from forte2.helpers.multiplicity_labels import multiplicity_labels
 
 @dataclass(order=True)
 class State:
-    """Class to represent a state of a quantum system.
+    """
+    Class to represent a state of a quantum system.
 
     Parameters
     ----------
-        nel : int
-            Total number of electrons.
-        multiplicity : int
-            Multiplicity of the state (2S+1).
-        ms : float
-            Spin projection (Ms) of the state.
-        irrep : int, optional
-            Irreducible representation of the state in Cotton ordering.
-        gas_min : list[int], optional, default=[]
-            Minimum GAS restrictions.
-        gas_max : list[int], optional, default=[]
-            Maximum GAS restrictions.
-        symmetry: int, optional, default=0
-            Symmetry of the state.
-        symmetry_label: str, optional, default=None
-            Label for the symmetry of the state.
+    nel : int
+        Total number of electrons.
+    multiplicity : int
+        Multiplicity of the state (2S+1).
+    ms : float
+        Spin projection (Ms) of the state.
+    irrep : int, optional
+        Irreducible representation of the state in Cotton ordering.
+    gas_min : list[int], optional, default=[]
+        Minimum GAS restrictions.
+    gas_max : list[int], optional, default=[]
+        Maximum GAS restrictions.
+    symmetry: int, optional, default=0
+        Symmetry of the state.
+    symmetry_label: str, optional, default=None
+        Label for the symmetry of the state.
     """
 
     nel: int

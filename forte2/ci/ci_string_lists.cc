@@ -24,9 +24,9 @@ template <typename Func> void debug(Func func) {
 
 CIStrings::CIStrings(size_t na, size_t nb, int symmetry,
                      std::vector<std::vector<int>> orbital_symmetry, const std::vector<int> gas_min,
-                     const std::vector<int> gas_max)
+                     const std::vector<int> gas_max, const int log_level)
     : na_(na), nb_(nb), symmetry_(symmetry), orbital_symmetry_(orbital_symmetry), gas_min_(gas_min),
-      gas_max_(gas_max) {
+      gas_max_(gas_max), log_level_(log_level) {
 
     std::vector<std::pair<int, int>> orbital_index_and_symmetry;
     {

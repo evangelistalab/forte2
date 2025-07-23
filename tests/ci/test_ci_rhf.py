@@ -11,11 +11,10 @@ def test_ci_1():
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci = CI(
-        orbitals=[0, 1],
-        state=State(nel=2, multiplicity=1, ms=0.0),
-        nroot=1,
-    )(rhf)
+    cistate = CIStates(
+        states=State(nel=2, multiplicity=1, ms=0.0), active_spaces=[0, 1]
+    )
+    ci = CI(cistate)(rhf)
     ci.run()
 
     assert rhf.E == approx(-1.05643120731551)
@@ -32,18 +31,18 @@ def test_ci_2():
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci = CI(
-        orbitals=[1, 2, 3, 4, 5, 6],
+    ci_states = CIStates(
+        states=State(nel=10, multiplicity=1, ms=0.0),
         core_orbitals=[0],
-        state=State(nel=10, multiplicity=1, ms=0.0),
-        nroot=1,
-    )(rhf)
+        active_spaces=[1, 2, 3, 4, 5, 6],
+    )
+    ci = CI(ci_states)(rhf)
     ci.run()
 
     assert ci.E[0] == approx(-100.019788438077)
 
 
-def test_multici_n2():
+def test_sa_ci_n2():
     xyz = f"""
     N 0.0 0.0 0.0
     N 0.0 0.0 1.2
@@ -52,36 +51,34 @@ def test_multici_n2():
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci_singlet = CI(
-        core_orbitals=[0, 1, 2, 3],
-        orbitals=[4, 5, 6, 7, 8, 9],
-        state=State(14, multiplicity=1, ms=0.0),
-        nroot=1,
+    singlet = State(14, multiplicity=1, ms=0.0)
+    triplet = State(14, multiplicity=3, ms=0.0)
+    mo_space = MOSpace(core_orbitals=[0, 1, 2, 3], active_spaces=[4, 5, 6, 7, 8, 9])
+    sa_info = CIStates(
+        states=[singlet, triplet],
+        mo_space=mo_space,
+        nroots=[1, 2],
+        weights=[[1.0], [0.85, 0.15]],
     )
-    ci_triplet = CI(
-        core_orbitals=[0, 1, 2, 3],
-        orbitals=[4, 5, 6, 7, 8, 9],
-        state=State(14, multiplicity=3, ms=0.0),
-        nroot=2,
-        weights=[0.85, 0.15],
-    )
-    ci = MultiCI([ci_singlet, ci_triplet], weights=[0.25, 0.75])(rhf)
+    ci = CI(sa_info)(rhf)
     ci.run()
     eref_singlet = -109.004622061660
     eref_triplet1 = -108.779926502402
     eref_triplet2 = -108.733907910380
     assert ci.E[0] == approx(eref_singlet)
-    assert ci.E[1][0] == approx(eref_triplet1)
-    assert ci.E[1][1] == approx(eref_triplet2)
-    assert ci.E_avg[0] == approx(eref_singlet)
-    assert ci.E_avg[1] == approx(0.85 * eref_triplet1 + 0.15 * eref_triplet2)
+    assert ci.E[1] == approx(eref_triplet1)
+    assert ci.E[2] == approx(eref_triplet2)
     assert ci.compute_average_energy() == approx(
-        0.25 * eref_singlet + 0.75 * (0.85 * eref_triplet1 + 0.15 * eref_triplet2)
+        0.5 * eref_singlet + 0.5 * (0.85 * eref_triplet1 + 0.15 * eref_triplet2)
     )
 
 
-def test_multici_with_avas():
-    # This won't be strictly identical to test_multici_n2 because AVAS will select different orbitals
+def test_sa_ci_with_avas():
+    # This won't be strictly identical to test_sa_ci_n2 because AVAS will select different orbitals
+    eref_singlet = -109.061384781871
+    eref_triplet1 = -108.833136404913
+    eref_triplet2 = -108.777400848037
+
     xyz = f"""
     N 0.0 0.0 0.0
     N 0.0 0.0 1.2
@@ -97,25 +94,22 @@ def test_multici_with_avas():
         subspace=["N(2p)"],
         diagonalize=True,
     )(rhf)
-    ci_singlet = AutoCI(charge=0, multiplicity=1, ms=0.0)
-    ci_triplet = AutoCI(
-        charge=0,
-        multiplicity=3,
-        ms=0.0,
-        nroot=2,
-        weights=[0.85, 0.15],
-    )
-    ci = MultiCI([ci_singlet, ci_triplet], weights=[0.25, 0.75])(avas)
-    ci.run()
 
-    eref_singlet = -109.061384781871
-    eref_triplet1 = -108.833136404913
-    eref_triplet2 = -108.777400848037
-    assert ci.E[0] == approx(eref_singlet)
-    assert ci.E[1][0] == approx(eref_triplet1)
-    assert ci.E[1][1] == approx(eref_triplet2)
-    assert ci.E_avg[0] == approx(eref_singlet)
-    assert ci.E_avg[1] == approx(0.85 * eref_triplet1 + 0.15 * eref_triplet2)
-    assert ci.compute_average_energy() == approx(
-        0.25 * eref_singlet + 0.75 * (0.85 * eref_triplet1 + 0.15 * eref_triplet2)
+    singlet = State(14, multiplicity=1, ms=0.0)
+    triplet = State(14, multiplicity=3, ms=0.0)
+    sa_info = CIStates(
+        states=[singlet, triplet],
+        mo_space=avas,
+        nroots=[1, 2],
+        weights=[[1.0], [0.85, 0.15]],
+    )
+
+    saci = CI(ci_states=sa_info)(avas)
+    saci.run()
+
+    assert saci.E[0] == approx(eref_singlet)
+    assert saci.E[1] == approx(eref_triplet1)
+    assert saci.E[2] == approx(eref_triplet2)
+    assert saci.compute_average_energy() == approx(
+        0.5 * eref_singlet + 0.5 * (0.85 * eref_triplet1 + 0.15 * eref_triplet2)
     )

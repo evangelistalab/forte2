@@ -465,6 +465,9 @@ class AVAS(MOsMixin, SystemMixin):
         self.ncore = len(inact_docc)
         self.core_orbitals = list(range(self.ncore))
         self.active_orbitals = list(range(self.ncore, self.ncore + self.nactv))
+        # For compatibility with the MOSpace class
+        self.active_spaces = [self.active_orbitals]
+        self.ngas = 1
         logger.log_info1(f"\nNumber of core orbitals:      {self.ncore}")
         logger.log_info1(f"Number of active orbitals:    {self.nactv}")
 

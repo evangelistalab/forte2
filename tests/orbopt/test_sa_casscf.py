@@ -1,10 +1,10 @@
 import pytest
 
-from forte2 import System, RHF, MCOptimizer, AVAS, AutoCI, MultiCI, State, CI
+from forte2 import System, RHF, MCOptimizer, AVAS, CIStates, State
 from forte2.helpers.comparisons import approx
 
 
-def test_sa_mcscf_diff_mult_with_autoci():
+def test_sa_mcscf_diff_mult_with_avas():
     # This should be strictly identical to test_mcscf_sa_diff_mult given a sufficiently robust MCSCF solver.
     xyz = f"""
     N 0.0 0.0 0.0
@@ -21,28 +21,25 @@ def test_sa_mcscf_diff_mult_with_autoci():
         subspace=["N(2p)"],
         diagonalize=True,
     )(rhf)
-    ci_singlet = AutoCI(charge=0, multiplicity=1, ms=0.0)
-    ci_triplet = AutoCI(
-        charge=0,
-        multiplicity=3,
-        ms=0.0,
-        nroot=2,
-        weights=[0.85, 0.15],
+    singlet = State(nel=rhf.nel, multiplicity=1, ms=0.0)
+    triplet = State(nel=rhf.nel, multiplicity=3, ms=0.0)
+    ci_states = CIStates(
+        states=[singlet, triplet],
+        mo_space=avas,
+        weights=[[0.25], [0.75 * 0.85, 0.75 * 0.15]],
+        nroots=[1, 2],
     )
-    ci = MultiCI([ci_singlet, ci_triplet], weights=[0.25, 0.75])(avas)
-    mc = MCOptimizer()(ci)
+    mc = MCOptimizer(ci_states)(avas)
     mc.run()
 
     eref_singlet = -109.0664322107
     eref_triplet1 = -108.8450131892
     eref_triplet2 = -108.7888580871
 
-    assert ci.E[0] == approx(eref_singlet)
-    assert ci.E[1][0] == approx(eref_triplet1)
-    assert ci.E[1][1] == approx(eref_triplet2)
-    assert ci.E_avg[0] == approx(eref_singlet)
-    assert ci.E_avg[1] == approx(0.85 * eref_triplet1 + 0.15 * eref_triplet2)
-    assert ci.compute_average_energy() == approx(
+    assert mc.E_ci[0] == approx(eref_singlet)
+    assert mc.E_ci[1] == approx(eref_triplet1)
+    assert mc.E_ci[2] == approx(eref_triplet2)
+    assert mc.ci_solver.compute_average_energy() == approx(
         0.25 * eref_singlet + 0.75 * (0.85 * eref_triplet1 + 0.15 * eref_triplet2)
     )
 
@@ -71,8 +68,10 @@ def test_sa_casscf_c2():
         num_active_uocc=4,
         subspace=["C(2s)", "C(2p)"],
     )(rhf)
-    ci = AutoCI(charge=0, multiplicity=1, ms=0.0, nroot=3)(avas)
-    mc = MCOptimizer()(ci)
+    ci_state = CIStates(
+        states=State(nel=rhf.nel, multiplicity=1, ms=0.0), mo_space=avas, nroots=3
+    )
+    mc = MCOptimizer(ci_state)(avas)
     mc.run()
 
     assert rhf.E == approx(erhf)
@@ -90,13 +89,13 @@ def test_sa_casscf_same_mult():
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci = CI(
-        orbitals=[4, 5, 6, 7, 8, 9],
+    ci_state = CIStates(
+        active_spaces=[4, 5, 6, 7, 8, 9],
         core_orbitals=[0, 1, 2, 3],
-        state=State(nel=14, multiplicity=1, ms=0.0),
-        nroot=2,
-    )(rhf)
-    mc = MCOptimizer(gconv=1e-7)(ci)
+        states=State(nel=14, multiplicity=1, ms=0.0),
+        nroots=2,
+    )
+    mc = MCOptimizer(ci_state, gconv=1e-7)(rhf)
     mc.run()
     assert rhf.E == approx(erhf)
     assert mc.E == approx(ecasscf)
@@ -111,21 +110,16 @@ def test_sa_casscf_diff_mult():
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci_singlet = CI(
+    singlet = State(nel=rhf.nel, multiplicity=1, ms=0.0)
+    triplet = State(nel=rhf.nel, multiplicity=3, ms=0.0)
+    ci_states = CIStates(
+        states=[singlet, triplet],
+        active_spaces=[4, 5, 6, 7, 8, 9],
         core_orbitals=[0, 1, 2, 3],
-        orbitals=[4, 5, 6, 7, 8, 9],
-        state=State(14, multiplicity=1, ms=0.0),
-        nroot=1,
+        weights=[[0.25], [0.75 * 0.85, 0.75 * 0.15]],
+        nroots=[1, 2],
     )
-    ci_triplet = CI(
-        core_orbitals=[0, 1, 2, 3],
-        orbitals=[4, 5, 6, 7, 8, 9],
-        state=State(14, multiplicity=3, ms=0.0),
-        nroot=2,
-        weights=[0.85, 0.15],
-    )
-    ci = MultiCI([ci_singlet, ci_triplet], weights=[0.25, 0.75])(rhf)
-    mc = MCOptimizer()(ci)
+    mc = MCOptimizer(ci_states)(rhf)
     mc.run()
 
     eref_singlet = -109.0664322107
@@ -156,12 +150,12 @@ def test_sa_casscf_hf():
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pvtz-jkfit")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci = CI(
-        orbitals=[0, 1, 2, 3, 4, 5],
-        state=State(nel=10, multiplicity=1, ms=0.0),
-        nroot=4,
-    )(rhf)
-    mc = MCOptimizer(econv=1e-12, gconv=1e-12)(ci)
+    ci_state = CIStates(
+        active_spaces=[0, 1, 2, 3, 4, 5],
+        states=State(nel=10, multiplicity=1, ms=0.0),
+        nroots=4,
+    )
+    mc = MCOptimizer(ci_state, econv=1e-12, gconv=1e-12)(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)
