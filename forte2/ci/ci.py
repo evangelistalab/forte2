@@ -473,21 +473,37 @@ class CIBase:
 
         Parameters
         ----------
-            ci_l : NDArray
-                Left CI vector in the CSF basis.
-            ci_r : NDArray
-                Right CI vector in the CSF basis.
+        ci_l : NDArray
+            Left CI vector in the CSF basis.
+        ci_r : NDArray
+            Right CI vector in the CSF basis.
 
         Returns
         -------
-            NDArray
-                Spin-free two-particle transition density matrix.
+        (norb, )*4 NDArray
+            Spin-free two-particle transition density matrix.
         """
         ci_l_det = np.zeros((self.ndet))
         ci_r_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_l, ci_l_det)
         self.spin_adapter.csf_C_to_det_C(ci_r, ci_r_det)
         return self.ci_sigma_builder.rdm2_sf(ci_l_det, ci_r_det)
+
+    def compute_natural_occupation_numbers(self):
+        """
+        Compute the natural occupation numbers from the spin-free 1-RDMs.
+
+        Returns
+        -------
+        (norb, nroot) NDArray
+            The natural occupation numbers for each root.
+        """
+        no = np.zeros((self.norb, self.nroot))
+        for i in range(self.nroot):
+            g1 = self.make_rdm1_sf(self.evecs[:, i])
+            no[:, i] = np.linalg.eigvalsh(g1)
+
+        return no
 
     def set_ints(self, scalar, oei, tei):
         """
@@ -858,6 +874,26 @@ class CISolver:
             ci_solver.ints.H = oei
             ci_solver.ints.V = tei
 
+    def pretty_print_ci_nat_occ_numbers(self):
+        """
+        Pretty print the natural occupation numbers for the CI states.
+        """
+        nroots = self.ci_states.nroots_sum
+        nos = []
+        width = 5 + 10 * nroots
+        for ci_solver in self.ci_solvers:
+            nos.append(ci_solver.compute_natural_occupation_numbers())
+        nos = np.concatenate(nos, axis=1)
+        logger.log_info1("\nNatural occupation numbers:")
+        logger.log_info1("=" * width)
+        logger.log_info1("Orb. " + "".join([f"Root {i:<5d}" for i in range(nroots)]))
+        logger.log_info1("-" * width)
+        for i in range(self.norb):
+            line = f"{self.ci_states.mo_space.active_orbitals[i]:<5d}"
+            line += "".join([f"{nos[i, j]:<10.5f}" for j in range(nroots)])
+            logger.log_info1(line)
+        logger.log_info1("=" * width)
+
 
 @dataclass
 class CI(CISolver):
@@ -872,6 +908,7 @@ class CI(CISolver):
 
     def _post_process(self):
         pretty_print_ci_summary(self.ci_states, self.evals_per_solver)
+        self.pretty_print_ci_nat_occ_numbers()
 
 
 def pretty_print_ci_summary(cistates: CIStates, eigvals_per_solver: list[list[float]]):
