@@ -1,10 +1,10 @@
 import pytest
 
-from forte2 import System, RHF, MCOptimizer, AVAS, CIStates, State, CI
+from forte2 import System, RHF, MCOptimizer, AVAS, CIStates, State
 from forte2.helpers.comparisons import approx
 
 
-def test_sa_mcscf_diff_mult_with_autoci():
+def test_sa_mcscf_diff_mult_with_avas():
     # This should be strictly identical to test_mcscf_sa_diff_mult given a sufficiently robust MCSCF solver.
     xyz = f"""
     N 0.0 0.0 0.0

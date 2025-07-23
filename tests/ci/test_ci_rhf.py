@@ -42,7 +42,7 @@ def test_ci_2():
     assert ci.E[0] == approx(-100.019788438077)
 
 
-def test_multici_n2():
+def test_sa_ci_n2():
     xyz = f"""
     N 0.0 0.0 0.0
     N 0.0 0.0 1.2
@@ -73,8 +73,8 @@ def test_multici_n2():
     )
 
 
-def test_multici_with_avas():
-    # This won't be strictly identical to test_multici_n2 because AVAS will select different orbitals
+def test_sa_ci_with_avas():
+    # This won't be strictly identical to test_sa_ci_n2 because AVAS will select different orbitals
     eref_singlet = -109.061384781871
     eref_triplet1 = -108.833136404913
     eref_triplet2 = -108.777400848037

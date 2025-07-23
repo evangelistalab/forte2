@@ -16,10 +16,56 @@ from forte2.system.system import System
 @dataclass
 class CIBase:
     """
-    A general configuration interaction (CI) solver class.
-    This solver is designed to be potentially called iteratively,
-    for example in a MCSCF loop or a DSRG reference relaxation loop.
-    For a single CI calculation, use the `CI` class instead.
+    A general configuration interaction (CI) solver class for a single `State`.
+    Although possible, is not recommended to instantiate this class directly.
+    Consider using the `CI` class instead.
+
+    Parameters
+    ----------
+    mo_space : MOSpace
+        Specifies the GASes and core orbitals.
+    state : State
+        The electronic state for which the CI is solved.
+    ints : RestrictedMOIntegrals
+        The molecular orbital integrals for the system.
+    nroot : int
+        The number of roots to compute.
+    do_test_rdms : bool, optional, default=False
+        If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
+    log_level : int, optional
+        The logging level for the CI solver. Defaults to the global logger's verbosity level.
+    ci_algorithm : str, optional, default="hz"
+        The algorithm used for the CI sigma builder.
+    guess_per_root : int, optional, default=2
+        The number of guess vectors for each root.
+    ndets_per_guess : int, optional, default=10
+        The number of determinants per guess vector.
+    collapse_per_root : int, optional, default=2
+        The number of determinants to collapse per root.
+    basis_per_root : int, optional, default=4
+        The maximum number of basis vectors per root.
+    maxiter : int, optional, default=100
+        The maximum number of iterations for the Davidson-Liu solver.
+    econv : float, optional, default=1e-10
+        The energy convergence threshold for the solver.
+    rconv : float, optional, default=1e-5
+        The residual convergence threshold for the solver.
+    gas_min : list[int], optional, default=[]
+        The minimum number of orbitals in each general orbital space (GAS).
+    gas_max : list[int], optional, default=[]
+        The maximum number of orbitals in each general orbital space (GAS).
+    energy_shift : float, optional, default=None
+        An energy shift to find roots around. If None, no shift is applied.
+
+    Attributes
+    ----------
+    eigensolver : DavidsonLiuSolver
+        The eigensolver used to find the roots of the CI problem.
+    E (evals) : NDArray
+        The eigenvalues (energies) of the CI problem.
+    evecs : NDArray
+        The eigenvectors (CI coefficients) of the CI problem.
+
     """
 
     mo_space: MOSpace
@@ -409,13 +455,13 @@ class CIBase:
 
         Parameters
         ----------
-            ci_vec : NDArray
-                CI vector in the CSF basis.
+        ci_vec : NDArray
+            CI vector in the CSF basis.
 
         Returns
         -------
-            NDArray
-                Spin-free two-particle RDM.
+        NDArray
+            Spin-free two-particle RDM.
         """
         ci_vec_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
@@ -489,10 +535,48 @@ class CIBase:
 class CIStates:
     """
     A class to hold information about state averaging in multireference calculations.
+
+    Parameters
+    ----------
+    states : list[State] | State
+        A list of `State` objects or a single `State` object representing the electronic states.
+        This also includes the gas_min and gas_max attributes.
+    nroots : list[int] | int, optional, default=1
+        A list of integers specifying the number of roots for each state.
+        If only one state is provided, this can be a single integer.
+    weights : list[list[float]], optional
+        A list of lists of floats specifying the weights for each root in each state.
+        These do not have to be normalized, but must be non-negative.
+        If not provided, equal weights are assigned to each root.
+    mo_space : MOSpace | AVAS, optional
+        The molecular orbital space defining the active spaces and core orbitals.
+        This is used with each `State` to define a `CIBase` solver.
+        If not provided, it will be constructed from `core_orbitals` and `active_spaces`.
+        An `AVAS` object can provided here instead, it does not need to be run first.
+    core_orbitals : list[int], optional
+        A list of integers specifying the core orbitals.
+        If `AVAS` is provided, this field will be fetched from it after its execution.
+    active_spaces : list[list[int]], optional
+        A list of lists of integers specifying the orbital indices for each GAS.
+        If `AVAS` is provided, this field will be fetched from it after its execution.
+
+    Attributes
+    ----------
+    ncis : int
+        The number of CI states, which is the length of the `states` list.
+    nroots_sum : int
+        The total number of roots across all states.
+    weights_flat : NDArray
+        A flattened array of weights for all roots across all states.
+    norb : int
+        The number of active orbitals in the molecular orbital space.
+    ncore : int
+        The number of core orbitals in the molecular orbital space.
+        If `AVAS` is provided, this is only available after its execution.
     """
 
-    states: list[State]
-    nroots: list[int] = 1
+    states: list[State] | State
+    nroots: list[int] | int = 1
     weights: list[list[float]] = None
     mo_space: MOSpace | AVAS = None
     core_orbitals: list[int] = None
@@ -586,8 +670,35 @@ class CIStates:
 class CISolver:
     """
     A general configuration interaction (CI) solver class.
-    This solver is designed to be potentially called iteratively,
-    for example in a MCSCF loop or a DSRG reference relaxation loop.
+    This solver is can be called iteratively, e.g., in a MCSCF loop or a DSRG reference relaxation loop.
+
+    Parameters
+    ----------
+    ci_states : CIStates
+        An instance of `CIStates` that holds information about the states to be solved.
+        This enables arbitrary state averaging in multireference calculations.
+    guess_per_root : int, optional, default=2
+        The number of guess vectors for each root.
+    ndets_per_guess : int, optional, default=10
+        The number of determinants per guess vector.
+    collapse_per_root : int, optional, default=2
+        The number of determinants to collapse per root.
+    basis_per_root : int, optional, default=4
+        The maximum number of basis vectors per root.
+    maxiter : int, optional, default=100
+        The maximum number of iterations for the Davidson-Liu solver.
+    econv : float, optional, default=1e-10
+        The energy convergence threshold for the solver.
+    rconv : float, optional, default=1e-5
+        The residual convergence threshold for the solver.
+    energy_shift : float, optional, default=None
+        An energy shift to find roots around. If None, no shift is applied.
+    do_test_rdms : bool, optional, default=False
+        If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
+    log_level : int, optional
+        The logging level for the CI solver. Defaults to the global logger's verbosity level.
+    ci_algorithm : str, optional, default="hz"
+        The algorithm used for the CI sigma builder.
     """
 
     ci_states: CIStates
@@ -716,7 +827,8 @@ class CISolver:
         Returns
         -------
         NDArray
-            Average spin-free two-particle RDM."""
+            Average spin-free two-particle RDM.
+        """
         rdm2 = np.zeros((self.norb,) * 4)
         for i, ci_solver in enumerate(self.ci_solvers):
             for j in range(ci_solver.nroot):
@@ -747,7 +859,8 @@ class CISolver:
 @dataclass
 class CI(CISolver):
     """
-    A configuration interaction (CI) solver class for a single CI calculation.
+    CI solver specialized for a single CI calculation. (i.e., not used in a loop).
+    See `CISolver` for all parameters and attributes.
     """
 
     def run(self):
@@ -759,6 +872,16 @@ class CI(CISolver):
 
 
 def pretty_print_ci_summary(cistates: CIStates, eigvals_per_solver: list[list[float]]):
+    """
+    Pretty print the CI energy summary for the given CI states and eigenvalues.
+
+    Parameters
+    ----------
+    cistates : CIStates
+        An instance of `CIStates` that holds information about the states and their properties.
+    eigvals_per_solver : list[list[float]]
+        A list of lists containing the eigenvalues (energies) for each CI solver.
+    """
     ncis = cistates.ncis
     mult = [state.multiplicity for state in cistates.states]
     ms = [state.ms for state in cistates.states]
