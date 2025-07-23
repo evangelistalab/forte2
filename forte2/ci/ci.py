@@ -578,7 +578,8 @@ class CIStates:
     states: list[State] | State
     nroots: list[int] | int = 1
     weights: list[list[float]] = None
-    mo_space: MOSpace | AVAS = None
+    mo_space: MOSpace = None
+    avas: AVAS = None
     core_orbitals: list[int] = None
     active_spaces: list[list[int]] = None
 
@@ -594,10 +595,10 @@ class CIStates:
         self.ncis = len(self.states)
 
         # 2. Make mo_space from core_orbitals and active_spaces if mo_space is not provided
-        if self.mo_space is None:
+        if self.mo_space is None and self.avas is None:
             assert (
                 self.active_spaces is not None
-            ), "If mo_space is not provided, active_spaces must be provided"
+            ), "If mo_space or avas is not provided, active_spaces must be provided"
             if self.core_orbitals is None:
                 self.core_orbitals = []
             self.mo_space = MOSpace(
@@ -634,10 +635,12 @@ class CIStates:
             assert np.all(self.weights_flat >= 0), "Weights must be non-negative"
 
     def fetch_mo_space(self):
-        if isinstance(self.mo_space, AVAS):
-            assert (
-                self.mo_space.executed
-            ), "AVAS must be executed before fetching MOSpace"
+        if self.avas is not None:
+            assert self.avas.executed, "AVAS must be executed before fetching MOSpace"
+            self.mo_space = MOSpace(
+                core_orbitals=self.avas.core_orbitals,
+                active_spaces=self.avas.active_spaces,
+            )
         self.norb = self.mo_space.nactv
         self.ncore = self.mo_space.ncore
         self.active_orbitals = self.mo_space.active_orbitals

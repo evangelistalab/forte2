@@ -25,7 +25,7 @@ def test_sa_mcscf_diff_mult_with_avas():
     triplet = State(nel=rhf.nel, multiplicity=3, ms=0.0)
     ci_states = CIStates(
         states=[singlet, triplet],
-        mo_space=avas,
+        avas=avas,
         weights=[[0.25], [0.75 * 0.85, 0.75 * 0.15]],
         nroots=[1, 2],
     )
@@ -69,7 +69,7 @@ def test_sa_casscf_c2():
         subspace=["C(2s)", "C(2p)"],
     )(rhf)
     ci_state = CIStates(
-        states=State(nel=rhf.nel, multiplicity=1, ms=0.0), mo_space=avas, nroots=3
+        states=State(nel=rhf.nel, multiplicity=1, ms=0.0), avas=avas, nroots=3
     )
     mc = MCOptimizer(ci_state)(avas)
     mc.run()

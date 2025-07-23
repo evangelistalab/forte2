@@ -59,3 +59,4 @@ def test_rhf_cholesky():
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)
+test_rhf_zero_virtuals()

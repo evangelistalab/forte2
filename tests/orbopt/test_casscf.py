@@ -245,7 +245,7 @@ def test_casscf_singlet_benzyne():
         unit="bohr",
     )
 
-    rhf = RHF(charge=0, econv=1)(system)
+    rhf = RHF(charge=0, econv=1e-12)(system)
     ci_state = CIStates(
         core_orbitals=list(range(19)),
         active_spaces=[19, 20],
