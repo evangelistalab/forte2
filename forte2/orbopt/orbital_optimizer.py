@@ -77,17 +77,17 @@ class MCOptimizer(MOsMixin, SystemMixin):
         if not self.parent_method.executed:
             self.parent_method.run()
 
+        SystemMixin.copy_from_upstream(self, self.parent_method)
+        MOsMixin.copy_from_upstream(self, self.parent_method)
+
         self.ci_states.fetch_mo_space()
         self.ci_states.pretty_print_ci_states()
         self.ncis = self.ci_states.ncis
-        self.core_orbitals = self.ci_states.core_orbitals
-        self.active_orbitals = self.ci_states.active_orbitals
+        # self.core_orbitals = self.ci_states.core_orbitals
+        # self.active_orbitals = self.ci_states.active_orbitals
         self.norb = self.ci_states.norb
         self.weights = self.ci_states.weights
         self.weights_flat = self.ci_states.weights_flat
-
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
 
         self._make_spaces_contiguous()
         self.nrr = self._get_nonredundant_rotations()
@@ -274,15 +274,13 @@ class MCOptimizer(MOsMixin, SystemMixin):
         Swap the orbitals to ensure that the core, active, and virtual orbitals
         are contiguous in the flattened orbital array.
         """
-        # [todo] handle GAS/RHF/ROHF cases
-        core = self.core_orbitals
-        actv = self.active_orbitals
-        virt = sorted(list(set(range(self.system.nbf)) - set(core) - set(actv)))
-        argsort = np.argsort(core + actv + virt)
+        self.ci_states.mo_space.make_spaces_contiguous(self.system.nbf)
+        argsort = self.ci_states.mo_space.argsort
         self.C[0][:, argsort] = self.C[0].copy()
-        self.core = slice(0, len(core))
-        self.actv = slice(len(core), len(core) + len(actv))
-        self.virt = slice(len(core) + len(actv), None)
+        self.core = self.ci_states.mo_space.core
+        # self.actv will be a list if multiple GASes are defined
+        self.actv = self.ci_states.mo_space.actv
+        self.virt = self.ci_states.mo_space.virt
 
     def _get_nonredundant_rotations(self):
         nrr = np.zeros((self.system.nbf, self.system.nbf), dtype=bool)

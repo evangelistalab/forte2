@@ -99,7 +99,7 @@ def test_sa_ci_with_avas():
     triplet = State(14, multiplicity=3, ms=0.0)
     sa_info = CIStates(
         states=[singlet, triplet],
-        mo_space=avas,
+        avas=avas,
         nroots=[1, 2],
         weights=[[1.0], [0.85, 0.15]],
     )

@@ -137,6 +137,7 @@ class AVAS(MOsMixin, SystemMixin):
             assert self.num_active > 0, "Number of active orbitals must be positive."
 
     def _parse_subspace(self, ss_str):
+        found = False
         mgroups = re.match(self._regex, ss_str).groups()
 
         # m[0] is the element symbol
@@ -177,6 +178,7 @@ class AVAS(MOsMixin, SystemMixin):
                         m = (self.minao_labels[pos].m + 1) % 3
                         c = self.atom_normals[(Z, A)][m]
                         self.minao_subspace.append((pos, self.subspace_counter, c))
+                        found = True
                         # Only add 1 to subspace_counter for an entire set of p orbitals
                         # here we use m=2 arbitrarily
                         self.subspace_counter += (
@@ -184,6 +186,7 @@ class AVAS(MOsMixin, SystemMixin):
                         )
                     else:
                         self.minao_subspace.append((pos, self.subspace_counter, 1.0))
+                        found = True
                         self.subspace_counter += 1
         else:
             n = int(mgroups[3][0])
@@ -201,6 +204,7 @@ class AVAS(MOsMixin, SystemMixin):
                             m = (self.minao_labels[pos].m + 1) % 3
                             c = self.atom_normals[(Z, A)][m]
                             self.minao_subspace.append((pos, self.subspace_counter, c))
+                            found = True
                     # Only add 1 to subspace_counter for an entire set of p orbitals
                     self.subspace_counter += 1
                 # if the subset is completely specified, e.g., "C2-3(3dz2)",
@@ -217,7 +221,13 @@ class AVAS(MOsMixin, SystemMixin):
                                 self.minao_subspace.append(
                                     (pos, self.subspace_counter, 1.0)
                                 )
+                                found = True
                                 self.subspace_counter += 1
+
+        if not found:
+            raise ValueError(
+                f"Subspace specification {ss_str} does not match any AOs in the minao_basis."
+            )
 
     def _print_subspace_info(self):
         logger.log_info1(

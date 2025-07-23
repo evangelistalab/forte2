@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+import numpy as np
 
 
 @dataclass
@@ -53,3 +54,29 @@ class MOSpace:
         assert (
             len(set(self.core_orbitals)) == self.ncore
         ), "Core orbitals must be unique."
+
+        assert (
+            len(set(self.active_orbitals + self.core_orbitals))
+            == self.nactv + self.ncore
+        ), "Active and core orbitals must not overlap."
+
+    def make_spaces_contiguous(self, nmo):
+        """
+        Swap the orbitals to ensure that the core, active, and virtual orbitals
+        are contiguous in the flattened orbital array.
+        """
+        core = self.core_orbitals
+        actv_sorted = [sorted(actv) for actv in self.active_spaces]
+        actv_sorted_flat = [item for sublist in actv_sorted for item in sublist]
+        virt = sorted(list(set(range(nmo)) - set(core) - set(actv_sorted_flat)))
+        self.argsort = np.argsort(core + actv_sorted_flat + virt)
+        self.inv_argsort = actv_sorted_flat
+        self.core = slice(0, len(core))
+        self.virt = slice(len(core) + len(actv_sorted_flat), nmo)
+        self.actv = []
+        i = len(core)
+        for actv in actv_sorted:
+            self.actv.append(slice(i, i + len(actv)))
+            i += len(actv)
+        if len(actv_sorted) == 1:
+            self.actv = self.actv[0]
