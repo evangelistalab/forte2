@@ -47,6 +47,7 @@ class System:
     cholesky_tei : bool, optional, default=False
         If True, auxiliary basis sets (if any) will be disregarded, and the B tensor will be built using the Cholesky decomposition of the 4D ERI tensor instead.
     cholesky_tol : float, optional, default=1e-6
+        The tolerance for the Cholesky decomposition of the 4D ERI tensor. Only used if `cholesky_tei` is True.
 
     Attributes
     ----------

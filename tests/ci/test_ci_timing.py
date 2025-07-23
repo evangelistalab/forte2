@@ -18,12 +18,12 @@ def timing(n):
     ms = 0.5 * (n % 2)  # Unpaired electrons for odd n
     rohf = ROHF(charge=0, ms=0.5 * (n % 2), econv=1e-12)(system)
     rohf.run()
-    ci = CI(
-        orbitals=list(range(n)),
-        state=State(nel=n, multiplicity=multiplicity, ms=ms),
-        nroot=1,
-        econv=1e-12,
-    )(rohf)
+    ci_state = CIStates(
+        active_spaces=list(range(n)),
+        states=State(nel=n, multiplicity=multiplicity, ms=ms),
+        nroots=1,
+    )
+    ci = CI(ci_state, econv=1e-12)(rohf)
     start = time.monotonic()
     ci.run()
     end = time.monotonic()
