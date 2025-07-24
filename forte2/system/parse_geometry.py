@@ -55,10 +55,7 @@ def parse_geometry(geom, unit):
     if not lines:
         raise ValueError("Empty geometry string provided.")
 
-    if not re.match(
-        r"^\s*([A-Z][a-z]?)\s+([-+]?\d*\.\d+|[-+]?\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)\s*$",
-        lines[0],
-    ):
+    if re.match(r"^([A-Z][a-z]?)$", lines[0]):
         return parse_zmatrix(geom, unit)
     else:
         return parse_xyz(geom, unit)
@@ -166,7 +163,7 @@ def parse_zmatrix(zmat, unit):
             coord = np.array([0.0, 0.0, 0.0])
         elif i == 1:
             # Atom with bond length
-            m = re.match(r"^([A-Z][a-z]?)\s+(\d+)\s+([-+]?\d*\.?\d+)$", line)
+            m = re.match(r"^([A-Z][a-z]?)\s+(\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)$", line)
             if not m:
                 raise ValueError(f"Invalid Z-matrix line {i+1}: {line}")
             symbol, i1, r = m.groups()
@@ -174,7 +171,7 @@ def parse_zmatrix(zmat, unit):
         elif i == 2:
             # Atom with bond length and angle
             m = re.match(
-                r"^([A-Z][a-z]?)\s+(\d+)\s+([-+]?\d*\.?\d+)\s+(\d+)\s+([-+]?\d*\.?\d+)$",
+                r"^([A-Z][a-z]?)\s+(\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)\s+(\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)$",
                 line,
             )
             if not m:
@@ -197,9 +194,9 @@ def parse_zmatrix(zmat, unit):
             coord = c + p1
         else:
             m = re.match(
-                r"^([A-Z][a-z]?)\s+(\d+)\s+([-+]?\d*\.?\d+)"
-                r"\s+(\d+)\s+([-+]?\d*\.?\d+)"
-                r"\s+(\d+)\s+([-+]?\d*\.?\d+)$",
+                r"^([A-Z][a-z]?)\s+(\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)"
+                r"\s+(\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)"
+                r"\s+(\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)$",
                 line,
             )
             if not m:
