@@ -6,7 +6,7 @@ from forte2.helpers import logger
 from forte2.helpers.matrix_functions import invsqrt_matrix, canonical_orth
 from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
-from .parse_xyz import parse_xyz
+from .parse_geometry import parse_geometry
 from .atom_data import ATOM_DATA, Z_TO_ATOM_SYMBOL
 
 import numpy as np
@@ -120,7 +120,7 @@ class System:
             "angstrom",
             "bohr",
         ], f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'."
-        self.atoms = parse_xyz(self.xyz, self.unit)
+        self.atoms = parse_geometry(self.xyz, self.unit)
         self.natoms = len(self.atoms)
         self.atomic_charges = np.array([atom[0] for atom in self.atoms])
         self.atomic_masses = np.array(
@@ -155,7 +155,9 @@ class System:
                 else None
             )
             if self.auxiliary_basis_set_corr is not None:
-                logger.log_warning(f"Using a separate auxiliary basis is not recommended!")
+                logger.log_warning(
+                    f"Using a separate auxiliary basis is not recommended!"
+                )
                 self.auxiliary_basis_set_corr = build_basis(
                     self.auxiliary_basis_set_corr, self.atoms
                 )
@@ -164,7 +166,7 @@ class System:
         else:
             self.auxiliary_basis = None
             self.auxiliary_basis_set_corr = None
-        
+
         self.minao_basis = (
             build_basis(self.minao_basis_set, self.atoms)
             if self.minao_basis_set is not None
