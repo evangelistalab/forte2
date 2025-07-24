@@ -14,6 +14,144 @@ from forte2.system.system import System
 
 
 @dataclass
+class CIStates:
+    """
+    A class to hold information about state averaging in multireference calculations.
+
+    Parameters
+    ----------
+    states : list[State] | State
+        A list of `State` objects or a single `State` object representing the electronic states.
+        This also includes the gas_min and gas_max attributes.
+    nroots : list[int] | int, optional, default=1
+        A list of integers specifying the number of roots for each state.
+        If only one state is provided, this can be a single integer.
+    weights : list[list[float]], optional
+        A list of lists of floats specifying the weights for each root in each state.
+        These do not have to be normalized, but must be non-negative.
+        If not provided, equal weights are assigned to each root.
+    mo_space : MOSpace | AVAS, optional
+        The molecular orbital space defining the active spaces and core orbitals.
+        This is used with each `State` to define a `_CIBase` solver.
+        If not provided, it will be constructed from `core_orbitals` and `active_spaces`.
+        An `AVAS` object can provided here instead, it does not need to be run first.
+    core_orbitals : list[int], optional
+        A list of integers specifying the core orbitals.
+        If `AVAS` is provided, this field will be fetched from it after its execution.
+    active_spaces : list[list[int]], optional
+        A list of lists of integers specifying the orbital indices for each GAS.
+        If `AVAS` is provided, this field will be fetched from it after its execution.
+
+    Attributes
+    ----------
+    ncis : int
+        The number of CI states, which is the length of the `states` list.
+    nroots_sum : int
+        The total number of roots across all states.
+    weights_flat : NDArray
+        A flattened array of weights for all roots across all states.
+    norb : int
+        The number of active orbitals in the molecular orbital space.
+    ncore : int
+        The number of core orbitals in the molecular orbital space.
+        If `AVAS` is provided, this is only available after its execution.
+    """
+
+    states: list[State] | State
+    nroots: list[int] | int = 1
+    weights: list[list[float]] = None
+    mo_space: MOSpace = None
+    avas: AVAS = None
+    core_orbitals: list[int] = None
+    active_spaces: list[list[int]] = None
+
+    def __post_init__(self):
+        # 1. Validate states
+        if isinstance(self.states, State):
+            self.states = [self.states]
+        assert isinstance(self.states, list), "states_and_mo_spaces must be a list"
+        assert all(
+            isinstance(state, State) for state in self.states
+        ), "All elements in states_and_mo_spaces must be State instances"
+        assert len(self.states) > 0, "states_and_mo_spaces cannot be empty"
+        self.ncis = len(self.states)
+
+        # 2. Make mo_space from core_orbitals and active_spaces if mo_space is not provided
+        if self.mo_space is None and self.avas is None:
+            assert (
+                self.active_spaces is not None
+            ), "If mo_space or avas is not provided, active_spaces must be provided"
+            if self.core_orbitals is None:
+                self.core_orbitals = []
+            self.mo_space = MOSpace(
+                core_orbitals=self.core_orbitals,
+                active_spaces=self.active_spaces,
+            )
+
+        # 3. Validate nroots
+        if isinstance(self.nroots, int):
+            assert (
+                self.ncis == 1
+            ), "If nroots is an integer, there must be exactly one state."
+            self.nroots = [self.nroots]
+        assert isinstance(self.nroots, list), "nroots must be a list"
+        assert all(
+            isinstance(n, int) and n > 0 for n in self.nroots
+        ), "nroots must be a list of positive integers"
+        self.nroots_sum = sum(self.nroots)
+
+        # 4. Validate weights
+        if self.weights is None:
+            self.weights = [[1.0 / self.nroots_sum] * n for n in self.nroots]
+            self.weights_flat = np.concatenate(self.weights)
+        else:
+            assert (
+                sum(len(w) for w in self.weights) == self.nroots_sum
+            ), "Weights must match the total number of roots across all states"
+            self.weights_flat = np.array(
+                [w for sublist in self.weights for w in sublist], dtype=float
+            )
+            n = self.weights_flat.sum()
+            self.weights = [[w / n for w in sublist] for sublist in self.weights]
+            self.weights_flat /= n
+            assert np.all(self.weights_flat >= 0), "Weights must be non-negative"
+
+    def fetch_mo_space(self):
+        if self.avas is not None:
+            assert self.avas.executed, "AVAS must be executed before fetching MOSpace"
+            self.mo_space = MOSpace(
+                core_orbitals=self.avas.core_orbitals,
+                active_spaces=self.avas.active_spaces,
+            )
+        self.norb = self.mo_space.nactv
+        self.ncore = self.mo_space.ncore
+        self.active_orbitals = self.mo_space.active_orbitals
+        self.core_orbitals = self.mo_space.core_orbitals
+
+    def pretty_print_ci_states(self):
+        """
+        Pretty print the CI states
+        """
+        width = 33
+        logger.log_info1("\nRequested CI states:")
+        logger.log_info1("=" * width)
+        logger.log_info1(
+            f"{'Root':>4} {'Nel':>5} {'Mult.':>6} {'Ms':>4} {'Weight':>10}"
+        )
+        logger.log_info1("-" * width)
+        iroot = 0
+        for i, state in enumerate(self.states):
+            for j in range(self.nroots[i]):
+                logger.log_info1(
+                    f"{iroot:>4} {state.nel:>5} {state.multiplicity:>6d} {state.ms:>4.1f} {self.weights[i][j]:>10.6f}"
+                )
+                iroot += 1
+            if i < len(self.states) - 1:
+                logger.log_info1("-" * width)
+        logger.log_info1("=" * width + "\n")
+
+
+@dataclass
 class _CIBase:
     """
     A general configuration interaction (CI) solver class for a single `State`.
@@ -498,6 +636,8 @@ class _CIBase:
         (norb, nroot) NDArray
             The natural occupation numbers for each root.
         """
+        if not self.executed:
+            raise RuntimeError("CI solver has not been executed yet.")
         no = np.zeros((self.norb, self.nroot))
         for i in range(self.nroot):
             g1 = self.make_rdm1_sf(self.evecs[:, i])
@@ -546,143 +686,36 @@ class _CIBase:
         """
         return self.maxiter
 
-
-@dataclass
-class CIStates:
-    """
-    A class to hold information about state averaging in multireference calculations.
-
-    Parameters
-    ----------
-    states : list[State] | State
-        A list of `State` objects or a single `State` object representing the electronic states.
-        This also includes the gas_min and gas_max attributes.
-    nroots : list[int] | int, optional, default=1
-        A list of integers specifying the number of roots for each state.
-        If only one state is provided, this can be a single integer.
-    weights : list[list[float]], optional
-        A list of lists of floats specifying the weights for each root in each state.
-        These do not have to be normalized, but must be non-negative.
-        If not provided, equal weights are assigned to each root.
-    mo_space : MOSpace | AVAS, optional
-        The molecular orbital space defining the active spaces and core orbitals.
-        This is used with each `State` to define a `_CIBase` solver.
-        If not provided, it will be constructed from `core_orbitals` and `active_spaces`.
-        An `AVAS` object can provided here instead, it does not need to be run first.
-    core_orbitals : list[int], optional
-        A list of integers specifying the core orbitals.
-        If `AVAS` is provided, this field will be fetched from it after its execution.
-    active_spaces : list[list[int]], optional
-        A list of lists of integers specifying the orbital indices for each GAS.
-        If `AVAS` is provided, this field will be fetched from it after its execution.
-
-    Attributes
-    ----------
-    ncis : int
-        The number of CI states, which is the length of the `states` list.
-    nroots_sum : int
-        The total number of roots across all states.
-    weights_flat : NDArray
-        A flattened array of weights for all roots across all states.
-    norb : int
-        The number of active orbitals in the molecular orbital space.
-    ncore : int
-        The number of core orbitals in the molecular orbital space.
-        If `AVAS` is provided, this is only available after its execution.
-    """
-
-    states: list[State] | State
-    nroots: list[int] | int = 1
-    weights: list[list[float]] = None
-    mo_space: MOSpace = None
-    avas: AVAS = None
-    core_orbitals: list[int] = None
-    active_spaces: list[list[int]] = None
-
-    def __post_init__(self):
-        # 1. Validate states
-        if isinstance(self.states, State):
-            self.states = [self.states]
-        assert isinstance(self.states, list), "states_and_mo_spaces must be a list"
-        assert all(
-            isinstance(state, State) for state in self.states
-        ), "All elements in states_and_mo_spaces must be State instances"
-        assert len(self.states) > 0, "states_and_mo_spaces cannot be empty"
-        self.ncis = len(self.states)
-
-        # 2. Make mo_space from core_orbitals and active_spaces if mo_space is not provided
-        if self.mo_space is None and self.avas is None:
-            assert (
-                self.active_spaces is not None
-            ), "If mo_space or avas is not provided, active_spaces must be provided"
-            if self.core_orbitals is None:
-                self.core_orbitals = []
-            self.mo_space = MOSpace(
-                core_orbitals=self.core_orbitals,
-                active_spaces=self.active_spaces,
-            )
-
-        # 3. Validate nroots
-        if isinstance(self.nroots, int):
-            assert (
-                self.ncis == 1
-            ), "If nroots is an integer, there must be exactly one state."
-            self.nroots = [self.nroots]
-        assert isinstance(self.nroots, list), "nroots must be a list"
-        assert all(
-            isinstance(n, int) and n > 0 for n in self.nroots
-        ), "nroots must be a list of positive integers"
-        self.nroots_sum = sum(self.nroots)
-
-        # 4. Validate weights
-        if self.weights is None:
-            self.weights = [[1.0 / self.nroots_sum] * n for n in self.nroots]
-            self.weights_flat = np.concatenate(self.weights)
-        else:
-            assert (
-                sum(len(w) for w in self.weights) == self.nroots_sum
-            ), "Weights must match the total number of roots across all states"
-            self.weights_flat = np.array(
-                [w for sublist in self.weights for w in sublist], dtype=float
-            )
-            n = self.weights_flat.sum()
-            self.weights = [[w / n for w in sublist] for sublist in self.weights]
-            self.weights_flat /= n
-            assert np.all(self.weights_flat >= 0), "Weights must be non-negative"
-
-    def fetch_mo_space(self):
-        if self.avas is not None:
-            assert self.avas.executed, "AVAS must be executed before fetching MOSpace"
-            self.mo_space = MOSpace(
-                core_orbitals=self.avas.core_orbitals,
-                active_spaces=self.avas.active_spaces,
-            )
-        self.norb = self.mo_space.nactv
-        self.ncore = self.mo_space.ncore
-        self.active_orbitals = self.mo_space.active_orbitals
-        self.core_orbitals = self.mo_space.core_orbitals
-
-    def pretty_print_ci_states(self):
+    def get_top_determinants(self, n=5):
         """
-        Pretty print the CI states
+        Get the top `n` determinants for each root based on their coefficients in the CI vector.
+
+        Parameters
+        ----------
+        n : int, optional, default=5
+            The number of top determinants to return.
+
+        Returns
+        -------
+        list[list[tuple[Determinant, float]]]
+            A list of lists, where each inner list contains tuples of the top determinants
+            and their coefficients for each root.
         """
-        width = 33
-        logger.log_info1("\nRequested CI states:")
-        logger.log_info1("=" * width)
-        logger.log_info1(
-            f"{'Root':>4} {'Nel':>5} {'Mult.':>6} {'Ms':>4} {'Weight':>10}"
-        )
-        logger.log_info1("-" * width)
-        iroot = 0
-        for i, state in enumerate(self.states):
-            for j in range(self.nroots[i]):
-                logger.log_info1(
-                    f"{iroot:>4} {state.nel:>5} {state.multiplicity:>6d} {state.ms:>4.1f} {self.weights[i][j]:>10.6f}"
-                )
-                iroot += 1
-            if i < len(self.states) - 1:
-                logger.log_info1("-" * width)
-        logger.log_info1("=" * width + "\n")
+        if not self.executed:
+            raise RuntimeError("CI solver has not been executed yet.")
+
+        top_dets_per_root = []
+        for i in range(self.nroot):
+            top_dets = []
+            ci_det = np.zeros((self.ndet))
+            self.spin_adapter.csf_C_to_det_C(self.evecs[:, i], ci_det)
+            argsort = np.argsort(np.abs(ci_det))[::-1]  # descending in absolute coeff
+            for j in range(n):
+                if j < len(argsort):
+                    top_dets.append((self.dets[argsort[j]], ci_det[argsort[j]]))
+            top_dets_per_root.append(top_dets)
+
+        return top_dets_per_root
 
 
 @dataclass
@@ -888,6 +921,25 @@ class CISolver:
             nos.append(ci_solver.compute_natural_occupation_numbers())
         self.nat_occs = np.concatenate(nos, axis=1)
 
+    def get_top_determinants(self, n=5):
+        """
+        Get the top `n` determinants for each root based on their coefficients in the CI vector.
+
+        Parameters
+        ----------
+        n : int, optional, default=5
+            The number of top determinants to return.
+
+        Returns
+        -------
+        top_dets : list[list[tuple[Determinant, float]]]]
+            top_dets[i] contains a list of tuples (Determinant, coefficient) for the `i`-th root.
+        """
+        top_dets = []
+        for ci_solver in self.ci_solvers:
+            top_dets += ci_solver.get_top_determinants(n)
+        return top_dets
+
 
 @dataclass
 class CI(CISolver):
@@ -904,6 +956,8 @@ class CI(CISolver):
         pretty_print_ci_summary(self.ci_states, self.evals_per_solver)
         self.compute_natural_occupation_numbers()
         pretty_print_ci_nat_occ_numbers(self.ci_states, self.nat_occs)
+        top_dets = self.get_top_determinants()
+        pretty_print_ci_dets(self.ci_states, top_dets)
 
 
 def pretty_print_ci_summary(cistates: CIStates, eigvals_per_solver: list[list[float]]):
@@ -945,19 +999,59 @@ def pretty_print_ci_summary(cistates: CIStates, eigvals_per_solver: list[list[fl
 def pretty_print_ci_nat_occ_numbers(cistates: CIStates, nat_occs: np.ndarray):
     """
     Pretty print the natural occupation numbers for the CI states.
+    Roots are rows, orbitals are columns.
     """
     nroots = cistates.nroots_sum
-    width = 5 + 11 * nroots
+    norb = cistates.norb
+    width = 5 + 11 * norb
     logger.log_info1("\nNatural occupation numbers*:")
     logger.log_info1("=" * width)
-    logger.log_info1("Orb. " + "".join([f"Root {i:<6d}" for i in range(nroots)]))
+    
+    # Header with orbital numbers
+    header = "Orb     " + "".join([f"{cistates.mo_space.active_orbitals[i]:<11d}" for i in range(norb)])
+    logger.log_info1(header)
     logger.log_info1("-" * width)
-    for i in range(cistates.norb):
-        line = f"{cistates.mo_space.active_orbitals[i]:<5d}"
-        line += "".join([f"{nat_occs[i, j]:<11.6f}" for j in range(nroots)])
+    
+    # Data rows (one per root)
+    for j in range(nroots):
+        line = f"Root {j:<3d}"
+        line += "".join([f"{nat_occs[i, j]:<11.6f}" for i in range(norb)])
         logger.log_info1(line)
+    
     logger.log_info1("=" * width)
     logger.log_info1(
-        "* The occupation numbers are sorted in descending order\n" \
+        "* The occupation numbers are sorted in descending order\n"
         "  and do not correspond one-to-one to the active MOs."
     )
+
+def pretty_print_ci_dets(cistates: CIStates, top_dets: list[list[list[tuple]]]):
+    """
+    Pretty print the top determinants for each root of the CI states.
+
+    Parameters
+    ----------
+    cistates : CIStates
+        An instance of `CIStates` that holds information about the states and their properties.
+    top_dets : list[list[list[tuple]]]
+        A list of lists containing the top determinants and their coefficients for each root.
+    """
+    width_per_det = 1 + max(12, cistates.norb + 2)  # '|2222000>'
+    ndets_per_root = len(top_dets[0])
+    width = 10 + width_per_det * ndets_per_root
+    nroots = cistates.nroots_sum
+    norb = cistates.norb
+
+    logger.log_info1("\nTop determinants:")
+    logger.log_info1("=" * width)
+    logger.log_info1(f"{'Contrib.':<10}" + "".join([f"{'#'+str(i+1):<{width_per_det}}" for i in range(ndets_per_root)]))
+    logger.log_info1("-" * width)
+    for i in range(nroots):
+        dets = [det for det, _ in top_dets[i]]
+        coeffs = [coeff for _, coeff in top_dets[i]]
+        logstr = f"Root {i:<5}" + "".join([f"{d.str(norb):<{width_per_det}}" for d in dets])
+        logstr += "\n"
+        logstr += " "*10 + "".join([f"{c:<+{width_per_det}.6f}" for c in coeffs])
+        logger.log_info1(logstr)
+        if i < nroots - 1:
+            logger.log_info1("-" * width)
+    logger.log_info1("=" * width)
