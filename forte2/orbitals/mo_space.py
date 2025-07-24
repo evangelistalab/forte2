@@ -41,13 +41,22 @@ class MOSpace:
                     isinstance(x, int) for x in sublist
                 ), "All elements in the sublists must be integers."
             self.ngas = len(self.active_spaces)
+        assert all(
+            sorted(sublist) == sublist for sublist in self.active_spaces
+        ), "All active spaces must be sorted lists of integers."
 
         self.nactv = sum(len(sublist) for sublist in self.active_spaces)
         self.ncore = len(self.core_orbitals)
+        assert (
+            sorted(self.core_orbitals) == self.core_orbitals
+        ), "Core orbitals must be sorted."
         # store a flattened list of all active orbitals
         self.active_orbitals = [
             orb for sublist in self.active_spaces for orb in sublist
         ]
+        assert (
+            sorted(self.active_orbitals) == self.active_orbitals
+        ), "Active orbitals must be sorted."
         assert (
             len(set(self.active_orbitals)) == self.nactv
         ), "Active orbitals must be unique."
@@ -66,17 +75,17 @@ class MOSpace:
         are contiguous in the flattened orbital array.
         """
         core = self.core_orbitals
-        actv_sorted = [sorted(actv) for actv in self.active_spaces]
-        actv_sorted_flat = [item for sublist in actv_sorted for item in sublist]
-        virt = sorted(list(set(range(nmo)) - set(core) - set(actv_sorted_flat)))
-        self.argsort = np.argsort(core + actv_sorted_flat + virt)
-        self.inv_argsort = actv_sorted_flat
+        actv_flat = [item for sublist in self.active_spaces for item in sublist]
+        virt = sorted(list(set(range(nmo)) - set(core) - set(actv_flat)))
+        self.argsort = np.argsort(core + actv_flat + virt)
+        self.inv_argsort = np.zeros_like(self.argsort, dtype=int)
+        self.inv_argsort[self.argsort] = np.arange(nmo, dtype=int)
         self.core = slice(0, len(core))
-        self.virt = slice(len(core) + len(actv_sorted_flat), nmo)
+        self.virt = slice(len(core) + len(actv_flat), nmo)
         self.actv = []
         i = len(core)
-        for actv in actv_sorted:
+        for actv in self.active_spaces:
             self.actv.append(slice(i, i + len(actv)))
             i += len(actv)
-        if len(actv_sorted) == 1:
+        if self.ngas == 1:
             self.actv = self.actv[0]
