@@ -41,7 +41,7 @@ def parse_geometry(geom, unit):
 
     Parameters
     ----------
-    geomr : str
+    geom : str
         Geometry string in XYZ or Z-matrix format.
     unit : str
         Coordinate unit, "bohr" or "angstrom".
@@ -96,7 +96,7 @@ def parse_xyz(xyz, unit):
     """
     atoms = []
     for line in xyz.split("\n"):
-        # look for lines of th form "Li 0.0 0.0 0.0" or "N -10 0 0" and capture the element symbol and coordinates
+        # look for lines of the form "Li 0.0 0.0 0.0" or "N -10 0 0" and capture the element symbol and coordinates
         # Use regex to match the expected format
         m = re.match(
             r"^\s*([A-Z][a-z]?)\s+([-+]?\d*\.\d+|[-+]?\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)\s*$",
@@ -142,9 +142,21 @@ def parse_zmatrix(zmat, unit):
     Raises
     ------
     ValueError
-        If a line in the Z-matrix string does not match the expected format or has an incorrect number of coordinates.
+        If a line in the Z-matrix string does not match the expected format.
 
     Examples
+    --------
+    Unit bohr:
+    H
+    O 1 0.9
+    O 2 1.4 1 105.0
+    H 3 0.9 2 105.0 1 120.0
+
+    Should return:
+    [[ 0.          0.          0.        ]
+    [ 1.70075351  0.          0.        ]
+    [ 2.38548947  0.         -2.55546938]
+    [ 3.29283067  1.42270804 -2.76806356]]
 
     """
 
