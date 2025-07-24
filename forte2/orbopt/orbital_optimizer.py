@@ -260,6 +260,8 @@ class MCOptimizer(MOsMixin, SystemMixin):
         forte2.ci.pretty_print_ci_nat_occ_numbers(
             self.ci_states, self.ci_solver.nat_occs
         )
+        top_dets = self.ci_solver.get_top_determinants()
+        forte2.ci.pretty_print_ci_dets(self.ci_states, top_dets)
         self._print_ao_composition()
 
     def _print_ao_composition(self):
