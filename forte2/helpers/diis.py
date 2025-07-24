@@ -15,7 +15,7 @@ class DIIS:
     ----------
     diis_start : int, optional, default=3
         Start saving DIIS vectors after this many iterations.
-        A value less than 1 means no DIIS
+        A value less than 0 means no DIIS
     diis_nvec : int, optional, default=8
         The number of vectors to keep in the DIIS.
     diis_min : int, optional, default=3
@@ -47,7 +47,7 @@ class DIIS:
         if self.diis_min > self.diis_nvec:
             raise ValueError("diis_min must be less than or equal to diis_nvec")
 
-        turn_off = (self.diis_start < 1) or (self.diis_nvec < 1)
+        turn_off = (self.diis_start < 0) or (self.diis_nvec < 1)
         if self.do_diis is True and turn_off:
             logger.log_warning(
                 "DIIS is turned off due to diis_start < 1 or diis_nvec < 1."
@@ -61,7 +61,7 @@ class DIIS:
             # Initialize the parameter and error double-ended queues (deques)
             self.p_diis = deque(maxlen=self.diis_nvec)
             self.e_diis = deque(maxlen=self.diis_nvec)
-            self.iter = -1
+            self.iter = 0
 
     def update(self, p: NDArray, e: NDArray) -> NDArray:
         """

@@ -35,3 +35,28 @@ H       -0.8580037770      4.8559228717     -0.0859634340
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)
+
+
+@pytest.mark.slow
+def test_rhf_cu2o7():
+    """Test RHF with [Cu2O7]10- molecule."""
+    eref = -3795.039253387557
+    xyz = """
+    Cu 0 -1.9 0
+    O 0 0 0
+    Cu 0 1.9 0
+    O 0 -3.8 0
+    O 0 3.8 0
+    O 1.9 1.9 0
+    O 1.9 -1.9 0
+    O -1.9 1.9 0
+    O -1.9 -1.9 0
+    """
+    system = forte2.System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="def2-universal-JKFIT",
+    )
+    mf = RHF(charge=-10)(system)
+    mf.run()
+    assert mf.E == approx(eref)

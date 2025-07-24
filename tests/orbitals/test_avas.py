@@ -39,6 +39,29 @@ def test_avas_inputs():
         )(rhf)
 
 
+def test_avas_subspace():
+    xyz = f"""
+    N 0.0 0.0 0.0
+    N 0.0 0.0 1.2
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        minao_basis_set="sto-3g",
+    )
+
+    rhf = RHF(charge=0, econv=1e-12)(system)
+
+    # sto-3g does not have 3p orbitals
+    with pytest.raises(Exception):
+        avas = AVAS(
+            selection_method="separate",
+            subspace=["N(3p)"],
+        )(rhf)
+
+
 def test_avas_separate_n2():
     eref_casci = -109.00462206150347
     eref_casci_avas = -109.005019207444
@@ -104,7 +127,7 @@ def test_avas_rohf_n2plus():
         num_active_uocc=3,
         diagonalize=True,
     )(rhf)
-    ci_state = CIStates(mo_space=avas, states=State(nel=13, multiplicity=2, ms=0.5))
+    ci_state = CIStates(avas=avas, states=State(nel=13, multiplicity=2, ms=0.5))
     casci = CI(ci_state)(avas)
     casci.run()
     assert casci.E[0] == approx(eref_avas)
@@ -128,7 +151,7 @@ def test_avas_rohf_n2minus():
         num_active_uocc=2,
         diagonalize=True,
     )(rhf)
-    ci_state = CIStates(mo_space=avas, states=State(nel=15, multiplicity=2, ms=0.5))
+    ci_state = CIStates(avas=avas, states=State(nel=15, multiplicity=2, ms=0.5))
     casci = CI(ci_state)(avas)
     casci.run()
     assert casci.E[0] == approx(eref_avas)
@@ -153,9 +176,7 @@ def test_avas_cumulative_h2co_all():
         sigma=1.0,
         diagonalize=True,
     )(rhf)
-    ci_state = CIStates(
-        mo_space=avas, states=State(nel=rhf.nel, multiplicity=1, ms=0.0)
-    )
+    ci_state = CIStates(avas=avas, states=State(nel=rhf.nel, multiplicity=1, ms=0.0))
     casci = CI(ci_state)(avas)
     casci.run()
 
@@ -181,9 +202,7 @@ def test_avas_cumulative_h2co_98pc():
         sigma=0.98,
         diagonalize=True,
     )(rhf)
-    ci_state = CIStates(
-        mo_space=avas, states=State(nel=rhf.nel, multiplicity=1, ms=0.0)
-    )
+    ci_state = CIStates(avas=avas, states=State(nel=rhf.nel, multiplicity=1, ms=0.0))
     casci = CI(ci_state)(avas)
     casci.run()
     assert casci.E[0] == approx(eref_avas_98pc)
@@ -208,9 +227,7 @@ def test_avas_total_h2co():
         num_active=2,
         diagonalize=True,
     )(rhf)
-    ci_state = CIStates(
-        mo_space=avas, states=State(nel=rhf.nel, multiplicity=1, ms=0.0)
-    )
+    ci_state = CIStates(avas=avas, states=State(nel=rhf.nel, multiplicity=1, ms=0.0))
     casci = CI(ci_state)(avas)
     casci.run()
     assert casci.E[0] == approx(eref_avas_98pc)
@@ -237,9 +254,7 @@ def test_avas_separate_h2co():
         num_active_uocc=2,
         diagonalize=True,
     )(rhf)
-    ci_state = CIStates(
-        mo_space=avas, states=State(nel=rhf.nel, multiplicity=1, ms=0.0)
-    )
+    ci_state = CIStates(avas=avas, states=State(nel=rhf.nel, multiplicity=1, ms=0.0))
     casci = CI(ci_state)(avas)
     casci.run()
     assert casci.E[0] == approx(eref_avas)
@@ -267,9 +282,7 @@ def test_avas_subspace_planes_h2co():
         sigma=1.0,
         diagonalize=True,
     )(rhf)
-    ci_state = CIStates(
-        mo_space=avas, states=State(nel=rhf.nel, multiplicity=1, ms=0.0)
-    )
+    ci_state = CIStates(avas=avas, states=State(nel=rhf.nel, multiplicity=1, ms=0.0))
     casci = CI(ci_state)(avas)
     casci.run()
     assert casci.E[0] == approx(eref_avas)
@@ -295,9 +308,7 @@ def test_avas_subspace_planes_h2co_casscf():
         sigma=1.0,
         diagonalize=True,
     )(rhf)
-    ci_state = CIStates(
-        mo_space=avas, states=State(nel=rhf.nel, multiplicity=1, ms=0.0)
-    )
+    ci_state = CIStates(avas=avas, states=State(nel=rhf.nel, multiplicity=1, ms=0.0))
     mc = MCOptimizer(ci_state)(avas)
     mc.run()
     assert mc.E_ci[0] == approx(eref_avas)

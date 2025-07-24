@@ -59,9 +59,9 @@ class SCFBase(ABC):
 
     charge: int
     do_diis: bool = True
-    diis_start: int = 4
+    diis_start: int = 1
     diis_nvec: int = 8
-    diis_min: int = 3
+    diis_min: int = 2
     econv: float = 1e-9
     dconv: float = 1e-6
     maxiter: int = 100
@@ -118,6 +118,7 @@ class SCFBase(ABC):
         diis = forte2.helpers.DIIS(
             diis_start=self.diis_start,
             diis_nvec=self.diis_nvec,
+            diis_min=self.diis_min,
             do_diis=self.do_diis,
         )
         Vnn = self._get_nuclear_repulsion()
@@ -361,8 +362,14 @@ class RHF(SCFBase, MOsMixin):
         if isinstance(self.system, forte2.ModelSystem):
             return
         basis_info = forte2.basis_utils.BasisInfo(self.system, self.system.basis)
-        logger.log_info1("AO Composition of MOs:")
-        basis_info.print_ao_composition(self.C[0], list(range(self.nmo)))
+        logger.log_info1("\nAO Composition of MOs (HOMO-5 to HOMO):")
+        basis_info.print_ao_composition(
+            self.C[0], list(range(max(self.na - 5, 0), self.na))
+        )
+        logger.log_info1("\nAO Composition of MOs (LUMO to LUMO+5):")
+        basis_info.print_ao_composition(
+            self.C[0], list(range(self.na, min(self.na + 5, self.nmo)))
+        )
 
 
 @dataclass
@@ -794,7 +801,7 @@ class GHF(SCFBase, MOsMixin):
         Ca = Cb = RHF._initial_guess(self, H_ao, S, guess_type)[0].astype(complex)
         if self.nel % 2 == 0 and self.guess_mix:
             Ca, Cb = guess_mix(Ca, self.nel // 2 - 1)
-        C_spinor = np.zeros((self.nbf * 2,) * 2, dtype=complex)
+        C_spinor = np.zeros((self.nbf * 2, self.nmo * 2), dtype=complex)
         C_spinor[: self.nbf, ::2] = Ca
         C_spinor[self.nbf :, 1::2] = Cb
         return [C_spinor]

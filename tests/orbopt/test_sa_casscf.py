@@ -1,5 +1,5 @@
 import pytest
-
+import numpy as np
 from forte2 import System, RHF, MCOptimizer, AVAS, CIStates, State
 from forte2.helpers.comparisons import approx
 
@@ -25,7 +25,7 @@ def test_sa_mcscf_diff_mult_with_avas():
     triplet = State(nel=rhf.nel, multiplicity=3, ms=0.0)
     ci_states = CIStates(
         states=[singlet, triplet],
-        mo_space=avas,
+        avas=avas,
         weights=[[0.25], [0.75 * 0.85, 0.75 * 0.15]],
         nroots=[1, 2],
     )
@@ -42,6 +42,18 @@ def test_sa_mcscf_diff_mult_with_avas():
     assert mc.ci_solver.compute_average_energy() == approx(
         0.25 * eref_singlet + 0.75 * (0.85 * eref_triplet1 + 0.15 * eref_triplet2)
     )
+
+    nat_occ_ref = np.array(
+        [
+            [1.97531263, 1.97618291, 1.9797172],
+            [1.91200525, 1.45253886, 1.46608634],
+            [1.91200525, 1.45253876, 1.46608622],
+            [0.08779585, 0.54735532, 0.53380309],
+            [0.08779585, 0.54735522, 0.53380298],
+            [0.02508518, 0.02402893, 0.02050418],
+        ]
+    )
+    assert mc.ci_solver.nat_occs == pytest.approx(nat_occ_ref, abs=5e-7)
 
 
 def test_sa_casscf_c2():
@@ -69,7 +81,7 @@ def test_sa_casscf_c2():
         subspace=["C(2s)", "C(2p)"],
     )(rhf)
     ci_state = CIStates(
-        states=State(nel=rhf.nel, multiplicity=1, ms=0.0), mo_space=avas, nroots=3
+        states=State(nel=rhf.nel, multiplicity=1, ms=0.0), avas=avas, nroots=3
     )
     mc = MCOptimizer(ci_state)(avas)
     mc.run()

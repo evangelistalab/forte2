@@ -122,7 +122,7 @@ def test_casscf_n2_cholesky():
 
 
 def test_mcscf_noncontiguous_spaces():
-    # The results of this test should be strictly identical to test_mcscf_3
+    # The results of this test should be strictly identical to test_casscf_n2
 
     erhf = -108.761639873604
     eci = -108.916505576963
@@ -245,7 +245,7 @@ def test_casscf_singlet_benzyne():
         unit="bohr",
     )
 
-    rhf = RHF(charge=0, econv=1)(system)
+    rhf = RHF(charge=0, econv=1e-12)(system)
     ci_state = CIStates(
         core_orbitals=list(range(19)),
         active_spaces=[19, 20],
