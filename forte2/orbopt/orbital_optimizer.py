@@ -256,6 +256,10 @@ class MCOptimizer(MOsMixin, SystemMixin):
         forte2.ci.pretty_print_ci_summary(
             self.ci_states, self.ci_solver.evals_per_solver
         )
+        self.ci_solver.compute_natural_occupation_numbers()
+        forte2.ci.pretty_print_ci_nat_occ_numbers(
+            self.ci_states, self.ci_solver.nat_occs
+        )
         self._print_ao_composition()
 
     def _print_ao_composition(self):

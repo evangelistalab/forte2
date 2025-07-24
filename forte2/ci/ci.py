@@ -14,7 +14,7 @@ from forte2.system.system import System
 
 
 @dataclass
-class CIBase:
+class _CIBase:
     """
     A general configuration interaction (CI) solver class for a single `State`.
     Although possible, is not recommended to instantiate this class directly.
@@ -473,21 +473,37 @@ class CIBase:
 
         Parameters
         ----------
-            ci_l : NDArray
-                Left CI vector in the CSF basis.
-            ci_r : NDArray
-                Right CI vector in the CSF basis.
+        ci_l : NDArray
+            Left CI vector in the CSF basis.
+        ci_r : NDArray
+            Right CI vector in the CSF basis.
 
         Returns
         -------
-            NDArray
-                Spin-free two-particle transition density matrix.
+        (norb, )*4 NDArray
+            Spin-free two-particle transition density matrix.
         """
         ci_l_det = np.zeros((self.ndet))
         ci_r_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_l, ci_l_det)
         self.spin_adapter.csf_C_to_det_C(ci_r, ci_r_det)
         return self.ci_sigma_builder.rdm2_sf(ci_l_det, ci_r_det)
+
+    def compute_natural_occupation_numbers(self):
+        """
+        Compute the natural occupation numbers from the spin-free 1-RDMs.
+
+        Returns
+        -------
+        (norb, nroot) NDArray
+            The natural occupation numbers for each root.
+        """
+        no = np.zeros((self.norb, self.nroot))
+        for i in range(self.nroot):
+            g1 = self.make_rdm1_sf(self.evecs[:, i])
+            no[:, i] = np.linalg.eigvalsh(g1)[::-1]
+
+        return no
 
     def set_ints(self, scalar, oei, tei):
         """
@@ -550,7 +566,7 @@ class CIStates:
         If not provided, equal weights are assigned to each root.
     mo_space : MOSpace | AVAS, optional
         The molecular orbital space defining the active spaces and core orbitals.
-        This is used with each `State` to define a `CIBase` solver.
+        This is used with each `State` to define a `_CIBase` solver.
         If not provided, it will be constructed from `core_orbitals` and `active_spaces`.
         An `AVAS` object can provided here instead, it does not need to be run first.
     core_orbitals : list[int], optional
@@ -758,7 +774,7 @@ class CISolver:
         for i, state in enumerate(self.ci_states.states):
             # Create a CI solver for each state and MOSpace
             self.ci_solvers.append(
-                CIBase(
+                _CIBase(
                     mo_space=self.ci_states.mo_space,
                     ints=ints,
                     state=state,
@@ -858,6 +874,20 @@ class CISolver:
             ci_solver.ints.H = oei
             ci_solver.ints.V = tei
 
+    def compute_natural_occupation_numbers(self):
+        """
+        Compute the natural occupation numbers for the CI states.
+
+        Returns
+        -------
+        (norb, nroot) NDArray
+            The natural occupation numbers for each root.
+        """
+        nos = []
+        for ci_solver in self.ci_solvers:
+            nos.append(ci_solver.compute_natural_occupation_numbers())
+        self.nat_occs = np.concatenate(nos, axis=1)
+
 
 @dataclass
 class CI(CISolver):
@@ -872,6 +902,8 @@ class CI(CISolver):
 
     def _post_process(self):
         pretty_print_ci_summary(self.ci_states, self.evals_per_solver)
+        self.compute_natural_occupation_numbers()
+        pretty_print_ci_nat_occ_numbers(self.ci_states, self.nat_occs)
 
 
 def pretty_print_ci_summary(cistates: CIStates, eigvals_per_solver: list[list[float]]):
@@ -908,3 +940,24 @@ def pretty_print_ci_summary(cistates: CIStates, eigvals_per_solver: list[list[fl
             iroot += 1
         sep = "-" if i < ncis - 1 else "="
         logger.log_info1(sep * width)
+
+
+def pretty_print_ci_nat_occ_numbers(cistates: CIStates, nat_occs: np.ndarray):
+    """
+    Pretty print the natural occupation numbers for the CI states.
+    """
+    nroots = cistates.nroots_sum
+    width = 5 + 11 * nroots
+    logger.log_info1("\nNatural occupation numbers*:")
+    logger.log_info1("=" * width)
+    logger.log_info1("Orb. " + "".join([f"Root {i:<6d}" for i in range(nroots)]))
+    logger.log_info1("-" * width)
+    for i in range(cistates.norb):
+        line = f"{cistates.mo_space.active_orbitals[i]:<5d}"
+        line += "".join([f"{nat_occs[i, j]:<11.6f}" for j in range(nroots)])
+        logger.log_info1(line)
+    logger.log_info1("=" * width)
+    logger.log_info1(
+        "* The occupation numbers are sorted in descending order\n" \
+        "  and do not correspond one-to-one to the active MOs."
+    )
