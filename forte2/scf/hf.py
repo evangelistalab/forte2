@@ -146,9 +146,12 @@ class SCFBase(ABC):
 
         if self.C is None:
             self.C = self._initial_guess(H, S, guess_type=self.guess_type)
-        self.D = self._build_initial_density_matrix()
+        self.D = self._build_density_matrix()
+        F, F_canon = self._build_fock(H, fock_builder, S)
+        self.F = F_canon
+        self.E = Vnn + self._energy(H, self.F)
 
-        Eold = 0.0
+        Eold = self.E
         Dold = self.D
 
         width = 81
@@ -159,20 +162,18 @@ class SCFBase(ABC):
         logger.log_info1("-" * width)
         self.iter = 0
         for iter in range(self.maxiter):
-
-            # 1. Build the Fock matrix
+            # 1. Get the extrapolated Fock matrix
+            AO_grad = self._build_ao_grad(S, F_canon)
+            F_canon = self._diis_update(diis, F_canon, AO_grad)
+            # 2. Diagonalize the extrapolated Fock
+            self.eps, self.C = self._diagonalize_fock(F_canon)
+            # 3. Build new density matrix
+            self.D = self._build_density_matrix()
+            # 4. Build the (non-extrapolated) Fock matrix
             # (there is a slot for canonicalized F to accommodate ROHF and CUHF methods - admittedly weird for RHF/UHF)
             F, F_canon = self._build_fock(H, fock_builder, S)
             self.F = F_canon
-            # 2. Build the orbital gradient (DIIS residual)
-            AO_grad = self._build_ao_grad(S, F_canon)
-            # 3. Perform DIIS update of Fock
-            F_canon = self._diis_update(diis, F_canon, AO_grad)
-            # 4. Diagonalize updated Fock
-            self.eps, self.C = self._diagonalize_fock(F_canon)
-            # 5. Build new density matrix
-            self.D = self._build_density_matrix()
-            # 6. Compute new HF energy
+            # 5. Compute new HF energy from the non-extrapolated Fock matrix
             self.E = Vnn + self._energy(H, F)
 
             # check convergence parameters
@@ -189,10 +190,10 @@ class SCFBase(ABC):
                 logger.log_info1("=" * width)
                 logger.log_info1(f"{self.method} iterations converged\n")
                 # perform final iteration
-                F, F_canon = self._build_fock(H, fock_builder, S)
-                self.F = F_canon
                 self.eps, self.C = self._diagonalize_fock(F_canon)
                 self.D = self._build_density_matrix()
+                F, F_canon = self._build_fock(H, fock_builder, S)
+                self.F = F_canon
                 self.E = Vnn + self._energy(H, F)
                 logger.log_info1(f"Final {self.method} Energy: {self.E:20.12f}")
                 self.converged = True
