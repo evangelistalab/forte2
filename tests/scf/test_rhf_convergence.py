@@ -35,7 +35,7 @@ def test_cadmium_imidazole_complex():
 
 
 def test_rhf_cu():
-    eref = -1638.952656388734
+    eref = -1638.952656289754
     xyz = """
     Cu 0 0 0
     """

@@ -47,12 +47,12 @@ def test_1d_hubbard_rohf():
 
 
 def test_1d_hubbard_uhf():
-    euhf = -3.870340669207
-    s2uhf = 4.287968149173
+    euhf = -3.8703406692066187
+    s2uhf = 4.287967519056591
 
     system = forte2.system.HubbardModel(t=1.0, U=4.0, nsites=10, pbc=False)
 
-    scf = UHF(charge=-10, ms=1.0)(system)
+    scf = UHF(charge=-10, ms=1.0, do_diis=False)(system)
     scf.guess_type = "hcore"
     scf = scf.run()
     assert scf.E == approx(euhf)

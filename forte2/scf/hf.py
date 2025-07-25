@@ -143,16 +143,17 @@ class SCFBase(ABC):
         logger.log_info1(f"Density convergence criterion: {self.dconv:e}")
         logger.log_info1(f"DIIS acceleration: {diis.do_diis}")
         logger.log_info1(f"\n==> {self.method} SCF ROUTINE <==")
-
+        self.iter = 0
         if self.C is None:
             self.C = self._initial_guess(H, S, guess_type=self.guess_type)
         self.D = self._build_density_matrix()
         F, F_canon = self._build_fock(H, fock_builder, S)
         self.F = F_canon
-        self.E = Vnn + self._energy(H, self.F)
+        self.E = Vnn + self._energy(H, F)
 
         Eold = self.E
         Dold = self.D
+        self.iter += 1
 
         width = 81
         logger.log_info1("=" * width)
@@ -160,7 +161,6 @@ class SCFBase(ABC):
             f"{'Iter':>4s} {'Energy':>20s} {'ΔE':>12} {'||ΔD||':>12} {'||AO grad||':>12} {'<S^2>':>10} {'DIIS':>5s}"
         )
         logger.log_info1("-" * width)
-        self.iter = 0
         for iter in range(self.maxiter):
             # 1. Get the extrapolated Fock matrix
             AO_grad = self._build_ao_grad(S, F_canon)
@@ -183,7 +183,7 @@ class SCFBase(ABC):
 
             # print iteration
             logger.log_info1(
-                f"{iter + 1:4d} {self.E:20.12f} {deltaE:12.4e} {deltaD:12.4e} {np.linalg.norm(AO_grad):12.4e} {self.S2:10.5f} {diis.status:>5s}"
+                f"{iter+1:4d} {self.E:20.12f} {deltaE:12.4e} {deltaD:12.4e} {np.linalg.norm(AO_grad):12.4e} {self.S2:10.5f} {diis.status:>5s}"
             )
 
             if np.abs(deltaE) < self.econv and deltaD < self.dconv:
@@ -236,9 +236,6 @@ class SCFBase(ABC):
 
     @abstractmethod
     def _build_density_matrix(self): ...
-
-    @abstractmethod
-    def _build_initial_density_matrix(self): ...
 
     @abstractmethod
     def _initial_guess(self, H, S, guess_type="minao"): ...
@@ -305,9 +302,6 @@ class RHF(SCFBase, MOsMixin):
                 raise RuntimeError(f"Unknown initial guess type: {guess_type}")
 
         return [C]
-
-    def _build_initial_density_matrix(self):
-        return self._build_density_matrix()
 
     def _build_ao_grad(self, S, F):
         ao_grad = F[0] @ self.D[0] @ S - S @ self.D[0] @ F[0]
@@ -440,10 +434,6 @@ class UHF(SCFBase, MOsMixin):
 
         return [C, C]
 
-    def _build_initial_density_matrix(self):
-        D_a, D_b = self._build_density_matrix()
-        return D_a, D_b
-
     def _build_ao_grad(self, S, F):
         AO_grad = np.hstack(
             [(f @ d @ S - S @ d @ f).flatten() for d, f in zip(self.D, F)]
@@ -553,7 +543,6 @@ class ROHF(SCFBase, MOsMixin):
 
     _parse_state = UHF._parse_state
     _initial_guess = RHF._initial_guess
-    _build_initial_density_matrix = UHF._build_initial_density_matrix
     _diagonalize_fock = RHF._diagonalize_fock
     _spin = RHF._spin
     _energy = UHF._energy
@@ -669,7 +658,6 @@ class CUHF(SCFBase, MOsMixin):
     _parse_state = UHF._parse_state
     _build_density_matrix = UHF._build_density_matrix
     _initial_guess = UHF._initial_guess
-    _build_initial_density_matrix = UHF._build_initial_density_matrix
     _build_ao_grad = UHF._build_ao_grad
     _diagonalize_fock = UHF._diagonalize_fock
     _spin = UHF._spin
@@ -789,6 +777,15 @@ class GHF(SCFBase, MOsMixin):
         Dab = D[:nbf, nbf:]
         Dba = D[nbf:, :nbf]
         Dbb = D[nbf:, nbf:]
+
+        if self.iter == 0 and self.break_complex_symmetry:
+            Daa[0, :] += 0.1j
+            Dab[0, :] += 0.1j
+            Daa[:, 0] -= 0.1j
+            Dba[:, 0] -= 0.1j
+            Dbb[0, :] += 0.1j
+            Dbb[:, 0] -= 0.1j
+
         return Daa, Dab, Dba, Dbb
 
     def _build_total_density_matrix(self):
@@ -806,19 +803,6 @@ class GHF(SCFBase, MOsMixin):
         C_spinor[: self.nbf, ::2] = Ca
         C_spinor[self.nbf :, 1::2] = Cb
         return [C_spinor]
-
-    def _build_initial_density_matrix(self):
-        Daa, Dab, Dba, Dbb = self._build_density_matrix()
-
-        if self.break_complex_symmetry:
-            Daa[0, :] += 0.05j
-            Dab[0, :] += 0.05j
-            Daa[:, 0] -= 0.05j
-            Dba[:, 0] -= 0.05j
-            Dbb[0, :] += 0.05j
-            Dbb[:, 0] -= 0.05j
-
-        return Daa, Dab, Dba, Dbb
 
     def _build_ao_grad(self, S, F):
         Daa, Dab, Dba, Dbb = self.D

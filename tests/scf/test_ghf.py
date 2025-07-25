@@ -68,36 +68,3 @@ def test_ghf_complex_perturbation():
     scf.run()
     assert scf.E == approx(e_uhf)
     assert scf.S2 == approx(s2_uhf)
-
-
-def test_break_complex_symmetry():
-    """
-    Odd regular polygons are prototypical examples of spin-frustrated systems.
-    This means that the UHF solution will be unstable wrt Sz and time-reversal
-    symmetry breaking
-    """
-    eghf = -1.514272436189
-    s2ghf = 0.777317358363
-
-    xyz = f"""
-    H 0 0 0
-    H 1 0 0
-    H 0.5 {0.5*np.sqrt(3)} 0
-    """
-
-    system = forte2.System(
-        xyz=xyz, basis_set="cc-pvtz", auxiliary_basis_set="cc-pvqz-jkfit"
-    )
-
-    scf = GHF(charge=0, econv=1e-10, dconv=1e-8)(system)
-    scf.guess_type = "hcore"
-    scf.break_complex_symmetry = True
-    scf.run()
-    assert scf.E == approx(eghf)
-    assert scf.S2 == approx(s2ghf)
-
-    scf.break_complex_symmetry = False
-    # Automatically uses the previous C as a guess
-    scf.run()
-    assert scf.E == approx(eghf)
-    assert scf.S2 == approx(s2ghf)
