@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 
 import numpy as np
 import forte2
@@ -11,6 +12,7 @@ from forte2.helpers import logger
 from forte2.orbitals import MOSpace, AVAS
 from forte2.jkbuilder import RestrictedMOIntegrals
 from forte2.system.system import System
+from forte2.system.atom_data import EH_TO_EV
 
 
 @dataclass
@@ -87,6 +89,10 @@ class CIStates:
                 core_orbitals=self.core_orbitals,
                 active_spaces=self.active_spaces,
             )
+        if self.avas is not None and self.mo_space is not None:
+            raise ValueError(
+                "Cannot provide both avas and mo_space. Use one or the other."
+            )
 
         # 3. Validate nroots
         if isinstance(self.nroots, int):
@@ -117,7 +123,7 @@ class CIStates:
             assert np.all(self.weights_flat >= 0), "Weights must be non-negative"
 
     def fetch_mo_space(self):
-        if self.avas is not None:
+        if self.avas is not None and self.mo_space is None:
             assert self.avas.executed, "AVAS must be executed before fetching MOSpace"
             self.mo_space = MOSpace(
                 core_orbitals=self.avas.core_orbitals,
@@ -482,13 +488,14 @@ class _CIBase:
 
         Parameters
         ----------
-            ci_vec : NDArray
-                CI vector in the CSF basis.
+        ci_vec : NDArray
+            CI vector in the CSF basis.
 
         Returns
         -------
-            NDArray
-                Spin-free one-particle RDM."""
+        NDArray
+            Spin-free one-particle RDM.
+        """
         ci_vec_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
         return self.ci_sigma_builder.rdm1_sf(ci_vec_det, ci_vec_det)
@@ -496,10 +503,16 @@ class _CIBase:
     def make_rdm1_a(self, ci_vec, spin):
         """
         Make the spin-free one-particle RDM from a CI vector.
-        Args:
-            ci_vec (ndarray): CI vector in the CSF basis.
-        Returns:
-            ndarray: Spin-free one-particle RDM."""
+
+        Parameters
+        ----------
+        ci_vec : NDArray
+            CI vector in the CSF basis.
+
+        Returns
+        -------
+        NDArray:
+            Spin-free one-particle RDM."""
         ci_vec_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
         return self.ci_sigma_builder.rdm1_a(ci_vec_det, ci_vec_det, spin)
@@ -510,15 +523,15 @@ class _CIBase:
 
         Parameters
         ----------
-            ci_l : NDArray
-                Left CI vector in the CSF basis.
-            ci_r : NDArray
-                Right CI vector in the CSF basis.
+        ci_l : NDArray
+            Left CI vector in the CSF basis.
+        ci_r : NDArray
+            Right CI vector in the CSF basis.
 
         Returns
         -------
-            NDArray
-                Spin-free one-particle transition density matrix.
+        NDArray
+            Spin-free one-particle transition density matrix.
         """
         ci_l_det = np.zeros((self.ndet))
         ci_r_det = np.zeros((self.ndet))
@@ -532,15 +545,15 @@ class _CIBase:
 
         Parameters
         ----------
-            ci_vec : ndarray
-                CI vector in the CSF basis.
-            full : bool, optional, default=True
-                If True, compute the full-dimension RDMs, otherwise compute compact aa and bb RDMs.
+        ci_vec : NDArray
+            CI vector in the CSF basis.
+        full : bool, optional, default=True
+            If True, compute the full-dimension RDMs, otherwise compute compact aa and bb RDMs.
 
         Returns
         -------
-            tuple :
-                Spin-dependent two-particle RDMs (aa, ab, bb).
+        tuple :
+            Spin-dependent two-particle RDMs (aa, ab, bb).
         """
         ci_vec_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
@@ -561,17 +574,17 @@ class _CIBase:
 
         Parameters
         ----------
-            ci_l : NDArray
-                Left CI vector in the CSF basis.
-            ci_r : NDArray
-                Right CI vector in the CSF basis.
-            full : bool, optional, default=True
-                If True, compute the full-dimension RDMs, otherwise compute compact aa and bb RDMs.
+        ci_l : NDArray
+            Left CI vector in the CSF basis.
+        ci_r : NDArray
+            Right CI vector in the CSF basis.
+        full : bool, optional, default=True
+            If True, compute the full-dimension RDMs, otherwise compute compact aa and bb RDMs.
 
         Returns
         -------
-            tuple
-                Spin-dependent two-particle transition density matrices (aa, ab, bb).
+        tuple
+            Spin-dependent two-particle transition density matrices (aa, ab, bb).
         """
         ci_l_det = np.zeros((self.ndet))
         ci_r_det = np.zeros((self.ndet))
@@ -940,6 +953,41 @@ class CISolver:
             top_dets += ci_solver.get_top_determinants(n)
         return top_dets
 
+    def compute_transition_properties(self, C=None):
+        """
+        Compute the transition dipole moments and oscillator strengths from the spin-free 1-TDMs.
+        The results are stored in `self.tdm_per_solver` and `self.fosc_per_solver`.
+        """
+        if not self.executed:
+            raise RuntimeError("CI solver has not been executed yet.")
+
+        if C is None:
+            C = self.C[0]
+
+        Cact = C[:, self.active_orbitals]
+        self.tdm_per_solver = []
+        self.fosc_per_solver = []
+
+        for ici, ci_solver in enumerate(self.ci_solvers):
+            tdmdict = OrderedDict()
+            foscdict = OrderedDict()
+            for i in range(ci_solver.nroot):
+                for j in range(i, ci_solver.nroot):
+                    tdm = ci_solver.make_tdm1_sf(
+                        ci_solver.evecs[:, i], ci_solver.evecs[:, j]
+                    )
+                    tdm = np.einsum(
+                        "ij,pi,qj->pq", tdm, Cact, Cact.conj(), optimize=True
+                    )
+                    tdip = forte2.props.get_1e_property(
+                        self.system, tdm, property_name="electric_dipole", unit="au"
+                    )
+                    tdmdict[(i, j)] = tdip
+                    vte = self.evals_per_solver[ici][j] - self.evals_per_solver[ici][i]
+                    foscdict[(i, j)] = (2 / 3) * vte * np.linalg.norm(tdip) ** 2
+            self.fosc_per_solver.append(foscdict)
+            self.tdm_per_solver.append(tdmdict)
+
 
 @dataclass
 class CI(CISolver):
@@ -947,6 +995,8 @@ class CI(CISolver):
     CI solver specialized for a single CI calculation. (i.e., not used in a loop).
     See `CISolver` for all parameters and attributes.
     """
+
+    do_transition_dipole: bool = False
 
     def run(self):
         super().run()
@@ -958,6 +1008,15 @@ class CI(CISolver):
         pretty_print_ci_nat_occ_numbers(self.ci_states, self.nat_occs)
         top_dets = self.get_top_determinants()
         pretty_print_ci_dets(self.ci_states, top_dets)
+
+        if self.do_transition_dipole and self.ci_states.nroots_sum > 1:
+            self.compute_transition_properties()
+            pretty_print_ci_transition_props(
+                self.ci_states,
+                self.tdm_per_solver,
+                self.fosc_per_solver,
+                self.evals_per_solver,
+            )
 
 
 def pretty_print_ci_summary(cistates: CIStates, eigvals_per_solver: list[list[float]]):
@@ -985,6 +1044,7 @@ def pretty_print_ci_summary(cistates: CIStates, eigvals_per_solver: list[list[fl
         f"{'Root':>6} {'Mult.':>6} {'Ms':>6} {'Irrep':>6} {'Energy':>20} {'Weight':>15}"
     )
     logger.log_info1("-" * width)
+    E_avg = 0.0
     iroot = 0
     for i in range(ncis):
         for j in range(nroots[i]):
@@ -992,8 +1052,10 @@ def pretty_print_ci_summary(cistates: CIStates, eigvals_per_solver: list[list[fl
                 f"{iroot:>6d} {mult[i]:>6d} {ms[i]:>6.1f} {irrep[i]:>6d} {eigvals_per_solver[i][j]:>20.10f} {weights[i][j]:>15.5f}"
             )
             iroot += 1
-        sep = "-" if i < ncis - 1 else "="
-        logger.log_info1(sep * width)
+            E_avg += eigvals_per_solver[i][j] * weights[i][j]
+        logger.log_info1("-" * width)
+    logger.log_info1(f"{'Ensemble average energy':<27} {E_avg:>20.10f}")
+    logger.log_info1("=" * width)
 
 
 def pretty_print_ci_nat_occ_numbers(cistates: CIStates, nat_occs: np.ndarray):
@@ -1006,23 +1068,26 @@ def pretty_print_ci_nat_occ_numbers(cistates: CIStates, nat_occs: np.ndarray):
     width = 5 + 11 * norb
     logger.log_info1("\nNatural occupation numbers*:")
     logger.log_info1("=" * width)
-    
+
     # Header with orbital numbers
-    header = "Orb     " + "".join([f"{cistates.mo_space.active_orbitals[i]:<11d}" for i in range(norb)])
+    header = "Orb     " + "".join(
+        [f"{cistates.mo_space.active_orbitals[i]:<11d}" for i in range(norb)]
+    )
     logger.log_info1(header)
     logger.log_info1("-" * width)
-    
+
     # Data rows (one per root)
     for j in range(nroots):
         line = f"Root {j:<3d}"
         line += "".join([f"{nat_occs[i, j]:<11.6f}" for i in range(norb)])
         logger.log_info1(line)
-    
+
     logger.log_info1("=" * width)
     logger.log_info1(
         "* The occupation numbers are sorted in descending order\n"
         "  and do not correspond one-to-one to the active MOs."
     )
+
 
 def pretty_print_ci_dets(cistates: CIStates, top_dets: list[list[list[tuple]]]):
     """
@@ -1043,15 +1108,65 @@ def pretty_print_ci_dets(cistates: CIStates, top_dets: list[list[list[tuple]]]):
 
     logger.log_info1("\nTop determinants:")
     logger.log_info1("=" * width)
-    logger.log_info1(f"{'Contrib.':<10}" + "".join([f"{'#'+str(i+1):<{width_per_det}}" for i in range(ndets_per_root)]))
+    logger.log_info1(
+        f"{'Contrib.':<10}"
+        + "".join([f"{'#'+str(i+1):<{width_per_det}}" for i in range(ndets_per_root)])
+    )
     logger.log_info1("-" * width)
     for i in range(nroots):
         dets = [det for det, _ in top_dets[i]]
         coeffs = [coeff for _, coeff in top_dets[i]]
-        logstr = f"Root {i:<5}" + "".join([f"{d.str(norb):<{width_per_det}}" for d in dets])
+        logstr = f"Root {i:<5}" + "".join(
+            [f"{d.str(norb):<{width_per_det}}" for d in dets]
+        )
         logstr += "\n"
-        logstr += " "*10 + "".join([f"{c:<+{width_per_det}.6f}" for c in coeffs])
+        logstr += " " * 10 + "".join([f"{c:<+{width_per_det}.6f}" for c in coeffs])
         logger.log_info1(logstr)
         if i < nroots - 1:
             logger.log_info1("-" * width)
     logger.log_info1("=" * width)
+
+
+def pretty_print_ci_transition_props(
+    cistates: CIStates, tdm_per_solver, fosc_per_solver, eigvals_per_solver
+):
+    """
+    Pretty print the transition dipole moments and oscillator strengths for the CI states.
+
+    Parameters
+    ----------
+    cistates : CIStates
+        An instance of `CIStates` that holds information about the states and their properties.
+    tdm_per_solver : OrderedDict
+        A dictionary with keys as tuples (i, j) representing the initial and final states,
+        and values as the transition dipole moments for each component (x, y, z).
+    eigvals_per_solver : list[list[float]]
+        A list of lists containing the eigenvalues (energies) for each CI solver.
+    """
+    thres = 1e-4
+    logger.log_info1(f"\nBright transitions (oscillator strength > {thres:5.2e}):")
+    iroot = 0
+    width = 64
+    for ici in range(cistates.ncis):
+        logger.log_info1("=" * width)
+        logger.log_info1(
+            f"{'Transition':<12} {'fosc':<10} {'VTE (eV)':<10} {'Electronic trans. dip. (a.u.)':<30}"
+        )
+        logger.log_info1("-" * width)
+        nbright = 0
+        for k, v in tdm_per_solver[ici].items():
+            i, j = k
+            dip = v
+            vte = (eigvals_per_solver[ici][j] - eigvals_per_solver[ici][i]) * EH_TO_EV
+            osc = fosc_per_solver[ici][k]
+            if osc > thres:
+                nbright += 1
+                info = f"{f'{iroot+i}->{iroot+j}':<12} "
+                info += f"{osc:<10.6f} {vte:<10.6f} "
+                dip = "[" + ", ".join(f"{d:>7.4f}" for d in dip) + "]"
+                info += f"{dip:<30}"
+                logger.log_info1(info)
+        iroot += cistates.nroots[ici]
+        if nbright == 0:
+            logger.log_info1("No bright transitions found.")
+        logger.log_info1("=" * width)

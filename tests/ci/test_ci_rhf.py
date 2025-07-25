@@ -1,3 +1,4 @@
+import pytest
 from forte2 import *
 from forte2.helpers.comparisons import approx
 
@@ -104,7 +105,7 @@ def test_sa_ci_with_avas():
         weights=[[1.0], [0.85, 0.15]],
     )
 
-    saci = CI(ci_states=sa_info)(avas)
+    saci = CI(ci_states=sa_info, do_transition_dipole=True)(avas)
     saci.run()
 
     assert saci.E[0] == approx(eref_singlet)
@@ -113,3 +114,25 @@ def test_sa_ci_with_avas():
     assert saci.compute_average_energy() == approx(
         0.5 * eref_singlet + 0.5 * (0.85 * eref_triplet1 + 0.15 * eref_triplet2)
     )
+
+
+def test_ci_tdm():
+    xyz = f"""
+    N 0.0 0.0 -1.0
+    N 0.0 0.0 1.0
+    """
+
+    system = System(
+        xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
+    )
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    ci_states = CIStates(
+        states=State(nel=14, multiplicity=1, ms=0.0),
+        core_orbitals=[0, 1, 2, 3],
+        active_spaces=[4, 5, 6, 7, 8, 9],
+        nroots=10,
+    )
+    ci = CI(ci_states, do_transition_dipole=True)(rhf)
+    ci.run()
+    assert abs(ci.tdm_per_solver[0][(0, 6)][2]) == approx(1.5435316739347478)
+    assert ci.fosc_per_solver[0][(0, 6)] == approx(1.1589808047738437)
