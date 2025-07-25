@@ -17,6 +17,8 @@ class MCOptimizer(MOsMixin, SystemMixin):
 
     Parameters
     ----------
+    ci_state : CIStates
+        The CI states to optimize.
     maxiter : int, optional, default=50
         Maximum number of macroiterations.
     econv : float, optional, default=1e-8
@@ -37,6 +39,8 @@ class MCOptimizer(MOsMixin, SystemMixin):
         The number of vectors to keep in the DIIS.
     diis_min : int, optional, default=4
         The minimum number of vectors to perform extrapolation.
+    do_transition_dipole : bool, optional, default=False
+        Whether to compute transition dipole moments.
     """
 
     ci_states: CIStates
@@ -58,6 +62,9 @@ class MCOptimizer(MOsMixin, SystemMixin):
     diis_start: int = 15
     diis_nvec: int = 8
     diis_min: int = 4
+
+    ### Post-iteration
+    do_transition_dipole: bool = False
 
     ### Non-init attributes
     executed: bool = field(default=False, init=False)
@@ -83,8 +90,6 @@ class MCOptimizer(MOsMixin, SystemMixin):
         self.ci_states.fetch_mo_space()
         self.ci_states.pretty_print_ci_states()
         self.ncis = self.ci_states.ncis
-        # self.core_orbitals = self.ci_states.core_orbitals
-        # self.active_orbitals = self.ci_states.active_orbitals
         self.norb = self.ci_states.norb
         self.weights = self.ci_states.weights
         self.weights_flat = self.ci_states.weights_flat
@@ -247,6 +252,11 @@ class MCOptimizer(MOsMixin, SystemMixin):
         logger.log_info1("=" * width)
         logger.log_info1(f"Orbital optimization converged in {self.iter} iterations.")
         logger.log_info1(f"Final orbital optimized energy: {self.E_avg:.10f}")
+
+        # undo make_spaces_contiguous
+        inv_argsort = self.ci_states.mo_space.inv_argsort
+        self.C[0][:, inv_argsort] = self.C[0]
+
         self._post_process()
         # self.parent_method.set_verbosity_level(current_verbosity)
         self.executed = True
@@ -263,6 +273,14 @@ class MCOptimizer(MOsMixin, SystemMixin):
         top_dets = self.ci_solver.get_top_determinants()
         forte2.ci.pretty_print_ci_dets(self.ci_states, top_dets)
         self._print_ao_composition()
+        if self.do_transition_dipole:
+            self.ci_solver.compute_transition_properties(self.C[0])
+            forte2.ci.pretty_print_ci_transition_props(
+                self.ci_states,
+                self.ci_solver.tdm_per_solver,
+                self.ci_solver.fosc_per_solver,
+                self.ci_solver.evals_per_solver,
+            )
 
     def _print_ao_composition(self):
         basis_info = forte2.basis_utils.BasisInfo(self.system, self.system.basis)
