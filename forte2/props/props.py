@@ -1,6 +1,4 @@
 import numpy as np
-import scipy.linalg
-from typing import Callable
 
 import forte2
 from forte2.helpers import logger
