@@ -31,7 +31,6 @@ def get_1e_property(system, g1_sf, property_name, origin=None, unit="debye"):
     def _origin_check(origin):
         if origin is None:
             origin = [0.0, 0.0, 0.0]
-            logger.log_info1(f"Origin not provided, using zero origin: {origin}")
         assert len(origin) == 3, "Origin must be a 3-element vector."
         return origin
 

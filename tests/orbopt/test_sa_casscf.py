@@ -177,8 +177,13 @@ def test_sa_casscf_hf():
     assert mc.E_ci[2] == approx(emcscf_root_3)
     assert mc.E_ci[3] == approx(emcscf_root_4)
 
+    # transition dipole moment of 0->3 transition
     assert abs(mc.ci_solver.tdm_per_solver[0][(0, 3)][2]) == approx(1.1358091937504018)
+    # transition oscillator strength of 0->3 transition
     assert mc.ci_solver.fosc_per_solver[0][(0, 3)] == approx(0.4525467009634354)
+    # total dipole of state 0, 1
+    assert abs(mc.ci_solver.tdm_per_solver[0][(0, 0)][2]) == approx(0.724351854165422)
+    assert abs(mc.ci_solver.tdm_per_solver[0][(1, 1)][2]) == approx(0.8238822644132533)
 
 
 def test_sa_casscf_c2_transition_dipole():
