@@ -63,4 +63,6 @@ def minao_initial_guess(system, H, S):
 
 
 def core_initial_guess(system: forte2.System, H, S):
-    return np.zeros((system.nbf,) * 2)
+    Htilde = system.Xorth.T @ H @ system.Xorth
+    _, C = np.linalg.eigh(Htilde)
+    return system.Xorth @ C
