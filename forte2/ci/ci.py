@@ -966,7 +966,8 @@ class CISolver:
 
         Cact = C[:, self.active_orbitals]
         Ccore = C[:, self.core_orbitals]
-        rdm_core = np.einsum("pi,qi->pq", Ccore, Ccore.conj(), optimize=True)
+        # factor of 2 for spin-summed 1-RDM
+        rdm_core = 2 * np.einsum("pi,qi->pq", Ccore, Ccore.conj(), optimize=True)
         # this includes nuclear dipole contribution
         core_dip = forte2.props.get_1e_property(
             self.system, rdm_core, property_name="dipole", unit="au"

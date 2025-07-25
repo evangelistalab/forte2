@@ -146,46 +146,6 @@ def test_sa_casscf_diff_mult():
     )
 
 
-def test_sa_casscf_hf():
-    erhf = -100.00987356244831
-    emcscf_root_1 = -99.996420746310
-    emcscf_root_2 = -99.688682892330
-    emcscf_root_3 = -99.688682892330
-    emcscf_root_4 = -99.470229157315
-    emcscf_avg = -99.71100392207127
-
-    xyz = f"""
-    H            0.000000000000     0.000000000000    -0.949624435830
-    F            0.000000000000     0.000000000000     0.050375564170
-    """
-
-    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pvtz-jkfit")
-
-    rhf = RHF(charge=0, econv=1e-12)(system)
-    ci_state = CIStates(
-        active_spaces=[0, 1, 2, 3, 4, 5],
-        states=State(nel=10, multiplicity=1, ms=0.0),
-        nroots=4,
-    )
-    mc = MCOptimizer(ci_state, econv=1e-12, gconv=1e-12, do_transition_dipole=True)(rhf)
-    mc.run()
-
-    assert rhf.E == approx(erhf)
-    assert mc.E == approx(emcscf_avg)
-    assert mc.E_ci[0] == approx(emcscf_root_1)
-    assert mc.E_ci[1] == approx(emcscf_root_2)
-    assert mc.E_ci[2] == approx(emcscf_root_3)
-    assert mc.E_ci[3] == approx(emcscf_root_4)
-
-    # transition dipole moment of 0->3 transition
-    assert abs(mc.ci_solver.tdm_per_solver[0][(0, 3)][2]) == approx(1.1358091937504018)
-    # transition oscillator strength of 0->3 transition
-    assert mc.ci_solver.fosc_per_solver[0][(0, 3)] == approx(0.4525467009634354)
-    # total dipole of state 0, 1
-    assert abs(mc.ci_solver.tdm_per_solver[0][(0, 0)][2]) == approx(0.724351854165422)
-    assert abs(mc.ci_solver.tdm_per_solver[0][(1, 1)][2]) == approx(0.8238822644132533)
-
-
 def test_sa_casscf_c2_transition_dipole():
     """Test CASSCF with C2 molecule."""
 
@@ -220,3 +180,44 @@ def test_sa_casscf_c2_transition_dipole():
     assert mc.ci_solver.evals_per_solver[1][0] == approx(-75.5792187010)
     assert mc.ci_solver.evals_per_solver[1][1] == approx(-75.5789867708)
     assert mc.ci_solver.fosc_per_solver[0][(0, 1)] == approx(0.006525243082121279)
+
+
+def test_sa_casscf_hf():
+    erhf = -100.009873562527
+    emcscf_root_1 = -99.9964137656
+    emcscf_root_2 = -99.6886809114
+    emcscf_root_3 = -99.6886809114
+    emcscf_root_4 = -99.4702123772
+    emcscf_avg = -99.7109969914
+
+    xyz = f"""
+    H            0.000000000000     0.000000000000    -0.949624435830
+    F            0.000000000000     0.000000000000     0.050375564170
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pvtz-jkfit")
+
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    ci_state = CIStates(
+        core_orbitals=[0],
+        active_spaces=[1, 2, 3, 4, 5],
+        states=State(nel=10, multiplicity=1, ms=0.0),
+        nroots=4,
+    )
+    mc = MCOptimizer(ci_state, econv=1e-12, gconv=1e-12, do_transition_dipole=True)(rhf)
+    mc.run()
+
+    assert rhf.E == approx(erhf)
+    assert mc.E == approx(emcscf_avg)
+    assert mc.E_ci[0] == approx(emcscf_root_1)
+    assert mc.E_ci[1] == approx(emcscf_root_2)
+    assert mc.E_ci[2] == approx(emcscf_root_3)
+    assert mc.E_ci[3] == approx(emcscf_root_4)
+
+    # transition dipole moment of 0->3 transition
+    assert abs(mc.ci_solver.tdm_per_solver[0][(0, 3)][2]) == approx(1.1357911621720147)
+    # transition oscillator strength of 0->3 transition
+    assert mc.ci_solver.fosc_per_solver[0][(0, 3)] == approx(0.4525407586932925)
+    # total dipole of state 0, 1
+    assert abs(mc.ci_solver.tdm_per_solver[0][(0, 0)][2]) == approx(0.7244112903260456)
+    assert abs(mc.ci_solver.tdm_per_solver[0][(1, 1)][2]) == approx(0.8239033452222257)
