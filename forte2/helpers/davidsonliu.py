@@ -28,6 +28,13 @@ class DavidsonLiuSolver:
         If None, no shift is applied.
     log_level : int, optional, default=logger.get_verbosity_level()
         Logging level for output messages.
+
+    Attributes
+    ----------
+    iter : int
+        Current iteration number.
+    converged : bool
+        Whether the solver has converged.
     """
 
     def __init__(
@@ -185,7 +192,10 @@ class DavidsonLiuSolver:
         # check orthonormality of the initial basis
         self.orthonormality_check(self.b[:, : self.basis_size])
 
-        for it in range(self.maxiter):
+        self.iter = 0
+        self.converged = False
+
+        for self.iter in range(self.maxiter):
             # 2. compute new sigma block if needed
             m_new = self.basis_size - self.sigma_size
             if m_new > 0:
@@ -236,6 +246,7 @@ class DavidsonLiuSolver:
             conv_e = np.all(np.abs(lamr - self.lam_old[: self.nroot]) < self.e_tol)
             conv_r = np.all(rnorms < self.r_tol)
             if (conv_e and conv_r) or (self.basis_size == self.size):
+                self.converged = True
                 break
             self.lam_old[: self.nroot] = lamr
 
@@ -261,6 +272,7 @@ class DavidsonLiuSolver:
 
             to_add = min(self.nroot, self.max_subspace_size - self.basis_size)
             if to_add == 0:
+                self.converged = True
                 break
 
             # attempt to add new basis vectors from R0
@@ -293,7 +305,7 @@ class DavidsonLiuSolver:
                 self.basis_size += added2
                 msg = f" <- +{added2} random"
             logger.log(
-                f"{it:4d}  ⟨E⟩ ={avg_e:18.12f}  max(ΔE) ={max_de:18.12f}  max(r) ={max_r:12.9f}  basis = {self.basis_size:4d} {msg}",
+                f"{self.iter:4d}  ⟨E⟩ ={avg_e:18.12f}  max(ΔE) ={max_de:18.12f}  max(r) ={max_r:12.9f}  basis = {self.basis_size:4d} {msg}",
                 self.log_level,
             )
 
@@ -466,8 +478,8 @@ class DavidsonLiuSolver:
         Check if the columns of b are orthonormal.
         """
         if not np.allclose(b.T @ b, np.eye(b.shape[1]), atol=1e-12):
-            print(f"{msg}")
-            print(f"S = {b.T @ b}")
+            logger.log_warning(f"{msg}")
+            logger.log_warning(f"S = {b.T @ b}")
             raise ValueError(msg)
 
     def _print_information(self):

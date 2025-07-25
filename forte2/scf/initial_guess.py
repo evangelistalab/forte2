@@ -56,10 +56,10 @@ def minao_initial_guess(system, H, S):
     SAP_V = np.einsum("Pmn->mn", SAP_ints)
 
     # generate the SAP Hamiltonian and diagonalize it
-    H_SAP = H + SAP_V
-    eps, C = sp.linalg.eigh(H_SAP, S)
+    H_SAP = system.Xorth.T @ (H + SAP_V) @ system.Xorth
+    _, C = np.linalg.eigh(H_SAP)
 
-    return C
+    return system.Xorth @ C
 
 
 def core_initial_guess(system: forte2.System, H, S):

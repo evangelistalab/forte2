@@ -6,7 +6,7 @@ from forte2.helpers import logger
 from forte2.helpers.matrix_functions import invsqrt_matrix, canonical_orth
 from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
-from .parse_xyz import parse_xyz
+from .parse_geometry import parse_geometry
 from .atom_data import ATOM_DATA, Z_TO_ATOM_SYMBOL
 
 import numpy as np
@@ -44,6 +44,10 @@ class System:
     ortho_thresh : float, optional, default=1e-8
         Linear combinations of AO basis functions with overlap eigenvalues below this threshold will be removed
         during orthogonalization.
+    cholesky_tei : bool, optional, default=False
+        If True, auxiliary basis sets (if any) will be disregarded, and the B tensor will be built using the Cholesky decomposition of the 4D ERI tensor instead.
+    cholesky_tol : float, optional, default=1e-6
+        The tolerance for the Cholesky decomposition of the 4D ERI tensor. Only used if `cholesky_tei` is True.
 
     Attributes
     ----------
@@ -97,6 +101,8 @@ class System:
     unit: str = "angstrom"
     linear_dep_trigger: float = 1e-10
     ortho_thresh: float = 1e-8
+    cholesky_tei: bool = False
+    cholesky_tol: float = 1e-6
 
     ### Non-init attributes
     atoms: list[tuple[float, tuple[float, float, float]]] = field(
@@ -114,7 +120,7 @@ class System:
             "angstrom",
             "bohr",
         ], f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'."
-        self.atoms = parse_xyz(self.xyz, self.unit)
+        self.atoms = parse_geometry(self.xyz, self.unit)
         self.natoms = len(self.atoms)
         self.atomic_charges = np.array([atom[0] for atom in self.atoms])
         self.atomic_masses = np.array(
@@ -141,18 +147,26 @@ class System:
             self.atom_to_center[atom[0]].append(i)
 
         self.basis = build_basis(self.basis_set, self.atoms)
-        self.auxiliary_basis = (
-            build_basis(self.auxiliary_basis_set, self.atoms)
-            if self.auxiliary_basis_set is not None
-            else None
-        )
-        if self.auxiliary_basis_set_corr is not None:
-            logger.log_warning(f"Using a separate auxiliary basis is not recommended!")
-            self.auxiliary_basis_set_corr = build_basis(
-                self.auxiliary_basis_set_corr, self.atoms
+
+        if not self.cholesky_tei:
+            self.auxiliary_basis = (
+                build_basis(self.auxiliary_basis_set, self.atoms)
+                if self.auxiliary_basis_set is not None
+                else None
             )
+            if self.auxiliary_basis_set_corr is not None:
+                logger.log_warning(
+                    f"Using a separate auxiliary basis is not recommended!"
+                )
+                self.auxiliary_basis_set_corr = build_basis(
+                    self.auxiliary_basis_set_corr, self.atoms
+                )
+            else:
+                self.auxiliary_basis_set_corr = self.auxiliary_basis
         else:
-            self.auxiliary_basis_set_corr = self.auxiliary_basis
+            self.auxiliary_basis = None
+            self.auxiliary_basis_set_corr = None
+
         self.minao_basis = (
             build_basis(self.minao_basis_set, self.atoms)
             if self.minao_basis_set is not None

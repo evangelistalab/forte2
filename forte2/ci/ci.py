@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from abc import ABC, abstractmethod
 
 import numpy as np
 import forte2
@@ -7,28 +8,172 @@ from forte2.state.state import State
 from forte2.helpers.mixins import MOsMixin, SystemMixin
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
 from forte2.helpers import logger
-
+from forte2.orbitals import MOSpace, AVAS
 from forte2.jkbuilder import RestrictedMOIntegrals
 from forte2.system.system import System
 
 
 @dataclass
-class CI(MOsMixin, SystemMixin):
+class CIStates:
     """
-    A general configuration interaction (CI) solver class.
+    A class to hold information about state averaging in multireference calculations.
 
     Parameters
     ----------
-    orbitals : list[int] | list[list[int]]
-        A list of active orbitals or a list of lists of active orbitals for each GAS
+    states : list[State] | State
+        A list of `State` objects or a single `State` object representing the electronic states.
+        This also includes the gas_min and gas_max attributes.
+    nroots : list[int] | int, optional, default=1
+        A list of integers specifying the number of roots for each state.
+        If only one state is provided, this can be a single integer.
+    weights : list[list[float]], optional
+        A list of lists of floats specifying the weights for each root in each state.
+        These do not have to be normalized, but must be non-negative.
+        If not provided, equal weights are assigned to each root.
+    mo_space : MOSpace | AVAS, optional
+        The molecular orbital space defining the active spaces and core orbitals.
+        This is used with each `State` to define a `_CIBase` solver.
+        If not provided, it will be constructed from `core_orbitals` and `active_spaces`.
+        An `AVAS` object can provided here instead, it does not need to be run first.
+    core_orbitals : list[int], optional
+        A list of integers specifying the core orbitals.
+        If `AVAS` is provided, this field will be fetched from it after its execution.
+    active_spaces : list[list[int]], optional
+        A list of lists of integers specifying the orbital indices for each GAS.
+        If `AVAS` is provided, this field will be fetched from it after its execution.
+
+    Attributes
+    ----------
+    ncis : int
+        The number of CI states, which is the length of the `states` list.
+    nroots_sum : int
+        The total number of roots across all states.
+    weights_flat : NDArray
+        A flattened array of weights for all roots across all states.
+    norb : int
+        The number of active orbitals in the molecular orbital space.
+    ncore : int
+        The number of core orbitals in the molecular orbital space.
+        If `AVAS` is provided, this is only available after its execution.
+    """
+
+    states: list[State] | State
+    nroots: list[int] | int = 1
+    weights: list[list[float]] = None
+    mo_space: MOSpace = None
+    avas: AVAS = None
+    core_orbitals: list[int] = None
+    active_spaces: list[list[int]] = None
+
+    def __post_init__(self):
+        # 1. Validate states
+        if isinstance(self.states, State):
+            self.states = [self.states]
+        assert isinstance(self.states, list), "states_and_mo_spaces must be a list"
+        assert all(
+            isinstance(state, State) for state in self.states
+        ), "All elements in states_and_mo_spaces must be State instances"
+        assert len(self.states) > 0, "states_and_mo_spaces cannot be empty"
+        self.ncis = len(self.states)
+
+        # 2. Make mo_space from core_orbitals and active_spaces if mo_space is not provided
+        if self.mo_space is None and self.avas is None:
+            assert (
+                self.active_spaces is not None
+            ), "If mo_space or avas is not provided, active_spaces must be provided"
+            if self.core_orbitals is None:
+                self.core_orbitals = []
+            self.mo_space = MOSpace(
+                core_orbitals=self.core_orbitals,
+                active_spaces=self.active_spaces,
+            )
+
+        # 3. Validate nroots
+        if isinstance(self.nroots, int):
+            assert (
+                self.ncis == 1
+            ), "If nroots is an integer, there must be exactly one state."
+            self.nroots = [self.nroots]
+        assert isinstance(self.nroots, list), "nroots must be a list"
+        assert all(
+            isinstance(n, int) and n > 0 for n in self.nroots
+        ), "nroots must be a list of positive integers"
+        self.nroots_sum = sum(self.nroots)
+
+        # 4. Validate weights
+        if self.weights is None:
+            self.weights = [[1.0 / self.nroots_sum] * n for n in self.nroots]
+            self.weights_flat = np.concatenate(self.weights)
+        else:
+            assert (
+                sum(len(w) for w in self.weights) == self.nroots_sum
+            ), "Weights must match the total number of roots across all states"
+            self.weights_flat = np.array(
+                [w for sublist in self.weights for w in sublist], dtype=float
+            )
+            n = self.weights_flat.sum()
+            self.weights = [[w / n for w in sublist] for sublist in self.weights]
+            self.weights_flat /= n
+            assert np.all(self.weights_flat >= 0), "Weights must be non-negative"
+
+    def fetch_mo_space(self):
+        if self.avas is not None:
+            assert self.avas.executed, "AVAS must be executed before fetching MOSpace"
+            self.mo_space = MOSpace(
+                core_orbitals=self.avas.core_orbitals,
+                active_spaces=self.avas.active_spaces,
+            )
+        self.norb = self.mo_space.nactv
+        self.ncore = self.mo_space.ncore
+        self.active_orbitals = self.mo_space.active_orbitals
+        self.core_orbitals = self.mo_space.core_orbitals
+
+    def pretty_print_ci_states(self):
+        """
+        Pretty print the CI states
+        """
+        width = 33
+        logger.log_info1("\nRequested CI states:")
+        logger.log_info1("=" * width)
+        logger.log_info1(
+            f"{'Root':>4} {'Nel':>5} {'Mult.':>6} {'Ms':>4} {'Weight':>10}"
+        )
+        logger.log_info1("-" * width)
+        iroot = 0
+        for i, state in enumerate(self.states):
+            for j in range(self.nroots[i]):
+                logger.log_info1(
+                    f"{iroot:>4} {state.nel:>5} {state.multiplicity:>6d} {state.ms:>4.1f} {self.weights[i][j]:>10.6f}"
+                )
+                iroot += 1
+            if i < len(self.states) - 1:
+                logger.log_info1("-" * width)
+        logger.log_info1("=" * width + "\n")
+
+
+@dataclass
+class _CIBase:
+    """
+    A general configuration interaction (CI) solver class for a single `State`.
+    Although possible, is not recommended to instantiate this class directly.
+    Consider using the `CI` class instead.
+
+    Parameters
+    ----------
+    mo_space : MOSpace
+        Specifies the GASes and core orbitals.
     state : State
-        The electronic state of the system, including number of electrons, multiplicity, and ms.
+        The electronic state for which the CI is solved.
+    ints : RestrictedMOIntegrals
+        The molecular orbital integrals for the system.
     nroot : int
         The number of roots to compute.
-    weights : list[float], optional, default=None
-        Weights for each root, must sum to 1. If None, equal weights are assigned to each root.
-    core_orbitals : list[int], optional, default=[]
-        A list of core orbitals to be excluded from the active space.
+    do_test_rdms : bool, optional, default=False
+        If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
+    log_level : int, optional
+        The logging level for the CI solver. Defaults to the global logger's verbosity level.
+    ci_algorithm : str, optional, default="hz"
+        The algorithm used for the CI sigma builder.
     guess_per_root : int, optional, default=2
         The number of guess vectors for each root.
     ndets_per_guess : int, optional, default=10
@@ -49,17 +194,29 @@ class CI(MOsMixin, SystemMixin):
         The maximum number of orbitals in each general orbital space (GAS).
     energy_shift : float, optional, default=None
         An energy shift to find roots around. If None, no shift is applied.
-    do_test_rdms : bool, optional, default=False
-        Whether to compute and test the reduced density matrices (RDMs) after the CI calculation.
-    ci_algorithm : str, optional, default="hz"
-        The algorithm to use for the CI calculation.
+
+    Attributes
+    ----------
+    eigensolver : DavidsonLiuSolver
+        The eigensolver used to find the roots of the CI problem.
+    E (evals) : NDArray
+        The eigenvalues (energies) of the CI problem.
+    evecs : NDArray
+        The eigenvectors (CI coefficients) of the CI problem.
+
     """
 
-    orbitals: list[int] | list[list[int]]
+    mo_space: MOSpace
     state: State
+    ints: RestrictedMOIntegrals
     nroot: int
-    weights: list[float] = None
-    core_orbitals: list[int] = field(default_factory=list)
+    do_test_rdms: bool = False
+    log_level: int = field(default=logger.get_verbosity_level())
+
+    ### Sigma builder parameters
+    ci_algorithm: str = "hz"
+
+    ### Davidson-Liu parameters
     guess_per_root: int = 2
     ndets_per_guess: int = 10
     collapse_per_root: int = 2
@@ -67,84 +224,35 @@ class CI(MOsMixin, SystemMixin):
     maxiter: int = 100
     econv: float = 1e-10
     rconv: float = 1e-5
-    gas_min: list[int] = field(default_factory=list)
-    gas_max: list[int] = field(default_factory=list)
     energy_shift: float = None
-    do_test_rdms: bool = False
-    ci_algorithm: str = "hz"
 
     ### Non-init attributes
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
     first_run: bool = field(default=True, init=False)
-    log_level: int = field(default=logger.get_verbosity_level(), init=False)
     executed: bool = field(default=False, init=False)
 
-    def __call__(self, method):
-        self.parent_method = method
-        return self
-
     def __post_init__(self):
-        # handle multiple orbitals formats
-        if isinstance(self.orbitals, list) and all(
-            isinstance(x, int) for x in self.orbitals
-        ):
-            self.orbitals = [self.orbitals]
-        elif not all(isinstance(x, list) for x in self.orbitals):
-            raise ValueError("Invalid orbitals format")
-
-        self.norb = sum(len(x) for x in self.orbitals)
-        self.solver = None
-        if self.weights is None:
-            self.weights = np.ones(self.nroot) / self.nroot
-        else:
-            assert isinstance(self.weights, list), "Weights must be a list"
-            self.weights = np.array(self.weights, dtype=float)
-            assert (
-                len(self.weights) == self.nroot
-            ), "Weights must match the number of roots"
-            assert np.all(self.weights >= 0), "Weights must be non-negative"
-            assert np.isclose(self.weights.sum(), 1), "Weights must sum to 1"
-            self.weights = np.array(self.weights, dtype=float)
+        self.norb = self.mo_space.nactv
+        self.ncore = self.mo_space.ncore
+        self.ngas = self.mo_space.ngas
+        self.gas_min = self.state.gas_min
+        self.gas_max = self.state.gas_max
+        self.eigensolver = None
 
     def _ci_solver_startup(self):
-        """
-        Initialize the CI solver with the necessary parameters and data structures.
-        If the CI solver is used in an iterative context, this method is only called
-        ocne at the beginning of the iteration."""
-        if not self.parent_method.executed:
-            self.parent_method.run()
-
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
-
-        logger.log(
-            f"\nRunning CI with orbitals: {self.orbitals}, state: {self.state}, nroot: {self.nroot}",
-            self.log_level,
-        )
-        # Generate the integrals with all the orbital spaces flattened
-        self.flattened_orbitals = [orb for sublist in self.orbitals for orb in sublist]
-
-        # 1. Transform the orbitals to the MO basis
-        self.ints = RestrictedMOIntegrals(
-            self.system,
-            self.C[0],
-            self.flattened_orbitals,
-            self.core_orbitals,
-            use_aux_corr=True,
-        )
-
-        # 2. Create the string lists
-        self.orbital_symmetry = [[0] * len(x) for x in self.orbitals]
+        self.orbital_symmetry = [
+            [0] * len(self.mo_space.active_spaces[x]) for x in range(self.ngas)
+        ]
 
         self.ci_strings = forte2.CIStrings(
-            self.state.na - len(self.core_orbitals),
-            self.state.nb - len(self.core_orbitals),
+            self.state.na - self.ncore,
+            self.state.nb - self.ncore,
             self.state.symmetry,
             self.orbital_symmetry,
             self.gas_min,
             self.gas_max,
+            log_level=self.log_level,
         )
-        self.ci_strings.set_log_level(self.log_level)
 
         logger.log(f"\nNumber of α electrons: {self.ci_strings.na}", self.log_level)
         logger.log(f"Number of β electrons: {self.ci_strings.nb}", self.log_level)
@@ -188,8 +296,8 @@ class CI(MOsMixin, SystemMixin):
         )
 
         # 3. Instantiate and configure solver
-        if self.solver is None:
-            self.solver = DavidsonLiuSolver(
+        if self.eigensolver is None:
+            self.eigensolver = DavidsonLiuSolver(
                 size=self.basis_size,  # size of the basis (number of CSF if we spin adapt)
                 nroot=self.nroot,
                 collapse_per_root=self.collapse_per_root,
@@ -202,43 +310,12 @@ class CI(MOsMixin, SystemMixin):
             )
 
         # 4. Compute diagonal of the Hamiltonian
-        self.solver.add_h_diag(Hdiag)
+        self.eigensolver.add_h_diag(Hdiag)
 
         # 5. Build the guess vectors if this is the first run
         if self.first_run:
             self._build_guess_vectors(Hdiag)
             self.first_run = False
-
-        # TODO: remove this once the CIStrings are fully implemented
-
-        # V0 = np.zeros((self.norb, self.norb, self.norb, self.norb))
-        # slater_rules = forte2.SlaterRules(self.norb, self.ints.E, self.ints.H, V0)
-        # Hex = np.zeros((self.ndet, self.ndet))
-        # for i in range(self.ndet):
-        #     for j in range(self.ndet):
-        #         if i >= j:
-        #             Hij = slater_rules.slater_rules(self.dets[i], self.dets[j])
-        #             Hex[i, j] = Hij
-        #             Hex[j, i] = Hij
-
-        # e = np.linalg.eigvalsh(Hex)
-        # print(f"\nLowest 5 eigenvalues of the Hamiltonian:")
-        # for i in range(5):
-        #     print(f"Eigenvalue {i}: {e[i]:20.12f} [Eh]")
-
-        # one body only -152.695278969574
-        #               -152.695278969574
-        #               -152.695278969574
-
-        # Hex = np.zeros((self.basis_size, self.basis_size))
-        # for i in range(self.basis_size):
-        #     for j in range(self.basis_size):
-        #         Hij = self.ci_sigma_builder.slater_rules_csf(
-        #             self.dets, self.spin_adapter, i, j
-        #         )
-        #         Hex[i, j] = Hij
-        # # find the lowest 5 eigenvalues of the Hamiltonian
-        # e, _ = np.linalg.eigh(Hex)
 
         def sigma_builder(Bblock, Sblock):
             # Compute the sigma block from the basis block
@@ -249,10 +326,10 @@ class CI(MOsMixin, SystemMixin):
                 # self.sigma_det = np.dot(Hex, self.b_det)
                 self.spin_adapter.det_C_to_csf_C(self.sigma_det, Sblock[:, i])
 
-        self.solver.add_sigma_builder(sigma_builder)
+        self.eigensolver.add_sigma_builder(sigma_builder)
 
         # 6. Run Davidson
-        self.evals, self.evecs = self.solver.solve()
+        self.evals, self.evecs = self.eigensolver.solve()
 
         logger.log(f"\nDavidson-Liu solver converged.\n", self.log_level)
 
@@ -397,45 +474,7 @@ class CI(MOsMixin, SystemMixin):
             for j, d in enumerate(indices):
                 guess_mat[d, i] = guess[j]
 
-        self.solver.add_guesses(guess_mat)
-
-    def compute_average_energy(self):
-        """
-        Compute the average energy from the CI roots using the weights.
-
-        Returns
-        -------
-            float
-                Average energy of the CI roots.
-        """
-        return np.dot(self.weights, self.E)
-
-    def make_average_rdm1_sf(self):
-        """
-        Make the average spin-free one-particle RDM from the CI vectors.
-
-        Returns
-        -------
-            NDArray
-                Average spin-free one-particle RDM.
-        """
-        rdm1 = np.zeros((self.norb,) * 2)
-        for i in range(self.nroot):
-            rdm1 += self.make_rdm1_sf(self.evecs[:, i]) * self.weights[i]
-        return rdm1
-
-    def make_average_rdm2_sf(self):
-        """
-        Make the average spin-free two-particle RDM from the CI vectors.
-
-        Returns
-        -------
-            NDArray
-                Average spin-free two-particle RDM."""
-        rdm2 = np.zeros((self.norb,) * 4)
-        for i in range(self.nroot):
-            rdm2 += self.make_rdm2_sf(self.evecs[:, i]) * self.weights[i]
-        return rdm2
+        self.eigensolver.add_guesses(guess_mat)
 
     def make_rdm1_sf(self, ci_vec):
         """
@@ -554,13 +593,13 @@ class CI(MOsMixin, SystemMixin):
 
         Parameters
         ----------
-            ci_vec : NDArray
-                CI vector in the CSF basis.
+        ci_vec : NDArray
+            CI vector in the CSF basis.
 
         Returns
         -------
-            NDArray
-                Spin-free two-particle RDM.
+        NDArray
+            Spin-free two-particle RDM.
         """
         ci_vec_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
@@ -572,15 +611,15 @@ class CI(MOsMixin, SystemMixin):
 
         Parameters
         ----------
-            ci_l : NDArray
-                Left CI vector in the CSF basis.
-            ci_r : NDArray
-                Right CI vector in the CSF basis.
+        ci_l : NDArray
+            Left CI vector in the CSF basis.
+        ci_r : NDArray
+            Right CI vector in the CSF basis.
 
         Returns
         -------
-            NDArray
-                Spin-free two-particle transition density matrix.
+        (norb, )*4 NDArray
+            Spin-free two-particle transition density matrix.
         """
         ci_l_det = np.zeros((self.ndet))
         ci_r_det = np.zeros((self.ndet))
@@ -588,18 +627,23 @@ class CI(MOsMixin, SystemMixin):
         self.spin_adapter.csf_C_to_det_C(ci_r, ci_r_det)
         return self.ci_sigma_builder.rdm2_sf(ci_l_det, ci_r_det)
 
-    def set_verbosity_level(self, level):
+    def compute_natural_occupation_numbers(self):
         """
-        Set the verbosity level for logging.
+        Compute the natural occupation numbers from the spin-free 1-RDMs.
 
-        Parameters
-        ----------
-        level : int
-            The verbosity level to set.
+        Returns
+        -------
+        (norb, nroot) NDArray
+            The natural occupation numbers for each root.
         """
-        self.log_level = level
-        if self.solver is not None:
-            self.solver.log_level = level
+        if not self.executed:
+            raise RuntimeError("CI solver has not been executed yet.")
+        no = np.zeros((self.norb, self.nroot))
+        for i in range(self.nroot):
+            g1 = self.make_rdm1_sf(self.evecs[:, i])
+            no[:, i] = np.linalg.eigvalsh(g1)[::-1]
+
+        return no
 
     def set_ints(self, scalar, oei, tei):
         """
@@ -618,235 +662,396 @@ class CI(MOsMixin, SystemMixin):
         self.ints.H = oei
         self.ints.V = tei
 
+    def set_maxiter(self, maxiter):
+        """
+        Set the maximum number of iterations for the CI solver.
+
+        Parameters
+        ----------
+        maxiter : int
+            The maximum number of iterations to set.
+        """
+        self.maxiter = maxiter
+        if self.eigensolver is not None:
+            self.eigensolver.maxiter = maxiter
+
+    def get_maxiter(self):
+        """
+        Get the maximum number of iterations for the CI solver.
+
+        Returns
+        -------
+        int
+            The maximum number of iterations.
+        """
+        return self.maxiter
+
+    def get_top_determinants(self, n=5):
+        """
+        Get the top `n` determinants for each root based on their coefficients in the CI vector.
+
+        Parameters
+        ----------
+        n : int, optional, default=5
+            The number of top determinants to return.
+
+        Returns
+        -------
+        list[list[tuple[Determinant, float]]]
+            A list of lists, where each inner list contains tuples of the top determinants
+            and their coefficients for each root.
+        """
+        if not self.executed:
+            raise RuntimeError("CI solver has not been executed yet.")
+
+        top_dets_per_root = []
+        for i in range(self.nroot):
+            top_dets = []
+            ci_det = np.zeros((self.ndet))
+            self.spin_adapter.csf_C_to_det_C(self.evecs[:, i], ci_det)
+            argsort = np.argsort(np.abs(ci_det))[::-1]  # descending in absolute coeff
+            for j in range(n):
+                if j < len(argsort):
+                    top_dets.append((self.dets[argsort[j]], ci_det[argsort[j]]))
+            top_dets_per_root.append(top_dets)
+
+        return top_dets_per_root
+
 
 @dataclass
-class MultiCI(MOsMixin, SystemMixin):
+class CISolver:
     """
-    A class for mixing multiple CI solvers into the same interface as the CI class.
+    A general configuration interaction (CI) solver class.
+    This solver is can be called iteratively, e.g., in a MCSCF loop or a DSRG reference relaxation loop.
 
     Parameters
     ----------
-    CIs : list[CI]
-        A list of CI instances to be mixed together.
-    weights : list[float], optional, default=None
-        Weights for each CI instance, must sum to 1. If None, equal weights are assigned to each CI.
+    ci_states : CIStates
+        An instance of `CIStates` that holds information about the states to be solved.
+        This enables arbitrary state averaging in multireference calculations.
+    guess_per_root : int, optional, default=2
+        The number of guess vectors for each root.
+    ndets_per_guess : int, optional, default=10
+        The number of determinants per guess vector.
+    collapse_per_root : int, optional, default=2
+        The number of determinants to collapse per root.
+    basis_per_root : int, optional, default=4
+        The maximum number of basis vectors per root.
+    maxiter : int, optional, default=100
+        The maximum number of iterations for the Davidson-Liu solver.
+    econv : float, optional, default=1e-10
+        The energy convergence threshold for the solver.
+    rconv : float, optional, default=1e-5
+        The residual convergence threshold for the solver.
+    energy_shift : float, optional, default=None
+        An energy shift to find roots around. If None, no shift is applied.
+    do_test_rdms : bool, optional, default=False
+        If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
+    log_level : int, optional
+        The logging level for the CI solver. Defaults to the global logger's verbosity level.
+    ci_algorithm : str, optional, default="hz"
+        The algorithm used for the CI sigma builder.
     """
 
-    CIs: list[CI]
-    weights: list[float] = None
+    ci_states: CIStates
 
+    ### Davidson-Liu parameters
+    guess_per_root: int = 2
+    ndets_per_guess: int = 10
+    collapse_per_root: int = 2
+    basis_per_root: int = 4
+    maxiter: int = 100
+    econv: float = 1e-10
+    rconv: float = 1e-5
+    energy_shift: float = None
+
+    do_test_rdms: bool = False
+    log_level: int = field(default=logger.get_verbosity_level())
+
+    ### Sigma builder parameters
+    ci_algorithm: str = "hz"
+
+    ### Non-init attributes
+    ci_builder_memory: int = field(default=1024, init=False)  # in MB
+    first_run: bool = field(default=True, init=False)
     executed: bool = field(default=False, init=False)
-    log_level: int = field(default=logger.get_verbosity_level(), init=False)
 
     def __call__(self, method):
         self.parent_method = method
         return self
 
-    def __post_init__(self):
-        assert all(
-            isinstance(ci, CI) for ci in self.CIs
-        ), "All elements of CIs must be CI instances"
-        assert len(self.CIs) > 0, "CIs list cannot be empty"
-        self.ncis = len(self.CIs)
-
-        assert (
-            len(set(ci.norb for ci in self.CIs)) == 1
-        ), "All CIs must have the same number of active orbitals"
-
-        self.norb = self.CIs[0].norb
-
-        if self.weights is None:
-            self.weights = np.ones(self.ncis) / self.ncis
-        else:
-            assert isinstance(self.weights, list)
-            assert (
-                len(self.weights) == self.ncis
-            ), "Weights must match the number of CIs"
-            self.weights = np.array(self.weights, dtype=float)
-            assert np.all(self.weights >= 0), "Weights must be non-negative"
-            assert np.isclose(self.weights.sum(), 1), "Weights must sum to 1"
-
-        for ci in self.CIs:
-            ci.log_level = self.log_level
-
-    def _ci_solver_startup(self):
+    def _startup(self):
         if not self.parent_method.executed:
             self.parent_method.run()
-        self.CIs = [ci(self.parent_method) for ci in self.CIs]
+
+        self.ci_states.fetch_mo_space()
+        self.ncis = self.ci_states.ncis
+        self.core_orbitals = self.ci_states.core_orbitals
+        self.active_orbitals = self.ci_states.active_orbitals
+        self.norb = self.ci_states.norb
+        self.weights = self.ci_states.weights
+        self.weights_flat = self.ci_states.weights_flat
+
         SystemMixin.copy_from_upstream(self, self.parent_method)
         MOsMixin.copy_from_upstream(self, self.parent_method)
 
+        ints = RestrictedMOIntegrals(
+            self.system,
+            self.C[0],
+            self.active_orbitals,
+            self.core_orbitals,
+            use_aux_corr=True,
+        )
+
+        self.ci_solvers = []
+        for i, state in enumerate(self.ci_states.states):
+            # Create a CI solver for each state and MOSpace
+            self.ci_solvers.append(
+                _CIBase(
+                    mo_space=self.ci_states.mo_space,
+                    ints=ints,
+                    state=state,
+                    nroot=self.ci_states.nroots[i],
+                    do_test_rdms=self.do_test_rdms,
+                    ci_algorithm=self.ci_algorithm,
+                    guess_per_root=self.guess_per_root,
+                    ndets_per_guess=self.ndets_per_guess,
+                    collapse_per_root=self.collapse_per_root,
+                    basis_per_root=self.basis_per_root,
+                    maxiter=self.maxiter,
+                    econv=self.econv,
+                    rconv=self.rconv,
+                    energy_shift=self.energy_shift,
+                    log_level=self.log_level,
+                )
+            )
+
     def run(self):
-        if not self.executed:
-            self._ci_solver_startup()
+        if self.first_run:
+            self._startup()
+            self.first_run = False
 
-        self.E = []
-        self.E_avg = []
-        for ci in self.CIs:
-            # Run each CI and collect results
-            ci.run()
-            self.E.append(ci.E)
-            self.E_avg.append(ci.compute_average_energy())
+        self.evals_per_solver = []
+        for ci_solver in self.ci_solvers:
+            ci_solver.run()
+            self.evals_per_solver.append(ci_solver.evals)
 
-        # TODO: these might be different for each CI
-        self.flattened_orbitals = self.CIs[0].flattened_orbitals.copy()
-        self.core_orbitals = self.CIs[0].core_orbitals.copy()
+        self.evals_flat = np.concatenate(self.evals_per_solver)
+        self.E_avg = self.compute_average_energy()
+
+        self.E = self.evals_flat
 
         self.executed = True
         return self
 
     def compute_average_energy(self):
-        return np.dot(self.weights, self.E_avg)
+        """
+        Compute the average energy from the CI roots using the weights.
+
+        Returns
+        -------
+        float
+            Average energy of the CI roots.
+        """
+        return np.dot(self.weights_flat, self.evals_flat)
 
     def make_average_rdm1_sf(self):
+        """
+        Make the average spin-free one-particle RDM from the CI vectors.
+
+        Returns
+        -------
+        NDArray
+            Average spin-free one-particle RDM.
+        """
         rdm1 = np.zeros((self.norb,) * 2)
-        for i, ci in enumerate(self.CIs):
-            rdm1 += ci.make_average_rdm1_sf() * self.weights[i]
+        for i, ci_solver in enumerate(self.ci_solvers):
+            for j in range(ci_solver.nroot):
+                rdm1 += (
+                    ci_solver.make_rdm1_sf(ci_solver.evecs[:, j]) * self.weights[i][j]
+                )
         return rdm1
 
     def make_average_rdm2_sf(self):
+        """
+        Make the average spin-free two-particle RDM from the CI vectors.
+
+        Returns
+        -------
+        NDArray
+            Average spin-free two-particle RDM.
+        """
         rdm2 = np.zeros((self.norb,) * 4)
-        for i, ci in enumerate(self.CIs):
-            rdm2 += ci.make_average_rdm2_sf() * self.weights[i]
+        for i, ci_solver in enumerate(self.ci_solvers):
+            for j in range(ci_solver.nroot):
+                rdm2 += (
+                    ci_solver.make_rdm2_sf(ci_solver.evecs[:, j]) * self.weights[i][j]
+                )
         return rdm2
 
-    def set_verbosity_level(self, level):
-        self.log_level = level
-        for ci in self.CIs:
-            ci.set_verbosity_level(level)
-
     def set_ints(self, scalar, oei, tei):
-        for ci in self.CIs:
-            ci.set_ints(scalar, oei, tei)
+        """
+        Set the active-space integrals for the CI solver.
+
+        Parameters
+        ----------
+        scalar : float
+            The scalar energy term.
+        oei : NDArray
+            One-electron active-space integrals in the MO basis.
+        tei : NDArray
+            Two-electron active-space integrals in the MO basis.
+        """
+        for ci_solver in self.ci_solvers:
+            ci_solver.ints.E = scalar
+            ci_solver.ints.H = oei
+            ci_solver.ints.V = tei
+
+    def compute_natural_occupation_numbers(self):
+        """
+        Compute the natural occupation numbers for the CI states.
+
+        Returns
+        -------
+        (norb, nroot) NDArray
+            The natural occupation numbers for each root.
+        """
+        nos = []
+        for ci_solver in self.ci_solvers:
+            nos.append(ci_solver.compute_natural_occupation_numbers())
+        self.nat_occs = np.concatenate(nos, axis=1)
+
+    def get_top_determinants(self, n=5):
+        """
+        Get the top `n` determinants for each root based on their coefficients in the CI vector.
+
+        Parameters
+        ----------
+        n : int, optional, default=5
+            The number of top determinants to return.
+
+        Returns
+        -------
+        top_dets : list[list[tuple[Determinant, float]]]]
+            top_dets[i] contains a list of tuples (Determinant, coefficient) for the `i`-th root.
+        """
+        top_dets = []
+        for ci_solver in self.ci_solvers:
+            top_dets += ci_solver.get_top_determinants(n)
+        return top_dets
 
 
-class CASCI(CI):
+@dataclass
+class CI(CISolver):
     """
-    A convenience class for performing CASCI calculations.
-
-    Parameters
-    ----------
-    norb : int
-        Number of orbitals in the CAS.
-    nelec : int
-        Number of electrons in the CAS.
-    charge : int, optional, default=0.
-        Charge of the system.
+    CI solver specialized for a single CI calculation. (i.e., not used in a loop).
+    See `CISolver` for all parameters and attributes.
     """
-
-    def __init__(self, ncasorb, ncaselec, charge=0, multiplicity=1, ms=0.0, nroot=1):
-        self.ncasorb = ncasorb
-        self.ncaselec = ncaselec
-        self.charge = charge
-        self.multiplicity = multiplicity
-        self.ms = ms
-        self.nroot = nroot
-
-        self.solver = None
-
-    def __call__(self, method):
-        nel = method.system.Zsum - self.charge
-        nelec_core = nel - self.ncaselec
-        assert nelec_core % 2 == 0, "Number of core electrons must be even."
-        ncore = nelec_core // 2
-        core_orbitals = list(range(ncore))
-        actv_orbitals = list(range(ncore, ncore + self.ncasorb))
-        super().__init__(
-            orbitals=actv_orbitals,
-            core_orbitals=core_orbitals,
-            state=State(nel=nel, multiplicity=self.multiplicity, ms=self.ms),
-            nroot=self.nroot,
-        )
-        self = super().__call__(method)
-        return self
-
-
-class AutoCI(CI):
-    """
-    A convenience class for initializing a CI calculations with automatic CAS selection using AVAS.
-
-    Parameters
-    ----------
-    charge : int, optional, default=0.
-        Charge of the system.
-    multiplicity : int, optional, default=1.
-        Multiplicity of the system.
-    ms : float, optional, default=0.0.
-        Spin quantum number.
-    nroot : int, optional, default=1.
-        Number of roots to compute.
-    """
-
-    def __init__(self, charge, multiplicity, ms, nroot=1):
-        self.charge = charge
-        self.multiplicity = multiplicity
-        self.ms = ms
-        self.nroot = nroot
-
-        self.solver = None
-
-    def __call__(self, method):
-        assert isinstance(method, forte2.AVAS), "Method must be an instance of AVAS"
-        self.parent_method = method
-        return self
 
     def run(self):
-        if not self.parent_method.executed:
-            self.parent_method.run()
-        nel = self.parent_method.system.Zsum - self.charge
-        core_orbitals = self.parent_method.core_orbitals
-        actv_orbitals = self.parent_method.active_orbitals
-        super().__init__(
-            orbitals=actv_orbitals,
-            core_orbitals=core_orbitals,
-            state=State(nel=nel, multiplicity=self.multiplicity, ms=self.ms),
-            nroot=self.nroot,
-        )
-        self = super().__call__(self.parent_method)
         super().run()
-        return self
+        self._post_process()
+
+    def _post_process(self):
+        pretty_print_ci_summary(self.ci_states, self.evals_per_solver)
+        self.compute_natural_occupation_numbers()
+        pretty_print_ci_nat_occ_numbers(self.ci_states, self.nat_occs)
+        top_dets = self.get_top_determinants()
+        pretty_print_ci_dets(self.ci_states, top_dets)
 
 
-class CISD(CI):
+def pretty_print_ci_summary(cistates: CIStates, eigvals_per_solver: list[list[float]]):
     """
-    A convenience class for performing CISD calculations.
+    Pretty print the CI energy summary for the given CI states and eigenvalues.
 
     Parameters
     ----------
-        charge : int, optional, default=0
-            Charge of the system.
-        multiplicity : int, optional, default=1
-            Multiplicity of the system.
-        ms : float, optional, default=0.0
-            Spin quantum number.
-        nroot : int, optional, default=0
-            Number of roots to compute.
+    cistates : CIStates
+        An instance of `CIStates` that holds information about the states and their properties.
+    eigvals_per_solver : list[list[float]]
+        A list of lists containing the eigenvalues (energies) for each CI solver.
     """
+    ncis = cistates.ncis
+    mult = [state.multiplicity for state in cistates.states]
+    ms = [state.ms for state in cistates.states]
+    irrep = [state.symmetry for state in cistates.states]
+    weights = cistates.weights
+    nroots = cistates.nroots
 
-    def __init__(self, charge=0, multiplicity=1, ms=0.0, nroot=1, frozen_core=0):
-        self.charge = charge
-        self.multiplicity = multiplicity
-        self.ms = ms
-        self.nroot = nroot
-        self.frozen_core = frozen_core
+    logger.log_info1("CI energy summary:")
+    width = 64
+    logger.log_info1("=" * width)
+    logger.log_info1(
+        f"{'Root':>6} {'Mult.':>6} {'Ms':>6} {'Irrep':>6} {'Energy':>20} {'Weight':>15}"
+    )
+    logger.log_info1("-" * width)
+    iroot = 0
+    for i in range(ncis):
+        for j in range(nroots[i]):
+            logger.log_info1(
+                f"{iroot:>6d} {mult[i]:>6d} {ms[i]:>6.1f} {irrep[i]:>6d} {eigvals_per_solver[i][j]:>20.10f} {weights[i][j]:>15.5f}"
+            )
+            iroot += 1
+        sep = "-" if i < ncis - 1 else "="
+        logger.log_info1(sep * width)
 
-    def __call__(self, method):
-        nel = method.system.Zsum - self.charge
-        # TODO: Lift this restriction (for ROHF, etc.)
-        assert nel % 2 == 0, "Number of electrons must be even."
-        orbitals = [
-            list(range(self.frozen_core, nel // 2)),
-            list(range(nel // 2, method.system.nbf)),
-        ]
-        core_orbitals = list(range(self.frozen_core))
-        nel_corr = nel - 2 * self.frozen_core
-        super().__init__(
-            orbitals=orbitals,
-            core_orbitals=core_orbitals,
-            state=State(nel=nel, multiplicity=self.multiplicity, ms=self.ms),
-            nroot=self.nroot,
-            gas_min=[nel_corr - 2, 0],
-            gas_max=[nel_corr, 2],
-        )
-        self = super().__call__(method)
-        return self
+
+def pretty_print_ci_nat_occ_numbers(cistates: CIStates, nat_occs: np.ndarray):
+    """
+    Pretty print the natural occupation numbers for the CI states.
+    Roots are rows, orbitals are columns.
+    """
+    nroots = cistates.nroots_sum
+    norb = cistates.norb
+    width = 5 + 11 * norb
+    logger.log_info1("\nNatural occupation numbers*:")
+    logger.log_info1("=" * width)
+    
+    # Header with orbital numbers
+    header = "Orb     " + "".join([f"{cistates.mo_space.active_orbitals[i]:<11d}" for i in range(norb)])
+    logger.log_info1(header)
+    logger.log_info1("-" * width)
+    
+    # Data rows (one per root)
+    for j in range(nroots):
+        line = f"Root {j:<3d}"
+        line += "".join([f"{nat_occs[i, j]:<11.6f}" for i in range(norb)])
+        logger.log_info1(line)
+    
+    logger.log_info1("=" * width)
+    logger.log_info1(
+        "* The occupation numbers are sorted in descending order\n"
+        "  and do not correspond one-to-one to the active MOs."
+    )
+
+def pretty_print_ci_dets(cistates: CIStates, top_dets: list[list[list[tuple]]]):
+    """
+    Pretty print the top determinants for each root of the CI states.
+
+    Parameters
+    ----------
+    cistates : CIStates
+        An instance of `CIStates` that holds information about the states and their properties.
+    top_dets : list[list[list[tuple]]]
+        A list of lists containing the top determinants and their coefficients for each root.
+    """
+    width_per_det = 1 + max(12, cistates.norb + 2)  # '|2222000>'
+    ndets_per_root = len(top_dets[0])
+    width = 10 + width_per_det * ndets_per_root
+    nroots = cistates.nroots_sum
+    norb = cistates.norb
+
+    logger.log_info1("\nTop determinants:")
+    logger.log_info1("=" * width)
+    logger.log_info1(f"{'Contrib.':<10}" + "".join([f"{'#'+str(i+1):<{width_per_det}}" for i in range(ndets_per_root)]))
+    logger.log_info1("-" * width)
+    for i in range(nroots):
+        dets = [det for det, _ in top_dets[i]]
+        coeffs = [coeff for _, coeff in top_dets[i]]
+        logstr = f"Root {i:<5}" + "".join([f"{d.str(norb):<{width_per_det}}" for d in dets])
+        logstr += "\n"
+        logstr += " "*10 + "".join([f"{c:<+{width_per_det}.6f}" for c in coeffs])
+        logger.log_info1(logstr)
+        if i < nroots - 1:
+            logger.log_info1("-" * width)
+    logger.log_info1("=" * width)
