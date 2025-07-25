@@ -1,4 +1,4 @@
-Forte2 C++ API Reference
+C++ API
 ========================
 
 .. automodule:: forte2._forte2
