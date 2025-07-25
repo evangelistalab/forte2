@@ -965,6 +965,13 @@ class CISolver:
             C = self.C[0]
 
         Cact = C[:, self.active_orbitals]
+        Ccore = C[:, self.core_orbitals]
+        # factor of 2 for spin-summed 1-RDM
+        rdm_core = 2 * np.einsum("pi,qi->pq", Ccore, Ccore.conj(), optimize=True)
+        # this includes nuclear dipole contribution
+        core_dip = forte2.props.get_1e_property(
+            self.system, rdm_core, property_name="dipole", unit="au"
+        )
         self.tdm_per_solver = []
         self.fosc_per_solver = []
 
@@ -972,7 +979,14 @@ class CISolver:
             tdmdict = OrderedDict()
             foscdict = OrderedDict()
             for i in range(ci_solver.nroot):
-                for j in range(i, ci_solver.nroot):
+                rdm = ci_solver.make_rdm1_sf(ci_solver.evecs[:, i])
+                rdm = np.einsum("ij,pi,qj->pq", rdm, Cact, Cact.conj(), optimize=True)
+                dip = forte2.props.get_1e_property(
+                    self.system, rdm, property_name="electric_dipole", unit="au"
+                )
+                tdmdict[(i, i)] = dip + core_dip
+                foscdict[(i, i)] = 0.0  # No oscillator strength for i->i transitions
+                for j in range(i + 1, ci_solver.nroot):
                     tdm = ci_solver.make_tdm1_sf(
                         ci_solver.evecs[:, i], ci_solver.evecs[:, j]
                     )
@@ -1128,10 +1142,11 @@ def pretty_print_ci_dets(cistates: CIStates, top_dets: list[list[list[tuple]]]):
 
 
 def pretty_print_ci_transition_props(
-    cistates: CIStates, tdm_per_solver, fosc_per_solver, eigvals_per_solver
+    cistates: CIStates, tdm_per_solver, fosc_per_solver, eigvals_per_solver, thres=1e-4
 ):
     """
-    Pretty print the transition dipole moments and oscillator strengths for the CI states.
+    Pretty print the dipole moments of CI states, as well as the bright transitions between them,
+    including the oscillator strengths and vertical transition energies (VTE).
 
     Parameters
     ----------
@@ -1143,17 +1158,29 @@ def pretty_print_ci_transition_props(
     eigvals_per_solver : list[list[float]]
         A list of lists containing the eigenvalues (energies) for each CI solver.
     """
-    thres = 1e-4
+
+    logger.log_info1("\nDipole moments (a.u.) of CI states (nuclear + electronic):")
+    width = 43
+    logger.log_info1("=" * width)
+    logger.log_info1(f"{'State':<12} {'Dipole moment':<30}")
+    logger.log_info1("-" * width)
+    for ici in range(cistates.ncis):
+        for iroot in range(cistates.nroots[ici]):
+            dip = tdm_per_solver[ici][(iroot, iroot)]
+            dip_str = "[" + ", ".join(f"{d:>7.4f}" for d in dip) + "]"
+            logger.log_info1(f"{f'{iroot}':<12} {dip_str:<30}")
+    logger.log_info1("=" * width)
+
     logger.log_info1(f"\nBright transitions (oscillator strength > {thres:5.2e}):")
     iroot = 0
     width = 64
+    logger.log_info1("=" * width)
+    logger.log_info1(
+        f"{'Transition':<12} {'fosc':<10} {'VTE (eV)':<10} {'Electronic trans. dip. (a.u.)':<30}"
+    )
+    logger.log_info1("-" * width)
+    nbright = 0
     for ici in range(cistates.ncis):
-        logger.log_info1("=" * width)
-        logger.log_info1(
-            f"{'Transition':<12} {'fosc':<10} {'VTE (eV)':<10} {'Electronic trans. dip. (a.u.)':<30}"
-        )
-        logger.log_info1("-" * width)
-        nbright = 0
         for k, v in tdm_per_solver[ici].items():
             i, j = k
             dip = v
@@ -1167,6 +1194,6 @@ def pretty_print_ci_transition_props(
                 info += f"{dip:<30}"
                 logger.log_info1(info)
         iroot += cistates.nroots[ici]
-        if nbright == 0:
-            logger.log_info1("No bright transitions found.")
-        logger.log_info1("=" * width)
+    if nbright == 0:
+        logger.log_info1("No bright transitions found.")
+    logger.log_info1("=" * width)
