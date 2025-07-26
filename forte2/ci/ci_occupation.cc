@@ -416,32 +416,4 @@ generate_1h1p_occupations(const std::vector<std::array<int, 6>>& gas_occupations
     return one_hole_one_particle_occ;
 }
 
-std::string occupation_table(size_t num_spaces,
-                             const std::vector<std::array<int, 6>>& alfa_occupation,
-                             const std::vector<std::array<int, 6>>& beta_occupation,
-                             const std::vector<std::pair<size_t, size_t>>& occupation_pairs) {
-    std::string s;
-    s += "\n    Config.";
-    for (size_t i = 0; i < num_spaces; i++) {
-        s += std::format("   Space {:1}", i + 1);
-    }
-    s += "\n            ";
-    for (size_t i = 0; i < num_spaces; i++) {
-        s += std::format("   α    β ");
-    }
-    int ndash = 7 + 10 * num_spaces;
-    std::string dash(ndash, '-');
-    s += std::format("\n    {}", dash);
-    for (size_t num_conf{0}; const auto& [aocc_idx, bocc_idx] : occupation_pairs) {
-        num_conf += 1;
-        const auto& aocc = alfa_occupation[aocc_idx];
-        const auto& bocc = beta_occupation[bocc_idx];
-        s += std::format("\n    {:6d} ", num_conf);
-        for (size_t i = 0; i < num_spaces; i++) {
-            s += std::format(" {:4d} {:4d}", aocc[i], bocc[i]);
-        }
-    }
-    return s;
-}
-
 } // namespace forte2

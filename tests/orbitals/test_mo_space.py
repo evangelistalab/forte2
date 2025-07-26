@@ -31,8 +31,9 @@ def test_mo_space_invalid():
         mospace = MOSpace(core_orbitals=[0, 1, 2], active_orbitals=[4, 3])
 
     with pytest.raises(Exception):
-        # unsorted active indices across GASes
-        mospace = MOSpace(core_orbitals=[0, 2], active_orbitals=[[3, 4], [1]])
+        # unsorted active indices in one of the GASes
+        # note it's acceptable to have [3, 4] in GAS1 and [1] in GAS2, as long as they are individually sorted
+        mospace = MOSpace(core_orbitals=[0, 2], active_orbitals=[[4, 3], [1]])
 
 
 def test_mo_space_simple_cas():
@@ -121,3 +122,18 @@ def test_mo_space_interlaced_gas_2():
     assert mospace.actv[1] == slice(3, 4)
     assert mospace.actv[2] == slice(4, 7)
     assert mospace.virt == slice(7, 10)
+
+
+def test_mo_space_interlaced_gas_3():
+    mospace = MOSpace(core_orbitals=[0, 2], active_orbitals=[[1, 4], [3, 6]])
+    mospace.compute_contiguous_permutation(nmo=10)
+    assert mospace.ngas == 2
+    assert mospace.nactv == 4
+    assert mospace.ncore == 2
+    assert mospace.active_indices == [1, 4, 3, 6]
+    assert list(mospace.contig_to_orig) == [0, 2, 1, 4, 3, 6, 5, 7, 8, 9]
+    assert list(mospace.orig_to_contig) == [0, 2, 1, 4, 3, 6, 5, 7, 8, 9]
+    assert mospace.core == slice(0, 2)
+    assert mospace.actv[0] == slice(2, 4)
+    assert mospace.actv[1] == slice(4, 6)
+    assert mospace.virt == slice(6, 10)

@@ -58,9 +58,6 @@ class MOSpace:
         ]
         self.core_indices = self.core_orbitals
         assert (
-            sorted(self.active_indices) == self.active_indices
-        ), "Active orbitals must be sorted."
-        assert (
             len(set(self.active_indices)) == self.nactv
         ), "Active orbitals must be unique."
         assert (
