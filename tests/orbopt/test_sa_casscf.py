@@ -102,7 +102,7 @@ def test_sa_casscf_same_mult():
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci_state = CIStates(
-        active_spaces=[4, 5, 6, 7, 8, 9],
+        active_orbitals=[4, 5, 6, 7, 8, 9],
         core_orbitals=[0, 1, 2, 3],
         states=State(nel=14, multiplicity=1, ms=0.0),
         nroots=2,
@@ -126,7 +126,7 @@ def test_sa_casscf_diff_mult():
     triplet = State(nel=rhf.nel, multiplicity=3, ms=0.0)
     ci_states = CIStates(
         states=[singlet, triplet],
-        active_spaces=[4, 5, 6, 7, 8, 9],
+        active_orbitals=[4, 5, 6, 7, 8, 9],
         core_orbitals=[0, 1, 2, 3],
         weights=[[0.25], [0.75 * 0.85, 0.75 * 0.15]],
         nroots=[1, 2],
@@ -183,6 +183,8 @@ def test_sa_casscf_c2_transition_dipole():
 
 
 def test_sa_casscf_hf():
+    from forte2 import CI
+
     erhf = -100.009873562527
     emcscf_root_1 = -99.9964137656
     emcscf_root_2 = -99.6886809114
@@ -200,11 +202,11 @@ def test_sa_casscf_hf():
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci_state = CIStates(
         core_orbitals=[0],
-        active_spaces=[1, 2, 3, 4, 5],
+        active_orbitals=[1, 2, 3, 4, 5],
         states=State(nel=10, multiplicity=1, ms=0.0),
         nroots=4,
     )
-    mc = MCOptimizer(ci_state, econv=1e-12, gconv=1e-12, do_transition_dipole=True)(rhf)
+    mc = MCOptimizer(ci_state, do_transition_dipole=True)(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)

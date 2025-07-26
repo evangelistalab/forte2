@@ -13,7 +13,7 @@ def test_ci_1():
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     cistate = CIStates(
-        states=State(nel=2, multiplicity=1, ms=0.0), active_spaces=[0, 1]
+        states=State(nel=2, multiplicity=1, ms=0.0), active_orbitals=[0, 1]
     )
     ci = CI(cistate)(rhf)
     ci.run()
@@ -35,7 +35,7 @@ def test_ci_2():
     ci_states = CIStates(
         states=State(nel=10, multiplicity=1, ms=0.0),
         core_orbitals=[0],
-        active_spaces=[1, 2, 3, 4, 5, 6],
+        active_orbitals=[1, 2, 3, 4, 5, 6],
     )
     ci = CI(ci_states)(rhf)
     ci.run()
@@ -54,10 +54,10 @@ def test_sa_ci_n2():
     rhf = RHF(charge=0, econv=1e-12)(system)
     singlet = State(14, multiplicity=1, ms=0.0)
     triplet = State(14, multiplicity=3, ms=0.0)
-    mo_space = MOSpace(core_orbitals=[0, 1, 2, 3], active_spaces=[4, 5, 6, 7, 8, 9])
     sa_info = CIStates(
         states=[singlet, triplet],
-        mo_space=mo_space,
+        core_orbitals=[0, 1, 2, 3],
+        active_orbitals=[4, 5, 6, 7, 8, 9],
         nroots=[1, 2],
         weights=[[1.0], [0.85, 0.15]],
     )
@@ -129,7 +129,7 @@ def test_ci_tdm():
     ci_states = CIStates(
         states=State(nel=14, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1, 2, 3],
-        active_spaces=[4, 5, 6, 7, 8, 9],
+        active_orbitals=[4, 5, 6, 7, 8, 9],
         nroots=10,
     )
     ci = CI(ci_states, do_transition_dipole=True)(rhf)

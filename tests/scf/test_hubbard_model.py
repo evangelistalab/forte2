@@ -24,7 +24,7 @@ def test_1d_hubbard_rhf_fci():
     scf = RHF(charge=-8)(system)
     scf.guess_type = "hcore"
     ci_state = CIStates(
-        active_spaces=list(range(8)),
+        active_orbitals=list(range(8)),
         states=forte2.State(nel=8, multiplicity=1, ms=0.0),
     )
     ci = CI(ci_state)(scf)
@@ -89,7 +89,7 @@ def test_2d_hubbard_rhf_fci():
     scf = RHF(charge=-8)(system)
     scf.guess_type = "hcore"
     ci_state = CIStates(
-        active_spaces=list(range(8)),
+        active_orbitals=list(range(8)),
         states=forte2.State(nel=8, multiplicity=1, ms=0.0),
     )
     ci = CI(ci_state)(scf)

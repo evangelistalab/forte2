@@ -21,7 +21,7 @@ def test_gasci_rohf_1():
 
     rhf = ROHF(charge=1, ms=0.5, econv=1e-12, dconv=1e-8)(system)
     ci_state = CIStates(
-        active_spaces=[[0], [1, 2, 3, 4, 5, 6, 7, 8]],
+        active_orbitals=[[0], [1, 2, 3, 4, 5, 6, 7, 8]],
         states=State(nel=9, multiplicity=2, ms=0.5, gas_min=[1], gas_max=[1]),
     )
     ci = CI(ci_state, econv=1e-12)(rhf)
@@ -49,7 +49,7 @@ def test_gasci_rohf_2():
 
     rhf = ROHF(charge=1, ms=0.5, econv=1e-12, dconv=1e-8)(system)
     ci_state = CIStates(
-        active_spaces=[[0], [1, 2, 3, 4, 5, 6, 7, 8]],
+        active_orbitals=[[0], [1, 2, 3, 4, 5, 6, 7, 8]],
         states=State(nel=9, multiplicity=2, ms=0.5, gas_min=[1], gas_max=[1]),
     )
     ci = CI(ci_state, econv=1e-12)(rhf)
@@ -72,7 +72,7 @@ def test_gasci_rohf_3():
 
     rhf = ROHF(charge=0, econv=1e-12, dconv=1e-8, ms=1.0)(system)
     ci_state = CIStates(
-        active_spaces=[[0], [1, 2, 3, 4, 5, 6]],
+        active_orbitals=[[0], [1, 2, 3, 4, 5, 6]],
         states=State(nel=10, multiplicity=3, ms=1.0, gas_min=[0], gas_max=[1]),
     )
     ci = CI(ci_state)(rhf)

@@ -474,9 +474,10 @@ class AVAS(MOsMixin, SystemMixin):
         self.nactv = len(act_docc) + len(act_uocc) + nsocc
         self.ncore = len(inact_docc)
         self.core_orbitals = list(range(self.ncore))
-        self.active_orbitals = list(range(self.ncore, self.ncore + self.nactv))
-        # For compatibility with the MOSpace class
-        self.active_spaces = [self.active_orbitals]
+        self.core_indices = self.core_orbitals
+        self.active_indices = list(range(self.ncore, self.ncore + self.nactv))
+        # For pushing to the CIStates class
+        self.active_orbitals = [self.active_indices]
         self.ngas = 1
         logger.log_info1(f"\nNumber of core orbitals:      {self.ncore}")
         logger.log_info1(f"Number of active orbitals:    {self.nactv}")

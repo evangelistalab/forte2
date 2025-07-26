@@ -13,7 +13,7 @@ def test_fci_co_o_core_exc():
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci_state = CIStates(
-        active_spaces=list(range(system.nbf)),
+        active_orbitals=list(range(system.nbf)),
         states=State(nel=14, multiplicity=1, ms=0.0),
         nroots=1,
     )
@@ -33,7 +33,7 @@ def test_fci_co_c_core_exc():
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci_state = CIStates(
-        active_spaces=list(range(system.nbf)),
+        active_orbitals=list(range(system.nbf)),
         states=State(nel=14, multiplicity=1, ms=0.0),
         nroots=1,
     )

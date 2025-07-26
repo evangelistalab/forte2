@@ -32,20 +32,22 @@ class CIStates:
         A list of lists of floats specifying the weights for each root in each state.
         These do not have to be normalized, but must be non-negative.
         If not provided, equal weights are assigned to each root.
-    mo_space : MOSpace | AVAS, optional
-        The molecular orbital space defining the active spaces and core orbitals.
-        This is used with each `State` to define a `_CIBase` solver.
-        If not provided, it will be constructed from `core_orbitals` and `active_spaces`.
-        An `AVAS` object can provided here instead, it does not need to be run first.
+    avas : AVAS, optional
+        An instance of `AVAS` to fetch the active spaces and core orbitals from.
+        If provided, `core_orbitals` and `active_orbitals` will be fetched from it after its execution.
     core_orbitals : list[int], optional
         A list of integers specifying the core orbitals.
         If `AVAS` is provided, this field will be fetched from it after its execution.
-    active_spaces : list[list[int]], optional
+    active_orbitals : list[list[int]], optional
         A list of lists of integers specifying the orbital indices for each GAS.
         If `AVAS` is provided, this field will be fetched from it after its execution.
 
     Attributes
     ----------
+    mo_space : MOSpace
+        The molecular orbital space defined by the active and core orbitals.
+        This is either constructed from `active_orbitals` and `core_orbitals`
+        or fetched from `AVAS` after its execution.
     ncis : int
         The number of CI states, which is the length of the `states` list.
     nroots_sum : int
@@ -62,10 +64,9 @@ class CIStates:
     states: list[State] | State
     nroots: list[int] | int = 1
     weights: list[list[float]] = None
-    mo_space: MOSpace = None
     avas: AVAS = None
     core_orbitals: list[int] = None
-    active_spaces: list[list[int]] = None
+    active_orbitals: list[list[int]] = None
 
     def __post_init__(self):
         # 1. Validate states
@@ -78,21 +79,19 @@ class CIStates:
         assert len(self.states) > 0, "states_and_mo_spaces cannot be empty"
         self.ncis = len(self.states)
 
-        # 2. Make mo_space from core_orbitals and active_spaces if mo_space is not provided
-        if self.mo_space is None and self.avas is None:
+        # 2. Make mo_space from core_orbitals and active_orbitals
+        if self.avas is None:
             assert (
-                self.active_spaces is not None
-            ), "If mo_space or avas is not provided, active_spaces must be provided"
+                self.active_orbitals is not None
+            ), "If avas is not provided, active_orbitals must be provided"
             if self.core_orbitals is None:
                 self.core_orbitals = []
             self.mo_space = MOSpace(
                 core_orbitals=self.core_orbitals,
-                active_spaces=self.active_spaces,
+                active_orbitals=self.active_orbitals,
             )
-        if self.avas is not None and self.mo_space is not None:
-            raise ValueError(
-                "Cannot provide both avas and mo_space. Use one or the other."
-            )
+        else:
+            self.mo_space = None
 
         # 3. Validate nroots
         if isinstance(self.nroots, int):
@@ -127,12 +126,12 @@ class CIStates:
             assert self.avas.executed, "AVAS must be executed before fetching MOSpace"
             self.mo_space = MOSpace(
                 core_orbitals=self.avas.core_orbitals,
-                active_spaces=self.avas.active_spaces,
+                active_orbitals=self.avas.active_orbitals,
             )
         self.norb = self.mo_space.nactv
         self.ncore = self.mo_space.ncore
-        self.active_orbitals = self.mo_space.active_orbitals
-        self.core_orbitals = self.mo_space.core_orbitals
+        self.active_indices = self.mo_space.active_indices
+        self.core_indices = self.mo_space.core_indices
 
     def pretty_print_ci_states(self):
         """
@@ -247,7 +246,7 @@ class _CIBase:
 
     def _ci_solver_startup(self):
         self.orbital_symmetry = [
-            [0] * len(self.mo_space.active_spaces[x]) for x in range(self.ngas)
+            [0] * len(self.mo_space.active_orbitals[x]) for x in range(self.ngas)
         ]
 
         self.ci_strings = forte2.CIStrings(
@@ -799,8 +798,8 @@ class CISolver:
 
         self.ci_states.fetch_mo_space()
         self.ncis = self.ci_states.ncis
-        self.core_orbitals = self.ci_states.core_orbitals
-        self.active_orbitals = self.ci_states.active_orbitals
+        self.core_indices = self.ci_states.core_indices
+        self.active_indices = self.ci_states.active_indices
         self.norb = self.ci_states.norb
         self.weights = self.ci_states.weights
         self.weights_flat = self.ci_states.weights_flat
@@ -811,8 +810,8 @@ class CISolver:
         ints = RestrictedMOIntegrals(
             self.system,
             self.C[0],
-            self.active_orbitals,
-            self.core_orbitals,
+            self.active_indices,
+            self.core_indices,
             use_aux_corr=True,
         )
 
@@ -964,8 +963,8 @@ class CISolver:
         if C is None:
             C = self.C[0]
 
-        Cact = C[:, self.active_orbitals]
-        Ccore = C[:, self.core_orbitals]
+        Cact = C[:, self.active_indices]
+        Ccore = C[:, self.core_indices]
         # factor of 2 for spin-summed 1-RDM
         rdm_core = 2 * np.einsum("pi,qi->pq", Ccore, Ccore.conj(), optimize=True)
         # this includes nuclear dipole contribution
@@ -1023,7 +1022,7 @@ class CI(CISolver):
         top_dets = self.get_top_determinants()
         pretty_print_ci_dets(self.ci_states, top_dets)
 
-        if self.do_transition_dipole and self.ci_states.nroots_sum > 1:
+        if self.do_transition_dipole:
             self.compute_transition_properties()
             pretty_print_ci_transition_props(
                 self.ci_states,
@@ -1083,9 +1082,9 @@ def pretty_print_ci_nat_occ_numbers(cistates: CIStates, nat_occs: np.ndarray):
     logger.log_info1("\nNatural occupation numbers*:")
     logger.log_info1("=" * width)
 
-    # Header with orbital numbers
+    # Header with orbital indices
     header = "Orb     " + "".join(
-        [f"{cistates.mo_space.active_orbitals[i]:<11d}" for i in range(norb)]
+        [f"{cistates.mo_space.active_indices[i]:<11d}" for i in range(norb)]
     )
     logger.log_info1(header)
     logger.log_info1("-" * width)

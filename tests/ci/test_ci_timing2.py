@@ -22,7 +22,7 @@ def timing(n):
     rohf = ROHF(charge=0, ms=0.5 * (n % 2), econv=1e-12)(system)
     rohf.run()
     ci_state = CIStates(
-        active_spaces=list(range(n)),
+        active_orbitals=list(range(n)),
         states=State(nel=n, multiplicity=multiplicity, ms=ms),
         nroots=1,
     )

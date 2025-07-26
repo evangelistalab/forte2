@@ -76,7 +76,7 @@ def test_avas_separate_n2():
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci_states = CIStates(
-        active_spaces=[4, 5, 6, 7, 8, 9],
+        active_orbitals=[4, 5, 6, 7, 8, 9],
         core_orbitals=[0, 1, 2, 3],
         states=State(nel=14, multiplicity=1, ms=0.0),
     )

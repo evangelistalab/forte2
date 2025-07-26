@@ -103,7 +103,7 @@ def test_ci_rdms_1():
     ci_state = CIStates(
         states=State(nel=10, multiplicity=1, ms=0.0),
         core_orbitals=[0],
-        active_spaces=[1, 2, 3, 4, 5, 6],
+        active_orbitals=[1, 2, 3, 4, 5, 6],
     )
     ci = CI(ci_state, do_test_rdms=True)(rhf)
     ci.run()

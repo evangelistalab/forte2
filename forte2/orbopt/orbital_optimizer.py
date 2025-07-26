@@ -94,7 +94,17 @@ class MCOptimizer(MOsMixin, SystemMixin):
         self.weights = self.ci_states.weights
         self.weights_flat = self.ci_states.weights_flat
 
-        self._make_spaces_contiguous()
+        # make the core, active, and virtual spaces contiguous
+        # i.e., [core, gas1, gas2, ..., virt]
+        self.ci_states.mo_space.compute_contiguous_permutation(self.system.nbf)
+        perm = self.ci_states.mo_space.orig_to_contig
+        # this is the contiguous coefficient matrix
+        self._C = self.C[0][:, perm].copy()
+        self.core = self.ci_states.mo_space.core
+        # self.actv will be a list if multiple GASes are defined
+        self.actv = self.ci_states.mo_space.actv
+        self.virt = self.ci_states.mo_space.virt
+
         self.nrr = self._get_nonredundant_rotations()
 
     def run(self):
@@ -119,7 +129,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
         #     2. minimize energy wrt CI expansion at current orbitals
         #       (this is just the diagonalization of the active-space CI Hamiltonian)
         self.orb_opt = OrbOptimizer(
-            self.C[0],
+            self._C,
             (self.core, self.actv, self.virt),
             fock_builder,
             self.Hcore,
@@ -195,9 +205,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
         while self.iter < self.maxiter:
             # 1. Optimize orbitals at fixed CI expansion
             self.E_orb = self.lbfgs_solver.minimize(self.orb_opt, R)
-            # Copy the optimized orbitals to the parent method
-            self.C[0] = self.orb_opt.C.copy()
-
+            self._C = self.orb_opt.C.copy()
             # 2. Convergence checks
             self.g_rms = np.sqrt(np.mean((self.lbfgs_solver.g - self.g_old) ** 2))
             self.g_old = self.lbfgs_solver.g.copy()
@@ -253,9 +261,9 @@ class MCOptimizer(MOsMixin, SystemMixin):
         logger.log_info1(f"Orbital optimization converged in {self.iter} iterations.")
         logger.log_info1(f"Final orbital optimized energy: {self.E_avg:.10f}")
 
-        # undo make_spaces_contiguous
-        inv_argsort = self.ci_states.mo_space.inv_argsort
-        self.C[0][:, inv_argsort] = self.C[0]
+        # undo _make_spaces_contiguous
+        perm = self.ci_states.mo_space.contig_to_orig
+        self.C[0] = self._C[:, perm].copy()
 
         self._post_process()
         # self.parent_method.set_verbosity_level(current_verbosity)
@@ -292,19 +300,6 @@ class MCOptimizer(MOsMixin, SystemMixin):
         basis_info.print_ao_composition(
             self.C[0], list(range(self.actv.start, self.actv.stop))
         )
-
-    def _make_spaces_contiguous(self):
-        """
-        Swap the orbitals to ensure that the core, active, and virtual orbitals
-        are contiguous in the flattened orbital array.
-        """
-        self.ci_states.mo_space.make_spaces_contiguous(self.system.nbf)
-        argsort = self.ci_states.mo_space.argsort
-        self.C[0][:, argsort] = self.C[0].copy()
-        self.core = self.ci_states.mo_space.core
-        # self.actv will be a list if multiple GASes are defined
-        self.actv = self.ci_states.mo_space.actv
-        self.virt = self.ci_states.mo_space.virt
 
     def _get_nonredundant_rotations(self):
         nrr = np.zeros((self.system.nbf, self.system.nbf), dtype=bool)
