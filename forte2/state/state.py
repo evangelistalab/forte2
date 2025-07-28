@@ -1,6 +1,8 @@
 import numpy as np
 from dataclasses import dataclass, field
+
 from forte2.helpers.multiplicity_labels import multiplicity_labels
+from forte2.helpers import logger
 
 
 @dataclass(order=True)
@@ -140,3 +142,97 @@ class State:
     def get_ms_string(twice_ms: int) -> str:
         """Return a string representation of Ms based on its value."""
         return str(twice_ms // 2) if twice_ms % 2 == 0 else f"{twice_ms}/2"
+
+
+@dataclass
+class StateAverageInfo:
+    """
+    A class to hold information about state averaging in multireference calculations.
+
+    Parameters
+    ----------
+    states : list[State] | State
+        A list of `State` objects or a single `State` object representing the electronic states.
+        This also includes the gas_min and gas_max attributes.
+    nroots : list[int] | int, optional, default=1
+        A list of integers specifying the number of roots for each state.
+        If only one state is provided, this can be a single integer.
+    weights : list[list[float]], optional
+        A list of lists of floats specifying the weights for each root in each state.
+        These do not have to be normalized, but must be non-negative.
+        If not provided, equal weights are assigned to each root.
+
+    Attributes
+    ----------
+    ncis : int
+        The number of CI states, which is the length of the `states` list.
+    nroots_sum : int
+        The total number of roots across all states.
+    weights_flat : NDArray
+        A flattened array of weights for all roots across all states.
+    """
+
+    states: list[State] | State
+    nroots: list[int] | int = 1
+    weights: list[list[float]] = None
+
+    def __post_init__(self):
+        # 1. Validate states
+        if isinstance(self.states, State):
+            self.states = [self.states]
+        assert isinstance(self.states, list), "states_and_mo_spaces must be a list"
+        assert all(
+            isinstance(state, State) for state in self.states
+        ), "All elements in states_and_mo_spaces must be State instances"
+        assert len(self.states) > 0, "states_and_mo_spaces cannot be empty"
+        self.ncis = len(self.states)
+
+        # 2. Validate nroots
+        if isinstance(self.nroots, int):
+            assert (
+                self.ncis == 1
+            ), "If nroots is an integer, there must be exactly one state."
+            self.nroots = [self.nroots]
+        assert isinstance(self.nroots, list), "nroots must be a list"
+        assert all(
+            isinstance(n, int) and n > 0 for n in self.nroots
+        ), "nroots must be a list of positive integers"
+        self.nroots_sum = sum(self.nroots)
+
+        # 3. Validate weights
+        if self.weights is None:
+            self.weights = [[1.0 / self.nroots_sum] * n for n in self.nroots]
+            self.weights_flat = np.concatenate(self.weights)
+        else:
+            assert (
+                sum(len(w) for w in self.weights) == self.nroots_sum
+            ), "Weights must match the total number of roots across all states"
+            self.weights_flat = np.array(
+                [w for sublist in self.weights for w in sublist], dtype=float
+            )
+            n = self.weights_flat.sum()
+            self.weights = [[w / n for w in sublist] for sublist in self.weights]
+            self.weights_flat /= n
+            assert np.all(self.weights_flat >= 0), "Weights must be non-negative"
+
+    def pretty_print_sa_info(self):
+        """
+        Pretty print the state averaging information.
+        """
+        width = 33
+        logger.log_info1("\nRequested states:")
+        logger.log_info1("=" * width)
+        logger.log_info1(
+            f"{'Root':>4} {'Nel':>5} {'Mult.':>6} {'Ms':>4} {'Weight':>10}"
+        )
+        logger.log_info1("-" * width)
+        iroot = 0
+        for i, state in enumerate(self.states):
+            for j in range(self.nroots[i]):
+                logger.log_info1(
+                    f"{iroot:>4} {state.nel:>5} {state.multiplicity:>6d} {state.ms:>4.1f} {self.weights[i][j]:>10.6f}"
+                )
+                iroot += 1
+            if i < len(self.states) - 1:
+                logger.log_info1("-" * width)
+        logger.log_info1("=" * width + "\n")

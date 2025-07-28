@@ -5,11 +5,13 @@ import time
 import numpy as np
 import scipy as sp
 
-import forte2
+from forte2 import ints
+from forte2.system.basis_utils import BasisInfo
+from forte2.system import System, ModelSystem
 from forte2.jkbuilder import FockBuilder
 from forte2.helpers.mixins import MOsMixin, SystemMixin
 from forte2.helpers.matrix_functions import givens_rotation
-from forte2.helpers import logger
+from forte2.helpers import logger, DIIS
 from .initial_guess import minao_initial_guess, core_initial_guess
 
 
@@ -72,7 +74,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
 
     def __call__(self, system):
         assert isinstance(
-            system, (forte2.System, forte2.ModelSystem)
+            system, (System, ModelSystem)
         ), "System must be an instance of forte2.System"
         self.system = system
         self.method = self._scf_type().upper()
@@ -114,7 +116,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         """
         start = time.monotonic()
 
-        diis = forte2.helpers.DIIS(
+        diis = DIIS(
             diis_start=self.diis_start,
             diis_nvec=self.diis_nvec,
             diis_min=self.diis_min,
@@ -353,9 +355,9 @@ class RHF(SCFBase):
         self._print_ao_composition()
 
     def _print_ao_composition(self):
-        if isinstance(self.system, forte2.ModelSystem):
+        if isinstance(self.system, ModelSystem):
             return
-        basis_info = forte2.basis_utils.BasisInfo(self.system, self.system.basis)
+        basis_info = BasisInfo(self.system, self.system.basis)
         logger.log_info1("\nAO Composition of MOs (HOMO-5 to HOMO):")
         basis_info.print_ao_composition(
             self.C[0], list(range(max(self.na - 5, 0), self.na))
@@ -792,7 +794,7 @@ class GHF(SCFBase):
         return Daa + Dbb
 
     def _initial_guess(self, H, S, guess_type="minao"):
-        H_ao = forte2.ints.kinetic(self.system.basis) + forte2.ints.nuclear(
+        H_ao = ints.kinetic(self.system.basis) + ints.nuclear(
             self.system.basis, self.system.atoms
         )
         Ca = Cb = RHF._initial_guess(self, H_ao, S, guess_type)[0].astype(complex)

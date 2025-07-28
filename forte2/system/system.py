@@ -1,7 +1,8 @@
 import scipy as sp
 from dataclasses import dataclass, field
 
-import forte2
+from forte2 import ints
+from forte2.system.atom_data import DEBYE_TO_AU, DEBYE_ANGSTROM_TO_AU
 from forte2.helpers import logger
 from forte2.helpers.matrix_functions import invsqrt_matrix, canonical_orth
 from forte2.x2c import get_hcore_x2c
@@ -67,13 +68,13 @@ class System:
         A dictionary mapping atomic numbers to their numbers in the system.
     atom_to_center : dict[int : list[int]]
         A dictionary mapping atomic numbers to a list of (0-based) indices of atoms of that type in the system.
-    basis : forte2.ints.Basis
+    basis : ints.Basis
         The basis set for the system, built from the provided `basis_set`.
-    auxiliary_basis : forte2.ints.Basis
+    auxiliary_basis : ints.Basis
         The auxiliary basis set for the system, built from the provided `auxiliary_basis_set`.
-    auxiliary_basis_set_corr : forte2.ints.Basis
+    auxiliary_basis_set_corr : ints.Basis
         The auxiliary basis set for correlated calculations, built from the provided `auxiliary_basis_set_corr`.
-    minao_basis : forte2.ints.Basis
+    minao_basis : ints.Basis
         The minimal atomic orbital basis set, built from the provided `minao_basis_set`.
     Zsum : float
         The total nuclear charge of the system, calculated as the sum of atomic charges.
@@ -126,7 +127,7 @@ class System:
         )
         self.atomic_positions = np.array([atom[1] for atom in self.atoms])
         self.centroid = np.mean(self.atomic_positions, axis=0)
-        self.nuclear_repulsion = forte2.ints.nuclear_repulsion(self.atoms)
+        self.nuclear_repulsion = ints.nuclear_repulsion(self.atoms)
 
         self.center_of_mass = np.einsum(
             "a,ax->x", self.atomic_masses, self.atomic_positions
@@ -204,7 +205,7 @@ class System:
 
         Returns
         -------
-        forte2.ints.Basis
+        ints.Basis
             Decontracted basis set.
         """
         return build_basis(
@@ -223,7 +224,7 @@ class System:
         NDArray
             Overlap integrals matrix.
         """
-        return forte2.ints.overlap(self.basis)
+        return ints.overlap(self.basis)
 
     def ints_hcore(self):
         """
@@ -234,8 +235,8 @@ class System:
         NDArray
             Core Hamiltonian integrals matrix.
         """
-        T = forte2.ints.kinetic(self.basis)
-        V = forte2.ints.nuclear(self.basis, self.atoms)
+        T = ints.kinetic(self.basis)
+        V = ints.nuclear(self.basis, self.atoms)
         return T + V
 
     def nuclear_dipole(self, origin=None, unit="debye"):
@@ -261,7 +262,7 @@ class System:
             assert len(origin) == 3, "Origin must be a 3-element vector."
             positions -= np.array(origin)[np.newaxis, :]
         conversion_factor = (
-            1.0 / forte2.atom_data.DEBYE_TO_AU if unit == "debye" else 1.0
+            1.0 / DEBYE_TO_AU if unit == "debye" else 1.0
         )
         return np.einsum("a,ax->x", charges, positions) * conversion_factor
 
@@ -290,7 +291,7 @@ class System:
         nuc_quad = np.einsum("a,ax,ay->xy", charges, positions, positions)
         nuc_quad = 0.5 * (3 * nuc_quad - np.eye(3) * nuc_quad.trace())
         conversion_factor = (
-            1.0 / forte2.atom_data.DEBYE_ANGSTROM_TO_AU if unit == "debye" else 1.0
+            1.0 / DEBYE_ANGSTROM_TO_AU if unit == "debye" else 1.0
         )
         return nuc_quad * conversion_factor
 

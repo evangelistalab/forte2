@@ -1,5 +1,7 @@
 from ._forte2 import *
-from .system import *
+from ._forte2 import ints
+from ._forte2.ints import Basis, Shell
+from .system import System, ModelSystem, HubbardModel
 from .state import State, MOSpace
 from .scf import RHF, ROHF, UHF, CUHF, GHF
 from .ci import CI

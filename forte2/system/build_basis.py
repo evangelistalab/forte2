@@ -6,7 +6,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-import forte2
+from forte2 import Basis, Shell
+from forte2.system.atom_data import ATOM_SYMBOL_TO_Z
 from forte2.helpers import logger
 
 try:
@@ -104,7 +105,7 @@ def parse_custom_basis_assignment(unique_atoms: set, basis_assignment: dict) -> 
 
     # convert atom symbols to atomic numbers
     basis_assignment = {
-        forte2.ATOM_SYMBOL_TO_Z[atom.upper()]: basis
+        ATOM_SYMBOL_TO_Z[atom.upper()]: basis
         for atom, basis in basis_assignment.items()
     }
 
@@ -130,7 +131,7 @@ def build_basis(
     atoms: list[tuple[int, tuple[float, float, float]]],
     embed_normalization_into_coefficients: bool = True,
     decontract: bool = False,
-) -> forte2.ints.Basis:
+) -> Basis:
     """
     Assemble the basis set from JSON data or Basis Set Exchange, depending on availability.
 
@@ -155,7 +156,7 @@ def build_basis(
     basis : forte2.ints.Basis
         The basis set.
     """
-    basis = forte2.ints.Basis()
+    basis = Basis()
     prefix = "decon-" if decontract else ""
     unique_atoms = set([atomic_number for atomic_number, _ in atoms])
 
@@ -190,7 +191,7 @@ def build_basis(
                 for l in angular_momentum:
                     for alpha in exponents:
                         basis.add(
-                            forte2.ints.Shell(
+                            Shell(
                                 l,
                                 [alpha],
                                 [1.0],
@@ -211,7 +212,7 @@ def build_basis(
                 ):
                     coefficients = list(map(float, subshell_coefficients))
                     basis.add(
-                        forte2.ints.Shell(
+                        Shell(
                             l,
                             exponents,
                             coefficients,

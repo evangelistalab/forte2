@@ -1,5 +1,6 @@
 import numpy as np
 
+import forte2
 from forte2 import *
 from forte2.jkbuilder import RestrictedMOIntegrals
 

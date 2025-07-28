@@ -2,8 +2,8 @@ import numpy as np
 import scipy as sp
 from dataclasses import dataclass, field
 
-from forte2.ci import CISolver, StateAverageInfo
-from forte2.state import State, MOSpace
+from forte2.ci import CISolver
+from forte2.state import State, MOSpace, StateAverageInfo
 from forte2.jkbuilder import FockBuilder
 from forte2.helpers.mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.helpers import logger, LBFGS, DIIS
