@@ -174,7 +174,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
         self.E_orb_old = self.E_orb
         self.E_avg_old = self.E_avg
 
-        g1_act = self.ci_solver.make_average_rdm1_sf()
+        g1_act = self.ci_solver.make_average_sf_1rdm()
         g2_act = 0.5 * self.ci_solver.make_average_rdm2_sf()
         # ci_maxiter_save = self.ci_solver.get_maxiter()
         # self.ci_solver.set_maxiter(self.ci_maxiter)
@@ -227,7 +227,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
             self.E_avg = self.ci_solver.compute_average_energy()
             self.E_ci = np.array(self.ci_solver.E)
             self.E = self.E_avg
-            g1_act = self.ci_solver.make_average_rdm1_sf()
+            g1_act = self.ci_solver.make_average_sf_1rdm()
             g2_act = 0.5 * self.ci_solver.make_average_rdm2_sf()
             self.orb_opt.set_rdms(g1_act, g2_act)
             self.iter += 1

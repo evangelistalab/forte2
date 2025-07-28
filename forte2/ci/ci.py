@@ -537,7 +537,7 @@ class _CIBase:
         ci_r_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_l, ci_l_det)
         self.spin_adapter.csf_C_to_det_C(ci_r, ci_r_det)
-        return self.ci_sigma_builder.rdm1_sf(ci_l_det, ci_r_det)
+        return self.ci_sigma_builder.sf_1rdm(ci_l_det, ci_r_det)
 
     def make_rdm2_sd(self, ci_vec, full=True):
         """
@@ -885,7 +885,7 @@ class CISolver:
         """
         return np.dot(self.weights_flat, self.evals_flat)
 
-    def make_average_rdm1_sf(self):
+    def make_average_sf_1rdm(self):
         """
         Make the average spin-free one-particle RDM from the CI vectors.
 
@@ -898,7 +898,7 @@ class CISolver:
         for i, ci_solver in enumerate(self.ci_solvers):
             for j in range(ci_solver.nroot):
                 rdm1 += (
-                    ci_solver.make_rdm1_sf(ci_solver.evecs[:, j]) * self.weights[i][j]
+                    ci_solver.make_sf_1rdm(ci_solver.evecs[:, j]) * self.weights[i][j]
                 )
         return rdm1
 
@@ -915,7 +915,7 @@ class CISolver:
         for i, ci_solver in enumerate(self.ci_solvers):
             for j in range(ci_solver.nroot):
                 rdm2 += (
-                    ci_solver.make_rdm2_sf(ci_solver.evecs[:, j]) * self.weights[i][j]
+                    ci_solver.make_sf_2rdm(ci_solver.evecs[:, j]) * self.weights[i][j]
                 )
         return rdm2
 
@@ -996,7 +996,7 @@ class CISolver:
             tdmdict = OrderedDict()
             foscdict = OrderedDict()
             for i in range(ci_solver.nroot):
-                rdm = ci_solver.make_rdm1_sf(ci_solver.evecs[:, i])
+                rdm = ci_solver.make_sf_1rdm(ci_solver.evecs[:, i])
                 rdm = np.einsum("ij,pi,qj->pq", rdm, Cact, Cact.conj(), optimize=True)
                 dip = forte2.props.get_1e_property(
                     self.system, rdm, property_name="electric_dipole", unit="au"
