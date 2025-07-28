@@ -598,9 +598,26 @@ class CISolver(SystemMixin, MOsMixin, MOSpaceMixin):
 
     Parameters
     ----------
-    ci_states : CIStates
-        An instance of `CIStates` that holds information about the states to be solved.
-        This enables arbitrary state averaging in multireference calculations.
+    states : State | list[State]
+        The electronic states for which the CI is solved. Can be a single state or a list of states.
+        A state-averaged CI is performed if multiple states are provided.
+    core_orbitals : list[int], optional
+        The indices of the core (restricted doubly occupied) orbitals.
+        If not provided, it defaults to an empty list.
+    active_orbitals : list[int] | list[list[int]], optional
+        The indices of the active orbitals. If a list is provided, a complete active space (CAS) is assumed.
+        If a list of lists is provided, each sublist corresponds to orbital indices of a GAS (generalized active space).
+        If not provided, CISolver must be called with a parent method that has MOSpaceMixin (e.g., AVAS).
+    nroots : int | list[int], optional, default=1
+        The number of roots to compute.
+        If a list is provided, each element corresponds to the number of roots for each state.
+        If a single integer is provided, `states` must be a single `State` object.
+    weights : list[float] | list[list[float]], optional
+        The weights for state averaging.
+        If a list of lists is provided, each sublist corresponds to the weights for each state.
+        The number of weights must match the number of roots for each state.
+        If not provided, equal weights are assumed for all states.
+        If a single list is provided, `states` must be a single `State` object.
     guess_per_root : int, optional, default=2
         The number of guess vectors for each root.
     ndets_per_guess : int, optional, default=10

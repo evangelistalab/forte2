@@ -4,7 +4,6 @@ import numpy as np
 
 from forte2 import CIStrings
 from forte2.state import State, MOSpace
-from forte2.orbitals import AVAS
 from forte2.helpers import logger
 from forte2.system.atom_data import EH_TO_EV
 
@@ -135,14 +134,16 @@ def pretty_print_gas_info(ci_strings: CIStrings):
     logger.log_info1(s)
 
 
-def pretty_print_ci_summary(sa_info: StateAverageInfo, eigvals_per_solver: list[list[float]]):
+def pretty_print_ci_summary(
+    sa_info: StateAverageInfo, eigvals_per_solver: list[list[float]]
+):
     """
     Pretty print the CI energy summary for the given CI states and eigenvalues.
 
     Parameters
     ----------
-    cistates : CIStates
-        An instance of `CIStates` that holds information about the states and their properties.
+    sa_info : StateAverageInfo
+        An instance of `StateAverageInfo` that holds information about the states and their properties.
     eigvals_per_solver : list[list[float]]
         A list of lists containing the eigenvalues (energies) for each CI solver.
     """
@@ -174,10 +175,22 @@ def pretty_print_ci_summary(sa_info: StateAverageInfo, eigvals_per_solver: list[
     logger.log_info1("=" * width)
 
 
-def pretty_print_ci_nat_occ_numbers(sa_info: StateAverageInfo, mo_space: MOSpace, nat_occs: np.ndarray):
+def pretty_print_ci_nat_occ_numbers(
+    sa_info: StateAverageInfo, mo_space: MOSpace, nat_occs: np.ndarray
+):
     """
     Pretty print the natural occupation numbers for the CI states.
     Roots are rows, orbitals are columns.
+
+    Parameters
+    ----------
+    sa_info : StateAverageInfo
+        An instance of `StateAverageInfo` that holds information about the states and their properties.
+    mo_space : MOSpace
+        An instance of `MOSpace` that holds information about the partitioning of the molecular orbitals.
+    nat_occs : np.ndarray
+        A 2D numpy array containing the natural occupation numbers for each root and orbital.
+        This should be calculated from CISolver.compute_natural_occupation_numbers.
     """
     nroots = sa_info.nroots_sum
     norb = mo_space.nactv
@@ -205,16 +218,21 @@ def pretty_print_ci_nat_occ_numbers(sa_info: StateAverageInfo, mo_space: MOSpace
     )
 
 
-def pretty_print_ci_dets(sa_info: StateAverageInfo, mo_space: MOSpace, top_dets: list[list[list[tuple]]]):
+def pretty_print_ci_dets(
+    sa_info: StateAverageInfo, mo_space: MOSpace, top_dets: list[list[list[tuple]]]
+):
     """
     Pretty print the top determinants for each root of the CI states.
 
     Parameters
     ----------
-    cistates : CIStates
-        An instance of `CIStates` that holds information about the states and their properties.
+    sa_info : StateAverageInfo
+        An instance of `StateAverageInfo` that holds information about the states and their properties.
+    mo_space : MOSpace
+        An instance of `MOSpace` that holds information about the partitioning of the molecular orbitals.
     top_dets : list[list[list[tuple]]]
         A list of lists containing the top determinants and their coefficients for each root.
+        This should be obtained from CISolver.get_top_determinants.
     """
     width_per_det = 1 + max(12, mo_space.nactv + 2)  # '|2222000>'
     ndets_per_root = len(top_dets[0])
@@ -244,7 +262,11 @@ def pretty_print_ci_dets(sa_info: StateAverageInfo, mo_space: MOSpace, top_dets:
 
 
 def pretty_print_ci_transition_props(
-    sa_info: StateAverageInfo, tdm_per_solver, fosc_per_solver, eigvals_per_solver, thres=1e-4
+    sa_info: StateAverageInfo,
+    tdm_per_solver,
+    fosc_per_solver,
+    eigvals_per_solver,
+    thres=1e-4,
 ):
     """
     Pretty print the dipole moments of CI states, as well as the bright transitions between them,
@@ -252,8 +274,8 @@ def pretty_print_ci_transition_props(
 
     Parameters
     ----------
-    cistates : CIStates
-        An instance of `CIStates` that holds information about the states and their properties.
+    sa_info : StateAverageInfo
+        An instance of `StateAverageInfo` that holds information about the states and their properties.
     tdm_per_solver : OrderedDict
         A dictionary with keys as tuples (i, j) representing the initial and final states,
         and values as the transition dipole moments for each component (x, y, z).
