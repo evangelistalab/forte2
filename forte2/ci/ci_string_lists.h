@@ -17,7 +17,7 @@ class CIStrings {
     // ==> Constructor and Destructor <==
     /// @brief The CIStrings constructor
     CIStrings(size_t na, size_t nb, int symmetry, std::vector<std::vector<int>> orbital_symmetry,
-              const std::vector<int> gas_min, const std::vector<int> gas_max);
+              const std::vector<int> gas_min, const std::vector<int> gas_max, const int log_level = 3);
 
     //   // ==> Class Public Functions <==
 

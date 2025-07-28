@@ -17,8 +17,13 @@ namespace forte2 {
 void export_ci_strings_api(nb::module_& m) {
     nb::class_<CIStrings>(m, "CIStrings")
         .def(nb::init<size_t, size_t, int, std::vector<std::vector<int>>, std::vector<int>,
-                      std::vector<int>>(),
-             "na"_a, "nb"_a, "symmetry"_a, "orbital_symmetry"_a, "gas_min"_a, "gas_max"_a)
+                      std::vector<int>, int>(),
+             "na"_a, "nb"_a, "symmetry"_a, "orbital_symmetry"_a, "gas_min"_a, "gas_max"_a,
+             "log_level"_a = 3,
+             "Initialize the CIStrings with number of alpha and beta electrons, symmetry, "
+             "orbital symmetry, minimum and maximum number of electrons in each GAS space, and "
+             "logging level")
+        .def_prop_ro("alfa_address", &CIStrings::alfa_address)
         .def_prop_ro("na", &CIStrings::na)
         .def_prop_ro("nb", &CIStrings::nb)
         .def_prop_ro("symmetry", &CIStrings::symmetry)

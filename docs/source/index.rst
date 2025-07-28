@@ -5,9 +5,11 @@ Forte2 documentation
    :maxdepth: 1
    :caption: Contents:
 
+   guide/index
    api_python
    api_cpp
    contributor
+   
 
 Indices and tables
 ==================

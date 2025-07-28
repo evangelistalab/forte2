@@ -1,6 +1,6 @@
 import forte2
 from forte2.scf import RHF, ROHF, UHF
-from forte2.ci import CI
+from forte2.ci import CI, CIStates
 from forte2.helpers.comparisons import approx
 
 
@@ -23,11 +23,11 @@ def test_1d_hubbard_rhf_fci():
 
     scf = RHF(charge=-8)(system)
     scf.guess_type = "hcore"
-    ci = CI(
-        orbitals=list(range(8)),
-        state=forte2.State(nel=8, multiplicity=1, ms=0.0),
-        nroot=1,
-    )(scf)
+    ci_state = CIStates(
+        active_spaces=list(range(8)),
+        states=forte2.State(nel=8, multiplicity=1, ms=0.0),
+    )
+    ci = CI(ci_state)(scf)
     ci.run()
     assert scf.E == approx(erhf)
     assert ci.E[0] == approx(efci)
@@ -47,12 +47,12 @@ def test_1d_hubbard_rohf():
 
 
 def test_1d_hubbard_uhf():
-    euhf = -3.870340669207
-    s2uhf = 4.287968149173
+    euhf = -3.8703406692066187
+    s2uhf = 4.287967519056591
 
     system = forte2.system.HubbardModel(t=1.0, U=4.0, nsites=10, pbc=False)
 
-    scf = UHF(charge=-10, ms=1.0)(system)
+    scf = UHF(charge=-10, ms=1.0, do_diis=False)(system)
     scf.guess_type = "hcore"
     scf = scf.run()
     assert scf.E == approx(euhf)
@@ -88,11 +88,11 @@ def test_2d_hubbard_rhf_fci():
     system = forte2.system.HubbardModel(t=1.0, U=4.0, nsites=(2, 4), pbc=False)
     scf = RHF(charge=-8)(system)
     scf.guess_type = "hcore"
-    ci = CI(
-        orbitals=list(range(8)),
-        state=forte2.State(nel=8, multiplicity=1, ms=0.0),
-        nroot=1,
-    )(scf)
+    ci_state = CIStates(
+        active_spaces=list(range(8)),
+        states=forte2.State(nel=8, multiplicity=1, ms=0.0),
+    )
+    ci = CI(ci_state)(scf)
     ci.run()
     assert scf.E == approx(erhf)
     assert ci.E[0] == approx(efci)
@@ -103,7 +103,7 @@ def test_2d_hubbard_rohf():
 
     system = forte2.system.HubbardModel(t=1.0, U=2.5, nsites=(3, 2), pbc=False)
 
-    scf = ROHF(charge=-7, ms=0.5)(system)
+    scf = ROHF(charge=-7, ms=0.5, diis_start=2)(system)
     scf.guess_type = "hcore"
     scf = scf.run()
     assert scf.E == approx(erohf)

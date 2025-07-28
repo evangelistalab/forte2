@@ -159,3 +159,49 @@ def test_custom_basis_rhf():
     scf = forte2.scf.RHF(charge=0)(system)
     scf.run()
     assert scf.E == pytest.approx(-112.484140615262, rel=1e-8, abs=1e-8)
+
+
+def test_zmatrix_0():
+    # Test for Z-matrix input
+    zmat = f"""
+    C
+    C    1    1.333
+    H    1    1.079    2    121.4
+    H    1    1.079    2    121.4    3    180.0
+    H    2    1.079    1    121.4    3      0.0
+    H    2    1.079    1    121.4    3    180.0
+    """
+    system = forte2.System(
+        xyz=zmat,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="angstrom",
+    )
+    scf = forte2.scf.RHF(charge=0)(system)
+    scf.run()
+
+    def z_to_cart_0():
+        """
+        Psi4 geometry
+        """
+        xyz = """
+            C            0.000000000000     0.000000000000    -0.666500000000
+            C            0.000000000000     0.000000000000     0.666500000000
+            H            0.000000000000     0.920981310260    -1.228669392756
+            H            0.000000000000    -0.920981310260    -1.228669392756
+            H            0.000000000000     0.920981310260     1.228669392756
+            H            0.000000000000    -0.920981310260     1.228669392756
+        """
+        system = forte2.System(
+            xyz=xyz,
+            basis_set="cc-pvdz",
+            auxiliary_basis_set="def2-universal-JKFIT",
+            unit="angstrom",
+        )
+        scf = forte2.scf.RHF(charge=0)(system)
+        scf.run()
+        return scf.E
+
+    E_ref = z_to_cart_0()
+
+    assert scf.E == pytest.approx(E_ref, rel=1e-8, abs=1e-8)

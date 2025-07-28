@@ -59,9 +59,9 @@ class SCFBase(ABC):
 
     charge: int
     do_diis: bool = True
-    diis_start: int = 4
+    diis_start: int = 1
     diis_nvec: int = 8
-    diis_min: int = 3
+    diis_min: int = 2
     econv: float = 1e-9
     dconv: float = 1e-6
     maxiter: int = 100
@@ -118,6 +118,7 @@ class SCFBase(ABC):
         diis = forte2.helpers.DIIS(
             diis_start=self.diis_start,
             diis_nvec=self.diis_nvec,
+            diis_min=self.diis_min,
             do_diis=self.do_diis,
         )
         Vnn = self._get_nuclear_repulsion()
@@ -142,13 +143,17 @@ class SCFBase(ABC):
         logger.log_info1(f"Density convergence criterion: {self.dconv:e}")
         logger.log_info1(f"DIIS acceleration: {diis.do_diis}")
         logger.log_info1(f"\n==> {self.method} SCF ROUTINE <==")
-
+        self.iter = 0
         if self.C is None:
             self.C = self._initial_guess(H, S, guess_type=self.guess_type)
-        self.D = self._build_initial_density_matrix()
+        self.D = self._build_density_matrix()
+        F, F_canon = self._build_fock(H, fock_builder, S)
+        self.F = F_canon
+        self.E = Vnn + self._energy(H, F)
 
-        Eold = 0.0
+        Eold = self.E
         Dold = self.D
+        self.iter += 1
 
         width = 81
         logger.log_info1("=" * width)
@@ -156,22 +161,19 @@ class SCFBase(ABC):
             f"{'Iter':>4s} {'Energy':>20s} {'ΔE':>12} {'||ΔD||':>12} {'||AO grad||':>12} {'<S^2>':>10} {'DIIS':>5s}"
         )
         logger.log_info1("-" * width)
-        self.iter = 0
         for iter in range(self.maxiter):
-
-            # 1. Build the Fock matrix
+            # 1. Get the extrapolated Fock matrix
+            AO_grad = self._build_ao_grad(S, F_canon)
+            F_canon = self._diis_update(diis, F_canon, AO_grad)
+            # 2. Diagonalize the extrapolated Fock
+            self.eps, self.C = self._diagonalize_fock(F_canon)
+            # 3. Build new density matrix
+            self.D = self._build_density_matrix()
+            # 4. Build the (non-extrapolated) Fock matrix
             # (there is a slot for canonicalized F to accommodate ROHF and CUHF methods - admittedly weird for RHF/UHF)
             F, F_canon = self._build_fock(H, fock_builder, S)
             self.F = F_canon
-            # 2. Build the orbital gradient (DIIS residual)
-            AO_grad = self._build_ao_grad(S, F_canon)
-            # 3. Perform DIIS update of Fock
-            F_canon = self._diis_update(diis, F_canon, AO_grad)
-            # 4. Diagonalize updated Fock
-            self.eps, self.C = self._diagonalize_fock(F_canon)
-            # 5. Build new density matrix
-            self.D = self._build_density_matrix()
-            # 6. Compute new HF energy
+            # 5. Compute new HF energy from the non-extrapolated Fock matrix
             self.E = Vnn + self._energy(H, F)
 
             # check convergence parameters
@@ -181,17 +183,17 @@ class SCFBase(ABC):
 
             # print iteration
             logger.log_info1(
-                f"{iter + 1:4d} {self.E:20.12f} {deltaE:12.4e} {deltaD:12.4e} {np.linalg.norm(AO_grad):12.4e} {self.S2:10.5f} {diis.status:>5s}"
+                f"{iter+1:4d} {self.E:20.12f} {deltaE:12.4e} {deltaD:12.4e} {np.linalg.norm(AO_grad):12.4e} {self.S2:10.5f} {diis.status:>5s}"
             )
 
             if np.abs(deltaE) < self.econv and deltaD < self.dconv:
                 logger.log_info1("=" * width)
                 logger.log_info1(f"{self.method} iterations converged\n")
                 # perform final iteration
-                F, F_canon = self._build_fock(H, fock_builder, S)
-                self.F = F_canon
                 self.eps, self.C = self._diagonalize_fock(F_canon)
                 self.D = self._build_density_matrix()
+                F, F_canon = self._build_fock(H, fock_builder, S)
+                self.F = F_canon
                 self.E = Vnn + self._energy(H, F)
                 logger.log_info1(f"Final {self.method} Energy: {self.E:20.12f}")
                 self.converged = True
@@ -234,9 +236,6 @@ class SCFBase(ABC):
 
     @abstractmethod
     def _build_density_matrix(self): ...
-
-    @abstractmethod
-    def _build_initial_density_matrix(self): ...
 
     @abstractmethod
     def _initial_guess(self, H, S, guess_type="minao"): ...
@@ -304,9 +303,6 @@ class RHF(SCFBase, MOsMixin):
 
         return [C]
 
-    def _build_initial_density_matrix(self):
-        return self._build_density_matrix()
-
     def _build_ao_grad(self, S, F):
         ao_grad = F[0] @ self.D[0] @ S - S @ self.D[0] @ F[0]
         ao_grad = self.Xorth.T @ ao_grad @ self.Xorth
@@ -361,8 +357,14 @@ class RHF(SCFBase, MOsMixin):
         if isinstance(self.system, forte2.ModelSystem):
             return
         basis_info = forte2.basis_utils.BasisInfo(self.system, self.system.basis)
-        logger.log_info1("AO Composition of MOs:")
-        basis_info.print_ao_composition(self.C[0], list(range(self.nmo)))
+        logger.log_info1("\nAO Composition of MOs (HOMO-5 to HOMO):")
+        basis_info.print_ao_composition(
+            self.C[0], list(range(max(self.na - 5, 0), self.na))
+        )
+        logger.log_info1("\nAO Composition of MOs (LUMO to LUMO+5):")
+        basis_info.print_ao_composition(
+            self.C[0], list(range(self.na, min(self.na + 5, self.nmo)))
+        )
 
 
 @dataclass
@@ -431,10 +433,6 @@ class UHF(SCFBase, MOsMixin):
             return guess_mix(C, self.nel // 2 - 1)
 
         return [C, C]
-
-    def _build_initial_density_matrix(self):
-        D_a, D_b = self._build_density_matrix()
-        return D_a, D_b
 
     def _build_ao_grad(self, S, F):
         AO_grad = np.hstack(
@@ -545,7 +543,6 @@ class ROHF(SCFBase, MOsMixin):
 
     _parse_state = UHF._parse_state
     _initial_guess = RHF._initial_guess
-    _build_initial_density_matrix = UHF._build_initial_density_matrix
     _diagonalize_fock = RHF._diagonalize_fock
     _spin = RHF._spin
     _energy = UHF._energy
@@ -661,7 +658,6 @@ class CUHF(SCFBase, MOsMixin):
     _parse_state = UHF._parse_state
     _build_density_matrix = UHF._build_density_matrix
     _initial_guess = UHF._initial_guess
-    _build_initial_density_matrix = UHF._build_initial_density_matrix
     _build_ao_grad = UHF._build_ao_grad
     _diagonalize_fock = UHF._diagonalize_fock
     _spin = UHF._spin
@@ -781,6 +777,15 @@ class GHF(SCFBase, MOsMixin):
         Dab = D[:nbf, nbf:]
         Dba = D[nbf:, :nbf]
         Dbb = D[nbf:, nbf:]
+
+        if self.iter == 0 and self.break_complex_symmetry:
+            Daa[0, :] += 0.1j
+            Dab[0, :] += 0.1j
+            Daa[:, 0] -= 0.1j
+            Dba[:, 0] -= 0.1j
+            Dbb[0, :] += 0.1j
+            Dbb[:, 0] -= 0.1j
+
         return Daa, Dab, Dba, Dbb
 
     def _build_total_density_matrix(self):
@@ -794,23 +799,10 @@ class GHF(SCFBase, MOsMixin):
         Ca = Cb = RHF._initial_guess(self, H_ao, S, guess_type)[0].astype(complex)
         if self.nel % 2 == 0 and self.guess_mix:
             Ca, Cb = guess_mix(Ca, self.nel // 2 - 1)
-        C_spinor = np.zeros((self.nbf * 2,) * 2, dtype=complex)
+        C_spinor = np.zeros((self.nbf * 2, self.nmo * 2), dtype=complex)
         C_spinor[: self.nbf, ::2] = Ca
         C_spinor[self.nbf :, 1::2] = Cb
         return [C_spinor]
-
-    def _build_initial_density_matrix(self):
-        Daa, Dab, Dba, Dbb = self._build_density_matrix()
-
-        if self.break_complex_symmetry:
-            Daa[0, :] += 0.05j
-            Dab[0, :] += 0.05j
-            Daa[:, 0] -= 0.05j
-            Dba[:, 0] -= 0.05j
-            Dbb[0, :] += 0.05j
-            Dbb[:, 0] -= 0.05j
-
-        return Daa, Dab, Dba, Dbb
 
     def _build_ao_grad(self, S, F):
         Daa, Dab, Dba, Dbb = self.D

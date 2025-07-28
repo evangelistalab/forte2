@@ -1,7 +1,9 @@
 import pytest
-
-from forte2 import System, RHF, MCOptimizer, AVAS, AutoCI, MultiCI
+import forte2
+from forte2 import System, RHF, MCOptimizer, AVAS, CIStates, State
 from forte2.helpers.comparisons import approx
+
+import numpy as np
 
 
 def test_casscf_cyclopropene():
@@ -33,8 +35,8 @@ def test_casscf_cyclopropene():
         selection_method="total",
         num_active=3,
     )(rhf)
-    ci = AutoCI(charge=0, multiplicity=1, ms=0.0)(avas)
-    mc = MCOptimizer()(ci)
+    ci_state = CIStates(avas=avas, states=State(nel=rhf.nel, multiplicity=1, ms=0.0))
+    mc = MCOptimizer(ci_state)(avas)
     mc.run()
 
     assert rhf.E == approx(erhf)
