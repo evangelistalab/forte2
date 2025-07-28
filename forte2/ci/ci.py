@@ -281,7 +281,7 @@ class CI(MOsMixin, SystemMixin):
         logger.log("\nComputing RDMs from CI vectors.\n", self.log_level)
         for root in range(self.nroot):
             root_rdms = {}
-            root_rdms["rdm1"] = self.make_rdm1_sf(self.evecs[:, root])
+            root_rdms["rdm1"] = self.make_sf_1rdm(self.evecs[:, root])
             rdm2_aa, rdm2_ab, rdm2_bb = self.make_rdm2_sd(
                 self.evecs[:, root], full=False
             )
@@ -295,7 +295,7 @@ class CI(MOsMixin, SystemMixin):
             root_rdms["rdm2_aa_full"] = rdm2_aa_full
             root_rdms["rdm2_bb_full"] = rdm2_bb_full
 
-            root_rdms["rdm2_sf"] = self.make_rdm2_sf(self.evecs[:, root])
+            root_rdms["rdm2_sf"] = self.make_sf_2rdm(self.evecs[:, root])
 
             # Compute the energy from the RDMs
             # from the numpy tensor V[i, j, k, l] = <ij|kl> make the np matrix with indices
@@ -421,7 +421,7 @@ class CI(MOsMixin, SystemMixin):
         """
         rdm1 = np.zeros((self.norb,) * 2)
         for i in range(self.nroot):
-            rdm1 += self.make_rdm1_sf(self.evecs[:, i]) * self.weights[i]
+            rdm1 += self.make_sf_1rdm(self.evecs[:, i]) * self.weights[i]
         return rdm1
 
     def make_average_rdm2_sf(self):
@@ -434,10 +434,10 @@ class CI(MOsMixin, SystemMixin):
                 Average spin-free two-particle RDM."""
         rdm2 = np.zeros((self.norb,) * 4)
         for i in range(self.nroot):
-            rdm2 += self.make_rdm2_sf(self.evecs[:, i]) * self.weights[i]
+            rdm2 += self.make_sf_2rdm(self.evecs[:, i]) * self.weights[i]
         return rdm2
 
-    def make_rdm1_sf(self, ci_vec):
+    def make_sf_1rdm(self, ci_vec):
         """
         Make the spin-free one-particle RDM from a CI vector.
 
@@ -452,7 +452,7 @@ class CI(MOsMixin, SystemMixin):
                 Spin-free one-particle RDM."""
         ci_vec_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
-        return self.ci_sigma_builder.rdm1_sf(ci_vec_det, ci_vec_det)
+        return self.ci_sigma_builder.sf_1rdm(ci_vec_det, ci_vec_det)
 
     def make_rdm1_a(self, ci_vec, spin):
         """
@@ -505,14 +505,13 @@ class CI(MOsMixin, SystemMixin):
         """
         ci_vec_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
-        aa_build = (
-            self.ci_sigma_builder.rdm2_aa_full
-            if full
-            else self.ci_sigma_builder.rdm2_aa
-        )
-        aa = aa_build(ci_vec_det, ci_vec_det, True)
-        bb = aa_build(ci_vec_det, ci_vec_det, False)
-        ab = self.ci_sigma_builder.rdm2_ab(ci_vec_det, ci_vec_det)
+        aa = self.ci_sigma_builder.aa_2rdm(ci_vec_det, ci_vec_det, True)
+        bb = self.ci_sigma_builder.aa_2rdm(ci_vec_det, ci_vec_det, False)
+        if full:
+            # Convert to full-dimension RDMs
+            aa = forte2.cpp_helpers.packed_tensor4_to_tensor4(aa)
+            bb = forte2.cpp_helpers.packed_tensor4_to_tensor4(bb)
+        ab = self.ci_sigma_builder.ab_2rdm(ci_vec_det, ci_vec_det)
         return aa, ab, bb
 
     def make_tdm2_sd(self, ci_l, ci_r, full=True):
@@ -548,7 +547,7 @@ class CI(MOsMixin, SystemMixin):
         ab = self.ci_sigma_builder.rdm2_ab(ci_l_det, ci_r_det)
         return aa, ab, bb
 
-    def make_rdm2_sf(self, ci_vec):
+    def make_sf_2rdm(self, ci_vec):
         """
         Make the spin-free two-particle RDM from a CI vector in the CSF basis.
 
@@ -564,7 +563,7 @@ class CI(MOsMixin, SystemMixin):
         """
         ci_vec_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
-        return self.ci_sigma_builder.rdm2_sf(ci_vec_det, ci_vec_det)
+        return self.ci_sigma_builder.sf_2rdm(ci_vec_det, ci_vec_det)
 
     def make_tdm2_sf(self, ci_l, ci_r):
         """
@@ -587,6 +586,24 @@ class CI(MOsMixin, SystemMixin):
         self.spin_adapter.csf_C_to_det_C(ci_l, ci_l_det)
         self.spin_adapter.csf_C_to_det_C(ci_r, ci_r_det)
         return self.ci_sigma_builder.rdm2_sf(ci_l_det, ci_r_det)
+
+    def make_sf_3rdm(self, ci_vec):
+        """
+        Make the spin-free three-particle RDM from a CI vector in the CSF basis.
+
+        Parameters
+        ----------
+            ci_vec : NDArray
+                CI vector in the CSF basis.
+
+        Returns
+        -------
+            NDArray
+                Spin-free two-particle RDM.
+        """
+        ci_vec_det = np.zeros((self.ndet))
+        self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
+        return self.ci_sigma_builder.sf_3rdm(ci_vec_det, ci_vec_det)
 
     def set_verbosity_level(self, level):
         """

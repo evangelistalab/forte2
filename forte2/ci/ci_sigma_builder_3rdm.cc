@@ -8,8 +8,7 @@
 
 namespace forte2 {
 
-np_matrix CISigmaBuilder::compute_3rdm_aaa_same_irrep(np_vector C_left, np_vector C_right,
-                                                      bool alfa) const {
+np_matrix CISigmaBuilder::compute_aaa_3rdm(np_vector C_left, np_vector C_right, bool alfa) const {
     local_timer timer;
 
     const size_t norb = lists_.norb();
@@ -80,7 +79,7 @@ np_matrix CISigmaBuilder::compute_3rdm_aaa_same_irrep(np_vector C_left, np_vecto
     return rdm;
 }
 
-np_tensor4 CISigmaBuilder::compute_3rdm_aab_same_irrep(np_vector C_left, np_vector C_right) const {
+np_tensor4 CISigmaBuilder::compute_aab_3rdm(np_vector C_left, np_vector C_right) const {
     local_timer timer;
 
     const size_t norb = lists_.norb();
@@ -163,7 +162,7 @@ np_tensor4 CISigmaBuilder::compute_3rdm_aab_same_irrep(np_vector C_left, np_vect
     return rdm;
 }
 
-np_tensor4 CISigmaBuilder::compute_3rdm_abb_same_irrep(np_vector C_left, np_vector C_right) const {
+np_tensor4 CISigmaBuilder::compute_abb_3rdm(np_vector C_left, np_vector C_right) const {
     local_timer timer;
 
     const size_t norb = lists_.norb();
@@ -246,14 +245,14 @@ np_tensor4 CISigmaBuilder::compute_3rdm_abb_same_irrep(np_vector C_left, np_vect
     return rdm;
 }
 
-np_tensor6 CISigmaBuilder::compute_sf_3rdm_same_irrep(np_vector C_left, np_vector C_right) const {
+np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) const {
     auto norb = lists_.norb();
     auto rdm_sf = make_zeros<nb::numpy, double, 6>({norb, norb, norb, norb, norb, norb});
 
-    auto rdm_aaa = compute_3rdm_aaa_same_irrep(C_left, C_right, true);
-    auto rdm_bbb = compute_3rdm_aaa_same_irrep(C_left, C_right, false);
-    auto rdm_aab = compute_3rdm_aab_same_irrep(C_left, C_right);
-    auto rdm_abb = compute_3rdm_abb_same_irrep(C_left, C_right);
+    auto rdm_aaa = compute_aaa_3rdm(C_left, C_right, true);
+    auto rdm_bbb = compute_aaa_3rdm(C_left, C_right, false);
+    auto rdm_aab = compute_aab_3rdm(C_left, C_right);
+    auto rdm_abb = compute_abb_3rdm(C_left, C_right);
 
     auto rdm_sf_v = rdm_sf.view();
     auto rdm_aaa_v = rdm_aaa.view();
@@ -267,7 +266,10 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm_same_irrep(np_vector C_left, np_vecto
                 for (size_t s{2}, stu{0}; s < norb; ++s) {
                     for (size_t t{1}; t < s; ++t) {
                         for (size_t u{0}; u < t; ++u, ++stu) {
+                            // grab the unique element of the 3-RDM
                             const auto el = rdm_aaa_v(pqr, stu) + rdm_bbb_v(pqr, stu);
+
+                            // Place the element in all valid 36 antisymmetric index permutations
                             rdm_sf_v(p, q, r, s, t, u) += el;
                             rdm_sf_v(p, q, r, s, u, t) -= el;
                             rdm_sf_v(p, q, r, u, s, t) += el;
@@ -337,9 +339,9 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm_same_irrep(np_vector C_left, np_vecto
 
                             // G3("rpqust") += g3aab_("pqrstu");
                             rdm_sf_v(r, p, q, u, s, t) += el;
-                            rdm_sf_v(r, p, q, t, s, u) -= el;
+                            rdm_sf_v(r, p, q, u, t, s) -= el;
                             rdm_sf_v(r, q, p, u, s, t) -= el;
-                            rdm_sf_v(r, q, p, t, s, u) += el;
+                            rdm_sf_v(r, q, p, u, t, s) += el;
                         }
                     }
                 }
@@ -357,8 +359,8 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm_same_irrep(np_vector C_left, np_vecto
                             // G3("pqrstu") += g3abb_("pqrstu");
                             rdm_sf_v(p, q, r, s, t, u) += el;
                             rdm_sf_v(p, q, r, s, u, t) -= el;
-                            rdm_sf_v(p, r, q, s, t, u) -= el;
                             rdm_sf_v(p, r, q, s, u, t) += el;
+                            rdm_sf_v(p, r, q, s, t, u) -= el;
 
                             // G3("qprtsu") += g3abb_("pqrstu");
                             rdm_sf_v(q, p, r, t, s, u) += el;
@@ -380,14 +382,13 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm_same_irrep(np_vector C_left, np_vecto
     return rdm_sf;
 }
 
-np_tensor6 CISigmaBuilder::compute_sf_3cumulant_same_irrep(np_vector C_left,
-                                                           np_vector C_right) const {
+np_tensor6 CISigmaBuilder::compute_sf_3cumulant(np_vector C_left, np_vector C_right) const {
     // Compute the spin-free 1-RDM
-    auto G1 = compute_sf_1rdm_same_irrep(C_left, C_right);
+    auto G1 = compute_sf_1rdm(C_left, C_right);
     // Compute the spin-free 2-RDM
-    auto G2 = compute_sf_2rdm_same_irrep(C_left, C_right);
+    auto G2 = compute_sf_2rdm(C_left, C_right);
     // Compute the spin-free 3-RDM (this will hold the cumulant)
-    auto L3 = compute_sf_3rdm_same_irrep(C_left, C_right);
+    auto L3 = compute_sf_3rdm(C_left, C_right);
 
     // Evaluate L3[p,q,r,s,t,u] = G3[p,q,r,s,t,u]
     //                            - G1[p,s] * G2[q,r,t,u]
