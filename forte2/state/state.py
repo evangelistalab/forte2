@@ -19,9 +19,13 @@ class State:
     irrep : int, optional
         Irreducible representation of the state in Cotton ordering.
     gas_min : list[int], optional, default=[]
-        Minimum GAS restrictions.
+        Minimum number of electrons in each GAS.
+        If not provided, no occupation restrictions will be applied.
+        If the length of `gas_min` is smaller than the number of GASes, the restrictions
+        will be sequentially applied to GAS1, GAS2, until the end of `gas_min`,
+        beyond which no restrictions will be applied.
     gas_max : list[int], optional, default=[]
-        Maximum GAS restrictions.
+        Maximum number of electrons in each GAS. Processed similarly to `gas_min`.
     symmetry: int, optional, default=0
         Symmetry of the state.
     symmetry_label: str, optional, default=None

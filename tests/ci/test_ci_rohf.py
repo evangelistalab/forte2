@@ -12,16 +12,16 @@ def test_rohf_ci_1():
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     rhf = ROHF(charge=1, ms=0.5, econv=1e-12)(system)
-    ci_state = CIStates(
+    ci = CI(
         states=State(nel=9, multiplicity=2, ms=0.5),
         core_orbitals=[0],
-        active_spaces=[1, 2, 3, 4, 5, 6],
+        active_orbitals=[1, 2, 3, 4, 5, 6],
         nroots=2,
-    )
-    ci = CI(ci_state)(rhf)
+    )(rhf)
     ci.run()
 
     assert ci.E[0] == approx(-99.510706628367)
+
 
 def test_rohf_ci_2():
     xyz = f"""
@@ -33,13 +33,12 @@ def test_rohf_ci_2():
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     rhf = ROHF(charge=1, ms=-0.5, econv=1e-12)(system)
-    ci_state = CIStates(
-        active_spaces=[1, 2, 3, 4, 5, 6],
+    ci = CI(
+        active_orbitals=[1, 2, 3, 4, 5, 6],
         core_orbitals=[0],
         states=State(nel=9, multiplicity=2, ms=-0.5),
         nroots=2,
-    )
-    ci = CI(ci_state)(rhf)
+    )(rhf)
     ci.run()
 
     assert ci.E[0] == approx(-99.510706628367)

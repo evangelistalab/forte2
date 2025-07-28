@@ -13,12 +13,11 @@ def test_gasci_rhf_1():
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci_state = CIStates(
-        active_spaces=[[0], [1]],
+    ci = CI(
+        active_orbitals=[[0], [1]],
         states=State(nel=2, multiplicity=1, ms=0.0, gas_min=[0], gas_max=[2]),
-        nroots=1,
-    )
-    ci = CI(ci_state, econv=1e-12)(rhf)
+        econv=1e-12,
+    )(rhf)
     ci.run()
 
     assert rhf.E == approx(-1.05643120731551)
@@ -34,12 +33,11 @@ def test_gasci_rhf_2():
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci_state = CIStates(
-        active_spaces=[[0], [1]],
+    ci = CI(
+        active_orbitals=[[0], [1]],
         states=State(nel=2, multiplicity=1, ms=0.0, gas_min=[1, 0], gas_max=[2, 1]),
         nroots=2,
-    )
-    ci = CI(ci_state)(rhf)
+    )(rhf)
     ci.run()
 
     assert rhf.E == approx(-1.089283671174)
@@ -63,11 +61,10 @@ def test_gasci_rhf_3():
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci_states = CIStates(
-        active_spaces=[[0], [1]],
+    ci = CI(
+        active_orbitals=[[0], [1]],
         states=State(nel=2, multiplicity=1, ms=0.0, gas_min=[0, 0], gas_max=[2, 2]),
-    )
-    ci = CI(ci_states)(rhf)
+    )(rhf)
     ci.run()
 
     assert rhf.E == approx(-1.124751148359)
@@ -86,11 +83,11 @@ def test_gasci_rhf_4():
     )
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-8)(system)
-    ci_state = CIStates(
-        active_spaces=[[0, 1, 2, 3, 4], [5, 6]],
+    ci = CI(
+        active_orbitals=[[0, 1, 2, 3, 4], [5, 6]],
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[6, 0], gas_max=[10, 4]),
-    )
-    ci = CI(ci_state, econv=1e-12)(rhf)
+        econv=1e-12,
+    )(rhf)
     ci.run()
 
     assert rhf.E == approx(-76.02146209548764)
@@ -109,12 +106,11 @@ def test_gasci_rhf_5():
     )
 
     rhf = RHF(charge=0, econv=1e-14, dconv=1e-8)(system)
-    ci_state = CIStates(
-        active_spaces=[[0], [1, 2, 3, 4, 5, 6]],
+    ci = CI(
+        active_orbitals=[[0], [1, 2, 3, 4, 5, 6]],
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[0], gas_max=[1]),
-        nroots=1,
-    )
-    ci = CI(ci_state, econv=1e-14)(rhf)
+        econv=1e-14,
+    )(rhf)
     ci.run()
 
     assert rhf.E == approx(-76.02146209548764)
@@ -132,13 +128,12 @@ def test_gasci_rhf_6():
     )
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-8)(system)
-    ci_state = CIStates(
-        active_spaces=[[0, 1, 2], [3, 4, 5, 6], [7, 8, 9]],
+    ci = CI(
+        active_orbitals=[[0, 1, 2], [3, 4, 5, 6], [7, 8, 9]],
         states=State(
             nel=10, multiplicity=1, ms=0.0, gas_min=[4, 0, 0], gas_max=[6, 8, 2]
         ),
-    )
-    ci = CI(ci_state)(rhf)
+    )(rhf)
     ci.run()
 
     assert rhf.E == approx(-100.00984797870581)
@@ -157,12 +152,12 @@ def test_gasci_rhf_7():
     )
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-8)(system)
-    ci_state = CIStates(
-        active_spaces=[[0], [1, 2, 3, 4, 5, 6]],
+    ci = CI(
+        active_orbitals=[[0], [1, 2, 3, 4, 5, 6]],
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
         nroots=2,
-    )
-    ci = CI(ci_state, econv=1e-12)(rhf)
+        econv=1e-12,
+    )(rhf)
     ci.run()
 
     assert rhf.E == approx(-76.02146209548764)
@@ -182,15 +177,14 @@ def test_gasci_rhf_8():
     )
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-8)(system)
-    ci_state = CIStates(
-        active_spaces=[[0], [1, 2, 3, 4, 5, 6]],
+    ci = CI(
+        active_orbitals=[[0], [1, 2, 3, 4, 5, 6]],
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
         nroots=2,
-    )
-    ci = CI(ci_state, econv=1e-12)(rhf)
+        econv=1e-12,
+    )(rhf)
     ci.run()
 
     assert rhf.E == approx(-75.68026686304654)
     assert ci.E[0] == approx(-55.598443621487)
     assert ci.E[1] == approx(-55.526088426266)
-

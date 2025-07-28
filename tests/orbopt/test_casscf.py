@@ -16,10 +16,7 @@ def test_casscf_h2():
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci_state = CIStates(
-        active_spaces=[0, 1], states=State(nel=2, multiplicity=1, ms=0.0)
-    )
-    mc = MCOptimizer(ci_state)(rhf)
+    mc = MCOptimizer(State(nel=2, multiplicity=1, ms=0.0), active_orbitals=[0, 1])(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)
@@ -39,12 +36,11 @@ def test_casscf_hf():
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci_state = CIStates(
-        active_spaces=[1, 2, 3, 4, 5, 6],
+    mc = MCOptimizer(
+        State(nel=10, multiplicity=1, ms=0.0),
+        active_orbitals=[1, 2, 3, 4, 5, 6],
         core_orbitals=[0],
-        states=State(nel=10, multiplicity=1, ms=0.0),
-    )
-    mc = MCOptimizer(ci_state)(rhf)
+    )(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)
@@ -65,12 +61,11 @@ def test_casscf_hf_smaller_active():
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci_state = CIStates(
-        active_spaces=[4, 5],
+    mc = MCOptimizer(
+        State(nel=10, multiplicity=1, ms=0.0),
+        active_orbitals=[4, 5],
         core_orbitals=[0, 1, 2, 3],
-        states=State(nel=10, multiplicity=1, ms=0.0),
-    )
-    mc = MCOptimizer(ci_state)(rhf)
+    )(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)
@@ -88,12 +83,12 @@ def test_casscf_n2():
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci_state = CIStates(
-        active_spaces=[4, 5, 6, 7, 8, 9],
+    mc = MCOptimizer(
+        State(nel=14, multiplicity=1, ms=0.0),
+        active_orbitals=[4, 5, 6, 7, 8, 9],
         core_orbitals=[0, 1, 2, 3],
-        states=State(nel=14, multiplicity=1, ms=0.0),
-    )
-    mc = MCOptimizer(ci_state, gconv=1e-7)(rhf)
+        gconv=1e-7,
+    )(rhf)
     mc.run()
     assert rhf.E == approx(erhf)
     assert mc.E == approx(ecasscf)
@@ -110,12 +105,12 @@ def test_casscf_n2_cholesky():
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", cholesky_tei=True, cholesky_tol=1e-10)
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci_state = CIStates(
-        active_spaces=[4, 5, 6, 7, 8, 9],
+    mc = MCOptimizer(
+        State(nel=14, multiplicity=1, ms=0.0),
+        active_orbitals=[4, 5, 6, 7, 8, 9],
         core_orbitals=[0, 1, 2, 3],
-        states=State(nel=14, multiplicity=1, ms=0.0),
-    )
-    mc = MCOptimizer(ci_state, gconv=1e-7)(rhf)
+        gconv=1e-7,
+    )(rhf)
     mc.run()
     assert rhf.E == approx(erhf)
     assert mc.E == approx(ecasscf)
@@ -125,7 +120,6 @@ def test_mcscf_noncontiguous_spaces():
     # The results of this test should be strictly identical to test_casscf_n2
 
     erhf = -108.761639873604
-    eci = -108.916505576963
     ecasscf = -108.9800484156
 
     xyz = f"""
@@ -143,16 +137,10 @@ def test_mcscf_noncontiguous_spaces():
     actv = [2, 4, 5, 7, 8, 11]
     virt = sorted(set(range(system.nbf)) - set(core + actv))
     rhf.C[0][:, core + actv + virt] = rhf.C[0]
-    ci_state = CIStates(
-        active_spaces=actv,
-        core_orbitals=core,
-        states=State(nel=14, multiplicity=1, ms=0.0),
-    )
-    ci = CI(ci_state)(rhf)
-    ci.run()
-    assert ci.E[0] == approx(eci)
 
-    mc = MCOptimizer(ci_state)(rhf)
+    mc = MCOptimizer(
+        State(nel=14, multiplicity=1, ms=0.0), active_orbitals=actv, core_orbitals=core
+    )(rhf)
     mc.run()
     assert mc.E == approx(ecasscf)
 
@@ -175,12 +163,13 @@ def test_casscf_water():
     )
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
-    ci_state = CIStates(
-        active_spaces=[1, 2, 3, 4, 5, 6],
+    mc = MCOptimizer(
+        State(nel=10, multiplicity=1, ms=0.0),
+        active_orbitals=[1, 2, 3, 4, 5, 6],
         core_orbitals=[0],
-        states=State(nel=10, multiplicity=1, ms=0.0),
-    )
-    mc = MCOptimizer(ci_state, gconv=1e-6, econv=1e-10)(rhf)
+        gconv=1e-6,
+        econv=1e-10,
+    )(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)
@@ -209,12 +198,12 @@ def test_casscf_symmetry_breaking():
     )
 
     rhf = RHF(charge=0, econv=1e-10)(system)
-    ci_state = CIStates(
+    mc = MCOptimizer(
+        State(nel=6, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1],
-        active_spaces=[2, 3],
-        states=State(nel=6, multiplicity=1, ms=0.0),
-    )
-    mc = MCOptimizer(ci_state, econv=1e-9)(rhf)
+        active_orbitals=[2, 3],
+        econv=1e-9,
+    )(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)
@@ -246,12 +235,11 @@ def test_casscf_singlet_benzyne():
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci_state = CIStates(
+    mc = MCOptimizer(
+        State(nel=40, multiplicity=1, ms=0.0),
         core_orbitals=list(range(19)),
-        active_spaces=[19, 20],
-        states=State(nel=40, multiplicity=1, ms=0.0),
-    )
-    mc = MCOptimizer(ci_state)(rhf)
+        active_orbitals=[19, 20],
+    )(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)

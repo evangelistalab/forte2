@@ -6,7 +6,7 @@ Code Standards
 Forte2 uses the `functional composition <https://en.wikipedia.org/wiki/Function_composition_(computer_science)>`_ style (like the `TensorFlow functional API <https://www.tensorflow.org/guide/keras/functional_api>`_) for most quantum chemical methods, with the following programmatic flow:
 
 >>> rhf = forte2.scf.RHF(charge=0)(system)
->>> ci = forte2.ci.CI(state=state, orbitals=[...], ...)(rhf)
+>>> ci = forte2.ci.CI(states=state, active_orbitals=[...], ...)(rhf)
 >>> ci.run()
 -0.75102385
 

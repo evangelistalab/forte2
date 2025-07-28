@@ -3,13 +3,14 @@ import numpy as np
 import re
 
 import forte2
+from forte2.state import MOSpace
 from forte2.helpers import logger
-from forte2.helpers.mixins import MOsMixin, SystemMixin
+from forte2.helpers.mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.system.atom_data import Z_TO_ATOM_SYMBOL, ATOM_SYMBOL_TO_Z
 
 
 @dataclass
-class AVAS(MOsMixin, SystemMixin):
+class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
     """
     Atomic valence active space (AVAS) method for selecting active orbitals for multi-reference calculations.
 
@@ -357,13 +358,6 @@ class AVAS(MOsMixin, SystemMixin):
             (np.arange(ndocc), np.arange(nuocc) + ndocc + nsocc), dtype=int
         )[argsort]
         nsig = len(sigmas)
-        # s_all = np.zeros((ndocc + nuocc, 3), dtype=float)
-        # s_all[:, 0] = np.concatenate((s_docc, s_uocc))
-        # s_all[:, 1] = np.concatenate(([1] * ndocc, [0] * nuocc))
-        # s_all[:, 2] = np.concatenate(
-        #     (np.arange(ndocc), np.arange(nuocc) + ndocc + nsocc)
-        # )
-        # s_all = s_all[argsort]
 
         act_docc = []
         act_uocc = []
@@ -473,11 +467,12 @@ class AVAS(MOsMixin, SystemMixin):
             )
         self.nactv = len(act_docc) + len(act_uocc) + nsocc
         self.ncore = len(inact_docc)
-        self.core_orbitals = list(range(self.ncore))
-        self.active_orbitals = list(range(self.ncore, self.ncore + self.nactv))
-        # For compatibility with the MOSpace class
-        self.active_spaces = [self.active_orbitals]
-        self.ngas = 1
+
+        self.mo_space = MOSpace(
+            active_orbitals=list(range(self.ncore, self.ncore + self.nactv)),
+            core_orbitals=list(range(self.ncore)),
+        )
+
         logger.log_info1(f"\nNumber of core orbitals:      {self.ncore}")
         logger.log_info1(f"Number of active orbitals:    {self.nactv}")
 
@@ -506,7 +501,9 @@ class AVAS(MOsMixin, SystemMixin):
         self.C[0][:, au_sl] = C_act_uocc
         self.C[0][:, iu_sl] = C_inact_uocc
 
-        logger.log_info1("\nAO composition of final canonicalized active MOs prepared by AVAS:")
+        logger.log_info1(
+            "\nAO composition of final canonicalized active MOs prepared by AVAS:"
+        )
         self.basis_info.print_ao_composition(
             self.C[0], list(range(ad_sl.start, au_sl.stop))
         )

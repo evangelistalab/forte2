@@ -36,9 +36,4 @@ generate_1h_occupations(const std::vector<std::array<int, 6>>& gas_occupations);
 std::vector<std::array<int, 6>>
 generate_1h1p_occupations(const std::vector<std::array<int, 6>>& gas_occupations);
 
-std::string occupation_table(size_t num_spaces,
-                             const std::vector<std::array<int, 6>>& alfa_occupation,
-                             const std::vector<std::array<int, 6>>& beta_occupation,
-                             const std::vector<std::pair<size_t, size_t>>& occupation_pairs);
-
 } // namespace forte2

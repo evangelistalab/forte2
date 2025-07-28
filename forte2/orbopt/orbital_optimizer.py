@@ -2,23 +2,47 @@ import numpy as np
 import scipy as sp
 from dataclasses import dataclass, field
 
-import forte2
-from forte2.ci import CISolver, CIStates
+from forte2.ci import CISolver, StateAverageInfo
+from forte2.state import State, MOSpace
 from forte2.jkbuilder import FockBuilder
-from forte2.helpers.mixins import MOsMixin, SystemMixin
-from forte2.helpers import logger, LBFGS
+from forte2.helpers.mixins import MOsMixin, SystemMixin, MOSpaceMixin
+from forte2.helpers import logger, LBFGS, DIIS
 from forte2.system.basis_utils import BasisInfo
+from forte2.ci import (
+    pretty_print_ci_summary,
+    pretty_print_ci_nat_occ_numbers,
+    pretty_print_ci_dets,
+    pretty_print_ci_transition_props,
+)
 
 
 @dataclass
-class MCOptimizer(MOsMixin, SystemMixin):
+class MCOptimizer(MOsMixin, SystemMixin, MOSpaceMixin):
     """
     Two-step optimizer for multi-configurational wavefunctions.
 
     Parameters
     ----------
-    ci_state : CIStates
-        The CI states to optimize.
+    states : State | list[State]
+        The electronic states for which the CI is solved. Can be a single state or a list of states.
+        A state-averaged CI is performed if multiple states are provided.
+    core_orbitals : list[int], optional
+        The indices of the core (restricted doubly occupied) orbitals.
+        If not provided, it defaults to an empty list.
+    active_orbitals : list[int] | list[list[int]], optional
+        The indices of the active orbitals. If a list is provided, a complete active space (CAS) is assumed.
+        If a list of lists is provided, each sublist corresponds to orbital indices of a GAS (generalized active space).
+        If not provided, CISolver must be called with a parent method that has MOSpaceMixin (e.g., AVAS).
+    nroots : int | list[int], optional, default=1
+        The number of roots to compute.
+        If a list is provided, each element corresponds to the number of roots for each state.
+        If a single integer is provided, `states` must be a single `State` object.
+    weights : list[float] | list[list[float]], optional
+        The weights for state averaging.
+        If a list of lists is provided, each sublist corresponds to the weights for each state.
+        The number of weights must match the number of roots for each state.
+        If not provided, equal weights are assumed for all states.
+        If a single list is provided, `states` must be a single `State` object.
     maxiter : int, optional, default=50
         Maximum number of macroiterations.
     econv : float, optional, default=1e-8
@@ -43,7 +67,11 @@ class MCOptimizer(MOsMixin, SystemMixin):
         Whether to compute transition dipole moments.
     """
 
-    ci_states: CIStates
+    states: State | list[State]
+    core_orbitals: list[int] = None
+    active_orbitals: list[int] | list[list[int]] = None
+    nroots: int | list[int] = 1
+    weights: list[float] | list[list[float]] = None
 
     ### Macroiteration parameters
     maxiter: int = 50
@@ -69,6 +97,16 @@ class MCOptimizer(MOsMixin, SystemMixin):
     ### Non-init attributes
     executed: bool = field(default=False, init=False)
 
+    def __post_init__(self):
+        self.sa_info = StateAverageInfo(
+            states=self.states,
+            nroots=self.nroots,
+            weights=self.weights,
+        )
+        self.ncis = self.sa_info.ncis
+        self.weights = self.sa_info.weights
+        self.weights_flat = self.sa_info.weights_flat
+
     def __call__(self, method):
         self.parent_method = method
         ### make sure we don't print the CI output at INFO1 level
@@ -86,15 +124,32 @@ class MCOptimizer(MOsMixin, SystemMixin):
 
         SystemMixin.copy_from_upstream(self, self.parent_method)
         MOsMixin.copy_from_upstream(self, self.parent_method)
+        if isinstance(self.parent_method, MOSpaceMixin):
+            MOSpaceMixin.copy_from_upstream(self, self.parent_method)
+        else:
+            assert self.active_orbitals is not None, (
+                "If the parent method does not have MOSpaceMixin, "
+                "then active_orbitals must be provided."
+            )
+            if self.core_orbitals is None:
+                self.core_orbitals = []
+            self.mo_space = MOSpace(self.active_orbitals, self.core_orbitals)
 
-        self.ci_states.fetch_mo_space()
-        self.ci_states.pretty_print_ci_states()
-        self.ncis = self.ci_states.ncis
-        self.norb = self.ci_states.norb
-        self.weights = self.ci_states.weights
-        self.weights_flat = self.ci_states.weights_flat
+        self.norb = self.mo_space.nactv
+        self.core_indices = self.mo_space.core_indices
+        self.active_indices = self.mo_space.active_indices
 
-        self._make_spaces_contiguous()
+        # make the core, active, and virtual spaces contiguous
+        # i.e., [core, gas1, gas2, ..., virt]
+        self.mo_space.compute_contiguous_permutation(self.system.nbf)
+        perm = self.mo_space.orig_to_contig
+        # this is the contiguous coefficient matrix
+        self._C = self.C[0][:, perm].copy()
+        self.core = self.mo_space.core
+        # self.actv will be a list if multiple GASes are defined
+        self.actv = self.mo_space.actv
+        self.virt = self.mo_space.virt
+
         self.nrr = self._get_nonredundant_rotations()
 
     def run(self):
@@ -119,7 +174,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
         #     2. minimize energy wrt CI expansion at current orbitals
         #       (this is just the diagonalization of the active-space CI Hamiltonian)
         self.orb_opt = OrbOptimizer(
-            self.C[0],
+            self._C,
             (self.core, self.actv, self.virt),
             fock_builder,
             self.Hcore,
@@ -127,7 +182,11 @@ class MCOptimizer(MOsMixin, SystemMixin):
             self.nrr,
         )
         self.ci_solver = CISolver(
-            ci_states=self.ci_states,
+            states=self.states,
+            core_orbitals=self.mo_space.core_orbitals,
+            active_orbitals=self.mo_space.active_orbitals,
+            nroots=self.sa_info.nroots,
+            weights=self.sa_info.weights,
             log_level=self.ci_solver_verbosity,
         )(self.parent_method)
         # iteration 0: one step of CI optimization to bootsrap the orbital optimization
@@ -143,7 +202,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
             maxiter=self.micro_maxiter,
         )
 
-        diis = forte2.helpers.DIIS(
+        diis = DIIS(
             diis_start=self.diis_start,
             diis_nvec=self.diis_nvec,
             diis_min=self.diis_min,
@@ -195,9 +254,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
         while self.iter < self.maxiter:
             # 1. Optimize orbitals at fixed CI expansion
             self.E_orb = self.lbfgs_solver.minimize(self.orb_opt, R)
-            # Copy the optimized orbitals to the parent method
-            self.C[0] = self.orb_opt.C.copy()
-
+            self._C = self.orb_opt.C.copy()
             # 2. Convergence checks
             self.g_rms = np.sqrt(np.mean((self.lbfgs_solver.g - self.g_old) ** 2))
             self.g_old = self.lbfgs_solver.g.copy()
@@ -253,9 +310,9 @@ class MCOptimizer(MOsMixin, SystemMixin):
         logger.log_info1(f"Orbital optimization converged in {self.iter} iterations.")
         logger.log_info1(f"Final orbital optimized energy: {self.E_avg:.10f}")
 
-        # undo make_spaces_contiguous
-        inv_argsort = self.ci_states.mo_space.inv_argsort
-        self.C[0][:, inv_argsort] = self.C[0]
+        # undo _make_spaces_contiguous
+        perm = self.mo_space.contig_to_orig
+        self.C[0] = self._C[:, perm].copy()
 
         self._post_process()
         # self.parent_method.set_verbosity_level(current_verbosity)
@@ -263,27 +320,25 @@ class MCOptimizer(MOsMixin, SystemMixin):
         return self
 
     def _post_process(self):
-        forte2.ci.pretty_print_ci_summary(
-            self.ci_states, self.ci_solver.evals_per_solver
-        )
+        pretty_print_ci_summary(self.sa_info, self.ci_solver.evals_per_solver)
         self.ci_solver.compute_natural_occupation_numbers()
-        forte2.ci.pretty_print_ci_nat_occ_numbers(
-            self.ci_states, self.ci_solver.nat_occs
+        pretty_print_ci_nat_occ_numbers(
+            self.sa_info, self.mo_space, self.ci_solver.nat_occs
         )
         top_dets = self.ci_solver.get_top_determinants()
-        forte2.ci.pretty_print_ci_dets(self.ci_states, top_dets)
+        pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
         self._print_ao_composition()
         if self.do_transition_dipole:
             self.ci_solver.compute_transition_properties(self.C[0])
-            forte2.ci.pretty_print_ci_transition_props(
-                self.ci_states,
+            pretty_print_ci_transition_props(
+                self.sa_info,
                 self.ci_solver.tdm_per_solver,
                 self.ci_solver.fosc_per_solver,
                 self.ci_solver.evals_per_solver,
             )
 
     def _print_ao_composition(self):
-        basis_info = forte2.basis_utils.BasisInfo(self.system, self.system.basis)
+        basis_info = BasisInfo(self.system, self.system.basis)
         logger.log_info1("\nAO Composition of core MOs:")
         basis_info.print_ao_composition(
             self.C[0], list(range(self.core.start, self.core.stop))
@@ -292,19 +347,6 @@ class MCOptimizer(MOsMixin, SystemMixin):
         basis_info.print_ao_composition(
             self.C[0], list(range(self.actv.start, self.actv.stop))
         )
-
-    def _make_spaces_contiguous(self):
-        """
-        Swap the orbitals to ensure that the core, active, and virtual orbitals
-        are contiguous in the flattened orbital array.
-        """
-        self.ci_states.mo_space.make_spaces_contiguous(self.system.nbf)
-        argsort = self.ci_states.mo_space.argsort
-        self.C[0][:, argsort] = self.C[0].copy()
-        self.core = self.ci_states.mo_space.core
-        # self.actv will be a list if multiple GASes are defined
-        self.actv = self.ci_states.mo_space.actv
-        self.virt = self.ci_states.mo_space.virt
 
     def _get_nonredundant_rotations(self):
         nrr = np.zeros((self.system.nbf, self.system.nbf), dtype=bool)

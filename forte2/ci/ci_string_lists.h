@@ -17,7 +17,7 @@ class CIStrings {
     // ==> Constructor and Destructor <==
     /// @brief The CIStrings constructor
     CIStrings(size_t na, size_t nb, int symmetry, std::vector<std::vector<int>> orbital_symmetry,
-              const std::vector<int> gas_min, const std::vector<int> gas_max, const int log_level = 3);
+              const std::vector<int> gas_min, const std::vector<int> gas_max);
 
     //   // ==> Class Public Functions <==
 
@@ -42,11 +42,14 @@ class CIStrings {
     /// @return the number of irreps
     int nirrep() const { return nirrep_; }
 
+    /// @return the number of GAS spaces
+    size_t ngas_spaces() const { return ngas_spaces_; }
+
+    /// @return the GAS space sizes
+    const std::vector<int>& gas_size() const { return gas_size_; }
+
     /// @return the number of correlated MOs
     size_t norb() const { return norb_; }
-
-    /// @brief Set the printing level for the class
-    void set_log_level(int level) { log_level_ = level; }
 
     /// @return the alpha string address object
     const auto& alfa_address() const { return alfa_address_; }
@@ -102,6 +105,9 @@ class CIStrings {
     const auto& gas_alfa_1h1p_occupations() const { return gas_alfa_1h1p_occupations_; }
     /// @return the beta GAS 1h1p occupations
     const auto& gas_beta_1h1p_occupations() const { return gas_beta_1h1p_occupations_; }
+
+    /// @return the GAS occupations
+    const auto& gas_occupations() const { return gas_occupations_; }
 
     /// @return the number of determinants in a given block
     size_t detpblk(size_t block) const { return detpblk_[block]; }
@@ -177,8 +183,6 @@ class CIStrings {
     std::vector<int> pairpi_;
     /// The offset array for pairpi
     std::vector<int> pair_offset_;
-    /// The logging level for the class
-    int log_level_ = 3;
 
     //   // GAS specific data
 

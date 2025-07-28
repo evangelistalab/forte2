@@ -24,9 +24,9 @@ template <typename Func> void debug(Func func) {
 
 CIStrings::CIStrings(size_t na, size_t nb, int symmetry,
                      std::vector<std::vector<int>> orbital_symmetry, const std::vector<int> gas_min,
-                     const std::vector<int> gas_max, const int log_level)
+                     const std::vector<int> gas_max)
     : na_(na), nb_(nb), symmetry_(symmetry), orbital_symmetry_(orbital_symmetry), gas_min_(gas_min),
-      gas_max_(gas_max), log_level_(log_level) {
+      gas_max_(gas_max) {
 
     std::vector<std::pair<int, int>> orbital_index_and_symmetry;
     {
@@ -57,7 +57,6 @@ CIStrings::CIStrings(size_t na, size_t nb, int symmetry,
     for (const auto& space : orbital_symmetry_) {
         const auto size = space.size();
         gas_size_.push_back(size);
-        LOG(log_level_) << "\n    GAS space size: " << size;
         for (const auto& s : space) {
             nirrep_ = std::max(nirrep_, static_cast<size_t>(std::abs(s + 1)));
         }
@@ -65,10 +64,6 @@ CIStrings::CIStrings(size_t na, size_t nb, int symmetry,
 
     std::tie(ngas_spaces_, gas_alfa_occupations_, gas_beta_occupations_, gas_occupations_) =
         get_ci_occupation_patterns(na_, nb_, gas_min_, gas_max_, gas_size_);
-
-    auto table = occupation_table(ngas_spaces_, gas_alfa_occupations_, gas_beta_occupations_,
-                                  gas_occupations_);
-    LOG(log_level_) << table;
 
     // local_timers
     double str_list_timer = 0.0;

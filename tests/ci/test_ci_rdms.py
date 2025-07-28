@@ -97,16 +97,21 @@ def compare_rdms(ci, root):
 
     # Test the spin-free cumulants
     sf_2cumulant = ci_solver.ci_sigma_builder.sf_2cumulant(ci_vec_det, ci_vec_det)
-    sf_2cumulant_debug = ci_solver.ci_sigma_builder.sf_2cumulant_debug(ci_vec_det, ci_vec_det)
+    sf_2cumulant_debug = ci_solver.ci_sigma_builder.sf_2cumulant_debug(
+        ci_vec_det, ci_vec_det
+    )
     assert (
         np.linalg.norm(sf_2cumulant - sf_2cumulant_debug) < rdm_threshold
     ), f"Norm of the difference between sf_2cumulant and sf_2cumulant_debug is too large: {np.linalg.norm(sf_2cumulant - sf_2cumulant_debug):.12f}."
 
     sf_3cumulant = ci_solver.ci_sigma_builder.sf_3cumulant(ci_vec_det, ci_vec_det)
-    sf_3cumulant_debug = ci_solver.ci_sigma_builder.sf_3cumulant_debug(ci_vec_det, ci_vec_det)
+    sf_3cumulant_debug = ci_solver.ci_sigma_builder.sf_3cumulant_debug(
+        ci_vec_det, ci_vec_det
+    )
     assert (
         np.linalg.norm(sf_3cumulant - sf_3cumulant_debug) < rdm_threshold
     ), f"Norm of the difference between sf_3cumulant and sf_3cumulant_debug is too large: {np.linalg.norm(sf_3cumulant - sf_3cumulant_debug):.12f}."
+
 
 def test_ci_rdms_1():
     xyz = f"""
@@ -118,12 +123,12 @@ def test_ci_rdms_1():
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci_state = CIStates(
+    ci = CI(
         states=State(nel=10, multiplicity=1, ms=0.0),
         core_orbitals=[0],
-        active_spaces=[1, 2, 3, 4, 5, 6],
-    )
-    ci = CI(ci_state, do_test_rdms=True)(rhf)
+        active_orbitals=[1, 2, 3, 4, 5, 6],
+        do_test_rdms=True,
+    )(rhf)
     ci.run()
     compare_rdms(ci, 0)
 

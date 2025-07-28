@@ -1,6 +1,8 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/vector.h>
+#include <nanobind/stl/array.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/pair.h>
 #include <nanobind/ndarray.h>
 
 #include "ci/ci_string_lists.h"
@@ -17,9 +19,8 @@ namespace forte2 {
 void export_ci_strings_api(nb::module_& m) {
     nb::class_<CIStrings>(m, "CIStrings")
         .def(nb::init<size_t, size_t, int, std::vector<std::vector<int>>, std::vector<int>,
-                      std::vector<int>, int>(),
+                      std::vector<int>>(),
              "na"_a, "nb"_a, "symmetry"_a, "orbital_symmetry"_a, "gas_min"_a, "gas_max"_a,
-             "log_level"_a = 3,
              "Initialize the CIStrings with number of alpha and beta electrons, symmetry, "
              "orbital symmetry, minimum and maximum number of electrons in each GAS space, and "
              "logging level")
@@ -30,8 +31,11 @@ void export_ci_strings_api(nb::module_& m) {
         .def_prop_ro("nas", &CIStrings::nas)
         .def_prop_ro("nbs", &CIStrings::nbs)
         .def_prop_ro("ndet", &CIStrings::ndet)
-        .def("set_log_level", &CIStrings::set_log_level, "level"_a,
-             "Set the logging level for the class")
+        .def_prop_ro("ngas_spaces", &CIStrings::ngas_spaces)
+        .def_prop_ro("gas_size", &CIStrings::gas_size)
+        .def_prop_ro("gas_alfa_occupations", &CIStrings::gas_alfa_occupations)
+        .def_prop_ro("gas_beta_occupations", &CIStrings::gas_beta_occupations)
+        .def_prop_ro("gas_occupations", &CIStrings::gas_occupations)
         .def("determinant", &CIStrings::determinant, "address"_a)
         .def("determinant_index", &CIStrings::determinant_address, "d"_a)
         .def("make_determinants", &CIStrings::make_determinants);

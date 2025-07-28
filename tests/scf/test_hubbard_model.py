@@ -1,6 +1,6 @@
 import forte2
 from forte2.scf import RHF, ROHF, UHF
-from forte2.ci import CI, CIStates
+from forte2.ci import CI
 from forte2.helpers.comparisons import approx
 
 
@@ -23,11 +23,10 @@ def test_1d_hubbard_rhf_fci():
 
     scf = RHF(charge=-8)(system)
     scf.guess_type = "hcore"
-    ci_state = CIStates(
-        active_spaces=list(range(8)),
+    ci = CI(
+        active_orbitals=list(range(8)),
         states=forte2.State(nel=8, multiplicity=1, ms=0.0),
-    )
-    ci = CI(ci_state)(scf)
+    )(scf)
     ci.run()
     assert scf.E == approx(erhf)
     assert ci.E[0] == approx(efci)
@@ -88,11 +87,10 @@ def test_2d_hubbard_rhf_fci():
     system = forte2.system.HubbardModel(t=1.0, U=4.0, nsites=(2, 4), pbc=False)
     scf = RHF(charge=-8)(system)
     scf.guess_type = "hcore"
-    ci_state = CIStates(
-        active_spaces=list(range(8)),
+    ci = CI(
+        active_orbitals=list(range(8)),
         states=forte2.State(nel=8, multiplicity=1, ms=0.0),
-    )
-    ci = CI(ci_state)(scf)
+    )(scf)
     ci.run()
     assert scf.E == approx(erhf)
     assert ci.E[0] == approx(efci)
