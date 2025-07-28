@@ -19,7 +19,8 @@ def timing(n):
     rohf = ROHF(charge=0, ms=0.5 * (n % 2), econv=1e-12)(system)
     rohf.run()
     ci = CI(
-        State(nel=n, multiplicity=multiplicity, active_orbitals=list(range(n)), ms=ms),
+        State(nel=n, multiplicity=multiplicity, ms=ms),
+        active_orbitals=list(range(n)),
         econv=1e-12,
     )(rohf)
     start = time.monotonic()
