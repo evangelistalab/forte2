@@ -6,7 +6,7 @@
 
 namespace forte2 {
 
-np_matrix CISigmaBuilder::compute_a_1rdm(np_vector C_left, np_vector C_right, bool alfa) const {
+np_matrix CISigmaBuilder::compute_s_1rdm(np_vector C_left, np_vector C_right, bool alfa) const {
     size_t norb = lists_.norb();
     auto rdm = make_zeros<nb::numpy, double, 2>({norb, norb});
     auto na = lists_.na();
@@ -61,9 +61,17 @@ np_matrix CISigmaBuilder::compute_a_1rdm(np_vector C_left, np_vector C_right, bo
     return rdm;
 }
 
+np_matrix CISigmaBuilder::compute_a_1rdm(np_vector C_left, np_vector C_right) const {
+    return compute_s_1rdm(C_left, C_right, true);
+}
+
+np_matrix CISigmaBuilder::compute_b_1rdm(np_vector C_left, np_vector C_right) const {
+    return compute_s_1rdm(C_left, C_right, false);
+}
+
 np_matrix CISigmaBuilder::compute_sf_1rdm(np_vector C_left, np_vector C_right) const {
-    auto rdm_a = compute_a_1rdm(C_left, C_right, true);
-    auto rdm_b = compute_a_1rdm(C_left, C_right, false);
+    auto rdm_a = compute_a_1rdm(C_left, C_right);
+    auto rdm_b = compute_b_1rdm(C_left, C_right);
     matrix::daxpy(1.0, rdm_a, rdm_b);
     return rdm_b;
 }

@@ -74,15 +74,24 @@ void export_ci_sigma_builder_api(nb::module_& m) {
         .def("sf_3cumulant", &CISigmaBuilder::compute_sf_3cumulant, "C_left"_a, "C_right"_a,
              "Compute the spin-free three-electron cumulant")
         // Spinful RDMs
-        .def("a_1rdm", &CISigmaBuilder::compute_a_1rdm, "C_left"_a, "C_right"_a, "alfa"_a,
-             "Compute the one-electron same-spin reduced density matrix")
-        .def("aa_2rdm", &CISigmaBuilder::compute_aa_2rdm, "C_left"_a, "C_right"_a, "alfa"_a,
-             "Compute the two-electron same-spin reduced density matrix")
-        .def("ab_2rdm", &CISigmaBuilder::compute_ab_2rdm, "C_left"_a, "C_right"_a)
-        .def("aaa_3rdm", &CISigmaBuilder::compute_aaa_3rdm, "C_left"_a, "C_right"_a, "alfa"_a)
-        .def("aab_3rdm", &CISigmaBuilder::compute_aab_3rdm, "C_left"_a, "C_right"_a)
-        .def("abb_3rdm", &CISigmaBuilder::compute_abb_3rdm, "C_left"_a, "C_right"_a)
-
+        .def("a_1rdm", &CISigmaBuilder::compute_a_1rdm, "C_left"_a, "C_right"_a,
+             "Compute the alpha one-electron reduced density matrix")
+        .def("b_1rdm", &CISigmaBuilder::compute_b_1rdm, "C_left"_a, "C_right"_a,
+             "Compute the beta one-electron reduced density matrix")
+        .def("aa_2rdm", &CISigmaBuilder::compute_aa_2rdm, "C_left"_a, "C_right"_a,
+             "Compute the alpha-alpha two-electron reduced density matrix")
+        .def("bb_2rdm", &CISigmaBuilder::compute_bb_2rdm, "C_left"_a, "C_right"_a,
+             "Compute the beta-beta two-electron reduced density matrix")
+        .def("ab_2rdm", &CISigmaBuilder::compute_ab_2rdm, "C_left"_a, "C_right"_a,
+             "Compute the alpha-beta two-electron reduced density matrix")
+        .def("aaa_3rdm", &CISigmaBuilder::compute_aaa_3rdm, "C_left"_a, "C_right"_a,
+             "Compute the alpha-alpha-alpha three-electron reduced density matrix")
+        .def("aab_3rdm", &CISigmaBuilder::compute_aab_3rdm, "C_left"_a, "C_right"_a,
+             "Compute the alpha-alpha-beta three-electron reduced density matrix")
+        .def("abb_3rdm", &CISigmaBuilder::compute_abb_3rdm, "C_left"_a, "C_right"_a,
+             "Compute the alpha-beta-beta three-electron reduced density matrix")
+        .def("bbb_3rdm", &CISigmaBuilder::compute_bbb_3rdm, "C_left"_a, "C_right"_a,
+             "Compute the beta-beta-beta three-electron reduced density matrix")
         .def("avg_build_time", &CISigmaBuilder::avg_build_time)
         .def("set_log_level", &CISigmaBuilder::set_log_level, "level"_a,
              "Set the logging level for the class")
@@ -115,11 +124,11 @@ void export_ci_sigma_builder_api(nb::module_& m) {
         .def("abbb_4rdm_debug", &CISigmaBuilder::compute_abbb_4rdm_debug, "C_left"_a, "C_right"_a,
              "Compute the abbb mixed-spin four-electron reduced density matrix for debugging "
              "purposes")
-        .def("sf_rdm1_debug", &CISigmaBuilder::compute_sf_1rdm_debug, "C_left"_a, "C_right"_a,
+        .def("sf_1rdm_debug", &CISigmaBuilder::compute_sf_1rdm_debug, "C_left"_a, "C_right"_a,
              "Compute the spin-free one-electron reduced density matrix for debugging purposes")
-        .def("sf_rdm2_debug", &CISigmaBuilder::compute_sf_2rdm_debug, "C_left"_a, "C_right"_a,
+        .def("sf_2rdm_debug", &CISigmaBuilder::compute_sf_2rdm_debug, "C_left"_a, "C_right"_a,
              "Compute the spin-free two-electron reduced density matrix for debugging purposes")
-        .def("sf_rdm3_debug", &CISigmaBuilder::compute_sf_3rdm_debug, "C_left"_a, "C_right"_a,
+        .def("sf_3rdm_debug", &CISigmaBuilder::compute_sf_3rdm_debug, "C_left"_a, "C_right"_a,
              "Compute the spin-free three-electron reduced density matrix for debugging purposes")
         .def("sf_2cumulant_debug", &CISigmaBuilder::compute_sf_2cumulant_debug, "C_left"_a,
              "C_right"_a, "Compute the spin-free two-electron cumulant for debugging purposes")

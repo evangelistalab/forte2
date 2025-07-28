@@ -8,7 +8,7 @@
 
 namespace forte2 {
 
-np_matrix CISigmaBuilder::compute_aa_2rdm(np_vector C_left, np_vector C_right, bool alfa) const {
+np_matrix CISigmaBuilder::compute_ss_2rdm(np_vector C_left, np_vector C_right, bool alfa) const {
     local_timer timer;
 
     const size_t norb = lists_.norb();
@@ -77,6 +77,14 @@ np_matrix CISigmaBuilder::compute_aa_2rdm(np_vector C_left, np_vector C_right, b
     }
     rdm2_aa_timer_ += timer.elapsed_seconds();
     return rdm;
+}
+
+np_matrix CISigmaBuilder::compute_aa_2rdm(np_vector C_left, np_vector C_right) const {
+    return compute_ss_2rdm(C_left, C_right, true);
+}
+
+np_matrix CISigmaBuilder::compute_bb_2rdm(np_vector C_left, np_vector C_right) const {
+    return compute_ss_2rdm(C_left, C_right, false);
 }
 
 np_tensor4 CISigmaBuilder::compute_ab_2rdm(np_vector C_left, np_vector C_right) const {
@@ -157,10 +165,10 @@ np_tensor4 CISigmaBuilder::compute_sf_2rdm(np_vector C_left, np_vector C_right) 
 
     auto rdm_sf_v = rdm_sf.view();
 
-    // To reduce the  memory footprint, we compute the aa and bb contributions in a packed format
-    // and one at a time.
+    // To reduce the  memory footprint, we compute the aa and bb contributions in a packed
+    // format and one at a time.
     for (auto spin : {true, false}) {
-        auto rdm_ss = compute_aa_2rdm(C_left, C_right, spin);
+        auto rdm_ss = compute_ss_2rdm(C_left, C_right, spin);
         auto rdm_ss_v = rdm_ss.view();
         for (size_t p{1}, pq{0}; p < norb; ++p) {
             for (size_t q{0}; q < p; ++q, ++pq) { // p > q

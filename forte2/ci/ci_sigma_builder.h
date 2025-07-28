@@ -74,13 +74,27 @@ class CISigmaBuilder {
         }
     }
 
-    /// @brief Compute the spinful one-electron reduced density matrix
+    /// @brief Compute the spin-dependent one-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
     /// @param C_right The right-hand side coefficients
     /// @param alfa If true, compute the alpha contribution, otherwise the beta
     /// @return The one-electron reduced density matrix stored as
-    ///        gamma(sigma)[p][q] = <L| a^+_p a_q |R> with p,q orbitals of spin sigma
-    np_matrix compute_a_1rdm(np_vector C_left, np_vector C_right, bool alfa) const;
+    ///        gamma(spin)[p][q] = <L| a^+_p a_q |R> with p,q orbitals of spin alpha/beta
+    np_matrix compute_s_1rdm(np_vector C_left, np_vector C_right, bool alfa) const;
+
+    /// @brief Compute the alpha one-electron reduced density matrix
+    /// @param C_left The left-hand side coefficients
+    /// @param C_right The right-hand side coefficients
+    /// @return The one-electron reduced density matrix stored as
+    ///        gamma(alpha)[p][q] = <L| a^+_p a_q |R> with p,q orbitals of spin alpha
+    np_matrix compute_a_1rdm(np_vector C_left, np_vector C_right) const;
+
+    /// @brief Compute the beta one-electron reduced density matrix
+    /// @param C_left The left-hand side coefficients
+    /// @param C_right The right-hand side coefficients
+    /// @return The one-electron reduced density matrix stored as
+    ///        gamma(beta)[p][q] = <L| b^+_p b_q |R> with p,q orbitals of spin beta
+    np_matrix compute_b_1rdm(np_vector C_left, np_vector C_right) const;
 
     /// @brief Compute the spin-free one-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -96,7 +110,23 @@ class CISigmaBuilder {
     /// @return The two-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(sigma)[p>q][r>s] = <L| a^+_p a^+_q a_s a_r |R>
     ///        with p > q, and r > s orbitals of spin sigma
-    np_matrix compute_aa_2rdm(np_vector C_left, np_vector C_right, bool alfa) const;
+    np_matrix compute_ss_2rdm(np_vector C_left, np_vector C_right, bool alfa) const;
+
+    /// @brief Compute the alpha-alpha two-electron reduced density matrix
+    /// @param C_left The left-hand side coefficients
+    /// @param C_right The right-hand side coefficients
+    /// @return The two-electron same-spin reduced density matrix stored as a matrix
+    ///        gamma(sigma)[p>q][r>s] = <L| a^+_p a^+_q a_s a_r |R>
+    ///        with p > q, and r > s orbitals of spin sigma
+    np_matrix compute_aa_2rdm(np_vector C_left, np_vector C_right) const;
+
+    /// @brief Compute the beta-beta two-electron reduced density matrix
+    /// @param C_left The left-hand side coefficients
+    /// @param C_right The right-hand side coefficients
+    /// @return The two-electron same-spin reduced density matrix stored as a matrix
+    ///        gamma(sigma)[p>q][r>s] = <L| a^+_p a^+_q a_s a_r |R>
+    ///        with p > q, and r > s orbitals of spin sigma
+    np_matrix compute_bb_2rdm(np_vector C_left, np_vector C_right) const;
 
     /// @brief Compute the mixed-spin two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -131,7 +161,23 @@ class CISigmaBuilder {
     /// @return The three-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(sigma)[p>q>r][s>t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
     ///        with p > q > r, and s > t > u orbitals of spin sigma
-    np_matrix compute_aaa_3rdm(np_vector C_left, np_vector C_right, bool alfa) const;
+    np_matrix compute_sss_3rdm(np_vector C_left, np_vector C_right, bool alfa) const;
+
+    /// @brief Compute the alpha-alpha-alpha three-electron same-spin reduced density matrix
+    /// @param C_left The left-hand side coefficients
+    /// @param C_right The right-hand side coefficients
+    /// @return The three-electron same-spin reduced density matrix stored as a matrix
+    ///        gamma(aaa)[p>q>r][s>t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
+    ///        with p > q > r, and s > t > u orbitals of spin alpha
+    np_matrix compute_aaa_3rdm(np_vector C_left, np_vector C_right) const;
+
+    /// @brief Compute the beta-beta-beta three-electron same-spin reduced density matrix
+    /// @param C_left The left-hand side coefficients
+    /// @param C_right The right-hand side coefficients
+    /// @return The three-electron same-spin reduced density matrix stored as a matrix
+    ///        gamma(bbb)[p>q>r][s>t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
+    ///        with p > q > r, and s > t > u orbitals of spin beta
+    np_matrix compute_bbb_3rdm(np_vector C_left, np_vector C_right) const;
 
     /// @brief Compute the aab mixed-spin three-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
