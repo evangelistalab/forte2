@@ -100,12 +100,12 @@ def test_ci_rdms_1():
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci_state = CIStates(
+    ci = CI(
         states=State(nel=10, multiplicity=1, ms=0.0),
         core_orbitals=[0],
         active_orbitals=[1, 2, 3, 4, 5, 6],
-    )
-    ci = CI(ci_state, do_test_rdms=True)(rhf)
+        do_test_rdms=True,
+    )(rhf)
     ci.run()
     compare_rdms(ci, 0)
 

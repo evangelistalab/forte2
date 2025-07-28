@@ -3,14 +3,16 @@ from abc import ABC, abstractmethod
 from collections import OrderedDict
 
 import numpy as np
-import forte2
 
+from forte2 import CIStrings, CISigmaBuilder, CISpinAdapter
 from forte2.state.state import State
-from forte2.helpers.mixins import MOsMixin, SystemMixin
+from forte2.helpers.mixins import MOsMixin, SystemMixin, MOSpaceMixin
+from forte2.helpers.comparisons import approx
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
 from forte2.helpers import logger
-from forte2.orbitals import MOSpace
+from forte2.state import MOSpace
 from forte2.jkbuilder import RestrictedMOIntegrals
+from forte2.props import get_1e_property
 from .ci_utils import *
 
 
@@ -103,7 +105,7 @@ class _CIBase:
             [0] * len(self.mo_space.active_orbitals[x]) for x in range(self.ngas)
         ]
 
-        self.ci_strings = forte2.CIStrings(
+        self.ci_strings = CIStrings(
             self.state.na - self.ncore,
             self.state.nb - self.ncore,
             self.state.symmetry,
@@ -125,7 +127,7 @@ class _CIBase:
                 "No determinants could be generated for the given state and orbitals."
             )
 
-        self.spin_adapter = forte2.CISpinAdapter(
+        self.spin_adapter = CISpinAdapter(
             self.state.multiplicity - 1, self.state.twice_ms, self.norb
         )
         self.spin_adapter.set_log_level(self.log_level)
@@ -150,7 +152,7 @@ class _CIBase:
         # Create the CISigmaBuilder from the CI strings and integrals
         # This object handles some temporary memory deallocated at destruction
         # and is used to compute the Hamiltonian matrix elements in the determinant basis
-        self.ci_sigma_builder = forte2.CISigmaBuilder(
+        self.ci_sigma_builder = CISigmaBuilder(
             self.ci_strings, self.ints.E, self.ints.H, self.ints.V, self.log_level
         )
         self.ci_sigma_builder.set_memory(self.ci_builder_memory)
@@ -276,8 +278,6 @@ class _CIBase:
             logger.log(
                 f"CI energy from expanded RDMs:  {rdms_energy:.12f} Eh", self.log_level
             )
-
-            from forte2.helpers.comparisons import approx
 
             assert self.E[root] == approx(rdms_energy)
 
@@ -591,7 +591,7 @@ class _CIBase:
 
 
 @dataclass
-class CISolver:
+class CISolver(SystemMixin, MOsMixin, MOSpaceMixin):
     """
     A general configuration interaction (CI) solver class.
     This solver is can be called iteratively, e.g., in a MCSCF loop or a DSRG reference relaxation loop.
@@ -625,7 +625,11 @@ class CISolver:
         The algorithm used for the CI sigma builder.
     """
 
-    ci_states: CIStates
+    states: State | list[State]
+    core_orbitals: list[int] = None
+    active_orbitals: list[int] | list[list[int]] = None
+    nroots: int | list[int] = 1
+    weights: list[float] | list[list[float]] = None
 
     ### Davidson-Liu parameters
     guess_per_root: int = 2
@@ -648,6 +652,16 @@ class CISolver:
     first_run: bool = field(default=True, init=False)
     executed: bool = field(default=False, init=False)
 
+    def __post_init__(self):
+        self.sa_info = StateAverageInfo(
+            states=self.states,
+            nroots=self.nroots,
+            weights=self.weights,
+        )
+        self.ncis = self.sa_info.ncis
+        self.weights = self.sa_info.weights
+        self.weights_flat = self.sa_info.weights_flat
+
     def __call__(self, method):
         self.parent_method = method
         return self
@@ -656,16 +670,22 @@ class CISolver:
         if not self.parent_method.executed:
             self.parent_method.run()
 
-        self.ci_states.fetch_mo_space()
-        self.ncis = self.ci_states.ncis
-        self.core_indices = self.ci_states.core_indices
-        self.active_indices = self.ci_states.active_indices
-        self.norb = self.ci_states.norb
-        self.weights = self.ci_states.weights
-        self.weights_flat = self.ci_states.weights_flat
-
         SystemMixin.copy_from_upstream(self, self.parent_method)
         MOsMixin.copy_from_upstream(self, self.parent_method)
+        if isinstance(self.parent_method, MOSpaceMixin):
+            MOSpaceMixin.copy_from_upstream(self, self.parent_method)
+        else:
+            assert self.active_orbitals is not None, (
+                "If the parent method does not have MOSpaceMixin, "
+                "then active_orbitals must be provided."
+            )
+            if self.core_orbitals is None:
+                self.core_orbitals = []
+            self.mo_space = MOSpace(self.active_orbitals, self.core_orbitals)
+
+        self.norb = self.mo_space.nactv
+        self.core_indices = self.mo_space.core_indices
+        self.active_indices = self.mo_space.active_indices
 
         ints = RestrictedMOIntegrals(
             self.system,
@@ -676,14 +696,14 @@ class CISolver:
         )
 
         self.ci_solvers = []
-        for i, state in enumerate(self.ci_states.states):
+        for i, state in enumerate(self.sa_info.states):
             # Create a CI solver for each state and MOSpace
             self.ci_solvers.append(
                 _CIBase(
-                    mo_space=self.ci_states.mo_space,
+                    mo_space=self.mo_space,
                     ints=ints,
                     state=state,
-                    nroot=self.ci_states.nroots[i],
+                    nroot=self.sa_info.nroots[i],
                     do_test_rdms=self.do_test_rdms,
                     ci_algorithm=self.ci_algorithm,
                     guess_per_root=self.guess_per_root,
@@ -828,7 +848,7 @@ class CISolver:
         # factor of 2 for spin-summed 1-RDM
         rdm_core = 2 * np.einsum("pi,qi->pq", Ccore, Ccore.conj(), optimize=True)
         # this includes nuclear dipole contribution
-        core_dip = forte2.props.get_1e_property(
+        core_dip = get_1e_property(
             self.system, rdm_core, property_name="dipole", unit="au"
         )
         self.tdm_per_solver = []
@@ -840,7 +860,7 @@ class CISolver:
             for i in range(ci_solver.nroot):
                 rdm = ci_solver.make_rdm1_sf(ci_solver.evecs[:, i])
                 rdm = np.einsum("ij,pi,qj->pq", rdm, Cact, Cact.conj(), optimize=True)
-                dip = forte2.props.get_1e_property(
+                dip = get_1e_property(
                     self.system, rdm, property_name="electric_dipole", unit="au"
                 )
                 tdmdict[(i, i)] = dip + core_dip
@@ -852,7 +872,7 @@ class CISolver:
                     tdm = np.einsum(
                         "ij,pi,qj->pq", tdm, Cact, Cact.conj(), optimize=True
                     )
-                    tdip = forte2.props.get_1e_property(
+                    tdip = get_1e_property(
                         self.system, tdm, property_name="electric_dipole", unit="au"
                     )
                     tdmdict[(i, j)] = tdip
@@ -876,16 +896,16 @@ class CI(CISolver):
         self._post_process()
 
     def _post_process(self):
-        pretty_print_ci_summary(self.ci_states, self.evals_per_solver)
+        pretty_print_ci_summary(self.sa_info, self.evals_per_solver)
         self.compute_natural_occupation_numbers()
-        pretty_print_ci_nat_occ_numbers(self.ci_states, self.nat_occs)
+        pretty_print_ci_nat_occ_numbers(self.sa_info, self.mo_space, self.nat_occs)
         top_dets = self.get_top_determinants()
-        pretty_print_ci_dets(self.ci_states, top_dets)
+        pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
 
         if self.do_transition_dipole:
             self.compute_transition_properties()
             pretty_print_ci_transition_props(
-                self.ci_states,
+                self.sa_info,
                 self.tdm_per_solver,
                 self.fosc_per_solver,
                 self.evals_per_solver,

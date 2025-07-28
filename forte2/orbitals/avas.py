@@ -3,13 +3,14 @@ import numpy as np
 import re
 
 import forte2
+from forte2.state import MOSpace
 from forte2.helpers import logger
-from forte2.helpers.mixins import MOsMixin, SystemMixin
+from forte2.helpers.mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.system.atom_data import Z_TO_ATOM_SYMBOL, ATOM_SYMBOL_TO_Z
 
 
 @dataclass
-class AVAS(MOsMixin, SystemMixin):
+class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
     """
     Atomic valence active space (AVAS) method for selecting active orbitals for multi-reference calculations.
 
@@ -473,12 +474,18 @@ class AVAS(MOsMixin, SystemMixin):
             )
         self.nactv = len(act_docc) + len(act_uocc) + nsocc
         self.ncore = len(inact_docc)
-        self.core_orbitals = list(range(self.ncore))
-        self.core_indices = self.core_orbitals
-        self.active_indices = list(range(self.ncore, self.ncore + self.nactv))
-        # For pushing to the CIStates class
-        self.active_orbitals = [self.active_indices]
-        self.ngas = 1
+        # self.core_orbitals = list(range(self.ncore))
+        # self.core_indices = self.core_orbitals
+        # self.active_indices = list(range(self.ncore, self.ncore + self.nactv))
+        # # For pushing to the CIStates class
+        # self.active_orbitals = [self.active_indices]
+        # self.ngas = 1
+
+        self.mo_space = MOSpace(
+            active_orbitals=list(range(self.ncore, self.ncore + self.nactv)),
+            core_orbitals=list(range(self.ncore)),
+        )
+
         logger.log_info1(f"\nNumber of core orbitals:      {self.ncore}")
         logger.log_info1(f"Number of active orbitals:    {self.nactv}")
 
@@ -507,7 +514,9 @@ class AVAS(MOsMixin, SystemMixin):
         self.C[0][:, au_sl] = C_act_uocc
         self.C[0][:, iu_sl] = C_inact_uocc
 
-        logger.log_info1("\nAO composition of final canonicalized active MOs prepared by AVAS:")
+        logger.log_info1(
+            "\nAO composition of final canonicalized active MOs prepared by AVAS:"
+        )
         self.basis_info.print_ao_composition(
             self.C[0], list(range(ad_sl.start, au_sl.stop))
         )

@@ -2,16 +2,22 @@ import numpy as np
 import scipy as sp
 from dataclasses import dataclass, field
 
-import forte2
-from forte2.ci import CISolver, CIStates
+from forte2.ci import CISolver, StateAverageInfo
+from forte2.state import State, MOSpace
 from forte2.jkbuilder import FockBuilder
-from forte2.helpers.mixins import MOsMixin, SystemMixin
-from forte2.helpers import logger, LBFGS
+from forte2.helpers.mixins import MOsMixin, SystemMixin, MOSpaceMixin
+from forte2.helpers import logger, LBFGS, DIIS
 from forte2.system.basis_utils import BasisInfo
+from forte2.ci import (
+    pretty_print_ci_summary,
+    pretty_print_ci_nat_occ_numbers,
+    pretty_print_ci_dets,
+    pretty_print_ci_transition_props,
+)
 
 
 @dataclass
-class MCOptimizer(MOsMixin, SystemMixin):
+class MCOptimizer(MOsMixin, SystemMixin, MOSpaceMixin):
     """
     Two-step optimizer for multi-configurational wavefunctions.
 
@@ -43,7 +49,11 @@ class MCOptimizer(MOsMixin, SystemMixin):
         Whether to compute transition dipole moments.
     """
 
-    ci_states: CIStates
+    states: State | list[State]
+    core_orbitals: list[int] = None
+    active_orbitals: list[int] | list[list[int]] = None
+    nroots: int | list[int] = 1
+    weights: list[float] | list[list[float]] = None
 
     ### Macroiteration parameters
     maxiter: int = 50
@@ -69,6 +79,16 @@ class MCOptimizer(MOsMixin, SystemMixin):
     ### Non-init attributes
     executed: bool = field(default=False, init=False)
 
+    def __post_init__(self):
+        self.sa_info = StateAverageInfo(
+            states=self.states,
+            nroots=self.nroots,
+            weights=self.weights,
+        )
+        self.ncis = self.sa_info.ncis
+        self.weights = self.sa_info.weights
+        self.weights_flat = self.sa_info.weights_flat
+
     def __call__(self, method):
         self.parent_method = method
         ### make sure we don't print the CI output at INFO1 level
@@ -86,24 +106,31 @@ class MCOptimizer(MOsMixin, SystemMixin):
 
         SystemMixin.copy_from_upstream(self, self.parent_method)
         MOsMixin.copy_from_upstream(self, self.parent_method)
+        if isinstance(self.parent_method, MOSpaceMixin):
+            MOSpaceMixin.copy_from_upstream(self, self.parent_method)
+        else:
+            assert self.active_orbitals is not None, (
+                "If the parent method does not have MOSpaceMixin, "
+                "then active_orbitals must be provided."
+            )
+            if self.core_orbitals is None:
+                self.core_orbitals = []
+            self.mo_space = MOSpace(self.active_orbitals, self.core_orbitals)
 
-        self.ci_states.fetch_mo_space()
-        self.ci_states.pretty_print_ci_states()
-        self.ncis = self.ci_states.ncis
-        self.norb = self.ci_states.norb
-        self.weights = self.ci_states.weights
-        self.weights_flat = self.ci_states.weights_flat
+        self.norb = self.mo_space.nactv
+        self.core_indices = self.mo_space.core_indices
+        self.active_indices = self.mo_space.active_indices
 
         # make the core, active, and virtual spaces contiguous
         # i.e., [core, gas1, gas2, ..., virt]
-        self.ci_states.mo_space.compute_contiguous_permutation(self.system.nbf)
-        perm = self.ci_states.mo_space.orig_to_contig
+        self.mo_space.compute_contiguous_permutation(self.system.nbf)
+        perm = self.mo_space.orig_to_contig
         # this is the contiguous coefficient matrix
         self._C = self.C[0][:, perm].copy()
-        self.core = self.ci_states.mo_space.core
+        self.core = self.mo_space.core
         # self.actv will be a list if multiple GASes are defined
-        self.actv = self.ci_states.mo_space.actv
-        self.virt = self.ci_states.mo_space.virt
+        self.actv = self.mo_space.actv
+        self.virt = self.mo_space.virt
 
         self.nrr = self._get_nonredundant_rotations()
 
@@ -137,7 +164,11 @@ class MCOptimizer(MOsMixin, SystemMixin):
             self.nrr,
         )
         self.ci_solver = CISolver(
-            ci_states=self.ci_states,
+            states=self.states,
+            core_orbitals=self.mo_space.core_orbitals,
+            active_orbitals=self.mo_space.active_orbitals,
+            nroots=self.sa_info.nroots,
+            weights=self.sa_info.weights,
             log_level=self.ci_solver_verbosity,
         )(self.parent_method)
         # iteration 0: one step of CI optimization to bootsrap the orbital optimization
@@ -153,7 +184,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
             maxiter=self.micro_maxiter,
         )
 
-        diis = forte2.helpers.DIIS(
+        diis = DIIS(
             diis_start=self.diis_start,
             diis_nvec=self.diis_nvec,
             diis_min=self.diis_min,
@@ -262,7 +293,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
         logger.log_info1(f"Final orbital optimized energy: {self.E_avg:.10f}")
 
         # undo _make_spaces_contiguous
-        perm = self.ci_states.mo_space.contig_to_orig
+        perm = self.mo_space.contig_to_orig
         self.C[0] = self._C[:, perm].copy()
 
         self._post_process()
@@ -271,27 +302,25 @@ class MCOptimizer(MOsMixin, SystemMixin):
         return self
 
     def _post_process(self):
-        forte2.ci.pretty_print_ci_summary(
-            self.ci_states, self.ci_solver.evals_per_solver
-        )
+        pretty_print_ci_summary(self.sa_info, self.ci_solver.evals_per_solver)
         self.ci_solver.compute_natural_occupation_numbers()
-        forte2.ci.pretty_print_ci_nat_occ_numbers(
-            self.ci_states, self.ci_solver.nat_occs
+        pretty_print_ci_nat_occ_numbers(
+            self.sa_info, self.mo_space, self.ci_solver.nat_occs
         )
         top_dets = self.ci_solver.get_top_determinants()
-        forte2.ci.pretty_print_ci_dets(self.ci_states, top_dets)
+        pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
         self._print_ao_composition()
         if self.do_transition_dipole:
             self.ci_solver.compute_transition_properties(self.C[0])
-            forte2.ci.pretty_print_ci_transition_props(
-                self.ci_states,
+            pretty_print_ci_transition_props(
+                self.sa_info,
                 self.ci_solver.tdm_per_solver,
                 self.ci_solver.fosc_per_solver,
                 self.ci_solver.evals_per_solver,
             )
 
     def _print_ao_composition(self):
-        basis_info = forte2.basis_utils.BasisInfo(self.system, self.system.basis)
+        basis_info = BasisInfo(self.system, self.system.basis)
         logger.log_info1("\nAO Composition of core MOs:")
         basis_info.print_ao_composition(
             self.C[0], list(range(self.core.start, self.core.stop))

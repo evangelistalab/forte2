@@ -7,15 +7,14 @@ import scipy as sp
 
 import forte2
 from forte2.jkbuilder import FockBuilder
-from forte2.helpers.mixins import MOsMixin
+from forte2.helpers.mixins import MOsMixin, SystemMixin
 from forte2.helpers.matrix_functions import givens_rotation
 from forte2.helpers import logger
-from forte2.system.atom_data import Z_TO_ATOM_SYMBOL
 from .initial_guess import minao_initial_guess, core_initial_guess
 
 
 @dataclass
-class SCFBase(ABC):
+class SCFBase(ABC, SystemMixin, MOsMixin):
     """
     Abstract base class for SCF calculations.
 
@@ -263,7 +262,7 @@ class SCFBase(ABC):
 
 
 @dataclass
-class RHF(SCFBase, MOsMixin):
+class RHF(SCFBase):
     """
     A class that runs restricted Hartree-Fock calculations.
     """
@@ -368,7 +367,7 @@ class RHF(SCFBase, MOsMixin):
 
 
 @dataclass
-class UHF(SCFBase, MOsMixin):
+class UHF(SCFBase):
     """
     A class that runs unrestricted Hartree-Fock calculations.
 
@@ -529,7 +528,7 @@ class UHF(SCFBase, MOsMixin):
 
 
 @dataclass
-class ROHF(SCFBase, MOsMixin):
+class ROHF(SCFBase):
     """
     A class that runs restricted open-shell Hartree-Fock calculations.
 
@@ -638,7 +637,7 @@ class ROHF(SCFBase, MOsMixin):
 
 
 @dataclass
-class CUHF(SCFBase, MOsMixin):
+class CUHF(SCFBase):
     """
     A class that runs constrained unrestricted Hartree-Fock calculations.
     Equivalent to ROHF but uses UHF machinery.
@@ -708,7 +707,7 @@ class CUHF(SCFBase, MOsMixin):
 
 
 @dataclass
-class GHF(SCFBase, MOsMixin):
+class GHF(SCFBase):
     r"""
     Generalized Hartree-Fock (GHF) method.
     The GHF spinor basis is a direct product of the atomic basis and :math:`\{|\alpha\rangle, |\beta\rangle\}`:
