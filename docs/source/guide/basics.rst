@@ -40,13 +40,11 @@ And you can prepare a complicated state-averaged CASSCF solver using the AVAS or
 >>> doublet = forte2.State(nel=13, multiplicity=2, ms=0.0)
 >>> singlet = forte2.State(nel=14, multiplicity=1, ms=0.0)
 >>> triplet = forte2.State(nel=14, multiplicity=3, ms=0.5)
->>> ci_states = forte2.CIStates(
+>>> casscf = forte2.MCOptimizer(
     states=[doublet, singlet, triplet],
-    avas=avas,
     nroots=[2,3,1],
     weights=[[2,1],[1,1,1],[0.5]],
-    )
->>> casscf = forte2.MCOptimizer(ci_states=ci_states)(avas)
+)(avas)
  
 If you execute the code now, the methods will click together under the hood, doing the necessary checks, but no computation will be performed yet.
 You can then run the whole chain with a single call:
