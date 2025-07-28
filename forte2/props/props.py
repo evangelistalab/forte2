@@ -1,7 +1,7 @@
 import numpy as np
 
-import forte2
-from forte2.helpers import logger
+from forte2 import ints
+from forte2.system.atom_data import DEBYE_TO_AU, ANGSTROM_TO_BOHR
 
 
 def get_1e_property(system, g1_sf, property_name, origin=None, unit="debye"):
@@ -49,13 +49,13 @@ def get_1e_property(system, g1_sf, property_name, origin=None, unit="debye"):
 
     match property_name:
         case "kinetic_energy":
-            ints = forte2.ints.kinetic(system.basis)
+            oei = ints.kinetic(system.basis)
         case "nuclear_attraction_energy":
-            ints = forte2.ints.nuclear(system.basis, system.atoms)
+            oei = ints.nuclear(system.basis, system.atoms)
         case "electric_dipole":
             origin = _origin_check(origin)
-            _, *ints = forte2.ints.emultipole1(system.basis, origin=origin)
-            factor = -1.0 / forte2.atom_data.DEBYE_TO_AU if unit == "debye" else -1.0
+            _, *oei = ints.emultipole1(system.basis, origin=origin)
+            factor = -1.0 / DEBYE_TO_AU if unit == "debye" else -1.0
         case "dipole":
             e_dip = get_1e_property(
                 system, g1_sf, "electric_dipole", origin=origin, unit=unit
@@ -64,13 +64,13 @@ def get_1e_property(system, g1_sf, property_name, origin=None, unit="debye"):
             return e_dip + nuc_dip
         case "electric_quadrupole":
             origin = _origin_check(origin)
-            *_, xx, xy, xz, yy, yz, zz = forte2.ints.emultipole2(
+            *_, xx, xy, xz, yy, yz, zz = ints.emultipole2(
                 system.basis, origin=origin
             )
-            ints = [xx, xy, xz, yy, yz, zz]
+            oei = [xx, xy, xz, yy, yz, zz]
             factor = (
                 -1.0
-                / (forte2.atom_data.DEBYE_TO_AU * forte2.atom_data.ANGSTROM_TO_BOHR)
+                / (DEBYE_TO_AU * ANGSTROM_TO_BOHR)
                 if unit == "debye"
                 else -1.0
             )
@@ -85,9 +85,9 @@ def get_1e_property(system, g1_sf, property_name, origin=None, unit="debye"):
         case _:
             raise ValueError(f"Property '{property_name}' is not supported.")
 
-    if not isinstance(ints, list):
-        return np.einsum("pq,qp->", g1_sf, ints) * factor
-    return np.array([np.einsum("pq,qp->", g1_sf, _) for _ in ints]) * factor
+    if not isinstance(oei, list):
+        return np.einsum("pq,qp->", g1_sf, oei) * factor
+    return np.array([np.einsum("pq,qp->", g1_sf, _) for _ in oei]) * factor
 
 
 def mulliken_population(system, g1_sf):
@@ -110,7 +110,7 @@ def mulliken_population(system, g1_sf):
     -----
     See eq 3.196 in Szabo and Ostlund.
     """
-    ovlp = forte2.ints.overlap(system.basis)
+    ovlp = ints.overlap(system.basis)
     psdiag = np.einsum("pq,qp->p", g1_sf, ovlp)
     center_first_and_last = system.basis.center_first_and_last
     charges = system.atomic_charges

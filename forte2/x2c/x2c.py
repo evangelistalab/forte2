@@ -1,8 +1,8 @@
 import numpy as np
 import scipy, scipy.constants
-import forte2
-import forte2.helpers
-from forte2.helpers import logger
+
+from forte2 import ints
+from forte2.helpers import logger, eigh_gen
 
 X2C_LINDEP_TOL = 5e-8
 LIGHT_SPEED = scipy.constants.physical_constants["inverse fine-structure constant"][0]
@@ -74,18 +74,18 @@ def _i_sigma_dot(A):
 
 def _get_projection_matrix(xbasis, basis, x2c_type):
     proj = scipy.linalg.solve(
-        forte2.ints.overlap(xbasis),
-        forte2.ints.overlap(xbasis, basis),
+        ints.overlap(xbasis),
+        ints.overlap(xbasis, basis),
         assume_a="pos",
     )
     return proj if x2c_type == "sf" else _block_diag(proj)
 
 
 def _get_integrals(xbasis, atoms, x2c_type):
-    S = forte2.ints.overlap(xbasis)
-    T = forte2.ints.kinetic(xbasis)
-    V = forte2.ints.nuclear(xbasis, atoms)
-    W = forte2.ints.opVop(xbasis, atoms)
+    S = ints.overlap(xbasis)
+    T = ints.kinetic(xbasis)
+    V = ints.nuclear(xbasis, atoms)
+    W = ints.opVop(xbasis, atoms)
     if x2c_type == "sf":
         return S, T, V, W[0]
     elif x2c_type == "so":
@@ -122,7 +122,7 @@ def _get_transformation_matrix(S, T, X, tol=1e-9):
     which avoids doing matrix inversions and leads to a more numerically stable transformation.
     """
     S_tilde = S + (0.5 / LIGHT_SPEED**2) * X.conj().T @ T @ X
-    lam, z = forte2.helpers.eigh_gen(
+    lam, z = eigh_gen(
         S_tilde, S, remove_lindep=True, orth_tol=tol, orth_method="canonical"
     )
     idx = lam > 1e-14

@@ -1,8 +1,9 @@
 import numpy as np
 import scipy as sp
 
+from forte2 import ints, Basis, Shell
+from forte2.system import System
 from forte2.system.build_basis import build_basis
-import forte2
 
 
 def minao_initial_guess(system, H, S):
@@ -32,14 +33,14 @@ def minao_initial_guess(system, H, S):
     )
 
     # create a new basis that will be used to store the scaled coefficients
-    scaled_sap_basis = forte2.ints.Basis()
+    scaled_sap_basis = Basis()
 
     for shell in sap_basis:
         # scales the coefficients by -(exponent / pi)^(3/2)
         scaled_coeff = np.array(
             [-c * ((e / np.pi) ** 1.5) for c, e in zip(shell.coeff, shell.exponents)]
         )
-        scaled_shell = forte2.ints.Shell(
+        scaled_shell = Shell(
             shell.l,
             shell.exponents,
             scaled_coeff,
@@ -50,7 +51,7 @@ def minao_initial_guess(system, H, S):
         scaled_sap_basis.add(scaled_shell)
 
     # generate the SAP integrals (P|mn)
-    SAP_ints = forte2.ints.coulomb_3c(scaled_sap_basis, system.basis, system.basis)
+    SAP_ints = ints.coulomb_3c(scaled_sap_basis, system.basis, system.basis)
 
     # generate the SAP potential V_mn = sum_P (P|mn)
     SAP_V = np.einsum("Pmn->mn", SAP_ints)
@@ -62,7 +63,7 @@ def minao_initial_guess(system, H, S):
     return system.Xorth @ C
 
 
-def core_initial_guess(system: forte2.System, H, S):
+def core_initial_guess(system: System, H, S):
     Htilde = system.Xorth.T @ H @ system.Xorth
     _, C = np.linalg.eigh(Htilde)
     return system.Xorth @ C
