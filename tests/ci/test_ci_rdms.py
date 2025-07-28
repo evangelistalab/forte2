@@ -97,16 +97,21 @@ def compare_rdms(ci, root):
 
     # Test the spin-free cumulants
     sf_2cumulant = ci_solver.ci_sigma_builder.sf_2cumulant(ci_vec_det, ci_vec_det)
-    sf_2cumulant_debug = ci_solver.ci_sigma_builder.sf_2cumulant_debug(ci_vec_det, ci_vec_det)
+    sf_2cumulant_debug = ci_solver.ci_sigma_builder.sf_2cumulant_debug(
+        ci_vec_det, ci_vec_det
+    )
     assert (
         np.linalg.norm(sf_2cumulant - sf_2cumulant_debug) < rdm_threshold
     ), f"Norm of the difference between sf_2cumulant and sf_2cumulant_debug is too large: {np.linalg.norm(sf_2cumulant - sf_2cumulant_debug):.12f}."
 
     sf_3cumulant = ci_solver.ci_sigma_builder.sf_3cumulant(ci_vec_det, ci_vec_det)
-    sf_3cumulant_debug = ci_solver.ci_sigma_builder.sf_3cumulant_debug(ci_vec_det, ci_vec_det)
+    sf_3cumulant_debug = ci_solver.ci_sigma_builder.sf_3cumulant_debug(
+        ci_vec_det, ci_vec_det
+    )
     assert (
         np.linalg.norm(sf_3cumulant - sf_3cumulant_debug) < rdm_threshold
     ), f"Norm of the difference between sf_3cumulant and sf_3cumulant_debug is too large: {np.linalg.norm(sf_3cumulant - sf_3cumulant_debug):.12f}."
+
 
 def test_ci_rdms_1():
     xyz = f"""

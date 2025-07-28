@@ -4,7 +4,7 @@ from collections import OrderedDict
 
 import numpy as np
 
-from forte2 import CIStrings, CISigmaBuilder, CISpinAdapter
+from forte2 import CIStrings, CISigmaBuilder, CISpinAdapter, cpp_helpers
 from forte2.state.state import State
 from forte2.helpers.mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.helpers.comparisons import approx
@@ -420,8 +420,8 @@ class _CIBase:
         bb = self.ci_sigma_builder.bb_2rdm(ci_vec_det, ci_vec_det)
         if full:
             # Convert to full-dimension RDMs
-            aa = forte2.cpp_helpers.packed_tensor4_to_tensor4(aa)
-            bb = forte2.cpp_helpers.packed_tensor4_to_tensor4(bb)
+            aa = cpp_helpers.packed_tensor4_to_tensor4(aa)
+            bb = cpp_helpers.packed_tensor4_to_tensor4(bb)
         ab = self.ci_sigma_builder.ab_2rdm(ci_vec_det, ci_vec_det)
         return aa, ab, bb
 

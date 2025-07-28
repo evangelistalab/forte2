@@ -358,13 +358,6 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             (np.arange(ndocc), np.arange(nuocc) + ndocc + nsocc), dtype=int
         )[argsort]
         nsig = len(sigmas)
-        # s_all = np.zeros((ndocc + nuocc, 3), dtype=float)
-        # s_all[:, 0] = np.concatenate((s_docc, s_uocc))
-        # s_all[:, 1] = np.concatenate(([1] * ndocc, [0] * nuocc))
-        # s_all[:, 2] = np.concatenate(
-        #     (np.arange(ndocc), np.arange(nuocc) + ndocc + nsocc)
-        # )
-        # s_all = s_all[argsort]
 
         act_docc = []
         act_uocc = []
@@ -474,12 +467,6 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             )
         self.nactv = len(act_docc) + len(act_uocc) + nsocc
         self.ncore = len(inact_docc)
-        # self.core_orbitals = list(range(self.ncore))
-        # self.core_indices = self.core_orbitals
-        # self.active_indices = list(range(self.ncore, self.ncore + self.nactv))
-        # # For pushing to the CIStates class
-        # self.active_orbitals = [self.active_indices]
-        # self.ngas = 1
 
         self.mo_space = MOSpace(
             active_orbitals=list(range(self.ncore, self.ncore + self.nactv)),
