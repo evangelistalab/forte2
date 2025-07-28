@@ -7,7 +7,7 @@ Compile with `pip install --no-build-isolation -ve .`
 ## Documentation
 In the root directory, run:
 ```bash
-pip install sphinx sphinx_autodoc_typehints sphinx-autodoc-typehints numpydoc
+pip install sphinx sphinx_autodoc_typehints sphinx-autodoc-typehints numpydoc pydata_sphinx_theme
 sphinx-apidoc -o docs/source forte2/.
 cd docs
 make html

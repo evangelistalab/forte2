@@ -20,7 +20,8 @@ template <typename T> T pair_index_gt(T i, T j) {
     return (i * (i - 1)) / 2 + j;
 }
 
-/// @brief From the index of the pair (i, j) where max(i,j) > min(i,j) compute the indices i and j.
+/// @brief From the index of the pair (i, j) where max(i,j) > min(i,j) compute the indices i and j
+/// (zero based).
 template <typename T> std::pair<T, T> inv_pair_index_gt(T n) {
     // solve for i = floor((1 + sqrt(1+8n)) / 2)
     double d = static_cast<double>(n);

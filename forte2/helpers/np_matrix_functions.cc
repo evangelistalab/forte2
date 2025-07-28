@@ -1,5 +1,6 @@
 #include <iostream>
 
+#include "helpers/indexing.hpp"
 #include "helpers/np_matrix_functions.h"
 
 namespace forte2::matrix {
@@ -83,4 +84,31 @@ void print(np_matrix mat, std::string label) {
         std::cout << std::endl;
     }
 }
+
+np_tensor4 packed_tensor4_to_tensor4(np_matrix m) {
+    const auto nrows = m.shape(0);
+    const auto ncols = m.shape(1);
+    auto nr = inv_pair_index_gt(nrows - 1).first + 1;
+    auto nl = inv_pair_index_gt(ncols - 1).first + 1;
+
+    auto m_v = m.view();
+    auto t = make_zeros<nb::numpy, double, 4>({nr, nr, nl, nl});
+    auto t_v = t.view();
+
+    for (size_t p{1}, pq{0}; p < nr; ++p) {
+        for (size_t q{0}; q < p; ++q, ++pq) { // p > q
+            for (size_t r{1}, rs{0}; r < nl; ++r) {
+                for (size_t s{0}; s < r; ++s, ++rs) { // r > s
+                    auto element = m_v(pq, rs);
+                    t_v(p, q, r, s) = element;
+                    t_v(q, p, s, r) = element;
+                    t_v(p, q, s, r) = -element;
+                    t_v(q, p, r, s) = -element;
+                }
+            }
+        }
+    }
+    return t;
+}
+
 } // namespace forte2::matrix
