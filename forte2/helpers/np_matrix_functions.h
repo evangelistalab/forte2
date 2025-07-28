@@ -32,4 +32,14 @@ double dot_rows(np_matrix x, int row_x, np_matrix y, int row_y, size_t max_col =
 /// @brief Print the contents of a np_matrix to standard output
 void print(np_matrix mat, std::string label = "Matrix");
 
+/// @brief Expand a packed 4D tensor T([p>q],[r>s]) stored as a 2D matrix into a full 4D tensor with
+/// elements:   T[p,q,r,s] = +T([p>q],[r>s])
+///             T[p,q,s,r] = -T([p>q],[r>s])
+///             T[q,p,r,s] = -T([p>q],[r>s])
+///             T[q,p,s,r] = +T([p>q],[r>s])
+///
+/// @param M The input 2D matrix.
+/// @return The expanded 4D tensor.
+np_tensor4 packed_tensor4_to_tensor4(np_matrix m);
+
 } // namespace forte2::matrix

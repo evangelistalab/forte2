@@ -10,10 +10,15 @@
 
 namespace nb = nanobind;
 
+// Aliases for ndarray types used in forte2
 using np_vector = nb::ndarray<nb::numpy, double, nb::ndim<1>>;
 using np_matrix = nb::ndarray<nb::numpy, double, nb::ndim<2>>;
 using np_tensor3 = nb::ndarray<nb::numpy, double, nb::ndim<3>>;
 using np_tensor4 = nb::ndarray<nb::numpy, double, nb::ndim<4>>;
+using np_tensor5 = nb::ndarray<nb::numpy, double, nb::ndim<5>>;
+using np_tensor6 = nb::ndarray<nb::numpy, double, nb::ndim<6>>;
+using np_tensor7 = nb::ndarray<nb::numpy, double, nb::ndim<7>>;
+using np_tensor8 = nb::ndarray<nb::numpy, double, nb::ndim<8>>;
 
 template <typename Type, typename T, int N>
 nb::ndarray<Type, T, nb::ndim<N>> make_ndarray(std::unique_ptr<std::vector<T>> vec,
