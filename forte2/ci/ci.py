@@ -715,7 +715,11 @@ class CISolver(SystemMixin, MOsMixin, MOSpaceMixin):
             )
             if self.core_orbitals is None:
                 self.core_orbitals = []
-            self.mo_space = MOSpace(self.active_orbitals, self.core_orbitals)
+            self.mo_space = MOSpace(
+                nmo=self.system.nmo,
+                active_orbitals=self.active_orbitals,
+                core_orbitals=self.core_orbitals,
+            )
 
         self.norb = self.mo_space.nactv
         self.core_indices = self.mo_space.core_indices

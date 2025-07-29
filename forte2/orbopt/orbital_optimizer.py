@@ -133,7 +133,11 @@ class MCOptimizer(MOsMixin, SystemMixin, MOSpaceMixin):
             )
             if self.core_orbitals is None:
                 self.core_orbitals = []
-            self.mo_space = MOSpace(self.active_orbitals, self.core_orbitals)
+            self.mo_space = MOSpace(
+                nmo=self.system.nmo,
+                active_orbitals=self.active_orbitals,
+                core_orbitals=self.core_orbitals,
+            )
 
         self.norb = self.mo_space.nactv
         self.core_indices = self.mo_space.core_indices
@@ -141,7 +145,6 @@ class MCOptimizer(MOsMixin, SystemMixin, MOSpaceMixin):
 
         # make the core, active, and virtual spaces contiguous
         # i.e., [core, gas1, gas2, ..., virt]
-        self.mo_space.compute_contiguous_permutation(self.system.nbf)
         perm = self.mo_space.orig_to_contig
         # this is the contiguous coefficient matrix
         self._C = self.C[0][:, perm].copy()

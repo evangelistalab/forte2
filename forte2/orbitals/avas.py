@@ -472,6 +472,7 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         self.ncore = len(inact_docc)
 
         self.mo_space = MOSpace(
+            nmo=self.system.nmo,
             active_orbitals=list(range(self.ncore, self.ncore + self.nactv)),
             core_orbitals=list(range(self.ncore)),
         )

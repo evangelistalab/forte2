@@ -1,7 +1,8 @@
 import numpy as np
 import scipy as sp
+
 from forte2 import ints
-from forte2.system import ModelSystem
+from forte2.system import System, ModelSystem
 from forte2.helpers import logger
 from forte2.helpers.matrix_functions import cholesky_wrapper
 
@@ -21,7 +22,7 @@ class FockBuilder:
         If True, uses ``system.auxiliary_basis_set_corr`` instead of ``system.auxiliary_basis``.
     """
 
-    def __init__(self, system, use_aux_corr=False):
+    def __init__(self, system: System, use_aux_corr=False):
         if isinstance(system, ModelSystem):
             # special handling for ModelSystem
             nbf = system.nbf
