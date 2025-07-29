@@ -125,3 +125,18 @@ def test_ci_tdm():
     ci.run()
     assert abs(ci.tdm_per_solver[0][(0, 6)][2]) == approx(1.5435316739347478)
     assert ci.fosc_per_solver[0][(0, 6)] == approx(1.1589808047738437)
+
+def test_ci_no_active():
+    xyz = f"""
+    H 0.0 0.0 0.0
+    H 0.0 0.0 {0.529177210903 * 2}
+    """
+
+    system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    ci = CI(State(nel=2, multiplicity=1, ms=0.0), core_orbitals=[0], active_orbitals=[])(rhf)
+    ci.run()
+
+    assert rhf.E == approx(-1.05643120731551)
+    assert ci.E[0] == approx(-1.05643120731551)

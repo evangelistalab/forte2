@@ -258,70 +258,8 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) 
     auto rdm_sf = make_zeros<nb::numpy, double, 6>({norb, norb, norb, norb, norb, norb});
     auto rdm_sf_v = rdm_sf.view();
 
-    // To reduce the  memory footprint, we compute the aaa and bbb contributions in a packed
-    // format and one at a time.
-    for (auto spin : {true, false}) {
-        auto rdm_sss = compute_sss_3rdm(C_left, C_right, spin);
-        auto rdm_sss_v = rdm_sss.view();
-
-        for (size_t p{2}, pqr{0}; p < norb; ++p) {
-            for (size_t q{1}; q < p; ++q) {
-                for (size_t r{0}; r < q; ++r, ++pqr) {
-                    for (size_t s{2}, stu{0}; s < norb; ++s) {
-                        for (size_t t{1}; t < s; ++t) {
-                            for (size_t u{0}; u < t; ++u, ++stu) {
-                                // grab the unique element of the 3-RDM
-                                const auto el = rdm_sss_v(pqr, stu);
-
-                                // Place the element in all valid 36 antisymmetric index
-                                // permutations
-                                rdm_sf_v(p, q, r, s, t, u) += el;
-                                rdm_sf_v(p, q, r, s, u, t) -= el;
-                                rdm_sf_v(p, q, r, u, s, t) += el;
-                                rdm_sf_v(p, q, r, u, t, s) -= el;
-                                rdm_sf_v(p, q, r, t, u, s) += el;
-                                rdm_sf_v(p, q, r, t, s, u) -= el;
-
-                                rdm_sf_v(p, r, q, s, t, u) -= el;
-                                rdm_sf_v(p, r, q, s, u, t) += el;
-                                rdm_sf_v(p, r, q, u, s, t) -= el;
-                                rdm_sf_v(p, r, q, u, t, s) += el;
-                                rdm_sf_v(p, r, q, t, u, s) -= el;
-                                rdm_sf_v(p, r, q, t, s, u) += el;
-
-                                rdm_sf_v(r, p, q, s, t, u) += el;
-                                rdm_sf_v(r, p, q, s, u, t) -= el;
-                                rdm_sf_v(r, p, q, u, s, t) += el;
-                                rdm_sf_v(r, p, q, u, t, s) -= el;
-                                rdm_sf_v(r, p, q, t, u, s) += el;
-                                rdm_sf_v(r, p, q, t, s, u) -= el;
-
-                                rdm_sf_v(r, q, p, s, t, u) -= el;
-                                rdm_sf_v(r, q, p, s, u, t) += el;
-                                rdm_sf_v(r, q, p, u, s, t) -= el;
-                                rdm_sf_v(r, q, p, u, t, s) += el;
-                                rdm_sf_v(r, q, p, t, u, s) -= el;
-                                rdm_sf_v(r, q, p, t, s, u) += el;
-
-                                rdm_sf_v(q, r, p, s, t, u) += el;
-                                rdm_sf_v(q, r, p, s, u, t) -= el;
-                                rdm_sf_v(q, r, p, u, s, t) += el;
-                                rdm_sf_v(q, r, p, u, t, s) -= el;
-                                rdm_sf_v(q, r, p, t, u, s) += el;
-                                rdm_sf_v(q, r, p, t, s, u) -= el;
-
-                                rdm_sf_v(q, p, r, s, t, u) -= el;
-                                rdm_sf_v(q, p, r, s, u, t) += el;
-                                rdm_sf_v(q, p, r, u, s, t) -= el;
-                                rdm_sf_v(q, p, r, u, t, s) += el;
-                                rdm_sf_v(q, p, r, t, u, s) -= el;
-                                rdm_sf_v(q, p, r, t, s, u) += el;
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    if (norb < 2) {
+        return rdm_sf; // No 3-RDM for less than 2 orbitals
     }
 
     // The aab contribution
@@ -396,14 +334,84 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) 
             }
         }
     }
+
+    if (norb < 3) {
+        return rdm_sf; // No same-spin contributions to the 3-RDM for less than 3 orbitals
+    }
+    // To reduce the  memory footprint, we compute the aaa and bbb contributions in a packed
+    // format and one at a time.
+    for (auto spin : {true, false}) {
+        auto rdm_sss = compute_sss_3rdm(C_left, C_right, spin);
+        auto rdm_sss_v = rdm_sss.view();
+
+        for (size_t p{2}, pqr{0}; p < norb; ++p) {
+            for (size_t q{1}; q < p; ++q) {
+                for (size_t r{0}; r < q; ++r, ++pqr) {
+                    for (size_t s{2}, stu{0}; s < norb; ++s) {
+                        for (size_t t{1}; t < s; ++t) {
+                            for (size_t u{0}; u < t; ++u, ++stu) {
+                                // grab the unique element of the 3-RDM
+                                const auto el = rdm_sss_v(pqr, stu);
+
+                                // Place the element in all valid 36 antisymmetric index
+                                // permutations
+                                rdm_sf_v(p, q, r, s, t, u) += el;
+                                rdm_sf_v(p, q, r, s, u, t) -= el;
+                                rdm_sf_v(p, q, r, u, s, t) += el;
+                                rdm_sf_v(p, q, r, u, t, s) -= el;
+                                rdm_sf_v(p, q, r, t, u, s) += el;
+                                rdm_sf_v(p, q, r, t, s, u) -= el;
+
+                                rdm_sf_v(p, r, q, s, t, u) -= el;
+                                rdm_sf_v(p, r, q, s, u, t) += el;
+                                rdm_sf_v(p, r, q, u, s, t) -= el;
+                                rdm_sf_v(p, r, q, u, t, s) += el;
+                                rdm_sf_v(p, r, q, t, u, s) -= el;
+                                rdm_sf_v(p, r, q, t, s, u) += el;
+
+                                rdm_sf_v(r, p, q, s, t, u) += el;
+                                rdm_sf_v(r, p, q, s, u, t) -= el;
+                                rdm_sf_v(r, p, q, u, s, t) += el;
+                                rdm_sf_v(r, p, q, u, t, s) -= el;
+                                rdm_sf_v(r, p, q, t, u, s) += el;
+                                rdm_sf_v(r, p, q, t, s, u) -= el;
+
+                                rdm_sf_v(r, q, p, s, t, u) -= el;
+                                rdm_sf_v(r, q, p, s, u, t) += el;
+                                rdm_sf_v(r, q, p, u, s, t) -= el;
+                                rdm_sf_v(r, q, p, u, t, s) += el;
+                                rdm_sf_v(r, q, p, t, u, s) -= el;
+                                rdm_sf_v(r, q, p, t, s, u) += el;
+
+                                rdm_sf_v(q, r, p, s, t, u) += el;
+                                rdm_sf_v(q, r, p, s, u, t) -= el;
+                                rdm_sf_v(q, r, p, u, s, t) += el;
+                                rdm_sf_v(q, r, p, u, t, s) -= el;
+                                rdm_sf_v(q, r, p, t, u, s) += el;
+                                rdm_sf_v(q, r, p, t, s, u) -= el;
+
+                                rdm_sf_v(q, p, r, s, t, u) -= el;
+                                rdm_sf_v(q, p, r, s, u, t) += el;
+                                rdm_sf_v(q, p, r, u, s, t) -= el;
+                                rdm_sf_v(q, p, r, u, t, s) += el;
+                                rdm_sf_v(q, p, r, t, u, s) -= el;
+                                rdm_sf_v(q, p, r, t, s, u) += el;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     return rdm_sf;
 }
 
 np_tensor6 CISigmaBuilder::compute_sf_3cumulant(np_vector C_left, np_vector C_right) const {
     // Compute the spin-free 1-RDM
-    auto G1 = compute_sf_1rdm(C_left, C_right);
+    auto sf_1rdm = compute_sf_1rdm(C_left, C_right);
     // Compute the spin-free 2-RDM
-    auto G2 = compute_sf_2rdm(C_left, C_right);
+    auto sf_2rdm = compute_sf_2rdm(C_left, C_right);
     // Compute the spin-free 3-RDM (this will hold the cumulant)
     auto L3 = compute_sf_3rdm(C_left, C_right);
 
@@ -424,8 +432,8 @@ np_tensor6 CISigmaBuilder::compute_sf_3cumulant(np_vector C_left, np_vector C_ri
     //                            + 0.5 * G1[p,t] * G1[q,u] * G1[r,s]
     //                            + 0.5 * G1[p,u] * G1[q,s] * G1[r,t];
 
-    auto G1_v = G1.view();
-    auto G2_v = G2.view();
+    auto G1_v = sf_1rdm.view();
+    auto G2_v = sf_2rdm.view();
     auto L3_v = L3.view();
 
     const auto norb = lists_.norb();

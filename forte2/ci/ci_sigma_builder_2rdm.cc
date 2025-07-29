@@ -162,8 +162,30 @@ np_tensor4 CISigmaBuilder::compute_ab_2rdm(np_vector C_left, np_vector C_right) 
 np_tensor4 CISigmaBuilder::compute_sf_2rdm(np_vector C_left, np_vector C_right) const {
     size_t norb = lists_.norb();
     auto rdm_sf = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
-
     auto rdm_sf_v = rdm_sf.view();
+
+    if (norb < 1) {
+        return rdm_sf; // No 2-RDM for less than 1 orbitals
+    }
+
+    // Mixed-spin contribution
+    {
+        auto rdm_ab = compute_ab_2rdm(C_left, C_right);
+        auto rdm_ab_v = rdm_ab.view();
+        for (size_t p{0}; p < norb; ++p) {
+            for (size_t q{0}; q < norb; ++q) {
+                for (size_t r{0}; r < norb; ++r) {
+                    for (size_t s{0}; s < norb; ++s) {
+                        rdm_sf_v(p, q, r, s) += rdm_ab_v(p, q, r, s) + rdm_ab_v(q, p, s, r);
+                    }
+                }
+            }
+        }
+    }
+
+    if (norb < 2) {
+        return rdm_sf; // No same-spin contributions to the 2-RDM for less than 2 orbitals
+    }
 
     // To reduce the  memory footprint, we compute the aa and bb contributions in a packed
     // format and one at a time.
@@ -180,20 +202,6 @@ np_tensor4 CISigmaBuilder::compute_sf_2rdm(np_vector C_left, np_vector C_right) 
                         rdm_sf_v(p, q, s, r) -= element;
                         rdm_sf_v(q, p, s, r) += element;
                     }
-                }
-            }
-        }
-    }
-
-    // Now we compute the mixed-spin contribution
-    auto rdm_ab = compute_ab_2rdm(C_left, C_right);
-    auto rdm_ab_v = rdm_ab.view();
-
-    for (size_t p{0}; p < norb; ++p) {
-        for (size_t q{0}; q < norb; ++q) {
-            for (size_t r{0}; r < norb; ++r) {
-                for (size_t s{0}; s < norb; ++s) {
-                    rdm_sf_v(p, q, r, s) += rdm_ab_v(p, q, r, s) + rdm_ab_v(q, p, s, r);
                 }
             }
         }
