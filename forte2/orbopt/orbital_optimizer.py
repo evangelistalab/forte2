@@ -8,6 +8,7 @@ from forte2.jkbuilder import FockBuilder
 from forte2.helpers.mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.helpers import logger, LBFGS, DIIS
 from forte2.system.basis_utils import BasisInfo
+from forte2.orbitals import Semicanonicalizer
 from forte2.ci import (
     pretty_print_ci_summary,
     pretty_print_ci_nat_occ_numbers,
@@ -318,7 +319,6 @@ class MCOptimizer(MOsMixin, SystemMixin, MOSpaceMixin):
         self.C[0] = self._C[:, perm].copy()
 
         self._post_process()
-        # self.parent_method.set_verbosity_level(current_verbosity)
         self.executed = True
         return self
 
@@ -399,7 +399,7 @@ class OrbOptimizer:
         self.ncore = self.Ccore.shape[1]
         self.nact = self.Cact.shape[1]
         self.nvirt = self.C.shape[1] - self.ncore - self.nact
-        self.fock_builder = fock_builder
+        self.fock_builder: FockBuilder = fock_builder
         self.hcore = hcore
         self.nrr = nrr
         self.nrot = self.nrr.sum()
@@ -512,28 +512,13 @@ class OrbOptimizer:
         )
 
     def _compute_Fact(self):
-        # compute the active Fock matrix [Algorithm 1, line 9]
-        # gamma_act (nmo * nmo) is defined in [Eq. (19)]
-        # as (gamma_act)_pq = C_pt C_qu g1_tu
-        # we decompose g1 and contract it into the coefficients
-        # so more efficient coefficient-based J-builder can be used
-        try:
-            # C @ g1_act C.T = C @ L @ L.T @ C.T == Cp @ Cp.T
-            L = np.linalg.cholesky(self.g1, upper=False)
-            Cp = self.Cact @ L
-        except np.linalg.LinAlgError:  # only if g1_act has very small eigenvalues
-            n, L = np.linalg.eigh(self.g1)
-            assert np.all(n > -1.0e-11), "g1_act must be positive semi-definite"
-            n = np.maximum(n, 0)
-            Cp = self.Cact @ L @ np.diag(np.sqrt(n))
-
-        Jact, Kact = self.fock_builder.build_JK([Cp])
+        Jact, Kact = self.fock_builder.build_JK_generalized(self.Cact, self.g1)
 
         # [Eq. (20)]
         self.Fact = np.einsum(
             "mp,mn,nq->pq",
             self.Cgen.conj(),
-            2 * Jact[0] - Kact[0],
+            2 * Jact - Kact,
             self.Cgen,
             optimize=True,
         )
