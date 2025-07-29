@@ -1,38 +1,32 @@
 import numpy as np
 import scipy as sp
-from dataclasses import dataclass, field
 
 from forte2.system import System
 from forte2.state import MOSpace
 from forte2.jkbuilder import FockBuilder
-from forte2.helpers.matrix_functions import cholesky_wrapper
 
 
 class Semicanonicalizer:
-    def __init__(self, mo_space: MOSpace, g1_sf, C, system=None, fock_builder=None):
+    def __init__(self, mo_space: MOSpace, g1_sf, C, system: System, fock_builder=None):
         self.mo_space = mo_space
-        self.g1_sf = g1_sf
+        # factor of 0.5 to use (2J - K) throughout for Fock build
+        # (i.e., gamma_core = CC^+ instead of 2CC^+)
+        self.g1_sf = 0.5 * g1_sf
         self.system = system
         self.fock_builder = fock_builder
-
         self._C = C[:, self.mo_space.orig_to_contig].copy()
 
-        if self.system is None:
-            assert (
-                self.fock_builder is not None
-            ), "Either system or fock_builder must be provided."
-
         if self.fock_builder is None:
-            assert (
-                self.system is not None
-            ), "Either system or fock_builder must be provided."
             self.fock_builder = FockBuilder(self.system, use_aux_corr=True)
+
+        self.hcore = self.system.ints_hcore()
 
     def _build_fock(self):
         # include frozen core in Fock build
         docc = slice(0, self.mo_space.core.stop)
         C_docc = self._C[:, docc]
-        fock = self.fock_builder.build_JK(C_docc)
+        J, K = self.fock_builder.build_JK([C_docc])
+        fock = self.hcore + 2 * J[0] - K[0]
 
         C_act = self._C[:, self.mo_space.actv]
         try:
@@ -43,7 +37,8 @@ class Semicanonicalizer:
             assert np.all(n > -1.0e-11), "g1_sf must be positive semi-definite"
             n = np.maximum(n, 0)
             Cp = C_act @ L @ np.diag(np.sqrt(n))
-        fock += self.fock_builder.build_JK(Cp)
+        J, K = self.fock_builder.build_JK([Cp])
+        fock += 2 * J[0] - K[0]
         fock = np.einsum("pq,pi,qj->ij", fock, self._C.conj(), self._C, optimize=True)
         return fock
 
@@ -83,3 +78,9 @@ class Semicanonicalizer:
             )
             eps[self.mo_space.frozen_virtual] = e
             U[self.mo_space.frozen_virtual, self.mo_space.frozen_virtual] = c
+
+        self.U = U
+        self.Uactv = U[self.mo_space.actv, self.mo_space.actv]
+        C_semican = (U.T.conj() @ self._C @ U)[:, self.mo_space.contig_to_orig]
+        eps_semican = eps[self.mo_space.contig_to_orig]
+        return eps_semican, C_semican
