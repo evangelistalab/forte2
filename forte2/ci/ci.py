@@ -236,7 +236,7 @@ class _CIBase:
             root_rdms["rdm2_aa_full"] = cpp_helpers.packed_tensor4_to_tensor4(rdm2_aa_full)
             root_rdms["rdm2_bb_full"] = cpp_helpers.packed_tensor4_to_tensor4(rdm2_bb_full)
 
-            root_rdms["rdm2_sf"] = self.make_sf_2rdm(self.evecs[:, root])
+            root_rdms["rdm2_sf"] = self.make_sf_2rdm(root)
 
             # Compute the energy from the RDMs
             # from the numpy tensor V[i, j, k, l] = <ij|kl> make the np matrix with indices
@@ -496,6 +496,58 @@ class _CIBase:
             right_ci_vec_det = np.zeros((self.ndet))
             self.spin_adapter.csf_C_to_det_C(self.evecs[:, right_root], right_ci_vec_det)
         return self.ci_sigma_builder.sf_3rdm(left_ci_vec_det, right_ci_vec_det)
+
+
+    def make_sf_2cumulant(self, left_root:int, right_root:int | None = None):
+        """
+        Make the spin-free cumulant of the two-particle RDM for two CI roots.
+
+        Parameters
+        ----------
+        left_root : int
+            the CI root for the bra state.
+        right_root : int | None, optional (default=left_root)
+            the CI root for the ket state.
+
+        Returns
+        -------
+        NDArray
+            Spin-free cumulant of the two-particle RDM.
+        """
+        left_ci_vec_det = np.zeros((self.ndet))
+        self.spin_adapter.csf_C_to_det_C(self.evecs[:, left_root], left_ci_vec_det)
+        if right_root is None:
+            right_ci_vec_det = left_ci_vec_det
+        else:
+            right_ci_vec_det = np.zeros((self.ndet))
+            self.spin_adapter.csf_C_to_det_C(self.evecs[:, right_root], right_ci_vec_det)
+        return self.ci_sigma_builder.sf_2cumulant(left_ci_vec_det, right_ci_vec_det)
+
+    def make_sf_3cumulant(self, left_root:int, right_root:int | None = None):
+        """
+        Make the spin-free cumulant of the three-particle RDM for two CI roots.
+
+        Parameters
+        ----------
+        left_root : int
+            the CI root for the bra state.
+        right_root : int | None, optional (default=left_root)
+            the CI root for the ket state.
+
+        Returns
+        -------
+        NDArray
+            Spin-free cumulant of the three-particle RDM.
+        """
+        left_ci_vec_det = np.zeros((self.ndet))
+        self.spin_adapter.csf_C_to_det_C(self.evecs[:, left_root], left_ci_vec_det)
+        if right_root is None:
+            right_ci_vec_det = left_ci_vec_det
+        else:
+            right_ci_vec_det = np.zeros((self.ndet))
+            self.spin_adapter.csf_C_to_det_C(self.evecs[:, right_root], right_ci_vec_det)
+        return self.ci_sigma_builder.sf_3cumulant(left_ci_vec_det, right_ci_vec_det)
+
 
     def compute_natural_occupation_numbers(self):
         """
@@ -791,9 +843,8 @@ class CISolver(SystemMixin, MOsMixin, MOSpaceMixin):
         rdm2 = np.zeros((self.norb,) * 4)
         for i, ci_solver in enumerate(self.ci_solvers):
             for j in range(ci_solver.nroot):
-                rdm2 += (
-                    ci_solver.make_sf_2rdm(ci_solver.evecs[:, j]) * self.weights[i][j]
-                )
+                rdm2 += ci_solver.make_sf_2rdm(j) * self.weights[i][j]
+                                   
         return rdm2
 
     def set_ints(self, scalar, oei, tei):
