@@ -608,7 +608,7 @@ class _CIBase:
 
 
 @dataclass
-class CISolver(SystemMixin, MOsMixin, MOSpaceMixin):
+class CISolver(MOsMixin, SystemMixin, MOSpaceMixin):
     """
     A general configuration interaction (CI) solver class.
     This solver is can be called iteratively, e.g., in a MCSCF loop or a DSRG reference relaxation loop.
@@ -618,13 +618,6 @@ class CISolver(SystemMixin, MOsMixin, MOSpaceMixin):
     states : State | list[State]
         The electronic states for which the CI is solved. Can be a single state or a list of states.
         A state-averaged CI is performed if multiple states are provided.
-    core_orbitals : list[int], optional
-        The indices of the core (restricted doubly occupied) orbitals.
-        If not provided, it defaults to an empty list.
-    active_orbitals : list[int] | list[list[int]], optional
-        The indices of the active orbitals. If a list is provided, a complete active space (CAS) is assumed.
-        If a list of lists is provided, each sublist corresponds to orbital indices of a GAS (generalized active space).
-        If not provided, CISolver must be called with a parent method that has MOSpaceMixin (e.g., AVAS).
     nroots : int | list[int], optional, default=1
         The number of roots to compute.
         If a list is provided, each element corresponds to the number of roots for each state.
@@ -635,6 +628,10 @@ class CISolver(SystemMixin, MOsMixin, MOSpaceMixin):
         The number of weights must match the number of roots for each state.
         If not provided, equal weights are assumed for all states.
         If a single list is provided, `states` must be a single `State` object.
+    mo_space : MOSpace, optional
+        A `MOSpace` object defining the partitioning of the molecular orbitals.
+        If not provided, CISolver must be called with a parent method that has MOSpaceMixin (e.g., AVAS).
+        If provided, it overrides the one from the parent method.
     guess_per_root : int, optional, default=2
         The number of guess vectors for each root.
     ndets_per_guess : int, optional, default=10
@@ -658,12 +655,13 @@ class CISolver(SystemMixin, MOsMixin, MOSpaceMixin):
     ci_algorithm : str, optional, default="hz"
         The algorithm used for the CI sigma builder.
     """
-
     states: State | list[State]
-    core_orbitals: list[int] = None
-    active_orbitals: list[int] | list[list[int]] = None
     nroots: int | list[int] = 1
     weights: list[float] | list[list[float]] = None
+    core_orbitals: list[int] = field(default_factory=list)
+    active_orbitals: list[int] = field(default_factory=list)
+    frozen_core_orbitals: list[int] = field(default_factory=list)
+    frozen_virtual_orbitals: list[int] = field(default_factory=list)
 
     ### Davidson-Liu parameters
     guess_per_root: int = 2
@@ -706,23 +704,25 @@ class CISolver(SystemMixin, MOsMixin, MOSpaceMixin):
 
         SystemMixin.copy_from_upstream(self, self.parent_method)
         MOsMixin.copy_from_upstream(self, self.parent_method)
+
         if isinstance(self.parent_method, MOSpaceMixin):
-            MOSpaceMixin.copy_from_upstream(self, self.parent_method)
+            if self.mo_space is not None:
+                logger.log_warning(
+                    "Using the provided mo_space instead of the one from the parent method."
+                )
+            else:
+                MOSpaceMixin.copy_from_upstream(self, self.parent_method)
         else:
-            assert self.active_orbitals is not None, (
+            assert self.mo_space is not None, (
                 "If the parent method does not have MOSpaceMixin, "
-                "then active_orbitals must be provided."
-            )
-            if self.core_orbitals is None:
-                self.core_orbitals = []
-            self.mo_space = MOSpace(
-                nmo=self.system.nmo,
-                active_orbitals=self.active_orbitals,
-                core_orbitals=self.core_orbitals,
+                "then mo_space must be provided."
             )
 
         self.norb = self.mo_space.nactv
-        self.core_indices = self.mo_space.core_indices
+        # no distinction between core and frozen core in the CI solver
+        self.core_indices = (
+            self.mo_space.frozen_core_indices + self.mo_space.core_indices
+        )
         self.active_indices = self.mo_space.active_indices
 
         ints = RestrictedMOIntegrals(

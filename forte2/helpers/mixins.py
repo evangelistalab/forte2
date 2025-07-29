@@ -12,9 +12,6 @@ class MOsMixin:
     Contains a list of molecular orbital coefficient matrices.
     """
 
-    # C is a list of numpy arrays, each representing the coefficients of a molecular orbital
-    C: list[np.ndarray] = field(default_factory=list, init=False)
-
     @classmethod
     def copy_from_upstream(cls, new, upstream) -> None:
         assert isinstance(new, MOsMixin), "new must be an instance of MOsMixin"
@@ -33,8 +30,6 @@ class SystemMixin:
     Contains a reference to the system object.
     """
 
-    system: System = field(default=None, init=False)
-
     @classmethod
     def copy_from_upstream(cls, new, upstream) -> None:
         assert isinstance(new, SystemMixin), "new must be an instance of SystemMixin"
@@ -51,8 +46,6 @@ class MOSpaceMixin:
     Mixin for classes that requires or provides a way to partition molecular orbitals
     into core, active (potentially multiple GASes), and virtual spaces.
     """
-
-    mo_space: MOSpace = field(default=None, init=False)
 
     @classmethod
     def copy_from_upstream(cls, new, upstream) -> None:
