@@ -7,7 +7,7 @@
 
 #include "helpers/ndarray.h"
 
-#include "ci/ci_string_lists.h"
+#include "ci/ci_strings.h"
 #include "ci/slater_rules.h"
 #include "ci/ci_spin_adapter.h"
 
@@ -80,6 +80,7 @@ class CISigmaBuilder {
     /// @param alfa If true, compute the alpha contribution, otherwise the beta
     /// @return The one-electron reduced density matrix stored as
     ///        gamma(spin)[p][q] = <L| a^+_p a_q |R> with p,q orbitals of spin alpha/beta
+    /// @note If the number of orbitals is 0, a matrix of shape (0, 0) is returned
     np_matrix compute_s_1rdm(np_vector C_left, np_vector C_right, bool alfa) const;
 
     /// @brief Compute the alpha one-electron reduced density matrix
@@ -87,6 +88,7 @@ class CISigmaBuilder {
     /// @param C_right The right-hand side coefficients
     /// @return The one-electron reduced density matrix stored as
     ///        gamma(alpha)[p][q] = <L| a^+_p a_q |R> with p,q orbitals of spin alpha
+    /// @note If the number of orbitals is 0, a matrix of shape (0, 0) is returned
     np_matrix compute_a_1rdm(np_vector C_left, np_vector C_right) const;
 
     /// @brief Compute the beta one-electron reduced density matrix
@@ -94,6 +96,7 @@ class CISigmaBuilder {
     /// @param C_right The right-hand side coefficients
     /// @return The one-electron reduced density matrix stored as
     ///        gamma(beta)[p][q] = <L| b^+_p b_q |R> with p,q orbitals of spin beta
+    /// @note If the number of orbitals is 0, a matrix of shape (0, 0) is returned
     np_matrix compute_b_1rdm(np_vector C_left, np_vector C_right) const;
 
     /// @brief Compute the spin-free one-electron reduced density matrix

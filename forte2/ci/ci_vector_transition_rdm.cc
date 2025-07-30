@@ -133,7 +133,7 @@ ambit::Tensor compute_1rdm_different_irrep(CIVector& C_left, CIVector& C_right, 
 
     // loop over blocks of matrix C
     for (const auto& [nI, class_Ia, class_Ib] : lists_right->determinant_classes()) {
-        if (lists_right->detpblk(nI) == 0)
+        if (lists_right->block_size(nI) == 0)
             continue;
 
         auto Cr = C_right.gather_block(CIVector::get_CR(), alfa, alfa_address_right,
@@ -151,7 +151,7 @@ ambit::Tensor compute_1rdm_different_irrep(CIVector& C_left, CIVector& C_right, 
                     continue;
             }
 
-            if (lists_left->detpblk(nJ) == 0)
+            if (lists_left->block_size(nJ) == 0)
                 continue;
 
             auto Cl = C_left.gather_block(CIVector::get_CL(), alfa, alfa_address_left,

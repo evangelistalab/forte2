@@ -163,7 +163,7 @@ def test_custom_basis_rhf():
 
 def test_zmatrix_0():
     # Test for Z-matrix input
-    zmat = f"""
+    zmat = """
     C
     C    1    1.333
     H    1    1.079    2    121.4

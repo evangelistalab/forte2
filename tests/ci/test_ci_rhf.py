@@ -20,7 +20,7 @@ def test_ci_1():
 
 
 def test_ci_2():
-    xyz = f"""
+    xyz = """
     H 0.0 0.0 0.0
     F 0.0 0.0 2.0
     """
@@ -40,7 +40,7 @@ def test_ci_2():
 
 
 def test_sa_ci_n2():
-    xyz = f"""
+    xyz = """
     N 0.0 0.0 0.0
     N 0.0 0.0 1.2
     """
@@ -75,7 +75,7 @@ def test_sa_ci_with_avas():
     eref_triplet1 = -108.833136404913
     eref_triplet2 = -108.777400848037
 
-    xyz = f"""
+    xyz = """
     N 0.0 0.0 0.0
     N 0.0 0.0 1.2
     """
@@ -106,7 +106,7 @@ def test_sa_ci_with_avas():
 
 
 def test_ci_tdm():
-    xyz = f"""
+    xyz = """
     N 0.0 0.0 -1.0
     N 0.0 0.0 1.0
     """
@@ -125,3 +125,117 @@ def test_ci_tdm():
     ci.run()
     assert abs(ci.tdm_per_solver[0][(0, 6)][2]) == approx(1.5435316739347478)
     assert ci.fosc_per_solver[0][(0, 6)] == approx(1.1589808047738437)
+
+def test_ci_no_active():
+    """Test CI with a core orbital and no active orbitals, should return the RHF energy.
+                                             _____          
+       Here we specify the determinant |0123401234|>
+                                              core|active
+
+    """
+    
+    xyz = """
+    H 0.0 0.0 0.0
+    F 0.0 0.0 2.0
+    """
+
+    system = System(
+        xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
+    )
+    state = State(nel=10, multiplicity=1, ms=0.0)
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    ci = CI(states=state, core_orbitals=[0, 1, 2, 3, 4], active_orbitals=[])(rhf)
+    ci.run()
+
+    assert rhf.E == approx(-99.997725200294)
+    assert ci.E[0] == approx(-99.997725200294)
+
+
+def test_ci_single_determinant1():
+    """Test CI with a single determinant, should return the RHF energy.
+                                            ____  _          
+       Here we specify the determinant |01230123|44>
+                                            core|active
+    """
+
+    xyz = """
+    H 0.0 0.0 0.0
+    F 0.0 0.0 2.0
+    """
+
+    system = System(
+        xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
+    )
+    state = State(nel=10, multiplicity=1, ms=0.0)
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    ci = CI(states=state, core_orbitals=[0, 1, 2, 3], active_orbitals=[4])(rhf)
+    ci.run()
+
+    assert rhf.E == approx(-99.997725200294)
+    assert ci.E[0] == approx(-99.997725200294)
+
+def test_ci_single_determinant2():
+    """Test CI with a single determinant, should return the RHF energy.
+                                             _____          
+       Here we specify the determinant ||0123401234>
+                                    core|active
+    """
+
+    xyz = """
+    H 0.0 0.0 0.0
+    F 0.0 0.0 2.0
+    """
+
+    system = System(
+        xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
+    )
+    state = State(nel=10, multiplicity=1, ms=0.0)
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    ci = CI(states=state, core_orbitals=[], active_orbitals=[0, 1, 2, 3, 4])(rhf)
+    ci.run()
+
+    assert rhf.E == approx(-99.997725200294)
+    assert ci.E[0] == approx(-99.997725200294)
+
+def test_ci_single_determinant3():
+    """Test CI with a high-spin triplet single determinant, should return the ROHF energy.
+           
+       Here we specify the determinant ||01>
+                                    core|active
+    """
+
+    xyz = f"""
+    H 0.0 0.0 0.0
+    H 0.0 0.0 {0.529177210903 * 2}
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = ROHF(charge=0, ms=1.0, econv=1e-12)(system)
+    ci = CI(State(nel=2, multiplicity=3, ms=1.0), active_orbitals=[0,1])(rhf)
+    ci.run()
+
+    assert rhf.E == approx(-0.889646913931)
+    assert ci.E[0] == approx(-0.889646913931)
+
+def test_ci_single_csf1():
+    """Test CI with a high-spin triplet single determinant, should return the ROHF energy.
+                                           _           _
+       Here we specify the determinants ||01>        ||01>
+                                     core|active  core|active
+    """
+
+    xyz = f"""
+    H 0.0 0.0 0.0
+    H 0.0 0.0 {0.529177210903 * 2}
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = ROHF(charge=0, ms=1.0, econv=1e-12)(system)
+    ci = CI(State(nel=2, multiplicity=3, ms=0.0), active_orbitals=[0,1])(rhf)
+    ci.run()
+
+    assert rhf.E == approx(-0.889646913931)
+    assert ci.E[0] == approx(-0.889646913931)
+
