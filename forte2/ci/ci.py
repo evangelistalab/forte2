@@ -12,6 +12,7 @@ from forte2.helpers import logger
 from forte2.state import MOSpace
 from forte2.jkbuilder import RestrictedMOIntegrals
 from forte2.props import get_1e_property
+from forte2.orbitals import Semicanonicalizer
 from .ci_utils import (
     pretty_print_gas_info,
     pretty_print_ci_summary,
@@ -902,6 +903,7 @@ class CI(CISolver):
     def run(self):
         super().run()
         self._post_process()
+        return self
 
     def _post_process(self):
         pretty_print_ci_summary(self.sa_info, self.evals_per_solver)
@@ -918,3 +920,10 @@ class CI(CISolver):
                 self.fosc_per_solver,
                 self.evals_per_solver,
             )
+
+        if self.final_orbital == "semicanonical":
+            semi = Semicanonicalizer(
+                self.mo_space, self.make_average_sf_1rdm(), self.C[0], self.system
+            )
+            semi.run()
+            self.C[0] = semi.C_semican.copy()

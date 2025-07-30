@@ -13,7 +13,7 @@ def test_rohf_ci_1():
     )
     rhf = ROHF(charge=1, ms=0.5, econv=1e-12)(system)
     ci = CI(
-        states=State(nel=9, multiplicity=2, ms=0.5),
+        states=State(system=system, charge=1, multiplicity=2, ms=0.5),
         core_orbitals=[0],
         active_orbitals=[1, 2, 3, 4, 5, 6],
         nroots=2,
@@ -36,7 +36,7 @@ def test_rohf_ci_2():
     ci = CI(
         active_orbitals=[1, 2, 3, 4, 5, 6],
         core_orbitals=[0],
-        states=State(nel=9, multiplicity=2, ms=-0.5),
+        states=State(system=system, charge=1, multiplicity=2, ms=-0.5),
         nroots=2,
     )(rhf)
     ci.run()

@@ -175,7 +175,7 @@ class System:
             f"Parsed {len(self.atoms)} atoms with basis set of {self.basis.size} functions."
         )
 
-        self.Zsum = np.sum([x[0] for x in self.atoms])
+        self.Zsum = round(np.sum([x[0] for x in self.atoms]))
         self.nbf = self.basis.size
         self.naux = self.auxiliary_basis.size if self.auxiliary_basis else 0
         self.nminao = self.minao_basis.size if self.minao_basis else 0
@@ -261,9 +261,7 @@ class System:
         if origin is not None:
             assert len(origin) == 3, "Origin must be a 3-element vector."
             positions -= np.array(origin)[np.newaxis, :]
-        conversion_factor = (
-            1.0 / DEBYE_TO_AU if unit == "debye" else 1.0
-        )
+        conversion_factor = 1.0 / DEBYE_TO_AU if unit == "debye" else 1.0
         return np.einsum("a,ax->x", charges, positions) * conversion_factor
 
     def nuclear_quadrupole(self, origin=None, unit="debye"):
@@ -290,9 +288,7 @@ class System:
             positions -= np.array(origin)[np.newaxis, :]
         nuc_quad = np.einsum("a,ax,ay->xy", charges, positions, positions)
         nuc_quad = 0.5 * (3 * nuc_quad - np.eye(3) * nuc_quad.trace())
-        conversion_factor = (
-            1.0 / DEBYE_ANGSTROM_TO_AU if unit == "debye" else 1.0
-        )
+        conversion_factor = 1.0 / DEBYE_ANGSTROM_TO_AU if unit == "debye" else 1.0
         return nuc_quad * conversion_factor
 
     def _check_linear_dependencies(self):

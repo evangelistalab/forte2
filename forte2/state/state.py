@@ -1,6 +1,7 @@
 import numpy as np
 from dataclasses import dataclass, field
 
+from forte2.system import System
 from forte2.helpers.multiplicity_labels import multiplicity_labels
 from forte2.helpers import logger
 
@@ -12,12 +13,16 @@ class State:
 
     Parameters
     ----------
-    nel : int
-        Total number of electrons.
     multiplicity : int
         Multiplicity of the state (2S+1).
     ms : float
         Spin projection (Ms) of the state.
+    nel : int, optional
+        Total number of electrons in the state. If not provided, it is calculated from the system and charge.
+    system : System, optional
+        The system to which this state belongs. If not provided, `nel` must be specified.
+    charge : int, optional, default=0
+        Charge of the state. Used to calculate the number of electrons if `system` is provided. Ignored if `nel` is provided.
     irrep : int, optional
         Irreducible representation of the state in Cotton ordering.
     gas_min : list[int], optional, default=[]
@@ -34,9 +39,11 @@ class State:
         Label for the symmetry of the state.
     """
 
-    nel: int
     multiplicity: int
     ms: float
+    nel: int = None
+    system: System = None
+    charge: int = 0
     gas_min: list[int] = field(default_factory=list)
     gas_max: list[int] = field(default_factory=list)
     symmetry: int = field(default=0)
@@ -48,26 +55,32 @@ class State:
     twice_ms: int = field(init=False)
 
     def __post_init__(self):
-        self.twice_ms = int(round(self.ms * 2))
+        if self.nel is None:
+            assert self.system is not None, "Either nel or system must be provided."
+            self.nel = self.system.Zsum - self.charge
+        if self.system is None:
+            assert self.nel is not None, "Either nel or system must be provided."
+
+        self.twice_ms = round(self.ms * 2)
 
         ### Sanity checks
         # 1. Basic checks
         assert np.isclose(
-            int(round(self.nel)), self.nel
+            round(self.nel), self.nel
         ), "Number of electrons must be an integer!"
-        self.nel = int(round(self.nel))
+        self.nel = round(self.nel)
         assert (
             self.nel >= 0
         ), f"Number of electrons must be non-negative, got {self.nel}."
         assert np.isclose(
-            int(round(self.multiplicity)), self.multiplicity
+            round(self.multiplicity), self.multiplicity
         ), "Multiplicity must be an integer!"
-        self.multiplicity = int(round(self.multiplicity))
+        self.multiplicity = round(self.multiplicity)
         assert (
             self.multiplicity >= 1
         ), f"Multiplicity must be at least 1! Got {self.multiplicity}."
         assert np.isclose(
-            int(round(self.ms * 2)), self.ms * 2
+            round(self.ms * 2), self.ms * 2
         ), "ms must be a multiple of 0.5."
 
         # 2. Is the multiplicity compatible with the number of electrons?
@@ -90,8 +103,8 @@ class State:
             )
         ###
 
-        self.na = int(round(self.nel + self.twice_ms) / 2)
-        self.nb = int(round(self.nel - self.twice_ms) / 2)
+        self.na = round((self.nel + self.twice_ms) / 2)
+        self.nb = round((self.nel - self.twice_ms) / 2)
         assert (
             self.nel == self.na + self.nb
         ), f"Number of electrons {self.nel} does not match na + nb = {self.na} + {self.nb}."

@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 
 from forte2.ci import CISolver
 from forte2.base_classes.active_space_solver import ActiveSpaceSolver
+from forte2.orbitals import Semicanonicalizer
 from forte2.jkbuilder import FockBuilder
 from forte2.helpers import logger, LBFGS, DIIS
 from forte2.system.basis_utils import BasisInfo
@@ -273,6 +274,17 @@ class MCOptimizer(ActiveSpaceSolver):
         # undo _make_spaces_contiguous
         perm = self.mo_space.contig_to_orig
         self.C[0] = self._C[:, perm].copy()
+
+        if self.final_orbital == "semicanonical":
+            semi = Semicanonicalizer(
+                self.mo_space,
+                self.ci_solver.make_average_sf_1rdm(),
+                self.C[0],
+                self.system,
+                fock_builder,
+            )
+            semi.run()
+            self.C[0] = semi.C_semican.copy()
 
         self._post_process()
         self.executed = True
