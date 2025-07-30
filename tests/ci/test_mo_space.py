@@ -5,7 +5,7 @@ from forte2.helpers.comparisons import approx
 
 
 def test_mo_space_invalid():
-
+    nmo = 10
     with pytest.raises(Exception):
         # repeated active indices in a single GAS
         mospace = MOSpace(nmo=nmo, active_orbitals=[0, 1, 1], core_orbitals=[5, 6])

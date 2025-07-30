@@ -11,11 +11,17 @@ class MOSpace:
 
     Parameters
     ----------
+    nmo : int
+        The total number of molecular orbitals.
     active_orbitals : list[int] | list[list[int]]
         A list of integers or a list of lists of integers storing the orbital indices of the GASes.
         If a single list of integers is provided, it is treated as the CAS (a single GAS).
     core_orbitals : list[int], optional, default=[]
         A list of integers storing the core orbital indices.
+    frozen_core_orbitals : list[int], optional, default=[]
+        A list of integers storing the frozen core orbital indices.
+    frozen_virtual_orbitals : list[int], optional, default=[]
+        A list of integers storing the frozen virtual orbital indices.
 
     Attributes
     ----------
