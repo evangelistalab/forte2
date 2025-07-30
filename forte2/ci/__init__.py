@@ -1,7 +1,4 @@
-from .ci import (
-    CISolver,
-    CI,
-)
+from .ci import CISolver, CI
 
 from .ci_utils import (
     pretty_print_ci_summary,

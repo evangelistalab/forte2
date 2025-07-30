@@ -6,10 +6,10 @@ from forte2 import ints
 from forte2.scf import RHF, ROHF
 from forte2.state import MOSpace
 from forte2.helpers import logger
-from forte2.helpers.mixins import MOsMixin, SystemMixin, MOSpaceMixin
+from forte2.base_classes.mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.system import System
 from forte2.system.basis_utils import BasisInfo, shell_label_to_lm
-from forte2.system.atom_data import Z_TO_ATOM_SYMBOL, ATOM_SYMBOL_TO_Z
+from forte2.system.atom_data import ATOM_SYMBOL_TO_Z
 
 
 @dataclass
@@ -472,6 +472,7 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         self.ncore = len(inact_docc)
 
         self.mo_space = MOSpace(
+            nmo=self.system.nmo,
             active_orbitals=list(range(self.ncore, self.ncore + self.nactv)),
             core_orbitals=list(range(self.ncore)),
         )

@@ -5,6 +5,7 @@ def test_ci_strings_singlet():
     # Create a State object
     state = State(nel=10, multiplicity=1, ms=0.0, gas_min=[1, 4, 2], gas_max=[2, 4, 3])
     mospace = MOSpace(
+        nmo=10,
         active_orbitals=[[1], [2, 3], [4, 5, 6]],
         core_orbitals=[0],
     )
@@ -35,6 +36,7 @@ def test_ci_strings_triplet():
     # Create a State object
     state = State(nel=10, multiplicity=3, ms=1.0, gas_min=[0, 3])
     mospace = MOSpace(
+        nmo=10,
         active_orbitals=[[1], [2, 3], [4, 5, 6]],
         core_orbitals=[0],
     )

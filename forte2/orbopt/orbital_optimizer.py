@@ -3,12 +3,12 @@ import scipy as sp
 from dataclasses import dataclass, field
 
 from forte2.ci import CISolver
-from forte2.state import State, MOSpace, StateAverageInfo
+from forte2.base_classes.active_space_solver import ActiveSpaceSolver
+from forte2.orbitals import Semicanonicalizer
 from forte2.jkbuilder import FockBuilder
-from forte2.helpers.mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.helpers import logger, LBFGS, DIIS
 from forte2.system.basis_utils import BasisInfo
-from forte2.ci import (
+from forte2.ci.ci_utils import (
     pretty_print_ci_summary,
     pretty_print_ci_nat_occ_numbers,
     pretty_print_ci_dets,
@@ -17,7 +17,7 @@ from forte2.ci import (
 
 
 @dataclass
-class MCOptimizer(MOsMixin, SystemMixin, MOSpaceMixin):
+class MCOptimizer(ActiveSpaceSolver):
     """
     Two-step optimizer for multi-configurational wavefunctions.
 
@@ -26,13 +26,6 @@ class MCOptimizer(MOsMixin, SystemMixin, MOSpaceMixin):
     states : State | list[State]
         The electronic states for which the CI is solved. Can be a single state or a list of states.
         A state-averaged CI is performed if multiple states are provided.
-    core_orbitals : list[int], optional
-        The indices of the core (restricted doubly occupied) orbitals.
-        If not provided, it defaults to an empty list.
-    active_orbitals : list[int] | list[list[int]], optional
-        The indices of the active orbitals. If a list is provided, a complete active space (CAS) is assumed.
-        If a list of lists is provided, each sublist corresponds to orbital indices of a GAS (generalized active space).
-        If not provided, CISolver must be called with a parent method that has MOSpaceMixin (e.g., AVAS).
     nroots : int | list[int], optional, default=1
         The number of roots to compute.
         If a list is provided, each element corresponds to the number of roots for each state.
@@ -43,6 +36,10 @@ class MCOptimizer(MOsMixin, SystemMixin, MOSpaceMixin):
         The number of weights must match the number of roots for each state.
         If not provided, equal weights are assumed for all states.
         If a single list is provided, `states` must be a single `State` object.
+    mo_space : MOSpace, optional
+        A `MOSpace` object defining the partitioning of the molecular orbitals.
+        If not provided, CISolver must be called with a parent method that has MOSpaceMixin (e.g., AVAS).
+        If provided, it overrides the one from the parent method.
     maxiter : int, optional, default=50
         Maximum number of macroiterations.
     econv : float, optional, default=1e-8
@@ -67,11 +64,7 @@ class MCOptimizer(MOsMixin, SystemMixin, MOSpaceMixin):
         Whether to compute transition dipole moments.
     """
 
-    states: State | list[State]
-    core_orbitals: list[int] = None
-    active_orbitals: list[int] | list[list[int]] = None
-    nroots: int | list[int] = 1
-    weights: list[float] | list[list[float]] = None
+    optimize_frozen_orbs: bool = True
 
     ### Macroiteration parameters
     maxiter: int = 50
@@ -97,16 +90,6 @@ class MCOptimizer(MOsMixin, SystemMixin, MOSpaceMixin):
     ### Non-init attributes
     executed: bool = field(default=False, init=False)
 
-    def __post_init__(self):
-        self.sa_info = StateAverageInfo(
-            states=self.states,
-            nroots=self.nroots,
-            weights=self.weights,
-        )
-        self.ncis = self.sa_info.ncis
-        self.weights = self.sa_info.weights
-        self.weights_flat = self.sa_info.weights_flat
-
     def __call__(self, method):
         self.parent_method = method
         ### make sure we don't print the CI output at INFO1 level
@@ -119,36 +102,19 @@ class MCOptimizer(MOsMixin, SystemMixin, MOSpaceMixin):
         return self
 
     def _startup(self):
-        if not self.parent_method.executed:
-            self.parent_method.run()
-
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
-        if isinstance(self.parent_method, MOSpaceMixin):
-            MOSpaceMixin.copy_from_upstream(self, self.parent_method)
-        else:
-            assert self.active_orbitals is not None, (
-                "If the parent method does not have MOSpaceMixin, "
-                "then active_orbitals must be provided."
-            )
-            if self.core_orbitals is None:
-                self.core_orbitals = []
-            self.mo_space = MOSpace(self.active_orbitals, self.core_orbitals)
-
-        self.norb = self.mo_space.nactv
-        self.core_indices = self.mo_space.core_indices
-        self.active_indices = self.mo_space.active_indices
-
+        super()._startup()
         # make the core, active, and virtual spaces contiguous
         # i.e., [core, gas1, gas2, ..., virt]
-        self.mo_space.compute_contiguous_permutation(self.system.nbf)
         perm = self.mo_space.orig_to_contig
         # this is the contiguous coefficient matrix
         self._C = self.C[0][:, perm].copy()
-        self.core = self.mo_space.core
+        # core slice will include frozen orbitals,
+        # if optimize_frozen_orbs is False, then the relevant
+        # gradients will be zeroed out by nrr
+        self.core = self.mo_space.docc
         # self.actv will be a list if multiple GASes are defined
         self.actv = self.mo_space.actv
-        self.virt = self.mo_space.virt
+        self.virt = self.mo_space.uocc
 
         self.nrr = self._get_nonredundant_rotations()
 
@@ -183,7 +149,7 @@ class MCOptimizer(MOsMixin, SystemMixin, MOSpaceMixin):
         )
         self.ci_solver = CISolver(
             states=self.states,
-            core_orbitals=self.mo_space.core_orbitals,
+            core_orbitals=self.mo_space.docc_orbitals,
             active_orbitals=self.mo_space.active_orbitals,
             nroots=self.sa_info.nroots,
             weights=self.sa_info.weights,
@@ -315,7 +281,18 @@ class MCOptimizer(MOsMixin, SystemMixin, MOSpaceMixin):
         self.C[0] = self._C[:, perm].copy()
 
         self._post_process()
-        # self.parent_method.set_verbosity_level(current_verbosity)
+
+        if self.final_orbital == "semicanonical":
+            semi = Semicanonicalizer(
+                self.mo_space,
+                self.ci_solver.make_average_sf_1rdm(),
+                self.C[0],
+                self.system,
+                fock_builder,
+            )
+            semi.run()
+            self.C[0] = semi.C_semican.copy()
+
         self.executed = True
         return self
 
@@ -352,9 +329,16 @@ class MCOptimizer(MOsMixin, SystemMixin, MOSpaceMixin):
         nrr = np.zeros((self.system.nbf, self.system.nbf), dtype=bool)
 
         # TODO: handle GAS/RHF/ROHF cases
-        nrr[self.core, self.virt] = True
-        nrr[self.actv, self.virt] = True
-        nrr[self.core, self.actv] = True
+        if self.optimize_frozen_orbs:
+            _core = self.mo_space.docc
+            _virt = self.mo_space.uocc
+        else:
+            _core = self.mo_space.core
+            _virt = self.mo_space.virt
+
+        nrr[_core, _virt] = True
+        nrr[self.actv, _virt] = True
+        nrr[_core, self.actv] = True
         return nrr
 
     def _check_convergence(self):
@@ -396,7 +380,7 @@ class OrbOptimizer:
         self.ncore = self.Ccore.shape[1]
         self.nact = self.Cact.shape[1]
         self.nvirt = self.C.shape[1] - self.ncore - self.nact
-        self.fock_builder = fock_builder
+        self.fock_builder: FockBuilder = fock_builder
         self.hcore = hcore
         self.nrr = nrr
         self.nrot = self.nrr.sum()
@@ -461,28 +445,12 @@ class OrbOptimizer:
 
     def _vec_to_mat(self, x):
         R = np.zeros_like(self.C)
-        # [cv, av, ca]
-        x_cv = x[: self.ncore * self.nvirt].reshape(self.ncore, self.nvirt)
-        x_av = x[
-            self.ncore * self.nvirt : self.ncore * self.nvirt + self.nact * self.nvirt
-        ].reshape(self.nact, self.nvirt)
-        x_ca = x[self.ncore * self.nvirt + self.nact * self.nvirt :].reshape(
-            self.ncore, self.nact
-        )
-        R[self.core, self.virt] = x_cv
-        R[self.actv, self.virt] = x_av
-        R[self.core, self.actv] = x_ca
-        R[self.virt, self.core] = -x_cv.T
-        R[self.virt, self.actv] = -x_av.T
-        R[self.actv, self.core] = -x_ca.T
+        R[self.nrr] = x
+        R += -R.T
         return R
 
     def _mat_to_vec(self, R):
-        # [cv, av, ca]
-        x_cv = R[self.core, self.virt].flatten()
-        x_av = R[self.actv, self.virt].flatten()
-        x_ca = R[self.core, self.actv].flatten()
-        return np.concatenate((x_cv, x_av, x_ca))
+        return R[self.nrr]
 
     def _compute_reference_energy(self):
         energy = self.Ecore + self.e_nuc
@@ -509,28 +477,13 @@ class OrbOptimizer:
         )
 
     def _compute_Fact(self):
-        # compute the active Fock matrix [Algorithm 1, line 9]
-        # gamma_act (nmo * nmo) is defined in [Eq. (19)]
-        # as (gamma_act)_pq = C_pt C_qu g1_tu
-        # we decompose g1 and contract it into the coefficients
-        # so more efficient coefficient-based J-builder can be used
-        try:
-            # C @ g1_act C.T = C @ L @ L.T @ C.T == Cp @ Cp.T
-            L = np.linalg.cholesky(self.g1, upper=False)
-            Cp = self.Cact @ L
-        except np.linalg.LinAlgError:  # only if g1_act has very small eigenvalues
-            n, L = np.linalg.eigh(self.g1)
-            assert np.all(n > -1.0e-11), "g1_act must be positive semi-definite"
-            n = np.maximum(n, 0)
-            Cp = self.Cact @ L @ np.diag(np.sqrt(n))
-
-        Jact, Kact = self.fock_builder.build_JK([Cp])
+        Jact, Kact = self.fock_builder.build_JK_generalized(self.Cact, self.g1)
 
         # [Eq. (20)]
         self.Fact = np.einsum(
             "mp,mn,nq->pq",
             self.Cgen.conj(),
-            2 * Jact[0] - Kact[0],
+            2 * Jact - Kact,
             self.Cgen,
             optimize=True,
         )

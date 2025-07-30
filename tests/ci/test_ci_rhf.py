@@ -12,7 +12,7 @@ def test_ci_1():
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci = CI(State(nel=2, multiplicity=1, ms=0.0), active_orbitals=[0, 1])(rhf)
+    ci = CI(State(system=system, multiplicity=1, ms=0.0), active_orbitals=[0, 1])(rhf)
     ci.run()
 
     assert rhf.E == approx(-1.05643120731551)
@@ -48,8 +48,8 @@ def test_sa_ci_n2():
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    singlet = State(14, multiplicity=1, ms=0.0)
-    triplet = State(14, multiplicity=3, ms=0.0)
+    singlet = State(nel=14, multiplicity=1, ms=0.0)
+    triplet = State(nel=14, multiplicity=3, ms=0.0)
     ci = CI(
         states=[singlet, triplet],
         core_orbitals=[0, 1, 2, 3],
@@ -91,8 +91,8 @@ def test_sa_ci_with_avas():
         diagonalize=True,
     )(rhf)
 
-    singlet = State(14, multiplicity=1, ms=0.0)
-    triplet = State(14, multiplicity=3, ms=0.0)
+    singlet = State(nel=14, multiplicity=1, ms=0.0)
+    triplet = State(nel=14, multiplicity=3, ms=0.0)
 
     saci = CI([singlet, triplet], nroots=[1, 2], weights=[[1.0], [0.85, 0.15]])(avas)
     saci.run()

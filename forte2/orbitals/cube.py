@@ -1,7 +1,6 @@
 import math
-import numpy as np
 
-import forte2
+from forte2 import ints
 
 
 def simple_grid(
@@ -51,7 +50,7 @@ class Cube:
         )
 
         # calculate the orbitals on the grid
-        values = forte2.ints.orbitals_on_grid(
+        values = ints.orbitals_on_grid(
             system.basis,
             C[:, indices],
             grid_origin,
