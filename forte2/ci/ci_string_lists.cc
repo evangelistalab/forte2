@@ -63,10 +63,24 @@ void CIStrings::startup() {
     }
 
     // Generate the allowed GAS occupation patterns for alpha and beta string
+    debug([&]() {
+        std::cout << "CIStrings: Generating GAS occupation patterns for alpha and beta strings..."
+                  << std::endl;
+    });
     std::tie(ngas_spaces_, gas_alfa_occupations_, gas_beta_occupations_, gas_occupations_) =
         get_ci_occupation_patterns(na_, nb_, gas_min_, gas_max_, gas_size_);
 
+    // Initialize the string class object. The string class is a combination of the irrep and GAS
+    // occupation.
+    string_class_ =
+        std::make_shared<StringClass>(symmetry_, orbital_symmetry_, gas_alfa_occupations_,
+                                      gas_beta_occupations_, gas_occupations_);
+
     // Build the string lists that satisfy the GAS constraints and the corresponding addressers
+    debug([&]() {
+        std::cout << "CIStrings: Generating string lists for alpha and beta strings..."
+                  << std::endl;
+    });
     alfa_strings_ = make_strings_with_occupation(ngas_spaces_, nirrep_, gas_size_, gas_mos_,
                                                  gas_alfa_occupations_, string_class_);
     beta_strings_ = make_strings_with_occupation(ngas_spaces_, nirrep_, gas_size_, gas_mos_,
@@ -74,12 +88,6 @@ void CIStrings::startup() {
 
     alfa_address_ = std::make_shared<StringAddress>(gas_size_, na_, alfa_strings_);
     beta_address_ = std::make_shared<StringAddress>(gas_size_, nb_, beta_strings_);
-
-    // Initialize the string class object. The string class is a combination of the irrep and GAS
-    // occupation.
-    string_class_ =
-        std::make_shared<StringClass>(symmetry_, orbital_symmetry_, gas_alfa_occupations_,
-                                      gas_beta_occupations_, gas_occupations_);
 
     // Build the 1h1p string lists and their addressers. These strings can have occupation patterns
     // that do not fall under the GAS restriction. Used in the Knowles-Handy algorithm.
@@ -93,6 +101,12 @@ void CIStrings::startup() {
 
     alfa_address_1h1p_ = std::make_shared<StringAddress>(gas_size_, na_, alfa_strings_1h1p_);
     beta_address_1h1p_ = std::make_shared<StringAddress>(gas_size_, nb_, beta_strings_1h1p_);
+
+    debug([&]() {
+        std::cout
+            << "CIStrings: Generating 1h, 2h, and 3h string lists for alpha and beta strings..."
+            << std::endl;
+    });
 
     // Build the 1h, 2h, and 3h occupation patterns and their corresponding string lists.
     const auto gas_alfa_1h_occupations_ = generate_1h_occupations(gas_alfa_occupations_);
@@ -143,6 +157,11 @@ void CIStrings::startup() {
         ndet_per_block_offset_.push_back(ndet_);
         ndet_ += nI;
     }
+
+    debug([&]() {
+        std::cout << "CIStrings: Generating string substitution lists for alpha and beta strings..."
+                  << std::endl;
+    });
 
     alfa_vo_list = make_vo_list(alfa_strings_, alfa_address_, alfa_address_);
     beta_vo_list = make_vo_list(beta_strings_, beta_address_, beta_address_);

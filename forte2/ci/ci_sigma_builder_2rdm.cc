@@ -11,13 +11,20 @@ namespace forte2 {
 np_matrix CISigmaBuilder::compute_ss_2rdm(np_vector C_left, np_vector C_right, bool alfa) const {
     local_timer timer;
 
-    const size_t norb = lists_.norb();
-    const size_t npairs = (norb * (norb - 1)) / 2;
-
-    auto rdm = make_zeros<nb::numpy, double, 2>({npairs, npairs});
-
     const auto na = lists_.na();
     const auto nb = lists_.nb();
+    const size_t norb = lists_.norb();
+
+    // if there are less than two orbitals, return an empty matrix
+    if (norb < 2) {
+        return make_zeros<nb::numpy, double, 2>({0, 0});
+    }
+
+    // calculate the number of pairs of orbitals p > q
+    const size_t npairs = (norb * (norb - 1)) / 2;
+    auto rdm = make_zeros<nb::numpy, double, 2>({npairs, npairs});
+
+    // skip building the RDM if there are not enough electrons
     if ((alfa and (na < 2)) or ((!alfa) and (nb < 2)))
         return rdm;
 
@@ -89,19 +96,24 @@ np_matrix CISigmaBuilder::compute_bb_2rdm(np_vector C_left, np_vector C_right) c
 
 np_tensor4 CISigmaBuilder::compute_ab_2rdm(np_vector C_left, np_vector C_right) const {
     local_timer timer;
-    size_t norb = lists_.norb();
-    auto rdm = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
-
-    auto norb2 = norb * norb;
-    auto norb3 = norb2 * norb;
-    auto index = [norb, norb2, norb3](size_t p, size_t q, size_t r, size_t s) {
-        return p * norb3 + q * norb2 + r * norb + s;
-    };
 
     const auto na = lists_.na();
     const auto nb = lists_.nb();
-    if ((na < 1) or (nb < 1))
+    const auto norb = lists_.norb();
+    const auto norb2 = norb * norb;
+    const auto norb3 = norb2 * norb;
+
+    auto rdm = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
+
+    // skip building the RDM if there are no electrons or there are zero orbitals
+    if ((na < 1) or (nb < 1) or (norb < 1)) {
         return rdm;
+    }
+
+    // Create a lambda to compute the index in the 4D tensor
+    auto index = [norb, norb2, norb3](size_t p, size_t q, size_t r, size_t s) {
+        return p * norb3 + q * norb2 + r * norb + s;
+    };
 
     auto rdm_data = rdm.data();
 
@@ -162,13 +174,13 @@ np_tensor4 CISigmaBuilder::compute_ab_2rdm(np_vector C_left, np_vector C_right) 
 np_tensor4 CISigmaBuilder::compute_sf_2rdm(np_vector C_left, np_vector C_right) const {
     size_t norb = lists_.norb();
     auto rdm_sf = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
-    auto rdm_sf_v = rdm_sf.view();
 
     if (norb < 1) {
         return rdm_sf; // No 2-RDM for less than 1 orbitals
     }
 
-    // Mixed-spin contribution
+    auto rdm_sf_v = rdm_sf.view();
+    // Mixed-spin contribution (1 orbital or more)
     {
         auto rdm_ab = compute_ab_2rdm(C_left, C_right);
         auto rdm_ab_v = rdm_ab.view();

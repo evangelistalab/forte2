@@ -395,9 +395,9 @@ class _CIBase:
         else:
             right_ci_vec_det = np.zeros((self.ndet))
             self.spin_adapter.csf_C_to_det_C(self.evecs[:, right_root], right_ci_vec_det)
-        aa = self.ci_sigma_builder.aa_2rdm(left_ci_vec_det, right_ci_vec_det) if self.norb > 1 else None
-        ab = self.ci_sigma_builder.ab_2rdm(left_ci_vec_det, right_ci_vec_det) if self.norb > 0 else None
-        bb = self.ci_sigma_builder.bb_2rdm(left_ci_vec_det, right_ci_vec_det) if self.norb > 1 else None
+        aa = self.ci_sigma_builder.aa_2rdm(left_ci_vec_det, right_ci_vec_det)
+        ab = self.ci_sigma_builder.ab_2rdm(left_ci_vec_det, right_ci_vec_det)
+        bb = self.ci_sigma_builder.bb_2rdm(left_ci_vec_det, right_ci_vec_det)
         return aa, ab, bb
     
     def make_sd_3rdm(self, left_root:int, right_root:int | None = None):
@@ -424,10 +424,10 @@ class _CIBase:
             right_ci_vec_det = np.zeros((self.ndet))
             self.spin_adapter.csf_C_to_det_C(self.evecs[:, right_root], right_ci_vec_det)
     
-        aaa = self.ci_sigma_builder.aaa_3rdm(left_ci_vec_det, right_ci_vec_det) if self.norb > 2 else None
-        aab = self.ci_sigma_builder.aab_3rdm(left_ci_vec_det, right_ci_vec_det) if self.norb > 1 else None
-        abb = self.ci_sigma_builder.abb_3rdm(left_ci_vec_det, right_ci_vec_det) if self.norb > 1 else None
-        bbb = self.ci_sigma_builder.bbb_3rdm(left_ci_vec_det, right_ci_vec_det) if self.norb > 2 else None
+        aaa = self.ci_sigma_builder.aaa_3rdm(left_ci_vec_det, right_ci_vec_det)
+        aab = self.ci_sigma_builder.aab_3rdm(left_ci_vec_det, right_ci_vec_det)
+        abb = self.ci_sigma_builder.abb_3rdm(left_ci_vec_det, right_ci_vec_det)
+        bbb = self.ci_sigma_builder.bbb_3rdm(left_ci_vec_det, right_ci_vec_det)
         return aaa, aab, abb, bbb
 
     def make_sf_1rdm(self, left_root:int, right_root:int | None = None):

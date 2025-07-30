@@ -11,13 +11,19 @@ namespace forte2 {
 np_matrix CISigmaBuilder::compute_sss_3rdm(np_vector C_left, np_vector C_right, bool alfa) const {
     local_timer timer;
 
-    const size_t norb = lists_.norb();
-    const size_t ntriplets = (norb * (norb - 1) * (norb - 2)) / 6;
-
-    auto rdm = make_zeros<nb::numpy, double, 2>({ntriplets, ntriplets});
-
     const auto na = lists_.na();
     const auto nb = lists_.nb();
+    const auto norb = lists_.norb();
+
+    // if there are less than three orbitals, return an empty matrix
+    if (norb < 3) {
+        return make_zeros<nb::numpy, double, 2>({0, 0});
+    }
+
+    const size_t ntriplets = (norb * (norb - 1) * (norb - 2)) / 6;
+    auto rdm = make_zeros<nb::numpy, double, 2>({ntriplets, ntriplets});
+
+    // skip building the RDM if there are not enough electrons
     if ((alfa and (na < 3)) or ((!alfa) and (nb < 3)))
         return rdm;
 
@@ -89,8 +95,15 @@ np_matrix CISigmaBuilder::compute_bbb_3rdm(np_vector C_left, np_vector C_right) 
 
 np_tensor4 CISigmaBuilder::compute_aab_3rdm(np_vector C_left, np_vector C_right) const {
     local_timer timer;
+    const auto na = lists_.na();
+    const auto nb = lists_.nb();
+    const auto norb = lists_.norb();
 
-    const size_t norb = lists_.norb();
+    // if there are less than two orbitals, return an empty matrix
+    if (norb < 2) {
+        return make_zeros<nb::numpy, double, 4>({0, 0, 0, 0});
+    }
+
     // the number of orbital pairs i > j of the same spin
     const size_t npair = (norb * (norb - 1)) / 2;
 
@@ -104,8 +117,7 @@ np_tensor4 CISigmaBuilder::compute_aab_3rdm(np_vector C_left, np_vector C_right)
         return pq * stride3 + r * stride2 + st * stride1 + u;
     };
 
-    const auto na = lists_.na();
-    const auto nb = lists_.nb();
+    // skip building the RDM if there are not enough electrons
     if ((na < 2) or (nb < 1))
         return rdm;
 
@@ -172,8 +184,15 @@ np_tensor4 CISigmaBuilder::compute_aab_3rdm(np_vector C_left, np_vector C_right)
 
 np_tensor4 CISigmaBuilder::compute_abb_3rdm(np_vector C_left, np_vector C_right) const {
     local_timer timer;
+    const auto na = lists_.na();
+    const auto nb = lists_.nb();
+    const auto norb = lists_.norb();
 
-    const size_t norb = lists_.norb();
+    // if there are less than two orbitals, return an empty matrix
+    if (norb < 2) {
+        return make_zeros<nb::numpy, double, 4>({0, 0, 0, 0});
+    }
+
     // the number of orbital pairs i > j of the same spin
     const size_t npair = (norb * (norb - 1)) / 2;
 
@@ -187,8 +206,7 @@ np_tensor4 CISigmaBuilder::compute_abb_3rdm(np_vector C_left, np_vector C_right)
         return p * stride3 + qr * stride2 + s * stride1 + tu;
     };
 
-    const auto na = lists_.na();
-    const auto nb = lists_.nb();
+    // skip building the RDM if there are not enough electrons
     if ((na < 1) or (nb < 2))
         return rdm;
 
@@ -256,13 +274,13 @@ np_tensor4 CISigmaBuilder::compute_abb_3rdm(np_vector C_left, np_vector C_right)
 np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) const {
     auto norb = lists_.norb();
     auto rdm_sf = make_zeros<nb::numpy, double, 6>({norb, norb, norb, norb, norb, norb});
-    auto rdm_sf_v = rdm_sf.view();
 
     if (norb < 2) {
         return rdm_sf; // No 3-RDM for less than 2 orbitals
     }
 
-    // The aab contribution
+    auto rdm_sf_v = rdm_sf.view();
+    // The aab contribution (2 orbitals or more)
     {
         auto rdm_aab = compute_aab_3rdm(C_left, C_right);
         auto rdm_aab_v = rdm_aab.view();
@@ -299,7 +317,7 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) 
         }
     }
 
-    // The abb contribution
+    // The abb contribution (2 orbitals or more)
     {
         auto rdm_abb = compute_abb_3rdm(C_left, C_right);
         auto rdm_abb_v = rdm_abb.view();
@@ -338,6 +356,7 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) 
     if (norb < 3) {
         return rdm_sf; // No same-spin contributions to the 3-RDM for less than 3 orbitals
     }
+
     // To reduce the  memory footprint, we compute the aaa and bbb contributions in a packed
     // format and one at a time.
     for (auto spin : {true, false}) {
@@ -414,23 +433,6 @@ np_tensor6 CISigmaBuilder::compute_sf_3cumulant(np_vector C_left, np_vector C_ri
     auto sf_2rdm = compute_sf_2rdm(C_left, C_right);
     // Compute the spin-free 3-RDM (this will hold the cumulant)
     auto L3 = compute_sf_3rdm(C_left, C_right);
-
-    // Evaluate L3[p,q,r,s,t,u] = G3[p,q,r,s,t,u]
-    //                            - G1[p,s] * G2[q,r,t,u]
-    //                            - G1[q,t] * G2[p,r,s,u]
-    //                            - G1[r,u] * G2[p,q,s,t]
-    //                            + 0.5 * G1[p,t] * G2[q,r,s,u]
-    //                            + 0.5 * G1[p,u] * G2[q,r,t,s]
-    //                            + 0.5 * G1[q,s] * G2[p,r,t,u]
-    //                            + 0.5 * G1[q,u] * G2[p,r,s,t]
-    //                            + 0.5 * G1[r,s] * G2[p,q,u,t]
-    //                            + 0.5 * G1[r,t] * G2[p,q,s,u]
-    //                            + 2.0 * G1[p,s] * G1[q,t] * G1[r,u]
-    //                            - G1[p,s] * G1[q,u] * G1[r,t]
-    //                            - G1[p,u] * G1[q,t] * G1[r,s]
-    //                            - G1[p,t] * G1[q,s] * G1[r,u]
-    //                            + 0.5 * G1[p,t] * G1[q,u] * G1[r,s]
-    //                            + 0.5 * G1[p,u] * G1[q,s] * G1[r,t];
 
     auto G1_v = sf_1rdm.view();
     auto G2_v = sf_2rdm.view();
