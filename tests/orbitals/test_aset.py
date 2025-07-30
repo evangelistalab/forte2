@@ -2,7 +2,6 @@ import pytest
 from forte2 import *
 #from forte2.helpers.comparisons import approx
 
-
 def test_aset_1():
     """
     test cutoff_method = threshold with a non-default cutoff value.

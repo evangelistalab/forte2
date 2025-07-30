@@ -97,10 +97,8 @@ class ASET(MOsMixin, SystemMixin):
 
         minao_info = BasisInfo(self.system, self.system.minao_basis)
 
-        # grab the nested mapping { Z → { rel_idx → [AO indices] } }
         raw_map = minao_info.atom_to_aos
 
-        # normalize both levels of keys to plain Python ints
         self.atom_to_center = self.system.atom_to_center
         self.atom_to_aos = {
             int(Z): {
@@ -163,7 +161,6 @@ class ASET(MOsMixin, SystemMixin):
             A sorted list of unique atom indices (0-based) matching the specification.
         """
 
-        # Parse string input into list of tokens using eval (or ast.literal_eval for safety)
         if isinstance(frag_str, str):
             frag_list = ast.literal_eval(frag_str)  # e.g., turns '["C1-3", "N"]' into list
         else:
@@ -172,7 +169,6 @@ class ASET(MOsMixin, SystemMixin):
         atom_indices = []
 
         for token in frag_list:
-            # Match using regex: element symbol + optional index or range
             match = re.match(self._regex, token)
             if not match:
                 raise ValueError(f"Invalid fragment specification: {token}")
@@ -181,7 +177,6 @@ class ASET(MOsMixin, SystemMixin):
             start = match.group(2)   # e.g., "1"
             end = match.group(3)     # e.g., "3" (if it's a range)
 
-            # Convert element symbol to atomic number (Z)
             try:
                 Z = ATOM_SYMBOL_TO_Z[symbol]
 
@@ -214,7 +209,6 @@ class ASET(MOsMixin, SystemMixin):
                 # Slice the appropriate atoms (relative to atoms of that element)
                 atom_indices.extend(element_atoms[start_idx:end_idx])
 
-        # Remove duplicates and sort (optional: preserve input order if needed)
         return sorted(set(atom_indices))
 
     def _make_fragment_projector(self): 
@@ -254,13 +248,11 @@ class ASET(MOsMixin, SystemMixin):
             ao_list = self.atom_to_aos[Z_i][rel_idx]
             frag_ao_indices.extend(ao_list)
 
-        # uniquify/sort
         frag_ao_indices = sorted(set(frag_ao_indices))
 
         # 3. Build fragment overlap block S_A and invert 
         S_A = S_mm[np.ix_(frag_ao_indices, frag_ao_indices)]
         S_A_inv = np.linalg.pinv(S_A, rcond=1e-8)
-
 
         # 4. Embed S_A_inv into full space and form projector
         S_A_mm = np.zeros((nbf_m, nbf_m))
@@ -285,46 +277,26 @@ class ASET(MOsMixin, SystemMixin):
     def _make_embedding(self): 
         """
         Perform Orbital Partitioning for ASET. 
-
-        1. Read cutoff parameters and determine fragment orbitals
-        2. Ensure SCF has been run and projector exists. 
-        3. Transform fragment projector into MO basis: F = C_min^T P_frag C_min
-        4. Split F into occupied and virtual blocks according to mo space info.
-        5. Diagonalize each block
-        6. Based on cutoff method, select orbitals for fragment A and B. Note that active space orbitals are not touched. 
-        7. Build index lists: index_A_occ, index_A_virt, index_B_occ, index_B_virt, plus frozen and active from mo space info. 
-        8. Semi cannonicalize each block unless specified otherwise. 
-        9. Reassemble MO coefficient matrix in the new block order.
-        10. Update and return a new MO space info. 
-
         """
         # 1. Get MO coeff and dimensions
         Ca = self.Ca
-        nmo = self.nmo
 
         # 1) Compute the overlaps
-        #    S_fm[μ, t] = ⟨ full‐AO μ | min‐AO t ⟩
         S_fm = ints.overlap(self.system.basis,
                             self.system.minao_basis)
-
-        #    S_mm[t, u] = ⟨ min‐AO t | min‐AO u ⟩
-        S_mm = self._S_mm
-
+        
         # 2) Orthonormalize the minimal basis
-        #    X_mm = S_mm^(–1/2)
         X_mm = self.X_mm
 
         # 3) Build the projection operator from full AO into orthonormal min‐AO
         #    T[t,μ] = (X_mm @ S_fmᵀ)[t,μ]
         T = X_mm @ S_fm.T
 
-        # 4) Project your full‐AO MOs into the minimal basis:
-        #    C_min[t, i] = ∑_μ T[t,μ] · Ca[μ, i]
+        # 4) Project full‐AO MOs into the minimal basis:
         C_min = T @ Ca  # shape (n_minAO, nmo)
 
         # 5) Build the fragment projector in the minimal basis
         P_frag = self.P_frag
-        #    P_frag[t, u] = ⟨ min‐AO t | fragment u ⟩
         F = C_min.T @ P_frag @ C_min
 
         # 6) Split F into occupied and virtual blocks
@@ -403,6 +375,10 @@ class ASET(MOsMixin, SystemMixin):
                             "and is assigned to B."
                         )
 
+        # For PAO:
+        if self.virtual_space.lower() == "pao":
+            print(f"\n****** Build PAOs for virtual space ******")
+            
         # Adjust occupied and virtual indices based on user input
         #################################
         # Skipping this section for now #
