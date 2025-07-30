@@ -11,8 +11,6 @@ class MOsMixin:
     Contains a list of molecular orbital coefficient matrices.
     """
 
-    C: list[np.ndarray] = field(default_factory=list, init=False)
-
     @classmethod
     def copy_from_upstream(cls, new, upstream) -> None:
         assert isinstance(new, MOsMixin), "new must be an instance of MOsMixin"
@@ -30,8 +28,6 @@ class SystemMixin:
     Mixin for classes that need to handle a system.
     Contains a reference to the system object.
     """
-
-    system: System = field(default=None, init=False)
 
     @classmethod
     def copy_from_upstream(cls, new, upstream) -> None:

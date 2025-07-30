@@ -175,7 +175,7 @@ class FockBuilder:
             Cp = C @ L
         except np.linalg.LinAlgError:
             n, L = np.linalg.eigh(g1)
-            assert np.all(n > -1.0e-11), "g1_sf must be positive semi-definite"
+            assert np.all(n > -1.0e-11), "g1 must be positive semi-definite"
             n = np.maximum(n, 0)
             Cp = C @ L @ np.diag(np.sqrt(n))
 
