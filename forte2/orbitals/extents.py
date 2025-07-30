@@ -6,9 +6,6 @@ import numpy as np
 def orbital_extents(basis, C, indices=None):
     """Compute the average position of the basis functions and their spread."""
 
-    # number of orbitals
-    N = C.shape[1]
-
     # evaluate the multipole moments in the AO basis
     AO_ints = forte2.ints.emultipole2(basis)
 
@@ -17,10 +14,9 @@ def orbital_extents(basis, C, indices=None):
     MO_ints = [C.T @ M @ C for M in AO_ints]
 
     # unpack the multipole moments
-    S, Mx, My, Mz, Mxx, Mxy, Mxz, Myy, Myz, Mzz = MO_ints
+    _, Mx, My, Mz, Mxx, Mxy, Mxz, Myy, Myz, Mzz = MO_ints
 
     # compute the average position of the basis functions
-    s = diag(S)
     x = diag(Mx)
     y = diag(My)
     z = diag(Mz)

@@ -1,5 +1,4 @@
 import numpy as np
-import scipy as sp
 
 from forte2.system import System
 from forte2.state import MOSpace

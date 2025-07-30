@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from abc import ABC, abstractmethod
 from collections import OrderedDict
 
 import numpy as np
@@ -13,7 +12,13 @@ from forte2.helpers import logger
 from forte2.state import MOSpace
 from forte2.jkbuilder import RestrictedMOIntegrals
 from forte2.props import get_1e_property
-from .ci_utils import *
+from .ci_utils import (
+    pretty_print_gas_info,
+    pretty_print_ci_summary,
+    pretty_print_ci_nat_occ_numbers,
+    pretty_print_ci_dets,
+    pretty_print_ci_transition_props,
+)
 
 
 @dataclass
@@ -198,7 +203,7 @@ class _CIBase:
         # 6. Run Davidson
         self.evals, self.evecs = self.eigensolver.solve()
 
-        logger.log(f"\nDavidson-Liu solver converged.\n", self.log_level)
+        logger.log("\nDavidson-Liu solver converged.\n", self.log_level)
 
         # 7. Store the final energy and properties
         self.E = self.evals
@@ -605,7 +610,6 @@ class _CIBase:
             top_dets_per_root.append(top_dets)
 
         return top_dets_per_root
-
 
 
 @dataclass

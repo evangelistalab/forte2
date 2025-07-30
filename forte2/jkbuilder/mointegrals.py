@@ -3,7 +3,6 @@ from dataclasses import dataclass, field
 import numpy as np
 from numpy.typing import NDArray
 
-from forte2 import ints
 from forte2.jkbuilder.jkbuilder import FockBuilder
 from forte2.system.system import System
 

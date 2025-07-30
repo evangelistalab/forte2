@@ -155,7 +155,7 @@ class System:
             )
             if self.auxiliary_basis_set_corr is not None:
                 logger.log_warning(
-                    f"Using a separate auxiliary basis is not recommended!"
+                    "Using a separate auxiliary basis is not recommended!"
                 )
                 self.auxiliary_basis_set_corr = build_basis(
                     self.auxiliary_basis_set_corr, self.atoms
@@ -301,7 +301,7 @@ class System:
         self._eigh = sp.linalg.eigh
         self.nmo = self.nbf
         if min(e) / max(e) < self.linear_dep_trigger:
-            logger.log_warning(f"Linear dependencies detected in overlap matrix S!")
+            logger.log_warning("Linear dependencies detected in overlap matrix S!")
             logger.log_debug(
                 f"Max eigenvalue: {np.max(e):.2e}. \n"
                 f"Min eigenvalue: {np.min(e):.2e}. \n"
@@ -315,7 +315,7 @@ class System:
                 )
             else:
                 logger.log_warning(
-                    f"Linear dependencies detected, but no basis functions were removed. Consider changing linear_dep_trigger or ortho_thresh."
+                    "Linear dependencies detected, but no basis functions were removed. Consider changing linear_dep_trigger or ortho_thresh."
                 )
             self.Xorth = canonical_orth(S, tol=self.ortho_thresh)
         else:

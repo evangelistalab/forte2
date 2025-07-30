@@ -483,7 +483,7 @@ class DavidsonLiuSolver:
             raise ValueError(msg)
 
     def _print_information(self):
-        logger.log(f"\nDavidson-Liu solver configuration:", self.log_level)
+        logger.log("\nDavidson-Liu solver configuration:", self.log_level)
         logger.log(f"  Size of the space:        {self.size}", self.log_level)
         logger.log(f"  Number of roots:          {self.nroot}", self.log_level)
         logger.log(

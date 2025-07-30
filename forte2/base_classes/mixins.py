@@ -1,7 +1,4 @@
-from dataclasses import dataclass, field
-import numpy as np
-
-from forte2.system.system import System
+from dataclasses import dataclass
 
 
 @dataclass
@@ -56,10 +53,3 @@ class MOSpaceMixin:
             upstream, "mo_space"
         ), "upstream must have a 'mo_space' attribute"
         new.mo_space = upstream.mo_space
-
-
-# @dataclass
-# class RDMsMixin:
-#     rdms: list[np.ndarray] = field(default_factory=list, init=False)
-#     G2: list[np.ndarray] = field(default_factory=list, init=False)
-#     G3: list[np.ndarray] = field(default_factory=list, init=False)

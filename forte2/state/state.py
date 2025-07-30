@@ -97,7 +97,7 @@ class State:
         ), f"Number of electrons {self.nel} does not match na + nb = {self.na} + {self.nb}."
         assert (
             self.na >= 0 and self.nb >= 0
-        ), f"Non-negative number of alpha and beta electrons is required."
+        ), "Non-negative number of alpha and beta electrons is required."
 
     def multiplicity_label(self) -> str:
         """Return the label for the multiplicity of the state."""

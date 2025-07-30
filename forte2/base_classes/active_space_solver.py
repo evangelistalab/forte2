@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from abc import ABC
 
 from .mixins import MOsMixin, SystemMixin, MOSpaceMixin

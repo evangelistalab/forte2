@@ -1,8 +1,6 @@
 from dataclasses import dataclass, field
 import numpy as np
 
-from forte2.system import System
-
 
 @dataclass
 class MOSpace:
