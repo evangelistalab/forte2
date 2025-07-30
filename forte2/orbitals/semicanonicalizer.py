@@ -69,9 +69,10 @@ class Semicanonicalizer:
             slice_list.append(self.mo_space.frozen_virt)
 
         for sl in slice_list:
-            e, c = _eigh(sl)
-            eps[sl] = e
-            U[sl, sl] = c
+            if sl.stop - sl.start > 0:  # Skip empty slices
+                e, c = _eigh(sl)
+                eps[sl] = e
+                U[sl, sl] = c
 
         self.U = U
         self.Uactv = U[self.mo_space.actv, self.mo_space.actv]
