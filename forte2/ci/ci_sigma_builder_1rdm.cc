@@ -7,13 +7,13 @@
 namespace forte2 {
 
 np_matrix CISigmaBuilder::compute_s_1rdm(np_vector C_left, np_vector C_right, bool alfa) const {
-    size_t norb = lists_.norb();
+    const auto na = lists_.na();
+    const auto nb = lists_.nb();
+    const auto norb = lists_.norb();
     auto rdm = make_zeros<nb::numpy, double, 2>({norb, norb});
-    auto na = lists_.na();
-    auto nb = lists_.nb();
 
-    // skip building the RDM if there are not enough electrons
-    if ((alfa and (na < 1)) or ((!alfa) and (nb < 1)))
+    // skip building the RDM if there are no electrons or there are zero orbitals
+    if ((alfa and (na < 1)) or ((!alfa) and (nb < 1)) or (norb < 1))
         return rdm;
 
     const auto& alfa_address = lists_.alfa_address();
@@ -24,7 +24,7 @@ np_matrix CISigmaBuilder::compute_s_1rdm(np_vector C_left, np_vector C_right, bo
 
     // loop over blocks of the right state
     for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-        if (lists_.detpblk(nI) == 0)
+        if (lists_.block_size(nI) == 0)
             continue;
 
         auto tr = gather_block(Cr_span, TR, alfa, lists_, class_Ia, class_Ib);
@@ -34,7 +34,7 @@ np_matrix CISigmaBuilder::compute_s_1rdm(np_vector C_left, np_vector C_right, bo
             // The string class on which we don't act must be the same for I and J
             if ((alfa and (class_Ib != class_Jb)) or (not alfa and (class_Ia != class_Ja)))
                 continue;
-            if (lists_.detpblk(nJ) == 0)
+            if (lists_.block_size(nJ) == 0)
                 continue;
 
             auto tl = gather_block(Cl_span, TL, alfa, lists_, class_Ja, class_Jb);
@@ -70,10 +70,14 @@ np_matrix CISigmaBuilder::compute_b_1rdm(np_vector C_left, np_vector C_right) co
 }
 
 np_matrix CISigmaBuilder::compute_sf_1rdm(np_vector C_left, np_vector C_right) const {
-    auto rdm_a = compute_a_1rdm(C_left, C_right);
-    auto rdm_b = compute_b_1rdm(C_left, C_right);
-    matrix::daxpy(1.0, rdm_a, rdm_b);
-    return rdm_b;
+    auto sf_1rdm = make_zeros<nb::numpy, double, 2>({lists_.norb(), lists_.norb()});
+    if (lists_.norb() > 0) {
+        auto a_1rdm = compute_a_1rdm(C_left, C_right);
+        auto b_1rdm = compute_b_1rdm(C_left, C_right);
+        matrix::daxpy(1.0, a_1rdm, sf_1rdm);
+        matrix::daxpy(1.0, b_1rdm, sf_1rdm);
+    }
+    return sf_1rdm;
 }
 
 } // namespace forte2

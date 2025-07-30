@@ -31,7 +31,7 @@ build-dir = "build/{wheel_tag}"
 # Build stable ABI wheels for CPython 3.12+
 wheel.py-api = "cp312"
 
-# The build type to use when building the project.
+# The build type to use when building the project. Valid values are "Debug", "Release", "MinSizeRel", and "RelWithDebInfo".
 cmake.build-type = "Release"
 
 [tool.cibuildwheel]

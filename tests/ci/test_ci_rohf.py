@@ -3,7 +3,7 @@ from forte2.helpers.comparisons import approx
 
 
 def test_rohf_ci_1():
-    xyz = f"""
+    xyz = """
     H 0.0 0.0 0.0
     F 0.0 0.0 2.0
     """
@@ -24,7 +24,7 @@ def test_rohf_ci_1():
 
 
 def test_rohf_ci_2():
-    xyz = f"""
+    xyz = """
     H 0.0 0.0 0.0
     F 0.0 0.0 2.0
     """

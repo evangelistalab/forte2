@@ -29,7 +29,7 @@ CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, n
     // Find the size of the largest symmetry block
     size_t max_size = 0;
     for (auto const& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
-        max_size = std::max(lists.detpblk(nI), max_size);
+        max_size = std::max(lists.block_size(nI), max_size);
     }
 
     LOG(log_level_) << "\nAllocating CI temporary buffers of size 2 x " << max_size << " ("
@@ -44,9 +44,9 @@ CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, n
 
 CISigmaBuilder::~CISigmaBuilder() {
     // Destructor does not need to do anything special
-    LOG(log_level_) << std::fixed << std::setprecision(3);
-    LOG(log_level_) << "\nTiming for 2RDM(aa):" << rdm2_aa_timer_ << " seconds";
-    LOG(log_level_) << "Timing for 2RDM(ab):" << rdm2_ab_timer_ << " seconds";
+    // LOG(log_level_) << std::fixed << std::setprecision(3);
+    // LOG(log_level_) << "\nTiming for 2RDM(aa):" << rdm2_aa_timer_ << " seconds";
+    // LOG(log_level_) << "Timing for 2RDM(ab):" << rdm2_ab_timer_ << " seconds";
 }
 
 void CISigmaBuilder::set_algorithm(const std::string& algorithm) {
