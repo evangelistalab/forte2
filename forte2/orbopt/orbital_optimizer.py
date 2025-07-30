@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from forte2.ci import CISolver
 from forte2.base_classes.active_space_solver import ActiveSpaceSolver
 from forte2.orbitals import Semicanonicalizer
-from forte2.jkbuilder import FockBuilder
+from forte2.jkbuilder import FockBuilder, RestrictedMOIntegrals
 from forte2.helpers import logger, LBFGS, DIIS
 from forte2.system.basis_utils import BasisInfo
 from forte2.ci.ci_utils import (
@@ -200,7 +200,7 @@ class MCOptimizer(ActiveSpaceSolver):
         self.E_avg_old = self.E_avg
 
         g1_act = self.ci_solver.make_average_sf_1rdm()
-        g2_act = 0.5 * self.ci_solver.make_average_rdm2_sf()
+        g2_act = 0.5 * self.ci_solver.make_average_sf_2rdm()
         # ci_maxiter_save = self.ci_solver.get_maxiter()
         # self.ci_solver.set_maxiter(self.ci_maxiter)
 
@@ -251,7 +251,7 @@ class MCOptimizer(ActiveSpaceSolver):
             self.E_ci = np.array(self.ci_solver.E)
             self.E = self.E_avg
             g1_act = self.ci_solver.make_average_sf_1rdm()
-            g2_act = 0.5 * self.ci_solver.make_average_rdm2_sf()
+            g2_act = 0.5 * self.ci_solver.make_average_sf_2rdm()
             self.orb_opt.set_rdms(g1_act, g2_act)
             self.iter += 1
         else:
@@ -289,9 +289,23 @@ class MCOptimizer(ActiveSpaceSolver):
                 self.C[0],
                 self.system,
                 fock_builder,
+                mix_inactive=not self.optimize_frozen_orbs,
+                mix_active=False,
             )
             semi.run()
             self.C[0] = semi.C_semican.copy()
+
+            # recompute the CI vectors in the semicanonical basis
+            ints = RestrictedMOIntegrals(
+                system=self.system,
+                C=self.C[0],
+                orbitals=self.mo_space.active_indices,
+                core_orbitals=self.mo_space.docc_indices,
+                use_aux_corr=True,
+                fock_builder=fock_builder,  # avoid reinitialization of FockBuilder
+            )
+            self.ci_solver.set_ints(ints.E, ints.H, ints.V)
+            self.ci_solver.run()
 
         self.executed = True
         return self

@@ -38,9 +38,13 @@ class RestrictedMOIntegrals:
     orbitals: list
     core_orbitals: list = field(default_factory=list)
     use_aux_corr: bool = False
+    fock_builder: FockBuilder = None
 
     def __post_init__(self):
-        jkbuilder = FockBuilder(self.system, self.use_aux_corr)
+        if self.fock_builder is None:
+            jkbuilder = FockBuilder(self.system, self.use_aux_corr)
+        else:
+            jkbuilder = self.fock_builder
         C = self.C[:, self.orbitals]
 
         # nuclear repulsion energy contribution to the energy

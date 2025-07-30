@@ -231,21 +231,17 @@ class _CIBase:
         logger.log("\nComputing RDMs from CI vectors.\n", self.log_level)
         for root in range(self.nroot):
             root_rdms = {}
-            root_rdms["rdm1"] = self.make_sf_1rdm(self.evecs[:, root])
-            rdm2_aa, rdm2_ab, rdm2_bb = self.make_rdm2_sd(
-                self.evecs[:, root], full=False
-            )
+            root_rdms["rdm1"] = self.make_sf_1rdm(root)
+            rdm2_aa, rdm2_ab, rdm2_bb = self.make_sd_rdm2(root, full=False)
             root_rdms["rdm2_aa"] = rdm2_aa
             root_rdms["rdm2_ab"] = rdm2_ab
             root_rdms["rdm2_bb"] = rdm2_bb
 
-            rdm2_aa_full, _, rdm2_bb_full = self.make_rdm2_sd(
-                self.evecs[:, root], full=True
-            )
+            rdm2_aa_full, _, rdm2_bb_full = self.make_sd_rdm2(root, full=True)
             root_rdms["rdm2_aa_full"] = rdm2_aa_full
             root_rdms["rdm2_bb_full"] = rdm2_bb_full
 
-            root_rdms["rdm2_sf"] = self.make_sf_2rdm(self.evecs[:, root])
+            root_rdms["rdm2_sf"] = self.make_sf_2rdm(root)
 
             # Compute the energy from the RDMs
             # from the numpy tensor V[i, j, k, l] = <ij|kl> make the np matrix with indices
@@ -347,71 +343,57 @@ class _CIBase:
 
         self.eigensolver.add_guesses(guess_mat)
 
-    def make_sf_1rdm(self, ci_vec):
+    def make_sf_1rdm(self, root_idx):
         """
         Make the spin-free one-particle RDM from a CI vector.
 
         Parameters
         ----------
-        ci_vec : NDArray
-            CI vector in the CSF basis.
+        root_idx : int
+            The index of the root for which to compute the RDM.
 
         Returns
         -------
         NDArray
             Spin-free one-particle RDM.
         """
+        ci_vec = self.evecs[:, root_idx]
         ci_vec_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
         return self.ci_sigma_builder.sf_1rdm(ci_vec_det, ci_vec_det)
 
-    def make_rdm1_a(self, ci_vec, spin):
-        """
-        Make the spin-free one-particle RDM from a CI vector.
-
-        Parameters
-        ----------
-        ci_vec : NDArray
-            CI vector in the CSF basis.
-
-        Returns
-        -------
-        NDArray:
-            Spin-free one-particle RDM."""
-        ci_vec_det = np.zeros((self.ndet))
-        self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
-        return self.ci_sigma_builder.rdm1_a(ci_vec_det, ci_vec_det, spin)
-
-    def make_tdm1_sf(self, ci_l, ci_r):
+    def make_sf_tdm1(self, r_idx, l_idx):
         """
         Make the spin-free one-particle transition density matrix from two CI vectors.
 
         Parameters
         ----------
-        ci_l : NDArray
-            Left CI vector in the CSF basis.
-        ci_r : NDArray
-            Right CI vector in the CSF basis.
+        r_idx : int
+            The index of the right CI vector.
+        l_idx : int
+            The index of the left CI vector.
 
         Returns
         -------
         NDArray
             Spin-free one-particle transition density matrix.
         """
+        ci_r = self.evecs[:, r_idx]
+        ci_l = self.evecs[:, l_idx]
         ci_l_det = np.zeros((self.ndet))
         ci_r_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_l, ci_l_det)
         self.spin_adapter.csf_C_to_det_C(ci_r, ci_r_det)
         return self.ci_sigma_builder.sf_1rdm(ci_l_det, ci_r_det)
 
-    def make_rdm2_sd(self, ci_vec, full=True):
+    def make_sd_rdm2(self, root_idx, full=True):
         """
         Make the spin-dependent two-particle RDMs (aa, ab, bb) from a CI vector in the CSF basis.
 
         Parameters
         ----------
-        ci_vec : NDArray
-            CI vector in the CSF basis.
+        root_idx : int
+            The index of the root for which to compute the RDMs.
         full : bool, optional, default=True
             If True, compute the full-dimension RDMs, otherwise compute compact aa and bb RDMs.
 
@@ -420,6 +402,7 @@ class _CIBase:
         tuple :
             Spin-dependent two-particle RDMs (aa, ab, bb).
         """
+        ci_vec = self.evecs[:, root_idx]
         ci_vec_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
         aa = self.ci_sigma_builder.aa_2rdm(ci_vec_det, ci_vec_det)
@@ -431,93 +414,40 @@ class _CIBase:
         ab = self.ci_sigma_builder.ab_2rdm(ci_vec_det, ci_vec_det)
         return aa, ab, bb
 
-    def make_tdm2_sd(self, ci_l, ci_r, full=True):
-        """
-        Make the spin-dependent two-particle transition density matrices (aa, ab, bb)
-        from two CI vectors in the CSF basis.
-
-        Parameters
-        ----------
-        ci_l : NDArray
-            Left CI vector in the CSF basis.
-        ci_r : NDArray
-            Right CI vector in the CSF basis.
-        full : bool, optional, default=True
-            If True, compute the full-dimension RDMs, otherwise compute compact aa and bb RDMs.
-
-        Returns
-        -------
-        tuple
-            Spin-dependent two-particle transition density matrices (aa, ab, bb).
-        """
-        ci_l_det = np.zeros((self.ndet))
-        ci_r_det = np.zeros((self.ndet))
-        self.spin_adapter.csf_C_to_det_C(ci_l, ci_l_det)
-        self.spin_adapter.csf_C_to_det_C(ci_r, ci_r_det)
-        aa_build = (
-            self.ci_sigma_builder.rdm2_aa_full
-            if full
-            else self.ci_sigma_builder.rdm2_aa
-        )
-        aa = aa_build(ci_l_det, ci_r_det, True)
-        bb = aa_build(ci_l_det, ci_r_det, False)
-        ab = self.ci_sigma_builder.rdm2_ab(ci_l_det, ci_r_det)
-        return aa, ab, bb
-
-    def make_sf_2rdm(self, ci_vec):
+    def make_sf_2rdm(self, root_idx):
         """
         Make the spin-free two-particle RDM from a CI vector in the CSF basis.
 
         Parameters
         ----------
-        ci_vec : NDArray
-            CI vector in the CSF basis.
+        root_idx : int
+            The index of the root for which to compute the RDM.
 
         Returns
         -------
         NDArray
             Spin-free two-particle RDM.
         """
+        ci_vec = self.evecs[:, root_idx]
         ci_vec_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
         return self.ci_sigma_builder.sf_2rdm(ci_vec_det, ci_vec_det)
 
-    def make_tdm2_sf(self, ci_l, ci_r):
-        """
-        Make the spin-free two-particle transition density matrix from two CI vectors in the CSF basis.
-
-        Parameters
-        ----------
-        ci_l : NDArray
-            Left CI vector in the CSF basis.
-        ci_r : NDArray
-            Right CI vector in the CSF basis.
-
-        Returns
-        -------
-        (norb, )*4 NDArray
-            Spin-free two-particle transition density matrix.
-        """
-        ci_l_det = np.zeros((self.ndet))
-        ci_r_det = np.zeros((self.ndet))
-        self.spin_adapter.csf_C_to_det_C(ci_l, ci_l_det)
-        self.spin_adapter.csf_C_to_det_C(ci_r, ci_r_det)
-        return self.ci_sigma_builder.rdm2_sf(ci_l_det, ci_r_det)
-
-    def make_sf_3rdm(self, ci_vec):
+    def make_sf_3rdm(self, root_idx):
         """
         Make the spin-free three-particle RDM from a CI vector in the CSF basis.
 
         Parameters
         ----------
-            ci_vec : NDArray
-                CI vector in the CSF basis.
+        root_idx : int
+            The index of the root for which to compute the RDM.
 
         Returns
         -------
             NDArray
                 Spin-free three-particle RDM.
         """
+        ci_vec = self.evecs[:, root_idx]
         ci_vec_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(ci_vec, ci_vec_det)
         return self.ci_sigma_builder.sf_3rdm(ci_vec_det, ci_vec_det)
@@ -535,7 +465,7 @@ class _CIBase:
             raise RuntimeError("CI solver has not been executed yet.")
         no = np.zeros((self.norb, self.nroot))
         for i in range(self.nroot):
-            g1 = self.make_sf_1rdm(self.evecs[:, i])
+            g1 = self.make_sf_1rdm(i)
             no[:, i] = np.linalg.eigvalsh(g1)[::-1]
 
         return no
@@ -768,12 +698,10 @@ class CISolver(ActiveSpaceSolver):
         rdm1 = np.zeros((self.norb,) * 2)
         for i, ci_solver in enumerate(self.ci_solvers):
             for j in range(ci_solver.nroot):
-                rdm1 += (
-                    ci_solver.make_sf_1rdm(ci_solver.evecs[:, j]) * self.weights[i][j]
-                )
+                rdm1 += ci_solver.make_sf_1rdm(j) * self.weights[i][j]
         return rdm1
 
-    def make_average_rdm2_sf(self):
+    def make_average_sf_2rdm(self):
         """
         Make the average spin-free two-particle RDM from the CI vectors.
 
@@ -785,9 +713,7 @@ class CISolver(ActiveSpaceSolver):
         rdm2 = np.zeros((self.norb,) * 4)
         for i, ci_solver in enumerate(self.ci_solvers):
             for j in range(ci_solver.nroot):
-                rdm2 += (
-                    ci_solver.make_sf_2rdm(ci_solver.evecs[:, j]) * self.weights[i][j]
-                )
+                rdm2 += ci_solver.make_sf_2rdm(j) * self.weights[i][j]
         return rdm2
 
     def set_ints(self, scalar, oei, tei):
@@ -867,7 +793,7 @@ class CISolver(ActiveSpaceSolver):
             tdmdict = OrderedDict()
             foscdict = OrderedDict()
             for i in range(ci_solver.nroot):
-                rdm = ci_solver.make_sf_1rdm(ci_solver.evecs[:, i])
+                rdm = ci_solver.make_sf_1rdm(i)
                 rdm = np.einsum("ij,pi,qj->pq", rdm, Cact, Cact.conj(), optimize=True)
                 dip = get_1e_property(
                     self.system, rdm, property_name="electric_dipole", unit="au"
@@ -875,9 +801,7 @@ class CISolver(ActiveSpaceSolver):
                 tdmdict[(i, i)] = dip + core_dip
                 foscdict[(i, i)] = 0.0  # No oscillator strength for i->i transitions
                 for j in range(i + 1, ci_solver.nroot):
-                    tdm = ci_solver.make_tdm1_sf(
-                        ci_solver.evecs[:, i], ci_solver.evecs[:, j]
-                    )
+                    tdm = ci_solver.make_sf_tdm1(i, j)
                     tdm = np.einsum(
                         "ij,pi,qj->pq", tdm, Cact, Cact.conj(), optimize=True
                     )
@@ -903,6 +827,27 @@ class CI(CISolver):
     def run(self):
         super().run()
         self._post_process()
+        if self.final_orbital == "semicanonical":
+            semi = Semicanonicalizer(
+                mo_space=self.mo_space,
+                g1_sf=self.make_average_sf_1rdm(),
+                C=self.C[0],
+                system=self.system,
+            )
+            semi.run()
+            self.C[0] = semi.C_semican.copy()
+
+            # recompute the CI vectors in the semicanonical basis
+            ints = RestrictedMOIntegrals(
+                self.system,
+                self.C[0],
+                self.active_indices,
+                self.core_indices,
+                use_aux_corr=True,
+            )
+            self.set_ints(ints.E, ints.H, ints.V)
+            super().run()
+
         return self
 
     def _post_process(self):
@@ -920,10 +865,3 @@ class CI(CISolver):
                 self.fosc_per_solver,
                 self.evals_per_solver,
             )
-
-        if self.final_orbital == "semicanonical":
-            semi = Semicanonicalizer(
-                self.mo_space, self.make_average_sf_1rdm(), self.C[0], self.system
-            )
-            semi.run()
-            self.C[0] = semi.C_semican.copy()

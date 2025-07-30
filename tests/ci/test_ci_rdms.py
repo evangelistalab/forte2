@@ -27,7 +27,7 @@ def compare_rdms(ci, root):
         np.linalg.norm(b_1rdm - b_1rdm_debug) < rdm_threshold
     ), f"Norm of the difference between b_1rdm and b_1rdm_debug is too large: {np.linalg.norm(b_1rdm - b_1rdm_debug):.12f}."
 
-    sf_1rdm = ci_solver.make_sf_1rdm(ci_solver.evecs[:, root])
+    sf_1rdm = ci_solver.make_sf_1rdm(root)
     sf_1rdm_debug = ci_solver.ci_sigma_builder.sf_1rdm_debug(ci_vec_det, ci_vec_det)
     assert (
         np.linalg.norm(sf_1rdm - sf_1rdm_debug) < rdm_threshold
@@ -55,7 +55,7 @@ def compare_rdms(ci, root):
         np.linalg.norm(ab_2rdm - ab_2rdm_debug) < rdm_threshold
     ), f"Norm of the difference between ab_2rdm and ab_2rdm_debug is too large: {np.linalg.norm(ab_2rdm - ab_2rdm_debug):.12f}."
 
-    rdm2_sf = ci_solver.make_sf_2rdm(ci_solver.evecs[:, root])
+    rdm2_sf = ci_solver.make_sf_2rdm(root)
     rdm2_sf_debug = ci_solver.ci_sigma_builder.sf_2rdm_debug(ci_vec_det, ci_vec_det)
     assert (
         np.linalg.norm(rdm2_sf - rdm2_sf_debug) < rdm_threshold
@@ -89,7 +89,7 @@ def compare_rdms(ci, root):
         np.linalg.norm(abb_3rdm - abb_3rdm_debug) < rdm_threshold
     ), f"Norm of the difference between abb_3rdm and abb_3rdm_debug is too large: {np.linalg.norm(abb_3rdm - abb_3rdm_debug):.12f}."
 
-    sf_3rdm = ci_solver.make_sf_3rdm(ci_solver.evecs[:, root])
+    sf_3rdm = ci_solver.make_sf_3rdm(root)
     sf_3rdm_debug = ci_solver.ci_sigma_builder.sf_3rdm_debug(ci_vec_det, ci_vec_det)
     assert (
         np.linalg.norm(sf_3rdm - sf_3rdm_debug) < rdm_threshold
