@@ -8,7 +8,7 @@ def test_casscf_6():
     """Test CASSCF (frozen core orbital) with HF molecule."""
     emcscf = -99.939295399756
 
-    xyz = f"""
+    xyz = """
     F            0.000000000000     0.000000000000    -0.075563346255
     H            0.000000000000     0.000000000000     1.424436653745
     """
