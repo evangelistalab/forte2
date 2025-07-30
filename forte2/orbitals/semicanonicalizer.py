@@ -49,63 +49,30 @@ class Semicanonicalizer:
         eps = np.zeros(self.mo_space.nmo)
         U = np.zeros((self.mo_space.nmo, self.mo_space.nmo))
 
-        # core blocks
-        if self.mix_inactive and self.mo_space.nfrozen_core + self.mo_space.ncore > 0:
-            # semicanonicalize frozen core and core together if mix_inactive
-            _core = slice(0, self.mo_space.core.stop)
-            e, c = np.linalg.eigh(fock[_core, _core])
-            eps[_core] = e
-            U[_core, _core] = c
+        def _eigh(sl):
+            return np.linalg.eigh(fock[sl, sl])
+
+        slice_list = []
+        if self.mix_inactive:
+            slice_list.append(self.mo_space.docc)
         else:
-            if self.mo_space.nfrozen_core > 0:
-                e, c = np.linalg.eigh(
-                    fock[self.mo_space.frozen_core, self.mo_space.frozen_core]
-                )
-                eps[self.mo_space.frozen_core] = e
-                U[self.mo_space.frozen_core, self.mo_space.frozen_core] = c
-
-            if self.mo_space.ncore > 0:
-                e, c = np.linalg.eigh(fock[self.mo_space.core, self.mo_space.core])
-                eps[self.mo_space.core] = e
-                U[self.mo_space.core, self.mo_space.core] = c
-
-        # active blocks
-        if self.mo_space.nactv > 0:
-            if self.mix_active:
-                # semicanonicalize active orbitals together if mix_active
-                e, c = np.linalg.eigh(fock[self.mo_space.actv, self.mo_space.actv])
-                eps[self.mo_space.actv] = e
-                U[self.mo_space.actv, self.mo_space.actv] = c
-            else:
-                for igas in range(self.mo_space.ngas):
-                    e, c = np.linalg.eigh(
-                        fock[self.mo_space.gas[igas], self.mo_space.gas[igas]]
-                    )
-                    eps[self.mo_space.gas[igas]] = e
-                    U[self.mo_space.gas[igas], self.mo_space.gas[igas]] = c
-
-        # virtual blocks
-        if (
-            self.mix_inactive
-            and self.mo_space.nfrozen_virtual + self.mo_space.nvirt > 0
-        ):
-            # semicanonicalize frozen virtual and virtual together if mix_inactive
-            _virt = slice(self.mo_space.virt.start, self.mo_space.frozen_virt.stop)
-            e, c = np.linalg.eigh(fock[_virt, _virt])
-            eps[_virt] = e
-            U[_virt, _virt] = c
+            slice_list.append(self.mo_space.frozen_core)
+            slice_list.append(self.mo_space.core)
+        if self.mix_active:
+            slice_list.append(self.mo_space.actv)
         else:
-            if self.mo_space.nvirt > 0:
-                e, c = np.linalg.eigh(fock[self.mo_space.virt, self.mo_space.virt])
-                eps[self.mo_space.virt] = e
-                U[self.mo_space.virt, self.mo_space.virt] = c
+            slice_list.extend(self.mo_space.gas)
+        if self.mix_inactive:
+            slice_list.append(self.mo_space.uocc)
+        else:
+            slice_list.append(self.mo_space.virt)
+            slice_list.append(self.mo_space.frozen_virt)
 
-            if self.mo_space.nfrozen_virtual > 0:
-                e, c = np.linalg.eigh(
-                    fock[self.mo_space.frozen_virt, self.mo_space.frozen_virt]
-                )
-                eps[self.mo_space.frozen_virt] = e
-                U[self.mo_space.frozen_virt, self.mo_space.frozen_virt] = c
+        for sl in slice_list:
+            if sl.stop - sl.start > 0:  # Skip empty slices
+                e, c = _eigh(sl)
+                eps[sl] = e
+                U[sl, sl] = c
 
         self.U = U
         self.Uactv = U[self.mo_space.actv, self.mo_space.actv]

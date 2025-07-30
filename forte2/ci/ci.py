@@ -814,7 +814,7 @@ class CISolver(ActiveSpaceSolver):
                 )
         return rdm1
 
-    def make_average_rdm2_sf(self):
+    def make_average_sf_2rdm(self):
         """
         Make the average spin-free two-particle RDM from the CI vectors.
 
@@ -941,6 +941,27 @@ class CI(CISolver):
     def run(self):
         super().run()
         self._post_process()
+        if self.final_orbital == "semicanonical":
+            semi = Semicanonicalizer(
+                mo_space=self.mo_space,
+                g1_sf=self.make_average_sf_1rdm(),
+                C=self.C[0],
+                system=self.system,
+            )
+            semi.run()
+            self.C[0] = semi.C_semican.copy()
+
+            # recompute the CI vectors in the semicanonical basis
+            ints = RestrictedMOIntegrals(
+                self.system,
+                self.C[0],
+                self.active_indices,
+                self.core_indices,
+                use_aux_corr=True,
+            )
+            self.set_ints(ints.E, ints.H, ints.V)
+            super().run()
+
         return self
 
     def _post_process(self):
@@ -958,10 +979,3 @@ class CI(CISolver):
                 self.fosc_per_solver,
                 self.evals_per_solver,
             )
-
-        if self.final_orbital == "semicanonical":
-            semi = Semicanonicalizer(
-                self.mo_space, self.make_average_sf_1rdm(), self.C[0], self.system
-            )
-            semi.run()
-            self.C[0] = semi.C_semican.copy()
