@@ -1,4 +1,3 @@
-from logging import root
 from forte2 import *
 from forte2.helpers.comparisons import approx
 
