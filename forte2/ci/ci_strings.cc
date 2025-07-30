@@ -7,8 +7,9 @@
 
 #include "ci_occupation.h"
 #include "ci_string_address.h"
-#include "ci_string_lists_makers.h"
-#include "ci_string_lists.h"
+#include "ci_strings_makers.h"
+
+#include "ci_strings.h"
 
 namespace forte2 {
 

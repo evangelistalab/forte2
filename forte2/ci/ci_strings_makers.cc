@@ -2,8 +2,8 @@
 #include <numeric>
 
 #include "ci/ci_string_address.h"
-#include "ci/ci_string_lists.h"
-#include "ci/ci_string_lists_makers.h"
+#include "ci/ci_strings.h"
+#include "ci/ci_strings_makers.h"
 
 #include "helpers/cartesian_product.hpp"
 #include "helpers/indexing.hpp"

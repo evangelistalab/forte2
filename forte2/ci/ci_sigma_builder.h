@@ -7,7 +7,7 @@
 
 #include "helpers/ndarray.h"
 
-#include "ci/ci_string_lists.h"
+#include "ci/ci_strings.h"
 #include "ci/slater_rules.h"
 #include "ci/ci_spin_adapter.h"
 
