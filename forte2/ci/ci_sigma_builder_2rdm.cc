@@ -38,7 +38,7 @@ np_matrix CISigmaBuilder::compute_ss_2rdm(np_vector C_left, np_vector C_right, b
 
         // loop over blocks of matrix C
         for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-            if (lists_.detpblk(nI) == 0)
+            if (lists_.block_size(nI) == 0)
                 continue;
 
             auto tr = gather_block(Cr_span, TR, alfa, lists_, class_Ia, class_Ib);
@@ -47,7 +47,7 @@ np_matrix CISigmaBuilder::compute_ss_2rdm(np_vector C_left, np_vector C_right, b
                 // The string class on which we don't act must be the same for I and J
                 if ((alfa and (class_Ib != class_Jb)) or (not alfa and (class_Ia != class_Ja)))
                     continue;
-                if (lists_.detpblk(nJ) == 0)
+                if (lists_.block_size(nJ) == 0)
                     continue;
 
                 const size_t maxL =
@@ -117,14 +117,14 @@ np_tensor4 CISigmaBuilder::compute_ab_2rdm(np_vector C_left, np_vector C_right) 
             const auto maxKb = lists_.beta_address_1h()->strpcls(class_Kb);
             // loop over blocks of matrix C
             for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-                if (lists_.detpblk(nI) == 0)
+                if (lists_.block_size(nI) == 0)
                     continue;
 
                 const auto maxIb = lists_.beta_address()->strpcls(class_Ib);
                 const auto Cr_offset = lists_.block_offset(nI);
 
                 for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
-                    if (lists_.detpblk(nJ) == 0)
+                    if (lists_.block_size(nJ) == 0)
                         continue;
 
                     const auto maxJb = lists_.beta_address()->strpcls(class_Jb);
@@ -282,7 +282,7 @@ np_tensor4 CISigmaBuilder::compute_sf_2cumulant(np_vector C_left, np_vector C_ri
 //     auto rdm_view = rdm.view();
 
 //     for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-//         if (lists_.detpblk(nI) == 0)
+//         if (lists_.block_size(nI) == 0)
 //             continue;
 
 //         gather_block(C_right, CR, alfa, lists_, class_Ia, class_Ib);
@@ -291,7 +291,7 @@ np_tensor4 CISigmaBuilder::compute_sf_2cumulant(np_vector C_left, np_vector C_ri
 //             // The string class on which we don't act must be the same for I and J
 //             if ((alfa and (class_Ib != class_Jb)) or (not alfa and (class_Ia != class_Ja)))
 //                 continue;
-//             if (lists_.detpblk(nJ) == 0)
+//             if (lists_.block_size(nJ) == 0)
 //                 continue;
 
 //             gather_block(C_left, CL, alfa, lists_, class_Ja, class_Jb);
@@ -355,14 +355,14 @@ np_tensor4 CISigmaBuilder::compute_sf_2cumulant(np_vector C_left, np_vector C_ri
 //     const auto& mo_sym = lists->string_class()->mo_sym();
 //     // Loop over blocks of matrix C
 //     for (const auto& [nI, class_Ia, class_Ib] : lists->determinant_classes()) {
-//         if (lists->detpblk(nI) == 0)
+//         if (lists->block_size(nI) == 0)
 //             continue;
 
 //         auto h_Ib = lists->string_class()->beta_string_classes()[class_Ib].second;
 //         const auto Cr = C_right.C_[nI]->pointer();
 
 //         for (const auto& [nJ, class_Ja, class_Jb] : lists->determinant_classes()) {
-//             if (lists->detpblk(nJ) == 0)
+//             if (lists->block_size(nJ) == 0)
 //                 continue;
 
 //             auto h_Jb = lists->string_class()->beta_string_classes()[class_Jb].second;

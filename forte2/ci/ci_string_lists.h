@@ -16,8 +16,16 @@ class CIStrings {
   public:
     // ==> Constructor and Destructor <==
     /// @brief The CIStrings constructor
-    CIStrings(size_t na, size_t nb, int symmetry, std::vector<std::vector<int>> orbital_symmetry,
-              const std::vector<int> gas_min, const std::vector<int> gas_max);
+    /// @param na the number of alpha electrons
+    /// @param nb the number of beta electrons
+    /// @param symmetry the symmetry of the state we are building
+    /// @param orbital_symmetry a vector of vectors storing the symmetry of the orbitals in each GAS
+    /// space
+    /// @param gas_min the minimum number of electrons in each GAS space
+    /// @param gas_max the maximum number of electrons in each GAS space
+    CIStrings(size_t na, size_t nb, int symmetry,
+              const std::vector<std::vector<int>>& orbital_symmetry,
+              const std::vector<int>& gas_min, const std::vector<int>& gas_max);
 
     //   // ==> Class Public Functions <==
 
@@ -28,10 +36,10 @@ class CIStrings {
     size_t nb() const { return nb_; }
 
     /// @return the number of alpha strings
-    size_t nas() const { return nas_; }
+    size_t nas() const { return nalfa_strings; }
 
     /// @return the number of beta strings
-    size_t nbs() const { return nbs_; }
+    size_t nbs() const { return nbeta_strings; }
 
     /// @return the number of determinants
     size_t ndet() const { return ndet_; }
@@ -74,11 +82,6 @@ class CIStrings {
     /// @return the beta string address object for N - 3 electrons
     auto beta_address_3h() const { return beta_address_3h_; }
 
-    /// @return the address of a determinant in the CI vector
-    size_t determinant_address(const Determinant& d) const;
-    /// @return the determinant corresponding to an address in the CI vector of a given symmetry
-    Determinant determinant(size_t address) const;
-
     /// @return the alpha string list
     const auto& alfa_strings() const { return alfa_strings_; }
     /// @return the beta string list
@@ -110,10 +113,18 @@ class CIStrings {
     const auto& gas_occupations() const { return gas_occupations_; }
 
     /// @return the number of determinants in a given block
-    size_t detpblk(size_t block) const { return detpblk_[block]; }
+    size_t block_size(size_t block) const { return ndet_per_block_[block]; }
 
     /// @return the offset of a given block in the CI vector
-    size_t block_offset(size_t block) const { return detpblk_offset_[block]; }
+    size_t block_offset(size_t block) const { return ndet_per_block_offset_[block]; }
+
+    /// @return the address of a determinant in the CI vector
+    /// @param d the determinant for which we want the address
+    size_t determinant_address(const Determinant& d) const;
+
+    /// @return the determinant corresponding to an address in the CI vector of a given symmetry
+    /// @param address the address of the determinant in the CI vector
+    Determinant determinant(size_t address) const;
 
     /// @return the list of determinants
     std::vector<Determinant> make_determinants() const;
@@ -156,6 +167,7 @@ class CIStrings {
 
   private:
     // ==> Class Data <==
+
     /// The number of alpha electrons
     size_t na_;
     /// The number of beta electrons
@@ -174,9 +186,9 @@ class CIStrings {
     std::vector<size_t> cmopi_offset_;
 
     /// The number of alpha strings
-    size_t nas_;
+    size_t nalfa_strings;
     /// The number of beta strings
-    size_t nbs_;
+    size_t nbeta_strings;
     /// The number of determinants
     size_t ndet_ = 0;
     /// The total number of orbital pairs per irrep
@@ -184,18 +196,11 @@ class CIStrings {
     /// The offset array for pairpi
     std::vector<int> pair_offset_;
 
-    //   // GAS specific data
-
+    // Occupation patterns of α/β GAS spaces
     std::vector<std::array<int, 6>> gas_alfa_occupations_;
     std::vector<std::array<int, 6>> gas_beta_occupations_;
     std::vector<std::array<int, 6>> gas_alfa_1h1p_occupations_;
     std::vector<std::array<int, 6>> gas_beta_1h1p_occupations_;
-    std::vector<std::array<int, 6>> gas_alfa_1h_occupations_;
-    std::vector<std::array<int, 6>> gas_beta_1h_occupations_;
-    std::vector<std::array<int, 6>> gas_alfa_2h_occupations_;
-    std::vector<std::array<int, 6>> gas_beta_2h_occupations_;
-    std::vector<std::array<int, 6>> gas_alfa_3h_occupations_;
-    std::vector<std::array<int, 6>> gas_beta_3h_occupations_;
 
     std::vector<std::pair<size_t, size_t>> gas_occupations_;
 
@@ -203,17 +208,17 @@ class CIStrings {
     size_t ngas_spaces_;
     /// The size of the GAS spaces (ignoring symmetry)
     std::vector<int> gas_size_;
-    /// The position of the GAS spaces in the active space. For example, gas_mos_[0] gives the
-    /// position of the MOs in the first GAS space in the active space
+    /// The position of the GAS orbitals in the active space. For example, gas_mos_[0] gives the
+    /// index of the MOs in the first GAS space with respect to the active space
     std::vector<std::vector<size_t>> gas_mos_;
     /// The minimum number of electrons in each GAS space
     std::vector<int> gas_min_;
     /// The maximum number of electrons in each GAS space
     std::vector<int> gas_max_;
     /// @brief The number of determinants in each block
-    std::vector<size_t> detpblk_;
+    std::vector<size_t> ndet_per_block_;
     /// @brief The offset of each block
-    std::vector<size_t> detpblk_offset_;
+    std::vector<size_t> ndet_per_block_offset_;
 
     // String lists
     std::shared_ptr<StringClass> string_class_;
@@ -224,17 +229,11 @@ class CIStrings {
     /// The beta strings stored by class and address
     StringList beta_strings_;
 
-    // String lists
-    /// The VO string lists
+    // VO lists
     VOListMap alfa_vo_list;
     VOListMap beta_vo_list;
     VOListMap2 alfa_vo_list2;
     VOListMap2 beta_vo_list2;
-
-    // Empty lists
-    const VOListElement empty_vo_list;
-    const VOListElement2 empty_vo_list2;
-
     /// The 1-hole lists
     H1List alfa_1h_list;
     H1List beta_1h_list;
@@ -248,6 +247,9 @@ class CIStrings {
     H3List alfa_3h_list;
     H3List beta_3h_list;
 
+    // Empty lists
+    const VOListElement empty_vo_list;
+    const VOListElement2 empty_vo_list2;
     const std::vector<H1StringSubstitution> empty_1h_list;
     const std::vector<std::vector<H1StringSubstitution>> empty_1h_list2;
     const std::vector<H2StringSubstitution> empty_2h_list;
@@ -277,6 +279,10 @@ class CIStrings {
     std::shared_ptr<StringAddress> beta_address_3h_;
 
     // == Private Functions ==
+    /// @brief Startup function to initialize the CIStrings object
+    /// This function is called in the constructor to initialize the object.
+    void startup();
+
     template <typename HListT, typename T>
     const std::vector<T>& lookup_hole_list(const HListT& map_ref, int i, size_t add, int j) const {
         HListKey key{i, add, j};

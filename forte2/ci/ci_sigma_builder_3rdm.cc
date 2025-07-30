@@ -37,7 +37,7 @@ np_matrix CISigmaBuilder::compute_sss_3rdm(np_vector C_left, np_vector C_right, 
 
         // loop over blocks of matrix C
         for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-            if (lists_.detpblk(nI) == 0)
+            if (lists_.block_size(nI) == 0)
                 continue;
 
             auto tr = gather_block(Cr_span, TR, alfa, lists_, class_Ia, class_Ib);
@@ -46,7 +46,7 @@ np_matrix CISigmaBuilder::compute_sss_3rdm(np_vector C_left, np_vector C_right, 
                 // The string class on which we don't act must be the same for I and J
                 if ((alfa and (class_Ib != class_Jb)) or (not alfa and (class_Ia != class_Ja)))
                     continue;
-                if (lists_.detpblk(nJ) == 0)
+                if (lists_.block_size(nJ) == 0)
                     continue;
 
                 const size_t maxL =
@@ -127,14 +127,14 @@ np_tensor4 CISigmaBuilder::compute_aab_3rdm(np_vector C_left, np_vector C_right)
 
             // loop over blocks of matrix C
             for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-                if (lists_.detpblk(nI) == 0)
+                if (lists_.block_size(nI) == 0)
                     continue;
 
                 const auto maxIb = lists_.beta_address()->strpcls(class_Ib);
                 const auto Cr_offset = lists_.block_offset(nI);
 
                 for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
-                    if (lists_.detpblk(nJ) == 0)
+                    if (lists_.block_size(nJ) == 0)
                         continue;
 
                     const auto maxJb = lists_.beta_address()->strpcls(class_Jb);
@@ -210,14 +210,14 @@ np_tensor4 CISigmaBuilder::compute_abb_3rdm(np_vector C_left, np_vector C_right)
 
             // loop over blocks of matrix C
             for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-                if (lists_.detpblk(nI) == 0)
+                if (lists_.block_size(nI) == 0)
                     continue;
 
                 const auto maxIb = lists_.beta_address()->strpcls(class_Ib);
                 const auto Cr_offset = lists_.block_offset(nI);
 
                 for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
-                    if (lists_.detpblk(nJ) == 0)
+                    if (lists_.block_size(nJ) == 0)
                         continue;
 
                     const auto maxJb = lists_.beta_address()->strpcls(class_Jb);

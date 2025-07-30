@@ -786,6 +786,12 @@ template <size_t N> std::string str(const BitArray<N>& ba, int n = BitArray<N>::
     return s;
 }
 
+/// print a BitArray object to an output stream
+template <size_t N> std::ostream& operator<<(std::ostream& os, const BitArray<N>& ba) {
+    os << str(ba);
+    return os;
+}
+
 } // namespace forte2
 
 namespace std {

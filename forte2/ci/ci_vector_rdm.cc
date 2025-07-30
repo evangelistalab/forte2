@@ -141,7 +141,7 @@ np_matrix CIVector::compute_1rdm_same_irrep(CIVector& C_left, CIVector& C_right,
 
     // loop over blocks of matrix C
     for (const auto& [nI, class_Ia, class_Ib] : lists->determinant_classes()) {
-        if (lists->detpblk(nI) == 0)
+        if (lists->block_size(nI) == 0)
             continue;
 
         auto Cr =
@@ -151,7 +151,7 @@ np_matrix CIVector::compute_1rdm_same_irrep(CIVector& C_left, CIVector& C_right,
             // The string class on which we don't act must be the same for I and J
             if ((alfa and (class_Ib != class_Jb)) or (not alfa and (class_Ia != class_Ja)))
                 continue;
-            if (lists->detpblk(nJ) == 0)
+            if (lists->block_size(nJ) == 0)
                 continue;
 
             auto Cl = C_left.gather_block(CL, alfa, alfa_address, beta_address, class_Ja, class_Jb,
@@ -197,7 +197,7 @@ ambit::Tensor CIVector::compute_2rdm_aa_same_irrep(CIVector& C_left, CIVector& C
     auto& rdm_data = rdm.data();
 
     for (const auto& [nI, class_Ia, class_Ib] : lists->determinant_classes()) {
-        if (lists->detpblk(nI) == 0)
+        if (lists->block_size(nI) == 0)
             continue;
 
         const auto Cr =
@@ -207,7 +207,7 @@ ambit::Tensor CIVector::compute_2rdm_aa_same_irrep(CIVector& C_left, CIVector& C
             // The string class on which we don't act must be the same for I and J
             if ((alfa and (class_Ib != class_Jb)) or (not alfa and (class_Ia != class_Ja)))
                 continue;
-            if (lists->detpblk(nJ) == 0)
+            if (lists->block_size(nJ) == 0)
                 continue;
 
             const auto Cl = C_left.gather_block(CL, alfa, alfa_address, beta_address, class_Ja,
@@ -287,14 +287,14 @@ ambit::Tensor CIVector::compute_2rdm_ab_same_irrep(CIVector& C_left, CIVector& C
     const auto& mo_sym = lists->string_class()->mo_sym();
     // Loop over blocks of matrix C
     for (const auto& [nI, class_Ia, class_Ib] : lists->determinant_classes()) {
-        if (lists->detpblk(nI) == 0)
+        if (lists->block_size(nI) == 0)
             continue;
 
         auto h_Ib = lists->string_class()->beta_string_classes()[class_Ib].second;
         const auto Cr = C_right.C_[nI]->pointer();
 
         for (const auto& [nJ, class_Ja, class_Jb] : lists->determinant_classes()) {
-            if (lists->detpblk(nJ) == 0)
+            if (lists->block_size(nJ) == 0)
                 continue;
 
             auto h_Jb = lists->string_class()->beta_string_classes()[class_Jb].second;
@@ -378,7 +378,7 @@ ambit::Tensor CIVector::compute_3rdm_aaa_same_irrep(CIVector& C_left, CIVector& 
 
         // loop over blocks of matrix C
         for (const auto& [nI, class_Ia, class_Ib] : lists->determinant_classes()) {
-            if (lists->detpblk(nI) == 0)
+            if (lists->block_size(nI) == 0)
                 continue;
 
             auto Cr = C_right.gather_block(CR, alfa, alfa_address, beta_address, class_Ia, class_Ib,
@@ -388,7 +388,7 @@ ambit::Tensor CIVector::compute_3rdm_aaa_same_irrep(CIVector& C_left, CIVector& 
                 // The string class on which we don't act must be the same for I and J
                 if ((alfa and (class_Ib != class_Jb)) or (not alfa and (class_Ia != class_Ja)))
                     continue;
-                if (lists->detpblk(nJ) == 0)
+                if (lists->block_size(nJ) == 0)
                     continue;
 
                 // Get a pointer to the correct block of matrix C
@@ -445,13 +445,13 @@ ambit::Tensor CIVector::compute_3rdm_aab_same_irrep(CIVector& C_left, CIVector& 
 
             // loop over blocks of matrix C
             for (const auto& [nI, class_Ia, class_Ib] : lists->determinant_classes()) {
-                if (lists->detpblk(nI) == 0)
+                if (lists->block_size(nI) == 0)
                     continue;
 
                 const auto Cr = C_right.C_[nI]->pointer();
 
                 for (const auto& [nJ, class_Ja, class_Jb] : lists->determinant_classes()) {
-                    if (lists->detpblk(nJ) == 0)
+                    if (lists->block_size(nJ) == 0)
                         continue;
 
                     // Get a pointer to the correct block of matrix C
@@ -528,13 +528,13 @@ ambit::Tensor CIVector::compute_3rdm_abb_same_irrep(CIVector& C_left, CIVector& 
 
             // loop over blocks of matrix C
             for (const auto& [nI, class_Ia, class_Ib] : lists->determinant_classes()) {
-                if (lists->detpblk(nI) == 0)
+                if (lists->block_size(nI) == 0)
                     continue;
 
                 const auto Cr = C_right.C_[nI]->pointer();
 
                 for (const auto& [nJ, class_Ja, class_Jb] : lists->determinant_classes()) {
-                    if (lists->detpblk(nJ) == 0)
+                    if (lists->block_size(nJ) == 0)
                         continue;
 
                     // Get a pointer to the correct block of matrix C

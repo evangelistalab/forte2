@@ -4,7 +4,7 @@
 #include <string>
 
 namespace forte2 {
-/// @brief Print the content of a container to the output file
+/// @brief Convert the contents of a container to a string representation
 template <typename Container> std::string container_to_string(const Container& c) {
     if (c.empty()) {
         return "[]";
@@ -16,7 +16,7 @@ template <typename Container> std::string container_to_string(const Container& c
     }
     std::string result = ss.str();
     if (!result.empty() and result.back() == ',') {
-        result.pop_back(); // Remove the trailing space
+        result.pop_back(); // Remove the trailing comma
     }
     result += "]";
     return result;

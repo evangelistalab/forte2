@@ -29,7 +29,7 @@ CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, n
     // Find the size of the largest symmetry block
     size_t max_size = 0;
     for (auto const& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
-        max_size = std::max(lists.detpblk(nI), max_size);
+        max_size = std::max(lists.block_size(nI), max_size);
     }
 
     LOG(log_level_) << "\nAllocating CI temporary buffers of size 2 x " << max_size << " ("

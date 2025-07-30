@@ -24,7 +24,7 @@ np_matrix CISigmaBuilder::compute_s_1rdm(np_vector C_left, np_vector C_right, bo
 
     // loop over blocks of the right state
     for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-        if (lists_.detpblk(nI) == 0)
+        if (lists_.block_size(nI) == 0)
             continue;
 
         auto tr = gather_block(Cr_span, TR, alfa, lists_, class_Ia, class_Ib);
@@ -34,7 +34,7 @@ np_matrix CISigmaBuilder::compute_s_1rdm(np_vector C_left, np_vector C_right, bo
             // The string class on which we don't act must be the same for I and J
             if ((alfa and (class_Ib != class_Jb)) or (not alfa and (class_Ia != class_Ja)))
                 continue;
-            if (lists_.detpblk(nJ) == 0)
+            if (lists_.block_size(nJ) == 0)
                 continue;
 
             auto tl = gather_block(Cl_span, TL, alfa, lists_, class_Ja, class_Jb);
