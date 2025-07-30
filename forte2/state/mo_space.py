@@ -45,7 +45,7 @@ class MOSpace:
 
     def __post_init__(self):
         # Validate input types
-        assert isinstance(self.active_orbitals, list), "active_spaces must be a list."
+        assert isinstance(self.active_orbitals, list), "active_orbitals must be a list."
         assert isinstance(self.core_orbitals, list), "core_orbitals must be a list."
         assert isinstance(
             self.frozen_core_orbitals, list
@@ -68,7 +68,7 @@ class MOSpace:
         # ensure all indices are sorted
         assert all(
             sorted(sublist) == sublist for sublist in self.active_orbitals
-        ), "All active spaces must be sorted lists of integers."
+        ), "All active orbitals must be sorted lists of integers."
         assert (
             sorted(self.core_orbitals) == self.core_orbitals
         ), "Core orbitals must be sorted."

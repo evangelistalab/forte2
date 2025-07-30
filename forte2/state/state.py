@@ -180,11 +180,11 @@ class StateAverageInfo:
         # 1. Validate states
         if isinstance(self.states, State):
             self.states = [self.states]
-        assert isinstance(self.states, list), "states_and_mo_spaces must be a list"
+        assert isinstance(self.states, list), "states must be a list"
         assert all(
             isinstance(state, State) for state in self.states
-        ), "All elements in states_and_mo_spaces must be State instances"
-        assert len(self.states) > 0, "states_and_mo_spaces cannot be empty"
+        ), "All elements in states must be State instances"
+        assert len(self.states) > 0, "states cannot be empty"
         self.ncis = len(self.states)
 
         # 2. Validate nroots
@@ -204,9 +204,15 @@ class StateAverageInfo:
             self.weights = [[1.0 / self.nroots_sum] * n for n in self.nroots]
             self.weights_flat = np.concatenate(self.weights)
         else:
-            assert (
-                sum(len(w) for w in self.weights) == self.nroots_sum
-            ), "Weights must match the total number of roots across all states"
+            assert isinstance(self.weights, list), "weights must be a list"
+            if self.ncis == 1 and all(
+                isinstance(w, (int, float)) for w in self.weights
+            ):
+                # If only one state and weights are a single list, convert to list of lists
+                self.weights = [self.weights]
+            assert all(
+                len(w) == n for w, n in zip(self.weights, self.nroots)
+            ), "Weights must have the same length as nroots for each state."
             self.weights_flat = np.array(
                 [w for sublist in self.weights for w in sublist], dtype=float
             )

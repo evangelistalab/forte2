@@ -30,7 +30,7 @@ def test_semican_rhf():
 
 
 def test_semican_ci():
-    # Semicanonicalized RHF eigenvalues should be strictly identical to the RHF eigenvalues
+    # CI energy should be identical using RHF-canonical or semicanonicalized orbitals
     xyz = f"""
     N 0.0 0.0 -1.0
     N 0.0 0.0 1.0
