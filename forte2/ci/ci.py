@@ -6,9 +6,9 @@ import numpy as np
 
 from forte2 import CIStrings, CISigmaBuilder, CISpinAdapter, cpp_helpers
 from forte2.state.state import State
-from forte2.helpers.mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.helpers.comparisons import approx
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
+from forte2.base_classes.active_space_solver import ActiveSpaceSolver
 from forte2.helpers import logger
 from forte2.state import MOSpace
 from forte2.jkbuilder import RestrictedMOIntegrals
@@ -607,8 +607,9 @@ class _CIBase:
         return top_dets_per_root
 
 
+
 @dataclass
-class CISolver(MOsMixin, SystemMixin, MOSpaceMixin):
+class CISolver(ActiveSpaceSolver):
     """
     A general configuration interaction (CI) solver class.
     This solver is can be called iteratively, e.g., in a MCSCF loop or a DSRG reference relaxation loop.
@@ -655,13 +656,6 @@ class CISolver(MOsMixin, SystemMixin, MOSpaceMixin):
     ci_algorithm : str, optional, default="hz"
         The algorithm used for the CI sigma builder.
     """
-    states: State | list[State]
-    nroots: int | list[int] = 1
-    weights: list[float] | list[list[float]] = None
-    core_orbitals: list[int] = field(default_factory=list)
-    active_orbitals: list[int] = field(default_factory=list)
-    frozen_core_orbitals: list[int] = field(default_factory=list)
-    frozen_virtual_orbitals: list[int] = field(default_factory=list)
 
     ### Davidson-Liu parameters
     guess_per_root: int = 2
@@ -684,40 +678,12 @@ class CISolver(MOsMixin, SystemMixin, MOSpaceMixin):
     first_run: bool = field(default=True, init=False)
     executed: bool = field(default=False, init=False)
 
-    def __post_init__(self):
-        self.sa_info = StateAverageInfo(
-            states=self.states,
-            nroots=self.nroots,
-            weights=self.weights,
-        )
-        self.ncis = self.sa_info.ncis
-        self.weights = self.sa_info.weights
-        self.weights_flat = self.sa_info.weights_flat
-
     def __call__(self, method):
         self.parent_method = method
         return self
 
     def _startup(self):
-        if not self.parent_method.executed:
-            self.parent_method.run()
-
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
-
-        if isinstance(self.parent_method, MOSpaceMixin):
-            if self.mo_space is not None:
-                logger.log_warning(
-                    "Using the provided mo_space instead of the one from the parent method."
-                )
-            else:
-                MOSpaceMixin.copy_from_upstream(self, self.parent_method)
-        else:
-            assert self.mo_space is not None, (
-                "If the parent method does not have MOSpaceMixin, "
-                "then mo_space must be provided."
-            )
-
+        super()._startup()
         self.norb = self.mo_space.nactv
         # no distinction between core and frozen core in the CI solver
         self.core_indices = (

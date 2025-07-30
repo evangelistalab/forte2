@@ -9,8 +9,7 @@ from forte2.jkbuilder import RestrictedMOIntegrals
 from forte2.state.state import State
 from forte2 import ints
 
-from forte2.helpers.mixins import MOsMixin
-from forte2.helpers.mixins import SystemMixin
+from forte2.base_classes.mixins import MOsMixin, SystemMixin
 
 
 def parse_state(state: dict) -> tuple:

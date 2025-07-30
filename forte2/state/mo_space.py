@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 import numpy as np
 
+from forte2.system import System
+
 
 @dataclass
 class MOSpace:
@@ -30,7 +32,7 @@ class MOSpace:
     """
 
     nmo: int
-    active_orbitals: list[int] | list[list[int]]
+    active_orbitals: list[int] | list[list[int]] = field(default_factory=list)
     core_orbitals: list[int] = field(default_factory=list)
     frozen_core_orbitals: list[int] = field(default_factory=list)
     frozen_virtual_orbitals: list[int] = field(default_factory=list)
@@ -75,6 +77,18 @@ class MOSpace:
         self.ncore = len(self.core_orbitals)
         self.nfrozen_core = len(self.frozen_core_orbitals)
         self.nfrozen_virtual = len(self.frozen_virtual_orbitals)
+
+        ndef = self.nfrozen_core + self.ncore + self.nactv + self.nfrozen_virtual
+
+        if ndef > self.nmo:
+            raise ValueError(
+                f"The sum of frozen_core, core, active, and frozen_virtual dimensions ({ndef}) exceeds the total number of orbitals ({self.nmo})."
+            )
+
+        if self.ncore + self.nactv == 0:
+            raise ValueError(
+                "Neither core nor active orbitals are defined. There will be no electrons to correlate."
+            )
 
         # store a flattened list ('*_indices') of all orbitals
         self.active_indices = [

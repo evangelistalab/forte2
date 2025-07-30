@@ -1,6 +1,7 @@
 from .ci import (
     CISolver,
     CI,
+    ActiveSpaceSolver,
 )
 
 from .ci_utils import (

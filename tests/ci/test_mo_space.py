@@ -5,7 +5,6 @@ from forte2.helpers.comparisons import approx
 
 
 def test_mo_space_invalid():
-    nmo = 10
 
     with pytest.raises(Exception):
         # repeated active indices in a single GAS

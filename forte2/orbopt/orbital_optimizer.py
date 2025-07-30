@@ -3,13 +3,13 @@ import scipy as sp
 from dataclasses import dataclass, field
 
 from forte2.ci import CISolver
+from forte2.base_classes.active_space_solver import ActiveSpaceSolver
 from forte2.state import State, MOSpace, StateAverageInfo
 from forte2.jkbuilder import FockBuilder
-from forte2.helpers.mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.helpers import logger, LBFGS, DIIS
 from forte2.system.basis_utils import BasisInfo
 from forte2.orbitals import Semicanonicalizer
-from forte2.ci import (
+from forte2.ci.ci_utils import (
     pretty_print_ci_summary,
     pretty_print_ci_nat_occ_numbers,
     pretty_print_ci_dets,
@@ -18,7 +18,7 @@ from forte2.ci import (
 
 
 @dataclass
-class MCOptimizer(MOsMixin, SystemMixin, MOSpaceMixin):
+class MCOptimizer(ActiveSpaceSolver):
     """
     Two-step optimizer for multi-configurational wavefunctions.
 
@@ -65,11 +65,6 @@ class MCOptimizer(MOsMixin, SystemMixin, MOSpaceMixin):
         Whether to compute transition dipole moments.
     """
 
-    states: State | list[State]
-    nroots: int | list[int] = 1
-    weights: list[float] | list[list[float]] = None
-    mo_space: MOSpace = None
-
     ### Macroiteration parameters
     maxiter: int = 50
     econv: float = 1e-8
@@ -94,16 +89,6 @@ class MCOptimizer(MOsMixin, SystemMixin, MOSpaceMixin):
     ### Non-init attributes
     executed: bool = field(default=False, init=False)
 
-    def __post_init__(self):
-        self.sa_info = StateAverageInfo(
-            states=self.states,
-            nroots=self.nroots,
-            weights=self.weights,
-        )
-        self.ncis = self.sa_info.ncis
-        self.weights = self.sa_info.weights
-        self.weights_flat = self.sa_info.weights_flat
-
     def __call__(self, method):
         self.parent_method = method
         ### make sure we don't print the CI output at INFO1 level
@@ -116,24 +101,7 @@ class MCOptimizer(MOsMixin, SystemMixin, MOSpaceMixin):
         return self
 
     def _startup(self):
-        if not self.parent_method.executed:
-            self.parent_method.run()
-
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
-        if isinstance(self.parent_method, MOSpaceMixin):
-            if self.mo_space is not None:
-                logger.log_warning(
-                    "Using the provided mo_space instead of the one from the parent method."
-                )
-            else:
-                MOSpaceMixin.copy_from_upstream(self, self.parent_method)
-        else:
-            assert self.mo_space is not None, (
-                "If the parent method does not have MOSpaceMixin, "
-                "then mo_space must be provided."
-            )
-
+        super()._startup()
         # make the core, active, and virtual spaces contiguous
         # i.e., [core, gas1, gas2, ..., virt]
         perm = self.mo_space.orig_to_contig

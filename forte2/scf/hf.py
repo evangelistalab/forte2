@@ -9,7 +9,7 @@ from forte2 import ints
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import System, ModelSystem
 from forte2.jkbuilder import FockBuilder
-from forte2.helpers.mixins import MOsMixin, SystemMixin
+from forte2.base_classes.mixins import MOsMixin, SystemMixin
 from forte2.helpers.matrix_functions import givens_rotation
 from forte2.helpers import logger, DIIS
 from .initial_guess import minao_initial_guess, core_initial_guess

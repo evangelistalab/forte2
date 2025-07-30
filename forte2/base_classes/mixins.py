@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from forte2.system.system import System
-from forte2.state import MOSpace
 
 
 @dataclass
@@ -11,6 +10,8 @@ class MOsMixin:
     Mixin for classes that need to handle molecular orbitals (MOsMixin).
     Contains a list of molecular orbital coefficient matrices.
     """
+
+    C: list[np.ndarray] = field(default_factory=list, init=False)
 
     @classmethod
     def copy_from_upstream(cls, new, upstream) -> None:
@@ -29,6 +30,8 @@ class SystemMixin:
     Mixin for classes that need to handle a system.
     Contains a reference to the system object.
     """
+
+    system: System = field(default=None, init=False)
 
     @classmethod
     def copy_from_upstream(cls, new, upstream) -> None:
