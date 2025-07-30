@@ -223,22 +223,6 @@ Determinant CIStrings::determinant(size_t address) const {
     return Determinant(Ia, Ib);
 }
 
-// const OOListElement& CIStrings::get_alfa_oo_list(int class_I) const {
-//     // check if the key exists, if not return an empty list
-//     if (auto it = alfa_oo_list.find(class_I); it != alfa_oo_list.end()) {
-//         return it->second;
-//     }
-//     return empty_oo_list;
-// }
-
-// const OOListElement& CIStrings::get_beta_oo_list(int class_I) const {
-//     // check if the key exists, if not return an empty list
-//     if (auto it = beta_oo_list.find(class_I); it != beta_oo_list.end()) {
-//         return it->second;
-//     }
-//     return empty_oo_list;
-// }
-
 /**
  * Returns a vector of tuples containing the sign, I, and J connected by a^{+}_p
  * a_q
@@ -294,24 +278,6 @@ const VOListElement2& CIStrings::get_beta_vo_list2(int class_I, int class_J) con
     }
     return empty_vo_list2;
 }
-
-// const VVOOListElement& CIStrings::get_alfa_vvoo_list(int class_I, int class_J) const {
-//     // check if the key exists, if not return an empty list
-//     if (auto it = alfa_vvoo_list.find(std::make_pair(class_I, class_J));
-//         it != alfa_vvoo_list.end()) {
-//         return it->second;
-//     }
-//     return empty_vvoo_list;
-// }
-
-// const VVOOListElement& CIStrings::get_beta_vvoo_list(int class_I, int class_J) const {
-//     // check if the key exists, if not return an empty list
-//     if (auto it = beta_vvoo_list.find(std::make_pair(class_I, class_J));
-//         it != beta_vvoo_list.end()) {
-//         return it->second;
-//     }
-//     return empty_vvoo_list;
-// }
 
 const std::vector<H1StringSubstitution>& CIStrings::get_alfa_1h_list(int class_I, size_t add_I,
                                                                      int class_J) const {

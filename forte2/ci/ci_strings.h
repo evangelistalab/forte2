@@ -279,8 +279,13 @@ class CIStrings {
     std::shared_ptr<StringAddress> beta_address_3h_;
 
     // == Private Functions ==
+
     /// @brief Startup function to initialize the CIStrings object
-    /// This function is called in the constructor to initialize the object.
+    /// This method is automatically called in the constructor of the CIStrings class.
+    /// It initializes the list of strings, the string address, and substitution lists needed in CI
+    /// computations and to evaluate the RDMs.
+    /// @throws std::invalid_argument if the number of GAS constrains is not consistent with the
+    /// number of GAS spaces
     void startup();
 
     template <typename HListT, typename T>
@@ -301,10 +306,5 @@ class CIStrings {
         return map_ref.at(key);
     }
 };
-
-// std::map<std::pair<int, int>, std::vector<std::pair<int, int>>>
-// find_string_map(const CIStrings& list_left, const CIStrings& list_right, bool alfa);
-
-// VOListMap find_ov_string_map(const CIStrings& list_left, const CIStrings& list_right, bool alfa);
 
 } // namespace forte2
