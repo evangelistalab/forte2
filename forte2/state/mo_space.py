@@ -77,13 +77,25 @@ class MOSpace:
             sorted(self.frozen_virtual_orbitals) == self.frozen_virtual_orbitals
         ), "Frozen virtual orbitals must be sorted."
 
+        # store flattened lists ('*_indices') of all orbitals
+        self.active_indices = [
+            orb for sublist in self.active_orbitals for orb in sublist
+        ]
+        self.core_indices = self.core_orbitals
+        self.frozen_core_indices = self.frozen_core_orbitals
+        self.frozen_virtual_indices = self.frozen_virtual_orbitals
+        self.docc_indices = self.docc_orbitals = (
+            self.frozen_core_orbitals + self.core_orbitals
+        )
+
+        # store the number of orbitals in each space
         self.nactv = sum(len(sublist) for sublist in self.active_orbitals)
         self.ncore = len(self.core_orbitals)
         self.nfrozen_core = len(self.frozen_core_orbitals)
         self.nfrozen_virtual = len(self.frozen_virtual_orbitals)
 
+        # sanity check on total number of orbitals
         ndef = self.nfrozen_core + self.ncore + self.nactv + self.nfrozen_virtual
-
         if ndef > self.nmo:
             raise ValueError(
                 f"The sum of frozen_core, core, active, and frozen_virtual dimensions ({ndef}) exceeds the total number of orbitals ({self.nmo})."
@@ -94,14 +106,20 @@ class MOSpace:
                 "Neither core nor active orbitals are defined. There will be no electrons to correlate."
             )
 
-        # store a flattened list ('*_indices') of all orbitals
-        self.active_indices = [
-            orb for sublist in self.active_orbitals for orb in sublist
-        ]
-        self.core_indices = self.core_orbitals
-        self.frozen_core_indices = self.frozen_core_orbitals
-        self.frozen_virtual_indices = self.frozen_virtual_orbitals
+        # infer virtual indices
+        all_indices = list(range(self.nmo))
+        self.virtual_indices = sorted(
+            list(
+                set(all_indices)
+                - set(self.active_indices)
+                - set(self.core_indices)
+                - set(self.frozen_core_indices)
+                - set(self.frozen_virtual_indices)
+            )
+        )
+        self.nvirt = len(self.virtual_indices)
 
+        # ensure no indices are repeated
         assert (
             len(set(self.active_indices)) == self.nactv
         ), "Active orbitals must be unique."
@@ -127,18 +145,6 @@ class MOSpace:
             == self.nactv + self.ncore + self.nfrozen_core + self.nfrozen_virtual
         ), "All orbital indices must be unique across active, core, frozen core, and frozen virtual spaces."
 
-        all_indices = list(range(self.nmo))
-        self.virtual_indices = sorted(
-            list(
-                set(all_indices)
-                - set(self.active_indices)
-                - set(self.core_indices)
-                - set(self.frozen_core_indices)
-                - set(self.frozen_virtual_indices)
-            )
-        )
-        self.nvirt = len(self.virtual_indices)
-
         # permutation array that makes spaces contiguous:
         # [frozen_core, core, gas1, gas2, ..., virt, frozen_virtual]
         # such that C_contig = C[:, self.contig_to_orig]
@@ -156,9 +162,11 @@ class MOSpace:
         # slices for the different spaces in the contiguous full space
         self.frozen_core = slice(0, self.nfrozen_core)
         self.core = slice(self.frozen_core.stop, self.frozen_core.stop + self.ncore)
+        self.docc = slice(0, self.core.stop)  # both core and frozen core
         self.actv = slice(self.core.stop, self.core.stop + self.nactv)
         self.virt = slice(self.actv.stop, self.actv.stop + self.nvirt)
         self.frozen_virt = slice(self.virt.stop, self.nmo)
+        self.uocc = slice(self.virt.start, self.nmo)  # both virtual and frozen virtual
         self.gas = []
         i = self.core.stop
         for actv in self.active_orbitals:

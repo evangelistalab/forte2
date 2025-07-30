@@ -64,6 +64,8 @@ class MCOptimizer(ActiveSpaceSolver):
         Whether to compute transition dipole moments.
     """
 
+    optimize_frozen_orbs: bool = True
+
     ### Macroiteration parameters
     maxiter: int = 50
     econv: float = 1e-8
@@ -106,10 +108,13 @@ class MCOptimizer(ActiveSpaceSolver):
         perm = self.mo_space.orig_to_contig
         # this is the contiguous coefficient matrix
         self._C = self.C[0][:, perm].copy()
-        self.core = self.mo_space.core
+        # core slice will include frozen orbitals,
+        # if optimize_frozen_orbs is False, then the relevant
+        # gradients will be zeroed out by nrr
+        self.core = self.mo_space.docc
         # self.actv will be a list if multiple GASes are defined
         self.actv = self.mo_space.actv
-        self.virt = self.mo_space.virt
+        self.virt = self.mo_space.uocc
 
         self.nrr = self._get_nonredundant_rotations()
 
@@ -144,7 +149,7 @@ class MCOptimizer(ActiveSpaceSolver):
         )
         self.ci_solver = CISolver(
             states=self.states,
-            core_orbitals=self.mo_space.core_orbitals,
+            core_orbitals=self.mo_space.docc_orbitals,
             active_orbitals=self.mo_space.active_orbitals,
             nroots=self.sa_info.nroots,
             weights=self.sa_info.weights,
@@ -275,6 +280,8 @@ class MCOptimizer(ActiveSpaceSolver):
         perm = self.mo_space.contig_to_orig
         self.C[0] = self._C[:, perm].copy()
 
+        self._post_process()
+
         if self.final_orbital == "semicanonical":
             semi = Semicanonicalizer(
                 self.mo_space,
@@ -286,7 +293,6 @@ class MCOptimizer(ActiveSpaceSolver):
             semi.run()
             self.C[0] = semi.C_semican.copy()
 
-        self._post_process()
         self.executed = True
         return self
 
@@ -323,9 +329,16 @@ class MCOptimizer(ActiveSpaceSolver):
         nrr = np.zeros((self.system.nbf, self.system.nbf), dtype=bool)
 
         # TODO: handle GAS/RHF/ROHF cases
-        nrr[self.core, self.virt] = True
-        nrr[self.actv, self.virt] = True
-        nrr[self.core, self.actv] = True
+        if self.optimize_frozen_orbs:
+            _core = self.mo_space.docc
+            _virt = self.mo_space.uocc
+        else:
+            _core = self.mo_space.core
+            _virt = self.mo_space.virt
+
+        nrr[_core, _virt] = True
+        nrr[self.actv, _virt] = True
+        nrr[_core, self.actv] = True
         return nrr
 
     def _check_convergence(self):
@@ -432,28 +445,12 @@ class OrbOptimizer:
 
     def _vec_to_mat(self, x):
         R = np.zeros_like(self.C)
-        # [cv, av, ca]
-        x_cv = x[: self.ncore * self.nvirt].reshape(self.ncore, self.nvirt)
-        x_av = x[
-            self.ncore * self.nvirt : self.ncore * self.nvirt + self.nact * self.nvirt
-        ].reshape(self.nact, self.nvirt)
-        x_ca = x[self.ncore * self.nvirt + self.nact * self.nvirt :].reshape(
-            self.ncore, self.nact
-        )
-        R[self.core, self.virt] = x_cv
-        R[self.actv, self.virt] = x_av
-        R[self.core, self.actv] = x_ca
-        R[self.virt, self.core] = -x_cv.T
-        R[self.virt, self.actv] = -x_av.T
-        R[self.actv, self.core] = -x_ca.T
+        R[self.nrr] = x
+        R += -R.T
         return R
 
     def _mat_to_vec(self, R):
-        # [cv, av, ca]
-        x_cv = R[self.core, self.virt].flatten()
-        x_av = R[self.actv, self.virt].flatten()
-        x_ca = R[self.core, self.actv].flatten()
-        return np.concatenate((x_cv, x_av, x_ca))
+        return R[self.nrr]
 
     def _compute_reference_energy(self):
         energy = self.Ecore + self.e_nuc
