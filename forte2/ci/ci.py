@@ -1,19 +1,25 @@
 from dataclasses import dataclass, field
-from abc import ABC, abstractmethod
 from collections import OrderedDict
 
 import numpy as np
 
 from forte2 import CIStrings, CISigmaBuilder, CISpinAdapter, cpp_helpers
 from forte2.state.state import State
-from forte2.helpers.mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.helpers.comparisons import approx
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
+from forte2.base_classes.active_space_solver import ActiveSpaceSolver
 from forte2.helpers import logger
 from forte2.state import MOSpace
 from forte2.jkbuilder import RestrictedMOIntegrals
 from forte2.props import get_1e_property
-from .ci_utils import *
+from forte2.orbitals import Semicanonicalizer
+from .ci_utils import (
+    pretty_print_gas_info,
+    pretty_print_ci_summary,
+    pretty_print_ci_nat_occ_numbers,
+    pretty_print_ci_dets,
+    pretty_print_ci_transition_props,
+)
 
 
 @dataclass
@@ -198,7 +204,7 @@ class _CIBase:
         # 6. Run Davidson
         self.evals, self.evecs = self.eigensolver.solve()
 
-        logger.log(f"\nDavidson-Liu solver converged.\n", self.log_level)
+        logger.log("\nDavidson-Liu solver converged.\n", self.log_level)
 
         # 7. Store the final energy and properties
         self.E = self.evals
@@ -608,7 +614,7 @@ class _CIBase:
 
 
 @dataclass
-class CISolver(SystemMixin, MOsMixin, MOSpaceMixin):
+class CISolver(ActiveSpaceSolver):
     """
     A general configuration interaction (CI) solver class.
     This solver is can be called iteratively, e.g., in a MCSCF loop or a DSRG reference relaxation loop.
@@ -618,13 +624,6 @@ class CISolver(SystemMixin, MOsMixin, MOSpaceMixin):
     states : State | list[State]
         The electronic states for which the CI is solved. Can be a single state or a list of states.
         A state-averaged CI is performed if multiple states are provided.
-    core_orbitals : list[int], optional
-        The indices of the core (restricted doubly occupied) orbitals.
-        If not provided, it defaults to an empty list.
-    active_orbitals : list[int] | list[list[int]], optional
-        The indices of the active orbitals. If a list is provided, a complete active space (CAS) is assumed.
-        If a list of lists is provided, each sublist corresponds to orbital indices of a GAS (generalized active space).
-        If not provided, CISolver must be called with a parent method that has MOSpaceMixin (e.g., AVAS).
     nroots : int | list[int], optional, default=1
         The number of roots to compute.
         If a list is provided, each element corresponds to the number of roots for each state.
@@ -635,6 +634,10 @@ class CISolver(SystemMixin, MOsMixin, MOSpaceMixin):
         The number of weights must match the number of roots for each state.
         If not provided, equal weights are assumed for all states.
         If a single list is provided, `states` must be a single `State` object.
+    mo_space : MOSpace, optional
+        A `MOSpace` object defining the partitioning of the molecular orbitals.
+        If not provided, CISolver must be called with a parent method that has MOSpaceMixin (e.g., AVAS).
+        If provided, it overrides the one from the parent method.
     guess_per_root : int, optional, default=2
         The number of guess vectors for each root.
     ndets_per_guess : int, optional, default=10
@@ -659,12 +662,6 @@ class CISolver(SystemMixin, MOsMixin, MOSpaceMixin):
         The algorithm used for the CI sigma builder.
     """
 
-    states: State | list[State]
-    core_orbitals: list[int] = None
-    active_orbitals: list[int] | list[list[int]] = None
-    nroots: int | list[int] = 1
-    weights: list[float] | list[list[float]] = None
-
     ### Davidson-Liu parameters
     guess_per_root: int = 2
     ndets_per_guess: int = 10
@@ -686,39 +683,17 @@ class CISolver(SystemMixin, MOsMixin, MOSpaceMixin):
     first_run: bool = field(default=True, init=False)
     executed: bool = field(default=False, init=False)
 
-    def __post_init__(self):
-        self.sa_info = StateAverageInfo(
-            states=self.states,
-            nroots=self.nroots,
-            weights=self.weights,
-        )
-        self.ncis = self.sa_info.ncis
-        self.weights = self.sa_info.weights
-        self.weights_flat = self.sa_info.weights_flat
-
     def __call__(self, method):
         self.parent_method = method
         return self
 
     def _startup(self):
-        if not self.parent_method.executed:
-            self.parent_method.run()
-
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
-        if isinstance(self.parent_method, MOSpaceMixin):
-            MOSpaceMixin.copy_from_upstream(self, self.parent_method)
-        else:
-            assert self.active_orbitals is not None, (
-                "If the parent method does not have MOSpaceMixin, "
-                "then active_orbitals must be provided."
-            )
-            if self.core_orbitals is None:
-                self.core_orbitals = []
-            self.mo_space = MOSpace(self.active_orbitals, self.core_orbitals)
-
+        super()._startup()
         self.norb = self.mo_space.nactv
-        self.core_indices = self.mo_space.core_indices
+        # no distinction between core and frozen core in the CI solver
+        self.core_indices = (
+            self.mo_space.frozen_core_indices + self.mo_space.core_indices
+        )
         self.active_indices = self.mo_space.active_indices
 
         ints = RestrictedMOIntegrals(
@@ -928,6 +903,7 @@ class CI(CISolver):
     def run(self):
         super().run()
         self._post_process()
+        return self
 
     def _post_process(self):
         pretty_print_ci_summary(self.sa_info, self.evals_per_solver)
@@ -944,3 +920,10 @@ class CI(CISolver):
                 self.fosc_per_solver,
                 self.evals_per_solver,
             )
+
+        if self.final_orbital == "semicanonical":
+            semi = Semicanonicalizer(
+                self.mo_space, self.make_average_sf_1rdm(), self.C[0], self.system
+            )
+            semi.run()
+            self.C[0] = semi.C_semican.copy()
