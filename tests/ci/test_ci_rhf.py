@@ -20,7 +20,7 @@ def test_ci_1():
 
 
 def test_ci_2():
-    xyz = f"""
+    xyz = """
     H 0.0 0.0 0.0
     F 0.0 0.0 2.0
     """
@@ -40,7 +40,7 @@ def test_ci_2():
 
 
 def test_sa_ci_n2():
-    xyz = f"""
+    xyz = """
     N 0.0 0.0 0.0
     N 0.0 0.0 1.2
     """
@@ -75,7 +75,7 @@ def test_sa_ci_with_avas():
     eref_triplet1 = -108.833136404913
     eref_triplet2 = -108.777400848037
 
-    xyz = f"""
+    xyz = """
     N 0.0 0.0 0.0
     N 0.0 0.0 1.2
     """
@@ -106,7 +106,7 @@ def test_sa_ci_with_avas():
 
 
 def test_ci_tdm():
-    xyz = f"""
+    xyz = """
     N 0.0 0.0 -1.0
     N 0.0 0.0 1.0
     """
@@ -134,7 +134,7 @@ def test_ci_no_active():
 
     """
     
-    xyz = f"""
+    xyz = """
     H 0.0 0.0 0.0
     F 0.0 0.0 2.0
     """
@@ -158,7 +158,7 @@ def test_ci_single_determinant1():
                                             core|active
     """
 
-    xyz = f"""
+    xyz = """
     H 0.0 0.0 0.0
     F 0.0 0.0 2.0
     """
@@ -181,7 +181,7 @@ def test_ci_single_determinant2():
                                     core|active
     """
 
-    xyz = f"""
+    xyz = """
     H 0.0 0.0 0.0
     F 0.0 0.0 2.0
     """

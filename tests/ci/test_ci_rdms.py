@@ -120,7 +120,7 @@ def compare_rdms(ci, root):
 
 
 def test_ci_rdms_1():
-    xyz = f"""
+    xyz = """
     H 0.0 0.0 0.0
     F 0.0 0.0 2.0
     """

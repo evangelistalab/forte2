@@ -6,7 +6,7 @@ from forte2.jkbuilder import RestrictedMOIntegrals
 
 
 def test_slater_rules_1():
-    xyz = f"""
+    xyz = """
     H 0.0 0.0 0.0
     H 0.0 0.0 2.0
     """
@@ -44,7 +44,7 @@ def test_slater_rules_1():
 
 
 def test_slater_rules_2():
-    xyz = f"""
+    xyz = """
     H 0.0 0.0 0.0
     F 0.0 0.0 2.0
     """
