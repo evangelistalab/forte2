@@ -52,8 +52,8 @@ def test_sa_ci_n2():
     triplet = State(nel=14, multiplicity=3, ms=0.0)
     ci = CI(
         states=[singlet, triplet],
-        core_orbitals=[0, 1, 2, 3],
-        active_orbitals=[4, 5, 6, 7, 8, 9],
+        core_orbitals=4,
+        active_orbitals=6,
         nroots=[1, 2],
         weights=[[1.0], [0.85, 0.15]],
     )(rhf)
@@ -126,14 +126,15 @@ def test_ci_tdm():
     assert abs(ci.tdm_per_solver[0][(0, 6)][2]) == approx(1.5435316739347478)
     assert ci.fosc_per_solver[0][(0, 6)] == approx(1.1589808047738437)
 
+
 def test_ci_no_active():
     """Test CI with a core orbital and no active orbitals, should return the RHF energy.
-                                             _____          
-       Here we specify the determinant |0123401234|>
-                                              core|active
+                                          _____
+    Here we specify the determinant |0123401234|>
+                                           core|active
 
     """
-    
+
     xyz = """
     H 0.0 0.0 0.0
     F 0.0 0.0 2.0
@@ -153,9 +154,9 @@ def test_ci_no_active():
 
 def test_ci_single_determinant1():
     """Test CI with a single determinant, should return the RHF energy.
-                                            ____  _          
-       Here we specify the determinant |01230123|44>
-                                            core|active
+                                         ____  _
+    Here we specify the determinant |01230123|44>
+                                         core|active
     """
 
     xyz = """
@@ -174,11 +175,12 @@ def test_ci_single_determinant1():
     assert rhf.E == approx(-99.997725200294)
     assert ci.E[0] == approx(-99.997725200294)
 
+
 def test_ci_single_determinant2():
     """Test CI with a single determinant, should return the RHF energy.
-                                             _____          
-       Here we specify the determinant ||0123401234>
-                                    core|active
+                                          _____
+    Here we specify the determinant ||0123401234>
+                                 core|active
     """
 
     xyz = """
@@ -197,11 +199,12 @@ def test_ci_single_determinant2():
     assert rhf.E == approx(-99.997725200294)
     assert ci.E[0] == approx(-99.997725200294)
 
+
 def test_ci_single_determinant3():
     """Test CI with a high-spin triplet single determinant, should return the ROHF energy.
-           
-       Here we specify the determinant ||01>
-                                    core|active
+
+    Here we specify the determinant ||01>
+                                 core|active
     """
 
     xyz = f"""
@@ -212,17 +215,18 @@ def test_ci_single_determinant3():
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = ROHF(charge=0, ms=1.0, econv=1e-12)(system)
-    ci = CI(State(nel=2, multiplicity=3, ms=1.0), active_orbitals=[0,1])(rhf)
+    ci = CI(State(nel=2, multiplicity=3, ms=1.0), active_orbitals=[0, 1])(rhf)
     ci.run()
 
     assert rhf.E == approx(-0.889646913931)
     assert ci.E[0] == approx(-0.889646913931)
+
 
 def test_ci_single_csf1():
     """Test CI with a high-spin triplet single determinant, should return the ROHF energy.
-                                           _           _
-       Here we specify the determinants ||01>        ||01>
-                                     core|active  core|active
+                                        _           _
+    Here we specify the determinants ||01>        ||01>
+                                  core|active  core|active
     """
 
     xyz = f"""
@@ -233,9 +237,8 @@ def test_ci_single_csf1():
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = ROHF(charge=0, ms=1.0, econv=1e-12)(system)
-    ci = CI(State(nel=2, multiplicity=3, ms=0.0), active_orbitals=[0,1])(rhf)
+    ci = CI(State(nel=2, multiplicity=3, ms=0.0), active_orbitals=[0, 1])(rhf)
     ci.run()
 
     assert rhf.E == approx(-0.889646913931)
     assert ci.E[0] == approx(-0.889646913931)
-
