@@ -35,6 +35,9 @@ class System:
     x2c_type : str, optional
         The type of X2C transformation to be used. Options are "sf" for scalar
         relativistic effects or "so" for spin-orbit coupling. If None, no X2C transformation is applied.
+    snso_type : str, optional
+        The type of screened nuclear spin-orbit coupling scaling scheme to use. 
+        Options are "boettger", "dc", "dcb", or "row-dependent"
     unit : str, optional, default="angstrom"
         The unit for the atomic coordinates. Can be "angstrom" or "bohr".
     linear_dep_trigger : float, optional, default=1e-10
@@ -97,6 +100,7 @@ class System:
     auxiliary_basis_set_corr: str | dict = None
     minao_basis_set: str | dict = "cc-pvtz-minao"
     x2c_type: str = None
+    snso_type: str = None
     unit: str = "angstrom"
     linear_dep_trigger: float = 1e-10
     ortho_thresh: float = 1e-8
@@ -145,7 +149,11 @@ class System:
                 self.atom_to_center[atom[0]] = []
             self.atom_to_center[atom[0]].append(i)
 
-        self.basis = build_basis(self.basis_set, self.atoms)
+        if 'decon-' in self.basis_set:
+            # decontract the basis set
+            self.basis = build_basis(self.basis_set.replace('decon-',''), self.atoms, decontract=True)
+        else:
+            self.basis = build_basis(self.basis_set, self.atoms)
 
         if not self.cholesky_tei:
             self.auxiliary_basis = (
@@ -194,7 +202,7 @@ class System:
         if self.x2c_type == "sf":
             self.ints_hcore = lambda: get_hcore_x2c(self, x2c_type="sf")
         elif self.x2c_type == "so":
-            self.ints_hcore = lambda: get_hcore_x2c(self, x2c_type="so")
+            self.ints_hcore = lambda: get_hcore_x2c(self, x2c_type="so", snso_type=self.snso_type)
 
     def __repr__(self):
         return f"System(atoms={self.atoms}, basis_set={self.basis}, auxiliary_basis_set={self.auxiliary_basis})"

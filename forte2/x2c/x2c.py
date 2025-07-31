@@ -8,7 +8,7 @@ X2C_LINDEP_TOL = 5e-8
 LIGHT_SPEED = scipy.constants.physical_constants["inverse fine-structure constant"][0]
 
 
-def get_hcore_x2c(system, x2c_type="sf"):
+def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
     """
     Return the one-electron X2C core Hamiltonian matrix for the given system.
 
@@ -59,6 +59,21 @@ def get_hcore_x2c(system, x2c_type="sf"):
 
     # project back to the contracted basis
     h_fw = proj.conj().T @ h_fw @ proj
+
+    if snso_type is not None:
+        nbf = system.nbf
+        haa = h_fw[:nbf, :nbf]
+        hab = h_fw[:nbf, nbf:]
+        hba = h_fw[nbf:, :nbf]
+        hbb = h_fw[nbf:, nbf:]
+        h0 = (haa + hbb) / 2
+        h1 = (hab + hba) / 2
+        h2 = (hab - hba) / (-2j)
+        h3 = (haa - hbb) / 2
+        h1 = apply_snso_scaling(h1, system.basis, system.atoms, snso_type=snso_type)
+        h2 = apply_snso_scaling(h2, system.basis, system.atoms, snso_type=snso_type)
+        h3 = apply_snso_scaling(h3, system.basis, system.atoms, snso_type=snso_type)
+        h_fw = np.block([[h0 + h3, h1 - 1j * h2], [h1 + 1j * h2, h0 - h3]])
 
     return h_fw
 
@@ -146,3 +161,61 @@ def _build_foldy_wouthuysen_hamiltonian(X, R, T, V, W):
         + (0.25 / LIGHT_SPEED**2) * X.conj().T @ W @ X
     )
     return R.conj().T @ L @ R
+
+
+def apply_snso_scaling(ints, basis, atoms, snso_type):
+    """
+    Apply the 'screened-nuclear-spin-orbit' (SNSO) scaling to the core Hamiltonian.
+    Original paper ('Boettger'): Phys. Rev. B 62, 7809 (2000)
+    Re-parameterized schemes ('DC'/'DCB'/'Row-dependent'): J. Chem. Theory Comput. 19, 5785 (2023)
+    """
+    if snso_type is None:
+        return ints
+    if basis.max_l > 7:
+        raise RuntimeError(
+            "SNSO scaling is not implemented for basis sets with l > 7. "
+            "Please use a different basis set."
+        )
+    match snso_type.lower():
+        case "boettger":
+            Ql = np.array([0.0, 2.0, 10.0, 28.0, 60.0, 110.0, 182.0, 280.0])
+        case "dc":
+            Ql = np.array([0.0, 2.32, 10.64, 28.38, 60.0, 110.0, 182.0, 280.0])
+        case "dcb":
+            Ql = np.array([0.0, 2.97, 11.93, 29.84, 64.0, 115.0, 188.0, 287.0])
+        case "row-dependent":
+            raise NotImplementedError(
+                "Row-dependent SNSO scaling is not implemented yet. "
+                "Please use 'boettger', 'dc', or 'dcb' instead."
+            )
+        case _:
+            raise ValueError(
+                f"Invalid SNSO type: {snso_type}. Must be 'boettger', 'dc', or 'dcb'."
+            )
+
+    center_first = np.array([_[0] for _ in basis.center_first_and_last])
+    center_given_shell = (
+        lambda ishell: np.searchsorted(center_first, ishell, side="right") - 1
+    )
+
+    iptr = jptr = 0
+    for ishell in range(basis.nshells):
+        isize = basis[ishell].size
+        li = int(basis[ishell].l)
+        if li == 0:
+            continue
+        Zi = atoms[center_given_shell(ishell)][0]
+        for jshell in range(basis.nshells):
+            jsize = basis[jshell].size
+            lj = int(basis[jshell].l)
+            if lj == 0:
+                continue
+            Zj = atoms[center_given_shell(jshell)][0]
+            snso_factor = 1 - np.sqrt(Ql[li] * Ql[lj] / (Zi * Zj))
+            print(snso_factor)
+            ints[iptr : iptr + isize, jptr : jptr + jsize] *= snso_factor
+            jptr += jsize
+        iptr += isize
+        jptr = 0
+
+    return ints
