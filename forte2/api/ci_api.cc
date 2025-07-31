@@ -5,9 +5,8 @@
 #include <nanobind/stl/pair.h>
 #include <nanobind/ndarray.h>
 
-#include "ci/ci_string_lists.h"
+#include "ci/ci_strings.h"
 #include "ci/ci_string_address.h"
-#include "ci/ci_vector.h"
 #include "ci/ci_sigma_builder.h"
 #include "ci/ci_spin_adapter.h"
 
@@ -39,17 +38,6 @@ void export_ci_strings_api(nb::module_& m) {
         .def("determinant", &CIStrings::determinant, "address"_a)
         .def("determinant_index", &CIStrings::determinant_address, "d"_a)
         .def("make_determinants", &CIStrings::make_determinants);
-    // .def_prop_ro("orbitals", &CIStrings::orbitals)
-    // .def_prop_ro("orbital_symmetry", &CIStrings::orbital_symmetry)
-    // .def_prop_ro("gas_min", &CIStrings::gas_min)
-    // .def_prop_ro("gas_max", &CIStrings::gas_max);
-}
-
-void export_ci_vector_api(nb::module_& m) {
-    nb::class_<CIVector>(m, "CIVector")
-        .def(nb::init<const CIStrings&>(), "lists"_a)
-        .def("copy", &CIVector::copy, "vec"_a)
-        .def("copy_to", &CIVector::copy_to, "vec"_a);
 }
 
 void export_ci_sigma_builder_api(nb::module_& m) {

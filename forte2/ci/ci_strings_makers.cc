@@ -2,8 +2,8 @@
 #include <numeric>
 
 #include "ci/ci_string_address.h"
-#include "ci/ci_string_lists.h"
-#include "ci/ci_string_lists_makers.h"
+#include "ci/ci_strings.h"
+#include "ci/ci_strings_makers.h"
 
 #include "helpers/cartesian_product.hpp"
 #include "helpers/indexing.hpp"
@@ -177,6 +177,10 @@ H1List2 make_1h_list2(const StringList& strings, std::shared_ptr<StringAddress> 
     //         }
     //     }
     // }
+
+    if (n == 0)
+        return list; // if n is 0, return an empty list
+
     auto nclasses_1h = addresser_1h->nclasses();
     auto nclasses = addresser->nclasses();
     for (size_t h = 0; h < nclasses_1h; ++h) {

@@ -1,8 +1,4 @@
-from dataclasses import dataclass, field
-import numpy as np
-
-from forte2.system.system import System
-from forte2.state import MOSpace
+from dataclasses import dataclass
 
 
 @dataclass
@@ -11,9 +7,6 @@ class MOsMixin:
     Mixin for classes that need to handle molecular orbitals (MOsMixin).
     Contains a list of molecular orbital coefficient matrices.
     """
-
-    # C is a list of numpy arrays, each representing the coefficients of a molecular orbital
-    C: list[np.ndarray] = field(default_factory=list, init=False)
 
     @classmethod
     def copy_from_upstream(cls, new, upstream) -> None:
@@ -33,8 +26,6 @@ class SystemMixin:
     Contains a reference to the system object.
     """
 
-    system: System = field(default=None, init=False)
-
     @classmethod
     def copy_from_upstream(cls, new, upstream) -> None:
         assert isinstance(new, SystemMixin), "new must be an instance of SystemMixin"
@@ -52,8 +43,6 @@ class MOSpaceMixin:
     into core, active (potentially multiple GASes), and virtual spaces.
     """
 
-    mo_space: MOSpace = field(default=None, init=False)
-
     @classmethod
     def copy_from_upstream(cls, new, upstream) -> None:
         assert isinstance(new, MOSpaceMixin), "new must be an instance of MOSpaceMixin"
@@ -64,10 +53,3 @@ class MOSpaceMixin:
             upstream, "mo_space"
         ), "upstream must have a 'mo_space' attribute"
         new.mo_space = upstream.mo_space
-
-
-# @dataclass
-# class RDMsMixin:
-#     rdms: list[np.ndarray] = field(default_factory=list, init=False)
-#     G2: list[np.ndarray] = field(default_factory=list, init=False)
-#     G3: list[np.ndarray] = field(default_factory=list, init=False)

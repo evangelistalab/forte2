@@ -5,7 +5,7 @@ from forte2.helpers.comparisons import approx
 
 
 def test_avas_inputs():
-    xyz = f"""
+    xyz = """
     N 0.0 0.0 0.0
     N 0.0 0.0 1.2
     """
@@ -40,7 +40,7 @@ def test_avas_inputs():
 
 
 def test_avas_subspace():
-    xyz = f"""
+    xyz = """
     N 0.0 0.0 0.0
     N 0.0 0.0 1.2
     """
@@ -67,7 +67,7 @@ def test_avas_separate_n2():
     eref_casci_avas = -109.005019207444
     eref_casci_avas_diagonalize = -109.061384781471
 
-    xyz = f"""
+    xyz = """
     N 0.0 0.0 0.0
     N 0.0 0.0 1.2
     """
@@ -109,7 +109,7 @@ def test_avas_separate_n2():
 def test_avas_rohf_n2plus():
     eref_avas = -108.475829170054
 
-    xyz = f"""
+    xyz = """
     N 0.0 0.0 0.0
     N 0.0 0.0 1.2
     """
@@ -132,7 +132,7 @@ def test_avas_rohf_n2plus():
 def test_avas_rohf_n2minus():
     eref_avas = -108.913294924545
 
-    xyz = f"""
+    xyz = """
     N 0.0 0.0 0.0
     N 0.0 0.0 1.2
     """
@@ -155,7 +155,7 @@ def test_avas_rohf_n2minus():
 def test_avas_cumulative_h2co_all():
     eref_avas_all = -113.909850012095
 
-    xyz = f"""
+    xyz = """
     C           -0.000000000000    -0.000000000006    -0.599542970149
     O           -0.000000000000     0.000000000001     0.599382404096
     H           -0.000000000000    -0.938817812172    -1.186989139808
@@ -180,7 +180,7 @@ def test_avas_cumulative_h2co_all():
 def test_avas_cumulative_h2co_98pc():
     eref_avas_98pc = -113.90837340149
 
-    xyz = f"""
+    xyz = """
     C           -0.000000000000    -0.000000000006    -0.599542970149
     O           -0.000000000000     0.000000000001     0.599382404096
     H           -0.000000000000    -0.938817812172    -1.186989139808
@@ -204,7 +204,7 @@ def test_avas_cumulative_h2co_98pc():
 def test_avas_total_h2co():
     eref_avas_98pc = -113.90837340149
 
-    xyz = f"""
+    xyz = """
     C           -0.000000000000    -0.000000000006    -0.599542970149
     O           -0.000000000000     0.000000000001     0.599382404096
     H           -0.000000000000    -0.938817812172    -1.186989139808
@@ -229,7 +229,7 @@ def test_avas_separate_h2co():
     # this test should be equivlent to test_avas_cumulative_h2co_all
     eref_avas = -113.909850012095
 
-    xyz = f"""
+    xyz = """
     C           -0.000000000000    -0.000000000006    -0.599542970149
     O           -0.000000000000     0.000000000001     0.599382404096
     H           -0.000000000000    -0.938817812172    -1.186989139808
@@ -256,7 +256,7 @@ def test_avas_subspace_planes_h2co():
     # the xyz has been rotated (plane normal: [1,1,1])
     eref_avas = -113.909850012095
 
-    xyz = f"""
+    xyz = """
     C        0.346146295209737    0.126698337466632   -0.472844632676369
     O       -0.346053592352928   -0.126664405871036    0.472717998223964
     H        1.227335215970831   -0.489581944167415   -0.737753271803415
@@ -282,7 +282,7 @@ def test_avas_subspace_planes_h2co_casscf():
     # this test should be equivlent to test_avas_cumulative_h2co_all
     eref_avas = -113.9136335342
 
-    xyz = f"""
+    xyz = """
     C        0.346146295209737    0.126698337466632   -0.472844632676369
     O       -0.346053592352928   -0.126664405871036    0.472717998223964
     H        1.227335215970831   -0.489581944167415   -0.737753271803415

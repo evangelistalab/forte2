@@ -2,7 +2,6 @@ import numpy as np
 from numpy.typing import NDArray
 
 from dataclasses import dataclass, field
-from enum import Enum
 
 
 @dataclass
@@ -375,7 +374,7 @@ class LBFGS:
             mask = np.abs(vh) > 1.0e-12
             q[mask] /= vh[mask]
             if self.print > 1 and not np.all(mask):
-                print(f"    Zero diagonal Hessian element")
+                print("    Zero diagonal Hessian element")
 
     def _compute_gamma(self):
         if self.iter - self.iter_shift_ == 0:

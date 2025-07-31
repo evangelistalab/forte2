@@ -4,7 +4,7 @@ from forte2.helpers.comparisons import approx
 
 def test_fci_co_o_core_exc():
     efci = -92.133019235463
-    xyz = f"""
+    xyz = """
     C 0 0 0
     O 0 0 1
     """
@@ -23,7 +23,7 @@ def test_fci_co_o_core_exc():
 
 def test_fci_co_c_core_exc():
     efci = -101.499040903802
-    xyz = f"""
+    xyz = """
     C 0 0 0
     O 0 0 1
     """

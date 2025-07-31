@@ -4,10 +4,11 @@ import pytest
 from forte2 import *
 from forte2.helpers.comparisons import approx
 
+
 @pytest.mark.skip
 def test_gasscf_0():
     erhf = -76.02672338005341
-    eci  = -76.039405150388
+    eci = -76.039405150388
     escf = -76.082673161513
 
     xyz = f"""
@@ -21,25 +22,21 @@ def test_gasscf_0():
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci = CI(
-        core_orbitals=[0,1],
-        orbitals=[[2,3,4],[5,6,7]],
-        gas_min=[3],
-        gas_max=[6],
-        state=State(nel=10, multiplicity=1, ms=0.0),
-        nroot=1,
-    )(rhf)
-
-    mc = MCOptimizer(maxiter=500)(ci)
+    mc = MCOptimizer(
+        State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[6]),
+        core_orbitals=[0, 1],
+        active_orbitals=[[2, 3, 4], [5, 6, 12], [15,16,20]]
+        )(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)
     assert mc.E == approx(escf)
 
+
 @pytest.mark.skip
 def test_gasscf_1():
     erhf = -76.02146209546578
-    eci  = -76.029273794488
+    eci = -76.029273794488
     escf = -76.077753286787
 
     xyz = f"""
@@ -55,23 +52,35 @@ def test_gasscf_1():
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CI(
         core_orbitals=[0],
-        orbitals=[[2,3,4,5],[6,7]],
-        gas_min=[6,0],
-        gas_max=[8,2],
-        state=State(nel=10, multiplicity=1, ms=0.0),
+        orbitals=[[2, 3, 4, 5], [6, 7]],
+        state=State(
+            nel=10,
+            multiplicity=1,
+            ms=0.0,
+            gas_min=[6, 0],
+            gas_max=[8, 2],
+        ),
         nroot=1,
     )(rhf)
 
-    mc = MCOptimizer(maxiter=200,diis_start=1, max_rotation=0.5, micro_maxiter=1,etol=1e-10,gradtol=1e-8)(ci)
+    mc = MCOptimizer(
+        maxiter=200,
+        diis_start=1,
+        max_rotation=0.5,
+        micro_maxiter=1,
+        etol=1e-10,
+        gradtol=1e-8,
+    )(ci)
     mc.run()
 
     assert rhf.E == approx(erhf)
     assert mc.E == approx(escf)
 
+
 @pytest.mark.skip
 def test_gasscf_2():
     erhf = -76.02146209547571
-    eci  = -55.819535518942
+    eci = -55.819535518942
     escf = -76.063794140801
 
     xyz = f"""
@@ -86,23 +95,28 @@ def test_gasscf_2():
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CI(
-        orbitals=[[0],[1,2,3,4,5,6]],
-        gas_min=[0],
-        gas_max=[1],
-        state=State(nel=10, multiplicity=1, ms=0.0),
+        orbitals=[[0], [1, 2, 3, 4, 5, 6]],
+        state=State(
+            nel=10,
+            multiplicity=1,
+            ms=0.0,
+            gas_min=[0],
+            gas_max=[1],
+        ),
         nroot=1,
     )(rhf)
 
-    mc = MCOptimizer(maxiter=400, etol=1e-10, diis_start=15)(ci)
+    mc = MCOptimizer(etol=1e-10)(ci)
     mc.run()
 
     assert rhf.E == approx(erhf)
     assert mc.E == approx(escf)
 
+
 @pytest.mark.skip
 def test_gasscf_3():
     erohf = -75.62820784535052
-    eci  = -75.629550216306
+    eci = -75.629550216306
     escf = -75.638998108114
 
     xyz = f"""
@@ -118,14 +132,24 @@ def test_gasscf_3():
     rohf = ROHF(charge=1, econv=1e-12, dconv=1e-8, ms=0.5, do_diis=False)(system)
     ci = CI(
         core_orbitals=[0],
-        orbitals=[[2,3,4,5],[6,7]],
-        gas_min=[6,0],
-        gas_max=[8,2],
-        state=State(nel=9, multiplicity=2, ms=0.5),
+        orbitals=[[2, 3, 4, 5], [6, 7]],
+        state=State(
+            nel=9,
+            multiplicity=2,
+            ms=0.5,
+            gas_min=[6, 0],
+            gas_max=[8, 2],
+        ),
         nroot=1,
     )(rohf)
 
-    mc = MCOptimizer(maxiter=200,diis_start=1, max_rotation=0.5, micro_maxiter=1,etol=1e-10,gradtol=1e-8)(ci)
+    mc = MCOptimizer(
+        diis_start=1,
+        max_rotation=0.5,
+        micro_maxiter=1,
+        etol=1e-10,
+        gradtol=1e-8,
+    )(ci)
     mc.run()
 
     assert rohf.E == approx(erohf)

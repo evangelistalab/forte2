@@ -6,7 +6,7 @@ from forte2.helpers.comparisons import approx
 
 def test_sa_mcscf_diff_mult_with_avas():
     # This should be strictly identical to test_mcscf_sa_diff_mult given a sufficiently robust MCSCF solver.
-    xyz = f"""
+    xyz = """
     N 0.0 0.0 0.0
     N 0.0 0.0 1.2
     """
@@ -58,7 +58,7 @@ def test_sa_casscf_c2():
     erhf = -75.382486499716
     ecasscf = -75.5580517997
 
-    xyz = f"""
+    xyz = """
     C 0.0 0.0 0.0
     C 0.0 0.0 1.2
     """
@@ -87,7 +87,7 @@ def test_sa_casscf_same_mult():
     erhf = -108.761639873604
     ecasscf = -108.8592663803
 
-    xyz = f"""
+    xyz = """
     N 0.0 0.0 0.0
     N 0.0 0.0 1.4
     """
@@ -107,7 +107,7 @@ def test_sa_casscf_same_mult():
 
 
 def test_sa_casscf_diff_mult():
-    xyz = f"""
+    xyz = """
     N 0.0 0.0 0.0
     N 0.0 0.0 1.2
     """
@@ -144,7 +144,7 @@ def test_sa_casscf_c2_transition_dipole():
     erhf = -75.382486499716
     ecasscf = -75.5580517997
 
-    xyz = f"""
+    xyz = """
     C 0.0 0.0 0.0
     C 0.0 0.0 1.2
     """
@@ -183,7 +183,7 @@ def test_sa_casscf_hf():
     emcscf_root_4 = -99.4702123772
     emcscf_avg = -99.7109969914
 
-    xyz = f"""
+    xyz = """
     H            0.000000000000     0.000000000000    -0.949624435830
     F            0.000000000000     0.000000000000     0.050375564170
     """

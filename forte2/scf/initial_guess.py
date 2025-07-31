@@ -1,5 +1,4 @@
 import numpy as np
-import scipy as sp
 
 from forte2 import ints, Basis, Shell
 from forte2.system import System

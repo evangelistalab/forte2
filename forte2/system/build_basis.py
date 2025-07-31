@@ -2,9 +2,6 @@ import json
 import itertools
 from importlib import resources
 from collections import defaultdict
-from dataclasses import dataclass
-
-import numpy as np
 
 from forte2 import Basis, Shell
 from forte2.system.atom_data import ATOM_SYMBOL_TO_Z
