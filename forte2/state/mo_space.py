@@ -76,7 +76,7 @@ class MOSpace:
         ), f"The sum of frozen_core, core, active, and frozen_virtual dimensions ({nfc + nc + na + nfv}) exceeds the total number of orbitals ({self.nmo})."
         self.frozen_core_orbitals = list(range(nfc))
         self.core_orbitals = list(range(nfc, nfc + nc))
-        self.active_orbitals = [list(range(nfc + nc, nfc + nc + na))]
+        self.active_orbitals = list(range(nfc + nc, nfc + nc + na))
         self.frozen_virtual_orbitals = list(range(self.nmo - nfv, self.nmo))
 
     def _parse_lists(self):
