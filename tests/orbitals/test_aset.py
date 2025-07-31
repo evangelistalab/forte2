@@ -1,12 +1,13 @@
 import pytest
 from forte2 import *
-#from forte2.helpers.comparisons import approx
+from forte2.helpers.comparisons import approx
+
 
 def test_aset_1():
     """
     test cutoff_method = threshold with a non-default cutoff value.
     """
-    xyz = f"""
+    xyz = """
     C       -2.2314881720      2.3523969887      0.1565319638                 
     C       -1.1287322054      1.6651786288     -0.1651010551                 
     H       -3.2159664855      1.9109197306      0.0351701750                 
@@ -21,21 +22,26 @@ def test_aset_1():
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    mc = MCOptimizer(State(nel=24, multiplicity=1, ms=0.0), core_orbitals=[0,1,2,3,4,5,6,7,8,9,10], active_orbitals=[11,12])(rhf)
+    mc = MCOptimizer(
+        State(nel=24, multiplicity=1, ms=0.0),
+        core_orbitals=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        active_orbitals=[11, 12],
+    )(rhf)
     aset = ASET(
         fragment=["C1-2", "H1-3"],
         cutoff_method="threshold",
-        cut_off = 0.1,
+        cutoff=0.1,
         semicanonicalize_active=False,
-        semicanonicalize_frozen=False
+        semicanonicalize_frozen=False,
     )(mc)
     aset.run()
+
 
 def test_aset_2():
     """
     Test cutoff_method = cumulative_threshold.
     """
-    xyz = f"""
+    xyz = """
     N       -1.1226987119      2.0137160725     -0.0992218410                 
     N       -0.1519067161      1.2402226172     -0.0345618482                 
     H        0.7253474870      1.7181546089     -0.2678695726          
@@ -45,24 +51,29 @@ def test_aset_2():
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    mc = MCOptimizer(State(nel=24, multiplicity=1, ms=0.0), core_orbitals=[0,1,2,3,4,5,6,7,8,9], active_orbitals=[10,11,12,13])(rhf)
+    mc = MCOptimizer(
+        State(nel=24, multiplicity=1, ms=0.0),
+        core_orbitals=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        active_orbitals=[10, 11, 12, 13],
+    )(rhf)
     aset = ASET(
         fragment=["N", "H"],
         cutoff_method="cumulative_threshold",
-        cut_off = 0.99,
+        cutoff=0.99,
         semicanonicalize_active=False,
-        semicanonicalize_frozen=False
+        semicanonicalize_frozen=False,
     )(mc)
     aset.run()
 
+
 def test_aset_3():
     """
-    This test was used to check for embedding_reference = HF in Forte1. 
-    The option of choosing HF to be the reference is not included in Forte2. 
-    Right now we test for cutoff = default = 0.5. 
+    This test was used to check for embedding_reference = HF in Forte1.
+    The option of choosing HF to be the reference is not included in Forte2.
+    Right now we test for cutoff = default = 0.5.
     This test will be updated when semicanonicalization becomes available.
     """
-    xyz = f"""
+    xyz = """
     C       -2.2314881720      2.3523969887      0.1565319638
     C       -1.1287322054      1.6651786288     -0.1651010551
     H       -3.2159664855      1.9109197306      0.0351701750
@@ -73,24 +84,29 @@ def test_aset_3():
     H        0.8387453665      1.5599644558      0.6466877402
     H        0.2749376338      3.2174213526      0.3670138598
 """
-    
+
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    mc = MCOptimizer(State(nel=24, multiplicity=1, ms=0.0), core_orbitals=[0,1,2,3,4,5,6,7,8,9,10], active_orbitals=[11,12])(rhf)
+    mc = MCOptimizer(
+        State(nel=24, multiplicity=1, ms=0.0),
+        core_orbitals=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        active_orbitals=[11, 12],
+    )(rhf)
     aset = ASET(
         fragment=["C1-2", "H1-3"],
         cutoff_method="threshold",
         semicanonicalize_active=False,
-        semicanonicalize_frozen=False
+        semicanonicalize_frozen=False,
     )(mc)
     aset.run()
 
+
 def test_aset_4():
     """
-    Test cutoff_method = number of orbitals. 
+    Test cutoff_method = number of orbitals.
     """
-    xyz = f"""
+    xyz = """
     N       -1.1226987119      2.0137160725     -0.0992218410
     N       -0.1519067161      1.2402226172     -0.0345618482
     H        0.7253474870      1.7181546089     -0.2678695726
@@ -99,22 +115,27 @@ def test_aset_4():
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    mc = MCOptimizer(State(nel=24, multiplicity=1, ms=0.0), core_orbitals=[0,1,2,3,4,5,6,7,8,9], active_orbitals=[10,11,12,13])(rhf)
+    mc = MCOptimizer(
+        State(nel=24, multiplicity=1, ms=0.0),
+        core_orbitals=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        active_orbitals=[10, 11, 12, 13],
+    )(rhf)
     aset = ASET(
         fragment=["N", "H"],
         cutoff_method="num_of_orbitals",
-        num_a_docc = 5,
-        num_a_uocc = 1,
+        num_a_docc=5,
+        num_a_uocc=1,
         semicanonicalize_active=False,
-        semicanonicalize_frozen=False
+        semicanonicalize_frozen=False,
     )(mc)
     aset.run()
 
+
 # def test_aset_5():
 #     """
-#     Test PAO for virtual space, not yet a feature. 
+#     Test PAO for virtual space, not yet a feature.
 #     """
-#     xyz = f"""
+#     xyz = """
 #     C            0.736149969259     0.199718340898    -0.207219947401
 #     C            1.894302493759    -0.319955293970     0.296207387267
 #     H            0.861933668943     1.105847110317    -0.832928585892
@@ -128,7 +149,7 @@ def test_aset_4():
 #     H           -0.863484663283    -0.665562244675    -1.411954335033
 #     H           -0.645242334465    -1.402514539204     0.216831010104
 # """
-    
+
 #     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
 #     rhf = RHF(charge=0, econv=1e-12)(system)
@@ -136,8 +157,8 @@ def test_aset_4():
 #     aset = ASET(
 #         fragment=["C1-2", "H1-3"],
 #         cutoff_method="threshold",
-#         cut_off = 0.5,
-#         virtual_space= PAO
+#         cutoff = 0.5,
+#         virtual_space= PAO,
 #         semicanonicalize_active=False,
 #         semicanonicalize_frozen=False
 #     )(mc)
