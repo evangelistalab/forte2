@@ -139,6 +139,7 @@ class MCOptimizer(ActiveSpaceSolver):
         #       (this is typically done iteratively with micro-iterations using L-BFGS)
         #     2. minimize energy wrt CI expansion at current orbitals
         #       (this is just the diagonalization of the active-space CI Hamiltonian)
+        do_gas = self.mo_space.ngas > 1
         self.orb_opt = OrbOptimizer(
             self._C,
             (self.core, self.actv, self.virt),
@@ -146,6 +147,7 @@ class MCOptimizer(ActiveSpaceSolver):
             self.Hcore,
             self.system.nuclear_repulsion,
             self.nrr,
+            gas_ref=do_gas
         )
         self.ci_solver = CISolver(
             states=self.states,
@@ -390,7 +392,7 @@ class MCOptimizer(ActiveSpaceSolver):
 
 
 class OrbOptimizer:
-    def __init__(self, C, extents, fock_builder, hcore, e_nuc, nrr):
+    def __init__(self, C, extents, fock_builder, hcore, e_nuc, nrr, gas_ref=False):
         self.core, self.actv, self.virt = extents
         self.C = C
         self.C0 = C.copy()
@@ -405,6 +407,7 @@ class OrbOptimizer:
         self.nrr = nrr
         self.nrot = self.nrr.sum()
         self.e_nuc = e_nuc
+        self.gas_ref=gas_ref
 
         self.R = np.zeros(self.nrot, dtype=float)
         self.U = np.eye(self.C.shape[1], dtype=float)
@@ -565,5 +568,8 @@ class OrbOptimizer:
         aa_diag = 4 * Fcore_aa + 2 * Fact_aa - 2 * Y_aa - 4 * Z_aa
         cc_diag = -4 * Fcore_cc - 2 * Fact_cc
         orbhess[self.core, self.actv] = ca_diag + aa_diag[None, :] + cc_diag[:, None]
+
+        # Compute GASn-GASm active-active blocks. [J. Chem. Phys. 152, 074102 (2020)]
+        # if self.gas_ref:
 
         return orbhess
