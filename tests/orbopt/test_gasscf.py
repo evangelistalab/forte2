@@ -22,20 +22,11 @@ def test_gasscf_0():
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci = CI(
+    mc = MCOptimizer(
+        State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[6]),
         core_orbitals=[0, 1],
-        orbitals=[[2, 3, 4], [5, 6, 7]],
-        state=State(
-            nel=10,
-            multiplicity=1,
-            ms=0.0,
-            gas_min=[3],
-            gas_max=[6],
-        ),
-        nroot=1,
-    )(rhf)
-
-    mc = MCOptimizer()(ci)
+        active_orbitals=[[2, 3, 4], [5, 6, 12], [15,16,20]]
+        )(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)
