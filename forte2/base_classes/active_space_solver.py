@@ -62,7 +62,7 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
 
         if (not provided_via_parent) and (provided_via_args == 0):
             raise ValueError(
-                "Parent_method cannot provided MOSpace. "
+                "Parent_method cannot provide MOSpace. "
                 "Either mo_space, *_orbitals, or nel_active and norb_active must be provided."
             )
 
