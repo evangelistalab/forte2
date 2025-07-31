@@ -116,18 +116,6 @@ class MCOptimizer(ActiveSpaceSolver):
         self.actv = self.mo_space.actv
         self.virt = self.mo_space.uocc
 
-        # list of number of active orbitals in each GAS space
-        # TODO generalize nactv to be like nactv_gas.
-        self.nactv_gas = [len(space) for space in self.mo_space.active_orbitals]
-
-        # list of GAS slices
-        # TODO fix: actv =/= actv_gas when multiple GASes are defined
-        self.actv_gas = []
-        shift = self.core.stop
-        for p in self.nactv_gas:
-            self.actv_gas.append(slice(shift, shift + p, None))
-            shift += p
-
         self.nrr = self._get_nonredundant_rotations()
 
     def run(self):
@@ -362,11 +350,11 @@ class MCOptimizer(ActiveSpaceSolver):
             _core = self.mo_space.core
             _virt = self.mo_space.virt
 
-        # handle GASn-GASm rotations if two or more GAS spaces exists
-        if len(self.nactv_gas) >= 2:
-            for n in range(len(self.nactv_gas)):
-                for m in range(n + 1, len(self.nactv_gas)):
-                    nrr[self.actv_gas[n], self.actv_gas[m]] = True
+        # GASn-GASm rotations
+        if self.mo_space.ngas > 1:
+            for i in range(self.mo_space.ngas):
+                for j in range(i + 1, self.mo_space.ngas):
+                    nrr[self.mo_space.gas[i], self.mo_space.gas[j]] = True
 
         nrr[_core, _virt] = True
         nrr[self.actv, _virt] = True
