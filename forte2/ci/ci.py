@@ -935,7 +935,7 @@ class CI(CISolver):
     CI solver specialized for a single CI calculation. (i.e., not used in a loop).
     See `CISolver` for all parameters and attributes.
     """
-
+    final_orbital: str = "original"
     do_transition_dipole: bool = False
 
     def run(self):

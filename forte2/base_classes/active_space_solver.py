@@ -38,12 +38,18 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
 
         SystemMixin.copy_from_upstream(self, self.parent_method)
         MOsMixin.copy_from_upstream(self, self.parent_method)
-        self._parse_mo_space()
+        self._make_mo_space()
 
-    def _parse_mo_space(self):
-        # If either mo_space is provided or speficied via the kwargs,
-        # then use it, otherwise copy from the parent method.
-        provided_via_kw = any(
+    def _make_mo_space(self):
+        # Ways of providing the MO space:
+        # 1. Via the parent method (if it has MOSpaceMixin).
+        # 2. Via the mo_space parameter.
+        # 3. Via the *_orbitals parameters (core_orbitals, active_orbitals, frozen_core_orbitals, frozen_virtual_orbitals).
+        # If any one of 2-3 is provided, then 1 is ignored.
+        # If more than one of 2-3 is provided, then an error is raised.
+        provided_via_parent = isinstance(self.parent_method, MOSpaceMixin)
+        provided_via_mo_space = self.mo_space is not None
+        provided_via_orbitals = any(
             [
                 self.frozen_core_orbitals is not None,
                 self.core_orbitals is not None,
@@ -52,40 +58,47 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
             ]
         )
 
-        if provided_via_kw and self.mo_space is not None:
-            raise ValueError("Both mo_space and *_orbitals parameters are provided. ")
+        provided_via_args = provided_via_mo_space + provided_via_orbitals
 
-        if provided_via_kw:
-            self.mo_space = MOSpace(
-                nmo=self.system.nmo,
-                active_orbitals=(
-                    self.active_orbitals if self.active_orbitals is not None else []
-                ),
-                core_orbitals=(
-                    self.core_orbitals if self.core_orbitals is not None else []
-                ),
-                frozen_core_orbitals=(
-                    self.frozen_core_orbitals
-                    if self.frozen_core_orbitals is not None
-                    else []
-                ),
-                frozen_virtual_orbitals=(
-                    self.frozen_virtual_orbitals
-                    if self.frozen_virtual_orbitals is not None
-                    else []
-                ),
+        if (not provided_via_parent) and (provided_via_args == 0):
+            raise ValueError(
+                "Parent_method cannot provided MOSpace. "
+                "Either mo_space, *_orbitals, or nel_active and norb_active must be provided."
             )
-            return
 
-        if isinstance(self.parent_method, MOSpaceMixin):
-            if self.mo_space is not None:
-                logger.log_warning(
-                    "Using the provided mo_space instead of the one from the parent method."
+        if provided_via_args > 1:
+            raise ValueError(
+                "Only one of mo_space, *_orbitals, or nel_active and norb_active can be provided."
+            )
+
+        # override parent_method if any arguments are provided
+        if provided_via_args == 1:
+            if provided_via_mo_space:
+                # mo_space is provided directly
+                return
+
+            if provided_via_orbitals:
+                # construct mo_space from *_orbitals arguments
+                self.mo_space = MOSpace(
+                    nmo=self.system.nmo,
+                    active_orbitals=(
+                        self.active_orbitals if self.active_orbitals is not None else []
+                    ),
+                    core_orbitals=(
+                        self.core_orbitals if self.core_orbitals is not None else []
+                    ),
+                    frozen_core_orbitals=(
+                        self.frozen_core_orbitals
+                        if self.frozen_core_orbitals is not None
+                        else []
+                    ),
+                    frozen_virtual_orbitals=(
+                        self.frozen_virtual_orbitals
+                        if self.frozen_virtual_orbitals is not None
+                        else []
+                    ),
                 )
-            else:
-                MOSpaceMixin.copy_from_upstream(self, self.parent_method)
-        else:
-            assert self.mo_space is not None, (
-                "If the parent method does not have MOSpaceMixin, "
-                "then mo_space must be provided."
-            )
+                return
+        elif provided_via_parent:
+            MOSpaceMixin.copy_from_upstream(self, self.parent_method)
+            return

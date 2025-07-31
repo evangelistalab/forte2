@@ -42,6 +42,44 @@ class MOSpace:
     frozen_virtual_orbitals: list[int] = field(default_factory=list)
 
     def __post_init__(self):
+        ints_as_args = any(
+            [
+                isinstance(self.active_orbitals, int),
+                isinstance(self.core_orbitals, int),
+                isinstance(self.frozen_core_orbitals, int),
+                isinstance(self.frozen_virtual_orbitals, int),
+            ]
+        )
+        if ints_as_args:
+            self._convert_integer_arguments_to_lists()
+
+        self._parse_lists()
+
+    def _convert_integer_arguments_to_lists(self):
+        def _to_int(x):
+            if isinstance(x, int):
+                return x
+            elif isinstance(x, list) and len(x) == 0:
+                return 0
+            else:
+                raise ValueError(
+                    "If one of the parameters is an integer, all must be integers or not provided."
+                )
+
+        nfc = _to_int(self.frozen_core_orbitals)
+        nc = _to_int(self.core_orbitals)
+        na = _to_int(self.active_orbitals)
+        nfv = _to_int(self.frozen_virtual_orbitals)
+        nv = self.nmo - (nfc + nc + na + nfv)
+        assert (
+            nv >= 0
+        ), f"The sum of frozen_core, core, active, and frozen_virtual dimensions ({nfc + nc + na + nfv}) exceeds the total number of orbitals ({self.nmo})."
+        self.frozen_core_orbitals = list(range(nfc))
+        self.core_orbitals = list(range(nfc, nfc + nc))
+        self.active_orbitals = [list(range(nfc + nc, nfc + nc + na))]
+        self.frozen_virtual_orbitals = list(range(self.nmo - nfv, self.nmo))
+
+    def _parse_lists(self):
         # Validate input types
         assert isinstance(self.active_orbitals, list), "active_orbitals must be a list."
         assert isinstance(self.core_orbitals, list), "core_orbitals must be a list."

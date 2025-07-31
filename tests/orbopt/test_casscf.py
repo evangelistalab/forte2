@@ -38,8 +38,8 @@ def test_casscf_hf():
     rhf = RHF(charge=0, econv=1e-12)(system)
     mc = MCOptimizer(
         State(nel=10, multiplicity=1, ms=0.0),
-        active_orbitals=[1, 2, 3, 4, 5, 6],
-        core_orbitals=[0],
+        active_orbitals=6,
+        core_orbitals=1,
     )(rhf)
     mc.run()
 
