@@ -110,8 +110,12 @@ class ASET(MOsMixin, SystemMixin):
         self._S_mm = ints.overlap(self.system.minao_basis)
         self.P_frag, self.X_mm = self._make_fragment_projector()
         self.executed = True
-        partition = self._make_embedding()
-        self._print_embedding_info(**partition)
+        self.partition = self._make_embedding()
+        self._print_embedding_info(**self.partition)
+        logger.log_info1("\nMO space is updated.")
+        self._apply_adjustments_to_mo_space()
+        logger.log_info1("\nASET procedure completed.")
+
         return self
 
     def _check_parameters(self):
@@ -319,11 +323,17 @@ class ASET(MOsMixin, SystemMixin):
             for i, v in vir_pairs:
                 (index_A_vir if v > self.cutoff else index_B_vir).append(i)
         elif self.cutoff_method == "cumulative_threshold":
+            # total occupied / virtual eigenvalue sums
+            sum_lo = float(np.sum(lo_vals))
+            sum_lv = float(np.sum(lv_vals))
+
             # occupied cumulative‐threshold partitioning
-            cum_lo = 0.0
-            for i, v in occ_pairs:
-                cum_lo += v
-                if cum_lo < self.cutoff:
+            tmp = 0.0
+            for idx_rel, v in enumerate(lo_vals):
+                tmp += v
+                cum_l_o = tmp / sum_lo
+                i = core_inds[idx_rel]
+                if cum_l_o < self.cutoff:
                     index_A_occ.append(i)
                 else:
                     index_B_occ.append(i)
@@ -334,10 +344,12 @@ class ASET(MOsMixin, SystemMixin):
                         )
 
             # virtual cumulative‐threshold partitioning
-            cum_lv = cum_lo
-            for i, v in vir_pairs:
-                cum_lv += v
-                if cum_lv < self.cutoff:
+            tmp = 0.0
+            for idx_rel, v in enumerate(lv_vals):
+                tmp += v
+                cum_l_v = tmp / sum_lv
+                i = virt_inds[idx_rel]
+                if cum_l_v < self.cutoff:
                     index_A_vir.append(i)
                 else:
                     index_B_vir.append(i)
@@ -373,81 +385,39 @@ class ASET(MOsMixin, SystemMixin):
                         )
 
         # # Semi-canonicalize the blocks
+        if self.semicanonicalize_active == False:
+            logger.log_info1(
+                f"\nSkipping semicanonicalization of active space orbitals."
+            )
+        if self.semicanonicalize_frozen == False:
+            logger.log_info1(
+                f"\nSkipping semicanonicalization of frozen core and frozen virtual orbitals."
+            )
+
         C_tilde = self.Ca.copy()
-        blocks = []
         frozen_core_inds = self.mo_space.frozen_core_indices
         frozen_virt_inds = self.mo_space.frozen_virtual_indices
         g1_sf = self.parent_method.ci_solver.make_average_sf_1rdm()
-        # semicanonicalization helper function
-        # Frozen core
-        if self.semicanonicalize_frozen:
-            C_fc = Semicanonicalizer(frozen_core_inds, g1_sf, C_tilde)
-        else:
-            logger.log_info1("\nSkipping semi-canonicalization of frozen orbitals")
-            C_fc = C_tilde[:, frozen_core_inds]
-        blocks.append(C_fc)
-
-        # Core in A
-        C_ac = Semicanonicalizer(index_A_occ, g1_sf, C_tilde)
-        blocks.append(C_ac)
-
-        # Core in B
-        C_bc = Semicanonicalizer(index_B_occ, g1_sf, C_tilde)
-        blocks.append(C_bc)
-
-        # Active
-        if self.semicanonicalize_active:
-            C_actv = Semicanonicalizer(actv_inds, g1_sf, C_tilde)
-        else:
-            logger.log_info1("\nSkipping semi-canonicalization of active orbitals")
-            C_actv = C_tilde[:, actv_inds]
-        blocks.append(C_actv)
-
-        # Virtual in A
-        C_av = Semicanonicalizer(index_A_vir, g1_sf, C_tilde)
-        blocks.append(C_av)
-
-        # Virtual in B
-        C_bv = Semicanonicalizer(index_B_vir, g1_sf, C_tilde)
-        blocks.append(C_bv)
-
-        # Frozen virtual
-        if self.semicanonicalize_frozen:
-            C_fv = Semicanonicalizer(frozen_virt_inds, g1_sf, C_tilde)
-        else:
-            C_fv = C_tilde[:, frozen_virt_inds]
-        blocks.append(C_fv)
-
-        # Combine all blocks into C_tilde
-        C_tilde = np.hstack(blocks)
-
-        def adjust_mo_space(adj, A, B):
-            nA = len(A)
-            cutoff = nA - adj
-            return A[:cutoff], B + A[cutoff:]
-
-        A_occ, B_occ = adjust_mo_space(self.adjust_B_docc, index_A_occ, index_B_occ)
-        A_vir, B_vir = adjust_mo_space(self.adjust_B_uocc, index_A_vir, index_B_vir)
-
-        self.Ca = C_tilde
-        self.C[0] = C_tilde.copy()
-        self.mo_space = MOSpace(
-            nmo=self.system.nmo,
-            active_orbitals=actv_inds,
-            core_orbitals=A_occ
-            frozen_core_orbitals=frozen_virt_inds + B_occ
-            frozen_virtual_orbitals= frozen_virt_inds + B_vir
+        semican = Semicanonicalizer(
+            g1_sf=g1_sf,
+            C=C_tilde,
+            system=self.system,
+            mo_space=self.mo_space,
+            do_frozen=self.semicanonicalize_frozen,
+            do_active=self.semicanonicalize_active,
         )
+        semican.run()
+        self.Ca = semican.C_semican
+        self.C[0] = semican.C_semican.copy()
 
         return {
-            "index_A_occ": A_occ,
+            "index_A_occ": index_A_occ,
             "index_actv": actv_inds,
-            "index_A_vir": A_vir,
-            "index_B_occ": B_occ,
-            "index_B_vir": B_vir,
+            "index_A_vir": index_A_vir,
+            "index_B_occ": index_B_occ,
+            "index_B_vir": index_B_vir,
             "lo_vals": lo_vals,
             "lv_vals": lv_vals,
-            "C_tilde": C_tilde,
         }
 
     def _print_embedding_info(
@@ -521,4 +491,77 @@ class ASET(MOsMixin, SystemMixin):
         )
         logger.log_info1(
             f"    Frozen Orbitals: {num_Fo} Core MOs, {num_Fv} Virtual MOs\n"
+        )
+
+        # Update MO space
+        def adjust_mo_space(adj, A, B):
+            nA = len(A)
+            cutoff = nA - adj
+
+            return A[:cutoff], B + A[cutoff:]
+
+        if self.adjust_B_docc != 0:
+            A_occ, B_occ = adjust_mo_space(self.adjust_B_docc, index_A_occ, index_B_occ)
+            if self.adjust_B_docc > 0:
+                logger.log_info1(
+                    f"\nAdding {self.adjust_B_docc} orbitals to frozen core orbitals."
+                )
+            else:
+                logger.log_info1(
+                    f"\nRemoving {abs(self.adjust_B_docc)} orbitals from frozen core orbitals."
+                )
+        if self.adjust_B_uocc != 0:
+            A_vir, B_vir = adjust_mo_space(self.adjust_B_uocc, index_A_vir, index_B_vir)
+            if self.adjust_B_uocc > 0:
+                logger.log_info1(
+                    f"\nAdding {self.adjust_B_uocc} orbitals to frozen virtual orbitals."
+                )
+            else:
+                logger.log_info1(
+                    f"\nRemoving {abs(self.adjust_B_uocc)} orbitals from frozen virtual orbitals."
+                )
+        self.mo_space = MOSpace(
+            nmo=self.system.nmo,
+            active_orbitals=index_actv,
+            core_orbitals=A_occ if self.adjust_B_docc != 0 else index_A_occ,
+            frozen_core_orbitals=(
+                self.mo_space.frozen_core_indices + B_occ
+                if self.adjust_B_docc != 0
+                else self.mo_space.frozen_core_indices
+            ),
+            frozen_virtual_orbitals=(
+                self.mo_space.frozen_virtual_indices + B_vir
+                if self.adjust_B_uocc != 0
+                else self.mo_space.frozen_virtual_indices
+            ),
+        )
+
+    def _apply_adjustments_to_mo_space(self):
+        """
+        Adjust the MO space based on the adjustments specified by the user.
+        """
+        index_A_occ = self.partition["index_A_occ"]
+        index_actv = self.partition["index_actv"]
+        index_A_vir = self.partition["index_A_vir"]
+        index_B_occ = self.partition["index_B_occ"]
+        index_B_vir = self.partition["index_B_vir"]
+
+        # Adjust the occupied and virtual spaces based on user input
+        def adjust_mo_space(adj, A, B):
+            nA = len(A)
+            cutoff = nA - adj
+
+            return A[:cutoff], B + A[cutoff:]
+
+        A_occ, B_occ = adjust_mo_space(self.adjust_B_docc, index_A_occ, index_B_occ)
+        A_vir, B_vir = adjust_mo_space(self.adjust_B_uocc, index_A_vir, index_B_vir)
+
+        self.mo_space = MOSpace(
+            nmo=self.system.nmo,
+            active_orbitals=index_actv,
+            core_orbitals=A_occ,
+            frozen_core_orbitals=sorted(set(self.mo_space.frozen_core_indices + B_occ)),
+            frozen_virtual_orbitals=sorted(
+                set(self.mo_space.frozen_virtual_indices + B_vir)
+            ),
         )
