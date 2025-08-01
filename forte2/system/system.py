@@ -1,18 +1,17 @@
 import scipy as sp
 from dataclasses import dataclass, field
 
-import forte2
+from forte2 import ints
+from forte2.system.atom_data import DEBYE_TO_AU, DEBYE_ANGSTROM_TO_AU
 from forte2.helpers import logger
 from forte2.helpers.matrix_functions import invsqrt_matrix, canonical_orth
 from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
 from .parse_geometry import parse_geometry
-from .atom_data import ATOM_DATA, Z_TO_ATOM_SYMBOL
+from .atom_data import ATOM_DATA
 
 import numpy as np
 from numpy.typing import NDArray
-
-from copy import deepcopy
 
 
 @dataclass
@@ -69,13 +68,13 @@ class System:
         A dictionary mapping atomic numbers to their numbers in the system.
     atom_to_center : dict[int : list[int]]
         A dictionary mapping atomic numbers to a list of (0-based) indices of atoms of that type in the system.
-    basis : forte2.ints.Basis
+    basis : ints.Basis
         The basis set for the system, built from the provided `basis_set`.
-    auxiliary_basis : forte2.ints.Basis
+    auxiliary_basis : ints.Basis
         The auxiliary basis set for the system, built from the provided `auxiliary_basis_set`.
-    auxiliary_basis_set_corr : forte2.ints.Basis
+    auxiliary_basis_set_corr : ints.Basis
         The auxiliary basis set for correlated calculations, built from the provided `auxiliary_basis_set_corr`.
-    minao_basis : forte2.ints.Basis
+    minao_basis : ints.Basis
         The minimal atomic orbital basis set, built from the provided `minao_basis_set`.
     Zsum : float
         The total nuclear charge of the system, calculated as the sum of atomic charges.
@@ -128,7 +127,7 @@ class System:
         )
         self.atomic_positions = np.array([atom[1] for atom in self.atoms])
         self.centroid = np.mean(self.atomic_positions, axis=0)
-        self.nuclear_repulsion = forte2.ints.nuclear_repulsion(self.atoms)
+        self.nuclear_repulsion = ints.nuclear_repulsion(self.atoms)
 
         self.center_of_mass = np.einsum(
             "a,ax->x", self.atomic_masses, self.atomic_positions
@@ -156,7 +155,7 @@ class System:
             )
             if self.auxiliary_basis_set_corr is not None:
                 logger.log_warning(
-                    f"Using a separate auxiliary basis is not recommended!"
+                    "Using a separate auxiliary basis is not recommended!"
                 )
                 self.auxiliary_basis_set_corr = build_basis(
                     self.auxiliary_basis_set_corr, self.atoms
@@ -176,7 +175,7 @@ class System:
             f"Parsed {len(self.atoms)} atoms with basis set of {self.basis.size} functions."
         )
 
-        self.Zsum = np.sum([x[0] for x in self.atoms])
+        self.Zsum = round(np.sum([x[0] for x in self.atoms]))
         self.nbf = self.basis.size
         self.naux = self.auxiliary_basis.size if self.auxiliary_basis else 0
         self.nminao = self.minao_basis.size if self.minao_basis else 0
@@ -206,7 +205,7 @@ class System:
 
         Returns
         -------
-        forte2.ints.Basis
+        ints.Basis
             Decontracted basis set.
         """
         return build_basis(
@@ -225,7 +224,7 @@ class System:
         NDArray
             Overlap integrals matrix.
         """
-        return forte2.ints.overlap(self.basis)
+        return ints.overlap(self.basis)
 
     def ints_hcore(self):
         """
@@ -236,8 +235,8 @@ class System:
         NDArray
             Core Hamiltonian integrals matrix.
         """
-        T = forte2.ints.kinetic(self.basis)
-        V = forte2.ints.nuclear(self.basis, self.atoms)
+        T = ints.kinetic(self.basis)
+        V = ints.nuclear(self.basis, self.atoms)
         return T + V
 
     def nuclear_dipole(self, origin=None, unit="debye"):
@@ -262,9 +261,7 @@ class System:
         if origin is not None:
             assert len(origin) == 3, "Origin must be a 3-element vector."
             positions -= np.array(origin)[np.newaxis, :]
-        conversion_factor = (
-            1.0 / forte2.atom_data.DEBYE_TO_AU if unit == "debye" else 1.0
-        )
+        conversion_factor = 1.0 / DEBYE_TO_AU if unit == "debye" else 1.0
         return np.einsum("a,ax->x", charges, positions) * conversion_factor
 
     def nuclear_quadrupole(self, origin=None, unit="debye"):
@@ -291,9 +288,7 @@ class System:
             positions -= np.array(origin)[np.newaxis, :]
         nuc_quad = np.einsum("a,ax,ay->xy", charges, positions, positions)
         nuc_quad = 0.5 * (3 * nuc_quad - np.eye(3) * nuc_quad.trace())
-        conversion_factor = (
-            1.0 / forte2.atom_data.DEBYE_ANGSTROM_TO_AU if unit == "debye" else 1.0
-        )
+        conversion_factor = 1.0 / DEBYE_ANGSTROM_TO_AU if unit == "debye" else 1.0
         return nuc_quad * conversion_factor
 
     def _check_linear_dependencies(self):
@@ -302,7 +297,7 @@ class System:
         self._eigh = sp.linalg.eigh
         self.nmo = self.nbf
         if min(e) / max(e) < self.linear_dep_trigger:
-            logger.log_warning(f"Linear dependencies detected in overlap matrix S!")
+            logger.log_warning("Linear dependencies detected in overlap matrix S!")
             logger.log_debug(
                 f"Max eigenvalue: {np.max(e):.2e}. \n"
                 f"Min eigenvalue: {np.min(e):.2e}. \n"
@@ -316,7 +311,7 @@ class System:
                 )
             else:
                 logger.log_warning(
-                    f"Linear dependencies detected, but no basis functions were removed. Consider changing linear_dep_trigger or ortho_thresh."
+                    "Linear dependencies detected, but no basis functions were removed. Consider changing linear_dep_trigger or ortho_thresh."
                 )
             self.Xorth = canonical_orth(S, tol=self.ortho_thresh)
         else:

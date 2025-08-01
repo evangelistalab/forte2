@@ -1,6 +1,6 @@
 import pytest
 import forte2
-from forte2 import System, RHF, MCOptimizer, AVAS, CIStates, State
+from forte2 import System, RHF, MCOptimizer, AVAS, State
 from forte2.helpers.comparisons import approx
 
 import numpy as np
@@ -12,7 +12,7 @@ def test_casscf_cyclopropene():
     erhf = -114.40009162104958
     emcscf = -114.440831983407
 
-    xyz = f"""
+    xyz = """
     H   0.912650   0.000000   1.457504
     H  -0.912650   0.000000   1.457504
     H   0.000000  -1.585659  -1.038624
@@ -35,8 +35,7 @@ def test_casscf_cyclopropene():
         selection_method="total",
         num_active=3,
     )(rhf)
-    ci_state = CIStates(avas=avas, states=State(nel=rhf.nel, multiplicity=1, ms=0.0))
-    mc = MCOptimizer(ci_state)(avas)
+    mc = MCOptimizer(State(nel=rhf.nel, multiplicity=1, ms=0.0))(avas)
     mc.run()
 
     assert rhf.E == approx(erhf)

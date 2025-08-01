@@ -1,7 +1,8 @@
 import numpy as np
 import scipy as sp
+
 from forte2 import ints
-from forte2.system import ModelSystem
+from forte2.system import System, ModelSystem
 from forte2.helpers import logger
 from forte2.helpers.matrix_functions import cholesky_wrapper
 
@@ -21,7 +22,7 @@ class FockBuilder:
         If True, uses ``system.auxiliary_basis_set_corr`` instead of ``system.auxiliary_basis``.
     """
 
-    def __init__(self, system, use_aux_corr=False):
+    def __init__(self, system: System, use_aux_corr=False):
         if isinstance(system, ModelSystem):
             # special handling for ModelSystem
             nbf = system.nbf
@@ -55,7 +56,9 @@ class FockBuilder:
         nbf = basis.size
         memory_gb = 8 * (nbf**4) / (1024**3)
         logger.log_info1("Building B tensor using Cholesky decomposition")
-        logger.log_info1(f"Temporary memory requirement for 4-index integrals: {memory_gb:.2f} GB")
+        logger.log_info1(
+            f"Temporary memory requirement for 4-index integrals: {memory_gb:.2f} GB"
+        )
         eri_full = ints.coulomb_4c(basis)
         eri = eri_full.reshape((nbf**2,) * 2)
 
@@ -120,10 +123,64 @@ class FockBuilder:
         return K
 
     def build_JK(self, C):
+        r"""
+        Compute the Coulomb and exchange matrices for a given set of orbitals.
+
+        .. math::
+
+            J_{\mu\nu} = \sum_{i}\sum_{\rho\sigma} (\mu\nu|\rho\sigma) C^*_{\rho i} C_{\sigma i}\\
+            K_{\mu\nu} = \sum_{i}\sum_{\rho\sigma} (\mu\rho|\nu\sigma) C^*_{\rho i} C_{\sigma i}
+
+        Parameters
+        ----------
+        C : list of NDArray
+            List of coefficient matrices for the orbitals.
+        
+        Returns
+        -------
+        tuple(list[NDArray], list[NDArray])
+            A tuple containing the lists of Coulomb (J) and exchange (K) matrices.
+        """
         D = [np.einsum("mi,ni->mn", Ci, Ci.conj(), optimize=True) for Ci in C]
         J = self.build_J(D)
         K = self.build_K(C)
         return J, K
+
+    def build_JK_generalized(self, C, g1):
+        r"""
+        Compute the generalized Coulomb and exchange matrices for a given set of orbitals.
+        These are used in building the generalized Fock matrix in multi-reference methods.
+        The generalized J and K matrices are defined as
+
+        .. math::
+            J_{\mu\nu} = \sum_{uv}\sum_{\rho\sigma} (\mu\nu|\rho\sigma) C^*_{\rho u} C_{\sigma v} \gamma_{uv}\\
+            K_{\mu\nu} = \sum_{uv}\sum_{\rho\sigma} (\mu\rho|\nu\sigma) C^*_{\rho u} C_{\sigma v} \gamma_{uv}
+
+        Parameters
+        ----------
+        C : NDArray
+            Coefficient matrix for the orbitals.
+        g1 : NDArray
+            One-electron density matrix (1-RDM) in the MO basis.
+        
+        Returns
+        -------
+        tuple(NDArray, NDArray)
+            A tuple containing the generalized Coulomb (J) and exchange (K) matrices.
+        """
+        assert C.shape[1] == g1.shape[0], "C and g1 must have compatible dimensions"
+
+        try:
+            L = np.linalg.cholesky(g1, upper=False)
+            Cp = C @ L
+        except np.linalg.LinAlgError:
+            n, L = np.linalg.eigh(g1)
+            assert np.all(n > -1.0e-11), "g1 must be positive semi-definite"
+            n = np.maximum(n, 0)
+            Cp = C @ L @ np.diag(np.sqrt(n))
+
+        J, K = self.build_JK([Cp])
+        return J[0], K[0]
 
     def two_electron_integrals_gen_block(self, C1, C2, C3, C4, antisymmetrize=False):
         r"""
@@ -196,5 +253,3 @@ class FockBuilder:
             The two-electron integrals in the form of a 4D array.
         """
         return self.two_electron_integrals_gen_block(C, C, C, C, antisymmetrize)
-
-

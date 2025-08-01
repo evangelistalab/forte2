@@ -74,12 +74,13 @@ nanobind_add_module(
   api/ci_api.cc
   api/determinant_api.cc
   api/determinant_helpers_api.cc
-  api/sparse_operator_api.cc
+  api/helpers_api.cc
   api/integrals_api.cc
   api/logging_api.cc
   api/slater_rules_api.cc
-  api/sparse_state_api.cc
   api/sparse_exp_api.cc
+  api/sparse_operator_api.cc
+  api/sparse_state_api.cc
   api/sq_operator_string_api.cc
   helpers/combinatorial.cc
   helpers/np_matrix_functions.cc
@@ -99,14 +100,13 @@ nanobind_add_module(
   ci/ci_sigma_builder_harrison_zarrabian.cc
   ci/ci_sigma_builder_knowles_handy.cc
   ci/ci_spin_adapter.cc
-  ci/ci_string_lists.cc
-  ci/ci_string_lists_makers.cc
+  ci/ci_strings.cc
+  ci/ci_strings_makers.cc
   ci/ci_string_address.cc
   ci/ci_string_class.cc
   ci/ci_occupation.cc
   ci/determinant_helpers.cc
   ci/sparse_exp.cc
-  ci/ci_vector.cc
   ci/slater_rules.cc
   ci/sparse_operator.cc
   ci/sparse_operator_hamiltonian.cc

@@ -2,14 +2,18 @@ from dataclasses import dataclass, field
 import numpy as np
 import re
 
-import forte2
+from forte2 import ints
+from forte2.scf import RHF, ROHF
+from forte2.state import MOSpace
 from forte2.helpers import logger
-from forte2.helpers.mixins import MOsMixin, SystemMixin
-from forte2.system.atom_data import Z_TO_ATOM_SYMBOL, ATOM_SYMBOL_TO_Z
+from forte2.base_classes.mixins import MOsMixin, SystemMixin, MOSpaceMixin
+from forte2.system import System
+from forte2.system.basis_utils import BasisInfo, shell_label_to_lm
+from forte2.system.atom_data import ATOM_SYMBOL_TO_Z
 
 
 @dataclass
-class AVAS(MOsMixin, SystemMixin):
+class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
     """
     Atomic valence active space (AVAS) method for selecting active orbitals for multi-reference calculations.
 
@@ -76,9 +80,9 @@ class AVAS(MOsMixin, SystemMixin):
 
     def __call__(self, parent_method):
         assert isinstance(
-            parent_method, (forte2.scf.RHF, forte2.scf.ROHF)
+            parent_method, (RHF, ROHF)
         ), f"Parent method must be RHF or ROHF, got {type(parent_method)}"
-        if isinstance(parent_method, forte2.scf.ROHF):
+        if isinstance(parent_method, ROHF):
             logger.log_info1(
                 "*** AVAS will take all singly occupied orbitals to be active! ***"
             )
@@ -91,8 +95,8 @@ class AVAS(MOsMixin, SystemMixin):
         SystemMixin.copy_from_upstream(self, self.parent_method)
         MOsMixin.copy_from_upstream(self, self.parent_method)
 
-        self.basis_info = forte2.basis_utils.BasisInfo(self.system, self.system.basis)
-        minao_info = forte2.basis_utils.BasisInfo(self.system, self.system.minao_basis)
+        self.basis_info = BasisInfo(self.system, self.system.basis)
+        minao_info = BasisInfo(self.system, self.system.minao_basis)
         self.minao_labels = minao_info.basis_labels
         self.atom_to_aos = minao_info.atom_to_aos
 
@@ -210,7 +214,7 @@ class AVAS(MOsMixin, SystemMixin):
                 # if the subset is completely specified, e.g., "C2-3(3dz2)",
                 # we disregard the planes (if any), we only add the specified AO
                 else:
-                    lm = forte2.basis_utils.shell_label_to_lm(mgroups[3][1:].lower())
+                    lm = shell_label_to_lm(mgroups[3][1:].lower())
                     for l, m in lm:
                         for pos in self.atom_to_aos[Z][A]:
                             if (
@@ -260,7 +264,7 @@ class AVAS(MOsMixin, SystemMixin):
 
     def _make_ao_space_projector(self):
         # Overlap Matrix in Minimal AO Basis
-        Smm = forte2.ints.overlap(self.system.minao_basis)
+        Smm = ints.overlap(self.system.minao_basis)
         nbf_m = Smm.shape[0]
         # Build Cms: minimal AO basis to subspace AO basis
         nbf_s = self.subspace_counter
@@ -276,7 +280,7 @@ class AVAS(MOsMixin, SystemMixin):
         evals, evecs = np.linalg.eigh(Sss)
         Xss = evecs @ np.diag((1.0 / np.sqrt(evals))) @ evecs.T
         # Build overlap matrix between subspace and computational (large) basis
-        Sml = forte2.ints.overlap(self.system.minao_basis, self.system.basis)
+        Sml = ints.overlap(self.system.minao_basis, self.system.basis)
         # Project into subspace
         Ssl = Cms.T @ Sml
         # AO projector
@@ -357,13 +361,6 @@ class AVAS(MOsMixin, SystemMixin):
             (np.arange(ndocc), np.arange(nuocc) + ndocc + nsocc), dtype=int
         )[argsort]
         nsig = len(sigmas)
-        # s_all = np.zeros((ndocc + nuocc, 3), dtype=float)
-        # s_all[:, 0] = np.concatenate((s_docc, s_uocc))
-        # s_all[:, 1] = np.concatenate(([1] * ndocc, [0] * nuocc))
-        # s_all[:, 2] = np.concatenate(
-        #     (np.arange(ndocc), np.arange(nuocc) + ndocc + nsocc)
-        # )
-        # s_all = s_all[argsort]
 
         act_docc = []
         act_uocc = []
@@ -473,11 +470,13 @@ class AVAS(MOsMixin, SystemMixin):
             )
         self.nactv = len(act_docc) + len(act_uocc) + nsocc
         self.ncore = len(inact_docc)
-        self.core_orbitals = list(range(self.ncore))
-        self.active_orbitals = list(range(self.ncore, self.ncore + self.nactv))
-        # For compatibility with the MOSpace class
-        self.active_spaces = [self.active_orbitals]
-        self.ngas = 1
+
+        self.mo_space = MOSpace(
+            nmo=self.system.nmo,
+            active_orbitals=list(range(self.ncore, self.ncore + self.nactv)),
+            core_orbitals=list(range(self.ncore)),
+        )
+
         logger.log_info1(f"\nNumber of core orbitals:      {self.ncore}")
         logger.log_info1(f"Number of active orbitals:    {self.nactv}")
 
@@ -506,7 +505,9 @@ class AVAS(MOsMixin, SystemMixin):
         self.C[0][:, au_sl] = C_act_uocc
         self.C[0][:, iu_sl] = C_inact_uocc
 
-        logger.log_info1("\nAO composition of final canonicalized active MOs prepared by AVAS:")
+        logger.log_info1(
+            "\nAO composition of final canonicalized active MOs prepared by AVAS:"
+        )
         self.basis_info.print_ao_composition(
             self.C[0], list(range(ad_sl.start, au_sl.stop))
         )
@@ -570,7 +571,7 @@ class AVAS(MOsMixin, SystemMixin):
             return {}
 
         # test input
-        if not isinstance(system, forte2.System):
+        if not isinstance(system, System):
             raise ValueError("Invalid argument for system!")
         if not isinstance(planes_expr, list):
             raise ValueError("Invalid plane expressions: layer 1 not a list!")

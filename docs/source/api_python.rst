@@ -1,5 +1,5 @@
-Forte2 Python API Reference
-===========================
+Python API
+===========
 
 .. toctree::
    :maxdepth: 4

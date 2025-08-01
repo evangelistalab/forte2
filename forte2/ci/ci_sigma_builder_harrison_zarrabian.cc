@@ -35,7 +35,7 @@ void CISigmaBuilder::H1_aa_gemm(std::span<double> basis, std::span<double> sigma
 
         // loop over blocks of matrix C
         for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-            if (lists_.detpblk(nI) == 0)
+            if (lists_.block_size(nI) == 0)
                 continue;
             size_t maxL = alfa ? beta_address->strpcls(class_Ib) : alfa_address->strpcls(class_Ia);
 
@@ -106,7 +106,7 @@ void CISigmaBuilder::H2_aaaa_gemm(std::span<double> basis, std::span<double> sig
 
         // loop over blocks of matrix C
         for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-            if (lists_.detpblk(nI) == 0)
+            if (lists_.block_size(nI) == 0)
                 continue;
 
             size_t maxL = alfa ? beta_address->strpcls(class_Ib) : alfa_address->strpcls(class_Ia);
@@ -215,7 +215,7 @@ void CISigmaBuilder::H2_aabb_gemm(std::span<double> basis, std::span<double> sig
 
                 // D([qs],[Ka Kb]) = \sum_{Ia,Ib} B^{Ka,Kb,Ia,Ib}_{pq} C_{Ia,Ib}
                 for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-                    if (lists_.detpblk(nI) == 0)
+                    if (lists_.block_size(nI) == 0)
                         continue;
                     const auto maxIb = lists_.beta_address()->strpcls(class_Ib);
                     const auto Cr_offset = lists_.block_offset(nI);
@@ -248,7 +248,7 @@ void CISigmaBuilder::H2_aabb_gemm(std::span<double> basis, std::span<double> sig
 
                 // D([qs],[Ka Kb]) = \sum_{Ia,Ib} B^{Ka,Kb,Ia,Ib}_{pq} C_{Ia,Ib}
                 for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-                    if (lists_.detpblk(nI) == 0)
+                    if (lists_.block_size(nI) == 0)
                         continue;
                     const auto maxIb = lists_.beta_address()->strpcls(class_Ib);
                     const auto Cr_offset = lists_.block_offset(nI);

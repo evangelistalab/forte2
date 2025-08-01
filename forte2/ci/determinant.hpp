@@ -630,9 +630,9 @@ std::string str(const DeterminantImpl<N>& d, int n = DeterminantImpl<N>::nbits_h
         if (d.na(p) and d.nb(p)) {
             s += "2";
         } else if (d.na(p) and not d.nb(p)) {
-            s += "+";
+            s += "a";
         } else if (not d.na(p) and d.nb(p)) {
-            s += "-";
+            s += "b";
         } else {
             s += "0";
         }

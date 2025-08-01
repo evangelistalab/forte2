@@ -1,11 +1,12 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/vector.h>
+#include <nanobind/stl/array.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/pair.h>
 #include <nanobind/ndarray.h>
 
-#include "ci/ci_string_lists.h"
+#include "ci/ci_strings.h"
 #include "ci/ci_string_address.h"
-#include "ci/ci_vector.h"
 #include "ci/ci_sigma_builder.h"
 #include "ci/ci_spin_adapter.h"
 
@@ -17,9 +18,8 @@ namespace forte2 {
 void export_ci_strings_api(nb::module_& m) {
     nb::class_<CIStrings>(m, "CIStrings")
         .def(nb::init<size_t, size_t, int, std::vector<std::vector<int>>, std::vector<int>,
-                      std::vector<int>, int>(),
+                      std::vector<int>>(),
              "na"_a, "nb"_a, "symmetry"_a, "orbital_symmetry"_a, "gas_min"_a, "gas_max"_a,
-             "log_level"_a = 3,
              "Initialize the CIStrings with number of alpha and beta electrons, symmetry, "
              "orbital symmetry, minimum and maximum number of electrons in each GAS space, and "
              "logging level")
@@ -30,22 +30,14 @@ void export_ci_strings_api(nb::module_& m) {
         .def_prop_ro("nas", &CIStrings::nas)
         .def_prop_ro("nbs", &CIStrings::nbs)
         .def_prop_ro("ndet", &CIStrings::ndet)
-        .def("set_log_level", &CIStrings::set_log_level, "level"_a,
-             "Set the logging level for the class")
+        .def_prop_ro("ngas_spaces", &CIStrings::ngas_spaces)
+        .def_prop_ro("gas_size", &CIStrings::gas_size)
+        .def_prop_ro("gas_alfa_occupations", &CIStrings::gas_alfa_occupations)
+        .def_prop_ro("gas_beta_occupations", &CIStrings::gas_beta_occupations)
+        .def_prop_ro("gas_occupations", &CIStrings::gas_occupations)
         .def("determinant", &CIStrings::determinant, "address"_a)
         .def("determinant_index", &CIStrings::determinant_address, "d"_a)
         .def("make_determinants", &CIStrings::make_determinants);
-    // .def_prop_ro("orbitals", &CIStrings::orbitals)
-    // .def_prop_ro("orbital_symmetry", &CIStrings::orbital_symmetry)
-    // .def_prop_ro("gas_min", &CIStrings::gas_min)
-    // .def_prop_ro("gas_max", &CIStrings::gas_max);
-}
-
-void export_ci_vector_api(nb::module_& m) {
-    nb::class_<CIVector>(m, "CIVector")
-        .def(nb::init<const CIStrings&>(), "lists"_a)
-        .def("copy", &CIVector::copy, "vec"_a)
-        .def("copy_to", &CIVector::copy_to, "vec"_a);
 }
 
 void export_ci_sigma_builder_api(nb::module_& m) {
@@ -62,54 +54,78 @@ void export_ci_sigma_builder_api(nb::module_& m) {
         .def("slater_rules_csf", &CISigmaBuilder::slater_rules_csf, "dets"_a, "spin_adapter"_a,
              "I"_a, "J"_a)
         .def("Hamiltonian", &CISigmaBuilder::Hamiltonian, "basis"_a, "sigma"_a)
-        .def("rdm1_a", &CISigmaBuilder::compute_1rdm_same_irrep, "C_left"_a, "C_right"_a, "alfa"_a)
-        .def("rdm2_aa", &CISigmaBuilder::compute_2rdm_aa_same_irrep, "C_left"_a, "C_right"_a,
-             "alfa"_a)
-        .def("rdm2_aa_full", &CISigmaBuilder::compute_2rdm_aa_same_irrep_full, "C_left"_a,
-             "C_right"_a, "alfa"_a)
-        .def("rdm2_ab", &CISigmaBuilder::compute_2rdm_ab_same_irrep, "C_left"_a, "C_right"_a)
-        .def("rdm3_aaa", &CISigmaBuilder::compute_3rdm_aaa_same_irrep, "C_left"_a, "C_right"_a,
-             "alfa"_a)
-        .def("rdm3_aab", &CISigmaBuilder::compute_3rdm_aab_same_irrep, "C_left"_a, "C_right"_a)
-        .def("rdm3_abb", &CISigmaBuilder::compute_3rdm_abb_same_irrep, "C_left"_a, "C_right"_a)
-        .def("rdm1_sf", &CISigmaBuilder::compute_sf_1rdm_same_irrep, "C_left"_a, "C_right"_a)
-        .def("rdm2_sf", &CISigmaBuilder::compute_sf_2rdm_same_irrep, "C_left"_a, "C_right"_a)
+        // Spin-free RDMs and cumulants
+        .def("sf_1rdm", &CISigmaBuilder::compute_sf_1rdm, "C_left"_a, "C_right"_a,
+             "Compute the spin-free one-electron reduced density matrix")
+        .def("sf_2rdm", &CISigmaBuilder::compute_sf_2rdm, "C_left"_a, "C_right"_a,
+             "Compute the spin-free two-electron reduced density matrix")
+        .def("sf_3rdm", &CISigmaBuilder::compute_sf_3rdm, "C_left"_a, "C_right"_a,
+             "Compute the spin-free three-electron reduced density matrix")
+        .def("sf_2cumulant", &CISigmaBuilder::compute_sf_2cumulant, "C_left"_a, "C_right"_a,
+             "Compute the spin-free two-electron cumulant")
+        .def("sf_3cumulant", &CISigmaBuilder::compute_sf_3cumulant, "C_left"_a, "C_right"_a,
+             "Compute the spin-free three-electron cumulant")
+        // Spinful RDMs
+        .def("a_1rdm", &CISigmaBuilder::compute_a_1rdm, "C_left"_a, "C_right"_a,
+             "Compute the alpha one-electron reduced density matrix")
+        .def("b_1rdm", &CISigmaBuilder::compute_b_1rdm, "C_left"_a, "C_right"_a,
+             "Compute the beta one-electron reduced density matrix")
+        .def("aa_2rdm", &CISigmaBuilder::compute_aa_2rdm, "C_left"_a, "C_right"_a,
+             "Compute the alpha-alpha two-electron reduced density matrix")
+        .def("bb_2rdm", &CISigmaBuilder::compute_bb_2rdm, "C_left"_a, "C_right"_a,
+             "Compute the beta-beta two-electron reduced density matrix")
+        .def("ab_2rdm", &CISigmaBuilder::compute_ab_2rdm, "C_left"_a, "C_right"_a,
+             "Compute the alpha-beta two-electron reduced density matrix")
+        .def("aaa_3rdm", &CISigmaBuilder::compute_aaa_3rdm, "C_left"_a, "C_right"_a,
+             "Compute the alpha-alpha-alpha three-electron reduced density matrix")
+        .def("aab_3rdm", &CISigmaBuilder::compute_aab_3rdm, "C_left"_a, "C_right"_a,
+             "Compute the alpha-alpha-beta three-electron reduced density matrix")
+        .def("abb_3rdm", &CISigmaBuilder::compute_abb_3rdm, "C_left"_a, "C_right"_a,
+             "Compute the alpha-beta-beta three-electron reduced density matrix")
+        .def("bbb_3rdm", &CISigmaBuilder::compute_bbb_3rdm, "C_left"_a, "C_right"_a,
+             "Compute the beta-beta-beta three-electron reduced density matrix")
         .def("avg_build_time", &CISigmaBuilder::avg_build_time)
         .def("set_log_level", &CISigmaBuilder::set_log_level, "level"_a,
              "Set the logging level for the class")
-        // The following methods are for debugging purposes
-        .def("rdm1_a_debug", &CISigmaBuilder::compute_1rdm_a_debug, "C_left"_a, "C_right"_a,
+        // RDMs debugging methods
+        .def("a_1rdm_debug", &CISigmaBuilder::compute_a_1rdm_debug, "C_left"_a, "C_right"_a,
              "alfa"_a)
-        .def("rdm2_aa_debug", &CISigmaBuilder::compute_2rdm_aa_debug, "C_left"_a, "C_right"_a,
+        .def("aa_2rdm_debug", &CISigmaBuilder::compute_aa_2rdm_debug, "C_left"_a, "C_right"_a,
              "alfa"_a,
              "Compute the two-electron same-spin reduced density matrix for debugging purposes")
-        .def("rdm2_ab_debug", &CISigmaBuilder::compute_2rdm_ab_debug, "C_left"_a, "C_right"_a,
+        .def("ab_2rdm_debug", &CISigmaBuilder::compute_ab_2rdm_debug, "C_left"_a, "C_right"_a,
              "Compute the two-electron mixed-spin reduced density matrix for debugging purposes")
-        .def("rdm3_aaa_debug", &CISigmaBuilder::compute_3rdm_aaa_debug, "C_left"_a, "C_right"_a,
+        .def("aaa_3rdm_debug", &CISigmaBuilder::compute_aaa_3rdm_debug, "C_left"_a, "C_right"_a,
              "alfa"_a,
              "Compute the three-electron same-spin reduced density matrix for debugging purposes")
-        .def("rdm3_aab_debug", &CISigmaBuilder::compute_3rdm_aab_debug, "C_left"_a, "C_right"_a,
+        .def("aab_3rdm_debug", &CISigmaBuilder::compute_aab_3rdm_debug, "C_left"_a, "C_right"_a,
              "Compute the aab mixed-spin three-electron reduced density matrix for debugging "
              "purposes")
-        .def("rdm3_abb_debug", &CISigmaBuilder::compute_3rdm_abb_debug, "C_left"_a, "C_right"_a,
+        .def("abb_3rdm_debug", &CISigmaBuilder::compute_abb_3rdm_debug, "C_left"_a, "C_right"_a,
              "Compute the abb mixed-spin three-electron reduced density matrix for debugging "
              "purposes")
-        .def("rdm4_aaaa_debug", &CISigmaBuilder::compute_4rdm_aaaa_debug, "C_left"_a, "C_right"_a,
+        .def("aaaa_4rdm_debug", &CISigmaBuilder::compute_aaaa_4rdm_debug, "C_left"_a, "C_right"_a,
              "alfa"_a,
              "Compute the four-electron same-spin reduced density matrix for debugging purposes")
-        .def("rdm4_aaab_debug", &CISigmaBuilder::compute_4rdm_aaab_debug, "C_left"_a, "C_right"_a,
+        .def("aaab_4rdm_debug", &CISigmaBuilder::compute_aaab_4rdm_debug, "C_left"_a, "C_right"_a,
              "Compute the aaab mixed-spin four-electron reduced density matrix for debugging "
              "purposes")
-        .def("rdm4_aabb_debug", &CISigmaBuilder::compute_4rdm_aabb_debug, "C_left"_a, "C_right"_a,
+        .def("aabb_4rdm_debug", &CISigmaBuilder::compute_aabb_4rdm_debug, "C_left"_a, "C_right"_a,
              "Compute the aabb mixed-spin four-electron reduced density matrix for debugging "
              "purposes")
-        .def("rdm4_abbb_debug", &CISigmaBuilder::compute_4rdm_abbb_debug, "C_left"_a, "C_right"_a,
+        .def("abbb_4rdm_debug", &CISigmaBuilder::compute_abbb_4rdm_debug, "C_left"_a, "C_right"_a,
              "Compute the abbb mixed-spin four-electron reduced density matrix for debugging "
              "purposes")
-        .def("rdm1_sf_debug", &CISigmaBuilder::compute_sf_1rdm_debug, "C_left"_a, "C_right"_a,
+        .def("sf_1rdm_debug", &CISigmaBuilder::compute_sf_1rdm_debug, "C_left"_a, "C_right"_a,
              "Compute the spin-free one-electron reduced density matrix for debugging purposes")
-        .def("rdm2_sf_debug", &CISigmaBuilder::compute_sf_2rdm_debug, "C_left"_a, "C_right"_a,
-             "Compute the spin-free two-electron reduced density matrix for debugging purposes");
+        .def("sf_2rdm_debug", &CISigmaBuilder::compute_sf_2rdm_debug, "C_left"_a, "C_right"_a,
+             "Compute the spin-free two-electron reduced density matrix for debugging purposes")
+        .def("sf_3rdm_debug", &CISigmaBuilder::compute_sf_3rdm_debug, "C_left"_a, "C_right"_a,
+             "Compute the spin-free three-electron reduced density matrix for debugging purposes")
+        .def("sf_2cumulant_debug", &CISigmaBuilder::compute_sf_2cumulant_debug, "C_left"_a,
+             "C_right"_a, "Compute the spin-free two-electron cumulant for debugging purposes")
+        .def("sf_3cumulant_debug", &CISigmaBuilder::compute_sf_3cumulant_debug, "C_left"_a,
+             "C_right"_a, "Compute the spin-free three-electron cumulant for debugging purposes");
 }
 
 void export_ci_spin_adapter_api(nb::module_& m) {

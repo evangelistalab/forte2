@@ -31,7 +31,7 @@ void CISigmaBuilder::H1_kh(std::span<double> basis, std::span<double> sigma, boo
     size_t norb = lists_.norb();
     // loop over blocks of matrix C
     for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-        if (lists_.detpblk(nI) == 0)
+        if (lists_.block_size(nI) == 0)
             continue;
         auto Cr = gather_block(basis, TR, alfa, lists_, class_Ia, class_Ib);
 
@@ -42,10 +42,10 @@ void CISigmaBuilder::H1_kh(std::span<double> basis, std::span<double> sigma, boo
             // For beta operator, the alpha string classes of the result must be the same
             if (not alfa and (class_Ia != class_Ja))
                 continue;
-            if (lists_.detpblk(nJ) == 0)
+            if (lists_.block_size(nJ) == 0)
                 continue;
 
-            std::fill_n(TL.begin(), lists_.detpblk(nJ), 0.0);
+            std::fill_n(TL.begin(), lists_.block_size(nJ), 0.0);
 
             size_t maxL = alfa ? lists_.beta_address()->strpcls(class_Ib)
                                : lists_.alfa_address()->strpcls(class_Ia);
@@ -250,7 +250,7 @@ void gather_alpha_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb
     for (auto const& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
         const auto Ib_occ = lists.gas_beta_occupations()[class_Ib / lists.nirrep()];
 
-        if ((Ib_occ != Kb_occ) or (lists.detpblk(nI) == 0))
+        if ((Ib_occ != Kb_occ) or (lists.block_size(nI) == 0))
             continue;
 
         // get all Ka/Ia pairs connected to the current class_Ka and class_Ia
@@ -280,7 +280,7 @@ void gather_beta_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb,
     const auto Ka_occ = lists.gas_alfa_1h1p_occupations()[class_Ka / lists.nirrep()];
     for (auto const& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
         const auto Ia_occ = lists.gas_alfa_occupations()[class_Ia / lists.nirrep()];
-        if ((Ia_occ != Ka_occ) or (lists.detpblk(nI) == 0))
+        if ((Ia_occ != Ka_occ) or (lists.block_size(nI) == 0))
             continue;
 
         // get all Kb/Ib pairs connected to the current class_Kb and class_Ib
@@ -311,7 +311,7 @@ void scatter_beta_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb
     const auto Ka_occ = lists.gas_alfa_1h1p_occupations()[class_Ka / lists.nirrep()];
     for (const auto& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
         const auto Ia_occ = lists.gas_alfa_occupations()[class_Ia / lists.nirrep()];
-        if ((Ia_occ != Ka_occ) or (lists.detpblk(nI) == 0))
+        if ((Ia_occ != Ka_occ) or (lists.block_size(nI) == 0))
             continue;
 
         // get all Kb/Ib pairs connected to the current class_Kb and class_Ib
@@ -345,7 +345,7 @@ void scatter_alpha_block(const CIStrings& lists, size_t class_Ka, size_t class_K
     const auto Kb_occ = lists.gas_beta_1h1p_occupations()[class_Kb / lists.nirrep()];
     for (auto const& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
         const auto Ib_occ = lists.gas_beta_occupations()[class_Ib / lists.nirrep()];
-        if ((Ib_occ != Kb_occ) or (lists.detpblk(nI) == 0))
+        if ((Ib_occ != Kb_occ) or (lists.block_size(nI) == 0))
             continue;
         // get all Ia/Ka pairs connected to the current class_Ka and class_Ia
         const auto alfa_vo_list = lists.get_alfa_vo_list2(class_Ka, class_Ia);

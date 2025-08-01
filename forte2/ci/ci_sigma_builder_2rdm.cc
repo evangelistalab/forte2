@@ -8,17 +8,23 @@
 
 namespace forte2 {
 
-np_matrix CISigmaBuilder::compute_2rdm_aa_same_irrep(np_vector C_left, np_vector C_right,
-                                                     bool alfa) const {
+np_matrix CISigmaBuilder::compute_ss_2rdm(np_vector C_left, np_vector C_right, bool alfa) const {
     local_timer timer;
-
-    const size_t norb = lists_.norb();
-    const size_t npairs = (norb * (norb - 1)) / 2;
-
-    auto rdm = make_zeros<nb::numpy, double, 2>({npairs, npairs});
 
     const auto na = lists_.na();
     const auto nb = lists_.nb();
+    const size_t norb = lists_.norb();
+
+    // if there are less than two orbitals, return an empty matrix
+    if (norb < 2) {
+        return make_zeros<nb::numpy, double, 2>({0, 0});
+    }
+
+    // calculate the number of pairs of orbitals p > q
+    const size_t npairs = (norb * (norb - 1)) / 2;
+    auto rdm = make_zeros<nb::numpy, double, 2>({npairs, npairs});
+
+    // skip building the RDM if there are not enough electrons
     if ((alfa and (na < 2)) or ((!alfa) and (nb < 2)))
         return rdm;
 
@@ -39,7 +45,7 @@ np_matrix CISigmaBuilder::compute_2rdm_aa_same_irrep(np_vector C_left, np_vector
 
         // loop over blocks of matrix C
         for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-            if (lists_.detpblk(nI) == 0)
+            if (lists_.block_size(nI) == 0)
                 continue;
 
             auto tr = gather_block(Cr_span, TR, alfa, lists_, class_Ia, class_Ib);
@@ -48,7 +54,7 @@ np_matrix CISigmaBuilder::compute_2rdm_aa_same_irrep(np_vector C_left, np_vector
                 // The string class on which we don't act must be the same for I and J
                 if ((alfa and (class_Ib != class_Jb)) or (not alfa and (class_Ia != class_Ja)))
                     continue;
-                if (lists_.detpblk(nJ) == 0)
+                if (lists_.block_size(nJ) == 0)
                     continue;
 
                 const size_t maxL =
@@ -80,21 +86,34 @@ np_matrix CISigmaBuilder::compute_2rdm_aa_same_irrep(np_vector C_left, np_vector
     return rdm;
 }
 
-np_tensor4 CISigmaBuilder::compute_2rdm_ab_same_irrep(np_vector C_left, np_vector C_right) {
-    local_timer timer;
-    size_t norb = lists_.norb();
-    auto rdm = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
+np_matrix CISigmaBuilder::compute_aa_2rdm(np_vector C_left, np_vector C_right) const {
+    return compute_ss_2rdm(C_left, C_right, true);
+}
 
-    auto norb2 = norb * norb;
-    auto norb3 = norb2 * norb;
-    auto index = [norb, norb2, norb3](size_t p, size_t q, size_t r, size_t s) {
-        return p * norb3 + q * norb2 + r * norb + s;
-    };
+np_matrix CISigmaBuilder::compute_bb_2rdm(np_vector C_left, np_vector C_right) const {
+    return compute_ss_2rdm(C_left, C_right, false);
+}
+
+np_tensor4 CISigmaBuilder::compute_ab_2rdm(np_vector C_left, np_vector C_right) const {
+    local_timer timer;
 
     const auto na = lists_.na();
     const auto nb = lists_.nb();
-    if ((na < 1) or (nb < 1))
+    const auto norb = lists_.norb();
+    const auto norb2 = norb * norb;
+    const auto norb3 = norb2 * norb;
+
+    auto rdm = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
+
+    // skip building the RDM if there are no electrons or there are zero orbitals
+    if ((na < 1) or (nb < 1) or (norb < 1)) {
         return rdm;
+    }
+
+    // Create a lambda to compute the index in the 4D tensor
+    auto index = [norb, norb2, norb3](size_t p, size_t q, size_t r, size_t s) {
+        return p * norb3 + q * norb2 + r * norb + s;
+    };
 
     auto rdm_data = rdm.data();
 
@@ -110,14 +129,14 @@ np_tensor4 CISigmaBuilder::compute_2rdm_ab_same_irrep(np_vector C_left, np_vecto
             const auto maxKb = lists_.beta_address_1h()->strpcls(class_Kb);
             // loop over blocks of matrix C
             for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-                if (lists_.detpblk(nI) == 0)
+                if (lists_.block_size(nI) == 0)
                     continue;
 
                 const auto maxIb = lists_.beta_address()->strpcls(class_Ib);
                 const auto Cr_offset = lists_.block_offset(nI);
 
                 for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
-                    if (lists_.detpblk(nJ) == 0)
+                    if (lists_.block_size(nJ) == 0)
                         continue;
 
                     const auto maxJb = lists_.beta_address()->strpcls(class_Jb);
@@ -152,22 +171,49 @@ np_tensor4 CISigmaBuilder::compute_2rdm_ab_same_irrep(np_vector C_left, np_vecto
     return rdm;
 }
 
-np_tensor4 CISigmaBuilder::compute_sf_2rdm_same_irrep(np_vector C_left, np_vector C_right) {
-    auto rdm_sf = compute_2rdm_aa_same_irrep_full(C_left, C_right, true);
-    auto rdm_bb = compute_2rdm_aa_same_irrep_full(C_left, C_right, false);
-    auto rdm_ab = compute_2rdm_ab_same_irrep(C_left, C_right);
+np_tensor4 CISigmaBuilder::compute_sf_2rdm(np_vector C_left, np_vector C_right) const {
+    size_t norb = lists_.norb();
+    auto rdm_sf = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
 
-    auto norb = lists_.norb();
+    if (norb < 1) {
+        return rdm_sf; // No 2-RDM for less than 1 orbitals
+    }
+
     auto rdm_sf_v = rdm_sf.view();
-    auto rdm_ab_v = rdm_ab.view();
-    auto rdm_bb_v = rdm_bb.view();
+    // Mixed-spin contribution (1 orbital or more)
+    {
+        auto rdm_ab = compute_ab_2rdm(C_left, C_right);
+        auto rdm_ab_v = rdm_ab.view();
+        for (size_t p{0}; p < norb; ++p) {
+            for (size_t q{0}; q < norb; ++q) {
+                for (size_t r{0}; r < norb; ++r) {
+                    for (size_t s{0}; s < norb; ++s) {
+                        rdm_sf_v(p, q, r, s) += rdm_ab_v(p, q, r, s) + rdm_ab_v(q, p, s, r);
+                    }
+                }
+            }
+        }
+    }
 
-    for (size_t p{0}; p < norb; ++p) {
-        for (size_t q{0}; q < norb; ++q) {
-            for (size_t r{0}; r < norb; ++r) {
-                for (size_t s{0}; s < norb; ++s) {
-                    rdm_sf_v(p, q, r, s) +=
-                        rdm_bb_v(p, q, r, s) + rdm_ab_v(p, q, r, s) + rdm_ab_v(q, p, s, r);
+    if (norb < 2) {
+        return rdm_sf; // No same-spin contributions to the 2-RDM for less than 2 orbitals
+    }
+
+    // To reduce the  memory footprint, we compute the aa and bb contributions in a packed
+    // format and one at a time.
+    for (auto spin : {true, false}) {
+        auto rdm_ss = compute_ss_2rdm(C_left, C_right, spin);
+        auto rdm_ss_v = rdm_ss.view();
+        for (size_t p{1}, pq{0}; p < norb; ++p) {
+            for (size_t q{0}; q < p; ++q, ++pq) { // p > q
+                for (size_t r{1}, rs{0}; r < norb; ++r) {
+                    for (size_t s{0}; s < r; ++s, ++rs) { // r > s
+                        auto element = rdm_ss_v(pq, rs);
+                        rdm_sf_v(p, q, r, s) += element;
+                        rdm_sf_v(q, p, r, s) -= element;
+                        rdm_sf_v(p, q, s, r) -= element;
+                        rdm_sf_v(q, p, s, r) += element;
+                    }
                 }
             }
         }
@@ -176,42 +222,54 @@ np_tensor4 CISigmaBuilder::compute_sf_2rdm_same_irrep(np_vector C_left, np_vecto
     return rdm_sf;
 }
 
-np_tensor4 CISigmaBuilder::compute_2rdm_aa_same_irrep_full(np_vector C_left, np_vector C_right,
-                                                           bool alfa) const {
-    auto rdm = compute_2rdm_aa_same_irrep(C_left, C_right, alfa);
-    auto norb = lists_.norb();
-    auto rdm_full = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
-    auto rdm_v = rdm.view();
-    auto rdm_full_v = rdm_full.view();
+// np_tensor4 CISigmaBuilder::compute_aa_2rdm_full(np_vector C_left, np_vector C_right,
+//                                                 bool alfa) const {
+//     auto rdm = compute_aa_2rdm(C_left, C_right, alfa);
+//     const auto norb = lists_.norb();
+//     auto rdm_full = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
+//     auto rdm_v = rdm.view();
+//     auto rdm_full_v = rdm_full.view();
 
-    for (size_t p{1}; p < norb; ++p) {
-        for (size_t q{0}; q < p; ++q) { // p > q
-            auto pq = pair_index_gt(p, q);
-            for (size_t r{1}; r < norb; ++r) {
-                for (size_t s{0}; s < r; ++s) { // r > s
-                    auto rs = pair_index_gt(r, s);
-                    auto element = rdm_v(pq, rs);
-                    rdm_full_v(p, q, r, s) = element;
-                    rdm_full_v(q, p, r, s) = -element;
-                    rdm_full_v(p, q, s, r) = -element;
-                    rdm_full_v(q, p, s, r) = element;
+//     for (size_t p{1}; p < norb; ++p) {
+//         for (size_t q{0}; q < p; ++q) { // p > q
+//             auto pq = pair_index_gt(p, q);
+//             for (size_t r{1}; r < norb; ++r) {
+//                 for (size_t s{0}; s < r; ++s) { // r > s
+//                     auto rs = pair_index_gt(r, s);
+//                     auto element = rdm_v(pq, rs);
+//                     rdm_full_v(p, q, r, s) = element;
+//                     rdm_full_v(q, p, r, s) = -element;
+//                     rdm_full_v(p, q, s, r) = -element;
+//                     rdm_full_v(q, p, s, r) = element;
+//                 }
+//             }
+//         }
+//     }
+//     return rdm_full;
+// }
+
+np_tensor4 CISigmaBuilder::compute_sf_2cumulant(np_vector C_left, np_vector C_right) const {
+    // Compute the spin-free 1-RDM
+    auto G1 = compute_sf_1rdm(C_left, C_right);
+    // Compute the spin-free 2-RDM (this will hold the cumulant)
+    auto L2 = compute_sf_2rdm(C_left, C_right);
+
+    // Evaluate L2[p,q,r,s] = G2[p,q,r,s] - G1[p,r] * G1[q,s] + 0.5 * G1[p,s] * G1[q,r]
+    auto G1_v = G1.view();
+    auto L2_v = L2.view();
+
+    const auto norb = lists_.norb();
+    for (size_t p{0}; p < norb; ++p) {
+        for (size_t q{0}; q < norb; ++q) {
+            for (size_t r{0}; r < norb; ++r) {
+                for (size_t s{0}; s < norb; ++s) {
+                    L2_v(p, q, r, s) += -G1_v(p, r) * G1_v(q, s) + 0.5 * G1_v(p, s) * G1_v(q, r);
                 }
             }
         }
     }
-    return rdm_full;
+    return L2;
 }
-
-// ambit::Tensor RDMs::SF_L2() const {
-//     _test_rdm_level(2, "L2");
-//     timer t("make_cumulant_L2");
-//     auto G1 = SF_G1();
-//     auto L2 = SF_G2().clone();
-//     L2("pqrs") -= G1("pr") * G1("qs");
-//     L2("pqrs") += 0.5 * G1("ps") * G1("qr");
-//     L2.set_name("SF_L2");
-//     return L2;
-// }
 
 } // namespace forte2
 
@@ -219,7 +277,7 @@ np_tensor4 CISigmaBuilder::compute_2rdm_aa_same_irrep_full(np_vector C_left, np_
 //  * Compute the aa/bb two-particle density matrix for a given wave function
 //  * @param alfa flag for alfa or beta component, true = aa, false = bb
 //  */
-// np_matrix CISigmaBuilder::compute_2rdm_aa_same_irrep(np_vector C_left, np_vector C_right,
+// np_matrix CISigmaBuilder::compute_aa_2rdm(np_vector C_left, np_vector C_right,
 //                                                      bool alfa) {
 //     const size_t norb = lists_.norb();
 //     const size_t npairs = (norb * (norb - 1)) / 2;
@@ -236,7 +294,7 @@ np_tensor4 CISigmaBuilder::compute_2rdm_aa_same_irrep_full(np_vector C_left, np_
 //     auto rdm_view = rdm.view();
 
 //     for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-//         if (lists_.detpblk(nI) == 0)
+//         if (lists_.block_size(nI) == 0)
 //             continue;
 
 //         gather_block(C_right, CR, alfa, lists_, class_Ia, class_Ib);
@@ -245,7 +303,7 @@ np_tensor4 CISigmaBuilder::compute_2rdm_aa_same_irrep_full(np_vector C_left, np_
 //             // The string class on which we don't act must be the same for I and J
 //             if ((alfa and (class_Ib != class_Jb)) or (not alfa and (class_Ia != class_Ja)))
 //                 continue;
-//             if (lists_.detpblk(nJ) == 0)
+//             if (lists_.block_size(nJ) == 0)
 //                 continue;
 
 //             gather_block(C_left, CL, alfa, lists_, class_Ja, class_Jb);
@@ -291,7 +349,7 @@ np_tensor4 CISigmaBuilder::compute_2rdm_aa_same_irrep_full(np_vector C_left, np_
 //     return rdm;
 // }
 
-// ambit::Tensor CIVector::compute_2rdm_ab_same_irrep(CIVector& C_left, CIVector& C_right) {
+// ambit::Tensor CIVector::compute_ab_2rdm(CIVector& C_left, CIVector& C_right) {
 //     size_t ncmo = C_left.ncmo_;
 //     const auto& alfa_address = C_left.alfa_address_;
 //     const auto& beta_address = C_left.beta_address_;
@@ -309,14 +367,14 @@ np_tensor4 CISigmaBuilder::compute_2rdm_aa_same_irrep_full(np_vector C_left, np_
 //     const auto& mo_sym = lists->string_class()->mo_sym();
 //     // Loop over blocks of matrix C
 //     for (const auto& [nI, class_Ia, class_Ib] : lists->determinant_classes()) {
-//         if (lists->detpblk(nI) == 0)
+//         if (lists->block_size(nI) == 0)
 //             continue;
 
 //         auto h_Ib = lists->string_class()->beta_string_classes()[class_Ib].second;
 //         const auto Cr = C_right.C_[nI]->pointer();
 
 //         for (const auto& [nJ, class_Ja, class_Jb] : lists->determinant_classes()) {
-//             if (lists->detpblk(nJ) == 0)
+//             if (lists->block_size(nJ) == 0)
 //                 continue;
 
 //             auto h_Jb = lists->string_class()->beta_string_classes()[class_Jb].second;

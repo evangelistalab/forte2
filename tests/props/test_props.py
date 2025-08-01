@@ -20,8 +20,9 @@ def test_core_energy():
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)
-    ke = forte2.get_property(scf, "kinetic_energy")
-    ve = forte2.get_property(scf, "nuclear_attraction_energy")
+    dm1 = scf._build_total_density_matrix()
+    ke = forte2.get_1e_property(system, dm1, "kinetic_energy")
+    ve = forte2.get_1e_property(system, dm1, "nuclear_attraction_energy")
     assert ke + ve == approx(ecore)
 
 
@@ -40,8 +41,8 @@ def test_dipole_rhf():
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)
-    dip = forte2.get_property(scf, "dipole")
-    print(dip)
+    dm1 = scf._build_total_density_matrix()
+    dip = forte2.get_1e_property(system, dm1, "dipole")
     assert dip == approx_loose([0.00000, 0.00000, 1.95868013])
 
 
@@ -58,11 +59,16 @@ def test_dipole_uhf():
     )
 
     scf = UHF(charge=1, ms=0.5)(system)
-    e_dip = forte2.get_property(scf, "electric_dipole")
-    # get_property will run the scf if not already run
+    scf.run()
     assert scf.E == approx(euhf)
+
+    dm1 = scf._build_total_density_matrix()
+    e_dip = forte2.get_1e_property(
+        system, dm1, "electric_dipole", origin=system.center_of_mass
+    )
+
     assert e_dip == approx_loose([0, 0, -2.56784946e-02])
-    dip = forte2.get_property(scf, "dipole", origin=[1.2, -0.7, 1])
+    dip = forte2.get_1e_property(system, dm1, "dipole", origin=[1.2, -0.7, 1])
     assert dip == approx([-3.05009553, 1.77922239, -0.23558438])
 
 
@@ -81,8 +87,8 @@ def test_quadrupole_rhf():
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)
-    quad = forte2.get_property(scf, "quadrupole")
-    print(quad)
+    dm1 = scf._build_total_density_matrix()
+    quad = forte2.get_1e_property(system, dm1, "quadrupole")
     assert np.trace(quad) == approx_loose(0.0)
     assert np.diag(quad) == approx([-2.16502486e00, 2.28286793e00, -1.17843071e-01])
 
@@ -102,5 +108,7 @@ def test_mulliken_rhf():
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)
-    mp = forte2.mulliken_population(scf)
+
+    dm1 = scf._build_total_density_matrix()
+    mp = forte2.mulliken_population(system, dm1)
     assert mp[1] == approx([-0.4620044, 0.2310022, 0.2310022])

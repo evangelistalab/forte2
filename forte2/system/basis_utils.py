@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-import forte2
+from forte2 import Basis
 from forte2.system import System
 from forte2.helpers import logger
 from forte2.system.atom_data import Z_TO_ATOM_SYMBOL
@@ -95,9 +95,9 @@ class BasisInfo:
 
     Parameters
     ----------
-    system : forte2.System
+    system : System
         The system for which the basis set information is to be generated.
-    basis : forte2.ints.Basis
+    basis : Basis
         The basis set.
 
     Attributes
@@ -116,7 +116,7 @@ class BasisInfo:
     """
 
     system: System
-    basis: forte2.ints.Basis
+    basis: Basis
 
     @dataclass
     class _AOLabel:
@@ -210,7 +210,7 @@ class BasisInfo:
                 label = self.basis_labels[c_argsort[iao]]
                 abs_ao_idx = "(" + str(label.abs_idx) + ")"
                 atom_label = f"{Z_TO_ATOM_SYMBOL[label.Z].capitalize()}{label.Zidx}"
-                shell_label = str(label.n) + forte2.basis_utils.get_shell_label(
+                shell_label = str(label.n) + get_shell_label(
                     label.l, label.m
                 )
                 ao_coeff = f"{c[c_argsort[iao]]:<+6.4f}"

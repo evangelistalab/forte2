@@ -7,7 +7,7 @@
 
 #include "helpers/ndarray.h"
 
-#include "ci/ci_string_lists.h"
+#include "ci/ci_strings.h"
 #include "ci/slater_rules.h"
 #include "ci/ci_spin_adapter.h"
 
@@ -74,38 +74,62 @@ class CISigmaBuilder {
         }
     }
 
-    /// @brief Compute the one-electron reduced density matrix
+    /// @brief Compute the spin-dependent one-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
     /// @param C_right The right-hand side coefficients
     /// @param alfa If true, compute the alpha contribution, otherwise the beta
     /// @return The one-electron reduced density matrix stored as
-    ///        gamma(sigma)[p][q] = <L| a^+_p a_q |R> with p,q orbitals of spin sigma
-    np_matrix compute_1rdm_same_irrep(np_vector C_left, np_vector C_right, bool alfa);
+    ///        gamma(spin)[p][q] = <L| a^+_p a_q |R> with p,q orbitals of spin alpha/beta
+    /// @note If the number of orbitals is 0, a matrix of shape (0, 0) is returned
+    np_matrix compute_s_1rdm(np_vector C_left, np_vector C_right, bool alfa) const;
+
+    /// @brief Compute the alpha one-electron reduced density matrix
+    /// @param C_left The left-hand side coefficients
+    /// @param C_right The right-hand side coefficients
+    /// @return The one-electron reduced density matrix stored as
+    ///        gamma(alpha)[p][q] = <L| a^+_p a_q |R> with p,q orbitals of spin alpha
+    /// @note If the number of orbitals is 0, a matrix of shape (0, 0) is returned
+    np_matrix compute_a_1rdm(np_vector C_left, np_vector C_right) const;
+
+    /// @brief Compute the beta one-electron reduced density matrix
+    /// @param C_left The left-hand side coefficients
+    /// @param C_right The right-hand side coefficients
+    /// @return The one-electron reduced density matrix stored as
+    ///        gamma(beta)[p][q] = <L| b^+_p b_q |R> with p,q orbitals of spin beta
+    /// @note If the number of orbitals is 0, a matrix of shape (0, 0) is returned
+    np_matrix compute_b_1rdm(np_vector C_left, np_vector C_right) const;
 
     /// @brief Compute the spin-free one-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
     /// @param C_right The right-hand side coefficients
     /// @return The spin-free one-electron reduced density matrix stored as
     ///        Gamma[p][q] = gamma(alpha)[p][q] + gamma(beta)[p][q]
-    np_matrix compute_sf_1rdm_same_irrep(np_vector C_left, np_vector C_right);
+    np_matrix compute_sf_1rdm(np_vector C_left, np_vector C_right) const;
 
-    /// @brief Compute the two-electron same-spin reduced density matrix
+    /// @brief Compute the same-spin two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
     /// @param C_right The right-hand side coefficients
     /// @param alfa If true, compute the alpha contribution, otherwise the beta
     /// @return The two-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(sigma)[p>q][r>s] = <L| a^+_p a^+_q a_s a_r |R>
     ///        with p > q, and r > s orbitals of spin sigma
-    np_matrix compute_2rdm_aa_same_irrep(np_vector C_left, np_vector C_right, bool alfa) const;
+    np_matrix compute_ss_2rdm(np_vector C_left, np_vector C_right, bool alfa) const;
 
-    /// @brief Compute the two-electron same-spin two-electron reduced density matrix
+    /// @brief Compute the alpha-alpha two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
     /// @param C_right The right-hand side coefficients
-    /// @param alfa If true, compute the alpha contribution, otherwise the beta
-    /// @return The two-electron same-spin reduced density matrix stored as a tensor
-    ///        gamma[p][q][r][s] = <L| a^+_p a^+_q a_s a_r |R>
-    np_tensor4 compute_2rdm_aa_same_irrep_full(np_vector C_left, np_vector C_right,
-                                               bool alfa) const;
+    /// @return The two-electron same-spin reduced density matrix stored as a matrix
+    ///        gamma(sigma)[p>q][r>s] = <L| a^+_p a^+_q a_s a_r |R>
+    ///        with p > q, and r > s orbitals of spin sigma
+    np_matrix compute_aa_2rdm(np_vector C_left, np_vector C_right) const;
+
+    /// @brief Compute the beta-beta two-electron reduced density matrix
+    /// @param C_left The left-hand side coefficients
+    /// @param C_right The right-hand side coefficients
+    /// @return The two-electron same-spin reduced density matrix stored as a matrix
+    ///        gamma(sigma)[p>q][r>s] = <L| a^+_p a^+_q a_s a_r |R>
+    ///        with p > q, and r > s orbitals of spin sigma
+    np_matrix compute_bb_2rdm(np_vector C_left, np_vector C_right) const;
 
     /// @brief Compute the mixed-spin two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -113,7 +137,7 @@ class CISigmaBuilder {
     /// @return The two-electron mixed-spin reduced density matrix stored as a tensor
     ///        gamma[p][q][r][s] = <L| a^+_p a^+_q a_s a_r |R>
     ///        with p,r orbitals of spin alpha and q,s orbitals of spin beta
-    np_tensor4 compute_2rdm_ab_same_irrep(np_vector C_left, np_vector C_right);
+    np_tensor4 compute_ab_2rdm(np_vector C_left, np_vector C_right) const;
 
     /// @brief Compute the spin-free two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -123,7 +147,15 @@ class CISigmaBuilder {
     ///                            gamma(bb)[p][q][r][s] +
     ///                            gamma(ab)[p][q][r][s]
     ///                            gamma(ab)[q][p][s][r]
-    np_tensor4 compute_sf_2rdm_same_irrep(np_vector C_left, np_vector C_right);
+    np_tensor4 compute_sf_2rdm(np_vector C_left, np_vector C_right) const;
+
+    /// @brief Compute the cumulant of the spin-free two-electron reduced density matrix
+    /// @param C_left The left-hand side coefficients
+    /// @param C_right The right-hand side coefficients
+    /// @return The cumulant of the two-electron spin-free reduced density matrix stored as a tensor
+    ///        lambda[p][q][r][s] = gamma[p][q][r][s] - gamma[p][r] * gamma[q][s] +
+    ///                              0.5 * gamma[p][s] * gamma[q][r]
+    np_tensor4 compute_sf_2cumulant(np_vector C_left, np_vector C_right) const;
 
     /// @brief Compute the three-electron same-spin reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -132,7 +164,23 @@ class CISigmaBuilder {
     /// @return The three-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(sigma)[p>q>r][s>t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
     ///        with p > q > r, and s > t > u orbitals of spin sigma
-    np_matrix compute_3rdm_aaa_same_irrep(np_vector C_left, np_vector C_right, bool alfa) const;
+    np_matrix compute_sss_3rdm(np_vector C_left, np_vector C_right, bool alfa) const;
+
+    /// @brief Compute the alpha-alpha-alpha three-electron same-spin reduced density matrix
+    /// @param C_left The left-hand side coefficients
+    /// @param C_right The right-hand side coefficients
+    /// @return The three-electron same-spin reduced density matrix stored as a matrix
+    ///        gamma(aaa)[p>q>r][s>t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
+    ///        with p > q > r, and s > t > u orbitals of spin alpha
+    np_matrix compute_aaa_3rdm(np_vector C_left, np_vector C_right) const;
+
+    /// @brief Compute the beta-beta-beta three-electron same-spin reduced density matrix
+    /// @param C_left The left-hand side coefficients
+    /// @param C_right The right-hand side coefficients
+    /// @return The three-electron same-spin reduced density matrix stored as a matrix
+    ///        gamma(bbb)[p>q>r][s>t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
+    ///        with p > q > r, and s > t > u orbitals of spin beta
+    np_matrix compute_bbb_3rdm(np_vector C_left, np_vector C_right) const;
 
     /// @brief Compute the aab mixed-spin three-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -140,7 +188,7 @@ class CISigmaBuilder {
     /// @return The three-electron mixed-spin reduced density matrix stored as a tensor
     ///        gamma[p>q][r][s>t][u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
     ///        with p > q and s > t are alpha spin orbitals and r,u are beta spin orbitals
-    np_tensor4 compute_3rdm_aab_same_irrep(np_vector C_left, np_vector C_right) const;
+    np_tensor4 compute_aab_3rdm(np_vector C_left, np_vector C_right) const;
 
     /// @brief Compute the abb mixed-spin three-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -148,26 +196,47 @@ class CISigmaBuilder {
     /// @return The three-electron mixed-spin reduced density matrix stored as a tensor
     ///        gamma[p][q>r][s][t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
     ///        with p and s are alpha spin orbitals and q > r and u > t are beta spin orbitals
-    np_tensor4 compute_3rdm_abb_same_irrep(np_vector C_left, np_vector C_right) const;
+    np_tensor4 compute_abb_3rdm(np_vector C_left, np_vector C_right) const;
 
-    // The following are debugging functions that compute reduced density matrices that parallel the
-    // definition of the functions above.
-    np_matrix compute_1rdm_a_debug(np_vector C_left, np_vector C_right, bool alfa);
+    /// @brief Compute the spin-free three-electron reduced density matrix
+    /// @param C_left The left-hand side coefficients
+    /// @param C_right The right-hand side coefficients
+    /// @return The three-electron spin-free reduced density matrix stored as a tensor
+    ///        gamma[p][q][r][s][t][u] = gamma(aaa)[p][q][r][s][t][u] +
+    ///                                  gamma(bbb)[p][q][r][s][t][u] + ...
+    np_tensor6 compute_sf_3rdm(np_vector C_left, np_vector C_right) const;
 
-    np_matrix compute_2rdm_aa_debug(np_vector C_left, np_vector C_right, bool alfa);
-    np_tensor4 compute_2rdm_ab_debug(np_vector C_left, np_vector C_right);
+    /// @brief Compute the cumulant of the spin-free three-electron reduced density matrix
+    /// @param C_left The left-hand side coefficients
+    /// @param C_right The right-hand side coefficients
+    /// @return The cumulant of the three-electron spin-free reduced density matrix stored as a
+    /// tensor
+    ///        lambda[p][q][r][s][t][u] = gamma[p][q][r][s][t][u] + ...
+    np_tensor6 compute_sf_3cumulant(np_vector C_left, np_vector C_right) const;
 
-    np_matrix compute_3rdm_aaa_debug(np_vector C_left, np_vector C_right, bool alfa);
-    np_tensor4 compute_3rdm_aab_debug(np_vector C_left, np_vector C_right);
-    np_tensor4 compute_3rdm_abb_debug(np_vector C_left, np_vector C_right);
+    // == Debugging Functions ==
+    // The following are debugging functions that compute reduced density matrices that parallel
+    // the definition of the functions above.
+    np_matrix compute_a_1rdm_debug(np_vector C_left, np_vector C_right, bool alfa) const;
 
-    np_matrix compute_4rdm_aaaa_debug(np_vector C_left, np_vector C_right, bool alfa);
-    np_tensor4 compute_4rdm_aaab_debug(np_vector C_left, np_vector C_right);
-    np_tensor4 compute_4rdm_aabb_debug(np_vector C_left, np_vector C_right);
-    np_tensor4 compute_4rdm_abbb_debug(np_vector C_left, np_vector C_right);
+    np_matrix compute_aa_2rdm_debug(np_vector C_left, np_vector C_right, bool alfa) const;
+    np_tensor4 compute_ab_2rdm_debug(np_vector C_left, np_vector C_right) const;
 
-    np_matrix compute_sf_1rdm_debug(np_vector C_left, np_vector C_right);
-    np_tensor4 compute_sf_2rdm_debug(np_vector C_left, np_vector C_right);
+    np_matrix compute_aaa_3rdm_debug(np_vector C_left, np_vector C_right, bool alfa) const;
+    np_tensor4 compute_aab_3rdm_debug(np_vector C_left, np_vector C_right) const;
+    np_tensor4 compute_abb_3rdm_debug(np_vector C_left, np_vector C_right) const;
+
+    np_matrix compute_aaaa_4rdm_debug(np_vector C_left, np_vector C_right, bool alfa) const;
+    np_tensor4 compute_aaab_4rdm_debug(np_vector C_left, np_vector C_right) const;
+    np_tensor4 compute_aabb_4rdm_debug(np_vector C_left, np_vector C_right) const;
+    np_tensor4 compute_abbb_4rdm_debug(np_vector C_left, np_vector C_right) const;
+
+    np_matrix compute_sf_1rdm_debug(np_vector C_left, np_vector C_right) const;
+    np_tensor4 compute_sf_2rdm_debug(np_vector C_left, np_vector C_right) const;
+    np_tensor6 compute_sf_3rdm_debug(np_vector C_left, np_vector C_right) const;
+
+    np_tensor4 compute_sf_2cumulant_debug(np_vector C_left, np_vector C_right) const;
+    np_tensor6 compute_sf_3cumulant_debug(np_vector C_left, np_vector C_right) const;
 
   private:
     // == Class Private Variables ==

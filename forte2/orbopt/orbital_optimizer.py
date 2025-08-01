@@ -2,21 +2,44 @@ import numpy as np
 import scipy as sp
 from dataclasses import dataclass, field
 
-import forte2
-from forte2.ci import CISolver, CIStates
-from forte2.jkbuilder import FockBuilder
-from forte2.helpers.mixins import MOsMixin, SystemMixin
-from forte2.helpers import logger, LBFGS
+from forte2.ci import CISolver
+from forte2.base_classes.active_space_solver import ActiveSpaceSolver
+from forte2.orbitals import Semicanonicalizer
+from forte2.jkbuilder import FockBuilder, RestrictedMOIntegrals
+from forte2.helpers import logger, LBFGS, DIIS
 from forte2.system.basis_utils import BasisInfo
+from forte2.ci.ci_utils import (
+    pretty_print_ci_summary,
+    pretty_print_ci_nat_occ_numbers,
+    pretty_print_ci_dets,
+    pretty_print_ci_transition_props,
+)
 
 
 @dataclass
-class MCOptimizer(MOsMixin, SystemMixin):
+class MCOptimizer(ActiveSpaceSolver):
     """
     Two-step optimizer for multi-configurational wavefunctions.
 
     Parameters
     ----------
+    states : State | list[State]
+        The electronic states for which the CI is solved. Can be a single state or a list of states.
+        A state-averaged CI is performed if multiple states are provided.
+    nroots : int | list[int], optional, default=1
+        The number of roots to compute.
+        If a list is provided, each element corresponds to the number of roots for each state.
+        If a single integer is provided, `states` must be a single `State` object.
+    weights : list[float] | list[list[float]], optional
+        The weights for state averaging.
+        If a list of lists is provided, each sublist corresponds to the weights for each state.
+        The number of weights must match the number of roots for each state.
+        If not provided, equal weights are assumed for all states.
+        If a single list is provided, `states` must be a single `State` object.
+    mo_space : MOSpace, optional
+        A `MOSpace` object defining the partitioning of the molecular orbitals.
+        If not provided, CISolver must be called with a parent method that has MOSpaceMixin (e.g., AVAS).
+        If provided, it overrides the one from the parent method.
     maxiter : int, optional, default=50
         Maximum number of macroiterations.
     econv : float, optional, default=1e-8
@@ -37,9 +60,11 @@ class MCOptimizer(MOsMixin, SystemMixin):
         The number of vectors to keep in the DIIS.
     diis_min : int, optional, default=4
         The minimum number of vectors to perform extrapolation.
+    do_transition_dipole : bool, optional, default=False
+        Whether to compute transition dipole moments.
     """
 
-    ci_states: CIStates
+    optimize_frozen_orbs: bool = True
 
     ### Macroiteration parameters
     maxiter: int = 50
@@ -59,6 +84,9 @@ class MCOptimizer(MOsMixin, SystemMixin):
     diis_nvec: int = 8
     diis_min: int = 4
 
+    ### Post-iteration
+    do_transition_dipole: bool = False
+
     ### Non-init attributes
     executed: bool = field(default=False, init=False)
 
@@ -74,22 +102,20 @@ class MCOptimizer(MOsMixin, SystemMixin):
         return self
 
     def _startup(self):
-        if not self.parent_method.executed:
-            self.parent_method.run()
+        super()._startup()
+        # make the core, active, and virtual spaces contiguous
+        # i.e., [core, gas1, gas2, ..., virt]
+        perm = self.mo_space.orig_to_contig
+        # this is the contiguous coefficient matrix
+        self._C = self.C[0][:, perm].copy()
+        # core slice will include frozen orbitals,
+        # if optimize_frozen_orbs is False, then the relevant
+        # gradients will be zeroed out by nrr
+        self.core = self.mo_space.docc
+        # self.actv will be a list if multiple GASes are defined
+        self.actv = self.mo_space.actv
+        self.virt = self.mo_space.uocc
 
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
-
-        self.ci_states.fetch_mo_space()
-        self.ci_states.pretty_print_ci_states()
-        self.ncis = self.ci_states.ncis
-        # self.core_orbitals = self.ci_states.core_orbitals
-        # self.active_orbitals = self.ci_states.active_orbitals
-        self.norb = self.ci_states.norb
-        self.weights = self.ci_states.weights
-        self.weights_flat = self.ci_states.weights_flat
-
-        self._make_spaces_contiguous()
         self.nrr = self._get_nonredundant_rotations()
 
     def run(self):
@@ -113,16 +139,22 @@ class MCOptimizer(MOsMixin, SystemMixin):
         #       (this is typically done iteratively with micro-iterations using L-BFGS)
         #     2. minimize energy wrt CI expansion at current orbitals
         #       (this is just the diagonalization of the active-space CI Hamiltonian)
+        do_gas = self.mo_space.ngas > 1
         self.orb_opt = OrbOptimizer(
-            self.C[0],
+            self._C,
             (self.core, self.actv, self.virt),
             fock_builder,
             self.Hcore,
             self.system.nuclear_repulsion,
             self.nrr,
+            gas_ref=do_gas
         )
         self.ci_solver = CISolver(
-            ci_states=self.ci_states,
+            states=self.states,
+            core_orbitals=self.mo_space.docc_orbitals,
+            active_orbitals=self.mo_space.active_orbitals,
+            nroots=self.sa_info.nroots,
+            weights=self.sa_info.weights,
             log_level=self.ci_solver_verbosity,
         )(self.parent_method)
         # iteration 0: one step of CI optimization to bootsrap the orbital optimization
@@ -138,7 +170,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
             maxiter=self.micro_maxiter,
         )
 
-        diis = forte2.helpers.DIIS(
+        diis = DIIS(
             diis_start=self.diis_start,
             diis_nvec=self.diis_nvec,
             diis_min=self.diis_min,
@@ -169,8 +201,8 @@ class MCOptimizer(MOsMixin, SystemMixin):
         self.E_orb_old = self.E_orb
         self.E_avg_old = self.E_avg
 
-        g1_act = self.ci_solver.make_average_rdm1_sf()
-        g2_act = 0.5 * self.ci_solver.make_average_rdm2_sf()
+        g1_act = self.ci_solver.make_average_sf_1rdm()
+        g2_act = 0.5 * self.ci_solver.make_average_sf_2rdm()
         # ci_maxiter_save = self.ci_solver.get_maxiter()
         # self.ci_solver.set_maxiter(self.ci_maxiter)
 
@@ -190,9 +222,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
         while self.iter < self.maxiter:
             # 1. Optimize orbitals at fixed CI expansion
             self.E_orb = self.lbfgs_solver.minimize(self.orb_opt, R)
-            # Copy the optimized orbitals to the parent method
-            self.C[0] = self.orb_opt.C.copy()
-
+            self._C = self.orb_opt.C.copy()
             # 2. Convergence checks
             self.g_rms = np.sqrt(np.mean((self.lbfgs_solver.g - self.g_old) ** 2))
             self.g_old = self.lbfgs_solver.g.copy()
@@ -222,8 +252,8 @@ class MCOptimizer(MOsMixin, SystemMixin):
             self.E_avg = self.ci_solver.compute_average_energy()
             self.E_ci = np.array(self.ci_solver.E)
             self.E = self.E_avg
-            g1_act = self.ci_solver.make_average_rdm1_sf()
-            g2_act = 0.5 * self.ci_solver.make_average_rdm2_sf()
+            g1_act = self.ci_solver.make_average_sf_1rdm()
+            g2_act = 0.5 * self.ci_solver.make_average_sf_2rdm()
             self.orb_opt.set_rdms(g1_act, g2_act)
             self.iter += 1
         else:
@@ -247,25 +277,61 @@ class MCOptimizer(MOsMixin, SystemMixin):
         logger.log_info1("=" * width)
         logger.log_info1(f"Orbital optimization converged in {self.iter} iterations.")
         logger.log_info1(f"Final orbital optimized energy: {self.E_avg:.10f}")
+
+        # undo _make_spaces_contiguous
+        perm = self.mo_space.contig_to_orig
+        self.C[0] = self._C[:, perm].copy()
+
         self._post_process()
-        # self.parent_method.set_verbosity_level(current_verbosity)
+
+        if self.final_orbital == "semicanonical":
+            semi = Semicanonicalizer(
+                self.mo_space,
+                self.ci_solver.make_average_sf_1rdm(),
+                self.C[0],
+                self.system,
+                fock_builder,
+                mix_inactive=not self.optimize_frozen_orbs,
+                mix_active=False,
+            )
+            semi.run()
+            self.C[0] = semi.C_semican.copy()
+
+            # recompute the CI vectors in the semicanonical basis
+            ints = RestrictedMOIntegrals(
+                system=self.system,
+                C=self.C[0],
+                orbitals=self.mo_space.active_indices,
+                core_orbitals=self.mo_space.docc_indices,
+                use_aux_corr=True,
+                fock_builder=fock_builder,  # avoid reinitialization of FockBuilder
+            )
+            self.ci_solver.set_ints(ints.E, ints.H, ints.V)
+            self.ci_solver.run()
+
         self.executed = True
         return self
 
     def _post_process(self):
-        forte2.ci.pretty_print_ci_summary(
-            self.ci_states, self.ci_solver.evals_per_solver
-        )
+        pretty_print_ci_summary(self.sa_info, self.ci_solver.evals_per_solver)
         self.ci_solver.compute_natural_occupation_numbers()
-        forte2.ci.pretty_print_ci_nat_occ_numbers(
-            self.ci_states, self.ci_solver.nat_occs
+        pretty_print_ci_nat_occ_numbers(
+            self.sa_info, self.mo_space, self.ci_solver.nat_occs
         )
         top_dets = self.ci_solver.get_top_determinants()
-        forte2.ci.pretty_print_ci_dets(self.ci_states, top_dets)
+        pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
         self._print_ao_composition()
+        if self.do_transition_dipole:
+            self.ci_solver.compute_transition_properties(self.C[0])
+            pretty_print_ci_transition_props(
+                self.sa_info,
+                self.ci_solver.tdm_per_solver,
+                self.ci_solver.fosc_per_solver,
+                self.ci_solver.evals_per_solver,
+            )
 
     def _print_ao_composition(self):
-        basis_info = forte2.basis_utils.BasisInfo(self.system, self.system.basis)
+        basis_info = BasisInfo(self.system, self.system.basis)
         logger.log_info1("\nAO Composition of core MOs:")
         basis_info.print_ao_composition(
             self.C[0], list(range(self.core.start, self.core.stop))
@@ -275,26 +341,26 @@ class MCOptimizer(MOsMixin, SystemMixin):
             self.C[0], list(range(self.actv.start, self.actv.stop))
         )
 
-    def _make_spaces_contiguous(self):
-        """
-        Swap the orbitals to ensure that the core, active, and virtual orbitals
-        are contiguous in the flattened orbital array.
-        """
-        self.ci_states.mo_space.make_spaces_contiguous(self.system.nbf)
-        argsort = self.ci_states.mo_space.argsort
-        self.C[0][:, argsort] = self.C[0].copy()
-        self.core = self.ci_states.mo_space.core
-        # self.actv will be a list if multiple GASes are defined
-        self.actv = self.ci_states.mo_space.actv
-        self.virt = self.ci_states.mo_space.virt
-
     def _get_nonredundant_rotations(self):
         nrr = np.zeros((self.system.nbf, self.system.nbf), dtype=bool)
 
         # TODO: handle GAS/RHF/ROHF cases
-        nrr[self.core, self.virt] = True
-        nrr[self.actv, self.virt] = True
-        nrr[self.core, self.actv] = True
+        if self.optimize_frozen_orbs:
+            _core = self.mo_space.docc
+            _virt = self.mo_space.uocc
+        else:
+            _core = self.mo_space.core
+            _virt = self.mo_space.virt
+
+        # GASn-GASm rotations
+        if self.mo_space.ngas > 1:
+            for i in range(self.mo_space.ngas):
+                for j in range(i + 1, self.mo_space.ngas):
+                    nrr[self.mo_space.gas[i], self.mo_space.gas[j]] = True
+
+        nrr[_core, _virt] = True
+        nrr[self.actv, _virt] = True
+        nrr[_core, self.actv] = True
         return nrr
 
     def _check_convergence(self):
@@ -326,7 +392,7 @@ class MCOptimizer(MOsMixin, SystemMixin):
 
 
 class OrbOptimizer:
-    def __init__(self, C, extents, fock_builder, hcore, e_nuc, nrr):
+    def __init__(self, C, extents, fock_builder, hcore, e_nuc, nrr, gas_ref=False):
         self.core, self.actv, self.virt = extents
         self.C = C
         self.C0 = C.copy()
@@ -336,11 +402,12 @@ class OrbOptimizer:
         self.ncore = self.Ccore.shape[1]
         self.nact = self.Cact.shape[1]
         self.nvirt = self.C.shape[1] - self.ncore - self.nact
-        self.fock_builder = fock_builder
+        self.fock_builder: FockBuilder = fock_builder
         self.hcore = hcore
         self.nrr = nrr
         self.nrot = self.nrr.sum()
         self.e_nuc = e_nuc
+        self.gas_ref=gas_ref
 
         self.R = np.zeros(self.nrot, dtype=float)
         self.U = np.eye(self.C.shape[1], dtype=float)
@@ -401,28 +468,12 @@ class OrbOptimizer:
 
     def _vec_to_mat(self, x):
         R = np.zeros_like(self.C)
-        # [cv, av, ca]
-        x_cv = x[: self.ncore * self.nvirt].reshape(self.ncore, self.nvirt)
-        x_av = x[
-            self.ncore * self.nvirt : self.ncore * self.nvirt + self.nact * self.nvirt
-        ].reshape(self.nact, self.nvirt)
-        x_ca = x[self.ncore * self.nvirt + self.nact * self.nvirt :].reshape(
-            self.ncore, self.nact
-        )
-        R[self.core, self.virt] = x_cv
-        R[self.actv, self.virt] = x_av
-        R[self.core, self.actv] = x_ca
-        R[self.virt, self.core] = -x_cv.T
-        R[self.virt, self.actv] = -x_av.T
-        R[self.actv, self.core] = -x_ca.T
+        R[self.nrr] = x
+        R += -R.T
         return R
 
     def _mat_to_vec(self, R):
-        # [cv, av, ca]
-        x_cv = R[self.core, self.virt].flatten()
-        x_av = R[self.actv, self.virt].flatten()
-        x_ca = R[self.core, self.actv].flatten()
-        return np.concatenate((x_cv, x_av, x_ca))
+        return R[self.nrr]
 
     def _compute_reference_energy(self):
         energy = self.Ecore + self.e_nuc
@@ -432,7 +483,7 @@ class OrbOptimizer:
         return energy
 
     def _compute_Fcore(self):
-        # Compute the core Fock matrix [Eq. (9)], also return the core energy
+        # Compute the core Fock matrix [Eq. (9) or (18)], also return the core energy
         Jcore, Kcore = self.fock_builder.build_JK([self.Ccore])
         self.Fcore = np.einsum(
             "mp,mn,nq->pq",
@@ -449,28 +500,13 @@ class OrbOptimizer:
         )
 
     def _compute_Fact(self):
-        # compute the active Fock matrix [Algorithm 1, line 9]
-        # gamma_act (nmo * nmo) is defined in [Eq. (19)]
-        # as (gamma_act)_pq = C_pt C_qu g1_tu
-        # we decompose g1 and contract it into the coefficients
-        # so more efficient coefficient-based J-builder can be used
-        try:
-            # C @ g1_act C.T = C @ L @ L.T @ C.T == Cp @ Cp.T
-            L = np.linalg.cholesky(self.g1, upper=False)
-            Cp = self.Cact @ L
-        except np.linalg.LinAlgError:  # only if g1_act has very small eigenvalues
-            n, L = np.linalg.eigh(self.g1)
-            assert np.all(n > -1.0e-11), "g1_act must be positive semi-definite"
-            n = np.maximum(n, 0)
-            Cp = self.Cact @ L @ np.diag(np.sqrt(n))
-
-        Jact, Kact = self.fock_builder.build_JK([Cp])
+        Jact, Kact = self.fock_builder.build_JK_generalized(self.Cact, self.g1)
 
         # [Eq. (20)]
         self.Fact = np.einsum(
             "mp,mn,nq->pq",
             self.Cgen.conj(),
-            2 * Jact[0] - Kact[0],
+            2 * Jact - Kact,
             self.Cgen,
             optimize=True,
         )
@@ -502,6 +538,34 @@ class OrbOptimizer:
         orbgrad[self.actv, self.virt] = 2 * Y_va.T + 4 * Z_va.T
         orbgrad[self.core, self.actv] = 4 * Fcore_ca + 2 * Fact_ca - 2 * Y_ca - 4 * Z_ca
 
+        if self.gas_ref:
+            # tei (xt|vw) => eri_aaaa
+            self.eri_aaaa = np.zeros((self.nact,self.nact,self.nact,self.nact))
+            for i in range(self.nact):
+                for j in range(self.nact):
+                    for k in range(self.nact):
+                        for l in range(self.nact):
+                            self.eri_aaaa[i][j][k][l] = self.eri_gaaa[self.ncore + i][j][k][l]
+
+            # A_xu = sum_v[Fcore_xv * D_vu] + sum_tvw[(xt|vw) * D_tu,vw]
+            # A_xu = self.Fcore[self.actv, self.actv] * self.g1 + self.eri_aaaa * self.g2
+            Fcore_aa = self.Fcore[self.actv, self.actv]
+            self.A_xu = np.zeros((self.nact, self.nact))
+            for x in range(self.nact):
+                for u in range(self.nact):
+                    for v in range(self.nact):
+                        self.A_xu[x][u] +=  (Fcore_aa[x][v] * self.g1[v][u])
+
+            for x in range(self.nact):
+                for u in range(self.nact):
+                    for v in range(self.nact):
+                        for t in range(self.nact):
+                            for w in range(self.nact):
+                                self.A_xu[x][u] += (self.eri_aaaa[x][t][v][w] * self.g2[t][u][v][w])
+                        
+            
+            orbgrad[self.actv, self.actv] = 2 * (self.A_xu - self.A_xu.T)
+
         return orbgrad
 
     def _compute_orbhess(self):
@@ -532,5 +596,148 @@ class OrbOptimizer:
         aa_diag = 4 * Fcore_aa + 2 * Fact_aa - 2 * Y_aa - 4 * Z_aa
         cc_diag = -4 * Fcore_cc - 2 * Fact_cc
         orbhess[self.core, self.actv] = ca_diag + aa_diag[None, :] + cc_diag[:, None]
+
+        # Compute GASn-GASm active-active blocks. [J. Chem. Phys. 152, 074102 (2020)]
+        if self.gas_ref:
+            # nactv2 = self.nact * self.nact
+            # nactv3 = nactv2 * self.nact
+
+            # fc_data = self.Fcore # F^c_{pq} -> Fc_.block("aa").data()
+            # v_data = self.eri_gaaa    # tei -> V_.block("aaaa").data()
+            # d2_data = self.g2    # 2RDM -> D2_.block("aaaa").data()
+
+            ## G^{uu}_{vv}
+
+            ## (uu|xy)
+            jk_internal_ = np.zeros((self.nact, self.nact, self.nact)) # name self.eri_aaa
+
+            for i in range(self.nact):
+                for j in range(self.nact):
+                    for k in range(self.nact):
+                        jk_internal_[i][j][k] = self.eri_gaaa[self.ncore + i][i][j][k]
+
+            # jk_internal_.block("aaa").iterate([&](const std::vector<size_t>& i, double& value) {
+            #     auto idx = i[0] * nactv3 + i[0] * nactv2 + i[1] * nactv_ + i[2];
+            #     value = v_data[idx];
+            # });
+
+            ## D_{vv,xy}
+            d2_internal_ = np.zeros((self.nact, self.nact, self.nact))
+
+            for i in range(self.nact):
+                for j in range(self.nact):
+                    for k in range(self.nact):
+                        d2_internal_[i][j][k] = self.g2[i][i][j][k]
+
+            Guu = np.zeros((self.nact, self.nact))
+
+            for i in range(self.nact):
+                for j in range(self.nact):
+                    for k in range(self.nact):
+                        for l in range(self.nact):
+                            Guu[i][j] = jk_internal_[i][k][l] * d2_internal_[j][k][l]
+
+            # d2_internal_.block("aaa").iterate([&](const std::vector<size_t>& i, double& value) {
+            #     auto idx = i[0] * nactv3 + i[0] * nactv2 + i[1] * nactv_ + i[2];
+            #     value = d2_data[idx];
+            # });
+
+            # Guu_["uv"] = jk_internal_["uxy"] * d2_internal_["vxy"];
+
+            ## (ux|uy)
+            jk_internal_2 = np.zeros((self.nact,self.nact,self.nact))
+
+            for u in range(self.nact):
+                for x in range(self.nact):
+                    for y in range(self.nact):
+                        jk_internal_2[u][x][y] = self.eri_gaaa[self.ncore + u][x][u][y]
+
+
+            # jk_internal_.block("aaa").iterate([&](const std::vector<size_t>& i, double& value) {
+            #     auto idx = i[0] * nactv3 + i[1] * nactv2 + i[0] * nactv_ + i[2];
+            #     value = v_data[idx];
+            # });
+
+            ## D_{vx,vy}
+            d2_internal_2 = np.zeros((self.nact,self.nact,self.nact))
+
+            for v in range(self.nact):
+                for x in range(self.nact):
+                    for y in range(self.nact):
+                        d2_internal_2[v][x][y] = self.g2[v][x][v][y]
+
+            # d2_internal_.block("aaa").iterate([&](const std::vector<size_t>& i, double& value) {
+            #     auto idx = i[0] * nactv3 + i[1] * nactv2 + i[0] * nactv_ + i[2];
+            #     value = d2_data[idx];
+            # });
+
+            for u in range(self.nact):
+                for v in range(self.nact):
+                    for x in range(self.nact):
+                        for y in range(self.nact):
+                            Guu[u][v] += 2.0 * jk_internal_2[u][x][y] * d2_internal_2[v][x][y]
+
+            # Guu_["uv"] += 2.0 * jk_internal_["uxy"] * d2_internal_["vxy"];
+
+            # TODO double check
+            for u in range(self.nact):
+                for v in range(self.nact):
+                    Guu[u][v] += self.Fcore[self.ncore + u][self.ncore + u] * self.g1[v][v]
+
+            # Guu_.block("aa").iterate([&](const std::vector<size_t>& i, double& value) {
+            #     auto i0 = i[0] * nactv_ + i[0];
+            #     auto i1 = i[1] * nactv_ + i[1];
+            #     value += fc_data[i0] * d1_data[i1];
+            # });
+
+            ## G^{uv}_{vu}
+            Guv = np.zeros((self.nact, self.nact))
+            for u in range(self.nact):
+                for v in range(self.nact):
+                    Guv[u][v] = self.Fcore[self.ncore + u][self.ncore + v] * self.g1[v][u]
+
+            # Guv_["uv"] = Fc_["uv"] * D1_["vu"];
+
+            for u in range(self.nact):
+                for v in range(self.nact):
+                    for x in range(self.nact):
+                        for y in range(self.nact):
+                            Guv[u][v] += self.eri_gaaa[self.ncore + u][v][x][y] * self.g2[v][u][x][y]
+
+            # Guv_["uv"] += V_["uvxy"] * D2_["vuxy"];
+
+            for u in range(self.nact):
+                for v in range(self.nact):
+                    for x in range(self.nact):
+                        for y in range(self.nact):
+                            Guv[u][v] += 2.0 * self.eri_gaaa[self.ncore + u][x][v][y] * self.g2[v][x][u][y]
+
+            # Guv_["uv"] += 2.0 * V_["uxvy"] * D2_["vxuy"];
+
+            ## build diagonal Hessian
+            h_diag = np.zeros((self.nact, self.nact))
+
+            for u in range(self.nact):
+                for v in range(self.nact):
+                    h_diag[u][v] = 2.0 * Guu[u][v] + 2.0 * Guu[v][u] - 2.0 * Guv[u][v] - 2.0 * Guv[v][u]
+
+            # h_diag_["uv"] = 2.0 * Guu_["uv"];
+            # h_diag_["uv"] += 2.0 * Guu_["vu"];
+            # h_diag_["uv"] -= 2.0 * Guv_["uv"];
+            # h_diag_["uv"] -= 2.0 * Guv_["vu"];
+
+            for u in range(self.nact):
+                for v in range(self.nact):
+                    h_diag[u][v] -= 2.0 * (self.A_xu[u][u] + self.A_xu[v][v])
+
+            # h_diag_.block("aa").iterate([&](const std::vector<size_t>& i, double& value) {
+            #     auto i0 = i[0] * nactv_ + i[0];
+            #     auto i1 = i[1] * nactv_ + i[1];
+            #     value -= 2.0 * (a_data[i0] + a_data[i1]);
+            # });
+
+            for u in range(self.nact):
+                for v in range(self.nact):
+                    orbhess[self.ncore + u][self.ncore + v] = h_diag[u][v]
 
         return orbhess
