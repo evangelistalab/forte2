@@ -483,7 +483,7 @@ class OrbOptimizer:
         return energy
 
     def _compute_Fcore(self):
-        # Compute the core Fock matrix [Eq. (9)], also return the core energy
+        # Compute the core Fock matrix [Eq. (9) or (18)], also return the core energy
         Jcore, Kcore = self.fock_builder.build_JK([self.Ccore])
         self.Fcore = np.einsum(
             "mp,mn,nq->pq",
@@ -538,6 +538,34 @@ class OrbOptimizer:
         orbgrad[self.actv, self.virt] = 2 * Y_va.T + 4 * Z_va.T
         orbgrad[self.core, self.actv] = 4 * Fcore_ca + 2 * Fact_ca - 2 * Y_ca - 4 * Z_ca
 
+        if self.gas_ref:
+            # tei (xt|vw) => eri_aaaa
+            self.eri_aaaa = np.zeros((self.nact,self.nact,self.nact,self.nact))
+            for i in range(self.nact):
+                for j in range(self.nact):
+                    for k in range(self.nact):
+                        for l in range(self.nact):
+                            self.eri_aaaa[i][j][k][l] = self.eri_gaaa[self.ncore + i][j][k][l]
+
+            # A_xu = sum_v[Fcore_xv * D_vu] + sum_tvw[(xt|vw) * D_tu,vw]
+            # A_xu = self.Fcore[self.actv, self.actv] * self.g1 + self.eri_aaaa * self.g2
+            Fcore_aa = self.Fcore[self.actv, self.actv]
+            self.A_xu = np.zeros((self.nact, self.nact))
+            for x in range(self.nact):
+                for u in range(self.nact):
+                    for v in range(self.nact):
+                        self.A_xu[x][u] +=  (Fcore_aa[x][v] * self.g1[v][u])
+
+            for x in range(self.nact):
+                for u in range(self.nact):
+                    for v in range(self.nact):
+                        for t in range(self.nact):
+                            for w in range(self.nact):
+                                self.A_xu[x][u] += (self.eri_aaaa[x][t][v][w] * self.g2[t][u][v][w])
+                        
+            
+            orbgrad[self.actv, self.actv] = 2 * (self.A_xu - self.A_xu.T)
+
         return orbgrad
 
     def _compute_orbhess(self):
@@ -570,6 +598,146 @@ class OrbOptimizer:
         orbhess[self.core, self.actv] = ca_diag + aa_diag[None, :] + cc_diag[:, None]
 
         # Compute GASn-GASm active-active blocks. [J. Chem. Phys. 152, 074102 (2020)]
-        # if self.gas_ref:
+        if self.gas_ref:
+            # nactv2 = self.nact * self.nact
+            # nactv3 = nactv2 * self.nact
+
+            # fc_data = self.Fcore # F^c_{pq} -> Fc_.block("aa").data()
+            # v_data = self.eri_gaaa    # tei -> V_.block("aaaa").data()
+            # d2_data = self.g2    # 2RDM -> D2_.block("aaaa").data()
+
+            ## G^{uu}_{vv}
+
+            ## (uu|xy)
+            jk_internal_ = np.zeros((self.nact, self.nact, self.nact)) # name self.eri_aaa
+
+            for i in range(self.nact):
+                for j in range(self.nact):
+                    for k in range(self.nact):
+                        jk_internal_[i][j][k] = self.eri_gaaa[self.ncore + i][i][j][k]
+
+            # jk_internal_.block("aaa").iterate([&](const std::vector<size_t>& i, double& value) {
+            #     auto idx = i[0] * nactv3 + i[0] * nactv2 + i[1] * nactv_ + i[2];
+            #     value = v_data[idx];
+            # });
+
+            ## D_{vv,xy}
+            d2_internal_ = np.zeros((self.nact, self.nact, self.nact))
+
+            for i in range(self.nact):
+                for j in range(self.nact):
+                    for k in range(self.nact):
+                        d2_internal_[i][j][k] = self.g2[i][i][j][k]
+
+            Guu = np.zeros((self.nact, self.nact))
+
+            for i in range(self.nact):
+                for j in range(self.nact):
+                    for k in range(self.nact):
+                        for l in range(self.nact):
+                            Guu[i][j] = jk_internal_[i][k][l] * d2_internal_[j][k][l]
+
+            # d2_internal_.block("aaa").iterate([&](const std::vector<size_t>& i, double& value) {
+            #     auto idx = i[0] * nactv3 + i[0] * nactv2 + i[1] * nactv_ + i[2];
+            #     value = d2_data[idx];
+            # });
+
+            # Guu_["uv"] = jk_internal_["uxy"] * d2_internal_["vxy"];
+
+            ## (ux|uy)
+            jk_internal_2 = np.zeros((self.nact,self.nact,self.nact))
+
+            for u in range(self.nact):
+                for x in range(self.nact):
+                    for y in range(self.nact):
+                        jk_internal_2[u][x][y] = self.eri_gaaa[self.ncore + u][x][u][y]
+
+
+            # jk_internal_.block("aaa").iterate([&](const std::vector<size_t>& i, double& value) {
+            #     auto idx = i[0] * nactv3 + i[1] * nactv2 + i[0] * nactv_ + i[2];
+            #     value = v_data[idx];
+            # });
+
+            ## D_{vx,vy}
+            d2_internal_2 = np.zeros((self.nact,self.nact,self.nact))
+
+            for v in range(self.nact):
+                for x in range(self.nact):
+                    for y in range(self.nact):
+                        d2_internal_2[v][x][y] = self.g2[v][x][v][y]
+
+            # d2_internal_.block("aaa").iterate([&](const std::vector<size_t>& i, double& value) {
+            #     auto idx = i[0] * nactv3 + i[1] * nactv2 + i[0] * nactv_ + i[2];
+            #     value = d2_data[idx];
+            # });
+
+            for u in range(self.nact):
+                for v in range(self.nact):
+                    for x in range(self.nact):
+                        for y in range(self.nact):
+                            Guu[u][v] += 2.0 * jk_internal_2[u][x][y] * d2_internal_2[v][x][y]
+
+            # Guu_["uv"] += 2.0 * jk_internal_["uxy"] * d2_internal_["vxy"];
+
+            # TODO double check
+            for u in range(self.nact):
+                for v in range(self.nact):
+                    Guu[u][v] += self.Fcore[self.ncore + u][self.ncore + u] * self.g1[v][v]
+
+            # Guu_.block("aa").iterate([&](const std::vector<size_t>& i, double& value) {
+            #     auto i0 = i[0] * nactv_ + i[0];
+            #     auto i1 = i[1] * nactv_ + i[1];
+            #     value += fc_data[i0] * d1_data[i1];
+            # });
+
+            ## G^{uv}_{vu}
+            Guv = np.zeros((self.nact, self.nact))
+            for u in range(self.nact):
+                for v in range(self.nact):
+                    Guv[u][v] = self.Fcore[self.ncore + u][self.ncore + v] * self.g1[v][u]
+
+            # Guv_["uv"] = Fc_["uv"] * D1_["vu"];
+
+            for u in range(self.nact):
+                for v in range(self.nact):
+                    for x in range(self.nact):
+                        for y in range(self.nact):
+                            Guv[u][v] += self.eri_gaaa[self.ncore + u][v][x][y] * self.g2[v][u][x][y]
+
+            # Guv_["uv"] += V_["uvxy"] * D2_["vuxy"];
+
+            for u in range(self.nact):
+                for v in range(self.nact):
+                    for x in range(self.nact):
+                        for y in range(self.nact):
+                            Guv[u][v] += 2.0 * self.eri_gaaa[self.ncore + u][x][v][y] * self.g2[v][x][u][y]
+
+            # Guv_["uv"] += 2.0 * V_["uxvy"] * D2_["vxuy"];
+
+            ## build diagonal Hessian
+            h_diag = np.zeros((self.nact, self.nact))
+
+            for u in range(self.nact):
+                for v in range(self.nact):
+                    h_diag[u][v] = 2.0 * Guu[u][v] + 2.0 * Guu[v][u] - 2.0 * Guv[u][v] - 2.0 * Guv[v][u]
+
+            # h_diag_["uv"] = 2.0 * Guu_["uv"];
+            # h_diag_["uv"] += 2.0 * Guu_["vu"];
+            # h_diag_["uv"] -= 2.0 * Guv_["uv"];
+            # h_diag_["uv"] -= 2.0 * Guv_["vu"];
+
+            for u in range(self.nact):
+                for v in range(self.nact):
+                    h_diag[u][v] -= 2.0 * (self.A_xu[u][u] + self.A_xu[v][v])
+
+            # h_diag_.block("aa").iterate([&](const std::vector<size_t>& i, double& value) {
+            #     auto i0 = i[0] * nactv_ + i[0];
+            #     auto i1 = i[1] * nactv_ + i[1];
+            #     value -= 2.0 * (a_data[i0] + a_data[i1]);
+            # });
+
+            for u in range(self.nact):
+                for v in range(self.nact):
+                    orbhess[self.ncore + u][self.ncore + v] = h_diag[u][v]
 
         return orbhess

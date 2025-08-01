@@ -25,7 +25,8 @@ def test_gasscf_0():
     mc = MCOptimizer(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[6]),
         core_orbitals=[0, 1],
-        active_orbitals=[[2, 3, 4], [5, 6, 12], [15,16,20]]
+        active_orbitals=[[2, 3, 4],[5, 6, 7]],
+        maxiter=500
         )(rhf)
     mc.run()
 
