@@ -75,7 +75,6 @@ def test_sox2c1e_water():
 
 
 def test_boettger_hbr():
-    eghf = -76.075428047998
     xyz = """
     H 0 0 0
     Br 0 0 1.4

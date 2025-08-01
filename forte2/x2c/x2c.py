@@ -46,7 +46,7 @@ def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
             else _block_diag(np.eye(xbasis.size))
         )
     else:
-        logger.log_info1(f"Number of contracted basis functions: , {system.nbf}")
+        logger.log_info1(f"Number of contracted basis functions: {system.nbf}")
         xbasis = system.decontract()
         proj = _get_projection_matrix(xbasis, system.basis, x2c_type=x2c_type)
 

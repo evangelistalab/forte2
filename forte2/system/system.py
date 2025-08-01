@@ -7,7 +7,7 @@ from forte2.helpers import logger
 from forte2.helpers.matrix_functions import invsqrt_matrix, canonical_orth
 from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
-from .parse_geometry import parse_geometry
+from .parse_geometry import parse_geometry, GeometryHelper
 from .atom_data import ATOM_DATA
 
 import numpy as np
@@ -124,37 +124,22 @@ class System:
             "angstrom",
             "bohr",
         ], f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'."
+
         self.atoms = parse_geometry(self.xyz, self.unit)
-        self.natoms = len(self.atoms)
-        self.atomic_charges = np.array([atom[0] for atom in self.atoms])
-        self.atomic_masses = np.array(
-            [ATOM_DATA[Z]["mass"] for Z in self.atomic_charges]
-        )
-        self.atomic_positions = np.array([atom[1] for atom in self.atoms])
-        self.centroid = np.mean(self.atomic_positions, axis=0)
-        self.nuclear_repulsion = ints.nuclear_repulsion(self.atoms)
+        _geom = GeometryHelper(self.atoms)
+        self.atoms = _geom.atoms
+        self.Zsum = _geom.Zsum
+        self.natoms = _geom.natoms
+        self.atomic_charges = _geom.atomic_charges
+        self.atomic_masses = _geom.atomic_masses
+        self.atomic_positions = _geom.atomic_positions
+        self.centroid = _geom.centroid
+        self.nuclear_repulsion = _geom.nuclear_repulsion
+        self.center_of_mass = _geom.center_of_mass
+        self.atom_counts = _geom.atom_counts
+        self.atom_to_center = _geom.atom_to_center
 
-        self.center_of_mass = np.einsum(
-            "a,ax->x", self.atomic_masses, self.atomic_positions
-        ) / np.sum(self.atomic_masses)
-
-        self.atom_counts = {}
-        for atom in self.atoms:
-            if atom[0] not in self.atom_counts:
-                self.atom_counts[atom[0]] = 0
-            self.atom_counts[atom[0]] += 1
-
-        self.atom_to_center = {}
-        for i, atom in enumerate(self.atoms):
-            if atom[0] not in self.atom_to_center:
-                self.atom_to_center[atom[0]] = []
-            self.atom_to_center[atom[0]].append(i)
-
-        if 'decon-' in self.basis_set:
-            # decontract the basis set
-            self.basis = build_basis(self.basis_set.replace('decon-',''), self.atoms, decontract=True)
-        else:
-            self.basis = build_basis(self.basis_set, self.atoms)
+        self.basis = build_basis(self.basis_set, self.atoms)
 
         if not self.cholesky_tei:
             self.auxiliary_basis = (
@@ -181,10 +166,9 @@ class System:
             else None
         )
         logger.log_info1(
-            f"Parsed {len(self.atoms)} atoms with basis set of {self.basis.size} functions."
+            f"Parsed {self.natoms} atoms with basis set of {self.basis.size} functions."
         )
 
-        self.Zsum = round(np.sum([x[0] for x in self.atoms]))
         self.nbf = self.basis.size
         self.naux = self.auxiliary_basis.size if self.auxiliary_basis else 0
         self.nminao = self.minao_basis.size if self.minao_basis else 0
@@ -203,7 +187,9 @@ class System:
         if self.x2c_type == "sf":
             self.ints_hcore = lambda: get_hcore_x2c(self, x2c_type="sf")
         elif self.x2c_type == "so":
-            self.ints_hcore = lambda: get_hcore_x2c(self, x2c_type="so", snso_type=self.snso_type)
+            self.ints_hcore = lambda: get_hcore_x2c(
+                self, x2c_type="so", snso_type=self.snso_type
+            )
 
     def __repr__(self):
         return f"System(atoms={self.atoms}, basis_set={self.basis}, auxiliary_basis_set={self.auxiliary_basis})"
