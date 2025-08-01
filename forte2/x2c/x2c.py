@@ -18,6 +18,8 @@ def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
         The system for which to compute the X2C core Hamiltonian.
     x2c_type : str, optional, default="sf"
         The type of X2C to use, either "sf" or "so" (spin-orbit).
+    snso_type : str, optional
+        The type of SNSO scaling to apply, if any. Options are "boettger", "dc", "dcb", or "row-dependent".
 
     Returns
     -------
@@ -81,9 +83,9 @@ def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
         h1 = (hab + hba) / 2
         h2 = (hab - hba) / (-2j)
         h3 = (haa - hbb) / 2
-        h1 = apply_snso_scaling(h1, system.basis, system.atoms, snso_type=snso_type)
-        h2 = apply_snso_scaling(h2, system.basis, system.atoms, snso_type=snso_type)
-        h3 = apply_snso_scaling(h3, system.basis, system.atoms, snso_type=snso_type)
+        h1 = _apply_snso_scaling(h1, system.basis, system.atoms, snso_type=snso_type)
+        h2 = _apply_snso_scaling(h2, system.basis, system.atoms, snso_type=snso_type)
+        h3 = _apply_snso_scaling(h3, system.basis, system.atoms, snso_type=snso_type)
         h_fw = np.block([[h0 + h3, h1 - 1j * h2], [h1 + 1j * h2, h0 - h3]])
 
     return h_fw
@@ -174,7 +176,7 @@ def _build_foldy_wouthuysen_hamiltonian(X, R, T, V, W):
     return R.conj().T @ L @ R
 
 
-def apply_snso_scaling(ints, basis, atoms, snso_type):
+def _apply_snso_scaling(ints, basis, atoms, snso_type):
     """
     Apply the 'screened-nuclear-spin-orbit' (SNSO) scaling to the core Hamiltonian.
     Original paper ('Boettger'): Phys. Rev. B 62, 7809 (2000)

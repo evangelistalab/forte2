@@ -36,7 +36,8 @@ class System:
         The type of X2C transformation to be used. Options are "sf" for scalar
         relativistic effects or "so" for spin-orbit coupling. If None, no X2C transformation is applied.
     snso_type : str, optional
-        The type of screened nuclear spin-orbit coupling scaling scheme to use. 
+        The type of screened nuclear spin-orbit coupling scaling scheme to use.
+        Only relevant if `x2c_type` is "so".
         Options are "boettger", "dc", "dcb", or "row-dependent"
     unit : str, optional, default="angstrom"
         The unit for the atomic coordinates. Can be "angstrom" or "bohr".
