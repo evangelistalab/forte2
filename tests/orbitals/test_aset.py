@@ -1,4 +1,5 @@
 import pytest
+
 from forte2 import *
 from forte2.helpers.comparisons import approx
 
@@ -35,6 +36,9 @@ def test_aset_1():
         semicanonicalize_frozen=False,
     )(mc)
     aset.run()
+
+
+test_aset_1()
 
 
 def test_aset_2():

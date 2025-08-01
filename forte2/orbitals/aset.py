@@ -4,13 +4,15 @@ import re
 import ast
 import forte2
 from forte2 import ints
+from forte2.base_classes.active_space_solver import MOSpace
 from forte2.state import MOSpace
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import System
 from forte2.helpers import logger
-from forte2.helpers.mixins import MOsMixin, SystemMixin
+from forte2.base_classes.mixins import MOsMixin, SystemMixin
 from forte2.orbopt import MCOptimizer
 from forte2.system.atom_data import ATOM_SYMBOL_TO_Z
+from forte2.orbitals.semicanonicalizer import Semicanonicalizer
 
 
 @dataclass
@@ -22,14 +24,14 @@ class ASET(MOsMixin, SystemMixin):
     ----------
     fragment : list[str]
         List of atomic symbols defining the fragment.
-    cutoff_method : str, optional, default="THRESHOLD"
-        Method for choosing the embedding cutoff. Options include "THRESHOLD", "CUMULATIVE_THRESHOLD", "NUM_OF_ORBITALS".
+    cutoff_method : str, optional, default="threshold"
+        Method for choosing the embedding cutoff. Options include "threshold", "cumulative_threshold", "num_of_orbitals".
     cutoff : float, optional, default = 0.5
         Projector eigenvalue for both simple and cumulative threshold methods.
-    num_a_docc : int, optional, default=0
-        Number of occupied orbitals fixed to this value in fragment A when cutoff method is "NUM_OF_ORBITALS".
-    num_a_uocc : int, optional, default=0
-        Number of virtual orbitals fixed to this value in fragment A when cutoff method is "NUM_OF_ORBITALS".
+    num_A_docc : int, optional, default=0
+        Number of occupied orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
+    num_A_uocc : int, optional, default=0
+        Number of virtual orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
     adjust_B_docc : int, optional, default=0
         Adjust this number of occupied orbitals between environment B and fragment A. If set to positive, move to B; if set to negative, move to A.
     adjust_B_uocc : int, optional, default=0
@@ -38,12 +40,6 @@ class ASET(MOsMixin, SystemMixin):
         Whether to semicanonicalize the active space orbitals.
     semicanonicalize_frozen : bool, optional, default=True
         Whether to semicanonicalize the frozen orbitals.
-    virtual_space : str, optional, default ="ASET"
-        Virtual space scheme to use. Options include "ASET", "PAO", "IAO".
-    pao_fix_virtual_num : bool, optional, default=False
-        Enable this option to generate PAOs equivalent to ASET virtuals instead of using cutoff method = "THRESHOLD".
-    pao_threshold : float, optional, default = 1e-08.
-        Virtual space truncation threshold for PAO.
 
     Notes
     -----
@@ -67,9 +63,6 @@ class ASET(MOsMixin, SystemMixin):
     adjust_B_uocc: int = 0
     semicanonicalize_active: bool = True
     semicanonicalize_frozen: bool = True
-    virtual_space: str = "aset"
-    pao_fix_virtual_num: bool = False
-    pao_threshold: float = 1e-8
 
     executed: bool = field(default=False, init=False)
 
@@ -93,9 +86,9 @@ class ASET(MOsMixin, SystemMixin):
         self.ncore = self.mo_space.ncore
         self.nactv = self.mo_space.nactv
 
-        self.Ca = self.parent_method.C[0]
-        self.nmo = self.Ca.shape[1]
-        self.nvirt = self.nmo - self.ncore - self.nactv
+        self.Ca = self.parent_method._C
+        self.nmo = self.mo_space.nmo
+        self.nvirt = self.mo_space.nvirt
 
         minao_info = BasisInfo(self.system, self.system.minao_basis)
 
@@ -139,7 +132,7 @@ class ASET(MOsMixin, SystemMixin):
         elif self.cutoff_method == "num_of_orbitals":
             assert (
                 self.num_a_docc >= 0 or self.num_a_uocc >= 0
-            ), f"Number of occupied and virtual orbitals in fragment A must be non-negative, got {self.num_a_docc}, {self.num_a_uocc}"
+            ), f"Number of occupied and virtual orbitals in Fragment A must be non-negative, got {self.num_a_docc}, {self.num_a_uocc}"
 
     def _parse_fragment(self, frag_str: str) -> list[int]:
         """
@@ -224,8 +217,10 @@ class ASET(MOsMixin, SystemMixin):
 
         Returns
         ------
-        P_frag : NDArray
+        P_frag : ndarray
             The fragment projector matrix in the full minimal-AO space.
+        X_mm : ndarray
+            The metric‐orthogonalizer (S_mm^–½).
         """
         # 1. Compute minAO overlap S_mm
         S_mm = self._S_mm
@@ -277,17 +272,6 @@ class ASET(MOsMixin, SystemMixin):
 
         return P_frag, X_mm
 
-    def _make_PAO(self):
-        """
-        Build PAO projector for virtual space.
-        """
-        nbf = self.system.nbf
-
-        # Build Density
-
-        # Build overlap
-        S_nn = ints.overlap(nbf)
-
     def _make_embedding(self):
         """
         Perform Orbital Partitioning for ASET.
@@ -315,7 +299,7 @@ class ASET(MOsMixin, SystemMixin):
         # 6) Split F into occupied and virtual blocks
         core_inds = self.mo_space.core_indices
         actv_inds = self.mo_space.active_indices
-        virt_inds = list(range(self.ncore + self.nactv, self.nmo))
+        virt_inds = self.mo_space.virtual_indices
 
         # Split F
         F_oo = F[np.ix_(core_inds, core_inds)]
@@ -388,31 +372,82 @@ class ASET(MOsMixin, SystemMixin):
                             "and is assigned to B."
                         )
 
-        # For PAO:
-        if self.virtual_space.lower() == "pao":
-            print(f"\n****** Build PAOs for virtual space ******")
+        # # Semi-canonicalize the blocks
+        C_tilde = self.Ca.copy()
+        blocks = []
+        frozen_core_inds = self.mo_space.frozen_core_indices
+        frozen_virt_inds = self.mo_space.frozen_virtual_indices
+        g1_sf = self.parent_method.ci_solver.make_average_sf_1rdm()
+        # semicanonicalization helper function
+        # Frozen core
+        if self.semicanonicalize_frozen:
+            C_fc = Semicanonicalizer(frozen_core_inds, g1_sf, C_tilde)
+        else:
+            logger.log_info1("\nSkipping semi-canonicalization of frozen orbitals")
+            C_fc = C_tilde[:, frozen_core_inds]
+        blocks.append(C_fc)
 
-        # Adjust occupied and virtual indices based on user input
-        #################################
-        # Skipping this section for now #
-        #################################
+        # Core in A
+        C_ac = Semicanonicalizer(index_A_occ, g1_sf, C_tilde)
+        blocks.append(C_ac)
 
-        # Semi-canonicalize the blocks by default
-        #################################
-        # Skipping this section for now #
-        #################################
-        # C_tilde = Ca.copy()
-        # C_av = semicanonicalize_block() ...
+        # Core in B
+        C_bc = Semicanonicalizer(index_B_occ, g1_sf, C_tilde)
+        blocks.append(C_bc)
+
+        # Active
+        if self.semicanonicalize_active:
+            C_actv = Semicanonicalizer(actv_inds, g1_sf, C_tilde)
+        else:
+            logger.log_info1("\nSkipping semi-canonicalization of active orbitals")
+            C_actv = C_tilde[:, actv_inds]
+        blocks.append(C_actv)
+
+        # Virtual in A
+        C_av = Semicanonicalizer(index_A_vir, g1_sf, C_tilde)
+        blocks.append(C_av)
+
+        # Virtual in B
+        C_bv = Semicanonicalizer(index_B_vir, g1_sf, C_tilde)
+        blocks.append(C_bv)
+
+        # Frozen virtual
+        if self.semicanonicalize_frozen:
+            C_fv = Semicanonicalizer(frozen_virt_inds, g1_sf, C_tilde)
+        else:
+            C_fv = C_tilde[:, frozen_virt_inds]
+        blocks.append(C_fv)
+
+        # Combine all blocks into C_tilde
+        C_tilde = np.hstack(blocks)
+
+        def adjust_mo_space(adj, A, B):
+            nA = len(A)
+            cutoff = nA - adj
+            return A[:cutoff], B + A[cutoff:]
+
+        A_occ, B_occ = adjust_mo_space(self.adjust_B_docc, index_A_occ, index_B_occ)
+        A_vir, B_vir = adjust_mo_space(self.adjust_B_uocc, index_A_vir, index_B_vir)
+
+        self.Ca = C_tilde
+        self.C[0] = C_tilde.copy()
+        self.mo_space = MOSpace(
+            nmo=self.system.nmo,
+            active_orbitals=actv_inds,
+            core_orbitals=A_occ
+            frozen_core_orbitals=frozen_virt_inds + B_occ
+            frozen_virtual_orbitals= frozen_virt_inds + B_vir
+        )
 
         return {
-            "index_A_occ": index_A_occ,
+            "index_A_occ": A_occ,
             "index_actv": actv_inds,
-            "index_A_vir": index_A_vir,
-            "index_B_occ": index_B_occ,
-            "index_B_vir": index_B_vir,
+            "index_A_vir": A_vir,
+            "index_B_occ": B_occ,
+            "index_B_vir": B_vir,
             "lo_vals": lo_vals,
             "lv_vals": lv_vals,
-            # "C_tilde": C_tilde
+            "C_tilde": C_tilde,
         }
 
     def _print_embedding_info(
@@ -429,16 +464,17 @@ class ASET(MOsMixin, SystemMixin):
         Print the sizes and MO lists for fragment embedding
         """
         core_inds = self.mo_space.core_indices
-        actv_inds = self.mo_space.active_indices
-        virt_inds = sorted(set(range(self.nmo)) - set(core_inds) - set(actv_inds))
+        virt_inds = self.mo_space.virtual_indices
+        num_Fo = len(self.mo_space.frozen_core_indices)
         num_Ao = len(index_A_occ)
         num_Av = len(index_A_vir)
         num_Bo = len(index_B_occ)
         num_Bv = len(index_B_vir)
+        num_Fv = len(self.mo_space.frozen_virtual_indices)
         num_actv = len(index_actv)
 
         # Environment A
-        logger.log_info1("\nFrozen-Orbital Embedding MOs (fragment A):")
+        logger.log_info1("\nFrozen-Orbital Embedding MOs (Fragment A):")
         logger.log_info1("    ============================")
         logger.log_info1("      MO     Type    <phi|P|phi>")
         logger.log_info1("    ----------------------------")
@@ -472,7 +508,7 @@ class ASET(MOsMixin, SystemMixin):
             logger.log_info1("    ============================")
         else:
             logger.log_info1(
-                "\n    Frozen‑orbital Embedding MOs (Environment B) more than 80, no printing."
+                "\n    Frozen‑orbital Embedding MOs (Environment B) more than 50, no printing."
             )
 
         # Summary
@@ -483,8 +519,6 @@ class ASET(MOsMixin, SystemMixin):
         logger.log_info1(
             f"    Environment (B): {num_Bo} Occupied MOs, {num_Bv} Virtual MOs"
         )
-
-        # no frozen atm
-        # logger.log_info1(
-        #     f"    Frozen Orbitals: {num_Fo} Core MOs, {num_Bv} Virtual MOs\n"
-        # )
+        logger.log_info1(
+            f"    Frozen Orbitals: {num_Fo} Core MOs, {num_Fv} Virtual MOs\n"
+        )
