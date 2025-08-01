@@ -4,7 +4,6 @@ import re
 import ast
 import forte2
 from forte2 import ints
-from forte2.base_classes.active_space_solver import MOSpace
 from forte2.state import MOSpace
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import System
