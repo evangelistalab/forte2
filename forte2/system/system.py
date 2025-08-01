@@ -194,22 +194,6 @@ class System:
     def __repr__(self):
         return f"System(atoms={self.atoms}, basis_set={self.basis}, auxiliary_basis_set={self.auxiliary_basis})"
 
-    def decontract(self):
-        """
-        Decontract the basis set.
-
-        Returns
-        -------
-        ints.Basis
-            Decontracted basis set.
-        """
-        return build_basis(
-            self.basis.name,
-            self.atoms,
-            embed_normalization_into_coefficients=True,
-            decontract=True,
-        )
-
     def ints_overlap(self):
         """
         Return the overlap integrals for the system.

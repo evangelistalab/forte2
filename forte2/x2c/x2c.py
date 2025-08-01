@@ -3,6 +3,7 @@ import scipy, scipy.constants
 
 from forte2 import ints
 from forte2.helpers import logger, eigh_gen
+from forte2.system.build_basis import build_basis
 
 X2C_LINDEP_TOL = 5e-8
 LIGHT_SPEED = scipy.constants.physical_constants["inverse fine-structure constant"][0]
@@ -37,18 +38,9 @@ def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
         "so",
     ], f"Invalid x2c_type: {x2c_type}. Must be 'sf' or 'so'."
 
-    if "decon-" in system.basis_set:
-        # basis is already decontracted
-        xbasis = system.basis
-        proj = (
-            np.eye(xbasis.size)
-            if x2c_type == "sf"
-            else _block_diag(np.eye(xbasis.size))
-        )
-    else:
-        logger.log_info1(f"Number of contracted basis functions: {system.nbf}")
-        xbasis = system.decontract()
-        proj = _get_projection_matrix(xbasis, system.basis, x2c_type=x2c_type)
+    logger.log_info1(f"Number of contracted basis functions: {system.nbf}")
+    xbasis = build_basis(system.basis_set, system.atoms, decontract=True)
+    proj = _get_projection_matrix(xbasis, system.basis, x2c_type=x2c_type)
 
     nbf_decon = len(xbasis)
     logger.log_info1(f"Number of decontracted basis functions: {nbf_decon}")
