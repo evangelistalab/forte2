@@ -279,23 +279,17 @@ class ASET(MOsMixin, SystemMixin):
         """
         Perform Orbital Partitioning for ASET.
         """
-        # 1. Get MO coeff and dimensions
         Ca = self.Ca
-
-        # 1) Compute the overlaps
         S_fm = ints.overlap(self.system.basis, self.system.minao_basis)
-
-        # 2) Orthonormalize the minimal basis
         X_mm = self.X_mm
 
-        # 3) Build the projection operator from full AO into orthonormal min‐AO
-        #    T[t,μ] = (X_mm @ S_fmᵀ)[t,μ]
+        # Build the projection operator from full AO into orthonormal min‐AO
         T = X_mm @ S_fm.T
 
-        # 4) Project full‐AO MOs into the minimal basis:
+        # Project full‐AO basis MOs into the minimal basis:
         C_min = T @ Ca  # shape (n_minAO, nmo)
 
-        # 5) Build the fragment projector in the minimal basis
+        # Build the fragment projector in the minimal basis
         P_frag = self.P_frag
         F = C_min.T @ P_frag @ C_min
 
