@@ -389,7 +389,7 @@ class ASET(MOsMixin, SystemMixin):
             logger.log_info1(
                 f"\nSkipping semicanonicalization of active space orbitals."
             )
-        if self.semicanonicalize_frozen == False:
+        if not self.semicanonicalize_frozen:
             logger.log_info1(
                 f"\nSkipping semicanonicalization of frozen core and frozen virtual orbitals."
             )
