@@ -1,8 +1,10 @@
 import numpy as np
 import pytest
+
 import forte2
 from forte2.scf import RHF, GHF
-from forte2.helpers.comparisons import approx, approx_loose
+from forte2.helpers.comparisons import approx
+from forte2.system.atom_data import EH_TO_WN
 
 
 def test_sfx2c1e():
@@ -53,16 +55,40 @@ def test_lindep_sfx2c1e():
     assert scf.nmo == 81
 
 
-def test_sox2c1e():
-    eghf = -128.61570430672734
-    xyz = "Ne 0 0 0"
+def test_sox2c1e_water():
+    eghf = -76.081946869897
+    xyz = """
+    O 0 0 0
+    H 0 -0.757 0.587
+    H 0 0.757 0.587
+    """
 
     system = forte2.System(
         xyz=xyz,
-        basis_set="cc-pvdz",
-        auxiliary_basis_set="def2-universal-jkfit",
+        basis_set="decon-cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
         x2c_type="so",
     )
     scf = GHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(eghf)
+
+
+def test_boettger_hbr():
+    xyz = """
+    H 0 0 0
+    Br 0 0 1.4
+    """
+
+    system = forte2.System(
+        xyz=xyz,
+        basis_set="decon-cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        x2c_type="so",
+        snso_type="dcb",
+    )
+    scf = GHF(charge=0)(system)
+    scf.run()
+    assert EH_TO_WN * (
+        scf.eps[0][scf.nel - 2] - scf.eps[0][scf.nel - 3]
+    ) == pytest.approx(2870.8981440453394, abs=1e-6)
