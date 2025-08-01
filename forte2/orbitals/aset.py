@@ -12,7 +12,7 @@ from forte2.helpers import logger
 from forte2.base_classes.mixins import MOsMixin, SystemMixin
 from forte2.orbopt import MCOptimizer
 from forte2.system.atom_data import ATOM_SYMBOL_TO_Z
-from forte2.orbitals.semicanonicalizer import Semicanonicalizer
+from forte2.orbitals.semicanonicalizer import Semicanonicalizer, EmbeddingMOSpace
 
 
 @dataclass
@@ -398,11 +398,22 @@ class ASET(MOsMixin, SystemMixin):
         frozen_core_inds = self.mo_space.frozen_core_indices
         frozen_virt_inds = self.mo_space.frozen_virtual_indices
         g1_sf = self.parent_method.ci_solver.make_average_sf_1rdm()
+        emb_space = EmbeddingMOSpace(
+            nmo=self.nmo,
+            frozen_core_orbitals=frozen_core_inds,
+            B_core_orbitals=index_B_occ,
+            A_core_orbitals=index_A_occ,
+            active_orbitals=actv_inds,
+            A_virtual_orbitals=index_A_vir,
+            B_virtual_orbitals=index_B_vir,
+            frozen_virtual_orbitals=frozen_virt_inds,
+        )
+
         semican = Semicanonicalizer(
             g1_sf=g1_sf,
             C=C_tilde,
             system=self.system,
-            mo_space=self.mo_space,
+            mo_space=emb_space,
             do_frozen=self.semicanonicalize_frozen,
             do_active=self.semicanonicalize_active,
         )
