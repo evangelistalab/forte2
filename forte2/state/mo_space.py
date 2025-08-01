@@ -244,10 +244,8 @@ class MOSpace:
         return virtual_indices
 
     def _parse_lists(self):
-        if isinstance(self.active_orbitals[0], int):
+        if all(isinstance(x, int) for x in self.active_orbitals):
             self.active_orbitals = [self.active_orbitals]
-        else:
-            self.active_orbitals = self.active_orbitals
 
         self.virtual_indices = self._infer_virtual_indices()
 
@@ -267,6 +265,10 @@ class MOSpace:
         self.ncore = _mo_space.ncore
         self.core_indices = _mo_space.core_indices
 
+        self.docc_orbitals = self.docc_indices = (
+            self.frozen_core_indices + self.core_indices
+        )
+
         self.nactv = _mo_space.nactv
         self.active_indices = _mo_space.active_indices
 
@@ -275,6 +277,10 @@ class MOSpace:
 
         self.nfrozen_virtual = _mo_space.nfrozen_virtual
         self.frozen_virtual_indices = _mo_space.frozen_virtual_indices
+
+        self.uocc_orbitals = self.uocc_indices = (
+            self.virtual_indices + self.frozen_virtual_indices
+        )
 
         if self.ncore + self.nactv == 0:
             raise ValueError(
@@ -311,6 +317,7 @@ class MOSpace:
 @dataclass
 class EmbeddingMOSpace:
     """Simplified attribute list as this is only used for semicanonicalization."""
+
     nmo: int
     frozen_core_orbitals: list[int]
     B_core_orbitals: list[int]
@@ -337,4 +344,3 @@ class EmbeddingMOSpace:
         self.A_virt = _mo_space.virt[0]
         self.B_virt = _mo_space.virt[1]
         self.frozen_virt = _mo_space.frozen_virt
-
