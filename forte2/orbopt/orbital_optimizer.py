@@ -288,11 +288,11 @@ class MCOptimizer(ActiveSpaceSolver):
 
         if self.final_orbital == "semicanonical":
             semi = Semicanonicalizer(
-                self.mo_space,
-                self.ci_solver.make_average_sf_1rdm(),
-                self.C[0],
-                self.system,
-                fock_builder,
+                mo_space=self.mo_space,
+                g1_sf=self.ci_solver.make_average_sf_1rdm(),
+                C=self.C[0],
+                system=self.system,
+                fock_builder=fock_builder,
                 mix_inactive=not self.optimize_frozen_orbs,
                 mix_active=False,
             )
