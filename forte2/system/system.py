@@ -147,6 +147,9 @@ class System:
 
     def _init_basis(self):
         self.basis = build_basis(self.basis_set, self.atoms)
+        logger.log_info1(
+            f"Parsed {self.natoms} atoms with basis set of {self.basis.size} functions."
+        )
 
         if not self.cholesky_tei:
             self.auxiliary_basis = (
@@ -172,14 +175,10 @@ class System:
             if self.minao_basis_set is not None
             else None
         )
-        logger.log_info1(
-            f"Parsed {self.natoms} atoms with basis set of {self.basis.size} functions."
-        )
 
         self.nbf = self.basis.size
         self.naux = self.auxiliary_basis.size if self.auxiliary_basis else 0
         self.nminao = self.minao_basis.size if self.minao_basis else 0
-
 
     def _init_x2c(self):
         if self.x2c_type is not None:
@@ -276,6 +275,7 @@ class System:
         return nuc_quad * conversion_factor
 
     def _get_orthonormal_transformation(self):
+        """Orthonormalize the AO basis, catch and remove linear dependencies."""
         S = self.ints_overlap()
         e, _ = np.linalg.eigh(S)
         self._eigh = sp.linalg.eigh
