@@ -205,3 +205,32 @@ def test_zmatrix_0():
     E_ref = z_to_cart_0()
 
     assert scf.E == pytest.approx(E_ref, rel=1e-8, abs=1e-8)
+
+
+def test_custom_basis_with_decontract():
+    xyz = """
+    C 0 0 0
+    O 0 0 1.2
+    H 0 0 1.5
+    H 0 0 1.8
+    C 0 0 2.0
+    O 0 0 2.2
+    H 0 0 2.5
+    """
+    system = forte2.System(
+        xyz=xyz,
+        basis_set={
+            "C1": "decon-cc-pvdz",
+            "O": "sto-6g",
+            "C2": "cc-pvtz",
+            "H2-3": "cc-pvdz",
+            "default": "cc-pvdz",
+        },
+        auxiliary_basis_set={
+            "C": "cc-pVQZ-JKFIT",
+            "O1": "decon-def2-universal-JKFIT",
+            "default": "def2-universal-JKFIT",
+        },
+    )
+    assert len(system.basis) == 97
+    assert len(system.auxiliary_basis) == 440

@@ -7,7 +7,7 @@ from forte2.helpers import logger
 from forte2.helpers.matrix_functions import invsqrt_matrix, canonical_orth
 from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
-from .parse_geometry import parse_geometry
+from .parse_geometry import parse_geometry, _GeometryHelper
 from .atom_data import ATOM_DATA
 
 import numpy as np
@@ -35,6 +35,10 @@ class System:
     x2c_type : str, optional
         The type of X2C transformation to be used. Options are "sf" for scalar
         relativistic effects or "so" for spin-orbit coupling. If None, no X2C transformation is applied.
+    snso_type : str, optional
+        The type of screened nuclear spin-orbit coupling scaling scheme to use.
+        Only relevant if `x2c_type` is "so".
+        Options are "boettger", "dc", "dcb", or "row-dependent"
     unit : str, optional, default="angstrom"
         The unit for the atomic coordinates. Can be "angstrom" or "bohr".
     linear_dep_trigger : float, optional, default=1e-10
@@ -97,6 +101,7 @@ class System:
     auxiliary_basis_set_corr: str | dict = None
     minao_basis_set: str | dict = "cc-pvtz-minao"
     x2c_type: str = None
+    snso_type: str = None
     unit: str = "angstrom"
     linear_dep_trigger: float = 1e-10
     ortho_thresh: float = 1e-8
@@ -119,33 +124,32 @@ class System:
             "angstrom",
             "bohr",
         ], f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'."
+
+        self._init_geometry()
+        self._init_basis()
+        self._init_x2c()
+        self._get_orthonormal_transformation()
+
+    def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
-        self.natoms = len(self.atoms)
-        self.atomic_charges = np.array([atom[0] for atom in self.atoms])
-        self.atomic_masses = np.array(
-            [ATOM_DATA[Z]["mass"] for Z in self.atomic_charges]
-        )
-        self.atomic_positions = np.array([atom[1] for atom in self.atoms])
-        self.centroid = np.mean(self.atomic_positions, axis=0)
-        self.nuclear_repulsion = ints.nuclear_repulsion(self.atoms)
+        _geom = _GeometryHelper(self.atoms)
+        self.atoms = _geom.atoms
+        self.Zsum = _geom.Zsum
+        self.natoms = _geom.natoms
+        self.atomic_charges = _geom.atomic_charges
+        self.atomic_masses = _geom.atomic_masses
+        self.atomic_positions = _geom.atomic_positions
+        self.centroid = _geom.centroid
+        self.nuclear_repulsion = _geom.nuclear_repulsion
+        self.center_of_mass = _geom.center_of_mass
+        self.atom_counts = _geom.atom_counts
+        self.atom_to_center = _geom.atom_to_center
 
-        self.center_of_mass = np.einsum(
-            "a,ax->x", self.atomic_masses, self.atomic_positions
-        ) / np.sum(self.atomic_masses)
-
-        self.atom_counts = {}
-        for atom in self.atoms:
-            if atom[0] not in self.atom_counts:
-                self.atom_counts[atom[0]] = 0
-            self.atom_counts[atom[0]] += 1
-
-        self.atom_to_center = {}
-        for i, atom in enumerate(self.atoms):
-            if atom[0] not in self.atom_to_center:
-                self.atom_to_center[atom[0]] = []
-            self.atom_to_center[atom[0]].append(i)
-
+    def _init_basis(self):
         self.basis = build_basis(self.basis_set, self.atoms)
+        logger.log_info1(
+            f"Parsed {self.natoms} atoms with basis set of {self.basis.size} functions."
+        )
 
         if not self.cholesky_tei:
             self.auxiliary_basis = (
@@ -171,17 +175,10 @@ class System:
             if self.minao_basis_set is not None
             else None
         )
-        logger.log_info1(
-            f"Parsed {len(self.atoms)} atoms with basis set of {self.basis.size} functions."
-        )
 
-        self.Zsum = round(np.sum([x[0] for x in self.atoms]))
         self.nbf = self.basis.size
         self.naux = self.auxiliary_basis.size if self.auxiliary_basis else 0
         self.nminao = self.minao_basis.size if self.minao_basis else 0
-
-        self._init_x2c()
-        self._check_linear_dependencies()
 
     def _init_x2c(self):
         if self.x2c_type is not None:
@@ -194,26 +191,12 @@ class System:
         if self.x2c_type == "sf":
             self.ints_hcore = lambda: get_hcore_x2c(self, x2c_type="sf")
         elif self.x2c_type == "so":
-            self.ints_hcore = lambda: get_hcore_x2c(self, x2c_type="so")
+            self.ints_hcore = lambda: get_hcore_x2c(
+                self, x2c_type="so", snso_type=self.snso_type
+            )
 
     def __repr__(self):
         return f"System(atoms={self.atoms}, basis_set={self.basis}, auxiliary_basis_set={self.auxiliary_basis})"
-
-    def decontract(self):
-        """
-        Decontract the basis set.
-
-        Returns
-        -------
-        ints.Basis
-            Decontracted basis set.
-        """
-        return build_basis(
-            self.basis.name,
-            self.atoms,
-            embed_normalization_into_coefficients=True,
-            decontract=True,
-        )
 
     def ints_overlap(self):
         """
@@ -291,7 +274,8 @@ class System:
         conversion_factor = 1.0 / DEBYE_ANGSTROM_TO_AU if unit == "debye" else 1.0
         return nuc_quad * conversion_factor
 
-    def _check_linear_dependencies(self):
+    def _get_orthonormal_transformation(self):
+        """Orthonormalize the AO basis, catch and remove linear dependencies."""
         S = self.ints_overlap()
         e, _ = np.linalg.eigh(S)
         self._eigh = sp.linalg.eigh
