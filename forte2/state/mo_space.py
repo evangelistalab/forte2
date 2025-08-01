@@ -87,9 +87,6 @@ class _MOSpaceBase:
             len(set(self.active_indices)) == self.nactv
         ), "Active indices must be unique."
         assert (
-            len(set(self.frozen_core_indices)) == self.nfrozen_core
-        ), "Frozen core indices must be unique."
-        assert (
             len(set(self.frozen_virtual_indices)) == self.nfrozen_virtual
         ), "Frozen virtual indices must be unique."
 
