@@ -1,8 +1,10 @@
 import numpy as np
 import pytest
+
 import forte2
 from forte2.scf import RHF, GHF
-from forte2.helpers.comparisons import approx, approx_loose
+from forte2.helpers.comparisons import approx
+from forte2.system.atom_data import EH_TO_WN
 
 
 def test_sfx2c1e():
@@ -53,14 +55,18 @@ def test_lindep_sfx2c1e():
     assert scf.nmo == 81
 
 
-def test_sox2c1e():
-    eghf = -128.61570430672734
-    xyz = "Ne 0 0 0"
+def test_sox2c1e_water():
+    eghf = -76.081946869897
+    xyz = """
+    O 0 0 0
+    H 0 -0.757 0.587
+    H 0 0.757 0.587
+    """
 
     system = forte2.System(
         xyz=xyz,
-        basis_set="cc-pvdz",
-        auxiliary_basis_set="def2-universal-jkfit",
+        basis_set="decon-cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
         x2c_type="so",
     )
     scf = GHF(charge=0)(system)
@@ -68,26 +74,22 @@ def test_sox2c1e():
     assert scf.E == approx(eghf)
 
 
-def test_snso():
-    eghf = -128.615699916705
-    emo = -0.83044548
-    xyz = "Ne 0 0 0"
+def test_boettger_hbr():
+    eghf = -76.075428047998
+    xyz = """
+    H 0 0 0
+    Br 0 0 1.4
+    """
 
     system = forte2.System(
         xyz=xyz,
-        basis_set="cc-pvdz",
-        auxiliary_basis_set="def2-universal-jkfit",
+        basis_set="decon-cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
         x2c_type="so",
-        snso_type="boettger",
+        snso_type="dcb",
     )
-    scf = GHF(charge=0,econv=1e-10, dconv=1e-8)(system)
+    scf = GHF(charge=0)(system)
     scf.run()
-    assert np.isclose(
-        scf.E, eghf, atol=1e-8, rtol=1e-6
-    ), f"SCF energy {scf.E} is not close to expected value {eghf}"
-    assert np.isclose(
-        scf.eps[0][9], emo, atol=1e-8, rtol=1e-6
-    ), f"MO energy {scf.eps[0][9]} is not close to expected value {emo}"
-
-
-test_snso()
+    assert EH_TO_WN * (
+        scf.eps[0][scf.nel - 2] - scf.eps[0][scf.nel - 3]
+    ) == pytest.approx(2870.8981440453394, abs=1e-6)

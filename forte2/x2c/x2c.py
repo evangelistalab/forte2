@@ -35,8 +35,19 @@ def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
         "so",
     ], f"Invalid x2c_type: {x2c_type}. Must be 'sf' or 'so'."
 
-    logger.log_info1(f"Number of contracted basis functions: {system.nbf}")
-    xbasis = system.decontract()
+    if "decon-" in system.basis_set:
+        # basis is already decontracted
+        xbasis = system.basis
+        proj = (
+            np.eye(xbasis.size)
+            if x2c_type == "sf"
+            else _block_diag(np.eye(xbasis.size))
+        )
+    else:
+        logger.log_info1(f"Number of contracted basis functions: , {system.nbf}")
+        xbasis = system.decontract()
+        proj = _get_projection_matrix(xbasis, system.basis, x2c_type=x2c_type)
+
     nbf_decon = len(xbasis)
     logger.log_info1(f"Number of decontracted basis functions: {nbf_decon}")
     nbf = nbf_decon if x2c_type == "sf" else nbf_decon * 2
@@ -212,7 +223,6 @@ def apply_snso_scaling(ints, basis, atoms, snso_type):
                 continue
             Zj = atoms[center_given_shell(jshell)][0]
             snso_factor = 1 - np.sqrt(Ql[li] * Ql[lj] / (Zi * Zj))
-            print(snso_factor)
             ints[iptr : iptr + isize, jptr : jptr + jsize] *= snso_factor
             jptr += jsize
         iptr += isize
