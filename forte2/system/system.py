@@ -7,7 +7,7 @@ from forte2.helpers import logger
 from forte2.helpers.matrix_functions import invsqrt_matrix, canonical_orth
 from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
-from .parse_geometry import parse_geometry, GeometryHelper
+from .parse_geometry import parse_geometry, _GeometryHelper
 from .atom_data import ATOM_DATA
 
 import numpy as np
@@ -125,8 +125,14 @@ class System:
             "bohr",
         ], f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'."
 
+        self._init_geometry()
+        self._init_basis()
+        self._init_x2c()
+        self._get_orthonormal_transformation()
+
+    def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
-        _geom = GeometryHelper(self.atoms)
+        _geom = _GeometryHelper(self.atoms)
         self.atoms = _geom.atoms
         self.Zsum = _geom.Zsum
         self.natoms = _geom.natoms
@@ -139,6 +145,7 @@ class System:
         self.atom_counts = _geom.atom_counts
         self.atom_to_center = _geom.atom_to_center
 
+    def _init_basis(self):
         self.basis = build_basis(self.basis_set, self.atoms)
 
         if not self.cholesky_tei:
@@ -173,8 +180,6 @@ class System:
         self.naux = self.auxiliary_basis.size if self.auxiliary_basis else 0
         self.nminao = self.minao_basis.size if self.minao_basis else 0
 
-        self._init_x2c()
-        self._check_linear_dependencies()
 
     def _init_x2c(self):
         if self.x2c_type is not None:
@@ -270,7 +275,7 @@ class System:
         conversion_factor = 1.0 / DEBYE_ANGSTROM_TO_AU if unit == "debye" else 1.0
         return nuc_quad * conversion_factor
 
-    def _check_linear_dependencies(self):
+    def _get_orthonormal_transformation(self):
         S = self.ints_overlap()
         e, _ = np.linalg.eigh(S)
         self._eigh = sp.linalg.eigh

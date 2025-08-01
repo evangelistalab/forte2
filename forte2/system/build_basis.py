@@ -7,7 +7,7 @@ import regex as re
 from forte2 import Basis, Shell
 from forte2.system.atom_data import ATOM_SYMBOL_TO_Z
 from forte2.helpers import logger
-from .parse_geometry import GeometryHelper
+from .parse_geometry import _GeometryHelper
 
 try:
     import basis_set_exchange as bse
@@ -48,7 +48,7 @@ def build_basis(
     basis : forte2.ints.Basis
         The basis set.
     """
-    geometry = GeometryHelper(atoms)
+    geometry = _GeometryHelper(atoms)
 
     prefix = "decon-" if decontract else ""
     natoms = geometry.natoms
