@@ -28,9 +28,9 @@ class ASET(MOsMixin, SystemMixin):
         Method for choosing the embedding cutoff. Options include "threshold", "cumulative_threshold", "num_of_orbitals".
     cutoff : float, optional, default = 0.5
         Projector eigenvalue for both simple and cumulative threshold methods.
-    num_A_docc : int, optional, default=0
+    num_a_docc : int, optional, default=0
         Number of occupied orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
-    num_A_uocc : int, optional, default=0
+    num_a_uocc : int, optional, default=0
         Number of virtual orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
     adjust_B_docc : int, optional, default=0
         Adjust this number of occupied orbitals between environment B and fragment A. If set to positive, move to B; if set to negative, move to A.
@@ -385,11 +385,11 @@ class ASET(MOsMixin, SystemMixin):
                         )
 
         # # Semi-canonicalize the blocks
-        if self.semicanonicalize_active == False:
+        if not self.semicanonicalize_active:
             logger.log_info1(
                 f"\nSkipping semicanonicalization of active space orbitals."
             )
-        if self.semicanonicalize_frozen == False:
+        if not self.semicanonicalize_frozen:
             logger.log_info1(
                 f"\nSkipping semicanonicalization of frozen core and frozen virtual orbitals."
             )
