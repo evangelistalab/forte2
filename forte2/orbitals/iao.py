@@ -65,8 +65,14 @@ class IAO:
         return C_iao
 
     def make_sf_1rdm(self, sf_1rdm_ao):
-        """
-        Generate the spin-free 1-particle density matrix in the IAO basis.
+        r"""
+        Generate the spin-free 1-particle density matrix in the IAO basis, given by
+
+        .. math::
+            \gamma_{\rho\sigma} = \langle\rho|\hat{\gamma}|\sigma\rangle,
+
+        where :math:`\hat{\gamma}=2\sum_{i \in \text{occ}} |i\rangle\langle i|` is the 
+        closed-shell RHF 1e density matrix (see eq 3 in the JCTC paper).
 
         Parameters
         ----------
@@ -79,7 +85,9 @@ class IAO:
             The spin-free 1-particle density matrix in the IAO basis.
         """
         S = self.system.ints_overlap()
-        return self.C_iao.T @ (S.T @ sf_1rdm_ao @ S) @ self.C_iao
+        # contracting two AO indices requires an intervening overlap matrix
+        # due to the non-orthogonality of the AOs
+        return self.C_iao.T @ (S @ sf_1rdm_ao @ S) @ self.C_iao
 
 
 def _orthogonalize(C, S):
