@@ -1,3 +1,19 @@
+'''
+This module computes symmetry irreps for MOs a posteriori by computing the character of each MO 
+under each symmetry operation of the point group. In a nutshell, what we want is the character
+
+\chi(g)_{p} = \langle p | \hat{R}(g) | p \rangle = \sum_{uv} c_{pu}* c_{pv} < u | \hat{R}(g) | v >
+
+Each AO function |u> ~ R_{nl}(r) Y_{lm}(𝜃,𝜙). For Abelian point groups, we only need to consider
+C2 rotations and mirror planes. None of these affect the radial part, but they transform the
+angular part to a symmetric partner on the same or a different atom with a phase. 
+
+If \hat{R}(g)|v> = \sum_{w} U_{vw} |w>, then < u | \hat{R}(g) | v > = \sum_{w} U_{vw} < u | w > 
+
+and 
+
+\chi(g)_{p} = \sum_{uvw} c_{pu}* c_{pv} U_{vw} S_{uw}. 
+'''
 import numpy as np
 from forte2.system.basis_utils import BasisInfo, get_shell_label
 from forte2.system.parse_geometry import rotation_mat, reflection_mat
@@ -50,23 +66,11 @@ _CHARACTER_TABLE = {
 }
 
 
-def sph_parity_cca(l, m):
-    if abs(m) > l:
-        raise ValueError(f'Something wrong - |m| cannot exceed l')
-    ma = abs(m)
-    pz = (1 - ma) & 1
-    if m == 0:
-        return 0, 0, pz
-    if m > 0: # cos-type
-        px = ma & 1
-        py = 0
-    else: # sin-type
-        px = (ma - 1) & 1
-        py = 1
-    return px, py, pz
-
-
 def local_sign(l, m, op):
+    '''
+    Return phase describing how the spherical harmonic Y_lm transforms under Abelian symmetry
+    operations `op`, which is one of [E, C2z, C2x, C2y, σ_xy, σ_xz, σ_yz].
+    '''
     ma = abs(m)
     if op == 'E':
         return 1
@@ -94,6 +98,9 @@ def local_sign(l, m, op):
 
 
 def get_symmetry_ops(point_group, prinaxis):
+    '''
+    Compute 3x3 matrix representations for the symmetry operators in `point_group`.
+    '''
     symmetry_ops = {}
 
     axes = {'x': 0, 'y': 1, 'z': 2}
@@ -113,6 +120,9 @@ def get_symmetry_ops(point_group, prinaxis):
 
 
 def characters(S, C, U_ops):
+    '''
+    Compute the characters of all MO vectors across all symmetry operators in the point group.
+    '''
     X = C.T.conj() @ S
 
     # pull out first entry in U_ops dictionary to see whether we are in a spatial or spinor basis
@@ -125,17 +135,23 @@ def characters(S, C, U_ops):
 
 
 def to_spinor(X):
+    '''
+    Helper function - block spinor matrix for to accommodate GHF cases.
+    '''
     return np.block([[X, np.zeros_like(X)], [np.zeros_like(X), X]])
 
 
-def assign_irrep_labels(group, U_ops, S, C):
-    ops_order = _SYMMETRY_OPS[group]
+def assign_irrep_labels(point_group, U_ops, S, C):
+    '''
+    Assigns the MO irrep labels in `point_group` by matching the character vectors to their expected values.
+    '''
+    ops_order = _SYMMETRY_OPS[point_group]
 
     # Compute character vector for each orbital in all symmetry ops
     chars = characters(S, C, U_ops)
 
     # Compare the character vector to the expected results and pick the closest match
-    table = _CHARACTER_TABLE[group]
+    table = _CHARACTER_TABLE[point_group]
     T = np.array([table[name] for name in table])     # (n_irrep, |G|)
     names = list(table.keys())
 
@@ -147,7 +163,13 @@ def assign_irrep_labels(group, U_ops, S, C):
 
 
 def build_U_matrices(symmetry_operations, system, info, tol=1e-6):
-
+    '''
+    Compute the matrices U(g)_{uv} < u | R(g) | v > that describes how the
+    AO basis functions transform under each symmetry operation R(g). This involves
+    finding the symmetric partner atom for each basis function and then mutiplying
+    that with a local phase describing how the spherical harmonic transforms under
+    the symmetry operation.
+    '''
     U_ops = {}
     for op_label, R in symmetry_operations.items():
         U = np.zeros((system.nbf, system.nbf))
