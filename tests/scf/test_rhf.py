@@ -69,7 +69,7 @@ def test_rhf_sym_assign():
 
     system = forte2.System(
         xyz=xyz, basis_set="cc-pv5z", auxiliary_basis_set="cc-pVQZ-JKFIT",
-        symgroup_assign="C2v"
+        point_group="C2v"
     )
 
     scf = RHF(charge=0)(system)

@@ -152,13 +152,13 @@ def build_U_matrices(symmetry_operations, system, info, tol=1e-6):
 
 def assign_mo_symmetries(system, S, C, verbose=False):
 
-    if system.symgroup_assign == 'C1':
+    if system.point_group == 'C1':
         return ['a' for _ in range(C.shape[1])]
 
     info = BasisInfo(system, system.basis)
 
     # step 1: build symmetry transformation matrices
-    symmetry_ops = get_symmetry_ops(system.symgroup_assign, system.prinaxis)
+    symmetry_ops = get_symmetry_ops(system.point_group, system.prinaxis)
 
     # step 2: build U matrices (permutation * phase)
     U = build_U_matrices(symmetry_ops, 
@@ -167,7 +167,7 @@ def assign_mo_symmetries(system, S, C, verbose=False):
                          tol=1e-6)
 
     # step 3: assign irrep labels
-    labels, chars = assign_irrep_labels(system.symgroup_assign, U, S, C)
+    labels, chars = assign_irrep_labels(system.point_group, U, S, C)
 
     if verbose:
         for i, c in enumerate(chars):
