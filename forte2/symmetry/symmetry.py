@@ -49,62 +49,35 @@ _CHARACTER_TABLE = {
     "C1": {"a":[+1]},
 }
 
-# labels: s ; px,py,pz ; dz2, dx2-y2, dxy, dxz, dyz
-_P_SIGNS = {
-    'px':  {'C2x': +1, 'C2y': -1, 'C2z': -1, 'σ_xy': +1, 'σ_xz': +1, 'σ_yz': -1, 'i': -1},
-    'py':  {'C2x': -1, 'C2y': +1, 'C2z': -1, 'σ_xy': +1, 'σ_xz': -1, 'σ_yz': +1, 'i': -1},
-    'pz':  {'C2x': -1, 'C2y': -1, 'C2z': +1, 'σ_xy': -1, 'σ_xz': +1, 'σ_yz': +1, 'i': -1},
-}
-_D_SIGNS = {
-    'dz2':     {'C2x': +1, 'C2y': +1, 'C2z': +1, 'σ_xy': +1, 'σ_xz': +1, 'σ_yz': +1, 'i': +1},
-    'dx2-y2':  {'C2x': +1, 'C2y': +1, 'C2z': +1, 'σ_xy': +1, 'σ_xz': +1, 'σ_yz': +1, 'i': +1},
-    'dxy':     {'C2x': -1, 'C2y': -1, 'C2z': +1, 'σ_xy': +1, 'σ_xz': -1, 'σ_yz': -1, 'i': +1},
-    'dxz':     {'C2x': -1, 'C2y': +1, 'C2z': -1, 'σ_xy': -1, 'σ_xz': +1, 'σ_yz': -1, 'i': +1},
-    'dyz':     {'C2x': +1, 'C2y': -1, 'C2z': -1, 'σ_xy': -1, 'σ_xz': -1, 'σ_yz': +1, 'i': +1},
-}
-# F (l=3): 7 real cubic harmonics
-# Conventions:
-#   fz3      ~ z*(2z^2 - x^2 - y^2)
-#   fxz2     ~ x*(2z^2 - x^2 - y^2)
-#   fyz2     ~ y*(2z^2 - x^2 - y^2)
-#   fxyz     ~ x*y*z
-#   fx(x2-3y2) ~ x*(x^2 - 3y^2)
-#   fy(3x2-y2) ~ y*(3x^2 - y^2)
-#   fz(x2-y2)  ~ z*(x^2 - y^2)
 
-_F_SIGNS = {
-    'fz3':        {'C2x': -1, 'C2y': -1, 'C2z': +1, 'σ_xy': -1, 'σ_xz': +1, 'σ_yz': +1, 'i': -1},
-    'fxz2':       {'C2x': +1, 'C2y': -1, 'C2z': -1, 'σ_xy': +1, 'σ_xz': +1, 'σ_yz': -1, 'i': -1},
-    'fyz2':       {'C2x': -1, 'C2y': +1, 'C2z': -1, 'σ_xy': +1, 'σ_xz': -1, 'σ_yz': +1, 'i': -1},
-    'fxyz':       {'C2x': +1, 'C2y': +1, 'C2z': +1, 'σ_xy': -1, 'σ_xz': -1, 'σ_yz': -1, 'i': -1},
-    'fx(x2-3y2)': {'C2x': +1, 'C2y': -1, 'C2z': -1, 'σ_xy': +1, 'σ_xz': +1, 'σ_yz': -1, 'i': -1},
-    'fy(3x2-y2)': {'C2x': -1, 'C2y': +1, 'C2z': -1, 'σ_xy': +1, 'σ_xz': -1, 'σ_yz': +1, 'i': -1},
-    'fz(x2-y2)':  {'C2x': -1, 'C2y': -1, 'C2z': +1, 'σ_xy': -1, 'σ_xz': +1, 'σ_yz': +1, 'i': -1},
-}
+def sph_parity_cca(l, m):
+    if abs(m) > l:
+        raise ValueError(f'Something wrong - |m| cannot exceed l')
+    ma = abs(m)
+    pz = (1 - ma) & 1
+    if m == 0:
+        return 0, 0, pz
+    if m > 0: # cos-type
+        px = ma & 1
+        py = 0
+    else: # sin-type
+        px = (ma - 1) & 1
+        py = 1
+    return px, py, pz
 
-# G (l=4): 9 real quartic harmonics
-# Conventions:
-#   gz4         ~ 35 z^4 - 30 z^2 r^2 + 3 r^4
-#   gxz3        ~ x*z*(7 z^2 - 3 r^2)
-#   gyz3        ~ y*z*(7 z^2 - 3 r^2)
-#   g(z2)(x2-y2)~ (x^2 - y^2)*(7 z^2 - r^2)
-#   g(z2)xy     ~ x*y*(7 z^2 - r^2)
-#   gz(x3-3y2x) ~ z*(x^3 - 3 x y^2)
-#   gz(3x2y-y3) ~ z*(3 x^2 y - y^3)
-#   g(x4-6x2y2+y4) ~ x^4 - 6 x^2 y^2 + y^4
-#   gxy(x2-y2)  ~ x*y*(x^2 - y^2)
-_G_SIGNS = {
-    'gz4':                 {'C2x': +1, 'C2y': +1, 'C2z': +1, 'σ_xy': +1, 'σ_xz': +1, 'σ_yz': +1, 'i': +1},
-    'gxz3':                {'C2x': -1, 'C2y': +1, 'C2z': -1, 'σ_xy': -1, 'σ_xz': +1, 'σ_yz': -1, 'i': +1},
-    'gyz3':                {'C2x': +1, 'C2y': -1, 'C2z': -1, 'σ_xy': -1, 'σ_xz': -1, 'σ_yz': +1, 'i': +1},
-    'gz2(x2-y2)':          {'C2x': +1, 'C2y': +1, 'C2z': +1, 'σ_xy': +1, 'σ_xz': +1, 'σ_yz': +1, 'i': +1},
-    'gz2xy':               {'C2x': -1, 'C2y': -1, 'C2z': +1, 'σ_xy': +1, 'σ_xz': -1, 'σ_yz': -1, 'i': +1},
-    'gz(x3-3y2x)':         {'C2x': -1, 'C2y': +1, 'C2z': -1, 'σ_xy': -1, 'σ_xz': +1, 'σ_yz': -1, 'i': +1},
-    'gz(3x2y-y3)':         {'C2x': +1, 'C2y': -1, 'C2z': -1, 'σ_xy': -1, 'σ_xz': -1, 'σ_yz': +1, 'i': +1},
-    'g(x4-6x2y2+y4)':      {'C2x': +1, 'C2y': +1, 'C2z': +1, 'σ_xy': +1, 'σ_xz': +1, 'σ_yz': +1, 'i': +1},
-    'gxy(x2-y2)':          {'C2x': -1, 'C2y': -1, 'C2z': +1, 'σ_xy': +1, 'σ_xz': -1, 'σ_yz': -1, 'i': +1},
-}
-
+def local_sign(l, m, op):
+    if op == 'E':
+        return +1
+    elif op == 'i':
+        return (-1)**l
+    else:
+        px, py, pz = sph_parity_cca(l, m)
+        if op == 'C2x': return (-1)**(py + pz)
+        elif op == 'C2y': return (-1)**(px + pz)
+        elif op == 'C2z': return (-1)**(px + py)
+        elif op == 'σ_xz': return (-1)**(py)
+        elif op == 'σ_yz': return (-1)**(px)
+        elif op == 'σ_xy': return (-1)**(pz)
 
 def get_symmetry_ops(point_group, prinaxis):
     symmetry_ops = {}
@@ -127,17 +100,6 @@ def get_symmetry_ops(point_group, prinaxis):
 def characters(S, C, U_ops):
     X = C.T @ S
     return np.column_stack([np.diag(X @ U @ C) for op, U in U_ops.items()])  # shape (M, |G|)
-
-def local_sign(l, label, op):
-    if op == 'E': return +1
-    if l == 0:    return +1
-    lab = label.replace(' ','').lower()
-    if l == 1:    return _P_SIGNS[lab][op]
-    if l == 2:    return _D_SIGNS[lab][op]
-    if l == 3:    return _F_SIGNS[lab][op]
-    if l == 4:    return _G_SIGNS[lab][op]
-    # if op == 'i': return +1 if (l % 2 == 0) else -1  # generic parity fallback
-    raise NotImplementedError(f"Local phases for AO basis functions with l = {l} are not implemented!")
 
 def assign_irrep_labels(group, U_ops, S, C, tol):
     ops_order = _SYMMETRY_OPS[group]
@@ -183,7 +145,7 @@ def build_U_matrices(symmetry_operations, system, info, tol=1e-6, verbose=False)
                     # get basis fcns centered on atom b
                     basis_b = [bas for bas in info.basis_labels if bas.iatom == j]
                     for bas1 in basis_a:
-                        sgn = local_sign(bas1.l, get_shell_label(bas1.l, bas1.m), op_label)
+                        sgn = local_sign(bas1.l, bas1.ml, op_label)
                         for bas2 in basis_b:
                             if bas1.n == bas2.n and bas1.l == bas2.l and bas1.m == bas2.m:
                                 U[bas1.abs_idx, bas2.abs_idx] = sgn
@@ -197,7 +159,7 @@ def build_U_matrices(symmetry_operations, system, info, tol=1e-6, verbose=False)
                         print(f"U({p, q}) = {U[p, q]}")
     return U_ops
 
-def assign_mo_symmetries(system, C, verbose=True):
+def assign_mo_symmetries(system, C, verbose=False):
 
     if system.symgroup_assign == 'C1':
         return ['a' for _ in range(C.shape[1])]

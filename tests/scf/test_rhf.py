@@ -68,7 +68,7 @@ def test_rhf_sym_assign():
     """
 
     system = forte2.System(
-        xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVQZ-JKFIT",
+        xyz=xyz, basis_set="cc-pv5z", auxiliary_basis_set="cc-pVQZ-JKFIT",
         symgroup_assign="C2v"
     )
 

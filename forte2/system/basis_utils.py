@@ -12,7 +12,9 @@ SPH_LABELS = [
     ["py", "pz", "px"],
     ["dxy", "dyz", "dz2", "dxz", "dx2-y2"],
     ["fy(3x2-y2)", "fxyz", "fyz2", "fz3", "fxz2", "fz(x2-y2)", "fx(x2-3y2)"],
-    ['gz4', 'gxz3', 'gyz3', 'gz2(x2-y2)', 'gz2xy', 'gz(x3-3y2x)', 'gz(3x2y-y3)', 'g(x4-6x2y2+y4)', 'gxy(x2-y2)']
+    ['gz4', 'gxz3', 'gyz3', 'gz2(x2-y2)', 'gz2xy', 'gz(x3-3y2x)', 'gz(3x2y-y3)', 'g(x4-6x2y2+y4)', 'gxy(x2-y2)'],
+    ['hz5', 'hxz4', 'hyz4', 'hz3(x2-y2)', 'hz3xy', 'hz2(x3-3xy2)', 'hz2(3x2y-y3)', 'hz(x4-6x2y2+y4)', 'hzxy(x2-y2)', 'h(x5-10x3y2+5xy4)', 'h(5x4y-10x2y3+y5)'],
+    ['iz6', 'ixz5', 'iyz5', 'iz4(x2-y2)', 'iz4xy', 'iz3(x3-3xy2)', 'iz3(3x2y-y3)', 'iz2(x4-6x2y2+y4)', 'iz2xy(x2-y2)', 'iz(x5-10x3y2+5xy4)', 'iz(5x4y-10x2y3+y5)', 'i(x6-15x4y2+15x2y4-y6)', 'ixy(x4-6x2y2+y4)'],
 ]
 """
 The labels for spherical harmonics up to f orbitals.
@@ -20,6 +22,26 @@ We follow the `Libint2 convention <https://github.com/evaleev/libint/wiki/using-
 """
 
 AM_LABELS = ["s", "p", "d", "f", "g", "h", "i", "j", "k", "l", "m", "n"]
+
+def ml_from_shell_index_cca(l, idx):
+    """
+    Map Libint Standard/CCA shell index (0..2*l) to signed magnetic quantum number (m_l) value.
+
+    Parameters
+    ----------
+    l: int
+        Angular momentum quantum number.
+    idx: int
+        Index of the shell within the angular momentum type.
+
+    Returns
+    -------
+    int:
+        Magnetic quantum number m_l.
+    """
+    if idx < 0 or idx > 2*l:
+        raise ValueError("The shell index must be in within 0 and 2*l")
+    return idx - l
 
 
 def get_shell_label(l, idx):
@@ -110,6 +132,7 @@ class BasisInfo:
         - Zidx: int, the index of the atom in the system (1-based).
         - n: int, the principal quantum number for the shell.
         - l: int, the angular momentum quantum number.
+        - ml: int, the magnetic quantum number m_l
         - m: int, the index of the basis function within the shell.
 
     atom_to_aos : dict[int : dict[int : list[int]]]
@@ -127,6 +150,7 @@ class BasisInfo:
         Zidx: int
         n: int
         l: int
+        ml: int
         m: int
 
         def __str__(self):
@@ -172,7 +196,8 @@ class BasisInfo:
                 l = self.basis[ishell].l
                 size = self.basis[ishell].size
                 for i in range(size):
-                    label = self._AOLabel(ibasis, iatom, Z, Zidx, n_count[l], l, i)
+                    ml = ml_from_shell_index_cca(l, i)
+                    label = self._AOLabel(ibasis, iatom, Z, Zidx, n_count[l], l, ml, i)
                     basis_labels.append(label)
                     ibasis += 1
                 n_count[l] += 1
