@@ -30,8 +30,8 @@ class Semicanonicalizer:
     mix_active : bool, optional, default=False
         If True, all GAS active orbitals will be diagonalized together.
 
-    Note
-    ----
+    Notes
+    -----
     The generalized Fock matrix is defined as
 
     .. math::
