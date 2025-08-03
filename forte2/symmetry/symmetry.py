@@ -65,19 +65,6 @@ def sph_parity_cca(l, m):
         py = 1
     return px, py, pz
 
-# def local_sign(l, m, op):
-#     if op == 'E':
-#         return +1
-#     elif op == 'i':
-#         return (-1)**l
-#     else:
-#         px, py, pz = sph_parity_cca(l, m)
-#         if op == 'C2x': return (-1)**(py + pz)
-#         elif op == 'C2y': return (-1)**(px + pz)
-#         elif op == 'C2z': return (-1)**(px + py)
-#         elif op == 'σ_xz': return (-1)**(py)
-#         elif op == 'σ_yz': return (-1)**(px)
-#         elif op == 'σ_xy': return (-1)**(pz)
 
 def local_sign(l, m, op):
     ma = abs(m)
@@ -124,6 +111,7 @@ def get_symmetry_ops(point_group, prinaxis):
             symmetry_ops[op] = reflection_mat((axes[op[-2]], axes[op[-1]]))
     return symmetry_ops
 
+
 def characters(S, C, U_ops):
     X = C.T.conj() @ S
 
@@ -135,8 +123,10 @@ def characters(S, C, U_ops):
     else:
         return np.column_stack([np.diag(X @ U @ C) for op, U in U_ops.items()])  
 
+
 def to_spinor(X):
     return np.block([[X, np.zeros_like(X)], [np.zeros_like(X), X]])
+
 
 def assign_irrep_labels(group, U_ops, S, C):
     ops_order = _SYMMETRY_OPS[group]
@@ -154,6 +144,7 @@ def assign_irrep_labels(group, U_ops, S, C):
     best = np.argmin(dists, axis=1)
     labels = [names[k] for k in best]
     return labels, chars
+
 
 def build_U_matrices(symmetry_operations, system, info, tol=1e-6):
 
@@ -176,6 +167,7 @@ def build_U_matrices(symmetry_operations, system, info, tol=1e-6):
                     break
         U_ops[op_label] = U
     return U_ops
+
 
 def assign_mo_symmetries(system, S, C, verbose=False):
 
