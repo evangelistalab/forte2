@@ -59,3 +59,20 @@ def test_rhf_cholesky():
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)
+
+def test_rhf_sym_assign():
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.061664597388
+    H            0.000000000000    -0.711620616369     0.489330954643
+    H            0.000000000000     0.711620616369     0.489330954643
+    """
+
+    system = forte2.System(
+        xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVQZ-JKFIT",
+        symgroup_assign="C2v"
+    )
+
+    scf = RHF(charge=0)(system)
+    scf.run()
+
+test_rhf_sym_assign()

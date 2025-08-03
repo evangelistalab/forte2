@@ -13,6 +13,7 @@ from forte2.base_classes.mixins import MOsMixin, SystemMixin
 from forte2.helpers.matrix_functions import givens_rotation
 from forte2.helpers import logger, DIIS
 from .initial_guess import minao_initial_guess, core_initial_guess
+from forte2.symmetry import assign_mo_symmetries
 
 
 @dataclass
@@ -230,6 +231,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
 
     def _post_process(self):
         self._get_occupation()
+        self._assign_orbital_symmetries()
         self._print_orbital_energies()
 
     @abstractmethod
@@ -261,6 +263,9 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
 
     @abstractmethod
     def _print_orbital_energies(self): ...
+
+    @abstractmethod
+    def _assign_orbital_symmetries(self): ...
 
 
 @dataclass
@@ -338,7 +343,7 @@ class RHF(SCFBase):
         for i in range(ndocc):
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{i+1:<4d} {self.eps[0][i]:<12.6f} "
+            string += f"{i+1:<4d} ({self.orbital_symmetries[i]}) {self.eps[0][i]:<12.6f} "
         logger.log_info1(string)
 
         logger.log_info1("\nVirtual:")
@@ -347,7 +352,7 @@ class RHF(SCFBase):
             idx = ndocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx+1:<4d} {self.eps[0][idx]:<12.6f} "
+            string += f"{idx+1:<4d} ({self.orbital_symmetries[idx]}) {self.eps[0][idx]:<12.6f} "
         logger.log_info1(string)
 
     def _post_process(self):
@@ -366,6 +371,17 @@ class RHF(SCFBase):
         basis_info.print_ao_composition(
             self.C[0], list(range(self.na, min(self.na + 5, self.nmo)))
         )
+
+    def _assign_orbital_symmetries(self):
+        self.orbital_symmetries = assign_mo_symmetries(self.system, self.C[0])
+
+    # def _s_orthonormalize(self, S, eps=1e-12):
+    #     M = self.C[0].T @ S @ self.C[0]                                # MO overlap
+    #     print(M)
+    #     w, U = np.linalg.eigh((M+M.T)*0.5)             # symmetrize; eig
+    #     w[w < eps] = 0.
+    #     Minvhalf = U @ np.diag(w**-0.5) @ U.T
+    #     return self.C[0] @ Minvhalf       
 
 
 @dataclass

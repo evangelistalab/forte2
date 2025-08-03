@@ -12,6 +12,7 @@ SPH_LABELS = [
     ["py", "pz", "px"],
     ["dxy", "dyz", "dz2", "dxz", "dx2-y2"],
     ["fy(3x2-y2)", "fxyz", "fyz2", "fz3", "fxz2", "fz(x2-y2)", "fx(x2-3y2)"],
+    ['gz4', 'gxz3', 'gyz3', 'gz2(x2-y2)', 'gz2xy', 'gz(x3-3y2x)', 'gz(3x2y-y3)', 'g(x4-6x2y2+y4)', 'gxy(x2-y2)']
 ]
 """
 The labels for spherical harmonics up to f orbitals.
@@ -129,7 +130,10 @@ class BasisInfo:
         m: int
 
         def __str__(self):
-            return f"{self.abs_idx:<5} {self.iatom:<5} {Z_TO_ATOM_SYMBOL[self.Z]+str(self.Zidx):<5} {str(self.n)+get_shell_label(self.l,self.m):<10}"
+            return f"{self.abs_idx:<5} {self.iatom:<5} {Z_TO_ATOM_SYMBOL[self.Z]+str(self.Zidx):<5} {self.label():<10}"
+
+        def label(self):
+            return str(self.n)+get_shell_label(self.l,self.m)
 
     def __post_init__(self):
         self.basis_labels = self._label_basis_functions()

@@ -47,6 +47,10 @@ class System:
         If True, auxiliary basis sets (if any) will be disregarded, and the B tensor will be built using the Cholesky decomposition of the 4D ERI tensor instead.
     cholesky_tol : float, optional, default=1e-6
         The tolerance for the Cholesky decomposition of the 4D ERI tensor. Only used if `cholesky_tei` is True.
+    symgroup_assign : str, optional, default="C1"
+        The Abelian point group used to assign symmetries of orbitals a posteriori. This only allows one to assign orbital symmetry, it does **not** imply that symmetry is used in a calculation.
+    prinaxis : np.ndarray(3), optional, default=np.array([0., 0., 1.])
+        The principal axis defining the molecular orientation.
 
     Attributes
     ----------
@@ -102,6 +106,7 @@ class System:
     ortho_thresh: float = 1e-8
     cholesky_tei: bool = False
     cholesky_tol: float = 1e-6
+    symgroup_assign: str = "C1"
 
     ### Non-init attributes
     atoms: list[tuple[float, tuple[float, float, float]]] = field(
@@ -128,6 +133,8 @@ class System:
         self.atomic_positions = np.array([atom[1] for atom in self.atoms])
         self.centroid = np.mean(self.atomic_positions, axis=0)
         self.nuclear_repulsion = ints.nuclear_repulsion(self.atoms)
+
+        self.prinaxis = np.array([0., 0., 1.])
 
         self.center_of_mass = np.einsum(
             "a,ax->x", self.atomic_masses, self.atomic_positions
