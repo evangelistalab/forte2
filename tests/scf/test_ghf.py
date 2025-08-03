@@ -68,4 +68,4 @@ def test_ghf_complex_perturbation():
     scf.run()
     assert scf.E == approx(e_uhf)
     assert scf.S2 == approx(s2_uhf)
-test_ghf_complex_perturbation()
+

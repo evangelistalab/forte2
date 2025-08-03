@@ -42,7 +42,7 @@ def test_rohf_triplet():
     scf.run()
     assert scf.E == approx(erohf)
     assert scf.S2 == approx(s2rohf)
-test_rohf_triplet()
+
 
 def test_rohf_incompatible_params():
     xyz = """

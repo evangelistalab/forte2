@@ -22,7 +22,7 @@ def test_uhf_triplet():
     scf.run()
     assert scf.E == approx(euhf)
     assert scf.S2 == approx(s2uhf)
-test_uhf_triplet()
+
 
 def test_uhf_singlet():
     # Test the UHF implementation with a simple example
