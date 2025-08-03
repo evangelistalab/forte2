@@ -1,8 +1,9 @@
 import regex as re
-
+from dataclasses import dataclass
 import numpy as np
 
-from .atom_data import ATOM_SYMBOL_TO_Z, ANGSTROM_TO_BOHR
+from forte2 import ints
+from .atom_data import ATOM_DATA, ATOM_SYMBOL_TO_Z, ANGSTROM_TO_BOHR
 
 
 def rotation_mat(axis, theta):
@@ -256,3 +257,36 @@ def parse_zmatrix(zmat, unit):
         coords.append(coord)
 
     return atoms
+
+
+@dataclass
+class _GeometryHelper:
+    """Helper class to process geometry data."""
+    atoms: list[tuple[int, np.ndarray]]
+
+    def __post_init__(self):
+        self.Zsum = round(np.sum([x[0] for x in self.atoms]))
+        self.natoms = len(self.atoms)
+        self.atomic_charges = np.array([atom[0] for atom in self.atoms])
+        self.atomic_masses = np.array(
+            [ATOM_DATA[Z]["mass"] for Z in self.atomic_charges]
+        )
+        self.atomic_positions = np.array([atom[1] for atom in self.atoms])
+        self.centroid = np.mean(self.atomic_positions, axis=0)
+        self.nuclear_repulsion = ints.nuclear_repulsion(self.atoms)
+
+        self.center_of_mass = np.einsum(
+            "a,ax->x", self.atomic_masses, self.atomic_positions
+        ) / np.sum(self.atomic_masses)
+
+        self.atom_counts = {}
+        for atom in self.atoms:
+            if atom[0] not in self.atom_counts:
+                self.atom_counts[atom[0]] = 0
+            self.atom_counts[atom[0]] += 1
+
+        self.atom_to_center = {}
+        for i, atom in enumerate(self.atoms):
+            if atom[0] not in self.atom_to_center:
+                self.atom_to_center[atom[0]] = []
+            self.atom_to_center[atom[0]].append(i)
