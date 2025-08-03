@@ -246,7 +246,7 @@ def build_U_matrices(symmetry_operations, system, info, tol=1e-6):
     return U_ops
 
 
-def assign_mo_symmetries(system, S, C, verbose=True):
+def assign_mo_symmetries(system, S, C, verbose=False):
 
     if system.point_group == 'C1':
         return ['a' for _ in range(C.shape[1])]

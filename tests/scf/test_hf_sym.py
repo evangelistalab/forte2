@@ -90,3 +90,4 @@ def test_rhf_n2_d2h():
         if irrep1.upper() != irrep2:
             print(f"{i + 1}  {irrep1}  {irrep2}  e = {scf.eps[0][i]}")
     assert list(map(str.upper, scf.orbital_symmetries)) == expected_mo_irreps
+
