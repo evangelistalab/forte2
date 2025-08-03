@@ -129,7 +129,7 @@ def test_gasci_rhf_6():
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-8)(system)
     ci = CI(
-        active_orbitals=[[0, 1, 2], [3, 4, 5, 6], [7, 8, 9]],
+        active_orbitals=(3, 4, 3),
         states=State(
             nel=10, multiplicity=1, ms=0.0, gas_min=[4, 0, 0], gas_max=[6, 8, 2]
         ),

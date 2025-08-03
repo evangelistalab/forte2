@@ -57,7 +57,7 @@ class MOSpace:
     def __post_init__(self):
         ints_as_args = any(
             [
-                isinstance(self.active_orbitals, int),
+                isinstance(self.active_orbitals, (int, tuple)),
                 isinstance(self.core_orbitals, int),
                 isinstance(self.frozen_core_orbitals, int),
                 isinstance(self.frozen_virtual_orbitals, int),
@@ -72,6 +72,11 @@ class MOSpace:
         def _to_int(x):
             if isinstance(x, int):
                 return x
+            elif isinstance(x, tuple):
+                assert all(
+                    isinstance(i, int) for i in x
+                ), "All elements in the tuple must be integers."
+                return list(x)
             elif isinstance(x, list) and len(x) == 0:
                 return 0
             else:
@@ -82,6 +87,11 @@ class MOSpace:
         nfc = _to_int(self.frozen_core_orbitals)
         nc = _to_int(self.core_orbitals)
         na = _to_int(self.active_orbitals)
+        if isinstance(na, list):
+            actv = na
+            na = sum(actv)
+        else:
+            actv = [na]
         nfv = _to_int(self.frozen_virtual_orbitals)
         nv = self.nmo - (nfc + nc + na + nfv)
         assert (
@@ -89,7 +99,11 @@ class MOSpace:
         ), f"The sum of frozen_core, core, active, and frozen_virtual dimensions ({nfc + nc + na + nfv}) exceeds the total number of orbitals ({self.nmo})."
         self.frozen_core_orbitals = list(range(nfc))
         self.core_orbitals = list(range(nfc, nfc + nc))
-        self.active_orbitals = list(range(nfc + nc, nfc + nc + na))
+        self.active_orbitals = []
+        iorb = nfc + nc
+        for i in actv:
+            self.active_orbitals.append(list(range(iorb, iorb + i)))
+            iorb += i
         self.frozen_virtual_orbitals = list(range(self.nmo - nfv, self.nmo))
 
     def _parse_lists(self):
