@@ -12,7 +12,7 @@ def test_rhf():
     """
 
     system = forte2.System(
-        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT", point_group="C2v"
     )
 
     scf = RHF(charge=0)(system)
@@ -26,7 +26,7 @@ def test_rhf_zero_electron():
     H           0.000000000000     0.000000000000     1.000000000000
     """
     system = forte2.System(
-        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT", point_group="D2h"
     )
     scf = RHF(charge=2)(system)
     scf.run()
@@ -53,26 +53,43 @@ def test_rhf_cholesky():
     """
 
     system = forte2.System(
-        xyz=xyz, basis_set="cc-pvdz", cholesky_tei=True, cholesky_tol=1e-10
+        xyz=xyz, basis_set="cc-pvdz", cholesky_tei=True, cholesky_tol=1e-10, point_group="D2h"
     )
 
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)
 
-def test_rhf_sym_assign():
+
+def test_rhf_cbd_d2h():
+    erhf = -153.6511710906
+    expected_mo_irreps =["AG", "B2U", "B3U", "B1G", "AG", "B2U", "B3U", "B1G",
+                         "AG", "B2U", "AG", "B1U", "B3U", "B3G", "B2G", "AG",
+                         "B2U", "B1G", "B3U", "AU", "B2U", "B3U", "B1G", "AG",
+                         "AG", "B1G", "B2U", "B1U", "B3G", "B3U", "B2G", "B2U",
+                         "AG", "AU", "B3U", "B1G", "AG", "B1G", "B2U", "B1U",
+                         "B3U", "B1U", "B2U", "B1G", "B2G", "B3U", "B3G", "AG",
+                         "AG", "B3U", "B1G", "B3G", "AU", "B2U", "B2G", "AG",
+                         "B1U", "B2U", "B3U", "B1G", "AU", "B3G", "B2U", "AG",
+                         "B3U", "B2G", "B1G", "B1G", "AU", "B2U", "B3U", "AG",
+                         "B1G", "B2U", "B3U", "B1G"]
     xyz = """
-    O            0.000000000000     0.000000000000    -0.061664597388
-    H            0.000000000000    -0.711620616369     0.489330954643
-    H            0.000000000000     0.711620616369     0.489330954643
+    C    -1.2916277126       -1.4862694893        0.0000000000
+    C     1.2916277126       -1.4862694893        0.0000000000
+    C    -1.2916277126        1.4862694893        0.0000000000
+    C     1.2916277126        1.4862694893       -0.0000000000
+    H    -2.7546827497       -2.9442264047        0.0000000000
+    H     2.7546827497       -2.9442264047        0.0000000000
+    H    -2.7546827497        2.9442264047        0.0000000000
+    H     2.7546827497        2.9442264047       -0.0000000000
     """
 
     system = forte2.System(
-        xyz=xyz, basis_set="cc-pv5z", auxiliary_basis_set="cc-pVQZ-JKFIT",
-        point_group="C2v"
+        xyz=xyz, basis_set="cc-pvdz", cholesky_tei=True, cholesky_tol=1e-10, point_group="D2h", unit="bohr"
     )
 
     scf = RHF(charge=0)(system)
     scf.run()
+    assert scf.E == approx(erhf)
+    assert list(map(str.upper, scf.orbital_symmetries)) == expected_mo_irreps
 
-test_rhf_sym_assign()
