@@ -26,6 +26,8 @@ AM_LABELS = ["s", "p", "d", "f", "g", "h", "i", "j", "k", "l", "m", "n"]
 def ml_from_shell_index_cca(l, idx):
     """
     Map Libint Standard/CCA shell index (0..2*l) to signed magnetic quantum number (m_l) value.
+    CCA standard is such that Y_{lm}s are listed from Y_{l,-l}, ... Y_{l,0}, ... Y_{l,l}. Thus,
+    the 0-based index position is related to the m quantum number via index - l.
 
     Parameters
     ----------
@@ -132,7 +134,7 @@ class BasisInfo:
         - Zidx: int, the index of the atom in the system (1-based).
         - n: int, the principal quantum number for the shell.
         - l: int, the angular momentum quantum number.
-        - ml: int, the magnetic quantum number m_l
+        - ml: int, the magnetic quantum number m_l.
         - m: int, the index of the basis function within the shell.
 
     atom_to_aos : dict[int : dict[int : list[int]]]

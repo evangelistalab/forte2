@@ -15,7 +15,7 @@ def test_rohf_singlet():
     """
 
     system = forte2.System(
-        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT", symgroup_assign="C2v"
     )
 
     scf = ROHF(charge=0, ms=0)(system)
@@ -35,14 +35,14 @@ def test_rohf_triplet():
     """
 
     system = forte2.System(
-        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT", symgroup_assign="C2v"
     )
 
     scf = ROHF(charge=0, ms=1)(system)
     scf.run()
     assert scf.E == approx(erohf)
     assert scf.S2 == approx(s2rohf)
-
+test_rohf_triplet()
 
 def test_rohf_incompatible_params():
     xyz = """

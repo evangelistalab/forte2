@@ -98,40 +98,37 @@ def get_symmetry_ops(point_group, prinaxis):
     return symmetry_ops
 
 def characters(S, C, U_ops):
-    X = C.T @ S
-    return np.column_stack([np.diag(X @ U @ C) for op, U in U_ops.items()])  # shape (M, |G|)
+    X = C.T.conj() @ S
 
-def assign_irrep_labels(group, U_ops, S, C, tol):
+    # pull out first entry in U_ops dictionary to see whether we are in a spatial or spinor basis
+    (_, first_U), *_ = U_ops.items()
+
+    if first_U[0].shape[0] == S.shape[0] // 2:
+        return np.column_stack([np.diag(X @ to_spinor(U) @ C) for op, U in U_ops.items()]) 
+    else:
+        return np.column_stack([np.diag(X @ U @ C) for op, U in U_ops.items()])  
+
+def to_spinor(X):
+    return np.block([[X, np.zeros_like(X)], [np.zeros_like(X), X]])
+
+def assign_irrep_labels(group, U_ops, S, C):
     ops_order = _SYMMETRY_OPS[group]
-    # 1) Compute character vector for each MO across ALL operations
-    chi = characters(S, C, U_ops)          # (M, |G|)
-    M = chi.shape[0]
 
-    # 2) Snap to nearest ±1 sign pattern (elementwise)
-    # sgn = np.where(chi >=  tol, +1,
-    #       np.where(chi <= -tol, -1, np.sign(chi)))    # (M, |G|)
-    sgn = chi
+    # Compute character vector for each orbital in all symmetry ops
+    chars = characters(S, C, U_ops)
 
-    # 3) Compare to each irrep’s exact ±1 vector and pick the closest (Hamming or L2)
+    # Compare the character vector to the expected results and pick the closest match
     table = _CHARACTER_TABLE[group]
     T = np.array([table[name] for name in table])     # (n_irrep, |G|)
     names = list(table.keys())
 
-    # L2 distance to each irrep vector
-    # (optionally weight by |chi| to penalize uncertain entries less)
-    dists = np.sum((chi[:,None,:] - T[None,:,:])**2, axis=2)   # (M, n_irrep)
+    # Distance to each irrep vector
+    dists = np.sum((chars[:, None, :] - T[None, :, :])**2, axis=2)   # (M, n_irrep)
     best = np.argmin(dists, axis=1)
     labels = [names[k] for k in best]
+    return labels, chars
 
-    # 4) Confidence: closeness to ±1 across ops (min |chi|), and match margin
-    conf_minabs = np.min(np.clip(np.abs(chi), 0, 1), axis=1)   # ∈ [0,1]
-    # margin between best and second-best Hamming distance (bigger is better)
-    sorted_d = np.sort(dists, axis=1)
-    margin = sorted_d[:,1] - sorted_d[:,0]
-
-    return labels, chi, conf_minabs, margin
-
-def build_U_matrices(symmetry_operations, system, info, tol=1e-6, verbose=False):
+def build_U_matrices(symmetry_operations, system, info, tol=1e-6):
 
     U_ops = {}
     for op_label, R in symmetry_operations.items():
@@ -150,16 +147,10 @@ def build_U_matrices(symmetry_operations, system, info, tol=1e-6, verbose=False)
                             if bas1.n == bas2.n and bas1.l == bas2.l and bas1.m == bas2.m:
                                 U[bas1.abs_idx, bas2.abs_idx] = sgn
                     break
-
         U_ops[op_label] = U
-        if verbose: 
-            for p in range(U.shape[0]):
-                for q in range(U.shape[1]):
-                    if p == q and U[p, q] != 1.:
-                        print(f"U({p, q}) = {U[p, q]}")
     return U_ops
 
-def assign_mo_symmetries(system, C, verbose=False):
+def assign_mo_symmetries(system, S, C, verbose=False):
 
     if system.symgroup_assign == 'C1':
         return ['a' for _ in range(C.shape[1])]
@@ -173,18 +164,13 @@ def assign_mo_symmetries(system, C, verbose=False):
     U = build_U_matrices(symmetry_ops, 
                          system, 
                          info, 
-                         tol=1e-6, 
-                         verbose=False)
+                         tol=1e-6)
 
     # step 3: assign irrep labels
-    labels, chi, conf, conf_minabs = assign_irrep_labels(system.symgroup_assign, 
-                                                         U, 
-                                                         system.ints_overlap(), 
-                                                         C, 
-                                                         tol=1.0)
+    labels, chars = assign_irrep_labels(system.symgroup_assign, U, S, C)
 
     if verbose:
-        for i, c in enumerate(chi):
+        for i, c in enumerate(chars):
             print(f"orbital {i + 1}, character = {c}")
 
     return labels

@@ -15,14 +15,14 @@ def test_uhf_triplet():
     """
 
     system = forte2.System(
-        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT", symgroup_assign="C2v",
     )
 
     scf = UHF(charge=0, ms=1)(system)
     scf.run()
     assert scf.E == approx(euhf)
     assert scf.S2 == approx(s2uhf)
-
+test_uhf_triplet()
 
 def test_uhf_singlet():
     # Test the UHF implementation with a simple example

@@ -54,7 +54,7 @@ def test_ghf_complex_perturbation():
     """
 
     system = forte2.System(
-        xyz=xyz, basis_set="cc-pvqz", auxiliary_basis_set="cc-pvqz-jkfit"
+        xyz=xyz, basis_set="cc-pvqz", auxiliary_basis_set="cc-pvqz-jkfit", symgroup_assign="C2v"
     )
 
     scf = UHF(charge=1, ms=0.5)(system)
@@ -68,3 +68,4 @@ def test_ghf_complex_perturbation():
     scf.run()
     assert scf.E == approx(e_uhf)
     assert scf.S2 == approx(s2_uhf)
+test_ghf_complex_perturbation()
