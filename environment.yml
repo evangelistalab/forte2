@@ -15,8 +15,4 @@ dependencies:
     - pytest
     - conda-forge::libint
     - conda-forge::regex
-<<<<<<< HEAD
-    - conda-forge::gcc=13
-=======
     - conda-forge::basis_set_exchange
->>>>>>> f67bea6e07de9500006ddcbab12069d5e7603763
