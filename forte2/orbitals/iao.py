@@ -1,53 +1,90 @@
-from forte2.helpers import invsqrt_matrix
+import numpy as np
+from dataclasses import dataclass
 
-
-def orthogonalize(M, S):
-    """
-    Orthogonalize the given matrix S using the Cholesky decomposition.
-
-    Args:
-        S (np.ndarray): The matrix to be orthogonalized.
-
-    Returns:
-        np.ndarray: The orthogonalized matrix.
-    """
-
-    X = C.T @ S @ C
-    X_invsqrt = invsqrt_matrix(X)
-    return C @ X_invsqrt
+from forte2 import ints
+from forte2.system import System
+from forte2.helpers import invsqrt_matrix, logger
 
 
 class IAO:
     """
     Class to represent the Inverse Atomic Orbital (IAO) basis set.
+
+    Parameters
+    ----------
+    system : System
+        The system for which the IAO is to be calculated.
+    C_occ : NDArray
+        The occupied molecular orbital coefficients.
+
+    Attributes
+    ----------
+    C_iao : NDArray
+        The orthonormalized IAO coefficients, shape (nbf, nminao).
+
+    Notes
+    -----
+    JCTC 2013, 9, 4834-4843
     """
 
-    def run(self, system, C):
-        """
-        Run the IAO calculation for the given system.
+    def __init__(self, system: System, C_occ: np.ndarray):
+        self.system = system
+        self.C_iao = self._make_iao(C_occ.copy())
 
-        Args:
-            system: The system for which the IAO is to be calculated.
-        """
-
-        basis = system.basis
-        minao_basis = system.minao_basis
+    def _make_iao(self, C):
+        basis = self.system.basis
+        nbf = self.system.nbf
+        minao_basis = self.system.minao_basis
         if minao_basis is None:
-            raise ValueError("No MINAO basis set found in the system.")
+            raise ValueError("No minao_basis found in the system.")
 
-        S1 = forte2.ints.overlap(basis, basis)
-        S12 = forte2.ints.overlap(basis, minao_basis)
-        S2 = forte2.ints.overlap(minao_basis, minao_basis)
+        # various overlap matrices, see appendix C of JCTC 2013, 9, 4834-4843
+        S1 = ints.overlap(basis, basis)
+        S12 = ints.overlap(basis, minao_basis)
+        S2 = ints.overlap(minao_basis, minao_basis)
 
         S1_inv = np.linalg.pinv(S1)
         S2_inv = np.linalg.pinv(S2)
-        P12 = S1_inv @ S12
-        Ct = orthogonalize(S1_inv @ S12 @ S2_inv @ S12.T @ C)
 
-        A = orthogonalize(
-            C @ C.T @ S1 @ Ct @ Ct.T @ S1 @ P12
-            + (np.eye(C.shape[0]) - C @ C.T @ S1)
-            @ (np.eye(Ct.shape[0]) - Ct @ Ct.T @ S1)
-            @ P12
+        # projector onto the large basis
+        P12 = S1_inv @ S12
+        # projector onto the minao basis
+        P21 = S2_inv @ S12.T
+        # downproject and upproject the occupied MOs to get a set of depolarized MOs
+        # cf. eq 1
+        C_depolarized = P12 @ P21 @ C
+        # orthonormal set of depolarized MOs
+        Ct = _orthogonalize(C_depolarized, S1)
+
+        C_polarized_occ = C @ C.T @ S1 @ Ct @ Ct.T @ S1 @ P12
+        C_polarized_vir = (
+            (np.eye(nbf) - C @ C.T @ S1) @ (np.eye(nbf) - Ct @ Ct.T @ S1) @ P12
         )
-        return A
+
+        C_iao = _orthogonalize(C_polarized_occ + C_polarized_vir, S1)
+        return C_iao
+
+    def make_sf_1rdm(self, sf_1rdm_ao):
+        """
+        Generate the spin-free 1-particle density matrix in the IAO basis.
+
+        Parameters
+        ----------
+        sf_1rdm_ao : NDArray
+            The spin-free 1-particle density matrix in the large AO basis.
+
+        Returns
+        -------
+        NDArray
+            The spin-free 1-particle density matrix in the IAO basis.
+        """
+        S = self.system.ints_overlap()
+        return self.C_iao.T @ (S.T @ sf_1rdm_ao @ S) @ self.C_iao
+
+
+def _orthogonalize(C, S):
+    """See appendix C of JCTC 2013, 9, 4834-4843"""
+
+    X = C.T @ S @ C
+    X_invsqrt = invsqrt_matrix(X)
+    return C @ X_invsqrt
