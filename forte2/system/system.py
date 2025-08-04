@@ -1,5 +1,8 @@
-import scipy as sp
 from dataclasses import dataclass, field
+
+import scipy as sp
+import numpy as np
+from numpy.typing import NDArray
 
 from forte2 import ints
 from forte2.system.atom_data import DEBYE_TO_AU, DEBYE_ANGSTROM_TO_AU
@@ -8,9 +11,6 @@ from forte2.helpers.matrix_functions import invsqrt_matrix, canonical_orth
 from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
 from .parse_geometry import parse_geometry, _GeometryHelper
-
-import numpy as np
-from numpy.typing import NDArray
 
 
 @dataclass

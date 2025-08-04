@@ -1,4 +1,3 @@
-# from forte2 import *
 import numpy as np
 
 from forte2 import System, RHF, CI, State
