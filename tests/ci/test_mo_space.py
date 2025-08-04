@@ -1,7 +1,6 @@
 import pytest
 
-from forte2 import *
-from forte2.helpers.comparisons import approx
+from forte2 import MOSpace
 
 
 def test_mo_space_invalid():

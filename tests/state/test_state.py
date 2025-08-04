@@ -1,4 +1,5 @@
 import pytest
+
 import forte2
 
 
@@ -25,6 +26,7 @@ def test_wrong_args():
 
     with pytest.raises(Exception):
         forte2.State(nel=-2, multiplicity=1, ms=0.0)
+
 
 def test_state():
     state = forte2.State(nel=2, multiplicity=1, ms=0.0)

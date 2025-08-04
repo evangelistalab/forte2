@@ -1,7 +1,6 @@
-import forte2
-import numpy as np
 import time
 
+from forte2 import System
 from forte2.jkbuilder import FockBuilder
 from forte2.scf import RHF
 from forte2.helpers.comparisons import approx
@@ -18,9 +17,7 @@ def test_mp2():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = forte2.System(
-        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
-    )
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
 
     scf = RHF(charge=0)(system)
     scf.run()

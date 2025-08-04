@@ -1,10 +1,8 @@
 import time
-from numpy import isclose
 import pytest
+
+from forte2 import System, ROHF, CI, State
 from forte2.helpers.comparisons import approx
-
-
-from forte2 import *
 
 
 def molecule(n, r=1.0):

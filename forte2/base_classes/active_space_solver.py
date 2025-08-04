@@ -3,7 +3,6 @@ from abc import ABC
 
 from .mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.state import StateAverageInfo, State, MOSpace
-from forte2.helpers import logger
 
 
 @dataclass
