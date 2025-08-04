@@ -1,5 +1,4 @@
 from forte2 import System, RHF
-from forte2.orbitals import Cube
 from forte2.orbitals.iao import IAO
 from forte2.props.props import iao_partial_charge
 from forte2.helpers.comparisons import approx
@@ -7,7 +6,7 @@ from forte2.helpers.comparisons import approx
 
 def test_iao_hcn():
     # geometry from cccbdb
-    xyz = f"""
+    xyz = """
     C 0 0 0
     H 0 0 1.0640
     N 0 0 -1.1560
@@ -28,7 +27,7 @@ def test_iao_hcn():
 
 def test_iao_ch4():
     # geometry from cccbdb
-    xyz = f"""
+    xyz = """
     C	0.0000	0.0000	0.0000
     H	0.6276	0.6276	0.6276
     H	0.6276	-0.6276	-0.6276

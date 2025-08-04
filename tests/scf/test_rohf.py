@@ -1,5 +1,6 @@
 import pytest
-import forte2
+
+from forte2 import System
 from forte2.scf import ROHF
 from forte2.helpers.comparisons import approx
 
@@ -14,7 +15,7 @@ def test_rohf_singlet():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = forte2.System(
+    system = System(
         xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
     )
 
@@ -34,7 +35,7 @@ def test_rohf_triplet():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = forte2.System(
+    system = System(
         xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
     )
 
@@ -50,7 +51,7 @@ def test_rohf_incompatible_params():
     H 0 0 1
     """
 
-    system = forte2.System(
+    system = System(
         xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="def2-universal-jkfit"
     )
     with pytest.raises(ValueError):

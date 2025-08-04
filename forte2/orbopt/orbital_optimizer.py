@@ -294,7 +294,6 @@ class MCOptimizer(ActiveSpaceSolver):
                 mix_inactive=not self.optimize_frozen_orbs,
                 mix_active=False,
             )
-            semi.run()
             self.C[0] = semi.C_semican.copy()
 
             # recompute the CI vectors in the semicanonical basis

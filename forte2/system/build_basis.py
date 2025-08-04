@@ -1,7 +1,6 @@
 import json
 import itertools
 from importlib import resources
-from collections import defaultdict
 import regex as re
 
 from forte2 import Basis, Shell
