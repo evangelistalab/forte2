@@ -133,6 +133,7 @@ class System:
         self._init_x2c()
         self._get_orthonormal_transformation()
         self.point_group = self.point_group.upper()
+        assert self.point_group in ["C1", "CS", "CI", "D2H", "D2", "C2V", "C2", "C2H"], f"Selected symmetry {self.point_group} not in list of supported Abelian point groups!"
 
     def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
