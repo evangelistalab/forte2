@@ -1,6 +1,6 @@
-import math
-import forte2
 import numpy as np
+import forte2
+
 
 # Description:
 # This file contains tests for the SparseOperator class

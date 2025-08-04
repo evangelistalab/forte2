@@ -1,10 +1,7 @@
-import forte2
-import numpy as np
-import scipy as sp
-import time
 import os
 import glob
 
+from forte2 import System
 from forte2.scf import RHF
 from forte2.orbitals.cube import Cube
 from forte2.helpers.comparisons import approx
@@ -19,7 +16,7 @@ def test_cube():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = forte2.System(
+    system = System(
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT"
     )
 

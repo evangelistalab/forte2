@@ -65,30 +65,18 @@ class Semicanonicalizer:
         if self.fock_builder is None:
             self.fock_builder = FockBuilder(self.system, use_aux_corr=True)
 
-        self.hcore = self.system.ints_hcore()
+        self._semicanonicalize()
 
-    def _build_fock(self):
-        # include frozen core in Fock build
-        docc = slice(0, self.mo_space.core.stop)
-        C_docc = self._C[:, docc]
-        J, K = self.fock_builder.build_JK([C_docc])
-        fock = self.hcore + 2 * J[0] - K[0]
-
-        C_act = self._C[:, self.mo_space.actv]
-
-        J, K = self.fock_builder.build_JK_generalized(C_act, self.g1_sf)
-        fock += 2 * J - K
-        fock = np.einsum("pq,pi,qj->ij", fock, self._C.conj(), self._C, optimize=True)
-        return fock
-
-    def run(self):
-        fock = self._build_fock()
+    def _semicanonicalize(self):
+        self.fock = self._build_fock()
         eps = np.zeros(self.mo_space.nmo)
-        U = np.zeros((self.mo_space.nmo, self.mo_space.nmo))
+        # U_init = I so that skipped blocks are not modified
+        U = np.eye(self.mo_space.nmo, dtype=self.fock.dtype)
 
         def _eigh(sl):
-            return np.linalg.eigh(fock[sl, sl])
+            return np.linalg.eigh(self.fock[sl, sl])
 
+        # assemble list of blocks to semicanonicalize
         slice_list = []
         if self.mix_inactive:
             slice_list.append(self.mo_space.docc)
@@ -106,7 +94,8 @@ class Semicanonicalizer:
             slice_list.append(self.mo_space.frozen_virt)
 
         for sl in slice_list:
-            if sl.stop - sl.start > 0:  # Skip empty slices
+            # avoid calling eigh on empty arrays
+            if sl.stop - sl.start > 0:
                 e, c = _eigh(sl)
                 eps[sl] = e
                 U[sl, sl] = c
@@ -117,3 +106,19 @@ class Semicanonicalizer:
         self.eps_semican = eps[self.mo_space.contig_to_orig]
 
         return self
+
+    def _build_fock(self):
+        # core contribution to the generalized Fock matrix
+        hcore = self.system.ints_hcore()
+        # 'docc' slice includes frozen core in Fock build
+        docc = self.mo_space.docc
+        C_docc = self._C[:, docc]
+        J, K = self.fock_builder.build_JK([C_docc])
+        fock = hcore + 2 * J[0] - K[0]
+
+        # active contribution to the generalized Fock matrix
+        C_act = self._C[:, self.mo_space.actv]
+        J, K = self.fock_builder.build_JK_generalized(C_act, self.g1_sf)
+        fock += 2 * J - K
+        fock = np.einsum("pq,pi,qj->ij", fock, self._C.conj(), self._C, optimize=True)
+        return fock

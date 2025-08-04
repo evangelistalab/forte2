@@ -1,5 +1,6 @@
 import pytest
-import forte2
+
+from forte2 import System
 from forte2.scf import RHF
 from forte2.helpers.comparisons import approx
 
@@ -28,9 +29,7 @@ H        1.4847817094      5.6210259948     -0.0887939559
 H       -0.8580037770      4.8559228717     -0.0859634340
     """
 
-    system = forte2.System(
-        xyz=xyz, basis_set="cc-pVTZ", auxiliary_basis_set="cc-pVTZ-JKFIT"
-    )
+    system = System(xyz=xyz, basis_set="cc-pVTZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     scf = RHF(charge=0)(system)
     scf.run()
@@ -52,7 +51,7 @@ def test_rhf_cu2o7():
     O -1.9 1.9 0
     O -1.9 -1.9 0
     """
-    system = forte2.System(
+    system = System(
         xyz=xyz,
         basis_set="cc-pvdz",
         auxiliary_basis_set="def2-universal-JKFIT",

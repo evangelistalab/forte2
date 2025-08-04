@@ -1,6 +1,7 @@
 import pytest
-import forte2
 import numpy as np
+
+from forte2 import System, ints
 from forte2.helpers.comparisons import approx
 from forte2.system.build_basis import BSE_AVAILABLE
 
@@ -15,9 +16,9 @@ def test_1e_ovlp():
     """
 
     # Create system in Forte2
-    system = forte2.System(xyz=xyz, basis_set="ano-rcc", auxiliary_basis_set=None)
+    system = System(xyz=xyz, basis_set="ano-rcc", auxiliary_basis_set=None)
     # Forte2 integrals
-    S = forte2.ints.overlap(system.basis)
+    S = ints.overlap(system.basis)
     assert np.linalg.norm(S) == approx(16.59004845412261)
 
 
@@ -31,10 +32,10 @@ def test_1e_hcore():
     """
 
     # Create system in Forte2
-    system = forte2.System(xyz=xyz, basis_set="ano-pvtz", auxiliary_basis_set=None)
+    system = System(xyz=xyz, basis_set="ano-pvtz", auxiliary_basis_set=None)
     # Forte2 integrals
-    T = forte2.ints.kinetic(system.basis)
-    V = forte2.ints.nuclear(system.basis, system.atoms)
+    T = ints.kinetic(system.basis)
+    V = ints.nuclear(system.basis, system.atoms)
     H = T + V
     assert np.linalg.norm(H) == approx(48.018559135658165)
 
@@ -49,11 +50,11 @@ def test_2e_eri():
     """
 
     # Create system in Forte2
-    system = forte2.System(
+    system = System(
         xyz=xyz, basis_set="DZ (Dunning-Hay)", auxiliary_basis_set=None
     )
     # Forte2 integrals
-    eri = forte2.ints.coulomb_4c(system.basis)
+    eri = ints.coulomb_4c(system.basis)
     assert np.linalg.norm(eri.flatten()) == approx(25.67187172762279)
 
 
@@ -70,7 +71,7 @@ def test_custom_basis_assignment():
     P -1 -1  1
     H -1 -1 -1 
     """
-    system = forte2.System(
+    system = System(
         xyz=xyz,
         basis_set={"H": "cc-pvdz", "P": "ano-pv5z", "default": "sap_helfem_large"},
         unit="bohr",

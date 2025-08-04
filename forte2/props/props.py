@@ -114,6 +114,23 @@ def mulliken_population(system, g1_sf):
 
 
 def iao_partial_charge(system, g1_sf_iao):
+    """
+    Perform partial charge analysis using IAOs.
+
+    Parameters
+    ----------
+    system : System
+        The system for which the partial charge is calculated.
+    g1_sf_iao : NDArray
+        The 1-particle spin-free density matrix in the IAO basis.
+        Calulated using `forte2.orbitlas.iao.IAO.make_sf_1rdm`.
+
+    Returns
+    -------
+    tuple(NDArray, NDArray)
+        The diagonal elements of the 1-particle density matrix in the IAO basis and the
+        partial charges for each atom.
+    """
     g1diag = np.diag(g1_sf_iao)
     center_first_and_last = system.minao_basis.center_first_and_last
     charges = system.atomic_charges

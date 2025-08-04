@@ -8,7 +8,6 @@ from forte2.helpers.matrix_functions import invsqrt_matrix, canonical_orth
 from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
 from .parse_geometry import parse_geometry, _GeometryHelper
-from .atom_data import ATOM_DATA
 
 import numpy as np
 from numpy.typing import NDArray

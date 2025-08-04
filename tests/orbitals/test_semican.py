@@ -1,14 +1,12 @@
-import pytest
-
-
 import numpy as np
-from forte2 import *
+
+from forte2 import System, RHF, CI, MOSpace, orbitals, State, MCOptimizer
 from forte2.helpers.comparisons import approx
 
 
 def test_semican_rhf():
     # Semicanonicalized RHF eigenvalues should be strictly identical to the RHF eigenvalues
-    xyz = f"""
+    xyz = """
     N 0.0 0.0 -1.0
     N 0.0 0.0 1.0
     """
@@ -25,13 +23,12 @@ def test_semican_rhf():
     semi = orbitals.Semicanonicalizer(
         mo_space=mo_space, g1_sf=np.diag([2, 2, 2, 0, 0, 0]), C=rhf.C[0], system=system
     )
-    semi = semi.run()
     assert rhf.eps[0] == approx(semi.eps_semican)
 
 
 def test_semican_ci():
     # CI energy should be identical using RHF-canonical or semicanonicalized orbitals
-    xyz = f"""
+    xyz = """
     N 0.0 0.0 -1.0
     N 0.0 0.0 1.0
     """
@@ -63,7 +60,7 @@ def test_semican_ci():
 
 def test_semican_casscf():
     # CI energy should be identical using RHF-canonical or semicanonicalized orbitals
-    xyz = f"""
+    xyz = """
     N 0.0 0.0 -1.0
     N 0.0 0.0 1.0
     """
@@ -95,7 +92,7 @@ def test_semican_casscf():
 
 def test_semican_fock_offdiag():
     # CI energy should be identical using RHF-canonical or semicanonicalized orbitals
-    xyz = f"""
+    xyz = """
     N 0.0 0.0 -1.0
     N 0.0 0.0 1.0
     """
@@ -122,7 +119,7 @@ def test_semican_fock_offdiag():
         system=system,
     )
 
-    fock = semi._build_fock()
+    fock = semi.fock
     fock_cc = fock[mo_space.core, mo_space.core]
     fock_aa = fock[mo_space.actv, mo_space.actv]
     fock_vv = fock[mo_space.virt, mo_space.virt]
@@ -148,7 +145,7 @@ def test_semican_fock_offdiag():
         system=system,
     )
 
-    fock = semi._build_fock()
+    fock = semi.fock
     fock_cc = fock[mo_space.core, mo_space.core]
     fock_aa = fock[mo_space.actv, mo_space.actv]
     fock_vv = fock[mo_space.virt, mo_space.virt]

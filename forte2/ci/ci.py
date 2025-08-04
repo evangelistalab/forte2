@@ -948,7 +948,6 @@ class CI(CISolver):
                 C=self.C[0],
                 system=self.system,
             )
-            semi.run()
             self.C[0] = semi.C_semican.copy()
 
             # recompute the CI vectors in the semicanonical basis
