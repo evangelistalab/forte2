@@ -1,8 +1,5 @@
-from dataclasses import dataclass, field
-
 import scipy as sp
-import numpy as np
-from numpy.typing import NDArray
+from dataclasses import dataclass, field
 
 from forte2 import ints
 from forte2.system.atom_data import DEBYE_TO_AU, DEBYE_ANGSTROM_TO_AU
@@ -11,6 +8,10 @@ from forte2.helpers.matrix_functions import invsqrt_matrix, canonical_orth
 from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
 from .parse_geometry import parse_geometry, _GeometryHelper
+from .atom_data import ATOM_DATA
+
+import numpy as np
+from numpy.typing import NDArray
 
 
 @dataclass
@@ -132,6 +133,7 @@ class System:
         self._init_x2c()
         self._get_orthonormal_transformation()
         self.point_group = self.point_group.upper()
+        assert self.point_group in ["C1", "CS", "CI", "D2H", "D2", "C2V", "C2", "C2H"], f"Selected symmetry {self.point_group} not in list of supported Abelian point groups!"
 
     def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
