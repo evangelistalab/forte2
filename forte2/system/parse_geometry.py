@@ -290,3 +290,22 @@ class _GeometryHelper:
             if atom[0] not in self.atom_to_center:
                 self.atom_to_center[atom[0]] = []
             self.atom_to_center[atom[0]].append(i)
+
+        self.inertia_matrix = np.zeros((3, 3))
+        for m, r in zip(self.atomic_masses, self.atomic_positions):
+            x = r - self.center_of_mass
+            r2 = np.dot(x, x)
+            self.inertia_matrix += m * ((r2 * np.eye(3)) - np.outer(x, x))
+
+        moi, v = np.linalg.eigh(self.inertia_matrix)
+        idx = np.argsort(moi)[::-1]
+        moi = moi[idx]
+        v = v[:, idx]
+
+        # Ensure right-handed triad
+        if np.linalg.det(v) < 0:
+            v[:, 2] *= -1.0   # flip z (smallest-moment axis)
+
+        self.moments_of_inertia = moi
+        self.prinaxis = v
+        self.prinrot = v.T

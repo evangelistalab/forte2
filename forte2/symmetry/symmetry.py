@@ -19,25 +19,25 @@ from forte2.system.basis_utils import BasisInfo, get_shell_label
 from forte2.system.parse_geometry import rotation_mat, reflection_mat
 
 _SYMMETRY_OPS = {
-    "C2v": ["E","C2z","σ_xz","σ_yz"],            
-    "C2h": ["E","C2z","i","σ_xy"],
+    "C2V": ["E","C2z","σ_xz","σ_yz"],            
+    "C2H": ["E","C2z","i","σ_xy"],
     "D2":  ["E","C2z","C2y","C2x"],
-    "D2h": ["E","C2z","C2y","C2x","i","σ_xy","σ_xz","σ_yz"],  
-    "Cs":  ["E","σ_xy"],
-    "Ci":  ["E","i"],
+    "D2H": ["E","C2z","C2y","C2x","i","σ_xy","σ_xz","σ_yz"],  
+    "CS":  ["E","σ_xy"],
+    "CI":  ["E","i"],
     "C2":  ["E","C2z"],
     "C1":  ["E"],
 }
 
 # Full 1-D character tables (±1 per operation, in the same order as _SYMMETRY_OPS[group])
 _CHARACTER_TABLE = {
-    "C2v": {
+    "C2V": {
         "a1": [+1, +1, +1, +1],
         "a2": [+1, +1, -1, -1],
         "b1": [+1, -1, +1, -1],
         "b2": [+1, -1, -1, +1],
     },
-    "C2h": {
+    "C2H": {
         "ag": [+1, +1, +1, +1],
         "au": [+1, +1, -1, -1],
         "bg": [+1, -1, +1, -1],
@@ -49,7 +49,7 @@ _CHARACTER_TABLE = {
         "b2": [+1, -1, +1, -1],  
         "b3": [+1, -1, -1, +1],  
     },
-    "D2h": {
+    "D2H": {
         "ag":  [+1,+1,+1,+1,+1,+1,+1,+1],
         "au":  [+1,+1,+1,+1,-1,-1,-1,-1],
         "b1g": [+1,+1,-1,-1,+1,+1,-1,-1],
@@ -59,12 +59,13 @@ _CHARACTER_TABLE = {
         "b3g": [+1,-1,-1,+1,+1,-1,-1,+1],
         "b3u": [+1,-1,-1,+1,-1,+1,+1,-1],
     },
-    "Cs": {"a'":[+1,+1], "a''":[+1,-1]},
-    "Ci": {"g":[+1,+1],  "u":[+1,-1]},
+    "CS": {"a'":[+1,+1], "a''":[+1,-1]},
+    "CI": {"g":[+1,+1],  "u":[+1,-1]},
     "C2": {"a":[+1,+1],  "b":[+1,-1]},
     "C1": {"a":[+1]},
 }
 
+_PRINCIPAL_AXIS = np.array([0., 0., 1.])
 
 def local_sign(l, m, op):
     '''
@@ -100,6 +101,7 @@ def local_sign(l, m, op):
 def get_symmetry_ops(point_group, prinaxis):
     '''
     Compute 3x3 matrix representations for the symmetry operators in `point_group`.
+    These representation perform reflections/rotations in the molecular principal frame.
     '''
     symmetry_ops = {}
 
@@ -162,6 +164,11 @@ def assign_irrep_labels(point_group, U_ops, S, C):
     return labels, chars
 
 
+def to_prin_frame(x, system):
+    # return system.prinrot @ (x - system.center_of_mass)
+    return (x - system.center_of_mass)
+
+
 def build_U_matrices(symmetry_operations, system, info, tol=1e-6):
     '''
     Compute the matrices U(g)_{uv} < u | R(g) | v > that describes how the
@@ -174,11 +181,13 @@ def build_U_matrices(symmetry_operations, system, info, tol=1e-6):
     for op_label, R in symmetry_operations.items():
         U = np.zeros((system.nbf, system.nbf))
         for i, a in enumerate(system.atoms):
-            v = R @ a[1]
+            coord1 = to_prin_frame(a[1], system)
+            v = R @ coord1 # apply symmetry operation
             # get basis fcns centered on atom a
             basis_a = [bas for bas in info.basis_labels if bas.iatom == i]
             for j, b in enumerate(system.atoms):
-                if (a[0] == b[0]) and (np.linalg.norm(v - b[1]) < tol):
+                coord2 = to_prin_frame(b[1], system)
+                if (a[0] == b[0]) and (np.linalg.norm(v - coord2) < tol):
                     # get basis fcns centered on atom b
                     basis_b = [bas for bas in info.basis_labels if bas.iatom == j]
                     for bas1 in basis_a:
@@ -191,7 +200,7 @@ def build_U_matrices(symmetry_operations, system, info, tol=1e-6):
     return U_ops
 
 
-def assign_mo_symmetries(system, S, C, verbose=False):
+def assign_mo_symmetries(system, S, C, verbose=True):
 
     if system.point_group == 'C1':
         return ['a' for _ in range(C.shape[1])]

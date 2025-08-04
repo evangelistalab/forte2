@@ -53,8 +53,6 @@ class System:
         The tolerance for the Cholesky decomposition of the 4D ERI tensor. Only used if `cholesky_tei` is True.
     point_group : str, optional, default="C1"
         The Abelian point group used to assign symmetries of orbitals a posteriori. This only allows one to assign orbital symmetry, it does **not** imply that symmetry is used in a calculation.
-    prinaxis : np.ndarray(3), optional, default=np.array([0., 0., 1.])
-        The principal axis defining the molecular orientation.
 
     Attributes
     ----------
@@ -134,6 +132,7 @@ class System:
         self._init_basis()
         self._init_x2c()
         self._get_orthonormal_transformation()
+        self.point_group = self.point_group.upper()
 
     def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
@@ -149,7 +148,9 @@ class System:
         self.center_of_mass = _geom.center_of_mass
         self.atom_counts = _geom.atom_counts
         self.atom_to_center = _geom.atom_to_center
-        self.prinaxis = np.array([0., 0., 1.])
+        self.moments_of_inertia = _geom.moments_of_inertia
+        self.prinrot = _geom.prinrot
+        self.prinaxis = _geom.prinaxis
 
     def _init_basis(self):
         self.basis = build_basis(self.basis_set, self.atoms)
