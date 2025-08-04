@@ -1,10 +1,10 @@
-from forte2 import *
+import numpy as np
+
+from forte2 import System, RHF, CI, State
 from forte2.helpers.comparisons import approx
 
 
 def compare_rdms(ci, root):
-    import numpy as np
-
     rdm_threshold = 1e-12
 
     ci_solver = ci.ci_solvers[0]

@@ -6,6 +6,43 @@ from forte2.jkbuilder import FockBuilder
 
 
 class Semicanonicalizer:
+    r"""
+    Class to perform semicanonicalization of a set of molecular orbitals.
+    The semi-canonical basis is defined as a basis where the generalized Fock matrix
+    is diagonal in a set of subspaces.
+
+    Parameters
+    ----------
+    mo_space : MOSpace
+        The molecular orbital space defining the subspaces.
+    g1_sf : np.ndarray
+        The spin-free 1-electron density matrix in the active space.
+    C : np.ndarray
+        The molecular orbital coefficients, in the "original" order of the orbitals.
+    system : System
+        The system object containing the basis set and other properties.
+    fock_builder : FockBuilder, optional
+        An instance of FockBuilder to compute the Fock matrix.
+        If None, a new FockBuilder will be created.
+    mix_inactive : bool, optional, default=False
+        If True, frozen_core and core orbitals will be diagonalized together,
+        virtual and frozen_virt also will be diagonalized together.
+    mix_active : bool, optional, default=False
+        If True, all GAS active orbitals will be diagonalized together.
+
+    Notes
+    -----
+    The generalized Fock matrix is defined as
+
+    .. math::
+        f_p^q = h_p^q + \sum_{ij}^{\mathbf{H}}v_{pi}^{qj}\gamma_j^i,
+
+    where :math:`\mathbf{H}` is the set of hole orbitals (i.e., all orbitals that are not unoccupied).
+    The task of the `Semicanonicalizer` class is then to form the generalized Fock matrix
+    and accumulate unitary transformations that diagonalizes the Fock matrix in the specified subspaces.
+    If a subspace is to be untouched, the corresponding subblock of unitary transformation is set to the identity.
+    """
+
     def __init__(
         self,
         g1_sf: np.ndarray,
@@ -34,34 +71,22 @@ class Semicanonicalizer:
         if self.fock_builder is None:
             self.fock_builder = FockBuilder(self.system, use_aux_corr=True)
 
-        self.hcore = self.system.ints_hcore()
+        self._semicanonicalize()
 
-    def _build_fock(self):
-        # include frozen core in Fock build
-        docc = slice(0, self.mo_space.core.stop)
-        C_docc = self._C[:, docc]
-        J, K = self.fock_builder.build_JK([C_docc])
-        fock = self.hcore + 2 * J[0] - K[0]
-
-        C_act = self._C[:, self.mo_space.actv]
-
-        J, K = self.fock_builder.build_JK_generalized(C_act, self.g1_sf)
-        fock += 2 * J - K
-        fock = np.einsum("pq,pi,qj->ij", fock, self._C.conj(), self._C, optimize=True)
-        return fock
-
-    def run(self):
-        fock = self._build_fock()
+    def _semicanonicalize(self):
+        self.fock = self._build_fock()
         eps = np.zeros(self.mo_space.nmo)
-        U = np.eye(self.mo_space.nmo)
+        # U_init = I so that skipped blocks are not modified
+        U = np.eye(self.mo_space.nmo, dtype=self.fock.dtype)
 
         def _eigh(sl):
-            return np.linalg.eigh(fock[sl, sl])
+            return np.linalg.eigh(self.fock[sl, sl])
 
         slice_list = self._generate_elementary_spaces()
 
         for sl in slice_list:
-            if sl.stop - sl.start > 0:  # Skip empty slices
+            # avoid calling eigh on empty arrays
+            if sl.stop - sl.start > 0:
                 e, c = _eigh(sl)
                 eps[sl] = e
                 U[sl, sl] = c
@@ -104,3 +129,19 @@ class Semicanonicalizer:
                 slice_list.append(self.mo_space.frozen_virt)
 
         return slice_list
+
+    def _build_fock(self):
+        # core contribution to the generalized Fock matrix
+        hcore = self.system.ints_hcore()
+        # 'docc' slice includes frozen core in Fock build
+        docc = self.mo_space.docc
+        C_docc = self._C[:, docc]
+        J, K = self.fock_builder.build_JK([C_docc])
+        fock = hcore + 2 * J[0] - K[0]
+
+        # active contribution to the generalized Fock matrix
+        C_act = self._C[:, self.mo_space.actv]
+        J, K = self.fock_builder.build_JK_generalized(C_act, self.g1_sf)
+        fock += 2 * J - K
+        fock = np.einsum("pq,pi,qj->ij", fock, self._C.conj(), self._C, optimize=True)
+        return fock

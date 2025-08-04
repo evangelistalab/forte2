@@ -1,6 +1,7 @@
 import numpy as np
 import scipy as sp
-from forte2.helpers import canonical_orth, invsqrt_matrix, eigh_gen
+
+from forte2.helpers import invsqrt_matrix, eigh_gen
 from forte2.helpers.comparisons import approx
 
 
