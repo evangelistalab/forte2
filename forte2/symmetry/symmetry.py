@@ -15,6 +15,7 @@ and
 \chi(g)_{p} = \sum_{uvw} c_{pu}* c_{pv} U_{vw} S_{uw}. 
 '''
 import numpy as np
+from forte2.helpers import logger
 from forte2.system.basis_utils import BasisInfo, get_shell_label
 from forte2.system.parse_geometry import rotation_mat, reflection_mat
 
@@ -200,7 +201,7 @@ def build_U_matrices(symmetry_operations, system, info, tol=1e-6):
     return U_ops
 
 
-def assign_mo_symmetries(system, S, C, verbose=True):
+def assign_mo_symmetries(system, S, C):
 
     if system.point_group == 'C1':
         return ['a' for _ in range(C.shape[1])]
@@ -219,8 +220,7 @@ def assign_mo_symmetries(system, S, C, verbose=True):
     # step 3: assign irrep labels
     labels, chars = assign_irrep_labels(system.point_group, U, S, C)
 
-    if verbose:
-        for i, c in enumerate(chars):
-            print(f"orbital {i + 1}, character = {c}")
+    for i, c in enumerate(chars):
+        logger.log_debug(f"orbital {i + 1}, character = {c}")
 
     return labels

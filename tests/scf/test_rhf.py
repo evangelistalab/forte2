@@ -12,13 +12,13 @@ def test_rhf():
     """
 
     system = forte2.System(
-        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT", point_group="c2v"
     )
 
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)
-
+test_rhf()
 
 def test_rhf_zero_electron():
     xyz = """
