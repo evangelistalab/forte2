@@ -1,5 +1,4 @@
 import numpy as np
-from dataclasses import dataclass
 
 from forte2 import ints
 from forte2.system import System
@@ -120,7 +119,7 @@ class IBO(IAO):
     maxiter : int, optional, default=10
         The maximum number of iterations for the IBO optimization.
     gconv : float, optional, default=1e-8
-        The gradient convergence criterion for the IBO optimization.
+        The RMS gradient convergence criterion for the IBO optimization.
 
     Notes
     -----
@@ -147,9 +146,10 @@ class IBO(IAO):
         ibo_iter = 0
 
         while ibo_iter < self.maxiter:
-            fgrad = 0.0
+            grad = 0.0
             for i in range(self.nocc):
                 for j in range(i):
+                    # Bij is the gradient, Aij is the approximate Hessian
                     Aij = 0
                     Bij = 0
                     for iatom in range(natoms):
@@ -157,15 +157,11 @@ class IBO(IAO):
                         Qii = np.dot(C_occ_iao[sl, i], C_occ_iao[sl, i])
                         Qjj = np.dot(C_occ_iao[sl, j], C_occ_iao[sl, j])
                         Qij = np.dot(C_occ_iao[sl, i], C_occ_iao[sl, j])
-                        # Exponent = 4
                         Aij -= Qii**4 + Qjj**4
                         Aij += 6 * (Qii**2 + Qjj**2) * Qij**2
                         Aij += Qii**3 * Qjj + Qii * Qjj**3
                         Bij += 4 * Qij * (Qii**3 - Qjj**3)
-                        # Exponent = 2
-                        # Aij += 4 * Qij**2 - (Qii**2 - Qjj**2) ** 2
-                        # Bij += 4 * Qij * (Qii - Qjj)
-                    fgrad += Bij**2
+                    grad += Bij**2
                     phi_ij = 0.25 * np.arctan2(Bij, -Aij)
                     i_new = (
                         np.cos(phi_ij) * C_occ_iao[:, i]
@@ -177,7 +173,7 @@ class IBO(IAO):
                     )
                     C_occ_iao[:, i] = i_new.copy()
                     C_occ_iao[:, j] = j_new.copy()
-            if np.sqrt(fgrad) < self.gconv:
+            if np.sqrt(grad) < self.gconv:
                 logger.log_info1(f"\nIBO converged after {ibo_iter} iterations.")
                 break
             ibo_iter += 1

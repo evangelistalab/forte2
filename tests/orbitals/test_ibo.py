@@ -9,7 +9,7 @@ from forte2.helpers.comparisons import approx
 @pytest.mark.slow
 def test_ibo_acrylic_acid():
     # geometry from http://www.iboview.org/bin/ibo-ref.20141030.tar.bz2
-    xyz = f"""
+    xyz = """
     C                 1.9750101       -0.0359056        0.0000000
     C                 0.8155445        0.6290773        0.0000000
     C                -0.4769136       -0.0990005        0.0000000
@@ -34,7 +34,7 @@ def test_ibo_acrylic_acid():
 
 
 def test_ibo_water():
-    xyz = f"""
+    xyz = """
     O
     H 1 1.1
     H 1 1.1 2 104.5
