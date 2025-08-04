@@ -281,7 +281,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// Apply the alpha creation operator a^+_n to this determinant
     /// If orbital n is unoccupied, create the electron and return the sign
     /// If orbital n is occupied, do not modify the determinant and return 0
-    double create_alfa_bit(int n) {
+    double create_a(int n) {
         if (na(n))
             return 0.0;
         set_na(n, true);
@@ -291,7 +291,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// Apply the beta creation operator a^+_n to this determinant
     /// If orbital n is unoccupied, create the electron and return the sign
     /// If orbital n is occupied, do not modify the determinant and return 0
-    double create_beta_bit(int n) {
+    double create_b(int n) {
         if (nb(n))
             return 0.0;
         set_nb(n, true);
@@ -301,7 +301,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// Apply the alpha annihilation operator a^+_n to this determinant
     /// If orbital n is occupied, annihilate the electron and return the sign
     /// If orbital n is unoccupied, do not modify the determinant and return 0
-    double destroy_alfa_bit(int n) {
+    double destroy_a(int n) {
         if (not na(n))
             return 0.0;
         set_na(n, false);
@@ -311,7 +311,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// Apply the beta annihilation operator a^+_n to this determinant
     /// If orbital n is occupied, annihilate the electron and return the sign
     /// If orbital n is unoccupied, do not modify the determinant and return 0
-    double destroy_beta_bit(int n) {
+    double destroy_b(int n) {
         if (not nb(n))
             return 0.0;
         set_nb(n, false);
