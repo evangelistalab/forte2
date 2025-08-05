@@ -919,13 +919,17 @@ def convert_coeff_1c_to_2c(system, C):
     """
     nbf = system.nbf
     C_2c = np.zeros((nbf * 2,) * 2, dtype=complex)
-    if isinstance(C, list):
+    assert isinstance(C, list)
+    if len(C) == 2:
         # UHF
         assert C[0].shape[0] == nbf
         assert C[1].shape[0] == nbf
         C_2c[:nbf, ::2] = C[0]
         C_2c[nbf:, 1::2] = C[1]
+    elif len(C) == 1:
+        # RHF/ROHF
+        C_2c[:nbf, ::2] = C[0]
+        C_2c[nbf:, 1::2] = C[0]
     else:
-        C_2c[:nbf, ::2] = C
-        C_2c[nbf:, 1::2] = C
-    return C_2c
+        raise RuntimeError(f"Coefficient of length {len(C)} not recognized!")
+    return [C_2c]
