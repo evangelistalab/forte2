@@ -10,9 +10,7 @@ def test_rhf():
     H            0.000000000000    -0.711620616369     0.489330954643
     H            0.000000000000     0.711620616369     0.489330954643
     """
-
     system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
-
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)

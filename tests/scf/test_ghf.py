@@ -51,6 +51,7 @@ def test_ghf_complex_perturbation():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
+
     system = System(
         xyz=xyz, basis_set="cc-pvqz", auxiliary_basis_set="cc-pvqz-jkfit"
     )
@@ -66,3 +67,4 @@ def test_ghf_complex_perturbation():
     scf.run()
     assert scf.E == approx(e_uhf)
     assert scf.S2 == approx(s2_uhf)
+

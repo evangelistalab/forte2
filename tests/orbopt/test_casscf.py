@@ -242,3 +242,28 @@ def test_casscf_singlet_benzyne():
 
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
+
+
+def test_casscf_n2_cholesky_2():
+    '''Equivalent to casscf_8 test in Forte'''
+    erhf = -108.949591958787 
+    emcscf = -109.090719613072
+
+    xyz = f"""
+    N 0.0 0.0 0.0
+    N 0.0 0.0 1.120
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pVDZ", cholesky_tei=True, cholesky_tol=1e-10)
+    rhf = RHF(charge=0, econv=1e-12)(system)
+
+    ci_state = CIStates(
+        active_spaces=[4, 5, 6, 7, 8, 9],
+        core_orbitals=[0, 1, 2, 3],
+        states=State(nel=14, multiplicity=1, ms=0.0),
+    )
+    mc = MCOptimizer(ci_state, gconv=1e-7)(rhf)
+    mc.run()
+    assert rhf.E == approx(erhf)
+    assert mc.E == approx(emcscf)
+

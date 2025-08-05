@@ -1,0 +1,1 @@
+from .symmetry import assign_mo_symmetries
