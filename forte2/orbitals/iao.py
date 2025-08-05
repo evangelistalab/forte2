@@ -168,9 +168,8 @@ class IBO(IAO):
             assert len(ind) == self.nocc, "Spaces must cover all occupied orbitals."
             assert (
                 sum(len(space) for space in spaces) == self.nocc
-            ), "Spaces must cover all occupied orbitals exactly once."
+            ), "Each occupied orbital must appear in exactly one space (no duplicates or omissions)."
 
-        print(spaces)
         self.C_ibo = []
         for space in spaces:
             self.C_ibo.append(self._make_ibo(space))
