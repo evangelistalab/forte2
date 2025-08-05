@@ -363,7 +363,7 @@ class EmbeddingMOSpace:
         self.frozen_core = _mo_space.frozen_core
         self.B_core = _mo_space.core[0]
         self.A_core = _mo_space.core[1]
-        self.core = slice(0, self.A_core.stop)
+        self.core = self.docc = slice(0, self.A_core.stop)
         self.actv = _mo_space.actv[0]
         self.A_virt = _mo_space.virt[0]
         self.B_virt = _mo_space.virt[1]

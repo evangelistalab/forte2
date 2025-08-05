@@ -406,7 +406,6 @@ class ASET(MOsMixin, SystemMixin):
             do_frozen=self.semicanonicalize_frozen,
             do_active=self.semicanonicalize_active,
         )
-        semican.run()
         self.Ca = semican.C_semican
         self.C[0] = semican.C_semican.copy()
 
