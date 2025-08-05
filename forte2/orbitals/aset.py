@@ -17,47 +17,47 @@ from forte2.orbitals.semicanonicalizer import Semicanonicalizer, EmbeddingMOSpac
 @dataclass
 class ASET(MOsMixin, SystemMixin):
     """
-    Active Space Embedding Theory (ASET) method for paritioning and projecting molecules.
+        Active Space Embedding Theory (ASET) method for paritioning and projecting molecules.
 
-    Parameters
-    ----------
-    fragment : list[str]
-        List of atomic symbols defining the fragment.
-    cutoff_method : str, optional, default="threshold"
-        Method for choosing the embedding cutoff. Options include "threshold", "cumulative_threshold", "num_of_orbitals".
-    cutoff : float, optional, default = 0.5
-        Projector eigenvalue for both simple and cumulative threshold methods.
-    num_a_docc : int, optional, default=0
-        Number of occupied orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
-    num_a_uocc : int, optional, default=0
-        Number of virtual orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
-    adjust_B_docc : int, optional, default=0
-        Adjust this number of occupied orbitals between environment B and fragment A. If set to positive, move to B; if set to negative, move to A.
-    adjust_B_uocc : int, optional, default=0
-        Adjust this number of virtual orbitals between environment B and fragment A. If set to positive, move to B; if set to negative, move to A.
-    semicanonicalize_active : bool, optional, default=True
-        Whether to semicanonicalize the active space orbitals.
-    semicanonicalize_frozen : bool, optional, default=True
-        Whether to semicanonicalize the frozen orbitals.
+        Parameters
+        ----------
+        fragment : list[str]
+            List of atomic symbols defining the fragment.
+        cutoff_method : str, optional, default="threshold"
+            Method for choosing the embedding cutoff. Options include "threshold", "cumulative_threshold", "num_of_orbitals".
+        cutoff : float, optional, default = 0.5
+            Projector eigenvalue for both simple and cumulative threshold methods.
+        num_A_docc : int, optional, default=0
+            Number of occupied orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
+        num_A_uocc : int, optional, default=0
+            Number of virtual orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
+        adjust_B_docc : int, optional, default=0
+            Adjust this number of occupied orbitals between environment B and fragment A. If set to positive, move to B; if set to negative, move to A.
+        adjust_B_uocc : int, optional, default=0
+            Adjust this number of virtual orbitals between environment B and fragment A. If set to positive, move to B; if set to negative, move to A.
+        semicanonicalize_active : bool, optional, default=True
+            Whether to semicanonicalize the active space orbitals.
+        semicanonicalize_frozen : bool, optional, default=True
+            Whether to semicanonicalize the frozen orbitals.
 
-    Notes
-    -----
-    The allow subspace specification is a list of strings, non-exhaustive examples::
+        Notes
+        -----
+        The allow subspace specification is a list of strings, non-exhaustive examples::
 
-    - ["C"]              # all carbon atoms
-    - ["C","N"]          # all carbon and nitrogen atoms
-    - ["C1"]             # carbon atom #1
-    - ["C1-7"]           # carbon atoms #1 through #7
-    - ["C1-3","N2"]       # carbon atoms #1, #2, #3 and nitrogen atom #2
+        - ["C"]              # all carbon atoms
+        - ["C","N"]          # all carbon and nitrogen atoms
+        - ["C1"]             # carbon atom #1
+        - ["C1-7"]           # carbon atoms #1 through #7
+        - ["C1-3","N2"]       # carbon atoms #1, #2, #3 and nitrogen atom #2
 
-    # add ASET citation
+    See J. Chem. Phys. 2020, 152 (9), 094107 <https://doi.org/10.1063/1.5142481>_ for details on the ASET(mf) method.
     """
 
     fragment: list
     cutoff_method: str = "threshold"
     cutoff: float = 0.5
-    num_a_docc: int = 0
-    num_a_uocc: int = 0
+    num_A_docc: int = 0
+    num_A_uocc: int = 0
     adjust_B_docc: int = 0
     adjust_B_uocc: int = 0
     semicanonicalize_active: bool = True
@@ -85,7 +85,7 @@ class ASET(MOsMixin, SystemMixin):
         self.ncore = self.mo_space.ncore
         self.nactv = self.mo_space.nactv
 
-        self.Ca = self.parent_method._C
+        self.Ca = self.parent_method.C[0][:, self.mo_space.orig_to_contig]
         self.nmo = self.mo_space.nmo
         self.nvirt = self.mo_space.nvirt
 
@@ -106,7 +106,6 @@ class ASET(MOsMixin, SystemMixin):
             f"Cutoff method: {self.cutoff_method} \nCutoff value: {self.cutoff}"
         )
         self.fragment = self._parse_fragment(self.fragment)
-        self._S_mm = ints.overlap(self.system.minao_basis)
         self.P_frag, self.X_mm = self._make_fragment_projector()
         self.executed = True
         self.partition = self._make_embedding()
@@ -134,8 +133,8 @@ class ASET(MOsMixin, SystemMixin):
             ), f"Cumulative threshold must be positive, got {self.cutoff}"
         elif self.cutoff_method == "num_of_orbitals":
             assert (
-                self.num_a_docc >= 0 or self.num_a_uocc >= 0
-            ), f"Number of occupied and virtual orbitals in Fragment A must be non-negative, got {self.num_a_docc}, {self.num_a_uocc}"
+                self.num_A_docc >= 0 or self.num_A_uocc >= 0
+            ), f"Number of occupied and virtual orbitals in Fragment A must be non-negative, got {self.num_A_docc}, {self.num_A_uocc}"
 
     def _parse_fragment(self, frag_str: str) -> list[int]:
         """
@@ -178,7 +177,6 @@ class ASET(MOsMixin, SystemMixin):
 
             try:
                 Z = ATOM_SYMBOL_TO_Z[symbol]
-
             except KeyError:
                 raise ValueError(f"Unknown atom symbol: {symbol}")
 
@@ -226,7 +224,7 @@ class ASET(MOsMixin, SystemMixin):
             The metric‐orthogonalizer (S_mm^–½).
         """
         # 1. Compute minAO overlap S_mm
-        S_mm = self._S_mm
+        S_mm = ints.overlap(self.system.minao_basis)
         nbf_m = S_mm.shape[0]
 
         # 2. Collect ao indices in fragment
@@ -260,9 +258,7 @@ class ASET(MOsMixin, SystemMixin):
         for i, mu in enumerate(frag_ao_indices):
             for j, nu in enumerate(frag_ao_indices):
                 S_A_mm[mu, nu] = S_A_inv[i, j]
-
-        evals, evecs = np.linalg.eigh(S_mm)
-        X_mm = evecs @ np.diag((1.0 / np.sqrt(evals))) @ evecs.T
+        X_mm = forte2.helpers.matrix_functions.invsqrt_matrix(S_mm)
         P_ao = S_mm @ S_A_mm @ S_mm
         P_frag = X_mm @ P_ao @ X_mm
 
@@ -355,7 +351,7 @@ class ASET(MOsMixin, SystemMixin):
         elif self.cutoff_method == "num_of_orbitals":
             for i, v in enumerate(lo_vals):
                 glob_i = core_inds[i]
-                if i < self.num_a_docc:
+                if i < self.num_A_docc:
                     index_A_occ.append(glob_i)
                 else:
                     index_B_occ.append(glob_i)
@@ -367,7 +363,7 @@ class ASET(MOsMixin, SystemMixin):
 
             for i, v in enumerate(lv_vals):
                 glob_i = virt_inds[i]
-                if i < self.num_a_uocc:
+                if i < self.num_A_uocc:
                     index_A_vir.append(glob_i)
                 else:
                     index_B_vir.append(glob_i)
@@ -424,19 +420,18 @@ class ASET(MOsMixin, SystemMixin):
             "lv_vals": lv_vals,
         }
 
-    def _print_embedding_info(
-        self,
-        index_A_occ: list[int],
-        index_actv: list[int],
-        index_A_vir: list[int],
-        index_B_occ: list[int],
-        index_B_vir: list[int],
-        lo_vals: np.ndarray,
-        lv_vals: np.ndarray,
-    ) -> None:
+    def _print_embedding_info(self, **info: dict[str, np.ndarray | list[int]]) -> None:
         """
         Print the sizes and MO lists for fragment embedding
         """
+        index_A_occ = info["index_A_occ"]
+        index_actv = info["index_actv"]
+        index_A_vir = info["index_A_vir"]
+        index_B_occ = info["index_B_occ"]
+        index_B_vir = info["index_B_vir"]
+        lo_vals: np.ndarray = info["lo_vals"]
+        lv_vals: np.ndarray = info["lv_vals"]
+
         core_inds = self.mo_space.core_indices
         virt_inds = self.mo_space.virtual_indices
         num_Fo = len(self.mo_space.frozen_core_indices)

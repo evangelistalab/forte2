@@ -120,8 +120,8 @@ def test_aset_4():
     aset = ASET(
         fragment=["N", "H"],
         cutoff_method="num_of_orbitals",
-        num_a_docc=5,
-        num_a_uocc=1,
+        num_A_docc=5,
+        num_A_uocc=1,
     )(mc)
     aset.run()
 
