@@ -1,4 +1,4 @@
-'''
+r'''
 This module computes symmetry irreps for MOs a posteriori by computing the character of each MO 
 under each symmetry operation of the point group. In a nutshell, what we want is the character
 
