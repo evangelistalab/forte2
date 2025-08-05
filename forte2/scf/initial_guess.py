@@ -6,7 +6,7 @@ from forte2.system import System
 from forte2.system.build_basis import build_basis
 
 
-def minao_initial_guess(system, H, S):
+def minao_initial_guess(system, H):
     """
     Generate a superposition of atomic potentials (SAP) initial guess for the SCF procedure
     S. Lehtola, J. Chem. Theory Comput. 15, 1593-1604 (2019), arXiv:1810.11659.
@@ -69,7 +69,8 @@ def minao_initial_guess(system, H, S):
     return Xorth @ C
 
 
-def core_initial_guess(system: System, H, S):
-    Htilde = system.Xorth.T @ H @ system.Xorth
+def core_initial_guess(system: System, H):
+    Xorth = system.get_Xorth()
+    Htilde = Xorth.T @ H @ Xorth
     _, C = np.linalg.eigh(Htilde)
-    return system.Xorth @ C
+    return Xorth @ C

@@ -147,7 +147,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         logger.log_info1(f"\n==> {self.method} SCF ROUTINE <==")
         self.iter = 0
         if self.C is None:
-            self.C = self._initial_guess(H, S, guess_type=self.guess_type)
+            self.C = self._initial_guess(H, guess_type=self.guess_type)
         self.D = self._build_density_matrix()
         F, F_canon = self._build_fock(H, fock_builder, S)
         self.F = F_canon
@@ -241,7 +241,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
     def _build_density_matrix(self): ...
 
     @abstractmethod
-    def _initial_guess(self, H, S, guess_type="minao"): ...
+    def _initial_guess(self, H, guess_type="minao"): ...
 
     @abstractmethod
     def _build_ao_grad(self, S, F): ...
@@ -299,12 +299,12 @@ class RHF(SCFBase):
         # returns the total density matrix (Daa + Dbb)
         return 2 * self._build_density_matrix()[0]
 
-    def _initial_guess(self, H, S, guess_type="minao"):
+    def _initial_guess(self, H, guess_type="minao"):
         match guess_type:
             case "minao":
-                C = minao_initial_guess(self.system, H, S)
+                C = minao_initial_guess(self.system, H)
             case "hcore":
-                C = core_initial_guess(self.system, H, S)
+                C = core_initial_guess(self.system, H)
             case _:
                 raise RuntimeError(f"Unknown initial guess type: {guess_type}")
 
@@ -440,8 +440,8 @@ class UHF(SCFBase):
         D_a, D_b = self._build_density_matrix()
         return D_a + D_b
 
-    def _initial_guess(self, H, S, guess_type="minao"):
-        C = RHF._initial_guess(self, H, S, guess_type=guess_type)[0]
+    def _initial_guess(self, H, guess_type="minao"):
+        C = RHF._initial_guess(self, H, guess_type=guess_type)[0]
 
         if self.twicems == 0 and self.guess_mix:
             return guess_mix(C, self.nel // 2 - 1)
@@ -815,8 +815,8 @@ class GHF(SCFBase):
         Daa, *_, Dbb = self._build_density_matrix()
         return Daa + Dbb
 
-    def _initial_guess(self, H, S, guess_type="minao"):
-        C = RHF._initial_guess(self, H, S, guess_type)[0]
+    def _initial_guess(self, H, guess_type="minao"):
+        C = RHF._initial_guess(self, H, guess_type)[0]
         if self.nel % 2 == 0 and self.guess_mix:
             C = guess_mix(C, self.nel, twocomp=True)
         return [C]
@@ -897,8 +897,7 @@ class GHF(SCFBase):
 
     def _assign_orbital_symmetries(self):
         S = self._get_overlap()
-        S_spinor = np.block([[S, np.zeros_like(S)], [np.zeros_like(S), S]])
-        self.orbital_symmetries = assign_mo_symmetries(self.system, S_spinor, self.C[0])
+        self.orbital_symmetries = assign_mo_symmetries(self.system, S, self.C[0])
 
 
 def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4, twocomp=False):
