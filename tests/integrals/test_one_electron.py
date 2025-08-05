@@ -1,3 +1,5 @@
+from scipy.linalg import eigh
+
 import forte2
 from forte2.helpers.comparisons import approx
 
@@ -14,8 +16,5 @@ def test_one_electron_integrals():
     H = T + V
 
     # Solve the generalized eigenvalue problem H C = S C ε
-    from scipy.linalg import eigh
-    from numpy import isclose
-
     ε, _ = eigh(H, S)
     assert ε[0] == approx(-0.4992784)

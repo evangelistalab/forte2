@@ -1,6 +1,6 @@
 import pytest
 
-from forte2 import *
+from forte2 import System, AVAS, CI, RHF, ROHF, State, MCOptimizer
 from forte2.helpers.comparisons import approx
 
 

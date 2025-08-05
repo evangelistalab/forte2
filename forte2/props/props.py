@@ -64,15 +64,10 @@ def get_1e_property(system, g1_sf, property_name, origin=None, unit="debye"):
             return e_dip + nuc_dip
         case "electric_quadrupole":
             origin = _origin_check(origin)
-            *_, xx, xy, xz, yy, yz, zz = ints.emultipole2(
-                system.basis, origin=origin
-            )
+            *_, xx, xy, xz, yy, yz, zz = ints.emultipole2(system.basis, origin=origin)
             oei = [xx, xy, xz, yy, yz, zz]
             factor = (
-                -1.0
-                / (DEBYE_TO_AU * ANGSTROM_TO_BOHR)
-                if unit == "debye"
-                else -1.0
+                -1.0 / (DEBYE_TO_AU * ANGSTROM_TO_BOHR) if unit == "debye" else -1.0
             )
         case "quadrupole":
             xx, xy, xz, yy, yz, zz = get_1e_property(
@@ -116,3 +111,28 @@ def mulliken_population(system, g1_sf):
     charges = system.atomic_charges
     pop = np.array([psdiag[_[0] : _[1]].sum() for _ in center_first_and_last])
     return (psdiag, charges - pop)
+
+
+def iao_partial_charge(system, g1_sf_iao):
+    """
+    Perform partial charge analysis using IAOs.
+
+    Parameters
+    ----------
+    system : System
+        The system for which the partial charge is calculated.
+    g1_sf_iao : NDArray
+        The 1-particle spin-free density matrix in the IAO basis.
+        Calulated using `forte2.orbitlas.iao.IAO.make_sf_1rdm`.
+
+    Returns
+    -------
+    tuple(NDArray, NDArray)
+        The diagonal elements of the 1-particle density matrix in the IAO basis and the
+        partial charges for each atom.
+    """
+    g1diag = np.diag(g1_sf_iao)
+    center_first_and_last = system.minao_basis.center_first_and_last
+    charges = system.atomic_charges
+    pop = np.array([g1diag[_[0] : _[1]].sum() for _ in center_first_and_last])
+    return (g1diag, charges - pop)

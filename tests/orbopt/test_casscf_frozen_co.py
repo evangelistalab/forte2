@@ -1,6 +1,4 @@
-import pytest
-
-from forte2 import *
+from forte2 import System, AVAS, MCOptimizer, State, RHF
 from forte2.helpers.comparisons import approx
 
 
@@ -8,7 +6,7 @@ def test_casscf_frozen_co():
     emcscf = -112.8641406910
     emcscf_frz = -112.8633865369
 
-    xyz = f"""
+    xyz = """
     C 0.0 0.0 0.0
     O 0.0 0.0 1.2
     """

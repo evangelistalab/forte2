@@ -1,5 +1,6 @@
 import numpy as np
-import forte2
+
+from forte2 import System
 from forte2.scf import RHF, GHF
 from forte2.helpers.comparisons import approx
 
@@ -8,7 +9,7 @@ def test_lindep_rhf():
     erhf = -4.071545222979
     xyz = "\n".join([f"H 0 0 {i}" for i in range(10)])
 
-    system = forte2.System(
+    system = System(
         xyz=xyz,
         basis_set="aug-cc-pvdz",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
@@ -31,7 +32,7 @@ def test_lindep_ghf():
     erhf = -4.071545223158
     xyz = "\n".join([f"H 0 0 {i}" for i in range(10)])
 
-    system = forte2.System(
+    system = System(
         xyz=xyz,
         basis_set="aug-cc-pvdz",
         auxiliary_basis_set="cc-pVQZ-JKFIT",

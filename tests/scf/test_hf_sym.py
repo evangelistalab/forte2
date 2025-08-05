@@ -2,6 +2,8 @@ import forte2
 from forte2.scf import RHF
 from forte2.helpers.comparisons import approx
 
+forte2.set_verbosity_level(5)
+
 
 def test_rhf_h2o_c2v():
     erhf = -76.061466407195
@@ -174,3 +176,4 @@ def test_rhf_n2_d2h():
         if irrep1.upper() != irrep2:
             print(f"{i + 1}  {irrep1}  {irrep2}  e = {scf.eps[0][i]}")
     assert list(map(str.upper, scf.orbital_symmetries)) == expected_mo_irreps
+test_rhf_n2_d2h()
