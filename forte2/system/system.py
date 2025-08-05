@@ -122,7 +122,6 @@ class System:
     Xorth: NDArray = field(init=False, default=None)
     two_component: bool = field(init=False, default=False)
 
-
     def __post_init__(self):
         assert self.unit in [
             "angstrom",
@@ -369,6 +368,9 @@ class ModelSystem:
 
     def nuclear_repulsion_energy(self):
         return self.nuclear_repulsion
+
+    def get_Xorth(self):
+        return self.Xorth
 
 
 @dataclass
