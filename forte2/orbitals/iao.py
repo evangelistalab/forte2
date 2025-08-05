@@ -116,10 +116,18 @@ class IBO(IAO):
         The system for which the IBO is to be calculated.
     C_occ : NDArray
         The occupied molecular orbital coefficients.
+    spaces : list[list[int]], optional
+        A list of lists of orbital indices, each list specifies a space,
+        and the spaces are separately localized. E.g., core and active indices.
+        The indices should cover all occupied orbitals exactly once.
     maxiter : int, optional, default=10
         The maximum number of iterations for the IBO optimization.
     gconv : float, optional, default=1e-8
         The RMS gradient convergence criterion for the IBO optimization.
+    exponent : int, optional, default=4
+        The exponent used in the IBO optimization, can be either 2 or 4.
+        IBO maximizes sum of atomic electron occupation raised to the power of `exponent`.
+        An exponent of 4 provides better description of delocalized systems.
 
     Notes
     -----
@@ -146,17 +154,23 @@ class IBO(IAO):
         if exponent not in (2, 4):
             raise ValueError("Exponent must be either 2 or 4.")
         if spaces is None:
-            spaces = [[list(range(self.nocc))]]
+            spaces = [list(range(self.nocc))]
         else:
             # assert spaces is a list of lists of integers
-            if not all(isinstance(space, list) and all(isinstance(i, int) for i in space) for space in spaces):
+            if not all(
+                isinstance(space, list) and all(isinstance(i, int) for i in space)
+                for space in spaces
+            ):
                 raise ValueError("Spaces must be a list of lists of integers.")
             ind = set()
             for space in spaces:
                 ind.update(space)
             assert len(ind) == self.nocc, "Spaces must cover all occupied orbitals."
-            assert sum(len(space) for space in spaces) == self.nocc, "Spaces must cover all occupied orbitals exactly once."
-        
+            assert (
+                sum(len(space) for space in spaces) == self.nocc
+            ), "Spaces must cover all occupied orbitals exactly once."
+
+        print(spaces)
         self.C_ibo = []
         for space in spaces:
             self.C_ibo.append(self._make_ibo(space))
