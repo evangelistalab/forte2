@@ -266,4 +266,3 @@ def test_casscf_n2_cholesky_2():
     mc.run()
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
-test_casscf_n2_cholesky_2()
