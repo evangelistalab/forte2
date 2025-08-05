@@ -53,8 +53,11 @@ class System:
         The tolerance for the Cholesky decomposition of the 4D ERI tensor. Only used if `cholesky_tei` is True.
     point_group : str, optional, default="C1"
         The Abelian point group used to assign symmetries of orbitals a posteriori. This only allows one to assign orbital symmetry, it does **not** imply that symmetry is used in a calculation.
+<<<<<<< HEAD
     charge: int, optional, default=0
         The total charge of the system
+=======
+>>>>>>> afb59883ac979d1d40df9cd27b3a748dc423c8d0
 
     Attributes
     ----------
@@ -114,7 +117,10 @@ class System:
     cholesky_tei: bool = False
     cholesky_tol: float = 1e-6
     point_group: str = "C1"
+<<<<<<< HEAD
     charge: int = 0
+=======
+>>>>>>> afb59883ac979d1d40df9cd27b3a748dc423c8d0
 
     ### Non-init attributes
     atoms: list[tuple[float, tuple[float, float, float]]] = field(
@@ -139,7 +145,10 @@ class System:
         self._get_orthonormal_transformation()
         self.point_group = self.point_group.upper()
         assert self.point_group in ["C1", "CS", "CI", "D2H", "D2", "C2V", "C2", "C2H"], f"Selected symmetry {self.point_group} not in list of supported Abelian point groups!"
+<<<<<<< HEAD
         self.nel = self.Zsum + self.charge
+=======
+>>>>>>> afb59883ac979d1d40df9cd27b3a748dc423c8d0
 
     def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
@@ -155,7 +164,13 @@ class System:
         self.center_of_mass = _geom.center_of_mass
         self.atom_counts = _geom.atom_counts
         self.atom_to_center = _geom.atom_to_center
+<<<<<<< HEAD
         self.prin_atomic_positions = _geom.prin_atomic_positions
+=======
+        self.moments_of_inertia = _geom.moments_of_inertia
+        self.prinrot = _geom.prinrot
+        self.prinaxis = _geom.prinaxis
+>>>>>>> afb59883ac979d1d40df9cd27b3a748dc423c8d0
 
     def _init_basis(self):
         self.basis = build_basis(self.basis_set, self.atoms)
