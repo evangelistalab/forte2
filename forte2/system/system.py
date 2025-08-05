@@ -53,6 +53,8 @@ class System:
         The tolerance for the Cholesky decomposition of the 4D ERI tensor. Only used if `cholesky_tei` is True.
     point_group : str, optional, default="C1"
         The Abelian point group used to assign symmetries of orbitals a posteriori. This only allows one to assign orbital symmetry, it does **not** imply that symmetry is used in a calculation.
+    charge: int, optional, default=0
+        The total charge of the system
 
     Attributes
     ----------
@@ -84,6 +86,8 @@ class System:
         The minimal atomic orbital basis set, built from the provided `minao_basis_set`.
     Zsum : float
         The total nuclear charge of the system, calculated as the sum of atomic charges.
+    nel : int
+        The total number of electrons in the system.
     nbf : int
         The number of basis functions in the system.
     nmo : int
@@ -110,6 +114,7 @@ class System:
     cholesky_tei: bool = False
     cholesky_tol: float = 1e-6
     point_group: str = "C1"
+    charge: int = 0
 
     ### Non-init attributes
     atoms: list[tuple[float, tuple[float, float, float]]] = field(
@@ -134,6 +139,7 @@ class System:
         self._get_orthonormal_transformation()
         self.point_group = self.point_group.upper()
         assert self.point_group in ["C1", "CS", "CI", "D2H", "D2", "C2V", "C2", "C2H"], f"Selected symmetry {self.point_group} not in list of supported Abelian point groups!"
+        self.nel = self.Zsum + self.charge
 
     def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
@@ -149,9 +155,7 @@ class System:
         self.center_of_mass = _geom.center_of_mass
         self.atom_counts = _geom.atom_counts
         self.atom_to_center = _geom.atom_to_center
-        self.moments_of_inertia = _geom.moments_of_inertia
-        self.prinrot = _geom.prinrot
-        self.prinaxis = _geom.prinaxis
+        self.prin_atomic_positions = _geom.prin_atomic_positions
 
     def _init_basis(self):
         self.basis = build_basis(self.basis_set, self.atoms)
@@ -331,6 +335,7 @@ class ModelSystem:
         self.nmo = self.nbf
         self.naux = 0
         self.Xorth = invsqrt_matrix(self.ints_overlap(), tol=1e-13)
+        self.point_group = "C1"
 
     def ints_overlap(self):
         return self.overlap
