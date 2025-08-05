@@ -158,8 +158,8 @@ void CISpinAdapter::prepare_couplings(const std::vector<Determinant>& dets) {
     confs_ = std::vector<Configuration>(confs.begin(), confs.end());
     // LOG(log_level_) << "Number of configuration state functions: " << ncsf;
     LOG(log_level_) << "Number of couplings: " << ncoupling;
-    LOG(log_level_) << "Timing for identifying configurations: " << std::fixed << std::setprecision(3)
-             << t1.elapsed_seconds() << " s";
+    LOG(log_level_) << "Timing for identifying configurations: " << std::fixed
+                    << std::setprecision(3) << t1.elapsed_seconds() << " s";
 
     // loop over all the configurations and find the CSFs
     local_timer t2;
@@ -171,7 +171,7 @@ void CISpinAdapter::prepare_couplings(const std::vector<Determinant>& dets) {
         }
     }
     LOG(log_level_) << "Timing for finding the CSFs: " << std::fixed << std::setprecision(3)
-             << t2.elapsed_seconds() << " s";
+                    << t2.elapsed_seconds() << " s";
 
     // check that the number of couplings and CSFs is correct
     assert(ncsf_ == ncsf);
@@ -199,9 +199,9 @@ void CISpinAdapter::conf_to_csfs(const Configuration& conf, det_hash<size_t>& de
         double sign = 1.0;
         for (int k = N - 1; k >= 0; k--) {
             if (det_occ.get_bit(k)) {
-                sign *= det.create_beta_bit(socc_vec[k]);
+                sign *= det.create_b(socc_vec[k]);
             } else {
-                sign *= det.create_alfa_bit(socc_vec[k]);
+                sign *= det.create_a(socc_vec[k]);
             }
         }
         csf_to_det_coeff_[ncoupling_].first = det_hash[det];
