@@ -25,9 +25,9 @@ void export_determinant_api(nb::module_& m) {
                      if (str[i] == '2') {
                          d->set_na(i, true);
                          d->set_nb(i, true);
-                     } else if (str[i] == '+') {
+                     } else if (str[i] == 'a') {
                          d->set_na(i, true);
-                     } else if (str[i] == '-') {
+                     } else if (str[i] == 'b') {
                          d->set_nb(i, true);
                      }
                  }
@@ -51,6 +51,18 @@ void export_determinant_api(nb::module_& m) {
         .def("count_a", &Determinant::count_a)
         .def("count_b", &Determinant::count_b)
         .def("count", [](Determinant& d) { return d.count_a() + d.count_b(); })
+        .def("create_a", &Determinant::create_a, "n"_a,
+             "Apply an alpha creation operator to the determinant at the specified orbital index "
+             "and return the sign")
+        .def("create_b", &Determinant::create_b, "n"_a,
+             "Apply a beta creation operator to the determinant at the specified orbital index and "
+             "return the sign")
+        .def("destroy_a", &Determinant::destroy_a, "n"_a,
+             "Apply an alpha destruction operator to the determinant at the specified orbital "
+             "index and return the sign")
+        .def("destroy_b", &Determinant::destroy_b, "n"_a,
+             "Apply a beta destruction operator to the determinant at the specified orbital index "
+             "and return the sign")
         .def("spin_flip", &Determinant::spin_flip,
              "Spin flip the determinant, i.e., swap alpha and beta orbitals")
         .def(

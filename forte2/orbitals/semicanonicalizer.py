@@ -16,7 +16,7 @@ class Semicanonicalizer:
     mo_space : MOSpace
         The molecular orbital space defining the subspaces.
     g1_sf : np.ndarray
-        The spin-free 1-electron density matrix in the active space.
+        The active space spin-free 1-electron density matrix in the molecular orbital basis.
     C : np.ndarray
         The molecular orbital coefficients, in the "original" order of the orbitals.
     system : System
