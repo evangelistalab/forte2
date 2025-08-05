@@ -1,5 +1,5 @@
 import numpy as np
-import scipy
+
 from scipy.optimize import minimize
 from forte2.helpers import LBFGS
 from forte2.helpers.comparisons import approx

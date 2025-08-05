@@ -1,7 +1,7 @@
 import numpy as np
 
 import forte2
-from forte2 import *
+from forte2 import System, RHF
 from forte2.jkbuilder import RestrictedMOIntegrals
 
 
@@ -25,7 +25,7 @@ def test_slater_rules_1():
 
     dets = forte2.hilbert_space(norb, scf.na, scf.nb)
 
-    print(f"Determinants:")
+    print("Determinants:")
     for i, det in enumerate(dets):
         print(f"{i}: {det}")
 

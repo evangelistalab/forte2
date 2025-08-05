@@ -1,4 +1,5 @@
 import numpy as np
+
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
 from forte2.helpers.comparisons import approx
 

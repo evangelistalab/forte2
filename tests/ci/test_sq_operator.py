@@ -1,8 +1,6 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+import pytest
 
 import forte2
-import pytest
 
 
 def test_sq_operator():

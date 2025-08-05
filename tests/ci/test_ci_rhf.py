@@ -1,5 +1,4 @@
-import pytest
-from forte2 import *
+from forte2 import System, RHF, CI, State, AVAS, ROHF
 from forte2.helpers.comparisons import approx
 
 

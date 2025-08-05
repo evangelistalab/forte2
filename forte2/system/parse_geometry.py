@@ -238,6 +238,7 @@ def parse_zmatrix(zmat, unit):
 
 @dataclass
 class _GeometryHelper:
+    """Helper class to process geometry data."""
     atoms: list[tuple[int, np.ndarray]]
 
     def __post_init__(self):

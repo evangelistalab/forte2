@@ -159,14 +159,27 @@ class MOSpace:
     ----------
     ngas : int
         The number of GASes (General Active Spaces) defined by the active_spaces.
-    nactv : int
-        The total number of active orbitals across all GASes.
-    ncore : int
-        The number of core orbitals.
-    active_indices : list[int]
-        A flattened list of all active orbital indices across all GASes.
-    core_indices : list[int]
-        A list of core orbital indices, same as core_orbitals.
+    nfrozen_core, ncore, nactv, nvirt, nfrozen_virtual : int
+        The number of frozen core, core, active, virtual, and frozen virtual orbitals.
+    *_indices : list[int]
+        Flattened lists of all orbital indices in the respective spaces.
+    orig_to_contig : np.ndarray
+        An array that maps original orbital indices to contiguous indices.
+        C_orig[:, orig_to_contig] gives the MOs that are organized as [frozen_core, core, gas1, gas2, ..., virt, frozen_virtual].
+    contig_to_orig : np.ndarray
+        An array that maps contiguous indices back to original orbital indices.
+        C_contig[:, contig_to_orig] gives the original MOs.
+    frozen_core, core, actv, virt, frozen_virt, uocc : slice
+        Slices for the different spaces in the **contiguous** space.
+        `actv` returns the slice for the entire active space, including all GASes.
+    gas : list[slice]
+        A list of slices for each GAS in the contiguous space.
+    corr : slice
+        Slice giving the correlated space, i.e., all orbitals that are not frozen.
+    core_corr, actv_corr, virt_corr: slice
+        Slices for the spaces relative to the correlated space.
+    gas_corr : list[slice]
+        A list of slices for each GAS in the correlated space.
     """
 
     nmo: int
@@ -178,7 +191,7 @@ class MOSpace:
     def __post_init__(self):
         ints_as_args = any(
             [
-                isinstance(self.active_orbitals, int),
+                isinstance(self.active_orbitals, (int, tuple)),
                 isinstance(self.core_orbitals, int),
                 isinstance(self.frozen_core_orbitals, int),
                 isinstance(self.frozen_virtual_orbitals, int),
@@ -193,6 +206,11 @@ class MOSpace:
         def _to_int(x):
             if isinstance(x, int):
                 return x
+            elif isinstance(x, tuple):
+                assert all(
+                    isinstance(i, int) for i in x
+                ), "All elements in the tuple must be integers."
+                return list(x)
             elif isinstance(x, list) and len(x) == 0:
                 return 0
             else:
@@ -203,6 +221,11 @@ class MOSpace:
         nfc = _to_int(self.frozen_core_orbitals)
         nc = _to_int(self.core_orbitals)
         na = _to_int(self.active_orbitals)
+        if isinstance(na, list):
+            actv = na
+            na = sum(actv)
+        else:
+            actv = [na]
         nfv = _to_int(self.frozen_virtual_orbitals)
         nv = self.nmo - (nfc + nc + na + nfv)
         assert (
@@ -210,7 +233,11 @@ class MOSpace:
         ), f"The sum of frozen_core, core, active, and frozen_virtual dimensions ({nfc + nc + na + nfv}) exceeds the total number of orbitals ({self.nmo})."
         self.frozen_core_orbitals = list(range(nfc))
         self.core_orbitals = list(range(nfc, nfc + nc))
-        self.active_orbitals = list(range(nfc + nc, nfc + nc + na))
+        self.active_orbitals = []
+        iorb = nfc + nc
+        for i in actv:
+            self.active_orbitals.append(list(range(iorb, iorb + i)))
+            iorb += i
         self.frozen_virtual_orbitals = list(range(self.nmo - nfv, self.nmo))
 
     def _infer_virtual_indices(self):

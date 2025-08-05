@@ -1,7 +1,6 @@
 import pytest
 
-from forte2 import *
-from forte2.helpers.comparisons import approx
+from forte2 import MOSpace
 
 
 def test_mo_space_invalid():
@@ -102,9 +101,11 @@ def test_mo_space_interlaced_cas_2():
     assert list(mospace.orig_to_contig) == [1, 0, 5, 2, 3, 4, 6, 7, 8, 9]
     assert mospace.frozen_core == slice(0, 1)
     assert mospace.core == slice(1, 3)
+    assert mospace.docc == slice(0, 3)
     assert mospace.actv == slice(3, 7)
     assert mospace.virt == slice(7, 8)
     assert mospace.frozen_virt == slice(8, 10)
+    assert mospace.uocc == slice(7, 10)
     assert mospace.corr == slice(1, 8)
     assert mospace.core_corr == slice(0, 2)
     assert mospace.actv_corr == slice(2, 6)

@@ -1,5 +1,8 @@
-import scipy as sp
 from dataclasses import dataclass, field
+
+import scipy as sp
+import numpy as np
+from numpy.typing import NDArray
 
 from forte2 import ints
 from forte2.system.atom_data import DEBYE_TO_AU, DEBYE_ANGSTROM_TO_AU
@@ -8,10 +11,6 @@ from forte2.helpers.matrix_functions import invsqrt_matrix, canonical_orth
 from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
 from .parse_geometry import parse_geometry, _GeometryHelper
-from .atom_data import ATOM_DATA
-
-import numpy as np
-from numpy.typing import NDArray
 
 
 @dataclass
@@ -147,6 +146,9 @@ class System:
 
     def _init_basis(self):
         self.basis = build_basis(self.basis_set, self.atoms)
+        logger.log_info1(
+            f"Parsed {self.natoms} atoms with basis set of {self.basis.size} functions."
+        )
 
         if not self.cholesky_tei:
             self.auxiliary_basis = (
@@ -172,14 +174,10 @@ class System:
             if self.minao_basis_set is not None
             else None
         )
-        logger.log_info1(
-            f"Parsed {self.natoms} atoms with basis set of {self.basis.size} functions."
-        )
 
         self.nbf = self.basis.size
         self.naux = self.auxiliary_basis.size if self.auxiliary_basis else 0
         self.nminao = self.minao_basis.size if self.minao_basis else 0
-
 
     def _init_x2c(self):
         if self.x2c_type is not None:
@@ -276,6 +274,7 @@ class System:
         return nuc_quad * conversion_factor
 
     def _get_orthonormal_transformation(self):
+        """Orthonormalize the AO basis, catch and remove linear dependencies."""
         S = self.ints_overlap()
         e, _ = np.linalg.eigh(S)
         self._eigh = sp.linalg.eigh
