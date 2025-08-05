@@ -1,6 +1,5 @@
 import regex as re
 from dataclasses import dataclass
-from itertools import permutations, product
 import numpy as np
 
 from forte2 import ints
@@ -298,20 +297,5 @@ class _GeometryHelper:
             r2 = np.dot(x, x)
             self.inertia_matrix += m * ((r2 * np.eye(3)) - np.outer(x, x))
 
-<<<<<<< HEAD
         self.prinrot = np.eye(3)
         self.prin_atomic_positions = np.array([self.prinrot @ (r - self.center_of_mass) for r in self.atomic_positions])
-=======
-        moi, v = np.linalg.eigh(self.inertia_matrix)
-        idx = np.argsort(moi)[::-1]
-        moi = moi[idx]
-        v = v[:, idx]
-
-        # Ensure right-handed triad
-        if np.linalg.det(v) < 0:
-            v[:, 2] *= -1.0   # flip z (smallest-moment axis)
-
-        self.moments_of_inertia = moi
-        self.prinaxis = v
-        self.prinrot = v.T
->>>>>>> afb59883ac979d1d40df9cd27b3a748dc423c8d0
