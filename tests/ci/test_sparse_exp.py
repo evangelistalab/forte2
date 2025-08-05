@@ -18,8 +18,8 @@ def test_linear_apply_op():
 
     wfn = forte2.apply_op(op, ref)
     assert Determinant("2200") not in wfn
-    assert wfn[Determinant("+2-0")] == pytest.approx(-0.3, abs=1e-9)
-    assert wfn[Determinant("-2+0")] == pytest.approx(-0.3, abs=1e-9)
+    assert wfn[Determinant("a2b0")] == pytest.approx(-0.3, abs=1e-9)
+    assert wfn[Determinant("b2a0")] == pytest.approx(-0.3, abs=1e-9)
     assert wfn[Determinant("0220")] == pytest.approx(0.15, abs=1e-9)
     assert wfn[Determinant("2002")] == pytest.approx(-0.21, abs=1e-9)
 
@@ -36,11 +36,11 @@ def test_exp_apply_op():
     wfn = exp.apply_op(op, ref)
     assert wfn[Determinant("2200")] == pytest.approx(1.0, abs=1e-9)
     assert wfn[Determinant("0220")] == pytest.approx(0.16, abs=1e-9)
-    assert wfn[Determinant("+2-0")] == pytest.approx(-0.1, abs=1e-9)
-    assert wfn[Determinant("-2+0")] == pytest.approx(-0.1, abs=1e-9)
+    assert wfn[Determinant("a2b0")] == pytest.approx(-0.1, abs=1e-9)
+    assert wfn[Determinant("b2a0")] == pytest.approx(-0.1, abs=1e-9)
     assert wfn[Determinant("2002")] == pytest.approx(-0.077, abs=1e-9)
-    assert wfn[Determinant("+0-2")] == pytest.approx(-0.0077, abs=1e-9)
-    assert wfn[Determinant("-0+2")] == pytest.approx(-0.0077, abs=1e-9)
+    assert wfn[Determinant("a0b2")] == pytest.approx(-0.0077, abs=1e-9)
+    assert wfn[Determinant("b0a2")] == pytest.approx(-0.0077, abs=1e-9)
 
 
 def test_exp_apply_antiherm():
@@ -52,8 +52,8 @@ def test_exp_apply_antiherm():
 
     exp = forte2.SparseExp()
     wfn = exp.apply_antiherm(op, ref)
-    assert wfn[Determinant("-2+0")] == pytest.approx(-0.091500564912, abs=1e-9)
-    assert wfn[Determinant("+2-0")] == pytest.approx(-0.091500564912, abs=1e-9)
+    assert wfn[Determinant("b2a0")] == pytest.approx(-0.091500564912, abs=1e-9)
+    assert wfn[Determinant("a2b0")] == pytest.approx(-0.091500564912, abs=1e-9)
     assert wfn[Determinant("0220")] == pytest.approx(+0.158390400605, abs=1e-9)
     assert wfn[Determinant("2200")] == pytest.approx(+0.978860446763, abs=1e-9)
 
@@ -70,8 +70,8 @@ def test_exp_apply_antiherm_scale():
     wfn2 = exp.apply_antiherm(op, wfn, scaling_factor=-1.0)
     assert wfn2[Determinant("2200")] == pytest.approx(1.0, abs=1e-9)
     assert wfn2[Determinant("0220")] == pytest.approx(0.0, abs=1e-9)
-    assert wfn2[Determinant("+2-0")] == pytest.approx(0.0, abs=1e-9)
-    assert wfn2[Determinant("-2+0")] == pytest.approx(0.0, abs=1e-9)
+    assert wfn2[Determinant("a2b0")] == pytest.approx(0.0, abs=1e-9)
+    assert wfn2[Determinant("b2a0")] == pytest.approx(0.0, abs=1e-9)
 
 
 def test_fact_exp_apply_antiherm_1():
@@ -84,8 +84,8 @@ def test_fact_exp_apply_antiherm_1():
     factexp = forte2.SparseFactExp()
     wfn = factexp.apply_antiherm(op, ref)
 
-    assert wfn[Determinant("+2-0")] == pytest.approx(-0.197676811654, abs=1e-9)
-    assert wfn[Determinant("-2+0")] == pytest.approx(-0.097843395007, abs=1e-9)
+    assert wfn[Determinant("a2b0")] == pytest.approx(-0.197676811654, abs=1e-9)
+    assert wfn[Determinant("b2a0")] == pytest.approx(-0.097843395007, abs=1e-9)
     assert wfn[Determinant("0220")] == pytest.approx(+0.165338757995, abs=1e-9)
     assert wfn[Determinant("2200")] == pytest.approx(+0.961256283877, abs=1e-9)
 
@@ -106,10 +106,10 @@ def test_fact_exp_apply_antiherm_2():
     wfn = factexp.apply_antiherm(op, ref)
 
     assert wfn[Determinant("200")] == pytest.approx(0.733340213919, abs=1e-9)
-    assert wfn[Determinant("+-0")] == pytest.approx(-0.049868863373, abs=1e-9)
+    assert wfn[Determinant("ab0")] == pytest.approx(-0.049868863373, abs=1e-9)
     assert wfn[Determinant("002")] == pytest.approx(-0.047410073759, abs=1e-9)
     assert wfn[Determinant("020")] == pytest.approx(0.676180171388, abs=1e-9)
-    assert wfn[Determinant("-+0")] == pytest.approx(0.016058887563, abs=1e-9)
+    assert wfn[Determinant("ba0")] == pytest.approx(0.016058887563, abs=1e-9)
 
 
 def test_fact_exp_reverse():
@@ -125,10 +125,10 @@ def test_fact_exp_reverse():
     wfn = factexp.apply_antiherm(op, ref, reverse=True)
 
     assert wfn[Determinant("200")] == pytest.approx(0.733340213919, abs=1e-9)
-    assert wfn[Determinant("+-0")] == pytest.approx(-0.049868863373, abs=1e-9)
+    assert wfn[Determinant("ab0")] == pytest.approx(-0.049868863373, abs=1e-9)
     assert wfn[Determinant("002")] == pytest.approx(-0.047410073759, abs=1e-9)
     assert wfn[Determinant("020")] == pytest.approx(0.676180171388, abs=1e-9)
-    assert wfn[Determinant("-+0")] == pytest.approx(0.016058887563, abs=1e-9)
+    assert wfn[Determinant("ba0")] == pytest.approx(0.016058887563, abs=1e-9)
 
 
 def test_equivalence_between_exp_and_factexp():
@@ -242,8 +242,8 @@ def test_exp_apply_complex():
     s2 = factexp.apply_antiherm(op, ref)
     assert s1[Determinant("20")] == pytest.approx(s2[Determinant("20")], abs=1e-9)
     assert s1[Determinant("02")] == pytest.approx(s2[Determinant("02")], abs=1e-9)
-    assert s1[Determinant("+-")] == pytest.approx(s2[Determinant("+-")], abs=1e-9)
-    assert s1[Determinant("-+")] == pytest.approx(s2[Determinant("-+")], abs=1e-9)
+    assert s1[Determinant("ab")] == pytest.approx(s2[Determinant("ab")], abs=1e-9)
+    assert s1[Determinant("ba")] == pytest.approx(s2[Determinant("ba")], abs=1e-9)
 
     s1 = exp.apply_antiherm(op, ref)
     s2 = exp.apply_antiherm(op_inv, s1)
@@ -265,7 +265,7 @@ def test_fact_exp_deriv_complex():
     t.add("[1a+ 0a-]", theta)
 
     # create a state with two determinants
-    psi = forte2.SparseState({Determinant("2"): 0.866, Determinant("-+"): 0.5})
+    psi = forte2.SparseState({Determinant("2"): 0.866, Determinant("ba"): 0.5})
 
     # SparseExp will compute the action of the exponential operator numerically using Taylor expansion
     res = exp.apply_antiherm(t, psi)
@@ -281,8 +281,8 @@ def test_fact_exp_deriv_complex():
     # assert the analytical derivatives match the finite difference derivatives
     dx1 = (res2[Determinant("2")] - res[Determinant("2")]) / dt
     assert deriv[0][Determinant("2")] == pytest.approx(dx1, abs=1e-6)
-    dx2 = (res2[Determinant("-+")] - res[Determinant("-+")]) / dt
-    assert deriv[0][Determinant("-+")] == pytest.approx(dx2, abs=1e-6)
+    dx2 = (res2[Determinant("ba")] - res[Determinant("ba")]) / dt
+    assert deriv[0][Determinant("ba")] == pytest.approx(dx2, abs=1e-6)
 
     # finite difference derivatives wrt the imaginary part
     dt = 1e-6 * 1j
@@ -293,8 +293,8 @@ def test_fact_exp_deriv_complex():
     # assert the analytical derivatives match the finite difference derivatives
     dy1 = (res2[Determinant("2")] - res[Determinant("2")]) / dt.imag
     assert deriv[1][Determinant("2")] == pytest.approx(dy1, abs=1e-6)
-    dy2 = (res2[Determinant("-+")] - res[Determinant("-+")]) / dt.imag
-    assert deriv[1][Determinant("-+")] == pytest.approx(dy2, abs=1e-6)
+    dy2 = (res2[Determinant("ba")] - res[Determinant("ba")]) / dt.imag
+    assert deriv[1][Determinant("ba")] == pytest.approx(dy2, abs=1e-6)
 
 
 def test_fact_exp_deriv_real_antiherm():
@@ -307,9 +307,9 @@ def test_fact_exp_deriv_real_antiherm():
 
     deriv = factexp.apply_antiherm_deriv(*t(0), psi)
     assert deriv[0][Determinant("2")] == pytest.approx(-np.sin(theta), abs=1e-6)
-    assert deriv[0][Determinant("-+")] == pytest.approx(np.cos(theta), abs=1e-6)
+    assert deriv[0][Determinant("ba")] == pytest.approx(np.cos(theta), abs=1e-6)
     assert deriv[1][Determinant("2")] == pytest.approx(0.0, abs=1e-6)
-    assert deriv[1][Determinant("-+")] == pytest.approx(
+    assert deriv[1][Determinant("ba")] == pytest.approx(
         1j * np.sin(theta) / theta, abs=1e-6
     )
 
@@ -324,7 +324,7 @@ def test_fact_exp_deriv_imagherm():
 
     deriv = factexp.apply_antiherm_deriv(*t(0), psi)
     assert deriv[1][Determinant("2")] == pytest.approx(-np.sin(theta), abs=1e-6)
-    assert deriv[1][Determinant("-+")] == pytest.approx(1j * np.cos(theta), abs=1e-6)
+    assert deriv[1][Determinant("ba")] == pytest.approx(1j * np.cos(theta), abs=1e-6)
 
 
 def test_fact_exp_deriv_zero_division():
@@ -335,7 +335,7 @@ def test_fact_exp_deriv_zero_division():
     theta = 0
     t = forte2.SparseOperatorList()
     t.add("[1a+ 0a-]", theta)
-    psi = forte2.SparseState({Determinant("2"): 0.866, Determinant("-+"): 0.5})
+    psi = forte2.SparseState({Determinant("2"): 0.866, Determinant("ba"): 0.5})
 
     res = exp.apply_antiherm(t, psi)
     deriv = factexp.apply_antiherm_deriv(*t(0), psi)
@@ -347,5 +347,5 @@ def test_fact_exp_deriv_zero_division():
 
     dx1 = (res2[Determinant("2")] - res[Determinant("2")]) / dt
     assert deriv[0][Determinant("2")] == pytest.approx(dx1, abs=1e-6)
-    dx2 = (res2[Determinant("-+")] - res[Determinant("-+")]) / dt
-    assert deriv[0][Determinant("-+")] == pytest.approx(dx2, abs=1e-6)
+    dx2 = (res2[Determinant("ba")] - res[Determinant("ba")]) / dt
+    assert deriv[0][Determinant("ba")] == pytest.approx(dx2, abs=1e-6)

@@ -81,8 +81,8 @@ def test_sparse_operator():
     ref = forte2.SparseState({dtest: 1.0})
     wfn = sop.apply_to_state(ref)
     assert wfn[det("20")] == pytest.approx(0.0, abs=1e-9)
-    assert wfn[det("-+")] == pytest.approx(0.1, abs=1e-9)
-    assert wfn[det("+-")] == pytest.approx(0.3, abs=1e-9)
+    assert wfn[det("ba")] == pytest.approx(0.1, abs=1e-9)
+    assert wfn[det("ab")] == pytest.approx(0.3, abs=1e-9)
     assert wfn[det("02")] == pytest.approx(0.5, abs=1e-9)
 
     sop = forte2.SparseOperator()
@@ -94,8 +94,8 @@ def test_sparse_operator():
     wfn = forte2.apply_antiherm(sop, ref)
     assert wfn[det("20")] == pytest.approx(-0.35, abs=1e-9)
     assert wfn[det("02")] == pytest.approx(0.7, abs=1e-9)
-    assert wfn[det("+-")] == pytest.approx(0.25, abs=1e-9)
-    assert wfn[det("-+")] == pytest.approx(-0.05, abs=1e-9)
+    assert wfn[det("ab")] == pytest.approx(0.25, abs=1e-9)
+    assert wfn[det("ba")] == pytest.approx(-0.05, abs=1e-9)
 
     ### Operator ordering tests ###
 
@@ -167,67 +167,67 @@ def test_sparse_operator():
     sop.add("[3a+ 4a+ 2b+ 1b- 0a-]", 1.0)
     ref = forte2.SparseState({det("22"): 1.0})
     wfn = forte2.apply_op(sop, ref)
-    assert wfn[det("-+-++")] == pytest.approx(1.0, abs=1e-9)
+    assert wfn[det("babaa")] == pytest.approx(1.0, abs=1e-9)
 
     sop = forte2.SparseOperator()
     sop.add("[0a+]", 1.0)
     wfn = forte2.apply_op(sop, forte2.SparseState({det(""): 1.0}))
-    assert wfn[det("+")] == pytest.approx(1.0, abs=1e-9)
+    assert wfn[det("a")] == pytest.approx(1.0, abs=1e-9)
 
     sop = forte2.SparseOperator()
     sop.add("[0a+ 1a+]", 1.0)
     wfn = forte2.apply_op(sop, forte2.SparseState({det(""): 1.0}))
-    assert wfn[det("++")] == pytest.approx(1.0, abs=1e-9)
+    assert wfn[det("aa")] == pytest.approx(1.0, abs=1e-9)
 
     sop = forte2.SparseOperator()
     sop.add("[0a+ 1a+ 2a+]", 1.0)
     wfn = forte2.apply_op(sop, forte2.SparseState({det(""): 1.0}))
-    assert wfn[det("+++")] == pytest.approx(1.0, abs=1e-9)
+    assert wfn[det("aaa")] == pytest.approx(1.0, abs=1e-9)
 
     sop = forte2.SparseOperator()
     sop.add("[0a+ 1a+ 2a+ 3a+]", 1.0)
     wfn = forte2.apply_op(sop, forte2.SparseState({det(""): 1.0}))
-    assert wfn[det("++++")] == pytest.approx(1.0, abs=1e-9)
+    assert wfn[det("aaaa")] == pytest.approx(1.0, abs=1e-9)
 
     sop = forte2.SparseOperator()
     sop.add("[0a+ 1a+ 2a+ 3a+ 4a+]", 1.0)
     wfn = forte2.apply_op(sop, forte2.SparseState({det(""): 1.0}))
-    assert wfn[det("+++++")] == pytest.approx(1.0, abs=1e-9)
+    assert wfn[det("aaaaa")] == pytest.approx(1.0, abs=1e-9)
 
     sop = forte2.SparseOperator()
     sop.add("[2a+ 0a+ 3a+ 1a+ 4a+]", 1.0, allow_reordering=True)
     wfn = forte2.apply_op(sop, forte2.SparseState({det(""): 1.0}))
-    assert wfn[det("+++++")] == pytest.approx(-1.0, abs=1e-9)
+    assert wfn[det("aaaaa")] == pytest.approx(-1.0, abs=1e-9)
 
     sop = forte2.SparseOperator()
     sop.add("[0a-]", 1.0)
     wfn = forte2.apply_op(sop, forte2.SparseState({det("22222"): 1.0}))
-    assert wfn[det("-2222")] == pytest.approx(1.0, abs=1e-9)
+    assert wfn[det("b2222")] == pytest.approx(1.0, abs=1e-9)
 
     sop = forte2.SparseOperator()
     sop.add("[1a- 0a-]", 1.0)
     wfn = forte2.apply_op(sop, forte2.SparseState({det("22222"): 1.0}))
-    assert wfn[det("--222")] == pytest.approx(1.0, abs=1e-9)
+    assert wfn[det("bb222")] == pytest.approx(1.0, abs=1e-9)
 
     sop = forte2.SparseOperator()
     sop.add("[2a- 1a- 0a-]", 1.0)
     wfn = forte2.apply_op(sop, forte2.SparseState({det("22222"): 1.0}))
-    assert wfn[det("---22")] == pytest.approx(1.0, abs=1e-9)
+    assert wfn[det("bbb22")] == pytest.approx(1.0, abs=1e-9)
 
     sop = forte2.SparseOperator()
     sop.add("[3a- 2a- 1a- 0a-]", 1.0)
     wfn = forte2.apply_op(sop, forte2.SparseState({det("22222"): 1.0}))
-    assert wfn[det("----2")] == pytest.approx(1.0, abs=1e-9)
+    assert wfn[det("bbbb2")] == pytest.approx(1.0, abs=1e-9)
 
     sop = forte2.SparseOperator()
     sop.add("[4a- 3a- 2a- 1a- 0a-]", 1.0)
     wfn = forte2.apply_op(sop, forte2.SparseState({det("22222"): 1.0}))
-    assert wfn[det("-----")] == pytest.approx(1.0, abs=1e-9)
+    assert wfn[det("bbbbb")] == pytest.approx(1.0, abs=1e-9)
 
     sop = forte2.SparseOperator()
     sop.add("[1a- 3a- 2a- 4a- 0a-]", 1.0, allow_reordering=True)
     wfn = forte2.apply_op(sop, forte2.SparseState({det("22222"): 1.0}))
-    assert wfn[det("-----")] == pytest.approx(-1.0, abs=1e-9)
+    assert wfn[det("bbbbb")] == pytest.approx(-1.0, abs=1e-9)
 
     ### Test for cases that are supposed to return zero ###
     # test destroying empty orbitals: (0a+ 0b+ 0b- 0a-) |0> = 0
@@ -249,7 +249,7 @@ def test_sparse_operator():
     # test creating in filled orbitals: (0a+ 1a+ 0a-) |22> = 0
     sop = forte2.SparseOperator()
     sop.add("[1a+ 0a+ 0a-]", 1.0, allow_reordering=True)
-    dtest = det("+")
+    dtest = det("a")
     ref = forte2.SparseState({dtest: 1.0})
     wfn = forte2.apply_op(sop, ref)
     assert dtest not in wfn
@@ -257,7 +257,7 @@ def test_sparse_operator():
     # test creating in filled orbitals: (0a+ 1a+ 0a-) |22> = 0
     sop = forte2.SparseOperator()
     sop.add("[1b+ 0a+ 0a-]", 1.0, allow_reordering=True)
-    dtest = det("+")
+    dtest = det("a")
     ref = forte2.SparseState({dtest: 1.0})
     wfn = forte2.apply_op(sop, ref)
     assert dtest not in wfn
@@ -274,7 +274,7 @@ def test_sparse_operator():
     # test number operator: (0a+ 0a-) |+> = |+>
     sop = forte2.SparseOperator()
     sop.add("[0a+ 0a-]", 1.0)
-    dtest = det("+")
+    dtest = det("a")
     ref = forte2.SparseState({dtest: 1.0})
     wfn = forte2.apply_op(sop, ref)
     assert wfn[dtest] == pytest.approx(1.0, abs=1e-9)
@@ -282,7 +282,7 @@ def test_sparse_operator():
     # test number operator: (0a+ 0a-) |-> = 0
     sop = forte2.SparseOperator()
     sop.add("[0a+ 0a-]", 1.0)
-    dtest = det("-")
+    dtest = det("b")
     ref = forte2.SparseState({dtest: 1.0})
     wfn = forte2.apply_op(sop, ref)
     assert dtest not in wfn
@@ -306,7 +306,7 @@ def test_sparse_operator():
     # test number operator: (0b+ 0b-) |+> = 0
     sop = forte2.SparseOperator()
     sop.add("[0b+ 0b-]", 1.0)
-    dtest = det("+")
+    dtest = det("a")
     ref = forte2.SparseState({dtest: 1.0})
     wfn = forte2.apply_op(sop, ref)
     assert dtest not in wfn
@@ -314,7 +314,7 @@ def test_sparse_operator():
     # test number operator: (0b+ 0b-) |-> = |->
     sop = forte2.SparseOperator()
     sop.add("[0b+ 0b-]", 1.0)
-    dtest = det("-")
+    dtest = det("b")
     ref = forte2.SparseState({dtest: 1.0})
     wfn = forte2.apply_op(sop, ref)
     assert wfn[dtest] == pytest.approx(1.0, abs=1e-9)
@@ -338,17 +338,17 @@ def test_sparse_operator():
     sop = forte2.SparseOperator()
     sop.add("[2a+ 2a-]", 1.0)
     sop.add("[2b+ 2b-]", 1.0)
-    ref = forte2.SparseState({det("22+"): 1.0})
+    ref = forte2.SparseState({det("22a"): 1.0})
     wfn = forte2.apply_op(sop, ref)
-    assert wfn[det("22+")] == pytest.approx(1.0, abs=1e-9)
+    assert wfn[det("22a")] == pytest.approx(1.0, abs=1e-9)
 
     # test number operator: (2a+ 2a- + 2b+ 2b-) |22-> = |22->
     sop = forte2.SparseOperator()
     sop.add("[2a+ 2a-]", 1.0)
     sop.add("[2b+ 2b-]", 1.0)
-    ref = forte2.SparseState({det("22-"): 1.0})
+    ref = forte2.SparseState({det("22b"): 1.0})
     wfn = forte2.apply_op(sop, ref)
-    assert wfn[det("22-")] == pytest.approx(1.0, abs=1e-9)
+    assert wfn[det("22b")] == pytest.approx(1.0, abs=1e-9)
 
     # test number operator: (2a+ 2a- + 2b+ 2b-) |220> = |220>
     sop = forte2.SparseOperator()
@@ -365,7 +365,7 @@ def test_sparse_operator():
     dtest = det("22")
     ref = forte2.SparseState({dtest: 1.0})
     wfn = forte2.apply_op(sop, ref)
-    assert wfn[det("-20+")] == pytest.approx(-1.0, abs=1e-9)
+    assert wfn[det("b20a")] == pytest.approx(-1.0, abs=1e-9)
 
     # test excitation operator: (0a- 3a+) |22> = 0a- |220+> = |-20+>
     sop = forte2.SparseOperator()
@@ -373,7 +373,7 @@ def test_sparse_operator():
     dtest = det("22")
     ref = forte2.SparseState({dtest: 1.0})
     wfn = forte2.apply_op(sop, ref)
-    assert wfn[det("-20+")] == pytest.approx(1.0, abs=1e-9)
+    assert wfn[det("b20a")] == pytest.approx(1.0, abs=1e-9)
 
     # test number operator: (3b+ 0b-) |2200> = 3b+ |+200> = |+20->
     sop = forte2.SparseOperator()
@@ -381,7 +381,7 @@ def test_sparse_operator():
     dtest = det("22")
     ref = forte2.SparseState({dtest: 1.0})
     wfn = forte2.apply_op(sop, ref)
-    assert wfn[det("+20-")] == pytest.approx(-1.0, abs=1e-9)
+    assert wfn[det("a20b")] == pytest.approx(-1.0, abs=1e-9)
 
     ### Adjoint tests
     # test adjoint of SqOperator is idempotent

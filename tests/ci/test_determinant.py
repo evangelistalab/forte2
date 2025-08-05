@@ -67,7 +67,7 @@ def test_determinant_set_get():
 def test_det_equality():
     """Test the __eq__ operator"""
     d1 = forte2.Determinant("22")
-    d2 = forte2.Determinant("2+")
+    d2 = forte2.Determinant("2a")
     d3 = forte2.Determinant("22")
     d4 = forte2.Determinant("0022")
     assert d1 == d1
@@ -80,7 +80,7 @@ def test_det_equality():
 def test_det_hash():
     """Test the __hash__ operator"""
     d1 = forte2.Determinant("22")
-    d2 = forte2.Determinant("2+")
+    d2 = forte2.Determinant("2a")
     d3 = forte2.Determinant("22")
     d4 = forte2.Determinant("0022")
     h = {}
@@ -97,8 +97,8 @@ def test_det_hash():
 def test_det_sorting():
     """Test the __lt__ operator"""
     d1 = forte2.Determinant("22")
-    d2 = forte2.Determinant("2+")
-    d3 = forte2.Determinant("--")
+    d2 = forte2.Determinant("2a")
+    d3 = forte2.Determinant("bb")
     d4 = forte2.Determinant("22")
     list = [d1, d2, d3, d4]
     sorted_list = sorted(list)
@@ -114,34 +114,34 @@ def test_gen_excitation():
     # test a -> a excitation
     d1 = forte2.Determinant("220")
     assert d1.gen_excitation([0], [3], [], []) == -1.0
-    assert d1 == forte2.Determinant("-20+")
+    assert d1 == forte2.Determinant("b20a")
 
     # test b -> b excitation
-    d2 = forte2.Determinant("2-+0")
+    d2 = forte2.Determinant("2ba0")
     assert d2.gen_excitation([], [], [0, 1], [2, 3]) == -1.0
-    assert d2 == forte2.Determinant("+02-")
+    assert d2 == forte2.Determinant("a02b")
 
     # test b creation and counting number of a
-    d3 = forte2.Determinant("+000")
+    d3 = forte2.Determinant("a000")
     assert d3.gen_excitation([], [], [], [0]) == -1.0
     assert d3 == forte2.Determinant("2")
     d3 = forte2.Determinant("0000")
     assert d3.gen_excitation([], [], [], [0]) == +1.0
-    assert d3 == forte2.Determinant("-")
+    assert d3 == forte2.Determinant("b")
 
     # test ab creation and sign
     d4 = forte2.Determinant("000")
     assert d4.gen_excitation([], [2, 1], [], [0, 1]) == -1.0
-    assert d4 == forte2.Determinant("-2+")
+    assert d4 == forte2.Determinant("b2a")
     d5 = forte2.Determinant("000")
     assert d5.gen_excitation([], [2, 1], [], [1, 0]) == +1.0
-    assert d5 == forte2.Determinant("-2+")
+    assert d5 == forte2.Determinant("b2a")
     d6 = forte2.Determinant("000")
     assert d6.gen_excitation([], [1, 2], [], [0, 1]) == +1.0
-    assert d6 == forte2.Determinant("-2+")
+    assert d6 == forte2.Determinant("b2a")
     d7 = forte2.Determinant("000")
     assert d7.gen_excitation([], [1, 2], [], [1, 0]) == -1.0
-    assert d7 == forte2.Determinant("-2+")
+    assert d7 == forte2.Determinant("b2a")
 
 
 def test_excitation_connection():
@@ -173,8 +173,8 @@ def test_excitation_connection():
     assert conn[2] == []  # beta hole
     assert conn[3] == [0]  # beta particle
 
-    d1 = forte2.Determinant("222+-00000")
-    d2 = forte2.Determinant("-++0200-02")
+    d1 = forte2.Determinant("222ab00000")
+    d2 = forte2.Determinant("baa0200b02")
     conn = d1.excitation_connection(d2)
     assert conn[0] == [0, 3]  # alfa hole
     assert conn[1] == [4, 9]  # alfa particle
@@ -187,7 +187,7 @@ def test_det_slater_sign():
 
     #        012345
     # parity 011001
-    d = forte2.Determinant("+0+0++")
+    d = forte2.Determinant("a0a0aa")
     assert d.slater_sign(0) == 1
     assert d.slater_sign(1) == -1
     assert d.slater_sign(2) == -1
@@ -207,5 +207,5 @@ def test_det_slater_sign():
 
 def test_spin_flip():
     """Test spin flip functions"""
-    d = forte2.Determinant("2-+0+-0++--")
-    assert d.spin_flip() == forte2.Determinant("2+-0-+0--++")
+    d = forte2.Determinant("2ba0ab0aabb")
+    assert d.spin_flip() == forte2.Determinant("2ab0ba0bbaa")

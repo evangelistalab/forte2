@@ -9,7 +9,7 @@ def det(s):
 def test_determinant_hilbert_space():
     dets = forte2.hilbert_space(2, 1, 1)
     # compare with the expected result of the determinant
-    expected = [det("20"), det("+-"), det("-+"), det("02")]
+    expected = [det("20"), det("ab"), det("ba"), det("02")]
     assert len(dets) == 4
     assert sorted(dets) == sorted(expected)
 
@@ -18,28 +18,28 @@ def test_determinant_hilbert_space():
     dets = forte2.hilbert_space(3, 1, 1, ref, truncation=2)
     expected = [
         det("002"),
-        det("0+-"),
-        det("0-+"),
-        det("+0-"),
-        det("-0+"),
+        det("0ab"),
+        det("0ba"),
+        det("a0b"),
+        det("b0a"),
         det("020"),
         det("200"),
-        det("+-0"),
-        det("-+0"),
+        det("ab0"),
+        det("ba0"),
     ]
     assert len(dets) == 9
     assert sorted(dets) == sorted(expected)
 
-    ref = det("0+-")
+    ref = det("0ab")
     dets = forte2.hilbert_space(3, 1, 1, ref, truncation=1)
-    expected = [det("0+-"), det("-+0"), det("+0-"), det("002"), det("020")]
+    expected = [det("0ab"), det("ba0"), det("a0b"), det("002"), det("020")]
     assert len(dets) == 5
     assert sorted(dets) == sorted(expected)
 
     ref = det("20")
     dets = forte2.hilbert_space(2, 1, 1, ref, truncation=1)
     # compare with the expected result of the determinant
-    expected = [det("20"), det("+-"), det("-+")]
+    expected = [det("20"), det("ab"), det("ba")]
     assert len(dets) == 3, dets
     assert sorted(dets) == sorted(expected)
 
@@ -51,7 +51,7 @@ def test_determinant_hilbert_space():
 
     dets = forte2.hilbert_space(2, 1, 1, nirrep=2, mo_symmetry=[0, 1], symmetry=1)
     # compare with the expected result of the determinant
-    expected = [det("+-"), det("-+")]
+    expected = [det("ab"), det("ba")]
     assert len(dets) == 2
     assert sorted(dets) == sorted(expected)
 
@@ -60,7 +60,7 @@ def test_determinant_hilbert_space():
         5, 2, 2, ref, truncation=1, nirrep=4, mo_symmetry=[0, 1, 2, 3, 0], symmetry=2
     )
     # compare with the expected result of the determinant
-    expected = [det("2+0-0"), det("2-0+0"), det("+2-00"), det("-2+00")]
+    expected = [det("2a0b0"), det("2b0a0"), det("a2b00"), det("b2a00")]
     assert len(dets) == 4
     assert sorted(dets) == sorted(expected)
 
@@ -88,13 +88,13 @@ def test_determinant_hilbert_space_edge_cases():
 
     dets = forte2.hilbert_space(1, 1, 0)
     # compare with the expected result of the determinant
-    expected = [det("+")]
+    expected = [det("a")]
     assert len(dets) == 1
     assert dets == expected
 
     dets = forte2.hilbert_space(1, 0, 1)
     # compare with the expected result of the determinant
-    expected = [det("-")]
+    expected = [det("b")]
     assert len(dets) == 1
     assert dets == expected
 
@@ -106,19 +106,19 @@ def test_determinant_hilbert_space_edge_cases():
     dets = forte2.hilbert_space(4, 2, 0)
     # compare with the expected result of the determinant
     expected = [
-        det("++00"),
-        det("+0+0"),
-        det("+00+"),
-        det("0++0"),
-        det("0+0+"),
-        det("00++"),
+        det("aa00"),
+        det("a0a0"),
+        det("a00a"),
+        det("0aa0"),
+        det("0a0a"),
+        det("00aa"),
     ]
     assert len(dets) == 6
     assert sorted(dets) == sorted(expected)
 
-    ref = det("++00")
+    ref = det("aa00")
     dets = forte2.hilbert_space(4, 2, 0, ref, truncation=1)
     # compare with the expected result of the determinant
-    expected = [det("++00"), det("+0+0"), det("+00+"), det("0++0"), det("0+0+")]
+    expected = [det("aa00"), det("a0a0"), det("a00a"), det("0aa0"), det("0a0a")]
     assert len(dets) == 5
     assert sorted(dets) == sorted(expected)
