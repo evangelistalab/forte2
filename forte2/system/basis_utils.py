@@ -12,9 +12,6 @@ SPH_LABELS = [
     ["py", "pz", "px"],
     ["dxy", "dyz", "dz2", "dxz", "dx2-y2"],
     ["fy(3x2-y2)", "fxyz", "fyz2", "fz3", "fxz2", "fz(x2-y2)", "fx(x2-3y2)"],
-    ['gz4', 'gxz3', 'gyz3', 'gz2(x2-y2)', 'gz2xy', 'gz(x3-3y2x)', 'gz(3x2y-y3)', 'g(x4-6x2y2+y4)', 'gxy(x2-y2)'],
-    ['hz5', 'hxz4', 'hyz4', 'hz3(x2-y2)', 'hz3xy', 'hz2(x3-3xy2)', 'hz2(3x2y-y3)', 'hz(x4-6x2y2+y4)', 'hzxy(x2-y2)', 'h(x5-10x3y2+5xy4)', 'h(5x4y-10x2y3+y5)'],
-    ['iz6', 'ixz5', 'iyz5', 'iz4(x2-y2)', 'iz4xy', 'iz3(x3-3xy2)', 'iz3(3x2y-y3)', 'iz2(x4-6x2y2+y4)', 'iz2xy(x2-y2)', 'iz(x5-10x3y2+5xy4)', 'iz(5x4y-10x2y3+y5)', 'i(x6-15x4y2+15x2y4-y6)', 'ixy(x4-6x2y2+y4)'],
 ]
 """
 The labels for spherical harmonics up to f orbitals.

@@ -94,7 +94,6 @@ class System:
         The number of minimal atomic orbital basis functions in the system.
     Xorth : NDArray
         The orthogonalization matrix for the basis functions.
-
     """
 
     xyz: str
@@ -149,9 +148,7 @@ class System:
         self.center_of_mass = _geom.center_of_mass
         self.atom_counts = _geom.atom_counts
         self.atom_to_center = _geom.atom_to_center
-        self.moments_of_inertia = _geom.moments_of_inertia
-        self.prinrot = _geom.prinrot
-        self.prinaxis = _geom.prinaxis
+        self.prin_atomic_positions = _geom.prin_atomic_positions
 
     def _init_basis(self):
         self.basis = build_basis(self.basis_set, self.atoms)
@@ -331,6 +328,7 @@ class ModelSystem:
         self.nmo = self.nbf
         self.naux = 0
         self.Xorth = invsqrt_matrix(self.ints_overlap(), tol=1e-13)
+        self.point_group = "C1"
 
     def ints_overlap(self):
         return self.overlap

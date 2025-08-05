@@ -100,7 +100,7 @@ def local_sign(l, m, op):
     raise ValueError(f"Unknown op {op}")
 
 
-def get_symmetry_ops(point_group, prinaxis):
+def get_symmetry_ops(point_group):
     '''
     Compute 3x3 matrix representations for the symmetry operators in `point_group`.
     These representation perform reflections/rotations in the molecular principal frame.
@@ -166,11 +166,6 @@ def assign_irrep_labels(point_group, U_ops, S, C):
     return labels, chars
 
 
-def to_prin_frame(x, system):
-    # return system.prinrot @ (x - system.center_of_mass)
-    return (x - system.center_of_mass)
-
-
 def build_U_matrices(symmetry_operations, system, info, tol=1e-6):
     '''
     Compute the matrices U(g)_{uv} < u | R(g) | v > that describes how the
@@ -183,13 +178,11 @@ def build_U_matrices(symmetry_operations, system, info, tol=1e-6):
     for op_label, R in symmetry_operations.items():
         U = np.zeros((system.nbf, system.nbf))
         for i, a in enumerate(system.atoms):
-            coord1 = to_prin_frame(a[1], system)
-            v = R @ coord1 # apply symmetry operation
+            v = R @ system.prin_atomic_positions[i] # apply symmetry operation in principal axis frame
             # get basis fcns centered on atom a
             basis_a = [bas for bas in info.basis_labels if bas.iatom == i]
             for j, b in enumerate(system.atoms):
-                coord2 = to_prin_frame(b[1], system)
-                if (a[0] == b[0]) and (np.linalg.norm(v - coord2) < tol):
+                if (a[0] == b[0]) and (np.linalg.norm(v - system.prin_atomic_positions[j]) < tol):
                     # get basis fcns centered on atom b
                     basis_b = [bas for bas in info.basis_labels if bas.iatom == j]
                     for bas1 in basis_a:
@@ -210,7 +203,7 @@ def assign_mo_symmetries(system, S, C):
     info = BasisInfo(system, system.basis)
 
     # step 1: build symmetry transformation matrices
-    symmetry_ops = get_symmetry_ops(system.point_group, system.prinaxis)
+    symmetry_ops = get_symmetry_ops(system.point_group)
 
     # step 2: build U matrices (permutation * phase)
     U = build_U_matrices(symmetry_ops, 
