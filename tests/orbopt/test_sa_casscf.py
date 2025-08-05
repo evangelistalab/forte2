@@ -1,5 +1,6 @@
 import pytest
 import numpy as np
+
 from forte2 import System, RHF, MCOptimizer, AVAS, State
 from forte2.helpers.comparisons import approx
 
@@ -174,8 +175,6 @@ def test_sa_casscf_c2_transition_dipole():
 
 
 def test_sa_casscf_hf():
-    from forte2 import CI
-
     erhf = -100.009873562527
     emcscf_root_1 = -99.9964137656
     emcscf_root_2 = -99.6886809114
@@ -214,3 +213,5 @@ def test_sa_casscf_hf():
     # total dipole of state 0, 1
     assert abs(mc.ci_solver.tdm_per_solver[0][(0, 0)][2]) == approx(0.7244112903260456)
     assert abs(mc.ci_solver.tdm_per_solver[0][(1, 1)][2]) == approx(0.8239033452222257)
+
+test_sa_casscf_hf()

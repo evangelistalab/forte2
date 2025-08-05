@@ -36,6 +36,29 @@ def rotation_mat(axis, theta):
     return R
 
 
+def reflection_mat(plane):
+    """
+    Return the 3x3 reflection matrix for the mirror plane σ(x_i, x_j).
+
+    Parameters
+    ----------
+    plane: tuple (i, j) with i != j and i,j ∈ {0,1,2} mapping to x,y,z.
+           Example: (0,1) -> σ_xy (flip z).
+
+    Returns
+    -------
+    R : ndarray of shape (3, 3)
+    The reflection matrix.
+    """
+    i, j = plane
+    if i == j:
+        raise ValueError("plane must use two distinct axes")
+    R = np.eye(3)
+    k = 3 - i - j          # the axis not in the plane (since {0,1,2})
+    R[k, k] = -1.0
+    return R
+
+
 def parse_geometry(geom, unit):
     """
     Parse a geometry string (XYZ or Z-matrix) into a list of atoms.
@@ -267,3 +290,12 @@ class _GeometryHelper:
             if atom[0] not in self.atom_to_center:
                 self.atom_to_center[atom[0]] = []
             self.atom_to_center[atom[0]].append(i)
+
+        self.inertia_matrix = np.zeros((3, 3))
+        for m, r in zip(self.atomic_masses, self.atomic_positions):
+            x = r - self.center_of_mass
+            r2 = np.dot(x, x)
+            self.inertia_matrix += m * ((r2 * np.eye(3)) - np.outer(x, x))
+
+        self.prinrot = np.eye(3)
+        self.prin_atomic_positions = np.array([self.prinrot @ (r - self.center_of_mass) for r in self.atomic_positions])

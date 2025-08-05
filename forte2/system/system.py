@@ -51,6 +51,8 @@ class System:
         If True, auxiliary basis sets (if any) will be disregarded, and the B tensor will be built using the Cholesky decomposition of the 4D ERI tensor instead.
     cholesky_tol : float, optional, default=1e-6
         The tolerance for the Cholesky decomposition of the 4D ERI tensor. Only used if `cholesky_tei` is True.
+    point_group : str, optional, default="C1"
+        The Abelian point group used to assign symmetries of orbitals a posteriori. This only allows one to assign orbital symmetry, it does **not** imply that symmetry is used in a calculation.
 
     Attributes
     ----------
@@ -92,7 +94,6 @@ class System:
         The number of minimal atomic orbital basis functions in the system.
     Xorth : NDArray
         The orthogonalization matrix for the basis functions.
-
     """
 
     xyz: str
@@ -107,6 +108,7 @@ class System:
     ortho_thresh: float = 1e-8
     cholesky_tei: bool = False
     cholesky_tol: float = 1e-6
+    point_group: str = "C1"
 
     ### Non-init attributes
     atoms: list[tuple[float, tuple[float, float, float]]] = field(
@@ -129,6 +131,8 @@ class System:
         self._init_basis()
         self._init_x2c()
         self._get_orthonormal_transformation()
+        self.point_group = self.point_group.upper()
+        assert self.point_group in ["C1", "CS", "CI", "D2H", "D2", "C2V", "C2", "C2H"], f"Selected symmetry {self.point_group} not in list of supported Abelian point groups!"
 
     def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
@@ -144,6 +148,7 @@ class System:
         self.center_of_mass = _geom.center_of_mass
         self.atom_counts = _geom.atom_counts
         self.atom_to_center = _geom.atom_to_center
+        self.prin_atomic_positions = _geom.prin_atomic_positions
 
     def _init_basis(self):
         self.basis = build_basis(self.basis_set, self.atoms)
@@ -323,6 +328,7 @@ class ModelSystem:
         self.nmo = self.nbf
         self.naux = 0
         self.Xorth = invsqrt_matrix(self.ints_overlap(), tol=1e-13)
+        self.point_group = "C1"
 
     def ints_overlap(self):
         return self.overlap

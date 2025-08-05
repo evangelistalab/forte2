@@ -1,8 +1,9 @@
-import forte2
 import time
-from forte2 import Determinant
 import pytest
 import numpy as np
+
+import forte2
+from forte2 import Determinant
 
 
 def test_linear_apply_op():

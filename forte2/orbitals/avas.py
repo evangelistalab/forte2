@@ -5,7 +5,7 @@ import re
 from forte2 import ints
 from forte2.scf import RHF, ROHF
 from forte2.state import MOSpace
-from forte2.helpers import logger
+from forte2.helpers import logger, invsqrt_matrix
 from forte2.base_classes.mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.system import System
 from forte2.system.basis_utils import BasisInfo, shell_label_to_lm
@@ -277,8 +277,7 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         # Subspace overlap matrix
         Sss = Cms.T @ Smm @ Cms
         # Orthogonalize Sss: Xss = Sss^(-1/2)
-        evals, evecs = np.linalg.eigh(Sss)
-        Xss = evecs @ np.diag((1.0 / np.sqrt(evals))) @ evecs.T
+        Xss = invsqrt_matrix(Sss)
         # Build overlap matrix between subspace and computational (large) basis
         Sml = ints.overlap(self.system.minao_basis, self.system.basis)
         # Project into subspace
@@ -471,6 +470,7 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         self.nactv = len(act_docc) + len(act_uocc) + nsocc
         self.ncore = len(inact_docc)
 
+        # AVAS is a provider of MOSpace: avas.mo_space be automatically used downstream if not overridden
         self.mo_space = MOSpace(
             nmo=self.system.nmo,
             active_orbitals=list(range(self.ncore, self.ncore + self.nactv)),
@@ -484,6 +484,7 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         # reminder that C_tilde will have zero SOCC coefficients, if ROHF
         C_tilde = self.C[0] @ U
         fock = self.parent_method.F[0]
+        # separately canonicalize the Fock matrix blocks
         C_inact_docc = self._canonicalize_block(fock, C_tilde, inact_docc)
         C_inact_uocc = self._canonicalize_block(fock, C_tilde, inact_uocc)
         C_act_docc = self._canonicalize_block(fock, C_tilde, act_docc)
@@ -495,6 +496,7 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         n_inact_docc = len(inact_docc)
         n_act_docc = len(act_docc)
         n_act_uocc = len(act_uocc)
+
         id_sl = slice(0, n_inact_docc)
         ad_sl = slice(id_sl.stop, n_inact_docc + n_act_docc)
         au_sl = slice(ad_sl.stop + nsocc, ad_sl.stop + nsocc + n_act_uocc)

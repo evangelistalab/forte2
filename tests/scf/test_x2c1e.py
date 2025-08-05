@@ -1,7 +1,6 @@
-import numpy as np
 import pytest
 
-import forte2
+from forte2 import System
 from forte2.scf import RHF, GHF
 from forte2.helpers.comparisons import approx
 from forte2.system.atom_data import EH_TO_WN
@@ -14,7 +13,7 @@ def test_sfx2c1e():
     Br 0 0 1.2
     """
 
-    system = forte2.System(
+    system = System(
         xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT", x2c_type="sf"
     )
 
@@ -39,7 +38,7 @@ def test_lindep_sfx2c1e():
 
     xyz = "\n".join([f"H 0 0 {i}" for i in range(10)])
 
-    system = forte2.System(
+    system = System(
         xyz=xyz,
         basis_set="aug-cc-pvdz",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
@@ -63,7 +62,7 @@ def test_sox2c1e_water():
     H 0 0.757 0.587
     """
 
-    system = forte2.System(
+    system = System(
         xyz=xyz,
         basis_set="decon-cc-pvdz",
         auxiliary_basis_set="cc-pvtz-jkfit",
@@ -80,7 +79,7 @@ def test_boettger_hbr():
     Br 0 0 1.4
     """
 
-    system = forte2.System(
+    system = System(
         xyz=xyz,
         basis_set="decon-cc-pvdz",
         auxiliary_basis_set="cc-pvtz-jkfit",

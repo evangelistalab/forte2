@@ -1,14 +1,9 @@
 from dataclasses import dataclass, field
 
-import numpy as np
-
-import forte2
-
+from forte2 import sparse_operator_hamiltonian, Determinant, SparseState, System
 from forte2.scf import RHF
 from forte2.jkbuilder import RestrictedMOIntegrals
 from forte2.state.state import State
-from forte2 import ints
-
 from forte2.base_classes.mixins import MOsMixin, SystemMixin
 
 
@@ -67,11 +62,11 @@ class SelectedCI(MOsMixin, SystemMixin):
             self.system, self.C[0], self.orbitals, self.core_orbitals
         )
 
-        H = forte2.sparse_operator_hamiltonian(ints.E, ints.H, ints.V)
+        H = sparse_operator_hamiltonian(ints.E, ints.H, ints.V)
         ndocc = min(self.state.na, self.state.nb)
         nsocc = max(self.state.na, self.state.nb) - ndocc
-        aufbau = forte2.Determinant("2" * ndocc + "1" * nsocc)
-        self.P = forte2.SparseState(aufbau, 1.0)
+        aufbau = Determinant("2" * ndocc + "1" * nsocc)
+        self.P = SparseState(aufbau, 1.0)
         # Hmat = H.matrix(dets)
         # eig = np.linalg.eigh(Hmat)[0]
         # print("Eigenvalues:", eig)
@@ -115,9 +110,7 @@ def test_sci1():
     H 0.0 0.0 {0.529177210903 * 2}
     """
 
-    system = forte2.System(
-        xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT"
-    )
+    system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     scf = RHF(charge=0)(system)
     scf.econv = 1e-12

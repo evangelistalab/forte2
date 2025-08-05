@@ -1,9 +1,5 @@
-import pytest
-import forte2
 from forte2 import System, RHF, MCOptimizer, AVAS, State
 from forte2.helpers.comparisons import approx
-
-import numpy as np
 
 
 def test_casscf_cyclopropene():

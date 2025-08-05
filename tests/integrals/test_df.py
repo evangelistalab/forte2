@@ -1,5 +1,6 @@
-import forte2
 import numpy as np
+
+import forte2
 
 
 def test_df():

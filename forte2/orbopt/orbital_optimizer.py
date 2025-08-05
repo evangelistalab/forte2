@@ -2,7 +2,7 @@ import numpy as np
 import scipy as sp
 from dataclasses import dataclass, field
 
-from forte2.ci import CISolver
+# from forte2.ci import CISolver
 from forte2.base_classes.active_space_solver import ActiveSpaceSolver
 from forte2.orbitals import Semicanonicalizer
 from forte2.jkbuilder import FockBuilder, RestrictedMOIntegrals
@@ -147,8 +147,10 @@ class MCOptimizer(ActiveSpaceSolver):
             self.Hcore,
             self.system.nuclear_repulsion,
             self.nrr,
-            gas_ref=do_gas
+            gas_ref=do_gas,
         )
+        from forte2.ci import CISolver
+
         self.ci_solver = CISolver(
             states=self.states,
             core_orbitals=self.mo_space.docc_orbitals,
@@ -201,13 +203,13 @@ class MCOptimizer(ActiveSpaceSolver):
         self.E_orb_old = self.E_orb
         self.E_avg_old = self.E_avg
 
-        g1_act = self.ci_solver.make_average_sf_1rdm()
+        self.g1_act = self.ci_solver.make_average_sf_1rdm()
         g2_act = 0.5 * self.ci_solver.make_average_sf_2rdm()
         # ci_maxiter_save = self.ci_solver.get_maxiter()
         # self.ci_solver.set_maxiter(self.ci_maxiter)
 
         # Prepare the orbital optimizer
-        self.orb_opt.set_rdms(g1_act, g2_act)
+        self.orb_opt.set_rdms(self.g1_act, g2_act)
         self.orb_opt._compute_Fcore()
         self.orb_opt.get_eri_gaaa()
         self.E_orb = self.E_avg
@@ -252,9 +254,9 @@ class MCOptimizer(ActiveSpaceSolver):
             self.E_avg = self.ci_solver.compute_average_energy()
             self.E_ci = np.array(self.ci_solver.E)
             self.E = self.E_avg
-            g1_act = self.ci_solver.make_average_sf_1rdm()
+            self.g1_act = self.ci_solver.make_average_sf_1rdm()
             g2_act = 0.5 * self.ci_solver.make_average_sf_2rdm()
-            self.orb_opt.set_rdms(g1_act, g2_act)
+            self.orb_opt.set_rdms(self.g1_act, g2_act)
             self.iter += 1
         else:
             logger.log_info1("=" * width)
@@ -286,15 +288,14 @@ class MCOptimizer(ActiveSpaceSolver):
 
         if self.final_orbital == "semicanonical":
             semi = Semicanonicalizer(
-                self.mo_space,
-                self.ci_solver.make_average_sf_1rdm(),
-                self.C[0],
-                self.system,
-                fock_builder,
+                mo_space=self.mo_space,
+                g1_sf=self.ci_solver.make_average_sf_1rdm(),
+                C=self.C[0],
+                system=self.system,
+                fock_builder=fock_builder,
                 mix_inactive=not self.optimize_frozen_orbs,
                 mix_active=False,
             )
-            semi.run()
             self.C[0] = semi.C_semican.copy()
 
             # recompute the CI vectors in the semicanonical basis
@@ -407,7 +408,7 @@ class OrbOptimizer:
         self.nrr = nrr
         self.nrot = self.nrr.sum()
         self.e_nuc = e_nuc
-        self.gas_ref=gas_ref
+        self.gas_ref = gas_ref
 
         self.R = np.zeros(self.nrot, dtype=float)
         self.U = np.eye(self.C.shape[1], dtype=float)

@@ -20,6 +20,28 @@ We follow the `Libint2 convention <https://github.com/evaleev/libint/wiki/using-
 
 AM_LABELS = ["s", "p", "d", "f", "g", "h", "i", "j", "k", "l", "m", "n"]
 
+def ml_from_shell_index_cca(l, idx):
+    """
+    Map Libint Standard/CCA shell index (0..2*l) to signed magnetic quantum number (m_l) value.
+    CCA standard is such that Y_{lm}s are listed from Y_{l,-l}, ... Y_{l,0}, ... Y_{l,l}. Thus,
+    the 0-based index position is related to the m quantum number via index - l.
+
+    Parameters
+    ----------
+    l: int
+        Angular momentum quantum number.
+    idx: int
+        Index of the shell within the angular momentum type.
+
+    Returns
+    -------
+    int:
+        Magnetic quantum number m_l.
+    """
+    if idx < 0 or idx > 2*l:
+        raise ValueError("The shell index must be in within 0 and 2*l")
+    return idx - l
+
 
 def get_shell_label(l, idx):
     """
@@ -109,6 +131,7 @@ class BasisInfo:
         - Zidx: int, the index of the atom in the system (1-based).
         - n: int, the principal quantum number for the shell.
         - l: int, the angular momentum quantum number.
+        - ml: int, the magnetic quantum number m_l.
         - m: int, the index of the basis function within the shell.
 
     atom_to_aos : dict[int : dict[int : list[int]]]
@@ -126,10 +149,14 @@ class BasisInfo:
         Zidx: int
         n: int
         l: int
+        ml: int
         m: int
 
         def __str__(self):
-            return f"{self.abs_idx:<5} {self.iatom:<5} {Z_TO_ATOM_SYMBOL[self.Z]+str(self.Zidx):<5} {str(self.n)+get_shell_label(self.l,self.m):<10}"
+            return f"{self.abs_idx:<5} {self.iatom:<5} {Z_TO_ATOM_SYMBOL[self.Z]+str(self.Zidx):<5} {self.label():<10}"
+
+        def label(self):
+            return str(self.n)+get_shell_label(self.l,self.m)
 
     def __post_init__(self):
         self.basis_labels = self._label_basis_functions()
@@ -168,7 +195,8 @@ class BasisInfo:
                 l = self.basis[ishell].l
                 size = self.basis[ishell].size
                 for i in range(size):
-                    label = self._AOLabel(ibasis, iatom, Z, Zidx, n_count[l], l, i)
+                    ml = ml_from_shell_index_cca(l, i)
+                    label = self._AOLabel(ibasis, iatom, Z, Zidx, n_count[l], l, ml, i)
                     basis_labels.append(label)
                     ibasis += 1
                 n_count[l] += 1

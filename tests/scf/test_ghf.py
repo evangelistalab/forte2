@@ -1,6 +1,4 @@
-import forte2
-from forte2.scf import *
-import numpy as np
+from forte2 import System, GHF, UHF
 from forte2.helpers.comparisons import approx
 
 
@@ -11,7 +9,7 @@ def test_equivalence_to_rhf():
     Ne 0 0 0
     """
 
-    system = forte2.System(
+    system = System(
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="def2-universal-jkfit"
     )
 
@@ -28,7 +26,7 @@ def test_equivalence_to_uhf():
     xyz = """
     H 0 0 0
     H 0 0 2.7"""
-    system = forte2.System(
+    system = System(
         xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
     )
     scf = GHF(charge=0)(system)
@@ -53,7 +51,8 @@ def test_ghf_complex_perturbation():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = forte2.System(
+
+    system = System(
         xyz=xyz, basis_set="cc-pvqz", auxiliary_basis_set="cc-pvqz-jkfit"
     )
 
@@ -68,3 +67,4 @@ def test_ghf_complex_perturbation():
     scf.run()
     assert scf.E == approx(e_uhf)
     assert scf.S2 == approx(s2_uhf)
+

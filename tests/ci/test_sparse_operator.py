@@ -1,6 +1,7 @@
-import forte2
 import numpy as np
 import pytest
+
+import forte2
 
 
 def det(s):

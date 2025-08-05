@@ -13,6 +13,7 @@ from forte2.base_classes.mixins import MOsMixin, SystemMixin
 from forte2.helpers.matrix_functions import givens_rotation
 from forte2.helpers import logger, DIIS
 from .initial_guess import minao_initial_guess, core_initial_guess
+from forte2.symmetry import assign_mo_symmetries
 
 
 @dataclass
@@ -230,6 +231,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
 
     def _post_process(self):
         self._get_occupation()
+        self._assign_orbital_symmetries()
         self._print_orbital_energies()
 
     @abstractmethod
@@ -261,6 +263,9 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
 
     @abstractmethod
     def _print_orbital_energies(self): ...
+
+    @abstractmethod
+    def _assign_orbital_symmetries(self): ...
 
 
 @dataclass
@@ -338,7 +343,7 @@ class RHF(SCFBase):
         for i in range(ndocc):
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{i+1:<4d} {self.eps[0][i]:<12.6f} "
+            string += f"{i+1:<4d} ({self.orbital_symmetries[i]}) {self.eps[0][i]:<12.6f} "
         logger.log_info1(string)
 
         logger.log_info1("\nVirtual:")
@@ -347,7 +352,7 @@ class RHF(SCFBase):
             idx = ndocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx+1:<4d} {self.eps[0][idx]:<12.6f} "
+            string += f"{idx+1:<4d} ({self.orbital_symmetries[idx]}) {self.eps[0][idx]:<12.6f} "
         logger.log_info1(string)
 
     def _post_process(self):
@@ -366,6 +371,10 @@ class RHF(SCFBase):
         basis_info.print_ao_composition(
             self.C[0], list(range(self.na, min(self.na + 5, self.nmo)))
         )
+
+    def _assign_orbital_symmetries(self):
+        S = self._get_overlap()
+        self.orbital_symmetries = assign_mo_symmetries(self.system, S, self.C[0])
 
 
 @dataclass
@@ -499,7 +508,7 @@ class UHF(SCFBase):
         for i in range(naocc):
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{i+1:<4d} {self.eps[0][i]:<12.6f} "
+            string += f"{i+1:<4d} ({self.orbital_symmetries_alfa[i]}) {self.eps[0][i]:<12.6f} "
         logger.log_info1(string)
 
         logger.log_info1("\nAlpha Virtual:")
@@ -508,7 +517,7 @@ class UHF(SCFBase):
             idx = naocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx+1:<4d} {self.eps[0][idx]:<12.6f} "
+            string += f"{idx+1:<4d} ({self.orbital_symmetries_alfa[idx]}) {self.eps[0][idx]:<12.6f} "
         logger.log_info1(string)
 
         logger.log_info1("\nBeta Occupied:")
@@ -516,7 +525,7 @@ class UHF(SCFBase):
         for i in range(nbocc):
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{i+1:<4d} {self.eps[1][i]:<12.6f} "
+            string += f"{i+1:<4d} ({self.orbital_symmetries_beta[i]}) {self.eps[1][i]:<12.6f} "
         logger.log_info1(string)
 
         logger.log_info1("\nBeta Virtual:")
@@ -525,9 +534,13 @@ class UHF(SCFBase):
             idx = nbocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx+1:<4d} {self.eps[1][i]:<12.6f} "
+            string += f"{idx+1:<4d} ({self.orbital_symmetries_beta[idx]}) {self.eps[1][i]:<12.6f} "
         logger.log_info1(string)
 
+    def _assign_orbital_symmetries(self):
+        S = self._get_overlap()
+        self.orbital_symmetries_alfa = assign_mo_symmetries(self.system, S, self.C[0])
+        self.orbital_symmetries_beta = assign_mo_symmetries(self.system, S, self.C[1])
 
 @dataclass
 class ROHF(SCFBase):
@@ -549,6 +562,7 @@ class ROHF(SCFBase):
     _energy = UHF._energy
     _diis_update = RHF._diis_update
     _build_total_density_matrix = UHF._build_total_density_matrix
+    _assign_orbital_symmetries = RHF._assign_orbital_symmetries
 
     def __call__(self, system):
         self = super().__call__(system)
@@ -615,7 +629,7 @@ class ROHF(SCFBase):
         for i in range(ndocc):
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{i+1:<4d} {self.eps[0][i]:<12.6f} "
+            string += f"{i+1:<4d} ({self.orbital_symmetries[i]}) {self.eps[0][i]:<12.6f} "
         logger.log_info1(string)
 
         if nsocc > 0:
@@ -625,7 +639,7 @@ class ROHF(SCFBase):
                 idx = ndocc + i
                 if i % orb_per_row == 0:
                     string += "\n"
-                string += f"{idx+1:<4d} {self.eps[0][idx]:<12.6f} "
+                string += f"{idx+1:<4d} ({self.orbital_symmetries[idx]}) {self.eps[0][idx]:<12.6f} "
             logger.log_info1(string)
 
         logger.log_info1("\nVirtual:")
@@ -634,7 +648,7 @@ class ROHF(SCFBase):
             idx = ndocc + nsocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx+1:<4d} {self.eps[0][idx]:<12.6f} "
+            string += f"{idx+1:<4d} ({self.orbital_symmetries[idx]}) {self.eps[0][idx]:<12.6f} "
         logger.log_info1(string)
 
 
@@ -667,6 +681,7 @@ class CUHF(SCFBase):
     _build_total_density_matrix = UHF._build_total_density_matrix
     _get_occupation = UHF._get_occupation
     _print_orbital_energies = UHF._print_orbital_energies
+    _assign_orbital_symmetries = UHF._assign_orbital_symmetries
 
     def __call__(self, system):
         self = super().__call__(system)
@@ -865,7 +880,7 @@ class GHF(SCFBase):
         for i in range(nocc):
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{i+1:<4d} {self.eps[0][i]:<12.6f} "
+            string += f"{i+1:<4d} ({self.orbital_symmetries[i]}) {self.eps[0][i]:<12.6f} "
         logger.log_info1(string)
 
         logger.log_info1("\nVirtual:")
@@ -874,9 +889,13 @@ class GHF(SCFBase):
             idx = nocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx+1:<4d} {self.eps[0][idx]:<12.6f} "
+            string += f"{idx+1:<4d} ({self.orbital_symmetries[idx]}) {self.eps[0][idx]:<12.6f} "
         logger.log_info1(string)
 
+    def _assign_orbital_symmetries(self):
+        S = self._get_overlap()
+        S_spinor = np.block([[S, np.zeros_like(S)], [np.zeros_like(S), S]])
+        self.orbital_symmetries = assign_mo_symmetries(self.system, S_spinor, self.C[0])
 
 def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4):
     cosq = np.cos(mixing_parameter)
@@ -884,3 +903,4 @@ def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4):
     Ca = givens_rotation(C, cosq, sinq, homo_idx, homo_idx + 1)
     Cb = givens_rotation(C, cosq, -sinq, homo_idx, homo_idx + 1)
     return [Ca, Cb]
+

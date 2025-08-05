@@ -1,7 +1,6 @@
 import pytest
-import numpy as np
 
-import forte2
+from forte2 import System
 from forte2.system.basis_utils import BasisInfo, get_shell_label, shell_label_to_lm
 
 
@@ -12,12 +11,12 @@ def test_basis_info():
     N 0 0 2.4
     O 2 1 0
     """
-    system = forte2.System(
+    system = System(
         xyz=xyz,
         basis_set={"C": "cc-pvtz", "O": "sto-6g", "default": "sto-3g"},
     )
     basis_info = BasisInfo(system, system.basis)
-    assert basis_info.basis_labels[23] == BasisInfo._AOLabel(23, 0, 6, 1, 4, 3, 0)
+    assert basis_info.basis_labels[23] == BasisInfo._AOLabel(23, 0, 6, 1, 4, 3, -3, 0)
     assert basis_info.atom_to_aos[8][2] == list(range(40, 45))
 
 
