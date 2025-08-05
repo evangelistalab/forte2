@@ -109,7 +109,6 @@ class System:
     cholesky_tei: bool = False
     cholesky_tol: float = 1e-6
     point_group: str = "C1"
-    two_component: bool = False
 
     ### Non-init attributes
     atoms: list[tuple[float, tuple[float, float, float]]] = field(
@@ -121,6 +120,8 @@ class System:
     naux: int = field(init=False, default=None)
     nminao: int = field(init=False, default=None)
     Xorth: NDArray = field(init=False, default=None)
+    two_component: bool = field(init=False, default=False)
+
 
     def __post_init__(self):
         assert self.unit in [
@@ -209,7 +210,7 @@ class System:
     def __repr__(self):
         return f"System(atoms={self.atoms}, basis_set={self.basis}, auxiliary_basis_set={self.auxiliary_basis})"
 
-    def ints_overlap(self, twocomp=False):
+    def ints_overlap(self):
         """
         Return the overlap integrals for the system.
 
@@ -219,7 +220,7 @@ class System:
             Overlap integrals matrix.
         """
         S = ints.overlap(self.basis)
-        if twocomp:
+        if self.two_component:
             S = sp.linalg.block_diag(S, S).astype(complex)
         return S
 
@@ -243,6 +244,20 @@ class System:
         if self.x2c_type in [None, "sf"] and self.two_component:
             H = sp.linalg.block_diag(H, H).astype(complex)
         return H
+
+    def get_Xorth(self):
+        """
+        Return the orthonormalization matrix for the basis functions.
+
+        Returns
+        -------
+        NDArray
+            Orthonormalization matrix.
+        """
+        if self.two_component:
+            return sp.linalg.block_diag(self.Xorth, self.Xorth).astype(complex)
+        else:
+            return self.Xorth
 
     def nuclear_dipole(self, origin=None, unit="debye"):
         """
@@ -298,7 +313,7 @@ class System:
 
     def _get_orthonormal_transformation(self):
         """Orthonormalize the AO basis, catch and remove linear dependencies."""
-        S = self.ints_overlap()
+        S = ints.overlap(self.basis)
         e, _ = np.linalg.eigh(S)
         self.nmo = self.nbf
         if min(e) / max(e) < self.linear_dep_trigger:

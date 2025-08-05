@@ -62,10 +62,11 @@ def minao_initial_guess(system, H, S):
         _SAP_V = SAP_V
 
     # generate the SAP Hamiltonian and diagonalize it
-    H_SAP = system.Xorth.T @ (H + _SAP_V) @ system.Xorth
+    Xorth = system.get_Xorth()
+    H_SAP = Xorth.T @ (H + _SAP_V) @ Xorth
     _, C = np.linalg.eigh(H_SAP)
 
-    return system.Xorth @ C
+    return Xorth @ C
 
 
 def core_initial_guess(system: System, H, S):

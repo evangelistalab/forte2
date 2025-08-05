@@ -88,7 +88,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
             )
 
         self.C = None
-        self.Xorth = self.system.Xorth
+        self.Xorth = self.system.get_Xorth()
 
         return self
 
@@ -275,6 +275,7 @@ class RHF(SCFBase):
     """
 
     def __call__(self, system):
+        system.two_component = False
         self = super().__call__(system)
         self._parse_state()
         return self
@@ -396,6 +397,7 @@ class UHF(SCFBase):
     guess_mix: bool = False  # only used if ms == 0
 
     def __call__(self, system):
+        system.two_component = False
         self = super().__call__(system)
         self._parse_state()
         return self
@@ -568,6 +570,7 @@ class ROHF(SCFBase):
     _assign_orbital_symmetries = RHF._assign_orbital_symmetries
 
     def __call__(self, system):
+        system.two_component = False
         self = super().__call__(system)
         self._parse_state()
         return self
@@ -689,6 +692,7 @@ class CUHF(SCFBase):
     _assign_orbital_symmetries = UHF._assign_orbital_symmetries
 
     def __call__(self, system):
+        system.two_component = False
         self = super().__call__(system)
         self._parse_state()
         return self
@@ -761,10 +765,7 @@ class GHF(SCFBase):
     _diis_update = RHF._diis_update
 
     def __call__(self, system):
-        if not system.two_component:
-            raise RuntimeError(
-                "GHF must be run with a system with 'two_component' flag set to True"
-            )
+        system.two_component = True
         self = super().__call__(system)
         return self
 
