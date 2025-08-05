@@ -29,9 +29,6 @@ void export_determinant_api(nb::module_& m) {
                          d->set_na(i, true);
                      } else if (str[i] == 'b') {
                          d->set_nb(i, true);
-                     } else if (str[i] == '0') {
-                         d->set_na(i, false);
-                         d->set_nb(i, false);
                      } else {
                          throw std::runtime_error(
                              "Determinant: Invalid character in determinant string: |" + str + ">");
