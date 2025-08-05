@@ -1,4 +1,5 @@
 import numpy as np
+import scipy as sp
 
 from forte2 import ints, Basis, Shell
 from forte2.system import System
@@ -55,8 +56,13 @@ def minao_initial_guess(system, H, S):
     # generate the SAP potential V_mn = sum_P (P|mn)
     SAP_V = np.einsum("Pmn->mn", SAP_ints)
 
+    if system.two_component:
+        _SAP_V = sp.linalg.block_diag(SAP_V, SAP_V).astype(complex)
+    else:
+        _SAP_V = SAP_V
+
     # generate the SAP Hamiltonian and diagonalize it
-    H_SAP = system.Xorth.T @ (H + SAP_V) @ system.Xorth
+    H_SAP = system.Xorth.T @ (H + _SAP_V) @ system.Xorth
     _, C = np.linalg.eigh(H_SAP)
 
     return system.Xorth @ C

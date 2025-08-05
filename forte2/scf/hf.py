@@ -756,10 +756,8 @@ class GHF(SCFBase):
     _diis_update = RHF._diis_update
 
     def __call__(self, system):
+        system.two_component = True
         self = super().__call__(system)
-        if self.system.x2c_type == "sf" or self.system.x2c_type == None:
-            H = self._get_hcore().astype(complex)
-            self._get_hcore = lambda: sp.linalg.block_diag(H, H)
         return self
 
     def _build_fock(self, H, fock_builder, S):
