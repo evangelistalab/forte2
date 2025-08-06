@@ -10,7 +10,9 @@ def test_equivalence_to_rhf():
     """
 
     system = System(
-        xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="def2-universal-jkfit"
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="def2-universal-jkfit",
     )
 
     scf = GHF(charge=0)(system)
@@ -27,7 +29,9 @@ def test_equivalence_to_uhf():
     H 0 0 0
     H 0 0 2.7"""
     system = System(
-        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
+        xyz=xyz,
+        basis_set="cc-pVQZ",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
     )
     scf = GHF(charge=0)(system)
     scf.guess_mix = True
@@ -51,9 +55,10 @@ def test_ghf_complex_perturbation():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-
     system = System(
-        xyz=xyz, basis_set="cc-pvqz", auxiliary_basis_set="cc-pvqz-jkfit"
+        xyz=xyz,
+        basis_set="cc-pvqz",
+        auxiliary_basis_set="cc-pvqz-jkfit",
     )
 
     scf = UHF(charge=1, ms=0.5)(system)
@@ -67,4 +72,3 @@ def test_ghf_complex_perturbation():
     scf.run()
     assert scf.E == approx(e_uhf)
     assert scf.S2 == approx(s2_uhf)
-

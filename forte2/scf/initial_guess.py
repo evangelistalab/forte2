@@ -1,11 +1,12 @@
 import numpy as np
+import scipy as sp
 
 from forte2 import ints, Basis, Shell
 from forte2.system import System
 from forte2.system.build_basis import build_basis
 
 
-def minao_initial_guess(system, H, S):
+def minao_initial_guess(system, H):
     """
     Generate a superposition of atomic potentials (SAP) initial guess for the SCF procedure
     S. Lehtola, J. Chem. Theory Comput. 15, 1593-1604 (2019), arXiv:1810.11659.
@@ -55,14 +56,21 @@ def minao_initial_guess(system, H, S):
     # generate the SAP potential V_mn = sum_P (P|mn)
     SAP_V = np.einsum("Pmn->mn", SAP_ints)
 
+    if system.two_component:
+        _SAP_V = sp.linalg.block_diag(SAP_V, SAP_V).astype(complex)
+    else:
+        _SAP_V = SAP_V
+
     # generate the SAP Hamiltonian and diagonalize it
-    H_SAP = system.Xorth.T @ (H + SAP_V) @ system.Xorth
+    Xorth = system.get_Xorth()
+    H_SAP = Xorth.T @ (H + _SAP_V) @ Xorth
     _, C = np.linalg.eigh(H_SAP)
 
-    return system.Xorth @ C
+    return Xorth @ C
 
 
-def core_initial_guess(system: System, H, S):
-    Htilde = system.Xorth.T @ H @ system.Xorth
+def core_initial_guess(system: System, H):
+    Xorth = system.get_Xorth()
+    Htilde = Xorth.T @ H @ Xorth
     _, C = np.linalg.eigh(Htilde)
-    return system.Xorth @ C
+    return Xorth @ C

@@ -88,7 +88,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
             )
 
         self.C = None
-        self.Xorth = self.system.Xorth
+        self.Xorth = self.system.get_Xorth()
 
         return self
 
@@ -98,10 +98,9 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         return e, self.Xorth @ c
 
     def _eigh_spinor(self, F):
-        Xorth = sp.linalg.block_diag(self.Xorth, self.Xorth)
-        Ftilde = Xorth.T @ F @ Xorth
+        Ftilde = self.Xorth.T @ F @ self.Xorth
         e, c = np.linalg.eigh(Ftilde)
-        return e, Xorth @ c
+        return e, self.Xorth @ c
 
     def _scf_type(self):
         return type(self).__name__.upper()
@@ -147,7 +146,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         logger.log_info1(f"\n==> {self.method} SCF ROUTINE <==")
         self.iter = 0
         if self.C is None:
-            self.C = self._initial_guess(H, S, guess_type=self.guess_type)
+            self.C = self._initial_guess(H, guess_type=self.guess_type)
         self.D = self._build_density_matrix()
         F, F_canon = self._build_fock(H, fock_builder, S)
         self.F = F_canon
@@ -241,7 +240,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
     def _build_density_matrix(self): ...
 
     @abstractmethod
-    def _initial_guess(self, H, S, guess_type="minao"): ...
+    def _initial_guess(self, H, guess_type="minao"): ...
 
     @abstractmethod
     def _build_ao_grad(self, S, F): ...
@@ -275,6 +274,7 @@ class RHF(SCFBase):
     """
 
     def __call__(self, system):
+        system.two_component = False
         self = super().__call__(system)
         self._parse_state()
         return self
@@ -298,12 +298,12 @@ class RHF(SCFBase):
         # returns the total density matrix (Daa + Dbb)
         return 2 * self._build_density_matrix()[0]
 
-    def _initial_guess(self, H, S, guess_type="minao"):
+    def _initial_guess(self, H, guess_type="minao"):
         match guess_type:
             case "minao":
-                C = minao_initial_guess(self.system, H, S)
+                C = minao_initial_guess(self.system, H)
             case "hcore":
-                C = core_initial_guess(self.system, H, S)
+                C = core_initial_guess(self.system, H)
             case _:
                 raise RuntimeError(f"Unknown initial guess type: {guess_type}")
 
@@ -343,7 +343,9 @@ class RHF(SCFBase):
         for i in range(ndocc):
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{i+1:<4d} ({self.orbital_symmetries[i]}) {self.eps[0][i]:<12.6f} "
+            string += (
+                f"{i+1:<4d} ({self.orbital_symmetries[i]}) {self.eps[0][i]:<12.6f} "
+            )
         logger.log_info1(string)
 
         logger.log_info1("\nVirtual:")
@@ -394,6 +396,7 @@ class UHF(SCFBase):
     guess_mix: bool = False  # only used if ms == 0
 
     def __call__(self, system):
+        system.two_component = False
         self = super().__call__(system)
         self._parse_state()
         return self
@@ -436,8 +439,8 @@ class UHF(SCFBase):
         D_a, D_b = self._build_density_matrix()
         return D_a + D_b
 
-    def _initial_guess(self, H, S, guess_type="minao"):
-        C = RHF._initial_guess(self, H, S, guess_type=guess_type)[0]
+    def _initial_guess(self, H, guess_type="minao"):
+        C = RHF._initial_guess(self, H, guess_type=guess_type)[0]
 
         if self.twicems == 0 and self.guess_mix:
             return guess_mix(C, self.nel // 2 - 1)
@@ -542,6 +545,7 @@ class UHF(SCFBase):
         self.orbital_symmetries_alfa = assign_mo_symmetries(self.system, S, self.C[0])
         self.orbital_symmetries_beta = assign_mo_symmetries(self.system, S, self.C[1])
 
+
 @dataclass
 class ROHF(SCFBase):
     """
@@ -565,6 +569,7 @@ class ROHF(SCFBase):
     _assign_orbital_symmetries = RHF._assign_orbital_symmetries
 
     def __call__(self, system):
+        system.two_component = False
         self = super().__call__(system)
         self._parse_state()
         return self
@@ -629,7 +634,9 @@ class ROHF(SCFBase):
         for i in range(ndocc):
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{i+1:<4d} ({self.orbital_symmetries[i]}) {self.eps[0][i]:<12.6f} "
+            string += (
+                f"{i+1:<4d} ({self.orbital_symmetries[i]}) {self.eps[0][i]:<12.6f} "
+            )
         logger.log_info1(string)
 
         if nsocc > 0:
@@ -684,6 +691,7 @@ class CUHF(SCFBase):
     _assign_orbital_symmetries = UHF._assign_orbital_symmetries
 
     def __call__(self, system):
+        system.two_component = False
         self = super().__call__(system)
         self._parse_state()
         return self
@@ -756,10 +764,8 @@ class GHF(SCFBase):
     _diis_update = RHF._diis_update
 
     def __call__(self, system):
+        system.two_component = True
         self = super().__call__(system)
-        if self.system.x2c_type == "sf" or self.system.x2c_type == None:
-            H = self._get_hcore().astype(complex)
-            self._get_hcore = lambda: sp.linalg.block_diag(H, H)
         return self
 
     def _build_fock(self, H, fock_builder, S):
@@ -808,23 +814,16 @@ class GHF(SCFBase):
         Daa, *_, Dbb = self._build_density_matrix()
         return Daa + Dbb
 
-    def _initial_guess(self, H, S, guess_type="minao"):
-        H_ao = ints.kinetic(self.system.basis) + ints.nuclear(
-            self.system.basis, self.system.atoms
-        )
-        Ca = Cb = RHF._initial_guess(self, H_ao, S, guess_type)[0].astype(complex)
+    def _initial_guess(self, H, guess_type="minao"):
+        C = RHF._initial_guess(self, H, guess_type)[0]
         if self.nel % 2 == 0 and self.guess_mix:
-            Ca, Cb = guess_mix(Ca, self.nel // 2 - 1)
-        C_spinor = np.zeros((self.nbf * 2, self.nmo * 2), dtype=complex)
-        C_spinor[: self.nbf, ::2] = Ca
-        C_spinor[self.nbf :, 1::2] = Cb
-        return [C_spinor]
+            C = guess_mix(C, self.nel, twocomp=True)
+        return [C]
 
     def _build_ao_grad(self, S, F):
         Daa, Dab, Dba, Dbb = self.D
         D_spinor = np.block([[Daa, Dab], [Dba, Dbb]])
-        S_spinor = np.block([[S, np.zeros_like(S)], [np.zeros_like(S), S]])
-        sdf = S_spinor @ D_spinor @ F[0]
+        sdf = S @ D_spinor @ F[0]
         AO_grad = sdf.conj().T - sdf
 
         return AO_grad
@@ -838,13 +837,14 @@ class GHF(SCFBase):
         S^2 = 0.5 * (S+S- + S-S+) + Sz^2, S+ = sum_i si+, S- = sum_i si-
         We make use of the Slater-Condon rules to compute <GHF|S^2|GHF>
         """
+        S_1c = S[: self.nbf, : self.nbf]
         mo_a = self.C[0][: self.nbf, : self.nel]
         mo_b = self.C[0][self.nbf :, : self.nel]
 
         # MO basis overlap matrices
-        saa = mo_a.conj().T @ S @ mo_a
-        sbb = mo_b.conj().T @ S @ mo_b
-        sab = mo_a.conj().T @ S @ mo_b
+        saa = mo_a.conj().T @ S_1c @ mo_a
+        sbb = mo_b.conj().T @ S_1c @ mo_b
+        sab = mo_a.conj().T @ S_1c @ mo_b
         sba = sab.conj().T
 
         na = saa.trace()
@@ -880,7 +880,9 @@ class GHF(SCFBase):
         for i in range(nocc):
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{i+1:<4d} ({self.orbital_symmetries[i]}) {self.eps[0][i]:<12.6f} "
+            string += (
+                f"{i+1:<4d} ({self.orbital_symmetries[i]}) {self.eps[0][i]:<12.6f} "
+            )
         logger.log_info1(string)
 
         logger.log_info1("\nVirtual:")
@@ -894,13 +896,42 @@ class GHF(SCFBase):
 
     def _assign_orbital_symmetries(self):
         S = self._get_overlap()
-        S_spinor = np.block([[S, np.zeros_like(S)], [np.zeros_like(S), S]])
-        self.orbital_symmetries = assign_mo_symmetries(self.system, S_spinor, self.C[0])
+        self.orbital_symmetries = assign_mo_symmetries(self.system, S, self.C[0])
 
-def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4):
+
+def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4, twocomp=False):
     cosq = np.cos(mixing_parameter)
     sinq = np.sin(mixing_parameter)
-    Ca = givens_rotation(C, cosq, sinq, homo_idx, homo_idx + 1)
-    Cb = givens_rotation(C, cosq, -sinq, homo_idx, homo_idx + 1)
-    return [Ca, Cb]
+    if twocomp:
+        C = givens_rotation(C, cosq, sinq, homo_idx - 1, homo_idx + 1)
+        C = givens_rotation(C, cosq, -sinq, homo_idx, homo_idx + 2)
+        return C
+    else:
+        Ca = givens_rotation(C, cosq, sinq, homo_idx, homo_idx + 1)
+        Cb = givens_rotation(C, cosq, -sinq, homo_idx, homo_idx + 1)
+        return [Ca, Cb]
 
+
+def convert_coeff_spatial_to_spinor(system, C, complex=True):
+    """
+    Convert spatial orbital MO coefficiensts to spinor(bital) MO coefficients
+    """
+    dtype = np.complex128 if complex else np.float64
+    nbf = system.nbf
+    C_2c = np.zeros((nbf * 2,) * 2, dtype=dtype)
+    assert isinstance(C, list)
+    if len(C) == 2:
+        # UHF
+        assert C[0].shape[0] == nbf
+        assert C[1].shape[0] == nbf
+        # |a^0_{alfa AO} b^0_{alfa AO} ... |
+        # |a^0_{beta AO} b^0_{beta AO} ... |
+        C_2c[:nbf, ::2] = C[0]
+        C_2c[nbf:, 1::2] = C[1]
+    elif len(C) == 1:
+        # RHF/ROHF
+        C_2c[:nbf, ::2] = C[0]
+        C_2c[nbf:, 1::2] = C[0]
+    else:
+        raise RuntimeError(f"Coefficient of length {len(C)} not recognized!")
+    return [C_2c]
