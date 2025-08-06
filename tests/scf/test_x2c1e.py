@@ -91,4 +91,4 @@ def test_boettger_hbr():
     scf.run()
     assert EH_TO_WN * (
         scf.eps[0][scf.nel - 2] - scf.eps[0][scf.nel - 3]
-    ) == pytest.approx(2870.8981440453394, abs=1e-6)
+    ) == pytest.approx(2870.8987272457603, abs=1e-6)

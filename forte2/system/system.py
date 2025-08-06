@@ -4,7 +4,11 @@ from dataclasses import dataclass, field
 from forte2 import ints
 from forte2.system.atom_data import DEBYE_TO_AU, DEBYE_ANGSTROM_TO_AU
 from forte2.helpers import logger
-from forte2.helpers.matrix_functions import invsqrt_matrix, canonical_orth
+from forte2.helpers.matrix_functions import (
+    invsqrt_matrix,
+    canonical_orth,
+    block_diag_2x2,
+)
 from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
 from .parse_geometry import parse_geometry, _GeometryHelper
@@ -120,6 +124,7 @@ class System:
     naux: int = field(init=False, default=None)
     nminao: int = field(init=False, default=None)
     Xorth: NDArray = field(init=False, default=None)
+    two_component: bool = field(init=False, default=False)
 
     def __post_init__(self):
         assert self.unit in [
@@ -132,7 +137,16 @@ class System:
         self._init_x2c()
         self._get_orthonormal_transformation()
         self.point_group = self.point_group.upper()
-        assert self.point_group in ["C1", "CS", "CI", "D2H", "D2", "C2V", "C2", "C2H"], f"Selected symmetry {self.point_group} not in list of supported Abelian point groups!"
+        assert self.point_group in [
+            "C1",
+            "CS",
+            "CI",
+            "D2H",
+            "D2",
+            "C2V",
+            "C2",
+            "C2H",
+        ], f"Selected symmetry {self.point_group} not in list of supported Abelian point groups!"
 
     def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
@@ -193,12 +207,8 @@ class System:
             ], f"x2c_type {self.x2c_type} is not supported. Use None, 'sf' or 'so'."
         else:
             return
-        if self.x2c_type == "sf":
-            self.ints_hcore = lambda: get_hcore_x2c(self, x2c_type="sf")
-        elif self.x2c_type == "so":
-            self.ints_hcore = lambda: get_hcore_x2c(
-                self, x2c_type="so", snso_type=self.snso_type
-            )
+        if self.x2c_type == "so":
+            self.two_component = True
 
     def __repr__(self):
         return f"System(atoms={self.atoms}, basis_set={self.basis}, auxiliary_basis_set={self.auxiliary_basis})"
@@ -212,7 +222,10 @@ class System:
         NDArray
             Overlap integrals matrix.
         """
-        return ints.overlap(self.basis)
+        S = ints.overlap(self.basis)
+        if self.two_component:
+            S = block_diag_2x2(S)
+        return S
 
     def ints_hcore(self):
         """
@@ -223,9 +236,31 @@ class System:
         NDArray
             Core Hamiltonian integrals matrix.
         """
-        T = ints.kinetic(self.basis)
-        V = ints.nuclear(self.basis, self.atoms)
-        return T + V
+        if self.x2c_type == "sf":
+            H = get_hcore_x2c(self, x2c_type="sf")
+        elif self.x2c_type == "so":
+            H = get_hcore_x2c(self, x2c_type="so", snso_type=self.snso_type)
+        else:
+            T = ints.kinetic(self.basis)
+            V = ints.nuclear(self.basis, self.atoms)
+            H = T + V
+        if self.x2c_type in [None, "sf"] and self.two_component:
+            H = block_diag_2x2(H)
+        return H
+
+    def get_Xorth(self):
+        """
+        Return the orthonormalization matrix for the basis functions.
+
+        Returns
+        -------
+        NDArray
+            Orthonormalization matrix.
+        """
+        if self.two_component:
+            return block_diag_2x2(self.Xorth)
+        else:
+            return self.Xorth
 
     def nuclear_dipole(self, origin=None, unit="debye"):
         """
@@ -281,9 +316,8 @@ class System:
 
     def _get_orthonormal_transformation(self):
         """Orthonormalize the AO basis, catch and remove linear dependencies."""
-        S = self.ints_overlap()
+        S = ints.overlap(self.basis)
         e, _ = np.linalg.eigh(S)
-        self._eigh = sp.linalg.eigh
         self.nmo = self.nbf
         if min(e) / max(e) < self.linear_dep_trigger:
             logger.log_warning("Linear dependencies detected in overlap matrix S!")
@@ -338,6 +372,9 @@ class ModelSystem:
 
     def nuclear_repulsion_energy(self):
         return self.nuclear_repulsion
+
+    def get_Xorth(self):
+        return self.Xorth
 
 
 @dataclass
