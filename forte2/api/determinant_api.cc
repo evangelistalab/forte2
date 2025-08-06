@@ -29,6 +29,11 @@ void export_determinant_api(nb::module_& m) {
                          d->set_na(i, true);
                      } else if (str[i] == 'b') {
                          d->set_nb(i, true);
+                     } else if (str[i] == '0') {
+                         // do nothing, the orbital is empty
+                     } else {
+                         throw std::runtime_error(
+                             "Determinant: Invalid character in determinant string: |" + str + ">");
                      }
                  }
              })
