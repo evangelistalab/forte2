@@ -1,4 +1,5 @@
 import numpy as np
+import scipy as sp
 
 
 def sph_real_to_complex(l):
@@ -101,43 +102,112 @@ def clebsh_gordan_spin_half(l, msdouble, jdouble, mjdouble):
     return c
 
 
-def sph2spinor(l):
+def real_sph_to_j_adapted_per_l(l):
+    r"""
+    Transformation matrix that transforms real spherical harmonics 
+    of a given angular momentum to (j-adapted) spinor basis.
+
+    Parameters
+    ----------
+    l : int
+        The angular momentum quantum number.
+
+    Returns
+    -------
+    tuple[NDArray]
+        The transformation matrices for alpha and beta spinors.
+        Each matrix has shape (2*l+1, 4*l+2).
+
+    Notes
+    -----
+    The transformation is based on the Clebsch-Gordan coefficients for coupling
+    the orbital angular momentum l with spin 1/2 to form total angular momentum j = l + 1/2, l - 1/2.
+    l = 0 is a special case where the transformation is trivial.
+
+    .. math::
+        |j, m_j> = \sum_{m_l=-l}^l\sum_{m_s=-1/2}^{1/2} |l, m_l; 1/2, m_s\rangle\langle l, m_l; 1/2, m_s|j, m_j\rangle\\
+                = \sum_{m_l=-l}^l\sum_{m_s=-1/2}^{1/2} |l, m_l; 1/2, m_s\rangle * C^{j,m_j}_{l,m_l;1/2,m_s}.
+
+    """
     if l == 0:
+        # mj = -1/2: 'beta', mj = 1/2: 'alpha', hence the order
         return np.array((0.0, 1.0)).reshape(1, -1), np.array((1.0, 0.0)).reshape(1, -1)
-    else:
-        u1 = sph_real_to_complex(l)
-        nml = 2 * l + 1
-        nmj = 4 * l + 2
-        ua = np.zeros((nml, nmj), dtype=np.complex128)
-        ub = np.zeros((nml, nmj), dtype=np.complex128)
-        jdouble = nmj
-        mldouble_a = l + (-jdouble - 1) // 2
-        mldouble_b = l + (-jdouble + 1) // 2
-        for k, mjdouble in enumerate(range(-jdouble, jdouble + 1, 2)):
-            ua[:, k] = u1[:, mldouble_a] * clebsh_gordan_spin_half(
+
+    r2c = sph_real_to_complex(l)
+    nml = 2 * l + 1
+    nmj = 4 * l + 2
+    ua = np.zeros((nml, nmj), dtype=np.complex128)
+    ub = np.zeros((nml, nmj), dtype=np.complex128)
+
+    # 'ua/b' first transforms the real spherical AOs to complex spherical AOs
+    # (pure angular momentum eigenfunctions), i.e., R(r)*|l, m_l>.
+    # 'ua' then applies the Clebsch-Gordan coefficients for m_s=1/2,
+    # and 'ub' for m_s=-1/2.
+    # 'ua' and 'ub' have dimensions (2*l+1, 4*l+2):
+    # | j= l-1/2         j = l+1/2       |
+    # | (2l+1) * (2l)    (2l+1) * (2l+2) |
+
+    # Case 1: j = l-1/2, m_j goes from -(l-1/2) to l-1/2
+    # since m_l + m_s = m_j,
+    # so for alpha, the lowest ml is -(l-1/2)-1/2 = -l
+    # and for beta, the lowest ml is -(l-1/2)+1/2 = -l+1
+    # these correspond to the r2c[:, 0] and r2c[:, 1] columns
+    jdouble = l * 2 - 1
+    mldouble_a = 0
+    mldouble_b = 1
+    for k, mjdouble in enumerate(range(-jdouble, jdouble + 1, 2)):
+        ua[:, k] = r2c[:, mldouble_a] * clebsh_gordan_spin_half(l, 1, jdouble, mjdouble)
+        ub[:, k] = r2c[:, mldouble_b] * clebsh_gordan_spin_half(
+            l, -1, jdouble, mjdouble
+        )
+        mldouble_a += 1
+        mldouble_b += 1
+
+    # Case 2: j = l + 1/2
+    jdouble = l * 2 + 1
+    mldouble_a = -1
+    mldouble_b = 0
+    for k, mjdouble in enumerate(range(-jdouble, jdouble + 1, 2)):
+        if mldouble_a < 0:
+            # corresponds to m_l = -l-1 (invalid)
+            ua[:, l * 2 + k] = 0
+        else:
+            ua[:, l * 2 + k] = r2c[:, mldouble_a] * clebsh_gordan_spin_half(
                 l, 1, jdouble, mjdouble
             )
-            ub[:, k] = u1[:, mldouble_b] * clebsh_gordan_spin_half(
+        if mldouble_b >= 2 * l + 1:
+            # corresponds to m_l = l+1 (invalid)
+            ub[:, l * 2 + k] = 0
+        else:
+            ub[:, l * 2 + k] = r2c[:, mldouble_b] * clebsh_gordan_spin_half(
                 l, -1, jdouble, mjdouble
             )
-            mldouble_a += 1
-            mldouble_b += 1
-        jdouble = l * 2 + 1
-        mldouble_a = l + (-jdouble - 1) // 2
-        mldouble_b = l + (-jdouble + 1) // 2
-        for k, mjdouble in enumerate(range(-jdouble, jdouble + 1, 2)):
-            if mldouble_a < 0:
-                ua[:, l * 2 + k] = 0
-            else:
-                ua[:, l * 2 + k] = u1[:, mldouble_a] * clebsh_gordan_spin_half(
-                    l, 1, jdouble, mjdouble
-                )
-            if mldouble_b >= 2 * l + 1:
-                ub[:, l * 2 + k] = 0
-            else:
-                ub[:, l * 2 + k] = u1[:, mldouble_b] * clebsh_gordan_spin_half(
-                    l, -1, jdouble, mjdouble
-                )
-            mldouble_a += 1
-            mldouble_b += 1
+        mldouble_a += 1
+        mldouble_b += 1
     return ua, ub
+
+
+def real_sph_to_j_adapted(basis):
+    """
+    Transformation matrix that transforms real-spherical GTOs to spinor
+    GTOs for all basis functions
+    """
+    # get transformation matrices for each l
+    lmax = basis.max_l
+    ualst = []
+    ublst = []
+    for l in range(lmax + 1):
+        ua, ub = real_sph_to_j_adapted_per_l(l)
+        ualst.append(ua)
+        ublst.append(ub)
+
+    ca = []
+    cb = []
+    for ishell in range(basis.nshells):
+        l = basis[ishell].l
+        ua = ualst[l]
+        ub = ublst[l]
+        nctr = basis[ishell].ncontr
+        ca.extend([ua] * nctr)
+        cb.extend([ub] * nctr)
+    return sp.linalg.block_diag(*ca), sp.linalg.block_diag(*cb)
