@@ -13,6 +13,7 @@ dependencies:
     - boost
     - scikit-build-core>=0.10
     - pytest
+    - pytest-cov
     - conda-forge::libint
     - conda-forge::regex
     - conda-forge::basis_set_exchange
