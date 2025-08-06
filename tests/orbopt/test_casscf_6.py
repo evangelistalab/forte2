@@ -18,11 +18,11 @@ def test_casscf_6():
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-mc = MCOptimizer(
-    states=State(nel=10, multiplicity=1, ms=0.0),
-    core_orbitals=[0, 1, 2, 3],
-    active_orbitals=[4, 5],
-)(rhf)
+    mc = MCOptimizer(
+        states=State(nel=10, multiplicity=1, ms=0.0),
+        core_orbitals=[0, 1, 2, 3],
+        active_orbitals=[4, 5],
+    )(rhf)
     mc.run()
 
     assert mc.E == approx(emcscf)
