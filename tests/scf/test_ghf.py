@@ -72,3 +72,33 @@ def test_ghf_complex_perturbation():
     scf.run()
     assert scf.E == approx(e_uhf)
     assert scf.S2 == approx(s2_uhf)
+
+
+def test_j_adapted_ghf():
+    # The two bases should yield the same result
+    eref = -75.427367675651
+    s2ref = 0.7525463566917241
+    xyz = """
+    O 0 0 0
+    H 0 0 1.1"""
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        x2c_type="so",
+    )
+    scf = GHF(charge=0, j_adapt=False)(system)
+    scf.run()
+    assert scf.E == approx(eref)
+    assert scf.S2 == approx(s2ref)
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        x2c_type="so",
+    )
+    scf = GHF(charge=0, j_adapt=True)(system)
+    scf.run()
+    assert scf.E == approx(eref)
+    assert scf.S2 == approx(s2ref)

@@ -7,13 +7,13 @@ import scipy as sp
 
 from forte2 import ints
 from forte2.system.basis_utils import BasisInfo
-from forte2.system import System, ModelSystem
+from forte2.system import System, ModelSystem, compute_orthonormal_transformation
 from forte2.jkbuilder import FockBuilder
 from forte2.base_classes.mixins import MOsMixin, SystemMixin
 from forte2.helpers.matrix_functions import givens_rotation
 from forte2.helpers import logger, DIIS
 from .initial_guess import minao_initial_guess, core_initial_guess
-from forte2.symmetry import assign_mo_symmetries
+from forte2.symmetry import assign_mo_symmetries, real_sph_to_j_adapted
 
 
 @dataclass
@@ -93,11 +93,6 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         return self
 
     def _eigh(self, F):
-        Ftilde = self.Xorth.T @ F @ self.Xorth
-        e, c = np.linalg.eigh(Ftilde)
-        return e, self.Xorth @ c
-
-    def _eigh_spinor(self, F):
         Ftilde = self.Xorth.T @ F @ self.Xorth
         e, c = np.linalg.eigh(Ftilde)
         return e, self.Xorth @ c
@@ -756,15 +751,28 @@ class GHF(SCFBase):
     break_complex_symmetry : bool, optional, default=False
         If True, will add a small complex perturbation to the initial density matrix. This will both break
         the complex conjugation symmetry and Sz symmetry (allowing alpha-beta density matrix blocks to be nonzero)
+    j_adapt: bool, optinoal, default=False
+        If True, the j-adapted spinor AO basis will be used instead of the spherical AO basis.
     """
 
     guess_mix: bool = False  # only used if nel is even
     break_complex_symmetry: bool = False
+    j_adapt: bool = False
 
     _diis_update = RHF._diis_update
 
     def __call__(self, system):
         system.two_component = True
+        if self.j_adapt:
+            ua, ub = real_sph_to_j_adapted(system.basis)
+            self.Usph2j = np.vstack((ua, ub))
+            S = system.ints_overlap()
+            S_spinor = self.Usph2j.conj().T @ S @ self.Usph2j
+            self.Xorth_spinor, _ = compute_orthonormal_transformation(
+                S_spinor,
+                system.linear_dep_trigger,
+                system.ortho_thresh,
+            )
         self = super().__call__(system)
         return self
 
@@ -828,8 +836,19 @@ class GHF(SCFBase):
 
         return AO_grad
 
+    def _eigh(self, F):
+        Xorth = self.Xorth_spinor if self.j_adapt else self.Xorth
+        Ftilde = Xorth.conj().T @ F @ Xorth
+        e, c = np.linalg.eigh(Ftilde)
+        return e, Xorth @ c
+
     def _diagonalize_fock(self, F):
-        eps, C = self._eigh_spinor(F[0])
+        if self.j_adapt:
+            F_spinor = self.Usph2j.conj().T @ F[0] @ self.Usph2j
+            eps, C = self._eigh(F_spinor)
+            C = self.Usph2j @ C
+        else:
+            eps, C = self._eigh(F[0])
         return [eps], [C]
 
     def _spin(self, S):
