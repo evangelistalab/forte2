@@ -1,5 +1,5 @@
 import numpy as np
-import scipy.linalg
+import scipy as sp
 
 MACHEPS = 1e-14
 
@@ -84,7 +84,7 @@ def eigh_gen(A, B=None, remove_lindep=True, orth_tol=1e-7, orth_method="canonica
     B : NDArray
         The matrix B. If None, the identity matrix is used.
     remove_lindep : bool, optional, default=True
-        If True, perform orthogonalization to remove linear dependencies, else use ``scipy.linalg.eigh``.
+        If True, perform orthogonalization to remove linear dependencies, else use ``sp.linalg.eigh``.
     orth_tol : float, optional, default=1e-7
         Eigenvalue threshold below which values are treated as zero.
     orth_method : str, optional, default="canonical"
@@ -111,7 +111,7 @@ def eigh_gen(A, B=None, remove_lindep=True, orth_tol=1e-7, orth_method="canonica
         e, c = np.linalg.eigh(A)
         return e, X @ c
     else:
-        return scipy.linalg.eigh(A, B)
+        return sp.linalg.eigh(A, B)
 
 
 def givens_rotation(A, c, s, i, j, column=True):
@@ -170,7 +170,7 @@ def cholesky_wrapper(M, tol):
     """
     # dpstrf: Cholesky decomposition with complete pivoting
     # tol=-1 ~machine precision tolerance
-    C, piv, rank, info = scipy.linalg.lapack.dpstrf(M, tol=tol, lower=False)
+    C, piv, rank, info = sp.linalg.lapack.dpstrf(M, tol=tol, lower=False)
     if info < 0:
         raise ValueError(
             f"dpstrf failed with info={info}, indicating the {-info}-th argument had an illegal value."
@@ -182,3 +182,26 @@ def cholesky_wrapper(M, tol):
 
     B = np.triu(C)[:rank, inv_piv]
     return B
+
+def block_diag_2x2(M, complex=True):
+    """
+    Return a block-diagonal matrix with two copies of `M` on the diagonal.
+    Note this is **not** a function to block-diagonalize a matrix.
+
+    Parameters
+    ----------
+    M : NDArray
+        The matrix to convert, shape (n, n).
+    complex : bool, optional, default=True
+        If True, the output will be explicitly converted to complex type.
+
+    Returns
+    -------
+    NDArray
+        The block-diagonal matrix, shape (2n, 2n).
+    """
+    A = sp.linalg.block_diag(M, M)
+    if complex:
+        return A.astype(np.complex128)
+    else:
+        return A

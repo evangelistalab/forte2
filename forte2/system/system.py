@@ -4,7 +4,11 @@ from dataclasses import dataclass, field
 from forte2 import ints
 from forte2.system.atom_data import DEBYE_TO_AU, DEBYE_ANGSTROM_TO_AU
 from forte2.helpers import logger
-from forte2.helpers.matrix_functions import invsqrt_matrix, canonical_orth
+from forte2.helpers.matrix_functions import (
+    invsqrt_matrix,
+    canonical_orth,
+    block_diag_2x2,
+)
 from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
 from .parse_geometry import parse_geometry, _GeometryHelper
@@ -220,7 +224,7 @@ class System:
         """
         S = ints.overlap(self.basis)
         if self.two_component:
-            S = sp.linalg.block_diag(S, S).astype(complex)
+            S = block_diag_2x2(S)
         return S
 
     def ints_hcore(self):
@@ -241,7 +245,7 @@ class System:
             V = ints.nuclear(self.basis, self.atoms)
             H = T + V
         if self.x2c_type in [None, "sf"] and self.two_component:
-            H = sp.linalg.block_diag(H, H).astype(complex)
+            H = block_diag_2x2(H)
         return H
 
     def get_Xorth(self):
@@ -254,7 +258,7 @@ class System:
             Orthonormalization matrix.
         """
         if self.two_component:
-            return sp.linalg.block_diag(self.Xorth, self.Xorth).astype(complex)
+            return block_diag_2x2(self.Xorth)
         else:
             return self.Xorth
 

@@ -4,6 +4,7 @@ from .matrix_functions import (
     eigh_gen,
     cholesky_wrapper,
     givens_rotation,
+    block_diag_2x2,
 )
 from .diis import DIIS
 from . import logger  # setup logging configuration

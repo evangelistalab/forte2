@@ -98,7 +98,6 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         return e, self.Xorth @ c
 
     def _eigh_spinor(self, F):
-        # Xorth = sp.linalg.block_diag(self.Xorth, self.Xorth)
         Ftilde = self.Xorth.T @ F @ self.Xorth
         e, c = np.linalg.eigh(Ftilde)
         return e, self.Xorth @ c
@@ -913,17 +912,20 @@ def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4, twocomp=False):
         return [Ca, Cb]
 
 
-def convert_coeff_1c_to_2c(system, C):
+def convert_coeff_spatial_to_spinor(system, C, complex=True):
     """
-    Convert one-component MO coefficients to two-component
+    Convert spatial orbital MO coefficiensts to spinor(bital) MO coefficients
     """
+    dtype = np.complex128 if complex else np.float64
     nbf = system.nbf
-    C_2c = np.zeros((nbf * 2,) * 2, dtype=complex)
+    C_2c = np.zeros((nbf * 2,) * 2, dtype=dtype)
     assert isinstance(C, list)
     if len(C) == 2:
         # UHF
         assert C[0].shape[0] == nbf
         assert C[1].shape[0] == nbf
+        # |a^0_{alfa AO} b^0_{alfa AO} ... |
+        # |a^0_{beta AO} b^0_{beta AO} ... |
         C_2c[:nbf, ::2] = C[0]
         C_2c[nbf:, 1::2] = C[1]
     elif len(C) == 1:
