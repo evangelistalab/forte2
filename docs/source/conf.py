@@ -2,7 +2,7 @@ import os
 import sys
 
 # Add the project root to the system path
-sys.path.insert(0, os.path.abspath("../"))
+sys.path.insert(0, os.path.abspath("../forte2"))
 
 project = "Forte2"
 copyright = "2025, Evangelista Lab"
