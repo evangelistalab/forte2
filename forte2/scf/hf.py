@@ -755,6 +755,7 @@ class GHF(SCFBase):
         If True, the j-adapted spinor AO basis will be used instead of the spherical AO basis.
     """
 
+    ms_guess: float = None
     guess_mix: bool = False  # only used if nel is even
     break_complex_symmetry: bool = False
     j_adapt: bool = False
@@ -774,13 +775,43 @@ class GHF(SCFBase):
                 system.ortho_thresh,
             )
         self = super().__call__(system)
+        self._parse_state()
         return self
+
+    def _parse_state(self):
+        if self.ms_guess is None:
+            # default to low-spin state
+            self.ms_guess = (self.nel % 2) / 2
+        assert np.isclose(
+            int(round(self.ms_guess * 2)), self.ms_guess * 2
+        ), "ms_guess must be a multiple of 0.5."
+        self.twicems_guess = int(round(self.ms_guess * 2))
+        if self.nel % 2 != self.twicems_guess % 2:
+            raise ValueError(
+                f"{self.nel} electrons is incompatible with ms_guess={self.ms_guess}!"
+            )
+        self.na_guess = int(round(self.nel + self.twicems_guess) / 2)
+        self.nb_guess = int(round(self.nel - self.twicems_guess) / 2)
+        assert (
+            self.nel == self.na_guess + self.nb_guess
+        ), f"Number of electrons {self.nel} does not match na + nb = {self.na_guess} + {self.nb_guess}."
+        assert (
+            self.na_guess >= 0 and self.nb_guess >= 0
+        ), f"{self._scf_type} requires non-negative number of alpha and beta electrons."
 
     def _build_fock(self, H, fock_builder, S):
         Jaa, Jbb = fock_builder.build_J([self.D[0], self.D[3]])
         nbf = Jaa.shape[0]
         if self.iter == 0 and self.break_complex_symmetry:
             Kaa, Kab, Kba, Kbb = fock_builder.build_K_density(self.D)
+        elif self.iter == 0:
+            # Apply na/nb_guess
+            mo_a, mo_b = self._guess_ms(self.C[0])
+            occ = list(mo_a[: self.na_guess]) + list(mo_b[: self.nb_guess])
+            occ = sorted(occ)
+            Kaa, Kab, Kba, Kbb = fock_builder.build_K(
+                [self.C[0][:nbf, occ], self.C[0][nbf:, occ]], cross=True
+            )
         else:
             Kaa, Kab, Kba, Kbb = fock_builder.build_K(
                 [self.C[0][:nbf, : self.nel], self.C[0][nbf:, : self.nel]], cross=True
@@ -797,11 +828,19 @@ class GHF(SCFBase):
 
     def _build_density_matrix(self):
         # D = Cocc Cocc^+
-        D = np.einsum(
-            "mi,ni->mn",
-            self.C[0][:, : self.nel],
-            self.C[0][:, : self.nel].conj(),
-        )
+        if self.iter == 0:
+            # apply na/nb_guess
+            occ_a, occ_b = self._guess_ms(self.C[0])
+            Ca = self.C[0][:, occ_a[: self.na_guess]]
+            Cb = self.C[0][:, occ_b[: self.nb_guess]]
+            D = np.einsum("mi,ni->mn", Ca, Ca.conj())
+            D += np.einsum("mi,ni->mn", Cb, Cb.conj())
+        else:
+            D = np.einsum(
+                "mi,ni->mn",
+                self.C[0][:, : self.nel],
+                self.C[0][:, : self.nel].conj(),
+            )
         nbf = self.nbf
         Daa = D[:nbf, :nbf]
         Dab = D[:nbf, nbf:]
@@ -824,7 +863,7 @@ class GHF(SCFBase):
 
     def _initial_guess(self, H, guess_type="minao"):
         C = RHF._initial_guess(self, H, guess_type)[0]
-        if self.nel % 2 == 0 and self.guess_mix:
+        if self.twicems_guess % 2 == 0 and self.guess_mix:
             C = guess_mix(C, self.nel, twocomp=True)
         return [C]
 
@@ -916,6 +955,20 @@ class GHF(SCFBase):
     def _assign_orbital_symmetries(self):
         S = self._get_overlap()
         self.orbital_symmetries = assign_mo_symmetries(self.system, S, self.C[0])
+
+    def _guess_ms(self, C):
+        nmo = C.shape[1]
+        nbf = C.shape[0] // 2
+        mo_a = []
+        mo_b = []
+        for i in range(nmo):
+            norm_a = np.linalg.norm(C[:nbf, i])
+            norm_b = np.linalg.norm(C[nbf:, i])
+            if norm_a >= norm_b:
+                mo_a.append(i)
+            else:
+                mo_b.append(i)
+        return np.array(mo_a), np.array(mo_b)
 
 
 def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4, twocomp=False):

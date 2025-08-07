@@ -36,7 +36,7 @@ class IAO:
 
     def _make_iao(self, C):
         basis = self.system.basis
-        nbf = self.system.nbf
+        nbf = C.shape[0]
         minao_basis = self.system.minao_basis
         if minao_basis is None:
             raise ValueError("No minao_basis found in the system.")
@@ -44,6 +44,8 @@ class IAO:
         if self.j_adapt:
             U1a, U1b = real_sph_to_j_adapted(basis)
             U2a, U2b = real_sph_to_j_adapted(minao_basis)
+            U1 = np.vstack((U1a, U1b))
+            C = U1.T.conj() @ C
 
         # various overlap matrices, see appendix C of JCTC 2013, 9, 4834-4843
         self.S1 = ints.overlap(basis, basis)

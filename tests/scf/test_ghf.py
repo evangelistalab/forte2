@@ -1,4 +1,4 @@
-from forte2 import System, GHF, UHF
+from forte2 import System, GHF, UHF, RHF
 from forte2.helpers.comparisons import approx
 
 
@@ -102,3 +102,19 @@ def test_j_adapted_ghf():
     scf.run()
     assert scf.E == approx(eref)
     assert scf.S2 == approx(s2ref)
+
+
+def test_equivalence_to_high_spin_uhf():
+    euhf = -37.686541301113
+    s2uhf = 2.0063122057868483
+    xyz = """
+    C 0 0 0"""
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+    )
+    scf = GHF(charge=0, ms_guess=1.0)(system)
+    scf.run()
+    assert scf.E == approx(euhf)
+    assert scf.S2 == approx(s2uhf)
