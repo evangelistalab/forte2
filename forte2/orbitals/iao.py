@@ -3,6 +3,7 @@ import numpy as np
 from forte2 import ints
 from forte2.system import System
 from forte2.helpers import invsqrt_matrix, logger
+from forte2.symmetry import real_sph_to_j_adapted
 
 
 class IAO:
@@ -26,9 +27,10 @@ class IAO:
     JCTC 2013, 9, 4834-4843
     """
 
-    def __init__(self, system: System, C_occ: np.ndarray):
+    def __init__(self, system: System, C_occ: np.ndarray, j_adapt=False):
         self.system = system
         self.C_occ = C_occ.copy()
+        self.j_adapt = j_adapt
         self.C_iao = self._make_iao(self.C_occ)
         self.nocc = C_occ.shape[1]
 
@@ -39,28 +41,43 @@ class IAO:
         if minao_basis is None:
             raise ValueError("No minao_basis found in the system.")
 
+        if self.j_adapt:
+            U1a, U1b = real_sph_to_j_adapted(basis)
+            U2a, U2b = real_sph_to_j_adapted(minao_basis)
+
         # various overlap matrices, see appendix C of JCTC 2013, 9, 4834-4843
         self.S1 = ints.overlap(basis, basis)
         self.S12 = ints.overlap(basis, minao_basis)
         self.S2 = ints.overlap(minao_basis, minao_basis)
 
-        S1_inv = np.linalg.pinv(self.S1)
-        S2_inv = np.linalg.pinv(self.S2)
+        if self.j_adapt:
+            _S1 = U1a.T.conj() @ self.S1 @ U1a
+            _S1 += U1b.T.conj() @ self.S1 @ U1b
+            self.S1 = _S1
+            _S2 = U2a.T.conj() @ self.S2 @ U2a
+            _S2 += U2b.T.conj() @ self.S2 @ U2b
+            self.S2 = _S2
+            _S12 = U1a.T.conj() @ self.S12 @ U2a
+            _S12 += U1b.T.conj() @ self.S12 @ U2b
+            self.S12 = _S12
+
+        S1_inv = np.linalg.pinv(self.S1, hermitian=True)
+        S2_inv = np.linalg.pinv(self.S2, hermitian=True)
 
         # projector onto the large basis
         P12 = S1_inv @ self.S12
         # projector onto the minao basis
-        P21 = S2_inv @ self.S12.T
+        P21 = S2_inv @ self.S12.T.conj()
         # downproject and upproject the occupied MOs to get a set of depolarized MOs
         # cf. eq 1
         C_depolarized = P12 @ P21 @ C
         # orthonormal set of depolarized MOs
         Ct = _orthogonalize(C_depolarized, self.S1)
 
-        C_polarized_occ = C @ C.T @ self.S1 @ Ct @ Ct.T @ self.S1 @ P12
+        C_polarized_occ = C @ C.T.conj() @ self.S1 @ Ct @ Ct.T.conj() @ self.S1 @ P12
         C_polarized_vir = (
-            (np.eye(nbf) - C @ C.T @ self.S1)
-            @ (np.eye(nbf) - Ct @ Ct.T @ self.S1)
+            (np.eye(nbf) - C @ C.T.conj() @ self.S1)
+            @ (np.eye(nbf) - Ct @ Ct.T.conj() @ self.S1)
             @ P12
         )
 
@@ -87,6 +104,8 @@ class IAO:
         NDArray
             The spin-free 1-particle density matrix in the IAO basis.
         """
+        if self.j_adapt:
+            raise NotImplementedError
         S = self.system.ints_overlap()
         # contracting two AO indices requires an intervening overlap matrix
         # due to the non-orthogonality of the AOs
@@ -101,7 +120,7 @@ def _orthogonalize(C, S):
     See appendix C of JCTC 2013, 9, 4834-4843
     """
 
-    X = C.T @ S @ C
+    X = C.T.conj() @ S @ C
     X_invsqrt = invsqrt_matrix(X)
     return C @ X_invsqrt
 

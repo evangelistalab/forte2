@@ -156,7 +156,7 @@ class BasisInfo:
     Attributes
     ----------
     basis_labels : list[_AOLabel]
-        A data structure with the following attributes:
+        `_AOLabel` is a data structure with the following attributes:
         - iatom: int, the index of the atom in the system.
         - Z: int, the atomic number of the atom.
         - Zidx: int, the index of the atom in the system (1-based).
@@ -164,7 +164,15 @@ class BasisInfo:
         - l: int, the angular momentum quantum number.
         - ml: int, the magnetic quantum number m_l.
         - m: int, the index of the basis function within the shell.
-
+    basis_labels_spinor : list[_SpinorAOLabel]
+        `_SpinorAOLabel` is a data structure with the following attributes:
+        - iatom: int, the index of the atom in the system.
+        - Z: int, the atomic number of the atom.
+        - Zidx: int, the index of the atom in the system (1-based).
+        - n: int, the principal quantum number for the shell.
+        - l: int, the angular momentum quantum number.
+        - jdouble: int, the total angular momentum quantum number (2*j).
+        - mjdouble: int, the magnetic quantum number (2*m_j).
     atom_to_aos : dict[int : dict[int : list[int]]]
         A dict of dict where e.g., ``atom_to_aos[6][2]`` gives a list of absolute indices of all AOs on C2.
     """
