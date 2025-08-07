@@ -1,3 +1,5 @@
 ipykernel
 nbsphinx
 pydata-sphinx-theme
+numpydoc
+sphinx_autodoc_typehints
