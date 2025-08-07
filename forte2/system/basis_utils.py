@@ -19,6 +19,8 @@ We follow the `Libint2 convention <https://github.com/evaleev/libint/wiki/using-
 """
 
 AM_LABELS = ["s", "p", "d", "f", "g", "h", "i", "j", "k", "l", "m", "n"]
+MAX_L = len(AM_LABELS) - 1
+
 
 def ml_from_shell_index_cca(l, idx):
     """
@@ -38,7 +40,7 @@ def ml_from_shell_index_cca(l, idx):
     int:
         Magnetic quantum number m_l.
     """
-    if idx < 0 or idx > 2*l:
+    if idx < 0 or idx > 2 * l:
         raise ValueError("The shell index must be in within 0 and 2*l")
     return idx - l
 
@@ -75,6 +77,35 @@ def get_shell_label(l, idx):
         return SPH_LABELS[l][idx]
     else:
         return f"{AM_LABELS[l]}({idx})"
+
+
+def get_spinor_label(l, jdouble, mjdouble):
+    """
+    Get the label for a shell based on its angular momentum quantum number (l),
+    total angular momentum (jdouble/2), and magnetic quantum number (mjdouble/2).
+
+    Parameters
+    ----------
+    l : int
+        Angular momentum quantum number.
+    jdouble : int
+        Total angular momentum quantum number (2*j).
+    mjdouble : int
+        Magnetic quantum number (2*mj).
+
+    Returns
+    -------
+    str
+        The label for the shell.
+    """
+
+    if l < 0 or jdouble < 0:
+        raise ValueError(f"Invalid angular momentum index: {l} or jdouble: {jdouble}")
+
+    if l > len(AM_LABELS):
+        raise ValueError(f"Angular momentum {l} exceeds defined labels.")
+
+    return f"{AM_LABELS[l]}{jdouble}/2, {mjdouble:+}/2"
 
 
 def shell_label_to_lm(shell_label):
@@ -156,13 +187,31 @@ class BasisInfo:
             return f"{self.abs_idx:<5} {self.iatom:<5} {Z_TO_ATOM_SYMBOL[self.Z]+str(self.Zidx):<5} {self.label():<10}"
 
         def label(self):
-            return str(self.n)+get_shell_label(self.l,self.m)
+            return str(self.n) + get_shell_label(self.l, self.m)
+
+    @dataclass
+    class _SpinorAOLabel:
+        abs_idx: int
+        iatom: int
+        Z: int
+        Zidx: int
+        n: int
+        l: int
+        jdouble: int
+        mjdouble: int
+
+        def __str__(self):
+            return f"{self.abs_idx:<5} {self.iatom:<5} {Z_TO_ATOM_SYMBOL[self.Z]+str(self.Zidx):<5} {self.label():<10}"
+
+        def label(self):
+            return str(self.n) + get_spinor_label(self.l, self.jdouble, self.mjdouble)
 
     def __post_init__(self):
         self.basis_labels = self._label_basis_functions()
+        self.basis_labels_spinor = self._label_basis_functions(spinor=True)
         self.atom_to_aos = self._make_atom_to_ao_map()
 
-    def _label_basis_functions(self):
+    def _label_basis_functions(self, spinor=False):
         basis_labels = []
 
         shell_first_and_size = self.basis.shell_first_and_size
@@ -189,16 +238,38 @@ class BasisInfo:
 
         ibasis = 0
         for iatom in range(self.system.natoms):
-            n_count = list(range(1, 11))
+            n_count = list(range(1, MAX_L + 2))
             Z, Zidx = center_to_atom_label[iatom]
             for ishell in center_to_shell[iatom]:
                 l = self.basis[ishell].l
-                size = self.basis[ishell].size
-                for i in range(size):
-                    ml = ml_from_shell_index_cca(l, i)
-                    label = self._AOLabel(ibasis, iatom, Z, Zidx, n_count[l], l, ml, i)
-                    basis_labels.append(label)
-                    ibasis += 1
+                if spinor:
+                    # j = l-0.5 case
+                    mjdouble = -2 * l + 1
+                    for _ in range(2 * l):
+                        label = self._SpinorAOLabel(
+                            ibasis, iatom, Z, Zidx, n_count[l], l, 2 * l - 1, mjdouble
+                        )
+                        basis_labels.append(label)
+                        ibasis += 1
+                        mjdouble += 2
+                    # j = l+0.5 case
+                    mjdouble = -2 * l - 1
+                    for _ in range(2 * l + 2):
+                        label = self._SpinorAOLabel(
+                            ibasis, iatom, Z, Zidx, n_count[l], l, 2 * l + 1, mjdouble
+                        )
+                        basis_labels.append(label)
+                        ibasis += 1
+                        mjdouble += 2
+                else:
+                    size = self.basis[ishell].size
+                    for i in range(size):
+                        ml = ml_from_shell_index_cca(l, i)
+                        label = self._AOLabel(
+                            ibasis, iatom, Z, Zidx, n_count[l], l, ml, i
+                        )
+                        basis_labels.append(label)
+                        ibasis += 1
                 n_count[l] += 1
 
         return basis_labels
@@ -213,15 +284,16 @@ class BasisInfo:
             atom_to_aos[label.Z][label.Zidx].append(idx)
         return atom_to_aos
 
-    def print_basis_labels(self):
+    def print_basis_labels(self, spinor=False):
         """
         Pretty print the basis labels.
         """
+        labels = self.basis_labels_spinor if spinor else self.basis_labels
         width = 30
         logger.log_info1("=" * width)
         logger.log_info1(f"{'AO':<5} {'Atom':<5} {'Label':<5} {'AO label':<10}")
         logger.log_info1("-" * width)
-        for label in self.basis_labels:
+        for label in labels:
             logger.log_info1(label)
         logger.log_info1("=" * width)
 
@@ -238,9 +310,7 @@ class BasisInfo:
                 label = self.basis_labels[c_argsort[iao]]
                 abs_ao_idx = "(" + str(label.abs_idx) + ")"
                 atom_label = f"{Z_TO_ATOM_SYMBOL[label.Z].capitalize()}{label.Zidx}"
-                shell_label = str(label.n) + get_shell_label(
-                    label.l, label.m
-                )
+                shell_label = str(label.n) + get_shell_label(label.l, label.m)
                 ao_coeff = f"{c[c_argsort[iao]]:<+6.4f}"
                 ao_label = f"{atom_label} {shell_label} {abs_ao_idx}"
                 lc = ao_label + ": " + ao_coeff
