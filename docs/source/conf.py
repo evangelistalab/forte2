@@ -16,7 +16,7 @@ extensions = [
     "numpydoc",  # for NumPy style docstrings
     "sphinx_autodoc_typehints",  # for type hints
 ]
-autoapi_dirs = ['../../forte2']
+autoapi_dirs = ["../../forte2"]
 
 html_theme = "pydata_sphinx_theme"
 html_theme_options = {
@@ -31,6 +31,15 @@ html_theme_options = {
     ],
 }
 
+autoapi_options = [
+    "members",
+    # "undoc-members",
+    # "private-members",
+    "show-inheritance",
+    # "show-module-summary",
+    # "special-members",
+    # "imported-members",
+]
 # autodoc_default_options = {
 #     "members": True,
 #     "private-members": False,

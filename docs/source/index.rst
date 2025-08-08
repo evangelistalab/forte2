@@ -7,11 +7,3 @@ Forte2 documentation
 
    guide/index
    contributor
-   
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
