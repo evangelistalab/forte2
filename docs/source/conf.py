@@ -1,9 +1,3 @@
-import os
-import sys
-
-# Add the project root to the system path
-sys.path.insert(0, os.path.abspath("../forte2"))
-
 project = "Forte2"
 copyright = "2025, Evangelista Lab"
 author = "Evangelista Lab"
@@ -40,12 +34,7 @@ autoapi_options = [
     # "special-members",
     # "imported-members",
 ]
+
 autoapi_ignore = ["*/fetch_basis.py", "*/fetch_ccrepo.py"]
-# autodoc_default_options = {
-#     "members": True,
-#     "private-members": False,
-#     "member-order": "bysource",
-#     "show-inheritance": True,
-# }
 
 numpydoc_show_class_members = False
