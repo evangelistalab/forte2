@@ -10,11 +10,13 @@ author = "Evangelista Lab"
 release = "0.0.1"
 
 extensions = [
+    "autoapi.extension",
     "sphinx.ext.autodoc",
     "sphinx.ext.viewcode",
     "numpydoc",  # for NumPy style docstrings
     "sphinx_autodoc_typehints",  # for type hints
 ]
+autoapi_dirs = ['../../forte2']
 
 html_theme = "pydata_sphinx_theme"
 html_theme_options = {
@@ -29,11 +31,11 @@ html_theme_options = {
     ],
 }
 
-autodoc_default_options = {
-    "members": True,
-    "private-members": False,
-    "member-order": "bysource",
-    "show-inheritance": True,
-}
+# autodoc_default_options = {
+#     "members": True,
+#     "private-members": False,
+#     "member-order": "bysource",
+#     "show-inheritance": True,
+# }
 
 numpydoc_show_class_members = False
