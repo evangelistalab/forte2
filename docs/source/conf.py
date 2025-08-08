@@ -33,13 +33,14 @@ html_theme_options = {
 
 autoapi_options = [
     "members",
-    # "undoc-members",
+    "undoc-members",
     # "private-members",
     "show-inheritance",
     # "show-module-summary",
     # "special-members",
     # "imported-members",
 ]
+autoapi_ignore = ["*/fetch_basis.py", "*/fetch_ccrepo.py"]
 # autodoc_default_options = {
 #     "members": True,
 #     "private-members": False,
