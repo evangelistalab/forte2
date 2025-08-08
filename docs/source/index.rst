@@ -6,14 +6,4 @@ Forte2 documentation
    :caption: Contents:
 
    guide/index
-   api_python
-   api_cpp
    contributor
-   
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`

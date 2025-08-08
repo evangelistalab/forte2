@@ -3,3 +3,4 @@ nbsphinx
 pydata-sphinx-theme
 numpydoc
 sphinx_autodoc_typehints
+sphinx-autoapi
