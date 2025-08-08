@@ -444,7 +444,10 @@ class UHF(SCFBase):
 
     def _build_ao_grad(self, S, F):
         AO_grad = np.hstack(
-            [(f @ d @ S - S @ d @ f).flatten() for d, f in zip(self.D, F)]
+            [
+                (self.Xorth.T @ (f @ d @ S - S @ d @ f) @ self.Xorth).flatten()
+                for d, f in zip(self.D, F)
+            ]
         )
         return AO_grad
 
@@ -609,7 +612,9 @@ class ROHF(SCFBase):
 
     def _build_ao_grad(self, S, F):
         Deff = 0.5 * (self.D[0] + self.D[1])
-        return F @ Deff @ S - S @ Deff @ F
+        ao_grad = F @ Deff @ S - S @ Deff @ F
+        ao_grad = self.Xorth.T @ ao_grad @ self.Xorth
+        return ao_grad
 
     def _get_occupation(self):
         self.ndocc = min(self.na, self.nb)
@@ -872,6 +877,7 @@ class GHF(SCFBase):
         D_spinor = np.block([[Daa, Dab], [Dba, Dbb]])
         sdf = S @ D_spinor @ F[0]
         AO_grad = sdf.conj().T - sdf
+        AO_grad = self.Xorth.T @ AO_grad @ self.Xorth
 
         return AO_grad
 
