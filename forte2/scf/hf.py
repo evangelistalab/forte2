@@ -864,7 +864,7 @@ class GHF(SCFBase):
     def _initial_guess(self, H, guess_type="minao"):
         C = RHF._initial_guess(self, H, guess_type)[0]
         if self.twicems_guess % 2 == 0 and self.guess_mix:
-            C = guess_mix(C, self.nel, twocomp=True)
+            C = guess_mix(C, self.nel - 1, twocomp=True)
         return [C]
 
     def _build_ao_grad(self, S, F):
@@ -975,7 +975,9 @@ def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4, twocomp=False):
     cosq = np.cos(mixing_parameter)
     sinq = np.sin(mixing_parameter)
     if twocomp:
+        # alpha channel
         C = givens_rotation(C, cosq, sinq, homo_idx - 1, homo_idx + 1)
+        # beta channel
         C = givens_rotation(C, cosq, -sinq, homo_idx, homo_idx + 2)
         return C
     else:
