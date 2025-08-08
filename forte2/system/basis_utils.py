@@ -305,22 +305,52 @@ class BasisInfo:
             logger.log_info1(label)
         logger.log_info1("=" * width)
 
-    def print_ao_composition(self, coeff, idx, nprint=5, thres=1e-3):
+    def print_ao_composition(self, coeff, idx, nprint=5, thres=1e-3, spinorbital=False):
         logger.log_info1(f"{'# MO':<5} {'(AO) label : coeff':40}")
+        nbf = coeff.shape[0] // 2 if spinorbital else coeff.shape[0]
         nprint_ = min(nprint, len(self.basis_labels))
         for imo in idx:
             c = coeff[:, imo]
             c_argsort = np.argsort(np.abs(c))[::-1][:nprint_]
             string = f"{imo:<5d}"
             for iao in range(nprint_):
+                if spinorbital:
+                    ao_idx = c_argsort[iao] % nbf
+                    spin = " a" if c_argsort[iao] < nbf else " b"
+                else:
+                    ao_idx = c_argsort[iao]
+                    spin = ""
                 if np.abs(c[c_argsort[iao]]) < thres:
                     continue
-                label = self.basis_labels[c_argsort[iao]]
+                label = self.basis_labels[ao_idx]
                 abs_ao_idx = "(" + str(label.abs_idx) + ")"
                 atom_label = f"{Z_TO_ATOM_SYMBOL[label.Z].capitalize()}{label.Zidx}"
                 shell_label = str(label.n) + get_shell_label(label.l, label.m)
                 ao_coeff = f"{c[c_argsort[iao]]:<+6.4f}"
-                ao_label = f"{atom_label} {shell_label} {abs_ao_idx}"
+                ao_label = f"{atom_label} {shell_label} {abs_ao_idx}{spin}"
+                lc = ao_label + ": " + ao_coeff
+                string += f" {lc:<25}"
+            logger.log_info1(string)
+
+    def print_spinor_composition(self, spinor_coeff, idx, nprint=5, thres=1e-3):
+        logger.log_info1(f"{'# MO':<5} {'Spinor label : coeff':40}")
+        nprint_ = min(nprint, len(self.basis_labels_spinor))
+        for imo in idx:
+            c = spinor_coeff[:, imo]
+            c_argsort = np.argsort(np.abs(c))[::-1][:nprint_]
+            string = f"{imo:<5d}"
+            for iao in range(nprint_):
+                ao_idx = c_argsort[iao]
+                if np.abs(c[c_argsort[iao]]) < thres:
+                    continue
+                label = self.basis_labels_spinor[ao_idx]
+                abs_ao_idx = "(" + str(label.abs_idx) + ")"
+                atom_label = f"{Z_TO_ATOM_SYMBOL[label.Z].capitalize()}{label.Zidx}"
+                spinor_label = str(label.n) + get_spinor_label(
+                    label.l, label.jdouble, label.mjdouble
+                )
+                ao_coeff = f"{c[c_argsort[iao]]:<+6.4f}"
+                ao_label = f"{atom_label} {spinor_label} {abs_ao_idx}"
                 lc = ao_label + ": " + ao_coeff
                 string += f" {lc:<25}"
             logger.log_info1(string)

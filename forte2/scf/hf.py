@@ -246,6 +246,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         self._get_occupation()
         self._assign_orbital_symmetries()
         self._print_orbital_energies()
+        self._print_ao_composition()
 
     @abstractmethod
     def _build_fock(self, H, fock_builder, S): ...
@@ -282,6 +283,9 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
 
     @abstractmethod
     def _apply_level_shift(self, F, S): ...
+
+    @abstractmethod
+    def _print_ao_composition(self): ...
 
 
 @dataclass
@@ -387,6 +391,7 @@ class RHF(SCFBase):
 
     def _print_ao_composition(self):
         if isinstance(self.system, ModelSystem):
+            # send a PR if you want this changed
             return
         basis_info = BasisInfo(self.system, self.system.basis)
         logger.log_info1("\nAO Composition of MOs (HOMO-5 to HOMO):")
@@ -571,13 +576,35 @@ class UHF(SCFBase):
             idx = nbocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx+1:<4d} ({self.orbital_symmetries_beta[idx]}) {self.eps[1][i]:<12.6f} "
+            string += f"{idx+1:<4d} ({self.orbital_symmetries_beta[idx]}) {self.eps[1][idx]:<12.6f} "
         logger.log_info1(string)
 
     def _assign_orbital_symmetries(self):
         S = self._get_overlap()
         self.orbital_symmetries_alfa = assign_mo_symmetries(self.system, S, self.C[0])
         self.orbital_symmetries_beta = assign_mo_symmetries(self.system, S, self.C[1])
+
+    def _print_ao_composition(self):
+        if isinstance(self.system, ModelSystem):
+            # send a PR if you want this changed
+            return
+        basis_info = BasisInfo(self.system, self.system.basis)
+        logger.log_info1("\nAO Composition of Alpha MOs (HOMO-5 to HOMO):")
+        basis_info.print_ao_composition(
+            self.C[0], list(range(max(self.na - 5, 0), self.na))
+        )
+        logger.log_info1("\nAO Composition of Alpha MOs (LUMO to LUMO+5):")
+        basis_info.print_ao_composition(
+            self.C[0], list(range(self.na, min(self.na + 5, self.nmo)))
+        )
+        logger.log_info1("\nAO Composition of Beta MOs (HOMO-5 to HOMO):")
+        basis_info.print_ao_composition(
+            self.C[1], list(range(max(self.na - 5, 0), self.na))
+        )
+        logger.log_info1("\nAO Composition of Beta MOs (LUMO to LUMO+5):")
+        basis_info.print_ao_composition(
+            self.C[1], list(range(self.na, min(self.na + 5, self.nmo)))
+        )
 
 
 @dataclass
@@ -695,6 +722,29 @@ class ROHF(SCFBase):
             string += f"{idx+1:<4d} ({self.orbital_symmetries[idx]}) {self.eps[0][idx]:<12.6f} "
         logger.log_info1(string)
 
+    def _print_ao_composition(self):
+        if isinstance(self.system, ModelSystem):
+            # send a PR if you want this changed
+            return
+        basis_info = BasisInfo(self.system, self.system.basis)
+        logger.log_info1("\nAO Composition of doubly occupied MOs (HOMO-3 to HOMO):")
+        basis_info.print_ao_composition(
+            self.C[0], list(range(max(self.ndocc - 3, 0), self.ndocc))
+        )
+        logger.log_info1("\nAO Composition of singly occupied MOs:")
+        basis_info.print_ao_composition(
+            self.C[0], list(range(self.ndocc, self.ndocc + self.nsocc))
+        )
+        logger.log_info1("\nAO Composition of MOs (LUMO to LUMO+5):")
+        basis_info.print_ao_composition(
+            self.C[0],
+            list(
+                range(
+                    self.ndocc + self.nsocc, min(self.ndocc + self.nsocc + 5, self.nmo)
+                )
+            ),
+        )
+
 
 @dataclass
 class CUHF(SCFBase):
@@ -726,6 +776,7 @@ class CUHF(SCFBase):
     _get_occupation = UHF._get_occupation
     _print_orbital_energies = UHF._print_orbital_energies
     _assign_orbital_symmetries = UHF._assign_orbital_symmetries
+    _print_orbital_energies = UHF._print_orbital_energies
 
     def __call__(self, system):
         system.two_component = False
@@ -1019,6 +1070,36 @@ class GHF(SCFBase):
             else:
                 mo_b.append(i)
         return np.array(mo_a), np.array(mo_b)
+
+    def _print_ao_composition(self):
+        if isinstance(self.system, ModelSystem):
+            # send a PR if you want this changed
+            return
+        basis_info = BasisInfo(self.system, self.system.basis)
+        if self.system.x2c_type == "so":
+            logger.log_info1("\nSpinor Composition of MOs (HOMO-6 to HOMO):")
+            if not hasattr(self, "Usph2j"):
+                ua, ub = real_sph_to_j_adapted(self.system.basis)
+                self.Usph2j = np.vstack((ua, ub))
+            C = self.Usph2j.conj().T @ self.C[0]
+            basis_info.print_spinor_composition(
+                C, list(range(max(self.nel - 6, 0), self.nel))
+            )
+            logger.log_info1("\nSpinor Composition of MOs (LUMO to LUMO+6):")
+            basis_info.print_spinor_composition(
+                C, list(range(self.nel, min(self.nel + 6, self.nmo * 2)))
+            )
+        else:
+            logger.log_info1("\nAO Composition of MOs (HOMO-5 to HOMO):")
+            basis_info.print_ao_composition(
+                self.C[0], list(range(max(self.nel - 6, 0), self.nel)), spinorbital=True
+            )
+            logger.log_info1("\nAO Composition of MOs (LUMO to LUMO+5):")
+            basis_info.print_ao_composition(
+                self.C[0],
+                list(range(self.nel, min(self.nel + 6, self.nmo * 2))),
+                spinorbital=True,
+            )
 
 
 def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4, twocomp=False):
