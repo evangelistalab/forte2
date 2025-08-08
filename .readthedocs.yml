@@ -3,7 +3,7 @@ version: 2
 build:
     os: ubuntu-22.04
     tools:
-      python: "mambaforge-22.9"
+      python: "miniconda3"
     jobs:
       pre_build:
         - sphinx-apidoc -o docs/source/ forte2/.
