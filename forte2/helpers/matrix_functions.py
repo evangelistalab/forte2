@@ -39,7 +39,7 @@ def invsqrt_matrix(M, tol=1e-7):
             invsqrt_evals[i] = 0.0  # treat small/singular values carefully
 
     # Rebuild the matrix
-    invsqrt_M = evecs @ np.diag(invsqrt_evals) @ evecs.T
+    invsqrt_M = evecs @ np.diag(invsqrt_evals) @ evecs.T.conj()
     return invsqrt_M
 
 

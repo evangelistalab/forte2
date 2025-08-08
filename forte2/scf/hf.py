@@ -7,13 +7,13 @@ import scipy as sp
 
 from forte2 import ints
 from forte2.system.basis_utils import BasisInfo
-from forte2.system import System, ModelSystem
+from forte2.system import System, ModelSystem, compute_orthonormal_transformation
 from forte2.jkbuilder import FockBuilder
 from forte2.base_classes.mixins import MOsMixin, SystemMixin
 from forte2.helpers.matrix_functions import givens_rotation
 from forte2.helpers import logger, DIIS
 from .initial_guess import minao_initial_guess, core_initial_guess
-from forte2.symmetry import assign_mo_symmetries
+from forte2.symmetry import assign_mo_symmetries, real_sph_to_j_adapted
 
 
 @dataclass
@@ -39,6 +39,12 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         RMS density change convergence threshold.
     maxiter : int, optional, default=100
         Maximum iteration for SCF.
+    guess_type : str, optional, default="minao"
+        Initial guess type for the SCF calculation. Can be "minao" or "hcore".
+    level_shift : float, optional
+        Level shift for the SCF calculation. If None, no level shift is applied.
+    level_shift_thresh : float, optional, default=1e-5
+        If energy change is below this threshold, level shift is turned off.
 
     Attributes
     ----------
@@ -69,6 +75,8 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
     maxiter: int = 100
     #: Initial guess algorithm. Can be "minao" or "hcore".
     guess_type: str = "minao"
+    level_shift: float = None
+    level_shift_thresh: float = 1e-5
 
     executed: bool = field(default=False, init=False)
     converged: bool = field(default=False, init=False)
@@ -89,15 +97,18 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
 
         self.C = None
         self.Xorth = self.system.get_Xorth()
-
+        if self.level_shift is not None:
+            if isinstance(self.level_shift, (int, float)) and self.level_shift < 0.0:
+                raise ValueError("level_shift must be non-negative.")
+            if isinstance(self.level_shift, tuple) and self.method != "UHF":
+                raise ValueError("Tuple level_shift is only valid for UHF.")
+            if isinstance(self.level_shift, float) and self.method == "UHF":
+                self.level_shift = (self.level_shift, self.level_shift)
+            if isinstance(self.level_shift, tuple) and len(self.level_shift) != 2:
+                raise ValueError("Tuple level_shift must have length 2 for UHF.")
         return self
 
     def _eigh(self, F):
-        Ftilde = self.Xorth.T @ F @ self.Xorth
-        e, c = np.linalg.eigh(Ftilde)
-        return e, self.Xorth @ c
-
-    def _eigh_spinor(self, F):
         Ftilde = self.Xorth.T @ F @ self.Xorth
         e, c = np.linalg.eigh(Ftilde)
         return e, self.Xorth @ c
@@ -166,6 +177,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
             # 1. Get the extrapolated Fock matrix
             AO_grad = self._build_ao_grad(S, F_canon)
             F_canon = self._diis_update(diis, F_canon, AO_grad)
+            F_canon = self._apply_level_shift(F_canon, S)
             # 2. Diagonalize the extrapolated Fock
             self.eps, self.C = self._diagonalize_fock(F_canon)
             # 3. Build new density matrix
@@ -179,6 +191,8 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
 
             # check convergence parameters
             deltaE = self.E - Eold
+            if np.abs(deltaE) < self.level_shift_thresh:
+                self.level_shift = None
             deltaD = sum([np.linalg.norm(d - dold) for d, dold in zip(self.D, Dold)])
             self.S2 = self._spin(S)
 
@@ -232,6 +246,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         self._get_occupation()
         self._assign_orbital_symmetries()
         self._print_orbital_energies()
+        self._print_ao_composition()
 
     @abstractmethod
     def _build_fock(self, H, fock_builder, S): ...
@@ -265,6 +280,12 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
 
     @abstractmethod
     def _assign_orbital_symmetries(self): ...
+
+    @abstractmethod
+    def _apply_level_shift(self, F, S): ...
+
+    @abstractmethod
+    def _print_ao_composition(self): ...
 
 
 @dataclass
@@ -327,6 +348,13 @@ class RHF(SCFBase):
     def _diis_update(self, diis, F, AO_grad):
         return [diis.update(F[0], AO_grad)]
 
+    def _apply_level_shift(self, F, S):
+        if self.level_shift is None or self.level_shift < 1e-4:
+            return F
+        D_vir = S - S @ self.D[0] @ S
+
+        return [F[0] + self.level_shift * D_vir]
+
     def _get_occupation(self):
         self.ndocc = self.na
         self.nuocc = self.nmo - self.ndocc
@@ -363,6 +391,7 @@ class RHF(SCFBase):
 
     def _print_ao_composition(self):
         if isinstance(self.system, ModelSystem):
+            # send a PR if you want this changed
             return
         basis_info = BasisInfo(self.system, self.system.basis)
         logger.log_info1("\nAO Composition of MOs (HOMO-5 to HOMO):")
@@ -449,7 +478,10 @@ class UHF(SCFBase):
 
     def _build_ao_grad(self, S, F):
         AO_grad = np.hstack(
-            [(f @ d @ S - S @ d @ f).flatten() for d, f in zip(self.D, F)]
+            [
+                (self.Xorth.T @ (f @ d @ S - S @ d @ f) @ self.Xorth).flatten()
+                for d, f in zip(self.D, F)
+            ]
         )
         return AO_grad
 
@@ -490,6 +522,13 @@ class UHF(SCFBase):
             F_flat[self.nbf**2 :].reshape(self.nbf, self.nbf),
         ]
         return F
+
+    def _apply_level_shift(self, F, S):
+        if self.level_shift is None or all(ls < 1e-4 for ls in self.level_shift):
+            return F
+        D_vir = [S - S @ d @ S for d in self.D]
+
+        return [f + ls * d for ls, f, d in zip(self.level_shift, F, D_vir)]
 
     def _get_occupation(self):
         self.aocc = self.na
@@ -537,13 +576,35 @@ class UHF(SCFBase):
             idx = nbocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx+1:<4d} ({self.orbital_symmetries_beta[idx]}) {self.eps[1][i]:<12.6f} "
+            string += f"{idx+1:<4d} ({self.orbital_symmetries_beta[idx]}) {self.eps[1][idx]:<12.6f} "
         logger.log_info1(string)
 
     def _assign_orbital_symmetries(self):
         S = self._get_overlap()
         self.orbital_symmetries_alfa = assign_mo_symmetries(self.system, S, self.C[0])
         self.orbital_symmetries_beta = assign_mo_symmetries(self.system, S, self.C[1])
+
+    def _print_ao_composition(self):
+        if isinstance(self.system, ModelSystem):
+            # send a PR if you want this changed
+            return
+        basis_info = BasisInfo(self.system, self.system.basis)
+        logger.log_info1("\nAO Composition of Alpha MOs (HOMO-5 to HOMO):")
+        basis_info.print_ao_composition(
+            self.C[0], list(range(max(self.na - 5, 0), self.na))
+        )
+        logger.log_info1("\nAO Composition of Alpha MOs (LUMO to LUMO+5):")
+        basis_info.print_ao_composition(
+            self.C[0], list(range(self.na, min(self.na + 5, self.nmo)))
+        )
+        logger.log_info1("\nAO Composition of Beta MOs (HOMO-5 to HOMO):")
+        basis_info.print_ao_composition(
+            self.C[1], list(range(max(self.na - 5, 0), self.na))
+        )
+        logger.log_info1("\nAO Composition of Beta MOs (LUMO to LUMO+5):")
+        basis_info.print_ao_composition(
+            self.C[1], list(range(self.na, min(self.na + 5, self.nmo)))
+        )
 
 
 @dataclass
@@ -567,6 +628,7 @@ class ROHF(SCFBase):
     _diis_update = RHF._diis_update
     _build_total_density_matrix = UHF._build_total_density_matrix
     _assign_orbital_symmetries = RHF._assign_orbital_symmetries
+    _apply_level_shift = RHF._apply_level_shift
 
     def __call__(self, system):
         system.two_component = False
@@ -614,7 +676,9 @@ class ROHF(SCFBase):
 
     def _build_ao_grad(self, S, F):
         Deff = 0.5 * (self.D[0] + self.D[1])
-        return F @ Deff @ S - S @ Deff @ F
+        ao_grad = F @ Deff @ S - S @ Deff @ F
+        ao_grad = self.Xorth.T @ ao_grad @ self.Xorth
+        return ao_grad
 
     def _get_occupation(self):
         self.ndocc = min(self.na, self.nb)
@@ -658,6 +722,29 @@ class ROHF(SCFBase):
             string += f"{idx+1:<4d} ({self.orbital_symmetries[idx]}) {self.eps[0][idx]:<12.6f} "
         logger.log_info1(string)
 
+    def _print_ao_composition(self):
+        if isinstance(self.system, ModelSystem):
+            # send a PR if you want this changed
+            return
+        basis_info = BasisInfo(self.system, self.system.basis)
+        logger.log_info1("\nAO Composition of doubly occupied MOs (HOMO-3 to HOMO):")
+        basis_info.print_ao_composition(
+            self.C[0], list(range(max(self.ndocc - 3, 0), self.ndocc))
+        )
+        logger.log_info1("\nAO Composition of singly occupied MOs:")
+        basis_info.print_ao_composition(
+            self.C[0], list(range(self.ndocc, self.ndocc + self.nsocc))
+        )
+        logger.log_info1("\nAO Composition of MOs (LUMO to LUMO+5):")
+        basis_info.print_ao_composition(
+            self.C[0],
+            list(
+                range(
+                    self.ndocc + self.nsocc, min(self.ndocc + self.nsocc + 5, self.nmo)
+                )
+            ),
+        )
+
 
 @dataclass
 class CUHF(SCFBase):
@@ -689,6 +776,7 @@ class CUHF(SCFBase):
     _get_occupation = UHF._get_occupation
     _print_orbital_energies = UHF._print_orbital_energies
     _assign_orbital_symmetries = UHF._assign_orbital_symmetries
+    _print_orbital_energies = UHF._print_orbital_energies
 
     def __call__(self, system):
         system.two_component = False
@@ -756,23 +844,67 @@ class GHF(SCFBase):
     break_complex_symmetry : bool, optional, default=False
         If True, will add a small complex perturbation to the initial density matrix. This will both break
         the complex conjugation symmetry and Sz symmetry (allowing alpha-beta density matrix blocks to be nonzero)
+    j_adapt: bool, optinoal, default=False
+        If True, the j-adapted spinor AO basis will be used instead of the spherical AO basis.
     """
 
+    ms_guess: float = None
     guess_mix: bool = False  # only used if nel is even
     break_complex_symmetry: bool = False
+    j_adapt: bool = False
 
     _diis_update = RHF._diis_update
 
     def __call__(self, system):
         system.two_component = True
+        if self.j_adapt:
+            ua, ub = real_sph_to_j_adapted(system.basis)
+            self.Usph2j = np.vstack((ua, ub))
+            S = system.ints_overlap()
+            S_spinor = self.Usph2j.conj().T @ S @ self.Usph2j
+            self.Xorth_spinor, _ = compute_orthonormal_transformation(
+                S_spinor,
+                system.linear_dep_trigger,
+                system.ortho_thresh,
+            )
         self = super().__call__(system)
+        self._parse_state()
         return self
+
+    def _parse_state(self):
+        if self.ms_guess is None:
+            # default to low-spin state
+            self.ms_guess = (self.nel % 2) / 2
+        assert np.isclose(
+            int(round(self.ms_guess * 2)), self.ms_guess * 2
+        ), "ms_guess must be a multiple of 0.5."
+        self.twicems_guess = int(round(self.ms_guess * 2))
+        if self.nel % 2 != self.twicems_guess % 2:
+            raise ValueError(
+                f"{self.nel} electrons is incompatible with ms_guess={self.ms_guess}!"
+            )
+        self.na_guess = int(round(self.nel + self.twicems_guess) / 2)
+        self.nb_guess = int(round(self.nel - self.twicems_guess) / 2)
+        assert (
+            self.nel == self.na_guess + self.nb_guess
+        ), f"Number of electrons {self.nel} does not match na + nb = {self.na_guess} + {self.nb_guess}."
+        assert (
+            self.na_guess >= 0 and self.nb_guess >= 0
+        ), f"{self._scf_type} requires non-negative number of alpha and beta electrons."
 
     def _build_fock(self, H, fock_builder, S):
         Jaa, Jbb = fock_builder.build_J([self.D[0], self.D[3]])
         nbf = Jaa.shape[0]
         if self.iter == 0 and self.break_complex_symmetry:
             Kaa, Kab, Kba, Kbb = fock_builder.build_K_density(self.D)
+        elif self.iter == 0:
+            # Apply na/nb_guess
+            mo_a, mo_b = self._guess_ms(self.C[0])
+            occ = list(mo_a[: self.na_guess]) + list(mo_b[: self.nb_guess])
+            occ = sorted(occ)
+            Kaa, Kab, Kba, Kbb = fock_builder.build_K(
+                [self.C[0][:nbf, occ], self.C[0][nbf:, occ]], cross=True
+            )
         else:
             Kaa, Kab, Kba, Kbb = fock_builder.build_K(
                 [self.C[0][:nbf, : self.nel], self.C[0][nbf:, : self.nel]], cross=True
@@ -789,11 +921,19 @@ class GHF(SCFBase):
 
     def _build_density_matrix(self):
         # D = Cocc Cocc^+
-        D = np.einsum(
-            "mi,ni->mn",
-            self.C[0][:, : self.nel],
-            self.C[0][:, : self.nel].conj(),
-        )
+        if self.iter == 0:
+            # apply na/nb_guess
+            occ_a, occ_b = self._guess_ms(self.C[0])
+            Ca = self.C[0][:, occ_a[: self.na_guess]]
+            Cb = self.C[0][:, occ_b[: self.nb_guess]]
+            D = np.einsum("mi,ni->mn", Ca, Ca.conj())
+            D += np.einsum("mi,ni->mn", Cb, Cb.conj())
+        else:
+            D = np.einsum(
+                "mi,ni->mn",
+                self.C[0][:, : self.nel],
+                self.C[0][:, : self.nel].conj(),
+            )
         nbf = self.nbf
         Daa = D[:nbf, :nbf]
         Dab = D[:nbf, nbf:]
@@ -814,10 +954,17 @@ class GHF(SCFBase):
         Daa, *_, Dbb = self._build_density_matrix()
         return Daa + Dbb
 
+    def _apply_level_shift(self, F, S):
+        if self.level_shift is None or self.level_shift < 1e-4:
+            return F
+        D_vir = S - S @ self.D[0] @ S
+
+        return [F[0] + self.level_shift * D_vir]
+
     def _initial_guess(self, H, guess_type="minao"):
         C = RHF._initial_guess(self, H, guess_type)[0]
-        if self.nel % 2 == 0 and self.guess_mix:
-            C = guess_mix(C, self.nel, twocomp=True)
+        if self.twicems_guess % 2 == 0 and self.guess_mix:
+            C = guess_mix(C, self.nel - 1, twocomp=True)
         return [C]
 
     def _build_ao_grad(self, S, F):
@@ -825,11 +972,23 @@ class GHF(SCFBase):
         D_spinor = np.block([[Daa, Dab], [Dba, Dbb]])
         sdf = S @ D_spinor @ F[0]
         AO_grad = sdf.conj().T - sdf
+        AO_grad = self.Xorth.T @ AO_grad @ self.Xorth
 
         return AO_grad
 
+    def _eigh(self, F):
+        Xorth = self.Xorth_spinor if self.j_adapt else self.Xorth
+        Ftilde = Xorth.conj().T @ F @ Xorth
+        e, c = np.linalg.eigh(Ftilde)
+        return e, Xorth @ c
+
     def _diagonalize_fock(self, F):
-        eps, C = self._eigh_spinor(F[0])
+        if self.j_adapt:
+            F_spinor = self.Usph2j.conj().T @ F[0] @ self.Usph2j
+            eps, C = self._eigh(F_spinor)
+            C = self.Usph2j @ C
+        else:
+            eps, C = self._eigh(F[0])
         return [eps], [C]
 
     def _spin(self, S):
@@ -898,12 +1057,58 @@ class GHF(SCFBase):
         S = self._get_overlap()
         self.orbital_symmetries = assign_mo_symmetries(self.system, S, self.C[0])
 
+    def _guess_ms(self, C):
+        nmo = C.shape[1]
+        nbf = C.shape[0] // 2
+        mo_a = []
+        mo_b = []
+        for i in range(nmo):
+            norm_a = np.linalg.norm(C[:nbf, i])
+            norm_b = np.linalg.norm(C[nbf:, i])
+            if norm_a >= norm_b:
+                mo_a.append(i)
+            else:
+                mo_b.append(i)
+        return np.array(mo_a), np.array(mo_b)
+
+    def _print_ao_composition(self):
+        if isinstance(self.system, ModelSystem):
+            # send a PR if you want this changed
+            return
+        basis_info = BasisInfo(self.system, self.system.basis)
+        if self.system.x2c_type == "so":
+            logger.log_info1("\nSpinor Composition of MOs (HOMO-6 to HOMO):")
+            if not hasattr(self, "Usph2j"):
+                ua, ub = real_sph_to_j_adapted(self.system.basis)
+                self.Usph2j = np.vstack((ua, ub))
+            C = self.Usph2j.conj().T @ self.C[0]
+            basis_info.print_spinor_composition(
+                C, list(range(max(self.nel - 6, 0), self.nel))
+            )
+            logger.log_info1("\nSpinor Composition of MOs (LUMO to LUMO+6):")
+            basis_info.print_spinor_composition(
+                C, list(range(self.nel, min(self.nel + 6, self.nmo * 2)))
+            )
+        else:
+            logger.log_info1("\nAO Composition of MOs (HOMO-5 to HOMO):")
+            basis_info.print_ao_composition(
+                self.C[0], list(range(max(self.nel - 6, 0), self.nel)), spinorbital=True
+            )
+            logger.log_info1("\nAO Composition of MOs (LUMO to LUMO+5):")
+            basis_info.print_ao_composition(
+                self.C[0],
+                list(range(self.nel, min(self.nel + 6, self.nmo * 2))),
+                spinorbital=True,
+            )
+
 
 def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4, twocomp=False):
     cosq = np.cos(mixing_parameter)
     sinq = np.sin(mixing_parameter)
     if twocomp:
+        # alpha channel
         C = givens_rotation(C, cosq, sinq, homo_idx - 1, homo_idx + 1)
+        # beta channel
         C = givens_rotation(C, cosq, -sinq, homo_idx, homo_idx + 2)
         return C
     else:
