@@ -39,6 +39,12 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         RMS density change convergence threshold.
     maxiter : int, optional, default=100
         Maximum iteration for SCF.
+    guess_type : str, optional, default="minao"
+        Initial guess type for the SCF calculation. Can be "minao" or "hcore".
+    level_shift : float, optional
+        Level shift for the SCF calculation. If None, no level shift is applied.
+    level_shift_thresh : float, optional, default=1e-5
+        If energy change is below this threshold, level shift is turned off.
 
     Attributes
     ----------
@@ -69,6 +75,8 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
     maxiter: int = 100
     #: Initial guess algorithm. Can be "minao" or "hcore".
     guess_type: str = "minao"
+    level_shift: float = None
+    level_shift_thresh: float = 1e-5
 
     executed: bool = field(default=False, init=False)
     converged: bool = field(default=False, init=False)
@@ -89,7 +97,15 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
 
         self.C = None
         self.Xorth = self.system.get_Xorth()
-
+        if self.level_shift is not None:
+            if isinstance(self.level_shift, (int, float)) and self.level_shift < 0.0:
+                raise ValueError("level_shift must be non-negative.")
+            if isinstance(self.level_shift, tuple) and self.method != "UHF":
+                raise ValueError("Tuple level_shift is only valid for UHF.")
+            if isinstance(self.level_shift, float) and self.method == "UHF":
+                self.level_shift = (self.level_shift, self.level_shift)
+            if isinstance(self.level_shift, tuple) and len(self.level_shift) != 2:
+                raise ValueError("Tuple level_shift must have length 2 for UHF.")
         return self
 
     def _eigh(self, F):
@@ -161,6 +177,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
             # 1. Get the extrapolated Fock matrix
             AO_grad = self._build_ao_grad(S, F_canon)
             F_canon = self._diis_update(diis, F_canon, AO_grad)
+            F_canon = self._apply_level_shift(F_canon, S)
             # 2. Diagonalize the extrapolated Fock
             self.eps, self.C = self._diagonalize_fock(F_canon)
             # 3. Build new density matrix
@@ -174,6 +191,8 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
 
             # check convergence parameters
             deltaE = self.E - Eold
+            if np.abs(deltaE) < self.level_shift_thresh:
+                self.level_shift = None
             deltaD = sum([np.linalg.norm(d - dold) for d, dold in zip(self.D, Dold)])
             self.S2 = self._spin(S)
 
@@ -261,6 +280,9 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
     @abstractmethod
     def _assign_orbital_symmetries(self): ...
 
+    @abstractmethod
+    def _apply_level_shift(self, F, S): ...
+
 
 @dataclass
 class RHF(SCFBase):
@@ -321,6 +343,13 @@ class RHF(SCFBase):
 
     def _diis_update(self, diis, F, AO_grad):
         return [diis.update(F[0], AO_grad)]
+
+    def _apply_level_shift(self, F, S):
+        if self.level_shift is None or self.level_shift < 1e-4:
+            return F
+        D_vir = S - S @ self.D[0] @ S
+
+        return [F[0] + self.level_shift * D_vir]
 
     def _get_occupation(self):
         self.ndocc = self.na
@@ -489,6 +518,13 @@ class UHF(SCFBase):
         ]
         return F
 
+    def _apply_level_shift(self, F, S):
+        if self.level_shift is None or all(ls < 1e-4 for ls in self.level_shift):
+            return F
+        D_vir = [S - S @ d @ S for d in self.D]
+
+        return [f + ls * d for ls, f, d in zip(self.level_shift, F, D_vir)]
+
     def _get_occupation(self):
         self.aocc = self.na
         self.auocc = self.nmo - self.aocc
@@ -565,6 +601,7 @@ class ROHF(SCFBase):
     _diis_update = RHF._diis_update
     _build_total_density_matrix = UHF._build_total_density_matrix
     _assign_orbital_symmetries = RHF._assign_orbital_symmetries
+    _apply_level_shift = RHF._apply_level_shift
 
     def __call__(self, system):
         system.two_component = False
@@ -865,6 +902,13 @@ class GHF(SCFBase):
     def _build_total_density_matrix(self):
         Daa, *_, Dbb = self._build_density_matrix()
         return Daa + Dbb
+
+    def _apply_level_shift(self, F, S):
+        if self.level_shift is None or self.level_shift < 1e-4:
+            return F
+        D_vir = S - S @ self.D[0] @ S
+
+        return [F[0] + self.level_shift * D_vir]
 
     def _initial_guess(self, H, guess_type="minao"):
         C = RHF._initial_guess(self, H, guess_type)[0]
