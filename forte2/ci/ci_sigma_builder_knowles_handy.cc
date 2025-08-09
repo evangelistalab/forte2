@@ -82,15 +82,21 @@ void CISigmaBuilder::H2_kh(std::span<double> basis, std::span<double> sigma) con
             const size_t Kb_start = 0;
             const size_t Kb_end = maxKb;
             const size_t Kb_size = Kb_end - Kb_start;
+            const size_t block_dim = npairs * Kb_size;
+
+            // Skip this chunk if it is empty
+            if (block_dim * maxKa == 0)
+                continue;
 
             // Grab the temporary buffers that will hold intermediates like
-            // D([i>=j],[Ka Kb]) where the indices range as [i>=j] all values
-            // Ka in chunks of maximum size Ka_max_size
-            // Kb in [0, maxKb)
+            // D([i>=j],[Ka Kb]) where the indices range as:
+            // - [i>=j] all values
+            // - Ka in chunks of maximum size Ka_max_size
+            // - Kb in [0, maxKb)
             // Ka_max_size is the maximum size of the Ka range that we can
             // process in one go without exceeding the memory limit, set via
             // the set_memory() function.
-            auto [Kblock1, Kblock2, Ka_max_size] = get_Kblock_spans(npairs * Kb_size, maxKa);
+            auto [Kblock1, Kblock2, Ka_max_size] = get_Kblock_spans(block_dim, maxKa);
 
             // Loop over ranges of Ka indices in chuncks of size Ka_max_size
             for (size_t Ka_start = 0; Ka_start < maxKa; Ka_start += Ka_max_size) {
@@ -153,13 +159,13 @@ CISigmaBuilder::get_Kblock_spans(size_t dim, size_t maxKa) const {
     // fully in core.
     const size_t temp_full_size = dim * maxKa;
 
-    // Ensure that Kblock1_ and Kblock2_ are allocated with the requested
-    // memory size
+    // Find the maximum size of the temporary buffers to allocate. This is either set by the full
+    // size of the buffers or by the available memory size, whichever is smaller
     std::size_t temp_memory_size = std::min(memory_size_ / (2 * sizeof(double)), temp_full_size);
     if (Kblock1_.size() < temp_memory_size) {
         LOG(log_level_) << "Allocating Knowles-Handy temporary buffers of size 2 x "
                         << temp_memory_size << " ("
-                        << 2 * temp_memory_size * sizeof(double) / (1024 * 1024) << " MB).\n";
+                        << 2 * temp_memory_size * sizeof(double) / (1024 * 1024) << " MB).";
         Kblock1_.resize(temp_memory_size);
         Kblock2_.resize(temp_memory_size);
     }
@@ -177,7 +183,8 @@ CISigmaBuilder::get_Kblock_spans(size_t dim, size_t maxKa) const {
         Kblock2_.resize(new_dim);
         auto available_MB = 2 * available / (1024 * 1024 * sizeof(double));
         auto new_dim_MB = 2 * new_dim / (1024 * 1024 * sizeof(double));
-        std::cerr << "Warning: Knowles-Handy temporary buffers too small (" << 2 * available
+        std::cerr << "Warning: dim = " << dim << ", maxKa = " << maxKa
+                  << " Knowles-Handy temporary buffers too small (" << 2 * available
                   << " elements; " << available_MB << " MB); resized to " << 2 * new_dim
                   << " elements; " << new_dim_MB << " MB.\n"
                   << "For best performance, set the memory size via the "

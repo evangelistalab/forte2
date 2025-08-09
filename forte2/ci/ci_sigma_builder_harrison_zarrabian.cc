@@ -13,12 +13,13 @@
 
 namespace forte2 {
 
-void CISigmaBuilder::H1_aa_gemm(std::span<double> basis, std::span<double> sigma, bool alfa,
-                                std::span<double> h) const {
+void CISigmaBuilder::H1_hz(std::span<double> basis, std::span<double> sigma, bool alfa,
+                           std::span<double> h) const {
     const size_t norb = lists_.norb();
-
     const auto na = lists_.na();
     const auto nb = lists_.nb();
+
+    // skip this block if there is no electron with equal spin to that on which this operator acts
     if ((alfa and (na < 1)) or ((!alfa) and (nb < 1)))
         return;
 
@@ -27,32 +28,36 @@ void CISigmaBuilder::H1_aa_gemm(std::span<double> basis, std::span<double> sigma
     int num_1h_classes =
         alfa ? lists_.alfa_address_1h()->nclasses() : lists_.beta_address_1h()->nclasses();
 
-    std::vector<double> TR, TL;
-
+    // |K>|L> = ± a_p |I>|L>
     for (int class_K = 0; class_K < num_1h_classes; ++class_K) {
         size_t maxK = alfa ? lists_.alfa_address_1h()->strpcls(class_K)
                            : lists_.beta_address_1h()->strpcls(class_K);
 
+        if (maxK == 0)
+            continue;
+
         // loop over blocks of matrix C
         for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
+            // skip this block if it is empty
             if (lists_.block_size(nI) == 0)
                 continue;
+
+            // size of the strings with opposite spin to the one on which we act
             size_t maxL = alfa ? beta_address->strpcls(class_Ib) : alfa_address->strpcls(class_Ia);
 
             if (maxL > 0) {
-                // We gather the block of C into TR
-                local_timer ta;
+                // find the size of the block
                 const size_t dimKL = maxK * maxL;
-                // This block requires a temp_dim = norb * maxK * maxL matrix
+                // storing this block requires a temp_dim = norb * maxK * maxL matrix
                 const auto temp_dim = norb * dimKL;
-                if (TR.size() < temp_dim) {
-                    TR.resize(temp_dim);
-                    TL.resize(temp_dim);
+                // allocate temporary buffers if needed
+                if (Kblock1_.size() < temp_dim) {
+                    Kblock1_.resize(temp_dim);
+                    Kblock2_.resize(temp_dim);
                 }
-                // We use TL to store the result of the transformation to the 2h
-                // basis
-                std::fill_n(TL.begin(), temp_dim, 0.0);
-                std::fill_n(TR.begin(), temp_dim, 0.0);
+                // Use TL_local to store the result of the transformation to the 1h basis
+                std::fill_n(Kblock2_.begin(), temp_dim, 0.0);
+                std::fill_n(Kblock1_.begin(), temp_dim, 0.0);
 
                 auto tr = gather_block(basis, TR, alfa, lists_, class_Ia, class_Ib);
 
@@ -60,23 +65,23 @@ void CISigmaBuilder::H1_aa_gemm(std::span<double> basis, std::span<double> sigma
                     auto& Klist = alfa ? lists_.get_alfa_1h_list(class_K, K, class_Ia)
                                        : lists_.get_beta_1h_list(class_K, K, class_Ib);
                     for (const auto& [sign_K, q, I] : Klist) {
-                        add(maxL, sign_K, &tr[I * maxL], 1, &TL[q * dimKL + K * maxL], 1);
+                        add(maxL, sign_K, &tr[I * maxL], 1, &Kblock2_[q * dimKL + K * maxL], 1);
                     }
                 }
 
-                matrix_product('N', 'N', norb, dimKL, norb, 1.0, h.data(), norb, TL.data(), dimKL,
-                               0.0, TR.data(), dimKL);
+                matrix_product('N', 'N', norb, dimKL, norb, 1.0, h.data(), norb, Kblock2_.data(),
+                               dimKL, 0.0, Kblock1_.data(), dimKL);
 
                 for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
                     if ((alfa) and (class_Ib != class_Jb) or ((!alfa) and (class_Ia != class_Ja)))
                         continue;
 
-                    std::fill_n(TL.begin(), temp_dim, 0.0);
+                    std::fill_n(TL.begin(), TL.size(), 0.0);
                     for (size_t K = 0; K < maxK; ++K) {
                         auto& Klist = alfa ? lists_.get_alfa_1h_list(class_K, K, class_Ja)
                                            : lists_.get_beta_1h_list(class_K, K, class_Jb);
                         for (const auto& [sign_K, p, I] : Klist) {
-                            add(maxL, sign_K, &TR[p * dimKL + K * maxL], 1, &TL[I * maxL], 1);
+                            add(maxL, sign_K, &Kblock1_[p * dimKL + K * maxL], 1, &TL[I * maxL], 1);
                         }
                     }
                     scatter_block(TL, sigma, alfa, lists_, class_Ja, class_Jb);
@@ -86,8 +91,8 @@ void CISigmaBuilder::H1_aa_gemm(std::span<double> basis, std::span<double> sigma
     }
 }
 
-void CISigmaBuilder::H2_aaaa_gemm(std::span<double> basis, std::span<double> sigma,
-                                  bool alfa) const {
+void CISigmaBuilder::H2_hz_same_spin(std::span<double> basis, std::span<double> sigma,
+                                     bool alfa) const {
     if ((alfa and (lists_.na() < 2)) or ((!alfa) and (lists_.nb() < 2)))
         return;
 
@@ -117,13 +122,14 @@ void CISigmaBuilder::H2_aaaa_gemm(std::span<double> basis, std::span<double> sig
 
                 // This block requires a temp_dim = npairs * maxK * maxL matrix
                 const auto temp_dim = npairs * dimKL;
-                if (TR.size() < temp_dim) {
-                    TR.resize(temp_dim);
-                    TL.resize(temp_dim);
+                if (Kblock1_.size() < temp_dim) {
+                    Kblock1_.resize(temp_dim);
+                    Kblock2_.resize(temp_dim);
                 }
-                // We use TL to store the result of the transformation to the 2h
+                // We use TL_local to store the result of the transformation to the 2h
                 // basis
-                std::fill_n(TL.begin(), temp_dim, 0.0);
+                std::fill_n(Kblock2_.begin(), temp_dim, 0.0);
+                std::fill_n(Kblock1_.begin(), temp_dim, 0.0);
 
                 auto tr = gather_block(basis, TR, alfa, lists_, class_Ia, class_Ib);
 
@@ -133,25 +139,26 @@ void CISigmaBuilder::H2_aaaa_gemm(std::span<double> basis, std::span<double> sig
                     for (const auto& [sign_K, q, s, I] : Krlist) {
                         const size_t qs_index = q * (q - 1) / 2 + s;
                         for (size_t idx{0}; idx != maxL; ++idx) {
-                            TL[qs_index * dimKL + K * maxL + idx] += sign_K * tr[I * maxL + idx];
+                            Kblock2_[qs_index * dimKL + K * maxL + idx] +=
+                                sign_K * tr[I * maxL + idx];
                         }
                     }
                 }
                 matrix_product('N', 'N', npairs, dimKL, npairs, 1.0, v_pr_qs_a.data(), npairs,
-                               TL.data(), dimKL, 0.0, TR.data(), dimKL);
+                               Kblock2_.data(), dimKL, 0.0, Kblock1_.data(), dimKL);
 
                 for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
-                    if ((alfa) and (class_Ib != class_Jb) or ((!alfa) and (class_Ia != class_Ja)))
+                    if (((alfa) and (class_Ib != class_Jb)) or ((!alfa) and (class_Ia != class_Ja)))
                         continue;
 
-                    std::fill_n(TL.begin(), temp_dim, 0.0);
+                    std::fill_n(TL.begin(), TL.size(), 0.0);
                     for (size_t K = 0; K < maxK; ++K) {
                         auto& Klist = alfa ? lists_.get_alfa_2h_list(class_K, K, class_Ja)
                                            : lists_.get_beta_2h_list(class_K, K, class_Jb);
                         for (const auto& [sign_K, p, r, I] : Klist) {
                             const size_t pr_index = p * (p - 1) / 2 + r;
-                            add(maxL, sign_K, &TR[pr_index * dimKL + K * maxL], 1, &TL[I * maxL],
-                                1);
+                            add(maxL, sign_K, &Kblock1_[pr_index * dimKL + K * maxL], 1,
+                                &TL[I * maxL], 1);
                         }
                     }
                     scatter_block(TL, sigma, alfa, lists_, class_Ja, class_Jb);
@@ -175,7 +182,7 @@ void CISigmaBuilder::H2_aaaa_gemm(std::span<double> basis, std::span<double> sig
     }
 }
 
-void CISigmaBuilder::H2_aabb_gemm(std::span<double> basis, std::span<double> sigma) const {
+void CISigmaBuilder::H2_hz_opposite_spin(std::span<double> basis, std::span<double> sigma) const {
     if ((lists_.na() < 1) or (lists_.nb() < 1))
         return;
 

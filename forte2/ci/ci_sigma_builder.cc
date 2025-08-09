@@ -42,13 +42,6 @@ CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, n
     set_Hamiltonian(E, H, V);
 }
 
-CISigmaBuilder::~CISigmaBuilder() {
-    // Destructor does not need to do anything special
-    // LOG(log_level_) << std::fixed << std::setprecision(3);
-    // LOG(log_level_) << "\nTiming for 2RDM(aa):" << rdm2_aa_timer_ << " seconds";
-    // LOG(log_level_) << "Timing for 2RDM(ab):" << rdm2_ab_timer_ << " seconds";
-}
-
 void CISigmaBuilder::set_algorithm(const std::string& algorithm) {
     if (algorithm == "kh" or algorithm == "knowles-handy") {
         algorithm_ = CIAlgorithm::Knowles_Handy;
@@ -162,21 +155,26 @@ void CISigmaBuilder::Hamiltonian(np_vector basis, np_vector sigma) const {
         H2_kh(b_span, s_span);
         haabb_timer_ += h_aabb_timer.elapsed_seconds();
     } else {
-        H1_aa_gemm(b_span, s_span, true, h_hz);
-        H1_aa_gemm(b_span, s_span, false, h_hz);
+        H1_hz(b_span, s_span, true, h_hz);
+        H1_hz(b_span, s_span, false, h_hz);
 
         local_timer h_aabb_timer;
-        H2_aabb_gemm(b_span, s_span);
+        H2_hz_opposite_spin(b_span, s_span);
         haabb_timer_ += h_aabb_timer.elapsed_seconds();
 
         local_timer h_aaaa_timer;
-        H2_aaaa_gemm(b_span, s_span, true);
+        H2_hz_same_spin(b_span, s_span, true);
         haaaa_timer_ += h_aaaa_timer.elapsed_seconds();
 
         local_timer h_bbbb_timer;
-        H2_aaaa_gemm(b_span, s_span, false);
+        H2_hz_same_spin(b_span, s_span, false);
         hbbbb_timer_ += h_bbbb_timer.elapsed_seconds();
     }
+    // std::cout << "Sigma: ";
+    // for (auto val : s_span) {
+    //     std::cout << val << std::endl;
+    // }
+
     hdiag_timer_ += t.elapsed_seconds();
     build_count_++;
 }

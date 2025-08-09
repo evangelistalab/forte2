@@ -203,7 +203,6 @@ class _CIBase:
             for i in range(ncols):
                 self.spin_adapter.csf_C_to_det_C(Bblock[:, i], self.b_det)
                 self.ci_sigma_builder.Hamiltonian(self.b_det, self.sigma_det)
-                # self.sigma_det = np.dot(Hex, self.b_det)
                 self.spin_adapter.det_C_to_csf_C(self.sigma_det, Sblock[:, i])
 
         self.eigensolver.add_sigma_builder(sigma_builder)

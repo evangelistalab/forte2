@@ -23,7 +23,6 @@ class CISigmaBuilder {
     // == Class Constructor ==
     CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V,
                    int log_level = 3);
-    ~CISigmaBuilder();
 
     // == Class Public Functions ==
 
@@ -274,6 +273,15 @@ class CISigmaBuilder {
     mutable std::vector<double> TR;
     mutable std::vector<double> TL;
 
+    /// @brief Temporary vectors used to store blocks of data of the form
+    /// L(op,K,L) = <K|op|I> C_{IL}
+    /// where `op` is an operator, K is a state in N, N-1, or N-2 electron strings
+    /// while I and L are alpha/beta string
+    /// These vectors are allocated on the first call to the Hamiltonian function
+    /// and resized as needed
+    mutable std::vector<double> Kblock1_;
+    mutable std::vector<double> Kblock2_;
+
     /// @brief Scalar contribution to the sigma vector |sigma> = E |basis>
     void H0(std::span<double> basis, std::span<double> sigma) const;
 
@@ -289,28 +297,24 @@ class CISigmaBuilder {
     /// @brief  One-electron contribution to the sigma vector |sigma> = H |basis>
     /// @param alfa If true, compute the alpha contribution, otherwise the beta
     /// @param h The one-electron integrals
-    void H1_aa_gemm(std::span<double> basis, std::span<double> sigma, bool alfa,
-                    std::span<double> h) const;
+    void H1_hz(std::span<double> basis, std::span<double> sigma, bool alfa,
+               std::span<double> h) const;
 
     /// @brief  Two-electron same-spin contribution to the sigma vector |sigma> = H |basis>
     /// @param alfa If true, compute the alpha contribution, otherwise the beta
-    void H2_aaaa_gemm(std::span<double> basis, std::span<double> sigma, bool alfa) const;
+    void H2_hz_same_spin(std::span<double> basis, std::span<double> sigma, bool alfa) const;
 
     /// @brief  Two-electron mixed-spin contribution to the sigma vector |sigma> = H |basis>
     /// @param basis The basis vector
     /// @param sigma The resulting sigma vector
-    void H2_aabb_gemm(std::span<double> basis, std::span<double> sigma) const;
+    void H2_hz_opposite_spin(std::span<double> basis, std::span<double> sigma) const;
 
     // -- Knowles-Handy Algorithm Functions/Data --
+
     // Modified one-electron integrals used in the Knowles-Handy algorithm
     mutable std::vector<double> h_kh;
     // Modified two-electron integrals used in the Knowles-Handy algorithm
     mutable std::vector<double> v_ijkl_hk;
-    /// @brief Temporary vectors used for the Knowles-Handy algorithm
-    /// These vectors are allocated on the first call to the Hamiltonian function
-    /// and resized as needed
-    mutable std::vector<double> Kblock1_;
-    mutable std::vector<double> Kblock2_;
 
     /// @brief Builds the one-electron contribution to the sigma vector using the Knowles-Handy
     /// algorithm.
