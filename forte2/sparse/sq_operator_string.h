@@ -1,11 +1,11 @@
 #pragma once
 
-#include <bitset>
 #include <functional>
 #include <vector>
 
-#include "ci/sparse.h"
 #include "ci/determinant.h"
+
+#include "sparse/sparse.h"
 
 namespace forte2 {
 
@@ -124,9 +124,11 @@ class SQOperatorString {
 
     struct Hash {
         std::size_t operator()(const SQOperatorString& sqop_str) const {
-            std::uint64_t seed = Determinant::Hash()(sqop_str.cre());
-            std::uint64_t w = Determinant::Hash()(sqop_str.ann());
-            hash_combine_uint64(seed, w);
+            std::size_t seed = 0;
+            std::uint64_t h1 = std::hash<Determinant>()(sqop_str.cre());
+            std::uint64_t h2 = std::hash<Determinant>()(sqop_str.ann());
+            hash_combine_uint64(seed, h1);
+            hash_combine_uint64(seed, h2);
             return seed;
         }
     };

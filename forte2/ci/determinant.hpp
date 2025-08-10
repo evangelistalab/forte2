@@ -46,6 +46,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     using BitArray<N>::find_first_one;
     using BitArray<N>::find_last_one;
     using BitArray<N>::clear;
+    using Hash = typename BitArray<N>::Hash;
 
     /// the number of bits divided by two
     static constexpr size_t nbits_half = N / 2;
@@ -610,9 +611,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
 
 // Functions
 
-/**
- * @brief return a string representation of this determinant
- */
+/// @brief return a string representation of this determinant
 template <size_t N>
 std::string str_bits(const DeterminantImpl<N>& d, int n = DeterminantImpl<N>::nbits) {
     std::string s;
@@ -938,3 +937,13 @@ template <size_t N> double spin2(const DeterminantImpl<N>& lhs, const Determinan
 }
 
 } // namespace forte2
+
+namespace std {
+// specialization of std::hash for forte2::OccupationVector
+template <size_t N> struct hash<forte2::DeterminantImpl<N>> {
+    std::size_t operator()(const forte2::DeterminantImpl<N>& d) const noexcept {
+        using HashT = typename forte2::DeterminantImpl<N>::Hash;
+        return HashT{}(d);
+    }
+};
+} // namespace std
