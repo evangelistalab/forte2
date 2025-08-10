@@ -17,38 +17,38 @@ from forte2.orbitals.semicanonicalizer import Semicanonicalizer, EmbeddingMOSpac
 @dataclass
 class ASET(MOsMixin, SystemMixin):
     """
-        Active Space Embedding Theory (ASET) method for paritioning and projecting molecules.
+    Active Space Embedding Theory (ASET) method for paritioning and projecting molecules.
 
-        Parameters
-        ----------
-        fragment : list[str]
-            List of atomic symbols defining the fragment.
-        cutoff_method : str, optional, default="threshold"
-            Method for choosing the embedding cutoff. Options include "threshold", "cumulative_threshold", "num_of_orbitals".
-        cutoff : float, optional, default = 0.5
-            Projector eigenvalue for both simple and cumulative threshold methods.
-        num_A_docc : int, optional, default=0
-            Number of occupied orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
-        num_A_uocc : int, optional, default=0
-            Number of virtual orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
-        adjust_B_docc : int, optional, default=0
-            Adjust this number of occupied orbitals between environment B and fragment A. If set to positive, move to B; if set to negative, move to A.
-        adjust_B_uocc : int, optional, default=0
-            Adjust this number of virtual orbitals between environment B and fragment A. If set to positive, move to B; if set to negative, move to A.
-        semicanonicalize_active : bool, optional, default=True
-            Whether to semicanonicalize the active space orbitals.
-        semicanonicalize_frozen : bool, optional, default=True
-            Whether to semicanonicalize the frozen orbitals.
+    Parameters
+    ----------
+    fragment : list[str]
+        List of atomic symbols defining the fragment.
+    cutoff_method : str, optional, default="threshold"
+        Method for choosing the embedding cutoff. Options include "threshold", "cumulative_threshold", "num_of_orbitals".
+    cutoff : float, optional, default = 0.5
+        Projector eigenvalue for both simple and cumulative threshold methods.
+    num_A_docc : int, optional, default=0
+        Number of occupied orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
+    num_A_uocc : int, optional, default=0
+        Number of virtual orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
+    adjust_B_docc : int, optional, default=0
+        Adjust this number of occupied orbitals between environment B and fragment A. If set to positive, move to B; if set to negative, move to A.
+    adjust_B_uocc : int, optional, default=0
+        Adjust this number of virtual orbitals between environment B and fragment A. If set to positive, move to B; if set to negative, move to A.
+    semicanonicalize_active : bool, optional, default=True
+        Whether to semicanonicalize the active space orbitals.
+    semicanonicalize_frozen : bool, optional, default=True
+        Whether to semicanonicalize the frozen orbitals.
 
-        Notes
-        -----
-        The allow subspace specification is a list of strings, non-exhaustive examples::
+    Notes
+    -----
+    The allowed subspace specification is a list of strings, non-exhaustive examples::
 
-        - ["C"]              # all carbon atoms
-        - ["C","N"]          # all carbon and nitrogen atoms
-        - ["C1"]             # carbon atom #1
-        - ["C1-7"]           # carbon atoms #1 through #7
-        - ["C1-3","N2"]       # carbon atoms #1, #2, #3 and nitrogen atom #2
+    - ["C"]              # all carbon atoms
+    - ["C","N"]          # all carbon and nitrogen atoms
+    - ["C1"]             # carbon atom #1
+    - ["C1-7"]           # carbon atoms #1 through #7
+    - ["C1-3","N2"]      # carbon atoms #1, #2, #3 and nitrogen atom #2
 
     See J. Chem. Phys. 2020, 152 (9), 094107 <https://doi.org/10.1063/1.5142481>_ for details on the ASET(mf) method.
     """

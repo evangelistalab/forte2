@@ -2,6 +2,7 @@
 
 [![Build Status](https://github.com/evangelistalab/forte2/actions/workflows/build.yml/badge.svg)](https://github.com/evangelistalab/forte2/actions/workflows/build.yml)
 [![codecov](https://codecov.io/github/evangelistalab/forte2/graph/badge.svg?token=KC1HN4DC42)](https://codecov.io/github/evangelistalab/forte2)
+[![Documentation Status](https://readthedocs.org/projects/forte2/badge/?version=latest)](http://forte2.readthedocs.io/en/latest/?badge=latest)
 
 Compile with `pip install --no-build-isolation -ve .`
 
