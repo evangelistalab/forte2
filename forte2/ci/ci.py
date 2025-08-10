@@ -163,6 +163,8 @@ class _CIBase:
         self.ci_sigma_builder.set_memory(self.ci_builder_memory)
         self.ci_sigma_builder.set_algorithm(self.ci_algorithm)
 
+        logger.log(f"Using CI algorithm: {self.ci_sigma_builder.get_algorithm()}", self.log_level)
+
         Hdiag = self.ci_sigma_builder.form_Hdiag_csf(
             self.dets, self.spin_adapter, spin_adapt_full_preconditioner=False
         )
@@ -222,7 +224,7 @@ class _CIBase:
         logger.log(f"h_aabb time:    {h_aabb:.3f} s/build", self.log_level)
         logger.log(f"h_aaaa time:    {h_aaaa:.3f} s/build", self.log_level)
         logger.log(f"h_bbbb time:    {h_bbbb:.3f} s/build", self.log_level)
-        logger.log(f"total time:     {h_tot:.3f} s/build", self.log_level)
+        logger.log(f"total time:     {h_tot:.3f} s/build\n", self.log_level)
 
         if self.do_test_rdms:
             self._test_rdms()

@@ -273,7 +273,4 @@ def test_gasci_rhf_11():
 
     assert rhf.E == approx(erhf)       
     assert ci.E[0] == approx(eci)
-
-
-test_gasci_rhf_10()
-test_gasci_rhf_11()
+    
