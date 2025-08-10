@@ -211,7 +211,6 @@ def test_gasci_rhf_9():
         core_orbitals=[0, 1],
         active_orbitals=[[2, 3, 4],[5, 6, 7]],
         econv=1e-12,
-        # ci_algorithm='kh'
     )(rhf)
     ci.run()    
 
