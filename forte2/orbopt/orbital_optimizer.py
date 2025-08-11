@@ -46,6 +46,8 @@ class MCOptimizer(ActiveSpaceSolver):
         Energy convergence tolerance.
     gconv : float, optional, default=1e-7
         Gradient convergence tolerance.
+    die_if_not_converged : bool, optional, default=True
+        If True, raises an error if the optimization does not converge.
     micro_maxiter : int, optional, default=6
         Maximum number of microiterations for L-BFGS.
     ci_maxiter : int, optional, default=50
@@ -70,6 +72,7 @@ class MCOptimizer(ActiveSpaceSolver):
     maxiter: int = 50
     econv: float = 1e-8
     gconv: float = 1e-7
+    die_if_not_converged: bool = True
 
     ### L-BFGS solver (microiteration) parameters
     micro_maxiter: int = 6
@@ -88,6 +91,7 @@ class MCOptimizer(ActiveSpaceSolver):
     do_transition_dipole: bool = False
 
     ### Non-init attributes
+    converged: bool = field(default=False, init=False)
     executed: bool = field(default=False, init=False)
 
     def __call__(self, method):
@@ -233,6 +237,7 @@ class MCOptimizer(ActiveSpaceSolver):
             iter_info = f"{self.iter:>10d} {self.E_avg:>20.10f} {self.delta_ci_avg:>12.4e} {self.E_orb:>20.10f} {self.delta_orb:>12.4e} {self.g_rms:>12.4e} {lbfgs_str:>8} {conv_str:>8}"
             if conv:
                 logger.log_info1(iter_info)
+                self.converged = True
                 break
 
             # 3. DIIS Extrapolation
@@ -260,9 +265,14 @@ class MCOptimizer(ActiveSpaceSolver):
             self.iter += 1
         else:
             logger.log_info1("=" * width)
-            raise RuntimeError(
-                f"Orbital optimization did not converge in {self.maxiter} iterations."
-            )
+            if self.die_if_not_converged:
+                raise RuntimeError(
+                    f"Orbital optimization did not converge in {self.maxiter} iterations."
+                )
+            else:
+                logger.log_warning(
+                    f"Orbital optimization did not converge in {self.maxiter} iterations."
+                )
         # self.ci_solver.set_maxiter(ci_maxiter_save)
         self.ci_solver.set_ints(
             self.orb_opt.Ecore + self.system.nuclear_repulsion,
@@ -541,12 +551,14 @@ class OrbOptimizer:
 
         if self.gas_ref:
             # tei (xt|vw) => eri_aaaa
-            self.eri_aaaa = np.zeros((self.nact,self.nact,self.nact,self.nact))
+            self.eri_aaaa = np.zeros((self.nact, self.nact, self.nact, self.nact))
             for i in range(self.nact):
                 for j in range(self.nact):
                     for k in range(self.nact):
                         for l in range(self.nact):
-                            self.eri_aaaa[i][j][k][l] = self.eri_gaaa[self.ncore + i][j][k][l]
+                            self.eri_aaaa[i][j][k][l] = self.eri_gaaa[self.ncore + i][
+                                j
+                            ][k][l]
 
             # A_xu = sum_v[Fcore_xv * D_vu] + sum_tvw[(xt|vw) * D_tu,vw]
             # A_xu = self.Fcore[self.actv, self.actv] * self.g1 + self.eri_aaaa * self.g2
@@ -555,16 +567,17 @@ class OrbOptimizer:
             for x in range(self.nact):
                 for u in range(self.nact):
                     for v in range(self.nact):
-                        self.A_xu[x][u] +=  (Fcore_aa[x][v] * self.g1[v][u])
+                        self.A_xu[x][u] += Fcore_aa[x][v] * self.g1[v][u]
 
             for x in range(self.nact):
                 for u in range(self.nact):
                     for v in range(self.nact):
                         for t in range(self.nact):
                             for w in range(self.nact):
-                                self.A_xu[x][u] += (self.eri_aaaa[x][t][v][w] * self.g2[t][u][v][w])
-                        
-            
+                                self.A_xu[x][u] += (
+                                    self.eri_aaaa[x][t][v][w] * self.g2[t][u][v][w]
+                                )
+
             orbgrad[self.actv, self.actv] = 2 * (self.A_xu - self.A_xu.T)
 
         return orbgrad
@@ -610,7 +623,9 @@ class OrbOptimizer:
             ## G^{uu}_{vv}
 
             ## (uu|xy)
-            jk_internal_ = np.zeros((self.nact, self.nact, self.nact)) # name self.eri_aaa
+            jk_internal_ = np.zeros(
+                (self.nact, self.nact, self.nact)
+            )  # name self.eri_aaa
 
             for i in range(self.nact):
                 for j in range(self.nact):
@@ -646,13 +661,12 @@ class OrbOptimizer:
             # Guu_["uv"] = jk_internal_["uxy"] * d2_internal_["vxy"];
 
             ## (ux|uy)
-            jk_internal_2 = np.zeros((self.nact,self.nact,self.nact))
+            jk_internal_2 = np.zeros((self.nact, self.nact, self.nact))
 
             for u in range(self.nact):
                 for x in range(self.nact):
                     for y in range(self.nact):
                         jk_internal_2[u][x][y] = self.eri_gaaa[self.ncore + u][x][u][y]
-
 
             # jk_internal_.block("aaa").iterate([&](const std::vector<size_t>& i, double& value) {
             #     auto idx = i[0] * nactv3 + i[1] * nactv2 + i[0] * nactv_ + i[2];
@@ -660,7 +674,7 @@ class OrbOptimizer:
             # });
 
             ## D_{vx,vy}
-            d2_internal_2 = np.zeros((self.nact,self.nact,self.nact))
+            d2_internal_2 = np.zeros((self.nact, self.nact, self.nact))
 
             for v in range(self.nact):
                 for x in range(self.nact):
@@ -676,14 +690,18 @@ class OrbOptimizer:
                 for v in range(self.nact):
                     for x in range(self.nact):
                         for y in range(self.nact):
-                            Guu[u][v] += 2.0 * jk_internal_2[u][x][y] * d2_internal_2[v][x][y]
+                            Guu[u][v] += (
+                                2.0 * jk_internal_2[u][x][y] * d2_internal_2[v][x][y]
+                            )
 
             # Guu_["uv"] += 2.0 * jk_internal_["uxy"] * d2_internal_["vxy"];
 
             # TODO double check
             for u in range(self.nact):
                 for v in range(self.nact):
-                    Guu[u][v] += self.Fcore[self.ncore + u][self.ncore + u] * self.g1[v][v]
+                    Guu[u][v] += (
+                        self.Fcore[self.ncore + u][self.ncore + u] * self.g1[v][v]
+                    )
 
             # Guu_.block("aa").iterate([&](const std::vector<size_t>& i, double& value) {
             #     auto i0 = i[0] * nactv_ + i[0];
@@ -695,7 +713,9 @@ class OrbOptimizer:
             Guv = np.zeros((self.nact, self.nact))
             for u in range(self.nact):
                 for v in range(self.nact):
-                    Guv[u][v] = self.Fcore[self.ncore + u][self.ncore + v] * self.g1[v][u]
+                    Guv[u][v] = (
+                        self.Fcore[self.ncore + u][self.ncore + v] * self.g1[v][u]
+                    )
 
             # Guv_["uv"] = Fc_["uv"] * D1_["vu"];
 
@@ -703,7 +723,10 @@ class OrbOptimizer:
                 for v in range(self.nact):
                     for x in range(self.nact):
                         for y in range(self.nact):
-                            Guv[u][v] += self.eri_gaaa[self.ncore + u][v][x][y] * self.g2[v][u][x][y]
+                            Guv[u][v] += (
+                                self.eri_gaaa[self.ncore + u][v][x][y]
+                                * self.g2[v][u][x][y]
+                            )
 
             # Guv_["uv"] += V_["uvxy"] * D2_["vuxy"];
 
@@ -711,7 +734,11 @@ class OrbOptimizer:
                 for v in range(self.nact):
                     for x in range(self.nact):
                         for y in range(self.nact):
-                            Guv[u][v] += 2.0 * self.eri_gaaa[self.ncore + u][x][v][y] * self.g2[v][x][u][y]
+                            Guv[u][v] += (
+                                2.0
+                                * self.eri_gaaa[self.ncore + u][x][v][y]
+                                * self.g2[v][x][u][y]
+                            )
 
             # Guv_["uv"] += 2.0 * V_["uxvy"] * D2_["vxuy"];
 
@@ -720,7 +747,12 @@ class OrbOptimizer:
 
             for u in range(self.nact):
                 for v in range(self.nact):
-                    h_diag[u][v] = 2.0 * Guu[u][v] + 2.0 * Guu[v][u] - 2.0 * Guv[u][v] - 2.0 * Guv[v][u]
+                    h_diag[u][v] = (
+                        2.0 * Guu[u][v]
+                        + 2.0 * Guu[v][u]
+                        - 2.0 * Guv[u][v]
+                        - 2.0 * Guv[v][u]
+                    )
 
             # h_diag_["uv"] = 2.0 * Guu_["uv"];
             # h_diag_["uv"] += 2.0 * Guu_["vu"];

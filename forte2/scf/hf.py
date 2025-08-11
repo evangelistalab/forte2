@@ -49,6 +49,8 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         Level shift for the SCF calculation. If None, no level shift is applied.
     level_shift_thresh : float, optional, default=1e-5
         If energy change is below this threshold, level shift is turned off.
+    die_if_not_converged : bool, optional, default=True
+        Whether to raise an error if the SCF calculation does not converge.
 
     Attributes
     ----------
@@ -81,6 +83,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
     guess_type: str = "minao"
     level_shift: float = None
     level_shift_thresh: float = 1e-5
+    die_if_not_converged: bool = True
 
     executed: bool = field(default=False, init=False)
     converged: bool = field(default=False, init=False)
@@ -224,15 +227,20 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
             self.iter += 1
         else:
             logger.log_info1("=" * width)
-            raise RuntimeError(
-                f"{self.method} did not converge in {self.maxiter} iterations."
-            )
+            logger.log_info1(f"{self.method} iterations did not converge")
+            if self.die_if_not_converged:
+                raise RuntimeError(
+                    f"{self.method} did not converge in {self.maxiter} iterations."
+                )
+            else:
+                logger.log_warning(
+                    f"{self.method} did not converge in {self.maxiter} iterations."
+                )
 
         end = time.monotonic()
         logger.log_info1(f"{self.method} time: {end - start:.2f} seconds")
 
-        if self.converged:
-            self._post_process()
+        self._post_process()
 
         self.executed = True
         return self
