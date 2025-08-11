@@ -956,7 +956,9 @@ class GHF(SCFBase):
     def _apply_level_shift(self, F, S):
         if self.level_shift is None or self.level_shift < 1e-4:
             return F
-        D_vir = S - S @ self.D[0] @ S
+        Daa, Dab, Dba, Dbb = self.D
+        D_spinor = np.block([[Daa, Dab], [Dba, Dbb]])
+        D_vir = S - S @ D_spinor @ S
 
         return [F[0] + self.level_shift * D_vir]
 
