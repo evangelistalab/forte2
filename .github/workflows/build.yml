@@ -8,10 +8,22 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         shell: bash -el {0}   
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        bse: [with_bse, without_bse]
+        include:
+          - bse: with_bse
+            extra_dependencies: 'conda-forge::basis_set_exchange'
+          - bse: without_bse
+            extra_dependencies: ''
+
 
     steps:
     - name: Checkout code
@@ -37,6 +49,9 @@ jobs:
         export CMAKE_GENERATOR="Unix Makefiles"
         pip install --no-build-isolation -ve .
         pip list
+        if [ -n "${{ matrix.extra_dependencies }}" ]; then
+          conda install -y ${{ matrix.extra_dependencies }}
+        fi
 
     - name: Run Forte2 pytest tests
       if: steps.compile-forte2.outcome == 'success' && '!cancelled()'
