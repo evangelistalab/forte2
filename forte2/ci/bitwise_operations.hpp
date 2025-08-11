@@ -9,6 +9,8 @@
 inline void hash_combine_uint64(std::size_t& seed, std::uint64_t value) {
     // seed ^= value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
     const std::size_t hv = std::hash<std::uint64_t>{}(value);
+    // 0x9e3779b97f4a7c15ULL is the 64-bit variant of the constant used in boost::hash_combine (0x9e3779b9),
+    // derived from the fractional part of the golden ratio. This helps to spread hash values uniformly.
     seed ^= hv + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
 }
 
