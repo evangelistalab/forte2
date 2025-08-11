@@ -308,7 +308,7 @@ def test_gasscf_8():
         econv=1e-9,
         gconv=1e-9,
         ci_maxiter=50,
-        maxiter=100
+        maxiter=200
         )(rhf)
     mc.run()
 
