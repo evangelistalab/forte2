@@ -40,6 +40,8 @@ class MCOptimizer(ActiveSpaceSolver):
         A `MOSpace` object defining the partitioning of the molecular orbitals.
         If not provided, CISolver must be called with a parent method that has MOSpaceMixin (e.g., AVAS).
         If provided, it overrides the one from the parent method.
+    active_frozen : list[int]
+        List of active orbital indices to be frozen in the MCSCF optimization.
     maxiter : int, optional, default=50
         Maximum number of macroiterations.
     econv : float, optional, default=1e-8
@@ -63,7 +65,7 @@ class MCOptimizer(ActiveSpaceSolver):
     do_transition_dipole : bool, optional, default=False
         Whether to compute transition dipole moments.
     """
-
+    active_frozen: list[int] = None
     optimize_frozen_orbs: bool = True
 
     ### Macroiteration parameters
@@ -115,6 +117,13 @@ class MCOptimizer(ActiveSpaceSolver):
         # self.actv will be a list if multiple GASes are defined
         self.actv = self.mo_space.actv
         self.virt = self.mo_space.uocc
+
+        # Check if all active_frozen indices are in the active space
+        if self.active_frozen is not None:
+            if not set(self.active_frozen).issubset(set(self.mo_space.active_indices)):
+                raise ValueError(
+                    "Active frozen indices selected are not in the active space."
+                )
 
         self.nrr = self._get_nonredundant_rotations()
 
@@ -362,6 +371,13 @@ class MCOptimizer(ActiveSpaceSolver):
         nrr[_core, _virt] = True
         nrr[self.actv, _virt] = True
         nrr[_core, self.actv] = True
+
+        # make frozen active indices False in nrr
+        if self.active_frozen:
+            for idx in self.active_frozen:
+                nrr[idx, :] = False
+                nrr[:, idx] = False
+
         return nrr
 
     def _check_convergence(self):
