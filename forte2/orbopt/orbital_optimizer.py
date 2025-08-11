@@ -118,12 +118,12 @@ class MCOptimizer(ActiveSpaceSolver):
         self.actv = self.mo_space.actv
         self.virt = self.mo_space.uocc
 
-        assert (
+        # check if all active_frozen_orbitals indices are in the active space
+        if self.active_frozen_orbitals is not None:
+            assert (
             sorted(self.active_frozen_orbitals) == self.active_frozen_orbitals
             ), "Active frozen orbitals must be sorted."
 
-        # check if all active_frozen_orbitals indices are in the active space
-        if self.active_frozen_orbitals is not None:
             missing = set(self.active_frozen_orbitals) - set(self.mo_space.active_indices)
             if missing:
                 raise ValueError(
