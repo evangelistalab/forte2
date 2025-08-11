@@ -23,6 +23,7 @@ class FockBuilder:
     """
 
     def __init__(self, system: System, use_aux_corr=False):
+        self.system = system
         if isinstance(system, ModelSystem):
             # special handling for ModelSystem
             nbf = system.nbf
@@ -107,19 +108,15 @@ class FockBuilder:
         J = [np.einsum("Pmn,Prs,sr->mn", self.B, self.B, Di, optimize=True) for Di in D]
         return J
 
-    def build_K(self, C, cross=False):
+    def build_K(self, C):
         Y = [np.einsum("Pmr,mi->Pri", self.B, Ci.conj(), optimize=True) for Ci in C]
-        if cross:
+        if self.system.two_component:
             K = []
             for Yi in Y:
                 for Yj in Y:
                     K.append(np.einsum("Pmi,Pni->mn", Yi.conj(), Yj, optimize=True))
         else:
             K = [np.einsum("Pmi,Pni->mn", Yi.conj(), Yi, optimize=True) for Yi in Y]
-        return K
-
-    def build_K_density(self, D):
-        K = [np.einsum("Pms,Prn,sr->mn", self.B, self.B, Di, optimize=True) for Di in D]
         return K
 
     def build_JK(self, C):

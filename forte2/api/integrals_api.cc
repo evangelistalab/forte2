@@ -103,7 +103,7 @@ void export_shell_api(nb::module_& sub_m) {
             "The number of contractions in the shell.")
         .def_prop_ro(
             "nprim", [](libint2::Shell& s) { return s.nprim(); },
-            "The number of primitives Gaussians in the shell.")
+            "The number of primitive Gaussians in the shell.")
         .def_prop_ro(
             "l", [](libint2::Shell& s) { return s.contr[0].l; },
             "The angular momentum of the shell.")
@@ -199,12 +199,10 @@ Returns
 ndarray, shape = (nb1, nb2)
     Overlap integrals matrix.
 )pbdoc");
-    sub_m.def(
-        "overlap", [](const Basis& basis) { return overlap(basis, basis); }, "basis"_a);
+    sub_m.def("overlap", [](const Basis& basis) { return overlap(basis, basis); }, "basis"_a);
 
     sub_m.def("kinetic", &kinetic, "basis1"_a, "basis2"_a);
-    sub_m.def(
-        "kinetic", [](const Basis& basis) { return kinetic(basis, basis); }, "basis"_a);
+    sub_m.def("kinetic", [](const Basis& basis) { return kinetic(basis, basis); }, "basis"_a);
 
     sub_m.def(
         "nuclear",
@@ -311,8 +309,7 @@ void export_two_electron_api(nb::module_& sub_m) {
         "coulomb_2c",
         [](const Basis& basis1, const Basis& basis2) { return coulomb_2c(basis1, basis2); },
         "basis1"_a, "basis2"_a);
-    sub_m.def(
-        "coulomb_2c", [](const Basis& basis) { return coulomb_2c(basis, basis); }, "basis"_a);
+    sub_m.def("coulomb_2c", [](const Basis& basis) { return coulomb_2c(basis, basis); }, "basis"_a);
 
     sub_m.def(
         "erf_coulomb_3c",
