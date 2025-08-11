@@ -15,7 +15,7 @@ inline void hash_combine_uint64(std::size_t& seed, std::uint64_t value) {
 
 /// @brief Hash a range of uint64_t values stored in an iterable container
 template <typename Container>
-inline constexpr std::size_t hash_range_uint64(Container container) noexcept {
+inline constexpr std::size_t hash_range_uint64(const Container& container) noexcept {
     static_assert(
         std::is_same_v<std::remove_cv_t<std::remove_reference_t<decltype(*std::begin(container))>>,
                        std::uint64_t>,
