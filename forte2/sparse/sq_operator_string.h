@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <vector>
+#include <bitset>
 
 #include "ci/determinant.h"
 
