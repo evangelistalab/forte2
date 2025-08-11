@@ -23,6 +23,7 @@ class FockBuilder:
     """
 
     def __init__(self, system: System, use_aux_corr=False):
+        self.system = system
         if isinstance(system, ModelSystem):
             # special handling for ModelSystem
             nbf = system.nbf
@@ -49,8 +50,6 @@ class FockBuilder:
             self.B, system.naux = self._build_B_cholesky(
                 system.basis, system.cholesky_tol
             )
-
-        self.two_component = system.two_component
 
     @staticmethod
     def _build_B_cholesky(basis, cholesky_tol):
@@ -111,7 +110,7 @@ class FockBuilder:
 
     def build_K(self, C):
         Y = [np.einsum("Pmr,mi->Pri", self.B, Ci.conj(), optimize=True) for Ci in C]
-        if self.two_component:
+        if self.system.two_component:
             K = []
             for Yi in Y:
                 for Yj in Y:

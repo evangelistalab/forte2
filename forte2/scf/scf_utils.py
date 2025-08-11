@@ -71,6 +71,21 @@ def minao_initial_guess(system, H):
 
 
 def core_initial_guess(system: System, H):
+    """
+    Generate an initial guess by diagonalizing the core Hamiltonian.
+
+    Parameters
+    ----------
+    system : forte2.System
+        The system object containing the atoms and basis set.
+    H : NDArray
+        The core Hamiltonian matrix.
+
+    Returns
+    -------
+    NDArray
+        The initial MO guess for the SCF procedure.
+    """
     Xorth = system.get_Xorth()
     Htilde = Xorth.T @ H @ Xorth
     _, C = np.linalg.eigh(Htilde)
@@ -78,6 +93,31 @@ def core_initial_guess(system: System, H):
 
 
 def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4, twocomp=False):
+    """
+    Induce the breaking of S^2 symmetry for UHF ms=0.0 calculations.
+    This is helpful for obtaining proxies for open-shell singlets, for example.
+
+    Parameters
+    ----------
+    C : NDArray
+        The MO coefficients.
+    homo_idx : int
+        The index of the highest occupied molecular orbital (HOMO).
+    mixing_parameter : float, optional
+        The mixing parameter for the Givens rotation.
+    twocomp : bool, optional
+        Whether the system is two-component.
+
+    Returns
+    -------
+    NDArray
+        The modified MO coefficients.
+
+    Notes
+    -----
+    See Szabo and Ostlund Ch. 3.8.7.
+
+    """
     cosq = np.cos(mixing_parameter)
     sinq = np.sin(mixing_parameter)
     if twocomp:
@@ -93,6 +133,23 @@ def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4, twocomp=False):
 
 
 def alpha_beta_mix(C, mixing_parameter=0.1):
+    """
+    Induce the breaking of S_z symmetry for GHF calculations.
+    This function explicitly mixes the degenerate alpha and beta MOs,
+    which results in non-vanishing D_ab/D_ba density matrix elements.
+
+    Parameters
+    ----------
+    C : NDArray
+        The MO coefficients.
+    mixing_parameter : float, optional
+        The mixing parameter for the Givens rotation.
+
+    Returns
+    -------
+    NDArray
+        The modified MO coefficients.
+    """
     cosq = np.cos(mixing_parameter)
     sinq = np.sin(mixing_parameter)
     nmo = C.shape[1]
@@ -102,6 +159,22 @@ def alpha_beta_mix(C, mixing_parameter=0.1):
 
 
 def break_complex_conjugation_symmetry(C, pert_strength=0.1):
+    """
+    Break the time-reversal/complex conjugation symmetry of the MO coefficients.
+    A random phase is applied to each AO (cannot be MO as it would not change the density matrix).
+
+    Parameters
+    ----------
+    C : NDArray
+        The MO coefficients.
+    pert_strength : float, optional
+        The strength of the perturbation (in radians).
+
+    Returns
+    -------
+    NDArray
+        The modified MO coefficients.
+    """
     # make sure alpha and beta are not complex conjugates
     phi = np.random.uniform(low=-pert_strength, high=pert_strength, size=C.shape[1])
     U = np.diag(np.exp(1.0j * phi))
@@ -111,7 +184,21 @@ def break_complex_conjugation_symmetry(C, pert_strength=0.1):
 
 def convert_coeff_spatial_to_spinor(system, C, complex=True):
     """
-    Convert spatial orbital MO coefficiensts to spinor(bital) MO coefficients
+    Convert spatial orbital MO coefficients to spinor(bital) MO coefficients
+
+    Parameters
+    ----------
+    system : forte2.System
+        The system object containing the atoms and basis set.
+    C : list of NDArray
+        The MO coefficients in spatial orbital basis.
+    complex : bool, optional, default=True
+        Whether to cast to complex dtype.
+
+    Returns
+    -------
+    list of NDArray
+        The MO coefficients in spinor(bital) basis.
     """
     dtype = np.complex128 if complex else np.float64
     nbf = system.nbf
