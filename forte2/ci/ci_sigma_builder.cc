@@ -55,9 +55,9 @@ void CISigmaBuilder::set_algorithm(const std::string& algorithm) {
 std::string CISigmaBuilder::get_algorithm() const {
     switch (algorithm_) {
     case CIAlgorithm::Knowles_Handy:
-        return "knowles-handy";
+        return "Knowles-Handy";
     case CIAlgorithm::Harrison_Zarrabian:
-        return "harrison-zarrabian";
+        return "Harrison-Zarrabian";
     default:
         throw std::runtime_error("Unknown CI algorithm.");
     }

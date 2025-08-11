@@ -124,6 +124,9 @@ void CISigmaBuilder::H2_hz_same_spin(std::span<double> basis, std::span<double> 
         const size_t maxK = is_alpha(spin) ? lists_.alfa_address_2h()->strpcls(class_K)
                                            : lists_.beta_address_2h()->strpcls(class_K);
 
+        if (maxK == 0)
+            continue;
+
         // loop over blocks of matrix C
         for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
             if (lists_.block_size(nI) == 0)
@@ -206,6 +209,9 @@ void CISigmaBuilder::H2_hz_opposite_spin(std::span<double> basis, std::span<doub
             const auto maxKa = lists_.alfa_address_1h()->strpcls(class_Ka);
             const auto maxKb = lists_.beta_address_1h()->strpcls(class_Kb);
 
+            if ((maxKa == 0) or (maxKb == 0))
+                continue;
+
             // We gather the block of C into TR
             const size_t Kb_block_start = 0;
             const size_t Kb_block_end = maxKb;
@@ -228,10 +234,8 @@ void CISigmaBuilder::H2_hz_opposite_spin(std::span<double> basis, std::span<doub
                         continue;
                     const auto maxIb = lists_.beta_address()->strpcls(class_Ib);
                     const auto Cr_offset = lists_.block_offset(nI);
-                    const auto& Ka_right_list =
-                        lists_.get_alfa_1h_list2(class_Ka, class_Ia); // Ka_block_start + Ka,
-                    const auto& Kb_right_list =
-                        lists_.get_beta_1h_list2(class_Kb, class_Ib); // Kb_block_start + Kb,
+                    const auto& Ka_right_list = lists_.get_alfa_1h_list2(class_Ka, class_Ia);
+                    const auto& Kb_right_list = lists_.get_beta_1h_list2(class_Kb, class_Ib);
                     if (Ka_right_list.empty() || Kb_right_list.empty())
                         continue;
                     for (size_t Ka = 0; Ka < Ka_block_size; ++Ka) {
@@ -261,10 +265,8 @@ void CISigmaBuilder::H2_hz_opposite_spin(std::span<double> basis, std::span<doub
                         continue;
                     const auto maxIb = lists_.beta_address()->strpcls(class_Ib);
                     const auto Cr_offset = lists_.block_offset(nI);
-                    const auto& Ka_right_list =
-                        lists_.get_alfa_1h_list2(class_Ka, class_Ia); // Ka_block_start + Ka,
-                    const auto& Kb_right_list =
-                        lists_.get_beta_1h_list2(class_Kb, class_Ib); // Kb_block_start + Kb,
+                    const auto& Ka_right_list = lists_.get_alfa_1h_list2(class_Ka, class_Ia);
+                    const auto& Kb_right_list = lists_.get_beta_1h_list2(class_Kb, class_Ib);
                     if (Ka_right_list.empty() || Kb_right_list.empty())
                         continue;
                     for (size_t Ka = 0; Ka < Ka_block_size; ++Ka) {
