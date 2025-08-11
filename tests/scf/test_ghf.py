@@ -1,4 +1,4 @@
-from forte2 import System, GHF, UHF, RHF
+from forte2 import System, GHF, UHF
 from forte2.helpers.comparisons import approx
 
 
