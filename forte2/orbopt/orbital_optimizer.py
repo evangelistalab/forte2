@@ -40,7 +40,7 @@ class MCOptimizer(ActiveSpaceSolver):
         A `MOSpace` object defining the partitioning of the molecular orbitals.
         If not provided, CISolver must be called with a parent method that has MOSpaceMixin (e.g., AVAS).
         If provided, it overrides the one from the parent method.
-    active_frozen : list[int]
+    active_frozen_orbitals : list[int]
         List of active orbital indices to be frozen in the MCSCF optimization.
     maxiter : int, optional, default=50
         Maximum number of macroiterations.
@@ -65,7 +65,7 @@ class MCOptimizer(ActiveSpaceSolver):
     do_transition_dipole : bool, optional, default=False
         Whether to compute transition dipole moments.
     """
-    active_frozen: list[int] = None
+    active_frozen_orbitals: list[int] = None
     optimize_frozen_orbs: bool = True
 
     ### Macroiteration parameters
@@ -118,11 +118,16 @@ class MCOptimizer(ActiveSpaceSolver):
         self.actv = self.mo_space.actv
         self.virt = self.mo_space.uocc
 
-        # Check if all active_frozen indices are in the active space
-        if self.active_frozen is not None:
-            if not set(self.active_frozen).issubset(set(self.mo_space.active_indices)):
+        assert (
+            sorted(self.active_frozen_orbitals) == self.active_frozen_orbitals
+            ), "Active frozen orbitals must be sorted."
+
+        # check if all active_frozen_orbitals indices are in the active space
+        if self.active_frozen_orbitals is not None:
+            missing = set(self.active_frozen_orbitals) - set(self.mo_space.active_indices)
+            if missing:
                 raise ValueError(
-                    "Active frozen indices selected are not in the active space."
+                    f'selected active frozen indices, {sorted(missing)}, are not in the active space {self.mo_space.active_indices}.'
                 )
 
         self.nrr = self._get_nonredundant_rotations()
@@ -372,9 +377,10 @@ class MCOptimizer(ActiveSpaceSolver):
         nrr[self.actv, _virt] = True
         nrr[_core, self.actv] = True
 
-        # make frozen active indices False in nrr
-        if self.active_frozen:
-            for idx in self.active_frozen:
+        # remove active_fronzen indices from nonredundant rotations
+        if self.active_frozen_orbitals is not None:
+            contig_actv_froz = self.mo_space.contig_to_orig[self.active_frozen_orbitals]
+            for idx in contig_actv_froz:
                 nrr[idx, :] = False
                 nrr[:, idx] = False
 
