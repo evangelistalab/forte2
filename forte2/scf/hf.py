@@ -5,15 +5,19 @@ import time
 import numpy as np
 import scipy as sp
 
-from forte2 import ints
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import System, ModelSystem, compute_orthonormal_transformation
 from forte2.jkbuilder import FockBuilder
 from forte2.base_classes.mixins import MOsMixin, SystemMixin
-from forte2.helpers.matrix_functions import givens_rotation
 from forte2.helpers import logger, DIIS
-from .initial_guess import minao_initial_guess, core_initial_guess
 from forte2.symmetry import assign_mo_symmetries, real_sph_to_j_adapted
+from .scf_utils import (
+    minao_initial_guess,
+    core_initial_guess,
+    guess_mix,
+    alpha_beta_mix,
+    break_complex_conjugation_symmetry,
+)
 
 
 @dataclass
@@ -841,6 +845,8 @@ class GHF(SCFBase):
     ----------
     guess_mix : bool, optional, default=False
         If True, will mix the HOMO and LUMO orbitals to try to break alpha-beta degeneracy if nel is even.
+    alpha_beta_mix : bool, optional, default=False
+        If True, will mix the highest two spinorbitals to try to seed alpha-beta orbital gradients.
     break_complex_symmetry : bool, optional, default=False
         If True, will add a small complex perturbation to the initial density matrix. This will both break
         the complex conjugation symmetry and Sz symmetry (allowing alpha-beta density matrix blocks to be nonzero)
@@ -850,6 +856,7 @@ class GHF(SCFBase):
 
     ms_guess: float = None
     guess_mix: bool = False  # only used if nel is even
+    alpha_beta_mix: bool = False
     break_complex_symmetry: bool = False
     j_adapt: bool = False
 
@@ -895,19 +902,17 @@ class GHF(SCFBase):
     def _build_fock(self, H, fock_builder, S):
         Jaa, Jbb = fock_builder.build_J([self.D[0], self.D[3]])
         nbf = Jaa.shape[0]
-        if self.iter == 0 and self.break_complex_symmetry:
-            Kaa, Kab, Kba, Kbb = fock_builder.build_K_density(self.D)
-        elif self.iter == 0:
+        if self.iter == 0:
             # Apply na/nb_guess
             mo_a, mo_b = self._guess_ms(self.C[0])
             occ = list(mo_a[: self.na_guess]) + list(mo_b[: self.nb_guess])
             occ = sorted(occ)
             Kaa, Kab, Kba, Kbb = fock_builder.build_K(
-                [self.C[0][:nbf, occ], self.C[0][nbf:, occ]], cross=True
+                [self.C[0][:nbf, occ], self.C[0][nbf:, occ]]
             )
         else:
             Kaa, Kab, Kba, Kbb = fock_builder.build_K(
-                [self.C[0][:nbf, : self.nel], self.C[0][nbf:, : self.nel]], cross=True
+                [self.C[0][:nbf, : self.nel], self.C[0][nbf:, : self.nel]]
             )
         F = H.copy()
         F[:nbf, :nbf] += Jaa + Jbb - Kaa
@@ -940,14 +945,6 @@ class GHF(SCFBase):
         Dba = D[nbf:, :nbf]
         Dbb = D[nbf:, nbf:]
 
-        if self.iter == 0 and self.break_complex_symmetry:
-            Daa[0, :] += 0.1j
-            Dab[0, :] += 0.1j
-            Daa[:, 0] -= 0.1j
-            Dba[:, 0] -= 0.1j
-            Dbb[0, :] += 0.1j
-            Dbb[:, 0] -= 0.1j
-
         return Daa, Dab, Dba, Dbb
 
     def _build_total_density_matrix(self):
@@ -965,6 +962,10 @@ class GHF(SCFBase):
         C = RHF._initial_guess(self, H, guess_type)[0]
         if self.twicems_guess % 2 == 0 and self.guess_mix:
             C = guess_mix(C, self.nel - 1, twocomp=True)
+        if self.alpha_beta_mix:
+            C = alpha_beta_mix(C)
+        if self.break_complex_symmetry:
+            C = break_complex_conjugation_symmetry(C)
         return [C]
 
     def _build_ao_grad(self, S, F):
@@ -1100,43 +1101,3 @@ class GHF(SCFBase):
                 list(range(self.nel, min(self.nel + 6, self.nmo * 2))),
                 spinorbital=True,
             )
-
-
-def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4, twocomp=False):
-    cosq = np.cos(mixing_parameter)
-    sinq = np.sin(mixing_parameter)
-    if twocomp:
-        # alpha channel
-        C = givens_rotation(C, cosq, sinq, homo_idx - 1, homo_idx + 1)
-        # beta channel
-        C = givens_rotation(C, cosq, -sinq, homo_idx, homo_idx + 2)
-        return C
-    else:
-        Ca = givens_rotation(C, cosq, sinq, homo_idx, homo_idx + 1)
-        Cb = givens_rotation(C, cosq, -sinq, homo_idx, homo_idx + 1)
-        return [Ca, Cb]
-
-
-def convert_coeff_spatial_to_spinor(system, C, complex=True):
-    """
-    Convert spatial orbital MO coefficiensts to spinor(bital) MO coefficients
-    """
-    dtype = np.complex128 if complex else np.float64
-    nbf = system.nbf
-    C_2c = np.zeros((nbf * 2,) * 2, dtype=dtype)
-    assert isinstance(C, list)
-    if len(C) == 2:
-        # UHF
-        assert C[0].shape[0] == nbf
-        assert C[1].shape[0] == nbf
-        # |a^0_{alfa AO} b^0_{alfa AO} ... |
-        # |a^0_{beta AO} b^0_{beta AO} ... |
-        C_2c[:nbf, ::2] = C[0]
-        C_2c[nbf:, 1::2] = C[1]
-    elif len(C) == 1:
-        # RHF/ROHF
-        C_2c[:nbf, ::2] = C[0]
-        C_2c[nbf:, 1::2] = C[0]
-    else:
-        raise RuntimeError(f"Coefficient of length {len(C)} not recognized!")
-    return [C_2c]

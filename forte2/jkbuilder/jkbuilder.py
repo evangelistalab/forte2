@@ -50,6 +50,8 @@ class FockBuilder:
                 system.basis, system.cholesky_tol
             )
 
+        self.two_component = system.two_component
+
     @staticmethod
     def _build_B_cholesky(basis, cholesky_tol):
         # Compute the memory requirements
@@ -107,19 +109,15 @@ class FockBuilder:
         J = [np.einsum("Pmn,Prs,sr->mn", self.B, self.B, Di, optimize=True) for Di in D]
         return J
 
-    def build_K(self, C, cross=False):
+    def build_K(self, C):
         Y = [np.einsum("Pmr,mi->Pri", self.B, Ci.conj(), optimize=True) for Ci in C]
-        if cross:
+        if self.two_component:
             K = []
             for Yi in Y:
                 for Yj in Y:
                     K.append(np.einsum("Pmi,Pni->mn", Yi.conj(), Yj, optimize=True))
         else:
             K = [np.einsum("Pmi,Pni->mn", Yi.conj(), Yi, optimize=True) for Yi in Y]
-        return K
-
-    def build_K_density(self, D):
-        K = [np.einsum("Pms,Prn,sr->mn", self.B, self.B, Di, optimize=True) for Di in D]
         return K
 
     def build_JK(self, C):

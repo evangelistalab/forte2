@@ -4,6 +4,7 @@ import scipy as sp
 from forte2 import ints, Basis, Shell
 from forte2.system import System
 from forte2.system.build_basis import build_basis
+from forte2.helpers.matrix_functions import givens_rotation
 
 
 def minao_initial_guess(system, H):
@@ -74,3 +75,60 @@ def core_initial_guess(system: System, H):
     Htilde = Xorth.T @ H @ Xorth
     _, C = np.linalg.eigh(Htilde)
     return Xorth @ C
+
+
+def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4, twocomp=False):
+    cosq = np.cos(mixing_parameter)
+    sinq = np.sin(mixing_parameter)
+    if twocomp:
+        # alpha channel
+        C = givens_rotation(C, cosq, sinq, homo_idx - 1, homo_idx + 1)
+        # beta channel
+        C = givens_rotation(C, cosq, -sinq, homo_idx, homo_idx + 2)
+        return C
+    else:
+        Ca = givens_rotation(C, cosq, sinq, homo_idx, homo_idx + 1)
+        Cb = givens_rotation(C, cosq, -sinq, homo_idx, homo_idx + 1)
+        return [Ca, Cb]
+
+
+def alpha_beta_mix(C, mixing_parameter=0.1):
+    cosq = np.cos(mixing_parameter)
+    sinq = np.sin(mixing_parameter)
+    nmo = C.shape[1]
+    for i in range(0, nmo, 2):
+        C = givens_rotation(C, cosq, sinq, i, i + 1)
+    return C
+
+
+def break_complex_conjugation_symmetry(C, pert_strength=0.1):
+    # make sure alpha and beta are not complex conjugates
+    phi = np.random.uniform(low=-pert_strength, high=pert_strength, size=C.shape[1])
+    U = np.diag(np.exp(1.0j * phi))
+    C = U @ C
+    return C
+
+
+def convert_coeff_spatial_to_spinor(system, C, complex=True):
+    """
+    Convert spatial orbital MO coefficiensts to spinor(bital) MO coefficients
+    """
+    dtype = np.complex128 if complex else np.float64
+    nbf = system.nbf
+    C_2c = np.zeros((nbf * 2,) * 2, dtype=dtype)
+    assert isinstance(C, list)
+    if len(C) == 2:
+        # UHF
+        assert C[0].shape[0] == nbf
+        assert C[1].shape[0] == nbf
+        # |a^0_{alfa AO} b^0_{alfa AO} ... |
+        # |a^0_{beta AO} b^0_{beta AO} ... |
+        C_2c[:nbf, ::2] = C[0]
+        C_2c[nbf:, 1::2] = C[1]
+    elif len(C) == 1:
+        # RHF/ROHF
+        C_2c[:nbf, ::2] = C[0]
+        C_2c[nbf:, 1::2] = C[0]
+    else:
+        raise RuntimeError(f"Coefficient of length {len(C)} not recognized!")
+    return [C_2c]

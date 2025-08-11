@@ -67,7 +67,9 @@ def test_ghf_complex_perturbation():
     assert scf.S2 == approx(s2_uhf)
 
     scf = GHF(charge=1)(system)
-    # this option breaks Sz and K symmetries in the initial guess DM
+    # this option breaks Sz in the initial guess
+    scf.alpha_beta_mix = True
+    # this option breaks time-reversal/complex conjugation symmetry in the initial guess
     scf.break_complex_symmetry = True
     scf.run()
     assert scf.E == approx(e_uhf)
