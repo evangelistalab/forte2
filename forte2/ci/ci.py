@@ -161,6 +161,27 @@ class _CIBase:
             self.ci_strings, self.ints.E, self.ints.H, self.ints.V, self.log_level
         )
         self.ci_sigma_builder.set_memory(self.ci_builder_memory)
+        if self.ci_algorithm.lower() == "exact":
+            self._do_exact_diagonalization()
+        else:
+            self._do_iterative_ci()
+
+        self.E = self.evals
+        for i, e in enumerate(self.evals):
+            logger.log(f"Final CI Energy Root {i}: {e:20.12f} [Eh]", self.log_level)
+
+        if self.do_test_rdms:
+            self._test_rdms()
+
+        self.executed = True
+
+        return self
+
+    def _do_iterative_ci(self):
+        """
+        Solve CI with an iterative Davidson-Liu solver, using either
+        Harrison-Zarrabian or Knowles-Handy sigma builder algorithm.
+        """
         self.ci_sigma_builder.set_algorithm(self.ci_algorithm)
 
         logger.log(
@@ -219,11 +240,6 @@ class _CIBase:
 
         logger.log("\nDavidson-Liu solver converged.\n", self.log_level)
 
-        # 7. Store the final energy and properties
-        self.E = self.evals
-        for i, e in enumerate(self.evals):
-            logger.log(f"Final CI Energy Root {i}: {e:20.12f} [Eh]", self.log_level)
-
         h_tot, h_aabb, h_aaaa, h_bbbb = self.ci_sigma_builder.avg_build_time()
         logger.log("\nAverage CI Sigma Builder time summary:", self.log_level)
         logger.log(f"h_aabb time:    {h_aabb:.3f} s/build", self.log_level)
@@ -231,12 +247,14 @@ class _CIBase:
         logger.log(f"h_bbbb time:    {h_bbbb:.3f} s/build", self.log_level)
         logger.log(f"total time:     {h_tot:.3f} s/build\n", self.log_level)
 
-        if self.do_test_rdms:
-            self._test_rdms()
+    def _do_exact_diagonalization(self):
+        logger.log(f"Using CI algorithm: exact", self.log_level)
 
-        self.executed = True
+        H = self.ci_sigma_builder.form_H_csf(self.dets, self.spin_adapter)
 
-        return self
+        self.evals_full, self.evecs_full = np.linalg.eigh(H)
+        self.evals = self.evals_full[: self.nroot]
+        self.evecs = self.evecs_full[:, : self.nroot]
 
     def _test_rdms(self):
         # Compute the RDMs from the CI vectors
@@ -321,10 +339,7 @@ class _CIBase:
             )
 
     def _build_guess_vectors(self, Hdiag):
-        """
-        Build the guess vectors for the CI calculation.
-        This method is a placeholder and should be implemented in subclasses.
-        """
+        """Build the guess vectors for the CI calculation."""
 
         # determine the number of guess vectors
         self.num_guess_states = min(self.guess_per_root * self.nroot, self.basis_size)
@@ -351,6 +366,7 @@ class _CIBase:
 
         # Diagonalize the Hamiltonian to get the initial guess vectors
         evals_guess, evecs_guess = np.linalg.eigh(Hguess)
+        print(evals_guess)
 
         # Select the lowest eigenvalues and their corresponding eigenvectors
         guess_mat = np.zeros((self.basis_size, self.num_guess_states))
@@ -740,9 +756,6 @@ class CISolver(ActiveSpaceSolver):
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
 
-    ### Sigma builder parameters
-    ci_algorithm: str = "hz"
-
     ### Non-init attributes
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
     first_run: bool = field(default=True, init=False)
@@ -750,8 +763,6 @@ class CISolver(ActiveSpaceSolver):
 
     def __call__(self, method):
         self.parent_method = method
-        # check if ci_algorithm is valid
-        assert self.ci_algorithm.lower() in ["hz", "kh"]
         return self
 
     def _startup(self):

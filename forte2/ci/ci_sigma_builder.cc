@@ -251,11 +251,9 @@ double CISigmaBuilder::slater_rules_csf(const std::vector<Determinant>& dets,
         for (const auto& [det_add_J, c_J] : spin_adapter.csf(J)) {
             if (det_add_I == det_add_J) {
                 matrix_element += c_I * c_J * slater_rules_.energy(dets[det_add_I]);
-            } else if (det_add_I < det_add_J) {
-                if (c_I * c_J != 0.0) {
-                    matrix_element += 2.0 * c_I * c_J *
-                                      slater_rules_.slater_rules(dets[det_add_I], dets[det_add_J]);
-                }
+            } else if (c_I * c_J != 0.0) {
+                matrix_element +=
+                    c_I * c_J * slater_rules_.slater_rules(dets[det_add_I], dets[det_add_J]);
             }
         }
     }
@@ -299,6 +297,28 @@ np_vector CISigmaBuilder::form_Hdiag_csf(const std::vector<Determinant>& dets,
         }
     }
     return Hdiag;
+}
+
+np_matrix CISigmaBuilder::form_H_csf(const std::vector<Determinant>& dets,
+                                     const CISpinAdapter& spin_adapter) const {
+    size_t ncsf = spin_adapter.ncsf();
+    if (ncsf * ncsf * sizeof(double) > memory_size_) {
+        throw std::runtime_error("Not enough memory to form the full Hamiltonian matrix in the CSF "
+                                 "basis. Increase the memory limit or use a different algorithm.");
+    }
+
+    auto H = make_zeros<nb::numpy, double, 2>({ncsf, ncsf});
+    auto H_view = H.view();
+    // Compute the full Hamiltonian matrix in the CSF basis
+    for (size_t I{0}, imax{ncsf}; I < imax; ++I) {
+        for (size_t J{0}, jmax{I}; J <= jmax; ++J) {
+            H_view(I, J) = slater_rules_csf(dets, spin_adapter, I, J);
+            if (I != J) {
+                H_view(J, I) = H_view(I, J);
+            }
+        }
+    }
+    return H;
 }
 
 } // namespace forte2

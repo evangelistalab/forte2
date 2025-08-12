@@ -52,6 +52,13 @@ class CISigmaBuilder {
                              const CISpinAdapter& spin_adapter,
                              bool spin_adapt_full_preconditioner) const;
 
+    /// @brief Form the full Hamiltonian matrix in the CSF basis
+    /// @param dets The list of determinants
+    /// @param spin_adapter The spin adapter for the CSF
+    /// @return The full Hamiltonian matrix in the CSF basis
+    np_matrix form_H_csf(const std::vector<Determinant>& dets,
+                         const CISpinAdapter& spin_adapter) const;
+
     /// @brief Compute the Slater rules for the CSF matrix element
     /// @param dets The list of determinants
     /// @param spin_adapter The spin adapter for the CSF
