@@ -128,10 +128,12 @@ class MCOptimizer(ActiveSpaceSolver):
         # check if all active_frozen_orbitals indices are in the active space
         if self.active_frozen_orbitals is not None:
             assert (
-            sorted(self.active_frozen_orbitals) == self.active_frozen_orbitals
+                sorted(self.active_frozen_orbitals) == self.active_frozen_orbitals
             ), "Active frozen orbitals must be sorted."
 
-            missing = set(self.active_frozen_orbitals) - set(self.mo_space.active_indices)
+            missing = set(self.active_frozen_orbitals) - set(
+                self.mo_space.active_indices
+            )
             if missing:
                 raise ValueError(
                     f"selected active frozen indices, {sorted(missing)}, are not in the active space {self.mo_space.active_indices}."
@@ -540,13 +542,6 @@ class OrbOptimizer:
             optimize=True,
         )
 
-    def _compute_YZ_intermediates(self):
-        # compute the Y intermediate [Algorithm 1, line 10]
-        Y = np.einsum("pu,tu->pt", self.Fcore[:, self.actv], self.g1)
-        # compute the Z intermediate [Algorithm 1, line 11]
-        Z = np.einsum("puvw,tuvw->pt", self.eri_gaaa, self.g2)
-        return Y, Z
-
     def _compute_orbgrad(self):
         self._compute_Fact()
         orbgrad = np.zeros_like(self.Fcore)
@@ -576,30 +571,28 @@ class OrbOptimizer:
         return orbgrad
 
     def _compute_orbhess(self):
-        # If GAS, build hessian following [J. Chem. Phys. 152, 074102 (2020)]
-        # reset orbhess matrix
+        """Diagonal orbital Hessian"""
         orbhess = np.zeros_like(self.Fcore)
-
-        h_diag_ = np.zeros_like(self.Fcore)
-        self.Fd = np.diag(self.Fock)
+        diagF = np.diag(self.Fock)
+        diagg1 = np.diag(self.g1)
+        diaggrad = np.diag(self.A_pq)
 
         # compute virtual-core block
-        h_diag_[self.virt, self.core] = 4.0 * (
-            self.Fd[self.virt, None] - self.Fd[None, self.core]
+        orbhess[self.virt, self.core] = 4.0 * (
+            diagF[self.virt, None] - diagF[None, self.core]
         )
 
         # compute virtual-active block
-        h_diag_[self.virt, self.actv] = 2.0 * (
-            self.Fd[self.virt, None] * np.diag(self.g1)[None, :]
-            - np.diag(self.A_pq)[None, self.actv]
+        orbhess[self.virt, self.actv] = 2.0 * (
+            diagF[self.virt, None] * diagg1[None, :] - diaggrad[None, self.actv]
         )
 
         # compute active-core block
-        h_diag_[self.actv, self.core] = 4.0 * (
-            self.Fd[self.actv, None] - self.Fd[None, self.core]
-        ) + 2.0 * (
-            self.Fd[None, self.core] * np.diag(self.g1)[:, None]
-            - np.diag(self.A_pq)[self.actv, None]
+        orbhess[self.actv, self.core] = 4.0 * (
+            diagF[self.actv, None] - diagF[None, self.core]
+        )
+        orbhess[self.actv, self.core] += 2.0 * (
+            diagF[None, self.core] * diagg1[:, None] - diaggrad[self.actv, None]
         )
 
         # if GAS: compute active-active block [see SI of J. Chem. Phys. 152, 074102 (2020)]
@@ -621,7 +614,7 @@ class OrbOptimizer:
 
             Guu_ += 2.0 * np.einsum("uxy,vxy->uv", jk_internal_2, d2_internal_2)
 
-            Guu_ += np.diag(self.Fcore)[self.actv, None] * np.diag(self.g1)[None, :]
+            Guu_ += np.diag(self.Fcore)[self.actv, None] * diagg1[None, :]
 
             # B. G^{uv}_{vu}
             Guv_ = self.Fcore[self.actv, self.actv] * self.g1.T
@@ -631,15 +624,14 @@ class OrbOptimizer:
             )
 
             # compute diagonal hessian
-            h_diag_[self.actv, self.actv] = 2.0 * Guu_
-            h_diag_[self.actv, self.actv] += 2.0 * Guu_.T
-            h_diag_[self.actv, self.actv] -= 2.0 * Guv_
-            h_diag_[self.actv, self.actv] -= 2.0 * Guv_.T
+            orbhess[self.actv, self.actv] = 2.0 * Guu_
+            orbhess[self.actv, self.actv] += 2.0 * Guu_.T
+            orbhess[self.actv, self.actv] -= 2.0 * Guv_
+            orbhess[self.actv, self.actv] -= 2.0 * Guv_.T
 
-            h_diag_[self.actv, self.actv] -= 2.0 * (
-                np.diag(self.A_pq)[self.actv, None]
-                + np.diag(self.A_pq)[None, self.actv]
+            orbhess[self.actv, self.actv] -= 2.0 * (
+                diaggrad[self.actv, None] + diaggrad[None, self.actv]
             )
-        orbhess = h_diag_.T * self.nrr
+        orbhess = orbhess.T * self.nrr
 
         return orbhess
