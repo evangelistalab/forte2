@@ -47,6 +47,8 @@ void export_ci_sigma_builder_api(nb::module_& m) {
              "Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals")
         .def("set_algorithm", &CISigmaBuilder::set_algorithm, "algorithm"_a,
              "Set the sigma build algorithm (options = kh, hz)")
+        .def("get_algorithm", &CISigmaBuilder::get_algorithm,
+             "Get the current sigma build algorithm")
         .def("set_memory", &CISigmaBuilder::set_memory, "memory"_a,
              "Set the memory limit for the builder (in MB)")
         .def("form_Hdiag_csf", &CISigmaBuilder::form_Hdiag_csf, "dets"_a, "spin_adapter"_a,

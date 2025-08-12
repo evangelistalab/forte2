@@ -42,13 +42,6 @@ CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, n
     set_Hamiltonian(E, H, V);
 }
 
-CISigmaBuilder::~CISigmaBuilder() {
-    // Destructor does not need to do anything special
-    // LOG(log_level_) << std::fixed << std::setprecision(3);
-    // LOG(log_level_) << "\nTiming for 2RDM(aa):" << rdm2_aa_timer_ << " seconds";
-    // LOG(log_level_) << "Timing for 2RDM(ab):" << rdm2_ab_timer_ << " seconds";
-}
-
 void CISigmaBuilder::set_algorithm(const std::string& algorithm) {
     if (algorithm == "kh" or algorithm == "knowles-handy") {
         algorithm_ = CIAlgorithm::Knowles_Handy;
@@ -56,6 +49,17 @@ void CISigmaBuilder::set_algorithm(const std::string& algorithm) {
         algorithm_ = CIAlgorithm::Harrison_Zarrabian;
     } else {
         throw std::runtime_error("CI algorithm " + algorithm + " not valid.");
+    }
+}
+
+std::string CISigmaBuilder::get_algorithm() const {
+    switch (algorithm_) {
+    case CIAlgorithm::Knowles_Handy:
+        return "Knowles-Handy";
+    case CIAlgorithm::Harrison_Zarrabian:
+        return "Harrison-Zarrabian";
+    default:
+        throw std::runtime_error("Unknown CI algorithm.");
     }
 }
 
@@ -156,25 +160,25 @@ void CISigmaBuilder::Hamiltonian(np_vector basis, np_vector sigma) const {
 
     H0(b_span, s_span);
     if (algorithm_ == CIAlgorithm::Knowles_Handy) {
-        H1_kh(b_span, s_span, true);
-        H1_kh(b_span, s_span, false);
+        H1_kh(b_span, s_span, Spin::Alpha);
+        H1_kh(b_span, s_span, Spin::Beta);
         local_timer h_aabb_timer;
         H2_kh(b_span, s_span);
         haabb_timer_ += h_aabb_timer.elapsed_seconds();
     } else {
-        H1_aa_gemm(b_span, s_span, true, h_hz);
-        H1_aa_gemm(b_span, s_span, false, h_hz);
+        H1_hz(b_span, s_span, Spin::Alpha, h_hz);
+        H1_hz(b_span, s_span, Spin::Beta, h_hz);
 
         local_timer h_aabb_timer;
-        H2_aabb_gemm(b_span, s_span);
+        H2_hz_opposite_spin(b_span, s_span);
         haabb_timer_ += h_aabb_timer.elapsed_seconds();
 
         local_timer h_aaaa_timer;
-        H2_aaaa_gemm(b_span, s_span, true);
+        H2_hz_same_spin(b_span, s_span, Spin::Alpha);
         haaaa_timer_ += h_aaaa_timer.elapsed_seconds();
 
         local_timer h_bbbb_timer;
-        H2_aaaa_gemm(b_span, s_span, false);
+        H2_hz_same_spin(b_span, s_span, Spin::Beta);
         hbbbb_timer_ += h_bbbb_timer.elapsed_seconds();
     }
     hdiag_timer_ += t.elapsed_seconds();
@@ -185,14 +189,14 @@ void CISigmaBuilder::H0(std::span<double> basis, std::span<double> sigma) const 
     add(basis.size(), E_, basis.data(), 1, sigma.data(), 1);
 }
 
-std::span<double> gather_block(std::span<double> source, std::span<double> dest, bool alfa,
+std::span<double> gather_block(std::span<double> source, std::span<double> dest, Spin spin,
                                const CIStrings& lists, int class_Ia, int class_Ib) {
     const auto block_index = lists.string_class()->block_index(class_Ia, class_Ib);
     const auto offset = lists.block_offset(block_index);
     const auto maxIa = lists.alfa_address()->strpcls(class_Ia);
     const auto maxIb = lists.beta_address()->strpcls(class_Ib);
 
-    if (alfa) {
+    if (is_alpha(spin)) {
         std::span<double> dest_span(source.data() + offset, maxIa * maxIb);
         return dest_span;
     }
@@ -202,12 +206,12 @@ std::span<double> gather_block(std::span<double> source, std::span<double> dest,
     return dest;
 }
 
-void zero_block(std::span<double> dest, bool alfa, const CIStrings& lists, int class_Ia,
+void zero_block(std::span<double> dest, Spin spin, const CIStrings& lists, int class_Ia,
                 int class_Ib) {
     const auto maxIa = lists.alfa_address()->strpcls(class_Ia);
     const auto maxIb = lists.beta_address()->strpcls(class_Ib);
 
-    if (alfa) {
+    if (is_alpha(spin)) {
         for (size_t Ia{0}; Ia < maxIa; ++Ia)
             for (size_t Ib{0}; Ib < maxIb; ++Ib)
                 dest[Ia * maxIb + Ib] = 0.0;
@@ -218,7 +222,7 @@ void zero_block(std::span<double> dest, bool alfa, const CIStrings& lists, int c
     }
 }
 
-void scatter_block(std::span<double> source, std::span<double> dest, bool alfa,
+void scatter_block(std::span<double> source, std::span<double> dest, Spin spin,
                    const CIStrings& lists, int class_Ia, int class_Ib) {
     size_t maxIa = lists.alfa_address()->strpcls(class_Ia);
     size_t maxIb = lists.beta_address()->strpcls(class_Ib);
@@ -226,7 +230,7 @@ void scatter_block(std::span<double> source, std::span<double> dest, bool alfa,
     auto block_index = lists.string_class()->block_index(class_Ia, class_Ib);
     auto offset = lists.block_offset(block_index);
 
-    if (alfa) {
+    if (is_alpha(spin)) {
         // Add m to C
         for (size_t I{0}, maxI{maxIa * maxIb}; I < maxI; ++I)
             // for (size_t Ib{0}; Ib < maxIb; ++Ib)

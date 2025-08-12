@@ -5,6 +5,7 @@
 #include "helpers/timer.hpp"
 #include "helpers/blas.h"
 #include "helpers/logger.h"
+#include "helpers/memory.h"
 
 #include "ci_sigma_builder.h"
 
@@ -27,31 +28,31 @@ void scatter_alpha_block(const CIStrings& lists, size_t class_Ka, size_t class_K
                          std::span<double> sigma);
 } // namespace
 
-void CISigmaBuilder::H1_kh(std::span<double> basis, std::span<double> sigma, bool alfa) const {
+void CISigmaBuilder::H1_kh(std::span<double> basis, std::span<double> sigma, Spin spin) const {
     size_t norb = lists_.norb();
     // loop over blocks of matrix C
     for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
         if (lists_.block_size(nI) == 0)
             continue;
-        auto Cr = gather_block(basis, TR, alfa, lists_, class_Ia, class_Ib);
+        auto Cr = gather_block(basis, TR, spin, lists_, class_Ia, class_Ib);
 
         for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
             // For alpha operator, the beta string classes of the result must be the same
-            if (alfa and (class_Ib != class_Jb))
+            if (is_alpha(spin) and (class_Ib != class_Jb))
                 continue;
             // For beta operator, the alpha string classes of the result must be the same
-            if (not alfa and (class_Ia != class_Ja))
+            if (is_beta(spin) and (class_Ia != class_Ja))
                 continue;
             if (lists_.block_size(nJ) == 0)
                 continue;
 
             std::fill_n(TL.begin(), lists_.block_size(nJ), 0.0);
 
-            size_t maxL = alfa ? lists_.beta_address()->strpcls(class_Ib)
-                               : lists_.alfa_address()->strpcls(class_Ia);
+            const size_t maxL = is_alpha(spin) ? lists_.beta_address()->strpcls(class_Ib)
+                                               : lists_.alfa_address()->strpcls(class_Ia);
 
-            const auto& pq_vo_list = alfa ? lists_.get_alfa_vo_list(class_Ia, class_Ja)
-                                          : lists_.get_beta_vo_list(class_Ib, class_Jb);
+            const auto& pq_vo_list = is_alpha(spin) ? lists_.get_alfa_vo_list(class_Ia, class_Ja)
+                                                    : lists_.get_beta_vo_list(class_Ib, class_Jb);
 
             for (const auto& [pq, vo_list] : pq_vo_list) {
                 const auto& [p, q] = pq;
@@ -60,7 +61,7 @@ void CISigmaBuilder::H1_kh(std::span<double> basis, std::span<double> sigma, boo
                     add(maxL, sign * Hpq, &Cr[I * maxL], 1, &TL[J * maxL], 1);
                 }
             }
-            scatter_block(TL, sigma, alfa, lists_, class_Ja, class_Jb);
+            scatter_block(TL, sigma, spin, lists_, class_Ja, class_Jb);
         }
     }
 }
@@ -82,15 +83,21 @@ void CISigmaBuilder::H2_kh(std::span<double> basis, std::span<double> sigma) con
             const size_t Kb_start = 0;
             const size_t Kb_end = maxKb;
             const size_t Kb_size = Kb_end - Kb_start;
+            const size_t block_dim = npairs * Kb_size;
+
+            // Skip this chunk if it is empty
+            if (block_dim * maxKa == 0)
+                continue;
 
             // Grab the temporary buffers that will hold intermediates like
-            // D([i>=j],[Ka Kb]) where the indices range as [i>=j] all values
-            // Ka in chunks of maximum size Ka_max_size
-            // Kb in [0, maxKb)
+            // D([i>=j],[Ka Kb]) where the indices range as:
+            // - [i>=j] all values
+            // - Ka in chunks of maximum size Ka_max_size
+            // - Kb in [0, maxKb)
             // Ka_max_size is the maximum size of the Ka range that we can
             // process in one go without exceeding the memory limit, set via
             // the set_memory() function.
-            auto [Kblock1, Kblock2, Ka_max_size] = get_Kblock_spans(npairs * Kb_size, maxKa);
+            auto [Kblock1, Kblock2, Ka_max_size] = get_Kblock_spans(block_dim, maxKa);
 
             // Loop over ranges of Ka indices in chuncks of size Ka_max_size
             for (size_t Ka_start = 0; Ka_start < maxKa; Ka_start += Ka_max_size) {
@@ -100,32 +107,29 @@ void CISigmaBuilder::H2_kh(std::span<double> basis, std::span<double> sigma) con
                 // dimensions of the matrix we are going to use for this Ka
                 // chunk
                 const size_t Kdim = Ka_size * Kb_size;
-                // dimension of the D([i<=j],[Ka Kb]) tensor we are going to
-                // use
+                // dimension of the D([i<=j],[Ka Kb]) tensor
                 const size_t temp_dim = npairs * Kdim;
 
                 // skip empty blocks
                 if (temp_dim == 0)
                     continue;
 
-                // zero out the block that will hold the D([i>=j],[Ka Kb])
-                // tensor
+                // zero out the block that will hold the D([i>=j],[Ka Kb]) tensor
                 std::fill_n(Kblock1.begin(), temp_dim, 0.0);
 
                 // alpha contribution to the D matrix D([i>=j],[Ka Kb])
                 gather_alpha_block(lists_, class_Ka, class_Kb, Ka_start, Ka_size, Kdim, maxKb,
                                    basis, std::span{Kblock1.data(), temp_dim});
 
-                // cyclic transpose of the D matrix D([i>=j],[Ka Kb]) to
-                // D([i>=j],[Kb Ka])
+                // cyclic transpose of the D matrix D([i>=j],[Ka Kb]) to D([i>=j],[Kb Ka])
                 transpose_23(Kblock1, Kblock2, npairs, Ka_size, maxKb);
 
                 // beta contribution to the D matrix D([i>=j],[Kb Ka])
                 gather_beta_block(lists_, class_Ka, class_Kb, Ka_start, Ka_size, Kdim, maxKb, basis,
                                   TR, std::span{Kblock2.data(), temp_dim});
 
-                // matrix-matrix multiplication 0.5 * V([k>=l][i>=j]) *
-                // D([i>=j],[Kb Ka]) The result is the matrix E([k>=l],[Kb Ka])
+                // matrix-matrix multiplication 0.5 * V([k>=l][i>=j]) * D([i>=j],[Kb Ka])
+                // The result is the matrix E([k>=l],[Kb Ka])
                 // [note that the Ka/Kb indices are still transposed]
                 matrix_product('N', 'N', npairs, Kdim, npairs, 0.5, v_ijkl_hk.data(), npairs,
                                Kblock2.data(), Kdim, 0.0, Kblock1.data(), Kdim);
@@ -148,52 +152,45 @@ void CISigmaBuilder::H2_kh(std::span<double> basis, std::span<double> sigma) con
 }
 
 std::tuple<std::span<double>, std::span<double>, size_t>
-CISigmaBuilder::get_Kblock_spans(size_t dim, size_t maxKa) const {
-    // calculate the amount needed to store the Kblock1_ and Kblock2_ buffers
-    // fully in core.
-    const size_t temp_full_size = dim * maxKa;
+CISigmaBuilder::get_Kblock_spans(size_t nrows, size_t ncols) const {
+    // Find the maximum size of the temporary block to allocate. This is either set by the full
+    // size of the block (nrows * ncols) or by the available memory size, whichever is smaller
+    std::size_t block_size = std::min(nrows * ncols, memory_size_ / (2 * sizeof(double)));
 
-    // Ensure that Kblock1_ and Kblock2_ are allocated with the requested
-    // memory size
-    std::size_t temp_memory_size = std::min(memory_size_ / (2 * sizeof(double)), temp_full_size);
-    if (Kblock1_.size() < temp_memory_size) {
-        LOG(log_level_) << "Allocating Knowles-Handy temporary buffers of size 2 x "
-                        << temp_memory_size << " ("
-                        << 2 * temp_memory_size * sizeof(double) / (1024 * 1024) << " MB).\n";
-        Kblock1_.resize(temp_memory_size);
-        Kblock2_.resize(temp_memory_size);
+    // Find the corresponding chunk size for K
+    size_t cols_chunk_size = std::min(block_size / nrows, ncols);
+
+    // If the chunk size is too small to store one row, resize it
+    bool need_resize = false;
+    if (cols_chunk_size < 1) {
+        // resize to a reasonable minimum and update block_size
+        cols_chunk_size = std::min(static_cast<size_t>(64), ncols);
+        block_size = nrows * cols_chunk_size;
+        need_resize = true;
     }
 
-    // Derive Ka_max_size from our preallocated buffers:
-    size_t available = Kblock1_.size(); // assume Kblock2_ same size
-    size_t Ka_max_size = std::min(available / dim, maxKa);
-    if (Ka_max_size < 1) {
-        // too small for even one row of Ka => resize to hold a reasonable
-        // minimum
-        Ka_max_size = std::min(static_cast<size_t>(64),
-                               maxKa); // 64 is a reasonable minimum size
-        size_t new_dim = Ka_max_size * dim;
-        Kblock1_.resize(new_dim);
-        Kblock2_.resize(new_dim);
-        auto available_MB = 2 * available / (1024 * 1024 * sizeof(double));
-        auto new_dim_MB = 2 * new_dim / (1024 * 1024 * sizeof(double));
-        std::cerr << "Warning: Knowles-Handy temporary buffers too small (" << 2 * available
-                  << " elements; " << available_MB << " MB); resized to " << 2 * new_dim
-                  << " elements; " << new_dim_MB << " MB.\n"
-                  << "For best performance, set the memory size via the "
-                     "CISigmaBuilder::set_memory() function.\n";
+    // If the temporary buffers are too small, resize them
+    if (Kblock1_.size() < block_size) {
+        Kblock1_.resize(block_size);
+        Kblock2_.resize(block_size);
+        if (need_resize) {
+            auto block_size_MB = to_mb<double>(2 * block_size);
+            LOG(log_level_) << "Available memory is too small to hold a row of the CI buffers.\n"
+                               "Block size has been adjusted to 2 x "
+                            << block_size << " (" << block_size_MB << " MB) to hold "
+                            << cols_chunk_size
+                            << " columns.\n"
+                               "For best performance, increase the memory limit.";
+        }
     }
 
-    size_t max_temp_dim = dim * Ka_max_size;
-
-    return {std::span<double>{Kblock1_.data(), max_temp_dim},
-            std::span<double>{Kblock2_.data(), max_temp_dim}, Ka_max_size};
+    return {std::span<double>{Kblock1_.data(), block_size},
+            std::span<double>{Kblock2_.data(), block_size}, cols_chunk_size};
 }
 
 // The following functions are used to gather and scatter blocks of data and
 // are relevant only to this file. They live in the anonymous namespace to
 // avoid polluting the global namespace.
-
 namespace {
 /// @brief Cyclic multithreaded transpose of indices 2 and 3 of a 3D tensor
 /// in[i][j][k] -> out[i][k][j]
@@ -291,7 +288,7 @@ void gather_beta_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb,
         size_t maxIa = lists.alfa_address()->strpcls(class_Ia);
 
         // transposes the basis vector into TR
-        auto basis_tr = gather_block(basis, TR, false, lists, class_Ia, class_Ib);
+        auto basis_tr = gather_block(basis, TR, Spin::Beta, lists, class_Ia, class_Ib);
 
         // add contributions to the Kblock
         for (size_t Kb = 0; Kb < maxKb; ++Kb) {
@@ -322,7 +319,7 @@ void scatter_beta_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb
         const auto maxIa = lists.alfa_address()->strpcls(class_Ia);
 
         // zero out the TR temporary vector for the scatter operation
-        zero_block(TR, false, lists, class_Ia, class_Ib);
+        zero_block(TR, Spin::Beta, lists, class_Ia, class_Ib);
 
         // scatter contributions from the Kblock into the TR vector
         for (size_t Kb = 0; Kb < maxKb; ++Kb) {
@@ -335,7 +332,7 @@ void scatter_beta_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb
         }
 
         // scatter the TR([Kb Ka]) vector to the sigma vector
-        scatter_block(TR, sigma, false, lists, class_Ia, class_Ib);
+        scatter_block(TR, sigma, Spin::Beta, lists, class_Ia, class_Ib);
     }
 }
 
