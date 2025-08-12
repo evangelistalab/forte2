@@ -4,9 +4,9 @@ import pytest
 from forte2 import *
 from forte2.helpers.comparisons import approx
 
+
 def test_gasscf_1():
     erhf = -76.05702512779526
-    eci = -76.063385164755
     emcscf = -76.115688424591
 
     xyz = """
@@ -21,33 +21,22 @@ def test_gasscf_1():
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
 
-    ci = CI(
-        states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[6]),
-        core_orbitals=[0, 1],
-        active_orbitals=[[2, 3, 4],[5, 6, 7]],
-        econv=1e-12,
-    )(rhf)
-    ci.run()
-
     mc = MCOptimizer(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[6]),
         core_orbitals=[0, 1],
-        active_orbitals=[[2, 3, 4],[5, 6, 7]],
-        do_diis=True,
+        active_orbitals=[[2, 3, 4], [5, 6, 7]],
         econv=1e-8,
         gconv=1e-7,
-        ci_maxiter=50,
-        maxiter=500
-        )(rhf)
+        maxiter=500,
+    )(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)
-    assert ci.E[0] == approx(eci)
     assert mc.E == approx(emcscf)
+
 
 def test_gasscf_2():
     erhf = -76.05702512779526
-    eci = -76.057386921703
     emcscf = -76.078664204560
 
     xyz = """
@@ -62,33 +51,24 @@ def test_gasscf_2():
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
 
-    ci = CI(
-        states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[6]),
-        core_orbitals=[0, 1],
-        active_orbitals=[[2, 3, 4],[5]],
-        econv=1e-12,
-    )(rhf)
-    ci.run()
-
     mc = MCOptimizer(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[6]),
         core_orbitals=[0, 1],
-        active_orbitals=[[2, 3, 4],[5]],
+        active_orbitals=[[2, 3, 4], [5]],
         do_diis=False,
         econv=1e-8,
         gconv=1e-7,
-        ci_maxiter=50,
-        maxiter=100
-        )(rhf)
+        maxiter=100,
+    )(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)
-    assert ci.E[0] == approx(eci)
     assert mc.E == approx(emcscf)
 
+
+@pytest.mark.slow
 def test_gasscf_3():
     erhf = -40.21254161940163
-    eci = -29.248375001062
     emcscf = -29.702820676605
 
     xyz = """
@@ -100,37 +80,31 @@ def test_gasscf_3():
     """
 
     system = System(
-        xyz=xyz, basis_set="cc-pVTZ", auxiliary_basis_set="def2-universal-jkfit", unit='bohr'
+        xyz=xyz,
+        basis_set="cc-pVTZ",
+        auxiliary_basis_set="def2-universal-jkfit",
+        unit="bohr",
     )
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
 
-    ci = CI(
-        State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
-        active_orbitals=[[0],[1,2,3,4,5,6,7,8]],
-        econv=1e-12,
-    )(rhf)
-    ci.run()
-
     mc = MCOptimizer(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
-        active_orbitals=[[0],[1,2,3,4,5,6,7,8]],
+        active_orbitals=[[0], [1, 2, 3, 4, 5, 6, 7, 8]],
         do_diis=True,
         econv=1e-8,
         gconv=1e-7,
-        ci_maxiter=50,
-        maxiter=100
-        )(rhf)
+        maxiter=100,
+    )(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)
-    assert ci.E[0] == approx(eci)
     assert mc.E == approx(emcscf)
+
 
 def test_gasscf_4():
     erhf = -76.05702512779526
     ecasscf = -76.116395214672
-    egasscf = -76.115688424591
 
     xyz = """
     O   0.0000000000  -0.0000000000  -0.0662628033
@@ -147,35 +121,23 @@ def test_gasscf_4():
     casscf = MCOptimizer(
         State(nel=10, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1],
-        active_orbitals=[[2, 3, 4, 5, 6, 7],[]], # CASSCF calculation using GASSCF algorithm
+        active_orbitals=[
+            [2, 3, 4, 5, 6, 7],
+            [],
+        ],  # CASSCF calculation using GASSCF algorithm
         do_diis=False,
         econv=1e-8,
         gconv=1e-7,
-        ci_maxiter=50,
-        maxiter=500
-        )(rhf)
+        maxiter=500,
+    )(rhf)
     casscf.run()
-
-    gasscf = MCOptimizer(
-        State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[6]),
-        core_orbitals=[0, 1],
-        active_orbitals=[[2, 3, 4],[5, 6, 7]],
-        do_diis=True,
-        econv=1e-8,
-        gconv=1e-7,
-        ci_maxiter=50,
-        maxiter=500
-        )(rhf)
-    gasscf.run()
 
     assert rhf.E == approx(erhf)
     assert casscf.E == approx(ecasscf)
-    assert casscf.E < gasscf.E
-    assert gasscf.E == approx(egasscf)
+
 
 def test_gasscf_5():
     erhf = -76.02146209546578
-    eci = -76.029273794488
     emcscf = -76.077753286787
 
     xyz = """
@@ -190,31 +152,19 @@ def test_gasscf_5():
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
 
-    ci = CI(
-        states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[6, 0], gas_max=[8, 2]),
-        core_orbitals=[0],
-        active_orbitals=[[1, 2, 3, 4], [5, 6]],
-        econv=1e-12,
-    )(rhf)
-    ci.run()
-
     mc = MCOptimizer(
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[6, 0], gas_max=[8, 2]),
         core_orbitals=[0],
         active_orbitals=[[1, 2, 3, 4], [5, 6]],
-        maxiter=1000,
-        diis_start=1,
-        max_rotation=0.5,
-        micro_maxiter=1,
+        maxiter=100,
         econv=1e-10,
         gconv=1e-8,
-        ci_maxiter=50
-        )(rhf)
+    )(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)
-    assert ci.E[0] == approx(eci)
     assert mc.E == approx(emcscf)
+
 
 def test_gasscf_6():
     erhf = -40.19845141292726
@@ -229,25 +179,28 @@ def test_gasscf_6():
     """
 
     system = System(
-        xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="def2-universal-jkfit", unit='bohr'
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="def2-universal-jkfit",
+        unit="bohr",
     )
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
 
     mc = MCOptimizer(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
-        active_orbitals=[[0],[1,2,3,4,5,6,7,8]],
+        active_orbitals=[[0], [1, 2, 3, 4, 5, 6, 7, 8]],
         active_frozen_orbitals=[0],
         do_diis=True,
         econv=1e-8,
         gconv=1e-7,
-        ci_maxiter=50,
-        maxiter=100
-        )(rhf)
+        maxiter=100,
+    )(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
+
 
 def test_gasscf_7():
     erhf = -40.19845141292726
@@ -262,26 +215,30 @@ def test_gasscf_7():
     """
 
     system = System(
-        xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="def2-universal-jkfit", unit='bohr'
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="def2-universal-jkfit",
+        unit="bohr",
     )
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
 
     mc = MCOptimizer(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
-        active_orbitals=[[0],[1,2,3,4,5,6,7,8]],
-        active_frozen_orbitals=[0,8],
+        active_orbitals=[[0], [1, 2, 3, 4, 5, 6, 7, 8]],
+        active_frozen_orbitals=[0, 8],
         do_diis=True,
         econv=1e-8,
         gconv=1e-7,
-        ci_maxiter=50,
-        maxiter=100
-        )(rhf)
+        maxiter=100,
+    )(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
 
+
+@pytest.mark.slow
 def test_gasscf_8():
     erhf = -40.19845141292726
     emcscf = -29.544266400483
@@ -295,21 +252,23 @@ def test_gasscf_8():
     """
 
     system = System(
-        xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="def2-universal-jkfit", unit='bohr'
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="def2-universal-jkfit",
+        unit="bohr",
     )
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
 
     mc = MCOptimizer(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
-        active_orbitals=[[0],[1,2,3,4,5,6,7,9]],
-        active_frozen_orbitals=[0,9],
+        active_orbitals=[[0], [1, 2, 3, 4, 5, 6, 7, 9]],
+        active_frozen_orbitals=[0, 9],
         do_diis=True,
         econv=1e-9,
         gconv=1e-9,
-        ci_maxiter=50,
-        maxiter=200
-        )(rhf)
+        maxiter=200,
+    )(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)

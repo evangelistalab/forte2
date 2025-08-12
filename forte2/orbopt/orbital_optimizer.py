@@ -514,7 +514,7 @@ class OrbOptimizer:
         return energy
 
     def _compute_Fcore(self):
-        # Compute the core Fock matrix [Eq. (3)], also return the core energy
+        # Compute the core Fock matrix [eq (3)], also return the core energy
         Jcore, Kcore = self.fock_builder.build_JK([self.Ccore])
         self.Fcore = np.einsum(
             "mp,mn,nq->pq",
@@ -533,7 +533,7 @@ class OrbOptimizer:
     def _compute_Fact(self):
         Jact, Kact = self.fock_builder.build_JK_generalized(self.Cact, self.g1)
 
-        # [Eq. (13)]
+        # [eq (13)]
         self.Fact = np.einsum(
             "mp,mn,nq->pq",
             self.Cgen.conj(),
@@ -558,6 +558,9 @@ class OrbOptimizer:
         )
         # (rt|vw) D_tu,vw, where (rt|vw) = <rv|tw>
         self.A_pq[:, self.actv] += np.einsum("rvtw,tuvw->ru", self.eri_gaaa, self.g2)
+
+        # screen small gradients to prevent symmetry breaking
+        self.A_pq[np.abs(self.A_pq) < 1e-12] = 0
 
         # compute g_rk (mo, core + active) block of gradient, [eq (9)]
         orbgrad = 2 * (self.A_pq - self.A_pq.T)
@@ -623,7 +626,6 @@ class OrbOptimizer:
             orbhess[self.actv, self.actv] += 2.0 * Guu_.T
             orbhess[self.actv, self.actv] -= 2.0 * Guv_
             orbhess[self.actv, self.actv] -= 2.0 * Guv_.T
-
             orbhess[self.actv, self.actv] -= 2.0 * (
                 diag_grad[self.actv, None] + diag_grad[None, self.actv]
             )
