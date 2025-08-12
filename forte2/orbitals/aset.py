@@ -137,7 +137,7 @@ class ASET(MOsMixin, SystemMixin):
 
     def _parse_fragment(self, frag_list: list[str]) -> list[int]:
         """
-        Parse a fragment specification string or list into atom indices.
+        Parse a list of fragment specification strings into atom indices.
 
         Supported input formats (all 1-indexed for the user):
             ["C"]         → all carbon atoms
@@ -213,7 +213,7 @@ class ASET(MOsMixin, SystemMixin):
         P_frag : ndarray
             The fragment projector matrix in the full minimal-AO space.
         X_mm : ndarray
-            The metric‐orthogonalizer (S_mm^–½).
+            The metric-orthogonalizer (S_mm^1/2).
         """
         # 1. Compute minAO overlap S_mm
         S_mm = ints.overlap(self.system.minao_basis)

@@ -2,7 +2,7 @@ import numpy as np
 import scipy as sp
 from dataclasses import dataclass, field
 
-from forte2.ci.ci import CISolver
+from forte2.ci import CISolver
 from forte2.base_classes.active_space_solver import ActiveSpaceSolver
 from forte2.orbitals import Semicanonicalizer
 from forte2.jkbuilder import FockBuilder, RestrictedMOIntegrals
@@ -40,8 +40,9 @@ class MCOptimizer(ActiveSpaceSolver):
         A `MOSpace` object defining the partitioning of the molecular orbitals.
         If not provided, CISolver must be called with a parent method that has MOSpaceMixin (e.g., AVAS).
         If provided, it overrides the one from the parent method.
-    active_frozen_orbitals : list[int]
+    active_frozen_orbitals : list[int], optional
         List of active orbital indices to be frozen in the MCSCF optimization.
+        If provided, all gradients involving these orbitals will be zeroed out.
     maxiter : int, optional, default=50
         Maximum number of macroiterations.
     econv : float, optional, default=1e-8
@@ -162,7 +163,6 @@ class MCOptimizer(ActiveSpaceSolver):
         #       (this is typically done iteratively with micro-iterations using L-BFGS)
         #     2. minimize energy wrt CI expansion at current orbitals
         #       (this is just the diagonalization of the active-space CI Hamiltonian)
-        do_gas = self.mo_space.ngas > 1
         self.orb_opt = OrbOptimizer(
             self._C,
             (self.core, self.actv, self.virt),
@@ -170,7 +170,7 @@ class MCOptimizer(ActiveSpaceSolver):
             self.Hcore,
             self.system.nuclear_repulsion,
             self.nrr,
-            gas_ref=do_gas,
+            gas_ref=self.mo_space.ngas > 1,
         )
 
         self.ci_solver = CISolver(
@@ -240,7 +240,7 @@ class MCOptimizer(ActiveSpaceSolver):
         self.g_old = np.zeros(self.orb_opt.nrot, dtype=float)
 
         # This holds the *overall* orbital rotation, C_current = C_0 @ exp(R)
-        # It's as the intial guess at the start of each orbital optimization and for DIIS
+        # It's used as the initial guess at the start of each orbital optimization, and also for DIIS
         R = np.zeros(self.orb_opt.nrot, dtype=float)
 
         while self.iter < self.maxiter:
@@ -423,7 +423,16 @@ class MCOptimizer(ActiveSpaceSolver):
 
 
 class OrbOptimizer:
-    def __init__(self, C, extents, fock_builder, hcore, e_nuc, nrr, gas_ref=False):
+    def __init__(
+        self,
+        C: np.ndarray,
+        extents: list[slice],
+        fock_builder: FockBuilder,
+        hcore: np.ndarray,
+        e_nuc: float,
+        nrr: np.ndarray,
+        gas_ref: bool = False,
+    ):
         self.core, self.actv, self.virt = extents
         self.C = C
         self.C0 = C.copy()
@@ -433,14 +442,16 @@ class OrbOptimizer:
         self.ncore = self.Ccore.shape[1]
         self.nact = self.Cact.shape[1]
         self.nvirt = self.C.shape[1] - self.ncore - self.nact
-        self.fock_builder: FockBuilder = fock_builder
+        self.fock_builder = fock_builder
         self.hcore = hcore
         self.nrr = nrr
         self.nrot = self.nrr.sum()
         self.e_nuc = e_nuc
         self.gas_ref = gas_ref
 
+        # the skew-hermitian rotation matrix, C_current = C_0 @ exp(R)
         self.R = np.zeros(self.nrot, dtype=float)
+        # the unitary transformation matrix, U = exp(R)
         self.U = np.eye(self.C.shape[1], dtype=float)
 
     def get_eri_gaaa(self):
