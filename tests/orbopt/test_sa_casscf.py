@@ -212,6 +212,4 @@ def test_sa_casscf_hf():
     assert mc.ci_solver.fosc_per_solver[0][(0, 3)] == approx(0.4525407586932925)
     # total dipole of state 0, 1
     assert abs(mc.ci_solver.tdm_per_solver[0][(0, 0)][2]) == approx(0.7244112903260456)
-    assert abs(mc.ci_solver.tdm_per_solver[0][(1, 1)][2]) == approx(0.8239033452222257)
-
-test_sa_casscf_hf()
+    assert abs(mc.ci_solver.tdm_per_solver[0][(1, 1)][2]) == approx(0.8239034078316554)
