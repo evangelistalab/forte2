@@ -247,8 +247,28 @@ double CISigmaBuilder::slater_rules_csf(const std::vector<Determinant>& dets,
                                         const CISpinAdapter& spin_adapter, size_t I,
                                         size_t J) const {
     double matrix_element = 0.0;
+    if (I == J) {
+        return energy_csf(dets, spin_adapter, I);
+    }
+
     for (const auto& [det_add_I, c_I] : spin_adapter.csf(I)) {
         for (const auto& [det_add_J, c_J] : spin_adapter.csf(J)) {
+            if (det_add_I == det_add_J) {
+                matrix_element += c_I * c_J * slater_rules_.energy(dets[det_add_I]);
+            } else if (c_I * c_J != 0.0) {
+                matrix_element +=
+                    c_I * c_J * slater_rules_.slater_rules(dets[det_add_I], dets[det_add_J]);
+            }
+        }
+    }
+    return matrix_element;
+}
+
+double CISigmaBuilder::energy_csf(const std::vector<Determinant>& dets,
+                                  const CISpinAdapter& spin_adapter, size_t I) const {
+    double matrix_element = 0.0;
+    for (const auto& [det_add_I, c_I] : spin_adapter.csf(I)) {
+        for (const auto& [det_add_J, c_J] : spin_adapter.csf(I)) {
             if (det_add_I == det_add_J) {
                 matrix_element += c_I * c_J * slater_rules_.energy(dets[det_add_I]);
             } else if (det_add_I < det_add_J) {
@@ -269,27 +289,15 @@ np_vector CISigmaBuilder::form_Hdiag_csf(const std::vector<Determinant>& dets,
     auto Hdiag_view = Hdiag.view();
     // Compute the diagonal elements of the Hamiltonian in the CSF basis
     if (spin_adapt_full_preconditioner) {
+        // exact diagonal element of <I|H|I> = c_iI c_jI <i|H|j> in the CSF basis
+        // this can be slow for 'deep' CSFs with many determinants, so in practice
+        // this is not used
         for (size_t i{0}, imax{spin_adapter.ncsf()}; i < imax; ++i) {
-            double energy = 0.0;
-            int I = 0;
-            for (const auto& [det_add_I, c_I] : spin_adapter.csf(i)) {
-                int J = 0;
-                for (const auto& [det_add_J, c_J] : spin_adapter.csf(i)) {
-                    if (I == J) {
-                        energy += c_I * c_J * slater_rules_.energy(dets[det_add_I]);
-                    } else if (I < J) {
-                        if (c_I * c_J != 0.0) {
-                            energy += 2.0 * c_I * c_J *
-                                      slater_rules_.slater_rules(dets[det_add_I], dets[det_add_J]);
-                        }
-                    }
-                    J++;
-                }
-                I++;
-            }
-            Hdiag_view(i) = energy;
+            Hdiag_view(i) = energy_csf(dets, spin_adapter, i);
         }
     } else {
+        // approximate diagonal element of <I|H|I> in the CSF basis,
+        // using only the diagonal contributions, i.e., <I|H|I> = c_iI c_iI <i|H|i>
         for (size_t i{0}, imax{spin_adapter.ncsf()}; i < imax; ++i) {
             double energy = 0.0;
             for (const auto& [det_add_I, c_I] : spin_adapter.csf(i)) {
@@ -299,6 +307,28 @@ np_vector CISigmaBuilder::form_Hdiag_csf(const std::vector<Determinant>& dets,
         }
     }
     return Hdiag;
+}
+
+np_matrix CISigmaBuilder::form_H_csf(const std::vector<Determinant>& dets,
+                                     const CISpinAdapter& spin_adapter) const {
+    size_t ncsf = spin_adapter.ncsf();
+    if (ncsf * ncsf * sizeof(double) > memory_size_) {
+        throw std::runtime_error("Not enough memory to form the full Hamiltonian matrix in the CSF "
+                                 "basis. Increase the memory limit or use a different algorithm.");
+    }
+
+    auto H = make_zeros<nb::numpy, double, 2>({ncsf, ncsf});
+    auto H_view = H.view();
+    // Compute the full Hamiltonian matrix in the CSF basis
+    for (size_t I{0}, imax{ncsf}; I < imax; ++I) {
+        for (size_t J{0}, jmax{I}; J <= jmax; ++J) {
+            H_view(I, J) = slater_rules_csf(dets, spin_adapter, I, J);
+            if (I != J) {
+                H_view(J, I) = H_view(I, J);
+            }
+        }
+    }
+    return H;
 }
 
 } // namespace forte2

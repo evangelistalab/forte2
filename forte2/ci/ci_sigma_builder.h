@@ -47,10 +47,29 @@ class CISigmaBuilder {
     void set_log_level(int level) { log_level_ = level; }
 
     /// @brief Form the diagonal of the Hamiltonian matrix in the CI basis
+    /// @param dets The list of determinants
+    /// @param spin_adapter The spin adapter for the CSF
+    /// @param spin_adapt_full_preconditioner If true, use the exact diagonal elements,
+    ///        otherwise use approximate diagonal elements.
     /// @return The diagonal elements of the Hamiltonian matrix
     np_vector form_Hdiag_csf(const std::vector<Determinant>& dets,
                              const CISpinAdapter& spin_adapter,
                              bool spin_adapt_full_preconditioner) const;
+
+    /// @brief Compute the energy (diagonal Hamiltonian element) of a CSF
+    /// @param dets The list of determinants
+    /// @param spin_adapter The spin adapter for the CSF
+    /// @param I The index of the CSF
+    /// @return The energy of the CSF
+    double energy_csf(const std::vector<Determinant>& dets, const CISpinAdapter& spin_adapter,
+                      size_t I) const;
+
+    /// @brief Form the full Hamiltonian matrix in the CSF basis
+    /// @param dets The list of determinants
+    /// @param spin_adapter The spin adapter for the CSF
+    /// @return The full Hamiltonian matrix in the CSF basis
+    np_matrix form_H_csf(const std::vector<Determinant>& dets,
+                         const CISpinAdapter& spin_adapter) const;
 
     /// @brief Compute the Slater rules for the CSF matrix element
     /// @param dets The list of determinants

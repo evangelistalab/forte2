@@ -572,7 +572,7 @@ class OrbOptimizer:
         self.A_pq[:, self.actv] += np.einsum("rvtw,tuvw->ru", self.eri_gaaa, self.g2)
 
         # screen small gradients to prevent symmetry breaking
-        self.A_pq[np.abs(self.A_pq) < 1e-12] = 0
+        self.A_pq[np.abs(self.A_pq) < 1e-12] = 0.0
 
         # compute g_rk (mo, core + active) block of gradient, [eq (9)]
         orbgrad = 2 * (self.A_pq - self.A_pq.T)
