@@ -371,7 +371,6 @@ class _CIBase:
 
         # Diagonalize the Hamiltonian to get the initial guess vectors
         evals_guess, evecs_guess = np.linalg.eigh(Hguess)
-        print(evals_guess)
 
         # Select the lowest eigenvalues and their corresponding eigenvectors
         guess_mat = np.zeros((self.basis_size, self.num_guess_states))
