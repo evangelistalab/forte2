@@ -8,6 +8,9 @@
 
 namespace forte2 {
 
+/// @brief Express the amount of memory needed to store `n` elements of type T in megabytes
+template <typename T> int to_mb(size_t n) { return n * sizeof(T) / (1024 * 1024); }
+
 /// @brief A templated buffer class used to store elements of type T
 /// This class is a simple wrapper around std::vector<T> which provides a variable-size buffer.
 /// The buffer is initialized with a given size and is automatically resized when needed.

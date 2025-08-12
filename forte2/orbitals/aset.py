@@ -1,17 +1,16 @@
 from dataclasses import dataclass, field
 import numpy as np
 import re
-import ast
+
 import forte2
 from forte2 import ints
-from forte2.state import MOSpace
+from forte2.state import MOSpace, EmbeddingMOSpace
 from forte2.system.basis_utils import BasisInfo
-from forte2.system import System
 from forte2.helpers import logger
+from forte2.helpers.matrix_functions import invsqrt_matrix
 from forte2.base_classes.mixins import MOsMixin, SystemMixin, MOSpaceMixin
-from forte2.orbopt import MCOptimizer
 from forte2.system.atom_data import ATOM_SYMBOL_TO_Z
-from forte2.orbitals.semicanonicalizer import Semicanonicalizer, EmbeddingMOSpace
+from forte2.orbitals.semicanonicalizer import Semicanonicalizer
 
 
 @dataclass
@@ -65,7 +64,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
 
     def __call__(self, parent_method):
         assert isinstance(
-            parent_method, MCOptimizer
+            parent_method, forte2.orbopt.MCOptimizer
         ), f"Parent method must be MCSCF, got {type(parent_method)}"
         self.parent_method = parent_method
         return self
@@ -132,7 +131,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
 
     def _parse_fragment(self, frag_str: str | list[str]) -> list[int]:
         """
-        Parse a fragment specification string or list into atom indices.
+        Parse a list of fragment specification strings into atom indices.
 
         Supported input formats (all 1-indexed for the user):
             ["C"]         → all carbon atoms
@@ -142,21 +141,14 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
 
         Parameters
         ----------
-        frag_str : str or list[str]
-            A string like '["C1-3", "N"]' or a list of such tokens.
+        frag_list : list[str]
+            A list of fragment specifications like ["C1-3", "N"].
 
         Returns
         -------
         list[int]
             A sorted list of unique atom indices (0-based) matching the specification.
         """
-
-        if isinstance(frag_str, str):
-            frag_list = ast.literal_eval(
-                frag_str
-            )  # e.g., turns '["C1-3", "N"]' into list
-        else:
-            frag_list = frag_str  # already a list
 
         atom_indices = []
 
@@ -215,7 +207,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         P_frag : ndarray
             The fragment projector matrix in the full minimal-AO space.
         X_mm : ndarray
-            The metric‐orthogonalizer (S_mm^–½).
+            The metric-orthogonalizer (S_mm^1/2).
         """
         # 1. Compute minAO overlap S_mm
         S_mm = ints.overlap(self.system.minao_basis)
@@ -252,7 +244,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         for i, mu in enumerate(frag_ao_indices):
             for j, nu in enumerate(frag_ao_indices):
                 S_A_mm[mu, nu] = S_A_inv[i, j]
-        X_mm = forte2.helpers.matrix_functions.invsqrt_matrix(S_mm)
+        X_mm = invsqrt_matrix(S_mm)
         P_ao = S_mm @ S_A_mm @ S_mm
         P_frag = X_mm @ P_ao @ X_mm
 
