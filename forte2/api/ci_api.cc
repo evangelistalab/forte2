@@ -53,6 +53,8 @@ void export_ci_sigma_builder_api(nb::module_& m) {
              "Set the memory limit for the builder (in MB)")
         .def("form_Hdiag_csf", &CISigmaBuilder::form_Hdiag_csf, "dets"_a, "spin_adapter"_a,
              "spin_adapt_full_preconditioner"_a = false)
+        .def("energy_csf", &CISigmaBuilder::energy_csf, "dets"_a, "spin_adapter"_a, "I"_a,
+             "Compute the energy of a CSF")
         .def("form_H_csf", &CISigmaBuilder::form_H_csf, "dets"_a, "spin_adapter"_a,
              "Form the full Hamiltonian matrix in the CSF basis")
         .def("slater_rules_csf", &CISigmaBuilder::slater_rules_csf, "dets"_a, "spin_adapter"_a,

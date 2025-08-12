@@ -247,6 +247,10 @@ double CISigmaBuilder::slater_rules_csf(const std::vector<Determinant>& dets,
                                         const CISpinAdapter& spin_adapter, size_t I,
                                         size_t J) const {
     double matrix_element = 0.0;
+    if (I == J) {
+        return energy_csf(dets, spin_adapter, I);
+    }
+
     for (const auto& [det_add_I, c_I] : spin_adapter.csf(I)) {
         for (const auto& [det_add_J, c_J] : spin_adapter.csf(J)) {
             if (det_add_I == det_add_J) {
@@ -254,6 +258,24 @@ double CISigmaBuilder::slater_rules_csf(const std::vector<Determinant>& dets,
             } else if (c_I * c_J != 0.0) {
                 matrix_element +=
                     c_I * c_J * slater_rules_.slater_rules(dets[det_add_I], dets[det_add_J]);
+            }
+        }
+    }
+    return matrix_element;
+}
+
+double CISigmaBuilder::energy_csf(const std::vector<Determinant>& dets,
+                                  const CISpinAdapter& spin_adapter, size_t I) const {
+    double matrix_element = 0.0;
+    for (const auto& [det_add_I, c_I] : spin_adapter.csf(I)) {
+        for (const auto& [det_add_J, c_J] : spin_adapter.csf(I)) {
+            if (det_add_I == det_add_J) {
+                matrix_element += c_I * c_J * slater_rules_.energy(dets[det_add_I]);
+            } else if (det_add_I < det_add_J) {
+                if (c_I * c_J != 0.0) {
+                    matrix_element += 2.0 * c_I * c_J *
+                                      slater_rules_.slater_rules(dets[det_add_I], dets[det_add_J]);
+                }
             }
         }
     }
@@ -289,11 +311,7 @@ np_vector CISigmaBuilder::form_Hdiag_csf(const std::vector<Determinant>& dets,
         }
     } else {
         for (size_t i{0}, imax{spin_adapter.ncsf()}; i < imax; ++i) {
-            double energy = 0.0;
-            for (const auto& [det_add_I, c_I] : spin_adapter.csf(i)) {
-                energy += c_I * c_I * slater_rules_.energy(dets[det_add_I]);
-            }
-            Hdiag_view(i) = energy;
+            Hdiag_view(i) = energy_csf(dets, spin_adapter, i);
         }
     }
     return Hdiag;
