@@ -47,6 +47,10 @@ class CISigmaBuilder {
     void set_log_level(int level) { log_level_ = level; }
 
     /// @brief Form the diagonal of the Hamiltonian matrix in the CI basis
+    /// @param dets The list of determinants
+    /// @param spin_adapter The spin adapter for the CSF
+    /// @param spin_adapt_full_preconditioner If true, use the exact diagonal elements,
+    ///        otherwise use approximate diagonal elements.
     /// @return The diagonal elements of the Hamiltonian matrix
     np_vector form_Hdiag_csf(const std::vector<Determinant>& dets,
                              const CISpinAdapter& spin_adapter,

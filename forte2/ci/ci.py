@@ -248,7 +248,7 @@ class _CIBase:
         logger.log(f"total time:     {h_tot:.3f} s/build\n", self.log_level)
 
     def _do_exact_diagonalization(self):
-        logger.log(f"Using CI algorithm: exact", self.log_level)
+        logger.log(f"Using CI algorithm: Exact Diagonalization", self.log_level)
 
         H = self.ci_sigma_builder.form_H_csf(self.dets, self.spin_adapter)
 

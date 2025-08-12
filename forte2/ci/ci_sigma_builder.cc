@@ -289,29 +289,21 @@ np_vector CISigmaBuilder::form_Hdiag_csf(const std::vector<Determinant>& dets,
     auto Hdiag_view = Hdiag.view();
     // Compute the diagonal elements of the Hamiltonian in the CSF basis
     if (spin_adapt_full_preconditioner) {
-        for (size_t i{0}, imax{spin_adapter.ncsf()}; i < imax; ++i) {
-            double energy = 0.0;
-            int I = 0;
-            for (const auto& [det_add_I, c_I] : spin_adapter.csf(i)) {
-                int J = 0;
-                for (const auto& [det_add_J, c_J] : spin_adapter.csf(i)) {
-                    if (I == J) {
-                        energy += c_I * c_J * slater_rules_.energy(dets[det_add_I]);
-                    } else if (I < J) {
-                        if (c_I * c_J != 0.0) {
-                            energy += 2.0 * c_I * c_J *
-                                      slater_rules_.slater_rules(dets[det_add_I], dets[det_add_J]);
-                        }
-                    }
-                    J++;
-                }
-                I++;
-            }
-            Hdiag_view(i) = energy;
-        }
-    } else {
+        // exact diagonal element of <I|H|I> = c_iI c_jI <i|H|j> in the CSF basis
+        // this can be slow for 'deep' CSFs with many determinants, so in practice
+        // this is not used
         for (size_t i{0}, imax{spin_adapter.ncsf()}; i < imax; ++i) {
             Hdiag_view(i) = energy_csf(dets, spin_adapter, i);
+        }
+    } else {
+        // approximate diagonal element of <I|H|I> in the CSF basis,
+        // using only the diagonal contributions, i.e., <I|H|I> = c_iI c_iI <i|H|i>
+        for (size_t i{0}, imax{spin_adapter.ncsf()}; i < imax; ++i) {
+            double energy = 0.0;
+            for (const auto& [det_add_I, c_I] : spin_adapter.csf(i)) {
+                energy += c_I * c_I * slater_rules_.energy(dets[det_add_I]);
+            }
+            Hdiag_view(i) = energy;
         }
     }
     return Hdiag;
