@@ -730,9 +730,16 @@ template <size_t N> class BitArray {
     struct Hash {
         std::size_t operator()(const BitArray<N>& d) const noexcept {
             if constexpr (N == 64) {
-                return std::hash<std::uint64_t>{}(d.words_[0]);
-            } else
-                return hash_range_uint64(d.words_);
+                return d.words_[0];
+            } else if constexpr (N == 128) {
+                return ((d.words_[0] * 13466917) + d.words_[1]) % 1405695061;
+            } else {
+                std::uint64_t seed = nwords_;
+                for (auto& w : d.words_) {
+                    hash_combine_uint64(seed, w);
+                }
+                return seed;
+            }
         }
     };
 

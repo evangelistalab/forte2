@@ -7,25 +7,10 @@
 /// @brief Accumulate hash values of 64 bit unsigned integers
 /// based on boost/functional/hash/hash.hpp
 inline void hash_combine_uint64(std::size_t& seed, std::uint64_t value) noexcept {
-    const std::size_t hv = std::hash<std::uint64_t>{}(value);
     // 0x9e3779b97f4a7c15ULL is the 64-bit variant of the constant used in boost::hash_combine
     // (0x9e3779b9), derived from the fractional part of the golden ratio. This helps to spread hash
     // values uniformly.
-    seed ^= hv + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
-}
-
-/// @brief Hash a range of uint64_t values stored in an iterable container
-template <typename Container>
-inline constexpr std::size_t hash_range_uint64(const Container& container) noexcept {
-    static_assert(
-        std::is_same_v<std::remove_cv_t<std::remove_reference_t<decltype(*std::begin(container))>>,
-                       std::uint64_t>,
-        "hash_range_uint64 can only be used with containers that provide iterators over uint64_t");
-    std::size_t seed = 0;
-    for (auto el : container) {
-        hash_combine_uint64(seed, el);
-    }
-    return seed;
+    seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
 }
 
 /// @brief Count the number of bit set to 1 in a uint64_t
