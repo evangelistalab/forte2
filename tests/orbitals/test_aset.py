@@ -35,7 +35,6 @@ def test_aset_1():
     )(mc)
     aset.run()
 
-
 def test_aset_2():
     """
     Test cutoff_method = cumulative_threshold.
@@ -62,7 +61,6 @@ def test_aset_2():
         cutoff=0.99,
     )(mc)
     aset.run()
-
 
 def test_aset_3():
     """
@@ -97,7 +95,6 @@ def test_aset_3():
     )(mc)
     aset.run()
 
-
 def test_aset_4():
     """
     Test cutoff_method = number of orbitals.
@@ -124,11 +121,12 @@ def test_aset_4():
         num_A_uocc=1,
     )(mc)
     aset.run()
-
+    ci = CI(State(nel = 4, multiplicity=1, ms=0.0))(aset)
+    ci.run()
 
 def test_aset_5():
     """
-    Test adjust B docc and uocc.
+    Test ASET with a larger molecule and a different cutoff method.
     """
     xyz = """
     C            0.736149969259     0.199718340898    -0.207219947401
@@ -156,8 +154,6 @@ def test_aset_5():
     aset = ASET(
         fragment=["C1-2", "H1-3"],
         cutoff_method="threshold",
-        cutoff=0.5,
-        adjust_B_docc=1,
-        adjust_B_uocc=-1,
+        cutoff=0.5
     )(mc)
     aset.run()
