@@ -245,8 +245,8 @@ def test_casscf_singlet_benzyne():
 
 
 def test_casscf_n2_cholesky_2():
-    '''Equivalent to casscf_8 test in Forte'''
-    erhf = -108.949591958787 
+    """Equivalent to casscf_8 test in Forte"""
+    erhf = -108.949591958787
     emcscf = -109.090719613072
 
     xyz = f"""

@@ -365,6 +365,7 @@ class MCOptimizer(ActiveSpaceSolver):
         )
 
     def _get_nonredundant_rotations(self):
+        """Lower triangular matrix of nonredundant rotations"""
         nrr = np.zeros((self.system.nbf, self.system.nbf), dtype=bool)
 
         if self.optimize_frozen_orbs:
@@ -378,11 +379,11 @@ class MCOptimizer(ActiveSpaceSolver):
         if self.mo_space.ngas > 1:
             for i in range(self.mo_space.ngas):
                 for j in range(i + 1, self.mo_space.ngas):
-                    nrr[self.mo_space.gas[i], self.mo_space.gas[j]] = True
+                    nrr[self.mo_space.gas[j], self.mo_space.gas[i]] = True
 
-        nrr[_core, _virt] = True
-        nrr[self.actv, _virt] = True
-        nrr[_core, self.actv] = True
+        nrr[_virt, _core] = True
+        nrr[_virt, self.actv] = True
+        nrr[self.actv, _core] = True
 
         # remove active_fronzen indices from nonredundant rotations
         if self.active_frozen_orbitals is not None:
@@ -468,7 +469,7 @@ class OrbOptimizer:
         E_orb = self._compute_reference_energy()
 
         if do_g:
-            grad = -self._compute_orbgrad()
+            grad = self._compute_orbgrad()
             g = self._mat_to_vec(grad)
 
         return E_orb, g
@@ -560,7 +561,7 @@ class OrbOptimizer:
 
         # compute g_rk (mo, core + active) block of gradient, [eq (9)]
         orbgrad = 2 * (self.A_pq - self.A_pq.T)
-        orbgrad = orbgrad.T * self.nrr
+        orbgrad *= self.nrr
 
         return orbgrad
 
@@ -626,6 +627,6 @@ class OrbOptimizer:
             orbhess[self.actv, self.actv] -= 2.0 * (
                 diag_grad[self.actv, None] + diag_grad[None, self.actv]
             )
-        orbhess = orbhess.T * self.nrr
+        orbhess *= self.nrr
 
         return orbhess
