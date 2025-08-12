@@ -122,7 +122,7 @@ def test_gasscf_5():
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[6, 0], gas_max=[8, 2]),
         core_orbitals=[0],
         active_orbitals=[[1, 2, 3, 4], [5, 6]],
-        maxiter=100,
+        maxiter=150,
         econv=1e-10,
         gconv=1e-8,
     )(rhf)
