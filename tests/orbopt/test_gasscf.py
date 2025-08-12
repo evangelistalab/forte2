@@ -4,11 +4,10 @@ import pytest
 from forte2 import *
 from forte2.helpers.comparisons import approx
 
-@pytest.mark.skip(reason="GASSCF falls below forte reference results")
 def test_gasscf_1():
     erhf = -76.05702512779526
     eci = -76.063385164755
-    emcscf = -76.114001134422
+    emcscf = -76.115688424591
 
     xyz = """
     O   0.0000000000  -0.0000000000  -0.0662628033
@@ -34,11 +33,11 @@ def test_gasscf_1():
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[6]),
         core_orbitals=[0, 1],
         active_orbitals=[[2, 3, 4],[5, 6, 7]],
-        do_diis=False,
-        econv=1e-5,
-        gconv=1e-5,
+        do_diis=True,
+        econv=1e-8,
+        gconv=1e-7,
         ci_maxiter=50,
-        maxiter=100
+        maxiter=500
         )(rhf)
     mc.run()
 
@@ -128,7 +127,6 @@ def test_gasscf_3():
     assert ci.E[0] == approx(eci)
     assert mc.E == approx(emcscf)
 
-@pytest.mark.skip(reason="CASSCF falls below forte reference results")
 def test_gasscf_4():
     erhf = -76.05702512779526
     ecasscf = -76.116395214672
@@ -149,7 +147,7 @@ def test_gasscf_4():
     casscf = MCOptimizer(
         State(nel=10, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1],
-        active_orbitals=[2, 3, 4, 5, 6, 7],
+        active_orbitals=[[2, 3, 4, 5, 6, 7],[]], # CASSCF calculation using GASSCF algorithm
         do_diis=False,
         econv=1e-8,
         gconv=1e-7,
@@ -162,7 +160,7 @@ def test_gasscf_4():
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[6]),
         core_orbitals=[0, 1],
         active_orbitals=[[2, 3, 4],[5, 6, 7]],
-        do_diis=False,
+        do_diis=True,
         econv=1e-8,
         gconv=1e-7,
         ci_maxiter=50,
@@ -278,6 +276,39 @@ def test_gasscf_7():
         gconv=1e-7,
         ci_maxiter=50,
         maxiter=100
+        )(rhf)
+    mc.run()
+
+    assert rhf.E == approx(erhf)
+    assert mc.E == approx(emcscf)
+
+def test_gasscf_8():
+    erhf = -40.19845141292726
+    emcscf = -29.544266400483
+
+    xyz = """
+    C            0.052417904862     0.008091170764     0.039717608738
+    H            1.170469902710     0.450548753521     1.737652542463
+    H            1.167683656136     0.451231405150    -1.659924552573
+    H           -1.690971530149     1.143552334703     0.040997211401
+    H           -0.436869468885    -2.014192012525     0.039431679323
+    """
+
+    system = System(
+        xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="def2-universal-jkfit", unit='bohr'
+    )
+
+    rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
+
+    mc = MCOptimizer(
+        State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
+        active_orbitals=[[0],[1,2,3,4,5,6,7,9]],
+        active_frozen_orbitals=[0,9],
+        do_diis=True,
+        econv=1e-9,
+        gconv=1e-9,
+        ci_maxiter=50,
+        maxiter=200
         )(rhf)
     mc.run()
 
