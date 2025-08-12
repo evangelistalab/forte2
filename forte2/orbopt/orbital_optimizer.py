@@ -70,6 +70,7 @@ class MCOptimizer(ActiveSpaceSolver):
     -----
     See J. Chem. Phys. 152, 074102 (2020) for the current implementation
     of a unified CASSCF/GASSCF gradient and diagonal Hessian.
+    The non-GAS part of diagonal Hessian implementation follows Theor. Chem. Acc. 97, 88-95 (1997).
     An earlier implementation (CASSCF only) used J. Chem. Phys. 142, 224103 (2015).
     """
 
@@ -586,6 +587,7 @@ class OrbOptimizer:
         diag_g1 = np.diag(self.g1)
         diag_grad = np.diag(self.A_pq)
 
+        # The VC, VA, AC blocks are based on Theor. Chem. Acc. 97, 88-95 (1997)
         # compute virtual-core block
         orbhess[self.virt, self.core] = 4.0 * (
             diag_F[self.virt, None] - diag_F[None, self.core]
@@ -606,37 +608,20 @@ class OrbOptimizer:
 
         # if GAS: compute active-active block [see SI of J. Chem. Phys. 152, 074102 (2020)]
         if self.gas_ref:
+            eri_actv = self.get_active_space_ints()
             # A. G^{uu}_{vv}
-            # a1. compute (uu|xy)
-            jk_internal_ = np.einsum("uxuy->uxy", self.eri_gaaa[self.actv, ...])
-
-            # a2. compute D_{vv,xy}
-            d2_internal_ = np.einsum("vvxy->vxy", self.g2)
-
-            Guu_ = np.einsum("uxy,vxy->uv", jk_internal_, d2_internal_)
-
-            # a3. compute (ux|uy)
-            jk_internal_2 = np.einsum("uuxy->uxy", self.eri_gaaa[self.actv, ...])
-
-            # a4. compute D_{vx,vy}
-            d2_internal_2 = np.einsum("vxvy->vxy", self.g2)
-
-            Guu_ += 2.0 * np.einsum("uxy,vxy->uv", jk_internal_2, d2_internal_2)
-
+            Guu_ = np.einsum("uxuy,vvxy->uv", eri_actv, self.g2)
+            Guu_ += 2.0 * np.einsum("uuxy,vxvy->uv", eri_actv, self.g2)
             Guu_ += np.diag(self.Fcore)[self.actv, None] * diag_g1[None, :]
 
             # B. G^{uv}_{vu}
             Guv_ = self.Fcore[self.actv, self.actv] * self.g1.T
-            Guv_ += np.einsum("uxvy,vuxy->uv", self.eri_gaaa[self.actv, ...], self.g2)
-            Guv_ += 2.0 * np.einsum(
-                "uvxy,vxuy->uv", self.eri_gaaa[self.actv, ...], self.g2
-            )
+            Guv_ += np.einsum("uxvy,vuxy->uv", eri_actv, self.g2)
+            Guv_ += 2.0 * np.einsum("uvxy,vxuy->uv", eri_actv, self.g2)
 
             # compute diagonal hessian
-            orbhess[self.actv, self.actv] = 2.0 * Guu_
-            orbhess[self.actv, self.actv] += 2.0 * Guu_.T
-            orbhess[self.actv, self.actv] -= 2.0 * Guv_
-            orbhess[self.actv, self.actv] -= 2.0 * Guv_.T
+            orbhess[self.actv, self.actv] = 2.0 * (Guu_ + Guu_.T)
+            orbhess[self.actv, self.actv] -= 2.0 * (Guv_ + Guv_.T)
             orbhess[self.actv, self.actv] -= 2.0 * (
                 diag_grad[self.actv, None] + diag_grad[None, self.actv]
             )
