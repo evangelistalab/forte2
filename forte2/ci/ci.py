@@ -253,6 +253,11 @@ class _CIBase:
         H = self.ci_sigma_builder.form_H_csf(self.dets, self.spin_adapter)
 
         self.evals_full, self.evecs_full = np.linalg.eigh(H)
+        if self.energy_shift is not None:
+            argsort = np.argsort(np.abs(self.evals_full - self.energy_shift))
+            self.evals_full = self.evals_full[argsort]
+            self.evecs_full = self.evecs_full[:, argsort]
+
         self.evals = self.evals_full[: self.nroot]
         self.evecs = self.evecs_full[:, : self.nroot]
 
