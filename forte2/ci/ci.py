@@ -724,6 +724,17 @@ class CISolver(ActiveSpaceSolver):
         The logging level for the CI solver. Defaults to the global logger's verbosity level.
     ci_algorithm : str, optional, valid choices=["hz", "kh"], default="hz"
         The algorithm used for the CI sigma builder.
+
+    Attributes
+    ----------
+    sub_solvers : list[_CIBase]
+        A list of CI solvers for each state in the state-averaged CI.
+    evals_per_solver : list[NDArray]
+        The eigenvalues (energies) computed by each sub-solver.
+    evals_flat, E : NDArray
+        The flattened array of eigenvalues from all sub-solvers.
+    E_avg : float
+        The average energy computed from the state-averaged CI roots.
     """
 
     ### Davidson-Liu parameters
@@ -770,10 +781,10 @@ class CISolver(ActiveSpaceSolver):
             use_aux_corr=True,
         )
 
-        self.ci_solvers = []
+        self.sub_solvers = []
         for i, state in enumerate(self.sa_info.states):
             # Create a CI solver for each state and MOSpace
-            self.ci_solvers.append(
+            self.sub_solvers.append(
                 _CIBase(
                     mo_space=self.mo_space,
                     ints=ints,
@@ -799,7 +810,7 @@ class CISolver(ActiveSpaceSolver):
             self.first_run = False
 
         self.evals_per_solver = []
-        for ci_solver in self.ci_solvers:
+        for ci_solver in self.sub_solvers:
             ci_solver.run()
             self.evals_per_solver.append(ci_solver.evals)
 
@@ -832,7 +843,7 @@ class CISolver(ActiveSpaceSolver):
             Average spin-free one-particle RDM.
         """
         rdm1 = np.zeros((self.norb,) * 2)
-        for i, ci_solver in enumerate(self.ci_solvers):
+        for i, ci_solver in enumerate(self.sub_solvers):
             for j in range(ci_solver.nroot):
                 rdm1 += ci_solver.make_sf_1rdm(j) * self.weights[i][j]
         return rdm1
@@ -847,7 +858,7 @@ class CISolver(ActiveSpaceSolver):
             Average spin-free two-particle RDM.
         """
         rdm2 = np.zeros((self.norb,) * 4)
-        for i, ci_solver in enumerate(self.ci_solvers):
+        for i, ci_solver in enumerate(self.sub_solvers):
             for j in range(ci_solver.nroot):
                 rdm2 += ci_solver.make_sf_2rdm(j) * self.weights[i][j]
 
@@ -866,7 +877,7 @@ class CISolver(ActiveSpaceSolver):
         tei : NDArray
             Two-electron active-space integrals in the MO basis.
         """
-        for ci_solver in self.ci_solvers:
+        for ci_solver in self.sub_solvers:
             ci_solver.ints.E = scalar
             ci_solver.ints.H = oei
             ci_solver.ints.V = tei
@@ -881,7 +892,7 @@ class CISolver(ActiveSpaceSolver):
             The natural occupation numbers for each root.
         """
         nos = []
-        for ci_solver in self.ci_solvers:
+        for ci_solver in self.sub_solvers:
             nos.append(ci_solver.compute_natural_occupation_numbers())
         self.nat_occs = np.concatenate(nos, axis=1)
 
@@ -900,7 +911,7 @@ class CISolver(ActiveSpaceSolver):
             top_dets[i] contains a list of tuples (Determinant, coefficient) for the `i`-th root.
         """
         top_dets = []
-        for ci_solver in self.ci_solvers:
+        for ci_solver in self.sub_solvers:
             top_dets += ci_solver.get_top_determinants(n)
         return top_dets
 
@@ -926,7 +937,7 @@ class CISolver(ActiveSpaceSolver):
         self.tdm_per_solver = []
         self.fosc_per_solver = []
 
-        for ici, ci_solver in enumerate(self.ci_solvers):
+        for ici, ci_solver in enumerate(self.sub_solvers):
             tdmdict = OrderedDict()
             foscdict = OrderedDict()
             for i in range(ci_solver.nroot):

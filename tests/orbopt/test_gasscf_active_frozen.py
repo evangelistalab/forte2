@@ -4,6 +4,7 @@ import pytest
 from forte2 import *
 from forte2.helpers.comparisons import approx
 
+
 @pytest.mark.slow
 def test_gasscf_ch4_active_frozen_1s():
     erhf = -40.19845141292726
@@ -39,6 +40,7 @@ def test_gasscf_ch4_active_frozen_1s():
 
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
+
 
 @pytest.mark.slow
 def test_gasscf_ch4_active_frozen_1s_highest_active():
