@@ -2,7 +2,7 @@ import numpy as np
 import scipy as sp
 from dataclasses import dataclass, field
 
-# from forte2.ci import CISolver
+from forte2.ci.ci import CISolver
 from forte2.base_classes.active_space_solver import ActiveSpaceSolver
 from forte2.orbitals import Semicanonicalizer
 from forte2.jkbuilder import FockBuilder, RestrictedMOIntegrals
@@ -64,7 +64,14 @@ class MCOptimizer(ActiveSpaceSolver):
         The minimum number of vectors to perform extrapolation.
     do_transition_dipole : bool, optional, default=False
         Whether to compute transition dipole moments.
+
+    Notes
+    -----
+    See J. Chem. Phys. 152, 074102 (2020) for the current implementation
+    of a unified CASSCF/GASSCF gradient and diagonal Hessian.
+    An earlier implementation (CASSCF only) used J. Chem. Phys. 142, 224103 (2015).
     """
+
     active_frozen_orbitals: list[int] = None
     optimize_frozen_orbs: bool = True
 
@@ -118,16 +125,18 @@ class MCOptimizer(ActiveSpaceSolver):
         self.actv = self.mo_space.actv
         self.virt = self.mo_space.uocc
 
-        assert (
-            sorted(self.active_frozen_orbitals) == self.active_frozen_orbitals
+        if self.active_frozen_orbitals is not None:
+            assert (
+                sorted(self.active_frozen_orbitals) == self.active_frozen_orbitals
             ), "Active frozen orbitals must be sorted."
 
-        # check if all active_frozen_orbitals indices are in the active space
-        if self.active_frozen_orbitals is not None:
-            missing = set(self.active_frozen_orbitals) - set(self.mo_space.active_indices)
+            # check if all active_frozen_orbitals indices are in the active space
+            missing = set(self.active_frozen_orbitals) - set(
+                self.mo_space.active_indices
+            )
             if missing:
                 raise ValueError(
-                    f'selected active frozen indices, {sorted(missing)}, are not in the active space {self.mo_space.active_indices}.'
+                    f"selected active frozen indices, {sorted(missing)}, are not in the active space {self.mo_space.active_indices}."
                 )
 
         self.nrr = self._get_nonredundant_rotations()
@@ -163,7 +172,6 @@ class MCOptimizer(ActiveSpaceSolver):
             self.nrr,
             gas_ref=do_gas,
         )
-        from forte2.ci import CISolver
 
         self.ci_solver = CISolver(
             states=self.states,
@@ -525,11 +533,11 @@ class OrbOptimizer:
     def _compute_Fact(self):
         Jact, Kact = self.fock_builder.build_JK_generalized(self.Cact, self.g1)
 
-        # [Eq. (20)]
+        # [Eq. (13)]
         self.Fact = np.einsum(
             "mp,mn,nq->pq",
             self.Cgen.conj(),
-            2 * Jact - Kact,
+            Jact - 0.5 * Kact,
             self.Cgen,
             optimize=True,
         )
@@ -543,127 +551,86 @@ class OrbOptimizer:
 
     def _compute_orbgrad(self):
         self._compute_Fact()
-
-        self.Y, self.Z = self._compute_YZ_intermediates()
         orbgrad = np.zeros_like(self.Fcore)
 
-        Fcore_cv = self.Fcore[self.core, self.virt]
-        Fcore_ca = self.Fcore[self.core, self.actv]
-        Fact_cv = self.Fact[self.core, self.virt]
-        Fact_ca = self.Fact[self.core, self.actv]
+        # 2RDM in chemist notation
+        self.rdm2 = np.einsum("prqs->pqrs", self.g2) + np.einsum("qrps->pqrs", self.g2)
 
-        Y_va = self.Y[self.virt, :]
-        Y_ca = self.Y[self.core, :]
-        Z_va = self.Z[self.virt, :]
-        Z_ca = self.Z[self.core, :]
+        self.A_pq = np.zeros_like(self.Fcore)
+        self.Fock = self.Fcore + self.Fact
 
-        orbgrad[self.core, self.virt] = 4 * Fcore_cv + 2 * Fact_cv
-        orbgrad[self.actv, self.virt] = 2 * Y_va.T + 4 * Z_va.T
-        orbgrad[self.core, self.actv] = 4 * Fcore_ca + 2 * Fact_ca - 2 * Y_ca - 4 * Z_ca
+        # compute A_ri (mo, core) block, [eq (10)]
+        self.A_pq[:, self.core] = 2.0 * self.Fock[:, self.core]
 
-        # If GAS, build gradient following [J. Chem. Phys. 152, 074102 (2020)]
-        if self.gas_ref:
-            # reset orbgrad matrix
-            orbgrad = np.zeros_like(self.Fcore)
+        # compute A_ru (mo, active) block, [eq (11)]
+        self.A_pq[:, self.actv] = np.einsum(
+            "rv,vu->ru", self.Fcore[:, self.actv], self.g1
+        )
+        # (rt|vw) D_tu,vw, where (rt|vw) = <rv|tw>
+        self.A_pq[:, self.actv] += np.einsum("rvtw,tuvw->ru", self.eri_gaaa, self.rdm2)
 
-            # 2RDM in chemist notation
-            self.rdm2 = np.einsum('prqs->pqrs', self.g2) + np.einsum('qrps->pqrs', self.g2)
+        # compute g_rk (mo, core + active) block of gradient, [eq (9)]
+        orbgrad = 2 * (self.A_pq - self.A_pq.T)
 
-            # initialize Apq matrix
-            self.A_pq = np.zeros_like(self.Fcore)
-
-            # make Fact [eq(13)] and Fcore [eq(3)] variables according to [J. Chem. Phys. 152, 074102 (2020)]
-            self.Fact_new = self.Fact * 0.5
-            self.Fcore_new = self.Fcore
-            self.F_new = self.Fcore_new + self.Fact_new
-
-            # compute A_ri (mo, core) block, [eq (10)]
-            self.A_pq[:,self.core] = 2.0 * self.F_new[:,self.core]
-
-            # compute A_ru (mo, active) block, [eq (11)]
-            self.A_pq[:, self.actv] = np.einsum('rv,vu->ru', self.Fcore_new[:, self.actv], self.g1)
-            # (rt|vw) D_tu,vw, where (rt|vw) = <rv|tw>
-            self.A_pq[:, self.actv] += np.einsum('rvtw,tuvw->ru', self.eri_gaaa, self.rdm2)
-
-            # compute g_rk (mo, core + active) block of gradient, [eq (9)]
-            orbgrad = 2 * (self.A_pq - self.A_pq.T)
-
-            # get ca, cv, aa, and av blocks of gradient
-            orbgrad = orbgrad.T * self.nrr
+        # get ca, cv, aa, and av blocks of gradient
+        orbgrad = orbgrad.T * self.nrr
 
         return orbgrad
 
     def _compute_orbhess(self):
+        # If GAS, build hessian following [J. Chem. Phys. 152, 074102 (2020)]
+        # reset orbhess matrix
         orbhess = np.zeros_like(self.Fcore)
 
-        Fcore_cc = np.diag(self.Fcore[self.core, self.core])
-        Fcore_aa = np.diag(self.Fcore[self.actv, self.actv])
-        Fcore_vv = np.diag(self.Fcore[self.virt, self.virt])
-        Fact_cc = np.diag(self.Fact[self.core, self.core])
-        Fact_aa = np.diag(self.Fact[self.actv, self.actv])
-        Fact_vv = np.diag(self.Fact[self.virt, self.virt])
-        g1_diag = np.diag(self.g1)
-        Y_aa = np.diag(self.Y[self.actv, :])
-        Z_aa = np.diag(self.Z[self.actv, :])
+        h_diag_ = np.zeros_like(self.Fcore)
+        self.Fd = np.diag(self.Fock)
 
-        # Algorithm 1, line 20
-        vdiag = 4 * Fcore_vv + 2 * Fact_vv
-        cdiag = 4 * Fcore_cc + 2 * Fact_cc
-        orbhess[self.core, self.virt] = vdiag - cdiag[:, None]
+        # compute virtual-core block
+        h_diag_[self.virt, self.core] = 4.0 * (
+            self.Fd[self.virt, None] - self.Fd[None, self.core]
+        )
 
-        # Algorithm 1, line 21
-        av_diag = 2 * np.outer(g1_diag, Fcore_vv) + np.outer(g1_diag, Fact_vv)
-        aa_diag = 2 * Y_aa + 4 * Z_aa
-        orbhess[self.actv, self.virt] = av_diag - aa_diag[:, None]
+        # compute virtual-active block
+        h_diag_[self.virt, self.actv] = 2.0 * (
+            self.Fd[self.virt, None] * np.diag(self.g1)[None, :]
+            - np.diag(self.A_pq)[None, self.actv]
+        )
 
-        # Algorithm 1, line 22
-        ca_diag = 2 * np.outer(Fcore_cc, g1_diag) + np.outer(Fact_cc, g1_diag)
-        aa_diag = 4 * Fcore_aa + 2 * Fact_aa - 2 * Y_aa - 4 * Z_aa
-        cc_diag = -4 * Fcore_cc - 2 * Fact_cc
-        orbhess[self.core, self.actv] = ca_diag + aa_diag[None, :] + cc_diag[:, None]
+        # compute active-core block
+        h_diag_[self.actv, self.core] = 4.0 * (
+            self.Fd[self.actv, None] - self.Fd[None, self.core]
+        ) + 2.0 * (
+            self.Fd[None, self.core] * np.diag(self.g1)[:, None]
+            - np.diag(self.A_pq)[self.actv, None]
+        )
 
-        # If GAS, build hessian following [J. Chem. Phys. 152, 074102 (2020)]
+        # if GAS: compute active-active block [see SI of J. Chem. Phys. 152, 074102 (2020)]
         if self.gas_ref:
-            # reset orbhess matrix
-            orbhess = np.zeros_like(self.Fcore)
-
-            h_diag_ = np.zeros_like(self.Fcore)
-            self.Fd = np.diag(self.F_new)
-
-            # compute virtual-core block
-            h_diag_[self.virt, self.core] = 4.0 * (self.Fd[self.virt, None] - self.Fd[None, self.core])
-
-            # compute virtual-active block
-            h_diag_[self.virt, self.actv] = 2.0 * (self.Fd[self.virt, None] * np.diag(self.g1)[None, :] - np.diag(self.A_pq)[None, self.actv])
-
-            # compute active-core block
-            h_diag_[self.actv, self.core] = 4.0 * (self.Fd[self.actv, None] - self.Fd[None, self.core]) + 2.0 * (self.Fd[None, self.core] * np.diag(self.g1)[:, None] - np.diag(self.A_pq)[self.actv, None])
-
-            # if GAS: compute active-active block [see SI of J. Chem. Phys. 152, 074102 (2020)]
-
             # A. G^{uu}_{vv}
             # a1. compute (uu|xy)
-            jk_internal_ = np.einsum('uxuy->uxy', self.eri_gaaa[self.actv,...])
+            jk_internal_ = np.einsum("uxuy->uxy", self.eri_gaaa[self.actv, ...])
 
             # a2. compute D_{vv,xy}
-            d2_internal_ = np.einsum('vvxy->vxy', self.rdm2)
+            d2_internal_ = np.einsum("vvxy->vxy", self.rdm2)
 
-            Guu_ = np.einsum('uxy,vxy->uv', jk_internal_, d2_internal_)
+            Guu_ = np.einsum("uxy,vxy->uv", jk_internal_, d2_internal_)
 
             # a3. compute (ux|uy)
-            jk_internal_2 = np.einsum('uuxy->uxy', self.eri_gaaa[self.actv,...])
+            jk_internal_2 = np.einsum("uuxy->uxy", self.eri_gaaa[self.actv, ...])
 
             # a4. compute D_{vx,vy}
-            d2_internal_2 = np.einsum('vxvy->vxy', self.rdm2)
+            d2_internal_2 = np.einsum("vxvy->vxy", self.rdm2)
 
-            Guu_ += 2.0 * np.einsum('uxy,vxy->uv', jk_internal_2, d2_internal_2)
+            Guu_ += 2.0 * np.einsum("uxy,vxy->uv", jk_internal_2, d2_internal_2)
 
-            Guu_ += np.diag(self.Fcore_new)[self.actv, None] * np.diag(self.g1)[None,:]
+            Guu_ += np.diag(self.Fcore)[self.actv, None] * np.diag(self.g1)[None, :]
 
             # B. G^{uv}_{vu}
-            Guv_ = self.Fcore_new[self.actv,self.actv] * self.g1.T
-            Guv_ += np.einsum('uxvy,vuxy->uv', self.eri_gaaa[self.actv, ...], self.rdm2)
-            Guv_ += 2.0 * np.einsum('uvxy,vxuy->uv', self.eri_gaaa[self.actv, ...], self.rdm2)
+            Guv_ = self.Fcore[self.actv, self.actv] * self.g1.T
+            Guv_ += np.einsum("uxvy,vuxy->uv", self.eri_gaaa[self.actv, ...], self.rdm2)
+            Guv_ += 2.0 * np.einsum(
+                "uvxy,vxuy->uv", self.eri_gaaa[self.actv, ...], self.rdm2
+            )
 
             # compute diagonal hessian
             h_diag_[self.actv, self.actv] = 2.0 * Guu_
@@ -671,7 +638,10 @@ class OrbOptimizer:
             h_diag_[self.actv, self.actv] -= 2.0 * Guv_
             h_diag_[self.actv, self.actv] -= 2.0 * Guv_.T
 
-            h_diag_[self.actv, self.actv] -= 2.0 * (np.diag(self.A_pq)[self.actv, None] + np.diag(self.A_pq)[None, self.actv])
-            orbhess = h_diag_.T * self.nrr
+            h_diag_[self.actv, self.actv] -= 2.0 * (
+                np.diag(self.A_pq)[self.actv, None]
+                + np.diag(self.A_pq)[None, self.actv]
+            )
+        orbhess = h_diag_.T * self.nrr
 
         return orbhess

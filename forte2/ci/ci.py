@@ -4,12 +4,11 @@ from collections import OrderedDict
 import numpy as np
 
 from forte2 import CIStrings, CISigmaBuilder, CISpinAdapter, cpp_helpers
-from forte2.state.state import State
+from forte2.state import State, MOSpace
 from forte2.helpers.comparisons import approx
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
 from forte2.base_classes.active_space_solver import ActiveSpaceSolver
 from forte2.helpers import logger
-from forte2.state import MOSpace
 from forte2.jkbuilder import RestrictedMOIntegrals
 from forte2.props import get_1e_property
 from forte2.orbitals import Semicanonicalizer
