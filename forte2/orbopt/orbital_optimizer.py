@@ -226,7 +226,7 @@ class MCOptimizer(ActiveSpaceSolver):
         self.E_avg_old = self.E_avg
 
         self.g1_act = self.ci_solver.make_average_sf_1rdm()
-        g2_act = 0.5 * self.ci_solver.make_average_sf_2rdm()
+        g2_act = self.ci_solver.make_average_sf_2rdm()
         # ci_maxiter_save = self.ci_solver.get_maxiter()
         # self.ci_solver.set_maxiter(self.ci_maxiter)
 
@@ -277,7 +277,7 @@ class MCOptimizer(ActiveSpaceSolver):
             self.E_ci = np.array(self.ci_solver.E)
             self.E = self.E_avg
             self.g1_act = self.ci_solver.make_average_sf_1rdm()
-            g2_act = 0.5 * self.ci_solver.make_average_sf_2rdm()
+            g2_act = self.ci_solver.make_average_sf_2rdm()
             self.orb_opt.set_rdms(self.g1_act, g2_act)
             self.iter += 1
         else:
@@ -367,7 +367,6 @@ class MCOptimizer(ActiveSpaceSolver):
     def _get_nonredundant_rotations(self):
         nrr = np.zeros((self.system.nbf, self.system.nbf), dtype=bool)
 
-        # TODO: handle GAS/RHF/ROHF cases
         if self.optimize_frozen_orbs:
             _core = self.mo_space.docc
             _virt = self.mo_space.uocc
@@ -451,7 +450,8 @@ class OrbOptimizer:
 
     def set_rdms(self, g1, g2):
         self.g1 = g1
-        self.g2 = g2
+        # '2RDM' defined as in [eq (6)]
+        self.g2 = 0.5 * (np.einsum("prqs->pqrs", g2) + np.einsum("qrps->pqrs", g2))
 
     def get_active_space_ints(self):
         """
@@ -509,12 +509,11 @@ class OrbOptimizer:
     def _compute_reference_energy(self):
         energy = self.Ecore + self.e_nuc
         energy += np.einsum("uv,uv->", self.Fcore[self.actv, self.actv], self.g1)
-        # factor of 0.5 already included in g2
-        energy += np.einsum("uvxy,uvxy->", self.get_active_space_ints(), self.g2)
+        energy += 0.5 * np.einsum("tvuw,tuvw->", self.get_active_space_ints(), self.g2)
         return energy
 
     def _compute_Fcore(self):
-        # Compute the core Fock matrix [Eq. (9) or (18)], also return the core energy
+        # Compute the core Fock matrix [Eq. (3)], also return the core energy
         Jcore, Kcore = self.fock_builder.build_JK([self.Ccore])
         self.Fcore = np.einsum(
             "mp,mn,nq->pq",
@@ -546,9 +545,6 @@ class OrbOptimizer:
         self._compute_Fact()
         orbgrad = np.zeros_like(self.Fcore)
 
-        # 2RDM in chemist notation
-        self.rdm2 = np.einsum("prqs->pqrs", self.g2) + np.einsum("qrps->pqrs", self.g2)
-
         self.A_pq = np.zeros_like(self.Fcore)
         self.Fock = self.Fcore + self.Fact
 
@@ -560,12 +556,10 @@ class OrbOptimizer:
             "rv,vu->ru", self.Fcore[:, self.actv], self.g1
         )
         # (rt|vw) D_tu,vw, where (rt|vw) = <rv|tw>
-        self.A_pq[:, self.actv] += np.einsum("rvtw,tuvw->ru", self.eri_gaaa, self.rdm2)
+        self.A_pq[:, self.actv] += np.einsum("rvtw,tuvw->ru", self.eri_gaaa, self.g2)
 
         # compute g_rk (mo, core + active) block of gradient, [eq (9)]
         orbgrad = 2 * (self.A_pq - self.A_pq.T)
-
-        # get ca, cv, aa, and av blocks of gradient
         orbgrad = orbgrad.T * self.nrr
 
         return orbgrad
@@ -573,26 +567,26 @@ class OrbOptimizer:
     def _compute_orbhess(self):
         """Diagonal orbital Hessian"""
         orbhess = np.zeros_like(self.Fcore)
-        diagF = np.diag(self.Fock)
-        diagg1 = np.diag(self.g1)
-        diaggrad = np.diag(self.A_pq)
+        diag_F = np.diag(self.Fock)
+        diag_g1 = np.diag(self.g1)
+        diag_grad = np.diag(self.A_pq)
 
         # compute virtual-core block
         orbhess[self.virt, self.core] = 4.0 * (
-            diagF[self.virt, None] - diagF[None, self.core]
+            diag_F[self.virt, None] - diag_F[None, self.core]
         )
 
         # compute virtual-active block
         orbhess[self.virt, self.actv] = 2.0 * (
-            diagF[self.virt, None] * diagg1[None, :] - diaggrad[None, self.actv]
+            diag_F[self.virt, None] * diag_g1[None, :] - diag_grad[None, self.actv]
         )
 
         # compute active-core block
         orbhess[self.actv, self.core] = 4.0 * (
-            diagF[self.actv, None] - diagF[None, self.core]
+            diag_F[self.actv, None] - diag_F[None, self.core]
         )
         orbhess[self.actv, self.core] += 2.0 * (
-            diagF[None, self.core] * diagg1[:, None] - diaggrad[self.actv, None]
+            diag_F[None, self.core] * diag_g1[:, None] - diag_grad[self.actv, None]
         )
 
         # if GAS: compute active-active block [see SI of J. Chem. Phys. 152, 074102 (2020)]
@@ -602,7 +596,7 @@ class OrbOptimizer:
             jk_internal_ = np.einsum("uxuy->uxy", self.eri_gaaa[self.actv, ...])
 
             # a2. compute D_{vv,xy}
-            d2_internal_ = np.einsum("vvxy->vxy", self.rdm2)
+            d2_internal_ = np.einsum("vvxy->vxy", self.g2)
 
             Guu_ = np.einsum("uxy,vxy->uv", jk_internal_, d2_internal_)
 
@@ -610,17 +604,17 @@ class OrbOptimizer:
             jk_internal_2 = np.einsum("uuxy->uxy", self.eri_gaaa[self.actv, ...])
 
             # a4. compute D_{vx,vy}
-            d2_internal_2 = np.einsum("vxvy->vxy", self.rdm2)
+            d2_internal_2 = np.einsum("vxvy->vxy", self.g2)
 
             Guu_ += 2.0 * np.einsum("uxy,vxy->uv", jk_internal_2, d2_internal_2)
 
-            Guu_ += np.diag(self.Fcore)[self.actv, None] * diagg1[None, :]
+            Guu_ += np.diag(self.Fcore)[self.actv, None] * diag_g1[None, :]
 
             # B. G^{uv}_{vu}
             Guv_ = self.Fcore[self.actv, self.actv] * self.g1.T
-            Guv_ += np.einsum("uxvy,vuxy->uv", self.eri_gaaa[self.actv, ...], self.rdm2)
+            Guv_ += np.einsum("uxvy,vuxy->uv", self.eri_gaaa[self.actv, ...], self.g2)
             Guv_ += 2.0 * np.einsum(
-                "uvxy,vxuy->uv", self.eri_gaaa[self.actv, ...], self.rdm2
+                "uvxy,vxuy->uv", self.eri_gaaa[self.actv, ...], self.g2
             )
 
             # compute diagonal hessian
@@ -630,7 +624,7 @@ class OrbOptimizer:
             orbhess[self.actv, self.actv] -= 2.0 * Guv_.T
 
             orbhess[self.actv, self.actv] -= 2.0 * (
-                diaggrad[self.actv, None] + diaggrad[None, self.actv]
+                diag_grad[self.actv, None] + diag_grad[None, self.actv]
             )
         orbhess = orbhess.T * self.nrr
 
