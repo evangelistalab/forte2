@@ -6,7 +6,7 @@
 
 /// @brief Accumulate hash values of 64 bit unsigned integers
 /// based on boost/functional/hash/hash.hpp
-inline void hash_combine_uint64(std::size_t& seed, std::uint64_t value) {
+inline void hash_combine_uint64(std::size_t& seed, std::uint64_t value) noexcept {
     const std::size_t hv = std::hash<std::uint64_t>{}(value);
     // 0x9e3779b97f4a7c15ULL is the 64-bit variant of the constant used in boost::hash_combine
     // (0x9e3779b9), derived from the fractional part of the golden ratio. This helps to spread hash
