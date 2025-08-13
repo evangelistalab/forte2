@@ -4,36 +4,55 @@
 #include <cstdint>
 #include <limits>
 
-/// @brief Accumulate hash values of 64 bit unsigned integers
-/// based on boost/functional/hash/hash.hpp
-inline void hash_combine_uint64(std::size_t& seed, std::uint64_t value) noexcept {
-    // 0x9e3779b97f4a7c15ULL is the 64-bit variant of the constant used in boost::hash_combine
-    // (0x9e3779b9), derived from the fractional part of the golden ratio. This helps to spread hash
-    // values uniformly.
-    seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+inline uint64_t hash_pair_fold(uint64_t a, uint64_t b) noexcept {
+    constexpr uint64_t C = 0x9e3779b97f4a7c15ull;
+    uint64_t t = a * C + b;
+    t ^= t >> 33;
+    return t;
 }
 
-/// @brief Count the number of bit set to 1 in a uint64_t
-/// @param x the uint64_t integer to test
-/// @return the number of bits that are set to 1
-inline uint64_t ui64_bit_count(uint64_t x) { return std::popcount(x); }
+// inline constexpr std::size_t fmix64(uint64_t x) noexcept {
+//     x ^= x >> 33;
+//     x *= 0xff51afd7ed558ccdULL;
+//     x ^= x >> 33;
+//     x *= 0xc4ceb9fe1a85ec53ULL;
+//     x ^= x >> 33;
+//     return x;
+// }
+
+// inline uint64_t hash_pair_simple(uint64_t a, uint64_t b) noexcept {
+//     // scramble each, then combine (Boost-style)
+//     uint64_t h1 = fmix64(a);
+//     uint64_t h2 = fmix64(b);
+//     return fmix64(h1 ^ (h2 + 0x9e3779b97f4a7c15ULL + (h1 << 6) + (h1 >> 2)));
+// }
+
+// /// @brief Accumulate hash values of 64 bit unsigned integers
+// /// based on boost/functional/hash/hash.hpp
+// inline void hash_combine_uint64(std::size_t& seed, std::size_t value) noexcept {
+//     // 0x9e3779b97f4a7c15ULL is the 64-bit variant of the constant used in boost::hash_combine
+//     // (0x9e3779b9), derived from the fractional part of the golden ratio. This helps to spread
+//     hash
+//     // values uniformly.
+//     seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+// }
 
 /// @brief Compute the parity of a uint64_t integer (1 if odd number of bits set, -1 otherwise)
 /// @param x the uint64_t integer to test
 /// @return parity = (-1)^(number of bits set to 1)
-inline double ui64_bit_parity(uint64_t x) { return 1.0 - 2.0 * (std::popcount(x) & 1); }
+inline double ui64_bit_parity(uint64_t x) noexcept { return 1.0 - 2.0 * (std::popcount(x) & 1); }
 
 /// @brief Bit-scan to find the first set bit (least significant bit)
 /// @param x the uint64_t integer to test
 /// @return the index of the least significant 1-bit of x, or if x is zero, returns ~0
-inline uint64_t ui64_find_lowest_one_bit(uint64_t x) {
+inline uint64_t ui64_find_lowest_one_bit(uint64_t x) noexcept {
     return (x == 0) ? ~uint64_t(0) : std::countr_zero(x);
 }
 
 /// @brief Bit-scan to find the last set bit (most significant bit)
 /// @param x the uint64_t integer to test
 /// @return the index of the least significant 1-bit of x, or if x is ~0, returns ~0
-inline uint64_t ui64_find_highest_one_bit(uint64_t x) {
+inline uint64_t ui64_find_highest_one_bit(uint64_t x) noexcept {
     return (x == ~uint64_t(0)) ? x : 63 - std::countl_zero(x);
 }
 
@@ -80,12 +99,12 @@ inline double ui64_sign(uint64_t x, int n) {
     // so we treat this case separately
     if (n == 0)
         return 1.0;
-    return 1.0 - 2.0 * (ui64_bit_count(x & (~0ULL >> (digits - n))) & 1);
+    return 1.0 - 2.0 * (std::popcount(x & (~0ULL >> (digits - n))) & 1);
     // uint64_t mask = ~0;
     // // mask = mask << (64 - n);             // make a string with n bits set
     // mask = mask >> (digits - n);   // move it right by n
     // mask = x & mask;               // intersect with string
-    // mask = ui64_bit_count(mask);   // count bits in between
+    // mask = std::popcount(mask);   // count bits in between
     // return 1.0 - 2.0 * (mask & 1); // compute sign
 }
 
@@ -115,7 +134,7 @@ inline double ui64_sign(uint64_t x, int m, int n) {
     mask = mask << (65 - gap);                  // make a string with |m - n| - 1 bits set
     mask = mask >> (64 - gap - std::min(m, n)); // move it right after min(m, n)
     mask = x & mask;                            // intersect with string
-    mask = ui64_bit_count(mask);                // count bits in between
+    mask = std::popcount(mask);                 // count bits in between
     return (mask % 2 == 0) ? 1.0 : -1.0;        // compute sign
 }
 
@@ -142,6 +161,6 @@ inline double ui64_sign_reverse(uint64_t x, int n) {
     uint64_t mask = ~0;
     mask = mask << (n + 1);        // make a string with 64 - n - 1 bits set
     mask = x & mask;               // intersect with string
-    mask = ui64_bit_count(mask);   // count bits in between
+    mask = std::popcount(mask);    // count bits in between
     return 1.0 - 2.0 * (mask & 1); // compute sign
 }

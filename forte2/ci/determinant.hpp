@@ -409,9 +409,9 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     int count_a() const {
         // with constexpr we compile only one of these cases
         if constexpr (N == 128) {
-            return ui64_bit_count(words_[0]);
+            return std::popcount(words_[0]);
         } else if (N == 256) {
-            return ui64_bit_count(words_[0]) + ui64_bit_count(words_[1]);
+            return std::popcount(words_[0]) + std::popcount(words_[1]);
         } else {
             return count(0, nwords_half);
         }
@@ -421,9 +421,9 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     int count_b() const {
         // with constexpr we compile only one of these cases
         if constexpr (N == 128) {
-            return ui64_bit_count(words_[1]);
+            return std::popcount(words_[1]);
         } else if (N == 256) {
-            return ui64_bit_count(words_[2]) + ui64_bit_count(words_[3]);
+            return std::popcount(words_[2]) + std::popcount(words_[3]);
         } else {
             return count(nwords_half, nwords_);
         }
@@ -482,7 +482,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     int npair() const {
         int count = 0;
         for (size_t k = 0; k < nwords_half; ++k) {
-            count += ui64_bit_count(words_[k] & words_[k + nwords_half]);
+            count += std::popcount(words_[k] & words_[k + nwords_half]);
         }
         return count;
     }
@@ -854,8 +854,8 @@ inline double faster_apply_operator_to_det(const DeterminantImpl<N>& d, Determin
         // specialization for 64 + 64 bits
         new_d.words_[0] = d.words_[0] & (~ann.words_[0]);
         new_d.words_[1] = d.words_[1] & (~ann.words_[1]);
-        n += ui64_bit_count(new_d.words_[0] & sign.words_[0]);
-        n += ui64_bit_count(new_d.words_[1] & sign.words_[1]);
+        n += std::popcount(new_d.words_[0] & sign.words_[0]);
+        n += std::popcount(new_d.words_[1] & sign.words_[1]);
         new_d.words_[0] |= cre.words_[0];
         new_d.words_[1] |= cre.words_[1];
     } else if constexpr (N == 256) {
@@ -863,10 +863,10 @@ inline double faster_apply_operator_to_det(const DeterminantImpl<N>& d, Determin
         new_d.words_[1] = d.words_[1] & (~ann.words_[1]);
         new_d.words_[2] = d.words_[2] & (~ann.words_[2]);
         new_d.words_[3] = d.words_[3] & (~ann.words_[3]);
-        n += ui64_bit_count(new_d.words_[0] & sign.words_[0]);
-        n += ui64_bit_count(new_d.words_[1] & sign.words_[1]);
-        n += ui64_bit_count(new_d.words_[2] & sign.words_[2]);
-        n += ui64_bit_count(new_d.words_[3] & sign.words_[3]);
+        n += std::popcount(new_d.words_[0] & sign.words_[0]);
+        n += std::popcount(new_d.words_[1] & sign.words_[1]);
+        n += std::popcount(new_d.words_[2] & sign.words_[2]);
+        n += std::popcount(new_d.words_[3] & sign.words_[3]);
         new_d.words_[0] |= cre.words_[0];
         new_d.words_[1] |= cre.words_[1];
         new_d.words_[2] |= cre.words_[2];
@@ -877,7 +877,7 @@ inline double faster_apply_operator_to_det(const DeterminantImpl<N>& d, Determin
             // apply the annihilation operator
             new_d.words_[i] = d.words_[i] & (~ann.words_[i]);
             // compute the sign
-            n += ui64_bit_count(new_d.words_[i] & sign.words_[i]);
+            n += std::popcount(new_d.words_[i] & sign.words_[i]);
             // apply the creation operator
             new_d.words_[i] |= cre.words_[i];
         }
