@@ -18,9 +18,13 @@ class MOsMixin:
         assert hasattr(
             upstream, "irrep_indices"
         ), "upstream must have an 'irrep_indices' attribute"
+        assert hasattr(
+            upstream, "irrep_labels"
+        ), "upstream must have an 'irrep_labels' attribute"
         # copy each matrix
         new.C = [arr.copy() for arr in upstream.C]
         new.irrep_indices = upstream.irrep_indices.copy()
+        new.irrep_labels = upstream.irrep_labels.copy()
 
 
 @dataclass
