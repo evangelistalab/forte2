@@ -69,8 +69,23 @@ _CHARACTER_TABLE = {
 }
 
 _COTTON_LABELS = {
-    gname: {irrep: i for i, irrep in enumerate(_CHARACTER_TABLE[gname])}
-    for gname in _CHARACTER_TABLE
+    "C1": {"a": 0},
+    "CI": {"g": 0, "u": 1},
+    "C2": {"a": 0, "b": 1},
+    "CS": {"a'": 0, "a''": 1},
+    "D2": {"a": 0, "b1": 1, "b2": 2, "b3": 3},
+    "C2V": {"a1": 0, "a2": 1, "b1": 2, "b2": 3},
+    "C2H": {"ag": 0, "bg": 1, "au": 2, "bu": 3},
+    "D2H": {
+        "ag": 0,
+        "b1g": 1,
+        "b2g": 2,
+        "b3g": 3,
+        "au": 4,
+        "b1u": 5,
+        "b2u": 6,
+        "b3u": 7,
+    },
 }
 
 _PRINCIPAL_AXIS = np.array([0.0, 0.0, 1.0])
