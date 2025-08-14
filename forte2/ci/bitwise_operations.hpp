@@ -4,38 +4,12 @@
 #include <cstdint>
 #include <limits>
 
-inline uint64_t hash_pair_fold(uint64_t a, uint64_t b) noexcept {
+inline uint64_t hash_combine_uint64(uint64_t a, uint64_t b) noexcept {
     constexpr uint64_t C = 0x9e3779b97f4a7c15ull;
     uint64_t t = a * C + b;
     t ^= t >> 33;
     return t;
 }
-
-// inline constexpr std::size_t fmix64(uint64_t x) noexcept {
-//     x ^= x >> 33;
-//     x *= 0xff51afd7ed558ccdULL;
-//     x ^= x >> 33;
-//     x *= 0xc4ceb9fe1a85ec53ULL;
-//     x ^= x >> 33;
-//     return x;
-// }
-
-// inline uint64_t hash_pair_simple(uint64_t a, uint64_t b) noexcept {
-//     // scramble each, then combine (Boost-style)
-//     uint64_t h1 = fmix64(a);
-//     uint64_t h2 = fmix64(b);
-//     return fmix64(h1 ^ (h2 + 0x9e3779b97f4a7c15ULL + (h1 << 6) + (h1 >> 2)));
-// }
-
-// /// @brief Accumulate hash values of 64 bit unsigned integers
-// /// based on boost/functional/hash/hash.hpp
-// inline void hash_combine_uint64(std::size_t& seed, std::size_t value) noexcept {
-//     // 0x9e3779b97f4a7c15ULL is the 64-bit variant of the constant used in boost::hash_combine
-//     // (0x9e3779b9), derived from the fractional part of the golden ratio. This helps to spread
-//     hash
-//     // values uniformly.
-//     seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
-// }
 
 /// @brief Compute the parity of a uint64_t integer (1 if odd number of bits set, -1 otherwise)
 /// @param x the uint64_t integer to test

@@ -732,12 +732,11 @@ template <size_t N> class BitArray {
             if constexpr (N == 64) {
                 return d.words_[0];
             } else if constexpr (N == 128) {
-                return hash_pair_fold(d.words_[0], d.words_[1]);
-                // return ((d.words_[0] * 13466917) + d.words_[1]) % 1405695061;
+                return hash_combine_uint64(d.words_[0], d.words_[1]);
             } else {
                 std::uint64_t seed = 0;
                 for (auto& w : d.words_) {
-                    hash_pair_fold(seed, w);
+                    hash_combine_uint64(seed, w);
                 }
                 return seed;
             }

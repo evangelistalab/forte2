@@ -125,10 +125,9 @@ class SQOperatorString {
 
     struct Hash {
         std::size_t operator()(const SQOperatorString& sqop_str) const {
-            std::size_t seed = 0;
             std::size_t h1 = std::hash<Determinant>()(sqop_str.cre());
             std::size_t h2 = std::hash<Determinant>()(sqop_str.ann());
-            return hash_pair_fold(h1, h2);
+            return hash_combine_uint64(h1, h2);
         }
     };
 
