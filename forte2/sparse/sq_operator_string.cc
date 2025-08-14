@@ -5,7 +5,7 @@
 #include "helpers/combinatorial.h"
 #include "helpers/string_algorithms.h"
 
-#include "ci/sq_operator_string.h"
+#include "sparse/sq_operator_string.h"
 
 namespace forte2 {
 

@@ -1,48 +1,20 @@
-/*
- * @BEGIN LICENSE
- *
- * Forte: an open-source plugin to Psi4 (https://github.com/psi4/psi4)
- * that implements a variety of quantum chemistry methods for strongly
- * correlated electrons.
- *
- * Copyright (c) 2012-2025 by its authors (see COPYING, COPYING.LESSER, AUTHORS).
- *
- * The copyrights for code used from other parties are included in
- * the corresponding files.
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this program.  If not, see http://www.gnu.org/licenses/.
- *
- * @END LICENSE
- */
+#include "helpers/timer.hpp"
+#include "helpers/np_matrix_functions.h"
+#include "helpers/np_vector_functions.h"
 
-#include "psi4/libmints/matrix.h"
+#include "ci_sigma_builder.h"
 
-#include "genci_string_lists.h"
-#include "genci_string_address.h"
+namespace forte2 {
 
-#include "genci_vector.h"
-
-namespace forte {
-
-double CIVector::compute_spin2() {
+double CISigmaBuilder::compute_spin2() {
     double spin2 = 0.0;
     for (const auto& [nI, class_Ia, class_Ib] : lists_->determinant_classes()) {
-        // The pq product is totally symmetric so the classes if the result are the same as the
-        // classes of the input
         size_t block_size = alfa_address_->strpcls(class_Ia) * beta_address_->strpcls(class_Ib);
         if (block_size == 0)
             continue;
+
+        // The pq product is totally symmetric so the classes of the result are the same as the
+        // classes of the input
         const auto Cr = C_[nI]->pointer();
         for (const auto& [nJ, class_Ja, class_Jb] : lists_->determinant_classes()) {
             auto Cl = C_[nJ]->pointer();
@@ -69,4 +41,4 @@ double CIVector::compute_spin2() {
     return -spin2 + 0.25 * std::pow(na - nb, 2.0) + 0.5 * (na + nb);
 }
 
-} // namespace forte
+} // namespace forte2

@@ -1,9 +1,10 @@
 #pragma once
 
-#include "ci/sparse_state.h"
-#include "ci/sparse_operator.h"
-#include "ci/determinant.h"
 #include "helpers/memory.h"
+#include "ci/determinant.h"
+
+#include "sparse/sparse_state.h"
+#include "sparse/sparse_operator.h"
 
 namespace forte2 {
 

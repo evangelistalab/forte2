@@ -1,11 +1,7 @@
-#include <algorithm>
-#include <cmath>
-#include <numeric>
-#include <algorithm>
-
 #include "helpers/string_algorithms.h"
 #include "ci/determinant.hpp"
-#include "ci/sparse_state.h"
+
+#include "sparse/sparse_state.h"
 
 namespace forte2 {
 

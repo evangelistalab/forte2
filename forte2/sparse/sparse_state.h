@@ -1,19 +1,18 @@
 #pragma once
 
 #include <vector>
-#include <unordered_map>
 
-#include "ci/sparse.h"
 #include "ci/determinant.h"
-#include "ci/sparse_operator.h"
+
+#include "sparse/sparse.h"
+#include "sparse/sparse_operator.h"
 
 namespace forte2 {
 
 /// @brief A class to represent general Fock space states
-class SparseState
-    : public VectorSpace<SparseState, Determinant, sparse_scalar_t, Determinant::Hash> {
+class SparseState : public VectorSpace<SparseState, Determinant, sparse_scalar_t> {
   public:
-    using base_t = VectorSpace<SparseState, Determinant, sparse_scalar_t, Determinant::Hash>;
+    using base_t = VectorSpace<SparseState, Determinant, sparse_scalar_t>;
     using base_t::base_t; // Make the base class constructors visible
 
     /// @return a string representation of the object

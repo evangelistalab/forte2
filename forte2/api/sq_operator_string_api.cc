@@ -4,8 +4,8 @@
 #include <nanobind/stl/unordered_map.h>
 #include <nanobind/make_iterator.h>
 
-#include "ci/sq_operator_string.h"
-#include "ci/sparse_operator.h"
+#include "sparse/sq_operator_string.h"
+#include "sparse/sparse_operator.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;

@@ -7,12 +7,12 @@
 #include <nanobind/make_iterator.h>
 #include <nanobind/ndarray.h>
 
-#include "ci/sparse_operator.h"
-#include "ci/sparse_state.h"
-#include "ci/sparse_operator_hamiltonian.h"
-
 #include "helpers/ndarray.h"
 #include "helpers/string_algorithms.h"
+
+#include "sparse/sparse_operator.h"
+#include "sparse/sparse_state.h"
+#include "sparse/sparse_operator_hamiltonian.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;
