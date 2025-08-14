@@ -1,0 +1,4 @@
+ignore:
+  - tests/ci/test_ci_timing.py
+  - tests/scf/test_rhf_long.py
+  - tests/orbital/test_ibo_long.py

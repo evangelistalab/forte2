@@ -7,7 +7,7 @@ from forte2.helpers.comparisons import approx
 def compare_rdms(ci, root):
     rdm_threshold = 1e-12
 
-    ci_solver = ci.ci_solvers[0]
+    ci_solver = ci.sub_solvers[0]
 
     # Test the 1-RDMs
 
