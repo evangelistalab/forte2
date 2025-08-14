@@ -76,7 +76,7 @@ class _CIBase:
     state: State
     ints: RestrictedMOIntegrals
     nroot: int
-    orbital_symmetries: list[int]
+    active_orbsym: list[int]
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
 
@@ -111,7 +111,7 @@ class _CIBase:
             self.state.na - self.ncore,
             self.state.nb - self.ncore,
             self.state.symmetry,
-            self.orbital_symmetries,
+            self.active_orbsym,
             self.gas_min,
             self.gas_max,
         )
@@ -807,7 +807,7 @@ class CISolver(ActiveSpaceSolver):
                     ints=ints,
                     state=state,
                     nroot=self.sa_info.nroots[i],
-                    orbital_symmetries=active_orbsym,
+                    active_orbsym=active_orbsym,
                     do_test_rdms=self.do_test_rdms,
                     ci_algorithm=self.ci_algorithm,
                     guess_per_root=self.guess_per_root,
