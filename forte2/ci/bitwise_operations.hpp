@@ -4,9 +4,15 @@
 #include <cstdint>
 #include <limits>
 
-inline uint64_t hash_combine_uint64(uint64_t a, uint64_t b) noexcept {
-    constexpr uint64_t C = 0x9e3779b97f4a7c15ull;
-    uint64_t t = a * C + b;
+/// @brief Hash function for combining two size_t values.
+/// @param a The first value.
+/// @param b The second value.
+/// @return A combined hash value.
+inline std::size_t hash_combine(std::size_t a, std::size_t b) noexcept {
+    static_assert(std::numeric_limits<std::size_t>::digits == 64,
+                  "The function forte2::hash_combine requires size_t to be a 64-bit integer.");
+    constexpr std::size_t C = 0x9e3779b97f4a7c15ull;
+    std::size_t t = a * C + b;
     t ^= t >> 33;
     return t;
 }
