@@ -264,7 +264,6 @@ class _GeometryHelper:
     """Helper class to process geometry data."""
 
     atoms: list[tuple[int, np.ndarray]]
-    tol: float = 1e-6
 
     def __post_init__(self):
         self.Zsum = round(np.sum([x[0] for x in self.atoms]))
@@ -299,44 +298,7 @@ class _GeometryHelper:
             r2 = np.dot(x, x)
             self.inertia_matrix += m * ((r2 * np.eye(3)) - np.outer(x, x))
 
-        # compute principle moments of inertia. These will be sorted in ascending order
-        moi, moi_vectors = np.linalg.eigh(self.inertia_matrix)
-        shifted_atomic_positions = self.atomic_positions - self.center_of_mass[None, :]
-        axis_order = []
-        for i in range(3):
-            R = rotation_mat(moi_vectors[:, i], np.pi)
-            rotated_positions = (R @ shifted_atomic_positions.T).T
-            print(f"Initial geometry:\n{shifted_atomic_positions}")
-            print(f"Rotated geometry {i}:\n{rotated_positions}")
-            all_match = True
-            for x in shifted_atomic_positions:
-                print(f"x = {x}")
-                found = False
-                for y in rotated_positions:
-                    if np.linalg.norm(x - y) < self.tol:
-                        found = True
-                if not found:
-                    all_match = False
-
-            axis_order.append(2 if all_match else 1)
-
-        print(f"Axis order: {axis_order}")
-
-        sorted_axis = sorted(
-            zip(axis_order, moi, range(3)), key=lambda x: (-x[0], x[1])
-        )
-        print(f"Sorted axis: {sorted_axis}")
-
-        l = [0, 1, 2]
-        self.prinrot = np.array(
-            [
-                moi_vectors[l[0]],
-                moi_vectors[l[1]],
-                moi_vectors[l[2]],
-            ]
-        ).T
-        print(f"Principal rotation matrix:\n{self.prinrot}")
+        self.prinrot = np.eye(3)
         self.prin_atomic_positions = np.array(
             [self.prinrot @ (r - self.center_of_mass) for r in self.atomic_positions]
-        ).T
-        print(f"Principal atomic positions:\n{self.prin_atomic_positions}")
+        )
