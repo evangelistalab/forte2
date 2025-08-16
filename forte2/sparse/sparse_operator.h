@@ -2,11 +2,12 @@
 
 #include <vector>
 #include <unordered_map>
-#include <helpers/math_structures.h>
 
-#include "ci/sparse.h"
-#include "ci/sq_operator_string.h"
+#include "helpers/math_structures.h"
 #include "helpers/ndarray.h"
+
+#include "sparse/sparse.h"
+#include "sparse/sq_operator_string.h"
 
 namespace forte2 {
 

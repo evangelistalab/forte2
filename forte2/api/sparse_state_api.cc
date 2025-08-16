@@ -5,7 +5,7 @@
 #include <nanobind/stl/vector.h>
 #include <nanobind/make_iterator.h>
 
-#include "ci/sparse_state.h"
+#include "sparse/sparse_state.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;

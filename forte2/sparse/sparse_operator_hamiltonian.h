@@ -2,7 +2,7 @@
 
 #include "helpers/ndarray.h"
 
-#include "ci/sparse_operator.h"
+#include "sparse/sparse_operator.h"
 
 namespace forte2 {
 SparseOperator sparse_operator_hamiltonian(double scalar_energy, np_matrix one_electron_integrals,
