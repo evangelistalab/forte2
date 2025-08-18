@@ -217,10 +217,11 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
     return (matrix_element);
 }
 
-RelSlaterRules::RelSlaterRules(int norb, double scalar_energy,
+RelSlaterRules::RelSlaterRules(int nspinor, double scalar_energy,
                                np_matrix_complex one_electron_integrals,
                                np_tensor4_complex two_electron_integrals)
-    : norb_(norb), scalar_energy_(scalar_energy), one_electron_integrals_(one_electron_integrals),
+    : nspinor_(nspinor), scalar_energy_(scalar_energy),
+      one_electron_integrals_(one_electron_integrals),
       two_electron_integrals_(two_electron_integrals) {}
 
 double RelSlaterRules::energy(const Determinant& det) const {
@@ -229,7 +230,7 @@ double RelSlaterRules::energy(const Determinant& det) const {
     auto h = one_electron_integrals_.view();
     auto v = two_electron_integrals_.view();
 
-    auto occ = det.get_alfa_occ(norb_);
+    auto occ = det.get_alfa_occ(nspinor_);
     for (auto p : occ) {
         energy += h(p, p); // <p|p>
         for (auto q : occ) {
@@ -272,7 +273,7 @@ std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
         double sign = lhs.slater_sign_aa(i, a);
         matrix_element += h(i, a); // <i|a>
 
-        auto occ = lhs.get_alfa_occ(norb_);
+        auto occ = lhs.get_alfa_occ(nspinor_);
 
         for (auto j : occ) {
             matrix_element += v(i, j, a, j) - v(i, j, j, a); // \sum_j<ij||aj>

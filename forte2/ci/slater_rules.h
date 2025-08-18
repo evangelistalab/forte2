@@ -37,7 +37,7 @@ class RelSlaterRules {
   public:
     // ==> Class Constructors <==
 
-    RelSlaterRules(int norb, double scalar_energy, np_matrix_complex one_electron_integrals,
+    RelSlaterRules(int nspinor, double scalar_energy, np_matrix_complex one_electron_integrals,
                    np_tensor4_complex two_electron_integrals);
 
     // ==> Class Interface <==
@@ -49,8 +49,8 @@ class RelSlaterRules {
     std::complex<double> slater_rules(const Determinant& lhs, const Determinant& rhs) const;
 
   private:
-    /// Number of orbitals
-    int norb_;
+    /// Number of spin(or)-orbitals
+    int nspinor_;
     /// Scalar energy term
     double scalar_energy_;
     /// Effective one-electron integrals (restricted)

@@ -156,7 +156,6 @@ class SRRestrictedMOIntegrals:
         self.build_fock()
 
     def __getitem__(self, key):
-
         idx = tuple(self.o if k == "o" else self.v if k == "v" else k for k in key)
         if len(idx) == 2:
             return self.F[idx]
