@@ -874,7 +874,7 @@ class GHF(SCFBase):
     break_complex_symmetry : bool, optional, default=False
         If True, will add a small complex perturbation to the initial density matrix. This will both break
         the complex conjugation symmetry and Sz symmetry (allowing alpha-beta density matrix blocks to be nonzero)
-    j_adapt: bool, optinoal, default=False
+    j_adapt: bool, optional, default=False
         If True, the j-adapted spinor AO basis will be used instead of the spherical AO basis.
     """
 
