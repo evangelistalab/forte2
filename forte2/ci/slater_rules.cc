@@ -258,14 +258,13 @@ std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
     // excitation_connection stores the creation and annihilation operators
     // that need to be applied to rhs to obtain lhs:
     // if <LHS|pa^+ qb^+ sa rb|RHS> = +- 1 then excitation_connection = [[s, p], [r, q]]
-    // [[alfa annihilation], [alfa creation],
-    //  [beta annihilation], [beta creation]]
+    // [[alpha annihilation], [alpha creation],
+    //  [beta annihilation],  [beta creation]]
     auto excitation_connection = lhs.excitation_connection(rhs);
 
     std::complex<double> matrix_element = 0.0;
     auto h = one_electron_integrals_.view();
     auto v = two_electron_integrals_.view();
-
 
     if (ndiff == 1) {
         size_t i = excitation_connection[0][0];
