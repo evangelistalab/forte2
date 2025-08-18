@@ -6,11 +6,11 @@
 #include <nanobind/stl/pair.h>
 #include <nanobind/make_iterator.h>
 
-#include "ci/sparse_exp.h"
-#include "ci/sparse_operator.h"
-#include "ci/sparse_state.h"
-
 #include "helpers/string_algorithms.h"
+
+#include "sparse/sparse_exp.h"
+#include "sparse/sparse_operator.h"
+#include "sparse/sparse_state.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;

@@ -344,7 +344,7 @@ class RHF(SCFBase):
             if i % orb_per_row == 0:
                 string += "\n"
             string += (
-                f"{i+1:<4d} ({self.orbital_symmetries[i]}) {self.eps[0][i]:<12.6f} "
+                f"{i+1:<4d} ({self.irrep_labels[i]}) {self.eps[0][i]:<12.6f} "
             )
         logger.log_info1(string)
 
@@ -354,7 +354,7 @@ class RHF(SCFBase):
             idx = ndocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx+1:<4d} ({self.orbital_symmetries[idx]}) {self.eps[0][idx]:<12.6f} "
+            string += f"{idx+1:<4d} ({self.irrep_labels[idx]}) {self.eps[0][idx]:<12.6f} "
         logger.log_info1(string)
 
     def _post_process(self):
@@ -376,7 +376,9 @@ class RHF(SCFBase):
 
     def _assign_orbital_symmetries(self):
         S = self._get_overlap()
-        self.orbital_symmetries = assign_mo_symmetries(self.system, S, self.C[0])
+        self.irrep_labels, self.irrep_indices = assign_mo_symmetries(
+            self.system, S, self.C[0]
+        )
 
 
 @dataclass
@@ -511,7 +513,7 @@ class UHF(SCFBase):
         for i in range(naocc):
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{i+1:<4d} ({self.orbital_symmetries_alfa[i]}) {self.eps[0][i]:<12.6f} "
+            string += f"{i+1:<4d} ({self.irrep_labels[0][i]}) {self.eps[0][i]:<12.6f} "
         logger.log_info1(string)
 
         logger.log_info1("\nAlpha Virtual:")
@@ -520,7 +522,7 @@ class UHF(SCFBase):
             idx = naocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx+1:<4d} ({self.orbital_symmetries_alfa[idx]}) {self.eps[0][idx]:<12.6f} "
+            string += f"{idx+1:<4d} ({self.irrep_labels[0][idx]}) {self.eps[0][idx]:<12.6f} "
         logger.log_info1(string)
 
         logger.log_info1("\nBeta Occupied:")
@@ -528,7 +530,7 @@ class UHF(SCFBase):
         for i in range(nbocc):
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{i+1:<4d} ({self.orbital_symmetries_beta[i]}) {self.eps[1][i]:<12.6f} "
+            string += f"{i+1:<4d} ({self.irrep_labels[1][i]}) {self.eps[1][i]:<12.6f} "
         logger.log_info1(string)
 
         logger.log_info1("\nBeta Virtual:")
@@ -537,13 +539,19 @@ class UHF(SCFBase):
             idx = nbocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx+1:<4d} ({self.orbital_symmetries_beta[idx]}) {self.eps[1][i]:<12.6f} "
+            string += f"{idx+1:<4d} ({self.irrep_labels[1][idx]}) {self.eps[1][i]:<12.6f} "
         logger.log_info1(string)
 
     def _assign_orbital_symmetries(self):
         S = self._get_overlap()
-        self.orbital_symmetries_alfa = assign_mo_symmetries(self.system, S, self.C[0])
-        self.orbital_symmetries_beta = assign_mo_symmetries(self.system, S, self.C[1])
+        irrep_labels_alpha, irrep_indices_alpha = assign_mo_symmetries(
+            self.system, S, self.C[0]
+        )
+        irrep_labels_beta, irrep_indices_beta = assign_mo_symmetries(
+            self.system, S, self.C[1]
+        )
+        self.irrep_labels = [irrep_labels_alpha, irrep_labels_beta]
+        self.irrep_indices = [irrep_indices_alpha, irrep_indices_beta]
 
 
 @dataclass
@@ -635,7 +643,7 @@ class ROHF(SCFBase):
             if i % orb_per_row == 0:
                 string += "\n"
             string += (
-                f"{i+1:<4d} ({self.orbital_symmetries[i]}) {self.eps[0][i]:<12.6f} "
+                f"{i+1:<4d} ({self.irrep_labels[i]}) {self.eps[0][i]:<12.6f} "
             )
         logger.log_info1(string)
 
@@ -646,7 +654,7 @@ class ROHF(SCFBase):
                 idx = ndocc + i
                 if i % orb_per_row == 0:
                     string += "\n"
-                string += f"{idx+1:<4d} ({self.orbital_symmetries[idx]}) {self.eps[0][idx]:<12.6f} "
+                string += f"{idx+1:<4d} ({self.irrep_labels[idx]}) {self.eps[0][idx]:<12.6f} "
             logger.log_info1(string)
 
         logger.log_info1("\nVirtual:")
@@ -655,7 +663,7 @@ class ROHF(SCFBase):
             idx = ndocc + nsocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx+1:<4d} ({self.orbital_symmetries[idx]}) {self.eps[0][idx]:<12.6f} "
+            string += f"{idx+1:<4d} ({self.irrep_labels[idx]}) {self.eps[0][idx]:<12.6f} "
         logger.log_info1(string)
 
 
@@ -881,7 +889,7 @@ class GHF(SCFBase):
             if i % orb_per_row == 0:
                 string += "\n"
             string += (
-                f"{i+1:<4d} ({self.orbital_symmetries[i]}) {self.eps[0][i]:<12.6f} "
+                f"{i+1:<4d} ({self.irrep_labels[i]}) {self.eps[0][i]:<12.6f} "
             )
         logger.log_info1(string)
 
@@ -891,12 +899,14 @@ class GHF(SCFBase):
             idx = nocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx+1:<4d} ({self.orbital_symmetries[idx]}) {self.eps[0][idx]:<12.6f} "
+            string += f"{idx+1:<4d} ({self.irrep_labels[idx]}) {self.eps[0][idx]:<12.6f} "
         logger.log_info1(string)
 
     def _assign_orbital_symmetries(self):
         S = self._get_overlap()
-        self.orbital_symmetries = assign_mo_symmetries(self.system, S, self.C[0])
+        self.irrep_labels, self.irrep_indices = assign_mo_symmetries(
+            self.system, S, self.C[0]
+        )
 
 
 def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4, twocomp=False):
