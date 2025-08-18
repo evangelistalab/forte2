@@ -17,12 +17,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        bse: [with_bse, without_bse]
+        opt_deps: [with_opt_deps, without_opt_deps]
         include:
-          - bse: with_bse
-            extra_dependencies: 'conda-forge::basis_set_exchange'
-          - bse: without_bse
-            extra_dependencies: ''
+          - opt_deps: with_opt_deps
+            extra_dependencies: "conda-forge::basis_set_exchange conda-forge::libcint"
+          - opt_deps: without_opt_deps
+            extra_dependencies: ""
 
 
     steps:
