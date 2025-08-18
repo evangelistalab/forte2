@@ -28,7 +28,7 @@ html_theme_options = {
 autoapi_options = [
     "members",
     "undoc-members",
-    # "private-members",
+    "private-members",
     "show-inheritance",
     # "show-module-summary",
     # "special-members",
@@ -38,3 +38,17 @@ autoapi_options = [
 autoapi_ignore = ["*/fetch_basis.py", "*/fetch_ccrepo.py"]
 
 numpydoc_show_class_members = False
+
+
+def skip_private_with_exceptions(app, what, name, obj, skip, options):
+    """Skip all private members except those in the exceptions list."""
+    short_name = name.split(".")[-1]
+    is_private = short_name.startswith("_") and not short_name.endswith("__")
+    exceptions = ["_forte2"]
+    if (is_private) and (short_name not in exceptions):
+        skip = True
+    return skip
+
+
+def setup(sphinx):
+    sphinx.connect("autoapi-skip-member", skip_private_with_exceptions)

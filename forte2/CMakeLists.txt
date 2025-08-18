@@ -115,6 +115,13 @@ nanobind_add_module(
   sparse/sq_operator_string.cc
 )
 
+nanobind_add_stub(
+  forte2_stub
+  MODULE _forte2
+  OUTPUT ${CMAKE_SOURCE_DIR}/forte2/_forte2.pyi
+  DEPENDS _forte2
+)
+
 target_link_libraries(_forte2 PRIVATE Libint2::int2)
 target_link_libraries(_forte2 PRIVATE Eigen3::Eigen)
 target_link_libraries(_forte2 PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
