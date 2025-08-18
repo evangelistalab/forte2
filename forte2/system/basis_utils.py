@@ -102,7 +102,7 @@ def get_spinor_label(l, jdouble, mjdouble):
     if l < 0 or jdouble < 0:
         raise ValueError(f"Invalid angular momentum index: {l} or jdouble: {jdouble}")
 
-    if l > len(AM_LABELS):
+    if l >= len(AM_LABELS):
         raise ValueError(f"Angular momentum {l} exceeds defined labels.")
 
     return f"{AM_LABELS[l]}{jdouble}/2, {mjdouble:+}/2"
