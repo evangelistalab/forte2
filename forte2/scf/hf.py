@@ -383,9 +383,7 @@ class RHF(SCFBase):
         for i in range(ndocc):
             if i % orb_per_row == 0:
                 string += "\n"
-            string += (
-                f"{i+1:<4d} ({self.irrep_labels[i]}) {self.eps[0][i]:<12.6f} "
-            )
+            string += f"{i+1:<4d} ({self.irrep_labels[i]}) {self.eps[0][i]:<12.6f} "
         logger.log_info1(string)
 
         logger.log_info1("\nVirtual:")
@@ -394,7 +392,9 @@ class RHF(SCFBase):
             idx = ndocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx+1:<4d} ({self.irrep_labels[idx]}) {self.eps[0][idx]:<12.6f} "
+            string += (
+                f"{idx+1:<4d} ({self.irrep_labels[idx]}) {self.eps[0][idx]:<12.6f} "
+            )
         logger.log_info1(string)
 
     def _post_process(self):
@@ -573,7 +573,9 @@ class UHF(SCFBase):
             idx = naocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx+1:<4d} ({self.irrep_labels[0][idx]}) {self.eps[0][idx]:<12.6f} "
+            string += (
+                f"{idx+1:<4d} ({self.irrep_labels[0][idx]}) {self.eps[0][idx]:<12.6f} "
+            )
         logger.log_info1(string)
 
         logger.log_info1("\nBeta Occupied:")
@@ -590,7 +592,9 @@ class UHF(SCFBase):
             idx = nbocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx+1:<4d} ({self.orbital_symmetries_beta[idx]}) {self.eps[1][i]:<12.6f} "
+            string += (
+                f"{idx+1:<4d} ({self.irrep_labels[1][idx]}) {self.eps[1][idx]:<12.6f} "
+            )
         logger.log_info1(string)
 
     def _assign_orbital_symmetries(self):
@@ -718,9 +722,7 @@ class ROHF(SCFBase):
         for i in range(ndocc):
             if i % orb_per_row == 0:
                 string += "\n"
-            string += (
-                f"{i+1:<4d} ({self.irrep_labels[i]}) {self.eps[0][i]:<12.6f} "
-            )
+            string += f"{i+1:<4d} ({self.irrep_labels[i]}) {self.eps[0][i]:<12.6f} "
         logger.log_info1(string)
 
         if nsocc > 0:
@@ -730,7 +732,9 @@ class ROHF(SCFBase):
                 idx = ndocc + i
                 if i % orb_per_row == 0:
                     string += "\n"
-                string += f"{idx+1:<4d} ({self.irrep_labels[idx]}) {self.eps[0][idx]:<12.6f} "
+                string += (
+                    f"{idx+1:<4d} ({self.irrep_labels[idx]}) {self.eps[0][idx]:<12.6f} "
+                )
             logger.log_info1(string)
 
         logger.log_info1("\nVirtual:")
@@ -739,7 +743,9 @@ class ROHF(SCFBase):
             idx = ndocc + nsocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx+1:<4d} ({self.irrep_labels[idx]}) {self.eps[0][idx]:<12.6f} "
+            string += (
+                f"{idx+1:<4d} ({self.irrep_labels[idx]}) {self.eps[0][idx]:<12.6f} "
+            )
         logger.log_info1(string)
 
     def _print_ao_composition(self):
@@ -1060,9 +1066,7 @@ class GHF(SCFBase):
         for i in range(nocc):
             if i % orb_per_row == 0:
                 string += "\n"
-            string += (
-                f"{i+1:<4d} ({self.irrep_labels[i]}) {self.eps[0][i]:<12.6f} "
-            )
+            string += f"{i+1:<4d} ({self.irrep_labels[i]}) {self.eps[0][i]:<12.6f} "
         logger.log_info1(string)
 
         logger.log_info1("\nVirtual:")
@@ -1071,7 +1075,9 @@ class GHF(SCFBase):
             idx = nocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx+1:<4d} ({self.irrep_labels[idx]}) {self.eps[0][idx]:<12.6f} "
+            string += (
+                f"{idx+1:<4d} ({self.irrep_labels[idx]}) {self.eps[0][idx]:<12.6f} "
+            )
         logger.log_info1(string)
 
     def _assign_orbital_symmetries(self):
