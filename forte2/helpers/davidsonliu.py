@@ -195,6 +195,13 @@ class DavidsonLiuSolver:
         self.iter = 0
         self.converged = False
 
+        logger.log(
+            ("=" * 64)
+            + f"\nIter                 ⟨E⟩             max(ΔE)        max(r) basis\n"
+            + ("-" * 64),
+            self.log_level,
+        )
+
         for self.iter in range(self.maxiter):
             # 2. compute new sigma block if needed
             m_new = self.basis_size - self.sigma_size
@@ -305,9 +312,14 @@ class DavidsonLiuSolver:
                 self.basis_size += added2
                 msg = f" <- +{added2} random"
             logger.log(
-                f"{self.iter:4d}  ⟨E⟩ ={avg_e:18.12f}  max(ΔE) ={max_de:18.12f}  max(r) ={max_r:12.9f}  basis = {self.basis_size:4d} {msg}",
+                f"{self.iter:4d}  {avg_e:18.12f}  {max_de:18.12f}  {max_r:12.9f}  {self.basis_size:4d} {msg}",
                 self.log_level,
             )
+
+        logger.log(
+            ("=" * 64),
+            self.log_level,
+        )
 
         # compute final eigenpairs
         lamr = self.lam[: self.nroot]

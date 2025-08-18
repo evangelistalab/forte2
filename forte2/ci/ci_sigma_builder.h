@@ -6,6 +6,7 @@
 #include <span>
 
 #include "helpers/ndarray.h"
+#include "helpers/spin.h"
 
 #include "ci/ci_strings.h"
 #include "ci/slater_rules.h"
@@ -23,7 +24,6 @@ class CISigmaBuilder {
     // == Class Constructor ==
     CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V,
                    int log_level = 3);
-    ~CISigmaBuilder();
 
     // == Class Public Functions ==
 
@@ -36,6 +36,10 @@ class CISigmaBuilder {
     /// Supported algorithms: "kh", "hz", "knowles-handy", "harrison-zarrabian"
     void set_algorithm(const std::string& algorithm);
 
+    /// @brief Get the name of the current sigma build algorithm
+    /// @return The name of the current sigma build algorithm
+    std::string get_algorithm() const;
+
     /// @brief Set the one and two-electron integrals for the Hamiltonian
     void set_Hamiltonian(double E, np_matrix H, np_tensor4 V);
 
@@ -43,10 +47,29 @@ class CISigmaBuilder {
     void set_log_level(int level) { log_level_ = level; }
 
     /// @brief Form the diagonal of the Hamiltonian matrix in the CI basis
+    /// @param dets The list of determinants
+    /// @param spin_adapter The spin adapter for the CSF
+    /// @param spin_adapt_full_preconditioner If true, use the exact diagonal elements,
+    ///        otherwise use approximate diagonal elements.
     /// @return The diagonal elements of the Hamiltonian matrix
     np_vector form_Hdiag_csf(const std::vector<Determinant>& dets,
                              const CISpinAdapter& spin_adapter,
                              bool spin_adapt_full_preconditioner) const;
+
+    /// @brief Compute the energy (diagonal Hamiltonian element) of a CSF
+    /// @param dets The list of determinants
+    /// @param spin_adapter The spin adapter for the CSF
+    /// @param I The index of the CSF
+    /// @return The energy of the CSF
+    double energy_csf(const std::vector<Determinant>& dets, const CISpinAdapter& spin_adapter,
+                      size_t I) const;
+
+    /// @brief Form the full Hamiltonian matrix in the CSF basis
+    /// @param dets The list of determinants
+    /// @param spin_adapter The spin adapter for the CSF
+    /// @return The full Hamiltonian matrix in the CSF basis
+    np_matrix form_H_csf(const std::vector<Determinant>& dets,
+                         const CISpinAdapter& spin_adapter) const;
 
     /// @brief Compute the Slater rules for the CSF matrix element
     /// @param dets The list of determinants
@@ -77,11 +100,11 @@ class CISigmaBuilder {
     /// @brief Compute the spin-dependent one-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
     /// @param C_right The right-hand side coefficients
-    /// @param alfa If true, compute the alpha contribution, otherwise the beta
+    /// @param spin The spin component to compute
     /// @return The one-electron reduced density matrix stored as
     ///        gamma(spin)[p][q] = <L| a^+_p a_q |R> with p,q orbitals of spin alpha/beta
     /// @note If the number of orbitals is 0, a matrix of shape (0, 0) is returned
-    np_matrix compute_s_1rdm(np_vector C_left, np_vector C_right, bool alfa) const;
+    np_matrix compute_s_1rdm(np_vector C_left, np_vector C_right, Spin spin) const;
 
     /// @brief Compute the alpha one-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -109,11 +132,11 @@ class CISigmaBuilder {
     /// @brief Compute the same-spin two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
     /// @param C_right The right-hand side coefficients
-    /// @param alfa If true, compute the alpha contribution, otherwise the beta
+    /// @param spin The spin component to compute
     /// @return The two-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(sigma)[p>q][r>s] = <L| a^+_p a^+_q a_s a_r |R>
     ///        with p > q, and r > s orbitals of spin sigma
-    np_matrix compute_ss_2rdm(np_vector C_left, np_vector C_right, bool alfa) const;
+    np_matrix compute_ss_2rdm(np_vector C_left, np_vector C_right, Spin spin) const;
 
     /// @brief Compute the alpha-alpha two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -160,11 +183,11 @@ class CISigmaBuilder {
     /// @brief Compute the three-electron same-spin reduced density matrix
     /// @param C_left The left-hand side coefficients
     /// @param C_right The right-hand side coefficients
-    /// @param alfa If true, compute the alpha contribution, otherwise the beta
+    /// @param spin The spin component to compute
     /// @return The three-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(sigma)[p>q>r][s>t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
     ///        with p > q > r, and s > t > u orbitals of spin sigma
-    np_matrix compute_sss_3rdm(np_vector C_left, np_vector C_right, bool alfa) const;
+    np_matrix compute_sss_3rdm(np_vector C_left, np_vector C_right, Spin spin) const;
 
     /// @brief Compute the alpha-alpha-alpha three-electron same-spin reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -274,6 +297,15 @@ class CISigmaBuilder {
     mutable std::vector<double> TR;
     mutable std::vector<double> TL;
 
+    /// @brief Temporary vectors used to store blocks of data of the form
+    /// L(op,K,L) = <K|op|I> C_{IL}
+    /// where `op` is an operator, K is a state in N, N-1, or N-2 electron strings
+    /// while I and L are alpha/beta string
+    /// These vectors are allocated on the first call to the Hamiltonian function
+    /// and resized as needed
+    mutable std::vector<double> Kblock1_;
+    mutable std::vector<double> Kblock2_;
+
     /// @brief Scalar contribution to the sigma vector |sigma> = E |basis>
     void H0(std::span<double> basis, std::span<double> sigma) const;
 
@@ -289,32 +321,28 @@ class CISigmaBuilder {
     /// @brief  One-electron contribution to the sigma vector |sigma> = H |basis>
     /// @param alfa If true, compute the alpha contribution, otherwise the beta
     /// @param h The one-electron integrals
-    void H1_aa_gemm(std::span<double> basis, std::span<double> sigma, bool alfa,
-                    std::span<double> h) const;
+    void H1_hz(std::span<double> basis, std::span<double> sigma, Spin spin,
+               std::span<double> h) const;
 
     /// @brief  Two-electron same-spin contribution to the sigma vector |sigma> = H |basis>
     /// @param alfa If true, compute the alpha contribution, otherwise the beta
-    void H2_aaaa_gemm(std::span<double> basis, std::span<double> sigma, bool alfa) const;
+    void H2_hz_same_spin(std::span<double> basis, std::span<double> sigma, Spin spin) const;
 
     /// @brief  Two-electron mixed-spin contribution to the sigma vector |sigma> = H |basis>
     /// @param basis The basis vector
     /// @param sigma The resulting sigma vector
-    void H2_aabb_gemm(std::span<double> basis, std::span<double> sigma) const;
+    void H2_hz_opposite_spin(std::span<double> basis, std::span<double> sigma) const;
 
     // -- Knowles-Handy Algorithm Functions/Data --
+
     // Modified one-electron integrals used in the Knowles-Handy algorithm
     mutable std::vector<double> h_kh;
     // Modified two-electron integrals used in the Knowles-Handy algorithm
     mutable std::vector<double> v_ijkl_hk;
-    /// @brief Temporary vectors used for the Knowles-Handy algorithm
-    /// These vectors are allocated on the first call to the Hamiltonian function
-    /// and resized as needed
-    mutable std::vector<double> Kblock1_;
-    mutable std::vector<double> Kblock2_;
 
     /// @brief Builds the one-electron contribution to the sigma vector using the Knowles-Handy
     /// algorithm.
-    void H1_kh(std::span<double> basis, std::span<double> sigma, bool alpha) const;
+    void H1_kh(std::span<double> basis, std::span<double> sigma, Spin spin) const;
 
     /// @brief Builds the two-electron contribution to the sigma vector using the Knowles-Handy
     /// algorithm.
@@ -325,13 +353,13 @@ class CISigmaBuilder {
 };
 
 [[nodiscard]] std::span<double> gather_block(std::span<double> source, std::span<double> dest,
-                                             bool alfa, const CIStrings& lists, int class_Ia,
+                                             Spin spin, const CIStrings& lists, int class_Ia,
                                              int class_Ib);
 
-void zero_block(std::span<double> dest, bool alfa, const CIStrings& lists, int class_Ia,
+void zero_block(std::span<double> dest, Spin spin, const CIStrings& lists, int class_Ia,
                 int class_Ib);
 
-void scatter_block(std::span<double> source, std::span<double> dest, bool alfa,
+void scatter_block(std::span<double> source, std::span<double> dest, Spin spin,
                    const CIStrings& lists, int class_Ia, int class_Ib);
 
 } // namespace forte2

@@ -4,12 +4,11 @@ from collections import OrderedDict
 import numpy as np
 
 from forte2 import CIStrings, CISigmaBuilder, CISpinAdapter, cpp_helpers
-from forte2.state.state import State
+from forte2.state import State, MOSpace
 from forte2.helpers.comparisons import approx
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
 from forte2.base_classes.active_space_solver import ActiveSpaceSolver
 from forte2.helpers import logger
-from forte2.state import MOSpace
 from forte2.jkbuilder import RestrictedMOIntegrals
 from forte2.props import get_1e_property
 from forte2.orbitals import Semicanonicalizer
@@ -43,7 +42,7 @@ class _CIBase:
         If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
     log_level : int, optional
         The logging level for the CI solver. Defaults to the global logger's verbosity level.
-    ci_algorithm : str, optional, default="hz"
+    ci_algorithm : str, optional, valid choices=["hz", "kh"], default="hz"
         The algorithm used for the CI sigma builder.
     guess_per_root : int, optional, default=2
         The number of guess vectors for each root.
@@ -77,6 +76,7 @@ class _CIBase:
     state: State
     ints: RestrictedMOIntegrals
     nroot: int
+    active_orbsym: list[int]
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
 
@@ -107,17 +107,14 @@ class _CIBase:
         self.eigensolver = None
 
     def _ci_solver_startup(self):
-        self.orbital_symmetry = [
-            [0] * len(self.mo_space.active_orbitals[x]) for x in range(self.ngas)
-        ]
         self.ci_strings = CIStrings(
             self.state.na - self.ncore,
             self.state.nb - self.ncore,
             self.state.symmetry,
-            self.orbital_symmetry,
+            self.active_orbsym,
             self.gas_min,
             self.gas_max,
-        )       
+        )
 
         pretty_print_gas_info(self.ci_strings)
 
@@ -161,7 +158,33 @@ class _CIBase:
             self.ci_strings, self.ints.E, self.ints.H, self.ints.V, self.log_level
         )
         self.ci_sigma_builder.set_memory(self.ci_builder_memory)
+        if self.ci_algorithm.lower() == "exact":
+            self._do_exact_diagonalization()
+        else:
+            self._do_iterative_ci()
+
+        self.E = self.evals
+        for i, e in enumerate(self.evals):
+            logger.log(f"Final CI Energy Root {i}: {e:20.12f} [Eh]", self.log_level)
+
+        if self.do_test_rdms:
+            self._test_rdms()
+
+        self.executed = True
+
+        return self
+
+    def _do_iterative_ci(self):
+        """
+        Solve CI with an iterative Davidson-Liu solver, using either
+        Harrison-Zarrabian or Knowles-Handy sigma builder algorithm.
+        """
         self.ci_sigma_builder.set_algorithm(self.ci_algorithm)
+
+        logger.log(
+            f"Using CI algorithm: {self.ci_sigma_builder.get_algorithm()}",
+            self.log_level,
+        )
 
         Hdiag = self.ci_sigma_builder.form_Hdiag_csf(
             self.dets, self.spin_adapter, spin_adapt_full_preconditioner=False
@@ -171,7 +194,9 @@ class _CIBase:
         if self.ndet == 1:
             self.evals = np.array([Hdiag[0]])
             self.evecs = np.ones((1, 1))
-            logger.log(f"Final CI Energy Root {0}: {self.evals[0]:20.12f} [Eh]", self.log_level)
+            logger.log(
+                f"Final CI Energy Root {0}: {self.evals[0]:20.12f} [Eh]", self.log_level
+            )
             self.executed = True
             return self
 
@@ -203,7 +228,6 @@ class _CIBase:
             for i in range(ncols):
                 self.spin_adapter.csf_C_to_det_C(Bblock[:, i], self.b_det)
                 self.ci_sigma_builder.Hamiltonian(self.b_det, self.sigma_det)
-                # self.sigma_det = np.dot(Hex, self.b_det)
                 self.spin_adapter.det_C_to_csf_C(self.sigma_det, Sblock[:, i])
 
         self.eigensolver.add_sigma_builder(sigma_builder)
@@ -213,24 +237,26 @@ class _CIBase:
 
         logger.log("\nDavidson-Liu solver converged.\n", self.log_level)
 
-        # 7. Store the final energy and properties
-        self.E = self.evals
-        for i, e in enumerate(self.evals):
-            logger.log(f"Final CI Energy Root {i}: {e:20.12f} [Eh]", self.log_level)
-
         h_tot, h_aabb, h_aaaa, h_bbbb = self.ci_sigma_builder.avg_build_time()
         logger.log("\nAverage CI Sigma Builder time summary:", self.log_level)
         logger.log(f"h_aabb time:    {h_aabb:.3f} s/build", self.log_level)
         logger.log(f"h_aaaa time:    {h_aaaa:.3f} s/build", self.log_level)
         logger.log(f"h_bbbb time:    {h_bbbb:.3f} s/build", self.log_level)
-        logger.log(f"total time:     {h_tot:.3f} s/build", self.log_level)
+        logger.log(f"total time:     {h_tot:.3f} s/build\n", self.log_level)
 
-        if self.do_test_rdms:
-            self._test_rdms()
+    def _do_exact_diagonalization(self):
+        logger.log(f"Using CI algorithm: Exact Diagonalization", self.log_level)
 
-        self.executed = True
+        H = self.ci_sigma_builder.form_H_csf(self.dets, self.spin_adapter)
 
-        return self
+        self.evals_full, self.evecs_full = np.linalg.eigh(H)
+        if self.energy_shift is not None:
+            argsort = np.argsort(np.abs(self.evals_full - self.energy_shift))
+            self.evals_full = self.evals_full[argsort]
+            self.evecs_full = self.evecs_full[:, argsort]
+
+        self.evals = self.evals_full[: self.nroot]
+        self.evecs = self.evecs_full[:, : self.nroot]
 
     def _test_rdms(self):
         # Compute the RDMs from the CI vectors
@@ -246,8 +272,12 @@ class _CIBase:
 
             rdm2_aa_full, _, rdm2_bb_full = self.make_sd_2rdm(root)
             # Convert to full-dimension RDMs
-            root_rdms["rdm2_aa_full"] = cpp_helpers.packed_tensor4_to_tensor4(rdm2_aa_full)
-            root_rdms["rdm2_bb_full"] = cpp_helpers.packed_tensor4_to_tensor4(rdm2_bb_full)
+            root_rdms["rdm2_aa_full"] = cpp_helpers.packed_tensor4_to_tensor4(
+                rdm2_aa_full
+            )
+            root_rdms["rdm2_bb_full"] = cpp_helpers.packed_tensor4_to_tensor4(
+                rdm2_bb_full
+            )
 
             root_rdms["rdm2_sf"] = self.make_sf_2rdm(root)
 
@@ -311,10 +341,7 @@ class _CIBase:
             )
 
     def _build_guess_vectors(self, Hdiag):
-        """
-        Build the guess vectors for the CI calculation.
-        This method is a placeholder and should be implemented in subclasses.
-        """
+        """Build the guess vectors for the CI calculation."""
 
         # determine the number of guess vectors
         self.num_guess_states = min(self.guess_per_root * self.nroot, self.basis_size)
@@ -351,7 +378,7 @@ class _CIBase:
 
         self.eigensolver.add_guesses(guess_mat)
 
-    def make_sd_1rdm(self, left_root:int, right_root:int | None = None):
+    def make_sd_1rdm(self, left_root: int, right_root: int | None = None):
         r"""
         Make the spin-dependent one-particle RDM for two CI roots.
 
@@ -373,12 +400,14 @@ class _CIBase:
             right_ci_vec_det = left_ci_vec_det
         else:
             right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(self.evecs[:, right_root], right_ci_vec_det)
+            self.spin_adapter.csf_C_to_det_C(
+                self.evecs[:, right_root], right_ci_vec_det
+            )
         a = self.ci_sigma_builder.a_1rdm(left_ci_vec_det, right_ci_vec_det)
         b = self.ci_sigma_builder.b_1rdm(left_ci_vec_det, right_ci_vec_det)
-        return a, b 
+        return a, b
 
-    def make_sd_2rdm(self, left_root:int, right_root:int | None = None):
+    def make_sd_2rdm(self, left_root: int, right_root: int | None = None):
         """
         Make the spin-dependent two-particle RDMs (aa, ab, bb) for two CI roots.
 
@@ -400,13 +429,15 @@ class _CIBase:
             right_ci_vec_det = left_ci_vec_det
         else:
             right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(self.evecs[:, right_root], right_ci_vec_det)
+            self.spin_adapter.csf_C_to_det_C(
+                self.evecs[:, right_root], right_ci_vec_det
+            )
         aa = self.ci_sigma_builder.aa_2rdm(left_ci_vec_det, right_ci_vec_det)
         ab = self.ci_sigma_builder.ab_2rdm(left_ci_vec_det, right_ci_vec_det)
         bb = self.ci_sigma_builder.bb_2rdm(left_ci_vec_det, right_ci_vec_det)
         return aa, ab, bb
-    
-    def make_sd_3rdm(self, left_root:int, right_root:int | None = None):
+
+    def make_sd_3rdm(self, left_root: int, right_root: int | None = None):
         """
         Make the spin-dependent three-particle RDMs (aaa, aab, abb, bbb) for two CI roots.
 
@@ -428,15 +459,17 @@ class _CIBase:
             right_ci_vec_det = left_ci_vec_det
         else:
             right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(self.evecs[:, right_root], right_ci_vec_det)
-    
+            self.spin_adapter.csf_C_to_det_C(
+                self.evecs[:, right_root], right_ci_vec_det
+            )
+
         aaa = self.ci_sigma_builder.aaa_3rdm(left_ci_vec_det, right_ci_vec_det)
         aab = self.ci_sigma_builder.aab_3rdm(left_ci_vec_det, right_ci_vec_det)
         abb = self.ci_sigma_builder.abb_3rdm(left_ci_vec_det, right_ci_vec_det)
         bbb = self.ci_sigma_builder.bbb_3rdm(left_ci_vec_det, right_ci_vec_det)
         return aaa, aab, abb, bbb
 
-    def make_sf_1rdm(self, left_root:int, right_root:int | None = None):
+    def make_sf_1rdm(self, left_root: int, right_root: int | None = None):
         """
         Make the spin-free one-particle RDM for two CI roots.
 
@@ -458,10 +491,12 @@ class _CIBase:
             right_ci_vec_det = left_ci_vec_det
         else:
             right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(self.evecs[:, right_root], right_ci_vec_det)
+            self.spin_adapter.csf_C_to_det_C(
+                self.evecs[:, right_root], right_ci_vec_det
+            )
         return self.ci_sigma_builder.sf_1rdm(left_ci_vec_det, right_ci_vec_det)
 
-    def make_sf_2rdm(self, left_root:int, right_root:int | None = None):
+    def make_sf_2rdm(self, left_root: int, right_root: int | None = None):
         """
         Make the spin-free two-particle RDM for two CI roots.
 
@@ -483,10 +518,12 @@ class _CIBase:
             right_ci_vec_det = left_ci_vec_det
         else:
             right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(self.evecs[:, right_root], right_ci_vec_det)
+            self.spin_adapter.csf_C_to_det_C(
+                self.evecs[:, right_root], right_ci_vec_det
+            )
         return self.ci_sigma_builder.sf_2rdm(left_ci_vec_det, right_ci_vec_det)
 
-    def make_sf_3rdm(self, left_root:int, right_root:int | None = None):
+    def make_sf_3rdm(self, left_root: int, right_root: int | None = None):
         """
         Make the spin-free three-particle RDM for two CI roots.
 
@@ -508,11 +545,12 @@ class _CIBase:
             right_ci_vec_det = left_ci_vec_det
         else:
             right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(self.evecs[:, right_root], right_ci_vec_det)
+            self.spin_adapter.csf_C_to_det_C(
+                self.evecs[:, right_root], right_ci_vec_det
+            )
         return self.ci_sigma_builder.sf_3rdm(left_ci_vec_det, right_ci_vec_det)
 
-
-    def make_sf_2cumulant(self, left_root:int, right_root:int | None = None):
+    def make_sf_2cumulant(self, left_root: int, right_root: int | None = None):
         """
         Make the spin-free cumulant of the two-particle RDM for two CI roots.
 
@@ -534,10 +572,12 @@ class _CIBase:
             right_ci_vec_det = left_ci_vec_det
         else:
             right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(self.evecs[:, right_root], right_ci_vec_det)
+            self.spin_adapter.csf_C_to_det_C(
+                self.evecs[:, right_root], right_ci_vec_det
+            )
         return self.ci_sigma_builder.sf_2cumulant(left_ci_vec_det, right_ci_vec_det)
 
-    def make_sf_3cumulant(self, left_root:int, right_root:int | None = None):
+    def make_sf_3cumulant(self, left_root: int, right_root: int | None = None):
         """
         Make the spin-free cumulant of the three-particle RDM for two CI roots.
 
@@ -559,9 +599,10 @@ class _CIBase:
             right_ci_vec_det = left_ci_vec_det
         else:
             right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(self.evecs[:, right_root], right_ci_vec_det)
+            self.spin_adapter.csf_C_to_det_C(
+                self.evecs[:, right_root], right_ci_vec_det
+            )
         return self.ci_sigma_builder.sf_3cumulant(left_ci_vec_det, right_ci_vec_det)
-
 
     def compute_natural_occupation_numbers(self):
         """
@@ -699,8 +740,19 @@ class CISolver(ActiveSpaceSolver):
         If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
     log_level : int, optional
         The logging level for the CI solver. Defaults to the global logger's verbosity level.
-    ci_algorithm : str, optional, default="hz"
+    ci_algorithm : str, optional, valid choices=["hz", "kh"], default="hz"
         The algorithm used for the CI sigma builder.
+
+    Attributes
+    ----------
+    sub_solvers : list[_CIBase]
+        A list of CI solvers for each state in the state-averaged CI.
+    evals_per_solver : list[NDArray]
+        The eigenvalues (energies) computed by each sub-solver.
+    evals_flat, E : NDArray
+        The flattened array of eigenvalues from all sub-solvers.
+    E_avg : float
+        The average energy computed from the state-averaged CI roots.
     """
 
     ### Davidson-Liu parameters
@@ -715,9 +767,6 @@ class CISolver(ActiveSpaceSolver):
 
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
-
-    ### Sigma builder parameters
-    ci_algorithm: str = "hz"
 
     ### Non-init attributes
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
@@ -745,15 +794,20 @@ class CISolver(ActiveSpaceSolver):
             use_aux_corr=True,
         )
 
-        self.ci_solvers = []
+        self.sub_solvers = []
+        active_orbsym = [
+            [self.irrep_indices[i] for i in active_space]
+            for active_space in self.mo_space.active_orbitals
+        ]
         for i, state in enumerate(self.sa_info.states):
             # Create a CI solver for each state and MOSpace
-            self.ci_solvers.append(
+            self.sub_solvers.append(
                 _CIBase(
                     mo_space=self.mo_space,
                     ints=ints,
                     state=state,
                     nroot=self.sa_info.nroots[i],
+                    active_orbsym=active_orbsym,
                     do_test_rdms=self.do_test_rdms,
                     ci_algorithm=self.ci_algorithm,
                     guess_per_root=self.guess_per_root,
@@ -774,7 +828,7 @@ class CISolver(ActiveSpaceSolver):
             self.first_run = False
 
         self.evals_per_solver = []
-        for ci_solver in self.ci_solvers:
+        for ci_solver in self.sub_solvers:
             ci_solver.run()
             self.evals_per_solver.append(ci_solver.evals)
 
@@ -807,11 +861,9 @@ class CISolver(ActiveSpaceSolver):
             Average spin-free one-particle RDM.
         """
         rdm1 = np.zeros((self.norb,) * 2)
-        for i, ci_solver in enumerate(self.ci_solvers):
+        for i, ci_solver in enumerate(self.sub_solvers):
             for j in range(ci_solver.nroot):
-                rdm1 += (
-                    ci_solver.make_sf_1rdm(j) * self.weights[i][j]
-                )
+                rdm1 += ci_solver.make_sf_1rdm(j) * self.weights[i][j]
         return rdm1
 
     def make_average_sf_2rdm(self):
@@ -824,10 +876,10 @@ class CISolver(ActiveSpaceSolver):
             Average spin-free two-particle RDM.
         """
         rdm2 = np.zeros((self.norb,) * 4)
-        for i, ci_solver in enumerate(self.ci_solvers):
+        for i, ci_solver in enumerate(self.sub_solvers):
             for j in range(ci_solver.nroot):
                 rdm2 += ci_solver.make_sf_2rdm(j) * self.weights[i][j]
-                                   
+
         return rdm2
 
     def set_ints(self, scalar, oei, tei):
@@ -843,7 +895,7 @@ class CISolver(ActiveSpaceSolver):
         tei : NDArray
             Two-electron active-space integrals in the MO basis.
         """
-        for ci_solver in self.ci_solvers:
+        for ci_solver in self.sub_solvers:
             ci_solver.ints.E = scalar
             ci_solver.ints.H = oei
             ci_solver.ints.V = tei
@@ -858,7 +910,7 @@ class CISolver(ActiveSpaceSolver):
             The natural occupation numbers for each root.
         """
         nos = []
-        for ci_solver in self.ci_solvers:
+        for ci_solver in self.sub_solvers:
             nos.append(ci_solver.compute_natural_occupation_numbers())
         self.nat_occs = np.concatenate(nos, axis=1)
 
@@ -877,7 +929,7 @@ class CISolver(ActiveSpaceSolver):
             top_dets[i] contains a list of tuples (Determinant, coefficient) for the `i`-th root.
         """
         top_dets = []
-        for ci_solver in self.ci_solvers:
+        for ci_solver in self.sub_solvers:
             top_dets += ci_solver.get_top_determinants(n)
         return top_dets
 
@@ -903,7 +955,7 @@ class CISolver(ActiveSpaceSolver):
         self.tdm_per_solver = []
         self.fosc_per_solver = []
 
-        for ici, ci_solver in enumerate(self.ci_solvers):
+        for ici, ci_solver in enumerate(self.sub_solvers):
             tdmdict = OrderedDict()
             foscdict = OrderedDict()
             for i in range(ci_solver.nroot):
@@ -935,6 +987,7 @@ class CI(CISolver):
     CI solver specialized for a single CI calculation. (i.e., not used in a loop).
     See `CISolver` for all parameters and attributes.
     """
+
     final_orbital: str = "original"
     do_transition_dipole: bool = False
 

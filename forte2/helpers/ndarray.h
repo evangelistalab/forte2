@@ -4,6 +4,7 @@
 #include <numeric>
 #include <memory>
 #include <vector>
+#include <complex>
 
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>

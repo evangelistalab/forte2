@@ -54,7 +54,7 @@ def reflection_mat(plane):
     if i == j:
         raise ValueError("plane must use two distinct axes")
     R = np.eye(3)
-    k = 3 - i - j          # the axis not in the plane (since {0,1,2})
+    k = 3 - i - j  # the axis not in the plane (since {0,1,2})
     R[k, k] = -1.0
     return R
 
@@ -262,6 +262,7 @@ def parse_zmatrix(zmat, unit):
 @dataclass
 class _GeometryHelper:
     """Helper class to process geometry data."""
+
     atoms: list[tuple[int, np.ndarray]]
 
     def __post_init__(self):
@@ -298,4 +299,6 @@ class _GeometryHelper:
             self.inertia_matrix += m * ((r2 * np.eye(3)) - np.outer(x, x))
 
         self.prinrot = np.eye(3)
-        self.prin_atomic_positions = np.array([self.prinrot @ (r - self.center_of_mass) for r in self.atomic_positions])
+        self.prin_atomic_positions = np.array(
+            [self.prinrot @ (r - self.center_of_mass) for r in self.atomic_positions]
+        )

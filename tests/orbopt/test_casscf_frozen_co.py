@@ -28,6 +28,7 @@ def test_casscf_frozen_co():
         active_orbitals=[4, 5, 6, 7, 8, 9],
         frozen_virtual_orbitals=[25, 26, 27],
         optimize_frozen_orbs=True,
+        ci_algorithm="exact",
     )(avas)
     mc.run()
     assert mc.E == approx(emcscf)

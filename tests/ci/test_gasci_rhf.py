@@ -189,3 +189,87 @@ def test_gasci_rhf_8():
     assert rhf.E == approx(-75.68026686304654)
     assert ci.E[0] == approx(-55.598443621487)
     assert ci.E[1] == approx(-55.526088426266)
+
+def test_gasci_rhf_9():
+    erhf = -76.05702512779526
+    eci = -76.063385164755
+
+    xyz = """
+    O   0.0000000000  -0.0000000000  -0.0662628033
+    H   0.0000000000  -0.7540256101   0.5259060578
+    H  -0.0000000000   0.7530256101   0.5260060578
+    """
+
+    system = System(
+        xyz=xyz, basis_set="cc-pVTZ", auxiliary_basis_set="def2-universal-jkfit"
+    )
+
+    rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
+
+    ci = CI(
+        states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[6]),
+        core_orbitals=[0, 1],
+        active_orbitals=[[2, 3, 4],[5, 6, 7]],
+        econv=1e-12,
+    )(rhf)
+    ci.run()    
+
+    assert rhf.E == approx(erhf)
+    assert ci.E[0] == approx(eci)
+
+def test_gasci_rhf_10():
+    erhf = -76.05702512779526
+    eci = -76.0650697375
+
+    xyz = """
+    O   0.0000000000  -0.0000000000  -0.0662628033
+    H   0.0000000000  -0.7540256101   0.5259060578
+    H  -0.0000000000   0.7530256101   0.5260060578
+    """
+
+    system = System(
+        xyz=xyz, basis_set="cc-pVTZ", auxiliary_basis_set="def2-universal-jkfit"
+    )
+
+    rhf = RHF(charge=0, econv=1e-12, dconv=1e-6)(system)
+
+    ci = CI(
+        states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[4], gas_max=[8]),
+        core_orbitals=[0],
+        active_orbitals=[[1, 2, 3, 4],[5, 6, 7]],    
+        econv=1e-10,
+        ci_algorithm='hz'
+    )(rhf)
+    ci.run()    
+
+    assert rhf.E == approx(erhf)       
+    assert ci.E[0] == approx(eci)
+
+def test_gasci_rhf_11():
+    erhf = -76.05702512779526
+    eci = -76.0650697375
+
+    xyz = """
+    O   0.0000000000  -0.0000000000  -0.0662628033
+    H   0.0000000000  -0.7540256101   0.5259060578
+    H  -0.0000000000   0.7530256101   0.5260060578
+    """
+
+    system = System(
+        xyz=xyz, basis_set="cc-pVTZ", auxiliary_basis_set="def2-universal-jkfit"
+    )
+
+    rhf = RHF(charge=0, econv=1e-12, dconv=1e-6)(system)
+
+    ci = CI(
+        states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[4], gas_max=[8]),
+        core_orbitals=[0],
+        active_orbitals=[[1, 2, 3, 4],[5, 6, 7]],    
+        econv=1e-10,
+        ci_algorithm='kh'
+    )(rhf)
+    ci.run()    
+
+    assert rhf.E == approx(erhf)       
+    assert ci.E[0] == approx(eci)
+    

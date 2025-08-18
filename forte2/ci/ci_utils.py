@@ -15,25 +15,40 @@ def pretty_print_gas_info(ci_strings: CIStrings):
 
     logger.log_info1("\nGAS information:")
     for i in range(num_spaces):
-        logger.log_info1(f"GAS space {i + 1} : size = {gas_sizes[i]}, ")
+        logger.log_info1(f"GAS{i + 1}: size = {gas_sizes[i]}, ")
 
-    s = "\n    Config."
+    table = []  # table[space_index] = [(aocc, bocc) for each config]
+
     for i in range(num_spaces):
-        s += f"   Space {i + 1}"
-    s += "\n            "
-    for i in range(num_spaces):
-        s += "   α    β "
-    ndash = 7 + 10 * num_spaces
-    dash = "-" * ndash
-    s += f"\n    {dash}"
-    num_conf = 0
-    for aocc_idx, bocc_idx in occupation_pairs:
-        num_conf += 1
-        aocc = alfa_occupation[aocc_idx]
-        bocc = beta_occupation[bocc_idx]
-        s += f"\n    {num_conf:6d} "
-        for i in range(num_spaces):
-            s += f" {aocc[i]:4d} {bocc[i]:4d}"
+        row = []
+        for aocc_idx, bocc_idx in occupation_pairs:
+            aocc = alfa_occupation[aocc_idx]
+            bocc = beta_occupation[bocc_idx]
+            row.append((aocc[i], bocc[i]))
+        table.append(row)
+
+    # Build header
+    header = "Config.    "
+    for conf_num in range(len(occupation_pairs)):
+        header += f"{conf_num + 1:>3}"
+    table_width = len(header)
+    dash = "\n" + "-" * table_width
+    eq_dash = "=" * table_width
+
+    # Print rows: one per space
+    rows = [header]
+    for space_idx, row in enumerate(table, start=1):
+        s_row = f"\nGAS{space_idx:1d} α Occ."
+        for a_val, b_val in row:
+            s_row += f" {a_val:2d}"
+        s_row += f"\nGAS{space_idx:1d} β Occ."
+        for a_val, b_val in row:
+            s_row += f" {b_val:2d}"
+        rows.append(s_row)
+
+    s = f"\nGAS Occupation Configurations:\n{eq_dash}\n"
+    s += dash.join(rows)
+    s += f"\n{eq_dash}"
 
     logger.log_info1(s)
 
