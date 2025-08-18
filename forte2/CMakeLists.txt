@@ -117,7 +117,7 @@ nanobind_add_module(
 
 nanobind_add_stub(
   forte2_stub
-  MODULE forte2._forte2
+  MODULE _forte2
   OUTPUT ${CMAKE_SOURCE_DIR}/forte2/_forte2.pyi
   DEPENDS _forte2
 )
