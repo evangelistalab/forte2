@@ -115,6 +115,19 @@ nanobind_add_module(
   sparse/sq_operator_string.cc
 )
 
+if(DEFINED ENV{CONDA_PREFIX})
+    list(APPEND CMAKE_PREFIX_PATH $ENV{CONDA_PREFIX})
+endif()
+
+# find_package(libcint)
+option(BUILD_LIBCINT "Build libcint wrapper" OFF)
+if (BUILD_LIBCINT)
+  message(STATUS "Building with libcint wrapper!")
+  add_subdirectory(libcint)
+else()
+  message(STATUS "Building without libcint wrapper!")
+endif()
+
 target_link_libraries(_forte2 PRIVATE Libint2::int2)
 target_link_libraries(_forte2 PRIVATE Eigen3::Eigen)
 target_link_libraries(_forte2 PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})

@@ -165,7 +165,9 @@ class System:
         self.prin_atomic_positions = _geom.prin_atomic_positions
 
     def _init_basis(self):
-        self.basis = build_basis(self.basis_set, self.atoms)
+        self.basis, self.atom_basis = build_basis(
+            self.basis_set, self.atoms, return_basis_data=True
+        )
         logger.log_info1(
             f"Parsed {self.natoms} atoms with basis set of {self.basis.size} functions."
         )

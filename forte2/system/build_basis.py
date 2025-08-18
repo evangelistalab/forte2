@@ -21,6 +21,7 @@ def build_basis(
     atoms,
     embed_normalization_into_coefficients: bool = True,
     decontract: bool = False,
+    return_basis_data: bool = False,
 ) -> Basis:
     """
     Assemble the basis set from JSON data or Basis Set Exchange, depending on availability.
@@ -101,7 +102,10 @@ def build_basis(
                 coords,
                 embed_normalization_into_coefficients,
             )
-    return basis
+    if return_basis_data:
+        return basis, atom_basis
+    else:
+        return basis
 
 
 def _parse_custom_basis_assignment(geometry, basis_assignment):

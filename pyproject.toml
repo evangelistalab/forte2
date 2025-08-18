@@ -61,3 +61,6 @@ testpaths = [
 python_functions = [
     "test_*",
 ]
+
+[tool.scikit-build.cmake.define]
+BUILD_LIBCINT = "ON"
