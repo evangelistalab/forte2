@@ -4,6 +4,7 @@
 #include <numeric>
 #include <memory>
 #include <vector>
+#include <complex>
 
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
@@ -19,6 +20,14 @@ using np_tensor5 = nb::ndarray<nb::numpy, double, nb::ndim<5>>;
 using np_tensor6 = nb::ndarray<nb::numpy, double, nb::ndim<6>>;
 using np_tensor7 = nb::ndarray<nb::numpy, double, nb::ndim<7>>;
 using np_tensor8 = nb::ndarray<nb::numpy, double, nb::ndim<8>>;
+using np_vector_complex = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<1>>;
+using np_matrix_complex = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<2>>;
+using np_tensor3_complex = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<3>>;
+using np_tensor4_complex = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<4>>;
+using np_tensor5_complex = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<5>>;
+using np_tensor6_complex = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<6>>;
+using np_tensor7_complex = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<7>>;
+using np_tensor8_complex = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<8>>;
 
 template <typename Type, typename T, int N>
 nb::ndarray<Type, T, nb::ndim<N>> make_ndarray(std::unique_ptr<std::vector<T>> vec,

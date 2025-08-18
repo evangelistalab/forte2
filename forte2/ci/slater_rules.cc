@@ -217,186 +217,80 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
     return (matrix_element);
 }
 
-/*double ActiveSpaceIntegrals::slater_rules_single_alpha(const Determinant& det, int i, int a) const
-{
-    // Slater rule 2 PhiI = j_a^+ i_a PhiJ
-    double sign = det.slater_sign_aa(i, a);
-    double matrix_element = oei_a_[i * nmo_ + a];
-    for (size_t p = 0; p < nmo_; ++p) {
-        if (det.get_alfa_bit(p)) {
-            matrix_element += tei_aa_[i * nmo3_ + p * nmo2_ + a * nmo_ + p];
-        }
-        if (det.get_beta_bit(p)) {
-            matrix_element += tei_ab_[i * nmo3_ + p * nmo2_ + a * nmo_ + p];
+RelSlaterRules::RelSlaterRules(int norb, double scalar_energy,
+                               np_matrix_complex one_electron_integrals,
+                               np_tensor4_complex two_electron_integrals)
+    : norb_(norb), scalar_energy_(scalar_energy), one_electron_integrals_(one_electron_integrals),
+      two_electron_integrals_(two_electron_integrals) {}
+
+double RelSlaterRules::energy(const Determinant& det) const {
+    std::complex<double> energy = scalar_energy_;
+
+    auto h = one_electron_integrals_.view();
+    auto v = two_electron_integrals_.view();
+
+    auto occ = det.get_alfa_occ(norb_);
+    for (auto p : occ) {
+        energy += h(p, p); // <p|p>
+        for (auto q : occ) {
+            energy += 0.5 * (v(p, q, p, q) - v(p, q, q, p)); // <pq||pq>
         }
     }
-    return sign * matrix_element;
+
+    return energy.real();
 }
 
-double ActiveSpaceIntegrals::slater_rules_single_alpha_abs(const Determinant& det, int i,
-                                                           int a) const {
-    // Slater rule 2 PhiI = j_a^+ i_a PhiJ
-    double matrix_element = oei_a_[i * nmo_ + a];
-    for (size_t p = 0; p < nmo_; ++p) {
-        if (det.get_alfa_bit(p)) {
-            matrix_element += tei_aa_[i * nmo3_ + p * nmo2_ + a * nmo_ + p];
-        }
-        if (det.get_beta_bit(p)) {
-            matrix_element += tei_ab_[i * nmo3_ + p * nmo2_ + a * nmo_ + p];
-        }
+std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
+                                                  const Determinant& rhs) const {
+    // make sure the two determinants have the same number of electrons
+    if (lhs.count_a() != rhs.count_a())
+        return 0.0;
+
+    int ndiff = lhs.fast_a_xor_b_count(rhs) / 2;
+    if (ndiff > 2)
+        return 0.0;
+
+    // Slater rule 1 PhiI = PhiJ
+    if (ndiff == 0) {
+        return energy(lhs);
     }
+
+    // excitation_connection stores the creation and annihilation operators
+    // that need to be applied to rhs to obtain lhs:
+    // if <LHS|pa^+ qb^+ sa rb|RHS> = +- 1 then excitation_connection = [[s, p], [r, q]]
+    // [[alfa annihilation], [alfa creation],
+    //  [beta annihilation], [beta creation]]
+    auto excitation_connection = lhs.excitation_connection(rhs);
+
+    std::complex<double> matrix_element = 0.0;
+    auto h = one_electron_integrals_.view();
+    auto v = two_electron_integrals_.view();
+
+
+    if (ndiff == 1) {
+        size_t i = excitation_connection[0][0];
+        size_t a = excitation_connection[1][0];
+        double sign = lhs.slater_sign_aa(i, a);
+        matrix_element += h(i, a); // <i|a>
+
+        auto occ = lhs.get_alfa_occ(norb_);
+
+        for (auto j : occ) {
+            matrix_element += v(i, j, a, j) - v(i, j, j, a); // \sum_j<ij||aj>
+        }
+        matrix_element *= sign;
+    }
+
+    if (ndiff == 2) {
+        size_t i = excitation_connection[0][0];
+        size_t j = excitation_connection[0][1];
+        size_t a = excitation_connection[1][0];
+        size_t b = excitation_connection[1][1];
+        double sign = lhs.slater_sign_aaaa(i, j, a, b);
+        matrix_element += sign * (v(i, j, a, b) - v(i, j, b, a)); // <ij||ab>
+    }
+
     return matrix_element;
 }
-
-double ActiveSpaceIntegrals::slater_rules_single_beta(const Determinant& det, int i, int a) const {
-    // Slater rule 2 PhiI = j_a^+ i_a PhiJ
-    double sign = det.slater_sign_bb(i, a);
-    double matrix_element = oei_b_[i * nmo_ + a];
-    for (size_t p = 0; p < nmo_; ++p) {
-        if (det.get_alfa_bit(p)) {
-            matrix_element += tei_ab_[p * nmo3_ + i * nmo2_ + p * nmo_ + a];
-        }
-        if (det.get_beta_bit(p)) {
-            matrix_element += tei_bb_[i * nmo3_ + p * nmo2_ + a * nmo_ + p];
-        }
-    }
-    return sign * matrix_element;
-}
-
-double ActiveSpaceIntegrals::slater_rules_single_beta_abs(const Determinant& det, int i,
-                                                          int a) const {
-    // Slater rule 2 PhiI = j_a^+ i_a PhiJ
-    double matrix_element = oei_b_[i * nmo_ + a];
-    for (size_t p = 0; p < nmo_; ++p) {
-        if (det.get_alfa_bit(p)) {
-            matrix_element += tei_ab_[p * nmo3_ + i * nmo2_ + p * nmo_ + a];
-        }
-        if (det.get_beta_bit(p)) {
-            matrix_element += tei_bb_[i * nmo3_ + p * nmo2_ + a * nmo_ + p];
-        }
-    }
-    return matrix_element;
-}
-
-void ActiveSpaceIntegrals::add(std::shared_ptr<ActiveSpaceIntegrals> as_ints, const double factor) {
-    if (as_ints->active_mo_symmetry() != active_mo_symmetry_)
-        throw std::runtime_error("Inconsistent active orbitals cannot be added!");
-
-    scalar_energy_ += factor * as_ints->scalar_energy();
-
-    auto add_op = [&factor](double lhs, double rhs) { return lhs + factor * rhs; };
-
-    std::transform(oei_a_.begin(), oei_a_.end(), as_ints->oei_a_vector().begin(), oei_a_.begin(),
-                   add_op);
-    std::transform(oei_b_.begin(), oei_b_.end(), as_ints->oei_b_vector().begin(), oei_b_.begin(),
-                   add_op);
-
-    std::transform(tei_aa_.begin(), tei_aa_.end(), as_ints->tei_aa_vector().begin(),
-                   tei_aa_.begin(), add_op);
-    std::transform(tei_ab_.begin(), tei_ab_.end(), as_ints->tei_ab_vector().begin(),
-                   tei_ab_.begin(), add_op);
-    std::transform(tei_bb_.begin(), tei_bb_.end(), as_ints->tei_bb_vector().begin(),
-                   tei_bb_.begin(), add_op);
-}
-
-void ActiveSpaceIntegrals::print() {
-    psi::outfile->Printf("\n\n  ==> Active Space Integrals <==\n");
-    psi::outfile->Printf("\n  Nuclear repulsion energy:   %20.12f\n", nuclear_repulsion_energy());
-    psi::outfile->Printf("  Frozen core energy:         %20.12f\n", frozen_core_energy());
-    psi::outfile->Printf("  Scalar energy:              %20.12f\n", scalar_energy());
-
-    psi::outfile->Printf("\nOne-electron integrals (alpha) <p|h|q> (includes restricted docc)\n");
-    for (size_t p = 0; p < nmo_; ++p) {
-        for (size_t q = 0; q < nmo_; ++q) {
-            if (std::fabs(oei_a(p, q)) > 1e-12)
-                psi::outfile->Printf("  <%2d|h|%2d> = %20.12f\n", p, q, oei_a(p, q));
-        }
-    }
-    psi::outfile->Printf("\nOne-electron integrals (beta) <p|h|q> (includes restricted docc)\n");
-    for (size_t p = 0; p < nmo_; ++p) {
-        for (size_t q = 0; q < nmo_; ++q) {
-            if (std::fabs(oei_b(p, q)) > 1e-12)
-                psi::outfile->Printf("  <%2d|h|%2d> = %20.12f\n", p, q, oei_b(p, q));
-        }
-    }
-
-    psi::outfile->Printf("\nAntisymmetrized two-electron integrals (alpha-alpha) <pq||rs>\n");
-    for (size_t p = 0; p < nmo_; ++p) {
-        for (size_t q = 0; q < nmo_; ++q) {
-            for (size_t r = 0; r < nmo_; ++r) {
-                for (size_t s = 0; s < nmo_; ++s) {
-                    if (std::fabs(tei_aa(p, q, r, s)) > 1e-12)
-                        psi::outfile->Printf("  <%2d %2d|%2d %2d> = %20.12f\n", p, q, r, s,
-                                             tei_aa(p, q, r, s));
-                }
-            }
-        }
-    }
-    psi::outfile->Printf("\nAntisymmetrized two-electron integrals (beta-beta) <pq||rs>\n");
-    for (size_t p = 0; p < nmo_; ++p) {
-        for (size_t q = 0; q < nmo_; ++q) {
-            for (size_t r = 0; r < nmo_; ++r) {
-                for (size_t s = 0; s < nmo_; ++s) {
-                    if (std::fabs(tei_bb(p, q, r, s)) > 1e-12)
-                        psi::outfile->Printf("  <%2d %2d|%2d %2d> = %20.12f\n", p, q, r, s,
-                                             tei_bb(p, q, r, s));
-                }
-            }
-        }
-    }
-    psi::outfile->Printf("\nTwo-electron integrals (alpha-beta) <pq|rs>\n");
-    for (size_t p = 0; p < nmo_; ++p) {
-        for (size_t q = 0; q < nmo_; ++q) {
-            for (size_t r = 0; r < nmo_; ++r) {
-                for (size_t s = 0; s < nmo_; ++s) {
-                    if (std::fabs(tei_ab(p, q, r, s)) > 1e-12)
-                        psi::outfile->Printf("  <%2d %2d|%2d %2d> = %20.12f\n", p, q, r, s,
-                                             tei_ab(p, q, r, s));
-                }
-            }
-        }
-    }
-}
-
-std::shared_ptr<ActiveSpaceIntegrals>
-make_active_space_ints(std::shared_ptr<MOSpaceInfo> mo_space_info,
-                       std::shared_ptr<ForteIntegrals> ints, const std::string& active_space,
-                       const std::vector<std::string>& core_spaces) {
-
-    bool updated_ints = ints->update_ints_if_needed();
-    if (updated_ints) {
-        psi::outfile->Printf(
-            "\n\n  The integrals are not consistent with the orbitals. Re-transforming them.\n");
-    }
-
-    // get the active/core vectors
-    auto active_mo = mo_space_info->corr_absolute_mo(active_space);
-    auto active_mo_symmetry = mo_space_info->symmetry(active_space);
-    std::vector<size_t> core_mo;
-    for (const auto& space : core_spaces) {
-        auto mos = mo_space_info->corr_absolute_mo(space);
-        core_mo.insert(core_mo.end(), mos.begin(), mos.end());
-    }
-
-    // allocate the active space integral object
-    auto as_ints =
-        std::make_shared<ActiveSpaceIntegrals>(ints, active_mo, active_mo_symmetry, core_mo);
-
-    // grab the integrals from the ForteIntegrals object
-    if (ints->spin_restriction() == IntegralSpinRestriction::Restricted) {
-        auto tei_active_ab = ints->aptei_ab_block(active_mo, active_mo, active_mo, active_mo);
-        auto tei_active_aa = tei_active_ab.clone();
-        tei_active_aa("pqrs") = tei_active_ab("pqrs") - tei_active_ab("pqsr");
-        tei_active_aa.set_name("tei_active_aa");
-        as_ints->set_active_integrals(tei_active_aa, tei_active_ab, tei_active_aa);
-    } else {
-        auto tei_active_aa = ints->aptei_aa_block(active_mo, active_mo, active_mo, active_mo);
-        auto tei_active_ab = ints->aptei_ab_block(active_mo, active_mo, active_mo, active_mo);
-        auto tei_active_bb = ints->aptei_bb_block(active_mo, active_mo, active_mo, active_mo);
-        as_ints->set_active_integrals(tei_active_aa, tei_active_ab, tei_active_bb);
-    }
-    as_ints->compute_restricted_one_body_operator();
-    return as_ints;
-}*/
 
 } // namespace forte2
