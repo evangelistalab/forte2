@@ -1,4 +1,5 @@
 import math
+import numpy as np
 
 from forte2 import ints
 
@@ -50,21 +51,74 @@ class Cube:
         )
 
         # calculate the orbitals on the grid
-        values = ints.orbitals_on_grid(
-            system.basis,
-            C[:, indices],
-            grid_origin,
-            npoints,
-            scaled_axes,
-        )
+        if system.two_component:
+            # for two-component systems, we need to calculate the orbitals for both alpha and beta
+            nbf = system.nbf
+            values = ints.orbitals_on_grid(
+                system.basis,
+                C[:nbf, indices].real,
+                grid_origin,
+                npoints,
+                scaled_axes,
+            )
+            values += ints.orbitals_on_grid(
+                system.basis,
+                C[nbf:, indices].real,
+                grid_origin,
+                npoints,
+                scaled_axes,
+            )
+            if C.dtype == complex:
+                values = values.astype(complex)
+                values += 1.0j * ints.orbitals_on_grid(
+                    system.basis,
+                    C[:nbf, indices].imag,
+                    grid_origin,
+                    npoints,
+                    scaled_axes,
+                )
+                values += 1.0j * ints.orbitals_on_grid(
+                    system.basis,
+                    C[nbf:, indices].imag,
+                    grid_origin,
+                    npoints,
+                    scaled_axes,
+                )
+        else:
+            values = ints.orbitals_on_grid(
+                system.basis,
+                C[:, indices],
+                grid_origin,
+                npoints,
+                scaled_axes,
+            )
 
         # write the cube files
-        for i, index in enumerate(indices):
-            cube = self._make_cube(
-                values[:, i], grid_origin, npoints, scaled_axes, system
-            )
-            with open(f"{prefix}_{index + 1:0{number_of_digits}d}.cube", "w") as f:
-                f.write(cube)
+        if values.dtype == complex:
+            # if the values are complex, we write two files: one for the real part and one for the imaginary part
+            for i, index in enumerate(indices):
+                cube_real = self._make_cube(
+                    values[:, i].real, grid_origin, npoints, scaled_axes, system
+                )
+                with open(
+                    f"{prefix}_{index + 1:0{number_of_digits}d}_real.cube", "w"
+                ) as f:
+                    f.write(cube_real)
+
+                cube_imag = self._make_cube(
+                    values[:, i].imag, grid_origin, npoints, scaled_axes, system
+                )
+                with open(
+                    f"{prefix}_{index + 1:0{number_of_digits}d}_imag.cube", "w"
+                ) as f:
+                    f.write(cube_imag)
+        else:
+            for i, index in enumerate(indices):
+                cube = self._make_cube(
+                    values[:, i], grid_origin, npoints, scaled_axes, system
+                )
+                with open(f"{prefix}_{index + 1:0{number_of_digits}d}.cube", "w") as f:
+                    f.write(cube)
 
     def _make_cube(self, values, minr, npoints, axis, system):
         """
