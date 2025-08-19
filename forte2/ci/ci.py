@@ -76,6 +76,7 @@ class _CIBase:
     state: State
     ints: RestrictedMOIntegrals
     nroot: int
+    active_orbsym: list[int]
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
 
@@ -106,14 +107,11 @@ class _CIBase:
         self.eigensolver = None
 
     def _ci_solver_startup(self):
-        self.orbital_symmetry = [
-            [0] * len(self.mo_space.active_orbitals[x]) for x in range(self.ngas)
-        ]
         self.ci_strings = CIStrings(
             self.state.na - self.ncore,
             self.state.nb - self.ncore,
             self.state.symmetry,
-            self.orbital_symmetry,
+            self.active_orbsym,
             self.gas_min,
             self.gas_max,
         )
@@ -797,6 +795,10 @@ class CISolver(ActiveSpaceSolver):
         )
 
         self.sub_solvers = []
+        active_orbsym = [
+            [self.irrep_indices[i] for i in active_space]
+            for active_space in self.mo_space.active_orbitals
+        ]
         for i, state in enumerate(self.sa_info.states):
             # Create a CI solver for each state and MOSpace
             self.sub_solvers.append(
@@ -805,6 +807,7 @@ class CISolver(ActiveSpaceSolver):
                     ints=ints,
                     state=state,
                     nroot=self.sa_info.nroots[i],
+                    active_orbsym=active_orbsym,
                     do_test_rdms=self.do_test_rdms,
                     ci_algorithm=self.ci_algorithm,
                     guess_per_root=self.guess_per_root,

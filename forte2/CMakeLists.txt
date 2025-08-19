@@ -106,13 +106,20 @@ nanobind_add_module(
   ci/ci_string_class.cc
   ci/ci_occupation.cc
   ci/determinant_helpers.cc
-  ci/sparse_exp.cc
   ci/slater_rules.cc
-  ci/sparse_operator.cc
-  ci/sparse_operator_hamiltonian.cc
-  ci/sparse_state_functions.cc
-  ci/sparse_state.cc
-  ci/sq_operator_string.cc
+  sparse/sparse_exp.cc
+  sparse/sparse_operator.cc
+  sparse/sparse_operator_hamiltonian.cc
+  sparse/sparse_state_functions.cc
+  sparse/sparse_state.cc
+  sparse/sq_operator_string.cc
+)
+
+nanobind_add_stub(
+  forte2_stub
+  MODULE _forte2
+  OUTPUT ${CMAKE_SOURCE_DIR}/forte2/_forte2.pyi
+  DEPENDS _forte2
 )
 
 target_link_libraries(_forte2 PRIVATE Libint2::int2)

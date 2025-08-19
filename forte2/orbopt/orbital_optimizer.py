@@ -367,7 +367,7 @@ class MCOptimizer(ActiveSpaceSolver):
 
     def _get_nonredundant_rotations(self):
         """Lower triangular matrix of nonredundant rotations"""
-        nrr = np.zeros((self.system.nbf, self.system.nbf), dtype=bool)
+        nrr = np.zeros((self.system.nmo, self.system.nmo), dtype=bool)
 
         if self.optimize_frozen_orbs:
             _core = self.mo_space.docc
@@ -392,6 +392,15 @@ class MCOptimizer(ActiveSpaceSolver):
             for idx in contig_actv_froz:
                 nrr[idx, :] = False
                 nrr[:, idx] = False
+
+        # zero out rotations between orbitals of different irreps
+        if self.system.point_group.upper() != "C1":
+            _irrid = np.array(self.irrep_indices)
+            # equivalent to:
+            # for i, j in range(nmo):
+            #   if i^j != 0:
+            #       nrr[i, j] = False
+            nrr[(_irrid[:, None] ^ _irrid != 0)] = False
 
         return nrr
 
