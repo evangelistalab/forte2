@@ -99,7 +99,7 @@ class _CIBase:
 
     def __post_init__(self):
         self.norb = self.mo_space.nactv
-        self.ncore = self.mo_space.ncore
+        self.ncore = self.mo_space.ncore + self.mo_space.nfrozen_core
         self.ngas = self.mo_space.ngas
         self.gas_min = self.state.gas_min
         self.gas_max = self.state.gas_max

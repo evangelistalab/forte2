@@ -152,7 +152,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
 
         atom_indices = []
 
-        for token in frag_list:
+        for token in frag_str:
             match = re.match(self._regex, token)
             if not match:
                 raise ValueError(f"Invalid fragment specification: {token}")
