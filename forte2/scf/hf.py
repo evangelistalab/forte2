@@ -931,13 +931,9 @@ class GHF(SCFBase):
             mo_a, mo_b = self._guess_ms(self.C[0])
             occ = list(mo_a[: self.na_guess]) + list(mo_b[: self.nb_guess])
             occ = sorted(occ)
-            Kaa, Kab, Kba, Kbb = fock_builder.build_K(
-                [self.C[0][:nbf, occ], self.C[0][nbf:, occ]]
-            )
+            Kaa, Kab, Kba, Kbb = fock_builder.build_K([self.C[0][:, occ]])
         else:
-            Kaa, Kab, Kba, Kbb = fock_builder.build_K(
-                [self.C[0][:nbf, : self.nel], self.C[0][nbf:, : self.nel]]
-            )
+            Kaa, Kab, Kba, Kbb = fock_builder.build_K([self.C[0][:, : self.nel]])
         F = H.copy()
         F[:nbf, :nbf] += Jaa + Jbb - Kaa
         F[:nbf, nbf:] += -Kab

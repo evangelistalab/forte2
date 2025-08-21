@@ -114,6 +114,11 @@ class FockBuilder:
         return J
 
     def build_K(self, C):
+        if self.system.two_component:
+            assert (
+                len(C) == 1
+            ), "C must be a list with one element for two-component systems."
+            C = [C[0][: self.nbf, :], C[0][self.nbf :, :]]
         Y = [np.einsum("Pmr,mi->Pri", self.B, Ci.conj(), optimize=True) for Ci in C]
         if self.system.two_component:
             K = []
