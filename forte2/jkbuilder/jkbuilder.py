@@ -1,5 +1,6 @@
 import numpy as np
 import scipy as sp
+import itertools
 
 from forte2 import ints
 from forte2.system import System, ModelSystem
@@ -31,6 +32,8 @@ class FockBuilder:
             self.B = cholesky_wrapper(eri, tol=-1)
             self.B = self.B.reshape((self.B.shape[0], nbf, nbf))
             system.naux = self.B.shape[0]
+            self.nbf = nbf
+            self.naux = system.naux
             return
 
         if not system.cholesky_tei:
@@ -50,6 +53,8 @@ class FockBuilder:
             self.B, system.naux = self._build_B_cholesky(
                 system.basis, system.cholesky_tol
             )
+        self.naux = system.naux
+        self.nbf = system.nbf
 
     @staticmethod
     def _build_B_cholesky(basis, cholesky_tol):
@@ -250,3 +255,60 @@ class FockBuilder:
             The two-electron integrals in the form of a 4D array.
         """
         return self.two_electron_integrals_gen_block(C, C, C, C, antisymmetrize)
+
+    def two_electron_integrals_gen_block_spinor(
+        self, C1, C2, C3, C4, antisymmetrize=False
+    ):
+        r"""
+        Compute the two-electron integrals for a given set of orbitals. This method is
+        general and can handle different sets of orbitals for each index (p, q, r, s).
+
+        The resulting integrals are stored in a 4D array with the following convention:
+        V[p,q,r,s] = :math:`\langle pq | rs \rangle`, where
+
+        .. math::
+
+            \langle pq | rs \rangle = \iint \phi^*_p(r_1) \phi^*_q(r_2) \frac{1}{r_{12}} \phi_r(r_1) \phi_s(r_2) dr_1 dr_2
+
+
+        Parameters
+        ----------
+        C1 : NDArray
+            Coefficient matrix for the first set of orbitals (index p).
+        C2 : NDArray
+            Coefficient matrix for the second set of orbitals (index q).
+        C3 : NDArray
+            Coefficient matrix for the third set of orbitals (index r).
+        C4 : NDArray
+            Coefficient matrix for the fourth set of orbitals (index s).
+        antisymmetrize : bool, optional, default=False
+            Whether to antisymmetrize the integrals. If True, the integrals are antisymmetrized as:
+            V[p,q,r,s] = :math:`\langle pq || rs \rangle = \langle pq | rs \rangle - \langle pq | sr \rangle`
+
+        Returns
+        -------
+        V : NDArray
+            The two-electron integrals in the form of a 4D array.
+        """
+        nbf = self.nbf
+        V = np.zeros(
+            (C1.shape[1], C2.shape[1], C3.shape[1], C4.shape[1]), dtype=complex
+        )
+        _a = slice(0, nbf)
+        _b = slice(nbf, nbf * 2)
+        # equivalent to 4 nested for loops over a,b parts of of C1/2/3/4
+        for s1, s2, s3, s4 in itertools.product([_a, _b], repeat=4):
+            V += np.einsum(
+                "Pmn,Prs,mi,rj,nk,sl->ijkl",
+                self.B,
+                self.B,
+                C1[s1, :].conj(),
+                C2[s2, :].conj(),
+                C3[s3, :],
+                C4[s4, :],
+                optimize=True,
+            )
+
+        if antisymmetrize:
+            V -= np.einsum("ijkl->ijlk", V)
+        return V
