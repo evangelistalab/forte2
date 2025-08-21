@@ -586,9 +586,13 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         return d;
     }
 
-    /// Describe the excitation connection of a determinant relative to this one
+    /// Describe the excitation connection of a determinant d,
+    /// relative to this one. The excitation connection is defined 
+    /// as the creation and annihilation operators that need to be applied
+    /// to this determinant to obtain d.
     /// The excitation connection is a vector of 4 vectors:
-    /// [[alfa holes], [alfa particles], [beta holes], [beta particles]]
+    /// [[alfa annihilation], [alfa creation], 
+    ///  [beta annihilation], [beta creation]]
     std::vector<std::vector<size_t>> excitation_connection(const DeterminantImpl<N>& d) const {
         std::vector<std::vector<size_t>> excitation(4);
         for (size_t i = 0; i < nbits_half; i++) {
