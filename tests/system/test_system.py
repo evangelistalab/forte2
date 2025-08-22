@@ -83,10 +83,10 @@ def test_units():
     H 0.0 0.0 0.0
     H 0.0 0.0 1.0
     """
-    system = System(xyz=xyz, basis_set="cc-pvdz", unit="angstrom")
+    system = System(xyz=xyz, basis_set="cc-pvdz", unit="angstrom", reorient=False)
     assert system.unit == "angstrom"
     assert system.atoms[1][1][2] == pytest.approx(1.88972612)
-    system = System(xyz=xyz, basis_set="cc-pvdz", unit="bohr")
+    system = System(xyz=xyz, basis_set="cc-pvdz", unit="bohr", reorient=False)
     assert system.unit == "bohr"
     assert system.atoms[1][1][2] == pytest.approx(1.0)
 
@@ -98,7 +98,7 @@ def test_nuclear_dipole():
     H 0.0 0.0 1.0
     Li 2.0 0.0 0.0
     """
-    system = System(xyz=xyz, basis_set="cc-pvdz", unit="bohr")
+    system = System(xyz=xyz, basis_set="cc-pvdz", unit="bohr", reorient=False)
 
     nucdip = system.nuclear_dipole(unit="au")
     assert nucdip == pytest.approx([6.0, 0.0, 1.0])
@@ -111,7 +111,7 @@ def test_nuclear_quadrupole():
     H 0.0 0.0 1.0
     Li 2.0 0.0 0.0
     """
-    system = System(xyz=xyz, basis_set="cc-pvdz", unit="bohr")
+    system = System(xyz=xyz, basis_set="cc-pvdz", unit="bohr", reorient=False)
 
     nucquad = system.nuclear_quadrupole(unit="au")
     assert np.trace(nucquad) == pytest.approx(0.0)

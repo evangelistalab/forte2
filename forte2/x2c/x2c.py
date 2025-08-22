@@ -39,7 +39,7 @@ def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
     ], f"Invalid x2c_type: {x2c_type}. Must be 'sf' or 'so'."
 
     logger.log_info1(f"Number of contracted basis functions: {system.nbf}")
-    xbasis = build_basis(system.basis_set, system.atoms, decontract=True)
+    xbasis = build_basis(system.basis_set, system.geom_helper, decontract=True)
     proj = _get_projection_matrix(xbasis, system.basis, x2c_type=x2c_type)
 
     nbf_decon = len(xbasis)
