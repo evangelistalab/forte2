@@ -305,10 +305,6 @@ class GeometryHelper:
             # compute principle moments of inertia. These will be sorted in ascending order
             moi, moi_vectors = np.linalg.eigh(self.inertia_matrix)
 
-            # check if moi_vectors is right-handed
-            # if np.linalg.det(moi_vectors) < 0:
-            #     moi_vectors[:, 0] *= -1.0  # flip one axis to fix handedness
-
             shifted_atomic_positions = (
                 self.atomic_positions - self.center_of_mass[None, :]
             )
@@ -359,11 +355,6 @@ class GeometryHelper:
             logger.log_info1(
                 "Original atomic coordinates overwritten with principle atomic positions"
             )
-
-            # self.center_of_mass = np.einsum(
-            #     "a,ax->x", self.atomic_masses, self.atomic_positions
-            # ) / np.sum(self.atomic_masses)
-            # print(f"NEW COM: {self.center_of_mass}")
         else:
             self.prinrot = np.eye(3)
             self.prin_atomic_positions = self.atomic_positions.copy()
