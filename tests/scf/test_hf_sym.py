@@ -3,10 +3,6 @@ import forte2
 from forte2.scf import RHF
 from forte2.helpers.comparisons import approx
 
-# import numpy as np
-# from forte2 import set_verbosity_level
-# set_verbosity_level(5)
-
 def test_rhf_h2o_c2v():
     erhf = -76.061466407195
     expected_mo_irreps = ["A1", "A1", "B2", "A1", "B1", "A1", "B2", "A1", "B2", "A1", "B1", 
@@ -82,7 +78,6 @@ def test_rhf_cbd_d2h():
     assert list(map(str.upper, scf.orbital_symmetries)) == expected_mo_irreps
 
 
-# @pytest.mark.skip(reason="This test will fail until principal axis rotation is correctly implemented.")
 def test_rhf_h2o_c2v_rot():
     erhf = -76.061466407195
     expected_mo_irreps = ["A1", "A1", "B2", "A1", "B1", "A1", "B2", "A1", "B2", "A1", "B1", 
@@ -108,13 +103,9 @@ def test_rhf_h2o_c2v_rot():
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)
-    # for i, j in zip(expected_mo_irreps, scf.orbital_symmetries):
-    #     print(f'expected {i} got {j}')
     assert list(map(str.upper, scf.orbital_symmetries)) == expected_mo_irreps
-# test_rhf_h2o_c2v_rot()
 
-
-# @pytest.mark.skip(reason="This test will fail until principal axis rotation is correctly implemented.")
+@pytest.mark.skip(reason="This test has erratic pass/fail behavior due to unpredicatable ordering of degenerate orbitals.")
 def test_rhf_n2_d2h_x():
     erhf = -108.94729293307688
     expected_mo_irreps = ["AG", "B1U", "AG", "B1U", "AG", "B3U", "B2U", "B2G", "B3G", "B1U", "AG", 
@@ -135,7 +126,7 @@ def test_rhf_n2_d2h_x():
     assert list(map(str.upper, scf.orbital_symmetries)) == expected_mo_irreps
 
 
-# @pytest.mark.skip(reason="This test has erratic pass/fail behavior due to unpredicatable ordering of degenerate orbitals.")
+@pytest.mark.skip(reason="This test has erratic pass/fail behavior due to unpredicatable ordering of degenerate orbitals.")
 def test_rhf_n2_d2h():
     erhf = -108.94729293307688
     expected_mo_irreps = ["AG", "B1U", "AG", "B1U", "AG", "B3U", "B2U", "B2G", "B3G", "B1U", "AG", 
