@@ -1,7 +1,7 @@
 project = "Forte2"
 copyright = "2025, Evangelista Lab"
 author = "Evangelista Lab"
-release = "0.0.1"
+release = "0.1.0"
 
 extensions = [
     "autoapi.extension",
@@ -24,6 +24,7 @@ html_theme_options = {
         }
     ],
 }
+html_logo = "forte2-logo.png"
 
 autoapi_options = [
     "members",
