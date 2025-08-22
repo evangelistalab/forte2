@@ -903,30 +903,28 @@ class GHF(SCFBase):
         return self
 
     def _parse_state(self):
-        if self.ms_guess is None:
-            # default to low-spin state
-            self.ms_guess = (self.nel % 2) / 2
-        assert np.isclose(
-            int(round(self.ms_guess * 2)), self.ms_guess * 2
-        ), "ms_guess must be a multiple of 0.5."
-        self.twicems_guess = int(round(self.ms_guess * 2))
-        if self.nel % 2 != self.twicems_guess % 2:
-            raise ValueError(
-                f"{self.nel} electrons is incompatible with ms_guess={self.ms_guess}!"
-            )
-        self.na_guess = int(round(self.nel + self.twicems_guess) / 2)
-        self.nb_guess = int(round(self.nel - self.twicems_guess) / 2)
-        assert (
-            self.nel == self.na_guess + self.nb_guess
-        ), f"Number of electrons {self.nel} does not match na + nb = {self.na_guess} + {self.nb_guess}."
-        assert (
-            self.na_guess >= 0 and self.nb_guess >= 0
-        ), f"{self._scf_type} requires non-negative number of alpha and beta electrons."
+        if self.ms_guess is not None:
+            assert np.isclose(
+                int(round(self.ms_guess * 2)), self.ms_guess * 2
+            ), "ms_guess must be a multiple of 0.5."
+            self.twicems_guess = int(round(self.ms_guess * 2))
+            if self.nel % 2 != self.twicems_guess % 2:
+                raise ValueError(
+                    f"{self.nel} electrons is incompatible with ms_guess={self.ms_guess}!"
+                )
+            self.na_guess = int(round(self.nel + self.twicems_guess) / 2)
+            self.nb_guess = int(round(self.nel - self.twicems_guess) / 2)
+            assert (
+                self.nel == self.na_guess + self.nb_guess
+            ), f"Number of electrons {self.nel} does not match na + nb = {self.na_guess} + {self.nb_guess}."
+            assert (
+                self.na_guess >= 0 and self.nb_guess >= 0
+            ), f"{self._scf_type} requires non-negative number of alpha and beta electrons."
 
     def _build_fock(self, H, fock_builder, S):
         Jaa, Jbb = fock_builder.build_J([self.D[0], self.D[3]])
         nbf = Jaa.shape[0]
-        if self.iter == 0:
+        if self.iter == 0 and self.ms_guess is not None:
             # Apply na/nb_guess
             mo_a, mo_b = self._guess_ms(self.C[0])
             occ = list(mo_a[: self.na_guess]) + list(mo_b[: self.nb_guess])
@@ -946,7 +944,7 @@ class GHF(SCFBase):
 
     def _build_density_matrix(self):
         # D = Cocc Cocc^+
-        if self.iter == 0:
+        if self.iter == 0 and self.ms_guess is not None:
             # apply na/nb_guess
             occ_a, occ_b = self._guess_ms(self.C[0])
             Ca = self.C[0][:, occ_a[: self.na_guess]]
@@ -982,8 +980,9 @@ class GHF(SCFBase):
 
     def _initial_guess(self, H, guess_type="minao"):
         C = RHF._initial_guess(self, H, guess_type)[0]
-        if self.twicems_guess % 2 == 0 and self.guess_mix:
-            C = guess_mix(C, self.nel - 1, twocomp=True)
+        if self.guess_mix and self.ms_guess is not None:
+            if self.ms_guess == 0:
+                C = guess_mix(C, self.nel - 1, twocomp=True)
         if self.alpha_beta_mix:
             C = alpha_beta_mix(C)
         if self.break_complex_symmetry:
