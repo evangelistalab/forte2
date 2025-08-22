@@ -76,7 +76,6 @@ class RestrictedMOIntegrals:
 
             # one-electron contributions to the energy
             self.E += 2.0 * np.einsum("mi,mn,ni->", Ccore, H_ao, Ccore)
-
             J, K = jkbuilder.build_JK([Ccore])
 
             # two-electron contributions to the energy
@@ -160,7 +159,6 @@ class SpinorbitalIntegrals:
     use_aux_corr: bool = False
     fock_builder: FockBuilder = None
     antisymmetrize: bool = False
-    spinorbital: bool = False
 
     def __post_init__(self):
         assert self.system.two_component, "System must be two-component."
@@ -181,56 +179,28 @@ class SpinorbitalIntegrals:
         H_ao = self.system.ints_hcore()
 
         # one-electron contributions to the one-electron integrals
-        self.H = np.einsum("mi,mn,nj->ij", C, H_ao, C)
+        self.H = np.einsum("mi,mn,nj->ij", C.conj(), H_ao, C)
 
-        if self.core_spinorbitals:
+        if len(self.core_spinorbitals) > 0:
             # compute the J and K matrices contributions from the core orbitals
             Ccore = self.C[:, self.core_spinorbitals]
 
             # one-electron contributions to the energy
-            self.E += 2.0 * np.einsum("mi,mn,ni->", Ccore, H_ao, Ccore)
+            self.E += np.einsum("mi,mn,ni->", Ccore.conj(), H_ao, Ccore)
+            (Jaa, Jbb), (Kaa, Kab, Kba, Kbb) = jkbuilder.build_JK([Ccore])
 
-            J, K = jkbuilder.build_JK([Ccore])
+            JK = np.block([[Jaa + Jbb - Kaa, -Kab], [-Kba, Jaa + Jbb - Kbb]])
 
             # two-electron contributions to the energy
-            self.E += np.einsum("mi,mn,ni->", Ccore, 2 * J[0] - K[0], Ccore)
+            self.E += 0.5 * np.einsum("mi,mn,ni->", Ccore.conj(), JK, Ccore)
 
             # two-electron contributions to the one-electron integrals
-            self.H += np.einsum("mi,mn,nj->ij", C, 2 * J[0] - K[0], C)
+            self.H += np.einsum("mi,mn,nj->ij", C.conj(), JK, C)
 
         # two-electron integrals
-        self.V = jkbuilder.two_electron_integrals_block(
+        self.V = jkbuilder.two_electron_integrals_block_spinor(
             C, antisymmetrize=self.antisymmetrize
         )
-
-        if self.spinorbital:
-            self._convert_to_spinorbital()
-
-    def _convert_to_spinorbital(self):
-        """
-        Convert restricted spatial orbitals into spinorbitals.
-        """
-        nso = 2 * self.norb
-
-        temp = self.H.copy()
-        self.H = np.zeros((nso, nso))
-        self.H[::2, ::2] = temp
-        self.H[1::2, 1::2] = temp
-
-        temp = self.V.copy()
-        self.V = np.zeros((nso, nso, nso, nso))
-        if self.antisymmetrize:
-            self.V[::2, ::2, ::2, ::2] = temp - temp.transpose(0, 1, 3, 2)  # v(aa)
-            self.V[1::2, 1::2, 1::2, 1::2] = temp - temp.transpose(0, 1, 3, 2)  # v(bb)
-            self.V[::2, 1::2, ::2, 1::2] = temp
-            self.V[1::2, ::2, 1::2, ::2] = temp.transpose(1, 0, 3, 2)
-            self.V[::2, 1::2, 1::2, ::2] = -temp.transpose(0, 1, 3, 2)
-            self.V[1::2, ::2, ::2, 1::2] = -temp.transpose(1, 0, 2, 3)
-        else:
-            self.V[::2, ::2, ::2, ::2] = temp
-            self.V[1::2, 1::2, 1::2, 1::2] = temp
-            self.V[::2, 1::2, ::2, 1::2] = temp
-            self.V[1::2, ::2, 1::2, ::2] = temp.transpose(1, 0, 3, 2)
 
 
 @dataclass

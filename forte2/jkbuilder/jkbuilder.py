@@ -149,6 +149,12 @@ class FockBuilder:
             A tuple containing the lists of Coulomb (J) and exchange (K) matrices.
         """
         D = [np.einsum("mi,ni->mn", Ci, Ci.conj(), optimize=True) for Ci in C]
+        if self.system.two_component:
+            assert (
+                len(C) == 1
+            ), "C must be a list with one element for two-component systems."
+            # build_J only needs the aa and bb parts of the density matrix
+            D = [D[0][: self.nbf, : self.nbf], D[0][self.nbf :, self.nbf :]]
         J = self.build_J(D)
         K = self.build_K(C)
         return J, K
@@ -303,6 +309,9 @@ class FockBuilder:
         _b = slice(nbf, nbf * 2)
         # equivalent to 4 nested for loops over a,b parts of of C1/2/3/4
         for s1, s2, s3, s4 in itertools.product([_a, _b], repeat=4):
+            # this essentially enforces the spin orthogonality of the AOs
+            if (s1 != s3) or (s2 != s4):
+                continue
             V += np.einsum(
                 "Pmn,Prs,mi,rj,nk,sl->ijkl",
                 self.B,
@@ -317,3 +326,29 @@ class FockBuilder:
         if antisymmetrize:
             V -= np.einsum("ijkl->ijlk", V)
         return V
+
+    def two_electron_integrals_block_spinor(self, C, antisymmetrize=False):
+        r"""
+        Compute the two-electron integrals for a given set of spin-orbitals.
+
+        The resulting integrals are stored in a 4D array with the following convention:
+        V[p,q,r,s] = :math:`\langle pq | rs \rangle`, where
+
+        .. math::
+
+            \langle pq | rs \rangle = \iint \phi^*_p(r_1) \phi^*_q(r_2) \frac{1}{r_{12}} \phi_r(r_1) \phi_s(r_2) dr_1 dr_2
+
+        Parameters
+        ----------
+        C : NDArray
+            Coefficient matrix for the set of spin-orbitals.
+        antisymmetrize : bool, optional, default=False
+            Whether to antisymmetrize the integrals. If True, the integrals are antisymmetrized as:
+            V[p,q,r,s] = :math:`\langle pq || rs \rangle = \langle pq | rs \rangle - \langle pq | sr \rangle`
+
+        Returns
+        -------
+        V : NDArray
+            The two-electron integrals in the form of a 4D array.
+        """
+        return self.two_electron_integrals_gen_block_spinor(C, C, C, C, antisymmetrize)
