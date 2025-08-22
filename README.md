@@ -5,6 +5,5 @@
 [![Documentation Status](https://readthedocs.org/projects/forte2/badge/?version=latest)](http://forte2.readthedocs.io/en/latest/?badge=latest)
 
 **Code authors**: [Evangelista Lab](https://evangelistalab.org/index.html)
-**Documentation**: [Read the Docs](http://forte2.readthedocs.io/en/latest/)
 
-Compile with `pip install --no-build-isolation -ve .`
+**Documentation**: [Read the Docs](http://forte2.readthedocs.io/en/latest/)

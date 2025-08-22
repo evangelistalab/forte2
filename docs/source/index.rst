@@ -1,7 +1,5 @@
-Forte2 documentation
+Forte2: An open-source suite of quantum chemistry methods for strongly correlated electrons
 ====================
-
-**Forte2: An open-source suite of quantum chemistry methods for strongly correlated electrons**
 
 .. image:: https://github.com/evangelistalab/forte2/actions/workflows/build.yml/badge.svg
    :target: https://github.com/evangelistalab/forte2/actions/workflows/build.yml
