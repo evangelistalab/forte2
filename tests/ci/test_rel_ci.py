@@ -74,7 +74,7 @@ def test_rel_ci_hf_ghf():
         unit="bohr",
         x2c_type="so",
     )
-    scf = GHF(charge=0, econv=1e-10)(system)
+    scf = GHF(charge=0)(system)
     ci = RelCI(
         state=State(nel=10, multiplicity=1, ms=0.0),
         core_spinorbitals=[0, 1],
