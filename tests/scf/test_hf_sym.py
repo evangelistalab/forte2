@@ -105,7 +105,7 @@ def test_rhf_h2o_c2v_rot():
     assert scf.E == approx(erhf)
     assert list(map(str.upper, scf.orbital_symmetries)) == expected_mo_irreps
 
-@pytest.mark.skip(reason="This test has erratic pass/fail behavior due to unpredicatable ordering of degenerate orbitals.")
+
 def test_rhf_n2_d2h_x():
     erhf = -108.94729293307688
     expected_mo_irreps = ["AG", "B1U", "AG", "B1U", "AG", "B3U", "B2U", "B2G", "B3G", "B1U", "AG", 
@@ -123,10 +123,20 @@ def test_rhf_n2_d2h_x():
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)
-    assert list(map(str.upper, scf.orbital_symmetries)) == expected_mo_irreps
+    try:
+        assert list(map(str.upper, scf.orbital_symmetries)) == expected_mo_irreps
+    except:
+        for e1, e2 in zip(scf.orbital_symmetries, expected_mo_irreps):
+            try:
+                assert e1.upper() == e2
+            except:
+                if e1.upper() == 'B2G' and e2 == 'B3G': continue
+                elif e1.upper() == 'B3G' and e2 == 'B2G': continue
+                elif e1.upper() == 'B2U' and e2 == 'B3U': continue
+                elif e1.upper() == 'B3U' and e2 == 'B2U': continue
+                else: raise AssertionError('Symmetry assignment wrong beyond b2g/b3g and b2u/b3u interchanges.')
 
 
-@pytest.mark.skip(reason="This test has erratic pass/fail behavior due to unpredicatable ordering of degenerate orbitals.")
 def test_rhf_n2_d2h():
     erhf = -108.94729293307688
     expected_mo_irreps = ["AG", "B1U", "AG", "B1U", "AG", "B3U", "B2U", "B2G", "B3G", "B1U", "AG", 
@@ -144,4 +154,15 @@ def test_rhf_n2_d2h():
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)
-    assert list(map(str.upper, scf.orbital_symmetries)) == expected_mo_irreps
+    try:
+        assert list(map(str.upper, scf.orbital_symmetries)) == expected_mo_irreps
+    except:
+        for e1, e2 in zip(scf.orbital_symmetries, expected_mo_irreps):
+            try:
+                assert e1.upper() == e2
+            except:
+                if e1.upper() == 'B2G' and e2 == 'B3G': continue
+                elif e1.upper() == 'B3G' and e2 == 'B2G': continue
+                elif e1.upper() == 'B2U' and e2 == 'B3U': continue
+                elif e1.upper() == 'B3U' and e2 == 'B2U': continue
+                else: raise AssertionError('Symmetry assignment wrong beyond b2g/b3g and b2u/b3u interchanges.')
