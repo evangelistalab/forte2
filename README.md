@@ -1,3 +1,5 @@
+![forte](docs/source/forte2-logo.png)
+
 # Forte2: An open-source suite of quantum chemistry methods for strongly correlated electrons
 
 [![Build Status](https://github.com/evangelistalab/forte2/actions/workflows/build.yml/badge.svg)](https://github.com/evangelistalab/forte2/actions/workflows/build.yml)
