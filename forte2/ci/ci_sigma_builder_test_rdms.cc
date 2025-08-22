@@ -5,7 +5,7 @@
 #include "helpers/blas.h"
 
 #include "ci_sigma_builder.h"
-#include "sparse_state.h"
+#include "sparse/sparse_state.h"
 
 namespace forte2 {
 

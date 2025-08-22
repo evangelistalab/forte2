@@ -8,7 +8,7 @@
 
 namespace forte2 {
 
-np_matrix CISigmaBuilder::compute_ss_2rdm(np_vector C_left, np_vector C_right, bool alfa) const {
+np_matrix CISigmaBuilder::compute_ss_2rdm(np_vector C_left, np_vector C_right, Spin spin) const {
     local_timer timer;
 
     const auto na = lists_.na();
@@ -25,7 +25,7 @@ np_matrix CISigmaBuilder::compute_ss_2rdm(np_vector C_left, np_vector C_right, b
     auto rdm = make_zeros<nb::numpy, double, 2>({npairs, npairs});
 
     // skip building the RDM if there are not enough electrons
-    if ((alfa and (na < 2)) or ((!alfa) and (nb < 2)))
+    if ((is_alpha(spin) and (na < 2)) or (is_beta(spin) and (nb < 2)))
         return rdm;
 
     auto Cl_span = vector::as_span(C_left);
@@ -36,37 +36,40 @@ np_matrix CISigmaBuilder::compute_ss_2rdm(np_vector C_left, np_vector C_right, b
     const auto& alfa_address = lists_.alfa_address();
     const auto& beta_address = lists_.beta_address();
 
-    int num_2h_classes =
-        alfa ? lists_.alfa_address_2h()->nclasses() : lists_.beta_address_2h()->nclasses();
+    int num_2h_classes = is_alpha(spin) ? lists_.alfa_address_2h()->nclasses()
+                                        : lists_.beta_address_2h()->nclasses();
 
     for (int class_K = 0; class_K < num_2h_classes; ++class_K) {
-        size_t maxK = alfa ? lists_.alfa_address_2h()->strpcls(class_K)
-                           : lists_.beta_address_2h()->strpcls(class_K);
+        size_t maxK = is_alpha(spin) ? lists_.alfa_address_2h()->strpcls(class_K)
+                                     : lists_.beta_address_2h()->strpcls(class_K);
 
         // loop over blocks of matrix C
         for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
             if (lists_.block_size(nI) == 0)
                 continue;
 
-            auto tr = gather_block(Cr_span, TR, alfa, lists_, class_Ia, class_Ib);
+            auto tr = gather_block(Cr_span, TR, spin, lists_, class_Ia, class_Ib);
 
             for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
                 // The string class on which we don't act must be the same for I and J
-                if ((alfa and (class_Ib != class_Jb)) or (not alfa and (class_Ia != class_Ja)))
+                if ((is_alpha(spin) and (class_Ib != class_Jb)) or
+                    (is_beta(spin) and (class_Ia != class_Ja)))
                     continue;
                 if (lists_.block_size(nJ) == 0)
                     continue;
 
-                const size_t maxL =
-                    alfa ? beta_address->strpcls(class_Ib) : alfa_address->strpcls(class_Ia);
+                const size_t maxL = is_alpha(spin) ? beta_address->strpcls(class_Ib)
+                                                   : alfa_address->strpcls(class_Ia);
                 if (maxL > 0) {
                     // Get a pointer to the correct block of matrix C
-                    auto tl = gather_block(Cl_span, TL, alfa, lists_, class_Ja, class_Jb);
+                    auto tl = gather_block(Cl_span, TL, spin, lists_, class_Ja, class_Jb);
                     for (size_t K{0}; K < maxK; ++K) {
-                        auto& Krlist = alfa ? lists_.get_alfa_2h_list(class_K, K, class_Ia)
-                                            : lists_.get_beta_2h_list(class_K, K, class_Ib);
-                        auto& Kllist = alfa ? lists_.get_alfa_2h_list(class_K, K, class_Ja)
-                                            : lists_.get_beta_2h_list(class_K, K, class_Jb);
+                        auto& Krlist = is_alpha(spin)
+                                           ? lists_.get_alfa_2h_list(class_K, K, class_Ia)
+                                           : lists_.get_beta_2h_list(class_K, K, class_Ib);
+                        auto& Kllist = is_alpha(spin)
+                                           ? lists_.get_alfa_2h_list(class_K, K, class_Ja)
+                                           : lists_.get_beta_2h_list(class_K, K, class_Jb);
                         for (const auto& [sign_K, p, q, I] : Krlist) {
                             const size_t pq_index = pair_index_gt(p, q);
                             for (const auto& [sign_L, r, s, J] : Kllist) {
@@ -87,11 +90,11 @@ np_matrix CISigmaBuilder::compute_ss_2rdm(np_vector C_left, np_vector C_right, b
 }
 
 np_matrix CISigmaBuilder::compute_aa_2rdm(np_vector C_left, np_vector C_right) const {
-    return compute_ss_2rdm(C_left, C_right, true);
+    return compute_ss_2rdm(C_left, C_right, Spin::Alpha);
 }
 
 np_matrix CISigmaBuilder::compute_bb_2rdm(np_vector C_left, np_vector C_right) const {
-    return compute_ss_2rdm(C_left, C_right, false);
+    return compute_ss_2rdm(C_left, C_right, Spin::Beta);
 }
 
 np_tensor4 CISigmaBuilder::compute_ab_2rdm(np_vector C_left, np_vector C_right) const {
@@ -201,7 +204,7 @@ np_tensor4 CISigmaBuilder::compute_sf_2rdm(np_vector C_left, np_vector C_right) 
 
     // To reduce the  memory footprint, we compute the aa and bb contributions in a packed
     // format and one at a time.
-    for (auto spin : {true, false}) {
+    for (auto spin : {Spin::Alpha, Spin::Beta}) {
         auto rdm_ss = compute_ss_2rdm(C_left, C_right, spin);
         auto rdm_ss_v = rdm_ss.view();
         for (size_t p{1}, pq{0}; p < norb; ++p) {

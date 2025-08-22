@@ -10,6 +10,7 @@ from forte2.system.system import System
 # module-level tokens
 o, v = object(), object()
 
+
 @dataclass
 class RestrictedMOIntegrals:
     r"""
@@ -25,6 +26,13 @@ class RestrictedMOIntegrals:
         Subspace of doubly occupied orbitals. Defaults to None.
     use_aux_corr : bool, optional, default=False
         If True, use ``system.auxiliary_basis_set_corr``, else use ``system.auxiliary_basis``.
+    fock_builder : FockBuilder, optional
+        An instance of FockBuilder to use for building the Fock matrix.
+        If not provided, a new FockBuilder will be created.
+    antisymmetrize : bool, optional, default=False
+        If True, antisymmetrize the two-electron integrals.
+    spinorbital : bool, optional, default=False
+        If True, the integrals are converted to the spin-orbital basis.
 
     Attributes
     ----------
@@ -33,7 +41,7 @@ class RestrictedMOIntegrals:
     H : NDArray
         The effective one-electron integrals.
     V : NDArray
-        The two-electron integrals stored in physics convention: V[p,q,r,s] = :math:`\langle pq | rs \rangle`.
+        The two-electron integrals stored in physicist's convention: V[p,q,r,s] = :math:`\langle pq | rs \rangle`.
     """
 
     system: System
@@ -42,9 +50,11 @@ class RestrictedMOIntegrals:
     core_orbitals: list = field(default_factory=list)
     use_aux_corr: bool = False
     fock_builder: FockBuilder = None
+    antisymmetrize: bool = False
     spinorbital: bool = False
 
     def __post_init__(self):
+        self.norb = len(self.orbitals)
         if self.fock_builder is None:
             jkbuilder = FockBuilder(self.system, self.use_aux_corr)
         else:
@@ -76,29 +86,39 @@ class RestrictedMOIntegrals:
             self.H += np.einsum("mi,mn,nj->ij", C, 2 * J[0] - K[0], C)
 
         # two-electron integrals
-        self.V = jkbuilder.two_electron_integrals_block(C)
+        self.V = jkbuilder.two_electron_integrals_block(
+            C, antisymmetrize=self.antisymmetrize
+        )
 
-    def convert_to_spinorbital(self):
-        '''
+        if self.spinorbital:
+            self._convert_to_spinorbital()
+
+    def _convert_to_spinorbital(self):
+        """
         Convert restricted spatial orbitals into spinorbitals.
-        '''
-        nso = 2 * self.system.nbf
+        """
+        nso = 2 * self.norb
 
         temp = self.H.copy()
         self.H = np.zeros((nso, nso))
-        self.H[::2, ::2] = temp 
+        self.H[::2, ::2] = temp
         self.H[1::2, 1::2] = temp
 
         temp = self.V.copy()
         self.V = np.zeros((nso, nso, nso, nso))
-        self.V[::2, ::2, ::2, ::2] = temp - temp.transpose(0, 1, 3,2) # v(aa)
-        self.V[1::2, 1::2, 1::2, 1::2] = temp - temp.transpose(0, 1, 3,2) # v(bb)
-        self.V[::2, 1::2, ::2, 1::2] = temp
-        self.V[1::2, ::2, 1::2, ::2] = temp.transpose(1, 0, 3, 2)
-        self.V[::2, 1::2, 1::2, ::2] = -temp.transpose(0, 1, 3, 2)
-        self.V[1::2, ::2, ::2, 1::2] = -temp.transpose(1, 0, 2, 3)
+        if self.antisymmetrize:
+            self.V[::2, ::2, ::2, ::2] = temp - temp.transpose(0, 1, 3, 2)  # v(aa)
+            self.V[1::2, 1::2, 1::2, 1::2] = temp - temp.transpose(0, 1, 3, 2)  # v(bb)
+            self.V[::2, 1::2, ::2, 1::2] = temp
+            self.V[1::2, ::2, 1::2, ::2] = temp.transpose(1, 0, 3, 2)
+            self.V[::2, 1::2, 1::2, ::2] = -temp.transpose(0, 1, 3, 2)
+            self.V[1::2, ::2, ::2, 1::2] = -temp.transpose(1, 0, 2, 3)
+        else:
+            self.V[::2, ::2, ::2, ::2] = temp
+            self.V[1::2, 1::2, 1::2, 1::2] = temp
+            self.V[::2, 1::2, ::2, 1::2] = temp
+            self.V[1::2, ::2, 1::2, ::2] = temp.transpose(1, 0, 3, 2)
 
-        self.spinorbital = True
 
 @dataclass
 class SRRestrictedMOIntegrals:
@@ -126,39 +146,38 @@ class SRRestrictedMOIntegrals:
 
     def __post_init__(self):
         if not self.ints.spinorbital:
-            raise ValueError("Expected restricted spin-orbital integrals (ints.spinorbital == True).")
-        
+            raise ValueError(
+                "Expected restricted spin-orbital integrals (ints.spinorbital == True)."
+            )
+
         self.o = slice(0, self.ints.system.nel - self.frozen)
         self.v = slice(self.ints.system.nel, self.ints.system.nbf - self.virtual)
 
         self.build_fock()
 
     def __getitem__(self, key):
-
-        idx = tuple(self.o if k == 'o' else self.v if k == 'v' else k for k in key)
+        idx = tuple(self.o if k == "o" else self.v if k == "v" else k for k in key)
         if len(idx) == 2:
             return self.F[idx]
         if len(idx) == 4:
             return self.ints.V[idx]
         raise IndexError("Use 2 indices for H or 4 indices for V.")
-    
+
     def build_fock(self):
         self.F = self.ints.H + np.einsum("piqi->pq", self.ints.V[:, self.o, :, self.o])
         self.eps_o = np.diag(self.F[self.o, self.o])
         self.eps_v = np.diag(self.F[self.v, self.v])
 
     def scf_energy(self):
-        E = (
-            np.einsum('ii->', self.ints.H[self.o, self.o])
-            + 0.5 * np.einsum("ijij->", self.ints.V[self.o, self.o, self.o, self.o])
+        E = np.einsum("ii->", self.ints.H[self.o, self.o]) + 0.5 * np.einsum(
+            "ijij->", self.ints.V[self.o, self.o, self.o, self.o]
         )
         E += self.ints.system.nuclear_repulsion
         return E
-    
+
     def scf_energy_fock(self):
-        E = (
-            np.einsum('ii->', self.F[self.o, self.o])
-            - 0.5 * np.einsum("ijij->", self.ints.V[self.o, self.o, self.o, self.o])
+        E = np.einsum("ii->", self.F[self.o, self.o]) - 0.5 * np.einsum(
+            "ijij->", self.ints.V[self.o, self.o, self.o, self.o]
         )
         E += self.ints.system.nuclear_repulsion
         return E

@@ -16,6 +16,7 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
     active_orbitals: list[int] | list[list[int]] = None
     frozen_virtual_orbitals: list[int] = None
     final_orbital: str = "semicanonical"
+    ci_algorithm: str = "hz"
 
     def __post_init__(self):
         self.sa_info = StateAverageInfo(
@@ -30,6 +31,12 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
             "semicanonical",
             "original",
         ], "final_orbital must be either 'semicanonical' or 'original'."
+
+        assert self.ci_algorithm.lower() in [
+            "hz",
+            "kh",
+            "exact",
+        ], "ci_algorithm must be one of 'hz', 'kh', or 'exact'."
 
     def _startup(self):
         if not self.parent_method.executed:

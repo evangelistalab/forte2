@@ -1,5 +1,9 @@
 name: forte2
 
+channels:
+  - conda-forge
+  - nodefaults
+
 dependencies:
     - python=3.12
     - pip
@@ -16,4 +20,3 @@ dependencies:
     - pytest-cov
     - conda-forge::libint
     - conda-forge::regex
-    - conda-forge::basis_set_exchange

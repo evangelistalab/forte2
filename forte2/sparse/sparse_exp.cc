@@ -2,7 +2,7 @@
 #include <numeric>
 #include <cmath>
 
-#include "ci/sparse_exp.h"
+#include "sparse/sparse_exp.h"
 
 namespace forte2 {
 

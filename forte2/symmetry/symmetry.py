@@ -1,5 +1,5 @@
 r"""
-This module computes symmetry irreps for MOs a posteriori by computing the character of each MO 
+This module computes symmetry irreps for MOs a posteriori by computing the character of each MO
 under each symmetry operation of the point group. In a nutshell, what we want is the character
 
 .. math::
@@ -66,6 +66,26 @@ _CHARACTER_TABLE = {
     "CI": {"g": [+1, +1], "u": [+1, -1]},
     "C2": {"a": [+1, +1], "b": [+1, -1]},
     "C1": {"a": [+1]},
+}
+
+_COTTON_LABELS = {
+    "C1": {"a": 0},
+    "CI": {"g": 0, "u": 1},
+    "C2": {"a": 0, "b": 1},
+    "CS": {"a'": 0, "a''": 1},
+    "D2": {"a": 0, "b1": 1, "b2": 2, "b3": 3},
+    "C2V": {"a1": 0, "a2": 1, "b1": 2, "b2": 3},
+    "C2H": {"ag": 0, "bg": 1, "au": 2, "bu": 3},
+    "D2H": {
+        "ag": 0,
+        "b1g": 1,
+        "b2g": 2,
+        "b3g": 3,
+        "au": 4,
+        "b1u": 5,
+        "b2u": 6,
+        "b3u": 7,
+    },
 }
 
 _PRINCIPAL_AXIS = np.array([0.0, 0.0, 1.0])
@@ -208,22 +228,24 @@ def build_U_matrices(symmetry_operations, system, info, tol=1e-6):
 
 
 def assign_mo_symmetries(system, S, C):
-
     if system.point_group == "C1":
-        return ["a" for _ in range(C.shape[1])]
+        labels = ["a" for _ in range(C.shape[1])]
+        irrep_indices = [0 for _ in range(C.shape[1])]
+    else:
+        info = BasisInfo(system, system.basis)
 
-    info = BasisInfo(system, system.basis)
+        # step 1: build symmetry transformation matrices
+        symmetry_ops = get_symmetry_ops(system.point_group)
 
-    # step 1: build symmetry transformation matrices
-    symmetry_ops = get_symmetry_ops(system.point_group)
+        # step 2: build U matrices (permutation * phase)
+        U = build_U_matrices(symmetry_ops, system, info, tol=1e-6)
 
-    # step 2: build U matrices (permutation * phase)
-    U = build_U_matrices(symmetry_ops, system, info, tol=1e-6)
+        # step 3: assign irrep labels
+        labels, chars = assign_irrep_labels(system.point_group, U, S, C)
 
-    # step 3: assign irrep labels
-    labels, chars = assign_irrep_labels(system.point_group, U, S, C)
+        for i, c in enumerate(chars):
+            logger.log_debug(f"orbital {i + 1}, character = {c}")
 
-    for i, c in enumerate(chars):
-        logger.log_debug(f"orbital {i + 1}, character = {c}")
+        irrep_indices = [_COTTON_LABELS[system.point_group][label] for label in labels]
 
-    return labels
+    return labels, irrep_indices

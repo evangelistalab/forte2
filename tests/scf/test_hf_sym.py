@@ -29,7 +29,7 @@ def test_rhf_h2o_c2v():
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)
-    assert list(map(str.upper, scf.orbital_symmetries)) == expected_mo_irreps
+    assert list(map(str.upper, scf.irrep_labels)) == expected_mo_irreps
 
 
 def test_rhf_cbd_d2h():
@@ -75,7 +75,7 @@ def test_rhf_cbd_d2h():
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)
-    assert list(map(str.upper, scf.orbital_symmetries)) == expected_mo_irreps
+    assert list(map(str.upper, scf.irrep_labels)) == expected_mo_irreps
 
 
 def test_rhf_h2o_c2v_rot():
@@ -103,7 +103,7 @@ def test_rhf_h2o_c2v_rot():
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)
-    assert list(map(str.upper, scf.orbital_symmetries)) == expected_mo_irreps
+    assert list(map(str.upper, scf.irrep_labels)) == expected_mo_irreps
 
 
 def test_rhf_n2_d2h_x():
@@ -123,6 +123,7 @@ def test_rhf_n2_d2h_x():
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)
+
     try:
         assert list(map(str.upper, scf.orbital_symmetries)) == expected_mo_irreps
     except:
@@ -154,6 +155,7 @@ def test_rhf_n2_d2h():
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)
+
     try:
         assert list(map(str.upper, scf.orbital_symmetries)) == expected_mo_irreps
     except:
