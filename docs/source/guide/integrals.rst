@@ -1,10 +1,10 @@
 Obtaining integrals
 ===================
 
-Forte2 uses the [Libint2](https://github.com/evaleev/libint) integral engine. 
+Forte2 uses the `Libint2 <https://github.com/evaleev/libint>`_ integral engine. 
 It provides a straightforward way of accessing atomic integrals through its API. 
-You can obtain the integrals for a given molecular system by first specifying a molecular system and using the `forte2.ints` module. 
-Almost all operators supported by Libint2 (see [Libint2 documentation](https://github.com/evaleev/libint/wiki/using-modern-CPlusPlus-API#create-an-integral-engine)) are available.
+You can obtain the integrals for a given molecular system by first specifying a molecular system and using the ``forte2.ints`` module. 
+Almost all operators supported by Libint2 (see `Libint2 documentation <https://github.com/evaleev/libint/wiki/using-modern-CPlusPlus-API#create-an-integral-engine>`_) are available.
 Here are some examples of how to obtain the most common integrals. First one needs to set up the molecular system::
 
     import forte2
@@ -18,7 +18,7 @@ Here are some examples of how to obtain the most common integrals. First one nee
         minao_basis_set="ano-r0",
     )
 
-The `system` object will now contain parsed geometry under `atoms`, the basis set under `basis`, the auxiliary basis set under `auxiliary_basis`, and the minimal atomic basis set under `minao_basis`.
+The ``system`` object will now contain parsed geometry under ``atoms``, the basis set under ``basis``, the auxiliary basis set under ``auxiliary_basis``, and the minimal atomic basis set under ``minao_basis``.
 Getting integrals is now straightforward::
 
     # overlap integrals
