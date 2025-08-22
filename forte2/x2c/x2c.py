@@ -6,7 +6,7 @@ from forte2.helpers import logger, eigh_gen
 from forte2.system.build_basis import build_basis
 
 X2C_LINDEP_TOL = 5e-8
-LIGHT_SPEED = scipy.constants.physical_constants["inverse fine-structure constant"][0]
+LIGHT_SPEED = 137.035999177
 ROW_Z_START = np.array([1, 3, 11, 19, 37, 55, 87])
 
 
