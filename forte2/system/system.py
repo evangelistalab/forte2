@@ -11,7 +11,7 @@ from forte2.helpers.matrix_functions import (
 )
 from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
-from .parse_geometry import parse_geometry, _GeometryHelper
+from .parse_geometry import parse_geometry, GeometryHelper
 from .atom_data import ATOM_DATA, Z_TO_ATOM_SYMBOL
 
 import numpy as np
@@ -57,6 +57,8 @@ class System:
         The tolerance for the Cholesky decomposition of the 4D ERI tensor. Only used if `cholesky_tei` is True.
     point_group : str, optional, default="C1"
         The Abelian point group used to assign symmetries of orbitals a posteriori. This only allows one to assign orbital symmetry, it does **not** imply that symmetry is used in a calculation.
+    reorient : bool, optional, default=True
+        Whether to reorient the molecular geometry (important for symmetry detection).
 
     Attributes
     ----------
@@ -113,6 +115,7 @@ class System:
     cholesky_tei: bool = False
     cholesky_tol: float = 1e-6
     point_group: str = "C1"
+    reorient: bool = True
 
     ### Non-init attributes
     atoms: list[list[float, list[float, float, float]]] = field(
@@ -150,7 +153,7 @@ class System:
 
     def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
-        self.geom_helper = _GeometryHelper(self.atoms)
+        self.geom_helper = GeometryHelper(self.atoms, reorient=self.reorient)
         self.atoms = self.geom_helper.atoms
         self.Zsum = self.geom_helper.Zsum
         self.natoms = self.geom_helper.natoms
@@ -164,9 +167,11 @@ class System:
         self.atom_to_center = self.geom_helper.atom_to_center
         self.prin_atomic_positions = self.geom_helper.prin_atomic_positions
 
-        logger.log_info1('Principle Atomic Positions (a.u.):')
+        logger.log_info1("Principle Atomic Positions (a.u.):")
         for i in range(self.natoms):
-            logger.log_info1(f'   {Z_TO_ATOM_SYMBOL[self.atoms[i][0]]}   {self.prin_atomic_positions[i, 0]:<.8f}   {self.prin_atomic_positions[i, 1]:<.8f}   {self.prin_atomic_positions[i, 2]:<.8f}')
+            logger.log_info1(
+                f"   {Z_TO_ATOM_SYMBOL[self.atoms[i][0]]}   {self.prin_atomic_positions[i, 0]:<.8f}   {self.prin_atomic_positions[i, 1]:<.8f}   {self.prin_atomic_positions[i, 2]:<.8f}"
+            )
 
     def _init_basis(self):
         self.basis = build_basis(self.basis_set, self.geom_helper)
@@ -185,7 +190,8 @@ class System:
                     "Using a separate auxiliary basis is not recommended!"
                 )
                 self.auxiliary_basis_set_corr = build_basis(
-                    self.auxiliary_basis_set_corr, self.geom_helper,
+                    self.auxiliary_basis_set_corr,
+                    self.geom_helper,
                 )
             else:
                 self.auxiliary_basis_set_corr = self.auxiliary_basis
