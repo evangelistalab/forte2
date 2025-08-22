@@ -24,7 +24,7 @@ html_theme_options = {
         }
     ],
 }
-html_logo = "forte2-logo.pdf"
+html_logo = "forte2-logo.png"
 
 autoapi_options = [
     "members",
