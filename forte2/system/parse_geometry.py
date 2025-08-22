@@ -254,7 +254,7 @@ def parse_zmatrix(zmat, unit):
             c = np.dot(rotation_mat(v1, phi), c)
             coord = c + p1
         atomic_number = ATOM_SYMBOL_TO_Z[symbol.upper()]
-        atoms.append((atomic_number, coord))
+        atoms.append([atomic_number, coord])
         coords.append(coord)
 
     return atoms
