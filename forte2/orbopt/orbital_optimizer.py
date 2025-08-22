@@ -49,6 +49,8 @@ class MCOptimizer(ActiveSpaceSolver):
         Energy convergence tolerance.
     gconv : float, optional, default=1e-7
         Gradient convergence tolerance.
+    die_if_not_converged : bool, optional, default=True
+        If True, raises an error if the optimization does not converge.
     micro_maxiter : int, optional, default=6
         Maximum number of microiterations for L-BFGS.
     ci_maxiter : int, optional, default=50
@@ -81,6 +83,7 @@ class MCOptimizer(ActiveSpaceSolver):
     maxiter: int = 50
     econv: float = 1e-8
     gconv: float = 1e-7
+    die_if_not_converged: bool = True
 
     ### L-BFGS solver (microiteration) parameters
     micro_maxiter: int = 6
@@ -99,6 +102,7 @@ class MCOptimizer(ActiveSpaceSolver):
     do_transition_dipole: bool = False
 
     ### Non-init attributes
+    converged: bool = field(default=False, init=False)
     executed: bool = field(default=False, init=False)
 
     def __call__(self, method):
@@ -256,6 +260,7 @@ class MCOptimizer(ActiveSpaceSolver):
             iter_info = f"{self.iter:>10d} {self.E_avg:>20.10f} {self.delta_ci_avg:>12.4e} {self.E_orb:>20.10f} {self.delta_orb:>12.4e} {self.g_rms:>12.4e} {lbfgs_str:>8} {conv_str:>8}"
             if conv:
                 logger.log_info1(iter_info)
+                self.converged = True
                 break
 
             # 3. DIIS Extrapolation
@@ -283,9 +288,14 @@ class MCOptimizer(ActiveSpaceSolver):
             self.iter += 1
         else:
             logger.log_info1("=" * width)
-            raise RuntimeError(
-                f"Orbital optimization did not converge in {self.maxiter} iterations."
-            )
+            if self.die_if_not_converged:
+                raise RuntimeError(
+                    f"Orbital optimization did not converge in {self.maxiter} iterations."
+                )
+            else:
+                logger.log_warning(
+                    f"Orbital optimization did not converge in {self.maxiter} iterations."
+                )
         # self.ci_solver.set_maxiter(ci_maxiter_save)
         self.ci_solver.set_ints(
             self.orb_opt.Ecore + self.system.nuclear_repulsion,

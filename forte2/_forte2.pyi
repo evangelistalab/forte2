@@ -360,6 +360,13 @@ class SlaterRules:
 
     def slater_rules(self, lhs: Determinant, rhs: Determinant) -> float: ...
 
+class RelSlaterRules:
+    def __init__(self, nspinor: int, scalar_energy: float, one_electron_integrals: Annotated[ArrayLike, dict(dtype='complex128', shape=(None, None))], two_electron_integrals: Annotated[ArrayLike, dict(dtype='complex128', shape=(None, None, None, None))]) -> None: ...
+
+    def energy(self, arg: Determinant, /) -> float: ...
+
+    def slater_rules(self, lhs: Determinant, rhs: Determinant) -> complex: ...
+
 class SparseState:
     """A class to represent a vector of determinants"""
 
