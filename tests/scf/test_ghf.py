@@ -33,7 +33,7 @@ def test_equivalence_to_uhf():
         basis_set="cc-pVQZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
     )
-    scf = GHF(charge=0)(system)
+    scf = GHF(charge=0, ms_guess=0.0)(system)
     scf.guess_mix = True
     scf.run()
     assert scf.E == approx(euhf)
