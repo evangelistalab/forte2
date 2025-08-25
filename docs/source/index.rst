@@ -10,7 +10,9 @@ Forte2: An open-source suite of quantum chemistry methods for strongly correlate
 .. image:: https://readthedocs.org/projects/forte2/badge/?version=latest
    :target: http://forte2.readthedocs.io/en/latest/?badge=latest
    :alt: Documentation Status
-
+.. image:: https://anaconda.org/conda-forge/forte2/badges/version.svg
+   :target: https://anaconda.org/conda-forge/forte2
+   :alt: Conda-Forge
 
 .. toctree::
    :maxdepth: 1
