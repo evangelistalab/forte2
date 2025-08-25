@@ -2,6 +2,7 @@ import pytest
 
 from forte2 import *
 from forte2.helpers.comparisons import approx
+
 # Ref Energies come from forte1
 
 
@@ -9,7 +10,7 @@ def test_aset_1():
     """
     test cutoff_method = threshold with a non-default cutoff value.
     """
-    eci     = -115.699156037836
+    eci = -115.699156037836
 
     xyz = """
     C       -2.2314881720      2.3523969887      0.1565319638                 
@@ -23,13 +24,15 @@ def test_aset_1():
     H        0.2749376338      3.2174213526      0.3670138598  
     """
 
-    system = System(xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="def2-universal-JKFIT")
+    system = System(
+        xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="def2-universal-JKFIT"
+    )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     mc = MCOptimizer(
         State(nel=24, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-        active_orbitals=[11, 12]
+        active_orbitals=[11, 12],
     )(rhf)
     aset = ASET(
         fragment=["C1-2", "H1-3"],
@@ -40,6 +43,7 @@ def test_aset_1():
     ci.run()
 
     assert ci.E == approx(eci)
+
 
 def test_aset_2():
     """
@@ -54,14 +58,16 @@ def test_aset_2():
     F       -2.2714806355      1.3880717623      0.2062454513     
     """
 
-    system = System(xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="def2-universal-JKFIT")
+    system = System(
+        xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="def2-universal-JKFIT"
+    )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     mc = MCOptimizer(
         State(nel=24, multiplicity=1, ms=0.0),
         frozen_core_orbitals=[0, 1, 2],
         core_orbitals=[3, 4, 5, 6, 7, 8, 9],
-        active_orbitals=[10, 11, 12, 13]
+        active_orbitals=[10, 11, 12, 13],
     )(rhf)
     aset = ASET(
         fragment=["N", "H"],
@@ -73,11 +79,12 @@ def test_aset_2():
 
     assert ci.E == approx(eci)
 
+
 def test_aset_3():
     """
     test no semicanonicalization.
     """
-    eci   = -115.699156030288
+    eci = -115.699156030288
 
     xyz = """
     C       -2.2314881720      2.3523969887      0.1565319638
@@ -91,7 +98,9 @@ def test_aset_3():
     H        0.2749376338      3.2174213526      0.3670138598
 """
 
-    system = System(xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="def2-universal-JKFIT")
+    system = System(
+        xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="def2-universal-JKFIT"
+    )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     mc = MCOptimizer(
@@ -111,38 +120,43 @@ def test_aset_3():
 
     assert ci.E == approx(eci)
 
+
 def test_aset_4():
     """
     Test cutoff_method = number of orbitals.
     """
 
-    eci     = -206.084138520357
+    eci = -206.084138520357
     xyz = """
     N       -1.1226987119      2.0137160725     -0.0992218410
     N       -0.1519067161      1.2402226172     -0.0345618482
     H        0.7253474870      1.7181546089     -0.2678695726
     F       -2.2714806355      1.3880717623      0.2062454513
     """
-    system = System(xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="def2-universal-JKFIT")
+    system = System(
+        xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="def2-universal-JKFIT"
+    )
 
     rhf = RHF(charge=0, econv=1e-10)(system)
     mc = MCOptimizer(
         State(nel=24, multiplicity=1, ms=0.0),
         frozen_core_orbitals=[0, 1, 2],
         core_orbitals=[3, 4, 5, 6, 7, 8, 9],
-        active_orbitals=[10, 11, 12, 13], econv=1e-9
+        active_orbitals=[10, 11, 12, 13],
+        econv=1e-9,
     )(rhf)
     aset = ASET(
         fragment=["N", "H"],
         cutoff_method="num_of_orbitals",
-        num_A_docc=5,
-        num_A_uocc=1,
+        num_A_occ=5,
+        num_A_vir=1,
     )(mc)
     aset.run()
-    ci = CI(State(system = system, multiplicity=1, ms=0.0))(aset)
+    ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
     ci.run()
 
     assert ci.E == approx(eci)
+
 
 def test_aset_5():
     eci = -154.269037292918
@@ -161,19 +175,17 @@ def test_aset_5():
     H           -0.645242334465    -1.402514539204     0.216831010104
 """
 
-    system = System(xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="def2-universal-JKFIT")
+    system = System(
+        xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="def2-universal-JKFIT"
+    )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     mc = MCOptimizer(
-        State(system = system, multiplicity=1, ms=0.0),
+        State(system=system, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
         active_orbitals=[15, 16],
     )(rhf)
-    aset = ASET(
-        fragment=["C1-2", "H1-3"],
-        cutoff_method="threshold",
-        cutoff=0.5
-    )(mc)
+    aset = ASET(fragment=["C1-2", "H1-3"], cutoff_method="threshold")(mc)
     ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
     ci.run()
 
