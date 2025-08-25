@@ -13,7 +13,7 @@ Forte2 uses the `functional composition <https://en.wikipedia.org/wiki/Function_
 This means that most methods should be a class with a ``__call__`` method that takes the previous method as an argument, and returns a new instance. Each method should also have a ``run`` method that executes the method and returns the result. This allows for easy chaining of methods, as shown in the example above.
 
 If you create new C++ functions or classes that are exposed through nanobind, make sure to document them in the binding code (`forte2/api`), 
-and run the `nanobind stubgen<https://nanobind.readthedocs.io/en/latest/typing.html#command-line-interface>` in the root directory::
+and run the `nanobind stubgen <https://nanobind.readthedocs.io/en/latest/typing.html#command-line-interface>`_ in the root directory::
 
     python -m nanobind.stubgen -m forte2._forte2 -O forte2
 

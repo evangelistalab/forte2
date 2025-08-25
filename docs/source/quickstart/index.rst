@@ -5,7 +5,7 @@ To get started with Forte2, you can either download it from conda-forge, or comp
 
 Install with conda
 ----
-If you have a conda distribution installed (e.g., `miniconda<https://www.anaconda.com/docs/getting-started/miniconda/main>`_),
+If you have a conda distribution installed (e.g., `miniconda <https://www.anaconda.com/docs/getting-started/miniconda/main>`_),
 you can obtain Forte2 from conda-forge::
 
     $ conda install -c conda-forge forte2
