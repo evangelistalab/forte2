@@ -12,6 +12,13 @@ Forte2 uses the `functional composition <https://en.wikipedia.org/wiki/Function_
 
 This means that most methods should be a class with a ``__call__`` method that takes the previous method as an argument, and returns a new instance. Each method should also have a ``run`` method that executes the method and returns the result. This allows for easy chaining of methods, as shown in the example above.
 
+If you create new C++ functions or classes that are exposed through nanobind, make sure to document them in the binding code (`forte2/api`), 
+and run the `nanobind stubgen<https://nanobind.readthedocs.io/en/latest/typing.html#command-line-interface>` in the root directory::
+
+    python -m nanobind.stubgen -m forte2._forte2 -O forte2
+
+This provides a "stub file" for (1) the RTD documentation, (2) autocomplete, argument hints, etc in IDEs like VSCode. Make sure to commit the stub file along with your other changes.
+
 Style Guide
 -----------
 Forte2 uses ``Black Formatter`` for Python code and ``Clang-Format`` for C++ code. Both can be obtained in VSCode via the extensions marketplace or via the command line.
