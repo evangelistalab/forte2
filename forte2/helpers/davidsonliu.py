@@ -48,7 +48,7 @@ class DavidsonLiuSolver:
         r_tol: float = 1e-6,
         eta: float | None = None,
         log_level: int = logger.get_verbosity_level(),
-        dtype: type = float,
+        dtype: type = np.float64,
     ):
         # size of the space
         self.size = size
@@ -139,7 +139,7 @@ class DavidsonLiuSolver:
         self._build_sigma = sigma_builder
 
     def add_h_diag(self, h_diag):
-        arr = np.asarray(h_diag, dtype=self.dtype)
+        arr = np.asarray(h_diag, self.dtype)
         if arr.shape != (self.size,):
             raise ValueError("h_diag must be shape (size,)")
         self.h_diag = arr.copy()
@@ -153,7 +153,7 @@ class DavidsonLiuSolver:
         guesses: NDArray
             ``guesses.shape == (size, n_guess)``, with n_guess between 1 and subspace_size.
         """
-        G = np.asarray(guesses, dtype=self.dtype)
+        G = np.asarray(guesses, self.dtype)
         if G.ndim != 2 or G.shape[0] != self.size:
             raise ValueError("guesses must be shape (size, n_guess)")
         self._guesses = G
@@ -162,7 +162,7 @@ class DavidsonLiuSolver:
         """
         project_out: list of arrays each shape (size,)
         """
-        self._proj_out = [np.asarray(v, dtype=self.dtype) for v in project_out]
+        self._proj_out = [np.asarray(v, self.dtype) for v in project_out]
 
     def solve(self):
 
@@ -180,6 +180,7 @@ class DavidsonLiuSolver:
                 # random if no guesses
                 rng = np.random.default_rng()
                 G = rng.uniform(-1, 1, size=(self.size, self.nroot))
+                G = G.astype(self.dtype)
             else:
                 G = self._guesses
 
@@ -459,11 +460,11 @@ class DavidsonLiuSolver:
             # orthogonalize against existing basis
             for i in range(n_existing):
                 ai = A_existing[:, i]
-                v -= np.dot(ai, v) * ai
+                v -= np.dot(ai.conj(), v) * ai
             # orthogonalize against new vectors
             for i in range(n_new):
                 si = A_new[:, i]
-                v -= np.dot(si, v) * si
+                v -= np.dot(si.conj(), v) * si
 
             # compute norm and discard if too small
             normv = norm(v)
@@ -481,7 +482,7 @@ class DavidsonLiuSolver:
                 max_overlap = max(max_overlap, np.abs(A_new.T.conj() @ v).max())
 
             # check normalization and orthogonality
-            norm2 = np.dot(v, v)
+            norm2 = np.dot(v.conj(), v)
             if (
                 max_overlap < self.schmidt_orthogonality_threshold
                 and abs(norm2 - 1.0) < self.schmidt_orthogonality_threshold
@@ -497,9 +498,9 @@ class DavidsonLiuSolver:
         """
         Check if the columns of b are orthonormal.
         """
-        if not np.allclose(b.conj().T @ b, np.eye(b.shape[1]), atol=1e-12):
+        if not np.allclose(b.T.conj() @ b, np.eye(b.shape[1]), atol=1e-12):
             logger.log_warning(f"{msg}")
-            logger.log_warning(f"S = {b.conj().T @ b}")
+            logger.log_warning(f"S = {b.T.conj() @ b}")
             raise ValueError(msg)
 
     def _print_information(self):
