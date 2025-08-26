@@ -337,6 +337,8 @@ void export_sparse_operator_api(nb::module_& m) {
             return sparse_operator_hamiltonian(scalar_energy, one_electron_integrals,
                                                two_electron_integrals, screen_thresh);
         },
+        "scalar_energy"_a, "one_electron_integrals"_a, "two_electron_integrals"_a,
+        "screen_thresh"_a = 1e-12,
         "Create a SparseOperator object representing the second quantized Hamiltonian.");
     // overloaded: complex Hamiltonian
     m.def(
@@ -346,6 +348,8 @@ void export_sparse_operator_api(nb::module_& m) {
             return sparse_operator_hamiltonian(scalar_energy, one_electron_integrals,
                                                two_electron_integrals, screen_thresh);
         },
+        "scalar_energy"_a, "one_electron_integrals"_a, "two_electron_integrals"_a,
+        "screen_thresh"_a = 1e-12,
         "Create a SparseOperator object representing the second quantized Hamiltonian.");
 }
 
