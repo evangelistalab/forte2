@@ -272,7 +272,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         X_inv = np.linalg.inv(X_mm)
         C_orth = X_inv @ Ca
 
-        # Build the fragment projector
+        # Build the fragment projectorf
         P_frag = self.P_frag
         F = C_orth.T @ P_frag @ C_orth
 
@@ -284,10 +284,21 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         # Split F
         F_oo = F[np.ix_(core_inds, core_inds)]
         F_vv = F[np.ix_(virt_inds, virt_inds)]
-        lo_vals, _ = np.linalg.eigh(F_oo)
-        lv_vals, _ = np.linalg.eigh(F_vv)
+        lo_vals, Uo = np.linalg.eigh(F_oo)
+        lv_vals, Uv = np.linalg.eigh(F_vv)
         occ_pairs = sorted(zip(core_inds, lo_vals), key=lambda x: x[1], reverse=True)
         vir_pairs = sorted(zip(virt_inds, lv_vals), key=lambda x: x[1], reverse=True)
+
+        Ca[:, core_inds] = Ca[:, core_inds] @ Uo
+        Ca[:, virt_inds] = Ca[:, virt_inds] @ Uv
+
+        C_orth[:, core_inds] = C_orth[:, core_inds] @ Uo
+        C_orth[:, virt_inds] = C_orth[:, virt_inds] @ Uv
+
+        F = C_orth.T @ P_frag @ C_orth
+        # diagF = np.diag(F)
+        # lo_diag = diagF[core_inds]
+        # lv_diag = diagF[virt_inds]
 
         # Partition by cutoff
         index_A_occ, index_B_occ = [], []
