@@ -28,6 +28,8 @@ class DavidsonLiuSolver:
         If None, no shift is applied.
     log_level : int, optional, default=logger.get_verbosity_level()
         Logging level for output messages.
+    dtype : type, optional, default=np.float64
+        Data type of the matrix to diagonalize. Must be float or complex.
 
     Attributes
     ----------
@@ -87,6 +89,10 @@ class DavidsonLiuSolver:
                 f"Davidson-Liu solver: basis_per_root ({basis_per_root}) must be greater than or equal to collapse_per_root + 1 ({collapse_per_root + 1})."
             )
 
+        assert np.issubdtype(self.dtype, np.floating) or np.issubdtype(
+            self.dtype, np.complexfloating
+        ), "dtype must be a float or complex type"
+
         # fixed subspace and collapse dims
         self.collapse_size = min(collapse_per_root * nroot, size)
         self.max_subspace_size = min(basis_per_root * nroot, size)
@@ -123,6 +129,9 @@ class DavidsonLiuSolver:
         ## function to build sigma block
         self._build_sigma = None
         self._executed = False
+
+        ## random number generator
+        self._rng = np.random.default_rng()
 
     def add_sigma_builder(self, sigma_builder):
         """
@@ -178,9 +187,16 @@ class DavidsonLiuSolver:
             # 1. setup guesses
             if not hasattr(self, "_guesses"):
                 # random if no guesses
-                rng = np.random.default_rng()
-                G = rng.uniform(-1, 1, size=(self.size, self.nroot))
-                G = G.astype(self.dtype)
+                if np.issubdtype(self.dtype, np.complexfloating):
+                    # uniform distribution on unit disc around 0 in complex plane
+                    G = np.sqrt(
+                        self._rng.uniform(0, 1, size=(self.size, self.nroot))
+                    ) * np.exp(
+                        1j
+                        * self._rng.uniform(0, 2 * np.pi, size=(self.size, self.nroot))
+                    )
+                else:
+                    G = self._rng.uniform(-1, 1, size=(self.size, self.nroot))
             else:
                 G = self._guesses
 
@@ -302,10 +318,16 @@ class DavidsonLiuSolver:
             msg = ""
             if added < to_add:
                 missing = to_add - added
-                temp = np.random.default_rng().uniform(
-                    -1.0, 1.0, size=(self.size, missing)
-                )
-                temp = temp.astype(self.dtype)
+                # 'float' and 'np.float64' are not subdtypes of np.complexfloating
+                if np.issubdtype(self.dtype, np.complexfloating):
+                    # uniform distribution on unit disc around 0 in complex plane
+                    temp = np.sqrt(
+                        self._rng.uniform(0, 1, size=(self.size, missing))
+                    ) * np.exp(
+                        1j * self._rng.uniform(0, 2 * np.pi, size=(self.size, missing))
+                    )
+                else:
+                    temp = self._rng.uniform(-1.0, 1.0, size=(self.size, missing))
                 if hasattr(self, "_proj_out"):
                     for v in self._proj_out:
                         # v shape (size,)
