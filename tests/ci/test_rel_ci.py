@@ -26,9 +26,9 @@ def test_rel_ci_h2():
     system.two_component = True
 
     state = State(nel=2, multiplicity=1, ms=0.0)
-    ci = RelCI(state=state, active_spinorbitals=[0, 1, 2, 3])(scf)
+    ci = RelCI(states=state, active_orbitals=4)(scf)
     ci.run()
-    assert ci.evals[0] == approx(-1.096071975854)
+    assert ci.E[0] == approx(-1.096071975854)
 
 
 def test_rel_ci_hf():
@@ -51,12 +51,12 @@ def test_rel_ci_hf():
     system.two_component = True
 
     ci = RelCI(
-        state=State(nel=10, multiplicity=1, ms=0.0),
-        core_spinorbitals=[0, 1],
-        active_spinorbitals=list(range(2, 14)),
+        states=State(nel=10, multiplicity=1, ms=0.0),
+        core_orbitals=2,
+        active_orbitals=12,
     )(scf)
     ci.run()
-    assert ci.evals[0] == approx(-100.019788438077)
+    assert ci.E[0] == approx(-100.019788438077)
 
 
 def test_rel_ci_hf_ghf():
@@ -76,9 +76,9 @@ def test_rel_ci_hf_ghf():
     )
     scf = GHF(charge=0)(system)
     ci = RelCI(
-        state=State(nel=10, multiplicity=1, ms=0.0),
-        core_spinorbitals=[0, 1],
-        active_spinorbitals=list(range(2, 14)),
+        states=State(nel=10, multiplicity=1, ms=0.0),
+        core_orbitals=2,
+        active_orbitals=12,
     )(scf)
     ci.run()
-    assert ci.evals[0] == approx(eref)
+    assert ci.E[0] == approx(eref)

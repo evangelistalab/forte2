@@ -2,8 +2,10 @@ import numpy as np
 
 import forte2
 from forte2 import System, RHF
-from forte2.jkbuilder import RestrictedMOIntegrals
+from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers.comparisons import approx
+from forte2.ci.relci import _RelCIBase
+from forte2.state import MOSpace, State
 
 
 def test_slater_rules_1():
@@ -227,4 +229,22 @@ def test_slater_rules_3_complex():
             H[i, j] = slater_rules.slater_rules(dets[i], dets[j])
     assert np.allclose(H, H.T.conj()), "Slater rules matrix is not Hermitian"
     E = np.linalg.eigvalsh(H)[0]
-    assert E == approx(eref), E
+
+    fakeints = SpinorbitalIntegrals.__new__(SpinorbitalIntegrals)
+    fakeints.E = 0.0
+    fakeints.H = h1
+    fakeints.V = h2
+    mo_space = MOSpace(nmo=norb, active_orbitals=list(range(norb)))
+    state = State(nel=8, multiplicity=1, ms=0.0)
+    ci = _RelCIBase(
+        mo_space=mo_space,
+        state=state,
+        ints=fakeints,
+        nroot=1,
+        active_orbsym=[[0] * norb],
+        maxiter=200,
+    )
+    ci.run()
+
+    assert E == approx(eref)
+    assert E == approx(ci.E[0])
