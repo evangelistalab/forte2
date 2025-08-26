@@ -28,6 +28,8 @@ class DavidsonLiuSolver:
         If None, no shift is applied.
     log_level : int, optional, default=logger.get_verbosity_level()
         Logging level for output messages.
+    dtype : type, optional, default=np.float64
+        Data type of the matrix to diagonalize. Must be float or complex.
 
     Attributes
     ----------
