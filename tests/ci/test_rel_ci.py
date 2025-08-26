@@ -3,7 +3,7 @@ import numpy as np
 from forte2 import System, RHF, State, GHF
 from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 from forte2.helpers.comparisons import approx
-from forte2.siso import RelCI
+from forte2.ci import RelCI
 
 
 def test_rel_ci_h2():
