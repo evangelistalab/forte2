@@ -224,8 +224,8 @@ class FockBuilder:
             C4,
             optimize=True,
         )
-        if antisymmetrize:
-            V -= np.einsum("ijkl->ijlk", V)
+        # if antisymmetrize:
+        #     V -= np.einsum("ijkl->ijlk", V)
         return V
 
     def two_electron_integrals_block(self, C, antisymmetrize=False):

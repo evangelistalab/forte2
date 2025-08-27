@@ -140,20 +140,24 @@ class SRRestrictedMOIntegrals:
     ----------
     """
 
-    ints: RestrictedMOIntegrals
-    frozen: int = 0
-    virtual: int = 0
+    def __init__(self, scf, frozen=0, virtual=0, spinorbital=True):
 
-    def __post_init__(self):
-        if not self.ints.spinorbital:
-            raise ValueError(
-                "Expected restricted spin-orbital integrals (ints.spinorbital == True)."
-            )
-
-        self.o = slice(0, self.ints.system.nel - self.frozen)
-        self.v = slice(self.ints.system.nel, self.ints.system.nbf - self.virtual)
+        self.ints = RestrictedMOIntegrals(scf.system, 
+                                          scf.C[0],
+                                          orbitals=list(range(scf.nmo)), 
+                                          spinorbital=spinorbital, 
+                                          antisymmetrize=True)
+        
+        self.occupied_all = slice(0, scf.nel)
+        self.unoccupied_all = slice(scf.nel, 2 * self.ints.norb)
+        self.o = slice(frozen, scf.nel)
+        self.v = slice(scf.nel, 2 * self.ints.norb - virtual) 
+        self.E = self.scf_energy()
 
         self.build_fock()
+
+        assert np.allclose(self.E, self.scf_energy_fock())
+
 
     def __getitem__(self, key):
         idx = tuple(self.o if k == "o" else self.v if k == "v" else k for k in key)
@@ -164,20 +168,16 @@ class SRRestrictedMOIntegrals:
         raise IndexError("Use 2 indices for H or 4 indices for V.")
 
     def build_fock(self):
-        self.F = self.ints.H + np.einsum("piqi->pq", self.ints.V[:, self.o, :, self.o])
-        self.eps_o = np.diag(self.F[self.o, self.o])
-        self.eps_v = np.diag(self.F[self.v, self.v])
+        self.F = self.ints.H + np.einsum("piqi->pq", self.ints.V[:, self.occupied_all, :, self.occupied_all])
 
     def scf_energy(self):
-        E = np.einsum("ii->", self.ints.H[self.o, self.o]) + 0.5 * np.einsum(
-            "ijij->", self.ints.V[self.o, self.o, self.o, self.o]
-        )
+        E = np.einsum("ii->", self.ints.H[self.occupied_all, self.occupied_all]) + 0.5 * np.einsum("ijij->", self.ints.V[self.occupied_all, self.occupied_all, self.occupied_all, self.occupied_all])
         E += self.ints.system.nuclear_repulsion
         return E
 
     def scf_energy_fock(self):
-        E = np.einsum("ii->", self.F[self.o, self.o]) - 0.5 * np.einsum(
-            "ijij->", self.ints.V[self.o, self.o, self.o, self.o]
+        E = np.einsum("ii->", self.F[self.occupied_all, self.occupied_all]) - 0.5 * np.einsum(
+            "ijij->", self.ints.V[self.occupied_all, self.occupied_all, self.occupied_all, self.occupied_all]
         )
         E += self.ints.system.nuclear_repulsion
         return E
