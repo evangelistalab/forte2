@@ -28,6 +28,8 @@ class DavidsonLiuSolver:
         If None, no shift is applied.
     log_level : int, optional, default=logger.get_verbosity_level()
         Logging level for output messages.
+    dtype : type, optional, default=np.float64
+        Data type of the matrix to diagonalize. Must be float or complex.
 
     Attributes
     ----------
@@ -48,6 +50,7 @@ class DavidsonLiuSolver:
         r_tol: float = 1e-6,
         eta: float | None = None,
         log_level: int = logger.get_verbosity_level(),
+        dtype: type = np.float64,
     ):
         # size of the space
         self.size = size
@@ -67,6 +70,8 @@ class DavidsonLiuSolver:
         self.eta = eta
         # logging level
         self.log_level = log_level
+        # data type
+        self.dtype = dtype
 
         # sanity checks
         if size <= 0:
@@ -84,21 +89,29 @@ class DavidsonLiuSolver:
                 f"Davidson-Liu solver: basis_per_root ({basis_per_root}) must be greater than or equal to collapse_per_root + 1 ({collapse_per_root + 1})."
             )
 
+        assert np.issubdtype(self.dtype, np.floating) or np.issubdtype(
+            self.dtype, np.complexfloating
+        ), "dtype must be a float or complex type"
+
         # fixed subspace and collapse dims
         self.collapse_size = min(collapse_per_root * nroot, size)
         self.max_subspace_size = min(basis_per_root * nroot, size)
 
         # allocate all arrays as (size, subspace_size) so each column is a vector
-        self.b = np.zeros((size, self.max_subspace_size))  # basis
-        self.sigma = np.zeros((size, self.max_subspace_size))  # H·basis
-        self.r = np.zeros((size, self.max_subspace_size))  # residuals
+        self.b = np.zeros((size, self.max_subspace_size), dtype=self.dtype)  # basis
+        self.sigma = np.zeros(
+            (size, self.max_subspace_size), dtype=self.dtype
+        )  # H·basis
+        self.r = np.zeros((size, self.max_subspace_size), dtype=self.dtype)  # residuals
         self.h_diag = None  # matrix diagonal, shape (size,)
 
         ## subspace Hamiltonian and eigenpairs
-        self.G = np.zeros((self.max_subspace_size, self.max_subspace_size))
+        self.G = np.zeros(
+            (self.max_subspace_size, self.max_subspace_size), dtype=self.dtype
+        )
         # eigenpairs of G
         self.alpha = np.zeros_like(self.G)
-        self.lam = np.zeros(self.max_subspace_size)
+        self.lam = np.zeros(self.max_subspace_size, dtype=self.dtype)
         self.lam_old = np.zeros_like(self.lam)
 
         ## configuration parameters
@@ -117,6 +130,9 @@ class DavidsonLiuSolver:
         self._build_sigma = None
         self._executed = False
 
+        ## random number generator
+        self._rng = np.random.default_rng()
+
     def add_sigma_builder(self, sigma_builder):
         """
         Add the function that builds the matrix-vector product.
@@ -132,7 +148,7 @@ class DavidsonLiuSolver:
         self._build_sigma = sigma_builder
 
     def add_h_diag(self, h_diag):
-        arr = np.asarray(h_diag, float)
+        arr = np.asarray(h_diag, self.dtype)
         if arr.shape != (self.size,):
             raise ValueError("h_diag must be shape (size,)")
         self.h_diag = arr.copy()
@@ -146,7 +162,7 @@ class DavidsonLiuSolver:
         guesses: NDArray
             ``guesses.shape == (size, n_guess)``, with n_guess between 1 and subspace_size.
         """
-        G = np.asarray(guesses, float)
+        G = np.asarray(guesses, self.dtype)
         if G.ndim != 2 or G.shape[0] != self.size:
             raise ValueError("guesses must be shape (size, n_guess)")
         self._guesses = G
@@ -155,7 +171,7 @@ class DavidsonLiuSolver:
         """
         project_out: list of arrays each shape (size,)
         """
-        self._proj_out = [np.asarray(v, float) for v in project_out]
+        self._proj_out = [np.asarray(v, self.dtype) for v in project_out]
 
     def solve(self):
 
@@ -171,8 +187,16 @@ class DavidsonLiuSolver:
             # 1. setup guesses
             if not hasattr(self, "_guesses"):
                 # random if no guesses
-                rng = np.random.default_rng()
-                G = rng.uniform(-1, 1, size=(self.size, self.nroot))
+                if np.issubdtype(self.dtype, np.complexfloating):
+                    # uniform distribution on unit disc around 0 in complex plane
+                    G = np.sqrt(
+                        self._rng.uniform(0, 1, size=(self.size, self.nroot))
+                    ) * np.exp(
+                        1j
+                        * self._rng.uniform(0, 2 * np.pi, size=(self.size, self.nroot))
+                    )
+                else:
+                    G = self._rng.uniform(-1, 1, size=(self.size, self.nroot))
             else:
                 G = self._guesses
 
@@ -180,7 +204,7 @@ class DavidsonLiuSolver:
                 for v in self._proj_out:
                     # v shape (size,)
                     coeffs = v @ G  # shape (nroot,)
-                    G -= np.outer(v, coeffs)
+                    G -= np.outer(v, coeffs.conj())
 
             # orthonormalize via QR
             Q, _ = qr(G, mode="reduced")
@@ -215,8 +239,8 @@ class DavidsonLiuSolver:
             # 3. form and diagonalize subspace Hamiltonian
             Bblk = self.b[:, : self.basis_size]
             Sblk = self.sigma[:, : self.basis_size]
-            Gm = Bblk.T @ Sblk
-            Gm = 0.5 * (Gm + Gm.T)  # symmetrize
+            Gm = Bblk.T.conj() @ Sblk
+            Gm = 0.5 * (Gm + Gm.T.conj())  # Hermitize
             lam, alpha = eigh(Gm)
 
             # sort eigenpair around user-specified shift
@@ -265,14 +289,14 @@ class DavidsonLiuSolver:
             # 6a. orthogonalize residuals against current basis
             R0 = self.r[:, : self.nroot]
             # subtract projection onto existing basis
-            R0 -= Bblk @ (Bblk.T @ R0)
+            R0 -= Bblk @ (Bblk.T.conj() @ R0)
 
             # 6b. project out undesirable vectors if provided
             if hasattr(self, "_proj_out"):
                 for v in self._proj_out:
                     # v shape (size,)
                     coeffs = v @ R0  # shape (nroot,)
-                    R0 -= np.outer(v, coeffs)
+                    R0 -= np.outer(v, coeffs.conj())
 
             # write back the cleaned residuals
             self.r[:, : self.nroot] = R0
@@ -294,14 +318,21 @@ class DavidsonLiuSolver:
             msg = ""
             if added < to_add:
                 missing = to_add - added
-                temp = np.random.default_rng().uniform(
-                    -1.0, 1.0, size=(self.size, missing)
-                )
+                # 'float' and 'np.float64' are not subdtypes of np.complexfloating
+                if np.issubdtype(self.dtype, np.complexfloating):
+                    # uniform distribution on unit disc around 0 in complex plane
+                    temp = np.sqrt(
+                        self._rng.uniform(0, 1, size=(self.size, missing))
+                    ) * np.exp(
+                        1j * self._rng.uniform(0, 2 * np.pi, size=(self.size, missing))
+                    )
+                else:
+                    temp = self._rng.uniform(-1.0, 1.0, size=(self.size, missing))
                 if hasattr(self, "_proj_out"):
                     for v in self._proj_out:
                         # v shape (size,)
                         coeffs = v @ temp  # shape (nroot,)
-                        temp -= np.outer(v, coeffs)
+                        temp -= np.outer(v, coeffs.conj())
 
                 added2 = self.add_rows_and_orthonormalize(
                     self.b[:, : self.basis_size],
@@ -451,11 +482,11 @@ class DavidsonLiuSolver:
             # orthogonalize against existing basis
             for i in range(n_existing):
                 ai = A_existing[:, i]
-                v -= np.dot(ai, v) * ai
+                v -= np.dot(ai.conj(), v) * ai
             # orthogonalize against new vectors
             for i in range(n_new):
                 si = A_new[:, i]
-                v -= np.dot(si, v) * si
+                v -= np.dot(si.conj(), v) * si
 
             # compute norm and discard if too small
             normv = norm(v)
@@ -468,12 +499,12 @@ class DavidsonLiuSolver:
             # compute maximum overlap
             max_overlap = 0.0
             if n_existing > 0:
-                max_overlap = np.abs(A_existing.T @ v).max()
+                max_overlap = np.abs(A_existing.T.conj() @ v).max()
             if n_new > 0:
-                max_overlap = max(max_overlap, np.abs(A_new.T @ v).max())
+                max_overlap = max(max_overlap, np.abs(A_new.T.conj() @ v).max())
 
             # check normalization and orthogonality
-            norm2 = np.dot(v, v)
+            norm2 = np.dot(v.conj(), v)
             if (
                 max_overlap < self.schmidt_orthogonality_threshold
                 and abs(norm2 - 1.0) < self.schmidt_orthogonality_threshold
@@ -489,9 +520,9 @@ class DavidsonLiuSolver:
         """
         Check if the columns of b are orthonormal.
         """
-        if not np.allclose(b.T @ b, np.eye(b.shape[1]), atol=1e-12):
+        if not np.allclose(b.T.conj() @ b, np.eye(b.shape[1]), atol=1e-12):
             logger.log_warning(f"{msg}")
-            logger.log_warning(f"S = {b.T @ b}")
+            logger.log_warning(f"S = {b.T.conj() @ b}")
             raise ValueError(msg)
 
     def _print_information(self):
