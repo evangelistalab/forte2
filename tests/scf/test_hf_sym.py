@@ -117,7 +117,7 @@ def test_rhf_n2_d2h_x():
     """
 
     system = forte2.System(
-        xyz=xyz, basis_set="cc-pvdz", cholesky_tei=True, cholesky_tol=1e-10, point_group="D2h"
+        xyz=xyz, basis_set="cc-pvdz", cholesky_tei=True, cholesky_tol=1e-10, point_group="D2h", reorient=True
     )
 
     scf = RHF(charge=0)(system)
@@ -125,9 +125,9 @@ def test_rhf_n2_d2h_x():
     assert scf.E == approx(erhf)
 
     try:
-        assert list(map(str.upper, scf.orbital_symmetries)) == expected_mo_irreps
+        assert list(map(str.upper, scf.irrep_labels)) == expected_mo_irreps
     except:
-        for e1, e2 in zip(scf.orbital_symmetries, expected_mo_irreps):
+        for e1, e2 in zip(scf.irrep_labels, expected_mo_irreps):
             try:
                 assert e1.upper() == e2
             except:
@@ -149,7 +149,7 @@ def test_rhf_n2_d2h():
     """
 
     system = forte2.System(
-        xyz=xyz, basis_set="cc-pvdz", cholesky_tei=True, cholesky_tol=1e-10, point_group="D2h"
+        xyz=xyz, basis_set="cc-pvdz", cholesky_tei=True, cholesky_tol=1e-10, point_group="D2h", reorient=True
     )
 
     scf = RHF(charge=0)(system)
@@ -157,9 +157,9 @@ def test_rhf_n2_d2h():
     assert scf.E == approx(erhf)
 
     try:
-        assert list(map(str.upper, scf.orbital_symmetries)) == expected_mo_irreps
+        assert list(map(str.upper, scf.irrep_labels)) == expected_mo_irreps
     except:
-        for e1, e2 in zip(scf.orbital_symmetries, expected_mo_irreps):
+        for e1, e2 in zip(scf.irrep_labels, expected_mo_irreps):
             try:
                 assert e1.upper() == e2
             except:
