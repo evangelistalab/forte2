@@ -29,7 +29,7 @@ def minao_initial_guess(system, H):
 
     # generate the SAP basis from the initial guess file. Skip normalization
     sap_basis = build_basis(
-        "sap_helfem_large", system.atoms, embed_normalization_into_coefficients=False
+        "sap_helfem_large", system.geom_helper, embed_normalization_into_coefficients=False,
     )
 
     # create a new basis that will be used to store the scaled coefficients

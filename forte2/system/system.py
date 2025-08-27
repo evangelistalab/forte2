@@ -11,8 +11,8 @@ from forte2.helpers.matrix_functions import (
 )
 from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
-from .parse_geometry import parse_geometry, _GeometryHelper
-from .atom_data import ATOM_DATA
+from .parse_geometry import parse_geometry, GeometryHelper
+from .atom_data import ATOM_DATA, Z_TO_ATOM_SYMBOL
 
 import numpy as np
 from numpy.typing import NDArray
@@ -57,10 +57,12 @@ class System:
         The tolerance for the Cholesky decomposition of the 4D ERI tensor. Only used if `cholesky_tei` is True.
     point_group : str, optional, default="C1"
         The Abelian point group used to assign symmetries of orbitals a posteriori. This only allows one to assign orbital symmetry, it does **not** imply that symmetry is used in a calculation.
+    reorient : bool, optional, default=True
+        Whether to reorient the molecular geometry (important for symmetry detection).
 
     Attributes
     ----------
-    atoms : list[tuple[float, tuple[float, float, float]]]
+    atoms : list[list[float, list[float, float, float]]]
         A list of tuples representing the atoms in the system, where each tuple contains the atomic charge and a tuple of coordinates (x, y, z).
     natoms : int
         The number of atoms in the system.
@@ -113,9 +115,10 @@ class System:
     cholesky_tei: bool = False
     cholesky_tol: float = 1e-6
     point_group: str = "C1"
+    reorient: bool = True
 
     ### Non-init attributes
-    atoms: list[tuple[float, tuple[float, float, float]]] = field(
+    atoms: list[list[float, list[float, float, float]]] = field(
         init=False, default=None
     )
     Zsum: float = field(init=False, default=None)
@@ -150,29 +153,35 @@ class System:
 
     def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
-        _geom = _GeometryHelper(self.atoms)
-        self.atoms = _geom.atoms
-        self.Zsum = _geom.Zsum
-        self.natoms = _geom.natoms
-        self.atomic_charges = _geom.atomic_charges
-        self.atomic_masses = _geom.atomic_masses
-        self.atomic_positions = _geom.atomic_positions
-        self.centroid = _geom.centroid
-        self.nuclear_repulsion = _geom.nuclear_repulsion
-        self.center_of_mass = _geom.center_of_mass
-        self.atom_counts = _geom.atom_counts
-        self.atom_to_center = _geom.atom_to_center
-        self.prin_atomic_positions = _geom.prin_atomic_positions
+        self.geom_helper = GeometryHelper(self.atoms, reorient=self.reorient)
+        self.atoms = self.geom_helper.atoms
+        self.Zsum = self.geom_helper.Zsum
+        self.natoms = self.geom_helper.natoms
+        self.atomic_charges = self.geom_helper.atomic_charges
+        self.atomic_masses = self.geom_helper.atomic_masses
+        self.atomic_positions = self.geom_helper.atomic_positions
+        self.centroid = self.geom_helper.centroid
+        self.nuclear_repulsion = self.geom_helper.nuclear_repulsion
+        self.center_of_mass = self.geom_helper.center_of_mass
+        self.atom_counts = self.geom_helper.atom_counts
+        self.atom_to_center = self.geom_helper.atom_to_center
+        self.prin_atomic_positions = self.geom_helper.prin_atomic_positions
+
+        logger.log_info1("Principle Atomic Positions (a.u.):")
+        for i in range(self.natoms):
+            logger.log_info1(
+                f"   {Z_TO_ATOM_SYMBOL[self.atoms[i][0]]}   {self.prin_atomic_positions[i, 0]:<.8f}   {self.prin_atomic_positions[i, 1]:<.8f}   {self.prin_atomic_positions[i, 2]:<.8f}"
+            )
 
     def _init_basis(self):
-        self.basis = build_basis(self.basis_set, self.atoms)
+        self.basis = build_basis(self.basis_set, self.geom_helper)
         logger.log_info1(
             f"Parsed {self.natoms} atoms with basis set of {self.basis.size} functions."
         )
 
         if not self.cholesky_tei:
             self.auxiliary_basis = (
-                build_basis(self.auxiliary_basis_set, self.atoms)
+                build_basis(self.auxiliary_basis_set, self.geom_helper)
                 if self.auxiliary_basis_set is not None
                 else None
             )
@@ -181,7 +190,8 @@ class System:
                     "Using a separate auxiliary basis is not recommended!"
                 )
                 self.auxiliary_basis_set_corr = build_basis(
-                    self.auxiliary_basis_set_corr, self.atoms
+                    self.auxiliary_basis_set_corr,
+                    self.geom_helper,
                 )
             else:
                 self.auxiliary_basis_set_corr = self.auxiliary_basis
@@ -190,7 +200,7 @@ class System:
             self.auxiliary_basis_set_corr = None
 
         self.minao_basis = (
-            build_basis(self.minao_basis_set, self.atoms)
+            build_basis(self.minao_basis_set, self.geom_helper)
             if self.minao_basis_set is not None
             else None
         )
