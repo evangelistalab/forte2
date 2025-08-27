@@ -90,8 +90,7 @@ def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4, twocomp=False):
 
 
 def convert_coeff_spatial_to_spinor(system, C, complex=True):
-    """
-    Convert spatial orbital MO coefficiensts to spinor(bital) MO coefficients
+    Convert spatial orbital MO coefficients to spinor(bital) MO coefficients
     """
     dtype = np.complex128 if complex else np.float64
     nbf = system.nbf
