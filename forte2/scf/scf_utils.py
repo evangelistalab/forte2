@@ -6,6 +6,7 @@ from forte2.system import System
 from forte2.system.build_basis import build_basis
 from forte2.helpers.matrix_functions import givens_rotation
 
+
 def minao_initial_guess(system, H):
     """
     Generate a superposition of atomic potentials (SAP) initial guess for the SCF procedure
@@ -29,7 +30,9 @@ def minao_initial_guess(system, H):
 
     # generate the SAP basis from the initial guess file. Skip normalization
     sap_basis = build_basis(
-        "sap_helfem_large", system.geom_helper, embed_normalization_into_coefficients=False,
+        "sap_helfem_large",
+        system.geom_helper,
+        embed_normalization_into_coefficients=False,
     )
 
     # create a new basis that will be used to store the scaled coefficients
@@ -70,6 +73,20 @@ def minao_initial_guess(system, H):
 
 
 def core_initial_guess(system: System, H):
+    """
+    Generate an initial guess by diagonalizing the core Hamiltonian.
+    Parameters
+    ----------
+    system : forte2.System
+        The system object containing the atoms and basis set.
+    H : NDArray
+        The core Hamiltonian matrix.
+
+    Returns
+    -------
+    NDArray
+        The initial MO guess for the SCF procedure.
+    """
     Xorth = system.get_Xorth()
     Htilde = Xorth.T @ H @ Xorth
     _, C = np.linalg.eigh(Htilde)
@@ -90,6 +107,7 @@ def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4, twocomp=False):
 
 
 def convert_coeff_spatial_to_spinor(system, C, complex=True):
+    """
     Convert spatial orbital MO coefficients to spinor(bital) MO coefficients
     """
     dtype = np.complex128 if complex else np.float64
