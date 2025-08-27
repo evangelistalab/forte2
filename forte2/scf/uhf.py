@@ -169,7 +169,7 @@ class UHF(SCFBase):
             if i % orb_per_row == 0:
                 string += "\n"
             string += (
-                f"{idx+1:<4d} ({self.irrep_labels[1][idx]}) {self.eps[1][i]:<12.6f} "
+                f"{idx+1:<4d} ({self.irrep_labels[1][idx]}) {self.eps[1][idx]:<12.6f} "
             )
         logger.log_info1(string)
 
