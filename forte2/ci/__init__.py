@@ -6,4 +6,4 @@ from .ci_utils import (
     pretty_print_ci_transition_props,
     pretty_print_gas_info,
 )
-from .relci import RelCI
+from .relci import RelCISolver, RelCI

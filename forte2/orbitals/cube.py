@@ -1,5 +1,4 @@
 import math
-import numpy as np
 
 from forte2 import ints
 
@@ -51,74 +50,21 @@ class Cube:
         )
 
         # calculate the orbitals on the grid
-        if system.two_component:
-            # for two-component systems, we need to calculate the orbitals for both alpha and beta
-            nbf = system.nbf
-            values = ints.orbitals_on_grid(
-                system.basis,
-                C[:nbf, indices].real,
-                grid_origin,
-                npoints,
-                scaled_axes,
-            )
-            values += ints.orbitals_on_grid(
-                system.basis,
-                C[nbf:, indices].real,
-                grid_origin,
-                npoints,
-                scaled_axes,
-            )
-            if C.dtype == complex:
-                values = values.astype(complex)
-                values += 1.0j * ints.orbitals_on_grid(
-                    system.basis,
-                    C[:nbf, indices].imag,
-                    grid_origin,
-                    npoints,
-                    scaled_axes,
-                )
-                values += 1.0j * ints.orbitals_on_grid(
-                    system.basis,
-                    C[nbf:, indices].imag,
-                    grid_origin,
-                    npoints,
-                    scaled_axes,
-                )
-        else:
-            values = ints.orbitals_on_grid(
-                system.basis,
-                C[:, indices],
-                grid_origin,
-                npoints,
-                scaled_axes,
-            )
+        values = ints.orbitals_on_grid(
+            system.basis,
+            C[:, indices],
+            grid_origin,
+            npoints,
+            scaled_axes,
+        )
 
         # write the cube files
-        if values.dtype == complex:
-            # if the values are complex, we write two files: one for the real part and one for the imaginary part
-            for i, index in enumerate(indices):
-                cube_real = self._make_cube(
-                    values[:, i].real, grid_origin, npoints, scaled_axes, system
-                )
-                with open(
-                    f"{prefix}_{index + 1:0{number_of_digits}d}_real.cube", "w"
-                ) as f:
-                    f.write(cube_real)
-
-                cube_imag = self._make_cube(
-                    values[:, i].imag, grid_origin, npoints, scaled_axes, system
-                )
-                with open(
-                    f"{prefix}_{index + 1:0{number_of_digits}d}_imag.cube", "w"
-                ) as f:
-                    f.write(cube_imag)
-        else:
-            for i, index in enumerate(indices):
-                cube = self._make_cube(
-                    values[:, i], grid_origin, npoints, scaled_axes, system
-                )
-                with open(f"{prefix}_{index + 1:0{number_of_digits}d}.cube", "w") as f:
-                    f.write(cube)
+        for i, index in enumerate(indices):
+            cube = self._make_cube(
+                values[:, i], grid_origin, npoints, scaled_axes, system
+            )
+            with open(f"{prefix}_{index + 1:0{number_of_digits}d}.cube", "w") as f:
+                f.write(cube)
 
     def _make_cube(self, values, minr, npoints, axis, system):
         """
@@ -142,46 +88,3 @@ class Cube:
             " ".join(f"{x:.5E}" for x in v[i : i + 6]) for i in range(0, len(v), 6)
         ]
         return header + "\n" + atoms + "\n" + "\n".join(lines)
-
-
-# # determine the center of charge, extents, and principal axes of the orbitals
-# center, extents, axes = local_grid(system.basis, C)
-
-
-# scale the axes to the grid spacing
-# scaled_axes = axes[i] * self.spacing
-
-# # calculate the grid points needed to cover three times the extent
-# # in each direction.
-# npoints = 2 * np.ceil(3 * extents[i] / self.spacing).astype(int) + 1
-
-# # calculate the origin of the grid
-# origin = center[i] - 0.5 * scaled_axes.T @ (npoints - 1)
-
-# print("Orbital extents: ", extents[i])
-# print("Number of grid points in each direction: ", npoints)
-# print("Principle axes:\n", axes[i])
-# print("Origin: ", origin)
-
-
-# def local_grid(basis, C):
-#     coords, moments = orbital_extents(basis, C)
-#     extents = []
-#     axes = []
-#     for i in range(C.shape[1]):
-#         # build a 3 x 3 tensor from the moments
-#         xx, xy, xz, yy, yz, zz = moments[i]
-#         M = np.array([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])
-
-#         # diagonalize the tensor and store the square root of the eigenvalues and eigenvectors
-#         evals, evecs = np.linalg.eigh(M)
-#         extents.append(np.sqrt(evals))
-#         # make the eigenvectors largest component to be positive
-#         print("M: \n", M)
-#         # for j in range(3):
-#         # evecs[:, j] *= np.sign(np.max(evecs[:, j]))
-#         print("Eigenvectors:\n", evecs)
-
-#         axes.append(evecs)
-
-#     return coords, extents, axes

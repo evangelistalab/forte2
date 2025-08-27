@@ -2,7 +2,7 @@ import numpy as np
 import scipy as sp
 from dataclasses import dataclass, field
 
-from forte2.ci import CISolver
+from forte2.ci import CISolver, RelCISolver
 from forte2.base_classes.active_space_solver import ActiveSpaceSolver
 from forte2.orbitals import Semicanonicalizer
 from forte2.jkbuilder import FockBuilder, RestrictedMOIntegrals
@@ -107,6 +107,7 @@ class MCOptimizer(ActiveSpaceSolver):
 
     def __call__(self, method):
         self.parent_method = method
+        self.two_component = self.system.two_component
         ### make sure we don't print the CI output at INFO1 level
         current_verbosity = logger.get_verbosity_level()
         # only log subproblem if the verbosity is higher than INFO1
@@ -117,7 +118,8 @@ class MCOptimizer(ActiveSpaceSolver):
         return self
 
     def _startup(self):
-        super()._startup()
+        # initialize as a two-component solver if parent_method is two component
+        super()._startup(two_component=self.two_component)
         # make the core, active, and virtual spaces contiguous
         # i.e., [core, gas1, gas2, ..., virt]
         perm = self.mo_space.orig_to_contig
@@ -178,7 +180,8 @@ class MCOptimizer(ActiveSpaceSolver):
             gas_ref=self.mo_space.ngas > 1,
         )
 
-        self.ci_solver = CISolver(
+        _CISolver = RelCISolver if self.two_component else CISolver
+        self.ci_solver = _CISolver(
             states=self.states,
             core_orbitals=self.mo_space.docc_orbitals,
             active_orbitals=self.mo_space.active_orbitals,
@@ -532,7 +535,7 @@ class OrbOptimizer:
     def _vec_to_mat(self, x):
         R = np.zeros_like(self.C)
         R[self.nrr] = x
-        R += -R.T
+        R += -R.T.conj()
         return R
 
     def _mat_to_vec(self, R):
@@ -594,7 +597,7 @@ class OrbOptimizer:
         self.A_pq[np.abs(self.A_pq) < 1e-12] = 0.0
 
         # compute g_rk (mo, core + active) block of gradient, [eq (9)]
-        orbgrad = 2 * (self.A_pq - self.A_pq.T)
+        orbgrad = 2 * (self.A_pq - self.A_pq.T.conj())
         orbgrad *= self.nrr
 
         return orbgrad

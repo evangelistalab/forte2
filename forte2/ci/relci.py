@@ -265,7 +265,7 @@ class _RelCIBase:
 
 
 @dataclass
-class RelCI(ActiveSpaceSolver):
+class RelCISolver(ActiveSpaceSolver):
     """
     Relativistic Configuration Interaction
     """
@@ -378,3 +378,48 @@ class RelCI(ActiveSpaceSolver):
             Average energy of the CI roots.
         """
         return np.dot(self.weights_flat, self.evals_flat)
+
+class RelCI(RelCISolver):
+    final_orbital: str = "original"
+    do_transition_dipole: bool = False
+
+    def run(self):
+        super().run()
+        self._post_process()
+        # if self.final_orbital == "semicanonical":
+        #     semi = Semicanonicalizer(
+        #         mo_space=self.mo_space,
+        #         g1_sf=self.make_average_sf_1rdm(),
+        #         C=self.C[0],
+        #         system=self.system,
+        #     )
+        #     self.C[0] = semi.C_semican.copy()
+
+        #     # recompute the CI vectors in the semicanonical basis
+        #     ints = RestrictedMOIntegrals(
+        #         self.system,
+        #         self.C[0],
+        #         self.active_indices,
+        #         self.core_indices,
+        #         use_aux_corr=True,
+        #     )
+        #     self.set_ints(ints.E, ints.H, ints.V)
+        #     super().run()
+
+        return self
+
+    def _post_process(self):...
+        # pretty_print_ci_summary(self.sa_info, self.evals_per_solver)
+        # self.compute_natural_occupation_numbers()
+        # pretty_print_ci_nat_occ_numbers(self.sa_info, self.mo_space, self.nat_occs)
+        # top_dets = self.get_top_determinants()
+        # pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
+
+        # if self.do_transition_dipole:
+        #     self.compute_transition_properties()
+        #     pretty_print_ci_transition_props(
+        #         self.sa_info,
+        #         self.tdm_per_solver,
+        #         self.fosc_per_solver,
+        #         self.evals_per_solver,
+        #     )
