@@ -179,8 +179,7 @@ class MCOptimizer(ActiveSpaceSolver):
             gas_ref=self.mo_space.ngas > 1,
         )
 
-        _CISolver = RelCISolver if self.two_component else CISolver
-        self.ci_solver = _CISolver(
+        self.ci_solver = CISolver(
             states=self.states,
             core_orbitals=self.mo_space.docc_orbitals,
             active_orbitals=self.mo_space.active_orbitals,
