@@ -52,7 +52,7 @@ def test_dipole_uhf():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT", reorient=False)
 
     scf = UHF(charge=1, ms=0.5)(system)
     scf.run()
@@ -76,7 +76,7 @@ def test_quadrupole_rhf():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT", reorient=False)
 
     scf = RHF(charge=0)(system)
     scf.run()
