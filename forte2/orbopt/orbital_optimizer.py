@@ -107,7 +107,6 @@ class MCOptimizer(ActiveSpaceSolver):
 
     def __call__(self, method):
         self.parent_method = method
-        self.two_component = self.system.two_component
         ### make sure we don't print the CI output at INFO1 level
         current_verbosity = logger.get_verbosity_level()
         # only log subproblem if the verbosity is higher than INFO1
@@ -119,7 +118,7 @@ class MCOptimizer(ActiveSpaceSolver):
 
     def _startup(self):
         # initialize as a two-component solver if parent_method is two component
-        super()._startup(two_component=self.two_component)
+        super()._startup()
         # make the core, active, and virtual spaces contiguous
         # i.e., [core, gas1, gas2, ..., virt]
         perm = self.mo_space.orig_to_contig
