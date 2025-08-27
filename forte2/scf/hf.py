@@ -981,7 +981,7 @@ class GHF(SCFBase):
     def _initial_guess(self, H, guess_type="minao"):
         C = RHF._initial_guess(self, H, guess_type)[0]
         if self.guess_mix and self.ms_guess is not None:
-            if self.ms_guess == 0:
+            if self.twicems_guess == 0:
                 C = guess_mix(C, self.nel - 1, twocomp=True)
         if self.alpha_beta_mix:
             C = alpha_beta_mix(C)

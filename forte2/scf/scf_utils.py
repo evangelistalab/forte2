@@ -73,6 +73,20 @@ def minao_initial_guess(system, H):
 
 
 def core_initial_guess(system: System, H):
+    """
+    Generate an initial guess by diagonalizing the core Hamiltonian.
+
+    Parameters
+    ----------
+    system : forte2.System
+        The system object containing the atoms and basis set.
+    H : NDArray
+        The core Hamiltonian matrix.
+    Returns
+    -------
+    NDArray
+        The initial MO guess for the SCF procedure.
+    """
     Xorth = system.get_Xorth()
     Htilde = Xorth.T @ H @ Xorth
     _, C = np.linalg.eigh(Htilde)
