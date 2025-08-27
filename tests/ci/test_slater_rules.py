@@ -243,6 +243,7 @@ def test_slater_rules_3_complex():
         nroot=1,
         active_orbsym=[[0] * norb],
         maxiter=200,
+        do_test_rdms=True,
     )
     ci.run()
 

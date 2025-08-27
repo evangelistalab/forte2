@@ -4,7 +4,9 @@ import numpy as np
 from forte2 import (
     RelSlaterRules,
     SparseState,
+    SparseOperator,
     CIStrings,
+    overlap,
     apply_op,
     sparse_operator_hamiltonian,
 )
@@ -14,6 +16,7 @@ from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 from forte2.jkbuilder import SpinorbitalIntegrals
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
 from forte2.helpers import logger
+from forte2.helpers.comparisons import approx
 from forte2.ci.ci_utils import pretty_print_gas_info
 
 
@@ -98,8 +101,8 @@ class _RelCIBase:
         for i, e in enumerate(self.evals):
             logger.log(f"Final CI Energy Root {i}: {e:20.12f} [Eh]", self.log_level)
 
-        # if self.do_test_rdms:
-        #     self._test_rdms()
+        if self.do_test_rdms:
+            self._test_rdms()
 
         self.executed = True
 
@@ -200,6 +203,65 @@ class _RelCIBase:
                 guess_mat[d, i] = guess[j]
 
         self.eigensolver.add_guesses(guess_mat)
+
+    def _test_rdms(self):
+        # Compute the RDMs from the CI vectors
+        # and verify the energy from the RDMs matches the CI energy
+        logger.log("\nComputing RDMs from CI vectors.\n", self.log_level)
+        for root in range(self.nroot):
+            rdm1 = self.make_1rdm(root)
+            rdm2 = self.make_2rdm(root)
+
+            rdms_energy = self.ints.E
+            rdms_energy += np.einsum("ij,ij", rdm1, self.ints.H)
+            rdms_energy += 0.5 * np.einsum("ijkl,ijkl", rdm2, self.ints.V)
+            logger.log(f"CI energy from RDMs: {rdms_energy:.12f} Eh", self.log_level)
+
+            assert self.E[root] == approx(rdms_energy)
+
+            logger.log(
+                f"RDMs for root {root} validated successfully.\n", self.log_level
+            )
+
+    def make_1rdm(self, left_root: int, right_root: int = None):
+        rdm = np.zeros((self.norb, self.norb), dtype=complex)
+        psil = SparseState({d: c for d, c in zip(self.dets, self.evecs[:, left_root])})
+        if right_root is None:
+            psir = psil
+        else:
+            psir = SparseState(
+                {d: c for d, c in zip(self.dets, self.evecs[:, right_root])}
+            )
+        for p in range(self.norb):
+            for q in range(self.norb):
+                op = SparseOperator()
+                op.add([p], [], [q], [])
+                rdm[p, q] = overlap(psil, apply_op(op, psir))
+
+        return rdm
+
+    def make_2rdm(self, left_root: int, right_root: int = None):
+        rdm = np.zeros((self.norb, self.norb, self.norb, self.norb), dtype=complex)
+        psil = SparseState({d: c for d, c in zip(self.dets, self.evecs[:, left_root])})
+        if right_root is None:
+            psir = psil
+        else:
+            psir = SparseState(
+                {d: c for d, c in zip(self.dets, self.evecs[:, right_root])}
+            )
+        for p in range(self.norb):
+            for q in range(p):
+                for r in range(self.norb):
+                    for s in range(r):
+                        op = SparseOperator()
+                        op.add([p, q], [], [r, s], [])
+                        element = overlap(psil, apply_op(op, psir))
+                        rdm[p, q, r, s] = element
+                        rdm[q, p, r, s] = -element
+                        rdm[p, q, s, r] = -element
+                        rdm[q, p, s, r] = element
+
+        return rdm
 
 
 @dataclass
