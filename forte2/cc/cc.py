@@ -7,7 +7,7 @@ import numpy as np
 from forte2.helpers.diis import DIIS
 from forte2.helpers import logger
 # from forte2.helpers.jacobi import JacobiSolver
-from forte2.jkbuilder import SRRestrictedMOIntegrals
+from forte2.jkbuilder import SONormalOrderedIntegrals
 
 
 @dataclass
@@ -43,11 +43,11 @@ class _SRCCBase(ABC):
     scf: object | None = None
     frozen: int = 0
     virtual: int = 0
-    spinorbital: bool = True
     log_level: int = field(default=logger.get_verbosity_level())
 
     ### CC intermediates
     intermediates: dict = field(default_factory=dict)
+    BT1: dict = field(default_factory=dict)
 
     ### Jacobi parameters
     maxiter: int = 100
@@ -70,10 +70,10 @@ class _SRCCBase(ABC):
             self(scf=self.scf)
 
     def __call__(self, scf):
-        self.ints = SRRestrictedMOIntegrals(scf, 
-                                            frozen=self.frozen, 
-                                            virtual=self.virtual, 
-                                            spinorbital=self.spinorbital)
+        self.ints = SONormalOrderedIntegrals(scf, 
+                                             frozen=self.frozen, 
+                                             virtual=self.virtual,
+                                             build_nvirt=2) 
         self.no, self.nu = self.ints['ov'].shape
         return self
 

@@ -20,6 +20,8 @@ class FockBuilder:
         If a ModelSystem is provided, it will decompose the 4D ERI tensor using Cholesky decomposition with complete pivoting.
     use_aux_corr : bool, optional, default=False
         If True, uses ``system.auxiliary_basis_set_corr`` instead of ``system.auxiliary_basis``.
+    spinorbital : bool, optional, default=False
+        If True, converts DF tensors to spinorbital basis prior to constructing integrals.
     """
 
     def __init__(self, system: System, use_aux_corr=False):
@@ -49,6 +51,11 @@ class FockBuilder:
             self.B, system.naux = self._build_B_cholesky(
                 system.basis, system.cholesky_tol
             )
+
+        # if spinorbital:
+        #     B_spinorb = np.zeros((self.B.shape[0], 2*nbf, 2*nbf))
+        #     B_spinorb[:, ::2, ::2] = B[:, 1::2, 1::2] = self.B
+        #     self.B = B_spinorb
 
     @staticmethod
     def _build_B_cholesky(basis, cholesky_tol):
@@ -182,7 +189,7 @@ class FockBuilder:
         J, K = self.build_JK([Cp])
         return J[0], K[0]
 
-    def two_electron_integrals_gen_block(self, C1, C2, C3, C4, antisymmetrize=False):
+    def two_electron_integrals_gen_block(self, C1, C2, C3, C4):
         r"""
         Compute the two-electron integrals for a given set of orbitals. This method is
         general and can handle different sets of orbitals for each index (p, q, r, s).
@@ -205,9 +212,6 @@ class FockBuilder:
             Coefficient matrix for the third set of orbitals (index r).
         C4 : NDArray
             Coefficient matrix for the fourth set of orbitals (index s).
-        antisymmetrize : bool, optional, default=False
-            Whether to antisymmetrize the integrals. If True, the integrals are antisymmetrized as:
-            V[p,q,r,s] = :math:`\langle pq || rs \rangle = \langle pq | rs \rangle - \langle pq | sr \rangle`
 
         Returns
         -------
@@ -224,11 +228,9 @@ class FockBuilder:
             C4,
             optimize=True,
         )
-        # if antisymmetrize:
-        #     V -= np.einsum("ijkl->ijlk", V)
         return V
 
-    def two_electron_integrals_block(self, C, antisymmetrize=False):
+    def two_electron_integrals_block(self, C):
         r"""
         Compute the two-electron integrals for a given set of orbitals.
 
@@ -243,13 +245,10 @@ class FockBuilder:
         ----------
         C : NDArray
             Coefficient matrix for the set of orbitals.
-        antisymmetrize : bool, optional, default=False
-            Whether to antisymmetrize the integrals. If True, the integrals are antisymmetrized as:
-            V[p,q,r,s] = :math:`\langle pq || rs \rangle = \langle pq | rs \rangle - \langle pq | sr \rangle`
 
         Returns
         -------
         V : NDArray
             The two-electron integrals in the form of a 4D array.
         """
-        return self.two_electron_integrals_gen_block(C, C, C, C, antisymmetrize)
+        return self.two_electron_integrals_gen_block(C, C, C, C)

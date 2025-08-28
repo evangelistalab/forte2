@@ -1,5 +1,7 @@
+import time
 import numpy as np
 from forte2.cc.cc import _SRCCBase
+from forte2.helpers import logger
 
 class CCSD(_SRCCBase):
 
@@ -18,11 +20,21 @@ class CCSD(_SRCCBase):
 
     def _build_residual(self):
         # CCS transformation
-        self._ccs_transformation()
+        tic = time.time()
+        self._ccs_intermediates()
+        logger.log_debug(f"time for CCS intermediates: {time.time() - tic}s")
+        # T1 transformation of DF tensor
+        tic = time.time()
+        self._t1_transformation()
+        logger.log_debug(f"time for DF T1 transform: {time.time() - tic}s")
         # T1 residual
+        tic = time.time()
         r1 = self._t1_residual()
+        logger.log_debug(f"time for T1 residual: {time.time() - tic}s")
         # T2 residual
+        tic = time.time()
         r2 = self._t2_residual()
+        logger.log_debug(f"time for T2 residual: {time.time() - tic}s")
         self.r = (r1, r2)
 
     def _build_update(self):
@@ -77,63 +89,62 @@ class CCSD(_SRCCBase):
         Compute the projection of the CCSD Hamiltonian on singles
         X[a, i] = < ia | (H_N exp(T1+T2))_C | 0 >
         """
+        X = self.intermediates
         t1, t2 = self.T
-
-        chi_vv = self.ints['vv'] + np.einsum("anef,fn->ae", self.ints['vovv'], t1, optimize=True)
-        chi_oo = self.ints['oo'] + np.einsum("mnif,fn->mi", self.ints['ooov'], t1, optimize=True)
-        h_ov = self.ints['ov'] + np.einsum("mnef,fn->me", self.ints['oovv'], t1, optimize=True)
-        h_oo = chi_oo + np.einsum("me,ei->mi", h_ov, t1, optimize=True)
-        h_ooov = self.ints['ooov'] + np.einsum("mnfe,fi->mnie", self.ints['oovv'], t1, optimize=True)
-        h_vovv = self.ints['vovv'] - np.einsum("mnfe,an->amef", self.ints['oovv'], t1, optimize=True)
-
-        singles_res = -np.einsum("mi,am->ai", h_oo, t1, optimize=True)
-        singles_res += np.einsum("ae,ei->ai", chi_vv, t1, optimize=True)
-        singles_res += np.einsum("anif,fn->ai", self.ints['voov'], t1, optimize=True)
-        singles_res += np.einsum("me,aeim->ai", h_ov, t2, optimize=True)
-        singles_res -= 0.5 * np.einsum("mnif,afmn->ai", h_ooov, t2, optimize=True)
-        singles_res += 0.5 * np.einsum("anef,efin->ai", h_vovv, t2, optimize=True)
-
-        singles_res += self.ints['vo']
-
-        return singles_res
+        singles_residual = -np.einsum("mi,am->ai", X['oo'], t1, optimize=True)
+        singles_residual += np.einsum("ae,ei->ai", X['vv'], t1, optimize=True)
+        singles_residual += np.einsum("me,aeim->ai", X['ov'], t2, optimize=True) # [+]
+        singles_residual += np.einsum("anif,fn->ai", self.ints['voov'], t1, optimize=True)
+        singles_residual -= 0.5 * np.einsum("mnif,afmn->ai", self.ints['ooov'], t2, optimize=True)
+        #
+        b_vo = (
+                  0.5 * np.einsum("xmf,efim->xei", self.ints.B['ov'], t2, optimize=True)
+                - 0.5 * np.einsum("xme,efim->xfi", self.ints.B['ov'], t2, optimize=True)
+        )
+        singles_residual += np.einsum("xae,xei->ai", self.ints.B['vv'], b_vo, optimize=True)
+        singles_residual += self.ints['vo']
+        return singles_residual
 
     def _t2_residual(self):
         """Compute the projection of the CCSD Hamiltonian on doubles
             X[a, b, i, j] = < ijab | (H_N exp(T1+T2))_C | 0 >
         """
-        X = self.intermediates
         t1, t2 = self.T
+        X = self.intermediates
+        # adjust (vv) intermediates
+        X['vv'] -= np.einsum("me,am->ae", X['ov'], t1, optimize=True)
         # intermediates
-        I_oo = X['oo'] + 0.5 * np.einsum("mnef,efin->mi", self.ints['oovv'], t2, optimize=True)
-        I_vv = X['vv'] - 0.5 * np.einsum("mnef,afmn->ae", self.ints['oovv'], t2, optimize=True)
-        I_voov = X['voov'] + 0.5 * np.einsum("mnef,afin->amie", self.ints['oovv'], t2, optimize=True)
-        I_oooo = X['oooo'] + 0.5 * np.einsum("mnef,efij->mnij", self.ints['oovv'], t2, optimize=True)
-        I_vooo = X['vooo'] + 0.5 * np.einsum('anef,efij->anij', self.ints['vovv'] + 0.5 * X['vovv'], t2, optimize=True)
-        tau = 0.5 * t2 + np.einsum('ai,bj->abij', t1, t1, optimize=True)
-
-        doubles_res = -0.5 * np.einsum("amij,bm->abij", I_vooo, t1, optimize=True)
-        doubles_res += 0.5 * np.einsum("abie,ej->abij", X['vvov'], t1, optimize=True)
-        doubles_res += 0.5 * np.einsum("ae,ebij->abij", I_vv, t2, optimize=True)
-        doubles_res -= 0.5 * np.einsum("mi,abmj->abij", I_oo, t2, optimize=True)
-        doubles_res += np.einsum("amie,ebmj->abij", I_voov, t2, optimize=True)
-        doubles_res += 0.25 * np.einsum("abef,efij->abij", self.ints['vvvv'], tau, optimize=True)
-        doubles_res += 0.125 * np.einsum("mnij,abmn->abij", I_oooo, t2, optimize=True)
-
-        doubles_res -= np.transpose(doubles_res, (1, 0, 2, 3)).conj()
-        doubles_res -= np.transpose(doubles_res, (0, 1, 3, 2)).conj()
-
-        doubles_res += self.ints['vvoo']
-
-        return doubles_res
+        h_oooo = (
+                np.einsum("xmi,xnj->mnij", self.BT1['oo'], self.BT1['oo'], optimize=True)
+                - np.einsum("xmj,xni->mnij", self.BT1['oo'], self.BT1['oo'], optimize=True)
+                + 0.5 * np.einsum("mnef,efij->mnij", self.ints['oovv'], t2, optimize=True)
+        )
+        h_voov = (
+                np.einsum("xai,xme->amie", self.BT1['vo'], self.BT1['ov'], optimize=True)
+                - np.einsum("xae,xmi->amie", self.BT1['vv'], self.BT1['oo'], optimize=True)
+                + 0.5 * np.einsum("mnef,afin->amie", self.ints['oovv'], t2, optimize=True)
+        )
+        # <abij|H(1)|0>
+        doubles_residual = 0.5 * np.einsum("xai,xbj->abij", self.BT1['vo'], self.BT1['vo'], optimize=True)
+        # <abij|[H(1)*T2]_C|0>
+        doubles_residual -= 0.5 * np.einsum("mi,abmj->abij", X['oo'], t2, optimize=True)
+        doubles_residual += 0.5 * np.einsum("ae,ebij->abij", X['vv'], t2, optimize=True)
+        doubles_residual += np.einsum("amie,ebmj->abij", h_voov, t2, optimize=True)
+        doubles_residual += 0.125 * np.einsum("mnij,abmn->abij", h_oooo, t2, optimize=True)
+        # vvvv term
+        for a in range(t1.shape[0]):
+           for b in range(a + 1, t1.shape[0]):
+               # <ab|ef> = <x|ae><x|bf>
+               batch_ints = np.einsum("xe,xf->ef", self.BT1['vv'][:, a, :], self.BT1['vv'][:, b, :], optimize=True)
+               batch_ints -= batch_ints.T.conj()
+               doubles_residual[a, b, :, :] += 0.25 * np.einsum("ef,efij->ij", batch_ints, t2, optimize=True)
+        doubles_residual -= np.transpose(doubles_residual, (1, 0, 2, 3)).conj()
+        doubles_residual -= np.transpose(doubles_residual, (0, 1, 3, 2)).conj()
+        return doubles_residual
     
-    def _ccs_transformation(self):
+    def _ccs_intermediates(self):
         """
-        Calculate the quantities related to the one-
-        and two-body components of the CCS similarity-transformed 
-        Hamiltonian, [H_N exp(T1)]_C, which serve as suitable 
-        intermediates for constructing the CCSD amplitude equations.
-            H1[:, :] ~ < p | [H_N exp(T1)]_C | q > (related to, not equal!)
-            H2[:, :, :, :] ~ < pq | [H_N exp(T1)]_C | rs > (related to, not equal!)
+        Compute CCS-like intermediates.
         """
         X = self.intermediates
         t1, t2 = self.T
@@ -142,49 +153,33 @@ class CCSD(_SRCCBase):
         temp = self.ints['ov'] + np.einsum("mnef,fn->me", self.ints['oovv'], t1, optimize=True)
         X['ov'] = temp
 
-        temp = self.ints['vv'] + (
-            np.einsum("anef,fn->ae", self.ints['vovv'], t1, optimize=True)
-            - np.einsum("me,am->ae", X['ov'], t1, optimize=True)
-        ) 
+        temp = self.ints['vv'] - 0.5 * np.einsum("mnef,afmn->ae", self.ints['oovv'], t2, optimize=True)
+        bt1 = np.einsum("xnf,fn->x", self.ints.B['ov'], t1, optimize=True)
+        bxt1 = -np.einsum("xne,fn->xfe", self.ints.B['ov'], t1, optimize=True)
+        temp += (
+                 np.einsum("xae,x->ae", self.ints.B['vv'], bt1, optimize=True)
+                + np.einsum("xaf,xfe->ae", self.ints.B['vv'], bxt1, optimize=True)
+        )
         X['vv'] = temp
 
         temp = self.ints['oo'] + (
-            np.einsum("mnif,fn->mi", self.ints['ooov'], t1, optimize=True)
+              np.einsum("mnif,fn->mi", self.ints['ooov'], t1, optimize=True)
             + np.einsum("me,ei->mi", X['ov'], t1, optimize=True)
+            + 0.5 * np.einsum("mnef,efin->mi", self.ints['oovv'], t2, optimize=True)
         ) 
         X['oo'] = temp
 
-        # 2-body components
-        temp = np.einsum("mnfe,fi->mnie", self.ints['oovv'], t1, optimize=True) 
-        X['ooov'] = temp
-
-        temp = (
-                0.5 * self.ints['oooo'] 
-                + np.einsum("nmje,ei->mnij", self.ints['ooov'] + 0.5 * X['ooov'], t1, optimize=True) # no(4)nu(1)
-        )
-        temp -= np.transpose(temp, (0, 1, 3, 2)).conj()
-        X['oooo'] = temp
-
-        temp = -np.einsum("mnfe,an->amef", self.ints['oovv'], t1, optimize=True) # no(2)nu(3)
-        X['vovv'] = temp
-
-        temp = self.ints['voov'] + (
-                np.einsum("amfe,fi->amie", self.ints['vovv'] + 0.5 * X['vovv'], t1, optimize=True)
-                - np.einsum("nmie,an->amie", self.ints['ooov'] + 0.5 * X['ooov'], t1, optimize=True)
-        )
-        X['voov'] = temp
-
-        temp2 = self.ints['voov'] + 0.5 * np.einsum('amef,ei->amif', self.ints['vovv'], t1, optimize=True) # no(2)nu(3)
-        temp3 = self.ints['oooo'] + np.einsum('mnie,ej->mnij', X['ooov'], t1, optimize=True) # no(4)nu(1)
-        temp = 0.5 * self.ints['vooo'] + (
-            np.einsum('amie,ej->amij', temp2, t1, optimize=True)
-            -0.25 * np.einsum('mnij,am->anij', temp3, t1, optimize=True)
-        ) 
-        temp -= np.transpose(temp, (0, 1, 3, 2)).conj()
-        X['vooo'] = temp
-
-        temp2 = np.einsum('mnie,am->anie', self.ints['ooov'], t1, optimize=True)
-        temp = self.ints['vvov'] + np.einsum("anie,bn->abie", temp2, t1, optimize=True) # no(1)nu(4)
-        X['vvov'] = temp
-
         self.intermediates = X
+
+    def _t1_transformation(self):
+        t1, _ = self.T
+        # T1-transform Cholesky vectors
+        self.BT1['ov'] = self.ints.B['ov'].copy()
+        self.BT1['oo'] = self.ints.B['oo'].copy() + np.einsum("xme,ei->xmi", self.BT1['ov'], t1, optimize=True)
+        self.BT1['vv'] = self.ints.B['vv'].copy() - np.einsum("xme,am->xae", self.BT1['ov'], t1, optimize=True)
+        self.BT1['vo'] = (
+                self.ints.B['vo'].copy()
+                - np.einsum("xmi,am->xai", self.BT1['oo'], t1, optimize=True)
+                + np.einsum("xae,ei->xai", self.BT1['vv'], t1, optimize=True)
+                + np.einsum("xme,ei,am->xai", self.BT1['ov'], t1, t1, optimize=True)
+        )

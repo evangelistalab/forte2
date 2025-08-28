@@ -7,9 +7,6 @@ from numpy.typing import NDArray
 from forte2.jkbuilder.jkbuilder import FockBuilder
 from forte2.system.system import System
 
-# module-level tokens
-o, v = object(), object()
-
 
 @dataclass
 class RestrictedMOIntegrals:
@@ -121,63 +118,134 @@ class RestrictedMOIntegrals:
 
 
 @dataclass
-class SRRestrictedMOIntegrals:
+class SONormalOrderedIntegrals:
     r"""
-    Class to compute molecular orbital integrals for a given set of restricted orbitals
+    Class to compute molecular spinorbital integrals for a given set of restricted (RHF/ROHF/GHF) orbitals
     for use in SR correlation methods.
 
     Parameters
     ----------
-    moints : RestrictedMOIntegrals
-        The integrals in the MO basis
+    scf : 
+        The mean-field RHF/ROHF/GHF object.
     frozen : int, optional
-        Number of frozen core orbitals to be excluded from the correlated calculation. Defaults to 0.
+        Number of frozen core spinorbitals to be excluded from the correlated calculation. Defaults to 0.
     virtual : int, optional
-        Number of virtual orbitals to be excluded from the correlated calculation. Defaults to 0.
-
+        Number of virtual spinorbitals to be excluded from the correlated calculation. Defaults to 0.
+    build_nvirt : int, optional
+        Builds integral blocks containing up to `build_nvirt` virtual dimensions. Defaults to 2.
 
     Attributes
     ----------
+    F : dict
+        The one-electron Fock integrals in the molecular spinorbital basis stored as occupied/virtual blocks in a dictionary
+    V : dict
+        The two-electron integrals in the molecular spinorbital basis stored as occupied/virtual blocks in a dictionary.
+    B : dict
+        The density-fitted tensor B(x|pq) stored as occupied/virtual slices in a dictionary
     """
 
-    def __init__(self, scf, frozen=0, virtual=0, spinorbital=True):
+    def __init__(self, scf, frozen=0, virtual=0, build_nvirt=4):
 
-        self.ints = RestrictedMOIntegrals(scf.system, 
-                                          scf.C[0],
-                                          orbitals=list(range(scf.nmo)), 
-                                          spinorbital=spinorbital, 
-                                          antisymmetrize=True)
-        
-        self.occupied_all = slice(0, scf.nel)
-        self.unoccupied_all = slice(scf.nel, 2 * self.ints.norb)
-        self.o = slice(frozen, scf.nel)
-        self.v = slice(scf.nel, 2 * self.ints.norb - virtual) 
-        self.E = self.scf_energy()
+        self.nocc = scf.nel
+        self.norb = 2 * scf.C[0].shape[1]
+        self.occupied_all = slice(0, self.nocc)
+        self.unoccupied_all = slice(self.nocc, self.norb)
+        self.o = slice(frozen, self.nocc)
+        self.v = slice(self.nocc, self.norb - virtual)
 
-        self.build_fock()
-
-        assert np.allclose(self.E, self.scf_energy_fock())
-
+        # Store nuclear repulsion energy
+        self.nuclear_repulsion = scf.system.nuclear_repulsion
+        # DF tensor
+        B = self.get_df_tensor(scf.system, scf.C[0])
+        # onebody (Hcore) integrals
+        Z = self.get_onebody_ints(scf.system, scf.C[0])
+        # Build Fock matrix using B tensors
+        F = self.build_fock(Z, B)
+        # Compute SCF energy
+        self.E = self.scf_energy(Z, B)
+        # Store B tensor in correlated o/v slices
+        self.B = {'oo': B[:, self.o, self.o], 
+                  'vv': B[:, self.v, self.v],
+                  'ov': B[:, self.o, self.v],
+                  'vo': B[:, self.v, self.o]}
+        # Store F matrix in correlated o/v slices
+        self.F = {'oo': F[self.o, self.o],
+                  'vv': F[self.v, self.v],
+                  'ov': F[self.o, self.v],
+                  'vo': F[self.v, self.o]}
+        # Compute blocks of two-electron integrals
+        self.get_twobody_ints(build_nvirt)
+        assert np.allclose(self.E, self.scf_energy_fock(F, B))
+        del B
 
     def __getitem__(self, key):
-        idx = tuple(self.o if k == "o" else self.v if k == "v" else k for k in key)
-        if len(idx) == 2:
-            return self.F[idx]
-        if len(idx) == 4:
-            return self.ints.V[idx]
-        raise IndexError("Use 2 indices for H or 4 indices for V.")
+        if len(key) == 4:
+            return self.V[key]
+        elif len(key) == 2:
+            return self.F[key]
 
-    def build_fock(self):
-        self.F = self.ints.H + np.einsum("piqi->pq", self.ints.V[:, self.occupied_all, :, self.occupied_all])
+    def get_df_tensor(self, system, C):
+         
+        jkbuilder = FockBuilder(system, use_aux_corr=False)
 
-    def scf_energy(self):
-        E = np.einsum("ii->", self.ints.H[self.occupied_all, self.occupied_all]) + 0.5 * np.einsum("ijij->", self.ints.V[self.occupied_all, self.occupied_all, self.occupied_all, self.occupied_all])
-        E += self.ints.system.nuclear_repulsion
+        # Build spinorbital B tensor in the MO basis
+        B_mo = np.einsum("xij,ip,jq->xpq", jkbuilder.B, C, C)
+        B = np.zeros((B_mo.shape[0], self.norb, self.norb))
+        B[:, ::2, ::2] = B[:, 1::2, 1::2] = B_mo
+        return B
+
+    def get_onebody_ints(self, system, C):
+
+        # Build spinorbital one-electron integrals in the MO basis
+        Z_mo = np.einsum("mi,mn,nj->ij", C, system.ints_hcore(), C)
+        Z = np.zeros((self.norb, self.norb))
+        Z[::2, ::2] = Z[1::2, 1::2] = Z_mo
+        return Z
+    
+    def get_twobody_ints(self, build_nvirt):
+
+        # unique two-electron integrals by o-v blocks
+        blk_0v = ['oooo']
+        blk_1v = ['ooov', 'vooo', ]
+        blk_2v = ['oovv', 'vvoo', 'voov']
+        blk_3v = ['vvov', 'vovv']
+        blk_4v = ['vvvv']
+        integral_blocks = [blk_0v, blk_1v, blk_2v, blk_3v, blk_4v]
+
+        # two-electron integrals via DF tensors
+        self.V = {}
+        for i, block in enumerate(integral_blocks[:build_nvirt + 1]):
+            for key in block:
+                s1 = key[0] + key[2] # pr
+                s2 = key[1] + key[3] # qs
+                s3 = key[0] + key[3] # ps
+                s4 = key[1] + key[2] # qr
+                self.V[key] = (
+                              np.einsum('xpr,xqs->pqrs', self.B[s1], self.B[s2], optimize=True) # B(pr)*B(qs) = <pq|rs>
+                            - np.einsum('xps,xqr->pqrs', self.B[s3], self.B[s4], optimize=True) # B(ps)*B(qr) = <pq|sr>
+                )
+
+    def build_fock(self, Z, B):
+        F = Z + (
+              np.einsum("xpq,xii->pq", B, B[:, self.occupied_all, self.occupied_all], optimize=True) # <pi|v|qi>
+            - np.einsum("xpi,xiq->pq", B[:, :, self.occupied_all], B[:, self.occupied_all, :], optimize=True) # <pi|v|iq>
+        )
+        return F
+
+    def scf_energy(self, Z, B):
+        E = (
+                np.einsum("ii->", Z[self.occupied_all, self.occupied_all])
+                + 0.5 * np.einsum("xii,xjj->", B[:, self.occupied_all, self.occupied_all], B[:, self.occupied_all, self.occupied_all]) 
+                - 0.5 * np.einsum("xij,xji->", B[:, self.occupied_all, self.occupied_all], B[:, self.occupied_all, self.occupied_all])
+                + self.nuclear_repulsion
+        )
         return E
 
-    def scf_energy_fock(self):
-        E = np.einsum("ii->", self.F[self.occupied_all, self.occupied_all]) - 0.5 * np.einsum(
-            "ijij->", self.ints.V[self.occupied_all, self.occupied_all, self.occupied_all, self.occupied_all]
+    def scf_energy_fock(self, F, B):
+        E = (
+                np.einsum("ii->", F[self.occupied_all, self.occupied_all]) 
+                - 0.5 * np.einsum("xii,xjj->", B[:, self.occupied_all, self.occupied_all], B[:, self.occupied_all, self.occupied_all]) 
+                + 0.5 * np.einsum("xij,xji->", B[:, self.occupied_all, self.occupied_all], B[:, self.occupied_all, self.occupied_all])
+                + self.nuclear_repulsion
         )
-        E += self.ints.system.nuclear_repulsion
         return E
