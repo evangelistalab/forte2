@@ -6,7 +6,6 @@ import numpy as np
 
 from forte2.helpers.diis import DIIS
 from forte2.helpers import logger
-# from forte2.helpers.jacobi import JacobiSolver
 from forte2.jkbuilder import SONormalOrderedIntegrals
 
 
@@ -66,6 +65,7 @@ class _SRCCBase(ABC):
     executed: bool = field(default=False, init=False)
 
     def __post_init__(self):
+        self.method = self._cc_type().upper()
         if self.scf is not None:
             self(scf=self.scf)
 
@@ -78,8 +78,7 @@ class _SRCCBase(ABC):
         return self
 
     def run(self):
-        # if not self.executed:
-        #     self._cc_solver_startup()
+        self._cc_print_banner()
 
         diis = DIIS(
             diis_start=self.diis_start,
@@ -142,6 +141,24 @@ class _SRCCBase(ABC):
         self.executed = True
 
         return self
+    
+    def _cc_print_banner(self):
+        logger.log(("=" * 64), self.log_level)
+        logger.log(f"Coupled-Cluster Calculation: {self.method}", self.log_level)
+        logger.log(f"Number of occupied spinorbitals: {self.no}", self.log_level)
+        logger.log(f"Number of unoccupied spinorbitals: {self.nu}", self.log_level)
+        logger.log(f"Number of frozen core spinorbitals: {self.frozen}", self.log_level)
+        logger.log(f"Number of frozen virtual spinorbitals: {self.virtual}", self.log_level)
+        logger.log(f"Energy Convergence: {self.econv}", self.log_level)
+        logger.log(f"Amplitude Convergence: {self.rconv}", self.log_level)
+        if self.do_diis:
+            logger.log(f"DIIS Subspace Size: {self.diis_nvec}", self.log_level)
+            logger.log(f"DIIS Start: {self.diis_start}", self.log_level)
+            logger.log(f"DIIS Min: {self.diis_min}", self.log_level)
+        logger.log(("=" * 64), self.log_level)
+
+    def _cc_type(self):
+        return type(self).__name__.upper()
     
     @abstractmethod
     def _build_residual(self): ...   

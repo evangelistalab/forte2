@@ -1,3 +1,4 @@
+import time
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -6,6 +7,7 @@ from numpy.typing import NDArray
 
 from forte2.jkbuilder.jkbuilder import FockBuilder
 from forte2.system.system import System
+from forte2.helpers import logger
 
 
 @dataclass
@@ -156,11 +158,17 @@ class SONormalOrderedIntegrals:
         # Store nuclear repulsion energy
         self.nuclear_repulsion = scf.system.nuclear_repulsion
         # DF tensor
+        tic = time.time()
         B = self.get_df_tensor(scf.system, scf.C[0])
+        logger.log_debug(f"[SOIntegrals] AO-to-MO + spinorbital transformation of DF tensor: {time.time() - tic} seconds")
         # onebody (Hcore) integrals
+        tic = time.time()
         Z = self.get_onebody_ints(scf.system, scf.C[0])
+        logger.log_debug(f"[SOIntegrals] Building one-body spinorbital integrals: {time.time() - tic} seconds")
         # Build Fock matrix using B tensors
+        tic = time.time()
         F = self.build_fock(Z, B)
+        logger.log_debug(f"[SOIntegrals] Building spinorbital Fock matrix: {time.time() - tic} seconds")
         # Compute SCF energy
         self.E = self.scf_energy(Z, B)
         # Store B tensor in correlated o/v slices
@@ -174,7 +182,9 @@ class SONormalOrderedIntegrals:
                   'ov': F[self.o, self.v],
                   'vo': F[self.v, self.o]}
         # Compute blocks of two-electron integrals
+        tic = time.time()
         self.get_twobody_ints(build_nvirt)
+        logger.log_debug(f"[SOIntegrals] Building blocks (up to nvirt = {build_nvirt}) of two-electron spinorbital integrals: {time.time() - tic} seconds")
         assert np.allclose(self.E, self.scf_energy_fock(F, B))
         del B
 
@@ -214,7 +224,7 @@ class SONormalOrderedIntegrals:
 
         # two-electron integrals via DF tensors
         self.V = {}
-        for i, block in enumerate(integral_blocks[:build_nvirt + 1]):
+        for block in integral_blocks[:build_nvirt + 1]:
             for key in block:
                 s1 = key[0] + key[2] # pr
                 s2 = key[1] + key[3] # qs

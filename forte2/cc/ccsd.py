@@ -5,6 +5,7 @@ from forte2.helpers import logger
 
 class CCSD(_SRCCBase):
 
+
     def _diis_update(self, diis):
         t1, t2 = self.T
         r1, r2 = self.r
@@ -22,19 +23,19 @@ class CCSD(_SRCCBase):
         # CCS transformation
         tic = time.time()
         self._ccs_intermediates()
-        logger.log_debug(f"time for CCS intermediates: {time.time() - tic}s")
+        logger.log_debug(f"[CCSD] time for CCS intermediates: {time.time() - tic}s")
         # T1 transformation of DF tensor
         tic = time.time()
         self._t1_transformation()
-        logger.log_debug(f"time for DF T1 transform: {time.time() - tic}s")
+        logger.log_debug(f"[CCSD] time for DF T1 transform: {time.time() - tic}s")
         # T1 residual
         tic = time.time()
         r1 = self._t1_residual()
-        logger.log_debug(f"time for T1 residual: {time.time() - tic}s")
+        logger.log_debug(f"[CCSD] time for T1 residual: {time.time() - tic}s")
         # T2 residual
         tic = time.time()
         r2 = self._t2_residual()
-        logger.log_debug(f"time for T2 residual: {time.time() - tic}s")
+        logger.log_debug(f"[CCSD] time for T2 residual: {time.time() - tic}s")
         self.r = (r1, r2)
 
     def _build_update(self):
@@ -131,6 +132,7 @@ class CCSD(_SRCCBase):
         doubles_residual += 0.5 * np.einsum("ae,ebij->abij", X['vv'], t2, optimize=True)
         doubles_residual += np.einsum("amie,ebmj->abij", h_voov, t2, optimize=True)
         doubles_residual += 0.125 * np.einsum("mnij,abmn->abij", h_oooo, t2, optimize=True)
+        tic = time.time()
         # vvvv term
         for a in range(t1.shape[0]):
            for b in range(a + 1, t1.shape[0]):
@@ -138,6 +140,7 @@ class CCSD(_SRCCBase):
                batch_ints = np.einsum("xe,xf->ef", self.BT1['vv'][:, a, :], self.BT1['vv'][:, b, :], optimize=True)
                batch_ints -= batch_ints.T.conj()
                doubles_residual[a, b, :, :] += 0.25 * np.einsum("ef,efij->ij", batch_ints, t2, optimize=True)
+        logger.log_debug(f"[CCSD] time for vvvv contraction: {time.time() - tic} s")
         doubles_residual -= np.transpose(doubles_residual, (1, 0, 2, 3)).conj()
         doubles_residual -= np.transpose(doubles_residual, (0, 1, 3, 2)).conj()
         return doubles_residual
