@@ -289,6 +289,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         occ_pairs = sorted(zip(core_inds, lo_vals), key=lambda x: x[1], reverse=True)
         vir_pairs = sorted(zip(virt_inds, lv_vals), key=lambda x: x[1], reverse=True)
 
+        # rotate the core and virtual orbitals to the ASET basis
         Ca[:, core_inds] = Ca[:, core_inds] @ Uo
         Ca[:, virt_inds] = Ca[:, virt_inds] @ Uv
 
