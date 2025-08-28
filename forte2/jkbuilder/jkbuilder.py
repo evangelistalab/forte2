@@ -20,8 +20,6 @@ class FockBuilder:
         If a ModelSystem is provided, it will decompose the 4D ERI tensor using Cholesky decomposition with complete pivoting.
     use_aux_corr : bool, optional, default=False
         If True, uses ``system.auxiliary_basis_set_corr`` instead of ``system.auxiliary_basis``.
-    spinorbital : bool, optional, default=False
-        If True, converts DF tensors to spinorbital basis prior to constructing integrals.
     """
 
     def __init__(self, system: System, use_aux_corr=False):
@@ -51,11 +49,6 @@ class FockBuilder:
             self.B, system.naux = self._build_B_cholesky(
                 system.basis, system.cholesky_tol
             )
-
-        # if spinorbital:
-        #     B_spinorb = np.zeros((self.B.shape[0], 2*nbf, 2*nbf))
-        #     B_spinorb[:, ::2, ::2] = B[:, 1::2, 1::2] = self.B
-        #     self.B = B_spinorb
 
     @staticmethod
     def _build_B_cholesky(basis, cholesky_tol):
