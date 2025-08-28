@@ -5,63 +5,62 @@ from forte2.helpers import LBFGS
 from forte2.helpers.comparisons import approx
 
 
-class ROSENBROCK:
-    def __init__(self, n):
-        if n % 2 != 0:
-            raise ValueError("Invalid size for Rosenbrock. Please use even number.")
-        self.n = n
+class Rosenbrock:
+    def evaluate(x):
+        r"""
+        Rosenbrock function
 
-    def evaluate(self, x, g, do_g=True):
-        fx = 0.0
-        for i in range(0, self.n, 2):
-            xi = x[i]
-            t1 = xi - 1.0
-            t2 = 10 * (xi * xi - x[i + 1])
-            if do_g:
-                g[i + 1] = -20 * t2
-                g[i] = 2.0 * (t1 - g[i + 1] * xi)
-            fx += t1 * t1 + t2 * t2
-        return fx, g
+        See https://docs.scipy.org/doc/scipy-0.14.0/reference/tutorial/optimize.html#unconstrained-minimization-of-multivariate-scalar-functions-minimize
 
-    def hess_diag(self, x):
-        h0 = np.zeros_like(x)
+        f(\bvec{x}) = \sum_{i=1}^{N-1}[100(x_{i+1}-x_i^2)^2+(1-x_i)^2]
+        """
+        t1 = x[1:] - x[:-1] ** 2
+        t2 = 1.0 - x[:-1]
+        return np.sum(100.0 * np.dot(t1, t1) + np.dot(t2, t2))
 
-        for i in range(0, self.n, 2):
-            xi = x[i]
-            t2 = 10 * (xi * xi - x[i + 1])
-            h0[i + 1] = 200
-            h0[i] = 2.0 * (1 + 400 * xi * xi + 20 * t2)
+    def gradient(x):
+        grad = np.zeros_like(x)
+        grad[1:] = -(1.0 - x[1:]) + 200 * (x[1:] - x[:-1] ** 2)
+        grad[:-1] -= 400 * x[:-1] * (x[1:] - x[:-1] ** 2)
+        return grad
+
+    def diagonal_hessian(x):
+        h0 = 202 + 400 * x**2
+        h0[:-1] -= 400 * x[:-1]
         return h0
 
 
-def scipy_minimize():
-    def rosenbrock(x):
-        # f(x) = sum_{i=0}^{n/2 - 1} [ 100 * (x_{2i}^2 - x_{2i + 1})^2 + (x_{2i} - 1)^2 ]
-        x_even = x[::2]
-        x_odd = x[1::2]
-        return sum(100.0 * (x_even**2 - x_odd) ** 2 + (x_even - 1) ** 2)
+class RosenbrockComplex:
+    def evaluate(x):
+        l = len(x) // 2
+        z = x[:l] + 1.0j * x[l:]
+        t1 = z[1:] - z[:-1] ** 2
+        t2 = 1.0 - z[:-1]
+        return np.sum(100.0 * np.dot(t1.conj(), t1).real + np.dot(t2.conj(), t2).real)
 
-    def rosenbrock_grad(x):
-        x_even = x[::2]
-        x_odd = x[1::2]
-        t1 = x_even - 1
-        t2 = 10 * (x_even**2 - x_odd)
-
-        g = np.zeros(x.shape)
-        g[1::2] = -20 * t2
-        g[::2] = 2.0 * (t1 - g[1::2] * x_even)
+    def gradient(x):
+        """
+        One of the Wirtinger gradients, df/dz*, is used for descent.
+        See https://mediatum.ub.tum.de/doc/631019/631019.pdf
+        """
+        l = len(x) // 2
+        z = x[:l] + 1.0j * x[l:]
+        grad = np.zeros(l, dtype=np.complex128)
+        grad[1:] = -(1.0 - z[1:]) + 100 * (z[1:] - z[:-1] ** 2)
+        grad[:-1] -= 200 * z[:-1].conj() * (z[1:] - z[:-1] ** 2)
+        g = np.concatenate([grad.real, grad.imag])
         return g
 
-    x0 = np.zeros(10)
-    res = minimize(
-        rosenbrock,
-        x0,
-        method="BFGS",
-        jac=rosenbrock_grad,
-        options={"gtol": 1e-6, "disp": True},
-    )
 
-    return res.x, res.fun
+class RosenbrockWrapper:
+    def evaluate(self, x, g, do_g=True):
+        fx = Rosenbrock.evaluate(x)
+        if do_g:
+            g = Rosenbrock.gradient(x)
+        return fx, g
+
+    def hess_diag(self, x):
+        return Rosenbrock.diagonal_hessian(x)
 
 
 def test_lbfgs_rosenbrock():
@@ -69,19 +68,38 @@ def test_lbfgs_rosenbrock():
     h0_freq = 0
     lbfgs_solver = LBFGS()
     lbfgs_solver.epsilon = 1.0e-6
-    lbfgs_solver.maxiter = 100
+    lbfgs_solver.maxiter = 200
     lbfgs_solver.h0_freq = h0_freq
     lbfgs_solver.print = 2
 
-    rosenbrock = ROSENBROCK(n)
-    x = np.zeros(n)
+    func = RosenbrockWrapper()
+    x = np.ones(n) * 0.1
 
-    fx = lbfgs_solver.minimize(rosenbrock, x)
-    x_scipy, fx_scipy = scipy_minimize()
+    fx = lbfgs_solver.minimize(func, x)
 
-    assert np.linalg.norm(x - x_scipy) < 1e-6
-    assert fx == approx(fx_scipy)
+    x0 = np.ones(n) * 0.1
+    hess_inv0 = np.diag(1.0 / Rosenbrock.diagonal_hessian(x))
+    res = minimize(
+        Rosenbrock.evaluate,
+        x0,
+        jac=Rosenbrock.gradient,
+        method="BFGS",
+        options={"gtol": 1e-6, "disp": True, "maxiter": 500, "hess_inv0": hess_inv0},
+    )
+
+    assert np.linalg.norm(x - res.x) < 1e-6
+    assert fx == approx(res.fun)
 
 
-if __name__ == "__main__":
-    test_lbfgs_rosenbrock()
+def test_lbfgs_rosenbrock_complex():
+    x0 = np.ones(20) * 0.1
+    res = minimize(
+        RosenbrockComplex.evaluate,
+        x0,
+        jac=RosenbrockComplex.gradient,
+        method="BFGS",
+        options={"gtol": 1e-6, "disp": True, "maxiter": 500},
+    )
+    print(res.x)
+
+test_lbfgs_rosenbrock_complex()
