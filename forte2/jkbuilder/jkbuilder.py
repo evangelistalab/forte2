@@ -205,6 +205,9 @@ class FockBuilder:
             Coefficient matrix for the third set of orbitals (index r).
         C4 : NDArray
             Coefficient matrix for the fourth set of orbitals (index s).
+        antisymmetrize : bool, optional, default=False
+            Whether to antisymmetrize the integrals. If True, the integrals are antisymmetrized as:
+            V[p,q,r,s] = :math:`\langle pq || rs \rangle = \langle pq | rs \rangle - \langle pq | sr \rangle`
 
         Returns
         -------
