@@ -182,7 +182,7 @@ class FockBuilder:
         J, K = self.build_JK([Cp])
         return J[0], K[0]
 
-    def two_electron_integrals_gen_block(self, C1, C2, C3, C4):
+    def two_electron_integrals_gen_block(self, C1, C2, C3, C4, antisymmetrize=False):
         r"""
         Compute the two-electron integrals for a given set of orbitals. This method is
         general and can handle different sets of orbitals for each index (p, q, r, s).
@@ -223,10 +223,12 @@ class FockBuilder:
             C3,
             C4,
             optimize=True,
-        )
+        )        
+        if antisymmetrize:
+            V -= np.einsum("ijkl->ijlk", V)
         return V
 
-    def two_electron_integrals_block(self, C):
+    def two_electron_integrals_block(self, C, antisymmetrize=False):
         r"""
         Compute the two-electron integrals for a given set of orbitals.
 
@@ -241,10 +243,13 @@ class FockBuilder:
         ----------
         C : NDArray
             Coefficient matrix for the set of orbitals.
+        antisymmetrize : bool, optional, default=False
+            Whether to antisymmetrize the integrals. If True, the integrals are antisymmetrized as:
+            V[p,q,r,s] = :math:`\langle pq || rs \rangle = \langle pq | rs \rangle - \langle pq | sr \rangle`
 
         Returns
         -------
         V : NDArray
             The two-electron integrals in the form of a 4D array.
         """
-        return self.two_electron_integrals_gen_block(C, C, C, C)
+        return self.two_electron_integrals_gen_block(C, C, C, C, antisymmetrize)
