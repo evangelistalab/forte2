@@ -82,6 +82,7 @@ def core_initial_guess(system: System, H):
         The system object containing the atoms and basis set.
     H : NDArray
         The core Hamiltonian matrix.
+
     Returns
     -------
     NDArray

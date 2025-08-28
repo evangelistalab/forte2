@@ -3,7 +3,6 @@ from abc import ABC, abstractmethod
 import time
 
 import numpy as np
-
 from forte2.system import System, ModelSystem
 from forte2.jkbuilder import FockBuilder
 from forte2.base_classes.mixins import MOsMixin, SystemMixin
@@ -69,7 +68,6 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
     econv: float = 1e-9
     dconv: float = 1e-6
     maxiter: int = 100
-    #: Initial guess algorithm. Can be "minao" or "hcore".
     guess_type: str = "minao"
     level_shift: float = None
     level_shift_thresh: float = 1e-5

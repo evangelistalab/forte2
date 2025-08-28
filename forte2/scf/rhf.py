@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-
 import numpy as np
 
 from forte2.system.basis_utils import BasisInfo
