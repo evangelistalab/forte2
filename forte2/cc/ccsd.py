@@ -5,6 +5,13 @@ from forte2.helpers import logger
 
 class CCSD(_SRCCBase):
 
+    def _build_energy_denominators(self):
+        n = np.newaxis
+        eps_o = np.diagonal(self.ints['oo'])
+        eps_v = np.diagonal(self.ints['vv'])
+        d1 = eps_o[n, :] - eps_v[:, n]
+        d2 = eps_o[n, n, :, n] + eps_o[n, n, n, :] - eps_v[:, n, n, n] - eps_v[n, :, n, n]
+        self.denom = (d1, d2)
 
     def _diis_update(self, diis):
         t1, t2 = self.T
@@ -41,24 +48,34 @@ class CCSD(_SRCCBase):
     def _build_update(self):
         t1, t2 = self.T
         r1, r2 = self.r
+        d1, d2 = self.denom
         resnorm = 0.
-        for a in range(self.nu):
-            for i in range(self.no):
-                denom = self.ints['oo'][i, i] - self.ints['vv'][a, a]
-                dt = r1[a, i] / (denom - self.energy_shift)
-                t1[a, i] += dt
-                resnorm += np.abs(dt)
-        for a in range(self.nu):
-            for b in range(a + 1, self.nu):
-                for i in range(self.no):
-                    for j in range(i + 1, self.no):
-                        denom = self.ints['oo'][i, i] + self.ints['oo'][j, j] - self.ints['vv'][a, a] - self.ints['vv'][b, b]
-                        dt = r2[a, b, i, j] / (denom - self.energy_shift)
-                        t2[a, b, i, j] +=  dt
-                        t2[b, a, i, j] = -t2[a, b, i, j]
-                        t2[a, b, j, i] = -t2[a, b, i, j]
-                        t2[b, a, j, i] = t2[a, b, i, j]
-                        resnorm += np.abs(dt)
+
+        dt = r1 / (d1 - self.energy_shift)
+        t1 += dt 
+        resnorm += np.sum(dt**2)
+
+        dt = r2 / (d2 - self.energy_shift)
+        t2 += dt 
+        resnorm += np.sum(dt**2)
+        resnorm = np.sqrt(resnorm)
+        #for a in range(self.nu):
+        #    for i in range(self.no):
+        #        denom = self.ints['oo'][i, i] - self.ints['vv'][a, a]
+        #        dt = r1[a, i] / (denom - self.energy_shift)
+        #        t1[a, i] += dt
+        #        resnorm += np.abs(dt)
+        #for a in range(self.nu):
+        #    for b in range(a + 1, self.nu):
+        #        for i in range(self.no):
+        #            for j in range(i + 1, self.no):
+        #                denom = self.ints['oo'][i, i] + self.ints['oo'][j, j] - self.ints['vv'][a, a] - self.ints['vv'][b, b]
+        #                dt = r2[a, b, i, j] / (denom - self.energy_shift)
+        #                t2[a, b, i, j] +=  dt
+        #                t2[b, a, i, j] = -t2[a, b, i, j]
+        #                t2[a, b, j, i] = -t2[a, b, i, j]
+        #                t2[b, a, j, i] = t2[a, b, i, j]
+        #                resnorm += np.abs(dt)
         self.T = (t1, t2)
         self.resnorm = resnorm
 
@@ -71,18 +88,19 @@ class CCSD(_SRCCBase):
         )
 
     def _build_initial_guess(self):
+        _, d2 = self.denom
         t1 = np.zeros((self.nu, self.no))
-        t2 = np.zeros((self.nu, self.nu, self.no, self.no))
-        for a in range(self.nu):
-            for b in range(a + 1, self.nu):
-                for i in range(self.no):
-                    for j in range(i + 1, self.no):
-                        denom = self.ints['oo'][i, i] + self.ints['oo'][j, j] - self.ints['vv'][a, a] - self.ints['vv'][b, b]
-                        t2[a, b, i, j] = self.ints['vvoo'][a, b, i, j] / (denom)
-
-                        t2[b, a, i, j] = -t2[a, b, i, j]
-                        t2[a, b, j, i] = -t2[a, b, i, j]
-                        t2[b, a, j, i] = t2[a, b, i, j]
+        t2 = self.ints['vvoo'] / d2
+        #t2 = np.zeros((self.nu, self.nu, self.no, self.no))
+        #for a in range(self.nu):
+        #    for b in range(a + 1, self.nu):
+        #        for i in range(self.no):
+        #            for j in range(i + 1, self.no):
+        #                denom = self.ints['oo'][i, i] + self.ints['oo'][j, j] - self.ints['vv'][a, a] - self.ints['vv'][b, b]
+        #                t2[a, b, i, j] = self.ints['vvoo'][a, b, i, j] / (denom)
+        #                t2[b, a, i, j] = -t2[a, b, i, j]
+        #                t2[a, b, j, i] = -t2[a, b, i, j]
+        #                t2[b, a, j, i] = t2[a, b, i, j]
         self.T = (t1, t2)
 
     def _t1_residual(self):
@@ -132,15 +150,21 @@ class CCSD(_SRCCBase):
         doubles_residual += 0.5 * np.einsum("ae,ebij->abij", X['vv'], t2, optimize=True)
         doubles_residual += np.einsum("amie,ebmj->abij", h_voov, t2, optimize=True)
         doubles_residual += 0.125 * np.einsum("mnij,abmn->abij", h_oooo, t2, optimize=True)
-        tic = time.time()
+
+        # [TODO]: It would be nice to perform this computation in C++
         # vvvv term
+        tic = time.time()
+        self.BT1['vv'] = self.BT1['vv'].swapaxes(0, 1)
         for a in range(t1.shape[0]):
            for b in range(a + 1, t1.shape[0]):
-               # <ab|ef> = <x|ae><x|bf>
-               batch_ints = np.einsum("xe,xf->ef", self.BT1['vv'][:, a, :], self.BT1['vv'][:, b, :], optimize=True)
+               # <ab||ef> = <x|ae><x|bf> - <x|af><x|be>
+               batch_ints = np.einsum("xe,xf->ef", self.BT1['vv'][a, :, :], self.BT1['vv'][b, :, :], optimize=True)
                batch_ints -= batch_ints.T.conj()
                doubles_residual[a, b, :, :] += 0.25 * np.einsum("ef,efij->ij", batch_ints, t2, optimize=True)
+        # BT1['vv'] is not used again (it's recomputed later), so we don't actually have to swap it back
+        # self.BT1['vv'] = self.BT1['vv'].swapaxes(0, 1) # pxq -> xpq
         logger.log_debug(f"[CCSD] time for vvvv contraction: {time.time() - tic} s")
+
         doubles_residual -= np.transpose(doubles_residual, (1, 0, 2, 3)).conj()
         doubles_residual -= np.transpose(doubles_residual, (0, 1, 3, 2)).conj()
         return doubles_residual

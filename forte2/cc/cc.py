@@ -88,14 +88,14 @@ class _SRCCBase(ABC):
         )
 
         if self.first_run:
+            self._build_energy_denominators()
             self._build_initial_guess()
-            self._build_energy()
             self.first_run = False
 
+        # Compute initial guess energy
+        self._build_energy()
         logger.log(f"Initial CC Correlation Energy: {self.E} hartree", self.log_level)
 
-        # 5. Run Jacobi
-        # T, E = self.solver.solve(T, self.ints)
         self.converged = False
         E_old = 0.
 
@@ -135,6 +135,10 @@ class _SRCCBase(ABC):
         )
         if self.converged:
             logger.log("\nCoupled-cluster calculation converged.\n", self.log_level)
+
+            logger.log_debug("Overwriting DF B tensors with their T1-transformed counterparts")
+            self.ints.B = self.BT1
+
         else:
             logger.log("\nCoupled-cluster calculation did not converge.\n", self.log_level)
 
@@ -143,22 +147,25 @@ class _SRCCBase(ABC):
         return self
     
     def _cc_print_banner(self):
-        logger.log(("=" * 64), self.log_level)
-        logger.log(f"Coupled-Cluster Calculation: {self.method}", self.log_level)
+        logger.log(("-" * 64), self.log_level)
+        logger.log(f"Coupled-cluster calculation: {self.method}", self.log_level)
         logger.log(f"Number of occupied spinorbitals: {self.no}", self.log_level)
         logger.log(f"Number of unoccupied spinorbitals: {self.nu}", self.log_level)
         logger.log(f"Number of frozen core spinorbitals: {self.frozen}", self.log_level)
         logger.log(f"Number of frozen virtual spinorbitals: {self.virtual}", self.log_level)
-        logger.log(f"Energy Convergence: {self.econv}", self.log_level)
-        logger.log(f"Amplitude Convergence: {self.rconv}", self.log_level)
+        logger.log(f"Energy convergence: {self.econv}", self.log_level)
+        logger.log(f"Amplitude convergence: {self.rconv}", self.log_level)
         if self.do_diis:
-            logger.log(f"DIIS Subspace Size: {self.diis_nvec}", self.log_level)
-            logger.log(f"DIIS Start: {self.diis_start}", self.log_level)
-            logger.log(f"DIIS Min: {self.diis_min}", self.log_level)
-        logger.log(("=" * 64), self.log_level)
+            logger.log(f"DIIS subspace size: {self.diis_nvec}", self.log_level)
+            logger.log(f"DIIS start: {self.diis_start}", self.log_level)
+            logger.log(f"DIIS min: {self.diis_min}", self.log_level)
+        logger.log(("-" * 64), self.log_level)
 
     def _cc_type(self):
         return type(self).__name__.upper()
+    
+    @abstractmethod
+    def _build_energy_denominators(self): ...
     
     @abstractmethod
     def _build_residual(self): ...   
