@@ -102,7 +102,10 @@ def test_lbfgs_rosenbrock():
     fx = lbfgs_solver.minimize(func, x)
 
     x0 = np.ones(n) * 0.1
-    hess_inv0 = np.diag(1.0 / Rosenbrock.diagonal_hessian(x))
+    hess = Rosenbrock.diagonal_hessian(x)
+    hess_inv0 = np.diag(
+        np.divide(1.0, hess, out=np.zeros_like(hess), where=np.abs(hess) >= 1e-12)
+    )
     res = minimize(
         Rosenbrock.evaluate,
         x0,
@@ -127,7 +130,10 @@ def test_lbfgs_rosenbrock_complex():
     x = np.ones(n) * 0.1
     fx = lbfgs_solver.minimize(func, x)
 
-    hess_inv0 = np.diag(1.0 / RosenbrockComplex.diagonal_hessian(x))
+    hess = RosenbrockComplex.diagonal_hessian(x)
+    hess_inv0 = np.diag(
+        np.divide(1.0, hess, out=np.zeros_like(hess), where=np.abs(hess) >= 1e-12)
+    )
     x0 = np.ones(20) * 0.1
     res = minimize(
         RosenbrockComplex.evaluate,
