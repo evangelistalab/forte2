@@ -1,7 +1,26 @@
 import pytest
+import numpy as np
+from pathlib import Path
 
 from forte2 import *
 from forte2.helpers.comparisons import approx
+
+# Directory containing *this* file
+THIS_DIR = Path(__file__).resolve().parent
+
+
+def compare_orbital_coefficients(system, aset, filename):
+    """
+    This function compares the coefficient matrix from an ASET calculation
+    with a reference file stored in the folder reference_aset_orbitals.
+
+    Note: this can only handle nondegenerate orbitals.
+    """
+    C_test = np.load(THIS_DIR / f"reference_aset_orbitals/{filename}")
+    S = system.ints_overlap()
+    overlap = np.abs(aset.C[0].T @ S @ C_test)
+    assert np.allclose(overlap, np.eye(overlap.shape[0]), atol=1e-10, rtol=0.0)
+
 
 # Ref Energies come from forte1
 
@@ -42,7 +61,14 @@ def test_aset_1():
     ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
     ci.run()
 
+    # write aset.C[0] to a numpy file
+    # np.save("test_aset_1_orbitals.npy", aset.C[0])
+    compare_orbital_coefficients(system, aset, "test_aset_1_orbitals.npy")
+
     assert ci.E == approx(eci)
+
+
+test_aset_1()
 
 
 def test_aset_2():

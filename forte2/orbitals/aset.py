@@ -78,7 +78,6 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         self.ncore = self.mo_space.ncore
         self.nactv = self.mo_space.nactv
 
-        self.Cm = self.parent_method.C[0][:, self.mo_space.orig_to_contig]
         self.nmo = self.mo_space.nmo
         self.nvirt = self.mo_space.nvirt
 
@@ -99,7 +98,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
             f"Cutoff method: {self.cutoff_method} \nCutoff value: {self.cutoff}"
         )
         self.fragment = self._parse_fragment(self.fragment)
-        self.P_ao = self._make_fragment_projector()
+        self.P_ao_frag = self._make_fragment_projector()
         self.executed = True
         self.partition = self._make_embedding()
         self._print_embedding_info(**self.partition)
@@ -196,11 +195,11 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         1. Compute AO overlap S_ff
         2. Extract fragment block S_A
         3. Pseudo invert S_A and embed into full AO space
-        4. Form P_frag = S_ff @ S_A_nn @ S_ff
+        4. Form P_ao_frag = S_ff @ S_A_nn @ S_ff
 
         Returns
         ------
-        P_ao : ndarray
+        P_ao_frag : ndarray
             The fragment projector matrix S_ff @ S_A_mm @ S_ff.
         """
         # 1. Compute AO overlap S_ff
@@ -234,50 +233,47 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         S_A_inv = np.linalg.pinv(S_A, rcond=1e-8)
 
         # 4. Embed S_A_inv into full space and form projector
-        S_A_mm = np.zeros((nbf_f, nbf_f))
+        S_A_ff = np.zeros((nbf_f, nbf_f))
         for i, mu in enumerate(frag_ao_indices):
             for j, nu in enumerate(frag_ao_indices):
-                S_A_mm[mu, nu] = S_A_inv[i, j]
-        X_ff = invsqrt_matrix(S_ff)
-        P_ao = S_ff @ S_A_mm @ S_ff
-        P_frag = X_ff @ P_ao @ X_ff
+                S_A_ff[mu, nu] = S_A_inv[i, j]
 
-        # check for hermiticity
-        if not np.allclose(P_frag, P_frag.conj().T, atol=1e-8):
-            raise RuntimeError("Fragment projector is not Hermitian.")
-        # check for idempotency
-        if not np.allclose(P_frag @ P_frag, P_frag, atol=1e-8):
-            raise RuntimeError("Fragment projector is not idempotent.")
+        # Build fragment projector P_ao_frag = S_ff S_A_ff S_ff
+        P_ao_frag = S_ff @ S_A_ff @ S_ff
 
-        return P_ao
+        return P_ao_frag
 
     def _make_embedding(self):
         """
         Perform Orbital Partitioning for ASET.
         """
-        Cm = self.Cm
+        # Copy the input orbitals and sort them into blocks of frozen core, core, active, ...
+        C = self.parent_method.C[0][:, self.mo_space.orig_to_contig]
 
         # Build the fragment projector
-        P_ao = self.P_ao
-        F = Cm.T @ P_ao @ Cm
+        P_ao_frag = self.P_ao_frag
+        P_frag = C.T @ P_ao_frag @ C
 
-        # 6) Split F into occupied and virtual blocks
+        # 6) Split P_frag into occupied and virtual blocks
         core = self.mo_space.core
         core_inds = self.mo_space.core_indices
         actv_inds = self.mo_space.active_indices
         virt = self.mo_space.virt
         virt_inds = self.mo_space.virtual_indices
 
-        # Split F
-        F_oo = F[core, core]
-        F_vv = F[virt, virt]
-        lo_vals, Uo = np.linalg.eigh(F_oo)
-        lv_vals, Uv = np.linalg.eigh(F_vv)
+        # Split P_frag into occupied and virtual blocks
+        P_frag_oo = P_frag[core, core]
+        P_frag_vv = P_frag[virt, virt]
+        lo_vals, Uo = np.linalg.eigh(P_frag_oo)
+        lv_vals, Uv = np.linalg.eigh(P_frag_vv)
+        # resort the virtual eigenvalue/eigenvector pairs
+        lv_vals = lv_vals[::-1]
+        Uv = Uv[:, ::-1]
         occ_pairs = sorted(zip(core_inds, lo_vals), key=lambda x: x[1], reverse=True)
         vir_pairs = sorted(zip(virt_inds, lv_vals), key=lambda x: x[1], reverse=True)
 
-        Cm[:, core_inds] = Cm[:, core_inds] @ Uo
-        Cm[:, virt_inds] = Cm[:, virt_inds] @ Uv
+        C[:, core_inds] = C[:, core_inds] @ Uo
+        C[:, virt_inds] = C[:, virt_inds] @ Uv
 
         # Partition by cutoff
         index_A_occ, index_B_occ = [], []
@@ -326,7 +322,6 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
                 f"\nSkipping semicanonicalization of frozen core and frozen virtual orbitals."
             )
 
-        C_tilde = self.Cm.copy()
         frozen_core_inds = self.mo_space.frozen_core_indices
         frozen_virt_inds = self.mo_space.frozen_virtual_indices
         g1_sf = self.parent_method.ci_solver.make_average_sf_1rdm()
@@ -343,7 +338,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
 
         semican = Semicanonicalizer(
             g1_sf=g1_sf,
-            C=C_tilde,
+            C=C,
             system=self.system,
             mo_space=emb_space,
             do_frozen=self.semicanonicalize_frozen,
