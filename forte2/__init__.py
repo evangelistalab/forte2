@@ -4,6 +4,7 @@ from ._forte2.ints import Basis, Shell
 from .system import System, ModelSystem, HubbardModel
 from .state import State, MOSpace
 from .scf import RHF, ROHF, UHF, CUHF, GHF
+from .cc import CCSD
 from .ci import CI
 from .x2c import x2c
 from .orbitals import AVAS, Cube, ASET
