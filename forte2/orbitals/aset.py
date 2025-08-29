@@ -23,9 +23,9 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
     fragment : list[str]
         List of atomic symbols defining the fragment.
     cutoff_method : str, optional, default="threshold"
-        Method for choosing the embedding cutoff. Options include "threshold", "cumulative_threshold", "num_of_orbitals".
+        Method for choosing the embedding cutoff. Options include "threshold", "num_of_orbitals".
     cutoff : float, optional, default = 0.5
-        Projector eigenvalue for both simple and cumulative threshold methods.
+        Projector eigenvalue for simple threshold methods.
     num_A_occ : int, optional, default=0
         Number of occupied orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
     num_A_vir : int, optional, default=0
@@ -78,13 +78,13 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         self.ncore = self.mo_space.ncore
         self.nactv = self.mo_space.nactv
 
-        self.Ca = self.parent_method.C[0][:, self.mo_space.orig_to_contig]
+        self.Cm = self.parent_method.C[0][:, self.mo_space.orig_to_contig]
         self.nmo = self.mo_space.nmo
         self.nvirt = self.mo_space.nvirt
 
-        fullao_info = BasisInfo(self.system, self.system.basis)
+        ao_info = BasisInfo(self.system, self.system.basis)
 
-        raw_map = fullao_info.atom_to_aos
+        raw_map = ao_info.atom_to_aos
 
         self.atom_to_center = self.system.atom_to_center
         self.atom_to_aos = {
@@ -99,7 +99,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
             f"Cutoff method: {self.cutoff_method} \nCutoff value: {self.cutoff}"
         )
         self.fragment = self._parse_fragment(self.fragment)
-        self.P_frag, self.X_mm = self._make_fragment_projector()
+        self.P_ao = self._make_fragment_projector()
         self.executed = True
         self.partition = self._make_embedding()
         self._print_embedding_info(**self.partition)
@@ -113,17 +113,12 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         self.cutoff_method = self.cutoff_method.lower()
         assert self.cutoff_method in [
             "threshold",
-            "cumulative_threshold",
             "num_of_orbitals",
         ], f"Invalid cutoff method: {self.cutoff_method}"
         if self.cutoff_method == "threshold":
             assert (
                 self.cutoff > 0 and self.cutoff < 1
             ), f"threshold must be in [0, 1], got {self.cutoff}"
-        elif self.cutoff_method == "cumulative_threshold":
-            assert (
-                self.cutoff > 0
-            ), f"Cumulative threshold must be positive, got {self.cutoff}"
         elif self.cutoff_method == "num_of_orbitals":
             assert (
                 self.num_A_occ >= 0 and self.num_A_vir >= 0
@@ -149,10 +144,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         list[int]
             A sorted list of unique atom indices (0-based) matching the specification.
         """
-        if isinstance(frag_str, str):
-            frag_str = [frag_str]
-        else:
-            frag_list = frag_str
+        frag_list = [frag_str] if isinstance(frag_str, str) else frag_str
 
         atom_indices = []
 
@@ -201,21 +193,19 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
     def _make_fragment_projector(self):
         """
         Build an AO-space fragment projector P = S^T (S_A) S in the AO basis:
-        1. Compute AO overlap S_mm
+        1. Compute AO overlap S_ff
         2. Extract fragment block S_A
         3. Pseudo invert S_A and embed into full AO space
-        4. Form P_frag = S_mm @ S_A_nn @ S_mm
+        4. Form P_frag = S_ff @ S_A_nn @ S_ff
 
         Returns
         ------
-        P_frag : ndarray
-            The fragment projector matrix in the full minimal-AO space.
-        X_mm : ndarray
-            The metric-orthogonalizer (S_mm^1/2).
+        P_ao : ndarray
+            The fragment projector matrix S_ff @ S_A_mm @ S_ff.
         """
-        # 1. Compute AO overlap S_mm
-        S_mm = ints.overlap(self.system.basis)
-        nbf_m = S_mm.shape[0]
+        # 1. Compute AO overlap S_ff
+        S_ff = ints.overlap(self.system.basis)
+        nbf_f = S_ff.shape[0]
 
         # 2. Collect ao indices in fragment
         frag_ao_indices = []
@@ -240,66 +230,54 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         frag_ao_indices = sorted(set(frag_ao_indices))
 
         # 3. Build fragment overlap block S_A and invert
-        S_A = S_mm[np.ix_(frag_ao_indices, frag_ao_indices)]
+        S_A = S_ff[np.ix_(frag_ao_indices, frag_ao_indices)]
         S_A_inv = np.linalg.pinv(S_A, rcond=1e-8)
 
         # 4. Embed S_A_inv into full space and form projector
-        S_A_mm = np.zeros((nbf_m, nbf_m))
+        S_A_mm = np.zeros((nbf_f, nbf_f))
         for i, mu in enumerate(frag_ao_indices):
             for j, nu in enumerate(frag_ao_indices):
                 S_A_mm[mu, nu] = S_A_inv[i, j]
-        X_mm = invsqrt_matrix(S_mm)
-        P_ao = S_mm @ S_A_mm @ S_mm
-        P_frag = X_mm @ P_ao @ X_mm
+        X_ff = invsqrt_matrix(S_ff)
+        P_ao = S_ff @ S_A_mm @ S_ff
+        P_frag = X_ff @ P_ao @ X_ff
 
         # check for hermiticity
-        if not np.allclose(P_frag, P_frag.conj().T, atol=1e-6):
+        if not np.allclose(P_frag, P_frag.conj().T, atol=1e-8):
             raise RuntimeError("Fragment projector is not Hermitian.")
         # check for idempotency
-        if not np.allclose(P_frag @ P_frag, P_frag, atol=1e-6):
+        if not np.allclose(P_frag @ P_frag, P_frag, atol=1e-8):
             raise RuntimeError("Fragment projector is not idempotent.")
 
-        return P_frag, X_mm
+        return P_ao
 
     def _make_embedding(self):
         """
         Perform Orbital Partitioning for ASET.
         """
-        Ca = self.Ca
-        X_mm = self.X_mm
+        Cm = self.Cm
 
-        # Convert AO-basis MO coeffs to orthogonalized AO coeffs
-        X_inv = np.linalg.inv(X_mm)
-        C_orth = X_inv @ Ca
-
-        # Build the fragment projectorf
-        P_frag = self.P_frag
-        F = C_orth.T @ P_frag @ C_orth
+        # Build the fragment projector
+        P_ao = self.P_ao
+        F = Cm.T @ P_ao @ Cm
 
         # 6) Split F into occupied and virtual blocks
+        core = self.mo_space.core
         core_inds = self.mo_space.core_indices
         actv_inds = self.mo_space.active_indices
+        virt = self.mo_space.virt
         virt_inds = self.mo_space.virtual_indices
 
         # Split F
-        F_oo = F[np.ix_(core_inds, core_inds)]
-        F_vv = F[np.ix_(virt_inds, virt_inds)]
+        F_oo = F[core, core]
+        F_vv = F[virt, virt]
         lo_vals, Uo = np.linalg.eigh(F_oo)
         lv_vals, Uv = np.linalg.eigh(F_vv)
         occ_pairs = sorted(zip(core_inds, lo_vals), key=lambda x: x[1], reverse=True)
         vir_pairs = sorted(zip(virt_inds, lv_vals), key=lambda x: x[1], reverse=True)
 
-        # rotate the core and virtual orbitals to the ASET basis
-        Ca[:, core_inds] = Ca[:, core_inds] @ Uo
-        Ca[:, virt_inds] = Ca[:, virt_inds] @ Uv
-
-        C_orth[:, core_inds] = C_orth[:, core_inds] @ Uo
-        C_orth[:, virt_inds] = C_orth[:, virt_inds] @ Uv
-
-        F = C_orth.T @ P_frag @ C_orth
-        # diagF = np.diag(F)
-        # lo_diag = diagF[core_inds]
-        # lv_diag = diagF[virt_inds]
+        Cm[:, core_inds] = Cm[:, core_inds] @ Uo
+        Cm[:, virt_inds] = Cm[:, virt_inds] @ Uv
 
         # Partition by cutoff
         index_A_occ, index_B_occ = [], []
@@ -310,40 +288,6 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
                 (index_A_occ if v > self.cutoff else index_B_occ).append(i)
             for i, v in vir_pairs:
                 (index_A_vir if v > self.cutoff else index_B_vir).append(i)
-        elif self.cutoff_method == "cumulative_threshold":
-            # total occupied / virtual eigenvalue sums
-            sum_lo = float(np.sum(lo_vals))
-            sum_lv = float(np.sum(lv_vals))
-
-            # occupied cumulative‐threshold partitioning
-            tmp = 0.0
-            for glob_i, v in occ_pairs:
-                cum_l_o = tmp / sum_lo if sum_lo > 0 else 1.0
-                if cum_l_o < self.cutoff:
-                    index_A_occ.append(glob_i)
-                    tmp += v
-                else:
-                    index_B_occ.append(glob_i)
-                    if v > 0.5:
-                        logger.log_info1(
-                            f"Warning! Occupied orbital {glob_i+1} has eigenvalue {v:8.6f} "
-                            "and is assigned to B."
-                        )
-
-            # virtual cumulative‐threshold partitioning
-            tmp = 0.0
-            for glob_i, v in vir_pairs:
-                cum_l_v = tmp / sum_lv if sum_lv > 0 else 1.0
-                if cum_l_v < self.cutoff:
-                    index_A_vir.append(glob_i)
-                    tmp += v
-                else:
-                    index_B_vir.append(glob_i)
-                    if v > 0.5:
-                        logger.log_info1(
-                            f"Warning! Virtual orbital {glob_i+1} has eigenvalue {v:8.6f} "
-                            "and is assigned to B."
-                        )
 
         elif self.cutoff_method == "num_of_orbitals":
             for rank, (glob_i, v) in enumerate(occ_pairs):
@@ -382,7 +326,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
                 f"\nSkipping semicanonicalization of frozen core and frozen virtual orbitals."
             )
 
-        C_tilde = self.Ca.copy()
+        C_tilde = self.Cm.copy()
         frozen_core_inds = self.mo_space.frozen_core_indices
         frozen_virt_inds = self.mo_space.frozen_virtual_indices
         g1_sf = self.parent_method.ci_solver.make_average_sf_1rdm()

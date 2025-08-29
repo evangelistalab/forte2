@@ -46,9 +46,6 @@ def test_aset_1():
 
 
 def test_aset_2():
-    """
-    Test cutoff_method = cumulative_threshold.
-    """
     eci = -206.084138520360
 
     xyz = """
@@ -71,7 +68,7 @@ def test_aset_2():
     )(rhf)
     aset = ASET(
         fragment=["N", "H"],
-        cutoff_method="cumulative_threshold",
+        cutoff_method="threshold",
         cutoff=0.99,
     )(mc)
     ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
@@ -156,6 +153,8 @@ def test_aset_4():
     ci.run()
 
     assert ci.E == approx(eci)
+    # cube = Cube()
+    # cube.run(system, ci.C[0])
 
 
 def test_aset_5():
