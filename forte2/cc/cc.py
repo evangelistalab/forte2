@@ -64,6 +64,7 @@ class _SRCCBase(ABC):
     first_run: bool = field(default=True, init=False)
     executed: bool = field(default=False, init=False)
 
+    # Move RHF to call and params to init
     def __post_init__(self):
         self.method = self._cc_type().upper()
         if self.scf is not None:
@@ -106,7 +107,7 @@ class _SRCCBase(ABC):
             self.log_level,
         )
 
-        for iter in range(self.maxiter):
+        for it in range(self.maxiter):
 
             # 1. Compute R_K = < K | (H e^T)_C | 0 >
             self._build_residual()
@@ -118,7 +119,7 @@ class _SRCCBase(ABC):
             delta_e = self.E - E_old
             # print the iteration
             logger.log(
-                f"{iter:4d}  {self.E:18.12f}  {delta_e:18.12f}  {self.resnorm:12.9f}",
+                f"{it:4d}  {self.E:18.12f}  {delta_e:18.12f}  {self.resnorm:12.9f}",
                 self.log_level,
             )
             # check exit conditions

@@ -123,7 +123,7 @@ class RestrictedMOIntegrals:
 @dataclass
 class SONormalOrderedIntegrals:
     r"""
-    Class to compute molecular spinorbital integrals for a given set of restricted (RHF/ROHF/GHF) orbitals
+    Class to compute molecular spinorbital integrals for a given set of restricted (RHF/GHF) orbitals
     for use in SR correlation methods.
 
     Parameters
@@ -135,7 +135,7 @@ class SONormalOrderedIntegrals:
     virtual : int, optional
         Number of virtual spinorbitals to be excluded from the correlated calculation. Defaults to 0.
     build_nvirt : int, optional
-        Builds integral blocks containing up to `build_nvirt` virtual dimensions. Defaults to 2.
+        Builds integral blocks containing up to `build_nvirt` virtual dimensions. Defaults to 4.
 
     Attributes
     ----------
@@ -151,20 +151,35 @@ class SONormalOrderedIntegrals:
 
         self.nocc = scf.nel
         self.norb = 2 * scf.C[0].shape[1]
+        self.na = scf.na
+        self.nb = scf.nb
         self.occupied_all = slice(0, self.nocc)
         self.unoccupied_all = slice(self.nocc, self.norb)
         self.o = slice(frozen, self.nocc)
         self.v = slice(self.nocc, self.norb - virtual)
 
+        if scf.method == 'RHF' or scf.method == 'GHF':
+            self.mo_occ = [2.0] * scf.ndocc + [0.0] * scf.nuocc
+        if scf.method == 'ROHF':
+            self.mo_occ = [2.0] * scf.ndocc + [1.0] * scf.nsocc + [0.0] * scf.nuocc
+
         # Store nuclear repulsion energy
         self.nuclear_repulsion = scf.system.nuclear_repulsion
+        # Obtain reordering array for singly occupied orbitals
+        if scf.method == 'ROHF':
+            # ab interleaving is not compatible with singly occupied alpha orbitals
+            perm = self.reorder_occ_first()
         # DF tensor
         tic = time.time()
         B = self.get_df_tensor(scf.system, scf.C[0])
+        if scf.method == 'ROHF':
+            B = B[np.ix_(np.arange(B.shape[0]), perm, perm)]
         logger.log_debug(f"[SOIntegrals] AO-to-MO + spinorbital transformation of DF tensor: {time.time() - tic} seconds")
         # onebody (Hcore) integrals
         tic = time.time()
         Z = self.get_onebody_ints(scf.system, scf.C[0])
+        if scf.method == 'ROHF':
+            Z = Z[np.ix_(perm, perm)]
         logger.log_debug(f"[SOIntegrals] Building one-body spinorbital integrals: {time.time() - tic} seconds")
         # Build Fock matrix using B tensors
         tic = time.time()
@@ -187,7 +202,7 @@ class SONormalOrderedIntegrals:
         self.get_twobody_ints(build_nvirt)
         logger.log_debug(f"[SOIntegrals] Building blocks (up to nvirt = {build_nvirt}) of two-electron spinorbital integrals: {time.time() - tic} seconds")
         assert self.E == approx_vtight(self.scf_energy_fock(F, B))
-        del B
+        del B, F, Z
 
     def __getitem__(self, key):
         if len(key) == 4:
@@ -260,3 +275,28 @@ class SONormalOrderedIntegrals:
                 + self.nuclear_repulsion
         )
         return E
+
+    def reorder_occ_first(self):
+        """
+        Reorder spin–orbital integrals so that occupied spin–orbitals are a
+        contiguous block. Works for RHF and ROHF (single set of spatial MOs).
+        """
+        # Decide which spin is occupied for singly-occupied spatial MOs.
+        singles_spin = 0 if self.na >= self.nb else 1      # 0: alpha, 1: beta
+
+        # Build occupied spin–orbital indices in the current (αβ interleaved) order.
+        occ_idx = []
+        for p, occ in enumerate(self.mo_occ):
+            if occ > 1.5:                         # doubly occupied
+                occ_idx.extend([2*p, 2*p+1])      # α and β
+            elif occ > 0.5:                       # singly occupied
+                occ_idx.append(2*p + singles_spin)
+
+        occ_idx = np.array(occ_idx, dtype=int)
+
+        # Put all remaining spin–orbitals after the occupied block (preserving order).
+        all_idx = np.arange(self.norb)
+        virt_idx = all_idx[~np.isin(all_idx, occ_idx, assume_unique=False)]
+        perm = np.concatenate([occ_idx, virt_idx])
+
+        return perm

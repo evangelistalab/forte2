@@ -152,9 +152,11 @@ class CCSD(_SRCCBase):
         doubles_residual += 0.125 * np.einsum("mnij,abmn->abij", h_oooo, t2, optimize=True)
 
         # [TODO]: It would be nice to perform this computation in C++
+        # Loop over slices of unoccupied orbitals
         # vvvv term
         tic = time.time()
         self.BT1['vv'] = self.BT1['vv'].swapaxes(0, 1)
+        # v(abef) t(efij) = [B(ae)B(bf) - B(af)B(be)] t(efij)
         for a in range(t1.shape[0]):
            for b in range(a + 1, t1.shape[0]):
                # <ab||ef> = <x|ae><x|bf> - <x|af><x|be>
