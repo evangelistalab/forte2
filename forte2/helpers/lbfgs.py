@@ -291,7 +291,7 @@ class LBFGS:
 
         if dg0 >= 0:
             print("  Warning: Direction increases the energy. Reset L-BFGS.")
-            self.reset()
+            self._reset()
 
         w1 = self.c1 * dg0
         w2 = -self.c2 * dg0
