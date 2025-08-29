@@ -21,12 +21,12 @@ class Rosenbrock:
 
     def gradient(x):
         grad = np.zeros_like(x)
-        grad[1:] = -(1.0 - x[1:]) + 200 * (x[1:] - x[:-1] ** 2)
+        grad[1:] = -2 * (1.0 - x[1:]) + 200 * (x[1:] - x[:-1] ** 2)
         grad[:-1] -= 400 * x[:-1] * (x[1:] - x[:-1] ** 2)
         return grad
 
     def diagonal_hessian(x):
-        h0 = 202 + 400 * x**2
+        h0 = 202 + 1200 * x**2
         h0[:-1] -= 400 * x[:-1]
         return h0
 
@@ -60,7 +60,7 @@ class RosenbrockComplex:
         """
         l = len(x) // 2
         z = x[:l] + 1.0j * x[l:]
-        hess = 400 * np.dot(z.conj(), z).real + 101
+        hess = 400 * (z.conj() * z).real + 101
         squared_term = 200 * np.real(z**2)
         squared_term[:-1] -= 200 * np.real(z[:-1])
         return 2 * np.concatenate([hess - squared_term, hess + squared_term])
@@ -98,10 +98,10 @@ def test_lbfgs_rosenbrock():
     lbfgs_solver.print = 2
 
     func = RosenbrockWrapper()
-    x = np.ones(n) * 0.1
+    x = np.ones(n) * 0.2
     fx = lbfgs_solver.minimize(func, x)
 
-    x0 = np.ones(n) * 0.1
+    x0 = np.ones(n) * 0.2
     hess = Rosenbrock.diagonal_hessian(x)
     hess_inv0 = np.diag(
         np.divide(1.0, hess, out=np.zeros_like(hess), where=np.abs(hess) >= 1e-12)
@@ -125,16 +125,16 @@ def test_lbfgs_rosenbrock_complex():
     lbfgs_solver.epsilon = 1.0e-6
     lbfgs_solver.maxiter = 200
     lbfgs_solver.h0_freq = h0_freq
-    lbfgs_solver.print = 3
+    lbfgs_solver.print = 2
     func = RosenbrockComplexWrapper()
-    x = np.ones(n) * 0.1
+    x = np.ones(n) * 0.2
     fx = lbfgs_solver.minimize(func, x)
 
     hess = RosenbrockComplex.diagonal_hessian(x)
     hess_inv0 = np.diag(
         np.divide(1.0, hess, out=np.zeros_like(hess), where=np.abs(hess) >= 1e-12)
     )
-    x0 = np.ones(20) * 0.1
+    x0 = np.ones(20) * 0.2
     res = minimize(
         RosenbrockComplex.evaluate,
         x0,
