@@ -51,7 +51,7 @@ class _SRCCBase(ABC):
     ### Jacobi parameters
     maxiter: int = 100
     econv: float = 1e-10
-    rconv: float = 1e-5
+    rconv: float = 1e-8
     energy_shift: float = 0.
 
     ### DIIS parameters
@@ -135,6 +135,10 @@ class _SRCCBase(ABC):
         )
         if self.converged:
             logger.log("\nCoupled-cluster calculation converged.\n", self.log_level)
+
+            logger.log(f"Reference Energy: {self.ints.E} hartree", self.log_level)
+            logger.log(f"Correlation Energy: {self.E} hartree", self.log_level)
+            logger.log(f"Total Coupled-Cluster Energy: {self.ints.E + self.E} hartree\n", self.log_level)
 
             logger.log_debug("Overwriting DF B tensors with their T1-transformed counterparts")
             self.ints.B = self.BT1

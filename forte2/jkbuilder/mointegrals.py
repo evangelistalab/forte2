@@ -8,6 +8,7 @@ from numpy.typing import NDArray
 from forte2.jkbuilder.jkbuilder import FockBuilder
 from forte2.system.system import System
 from forte2.helpers import logger
+from forte2.helpers.comparisons import approx_vtight
 
 
 @dataclass
@@ -185,7 +186,7 @@ class SONormalOrderedIntegrals:
         tic = time.time()
         self.get_twobody_ints(build_nvirt)
         logger.log_debug(f"[SOIntegrals] Building blocks (up to nvirt = {build_nvirt}) of two-electron spinorbital integrals: {time.time() - tic} seconds")
-        assert np.allclose(self.E, self.scf_energy_fock(F, B))
+        assert self.E == approx_vtight(self.scf_energy_fock(F, B))
         del B
 
     def __getitem__(self, key):
