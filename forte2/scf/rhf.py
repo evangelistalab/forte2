@@ -69,6 +69,13 @@ class RHF(SCFBase):
     def _diis_update(self, diis, F, AO_grad):
         return [diis.update(F[0], AO_grad)]
 
+    def _apply_level_shift(self, F, S):
+        if self.level_shift is None or self.level_shift < 1e-4:
+            return F
+        D_vir = S - S @ self.D[0] @ S
+
+        return [F[0] + self.level_shift * D_vir]
+
     def _get_occupation(self):
         self.ndocc = self.na
         self.nuocc = self.nmo - self.ndocc
@@ -105,6 +112,7 @@ class RHF(SCFBase):
 
     def _print_ao_composition(self):
         if isinstance(self.system, ModelSystem):
+            # send a PR if you want this changed
             return
         basis_info = BasisInfo(self.system, self.system.basis)
         logger.log_info1("\nAO Composition of MOs (HOMO-5 to HOMO):")

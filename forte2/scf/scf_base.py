@@ -3,15 +3,10 @@ from abc import ABC, abstractmethod
 import time
 
 import numpy as np
-import scipy as sp
-
-from forte2 import ints
-from forte2.system.basis_utils import BasisInfo
 from forte2.system import System, ModelSystem
 from forte2.jkbuilder import FockBuilder
 from forte2.base_classes.mixins import MOsMixin, SystemMixin
 from forte2.helpers import logger, DIIS
-from forte2.symmetry import assign_mo_symmetries
 
 
 @dataclass
@@ -37,6 +32,14 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         RMS density change convergence threshold.
     maxiter : int, optional, default=100
         Maximum iteration for SCF.
+    guess_type : str, optional, default="minao"
+        Initial guess type for the SCF calculation. Can be "minao" or "hcore".
+    level_shift : float, optional
+        Level shift for the SCF calculation. If None, no level shift is applied.
+    level_shift_thresh : float, optional, default=1e-5
+        If energy change is below this threshold, level shift is turned off.
+    die_if_not_converged : bool, optional, default=True
+        Whether to raise an error if the SCF calculation does not converge.
 
     Attributes
     ----------
@@ -65,8 +68,10 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
     econv: float = 1e-9
     dconv: float = 1e-6
     maxiter: int = 100
-    #: Initial guess algorithm. Can be "minao" or "hcore".
     guess_type: str = "minao"
+    level_shift: float = None
+    level_shift_thresh: float = 1e-5
+    die_if_not_converged: bool = True
 
     executed: bool = field(default=False, init=False)
     converged: bool = field(default=False, init=False)
@@ -87,15 +92,18 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
 
         self.C = None
         self.Xorth = self.system.get_Xorth()
-
+        if self.level_shift is not None:
+            if isinstance(self.level_shift, (int, float)) and self.level_shift < 0.0:
+                raise ValueError("level_shift must be non-negative.")
+            if isinstance(self.level_shift, tuple) and self.method != "UHF":
+                raise ValueError("Tuple level_shift is only valid for UHF.")
+            if isinstance(self.level_shift, float) and self.method == "UHF":
+                self.level_shift = (self.level_shift, self.level_shift)
+            if isinstance(self.level_shift, tuple) and len(self.level_shift) != 2:
+                raise ValueError("Tuple level_shift must have length 2 for UHF.")
         return self
 
     def _eigh(self, F):
-        Ftilde = self.Xorth.T @ F @ self.Xorth
-        e, c = np.linalg.eigh(Ftilde)
-        return e, self.Xorth @ c
-
-    def _eigh_spinor(self, F):
         Ftilde = self.Xorth.T @ F @ self.Xorth
         e, c = np.linalg.eigh(Ftilde)
         return e, self.Xorth @ c
@@ -164,6 +172,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
             # 1. Get the extrapolated Fock matrix
             AO_grad = self._build_ao_grad(S, F_canon)
             F_canon = self._diis_update(diis, F_canon, AO_grad)
+            F_canon = self._apply_level_shift(F_canon, S)
             # 2. Diagonalize the extrapolated Fock
             self.eps, self.C = self._diagonalize_fock(F_canon)
             # 3. Build new density matrix
@@ -177,6 +186,8 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
 
             # check convergence parameters
             deltaE = self.E - Eold
+            if np.abs(deltaE) < self.level_shift_thresh:
+                self.level_shift = None
             deltaD = sum([np.linalg.norm(d - dold) for d, dold in zip(self.D, Dold)])
             self.S2 = self._spin(S)
 
@@ -204,15 +215,20 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
             self.iter += 1
         else:
             logger.log_info1("=" * width)
-            raise RuntimeError(
-                f"{self.method} did not converge in {self.maxiter} iterations."
-            )
+            logger.log_info1(f"{self.method} iterations did not converge")
+            if self.die_if_not_converged:
+                raise RuntimeError(
+                    f"{self.method} did not converge in {self.maxiter} iterations."
+                )
+            else:
+                logger.log_warning(
+                    f"{self.method} did not converge in {self.maxiter} iterations."
+                )
 
         end = time.monotonic()
         logger.log_info1(f"{self.method} time: {end - start:.2f} seconds")
 
-        if self.converged:
-            self._post_process()
+        self._post_process()
 
         self.executed = True
         return self
@@ -230,6 +246,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         self._get_occupation()
         self._assign_orbital_symmetries()
         self._print_orbital_energies()
+        self._print_ao_composition()
 
     @abstractmethod
     def _build_fock(self, H, fock_builder, S): ...
@@ -263,3 +280,9 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
 
     @abstractmethod
     def _assign_orbital_symmetries(self): ...
+
+    @abstractmethod
+    def _apply_level_shift(self, F, S): ...
+
+    @abstractmethod
+    def _print_ao_composition(self): ...

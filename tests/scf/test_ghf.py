@@ -32,9 +32,9 @@ def test_equivalence_to_uhf():
         xyz=xyz,
         basis_set="cc-pVQZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
+        reorient=False,
     )
-    scf = GHF(charge=0)(system)
-    scf.guess_mix = True
+    scf = GHF(charge=0, ms_guess=0.0, guess_mix=True)(system)
     scf.run()
     assert scf.E == approx(euhf)
     assert scf.S2 == approx(s2uhf)
@@ -67,8 +67,56 @@ def test_ghf_complex_perturbation():
     assert scf.S2 == approx(s2_uhf)
 
     scf = GHF(charge=1)(system)
-    # this option breaks Sz and K symmetries in the initial guess DM
+    # this option breaks Sz in the initial guess
+    scf.alpha_beta_mix = True
+    # this option breaks time-reversal/complex conjugation symmetry in the initial guess
     scf.break_complex_symmetry = True
     scf.run()
     assert scf.E == approx(e_uhf)
     assert scf.S2 == approx(s2_uhf)
+
+
+def test_j_adapted_ghf():
+    # The two bases should yield the same result
+    eref = -75.427367675651
+    s2ref = 0.7525463566917241
+    xyz = """
+    O 0 0 0
+    H 0 0 1.1"""
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        x2c_type="so",
+    )
+    scf = GHF(charge=0, j_adapt=False)(system)
+    scf.run()
+    assert scf.E == approx(eref)
+    assert scf.S2 == approx(s2ref)
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        x2c_type="so",
+    )
+    scf = GHF(charge=0, j_adapt=True)(system)
+    scf.run()
+    assert scf.E == approx(eref)
+    assert scf.S2 == approx(s2ref)
+
+
+def test_equivalence_to_high_spin_uhf():
+    euhf = -37.686541301113
+    s2uhf = 2.0063122057868483
+    xyz = """
+    C 0 0 0"""
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+    )
+    scf = GHF(charge=0, ms_guess=1.0)(system)
+    scf.run()
+    assert scf.E == approx(euhf)
+    assert scf.S2 == approx(s2uhf)

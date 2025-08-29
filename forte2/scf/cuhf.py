@@ -35,6 +35,9 @@ class CUHF(SCFBase):
     _get_occupation = UHF._get_occupation
     _print_orbital_energies = UHF._print_orbital_energies
     _assign_orbital_symmetries = UHF._assign_orbital_symmetries
+    _print_orbital_energies = UHF._print_orbital_energies
+    _print_ao_composition = UHF._print_ao_composition
+    _apply_level_shift = UHF._apply_level_shift
 
     def __call__(self, system):
         system.two_component = False

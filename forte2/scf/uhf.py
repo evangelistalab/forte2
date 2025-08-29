@@ -1,11 +1,14 @@
 from dataclasses import dataclass
+
 import numpy as np
 
+from forte2.system.basis_utils import BasisInfo
+from forte2.system import ModelSystem
 from forte2.helpers import logger
 from forte2.symmetry import assign_mo_symmetries
 from .scf_base import SCFBase
-from .scf_utils import guess_mix
 from .rhf import RHF
+from .scf_utils import guess_mix
 
 
 @dataclass
@@ -78,7 +81,10 @@ class UHF(SCFBase):
 
     def _build_ao_grad(self, S, F):
         AO_grad = np.hstack(
-            [(f @ d @ S - S @ d @ f).flatten() for d, f in zip(self.D, F)]
+            [
+                (self.Xorth.T @ (f @ d @ S - S @ d @ f) @ self.Xorth).flatten()
+                for d, f in zip(self.D, F)
+            ]
         )
         return AO_grad
 
@@ -119,6 +125,13 @@ class UHF(SCFBase):
             F_flat[self.nbf**2 :].reshape(self.nbf, self.nbf),
         ]
         return F
+
+    def _apply_level_shift(self, F, S):
+        if self.level_shift is None or all(ls < 1e-4 for ls in self.level_shift):
+            return F
+        D_vir = [S - S @ d @ S for d in self.D]
+
+        return [f + ls * d for ls, f, d in zip(self.level_shift, F, D_vir)]
 
     def _get_occupation(self):
         self.aocc = self.na
@@ -183,3 +196,25 @@ class UHF(SCFBase):
         )
         self.irrep_labels = [irrep_labels_alpha, irrep_labels_beta]
         self.irrep_indices = [irrep_indices_alpha, irrep_indices_beta]
+
+    def _print_ao_composition(self):
+        if isinstance(self.system, ModelSystem):
+            # send a PR if you want this changed
+            return
+        basis_info = BasisInfo(self.system, self.system.basis)
+        logger.log_info1("\nAO Composition of Alpha MOs (HOMO-5 to HOMO):")
+        basis_info.print_ao_composition(
+            self.C[0], list(range(max(self.na - 5, 0), self.na))
+        )
+        logger.log_info1("\nAO Composition of Alpha MOs (LUMO to LUMO+5):")
+        basis_info.print_ao_composition(
+            self.C[0], list(range(self.na, min(self.na + 5, self.nmo)))
+        )
+        logger.log_info1("\nAO Composition of Beta MOs (HOMO-5 to HOMO):")
+        basis_info.print_ao_composition(
+            self.C[1], list(range(max(self.na - 5, 0), self.na))
+        )
+        logger.log_info1("\nAO Composition of Beta MOs (LUMO to LUMO+5):")
+        basis_info.print_ao_composition(
+            self.C[1], list(range(self.na, min(self.na + 5, self.nmo)))
+        )

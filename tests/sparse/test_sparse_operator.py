@@ -489,7 +489,6 @@ def test_sparse_operator_hamiltonian():
     oei = np.einsum("pq,pi,qj->ij", oei, C, C, optimize=True)
     jkbuilder = FockBuilder(system)
     eri = jkbuilder.two_electron_integrals_block(C)
-
     ham = forte2.sparse_operator_hamiltonian(scalar, oei, eri)
     Href = forte2.apply_op(ham, hf_state)
     energy = forte2.overlap(hf_state, Href).real
