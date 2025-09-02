@@ -185,6 +185,15 @@ class _SRCCBase(ABC):
                 + np.einsum("xme,ei,am->xai", self.BT1['ov'], t1, t1, optimize=True)
         )
 
+    def _build_energy(self):
+        t1 = self.T[0]
+        t2 = self.T[1]
+        self.E = (
+            np.einsum("me,em->", self.ints['ov'], t1, optimize=True)
+            + 0.5 * np.einsum("mnef,em,fn->", self.ints['oovv'], t1, t1, optimize=True)
+            + 0.25 * np.einsum("mnef,efmn->", self.ints['oovv'], t2, optimize=True)
+        )
+
     @abstractmethod
     def _build_energy_denominators(self): ...
     
@@ -193,9 +202,6 @@ class _SRCCBase(ABC):
 
     @abstractmethod
     def _build_update(self): ...  
-
-    @abstractmethod
-    def _build_energy(self): ... 
 
     @abstractmethod
     def _build_initial_guess(self): ...

@@ -62,14 +62,6 @@ class CCSD(_SRCCBase):
         self.T = (t1, t2)
         self.resnorm = resnorm
 
-    def _build_energy(self):
-        t1, t2 = self.T
-        self.E = (
-            np.einsum("me,em->", self.ints['ov'], t1, optimize=True)
-            + 0.5 * np.einsum("mnef,em,fn->", self.ints['oovv'], t1, t1, optimize=True)
-            + 0.25 * np.einsum("mnef,efmn->", self.ints['oovv'], t2, optimize=True)
-        )
-
     def _build_initial_guess(self):
         _, d2 = self.denom
         t1 = np.zeros((self.nu, self.no))
