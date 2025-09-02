@@ -59,23 +59,6 @@ class CCSD(_SRCCBase):
         t2 += dt 
         resnorm += np.sum(dt**2)
         resnorm = np.sqrt(resnorm)
-        #for a in range(self.nu):
-        #    for i in range(self.no):
-        #        denom = self.ints['oo'][i, i] - self.ints['vv'][a, a]
-        #        dt = r1[a, i] / (denom - self.energy_shift)
-        #        t1[a, i] += dt
-        #        resnorm += np.abs(dt)
-        #for a in range(self.nu):
-        #    for b in range(a + 1, self.nu):
-        #        for i in range(self.no):
-        #            for j in range(i + 1, self.no):
-        #                denom = self.ints['oo'][i, i] + self.ints['oo'][j, j] - self.ints['vv'][a, a] - self.ints['vv'][b, b]
-        #                dt = r2[a, b, i, j] / (denom - self.energy_shift)
-        #                t2[a, b, i, j] +=  dt
-        #                t2[b, a, i, j] = -t2[a, b, i, j]
-        #                t2[a, b, j, i] = -t2[a, b, i, j]
-        #                t2[b, a, j, i] = t2[a, b, i, j]
-        #                resnorm += np.abs(dt)
         self.T = (t1, t2)
         self.resnorm = resnorm
 
@@ -91,16 +74,6 @@ class CCSD(_SRCCBase):
         _, d2 = self.denom
         t1 = np.zeros((self.nu, self.no))
         t2 = self.ints['vvoo'] / d2
-        #t2 = np.zeros((self.nu, self.nu, self.no, self.no))
-        #for a in range(self.nu):
-        #    for b in range(a + 1, self.nu):
-        #        for i in range(self.no):
-        #            for j in range(i + 1, self.no):
-        #                denom = self.ints['oo'][i, i] + self.ints['oo'][j, j] - self.ints['vv'][a, a] - self.ints['vv'][b, b]
-        #                t2[a, b, i, j] = self.ints['vvoo'][a, b, i, j] / (denom)
-        #                t2[b, a, i, j] = -t2[a, b, i, j]
-        #                t2[a, b, j, i] = -t2[a, b, i, j]
-        #                t2[b, a, j, i] = t2[a, b, i, j]
         self.T = (t1, t2)
 
     def _t1_residual(self):
@@ -151,15 +124,13 @@ class CCSD(_SRCCBase):
         doubles_residual += np.einsum("amie,ebmj->abij", h_voov, t2, optimize=True)
         doubles_residual += 0.125 * np.einsum("mnij,abmn->abij", h_oooo, t2, optimize=True)
 
-        # [TODO]: It would be nice to perform this computation in C++
-        # Loop over slices of unoccupied orbitals
+        # [TODO]: Loop over slices of unoccupied orbitals and batch matrix multiply
         # vvvv term
         tic = time.time()
         self.BT1['vv'] = self.BT1['vv'].swapaxes(0, 1)
         # v(abef) t(efij) = [B(ae)B(bf) - B(af)B(be)] t(efij)
         for a in range(t1.shape[0]):
            for b in range(a + 1, t1.shape[0]):
-               # <ab||ef> = <x|ae><x|bf> - <x|af><x|be>
                batch_ints = np.einsum("xe,xf->ef", self.BT1['vv'][a, :, :], self.BT1['vv'][b, :, :], optimize=True)
                batch_ints -= batch_ints.T.conj()
                doubles_residual[a, b, :, :] += 0.25 * np.einsum("ef,efij->ij", batch_ints, t2, optimize=True)
@@ -200,15 +171,87 @@ class CCSD(_SRCCBase):
 
         self.intermediates = X
 
-    def _t1_transformation(self):
-        t1, _ = self.T
-        # T1-transform Cholesky vectors
-        self.BT1['ov'] = self.ints.B['ov'].copy()
-        self.BT1['oo'] = self.ints.B['oo'].copy() + np.einsum("xme,ei->xmi", self.BT1['ov'], t1, optimize=True)
-        self.BT1['vv'] = self.ints.B['vv'].copy() - np.einsum("xme,am->xae", self.BT1['ov'], t1, optimize=True)
-        self.BT1['vo'] = (
-                self.ints.B['vo'].copy()
-                - np.einsum("xmi,am->xai", self.BT1['oo'], t1, optimize=True)
-                + np.einsum("xae,ei->xai", self.BT1['vv'], t1, optimize=True)
-                + np.einsum("xme,ei,am->xai", self.BT1['ov'], t1, t1, optimize=True)
+    def _build_hbar(self):
+
+        self.hbar = {}
+        t1, t2 = self.T
+
+        ### OV
+        temp = self.ints['ov'] + np.einsum("imae,em->ia", self.ints['oovv'], t1, optimize=True)
+        self.hbar['ov'] = temp
+        ### OO
+        temp = self.ints['oo'] + (
+                np.einsum("je,ei->ji", self.hbar['ov'], t1, optimize=True)
+                + np.einsum("jmie,em->ji", self.ints['ooov'], t1, optimize=True)
+                + 0.5 * np.einsum("jnef,efin->ji", self.ints['oovv'], t2, optimize=True)
         )
+        self.hbar['oo'] = temp
+        ### VV
+        temp = self.ints['vv'] - 0.5 * np.einsum("mnef,afmn->ae", self.ints['oovv'], t2, optimize=True) 
+        bt1 = np.einsum("xnf,fn->x", self.ints.B['ov'], t1, optimize=True)
+        bxt1 = -np.einsum("xne,fn->xfe", self.ints.B['ov'], t1, optimize=True)
+        temp += (
+                np.einsum("xae,x->ae", self.ints.B['vv'], bt1, optimize=True)
+                + np.einsum("xaf,xfe->ae", self.ints.B['vv'], bxt1, optimize=True)
+                - np.einsum("me,am->ae", self.hbar['ov'], t1, optimize=True)
+        )
+
+        ### T1-transformation of Cholesky vectors
+        # self._t1_transformation() # this is done at the end of obj.run() in cc.py
+        # Cholesky-based intermediates folding some T2
+        x_vo = self.BT1['vo'] + np.einsum("xnf,afin->xai", self.BT1['ov'], t2, optimize=True)
+
+        ### TYPE: OOOO
+        temp = (
+                np.einsum("xmi,xnj->mnij", self.BT1['oo'], self.BT1['oo'], optimize=True)
+                - np.einsum("xmj,xni->mnij", self.BT1['oo'], self.BT1['oo'], optimize=True)
+                + 0.5 * np.einsum("mnef,efij->mnij", self.ints['oovv'], t2, optimize=True)
+        )
+        self.hbar['oooo'] = temp
+        ### TYPE: OOOV
+        temp = np.einsum("xmi,xne->mnie", self.BT1['oo'], self.BT1['ov'], optimize=True)
+        temp -= np.transpose(temp, (1, 0, 2, 3))
+        self.hbar['ooov'] = temp
+        ### TYPE: VOVV
+        temp = np.einsum("xbe,xnf->bnef", self.BT1['vv'], self.BT1['ov'], optimize=True)
+        temp -= np.transpose(temp, (0, 1, 3, 2))
+        self.hbar['vovv'] = temp
+        ### TYPE: VOOO
+        temp = (
+                np.einsum("xai,xmj->amij", x_vo, self.BT1['oo'], optimize=True)
+                + 0.25 * np.einsum("amef,efij->amij", self.hbar['vovv'], t2, optimize=True)
+                + 0.5 * np.einsum("me,aeij->amij", self.hbar['ov'], t2, optimize=True)
+                #
+                # This exchange term won't go away!!!
+                #
+                - np.einsum("xnj,xmf,afin->amij", self.BT1['oo'], self.BT1['ov'], t2, optimize=True)
+        )
+        temp -= np.transpose(temp, (0, 1, 3, 2))
+        self.hbar['vooo'] = temp
+        ### TYPE: VOOV
+        temp = (
+                np.einsum("xai,xme->amie", self.BT1['vo'], self.BT1['ov'], optimize=True)
+                - np.einsum("xae,xmi->amie", self.BT1['vv'], self.BT1['oo'], optimize=True)
+                + np.einsum("mnef,afin->amie", self.ints['oovv'], t2, optimize=True)
+        )
+        self.hbar['voov'] = temp
+        ### TYPE: VVOV
+        temp = (
+                np.einsum("xai,xbe->abie", x_vo, self.BT1['vv'], optimize=True)
+                + 0.25 * np.einsum("mnie,abmn->abie", self.hbar['ooov'], t2, optimize=True)
+                - 0.5 * np.einsum("me,abim->abie", self.hbar['ov'], t2, optimize=True)
+                #
+                # This exchange term won't go away! Cost is Naux*O^2*V^4, very expensive...
+                #
+                - np.einsum("xbf,xne,afin->abie", self.BT1['vv'], self.BT1['ov'], t2, optimize=True)
+        )
+        temp -= np.transpose(temp, (1, 0, 2, 3))
+        self.hbar['vvov'] = temp
+        ### TYPE: VVVV
+        if self.build_hbar_nvirt >= 4:
+            temp = (
+                    np.einsum("xae,xbf->abef", self.BT1['vv'], self.BT1['vv'], optimize=True)
+                    - np.einsum("xaf,xbe->abef", self.BT1['vv'], self.BT1['vv'], optimize=True)
+                    + 0.5 * np.einsum("mnef,abmn->abef", self.ints['oovv'], t2, optimize=True)
+            )
+            self.hbar['vvvv'] = temp

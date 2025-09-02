@@ -43,6 +43,8 @@ class _SRCCBase(ABC):
     frozen: int = 0
     virtual: int = 0
     log_level: int = field(default=logger.get_verbosity_level())
+    build_nvirt: int = 2
+    build_hbar_nvirt: int = 3
 
     ### CC intermediates
     intermediates: dict = field(default_factory=dict)
@@ -64,17 +66,14 @@ class _SRCCBase(ABC):
     first_run: bool = field(default=True, init=False)
     executed: bool = field(default=False, init=False)
 
-    # Move RHF to call and params to init
     def __post_init__(self):
         self.method = self._cc_type().upper()
-        if self.scf is not None:
-            self(scf=self.scf)
 
     def __call__(self, scf):
         self.ints = SONormalOrderedIntegrals(scf, 
                                              frozen=self.frozen, 
                                              virtual=self.virtual,
-                                             build_nvirt=2) 
+                                             build_nvirt=self.build_nvirt) 
         self.no, self.nu = self.ints['ov'].shape
         return self
 
@@ -140,12 +139,11 @@ class _SRCCBase(ABC):
             logger.log(f"Reference Energy: {self.ints.E} hartree", self.log_level)
             logger.log(f"Correlation Energy: {self.E} hartree", self.log_level)
             logger.log(f"Total Coupled-Cluster Energy: {self.ints.E + self.E} hartree\n", self.log_level)
-
-            logger.log_debug("Overwriting DF B tensors with their T1-transformed counterparts")
-            self.ints.B = self.BT1
-
         else:
             logger.log("\nCoupled-cluster calculation did not converge.\n", self.log_level)
+
+        # T1-transform DF tensors at the end to make them consistent with T
+        self._t1_transformation()
 
         self.executed = True
 
@@ -169,6 +167,24 @@ class _SRCCBase(ABC):
     def _cc_type(self):
         return type(self).__name__.upper()
     
+    def _t1_transformation(self):
+        t1 = self.T[0]
+
+        # Guard against cases where T1 is absent (e.g., CCD)
+        if len(t1.shape) != 2:
+            raise ValueError('Dimension of T1 for DF transformation is wrong.')
+        
+        # T1-transform DF tensor vectors
+        self.BT1['ov'] = self.ints.B['ov'].copy()
+        self.BT1['oo'] = self.ints.B['oo'].copy() + np.einsum("xme,ei->xmi", self.BT1['ov'], t1, optimize=True)
+        self.BT1['vv'] = self.ints.B['vv'].copy() - np.einsum("xme,am->xae", self.BT1['ov'], t1, optimize=True)
+        self.BT1['vo'] = (
+                self.ints.B['vo'].copy()
+                - np.einsum("xmi,am->xai", self.BT1['oo'], t1, optimize=True)
+                + np.einsum("xae,ei->xai", self.BT1['vv'], t1, optimize=True)
+                + np.einsum("xme,ei,am->xai", self.BT1['ov'], t1, t1, optimize=True)
+        )
+
     @abstractmethod
     def _build_energy_denominators(self): ...
     
@@ -185,4 +201,7 @@ class _SRCCBase(ABC):
     def _build_initial_guess(self): ...
 
     @abstractmethod
-    def _diis_update(self, diis): ... 
+    def _diis_update(self, diis): ...
+
+    @abstractmethod
+    def _build_hbar(self): ... 

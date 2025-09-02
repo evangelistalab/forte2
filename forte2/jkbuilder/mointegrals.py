@@ -120,10 +120,9 @@ class RestrictedMOIntegrals:
             self.V[1::2, ::2, 1::2, ::2] = temp.transpose(1, 0, 3, 2)
 
 
-@dataclass
 class SONormalOrderedIntegrals:
     r"""
-    Class to compute molecular spinorbital integrals for a given set of restricted (RHF/GHF) orbitals
+    Class to compute molecular spinorbital integrals for a given set of restricted (RHF/ROHF/GHF) orbitals
     for use in SR correlation methods.
 
     Parameters
@@ -149,14 +148,28 @@ class SONormalOrderedIntegrals:
 
     def __init__(self, scf, frozen=0, virtual=0, build_nvirt=4):
 
-        self.nocc = scf.nel
-        self.norb = 2 * scf.C[0].shape[1]
-        self.na = scf.na
-        self.nb = scf.nb
-        self.occupied_all = slice(0, self.nocc)
-        self.unoccupied_all = slice(self.nocc, self.norb)
-        self.o = slice(frozen, self.nocc)
-        self.v = slice(self.nocc, self.norb - virtual)
+        assert scf.method in ['RHF', 'ROHF', 'GHF'], "SONormalOrderedIntegrals only supports RHF, ROHF, and GHF references."
+
+        ### Set up orbital dimensions
+        self.nocc = scf.nel                               # total number of occupied spinorbitals
+        self.norb = 2 * scf.C[0].shape[1]                 # total number of orbitals
+        self.na = scf.na                                  # number of alpha electrons
+        self.nb = scf.nb                                  # number of beta electrons
+        self.occupied_all = slice(0, self.nocc)           # slice of occupied orbitals
+        self.unoccupied_all = slice(self.nocc, self.norb) # slice of unoccupied orbitals
+        self.o = slice(frozen, self.nocc)                 # slice of correlated occupied orbitals
+        self.v = slice(self.nocc, self.norb - virtual)    # slice of correlated unoccupied orbitals
+
+        ### Build the integral data
+        self.build_integral_data(scf, build_nvirt)
+
+    def __getitem__(self, key):
+        if len(key) == 4:
+            return self.V[key]
+        elif len(key) == 2:
+            return self.F[key]
+
+    def build_integral_data(self, scf, build_nvirt):
 
         if scf.method == 'RHF' or scf.method == 'GHF':
             self.mo_occ = [2.0] * scf.ndocc + [0.0] * scf.nuocc
@@ -203,12 +216,6 @@ class SONormalOrderedIntegrals:
         logger.log_debug(f"[SOIntegrals] Building blocks (up to nvirt = {build_nvirt}) of two-electron spinorbital integrals: {time.time() - tic} seconds")
         assert self.E == approx_vtight(self.scf_energy_fock(F, B))
         del B, F, Z
-
-    def __getitem__(self, key):
-        if len(key) == 4:
-            return self.V[key]
-        elif len(key) == 2:
-            return self.F[key]
 
     def get_df_tensor(self, system, C):
          

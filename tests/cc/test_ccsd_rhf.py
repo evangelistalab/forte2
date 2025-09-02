@@ -14,9 +14,11 @@ def test_ccsd_1():
 
     rhf = RHF(charge=0, econv=1e-12)(system).run()
 
-    cc = CCSD(rhf, frozen=4, econv=1e-12).run()
+    cc = CCSD(frozen=4, econv=1e-12)(rhf).run()
+    cc._build_hbar()
 
     assert cc.E == approx(-0.243926801139)
+
 
 def test_ccsd_2():
     xyz = f"""
@@ -26,14 +28,15 @@ def test_ccsd_2():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", cholesky_tei=True, cholesky_tol=1.0e-010, point_group="D2H", reorient=True, unit="bohr")
 
-    rhf = ROHF(charge=0, econv=1e-12, ms=1)(system).run()
+    rohf = ROHF(charge=0, econv=1e-12, ms=1)(system).run()
 
-    cc = CCSD(rhf, frozen=4, econv=1e-12).run()
+    cc = CCSD(frozen=4, econv=1e-12)(rohf).run()
+    cc._build_hbar()
 
     assert cc.E == approx(-0.53380816)
 
 
-@pytest.mark.skip(reason="Test is too large to be run")
+@pytest.mark.skip(reason="Test is too large to be run very often.")
 def test_ccsd_3():
     xyz = """
         O -2.877091949897 -1.507375565672 -0.398996049903
