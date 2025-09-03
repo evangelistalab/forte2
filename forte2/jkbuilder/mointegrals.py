@@ -190,10 +190,10 @@ class SpinorbitalIntegrals:
             J, K = jkbuilder.build_JK([Ccore])
 
             # two-electron contributions to the energy
-            self.E += 0.5 * np.einsum("mi,mn,ni->", Ccore.conj(), J[0]+K[0], Ccore)
+            self.E += 0.5 * np.einsum("mi,mn,ni->", Ccore.conj(), J[0] - K[0], Ccore)
 
             # two-electron contributions to the one-electron integrals
-            self.H += np.einsum("mi,mn,nj->ij", C.conj(), J[0]+K[0], C)
+            self.H += np.einsum("mi,mn,nj->ij", C.conj(), J[0] - K[0], C)
 
         # two-electron integrals
         self.V = jkbuilder.two_electron_integrals_block_spinor(

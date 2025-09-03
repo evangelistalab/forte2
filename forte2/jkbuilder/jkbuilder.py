@@ -166,10 +166,10 @@ class FockBuilder:
             K_spinor = np.zeros((nbf * 2,) * 2, dtype=np.complex128)
             J_spinor[:nbf, :nbf] += Jaa + Jbb
             J_spinor[nbf:, nbf:] += Jaa + Jbb
-            K_spinor[:nbf, :nbf] -= Kaa
-            K_spinor[nbf:, nbf:] -= Kbb
-            K_spinor[:nbf, nbf:] -= Kab
-            K_spinor[nbf:, :nbf] -= Kba
+            K_spinor[:nbf, :nbf] += Kaa
+            K_spinor[nbf:, nbf:] += Kbb
+            K_spinor[:nbf, nbf:] += Kab
+            K_spinor[nbf:, :nbf] += Kba
             J, K = [J_spinor], [K_spinor]
         return J, K
 

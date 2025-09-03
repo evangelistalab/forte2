@@ -498,7 +498,7 @@ class OrbOptimizer:
     def set_rdms(self, g1, g2):
         self.g1 = g1
         # '2RDM' defined as in [eq (6)]
-        self.g2 = 0.5 * (np.einsum("prqs->pqrs", g2) + np.einsum("qrps->pqrs", g2))
+        self.g2 = g2.swapaxes(1, 2)
 
     def get_active_space_ints(self):
         """
@@ -568,7 +568,7 @@ class OrbOptimizer:
         self.Fcore = np.einsum(
             "mp,mn,nq->pq",
             self.Cgen.conj(),
-            self.hcore + 2 * Jcore[0] - Kcore[0],
+            self.hcore + Jcore[0] - Kcore[0],
             self.Cgen,
             optimize=True,
         )
@@ -576,7 +576,7 @@ class OrbOptimizer:
             "pi,qi,pq->",
             self.Ccore.conj(),
             self.Ccore,
-            2 * self.hcore + 2 * Jcore[0] - Kcore[0],
+            self.hcore + 0.5 * (Jcore[0] - Kcore[0]),
         )
 
     def _compute_Fact(self):
@@ -586,7 +586,7 @@ class OrbOptimizer:
         self.Fact = np.einsum(
             "mp,mn,nq->pq",
             self.Cgen.conj(),
-            Jact - 0.5 * Kact,
+            Jact - Kact,
             self.Cgen,
             optimize=True,
         )
