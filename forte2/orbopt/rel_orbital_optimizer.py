@@ -262,13 +262,14 @@ class RelMCOptimizer(ActiveSpaceSolver):
             R = _real_to_cmplx(_R_real)
             self._C = self.orb_opt.C.copy()
             # 2. Convergence checks
-            g_cmplx = _real_to_cmplx(self.lbfgs_solver.g)
+            g_cmplx = _grad_real_to_cmplx(self.lbfgs_solver.g)
             _dg = g_cmplx - self.g_old
             self.g_rms = np.sqrt(np.mean((_dg.conj() * _dg).real))
             self.g_old = g_cmplx.copy()
             conv, conv_str = self._check_convergence()
             lbfgs_str = f"{self.lbfgs_solver.iter}/{'Y' if self.lbfgs_solver.converged else 'N'}"
-            iter_info = f"{self.iter:>10d} {self.E_avg:>20.10f} {self.delta_ci_avg:>12.4e} {self.E_orb:>20.10f} {self.delta_orb:>12.4e} {self.g_rms:>12.4e} {lbfgs_str:>8} {conv_str:>8}"
+            iter_info = f"{self.iter:>10d} {self.E_avg.real:>20.10f} {self.delta_ci_avg.real:>12.4e} "
+            iter_info += f"{self.E_orb.real:>20.10f} {self.delta_orb.real:>12.4e} {self.g_rms.real:>12.4e} {lbfgs_str:>8} {conv_str:>8}"
             if conv:
                 logger.log_info1(iter_info)
                 self.converged = True
@@ -517,7 +518,7 @@ class OrbOptimizer:
         if do_g:
             grad = self._compute_orbgrad()
             g = self._mat_to_vec(grad)
-            g = _cmplx_to_real(g)
+            g = _grad_cmplx_to_real(g)
 
         return E_orb, g
 
@@ -664,6 +665,24 @@ class OrbOptimizer:
         orbhess *= self.nrr
 
         return orbhess
+
+
+def _grad_cmplx_to_real(x_comp):
+    l = len(x_comp)
+    x_real = np.zeros(l * 2, dtype=float)
+    x_real[:l] = x_comp.real
+    # for gradient, we compute the Wirtinger derivative
+    # dE/dk = 1/2(dE/dx - idE/dy)
+    x_real[l:] = -x_comp.imag
+    return 2 * x_real
+
+
+def _grad_real_to_cmplx(x_real):
+    l = len(x_real) // 2
+    x_comp = np.zeros(l, dtype=complex)
+    x_comp += x_real[:l]
+    x_comp -= 1j * x_real[l:]
+    return 0.5 * x_comp
 
 
 def _cmplx_to_real(x_comp):
