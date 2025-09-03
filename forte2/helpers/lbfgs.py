@@ -1,5 +1,6 @@
 import numpy as np
 from numpy.typing import NDArray
+import scipy
 
 from dataclasses import dataclass, field
 
@@ -394,3 +395,57 @@ class LBFGS:
         self._resize(self.m)
         self.iter = 0
         self.iter_shift_ = 0
+
+
+@dataclass
+class LBFGS_scipy:
+    """
+    A wrapper for the SciPy L-BFGS optimization. For debug use only.
+    """
+
+    epsilon: float = 1.0e-5
+    maxiter: int = 20
+    c1: float = 1.0e-4
+    c2: float = 0.9
+
+    ### Unused parameters to match custom implementation
+    print: int = 1
+    m: int = 6
+    h0_freq: int = 0
+    maxiter_linesearch: int = 5
+    max_dir: float = 1.0e15
+    line_search_condition: str = "strong_wolfe"
+    step_length_method: str = "line_bracketing_zoom"
+    min_step: float = 1.0e-15
+    max_step: float = 1.0e15
+
+    def minimize(self, obj, x):
+        fun = lambda x: obj.evaluate(x, None, do_g=False)[0]
+        jac = lambda x: obj.evaluate(x, np.zeros_like(x), do_g=True)[1]
+        _ = fun(x)
+        _ = jac(x)
+        hess_diag = obj.hess_diag(x)
+        hess_inv0 = np.diag(
+            np.divide(
+                1.0,
+                hess_diag,
+                out=np.zeros_like(hess_diag),
+                where=np.abs(hess_diag) >= 1e-12,
+            )
+        )
+        res = scipy.optimize.minimize(
+            fun,
+            x,
+            jac=jac,
+            method="BFGS",
+            options={
+                "maxiter": self.maxiter,
+                "c1": self.c1,
+                "c2": self.c2,
+                "hess_inv0": hess_inv0,
+            },
+        )
+        self.g = res.x.copy()
+        self.converged = res.success
+        self.iter = res.nit
+        return res.fun

@@ -45,7 +45,10 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
 
         SystemMixin.copy_from_upstream(self, self.parent_method)
         MOsMixin.copy_from_upstream(self, self.parent_method)
-        self._make_mo_space(two_component=two_component)
+        if self.system.two_component:
+            self._make_mo_space(two_component=True)
+        else:
+            self._make_mo_space(two_component=two_component)
 
     def _make_mo_space(self, two_component):
         # Ways of providing the MO space:

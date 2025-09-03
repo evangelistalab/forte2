@@ -2,7 +2,7 @@ import numpy as np
 import scipy as sp
 from dataclasses import dataclass, field
 
-from forte2.ci import CISolver, RelCISolver
+from forte2.ci import RelCISolver
 from forte2.base_classes.active_space_solver import ActiveSpaceSolver
 from forte2.orbitals import Semicanonicalizer
 from forte2.jkbuilder import FockBuilder, RestrictedMOIntegrals
@@ -182,8 +182,7 @@ class RelMCOptimizer(ActiveSpaceSolver):
             gas_ref=self.mo_space.ngas > 1,
         )
 
-        _CISolver = RelCISolver if self.two_component else CISolver
-        self.ci_solver = _CISolver(
+        self.ci_solver = RelCISolver(
             states=self.states,
             core_orbitals=self.mo_space.docc_orbitals,
             active_orbitals=self.mo_space.active_orbitals,
@@ -212,7 +211,10 @@ class RelMCOptimizer(ActiveSpaceSolver):
         )
 
         width = 115
-        logger.log_info1("Entering orbital optimization loop")
+        logger.log_info1("\nEntering orbital optimization loop")
+        logger.log_info1(self.mo_space)
+        logger.log_info1(f"# of non-redundant rotations: {self.nrr.sum()}")
+
         logger.log_info1("\nConvergence criteria ('.' if satisfied, 'x' otherwise):")
         logger.log_info1(f"  {'1. RMS(grad - grad_old)':<25} < {self.gconv:.1e}")
         logger.log_info1(f"  {'2. ||E_CI - E_orb||':<25} < {self.econv:.1e}")
@@ -235,8 +237,8 @@ class RelMCOptimizer(ActiveSpaceSolver):
         self.E_orb_old = self.E_orb
         self.E_avg_old = self.E_avg
 
-        self.g1_act = self.ci_solver.make_average_sf_1rdm()
-        g2_act = self.ci_solver.make_average_sf_2rdm()
+        self.g1_act = self.ci_solver.make_average_1rdm()
+        g2_act = self.ci_solver.make_average_2rdm()
         # ci_maxiter_save = self.ci_solver.get_maxiter()
         # self.ci_solver.set_maxiter(self.ci_maxiter)
 
@@ -255,12 +257,15 @@ class RelMCOptimizer(ActiveSpaceSolver):
 
         while self.iter < self.maxiter:
             # 1. Optimize orbitals at fixed CI expansion
-            self.E_orb = self.lbfgs_solver.minimize(self.orb_opt, R)
+            _R_real = _cmplx_to_real(R)
+            self.E_orb = self.lbfgs_solver.minimize(self.orb_opt, _R_real)
+            R = _real_to_cmplx(_R_real)
             self._C = self.orb_opt.C.copy()
             # 2. Convergence checks
-            _dg = self.lbfgs_solver.g - self.g_old
-            self.g_rms = np.sqrt(np.mean(np.dot(_dg.conj(), _dg).real))
-            self.g_old = self.lbfgs_solver.g.copy()
+            g_cmplx = _real_to_cmplx(self.lbfgs_solver.g)
+            _dg = g_cmplx - self.g_old
+            self.g_rms = np.sqrt(np.mean((_dg.conj() * _dg).real))
+            self.g_old = g_cmplx.copy()
             conv, conv_str = self._check_convergence()
             lbfgs_str = f"{self.lbfgs_solver.iter}/{'Y' if self.lbfgs_solver.converged else 'N'}"
             iter_info = f"{self.iter:>10d} {self.E_avg:>20.10f} {self.delta_ci_avg:>12.4e} {self.E_orb:>20.10f} {self.delta_orb:>12.4e} {self.g_rms:>12.4e} {lbfgs_str:>8} {conv_str:>8}"
@@ -276,7 +281,8 @@ class RelMCOptimizer(ActiveSpaceSolver):
             # if diis has performed extrapolation
             if "E" in diis.status:
                 # orb_opt.evaluate updates the 1 and 2-electron integrals for CI
-                _ = self.orb_opt.evaluate(R, self.lbfgs_solver.g, do_g=False)
+                _R_real = _cmplx_to_real(R)
+                _ = self.orb_opt.evaluate(_R_real, self.lbfgs_solver.g, do_g=False)
 
             # 4. Optimize CI expansion at fixed orbitals
             self.ci_solver.set_ints(
@@ -288,8 +294,8 @@ class RelMCOptimizer(ActiveSpaceSolver):
             self.E_avg = self.ci_solver.compute_average_energy()
             self.E_ci = np.array(self.ci_solver.E)
             self.E = self.E_avg
-            self.g1_act = self.ci_solver.make_average_sf_1rdm()
-            g2_act = self.ci_solver.make_average_sf_2rdm()
+            self.g1_act = self.ci_solver.make_average_1rdm()
+            g2_act = self.ci_solver.make_average_2rdm()
             self.orb_opt.set_rdms(self.g1_act, g2_act)
             self.iter += 1
         else:
@@ -328,7 +334,7 @@ class RelMCOptimizer(ActiveSpaceSolver):
         if self.final_orbital == "semicanonical":
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
-                g1_sf=self.ci_solver.make_average_sf_1rdm(),
+                g1_sf=self.ci_solver.make_average_1rdm(),
                 C=self.C[0],
                 system=self.system,
                 fock_builder=fock_builder,
@@ -353,6 +359,7 @@ class RelMCOptimizer(ActiveSpaceSolver):
         return self
 
     def _post_process(self):
+        return
         pretty_print_ci_summary(self.sa_info, self.ci_solver.evals_per_solver)
         self.ci_solver.compute_natural_occupation_numbers()
         pretty_print_ci_nat_occ_numbers(
@@ -383,7 +390,8 @@ class RelMCOptimizer(ActiveSpaceSolver):
 
     def _get_nonredundant_rotations(self):
         """Lower triangular matrix of nonredundant rotations"""
-        nrr = np.zeros((self.system.nmo, self.system.nmo), dtype=bool)
+        nmo = self._C.shape[1]
+        nrr = np.zeros((nmo, nmo), dtype=bool)
 
         if self.optimize_frozen_orbs:
             _core = self.mo_space.docc
@@ -476,12 +484,12 @@ class OrbOptimizer:
         self.gas_ref = gas_ref
 
         # the skew-hermitian rotation matrix, C_current = C_0 @ exp(R)
-        self.R = np.zeros(self.nrot, dtype=float)
+        self.R = np.zeros(self.nrot, dtype=complex)
         # the unitary transformation matrix, U = exp(R)
-        self.U = np.eye(self.C.shape[1], dtype=float)
+        self.U = np.eye(self.C.shape[1], dtype=complex)
 
     def get_eri_gaaa(self):
-        self.eri_gaaa = self.fock_builder.two_electron_integrals_gen_block(
+        self.eri_gaaa = self.fock_builder.two_electron_integrals_gen_block_spinor(
             self.Cgen, *(self.Cact,) * 3
         )
         return self.eri_gaaa
@@ -498,7 +506,8 @@ class OrbOptimizer:
         return self.eri_gaaa[self.actv, ...]
 
     def evaluate(self, x, g, do_g=True):
-        do_update_integrals = self._update_orbitals(x)
+        x_cmplx = _real_to_cmplx(x)
+        do_update_integrals = self._update_orbitals(x_cmplx)
         if do_update_integrals:
             self._compute_Fcore()
             self.get_eri_gaaa()
@@ -508,12 +517,14 @@ class OrbOptimizer:
         if do_g:
             grad = self._compute_orbgrad()
             g = self._mat_to_vec(grad)
+            g = _cmplx_to_real(g)
 
         return E_orb, g
 
     def hess_diag(self, x):
         hess = self._compute_orbhess()
         h0 = self._mat_to_vec(hess)
+        h0 = _cmplx_to_real(h0)
         return h0
 
     def _update_orbitals(self, R):
@@ -600,7 +611,7 @@ class OrbOptimizer:
         self.A_pq[np.abs(self.A_pq) < 1e-12] = 0.0
 
         # compute g_rk (mo, core + active) block of gradient, [eq (9)]
-        orbgrad = 2 * (self.A_pq - self.A_pq.T.conj())
+        orbgrad = self.A_pq - self.A_pq.T.conj()
         orbgrad *= self.nrr
 
         return orbgrad
@@ -653,3 +664,19 @@ class OrbOptimizer:
         orbhess *= self.nrr
 
         return orbhess
+
+
+def _cmplx_to_real(x_comp):
+    l = len(x_comp)
+    x_real = np.zeros(l * 2, dtype=float)
+    x_real[:l] = x_comp.real
+    x_real[l:] = x_comp.imag
+    return x_real
+
+
+def _real_to_cmplx(x_real):
+    l = len(x_real) // 2
+    x_comp = np.zeros(l, dtype=complex)
+    x_comp += x_real[:l]
+    x_comp += 1j * x_real[l:]
+    return x_comp

@@ -148,15 +148,29 @@ class FockBuilder:
         tuple(list[NDArray], list[NDArray])
             A tuple containing the lists of Coulomb (J) and exchange (K) matrices.
         """
+        nbf = self.system.nbf
         D = [np.einsum("mi,ni->mn", Ci, Ci.conj(), optimize=True) for Ci in C]
         if self.system.two_component:
             assert (
                 len(C) == 1
             ), "C must be a list with one element for two-component systems."
             # build_J only needs the aa and bb parts of the density matrix
-            D = [D[0][: self.nbf, : self.nbf], D[0][self.nbf :, self.nbf :]]
+            D = [D[0][:nbf, :nbf], D[0][nbf:, nbf:]]
         J = self.build_J(D)
         K = self.build_K(C)
+        if self.system.two_component:
+            # assemble the two-component JK matrices
+            Jaa, Jbb = J
+            Kaa, Kab, Kba, Kbb = K
+            J_spinor = np.zeros((nbf * 2,) * 2, dtype=np.complex128)
+            K_spinor = np.zeros((nbf * 2,) * 2, dtype=np.complex128)
+            J_spinor[:nbf, :nbf] += Jaa + Jbb
+            J_spinor[nbf:, nbf:] += Jaa + Jbb
+            K_spinor[:nbf, :nbf] -= Kaa
+            K_spinor[nbf:, nbf:] -= Kbb
+            K_spinor[:nbf, nbf:] -= Kab
+            K_spinor[nbf:, :nbf] -= Kba
+            J, K = [J_spinor], [K_spinor]
         return J, K
 
     def build_JK_generalized(self, C, g1):
@@ -173,7 +187,7 @@ class FockBuilder:
         ----------
         C : NDArray
             Coefficient matrix for the orbitals.
-        g1 : NDArray
+        g1 : NDArray    
             One-electron density matrix (1-RDM) in the MO basis.
         
         Returns
@@ -184,13 +198,16 @@ class FockBuilder:
         assert C.shape[1] == g1.shape[0], "C and g1 must have compatible dimensions"
 
         try:
+            # C^*_{\rho u} C_{\sigma v} \gamma_{uv} = C^*_{\rho u} C_{\sigma v} L_ua L_va^*
+            # = (C_{\sigma v} L_va^*) (C^*_{\rho u} L_ua)
+            # = C_{\sigma a} C^*_{\rho a}
             L = np.linalg.cholesky(g1, upper=False)
-            Cp = C @ L
+            Cp = C @ L.conj()
         except np.linalg.LinAlgError:
             n, L = np.linalg.eigh(g1)
             assert np.all(n > -1.0e-11), "g1 must be positive semi-definite"
             n = np.maximum(n, 0)
-            Cp = C @ L @ np.diag(np.sqrt(n))
+            Cp = C @ L.conj() @ np.diag(np.sqrt(n))
 
         J, K = self.build_JK([Cp])
         return J[0], K[0]

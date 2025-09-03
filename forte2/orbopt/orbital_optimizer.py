@@ -2,11 +2,11 @@ import numpy as np
 import scipy as sp
 from dataclasses import dataclass, field
 
-from forte2.ci import CISolver, RelCISolver
+from forte2.ci import CISolver
 from forte2.base_classes.active_space_solver import ActiveSpaceSolver
 from forte2.orbitals import Semicanonicalizer
 from forte2.jkbuilder import FockBuilder, RestrictedMOIntegrals
-from forte2.helpers import logger, LBFGS, DIIS
+from forte2.helpers import logger, LBFGS, DIIS, LBFGS_scipy
 from forte2.system.basis_utils import BasisInfo
 from forte2.ci.ci_utils import (
     pretty_print_ci_summary,

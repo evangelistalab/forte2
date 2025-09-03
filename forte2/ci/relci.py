@@ -223,6 +223,23 @@ class _RelCIBase:
                 f"RDMs for root {root} validated successfully.\n", self.log_level
             )
 
+    def set_ints(self, scalar, oei, tei):
+        """
+        Set the active-space integrals for the CI solver.
+
+        Parameters
+        ----------
+        scalar : float
+            The scalar energy term.
+        oei : NDArray
+            One-electron active-space integrals in the MO basis.
+        tei : NDArray
+            Two-electron active-space integrals in the MO basis.
+        """
+        self.ints.E = scalar
+        self.ints.H = oei
+        self.ints.V = tei
+
     def make_1rdm(self, left_root: int, right_root: int = None):
         rdm = np.zeros((self.norb, self.norb), dtype=complex)
         psil = SparseState({d: c for d, c in zip(self.dets, self.evecs[:, left_root])})
@@ -368,6 +385,24 @@ class RelCISolver(ActiveSpaceSolver):
         self.executed = True
         return self
 
+    def set_ints(self, scalar, oei, tei):
+        """
+        Set the active-space integrals for the CI solver.
+
+        Parameters
+        ----------
+        scalar : float
+            The scalar energy term.
+        oei : NDArray
+            One-electron active-space integrals in the MO basis.
+        tei : NDArray
+            Two-electron active-space integrals in the MO basis.
+        """
+        for ci_solver in self.sub_solvers:
+            ci_solver.ints.E = scalar
+            ci_solver.ints.H = oei
+            ci_solver.ints.V = tei
+
     def compute_average_energy(self):
         """
         Compute the average energy from the CI roots using the weights.
@@ -378,6 +413,38 @@ class RelCISolver(ActiveSpaceSolver):
             Average energy of the CI roots.
         """
         return np.dot(self.weights_flat, self.evals_flat)
+
+    def make_average_1rdm(self):
+        """
+        Make the average one-particle RDM from the CI vectors.
+
+        Returns
+        -------
+        NDArray
+            Average one-particle RDM.
+        """
+        rdm1 = np.zeros((self.norb,) * 2, dtype=np.complex128)
+        for i, ci_solver in enumerate(self.sub_solvers):
+            for j in range(ci_solver.nroot):
+                rdm1 += ci_solver.make_1rdm(j) * self.weights[i][j]
+        return rdm1
+
+    def make_average_2rdm(self):
+        """
+        Make the average two-particle RDM from the CI vectors.
+
+        Returns
+        -------
+        NDArray
+            Average two-particle RDM.
+        """
+        rdm2 = np.zeros((self.norb,) * 4, dtype=np.complex128)
+        for i, ci_solver in enumerate(self.sub_solvers):
+            for j in range(ci_solver.nroot):
+                rdm2 += ci_solver.make_2rdm(j) * self.weights[i][j]
+
+        return rdm2
+
 
 class RelCI(RelCISolver):
     final_orbital: str = "original"
@@ -408,18 +475,19 @@ class RelCI(RelCISolver):
 
         return self
 
-    def _post_process(self):...
-        # pretty_print_ci_summary(self.sa_info, self.evals_per_solver)
-        # self.compute_natural_occupation_numbers()
-        # pretty_print_ci_nat_occ_numbers(self.sa_info, self.mo_space, self.nat_occs)
-        # top_dets = self.get_top_determinants()
-        # pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
+    def _post_process(self): ...
 
-        # if self.do_transition_dipole:
-        #     self.compute_transition_properties()
-        #     pretty_print_ci_transition_props(
-        #         self.sa_info,
-        #         self.tdm_per_solver,
-        #         self.fosc_per_solver,
-        #         self.evals_per_solver,
-        #     )
+    # pretty_print_ci_summary(self.sa_info, self.evals_per_solver)
+    # self.compute_natural_occupation_numbers()
+    # pretty_print_ci_nat_occ_numbers(self.sa_info, self.mo_space, self.nat_occs)
+    # top_dets = self.get_top_determinants()
+    # pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
+
+    # if self.do_transition_dipole:
+    #     self.compute_transition_properties()
+    #     pretty_print_ci_transition_props(
+    #         self.sa_info,
+    #         self.tdm_per_solver,
+    #         self.fosc_per_solver,
+    #         self.evals_per_solver,
+    #     )

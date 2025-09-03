@@ -202,6 +202,22 @@ class MOSpace:
 
         self._parse_lists()
 
+    def __str__(self):
+        width = 25
+        return (
+            f"{'='*width}\n"
+            f"{'MO Space':<15} {'#':<3}\n"
+            f"{'-'*width}\n"
+            f"{'Frozen core':<15} {self.nfrozen_core:<3d}\n"
+            f"{'Core':<15} {self.ncore:<3d}\n"
+            f"{'Active':<15} {self.nactv:<3d}\n"
+            f"{'Virtual':<15} {self.nvirt:<3d}\n"
+            f"{'Frozen virtual':<15} {self.nfrozen_virtual:<3d}\n"
+            f"{'-'*width}\n"
+            f"{'Total':<15} {self.nmo:<3d}\n"
+            f"{'='*width}\n"
+        )
+
     def _convert_integer_arguments_to_lists(self):
         def _to_int(x):
             if isinstance(x, int):

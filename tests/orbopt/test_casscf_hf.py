@@ -51,3 +51,4 @@ def test_casscf_hf_smaller_active():
 
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
+test_casscf_hf_smaller_active()
