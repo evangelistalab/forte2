@@ -116,18 +116,18 @@ class LBFGS:
 
         Parameters
         ----------
-            obj : object
-                Target function to minimize, it should should be encapsulated in a class that has the following methods:
-                ``fx, g = obj.evaluate(x, g, do_g=True)`` where gradient ``g`` is modified by the function,
-                ``fx`` is the function return value, and ``g`` is computed when ``do_g==True``.
-                If diagonal Hessian is specified, ``h0 = obj.hess_diag(x)`` should be available.
-            x : NDArray
-                The initial value of ``x`` as input, the final value of ``x`` as output.
+        obj : object
+            Target function to minimize, it should should be encapsulated in a class that has the following methods:
+            ``fx, g = obj.evaluate(x, g, do_g=True)`` where gradient ``g`` is modified by the function,
+            ``fx`` is the function return value, and ``g`` is computed when ``do_g==True``.
+            If diagonal Hessian is specified, ``h0 = obj.hess_diag(x)`` should be available.
+        x : NDArray
+            The initial value of ``x`` as input, the final value of ``x`` as output.
 
         Returns
         -------
-            fx : float
-                The function value at optimized ``x``.
+        fx : float
+            The function value at optimized ``x``.
         """
         self.g = np.zeros_like(x)
         fx, self.g = obj.evaluate(x, self.g)
@@ -449,3 +449,42 @@ class LBFGS_scipy:
         self.converged = res.success
         self.iter = res.nit
         return res.fun
+
+
+@dataclass
+class NewtonRaphson:
+    epsilon: float = 1.0e-5
+    maxiter: int = 20
+    c1: float = 1.0e-4
+    c2: float = 0.9
+
+    ### Unused parameters to match custom implementation
+    print: int = 1
+    m: int = 6
+    h0_freq: int = 0
+    maxiter_linesearch: int = 5
+    max_dir: float = 1.0e15
+    line_search_condition: str = "strong_wolfe"
+    step_length_method: str = "line_bracketing_zoom"
+    min_step: float = 1.0e-15
+    max_step: float = 1.0e15
+
+    def minimize(self, obj, x):
+        fun = lambda x: obj.evaluate(x, None, do_g=False)[0]
+        jac = lambda x: obj.evaluate(x, np.zeros_like(x), do_g=True)[1]
+        _ = fun(x)
+        g0 = jac(x)
+        hess_diag = obj.hess_diag(x)
+        hess_inv0 = np.divide(
+            1.0,
+            hess_diag,
+            out=np.zeros_like(hess_diag),
+            where=np.abs(hess_diag) >= 1e-12,
+        )
+        step = g0 * hess_inv0
+        x -= step
+        fx = fun(x)
+        self.g = x
+        self.converged = True
+        self.iter = 1
+        return fx
