@@ -78,12 +78,69 @@ def test_rel_casscf_hf_ghf():
     scf = GHF(charge=0)(system)
     ci = RelMCOptimizer(
         states=State(nel=10, multiplicity=1, ms=0.0),
+        nroots=1,
         core_orbitals=2,
         active_orbitals=12,
         final_orbital="original",
+        do_diis=False,
+        maxiter=200,
     )(scf)
     ci.run()
     # assert ci.E[0] == approx(eref)
+
+
+def test_rel_casscf_h2_ghf():
+    xyz = """
+    H 0.0 0.0 0.0
+    H 0.0 0.0 2.0
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="bohr",
+        x2c_type="so",
+    )
+    scf = GHF(charge=0)(system)
+    ci = RelMCOptimizer(
+        states=State(nel=2, multiplicity=1, ms=0.0),
+        nroots=2,
+        core_orbitals=0,
+        active_orbitals=4,
+        final_orbital="original",
+        do_diis=False,
+        maxiter=500,
+    )(scf)
+    ci.run()
+    print(ci.E_ci)
+    # assert ci.E[0] == approx(eref)
+
+
+def test_rel_casscf_na_ghf():
+    xyz = """
+    Na 0.0 0.0 0.0
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="def2-universal-jkfit",
+        unit="bohr",
+        x2c_type="so",
+    )
+    scf = GHF(charge=0)(system)
+    ci = RelMCOptimizer(
+        states=State(nel=11, multiplicity=2, ms=0.5),
+        nroots=8,
+        core_orbitals=10,
+        active_orbitals=8,
+        final_orbital="original",
+        do_diis=False,
+        maxiter=500,
+    )(scf)
+    ci.run()
+    print(ci.E_ci)
 
 
 test_rel_casscf_hf_ghf()

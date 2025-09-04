@@ -470,7 +470,6 @@ class NewtonRaphson:
     def minimize(self, obj, x):
         fun = lambda x: obj.evaluate(x, None, do_g=False)[0]
         jac = lambda x: obj.evaluate(x, np.zeros_like(x), do_g=True)[1]
-        _ = fun(x)
         g0 = jac(x)
         hess_diag = obj.hess_diag(x)
         hess_inv0 = np.divide(

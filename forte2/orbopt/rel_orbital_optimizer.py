@@ -189,7 +189,7 @@ class RelMCOptimizer(ActiveSpaceSolver):
             nroots=self.sa_info.nroots,
             weights=self.sa_info.weights,
             log_level=self.ci_solver_verbosity,
-            ci_algorithm="sparse",
+            ci_algorithm="exact",
         )(self.parent_method)
         # iteration 0: one step of CI optimization to bootsrap the orbital optimization
         self.iter = 0
@@ -247,7 +247,6 @@ class RelMCOptimizer(ActiveSpaceSolver):
         self.orb_opt.set_rdms(self.g1_act, g2_act)
         self.orb_opt._compute_Fcore()
         self.orb_opt.get_eri_gaaa()
-        print(self.orb_opt._compute_reference_energy())
         self.E_orb = self.E_avg
         self.E_orb_old = self.E_orb
 
@@ -432,7 +431,7 @@ class RelMCOptimizer(ActiveSpaceSolver):
             #       nrr[i, j] = False
             nrr[(_irrid[:, None] ^ _irrid != 0)] = False
 
-        return nrr
+        return nrr.T
 
     def _check_convergence(self):
         is_grad_conv = self.g_rms < self.gconv
@@ -601,52 +600,57 @@ class OrbOptimizer:
         self._compute_Fact()
         orbgrad = np.zeros_like(self.Fcore)
 
-        self.A_pq = np.zeros_like(self.Fcore)
-        self.Fock = self.Fcore + self.Fact
+        self.Fock = np.zeros_like(self.Fcore)
+        self.Fock1 = (self.Fcore + self.Fact)
 
         # compute A_ri (mo, core) block, [eq (10)]
-        self.A_pq[self.core, :] = 2.0 * self.Fock[self.core, :]
+        self.Fock[self.core, :] += self.Fock1[:, self.core].T
 
         # compute A_ru (mo, active) block, [eq (11)]
-        self.A_pq[self.actv, :] = np.einsum(
-            "tu,qu->tq", self.g1, self.Fcore[:, self.actv]
+        self.Fock2 = np.zeros_like(self.Fcore)
+        self.Fock2[self.actv, :] = np.einsum(
+            "tu,qu->tq", self.g1, self.Fcore[:, self.actv], optimize=True
         )
         # (rt|vw) D_tu,vw, where (rt|vw) = <rv|tw>
-        self.A_pq[self.actv, :] += np.einsum("qvuw,tuvw->tq", self.eri_gaaa, self.g2)
+        self.Fock2[self.actv, :] += np.einsum(
+            "tuvw,qvuw->tq", self.g2, self.eri_gaaa, optimize=True
+        )
+        self.Fock[self.actv, :] += self.Fock2[self.actv, :]
 
         # screen small gradients to prevent symmetry breaking
-        self.A_pq[np.abs(self.A_pq) < 1e-12] = 0.0
+        self.Fock[np.abs(self.Fock) < 1e-12] = 0.0
 
-        # compute g_rk (mo, core + active) block of gradient, [eq (9)]
-        orbgrad = 2 * (self.A_pq - self.A_pq.T.conj())
+        orbgrad = -2 * (self.Fock - self.Fock.T.conj()).conj()
         orbgrad *= self.nrr
+        print(np.linalg.norm(orbgrad))
 
         return orbgrad
 
     def _compute_orbhess(self):
         """Diagonal orbital Hessian"""
         orbhess = np.zeros_like(self.Fcore)
-        diag_F = np.diag(self.Fock)
+        diag_F = np.diag(self.Fock1)
+        diag_F2 = np.diag(self.Fock2)
         diag_g1 = np.diag(self.g1)
-        diag_grad = np.diag(self.A_pq)
+        diag_grad = np.diag(self.Fock)
 
         # The VC, VA, AC blocks are based on Theor. Chem. Acc. 97, 88-95 (1997)
         # compute virtual-core block
-        orbhess[self.virt, self.core] = 4.0 * (
+        orbhess[self.virt, self.core] += 2.0 * (
             diag_F[self.virt, None] - diag_F[None, self.core]
         )
 
         # compute virtual-active block
-        orbhess[self.virt, self.actv] = 2.0 * (
-            diag_F[self.virt, None] * diag_g1[None, :] - diag_grad[None, self.actv]
+        orbhess[self.virt, self.actv] += 2.0 * (
+            diag_F[self.virt, None] * diag_g1[None, :] - diag_F2[None, self.actv]
         )
 
         # compute active-core block
-        orbhess[self.actv, self.core] = 4.0 * (
+        orbhess[self.actv, self.core] += 2.0 * (
             diag_F[self.actv, None] - diag_F[None, self.core]
         )
         orbhess[self.actv, self.core] += 2.0 * (
-            diag_F[None, self.core] * diag_g1[:, None] - diag_grad[self.actv, None]
+            diag_g1[:, None] * diag_F[None, self.core] - diag_F2[self.actv, None]
         )
 
         # if GAS: compute active-active block [see SI of J. Chem. Phys. 152, 074102 (2020)]
@@ -669,7 +673,7 @@ class OrbOptimizer:
             orbhess[self.actv, self.actv] -= 2.0 * (
                 diag_grad[self.actv, None] + diag_grad[None, self.actv]
             )
-        orbhess *= self.nrr
+        orbhess = orbhess.T * self.nrr
 
         return orbhess
 
