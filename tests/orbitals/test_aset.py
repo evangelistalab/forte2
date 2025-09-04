@@ -68,9 +68,6 @@ def test_aset_1():
     assert ci.E == approx(eci)
 
 
-test_aset_1()
-
-
 def test_aset_2():
     eci = -206.084138520360
 
@@ -99,6 +96,10 @@ def test_aset_2():
     )(mc)
     ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
     ci.run()
+
+    # write aset.C[0] to a numpy file
+    # np.save("test_aset_2_orbitals.npy", aset.C[0])
+    compare_orbital_coefficients(system, aset, "test_aset_2_orbitals.npy")
 
     assert ci.E == approx(eci)
 
@@ -141,6 +142,10 @@ def test_aset_3():
     ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
     ci.run()
 
+    # write aset.C[0] to a numpy file
+    # np.save("test_aset_3_orbitals.npy", aset.C[0])
+    compare_orbital_coefficients(system, aset, "test_aset_3_orbitals.npy")
+
     assert ci.E == approx(eci)
 
 
@@ -178,9 +183,11 @@ def test_aset_4():
     ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
     ci.run()
 
+    # write aset.C[0] to a numpy file
+    # np.save("test_aset_4_orbitals.npy", aset.C[0])
+    compare_orbital_coefficients(system, aset, "test_aset_4_orbitals.npy")
+
     assert ci.E == approx(eci)
-    # cube = Cube()
-    # cube.run(system, ci.C[0])
 
 
 def test_aset_5():
@@ -213,5 +220,9 @@ def test_aset_5():
     aset = ASET(fragment=["C1-2", "H1-3"], cutoff_method="threshold")(mc)
     ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
     ci.run()
+
+    # write aset.C[0] to a numpy file
+    # np.save("test_aset_5_orbitals.npy", aset.C[0])
+    compare_orbital_coefficients(system, aset, "test_aset_5_orbitals.npy")
 
     assert ci.E == approx(eci)
