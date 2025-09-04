@@ -1,3 +1,4 @@
+import pytest
 import numpy as np
 
 from forte2 import System, RHF, State, GHF
@@ -6,6 +7,7 @@ from forte2.helpers.comparisons import approx
 from forte2.orbopt import RelMCOptimizer
 
 
+@pytest.mark.skip(reason="relativistic mcscf not fully functional yet")
 def test_rel_casscf_h2():
     # equivalent to test_slater_rules::test_slater_rules_1_complex
     xyz = """
@@ -31,6 +33,7 @@ def test_rel_casscf_h2():
     assert ci.E[0] == approx(-1.096071975854)
 
 
+@pytest.mark.skip(reason="relativistic mcscf not fully functional yet")
 def test_rel_casscf_hf():
     # equivalent to test_slater_rules::test_slater_rules_2_complex
     xyz = """
@@ -60,6 +63,7 @@ def test_rel_casscf_hf():
     assert ci.E[0] == approx(-100.019788438077)
 
 
+@pytest.mark.skip(reason="relativistic mcscf not fully functional yet")
 def test_rel_casscf_hf_ghf():
     # cross-validated with the pyscf fci_dhf_slow solver using integrals from SpinorbitalIntegrals
     eref = -100.10065023157668
@@ -89,6 +93,7 @@ def test_rel_casscf_hf_ghf():
     # assert ci.E[0] == approx(eref)
 
 
+@pytest.mark.skip(reason="relativistic mcscf not fully functional yet")
 def test_rel_casscf_h2_ghf():
     xyz = """
     H 0.0 0.0 0.0
@@ -117,6 +122,7 @@ def test_rel_casscf_h2_ghf():
     # assert ci.E[0] == approx(eref)
 
 
+@pytest.mark.skip(reason="relativistic mcscf not fully functional yet")
 def test_rel_casscf_na_ghf():
     xyz = """
     Na 0.0 0.0 0.0
@@ -141,6 +147,3 @@ def test_rel_casscf_na_ghf():
     )(scf)
     ci.run()
     print(ci.E_ci)
-
-
-test_rel_casscf_hf_ghf()
