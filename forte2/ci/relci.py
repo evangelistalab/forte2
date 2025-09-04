@@ -82,7 +82,6 @@ class _RelCIBase:
 
     def run(self):
         if self.first_run:
-            # don't set first_run to false before _build_guess_vectors
             self._ci_solver_startup()
 
         self.slater_rules = RelSlaterRules(
@@ -105,22 +104,24 @@ class _RelCIBase:
             self._test_rdms()
 
         self.executed = True
+        self.first_run = False
 
         return self
 
     def _do_iterative_ci(self, ints):
-        self.eigensolver = DavidsonLiuSolver(
-            size=self.ndet,
-            nroot=self.nroot,
-            collapse_per_root=self.collapse_per_root,
-            basis_per_root=self.basis_per_root,
-            e_tol=self.econv,
-            r_tol=self.rconv,
-            maxiter=self.maxiter,
-            eta=self.energy_shift,
-            log_level=self.log_level,
-            dtype=complex,
-        )
+        if self.eigensolver is None:
+            self.eigensolver = DavidsonLiuSolver(
+                size=self.ndet,
+                nroot=self.nroot,
+                collapse_per_root=self.collapse_per_root,
+                basis_per_root=self.basis_per_root,
+                e_tol=self.econv,
+                r_tol=self.rconv,
+                maxiter=self.maxiter,
+                eta=self.energy_shift,
+                log_level=self.log_level,
+                dtype=complex,
+            )
 
         Hdiag = []
         for i in self.dets:
@@ -139,7 +140,6 @@ class _RelCIBase:
 
         if self.first_run:
             self._build_guess_vectors(Hdiag)
-            self.first_run = False
 
         ham = sparse_operator_hamiltonian(ints.E.real, ints.H, ints.V, 1e-12)
 
@@ -167,6 +167,8 @@ class _RelCIBase:
                 H[j, i] = np.conj(H[i, j])
 
         self.evals, self.evecs = np.linalg.eigh(H)
+        self.evals = self.evals[: self.nroot]
+        self.evecs = self.evecs[:, : self.nroot]
 
     def _build_guess_vectors(self, Hdiag):
         """Build the guess vectors for the CI calculation."""

@@ -80,7 +80,10 @@ def test_rel_casscf_hf_ghf():
         states=State(nel=10, multiplicity=1, ms=0.0),
         core_orbitals=2,
         active_orbitals=12,
+        final_orbital="original",
     )(scf)
     ci.run()
     # assert ci.E[0] == approx(eref)
+
+
 test_rel_casscf_hf_ghf()

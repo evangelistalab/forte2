@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from forte2.ci import RelCISolver
 from forte2.base_classes.active_space_solver import ActiveSpaceSolver
 from forte2.orbitals import Semicanonicalizer
-from forte2.jkbuilder import FockBuilder, RestrictedMOIntegrals
+from forte2.jkbuilder import FockBuilder, SpinorbitalIntegrals
 from forte2.helpers import logger, LBFGS, DIIS, NewtonRaphson
 from forte2.system.basis_utils import BasisInfo
 from forte2.ci.ci_utils import (
@@ -189,6 +189,7 @@ class RelMCOptimizer(ActiveSpaceSolver):
             nroots=self.sa_info.nroots,
             weights=self.sa_info.weights,
             log_level=self.ci_solver_verbosity,
+            ci_algorithm="sparse",
         )(self.parent_method)
         # iteration 0: one step of CI optimization to bootsrap the orbital optimization
         self.iter = 0
@@ -323,7 +324,7 @@ class RelMCOptimizer(ActiveSpaceSolver):
         self.E_ci = np.array(self.ci_solver.E)
         self.E_avg = self.ci_solver.compute_average_energy()
         logger.log_info1(
-            f"{'Final CI':>10} {self.E_avg:>20.10f} {'-':>12} {self.E_orb:>20.10f} {'-':>12} {'-':>12} {'-':>6} {conv_str:>10s}"
+            f"{'Final CI':>10} {self.E_avg.real:>20.10f} {'-':>12} {self.E_orb.real:>20.10f} {'-':>12} {'-':>12} {'-':>6} {conv_str:>10s}"
         )
 
         logger.log_info1("=" * width)
@@ -349,7 +350,7 @@ class RelMCOptimizer(ActiveSpaceSolver):
             self.C[0] = semi.C_semican.copy()
 
             # recompute the CI vectors in the semicanonical basis
-            ints = RestrictedMOIntegrals(
+            ints = SpinorbitalIntegrals(
                 system=self.system,
                 C=self.C[0],
                 orbitals=self.mo_space.active_indices,
@@ -571,10 +572,10 @@ class OrbOptimizer:
         # Compute the core Fock matrix [eq (3)], also return the core energy
         Jcore, Kcore = self.fock_builder.build_JK([self.Ccore])
         self.Fcore = np.einsum(
-            "mp,mn,nq->pq",
+            "mp,nq,mn->pq",
             self.Cgen.conj(),
-            self.hcore + Jcore[0] - Kcore[0],
             self.Cgen,
+            self.hcore + Jcore[0] - Kcore[0],
             optimize=True,
         )
         self.Ecore = np.einsum(
@@ -589,10 +590,10 @@ class OrbOptimizer:
 
         # [eq (13)]
         self.Fact = np.einsum(
-            "mp,mn,nq->pq",
+            "mp,nq,mn->pq",
             self.Cgen.conj(),
-            Jact - Kact,
             self.Cgen,
+            Jact - Kact,
             optimize=True,
         )
 
@@ -617,7 +618,7 @@ class OrbOptimizer:
         self.A_pq[np.abs(self.A_pq) < 1e-12] = 0.0
 
         # compute g_rk (mo, core + active) block of gradient, [eq (9)]
-        orbgrad = self.A_pq - self.A_pq.T.conj()
+        orbgrad = 2 * (self.A_pq - self.A_pq.T.conj())
         orbgrad *= self.nrr
 
         return orbgrad

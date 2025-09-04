@@ -457,8 +457,6 @@ class NewtonRaphson:
     maxiter: int = 20
     c1: float = 1.0e-4
     c2: float = 0.9
-
-    ### Unused parameters to match custom implementation
     print: int = 1
     m: int = 6
     h0_freq: int = 0
