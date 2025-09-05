@@ -42,6 +42,8 @@ class _CIBase:
         If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
     log_level : int, optional
         The logging level for the CI solver. Defaults to the global logger's verbosity level.
+    die_if_not_converged : bool, optional, default=False
+        If True, raise an error if the CI solver does not converge.
     ci_algorithm : str, optional, valid choices=["hz", "kh"], default="hz"
         The algorithm used for the CI sigma builder.
     guess_per_root : int, optional, default=2
@@ -79,6 +81,7 @@ class _CIBase:
     active_orbsym: list[int]
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
+    die_if_not_converged: bool = False
 
     ### Sigma builder parameters
     ci_algorithm: str = "hz"
@@ -235,7 +238,13 @@ class _CIBase:
         # 6. Run Davidson
         self.evals, self.evecs = self.eigensolver.solve()
 
-        logger.log("\nDavidson-Liu solver converged.\n", self.log_level)
+        if self.eigensolver.converged:
+            logger.log("\nDavidson-Liu solver converged.\n", self.log_level)
+        else:
+            if self.die_if_not_converged:
+                raise RuntimeError("Davidson-Liu solver did not converge.")
+            else:
+                logger.log(f"\nDavidson-Liu solver did not converge in {self.eigensolver.maxiter} iterations.\n", self.log_level)
 
         h_tot, h_aabb, h_aaaa, h_bbbb = self.ci_sigma_builder.avg_build_time()
         logger.log("\nAverage CI Sigma Builder time summary:", self.log_level)
@@ -809,6 +818,7 @@ class CISolver(ActiveSpaceSolver):
                     nroot=self.sa_info.nroots[i],
                     active_orbsym=active_orbsym,
                     do_test_rdms=self.do_test_rdms,
+                    die_if_not_converged=self.die_if_not_converged,
                     ci_algorithm=self.ci_algorithm,
                     guess_per_root=self.guess_per_root,
                     ndets_per_guess=self.ndets_per_guess,
@@ -896,9 +906,7 @@ class CISolver(ActiveSpaceSolver):
             Two-electron active-space integrals in the MO basis.
         """
         for ci_solver in self.sub_solvers:
-            ci_solver.ints.E = scalar
-            ci_solver.ints.H = oei
-            ci_solver.ints.V = tei
+            ci_solver.set_ints(scalar, oei, tei)
 
     def compute_natural_occupation_numbers(self):
         """
@@ -987,7 +995,7 @@ class CI(CISolver):
     CI solver specialized for a single CI calculation. (i.e., not used in a loop).
     See `CISolver` for all parameters and attributes.
     """
-
+    die_if_not_converged: bool = True
     final_orbital: str = "original"
     do_transition_dipole: bool = False
 
@@ -997,7 +1005,7 @@ class CI(CISolver):
         if self.final_orbital == "semicanonical":
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
-                g1_sf=self.make_average_sf_1rdm(),
+                g1=self.make_average_sf_1rdm(),
                 C=self.C[0],
                 system=self.system,
             )

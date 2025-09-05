@@ -616,10 +616,14 @@ def sparse_operator(list: Sequence[tuple[SQOperatorString, complex]]) -> SparseO
 
 def new_product(arg0: SparseOperator, arg1: SparseOperator, /) -> SparseOperator: ...
 
+@overload
 def sparse_operator_hamiltonian(scalar_energy: float, one_electron_integrals: Annotated[ArrayLike, dict(dtype='float64', shape=(None, None))], two_electron_integrals: Annotated[ArrayLike, dict(dtype='float64', shape=(None, None, None, None))], screen_thresh: float = 1e-12) -> SparseOperator:
     """
-    Create a SparseOperator object representing the Hamiltonian from integrals
+    Create a SparseOperator object representing the second quantized Hamiltonian.
     """
+
+@overload
+def sparse_operator_hamiltonian(scalar_energy: float, one_electron_integrals: Annotated[ArrayLike, dict(dtype='complex128', shape=(None, None))], two_electron_integrals: Annotated[ArrayLike, dict(dtype='complex128', shape=(None, None, None, None))], screen_thresh: float = 1e-12) -> SparseOperator: ...
 
 class SparseOperatorList:
     """A class to represent a list of sparse operators"""

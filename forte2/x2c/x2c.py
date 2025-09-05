@@ -6,7 +6,12 @@ from forte2.helpers import logger, eigh_gen
 from forte2.system.build_basis import build_basis
 
 X2C_LINDEP_TOL = 5e-8
-LIGHT_SPEED = scipy.constants.physical_constants["inverse fine-structure constant"][0]
+LIGHT_SPEED = 137.035999177
+ROW_Z_START = np.array([1, 3, 11, 19, 37, 55, 87])
+
+
+def _row_given_Z(Z):
+    return np.searchsorted(ROW_Z_START, Z, side="right")
 
 
 def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
@@ -37,6 +42,14 @@ def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
         "sf",
         "so",
     ], f"Invalid x2c_type: {x2c_type}. Must be 'sf' or 'so'."
+
+    if snso_type is not None:
+        assert snso_type.lower() in [
+            "boettger",
+            "dc",
+            "dcb",
+            "row-dependent",
+        ], f"Invalid snso_type: {snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
 
     logger.log_info1(f"Number of contracted basis functions: {system.nbf}")
     xbasis = build_basis(system.basis_set, system.geom_helper, decontract=True)
@@ -177,10 +190,7 @@ def _apply_snso_scaling(ints, basis, atoms, snso_type):
     if snso_type is None:
         return ints
     if basis.max_l > 7:
-        raise RuntimeError(
-            "SNSO scaling is not implemented for basis sets with l > 7. "
-            "Please use a different basis set."
-        )
+        raise RuntimeError("SNSO scaling is not implemented for basis sets with l > 7.")
     match snso_type.lower():
         case "boettger":
             Ql = np.array([0.0, 2.0, 10.0, 28.0, 60.0, 110.0, 182.0, 280.0])
@@ -189,13 +199,18 @@ def _apply_snso_scaling(ints, basis, atoms, snso_type):
         case "dcb":
             Ql = np.array([0.0, 2.97, 11.93, 29.84, 64.0, 115.0, 188.0, 287.0])
         case "row-dependent":
-            raise NotImplementedError(
-                "Row-dependent SNSO scaling is not implemented yet. "
-                "Please use 'boettger', 'dc', or 'dcb' instead."
-            )
+            Ql = {
+                1: np.array([0, 2.32, 10.64, 28.38, 60, 110, 182, 280]),
+                2: np.array([0, 2.80, 11.93, 29.84, 64, 115, 188, 287]),
+                3: np.array([0, 2.95, 11.93, 29.84, 64, 115, 188, 287]),
+                4: np.array([0, 3.09, 11.49, 29.84, 64, 115, 188, 287]),
+                5: np.array([0, 3.02, 11.91, 29.84, 64, 115, 188, 287]),
+                6: np.array([0, 2.85, 12.31, 30.61, 64, 115, 188, 287]),
+                7: np.array([0, 2.85, 12.31, 30.61, 64, 115, 188, 287]),
+            }
         case _:
             raise ValueError(
-                f"Invalid SNSO type: {snso_type}. Must be 'boettger', 'dc', or 'dcb'."
+                f"Invalid SNSO type: {snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
             )
 
     center_first = np.array([_[0] for _ in basis.center_first_and_last])
@@ -210,13 +225,21 @@ def _apply_snso_scaling(ints, basis, atoms, snso_type):
         if li == 0:
             continue
         Zi = atoms[center_given_shell(ishell)][0]
+        if isinstance(Ql, dict):
+            Ql_i = Ql[_row_given_Z(Zi)][li]
+        else:
+            Ql_i = Ql[li]
         for jshell in range(basis.nshells):
             jsize = basis[jshell].size
             lj = int(basis[jshell].l)
             if lj == 0:
                 continue
             Zj = atoms[center_given_shell(jshell)][0]
-            snso_factor = 1 - np.sqrt(Ql[li] * Ql[lj] / (Zi * Zj))
+            if isinstance(Ql, dict):
+                Ql_j = Ql[_row_given_Z(Zj)][lj]
+            else:
+                Ql_j = Ql[lj]
+            snso_factor = 1 - np.sqrt(Ql_i * Ql_j / (Zi * Zj))
             ints[iptr : iptr + isize, jptr : jptr + jsize] *= snso_factor
             jptr += jsize
         iptr += isize

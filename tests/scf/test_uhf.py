@@ -15,9 +15,7 @@ def test_uhf_triplet():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = System(
-        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
-    )
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
 
     scf = UHF(charge=0, ms=1)(system)
     scf.run()
@@ -35,9 +33,7 @@ def test_uhf_singlet():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = System(
-        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
-    )
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
 
     scf = UHF(charge=0, ms=0)(system)
     scf.run()
@@ -52,9 +48,7 @@ def test_uhf_one_electron():
     H           0.000000000000     0.000000000000     0.000000000000
     H           0.000000000000     0.000000000000     1.000000000000
     """
-    system = System(
-        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
-    )
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
     scf = UHF(charge=1, ms=-0.5)(system)
     scf.run()
     assert scf.E == approx(euhf)
@@ -83,9 +77,7 @@ def test_coulson_fischer():
     xyz = """
     H 0 0 0
     H 0 0 2.7"""
-    system = System(
-        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT"
-    )
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
     rhf = RHF(charge=0)(system)
     rhf.run()
     assert rhf.E == approx(erhf)

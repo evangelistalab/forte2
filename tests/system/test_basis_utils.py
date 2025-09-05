@@ -82,3 +82,14 @@ def test_shell_label_to_lm():
         shell_label_to_lm("g(-1)")
     with pytest.raises(Exception):
         shell_label_to_lm("h(11)")
+
+
+def test_basis_info_spinor():
+    system = System(
+        xyz="C 0 0 0",
+        basis_set="cc-pvdz",
+    )
+    basis_info = BasisInfo(system, system.basis)
+    assert basis_info.basis_labels_spinor[22] == BasisInfo._SpinorAOLabel(
+        22, 0, 6, 1, 3, 2, 5, -5
+    )
