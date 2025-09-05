@@ -43,6 +43,49 @@ def test_davidson_vs_numpy():
     assert diff_norm < 1e-5, f"Eigenvector subspaces differ (norm {diff_norm:.2e})"
 
 
+def test_davidson_vs_numpy_complex():
+    # 1. Build a small random Hermitian matrix H
+    np.random.seed(123)
+    size = 100
+    nroot = 3
+    H = np.random.randn(size, size) + 1j * np.random.randn(size, size)
+    H = 0.5 * (H + H.conj().T)
+
+    # 2. σ-builder that handles multiple columns at once
+    def sigma_builder(basis_block: np.ndarray, sigma_block: np.ndarray) -> None:
+        sigma_block[:] = H @ basis_block
+
+    # 3. Instantiate and configure solver
+    solver = DavidsonLiuSolver(
+        size=size,
+        nroot=nroot,
+        collapse_per_root=3,
+        basis_per_root=6,
+        dtype=np.complex128,
+    )
+    solver.add_h_diag(np.diag(H))
+    solver.add_sigma_builder(sigma_builder)
+    # no guesses → solver will generate random initial vectors
+
+    # 4. Run Davidson
+    evals, evecs = solver.solve()
+
+    # 5. Reference solution via NumPy
+    ref_vals, ref_vecs = np.linalg.eigh(H)
+    ref_vals = ref_vals[:nroot]
+
+    # 6. Compare eigenvalues (up to ordering)
+    assert np.allclose(
+        np.sort(evals), np.sort(ref_vals), atol=1e-12
+    ), f"Eigenvalues mismatch: {evals} vs {ref_vals}"
+
+    # 7. Compare eigenvector subspaces via projector difference
+    P_solver = evecs @ evecs.T.conj()
+    P_ref = ref_vecs[:, :3] @ ref_vecs[:, :3].T.conj()
+    diff_norm = np.linalg.norm(P_solver - P_ref)
+    assert diff_norm < 1e-5, f"Eigenvector subspaces differ (norm {diff_norm:.2e})"
+
+
 def test_dl_1():
     """Test the Davidson-Liu solver with a 4x4 matrix.
     Pass the standard basis vectors as initial guesses."""
@@ -286,7 +329,7 @@ def test_dl_shift():
     # user-specified shift for target eigenvalue
     eta = ref_vals[20] + np.random.uniform(-1, 1)
     # reorder ref eigenpair by user-specified shift
-    idx = np.argsort(np.abs(ref_vals - eta)) 
+    idx = np.argsort(np.abs(ref_vals - eta))
     ref_vals = ref_vals[idx]
     ref_vecs = ref_vecs[:, idx]
     ref_vals = ref_vals[:nroot]
@@ -296,7 +339,7 @@ def test_dl_shift():
         sigma_block[:] = H @ basis_block
 
     # 4. Instantiate and configure solver
-    
+
     solver = DavidsonLiuSolver(
         size=size, nroot=nroot, collapse_per_root=5, basis_per_root=10, eta=eta
     )
