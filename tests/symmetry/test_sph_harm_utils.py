@@ -12,7 +12,6 @@ def test_sph_real_to_complex():
 
 def test_sph_real_to_complex_p():
     U = sph_real_to_complex(1)
-    print(U.conj().T)
 
 def test_clebsh_gordan_spin_half():
     # l = 0

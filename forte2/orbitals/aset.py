@@ -65,7 +65,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
     def __call__(self, parent_method):
         assert isinstance(
             parent_method, forte2.orbopt.MCOptimizer
-        ), f"Parent methd must be MCSCF, got {type(parent_method)}"
+        ), f"Parent method must be MCSCF, got {type(parent_method)}"
         self.parent_method = parent_method
         return self
 
