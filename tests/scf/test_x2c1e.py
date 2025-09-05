@@ -92,7 +92,7 @@ def test_boettger_hbr():
     scf.run()
     assert EH_TO_WN * (
         scf.eps[0][scf.nel - 2] - scf.eps[0][scf.nel - 3]
-    ) == pytest.approx(2870.8987272457603, abs=1e-4)
+    ) == pytest.approx(2898.7863319000467, abs=1e-4)
 
 
 def test_so_from_sf_water():

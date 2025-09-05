@@ -1,2 +1,2 @@
-from .state import State, StateAverageInfo
+from .state import State, RelState, StateAverageInfo
 from .mo_space import MOSpace, EmbeddingMOSpace
