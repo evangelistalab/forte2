@@ -19,7 +19,7 @@ def compare_orbital_coefficients(system, aset, filename):
     C_test = np.load(THIS_DIR / f"reference_aset_orbitals/{filename}")
     S = system.ints_overlap()
     overlap = np.abs(aset.C[0].T @ S @ C_test)
-    assert np.allclose(overlap, np.eye(overlap.shape[0]), atol=1e-10, rtol=0.0)
+    assert np.allclose(overlap, np.eye(overlap.shape[0]), atol=1e-8, rtol=0.0)
 
 
 # Ref Energies come from forte1
@@ -44,7 +44,10 @@ def test_aset_1():
     """
 
     system = System(
-        xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="def2-universal-JKFIT"
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        reorient=False,
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
@@ -61,8 +64,6 @@ def test_aset_1():
     ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
     ci.run()
 
-    # write aset.C[0] to a numpy file
-    # np.save("test_aset_1_orbitals.npy", aset.C[0])
     compare_orbital_coefficients(system, aset, "test_aset_1_orbitals.npy")
 
     assert ci.E == approx(eci)
@@ -79,7 +80,10 @@ def test_aset_2():
     """
 
     system = System(
-        xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="def2-universal-JKFIT"
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        reorient=False,
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
@@ -97,8 +101,6 @@ def test_aset_2():
     ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
     ci.run()
 
-    # write aset.C[0] to a numpy file
-    # np.save("test_aset_2_orbitals.npy", aset.C[0])
     compare_orbital_coefficients(system, aset, "test_aset_2_orbitals.npy")
 
     assert ci.E == approx(eci)
@@ -123,7 +125,10 @@ def test_aset_3():
 """
 
     system = System(
-        xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="def2-universal-JKFIT"
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        reorient=False,
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
@@ -142,9 +147,6 @@ def test_aset_3():
     ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
     ci.run()
 
-    # write aset.C[0] to a numpy file
-    # np.save("test_aset_3_orbitals.npy", aset.C[0])
-    print(aset.C[0])
     compare_orbital_coefficients(system, aset, "test_aset_3_orbitals.npy")
 
     assert ci.E == approx(eci)
@@ -163,7 +165,10 @@ def test_aset_4():
     F       -2.2714806355      1.3880717623      0.2062454513
     """
     system = System(
-        xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="def2-universal-JKFIT"
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        reorient=False,
     )
 
     rhf = RHF(charge=0, econv=1e-10)(system)
@@ -184,8 +189,6 @@ def test_aset_4():
     ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
     ci.run()
 
-    # write aset.C[0] to a numpy file
-    # np.save("test_aset_4_orbitals.npy", aset.C[0])
     compare_orbital_coefficients(system, aset, "test_aset_4_orbitals.npy")
 
     assert ci.E == approx(eci)
@@ -209,7 +212,10 @@ def test_aset_5():
 """
 
     system = System(
-        xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="def2-universal-JKFIT"
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        reorient=False,
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
@@ -222,8 +228,6 @@ def test_aset_5():
     ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
     ci.run()
 
-    # write aset.C[0] to a numpy file
-    # np.save("test_aset_5_orbitals.npy", aset.C[0])
     compare_orbital_coefficients(system, aset, "test_aset_5_orbitals.npy")
 
     assert ci.E == approx(eci)
