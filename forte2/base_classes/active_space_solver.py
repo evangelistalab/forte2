@@ -17,6 +17,7 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
     frozen_virtual_orbitals: list[int] = None
     final_orbital: str = "semicanonical"
     ci_algorithm: str = "hz"
+    die_if_not_converged: bool = False
 
     def __post_init__(self):
         self.sa_info = StateAverageInfo(

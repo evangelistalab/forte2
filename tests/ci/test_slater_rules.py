@@ -4,7 +4,7 @@ import forte2
 from forte2 import System, RHF
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers.comparisons import approx
-from forte2.ci.relci import _RelCIBase
+from forte2.ci.rel_ci import _RelCIBase
 from forte2.state import MOSpace, State
 
 

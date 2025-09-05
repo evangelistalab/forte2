@@ -14,10 +14,17 @@ from forte2.state import State, MOSpace
 from forte2.base_classes import ActiveSpaceSolver
 from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 from forte2.jkbuilder import SpinorbitalIntegrals
+from forte2.orbitals import Semicanonicalizer
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
 from forte2.helpers import logger
 from forte2.helpers.comparisons import approx
-from forte2.ci.ci_utils import pretty_print_gas_info
+from .ci_utils import (
+    pretty_print_gas_info,
+    pretty_print_ci_summary,
+    pretty_print_ci_nat_occ_numbers,
+    pretty_print_ci_dets,
+    pretty_print_ci_transition_props,
+)
 
 
 @dataclass
@@ -29,6 +36,7 @@ class _RelCIBase:
     active_orbsym: list[int]
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
+    die_if_not_converged: bool = False
 
     ### Sigma builder parameters
     ci_algorithm: str = "sparse"
@@ -94,7 +102,7 @@ class _RelCIBase:
         if self.ci_algorithm == "exact":
             self._do_exact_diagonalization()
         elif self.ci_algorithm == "sparse":
-            self._do_iterative_ci(self.ints)
+            self._do_iterative_ci()
 
         self.E = self.evals
         for i, e in enumerate(self.evals):
@@ -108,7 +116,7 @@ class _RelCIBase:
 
         return self
 
-    def _do_iterative_ci(self, ints):
+    def _do_iterative_ci(self):
         if self.eigensolver is None:
             self.eigensolver = DavidsonLiuSolver(
                 size=self.ndet,
@@ -141,7 +149,9 @@ class _RelCIBase:
         if self.first_run:
             self._build_guess_vectors(Hdiag)
 
-        ham = sparse_operator_hamiltonian(ints.E.real, ints.H, ints.V, 1e-12)
+        ham = sparse_operator_hamiltonian(
+            self.ints.E.real, self.ints.H, self.ints.V, 1e-12
+        )
 
         def sigma_builder(basis_block, sigma_block):
             nstate = basis_block.shape[1]
@@ -149,7 +159,7 @@ class _RelCIBase:
                 psi = SparseState(
                     {d: c for d, c in zip(self.dets, basis_block[:, istate])}
                 )
-                Hpsi = apply_op(ham, psi)
+                Hpsi = apply_op(ham, psi, screen_thresh=1e-100)
                 for idet in range(self.ndet):
                     sigma_block[idet, istate] = Hpsi[self.dets[idet]]
 
@@ -157,7 +167,16 @@ class _RelCIBase:
 
         self.evals, self.evecs = self.eigensolver.solve()
 
-        logger.log("\nDavidson-Liu solver converged.\n", self.log_level)
+        if self.eigensolver.converged:
+            logger.log("\nDavidson-Liu solver converged.\n", self.log_level)
+        else:
+            if self.die_if_not_converged:
+                raise RuntimeError("Davidson-Liu solver did not converge.")
+            else:
+                logger.log(
+                    f"\nDavidson-Liu solver did not converge in {self.eigensolver.maxiter} iterations.\n",
+                    self.log_level,
+                )
 
     def _do_exact_diagonalization(self):
         H = np.zeros((self.ndet,) * 2, dtype=complex)
@@ -225,6 +244,54 @@ class _RelCIBase:
                 f"RDMs for root {root} validated successfully.\n", self.log_level
             )
 
+    def compute_natural_occupation_numbers(self):
+        """
+        Compute the natural occupation numbers from the 1-RDMs.
+
+        Returns
+        -------
+        (norb, nroot) NDArray
+            The natural occupation numbers for each root.
+        """
+        if not self.executed:
+            raise RuntimeError("CI solver has not been executed yet.")
+        no = np.zeros((self.norb, self.nroot))
+        for i in range(self.nroot):
+            g1 = self.make_1rdm(i)
+            no[:, i] = np.linalg.eigvalsh(g1)[::-1]
+
+        return no
+
+    def get_top_determinants(self, n=5):
+        """
+        Get the top `n` determinants for each root based on their coefficients in the CI vector.
+
+        Parameters
+        ----------
+        n : int, optional, default=5
+            The number of top determinants to return.
+
+        Returns
+        -------
+        list[list[tuple[Determinant, float]]]
+            A list of lists, where each inner list contains tuples of the top determinants
+            and their coefficients for each root.
+        """
+        if not self.executed:
+            raise RuntimeError("CI solver has not been executed yet.")
+
+        top_dets_per_root = []
+        for i in range(self.nroot):
+            top_dets = []
+            ci_det = self.evecs[:, i]
+            argsort = np.argsort(np.abs(ci_det))[::-1]  # descending in absolute coeff
+            for j in range(n):
+                if j < len(argsort):
+                    top_dets.append((self.dets[argsort[j]], ci_det[argsort[j]]))
+            top_dets_per_root.append(top_dets)
+
+        return top_dets_per_root
+
     def set_ints(self, scalar, oei, tei):
         """
         Set the active-space integrals for the CI solver.
@@ -255,7 +322,7 @@ class _RelCIBase:
             for q in range(self.norb):
                 op = SparseOperator()
                 op.add([p], [], [q], [])
-                rdm[p, q] = overlap(psil, apply_op(op, psir))
+                rdm[p, q] = overlap(psil, apply_op(op, psir, screen_thresh=1e-100))
 
         return rdm
 
@@ -334,13 +401,6 @@ class RelCISolver(ActiveSpaceSolver):
             use_aux_corr=True,
         )
 
-        self.slater_rules = RelSlaterRules(
-            nspinor=self.norb,
-            scalar_energy=ints.E.real,
-            one_electron_integrals=ints.H,
-            two_electron_integrals=ints.V,
-        )
-
         self.sub_solvers = []
         active_orbsym = [
             [0 for _ in active_space] for active_space in self.mo_space.active_orbitals
@@ -387,6 +447,39 @@ class RelCISolver(ActiveSpaceSolver):
         self.executed = True
         return self
 
+    def compute_natural_occupation_numbers(self):
+        """
+        Compute the natural occupation numbers for the CI states.
+
+        Returns
+        -------
+        (norb, nroot) NDArray
+            The natural occupation numbers for each root.
+        """
+        nos = []
+        for ci_solver in self.sub_solvers:
+            nos.append(ci_solver.compute_natural_occupation_numbers())
+        self.nat_occs = np.concatenate(nos, axis=1)
+
+    def get_top_determinants(self, n=5):
+        """
+        Get the top `n` determinants for each root based on their coefficients in the CI vector.
+
+        Parameters
+        ----------
+        n : int, optional, default=5
+            The number of top determinants to return.
+
+        Returns
+        -------
+        top_dets : list[list[tuple[Determinant, float]]]]
+            top_dets[i] contains a list of tuples (Determinant, coefficient) for the `i`-th root.
+        """
+        top_dets = []
+        for ci_solver in self.sub_solvers:
+            top_dets += ci_solver.get_top_determinants(n)
+        return top_dets
+
     def set_ints(self, scalar, oei, tei):
         """
         Set the active-space integrals for the CI solver.
@@ -401,9 +494,7 @@ class RelCISolver(ActiveSpaceSolver):
             Two-electron active-space integrals in the MO basis.
         """
         for ci_solver in self.sub_solvers:
-            ci_solver.ints.E = scalar
-            ci_solver.ints.H = oei
-            ci_solver.ints.V = tei
+            ci_solver.set_ints(scalar, oei, tei)
 
     def compute_average_energy(self):
         """
@@ -448,6 +539,7 @@ class RelCISolver(ActiveSpaceSolver):
         return rdm2
 
 
+@dataclass
 class RelCI(RelCISolver):
     final_orbital: str = "original"
     do_transition_dipole: bool = False
@@ -455,41 +547,40 @@ class RelCI(RelCISolver):
     def run(self):
         super().run()
         self._post_process()
-        # if self.final_orbital == "semicanonical":
-        #     semi = Semicanonicalizer(
-        #         mo_space=self.mo_space,
-        #         g1_sf=self.make_average_sf_1rdm(),
-        #         C=self.C[0],
-        #         system=self.system,
-        #     )
-        #     self.C[0] = semi.C_semican.copy()
+        if self.final_orbital == "semicanonical":
+            semi = Semicanonicalizer(
+                mo_space=self.mo_space,
+                g1=self.make_average_1rdm(),
+                C=self.C[0],
+                system=self.system,
+            )
+            self.C[0] = semi.C_semican.copy()
 
-        #     # recompute the CI vectors in the semicanonical basis
-        #     ints = RestrictedMOIntegrals(
-        #         self.system,
-        #         self.C[0],
-        #         self.active_indices,
-        #         self.core_indices,
-        #         use_aux_corr=True,
-        #     )
-        #     self.set_ints(ints.E, ints.H, ints.V)
-        #     super().run()
+            # recompute the CI vectors in the semicanonical basis
+            ints = SpinorbitalIntegrals(
+                self.system,
+                self.C[0],
+                self.active_indices,
+                self.core_indices,
+                use_aux_corr=True,
+            )
+            self.set_ints(ints.E, ints.H, ints.V)
+            super().run()
 
         return self
 
-    def _post_process(self): ...
+    def _post_process(self):
+        pretty_print_ci_summary(self.sa_info, self.evals_per_solver)
+        self.compute_natural_occupation_numbers()
+        pretty_print_ci_nat_occ_numbers(self.sa_info, self.mo_space, self.nat_occs)
+        top_dets = self.get_top_determinants()
+        pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
 
-    # pretty_print_ci_summary(self.sa_info, self.evals_per_solver)
-    # self.compute_natural_occupation_numbers()
-    # pretty_print_ci_nat_occ_numbers(self.sa_info, self.mo_space, self.nat_occs)
-    # top_dets = self.get_top_determinants()
-    # pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
-
-    # if self.do_transition_dipole:
-    #     self.compute_transition_properties()
-    #     pretty_print_ci_transition_props(
-    #         self.sa_info,
-    #         self.tdm_per_solver,
-    #         self.fosc_per_solver,
-    #         self.evals_per_solver,
-    #     )
+        # if self.do_transition_dipole:
+        #     self.compute_transition_properties()
+        #     pretty_print_ci_transition_props(
+        #         self.sa_info,
+        #         self.tdm_per_solver,
+        #         self.fosc_per_solver,
+        #         self.evals_per_solver,
+        #     )

@@ -90,6 +90,7 @@ class RelMCOptimizer(ActiveSpaceSolver):
     max_rotation: float = 0.2
 
     ### CI solver parameters
+    ci_algorithm: str = "sparse"
     ci_maxiter: int = 50
 
     ### DIIS parameters
@@ -339,7 +340,7 @@ class RelMCOptimizer(ActiveSpaceSolver):
         if self.final_orbital == "semicanonical":
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
-                g1_sf=self.ci_solver.make_average_1rdm(),
+                g1=self.ci_solver.make_average_1rdm(),
                 C=self.C[0],
                 system=self.system,
                 fock_builder=fock_builder,
@@ -352,8 +353,8 @@ class RelMCOptimizer(ActiveSpaceSolver):
             ints = SpinorbitalIntegrals(
                 system=self.system,
                 C=self.C[0],
-                orbitals=self.mo_space.active_indices,
-                core_orbitals=self.mo_space.docc_indices,
+                spinorbitals=self.mo_space.active_indices,
+                core_spinorbitals=self.mo_space.docc_indices,
                 use_aux_corr=True,
                 fock_builder=fock_builder,  # avoid reinitialization of FockBuilder
             )
@@ -364,7 +365,6 @@ class RelMCOptimizer(ActiveSpaceSolver):
         return self
 
     def _post_process(self):
-        return
         pretty_print_ci_summary(self.sa_info, self.ci_solver.evals_per_solver)
         self.ci_solver.compute_natural_occupation_numbers()
         pretty_print_ci_nat_occ_numbers(
@@ -372,15 +372,15 @@ class RelMCOptimizer(ActiveSpaceSolver):
         )
         top_dets = self.ci_solver.get_top_determinants()
         pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
-        self._print_ao_composition()
-        if self.do_transition_dipole:
-            self.ci_solver.compute_transition_properties(self.C[0])
-            pretty_print_ci_transition_props(
-                self.sa_info,
-                self.ci_solver.tdm_per_solver,
-                self.ci_solver.fosc_per_solver,
-                self.ci_solver.evals_per_solver,
-            )
+        # self._print_ao_composition()
+        # if self.do_transition_dipole:
+        #     self.ci_solver.compute_transition_properties(self.C[0])
+        #     pretty_print_ci_transition_props(
+        #         self.sa_info,
+        #         self.ci_solver.tdm_per_solver,
+        #         self.ci_solver.fosc_per_solver,
+        #         self.ci_solver.evals_per_solver,
+        #     )
 
     def _print_ao_composition(self):
         basis_info = BasisInfo(self.system, self.system.basis)
@@ -601,7 +601,7 @@ class OrbOptimizer:
         orbgrad = np.zeros_like(self.Fcore)
 
         self.Fock = np.zeros_like(self.Fcore)
-        self.Fock1 = (self.Fcore + self.Fact)
+        self.Fock1 = self.Fcore + self.Fact
 
         # compute A_ri (mo, core) block, [eq (10)]
         self.Fock[self.core, :] += self.Fock1[:, self.core].T
@@ -622,7 +622,6 @@ class OrbOptimizer:
 
         orbgrad = -2 * (self.Fock - self.Fock.T.conj()).conj()
         orbgrad *= self.nrr
-        print(np.linalg.norm(orbgrad))
 
         return orbgrad
 

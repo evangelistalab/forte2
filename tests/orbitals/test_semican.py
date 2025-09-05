@@ -21,7 +21,7 @@ def test_semican_rhf():
     )
 
     semi = orbitals.Semicanonicalizer(
-        mo_space=mo_space, g1_sf=np.diag([2, 2, 2, 0, 0, 0]), C=rhf.C[0], system=system
+        mo_space=mo_space, g1=np.diag([2, 2, 2, 0, 0, 0]), C=rhf.C[0], system=system
     )
     assert rhf.eps[0] == approx(semi.eps_semican)
 
@@ -114,7 +114,7 @@ def test_semican_fock_offdiag():
     mo_space = ci.mo_space
     semi = orbitals.Semicanonicalizer(
         mo_space=mo_space,
-        g1_sf=ci.make_average_sf_1rdm(),
+        g1=ci.make_average_sf_1rdm(),
         C=ci.C[0],
         system=system,
     )
@@ -140,7 +140,7 @@ def test_semican_fock_offdiag():
     mo_space = ci.mo_space
     semi = orbitals.Semicanonicalizer(
         mo_space=mo_space,
-        g1_sf=ci.make_average_sf_1rdm(),
+        g1=ci.make_average_sf_1rdm(),
         C=ci.C[0],
         system=system,
     )

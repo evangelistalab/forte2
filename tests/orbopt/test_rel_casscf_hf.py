@@ -1,72 +1,40 @@
 import pytest
 import numpy as np
 
-from forte2 import System, RHF, State, GHF
-from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
+from forte2 import System, State, GHF
 from forte2.helpers.comparisons import approx
 from forte2.orbopt import RelMCOptimizer
 
 
-@pytest.mark.skip(reason="relativistic mcscf not fully functional yet")
-def test_rel_casscf_h2():
-    # equivalent to test_slater_rules::test_slater_rules_1_complex
-    xyz = """
-    H 0.0 0.0 0.0
-    H 0.0 0.0 2.0
-    """
+@pytest.mark.slow
+def test_rel_casscf_hf_equivalence_to_nonrel():
+    erhf = -99.9977252002946
+    emcscf = -100.0435018956
 
-    system = System(
-        xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
-    )
-    scf = RHF(charge=0, econv=1e-12)(system)
-    scf.run()
-    C = convert_coeff_spatial_to_spinor(system, scf.C)[0]
-    nmo = C.shape[1]
-    random_phase = np.diag(np.exp(1j * np.random.uniform(-np.pi, np.pi, size=nmo)))
-    C = C @ random_phase
-    scf.C[0] = C
-    system.two_component = True
-
-    state = State(nel=2, multiplicity=1, ms=0.0)
-    ci = RelCI(states=state, active_orbitals=4, do_test_rdms=True)(scf)
-    ci.run()
-    assert ci.E[0] == approx(-1.096071975854)
-
-
-@pytest.mark.skip(reason="relativistic mcscf not fully functional yet")
-def test_rel_casscf_hf():
-    # equivalent to test_slater_rules::test_slater_rules_2_complex
     xyz = """
     H 0.0 0.0 0.0
     F 0.0 0.0 2.0
     """
-
     system = System(
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    scf = RHF(charge=0, econv=1e-10)(system)
-    scf.run()
-    C = convert_coeff_spatial_to_spinor(system, scf.C)[0]
-    nmo = C.shape[1]
-    random_phase = np.diag(np.exp(1j * np.random.uniform(-np.pi, np.pi, size=nmo)))
-    C = C @ random_phase
-    scf.C[0] = C
-    system.two_component = True
-
-    ci = RelCI(
+    scf = GHF(charge=0, econv=1e-10)(system)
+    mc = RelMCOptimizer(
         states=State(nel=10, multiplicity=1, ms=0.0),
         core_orbitals=2,
         active_orbitals=12,
-        do_test_rdms=True,
+        do_diis=False,
+        maxiter=200,
     )(scf)
-    ci.run()
-    assert ci.E[0] == approx(-100.019788438077)
+    mc.run()
+    assert scf.E == approx(erhf)
+    assert mc.E == approx(emcscf)
 
 
-@pytest.mark.skip(reason="relativistic mcscf not fully functional yet")
+@pytest.mark.slow
 def test_rel_casscf_hf_ghf():
-    # cross-validated with the pyscf fci_dhf_slow solver using integrals from SpinorbitalIntegrals
-    eref = -100.10065023157668
+    escf = -100.078531285537
+    emcscf = -100.1361832608
     xyz = """
     H 0.0 0.0 0.0
     F 0.0 0.0 2.0
@@ -80,50 +48,22 @@ def test_rel_casscf_hf_ghf():
         x2c_type="so",
     )
     scf = GHF(charge=0)(system)
-    ci = RelMCOptimizer(
+    mc = RelMCOptimizer(
         states=State(nel=10, multiplicity=1, ms=0.0),
         nroots=1,
         core_orbitals=2,
         active_orbitals=12,
-        final_orbital="original",
         do_diis=False,
         maxiter=200,
     )(scf)
-    ci.run()
-    # assert ci.E[0] == approx(eref)
+    mc.run()
+
+    assert scf.E == approx(escf)
+    assert mc.E == approx(emcscf)
 
 
-@pytest.mark.skip(reason="relativistic mcscf not fully functional yet")
-def test_rel_casscf_h2_ghf():
-    xyz = """
-    H 0.0 0.0 0.0
-    H 0.0 0.0 2.0
-    """
-
-    system = System(
-        xyz=xyz,
-        basis_set="cc-pvdz",
-        auxiliary_basis_set="cc-pVTZ-JKFIT",
-        unit="bohr",
-        x2c_type="so",
-    )
-    scf = GHF(charge=0)(system)
-    ci = RelMCOptimizer(
-        states=State(nel=2, multiplicity=1, ms=0.0),
-        nroots=2,
-        core_orbitals=0,
-        active_orbitals=4,
-        final_orbital="original",
-        do_diis=False,
-        maxiter=500,
-    )(scf)
-    ci.run()
-    print(ci.E_ci)
-    # assert ci.E[0] == approx(eref)
-
-
-@pytest.mark.skip(reason="relativistic mcscf not fully functional yet")
 def test_rel_casscf_na_ghf():
+    emcscf = -161.9905346837
     xyz = """
     Na 0.0 0.0 0.0
     """
@@ -136,14 +76,14 @@ def test_rel_casscf_na_ghf():
         x2c_type="so",
     )
     scf = GHF(charge=0)(system)
-    ci = RelMCOptimizer(
+    mc = RelMCOptimizer(
         states=State(nel=11, multiplicity=2, ms=0.5),
         nroots=8,
         core_orbitals=10,
         active_orbitals=8,
-        final_orbital="original",
         do_diis=False,
         maxiter=500,
     )(scf)
-    ci.run()
-    print(ci.E_ci)
+    mc.run()
+
+    assert mc.E == approx(emcscf)

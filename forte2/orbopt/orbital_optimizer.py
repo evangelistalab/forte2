@@ -323,7 +323,7 @@ class MCOptimizer(ActiveSpaceSolver):
         if self.final_orbital == "semicanonical":
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
-                g1_sf=self.ci_solver.make_average_sf_1rdm(),
+                g1=self.ci_solver.make_average_sf_1rdm(),
                 C=self.C[0],
                 system=self.system,
                 fock_builder=fock_builder,

@@ -85,12 +85,12 @@ def pretty_print_ci_summary(
     for i in range(ncis):
         for j in range(nroots[i]):
             logger.log_info1(
-                f"{iroot:>6d} {mult[i]:>6d} {ms[i]:>6.1f} {irrep[i]:>6d} {eigvals_per_solver[i][j]:>20.10f} {weights[i][j]:>15.5f}"
+                f"{iroot:>6d} {mult[i]:>6d} {ms[i]:>6.1f} {irrep[i]:>6d} {eigvals_per_solver[i][j].real:>20.10f} {weights[i][j]:>15.5f}"
             )
             iroot += 1
             E_avg += eigvals_per_solver[i][j] * weights[i][j]
         logger.log_info1("-" * width)
-    logger.log_info1(f"{'Ensemble average energy':<27} {E_avg:>20.10f}")
+    logger.log_info1(f"{'Ensemble average energy':<27} {E_avg.real:>20.10f}")
     logger.log_info1("=" * width)
 
 
@@ -158,6 +158,7 @@ def pretty_print_ci_dets(
     width = 10 + width_per_det * ndets_per_root
     nroots = sa_info.nroots_sum
     norb = mo_space.nactv
+    is_complex = isinstance(top_dets[0][0][1], complex)
 
     logger.log_info1("\nTop determinants:")
     logger.log_info1("=" * width)
@@ -172,8 +173,17 @@ def pretty_print_ci_dets(
         logstr = f"Root {i:<5}" + "".join(
             [f"{d.str(norb):<{width_per_det}}" for d in dets]
         )
-        logstr += "\n"
-        logstr += " " * 10 + "".join([f"{c:<+{width_per_det}.6f}" for c in coeffs])
+        logstr += (
+            "\n"
+            + " " * 10
+            + "".join([f"{c.real:<+{width_per_det}.6f}" for c in coeffs])
+        )
+        if is_complex:
+            logstr += (
+                "\n"
+                + " " * 10
+                + "".join([f"{f'{c.imag:<+.6f}'+'i':<{width_per_det}}" for c in coeffs])
+            )
         logger.log_info1(logstr)
         if i < nroots - 1:
             logger.log_info1("-" * width)
