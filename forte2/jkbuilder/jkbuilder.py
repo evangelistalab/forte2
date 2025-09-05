@@ -1,5 +1,6 @@
 import numpy as np
 import scipy as sp
+import itertools
 
 from forte2 import ints
 from forte2.system import System, ModelSystem
@@ -23,6 +24,7 @@ class FockBuilder:
     """
 
     def __init__(self, system: System, use_aux_corr=False):
+        self.system = system
         if isinstance(system, ModelSystem):
             # special handling for ModelSystem
             nbf = system.nbf
@@ -30,6 +32,8 @@ class FockBuilder:
             self.B = cholesky_wrapper(eri, tol=-1)
             self.B = self.B.reshape((self.B.shape[0], nbf, nbf))
             system.naux = self.B.shape[0]
+            self.nbf = nbf
+            self.naux = system.naux
             return
 
         if not system.cholesky_tei:
@@ -49,6 +53,8 @@ class FockBuilder:
             self.B, system.naux = self._build_B_cholesky(
                 system.basis, system.cholesky_tol
             )
+        self.naux = system.naux
+        self.nbf = system.nbf
 
     @staticmethod
     def _build_B_cholesky(basis, cholesky_tol):
@@ -107,19 +113,20 @@ class FockBuilder:
         J = [np.einsum("Pmn,Prs,sr->mn", self.B, self.B, Di, optimize=True) for Di in D]
         return J
 
-    def build_K(self, C, cross=False):
+    def build_K(self, C):
+        if self.system.two_component:
+            assert (
+                len(C) == 1
+            ), "C must be a list with one element for two-component systems."
+            C = [C[0][: self.nbf, :], C[0][self.nbf :, :]]
         Y = [np.einsum("Pmr,mi->Pri", self.B, Ci.conj(), optimize=True) for Ci in C]
-        if cross:
+        if self.system.two_component:
             K = []
             for Yi in Y:
                 for Yj in Y:
                     K.append(np.einsum("Pmi,Pni->mn", Yi.conj(), Yj, optimize=True))
         else:
             K = [np.einsum("Pmi,Pni->mn", Yi.conj(), Yi, optimize=True) for Yi in Y]
-        return K
-
-    def build_K_density(self, D):
-        K = [np.einsum("Pms,Prn,sr->mn", self.B, self.B, Di, optimize=True) for Di in D]
         return K
 
     def build_JK(self, C):
@@ -141,9 +148,29 @@ class FockBuilder:
         tuple(list[NDArray], list[NDArray])
             A tuple containing the lists of Coulomb (J) and exchange (K) matrices.
         """
+        nbf = self.system.nbf
         D = [np.einsum("mi,ni->mn", Ci, Ci.conj(), optimize=True) for Ci in C]
+        if self.system.two_component:
+            assert (
+                len(C) == 1
+            ), "C must be a list with one element for two-component systems."
+            # build_J only needs the aa and bb parts of the density matrix
+            D = [D[0][:nbf, :nbf], D[0][nbf:, nbf:]]
         J = self.build_J(D)
         K = self.build_K(C)
+        if self.system.two_component:
+            # assemble the two-component JK matrices
+            Jaa, Jbb = J
+            Kaa, Kab, Kba, Kbb = K
+            J_spinor = np.zeros((nbf * 2,) * 2, dtype=np.complex128)
+            K_spinor = np.zeros((nbf * 2,) * 2, dtype=np.complex128)
+            J_spinor[:nbf, :nbf] += Jaa + Jbb
+            J_spinor[nbf:, nbf:] += Jaa + Jbb
+            K_spinor[:nbf, :nbf] += Kaa
+            K_spinor[nbf:, nbf:] += Kbb
+            K_spinor[:nbf, nbf:] += Kab
+            K_spinor[nbf:, :nbf] += Kba
+            J, K = [J_spinor], [K_spinor]
         return J, K
 
     def build_JK_generalized(self, C, g1):
@@ -160,7 +187,7 @@ class FockBuilder:
         ----------
         C : NDArray
             Coefficient matrix for the orbitals.
-        g1 : NDArray
+        g1 : NDArray    
             One-electron density matrix (1-RDM) in the MO basis.
         
         Returns
@@ -171,13 +198,16 @@ class FockBuilder:
         assert C.shape[1] == g1.shape[0], "C and g1 must have compatible dimensions"
 
         try:
+            # C^*_{\rho u} C_{\sigma v} \gamma_{uv} = C^*_{\rho u} C_{\sigma v} L_ua L_va^*
+            # = (C_{\sigma v} L_va^*) (C^*_{\rho u} L_ua)
+            # = C_{\sigma a} C^*_{\rho a}
             L = np.linalg.cholesky(g1, upper=False)
-            Cp = C @ L
+            Cp = C @ L.conj()
         except np.linalg.LinAlgError:
             n, L = np.linalg.eigh(g1)
             assert np.all(n > -1.0e-11), "g1 must be positive semi-definite"
             n = np.maximum(n, 0)
-            Cp = C @ L @ np.diag(np.sqrt(n))
+            Cp = C @ L.conj() @ np.diag(np.sqrt(n))
 
         J, K = self.build_JK([Cp])
         return J[0], K[0]
@@ -253,3 +283,89 @@ class FockBuilder:
             The two-electron integrals in the form of a 4D array.
         """
         return self.two_electron_integrals_gen_block(C, C, C, C, antisymmetrize)
+
+    def two_electron_integrals_gen_block_spinor(
+        self, C1, C2, C3, C4, antisymmetrize=False
+    ):
+        r"""
+        Compute the two-electron integrals for a given set of orbitals. This method is
+        general and can handle different sets of orbitals for each index (p, q, r, s).
+
+        The resulting integrals are stored in a 4D array with the following convention:
+        V[p,q,r,s] = :math:`\langle pq | rs \rangle`, where
+
+        .. math::
+
+            \langle pq | rs \rangle = \iint \phi^*_p(r_1) \phi^*_q(r_2) \frac{1}{r_{12}} \phi_r(r_1) \phi_s(r_2) dr_1 dr_2
+
+
+        Parameters
+        ----------
+        C1 : NDArray
+            Coefficient matrix for the first set of orbitals (index p).
+        C2 : NDArray
+            Coefficient matrix for the second set of orbitals (index q).
+        C3 : NDArray
+            Coefficient matrix for the third set of orbitals (index r).
+        C4 : NDArray
+            Coefficient matrix for the fourth set of orbitals (index s).
+        antisymmetrize : bool, optional, default=False
+            Whether to antisymmetrize the integrals. If True, the integrals are antisymmetrized as:
+            V[p,q,r,s] = :math:`\langle pq || rs \rangle = \langle pq | rs \rangle - \langle pq | sr \rangle`
+
+        Returns
+        -------
+        V : NDArray
+            The two-electron integrals in the form of a 4D array.
+        """
+        nbf = self.nbf
+        V = np.zeros(
+            (C1.shape[1], C2.shape[1], C3.shape[1], C4.shape[1]), dtype=complex
+        )
+        _a = slice(0, nbf)
+        _b = slice(nbf, nbf * 2)
+        # equivalent to 4 nested for loops over a,b parts of of C1/2/3/4
+        for s1, s2, s3, s4 in itertools.product([_a, _b], repeat=4):
+            # this essentially enforces the spin orthogonality of the AOs
+            if (s1 != s3) or (s2 != s4):
+                continue
+            V += np.einsum(
+                "Pmn,Prs,mi,rj,nk,sl->ijkl",
+                self.B,
+                self.B,
+                C1[s1, :].conj(),
+                C2[s2, :].conj(),
+                C3[s3, :],
+                C4[s4, :],
+                optimize=True,
+            )
+
+        if antisymmetrize:
+            V -= np.einsum("ijkl->ijlk", V)
+        return V
+
+    def two_electron_integrals_block_spinor(self, C, antisymmetrize=False):
+        r"""
+        Compute the two-electron integrals for a given set of spin-orbitals.
+
+        The resulting integrals are stored in a 4D array with the following convention:
+        V[p,q,r,s] = :math:`\langle pq | rs \rangle`, where
+
+        .. math::
+
+            \langle pq | rs \rangle = \iint \phi^*_p(r_1) \phi^*_q(r_2) \frac{1}{r_{12}} \phi_r(r_1) \phi_s(r_2) dr_1 dr_2
+
+        Parameters
+        ----------
+        C : NDArray
+            Coefficient matrix for the set of spin-orbitals.
+        antisymmetrize : bool, optional, default=False
+            Whether to antisymmetrize the integrals. If True, the integrals are antisymmetrized as:
+            V[p,q,r,s] = :math:`\langle pq || rs \rangle = \langle pq | rs \rangle - \langle pq | sr \rangle`
+
+        Returns
+        -------
+        V : NDArray
+            The two-electron integrals in the form of a 4D array.
+        """
+        return self.two_electron_integrals_gen_block_spinor(C, C, C, C, antisymmetrize)

@@ -1,6 +1,9 @@
 from dataclasses import dataclass
+
 import numpy as np
 
+from forte2.system.basis_utils import BasisInfo
+from forte2.system import ModelSystem
 from forte2.helpers import logger
 from .scf_base import SCFBase
 from .rhf import RHF
@@ -28,6 +31,7 @@ class ROHF(SCFBase):
     _diis_update = RHF._diis_update
     _build_total_density_matrix = UHF._build_total_density_matrix
     _assign_orbital_symmetries = RHF._assign_orbital_symmetries
+    _apply_level_shift = RHF._apply_level_shift
 
     def __call__(self, system):
         system.two_component = False
@@ -75,7 +79,9 @@ class ROHF(SCFBase):
 
     def _build_ao_grad(self, S, F):
         Deff = 0.5 * (self.D[0] + self.D[1])
-        return F @ Deff @ S - S @ Deff @ F
+        ao_grad = F @ Deff @ S - S @ Deff @ F
+        ao_grad = self.Xorth.T @ ao_grad @ self.Xorth
+        return ao_grad
 
     def _get_occupation(self):
         self.ndocc = min(self.na, self.nb)
@@ -120,3 +126,26 @@ class ROHF(SCFBase):
                 f"{idx+1:<4d} ({self.irrep_labels[idx]}) {self.eps[0][idx]:<12.6f} "
             )
         logger.log_info1(string)
+
+    def _print_ao_composition(self):
+        if isinstance(self.system, ModelSystem):
+            # send a PR if you want this changed
+            return
+        basis_info = BasisInfo(self.system, self.system.basis)
+        logger.log_info1("\nAO Composition of doubly occupied MOs (HOMO-3 to HOMO):")
+        basis_info.print_ao_composition(
+            self.C[0], list(range(max(self.ndocc - 3, 0), self.ndocc))
+        )
+        logger.log_info1("\nAO Composition of singly occupied MOs:")
+        basis_info.print_ao_composition(
+            self.C[0], list(range(self.ndocc, self.ndocc + self.nsocc))
+        )
+        logger.log_info1("\nAO Composition of MOs (LUMO to LUMO+5):")
+        basis_info.print_ao_composition(
+            self.C[0],
+            list(
+                range(
+                    self.ndocc + self.nsocc, min(self.ndocc + self.nsocc + 5, self.nmo)
+                )
+            ),
+        )

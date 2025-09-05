@@ -15,8 +15,8 @@ class Semicanonicalizer:
     ----------
     mo_space : MOSpace
         The molecular orbital space defining the subspaces.
-    g1_sf : np.ndarray
-        The active space spin-free 1-electron density matrix in the molecular orbital basis.
+    g1 : np.ndarray
+        The active space 1-electron density matrix in the molecular orbital basis.
     C : np.ndarray
         The molecular orbital coefficients, in the "original" order of the orbitals.
     system : System
@@ -45,7 +45,7 @@ class Semicanonicalizer:
 
     def __init__(
         self,
-        g1_sf: np.ndarray,
+        g1: np.ndarray,
         C: np.ndarray,
         system: System,
         mo_space: MOSpace | EmbeddingMOSpace = None,
@@ -56,8 +56,12 @@ class Semicanonicalizer:
         do_active: bool = True,
     ):
         self.mo_space = mo_space
-        # factor of 0.5 to use (2J - K) throughout for Fock build
-        self.g1_sf = 0.5 * g1_sf
+        self.two_component = system.two_component
+        if self.two_component:
+            self.g1 = g1
+        else:
+            # factor of 0.5 to use (2J - K) throughout for Fock build
+            self.g1 = 0.5 * g1
         self.system = system
         self.fock_builder = fock_builder
         self._C = C[:, self.mo_space.orig_to_contig].copy()
@@ -98,7 +102,6 @@ class Semicanonicalizer:
 
         return self
 
-
     def _generate_elementary_spaces(self):
         slice_list = []
         if isinstance(self.mo_space, MOSpace):
@@ -137,11 +140,12 @@ class Semicanonicalizer:
         docc = self.mo_space.docc
         C_docc = self._C[:, docc]
         J, K = self.fock_builder.build_JK([C_docc])
-        fock = hcore + 2 * J[0] - K[0]
+        factor = 1 if self.two_component else 2
+        fock = hcore + factor * J[0] - K[0]
 
         # active contribution to the generalized Fock matrix
         C_act = self._C[:, self.mo_space.actv]
-        J, K = self.fock_builder.build_JK_generalized(C_act, self.g1_sf)
-        fock += 2 * J - K
+        J, K = self.fock_builder.build_JK_generalized(C_act, self.g1)
+        fock += factor * J - K
         fock = np.einsum("pq,pi,qj->ij", fock, self._C.conj(), self._C, optimize=True)
         return fock

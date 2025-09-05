@@ -2,11 +2,11 @@ import numpy as np
 import scipy as sp
 from dataclasses import dataclass, field
 
-from forte2.ci import CISolver
+from forte2.ci import RelCISolver
 from forte2.base_classes.active_space_solver import ActiveSpaceSolver
 from forte2.orbitals import Semicanonicalizer
-from forte2.jkbuilder import FockBuilder, RestrictedMOIntegrals
-from forte2.helpers import logger, LBFGS, DIIS
+from forte2.jkbuilder import FockBuilder, SpinorbitalIntegrals
+from forte2.helpers import logger, LBFGS, DIIS, NewtonRaphson
 from forte2.system.basis_utils import BasisInfo
 from forte2.ci.ci_utils import (
     pretty_print_ci_summary,
@@ -17,7 +17,7 @@ from forte2.ci.ci_utils import (
 
 
 @dataclass
-class MCOptimizer(ActiveSpaceSolver):
+class RelMCOptimizer(ActiveSpaceSolver):
     """
     Two-step optimizer for multi-configurational wavefunctions.
 
@@ -90,6 +90,7 @@ class MCOptimizer(ActiveSpaceSolver):
     max_rotation: float = 0.2
 
     ### CI solver parameters
+    ci_algorithm: str = "sparse"
     ci_maxiter: int = 50
 
     ### DIIS parameters
@@ -107,7 +108,10 @@ class MCOptimizer(ActiveSpaceSolver):
 
     def __call__(self, method):
         self.parent_method = method
-        ### make sure we don't print the CI output at INFO1 level
+        # register two-component flag
+        self.two_component = method.system.two_component
+        self.dtype = np.complex128 if self.two_component else np.float64
+        # make sure we don't print the CI output at INFO1 level
         current_verbosity = logger.get_verbosity_level()
         # only log subproblem if the verbosity is higher than INFO1
         if current_verbosity > 3:
@@ -179,13 +183,14 @@ class MCOptimizer(ActiveSpaceSolver):
             gas_ref=self.mo_space.ngas > 1,
         )
 
-        self.ci_solver = CISolver(
+        self.ci_solver = RelCISolver(
             states=self.states,
             core_orbitals=self.mo_space.docc_orbitals,
             active_orbitals=self.mo_space.active_orbitals,
             nroots=self.sa_info.nroots,
             weights=self.sa_info.weights,
             log_level=self.ci_solver_verbosity,
+            ci_algorithm="exact",
         )(self.parent_method)
         # iteration 0: one step of CI optimization to bootsrap the orbital optimization
         self.iter = 0
@@ -193,7 +198,7 @@ class MCOptimizer(ActiveSpaceSolver):
 
         # Initialize the LBFGS solver that finds the optimal orbital
         # at fixed CI expansion using the gradient and diagonal Hessian
-        self.lbfgs_solver = LBFGS(
+        self.lbfgs_solver = NewtonRaphson(
             epsilon=self.gconv,
             max_dir=self.max_rotation,
             step_length_method="max_correction",
@@ -208,7 +213,10 @@ class MCOptimizer(ActiveSpaceSolver):
         )
 
         width = 115
-        logger.log_info1("Entering orbital optimization loop")
+        logger.log_info1("\nEntering orbital optimization loop")
+        logger.log_info1(self.mo_space)
+        logger.log_info1(f"# of non-redundant rotations: {self.nrr.sum()}")
+
         logger.log_info1("\nConvergence criteria ('.' if satisfied, 'x' otherwise):")
         logger.log_info1(f"  {'1. RMS(grad - grad_old)':<25} < {self.gconv:.1e}")
         logger.log_info1(f"  {'2. ||E_CI - E_orb||':<25} < {self.econv:.1e}")
@@ -222,7 +230,7 @@ class MCOptimizer(ActiveSpaceSolver):
         )
         logger.log_info1("-" * width)
 
-        # E_ci: list[float],CI eigenvalues,
+        # E_ci: list[float], CI eigenvalues,
         # E_avg: float, ensemble average energy,
         # E_orb: float, energy after orbital optimization
         self.E_ci = np.array(self.ci_solver.E)
@@ -231,8 +239,8 @@ class MCOptimizer(ActiveSpaceSolver):
         self.E_orb_old = self.E_orb
         self.E_avg_old = self.E_avg
 
-        self.g1_act = self.ci_solver.make_average_sf_1rdm()
-        g2_act = self.ci_solver.make_average_sf_2rdm()
+        self.g1_act = self.ci_solver.make_average_1rdm()
+        g2_act = self.ci_solver.make_average_2rdm()
         # ci_maxiter_save = self.ci_solver.get_maxiter()
         # self.ci_solver.set_maxiter(self.ci_maxiter)
 
@@ -243,22 +251,29 @@ class MCOptimizer(ActiveSpaceSolver):
         self.E_orb = self.E_avg
         self.E_orb_old = self.E_orb
 
-        self.g_old = np.zeros(self.orb_opt.nrot, dtype=float)
+        self.g_old = np.zeros(self.orb_opt.nrot, dtype=self.dtype)
 
         # This holds the *overall* orbital rotation, C_current = C_0 @ exp(R)
         # It's used as the initial guess at the start of each orbital optimization, and also for DIIS
-        R = np.zeros(self.orb_opt.nrot, dtype=float)
+        R = np.zeros(self.orb_opt.nrot, dtype=self.dtype)
 
         while self.iter < self.maxiter:
             # 1. Optimize orbitals at fixed CI expansion
+            # _R_real = _cmplx_to_real(R)
+            # self.E_orb = self.lbfgs_solver.minimize(self.orb_opt, _R_real)
             self.E_orb = self.lbfgs_solver.minimize(self.orb_opt, R)
+            # R = _real_to_cmplx(_R_real)
             self._C = self.orb_opt.C.copy()
             # 2. Convergence checks
-            self.g_rms = np.sqrt(np.mean((self.lbfgs_solver.g - self.g_old) ** 2))
-            self.g_old = self.lbfgs_solver.g.copy()
+            # g_cmplx = _grad_real_to_cmplx(self.lbfgs_solver.g)
+            g_cmplx = self.lbfgs_solver.g
+            _dg = g_cmplx - self.g_old
+            self.g_rms = np.sqrt(np.mean((_dg.conj() * _dg).real))
+            self.g_old = g_cmplx.copy()
             conv, conv_str = self._check_convergence()
             lbfgs_str = f"{self.lbfgs_solver.iter}/{'Y' if self.lbfgs_solver.converged else 'N'}"
-            iter_info = f"{self.iter:>10d} {self.E_avg:>20.10f} {self.delta_ci_avg:>12.4e} {self.E_orb:>20.10f} {self.delta_orb:>12.4e} {self.g_rms:>12.4e} {lbfgs_str:>8} {conv_str:>8}"
+            iter_info = f"{self.iter:>10d} {self.E_avg.real:>20.10f} {self.delta_ci_avg.real:>12.4e} "
+            iter_info += f"{self.E_orb.real:>20.10f} {self.delta_orb.real:>12.4e} {self.g_rms.real:>12.4e} {lbfgs_str:>8} {conv_str:>8}"
             if conv:
                 logger.log_info1(iter_info)
                 self.converged = True
@@ -271,6 +286,8 @@ class MCOptimizer(ActiveSpaceSolver):
             # if diis has performed extrapolation
             if "E" in diis.status:
                 # orb_opt.evaluate updates the 1 and 2-electron integrals for CI
+                # _R_real = _cmplx_to_real(R)
+                # _ = self.orb_opt.evaluate(_R_real, self.lbfgs_solver.g, do_g=False)
                 _ = self.orb_opt.evaluate(R, self.lbfgs_solver.g, do_g=False)
 
             # 4. Optimize CI expansion at fixed orbitals
@@ -283,8 +300,8 @@ class MCOptimizer(ActiveSpaceSolver):
             self.E_avg = self.ci_solver.compute_average_energy()
             self.E_ci = np.array(self.ci_solver.E)
             self.E = self.E_avg
-            self.g1_act = self.ci_solver.make_average_sf_1rdm()
-            g2_act = self.ci_solver.make_average_sf_2rdm()
+            self.g1_act = self.ci_solver.make_average_1rdm()
+            g2_act = self.ci_solver.make_average_2rdm()
             self.orb_opt.set_rdms(self.g1_act, g2_act)
             self.iter += 1
         else:
@@ -307,7 +324,7 @@ class MCOptimizer(ActiveSpaceSolver):
         self.E_ci = np.array(self.ci_solver.E)
         self.E_avg = self.ci_solver.compute_average_energy()
         logger.log_info1(
-            f"{'Final CI':>10} {self.E_avg:>20.10f} {'-':>12} {self.E_orb:>20.10f} {'-':>12} {'-':>12} {'-':>6} {conv_str:>10s}"
+            f"{'Final CI':>10} {self.E_avg.real:>20.10f} {'-':>12} {self.E_orb.real:>20.10f} {'-':>12} {'-':>12} {'-':>6} {conv_str:>10s}"
         )
 
         logger.log_info1("=" * width)
@@ -323,7 +340,7 @@ class MCOptimizer(ActiveSpaceSolver):
         if self.final_orbital == "semicanonical":
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
-                g1=self.ci_solver.make_average_sf_1rdm(),
+                g1=self.ci_solver.make_average_1rdm(),
                 C=self.C[0],
                 system=self.system,
                 fock_builder=fock_builder,
@@ -333,11 +350,11 @@ class MCOptimizer(ActiveSpaceSolver):
             self.C[0] = semi.C_semican.copy()
 
             # recompute the CI vectors in the semicanonical basis
-            ints = RestrictedMOIntegrals(
+            ints = SpinorbitalIntegrals(
                 system=self.system,
                 C=self.C[0],
-                orbitals=self.mo_space.active_indices,
-                core_orbitals=self.mo_space.docc_indices,
+                spinorbitals=self.mo_space.active_indices,
+                core_spinorbitals=self.mo_space.docc_indices,
                 use_aux_corr=True,
                 fock_builder=fock_builder,  # avoid reinitialization of FockBuilder
             )
@@ -355,15 +372,15 @@ class MCOptimizer(ActiveSpaceSolver):
         )
         top_dets = self.ci_solver.get_top_determinants()
         pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
-        self._print_ao_composition()
-        if self.do_transition_dipole:
-            self.ci_solver.compute_transition_properties(self.C[0])
-            pretty_print_ci_transition_props(
-                self.sa_info,
-                self.ci_solver.tdm_per_solver,
-                self.ci_solver.fosc_per_solver,
-                self.ci_solver.evals_per_solver,
-            )
+        # self._print_ao_composition()
+        # if self.do_transition_dipole:
+        #     self.ci_solver.compute_transition_properties(self.C[0])
+        #     pretty_print_ci_transition_props(
+        #         self.sa_info,
+        #         self.ci_solver.tdm_per_solver,
+        #         self.ci_solver.fosc_per_solver,
+        #         self.ci_solver.evals_per_solver,
+        #     )
 
     def _print_ao_composition(self):
         basis_info = BasisInfo(self.system, self.system.basis)
@@ -378,7 +395,8 @@ class MCOptimizer(ActiveSpaceSolver):
 
     def _get_nonredundant_rotations(self):
         """Lower triangular matrix of nonredundant rotations"""
-        nrr = np.zeros((self.system.nmo, self.system.nmo), dtype=bool)
+        nmo = self._C.shape[1]
+        nrr = np.zeros((nmo, nmo), dtype=bool)
 
         if self.optimize_frozen_orbs:
             _core = self.mo_space.docc
@@ -413,7 +431,7 @@ class MCOptimizer(ActiveSpaceSolver):
             #       nrr[i, j] = False
             nrr[(_irrid[:, None] ^ _irrid != 0)] = False
 
-        return nrr
+        return nrr.T
 
     def _check_convergence(self):
         is_grad_conv = self.g_rms < self.gconv
@@ -471,12 +489,12 @@ class OrbOptimizer:
         self.gas_ref = gas_ref
 
         # the skew-hermitian rotation matrix, C_current = C_0 @ exp(R)
-        self.R = np.zeros(self.nrot, dtype=float)
+        self.R = np.zeros(self.nrot, dtype=complex)
         # the unitary transformation matrix, U = exp(R)
-        self.U = np.eye(self.C.shape[1], dtype=float)
+        self.U = np.eye(self.C.shape[1], dtype=complex)
 
     def get_eri_gaaa(self):
-        self.eri_gaaa = self.fock_builder.two_electron_integrals_gen_block(
+        self.eri_gaaa = self.fock_builder.two_electron_integrals_gen_block_spinor(
             self.Cgen, *(self.Cact,) * 3
         )
         return self.eri_gaaa
@@ -484,7 +502,7 @@ class OrbOptimizer:
     def set_rdms(self, g1, g2):
         self.g1 = g1
         # '2RDM' defined as in [eq (6)]
-        self.g2 = 0.5 * (np.einsum("prqs->pqrs", g2) + np.einsum("qrps->pqrs", g2))
+        self.g2 = g2.swapaxes(1, 2)
 
     def get_active_space_ints(self):
         """
@@ -493,7 +511,9 @@ class OrbOptimizer:
         return self.eri_gaaa[self.actv, ...]
 
     def evaluate(self, x, g, do_g=True):
-        do_update_integrals = self._update_orbitals(x)
+        # x_cmplx = _real_to_cmplx(x)
+        x_cmplx = x
+        do_update_integrals = self._update_orbitals(x_cmplx)
         if do_update_integrals:
             self._compute_Fcore()
             self.get_eri_gaaa()
@@ -503,12 +523,14 @@ class OrbOptimizer:
         if do_g:
             grad = self._compute_orbgrad()
             g = self._mat_to_vec(grad)
+            # g = _grad_cmplx_to_real(g)
 
         return E_orb, g
 
     def hess_diag(self, x):
         hess = self._compute_orbhess()
         h0 = self._mat_to_vec(hess)
+        # h0 = _cmplx_to_real(h0)
         return h0
 
     def _update_orbitals(self, R):
@@ -549,17 +571,17 @@ class OrbOptimizer:
         # Compute the core Fock matrix [eq (3)], also return the core energy
         Jcore, Kcore = self.fock_builder.build_JK([self.Ccore])
         self.Fcore = np.einsum(
-            "mp,mn,nq->pq",
+            "mp,nq,mn->pq",
             self.Cgen.conj(),
-            self.hcore + 2 * Jcore[0] - Kcore[0],
             self.Cgen,
+            self.hcore + Jcore[0] - Kcore[0],
             optimize=True,
         )
         self.Ecore = np.einsum(
             "pi,qi,pq->",
             self.Ccore.conj(),
             self.Ccore,
-            2 * self.hcore + 2 * Jcore[0] - Kcore[0],
+            self.hcore + 0.5 * (Jcore[0] - Kcore[0]),
         )
 
     def _compute_Fact(self):
@@ -567,10 +589,10 @@ class OrbOptimizer:
 
         # [eq (13)]
         self.Fact = np.einsum(
-            "mp,mn,nq->pq",
+            "mp,nq,mn->pq",
             self.Cgen.conj(),
-            Jact - 0.5 * Kact,
             self.Cgen,
+            Jact - Kact,
             optimize=True,
         )
 
@@ -578,24 +600,27 @@ class OrbOptimizer:
         self._compute_Fact()
         orbgrad = np.zeros_like(self.Fcore)
 
-        self.A_pq = np.zeros_like(self.Fcore)
-        self.Fock = self.Fcore + self.Fact
+        self.Fock = np.zeros_like(self.Fcore)
+        self.Fock1 = self.Fcore + self.Fact
 
         # compute A_ri (mo, core) block, [eq (10)]
-        self.A_pq[:, self.core] = 2.0 * self.Fock[:, self.core]
+        self.Fock[self.core, :] += self.Fock1[:, self.core].T
 
         # compute A_ru (mo, active) block, [eq (11)]
-        self.A_pq[:, self.actv] = np.einsum(
-            "rv,vu->ru", self.Fcore[:, self.actv], self.g1
+        self.Fock2 = np.zeros_like(self.Fcore)
+        self.Fock2[self.actv, :] = np.einsum(
+            "tu,qu->tq", self.g1, self.Fcore[:, self.actv], optimize=True
         )
         # (rt|vw) D_tu,vw, where (rt|vw) = <rv|tw>
-        self.A_pq[:, self.actv] += np.einsum("rvtw,tuvw->ru", self.eri_gaaa, self.g2)
+        self.Fock2[self.actv, :] += np.einsum(
+            "tuvw,qvuw->tq", self.g2, self.eri_gaaa, optimize=True
+        )
+        self.Fock[self.actv, :] += self.Fock2[self.actv, :]
 
         # screen small gradients to prevent symmetry breaking
-        self.A_pq[np.abs(self.A_pq) < 1e-12] = 0.0
+        self.Fock[np.abs(self.Fock) < 1e-12] = 0.0
 
-        # compute g_rk (mo, core + active) block of gradient, [eq (9)]
-        orbgrad = 2 * (self.A_pq - self.A_pq.T.conj())
+        orbgrad = -2 * (self.Fock - self.Fock.T.conj()).conj()
         orbgrad *= self.nrr
 
         return orbgrad
@@ -603,31 +628,33 @@ class OrbOptimizer:
     def _compute_orbhess(self):
         """Diagonal orbital Hessian"""
         orbhess = np.zeros_like(self.Fcore)
-        diag_F = np.diag(self.Fock)
+        diag_F = np.diag(self.Fock1)
+        diag_F2 = np.diag(self.Fock2)
         diag_g1 = np.diag(self.g1)
-        diag_grad = np.diag(self.A_pq)
+        diag_grad = np.diag(self.Fock)
 
         # The VC, VA, AC blocks are based on Theor. Chem. Acc. 97, 88-95 (1997)
         # compute virtual-core block
-        orbhess[self.virt, self.core] = 4.0 * (
+        orbhess[self.virt, self.core] += 2.0 * (
             diag_F[self.virt, None] - diag_F[None, self.core]
         )
 
         # compute virtual-active block
-        orbhess[self.virt, self.actv] = 2.0 * (
-            diag_F[self.virt, None] * diag_g1[None, :] - diag_grad[None, self.actv]
+        orbhess[self.virt, self.actv] += 2.0 * (
+            diag_F[self.virt, None] * diag_g1[None, :] - diag_F2[None, self.actv]
         )
 
         # compute active-core block
-        orbhess[self.actv, self.core] = 4.0 * (
+        orbhess[self.actv, self.core] += 2.0 * (
             diag_F[self.actv, None] - diag_F[None, self.core]
         )
         orbhess[self.actv, self.core] += 2.0 * (
-            diag_F[None, self.core] * diag_g1[:, None] - diag_grad[self.actv, None]
+            diag_g1[:, None] * diag_F[None, self.core] - diag_F2[self.actv, None]
         )
 
         # if GAS: compute active-active block [see SI of J. Chem. Phys. 152, 074102 (2020)]
         if self.gas_ref:
+            raise NotImplementedError
             eri_actv = self.get_active_space_ints()
             # A. G^{uu}_{vv}
             Guu_ = np.einsum("uxuy,vvxy->uv", eri_actv, self.g2)
@@ -635,16 +662,50 @@ class OrbOptimizer:
             Guu_ += np.diag(self.Fcore)[self.actv, None] * diag_g1[None, :]
 
             # B. G^{uv}_{vu}
-            Guv_ = self.Fcore[self.actv, self.actv] * self.g1.T
+            Guv_ = self.Fcore[self.actv, self.actv] * self.g1.T.conj()
             Guv_ += np.einsum("uxvy,vuxy->uv", eri_actv, self.g2)
             Guv_ += 2.0 * np.einsum("uvxy,vxuy->uv", eri_actv, self.g2)
 
             # compute diagonal hessian
-            orbhess[self.actv, self.actv] = 2.0 * (Guu_ + Guu_.T)
-            orbhess[self.actv, self.actv] -= 2.0 * (Guv_ + Guv_.T)
+            orbhess[self.actv, self.actv] = 2.0 * (Guu_ + Guu_.T.conj())
+            orbhess[self.actv, self.actv] -= 2.0 * (Guv_ + Guv_.T.conj())
             orbhess[self.actv, self.actv] -= 2.0 * (
                 diag_grad[self.actv, None] + diag_grad[None, self.actv]
             )
-        orbhess *= self.nrr
+        orbhess = orbhess.T * self.nrr
 
         return orbhess
+
+
+def _grad_cmplx_to_real(x_comp):
+    l = len(x_comp)
+    x_real = np.zeros(l * 2, dtype=float)
+    x_real[:l] = x_comp.real
+    # for gradient, we compute the Wirtinger derivative
+    # dE/dk = 1/2(dE/dx - idE/dy)
+    x_real[l:] = -x_comp.imag
+    return 2 * x_real
+
+
+def _grad_real_to_cmplx(x_real):
+    l = len(x_real) // 2
+    x_comp = np.zeros(l, dtype=complex)
+    x_comp += x_real[:l]
+    x_comp -= 1j * x_real[l:]
+    return 0.5 * x_comp
+
+
+def _cmplx_to_real(x_comp):
+    l = len(x_comp)
+    x_real = np.zeros(l * 2, dtype=float)
+    x_real[:l] = x_comp.real
+    x_real[l:] = x_comp.imag
+    return x_real
+
+
+def _real_to_cmplx(x_real):
+    l = len(x_real) // 2
+    x_comp = np.zeros(l, dtype=complex)
+    x_comp += x_real[:l]
+    x_comp += 1j * x_real[l:]
+    return x_comp
