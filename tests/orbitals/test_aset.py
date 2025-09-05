@@ -145,6 +145,7 @@ def test_aset_3():
     # write aset.C[0] to a numpy file
     # np.save("test_aset_3_orbitals.npy", aset.C[0])
     compare_orbital_coefficients(system, aset, "test_aset_3_orbitals.npy")
+    print(aset.C[0])
 
     assert ci.E == approx(eci)
 
