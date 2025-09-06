@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 
-from forte2 import System, RHF, CI, State, ROHF
+from forte2 import System, RHF, RelState, ROHF
 from forte2.ci import RelCI
 from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 from forte2.helpers.comparisons import approx
@@ -31,7 +31,7 @@ def test_rel_gasci_rhf_1():
     rhf, system = prepare_rhf_coeff_for_relci(rhf, system)
     ci = RelCI(
         active_orbitals=[[0, 1], [2, 3]],
-        states=State(nel=2, multiplicity=1, ms=0.0, gas_min=[0], gas_max=[2]),
+        states=RelState(nel=2, gas_min=[0], gas_max=[2]),
         econv=1e-12,
     )(rhf)
     ci.run()
@@ -53,7 +53,7 @@ def test_rel_gasci_rhf_2():
     system.two_component = True
     ci = RelCI(
         active_orbitals=[[0, 1], [2, 3]],
-        states=State(nel=2, multiplicity=1, ms=0.0, gas_min=[1, 0], gas_max=[2, 1]),
+        states=RelState(nel=2, gas_min=[1, 0], gas_max=[2, 1]),
         nroots=2,
     )(rhf)
     ci.run()
@@ -83,7 +83,7 @@ def test_rel_gasci_rhf_3():
     system.two_component = True
     ci = RelCI(
         active_orbitals=[[0, 1], [2, 3]],
-        states=State(nel=2, multiplicity=1, ms=0.0, gas_min=[0, 0], gas_max=[2, 2]),
+        states=RelState(nel=2, gas_min=[0, 0], gas_max=[2, 2]),
     )(rhf)
     ci.run()
 
@@ -107,7 +107,7 @@ def test_rel_gasci_rhf_4():
     system.two_component = True
     ci = RelCI(
         active_orbitals=(10, 4),
-        states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[6, 0], gas_max=[10, 4]),
+        states=RelState(nel=10, gas_min=[6, 0], gas_max=[10, 4]),
         econv=1e-12,
     )(rhf)
     ci.run()
@@ -132,7 +132,7 @@ def test_rel_gasci_rhf_5():
     system.two_component = True
     ci = RelCI(
         active_orbitals=(2, 12),
-        states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[0], gas_max=[1]),
+        states=RelState(nel=10, gas_min=[0], gas_max=[1]),
         nroots=4,
         basis_per_root=10,
         ndets_per_guess=20,
@@ -160,7 +160,7 @@ def test_rel_gasci_rohf_3():
     rhf, system = prepare_rhf_coeff_for_relci(rhf, system)
     ci = RelCI(
         active_orbitals=(2, 12),
-        states=State(nel=10, multiplicity=3, ms=1.0, gas_min=[0], gas_max=[1]),
+        states=RelState(nel=10, gas_min=[0], gas_max=[1]),
     )(rhf)
     ci.run()
 
