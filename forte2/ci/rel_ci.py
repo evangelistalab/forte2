@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from collections import OrderedDict
 import numpy as np
 
 from forte2 import (
@@ -18,6 +19,7 @@ from forte2.orbitals import Semicanonicalizer
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
 from forte2.helpers import logger
 from forte2.helpers.comparisons import approx
+from forte2.props import get_1e_property
 from .ci_utils import (
     pretty_print_gas_info,
     pretty_print_ci_summary,
@@ -341,7 +343,7 @@ class _RelCIBase:
                     for s in range(r):
                         op = SparseOperator()
                         op.add([p, q], [], [r, s], [])
-                        element = overlap(psil, apply_op(op, psir))
+                        element = overlap(psil, apply_op(op, psir, screen_thresh=1e-100))
                         rdm[p, q, r, s] = element
                         rdm[q, p, r, s] = -element
                         rdm[p, q, s, r] = -element
@@ -461,6 +463,53 @@ class RelCISolver(ActiveSpaceSolver):
             nos.append(ci_solver.compute_natural_occupation_numbers())
         self.nat_occs = np.concatenate(nos, axis=1)
 
+    def compute_transition_properties(self, C=None):
+        """
+        Compute the transition dipole moments and oscillator strengths from the spin-free 1-TDMs.
+        The results are stored in `self.tdm_per_solver` and `self.fosc_per_solver`.
+        """
+        if not self.executed:
+            raise RuntimeError("CI solver has not been executed yet.")
+
+        if C is None:
+            C = self.C[0]
+
+        Cact = C[:, self.active_indices]
+        Ccore = C[:, self.core_indices]
+        # factor of 2 for spin-summed 1-RDM
+        rdm_core = np.einsum("pi,qi->pq", Ccore, Ccore.conj(), optimize=True)
+        # this includes nuclear dipole contribution
+        core_dip = get_1e_property(
+            self.system, rdm_core, property_name="dipole", unit="au"
+        )
+        self.tdm_per_solver = []
+        self.fosc_per_solver = []
+
+        for ici, ci_solver in enumerate(self.sub_solvers):
+            tdmdict = OrderedDict()
+            foscdict = OrderedDict()
+            for i in range(ci_solver.nroot):
+                rdm = ci_solver.make_1rdm(i)
+                rdm = np.einsum("ij,pi,qj->pq", rdm, Cact, Cact.conj(), optimize=True)
+                dip = get_1e_property(
+                    self.system, rdm, property_name="electric_dipole", unit="au"
+                )
+                tdmdict[(i, i)] = dip + core_dip
+                foscdict[(i, i)] = 0.0  # No oscillator strength for i->i transitions
+                for j in range(i + 1, ci_solver.nroot):
+                    tdm = ci_solver.make_1rdm(i, j)
+                    tdm = np.einsum(
+                        "ij,pi,qj->pq", tdm, Cact, Cact.conj(), optimize=True
+                    )
+                    tdip = get_1e_property(
+                        self.system, tdm, property_name="electric_dipole", unit="au"
+                    )
+                    tdmdict[(i, j)] = tdip
+                    vte = self.evals_per_solver[ici][j] - self.evals_per_solver[ici][i]
+                    foscdict[(i, j)] = (2 / 3) * vte * np.linalg.norm(tdip) ** 2
+            self.fosc_per_solver.append(foscdict)
+            self.tdm_per_solver.append(tdmdict)
+
     def get_top_determinants(self, n=5):
         """
         Get the top `n` determinants for each root based on their coefficients in the CI vector.
@@ -576,11 +625,11 @@ class RelCI(RelCISolver):
         top_dets = self.get_top_determinants()
         pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
 
-        # if self.do_transition_dipole:
-        #     self.compute_transition_properties()
-        #     pretty_print_ci_transition_props(
-        #         self.sa_info,
-        #         self.tdm_per_solver,
-        #         self.fosc_per_solver,
-        #         self.evals_per_solver,
-        #     )
+        if self.do_transition_dipole:
+            self.compute_transition_properties()
+            pretty_print_ci_transition_props(
+                self.sa_info,
+                self.tdm_per_solver,
+                self.fosc_per_solver,
+                self.evals_per_solver,
+            )
