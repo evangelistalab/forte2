@@ -271,7 +271,7 @@ class MCOptimizer(ActiveSpaceSolver):
             # if diis has performed extrapolation
             if "E" in diis.status:
                 # orb_opt.evaluate updates the 1 and 2-electron integrals for CI
-                _ = self.orb_opt.evaluate(R, self.lbfgs_solver.g, do_g=False)
+                _ = self.orb_opt.evaluate(R)
 
             # 4. Optimize CI expansion at fixed orbitals
             self.ci_solver.set_ints(
@@ -492,7 +492,7 @@ class OrbOptimizer:
         """
         return self.eri_gaaa[self.actv, ...]
 
-    def evaluate(self, x, g, do_g=True):
+    def evaluate(self, x):
         do_update_integrals = self._update_orbitals(x)
         if do_update_integrals:
             self._compute_Fcore()
@@ -500,11 +500,12 @@ class OrbOptimizer:
 
         E_orb = self._compute_reference_energy()
 
-        if do_g:
-            grad = self._compute_orbgrad()
-            g = self._mat_to_vec(grad)
+        return E_orb
 
-        return E_orb, g
+    def gradient(self, x):
+        grad = self._compute_orbgrad()
+        g = self._mat_to_vec(grad)
+        return g
 
     def hess_diag(self, x):
         hess = self._compute_orbhess()

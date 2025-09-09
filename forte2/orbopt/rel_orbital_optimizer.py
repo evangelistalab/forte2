@@ -198,11 +198,12 @@ class RelMCOptimizer(RelActiveSpaceSolver):
 
         # Initialize the LBFGS solver that finds the optimal orbital
         # at fixed CI expansion using the gradient and diagonal Hessian
-        self.lbfgs_solver = NewtonRaphson(
+        self.lbfgs_solver = LBFGS(
             epsilon=self.gconv,
             max_dir=self.max_rotation,
             step_length_method="max_correction",
             maxiter=self.micro_maxiter,
+            dtype=complex,
         )
 
         diis = DIIS(
@@ -288,7 +289,7 @@ class RelMCOptimizer(RelActiveSpaceSolver):
                 # orb_opt.evaluate updates the 1 and 2-electron integrals for CI
                 # _R_real = _cmplx_to_real(R)
                 # _ = self.orb_opt.evaluate(_R_real, self.lbfgs_solver.g, do_g=False)
-                _ = self.orb_opt.evaluate(R, self.lbfgs_solver.g, do_g=False)
+                _ = self.orb_opt.evaluate(R)
 
             # 4. Optimize CI expansion at fixed orbitals
             self.ci_solver.set_ints(
@@ -510,7 +511,7 @@ class OrbOptimizer:
         """
         return self.eri_gaaa[self.actv, ...]
 
-    def evaluate(self, x, g, do_g=True):
+    def evaluate(self, x):
         # x_cmplx = _real_to_cmplx(x)
         x_cmplx = x
         do_update_integrals = self._update_orbitals(x_cmplx)
@@ -520,12 +521,13 @@ class OrbOptimizer:
 
         E_orb = self._compute_reference_energy()
 
-        if do_g:
-            grad = self._compute_orbgrad()
-            g = self._mat_to_vec(grad)
-            # g = _grad_cmplx_to_real(g)
+        return E_orb
 
-        return E_orb, g
+    def gradient(self, x):
+        grad = self._compute_orbgrad()
+        g = self._mat_to_vec(grad)
+        # g = _grad_cmplx_to_real(g)
+        return g
 
     def hess_diag(self, x):
         hess = self._compute_orbhess()

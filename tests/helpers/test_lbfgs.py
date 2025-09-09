@@ -67,22 +67,26 @@ class RosenbrockComplex:
 
 
 class RosenbrockWrapper:
-    def evaluate(self, x, g, do_g=True):
+    def evaluate(self, x):
         fx = Rosenbrock.evaluate(x)
-        if do_g:
-            g = Rosenbrock.gradient(x)
-        return fx, g
+        return fx
+    
+    def gradient(self, x):
+        g = Rosenbrock.gradient(x)
+        return g
 
     def hess_diag(self, x):
         return Rosenbrock.diagonal_hessian(x)
 
 
 class RosenbrockComplexWrapper:
-    def evaluate(self, x, g, do_g=True):
+    def evaluate(self, x):
         fx = RosenbrockComplex.evaluate(x)
-        if do_g:
-            g = RosenbrockComplex.gradient(x)
-        return fx, g
+        return fx
+
+    def gradient(self, x):
+        g = RosenbrockComplex.gradient(x)
+        return g
 
     def hess_diag(self, x):
         return RosenbrockComplex.diagonal_hessian(x)
@@ -90,11 +94,9 @@ class RosenbrockComplexWrapper:
 
 def test_lbfgs_rosenbrock():
     n = 10
-    h0_freq = 0
     lbfgs_solver = LBFGS()
     lbfgs_solver.epsilon = 1.0e-6
     lbfgs_solver.maxiter = 200
-    lbfgs_solver.h0_freq = h0_freq
     lbfgs_solver.print = 2
 
     func = RosenbrockWrapper()
@@ -120,11 +122,9 @@ def test_lbfgs_rosenbrock():
 
 def test_lbfgs_rosenbrock_complex():
     n = 20
-    h0_freq = 0
     lbfgs_solver = LBFGS()
     lbfgs_solver.epsilon = 1.0e-6
     lbfgs_solver.maxiter = 200
-    lbfgs_solver.h0_freq = h0_freq
     lbfgs_solver.print = 2
     func = RosenbrockComplexWrapper()
     x = np.ones(n) * 0.2
