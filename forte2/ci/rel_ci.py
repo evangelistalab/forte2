@@ -476,7 +476,6 @@ class RelCISolver(ActiveSpaceSolver):
 
         Cact = C[:, self.active_indices]
         Ccore = C[:, self.core_indices]
-        # factor of 2 for spin-summed 1-RDM
         rdm_core = np.einsum("pi,qi->pq", Ccore, Ccore.conj(), optimize=True)
         # this includes nuclear dipole contribution
         core_dip = get_1e_property(
@@ -490,7 +489,10 @@ class RelCISolver(ActiveSpaceSolver):
             foscdict = OrderedDict()
             for i in range(ci_solver.nroot):
                 rdm = ci_solver.make_1rdm(i)
-                rdm = np.einsum("ij,pi,qj->pq", rdm, Cact, Cact.conj(), optimize=True)
+                # Different (back-)transformation rules for RDMs:
+                # O_{mu}^{nu} = C_{mu}^p <phi_p|O|phi^q> C^q_{nu} = C^H O[mo] C
+                # rdm^{mu}_{nu} = C^{mu}_p <a^p a_q> C^q_{nu} = C^* rdm[mo] C^T
+                rdm = np.einsum("ij,pi,qj->pq", rdm, Cact.conj(), Cact, optimize=True)
                 dip = get_1e_property(
                     self.system, rdm, property_name="electric_dipole", unit="au"
                 )
@@ -499,7 +501,7 @@ class RelCISolver(ActiveSpaceSolver):
                 for j in range(i + 1, ci_solver.nroot):
                     tdm = ci_solver.make_1rdm(i, j)
                     tdm = np.einsum(
-                        "ij,pi,qj->pq", tdm, Cact, Cact.conj(), optimize=True
+                        "ij,pi,qj->pq", tdm, Cact.conj(), Cact, optimize=True
                     )
                     tdip = get_1e_property(
                         self.system, tdm, property_name="electric_dipole", unit="au"

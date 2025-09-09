@@ -373,14 +373,14 @@ class RelMCOptimizer(ActiveSpaceSolver):
         top_dets = self.ci_solver.get_top_determinants()
         pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
         # self._print_ao_composition()
-        # if self.do_transition_dipole:
-        #     self.ci_solver.compute_transition_properties(self.C[0])
-        #     pretty_print_ci_transition_props(
-        #         self.sa_info,
-        #         self.ci_solver.tdm_per_solver,
-        #         self.ci_solver.fosc_per_solver,
-        #         self.ci_solver.evals_per_solver,
-        #     )
+        if self.do_transition_dipole:
+            self.ci_solver.compute_transition_properties(self.C[0])
+            pretty_print_ci_transition_props(
+                self.sa_info,
+                self.ci_solver.tdm_per_solver,
+                self.ci_solver.fosc_per_solver,
+                self.ci_solver.evals_per_solver,
+            )
 
     def _print_ao_composition(self):
         basis_info = BasisInfo(self.system, self.system.basis)

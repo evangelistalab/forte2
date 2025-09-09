@@ -132,11 +132,12 @@ def test_rel_ci_hf_transition_dipole_ghf():
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         unit="bohr",
         x2c_type="so",
+        reorient=False,
     )
     scf = GHF(charge=0)(system)
     ci = RelCI(
         states=RelState(nel=10),
-        nroots=4,
+        nroots=5,
         core_orbitals=2,
         active_orbitals=12,
         do_transition_dipole=True,
@@ -145,13 +146,16 @@ def test_rel_ci_hf_transition_dipole_ghf():
     ci.run()
     assert ci.E[0] == approx(-100.10065023157668)
     assert ci.E[1] == approx(-99.7875319545)
-
-    assert np.abs(ci.fosc_per_solver[0][(0, 1)]) == pytest.approx(
-        0.000971182707117118, abs=1e-6
+    assert ci.E[3] == approx(-99.7866432345)
+    assert np.abs(ci.tdm_per_solver[0][(0, 0)]) == pytest.approx(
+        [0.0, 0.0, 7.54973019e-01], abs=1e-7
     )
-    assert np.abs(ci.fosc_per_solver[0][(0, 2)]) == pytest.approx(
-        0.0019659547500647276, abs=1e-6
+    assert np.abs(ci.tdm_per_solver[0][(1, 1)]) == pytest.approx(
+        [0.0, 0.0, 7.21281411e-01], abs=1e-7
+    )
+    assert np.abs(ci.tdm_per_solver[0][(3, 3)]) == pytest.approx(
+        [0.0, 0.0, 7.21065535e-01], abs=1e-7
     )
     assert np.abs(ci.fosc_per_solver[0][(0, 3)]) == pytest.approx(
-        0.0005518591365081285, abs=1e-6
+        1.7115423772911847e-05, abs=1e-7
     )
