@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 
-from forte2 import System, RelState, GHF
+from forte2 import System, GHF
 from forte2.helpers.comparisons import approx
 from forte2.orbopt import RelMCOptimizer
 
@@ -20,7 +20,7 @@ def test_rel_casscf_hf_equivalence_to_nonrel():
     )
     scf = GHF(charge=0, econv=1e-10)(system)
     mc = RelMCOptimizer(
-        states=RelState(nel=10),
+        nel=10,
         core_orbitals=2,
         active_orbitals=12,
         do_diis=False,
@@ -49,7 +49,7 @@ def test_rel_casscf_hf_ghf():
     )
     scf = GHF(charge=0)(system)
     mc = RelMCOptimizer(
-        states=RelState(nel=10),
+        nel=10,
         nroots=1,
         core_orbitals=2,
         active_orbitals=12,
@@ -77,7 +77,7 @@ def test_rel_casscf_na_ghf():
     )
     scf = GHF(charge=0)(system)
     mc = RelMCOptimizer(
-        states=RelState(nel=11),
+        nel=11,
         nroots=8,
         core_orbitals=10,
         active_orbitals=8,

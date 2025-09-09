@@ -12,7 +12,7 @@ from forte2 import (
     sparse_operator_hamiltonian,
 )
 from forte2.state import State, MOSpace
-from forte2.base_classes import ActiveSpaceSolver
+from forte2.base_classes import RelActiveSpaceSolver
 from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 from forte2.jkbuilder import SpinorbitalIntegrals
 from forte2.orbitals import Semicanonicalizer
@@ -353,7 +353,7 @@ class _RelCIBase:
 
 
 @dataclass
-class RelCISolver(ActiveSpaceSolver):
+class RelCISolver(RelActiveSpaceSolver):
     """
     Relativistic Configuration Interaction
     """

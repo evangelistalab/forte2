@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, RHF, RelState, GHF, State
+from forte2 import System, RHF, GHF, State
 from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 from forte2.helpers.comparisons import approx
 from forte2.ci import RelCI, CI
@@ -27,8 +27,7 @@ def test_rel_ci_h2():
     scf.C[0] = C
     system.two_component = True
 
-    state = RelState(nel=2)
-    ci = RelCI(states=state, active_orbitals=4, do_test_rdms=True)(scf)
+    ci = RelCI(nel=2, active_orbitals=4, do_test_rdms=True)(scf)
     ci.run()
     assert ci.E[0] == approx(-1.096071975854)
 
@@ -53,7 +52,7 @@ def test_rel_ci_hf():
     system.two_component = True
 
     ci = RelCI(
-        states=RelState(nel=10),
+        nel=10,
         core_orbitals=2,
         active_orbitals=12,
         do_test_rdms=True,
@@ -79,7 +78,7 @@ def test_rel_ci_hf_ghf():
     )
     scf = GHF(charge=0)(system)
     ci = RelCI(
-        states=RelState(nel=10),
+        nel=10,
         core_orbitals=2,
         active_orbitals=12,
         do_test_rdms=True,
@@ -105,7 +104,7 @@ def test_rel_ci_hf_transition_dipole_equivalence_to_rhf():
     )
     scf = GHF(charge=0)(system)
     ci = RelCI(
-        states=RelState(nel=10),
+        nel=10,
         nroots=4,
         core_orbitals=2,
         active_orbitals=12,
@@ -136,7 +135,7 @@ def test_rel_ci_hf_transition_dipole_ghf():
     )
     scf = GHF(charge=0)(system)
     ci = RelCI(
-        states=RelState(nel=10),
+        nel=10,
         nroots=5,
         core_orbitals=2,
         active_orbitals=12,

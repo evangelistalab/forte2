@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 
-from forte2 import System, RHF, RelState, ROHF
+from forte2 import System, RHF, ROHF, RelState
 from forte2.ci import RelCI
 from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 from forte2.helpers.comparisons import approx

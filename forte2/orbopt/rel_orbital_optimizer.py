@@ -3,7 +3,7 @@ import scipy as sp
 from dataclasses import dataclass, field
 
 from forte2.ci import RelCISolver
-from forte2.base_classes.active_space_solver import ActiveSpaceSolver
+from forte2.base_classes.active_space_solver import RelActiveSpaceSolver
 from forte2.orbitals import Semicanonicalizer
 from forte2.jkbuilder import FockBuilder, SpinorbitalIntegrals
 from forte2.helpers import logger, LBFGS, DIIS, NewtonRaphson
@@ -17,7 +17,7 @@ from forte2.ci.ci_utils import (
 
 
 @dataclass
-class RelMCOptimizer(ActiveSpaceSolver):
+class RelMCOptimizer(RelActiveSpaceSolver):
     """
     Two-step optimizer for multi-configurational wavefunctions.
 
