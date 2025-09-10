@@ -6,7 +6,6 @@ from forte2.helpers.comparisons import approx
 from forte2.orbopt import RelMCOptimizer
 
 
-@pytest.mark.slow
 def test_rel_casscf_hf_equivalence_to_nonrel():
     erhf = -99.9977252002946
     emcscf = -100.0435018956
@@ -31,7 +30,6 @@ def test_rel_casscf_hf_equivalence_to_nonrel():
     assert mc.E == approx(emcscf)
 
 
-@pytest.mark.slow
 def test_rel_casscf_hf_ghf():
     escf = -100.078531285537
     emcscf = -100.1361832608
