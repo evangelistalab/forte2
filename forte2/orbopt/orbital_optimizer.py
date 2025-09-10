@@ -51,6 +51,10 @@ class MCOptimizer(ActiveSpaceSolver):
         Gradient convergence tolerance.
     die_if_not_converged : bool, optional, default=True
         If True, raises an error if the optimization does not converge.
+    optimize_frozen_orbs : bool, optional, default=True
+        Whether to optimize the frozen orbitals.
+    freeze_inter_gas_rots : bool, optional, default=False
+        Whether to freeze inter-GAS orbital rotations when multiple GASes are defined.
     micro_maxiter : int, optional, default=6
         Maximum number of microiterations for L-BFGS.
     ci_maxiter : int, optional, default=50
@@ -78,6 +82,7 @@ class MCOptimizer(ActiveSpaceSolver):
 
     active_frozen_orbitals: list[int] = None
     optimize_frozen_orbs: bool = True
+    freeze_inter_gas_rots: bool = False
 
     ### Macroiteration parameters
     maxiter: int = 50
@@ -388,7 +393,7 @@ class MCOptimizer(ActiveSpaceSolver):
             _virt = self.mo_space.virt
 
         # GASn-GASm rotations
-        if self.mo_space.ngas > 1:
+        if self.mo_space.ngas > 1 and not self.freeze_inter_gas_rots:
             for i in range(self.mo_space.ngas):
                 for j in range(i + 1, self.mo_space.ngas):
                     nrr[self.mo_space.gas[j], self.mo_space.gas[i]] = True
