@@ -69,12 +69,8 @@ class _SRCCBase(ABC):
     def __post_init__(self):
         self.method = self._cc_type().upper()
 
-    def __call__(self, scf):
-        self.ints = SONormalOrderedIntegrals(scf, 
-                                             frozen=self.frozen, 
-                                             virtual=self.virtual,
-                                             build_nvirt=self.build_nvirt) 
-        self.no, self.nu = self.ints['ov'].shape
+    def __call__(self, parent_method):
+        self.parent_method = parent_method
         return self
 
     def run(self):
