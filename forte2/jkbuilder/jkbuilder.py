@@ -223,7 +223,7 @@ class FockBuilder:
             C3,
             C4,
             optimize=True,
-        )        
+        )
         if antisymmetrize:
             V -= np.einsum("ijkl->ijlk", V)
         return V
