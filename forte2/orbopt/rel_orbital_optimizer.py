@@ -185,7 +185,8 @@ class RelMCOptimizer(RelActiveSpaceSolver):
             self.Hcore,
             self.system.nuclear_repulsion,
             self.nrr,
-            gas_ref=self.mo_space.ngas > 1,
+            compute_active_hessian=self.mo_space.ngas > 1
+            and not self.freeze_inter_gas_rots,
         )
 
         self.ci_solver = RelCISolver(
@@ -476,7 +477,7 @@ class OrbOptimizer:
         hcore: np.ndarray,
         e_nuc: float,
         nrr: np.ndarray,
-        gas_ref: bool = False,
+        compute_active_hessian: bool = False,
     ):
         self.core, self.actv, self.virt = extents
         self.C = C
@@ -492,7 +493,7 @@ class OrbOptimizer:
         self.nrr = nrr
         self.nrot = self.nrr.sum()
         self.e_nuc = e_nuc
-        self.gas_ref = gas_ref
+        self.compute_active_hessian = compute_active_hessian
 
         # the skew-hermitian rotation matrix, C_current = C_0 @ exp(R)
         self.R = np.zeros(self.nrot, dtype=complex)
@@ -660,7 +661,7 @@ class OrbOptimizer:
         )
 
         # if GAS: compute active-active block [see SI of J. Chem. Phys. 152, 074102 (2020)]
-        if self.gas_ref:
+        if self.compute_active_hessian:
             eri_actv = self.get_active_space_ints()
             # A. G^{uu}_{vv}
             Guu_ = np.einsum("uxuy,vvxy->uv", eri_actv, self.g2)
