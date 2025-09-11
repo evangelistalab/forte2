@@ -3,6 +3,7 @@ from collections import OrderedDict
 import numpy as np
 
 from forte2 import (
+    RelCISigmaBuilder,
     RelSlaterRules,
     SparseState,
     SparseOperator,
@@ -90,6 +91,10 @@ class _RelCIBase:
 
         self.dets = self.ci_strings.make_determinants()
 
+        if self.ci_algorithm == "hz":
+            self.sigma_det = np.zeros((self.ndet,), dtype=complex)
+            self.b_det = np.zeros((self.ndet,), dtype=complex)
+
     def run(self):
         if self.first_run:
             self._ci_solver_startup()
@@ -104,7 +109,9 @@ class _RelCIBase:
         if self.ci_algorithm == "exact":
             self._do_exact_diagonalization()
         elif self.ci_algorithm == "sparse":
-            self._do_iterative_ci()
+            self._do_sparse_ci()
+        elif self.ci_algorithm == "hz":
+            self._do_hz_ci()
 
         self.E = self.evals
         for i, e in enumerate(self.evals):
@@ -118,7 +125,64 @@ class _RelCIBase:
 
         return self
 
-    def _do_iterative_ci(self):
+    def _do_hz_ci(self):
+        self.ci_sigma_builder = RelCISigmaBuilder(
+            self.ci_strings, self.ints.E, self.ints.H, self.ints.V, self.log_level
+        )
+        self.ci_sigma_builder.set_memory(self.ci_builder_memory)
+        self.ci_sigma_builder.set_algorithm("hz")
+        Hdiag = self.ci_sigma_builder.form_Hdiag(self.dets)
+
+        if self.ndet == 1:
+            self.evals = np.array([Hdiag[0]])
+            self.evecs = np.ones((1, 1))
+            logger.log(
+                f"Final CI Energy Root {0}: {self.evals[0]:20.12f} [Eh]", self.log_level
+            )
+            self.executed = True
+            return self
+
+        if self.eigensolver is None:
+            self.eigensolver = DavidsonLiuSolver(
+                size=self.ndet,
+                nroot=self.nroot,
+                collapse_per_root=self.collapse_per_root,
+                basis_per_root=self.basis_per_root,
+                e_tol=self.econv,
+                r_tol=self.rconv,
+                maxiter=self.maxiter,
+                eta=self.energy_shift,
+                log_level=self.log_level,
+                dtype=complex,
+            )
+        self.eigensolver.add_h_diag(Hdiag)
+
+        if self.first_run:
+            self._build_guess_vectors(Hdiag)
+            self.first_run = False
+
+        def sigma_builder(Bblock, Sblock):
+            # Compute the sigma block from the basis block
+            ncols = Bblock.shape[1]
+            for i in range(ncols):
+                self.b_det = Bblock[:, i].copy()
+                self.ci_sigma_builder.Hamiltonian(self.b_det, self.sigma_det)
+                Sblock[:, i] = self.sigma_det.copy()
+
+        self.eigensolver.add_sigma_builder(sigma_builder)
+
+        # 6. Run Davidson
+        self.evals, self.evecs = self.eigensolver.solve()
+
+        if self.eigensolver.converged:
+            logger.log("\nDavidson-Liu solver converged.\n", self.log_level)
+        else:
+            if self.die_if_not_converged:
+                raise RuntimeError("Davidson-Liu solver did not converge.")
+            else:
+                logger.log(f"\nDavidson-Liu solver did not converge in {self.eigensolver.maxiter} iterations.\n", self.log_level)
+
+    def _do_sparse_ci(self):
         if self.eigensolver is None:
             self.eigensolver = DavidsonLiuSolver(
                 size=self.ndet,
@@ -343,7 +407,9 @@ class _RelCIBase:
                     for s in range(r):
                         op = SparseOperator()
                         op.add([p, q], [], [r, s], [])
-                        element = overlap(psil, apply_op(op, psir, screen_thresh=1e-100))
+                        element = overlap(
+                            psil, apply_op(op, psir, screen_thresh=1e-100)
+                        )
                         rdm[p, q, r, s] = element
                         rdm[q, p, r, s] = -element
                         rdm[p, q, s, r] = -element

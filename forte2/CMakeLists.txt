@@ -106,6 +106,8 @@ nanobind_add_module(
   ci/ci_string_class.cc
   ci/ci_occupation.cc
   ci/determinant_helpers.cc
+  ci/rel_ci_sigma_builder.cc
+  ci/rel_ci_sigma_builder_harrison_zarrabian.cc
   ci/slater_rules.cc
   sparse/sparse_exp.cc
   sparse/sparse_operator.cc

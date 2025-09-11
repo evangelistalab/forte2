@@ -2,6 +2,7 @@
 
 #include <string>
 #include <span>
+#include <complex>
 
 #include "ndarray.h"
 
@@ -34,3 +35,33 @@ std::span<double> as_span(np_vector vec);
 void print(np_vector vec, std::string label = "Vector");
 
 } // namespace forte2::vector
+
+namespace forte2::vector_complex {
+
+/// @brief Zero out a np_vector
+/// @param vec The vector to zero out
+void zero(np_vector_complex vec);
+
+/// @brief Copy the contents of one np_vector_complex to another
+/// @param src The source vector to copy from
+/// @param dest The destination vector to copy to
+void copy(np_vector_complex src, np_vector_complex dest);
+
+/// @brief Scale a np_vector_complex by a factor
+/// @param vec The vector to scale
+/// @param factor The scaling factor
+void scale(np_vector_complex vec, double factor);
+
+/// @brief Perform the operation y = a * x + y for specific rows in two vectors
+/// @param a The scalar multiplier
+/// @param x The source vector to multiply
+/// @param y The destination vector to add to
+void daxpy(double a, np_vector_complex x, np_vector_complex y);
+
+/// @brief Check np_vector_complex for contiguity and make a std::span from it
+std::span<std::complex<double>> as_span(np_vector_complex vec);
+
+/// @brief Print the contents of a np_vector_complex to standard output
+void print(np_vector_complex vec, std::string label = "Vector");
+
+} // namespace forte2::vector_complex

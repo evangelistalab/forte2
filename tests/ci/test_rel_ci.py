@@ -140,21 +140,21 @@ def test_rel_ci_hf_transition_dipole_ghf():
         core_orbitals=2,
         active_orbitals=12,
         do_transition_dipole=True,
-        ci_algorithm="exact",
+        ci_algorithm="hz",
     )(scf)
     ci.run()
     assert ci.E[0] == approx(-100.10065023157668)
     assert ci.E[1] == approx(-99.7875319545)
     assert ci.E[3] == approx(-99.7866432345)
     assert np.abs(ci.tdm_per_solver[0][(0, 0)]) == pytest.approx(
-        [0.0, 0.0, 7.54973019e-01], abs=1e-7
+        [0.0, 0.0, 7.54972929e-01], abs=1e-7
     )
     assert np.abs(ci.tdm_per_solver[0][(1, 1)]) == pytest.approx(
-        [0.0, 0.0, 7.21281411e-01], abs=1e-7
+        [0.0, 0.0, 7.21281876e-01], abs=1e-7
     )
     assert np.abs(ci.tdm_per_solver[0][(3, 3)]) == pytest.approx(
-        [0.0, 0.0, 7.21065535e-01], abs=1e-7
+        [0.0, 0.0, 7.21066916e-01], abs=1e-7
     )
     assert np.abs(ci.fosc_per_solver[0][(0, 3)]) == pytest.approx(
-        1.7115423772911847e-05, abs=1e-7
+        1.711178808962322e-05, abs=1e-7
     )
