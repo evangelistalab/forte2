@@ -106,6 +106,7 @@ nanobind_add_module(
   ci/determinant_helpers.cc
   ci/rel_ci_sigma_builder.cc
   ci/rel_ci_sigma_builder_rdm.cc
+  ci/rel_ci_sigma_builder_rdm_debug.cc
   ci/rel_ci_sigma_builder_harrison_zarrabian.cc
   ci/slater_rules.cc
   sparse/sparse_exp.cc

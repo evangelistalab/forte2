@@ -383,23 +383,6 @@ class _RelCIBase:
         self.ints.V = tei
 
     def make_1rdm(self, left_root: int, right_root: int = None):
-        rdm = np.zeros((self.norb, self.norb), dtype=complex)
-        psil = SparseState({d: c for d, c in zip(self.dets, self.evecs[:, left_root])})
-        if right_root is None:
-            psir = psil
-        else:
-            psir = SparseState(
-                {d: c for d, c in zip(self.dets, self.evecs[:, right_root])}
-            )
-        for p in range(self.norb):
-            for q in range(self.norb):
-                op = SparseOperator()
-                op.add([p], [], [q], [])
-                rdm[p, q] = overlap(psil, apply_op(op, psir, screen_thresh=1e-100))
-
-        return rdm
-
-    def make_1rdm_sigma(self, left_root: int, right_root: int = None):
         if right_root is None:
             right_root = left_root
         # copy to ensure contiguous arrays are passed to the sigma builder
@@ -410,32 +393,49 @@ class _RelCIBase:
 
         return rdm
 
-    def make_2rdm(self, left_root: int, right_root: int = None):
-        rdm = np.zeros((self.norb, self.norb, self.norb, self.norb), dtype=complex)
-        psil = SparseState({d: c for d, c in zip(self.dets, self.evecs[:, left_root])})
+    def make_1rdm_debug(self, left_root: int, right_root: int = None):
         if right_root is None:
-            psir = psil
-        else:
-            psir = SparseState(
-                {d: c for d, c in zip(self.dets, self.evecs[:, right_root])}
-            )
-        for p in range(self.norb):
-            for q in range(p):
-                for r in range(self.norb):
-                    for s in range(r):
-                        op = SparseOperator()
-                        op.add([p, q], [], [r, s], [])
-                        element = overlap(
-                            psil, apply_op(op, psir, screen_thresh=1e-100)
-                        )
-                        rdm[p, q, r, s] = element
-                        rdm[q, p, r, s] = -element
-                        rdm[p, q, s, r] = -element
-                        rdm[q, p, s, r] = element
+            right_root = left_root
+        # copy to ensure contiguous arrays are passed to the sigma builder
+        rdm = self.ci_sigma_builder.so_1rdm_debug(
+            self.evecs[:, left_root].copy(),
+            self.evecs[:, right_root].copy(),
+        )
+
+        return rdm
+
+    def make_2rdm_debug(self, left_root: int, right_root: int = None):
+        if right_root is None:
+            right_root = left_root
+        # copy to ensure contiguous arrays are passed to the sigma builder
+        rdm = self.ci_sigma_builder.so_2rdm_debug(
+            self.evecs[:, left_root].copy(),
+            self.evecs[:, right_root].copy(),
+        )
 
         return rdm
 
     def make_2cumulant(self, left_root: int, right_root: int = None):
+        if right_root is None:
+            right_root = left_root
+        lambda2 = self.ci_sigma_builder.so_2cumulant(
+            self.evecs[:, left_root].copy(),
+            self.evecs[:, right_root].copy(),
+        )
+        return lambda2
+
+    def make_2rdm(self, left_root: int, right_root: int = None):
+        if right_root is None:
+            right_root = left_root
+        # copy to ensure contiguous arrays are passed to the sigma builder
+        rdm = self.ci_sigma_builder.so_2rdm(
+            self.evecs[:, left_root].copy(),
+            self.evecs[:, right_root].copy(),
+        )
+
+        return rdm
+
+    def make_2cumulant_debug(self, left_root: int, right_root: int = None):
         if right_root is None:
             right_root = left_root
         rdm1 = self.make_1rdm(left_root, right_root)
@@ -447,28 +447,36 @@ class _RelCIBase:
         )
         return lambda2
 
-    def make_2rdm_sigma(self, left_root: int, right_root: int = None):
+    def make_3rdm_debug(self, left_root: int, right_root: int = None):
         if right_root is None:
             right_root = left_root
         # copy to ensure contiguous arrays are passed to the sigma builder
-        rdm = self.ci_sigma_builder.so_2rdm(
+        rdm = self.ci_sigma_builder.so_3rdm_debug(
             self.evecs[:, left_root].copy(),
             self.evecs[:, right_root].copy(),
         )
 
         return rdm
-    
-    def make_2cumulant_sigma(self, left_root: int, right_root: int = None):
+
+    def make_3rdm(self, left_root: int, right_root: int = None):
         if right_root is None:
             right_root = left_root
-        rdm1 = self.make_1rdm_sigma(left_root, right_root)
-        rdm2 = self.make_2rdm_sigma(left_root, right_root)
-        lambda2 = (
-            rdm2
-            - np.einsum("pr,qs->pqrs", rdm1, rdm1, optimize=True)
-            + np.einsum("ps,qr->pqrs", rdm1, rdm1, optimize=True)
+        # copy to ensure contiguous arrays are passed to the sigma builder
+        rdm = self.ci_sigma_builder.so_3rdm(
+            self.evecs[:, left_root].copy(),
+            self.evecs[:, right_root].copy(),
         )
-        return lambda2
+
+        return rdm
+
+    def make_3cumulant(self, left_root: int, right_root: int = None):
+        if right_root is None:
+            right_root = left_root
+        lambda3 = self.ci_sigma_builder.so_3cumulant(
+            self.evecs[:, left_root].copy(),
+            self.evecs[:, right_root].copy(),
+        )
+        return lambda3
 
 
 @dataclass

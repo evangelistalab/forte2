@@ -88,7 +88,7 @@ class RelCISigmaBuilder {
     /// @return The three-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(sigma)[p>q>r][s>t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
     ///        with p > q > r, and s > t > u orbitals of spin sigma
-    np_matrix_complex compute_3rdm(np_vector_complex C_left, np_vector_complex C_right) const;
+    np_tensor6_complex compute_3rdm(np_vector_complex C_left, np_vector_complex C_right) const;
 
     /// @brief Compute the cumulant of the spin-free three-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -96,8 +96,13 @@ class RelCISigmaBuilder {
     /// @return The cumulant of the three-electron spin-free reduced density matrix stored as a
     /// tensor
     ///        lambda[p][q][r][s][t][u] = gamma[p][q][r][s][t][u] + ...
-    // np_tensor6_complex compute_3cumulant(np_vector_complex C_left, np_vector_complex C_right)
-    // const;
+    np_tensor6_complex compute_3cumulant(np_vector_complex C_left, np_vector_complex C_right) const;
+
+    np_matrix_complex compute_1rdm_debug(np_vector_complex C_left, np_vector_complex C_right) const;
+    np_tensor4_complex compute_2rdm_debug(np_vector_complex C_left,
+                                          np_vector_complex C_right) const;
+    np_tensor6_complex compute_3rdm_debug(np_vector_complex C_left,
+                                          np_vector_complex C_right) const;
 
   private:
     // == Class Private Variables ==

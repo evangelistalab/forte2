@@ -112,15 +112,4 @@ packed_tensor4_to_tensor4(nb::ndarray<nb::numpy, T, nb::ndim<2>> m) {
     }
     return t;
 }
-
-/// @brief Expand a packed 6D tensor T([p>q>r],[s>t>u]) stored as a 2D matrix into a full 6D tensor
-/// with elements:   T[p,q,r,s,t,u] = +T([p>q>r],[s>t>u])
-///             T[p,q,r,s,u,t] = -T([p>q>r],[s>t>u])
-///             T[p,r,q,s,t,u] = -T([p>q>r],[s>t>u])
-///             T[p,r,q,s,u,t] = +T([p>q>r],[s>t>u])
-///             T[q,p,r,s,t,u] = -T([p>q>r],[s>t>u])
-///             T[q,p,r,s,u,t] = +T([p>q>r],[s>t>u])
-/// @param m The input 2D matrix.
-/// @return The expanded 6D tensor.
-// np_tensor6 packed_tensor6_to_tensor6(np_matrix m);
 } // namespace forte2::matrix

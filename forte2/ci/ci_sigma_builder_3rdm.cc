@@ -46,7 +46,7 @@ np_matrix CISigmaBuilder::compute_sss_3rdm(np_vector C_left, np_vector C_right, 
             if (lists_.block_size(nI) == 0)
                 continue;
 
-            auto tr = gather_block(Cr_span, TR, spin, lists_, class_Ia, class_Ib);
+            auto tr = gather_block(Cl_span, TR, spin, lists_, class_Ia, class_Ib);
 
             for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
                 // The string class on which we don't act must be the same for I and J
@@ -61,7 +61,7 @@ np_matrix CISigmaBuilder::compute_sss_3rdm(np_vector C_left, np_vector C_right, 
 
                 if (maxL > 0) {
                     // Get a pointer to the correct block of matrix C
-                    auto tl = gather_block(Cl_span, TL, spin, lists_, class_Ja, class_Jb);
+                    auto tl = gather_block(Cr_span, TL, spin, lists_, class_Ja, class_Jb);
 
                     for (size_t K{0}; K < maxK; ++K) {
                         auto& Krlist = is_alpha(spin)

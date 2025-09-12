@@ -166,7 +166,14 @@ void export_rel_ci_sigma_builder_api(nb::module_& m) {
         .def("so_2rdm", &RelCISigmaBuilder::compute_2rdm, "C_left"_a, "C_right"_a,
              "Compute the spin-orbital two-electron reduced density matrix")
         .def("so_2cumulant", &RelCISigmaBuilder::compute_2cumulant, "C_left"_a, "C_right"_a,
-             "Compute the spin-orbital two-electron cumulant");
+             "Compute the spin-orbital two-electron cumulant")
+        .def("so_3rdm", &RelCISigmaBuilder::compute_3rdm, "C_left"_a, "C_right"_a,
+             "Compute the spin-orbital three-electron reduced density matrix")
+        .def("so_3cumulant", &RelCISigmaBuilder::compute_3cumulant, "C_left"_a, "C_right"_a,
+             "Compute the spin-orbital three-electron cumulant")
+        .def("so_1rdm_debug", &RelCISigmaBuilder::compute_1rdm_debug, "C_left"_a, "C_right"_a)
+        .def("so_2rdm_debug", &RelCISigmaBuilder::compute_2rdm_debug, "C_left"_a, "C_right"_a)
+        .def("so_3rdm_debug", &RelCISigmaBuilder::compute_3rdm_debug, "C_left"_a, "C_right"_a);
 }
 
 } // namespace forte2

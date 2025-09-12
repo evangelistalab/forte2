@@ -107,7 +107,7 @@ np_tensor4_complex RelCISigmaBuilder::compute_2rdm(np_vector_complex C_left,
             if (lists_.block_size(nI) == 0)
                 continue;
 
-            auto tr = gather_block(Cr_span, TR, spin, lists_, class_Ia, class_Ib);
+            auto tr = gather_block(Cl_span, TR, spin, lists_, class_Ia, class_Ib);
 
             for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
                 // The string class on which we don't act must be the same for I and J
@@ -121,7 +121,7 @@ np_tensor4_complex RelCISigmaBuilder::compute_2rdm(np_vector_complex C_left,
                                                    : alfa_address->strpcls(class_Ia);
                 if (maxL > 0) {
                     // Get a pointer to the correct block of matrix C
-                    auto tl = gather_block(Cl_span, TL, spin, lists_, class_Ja, class_Jb);
+                    auto tl = gather_block(Cr_span, TL, spin, lists_, class_Ja, class_Jb);
                     for (size_t K{0}; K < maxK; ++K) {
                         auto& Krlist = is_alpha(spin)
                                            ? lists_.get_alfa_2h_list(class_K, K, class_Ia)
@@ -173,24 +173,20 @@ np_tensor4_complex RelCISigmaBuilder::compute_2cumulant(np_vector_complex C_left
     return L2;
 }
 
-np_matrix_complex RelCISigmaBuilder::compute_3rdm(np_vector_complex C_left,
-                                                  np_vector_complex C_right) const {
+np_tensor6_complex RelCISigmaBuilder::compute_3rdm(np_vector_complex C_left,
+                                                   np_vector_complex C_right) const {
     Spin spin = Spin::Alpha; // placeholder spin
     const auto na = lists_.na();
     const auto nb = lists_.nb();
     const auto norb = lists_.norb();
 
-    // if there are less than three orbitals, return an empty matrix
-    if (norb < 3) {
-        return make_zeros<nb::numpy, std::complex<double>, 2>({0, 0});
+    // if there are less than three orbitals or 3 electrons, return an empty matrix
+    if (norb < 3 || na < 3) {
+        return make_zeros<nb::numpy, std::complex<double>, 6>({0, 0, 0, 0, 0, 0});
     }
 
     const size_t ntriplets = (norb * (norb - 1) * (norb - 2)) / 6;
     auto rdm = make_zeros<nb::numpy, std::complex<double>, 2>({ntriplets, ntriplets});
-
-    // skip building the RDM if there are not enough electrons
-    if ((is_alpha(spin) and (na < 3)) or (is_beta(spin) and (nb < 3)))
-        return rdm;
 
     auto Cl_span = vector::as_span<std::complex<double>>(C_left);
     auto Cr_span = vector::as_span<std::complex<double>>(C_right);
@@ -211,7 +207,7 @@ np_matrix_complex RelCISigmaBuilder::compute_3rdm(np_vector_complex C_left,
             if (lists_.block_size(nI) == 0)
                 continue;
 
-            auto tr = gather_block(Cr_span, TR, spin, lists_, class_Ia, class_Ib);
+            auto tr = gather_block(Cl_span, TR, spin, lists_, class_Ia, class_Ib);
 
             for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
                 // The string class on which we don't act must be the same for I and J
@@ -226,7 +222,7 @@ np_matrix_complex RelCISigmaBuilder::compute_3rdm(np_vector_complex C_left,
 
                 if (maxL > 0) {
                     // Get a pointer to the correct block of matrix C
-                    auto tl = gather_block(Cl_span, TL, spin, lists_, class_Ja, class_Jb);
+                    auto tl = gather_block(Cr_span, TL, spin, lists_, class_Ja, class_Jb);
 
                     for (size_t K{0}; K < maxK; ++K) {
                         auto& Krlist = is_alpha(spin)
@@ -251,7 +247,115 @@ np_matrix_complex RelCISigmaBuilder::compute_3rdm(np_vector_complex C_left,
             }
         }
     }
-    return rdm;
+
+    auto rdm_v = rdm.view();
+    auto rdm_full =
+        make_zeros<nb::numpy, std::complex<double>, 6>({norb, norb, norb, norb, norb, norb});
+    auto rdm_full_v = rdm_full.view();
+    for (size_t p{2}, pqr{0}; p < norb; ++p) {
+        for (size_t q{1}; q < p; ++q) {
+            for (size_t r{0}; r < q; ++r, ++pqr) {
+                for (size_t s{2}, stu{0}; s < norb; ++s) {
+                    for (size_t t{1}; t < s; ++t) {
+                        for (size_t u{0}; u < t; ++u, ++stu) {
+                            // grab the unique element of the 3-RDM
+                            const auto el = rdm_v(pqr, stu);
+
+                            // Place the element in all valid 36 antisymmetric index
+                            // permutations
+                            rdm_full_v(p, q, r, s, t, u) = +el;
+                            rdm_full_v(p, q, r, s, u, t) = -el;
+                            rdm_full_v(p, q, r, u, s, t) = +el;
+                            rdm_full_v(p, q, r, u, t, s) = -el;
+                            rdm_full_v(p, q, r, t, u, s) = +el;
+                            rdm_full_v(p, q, r, t, s, u) = -el;
+
+                            rdm_full_v(p, r, q, s, t, u) = -el;
+                            rdm_full_v(p, r, q, s, u, t) = +el;
+                            rdm_full_v(p, r, q, u, s, t) = -el;
+                            rdm_full_v(p, r, q, u, t, s) = +el;
+                            rdm_full_v(p, r, q, t, u, s) = -el;
+                            rdm_full_v(p, r, q, t, s, u) = +el;
+
+                            rdm_full_v(r, p, q, s, t, u) = +el;
+                            rdm_full_v(r, p, q, s, u, t) = -el;
+                            rdm_full_v(r, p, q, u, s, t) = +el;
+                            rdm_full_v(r, p, q, u, t, s) = -el;
+                            rdm_full_v(r, p, q, t, u, s) = +el;
+                            rdm_full_v(r, p, q, t, s, u) = -el;
+
+                            rdm_full_v(r, q, p, s, t, u) = -el;
+                            rdm_full_v(r, q, p, s, u, t) = +el;
+                            rdm_full_v(r, q, p, u, s, t) = -el;
+                            rdm_full_v(r, q, p, u, t, s) = +el;
+                            rdm_full_v(r, q, p, t, u, s) = -el;
+                            rdm_full_v(r, q, p, t, s, u) = +el;
+
+                            rdm_full_v(q, r, p, s, t, u) = +el;
+                            rdm_full_v(q, r, p, s, u, t) = -el;
+                            rdm_full_v(q, r, p, u, s, t) = +el;
+                            rdm_full_v(q, r, p, u, t, s) = -el;
+                            rdm_full_v(q, r, p, t, u, s) = +el;
+                            rdm_full_v(q, r, p, t, s, u) = -el;
+
+                            rdm_full_v(q, p, r, s, t, u) = -el;
+                            rdm_full_v(q, p, r, s, u, t) = +el;
+                            rdm_full_v(q, p, r, u, s, t) = -el;
+                            rdm_full_v(q, p, r, u, t, s) = +el;
+                            rdm_full_v(q, p, r, t, u, s) = -el;
+                            rdm_full_v(q, p, r, t, s, u) = +el;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return rdm_full;
+}
+
+np_tensor6_complex RelCISigmaBuilder::compute_3cumulant(np_vector_complex C_left,
+                                                        np_vector_complex C_right) const {
+    // Compute the 1-RDM
+    auto G1 = compute_1rdm(C_left, C_right);
+    // Compute the 2-RDM
+    auto G2 = compute_2rdm(C_left, C_right);
+    // Compute the 3-RDM (this will hold the cumulant)
+    auto L3 = compute_3rdm(C_left, C_right);
+
+    auto G1_v = G1.view();
+    auto G2_v = G2.view();
+    auto L3_v = L3.view();
+
+    const auto norb = lists_.norb();
+    for (size_t p{0}; p < norb; ++p) {
+        for (size_t q{0}; q < norb; ++q) {
+            for (size_t r{0}; r < norb; ++r) {
+                for (size_t s{0}; s < norb; ++s) {
+                    for (size_t t{0}; t < norb; ++t) {
+                        for (size_t u{0}; u < norb; ++u) {
+                            L3_v(p, q, r, s, t, u) += -G1_v(p, s) * G2_v(q, r, t, u);
+                            L3_v(p, q, r, s, t, u) += -G1_v(q, t) * G2_v(p, r, s, u);
+                            L3_v(p, q, r, s, t, u) += -G1_v(r, u) * G2_v(p, q, s, t);
+                            L3_v(p, q, r, s, t, u) += +G1_v(p, t) * G2_v(q, r, s, u);
+                            L3_v(p, q, r, s, t, u) += +G1_v(p, u) * G2_v(q, r, t, s);
+                            L3_v(p, q, r, s, t, u) += +G1_v(q, s) * G2_v(p, r, t, u);
+                            L3_v(p, q, r, s, t, u) += +G1_v(q, u) * G2_v(p, r, s, t);
+                            L3_v(p, q, r, s, t, u) += +G1_v(r, s) * G2_v(p, q, u, t);
+                            L3_v(p, q, r, s, t, u) += +G1_v(r, t) * G2_v(p, q, s, u);
+                            L3_v(p, q, r, s, t, u) += +2.0 * G1_v(p, s) * G1_v(q, t) * G1_v(r, u);
+                            L3_v(p, q, r, s, t, u) += -2.0 * G1_v(p, s) * G1_v(q, u) * G1_v(r, t);
+                            L3_v(p, q, r, s, t, u) += -2.0 * G1_v(p, u) * G1_v(q, t) * G1_v(r, s);
+                            L3_v(p, q, r, s, t, u) += -2.0 * G1_v(p, t) * G1_v(q, s) * G1_v(r, u);
+                            L3_v(p, q, r, s, t, u) += +2.0 * G1_v(p, t) * G1_v(q, u) * G1_v(r, s);
+                            L3_v(p, q, r, s, t, u) += +2.0 * G1_v(p, u) * G1_v(q, s) * G1_v(r, t);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return L3;
 }
 
 } // namespace forte2
