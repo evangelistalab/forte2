@@ -160,7 +160,13 @@ void export_rel_ci_sigma_builder_api(nb::module_& m) {
         .def("set_memory", &RelCISigmaBuilder::set_memory, "memory"_a,
              "Set the memory limit for the builder (in MB)")
         .def("form_Hdiag", &RelCISigmaBuilder::form_Hdiag, "dets"_a)
-        .def("Hamiltonian", &RelCISigmaBuilder::Hamiltonian, "basis"_a, "sigma"_a);
+        .def("Hamiltonian", &RelCISigmaBuilder::Hamiltonian, "basis"_a, "sigma"_a)
+        .def("so_1rdm", &RelCISigmaBuilder::compute_1rdm, "C_left"_a, "C_right"_a,
+             "Compute the spin-orbital one-electron reduced density matrix")
+        .def("so_2rdm", &RelCISigmaBuilder::compute_2rdm, "C_left"_a, "C_right"_a,
+             "Compute the spin-orbital two-electron reduced density matrix")
+        .def("so_2cumulant", &RelCISigmaBuilder::compute_2cumulant, "C_left"_a, "C_right"_a,
+             "Compute the spin-orbital two-electron cumulant");
 }
 
 } // namespace forte2

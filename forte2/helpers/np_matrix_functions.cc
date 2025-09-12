@@ -168,7 +168,8 @@ void daxpy_rows(double a, np_matrix_complex x, int row_x, np_matrix_complex y, i
     }
 }
 
-std::complex<double> dot_rows(np_matrix_complex x, int row_x, np_matrix_complex y, int row_y, size_t max_col) {
+std::complex<double> dot_rows(np_matrix_complex x, int row_x, np_matrix_complex y, int row_y,
+                              size_t max_col) {
     if (x.shape(1) != y.shape(1)) {
         throw std::runtime_error(
             "Source and destination matrices must have the same number of columns.");

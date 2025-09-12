@@ -180,7 +180,10 @@ class _RelCIBase:
             if self.die_if_not_converged:
                 raise RuntimeError("Davidson-Liu solver did not converge.")
             else:
-                logger.log(f"\nDavidson-Liu solver did not converge in {self.eigensolver.maxiter} iterations.\n", self.log_level)
+                logger.log(
+                    f"\nDavidson-Liu solver did not converge in {self.eigensolver.maxiter} iterations.\n",
+                    self.log_level,
+                )
 
     def _do_sparse_ci(self):
         if self.eigensolver is None:
@@ -296,8 +299,12 @@ class _RelCIBase:
         # and verify the energy from the RDMs matches the CI energy
         logger.log("\nComputing RDMs from CI vectors.\n", self.log_level)
         for root in range(self.nroot):
-            rdm1 = self.make_1rdm(root)
-            rdm2 = self.make_2rdm(root)
+            if self.ci_algorithm == "hz":
+                rdm1 = self.make_1rdm_sigma(root)
+                rdm2 = self.make_2rdm_sigma(root)
+            else:
+                rdm1 = self.make_1rdm(root)
+                rdm2 = self.make_2rdm(root)
 
             rdms_energy = self.ints.E
             rdms_energy += np.einsum("ij,ij", rdm1, self.ints.H)
@@ -392,6 +399,17 @@ class _RelCIBase:
 
         return rdm
 
+    def make_1rdm_sigma(self, left_root: int, right_root: int = None):
+        if right_root is None:
+            right_root = left_root
+        # copy to ensure contiguous arrays are passed to the sigma builder
+        rdm = self.ci_sigma_builder.so_1rdm(
+            self.evecs[:, left_root].copy(),
+            self.evecs[:, right_root].copy(),
+        )
+
+        return rdm
+
     def make_2rdm(self, left_root: int, right_root: int = None):
         rdm = np.zeros((self.norb, self.norb, self.norb, self.norb), dtype=complex)
         psil = SparseState({d: c for d, c in zip(self.dets, self.evecs[:, left_root])})
@@ -414,6 +432,17 @@ class _RelCIBase:
                         rdm[q, p, r, s] = -element
                         rdm[p, q, s, r] = -element
                         rdm[q, p, s, r] = element
+
+        return rdm
+
+    def make_2rdm_sigma(self, left_root: int, right_root: int = None):
+        if right_root is None:
+            right_root = left_root
+        # copy to ensure contiguous arrays are passed to the sigma builder
+        rdm = self.ci_sigma_builder.so_2rdm(
+            self.evecs[:, left_root].copy(),
+            self.evecs[:, right_root].copy(),
+        )
 
         return rdm
 

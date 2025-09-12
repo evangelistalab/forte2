@@ -141,6 +141,7 @@ def test_rel_ci_hf_transition_dipole_ghf():
         active_orbitals=12,
         do_transition_dipole=True,
         ci_algorithm="hz",
+        do_test_rdms=True,
     )(scf)
     ci.run()
     assert ci.E[0] == approx(-100.10065023157668)

@@ -216,6 +216,15 @@ class RelCISigmaBuilder:
 
     def Hamiltonian(self, basis: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))], sigma: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))]) -> None: ...
 
+    def so_1rdm(self, C_left: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))], C_right: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))]) -> Annotated[ArrayLike, dict(dtype='complex128', shape=(None, None))]:
+        """Compute the spin-orbital one-electron reduced density matrix"""
+
+    def so_2rdm(self, C_left: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))], C_right: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))]) -> Annotated[ArrayLike, dict(dtype='complex128', shape=(None, None, None, None))]:
+        """Compute the spin-orbital two-electron reduced density matrix"""
+
+    def so_2cumulant(self, C_left: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))], C_right: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))]) -> Annotated[ArrayLike, dict(dtype='complex128', shape=(None, None, None, None))]:
+        """Compute the spin-orbital two-electron cumulant"""
+
 class CISpinAdapter:
     def __init__(self, twoS: int, twoMs: int, norb: int) -> None: ...
 

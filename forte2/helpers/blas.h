@@ -1,4 +1,5 @@
 #pragma once
+#include <complex.h>
 #include <complex>
 namespace forte2 {
 
@@ -21,6 +22,10 @@ void zgemm_(const char* transA, const char* transB, const int* M, const int* N, 
             std::complex<double>* C, const int* ldc);
 
 double ddot_(int* n, const double* x, int* incx, const double* y, int* incy);
+
+void cblas_zdotc_sub(const int N, const std::complex<double>* X, const int incX,
+                     const std::complex<double>* Y, const int incY, std::complex<double>* dotc);
+
 } // extern "C"
 
 inline void matrix_product(char transa, char transb, int m, int n, int k, double alpha, double* a,
@@ -88,4 +93,24 @@ inline double dot(size_t length, const double* const x, int inc_x, const double*
     return reg;
 }
 
+inline std::complex<double> dot(size_t length, const std::complex<double>* const x, int inc_x,
+                                const std::complex<double>* const y, int inc_y) {
+    if (length == 0)
+        return 0.0;
+
+    std::complex<double> reg = 0.0;
+    std::complex<double> tmp;
+
+    int big_blocks = (int)(length / INT_MAX);
+    int small_size = (int)(length % INT_MAX);
+    for (int block = 0; block <= big_blocks; block++) {
+        const std::complex<double>* x_s = &x[static_cast<size_t>(block) * inc_x * INT_MAX];
+        const std::complex<double>* y_s = &y[static_cast<size_t>(block) * inc_y * INT_MAX];
+        signed int length_s = (block == big_blocks) ? small_size : INT_MAX;
+        cblas_zdotc_sub(length_s, x_s, inc_x, y_s, inc_y, &tmp);
+        reg += tmp;
+    }
+
+    return reg;
+}
 } // namespace forte2

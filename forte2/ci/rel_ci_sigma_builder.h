@@ -62,7 +62,7 @@ class RelCISigmaBuilder {
     /// @return The one-electron reduced density matrix stored as
     ///        gamma(spin)[p][q] = <L| a^+_p a_q |R> with p,q orbitals of spin alpha/beta
     /// @note If the number of orbitals is 0, a matrix of shape (0, 0) is returned
-    // np_matrix_complex compute_1rdm(np_vector_complex C_left, np_vector_complex C_right) const;
+    np_matrix_complex compute_1rdm(np_vector_complex C_left, np_vector_complex C_right) const;
 
     /// @brief Compute the same-spin two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -71,7 +71,7 @@ class RelCISigmaBuilder {
     /// @return The two-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(sigma)[p>q][r>s] = <L| a^+_p a^+_q a_s a_r |R>
     ///        with p > q, and r > s orbitals of spin sigma
-    // np_matrix_complex compute_2rdm(np_vector_complex C_left, np_vector_complex C_right) const;
+    np_tensor4_complex compute_2rdm(np_vector_complex C_left, np_vector_complex C_right) const;
 
     /// @brief Compute the cumulant of the spin-free two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -79,8 +79,7 @@ class RelCISigmaBuilder {
     /// @return The cumulant of the two-electron spin-free reduced density matrix stored as a tensor
     ///        lambda[p][q][r][s] = gamma[p][q][r][s] - gamma[p][r] * gamma[q][s] +
     ///                              0.5 * gamma[p][s] * gamma[q][r]
-    // np_tensor4_complex compute_2cumulant(np_vector_complex C_left, np_vector_complex C_right)
-    // const;
+    np_tensor4_complex compute_2cumulant(np_vector_complex C_left, np_vector_complex C_right) const;
 
     /// @brief Compute the three-electron same-spin reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -119,15 +118,6 @@ class RelCISigmaBuilder {
     size_t memory_size_ = 1073741824;
     /// @brief logging level for the class
     int log_level_ = 3;
-
-    mutable double hdiag_timer_ = 0.0;
-    mutable double haaaa_timer_ = 0.0;
-    mutable double haabb_timer_ = 0.0;
-    mutable double hbbbb_timer_ = 0.0;
-    mutable double rdm1_timer_ = 0.0;
-    mutable double rdm2_aa_timer_ = 0.0;
-    mutable double rdm2_ab_timer_ = 0.0;
-    mutable int build_count_ = 0;
 
     // == Class Private Functions/Data ==
 
