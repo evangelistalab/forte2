@@ -1,5 +1,4 @@
 #pragma once
-#include <complex.h>
 #include <complex>
 namespace forte2 {
 
