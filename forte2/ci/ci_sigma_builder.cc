@@ -154,9 +154,9 @@ void CISigmaBuilder::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
 
 void CISigmaBuilder::Hamiltonian(np_vector basis, np_vector sigma) const {
     local_timer t;
-    vector::zero(sigma);
-    auto b_span = vector::as_span(basis);
-    auto s_span = vector::as_span(sigma);
+    vector::zero<double>(sigma);
+    auto b_span = vector::as_span<double>(basis);
+    auto s_span = vector::as_span<double>(sigma);
 
     H0(b_span, s_span);
     if (algorithm_ == CIAlgorithm::Knowles_Handy) {

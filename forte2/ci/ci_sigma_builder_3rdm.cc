@@ -27,8 +27,8 @@ np_matrix CISigmaBuilder::compute_sss_3rdm(np_vector C_left, np_vector C_right, 
     if ((is_alpha(spin) and (na < 3)) or (is_beta(spin) and (nb < 3)))
         return rdm;
 
-    auto Cl_span = vector::as_span(C_left);
-    auto Cr_span = vector::as_span(C_right);
+    auto Cl_span = vector::as_span<double>(C_left);
+    auto Cr_span = vector::as_span<double>(C_right);
 
     auto rdm_data = rdm.data();
     const auto& alfa_address = lists_.alfa_address();
@@ -124,8 +124,8 @@ np_tensor4 CISigmaBuilder::compute_aab_3rdm(np_vector C_left, np_vector C_right)
     if ((na < 2) or (nb < 1))
         return rdm;
 
-    auto Cl_span = vector::as_span(C_left);
-    auto Cr_span = vector::as_span(C_right);
+    auto Cl_span = vector::as_span<double>(C_left);
+    auto Cr_span = vector::as_span<double>(C_right);
 
     auto rdm_data = rdm.data();
     const auto& alfa_address = lists_.alfa_address();
@@ -213,8 +213,8 @@ np_tensor4 CISigmaBuilder::compute_abb_3rdm(np_vector C_left, np_vector C_right)
     if ((na < 1) or (nb < 2))
         return rdm;
 
-    auto Cl_span = vector::as_span(C_left);
-    auto Cr_span = vector::as_span(C_right);
+    auto Cl_span = vector::as_span<double>(C_left);
+    auto Cr_span = vector::as_span<double>(C_right);
 
     auto rdm_data = rdm.data();
     const auto& alfa_address = lists_.alfa_address();

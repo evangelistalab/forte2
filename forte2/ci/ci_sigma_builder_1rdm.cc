@@ -19,8 +19,8 @@ np_matrix CISigmaBuilder::compute_s_1rdm(np_vector C_left, np_vector C_right, Sp
     const auto& alfa_address = lists_.alfa_address();
     const auto& beta_address = lists_.beta_address();
     auto rdm_view = rdm.view();
-    auto Cl_span = vector::as_span(C_left);
-    auto Cr_span = vector::as_span(C_right);
+    auto Cl_span = vector::as_span<double>(C_left);
+    auto Cr_span = vector::as_span<double>(C_right);
 
     // loop over blocks of the right state
     for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
@@ -75,8 +75,8 @@ np_matrix CISigmaBuilder::compute_sf_1rdm(np_vector C_left, np_vector C_right) c
     if (lists_.norb() > 0) {
         auto a_1rdm = compute_a_1rdm(C_left, C_right);
         auto b_1rdm = compute_b_1rdm(C_left, C_right);
-        matrix::daxpy(1.0, a_1rdm, sf_1rdm);
-        matrix::daxpy(1.0, b_1rdm, sf_1rdm);
+        matrix::daxpy<double>(1.0, a_1rdm, sf_1rdm);
+        matrix::daxpy<double>(1.0, b_1rdm, sf_1rdm);
     }
     return sf_1rdm;
 }

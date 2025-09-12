@@ -127,7 +127,7 @@ class _RelCIBase:
 
     def _do_hz_ci(self):
         self.ci_sigma_builder = RelCISigmaBuilder(
-            self.ci_strings, self.ints.E, self.ints.H, self.ints.V, self.log_level
+            self.ci_strings, self.ints.E.real, self.ints.H, self.ints.V, self.log_level
         )
         self.ci_sigma_builder.set_memory(self.ci_builder_memory)
         self.ci_sigma_builder.set_algorithm("hz")
@@ -435,6 +435,18 @@ class _RelCIBase:
 
         return rdm
 
+    def make_2cumulant(self, left_root: int, right_root: int = None):
+        if right_root is None:
+            right_root = left_root
+        rdm1 = self.make_1rdm(left_root, right_root)
+        rdm2 = self.make_2rdm(left_root, right_root)
+        lambda2 = (
+            rdm2
+            - np.einsum("pr,qs->pqrs", rdm1, rdm1, optimize=True)
+            + np.einsum("ps,qr->pqrs", rdm1, rdm1, optimize=True)
+        )
+        return lambda2
+
     def make_2rdm_sigma(self, left_root: int, right_root: int = None):
         if right_root is None:
             right_root = left_root
@@ -445,6 +457,18 @@ class _RelCIBase:
         )
 
         return rdm
+    
+    def make_2cumulant_sigma(self, left_root: int, right_root: int = None):
+        if right_root is None:
+            right_root = left_root
+        rdm1 = self.make_1rdm_sigma(left_root, right_root)
+        rdm2 = self.make_2rdm_sigma(left_root, right_root)
+        lambda2 = (
+            rdm2
+            - np.einsum("pr,qs->pqrs", rdm1, rdm1, optimize=True)
+            + np.einsum("ps,qr->pqrs", rdm1, rdm1, optimize=True)
+        )
+        return lambda2
 
 
 @dataclass

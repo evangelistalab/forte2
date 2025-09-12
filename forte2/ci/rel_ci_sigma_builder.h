@@ -88,7 +88,7 @@ class RelCISigmaBuilder {
     /// @return The three-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(sigma)[p>q>r][s>t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
     ///        with p > q > r, and s > t > u orbitals of spin sigma
-    // np_matrix_complex compute_3rdm(np_vector_complex C_left, np_vector_complex C_right) const;
+    np_matrix_complex compute_3rdm(np_vector_complex C_left, np_vector_complex C_right) const;
 
     /// @brief Compute the cumulant of the spin-free three-electron reduced density matrix
     /// @param C_left The left-hand side coefficients

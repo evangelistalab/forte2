@@ -130,9 +130,9 @@ void RelCISigmaBuilder::set_Hamiltonian(double E, np_matrix_complex H, np_tensor
 }
 
 void RelCISigmaBuilder::Hamiltonian(np_vector_complex basis, np_vector_complex sigma) const {
-    vector_complex::zero(sigma);
-    auto b_span = vector_complex::as_span(basis);
-    auto s_span = vector_complex::as_span(sigma);
+    vector::zero<std::complex<double>>(sigma);
+    auto b_span = vector::as_span<std::complex<double>>(basis);
+    auto s_span = vector::as_span<std::complex<double>>(sigma);
 
     H0(b_span, s_span);
     if (algorithm_ == CIAlgorithm::Knowles_Handy) {
