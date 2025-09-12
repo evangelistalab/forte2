@@ -212,4 +212,14 @@ np_vector_complex RelCISigmaBuilder::form_Hdiag(const std::vector<Determinant>& 
     return Hdiag;
 }
 
+std::complex<double> RelCISigmaBuilder::slater_rules(const std::vector<Determinant>& dets, size_t I,
+                                                     size_t J) const {
+    double matrix_element = 0.0;
+    if (I == J) {
+        return rel_slater_rules_.energy(dets[I]);
+    } else {
+        return rel_slater_rules_.slater_rules(dets[I], dets[J]);
+    }
+}
+
 } // namespace forte2

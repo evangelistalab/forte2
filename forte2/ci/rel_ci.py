@@ -42,7 +42,7 @@ class _RelCIBase:
     die_if_not_converged: bool = False
 
     ### Sigma builder parameters
-    ci_algorithm: str = "sparse"
+    ci_algorithm: str = "hz"
 
     ### Davidson-Liu parameters
     guess_per_root: int = 2
@@ -99,11 +99,8 @@ class _RelCIBase:
         if self.first_run:
             self._ci_solver_startup()
 
-        self.slater_rules = RelSlaterRules(
-            nspinor=self.norb,
-            scalar_energy=self.ints.E.real,
-            one_electron_integrals=self.ints.H,
-            two_electron_integrals=self.ints.V,
+        self.ci_sigma_builder = RelCISigmaBuilder(
+            self.ci_strings, self.ints.E.real, self.ints.H, self.ints.V, self.log_level
         )
 
         if self.ci_algorithm == "exact":
@@ -126,9 +123,6 @@ class _RelCIBase:
         return self
 
     def _do_hz_ci(self):
-        self.ci_sigma_builder = RelCISigmaBuilder(
-            self.ci_strings, self.ints.E.real, self.ints.H, self.ints.V, self.log_level
-        )
         self.ci_sigma_builder.set_memory(self.ci_builder_memory)
         self.ci_sigma_builder.set_algorithm("hz")
         Hdiag = self.ci_sigma_builder.form_Hdiag(self.dets)
@@ -200,9 +194,7 @@ class _RelCIBase:
                 dtype=complex,
             )
 
-        Hdiag = []
-        for i in self.dets:
-            Hdiag.append(self.slater_rules.energy(i))
+        Hdiag = self.ci_sigma_builder.form_Hdiag(self.dets)
 
         if self.ndet == 1:
             self.evals = np.array([Hdiag[0]])
@@ -251,7 +243,7 @@ class _RelCIBase:
         H = np.zeros((self.ndet,) * 2, dtype=complex)
         for i in range(self.ndet):
             for j in range(i + 1):
-                H[i, j] = self.slater_rules.slater_rules(self.dets[i], self.dets[j])
+                H[i, j] = self.ci_sigma_builder.slater_rules(self.dets, i, j)
                 H[j, i] = np.conj(H[i, j])
 
         self.evals, self.evecs = np.linalg.eigh(H)
@@ -278,7 +270,7 @@ class _RelCIBase:
         for i, I in enumerate(indices):
             for j, J in enumerate(indices):
                 if i >= j:
-                    Hij = self.slater_rules.slater_rules(self.dets[I], self.dets[J])
+                    Hij = self.ci_sigma_builder.slater_rules(self.dets, I, J)
                     Hguess[i, j] = Hij
                     Hguess[j, i] = np.conj(Hij)
 
@@ -299,12 +291,8 @@ class _RelCIBase:
         # and verify the energy from the RDMs matches the CI energy
         logger.log("\nComputing RDMs from CI vectors.\n", self.log_level)
         for root in range(self.nroot):
-            if self.ci_algorithm == "hz":
-                rdm1 = self.make_1rdm_sigma(root)
-                rdm2 = self.make_2rdm_sigma(root)
-            else:
-                rdm1 = self.make_1rdm(root)
-                rdm2 = self.make_2rdm(root)
+            rdm1 = self.make_1rdm(root)
+            rdm2 = self.make_2rdm(root)
 
             rdms_energy = self.ints.E
             rdms_energy += np.einsum("ij,ij", rdm1, self.ints.H)
