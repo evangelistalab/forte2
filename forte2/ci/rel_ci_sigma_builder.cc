@@ -12,16 +12,6 @@
 
 namespace forte2 {
 
-double gather_a_time = 0.0;
-double gather_b_time = 0.0;
-double gather_b_time_read = 0.0;
-double dgemm_time = 0.0;
-double scatter_a_time = 0.0;
-double scatter_b_time = 0.0;
-double scatter_b_time_write = 0.0;
-double transpose_1_time = 0.0;
-double transpose_2_time = 0.0;
-
 RelCISigmaBuilder::RelCISigmaBuilder(const CIStrings& lists, double E, np_matrix_complex& H,
                                      np_tensor4_complex& V, int log_level)
     : lists_(lists), E_(E), H_(H), V_(V), rel_slater_rules_(lists.norb(), E, H, V),
@@ -140,36 +130,16 @@ void RelCISigmaBuilder::set_Hamiltonian(double E, np_matrix_complex H, np_tensor
 }
 
 void RelCISigmaBuilder::Hamiltonian(np_vector_complex basis, np_vector_complex sigma) const {
-    local_timer t;
     vector_complex::zero(sigma);
     auto b_span = vector_complex::as_span(basis);
     auto s_span = vector_complex::as_span(sigma);
 
     H0(b_span, s_span);
     if (algorithm_ == CIAlgorithm::Knowles_Handy) {
-        // H1_kh(b_span, s_span, Spin::Alpha);
-        // H1_kh(b_span, s_span, Spin::Beta);
-        // local_timer h_aabb_timer;
-        // H2_kh(b_span, s_span);
-        // haabb_timer_ += h_aabb_timer.elapsed_seconds();
     } else {
         H1_hz(b_span, s_span, Spin::Alpha, h_hz);
-        // H1_hz(b_span, s_span, Spin::Beta, h_hz);
-
-        local_timer h_aabb_timer;
-        // H2_hz_opposite_spin(b_span, s_span);
-        haabb_timer_ += h_aabb_timer.elapsed_seconds();
-
-        local_timer h_aaaa_timer;
         H2_hz_same_spin(b_span, s_span, Spin::Alpha);
-        haaaa_timer_ += h_aaaa_timer.elapsed_seconds();
-
-        local_timer h_bbbb_timer;
-        // H2_hz_same_spin(b_span, s_span, Spin::Beta);
-        hbbbb_timer_ += h_bbbb_timer.elapsed_seconds();
     }
-    hdiag_timer_ += t.elapsed_seconds();
-    build_count_++;
 }
 
 void RelCISigmaBuilder::H0(std::span<std::complex<double>> basis,
