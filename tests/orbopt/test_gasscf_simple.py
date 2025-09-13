@@ -1,7 +1,6 @@
-from logging import fatal
 import pytest
 
-from forte2 import *
+from forte2 import System, RHF, MCOptimizer, State
 from forte2.helpers.comparisons import approx
 
 
@@ -36,7 +35,6 @@ def test_gasscf_1():
 
 def test_gasscf_h2o_core():
     erhf = -76.05702512779526
-    emcscf = -76.1156924702
 
     xyz = """
     O   0.0000000000  -0.0000000000  -0.0662628033

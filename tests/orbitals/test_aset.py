@@ -1,6 +1,4 @@
-import pytest
-
-from forte2 import *
+from forte2 import System, RHF, MCOptimizer, ASET, CI, State
 from forte2.helpers.comparisons import approx
 # Ref Energies come from forte1
 

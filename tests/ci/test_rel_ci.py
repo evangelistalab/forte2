@@ -1,11 +1,10 @@
 import numpy as np
 import pytest
 
-from forte2 import System, RHF, GHF, State
+from forte2 import System, RHF, GHF
 from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 from forte2.helpers.comparisons import approx
-from forte2.ci import RelCI, CI
-from forte2.props import get_1e_property
+from forte2.ci import RelCI
 
 
 def test_rel_ci_h2():

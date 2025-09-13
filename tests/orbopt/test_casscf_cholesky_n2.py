@@ -7,7 +7,7 @@ def test_casscf_n2_cholesky():
     erhf = -108.949591958787
     emcscf = -109.090719613072
 
-    xyz = f"""
+    xyz = """
     N 0.0 0.0 0.0
     N 0.0 0.0 1.120
     """

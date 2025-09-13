@@ -1,6 +1,3 @@
-import pytest
-import numpy as np
-
 from forte2 import System, GHF
 from forte2.helpers.comparisons import approx
 from forte2.orbopt import RelMCOptimizer

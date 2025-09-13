@@ -362,11 +362,11 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         # # Semi-canonicalize the blocks
         if not self.semicanonicalize_active:
             logger.log_info1(
-                f"\nSkipping semicanonicalization of active space orbitals."
+                "\nSkipping semicanonicalization of active space orbitals."
             )
         if not self.semicanonicalize_frozen:
             logger.log_info1(
-                f"\nSkipping semicanonicalization of frozen core and frozen virtual orbitals."
+                "\nSkipping semicanonicalization of frozen core and frozen virtual orbitals."
             )
 
         C_tilde = self.Ca.copy()

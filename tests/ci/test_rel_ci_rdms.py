@@ -1,6 +1,6 @@
 import numpy as np
 
-from forte2 import System, RHF, CI, State, RelSlaterRules, hilbert_space, MOSpace
+from forte2 import State, MOSpace
 from forte2.jkbuilder import SpinorbitalIntegrals
 from forte2.ci.rel_ci import _RelCIBase
 from forte2.helpers.comparisons import approx
@@ -107,7 +107,6 @@ def test_ci_rdms_1():
     # cisolver.conv_tol = 1e-12
     # e, fcivec = cisolver.kernel(h1, h2, norb, nelec=8, verbose=5)
 
-    eref = -80.43551643145948
     rng = np.random.default_rng(12)
     norb = 12
     h1 = rng.random((norb, norb)) + 1j * rng.random((norb, norb))

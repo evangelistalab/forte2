@@ -1,16 +1,9 @@
-import pytest
-import numpy as np
-
 from forte2 import System, RHF, MCOptimizer, AVAS, State
 from forte2.helpers.comparisons import approx
 
 
 def test_sa_casscf_c2_transition_dipole():
     """Test CASSCF with C2 molecule."""
-
-    erhf = -75.382486499716
-    ecasscf = -75.5580517997
-
     xyz = """
     C 0.0 0.0 0.0
     C 0.0 0.0 1.2

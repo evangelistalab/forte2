@@ -1,4 +1,3 @@
-import scipy as sp
 from dataclasses import dataclass, field
 
 from forte2 import ints
@@ -12,7 +11,7 @@ from forte2.helpers.matrix_functions import (
 from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
 from .parse_geometry import parse_geometry, GeometryHelper
-from .atom_data import ATOM_DATA, Z_TO_ATOM_SYMBOL
+from .atom_data import Z_TO_ATOM_SYMBOL
 
 import numpy as np
 from numpy.typing import NDArray

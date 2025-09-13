@@ -4,11 +4,8 @@ import numpy as np
 
 from forte2 import (
     RelCISigmaBuilder,
-    RelSlaterRules,
     SparseState,
-    SparseOperator,
     CIStrings,
-    overlap,
     apply_op,
     sparse_operator_hamiltonian,
 )

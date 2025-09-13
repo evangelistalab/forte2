@@ -6,7 +6,7 @@ from forte2.ci import RelCISolver
 from forte2.base_classes.active_space_solver import RelActiveSpaceSolver
 from forte2.orbitals import Semicanonicalizer
 from forte2.jkbuilder import FockBuilder, SpinorbitalIntegrals
-from forte2.helpers import logger, LBFGS, DIIS, NewtonRaphson
+from forte2.helpers import logger, LBFGS, DIIS
 from forte2.system.basis_utils import BasisInfo
 from forte2.ci.ci_utils import (
     pretty_print_ci_summary,
@@ -682,37 +682,3 @@ class OrbOptimizer:
         orbhess = orbhess.T * self.nrr
 
         return orbhess
-
-
-def _grad_cmplx_to_real(x_comp):
-    l = len(x_comp)
-    x_real = np.zeros(l * 2, dtype=float)
-    x_real[:l] = x_comp.real
-    # for gradient, we compute the Wirtinger derivative
-    # dE/dk = 1/2(dE/dx - idE/dy)
-    x_real[l:] = -x_comp.imag
-    return 2 * x_real
-
-
-def _grad_real_to_cmplx(x_real):
-    l = len(x_real) // 2
-    x_comp = np.zeros(l, dtype=complex)
-    x_comp += x_real[:l]
-    x_comp -= 1j * x_real[l:]
-    return 0.5 * x_comp
-
-
-def _cmplx_to_real(x_comp):
-    l = len(x_comp)
-    x_real = np.zeros(l * 2, dtype=float)
-    x_real[:l] = x_comp.real
-    x_real[l:] = x_comp.imag
-    return x_real
-
-
-def _real_to_cmplx(x_real):
-    l = len(x_real) // 2
-    x_comp = np.zeros(l, dtype=complex)
-    x_comp += x_real[:l]
-    x_comp += 1j * x_real[l:]
-    return x_comp

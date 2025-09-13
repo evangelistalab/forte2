@@ -1,4 +1,3 @@
-from logging import fatal
 import pytest
 
 from forte2 import System, GHF, RelState
