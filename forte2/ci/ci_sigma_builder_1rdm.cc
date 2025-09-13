@@ -52,7 +52,7 @@ np_matrix CISigmaBuilder::compute_s_1rdm(np_vector C_left, np_vector C_right, Sp
                 for (const auto& [sign, I, J] : vo_list) {
                     // Compute the RDM element contribution
                     for (size_t idx{0}; idx != maxL; ++idx) {
-                        rdm_element += sign * tr[I * maxL + idx] * tl[J * maxL + idx];
+                        rdm_element += sign * tl[J * maxL + idx] * tr[I * maxL + idx];
                     }
                 }
                 rdm_view(p, q) += rdm_element;

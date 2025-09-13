@@ -48,7 +48,7 @@ np_matrix CISigmaBuilder::compute_ss_2rdm(np_vector C_left, np_vector C_right, S
             if (lists_.block_size(nI) == 0)
                 continue;
 
-            auto tr = gather_block(Cl_span, TR, spin, lists_, class_Ia, class_Ib);
+            auto tl = gather_block(Cl_span, TL, spin, lists_, class_Ia, class_Ib);
 
             for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
                 // The string class on which we don't act must be the same for I and J
@@ -62,20 +62,20 @@ np_matrix CISigmaBuilder::compute_ss_2rdm(np_vector C_left, np_vector C_right, S
                                                    : alfa_address->strpcls(class_Ia);
                 if (maxL > 0) {
                     // Get a pointer to the correct block of matrix C
-                    auto tl = gather_block(Cr_span, TL, spin, lists_, class_Ja, class_Jb);
+                    auto tr = gather_block(Cr_span, TR, spin, lists_, class_Ja, class_Jb);
                     for (size_t K{0}; K < maxK; ++K) {
-                        auto& Krlist = is_alpha(spin)
+                        auto& Kllist = is_alpha(spin)
                                            ? lists_.get_alfa_2h_list(class_K, K, class_Ia)
                                            : lists_.get_beta_2h_list(class_K, K, class_Ib);
-                        auto& Kllist = is_alpha(spin)
+                        auto& Krlist = is_alpha(spin)
                                            ? lists_.get_alfa_2h_list(class_K, K, class_Ja)
                                            : lists_.get_beta_2h_list(class_K, K, class_Jb);
-                        for (const auto& [sign_K, p, q, I] : Krlist) {
+                        for (const auto& [sign_K, p, q, I] : Kllist) {
                             const size_t pq_index = pair_index_gt(p, q);
-                            for (const auto& [sign_L, r, s, J] : Kllist) {
+                            for (const auto& [sign_L, r, s, J] : Krlist) {
                                 const size_t rs_index = pair_index_gt(r, s);
                                 const double rdm_element =
-                                    dot(maxL, tr.data() + I * maxL, 1, tl.data() + J * maxL, 1);
+                                    dot(maxL, tl.data() + I * maxL, 1, tr.data() + J * maxL, 1);
                                 rdm_data[pq_index * npairs + rs_index] +=
                                     sign_K * sign_L * rdm_element;
                             }
@@ -224,32 +224,6 @@ np_tensor4 CISigmaBuilder::compute_sf_2rdm(np_vector C_left, np_vector C_right) 
 
     return rdm_sf;
 }
-
-// np_tensor4 CISigmaBuilder::compute_aa_2rdm_full(np_vector C_left, np_vector C_right,
-//                                                 bool alfa) const {
-//     auto rdm = compute_aa_2rdm(C_left, C_right, alfa);
-//     const auto norb = lists_.norb();
-//     auto rdm_full = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
-//     auto rdm_v = rdm.view();
-//     auto rdm_full_v = rdm_full.view();
-
-//     for (size_t p{1}; p < norb; ++p) {
-//         for (size_t q{0}; q < p; ++q) { // p > q
-//             auto pq = pair_index_gt(p, q);
-//             for (size_t r{1}; r < norb; ++r) {
-//                 for (size_t s{0}; s < r; ++s) { // r > s
-//                     auto rs = pair_index_gt(r, s);
-//                     auto element = rdm_v(pq, rs);
-//                     rdm_full_v(p, q, r, s) = element;
-//                     rdm_full_v(q, p, r, s) = -element;
-//                     rdm_full_v(p, q, s, r) = -element;
-//                     rdm_full_v(q, p, s, r) = element;
-//                 }
-//             }
-//         }
-//     }
-//     return rdm_full;
-// }
 
 np_tensor4 CISigmaBuilder::compute_sf_2cumulant(np_vector C_left, np_vector C_right) const {
     // Compute the spin-free 1-RDM

@@ -60,7 +60,7 @@ np_matrix_complex RelCISigmaBuilder::compute_1rdm(np_vector_complex C_left,
                 for (const auto& [sign, I, J] : vo_list) {
                     // Compute the RDM element contribution
                     for (size_t idx{0}; idx != maxL; ++idx) {
-                        rdm_element += sign * tr[I * maxL + idx] * std::conj(tl[J * maxL + idx]);
+                        rdm_element += sign * std::conj(tl[J * maxL + idx]) * tr[I * maxL + idx];
                     }
                 }
                 rdm_view(p, q) += rdm_element;
@@ -107,7 +107,7 @@ np_tensor4_complex RelCISigmaBuilder::compute_2rdm(np_vector_complex C_left,
             if (lists_.block_size(nI) == 0)
                 continue;
 
-            auto tr = gather_block(Cl_span, TR, spin, lists_, class_Ia, class_Ib);
+            auto tl = gather_block(Cl_span, TL, spin, lists_, class_Ia, class_Ib);
 
             for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
                 // The string class on which we don't act must be the same for I and J
@@ -121,20 +121,20 @@ np_tensor4_complex RelCISigmaBuilder::compute_2rdm(np_vector_complex C_left,
                                                    : alfa_address->strpcls(class_Ia);
                 if (maxL > 0) {
                     // Get a pointer to the correct block of matrix C
-                    auto tl = gather_block(Cr_span, TL, spin, lists_, class_Ja, class_Jb);
+                    auto tr = gather_block(Cr_span, TR, spin, lists_, class_Ja, class_Jb);
                     for (size_t K{0}; K < maxK; ++K) {
-                        auto& Krlist = is_alpha(spin)
+                        auto& Kllist = is_alpha(spin)
                                            ? lists_.get_alfa_2h_list(class_K, K, class_Ia)
                                            : lists_.get_beta_2h_list(class_K, K, class_Ib);
-                        auto& Kllist = is_alpha(spin)
+                        auto& Krlist = is_alpha(spin)
                                            ? lists_.get_alfa_2h_list(class_K, K, class_Ja)
                                            : lists_.get_beta_2h_list(class_K, K, class_Jb);
-                        for (const auto& [sign_K, p, q, I] : Krlist) {
+                        for (const auto& [sign_K, p, q, I] : Kllist) {
                             const size_t pq_index = pair_index_gt(p, q);
-                            for (const auto& [sign_L, r, s, J] : Kllist) {
+                            for (const auto& [sign_L, r, s, J] : Krlist) {
                                 const size_t rs_index = pair_index_gt(r, s);
                                 const std::complex<double> rdm_element =
-                                    dot(maxL, tr.data() + I * maxL, 1, tl.data() + J * maxL, 1);
+                                    dot(maxL, tl.data() + I * maxL, 1, tr.data() + J * maxL, 1);
                                 rdm_data[pq_index * npairs + rs_index] +=
                                     static_cast<std::complex<double>>(sign_K * sign_L) *
                                     rdm_element;
@@ -207,7 +207,7 @@ np_tensor6_complex RelCISigmaBuilder::compute_3rdm(np_vector_complex C_left,
             if (lists_.block_size(nI) == 0)
                 continue;
 
-            auto tr = gather_block(Cl_span, TR, spin, lists_, class_Ia, class_Ib);
+            auto tl = gather_block(Cl_span, TL, spin, lists_, class_Ia, class_Ib);
 
             for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
                 // The string class on which we don't act must be the same for I and J
@@ -222,21 +222,21 @@ np_tensor6_complex RelCISigmaBuilder::compute_3rdm(np_vector_complex C_left,
 
                 if (maxL > 0) {
                     // Get a pointer to the correct block of matrix C
-                    auto tl = gather_block(Cr_span, TL, spin, lists_, class_Ja, class_Jb);
+                    auto tr = gather_block(Cr_span, TR, spin, lists_, class_Ja, class_Jb);
 
                     for (size_t K{0}; K < maxK; ++K) {
-                        auto& Krlist = is_alpha(spin)
+                        auto& Kllist = is_alpha(spin)
                                            ? lists_.get_alfa_3h_list(class_K, K, class_Ia)
                                            : lists_.get_beta_3h_list(class_K, K, class_Ib);
-                        auto& Kllist = is_alpha(spin)
+                        auto& Krlist = is_alpha(spin)
                                            ? lists_.get_alfa_3h_list(class_K, K, class_Ja)
                                            : lists_.get_beta_3h_list(class_K, K, class_Jb);
-                        for (const auto& [sign_K, p, q, r, I] : Krlist) {
+                        for (const auto& [sign_K, p, q, r, I] : Kllist) {
                             const size_t pqr_index = triplet_index_gt(p, q, r);
-                            for (const auto& [sign_L, s, t, u, J] : Kllist) {
+                            for (const auto& [sign_L, s, t, u, J] : Krlist) {
                                 const size_t stu_index = triplet_index_gt(s, t, u);
                                 const std::complex<double> rdm_element =
-                                    dot(maxL, tr.data() + I * maxL, 1, tl.data() + J * maxL, 1);
+                                    dot(maxL, tl.data() + I * maxL, 1, tr.data() + J * maxL, 1);
                                 rdm_data[pqr_index * ntriplets + stu_index] +=
                                     static_cast<std::complex<double>>(sign_K * sign_L) *
                                     rdm_element;
