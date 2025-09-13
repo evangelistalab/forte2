@@ -79,7 +79,7 @@ np_tensor4_complex RelCISigmaBuilder::compute_2rdm(np_vector_complex C_left,
 
     // if there are less than two orbitals or two electrons, return an empty matrix
     if (norb < 2 || na < 2) {
-        return make_zeros<nb::numpy, std::complex<double>, 4>({0, 0, 0, 0});
+        return make_zeros<nb::numpy, std::complex<double>, 4>({norb, norb, norb, norb});
     }
 
     // calculate the number of pairs of orbitals p > q
@@ -182,7 +182,7 @@ np_tensor6_complex RelCISigmaBuilder::compute_3rdm(np_vector_complex C_left,
 
     // if there are less than three orbitals or 3 electrons, return an empty matrix
     if (norb < 3 || na < 3) {
-        return make_zeros<nb::numpy, std::complex<double>, 6>({0, 0, 0, 0, 0, 0});
+        return make_zeros<nb::numpy, std::complex<double>, 6>({norb, norb, norb, norb, norb, norb});
     }
 
     const size_t ntriplets = (norb * (norb - 1) * (norb - 2)) / 6;
