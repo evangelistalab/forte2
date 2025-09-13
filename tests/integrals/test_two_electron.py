@@ -39,14 +39,3 @@ H                     0.000000000000     0.711620616370     0.489330954643
     assert V[0, 3, 1, 5] == approx(0.004687753192919011)
     assert V[1, 0, 6, 2] == approx(0.056745507084677765)
     assert V[0, 5, 5, 3] == approx(0.012314281459575225)
-
-
-def test_two_electron_integrals_timing():
-    xyz = """
-O  0.000000000000  0.000000000000 -0.116529200700
-H  0.000000000000 -1.344768070168  0.924701488984
-H  0.000000000000  1.344768070168  0.924701488984
-"""
-
-    system = forte2.System(xyz=xyz, basis_set="cc-pvqz")
-    V = forte2.ints.coulomb_4c(system.basis)

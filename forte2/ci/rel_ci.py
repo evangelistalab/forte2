@@ -1,23 +1,23 @@
 from dataclasses import dataclass, field
+from collections import OrderedDict
 import numpy as np
 
 from forte2 import (
-    RelSlaterRules,
+    RelCISigmaBuilder,
     SparseState,
-    SparseOperator,
     CIStrings,
-    overlap,
     apply_op,
     sparse_operator_hamiltonian,
 )
 from forte2.state import State, MOSpace
-from forte2.base_classes import ActiveSpaceSolver
+from forte2.base_classes import RelActiveSpaceSolver
 from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 from forte2.jkbuilder import SpinorbitalIntegrals
 from forte2.orbitals import Semicanonicalizer
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
 from forte2.helpers import logger
 from forte2.helpers.comparisons import approx
+from forte2.props import get_1e_property
 from .ci_utils import (
     pretty_print_gas_info,
     pretty_print_ci_summary,
@@ -39,7 +39,7 @@ class _RelCIBase:
     die_if_not_converged: bool = False
 
     ### Sigma builder parameters
-    ci_algorithm: str = "sparse"
+    ci_algorithm: str = "hz"
 
     ### Davidson-Liu parameters
     guess_per_root: int = 2
@@ -88,21 +88,24 @@ class _RelCIBase:
 
         self.dets = self.ci_strings.make_determinants()
 
+        if self.ci_algorithm == "hz":
+            self.sigma_det = np.zeros((self.ndet,), dtype=complex)
+            self.b_det = np.zeros((self.ndet,), dtype=complex)
+
     def run(self):
         if self.first_run:
             self._ci_solver_startup()
 
-        self.slater_rules = RelSlaterRules(
-            nspinor=self.norb,
-            scalar_energy=self.ints.E.real,
-            one_electron_integrals=self.ints.H,
-            two_electron_integrals=self.ints.V,
+        self.ci_sigma_builder = RelCISigmaBuilder(
+            self.ci_strings, self.ints.E.real, self.ints.H, self.ints.V, self.log_level
         )
 
         if self.ci_algorithm == "exact":
             self._do_exact_diagonalization()
         elif self.ci_algorithm == "sparse":
-            self._do_iterative_ci()
+            self._do_sparse_ci()
+        elif self.ci_algorithm == "hz":
+            self._do_hz_ci()
 
         self.E = self.evals
         for i, e in enumerate(self.evals):
@@ -116,7 +119,64 @@ class _RelCIBase:
 
         return self
 
-    def _do_iterative_ci(self):
+    def _do_hz_ci(self):
+        self.ci_sigma_builder.set_memory(self.ci_builder_memory)
+        self.ci_sigma_builder.set_algorithm("hz")
+        Hdiag = self.ci_sigma_builder.form_Hdiag(self.dets)
+
+        if self.ndet == 1:
+            self.evals = np.array([Hdiag[0]])
+            self.evecs = np.ones((1, 1))
+            logger.log(
+                f"Final CI Energy Root {0}: {self.evals[0]:20.12f} [Eh]", self.log_level
+            )
+            self.executed = True
+            return self
+
+        if self.eigensolver is None:
+            self.eigensolver = DavidsonLiuSolver(
+                size=self.ndet,
+                nroot=self.nroot,
+                collapse_per_root=self.collapse_per_root,
+                basis_per_root=self.basis_per_root,
+                e_tol=self.econv,
+                r_tol=self.rconv,
+                maxiter=self.maxiter,
+                eta=self.energy_shift,
+                log_level=self.log_level,
+                dtype=complex,
+            )
+        self.eigensolver.add_h_diag(Hdiag)
+
+        if self.first_run:
+            self._build_guess_vectors(Hdiag)
+            self.first_run = False
+
+        def sigma_builder(Bblock, Sblock):
+            # Compute the sigma block from the basis block
+            ncols = Bblock.shape[1]
+            for i in range(ncols):
+                self.b_det = Bblock[:, i].copy()
+                self.ci_sigma_builder.Hamiltonian(self.b_det, self.sigma_det)
+                Sblock[:, i] = self.sigma_det.copy()
+
+        self.eigensolver.add_sigma_builder(sigma_builder)
+
+        # 6. Run Davidson
+        self.evals, self.evecs = self.eigensolver.solve()
+
+        if self.eigensolver.converged:
+            logger.log("\nDavidson-Liu solver converged.\n", self.log_level)
+        else:
+            if self.die_if_not_converged:
+                raise RuntimeError("Davidson-Liu solver did not converge.")
+            else:
+                logger.log(
+                    f"\nDavidson-Liu solver did not converge in {self.eigensolver.maxiter} iterations.\n",
+                    self.log_level,
+                )
+
+    def _do_sparse_ci(self):
         if self.eigensolver is None:
             self.eigensolver = DavidsonLiuSolver(
                 size=self.ndet,
@@ -131,9 +191,7 @@ class _RelCIBase:
                 dtype=complex,
             )
 
-        Hdiag = []
-        for i in self.dets:
-            Hdiag.append(self.slater_rules.energy(i))
+        Hdiag = self.ci_sigma_builder.form_Hdiag(self.dets)
 
         if self.ndet == 1:
             self.evals = np.array([Hdiag[0]])
@@ -182,7 +240,7 @@ class _RelCIBase:
         H = np.zeros((self.ndet,) * 2, dtype=complex)
         for i in range(self.ndet):
             for j in range(i + 1):
-                H[i, j] = self.slater_rules.slater_rules(self.dets[i], self.dets[j])
+                H[i, j] = self.ci_sigma_builder.slater_rules(self.dets, i, j)
                 H[j, i] = np.conj(H[i, j])
 
         self.evals, self.evecs = np.linalg.eigh(H)
@@ -209,7 +267,7 @@ class _RelCIBase:
         for i, I in enumerate(indices):
             for j, J in enumerate(indices):
                 if i >= j:
-                    Hij = self.slater_rules.slater_rules(self.dets[I], self.dets[J])
+                    Hij = self.ci_sigma_builder.slater_rules(self.dets, I, J)
                     Hguess[i, j] = Hij
                     Hguess[j, i] = np.conj(Hij)
 
@@ -310,48 +368,104 @@ class _RelCIBase:
         self.ints.V = tei
 
     def make_1rdm(self, left_root: int, right_root: int = None):
-        rdm = np.zeros((self.norb, self.norb), dtype=complex)
-        psil = SparseState({d: c for d, c in zip(self.dets, self.evecs[:, left_root])})
         if right_root is None:
-            psir = psil
-        else:
-            psir = SparseState(
-                {d: c for d, c in zip(self.dets, self.evecs[:, right_root])}
-            )
-        for p in range(self.norb):
-            for q in range(self.norb):
-                op = SparseOperator()
-                op.add([p], [], [q], [])
-                rdm[p, q] = overlap(psil, apply_op(op, psir, screen_thresh=1e-100))
+            right_root = left_root
+        # copy to ensure contiguous arrays are passed to the sigma builder
+        rdm = self.ci_sigma_builder.so_1rdm(
+            self.evecs[:, left_root].copy(),
+            self.evecs[:, right_root].copy(),
+        )
 
         return rdm
+
+    def make_1rdm_debug(self, left_root: int, right_root: int = None):
+        if right_root is None:
+            right_root = left_root
+        # copy to ensure contiguous arrays are passed to the sigma builder
+        rdm = self.ci_sigma_builder.so_1rdm_debug(
+            self.evecs[:, left_root].copy(),
+            self.evecs[:, right_root].copy(),
+        )
+
+        return rdm
+
+    def make_2rdm_debug(self, left_root: int, right_root: int = None):
+        if right_root is None:
+            right_root = left_root
+        # copy to ensure contiguous arrays are passed to the sigma builder
+        rdm = self.ci_sigma_builder.so_2rdm_debug(
+            self.evecs[:, left_root].copy(),
+            self.evecs[:, right_root].copy(),
+        )
+
+        return rdm
+
+    def make_2cumulant(self, left_root: int, right_root: int = None):
+        if right_root is None:
+            right_root = left_root
+        lambda2 = self.ci_sigma_builder.so_2cumulant(
+            self.evecs[:, left_root].copy(),
+            self.evecs[:, right_root].copy(),
+        )
+        return lambda2
 
     def make_2rdm(self, left_root: int, right_root: int = None):
-        rdm = np.zeros((self.norb, self.norb, self.norb, self.norb), dtype=complex)
-        psil = SparseState({d: c for d, c in zip(self.dets, self.evecs[:, left_root])})
         if right_root is None:
-            psir = psil
-        else:
-            psir = SparseState(
-                {d: c for d, c in zip(self.dets, self.evecs[:, right_root])}
-            )
-        for p in range(self.norb):
-            for q in range(p):
-                for r in range(self.norb):
-                    for s in range(r):
-                        op = SparseOperator()
-                        op.add([p, q], [], [r, s], [])
-                        element = overlap(psil, apply_op(op, psir))
-                        rdm[p, q, r, s] = element
-                        rdm[q, p, r, s] = -element
-                        rdm[p, q, s, r] = -element
-                        rdm[q, p, s, r] = element
+            right_root = left_root
+        # copy to ensure contiguous arrays are passed to the sigma builder
+        rdm = self.ci_sigma_builder.so_2rdm(
+            self.evecs[:, left_root].copy(),
+            self.evecs[:, right_root].copy(),
+        )
 
         return rdm
+
+    def make_2cumulant_debug(self, left_root: int, right_root: int = None):
+        if right_root is None:
+            right_root = left_root
+        rdm1 = self.make_1rdm(left_root, right_root)
+        rdm2 = self.make_2rdm(left_root, right_root)
+        lambda2 = (
+            rdm2
+            - np.einsum("pr,qs->pqrs", rdm1, rdm1, optimize=True)
+            + np.einsum("ps,qr->pqrs", rdm1, rdm1, optimize=True)
+        )
+        return lambda2
+
+    def make_3rdm_debug(self, left_root: int, right_root: int = None):
+        if right_root is None:
+            right_root = left_root
+        # copy to ensure contiguous arrays are passed to the sigma builder
+        rdm = self.ci_sigma_builder.so_3rdm_debug(
+            self.evecs[:, left_root].copy(),
+            self.evecs[:, right_root].copy(),
+        )
+
+        return rdm
+
+    def make_3rdm(self, left_root: int, right_root: int = None):
+        if right_root is None:
+            right_root = left_root
+        # copy to ensure contiguous arrays are passed to the sigma builder
+        rdm = self.ci_sigma_builder.so_3rdm(
+            self.evecs[:, left_root].copy(),
+            self.evecs[:, right_root].copy(),
+        )
+
+        return rdm
+
+    def make_3cumulant(self, left_root: int, right_root: int = None):
+        if right_root is None:
+            right_root = left_root
+        lambda3 = self.ci_sigma_builder.so_3cumulant(
+            self.evecs[:, left_root].copy(),
+            self.evecs[:, right_root].copy(),
+        )
+        return lambda3
 
 
 @dataclass
-class RelCISolver(ActiveSpaceSolver):
+class RelCISolver(RelActiveSpaceSolver):
     """
     Relativistic Configuration Interaction
     """
@@ -460,6 +574,55 @@ class RelCISolver(ActiveSpaceSolver):
         for ci_solver in self.sub_solvers:
             nos.append(ci_solver.compute_natural_occupation_numbers())
         self.nat_occs = np.concatenate(nos, axis=1)
+
+    def compute_transition_properties(self, C=None):
+        """
+        Compute the transition dipole moments and oscillator strengths from the spin-free 1-TDMs.
+        The results are stored in `self.tdm_per_solver` and `self.fosc_per_solver`.
+        """
+        if not self.executed:
+            raise RuntimeError("CI solver has not been executed yet.")
+
+        if C is None:
+            C = self.C[0]
+
+        Cact = C[:, self.active_indices]
+        Ccore = C[:, self.core_indices]
+        rdm_core = np.einsum("pi,qi->pq", Ccore, Ccore.conj(), optimize=True)
+        # this includes nuclear dipole contribution
+        core_dip = get_1e_property(
+            self.system, rdm_core, property_name="dipole", unit="au"
+        )
+        self.tdm_per_solver = []
+        self.fosc_per_solver = []
+
+        for ici, ci_solver in enumerate(self.sub_solvers):
+            tdmdict = OrderedDict()
+            foscdict = OrderedDict()
+            for i in range(ci_solver.nroot):
+                rdm = ci_solver.make_1rdm(i)
+                # Different (back-)transformation rules for RDMs:
+                # O_{mu}^{nu} = C_{mu}^p <phi_p|O|phi^q> C^q_{nu} = C^H O[mo] C
+                # rdm^{mu}_{nu} = C^{mu}_p <a^p a_q> C^q_{nu} = C^* rdm[mo] C^T
+                rdm = np.einsum("ij,pi,qj->pq", rdm, Cact.conj(), Cact, optimize=True)
+                dip = get_1e_property(
+                    self.system, rdm, property_name="electric_dipole", unit="au"
+                )
+                tdmdict[(i, i)] = dip + core_dip
+                foscdict[(i, i)] = 0.0  # No oscillator strength for i->i transitions
+                for j in range(i + 1, ci_solver.nroot):
+                    tdm = ci_solver.make_1rdm(i, j)
+                    tdm = np.einsum(
+                        "ij,pi,qj->pq", tdm, Cact.conj(), Cact, optimize=True
+                    )
+                    tdip = get_1e_property(
+                        self.system, tdm, property_name="electric_dipole", unit="au"
+                    )
+                    tdmdict[(i, j)] = tdip
+                    vte = self.evals_per_solver[ici][j] - self.evals_per_solver[ici][i]
+                    foscdict[(i, j)] = (2 / 3) * vte * np.linalg.norm(tdip) ** 2
+            self.fosc_per_solver.append(foscdict)
+            self.tdm_per_solver.append(tdmdict)
 
     def get_top_determinants(self, n=5):
         """
@@ -576,11 +739,11 @@ class RelCI(RelCISolver):
         top_dets = self.get_top_determinants()
         pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
 
-        # if self.do_transition_dipole:
-        #     self.compute_transition_properties()
-        #     pretty_print_ci_transition_props(
-        #         self.sa_info,
-        #         self.tdm_per_solver,
-        #         self.fosc_per_solver,
-        #         self.evals_per_solver,
-        #     )
+        if self.do_transition_dipole:
+            self.compute_transition_properties()
+            pretty_print_ci_transition_props(
+                self.sa_info,
+                self.tdm_per_solver,
+                self.fosc_per_solver,
+                self.evals_per_solver,
+            )

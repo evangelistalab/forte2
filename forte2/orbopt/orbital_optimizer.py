@@ -51,6 +51,10 @@ class MCOptimizer(ActiveSpaceSolver):
         Gradient convergence tolerance.
     die_if_not_converged : bool, optional, default=True
         If True, raises an error if the optimization does not converge.
+    optimize_frozen_orbs : bool, optional, default=True
+        Whether to optimize the frozen orbitals.
+    freeze_inter_gas_rots : bool, optional, default=False
+        Whether to freeze inter-GAS orbital rotations when multiple GASes are defined.
     micro_maxiter : int, optional, default=6
         Maximum number of microiterations for L-BFGS.
     ci_maxiter : int, optional, default=50
@@ -78,6 +82,7 @@ class MCOptimizer(ActiveSpaceSolver):
 
     active_frozen_orbitals: list[int] = None
     optimize_frozen_orbs: bool = True
+    freeze_inter_gas_rots: bool = False
 
     ### Macroiteration parameters
     maxiter: int = 50
@@ -176,7 +181,8 @@ class MCOptimizer(ActiveSpaceSolver):
             self.Hcore,
             self.system.nuclear_repulsion,
             self.nrr,
-            gas_ref=self.mo_space.ngas > 1,
+            compute_active_hessian=self.mo_space.ngas > 1
+            and not self.freeze_inter_gas_rots,
         )
 
         self.ci_solver = CISolver(
@@ -271,7 +277,7 @@ class MCOptimizer(ActiveSpaceSolver):
             # if diis has performed extrapolation
             if "E" in diis.status:
                 # orb_opt.evaluate updates the 1 and 2-electron integrals for CI
-                _ = self.orb_opt.evaluate(R, self.lbfgs_solver.g, do_g=False)
+                _ = self.orb_opt.evaluate(R)
 
             # 4. Optimize CI expansion at fixed orbitals
             self.ci_solver.set_ints(
@@ -388,7 +394,7 @@ class MCOptimizer(ActiveSpaceSolver):
             _virt = self.mo_space.virt
 
         # GASn-GASm rotations
-        if self.mo_space.ngas > 1:
+        if self.mo_space.ngas > 1 and not self.freeze_inter_gas_rots:
             for i in range(self.mo_space.ngas):
                 for j in range(i + 1, self.mo_space.ngas):
                     nrr[self.mo_space.gas[j], self.mo_space.gas[i]] = True
@@ -452,7 +458,7 @@ class OrbOptimizer:
         hcore: np.ndarray,
         e_nuc: float,
         nrr: np.ndarray,
-        gas_ref: bool = False,
+        compute_active_hessian: bool = False,
     ):
         self.core, self.actv, self.virt = extents
         self.C = C
@@ -468,7 +474,7 @@ class OrbOptimizer:
         self.nrr = nrr
         self.nrot = self.nrr.sum()
         self.e_nuc = e_nuc
-        self.gas_ref = gas_ref
+        self.compute_active_hessian = compute_active_hessian
 
         # the skew-hermitian rotation matrix, C_current = C_0 @ exp(R)
         self.R = np.zeros(self.nrot, dtype=float)
@@ -492,7 +498,7 @@ class OrbOptimizer:
         """
         return self.eri_gaaa[self.actv, ...]
 
-    def evaluate(self, x, g, do_g=True):
+    def evaluate(self, x):
         do_update_integrals = self._update_orbitals(x)
         if do_update_integrals:
             self._compute_Fcore()
@@ -500,11 +506,12 @@ class OrbOptimizer:
 
         E_orb = self._compute_reference_energy()
 
-        if do_g:
-            grad = self._compute_orbgrad()
-            g = self._mat_to_vec(grad)
+        return E_orb
 
-        return E_orb, g
+    def gradient(self, x):
+        grad = self._compute_orbgrad()
+        g = self._mat_to_vec(grad)
+        return g
 
     def hess_diag(self, x):
         hess = self._compute_orbhess()
@@ -627,7 +634,7 @@ class OrbOptimizer:
         )
 
         # if GAS: compute active-active block [see SI of J. Chem. Phys. 152, 074102 (2020)]
-        if self.gas_ref:
+        if self.compute_active_hessian:
             eri_actv = self.get_active_space_ints()
             # A. G^{uu}_{vv}
             Guu_ = np.einsum("uxuy,vvxy->uv", eri_actv, self.g2)

@@ -1,7 +1,4 @@
-import pytest
-import numpy as np
-
-from forte2 import System, RHF, MCOptimizer, AVAS, State
+from forte2 import System, RHF, MCOptimizer, State
 from forte2.helpers.comparisons import approx
 
 

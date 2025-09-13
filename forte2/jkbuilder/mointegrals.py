@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 
 import numpy as np
-import scipy as sp
 from numpy.typing import NDArray
 
 from forte2.jkbuilder.jkbuilder import FockBuilder

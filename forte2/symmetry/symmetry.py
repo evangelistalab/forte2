@@ -173,8 +173,6 @@ def assign_irrep_labels(point_group, U_ops, S, C):
     """
     Assigns the MO irrep labels in `point_group` by matching the character vectors to their expected values.
     """
-    ops_order = _SYMMETRY_OPS[point_group]
-
     # Compute character vector for each orbital in all symmetry ops
     chars = characters(S, C, U_ops)
 

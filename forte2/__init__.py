@@ -2,7 +2,7 @@ from ._forte2 import *
 from ._forte2 import ints
 from ._forte2.ints import Basis, Shell
 from .system import System, ModelSystem, HubbardModel
-from .state import State, MOSpace
+from .state import State, RelState, MOSpace
 from .scf import RHF, ROHF, UHF, CUHF, GHF
 from .ci import CI
 from .x2c import x2c

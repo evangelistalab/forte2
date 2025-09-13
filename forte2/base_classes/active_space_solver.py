@@ -114,3 +114,21 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
         elif provided_via_parent:
             MOSpaceMixin.copy_from_upstream(self, self.parent_method)
             return
+
+
+@dataclass
+class RelActiveSpaceSolver(ActiveSpaceSolver):
+    nel: int = None
+    states: State | list[State] = None
+
+    def __post_init__(self):
+        if self.nel is None and self.states is None:
+            raise ValueError("Either nel or states must be provided.")
+        if self.nel is not None and self.states is not None:
+            raise ValueError("Only one of nel or states can be provided.")
+        if self.nel is not None:
+            mult = 1 if self.nel % 2 == 0 else 2
+            ms = 0.0 if mult == 1 else 0.5
+            self.states = State(nel=self.nel, multiplicity=mult, ms=ms)
+
+        super().__post_init__()

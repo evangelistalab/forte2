@@ -221,7 +221,7 @@ class DavidsonLiuSolver:
 
         logger.log(
             ("=" * 64)
-            + f"\nIter                 ⟨E⟩             max(ΔE)        max(r) basis\n"
+            + "\nIter                 ⟨E⟩             max(ΔE)        max(r) basis\n"
             + ("-" * 64),
             self.log_level,
         )

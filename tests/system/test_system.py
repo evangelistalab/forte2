@@ -12,7 +12,6 @@ def test_system():
     """
 
     system = System(xyz=xyz, basis_set="cc-pvdz")
-    system_large_basis = System(xyz=xyz, basis_set="cc-pvdz")
     print(system)
 
     S = ints.overlap(system.basis)

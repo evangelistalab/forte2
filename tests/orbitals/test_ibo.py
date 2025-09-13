@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 
 from forte2 import System, RHF
 from forte2.orbitals.iao import IBO

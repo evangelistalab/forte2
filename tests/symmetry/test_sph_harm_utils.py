@@ -3,15 +3,32 @@ import numpy as np
 from forte2.symmetry.sph_harm_utils import sph_real_to_complex, clebsh_gordan_spin_half
 from forte2.helpers.comparisons import approx
 
+
 def test_sph_real_to_complex():
     for i in range(10):
         U = sph_real_to_complex(i)
         assert U.shape == (2 * i + 1, 2 * i + 1)
         # every column/row should have norm 1
-        assert all(np.isclose(np.linalg.norm(U[:, _], ord=2), 1.0, rtol=0, atol=1e-12) for _ in range(2 * i + 1))
+        assert all(
+            np.isclose(np.linalg.norm(U[:, _], ord=2), 1.0, rtol=0, atol=1e-12)
+            for _ in range(2 * i + 1)
+        )
+
 
 def test_sph_real_to_complex_p():
     U = sph_real_to_complex(1)
+    U_ref = (
+        np.array(
+            [
+                [np.sqrt(2) * 1.0j, 0, -np.sqrt(2)],
+                [0, 2, 0],
+                [np.sqrt(2) * 1.0j, 0, np.sqrt(2)],
+            ]
+        )
+        / 2
+    )
+    assert np.allclose(U, U_ref, rtol=0, atol=1e-12)
+
 
 def test_clebsh_gordan_spin_half():
     # l = 0
