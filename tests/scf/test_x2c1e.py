@@ -4,7 +4,7 @@ from forte2 import System
 from forte2.scf import RHF, GHF, UHF
 from forte2.helpers.comparisons import approx
 from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
-from forte2.system.atom_data import EH_TO_WN
+from forte2.system.atom_data import EH_TO_WN, EH_TO_EV
 
 
 def test_sfx2c1e():
@@ -124,3 +124,19 @@ def test_so_from_sf_water():
     scf_so.C = convert_coeff_spatial_to_spinor(system, scf.C)
     scf_so.run()
     assert scf_so.E == approx(eghf)
+
+
+def test_sox2c1e_sc():
+    l23_ref = 4.395077285344983
+    xyz = """Sc 0 0 0"""
+    system = System(
+        xyz=xyz,
+        basis_set="sapporo-dkh3-dzp-2012-diffuse",
+        auxiliary_basis_set="def2-universal-jkfit",
+        x2c_type="so",
+        snso_type="row-dependent",
+    )
+    scf = GHF(charge=3)(system)
+    scf.run()
+    l23_splitting = EH_TO_EV * (scf.eps[0][6] - scf.eps[0][5])
+    assert l23_splitting == pytest.approx(l23_ref, abs=1e-5)

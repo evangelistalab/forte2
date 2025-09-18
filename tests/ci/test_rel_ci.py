@@ -98,8 +98,6 @@ def test_rel_ci_hf_transition_dipole_equivalence_to_rhf():
         basis_set="cc-pvdz",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         unit="bohr",
-        # reorient=False,
-        # x2c_type="so",
     )
     scf = GHF(charge=0)(system)
     ci = RelCI(
@@ -146,6 +144,7 @@ def test_rel_ci_hf_transition_dipole_ghf():
     assert ci.E[0] == approx(-100.10065023157668)
     assert ci.E[1] == approx(-99.7875319545)
     assert ci.E[3] == approx(-99.7866432345)
+
     assert np.abs(ci.tdm_per_solver[0][(0, 0)]) == pytest.approx(
         [0.0, 0.0, 7.54972929e-01], abs=1e-7
     )

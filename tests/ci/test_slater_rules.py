@@ -4,7 +4,7 @@ import forte2
 from forte2 import System, RHF
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers.comparisons import approx
-from forte2.ci.rel_ci import _RelCIBase
+from forte2.ci.ci import _CIBase
 from forte2.state import MOSpace, State
 
 
@@ -236,7 +236,7 @@ def test_slater_rules_3_complex():
     fakeints.V = h2
     mo_space = MOSpace(nmo=norb, active_orbitals=list(range(norb)))
     state = State(nel=8, multiplicity=1, ms=0.0)
-    ci = _RelCIBase(
+    ci = _CIBase(
         mo_space=mo_space,
         state=state,
         ints=fakeints,
@@ -245,6 +245,7 @@ def test_slater_rules_3_complex():
         maxiter=200,
         do_test_rdms=True,
         ci_algorithm="hz",
+        two_component=True,
     )
     ci.run()
 
