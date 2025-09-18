@@ -228,6 +228,7 @@ def _apply_snso_scaling(ints, basis, atoms, snso_type):
         li = int(basis[ishell].l)
         if li == 0:
             iptr += isize
+            jptr = 0
             continue
         Zi = atoms[center_given_shell(ishell)][0]
         if isinstance(Ql, dict):

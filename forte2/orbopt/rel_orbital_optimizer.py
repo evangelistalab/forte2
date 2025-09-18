@@ -95,7 +95,7 @@ class RelMCOptimizer(RelActiveSpaceSolver):
     max_rotation: float = 0.2
 
     ### CI solver parameters
-    ci_algorithm: str = "sparse"
+    ci_algorithm: str = "hz"
     ci_maxiter: int = 50
 
     ### DIIS parameters
@@ -196,7 +196,7 @@ class RelMCOptimizer(RelActiveSpaceSolver):
             nroots=self.sa_info.nroots,
             weights=self.sa_info.weights,
             log_level=self.ci_solver_verbosity,
-            ci_algorithm="exact",
+            ci_algorithm=self.ci_algorithm,
         )(self.parent_method)
         # iteration 0: one step of CI optimization to bootsrap the orbital optimization
         self.iter = 0

@@ -470,7 +470,7 @@ class RelCISolver(RelActiveSpaceSolver):
     Relativistic Configuration Interaction
     """
 
-    ci_algorithm: str = "sparse"
+    ci_algorithm: str = "hz"
 
     ### Davidson-Liu parameters
     guess_per_root: int = 2
