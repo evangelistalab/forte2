@@ -3,12 +3,14 @@
 #include <nanobind/stl/array.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/pair.h>
+#include <nanobind/stl/complex.h>
 #include <nanobind/ndarray.h>
 
 #include "ci/ci_strings.h"
 #include "ci/ci_string_address.h"
 #include "ci/ci_sigma_builder.h"
 #include "ci/ci_spin_adapter.h"
+#include "ci/rel_ci_sigma_builder.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -145,4 +147,34 @@ void export_ci_spin_adapter_api(nb::module_& m) {
              "Set the logging level for the class");
     // .def("ndet", &CISpinAdapter::ndet);
 }
+
+void export_rel_ci_sigma_builder_api(nb::module_& m) {
+    nb::class_<RelCISigmaBuilder>(m, "RelCISigmaBuilder")
+        .def(nb::init<const CIStrings&, double, np_matrix_complex&, np_tensor4_complex&, int>(),
+             "lists"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3,
+             "Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals")
+        .def("set_algorithm", &RelCISigmaBuilder::set_algorithm, "algorithm"_a,
+             "Set the sigma build algorithm (options = kh, hz)")
+        .def("get_algorithm", &RelCISigmaBuilder::get_algorithm,
+             "Get the current sigma build algorithm")
+        .def("set_memory", &RelCISigmaBuilder::set_memory, "memory"_a,
+             "Set the memory limit for the builder (in MB)")
+        .def("form_Hdiag", &RelCISigmaBuilder::form_Hdiag, "dets"_a)
+        .def("slater_rules", &RelCISigmaBuilder::slater_rules, "dets"_a, "I"_a, "J"_a)
+        .def("Hamiltonian", &RelCISigmaBuilder::Hamiltonian, "basis"_a, "sigma"_a)
+        .def("so_1rdm", &RelCISigmaBuilder::compute_1rdm, "C_left"_a, "C_right"_a,
+             "Compute the spin-orbital one-electron reduced density matrix")
+        .def("so_2rdm", &RelCISigmaBuilder::compute_2rdm, "C_left"_a, "C_right"_a,
+             "Compute the spin-orbital two-electron reduced density matrix")
+        .def("so_2cumulant", &RelCISigmaBuilder::compute_2cumulant, "C_left"_a, "C_right"_a,
+             "Compute the spin-orbital two-electron cumulant")
+        .def("so_3rdm", &RelCISigmaBuilder::compute_3rdm, "C_left"_a, "C_right"_a,
+             "Compute the spin-orbital three-electron reduced density matrix")
+        .def("so_3cumulant", &RelCISigmaBuilder::compute_3cumulant, "C_left"_a, "C_right"_a,
+             "Compute the spin-orbital three-electron cumulant")
+        .def("so_1rdm_debug", &RelCISigmaBuilder::compute_1rdm_debug, "C_left"_a, "C_right"_a)
+        .def("so_2rdm_debug", &RelCISigmaBuilder::compute_2rdm_debug, "C_left"_a, "C_right"_a)
+        .def("so_3rdm_debug", &RelCISigmaBuilder::compute_3rdm_debug, "C_left"_a, "C_right"_a);
+}
+
 } // namespace forte2

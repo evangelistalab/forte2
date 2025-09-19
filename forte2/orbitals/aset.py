@@ -64,7 +64,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
 
     def __call__(self, parent_method):
         assert isinstance(
-            parent_method, forte2.orbopt.MCOptimizer
+            parent_method, forte2.mcopt.MCOptimizer
         ), f"Parent method must be MCSCF, got {type(parent_method)}"
         self.parent_method = parent_method
         return self
@@ -315,11 +315,11 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         # # Semi-canonicalize the blocks
         if not self.semicanonicalize_active:
             logger.log_info1(
-                f"\nSkipping semicanonicalization of active space orbitals."
+                "\nSkipping semicanonicalization of active space orbitals."
             )
         if not self.semicanonicalize_frozen:
             logger.log_info1(
-                f"\nSkipping semicanonicalization of frozen core and frozen virtual orbitals."
+                "\nSkipping semicanonicalization of frozen core and frozen virtual orbitals."
             )
 
         frozen_core_inds = self.mo_space.frozen_core_indices

@@ -280,7 +280,6 @@ def test_sparse_operator_fast_product():
     assert C == D
 
     # generate all possible operators with 2 indices in the range [0,1,2,3]
-    operators = []
     A = forte2.SparseOperator()
 
     max_single_index = 6

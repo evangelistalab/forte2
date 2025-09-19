@@ -1,13 +1,12 @@
-from logging import fatal
 import pytest
 
-from forte2 import *
+from forte2 import System, RHF, MCOptimizer, State
 from forte2.helpers.comparisons import approx
 
 
 def test_gasscf_1():
     erhf = -76.05702512779526
-    emcscf = -76.115688424591
+    emcscf = -76.1156924702
 
     xyz = """
     O   0.0000000000  -0.0000000000  -0.0662628033
@@ -19,20 +18,53 @@ def test_gasscf_1():
         xyz=xyz, basis_set="cc-pVTZ", auxiliary_basis_set="def2-universal-jkfit"
     )
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
+    rhf = RHF(charge=0)(system)
 
     mc = MCOptimizer(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[6]),
-        core_orbitals=[0, 1],
-        active_orbitals=[[2, 3, 4], [5, 6, 7]],
-        econv=1e-8,
-        gconv=1e-7,
-        maxiter=500,
+        core_orbitals=2,
+        active_orbitals=(3, 3),
+        freeze_inter_gas_rots=True,
+        do_diis=False,
     )(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
+
+
+def test_gasscf_h2o_core():
+    erhf = -76.05702512779526
+
+    xyz = """
+    O   0.0000000000  -0.0000000000  -0.0662628033
+    H   0.0000000000  -0.7540256101   0.5259060578
+    H  -0.0000000000   0.7530256101   0.5260060578
+    """
+
+    system = System(
+        xyz=xyz, basis_set="cc-pVTZ", auxiliary_basis_set="def2-universal-jkfit"
+    )
+
+    rhf = RHF(charge=0)(system)
+
+    mc = MCOptimizer(
+        states=[
+            State(nel=10, multiplicity=1, ms=0.0, gas_min=[0], gas_max=[1]),
+            State(nel=10, multiplicity=3, ms=1.0, gas_min=[0], gas_max=[1]),
+        ],
+        nroots=[1, 1],
+        weights=[[1.0], [3.0]],
+        core_orbitals=[1],
+        active_orbitals=[[0], [2, 3, 4, 5]],
+        freeze_inter_gas_rots=True,
+        do_diis=False,
+    )(rhf)
+    mc.run()
+
+    assert rhf.E == approx(erhf)
+    assert mc.E_ci[0] == approx(-56.3948123402)
+    assert mc.E_ci[1] == approx(-56.4171164248)
 
 
 def test_gasscf_2():

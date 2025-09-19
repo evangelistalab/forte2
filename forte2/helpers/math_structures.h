@@ -267,19 +267,21 @@ class VectorSpace {
         return result;
     }
 
-    /// @brief Calculate the dot product of two vectors <this|other>Add commentMore actions
+    /// @brief Calculate the dot product of two vectors <this|other>
     F dot(const Derived& other) const {
         F result{0};
         bool self_smaller = size() < other.size();
         const auto& smaller = self_smaller ? elements() : other.elements();
         const auto& larger = self_smaller ? other.elements() : elements();
         if (self_smaller) {
+            // <smaller(self)|larger>
             for (const auto& [e, c] : smaller) {
                 if (const auto it = larger.find(e); it != larger.end()) {
                     result += conjugate(c) * it->second;
                 }
             }
         } else {
+            // <larger(self)|smaller>
             for (const auto& [e, c] : smaller) {
                 if (const auto it = larger.find(e); it != larger.end()) {
                     result += conjugate(it->second) * c;

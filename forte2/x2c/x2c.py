@@ -84,6 +84,10 @@ def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
         hab = h_fw[:nbf, nbf:]
         hba = h_fw[nbf:, :nbf]
         hbb = h_fw[nbf:, nbf:]
+        # the pauli representation of a spin-dependent operator. 
+        # h0 is spin-free, h1-3 are spin-dependent
+        # SNSO is applied to the spin-dependent parts only.
+        # see for example eq 4-6 of 10.1002/wcms.1436
         h0 = (haa + hbb) / 2
         h1 = (hab + hba) / 2
         h2 = (hab - hba) / (-2j)
@@ -223,6 +227,8 @@ def _apply_snso_scaling(ints, basis, atoms, snso_type):
         isize = basis[ishell].size
         li = int(basis[ishell].l)
         if li == 0:
+            iptr += isize
+            jptr = 0
             continue
         Zi = atoms[center_given_shell(ishell)][0]
         if isinstance(Ql, dict):
@@ -233,6 +239,7 @@ def _apply_snso_scaling(ints, basis, atoms, snso_type):
             jsize = basis[jshell].size
             lj = int(basis[jshell].l)
             if lj == 0:
+                jptr += jsize
                 continue
             Zj = atoms[center_given_shell(jshell)][0]
             if isinstance(Ql, dict):

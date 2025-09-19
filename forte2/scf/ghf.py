@@ -130,8 +130,8 @@ class GHF(SCFBase):
         return Daa, Dab, Dba, Dbb
 
     def _build_total_density_matrix(self):
-        Daa, *_, Dbb = self._build_density_matrix()
-        return Daa + Dbb
+        Daa, Dab, Dba, Dbb = self._build_density_matrix()
+        return np.block([[Daa, Dab], [Dba, Dbb]])
 
     def _apply_level_shift(self, F, S):
         if self.level_shift is None or self.level_shift < 1e-4:

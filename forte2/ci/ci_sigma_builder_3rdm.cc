@@ -27,8 +27,8 @@ np_matrix CISigmaBuilder::compute_sss_3rdm(np_vector C_left, np_vector C_right, 
     if ((is_alpha(spin) and (na < 3)) or (is_beta(spin) and (nb < 3)))
         return rdm;
 
-    auto Cl_span = vector::as_span(C_left);
-    auto Cr_span = vector::as_span(C_right);
+    auto Cl_span = vector::as_span<double>(C_left);
+    auto Cr_span = vector::as_span<double>(C_right);
 
     auto rdm_data = rdm.data();
     const auto& alfa_address = lists_.alfa_address();
@@ -46,7 +46,7 @@ np_matrix CISigmaBuilder::compute_sss_3rdm(np_vector C_left, np_vector C_right, 
             if (lists_.block_size(nI) == 0)
                 continue;
 
-            auto tr = gather_block(Cr_span, TR, spin, lists_, class_Ia, class_Ib);
+            auto tl = gather_block(Cl_span, TL, spin, lists_, class_Ia, class_Ib);
 
             for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
                 // The string class on which we don't act must be the same for I and J
@@ -61,21 +61,21 @@ np_matrix CISigmaBuilder::compute_sss_3rdm(np_vector C_left, np_vector C_right, 
 
                 if (maxL > 0) {
                     // Get a pointer to the correct block of matrix C
-                    auto tl = gather_block(Cl_span, TL, spin, lists_, class_Ja, class_Jb);
+                    auto tr = gather_block(Cr_span, TR, spin, lists_, class_Ja, class_Jb);
 
                     for (size_t K{0}; K < maxK; ++K) {
-                        auto& Krlist = is_alpha(spin)
+                        auto& Kllist = is_alpha(spin)
                                            ? lists_.get_alfa_3h_list(class_K, K, class_Ia)
                                            : lists_.get_beta_3h_list(class_K, K, class_Ib);
-                        auto& Kllist = is_alpha(spin)
+                        auto& Krlist = is_alpha(spin)
                                            ? lists_.get_alfa_3h_list(class_K, K, class_Ja)
                                            : lists_.get_beta_3h_list(class_K, K, class_Jb);
-                        for (const auto& [sign_K, p, q, r, I] : Krlist) {
+                        for (const auto& [sign_K, p, q, r, I] : Kllist) {
                             const size_t pqr_index = triplet_index_gt(p, q, r);
-                            for (const auto& [sign_L, s, t, u, J] : Kllist) {
+                            for (const auto& [sign_L, s, t, u, J] : Krlist) {
                                 const size_t stu_index = triplet_index_gt(s, t, u);
                                 const double rdm_element =
-                                    dot(maxL, tr.data() + I * maxL, 1, tl.data() + J * maxL, 1);
+                                    dot(maxL, tl.data() + I * maxL, 1, tr.data() + J * maxL, 1);
                                 rdm_data[pqr_index * ntriplets + stu_index] +=
                                     sign_K * sign_L * rdm_element;
                             }
@@ -124,8 +124,8 @@ np_tensor4 CISigmaBuilder::compute_aab_3rdm(np_vector C_left, np_vector C_right)
     if ((na < 2) or (nb < 1))
         return rdm;
 
-    auto Cl_span = vector::as_span(C_left);
-    auto Cr_span = vector::as_span(C_right);
+    auto Cl_span = vector::as_span<double>(C_left);
+    auto Cr_span = vector::as_span<double>(C_right);
 
     auto rdm_data = rdm.data();
     const auto& alfa_address = lists_.alfa_address();
@@ -213,8 +213,8 @@ np_tensor4 CISigmaBuilder::compute_abb_3rdm(np_vector C_left, np_vector C_right)
     if ((na < 1) or (nb < 2))
         return rdm;
 
-    auto Cl_span = vector::as_span(C_left);
-    auto Cr_span = vector::as_span(C_right);
+    auto Cl_span = vector::as_span<double>(C_left);
+    auto Cr_span = vector::as_span<double>(C_right);
 
     auto rdm_data = rdm.data();
     const auto& alfa_address = lists_.alfa_address();

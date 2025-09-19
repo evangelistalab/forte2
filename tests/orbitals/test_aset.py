@@ -1,8 +1,7 @@
-import pytest
 import numpy as np
 from pathlib import Path
 
-from forte2 import *
+from forte2 import System, RHF, MCOptimizer, ASET, CI, State
 from forte2.helpers.comparisons import approx
 
 # Directory containing *this* file

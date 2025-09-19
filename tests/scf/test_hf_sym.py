@@ -1,4 +1,3 @@
-import pytest
 import forte2
 from forte2.scf import RHF
 from forte2.helpers.comparisons import approx

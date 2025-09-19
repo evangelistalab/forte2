@@ -197,6 +197,48 @@ class CISigmaBuilder:
     def sf_3cumulant_debug(self, C_left: Annotated[ArrayLike, dict(dtype='float64', shape=(None))], C_right: Annotated[ArrayLike, dict(dtype='float64', shape=(None))]) -> Annotated[ArrayLike, dict(dtype='float64', shape=(None, None, None, None, None, None))]:
         """Compute the spin-free three-electron cumulant for debugging purposes"""
 
+class RelCISigmaBuilder:
+    def __init__(self, lists: CIStrings, E: float, H: Annotated[ArrayLike, dict(dtype='complex128', shape=(None, None))], V: Annotated[ArrayLike, dict(dtype='complex128', shape=(None, None, None, None))], log_level: int = 3) -> None:
+        """
+        Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals
+        """
+
+    def set_algorithm(self, algorithm: str) -> None:
+        """Set the sigma build algorithm (options = kh, hz)"""
+
+    def get_algorithm(self) -> str:
+        """Get the current sigma build algorithm"""
+
+    def set_memory(self, memory: int) -> None:
+        """Set the memory limit for the builder (in MB)"""
+
+    def form_Hdiag(self, dets: Sequence[Determinant]) -> Annotated[ArrayLike, dict(dtype='complex128', shape=(None))]: ...
+
+    def slater_rules(self, dets: Sequence[Determinant], I: int, J: int) -> complex: ...
+
+    def Hamiltonian(self, basis: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))], sigma: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))]) -> None: ...
+
+    def so_1rdm(self, C_left: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))], C_right: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))]) -> Annotated[ArrayLike, dict(dtype='complex128', shape=(None, None))]:
+        """Compute the spin-orbital one-electron reduced density matrix"""
+
+    def so_2rdm(self, C_left: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))], C_right: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))]) -> Annotated[ArrayLike, dict(dtype='complex128', shape=(None, None, None, None))]:
+        """Compute the spin-orbital two-electron reduced density matrix"""
+
+    def so_2cumulant(self, C_left: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))], C_right: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))]) -> Annotated[ArrayLike, dict(dtype='complex128', shape=(None, None, None, None))]:
+        """Compute the spin-orbital two-electron cumulant"""
+
+    def so_3rdm(self, C_left: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))], C_right: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))]) -> Annotated[ArrayLike, dict(dtype='complex128', shape=(None, None, None, None, None, None))]:
+        """Compute the spin-orbital three-electron reduced density matrix"""
+
+    def so_3cumulant(self, C_left: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))], C_right: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))]) -> Annotated[ArrayLike, dict(dtype='complex128', shape=(None, None, None, None, None, None))]:
+        """Compute the spin-orbital three-electron cumulant"""
+
+    def so_1rdm_debug(self, C_left: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))], C_right: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))]) -> Annotated[ArrayLike, dict(dtype='complex128', shape=(None, None))]: ...
+
+    def so_2rdm_debug(self, C_left: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))], C_right: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))]) -> Annotated[ArrayLike, dict(dtype='complex128', shape=(None, None, None, None))]: ...
+
+    def so_3rdm_debug(self, C_left: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))], C_right: Annotated[ArrayLike, dict(dtype='complex128', shape=(None))]) -> Annotated[ArrayLike, dict(dtype='complex128', shape=(None, None, None, None, None, None))]: ...
+
 class CISpinAdapter:
     def __init__(self, twoS: int, twoMs: int, norb: int) -> None: ...
 
