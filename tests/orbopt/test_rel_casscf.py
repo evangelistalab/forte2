@@ -1,6 +1,6 @@
 from forte2 import System, GHF
 from forte2.helpers.comparisons import approx
-from forte2.orbopt import RelMCOptimizer
+from forte2.mcopt import RelMCOptimizer
 
 
 def test_rel_casscf_hf_equivalence_to_nonrel():

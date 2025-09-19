@@ -1,7 +1,7 @@
 import pytest
 
 from forte2 import System, GHF, RelState
-from forte2.orbopt import RelMCOptimizer
+from forte2.mcopt import RelMCOptimizer
 from forte2.helpers.comparisons import approx
 
 
