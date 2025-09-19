@@ -1,3 +1,6 @@
+__version__ = "0.2.0"
+__author__ = "Forte2 Developers"
+
 from ._forte2 import *
 from ._forte2 import ints
 from ._forte2.ints import Basis, Shell
