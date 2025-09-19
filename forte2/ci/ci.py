@@ -57,8 +57,17 @@ class _CIBase:
         The logging level for the CI solver. Defaults to the global logger's verbosity level.
     die_if_not_converged : bool, optional, default=False
         If True, raise an error if the CI solver does not converge.
-    ci_algorithm : str, optional, valid choices=["hz", "kh"], default="hz"
+    ci_algorithm : str, optional, default="hz"
         The algorithm used for the CI sigma builder.
+        Non-relativistic options are:
+            - "hz": Harrison-Zarrabian
+            - "kh": Knowles-Handy
+            - "exact": Exact diagonalization
+        Two-component (relativistic) options are:
+            - "hz": Harrison-Zarrabian
+            - "exact": Exact diagonalization
+            - "sparse": Sigma builder using sparse representation of the Hamiltonian and states. 
+                Recommended for debug use only.
     guess_per_root : int, optional, default=2
         The number of guess vectors for each root.
     ndets_per_guess : int, optional, default=10
@@ -124,6 +133,13 @@ class _CIBase:
         self.eigensolver = None
 
         self.dtype = complex if self.two_component else float
+
+        if self.two_component:
+            assert self.ci_algorithm.lower() in [
+                "hz", "sparse", "exact"], "Two-component CI only supports 'hz', 'sparse', or 'exact' algorithms."
+        else:
+            assert self.ci_algorithm.lower() in [
+                "hz", "kh", "exact"], "CI algorithm must be 'hz', 'kh', or 'exact'."
 
     def _ci_solver_startup(self):
         if self.two_component:

@@ -60,10 +60,20 @@ class MCOptimizer(ActiveSpaceSolver):
         Whether to freeze inter-GAS orbital rotations when multiple GASes are defined.
     micro_maxiter : int, optional, default=6
         Maximum number of microiterations for L-BFGS.
-    ci_maxiter : int, optional, default=50
-        Maximum number of iterations for CI optimization.
     max_rotation : float, optional, default=0.2
         Maximum orbital rotation size for L-BFGS.
+    ci_* : various, optional
+        Various parameters for the CI solver. See `CISolver` for details. 
+        Available parameters:
+        - ci_guess_per_root
+        - ci_ndets_per_guess
+        - ci_collapse_per_root
+        - ci_basis_per_root
+        - ci_maxiter
+        - ci_econv
+        - ci_rconv
+        - ci_energy_shift
+        All parameters have the same default values.
     do_diis : bool, optional
         Whether DIIS acceleration is used.
     diis_start : int, optional, default=15
@@ -98,7 +108,14 @@ class MCOptimizer(ActiveSpaceSolver):
     max_rotation: float = 0.2
 
     ### CI solver parameters
-    ci_maxiter: int = 50
+    ci_maxiter: int = 100
+    ci_econv: float = 1e-10
+    ci_rconv: float = 1e-5
+    ci_guess_per_root: int = 2
+    ci_ndets_per_guess: int = 10
+    ci_collapse_per_root: int = 2
+    ci_basis_per_root: int = 4
+    ci_energy_shift: float = None
 
     ### DIIS parameters
     do_diis: bool = None
@@ -199,8 +216,17 @@ class MCOptimizer(ActiveSpaceSolver):
             nroots=self.sa_info.nroots,
             weights=self.sa_info.weights,
             log_level=self.ci_solver_verbosity,
+            die_if_not_converged=False,
+            econv=self.ci_econv,
+            rconv=self.ci_rconv,
+            maxiter=self.ci_maxiter,
+            guess_per_root=self.ci_guess_per_root,
+            ndets_per_guess=self.ci_ndets_per_guess,
+            collapse_per_root=self.ci_collapse_per_root,
+            basis_per_root=self.ci_basis_per_root,
+            energy_shift=self.ci_energy_shift,
         )(self.parent_method)
-        # iteration 0: one step of CI optimization to bootsrap the orbital optimization
+        # iteration 0: one step of CI optimization to bootstrap the orbital optimization
         self.iter = 0
         self.ci_solver.run()
 
