@@ -8,7 +8,7 @@
 
 namespace forte2 {
 
-np_matrix CISigmaBuilder::compute_sss_3rdm(np_vector C_left, np_vector C_right, bool alfa) const {
+np_matrix CISigmaBuilder::compute_sss_3rdm(np_vector C_left, np_vector C_right, Spin spin) const {
     local_timer timer;
 
     const auto na = lists_.na();
@@ -24,55 +24,58 @@ np_matrix CISigmaBuilder::compute_sss_3rdm(np_vector C_left, np_vector C_right, 
     auto rdm = make_zeros<nb::numpy, double, 2>({ntriplets, ntriplets});
 
     // skip building the RDM if there are not enough electrons
-    if ((alfa and (na < 3)) or ((!alfa) and (nb < 3)))
+    if ((is_alpha(spin) and (na < 3)) or (is_beta(spin) and (nb < 3)))
         return rdm;
 
-    auto Cl_span = vector::as_span(C_left);
-    auto Cr_span = vector::as_span(C_right);
+    auto Cl_span = vector::as_span<double>(C_left);
+    auto Cr_span = vector::as_span<double>(C_right);
 
     auto rdm_data = rdm.data();
     const auto& alfa_address = lists_.alfa_address();
     const auto& beta_address = lists_.beta_address();
 
-    int num_3h_classes =
-        alfa ? lists_.alfa_address_3h()->nclasses() : lists_.beta_address_3h()->nclasses();
+    int num_3h_classes = is_alpha(spin) ? lists_.alfa_address_3h()->nclasses()
+                                        : lists_.beta_address_3h()->nclasses();
 
     for (int class_K = 0; class_K < num_3h_classes; ++class_K) {
-        size_t maxK = alfa ? lists_.alfa_address_3h()->strpcls(class_K)
-                           : lists_.beta_address_3h()->strpcls(class_K);
+        size_t maxK = is_alpha(spin) ? lists_.alfa_address_3h()->strpcls(class_K)
+                                     : lists_.beta_address_3h()->strpcls(class_K);
 
         // loop over blocks of matrix C
         for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
             if (lists_.block_size(nI) == 0)
                 continue;
 
-            auto tr = gather_block(Cr_span, TR, alfa, lists_, class_Ia, class_Ib);
+            auto tl = gather_block(Cl_span, TL, spin, lists_, class_Ia, class_Ib);
 
             for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
                 // The string class on which we don't act must be the same for I and J
-                if ((alfa and (class_Ib != class_Jb)) or (not alfa and (class_Ia != class_Ja)))
+                if ((is_alpha(spin) and (class_Ib != class_Jb)) or
+                    (is_beta(spin) and (class_Ia != class_Ja)))
                     continue;
                 if (lists_.block_size(nJ) == 0)
                     continue;
 
-                const size_t maxL =
-                    alfa ? beta_address->strpcls(class_Ib) : alfa_address->strpcls(class_Ia);
+                const size_t maxL = is_alpha(spin) ? beta_address->strpcls(class_Ib)
+                                                   : alfa_address->strpcls(class_Ia);
 
                 if (maxL > 0) {
                     // Get a pointer to the correct block of matrix C
-                    auto tl = gather_block(Cl_span, TL, alfa, lists_, class_Ja, class_Jb);
+                    auto tr = gather_block(Cr_span, TR, spin, lists_, class_Ja, class_Jb);
 
                     for (size_t K{0}; K < maxK; ++K) {
-                        auto& Krlist = alfa ? lists_.get_alfa_3h_list(class_K, K, class_Ia)
-                                            : lists_.get_beta_3h_list(class_K, K, class_Ib);
-                        auto& Kllist = alfa ? lists_.get_alfa_3h_list(class_K, K, class_Ja)
-                                            : lists_.get_beta_3h_list(class_K, K, class_Jb);
-                        for (const auto& [sign_K, p, q, r, I] : Krlist) {
+                        auto& Kllist = is_alpha(spin)
+                                           ? lists_.get_alfa_3h_list(class_K, K, class_Ia)
+                                           : lists_.get_beta_3h_list(class_K, K, class_Ib);
+                        auto& Krlist = is_alpha(spin)
+                                           ? lists_.get_alfa_3h_list(class_K, K, class_Ja)
+                                           : lists_.get_beta_3h_list(class_K, K, class_Jb);
+                        for (const auto& [sign_K, p, q, r, I] : Kllist) {
                             const size_t pqr_index = triplet_index_gt(p, q, r);
-                            for (const auto& [sign_L, s, t, u, J] : Kllist) {
+                            for (const auto& [sign_L, s, t, u, J] : Krlist) {
                                 const size_t stu_index = triplet_index_gt(s, t, u);
                                 const double rdm_element =
-                                    dot(maxL, tr.data() + I * maxL, 1, tl.data() + J * maxL, 1);
+                                    dot(maxL, tl.data() + I * maxL, 1, tr.data() + J * maxL, 1);
                                 rdm_data[pqr_index * ntriplets + stu_index] +=
                                     sign_K * sign_L * rdm_element;
                             }
@@ -86,11 +89,11 @@ np_matrix CISigmaBuilder::compute_sss_3rdm(np_vector C_left, np_vector C_right, 
 }
 
 np_matrix CISigmaBuilder::compute_aaa_3rdm(np_vector C_left, np_vector C_right) const {
-    return compute_sss_3rdm(C_left, C_right, true);
+    return compute_sss_3rdm(C_left, C_right, Spin::Alpha);
 }
 
 np_matrix CISigmaBuilder::compute_bbb_3rdm(np_vector C_left, np_vector C_right) const {
-    return compute_sss_3rdm(C_left, C_right, false);
+    return compute_sss_3rdm(C_left, C_right, Spin::Beta);
 }
 
 np_tensor4 CISigmaBuilder::compute_aab_3rdm(np_vector C_left, np_vector C_right) const {
@@ -121,8 +124,8 @@ np_tensor4 CISigmaBuilder::compute_aab_3rdm(np_vector C_left, np_vector C_right)
     if ((na < 2) or (nb < 1))
         return rdm;
 
-    auto Cl_span = vector::as_span(C_left);
-    auto Cr_span = vector::as_span(C_right);
+    auto Cl_span = vector::as_span<double>(C_left);
+    auto Cr_span = vector::as_span<double>(C_right);
 
     auto rdm_data = rdm.data();
     const auto& alfa_address = lists_.alfa_address();
@@ -210,8 +213,8 @@ np_tensor4 CISigmaBuilder::compute_abb_3rdm(np_vector C_left, np_vector C_right)
     if ((na < 1) or (nb < 2))
         return rdm;
 
-    auto Cl_span = vector::as_span(C_left);
-    auto Cr_span = vector::as_span(C_right);
+    auto Cl_span = vector::as_span<double>(C_left);
+    auto Cr_span = vector::as_span<double>(C_right);
 
     auto rdm_data = rdm.data();
     const auto& alfa_address = lists_.alfa_address();
@@ -359,7 +362,7 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) 
 
     // To reduce the  memory footprint, we compute the aaa and bbb contributions in a packed
     // format and one at a time.
-    for (auto spin : {true, false}) {
+    for (auto spin : {Spin::Alpha, Spin::Beta}) {
         auto rdm_sss = compute_sss_3rdm(C_left, C_right, spin);
         auto rdm_sss_v = rdm_sss.view();
 

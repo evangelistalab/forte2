@@ -83,8 +83,6 @@ nanobind_add_module(
   api/sparse_state_api.cc
   api/sq_operator_string_api.cc
   helpers/combinatorial.cc
-  helpers/np_matrix_functions.cc
-  helpers/np_vector_functions.cc
   helpers/string_algorithms.cc
   ints/basis.cc
   ints/fock_builder.cc
@@ -106,13 +104,17 @@ nanobind_add_module(
   ci/ci_string_class.cc
   ci/ci_occupation.cc
   ci/determinant_helpers.cc
-  ci/sparse_exp.cc
+  ci/rel_ci_sigma_builder.cc
+  ci/rel_ci_sigma_builder_rdm.cc
+  ci/rel_ci_sigma_builder_rdm_debug.cc
+  ci/rel_ci_sigma_builder_harrison_zarrabian.cc
   ci/slater_rules.cc
-  ci/sparse_operator.cc
-  ci/sparse_operator_hamiltonian.cc
-  ci/sparse_state_functions.cc
-  ci/sparse_state.cc
-  ci/sq_operator_string.cc
+  sparse/sparse_exp.cc
+  sparse/sparse_operator.cc
+  sparse/sparse_operator_hamiltonian.cc
+  sparse/sparse_state_functions.cc
+  sparse/sparse_state.cc
+  sparse/sq_operator_string.cc
 )
 
 target_link_libraries(_forte2 PRIVATE Libint2::int2)

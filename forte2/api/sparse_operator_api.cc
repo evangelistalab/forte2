@@ -7,12 +7,12 @@
 #include <nanobind/make_iterator.h>
 #include <nanobind/ndarray.h>
 
-#include "ci/sparse_operator.h"
-#include "ci/sparse_state.h"
-#include "ci/sparse_operator_hamiltonian.h"
-
 #include "helpers/ndarray.h"
 #include "helpers/string_algorithms.h"
+
+#include "sparse/sparse_operator.h"
+#include "sparse/sparse_state.h"
+#include "sparse/sparse_operator_hamiltonian.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -329,11 +329,28 @@ void export_sparse_operator_api(nb::module_& m) {
     //     }
     //     return C;
     // });
-
-    m.def("sparse_operator_hamiltonian", &sparse_operator_hamiltonian,
-          "Create a SparseOperator object representing the Hamiltonian from integrals",
-          "scalar_energy"_a, "one_electron_integrals"_a, "two_electron_integrals"_a,
-          "screen_thresh"_a = 1.0e-12);
+    // overloaded: real Hamiltonian
+    m.def(
+        "sparse_operator_hamiltonian",
+        [](double scalar_energy, np_matrix one_electron_integrals,
+           np_tensor4 two_electron_integrals, double screen_thresh) {
+            return sparse_operator_hamiltonian(scalar_energy, one_electron_integrals,
+                                               two_electron_integrals, screen_thresh);
+        },
+        "scalar_energy"_a, "one_electron_integrals"_a, "two_electron_integrals"_a,
+        "screen_thresh"_a = 1e-12,
+        "Create a SparseOperator object representing the second quantized Hamiltonian.");
+    // overloaded: complex Hamiltonian
+    m.def(
+        "sparse_operator_hamiltonian",
+        [](double scalar_energy, np_matrix_complex one_electron_integrals,
+           np_tensor4_complex two_electron_integrals, double screen_thresh) {
+            return sparse_operator_hamiltonian(scalar_energy, one_electron_integrals,
+                                               two_electron_integrals, screen_thresh);
+        },
+        "scalar_energy"_a, "one_electron_integrals"_a, "two_electron_integrals"_a,
+        "screen_thresh"_a = 1e-12,
+        "Create a SparseOperator object representing the second quantized Hamiltonian.");
 }
 
 void export_sparse_operator_list_api(nb::module_& m) {

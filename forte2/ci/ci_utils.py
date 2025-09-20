@@ -15,25 +15,40 @@ def pretty_print_gas_info(ci_strings: CIStrings):
 
     logger.log_info1("\nGAS information:")
     for i in range(num_spaces):
-        logger.log_info1(f"GAS space {i + 1} : size = {gas_sizes[i]}, ")
+        logger.log_info1(f"GAS{i + 1}: size = {gas_sizes[i]}, ")
 
-    s = "\n    Config."
+    table = []  # table[space_index] = [(aocc, bocc) for each config]
+
     for i in range(num_spaces):
-        s += f"   Space {i + 1}"
-    s += "\n            "
-    for i in range(num_spaces):
-        s += "   α    β "
-    ndash = 7 + 10 * num_spaces
-    dash = "-" * ndash
-    s += f"\n    {dash}"
-    num_conf = 0
-    for aocc_idx, bocc_idx in occupation_pairs:
-        num_conf += 1
-        aocc = alfa_occupation[aocc_idx]
-        bocc = beta_occupation[bocc_idx]
-        s += f"\n    {num_conf:6d} "
-        for i in range(num_spaces):
-            s += f" {aocc[i]:4d} {bocc[i]:4d}"
+        row = []
+        for aocc_idx, bocc_idx in occupation_pairs:
+            aocc = alfa_occupation[aocc_idx]
+            bocc = beta_occupation[bocc_idx]
+            row.append((aocc[i], bocc[i]))
+        table.append(row)
+
+    # Build header
+    header = "Config.    "
+    for conf_num in range(len(occupation_pairs)):
+        header += f"{conf_num + 1:>3}"
+    table_width = len(header)
+    dash = "\n" + "-" * table_width
+    eq_dash = "=" * table_width
+
+    # Print rows: one per space
+    rows = [header]
+    for space_idx, row in enumerate(table, start=1):
+        s_row = f"\nGAS{space_idx:1d} α Occ."
+        for a_val, b_val in row:
+            s_row += f" {a_val:2d}"
+        s_row += f"\nGAS{space_idx:1d} β Occ."
+        for a_val, b_val in row:
+            s_row += f" {b_val:2d}"
+        rows.append(s_row)
+
+    s = f"\nGAS Occupation Configurations:\n{eq_dash}\n"
+    s += dash.join(rows)
+    s += f"\n{eq_dash}"
 
     logger.log_info1(s)
 
@@ -70,12 +85,12 @@ def pretty_print_ci_summary(
     for i in range(ncis):
         for j in range(nroots[i]):
             logger.log_info1(
-                f"{iroot:>6d} {mult[i]:>6d} {ms[i]:>6.1f} {irrep[i]:>6d} {eigvals_per_solver[i][j]:>20.10f} {weights[i][j]:>15.5f}"
+                f"{iroot:>6d} {mult[i]:>6d} {ms[i]:>6.1f} {irrep[i]:>6d} {eigvals_per_solver[i][j].real:>20.10f} {weights[i][j]:>15.5f}"
             )
             iroot += 1
             E_avg += eigvals_per_solver[i][j] * weights[i][j]
         logger.log_info1("-" * width)
-    logger.log_info1(f"{'Ensemble average energy':<27} {E_avg:>20.10f}")
+    logger.log_info1(f"{'Ensemble average energy':<27} {E_avg.real:>20.10f}")
     logger.log_info1("=" * width)
 
 
@@ -143,6 +158,7 @@ def pretty_print_ci_dets(
     width = 10 + width_per_det * ndets_per_root
     nroots = sa_info.nroots_sum
     norb = mo_space.nactv
+    is_complex = isinstance(top_dets[0][0][1], complex)
 
     logger.log_info1("\nTop determinants:")
     logger.log_info1("=" * width)
@@ -157,8 +173,17 @@ def pretty_print_ci_dets(
         logstr = f"Root {i:<5}" + "".join(
             [f"{d.str(norb):<{width_per_det}}" for d in dets]
         )
-        logstr += "\n"
-        logstr += " " * 10 + "".join([f"{c:<+{width_per_det}.6f}" for c in coeffs])
+        logstr += (
+            "\n"
+            + " " * 10
+            + "".join([f"{c.real:<+{width_per_det}.6f}" for c in coeffs])
+        )
+        if is_complex:
+            logstr += (
+                "\n"
+                + " " * 10
+                + "".join([f"{f'{c.imag:<+.6f}'+'i':<{width_per_det}}" for c in coeffs])
+            )
         logger.log_info1(logstr)
         if i < nroots - 1:
             logger.log_info1("-" * width)

@@ -11,7 +11,7 @@
 
 #include "sparse_ci/sparse_initial_guess.h"
 
-namespace forte {
+namespace forte2 {
 
 std::vector<Determinant> GenCISolver::initial_guess_generate_dets(std::shared_ptr<psi::Vector> diag,
                                                                   size_t num_guess_states) {
@@ -80,4 +80,4 @@ sparse_mat GenCISolver::initial_guess_csf(std::shared_ptr<psi::Vector> diag,
                                   print_ >= PrintLevel::Default);
 }
 
-} // namespace forte
+} // namespace forte2

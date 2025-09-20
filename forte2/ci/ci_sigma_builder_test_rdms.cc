@@ -5,12 +5,12 @@
 #include "helpers/blas.h"
 
 #include "ci_sigma_builder.h"
-#include "sparse_state.h"
+#include "sparse/sparse_state.h"
 
 namespace forte2 {
 
 SparseState get_sparse_state(np_vector c, const CIStrings& lists) {
-    auto c_span = vector::as_span(c);
+    auto c_span = vector::as_span<double>(c);
     SparseState state;
     auto dets = lists.make_determinants();
     for (size_t i{0}, maxi{dets.size()}; i < maxi; ++i) {

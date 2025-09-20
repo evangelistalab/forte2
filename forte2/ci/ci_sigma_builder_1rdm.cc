@@ -6,44 +6,45 @@
 
 namespace forte2 {
 
-np_matrix CISigmaBuilder::compute_s_1rdm(np_vector C_left, np_vector C_right, bool alfa) const {
+np_matrix CISigmaBuilder::compute_s_1rdm(np_vector C_left, np_vector C_right, Spin spin) const {
     const auto na = lists_.na();
     const auto nb = lists_.nb();
     const auto norb = lists_.norb();
     auto rdm = make_zeros<nb::numpy, double, 2>({norb, norb});
 
     // skip building the RDM if there are no electrons or there are zero orbitals
-    if ((alfa and (na < 1)) or ((!alfa) and (nb < 1)) or (norb < 1))
+    if ((is_alpha(spin) and (na < 1)) or (is_beta(spin) and (nb < 1)) or (norb < 1))
         return rdm;
 
     const auto& alfa_address = lists_.alfa_address();
     const auto& beta_address = lists_.beta_address();
     auto rdm_view = rdm.view();
-    auto Cl_span = vector::as_span(C_left);
-    auto Cr_span = vector::as_span(C_right);
+    auto Cl_span = vector::as_span<double>(C_left);
+    auto Cr_span = vector::as_span<double>(C_right);
 
     // loop over blocks of the right state
     for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
         if (lists_.block_size(nI) == 0)
             continue;
 
-        auto tr = gather_block(Cr_span, TR, alfa, lists_, class_Ia, class_Ib);
+        auto tr = gather_block(Cr_span, TR, spin, lists_, class_Ia, class_Ib);
 
         // loop over blocks of the left state
         for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
             // The string class on which we don't act must be the same for I and J
-            if ((alfa and (class_Ib != class_Jb)) or (not alfa and (class_Ia != class_Ja)))
+            if ((is_alpha(spin) and (class_Ib != class_Jb)) or
+                (is_beta(spin) and (class_Ia != class_Ja)))
                 continue;
             if (lists_.block_size(nJ) == 0)
                 continue;
 
-            auto tl = gather_block(Cl_span, TL, alfa, lists_, class_Ja, class_Jb);
+            auto tl = gather_block(Cl_span, TL, spin, lists_, class_Ja, class_Jb);
 
             const size_t maxL =
-                alfa ? beta_address->strpcls(class_Ib) : alfa_address->strpcls(class_Ia);
+                is_alpha(spin) ? beta_address->strpcls(class_Ib) : alfa_address->strpcls(class_Ia);
 
-            const auto& pq_vo_list = alfa ? lists_.get_alfa_vo_list(class_Ia, class_Ja)
-                                          : lists_.get_beta_vo_list(class_Ib, class_Jb);
+            const auto& pq_vo_list = is_alpha(spin) ? lists_.get_alfa_vo_list(class_Ia, class_Ja)
+                                                    : lists_.get_beta_vo_list(class_Ib, class_Jb);
 
             for (const auto& [pq, vo_list] : pq_vo_list) {
                 const auto& [p, q] = pq;
@@ -51,7 +52,7 @@ np_matrix CISigmaBuilder::compute_s_1rdm(np_vector C_left, np_vector C_right, bo
                 for (const auto& [sign, I, J] : vo_list) {
                     // Compute the RDM element contribution
                     for (size_t idx{0}; idx != maxL; ++idx) {
-                        rdm_element += sign * tr[I * maxL + idx] * tl[J * maxL + idx];
+                        rdm_element += sign * tl[J * maxL + idx] * tr[I * maxL + idx];
                     }
                 }
                 rdm_view(p, q) += rdm_element;
@@ -62,11 +63,11 @@ np_matrix CISigmaBuilder::compute_s_1rdm(np_vector C_left, np_vector C_right, bo
 }
 
 np_matrix CISigmaBuilder::compute_a_1rdm(np_vector C_left, np_vector C_right) const {
-    return compute_s_1rdm(C_left, C_right, true);
+    return compute_s_1rdm(C_left, C_right, Spin::Alpha);
 }
 
 np_matrix CISigmaBuilder::compute_b_1rdm(np_vector C_left, np_vector C_right) const {
-    return compute_s_1rdm(C_left, C_right, false);
+    return compute_s_1rdm(C_left, C_right, Spin::Beta);
 }
 
 np_matrix CISigmaBuilder::compute_sf_1rdm(np_vector C_left, np_vector C_right) const {
@@ -74,8 +75,8 @@ np_matrix CISigmaBuilder::compute_sf_1rdm(np_vector C_left, np_vector C_right) c
     if (lists_.norb() > 0) {
         auto a_1rdm = compute_a_1rdm(C_left, C_right);
         auto b_1rdm = compute_b_1rdm(C_left, C_right);
-        matrix::daxpy(1.0, a_1rdm, sf_1rdm);
-        matrix::daxpy(1.0, b_1rdm, sf_1rdm);
+        matrix::daxpy<double>(1.0, a_1rdm, sf_1rdm);
+        matrix::daxpy<double>(1.0, b_1rdm, sf_1rdm);
     }
     return sf_1rdm;
 }

@@ -2,7 +2,7 @@ import numpy as np
 
 from forte2 import System
 from forte2.props import get_1e_property, mulliken_population
-from forte2.scf import RHF, UHF
+from forte2.scf import RHF, UHF, GHF
 from forte2.helpers.comparisons import approx, approx_loose
 
 
@@ -52,9 +52,43 @@ def test_dipole_uhf():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVQZ",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
+        reorient=False,
+    )
 
     scf = UHF(charge=1, ms=0.5)(system)
+    scf.run()
+    assert scf.E == approx(euhf)
+
+    dm1 = scf._build_total_density_matrix()
+    e_dip = get_1e_property(
+        system, dm1, "electric_dipole", origin=system.center_of_mass
+    )
+
+    assert e_dip == approx_loose([0, 0, -2.56784946e-02])
+    dip = get_1e_property(system, dm1, "dipole", origin=[1.2, -0.7, 1])
+    assert dip == approx([-3.05009553, 1.77922239, -0.23558438])
+
+
+def test_dipole_ghf():
+    euhf = -75.649277914372
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.061664597388
+    H            0.000000000000    -0.711620616369     0.489330954643
+    H            0.000000000000     0.711620616369     0.489330954643
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVQZ",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
+        reorient=False,
+    )
+
+    scf = GHF(charge=1)(system)
     scf.run()
     assert scf.E == approx(euhf)
 
@@ -76,7 +110,12 @@ def test_quadrupole_rhf():
     H            0.000000000000     0.711620616369     0.489330954643
     """
 
-    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVQZ",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
+        reorient=False,
+    )
 
     scf = RHF(charge=0)(system)
     scf.run()

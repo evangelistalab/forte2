@@ -1,14 +1,17 @@
-import scipy as sp
 from dataclasses import dataclass, field
 
 from forte2 import ints
 from forte2.system.atom_data import DEBYE_TO_AU, DEBYE_ANGSTROM_TO_AU
 from forte2.helpers import logger
-from forte2.helpers.matrix_functions import invsqrt_matrix, canonical_orth
+from forte2.helpers.matrix_functions import (
+    invsqrt_matrix,
+    canonical_orth,
+    block_diag_2x2,
+)
 from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
-from .parse_geometry import parse_geometry, _GeometryHelper
-from .atom_data import ATOM_DATA
+from .parse_geometry import parse_geometry, GeometryHelper
+from .atom_data import Z_TO_ATOM_SYMBOL
 
 import numpy as np
 from numpy.typing import NDArray
@@ -53,10 +56,12 @@ class System:
         The tolerance for the Cholesky decomposition of the 4D ERI tensor. Only used if `cholesky_tei` is True.
     point_group : str, optional, default="C1"
         The Abelian point group used to assign symmetries of orbitals a posteriori. This only allows one to assign orbital symmetry, it does **not** imply that symmetry is used in a calculation.
+    reorient : bool, optional, default=True
+        Whether to reorient the molecular geometry (important for symmetry detection).
 
     Attributes
     ----------
-    atoms : list[tuple[float, tuple[float, float, float]]]
+    atoms : list[list[float, list[float, float, float]]]
         A list of tuples representing the atoms in the system, where each tuple contains the atomic charge and a tuple of coordinates (x, y, z).
     natoms : int
         The number of atoms in the system.
@@ -109,9 +114,10 @@ class System:
     cholesky_tei: bool = False
     cholesky_tol: float = 1e-6
     point_group: str = "C1"
+    reorient: bool = True
 
     ### Non-init attributes
-    atoms: list[tuple[float, tuple[float, float, float]]] = field(
+    atoms: list[list[float, list[float, float, float]]] = field(
         init=False, default=None
     )
     Zsum: float = field(init=False, default=None)
@@ -120,6 +126,7 @@ class System:
     naux: int = field(init=False, default=None)
     nminao: int = field(init=False, default=None)
     Xorth: NDArray = field(init=False, default=None)
+    two_component: bool = field(init=False, default=False)
 
     def __post_init__(self):
         assert self.unit in [
@@ -130,35 +137,55 @@ class System:
         self._init_geometry()
         self._init_basis()
         self._init_x2c()
-        self._get_orthonormal_transformation()
+        _S = ints.overlap(self.basis)
+        self.Xorth, self.nmo = compute_orthonormal_transformation(
+            _S,
+            self.linear_dep_trigger,
+            self.ortho_thresh,
+        )
         self.point_group = self.point_group.upper()
-        assert self.point_group in ["C1", "CS", "CI", "D2H", "D2", "C2V", "C2", "C2H"], f"Selected symmetry {self.point_group} not in list of supported Abelian point groups!"
+        assert self.point_group in [
+            "C1",
+            "CS",
+            "CI",
+            "D2H",
+            "D2",
+            "C2V",
+            "C2",
+            "C2H",
+        ], f"Selected symmetry {self.point_group} not in list of supported Abelian point groups!"
 
     def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
-        _geom = _GeometryHelper(self.atoms)
-        self.atoms = _geom.atoms
-        self.Zsum = _geom.Zsum
-        self.natoms = _geom.natoms
-        self.atomic_charges = _geom.atomic_charges
-        self.atomic_masses = _geom.atomic_masses
-        self.atomic_positions = _geom.atomic_positions
-        self.centroid = _geom.centroid
-        self.nuclear_repulsion = _geom.nuclear_repulsion
-        self.center_of_mass = _geom.center_of_mass
-        self.atom_counts = _geom.atom_counts
-        self.atom_to_center = _geom.atom_to_center
-        self.prin_atomic_positions = _geom.prin_atomic_positions
+        self.geom_helper = GeometryHelper(self.atoms, reorient=self.reorient)
+        self.atoms = self.geom_helper.atoms
+        self.Zsum = self.geom_helper.Zsum
+        self.natoms = self.geom_helper.natoms
+        self.atomic_charges = self.geom_helper.atomic_charges
+        self.atomic_masses = self.geom_helper.atomic_masses
+        self.atomic_positions = self.geom_helper.atomic_positions
+        self.centroid = self.geom_helper.centroid
+        self.nuclear_repulsion = self.geom_helper.nuclear_repulsion
+        self.center_of_mass = self.geom_helper.center_of_mass
+        self.atom_counts = self.geom_helper.atom_counts
+        self.atom_to_center = self.geom_helper.atom_to_center
+        self.prin_atomic_positions = self.geom_helper.prin_atomic_positions
+
+        logger.log_info1("Principle Atomic Positions (a.u.):")
+        for i in range(self.natoms):
+            logger.log_info1(
+                f"   {Z_TO_ATOM_SYMBOL[self.atoms[i][0]]}   {self.prin_atomic_positions[i, 0]:<.8f}   {self.prin_atomic_positions[i, 1]:<.8f}   {self.prin_atomic_positions[i, 2]:<.8f}"
+            )
 
     def _init_basis(self):
-        self.basis = build_basis(self.basis_set, self.atoms)
+        self.basis = build_basis(self.basis_set, self.geom_helper)
         logger.log_info1(
             f"Parsed {self.natoms} atoms with basis set of {self.basis.size} functions."
         )
 
         if not self.cholesky_tei:
             self.auxiliary_basis = (
-                build_basis(self.auxiliary_basis_set, self.atoms)
+                build_basis(self.auxiliary_basis_set, self.geom_helper)
                 if self.auxiliary_basis_set is not None
                 else None
             )
@@ -167,7 +194,8 @@ class System:
                     "Using a separate auxiliary basis is not recommended!"
                 )
                 self.auxiliary_basis_set_corr = build_basis(
-                    self.auxiliary_basis_set_corr, self.atoms
+                    self.auxiliary_basis_set_corr,
+                    self.geom_helper,
                 )
             else:
                 self.auxiliary_basis_set_corr = self.auxiliary_basis
@@ -176,7 +204,7 @@ class System:
             self.auxiliary_basis_set_corr = None
 
         self.minao_basis = (
-            build_basis(self.minao_basis_set, self.atoms)
+            build_basis(self.minao_basis_set, self.geom_helper)
             if self.minao_basis_set is not None
             else None
         )
@@ -193,12 +221,8 @@ class System:
             ], f"x2c_type {self.x2c_type} is not supported. Use None, 'sf' or 'so'."
         else:
             return
-        if self.x2c_type == "sf":
-            self.ints_hcore = lambda: get_hcore_x2c(self, x2c_type="sf")
-        elif self.x2c_type == "so":
-            self.ints_hcore = lambda: get_hcore_x2c(
-                self, x2c_type="so", snso_type=self.snso_type
-            )
+        if self.x2c_type == "so":
+            self.two_component = True
 
     def __repr__(self):
         return f"System(atoms={self.atoms}, basis_set={self.basis}, auxiliary_basis_set={self.auxiliary_basis})"
@@ -212,7 +236,10 @@ class System:
         NDArray
             Overlap integrals matrix.
         """
-        return ints.overlap(self.basis)
+        S = ints.overlap(self.basis)
+        if self.two_component:
+            S = block_diag_2x2(S)
+        return S
 
     def ints_hcore(self):
         """
@@ -223,9 +250,31 @@ class System:
         NDArray
             Core Hamiltonian integrals matrix.
         """
-        T = ints.kinetic(self.basis)
-        V = ints.nuclear(self.basis, self.atoms)
-        return T + V
+        if self.x2c_type == "sf":
+            H = get_hcore_x2c(self, x2c_type="sf")
+        elif self.x2c_type == "so":
+            H = get_hcore_x2c(self, x2c_type="so", snso_type=self.snso_type)
+        else:
+            T = ints.kinetic(self.basis)
+            V = ints.nuclear(self.basis, self.atoms)
+            H = T + V
+        if self.x2c_type in [None, "sf"] and self.two_component:
+            H = block_diag_2x2(H)
+        return H
+
+    def get_Xorth(self):
+        """
+        Return the orthonormalization matrix for the basis functions.
+
+        Returns
+        -------
+        NDArray
+            Orthonormalization matrix.
+        """
+        if self.two_component:
+            return block_diag_2x2(self.Xorth)
+        else:
+            return self.Xorth
 
     def nuclear_dipole(self, origin=None, unit="debye"):
         """
@@ -279,34 +328,6 @@ class System:
         conversion_factor = 1.0 / DEBYE_ANGSTROM_TO_AU if unit == "debye" else 1.0
         return nuc_quad * conversion_factor
 
-    def _get_orthonormal_transformation(self):
-        """Orthonormalize the AO basis, catch and remove linear dependencies."""
-        S = self.ints_overlap()
-        e, _ = np.linalg.eigh(S)
-        self._eigh = sp.linalg.eigh
-        self.nmo = self.nbf
-        if min(e) / max(e) < self.linear_dep_trigger:
-            logger.log_warning("Linear dependencies detected in overlap matrix S!")
-            logger.log_debug(
-                f"Max eigenvalue: {np.max(e):.2e}. \n"
-                f"Min eigenvalue: {np.min(e):.2e}. \n"
-                f"Condition number: {max(e)/min(e):.2e}. \n"
-                f"Removing linear dependencies with threshold {self.ortho_thresh:.2e}."
-            )
-            self.nmo -= np.sum(e < self.ortho_thresh)
-            if self.nmo < self.nbf:
-                logger.log_warning(
-                    f"Reduced number of basis functions from {self.nbf} to {self.nmo} due to linear dependencies."
-                )
-            else:
-                logger.log_warning(
-                    "Linear dependencies detected, but no basis functions were removed. Consider changing linear_dep_trigger or ortho_thresh."
-                )
-            self.Xorth = canonical_orth(S, tol=self.ortho_thresh)
-        else:
-            # no linear dependencies, use symmetric orthogonalization
-            self.Xorth = invsqrt_matrix(S, tol=1e-13)
-
 
 @dataclass
 class ModelSystem:
@@ -319,6 +340,8 @@ class ModelSystem:
     overlap: NDArray = field(init=False)
     hcore: NDArray = field(init=False)
     eri: NDArray = field(init=False)
+
+    two_component: bool = field(init=False, default=False)
 
     def __post_init__(self):
         self.Zsum = 0  # total nuclear charge, here set to zero, so charge can be set to -nel later
@@ -338,6 +361,9 @@ class ModelSystem:
 
     def nuclear_repulsion_energy(self):
         return self.nuclear_repulsion
+
+    def get_Xorth(self):
+        return self.Xorth
 
 
 @dataclass
@@ -453,3 +479,52 @@ class HubbardModel(ModelSystem):
         self.eri = np.zeros((nsites_flat,) * 4)
         for i in range(nsites_flat):
             self.eri[i, i, i, i] = self.U
+
+
+def compute_orthonormal_transformation(S, lindep_trigger, ortho_thresh):
+    """
+    Orthonormalize the AO basis, catch and remove linear dependencies.
+
+    Parameters
+    ----------
+    S : NDArray
+        The overlap matrix of the basis functions.
+    lindep_trigger : float
+        The trigger for detecting linear dependencies in the overlap matrix.
+        If the ratio of the minimum to maximum eigenvalue of the overlap matrix falls below this value,
+        linear dependencies will be removed.
+    ortho_thresh : float
+        Linear combinations of AO basis functions with overlap eigenvalues below this threshold will be removed
+        during orthogonalization.
+
+    Returns
+    -------
+    Xorth : NDArray
+        The orthonormalization matrix for the basis functions.
+    nmo : int
+        The number of linearly independent combinations of atomic orbitals in the system.
+    """
+    e, _ = np.linalg.eigh(S)
+    nmo = nbf = S.shape[0]
+    if min(e) / max(e) < lindep_trigger:
+        logger.log_warning("Linear dependencies detected in overlap matrix S!")
+        logger.log_debug(
+            f"Max eigenvalue: {np.max(e):.2e}. \n"
+            f"Min eigenvalue: {np.min(e):.2e}. \n"
+            f"Condition number: {max(e)/min(e):.2e}. \n"
+            f"Removing linear dependencies with threshold {ortho_thresh:.2e}."
+        )
+        nmo -= np.sum(e < ortho_thresh)
+        if nmo < nbf:
+            logger.log_warning(
+                f"Reduced number of basis functions from {nbf} to {nmo} due to linear dependencies."
+            )
+        else:
+            logger.log_warning(
+                "Linear dependencies detected, but no basis functions were removed. Consider changing linear_dep_trigger or ortho_thresh."
+            )
+        Xorth = canonical_orth(S, tol=ortho_thresh)
+    else:
+        # no linear dependencies, use symmetric orthogonalization
+        Xorth = invsqrt_matrix(S, tol=1e-13)
+    return Xorth, nmo

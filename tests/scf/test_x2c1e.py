@@ -1,9 +1,11 @@
 import pytest
 
 from forte2 import System
-from forte2.scf import RHF, GHF
+from forte2.scf import RHF, GHF, UHF
 from forte2.helpers.comparisons import approx
-from forte2.system.atom_data import EH_TO_WN
+from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
+from forte2.system import BSE_AVAILABLE
+from forte2.system.atom_data import EH_TO_WN, EH_TO_EV
 
 
 def test_sfx2c1e():
@@ -91,4 +93,52 @@ def test_boettger_hbr():
     scf.run()
     assert EH_TO_WN * (
         scf.eps[0][scf.nel - 2] - scf.eps[0][scf.nel - 3]
-    ) == pytest.approx(2870.8981440453394, abs=1e-6)
+    ) == pytest.approx(2898.7863319000467, abs=1e-4)
+
+
+def test_so_from_sf_water():
+    euhf = -75.711680104122
+    eghf = -75.711686004089
+    xyz = """
+    O 0 0 0
+    H 0 -0.757 0.587
+    H 0 0.757 0.587
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvqz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        x2c_type="sf",
+    )
+    scf = UHF(charge=1, ms=0.5)(system)
+    scf.run()
+    assert scf.E == approx(euhf)
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvqz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        x2c_type="so",
+    )
+    scf_so = GHF(charge=1)(system)
+    scf_so.C = convert_coeff_spatial_to_spinor(system, scf.C)
+    scf_so.run()
+    assert scf_so.E == approx(eghf)
+
+
+@pytest.mark.skipif(not BSE_AVAILABLE, reason="Basis set exchange is not available")
+def test_sox2c1e_sc():
+    l23_ref = 4.395077285344983
+    xyz = """Sc 0 0 0"""
+    system = System(
+        xyz=xyz,
+        basis_set="sapporo-dkh3-dzp-2012-diffuse",
+        auxiliary_basis_set="def2-universal-jkfit",
+        x2c_type="so",
+        snso_type="row-dependent",
+    )
+    scf = GHF(charge=3)(system)
+    scf.run()
+    l23_splitting = EH_TO_EV * (scf.eps[0][6] - scf.eps[0][5])
+    assert l23_splitting == pytest.approx(l23_ref, abs=1e-5)

@@ -10,7 +10,7 @@ O 2.500000000000  0.000000000000  0.000000000000
 """
 
     system = forte2.System(xyz=xyz, basis_set="cc-pVDZ")
-    jkfit_basis = forte2.system.build_basis("cc-pVQZ-jkfit", system.atoms)
+    jkfit_basis = forte2.system.build_basis("cc-pVQZ-jkfit", system.geom_helper)
 
     # def2-universal-jkfit
     # Compute the density fitted integrals as
@@ -18,8 +18,6 @@ O 2.500000000000  0.000000000000  0.000000000000
 
     # Compute the two-electron integrals in the JKfit basis AA = (P|Q)
     AA = forte2.ints.coulomb_2c(jkfit_basis)
-
-    S_AA = forte2.ints.overlap(jkfit_basis)
 
     # Compute the two-electron integrals in the JKfit/computational basis Acc = (P|mn)
     Acc = forte2.ints.coulomb_3c(jkfit_basis, system.basis, system.basis)

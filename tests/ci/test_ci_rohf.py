@@ -38,6 +38,7 @@ def test_rohf_ci_2():
         core_orbitals=[0],
         states=State(system=system, charge=1, multiplicity=2, ms=-0.5),
         nroots=2,
+        ci_algorithm="exact",
     )(rhf)
     ci.run()
 

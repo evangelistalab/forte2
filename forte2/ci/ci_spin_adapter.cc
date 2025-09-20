@@ -60,7 +60,7 @@ size_t CISpinAdapter::ncsf() const { return ncsf_; }
 size_t CISpinAdapter::ndet() const { return ndet_; }
 
 void CISpinAdapter::det_C_to_csf_C(np_vector det_C, np_vector csf_C) {
-    vector::zero(csf_C);
+    vector::zero<double>(csf_C);
     // loop over all the elements of csf_to_det_coeff_ and add the contribution to csf_C
     for (size_t i{0}; i < ncsf_; i++) {
         const auto& start = csf_to_det_bounds_[i];
@@ -73,7 +73,7 @@ void CISpinAdapter::det_C_to_csf_C(np_vector det_C, np_vector csf_C) {
 }
 
 void CISpinAdapter::csf_C_to_det_C(np_vector csf_C, np_vector det_C) {
-    vector::zero(det_C);
+    vector::zero<double>(det_C);
 
     // loop over all the elements of csf_to_det_coeff_ and add the contribution to det_C
     for (size_t i = 0; i < ncsf_; i++) {

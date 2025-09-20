@@ -1,54 +1,49 @@
 from dataclasses import dataclass, field
 import numpy as np
 import re
-import ast
+
 import forte2
 from forte2 import ints
-from forte2.state import MOSpace
+from forte2.state import MOSpace, EmbeddingMOSpace
 from forte2.system.basis_utils import BasisInfo
-from forte2.system import System
 from forte2.helpers import logger
-from forte2.base_classes.mixins import MOsMixin, SystemMixin
-from forte2.orbopt import MCOptimizer
+from forte2.helpers.matrix_functions import invsqrt_matrix
+from forte2.base_classes.mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.system.atom_data import ATOM_SYMBOL_TO_Z
-from forte2.orbitals.semicanonicalizer import Semicanonicalizer, EmbeddingMOSpace
+from forte2.orbitals.semicanonicalizer import Semicanonicalizer
 
 
 @dataclass
-class ASET(MOsMixin, SystemMixin):
+class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
     """
-        Active Space Embedding Theory (ASET) method for paritioning and projecting molecules.
+    Active Space Embedding Theory (ASET) method for paritioning and projecting molecules.
 
-        Parameters
-        ----------
-        fragment : list[str]
-            List of atomic symbols defining the fragment.
-        cutoff_method : str, optional, default="threshold"
-            Method for choosing the embedding cutoff. Options include "threshold", "cumulative_threshold", "num_of_orbitals".
-        cutoff : float, optional, default = 0.5
-            Projector eigenvalue for both simple and cumulative threshold methods.
-        num_A_docc : int, optional, default=0
-            Number of occupied orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
-        num_A_uocc : int, optional, default=0
-            Number of virtual orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
-        adjust_B_docc : int, optional, default=0
-            Adjust this number of occupied orbitals between environment B and fragment A. If set to positive, move to B; if set to negative, move to A.
-        adjust_B_uocc : int, optional, default=0
-            Adjust this number of virtual orbitals between environment B and fragment A. If set to positive, move to B; if set to negative, move to A.
-        semicanonicalize_active : bool, optional, default=True
-            Whether to semicanonicalize the active space orbitals.
-        semicanonicalize_frozen : bool, optional, default=True
-            Whether to semicanonicalize the frozen orbitals.
+    Parameters
+    ----------
+    fragment : list[str]
+        List of atomic symbols defining the fragment.
+    cutoff_method : str, optional, default="threshold"
+        Method for choosing the embedding cutoff. Options include "threshold", "num_of_orbitals".
+    cutoff : float, optional, default = 0.5
+        Projector eigenvalue for simple threshold methods.
+    num_A_occ : int, optional, default=0
+        Number of occupied orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
+    num_A_vir : int, optional, default=0
+        Number of virtual orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
+    semicanonicalize_active : bool, optional, default=True
+        Whether to semicanonicalize the active space orbitals.
+    semicanonicalize_frozen : bool, optional, default=True
+        Whether to semicanonicalize the frozen orbitals.
 
-        Notes
-        -----
-        The allow subspace specification is a list of strings, non-exhaustive examples::
+    Notes
+    -----
+    The allowed subspace specification is a list of strings, non-exhaustive examples::
 
-        - ["C"]              # all carbon atoms
-        - ["C","N"]          # all carbon and nitrogen atoms
-        - ["C1"]             # carbon atom #1
-        - ["C1-7"]           # carbon atoms #1 through #7
-        - ["C1-3","N2"]       # carbon atoms #1, #2, #3 and nitrogen atom #2
+    - ["C"]              # all carbon atoms
+    - ["C","N"]          # all carbon and nitrogen atoms
+    - ["C1"]             # carbon atom #1
+    - ["C1-7"]           # carbon atoms #1 through #7
+    - ["C1-3","N2"]      # carbon atoms #1, #2, #3 and nitrogen atom #2
 
     See J. Chem. Phys. 2020, 152 (9), 094107 <https://doi.org/10.1063/1.5142481>_ for details on the ASET(mf) method.
     """
@@ -56,10 +51,8 @@ class ASET(MOsMixin, SystemMixin):
     fragment: list
     cutoff_method: str = "threshold"
     cutoff: float = 0.5
-    num_A_docc: int = 0
-    num_A_uocc: int = 0
-    adjust_B_docc: int = 0
-    adjust_B_uocc: int = 0
+    num_A_occ: int = 0
+    num_A_vir: int = 0
     semicanonicalize_active: bool = True
     semicanonicalize_frozen: bool = True
 
@@ -71,7 +64,7 @@ class ASET(MOsMixin, SystemMixin):
 
     def __call__(self, parent_method):
         assert isinstance(
-            parent_method, MCOptimizer
+            parent_method, forte2.mcopt.MCOptimizer
         ), f"Parent method must be MCSCF, got {type(parent_method)}"
         self.parent_method = parent_method
         return self
@@ -85,13 +78,12 @@ class ASET(MOsMixin, SystemMixin):
         self.ncore = self.mo_space.ncore
         self.nactv = self.mo_space.nactv
 
-        self.Ca = self.parent_method.C[0][:, self.mo_space.orig_to_contig]
         self.nmo = self.mo_space.nmo
         self.nvirt = self.mo_space.nvirt
 
-        minao_info = BasisInfo(self.system, self.system.minao_basis)
+        ao_info = BasisInfo(self.system, self.system.basis)
 
-        raw_map = minao_info.atom_to_aos
+        raw_map = ao_info.atom_to_aos
 
         self.atom_to_center = self.system.atom_to_center
         self.atom_to_aos = {
@@ -106,12 +98,12 @@ class ASET(MOsMixin, SystemMixin):
             f"Cutoff method: {self.cutoff_method} \nCutoff value: {self.cutoff}"
         )
         self.fragment = self._parse_fragment(self.fragment)
-        self.P_frag, self.X_mm = self._make_fragment_projector()
+        self.P_ao_frag = self._make_fragment_projector()
         self.executed = True
         self.partition = self._make_embedding()
         self._print_embedding_info(**self.partition)
         logger.log_info1("\nMO space is updated.")
-        self._apply_adjustments_to_mo_space()
+        self._update_mo_space_from_partition()
         logger.log_info1("\nASET procedure completed.")
 
         return self
@@ -120,25 +112,20 @@ class ASET(MOsMixin, SystemMixin):
         self.cutoff_method = self.cutoff_method.lower()
         assert self.cutoff_method in [
             "threshold",
-            "cumulative_threshold",
             "num_of_orbitals",
         ], f"Invalid cutoff method: {self.cutoff_method}"
         if self.cutoff_method == "threshold":
             assert (
                 self.cutoff > 0 and self.cutoff < 1
             ), f"threshold must be in [0, 1], got {self.cutoff}"
-        elif self.cutoff_method == "cumulative_threshold":
-            assert (
-                self.cutoff > 0
-            ), f"Cumulative threshold must be positive, got {self.cutoff}"
         elif self.cutoff_method == "num_of_orbitals":
             assert (
-                self.num_A_docc >= 0 or self.num_A_uocc >= 0
-            ), f"Number of occupied and virtual orbitals in Fragment A must be non-negative, got {self.num_A_docc}, {self.num_A_uocc}"
+                self.num_A_occ >= 0 and self.num_A_vir >= 0
+            ), f"Number of occupied and virtual orbitals in Fragment A must be non-negative, got {self.num_A_occ}, {self.num_A_vir}"
 
-    def _parse_fragment(self, frag_str: str) -> list[int]:
+    def _parse_fragment(self, frag_str: str | list[str]) -> list[int]:
         """
-        Parse a fragment specification string or list into atom indices.
+        Parse a list of fragment specification strings into atom indices.
 
         Supported input formats (all 1-indexed for the user):
             ["C"]         → all carbon atoms
@@ -148,21 +135,15 @@ class ASET(MOsMixin, SystemMixin):
 
         Parameters
         ----------
-        frag_str : str or list[str]
-            A string like '["C1-3", "N"]' or a list of such tokens.
+        frag_list : list[str]
+            A list of fragment specifications like ["C1-3", "N"].
 
         Returns
         -------
         list[int]
             A sorted list of unique atom indices (0-based) matching the specification.
         """
-
-        if isinstance(frag_str, str):
-            frag_list = ast.literal_eval(
-                frag_str
-            )  # e.g., turns '["C1-3", "N"]' into list
-        else:
-            frag_list = frag_str  # already a list
+        frag_list = [frag_str] if isinstance(frag_str, str) else frag_str
 
         atom_indices = []
 
@@ -210,22 +191,20 @@ class ASET(MOsMixin, SystemMixin):
 
     def _make_fragment_projector(self):
         """
-        Build an AO-space fragment projector P = S^T (S_A) S in the minimal-AO basis:
-        1. Compute AO overlap S_mm
+        Build an AO-space fragment projector P = S^T (S_A) S in the AO basis:
+        1. Compute AO overlap S_ff
         2. Extract fragment block S_A
-        3. Pseudo invert S_A and embed into full minimal-AO space
-        4. Form P_frag = S_mm @ S_A_nn @ S_mm
+        3. Pseudo invert S_A and embed into full AO space
+        4. Form P_ao_frag = S_ff @ S_A_nn @ S_ff
 
         Returns
         ------
-        P_frag : ndarray
-            The fragment projector matrix in the full minimal-AO space.
-        X_mm : ndarray
-            The metric‐orthogonalizer (S_mm^–½).
+        P_ao_frag : ndarray
+            The fragment projector matrix S_ff @ S_A_mm @ S_ff.
         """
-        # 1. Compute minAO overlap S_mm
-        S_mm = ints.overlap(self.system.minao_basis)
-        nbf_m = S_mm.shape[0]
+        # 1. Compute AO overlap S_ff
+        S_ff = ints.overlap(self.system.basis)
+        nbf_f = S_ff.shape[0]
 
         # 2. Collect ao indices in fragment
         frag_ao_indices = []
@@ -250,57 +229,51 @@ class ASET(MOsMixin, SystemMixin):
         frag_ao_indices = sorted(set(frag_ao_indices))
 
         # 3. Build fragment overlap block S_A and invert
-        S_A = S_mm[np.ix_(frag_ao_indices, frag_ao_indices)]
+        S_A = S_ff[np.ix_(frag_ao_indices, frag_ao_indices)]
         S_A_inv = np.linalg.pinv(S_A, rcond=1e-8)
 
         # 4. Embed S_A_inv into full space and form projector
-        S_A_mm = np.zeros((nbf_m, nbf_m))
+        S_A_ff = np.zeros((nbf_f, nbf_f))
         for i, mu in enumerate(frag_ao_indices):
             for j, nu in enumerate(frag_ao_indices):
-                S_A_mm[mu, nu] = S_A_inv[i, j]
-        X_mm = forte2.helpers.matrix_functions.invsqrt_matrix(S_mm)
-        P_ao = S_mm @ S_A_mm @ S_mm
-        P_frag = X_mm @ P_ao @ X_mm
+                S_A_ff[mu, nu] = S_A_inv[i, j]
 
-        # check for hermiticity
-        if not np.allclose(P_frag, P_frag.conj().T, atol=1e-8):
-            raise RuntimeError("Fragment projector is not Hermitian.")
-        # check for idempotency
-        if not np.allclose(P_frag @ P_frag, P_frag, atol=1e-8):
-            raise RuntimeError("Fragment projector is not idempotent.")
+        # Build fragment projector P_ao_frag = S_ff S_A_ff S_ff
+        P_ao_frag = S_ff @ S_A_ff @ S_ff
 
-        return P_frag, X_mm
+        return P_ao_frag
 
     def _make_embedding(self):
         """
         Perform Orbital Partitioning for ASET.
         """
-        Ca = self.Ca
-        S_fm = ints.overlap(self.system.basis, self.system.minao_basis)
-        X_mm = self.X_mm
+        # Copy the input orbitals and sort them into blocks of frozen core, core, active, ...
+        C = self.parent_method.C[0][:, self.mo_space.orig_to_contig]
 
-        # Build the projection operator from full AO into orthonormal min‐AO
-        T = X_mm @ S_fm.T
+        # Build the fragment projector
+        P_ao_frag = self.P_ao_frag
+        P_frag = C.T @ P_ao_frag @ C
 
-        # Project full‐AO basis MOs into the minimal basis:
-        C_min = T @ Ca  # shape (n_minAO, nmo)
-
-        # Build the fragment projector in the minimal basis
-        P_frag = self.P_frag
-        F = C_min.T @ P_frag @ C_min
-
-        # 6) Split F into occupied and virtual blocks
+        # 6) Split P_frag into occupied and virtual blocks
+        core = self.mo_space.core
         core_inds = self.mo_space.core_indices
         actv_inds = self.mo_space.active_indices
+        virt = self.mo_space.virt
         virt_inds = self.mo_space.virtual_indices
 
-        # Split F
-        F_oo = F[np.ix_(core_inds, core_inds)]
-        F_vv = F[np.ix_(virt_inds, virt_inds)]
-        lo_vals, Uo = np.linalg.eigh(F_oo)
-        lv_vals, Uv = np.linalg.eigh(F_vv)
-        occ_pairs = zip(core_inds, lo_vals)
-        vir_pairs = zip(virt_inds, lv_vals)
+        # Split P_frag into occupied and virtual blocks
+        P_frag_oo = P_frag[core, core]
+        P_frag_vv = P_frag[virt, virt]
+        lo_vals, Uo = np.linalg.eigh(P_frag_oo)
+        lv_vals, Uv = np.linalg.eigh(P_frag_vv)
+        # resort the virtual eigenvalue/eigenvector pairs
+        lv_vals = lv_vals[::-1]
+        Uv = Uv[:, ::-1]
+        occ_pairs = sorted(zip(core_inds, lo_vals), key=lambda x: x[1], reverse=True)
+        vir_pairs = sorted(zip(virt_inds, lv_vals), key=lambda x: x[1], reverse=True)
+
+        C[:, core_inds] = C[:, core_inds] @ Uo
+        C[:, virt_inds] = C[:, virt_inds] @ Uv
 
         # Partition by cutoff
         index_A_occ, index_B_occ = [], []
@@ -311,47 +284,10 @@ class ASET(MOsMixin, SystemMixin):
                 (index_A_occ if v > self.cutoff else index_B_occ).append(i)
             for i, v in vir_pairs:
                 (index_A_vir if v > self.cutoff else index_B_vir).append(i)
-        elif self.cutoff_method == "cumulative_threshold":
-            # total occupied / virtual eigenvalue sums
-            sum_lo = float(np.sum(lo_vals))
-            sum_lv = float(np.sum(lv_vals))
-
-            # occupied cumulative‐threshold partitioning
-            tmp = 0.0
-            for idx_rel, v in enumerate(lo_vals):
-                tmp += v
-                cum_l_o = tmp / sum_lo
-                i = core_inds[idx_rel]
-                if cum_l_o < self.cutoff:
-                    index_A_occ.append(i)
-                else:
-                    index_B_occ.append(i)
-                    if v > 0.5:
-                        logger.log_info1(
-                            f"Warning! Occupied orbital {i+1} has eigenvalue {v:8.6f} "
-                            "and is assigned to B."
-                        )
-
-            # virtual cumulative‐threshold partitioning
-            tmp = 0.0
-            for idx_rel, v in enumerate(lv_vals):
-                tmp += v
-                cum_l_v = tmp / sum_lv
-                i = virt_inds[idx_rel]
-                if cum_l_v < self.cutoff:
-                    index_A_vir.append(i)
-                else:
-                    index_B_vir.append(i)
-                    if v > 0.5:
-                        logger.log_info1(
-                            f"Warning! Virtual orbital {i+1} has eigenvalue {v:8.6f} "
-                            "and is assigned to B."
-                        )
 
         elif self.cutoff_method == "num_of_orbitals":
-            for i, v in enumerate(lo_vals):
-                glob_i = core_inds[i]
-                if i < self.num_A_docc:
+            for rank, (glob_i, v) in enumerate(occ_pairs):
+                if rank < self.num_A_occ:
                     index_A_occ.append(glob_i)
                 else:
                     index_B_occ.append(glob_i)
@@ -361,9 +297,8 @@ class ASET(MOsMixin, SystemMixin):
                             "and is assigned to B."
                         )
 
-            for i, v in enumerate(lv_vals):
-                glob_i = virt_inds[i]
-                if i < self.num_A_uocc:
+            for rank, (glob_i, v) in enumerate(vir_pairs):
+                if rank < self.num_A_vir:
                     index_A_vir.append(glob_i)
                 else:
                     index_B_vir.append(glob_i)
@@ -372,18 +307,21 @@ class ASET(MOsMixin, SystemMixin):
                             f"Warning! Virtual orbital {glob_i+1} has eigenvalue {v:8.6f} "
                             "and is assigned to B."
                         )
+        index_A_occ.sort()
+        index_B_occ.sort()
+        index_A_vir.sort()
+        index_B_vir.sort()
 
         # # Semi-canonicalize the blocks
         if not self.semicanonicalize_active:
             logger.log_info1(
-                f"\nSkipping semicanonicalization of active space orbitals."
+                "\nSkipping semicanonicalization of active space orbitals."
             )
         if not self.semicanonicalize_frozen:
             logger.log_info1(
-                f"\nSkipping semicanonicalization of frozen core and frozen virtual orbitals."
+                "\nSkipping semicanonicalization of frozen core and frozen virtual orbitals."
             )
 
-        C_tilde = self.Ca.copy()
         frozen_core_inds = self.mo_space.frozen_core_indices
         frozen_virt_inds = self.mo_space.frozen_virtual_indices
         g1_sf = self.parent_method.ci_solver.make_average_sf_1rdm()
@@ -399,14 +337,13 @@ class ASET(MOsMixin, SystemMixin):
         )
 
         semican = Semicanonicalizer(
-            g1_sf=g1_sf,
-            C=C_tilde,
+            g1=g1_sf,
+            C=C,
             system=self.system,
             mo_space=emb_space,
             do_frozen=self.semicanonicalize_frozen,
             do_active=self.semicanonicalize_active,
         )
-        self.Ca = semican.C_semican
         self.C[0] = semican.C_semican.copy()
 
         return {
@@ -491,75 +428,22 @@ class ASET(MOsMixin, SystemMixin):
             f"    Frozen Orbitals: {num_Fo} Core MOs, {num_Fv} Virtual MOs\n"
         )
 
-        # Update MO space
-        def adjust_mo_space(adj, A, B):
-            nA = len(A)
-            cutoff = nA - adj
-
-            return A[:cutoff], B + A[cutoff:]
-
-        if self.adjust_B_docc != 0:
-            A_occ, B_occ = adjust_mo_space(self.adjust_B_docc, index_A_occ, index_B_occ)
-            if self.adjust_B_docc > 0:
-                logger.log_info1(
-                    f"\nAdding {self.adjust_B_docc} orbitals to frozen core orbitals."
-                )
-            else:
-                logger.log_info1(
-                    f"\nRemoving {abs(self.adjust_B_docc)} orbitals from frozen core orbitals."
-                )
-        if self.adjust_B_uocc != 0:
-            A_vir, B_vir = adjust_mo_space(self.adjust_B_uocc, index_A_vir, index_B_vir)
-            if self.adjust_B_uocc > 0:
-                logger.log_info1(
-                    f"\nAdding {self.adjust_B_uocc} orbitals to frozen virtual orbitals."
-                )
-            else:
-                logger.log_info1(
-                    f"\nRemoving {abs(self.adjust_B_uocc)} orbitals from frozen virtual orbitals."
-                )
-        self.mo_space = MOSpace(
-            nmo=self.system.nmo,
-            active_orbitals=index_actv,
-            core_orbitals=A_occ if self.adjust_B_docc != 0 else index_A_occ,
-            frozen_core_orbitals=(
-                self.mo_space.frozen_core_indices + B_occ
-                if self.adjust_B_docc != 0
-                else self.mo_space.frozen_core_indices
-            ),
-            frozen_virtual_orbitals=(
-                self.mo_space.frozen_virtual_indices + B_vir
-                if self.adjust_B_uocc != 0
-                else self.mo_space.frozen_virtual_indices
-            ),
-        )
-
-    def _apply_adjustments_to_mo_space(self):
+    def _update_mo_space_from_partition(self):
         """
-        Adjust the MO space based on the adjustments specified by the user.
+        Update the MO space based on the partitioning results.
         """
-        index_A_occ = self.partition["index_A_occ"]
-        index_actv = self.partition["index_actv"]
-        index_A_vir = self.partition["index_A_vir"]
-        index_B_occ = self.partition["index_B_occ"]
-        index_B_vir = self.partition["index_B_vir"]
-
-        # Adjust the occupied and virtual spaces based on user input
-        def adjust_mo_space(adj, A, B):
-            nA = len(A)
-            cutoff = nA - adj
-
-            return A[:cutoff], B + A[cutoff:]
-
-        A_occ, B_occ = adjust_mo_space(self.adjust_B_docc, index_A_occ, index_B_occ)
-        A_vir, B_vir = adjust_mo_space(self.adjust_B_uocc, index_A_vir, index_B_vir)
 
         self.mo_space = MOSpace(
             nmo=self.system.nmo,
-            active_orbitals=index_actv,
-            core_orbitals=A_occ,
-            frozen_core_orbitals=sorted(set(self.mo_space.frozen_core_indices + B_occ)),
+            active_orbitals=self.partition["index_actv"],
+            core_orbitals=self.partition["index_A_occ"],
+            frozen_core_orbitals=sorted(
+                set(self.mo_space.frozen_core_indices + self.partition["index_B_occ"])
+            ),
             frozen_virtual_orbitals=sorted(
-                set(self.mo_space.frozen_virtual_indices + B_vir)
+                set(
+                    self.mo_space.frozen_virtual_indices + self.partition["index_B_vir"]
+                )
             ),
         )
+        return self.mo_space

@@ -16,6 +16,8 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
     active_orbitals: list[int] | list[list[int]] = None
     frozen_virtual_orbitals: list[int] = None
     final_orbital: str = "semicanonical"
+    ci_algorithm: str = "hz"
+    die_if_not_converged: bool = False
 
     def __post_init__(self):
         self.sa_info = StateAverageInfo(
@@ -31,15 +33,25 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
             "original",
         ], "final_orbital must be either 'semicanonical' or 'original'."
 
-    def _startup(self):
+        assert self.ci_algorithm.lower() in [
+            "hz",
+            "kh",
+            "exact",
+            "sparse",
+        ], "ci_algorithm must be one of 'hz', 'kh', 'exact', or 'sparse'."
+
+    def _startup(self, two_component=False):
         if not self.parent_method.executed:
             self.parent_method.run()
 
         SystemMixin.copy_from_upstream(self, self.parent_method)
         MOsMixin.copy_from_upstream(self, self.parent_method)
-        self._make_mo_space()
+        if self.system.two_component:
+            self._make_mo_space(two_component=True)
+        else:
+            self._make_mo_space(two_component=two_component)
 
-    def _make_mo_space(self):
+    def _make_mo_space(self, two_component):
         # Ways of providing the MO space:
         # 1. Via the parent method (if it has MOSpaceMixin).
         # 2. Via the mo_space parameter.
@@ -78,8 +90,9 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
 
             if provided_via_orbitals:
                 # construct mo_space from *_orbitals arguments
+                nmo = self.system.nmo * 2 if two_component else self.system.nmo
                 self.mo_space = MOSpace(
-                    nmo=self.system.nmo,
+                    nmo=nmo,
                     active_orbitals=(
                         self.active_orbitals if self.active_orbitals is not None else []
                     ),
@@ -101,3 +114,21 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
         elif provided_via_parent:
             MOSpaceMixin.copy_from_upstream(self, self.parent_method)
             return
+
+
+@dataclass
+class RelActiveSpaceSolver(ActiveSpaceSolver):
+    nel: int = None
+    states: State | list[State] = None
+
+    def __post_init__(self):
+        if self.nel is None and self.states is None:
+            raise ValueError("Either nel or states must be provided.")
+        if self.nel is not None and self.states is not None:
+            raise ValueError("Only one of nel or states can be provided.")
+        if self.nel is not None:
+            mult = 1 if self.nel % 2 == 0 else 2
+            ms = 0.0 if mult == 1 else 0.5
+            self.states = State(nel=self.nel, multiplicity=mult, ms=ms)
+
+        super().__post_init__()

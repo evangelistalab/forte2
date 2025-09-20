@@ -8,10 +8,16 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         shell: bash -el {0}   
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
 
     steps:
     - name: Checkout code
@@ -44,7 +50,12 @@ jobs:
         conda activate forte
         cd $HOME/work/forte2/forte2/tests
         if [ "${{ github.event_name }}" == "schedule" ]; then
-          pytest -v
+          pytest -v --cov --cov-branch --cov-report=xml
         else
-          pytest -v -m "not slow"
+          pytest -v -m "not slow" --cov --cov-branch --cov-report=xml
         fi
+
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}

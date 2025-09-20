@@ -13,9 +13,9 @@ class State:
 
     Parameters
     ----------
-    multiplicity : int
+    multiplicity : int, required for non-relativisitic states.
         Multiplicity of the state (2S+1).
-    ms : float
+    ms : float, required for non-relativisitic states.
         Spin projection (Ms) of the state.
     nel : int, optional
         Total number of electrons in the state. If not provided, it is calculated from the system and charge.
@@ -155,6 +155,31 @@ class State:
     def get_ms_string(twice_ms: int) -> str:
         """Return a string representation of Ms based on its value."""
         return str(twice_ms // 2) if twice_ms % 2 == 0 else f"{twice_ms}/2"
+
+
+@dataclass
+class RelState(State):
+    """
+    A convenience class representing a relativistic electronic state.
+    Multiplicity and ms are no longer required, but will be used for initial guesses if provided.
+    """
+
+    multiplicity: int = None
+    ms: float = None
+
+    def __post_init__(self):
+        if self.nel is None:
+            assert self.system is not None, "Either nel or system must be provided."
+            self.nel = self.system.Zsum - self.charge
+        if self.system is None:
+            assert self.nel is not None, "Either nel or system must be provided."
+
+        if self.multiplicity is None or self.ms is None:
+            # adopt sensible defaults
+            self.ms = self.nel % 2 * 0.5
+            self.multiplicity = 1 if self.nel % 2 == 0 else 2
+
+        super().__post_init__()
 
 
 @dataclass
