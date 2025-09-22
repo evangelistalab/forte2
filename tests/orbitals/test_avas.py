@@ -93,7 +93,6 @@ def test_avas_separate_n2():
     casci = CI(states=State(nel=14, multiplicity=1, ms=0.0))(avas)
     casci.run()
     assert casci.E[0] == approx(eref_casci_avas)
-    return
     avas = AVAS(
         selection_method="separate",
         subspace=["N(2p)"],
@@ -106,7 +105,6 @@ def test_avas_separate_n2():
     assert casci.E[0] == approx(eref_casci_avas_diagonalize)
 
 
-# test_avas_separate_n2()
 
 
 def test_avas_separate_n2_ghf_equivalent_to_rhf():
