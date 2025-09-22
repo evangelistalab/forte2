@@ -272,6 +272,30 @@ def test_avas_total_h2co():
     assert casci.E[0] == approx(eref_avas_98pc)
 
 
+def test_avas_total_h2co_ghf_equivalent_to_rhf():
+    eref_avas_98pc = -113.90837340149
+
+    xyz = """
+    C           -0.000000000000    -0.000000000006    -0.599542970149
+    O           -0.000000000000     0.000000000001     0.599382404096
+    H           -0.000000000000    -0.938817812172    -1.186989139808
+    H            0.000000000000     0.938817812225    -1.186989139839
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = GHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    avas = AVAS(
+        selection_method="total",
+        subspace=["C(2px)", "O1(2px)"],
+        num_active=4,
+        diagonalize=True,
+    )(rhf)
+    casci = RelCI(nel=rhf.nel)(avas)
+    casci.run()
+    assert casci.E[0] == approx(eref_avas_98pc)
+
+
 def test_avas_separate_h2co():
     # this test should be equivlent to test_avas_cumulative_h2co_all
     eref_avas = -113.909850012095
