@@ -1,7 +1,7 @@
 import numpy as np
 
 from forte2 import ints
-from forte2.system.atom_data import DEBYE_TO_AU, ANGSTROM_TO_BOHR
+from forte2.data import DEBYE_TO_AU, ANGSTROM_TO_BOHR
 from forte2.helpers.matrix_functions import block_diag_2x2
 
 

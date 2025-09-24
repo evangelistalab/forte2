@@ -4,7 +4,7 @@ from importlib import resources
 import regex as re
 
 from forte2 import Basis, Shell
-from forte2.system.atom_data import ATOM_SYMBOL_TO_Z
+from forte2.data import ATOM_SYMBOL_TO_Z
 from forte2.helpers import logger
 
 try:

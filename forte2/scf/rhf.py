@@ -127,5 +127,8 @@ class RHF(SCFBase):
     def _assign_orbital_symmetries(self):
         S = self._get_overlap()
         self.irrep_labels, self.irrep_indices = assign_mo_symmetries(
-            self.system, S, self.C[0]
+            self.system,
+            self.basis_info,
+            S,
+            self.C[0],
         )
