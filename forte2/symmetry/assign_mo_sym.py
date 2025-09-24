@@ -16,79 +16,8 @@ and :math:`\chi(g)_{p} = \sum_{uvw} c_{pu}^* c_{pv} U_{vw} S_{uw}.`
 """
 
 import numpy as np
-from forte2.helpers import logger
-from forte2.system.basis_utils import BasisInfo
-from forte2.system.parse_geometry import rotation_mat, reflection_mat
-
-
-_SYMMETRY_OPS = {
-    "C2V": ["E", "C2z", "σ_xz", "σ_yz"],
-    "C2H": ["E", "C2z", "i", "σ_xy"],
-    "D2": ["E", "C2z", "C2y", "C2x"],
-    "D2H": ["E", "C2z", "C2y", "C2x", "i", "σ_xy", "σ_xz", "σ_yz"],
-    "CS": ["E", "σ_xy"],
-    "CI": ["E", "i"],
-    "C2": ["E", "C2z"],
-    "C1": ["E"],
-}
-
-# Full 1-D character tables (±1 per operation, in the same order as _SYMMETRY_OPS[group])
-_CHARACTER_TABLE = {
-    "C2V": {
-        "a1": [+1, +1, +1, +1],
-        "a2": [+1, +1, -1, -1],
-        "b1": [+1, -1, +1, -1],
-        "b2": [+1, -1, -1, +1],
-    },
-    "C2H": {
-        "ag": [+1, +1, +1, +1],
-        "au": [+1, +1, -1, -1],
-        "bg": [+1, -1, +1, -1],
-        "bu": [+1, -1, -1, +1],
-    },
-    "D2": {
-        "a": [+1, +1, +1, +1],
-        "b1": [+1, +1, -1, -1],
-        "b2": [+1, -1, +1, -1],
-        "b3": [+1, -1, -1, +1],
-    },
-    "D2H": {
-        "ag": [+1, +1, +1, +1, +1, +1, +1, +1],
-        "au": [+1, +1, +1, +1, -1, -1, -1, -1],
-        "b1g": [+1, +1, -1, -1, +1, +1, -1, -1],
-        "b1u": [+1, +1, -1, -1, -1, -1, +1, +1],
-        "b2g": [+1, -1, +1, -1, +1, -1, +1, -1],
-        "b2u": [+1, -1, +1, -1, -1, +1, -1, +1],
-        "b3g": [+1, -1, -1, +1, +1, -1, -1, +1],
-        "b3u": [+1, -1, -1, +1, -1, +1, +1, -1],
-    },
-    "CS": {"a'": [+1, +1], "a''": [+1, -1]},
-    "CI": {"g": [+1, +1], "u": [+1, -1]},
-    "C2": {"a": [+1, +1], "b": [+1, -1]},
-    "C1": {"a": [+1]},
-}
-
-_COTTON_LABELS = {
-    "C1": {"a": 0},
-    "CI": {"g": 0, "u": 1},
-    "C2": {"a": 0, "b": 1},
-    "CS": {"a'": 0, "a''": 1},
-    "D2": {"a": 0, "b1": 1, "b2": 2, "b3": 3},
-    "C2V": {"a1": 0, "a2": 1, "b1": 2, "b2": 3},
-    "C2H": {"ag": 0, "bg": 1, "au": 2, "bu": 3},
-    "D2H": {
-        "ag": 0,
-        "b1g": 1,
-        "b2g": 2,
-        "b3g": 3,
-        "au": 4,
-        "b1u": 5,
-        "b2u": 6,
-        "b3u": 7,
-    },
-}
-
-_PRINCIPAL_AXIS = np.array([0.0, 0.0, 1.0])
+from forte2.helpers import logger, block_diag_2x2
+from .sym_utils import SYMMETRY_OPS, CHARACTER_TABLE, COTTON_LABELS, rotation_mat, reflection_mat
 
 
 def local_sign(l, m, op):
@@ -132,7 +61,7 @@ def get_symmetry_ops(point_group):
     axes = {"x": 0, "y": 1, "z": 2}
     I = np.eye(3)
 
-    ops = _SYMMETRY_OPS[point_group]
+    ops = SYMMETRY_OPS[point_group]
     for op in ops:
         if op == "E":
             symmetry_ops[op] = I
@@ -156,17 +85,10 @@ def characters(S, C, U_ops):
 
     if first_U[0].shape[0] == S.shape[0] // 2:
         return np.column_stack(
-            [np.diag(X @ to_spinor(U) @ C) for op, U in U_ops.items()]
+            [np.diag(X @ block_diag_2x2(U) @ C) for op, U in U_ops.items()]
         )
     else:
         return np.column_stack([np.diag(X @ U @ C) for op, U in U_ops.items()])
-
-
-def to_spinor(X):
-    """
-    Helper function - block spinor matrix for to accommodate GHF cases.
-    """
-    return np.block([[X, np.zeros_like(X)], [np.zeros_like(X), X]])
 
 
 def assign_irrep_labels(point_group, U_ops, S, C):
@@ -177,7 +99,7 @@ def assign_irrep_labels(point_group, U_ops, S, C):
     chars = characters(S, C, U_ops)
 
     # Compare the character vector to the expected results and pick the closest match
-    table = _CHARACTER_TABLE[point_group]
+    table = CHARACTER_TABLE[point_group]
     T = np.array([table[name] for name in table])  # (n_irrep, |G|)
     names = list(table.keys())
 
@@ -225,13 +147,11 @@ def build_U_matrices(symmetry_operations, system, info, tol=1e-6):
     return U_ops
 
 
-def assign_mo_symmetries(system, S, C):
+def assign_mo_symmetries(system, info, S, C):
     if system.point_group == "C1":
         labels = ["a" for _ in range(C.shape[1])]
         irrep_indices = [0 for _ in range(C.shape[1])]
     else:
-        info = BasisInfo(system, system.basis)
-
         # step 1: build symmetry transformation matrices
         symmetry_ops = get_symmetry_ops(system.point_group)
 
@@ -244,6 +164,6 @@ def assign_mo_symmetries(system, S, C):
         for i, c in enumerate(chars):
             logger.log_debug(f"orbital {i + 1}, character = {c}")
 
-        irrep_indices = [_COTTON_LABELS[system.point_group][label] for label in labels]
+        irrep_indices = [COTTON_LABELS[system.point_group][label] for label in labels]
 
     return labels, irrep_indices

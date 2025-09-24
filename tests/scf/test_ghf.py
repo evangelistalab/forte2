@@ -32,7 +32,6 @@ def test_equivalence_to_uhf():
         xyz=xyz,
         basis_set="cc-pVQZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        reorient=False,
     )
     scf = GHF(charge=0, ms_guess=0.0, guess_mix=True)(system)
     scf.run()
