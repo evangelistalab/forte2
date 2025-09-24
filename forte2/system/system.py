@@ -178,7 +178,9 @@ class System:
             )
 
     def _init_basis(self):
+        print(self.basis_set)
         self.basis = build_basis(self.basis_set, self.geom_helper)
+        print(self.basis_set)
         logger.log_info1(
             f"Parsed {self.natoms} atoms with basis set of {self.basis.size} functions."
         )
