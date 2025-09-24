@@ -137,7 +137,10 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         self.naux = self.system.naux
         self.nmo = self.system.nmo
 
-        self.basis_info = BasisInfo(self.system, self.system.basis)
+        if isinstance(self.system, ModelSystem):
+            self.basis_info = None
+        else:
+            self.basis_info = BasisInfo(self.system, self.system.basis)
 
         logger.log_info1(f"Number of electrons: {self.nel}")
         if self._scf_type() != "GHF":  # not good quantum numbers for GHF

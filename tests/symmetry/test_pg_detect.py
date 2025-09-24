@@ -149,3 +149,11 @@ def test_pg_detection_c4v():
     Cl 0 0 -1"""
     system = System(xyz=xyz, basis_set="sto-6g", symmetry=True)
     assert system.point_group.lower() == "c2v"
+
+
+def test_pg_detection_atom():
+    xyz = """
+    H 0 0 0
+    """
+    system = System(xyz=xyz, basis_set="sto-6g", symmetry=True)
+    assert system.point_group.lower() == "d2h"

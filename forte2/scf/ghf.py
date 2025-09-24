@@ -49,7 +49,7 @@ class GHF(SCFBase):
     j_adapt: bool = False
 
     _diis_update = RHF._diis_update
-    assign_mo_symmetries = RHF._assign_orbital_symmetries
+    _assign_mo_symmetries = RHF._assign_orbital_symmetries
 
     def __call__(self, system):
         system.two_component = True
