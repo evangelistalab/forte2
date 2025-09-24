@@ -4,60 +4,8 @@ import numpy as np
 
 from forte2 import ints
 from forte2.helpers import logger
-from .atom_data import ATOM_DATA, ATOM_SYMBOL_TO_Z, ANGSTROM_TO_BOHR
-
-
-def rotation_mat(axis, theta):
-    """
-    Euler-Rodrigues formula for rotation matrix
-
-    Parameters
-    ----------
-    axis : ndarray of shape (3,)
-        The axis to rotate around. Will be normalized internally.
-    theta : float
-        Rotation angle
-
-    Returns
-    -------
-    R : ndarray of shape (3, 3)
-        The rotation matrix.
-    """
-    axis = axis / np.linalg.norm(axis)
-    a = np.cos(theta / 2)
-    b, c, d = -axis * np.sin(theta / 2)
-
-    R = np.array(
-        [
-            [a * a + b * b - c * c - d * d, 2 * (b * c - a * d), 2 * (b * d + a * c)],
-            [2 * (b * c + a * d), a * a + c * c - b * b - d * d, 2 * (c * d - a * b)],
-            [2 * (b * d - a * c), 2 * (c * d + a * b), a * a + d * d - b * b - c * c],
-        ]
-    )
-    return R
-
-
-def reflection_mat(plane):
-    """
-    Return the 3x3 reflection matrix for the mirror plane σ(x_i, x_j).
-
-    Parameters
-    ----------
-    plane: tuple (i, j) with i != j and i,j ∈ {0,1,2} mapping to x,y,z.
-           Example: (0,1) -> σ_xy (flip z).
-
-    Returns
-    -------
-    R : ndarray of shape (3, 3)
-    The reflection matrix.
-    """
-    i, j = plane
-    if i == j:
-        raise ValueError("plane must use two distinct axes")
-    R = np.eye(3)
-    k = 3 - i - j  # the axis not in the plane (since {0,1,2})
-    R[k, k] = -1.0
-    return R
+from forte2.symmetry import rotation_mat, PGSymmetryDetector
+from forte2.data import ATOM_DATA, ATOM_SYMBOL_TO_Z, ANGSTROM_TO_BOHR
 
 
 def parse_geometry(geom, unit):
@@ -265,8 +213,8 @@ class GeometryHelper:
     """Helper class to process geometry data."""
 
     atoms: list[tuple[int, np.ndarray]]
-    tol: float = 1.0e-06
-    reorient: bool = True
+    tol: float = 1e-4
+    symmetry: bool = False
 
     def __post_init__(self):
         self.Zsum = round(np.sum([x[0] for x in self.atoms]))
@@ -301,60 +249,26 @@ class GeometryHelper:
             r2 = np.dot(x, x)
             self.inertia_matrix += m * ((r2 * np.eye(3)) - np.outer(x, x))
 
-        if self.reorient:
-            # compute principle moments of inertia. These will be sorted in ascending order
-            moi, moi_vectors = np.linalg.eigh(self.inertia_matrix)
-
-            shifted_atomic_positions = (
-                self.atomic_positions - self.center_of_mass[None, :]
+        if self.symmetry:
+            com_atomic_positions = self.atomic_positions - self.center_of_mass[None, :]
+            sym_detector = PGSymmetryDetector(
+                self.inertia_matrix, com_atomic_positions, self.atomic_charges
             )
+            sym_detector.run()
+            self.prinrot = sym_detector.prinrot
+            self.point_group = sym_detector.pg_name
+            logger.log_info1(f"Detected point group: {self.point_group}")
+            self.prin_atomic_positions = sym_detector.prin_atomic_positions
 
-            axis_order = []
-            for i in range(3):
-                R = rotation_mat(moi_vectors[:, i], np.pi)
-                rotated_positions = (R @ shifted_atomic_positions.T).T
-                all_match = True
-                for x in shifted_atomic_positions:
-                    found = False
-                    for y in rotated_positions:
-                        if np.linalg.norm(x - y) < self.tol:
-                            found = True
-                    if not found:
-                        all_match = False
-
-                axis_order.append(2 if all_match else 1)
-
-            sorted_axis = sorted(
-                zip(axis_order, moi, range(3)),
-                key=lambda x: (
-                    x[0],
-                    -x[1],
-                ),  # sort axes by Cn order first, then by descending MOI
-            )
-            logger.log_debug("Sorted Axis Order:")
-            for ax in sorted_axis:
-                n, I, idx = ax
-                logger.log_debug(
-                    f"Axis: {moi_vectors[:, idx]}   Cn: {n}   MOI: {I}   Axis Assignment: {idx}"
-                )
-
-            self.prinrot = np.concatenate(
-                [moi_vectors[:, n][:, np.newaxis] for _, _, n in sorted_axis], axis=1
-            ).T  # for rotated water
-            self.prin_atomic_positions = np.array(
-                [
-                    self.prinrot @ (r - self.center_of_mass)
-                    for r in self.atomic_positions
-                ]
-            )
-
-            # Overwrite original inputted atomic positions with principle atomic positions
+            # Overwrite original inputted atomic positions with principal atomic positions
             self.atomic_positions = self.prin_atomic_positions.copy()
             for i in range(self.natoms):
                 self.atoms[i][1] = self.prin_atomic_positions[i, :]
             logger.log_info1(
-                "Original atomic coordinates overwritten with principle atomic positions"
+                "Original atomic coordinates overwritten with principal atomic positions"
             )
         else:
             self.prinrot = np.eye(3)
             self.prin_atomic_positions = self.atomic_positions.copy()
+            self.point_group = "C1"
+            logger.log_info1("Point group symmetry detection not performed. Running in C1 symmetry.")

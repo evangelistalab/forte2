@@ -9,7 +9,7 @@ from forte2.system.basis_utils import BasisInfo
 from forte2.helpers import logger
 from forte2.helpers.matrix_functions import invsqrt_matrix
 from forte2.base_classes.mixins import MOsMixin, SystemMixin, MOSpaceMixin
-from forte2.system.atom_data import ATOM_SYMBOL_TO_Z
+from forte2.data import ATOM_SYMBOL_TO_Z
 from forte2.orbitals.semicanonicalizer import Semicanonicalizer
 from forte2.orbitals.avas import AVAS
 

@@ -189,10 +189,16 @@ class UHF(SCFBase):
     def _assign_orbital_symmetries(self):
         S = self._get_overlap()
         irrep_labels_alpha, irrep_indices_alpha = assign_mo_symmetries(
-            self.system, S, self.C[0]
+            self.system,
+            self.basis_info,
+            S,
+            self.C[0],
         )
         irrep_labels_beta, irrep_indices_beta = assign_mo_symmetries(
-            self.system, S, self.C[1]
+            self.system,
+            self.basis_info,
+            S,
+            self.C[1],
         )
         self.irrep_labels = [irrep_labels_alpha, irrep_labels_beta]
         self.irrep_indices = [irrep_indices_alpha, irrep_indices_beta]

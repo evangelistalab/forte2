@@ -5,7 +5,7 @@ from forte2.scf import RHF, GHF, UHF
 from forte2.helpers.comparisons import approx
 from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 from forte2.system import BSE_AVAILABLE
-from forte2.system.atom_data import EH_TO_WN, EH_TO_EV
+from forte2.data import EH_TO_WN, EH_TO_EV
 
 
 def test_sfx2c1e():
