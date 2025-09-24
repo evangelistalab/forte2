@@ -55,6 +55,8 @@ class System:
     symmetry : bool, optional, default=False
         Whether to automatically detect the largest Abelian point group symmetry of the molecule.
         This will center the molecule at its center of mass and reorient it along its principal axes of inertia.
+    symmetry_tol : float, optional, default=1e-4
+        The tolerance for detecting symmetry.
 
     Attributes
     ----------
@@ -111,6 +113,7 @@ class System:
     cholesky_tei: bool = False
     cholesky_tol: float = 1e-6
     symmetry: bool = False
+    symmetry_tol: float = 1e-4
 
     ### Non-init attributes
     atoms: list[list[float, list[float, float, float]]] = field(
@@ -142,7 +145,7 @@ class System:
 
     def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
-        self.geom_helper = GeometryHelper(self.atoms, symmetry=self.symmetry)
+        self.geom_helper = GeometryHelper(self.atoms, symmetry=self.symmetry, tol=self.symmetry_tol)
         self.atoms = self.geom_helper.atoms
         self.Zsum = self.geom_helper.Zsum
         self.natoms = self.geom_helper.natoms
