@@ -338,6 +338,7 @@ class ModelSystem:
         self.naux = 0
         self.Xorth = invsqrt_matrix(self.ints_overlap(), tol=1e-13)
         self.symmetry = False
+        self.point_group = "C1"
 
     def ints_overlap(self):
         return self.overlap

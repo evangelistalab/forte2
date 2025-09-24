@@ -64,7 +64,10 @@ class PGSymmetryDetector:
         self.natoms = self.com_atomic_positions.shape[0]
         if self.natoms == 1:
             # Just an atom at the origin, no need to rotate
-            return np.eye(3)
+            self.prinrot = np.eye(3)
+            self.prin_atomic_positions = self.com_atomic_positions
+            self.pg_name = "D2H"
+            return
 
         # compute principal moments of inertia. These are sorted in ascending order
         self.moi, self.moi_vectors = np.linalg.eigh(self.inertia_tensor)
@@ -75,12 +78,13 @@ class PGSymmetryDetector:
         # count degeneracies
         ndegen = (np.abs(self.moi[1:] - self.moi[:-1]) < self.tol).sum() + 1
 
+        force_c1 = False
         if ndegen == 1:
             self.prinrot = self.find_principal_rotation_axes_asym_top()
         elif ndegen == 2:
             self.prinrot = self.find_principal_rotation_axes_sym_top()
         else:
-            self.prinrot = self.find_principal_rotation_axes_sph_top()
+            self.prinrot, force_c1 = self.find_principal_rotation_axes_sph_top()
 
         det = np.linalg.det(self.prinrot)
 
@@ -96,7 +100,10 @@ class PGSymmetryDetector:
 
         self.prin_atomic_positions = (self.prinrot @ self.com_atomic_positions.T).T
 
-        self.pg_name = self.detect_abelian_pg_symmetry()
+        if force_c1:
+            self.pg_name = "C1"
+        else:
+            self.pg_name = self.detect_abelian_pg_symmetry()
 
     def detect_abelian_pg_symmetry(self):
         """
@@ -231,9 +238,8 @@ class PGSymmetryDetector:
         return prinrot
 
     def find_principal_rotation_axes_sph_top(self):
-        # do not reorient if the molecule was already "properly" oriented
-        if np.allclose(np.abs(self.moi_vectors), np.eye(3), atol=self.tol, rtol=0):
-            return self.moi_vectors
+        force_c1 = False
+
         c2_axes = []
         c2_axes += self.find_c2_axes_through_atom()
         c2_axes += self.find_c2_axes_through_midpoint()
@@ -254,6 +260,7 @@ class PGSymmetryDetector:
                 "Not reorienting. Check geometry, or relax tolerance."
             )
             prinrot = np.eye(3)
+            force_c1 = True
         if nc2 == 3:
             # T/Td/Th, the C2 axes are the principle axes
             prinrot = np.array(unique_c2_axes)
@@ -266,6 +273,7 @@ class PGSymmetryDetector:
                     " Not reorienting. Check geometry, or relax tolerance."
                 )
                 prinrot = np.eye(3)
+                force_c1 = True
             else:
                 prinrot = np.array(unique_c4_axes)
         elif nc2 == 15:
@@ -273,8 +281,9 @@ class PGSymmetryDetector:
                 "find_principal_rotation_axes_sph_top: Icosahedral point group detected, but currently treated as C1."
             )
             prinrot = np.eye(3)
+            force_c1 = True
 
-        return prinrot
+        return prinrot, force_c1
 
     def find_symmetry_equivalent_atoms(self):
         """
