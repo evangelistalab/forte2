@@ -5,7 +5,7 @@ import numpy as np
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem, compute_orthonormal_transformation
 from forte2.helpers import logger
-from forte2.symmetry import assign_mo_symmetries, real_sph_to_j_adapted
+from forte2.symmetry import real_sph_to_j_adapted
 from .scf_base import SCFBase
 from .rhf import RHF
 from .scf_utils import guess_mix, alpha_beta_mix, break_complex_conjugation_symmetry
@@ -49,7 +49,7 @@ class GHF(SCFBase):
     j_adapt: bool = False
 
     _diis_update = RHF._diis_update
-    _assign_mo_symmetries = RHF._assign_orbital_symmetries
+    _assign_orbital_symmetries = RHF._assign_orbital_symmetries
 
     def __call__(self, system):
         system.two_component = True
