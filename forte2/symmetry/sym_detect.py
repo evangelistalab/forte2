@@ -262,7 +262,7 @@ class PGSymmetryDetector:
             prinrot = np.eye(3)
             force_c1 = True
         if nc2 == 3:
-            # T/Td/Th, the C2 axes are the principle axes
+            # T/Td/Th, the C2 axes are the principal axes
             prinrot = np.array(unique_c2_axes)
         elif nc2 == 9:
             unique_c4_axes = self.find_c4_axes_for_oh()
