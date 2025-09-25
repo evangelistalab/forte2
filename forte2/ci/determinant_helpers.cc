@@ -4,6 +4,50 @@
 
 namespace forte2 {
 
+Determinant create_single_a_excitation(const Determinant& det, size_t i, size_t a) {
+    Determinant new_det = det;
+    new_det.set_na(i, false);
+    new_det.set_na(a, true);
+    return new_det;
+}
+
+Determinant create_single_b_excitation(const Determinant& det, size_t i, size_t a) {
+    Determinant new_det = det;
+    new_det.set_nb(i, false);
+    new_det.set_nb(a, true);
+    return new_det;
+}
+
+Determinant create_double_aa_excitation(const Determinant& det, size_t i, size_t j, size_t a,
+                                        size_t b) {
+    Determinant new_det = det;
+    new_det.set_na(i, false);
+    new_det.set_na(j, false);
+    new_det.set_na(a, true);
+    new_det.set_na(b, true);
+    return new_det;
+}
+
+Determinant create_double_bb_excitation(const Determinant& det, size_t i, size_t j, size_t a,
+                                        size_t b) {
+    Determinant new_det = det;
+    new_det.set_nb(i, false);
+    new_det.set_nb(j, false);
+    new_det.set_nb(a, true);
+    new_det.set_nb(b, true);
+    return new_det;
+}
+
+Determinant create_double_ab_excitation(const Determinant& det, size_t i, size_t j, size_t a,
+                                        size_t b) {
+    Determinant new_det = det;
+    new_det.set_na(i, false);
+    new_det.set_nb(j, false);
+    new_det.set_na(a, true);
+    new_det.set_nb(b, true);
+    return new_det;
+}
+
 // std::shared_ptr<psi::Matrix> make_s2_matrix(const std::vector<Determinant>& dets) {
 //     const size_t n = dets.size();
 //     auto S2 = std::make_shared<psi::Matrix>("S^2", n, n);

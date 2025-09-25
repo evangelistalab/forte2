@@ -10,7 +10,49 @@ class Matrix;
 
 namespace forte2 {
 
-// class ActiveSpaceIntegrals;
+/// @brief Create a single excitation from alpha orbital i to alpha orbital a
+/// @param det The original determinant
+/// @param i The index of the occupied alpha orbital
+/// @param a The index of the virtual alpha orbital
+/// @return The new determinant with the single excitation
+Determinant create_single_a_excitation(const Determinant& det, size_t i, size_t a);
+
+/// @brief Create a single excitation from beta orbital i to beta orbital a
+/// @param det The original determinant
+/// @param i The index of the occupied beta orbital
+/// @param a The index of the virtual beta orbital
+/// @return The new determinant with the single excitation
+Determinant create_single_b_excitation(const Determinant& det, size_t i, size_t a);
+
+/// @brief Create a double excitation from alpha orbitals i,j to alpha orbitals a,b
+/// @param det The original determinant
+/// @param i The index of the first occupied alpha orbital
+/// @param j The index of the second occupied alpha orbital
+/// @param a The index of the first virtual alpha orbital
+/// @param b The index of the second virtual alpha orbital
+/// @return The new determinant with the double excitation
+Determinant create_double_aa_excitation(const Determinant& det, size_t i, size_t j, size_t a,
+                                        size_t b);
+
+/// @brief Create a double excitation from beta orbitals i,j to beta orbitals a,b
+/// @param det The original determinant
+/// @param i The index of the first occupied beta orbital
+/// @param j The index of the second occupied beta orbital
+/// @param a The index of the first virtual beta orbital
+/// @param b The index of the second virtual beta orbital
+/// @return The new determinant with the double excitation
+Determinant create_double_bb_excitation(const Determinant& det, size_t i, size_t j, size_t a,
+                                        size_t b);
+
+/// @brief Create a double excitation from alpha orbital i and beta orbital j to
+///        alpha orbital a and beta orbital b
+/// @param det The original determinant
+/// @param i The index of the occupied alpha orbital
+/// @param j The index of the occupied beta orbital
+/// @param a The index of the virtual alpha orbital
+/// @param b The index of the virtual beta orbital
+Determinant create_double_ab_excitation(const Determinant& det, size_t i, size_t j, size_t a,
+                                        size_t b);
 
 /// @brief Build the S^2 operator matrix in the given basis of determinants (multithreaded)
 /// @param dets A vector of determinants

@@ -77,6 +77,7 @@ nanobind_add_module(
   api/helpers_api.cc
   api/integrals_api.cc
   api/logging_api.cc
+  api/sci_api.cc
   api/slater_rules_api.cc
   api/sparse_exp_api.cc
   api/sparse_operator_api.cc
@@ -108,6 +109,8 @@ nanobind_add_module(
   ci/rel_ci_sigma_builder_rdm.cc
   ci/rel_ci_sigma_builder_rdm_debug.cc
   ci/rel_ci_sigma_builder_harrison_zarrabian.cc
+  ci/sci_helper.cc
+  ci/sci_helper_select.cc
   ci/slater_rules.cc
   sparse/sparse_exp.cc
   sparse/sparse_operator.cc

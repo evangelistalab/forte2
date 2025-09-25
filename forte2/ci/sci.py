@@ -4,14 +4,13 @@ from collections import OrderedDict
 import numpy as np
 
 from forte2 import (
-    CIStrings,
-    CISigmaBuilder,
-    CISpinAdapter,
     cpp_helpers,
-    RelCISigmaBuilder,
-    SparseState,
     apply_op,
     sparse_operator_hamiltonian,
+    Determinant,
+    SparseState,
+    SlaterRules,
+    SelectedCIHelper,
 )
 from forte2.state import State, MOSpace
 from forte2.helpers.comparisons import approx
@@ -35,11 +34,11 @@ from .ci_utils import (
 
 
 @dataclass
-class _CIBase:
+class _SelectedCIBase:
     """
-    A general configuration interaction (CI) solver class for a single `State`.
+    A general selected configuration interaction (CI) solver class for a single `State`.
     Although possible, is not recommended to instantiate this class directly.
-    Consider using the `CI` class instead.
+    Consider using the `SelectedCI` class instead.
 
     Parameters
     ----------
@@ -105,6 +104,11 @@ class _CIBase:
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
     die_if_not_converged: bool = False
+    slater_rules: SlaterRules = field(default=None, init=False)
+
+    ### Selected CI parameters
+    maxcycle: int = 10
+    threshold: float = 1e-5
 
     ### Sigma builder parameters
     ci_algorithm: str = "hz"
@@ -147,108 +151,95 @@ class _CIBase:
                 "exact",
             ], "CI algorithm must be 'hz', 'kh', or 'exact'."
 
-    def _ci_solver_startup(self):
-        if self.two_component:
-            self.ci_strings = CIStrings(
-                self.state.nel - self.ncore,
-                0,
-                self.state.symmetry,
-                self.active_orbsym,
-                self.state.gas_min,
-                self.state.gas_max,
-            )
-        else:
-            self.ci_strings = CIStrings(
-                self.state.na - self.ncore,
-                self.state.nb - self.ncore,
-                self.state.symmetry,
-                self.active_orbsym,
-                self.gas_min,
-                self.gas_max,
-            )
+    def _sci_solver_startup(self):
+        # Create the Slater rules object
+        self.slater_rules = SlaterRules(
+            self.norb, self.ints.E, self.ints.H, self.ints.V
+        )
 
-        pretty_print_gas_info(self.ci_strings)
+        # Create an initial guess
+        self.guess_determinants, self.guess_c = self._initial_guess()
 
-        if self.two_component:
-            logger.log(f"\nNumber of electrons: {self.ci_strings.na}", self.log_level)
-            logger.log(f"Number of strings: {self.ci_strings.nas}", self.log_level)
-        else:
-            logger.log(f"\nNumber of α electrons: {self.ci_strings.na}", self.log_level)
-            logger.log(f"Number of β electrons: {self.ci_strings.nb}", self.log_level)
-            logger.log(f"Number of α strings: {self.ci_strings.nas}", self.log_level)
-            logger.log(f"Number of β strings: {self.ci_strings.nbs}", self.log_level)
-            self.ndet = self.ci_strings.ndet
-        logger.log(f"Number of determinants: {self.ci_strings.ndet}", self.log_level)
+        self.ndet = len(self.guess_determinants)
+        logger.log(f"Number of determinants: {self.ndet}", self.log_level)
 
-        if self.ci_strings.ndet == 0:
-            raise ValueError(
-                "No determinants could be generated for the given state and orbitals."
-            )
-        if self.two_component:
-            # no "spin-adaptation" for 2c, we use a basis of determinants directly
-            self.ndet = self.ci_strings.ndet
-            self.basis_size = self.ndet
-            self.dets = self.ci_strings.make_determinants()
-            self.sigma_det = np.zeros((self.ndet,), dtype=complex)
-            self.b_det = np.zeros((self.ndet,), dtype=complex)
-        else:
-            self.spin_adapter = CISpinAdapter(
-                self.state.multiplicity - 1, self.state.twice_ms, self.norb
-            )
-            self.spin_adapter.set_log_level(self.log_level)
-            self.dets = self.ci_strings.make_determinants()
-
-            self.spin_adapter.prepare_couplings(self.dets)
-            logger.log(f"Number of CSFs: {self.spin_adapter.ncsf()}", self.log_level)
-
-            # 1. Allocate memory for the CI vectors
-            self.ndet = self.ci_strings.ndet
-            self.basis_size = self.spin_adapter.ncsf()
-
-            # Create the CI vectors that will hold the results of the sigma builder in the
-            # determinant basis
-            self.b_det = np.zeros((self.ndet))
-            self.sigma_det = np.zeros((self.ndet))
+        # Create the CI vectors that will hold the results of the sigma builder in the
+        # determinant basis
+        self.b_det = np.zeros((self.ndet))
+        self.sigma_det = np.zeros((self.ndet))
 
     def run(self):
         if not self.executed:
-            self._ci_solver_startup()
+            self._sci_solver_startup()
 
-        # Create the CISigmaBuilder from the CI strings and integrals
-        # This object handles some temporary memory deallocated at destruction
-        # and is used to compute the Hamiltonian matrix elements in the determinant basis
-        if self.two_component:
-            self.ci_sigma_builder = RelCISigmaBuilder(
-                self.ci_strings,
-                self.ints.E.real,
-                self.ints.H,
-                self.ints.V,
-                self.log_level,
-            )
-        else:
-            self.ci_sigma_builder = CISigmaBuilder(
-                self.ci_strings,
-                self.ints.E,
-                self.ints.H,
-                self.ints.V,
-                self.log_level,
-            )
-        self.ci_sigma_builder.set_memory(self.ci_builder_memory)
-        if self.ci_algorithm.lower() == "exact":
-            self._do_exact_diagonalization()
-        else:
-            self._do_iterative_ci()
+        # Create the SelectedCIHelper to manage the selected CI procedure
+        self.sci_helper = SelectedCIHelper(
+            self.norb,
+            self.guess_determinants,
+            self.guess_c,
+            self.ints.E,
+            self.ints.H,
+            self.ints.V,
+            self.log_level,
+        )
 
-        self.E = self.evals
-        for i, e in enumerate(self.evals):
-            logger.log(f"Final CI Energy Root {i}: {e:20.12f} [Eh]", self.log_level)
+        for cycle in range(self.maxcycle):
+            print(f"\nCycle {cycle + 1}")
+            # Step 1. Diagonalize the Hamiltonian in the P space
+            # self._diagonalize_P_space()
 
-        if self.do_test_rdms:
-            self._test_rdms()
+            # # Step 2. Find determinants in the Q space
+            self.sci_helper.select_cipsi(threshold=self.threshold)
+
+            self.ndet = self.sci_helper.ndets()
+            logger.log(f"Number of determinants: {self.ndet}", self.log_level)
+
+            if self.ci_algorithm.lower() == "exact":
+                self._do_exact_diagonalization()
+            else:
+                self._do_iterative_ci()
+
+            # # Step 3. Diagonalize the Hamiltonian in the P + Q space
+            # diagonalize_PQ_space()
+
+            logger.log(f"CI Energy Roots: {self.evals}", self.log_level)
+
+            self.sci_helper.set_c(self.evecs)
+
+            # # Step 4. Check convergence and break if needed
+            # if check_convergence():
+            #     break
+
+            # # Step 5. Prune the P + Q space to get an updated P space
+            # prune_PQ_to_P()
+
+        # self.E = self.evals
+        # for i, e in enumerate(self.evals):
+        #     logger.log(f"Final CI Energy Root {i}: {e:20.12f} [Eh]", self.log_level)
+
+        # if self.do_test_rdms:
+        #     self._test_rdms()
 
         self.executed = True
 
         return self
+
+    def _initial_guess(self):
+        # create the initial guess determinant
+        d = Determinant.zero()
+        if self.two_component:
+            na = self.state.nel - self.ncore
+            nb = 0
+        else:
+            na = self.state.na - self.ncore
+            nb = self.state.nb - self.ncore
+        for i in range(na):
+            d.set_na(i, True)
+        for i in range(nb):
+            d.set_nb(i, True)
+        logger.log(f"Initial guess determinant: {d.str(self.norb)}", self.log_level)
+        c = np.eye(self.nroot, dtype=self.dtype)
+        return [d], c
 
     def _do_iterative_ci(self):
         """
@@ -256,18 +247,9 @@ class _CIBase:
         Harrison-Zarrabian or Knowles-Handy sigma builder algorithm.
         """
         if self.two_component:
-            assert self.ci_algorithm.lower() in [
-                "hz",
-                "sparse",
-            ], "For two-component CI, only the Harrison-Zarrabian (hz) algorithm is supported."
-            self.ci_sigma_builder.set_algorithm("hz")
-        else:
-            self.ci_sigma_builder.set_algorithm(self.ci_algorithm)
-
-        logger.log(
-            f"Using CI algorithm: {self.ci_sigma_builder.get_algorithm()}",
-            self.log_level,
-        )
+            raise NotImplementedError(
+                "Two-component Selected CI is not yet implemented."
+            )
 
         if self.two_component:
             Hdiag = self.ci_sigma_builder.form_Hdiag(self.dets)
@@ -376,14 +358,13 @@ class _CIBase:
     def _do_exact_diagonalization(self):
         logger.log("Using CI algorithm: Exact Diagonalization", self.log_level)
 
-        if self.two_component:
-            H = np.zeros((self.ndet,) * 2, dtype=complex)
-            for i in range(self.ndet):
-                for j in range(i + 1):
-                    H[i, j] = self.ci_sigma_builder.slater_rules(self.dets, i, j)
-                    H[j, i] = np.conj(H[i, j])
-        else:
-            H = self.ci_sigma_builder.form_H_csf(self.dets, self.spin_adapter)
+        dets = self.sci_helper.dets()
+
+        H = np.zeros((self.ndet,) * 2, dtype=self.dtype)
+        for i in range(self.ndet):
+            for j in range(i + 1):
+                H[i, j] = self.slater_rules.slater_rules(dets[i], dets[j])
+                H[j, i] = np.conj(H[i, j])
 
         self.evals_full, self.evecs_full = np.linalg.eigh(H)
         if self.energy_shift is not None:
@@ -664,13 +645,13 @@ class _CIBase:
         left_ci_vec_det = np.zeros((self.ndet))
         self.spin_adapter.csf_C_to_det_C(self.evecs[:, left_root], left_ci_vec_det)
         if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(
-                self.evecs[:, right_root], right_ci_vec_det
+            return self.ci_sigma_builder.sf_1rdm(
+                self.evecs[:, left_root], self.evecs[:, left_root]
             )
-        return self.ci_sigma_builder.sf_1rdm(left_ci_vec_det, right_ci_vec_det)
+
+        return self.ci_sigma_builder.sf_1rdm(
+            self.evecs[:, left_root], self.evecs[:, right_root]
+        )
 
     def make_sf_2rdm(self, left_root: int, right_root: int | None = None):
         """
@@ -1116,7 +1097,7 @@ class _CIBase:
 
 
 @dataclass
-class CISolver(ActiveSpaceSolver):
+class SelectedCISolver(ActiveSpaceSolver):
     """
     A general configuration interaction (CI) solver class.
     This solver is can be called iteratively, e.g., in a MCSCF loop or a DSRG reference relaxation loop.
@@ -1185,6 +1166,8 @@ class CISolver(ActiveSpaceSolver):
     rconv: float = 1e-5
     energy_shift: float = None
 
+    threshold: float = 1e-5
+
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
 
@@ -1222,7 +1205,7 @@ class CISolver(ActiveSpaceSolver):
         for i, state in enumerate(self.sa_info.states):
             # Create a CI solver for each state and MOSpace
             self.sub_solvers.append(
-                _CIBase(
+                _SelectedCIBase(
                     mo_space=self.mo_space,
                     ints=ints,
                     state=state,
@@ -1240,6 +1223,7 @@ class CISolver(ActiveSpaceSolver):
                     rconv=self.rconv,
                     energy_shift=self.energy_shift,
                     log_level=self.log_level,
+                    threshold=self.threshold,
                 )
             )
 
@@ -1401,7 +1385,7 @@ class CISolver(ActiveSpaceSolver):
 
 
 @dataclass
-class CI(CISolver):
+class SelectedCI(SelectedCISolver):
     """
     CI solver specialized for a single CI calculation. (i.e., not used in a loop).
     See `CISolver` for all parameters and attributes.
@@ -1453,285 +1437,69 @@ class CI(CISolver):
             )
 
 
-@dataclass
-class RelCISolver(RelActiveSpaceSolver):
-    """
-    Relativistic Configuration Interaction
-    """
+# @dataclass
+# class SelectedCI(MOsMixin, SystemMixin):
+#     orbitals: list[int] | list[list[int]]
+#     norb: int = field(init=False)
+#     state: State
+#     nroot: int
+#     core_orbitals: list[int] = field(default_factory=list)
+#     max_iter: int = 2
 
-    ### Davidson-Liu parameters
-    guess_per_root: int = 2
-    ndets_per_guess: int = 10
-    collapse_per_root: int = 2
-    basis_per_root: int = 4
-    maxiter: int = 100
-    econv: float = 1e-10
-    rconv: float = 1e-5
-    energy_shift: float = None
+#     def __post_init__(self):
+#         self.norb = len(self.orbitals)
 
-    do_test_rdms: bool = False
-    log_level: int = field(default=logger.get_verbosity_level())
+#     def __call__(self, method):
+#         SystemMixin.copy_from_upstream(self, method)
+#         MOsMixin.copy_from_upstream(self, method)
 
-    ### Non-init attributes
-    ci_builder_memory: int = field(default=1024, init=False)  # in MB
-    first_run: bool = field(default=True, init=False)
-    executed: bool = field(default=False, init=False)
+#         return self
 
-    def __call__(self, parent_method):
-        self.parent_method = parent_method
-        return self
+#     def run(self):
+#         print("\nSelected configuration interaction")
 
-    def _startup(self):
-        super()._startup(two_component=True)
-        if not self.system.two_component:
-            self.C = convert_coeff_spatial_to_spinor(self.system, self.C)
-            self.system.two_component = True
+#         # dets = forte2.hilbert_space(self.norb, self.state.na, self.state.nb)
+#         ints = RestrictedMOIntegrals(
+#             self.system, self.C[0], self.orbitals, self.core_orbitals
+#         )
 
-        self.norb = self.mo_space.nactv
-        # no distinction between core and frozen core in the CI solver
-        self.core_indices = (
-            self.mo_space.frozen_core_indices + self.mo_space.core_indices
-        )
-        self.active_indices = self.mo_space.active_indices
+#         H = sparse_operator_hamiltonian(ints.E, ints.H, ints.V)
+#         ndocc = min(self.state.na, self.state.nb)
+#         nsocc = max(self.state.na, self.state.nb) - ndocc
+#         aufbau = Determinant("2" * ndocc + "1" * nsocc)
+#         self.P = SparseState(aufbau, 1.0)
+#         # Hmat = H.matrix(dets)
+#         # eig = np.linalg.eigh(Hmat)[0]
+#         # print("Eigenvalues:", eig)
 
-        ints = SpinorbitalIntegrals(
-            self.system,
-            self.C[0],
-            self.active_indices,
-            self.core_indices,
-            use_aux_corr=True,
-        )
+#         # print(eig[0] + 1.096071975854)
 
-        self.sub_solvers = []
-        active_orbsym = [
-            [0 for _ in active_space] for active_space in self.mo_space.active_orbitals
-        ]
+#         # pre_iter_preparation()
 
-        for i, state in enumerate(self.sa_info.states):
-            # Create a CI solver for each state and MOSpace
-            self.sub_solvers.append(
-                _CIBase(
-                    mo_space=self.mo_space,
-                    ints=ints,
-                    state=state,
-                    nroot=self.sa_info.nroots[i],
-                    active_orbsym=active_orbsym,
-                    do_test_rdms=self.do_test_rdms,
-                    ci_algorithm=self.ci_algorithm,
-                    guess_per_root=self.guess_per_root,
-                    ndets_per_guess=self.ndets_per_guess,
-                    collapse_per_root=self.collapse_per_root,
-                    basis_per_root=self.basis_per_root,
-                    maxiter=self.maxiter,
-                    econv=self.econv,
-                    rconv=self.rconv,
-                    energy_shift=self.energy_shift,
-                    log_level=self.log_level,
-                    two_component=True,
-                )
-            )
+#         for cycle in range(self.max_iter):
+#             print(f"\nCycle {cycle + 1}")
+#             # Step 1. Diagonalize the Hamiltonian in the P space
+#             self._diagonalize_P_space()
 
-    def run(self):
-        if self.first_run:
-            self._startup()
-            self.first_run = False
+#             # # Step 2. Find determinants in the Q space
+#             # find_q_space()
 
-        self.evals_per_solver = []
-        for ci_solver in self.sub_solvers:
-            ci_solver.run()
-            self.evals_per_solver.append(ci_solver.evals)
+#             # # Step 3. Diagonalize the Hamiltonian in the P + Q space
+#             # diagonalize_PQ_space()
 
-        self.evals_flat = np.concatenate(self.evals_per_solver)
-        self.E_avg = self.compute_average_energy()
+#             # # Step 4. Check convergence and break if needed
+#             # if check_convergence():
+#             #     break
 
-        self.E = self.evals_flat
+#             # # Step 5. Prune the P + Q space to get an updated P space
+#             # prune_PQ_to_P()
 
-        self.executed = True
-        return self
+#     # if one_cycle_:
+#     #     diagonalize_PQ_space()
 
-    def compute_natural_occupation_numbers(self):
-        """
-        Compute the natural occupation numbers for the CI states.
+#     # # Post-iter process
+#     # post_iter_process()
 
-        Returns
-        -------
-        (norb, nroot) NDArray
-            The natural occupation numbers for each root.
-        """
-        nos = []
-        for ci_solver in self.sub_solvers:
-            nos.append(ci_solver.compute_natural_occupation_numbers())
-        self.nat_occs = np.concatenate(nos, axis=1)
-
-    def compute_transition_properties(self, C=None):
-        """
-        Compute the transition dipole moments and oscillator strengths from the spin-free 1-TDMs.
-        The results are stored in `self.tdm_per_solver` and `self.fosc_per_solver`.
-        """
-        if not self.executed:
-            raise RuntimeError("CI solver has not been executed yet.")
-
-        if C is None:
-            C = self.C[0]
-
-        Cact = C[:, self.active_indices]
-        Ccore = C[:, self.core_indices]
-        rdm_core = np.einsum("pi,qi->pq", Ccore, Ccore.conj(), optimize=True)
-        # this includes nuclear dipole contribution
-        core_dip = get_1e_property(
-            self.system, rdm_core, property_name="dipole", unit="au"
-        )
-        self.tdm_per_solver = []
-        self.fosc_per_solver = []
-
-        for ici, ci_solver in enumerate(self.sub_solvers):
-            tdmdict = OrderedDict()
-            foscdict = OrderedDict()
-            for i in range(ci_solver.nroot):
-                rdm = ci_solver.make_1rdm(i)
-                # Different (back-)transformation rules for RDMs:
-                # O_{mu}^{nu} = C_{mu}^p <phi_p|O|phi^q> C^q_{nu} = C^H O[mo] C
-                # rdm^{mu}_{nu} = C^{mu}_p <a^p a_q> C^q_{nu} = C^* rdm[mo] C^T
-                rdm = np.einsum("ij,pi,qj->pq", rdm, Cact.conj(), Cact, optimize=True)
-                dip = get_1e_property(
-                    self.system, rdm, property_name="electric_dipole", unit="au"
-                )
-                tdmdict[(i, i)] = dip + core_dip
-                foscdict[(i, i)] = 0.0  # No oscillator strength for i->i transitions
-                for j in range(i + 1, ci_solver.nroot):
-                    tdm = ci_solver.make_1rdm(i, j)
-                    tdm = np.einsum(
-                        "ij,pi,qj->pq", tdm, Cact.conj(), Cact, optimize=True
-                    )
-                    tdip = get_1e_property(
-                        self.system, tdm, property_name="electric_dipole", unit="au"
-                    )
-                    tdmdict[(i, j)] = tdip
-                    vte = self.evals_per_solver[ici][j] - self.evals_per_solver[ici][i]
-                    foscdict[(i, j)] = (2 / 3) * vte * np.linalg.norm(tdip) ** 2
-            self.fosc_per_solver.append(foscdict)
-            self.tdm_per_solver.append(tdmdict)
-
-    def get_top_determinants(self, n=5):
-        """
-        Get the top `n` determinants for each root based on their coefficients in the CI vector.
-
-        Parameters
-        ----------
-        n : int, optional, default=5
-            The number of top determinants to return.
-
-        Returns
-        -------
-        top_dets : list[list[tuple[Determinant, float]]]]
-            top_dets[i] contains a list of tuples (Determinant, coefficient) for the `i`-th root.
-        """
-        top_dets = []
-        for ci_solver in self.sub_solvers:
-            top_dets += ci_solver.get_top_determinants(n)
-        return top_dets
-
-    def set_ints(self, scalar, oei, tei):
-        """
-        Set the active-space integrals for the CI solver.
-
-        Parameters
-        ----------
-        scalar : float
-            The scalar energy term.
-        oei : NDArray
-            One-electron active-space integrals in the MO basis.
-        tei : NDArray
-            Two-electron active-space integrals in the MO basis.
-        """
-        for ci_solver in self.sub_solvers:
-            ci_solver.set_ints(scalar, oei, tei)
-
-    def compute_average_energy(self):
-        """
-        Compute the average energy from the CI roots using the weights.
-
-        Returns
-        -------
-        float
-            Average energy of the CI roots.
-        """
-        return np.dot(self.weights_flat, self.evals_flat)
-
-    def make_average_1rdm(self):
-        """
-        Make the average one-particle RDM from the CI vectors.
-
-        Returns
-        -------
-        NDArray
-            Average one-particle RDM.
-        """
-        rdm1 = np.zeros((self.norb,) * 2, dtype=np.complex128)
-        for i, ci_solver in enumerate(self.sub_solvers):
-            for j in range(ci_solver.nroot):
-                rdm1 += ci_solver.make_1rdm(j) * self.weights[i][j]
-        return rdm1
-
-    def make_average_2rdm(self):
-        """
-        Make the average two-particle RDM from the CI vectors.
-
-        Returns
-        -------
-        NDArray
-            Average two-particle RDM.
-        """
-        rdm2 = np.zeros((self.norb,) * 4, dtype=np.complex128)
-        for i, ci_solver in enumerate(self.sub_solvers):
-            for j in range(ci_solver.nroot):
-                rdm2 += ci_solver.make_2rdm(j) * self.weights[i][j]
-
-        return rdm2
-
-
-@dataclass
-class RelCI(RelCISolver):
-    final_orbital: str = "original"
-    do_transition_dipole: bool = False
-
-    def run(self):
-        super().run()
-        self._post_process()
-        if self.final_orbital == "semicanonical":
-            semi = Semicanonicalizer(
-                mo_space=self.mo_space,
-                g1=self.make_average_1rdm(),
-                C=self.C[0],
-                system=self.system,
-            )
-            self.C[0] = semi.C_semican.copy()
-
-            # recompute the CI vectors in the semicanonical basis
-            ints = SpinorbitalIntegrals(
-                self.system,
-                self.C[0],
-                self.active_indices,
-                self.core_indices,
-                use_aux_corr=True,
-            )
-            self.set_ints(ints.E, ints.H, ints.V)
-            super().run()
-
-        return self
-
-    def _post_process(self):
-        pretty_print_ci_summary(self.sa_info, self.evals_per_solver)
-        self.compute_natural_occupation_numbers()
-        pretty_print_ci_nat_occ_numbers(self.sa_info, self.mo_space, self.nat_occs)
-        top_dets = self.get_top_determinants()
-        pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
-
-        if self.do_transition_dipole:
-            self.compute_transition_properties()
-            pretty_print_ci_transition_props(
-                self.sa_info,
-                self.tdm_per_solver,
-                self.fosc_per_solver,
-                self.evals_per_solver,
-            )
+#     def _diagonalize_P_space(self):
+#         """Diagonalize the Hamiltonian in the P space."""
+#         print(str(self.P))

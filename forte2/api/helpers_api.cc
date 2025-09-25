@@ -13,6 +13,7 @@ namespace forte2 {
 void export_helpers_api(nb::module_& m) {
     nb::module_ sub_m = m.def_submodule("cpp_helpers", "Helpers submodule");
 
+    sub_m.def("pair_index", &pair_index<size_t>);
     sub_m.def("pair_index_geq", &pair_index_geq<size_t>);
     sub_m.def("pair_index_gt", &pair_index_gt<size_t>);
     sub_m.def("inv_pair_index_gt", &inv_pair_index_gt<size_t>);

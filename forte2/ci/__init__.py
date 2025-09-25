@@ -1,4 +1,5 @@
 from .ci import CISolver, CI, RelCISolver, RelCI
+from .sci import SelectedCI
 from .ci_utils import (
     pretty_print_ci_summary,
     pretty_print_ci_nat_occ_numbers,

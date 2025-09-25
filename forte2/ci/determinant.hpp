@@ -46,6 +46,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     using BitArray<N>::find_first_one;
     using BitArray<N>::find_last_one;
     using BitArray<N>::clear;
+    using BitArray<N>::find_set_bits;
     using Hash = typename BitArray<N>::Hash;
 
     /// the number of bits divided by two
@@ -277,6 +278,38 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
             }
         }
         return vir;
+    }
+
+    /// @brief Find the occupied alpha orbitals and store them in occ
+    /// @param occ a vector to store the occupied orbitals
+    /// @param n the number of occupied orbitals found
+    void get_fast_a_occ(std::vector<size_t>& occ, size_t& n) const {
+        n = 0;
+        uint64_t x;
+        for (size_t begin{0}; begin < nwords_half; ++begin) {
+            x = words_[begin];
+            const size_t base = begin * bits_per_word;
+            while (x) {
+                occ[n++] = base + std::countr_zero(x);
+                x &= (x - 1); // clear lowest set bit
+            }
+        }
+    }
+
+    /// @brief Find the occupied beta orbitals and store them in occ
+    /// @param occ a vector to store the occupied orbitals
+    /// @param n the number of occupied orbitals found
+    void get_fast_b_occ(std::vector<size_t>& occ, size_t& n) const {
+        n = 0;
+        uint64_t x;
+        for (size_t begin{0}; begin < nwords_half; ++begin) {
+            x = words_[begin + nwords_half];
+            const size_t base = begin * bits_per_word;
+            while (x) {
+                occ[n++] = base + std::countr_zero(x);
+                x &= (x - 1); // clear lowest set bit
+            }
+        }
     }
 
     /// Apply the alpha creation operator a^+_n to this determinant
@@ -587,11 +620,11 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     }
 
     /// Describe the excitation connection of a determinant d,
-    /// relative to this one. The excitation connection is defined 
+    /// relative to this one. The excitation connection is defined
     /// as the creation and annihilation operators that need to be applied
     /// to this determinant to obtain d.
     /// The excitation connection is a vector of 4 vectors:
-    /// [[alfa annihilation], [alfa creation], 
+    /// [[alfa annihilation], [alfa creation],
     ///  [beta annihilation], [beta creation]]
     std::vector<std::vector<size_t>> excitation_connection(const DeterminantImpl<N>& d) const {
         std::vector<std::vector<size_t>> excitation(4);
@@ -950,4 +983,17 @@ template <size_t N> struct hash<forte2::DeterminantImpl<N>> {
         return HashT{}(d);
     }
 };
+
+void compute_fast_virtual(const std::vector<size_t>& occ, std::vector<size_t>& vir, size_t n) {
+    size_t j = 0; // index into occ
+    size_t k = 0; // index into vir
+    for (size_t i = 0; i < n; ++i) {
+        if (occ[j] == i) {
+            ++j; // skip set bit
+        } else {
+            vir[k] = i;
+            ++k;
+        }
+    }
+}
 } // namespace std

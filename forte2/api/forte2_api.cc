@@ -10,6 +10,7 @@ void export_ci_strings_api(nb::module_& m);
 void export_ci_sigma_builder_api(nb::module_& m);
 void export_rel_ci_sigma_builder_api(nb::module_& m);
 void export_ci_spin_adapter_api(nb::module_& m);
+void export_sci_helper_api(nb::module_& m);
 void export_slater_rules_api(nb::module_& m);
 void export_rel_slater_rules_api(nb::module_& m);
 void export_determinant_api(nb::module_& m);
@@ -29,6 +30,7 @@ NB_MODULE(_forte2, m) {
     export_integrals_api(m);
     export_ci_strings_api(m);
     export_ci_sigma_builder_api(m);
+    export_sci_helper_api(m);
     export_rel_ci_sigma_builder_api(m);
     export_ci_spin_adapter_api(m);
     export_determinant_api(m);
