@@ -13,49 +13,60 @@ namespace forte2 {
 void export_determinant_api(nb::module_& m) {
     nb::class_<Determinant>(m, "Determinant")
         .def(nb::init<const Determinant&>())
-        .def("__init__",
-             [](Determinant* d, std::string str) {
-                 new (d) Determinant{};
-                 d->clear();
-                 if (str.size() > Determinant::norb()) {
-                     throw std::runtime_error("Determinant string must be of length " +
-                                              std::to_string(Determinant::norb()));
-                 }
-                 for (int i = 0; i < str.size(); ++i) {
-                     if (str[i] == '2') {
-                         d->set_na(i, true);
-                         d->set_nb(i, true);
-                     } else if (str[i] == 'a') {
-                         d->set_na(i, true);
-                     } else if (str[i] == 'b') {
-                         d->set_nb(i, true);
-                     } else if (str[i] == '0') {
-                         // do nothing, the orbital is empty
-                     } else {
-                         throw std::runtime_error(
-                             "Determinant: Invalid character in determinant string: |" + str + ">");
-                     }
-                 }
-             })
-        // define a static method to create a zero determinant
-        .def_static("zero", &Determinant::zero)
-        .def("__eq__", [](const Determinant& a, const Determinant& b) { return a == b; })
-        .def("__lt__", [](const Determinant& a, const Determinant& b) { return a < b; })
-        .def("__hash__",
-             [](const Determinant& d) {
-                 // Use the hash function defined in the Determinant class
-                 return Determinant::Hash{}(d);
-             })
+        .def(
+            "__init__",
+            [](Determinant* d, std::string str) {
+                new (d) Determinant{};
+                d->clear();
+                if (str.size() > Determinant::norb()) {
+                    throw std::runtime_error("Determinant string must be of length " +
+                                             std::to_string(Determinant::norb()));
+                }
+                for (int i = 0; i < str.size(); ++i) {
+                    if (str[i] == '2') {
+                        d->set_na(i, true);
+                        d->set_nb(i, true);
+                    } else if (str[i] == 'a') {
+                        d->set_na(i, true);
+                    } else if (str[i] == 'b') {
+                        d->set_nb(i, true);
+                    } else if (str[i] == '0') {
+                        // do nothing, the orbital is empty
+                    } else {
+                        throw std::runtime_error(
+                            "Determinant: Invalid character in determinant string: |" + str +
+                            "> (all characters must be 0, 2, a, or b)");
+                    }
+                }
+            },
+            "str"_a, "Build a determinant from a string representation")
+        .def_static("zero", &Determinant::zero, "Create a zero determinant with no electrons")
+        .def_prop_ro_static(
+            "maxnorb", [](nb::object /* self */) { return Determinant::norb(); },
+            "The maximum number of orbitals supported by the Determinant class")
+        .def(
+            "__eq__", [](const Determinant& a, const Determinant& b) { return a == b; },
+            "Check if two determinants are equal")
+        .def(
+            "__lt__", [](const Determinant& a, const Determinant& b) { return a < b; },
+            "Check if a determinant is less than another determinant")
+        .def(
+            "__hash__", [](const Determinant& d) { return Determinant::Hash{}(d); },
+            "Get the hash of the determinant")
         .def(
             "__repr__", [](Determinant& d) { return str(d); },
             "String representation of the determinant")
-        .def("set_na", &Determinant::set_na)
-        .def("set_nb", &Determinant::set_nb)
-        .def("na", &Determinant::na)
-        .def("nb", &Determinant::nb)
-        .def("count_a", &Determinant::count_a)
-        .def("count_b", &Determinant::count_b)
-        .def("count", [](Determinant& d) { return d.count_a() + d.count_b(); })
+        .def("set_na", &Determinant::set_na, "n"_a, "value"_a,
+             "Set the occupation of an alpha orbital")
+        .def("set_nb", &Determinant::set_nb, "n"_a, "value"_a,
+             "Set the occupation of a beta orbital")
+        .def("na", &Determinant::na, "n"_a, "Is orbital n occupied by an alpha electron?")
+        .def("nb", &Determinant::nb, "n"_a, "Is orbital n occupied by a beta electron?")
+        .def("count_a", &Determinant::count_a, "Count the number of alpha electrons")
+        .def("count_b", &Determinant::count_b, "Count the number of beta electrons")
+        .def(
+            "count", [](Determinant& d) { return d.count_a() + d.count_b(); },
+            "Count the total number of electrons")
         .def("create_a", &Determinant::create_a, "n"_a,
              "Apply an alpha creation operator to the determinant at the specified orbital index "
              "and return the sign")
