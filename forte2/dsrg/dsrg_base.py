@@ -3,13 +3,13 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from forte2.base_classes import SystemMixin, MOSpaceMixin, ActiveSpaceSolver
+from forte2.base_classes import SystemMixin, MOsMixin, MOSpaceMixin, ActiveSpaceSolver
 from forte2.ci import CISolver
 from forte2.helpers import logger
 
 
 @dataclass
-class DSRGBase(SystemMixin, MOSpaceMixin, ABC):
+class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
     """Base class for DSRG methods."""
 
     ci_solver: CISolver
@@ -62,11 +62,18 @@ class DSRGBase(SystemMixin, MOSpaceMixin, ABC):
             self.parent_method.run()
 
         SystemMixin.copy_from_upstream(self, self.parent_method)
+        self.two_component = self.system.two_component
+
         MOSpaceMixin.copy_from_upstream(self, self.parent_method)
+        perm = self.mo_space.orig_to_contig
 
-        # TODO: get integrals
-        self.ints = NotImplemented
+        MOsMixin.copy_from_upstream(self, self.parent_method)
+        self._C = self.C[0][:, perm].copy()
 
+        self.ints, self.cumulants = self.get_integrals()
+
+        # only initialize the CI solver if reference relaxation is requested
+        # initialized in do_reference_relaxation()
         self.ci_solver = None
 
     def run(self):
@@ -127,3 +134,6 @@ class DSRGBase(SystemMixin, MOSpaceMixin, ABC):
 
     @abstractmethod
     def do_reference_relaxation(self): ...
+
+    @abstractmethod
+    def get_integrals(self): ...

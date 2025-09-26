@@ -63,7 +63,7 @@ class MCOptimizer(ActiveSpaceSolver):
     max_rotation : float, optional, default=0.2
         Maximum orbital rotation size for L-BFGS.
     ci_* : various, optional
-        Various parameters for the CI solver. See `CISolver` for details. 
+        Various parameters for the CI solver. See `CISolver` for details.
         Available parameters:
         - ci_guess_per_root
         - ci_ndets_per_guess
@@ -130,7 +130,6 @@ class MCOptimizer(ActiveSpaceSolver):
     converged: bool = field(default=False, init=False)
     executed: bool = field(default=False, init=False)
     two_component: bool = field(default=False, init=False)
-    dtype: type = field(default=float, init=False)
 
     def __call__(self, method):
         self.parent_method = method
@@ -271,12 +270,8 @@ class MCOptimizer(ActiveSpaceSolver):
         self.E_orb_old = self.E_orb
         self.E_avg_old = self.E_avg
 
-        if self.two_component:
-            self.g1_act = self.ci_solver.make_average_1rdm()
-            g2_act = self.ci_solver.make_average_2rdm()
-        else:
-            self.g1_act = self.ci_solver.make_average_sf_1rdm()
-            g2_act = self.ci_solver.make_average_sf_2rdm()
+        self.g1_act = self.make_average_1rdm()
+        g2_act = self.make_average_2rdm()
         # ci_maxiter_save = self.ci_solver.get_maxiter()
         # self.ci_solver.set_maxiter(self.ci_maxiter)
 
@@ -329,12 +324,8 @@ class MCOptimizer(ActiveSpaceSolver):
             self.E_avg = self.ci_solver.compute_average_energy()
             self.E_ci = np.array(self.ci_solver.E)
             self.E = self.E_avg
-            if self.two_component:
-                self.g1_act = self.ci_solver.make_average_1rdm()
-                g2_act = self.ci_solver.make_average_2rdm()
-            else:
-                self.g1_act = self.ci_solver.make_average_sf_1rdm()
-                g2_act = self.ci_solver.make_average_sf_2rdm()
+            self.g1_act = self.make_average_1rdm()
+            g2_act = self.make_average_2rdm()
             self.orb_opt.set_rdms(self.g1_act, g2_act)
             self.iter += 1
         else:
@@ -371,10 +362,7 @@ class MCOptimizer(ActiveSpaceSolver):
         self._post_process()
 
         if self.final_orbital == "semicanonical":
-            if self.two_component:
-                g1 = self.ci_solver.make_average_1rdm()
-            else:
-                g1 = self.ci_solver.make_average_sf_1rdm()
+            g1 = self.make_average_1rdm()
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
                 g1=g1,
@@ -509,11 +497,21 @@ class MCOptimizer(ActiveSpaceSolver):
         self.E_orb_old = self.E_orb
         return conv, conv_str
 
+    def make_average_1rdm(self):
+        return self.ci_solver.make_average_1rdm()
+
+    def make_average_2rdm(self):
+        return self.ci_solver.make_average_2rdm()
+
+    def make_average_2cumulant(self):
+        return self.ci_solver.make_average_2cumulant()
+
+    def make_average_3rdm(self):
+        return self.ci_solver.make_average_3rdm()
+
+    def make_average_3cumulant(self):
+        return self.ci_solver.make_average_3cumulant()
+
 
 @dataclass
-class RelMCOptimizer(RelActiveSpaceSolver, MCOptimizer):
-    def __post_init__(self):
-        self.two_component = True
-        self.dtype = complex
-        RelActiveSpaceSolver.__post_init__(self)
-        MCOptimizer.__post_init__(self)
+class RelMCOptimizer(RelActiveSpaceSolver, MCOptimizer): ...
