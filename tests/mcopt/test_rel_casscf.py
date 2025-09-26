@@ -1,6 +1,7 @@
 from forte2 import System, GHF
 from forte2.helpers.comparisons import approx
 from forte2.mcopt import RelMCOptimizer
+from forte2.orbitals import AVAS
 
 
 def test_rel_casscf_hf_equivalence_to_nonrel():
@@ -54,6 +55,82 @@ def test_rel_casscf_hf_ghf():
     mc.run()
 
     assert scf.E == approx(escf)
+    assert mc.E == approx(emcscf)
+
+
+def test_rel_casscf_frozen_co_equivalent_to_nonrel():
+    emcscf = -112.8641406910
+    emcscf_frz = -112.8633865369
+
+    xyz = """
+    C 0.0 0.0 0.0
+    O 0.0 0.0 1.2
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = GHF(charge=0, econv=1e-12)(system)
+    avas = AVAS(
+        subspace=["C(2p)", "O(2p)"],
+        selection_method="separate",
+        num_active_docc=6,
+        num_active_uocc=6,
+    )(rhf)
+
+    mc = RelMCOptimizer(
+        nel=14,
+        frozen_core_orbitals=2,
+        core_orbitals=6,
+        active_orbitals=12,
+        frozen_virtual_orbitals=6,
+        optimize_frozen_orbs=True,
+    )(avas)
+    mc.run()
+    assert mc.E == approx(emcscf)
+
+    mc = RelMCOptimizer(
+        nel=14,
+        frozen_core_orbitals=2,
+        core_orbitals=6,
+        active_orbitals=12,
+        frozen_virtual_orbitals=6,
+        optimize_frozen_orbs=False,
+    )(avas)
+    mc.run()
+    assert mc.E == approx(emcscf_frz)
+
+
+def test_rel_casscf_frozen_co_x2c():
+    # this energy was obtained without AVAS
+    emcscf = -112.9273233729
+
+    xyz = """
+    C 0.0 0.0 0.0
+    O 0.0 0.0 1.2
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        x2c_type="so",
+        snso_type="row-dependent",
+    )
+
+    mf = GHF(charge=0, econv=1e-12)(system)
+    avas = AVAS(
+        subspace=["C(2p)", "O(2p)"],
+        selection_method="separate",
+        num_active_docc=6,
+        num_active_uocc=6,
+    )(mf)
+
+    mc = RelMCOptimizer(
+        nel=14,
+        core_orbitals=8,
+        active_orbitals=12,
+    )(avas)
+    mc.run()
     assert mc.E == approx(emcscf)
 
 
