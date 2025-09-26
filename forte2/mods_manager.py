@@ -7,12 +7,29 @@ from pathlib import Path
 
 def load_mods(paths=None):
     """
-    Load mods from one or more directories.
-    By default: first ~/.forte2, then mods/ shipped with the package.
-    User mods can override shipped mods.
+    Load forte2 mods from one or more directories.
+
+    By default, this function checks for mods in the following directories:
+    1. The ~/.forte2/mods/ directory in the user's home folder.
+    2. The mods/ directory in the forte2 package.
+
+    Mods are expected to be python files with a register(forte2) function of the form
+
+    ```python
+    # ~/.forte2/mods/my_mod.py
+
+    def register(forte2):
+        ...
+    ```
+
+    Parameters
+    ----------
+    paths : list of Path or str, optional, default=None
+        Optional list of directories to search for mods.
+        If None, the default directories are used.
     """
     if paths is None:
-        user_path = Path.home() / ".forte2"
+        user_path = Path.home() / ".forte2/mods"
         package_path = Path(__file__).resolve().parent.parent / "mods"
         paths = [user_path, package_path]
 
