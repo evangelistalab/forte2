@@ -82,7 +82,7 @@ class PGSymmetryDetector:
         if ndegen == 1:
             self.prinrot = self.find_principal_rotation_axes_asym_top()
         elif ndegen == 2:
-            self.prinrot = self.find_principal_rotation_axes_sym_top()
+            self.prinrot, force_c1 = self.find_principal_rotation_axes_sym_top()
         else:
             self.prinrot, force_c1 = self.find_principal_rotation_axes_sph_top()
 
@@ -169,7 +169,7 @@ class PGSymmetryDetector:
             (False, 0, 1): "CS",
             (False, 3, 0): "D2",
             (False, 1, 2): "C2V",
-            (True, 1, 0): "C2H",
+            (True, 1, 1): "C2H",
             (True, 3, 3): "D2H",
         }
         try:
@@ -216,26 +216,51 @@ class PGSymmetryDetector:
         return prinrot
 
     def find_principal_rotation_axes_sym_top(self):
+        force_c1 = False
         if abs(self.moi[0]) < self.tol:
             # linear molecule: arbitrary x/y plane is fine, don't bother with the rest
             prinrot = self.moi_vectors[:, [1, 2, 0]].T
         else:
             unique_axis = 0 if abs(self.moi[0] - self.moi[1]) > self.tol else 2
-            # find a group of symmetry equivalent atoms, pick one and
-            # make its projection onto the plane orthogonal to the unique axis the x-axis
             z_axis = self.moi_vectors[:, unique_axis]
-            for equiv_set in self.equivalent_sets:
-                for i in equiv_set:
-                    if not _is_colinear(
-                        self.com_atomic_positions[i], z_axis, tol=self.tol
-                    ):
-                        x_axis = self.com_atomic_positions[i].copy()
+            # Find all possible C2 axes orthogonal to the unique axis
+            c2_axes = []
+            c2_axes += self.find_c2_axes_through_atom()
+            c2_axes += self.find_c2_axes_through_midpoint()
+            unique_c2_axes = [z_axis]
+            for ax in c2_axes[1:]:
+                is_unique = True
+                for uax in unique_c2_axes:
+                    if _is_colinear(ax, uax, tol=self.tol):
+                        is_unique = False
                         break
-            x_axis -= np.dot(x_axis, z_axis) * z_axis
-            x_axis /= np.linalg.norm(x_axis)
-            y_axis = np.cross(z_axis, x_axis)
+                if is_unique:
+                    unique_c2_axes.append(ax)
+            if len(unique_c2_axes) == 1:
+                # No C2 axes, but there could be mirror planes.
+                # We only need to worry about Cnh and Cnv, 
+                # since Dnh and Dnd would have three unique C2 axes.
+                # Cnh is easy, since we already know the unique axis, 
+                # any x/y axis will lie in the horizontal mirror plane.
+                # For Cnv, we know the sigma_v plane must pass through
+                # symmetry equivalent atoms, so pick one and we're done.
+                for equiv_set in self.equivalent_sets:
+                    for i in equiv_set:
+                        vec = self.com_atomic_positions[i]
+                        if _is_colinear(vec, z_axis, tol=self.tol):
+                            continue
+                        x_axis = vec - np.dot(vec, z_axis) * z_axis
+                        x_axis /= np.linalg.norm(x_axis)
+                        y_axis = np.cross(z_axis, x_axis)
+                        break
+                    break
+            else:
+                # found at least one C2 axis orthogonal to the unique axis
+                # use the first one to define the x-axis
+                x_axis = unique_c2_axes[1]
+                y_axis = np.cross(z_axis, x_axis)
             prinrot = np.array([x_axis, y_axis, z_axis])
-        return prinrot
+        return prinrot, force_c1
 
     def find_principal_rotation_axes_sph_top(self):
         force_c1 = False
@@ -247,7 +272,7 @@ class PGSymmetryDetector:
         for ax in c2_axes[1:]:
             is_unique = True
             for uax in unique_c2_axes:
-                if _is_colinear(ax, uax):
+                if _is_colinear(ax, uax, tol=self.tol):
                     is_unique = False
                     break
             if is_unique:
@@ -265,7 +290,7 @@ class PGSymmetryDetector:
             # T/Td/Th, the C2 axes are the principal axes
             prinrot = np.array(unique_c2_axes)
         elif nc2 == 9:
-            unique_c4_axes = self.find_c4_axes_for_oh()
+            unique_c4_axes = self.find_c4_axes_perp_to_square()
             if len(unique_c4_axes) != 3:
                 logger.log_warning(
                     f"find_principal_rotation_axes_sph_top: Octahedral symmetry detected,"
@@ -356,7 +381,7 @@ class PGSymmetryDetector:
                 c2_axes_through_midpoint.append(axis)
         return c2_axes_through_midpoint
 
-    def find_c4_axes_for_oh(self):
+    def find_c4_axes_perp_to_square(self):
         c4_axes = []
         # pick a set of symmetry equivalent atoms find all quadruplets that form a square
         # the normal of each square is a C4 axis
@@ -388,7 +413,7 @@ class PGSymmetryDetector:
         for ax in c4_axes[1:]:
             is_unique = True
             for uax in unique_c4_axes:
-                if _is_colinear(ax, uax):
+                if _is_colinear(ax, uax, tol=self.tol):
                     is_unique = False
                     break
             if is_unique:

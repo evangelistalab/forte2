@@ -1213,6 +1213,7 @@ class CISolver(ActiveSpaceSolver):
             [self.irrep_indices[i] for i in active_space]
             for active_space in self.mo_space.active_orbitals
         ]
+        # active_orbsym =[[0,1,1,1,1,0]]
         for i, state in enumerate(self.sa_info.states):
             # Create a CI solver for each state and MOSpace
             self.sub_solvers.append(
@@ -1497,7 +1498,8 @@ class RelCISolver(RelActiveSpaceSolver):
 
         self.sub_solvers = []
         active_orbsym = [
-            [0 for _ in active_space] for active_space in self.mo_space.active_orbitals
+            [self.irrep_indices[i] for i in active_space]
+            for active_space in self.mo_space.active_orbitals
         ]
 
         for i, state in enumerate(self.sa_info.states):

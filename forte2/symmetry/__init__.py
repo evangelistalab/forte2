@@ -1,4 +1,4 @@
-from .assign_mo_sym import assign_mo_symmetries
+# from .assign_mo_sym import assign_mo_symmetries
 from .sph_harm_utils import (
     sph_real_to_complex,
     clebsh_gordan_spin_half,
