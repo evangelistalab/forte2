@@ -14,7 +14,7 @@ from .mcopt import MCOptimizer
 from .props import get_1e_property, mulliken_population
 from .helpers import logger, set_verbosity_level, comparisons
 
-# Automatically load any mods in the mods/ or ~/.forte2 directory
-from .mods_manager import load_mods
+from .mods_manager import load_mods, enable_mod
 
+# Automatically load any mods in the mods/ or ~/.forte2 directory
 load_mods()
