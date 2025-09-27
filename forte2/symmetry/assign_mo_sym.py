@@ -15,9 +15,18 @@ If :math:`\hat{R}(g)|v\rangle = \sum_{w} U_{vw} |w\rangle`, then :math:`\langle 
 and :math:`\chi(g)_{p} = \sum_{uvw} c_{pu}^* c_{pv} U_{vw} S_{uw}.`
 """
 
+from dataclasses import dataclass
 import numpy as np
+
+import forte2
 from forte2.helpers import logger, block_diag_2x2
-from .sym_utils import SYMMETRY_OPS, CHARACTER_TABLE, COTTON_LABELS, rotation_mat, reflection_mat
+from .sym_utils import (
+    SYMMETRY_OPS,
+    CHARACTER_TABLE,
+    COTTON_LABELS,
+    rotation_mat,
+    reflection_mat,
+)
 
 
 def local_sign(l, m, op):
@@ -74,96 +83,155 @@ def get_symmetry_ops(point_group):
     return symmetry_ops
 
 
-def characters(S, C, U_ops):
-    """
-    Compute the characters of all MO vectors across all symmetry operators in the point group.
-    """
-    X = C.T.conj() @ S
+class MOSymmetryDetector:
+    def __init__(self, system, info, S, C, eps, tol=1e-6):
+        """
+        Parameters
+        ----------
+        system
+            Forte2 System object with symmetry information
+        info
+            Forte2 BasisInfo object with basis set information
+        S
+            AO overlap matrix
+        C
+            MO coefficient matrix (columns are MOs)
+        eps
+            MO energies
+        tol
+            tolerance for matching atomic positions under symmetry operations
+        """
+        self.system = system
+        self.info = info
+        self.S = S
+        self.C = C
+        self.eps = eps
+        self.tol = tol
 
-    # pull out first entry in U_ops dictionary to see whether we are in a spatial or spinor basis
-    (_, first_U), *_ = U_ops.items()
+    def __post_init__(self):
+        self.two_component = self.system.two_component
 
-    if first_U[0].shape[0] == S.shape[0] // 2:
+    def run(self):
+        if self.system.point_group == "C1":
+            self.labels = ["a" for _ in range(self.C.shape[1])]
+            self.irrep_indices = [0 for _ in range(self.C.shape[1])]
+        else:
+            # step 1: build symmetry transformation matrices
+            symmetry_ops = get_symmetry_ops(self.system.point_group)
+
+            # step 2: build U matrices (permutation * phase)
+            self.U_ops = self.build_U_matrices(symmetry_ops)
+
+            # step 3: assign irrep labels
+            self.labels, chars = self.assign_irrep_labels()
+
+            for i, c in enumerate(chars):
+                logger.log_debug(f"orbital {i + 1}, character = {c}")
+
+            self.irrep_indices = [
+                COTTON_LABELS[self.system.point_group][label] for label in self.labels
+            ]
+
+    def compute_characters(self):
+        """
+        Compute the characters of all MO vectors across all symmetry operators in the point group.
+        """
+        X = self.C.T.conj() @ self.S
+        off_diag = []
+        nondiag_rep = None
+        for op, U in self.U_ops.items():
+            if self.two_component:
+                U = block_diag_2x2(U)
+            rep = X @ U @ self.C
+            if np.allclose(np.abs(rep), np.eye(rep.shape[0]), atol=1e-6):
+                continue
+            else:
+                for i in range(rep.shape[0]):
+                    if (np.abs(rep[:, i]) > 1e-6).sum() > 1:
+                        off_diag.append(i)
+                nondiag_rep = rep
+                break
+
+        if nondiag_rep is not None:
+            self.C = self.project_onto_irrep(nondiag_rep, off_diag)
+            X = self.C.T.conj() @ self.S
+
         return np.column_stack(
-            [np.diag(X @ block_diag_2x2(U) @ C) for op, U in U_ops.items()]
+            [np.diag(X @ U @ self.C) for op, U in self.U_ops.items()]
         )
-    else:
-        return np.column_stack([np.diag(X @ U @ C) for op, U in U_ops.items()])
 
+    def project_onto_irrep(self, nondiag_rep, off_diag):
+        # group the MOs that mix together into degenerate subsets and diagonalize each subset
+        eps_nondiag = self.eps[off_diag]
+        pass
 
-def assign_irrep_labels(point_group, U_ops, S, C):
-    """
-    Assigns the MO irrep labels in `point_group` by matching the character vectors to their expected values.
-    """
-    # Compute character vector for each orbital in all symmetry ops
-    chars = characters(S, C, U_ops)
+        for i in range(0, len(off_diag), 2):
+            sl = slice(off_diag[i], off_diag[i] + 2)
+            rep_sub = nondiag_rep[sl, sl]
+            _, c = np.linalg.eigh(rep_sub)
+            self.C[:, sl] = self.C[:, sl] @ c
 
-    # Compare the character vector to the expected results and pick the closest match
-    table = CHARACTER_TABLE[point_group]
-    T = np.array([table[name] for name in table])  # (n_irrep, |G|)
-    names = list(table.keys())
+        X = self.C.T.conj() @ self.S
+        for op, U in self.U_ops.items():
+            rep = X @ U @ self.C
+            if np.allclose(np.abs(rep), np.eye(rep.shape[0]), atol=1e-6):
+                continue
+            else:
+                print(f"representation for op {op} is not diagonal!")
 
-    # Distance to each irrep vector
-    dists = np.sum((chars[:, None, :] - T[None, :, :]) ** 2, axis=2)  # (M, n_irrep)
-    best = np.argmin(dists, axis=1)
-    labels = [names[k] for k in best]
-    return labels, chars
+    def assign_irrep_labels(self):
+        """
+        Assigns the MO irrep labels in `point_group` by matching the character vectors to their expected values.
+        """
+        # Compute character vector for each orbital in all symmetry ops
+        chars = self.compute_characters()
 
+        # Compare the character vector to the expected results and pick the closest match
+        table = CHARACTER_TABLE[self.system.point_group]
+        T = np.array([table[name] for name in table])  # (n_irrep, |G|)
+        names = list(table.keys())
 
-def build_U_matrices(symmetry_operations, system, info, tol=1e-6):
-    """
-    Compute the matrices U(g)_{uv} < u | R(g) | v > that describes how the
-    AO basis functions transform under each symmetry operation R(g). This involves
-    finding the symmetric partner atom for each basis function and then mutiplying
-    that with a local phase describing how the spherical harmonic transforms under
-    the symmetry operation.
-    """
-    U_ops = {}
-    for op_label, R in symmetry_operations.items():
-        U = np.zeros((system.nbf, system.nbf))
-        for i, a in enumerate(system.atoms):
-            v = (
-                R @ system.prin_atomic_positions[i]
-            )  # apply symmetry operation in principal axis frame
-            # get basis fcns centered on atom a
-            basis_a = [bas for bas in info.basis_labels if bas.iatom == i]
-            for j, b in enumerate(system.atoms):
-                if (a[0] == b[0]) and (
-                    np.linalg.norm(v - system.prin_atomic_positions[j]) < tol
-                ):
-                    # get basis fcns centered on atom b
-                    basis_b = [bas for bas in info.basis_labels if bas.iatom == j]
-                    for bas1 in basis_a:
-                        sgn = local_sign(bas1.l, bas1.ml, op_label)
-                        for bas2 in basis_b:
-                            if (
-                                bas1.n == bas2.n
-                                and bas1.l == bas2.l
-                                and bas1.ml == bas2.ml
-                            ):
-                                U[bas1.abs_idx, bas2.abs_idx] = sgn
-                    break
-        U_ops[op_label] = U
-    return U_ops
+        # Distance to each irrep vector
+        dists = np.sum((chars[:, None, :] - T[None, :, :]) ** 2, axis=2)  # (M, n_irrep)
+        best = np.argmin(dists, axis=1)
+        labels = [names[k] for k in best]
+        return labels, chars
 
-
-def assign_mo_symmetries(system, info, S, C):
-    if system.point_group == "C1":
-        labels = ["a" for _ in range(C.shape[1])]
-        irrep_indices = [0 for _ in range(C.shape[1])]
-    else:
-        # step 1: build symmetry transformation matrices
-        symmetry_ops = get_symmetry_ops(system.point_group)
-
-        # step 2: build U matrices (permutation * phase)
-        U = build_U_matrices(symmetry_ops, system, info, tol=1e-6)
-
-        # step 3: assign irrep labels
-        labels, chars = assign_irrep_labels(system.point_group, U, S, C)
-
-        for i, c in enumerate(chars):
-            logger.log_debug(f"orbital {i + 1}, character = {c}")
-
-        irrep_indices = [COTTON_LABELS[system.point_group][label] for label in labels]
-
-    return labels, irrep_indices
+    def build_U_matrices(self, symmetry_operations):
+        r"""
+        Compute the matrices :math:`U(g)_{\mu\nu}= \langle \mu | R(g) | \nu \rangle`
+        that describes how the AO basis functions transform under each symmetry operation R(g).
+        This involves finding the symmetric partner atom for each basis function,
+        and then mutiplying that with a local phase describing how the spherical
+        harmonic transforms under the symmetry operation.
+        """
+        U_ops = {}
+        for op_label, R in symmetry_operations.items():
+            U = np.zeros((self.system.nbf, self.system.nbf))
+            for i, a in enumerate(self.system.atoms):
+                v = (
+                    R @ self.system.prin_atomic_positions[i]
+                )  # apply symmetry operation in principal axis frame
+                # get basis fcns centered on atom a
+                basis_a = [bas for bas in self.info.basis_labels if bas.iatom == i]
+                for j, b in enumerate(self.system.atoms):
+                    if (a[0] == b[0]) and (
+                        np.linalg.norm(v - self.system.prin_atomic_positions[j])
+                        < self.tol
+                    ):
+                        # get basis fcns centered on atom b
+                        basis_b = [
+                            bas for bas in self.info.basis_labels if bas.iatom == j
+                        ]
+                        for bas1 in basis_a:
+                            sgn = local_sign(bas1.l, bas1.ml, op_label)
+                            for bas2 in basis_b:
+                                if (
+                                    bas1.n == bas2.n
+                                    and bas1.l == bas2.l
+                                    and bas1.ml == bas2.ml
+                                ):
+                                    U[bas1.abs_idx, bas2.abs_idx] = sgn
+                        break
+            U_ops[op_label] = U
+        return U_ops
