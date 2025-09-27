@@ -1,4 +1,4 @@
-# from .assign_mo_sym import assign_mo_symmetries
+from .mo_sym_detect import MOSymmetryDetector
 from .sph_harm_utils import (
     sph_real_to_complex,
     clebsh_gordan_spin_half,
@@ -6,4 +6,4 @@ from .sph_harm_utils import (
     real_sph_to_j_adapted_per_l,
 )
 from .sym_utils import equivalent_under_operation, rotation_mat, reflection_mat
-from .sym_detect import PGSymmetryDetector
+from .pg_sym_detect import PGSymmetryDetector

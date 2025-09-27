@@ -4,7 +4,7 @@ import numpy as np
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
 from forte2.helpers import logger
-# from forte2.symmetry import assign_mo_symmetries
+from forte2.symmetry import MOSymmetryDetector
 from .scf_base import SCFBase
 from .scf_utils import minao_initial_guess, core_initial_guess
 
@@ -126,9 +126,13 @@ class RHF(SCFBase):
 
     def _assign_orbital_symmetries(self):
         S = self._get_overlap()
-        self.irrep_labels, self.irrep_indices = assign_mo_symmetries(
+        mosym = MOSymmetryDetector(
             self.system,
             self.basis_info,
             S,
             self.C[0],
+            self.eps[0],
         )
+        mosym.run()
+        self.irrep_labels = mosym.labels
+        self.irrep_indices = mosym.irrep_indices

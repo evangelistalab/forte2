@@ -38,6 +38,30 @@ def test_ci_2():
     assert ci.E[0] == approx(-100.019788438077)
 
 
+def test_ci_with_symmetry():
+    xyz = """
+    N 0.0 0.0 0.0
+    N 0.0 0.0 1.2
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        symmetry=True,
+    )
+
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    ci = CI(
+        states=State(nel=14, multiplicity=1, ms=0.0),
+        core_orbitals=4,
+        active_orbitals=6,
+    )(rhf)
+    ci.run()
+    eref_singlet = -109.004622061660
+    assert ci.E[0] == approx(eref_singlet)
+
+
 def test_sa_ci_n2():
     xyz = """
     N 0.0 0.0 0.0
