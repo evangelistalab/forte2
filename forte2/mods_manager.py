@@ -4,6 +4,8 @@ import os
 import sys
 from pathlib import Path
 
+from forte2.helpers import logger
+
 
 def load_mods():
     """
@@ -35,12 +37,14 @@ def load_mods():
 
         for _, name, _ in pkgutil.iter_modules([str(path)]):
             try:
-                print(f"[mods_manager] loading mod {name} from {path}")
+                logger.log(f"[mods_manager] loading mod {name} from {path}")
                 mod = importlib.import_module(name)
                 if hasattr(mod, "register"):
                     mod.register(importlib.import_module("forte2"))
             except Exception as e:
-                print(f"[mods_manager] failed to load mod {name} from {path}: {e}")
+                logger.log_warning(
+                    f"[mods_manager] failed to load mod {name} from {path}: {e}"
+                )
 
 
 def enable_mod(modname: str, paths=None):
@@ -89,9 +93,11 @@ def enable_mod(modname: str, paths=None):
             if name != modname:
                 continue
             try:
-                print(f"[mods_manager] loading mod {name} from {path}")
+                logger.log(f"[mods_manager] loading mod {name} from {path}")
                 mod = importlib.import_module(name)
                 if hasattr(mod, "register"):
                     mod.register(importlib.import_module("forte2"))
             except Exception as e:
-                print(f"[mods_manager] failed to load mod {name} from {path}: {e}")
+                logger.log_warning(
+                    f"[mods_manager] failed to load mod {name} from {path}: {e}"
+                )
