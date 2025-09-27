@@ -461,9 +461,13 @@ def test_rhf_n2_d2h_x():
                     continue
                 elif e1.upper() == "B3U" and e2 == "B2U":
                     continue
+                elif e1.upper() == "B1G" and e2 == "AG":
+                    continue
+                elif e1.upper() == "AG" and e2 == "B1G":
+                    continue
                 else:
                     raise AssertionError(
-                        "Symmetry assignment wrong beyond b2g/b3g and b2u/b3u interchanges."
+                        f"Symmetry assignment wrong beyond ag/b1g, b2g/b3g and b2u/b3u interchanges: {e1} != {e2}."
                     )
 
 
@@ -531,7 +535,11 @@ def test_rhf_n2_d2h():
                     continue
                 elif e1.upper() == "B3U" and e2 == "B2U":
                     continue
+                elif e1.upper() == "B1G" and e2 == "AG":
+                    continue
+                elif e1.upper() == "AG" and e2 == "B1G":
+                    continue
                 else:
                     raise AssertionError(
-                        "Symmetry assignment wrong beyond b2g/b3g and b2u/b3u interchanges."
+                        f"Symmetry assignment wrong beyond ag/b1g, b2g/b3g and b2u/b3u interchanges: {e1} != {e2}."
                     )

@@ -15,10 +15,8 @@ If :math:`\hat{R}(g)|v\rangle = \sum_{w} U_{vw} |w\rangle`, then :math:`\langle 
 and :math:`\chi(g)_{p} = \sum_{uvw} c_{pu}^* c_{pv} U_{vw} S_{uw}.`
 """
 
-from dataclasses import dataclass
 import numpy as np
 
-import forte2
 from forte2.helpers import logger, block_diag_2x2
 from .sym_utils import (
     SYMMETRY_OPS,
@@ -107,8 +105,6 @@ class MOSymmetryDetector:
         self.C = C
         self.eps = eps
         self.tol = tol
-
-    def __post_init__(self):
         self.two_component = self.system.two_component
 
     def run(self):
@@ -137,8 +133,14 @@ class MOSymmetryDetector:
         Compute the characters of all MO vectors across all symmetry operators in the point group.
         """
         X = self.C.T.conj() @ self.S
-        off_diag = []
-        nondiag_rep = None
+        # indices of MOs that mix under symmetry ops
+        mixed_indices = []
+        # representation of (one of the) operators that mix MOs
+        # since we are in an Abelian group, only one such
+        # representation needs to be diagonalized to yield
+        # the correct projected MOs
+        rep_of_mixed_operator = None
+
         for op, U in self.U_ops.items():
             if self.two_component:
                 U = block_diag_2x2(U)
@@ -148,36 +150,50 @@ class MOSymmetryDetector:
             else:
                 for i in range(rep.shape[0]):
                     if (np.abs(rep[:, i]) > 1e-6).sum() > 1:
-                        off_diag.append(i)
-                nondiag_rep = rep
+                        mixed_indices.append(i)
+                rep_of_mixed_operator = rep
                 break
 
-        if nondiag_rep is not None:
-            self.C = self.project_onto_irrep(nondiag_rep, off_diag)
+        if rep_of_mixed_operator is not None:
+            self.project_onto_irrep(rep_of_mixed_operator, mixed_indices)
             X = self.C.T.conj() @ self.S
 
         return np.column_stack(
             [np.diag(X @ U @ self.C) for op, U in self.U_ops.items()]
         )
 
-    def project_onto_irrep(self, nondiag_rep, off_diag):
+    def project_onto_irrep(self, rep_of_mixed_operator, mixed_indices):
         # group the MOs that mix together into degenerate subsets and diagonalize each subset
-        eps_nondiag = self.eps[off_diag]
-        pass
+        degenerate_subsets = [set([mixed_indices[0]])]
+        ep_current_subset = self.eps[mixed_indices[0]]
+        for i in mixed_indices[1:]:
+            if abs(self.eps[i] - ep_current_subset) < self.tol:
+                degenerate_subsets[-1].add(i)
+            else:
+                degenerate_subsets.append(set([i]))
+                ep_current_subset = self.eps[i]
+        # assert that all degenerate subsets are contiguous
+        for subset in degenerate_subsets:
+            assert max(subset) - min(subset) + 1 == len(
+                subset
+            ), f"degenerate subset {subset} is not contiguous!"
+        # convert the subsets to slices
+        degen_slices = []
+        for subset in degenerate_subsets:
+            degen_slices.append(slice(min(subset), max(subset) + 1))
 
-        for i in range(0, len(off_diag), 2):
-            sl = slice(off_diag[i], off_diag[i] + 2)
-            rep_sub = nondiag_rep[sl, sl]
+        for sl in degen_slices:
+            rep_sub = rep_of_mixed_operator[sl, sl]
             _, c = np.linalg.eigh(rep_sub)
             self.C[:, sl] = self.C[:, sl] @ c
 
         X = self.C.T.conj() @ self.S
         for op, U in self.U_ops.items():
             rep = X @ U @ self.C
-            if np.allclose(np.abs(rep), np.eye(rep.shape[0]), atol=1e-6):
+            if np.allclose(np.abs(rep), np.eye(rep.shape[0]), atol=self.tol):
                 continue
             else:
-                print(f"representation for op {op} is not diagonal!")
+                logger.log_warning(f"After projection, {op} still mixes MOs!")
 
     def assign_irrep_labels(self):
         """
