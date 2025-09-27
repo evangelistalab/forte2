@@ -188,27 +188,25 @@ class UHF(SCFBase):
 
     def _assign_orbital_symmetries(self):
         S = self._get_overlap()
-        mosym = MOSymmetryDetector(
+        mosym_a = MOSymmetryDetector(
             self.system,
             self.basis_info,
             S,
             self.C[0],
             self.eps[0],
         )
-        mosym.run()
-        self.irrep_labels_alpha = mosym.labels
-        self.irrep_indices_alpha = mosym.irrep_indices
+        mosym_a.run()
 
-        mosym = MOSymmetryDetector(
+        mosym_b = MOSymmetryDetector(
             self.system,
             self.basis_info,
             S,
             self.C[1],
             self.eps[1],
         )
-        mosym.run()
-        self.irrep_labels_beta = mosym.labels
-        self.irrep_indices_beta = mosym.irrep_indices
+        mosym_b.run()
+        self.irrep_labels = [mosym_a.labels, mosym_b.labels]
+        self.irrep_indices = [mosym_a.irrep_indices, mosym_b.irrep_indices]
 
     def _print_ao_composition(self):
         if isinstance(self.system, ModelSystem):
