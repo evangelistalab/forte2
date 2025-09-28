@@ -85,7 +85,7 @@ def test_ci_ch4_with_symmetry():
     ci.run()
 
     # reference energy obtained without symmetry
-    assert rhf.E == approx(-40.2116319300)
+    assert ci.E[0] == approx(-40.2116319300)
 
 
 def test_sa_ci_n2():
