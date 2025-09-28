@@ -1,20 +1,3 @@
-r"""
-This module computes symmetry irreps for MOs a posteriori by computing the character of each MO
-under each symmetry operation of the point group. In a nutshell, what we want is the character
-
-.. math::
-
-    \chi(g)_{p} = \langle p | \hat{R}(g) | p \rangle = \sum_{uv} c_{pu}^* c_{pv} \langle u | \hat{R}(g) | v \rangle
-
-Each AO function :math:`|u\rangle \sim R_{nl}(r) Y_{lm}(\theta,\phi)`.
-For Abelian point groups, we only need to consider
-C2 rotations and mirror planes. None of these affect the radial part, but they transform the
-angular part to a symmetric partner on the same or a different atom with a phase.
-
-If :math:`\hat{R}(g)|v\rangle = \sum_{w} U_{vw} |w\rangle`, then :math:`\langle u | \hat{R}(g) | v \rangle = \sum_{w} U_{vw} \langle u | w \rangle`,
-and :math:`\chi(g)_{p} = \sum_{uvw} c_{pu}^* c_{pv} U_{vw} S_{uw}.`
-"""
-
 import numpy as np
 
 from forte2.helpers import logger, block_diag_2x2
@@ -82,23 +65,54 @@ def get_symmetry_ops(point_group):
 
 
 class MOSymmetryDetector:
+    r"""
+    Class to detect the irreducible representation (irrep) labels of molecular orbitals.
+
+    Parameters
+    ----------
+    system : forte2.System
+        Forte2 System object with symmetry information
+    info : forte2.BasisInfo
+        Forte2 BasisInfo object with basis set information
+    S : ndarray
+        AO overlap matrix
+    C : ndarray
+        MO coefficient matrix (columns are MOs)
+    eps : ndarray
+        MO energies
+    tol : float, optional, default=1e-6
+        tolerance for matching atomic positions under symmetry operations
+
+    Attributes
+    ----------
+    irrep_indices : list of int
+        List of irrep indices for each MO according to COTTON_LABELS
+    labels : list of str
+        List of irrep labels for each MO (e.g. 'a1', 'b2', etc.)
+
+    Notes
+    -----
+    We compute symmetry irreps for MOs a posteriori by computing the character of each MO
+    under each symmetry operation of the point group. In a nutshell, what we want is the character
+
+    .. math::
+
+        \chi(g)_{p} = \langle p | \hat{R}(g) | p \rangle = \sum_{uv} c_{pu}^* c_{pv} \langle u | \hat{R}(g) | v \rangle
+
+    Each AO function :math:`|u\rangle \sim R_{nl}(r) Y_{lm}(\theta,\phi)`.
+    For Abelian point groups, we only need to consider
+    C2 rotations and mirror planes. None of these affect the radial part, but they transform the
+    angular part to a symmetric partner on the same or a different atom with a phase.
+
+    If :math:`\hat{R}(g)|v\rangle = \sum_{w} U_{vw} |w\rangle`, then :math:`\langle u | \hat{R}(g) | v \rangle = \sum_{w} U_{vw} \langle u | w \rangle`,
+    and :math:`\chi(g)_{p} = \sum_{uvw} c_{pu}^* c_{pv} U_{vw} S_{uw}.`
+
+    The above procedure works if the symmetry operations do not mix MOs (i.e., the true molecular point group is Abelian).
+    If some MOs are mixed by the symmetry operations, then we need diagonalize subsets of the MO space
+    that are mixed together to obtain MOs that purely transform as irreps of the Abelian subgroup.
+    """
+
     def __init__(self, system, info, S, C, eps, tol=1e-6):
-        """
-        Parameters
-        ----------
-        system
-            Forte2 System object with symmetry information
-        info
-            Forte2 BasisInfo object with basis set information
-        S
-            AO overlap matrix
-        C
-            MO coefficient matrix (columns are MOs)
-        eps
-            MO energies
-        tol
-            tolerance for matching atomic positions under symmetry operations
-        """
         self.system = system
         self.info = info
         self.S = S
@@ -116,10 +130,10 @@ class MOSymmetryDetector:
             symmetry_ops = get_symmetry_ops(self.system.point_group)
 
             # step 2: build U matrices (permutation * phase)
-            self.U_ops = self.build_U_matrices(symmetry_ops)
+            self.U_ops = self._build_U_matrices(symmetry_ops)
 
             # step 3: assign irrep labels
-            self.labels, chars = self.assign_irrep_labels()
+            self.labels, chars = self._assign_irrep_labels()
 
             for i, c in enumerate(chars):
                 logger.log_debug(f"orbital {i + 1}, character = {c}")
@@ -128,7 +142,7 @@ class MOSymmetryDetector:
                 COTTON_LABELS[self.system.point_group][label] for label in self.labels
             ]
 
-    def compute_characters(self):
+    def _compute_characters(self):
         """
         Compute the characters of all MO vectors across all symmetry operators in the point group.
         """
@@ -162,7 +176,7 @@ class MOSymmetryDetector:
                 break
 
         if rep_of_mixed_operator is not None:
-            self.project_onto_irrep(rep_of_mixed_operator, mixed_indices)
+            self._project_onto_irrep(rep_of_mixed_operator, mixed_indices)
 
             X = self.C.T.conj() @ self.S
             need_sequential_projection = False
@@ -181,7 +195,7 @@ class MOSymmetryDetector:
                     break
 
             if need_sequential_projection:
-                self.project_onto_irrep(rep_of_mixed_operator, mixed_indices)
+                self._project_onto_irrep(rep_of_mixed_operator, mixed_indices)
 
             X = self.C.T.conj() @ self.S
 
@@ -199,7 +213,7 @@ class MOSymmetryDetector:
             [np.diag(X @ U @ self.C) for op, U in self.U_ops.items()]
         )
 
-    def project_onto_irrep(self, rep_of_mixed_operator, mixed_indices):
+    def _project_onto_irrep(self, rep_of_mixed_operator, mixed_indices):
         # group the MOs that mix together into degenerate subsets and diagonalize each subset
         degenerate_subsets = [set([mixed_indices[0]])]
         ep_current_subset = self.eps[mixed_indices[0]]
@@ -224,12 +238,12 @@ class MOSymmetryDetector:
             _, c = np.linalg.eigh(rep_sub)
             self.C[:, sl] = self.C[:, sl] @ c
 
-    def assign_irrep_labels(self):
+    def _assign_irrep_labels(self):
         """
         Assigns the MO irrep labels in `point_group` by matching the character vectors to their expected values.
         """
         # Compute character vector for each orbital in all symmetry ops
-        chars = self.compute_characters()
+        chars = self._compute_characters()
 
         # Compare the character vector to the expected results and pick the closest match
         table = CHARACTER_TABLE[self.system.point_group]
@@ -242,7 +256,7 @@ class MOSymmetryDetector:
         labels = [names[k] for k in best]
         return labels, chars
 
-    def build_U_matrices(self, symmetry_operations):
+    def _build_U_matrices(self, symmetry_operations):
         r"""
         Compute the matrices :math:`U(g)_{\mu\nu}= \langle \mu | R(g) | \nu \rangle`
         that describes how the AO basis functions transform under each symmetry operation R(g).
