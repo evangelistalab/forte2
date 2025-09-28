@@ -69,6 +69,26 @@ COTTON_LABELS = {
 
 
 def equivalent_under_operation(coords, charges, op, tol):
+    """
+    Check if a set of coordinates and charges is equivalent to itself under a
+    given symmetry operation.
+
+    Parameters
+    ----------
+    coords : ndarray of shape (N, 3)
+        The coordinates of the atoms.
+    charges : list of length N
+        The nuclear charges of the atoms.
+    op : callable
+        A function representing the symmetry operation that takes a 3-vector and returns the transformed 3-vector.
+    tol : float
+        The tolerance for comparing distances.
+
+    Returns
+    -------
+    has_op : bool
+        True if the system is invariant under the operation, False otherwise.
+    """
     has_op = True
     for Za, Ra in zip(charges, coords):
         found = False

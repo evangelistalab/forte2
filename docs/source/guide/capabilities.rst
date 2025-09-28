@@ -6,6 +6,7 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
 
 * Support for density-fitted or Cholesky-decomposed integrals (no support for conventional, 4-index integrals)
 * Support for arbitrary model Hamiltonians
+* Support for utilizing molecular symmetry (largest Abelian subgroup) at the post-Hartree-Fock level
 * Scalar and vector relativistic Hamiltonians
   
   * Spin-free 1-electron exact two-component (sf-1eX2C) [1]_
@@ -30,7 +31,7 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   
   * Support for CAS-SCF and GAS-SCF/ORMAS-SCF, with state-averaging
   * Two-component CAS/GAS/ORMAS-SCF
-  * Atomic valence active space (AVAS) active space selection (non-relativistic only) [3]_
+  * Atomic valence active space (AVAS) active space selection (support for both one- and two-component Hartree-Fock) [3]_
   
 * Various orbital manipulation routines
   

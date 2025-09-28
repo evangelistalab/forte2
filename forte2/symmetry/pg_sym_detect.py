@@ -44,9 +44,13 @@ class PGSymmetryDetector:
     and the principal axes are the eigenvectors of the inertia tensor.
 
     The symmetric top case has a unique axis (e.g. the lone pair axis in NH3), and the other two axes
-    are arbitrary in the plane orthogonal to the unique axis.
-    Symmetry equivalent atoms are found, and any atom with a non-zero projection onto the orthogonal plane is used to define the x-axis.
-    The y-axis is then defined as the cross product of the unique axis and x-axis.
+    are degenerate in the plane orthogonal to the unique axis. These are the C/D/S cases.
+    D groups have C2 axes orthogonal to the unique axis, so we first check for those.
+    These could be through an atom or through the midpoint between two symmetry equivalent atoms.
+    If we find at least one C2 axis, we use that to define the x-axis in the orthogonal plane,
+    and the y-axis is then determined by the right-hand rule.
+    If not, we are in the C/S case, and we need to look for sigma_v planes. We know that
+    these must be through atoms, so we pick one and use that to define the x-axis.    
 
     The spherical top case is the most complicated. To distinguish between T/O/I groups, we find all unique C2 axes.
     T groups have 3 unique C2 axes, O groups have 9, and I groups have 15.
@@ -73,18 +77,18 @@ class PGSymmetryDetector:
         self.moi, self.moi_vectors = np.linalg.eigh(self.inertia_tensor)
         logger.log_info1(f"Principal moments of inertia: {self.moi}")
 
-        self.find_symmetry_equivalent_atoms()
+        self._find_symmetry_equivalent_atoms()
 
         # count degeneracies
         ndegen = (np.abs(self.moi[1:] - self.moi[:-1]) < self.tol).sum() + 1
 
         force_c1 = False
         if ndegen == 1:
-            self.prinrot = self.find_principal_rotation_axes_asym_top()
+            self.prinrot = self._find_principal_rotation_axes_asym_top()
         elif ndegen == 2:
-            self.prinrot, force_c1 = self.find_principal_rotation_axes_sym_top()
+            self.prinrot, force_c1 = self._find_principal_rotation_axes_sym_top()
         else:
-            self.prinrot, force_c1 = self.find_principal_rotation_axes_sph_top()
+            self.prinrot, force_c1 = self._find_principal_rotation_axes_sph_top()
 
         det = np.linalg.det(self.prinrot)
 
@@ -103,9 +107,9 @@ class PGSymmetryDetector:
         if force_c1:
             self.pg_name = "C1"
         else:
-            self.pg_name = self.detect_abelian_pg_symmetry()
+            self.pg_name = self._detect_abelian_pg_symmetry()
 
-    def detect_abelian_pg_symmetry(self):
+    def _detect_abelian_pg_symmetry(self):
         """
         After determining the principal axes of rotation,
         this method determine the largest Abelian point group symmetry of the molecule.
@@ -182,7 +186,7 @@ class PGSymmetryDetector:
             pg = "C1"
         return pg
 
-    def find_principal_rotation_axes_asym_top(self):
+    def _find_principal_rotation_axes_asym_top(self):
         axis_order = []
         for i in range(3):
             R = rotation_mat(self.moi_vectors[:, i], np.pi)
@@ -215,7 +219,7 @@ class PGSymmetryDetector:
         prinrot = self.moi_vectors[:, [n for _, _, n in sorted_axis]].T
         return prinrot
 
-    def find_principal_rotation_axes_sym_top(self):
+    def _find_principal_rotation_axes_sym_top(self):
         force_c1 = False
         if abs(self.moi[0]) < self.tol:
             # linear molecule: arbitrary x/y plane is fine, don't bother with the rest
@@ -262,7 +266,7 @@ class PGSymmetryDetector:
             prinrot = np.array([x_axis, y_axis, z_axis])
         return prinrot, force_c1
 
-    def find_principal_rotation_axes_sph_top(self):
+    def _find_principal_rotation_axes_sph_top(self):
         force_c1 = False
 
         c2_axes = []
@@ -281,7 +285,7 @@ class PGSymmetryDetector:
         nc2 = len(unique_c2_axes)
         if nc2 not in [3, 9, 15]:
             logger.log_warning(
-                f"find_principal_rotation_axes_sph_top: Found {nc2} unique C2 axes, which is unexpected."
+                f"_find_principal_rotation_axes_sph_top: Found {nc2} unique C2 axes, which is unexpected."
                 "Not reorienting. Check geometry, or relax tolerance."
             )
             prinrot = np.eye(3)
@@ -290,10 +294,10 @@ class PGSymmetryDetector:
             # T/Td/Th, the C2 axes are the principal axes
             prinrot = np.array(unique_c2_axes)
         elif nc2 == 9:
-            unique_c4_axes = self.find_c4_axes_perp_to_square()
+            unique_c4_axes = self._find_c4_axes_perp_to_square()
             if len(unique_c4_axes) != 3:
                 logger.log_warning(
-                    f"find_principal_rotation_axes_sph_top: Octahedral symmetry detected,"
+                    f"_find_principal_rotation_axes_sph_top: Octahedral symmetry detected,"
                     f" but found {len(unique_c4_axes)} unique C4 axes, which is unexpected."
                     " Not reorienting. Check geometry, or relax tolerance."
                 )
@@ -303,14 +307,14 @@ class PGSymmetryDetector:
                 prinrot = np.array(unique_c4_axes)
         elif nc2 == 15:
             logger.log_warning(
-                "find_principal_rotation_axes_sph_top: Icosahedral point group detected, but currently treated as C1."
+                "_find_principal_rotation_axes_sph_top: Icosahedral point group detected, but currently treated as C1."
             )
             prinrot = np.eye(3)
             force_c1 = True
 
         return prinrot, force_c1
 
-    def find_symmetry_equivalent_atoms(self):
+    def _find_symmetry_equivalent_atoms(self):
         """
         Find sets of symmetry equivalent atoms based on interatomic distances.
         """
@@ -381,7 +385,7 @@ class PGSymmetryDetector:
                 c2_axes_through_midpoint.append(axis)
         return c2_axes_through_midpoint
 
-    def find_c4_axes_perp_to_square(self):
+    def _find_c4_axes_perp_to_square(self):
         c4_axes = []
         # pick a set of symmetry equivalent atoms find all quadruplets that form a square
         # the normal of each square is a C4 axis
