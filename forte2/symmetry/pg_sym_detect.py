@@ -238,9 +238,9 @@ class PGSymmetryDetector:
                     unique_c2_axes.append(ax)
             if len(unique_c2_axes) == 1:
                 # No C2 axes, but there could be mirror planes.
-                # We only need to worry about Cnh and Cnv, 
+                # We only need to worry about Cnh and Cnv,
                 # since Dnh and Dnd would have three unique C2 axes.
-                # Cnh is easy, since we already know the unique axis, 
+                # Cnh is easy, since we already know the unique axis,
                 # any x/y axis will lie in the horizontal mirror plane.
                 # For Cnv, we know the sigma_v plane must pass through
                 # symmetry equivalent atoms, so pick one and we're done.

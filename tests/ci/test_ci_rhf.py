@@ -38,7 +38,7 @@ def test_ci_2():
     assert ci.E[0] == approx(-100.019788438077)
 
 
-def test_ci_with_symmetry():
+def test_ci_n2_with_symmetry():
     xyz = """
     N 0.0 0.0 0.0
     N 0.0 0.0 1.2
@@ -60,6 +60,32 @@ def test_ci_with_symmetry():
     ci.run()
     eref_singlet = -109.004622061660
     assert ci.E[0] == approx(eref_singlet)
+
+
+def test_ci_ch4_with_symmetry():
+    xyz = """
+    C 0.881018195 4.336586688 4.172509116
+    H 1.899108274 4.213611337 3.803066093
+    H 0.897015796 4.915685304 5.095822368
+    H 0.284205956 4.860075328 3.425586572
+    H 0.443742755 3.356974782 4.365561431
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        symmetry=False,
+    )
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    ci = CI(
+        states=State(nel=10, multiplicity=1, ms=0.0),
+        core_orbitals=1,
+        active_orbitals=8,
+    )(rhf)
+    ci.run()
+
+    # reference energy obtained without symmetry
+    assert rhf.E == approx(-40.2116319300)
 
 
 def test_sa_ci_n2():
