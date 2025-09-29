@@ -366,17 +366,19 @@ class MCOptimizer(ActiveSpaceSolver):
         self._post_process()
 
         if self.final_orbital == "semicanonical":
-            g1 = self.make_average_1rdm()
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
-                g1=g1,
-                C=self.C[0],
                 system=self.system,
                 fock_builder=fock_builder,
                 mix_inactive=not self.optimize_frozen_orbs,
                 mix_active=False,
             )
-            self.C[0] = semi.C_semican.copy()
+            C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
+            semi.semi_canonicalize(
+                g1=self.make_average_1rdm(),
+                C_contig=C_contig,
+            )
+            self.C[0] = semi.C_semican[self.mo_space.contig_to_orig].copy()
 
             # recompute the CI vectors in the semicanonical basis
             if self.two_component:

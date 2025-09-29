@@ -20,9 +20,8 @@ def test_semican_rhf():
         core_orbitals=[0, 1, 2, 3], active_orbitals=[4, 5, 6, 7, 8, 9], nmo=system.nmo
     )
 
-    semi = orbitals.Semicanonicalizer(
-        mo_space=mo_space, g1=np.diag([2, 2, 2, 0, 0, 0]), C=rhf.C[0], system=system
-    )
+    semi = orbitals.Semicanonicalizer(mo_space=mo_space, system=system)
+    semi.semi_canonicalize(g1=np.diag([2, 2, 2, 0, 0, 0]), C_contig=rhf.C[0])
     assert rhf.eps[0] == approx(semi.eps_semican)
 
 
@@ -112,12 +111,8 @@ def test_semican_fock_offdiag():
     assert ci.evals_flat[0] == approx(-109.01444624968038)
 
     mo_space = ci.mo_space
-    semi = orbitals.Semicanonicalizer(
-        mo_space=mo_space,
-        g1=ci.make_average_1rdm(),
-        C=ci.C[0],
-        system=system,
-    )
+    semi = orbitals.Semicanonicalizer(mo_space=mo_space, system=system)
+    semi.semi_canonicalize(g1=ci.make_average_1rdm(), C_contig=ci.C[0])
 
     fock = semi.fock
     fock_cc = fock[mo_space.core, mo_space.core]
@@ -128,6 +123,17 @@ def test_semican_fock_offdiag():
     # assert not np.allclose(fock_aa, np.diag(np.diag(fock_aa)), rtol=0, atol=5e-8)
     assert not np.allclose(fock_vv, np.diag(np.diag(fock_vv)), rtol=0, atol=5e-8)
 
+    # The semicanonicalized Fock should be diagonal in the C/A/V blocks
+    fock_semican = semi.fock_semican
+    fock_cc = fock_semican[mo_space.core, mo_space.core]
+    fock_aa = fock_semican[mo_space.actv, mo_space.actv]
+    fock_vv = fock_semican[mo_space.virt, mo_space.virt]
+    assert np.allclose(fock_cc, np.diag(np.diag(fock_cc)), rtol=0, atol=5e-8)
+    assert np.allclose(fock_aa, np.diag(np.diag(fock_aa)), rtol=0, atol=5e-8)
+    assert np.allclose(fock_vv, np.diag(np.diag(fock_vv)), rtol=0, atol=5e-8)
+
+    # The long way to check: recompute the CI in the semicanonical basis,
+    # and the generalized Fock should already be diagonal in C/A/V
     ci = CI(
         State(nel=rhf.nel, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1, 2, 3],
@@ -138,12 +144,7 @@ def test_semican_fock_offdiag():
     assert ci.evals_flat[0] == approx(-109.01444624968038)
 
     mo_space = ci.mo_space
-    semi = orbitals.Semicanonicalizer(
-        mo_space=mo_space,
-        g1=ci.make_average_1rdm(),
-        C=ci.C[0],
-        system=system,
-    )
+    semi.semi_canonicalize(g1=ci.make_average_1rdm(), C_contig=ci.C[0])
 
     fock = semi.fock
     fock_cc = fock[mo_space.core, mo_space.core]
