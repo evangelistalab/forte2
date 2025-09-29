@@ -46,7 +46,6 @@ def test_aset_1():
         xyz=xyz,
         basis_set="sto-3g",
         auxiliary_basis_set="def2-universal-JKFIT",
-        reorient=False,
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
@@ -82,7 +81,6 @@ def test_aset_2():
         xyz=xyz,
         basis_set="sto-3g",
         auxiliary_basis_set="def2-universal-JKFIT",
-        reorient=False,
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
@@ -127,7 +125,6 @@ def test_aset_3():
         xyz=xyz,
         basis_set="sto-3g",
         auxiliary_basis_set="def2-universal-JKFIT",
-        reorient=False,
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
@@ -167,7 +164,6 @@ def test_aset_4():
         xyz=xyz,
         basis_set="sto-3g",
         auxiliary_basis_set="def2-universal-JKFIT",
-        reorient=False,
     )
 
     rhf = RHF(charge=0, econv=1e-10)(system)
@@ -214,7 +210,6 @@ def test_aset_5():
         xyz=xyz,
         basis_set="sto-3g",
         auxiliary_basis_set="def2-universal-JKFIT",
-        reorient=False,
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)

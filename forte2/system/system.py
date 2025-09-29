@@ -1,7 +1,9 @@
 from dataclasses import dataclass, field
+import numpy as np
+from numpy.typing import NDArray
 
 from forte2 import ints
-from forte2.system.atom_data import DEBYE_TO_AU, DEBYE_ANGSTROM_TO_AU
+from forte2.data import DEBYE_TO_AU, DEBYE_ANGSTROM_TO_AU, Z_TO_ATOM_SYMBOL
 from forte2.helpers import logger
 from forte2.helpers.matrix_functions import (
     invsqrt_matrix,
@@ -10,11 +12,7 @@ from forte2.helpers.matrix_functions import (
 )
 from forte2.x2c import get_hcore_x2c
 from .build_basis import build_basis
-from .parse_geometry import parse_geometry, GeometryHelper
-from .atom_data import Z_TO_ATOM_SYMBOL
-
-import numpy as np
-from numpy.typing import NDArray
+from .geom_utils import GeometryHelper, parse_geometry
 
 
 @dataclass
@@ -54,10 +52,11 @@ class System:
         If True, auxiliary basis sets (if any) will be disregarded, and the B tensor will be built using the Cholesky decomposition of the 4D ERI tensor instead.
     cholesky_tol : float, optional, default=1e-6
         The tolerance for the Cholesky decomposition of the 4D ERI tensor. Only used if `cholesky_tei` is True.
-    point_group : str, optional, default="C1"
-        The Abelian point group used to assign symmetries of orbitals a posteriori. This only allows one to assign orbital symmetry, it does **not** imply that symmetry is used in a calculation.
-    reorient : bool, optional, default=True
-        Whether to reorient the molecular geometry (important for symmetry detection).
+    symmetry : bool, optional, default=False
+        Whether to automatically detect the largest Abelian point group symmetry of the molecule.
+        This will center the molecule at its center of mass and reorient it along its principal axes of inertia.
+    symmetry_tol : float, optional, default=1e-4
+        The tolerance for detecting symmetry.
 
     Attributes
     ----------
@@ -113,8 +112,8 @@ class System:
     ortho_thresh: float = 1e-8
     cholesky_tei: bool = False
     cholesky_tol: float = 1e-6
-    point_group: str = "C1"
-    reorient: bool = True
+    symmetry: bool = False
+    symmetry_tol: float = 1e-4
 
     ### Non-init attributes
     atoms: list[list[float, list[float, float, float]]] = field(
@@ -143,21 +142,10 @@ class System:
             self.linear_dep_trigger,
             self.ortho_thresh,
         )
-        self.point_group = self.point_group.upper()
-        assert self.point_group in [
-            "C1",
-            "CS",
-            "CI",
-            "D2H",
-            "D2",
-            "C2V",
-            "C2",
-            "C2H",
-        ], f"Selected symmetry {self.point_group} not in list of supported Abelian point groups!"
 
     def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
-        self.geom_helper = GeometryHelper(self.atoms, reorient=self.reorient)
+        self.geom_helper = GeometryHelper(self.atoms, symmetry=self.symmetry, tol=self.symmetry_tol)
         self.atoms = self.geom_helper.atoms
         self.Zsum = self.geom_helper.Zsum
         self.natoms = self.geom_helper.natoms
@@ -170,8 +158,9 @@ class System:
         self.atom_counts = self.geom_helper.atom_counts
         self.atom_to_center = self.geom_helper.atom_to_center
         self.prin_atomic_positions = self.geom_helper.prin_atomic_positions
+        self.point_group = self.geom_helper.point_group
 
-        logger.log_info1("Principle Atomic Positions (a.u.):")
+        logger.log_info1("Principal Atomic Positions (a.u.):")
         for i in range(self.natoms):
             logger.log_info1(
                 f"   {Z_TO_ATOM_SYMBOL[self.atoms[i][0]]}   {self.prin_atomic_positions[i, 0]:<.8f}   {self.prin_atomic_positions[i, 1]:<.8f}   {self.prin_atomic_positions[i, 2]:<.8f}"
@@ -351,6 +340,7 @@ class ModelSystem:
         self.nmo = self.nbf
         self.naux = 0
         self.Xorth = invsqrt_matrix(self.ints_overlap(), tol=1e-13)
+        self.symmetry = False
         self.point_group = "C1"
 
     def ints_overlap(self):

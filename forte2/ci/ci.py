@@ -66,7 +66,7 @@ class _CIBase:
         Two-component (relativistic) options are:
             - "hz": Harrison-Zarrabian
             - "exact": Exact diagonalization
-            - "sparse": Sigma builder using sparse representation of the Hamiltonian and states. 
+            - "sparse": Sigma builder using sparse representation of the Hamiltonian and states.
                 Recommended for debug use only.
     guess_per_root : int, optional, default=2
         The number of guess vectors for each root.
@@ -136,10 +136,16 @@ class _CIBase:
 
         if self.two_component:
             assert self.ci_algorithm.lower() in [
-                "hz", "sparse", "exact"], "Two-component CI only supports 'hz', 'sparse', or 'exact' algorithms."
+                "hz",
+                "sparse",
+                "exact",
+            ], "Two-component CI only supports 'hz', 'sparse', or 'exact' algorithms."
         else:
             assert self.ci_algorithm.lower() in [
-                "hz", "kh", "exact"], "CI algorithm must be 'hz', 'kh', or 'exact'."
+                "hz",
+                "kh",
+                "exact",
+            ], "CI algorithm must be 'hz', 'kh', or 'exact'."
 
     def _ci_solver_startup(self):
         if self.two_component:
@@ -1452,6 +1458,7 @@ class RelCISolver(RelActiveSpaceSolver):
     """
     Relativistic Configuration Interaction
     """
+
     ### Davidson-Liu parameters
     guess_per_root: int = 2
     ndets_per_guess: int = 10
@@ -1497,7 +1504,8 @@ class RelCISolver(RelActiveSpaceSolver):
 
         self.sub_solvers = []
         active_orbsym = [
-            [0 for _ in active_space] for active_space in self.mo_space.active_orbitals
+            [self.irrep_indices[i] for i in active_space]
+            for active_space in self.mo_space.active_orbitals
         ]
 
         for i, state in enumerate(self.sa_info.states):
