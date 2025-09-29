@@ -74,7 +74,7 @@ def test_ci_ch4_with_symmetry():
         xyz=xyz,
         basis_set="cc-pvdz",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
-        symmetry=False,
+        symmetry=True,
     )
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CI(

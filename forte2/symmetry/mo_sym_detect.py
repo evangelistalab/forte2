@@ -154,33 +154,9 @@ class MOSymmetryDetector:
                     mixed_indices.append(i)
             return mixed_indices
 
-        X = self.C.T.conj() @ self.S
-        # representation of (one of the) operators that mix MOs
-        # since we are in an Abelian group, only one such
-        # representation needs to be diagonalized to simultaneously
-        # diagonalize all operators.
-        # If we are in doubly degenerate group, then only one
-        # diagonalization is needed, if we are in a triply degenerate
-        # group, then another diagonalizations will be needed.
-        rep_of_mixed_operator = None
-
-        for op, U in self.U_ops.items():
-            if self.two_component:
-                U = block_diag_2x2(U)
-            rep = X @ U @ self.C
-            if np.allclose(np.abs(rep), np.eye(rep.shape[0]), atol=1e-6):
-                continue
-            else:
-                mixed_indices = _find_mixed_indices(rep)
-                rep_of_mixed_operator = rep
-                break
-
-        if rep_of_mixed_operator is not None:
-            self._project_onto_irrep(rep_of_mixed_operator, mixed_indices)
-
-            X = self.C.T.conj() @ self.S
-            need_sequential_projection = False
-            mixed_indices = []
+        def _are_reps_diagonal(X):
+            reps_are_diagonal = True
+            mixed_indices = None
             rep_of_mixed_operator = None
             for op, U in self.U_ops.items():
                 rep = X @ U @ self.C
@@ -191,23 +167,31 @@ class MOSymmetryDetector:
                     # to fully symmetrize the MOs
                     mixed_indices = _find_mixed_indices(rep)
                     rep_of_mixed_operator = rep
-                    need_sequential_projection = True
+                    reps_are_diagonal = False
                     break
+            return reps_are_diagonal, mixed_indices, rep_of_mixed_operator
 
-            if need_sequential_projection:
-                self._project_onto_irrep(rep_of_mixed_operator, mixed_indices)
-
+        for i in range(3):
             X = self.C.T.conj() @ self.S
-
-            # final check
+            reps_are_diagonal, mixed_indices, rep_of_mixed_operator = (
+                _are_reps_diagonal(X)
+            )
+            if reps_are_diagonal:
+                break
+            # we only allow up to 2 rounds of diagonalization
+            # if for some reason the MOs are still not fully symmetrized,
+            # we just set all irreps to totally symmetric in the else clause below
+            elif i < 2:
+                self._project_onto_irrep(rep_of_mixed_operator, mixed_indices)
+        else:
             for op, U in self.U_ops.items():
                 rep = X @ U @ self.C
-                if np.allclose(np.abs(rep), np.eye(rep.shape[0]), atol=self.tol):
-                    continue
-                else:
+                if not np.allclose(np.abs(rep), np.eye(rep.shape[0]), atol=self.tol):
                     logger.log_warning(
-                        f"Warning: MO space is not fully symmetrized! Failed for op {op}"
+                        f"Warning: MO space is not fully symmetrized after projection! Failed for op {op}, "
+                        "setting all MO irreps to totally symmetric!"
                     )
+            return np.ones((self.C.shape[1], len(self.U_ops)))
 
         return np.column_stack(
             [np.diag(X @ U @ self.C) for op, U in self.U_ops.items()]
