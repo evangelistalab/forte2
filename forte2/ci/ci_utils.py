@@ -3,7 +3,7 @@ import numpy as np
 from forte2 import CIStrings
 from forte2.state import MOSpace, StateAverageInfo
 from forte2.helpers import logger
-from forte2.system.atom_data import EH_TO_EV
+from forte2.data import EH_TO_EV
 
 
 def pretty_print_gas_info(ci_strings: CIStrings):

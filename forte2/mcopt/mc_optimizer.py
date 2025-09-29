@@ -247,6 +247,10 @@ class MCOptimizer(ActiveSpaceSolver):
         )
 
         width = 115
+
+        logger.log_info1(self.mo_space)
+        logger.log_info1(f"# of nonredundant rotations: {self.nrr.sum()}\n")
+
         logger.log_info1("Entering orbital optimization loop")
         logger.log_info1("\nConvergence criteria ('.' if satisfied, 'x' otherwise):")
         logger.log_info1(f"  {'1. RMS(grad - grad_old)':<25} < {self.gconv:.1e}")

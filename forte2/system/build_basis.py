@@ -4,7 +4,7 @@ from importlib import resources
 import regex as re
 
 from forte2 import Basis, Shell
-from forte2.system.atom_data import ATOM_SYMBOL_TO_Z
+from forte2.data import ATOM_SYMBOL_TO_Z
 from forte2.helpers import logger
 
 try:
@@ -102,12 +102,14 @@ def build_basis(
 
 
 def _parse_custom_basis_assignment(geometry, basis_assignment):
-    default_basis = basis_assignment.pop("default", None)
+    # explicit_basis contains all entries except "default"
+    explicit_basis = basis_assignment.copy()
+    default_basis = explicit_basis.pop("default", None)
     atom_to_center = geometry.atom_to_center
     atom_counts = geometry.atom_counts
 
     assigned_basis = {}
-    for k, v in basis_assignment.items():
+    for k, v in explicit_basis.items():
         # "could be "O" or "O2" or "H2-12"
         m = re.match(r"([a-zA-Z]{1,2})([0-9]+)?-?([0-9]+)?", k).groups()
         # m[0]: atom symbol

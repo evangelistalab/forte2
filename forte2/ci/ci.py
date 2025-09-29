@@ -1683,7 +1683,8 @@ class RelCISolver(RelActiveSpaceSolver):
 
         self.sub_solvers = []
         active_orbsym = [
-            [0 for _ in active_space] for active_space in self.mo_space.active_orbitals
+            [self.irrep_indices[i] for i in active_space]
+            for active_space in self.mo_space.active_orbitals
         ]
 
         for i, state in enumerate(self.sa_info.states):

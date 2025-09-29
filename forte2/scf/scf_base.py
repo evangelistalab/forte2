@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 import time
 
 import numpy as np
-from forte2.system import System, ModelSystem
+from forte2.system import System, ModelSystem, BasisInfo
 from forte2.jkbuilder import FockBuilder
 from forte2.base_classes.mixins import MOsMixin, SystemMixin
 from forte2.helpers import logger, DIIS
@@ -136,6 +136,11 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         self.nbf = self.system.nbf
         self.naux = self.system.naux
         self.nmo = self.system.nmo
+
+        if isinstance(self.system, ModelSystem):
+            self.basis_info = None
+        else:
+            self.basis_info = BasisInfo(self.system, self.system.basis)
 
         logger.log_info1(f"Number of electrons: {self.nel}")
         if self._scf_type() != "GHF":  # not good quantum numbers for GHF

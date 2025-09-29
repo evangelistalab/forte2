@@ -4,17 +4,24 @@ import pytest
 from forte2 import System, ROHF, CI, State
 from forte2.helpers.comparisons import approx
 
+
 def molecule(n, r=1.0):
     """Helper function to make a molecular geometry string for a linear chain of hydrogen atoms
-       with a specified bond length `r`.
+    with a specified bond length `r`.
     """
     for i in range(n):
         yield f"H 0.0 0.0 {i * r}"
 
+
 def timing(n):
     xyz = "\n".join(molecule(n))
 
-    system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
+    system = System(
+        xyz=xyz,
+        basis_set="sto-6g",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        symmetry=True,
+    )
 
     multiplicity = 1 + (n % 2)  # Singlet for even n, doublet for odd n
     ms = 0.5 * (n % 2)  # Unpaired electrons for odd n
@@ -37,13 +44,13 @@ def test_ci_timing():
     """Test the CI energy and timing for hydrogen chains of length 2 to 12."""
 
     ref_energies = [
-        -1.108873664804, # H2
-        -2.180967812817, # H4
-        -3.257608942865, # H6
-        -4.336068592474, # H8
-        -5.415397091940, # H10
-        -6.495197015363, # H12
-        -7.575276862289, # H14
+        -1.108873664804,  # H2
+        -2.180967812817,  # H4
+        -3.257608942865,  # H6
+        -4.336068592474,  # H8
+        -5.415397091940,  # H10
+        -6.495197015363,  # H12
+        -7.575276862289,  # H14
     ]
 
     ci_timing = []
@@ -68,7 +75,7 @@ def test_ci_timing():
 def test_ci_timing2():
     """Test the CI energy and timing for hydrogen chain of length 13."""
 
-    ref_energies = [-7.013625049615] # H13
+    ref_energies = [-7.013625049615]  # H13
 
     ci_timing = []
     energies = []

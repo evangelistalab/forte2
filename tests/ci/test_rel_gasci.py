@@ -16,6 +16,11 @@ def prepare_rhf_coeff_for_relci(rhf, system):
     C = C @ random_phase
     rhf.C[0] = C
     system.two_component = True
+    irrep_labels = [l for sub in rhf.irrep_labels for l in (sub, sub)]
+    irrep_indices = [i for sub in rhf.irrep_indices for i in (sub, sub)]
+    rhf.irrep_labels = irrep_labels
+    rhf.irrep_indices = irrep_indices
+
     return rhf, system
 
 

@@ -12,7 +12,13 @@ def test_casscf_n2_cholesky():
     N 0.0 0.0 1.120
     """
 
-    system = System(xyz=xyz, basis_set="cc-pVDZ", cholesky_tei=True, cholesky_tol=1e-10)
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        cholesky_tei=True,
+        cholesky_tol=1e-10,
+        symmetry=True,
+    )
     rhf = RHF(charge=0, econv=1e-12)(system)
 
     mc = MCOptimizer(
