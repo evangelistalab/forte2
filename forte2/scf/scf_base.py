@@ -5,12 +5,13 @@ import time
 import numpy as np
 from forte2.system import System, ModelSystem
 from forte2.jkbuilder import FockBuilder
-from forte2.base_classes.mixins import MOsMixin, SystemMixin
+from forte2.base_classes.mixins import MOsMixin, SystemMixin, MOSpaceMixin
+from forte2.state import MOSpace
 from forte2.helpers import logger, DIIS
 
 
 @dataclass
-class SCFBase(ABC, SystemMixin, MOsMixin):
+class SCFBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
     """
     Abstract base class for SCF calculations.
 
@@ -247,6 +248,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         self._assign_orbital_symmetries()
         self._print_orbital_energies()
         self._print_ao_composition()
+        self._build_mo_space()
 
     @abstractmethod
     def _build_fock(self, H, fock_builder, S): ...
@@ -286,3 +288,30 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
 
     @abstractmethod
     def _print_ao_composition(self): ...
+
+    def _build_mo_space(self):
+        """
+        Build MO space after HF convergence:
+        - RHF/ROHF/UHF: core = doubly occupied, active = singly occupied
+        - GHF: core = occupied spinors (nel), active = none
+        """
+        nmo = self.nmo
+        if self.method != "GHF":
+            na = self.na
+            nb = self.nb
+            docc = min(na, nb)
+            socc = abs(na - nb)
+            core = list(range(docc))
+            active = list(range(docc, docc + socc)) if socc else []
+        else:
+            nel = self.nel
+            core = list(range(nel))
+            active = []
+        self.mo_space = MOSpace(
+            nmo=nmo,
+            active_orbitals=active,
+            core_orbitals=core,
+            frozen_core_orbitals=[],
+            frozen_virtual_orbitals=[],
+        )
+        return self.mo_space

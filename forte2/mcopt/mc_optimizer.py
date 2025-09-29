@@ -63,7 +63,7 @@ class MCOptimizer(ActiveSpaceSolver):
     max_rotation : float, optional, default=0.2
         Maximum orbital rotation size for L-BFGS.
     ci_* : various, optional
-        Various parameters for the CI solver. See `CISolver` for details. 
+        Various parameters for the CI solver. See `CISolver` for details.
         Available parameters:
         - ci_guess_per_root
         - ci_ndets_per_guess
@@ -441,6 +441,8 @@ class MCOptimizer(ActiveSpaceSolver):
         basis_info.print_ao_composition(
             self.C[0], list(range(self.actv.start, self.actv.stop))
         )
+        logger.log_info1("\n Orbital Info:")
+        print(self.mo_space)
 
     def _get_nonredundant_rotations(self):
         """Lower triangular matrix of nonredundant rotations"""
