@@ -169,6 +169,8 @@ class SelectedCIHelper {
 
     void Hamiltonian(np_vector basis, np_vector sigma) const;
 
+    np_vector Hdiag() const;
+
   private:
     // == Class Private Methods ==
     void prepare_sigma_build();

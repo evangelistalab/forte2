@@ -129,4 +129,12 @@ void SelectedCIHelper::set_c(np_matrix& c) {
     }
 }
 
+np_vector SelectedCIHelper::Hdiag() const {
+    auto Hdiag = make_zeros<nb::numpy, double, 1>({dets_.size()});
+    auto Hdiag_view = Hdiag.view();
+    for (size_t i{0}; i < dets_.size(); ++i) {
+        Hdiag_view(i) = det_energies_[i];
+    }
+    return Hdiag;
+}
 } // namespace forte2

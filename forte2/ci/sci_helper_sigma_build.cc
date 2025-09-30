@@ -179,6 +179,7 @@ SortedStringList::SortedStringList(size_t norb, std::vector<Determinant>&& dets)
 }
 
 void SelectedCIHelper::prepare_sigma_build() {
+    local_timer t;
     // compute the energy of all the determinants
     det_energies_.resize(dets_.size());
     for (size_t i{0}, i_max{dets_.size()}; i < i_max; ++i) {
@@ -198,27 +199,7 @@ void SelectedCIHelper::prepare_sigma_build() {
     }
     ba_list_ = SortedStringList(norb_, std::move(ba_dets_));
 
-    for (auto& list : {ab_list_, ba_list_}) {
-        auto& dets = list.sorted_dets();
-        // for (size_t i = 0; i < dets.size(); ++i) {
-        //     LOG(log_level_) << str(dets[i], norb_) << " " << i;
-        // }
-
-        for (size_t i = 0; i < list.first_string_size(); ++i) {
-            auto [start, end] = list.range(i);
-            // LOG(log_level_) << "Alpha string: " << str(list.sorted_first_string(i), norb_)
-            //                 << " Range: [" << start << ", " << end << ")";
-            for (size_t j = start; j < end; ++j) {
-                auto idx = list.sorted_dets_second_string(j);
-                Determinant d = list.sorted_dets()[j];
-                // LOG(log_level_) << "   " << str(list.sorted_first_string(i), norb_) << " x "
-                //                 << str(list.sorted_second_string(idx), norb_);
-                // LOG(log_level_) << "   " << str(d, norb_)
-                //                 << " Index: " << list.second_string_to_det_index()[i].at(idx);
-            }
-        }
-    }
-    fullHamiltonian();
+    LOG(log_level_) << "Prepared sigma build in " << t.elapsed_seconds() << " seconds.";
 }
 
 np_matrix SelectedCIHelper::fullHamiltonian() const {
@@ -236,7 +217,7 @@ np_matrix SelectedCIHelper::fullHamiltonian() const {
         H2b(basis, sigma);
         H2ab(basis, sigma);
         for (size_t j{0}; j < dets_.size(); ++j) {
-            H(i, j) = sigma[j];
+            H(j, i) = sigma[j];
         }
         basis[i] = 0.0;
         for (size_t j{0}; j < dets_.size(); ++j) {
@@ -253,11 +234,11 @@ void SelectedCIHelper::Hamiltonian(np_vector basis, np_vector sigma) const {
     auto s_span = vector::as_span<double>(sigma);
 
     H0(b_span, s_span);
-    // H1(b_span, s_span, Spin::Alpha);
-    // H1(b_span, s_span, Spin::Beta);
-    // H2_same_spin(b_span, s_span, Spin::Alpha);
-    // H2_same_spin(b_span, s_span, Spin::Beta);
-    // H2_opposite_spin(b_span, s_span);
+    H1a(b_span, s_span);
+    H1b(b_span, s_span);
+    H2a(b_span, s_span);
+    H2b(b_span, s_span);
+    H2ab(b_span, s_span);
 }
 
 void SelectedCIHelper::H0(std::span<double> basis, std::span<double> sigma) const {
@@ -406,11 +387,12 @@ void SelectedCIHelper::H2ab(std::span<double> basis, std::span<double> sigma) co
         for (const auto& [p, hole_idx, sign_p] : sublist) {
             const auto& inv_sublist = ab_list_.one_hole_string_list_inv()[hole_idx];
             for (const auto& [q, j, sign_q] : inv_sublist) {
-                const auto& [jstart, jend] = ba_list_.range(j);
+                const auto& [jstart, jend] = ab_list_.range(j);
+                const auto& j_second_string_to_det_index = ab_list_.second_string_to_det_index()[j];
                 // At this point we have a+_p a_q acting on the alpha string
                 // Loop over all the beta strings with the same alpha string
                 for (size_t jj{jstart}; jj < jend; ++jj) {
-                    const auto idx_j = ba_list_.sorted_dets_second_string(jj);
+                    const auto idx_j = ab_list_.sorted_dets_second_string(jj);
                     // Now loop over single excitations in the beta string
                     const auto& sublist_b = ab_list_.one_hole_second_string_list()[idx_j];
                     for (const auto& [r, hole_idx_b, sign_r] : sublist_b) {
@@ -428,8 +410,8 @@ void SelectedCIHelper::H2ab(std::span<double> basis, std::span<double> sigma) co
                             if (it != i_second_string_to_det_index.end()) {
                                 const size_t ii = it->second;
                                 sigma[ii] += v_pqrs * sign * basis[det_permutation[jj]];
-                                // LOG(log_level_)
-                                //     << "a+(" << q << ") a(" << p << ") "
+                                //     // LOG(log_level_)
+                                //     //     << "a+(" << q << ") a(" << p << ") "
                             }
                         }
                     }

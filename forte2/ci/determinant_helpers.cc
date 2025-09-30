@@ -48,6 +48,19 @@ Determinant create_double_ab_excitation(const Determinant& det, size_t i, size_t
     return new_det;
 }
 
+void compute_fast_virtual(const std::vector<size_t>& occ, std::vector<size_t>& vir, size_t n) {
+    size_t j = 0; // index into occ
+    size_t k = 0; // index into vir
+    for (size_t i = 0; i < n; ++i) {
+        if (occ[j] == i) {
+            ++j; // skip set bit
+        } else {
+            vir[k] = i;
+            ++k;
+        }
+    }
+}
+
 // std::shared_ptr<psi::Matrix> make_s2_matrix(const std::vector<Determinant>& dets) {
 //     const size_t n = dets.size();
 //     auto S2 = std::make_shared<psi::Matrix>("S^2", n, n);

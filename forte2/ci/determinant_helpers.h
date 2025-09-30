@@ -103,4 +103,10 @@ std::vector<Determinant> make_hilbert_space(size_t nmo, size_t na, size_t nb, De
                                             std::vector<int> mo_symmetry = std::vector<int>(),
                                             int symmetry = 0);
 
+/// @brief Given a vector of occupied orbitals, compute the list of virtual orbitals
+/// @param occ The vector of occupied orbitals
+/// @param vir The vector of virtual orbitals (to be filled)
+/// @param n The total number of orbitals
+void compute_fast_virtual(const std::vector<size_t>& occ, std::vector<size_t>& vir, size_t n);
+
 } // namespace forte2

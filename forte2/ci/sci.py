@@ -1,3 +1,4 @@
+import time
 from dataclasses import dataclass, field
 from collections import OrderedDict
 
@@ -89,7 +90,7 @@ class _SelectedCIBase:
     eigensolver : DavidsonLiuSolver
         The eigensolver used to find the roots of the CI problem.
     E (evals) : NDArray
-        The eigenvalues (energies) of the CI problem.
+        The eigenvalues (energielapsed:.3fes) of the CI problem.
     evecs : NDArray
         The eigenvectors (CI coefficients) of the CI problem.
 
@@ -116,7 +117,7 @@ class _SelectedCIBase:
 
     ### Davidson-Liu parameters
     guess_per_root: int = 2
-    ndets_per_guess: int = 10
+    ndets_per_guess: int = 20
     collapse_per_root: int = 2
     basis_per_root: int = 4
     maxiter: int = 100
@@ -160,14 +161,10 @@ class _SelectedCIBase:
 
         # Create an initial guess
         self.guess_determinants, self.guess_c = self._initial_guess()
+        self.evecs = self.guess_c.copy()
 
         self.ndet = len(self.guess_determinants)
         logger.log(f"Number of determinants: {self.ndet}", self.log_level)
-
-        # Create the CI vectors that will hold the results of the sigma builder in the
-        # determinant basis
-        self.b_det = np.zeros((self.ndet))
-        self.sigma_det = np.zeros((self.ndet))
 
     def run(self):
         if not self.executed:
@@ -184,6 +181,7 @@ class _SelectedCIBase:
             self.log_level,
         )
 
+        old_energy = 0.0
         for cycle in range(self.maxcycle):
             print(f"\nCycle {cycle + 1}")
             # Step 1. Diagonalize the Hamiltonian in the P space
@@ -200,33 +198,37 @@ class _SelectedCIBase:
                 )
 
             self.ndet = self.sci_helper.ndets()
+            self.dets = self.sci_helper.dets()
+
+            self.b_det = np.zeros((self.ndet))
+            self.sigma_det = np.zeros((self.ndet))
+
             logger.log(f"Number of determinants: {self.ndet}", self.log_level)
+
+            # Save the current CI vectors as the guess for the next iteration
+            num_guess = min(self.evecs.shape[1], self.nroot)
+            self.guess_c = np.zeros((self.ndet, num_guess), dtype=self.dtype)
+            self.guess_c[0 : self.evecs.shape[0], 0:num_guess] = self.evecs[
+                :, 0:num_guess
+            ]
 
             if self.ci_algorithm.lower() == "exact":
                 self._do_exact_diagonalization()
             else:
                 self._do_iterative_ci()
 
-            # # Step 3. Diagonalize the Hamiltonian in the P + Q space
-            # diagonalize_PQ_space()
-
-            logger.log(f"CI Energy Roots: {self.evals}", self.log_level)
+            # logger.log(f"CI Energy Roots: {self.evals}", self.log_level)
 
             self.sci_helper.set_c(self.evecs)
 
-            # # Step 4. Check convergence and break if needed
-            # if check_convergence():
-            #     break
+            delta_energy = np.average(self.evals) - old_energy
+            old_energy = np.average(self.evals)
 
-            # # Step 5. Prune the P + Q space to get an updated P space
-            # prune_PQ_to_P()
-
-        # self.E = self.evals
-        # for i, e in enumerate(self.evals):
-        #     logger.log(f"Final CI Energy Root {i}: {e:20.12f} [Eh]", self.log_level)
-
-        # if self.do_test_rdms:
-        #     self._test_rdms()
+            if abs(delta_energy) < self.econv:
+                logger.log(
+                    f"Selected CI converged in {cycle + 1} cycles.", self.log_level
+                )
+                break
 
         self.executed = True
 
@@ -259,12 +261,7 @@ class _SelectedCIBase:
                 "Two-component Selected CI is not yet implemented."
             )
 
-        if self.two_component:
-            Hdiag = self.ci_sigma_builder.form_Hdiag(self.dets)
-        else:
-            Hdiag = self.ci_sigma_builder.form_Hdiag_csf(
-                self.dets, self.spin_adapter, spin_adapt_full_preconditioner=False
-            )
+        Hdiag = self.sci_helper.Hdiag()
 
         # If there is only one determinant, we can skip calling the eigensolver
         if self.ndet == 1:
@@ -277,27 +274,26 @@ class _SelectedCIBase:
             return self
 
         # 3. Instantiate and configure solver
-        if self.eigensolver is None:
-            self.eigensolver = DavidsonLiuSolver(
-                size=self.basis_size,  # size of the basis (number of CSF if we spin adapt)
-                nroot=self.nroot,
-                collapse_per_root=self.collapse_per_root,
-                basis_per_root=self.basis_per_root,
-                e_tol=self.econv,  # eigenvalue convergence
-                r_tol=self.rconv,  # residual convergence
-                maxiter=self.maxiter,
-                eta=self.energy_shift,
-                log_level=self.log_level,
-                dtype=complex if self.two_component else float,
-            )
+        # if self.eigensolver is None:
+        self.eigensolver = DavidsonLiuSolver(
+            size=self.ndet,  # size of the basis (number of CSF if we spin adapt)
+            nroot=self.nroot,
+            collapse_per_root=self.collapse_per_root,
+            basis_per_root=self.basis_per_root,
+            e_tol=self.econv,  # eigenvalue convergence
+            r_tol=self.rconv,  # residual convergence
+            maxiter=self.maxiter,
+            eta=self.energy_shift,
+            log_level=self.log_level,
+            dtype=complex if self.two_component else float,
+        )
 
         # 4. Compute diagonal of the Hamiltonian
         self.eigensolver.add_h_diag(Hdiag)
 
-        # 5. Build the guess vectors if this is the first run
-        if self.first_run:
-            self._build_guess_vectors(Hdiag)
-            self.first_run = False
+        # # 5. Build the guess vectors
+        # self._build_guess_vectors(Hdiag)
+        self.eigensolver.add_guesses(self.guess_c)
 
         if self.two_component:
             if self.ci_algorithm.lower() == "sparse":
@@ -335,17 +331,23 @@ class _SelectedCIBase:
                 # Compute the sigma block from the basis block
                 ncols = Bblock.shape[1]
                 for i in range(ncols):
-                    self.spin_adapter.csf_C_to_det_C(Bblock[:, i], self.b_det)
-                    self.ci_sigma_builder.Hamiltonian(self.b_det, self.sigma_det)
-                    self.spin_adapter.det_C_to_csf_C(self.sigma_det, Sblock[:, i])
+                    self.b_det = Bblock[:, i].copy()
+                    self.sci_helper.Hamiltonian(self.b_det, self.sigma_det)
+                    Sblock[:, i] = self.sigma_det.copy()
 
         self.eigensolver.add_sigma_builder(sigma_builder)
 
         # 6. Run Davidson
+        start = time.monotonic()
         self.evals, self.evecs = self.eigensolver.solve()
+        end = time.monotonic()
+        elapsed = end - start
 
         if self.eigensolver.converged:
-            logger.log("\nDavidson-Liu solver converged.\n", self.log_level)
+            logger.log(
+                f"\nDavidson-Liu solver converged in {elapsed:.3f} seconds.\n",
+                self.log_level,
+            )
         else:
             if self.die_if_not_converged:
                 raise RuntimeError("Davidson-Liu solver did not converge.")
@@ -355,13 +357,13 @@ class _SelectedCIBase:
                     self.log_level,
                 )
 
-        if not self.two_component:
-            h_tot, h_aabb, h_aaaa, h_bbbb = self.ci_sigma_builder.avg_build_time()
-            logger.log("\nAverage CI Sigma Builder time summary:", self.log_level)
-            logger.log(f"h_aabb time:    {h_aabb:.3f} s/build", self.log_level)
-            logger.log(f"h_aaaa time:    {h_aaaa:.3f} s/build", self.log_level)
-            logger.log(f"h_bbbb time:    {h_bbbb:.3f} s/build", self.log_level)
-            logger.log(f"total time:     {h_tot:.3f} s/build\n", self.log_level)
+        # if not self.two_component:
+        #     h_tot, h_aabb, h_aaaa, h_bbbb = self.ci_sigma_builder.avg_build_time()
+        #     logger.log("\nAverage CI Sigma Builder time summary:", self.log_level)
+        #     logger.log(f"h_aabb time:    {h_aabb:.3f} s/build", self.log_level)
+        #     logger.log(f"h_aaaa time:    {h_aaaa:.3f} s/build", self.log_level)
+        #     logger.log(f"h_bbbb time:    {h_bbbb:.3f} s/build", self.log_level)
+        #     logger.log(f"total time:     {h_tot:.3f} s/build\n", self.log_level)
 
     def _do_exact_diagonalization(self):
         logger.log("Using CI algorithm: Exact Diagonalization", self.log_level)
@@ -499,9 +501,9 @@ class _SelectedCIBase:
     def _build_guess_vectors(self, Hdiag):
         """Build the guess vectors for the CI calculation."""
         # determine the number of guess vectors
-        self.num_guess_states = min(self.guess_per_root * self.nroot, self.basis_size)
+        self.num_guess_states = min(self.guess_per_root * self.nroot, self.ndet)
         logger.log(f"Number of guess states: {self.num_guess_states}", self.log_level)
-        nguess_dets = min(self.ndets_per_guess * self.num_guess_states, self.basis_size)
+        nguess_dets = min(self.ndets_per_guess * self.num_guess_states, self.ndet)
         logger.log(f"Number of guess basis: {nguess_dets}", self.log_level)
 
         # find the indices of the elements of Hdiag with the lowest values
@@ -510,28 +512,21 @@ class _SelectedCIBase:
         else:
             indices = np.argsort(Hdiag)[:nguess_dets]
 
-        if self.two_component:
-            _slater_rules = lambda I, J: self.ci_sigma_builder.slater_rules(
-                self.dets, I, J
-            )
-        else:
-            _slater_rules = lambda I, J: self.ci_sigma_builder.slater_rules_csf(
-                self.dets, self.spin_adapter, I, J
-            )
         # create the Hamiltonian matrix in the basis of the guess CSFs
         Hguess = np.zeros((nguess_dets, nguess_dets), dtype=self.dtype)
         for i, I in enumerate(indices):
             for j, J in enumerate(indices):
                 if i >= j:
-                    Hij = _slater_rules(I, J)
+                    Hij = self.slater_rules.slater_rules(self.dets[I], self.dets[J])
                     Hguess[i, j] = Hij
                     Hguess[j, i] = np.conj(Hij)
 
         # Diagonalize the Hamiltonian to get the initial guess vectors
         evals_guess, evecs_guess = np.linalg.eigh(Hguess)
+        print(f"Guess energies: {evals_guess[:self.num_guess_states]}")
 
         # Select the lowest eigenvalues and their corresponding eigenvectors
-        guess_mat = np.zeros((self.basis_size, self.num_guess_states), dtype=self.dtype)
+        guess_mat = np.zeros((self.ndet, self.num_guess_states), dtype=self.dtype)
         for i in range(self.num_guess_states):
             guess = evecs_guess[:, i]
             for j, d in enumerate(indices):
@@ -1105,8 +1100,7 @@ class _SelectedCIBase:
 
         for i in range(self.nroot):
             top_dets = []
-            ci_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(self.evecs[:, i], ci_det)
+            ci_det = self.evecs[:, i]
             argsort = np.argsort(np.abs(ci_det))[::-1]  # descending in absolute coeff
             for j in range(n):
                 if j < len(argsort):

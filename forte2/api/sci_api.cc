@@ -22,8 +22,11 @@ void export_sci_helper_api(nb::module_& m) {
              "energy, Hamiltonian, and integrals")
         .def("set_Hamiltonian", &SelectedCIHelper::set_Hamiltonian, "E"_a, "H"_a, "V"_a,
              "Set the Hamiltonian integrals")
-        .def("fullHamiltonian", &SelectedCIHelper::fullHamiltonian,
-             "Return the full Hamiltonian matrix in the determinant basis")
+        //    .def("fullHamiltonian", &SelectedCIHelper::fullHamiltonian,
+        //         "Return the full Hamiltonian matrix in the determinant basis")
+        .def("Hamiltonian", &SelectedCIHelper::Hamiltonian, "basis"_a, "sigma"_a,
+             "Apply the Hamiltonian to the basis and store the result in sigma")
+        .def("Hdiag", &SelectedCIHelper::Hdiag, "Return the diagonal of the Hamiltonian matrix")
         .def("set_c", &SelectedCIHelper::set_c, "c"_a, "Set the CI coefficients")
         .def("select_cipsi", &SelectedCIHelper::select_cipsi, "threshold"_a,
              "Perform CIPSI selection with the given threshold")

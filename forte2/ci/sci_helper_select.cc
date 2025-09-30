@@ -332,18 +332,16 @@ void SelectedCIHelper::select_hbci(double threshold) {
             }
         }
     }
-    LOG(log_level_) << "HBCI selection completed in " << selection_timer.elapsed();
-    LOG(log_level_) << "Checked " << checks_count << " excitations for selection";
 
     merge_and_keep_unique(dets_, new_dets);
     c_.resize(dets_.size(), 0.0);
-    prepare_sigma_build();
-    // for (size_t i = 0; i < dets_.size(); ++i) {
-    //     LOG(log_level_) << std::to_string(i) << " " << str(dets_[i], norb_) << "  c = " << c_[i]
-    //                     << " E = " << det_energies_[i];
-    // }
 
+    LOG(log_level_) << "Checked " << checks_count << " excitations for selection";
     LOG(log_level_) << "After HBCI selection, number of determinants: " << dets_.size();
+    LOG(log_level_) << "HBCI selection completed in " << selection_timer.elapsed_seconds()
+                    << " seconds.";
+
+    prepare_sigma_build();
 }
 
 } // namespace forte2

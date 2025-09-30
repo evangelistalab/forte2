@@ -985,16 +985,4 @@ template <size_t N> struct hash<forte2::DeterminantImpl<N>> {
     }
 };
 
-void compute_fast_virtual(const std::vector<size_t>& occ, std::vector<size_t>& vir, size_t n) {
-    size_t j = 0; // index into occ
-    size_t k = 0; // index into vir
-    for (size_t i = 0; i < n; ++i) {
-        if (occ[j] == i) {
-            ++j; // skip set bit
-        } else {
-            vir[k] = i;
-            ++k;
-        }
-    }
-}
 } // namespace std
