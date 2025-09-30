@@ -338,10 +338,10 @@ void SelectedCIHelper::select_hbci(double threshold) {
     merge_and_keep_unique(dets_, new_dets);
     c_.resize(dets_.size(), 0.0);
     prepare_sigma_build();
-    for (size_t i = 0; i < dets_.size(); ++i) {
-        LOG(log_level_) << std::to_string(i) << " " << str(dets_[i], norb_) << "  c = " << c_[i]
-                        << " E = " << det_energies_[i];
-    }
+    // for (size_t i = 0; i < dets_.size(); ++i) {
+    //     LOG(log_level_) << std::to_string(i) << " " << str(dets_[i], norb_) << "  c = " << c_[i]
+    //                     << " E = " << det_energies_[i];
+    // }
 
     LOG(log_level_) << "After HBCI selection, number of determinants: " << dets_.size();
 }

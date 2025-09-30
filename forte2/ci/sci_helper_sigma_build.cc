@@ -200,21 +200,21 @@ void SelectedCIHelper::prepare_sigma_build() {
 
     for (auto& list : {ab_list_, ba_list_}) {
         auto& dets = list.sorted_dets();
-        for (size_t i = 0; i < dets.size(); ++i) {
-            LOG(log_level_) << str(dets[i], norb_) << " " << i;
-        }
+        // for (size_t i = 0; i < dets.size(); ++i) {
+        //     LOG(log_level_) << str(dets[i], norb_) << " " << i;
+        // }
 
         for (size_t i = 0; i < list.first_string_size(); ++i) {
             auto [start, end] = list.range(i);
-            LOG(log_level_) << "Alpha string: " << str(list.sorted_first_string(i), norb_)
-                            << " Range: [" << start << ", " << end << ")";
+            // LOG(log_level_) << "Alpha string: " << str(list.sorted_first_string(i), norb_)
+            //                 << " Range: [" << start << ", " << end << ")";
             for (size_t j = start; j < end; ++j) {
                 auto idx = list.sorted_dets_second_string(j);
                 Determinant d = list.sorted_dets()[j];
-                LOG(log_level_) << "   " << str(list.sorted_first_string(i), norb_) << " x "
-                                << str(list.sorted_second_string(idx), norb_);
-                LOG(log_level_) << "   " << str(d, norb_)
-                                << " Index: " << list.second_string_to_det_index()[i].at(idx);
+                // LOG(log_level_) << "   " << str(list.sorted_first_string(i), norb_) << " x "
+                //                 << str(list.sorted_second_string(idx), norb_);
+                // LOG(log_level_) << "   " << str(d, norb_)
+                //                 << " Index: " << list.second_string_to_det_index()[i].at(idx);
             }
         }
     }

@@ -374,16 +374,7 @@ class _SelectedCIBase:
                 H[i, j] = self.slater_rules.slater_rules(dets[i], dets[j])
                 H[j, i] = np.conj(H[i, j])
 
-        with np.printoptions(precision=4, suppress=True):
-            print(H)
-
         H2 = self.sci_helper.fullHamiltonian()
-
-        for i in range(self.ndet):
-            print(f"{i:4d} {dets[i].str(self.norb)}")
-
-        with np.printoptions(precision=4, suppress=True):
-            print(H2)
 
         print(f"Error = {np.linalg.norm(H - H2)}")
 
