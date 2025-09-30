@@ -34,6 +34,7 @@ SortedStringList::SortedStringList(size_t norb, std::vector<Determinant>&& dets)
     for (size_t j{1}; j < ndets_; j++) {
         first_string = sorted_dets_[j].a_string();
         second_string = sorted_dets_[j].b_string();
+        // check if the second string is new, and if so, add it and assign it an index
         if (second_string_index_.find(second_string) == second_string_index_.end()) {
             second_string_index_[second_string] = second_string_index_.size();
             sorted_second_string_.push_back(second_string);
@@ -55,12 +56,11 @@ SortedStringList::SortedStringList(size_t norb, std::vector<Determinant>&& dets)
 
     second_string_to_det_index_.reserve(first_string_range_.size());
 
-    for (size_t k{0}; const auto [start, end] : first_string_range_) {
+    for (const auto [start, end] : first_string_range_) {
         ankerl::unordered_dense::map<size_t, size_t, std::hash<size_t>> map;
         for (size_t idx{start}; idx < end; ++idx) {
-            map[sorted_dets_second_string_[idx]] =
-                det_permutation_[k]; // use the original index here
-            k++;
+            map[sorted_dets_second_string_[idx]] = det_permutation_[idx];
+            //; // use the original index here
         }
         second_string_to_det_index_.push_back(std::move(map));
     }
@@ -98,6 +98,42 @@ SortedStringList::SortedStringList(size_t norb, std::vector<Determinant>&& dets)
     for (size_t i = 0, imax{sorted_first_string_.size()}; i < imax; ++i) {
         for (const auto& [orb, hole_idx, sign] : one_hole_string_list_[i]) {
             one_hole_string_list_inv_[hole_idx].emplace_back(orb, i, sign);
+        }
+    }
+
+    one_hole_second_string_list_.reserve(sorted_second_string_.size());
+    for (size_t i = 0, imax{sorted_second_string_.size()}; i < imax; ++i) {
+        const auto& second_str = sorted_second_string_[i];
+        // Find the occupied orbitals in the second string
+        size_t n = 0;
+        second_str.find_set_bits(occ, n);
+
+        std::vector<std::tuple<size_t, size_t, double>> one_hole_second_string_list_entry;
+        one_hole_second_string_list_entry.reserve(n);
+
+        // For each occupied orbital, create the one-hole string and store it
+        for (size_t p = 0; p < n; ++p) {
+            const size_t orb = occ[p];
+            String one_hole = second_str;
+            one_hole.set_bit(orb, false);
+            if (one_hole_second_strings_index_.find(one_hole) ==
+                one_hole_second_strings_index_.end()) {
+                one_hole_second_strings_index_[one_hole] = one_hole_second_strings_index_.size();
+                one_hole_second_strings_.push_back(one_hole);
+            }
+            const size_t hole_idx = one_hole_second_strings_index_[one_hole];
+            const double sign = second_str.slater_sign(orb);
+
+            one_hole_second_string_list_entry.emplace_back(orb, hole_idx, sign);
+        }
+        one_hole_second_string_list_.emplace_back(std::move(one_hole_second_string_list_entry));
+    }
+
+    // Create the inverse mapping from one-hole strings to full strings
+    one_hole_second_string_list_inv_.resize(one_hole_second_strings_index_.size());
+    for (size_t i = 0, imax{sorted_second_string_.size()}; i < imax; ++i) {
+        for (const auto& [orb, hole_idx, sign] : one_hole_second_string_list_[i]) {
+            one_hole_second_string_list_inv_[hole_idx].emplace_back(orb, i, sign);
         }
     }
 
@@ -195,7 +231,10 @@ np_matrix SelectedCIHelper::fullHamiltonian() const {
         basis[i] = 1.0;
         H0(basis, sigma);
         H1a(basis, sigma);
-        // H1b(basis, sigma);
+        H1b(basis, sigma);
+        H2a(basis, sigma);
+        H2b(basis, sigma);
+        H2ab(basis, sigma);
         for (size_t j{0}; j < dets_.size(); ++j) {
             H(i, j) = sigma[j];
         }
@@ -235,6 +274,8 @@ void SelectedCIHelper::find_matching_dets(std::span<double> basis, std::span<dou
     const auto& [istart, iend] = list.range(i);
     const auto& [jstart, jend] = list.range(j);
 
+    const auto& det_permutation = list.det_permutation();
+
     if (iend - istart >= jend - jstart) {
         const auto& i_second_string_to_det_index = list.second_string_to_det_index()[i];
         // Loop over the determinants in the smaller range
@@ -249,7 +290,7 @@ void SelectedCIHelper::find_matching_dets(std::span<double> basis, std::span<dou
                 //     << "a+(" << q << ") a(" << p << ") " << str(dets_[ii], norb_)
                 //     << " -> " << sign << " * " << h_pq << " " << str(dets_[jj],
                 //     norb_);
-                sigma[ii] += int_sign * basis[jj];
+                sigma[ii] += int_sign * basis[det_permutation[jj]]; // use the original index here
             }
         }
     } else {
@@ -260,7 +301,7 @@ void SelectedCIHelper::find_matching_dets(std::span<double> basis, std::span<dou
             const auto it = j_second_string_to_det_index.find(idx_i);
             if (it != j_second_string_to_det_index.end()) {
                 const size_t jj = it->second;
-                sigma[ii] += int_sign * basis[jj];
+                sigma[det_permutation[ii]] += int_sign * basis[jj];
             }
         }
     }
@@ -269,64 +310,20 @@ void SelectedCIHelper::find_matching_dets(std::span<double> basis, std::span<dou
 void SelectedCIHelper::H1a(std::span<double> basis, std::span<double> sigma) const {
     const auto first_string_size = ab_list_.first_string_size();
     const auto& one_hole_strings = ab_list_.one_hole_strings();
-    LOG(log_level_) << "Number of unique alpha strings: " << first_string_size;
-    LOG(log_level_) << "Number of unique one-hole alpha strings: " << one_hole_strings.size();
     // Loop over all unique alpha strings
     for (size_t i{0}; i < first_string_size; ++i) {
         const auto& i_second_string_to_det_index = ab_list_.second_string_to_det_index()[i];
         const auto& sublist = ab_list_.one_hole_string_list()[i];
         for (const auto& [p, hole_idx, sign_p] : sublist) {
-            LOG(log_level_) << "a(" << p << ") " << str(ab_list_.sorted_first_string(i), norb_)
-                            << " -> " << sign_p << " " << str(one_hole_strings[hole_idx], norb_);
-            // Find the corresponding beta string
             const auto& inv_sublist = ab_list_.one_hole_string_list_inv()[hole_idx];
             for (const auto& [q, j, sign_q] : inv_sublist) {
                 if (p == q)
-                    continue; // skip same orbital
-                // LOG(log_level_) << "a(" << q << ")+" << str(one_hole_strings[hole_idx], norb_)
-                //                 << " -> " << sign_q << " "
-                //                 << str(ab_list_.sorted_first_string(j), norb_);
-                const double sign = sign_p * sign_q;
+                    continue; // skip diagonal contribution
                 const double h_pq = h_[p * norb_ + q];
                 if (std::abs(h_pq) < 1e-12)
                     continue;
-
+                const double sign = sign_p * sign_q;
                 find_matching_dets(basis, sigma, ab_list_, i, j, h_pq * sign);
-
-                // // Find the range of determinants with the current alpha string
-                // auto [istart, iend] = ab_list_.range(i);
-                // auto [jstart, jend] = ab_list_.range(j);
-
-                // const auto& j_second_string_to_det_index =
-                //     ab_list_.second_string_to_det_index()[j];
-
-                // if (iend - istart >= jend - jstart) {
-                //     // Loop over the determinants in the smaller range
-                //     for (size_t jj{jstart}; jj < jend; ++jj) {
-                //         // Get the index of the jj determinant in the full list
-                //         const auto idx_j = ab_list_.sorted_dets_second_string(jj);
-                //         // Check if the determinant with the new beta string exists
-                //         const auto it = i_second_string_to_det_index.find(idx_j);
-                //         if (it != i_second_string_to_det_index.end()) {
-                //             const size_t ii = it->second;
-                //             // LOG(log_level_)
-                //             //     << "a+(" << q << ") a(" << p << ") " << str(dets_[ii], norb_)
-                //             //     << " -> " << sign << " * " << h_pq << " " << str(dets_[jj],
-                //             //     norb_);
-                //             sigma[ii] += h_pq * sign * basis[jj];
-                //         }
-                //     }
-                // } else {
-                //     for (size_t ii{istart}; ii < iend; ++ii) {
-                //         const auto idx_i = ab_list_.sorted_dets_second_string(ii);
-                //         // Check if the determinant with the new beta string exists
-                //         const auto it = ab_list_.second_string_to_det_index()[j].find(idx_i);
-                //         if (it != ab_list_.second_string_to_det_index()[j].end()) {
-                //             const size_t jj = it->second;
-                //             sigma[ii] += h_pq * sign * basis[jj];
-                //         }
-                //     }
-                // }
             }
         }
     }
@@ -335,25 +332,19 @@ void SelectedCIHelper::H1a(std::span<double> basis, std::span<double> sigma) con
 void SelectedCIHelper::H1b(std::span<double> basis, std::span<double> sigma) const {
     const auto first_string_size = ba_list_.first_string_size();
     const auto& one_hole_strings = ba_list_.one_hole_strings();
-    LOG(log_level_) << "Number of unique beta strings: " << first_string_size;
-    LOG(log_level_) << "Number of unique one-hole beta strings: " << one_hole_strings.size();
     // Loop over all unique beta strings
     for (size_t i{0}; i < first_string_size; ++i) {
         const auto& i_second_string_to_det_index = ba_list_.second_string_to_det_index()[i];
         const auto& sublist = ba_list_.one_hole_string_list()[i];
         for (const auto& [p, hole_idx, sign_p] : sublist) {
-            // LOG(log_level_) << "a(" << p << ") " << str(ba_list_.sorted_first_string(i), norb_)
-            //                 << " -> " << sign_p << " " << str(one_hole_strings[hole_idx], norb_);
-            // Find the corresponding beta string
             const auto& inv_sublist = ba_list_.one_hole_string_list_inv()[hole_idx];
             for (const auto& [q, j, sign_q] : inv_sublist) {
                 if (p == q)
-                    continue; // skip same orbital
-                const double sign = sign_p * sign_q;
+                    continue; // skip diagonal contribution
                 const double h_pq = h_[p * norb_ + q];
                 if (std::abs(h_pq) < 1e-12)
                     continue;
-
+                const double sign = sign_p * sign_q;
                 find_matching_dets(basis, sigma, ba_list_, i, j, h_pq * sign);
             }
         }
@@ -363,29 +354,19 @@ void SelectedCIHelper::H1b(std::span<double> basis, std::span<double> sigma) con
 void SelectedCIHelper::H2a(std::span<double> basis, std::span<double> sigma) const {
     const auto first_string_size = ab_list_.first_string_size();
     const auto& two_hole_strings = ab_list_.two_hole_strings();
-    LOG(log_level_) << "Number of unique alpha strings: " << first_string_size;
-    LOG(log_level_) << "Number of unique two-hole alpha strings: " << two_hole_strings.size();
     // Loop over all unique alpha strings
     for (size_t i{0}; i < first_string_size; ++i) {
         const auto& i_second_string_to_det_index = ab_list_.second_string_to_det_index()[i];
         const auto& sublist = ab_list_.two_hole_string_list()[i];
         for (const auto& [p, q, hole_idx, sign_pq] : sublist) {
-            LOG(log_level_) << "a(" << q << ") "
-                            << "a(" << p << ") " << str(ab_list_.sorted_first_string(i), norb_)
-                            << " -> " << sign_pq << " " << str(two_hole_strings[hole_idx], norb_);
-            // Find the corresponding beta string
             const auto& inv_sublist = ab_list_.two_hole_string_list_inv()[hole_idx];
             for (const auto& [r, s, j, sign_rs] : inv_sublist) {
                 if ((p == r) and (q == s))
-                    continue; // skip the term that would give back the original determinant
-                // LOG(log_level_) << "a(" << q << ")+" << str(one_hole_strings[hole_idx], norb_)
-                //                 << " -> " << sign_q << " "
-                //                 << str(ab_list_.sorted_first_string(j), norb_);
-                const double sign = sign_pq * sign_rs;
+                    continue; // skip diagonal contribution
                 const double v_pqrs = Va(p, q, r, s);
                 if (std::abs(v_pqrs) < 1e-12)
                     continue;
-
+                const double sign = sign_pq * sign_rs;
                 find_matching_dets(basis, sigma, ab_list_, i, j, v_pqrs * sign);
             }
         }
@@ -397,19 +378,16 @@ void SelectedCIHelper::H2b(std::span<double> basis, std::span<double> sigma) con
     const auto& two_hole_strings = ba_list_.two_hole_strings();
     // Loop over all unique beta strings
     for (size_t i{0}; i < first_string_size; ++i) {
-        // find the two-hole strings for this beta string
         const auto& sublist = ba_list_.two_hole_string_list()[i];
         for (const auto& [p, q, hole_idx, sign_pq] : sublist) {
-            // find the connected beta strings by adding back two electrons
             const auto& inv_sublist = ba_list_.two_hole_string_list_inv()[hole_idx];
             for (const auto& [r, s, j, sign_rs] : inv_sublist) {
-                // |j> = sign_pq * sign_rs a^_s a^_r a_q a_p |i> (?)
                 if ((p == r) and (q == s))
-                    continue; // skip the term that would give back the original determinant
-                const double sign = sign_pq * sign_rs;
+                    continue; // skip diagonal contribution
                 const double v_pqrs = Va(p, q, r, s);
                 if (std::abs(v_pqrs) < 1e-12)
                     continue;
+                const double sign = sign_pq * sign_rs;
                 find_matching_dets(basis, sigma, ba_list_, i, j, v_pqrs * sign);
             }
         }
@@ -418,6 +396,47 @@ void SelectedCIHelper::H2b(std::span<double> basis, std::span<double> sigma) con
 
 void SelectedCIHelper::H2ab(std::span<double> basis, std::span<double> sigma) const {
     const auto first_string_size = ab_list_.first_string_size();
+    const auto& one_hole_strings = ab_list_.one_hole_strings();
+    const auto& det_permutation = ab_list_.det_permutation();
+    // Loop over all unique alpha strings
+    for (size_t i{0}; i < first_string_size; ++i) {
+        const auto& [istart, iend] = ab_list_.range(i);
+        const auto& i_second_string_to_det_index = ab_list_.second_string_to_det_index()[i];
+        const auto& sublist = ab_list_.one_hole_string_list()[i];
+        for (const auto& [p, hole_idx, sign_p] : sublist) {
+            const auto& inv_sublist = ab_list_.one_hole_string_list_inv()[hole_idx];
+            for (const auto& [q, j, sign_q] : inv_sublist) {
+                const auto& [jstart, jend] = ba_list_.range(j);
+                // At this point we have a+_p a_q acting on the alpha string
+                // Loop over all the beta strings with the same alpha string
+                for (size_t jj{jstart}; jj < jend; ++jj) {
+                    const auto idx_j = ba_list_.sorted_dets_second_string(jj);
+                    // Now loop over single excitations in the beta string
+                    const auto& sublist_b = ab_list_.one_hole_second_string_list()[idx_j];
+                    for (const auto& [r, hole_idx_b, sign_r] : sublist_b) {
+                        const auto& inv_sublist_b =
+                            ab_list_.one_hole_second_string_list_inv()[hole_idx_b];
+                        for (const auto& [s, k, sign_s] : inv_sublist_b) {
+                            if ((p == q) and (r == s))
+                                continue; // skip diagonal contribution
+                            const double v_pqrs = V(p, r, q, s);
+                            if (std::abs(v_pqrs) < 1e-12)
+                                continue;
+                            const double sign = sign_p * sign_q * sign_r * sign_s;
+                            // Check if the determinant with the new beta string exists
+                            const auto it = i_second_string_to_det_index.find(k);
+                            if (it != i_second_string_to_det_index.end()) {
+                                const size_t ii = it->second;
+                                sigma[ii] += v_pqrs * sign * basis[det_permutation[jj]];
+                                // LOG(log_level_)
+                                //     << "a+(" << q << ") a(" << p << ") "
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 } // namespace forte2

@@ -58,6 +58,16 @@ class SortedStringList {
         return one_hole_string_list_inv_;
     }
 
+    const std::vector<String>& one_hole_second_strings() const { return one_hole_second_strings_; }
+    const std::vector<std::vector<std::tuple<size_t, size_t, double>>>&
+    one_hole_second_string_list() const {
+        return one_hole_second_string_list_;
+    }
+    const std::vector<std::vector<std::tuple<size_t, size_t, double>>>&
+    one_hole_second_string_list_inv() const {
+        return one_hole_second_string_list_inv_;
+    }
+
     const std::vector<String>& two_hole_strings() const { return two_hole_strings_; }
 
     const std::vector<std::vector<std::tuple<size_t, size_t, size_t, double>>>&
@@ -108,6 +118,17 @@ class SortedStringList {
     /// @brief Precomputed list of one-particle strings with sign for each orbital (inverse)
     /// Stores K -> tuples of (orbital, I, sign) where I is the index of the string
     std::vector<std::vector<std::tuple<size_t, size_t, double>>> one_hole_string_list_inv_;
+
+    /// @brief Precomputed list of one-hole strings
+    std::vector<String> one_hole_second_strings_;
+    /// @brief Map from one-hole string to its index
+    ankerl::unordered_dense::map<String, size_t, String::Hash> one_hole_second_strings_index_;
+    /// @brief Precomputed list of one-particle strings with sign for each orbital
+    /// Stores I -> tuples of (orbital, K, sign) where K is the index of the one-hole string
+    std::vector<std::vector<std::tuple<size_t, size_t, double>>> one_hole_second_string_list_;
+    /// @brief Precomputed list of one-particle strings with sign for each orbital (inverse)
+    /// Stores K -> tuples of (orbital, I, sign) where I is the index of the string
+    std::vector<std::vector<std::tuple<size_t, size_t, double>>> one_hole_second_string_list_inv_;
 
     /// @brief Two-hole strings
     std::vector<String> two_hole_strings_;
