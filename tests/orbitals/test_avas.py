@@ -1,6 +1,6 @@
 import pytest
 
-from forte2 import System, AVAS, CI, RHF, ROHF, State, MCOptimizer
+from forte2 import System, AVAS, CI, RHF, ROHF, State, MCOptimizer, GHF, RelCI
 from forte2.helpers.comparisons import approx
 
 
@@ -93,7 +93,6 @@ def test_avas_separate_n2():
     casci = CI(states=State(nel=14, multiplicity=1, ms=0.0))(avas)
     casci.run()
     assert casci.E[0] == approx(eref_casci_avas)
-
     avas = AVAS(
         selection_method="separate",
         subspace=["N(2p)"],
@@ -102,6 +101,52 @@ def test_avas_separate_n2():
         diagonalize=True,
     )(rhf)
     casci = CI(states=State(nel=14, multiplicity=1, ms=0.0))(avas)
+    casci.run()
+    assert casci.E[0] == approx(eref_casci_avas_diagonalize)
+
+
+
+
+def test_avas_separate_n2_ghf_equivalent_to_rhf():
+    eref_casci = -109.00462206150347
+    eref_casci_avas = -109.005019207444
+    eref_casci_avas_diagonalize = -109.061384781471
+
+    xyz = """
+    N 0.0 0.0 0.0
+    N 0.0 0.0 1.2
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    mf = GHF(charge=0, econv=1e-12)(system)
+    casci = RelCI(
+        nel=14,
+        active_orbitals=12,
+        core_orbitals=8,
+    )(mf)
+    casci.run()
+    assert casci.E[0] == approx(eref_casci)
+
+    avas = AVAS(
+        selection_method="separate",
+        subspace=["N1-2(2p)"],
+        num_active_docc=6,
+        num_active_uocc=6,
+        diagonalize=False,
+    )(mf)
+    casci = RelCI(nel=14)(avas)
+    casci.run()
+    assert casci.E[0] == approx(eref_casci_avas)
+
+    avas = AVAS(
+        selection_method="separate",
+        subspace=["N(2p)"],
+        num_active_docc=6,
+        num_active_uocc=6,
+        diagonalize=True,
+    )(mf)
+    casci = RelCI(nel=14)(avas)
     casci.run()
     assert casci.E[0] == approx(eref_casci_avas_diagonalize)
 
@@ -221,6 +266,30 @@ def test_avas_total_h2co():
         diagonalize=True,
     )(rhf)
     casci = CI(states=State(nel=rhf.nel, multiplicity=1, ms=0.0))(avas)
+    casci.run()
+    assert casci.E[0] == approx(eref_avas_98pc)
+
+
+def test_avas_total_h2co_ghf_equivalent_to_rhf():
+    eref_avas_98pc = -113.90837340149
+
+    xyz = """
+    C           -0.000000000000    -0.000000000006    -0.599542970149
+    O           -0.000000000000     0.000000000001     0.599382404096
+    H           -0.000000000000    -0.938817812172    -1.186989139808
+    H            0.000000000000     0.938817812225    -1.186989139839
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = GHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    avas = AVAS(
+        selection_method="total",
+        subspace=["C(2px)", "O1(2px)"],
+        num_active=4,
+        diagonalize=True,
+    )(rhf)
+    casci = RelCI(nel=rhf.nel)(avas)
     casci.run()
     assert casci.E[0] == approx(eref_avas_98pc)
 

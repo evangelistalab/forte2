@@ -17,14 +17,13 @@ def test_rel_ci_h2():
     system = System(
         xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    scf = RHF(charge=0, econv=1e-12)(system)
+    scf = GHF(charge=0, econv=1e-12)(system)
     scf.run()
-    C = convert_coeff_spatial_to_spinor(system, scf.C)[0]
+    C = scf.C[0]
     nmo = C.shape[1]
     random_phase = np.diag(np.exp(1j * np.random.uniform(-np.pi, np.pi, size=nmo)))
     C = C @ random_phase
     scf.C[0] = C
-    system.two_component = True
 
     ci = RelCI(nel=2, active_orbitals=4, do_test_rdms=True)(scf)
     ci.run()
@@ -128,7 +127,6 @@ def test_rel_ci_hf_transition_dipole_ghf():
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         unit="bohr",
         x2c_type="so",
-        reorient=False,
     )
     scf = GHF(charge=0)(system)
     ci = RelCI(

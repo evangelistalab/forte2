@@ -5,7 +5,7 @@ import numpy as np
 from forte2 import Basis
 from forte2.system import System
 from forte2.helpers import logger
-from forte2.system.atom_data import Z_TO_ATOM_SYMBOL
+from forte2.data import Z_TO_ATOM_SYMBOL
 
 SPH_LABELS = [
     ["s"],

@@ -5,7 +5,7 @@ import numpy as np
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
 from forte2.helpers import logger
-from forte2.symmetry import assign_mo_symmetries
+from forte2.symmetry import MOSymmetryDetector
 from .scf_base import SCFBase
 from .rhf import RHF
 from .scf_utils import guess_mix
@@ -188,14 +188,25 @@ class UHF(SCFBase):
 
     def _assign_orbital_symmetries(self):
         S = self._get_overlap()
-        irrep_labels_alpha, irrep_indices_alpha = assign_mo_symmetries(
-            self.system, S, self.C[0]
+        mosym_a = MOSymmetryDetector(
+            self.system,
+            self.basis_info,
+            S,
+            self.C[0],
+            self.eps[0],
         )
-        irrep_labels_beta, irrep_indices_beta = assign_mo_symmetries(
-            self.system, S, self.C[1]
+        mosym_a.run()
+
+        mosym_b = MOSymmetryDetector(
+            self.system,
+            self.basis_info,
+            S,
+            self.C[1],
+            self.eps[1],
         )
-        self.irrep_labels = [irrep_labels_alpha, irrep_labels_beta]
-        self.irrep_indices = [irrep_indices_alpha, irrep_indices_beta]
+        mosym_b.run()
+        self.irrep_labels = [mosym_a.labels, mosym_b.labels]
+        self.irrep_indices = [mosym_a.irrep_indices, mosym_b.irrep_indices]
 
     def _print_ao_composition(self):
         if isinstance(self.system, ModelSystem):
