@@ -9,7 +9,7 @@ from forte2.helpers import logger
 
 def load_mods():
     """
-    Load forte2 mods installed from one or more directories.
+    Load forte2 installed mods from standard locations.
 
     By default, this function checks for mods in the following directories:
     1. The ~/.forte2/mods/ directory in the user's home folder.
@@ -49,17 +49,16 @@ def load_mods():
 
 def enable_mod(modname: str, paths=None):
     """
-    Load a specific forte2 mod
+    Load optional mods
 
     By default, this function checks for mods in the following directories:
-    1. The ~/.forte2/mods/ directory in the user's home folder.
-    2. The mods/ directory in the forte2 package.
-    3. The current working directory.
+    1. The ~/.forte2/optional_mods/ directory in the user's home folder.
+    2. The current working directory.
 
-    Mods are expected to be python files with a register(forte2) function of the form
+    Optional mods are expected to be python files with a register(forte2) function of the form
 
     ```python
-    # ~/.forte2/mods/my_mod.py
+    # ~/.forte2/optional_mods/my_mod.py
 
     def register(forte2):
         ...
@@ -75,12 +74,11 @@ def enable_mod(modname: str, paths=None):
     """
     if paths is None:
         user_path = Path.home() / ".forte2/optional_mods"
-        package_path = Path(__file__).resolve().parent.parent / "optional_mods"
-        # include the folder in which the script is executed
-        if os.getcwd() != str(user_path) and os.getcwd() != str(package_path):
-            paths = [Path(os.getcwd()), user_path, package_path]
+        # include the folder in which the script is executed only if it's not the same as user_path
+        if os.getcwd() != str(user_path):
+            paths = [Path(os.getcwd()), user_path]
         else:
-            paths = [user_path, package_path]
+            paths = [user_path]
 
     for path in paths:
         if not path.exists():
@@ -97,6 +95,8 @@ def enable_mod(modname: str, paths=None):
                 mod = importlib.import_module(name)
                 if hasattr(mod, "register"):
                     mod.register(importlib.import_module("forte2"))
+                    # mod found and loaded, return
+                    return
             except Exception as e:
                 logger.log_warning(
                     f"[mods_manager] failed to load mod {name} from {path}: {e}"
