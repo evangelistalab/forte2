@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 import numpy as np
+from forte2.helpers import logger
 
 
 @dataclass
@@ -323,8 +324,9 @@ class MOSpace:
         )
 
         if self.ncore + self.nactv == 0:
-            raise ValueError(
-                "Neither core nor active orbitals are defined. There will be no electrons to correlate."
+            logger.log_info1(
+                "Warning: Neither core nor active orbitals are defined. "
+                "All orbitals are virtual."
             )
 
         # slices for the different spaces in the contiguous full space

@@ -445,6 +445,8 @@ class MCOptimizer(ActiveSpaceSolver):
         basis_info.print_ao_composition(
             self.C[0], list(range(self.actv.start, self.actv.stop))
         )
+        logger.log_info1("\n Orbital Info:")
+        print(self.mo_space)
 
     def _get_nonredundant_rotations(self):
         """Lower triangular matrix of nonredundant rotations"""
