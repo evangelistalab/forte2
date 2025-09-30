@@ -56,7 +56,6 @@ def test_dipole_uhf():
         xyz=xyz,
         basis_set="cc-pVQZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        reorient=False,
     )
 
     scf = UHF(charge=1, ms=0.5)(system)
@@ -85,7 +84,6 @@ def test_dipole_ghf():
         xyz=xyz,
         basis_set="cc-pVQZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        reorient=False,
     )
 
     scf = GHF(charge=1)(system)
@@ -114,7 +112,6 @@ def test_quadrupole_rhf():
         xyz=xyz,
         basis_set="cc-pVQZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        reorient=False,
     )
 
     scf = RHF(charge=0)(system)

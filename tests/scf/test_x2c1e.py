@@ -5,7 +5,7 @@ from forte2.scf import RHF, GHF, UHF
 from forte2.helpers.comparisons import approx
 from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 from forte2.system import BSE_AVAILABLE
-from forte2.system.atom_data import EH_TO_WN, EH_TO_EV
+from forte2.data import EH_TO_WN, EH_TO_EV
 
 
 def test_sfx2c1e():
@@ -84,7 +84,7 @@ def test_boettger_hbr():
 
     system = System(
         xyz=xyz,
-        basis_set="decon-cc-pvdz",
+        basis_set={"Br": "decon-aug-cc-pvdz", "default": "cc-pvtz"},
         auxiliary_basis_set="cc-pvtz-jkfit",
         x2c_type="so",
         snso_type="dcb",
@@ -93,7 +93,7 @@ def test_boettger_hbr():
     scf.run()
     assert EH_TO_WN * (
         scf.eps[0][scf.nel - 2] - scf.eps[0][scf.nel - 3]
-    ) == pytest.approx(2898.7863319000467, abs=1e-4)
+    ) == pytest.approx(2953.1938408944357, abs=1e-4)
 
 
 def test_so_from_sf_water():

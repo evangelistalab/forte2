@@ -3,13 +3,13 @@ import numpy as np
 import re
 
 from forte2 import ints
-from forte2.scf import RHF, ROHF
+from forte2.scf import RHF, ROHF, GHF
 from forte2.state import MOSpace
-from forte2.helpers import logger, invsqrt_matrix
+from forte2.helpers import logger, invsqrt_matrix, block_diag_2x2
 from forte2.base_classes.mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.system import System
 from forte2.system.basis_utils import BasisInfo, shell_label_to_lm
-from forte2.system.atom_data import ATOM_SYMBOL_TO_Z
+from forte2.data import ATOM_SYMBOL_TO_Z
 
 
 @dataclass
@@ -80,8 +80,8 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
 
     def __call__(self, parent_method):
         assert isinstance(
-            parent_method, (RHF, ROHF)
-        ), f"Parent method must be RHF or ROHF, got {type(parent_method)}"
+            parent_method, (RHF, ROHF, GHF)
+        ), f"Parent method must be RHF, ROHF, or GHF, got {type(parent_method)}"
         if isinstance(parent_method, ROHF):
             logger.log_info1(
                 "*** AVAS will take all singly occupied orbitals to be active! ***"
@@ -94,6 +94,9 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             self.parent_method.run()
         SystemMixin.copy_from_upstream(self, self.parent_method)
         MOsMixin.copy_from_upstream(self, self.parent_method)
+        self.nmo = self.C[0].shape[1]
+        self.two_component = self.system.two_component
+        self.dtype = float if not self.two_component else complex
 
         self.basis_info = BasisInfo(self.system, self.system.basis)
         minao_info = BasisInfo(self.system, self.system.minao_basis)
@@ -268,35 +271,40 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         nbf_m = Smm.shape[0]
         # Build Cms: minimal AO basis to subspace AO basis
         nbf_s = self.subspace_counter
-        Cms = np.zeros((nbf_m, nbf_s))
+        Cms = np.zeros((nbf_m, nbf_s), dtype=self.dtype)
         for m, s, c in self.minao_subspace:
             # m is the index of the minimal AO
             # s is the index of the subspace AO
             # c is the coefficient of the subspace AO in the minimal AO basis
             Cms[m, s] = c
         # Subspace overlap matrix
-        Sss = Cms.T @ Smm @ Cms
+        Sss = Cms.T.conj() @ Smm @ Cms
         # Orthogonalize Sss: Xss = Sss^(-1/2)
         Xss = invsqrt_matrix(Sss)
         # Build overlap matrix between subspace and computational (large) basis
         Sml = ints.overlap(self.system.minao_basis, self.system.basis)
         # Project into subspace
-        Ssl = Cms.T @ Sml
+        Ssl = Cms.T.conj() @ Sml
         # AO projector
         # Pao = Ssl^T Sss^-1 Ssl = (Cms^T Sml)^T (Xss^T Xss) (Cms^T Sml)
         Xsl = Xss @ Ssl
-        Pao = Xsl.T @ Xsl
+        Pao = Xsl.T.conj() @ Xsl
+        if self.two_component:
+            Pao = block_diag_2x2(Pao)
         return Pao
 
     def _make_avas_orbitals(self):
-        ndocc = self.parent_method.ndocc
+        if self.two_component:
+            # GHF has the "nocc" attribute instead of "ndocc"
+            ndocc = self.parent_method.nocc
+        else:
+            ndocc = self.parent_method.ndocc
         nsocc = (
             0 if not hasattr(self.parent_method, "nsocc") else self.parent_method.nsocc
         )
         nuocc = self.parent_method.nuocc
-        nmo = self.system.nmo
 
-        CpsC = self.C[0].T @ self.ao_projector @ self.C[0]
+        CpsC = self.C[0].T.conj() @ self.ao_projector @ self.C[0]
 
         logger.log_info1(
             "\nMOs with significant overlap with the subspace (> 1.00e-3):"
@@ -311,18 +319,22 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         logger.log_info1(f"{'# MO':<5} {'<phi|P|phi>':<12}")
         logger.log_info1("-" * 18)
         print_mos = []
-        for i in range(nmo):
+        for i in range(self.nmo):
             if CpsC[i, i] > 1.0e-3:
                 print_mos.append(i)
-                logger.log_info1(f"{i:<5d} {CpsC[i, i]:<12.6f}")
+                logger.log_info1(f"{i:<5d} {CpsC[i, i].real:<12.6f}")
         logger.log_info1("=" * 18)
         logger.log_info1("AO Composition of MOs with significant overlap:")
         self.basis_info.print_ao_composition(
-            self.C[0], print_mos, nprint=5, thres=1.0e-3
+            self.C[0],
+            print_mos,
+            nprint=5,
+            thres=1.0e-3,
+            spinorbital=True,
         )
 
         docc_sl = slice(0, ndocc)
-        uocc_sl = slice(ndocc + nsocc, nmo)
+        uocc_sl = slice(ndocc + nsocc, self.nmo)
 
         if self.diagonalize:
             logger.log_info1(
@@ -331,7 +343,7 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             logger.log_info1(
                 "The eigenvalues of the projected overlap matrix will be used to select the AVAS orbitals."
             )
-            U = np.zeros((nmo, nmo))
+            U = np.zeros((self.nmo, self.nmo), dtype=self.dtype)
             s_docc, Udocc = np.linalg.eigh(CpsC[docc_sl, docc_sl])
             U[docc_sl, docc_sl] = Udocc
             s_uocc, Uuocc = np.linalg.eigh(CpsC[uocc_sl, uocc_sl])
@@ -344,9 +356,9 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             logger.log_info1(
                 "The diagonal elements of the projected overlap matrix will be used to select the AVAS orbitals."
             )
-            s_docc = CpsC[docc_sl, docc_sl].diagonal()
-            s_uocc = CpsC[uocc_sl, uocc_sl].diagonal()
-            U = np.eye(nmo)
+            s_docc = np.real(CpsC[docc_sl, docc_sl].diagonal())
+            s_uocc = np.real(CpsC[uocc_sl, uocc_sl].diagonal())
+            U = np.eye(self.nmo, dtype=self.dtype)
             sigma_type = "diagonal "
 
         s_sum = np.sum(s_docc) + np.sum(s_uocc)
@@ -472,7 +484,7 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
 
         # AVAS is a provider of MOSpace: avas.mo_space be automatically used downstream if not overridden
         self.mo_space = MOSpace(
-            nmo=self.system.nmo,
+            nmo=self.nmo,
             active_orbitals=list(range(self.ncore, self.ncore + self.nactv)),
             core_orbitals=list(range(self.ncore)),
         )
@@ -500,7 +512,7 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         id_sl = slice(0, n_inact_docc)
         ad_sl = slice(id_sl.stop, n_inact_docc + n_act_docc)
         au_sl = slice(ad_sl.stop + nsocc, ad_sl.stop + nsocc + n_act_uocc)
-        iu_sl = slice(au_sl.stop, nmo)
+        iu_sl = slice(au_sl.stop, self.nmo)
 
         self.C[0][:, id_sl] = C_inact_docc
         self.C[0][:, ad_sl] = C_act_docc
@@ -511,12 +523,14 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             "\nAO composition of final canonicalized active MOs prepared by AVAS:"
         )
         self.basis_info.print_ao_composition(
-            self.C[0], list(range(ad_sl.start, au_sl.stop))
+            self.C[0],
+            list(range(ad_sl.start, au_sl.stop)),
+            spinorbital=True,
         )
 
     def _canonicalize_block(self, F, C, mos):
         C_sub = C[:, mos]
-        F_sub = C_sub.T @ F @ C_sub
+        F_sub = C_sub.T.conj() @ F @ C_sub
         _, U_sub = np.linalg.eigh(F_sub)
         return C_sub @ U_sub
 
