@@ -565,7 +565,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         return slater_sign_bbbb(i, j, a, b);
     }
 
-    BitArray<nbits_half> get_alfa_bits() const {
+    BitArray<nbits_half> a_string() const {
         BitArray<nbits_half> s;
         for (size_t i = 0; i < nwords_half; i++) {
             s.set_word(i, words_[i]);
@@ -573,7 +573,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         return s;
     }
 
-    BitArray<nbits_half> get_beta_bits() const {
+    BitArray<nbits_half> b_string() const {
         BitArray<nbits_half> s;
         for (size_t i = 0; i < nwords_half; i++) {
             s.set_word(i, words_[nwords_half + i]);
@@ -595,7 +595,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     }
 
     BitArray<nbits_half> get_bits(DetSpinType spin_type) const {
-        return (spin_type == DetSpinType::Alpha ? get_alfa_bits() : get_beta_bits());
+        return (spin_type == DetSpinType::Alpha ? a_string() : b_string());
     }
 
     /// Zero the alpha part of a determinant
@@ -611,10 +611,11 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     }
 
     /// Swap the alpha and beta bits of a determinant
-    DeterminantImpl<N> spin_flip() const {
-        DeterminantImpl<N> d(*this);
+    DeterminantImpl<N> spin_flip() const noexcept {
+        DeterminantImpl<N> d;
         for (size_t n = 0; n < nwords_half; n++) {
-            std::swap(d.words_[n], d.words_[n + nwords_half]);
+            d.words_[n] = words_[n + nwords_half];
+            d.words_[n + nwords_half] = words_[n];
         }
         return d;
     }

@@ -2,27 +2,40 @@ from dataclasses import dataclass, field
 
 from forte2 import System, State
 from forte2.scf import RHF
-from forte2.ci import SelectedCI
+from forte2.ci import SelectedCI, CI
 
 
 def test_sci1():
     xyz = f"""
     H 0.0 0.0 0.0
-    H 0.0 0.0 {0.529177210903 * 2}
+    H 0.0 0.0 1.0
+    H 0.0 0.0 2.0
+    H 0.0 0.0 3.0
     """
 
-    system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
+    efci = -2.253991839297
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = RHF(charge=0, econv=1e-14)(system)
+
+    # ci = CI(
+    #     states=State(nel=4, multiplicity=1, ms=0.0),
+    #     active_orbitals=list(range(4)),
+    # )(rhf)
+    # ci.run()
 
     sci = SelectedCI(
-        states=State(nel=2, multiplicity=1, ms=0.0),
-        active_orbitals=list(range(10)),
+        states=State(nel=4, multiplicity=1, ms=0.0),
+        active_orbitals=list(range(4)),
         ci_algorithm="exact",
-        threshold=1e-3,
+        selection_algorithm="hbci",
+        threshold=1e-2,
     )(rhf)
 
     sci.run()
+
+    # -2.180967812920
 
 
 test_sci1()

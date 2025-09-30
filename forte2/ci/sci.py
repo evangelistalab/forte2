@@ -109,6 +109,7 @@ class _SelectedCIBase:
     ### Selected CI parameters
     maxcycle: int = 10
     threshold: float = 1e-5
+    selection_algorithm: str = "hbci"
 
     ### Sigma builder parameters
     ci_algorithm: str = "hz"
@@ -189,7 +190,14 @@ class _SelectedCIBase:
             # self._diagonalize_P_space()
 
             # # Step 2. Find determinants in the Q space
-            self.sci_helper.select_cipsi(threshold=self.threshold)
+            if self.selection_algorithm.lower() == "hbci":
+                self.sci_helper.select_hbci(threshold=self.threshold)
+            elif self.selection_algorithm.lower() == "cipsi":
+                self.sci_helper.select_cipsi(threshold=self.threshold)
+            else:
+                raise ValueError(
+                    f"Unknown selection algorithm: {self.selection_algorithm}"
+                )
 
             self.ndet = self.sci_helper.ndets()
             logger.log(f"Number of determinants: {self.ndet}", self.log_level)
@@ -365,6 +373,13 @@ class _SelectedCIBase:
             for j in range(i + 1):
                 H[i, j] = self.slater_rules.slater_rules(dets[i], dets[j])
                 H[j, i] = np.conj(H[i, j])
+
+        with np.printoptions(precision=4, suppress=True):
+            print(H)
+
+        H2 = self.sci_helper.fullHamiltonian()
+        with np.printoptions(precision=4, suppress=True):
+            print(H2)
 
         self.evals_full, self.evecs_full = np.linalg.eigh(H)
         if self.energy_shift is not None:
@@ -1166,6 +1181,7 @@ class SelectedCISolver(ActiveSpaceSolver):
     rconv: float = 1e-5
     energy_shift: float = None
 
+    selection_algorithm: str = "hbci"
     threshold: float = 1e-5
 
     do_test_rdms: bool = False
@@ -1224,6 +1240,7 @@ class SelectedCISolver(ActiveSpaceSolver):
                     energy_shift=self.energy_shift,
                     log_level=self.log_level,
                     threshold=self.threshold,
+                    selection_algorithm=self.selection_algorithm,
                 )
             )
 
@@ -1422,84 +1439,16 @@ class SelectedCI(SelectedCISolver):
 
     def _post_process(self):
         pretty_print_ci_summary(self.sa_info, self.evals_per_solver)
-        self.compute_natural_occupation_numbers()
-        pretty_print_ci_nat_occ_numbers(self.sa_info, self.mo_space, self.nat_occs)
+        # self.compute_natural_occupation_numbers()
+        # pretty_print_ci_nat_occ_numbers(self.sa_info, self.mo_space, self.nat_occs)
         top_dets = self.get_top_determinants()
         pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
 
-        if self.do_transition_dipole:
-            self.compute_transition_properties()
-            pretty_print_ci_transition_props(
-                self.sa_info,
-                self.tdm_per_solver,
-                self.fosc_per_solver,
-                self.evals_per_solver,
-            )
-
-
-# @dataclass
-# class SelectedCI(MOsMixin, SystemMixin):
-#     orbitals: list[int] | list[list[int]]
-#     norb: int = field(init=False)
-#     state: State
-#     nroot: int
-#     core_orbitals: list[int] = field(default_factory=list)
-#     max_iter: int = 2
-
-#     def __post_init__(self):
-#         self.norb = len(self.orbitals)
-
-#     def __call__(self, method):
-#         SystemMixin.copy_from_upstream(self, method)
-#         MOsMixin.copy_from_upstream(self, method)
-
-#         return self
-
-#     def run(self):
-#         print("\nSelected configuration interaction")
-
-#         # dets = forte2.hilbert_space(self.norb, self.state.na, self.state.nb)
-#         ints = RestrictedMOIntegrals(
-#             self.system, self.C[0], self.orbitals, self.core_orbitals
-#         )
-
-#         H = sparse_operator_hamiltonian(ints.E, ints.H, ints.V)
-#         ndocc = min(self.state.na, self.state.nb)
-#         nsocc = max(self.state.na, self.state.nb) - ndocc
-#         aufbau = Determinant("2" * ndocc + "1" * nsocc)
-#         self.P = SparseState(aufbau, 1.0)
-#         # Hmat = H.matrix(dets)
-#         # eig = np.linalg.eigh(Hmat)[0]
-#         # print("Eigenvalues:", eig)
-
-#         # print(eig[0] + 1.096071975854)
-
-#         # pre_iter_preparation()
-
-#         for cycle in range(self.max_iter):
-#             print(f"\nCycle {cycle + 1}")
-#             # Step 1. Diagonalize the Hamiltonian in the P space
-#             self._diagonalize_P_space()
-
-#             # # Step 2. Find determinants in the Q space
-#             # find_q_space()
-
-#             # # Step 3. Diagonalize the Hamiltonian in the P + Q space
-#             # diagonalize_PQ_space()
-
-#             # # Step 4. Check convergence and break if needed
-#             # if check_convergence():
-#             #     break
-
-#             # # Step 5. Prune the P + Q space to get an updated P space
-#             # prune_PQ_to_P()
-
-#     # if one_cycle_:
-#     #     diagonalize_PQ_space()
-
-#     # # Post-iter process
-#     # post_iter_process()
-
-#     def _diagonalize_P_space(self):
-#         """Diagonalize the Hamiltonian in the P space."""
-#         print(str(self.P))
+        # if self.do_transition_dipole:
+        #     self.compute_transition_properties()
+        #     pretty_print_ci_transition_props(
+        #         self.sa_info,
+        #         self.tdm_per_solver,
+        #         self.fosc_per_solver,
+        #         self.evals_per_solver,
+        #     )

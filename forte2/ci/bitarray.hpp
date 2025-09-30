@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <span>
 
 #include "bitwise_operations.hpp"
 
@@ -258,15 +259,33 @@ template <size_t N> class BitArray {
         }
     }
 
+    /// not equal operator
+    bool operator!=(const BitArray<N>& lhs) const {
+        if constexpr (N == 64) {
+            return (this->words_[0] != lhs.words_[0]);
+        } else if constexpr (N == 128) {
+            return ((this->words_[0] != lhs.words_[0]) or (this->words_[1] != lhs.words_[1]));
+        } else if constexpr (N == 192) {
+            return ((this->words_[0] != lhs.words_[0]) or (this->words_[1] != lhs.words_[1]) or
+                    (this->words_[2] != lhs.words_[2]));
+        } else if constexpr (N == 256) {
+            return ((this->words_[0] != lhs.words_[0]) or (this->words_[1] != lhs.words_[1]) or
+                    (this->words_[2] != lhs.words_[2]) or (this->words_[3] != lhs.words_[3]));
+        } else {
+            for (size_t n = 0; n < nwords_; ++n) {
+                if (this->words_[n] != lhs.words_[n])
+                    return true;
+            }
+            return false;
+        }
+    }
+
     /// not operator
     BitArray<N> operator~() {
         BitArray<N> res(*this);
         res.flip();
         return res;
     }
-
-    /// not equal operator
-    bool operator!=(const BitArray<N>& lhs) const { return not(*this == lhs); }
 
     /// Less than operator
     bool operator<(const BitArray<N>& lhs) const {
@@ -468,15 +487,16 @@ template <size_t N> class BitArray {
     /// @param n the number of bits set to one
     /// @param begin the index of the first word to test
     /// @param end the index of the last word to test (not included)
-    void find_set_bits(std::vector<short>& occ, size_t& n, size_t begin = 0,
+    void find_set_bits(std::vector<size_t>& occ, size_t& n, size_t begin = 0,
                        size_t end = nwords_) const {
         n = 0;
         uint64_t x;
         for (; begin < end; ++begin) {
             x = words_[begin];
-            while (x != 0) {
-                occ[n] = ui64_find_and_clear_lowest_one_bit(x) + begin * bits_per_word;
-                ++n;
+            const size_t base = begin * bits_per_word;
+            while (x) {
+                occ[n++] = base + std::countr_zero(x);
+                x &= (x - 1); // clear lowest set bit
             }
         }
     }

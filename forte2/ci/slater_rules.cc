@@ -13,8 +13,8 @@ double SlaterRules::energy(const Determinant& det) const {
     auto h = one_electron_integrals_.view();
     auto v = two_electron_integrals_.view();
 
-    String Ia = det.get_alfa_bits();
-    String Ib = det.get_beta_bits();
+    String Ia = det.a_string();
+    String Ib = det.b_string();
     String Iac;
     String Ibc;
 
