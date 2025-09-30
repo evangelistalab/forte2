@@ -378,8 +378,22 @@ class _SelectedCIBase:
             print(H)
 
         H2 = self.sci_helper.fullHamiltonian()
+
+        for i in range(self.ndet):
+            print(f"{i:4d} {dets[i].str(self.norb)}")
+
         with np.printoptions(precision=4, suppress=True):
             print(H2)
+
+        print(f"Error = {np.linalg.norm(H - H2)}")
+
+        for i in range(self.ndet):
+            for j in range(self.ndet):
+                if not np.isclose(H[i, j], H2[i, j]):
+                    print(
+                        f"Error at {i}, {j}: there is {H2[i, j]} but should be {H[i, j]}"
+                    )
+                    print(f"Diff: {dets[i].str(self.norb)} vs {dets[j].str(self.norb)}")
 
         self.evals_full, self.evecs_full = np.linalg.eigh(H)
         if self.energy_shift is not None:

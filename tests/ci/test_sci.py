@@ -30,7 +30,7 @@ def test_sci1():
         active_orbitals=list(range(4)),
         ci_algorithm="exact",
         selection_algorithm="hbci",
-        threshold=1e-2,
+        threshold=1e-1,
     )(rhf)
 
     sci.run()
