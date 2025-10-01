@@ -336,9 +336,9 @@ void SelectedCIHelper::select_hbci(double threshold) {
     merge_and_keep_unique(dets_, new_dets);
     c_.resize(dets_.size(), 0.0);
 
-    LOG(log_level_) << "Checked " << checks_count << " excitations for selection";
-    LOG(log_level_) << "After HBCI selection, number of determinants: " << dets_.size();
-    LOG(log_level_) << "HBCI selection completed in " << selection_timer.elapsed_seconds()
+    LOG(log_level_) << "Tested " << checks_count << " excitations for selection.";
+    LOG(log_level_) << "Number of variational determinants after selection: " << dets_.size();
+    LOG(log_level_) << "Selection completed in " << selection_timer.elapsed_seconds()
                     << " seconds.";
 
     prepare_sigma_build();
