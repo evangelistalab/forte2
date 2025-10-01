@@ -112,6 +112,7 @@ nanobind_add_module(
   ci/sci_helper.cc
   ci/sci_helper_select.cc
   ci/sci_helper_sigma_build.cc
+  ci/sci_strings.cc
   ci/slater_rules.cc
   sparse/sparse_exp.cc
   sparse/sparse_operator.cc
