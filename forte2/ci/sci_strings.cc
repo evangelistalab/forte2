@@ -96,24 +96,22 @@ void SelectedCIStrings::build_one_hole_strings_and_lists(
         std::vector<std::tuple<size_t, size_t, double>> list_entry;
         list_entry.reserve(n);
 
-        // For each occupied orbital, create the one-hole string and store it
+        // for each occupied orbital, create the one-hole string and store it
         for (size_t p = 0; p < n; ++p) {
             const size_t orb = occ[p];
             String one_hole = str;
             one_hole.set_bit(orb, false);
-            if (index_map.find(one_hole) == index_map.end()) {
-                index_map[one_hole] = index_map.size();
+            // insert one-hole string into map if not already present
+            auto [it, inserted] = index_map.try_emplace(one_hole, index_map.size());
+            // if inserted, also add to the list of one-hole strings
+            if (inserted)
                 one_hole_strings.push_back(one_hole);
-            }
-            const size_t hole_idx = index_map[one_hole];
-            const double sign = str.slater_sign(orb);
-
-            list_entry.emplace_back(orb, hole_idx, sign);
+            list_entry.emplace_back(orb, it->second, str.slater_sign(orb));
         }
         list.emplace_back(std::move(list_entry));
     }
 
-    // Create the inverse mapping from one-hole strings to full strings
+    // create the inverse mapping from one-hole strings to full strings
     inverse_list.resize(index_map.size());
     for (size_t i = 0, imax{sorted_first_string_.size()}; i < imax; ++i) {
         for (const auto& [orb, hole_idx, sign] : list[i]) {
@@ -145,12 +143,13 @@ void SelectedCIStrings::build_two_hole_strings() {
                 sign *= two_hole.slater_sign(orb_p);
                 two_hole.set_bit(orb_q, false);
                 sign *= two_hole.slater_sign(orb_q);
-                if (two_hole_strings_index_.find(two_hole) == two_hole_strings_index_.end()) {
-                    two_hole_strings_index_[two_hole] = two_hole_strings_index_.size();
+                // insert two-hole string into map if not already present
+                auto [it, inserted] =
+                    two_hole_strings_index_.try_emplace(two_hole, two_hole_strings_index_.size());
+                // if inserted, also add to the list of two-hole strings
+                if (inserted)
                     two_hole_strings_.push_back(two_hole);
-                }
-                const size_t hole_idx = two_hole_strings_index_[two_hole];
-                two_hole_string_list_entry.emplace_back(orb_p, orb_q, hole_idx, sign);
+                two_hole_string_list_entry.emplace_back(orb_p, orb_q, it->second, sign);
             }
         }
         two_hole_string_list_.emplace_back(std::move(two_hole_string_list_entry));
