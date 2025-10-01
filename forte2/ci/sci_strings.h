@@ -18,23 +18,31 @@ class SelectedCIStrings {
 
     /// @return The number of orbitals
     size_t norb() const { return norb_; }
+
     /// @return The number of determinants
     size_t ndets() const { return ndets_; }
+
     /// @return The sorted determinants
     const std::vector<Determinant>& sorted_dets() const { return sorted_dets_; }
+
     /// @return The i-th sorted first string
     const String& sorted_first_string(size_t i) const { return sorted_first_string_[i]; }
+
     /// @return The i-th sorted second string
     const String& sorted_second_string(size_t i) const { return sorted_second_string_[i]; }
+
     /// @return The permutation that sorts the determinants (perm[i] gives the index in the original
     /// det ordering)
     const std::vector<size_t>& det_permutation() const { return det_permutation_; }
+
     /// @return The range of indices of the determinants that go with the i-th unique first string
     /// as (start, end) indices in sorted_dets_
     const std::pair<size_t, size_t> range(size_t i) const { return first_string_range_[i]; }
+
     /// @return The index sorted second string that corresponds to the i-th determinant in
     /// sorted_dets_
     const size_t sorted_dets_second_string(size_t i) const { return sorted_dets_second_string_[i]; }
+
     /// @return The number of unique first strings
     size_t first_string_size() const { return sorted_first_string_.size(); }
 
@@ -90,8 +98,19 @@ class SelectedCIStrings {
         return two_hole_string_list_inv_;
     }
 
-  protected:
+  private:
+    // == Class Private Functions ==
+    void initialize_sorted_strings(std::vector<Determinant>& dets);
+    void build_second_string_to_det_index();
+    void build_one_hole_strings_and_lists(
+        const std::vector<String>& sorted_strings, std::vector<String>& one_hole_strings,
+        std::vector<std::vector<std::tuple<size_t, size_t, double>>>& list,
+        std::vector<std::vector<std::tuple<size_t, size_t, double>>>& inverse_list,
+        ankerl::unordered_dense::map<String, size_t, String::Hash>& index_map);
+    void build_two_hole_strings();
+
     // == Class Protected Variables ==
+
     /// @brief Number of orbitals
     size_t norb_ = 0;
     /// @brief Number of determinants

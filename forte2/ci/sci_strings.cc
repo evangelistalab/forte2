@@ -1,4 +1,3 @@
-
 #include "helpers/logger.h"
 #include "helpers/timer.hpp"
 #include "helpers/unordered_dense.h"
@@ -12,7 +11,21 @@
 namespace forte2 {
 
 SelectedCIStrings::SelectedCIStrings(size_t norb, std::vector<Determinant>& dets) : norb_(norb) {
+    initialize_sorted_strings(dets);
+    build_second_string_to_det_index();
 
+    build_one_hole_strings_and_lists(sorted_first_string_, one_hole_first_strings_,
+                                     one_hole_first_string_list_, one_hole_first_string_list_inv_,
+                                     one_hole_first_strings_index_);
+    build_one_hole_strings_and_lists(sorted_second_string_, one_hole_second_strings_,
+                                     one_hole_second_string_list_, one_hole_second_string_list_inv_,
+                                     one_hole_second_strings_index_);
+    // build_one_hole_first_strings();
+    // build_one_hole_second_strings();
+    build_two_hole_strings();
+}
+
+void SelectedCIStrings::initialize_sorted_strings(std::vector<Determinant>& dets) {
     det_permutation_ = sort_permutation(dets, Determinant::reverse_less_than);
     apply_permutation_in_place(dets, det_permutation_);
 
@@ -23,7 +36,7 @@ SelectedCIStrings::SelectedCIStrings(size_t norb, std::vector<Determinant>& dets
     String second_string = dets[0].b_string();
     String old_first_string = first_string;
 
-    first_string_range_.push_back(std::make_pair(i, i + 1));
+    first_string_range_.push_back({i, i + 1});
     sorted_first_string_.push_back(first_string);
     sorted_second_string_.push_back(second_string);
     first_string_index_[first_string] = 0;
@@ -52,7 +65,9 @@ SelectedCIStrings::SelectedCIStrings(size_t norb, std::vector<Determinant>& dets
     }
     // set the end of the last range
     first_string_range_[i].second = ndets_;
+}
 
+void SelectedCIStrings::build_second_string_to_det_index() {
     second_string_to_det_index_.reserve(first_string_range_.size());
 
     for (const auto [start, end] : first_string_range_) {
@@ -63,81 +78,53 @@ SelectedCIStrings::SelectedCIStrings(size_t norb, std::vector<Determinant>& dets
         }
         second_string_to_det_index_.push_back(std::move(map));
     }
+}
 
-    one_hole_first_string_list_.reserve(sorted_first_string_.size());
+void SelectedCIStrings::build_one_hole_strings_and_lists(
+    const std::vector<String>& sorted_strings, std::vector<String>& one_hole_strings,
+    std::vector<std::vector<std::tuple<size_t, size_t, double>>>& list,
+    std::vector<std::vector<std::tuple<size_t, size_t, double>>>& inverse_list,
+    ankerl::unordered_dense::map<String, size_t, String::Hash>& index_map) {
+    list.reserve(sorted_strings.size());
     std::vector<size_t> occ(norb_, 0); // at most norb occupied orbitals
-    for (size_t i = 0, imax{sorted_first_string_.size()}; i < imax; ++i) {
-        const auto& first_str = sorted_first_string_[i];
+    for (size_t i = 0, imax{sorted_strings.size()}; i < imax; ++i) {
+        const auto& str = sorted_strings[i];
         // Find the occupied orbitals in the first string
         size_t n = 0;
-        first_str.find_set_bits(occ, n);
+        str.find_set_bits(occ, n);
 
-        std::vector<std::tuple<size_t, size_t, double>> one_hole_first_string_list_entry;
-        one_hole_first_string_list_entry.reserve(n);
+        std::vector<std::tuple<size_t, size_t, double>> list_entry;
+        list_entry.reserve(n);
 
         // For each occupied orbital, create the one-hole string and store it
         for (size_t p = 0; p < n; ++p) {
             const size_t orb = occ[p];
-            String one_hole = first_str;
+            String one_hole = str;
             one_hole.set_bit(orb, false);
-            if (one_hole_first_strings_index_.find(one_hole) ==
-                one_hole_first_strings_index_.end()) {
-                one_hole_first_strings_index_[one_hole] = one_hole_first_strings_index_.size();
-                one_hole_first_strings_.push_back(one_hole);
+            if (index_map.find(one_hole) == index_map.end()) {
+                index_map[one_hole] = index_map.size();
+                one_hole_strings.push_back(one_hole);
             }
-            const size_t hole_idx = one_hole_first_strings_index_[one_hole];
-            const double sign = first_str.slater_sign(orb);
+            const size_t hole_idx = index_map[one_hole];
+            const double sign = str.slater_sign(orb);
 
-            one_hole_first_string_list_entry.emplace_back(orb, hole_idx, sign);
+            list_entry.emplace_back(orb, hole_idx, sign);
         }
-        one_hole_first_string_list_.emplace_back(std::move(one_hole_first_string_list_entry));
+        list.emplace_back(std::move(list_entry));
     }
 
     // Create the inverse mapping from one-hole strings to full strings
-    one_hole_first_string_list_inv_.resize(one_hole_first_strings_index_.size());
+    inverse_list.resize(index_map.size());
     for (size_t i = 0, imax{sorted_first_string_.size()}; i < imax; ++i) {
-        for (const auto& [orb, hole_idx, sign] : one_hole_first_string_list_[i]) {
-            one_hole_first_string_list_inv_[hole_idx].emplace_back(orb, i, sign);
+        for (const auto& [orb, hole_idx, sign] : list[i]) {
+            inverse_list[hole_idx].emplace_back(orb, i, sign);
         }
     }
+}
 
-    one_hole_second_string_list_.reserve(sorted_second_string_.size());
-    for (size_t i = 0, imax{sorted_second_string_.size()}; i < imax; ++i) {
-        const auto& second_str = sorted_second_string_[i];
-        // Find the occupied orbitals in the second string
-        size_t n = 0;
-        second_str.find_set_bits(occ, n);
-
-        std::vector<std::tuple<size_t, size_t, double>> one_hole_second_string_list_entry;
-        one_hole_second_string_list_entry.reserve(n);
-
-        // For each occupied orbital, create the one-hole string and store it
-        for (size_t p = 0; p < n; ++p) {
-            const size_t orb = occ[p];
-            String one_hole = second_str;
-            one_hole.set_bit(orb, false);
-            if (one_hole_second_strings_index_.find(one_hole) ==
-                one_hole_second_strings_index_.end()) {
-                one_hole_second_strings_index_[one_hole] = one_hole_second_strings_index_.size();
-                one_hole_second_strings_.push_back(one_hole);
-            }
-            const size_t hole_idx = one_hole_second_strings_index_[one_hole];
-            const double sign = second_str.slater_sign(orb);
-
-            one_hole_second_string_list_entry.emplace_back(orb, hole_idx, sign);
-        }
-        one_hole_second_string_list_.emplace_back(std::move(one_hole_second_string_list_entry));
-    }
-
-    // Create the inverse mapping from one-hole strings to full strings
-    one_hole_second_string_list_inv_.resize(one_hole_second_strings_index_.size());
-    for (size_t i = 0, imax{sorted_second_string_.size()}; i < imax; ++i) {
-        for (const auto& [orb, hole_idx, sign] : one_hole_second_string_list_[i]) {
-            one_hole_second_string_list_inv_[hole_idx].emplace_back(orb, i, sign);
-        }
-    }
-
+void SelectedCIStrings::build_two_hole_strings() {
     two_hole_string_list_.reserve(sorted_first_string_.size());
+    std::vector<size_t> occ(norb_, 0); // at most norb occupied orbitals
     for (size_t i = 0, imax{sorted_first_string_.size()}; i < imax; ++i) {
         const auto& first_str = sorted_first_string_[i];
         // Find the occupied orbitals in the first string
