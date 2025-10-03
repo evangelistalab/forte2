@@ -181,6 +181,8 @@ class _SelectedCIBase:
             self.log_level,
         )
 
+        self.sci_helper.set_c(self.guess_c)
+
         old_energy = 0.0
         for cycle in range(self.maxcycle):
             print(f"\nCycle {cycle + 1}")
@@ -189,7 +191,7 @@ class _SelectedCIBase:
 
             # # Step 2. Find determinants in the Q space
             if self.selection_algorithm.lower() == "hbci":
-                self.sci_helper.select_hbci(threshold=self.threshold)
+                self.sci_helper.select_hbci2(threshold=self.threshold)
             elif self.selection_algorithm.lower() == "cipsi":
                 self.sci_helper.select_cipsi(threshold=self.threshold)
             else:
@@ -234,9 +236,9 @@ class _SelectedCIBase:
 
         return self
 
-    def _initial_guess(self):
+    def _initial_guess(self, window_occ=6, window_vir=6):
         # create the initial guess determinant
-        d = Determinant.zero()
+        d0 = Determinant.zero()
         if self.two_component:
             na = self.state.nel - self.ncore
             nb = 0
@@ -244,12 +246,71 @@ class _SelectedCIBase:
             na = self.state.na - self.ncore
             nb = self.state.nb - self.ncore
         for i in range(na):
-            d.set_na(i, True)
+            d0.set_na(i, True)
         for i in range(nb):
-            d.set_nb(i, True)
-        logger.log(f"Initial guess determinant: {d.str(self.norb)}", self.log_level)
-        c = np.eye(self.nroot, dtype=self.dtype)
-        return [d], c
+            d0.set_nb(i, True)
+
+        n_guess_dets = max(8, 2 * self.nroot + 4)
+
+        # define a window around HOMO and LUMO to generate excitations
+        occ_a = range(max(0, na - window_occ), na)
+        occ_b = range(max(0, nb - window_occ), nb)
+        vir_a = range(na, min(self.norb, na + window_vir))
+        vir_b = range(nb, min(self.norb, nb + window_vir))
+
+        det_energy = {d0: self.slater_rules.energy(d0)}
+
+        # Alpha excitations
+        for i in occ_a:
+            for a in vir_a:
+                d1 = Determinant(d0)
+                d1.set_na(i, False)
+                d1.set_na(a, True)
+                det_energy[d1] = self.slater_rules.energy(d1)
+
+        # Beta excitations
+        for i in occ_b:
+            for a in vir_b:
+                d1 = Determinant(d0)
+                d1.set_nb(i, False)
+                d1.set_nb(a, True)
+                det_energy[d1] = self.slater_rules.energy(d1)
+
+        # Pair excitations
+        n_pairs = min(na, nb)
+        n_occ = max(na, nb)
+        occ_pair = range(max(0, n_pairs - window_occ), n_pairs)
+        vir_pair = range(n_occ, min(self.norb, n_occ + window_vir))
+        for i in occ_pair:
+            for a in vir_pair:
+                d1 = Determinant(d0)
+                d1.set_na(i, False)
+                d1.set_nb(i, False)
+                d1.set_na(a, True)
+                d1.set_nb(a, True)
+                det_energy[d1] = self.slater_rules.energy(d1)
+
+        # Sort the determinants by energy
+        sorted_dets = sorted(det_energy.items(), key=lambda x: x[1])
+        print("Initial guess determinants (by energy):")
+        for d, e in sorted_dets[:n_guess_dets]:
+            print(f"  {d.str(self.norb)}: {e:20.12f} [Eh]")
+
+        # Form the Hamiltonian matrix in this basis
+        guess_dets = [d for d, e in sorted_dets[:n_guess_dets]]
+        ndet = len(guess_dets)
+        Hguess = np.zeros((ndet, ndet), dtype=self.dtype)
+        for i in range(ndet):
+            for j in range(i + 1):
+                Hguess[i, j] = self.slater_rules.slater_rules(
+                    guess_dets[i], guess_dets[j]
+                )
+                Hguess[j, i] = np.conj(Hguess[i, j])
+
+        # Diagonalize the Hamiltonian to get the initial guess coefficients
+        evals, evecs = np.linalg.eigh(Hguess)
+        c = evecs[:, : self.nroot].copy()
+        return guess_dets, c
 
     def _do_iterative_ci(self):
         """

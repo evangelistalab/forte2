@@ -207,10 +207,6 @@ void SelectedCIHelper::select_cipsi(double threshold) {
                                         (epsilon_[a] + epsilon_[b] - epsilon_[i] - epsilon_[j]);
                         checks_count++;
                         if (std::abs(h_ijab) > threshold) {
-                            // std::cout << "  Selected double excitation (alpha-beta): " << i << "
-                            // "
-                            //          << j << " -> " << a << " " << b << " with matrix element "
-                            //          << h_ijab << std::endl;
                             new_dets.emplace_back(create_double_ab_excitation(det, i, j, a, b));
                         }
                     }
@@ -234,24 +230,27 @@ void SelectedCIHelper::select_cipsi(double threshold) {
     LOG(log_level_) << "CIPSI selection completed in " << selection_timer.elapsed();
 }
 
+// This is the original implementation of the HBCI selection algorithm
 void SelectedCIHelper::select_hbci(double threshold) {
 
     local_timer selection_timer;
 
-    std::vector<size_t> aocc(norb_);
-    std::vector<size_t> bocc(norb_);
-    std::vector<size_t> avir(norb_);
-    std::vector<size_t> bvir(norb_);
+    std::vector<size_t> aocc(na_);
+    std::vector<size_t> bocc(nb_);
+    std::vector<size_t> avir(norb_ - na_);
+    std::vector<size_t> bvir(norb_ - nb_);
 
     std::vector<Determinant> new_dets;
     size_t checks_count = 0;
+    double e_pt2 = 0.0;
 
     size_t noa, nob;
     for (size_t idx{0}, idx_max{dets_.size()}; idx < idx_max; ++idx) {
         const auto& det = dets_[idx];
-        const double c = c_[idx];
-
-        // std::cout << "Determinant in variational space: " << str(det, norb_) << std::endl;
+        double c2 = 0.0;
+        for (size_t r{0}; r < nroots_; ++r) {
+            c2 += std::pow(c_[idx * nroots_ + r], 2);
+        }
 
         // Perform selection based on threshold
         det.get_fast_a_occ(aocc, noa);
@@ -261,39 +260,34 @@ void SelectedCIHelper::select_hbci(double threshold) {
         size_t nva = norb_ - noa;
         size_t nvb = norb_ - nob;
 
-        std::span<size_t> aocc_span(aocc.data(), noa);
-        std::span<size_t> avir_span(avir.data(), nva);
-        std::span<size_t> bocc_span(bocc.data(), nob);
-        std::span<size_t> bvir_span(bvir.data(), nvb);
-
-        for (const auto& i : aocc_span) {
-            for (const auto& a : avir_span) {
-                double h_ia = c * h_[i * norb_ + a] / (epsilon_[a] - epsilon_[i]);
+        for (const auto& i : aocc) {
+            for (const auto& a : avir) {
+                double val = c2 * std::pow(h_[i * norb_ + a], 2.0) / (epsilon_[a] - epsilon_[i]);
                 checks_count++;
-                if (std::abs(h_ia) > threshold) {
+                if (std::abs(val) > threshold) {
                     new_dets.emplace_back(create_single_a_excitation(det, i, a));
                 }
             }
         }
 
-        for (const auto& i : bocc_span) {
-            for (const auto& a : bvir_span) {
-                double h_ia = c * h_[i * norb_ + a] / (epsilon_[a] - epsilon_[i]);
+        for (const auto& i : bocc) {
+            for (const auto& a : bvir) {
+                double val = c2 * std::pow(h_[i * norb_ + a], 2.0) / (epsilon_[a] - epsilon_[i]);
                 checks_count++;
-                if (std::abs(h_ia) > threshold) {
+                if (std::abs(val) > threshold) {
                     new_dets.emplace_back(create_single_b_excitation(det, i, a));
                 }
             }
         }
 
-        for (const auto& i : aocc_span) {
-            for (const auto& j : aocc_span) {
+        for (const auto& i : aocc) {
+            for (const auto& j : aocc) {
                 if (i >= j)
                     continue;
                 const auto& v_list = va_sorted_[i * norb_ + j];
-                for (const auto& [v_ijab, a, b] : v_list) {
+                for (const auto& [val, a, b] : v_list) {
                     checks_count++;
-                    if (std::abs(v_ijab * c) < threshold)
+                    if (std::abs(val * c2) < threshold)
                         break;
                     if (det.na(a) or det.na(b))
                         continue;
@@ -302,14 +296,14 @@ void SelectedCIHelper::select_hbci(double threshold) {
             }
         }
 
-        for (const auto& i : bocc_span) {
-            for (const auto& j : bocc_span) {
+        for (const auto& i : bocc) {
+            for (const auto& j : bocc) {
                 if (i >= j)
                     continue;
                 const auto& v_list = va_sorted_[i * norb_ + j];
-                for (const auto& [v_ijab, a, b] : v_list) {
+                for (const auto& [val, a, b] : v_list) {
                     checks_count++;
-                    if (std::abs(v_ijab * c) < threshold)
+                    if (std::abs(val * c2) < threshold)
                         break;
                     if (det.nb(a) or det.nb(b))
                         continue;
@@ -318,12 +312,12 @@ void SelectedCIHelper::select_hbci(double threshold) {
             }
         }
 
-        for (const auto& i : aocc_span) {
-            for (const auto& j : bocc_span) {
+        for (const auto& i : aocc) {
+            for (const auto& j : bocc) {
                 const auto& v_list = v_sorted_[i * norb_ + j];
-                for (const auto& [v_ijab, a, b] : v_list) {
+                for (const auto& [val, a, b] : v_list) {
                     checks_count++;
-                    if (std::abs(v_ijab * c) < threshold)
+                    if (std::abs(val * c2) < threshold)
                         break;
                     if (det.na(a) or det.nb(b))
                         continue;
@@ -341,7 +335,8 @@ void SelectedCIHelper::select_hbci(double threshold) {
     LOG(log_level_) << "Selection completed in " << selection_timer.elapsed_seconds()
                     << " seconds.";
 
-    prepare_sigma_build();
+    compute_det_energies();
+    prepare_strings();
 }
 
 } // namespace forte2

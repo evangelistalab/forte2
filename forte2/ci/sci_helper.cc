@@ -1,12 +1,7 @@
 #include <iostream>
 #include <iomanip>
 
-// #include "helpers/timer.hpp"
-// #include "helpers/np_vector_functions.h"
-// #include "helpers/np_matrix_functions.h"
 #include "helpers/indexing.hpp"
-// #include "helpers/blas.h"
-// #include "helpers/logger.h"
 
 #include "sci_helper.h"
 
@@ -16,34 +11,43 @@ SelectedCIHelper::SelectedCIHelper(size_t norb, const std::vector<Determinant>& 
                                    double E, np_matrix& H, np_tensor4& V, int log_level)
     : norb_(norb), norb2_(norb * norb), norb3_(norb * norb * norb), dets_(dets), c_guess_(c),
       log_level_(log_level), slater_rules_(norb, E, H, V) {
+    if (dets.empty()) {
+        throw std::runtime_error("The list of determinants cannot be empty.");
+    }
+
     set_Hamiltonian(E, H, V);
     set_c(c);
 
-    // LOG(log_level_) << "\nAllocating CI temporary buffers of size 2 x " << max_size << " ("
-    //                 << 2 * max_size * sizeof(double) / (1024 * 1024) << " MB).\n";
+    na_ = dets_[0].count_a();
+    nb_ = dets_[0].count_b();
+
+    for (const auto& det : dets_) {
+        if (det.count_a() != na_ || det.count_b() != nb_) {
+            throw std::runtime_error("All determinants must have the same number of electrons.");
+        }
+        det_energies_.push_back(slater_rules_.energy(det));
+    }
 }
 
 void SelectedCIHelper::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
-    const auto norb = norb_;
-
     E_ = E;
 
     if (H.ndim() != 2) {
         throw std::runtime_error("H must be a 2D matrix.");
     }
-    if (H.shape(0) != norb || H.shape(1) != norb) {
+    if (H.shape(0) != norb_ || H.shape(1) != norb_) {
         throw std::runtime_error("H shape does not match the number of orbitals.");
     }
     H_ = H;
 
     // Initialize the one-electron integrals epsilon and h
-    epsilon_.resize(norb);
-    h_.resize(norb * norb);
+    epsilon_.resize(norb_);
+    h_.resize(norb_ * norb_);
     auto h = H.view();
-    for (size_t p{0}; p < norb; ++p) {
+    for (size_t p{0}; p < norb_; ++p) {
         epsilon_[p] = h(p, p);
-        for (size_t q{0}; q < norb; ++q) {
-            h_[p * norb + q] = h(p, q);
+        for (size_t q{0}; q < norb_; ++q) {
+            h_[p * norb_ + q] = h(p, q);
         }
     }
 
@@ -51,20 +55,20 @@ void SelectedCIHelper::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
     if (V.ndim() != 4) {
         throw std::runtime_error("V must be a 4D tensor.");
     }
-    if (V.shape(0) != norb || V.shape(1) != norb || V.shape(2) != norb || V.shape(3) != norb) {
+    if (V.shape(0) != norb_ || V.shape(1) != norb_ || V.shape(2) != norb_ || V.shape(3) != norb_) {
         throw std::runtime_error("V shape does not match the number of orbitals.");
     }
     V_ = V;
 
-    v_.resize(norb * norb * norb * norb);   // V[p][q][r][s] = <pq|rs>
-    v_a_.resize(norb * norb * norb * norb); // V_a[p][q][r][s] = <pq||rs> = <pq|rs> - <pq|sr>
+    v_.resize(norb_ * norb_ * norb_ * norb_);   // V[p][q][r][s] = <pq|rs>
+    v_a_.resize(norb_ * norb_ * norb_ * norb_); // V_a[p][q][r][s] = <pq||rs> = <pq|rs> - <pq|sr>
 
     auto v = V.view();
     // Loop over all pairs (p, r) and (q, s) to fill v_
-    for (size_t p{0}, pqrs{0}; p < norb; ++p) {
-        for (size_t q{0}; q < norb; ++q) {
-            for (size_t r{0}; r < norb; ++r) {
-                for (size_t s{0}; s < norb; ++s, ++pqrs) {
+    for (size_t p{0}, pqrs{0}; p < norb_; ++p) {
+        for (size_t q{0}; q < norb_; ++q) {
+            for (size_t r{0}; r < norb_; ++r) {
+                for (size_t s{0}; s < norb_; ++s, ++pqrs) {
                     v_[pqrs] = v(p, q, r, s);
                     v_a_[pqrs] = v(p, q, r, s) - v(p, q, s, r);
                 }
@@ -72,18 +76,24 @@ void SelectedCIHelper::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
         }
     }
 
+    update_hbci_ints();
+}
+
+void SelectedCIHelper::update_hbci_ints() {
     // Precompute sorted lists of two-electron integrals for each (p, q) pair
-    // (p,q) -> [|<pq|rs>|^2/(ep+eq-er-es)|, r, s), ...] sorted in descending order
-    v_sorted_.resize(norb * norb);
-    for (size_t p{0}; p < norb; ++p) {
-        for (size_t q{0}; q < norb; ++q) {
+    // (p,q) -> [|<pq|rs>^2/(ep+eq-er-es)|, r, s), ...] sorted in descending order
+    v_sorted_.resize(norb_ * norb_);
+    for (size_t p{0}; p < norb_; ++p) {
+        for (size_t q{0}; q < norb_; ++q) {
             std::vector<std::tuple<double, size_t, size_t>> v_list;
-            v_list.reserve(norb * norb);
-            for (size_t r{0}; r < norb; ++r) {
-                for (size_t s{0}; s < norb; ++s) {
-                    const double den = epsilon_[p] + epsilon_[q] - epsilon_[r] - epsilon_[s];
-                    const double val = std::fabs(std::pow(V(p, q, r, s), 2.0) / den);
-                    v_list.emplace_back(val, r, s);
+            v_list.reserve(norb_ * norb_);
+            for (size_t r{0}; r < norb_; ++r) {
+                for (size_t s{0}; s < norb_; ++s) {
+                    const double den =
+                        std::fabs(epsilon_[p] + epsilon_[q] - epsilon_[r] - epsilon_[s]) + 1e-3;
+                    const double val = std::pow(V(p, q, r, s), 2.0) / den;
+                    if (std::abs(val) > integral_threshold)
+                        v_list.emplace_back(val, r, s);
                 }
             }
             // Sort in descending order by absolute value of the integral
@@ -94,17 +104,19 @@ void SelectedCIHelper::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
     }
 
     // Precompute sorted lists of two-electron integrals for each (p, q) pair
-    // (p,q) -> [|<pq||rs>|^2/(ep+eq-er-es)|, r, s), ...] sorted in descending order
-    va_sorted_.resize(norb * norb);
-    for (size_t p{0}; p < norb; ++p) {
-        for (size_t q{0}; q < norb; ++q) {
+    // (p,q) -> [|<pq||rs>^2/(ep+eq-er-es)|, r, s), ...] sorted in descending order
+    va_sorted_.resize(norb_ * norb_);
+    for (size_t p{0}; p < norb_; ++p) {
+        for (size_t q{0}; q < norb_; ++q) {
             std::vector<std::tuple<double, size_t, size_t>> v_list;
-            v_list.reserve(norb * norb);
-            for (size_t r{0}; r < norb; ++r) {
-                for (size_t s{0}; s < norb; ++s) {
-                    const double den = epsilon_[p] + epsilon_[q] - epsilon_[r] - epsilon_[s];
-                    const double val = std::fabs(std::pow(Va(p, q, r, s), 2.0) / den);
-                    v_list.emplace_back(val, r, s);
+            v_list.reserve(norb_ * norb_);
+            for (size_t r{0}; r < norb_; ++r) {
+                for (size_t s{0}; s < norb_; ++s) {
+                    const double den =
+                        std::fabs(epsilon_[p] + epsilon_[q] - epsilon_[r] - epsilon_[s]) + 1e-3;
+                    const double val = std::pow(Va(p, q, r, s), 2.0) / den;
+                    if (std::abs(val) > integral_threshold)
+                        v_list.emplace_back(val, r, s);
                 }
             }
             // Sort in descending order by absolute value of the integral

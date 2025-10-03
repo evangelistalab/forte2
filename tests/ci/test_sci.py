@@ -41,8 +41,6 @@ def test_sci2():
     H 0.0 0.0 5.0
     """
 
-    efci = -3.3213221642
-
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-10)(system)
@@ -50,6 +48,7 @@ def test_sci2():
     ci = CI(
         states=State(nel=6, multiplicity=1, ms=0.0),
         active_orbitals=list(range(12)),
+        nroots=2,
     )(rhf)
     ci.run()
 
@@ -57,12 +56,13 @@ def test_sci2():
         states=State(nel=6, multiplicity=1, ms=0.0),
         active_orbitals=list(range(12)),
         selection_algorithm="hbci",
-        threshold=1e-6,
+        econv=1e-6,
+        rconv=1e-0,
+        threshold=1e-11,
+        nroots=5,
     )(rhf)
 
     sci.run()
 
-    assert sci.E[0] == approx(efci)
-
-
-test_sci2()
+    assert sci.E[0] == approx(-3.3213221642)
+    assert sci.E[3] == approx(-3.0403078112)

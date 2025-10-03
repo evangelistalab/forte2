@@ -49,6 +49,13 @@ class SelectedCIStrings {
     /// @return For a given first string, this maps the second string index to the determinant index
     /// in the original ordering
     const std::vector<ankerl::unordered_dense::map<size_t, size_t, std::hash<size_t>>>&
+    second_string_to_sorted_det_index() const {
+        return second_string_to_sorted_det_index_;
+    }
+
+    /// @return For a given first string, this maps the second string index to the determinant index
+    /// in the original ordering
+    const std::vector<ankerl::unordered_dense::map<size_t, size_t, std::hash<size_t>>>&
     second_string_to_det_index() const {
         return second_string_to_det_index_;
     }
@@ -135,6 +142,10 @@ class SelectedCIStrings {
     /// @brief Map from second string to its index
     ankerl::unordered_dense::map<String, size_t, String::Hash> second_string_index_;
     /// @brief For each unique first string, map from second string index to determinant index
+    std::vector<ankerl::unordered_dense::map<size_t, size_t, std::hash<size_t>>>
+        second_string_to_sorted_det_index_;
+    /// @brief For each unique first string, map from second string index to determinant index in
+    /// the original ordering
     std::vector<ankerl::unordered_dense::map<size_t, size_t, std::hash<size_t>>>
         second_string_to_det_index_;
 

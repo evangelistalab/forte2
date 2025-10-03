@@ -69,14 +69,21 @@ void SelectedCIStrings::initialize_sorted_strings(std::vector<Determinant>& dets
 
 void SelectedCIStrings::build_second_string_to_det_index() {
     second_string_to_det_index_.reserve(first_string_range_.size());
-
     for (const auto [start, end] : first_string_range_) {
         ankerl::unordered_dense::map<size_t, size_t, std::hash<size_t>> map;
         for (size_t idx{start}; idx < end; ++idx) {
             map[sorted_dets_second_string_[idx]] = det_permutation_[idx];
-            //; // use the original index here
         }
         second_string_to_det_index_.push_back(std::move(map));
+    }
+
+    second_string_to_sorted_det_index_.reserve(first_string_range_.size());
+    for (const auto [start, end] : first_string_range_) {
+        ankerl::unordered_dense::map<size_t, size_t, std::hash<size_t>> map;
+        for (size_t idx{start}; idx < end; ++idx) {
+            map[sorted_dets_second_string_[idx]] = idx;
+        }
+        second_string_to_sorted_det_index_.push_back(std::move(map));
     }
 }
 

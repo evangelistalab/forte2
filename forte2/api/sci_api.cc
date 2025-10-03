@@ -30,6 +30,8 @@ void export_sci_helper_api(nb::module_& m) {
              "Perform CIPSI selection with the given threshold")
         .def("select_hbci", &SelectedCIHelper::select_hbci, "threshold"_a,
              "Perform HBCI selection with the given threshold")
+        .def("select_hbci2", &SelectedCIHelper::select_hbci2, "threshold"_a,
+             "Perform HBCI2 selection with the given threshold")
         .def("dets", &SelectedCIHelper::get_variational_dets,
              "Return the determinants in the variational space")
         .def(

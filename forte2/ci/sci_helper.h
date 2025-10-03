@@ -35,13 +35,26 @@ class SelectedCIHelper {
     /// @brief Perform HBCI selection with the given threshold
     void select_hbci(double threshold);
 
+    /// @brief Perform HBCI selection with the given threshold
+    void select_hbci2(double threshold);
+
     void Hamiltonian(np_vector basis, np_vector sigma) const;
 
     np_vector Hdiag() const;
 
+    np_matrix compute_sf_1rdm(size_t left_root, size_t right_root) const;
+
+    np_matrix compute_a_1rdm(size_t left_root, size_t right_root) const;
+    np_matrix compute_b_1rdm(size_t left_root, size_t right_root) const;
+
   private:
     // == Class Private Methods ==
-    void prepare_sigma_build();
+    /// @brief Compute the energies of all determinants in the variational space
+    void compute_det_energies();
+    /// @brief Prepare the string lists for fast Hamiltonian application
+    void prepare_strings();
+    void update_hbci_ints();
+
     void H0(std::span<double> basis, std::span<double> sigma) const;
     void H1a(std::span<double> basis, std::span<double> sigma) const;
     void H1b(std::span<double> basis, std::span<double> sigma) const;
@@ -51,6 +64,10 @@ class SelectedCIHelper {
     void find_matching_dets(std::span<double> basis, std::span<double> sigma,
                             const SelectedCIStrings& list, size_t i, size_t j,
                             double int_sign) const;
+
+    double find_matching_dets_1rdm(size_t left_root, size_t right_root,
+                                   const SelectedCIStrings& list, size_t i, size_t j,
+                                   double sign) const;
 
     // == Class Private Variables ==
 
@@ -63,6 +80,8 @@ class SelectedCIHelper {
     const size_t norb_;
     const size_t norb2_;
     const size_t norb3_;
+    size_t na_;
+    size_t nb_;
 
     /// @brief The scalar energy
     double E_;
