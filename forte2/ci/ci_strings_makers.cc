@@ -31,13 +31,13 @@ StringList make_strings_with_occupation(size_t num_spaces, int nirrep,
         // enumerate all the possible strings in each GAS space
         for (size_t n = 0; n < num_spaces; n++) {
             String I;
+            I.clear();
             auto gas_norb = space_size[n];
             auto gas_ne = occupation[n];
             if ((gas_ne >= 0) and (gas_ne <= gas_norb)) {
                 const auto I_begin = I.begin();
-                const auto I_end = I.begin() + gas_norb;
+                const auto I_end = std::next(I.begin(), gas_norb);
 
-                I.clear();
                 for (int i = std::max(0, gas_norb - gas_ne); i < gas_norb; ++i)
                     I[i] = true; // Generate the string 000011111
 

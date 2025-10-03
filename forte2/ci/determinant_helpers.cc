@@ -53,7 +53,7 @@ std::vector<std::vector<String>> make_strings(int n, int k, size_t nirrep,
     if ((k >= 0) and (k <= n)) { // check that (n > 0) makes sense.
         String I;
         const auto I_begin = I.begin();
-        const auto I_end = I.begin() + n;
+        const auto I_end = std::next(I.begin(), n);
         // Generate the string 00000001111111
         //                      {n-k}  { k }
         I.clear();

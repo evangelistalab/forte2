@@ -142,15 +142,6 @@ template <size_t N> class BitArray {
             return copy;
         }
 
-        // TODO: This should be tested!
-        iterator operator+(difference_type n) const {
-            iterator result = *this;
-            const auto overage = result.index_ + (n % bits_per_word);
-            result.word_it_ += (n + overage) / bits_per_word;
-            result.index_ += overage % bits_per_word;
-            return result;
-        }
-
         bool operator==(const iterator& other) const {
             return (word_it_ == other.word_it_) and (index_ == other.index_);
         }
