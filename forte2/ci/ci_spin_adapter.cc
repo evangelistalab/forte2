@@ -221,6 +221,8 @@ auto CISpinAdapter::make_spin_couplings(int N, int twoS) -> std::vector<String> 
     std::vector<String> couplings;
     auto nup = (N + twoS) / 2;
     String coupling;
+    const auto coupling_second = std::next(coupling.begin(), 1); // to keep the first coupling as up
+    const auto coupling_end = std::next(coupling.begin(), N);
     // up = false = 0, down = true = 1
     // The coupling should always start with up
     for (int i = 0; i < nup; i++)
@@ -239,7 +241,7 @@ auto CISpinAdapter::make_spin_couplings(int N, int twoS) -> std::vector<String> 
         if (valid)
             couplings.push_back(coupling);
         // to keep the first coupling as up we only permute starting from the second element
-    } while (std::next_permutation(coupling.begin() + 1, coupling.begin() + N));
+    } while (std::next_permutation(coupling_second, coupling_end));
 
     return couplings;
 }
@@ -250,6 +252,8 @@ auto CISpinAdapter::make_determinant_occupations(int N, int twoMs) -> std::vecto
         return std::vector<String>(1, String());
     auto nup = (N + twoMs) / 2;
     String det_occ;
+    const auto det_occ_begin = det_occ.begin();
+    const auto det_occ_end = std::next(det_occ_begin, N);
     // true = 1 = up, false = 0 = down
     // The det_occ should always start with up
     for (int i = 0; i < nup; i++)
@@ -259,7 +263,7 @@ auto CISpinAdapter::make_determinant_occupations(int N, int twoMs) -> std::vecto
     /// Generate all permutations of the path
     do {
         det_occs.push_back(det_occ);
-    } while (std::next_permutation(det_occ.begin(), det_occ.begin() + N));
+    } while (std::next_permutation(det_occ_begin, det_occ_end));
     return det_occs;
 }
 

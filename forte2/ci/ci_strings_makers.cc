@@ -28,18 +28,20 @@ StringList make_strings_with_occupation(size_t num_spaces, int nirrep,
         std::vector<std::vector<String>> gas_space_string(num_spaces, std::vector<String>{});
         std::vector<std::vector<String>> full_strings(nirrep, std::vector<String>{});
 
-        // enumerate all the possible strings in each GAS space
+        // loop over all the GAS spaces
         for (size_t n = 0; n < num_spaces; n++) {
-            String I;
             auto gas_norb = space_size[n];
             auto gas_ne = occupation[n];
+            // generate all the strings for the n-th GAS space with gas_ne electrons in gas_norb
+            // orbitals
             if ((gas_ne >= 0) and (gas_ne <= gas_norb)) {
-                const auto I_begin = I.begin();
-                const auto I_end = I.begin() + gas_norb;
-
+                String I;
                 I.clear();
                 for (int i = std::max(0, gas_norb - gas_ne); i < gas_norb; ++i)
                     I[i] = true; // Generate the string 000011111
+
+                const auto I_begin = I.begin();
+                const auto I_end = std::next(I.begin(), gas_norb);
 
                 do {
                     String J;

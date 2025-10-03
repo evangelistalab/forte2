@@ -121,3 +121,9 @@ def test_determinant_hilbert_space_edge_cases():
     expected = [det("aa00"), det("a0a0"), det("a00a"), det("0aa0"), det("0a0a")]
     assert len(dets) == 5
     assert sorted(dets) == sorted(expected)
+
+    dets = hilbert_space(35, 1, 0)
+    assert len(dets) == 35
+
+    dets = hilbert_space(64, 0, 1)
+    assert len(dets) == 64
