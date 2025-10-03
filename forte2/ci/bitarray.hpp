@@ -54,6 +54,12 @@ template <size_t N> class BitArray {
         }
     }
 
+    static BitArray zero() {
+        BitArray b;
+        b.clear();
+        return b;
+    }
+
     /// @brief A class to access the bits of a BitArray object as if they were a vector of bools
     class Proxy {
       public:
