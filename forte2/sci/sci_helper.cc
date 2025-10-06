@@ -17,6 +17,9 @@ SelectedCIHelper::SelectedCIHelper(size_t norb, const std::vector<Determinant>& 
 
     set_Hamiltonian(E, H, V);
     set_c(c);
+    root_energies_.resize(nroots_, 0.0);
+    ept2_var_.resize(nroots_, 0.0);
+    ept2_pt_.resize(nroots_, 0.0);
 
     na_ = dets_[0].count_a();
     nb_ = dets_[0].count_b();
@@ -79,26 +82,32 @@ void SelectedCIHelper::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
     update_hbci_ints();
 }
 
+double evaluate_criterion(double delta, double v, ScreeningCriterion criterion) {
+    if (criterion == ScreeningCriterion::eHBCI) {
+        return v * v / (std::fabs(delta) + 1e-6);
+    }
+    return std::fabs(v);
+}
+
 void SelectedCIHelper::update_hbci_ints() {
     // Precompute sorted lists of two-electron integrals for each (p, q) pair
     // (p,q) -> [|<pq|rs>^2/(ep+eq-er-es)|, r, s), ...] sorted in descending order
     v_sorted_.resize(norb_ * norb_);
     for (size_t p{0}; p < norb_; ++p) {
         for (size_t q{0}; q < norb_; ++q) {
-            std::vector<std::tuple<double, size_t, size_t>> v_list;
+            std::vector<std::tuple<double, double, u_int32_t, u_int32_t>> v_list;
             v_list.reserve(norb_ * norb_);
             for (size_t r{0}; r < norb_; ++r) {
                 for (size_t s{0}; s < norb_; ++s) {
-                    const double den =
-                        std::fabs(epsilon_[p] + epsilon_[q] - epsilon_[r] - epsilon_[s]) + 1e-3;
-                    const double val = std::pow(V(p, q, r, s), 2.0) / den;
-                    if (std::abs(val) > integral_threshold)
-                        v_list.emplace_back(val, r, s);
+                    const double delta = epsilon_[p] + epsilon_[q] - epsilon_[r] - epsilon_[s];
+                    const double v = V(p, q, r, s);
+                    const double val = evaluate_criterion(delta, v, screening_criterion_);
+                    if (std::fabs(val) > integral_threshold)
+                        v_list.emplace_back(val, v, r, s);
                 }
             }
-            // Sort in descending order by absolute value of the integral
+            // sort in descending order by absolute value of the integral
             std::sort(v_list.rbegin(), v_list.rend());
-
             v_sorted_[p * norb_ + q] = std::move(v_list);
         }
     }
@@ -108,21 +117,42 @@ void SelectedCIHelper::update_hbci_ints() {
     va_sorted_.resize(norb_ * norb_);
     for (size_t p{0}; p < norb_; ++p) {
         for (size_t q{0}; q < norb_; ++q) {
-            std::vector<std::tuple<double, size_t, size_t>> v_list;
+            std::vector<std::tuple<double, double, u_int32_t, u_int32_t>> v_list;
             v_list.reserve(norb_ * norb_);
             for (size_t r{0}; r < norb_; ++r) {
                 for (size_t s{0}; s < norb_; ++s) {
-                    const double den =
-                        std::fabs(epsilon_[p] + epsilon_[q] - epsilon_[r] - epsilon_[s]) + 1e-3;
-                    const double val = std::pow(Va(p, q, r, s), 2.0) / den;
-                    if (std::abs(val) > integral_threshold)
-                        v_list.emplace_back(val, r, s);
+                    const double delta = epsilon_[p] + epsilon_[q] - epsilon_[r] - epsilon_[s];
+                    const double v = Va(p, q, r, s);
+                    const double val = evaluate_criterion(delta, v, screening_criterion_);
+                    if (std::fabs(val) > integral_threshold)
+                        v_list.emplace_back(val, v, r, s);
                 }
             }
-            // Sort in descending order by absolute value of the integral
+            // sort in descending order by absolute value of the integral
             std::sort(v_list.rbegin(), v_list.rend());
-
             va_sorted_[p * norb_ + q] = std::move(v_list);
+        }
+    }
+
+    // Precompute sorted lists of two-electron integrals for each (p, q) pair
+    // (p,q) -> [|<pq|rs>^2/(ep+eq-er-es)|, r, s), ...] sorted in descending order
+    vab_sorted_.resize(norb_ * norb_);
+    for (size_t p{0}; p < norb_; ++p) {
+        for (size_t r{0}; r < norb_; ++r) {
+            std::vector<std::tuple<double, double, u_int32_t, u_int32_t>> v_list;
+            v_list.reserve(norb_ * norb_);
+            for (size_t q{0}; q < norb_; ++q) {
+                for (size_t s{0}; s < norb_; ++s) {
+                    const double delta = epsilon_[p] + epsilon_[q] - epsilon_[r] - epsilon_[s];
+                    const double v = Va(p, q, r, s);
+                    const double val = evaluate_criterion(delta, v, screening_criterion_);
+                    if (std::fabs(val) > integral_threshold)
+                        v_list.emplace_back(val, v, q, s);
+                }
+            }
+            // sort in descending order by absolute value of the integral
+            std::sort(v_list.rbegin(), v_list.rend());
+            vab_sorted_[p * norb_ + r] = std::move(v_list);
         }
     }
 }
@@ -138,6 +168,16 @@ void SelectedCIHelper::set_c(np_matrix& c) {
         for (size_t r{0}; r < nroots_; ++r) {
             c_[i * nroots_ + r] = c_view(i, r);
         }
+    }
+}
+
+void SelectedCIHelper::set_energies(np_vector e) {
+    if (e.shape(0) != nroots_) {
+        throw std::runtime_error("The length of e must match the number of roots.");
+    }
+    root_energies_.resize(nroots_);
+    for (size_t r{0}; r < nroots_; ++r) {
+        root_energies_[r] = e(r);
     }
 }
 

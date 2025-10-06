@@ -6,7 +6,7 @@
 #include <nanobind/stl/complex.h>
 #include <nanobind/ndarray.h>
 
-#include "ci/sci_helper.h"
+#include "sci/sci_helper.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -26,16 +26,25 @@ void export_sci_helper_api(nb::module_& m) {
              "Apply the Hamiltonian to the basis and store the result in sigma")
         .def("Hdiag", &SelectedCIHelper::Hdiag, "Return the diagonal of the Hamiltonian matrix")
         .def("set_c", &SelectedCIHelper::set_c, "c"_a, "Set the CI coefficients")
+        .def("set_energies", &SelectedCIHelper::set_energies, "e"_a,
+             "Set the energies of the roots")
         .def("select_cipsi", &SelectedCIHelper::select_cipsi, "threshold"_a,
              "Perform CIPSI selection with the given threshold")
-        .def("select_hbci", &SelectedCIHelper::select_hbci, "threshold"_a,
-             "Perform HBCI selection with the given threshold")
-        .def("select_hbci2", &SelectedCIHelper::select_hbci2, "threshold"_a,
-             "Perform HBCI2 selection with the given threshold")
+        .def("select_hbci_ref", &SelectedCIHelper::select_hbci_ref, "var_threshold"_a,
+             "pt2_threshold"_a, "Perform HBCI selection with the given threshold")
+        .def("select_hbci2", &SelectedCIHelper::select_hbci2, "var_threshold"_a, "pt2_threshold"_a,
+             "Perform HBCI2 selection with the given thresholds")
+        .def("select_hbci3", &SelectedCIHelper::select_hbci3, "var_threshold"_a, "pt2_threshold"_a,
+             "Perform HBCI3 selection with the given thresholds")
         .def("dets", &SelectedCIHelper::get_variational_dets,
              "Return the determinants in the variational space")
         .def(
             "ndets", [](SelectedCIHelper& self) { return self.get_variational_dets().size(); },
-            "Return the number of determinants in the variational space");
+            "Return the number of determinants in the variational space")
+        .def("get_energies", &SelectedCIHelper::get_energies, "Return the energies of the roots")
+        .def("get_ept2_var", &SelectedCIHelper::get_ept2_var,
+             "Return the variational part of the Epstein-Nesbet second-order energy correction")
+        .def("get_ept2_pt", &SelectedCIHelper::get_ept2_pt,
+             "Return the perturbative part of the Epstein-Nesbet second-order energy correction");
 }
 } // namespace forte2

@@ -218,8 +218,8 @@ Determinant CIStrings::determinant(size_t address) const {
     const size_t beta_size = beta_address_->strpcls(class_Ib);
     const size_t addIa = shift / beta_size;
     const size_t addIb = shift % beta_size;
-    String Ia = alfa_str(class_Ia, addIa);
-    String Ib = beta_str(class_Ib, addIb);
+    String Ia{alfa_str(class_Ia, addIa)};
+    String Ib{beta_str(class_Ib, addIb)};
     return Determinant(Ia, Ib);
 }
 

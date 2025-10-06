@@ -5,7 +5,7 @@
 #include "helpers/ndarray.h"
 #include "helpers/np_vector_functions.h"
 
-#include "determinant_helpers.h"
+#include "ci/determinant_helpers.h"
 #include "sci_helper.h"
 
 namespace forte2 {
@@ -32,9 +32,9 @@ void SelectedCIStrings::initialize_sorted_strings(std::vector<Determinant>& dets
     ndets_ = dets.size();
 
     size_t i = 0;
-    String first_string = dets[0].a_string();
-    String second_string = dets[0].b_string();
-    String old_first_string = first_string;
+    String first_string{dets[0].a_string()};
+    String second_string{dets[0].b_string()};
+    String old_first_string{first_string};
 
     first_string_range_.push_back({i, i + 1});
     sorted_first_string_.push_back(first_string);
@@ -106,7 +106,7 @@ void SelectedCIStrings::build_one_hole_strings_and_lists(
         // for each occupied orbital, create the one-hole string and store it
         for (size_t p = 0; p < n; ++p) {
             const size_t orb = occ[p];
-            String one_hole = str;
+            String one_hole{str};
             one_hole.set_bit(orb, false);
             // insert one-hole string into map if not already present
             auto [it, inserted] = index_map.try_emplace(one_hole, index_map.size());
@@ -120,7 +120,7 @@ void SelectedCIStrings::build_one_hole_strings_and_lists(
 
     // create the inverse mapping from one-hole strings to full strings
     inverse_list.resize(index_map.size());
-    for (size_t i = 0, imax{sorted_first_string_.size()}; i < imax; ++i) {
+    for (size_t i = 0, imax{sorted_strings.size()}; i < imax; ++i) {
         for (const auto& [orb, hole_idx, sign] : list[i]) {
             inverse_list[hole_idx].emplace_back(orb, i, sign);
         }
@@ -144,7 +144,7 @@ void SelectedCIStrings::build_two_hole_strings() {
             const size_t orb_p = occ[p];
             for (size_t q = p + 1; q < n; ++q) {
                 const size_t orb_q = occ[q];
-                String two_hole = first_str;
+                String two_hole{first_str};
                 double sign = 1.0;
                 two_hole.set_bit(orb_p, false);
                 sign *= two_hole.slater_sign(orb_p);

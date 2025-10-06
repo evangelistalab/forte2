@@ -25,7 +25,7 @@ from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.props import get_1e_property
 from forte2.orbitals import Semicanonicalizer
 from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
-from .ci_utils import (
+from forte2.ci.ci_utils import (
     pretty_print_gas_info,
     pretty_print_ci_summary,
     pretty_print_ci_nat_occ_numbers,
@@ -109,8 +109,9 @@ class _SelectedCIBase:
 
     ### Selected CI parameters
     maxcycle: int = 10
-    threshold: float = 1e-5
-    selection_algorithm: str = "hbci"
+    var_threshold: float = 1e-5
+    pt2_threshold: float = 1e-8
+    selection_algorithm: str = "hbci_ref"
 
     ### Sigma builder parameters
     ci_algorithm: str = "hz"
@@ -160,7 +161,9 @@ class _SelectedCIBase:
         )
 
         # Create an initial guess
-        self.guess_determinants, self.guess_c = self._initial_guess()
+        self.guess_determinants, self.guess_c, self.guess_energies = (
+            self._initial_guess()
+        )
         self.evecs = self.guess_c.copy()
 
         self.ndet = len(self.guess_determinants)
@@ -182,6 +185,7 @@ class _SelectedCIBase:
         )
 
         self.sci_helper.set_c(self.guess_c)
+        self.sci_helper.set_energies(self.guess_energies)
 
         old_energy = 0.0
         for cycle in range(self.maxcycle):
@@ -190,14 +194,39 @@ class _SelectedCIBase:
             # self._diagonalize_P_space()
 
             # # Step 2. Find determinants in the Q space
-            if self.selection_algorithm.lower() == "hbci":
-                self.sci_helper.select_hbci2(threshold=self.threshold)
-            elif self.selection_algorithm.lower() == "cipsi":
-                self.sci_helper.select_cipsi(threshold=self.threshold)
+            if self.selection_algorithm.lower() == "hbci_ref":
+                self.sci_helper.select_hbci_ref(
+                    var_threshold=self.var_threshold, pt2_threshold=self.pt2_threshold
+                )
+            elif self.selection_algorithm.lower() == "hbci2":
+                self.sci_helper.select_hbci2(
+                    var_threshold=self.var_threshold, pt2_threshold=self.pt2_threshold
+                )
+            elif self.selection_algorithm.lower() == "hbci3":
+                self.sci_helper.select_hbci3(
+                    var_threshold=self.var_threshold, pt2_threshold=self.pt2_threshold
+                )
             else:
                 raise ValueError(
                     f"Unknown selection algorithm: {self.selection_algorithm}"
                 )
+
+            e_var = self.sci_helper.get_energies()
+            ept2_var = self.sci_helper.get_ept2_var()
+            ept2_pt = self.sci_helper.get_ept2_pt()
+
+            logger.log("=" * 67, self.log_level)
+            logger.log(
+                f"Root         E (var) [Eh]        E (var') [Eh]    E (var'+PT2) [Eh]",
+                self.log_level,
+            )
+            logger.log("-" * 67, self.log_level)
+            for r in range(self.nroot):
+                logger.log(
+                    f"{r:>4} {e_var[r]:20.12f} {e_var[r] + ept2_var[r]:20.12f} {e_var[r] + ept2_var[r] + ept2_pt[r]:20.12f}",
+                    self.log_level,
+                )
+            logger.log("=" * 67, self.log_level)
 
             self.ndet = self.sci_helper.ndets()
             self.dets = self.sci_helper.dets()
@@ -222,6 +251,7 @@ class _SelectedCIBase:
             # logger.log(f"CI Energy Roots: {self.evals}", self.log_level)
 
             self.sci_helper.set_c(self.evecs)
+            self.sci_helper.set_energies(self.evals)
 
             delta_energy = np.average(self.evals) - old_energy
             old_energy = np.average(self.evals)
@@ -310,7 +340,8 @@ class _SelectedCIBase:
         # Diagonalize the Hamiltonian to get the initial guess coefficients
         evals, evecs = np.linalg.eigh(Hguess)
         c = evecs[:, : self.nroot].copy()
-        return guess_dets, c
+        energies = evals[: self.nroot].copy()
+        return guess_dets, c, energies
 
     def _do_iterative_ci(self):
         """
@@ -1241,8 +1272,9 @@ class SelectedCISolver(ActiveSpaceSolver):
     rconv: float = 1e-5
     energy_shift: float = None
 
-    selection_algorithm: str = "hbci"
-    threshold: float = 1e-5
+    selection_algorithm: str = "hbci_ref"
+    var_threshold: float = 1e-5
+    pt2_threshold: float = 1e-8
 
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
@@ -1299,7 +1331,8 @@ class SelectedCISolver(ActiveSpaceSolver):
                     rconv=self.rconv,
                     energy_shift=self.energy_shift,
                     log_level=self.log_level,
-                    threshold=self.threshold,
+                    var_threshold=self.var_threshold,
+                    pt2_threshold=self.pt2_threshold,
                     selection_algorithm=self.selection_algorithm,
                 )
             )

@@ -115,7 +115,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// Construct the determinant from an occupation vector that
     /// specifies the alpha and beta strings.  occupation = [Ia,Ib]
     explicit DeterminantImpl(const BitArray<nbits_half>& Ia, const BitArray<nbits_half>& Ib) {
-        this->set_str(Ia, Ib);
+        this->set_strings(Ia, Ib);
     }
 
     /// String constructor. Convert a std::string to a determinant.
@@ -151,20 +151,20 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     void set_nb(size_t pos, bool val) { set_bit(pos + beta_bit_offset, val); }
 
     /// set the alpha/beta strings
-    void set_str(const BitArray<nbits_half>& sa, const BitArray<nbits_half>& sb) {
+    void set_strings(const BitArray<nbits_half>& sa, const BitArray<nbits_half>& sb) {
         for (size_t n = 0; n < nwords_half; n++) {
             words_[n] = sa.get_word(n);
             words_[n + nwords_half] = sb.get_word(n);
         }
     }
 
-    void set_alfa_str(const BitArray<nbits_half>& sa) {
+    void set_a_string(const BitArray<nbits_half>& sa) {
         for (size_t n = 0; n < nwords_half; n++) {
             words_[n] = sa.get_word(n);
         }
     }
 
-    void set_beta_str(const BitArray<nbits_half>& sb) {
+    void set_b_string(const BitArray<nbits_half>& sb) {
         for (size_t n = 0; n < nwords_half; n++) {
             words_[n + nwords_half] = sb.get_word(n);
         }

@@ -3,7 +3,7 @@
 #include "helpers/timer.hpp"
 #include "helpers/sorting.hpp"
 
-#include "determinant_helpers.h"
+#include "ci/determinant_helpers.h"
 #include "sci_helper.h"
 
 namespace forte2 {
@@ -138,7 +138,7 @@ void SelectedCIHelper::select_cipsi(double threshold) {
                 if (std::abs(h_ia) > threshold) {
                     // std::cout << "  Selected single excitation (alpha): " << i << " -> " << a
                     //           << " with matrix element " << h_ia << std::endl;
-                    new_dets.emplace_back(create_single_a_excitation(det, i, a));
+                    // new_dets.emplace_back(create_single_a_excitation(det, i, a));
                 }
             }
         }
@@ -150,7 +150,7 @@ void SelectedCIHelper::select_cipsi(double threshold) {
                 if (std::abs(h_ia) > threshold) {
                     // std::cout << "  Selected single excitation (beta): " << i << " -> " << a
                     //           << " with matrix element " << h_ia << std::endl;
-                    new_dets.emplace_back(create_single_b_excitation(det, i, a));
+                    // new_dets.emplace_back(create_single_b_excitation(det, i, a));
                 }
             }
         }
@@ -170,7 +170,7 @@ void SelectedCIHelper::select_cipsi(double threshold) {
                             // std::cout << "  Selected double excitation (alpha-alpha): " << i << j
                             //           << " -> " << a << b << " with matrix element " << h_ijab
                             //           << std::endl;
-                            new_dets.emplace_back(create_double_aa_excitation(det, i, j, a, b));
+                            // new_dets.emplace_back(create_double_aa_excitation(det, i, j, a, b));
                         }
                     }
                 }
@@ -192,7 +192,8 @@ void SelectedCIHelper::select_cipsi(double threshold) {
                             // std::cout << "  Selected double excitation (beta-beta): " << i << j
                             //           << " -> " << a << b << " with matrix element " << h_ijab
                             //           << std::endl;
-                            new_dets.emplace_back(create_double_bb_excitation(det, i, j, a, b));
+                            // new_dets.empla /ce_back(create_double_bb_excitation(det, i, j, a,
+                            // b));
                         }
                     }
                 }
@@ -207,7 +208,7 @@ void SelectedCIHelper::select_cipsi(double threshold) {
                                         (epsilon_[a] + epsilon_[b] - epsilon_[i] - epsilon_[j]);
                         checks_count++;
                         if (std::abs(h_ijab) > threshold) {
-                            new_dets.emplace_back(create_double_ab_excitation(det, i, j, a, b));
+                            // new_dets.emplace_back(create_double_ab_excitation(det, i, j, a, b));
                         }
                     }
                 }
@@ -228,115 +229,6 @@ void SelectedCIHelper::select_cipsi(double threshold) {
 
     LOG(log_level_) << "Checked " << checks_count << " excitations for selection";
     LOG(log_level_) << "CIPSI selection completed in " << selection_timer.elapsed();
-}
-
-// This is the original implementation of the HBCI selection algorithm
-void SelectedCIHelper::select_hbci(double threshold) {
-
-    local_timer selection_timer;
-
-    std::vector<size_t> aocc(na_);
-    std::vector<size_t> bocc(nb_);
-    std::vector<size_t> avir(norb_ - na_);
-    std::vector<size_t> bvir(norb_ - nb_);
-
-    std::vector<Determinant> new_dets;
-    size_t checks_count = 0;
-    double e_pt2 = 0.0;
-
-    size_t noa, nob;
-    for (size_t idx{0}, idx_max{dets_.size()}; idx < idx_max; ++idx) {
-        const auto& det = dets_[idx];
-        double c2 = 0.0;
-        for (size_t r{0}; r < nroots_; ++r) {
-            c2 += std::pow(c_[idx * nroots_ + r], 2);
-        }
-
-        // Perform selection based on threshold
-        det.get_fast_a_occ(aocc, noa);
-        det.get_fast_b_occ(bocc, nob);
-        compute_fast_virtual(aocc, avir, norb_);
-        compute_fast_virtual(bocc, bvir, norb_);
-        size_t nva = norb_ - noa;
-        size_t nvb = norb_ - nob;
-
-        for (const auto& i : aocc) {
-            for (const auto& a : avir) {
-                double val = c2 * std::pow(h_[i * norb_ + a], 2.0) / (epsilon_[a] - epsilon_[i]);
-                checks_count++;
-                if (std::abs(val) > threshold) {
-                    new_dets.emplace_back(create_single_a_excitation(det, i, a));
-                }
-            }
-        }
-
-        for (const auto& i : bocc) {
-            for (const auto& a : bvir) {
-                double val = c2 * std::pow(h_[i * norb_ + a], 2.0) / (epsilon_[a] - epsilon_[i]);
-                checks_count++;
-                if (std::abs(val) > threshold) {
-                    new_dets.emplace_back(create_single_b_excitation(det, i, a));
-                }
-            }
-        }
-
-        for (const auto& i : aocc) {
-            for (const auto& j : aocc) {
-                if (i >= j)
-                    continue;
-                const auto& v_list = va_sorted_[i * norb_ + j];
-                for (const auto& [val, a, b] : v_list) {
-                    checks_count++;
-                    if (std::abs(val * c2) < threshold)
-                        break;
-                    if (det.na(a) or det.na(b))
-                        continue;
-                    new_dets.emplace_back(create_double_aa_excitation(det, i, j, a, b));
-                }
-            }
-        }
-
-        for (const auto& i : bocc) {
-            for (const auto& j : bocc) {
-                if (i >= j)
-                    continue;
-                const auto& v_list = va_sorted_[i * norb_ + j];
-                for (const auto& [val, a, b] : v_list) {
-                    checks_count++;
-                    if (std::abs(val * c2) < threshold)
-                        break;
-                    if (det.nb(a) or det.nb(b))
-                        continue;
-                    new_dets.emplace_back(create_double_bb_excitation(det, i, j, a, b));
-                }
-            }
-        }
-
-        for (const auto& i : aocc) {
-            for (const auto& j : bocc) {
-                const auto& v_list = v_sorted_[i * norb_ + j];
-                for (const auto& [val, a, b] : v_list) {
-                    checks_count++;
-                    if (std::abs(val * c2) < threshold)
-                        break;
-                    if (det.na(a) or det.nb(b))
-                        continue;
-                    new_dets.emplace_back(create_double_ab_excitation(det, i, j, a, b));
-                }
-            }
-        }
-    }
-
-    merge_and_keep_unique(dets_, new_dets);
-    c_.resize(dets_.size(), 0.0);
-
-    LOG(log_level_) << "Tested " << checks_count << " excitations for selection.";
-    LOG(log_level_) << "Number of variational determinants after selection: " << dets_.size();
-    LOG(log_level_) << "Selection completed in " << selection_timer.elapsed_seconds()
-                    << " seconds.";
-
-    compute_det_energies();
-    prepare_strings();
 }
 
 } // namespace forte2

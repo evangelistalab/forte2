@@ -657,6 +657,20 @@ template <size_t N> class BitArray {
         }
     }
 
+    double create(int n) {
+        if (get_bit(n))
+            return 0.0;
+        set_bit(n, true);
+        return slater_sign(n);
+    }
+
+    double destroy(int n) {
+        if (not get_bit(n))
+            return 0.0;
+        set_bit(n, false);
+        return slater_sign(n);
+    }
+
     /// @brief Find the irreducible representation of a product of spin orbitals
     /// @param temp the input BitArray
     /// @param irrep a vector of irrep values

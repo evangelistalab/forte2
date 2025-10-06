@@ -6,14 +6,21 @@
 #include <span>
 
 #include "helpers/ndarray.h"
-#include "determinant.h"
 
+#include "ci/determinant.h"
 #include "ci/slater_rules.h"
-#include "ci/sci_strings.h"
+
+#include "sci/sci_strings.h"
 
 namespace forte2 {
 
+using DetMap = ankerl::unordered_dense::map<Determinant, double, Determinant::Hash>;
+
+enum class ScreeningCriterion { HBCI, eHBCI };
+enum class EnergyCorrection { PT2, Variational };
+
 class SelectedCIHelper {
+
   public:
     // == Class Constructor ==
     SelectedCIHelper(size_t norb, const std::vector<Determinant>& dets, np_matrix& c, double E,
@@ -29,14 +36,23 @@ class SelectedCIHelper {
 
     void set_c(np_matrix& c);
 
+    void set_energies(np_vector e);
+
+    const std::vector<double>& get_energies() const { return root_energies_; }
+    const std::vector<double>& get_ept2_var() const { return ept2_var_; }
+    const std::vector<double>& get_ept2_pt() const { return ept2_pt_; }
+
     /// @brief Perform CIPSI selection with the given threshold
     void select_cipsi(double threshold);
 
     /// @brief Perform HBCI selection with the given threshold
-    void select_hbci(double threshold);
+    void select_hbci_ref(double var_threshold, double pt2_threshold);
 
     /// @brief Perform HBCI selection with the given threshold
-    void select_hbci2(double threshold);
+    void select_hbci2(double var_threshold, double pt2_threshold);
+
+    /// @brief Perform HBCI selection with the given threshold
+    void select_hbci3(double var_threshold, double pt2_threshold);
 
     void Hamiltonian(np_vector basis, np_vector sigma) const;
 
@@ -53,7 +69,9 @@ class SelectedCIHelper {
     void compute_det_energies();
     /// @brief Prepare the string lists for fast Hamiltonian application
     void prepare_strings();
+    void update_orbital_energies();
     void update_hbci_ints();
+    double compute_delta_ept2(double delta, double v) const;
 
     void H0(std::span<double> basis, std::span<double> sigma) const;
     void H1a(std::span<double> basis, std::span<double> sigma) const;
@@ -72,6 +90,9 @@ class SelectedCIHelper {
     // == Class Private Variables ==
 
     static constexpr double integral_threshold = 1e-12;
+
+    ScreeningCriterion screening_criterion_ = ScreeningCriterion::HBCI; // Default to HBCI screening
+    EnergyCorrection energy_correction_ = EnergyCorrection::PT2;        // Default to PT2 correction
 
     /// @brief logging level for the class
     int log_level_ = 3;
@@ -101,8 +122,9 @@ class SelectedCIHelper {
     /// @brief Two-electron integrals: V[p][q][r][s] = <pq||rs> = (pr|qs) - (ps|qr)
     std::vector<double> v_a_;
 
-    std::vector<std::vector<std::tuple<double, size_t, size_t>>> v_sorted_;
-    std::vector<std::vector<std::tuple<double, size_t, size_t>>> va_sorted_;
+    std::vector<std::vector<std::tuple<double, double, u_int32_t, u_int32_t>>> v_sorted_;
+    std::vector<std::vector<std::tuple<double, double, u_int32_t, u_int32_t>>> va_sorted_;
+    std::vector<std::vector<std::tuple<double, double, u_int32_t, u_int32_t>>> vab_sorted_;
 
     inline const double& h(std::size_t i, std::size_t j) const noexcept {
         return h_[i * norb_ + j];
@@ -134,6 +156,11 @@ class SelectedCIHelper {
     /// root are stored contiguously. E.g., the coefficient for determinant i and root r is at
     /// index i * nroots_ + r.
     std::vector<double> c_;
+
+    /// @brief The energies of the roots
+    std::vector<double> root_energies_;
+    std::vector<double> ept2_var_;
+    std::vector<double> ept2_pt_;
 
     SelectedCIStrings ab_list_;
     SelectedCIStrings ba_list_;

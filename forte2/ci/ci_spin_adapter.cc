@@ -194,7 +194,7 @@ void CISpinAdapter::conf_to_csfs(const Configuration& conf, det_hash<size_t>& de
     size_t temp = ncoupling_;
     for (const auto& [i, j, o] : N_to_overlaps_[N]) {
         const auto& det_occ = determinant_occ[j];
-        det.set_str(docc, docc);
+        det.set_strings(docc, docc);
         // keep track of the sign of the singly occupied orbitals
         double sign = 1.0;
         for (int k = N - 1; k >= 0; k--) {
