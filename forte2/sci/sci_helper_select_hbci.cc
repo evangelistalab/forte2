@@ -139,6 +139,8 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
             }
         }
 
+        continue;
+
         for (const auto& i : aocc_span) {
             for (const auto& j : aocc_span) {
                 if (i >= j)
@@ -565,79 +567,88 @@ void SelectedCIHelper::select_hbci3(double var_threshold, double pt2_threshold) 
             for (const auto& a : avir) {
                 const double integral = h_[i * norb_ + a];
                 auto [new_a_str, sign] = create_single_excitation(a_str, i, a);
-                for (size_t k{0}; const auto& [b_str, det_index] : second_string_to_det_index) {
-                    double eps = std::fabs(integral * c_block[k]);
-                    if (eps > pt2_threshold) {
+                for (size_t k{0}; const auto& [b_str_idx, det_index] : second_string_to_det_index) {
+                    double criterion = std::fabs(integral * c_block[k]);
+                    if (criterion > pt2_threshold) {
                         new_det.set_a_string(new_a_str);
-                        new_det.set_b_string(ab_list_.sorted_second_string(b_str));
-                        fill_hbci_maps(new_det, eps, sign * integral, k, c_block, V_map, PT_map,
-                                       nroots_, var_threshold, pt2_threshold);
+                        new_det.set_b_string(ab_list_.sorted_second_string(b_str_idx));
+                        if (criterion > var_threshold) {
+                            for (size_t r{0}; r < nroots_; ++r) {
+                                V_map[r][new_det] += sign * integral * c_block[k + r];
+                            }
+                        } else {
+                            for (size_t r{0}; r < nroots_; ++r) {
+                                PT_map[r][new_det] += sign * integral * c_block[k + r];
+                            }
+                        }
                     }
                     k += nroots_;
                 }
             }
         }
 
-        // double alpha-alpha excitations
-        for (const auto& i : aocc) {
-            for (const auto& j : aocc) {
-                if (i >= j)
-                    continue;
-                const auto& v_list = va_sorted_[i * norb_ + j];
-                for (const auto& [val, integral, a, b] : v_list) {
-                    // break early if the integrals are too small
-                    if (std::fabs(val * abs_c_max) < pt2_threshold)
-                        break;
+        // // double alpha-alpha excitations
+        // for (const auto& i : aocc) {
+        //     for (const auto& j : aocc) {
+        //         if (i >= j)
+        //             continue;
+        //         const auto& v_list = va_sorted_[i * norb_ + j];
+        //         for (const auto& [val, integral, a, b] : v_list) {
+        //             // break early if the integrals are too small
+        //             if (std::fabs(val * abs_c_max) < pt2_threshold)
+        //                 break;
 
-                    auto [new_a_str, sign] = create_double_excitation(a_str, i, j, a, b);
+        //             auto [new_a_str, sign] = create_double_excitation(a_str, i, j, a, b);
 
-                    for (size_t k{0}; const auto& [b_str, det_index] : second_string_to_det_index) {
-                        double eps = std::fabs(val * c_block[k]);
-                        if (eps > pt2_threshold) {
-                            new_det.set_a_string(new_a_str);
-                            new_det.set_b_string(ab_list_.sorted_second_string(b_str));
-                            fill_hbci_maps(new_det, eps, sign * integral, k, c_block, V_map, PT_map,
-                                           nroots_, var_threshold, pt2_threshold);
-                        }
-                        k += nroots_;
-                    }
-                }
-            }
-        }
+        //             for (size_t k{0}; const auto& [b_str, det_index] :
+        //             second_string_to_det_index) {
+        //                 double eps = std::fabs(val * c_block[k]);
+        //                 if (eps > pt2_threshold) {
+        //                     new_det.set_a_string(new_a_str);
+        //                     new_det.set_b_string(ab_list_.sorted_second_string(b_str));
+        //                     fill_hbci_maps(new_det, eps, sign * integral, k, c_block, V_map,
+        //                     PT_map,
+        //                                    nroots_, var_threshold, pt2_threshold);
+        //                 }
+        //                 k += nroots_;
+        //             }
+        //         }
+        //     }
+        // }
 
-        // double alpha-beta excitations
-        for (const auto& i : aocc) {
-            for (const auto& a : avir) {
-                const auto& v_list = vab_sorted_[i * norb_ + a];
+        // // double alpha-beta excitations
+        // for (const auto& i : aocc) {
+        //     for (const auto& a : avir) {
+        //         const auto& v_list = vab_sorted_[i * norb_ + a];
 
-                // find the new alpha string after excitation and the sign and store it
-                auto [new_a_str, a_sign] = create_single_excitation(a_str, i, a);
-                new_det.set_a_string(new_a_str);
+        //         // find the new alpha string after excitation and the sign and store it
+        //         auto [new_a_str, a_sign] = create_single_excitation(a_str, i, a);
+        //         new_det.set_a_string(new_a_str);
 
-                for (const auto& [val, integral, j, b] : v_list) {
-                    // break early if the integrals are too small
-                    if (std::fabs(val * abs_c_max) < pt2_threshold)
-                        break;
+        //         for (const auto& [val, integral, j, b] : v_list) {
+        //             // break early if the integrals are too small
+        //             if (std::fabs(val * abs_c_max) < pt2_threshold)
+        //                 break;
 
-                    for (size_t k{0};
-                         const auto& [b_str_idx, det_index] : second_string_to_det_index) {
-                        const String& b_str = ab_list_.sorted_second_string(b_str_idx);
+        //             for (size_t k{0};
+        //                  const auto& [b_str_idx, det_index] : second_string_to_det_index) {
+        //                 const String& b_str = ab_list_.sorted_second_string(b_str_idx);
 
-                        // check if the beta excitation is valid
-                        if ((not b_str.get_bit(i)) or b_str.get_bit(b))
-                            continue;
-                        double eps = std::fabs(val * c_block[k]);
-                        if (eps > pt2_threshold) {
-                            auto [new_b_str, b_sign] = create_single_excitation(b_str, j, b);
-                            new_det.set_b_string(new_b_str);
-                            fill_hbci_maps(new_det, eps, a_sign * b_sign * integral, k, c_block,
-                                           V_map, PT_map, nroots_, var_threshold, pt2_threshold);
-                        }
-                        k += nroots_;
-                    }
-                }
-            }
-        }
+        //                 // check if the beta excitation is valid
+        //                 if ((not b_str.get_bit(i)) or b_str.get_bit(b))
+        //                     continue;
+        //                 double eps = std::fabs(val * c_block[k]);
+        //                 if (eps > pt2_threshold) {
+        //                     auto [new_b_str, b_sign] = create_single_excitation(b_str, j, b);
+        //                     new_det.set_b_string(new_b_str);
+        //                     fill_hbci_maps(new_det, eps, a_sign * b_sign * integral, k, c_block,
+        //                                    V_map, PT_map, nroots_, var_threshold, pt2_threshold);
+        //                 }
+        //                 k += nroots_;
+        //             }
+        //         }
+        //     }
+        // }
     }
 
     const auto b_string_size = ba_list_.first_string_size();
@@ -677,45 +688,54 @@ void SelectedCIHelper::select_hbci3(double var_threshold, double pt2_threshold) 
             for (const auto& a : bvir) {
                 const double integral = h_[i * norb_ + a];
                 auto [new_b_str, sign] = create_single_excitation(b_str, i, a);
-                for (size_t k{0}; const auto& [a_str, det_index] : second_string_to_det_index) {
-                    double eps = std::fabs(integral * c_block[k]);
-                    if (eps > pt2_threshold) {
-                        new_det.set_a_string(new_b_str);
-                        new_det.set_b_string(ba_list_.sorted_second_string(a_str));
-                        fill_hbci_maps(new_det, eps, sign * integral, k, c_block, V_map, PT_map,
-                                       nroots_, var_threshold, pt2_threshold);
+                for (size_t k{0}; const auto& [a_str_idx, det_index] : second_string_to_det_index) {
+                    double criterion = std::fabs(integral * c_block[k]);
+                    if (criterion > pt2_threshold) {
+                        new_det.set_b_string(new_b_str);
+                        new_det.set_a_string(ba_list_.sorted_second_string(a_str_idx));
+                        if (criterion > var_threshold) {
+                            for (size_t r{0}; r < nroots_; ++r) {
+                                V_map[r][new_det] += sign * integral * c_block[k + r];
+                            }
+                        } else {
+                            for (size_t r{0}; r < nroots_; ++r) {
+                                PT_map[r][new_det] += sign * integral * c_block[k + r];
+                            }
+                        }
                     }
                     k += nroots_;
                 }
             }
         }
 
-        // double beta-beta excitations
-        for (const auto& i : bocc) {
-            for (const auto& j : bocc) {
-                if (i >= j)
-                    continue;
-                const auto& v_list = va_sorted_[i * norb_ + j];
-                for (const auto& [val, integral, a, b] : v_list) {
-                    // break early if the integrals are too small
-                    if (std::fabs(val * abs_c_max) < pt2_threshold)
-                        break;
+        // // double beta-beta excitations
+        // for (const auto& i : bocc) {
+        //     for (const auto& j : bocc) {
+        //         if (i >= j)
+        //             continue;
+        //         const auto& v_list = va_sorted_[i * norb_ + j];
+        //         for (const auto& [val, integral, a, b] : v_list) {
+        //             // break early if the integrals are too small
+        //             if (std::fabs(val * abs_c_max) < pt2_threshold)
+        //                 break;
 
-                    auto [new_b_str, sign] = create_double_excitation(b_str, i, j, a, b);
+        //             auto [new_b_str, sign] = create_double_excitation(b_str, i, j, a, b);
 
-                    for (size_t k{0}; const auto& [a_str, det_index] : second_string_to_det_index) {
-                        double eps = std::fabs(val * c_block[k]);
-                        if (eps > pt2_threshold) {
-                            new_det.set_b_string(new_b_str);
-                            new_det.set_a_string(ba_list_.sorted_second_string(a_str));
-                            fill_hbci_maps(new_det, eps, sign * integral, k, c_block, V_map, PT_map,
-                                           nroots_, var_threshold, pt2_threshold);
-                        }
-                        k += nroots_;
-                    }
-                }
-            }
-        }
+        //             for (size_t k{0}; const auto& [a_str, det_index] :
+        //             second_string_to_det_index) {
+        //                 double eps = std::fabs(val * c_block[k]);
+        //                 if (eps > pt2_threshold) {
+        //                     new_det.set_b_string(new_b_str);
+        //                     new_det.set_a_string(ba_list_.sorted_second_string(a_str));
+        //                     fill_hbci_maps(new_det, eps, sign * integral, k, c_block, V_map,
+        //                     PT_map,
+        //                                    nroots_, var_threshold, pt2_threshold);
+        //                 }
+        //                 k += nroots_;
+        //             }
+        //         }
+        //     }
+        // }
     }
 
     // Remove the coupling to determinants that are already in the variational space
@@ -733,8 +753,6 @@ void SelectedCIHelper::select_hbci3(double var_threshold, double pt2_threshold) 
         }
     }
 
-    // // merge_and_keep_unique(dets_, new_dets);
-
     // add variational determinants first
     for (const auto& [det, val] : V_map[0]) {
         dets_.push_back(det);
@@ -742,23 +760,18 @@ void SelectedCIHelper::select_hbci3(double var_threshold, double pt2_threshold) 
 
     // print all the variational determinants
     LOG(log_level_) << "Number of variational determinants added: " << V_map[0].size();
-    LOG(log_level_) << "Number of perturbative determinants added: " << PT_map[0].size();
+    LOG(log_level_) << "Number of perturbative determinants considered: " << PT_map[0].size();
     LOG(log_level_) << "Total number of determinants: " << dets_.size();
-
-    // sort and keep unique
-    // std::sort(dets_.begin(), dets_.end());
-    // dets_.erase(std::unique(dets_.begin(), dets_.end()), dets_.end());
-    // LOG(log_level_) << "Number of determinants after removing duplicates: " << dets_.size();
 
     for (size_t r{0}; r < nroots_; ++r) {
         double var = 0.0;
         double pt = 0.0;
         for (const auto& [det, val] : V_map[r]) {
-            const double delta = slater_rules_.energy(det) - root_energies_[r];
+            const double delta = root_energies_[r] - slater_rules_.energy(det);
             var += compute_delta_ept2(delta, val);
         }
         for (const auto& [det, val] : PT_map[r]) {
-            const double delta = slater_rules_.energy(det) - root_energies_[r];
+            const double delta = root_energies_[r] - slater_rules_.energy(det);
             pt += compute_delta_ept2(delta, val);
         }
         ept2_var_[r] = var;
@@ -766,11 +779,6 @@ void SelectedCIHelper::select_hbci3(double var_threshold, double pt2_threshold) 
     }
 
     c_.resize(dets_.size(), 0.0);
-
-    LOG(log_level_) << "Tested " << checks_count << " excitations for selection.";
-    LOG(log_level_) << "Number of variational determinants after selection: " << dets_.size();
-    LOG(log_level_) << "Selection completed in " << selection_timer.elapsed_seconds()
-                    << " seconds.";
 
     compute_det_energies();
     prepare_strings();
