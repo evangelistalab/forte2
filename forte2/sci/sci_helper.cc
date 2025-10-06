@@ -144,7 +144,7 @@ void SelectedCIHelper::update_hbci_ints() {
             for (size_t q{0}; q < norb_; ++q) {
                 for (size_t s{0}; s < norb_; ++s) {
                     const double delta = epsilon_[p] + epsilon_[q] - epsilon_[r] - epsilon_[s];
-                    const double v = Va(p, q, r, s);
+                    const double v = V(p, q, r, s);
                     const double val = evaluate_criterion(delta, v, screening_criterion_);
                     if (std::fabs(val) > integral_threshold)
                         v_list.emplace_back(val, v, q, s);

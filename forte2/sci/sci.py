@@ -203,6 +203,9 @@ class _SelectedCIBase:
                     var_threshold=self.var_threshold, pt2_threshold=self.pt2_threshold
                 )
             elif self.selection_algorithm.lower() == "hbci3":
+                print(
+                    f"Using HBCI3 selection algorithm with var_threshold={self.var_threshold} and pt2_threshold={self.pt2_threshold}"
+                )
                 self.sci_helper.select_hbci3(
                     var_threshold=self.var_threshold, pt2_threshold=self.pt2_threshold
                 )

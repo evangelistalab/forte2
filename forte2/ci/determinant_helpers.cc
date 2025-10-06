@@ -16,8 +16,8 @@ std::pair<String, double> create_double_excitation(const String& str, size_t i, 
     String new_str = str;
     double sign = new_str.destroy(i);
     sign *= new_str.destroy(j);
-    sign *= new_str.create(a);
     sign *= new_str.create(b);
+    sign *= new_str.create(a);
     return {new_str, sign};
 }
 
