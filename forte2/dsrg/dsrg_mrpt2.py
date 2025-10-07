@@ -3,26 +3,72 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from forte2.jkbuilder.mointegrals import RestrictedMOIntegrals, SpinorbitalIntegrals
+from forte2.orbitals import Semicanonicalizer
 from .dsrg_base import DSRGBase
+
+MACHEPS = 1e-9
+TAYLOR_THRES = 1e-3
+
+
+# TODO: these need to be moved to C++ for performance
+def taylor_exp(z):
+    """
+    Taylor expansion of (1-exp(-z^2))/z for small z.
+    """
+    n = int(0.5 * (15.0 / TAYLOR_THRES + 1)) + 1
+    if n > 0:
+        value = z
+        tmp = z
+        for x in range(n - 1):
+            tmp *= -1.0 * z * z / (x + 2)
+            value += tmp
+
+        return value
+    else:
+        return 0.0
+
+
+def regularized_denominator(x, s):
+    """
+    Returns (1-exp(-s*x^2))/x
+    """
+    z = np.sqrt(s) * x
+    if abs(z) <= MACHEPS:
+        return taylor_exp(z) * np.sqrt(s)
+    else:
+        return (1.0 - np.exp(-s * x**2)) / x
 
 
 @dataclass
 class DSRG_MRPT2(DSRGBase):
     def get_integrals(self):
-        if self.parent_method.final_orbital != "semicanonical":
-            # TODO: semi-canonicalize first
-            raise NotImplementedError("Only semicanonical orbitals are implemented.")
+        # always semi-canonicalize, to get the generalized Fock matrix
+        self.semicanonicalizer = Semicanonicalizer(
+            system=self.system,
+            mo_space=self.mo_space,
+            fock_builder=self.fock_builder,
+            mix_active=False,
+            # do not mix correlated and frozen orbitals after MCSCF
+            mix_inactive=False,
+        )
+        g1 = self.parent_method.make_average_1rdm()
+        self.semicanonicalizer.semi_canonicalize(g1=g1, C_contig=self._C)
+        self._C = self.semicanonicalizer.C_semican.copy()
+        self.fock = self.semicanonicalizer.fock_semican.copy()
+        self.eps = self.semicanonicalizer.eps_semican.copy()
+        self.delta_actv = self.eps[self.actv][:, None] - self.eps[self.actv][None, :]
 
         if self.two_component:
             ints = SpinorbitalIntegrals(
                 system=self.system,
                 C=self._C,
                 spinorbitals=list(
-                    range(self.mo_space.coor.start, self.mo_space.coor.stop)
+                    range(self.mo_space.corr.start, self.mo_space.corr.stop)
                 ),
                 core_spinorbitals=list(range(0, self.mo_space.frozen_core.stop)),
                 antisymmetrize=True,
             )
+            ints.H = self.fock - np.diag(np.diag(self.fock))  # remove diagonal
             cumulants = dict()
             cumulants["gamma1"] = self.parent_method.make_average_1rdm()
             cumulants["eta1"] = (
@@ -36,9 +82,235 @@ class DSRG_MRPT2(DSRGBase):
             raise NotImplementedError("Only two-component integrals are implemented.")
 
     def solve_dsrg(self):
-        raise NotImplementedError("DSRG-MRPT2 is not yet implemented.")
+        self.T2 = self._build_t2()
+        self.T1 = self._build_t1()
+        self._renormalize_integrals()
+        E = self._compute_pt2_energy(
+            self.f_tilde,
+            self.v_tilde,
+            self.T1,
+            self.T2,
+            self.cumulants["gamma1"],
+            self.cumulants["eta1"],
+            self.cumulants["lambda2"],
+            self.cumulants["lambda3"],
+        )
+        self.E = E
+        return E
 
     def do_reference_relaxation(self):
         raise NotImplementedError(
             "Reference relaxation for DSRG-MRPT2 is not yet implemented."
         )
+
+    def _build_t1(self):
+        t1 = self.ints.H[self.hole, self.part] + np.einsum(
+            "xu,iuax,xu->ia",
+            self.delta_actv,
+            self.T2[:, self.ha, :, self.pa],
+            self.cumulants["gamma1"],
+            optimize=True,
+        )
+        for i in range(self.nhole):
+            for a in range(self.npart):
+                denom = self.eps[i] - self.eps[a + self.ncore]
+                t1[i, a] *= regularized_denominator(denom, self.flow_param)
+        t1[self.ha, self.pa] = 0.0
+        return t1
+
+    def _build_t2(self):
+        t2 = np.zeros((self.nhole, self.nhole, self.npart, self.npart), dtype=complex)
+        for i in range(self.nhole):
+            for j in range(self.nhole):
+                for a in range(self.npart):
+                    for b in range(self.npart):
+                        denom = (
+                            self.eps[i]
+                            + self.eps[j]
+                            - self.eps[a + self.ncore]
+                            - self.eps[b + self.ncore]
+                        )
+                        t2[i, j, a, b] = self.ints.V[
+                            i, j, a + self.ncore, b + self.ncore
+                        ] * regularized_denominator(denom, self.flow_param)
+
+        t2[self.ha, self.ha, self.pa, self.pa] = 0.0
+        return t2
+
+    def _renormalize_integrals(self):
+        self.v_tilde = self.ints.V[self.hole, self.hole, self.part, self.part].copy()
+        self.f_tilde = self.ints.H[self.hole, self.part].copy()
+        delta_ia = self.eps[self.hole][:, None] - self.eps[self.part][None, :]
+        delta_ijab = (
+            self.eps[self.hole][:, None, None, None]
+            + self.eps[self.hole][None, :, None, None]
+            - self.eps[self.part][None, None, :, None]
+            - self.eps[self.part][None, None, None, :]
+        )
+        exp_delta_2 = np.exp(-self.flow_param * delta_ijab**2)
+        self.v_tilde += self.v_tilde * exp_delta_2
+        exp_delta_1 = np.exp(-self.flow_param * delta_ia**2)
+        self.f_tilde += (
+            self.f_tilde * exp_delta_1
+            + np.einsum(
+                "xu,iuax,xu->ia",
+                self.delta_actv,
+                self.T2[:, self.ha, :, self.pa],
+                self.cumulants["gamma1"],
+                optimize=True,
+            )
+            * exp_delta_1
+        )
+
+    def _compute_pt2_energy(self, F, V, T1, T2, gamma1, eta1, lambda2, lambda3):
+        ha = self.ha
+        pa = self.pa
+        hc = self.hc
+        pv = self.pv
+        E = 0.0
+        E += +1.000 * np.einsum(
+            "iu,iv,vu->", F[hc, pa], T1[hc, pa], eta1, optimize=True
+        )
+        E += -0.500 * np.einsum(
+            "iu,ixvw,vwux->", F[hc, pa], T2[hc, ha, pa, pa], lambda2, optimize=True
+        )
+        E += +1.000 * np.einsum("ia,ia->", F[hc, pv], T1[hc, pv], optimize=True)
+        E += +1.000 * np.einsum(
+            "ua,va,uv->", F[ha, pv], T1[ha, pv], gamma1, optimize=True
+        )
+        E += -0.500 * np.einsum(
+            "ua,wxva,uvwx->", F[ha, pv], T2[ha, ha, pa, pv], lambda2, optimize=True
+        )
+        E += -0.500 * np.einsum(
+            "iu,ivwx,uvwx->", T1[hc, pa], V[hc, ha, pa, pa], lambda2, optimize=True
+        )
+        E += -0.500 * np.einsum(
+            "ua,vwxa,vwux->", T1[ha, pv], V[ha, ha, pa, pv], lambda2, optimize=True
+        )
+        E += +0.250 * np.einsum(
+            "ijuv,ijwx,vx,uw->",
+            T2[hc, hc, pa, pa],
+            V[hc, hc, pa, pa],
+            eta1,
+            eta1,
+            optimize=True,
+        )
+        E += +0.125 * np.einsum(
+            "ijuv,ijwx,uvwx->",
+            T2[hc, hc, pa, pa],
+            V[hc, hc, pa, pa],
+            lambda2,
+            optimize=True,
+        )
+        E += +0.500 * np.einsum(
+            "iwuv,ixyz,vz,uy,xw->",
+            T2[hc, ha, pa, pa],
+            V[hc, ha, pa, pa],
+            eta1,
+            eta1,
+            gamma1,
+            optimize=True,
+        )
+        E += +1.000 * np.einsum(
+            "iwuv,ixyz,vz,uxwy->",
+            T2[hc, ha, pa, pa],
+            V[hc, ha, pa, pa],
+            eta1,
+            lambda2,
+            optimize=True,
+        )
+        E += +0.250 * np.einsum(
+            "iwuv,ixyz,xw,uvyz->",
+            T2[hc, ha, pa, pa],
+            V[hc, ha, pa, pa],
+            gamma1,
+            lambda2,
+            optimize=True,
+        )
+        E += +0.250 * np.einsum(
+            "iwuv,ixyz,uvxwyz->",
+            T2[hc, ha, pa, pa],
+            V[hc, ha, pa, pa],
+            lambda3,
+            optimize=True,
+        )
+        E += +0.500 * np.einsum(
+            "ijua,ijva,uv->",
+            T2[hc, hc, pa, pv],
+            V[hc, hc, pa, pv],
+            eta1,
+            optimize=True,
+        )
+        E += +1.000 * np.einsum(
+            "ivua,iwxa,ux,wv->",
+            T2[hc, ha, pa, pv],
+            V[hc, ha, pa, pv],
+            eta1,
+            gamma1,
+            optimize=True,
+        )
+        E += +1.000 * np.einsum(
+            "ivua,iwxa,uwvx->",
+            T2[hc, ha, pa, pv],
+            V[hc, ha, pa, pv],
+            lambda2,
+            optimize=True,
+        )
+        E += +0.500 * np.einsum(
+            "vwua,xyza,uz,yw,xv->",
+            T2[ha, ha, pa, pv],
+            V[ha, ha, pa, pv],
+            eta1,
+            gamma1,
+            gamma1,
+            optimize=True,
+        )
+        E += +0.250 * np.einsum(
+            "vwua,xyza,uz,xyvw->",
+            T2[ha, ha, pa, pv],
+            V[ha, ha, pa, pv],
+            eta1,
+            lambda2,
+            optimize=True,
+        )
+        E += +1.000 * np.einsum(
+            "vwua,xyza,yw,uxvz->",
+            T2[ha, ha, pa, pv],
+            V[ha, ha, pa, pv],
+            gamma1,
+            lambda2,
+            optimize=True,
+        )
+        E += -0.250 * np.einsum(
+            "vwua,xyza,uxyvwz->",
+            T2[ha, ha, pa, pv],
+            V[ha, ha, pa, pv],
+            lambda3,
+            optimize=True,
+        )
+        E += +0.250 * np.einsum(
+            "ijab,ijab->", T2[hc, hc, pv, pv], V[hc, hc, pv, pv], optimize=True
+        )
+        E += +0.500 * np.einsum(
+            "iuab,ivab,vu->",
+            T2[hc, ha, pv, pv],
+            V[hc, ha, pv, pv],
+            gamma1,
+            optimize=True,
+        )
+        E += +0.250 * np.einsum(
+            "uvab,wxab,xv,wu->",
+            T2[ha, ha, pv, pv],
+            V[ha, ha, pv, pv],
+            gamma1,
+            gamma1,
+            optimize=True,
+        )
+        E += +0.125 * np.einsum(
+            "uvab,wxab,wxuv->",
+            T2[ha, ha, pv, pv],
+            V[ha, ha, pv, pv],
+            lambda2,
+            optimize=True,
+        )
+        return E

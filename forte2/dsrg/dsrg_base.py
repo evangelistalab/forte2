@@ -6,13 +6,14 @@ import numpy as np
 from forte2.base_classes import SystemMixin, MOsMixin, MOSpaceMixin, ActiveSpaceSolver
 from forte2.ci import CISolver
 from forte2.helpers import logger
+from forte2.jkbuilder import FockBuilder
 
 
 @dataclass
 class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
     """Base class for DSRG methods."""
 
-    ci_solver: CISolver
+    # ci_solver: CISolver
     flow_param: float = 0.5
 
     # Reference relaxation options
@@ -47,14 +48,13 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
                 self.nrelax = 2
             else:
                 self.nrelax = self.relax_maxiter
-            # [Edsrg(fixed_reference), Edsrg(relaxed_reference), Eref]
-            self.relax_energies = np.zeros((self.nrelax, 3))
         else:
             logger.log_warning(
                 "Reference relaxation options not recognized, no relaxation will be performed."
             )
             self.nrelax = 0
-            self.relax_energies = np.zeros((1, 3))
+        # [Edsrg(fixed_reference), Edsrg(relaxed_reference), Eref]
+        self.relax_energies = np.zeros((self.nrelax + 1, 3))
 
     def _startup(self):
         assert isinstance(self.parent_method, ActiveSpaceSolver)
@@ -66,15 +66,32 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
 
         MOSpaceMixin.copy_from_upstream(self, self.parent_method)
         perm = self.mo_space.orig_to_contig
+        self.ncorr = self.mo_space.corr.stop - self.mo_space.corr.start
+        self.ncore = self.mo_space.core.stop - self.mo_space.core.start
+        self.nact = self.mo_space.actv.stop - self.mo_space.actv.start
+        self.nvirt = self.mo_space.virt.stop - self.mo_space.virt.start
+        self.nhole = self.ncore + self.nact
+        self.npart = self.nact + self.nvirt
+        self.actv = self.mo_space.actv
+        self.core = self.mo_space.core
+        self.virt = self.mo_space.virt
+        self.hole = slice(0, self.nhole)
+        self.part = slice(self.ncore, self.ncorr)
+        self.ha = self.actv
+        self.pa = slice(0, self.nact)
+        self.hc = self.core
+        self.pv = slice(self.nact, self.nact + self.nvirt)
 
         MOsMixin.copy_from_upstream(self, self.parent_method)
         self._C = self.C[0][:, perm].copy()
 
-        self.ints, self.cumulants = self.get_integrals()
-
-        # only initialize the CI solver if reference relaxation is requested
+        # only initialize the a new CI solver if reference relaxation is requested
         # initialized in do_reference_relaxation()
         self.ci_solver = None
+
+        self.fock_builder = FockBuilder(system=self.system, use_aux_corr=True)
+
+        self.ints, self.cumulants = self.get_integrals()
 
     def run(self):
         self._startup()

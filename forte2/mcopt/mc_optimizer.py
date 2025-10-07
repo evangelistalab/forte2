@@ -370,7 +370,8 @@ class MCOptimizer(ActiveSpaceSolver):
                 mo_space=self.mo_space,
                 system=self.system,
                 fock_builder=fock_builder,
-                mix_inactive=not self.optimize_frozen_orbs,
+                # semicanonicalize together if frozen orbitals are optimized
+                mix_inactive=self.optimize_frozen_orbs,
                 mix_active=False,
             )
             C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()

@@ -15,10 +15,6 @@ class Semicanonicalizer:
     ----------
     mo_space : MOSpace
         The molecular orbital space defining the subspaces.
-    g1 : np.ndarray
-        The active space 1-electron density matrix in the molecular orbital basis.
-    C : np.ndarray
-        The molecular orbital coefficients, in the "original" order of the orbitals.
     system : System
         The system object containing the basis set and other properties.
     fock_builder : FockBuilder, optional
@@ -29,6 +25,21 @@ class Semicanonicalizer:
         virtual and frozen_virt also will be diagonalized together.
     mix_active : bool, optional, default=False
         If True, all GAS active orbitals will be diagonalized together.
+
+    Attributes
+    ----------
+    fock : np.ndarray
+        The generalized Fock matrix in the original basis.
+    fock_semican : np.ndarray
+        The generalized Fock matrix in the semi-canonical basis.
+    eps_semican : np.ndarray
+        The diagonal entries of the Fock matrix in the semi-canonical basis.
+    C_semican : np.ndarray
+        The molecular orbital coefficients in the semi-canonical basis.
+    U : np.ndarray
+        The unitary transformation matrix from the original to the semi-canonical basis.
+    Uactv : np.ndarray
+        The unitary transformation matrix within the active space.
 
     Notes
     -----
@@ -68,6 +79,17 @@ class Semicanonicalizer:
             self.fock_builder = FockBuilder(self.system, use_aux_corr=True)
 
     def semi_canonicalize(self, g1, C_contig):
+        """
+        Perform the semi-canonicalization.
+
+        Parameters
+        ----------
+        g1 : np.ndarray
+            The active space 1-electron density matrix in the molecular orbital basis.
+        C_contig : np.ndarray
+            The molecular orbital coefficients, in the "contiguous" order of the orbitals.
+            Note that all other quantities are also defined in this order.
+        """
         self.fock = self._build_fock(g1, C_contig)
         eps = np.zeros(self.mo_space.nmo)
         # U_init = I so that skipped blocks are not modified
