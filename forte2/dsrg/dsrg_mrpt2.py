@@ -128,7 +128,8 @@ class DSRG_MRPT2(DSRGBase):
         )
 
     def _build_t1(self):
-        t1 = self.ints.H[self.hole, self.part] + np.einsum(
+        t1 = self.ints.H[self.hole, self.part].conj().copy()
+        t1 += np.einsum(
             "xu,iuax,xu->ia",
             self.delta_actv,
             self.T2[:, self.ha, :, self.pa],
@@ -143,7 +144,7 @@ class DSRG_MRPT2(DSRGBase):
         return t1
 
     def _build_t2(self):
-        t2 = np.zeros((self.nhole, self.nhole, self.npart, self.npart), dtype=complex)
+        t2 = self.ints.V[self.hole, self.hole, self.part, self.part].conj().copy()
         for i in range(self.nhole):
             for j in range(self.nhole):
                 for a in range(self.npart):
@@ -154,16 +155,16 @@ class DSRG_MRPT2(DSRGBase):
                             - self.eps[a + self.ncore]
                             - self.eps[b + self.ncore]
                         )
-                        t2[i, j, a, b] = self.ints.V[
-                            i, j, a + self.ncore, b + self.ncore
-                        ] * regularized_denominator(denom, self.flow_param)
+                        t2[i, j, a, b] *= regularized_denominator(
+                            denom, self.flow_param
+                        )
 
         t2[self.ha, self.ha, self.pa, self.pa] = 0.0
         return t2
 
     def _renormalize_integrals(self):
         self.v_tilde = self.ints.V[self.hole, self.hole, self.part, self.part].copy()
-        self.f_tilde = self.ints.H[self.hole, self.part].copy()
+        self.f_tilde = self.ints.H[self.hole, self.part].conj().copy()
         delta_ia = self.eps[self.hole][:, None] - self.eps[self.part][None, :]
         delta_ijab = (
             self.eps[self.hole][:, None, None, None]
@@ -185,6 +186,7 @@ class DSRG_MRPT2(DSRGBase):
             )
             * exp_delta_1
         )
+        self.f_tilde = self.f_tilde.conj()
 
     def _compute_pt2_energy(self, F, V, T1, T2, gamma1, eta1, lambda2, lambda3):
         ha = self.ha
@@ -192,7 +194,6 @@ class DSRG_MRPT2(DSRGBase):
         hc = self.hc
         pv = self.pv
         E = 0.0
-        # <[F, T1]>
         E += +1.000 * np.einsum(
             "iu,iv,vu->", F[hc, pa], T1[hc, pa], eta1, optimize=True
         )
@@ -200,7 +201,6 @@ class DSRG_MRPT2(DSRGBase):
         E += +1.000 * np.einsum(
             "ua,va,uv->", F[ha, pv], T1[ha, pv], gamma1, optimize=True
         )
-        print(f"E after F T1: {E:.12f}")
 
         E += -0.500 * np.einsum(
             "iu,ixvw,vwux->", F[hc, pa], T2[hc, ha, pa, pa], lambda2, optimize=True

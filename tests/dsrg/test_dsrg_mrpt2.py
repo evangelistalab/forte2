@@ -1,4 +1,6 @@
-from forte2 import System, GHF, RelMCOptimizer, State
+import numpy as np
+
+from forte2 import System, GHF, RelMCOptimizer
 from forte2.dsrg import DSRG_MRPT2
 from forte2.helpers.comparisons import approx
 
@@ -17,6 +19,11 @@ def test_mrpt2_hf():
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     rhf = GHF(charge=0, econv=1e-12)(system)
+    rhf.run()
+    random_phase = np.diag(
+        np.exp(1j * np.random.uniform(-np.pi, np.pi, size=rhf.nmo * 2))
+    )
+    rhf.C[0] = rhf.C[0] @ random_phase
     mc = RelMCOptimizer(
         nel=10,
         active_orbitals=12,
