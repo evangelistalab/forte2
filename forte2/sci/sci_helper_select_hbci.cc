@@ -503,6 +503,20 @@ void fill_hbci_maps(const Determinant& det, double eps, double value, size_t k,
     }
 }
 
+void insert_into_hbci_map(const Determinant& new_det, double value, double criterion, size_t k,
+                          const std::vector<double>& c_block, std::vector<DetMap>& V_map,
+                          std::vector<DetMap>& PT_map, size_t nroots_, double var_threshold) {
+    if (criterion > var_threshold) {
+        for (size_t r{0}; r < nroots_; ++r) {
+            V_map[r][new_det] += value * c_block[k * nroots_ + r];
+        }
+    } else {
+        for (size_t r{0}; r < nroots_; ++r) {
+            PT_map[r][new_det] += value * c_block[k * nroots_ + r];
+        }
+    }
+}
+
 void SelectedCIHelper::select_hbci3(double var_threshold, double pt2_threshold) {
 
     compute_det_energies();
@@ -541,7 +555,7 @@ void SelectedCIHelper::select_hbci3(double var_threshold, double pt2_threshold) 
 
     // Loop over all unique alpha strings
     for (size_t i{0}; i < a_string_size; ++i) {
-        const String a_str = ab_list_.sorted_first_string(i);
+        const String& a_str = ab_list_.sorted_first_string(i);
         const auto& second_string_to_det_index = ab_list_.second_string_to_det_index()[i];
 
         // grab the CI coefficients for all determinants with the current alpha string for all
@@ -674,53 +688,22 @@ void SelectedCIHelper::select_hbci3(double var_threshold, double pt2_threshold) 
                 }
             }
         }
-    }
 
-    const auto b_string_size = ba_list_.first_string_size();
+        // beta excitations
+        for (size_t k{0}; const auto& [b_str_idx, det_index] : second_string_to_det_index) {
+            const String& b_str = ab_list_.sorted_second_string(b_str_idx);
+            b_str.find_set_bits(bocc, nob);
+            compute_fast_virtual(bocc, bvir, norb_);
 
-    // precompute the maximum block size for the temporary storage
-    max_block_size = 0;
-    for (size_t i{0}; i < b_string_size; ++i) {
-        max_block_size = std::max(max_block_size, ba_list_.second_string_to_det_index()[i].size());
-    }
-    // allocate the temporary storage outside the loop
-    abs_c_max.resize(max_block_size);
-    c_block.resize(max_block_size * nroots_);
+            // single beta excitations
+            for (const auto& i : bocc) {
+                for (const auto& a : bvir) {
+                    const double integral = h_[i * norb_ + a];
+                    auto [new_b_str, sign] = create_single_excitation(b_str, i, a);
 
-    // Loop over all unique alpha strings
-    for (size_t i{0}; i < b_string_size; ++i) {
-        const String b_str = ba_list_.sorted_first_string(i);
-        const auto& second_string_to_det_index = ba_list_.second_string_to_det_index()[i];
-
-        // grab the CI coefficients for all determinants with the current alpha string for all
-        // roots
-        double abs_c_max_block = 0.0; // track the maximum absolute CI coefficient
-        for (size_t k{0}; const auto& [_, idx] : second_string_to_det_index) {
-            double abs_c_max_det = 0.0;
-            for (size_t r{0}; r < nroots_; ++r) {
-                const double c_r = c_[idx * nroots_ + r];
-                c_block[k * nroots_ + r] = c_r;
-                abs_c_max_block = std::max(abs_c_max_block, std::abs(c_r));
-                abs_c_max_det = std::max(abs_c_max_det, std::abs(c_r));
-            }
-            abs_c_max[k] = abs_c_max_det;
-            ++k;
-        }
-
-        // find the occupied and empty orbitals for the current beta string
-        b_str.find_set_bits(bocc, nob);
-        compute_fast_virtual(bocc, bvir, norb_);
-
-        // single beta excitations
-        for (const auto& i : bocc) {
-            for (const auto& a : bvir) {
-                const double integral = h_[i * norb_ + a];
-                auto [new_b_str, sign] = create_single_excitation(b_str, i, a);
-
-                for (size_t k{0}; const auto& [a_str_idx, det_index] : second_string_to_det_index) {
                     const double criterion = std::fabs(integral * abs_c_max[k]);
                     if (criterion > pt2_threshold) {
-                        new_det.set_a_string(ba_list_.sorted_second_string(a_str_idx));
+                        new_det.set_a_string(a_str);
                         new_det.set_b_string(new_b_str);
 
                         if (criterion > var_threshold) {
@@ -733,52 +716,152 @@ void SelectedCIHelper::select_hbci3(double var_threshold, double pt2_threshold) 
                             }
                         }
                     }
-                    k++;
                 }
             }
-        }
 
-        // double beta-beta excitations
-        for (const auto& i : bocc) {
-            for (const auto& j : bocc) {
-                if (i >= j)
-                    continue;
-                const auto& v_list = va_sorted_[i * norb_ + j];
-                for (const auto& [coupling, integral, a, b] : v_list) {
-
-                    if ((a >= b) or b_str.get_bit(a) or b_str.get_bit(b))
+            // double beta-beta excitations
+            for (const auto& i : bocc) {
+                for (const auto& j : bocc) {
+                    if (i >= j)
                         continue;
-
-                    // break early if the integrals are too small for all determinants
-                    if (std::fabs(coupling * abs_c_max_block) < pt2_threshold)
-                        break;
-
-                    auto [new_b_str, sign] = create_double_excitation(b_str, i, j, a, b);
-
-                    for (size_t k{0};
-                         const auto& [a_str_idx, det_index] : second_string_to_det_index) {
+                    const auto& v_list = va_sorted_[i * norb_ + j];
+                    for (const auto& [coupling, integral, a, b] : v_list) {
                         const double criterion = std::fabs(coupling * abs_c_max[k]);
-                        if (criterion > pt2_threshold) {
-                            new_det.set_a_string(ba_list_.sorted_second_string(a_str_idx));
-                            new_det.set_b_string(new_b_str);
+                        if (criterion < pt2_threshold)
+                            break;
 
-                            if (criterion > var_threshold) {
-                                for (size_t r{0}; r < nroots_; ++r) {
-                                    V_map[r][new_det] += sign * integral * c_block[k * nroots_ + r];
-                                }
-                            } else {
-                                for (size_t r{0}; r < nroots_; ++r) {
-                                    PT_map[r][new_det] +=
-                                        sign * integral * c_block[k * nroots_ + r];
-                                }
+                        if ((a >= b) or b_str.get_bit(a) or b_str.get_bit(b))
+                            continue;
+
+                        auto [new_b_str, sign] = create_double_excitation(b_str, i, j, a, b);
+                        new_det.set_a_string(a_str);
+                        new_det.set_b_string(new_b_str);
+
+                        if (criterion > var_threshold) {
+                            for (size_t r{0}; r < nroots_; ++r) {
+                                V_map[r][new_det] += sign * integral * c_block[k * nroots_ + r];
+                            }
+                        } else {
+                            for (size_t r{0}; r < nroots_; ++r) {
+                                PT_map[r][new_det] += sign * integral * c_block[k * nroots_ + r];
                             }
                         }
-                        k++;
                     }
                 }
             }
+            k++;
         }
     }
+
+    // const auto b_string_size = ba_list_.first_string_size();
+
+    // // precompute the maximum block size for the temporary storage
+    // max_block_size = 0;
+    // for (size_t i{0}; i < b_string_size; ++i) {
+    //     max_block_size = std::max(max_block_size,
+    //     ba_list_.second_string_to_det_index()[i].size());
+    // }
+    // // allocate the temporary storage outside the loop
+    // abs_c_max.resize(max_block_size);
+    // c_block.resize(max_block_size * nroots_);
+
+    // // Loop over all unique alpha strings
+    // for (size_t i{0}; i < b_string_size; ++i) {
+    //     const String b_str = ba_list_.sorted_first_string(i);
+    //     const auto& second_string_to_det_index = ba_list_.second_string_to_det_index()[i];
+
+    //     // grab the CI coefficients for all determinants with the current alpha string for
+    //     all
+    //     // roots
+    //     double abs_c_max_block = 0.0; // track the maximum absolute CI coefficient
+    //     for (size_t k{0}; const auto& [_, idx] : second_string_to_det_index) {
+    //         double abs_c_max_det = 0.0;
+    //         for (size_t r{0}; r < nroots_; ++r) {
+    //             const double c_r = c_[idx * nroots_ + r];
+    //             c_block[k * nroots_ + r] = c_r;
+    //             abs_c_max_block = std::max(abs_c_max_block, std::abs(c_r));
+    //             abs_c_max_det = std::max(abs_c_max_det, std::abs(c_r));
+    //         }
+    //         abs_c_max[k] = abs_c_max_det;
+    //         ++k;
+    //     }
+
+    //     // find the occupied and empty orbitals for the current beta string
+    //     b_str.find_set_bits(bocc, nob);
+    //     compute_fast_virtual(bocc, bvir, norb_);
+
+    //     // single beta excitations
+    //     for (const auto& i : bocc) {
+    //         for (const auto& a : bvir) {
+    //             const double integral = h_[i * norb_ + a];
+    //             auto [new_b_str, sign] = create_single_excitation(b_str, i, a);
+
+    //             for (size_t k{0}; const auto& [a_str_idx, det_index] :
+    //             second_string_to_det_index) {
+    //                 const double criterion = std::fabs(integral * abs_c_max[k]);
+    //                 if (criterion > pt2_threshold) {
+    //                     new_det.set_a_string(ba_list_.sorted_second_string(a_str_idx));
+    //                     new_det.set_b_string(new_b_str);
+
+    //                     if (criterion > var_threshold) {
+    //                         for (size_t r{0}; r < nroots_; ++r) {
+    //                             V_map[r][new_det] += sign * integral * c_block[k * nroots_ +
+    //                             r];
+    //                         }
+    //                     } else {
+    //                         for (size_t r{0}; r < nroots_; ++r) {
+    //                             PT_map[r][new_det] += sign * integral * c_block[k * nroots_ +
+    //                             r];
+    //                         }
+    //                     }
+    //                 }
+    //                 k++;
+    //             }
+    //         }
+    //     }
+
+    //     // double beta-beta excitations
+    //     for (const auto& i : bocc) {
+    //         for (const auto& j : bocc) {
+    //             if (i >= j)
+    //                 continue;
+    //             const auto& v_list = va_sorted_[i * norb_ + j];
+    //             for (const auto& [coupling, integral, a, b] : v_list) {
+
+    //                 if ((a >= b) or b_str.get_bit(a) or b_str.get_bit(b))
+    //                     continue;
+
+    //                 // break early if the integrals are too small for all determinants
+    //                 if (std::fabs(coupling * abs_c_max_block) < pt2_threshold)
+    //                     break;
+
+    //                 auto [new_b_str, sign] = create_double_excitation(b_str, i, j, a, b);
+
+    //                 for (size_t k{0};
+    //                      const auto& [a_str_idx, det_index] : second_string_to_det_index) {
+    //                     const double criterion = std::fabs(coupling * abs_c_max[k]);
+    //                     if (criterion > pt2_threshold) {
+    //                         new_det.set_a_string(ba_list_.sorted_second_string(a_str_idx));
+    //                         new_det.set_b_string(new_b_str);
+
+    //                         if (criterion > var_threshold) {
+    //                             for (size_t r{0}; r < nroots_; ++r) {
+    //                                 V_map[r][new_det] += sign * integral * c_block[k *
+    //                                 nroots_ + r];
+    //                             }
+    //                         } else {
+    //                             for (size_t r{0}; r < nroots_; ++r) {
+    //                                 PT_map[r][new_det] +=
+    //                                     sign * integral * c_block[k * nroots_ + r];
+    //                             }
+    //                         }
+    //                     }
+    //                     k++;
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
 
     // Remove the coupling to determinants that are already in the variational space
     for (size_t r{0}; r < nroots_; ++r) {

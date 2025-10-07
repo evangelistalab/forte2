@@ -60,18 +60,19 @@ def test_sci2():
     sci = SelectedCI(
         states=State(nel=6, multiplicity=1, ms=0.0),
         active_orbitals=list(range(12)),
-        selection_algorithm="hbci_ref",
+        # selection_algorithm="hbci_ref",
         # selection_algorithm="hbci2",
-        econv=1e-6,
-        rconv=1e-0,
-        var_threshold=1e-5,
+        selection_algorithm="hbci3",
+        var_threshold=1e-4,
         pt2_threshold=0.0,
         nroots=1,
     )(rhf)
 
     sci.run()
 
-    assert sci.E[0] == pytest.approx(-3.3213221642, abs=1e-3)
+    assert sci.E[0] == pytest.approx(-3.3213015004, abs=1e-8)
+
+    # assert sci.E[0] == pytest.approx(-3.3213221642, abs=1e-3)
     # assert sci.E[3] == pytest.approx(-3.0403078112, abs=1e-3)
 
 
