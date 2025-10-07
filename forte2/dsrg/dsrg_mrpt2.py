@@ -57,6 +57,7 @@ class DSRG_MRPT2(DSRGBase):
         self.fock = self.semicanonicalizer.fock_semican.copy()
         self.eps = self.semicanonicalizer.eps_semican.copy()
         self.delta_actv = self.eps[self.actv][:, None] - self.eps[self.actv][None, :]
+        self.Uactv = self.semicanonicalizer.Uactv
 
         if self.two_component:
             ints = SpinorbitalIntegrals(
@@ -70,13 +71,36 @@ class DSRG_MRPT2(DSRGBase):
             )
             ints.H = self.fock - np.diag(np.diag(self.fock))  # remove diagonal
             cumulants = dict()
-            cumulants["gamma1"] = self.parent_method.make_average_1rdm()
+            g1 = self.parent_method.make_average_1rdm()
+            cumulants["gamma1"] = np.einsum(
+                "ip,ij,jq->pq", self.Uactv, g1, self.Uactv.conj(), optimize=True
+            )
             cumulants["eta1"] = (
                 np.eye(cumulants["gamma1"].shape[0], dtype=complex)
                 - cumulants["gamma1"]
             )
-            cumulants["lambda2"] = self.parent_method.make_average_2cumulant()
-            cumulants["lambda3"] = self.parent_method.make_average_3cumulant()
+            l2 = self.parent_method.make_average_2cumulant()
+            cumulants["lambda2"] = np.einsum(
+                "ip,jq,ijkl,kr,ls->pqrs",
+                self.Uactv,
+                self.Uactv,
+                l2,
+                self.Uactv.conj(),
+                self.Uactv.conj(),
+                optimize=True,
+            )
+            l3 = self.parent_method.make_average_3cumulant()
+            cumulants["lambda3"] = np.einsum(
+                "ip,jq,kr,ijklmn,ls,mt,nu->pqrstu",
+                self.Uactv,
+                self.Uactv,
+                self.Uactv,
+                l3,
+                self.Uactv.conj(),
+                self.Uactv.conj(),
+                self.Uactv.conj(),
+                optimize=True,
+            )
             return ints, cumulants
         else:
             raise NotImplementedError("Only two-component integrals are implemented.")
@@ -168,16 +192,20 @@ class DSRG_MRPT2(DSRGBase):
         hc = self.hc
         pv = self.pv
         E = 0.0
+        # <[F, T1]>
         E += +1.000 * np.einsum(
             "iu,iv,vu->", F[hc, pa], T1[hc, pa], eta1, optimize=True
-        )
-        E += -0.500 * np.einsum(
-            "iu,ixvw,vwux->", F[hc, pa], T2[hc, ha, pa, pa], lambda2, optimize=True
         )
         E += +1.000 * np.einsum("ia,ia->", F[hc, pv], T1[hc, pv], optimize=True)
         E += +1.000 * np.einsum(
             "ua,va,uv->", F[ha, pv], T1[ha, pv], gamma1, optimize=True
         )
+        print(f"E after F T1: {E:.12f}")
+
+        E += -0.500 * np.einsum(
+            "iu,ixvw,vwux->", F[hc, pa], T2[hc, ha, pa, pa], lambda2, optimize=True
+        )
+
         E += -0.500 * np.einsum(
             "ua,wxva,uvwx->", F[ha, pv], T2[ha, ha, pa, pv], lambda2, optimize=True
         )

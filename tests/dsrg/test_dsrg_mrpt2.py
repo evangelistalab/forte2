@@ -2,9 +2,11 @@ from forte2 import System, GHF, RelMCOptimizer, State
 from forte2.dsrg import DSRG_MRPT2
 from forte2.helpers.comparisons import approx
 
+
 def test_mrpt2_hf():
     erhf = -99.9977252002946
     emcscf = -100.0435018956
+    ept2 = -0.161588042412140
 
     xyz = """
     H 0.0 0.0 0.0
@@ -27,5 +29,4 @@ def test_mrpt2_hf():
 
     dsrg = DSRG_MRPT2()(mc)
     dsrg.run()
-    print(dsrg.E)
-test_mrpt2_hf()
+    assert dsrg.E == approx(ept2)
