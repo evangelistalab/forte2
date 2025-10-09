@@ -10,6 +10,8 @@ SlaterRules::SlaterRules(int norb, double scalar_energy, np_matrix one_electron_
     h_.resize(norb_ * norb_);
     J_.resize(norb_ * norb_);
     JK_.resize(norb_ * norb_);
+    f_J_.resize(norb_ * norb_ * norb_);
+    f_JK_.resize(norb_ * norb_ * norb_);
     v_.resize(norb_ * norb_ * norb_ * norb_);
     va_.resize(norb_ * norb_ * norb_ * norb_);
     auto h_view = one_electron_integrals.view();
@@ -21,6 +23,9 @@ SlaterRules::SlaterRules(int norb, double scalar_energy, np_matrix one_electron_
             J_[p * norb_ + q] = v_view(p, q, p, q);                       // <pq|pq>
             JK_[p * norb_ + q] = v_view(p, q, p, q) - v_view(p, q, q, p); // <pq|pq> - <pq|qp>
             for (int r = 0; r < norb_; ++r) {
+                f_J_[p * norb2_ + q * norb_ + r] = v_view(p, r, q, r); // <pr|qr>
+                f_JK_[p * norb2_ + q * norb_ + r] =
+                    v_view(p, r, q, r) - v_view(p, r, r, q); // <pr|qr> - <pr|rq>
                 for (int s = 0; s < norb_; ++s) {
                     v_[p * norb3_ + q * norb2_ + r * norb_ + s] = v_view(p, q, r, s); // <pq|rs>
                     va_[p * norb3_ + q * norb2_ + r * norb_ + s] =
@@ -231,6 +236,18 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
     }
 
     return (matrix_element);
+}
+
+double SlaterRules::singles_coupling(size_t i, size_t a, const std::vector<size_t>& same_spin_occ,
+                                     const std::vector<size_t>& opposite_spin_occ) const {
+    double coupling = h(i, a);
+    for (const auto& j : same_spin_occ) {
+        coupling += f_JK(i, a, j); // <ij||aj>
+    }
+    for (const auto& j : opposite_spin_occ) {
+        coupling += f_J(i, a, j); // <ij|aj>
+    }
+    return coupling;
 }
 
 RelSlaterRules::RelSlaterRules(int nspinor, double scalar_energy,

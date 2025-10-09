@@ -83,6 +83,11 @@ class SelectedCIHelper {
                             const SelectedCIStrings& list, size_t i, size_t j,
                             double int_sign) const;
 
+    std::pair<std::vector<DetMap>, std::vector<DetMap>> select_hbci_batch(double var_threshold,
+                                                                          double pt2_threshold,
+                                                                          size_t num_batches,
+                                                                          size_t batch_id);
+
     double find_matching_dets_1rdm(size_t left_root, size_t right_root,
                                    const SelectedCIStrings& list, size_t i, size_t j,
                                    double sign) const;

@@ -112,6 +112,8 @@ class _SelectedCIBase:
     var_threshold: float = 1e-5
     pt2_threshold: float = 1e-8
     selection_algorithm: str = "hbci_ref"
+    guess_occ_window: int = 2
+    guess_vir_window: int = 2
 
     ### Sigma builder parameters
     ci_algorithm: str = "hz"
@@ -162,7 +164,7 @@ class _SelectedCIBase:
 
         # Create an initial guess
         self.guess_determinants, self.guess_c, self.guess_energies = (
-            self._initial_guess()
+            self._initial_guess(self.guess_occ_window, self.guess_vir_window)
         )
         self.evecs = self.guess_c.copy()
 
@@ -269,7 +271,7 @@ class _SelectedCIBase:
 
         return self
 
-    def _initial_guess(self, window_occ=6, window_vir=6):
+    def _initial_guess(self, window_occ=0, window_vir=0):
         # create the initial guess determinant
         d0 = Determinant.zero()
         if self.two_component:
@@ -330,7 +332,7 @@ class _SelectedCIBase:
             print(f"  {d.str(self.norb)}: {e:20.12f} [Eh]")
 
         # Form the Hamiltonian matrix in this basis
-        guess_dets = [d for d, e in sorted_dets[:n_guess_dets]]
+        guess_dets = [d for d, e in sorted_dets[: min(n_guess_dets, len(sorted_dets))]]
         ndet = len(guess_dets)
         Hguess = np.zeros((ndet, ndet), dtype=self.dtype)
         for i in range(ndet):
@@ -1278,6 +1280,8 @@ class SelectedCISolver(ActiveSpaceSolver):
     selection_algorithm: str = "hbci_ref"
     var_threshold: float = 1e-5
     pt2_threshold: float = 1e-8
+    guess_occ_window: int = 2
+    guess_vir_window: int = 2
 
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
@@ -1336,6 +1340,8 @@ class SelectedCISolver(ActiveSpaceSolver):
                     log_level=self.log_level,
                     var_threshold=self.var_threshold,
                     pt2_threshold=self.pt2_threshold,
+                    guess_occ_window=self.guess_occ_window,
+                    guess_vir_window=self.guess_vir_window,
                     selection_algorithm=self.selection_algorithm,
                 )
             )

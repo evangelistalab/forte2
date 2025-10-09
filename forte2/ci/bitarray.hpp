@@ -833,4 +833,13 @@ void swap(typename forte2::BitArray<N>::Proxy& a, typename forte2::BitArray<N>::
     a = temp_b;
     b = temp_a;
 }
+
+// specialization of std::hash for forte2::OccupationVector
+template <size_t N> struct hash<forte2::BitArray<N>> {
+    std::size_t operator()(const forte2::BitArray<N>& d) const noexcept {
+        using HashT = typename forte2::BitArray<N>::Hash;
+        return HashT{}(d);
+    }
+};
+
 } // namespace std
