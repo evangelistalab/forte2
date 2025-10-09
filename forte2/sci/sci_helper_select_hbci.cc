@@ -1,3 +1,7 @@
+#include <atomic>
+#include <thread>
+#include <future>
+#include <mutex>
 
 #include "helpers/logger.h"
 #include "helpers/timer.hpp"
@@ -532,76 +536,171 @@ void SelectedCIHelper::select_hbci3(double var_threshold, double pt2_threshold) 
 
     local_timer selection_timer;
 
-    size_t num_batches = 1; // number of batches to split the work into
+    const size_t num_batches_per_thread = 4; // number of batches each thread will process
+    const size_t num_threads = 8;            // number of threads to use
+    const size_t num_batches = num_batches_per_thread * num_threads; // total number of batches
 
     for (size_t r{0}; r < nroots_; ++r) {
         ept2_var_[r] = 0.0;
         ept2_pt_[r] = 0.0;
     }
 
-    std::vector<Determinant> new_dets;
+    std::atomic<size_t> next_batch(0);
+    std::mutex merge_mutex;
+    std::mutex log_mutex;
 
-    for (size_t batch_id{0}; batch_id < num_batches; ++batch_id) {
-        auto t1 = std::chrono::high_resolution_clock::now();
+    // std::vector<Determinant> new_dets;
+    std::vector<std::future<void>> workers;
+    std::vector<std::vector<Determinant>> thread_new_dets(num_threads);
+    std::vector<std::vector<double>> local_ept2_var(num_threads, std::vector<double>(nroots_, 0.0));
+    std::vector<std::vector<double>> local_ept2_pt(num_threads, std::vector<double>(nroots_, 0.0));
+    std::vector<std::vector<std::tuple<size_t, size_t, double>>> thread_log_data(num_threads);
 
-        auto [V_map, PT_map] =
-            select_hbci_batch(var_threshold, pt2_threshold, num_batches, batch_id);
+    auto worker = [&](size_t thread_id) {
+        while (true) {
+            // Get the next batch ID for this thread
+            size_t batch_id = next_batch.fetch_add(1);
+            if (batch_id >= num_batches)
+                break;
 
-        // Remove the coupling to determinants that are already in the variational space
-        for (size_t r{0}; r < nroots_; ++r) {
-            for (const auto& det : dets_) {
-                V_map[r].erase(det);
-                PT_map[r].erase(det);
+            local_timer batch_timer;
+
+            auto [V_map, PT_map] =
+                select_hbci_batch(var_threshold, pt2_threshold, num_batches, batch_id);
+
+            // Filter out existing determinants
+            for (size_t r = 0; r < nroots_; ++r) {
+                for (const auto& det : dets_) {
+                    V_map[r].erase(det);
+                    PT_map[r].erase(det);
+                }
+                for (const auto& [det, _] : V_map[0])
+                    PT_map[r].erase(det);
             }
-        }
 
-        size_t num_var_dets = V_map[0].size();
-        size_t num_pt_dets = PT_map[0].size();
+            std::vector<Determinant> new_dets_local;
+            new_dets_local.reserve(V_map[0].size());
+            for (const auto& [det, _] : V_map[0])
+                new_dets_local.push_back(det);
 
-        // Remove the coupling for the PT2 determinants that are already in the variational
-        // space
-        for (size_t r{0}; r < nroots_; ++r) {
-            for (const auto& [det, _] : V_map[0]) {
-                PT_map[r].erase(det);
+            // Compute contributions
+            for (size_t r = 0; r < nroots_; ++r) {
+                double var = 0.0, pt = 0.0;
+                for (const auto& [det, val] : V_map[r])
+                    var += compute_delta_ept2(root_energies_[r] - slater_rules_.energy(det), val);
+                for (const auto& [det, val] : PT_map[r])
+                    pt += compute_delta_ept2(root_energies_[r] - slater_rules_.energy(det), val);
+                local_ept2_var[thread_id][r] += var;
+                local_ept2_pt[thread_id][r] += pt;
             }
-        }
 
-        // add variational determinants first
-        for (const auto& [det, _] : V_map[0]) {
-            new_dets.push_back(det);
-        }
+            // Append to thread-local container (no locks)
+            thread_new_dets[thread_id].insert(thread_new_dets[thread_id].end(),
+                                              new_dets_local.begin(), new_dets_local.end());
 
-        for (size_t r{0}; r < nroots_; ++r) {
-            double var = 0.0;
-            double pt = 0.0;
-            for (const auto& [det, val] : V_map[r]) {
-                const double delta = root_energies_[r] - slater_rules_.energy(det);
-                var += compute_delta_ept2(delta, val);
-            }
-            for (const auto& [det, val] : PT_map[r]) {
-                const double delta = root_energies_[r] - slater_rules_.energy(det);
-                pt += compute_delta_ept2(delta, val);
-            }
-            ept2_var_[r] += var;
-            ept2_pt_[r] += pt;
+            thread_log_data[thread_id].push_back(
+                {batch_id, PT_map[0].size(), batch_timer.elapsed_seconds()});
         }
-        auto t2 = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> diff = t2 - t1;
-        LOG(log_level_) << "\nBatch " << batch_id + 1 << "/" << num_batches << " took "
-                        << diff.count() << " seconds";
-        // print all the variational determinants
-        LOG(log_level_) << "  Number of variational determinants added: " << V_map[0].size();
-        LOG(log_level_) << "  Number of perturbative determinants considered: " << PT_map[0].size();
-        LOG(log_level_) << "  Number of elements stored in memory: " << num_var_dets + num_pt_dets;
+    };
+
+    // Launch threads
+    for (size_t t{0}; t < num_threads; ++t)
+        workers.push_back(std::async(std::launch::async, worker, t));
+
+    for (auto& w : workers)
+        w.get();
+
+    for (size_t r{0}; r < nroots_; ++r) {
+        ept2_var_[r] = 0.0;
+        ept2_pt_[r] = 0.0;
+        for (size_t t = 0; t < num_threads; ++t) {
+            ept2_var_[r] += local_ept2_var[t][r];
+            ept2_pt_[r] += local_ept2_pt[t][r];
+        }
     }
 
-    // add all new determinants and keep only unique ones
-    for (const auto& det : new_dets) {
-        dets_.push_back(det);
+    size_t new_dets_count = 0;
+    for (auto& v : thread_new_dets) {
+        dets_.insert(dets_.end(), v.begin(), v.end());
+        new_dets_count += v.size();
     }
+
+    for (size_t t{0}; t < num_threads; ++t) {
+        size_t total_num_pt_dets = 0;
+        for (const auto& [batch_id, num_pt_dets, time] : thread_log_data[t]) {
+            total_num_pt_dets += num_pt_dets;
+        }
+        LOG(log_level_) << "Thread " << t + 1 << " processed " << thread_log_data[t].size()
+                        << " batches. Total PT2 determinants: " << total_num_pt_dets;
+    }
+
     LOG(log_level_) << "\nTotal number of determinants: " << dets_.size();
+    LOG(log_level_) << "Number of variational determinants added: " << new_dets_count;
 
     c_.resize(dets_.size() * nroots_, 0.0);
+
+    // for (size_t batch_id{0}; batch_id < num_batches; ++batch_id) {
+    //     auto t1 = std::chrono::high_resolution_clock::now();
+
+    //     auto [V_map, PT_map] =
+    //         select_hbci_batch(var_threshold, pt2_threshold, num_batches, batch_id);
+
+    //     // Remove the coupling to determinants that are already in the variational space
+    //     for (size_t r{0}; r < nroots_; ++r) {
+    //         for (const auto& det : dets_) {
+    //             V_map[r].erase(det);
+    //             PT_map[r].erase(det);
+    //         }
+    //     }
+
+    //     size_t num_var_dets = V_map[0].size();
+    //     size_t num_pt_dets = PT_map[0].size();
+
+    //     // Remove the coupling for the PT2 determinants that are already in the variational
+    //     // space
+    //     for (size_t r{0}; r < nroots_; ++r) {
+    //         for (const auto& [det, _] : V_map[0]) {
+    //             PT_map[r].erase(det);
+    //         }
+    //     }
+
+    //     // add variational determinants first
+    //     for (const auto& [det, _] : V_map[0]) {
+    //         new_dets.push_back(det);
+    //     }
+
+    //     for (size_t r{0}; r < nroots_; ++r) {
+    //         double var = 0.0;
+    //         double pt = 0.0;
+    //         for (const auto& [det, val] : V_map[r]) {
+    //             const double delta = root_energies_[r] - slater_rules_.energy(det);
+    //             var += compute_delta_ept2(delta, val);
+    //         }
+    //         for (const auto& [det, val] : PT_map[r]) {
+    //             const double delta = root_energies_[r] - slater_rules_.energy(det);
+    //             pt += compute_delta_ept2(delta, val);
+    //         }
+    //         ept2_var_[r] += var;
+    //         ept2_pt_[r] += pt;
+    //     }
+    //     auto t2 = std::chrono::high_resolution_clock::now();
+    //     std::chrono::duration<double> diff = t2 - t1;
+    // }
+    // LOG(log_level_) << "\nBatch " << batch_id + 1 << "/" << num_batches << " took " <<
+    // diff.count()
+    //                 << " seconds";
+    // // print all the variational determinants
+    // LOG(log_level_) << "  Number of variational determinants added: " << V_map[0].size();
+    // LOG(log_level_) << "  Number of perturbative determinants considered: " << PT_map[0].size();
+    // LOG(log_level_) << "  Number of elements stored in memory: " << num_var_dets + num_pt_dets;
+
+    // // add all new determinants and keep only unique ones
+    // for (const auto& det : new_dets) {
+    //     dets_.push_back(det);
+    // }
+    // LOG(log_level_) << "\nTotal number of determinants: " << dets_.size();
+
+    // c_.resize(dets_.size() * nroots_, 0.0);
 
     compute_det_energies();
     prepare_strings();
