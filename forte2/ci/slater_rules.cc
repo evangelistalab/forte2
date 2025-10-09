@@ -238,15 +238,17 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
     return (matrix_element);
 }
 
-double SlaterRules::singles_coupling(size_t i, size_t a, const std::vector<size_t>& same_spin_occ,
-                                     const std::vector<size_t>& opposite_spin_occ) const {
+double SlaterRules::singles_coupling_a(size_t i, size_t a, const Determinant& d) const noexcept {
     double coupling = h(i, a);
-    for (const auto& j : same_spin_occ) {
-        coupling += f_JK(i, a, j); // <ij||aj>
-    }
-    for (const auto& j : opposite_spin_occ) {
-        coupling += f_J(i, a, j); // <ij|aj>
-    }
+    d.for_all_a([&](size_t j) { coupling += f_JK(i, a, j); });
+    d.for_all_b([&](size_t j) { coupling += f_J(i, a, j); });
+    return coupling;
+}
+
+double SlaterRules::singles_coupling_b(size_t i, size_t a, const Determinant& d) const noexcept {
+    double coupling = h(i, a);
+    d.for_all_a([&](size_t j) { coupling += f_J(i, a, j); });
+    d.for_all_b([&](size_t j) { coupling += f_JK(i, a, j); });
     return coupling;
 }
 

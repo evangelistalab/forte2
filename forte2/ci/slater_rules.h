@@ -60,8 +60,11 @@ class SlaterRules {
     /// @return The Fock-Coulomb-Exchange integral f_JK[p,q,r] = <pr|qr> - <pr|rq>
     double f_JK(int p, int q, int r) const noexcept { return f_JK_[p * norb2_ + q * norb_ + r]; }
 
-    double singles_coupling(size_t i, size_t a, const std::vector<size_t>& same_spin_occ,
-                            const std::vector<size_t>& opposite_spin_occ) const;
+    /// @brief Compute the singles coupling for alpha spin
+    double singles_coupling_a(size_t i, size_t a, const Determinant& d) const noexcept;
+
+    /// @brief Compute the singles coupling for beta spin
+    double singles_coupling_b(size_t i, size_t a, const Determinant& d) const noexcept;
 
   private:
     /// @brief Number of orbitals
