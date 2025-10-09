@@ -1077,8 +1077,8 @@ class _CIBase:
         ), "make_2cumulant_debug is only available for two-component CI."
         if right_root is None:
             right_root = left_root
-        rdm1 = self.make_1rdm(left_root, right_root)
-        rdm2 = self.make_2rdm(left_root, right_root)
+        rdm1 = self.make_so_1rdm_debug(left_root, right_root)
+        rdm2 = self.make_so_2rdm_debug(left_root, right_root)
         lambda2 = (
             rdm2
             - np.einsum("pr,qs->pqrs", rdm1, rdm1, optimize=True)

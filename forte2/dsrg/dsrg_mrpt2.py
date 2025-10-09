@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from forte2 import dsrg_utils
 from forte2.jkbuilder.mointegrals import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.orbitals import Semicanonicalizer
 from .dsrg_base import DSRGBase
@@ -9,34 +10,8 @@ from .dsrg_base import DSRGBase
 MACHEPS = 1e-9
 TAYLOR_THRES = 1e-3
 
-
-# TODO: these need to be moved to C++ for performance
-def taylor_exp(z):
-    """
-    Taylor expansion of (1-exp(-z^2))/z for small z.
-    """
-    n = int(0.5 * (15.0 / TAYLOR_THRES + 1)) + 1
-    if n > 0:
-        value = z
-        tmp = z
-        for x in range(n - 1):
-            tmp *= -1.0 * z * z / (x + 2)
-            value += tmp
-
-        return value
-    else:
-        return 0.0
-
-
-def regularized_denominator(x, s):
-    """
-    Returns (1-exp(-s*x^2))/x
-    """
-    z = np.sqrt(s) * x
-    if abs(z) <= MACHEPS:
-        return taylor_exp(z) * np.sqrt(s)
-    else:
-        return (1.0 - np.exp(-s * x**2)) / x
+regularized_denominator = dsrg_utils.regularized_denominator
+taylor_exp = dsrg_utils.taylor_exp
 
 
 @dataclass
@@ -106,12 +81,11 @@ class DSRG_MRPT2(DSRGBase):
             raise NotImplementedError("Only two-component integrals are implemented.")
 
     def solve_dsrg(self):
-        self.T2 = self._build_t2()
-        self.T1 = self._build_t1()
-        self._renormalize_integrals()
+        self.T1, self.T2 = self._build_tamps()
+        self.F_tilde, self.V_tilde = self._renormalize_integrals()
         E = self._compute_pt2_energy(
-            self.f_tilde,
-            self.v_tilde,
+            self.F_tilde,
+            self.V_tilde,
             self.T1,
             self.T2,
             self.cumulants["gamma1"],
@@ -127,24 +101,8 @@ class DSRG_MRPT2(DSRGBase):
             "Reference relaxation for DSRG-MRPT2 is not yet implemented."
         )
 
-    def _build_t1(self):
-        t1 = self.ints.H[self.hole, self.part].conj().copy()
-        t1 += np.einsum(
-            "xu,iuax,xu->ia",
-            self.delta_actv,
-            self.T2[:, self.ha, :, self.pa],
-            self.cumulants["gamma1"],
-            optimize=True,
-        )
-        for i in range(self.nhole):
-            for a in range(self.npart):
-                denom = self.eps[i] - self.eps[a + self.ncore]
-                t1[i, a] *= regularized_denominator(denom, self.flow_param)
-        t1[self.ha, self.pa] = 0.0
-        return t1
-
-    def _build_t2(self):
-        t2 = self.ints.V[self.hole, self.hole, self.part, self.part].conj().copy()
+    def _build_tamps(self):
+        t2 = np.conj(self.ints.V[self.hole, self.hole, self.part, self.part])
         for i in range(self.nhole):
             for j in range(self.nhole):
                 for a in range(self.npart):
@@ -160,23 +118,28 @@ class DSRG_MRPT2(DSRGBase):
                         )
 
         t2[self.ha, self.ha, self.pa, self.pa] = 0.0
-        return t2
+
+        t1 = self.ints.H[self.hole, self.part].conj().copy()
+        t1 += np.einsum(
+            "xu,iuax,xu->ia",
+            self.delta_actv,
+            t2[:, self.ha, :, self.pa],
+            self.cumulants["gamma1"],
+            optimize=True,
+        )
+        for i in range(self.nhole):
+            for a in range(self.npart):
+                denom = self.eps[i] - self.eps[a + self.ncore]
+                t1[i, a] *= regularized_denominator(denom, self.flow_param)
+        t1[self.ha, self.pa] = 0.0
+        return t1, t2
 
     def _renormalize_integrals(self):
-        self.v_tilde = self.ints.V[self.hole, self.hole, self.part, self.part].copy()
-        self.f_tilde = self.ints.H[self.hole, self.part].conj().copy()
+        F_tilde = np.conj(self.ints.H[self.hole, self.part])
         delta_ia = self.eps[self.hole][:, None] - self.eps[self.part][None, :]
-        delta_ijab = (
-            self.eps[self.hole][:, None, None, None]
-            + self.eps[self.hole][None, :, None, None]
-            - self.eps[self.part][None, None, :, None]
-            - self.eps[self.part][None, None, None, :]
-        )
-        exp_delta_2 = np.exp(-self.flow_param * delta_ijab**2)
-        self.v_tilde += self.v_tilde * exp_delta_2
         exp_delta_1 = np.exp(-self.flow_param * delta_ia**2)
-        self.f_tilde += (
-            self.f_tilde * exp_delta_1
+        F_tilde += (
+            F_tilde * exp_delta_1
             + np.einsum(
                 "xu,iuax,xu->ia",
                 self.delta_actv,
@@ -186,7 +149,19 @@ class DSRG_MRPT2(DSRGBase):
             )
             * exp_delta_1
         )
-        self.f_tilde = self.f_tilde.conj()
+        np.conj(F_tilde, out=F_tilde)
+
+        V_tilde = np.copy(self.ints.V[self.hole, self.hole, self.part, self.part])
+        delta_ijab = (
+            self.eps[self.hole][:, None, None, None]
+            + self.eps[self.hole][None, :, None, None]
+            - self.eps[self.part][None, None, :, None]
+            - self.eps[self.part][None, None, None, :]
+        )
+        exp_delta_2 = np.exp(-self.flow_param * delta_ijab**2)
+        V_tilde += V_tilde * exp_delta_2
+
+        return F_tilde, V_tilde
 
     def _compute_pt2_energy(self, F, V, T1, T2, gamma1, eta1, lambda2, lambda3):
         ha = self.ha
@@ -194,18 +169,15 @@ class DSRG_MRPT2(DSRGBase):
         hc = self.hc
         pv = self.pv
         E = 0.0
-        E += +1.000 * np.einsum(
-            "iu,iv,vu->", F[hc, pa], T1[hc, pa], eta1, optimize=True
-        )
+
+        E += +1.000 * np.einsum("iu,iv,vu->", F[hc, pa], T1[hc, pa], eta1, optimize=True)
         E += +1.000 * np.einsum("ia,ia->", F[hc, pv], T1[hc, pv], optimize=True)
         E += +1.000 * np.einsum(
             "ua,va,uv->", F[ha, pv], T1[ha, pv], gamma1, optimize=True
         )
-
         E += -0.500 * np.einsum(
             "iu,ixvw,vwux->", F[hc, pa], T2[hc, ha, pa, pa], lambda2, optimize=True
         )
-
         E += -0.500 * np.einsum(
             "ua,wxva,uvwx->", F[ha, pv], T2[ha, ha, pa, pv], lambda2, optimize=True
         )

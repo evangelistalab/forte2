@@ -74,6 +74,7 @@ nanobind_add_module(
   api/ci_api.cc
   api/determinant_api.cc
   api/determinant_helpers_api.cc
+  api/dsrg_api.cc
   api/helpers_api.cc
   api/integrals_api.cc
   api/logging_api.cc

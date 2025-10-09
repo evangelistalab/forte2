@@ -159,5 +159,5 @@ class Semicanonicalizer:
         C_act = C_contig[:, self.mo_space.actv]
         J, K = self.fock_builder.build_JK_generalized(C_act, g1 * gfactor)
         fock += Jfactor * J - K
-        fock = np.einsum("pq,pi,qj->ij", fock, C_contig.conj(), C_contig, optimize=True)
+        fock = C_contig.conj().T @ fock @ C_contig
         return fock
