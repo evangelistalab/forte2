@@ -115,24 +115,26 @@ void renormalize_V_block(np_tensor4_complex& v, np_vector& ei, np_vector& ej, np
     }
 }
 
-void renormalize_CCVV(np_tensor3_complex& v, np_vector& ec, np_vector& ev, double ei,
-                      double flow_param) {
+void renormalize_3index(np_tensor3_complex& v, double& ep, np_vector& eq, np_vector& er,
+                        np_vector& es, double flow_param) {
     auto v_v = v.view();
-    auto ec_v = ec.view();
-    auto ev_v = ev.view();
+    auto eq_v = eq.view();
+    auto er_v = er.view();
+    auto es_v = es.view();
 
-    size_t nc = ec.shape(0);
-    size_t nv = ev.shape(0);
+    size_t nq = eq.shape(0);
+    size_t nr = er.shape(0);
+    size_t ns = es.shape(0);
 
-    assert(nc == v.shape(0));
-    assert(nv == v.shape(1));
-    assert(nv == v.shape(2));
+    assert(nq == v.shape(0));
+    assert(nr == v.shape(1));
+    assert(ns == v.shape(2));
     double denom;
-    for (size_t j = 0; j < nv; j++) {
-        for (size_t a = 0; a < nv; a++) {
-            for (size_t b = 0; b < nv; b++) {
-                denom = ei + ec_v(j) - ev_v(a) - ev_v(b);
-                v_v(j, a, b) *=
+    for (size_t q = 0; q < nq; q++) {
+        for (size_t r = 0; r < nr; r++) {
+            for (size_t s = 0; s < ns; s++) {
+                denom = ep + eq_v(q) - er_v(r) - es_v(s);
+                v_v(q, r, s) *=
                     static_cast<std::complex<double>>((1 + std::exp(-flow_param * denom * denom)) *
                                                       regularized_denominator(denom, flow_param));
             }

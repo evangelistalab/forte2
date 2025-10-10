@@ -18,6 +18,7 @@ void export_dsrg_api(nb::module_& m) {
               "flow_param"_a);
     sub_m.def("renormalize_V_block", &renormalize_V_block, "v"_a, "ei"_a, "ej"_a, "ea"_a, "eb"_a,
               "flow_param"_a);
-    sub_m.def("renormalize_CCVV", &renormalize_CCVV, "v"_a, "ec"_a, "ev"_a, "ei"_a, "flow_param"_a);
+    sub_m.def("renormalize_3index", &renormalize_3index, "v"_a, "ep"_a, "eq"_a, "er"_a, "es"_a,
+              "flow_param"_a);
 }
 } // namespace forte2
