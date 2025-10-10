@@ -86,28 +86,38 @@ class DSRG_MRPT2_DF(DSRGBase):
                 ints["B"][:, self.actv, self.actv],
                 optimize=True,
             )
+            ints["V"]["caaa"] -= ints["V"]["caaa"].swapaxes(2, 3)
             ints["V"]["aaav"] = np.einsum(
                 "Buv,Bwa->uwva",
                 ints["B"][:, self.actv, self.actv],
                 ints["B"][:, self.actv, self.virt],
                 optimize=True,
             )
+            ints["V"]["aaav"] -= ints["V"]["aaav"].swapaxes(0, 1)
             ints["V"]["ccaa"] = np.einsum(
                 "Biu,Bjv->ijuv",
                 ints["B"][:, self.core, self.actv],
                 ints["B"][:, self.core, self.actv],
                 optimize=True,
             )
+            ints["V"]["ccaa"] -= ints["V"]["ccaa"].swapaxes(2, 3)
             ints["V"]["ccav"] = np.einsum(
                 "Biu,Bja->ijua",
                 ints["B"][:, self.core, self.actv],
                 ints["B"][:, self.core, self.virt],
                 optimize=True,
             )
+            ints["V"]["ccav"] -= ints["V"]["ccav"].swapaxes(0, 1)
             ints["V"]["caav"] = np.einsum(
                 "Biu,Bva->ivua",
                 ints["B"][:, self.core, self.actv],
                 ints["B"][:, self.actv, self.virt],
+                optimize=True,
+            )
+            ints["V"]["caav"] -= np.einsum(
+                "Bia,Bvu->ivua",
+                ints["B"][:, self.core, self.virt],
+                ints["B"][:, self.actv, self.actv],
                 optimize=True,
             )
             ints["V"]["ccvv"] = np.einsum(
@@ -116,18 +126,21 @@ class DSRG_MRPT2_DF(DSRGBase):
                 ints["B"][:, self.core, self.virt],
                 optimize=True,
             )
+            ints["V"]["ccvv"] -= ints["V"]["ccvv"].swapaxes(2, 3)
             ints["V"]["aavv"] = np.einsum(
                 "Bua,Bvb->uvab",
                 ints["B"][:, self.actv, self.virt],
                 ints["B"][:, self.actv, self.virt],
                 optimize=True,
             )
+            ints["V"]["aavv"] -= ints["V"]["aavv"].swapaxes(2, 3)
             ints["V"]["cavv"] = np.einsum(
                 "Bia,Bub->iuab",
                 ints["B"][:, self.core, self.virt],
                 ints["B"][:, self.actv, self.virt],
                 optimize=True,
             )
+            ints["V"]["cavv"] -= ints["V"]["cavv"].swapaxes(2, 3)
             ints["eps"] = dict()
             ints["eps"]["core"] = self.eps[self.core].copy()
             ints["eps"]["actv"] = self.eps[self.actv].copy()

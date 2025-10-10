@@ -44,6 +44,7 @@ def test_mrpt2_n2_nonrel():
     print(dsrg.E)
     assert dsrg.E == approx(ept2)
 
+
 def test_mrpt2_n2_so():
     erhf = -108.954140898736
     emcscf = -109.0811491968
@@ -79,5 +80,6 @@ def test_mrpt2_n2_so():
     dsrg.run()
     print(dsrg.E)
     # assert dsrg.E == approx(ept2)
+
 
 test_mrpt2_n2_nonrel()
