@@ -115,4 +115,29 @@ void renormalize_V_block(np_tensor4_complex& v, np_vector& ei, np_vector& ej, np
     }
 }
 
+void renormalize_CCVV(np_tensor3_complex& v, np_vector& ec, np_vector& ev, double ei,
+                      double flow_param) {
+    auto v_v = v.view();
+    auto ec_v = ec.view();
+    auto ev_v = ev.view();
+
+    size_t nc = ec.shape(0);
+    size_t nv = ev.shape(0);
+
+    assert(nc == v.shape(0));
+    assert(nv == v.shape(1));
+    assert(nv == v.shape(2));
+    double denom;
+    for (size_t j = 0; j < nv; j++) {
+        for (size_t a = 0; a < nv; a++) {
+            for (size_t b = 0; b < nv; b++) {
+                denom = ei + ec_v(j) - ev_v(a) - ev_v(b);
+                v_v(j, a, b) *=
+                    static_cast<std::complex<double>>((1 + std::exp(-flow_param * denom * denom)) *
+                                                      regularized_denominator(denom, flow_param));
+            }
+        }
+    }
+}
+
 } // namespace forte2

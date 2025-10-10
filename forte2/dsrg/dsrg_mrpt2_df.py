@@ -10,11 +10,10 @@ from .dsrg_base import DSRGBase
 MACHEPS = 1e-9
 TAYLOR_THRES = 1e-3
 
-regularized_denominator = dsrg_utils.regularized_denominator
-taylor_exp = dsrg_utils.taylor_exp
 compute_t1_block = dsrg_utils.compute_T1_block
 compute_t2_block = dsrg_utils.compute_T2_block
 renormalize_V_block = dsrg_utils.renormalize_V_block
+renormalized_CCVV = dsrg_utils.renormalize_CCVV
 
 
 @dataclass
@@ -120,13 +119,13 @@ class DSRG_MRPT2_DF(DSRGBase):
                 ints["B"][:, self.actv, self.actv],
                 optimize=True,
             )
-            ints["V"]["ccvv"] = np.einsum(
-                "Bia,Bjb->ijab",
-                ints["B"][:, self.core, self.virt],
-                ints["B"][:, self.core, self.virt],
-                optimize=True,
-            )
-            ints["V"]["ccvv"] -= ints["V"]["ccvv"].swapaxes(2, 3)
+            # ints["V"]["ccvv"] = np.einsum(
+            #     "Bia,Bjb->ijab",
+            #     ints["B"][:, self.core, self.virt],
+            #     ints["B"][:, self.core, self.virt],
+            #     optimize=True,
+            # )
+            # ints["V"]["ccvv"] -= ints["V"]["ccvv"].swapaxes(2, 3)
             ints["V"]["aavv"] = np.einsum(
                 "Bua,Bvb->uvab",
                 ints["B"][:, self.actv, self.virt],
@@ -152,7 +151,7 @@ class DSRG_MRPT2_DF(DSRGBase):
     def solve_dsrg(self):
         self.T1, self.T2 = self._build_tamps()
         self.F_tilde, self.V_tilde = self._renormalize_integrals()
-        E = self._compute_pt2_energy(
+        E = self._compute_pt2_energy_direct(
             self.F_tilde,
             self.V_tilde,
             self.T1,
@@ -219,15 +218,15 @@ class DSRG_MRPT2_DF(DSRGBase):
             self.ints["eps"]["virt"],
             self.flow_param,
         )
-        t2["ccvv"] = self.ints["V"]["ccvv"].conj()
-        compute_t2_block(
-            t2["ccvv"],
-            self.ints["eps"]["core"],
-            self.ints["eps"]["core"],
-            self.ints["eps"]["virt"],
-            self.ints["eps"]["virt"],
-            self.flow_param,
-        )
+        # t2["ccvv"] = self.ints["V"]["ccvv"].conj()
+        # compute_t2_block(
+        #     t2["ccvv"],
+        #     self.ints["eps"]["core"],
+        #     self.ints["eps"]["core"],
+        #     self.ints["eps"]["virt"],
+        #     self.ints["eps"]["virt"],
+        #     self.flow_param,
+        # )
         t2["aavv"] = self.ints["V"]["aavv"].conj()
         compute_t2_block(
             t2["aavv"],
@@ -359,15 +358,15 @@ class DSRG_MRPT2_DF(DSRGBase):
             self.ints["eps"]["virt"],
             self.flow_param,
         )
-        V_tilde["ccvv"] = np.copy(self.ints["V"]["ccvv"])
-        renormalize_V_block(
-            V_tilde["ccvv"],
-            self.ints["eps"]["core"],
-            self.ints["eps"]["core"],
-            self.ints["eps"]["virt"],
-            self.ints["eps"]["virt"],
-            self.flow_param,
-        )
+        # V_tilde["ccvv"] = np.copy(self.ints["V"]["ccvv"])
+        # renormalize_V_block(
+        #     V_tilde["ccvv"],
+        #     self.ints["eps"]["core"],
+        #     self.ints["eps"]["core"],
+        #     self.ints["eps"]["virt"],
+        #     self.ints["eps"]["virt"],
+        #     self.flow_param,
+        # )
         V_tilde["aavv"] = np.copy(self.ints["V"]["aavv"])
         renormalize_V_block(
             V_tilde["aavv"],
@@ -389,7 +388,7 @@ class DSRG_MRPT2_DF(DSRGBase):
 
         return F_tilde, V_tilde
 
-    def _compute_pt2_energy(self, F, V, T1, T2, gamma1, eta1, lambda2, lambda3):
+    def _compute_pt2_energy_direct(self, F, V, T1, T2, gamma1, eta1, lambda2, lambda3):
         E = 0.0
 
         E += +1.000 * np.einsum("iu,iv,vu->", F["ca"], T1["ca"], eta1, optimize=True)
@@ -508,7 +507,6 @@ class DSRG_MRPT2_DF(DSRGBase):
             lambda3,
             optimize=True,
         )
-        E += +0.250 * np.einsum("ijab,ijab->", T2["ccvv"], V["ccvv"], optimize=True)
         E += +0.500 * np.einsum(
             "iuab,ivab,vu->",
             T2["cavv"],
@@ -531,4 +529,28 @@ class DSRG_MRPT2_DF(DSRGBase):
             lambda2,
             optimize=True,
         )
+        E += self._compute_pt2_energy_ccvv(V, T2, gamma1, lambda2)
+
+        return E
+
+    def _compute_pt2_energy_ccvv(self, V, T2, gamma1, lambda2):
+        E = 0.0
+        # E += +0.250 * np.einsum("ijab,ijab->", T2["ccvv"], V["ccvv"], optimize=True)
+        B_cv = self.ints["B"][:, self.core, self.virt].copy()
+        for i in range(self.ncore):
+            # T2 = conj(Vbare) * renorm
+            # V = Vbare * (1 + exp)
+            # So, we compute Vbare * Vr, where Vr = Vbare * renorm * (1 + exp)
+            Vbare_i = np.einsum("Ba,Bjb->jab", B_cv[:, i, :], B_cv, optimize=True)
+            Vbare_i -= Vbare_i.swapaxes(1, 2)
+            Vr_i = Vbare_i.copy()
+            renormalized_CCVV(
+                Vr_i,
+                self.ints["eps"]["core"],
+                self.ints["eps"]["virt"],
+                self.ints["eps"]["core"][i],
+                self.flow_param,
+            )
+            E += 0.250 * np.einsum("jab,jab->", Vbare_i.conj(), Vr_i, optimize=True)
+
         return E
