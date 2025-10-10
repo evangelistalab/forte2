@@ -1,7 +1,7 @@
 import numpy as np
 
 from forte2 import System, GHF, RelMCOptimizer, RelCI
-from forte2.dsrg import DSRG_MRPT2
+from forte2.dsrg import DSRG_MRPT2, DSRG_MRPT2_DF
 from forte2.helpers.comparisons import approx
 
 
@@ -39,7 +39,7 @@ def test_mrpt2_n2_nonrel():
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
 
-    dsrg = DSRG_MRPT2(flow_param=0.5)(mc)
+    dsrg = DSRG_MRPT2_DF(flow_param=0.5)(mc)
     dsrg.run()
     print(dsrg.E)
     assert dsrg.E == approx(ept2)

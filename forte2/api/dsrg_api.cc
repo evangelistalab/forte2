@@ -13,5 +13,10 @@ void export_dsrg_api(nb::module_& m) {
 
     sub_m.def("regularized_denominator", &regularized_denominator, "x"_a, "s"_a);
     sub_m.def("taylor_exp", &taylor_exp, "z"_a);
+    sub_m.def("compute_T1_block", &compute_T1_block, "t1"_a, "ei"_a, "ea"_a, "flow_param"_a);
+    sub_m.def("compute_T2_block", &compute_T2_block, "t2"_a, "ei"_a, "ej"_a, "ea"_a, "eb"_a,
+              "flow_param"_a);
+    sub_m.def("renormalize_V_block", &renormalize_V_block, "v"_a, "ei"_a, "ej"_a, "ea"_a, "eb"_a,
+              "flow_param"_a);
 }
 } // namespace forte2

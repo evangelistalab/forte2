@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cmath>
+#include <cassert>
+#include "helpers/ndarray.h"
 
 #define MACHEPS 1e-9
 #define TAYLOR_THRES 1e-3
@@ -30,4 +32,87 @@ double regularized_denominator(double x, double s) {
         return (1. - std::exp(-s * x * x)) / x;
     }
 }
+
+void compute_T2_block(np_tensor4_complex& t2, np_vector& ei, np_vector& ej, np_vector& ea,
+                      np_vector& eb, double flow_param) {
+    auto t2_v = t2.view();
+    auto ei_v = ei.view();
+    auto ej_v = ej.view();
+    auto ea_v = ea.view();
+    auto eb_v = eb.view();
+
+    size_t ni = ei.shape(0);
+    size_t nj = ej.shape(0);
+    size_t na = ea.shape(0);
+    size_t nb = eb.shape(0);
+
+    assert(ni == t2.shape(0));
+    assert(nj == t2.shape(1));
+    assert(na == t2.shape(2));
+    assert(nb == t2.shape(3));
+    double denom;
+    for (size_t i = 0; i < ni; i++) {
+        for (size_t j = 0; j < nj; j++) {
+            for (size_t a = 0; a < na; a++) {
+                for (size_t b = 0; b < nb; b++) {
+                    denom = ei_v(i) + ej_v(j) - ea_v(a) - eb_v(b);
+                    t2_v(i, j, a, b) *= static_cast<std::complex<double>>(
+                        regularized_denominator(denom, flow_param));
+                }
+            }
+        }
+    }
+}
+
+void compute_T1_block(np_matrix_complex& t1, np_vector& ei, np_vector& ea, double flow_param) {
+    auto t1_v = t1.view();
+    auto ei_v = ei.view();
+    auto ea_v = ea.view();
+
+    size_t ni = ei.shape(0);
+    size_t na = ea.shape(0);
+
+    assert(ni == t1.shape(0));
+    assert(na == t1.shape(1));
+    double denom;
+    for (size_t i = 0; i < ni; i++) {
+        for (size_t a = 0; a < na; a++) {
+            denom = ei_v(i) - ea_v(a);
+            t1_v(i, a) *=
+                static_cast<std::complex<double>>(regularized_denominator(denom, flow_param));
+        }
+    }
+}
+
+void renormalize_V_block(np_tensor4_complex& v, np_vector& ei, np_vector& ej, np_vector& ea,
+                         np_vector& eb, double flow_param) {
+    auto v_v = v.view();
+    auto ei_v = ei.view();
+    auto ej_v = ej.view();
+    auto ea_v = ea.view();
+    auto eb_v = eb.view();
+
+    size_t ni = ei.shape(0);
+    size_t nj = ej.shape(0);
+    size_t na = ea.shape(0);
+    size_t nb = eb.shape(0);
+
+    assert(ni == v.shape(0));
+    assert(nj == v.shape(1));
+    assert(na == v.shape(2));
+    assert(nb == v.shape(3));
+    double denom;
+    for (size_t i = 0; i < ni; i++) {
+        for (size_t j = 0; j < nj; j++) {
+            for (size_t a = 0; a < na; a++) {
+                for (size_t b = 0; b < nb; b++) {
+                    denom = ei_v(i) + ej_v(j) - ea_v(a) - eb_v(b);
+                    v_v(i, j, a, b) += v_v(i, j, a, b) * static_cast<std::complex<double>>(
+                                                             std::exp(-flow_param * denom * denom));
+                }
+            }
+        }
+    }
+}
+
 } // namespace forte2

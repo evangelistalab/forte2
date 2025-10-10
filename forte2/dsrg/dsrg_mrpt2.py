@@ -43,6 +43,7 @@ class DSRG_MRPT2(DSRGBase):
                 ),
                 core_spinorbitals=list(range(0, self.mo_space.frozen_core.stop)),
                 antisymmetrize=True,
+                fock_builder=self.fock_builder,
             )
             ints.H = self.fock - np.diag(np.diag(self.fock))  # remove diagonal
             cumulants = dict()
@@ -168,26 +169,55 @@ class DSRG_MRPT2(DSRGBase):
         pa = self.pa
         hc = self.hc
         pv = self.pv
-        E = 0.0
+        Etot = 0.0
 
-        E += +1.000 * np.einsum("iu,iv,vu->", F[hc, pa], T1[hc, pa], eta1, optimize=True)
-        E += +1.000 * np.einsum("ia,ia->", F[hc, pv], T1[hc, pv], optimize=True)
-        E += +1.000 * np.einsum(
+        # 1
+        E = +1.000 * np.einsum("iu,iv,vu->", F[hc, pa], T1[hc, pa], eta1, optimize=True)
+        Etot += E
+        print(E)
+
+        # 2
+        E = +1.000 * np.einsum("ia,ia->", F[hc, pv], T1[hc, pv], optimize=True)
+        Etot += E
+        print(E)
+
+        # 3
+        E = +1.000 * np.einsum(
             "ua,va,uv->", F[ha, pv], T1[ha, pv], gamma1, optimize=True
         )
-        E += -0.500 * np.einsum(
+        Etot += E
+        print(E)
+
+        # 4
+        E = -0.500 * np.einsum(
             "iu,ixvw,vwux->", F[hc, pa], T2[hc, ha, pa, pa], lambda2, optimize=True
         )
-        E += -0.500 * np.einsum(
+        Etot += E
+        print(E)
+
+        # 5
+        E = -0.500 * np.einsum(
             "ua,wxva,uvwx->", F[ha, pv], T2[ha, ha, pa, pv], lambda2, optimize=True
         )
-        E += -0.500 * np.einsum(
+        Etot += E
+        print(E)
+
+        # 6
+        E = -0.500 * np.einsum(
             "iu,ivwx,uvwx->", T1[hc, pa], V[hc, ha, pa, pa], lambda2, optimize=True
         )
-        E += -0.500 * np.einsum(
+        Etot += E
+        print(E)
+
+        # 7
+        E = -0.500 * np.einsum(
             "ua,vwxa,vwux->", T1[ha, pv], V[ha, ha, pa, pv], lambda2, optimize=True
         )
-        E += +0.250 * np.einsum(
+        Etot += E
+        print(E)
+
+        # 8
+        E = +0.250 * np.einsum(
             "ijuv,ijwx,vx,uw->",
             T2[hc, hc, pa, pa],
             V[hc, hc, pa, pa],
@@ -195,14 +225,22 @@ class DSRG_MRPT2(DSRGBase):
             eta1,
             optimize=True,
         )
-        E += +0.125 * np.einsum(
+        Etot += E
+        print(E)
+
+        # 9
+        E = +0.125 * np.einsum(
             "ijuv,ijwx,uvwx->",
             T2[hc, hc, pa, pa],
             V[hc, hc, pa, pa],
             lambda2,
             optimize=True,
         )
-        E += +0.500 * np.einsum(
+        Etot += E
+        print(E)
+
+        # 10
+        E = +0.500 * np.einsum(
             "iwuv,ixyz,vz,uy,xw->",
             T2[hc, ha, pa, pa],
             V[hc, ha, pa, pa],
@@ -211,7 +249,11 @@ class DSRG_MRPT2(DSRGBase):
             gamma1,
             optimize=True,
         )
-        E += +1.000 * np.einsum(
+        Etot += E
+        print(E)
+
+        # 11
+        E = +1.000 * np.einsum(
             "iwuv,ixyz,vz,uxwy->",
             T2[hc, ha, pa, pa],
             V[hc, ha, pa, pa],
@@ -219,7 +261,11 @@ class DSRG_MRPT2(DSRGBase):
             lambda2,
             optimize=True,
         )
-        E += +0.250 * np.einsum(
+        Etot += E
+        print(E)
+
+        # 12
+        E = +0.250 * np.einsum(
             "iwuv,ixyz,xw,uvyz->",
             T2[hc, ha, pa, pa],
             V[hc, ha, pa, pa],
@@ -227,21 +273,33 @@ class DSRG_MRPT2(DSRGBase):
             lambda2,
             optimize=True,
         )
-        E += +0.250 * np.einsum(
+        Etot += E
+        print(E)
+
+        # 13
+        E = +0.250 * np.einsum(
             "iwuv,ixyz,uvxwyz->",
             T2[hc, ha, pa, pa],
             V[hc, ha, pa, pa],
             lambda3,
             optimize=True,
         )
-        E += +0.500 * np.einsum(
+        Etot += E
+        print(E)
+
+        # 14
+        E = +0.500 * np.einsum(
             "ijua,ijva,uv->",
             T2[hc, hc, pa, pv],
             V[hc, hc, pa, pv],
             eta1,
             optimize=True,
         )
-        E += +1.000 * np.einsum(
+        Etot += E
+        print(E)
+
+        # 15
+        E = +1.000 * np.einsum(
             "ivua,iwxa,ux,wv->",
             T2[hc, ha, pa, pv],
             V[hc, ha, pa, pv],
@@ -249,14 +307,22 @@ class DSRG_MRPT2(DSRGBase):
             gamma1,
             optimize=True,
         )
-        E += +1.000 * np.einsum(
+        Etot += E
+        print(E)
+
+        # 16
+        E = +1.000 * np.einsum(
             "ivua,iwxa,uwvx->",
             T2[hc, ha, pa, pv],
             V[hc, ha, pa, pv],
             lambda2,
             optimize=True,
         )
-        E += +0.500 * np.einsum(
+        Etot += E
+        print(E)
+
+        # 17
+        E = +0.500 * np.einsum(
             "vwua,xyza,uz,yw,xv->",
             T2[ha, ha, pa, pv],
             V[ha, ha, pa, pv],
@@ -265,7 +331,11 @@ class DSRG_MRPT2(DSRGBase):
             gamma1,
             optimize=True,
         )
-        E += +0.250 * np.einsum(
+        Etot += E
+        print(E)
+
+        # 18
+        E = +0.250 * np.einsum(
             "vwua,xyza,uz,xyvw->",
             T2[ha, ha, pa, pv],
             V[ha, ha, pa, pv],
@@ -273,7 +343,11 @@ class DSRG_MRPT2(DSRGBase):
             lambda2,
             optimize=True,
         )
-        E += +1.000 * np.einsum(
+        Etot += E
+        print(E)
+
+        # 19
+        E = +1.000 * np.einsum(
             "vwua,xyza,yw,uxvz->",
             T2[ha, ha, pa, pv],
             V[ha, ha, pa, pv],
@@ -281,24 +355,40 @@ class DSRG_MRPT2(DSRGBase):
             lambda2,
             optimize=True,
         )
-        E += -0.250 * np.einsum(
+        Etot += E
+        print(E)
+
+        # 20
+        E = -0.250 * np.einsum(
             "vwua,xyza,uxyvwz->",
             T2[ha, ha, pa, pv],
             V[ha, ha, pa, pv],
             lambda3,
             optimize=True,
         )
-        E += +0.250 * np.einsum(
+        Etot += E
+        print(E)
+
+        # 21
+        E = +0.250 * np.einsum(
             "ijab,ijab->", T2[hc, hc, pv, pv], V[hc, hc, pv, pv], optimize=True
         )
-        E += +0.500 * np.einsum(
+        Etot += E
+        print(E)
+
+        # 22
+        E = +0.500 * np.einsum(
             "iuab,ivab,vu->",
             T2[hc, ha, pv, pv],
             V[hc, ha, pv, pv],
             gamma1,
             optimize=True,
         )
-        E += +0.250 * np.einsum(
+        Etot += E
+        print(E)
+
+        # 23
+        E = +0.250 * np.einsum(
             "uvab,wxab,xv,wu->",
             T2[ha, ha, pv, pv],
             V[ha, ha, pv, pv],
@@ -306,11 +396,17 @@ class DSRG_MRPT2(DSRGBase):
             gamma1,
             optimize=True,
         )
-        E += +0.125 * np.einsum(
+        Etot += E
+        print(E)
+
+        # 24
+        E = +0.125 * np.einsum(
             "uvab,wxab,wxuv->",
             T2[ha, ha, pv, pv],
             V[ha, ha, pv, pv],
             lambda2,
             optimize=True,
         )
-        return E
+        Etot += E
+        print(E)
+        return Etot
