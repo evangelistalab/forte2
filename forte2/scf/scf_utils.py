@@ -94,7 +94,7 @@ def core_initial_guess(system: System, H):
     return Xorth @ C
 
 
-def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4, twocomp=False):
+def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4):
     """
     Induce the breaking of S^2 symmetry for UHF ms=0.0 calculations.
     This is helpful for obtaining proxies for open-shell singlets, for example.
@@ -122,16 +122,47 @@ def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4, twocomp=False):
     """
     cosq = np.cos(mixing_parameter)
     sinq = np.sin(mixing_parameter)
-    if twocomp:
-        # alpha channel
-        C = givens_rotation(C, cosq, sinq, homo_idx - 1, homo_idx + 1)
-        # beta channel
-        C = givens_rotation(C, cosq, -sinq, homo_idx, homo_idx + 2)
-        return C
-    else:
-        Ca = givens_rotation(C, cosq, sinq, homo_idx, homo_idx + 1)
-        Cb = givens_rotation(C, cosq, -sinq, homo_idx, homo_idx + 1)
-        return [Ca, Cb]
+    Ca = givens_rotation(C, cosq, sinq, homo_idx, homo_idx + 1)
+    Cb = givens_rotation(C, cosq, -sinq, homo_idx, homo_idx + 1)
+    return [Ca, Cb]
+
+def guess_mix_ghf(C, ha, hb, la, lb, mixing_parameter=np.pi / 4):
+    """
+    Induce the breaking of S^2 symmetry for UHF ms=0.0 calculations.
+    This is helpful for obtaining proxies for open-shell singlets, for example.
+
+    Parameters
+    ----------
+    C : NDArray
+        The MO coefficients.
+    ha : int
+        The index of the highest occupied alpha(-like) orbital.
+    hb : int
+        The index of the highest occupied beta(-like) orbital.
+    la : int
+        The index of the lowest unoccupied alpha(-like) orbital.
+    lb : int
+        The index of the lowest unoccupied beta(-like) orbital.
+    mixing_parameter : float, optional
+        The mixing parameter for the Givens rotation.
+
+    Returns
+    -------
+    NDArray
+        The modified MO coefficients.
+
+    Notes
+    -----
+    See Szabo and Ostlund Ch. 3.8.7.
+
+    """
+    cosq = np.cos(mixing_parameter)
+    sinq = np.sin(mixing_parameter)
+    # alpha channel
+    C = givens_rotation(C, cosq, sinq, ha, la)
+    # beta channel
+    C = givens_rotation(C, cosq, -sinq, hb, lb)
+    return C
 
 
 def alpha_beta_mix(C, mixing_parameter=0.1):

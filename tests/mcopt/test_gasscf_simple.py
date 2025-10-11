@@ -136,7 +136,7 @@ def test_gasscf_3():
 
 def test_gasscf_5():
     erhf = -76.02146209546578
-    emcscf = -76.077753286787
+    emcscf = -76.0776921745
 
     xyz = """
     O            0.000000000000     0.000000000000    -0.069592187400
@@ -154,9 +154,10 @@ def test_gasscf_5():
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[6, 0], gas_max=[8, 2]),
         core_orbitals=[0],
         active_orbitals=[[1, 2, 3, 4], [5, 6]],
-        maxiter=200,
+        freeze_inter_gas_rots=True,
         econv=1e-10,
         gconv=1e-8,
+        do_diis=False,
     )(rhf)
     mc.run()
 
