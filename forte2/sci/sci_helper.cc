@@ -28,8 +28,10 @@ SelectedCIHelper::SelectedCIHelper(size_t norb, const std::vector<Determinant>& 
         if (det.count_a() != na_ || det.count_b() != nb_) {
             throw std::runtime_error("All determinants must have the same number of electrons.");
         }
-        det_energies_.push_back(slater_rules_.energy(det));
     }
+
+    compute_det_energies();
+    prepare_strings();
 }
 
 void SelectedCIHelper::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {

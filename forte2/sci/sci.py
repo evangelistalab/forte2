@@ -13,6 +13,7 @@ from forte2 import (
     SlaterRules,
     SelectedCIHelper,
 )
+from forte2.helpers.table import AsciiTable
 from forte2.state import State, MOSpace
 from forte2.helpers.comparisons import approx
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
@@ -114,9 +115,9 @@ class _SelectedCIBase:
     selection_algorithm: str = "hbci_ref"
     guess_occ_window: int = 2
     guess_vir_window: int = 2
-
-    ### Sigma builder parameters
-    ci_algorithm: str = "hz"
+    num_threads: int = 4
+    ci_algorithm: str = "string"
+    num_batches_per_thread: int = 4
 
     ### Davidson-Liu parameters
     guess_per_root: int = 2
@@ -145,16 +146,14 @@ class _SelectedCIBase:
 
         if self.two_component:
             assert self.ci_algorithm.lower() in [
-                "hz",
-                "sparse",
+                "string",
                 "exact",
-            ], "Two-component CI only supports 'hz', 'sparse', or 'exact' algorithms."
+            ], "Two-component CI algorithm must be 'string' or 'exact'."
         else:
             assert self.ci_algorithm.lower() in [
-                "hz",
-                "kh",
+                "string",
                 "exact",
-            ], "CI algorithm must be 'hz', 'kh', or 'exact'."
+            ], "CI algorithm must be 'string' or 'exact'."
 
     def _sci_solver_startup(self):
         # Create the Slater rules object
@@ -188,14 +187,19 @@ class _SelectedCIBase:
 
         self.sci_helper.set_c(self.guess_c)
         self.sci_helper.set_energies(self.guess_energies)
+        self.sci_helper.set_num_threads(self.num_threads)
+        self.sci_helper.set_num_batches_per_thread(self.num_batches_per_thread)
 
         old_energy = 0.0
         for cycle in range(self.maxcycle):
-            print(f"\nCycle {cycle + 1}")
-            # Step 1. Diagonalize the Hamiltonian in the P space
-            # self._diagonalize_P_space()
+            print(f"\n{'=' * 67}")
+            print(f"Selected CI Cycle {cycle + 1}")
+            print(f"{'=' * 67}")
 
-            # # Step 2. Find determinants in the Q space
+            print(f"Algorithm: {self.selection_algorithm}")
+            print(f"  var_threshold = {self.var_threshold}")
+            print(f"  pt2_threshold = {self.pt2_threshold}")
+
             if self.selection_algorithm.lower() == "hbci_ref":
                 self.sci_helper.select_hbci_ref(
                     var_threshold=self.var_threshold, pt2_threshold=self.pt2_threshold
@@ -205,9 +209,6 @@ class _SelectedCIBase:
                     var_threshold=self.var_threshold, pt2_threshold=self.pt2_threshold
                 )
             elif self.selection_algorithm.lower() == "hbci3":
-                print(
-                    f"Using HBCI3 selection algorithm with var_threshold={self.var_threshold} and pt2_threshold={self.pt2_threshold}"
-                )
                 self.sci_helper.select_hbci3(
                     var_threshold=self.var_threshold, pt2_threshold=self.pt2_threshold
                 )
@@ -220,26 +221,41 @@ class _SelectedCIBase:
             ept2_var = self.sci_helper.get_ept2_var()
             ept2_pt = self.sci_helper.get_ept2_pt()
 
-            logger.log("=" * 67, self.log_level)
-            logger.log(
-                f"Root         E (var) [Eh]        E (var') [Eh]    E (var'+PT2) [Eh]",
-                self.log_level,
+            summary = "\nSummary of selection:"
+            summary += f"\n  Variational added:     {self.sci_helper.get_num_new_dets_var() + self.sci_helper.get_num_new_dets_pt2()}"
+            summary += (
+                f"\n  Perturbative included: {self.sci_helper.get_num_new_dets_pt2()}"
             )
-            logger.log("-" * 67, self.log_level)
+            summary += f"\n  Total determinants:    {self.sci_helper.ndets()}"
+            summary += f"\n  Selection time:       {self.sci_helper.get_selection_time():.3f} s\n"
+            logger.log(summary, self.log_level)
+
+            table = AsciiTable(
+                columns=["Root", "E (var) [Eh]", "E (var') [Eh]", "E (var'+PT2) [Eh]"],
+                formats=["{:>4}", "{:>20.12f}", "{:>20.12f}", "{:>20.12f}"],
+            )
+
+            logger.log(table.header(), self.log_level)
             for r in range(self.nroot):
                 logger.log(
-                    f"{r:>4} {e_var[r]:20.12f} {e_var[r] + ept2_var[r]:20.12f} {e_var[r] + ept2_var[r] + ept2_pt[r]:20.12f}",
+                    table.row(
+                        r,
+                        e_var[r],
+                        e_var[r] + ept2_var[r],
+                        e_var[r] + ept2_var[r] + ept2_pt[r],
+                    )
+                    # f"{r:>4} {e_var[r]:20.12f} {e_var[r] + ept2_var[r]:20.12f} {e_var[r] + ept2_var[r] + ept2_pt[r]:20.12f}",
+                    ,
                     self.log_level,
                 )
-            logger.log("=" * 67, self.log_level)
+            # logger.log("=" * 67, self.log_level)
+            logger.log(table.footer(), self.log_level)
 
             self.ndet = self.sci_helper.ndets()
             self.dets = self.sci_helper.dets()
 
             self.b_det = np.zeros((self.ndet))
             self.sigma_det = np.zeros((self.ndet))
-
-            logger.log(f"Number of determinants: {self.ndet}", self.log_level)
 
             # Save the current CI vectors as the guess for the next iteration
             num_guess = min(self.evecs.shape[1], self.nroot)
@@ -1282,6 +1298,8 @@ class SelectedCISolver(ActiveSpaceSolver):
     pt2_threshold: float = 1e-8
     guess_occ_window: int = 2
     guess_vir_window: int = 2
+    num_threads: int = 4
+    num_batches_per_thread: int = 4
 
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
@@ -1328,7 +1346,6 @@ class SelectedCISolver(ActiveSpaceSolver):
                     active_orbsym=active_orbsym,
                     do_test_rdms=self.do_test_rdms,
                     die_if_not_converged=self.die_if_not_converged,
-                    ci_algorithm=self.ci_algorithm,
                     guess_per_root=self.guess_per_root,
                     ndets_per_guess=self.ndets_per_guess,
                     collapse_per_root=self.collapse_per_root,
@@ -1343,6 +1360,8 @@ class SelectedCISolver(ActiveSpaceSolver):
                     guess_occ_window=self.guess_occ_window,
                     guess_vir_window=self.guess_vir_window,
                     selection_algorithm=self.selection_algorithm,
+                    num_threads=self.num_threads,
+                    num_batches_per_thread=self.num_batches_per_thread,
                 )
             )
 

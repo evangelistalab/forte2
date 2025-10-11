@@ -17,7 +17,7 @@ void SelectedCIHelper::compute_det_energies() {
     for (size_t i{istart}, n{dets_.size()}; i < n; ++i) {
         det_energies_[i] = slater_rules_.energy(dets_[i]);
     }
-    LOG(log_level_) << "Determinant energies built in " << t.elapsed_seconds() << " seconds.";
+    // LOG(log_level_) << "Determinant energies built in " << t.elapsed_seconds() << " seconds.";
 }
 
 void SelectedCIHelper::prepare_strings() {
@@ -33,7 +33,7 @@ void SelectedCIHelper::prepare_strings() {
     }
     ba_list_ = SelectedCIStrings(norb_, sorted_dets);
 
-    LOG(log_level_) << "String lists built in " << t.elapsed_seconds() << " seconds.";
+    // LOG(log_level_) << "String lists built in " << t.elapsed_seconds() << " seconds.";
 }
 
 void SelectedCIHelper::Hamiltonian(np_vector basis, np_vector sigma) const {

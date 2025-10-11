@@ -38,9 +38,20 @@ class SelectedCIHelper {
 
     void set_energies(np_vector e);
 
+    void set_num_threads(size_t n) { num_threads_ = n; }
+    void set_num_batches_per_thread(size_t n) { num_batches_per_thread_ = n; }
+
     const std::vector<double>& get_energies() const { return root_energies_; }
     const std::vector<double>& get_ept2_var() const { return ept2_var_; }
     const std::vector<double>& get_ept2_pt() const { return ept2_pt_; }
+
+    const size_t get_num_dets() const { return dets_.size(); }
+
+    size_t get_num_new_dets_var() const { return num_new_dets_var_; }
+
+    size_t get_num_new_dets_pt2() const { return num_new_dets_pt2_; }
+
+    double get_selection_time() const { return selection_time_; }
 
     /// @brief Perform CIPSI selection with the given threshold
     void select_cipsi(double threshold);
@@ -101,6 +112,9 @@ class SelectedCIHelper {
 
     /// @brief logging level for the class
     int log_level_ = 3;
+
+    size_t num_threads_ = 1;
+    size_t num_batches_per_thread_ = 1;
 
     /// @brief Number of orbitals
     const size_t norb_;
@@ -166,6 +180,9 @@ class SelectedCIHelper {
     std::vector<double> root_energies_;
     std::vector<double> ept2_var_;
     std::vector<double> ept2_pt_;
+    size_t num_new_dets_var_ = 0;
+    size_t num_new_dets_pt2_ = 0;
+    double selection_time_ = 0.0;
 
     SelectedCIStrings ab_list_;
     SelectedCIStrings ba_list_;

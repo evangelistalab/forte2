@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cassert>
 
 #include "determinant_helpers.h"
 
@@ -67,16 +68,29 @@ std::pair<Determinant, double> create_double_ab_excitation(const Determinant& de
     return {new_det, sign};
 }
 
-void compute_fast_virtual(const std::vector<size_t>& occ, std::vector<size_t>& vir, size_t n) {
-    size_t j = 0; // index into occ
-    size_t k = 0; // index into vir
-    for (size_t i = 0; i < n; ++i) {
-        if (occ[j] == i) {
-            ++j; // skip set bit
-        } else {
-            vir[k] = i;
-            ++k;
+void compute_fast_virtual(const std::vector<size_t>& occ, std::vector<size_t>& vir,
+                          const size_t n) {
+    // Debug sanity checks
+#ifndef NDEBUG
+    for (size_t j = 1; j < occ.size(); ++j)
+        assert(occ[j] > occ[j - 1]); // check that occ is sorted
+    for (auto o : occ)
+        assert(o < n);                    // check that all occupied orbitals are less than n
+    assert(vir.size() == n - occ.size()); // check that vir has enough space
+#endif
+    size_t i = 0; // index into vir vector
+    size_t k = 0; // index into orbitals
+    for (auto o : occ) {
+        // add all orbitals before the occupied orbital o
+        for (; k < o; ++k) {
+            vir[i++] = k;
         }
+        // set new restarting point after the occupied orbital
+        k = o + 1;
+    }
+    // add all remaining orbitals after the last occupied orbital
+    for (; k < n; ++k) {
+        vir[i++] = k;
     }
 }
 

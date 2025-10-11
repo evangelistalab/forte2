@@ -1,6 +1,8 @@
-from forte2.helpers import logger
 import numpy as np
 from numpy.linalg import eigh, qr, norm
+
+from forte2.helpers import logger
+from forte2.helpers.table import AsciiTable
 
 
 class DavidsonLiuSolver:
@@ -219,12 +221,19 @@ class DavidsonLiuSolver:
         self.iter = 0
         self.converged = False
 
-        logger.log(
-            ("=" * 64)
-            + "\nIter                 ⟨E⟩             max(ΔE)        max(r) basis\n"
-            + ("-" * 64),
-            self.log_level,
+        table = AsciiTable(
+            columns=["Iter", "⟨E⟩", "max(ΔE)", "max(r)", "basis", "note"],
+            formats=[
+                "{:>4}",
+                "{:>20.12f}",
+                "{:>+12.4e}",
+                "{:>+12.4e}",
+                "{:>4}",
+                "{:>6}",
+            ],
         )
+
+        logger.log(table.header(), self.log_level)
 
         for self.iter in range(self.maxiter):
             # 2. compute new sigma block if needed
@@ -342,15 +351,13 @@ class DavidsonLiuSolver:
                 )
                 self.basis_size += added2
                 msg = f" <- +{added2} random"
+
             logger.log(
-                f"{self.iter:4d}  {avg_e:18.12f}  {max_de:18.12f}  {max_r:12.9f}  {self.basis_size:4d} {msg}",
+                table.row(self.iter, avg_e, max_de, max_r, self.basis_size, msg),
                 self.log_level,
             )
 
-        logger.log(
-            ("=" * 64),
-            self.log_level,
-        )
+        logger.log(table.footer(), self.log_level)
 
         # compute final eigenpairs
         lamr = self.lam[: self.nroot]
