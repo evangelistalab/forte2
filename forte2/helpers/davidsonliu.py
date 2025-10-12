@@ -229,7 +229,7 @@ class DavidsonLiuSolver:
                 "{:>+12.4e}",
                 "{:>+12.4e}",
                 "{:>4}",
-                "{:>6}",
+                "{:>7}",
             ],
         )
 
@@ -350,7 +350,7 @@ class DavidsonLiuSolver:
                     # self.b, self.basis_size, temp, missing
                 )
                 self.basis_size += added2
-                msg = f" <- +{added2} random"
+                msg = f"+{added2} rand"
 
             logger.log(
                 table.row(self.iter, avg_e, max_de, max_r, self.basis_size, msg),
