@@ -8,13 +8,15 @@ from forte2 import (
     cpp_helpers,
     apply_op,
     sparse_operator_hamiltonian,
+    spin2,
     Determinant,
+    Configuration,
     SparseState,
     SlaterRules,
     SelectedCIHelper,
 )
 from forte2.helpers.table import AsciiTable
-from forte2.state import State, MOSpace
+from forte2.state import State, MOSpace, state
 from forte2.helpers.comparisons import approx
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
 from forte2.base_classes.active_space_solver import (
@@ -118,6 +120,7 @@ class _SelectedCIBase:
     num_threads: int = 4
     ci_algorithm: str = "string"
     num_batches_per_thread: int = 4
+    do_spin_penalty: bool = True
 
     ### Davidson-Liu parameters
     guess_per_root: int = 2
@@ -162,9 +165,12 @@ class _SelectedCIBase:
         )
 
         # Create an initial guess
-        self.guess_determinants, self.guess_c, self.guess_energies = (
-            self._initial_guess(self.guess_occ_window, self.guess_vir_window)
-        )
+        (
+            self.guess_determinants,
+            self.guess_c,
+            self.guess_energies,
+            self.project_out,
+        ) = self._initial_guess(self.guess_occ_window, self.guess_vir_window)
         self.evecs = self.guess_c.copy()
 
         self.ndet = len(self.guess_determinants)
@@ -190,9 +196,10 @@ class _SelectedCIBase:
         self.sci_helper.set_num_threads(self.num_threads)
         self.sci_helper.set_num_batches_per_thread(self.num_batches_per_thread)
 
+        print()
         old_energy = 0.0
         for cycle in range(self.maxcycle):
-            print(f"\n{'=' * 67}")
+            print(f"{'=' * 67}")
             print(f"Selected CI Cycle {cycle + 1}")
             print(f"{'=' * 67}")
 
@@ -220,19 +227,28 @@ class _SelectedCIBase:
             e_var = self.sci_helper.get_energies()
             ept2_var = self.sci_helper.get_ept2_var()
             ept2_pt = self.sci_helper.get_ept2_pt()
+            spin2_var = self.sci_helper.compute_spin2()
 
             summary = "\nSummary of selection:"
-            summary += f"\n  Variational added:     {self.sci_helper.get_num_new_dets_var() + self.sci_helper.get_num_new_dets_pt2()}"
+            summary += (
+                f"\n  Variational added:     {self.sci_helper.get_num_new_dets_var()}"
+            )
             summary += (
                 f"\n  Perturbative included: {self.sci_helper.get_num_new_dets_pt2()}"
             )
             summary += f"\n  Total determinants:    {self.sci_helper.ndets()}"
-            summary += f"\n  Selection time:       {self.sci_helper.get_selection_time():.3f} s\n"
+            summary += f"\n  Selection time:        {self.sci_helper.get_selection_time():.3f} s\n"
             logger.log(summary, self.log_level)
 
             table = AsciiTable(
-                columns=["Root", "E (var) [Eh]", "E (var') [Eh]", "E (var'+PT2) [Eh]"],
-                formats=["{:>4}", "{:>20.12f}", "{:>20.12f}", "{:>20.12f}"],
+                columns=[
+                    "Root",
+                    "E (var) [Eh]",
+                    "S^2 (var)",
+                    "E (var') [Eh]",
+                    "E (var'+PT2) [Eh]",
+                ],
+                formats=["{:>4}", "{:>20.12f}", "{:>6.3f}", "{:>20.12f}", "{:>20.12f}"],
             )
 
             logger.log(table.header(), self.log_level)
@@ -241,6 +257,7 @@ class _SelectedCIBase:
                     table.row(
                         r,
                         e_var[r],
+                        spin2_var[r],
                         e_var[r] + ept2_var[r],
                         e_var[r] + ept2_var[r] + ept2_pt[r],
                     )
@@ -343,13 +360,43 @@ class _SelectedCIBase:
 
         # Sort the determinants by energy
         sorted_dets = sorted(det_energy.items(), key=lambda x: x[1])
-        print("Initial guess determinants (by energy):")
-        for d, e in sorted_dets[:n_guess_dets]:
-            print(f"  {d.str(self.norb)}: {e:20.12f} [Eh]")
 
         # Form the Hamiltonian matrix in this basis
         guess_dets = [d for d, e in sorted_dets[: min(n_guess_dets, len(sorted_dets))]]
+
+        # Check that we have all spin complement pairs
+        configurations = {Configuration(d) for d in guess_dets}
+        guess_dets = []
+        for conf in configurations:
+            docc = conf.get_docc_vec()
+            socc = conf.get_socc_vec()
+            print(f"Determinant: {conf.str(self.norb)}" f"  docc: {docc}  socc: {socc}")
+            # generate all combinations of spin complements that satisfy the same ms constraint
+            nopen = len(socc)
+            na = (nopen + self.state.twice_ms) // 2
+            nb = nopen - na
+            from itertools import combinations
+
+            for alpha_indices in combinations(range(nopen), na):
+                beta_indices = set(range(nopen)) - set(alpha_indices)
+                dcomp = Determinant.zero()
+                for i in docc:
+                    dcomp.set_na(i, True)
+                    dcomp.set_nb(i, True)
+                for ia in alpha_indices:
+                    orb = socc[ia]
+                    dcomp.set_na(orb, True)
+                for ib in beta_indices:
+                    orb = socc[ib]
+                    dcomp.set_nb(orb, True)
+                guess_dets.append(dcomp)
+
+        print("Initial guess determinants (by energy):")
+        for d in guess_dets:
+            print(f"  {d.str(self.norb)}: {self.slater_rules.energy(d):20.12f} [Eh]")
+
         ndet = len(guess_dets)
+        S2guess = np.zeros((ndet, ndet), dtype=self.dtype)
         Hguess = np.zeros((ndet, ndet), dtype=self.dtype)
         for i in range(ndet):
             for j in range(i + 1):
@@ -357,12 +404,47 @@ class _SelectedCIBase:
                     guess_dets[i], guess_dets[j]
                 )
                 Hguess[j, i] = np.conj(Hguess[i, j])
+                S2guess[i, j] = spin2(guess_dets[i], guess_dets[j])
+                S2guess[j, i] = np.conj(S2guess[i, j])
 
+        svals, svecs = np.linalg.eigh(S2guess)
+        print(f"S^2 values of the guess determinants: {svals}")
+        # find the multiplicity of the eigenvalue closest to S(S+1)
+        S = (self.state.multiplicity - 1) / 2
+        target_s2 = S * (S + 1)
+        close_idx = [
+            i for i, v in enumerate(svals) if np.isclose(v, target_s2, atol=1e-4)
+        ]
+        # find the indices of the eigenvalues that are not close to target_s2
+        not_close_idx = [i for i in range(len(svals)) if i not in close_idx]
+
+        print(
+            f"Target S(S+1) = {target_s2}, found {len(close_idx)} eigenvalues close to it."
+        )
+
+        # project the guess determinants into the S^2 subspace
+        S2sub = svecs[:, close_idx]
+        S2project_out = (
+            [svecs[:, i].copy() for i in not_close_idx] if self.do_spin_penalty else []
+        )
+        print(S2sub)
+        Hguess = S2sub.conj().T @ Hguess @ S2sub if self.do_spin_penalty else Hguess
         # Diagonalize the Hamiltonian to get the initial guess coefficients
         evals, evecs = np.linalg.eigh(Hguess)
-        c = evecs[:, : self.nroot].copy()
+        c = (
+            S2sub @ evecs[:, : self.nroot].copy()
+            if self.do_spin_penalty
+            else evecs[:, : self.nroot].copy()
+        )
         energies = evals[: self.nroot].copy()
-        return guess_dets, c, energies
+        print(f"Initial guess energies: {energies}")
+        print(f"Initial guess states:")
+        for r in range(c.shape[1]):
+            print(f"  Root {r}:")
+            for i in range(c.shape[0]):
+                if abs(c[i, r]) > 1e-4:
+                    print(f"    {guess_dets[i].str(self.norb)}: {c[i, r]:20.12f}")
+        return guess_dets, c, energies, S2project_out
 
     def _do_iterative_ci(self):
         """
@@ -407,6 +489,15 @@ class _SelectedCIBase:
         # # 5. Build the guess vectors
         # self._build_guess_vectors(Hdiag)
         self.eigensolver.add_guesses(self.guess_c)
+
+        # Project out any states as needed
+        if len(self.project_out) > 0:
+            project_out = []
+            for vec in self.project_out:
+                resized_vec = vec.copy()
+                resized_vec.resize(self.ndet)
+                project_out.append(resized_vec)
+            self.eigensolver.add_project_out(project_out)
 
         if self.two_component:
             if self.ci_algorithm.lower() == "sparse":
@@ -1300,6 +1391,7 @@ class SelectedCISolver(ActiveSpaceSolver):
     guess_vir_window: int = 2
     num_threads: int = 4
     num_batches_per_thread: int = 4
+    do_spin_penalty: bool = True
 
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
@@ -1362,6 +1454,7 @@ class SelectedCISolver(ActiveSpaceSolver):
                     selection_algorithm=self.selection_algorithm,
                     num_threads=self.num_threads,
                     num_batches_per_thread=self.num_batches_per_thread,
+                    do_spin_penalty=self.do_spin_penalty,
                 )
             )
 

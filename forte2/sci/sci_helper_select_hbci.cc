@@ -13,21 +13,6 @@
 
 namespace forte2 {
 
-static inline void merge_and_keep_unique(std::vector<Determinant>& dets,
-                                         std::vector<Determinant>& new_dets) {
-    // Sort a copy of the existing determinants
-    std::vector<Determinant> dets_sorted = dets;
-    std::sort(dets_sorted.begin(), dets_sorted.end());
-
-    // Sort the new determinants
-    std::sort(new_dets.begin(), new_dets.end());
-
-    // Keep only unique new determinants
-    new_dets.erase(std::unique(new_dets.begin(), new_dets.end()), new_dets.end());
-
-    append_unique_from_sorted_inplace(dets, dets_sorted, new_dets);
-}
-
 double SelectedCIHelper::compute_delta_ept2(double delta, double v) const {
     if (energy_correction_ == EnergyCorrection::Variational) {
         return -0.5 * (delta + std::sqrt(delta * delta + 4.0 * v * v));
@@ -690,18 +675,7 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
 
         // find the occupied and empty orbitals for the current alpha string
         a_str.find_set_bits(aocc, noa);
-        if (noa != na_) {
-            throw std::runtime_error("Number of alpha electrons does not match! Found " +
-                                     std::to_string(noa) + " expected " + std::to_string(na_)
-
-            );
-        }
         compute_fast_virtual(aocc, avir, norb_);
-        if (norb_ != avir.size() + noa) {
-            throw std::runtime_error("Number of alpha virtual orbitals does not match! Found " +
-                                     std::to_string(norb_ - noa) + " expected " +
-                                     std::to_string(avir.size()));
-        }
 
         // single alpha excitations
         for (const auto& i : aocc) {

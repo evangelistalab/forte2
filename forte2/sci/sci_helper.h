@@ -67,6 +67,8 @@ class SelectedCIHelper {
 
     void Hamiltonian(np_vector basis, np_vector sigma) const;
 
+    std::vector<double> compute_spin2();
+
     np_vector Hdiag() const;
 
     np_matrix compute_sf_1rdm(size_t left_root, size_t right_root) const;
@@ -98,6 +100,8 @@ class SelectedCIHelper {
                                                                           double pt2_threshold,
                                                                           size_t num_batches,
                                                                           size_t batch_id);
+
+    std::vector<double> spin2_batch(size_t num_batches, size_t batch_id);
 
     double find_matching_dets_1rdm(size_t left_root, size_t right_root,
                                    const SelectedCIStrings& list, size_t i, size_t j,
@@ -180,9 +184,12 @@ class SelectedCIHelper {
     std::vector<double> root_energies_;
     std::vector<double> ept2_var_;
     std::vector<double> ept2_pt_;
+
     size_t num_new_dets_var_ = 0;
     size_t num_new_dets_pt2_ = 0;
+
     double selection_time_ = 0.0;
+    double spin2_time_ = 0.0;
 
     SelectedCIStrings ab_list_;
     SelectedCIStrings ba_list_;

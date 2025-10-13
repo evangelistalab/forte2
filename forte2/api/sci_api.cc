@@ -40,6 +40,8 @@ void export_sci_helper_api(nb::module_& m) {
              "Perform HBCI2 selection with the given thresholds")
         .def("select_hbci3", &SelectedCIHelper::select_hbci3, "var_threshold"_a, "pt2_threshold"_a,
              "Perform HBCI3 selection with the given thresholds")
+        .def("compute_spin2", &SelectedCIHelper::compute_spin2,
+             "Compute the expectation value of S^2 for each root and return as a list")
         .def("dets", &SelectedCIHelper::get_variational_dets,
              "Return the determinants in the variational space")
         .def(
