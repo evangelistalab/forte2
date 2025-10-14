@@ -38,7 +38,35 @@ from forte2.ci.ci_utils import (
 
 
 @dataclass
-class _SelectedCIBase:
+class SelectedCIParams:
+    ### Selected CI parameters
+    maxcycle: int = 10
+    var_threshold: float = 1e-5
+    pt2_threshold: float = 1e-8
+    selection_algorithm: str = "hbci_ref"
+    guess_occ_window: int = 2
+    guess_vir_window: int = 2
+    num_threads: int = 4
+    ci_algorithm: str = "string"
+    num_batches_per_thread: int = 4
+    do_spin_penalty: bool = True
+
+
+@dataclass
+class DavidsonLiuParams:
+    ### Davidson-Liu parameters
+    guess_per_root: int = 2
+    ndets_per_guess: int = 10
+    collapse_per_root: int = 2
+    basis_per_root: int = 4
+    maxiter: int = 100
+    econv: float = 1e-10
+    rconv: float = 1e-5
+    energy_shift: float = None
+
+
+@dataclass
+class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
     """
     A general selected configuration interaction (CI) solver class for a single `State`.
     Although possible, is not recommended to instantiate this class directly.
@@ -99,38 +127,16 @@ class _SelectedCIBase:
 
     """
 
-    mo_space: MOSpace
-    state: State
-    ints: RestrictedMOIntegrals
-    nroot: int
-    active_orbsym: list[int]
+    mo_space: MOSpace = field(default=None)
+    state: State = field(default=None)
+    ints: RestrictedMOIntegrals = field(default=None)
+    nroot: int = field(default=1)
+    active_orbsym: list[int] = field(default_factory=list)
     two_component: bool = False
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
     die_if_not_converged: bool = False
     slater_rules: SlaterRules = field(default=None, init=False)
-
-    ### Selected CI parameters
-    maxcycle: int = 10
-    var_threshold: float = 1e-5
-    pt2_threshold: float = 1e-8
-    selection_algorithm: str = "hbci_ref"
-    guess_occ_window: int = 2
-    guess_vir_window: int = 2
-    num_threads: int = 4
-    ci_algorithm: str = "string"
-    num_batches_per_thread: int = 4
-    do_spin_penalty: bool = True
-
-    ### Davidson-Liu parameters
-    guess_per_root: int = 2
-    ndets_per_guess: int = 20
-    collapse_per_root: int = 2
-    basis_per_root: int = 4
-    maxiter: int = 100
-    econv: float = 1e-10
-    rconv: float = 1e-5
-    energy_shift: float = None
 
     ### Non-init attributes
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
@@ -211,12 +217,8 @@ class _SelectedCIBase:
                 self.sci_helper.select_hbci_ref(
                     var_threshold=self.var_threshold, pt2_threshold=self.pt2_threshold
                 )
-            elif self.selection_algorithm.lower() == "hbci2":
-                self.sci_helper.select_hbci2(
-                    var_threshold=self.var_threshold, pt2_threshold=self.pt2_threshold
-                )
-            elif self.selection_algorithm.lower() == "hbci3":
-                self.sci_helper.select_hbci3(
+            elif self.selection_algorithm.lower() == "hbci":
+                self.sci_helper.select_hbci(
                     var_threshold=self.var_threshold, pt2_threshold=self.pt2_threshold
                 )
             else:
@@ -224,20 +226,22 @@ class _SelectedCIBase:
                     f"Unknown selection algorithm: {self.selection_algorithm}"
                 )
 
-            e_var = self.sci_helper.get_energies()
-            ept2_var = self.sci_helper.get_ept2_var()
-            ept2_pt = self.sci_helper.get_ept2_pt()
+            e_var = self.sci_helper.energies()
+            ept2_var = self.sci_helper.ept2_var()
+            ept2_pt = self.sci_helper.ept2_pt()
             spin2_var = self.sci_helper.compute_spin2()
 
             summary = "\nSummary of selection:"
             summary += (
-                f"\n  Variational added:     {self.sci_helper.get_num_new_dets_var()}"
+                f"\n  Variational added:     {self.sci_helper.num_new_dets_var()}"
             )
             summary += (
-                f"\n  Perturbative included: {self.sci_helper.get_num_new_dets_pt2()}"
+                f"\n  Perturbative included: {self.sci_helper.num_new_dets_pt2()}"
             )
             summary += f"\n  Total determinants:    {self.sci_helper.ndets()}"
-            summary += f"\n  Selection time:        {self.sci_helper.get_selection_time():.3f} s\n"
+            summary += (
+                f"\n  Selection time:        {self.sci_helper.selection_time():.3f} s\n"
+            )
             logger.log(summary, self.log_level)
 
             table = AsciiTable(
@@ -487,7 +491,6 @@ class _SelectedCIBase:
         self.eigensolver.add_h_diag(Hdiag)
 
         # # 5. Build the guess vectors
-        # self._build_guess_vectors(Hdiag)
         self.eigensolver.add_guesses(self.guess_c)
 
         # Project out any states as needed
@@ -702,42 +705,6 @@ class _SelectedCIBase:
                 f"RDMs for root {root} validated successfully.\n", self.log_level
             )
 
-    def _build_guess_vectors(self, Hdiag):
-        """Build the guess vectors for the CI calculation."""
-        # determine the number of guess vectors
-        self.num_guess_states = min(self.guess_per_root * self.nroot, self.ndet)
-        logger.log(f"Number of guess states: {self.num_guess_states}", self.log_level)
-        nguess_dets = min(self.ndets_per_guess * self.num_guess_states, self.ndet)
-        logger.log(f"Number of guess basis: {nguess_dets}", self.log_level)
-
-        # find the indices of the elements of Hdiag with the lowest values
-        if self.energy_shift is not None:
-            indices = np.argsort(np.abs(Hdiag - self.energy_shift))[:nguess_dets]
-        else:
-            indices = np.argsort(Hdiag)[:nguess_dets]
-
-        # create the Hamiltonian matrix in the basis of the guess CSFs
-        Hguess = np.zeros((nguess_dets, nguess_dets), dtype=self.dtype)
-        for i, I in enumerate(indices):
-            for j, J in enumerate(indices):
-                if i >= j:
-                    Hij = self.slater_rules.slater_rules(self.dets[I], self.dets[J])
-                    Hguess[i, j] = Hij
-                    Hguess[j, i] = np.conj(Hij)
-
-        # Diagonalize the Hamiltonian to get the initial guess vectors
-        evals_guess, evecs_guess = np.linalg.eigh(Hguess)
-        print(f"Guess energies: {evals_guess[:self.num_guess_states]}")
-
-        # Select the lowest eigenvalues and their corresponding eigenvectors
-        guess_mat = np.zeros((self.ndet, self.num_guess_states), dtype=self.dtype)
-        for i in range(self.num_guess_states):
-            guess = evecs_guess[:, i]
-            for j, d in enumerate(indices):
-                guess_mat[d, i] = guess[j]
-
-        self.eigensolver.add_guesses(guess_mat)
-
     def make_sd_1rdm(self, left_root: int, right_root: int | None = None):
         r"""
         Make the spin-dependent one-particle RDM for two CI roots.
@@ -771,76 +738,6 @@ class _SelectedCIBase:
         b = self.ci_sigma_builder.b_1rdm(left_ci_vec_det, right_ci_vec_det)
         return a, b
 
-    def make_sd_2rdm(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-dependent two-particle RDMs (aa, ab, bb) for two CI roots.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int | None, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        tuple[NDArray, NDArray, NDArray]:
-            Spin-dependent two-particle RDMs (aa, ab, bb).
-        """
-        assert (
-            not self.two_component
-        ), "make_sd_2rdm is only available for non-relativistic CI."
-
-        left_ci_vec_det = np.zeros((self.ndet))
-        self.spin_adapter.csf_C_to_det_C(self.evecs[:, left_root], left_ci_vec_det)
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(
-                self.evecs[:, right_root], right_ci_vec_det
-            )
-        aa = self.ci_sigma_builder.aa_2rdm(left_ci_vec_det, right_ci_vec_det)
-        ab = self.ci_sigma_builder.ab_2rdm(left_ci_vec_det, right_ci_vec_det)
-        bb = self.ci_sigma_builder.bb_2rdm(left_ci_vec_det, right_ci_vec_det)
-        return aa, ab, bb
-
-    def make_sd_3rdm(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-dependent three-particle RDMs (aaa, aab, abb, bbb) for two CI roots.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int | None, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        tuple[NDArray, NDArray, NDArray, NDArray]:
-            Spin-dependent three-particle RDMs (aaa, aab, abb, bbb).
-        """
-        assert (
-            not self.two_component
-        ), "make_sd_3rdm is only available for non-relativistic CI."
-
-        left_ci_vec_det = np.zeros((self.ndet))
-        self.spin_adapter.csf_C_to_det_C(self.evecs[:, left_root], left_ci_vec_det)
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(
-                self.evecs[:, right_root], right_ci_vec_det
-            )
-
-        aaa = self.ci_sigma_builder.aaa_3rdm(left_ci_vec_det, right_ci_vec_det)
-        aab = self.ci_sigma_builder.aab_3rdm(left_ci_vec_det, right_ci_vec_det)
-        abb = self.ci_sigma_builder.abb_3rdm(left_ci_vec_det, right_ci_vec_det)
-        bbb = self.ci_sigma_builder.bbb_3rdm(left_ci_vec_det, right_ci_vec_det)
-        return aaa, aab, abb, bbb
-
     def make_sf_1rdm(self, left_root: int, right_root: int | None = None):
         """
         Make the spin-free one-particle RDM for two CI roots.
@@ -871,341 +768,6 @@ class _SelectedCIBase:
         return self.ci_sigma_builder.sf_1rdm(
             self.evecs[:, left_root], self.evecs[:, right_root]
         )
-
-    def make_sf_2rdm(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-free two-particle RDM for two CI roots.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int | None, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            Spin-free two-particle RDM.
-        """
-        assert (
-            not self.two_component
-        ), "make_sf_2rdm is only available for non-relativistic CI."
-
-        left_ci_vec_det = np.zeros((self.ndet))
-        self.spin_adapter.csf_C_to_det_C(self.evecs[:, left_root], left_ci_vec_det)
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(
-                self.evecs[:, right_root], right_ci_vec_det
-            )
-        return self.ci_sigma_builder.sf_2rdm(left_ci_vec_det, right_ci_vec_det)
-
-    def make_sf_3rdm(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-free three-particle RDM for two CI roots.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int | None, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            Spin-free three-particle RDM.
-        """
-        assert (
-            not self.two_component
-        ), "make_sf_3rdm is only available for non-relativistic CI."
-
-        left_ci_vec_det = np.zeros((self.ndet))
-        self.spin_adapter.csf_C_to_det_C(self.evecs[:, left_root], left_ci_vec_det)
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(
-                self.evecs[:, right_root], right_ci_vec_det
-            )
-        return self.ci_sigma_builder.sf_3rdm(left_ci_vec_det, right_ci_vec_det)
-
-    def make_sf_2cumulant(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-free cumulant of the two-particle RDM for two CI roots.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int | None, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            Spin-free cumulant of the two-particle RDM.
-        """
-        assert (
-            not self.two_component
-        ), "make_sf_2cumulant is only available for non-relativistic CI."
-
-        left_ci_vec_det = np.zeros((self.ndet))
-        self.spin_adapter.csf_C_to_det_C(self.evecs[:, left_root], left_ci_vec_det)
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(
-                self.evecs[:, right_root], right_ci_vec_det
-            )
-        return self.ci_sigma_builder.sf_2cumulant(left_ci_vec_det, right_ci_vec_det)
-
-    def make_sf_3cumulant(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-free cumulant of the three-particle RDM for two CI roots.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int | None, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            Spin-free cumulant of the three-particle RDM.
-        """
-        assert (
-            not self.two_component
-        ), "make_sf_3cumulant is only available for non-relativistic CI."
-
-        left_ci_vec_det = np.zeros((self.ndet))
-        self.spin_adapter.csf_C_to_det_C(self.evecs[:, left_root], left_ci_vec_det)
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(
-                self.evecs[:, right_root], right_ci_vec_det
-            )
-        return self.ci_sigma_builder.sf_3cumulant(left_ci_vec_det, right_ci_vec_det)
-
-    def make_1rdm(self, left_root: int, right_root: int = None):
-        """
-        Make the one-particle RDM for two CI roots. For two-component CI only.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            One-particle RDM.
-        """
-        assert self.two_component, "make_1rdm is only available for two-component CI."
-
-        if right_root is None:
-            right_root = left_root
-        # copy to ensure contiguous arrays are passed to the sigma builder
-        rdm = self.ci_sigma_builder.so_1rdm(
-            self.evecs[:, left_root].copy(),
-            self.evecs[:, right_root].copy(),
-        )
-
-        return rdm
-
-    def make_1rdm_debug(self, left_root: int, right_root: int = None):
-        """
-        Make the one-particle RDM for two CI roots. For two-component CI only.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            One-particle RDM.
-        """
-        assert (
-            self.two_component
-        ), "make_1rdm_debug is only available for two-component CI."
-
-        if right_root is None:
-            right_root = left_root
-        # copy to ensure contiguous arrays are passed to the sigma builder
-        rdm = self.ci_sigma_builder.so_1rdm_debug(
-            self.evecs[:, left_root].copy(),
-            self.evecs[:, right_root].copy(),
-        )
-
-        return rdm
-
-    def make_2rdm_debug(self, left_root: int, right_root: int = None):
-        """
-        Make the two-particle RDM for two CI roots. For two-component CI only.
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            Two-particle RDM.
-        """
-        assert (
-            self.two_component
-        ), "make_2rdm_debug is only available for two-component CI."
-
-        if right_root is None:
-            right_root = left_root
-        # copy to ensure contiguous arrays are passed to the sigma builder
-        rdm = self.ci_sigma_builder.so_2rdm_debug(
-            self.evecs[:, left_root].copy(),
-            self.evecs[:, right_root].copy(),
-        )
-
-        return rdm
-
-    def make_2cumulant(self, left_root: int, right_root: int = None):
-        """
-        Make the cumulant of the two-particle RDM for two CI roots. For two-component CI only.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            Cumulant of the two-particle RDM.
-        """
-        assert (
-            self.two_component
-        ), "make_2cumulant is only available for two-component CI."
-
-        if right_root is None:
-            right_root = left_root
-        lambda2 = self.ci_sigma_builder.so_2cumulant(
-            self.evecs[:, left_root].copy(),
-            self.evecs[:, right_root].copy(),
-        )
-        return lambda2
-
-    def make_2rdm(self, left_root: int, right_root: int = None):
-        """
-        Make the two-particle RDM for two CI roots. For two-component CI only.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            Two-particle RDM.
-        """
-        assert self.two_component, "make_2rdm is only available for two-component CI."
-
-        if right_root is None:
-            right_root = left_root
-        # copy to ensure contiguous arrays are passed to the sigma builder
-        rdm = self.ci_sigma_builder.so_2rdm(
-            self.evecs[:, left_root].copy(),
-            self.evecs[:, right_root].copy(),
-        )
-
-        return rdm
-
-    def make_2cumulant_debug(self, left_root: int, right_root: int = None):
-        """
-        Make the cumulant of the two-particle RDM for two CI roots. For two-component CI only.
-
-        Parameters
-        ----------
-        left_root : int
-            the CI root for the bra state.
-        right_root : int, optional (default=left_root)
-            the CI root for the ket state.
-
-        Returns
-        -------
-        NDArray
-            Cumulant of the two-particle RDM.
-        """
-        assert (
-            self.two_component
-        ), "make_2cumulant_debug is only available for two-component CI."
-        if right_root is None:
-            right_root = left_root
-        rdm1 = self.make_1rdm(left_root, right_root)
-        rdm2 = self.make_2rdm(left_root, right_root)
-        lambda2 = (
-            rdm2
-            - np.einsum("pr,qs->pqrs", rdm1, rdm1, optimize=True)
-            + np.einsum("ps,qr->pqrs", rdm1, rdm1, optimize=True)
-        )
-        return lambda2
-
-    def make_3rdm_debug(self, left_root: int, right_root: int = None):
-        assert (
-            self.two_component
-        ), "make_3rdm_debug is only available for two-component CI."
-        if right_root is None:
-            right_root = left_root
-        # copy to ensure contiguous arrays are passed to the sigma builder
-        rdm = self.ci_sigma_builder.so_3rdm_debug(
-            self.evecs[:, left_root].copy(),
-            self.evecs[:, right_root].copy(),
-        )
-
-        return rdm
-
-    def make_3rdm(self, left_root: int, right_root: int = None):
-        assert self.two_component, "make_3rdm is only available for two-component CI."
-        if right_root is None:
-            right_root = left_root
-        # copy to ensure contiguous arrays are passed to the sigma builder
-        rdm = self.ci_sigma_builder.so_3rdm(
-            self.evecs[:, left_root].copy(),
-            self.evecs[:, right_root].copy(),
-        )
-
-        return rdm
-
-    def make_3cumulant(self, left_root: int, right_root: int = None):
-        assert (
-            self.two_component
-        ), "make_3cumulant is only available for two-component CI."
-        if right_root is None:
-            right_root = left_root
-        lambda3 = self.ci_sigma_builder.so_3cumulant(
-            self.evecs[:, left_root].copy(),
-            self.evecs[:, right_root].copy(),
-        )
-        return lambda3
 
     def compute_natural_occupation_numbers(self):
         """
@@ -1315,7 +877,7 @@ class _SelectedCIBase:
 
 
 @dataclass
-class SelectedCISolver(ActiveSpaceSolver):
+class SelectedCISolver(SelectedCIParams, DavidsonLiuParams, ActiveSpaceSolver):
     """
     A general configuration interaction (CI) solver class.
     This solver is can be called iteratively, e.g., in a MCSCF loop or a DSRG reference relaxation loop.
@@ -1374,25 +936,6 @@ class SelectedCISolver(ActiveSpaceSolver):
         The average energy computed from the state-averaged CI roots.
     """
 
-    ### Davidson-Liu parameters
-    guess_per_root: int = 2
-    ndets_per_guess: int = 10
-    collapse_per_root: int = 2
-    basis_per_root: int = 4
-    maxiter: int = 100
-    econv: float = 1e-10
-    rconv: float = 1e-5
-    energy_shift: float = None
-
-    selection_algorithm: str = "hbci_ref"
-    var_threshold: float = 1e-5
-    pt2_threshold: float = 1e-8
-    guess_occ_window: int = 2
-    guess_vir_window: int = 2
-    num_threads: int = 4
-    num_batches_per_thread: int = 4
-    do_spin_penalty: bool = True
-
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
 
@@ -1404,6 +947,15 @@ class SelectedCISolver(ActiveSpaceSolver):
     def __call__(self, method):
         self.parent_method = method
         return self
+
+    def _collect_child_kwargs(self, target_cls):
+        """Collect keyword arguments for child solvers."""
+        # Defer import to avoid polluting top-level namespace
+        from dataclasses import fields as _dc_fields
+
+        # Take all init fields of the target dataclass and copy values from `self` if present
+        names = {f.name for f in _dc_fields(target_cls) if f.init}
+        return {n: getattr(self, n) for n in names if hasattr(self, n)}
 
     def _startup(self):
         super()._startup()
@@ -1429,34 +981,18 @@ class SelectedCISolver(ActiveSpaceSolver):
         ]
         for i, state in enumerate(self.sa_info.states):
             # Create a CI solver for each state and MOSpace
-            self.sub_solvers.append(
-                _SelectedCIBase(
-                    mo_space=self.mo_space,
-                    ints=ints,
-                    state=state,
-                    nroot=self.sa_info.nroots[i],
-                    active_orbsym=active_orbsym,
-                    do_test_rdms=self.do_test_rdms,
-                    die_if_not_converged=self.die_if_not_converged,
-                    guess_per_root=self.guess_per_root,
-                    ndets_per_guess=self.ndets_per_guess,
-                    collapse_per_root=self.collapse_per_root,
-                    basis_per_root=self.basis_per_root,
-                    maxiter=self.maxiter,
-                    econv=self.econv,
-                    rconv=self.rconv,
-                    energy_shift=self.energy_shift,
-                    log_level=self.log_level,
-                    var_threshold=self.var_threshold,
-                    pt2_threshold=self.pt2_threshold,
-                    guess_occ_window=self.guess_occ_window,
-                    guess_vir_window=self.guess_vir_window,
-                    selection_algorithm=self.selection_algorithm,
-                    num_threads=self.num_threads,
-                    num_batches_per_thread=self.num_batches_per_thread,
-                    do_spin_penalty=self.do_spin_penalty,
-                )
+
+            kwargs = self._collect_child_kwargs(_SelectedCIBase)
+            kwargs.update(
+                {
+                    "mo_space": self.mo_space,
+                    "ints": ints,
+                    "state": state,
+                    "nroot": self.sa_info.nroots[i],
+                    "active_orbsym": active_orbsym,
+                }
             )
+            self.sub_solvers.append(_SelectedCIBase(**kwargs))
 
     def run(self):
         if self.first_run:

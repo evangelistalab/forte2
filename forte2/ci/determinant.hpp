@@ -521,6 +521,20 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         }
     }
 
+    /// @brief Apply a function to each occupied spin orbital.
+    /// @tparam Func Callable of the form void(size_t)
+    void for_all(auto&& func) const noexcept {
+        for (size_t begin = 0; begin < nwords_; ++begin) {
+            uint64_t x = words_[begin];
+            const size_t base = begin * bits_per_word;
+            while (x) {
+                const size_t pos = base + std::countr_zero(x);
+                func(pos);
+                x &= (x - 1); // clear the lowest set bit
+            }
+        }
+    }
+
     /// Find the index of the first alpha bit set to 1
     uint64_t find_first_one_alfa() const { return find_first_one(0, nwords_half); }
 

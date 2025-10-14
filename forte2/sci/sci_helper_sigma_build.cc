@@ -91,7 +91,6 @@ void SelectedCIHelper::H1a(std::span<double> basis, std::span<double> sigma) con
     const auto& one_hole_first_strings = ab_list_.one_hole_first_strings();
     // Loop over all unique alpha strings
     for (size_t i{0}; i < first_string_size; ++i) {
-        const auto& i_second_string_to_det_index = ab_list_.second_string_to_det_index()[i];
         const auto& sublist = ab_list_.one_hole_first_string_list()[i];
         for (const auto& [p, hole_idx, sign_p] : sublist) {
             const auto& inv_sublist = ab_list_.one_hole_first_string_list_inv()[hole_idx];
@@ -113,7 +112,6 @@ void SelectedCIHelper::H1b(std::span<double> basis, std::span<double> sigma) con
     const auto& one_hole_first_strings = ba_list_.one_hole_first_strings();
     // Loop over all unique beta strings
     for (size_t i{0}; i < first_string_size; ++i) {
-        const auto& i_second_string_to_det_index = ba_list_.second_string_to_det_index()[i];
         const auto& sublist = ba_list_.one_hole_first_string_list()[i];
         for (const auto& [p, hole_idx, sign_p] : sublist) {
             const auto& inv_sublist = ba_list_.one_hole_first_string_list_inv()[hole_idx];
@@ -135,7 +133,6 @@ void SelectedCIHelper::H2a(std::span<double> basis, std::span<double> sigma) con
     const auto& two_hole_strings = ab_list_.two_hole_strings();
     // Loop over all unique alpha strings
     for (size_t i{0}; i < first_string_size; ++i) {
-        const auto& i_second_string_to_det_index = ab_list_.second_string_to_det_index()[i];
         const auto& sublist = ab_list_.two_hole_string_list()[i];
         for (const auto& [p, q, hole_idx, sign_pq] : sublist) {
             const auto& inv_sublist = ab_list_.two_hole_string_list_inv()[hole_idx];
@@ -257,7 +254,6 @@ np_matrix SelectedCIHelper::compute_a_1rdm(size_t left_root, size_t right_root) 
     const auto& one_hole_first_strings = ab_list_.one_hole_first_strings();
     // Loop over all unique alpha strings
     for (size_t i{0}; i < first_string_size; ++i) {
-        const auto& i_second_string_to_det_index = ab_list_.second_string_to_det_index()[i];
         const auto& sublist = ab_list_.one_hole_first_string_list()[i];
         for (const auto& [p, hole_idx, sign_p] : sublist) {
             const auto& inv_sublist = ab_list_.one_hole_first_string_list_inv()[hole_idx];
@@ -280,7 +276,6 @@ np_matrix SelectedCIHelper::compute_b_1rdm(size_t left_root, size_t right_root) 
     const auto& one_hole_first_strings = ba_list_.one_hole_first_strings();
     // Loop over all unique beta strings
     for (size_t i{0}; i < first_string_size; ++i) {
-        const auto& i_second_string_to_det_index = ba_list_.second_string_to_det_index()[i];
         const auto& sublist = ba_list_.one_hole_first_string_list()[i];
         for (const auto& [p, hole_idx, sign_p] : sublist) {
             const auto& inv_sublist = ba_list_.one_hole_first_string_list_inv()[hole_idx];

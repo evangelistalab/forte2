@@ -9,6 +9,8 @@ import pytest
 
 
 def test_sci1():
+    """Test that SelectedCI reproduces the FCI energy on 4 H atoms in a chain with STO-6G basis set."""
+
     xyz = f"""
     H 0.0 0.0 0.0
     H 0.0 0.0 1.0
@@ -25,7 +27,7 @@ def test_sci1():
     sci = SelectedCI(
         states=State(nel=4, multiplicity=1, ms=0.0),
         active_orbitals=list(range(4)),
-        selection_algorithm="hbci3",
+        selection_algorithm="hbci",
         var_threshold=1e-12,
         pt2_threshold=0.0,
     )(rhf)
@@ -35,6 +37,8 @@ def test_sci1():
 
 
 def test_sci2():
+    """Test SelectedCI with a single determinant guess."""
+
     xyz = f"""
     H 0.0 0.0 0.0
     H 0.0 0.0 1.0
@@ -48,19 +52,10 @@ def test_sci2():
 
     rhf = RHF(charge=0, econv=1e-10)(system)
 
-    # ci = CI(
-    #     states=State(nel=6, multiplicity=1, ms=0.0),
-    #     active_orbitals=list(range(12)),
-    #     nroots=2,
-    # )(rhf)
-    # ci.run()
-
     sci = SelectedCI(
         states=State(nel=6, multiplicity=1, ms=0.0),
         active_orbitals=list(range(12)),
-        # selection_algorithm="hbci_ref",
-        # selection_algorithm="hbci2",
-        selection_algorithm="hbci3",
+        selection_algorithm="hbci",
         var_threshold=1e-4,
         pt2_threshold=0.0,
         guess_occ_window=0,
@@ -70,10 +65,11 @@ def test_sci2():
 
     sci.run()
 
-    assert sci.E[0] == pytest.approx(-3.321294103198, abs=1e-8)
+    assert sci.E[0] == pytest.approx(-3.321294103198, abs=1e-9)
 
 
 def test_sci3():
+    """Test SelectedCI on multiple states without spin penalty."""
     xyz = f"""
     H 0.0 0.0 0.0
     H 0.0 0.0 1.0
@@ -90,7 +86,7 @@ def test_sci3():
     sci = SelectedCI(
         states=State(nel=6, multiplicity=1, ms=0.0),
         active_orbitals=list(range(12)),
-        selection_algorithm="hbci3",
+        selection_algorithm="hbci",
         var_threshold=1e-5,
         pt2_threshold=0.0,
         guess_occ_window=2,
@@ -106,6 +102,7 @@ def test_sci3():
 
 
 def test_sci4():
+    """Test SelectedCI on multiple states with spin penalty."""
     xyz = f"""
     H 0.0 0.0 0.0
     H 0.0 0.0 1.0
@@ -122,7 +119,7 @@ def test_sci4():
     sci = SelectedCI(
         states=State(nel=6, multiplicity=1, ms=0.0),
         active_orbitals=list(range(12)),
-        selection_algorithm="hbci3",
+        selection_algorithm="hbci",
         var_threshold=1e-5,
         pt2_threshold=0.0,
         guess_occ_window=2,

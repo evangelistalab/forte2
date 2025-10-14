@@ -32,31 +32,26 @@ void export_sci_helper_api(nb::module_& m) {
              "Set the number of batches each thread will process in parallel sections")
         .def("set_energies", &SelectedCIHelper::set_energies, "e"_a,
              "Set the energies of the roots")
-        .def("select_cipsi", &SelectedCIHelper::select_cipsi, "threshold"_a,
-             "Perform CIPSI selection with the given threshold")
         .def("select_hbci_ref", &SelectedCIHelper::select_hbci_ref, "var_threshold"_a,
              "pt2_threshold"_a, "Perform HBCI selection with the given threshold")
-        .def("select_hbci2", &SelectedCIHelper::select_hbci2, "var_threshold"_a, "pt2_threshold"_a,
-             "Perform HBCI2 selection with the given thresholds")
-        .def("select_hbci3", &SelectedCIHelper::select_hbci3, "var_threshold"_a, "pt2_threshold"_a,
-             "Perform HBCI3 selection with the given thresholds")
+        .def("select_hbci", &SelectedCIHelper::select_hbci, "var_threshold"_a, "pt2_threshold"_a,
+             "Perform HBCI selection with the given thresholds")
         .def("compute_spin2", &SelectedCIHelper::compute_spin2,
              "Compute the expectation value of S^2 for each root and return as a list")
-        .def("dets", &SelectedCIHelper::get_variational_dets,
+        .def("dets", &SelectedCIHelper::variational_dets,
              "Return the determinants in the variational space")
-        .def(
-            "ndets", [](SelectedCIHelper& self) { return self.get_variational_dets().size(); },
-            "Return the number of determinants in the variational space")
-        .def("get_energies", &SelectedCIHelper::get_energies, "Return the energies of the roots")
-        .def("get_ept2_var", &SelectedCIHelper::get_ept2_var,
+        .def("ndets", &SelectedCIHelper::num_dets_var,
+             "Return the number of determinants in the variational space")
+        .def("energies", &SelectedCIHelper::energies, "Return the energies of the roots")
+        .def("ept2_var", &SelectedCIHelper::ept2_var,
              "Return the variational part of the Epstein-Nesbet second-order energy correction")
-        .def("get_ept2_pt", &SelectedCIHelper::get_ept2_pt,
+        .def("ept2_pt", &SelectedCIHelper::ept2_pt,
              "Return the perturbative part of the Epstein-Nesbet second-order energy correction")
-        .def("get_num_new_dets_var", &SelectedCIHelper::get_num_new_dets_var,
+        .def("num_new_dets_var", &SelectedCIHelper::num_new_dets_var,
              "Return the number of new variational determinants added in the last selection")
-        .def("get_num_new_dets_pt2", &SelectedCIHelper::get_num_new_dets_pt2,
+        .def("num_new_dets_pt2", &SelectedCIHelper::num_new_dets_pt2,
              "Return the number of new perturbative determinants added in the last selection")
-        .def("get_selection_time", &SelectedCIHelper::get_selection_time,
+        .def("selection_time", &SelectedCIHelper::selection_time,
              "Return the total selection time");
 }
 } // namespace forte2

@@ -111,7 +111,6 @@ nanobind_add_module(
   ci/rel_ci_sigma_builder_harrison_zarrabian.cc
   ci/slater_rules.cc
   sci/sci_helper.cc
-  sci/sci_helper_select.cc
   sci/sci_helper_select_hbci.cc
   sci/sci_helper_sigma_build.cc
   sci/sci_helper_spin.cc
