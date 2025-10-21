@@ -1,5 +1,5 @@
 import numpy as np
-import scipy, scipy.constants
+import scipy
 
 from forte2 import integrals
 from forte2.helpers import logger, eigh_gen
@@ -14,7 +14,7 @@ def _row_given_Z(Z):
     return np.searchsorted(ROW_Z_START, Z, side="right")
 
 
-def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
+def get_hcore_x2c(system, snso_type=None):
     """
     Return the one-electron X2C core Hamiltonian matrix for the given system.
 
@@ -22,8 +22,6 @@ def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
     ----------
     system : forte2.system.System
         The system for which to compute the X2C core Hamiltonian.
-    x2c_type : str, optional, default="sf"
-        The type of X2C to use, either "sf" or "so" (spin-orbit).
     snso_type : str, optional
         The type of SNSO scaling to apply, if any. Options are "boettger", "dc", "dcb", or "row-dependent".
 
@@ -38,10 +36,10 @@ def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
     but adopts some numerical tricks from J. Chem. Phys. 131, 031104 (2009), especially
     for the spin-orbit case. See also PySCF's x2c module for reference.
     """
-    assert x2c_type in [
+    assert system.x2c_type in [
         "sf",
         "so",
-    ], f"Invalid x2c_type: {x2c_type}. Must be 'sf' or 'so'."
+    ], f"Invalid x2c_type: {system.x2c_type}. Must be 'sf' or 'so'."
 
     if snso_type is not None:
         assert snso_type.lower() in [
@@ -56,14 +54,14 @@ def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
 
     nbf_decon = len(xbasis)
     logger.log_info1(f"Number of decontracted basis functions: {nbf_decon}")
-    nbf = nbf_decon if x2c_type == "sf" else nbf_decon * 2
+    nbf = nbf_decon if system.x2c_type == "sf" else nbf_decon * 2
     # expensive way to get this for now but works for all types of contraction schemes
-    proj = _get_projection_matrix(system, xbasis, x2c_type=x2c_type)
+    proj = _get_projection_matrix(system, xbasis, x2c_type=system.x2c_type)
 
     S, T, V, W = _get_integrals(xbasis, system)
 
     # build and solve the one-electron matrix Dirac equation
-    _, c_dirac = _solve_dirac_eq(S, T, V, W, nbf, x2c_type)
+    _, c_dirac = _solve_dirac_eq(S, T, V, W, nbf, x2c_type=system.x2c_type)
 
     # build the decoupling matrix X
     X = _get_decoupling_matrix(c_dirac, nbf)
@@ -108,13 +106,13 @@ def _i_sigma_dot(A):
     return np.block([[scalar + z * 1j, x * 1j + y], [x * 1j - y, scalar - z * 1j]])
 
 
-def _get_projection_matrix(system, xbasis, x2c_type):
+def _get_projection_matrix(system, xbasis):
     proj = scipy.linalg.solve(
         integrals.overlap(system, xbasis),
         integrals.overlap(system, xbasis, system.basis),
         assume_a="pos",
     )
-    return proj if x2c_type == "sf" else _block_diag(proj)
+    return proj if system.x2c_type == "sf" else _block_diag(proj)
 
 
 def _get_integrals(xbasis, system):
