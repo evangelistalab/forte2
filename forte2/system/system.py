@@ -253,10 +253,8 @@ class System:
         NDArray
             Core Hamiltonian integrals matrix.
         """
-        if self.x2c_type == "sf":
-            H = get_hcore_x2c(self, x2c_type="sf")
-        elif self.x2c_type == "so":
-            H = get_hcore_x2c(self, x2c_type="so", snso_type=self.snso_type)
+        if self.x2c_type in ["sf", "so"]:
+            H = get_hcore_x2c(self)
         else:
             T = integrals.kinetic(self)
             V = integrals.nuclear(self)

@@ -14,7 +14,7 @@ def _row_given_Z(Z):
     return np.searchsorted(ROW_Z_START, Z, side="right")
 
 
-def get_hcore_x2c(system, snso_type=None):
+def get_hcore_x2c(system):
     """
     Return the one-electron X2C core Hamiltonian matrix for the given system.
 
@@ -41,13 +41,13 @@ def get_hcore_x2c(system, snso_type=None):
         "so",
     ], f"Invalid x2c_type: {system.x2c_type}. Must be 'sf' or 'so'."
 
-    if snso_type is not None:
-        assert snso_type.lower() in [
+    if system.snso_type is not None:
+        assert system.snso_type.lower() in [
             "boettger",
             "dc",
             "dcb",
             "row-dependent",
-        ], f"Invalid snso_type: {snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
+        ], f"Invalid snso_type: {system.snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
 
     logger.log_info1(f"Number of contracted basis functions: {system.nbf}")
     xbasis = build_basis(system.basis_set, system.geom_helper, decontract=True)
@@ -56,7 +56,7 @@ def get_hcore_x2c(system, snso_type=None):
     logger.log_info1(f"Number of decontracted basis functions: {nbf_decon}")
     nbf = nbf_decon if system.x2c_type == "sf" else nbf_decon * 2
     # expensive way to get this for now but works for all types of contraction schemes
-    proj = _get_projection_matrix(system, xbasis, x2c_type=system.x2c_type)
+    proj = _get_projection_matrix(system, xbasis)
 
     S, T, V, W = _get_integrals(xbasis, system)
 
@@ -75,7 +75,7 @@ def get_hcore_x2c(system, snso_type=None):
     # project back to the contracted basis
     h_fw = proj.conj().T @ h_fw @ proj
 
-    if snso_type is not None:
+    if system.snso_type is not None:
         nbf = system.nbf
         haa = h_fw[:nbf, :nbf]
         hab = h_fw[:nbf, nbf:]
@@ -89,9 +89,9 @@ def get_hcore_x2c(system, snso_type=None):
         h1 = (hab + hba) / 2
         h2 = (hab - hba) / (-2j)
         h3 = (haa - hbb) / 2
-        h1 = _apply_snso_scaling(h1, system.basis, system.atoms, snso_type=snso_type)
-        h2 = _apply_snso_scaling(h2, system.basis, system.atoms, snso_type=snso_type)
-        h3 = _apply_snso_scaling(h3, system.basis, system.atoms, snso_type=snso_type)
+        h1 = _apply_snso_scaling(h1, system.basis, system.atoms, snso_type=system.snso_type)
+        h2 = _apply_snso_scaling(h2, system.basis, system.atoms, snso_type=system.snso_type)
+        h3 = _apply_snso_scaling(h3, system.basis, system.atoms, snso_type=system.snso_type)
         h_fw = np.block([[h0 + h3, h1 - 1j * h2], [h1 + 1j * h2, h0 - h3]])
 
     return h_fw
