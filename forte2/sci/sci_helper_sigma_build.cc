@@ -10,18 +10,15 @@
 namespace forte2 {
 
 void SelectedCIHelper::compute_det_energies() {
-    local_timer t;
     // compute the energy of all the determinants
     const auto istart = det_energies_.size();
     det_energies_.resize(dets_.size());
     for (size_t i{istart}, n{dets_.size()}; i < n; ++i) {
         det_energies_[i] = slater_rules_.energy(dets_[i]);
     }
-    // LOG(log_level_) << "Determinant energies built in " << t.elapsed_seconds() << " seconds.";
 }
 
 void SelectedCIHelper::prepare_strings() {
-    local_timer t;
     // create the sorted string lists for alpha-beta and beta-alpha
     // Alpha-Beta
     std::vector<Determinant> sorted_dets = dets_;
@@ -32,8 +29,6 @@ void SelectedCIHelper::prepare_strings() {
         sorted_dets[i] = dets_[i].spin_flip();
     }
     ba_list_ = SelectedCIStrings(norb_, sorted_dets);
-
-    // LOG(log_level_) << "String lists built in " << t.elapsed_seconds() << " seconds.";
 }
 
 void SelectedCIHelper::Hamiltonian(np_vector basis, np_vector sigma) const {
@@ -98,7 +93,7 @@ void SelectedCIHelper::H1a(std::span<double> basis, std::span<double> sigma) con
                 if (p == q)
                     continue; // skip diagonal contribution
                 const double h_pq = h(p, q);
-                if (std::abs(h_pq) < integral_threshold)
+                if (std::fabs(h_pq) < integral_threshold)
                     continue;
                 const double sign = sign_p * sign_q;
                 find_matching_dets(basis, sigma, ab_list_, i, j, h_pq * sign);
@@ -119,7 +114,7 @@ void SelectedCIHelper::H1b(std::span<double> basis, std::span<double> sigma) con
                 if (p == q)
                     continue; // skip diagonal contribution
                 const double h_pq = h(p, q);
-                if (std::abs(h_pq) < integral_threshold)
+                if (std::fabs(h_pq) < integral_threshold)
                     continue;
                 const double sign = sign_p * sign_q;
                 find_matching_dets(basis, sigma, ba_list_, i, j, h_pq * sign);
@@ -134,13 +129,13 @@ void SelectedCIHelper::H2a(std::span<double> basis, std::span<double> sigma) con
     // Loop over all unique alpha strings
     for (size_t i{0}; i < first_string_size; ++i) {
         const auto& sublist = ab_list_.two_hole_string_list()[i];
-        for (const auto& [p, q, hole_idx, sign_pq] : sublist) {
+        for (const auto& [p, q, hole_idx, sign_pq] : sublist) { // (p < q)
             const auto& inv_sublist = ab_list_.two_hole_string_list_inv()[hole_idx];
-            for (const auto& [r, s, j, sign_rs] : inv_sublist) {
+            for (const auto& [r, s, j, sign_rs] : inv_sublist) { // (r < s)
                 if ((p == r) and (q == s))
                     continue; // skip diagonal contribution
                 const double v_pqrs = Va(p, q, r, s);
-                if (std::abs(v_pqrs) < integral_threshold)
+                if (std::fabs(v_pqrs) < integral_threshold)
                     continue;
                 const double sign = sign_pq * sign_rs;
                 find_matching_dets(basis, sigma, ab_list_, i, j, v_pqrs * sign);
@@ -155,13 +150,13 @@ void SelectedCIHelper::H2b(std::span<double> basis, std::span<double> sigma) con
     // Loop over all unique beta strings
     for (size_t i{0}; i < first_string_size; ++i) {
         const auto& sublist = ba_list_.two_hole_string_list()[i];
-        for (const auto& [p, q, hole_idx, sign_pq] : sublist) {
+        for (const auto& [p, q, hole_idx, sign_pq] : sublist) { // (p < q)
             const auto& inv_sublist = ba_list_.two_hole_string_list_inv()[hole_idx];
-            for (const auto& [r, s, j, sign_rs] : inv_sublist) {
+            for (const auto& [r, s, j, sign_rs] : inv_sublist) { // (r < s)
                 if ((p == r) and (q == s))
                     continue; // skip diagonal contribution
                 const double v_pqrs = Va(p, q, r, s);
-                if (std::abs(v_pqrs) < integral_threshold)
+                if (std::fabs(v_pqrs) < integral_threshold)
                     continue;
                 const double sign = sign_pq * sign_rs;
                 find_matching_dets(basis, sigma, ba_list_, i, j, v_pqrs * sign);
@@ -196,7 +191,7 @@ void SelectedCIHelper::H2ab(std::span<double> basis, std::span<double> sigma) co
                             if ((p == q) and (r == s))
                                 continue; // skip diagonal contribution
                             const double v_pqrs = V(p, r, q, s);
-                            if (std::abs(v_pqrs) < integral_threshold)
+                            if (std::fabs(v_pqrs) < integral_threshold)
                                 continue;
                             const double sign = sign_p * sign_q * sign_r * sign_s;
                             // Check if the determinant with the new beta string exists

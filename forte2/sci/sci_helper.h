@@ -63,6 +63,12 @@ class SelectedCIHelper {
     /// @brief Set the number of batches per thread for parallelization
     void set_num_batches_per_thread(size_t n) { num_batches_per_thread_ = n; }
 
+    /// @brief Set the orbital that should be excluded from the list of creation operators
+    void set_frozen_creation(const std::vector<size_t>& frozen_creation);
+
+    /// @brief Set the screening criterion
+    void set_screening_criterion(std::string criterion);
+
     /// @return The energies of the roots
     const std::vector<double>& energies() const { return root_energies_; }
 
@@ -227,6 +233,10 @@ class SelectedCIHelper {
 
     /// @brief The Slater rules for the current set of determinants
     SlaterRules slater_rules_;
+
+    /// @brief Do frozen creation
+    /// @brief The mask that controls frozen creation
+    String frozen_creation_mask_;
 
     /// @brief Orbital energies: e[p] = <p|H|p>
     std::vector<double> epsilon_;

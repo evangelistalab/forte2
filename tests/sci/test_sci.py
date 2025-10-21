@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from forte2 import System, State
+from forte2 import System, State, Determinant
 from forte2.scf import RHF
 from forte2.sci import SelectedCI
 from forte2.helpers.comparisons import approx
@@ -134,5 +134,77 @@ def test_sci4():
     assert sci.E[1] == pytest.approx(-3.0403076453, abs=1e-8)
 
 
+def test_sci5():
+    """Test SelectedCI on a core-ionized state."""
+    xyz = f"""
+    Ne 0.0 0.0 0.0
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pVDZ", cholesky_tei=True, cholesky_tol=1e-16)
+
+    rhf = RHF(charge=0, econv=1e-10)(system)
+
+    sci0 = SelectedCI(
+        states=State(nel=10, multiplicity=1, ms=0.0),
+        active_orbitals=list(range(12)),
+        selection_algorithm="hbci",
+        var_threshold=1e-5,
+        pt2_threshold=0.0,
+        nroots=1,
+        do_spin_penalty=True,
+    )(rhf)
+
+    sci0.run()
+
+    sci = SelectedCI(
+        states=State(nel=9, multiplicity=2, ms=0.5),
+        active_orbitals=list(range(12)),
+        selection_algorithm="hbci",
+        var_threshold=1e-5,
+        pt2_threshold=0.0,
+        guess_dets=[Determinant("a2222")],
+        nroots=1,
+        do_spin_penalty=True,
+    )(rhf)
+
+    sci.run()
+
+    assert sci.E[0] == pytest.approx(-96.5578779686, abs=1e-8)
+
+    print(sci0.E[0])
+    print(sci.E[0])
+
+
+def test_sci6():
+    """Test SelectedCI on a core-excited state."""
+    xyz = f"""
+    Ne 0.0 0.0 0.0
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pVDZ", cholesky_tei=True, cholesky_tol=1e-16)
+
+    rhf = RHF(charge=0, econv=1e-10)(system)
+
+    sci = SelectedCI(
+        states=State(nel=10, multiplicity=1, ms=0.0),
+        active_orbitals=list(range(12)),
+        selection_algorithm="hbci_ref",
+        var_threshold=3e-4,
+        pt2_threshold=0.0,
+        guess_dets=[Determinant("a2222b"), Determinant("b2222a")],
+        nroots=1,
+        do_spin_penalty=True,
+        screening_criterion="hbci",
+    )(rhf)
+
+    sci.run()
+
+    # assert sci.E[0] == pytest.approx(-96.5578779686, abs=1e-8)
+    # Ensemble average energy           -95.5941440392
+    # Ensemble average energy           -95.5858726939
+    # print(sci0.E[0])
+    print(sci.E[0])
+
+
 if __name__ == "__main__":
-    test_sci3()
+    test_sci6()

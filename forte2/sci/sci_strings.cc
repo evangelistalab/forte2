@@ -20,8 +20,6 @@ SelectedCIStrings::SelectedCIStrings(size_t norb, std::vector<Determinant>& dets
     build_one_hole_strings_and_lists(sorted_second_string_, one_hole_second_strings_,
                                      one_hole_second_string_list_, one_hole_second_string_list_inv_,
                                      one_hole_second_strings_index_);
-    // build_one_hole_first_strings();
-    // build_one_hole_second_strings();
     build_two_hole_strings();
 }
 

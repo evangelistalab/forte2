@@ -36,7 +36,7 @@ void SelectedCIHelper::update_orbital_energies() {
     matrix::scale(rdm, 1.0 / nroots_);
 
     for (size_t i = 0; i < norb_; ++i) {
-        epsilon_[i] = h_[i * norb_ + i];
+        epsilon_[i] = h(i, i);
         for (size_t j = 0; j < norb_; ++j) {
             for (size_t k = 0; k < norb_; ++k) {
                 epsilon_[i] += rdm(j, k) * (V(i, j, i, k) - 0.5 * V(i, j, k, i));
@@ -241,10 +241,6 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
     }
 
     // print all the variational determinants
-    LOG(log_level_) << "Number of variational determinants added: " << V_map[0].size();
-    LOG(log_level_) << "Number of perturbative determinants considered: " << PT_map[0].size();
-    LOG(log_level_) << "Total number of determinants: " << dets_.size();
-
     for (size_t r{0}; r < nroots_; ++r) {
         double var = 0.0;
         double pt = 0.0;
@@ -269,6 +265,7 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
 void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
     local_timer selection_timer;
 
+    update_orbital_energies();
     update_hbci_ints();
 
     const size_t num_batches = num_batches_per_thread_ * num_threads_; // total number of batches
@@ -349,6 +346,21 @@ void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
         }
     }
 
+    // print a summary of each thread's work
+    for (size_t t{0}; t < num_threads_; ++t) {
+        size_t total_batches = thread_log_data[t].size();
+        size_t total_dets = 0;
+        double total_time = 0.0;
+        for (const auto& [batch_id, num_pt_dets, time] : thread_log_data[t]) {
+            total_dets += num_pt_dets;
+            total_time += time;
+        }
+        std::cout << "Thread " << t << " processed " << total_batches << " batches, found "
+                  << total_dets << " new determinants in " << total_time << " seconds (avg "
+                  << total_time / total_batches << " s/batch, " << total_dets / total_time
+                  << " dets/s)" << std::endl;
+    }
+
     // count the new determinants
     num_new_dets_var_ = 0;
     for (auto& v : thread_new_dets)
@@ -381,7 +393,6 @@ std::pair<std::vector<DetMap>, std::vector<DetMap>>
 SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, size_t num_batches,
                                     size_t batch_id) {
     // We assume all determinants have the same number of electrons
-
     std::vector<size_t> aocc(na_);
     std::vector<size_t> bocc(nb_);
     std::vector<size_t> avir(norb_ - na_);
@@ -402,7 +413,8 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
     for (size_t i{0}; i < a_string_size; ++i) {
         max_block_size = std::max(max_block_size, ab_list_.second_string_to_det_index()[i].size());
     }
-    // allocate the temporary storage outside the loop
+
+    // allocate the temporary storage for the largest block of alpha strings
     std::vector<double> abs_c_max(max_block_size, 0.0);
     std::vector<double> c_block(max_block_size * nroots_, 0.0);
 

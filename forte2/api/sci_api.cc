@@ -32,6 +32,8 @@ void export_sci_helper_api(nb::module_& m) {
              "Set the number of batches each thread will process in parallel sections")
         .def("set_energies", &SelectedCIHelper::set_energies, "e"_a,
              "Set the energies of the roots")
+        .def("set_screening_criterion", &SelectedCIHelper::set_screening_criterion, "criterion"_a,
+             "Set the screening criterion.")
         .def("select_hbci_ref", &SelectedCIHelper::select_hbci_ref, "var_threshold"_a,
              "pt2_threshold"_a, "Perform HBCI selection with the given threshold")
         .def("select_hbci", &SelectedCIHelper::select_hbci, "var_threshold"_a, "pt2_threshold"_a,

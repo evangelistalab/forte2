@@ -84,9 +84,16 @@ void SelectedCIHelper::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
     update_hbci_ints();
 }
 
+void SelectedCIHelper::set_frozen_creation(const std::vector<size_t>& frozen_creation) {
+    frozen_creation_mask_.clear();
+    for (auto i : frozen_creation) {
+        frozen_creation_mask_.set_bit(i, true);
+    }
+}
+
 double evaluate_criterion(double delta, double v, ScreeningCriterion criterion) {
     if (criterion == ScreeningCriterion::eHBCI) {
-        return v * v / (std::fabs(delta) + 1e-6);
+        return v * v / (std::fabs(delta) + 1e-3);
     }
     return std::fabs(v);
 }
@@ -180,6 +187,14 @@ void SelectedCIHelper::set_energies(np_vector e) {
     root_energies_.resize(nroots_);
     for (size_t r{0}; r < nroots_; ++r) {
         root_energies_[r] = e(r);
+    }
+}
+
+void SelectedCIHelper::set_screening_criterion(std::string criterion) {
+    if (criterion == "ehbci") {
+        screening_criterion_ = ScreeningCriterion::eHBCI;
+    } else {
+        screening_criterion_ = ScreeningCriterion::HBCI;
     }
 }
 

@@ -1,6 +1,8 @@
 import time
 from dataclasses import dataclass, field
 from collections import OrderedDict
+from itertools import combinations
+
 
 import numpy as np
 
@@ -41,15 +43,18 @@ from forte2.ci.ci_utils import (
 class SelectedCIParams:
     ### Selected CI parameters
     maxcycle: int = 10
-    var_threshold: float = 1e-5
+    var_threshold: float = 5e-4
     pt2_threshold: float = 1e-8
-    selection_algorithm: str = "hbci_ref"
+    selection_algorithm: str = "hbci"
     guess_occ_window: int = 2
     guess_vir_window: int = 2
     num_threads: int = 4
     ci_algorithm: str = "string"
     num_batches_per_thread: int = 4
     do_spin_penalty: bool = True
+    guess_dets: list[Determinant] = field(default_factory=list)
+    frozen_creation: list[int] = field(default_factory=list)
+    screening_criterion: str = "hbci"
 
 
 @dataclass
@@ -88,17 +93,11 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
         The logging level for the CI solver. Defaults to the global logger's verbosity level.
     die_if_not_converged : bool, optional, default=False
         If True, raise an error if the CI solver does not converge.
-    ci_algorithm : str, optional, default="hz"
+    ci_algorithm : str, optional, default="string"
         The algorithm used for the CI sigma builder.
-        Non-relativistic options are:
-            - "hz": Harrison-Zarrabian
-            - "kh": Knowles-Handy
+        The options are:
+            - "string": A string-based algorithm
             - "exact": Exact diagonalization
-        Two-component (relativistic) options are:
-            - "hz": Harrison-Zarrabian
-            - "exact": Exact diagonalization
-            - "sparse": Sigma builder using sparse representation of the Hamiltonian and states.
-                Recommended for debug use only.
     guess_per_root : int, optional, default=2
         The number of guess vectors for each root.
     ndets_per_guess : int, optional, default=10
@@ -127,10 +126,12 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
 
     """
 
+    ### Init attributes
     mo_space: MOSpace = field(default=None)
     state: State = field(default=None)
     ints: RestrictedMOIntegrals = field(default=None)
     nroot: int = field(default=1)
+
     active_orbsym: list[int] = field(default_factory=list)
     two_component: bool = False
     do_test_rdms: bool = False
@@ -201,6 +202,7 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
         self.sci_helper.set_energies(self.guess_energies)
         self.sci_helper.set_num_threads(self.num_threads)
         self.sci_helper.set_num_batches_per_thread(self.num_batches_per_thread)
+        self.sci_helper.set_screening_criterion(self.screening_criterion)
 
         print()
         old_energy = 0.0
@@ -309,6 +311,72 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
         return self
 
     def _initial_guess(self, window_occ=0, window_vir=0):
+        # If there are no guess determinants, generate some based on occupation windows
+        if len(self.guess_dets) == 0:
+            self.guess_dets = self._generate_initial_guess_dets(window_occ, window_vir)
+        else:
+            self._check_guess_dets(self.guess_dets)
+
+        # Check that we have all spin complement pairs
+        self.guess_dets = self._generate_spin_complement_pairs(self.guess_dets)
+
+        print("Initial guess determinants (by energy):")
+        for d in self.guess_dets:
+            print(f"  {d.str(self.norb)}: {self.slater_rules.energy(d):20.12f}")
+
+        ndet = len(self.guess_dets)
+        S2guess = np.zeros((ndet, ndet), dtype=self.dtype)
+        Hguess = np.zeros((ndet, ndet), dtype=self.dtype)
+        for i in range(ndet):
+            for j in range(i + 1):
+                Hguess[i, j] = self.slater_rules.slater_rules(
+                    self.guess_dets[i], self.guess_dets[j]
+                )
+                Hguess[j, i] = np.conj(Hguess[i, j])
+                S2guess[i, j] = spin2(self.guess_dets[i], self.guess_dets[j])
+                S2guess[j, i] = np.conj(S2guess[i, j])
+
+        svals, svecs = np.linalg.eigh(S2guess)
+        print(f"S^2 values of the guess determinants: {svals}")
+        # find the multiplicity of the eigenvalue closest to S(S+1)
+        S = (self.state.multiplicity - 1) / 2
+        target_s2 = S * (S + 1)
+        close_idx = [
+            i for i, v in enumerate(svals) if np.isclose(v, target_s2, atol=1e-4)
+        ]
+        # find the indices of the eigenvalues that are not close to target_s2
+        not_close_idx = [i for i in range(len(svals)) if i not in close_idx]
+
+        print(
+            f"Target S(S+1) = {target_s2}, found {len(close_idx)} eigenvalues close to it."
+        )
+
+        # project the guess determinants into the S^2 subspace
+        S2sub = svecs[:, close_idx]
+        S2project_out = (
+            [svecs[:, i].copy() for i in not_close_idx] if self.do_spin_penalty else []
+        )
+
+        Hguess = S2sub.conj().T @ Hguess @ S2sub if self.do_spin_penalty else Hguess
+        # Diagonalize the Hamiltonian to get the initial guess coefficients
+        evals, evecs = np.linalg.eigh(Hguess)
+        c = (
+            S2sub @ evecs[:, : self.nroot].copy()
+            if self.do_spin_penalty
+            else evecs[:, : self.nroot].copy()
+        )
+        energies = evals[: self.nroot].copy()
+        print(f"Initial guess energies: {energies}")
+        print(f"Initial guess states:")
+        for r in range(c.shape[1]):
+            print(f"  Root {r}:")
+            for i in range(c.shape[0]):
+                if abs(c[i, r]) > 1e-4:
+                    print(f"    {self.guess_dets[i].str(self.norb)}: {c[i, r]:20.12f}")
+        return self.guess_dets, c, energies, S2project_out
+
+    def _generate_initial_guess_dets(self, window_occ, window_vir):
+        logger.log("Generating initial determinant guess")
         # create the initial guess determinant
         d0 = Determinant.zero()
         if self.two_component:
@@ -368,18 +436,19 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
         # Form the Hamiltonian matrix in this basis
         guess_dets = [d for d, e in sorted_dets[: min(n_guess_dets, len(sorted_dets))]]
 
-        # Check that we have all spin complement pairs
+        return guess_dets
+
+    def _generate_spin_complement_pairs(self, guess_dets):
+        # find all the unique electronic configurations
         configurations = {Configuration(d) for d in guess_dets}
-        guess_dets = []
+        spin_complete_guess_dets = []
         for conf in configurations:
             docc = conf.get_docc_vec()
             socc = conf.get_socc_vec()
-            print(f"Determinant: {conf.str(self.norb)}" f"  docc: {docc}  socc: {socc}")
             # generate all combinations of spin complements that satisfy the same ms constraint
             nopen = len(socc)
             na = (nopen + self.state.twice_ms) // 2
             nb = nopen - na
-            from itertools import combinations
 
             for alpha_indices in combinations(range(nopen), na):
                 beta_indices = set(range(nopen)) - set(alpha_indices)
@@ -393,62 +462,21 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
                 for ib in beta_indices:
                     orb = socc[ib]
                     dcomp.set_nb(orb, True)
-                guess_dets.append(dcomp)
+                spin_complete_guess_dets.append(dcomp)
+        return spin_complete_guess_dets
 
-        print("Initial guess determinants (by energy):")
+    def _check_guess_dets(self, guess_dets):
         for d in guess_dets:
-            print(f"  {d.str(self.norb)}: {self.slater_rules.energy(d):20.12f} [Eh]")
-
-        ndet = len(guess_dets)
-        S2guess = np.zeros((ndet, ndet), dtype=self.dtype)
-        Hguess = np.zeros((ndet, ndet), dtype=self.dtype)
-        for i in range(ndet):
-            for j in range(i + 1):
-                Hguess[i, j] = self.slater_rules.slater_rules(
-                    guess_dets[i], guess_dets[j]
+            na = d.count_a()
+            nb = d.count_b()
+            if na + self.ncore != self.state.na:
+                raise ValueError(
+                    f"Guess determinant {d.str(self.norb)} has {na} alpha electrons, expected {self.state.na - self.ncore}."
                 )
-                Hguess[j, i] = np.conj(Hguess[i, j])
-                S2guess[i, j] = spin2(guess_dets[i], guess_dets[j])
-                S2guess[j, i] = np.conj(S2guess[i, j])
-
-        svals, svecs = np.linalg.eigh(S2guess)
-        print(f"S^2 values of the guess determinants: {svals}")
-        # find the multiplicity of the eigenvalue closest to S(S+1)
-        S = (self.state.multiplicity - 1) / 2
-        target_s2 = S * (S + 1)
-        close_idx = [
-            i for i, v in enumerate(svals) if np.isclose(v, target_s2, atol=1e-4)
-        ]
-        # find the indices of the eigenvalues that are not close to target_s2
-        not_close_idx = [i for i in range(len(svals)) if i not in close_idx]
-
-        print(
-            f"Target S(S+1) = {target_s2}, found {len(close_idx)} eigenvalues close to it."
-        )
-
-        # project the guess determinants into the S^2 subspace
-        S2sub = svecs[:, close_idx]
-        S2project_out = (
-            [svecs[:, i].copy() for i in not_close_idx] if self.do_spin_penalty else []
-        )
-        print(S2sub)
-        Hguess = S2sub.conj().T @ Hguess @ S2sub if self.do_spin_penalty else Hguess
-        # Diagonalize the Hamiltonian to get the initial guess coefficients
-        evals, evecs = np.linalg.eigh(Hguess)
-        c = (
-            S2sub @ evecs[:, : self.nroot].copy()
-            if self.do_spin_penalty
-            else evecs[:, : self.nroot].copy()
-        )
-        energies = evals[: self.nroot].copy()
-        print(f"Initial guess energies: {energies}")
-        print(f"Initial guess states:")
-        for r in range(c.shape[1]):
-            print(f"  Root {r}:")
-            for i in range(c.shape[0]):
-                if abs(c[i, r]) > 1e-4:
-                    print(f"    {guess_dets[i].str(self.norb)}: {c[i, r]:20.12f}")
-        return guess_dets, c, energies, S2project_out
+            if nb + self.ncore != self.state.nb:
+                raise ValueError(
+                    f"Guess determinant {d.str(self.norb)} has {nb} beta electrons, expected {self.state.nb - self.ncore}."
+                )
 
     def _do_iterative_ci(self):
         """
