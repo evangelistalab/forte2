@@ -53,13 +53,12 @@ def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
 
     logger.log_info1(f"Number of contracted basis functions: {system.nbf}")
     xbasis = build_basis(system.basis_set, system.geom_helper, decontract=True)
-    proj = _get_projection_matrix(xbasis, system.basis, x2c_type=x2c_type)
 
     nbf_decon = len(xbasis)
     logger.log_info1(f"Number of decontracted basis functions: {nbf_decon}")
     nbf = nbf_decon if x2c_type == "sf" else nbf_decon * 2
     # expensive way to get this for now but works for all types of contraction schemes
-    proj = _get_projection_matrix(xbasis, system.basis, x2c_type=x2c_type)
+    proj = _get_projection_matrix(system, xbasis, x2c_type=x2c_type)
 
     S, T, V, W = _get_integrals(xbasis, system)
 
@@ -109,20 +108,20 @@ def _i_sigma_dot(A):
     return np.block([[scalar + z * 1j, x * 1j + y], [x * 1j - y, scalar - z * 1j]])
 
 
-def _get_projection_matrix(xbasis, basis, x2c_type):
+def _get_projection_matrix(system, xbasis, x2c_type):
     proj = scipy.linalg.solve(
-        integrals.overlap(xbasis),
-        integrals.overlap(xbasis, basis),
+        integrals.overlap(system, xbasis),
+        integrals.overlap(system, xbasis, system.basis),
         assume_a="pos",
     )
     return proj if x2c_type == "sf" else _block_diag(proj)
 
 
 def _get_integrals(xbasis, system):
-    S = integrals.overlap(xbasis)
-    T = integrals.kinetic(xbasis)
-    V = integrals.nuclear(xbasis)
-    W = integrals.opVop(xbasis)
+    S = integrals.overlap(system, xbasis)
+    T = integrals.kinetic(system, xbasis)
+    V = integrals.nuclear(system, xbasis)
+    W = integrals.opVop(system, xbasis)
     if system.x2c_type == "sf":
         return S, T, V, W[0]
     elif system.x2c_type == "so":
