@@ -11,6 +11,7 @@ from forte2.helpers.matrix_functions import (
     block_diag_2x2,
 )
 from forte2.x2c import get_hcore_x2c
+from forte2 import integrals
 from .build_basis import build_basis
 from .geom_utils import GeometryHelper, parse_geometry
 
@@ -57,6 +58,8 @@ class System:
         This will center the molecule at its center of mass and reorient it along its principal axes of inertia.
     symmetry_tol : float, optional, default=1e-4
         The tolerance for detecting symmetry.
+    use_gaussian_charges : bool, optional, default=False
+        Whether to use Gaussian nuclear charge distributions instead of point charges.
 
     Attributes
     ----------
@@ -114,6 +117,7 @@ class System:
     cholesky_tol: float = 1e-6
     symmetry: bool = False
     symmetry_tol: float = 1e-4
+    use_gaussian_charges: bool = False
 
     ### Non-init attributes
     atoms: list[list[float, list[float, float, float]]] = field(
@@ -135,8 +139,9 @@ class System:
 
         self._init_geometry()
         self._init_basis()
+        self.nuclear_repulsion = integrals.nuclear_repulsion(self)
         self._init_x2c()
-        _S = ints.overlap(self.basis)
+        _S = integrals.overlap(self)
         self.Xorth, self.nmo = compute_orthonormal_transformation(
             _S,
             self.linear_dep_trigger,
@@ -145,7 +150,9 @@ class System:
 
     def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
-        self.geom_helper = GeometryHelper(self.atoms, symmetry=self.symmetry, tol=self.symmetry_tol)
+        self.geom_helper = GeometryHelper(
+            self.atoms, symmetry=self.symmetry, tol=self.symmetry_tol
+        )
         self.atoms = self.geom_helper.atoms
         self.Zsum = self.geom_helper.Zsum
         self.natoms = self.geom_helper.natoms
@@ -153,7 +160,6 @@ class System:
         self.atomic_masses = self.geom_helper.atomic_masses
         self.atomic_positions = self.geom_helper.atomic_positions
         self.centroid = self.geom_helper.centroid
-        self.nuclear_repulsion = self.geom_helper.nuclear_repulsion
         self.center_of_mass = self.geom_helper.center_of_mass
         self.atom_counts = self.geom_helper.atom_counts
         self.atom_to_center = self.geom_helper.atom_to_center
@@ -202,6 +208,14 @@ class System:
         self.naux = self.auxiliary_basis.size if self.auxiliary_basis else 0
         self.nminao = self.minao_basis.size if self.minao_basis else 0
 
+        self.gaussian_charge_basis = None
+        if self.use_gaussian_charges:
+            self.gaussian_charge_basis = build_basis(
+                "gaussian_charge",
+                self.geom_helper,
+                embed_normalization_into_coefficients=False,
+            )
+
     def _init_x2c(self):
         if self.x2c_type is not None:
             assert self.x2c_type in [
@@ -225,7 +239,7 @@ class System:
         NDArray
             Overlap integrals matrix.
         """
-        S = ints.overlap(self.basis)
+        S = integrals.overlap(self)
         if self.two_component:
             S = block_diag_2x2(S)
         return S
@@ -244,8 +258,8 @@ class System:
         elif self.x2c_type == "so":
             H = get_hcore_x2c(self, x2c_type="so", snso_type=self.snso_type)
         else:
-            T = ints.kinetic(self.basis)
-            V = ints.nuclear(self.basis, self.atoms)
+            T = integrals.kinetic(self)
+            V = integrals.nuclear(self)
             H = T + V
         if self.x2c_type in [None, "sf"] and self.two_component:
             H = block_diag_2x2(H)

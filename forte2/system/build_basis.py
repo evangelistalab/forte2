@@ -38,8 +38,12 @@ def build_basis(
             }
 
         where ``"default"`` is used for atoms not explicitly listed.
-    atoms : list[tuple(int, list[float])]
-        A list of tuples containing atomic numbers and coordinates.
+    geometry : forte2.system.geom_utils.GeometryHelper
+        The geometry helper containing atomic information.
+    embed_normalization_into_coefficients : bool, optional, default=True
+        Whether to embed normalization factors into the contraction coefficients.
+    decontract : bool, optional, default=False
+        Whether to decontract the basis set.
 
     Returns
     -------

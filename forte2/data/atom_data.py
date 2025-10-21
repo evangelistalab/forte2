@@ -6,6 +6,7 @@ EH_TO_EV = 27.211386245988
 EV_TO_EH = 0.03674932217565499
 EH_TO_WN = 219474.6313632
 WN_TO_EH = 4.556335252912e-06
+LIGHT_SPEED = 137.035999177
 
 ATOM_SYMBOL_TO_Z = {
     "X": 0,
@@ -109,6 +110,14 @@ ATOM_SYMBOL_TO_Z = {
     "CF": 98,
     "ES": 99,
     "FM": 100,
+    "MD": 101,
+    "NO": 102,
+    "LR": 103,
+    "RF": 104,
+    "DB": 105,
+    "SG": 106,
+    "HS": 107,
+    "MT": 108,
 }
 Z_TO_ATOM_SYMBOL = {v: k for k, v in ATOM_SYMBOL_TO_Z.items()}
 ATOM_DATA = [
@@ -919,5 +928,69 @@ ATOM_DATA = [
         "radius_covalent": 1.67,
         "radius_VDW": 3.0,
         "color": [178, 30, 186],
+    },
+    {
+        "symbol": "Md",
+        "name": "Mendelevium",
+        "mass": 258,
+        "radius_covalent": 1.73,
+        "radius_VDW": 3.0,
+        "color": [191, 25, 166],
+    },
+    {
+        "symbol": "No",
+        "name": "Nobelium",
+        "mass": 259,
+        "radius_covalent": 1.75,
+        "radius_VDW": 3.0,
+        "color": [204, 10, 143],
+    },
+    {
+        "symbol": "Lr",
+        "name": "Lawrencium",
+        "mass": 266,
+        "radius_covalent": 1.87,
+        "radius_VDW": 3.0,
+        "color": [217, 0, 117],
+    },
+    {
+        "symbol": "Rf",
+        "name": "Rutherfordium",
+        "mass": 267,
+        "radius_covalent": 1.9,
+        "radius_VDW": 3.0,
+        "color": [217, 0, 91],
+    },
+    {
+        "symbol": "Db",
+        "name": "Dubnium",
+        "mass": 268,
+        "radius_covalent": 1.9,
+        "radius_VDW": 3.0,
+        "color": [222, 0, 66],
+    },
+    {
+        "symbol": "Sg",
+        "name": "Seaborgium",
+        "mass": 269,
+        "radius_covalent": 1.9,
+        "radius_VDW": 3.0,
+        "color": [225, 0, 38],
+    },
+    {
+        "symbol": "Hs",
+        "name": "Hassium",
+        "mass": 277,
+        "radius_covalent": 1.9,
+        "radius_VDW": 3.0,
+        "color": [230, 0, 25],
+    },
+    {
+        "symbol": "Mt",
+        "name": "Meitnerium",
+        "mass": 278,
+        "radius_covalent": 1.9,
+        "radius_VDW": 3.0,
+        "color": [235, 0, 0],
     },
 ]

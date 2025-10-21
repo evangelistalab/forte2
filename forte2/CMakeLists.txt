@@ -84,12 +84,12 @@ nanobind_add_module(
   api/sq_operator_string_api.cc
   helpers/combinatorial.cc
   helpers/string_algorithms.cc
-  ints/basis.cc
-  ints/fock_builder.cc
-  ints/nuclear_repulsion.cc
-  ints/one_electron.cc
-  ints/two_electron.cc
-  ints/value_at_points.cc
+  integrals/basis.cc
+  integrals/fock_builder.cc
+  integrals/nuclear_repulsion.cc
+  integrals/one_electron.cc
+  integrals/two_electron.cc
+  integrals/value_at_points.cc
   ci/ci_sigma_builder.cc
   ci/ci_sigma_builder_1rdm.cc
   ci/ci_sigma_builder_2rdm.cc

@@ -1,7 +1,7 @@
 import numpy as np
 import scipy, scipy.constants
 
-from forte2 import ints
+from forte2 import integrals
 from forte2.helpers import logger, eigh_gen
 from forte2.system.build_basis import build_basis
 
@@ -61,7 +61,7 @@ def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
     # expensive way to get this for now but works for all types of contraction schemes
     proj = _get_projection_matrix(xbasis, system.basis, x2c_type=x2c_type)
 
-    S, T, V, W = _get_integrals(xbasis, system.atoms, x2c_type=x2c_type)
+    S, T, V, W = _get_integrals(xbasis, system)
 
     # build and solve the one-electron matrix Dirac equation
     _, c_dirac = _solve_dirac_eq(S, T, V, W, nbf, x2c_type)
@@ -84,7 +84,7 @@ def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
         hab = h_fw[:nbf, nbf:]
         hba = h_fw[nbf:, :nbf]
         hbb = h_fw[nbf:, nbf:]
-        # the pauli representation of a spin-dependent operator. 
+        # the pauli representation of a spin-dependent operator.
         # h0 is spin-free, h1-3 are spin-dependent
         # SNSO is applied to the spin-dependent parts only.
         # see for example eq 4-6 of 10.1002/wcms.1436
@@ -111,21 +111,21 @@ def _i_sigma_dot(A):
 
 def _get_projection_matrix(xbasis, basis, x2c_type):
     proj = scipy.linalg.solve(
-        ints.overlap(xbasis),
-        ints.overlap(xbasis, basis),
+        integrals.overlap(xbasis),
+        integrals.overlap(xbasis, basis),
         assume_a="pos",
     )
     return proj if x2c_type == "sf" else _block_diag(proj)
 
 
-def _get_integrals(xbasis, atoms, x2c_type):
-    S = ints.overlap(xbasis)
-    T = ints.kinetic(xbasis)
-    V = ints.nuclear(xbasis, atoms)
-    W = ints.opVop(xbasis, atoms)
-    if x2c_type == "sf":
+def _get_integrals(xbasis, system):
+    S = integrals.overlap(xbasis)
+    T = integrals.kinetic(xbasis)
+    V = integrals.nuclear(xbasis)
+    W = integrals.opVop(xbasis)
+    if system.x2c_type == "sf":
         return S, T, V, W[0]
-    elif x2c_type == "so":
+    elif system.x2c_type == "so":
         return _block_diag(S), _block_diag(T), _block_diag(V), _i_sigma_dot(W)
 
 

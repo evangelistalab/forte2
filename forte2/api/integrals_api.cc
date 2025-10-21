@@ -12,12 +12,12 @@
 #include <nanobind/stl/pair.h>
 #include <nanobind/stl/string.h>
 
-#include "ints/basis.h"
-#include "ints/fock_builder.h"
-#include "ints/nuclear_repulsion.h"
-#include "ints/one_electron.h"
-#include "ints/two_electron.h"
-#include "ints/value_at_points.h"
+#include "integrals/basis.h"
+#include "integrals/fock_builder.h"
+#include "integrals/nuclear_repulsion.h"
+#include "integrals/one_electron.h"
+#include "integrals/two_electron.h"
+#include "integrals/value_at_points.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;

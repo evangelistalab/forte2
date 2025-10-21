@@ -62,7 +62,7 @@ def get_1e_property(system, g1, property_name, origin=None, unit="debye"):
         case "kinetic_energy":
             oei = ints.kinetic(system.basis)
         case "nuclear_attraction_energy":
-            oei = ints.nuclear(system.basis, system.atoms)
+            oei = system.ints_nuclear()
         case "electric_dipole":
             origin = _origin_check(origin)
             _, *oei = ints.emultipole1(system.basis, origin=origin)
