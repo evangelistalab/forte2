@@ -117,7 +117,7 @@ class MutualCorrelationAnalysis:
 
     def _spin_free_correlation(self, λaa, λab, λbb):
         """Computes the spin-free correlation C_PQRS from the spin-dependent cumulant 2-RDMs."""
-        C_PQRS = 0.25 * np.einsum("ijkl->ijkl", λaa**2).copy()
+        C_PQRS = 0.25 * (λaa**2).copy()
         C_PQRS += 0.25 * np.einsum("ijkl->ijkl", λab**2)
         C_PQRS += 0.25 * np.einsum("ijlk->ijkl", λab**2)
         C_PQRS += 0.25 * np.einsum("jikl->ijkl", λab**2)
