@@ -118,11 +118,11 @@ class MutualCorrelationAnalysis:
     def _spin_free_correlation(self, λaa, λab, λbb):
         """Computes the spin-free correlation C_PQRS from the spin-dependent cumulant 2-RDMs."""
         C_PQRS = 0.25 * (λaa**2).copy()
-        C_PQRS += 0.25 * np.einsum("ijkl->ijkl", λab**2)
+        C_PQRS += 0.25 * (λab**2)
         C_PQRS += 0.25 * np.einsum("ijlk->ijkl", λab**2)
         C_PQRS += 0.25 * np.einsum("jikl->ijkl", λab**2)
         C_PQRS += 0.25 * np.einsum("jilk->ijkl", λab**2)
-        C_PQRS += 0.25 * np.einsum("ijkl->ijkl", λbb**2)
+        C_PQRS += 0.25 * (λbb**2)
         return C_PQRS
 
     def _orbital_correlation(self, C_PQRS):
@@ -158,7 +158,7 @@ class MutualCorrelationAnalysis:
 
     def _tetrad_mutual_correlation(self, C_PQRS):
         """Computes the tetrad mutual correlation M4 from the spin-free correlation C_PQRS."""
-        M4 = 8 * np.einsum("ijkl->ijkl", C_PQRS).copy()
+        M4 = 8 * C_PQRS.copy()
         M4 += 8 * np.einsum("ikjl->ijkl", C_PQRS)
         M4 += 8 * np.einsum("iljk->ijkl", C_PQRS)
         # zero the terms with any two equal indices
