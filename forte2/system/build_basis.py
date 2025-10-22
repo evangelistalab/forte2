@@ -40,6 +40,10 @@ def build_basis(
         where ``"default"`` is used for atoms not explicitly listed.
     atoms : list[tuple(int, list[float])]
         A list of tuples containing atomic numbers and coordinates.
+    embed_normalization_into_coefficients : bool, optional, default=True
+        Whether to embed the normalization factors into the contraction coefficients.
+    decontract : bool, optional, default=False
+        Whether to decontract the basis set.
 
     Returns
     -------
@@ -98,7 +102,7 @@ def build_basis(
                 coords,
                 embed_normalization_into_coefficients,
             )
-    return basis
+    return basis, atom_basis
 
 
 def _parse_custom_basis_assignment(geometry, basis_assignment):

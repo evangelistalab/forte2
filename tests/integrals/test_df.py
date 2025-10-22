@@ -10,7 +10,7 @@ O 2.500000000000  0.000000000000  0.000000000000
 """
 
     system = forte2.System(xyz=xyz, basis_set="cc-pVDZ")
-    jkfit_basis = forte2.system.build_basis("cc-pVQZ-jkfit", system.geom_helper)
+    jkfit_basis, _ = forte2.system.build_basis("cc-pVQZ-jkfit", system.geom_helper)
 
     # def2-universal-jkfit
     # Compute the density fitted integrals as
