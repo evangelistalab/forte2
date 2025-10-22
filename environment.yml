@@ -21,3 +21,4 @@ dependencies:
     - conda-forge::libint
     - conda-forge::regex
     - conda-forge::basis_set_exchange
+    - conda-forge::libcint

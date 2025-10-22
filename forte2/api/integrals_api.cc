@@ -18,6 +18,7 @@
 #include "integrals/one_electron.h"
 #include "integrals/two_electron.h"
 #include "integrals/value_at_points.h"
+#include "integrals/libcint_compute.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -33,6 +34,7 @@ void export_scalar_api(nb::module_& m);
 void export_one_electron_api(nb::module_& m);
 void export_two_electron_api(nb::module_& m);
 void export_value_at_points_api(nb::module_& m);
+void export_libcint_compute_api(nb::module_& m);
 
 void export_integrals_api(nb::module_& m) {
     nb::module_ sub_m = m.def_submodule("ints", "Integrals submodule");
@@ -48,6 +50,8 @@ void export_integrals_api(nb::module_& m) {
     export_two_electron_api(sub_m);
 
     export_value_at_points_api(sub_m);
+
+    export_libcint_compute_api(sub_m);
 }
 
 void export_shell_api(nb::module_& sub_m) {
@@ -340,4 +344,8 @@ void export_two_electron_api(nb::module_& sub_m) {
         "basis1"_a, "basis2"_a, "omega"_a);
 }
 
+void export_libcint_compute_api(nb::module_& sub_m) {
+    sub_m.def("cint_int1e_ovlp_sph", &cint_int1e_ovlp_sph, "nao"_a, "atm"_a, "bas"_a, "env"_a,
+              "Compute the overlap integral matrix using libcint in spherical harmonics.");
+}
 } // namespace forte2

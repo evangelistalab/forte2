@@ -21,6 +21,10 @@ if (NOT SKBUILD)
   after editing C++ files.")
 endif()
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../cmake")
+
+find_package(libcint REQUIRED)
+
 # Try to import all Python components potentially needed by nanobind
 find_package(Python 3.8
   REQUIRED COMPONENTS Interpreter Development.Module
@@ -120,6 +124,7 @@ nanobind_add_module(
 target_link_libraries(_forte2 PRIVATE Libint2::int2)
 target_link_libraries(_forte2 PRIVATE Eigen3::Eigen)
 target_link_libraries(_forte2 PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
+target_link_libraries(_forte2 PRIVATE ${LIBCINT_LIBRARIES})
 
 target_include_directories(_forte2
   PUBLIC

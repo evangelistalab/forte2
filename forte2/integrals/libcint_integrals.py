@@ -23,8 +23,8 @@ def int1e_ovlp(system):
     di = _cint.CINTcgto_spheric(0, system.cint_bas)
     dj = _cint.CINTcgto_spheric(1, system.cint_bas)
 
-    _cint.cint1e_ovlp.argtypes = [
-        np.ctypeslib.ndpointer(dtype=np.double, ndim=3),
+    _cint.cint1e_ovlp_sph.argtypes = [
+        np.ctypeslib.ndpointer(dtype=np.double, ndim=2),
         (ctypes.c_int * 2),
         np.ctypeslib.ndpointer(dtype=np.intc, ndim=2),
         ctypes.c_int,
@@ -32,8 +32,8 @@ def int1e_ovlp(system):
         ctypes.c_int,
         np.ctypeslib.ndpointer(dtype=np.double, ndim=1),
     ]
-    buf = np.empty((di, dj), order="F")
-    _cint.cint1e_ovlp(
+    buf = np.empty((di, dj), dtype=np.double, order="F")
+    _cint.cint1e_ovlp_sph(
         buf,
         (ctypes.c_int * 2)(0, 1),
         system.cint_atm,

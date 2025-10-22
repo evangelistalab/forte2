@@ -51,8 +51,8 @@ template <typename T> void scale(nb::ndarray<nb::numpy, T, nb::ndim<2>> mat, dou
 
 /// @brief Perform the operation y[:,:] = a * x[:,:] + y[:,:]
 template <typename T>
-void daxpy(double a, nb::ndarray<nb::numpy, T, nb::ndim<2>> x,
-           nb::ndarray<nb::numpy, T, nb::ndim<2>> y) {
+void daxpy(double a, nb::ndarray<nb::numpy, T, nb::ndim<2>, nb::c_contig> x,
+           nb::ndarray<nb::numpy, T, nb::ndim<2>, nb::c_contig> y) {
     if (x.shape(0) != y.shape(0) || x.shape(1) != y.shape(1)) {
         throw std::runtime_error("Source and destination matrices must have the same shape.");
     }
@@ -66,7 +66,8 @@ void daxpy(double a, nb::ndarray<nb::numpy, T, nb::ndim<2>> x,
 }
 
 /// @brief Print the contents of a np_matrix to standard output
-template <typename T> void print(nb::ndarray<nb::numpy, T, nb::ndim<2>> mat, std::string label) {
+template <typename T>
+void print(nb::ndarray<nb::numpy, T, nb::ndim<2>, nb::c_contig> mat, std::string label) {
     std::cout << label << ":" << std::endl;
     auto mat_view = mat.view();
     for (size_t i{0}, maxi{mat.shape(0)}; i < maxi; ++i) {
@@ -86,8 +87,8 @@ template <typename T> void print(nb::ndarray<nb::numpy, T, nb::ndim<2>> mat, std
 /// @param M The input 2D matrix.
 /// @return The expanded 4D tensor.
 template <typename T>
-nb::ndarray<nb::numpy, T, nb::ndim<4>>
-packed_tensor4_to_tensor4(nb::ndarray<nb::numpy, T, nb::ndim<2>> m) {
+nb::ndarray<nb::numpy, T, nb::ndim<4>, nb::c_contig>
+packed_tensor4_to_tensor4(nb::ndarray<nb::numpy, T, nb::ndim<2>, nb::c_contig> m) {
     const auto nrows = m.shape(0);
     const auto ncols = m.shape(1);
     auto nr = inv_pair_index_gt(nrows - 1).first + 1;
