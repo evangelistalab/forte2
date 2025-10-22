@@ -102,7 +102,7 @@ def build_basis(
                 coords,
                 embed_normalization_into_coefficients,
             )
-    return basis
+    return basis, atom_basis
 
 
 def _parse_custom_basis_assignment(geometry, basis_assignment):

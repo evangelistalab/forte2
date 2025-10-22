@@ -12,6 +12,8 @@ from forte2.helpers.matrix_functions import (
 )
 from forte2.x2c import get_hcore_x2c
 from forte2 import integrals
+from forte2.integrals.libcint_integrals import LIBCINT_AVAILABLE
+from forte2.integrals.libcint_utils import atom_basis_to_bas, make_env, PTR_ENV_START
 from .build_basis import build_basis
 from .geom_utils import GeometryHelper, parse_geometry
 
@@ -148,6 +150,13 @@ class System:
             self.ortho_thresh,
         )
 
+        if LIBCINT_AVAILABLE:
+            basis = atom_basis_to_bas(self.basis_data)
+            env = np.zeros(PTR_ENV_START)
+            self.cint_atm, self.cint_bas, self.cint_env = make_env(
+                self.atoms, basis, env, nucmod={}
+            )
+
     def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
         self.geom_helper = GeometryHelper(
@@ -173,36 +182,44 @@ class System:
             )
 
     def _init_basis(self):
-        self.basis = build_basis(self.basis_set, self.geom_helper)
+        self.basis, self.basis_data = build_basis(self.basis_set, self.geom_helper)
         logger.log_info1(
             f"Parsed {self.natoms} atoms with basis set of {self.basis.size} functions."
         )
 
         if not self.cholesky_tei:
-            self.auxiliary_basis = (
-                build_basis(self.auxiliary_basis_set, self.geom_helper)
-                if self.auxiliary_basis_set is not None
-                else None
+            self.auxiliary_basis, self.auxiliary_basis_data = (
+                (
+                    build_basis(self.auxiliary_basis_set, self.geom_helper)
+                    if self.auxiliary_basis_set is not None
+                    else None
+                ),
+                None,
             )
             if self.auxiliary_basis_set_corr is not None:
                 logger.log_warning(
                     "Using a separate auxiliary basis is not recommended!"
                 )
-                self.auxiliary_basis_set_corr = build_basis(
-                    self.auxiliary_basis_set_corr,
-                    self.geom_helper,
+                self.auxiliary_basis_set_corr, self.auxiliary_basis_set_corr_data = (
+                    build_basis(
+                        self.auxiliary_basis_set_corr,
+                        self.geom_helper,
+                    )
                 )
             else:
                 self.auxiliary_basis_set_corr = self.auxiliary_basis
+                self.auxiliary_basis_set_corr_data = self.auxiliary_basis_data
         else:
             self.auxiliary_basis = None
             self.auxiliary_basis_set_corr = None
 
-        self.minao_basis = (
-            build_basis(self.minao_basis_set, self.geom_helper)
-            if self.minao_basis_set is not None
-            else None
-        )
+        if self.minao_basis_set is not None:
+            self.minao_basis, self.minao_basis_data = build_basis(
+                self.minao_basis_set, self.geom_helper
+            )
+        else:
+            self.minao_basis = None
+            self.minao_basis_data = None
 
         self.nbf = self.basis.size
         self.naux = self.auxiliary_basis.size if self.auxiliary_basis else 0
