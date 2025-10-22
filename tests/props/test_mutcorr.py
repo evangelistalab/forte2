@@ -54,7 +54,7 @@ def test_mutual_correlation_h2_triplet_lowspin():
 
 
 def test_mutual_correlation_h2_triplet_highspin():
-    """Test mutual correlation analysis on H2 molecule in STO-6G basis at dissociation."""
+    """Test mutual correlation analysis on H2 molecule in the triplet high-spin state (multiplicity=3, ms=1.0) in STO-6G basis at dissociation."""
 
     xyz = f"""
     H 0.0 0.0 0.0
