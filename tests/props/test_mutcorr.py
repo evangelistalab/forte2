@@ -78,7 +78,7 @@ def test_mutual_correlation_h2_triplet_highspin():
 
 
 def test_mutual_correlation_h2_orbopt():
-    """Test mutual correlation analysis on H2 molecule in STO-6G basis at dissociation."""
+    """Test mutual correlation analysis on H2 molecule in cc-pVDZ basis at 2.0 Angstroms separation."""
 
     xyz = f"""
     H 0.0 0.0 0.0
