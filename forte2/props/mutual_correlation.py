@@ -29,11 +29,43 @@ class MutualCorrelationAnalysis:
         Triad mutual correlation measure.
     M4 : NDArray
         Tetrad mutual correlation measure.
-    U : NDArray
-        Unitary transformation matrix to form the maximally correlated orbitals.
+    Q : NDArray
+        Orthogonal transformation matrix to form the maximally correlated orbitals.
+
+    Implementation Details
+    ----------------------
+    This analysis expects an active space solver with the following API
+    on the selected sub-solver `solver.sub_solvers[sub_solver_index]`:
+
+    - make_sd_1rdm(root) -> tuple[NDArray, NDArray]
+            Returns (γa, γb) spin-dependent 1-RDMs with shape (norb, norb) each.
+    - make_sd_2rdm(root) -> tuple[NDArray, NDArray, NDArray]
+            Returns (γaa, γab, γbb) spin-dependent 2-RDMs.
+            γaa and γbb are packed (lower-triangular pair indices) and are
+            converted to full (norb, norb, norb, norb) tensors via
+            `cpp_helpers.packed_tensor4_to_tensor4`. γab is already full with shape
+            (norb, norb, norb, norb).
+
+    Derived tensors and outputs:
+    - Γ1 = γa + γb with shape (norb, norb).
+    - Cumulants λaa, λab, λbb with shape (norb, norb, norb, norb) each.
+    - total_correlation: scalar.
+    - M1: shape (norb,), orbital correlation.
+    - M2: shape (norb, norb), dyad mutual correlations (diagonal zeroed).
+    - M3: shape (norb, norb, norb), triad mutual correlations (entries with
+        any repeated indices are zeroed).
+    - M4: shape (norb, norb, norb, norb), tetrad mutual correlations (entries
+        with any repeated pair of indices are zeroed).
+    - Q: shape (norb, norb), real orthogonal matrix from expm of a real
+        antisymmetric generator. Stored after `optimize_orbitals`.
+
+    Notes:
+    - This implementation targets the non-relativistic case.
     """
 
     def __init__(self, solver, root=0, sub_solver_index=0):
+        self.Q = None
+
         # extract the spin-dependent 1-RDM  from the solver
         γa, γb = solver.sub_solvers[sub_solver_index].make_sd_1rdm(root)
 
@@ -111,7 +143,6 @@ class MutualCorrelationAnalysis:
 
     def _triad_mutual_correlation(self, C_PQRS):
         """Computes the triad mutual correlation M3 from the spin-free correlation C_PQRS."""
-        # unfinished and untested
         M3 = 4 * np.einsum("ijkk->ijk", C_PQRS).copy()
         M3 += 8 * np.einsum("ikjk->ijk", C_PQRS)
         M3 += 4 * np.einsum("ikjj->ijk", C_PQRS)
@@ -127,7 +158,6 @@ class MutualCorrelationAnalysis:
 
     def _tetrad_mutual_correlation(self, C_PQRS):
         """Computes the tetrad mutual correlation M4 from the spin-free correlation C_PQRS."""
-        # unfinished and untested
         M4 = 8 * np.einsum("ijkl->ijkl", C_PQRS).copy()
         M4 += 8 * np.einsum("ikjl->ijkl", C_PQRS)
         M4 += 8 * np.einsum("iljk->ijkl", C_PQRS)
@@ -170,9 +200,11 @@ class MutualCorrelationAnalysis:
 
         return "\n".join(s_lines)
 
-    def optimize_orbitals(self, k=2, random_guess_noise=0.001, method="L-BFGS-B"):
+    def optimize_orbitals(
+        self, k=2, random_guess_noise=0.001, method="L-BFGS-B", seed: int | None = None
+    ):
         """
-        Optimize the orbitals by minimizing the sum of the square of the mutual correlation M2.
+        Optimize the orbitals by maximizing the sum of the k-th power of the mutual correlation M2.
 
         Parameters
         ----------
@@ -182,30 +214,38 @@ class MutualCorrelationAnalysis:
             The amplitude of the random noise to add to the initial guess for the antisymmetric matrix. Default is 0.001.
         method : str, optional
             The optimization method to use. Default is "L-BFGS-B".
+        seed : int | None, optional
+            Seed for the random initial antisymmetric matrix. If None, a
+            nondeterministic seed is used (different results across runs).
+
+        Returns
+        -------
+        Q : NDArray
+            The optimized orthogonal transformation matrix.
         """
-        M2_sum_start = np.sum(self.M2)
-        print(f"M2 sum before optimization: {M2_sum_start}")
 
         # Generate a random antisymmetric matrix
         N = self.Γ1.shape[0]
-        a = np.random.rand(N**2) * random_guess_noise
+        # If seed is None, default_rng uses a nondeterministic seed
+        rng = np.random.default_rng(seed)
+        a = rng.random(N**2) * random_guess_noise
 
         # define the objective function to minimize
         def objective(x):
-            # construct the unitary matrix U from the antisymmetric matrix A
+            # construct the orthogonal matrix Q from the antisymmetric matrix A
             A = x.reshape(N, N)
             A = A - A.T
-            U = sp.linalg.expm(A)
+            Q = sp.linalg.expm(A)
 
-            # apply the unitary transformation to the RDMs
+            # apply the orthogonal transformation to the RDMs
             λaa_trans = np.einsum(
-                "pqrs,pi,qj,rk,sl->ijkl", self.λaa, U, U, U, U, optimize=True
+                "pqrs,pi,qj,rk,sl->ijkl", self.λaa, Q, Q, Q, Q, optimize=True
             )
             λab_trans = np.einsum(
-                "pqrs,pi,qj,rk,sl->ijkl", self.λab, U, U, U, U, optimize=True
+                "pqrs,pi,qj,rk,sl->ijkl", self.λab, Q, Q, Q, Q, optimize=True
             )
             λbb_trans = np.einsum(
-                "pqrs,pi,qj,rk,sl->ijkl", self.λbb, U, U, U, U, optimize=True
+                "pqrs,pi,qj,rk,sl->ijkl", self.λbb, Q, Q, Q, Q, optimize=True
             )
 
             # compute the new mutual correlation matrix
@@ -225,16 +265,15 @@ class MutualCorrelationAnalysis:
 
         A = res["x"].reshape(N, N)
         A = A - A.T
-        U = sp.linalg.expm(A)
-        self.U = U
+        Q = sp.linalg.expm(A)
+        self.Q = Q
 
-        # Apply the unitary transformation to the RDMs
-        self.λaa = np.einsum("pqrs,pi,qj,rk,sl->ijkl", self.λaa, U, U, U, U)
-        self.λab = np.einsum("pqrs,pi,qj,rk,sl->ijkl", self.λab, U, U, U, U)
-        self.λbb = np.einsum("pqrs,pi,qj,rk,sl->ijkl", self.λbb, U, U, U, U)
+        # Apply the orthogonal transformation to the RDMs
+        self.λaa = np.einsum("pqrs,pi,qj,rk,sl->ijkl", self.λaa, Q, Q, Q, Q)
+        self.λab = np.einsum("pqrs,pi,qj,rk,sl->ijkl", self.λab, Q, Q, Q, Q)
+        self.λbb = np.einsum("pqrs,pi,qj,rk,sl->ijkl", self.λbb, Q, Q, Q, Q)
 
         # Recompute the mutual correlation measures
         self._compute_mutual_correlation_measures(self.λaa, self.λab, self.λbb)
 
-        M2_sum_end = np.sum(self.M2)
-        print(f"M2 sum after optimization: {M2_sum_end}")
+        return self.Q

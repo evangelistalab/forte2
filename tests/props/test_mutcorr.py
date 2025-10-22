@@ -97,7 +97,8 @@ def test_mutual_correlation_h2_orbopt():
     assert mca.total_correlation == approx(0.512615148)
     assert mca.M2[0, 1] == approx(0.416025017)
 
-    mca.optimize_orbitals()
+    # Use a fixed seed for deterministic optimization in tests
+    mca.optimize_orbitals(seed=1023)
     assert mca.total_correlation == approx(0.512615148)
     assert mca.M2[0, 1] == approx(0.511668631)
 
