@@ -192,14 +192,14 @@ class System:
         )
 
         if not self.cholesky_tei:
-            self.auxiliary_basis, self.auxiliary_basis_data = (
-                (
-                    build_basis(self.auxiliary_basis_set, self.geom_helper)
-                    if self.auxiliary_basis_set is not None
-                    else None
-                ),
-                None,
-            )
+            if self.auxiliary_basis_set is not None:
+                self.auxiliary_basis, self.auxiliary_basis_data = build_basis(
+                    self.auxiliary_basis_set, self.geom_helper
+                )
+            else:
+                self.auxiliary_basis = None
+                self.auxiliary_basis_data = None
+
             if self.auxiliary_basis_set_corr is not None:
                 logger.log_warning(
                     "Using a separate auxiliary basis is not recommended!"
@@ -215,7 +215,9 @@ class System:
                 self.auxiliary_basis_set_corr_data = self.auxiliary_basis_data
         else:
             self.auxiliary_basis = None
+            self.auxiliary_basis_data = None
             self.auxiliary_basis_set_corr = None
+            self.auxiliary_basis_set_corr_data = None
 
         if self.minao_basis_set is not None:
             self.minao_basis, self.minao_basis_data = build_basis(
