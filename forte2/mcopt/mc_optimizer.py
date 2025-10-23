@@ -1,6 +1,7 @@
 import numpy as np
 from dataclasses import dataclass, field
 
+from forte2 import ints
 from forte2.ci import CISolver, RelCISolver
 from forte2.base_classes.active_space_solver import (
     ActiveSpaceSolver,
@@ -8,7 +9,7 @@ from forte2.base_classes.active_space_solver import (
 )
 from forte2.orbitals import Semicanonicalizer
 from forte2.jkbuilder import FockBuilder, RestrictedMOIntegrals, SpinorbitalIntegrals
-from forte2.helpers import logger, LBFGS, DIIS
+from forte2.helpers import logger, LBFGS, DIIS, block_diag_2x2
 from forte2.system.basis_utils import BasisInfo
 from forte2.ci.ci_utils import (
     pretty_print_ci_summary,
@@ -16,6 +17,7 @@ from forte2.ci.ci_utils import (
     pretty_print_ci_dets,
     pretty_print_ci_transition_props,
 )
+from forte2.orbitals.orbital_utils import check_orbital_orthonormality
 from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
 
 
@@ -392,7 +394,7 @@ class MCOptimizer(ActiveSpaceSolver):
 
             # recompute the CI vectors in the semicanonical basis
             if self.two_component:
-                ints = SpinorbitalIntegrals(
+                integrals = SpinorbitalIntegrals(
                     system=self.system,
                     C=self.C[0],
                     spinorbitals=self.mo_space.active_indices,
@@ -401,7 +403,7 @@ class MCOptimizer(ActiveSpaceSolver):
                     fock_builder=fock_builder,  # avoid reinitialization of FockBuilder
                 )
             else:
-                ints = RestrictedMOIntegrals(
+                integrals = RestrictedMOIntegrals(
                     system=self.system,
                     C=self.C[0],
                     orbitals=self.mo_space.active_indices,
@@ -409,9 +411,12 @@ class MCOptimizer(ActiveSpaceSolver):
                     use_aux_corr=True,
                     fock_builder=fock_builder,  # avoid reinitialization of FockBuilder
                 )
-            self.ci_solver.set_ints(ints.E, ints.H, ints.V)
+            self.ci_solver.set_ints(integrals.E, integrals.H, integrals.V)
             self.ci_solver.run()
 
+        assert check_orbital_orthonormality(
+            self.C[0], self.system.ints_overlap()
+        ), "Molecular orbitals are not orthonormal."
         self.executed = True
         return self
 

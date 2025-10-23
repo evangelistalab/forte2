@@ -2,6 +2,7 @@ import numpy as np
 import scipy as sp
 
 from forte2.jkbuilder import FockBuilder
+from forte2.orbitals.orbital_utils import normalize_unitary_matrix
 
 
 class OrbOptimizer:
@@ -80,6 +81,7 @@ class OrbOptimizer:
             return False
         self.R += dR
         self.U = self.U @ self._expm(dR)
+        self.U = normalize_unitary_matrix(self.U)
 
         self.C = self.C0 @ self.U
         self.Cgen = self.C

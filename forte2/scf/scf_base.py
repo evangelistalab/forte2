@@ -7,6 +7,7 @@ from forte2.system import System, ModelSystem, BasisInfo
 from forte2.jkbuilder import FockBuilder
 from forte2.base_classes.mixins import MOsMixin, SystemMixin
 from forte2.helpers import logger, DIIS
+from forte2.orbitals.orbital_utils import check_orbital_orthonormality
 
 
 @dataclass
@@ -248,6 +249,13 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         return self.system.nuclear_repulsion
 
     def _post_process(self):
+        # Assert orthonormality of molecular orbitals
+        S = self._get_overlap()
+        for c in self.C:
+            assert check_orbital_orthonormality(
+                c, S
+            ), "Molecular orbitals are not orthonormal."
+        
         self._get_occupation()
         self._assign_orbital_symmetries()
         self._print_orbital_energies()

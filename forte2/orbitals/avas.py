@@ -10,6 +10,7 @@ from forte2.base_classes.mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.system import System
 from forte2.system.basis_utils import BasisInfo, shell_label_to_lm
 from forte2.data import ATOM_SYMBOL_TO_Z
+from .orbital_utils import check_orbital_orthonormality
 
 
 @dataclass
@@ -115,6 +116,13 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         logger.log_info1("\n2. Building the AVAS projector")
         self.ao_projector = self._make_ao_space_projector()
         self._make_avas_orbitals()
+
+        # Final orthonormality check
+        ovlp = ints.overlap(self.system.basis)
+        if self.two_component:
+            ovlp = block_diag_2x2(ovlp)
+        assert check_orbital_orthonormality(self.C[0], ovlp), "Molecular orbitals are not orthonormal."
+        
         self.executed = True
         return self
 

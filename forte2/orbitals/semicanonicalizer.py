@@ -3,6 +3,10 @@ import numpy as np
 from forte2.system import System
 from forte2.state import MOSpace, EmbeddingMOSpace
 from forte2.jkbuilder import FockBuilder
+from forte2.orbitals.orbital_utils import (
+    check_orbital_orthonormality,
+    normalize_unitary_matrix,
+)
 
 
 class Semicanonicalizer:
@@ -95,9 +99,13 @@ class Semicanonicalizer:
                 eps[sl] = e
                 U[sl, sl] = c
 
+        U = normalize_unitary_matrix(U)
         self.U = U
         self.Uactv = U[self.mo_space.actv, self.mo_space.actv]
         self.C_semican = (self._C @ U)[:, self.mo_space.contig_to_orig]
+        assert check_orbital_orthonormality(
+            self.C_semican, self.system.ints_overlap()
+        ), "Semicanonicalized molecular orbitals are not orthonormal."
         self.eps_semican = eps[self.mo_space.contig_to_orig]
 
         return self
