@@ -153,8 +153,12 @@ class System:
         if LIBCINT_AVAILABLE:
             basis = atom_basis_to_bas(self.basis_data)
             env = np.zeros(PTR_ENV_START)
+            if self.use_gaussian_charges:
+                nucmod = "G"
+            else:
+                nucmod = {}
             self.cint_atm, self.cint_bas, self.cint_env = make_env(
-                self.atoms, basis, env, nucmod={}
+                self.atoms, basis, env, nucmod=nucmod
             )
 
     def _init_geometry(self):
@@ -227,7 +231,7 @@ class System:
 
         self.gaussian_charge_basis = None
         if self.use_gaussian_charges:
-            self.gaussian_charge_basis = build_basis(
+            self.gaussian_charge_basis, _ = build_basis(
                 "gaussian_charge",
                 self.geom_helper,
                 embed_normalization_into_coefficients=False,

@@ -18,7 +18,7 @@
 #include "integrals/one_electron.h"
 #include "integrals/two_electron.h"
 #include "integrals/value_at_points.h"
-#include "integrals/libcint_compute.h"
+#include "integrals/libcint_one_electron.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -347,5 +347,9 @@ void export_two_electron_api(nb::module_& sub_m) {
 void export_libcint_compute_api(nb::module_& sub_m) {
     sub_m.def("cint_int1e_ovlp_sph", &cint_int1e_ovlp_sph, "nao"_a, "atm"_a, "bas"_a, "env"_a,
               "Compute the overlap integral matrix using libcint in spherical harmonics.");
+    sub_m.def("cint_int1e_kin_sph", &cint_int1e_kin_sph, "nao"_a, "atm"_a, "bas"_a, "env"_a,
+              "Compute the kinetic energy integral matrix using libcint in spherical harmonics.");
+    sub_m.def("cint_int1e_nuc_sph", &cint_int1e_nuc_sph, "nao"_a, "atm"_a, "bas"_a, "env"_a,
+              "Compute the nuclear attraction integral matrix using libcint in spherical harmonics.");
 }
 } // namespace forte2

@@ -151,7 +151,6 @@ def make_atm_env(atom, ptr=0, nuclear_model=NUC_POINT, nucprop={}):
     else:  # callable(nuclear_model)
         zeta = nuclear_model(nuc_charge, nucprop)
         nuclear_model = NUC_GAUSS
-    print(zeta)
     _env = numpy.hstack((atom[1], zeta))
     _atm = numpy.zeros(6, dtype=numpy.int32)
     _atm[CHARGE_OF] = nuc_charge
