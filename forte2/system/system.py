@@ -12,7 +12,6 @@ from forte2.helpers.matrix_functions import (
 )
 from forte2.x2c import get_hcore_x2c
 from forte2 import integrals
-from forte2.integrals.libcint_integrals import LIBCINT_AVAILABLE
 from forte2.integrals.libcint_utils import atom_basis_to_bas, make_env, PTR_ENV_START
 from .build_basis import build_basis
 from .geom_utils import GeometryHelper, parse_geometry
@@ -150,16 +149,15 @@ class System:
             self.ortho_thresh,
         )
 
-        if LIBCINT_AVAILABLE:
-            basis = atom_basis_to_bas(self.basis_data)
-            env = np.zeros(PTR_ENV_START)
-            if self.use_gaussian_charges:
-                nucmod = "G"
-            else:
-                nucmod = {}
-            self.cint_atm, self.cint_bas, self.cint_env = make_env(
-                self.atoms, basis, env, nucmod=nucmod
-            )
+        basis = atom_basis_to_bas(self.basis_data)
+        env = np.zeros(PTR_ENV_START)
+        if self.use_gaussian_charges:
+            nucmod = "G"
+        else:
+            nucmod = {}
+        self.cint_atm, self.cint_bas, self.cint_env = make_env(
+            self.atoms, basis, env, nucmod=nucmod
+        )
 
     def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
