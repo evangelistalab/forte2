@@ -110,7 +110,7 @@ def mutual_correlation_plot(
     C,
     indices,
     mca,
-    orb_path="mca_orbitals",
+    orbitals_filepath="mca_orbitals",
     radius=1.0,
     offset=1.5,
     zoom=0.2,
@@ -121,6 +121,7 @@ def mutual_correlation_plot(
     vmax=0.75,
     cmap_name="magma_r",
     show_colorbar=True,
+    vmd_parameters=None,
 ):
     """
     Plots a set of orbitals arranged in a circle, and visualizes diagonal, semi-diagonal,
@@ -132,25 +133,49 @@ def mutual_correlation_plot(
         The Forte2 System object.
     C : NDArray
         The molecular orbital coefficients.
-    indices : list of int
+    indices : List[int]
         List of orbital indices to plot.
     mca : MutualCorrelationAnalysis
         The MutualCorrelationAnalysis object containing the cumulant data.
+    orbitals_filepath : str, optional, default="mca_orbitals"
+        Directory to save orbital cube files.
+    radius : float, optional, default=1.0
+        Radius of the circle on which orbitals are placed.
+    offset : float, optional, default=1.5
+        Offset for placing orbital images.
+    zoom : float, optional, default=0.2
+        Zoom factor for orbital images.
+    fontsize : int, optional, default=10
+        Font size for labels.
+    figsize : Tuple[float, float], optional, default=(6, 6)
+        Size of the figure.
+    output_file : str, optional
+        If provided, saves the plot to a file with this name (PDF format).
+    vmin : float, optional, default=0.00075
+        Minimum value for color mapping.
+    vmax : float, optional, default=0.75
+        Maximum value for color mapping.
+    cmap_name : str, optional, default="magma_r"
+        Name of the matplotlib colormap to use.
+    show_colorbar : bool, optional, default=True
+        Whether to display the colorbar.
+    vmd_parameters : dict, optional
+        Parameters to pass to VMDCube for orbital visualization.
     """
 
+    # generate cube files for the orbitals
     cube = Cube()
-    cube.run(
-        system,
-        C,
-        indices=indices,
-        filepath=orb_path,
-        prefix="orbital",
-    )
+    cube.run(system, C, indices=indices, filepath=orbitals_filepath, prefix="orbital")
 
     # run VMDCube
-    from vmdcube import VMDCube
+    try:
+        from vmdcube import VMDCube
+    except ImportError:
+        raise ImportError("VMDCube is not installed")
 
-    vmd = VMDCube(cubedir=orb_path, isovalues=[0.01, -0.01])
+    vmd_parameters = {} if vmd_parameters is None else vmd_parameters
+
+    vmd = VMDCube(cubedir=orbitals_filepath, **vmd_parameters)
     vmd.run()
 
     # Set font types for better compatibility
@@ -172,7 +197,9 @@ def mutual_correlation_plot(
     ax.set_aspect("equal", "box")
 
     # find all the files with the pattern orbital_*.tga
-    tga_files = glob.glob(f"{orb_path}/orbital_*.tga")
+    orbitals_filepath = pathlib.Path(orbitals_filepath)
+
+    tga_files = glob.glob(str(orbitals_filepath / pathlib.Path("orbital_*.tga")))
     tga_files_dict = {}
     for file in tga_files:
         orbital_index = int(file.split("/")[-1].split(".")[0].split("_")[-1])
@@ -184,7 +211,6 @@ def mutual_correlation_plot(
         x_img = (radius + offset) * x / radius
         y_img = (radius + offset) * y / radius
 
-        orb_path = pathlib.Path(orb_path)
         filename = tga_files_dict[orbital_index]
         tga_file = filename
         try:
