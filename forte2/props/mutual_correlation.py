@@ -1,4 +1,5 @@
 import numpy as np
+from numpy.typing import NDArray, Any
 import scipy as sp
 
 from forte2 import cpp_helpers
@@ -107,7 +108,7 @@ class MutualCorrelationAnalysis:
         self.M3 = self._triad_mutual_correlation(C_PQRS)
         self.M4 = self._tetrad_mutual_correlation(C_PQRS)
 
-    def _total_correlation(self, λaa, λab, λbb):
+    def _total_correlation(self, λaa, λab, λbb) -> np.floating[Any] | np.float64:
         """Computes the total correlation from the cumulant 2-RDMs."""
         return 0.25 * (
             np.linalg.norm(λaa) ** 2
@@ -115,7 +116,7 @@ class MutualCorrelationAnalysis:
             + np.linalg.norm(λbb) ** 2
         )
 
-    def _spin_free_correlation(self, λaa, λab, λbb):
+    def _spin_free_correlation(self, λaa, λab, λbb) -> NDArray:
         """Computes the spin-free correlation C_PQRS from the spin-dependent cumulant 2-RDMs."""
         C_PQRS = 0.25 * (λaa**2).copy()
         C_PQRS += 0.25 * (λab**2)
@@ -125,12 +126,12 @@ class MutualCorrelationAnalysis:
         C_PQRS += 0.25 * (λbb**2)
         return C_PQRS
 
-    def _orbital_correlation(self, C_PQRS):
+    def _orbital_correlation(self, C_PQRS) -> NDArray:
         """Computes the orbital correlation from the spin-free correlation C_PQRS."""
         M1 = np.einsum("iiii->i", C_PQRS).copy()
         return M1
 
-    def _dyad_mutual_correlation(self, C_PQRS):
+    def _dyad_mutual_correlation(self, C_PQRS) -> NDArray:
         """Computes the dyad mutual correlation M2 from the spin-free correlation C_PQRS."""
         M2 = 4 * np.einsum("iiij->ij", C_PQRS).copy()
         M2 += 2 * np.einsum("iijj->ij", C_PQRS)
@@ -141,7 +142,7 @@ class MutualCorrelationAnalysis:
         M2[idx, idx] = 0
         return M2
 
-    def _triad_mutual_correlation(self, C_PQRS):
+    def _triad_mutual_correlation(self, C_PQRS) -> NDArray:
         """Computes the triad mutual correlation M3 from the spin-free correlation C_PQRS."""
         M3 = 4 * np.einsum("ijkk->ijk", C_PQRS).copy()
         M3 += 8 * np.einsum("ikjk->ijk", C_PQRS)
@@ -156,7 +157,7 @@ class MutualCorrelationAnalysis:
         M3[:, idx, idx] = 0
         return M3
 
-    def _tetrad_mutual_correlation(self, C_PQRS):
+    def _tetrad_mutual_correlation(self, C_PQRS) -> NDArray:
         """Computes the tetrad mutual correlation M4 from the spin-free correlation C_PQRS."""
         M4 = 8 * C_PQRS.copy()
         M4 += 8 * np.einsum("ikjl->ijkl", C_PQRS)
@@ -171,12 +172,24 @@ class MutualCorrelationAnalysis:
         M4[:, :, idx, idx] = 0
         return M4
 
-    def mutual_correlation_matrix_summary(self) -> str:
-        """Prints the mutual correlation matrix M2."""
+    def mutual_correlation_matrix_summary(self, print_threshold: float = 7.5e-4) -> str:
+        """
+        Generates a summary of the mutual correlation matrix M2.
+
+        Parameters
+        ----------
+        print_threshold : float, optional, default=7.5e-4
+            Only values greater than this threshold are printed.
+
+        Returns
+        -------
+        summary : str
+            A formatted string summarizing the mutual correlation matrix M2.
+        """
 
         s_lines = [
             f"Total λ2 Correlation: {self.total_correlation:8.6f}",
-            "Mutual Correlation Matrix M2 (only values > 7.5e-4):",
+            f"Mutual Correlation Matrix M2 (only values > {print_threshold:.1e}):",
             "=====================",
             "    P     Q      M_PQ",
             "---------------------",
@@ -190,19 +203,17 @@ class MutualCorrelationAnalysis:
         M2_vals.sort(reverse=True, key=lambda x: x[0])
 
         for val, i, j in M2_vals:
-            if val < 7.5e-04:
+            if val < threshold:
                 break
             s_lines.append(f"{i:>5} {j:>5}  {val:8.6f}")
 
-        s_lines.append(
-            "=====================",
-        )
+        s_lines.append("=====================")
 
         return "\n".join(s_lines)
 
     def optimize_orbitals(
         self, k=2, random_guess_noise=0.001, method="L-BFGS-B", seed: int | None = None
-    ):
+    ) -> NDArray:
         """
         Optimize the orbitals by maximizing the sum of the k-th power of the mutual correlation M2.
 
