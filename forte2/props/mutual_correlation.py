@@ -259,9 +259,7 @@ class MutualCorrelationAnalysis:
             return -cost(M2_trans)
 
         # minimize the objective function as a function of the antisymmetric matrix A
-        from scipy.optimize import minimize
-
-        res = minimize(objective, a, method=method)
+        res = sp.optimize.minimize(objective, a, method=method)
 
         A = res["x"].reshape(N, N)
         A = A - A.T
