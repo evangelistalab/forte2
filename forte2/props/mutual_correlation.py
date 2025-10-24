@@ -32,7 +32,7 @@ class MutualCorrelationAnalysis:
     Q : NDArray
         Orthogonal transformation matrix to form the maximally correlated orbitals.
 
-    Implementation Details
+    Notes
     ----------------------
     This analysis expects an active space solver with the following API
     on the selected sub-solver `solver.sub_solvers[sub_solver_index]`:
