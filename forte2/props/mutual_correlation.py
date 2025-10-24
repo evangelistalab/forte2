@@ -210,8 +210,8 @@ class MutualCorrelationAnalysis:
         ----------
         k : int, optional
             The power to which to raise the mutual correlation values in the cost function. Default is 2.
-        random_guess_noise : float, optional
-            The amplitude of the random noise to add to the initial guess for the antisymmetric matrix. Default is 0.001.
+        random_guess_noise : float, optional, default=0.001
+            The amplitude of the random noise to add to the initial guess for the antisymmetric matrix.
         method : str, optional
             The optimization method to use. Default is "L-BFGS-B".
         seed : int | None, optional
