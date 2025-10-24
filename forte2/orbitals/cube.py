@@ -1,12 +1,36 @@
 import math
+from pathlib import Path
 import numpy as np
 
+from forte2.helpers import logger
 from forte2 import ints
 
 
 def simple_grid(
     atoms, spacing: tuple[float, float, float], overage: tuple[float, float, float]
 ):
+    """
+    Create a simple cubic grid around the given atoms.
+
+    Parameters
+    ----------
+    atoms : List[Tuple[int, Tuple[float, float, float]]]
+        List of atoms, each represented as a tuple (Z, (x, y, z)).
+    spacing : Tuple[float, float, float]
+        The spacing between grid points in the x, y, and z directions.
+    overage : Tuple[float, float, float]
+        The amount of overage to add to the grid in the x, y, and z directions.
+
+    Returns
+    -------
+    grid_origin : Tuple[float, float, float]
+        The origin of the grid.
+    npoints : Tuple[int, int, int]
+        The number of grid points in the x, y, and z directions.
+    scaled_axes : List[Tuple[float, float, float]]
+        The scaled axes for the grid.
+    """
+
     # find the orbital extents
     xrange = (math.inf, -math.inf)
     yrange = (math.inf, -math.inf)
@@ -15,14 +39,16 @@ def simple_grid(
         xrange = (min(xrange[0], x), max(xrange[1], x))
         yrange = (min(yrange[0], y), max(yrange[1], y))
         zrange = (min(zrange[0], z), max(zrange[1], z))
+
     # add overage
     xrange = (xrange[0] - overage[0], xrange[1] + overage[0])
     yrange = (yrange[0] - overage[1], yrange[1] + overage[1])
     zrange = (zrange[0] - overage[2], zrange[1] + overage[2])
-    npoints = [
+    npoints = (
         math.ceil((r[1] - r[0]) / s)
         for (r, s) in zip((xrange, yrange, zrange), spacing)
-    ]
+    )
+
     return (
         (xrange[0], yrange[0], zrange[0]),
         tuple(npoints),
@@ -39,7 +65,8 @@ class Cube:
         self.spacing = [spacing, spacing, spacing]
         self.overage = [overage, overage, overage]
 
-    def run(self, system, C, indices=None, prefix="orbital"):
+    def run(self, system, C, indices=None, prefix="orbital", filepath="."):
+        filepath = Path(filepath)
         # determine the indices of the orbitals to generate
         indices = indices if indices is not None else range(C.shape[1])
         max_index = max(indices)
@@ -49,6 +76,14 @@ class Cube:
         grid_origin, npoints, scaled_axes = simple_grid(
             system.atoms, spacing=self.spacing, overage=self.overage
         )
+
+        logger.log(f"\nGenerating cube files with the following parameters:")
+        logger.log(
+            f"  Grid origin: ({grid_origin[0]:.3f}, {grid_origin[1]:.3f}, {grid_origin[2]:.3f})"
+        )
+        logger.log(f"  Grid points: {npoints[0]} x {npoints[1]} x {npoints[2]} points.")
+        logger.log(f"  Scaled axes: {scaled_axes}")
+        logger.log(f"  Orbitals: {list(indices)}\n")
 
         # calculate the orbitals on the grid
         if system.two_component:
@@ -94,32 +129,43 @@ class Cube:
                 scaled_axes,
             )
 
+        def _write_file(cube, filepath, filename):
+            # check if the directory exists, if not, create it
+            filepath = Path(filepath)
+            filepath.mkdir(parents=True, exist_ok=True)
+            with open(filepath / filename, "w") as f:
+                f.write(cube)
+
         # write the cube files
         if system.two_component:
-            # if the values are complex, we write two files: one for the real part and one for the imaginary part
+            # for two-component systems, write the magnitude of alpha and beta parts in separate cube files
             for i, index in enumerate(indices):
                 cube_a = self._make_cube(
                     np.abs(values_a[:, i]), grid_origin, npoints, scaled_axes, system
                 )
-                with open(
-                    f"{prefix}_{index + 1:0{number_of_digits}d}_a.cube", "w"
-                ) as f:
-                    f.write(cube_a)
+                _write_file(
+                    cube_a,
+                    filepath,
+                    f"{prefix}_{index + 1:0{number_of_digits}d}_a.cube",
+                )
 
                 cube_b = self._make_cube(
                     np.abs(values_b[:, i]), grid_origin, npoints, scaled_axes, system
                 )
-                with open(
-                    f"{prefix}_{index + 1:0{number_of_digits}d}_b.cube", "w"
-                ) as f:
-                    f.write(cube_b)
+                _write_file(
+                    cube_b,
+                    filepath,
+                    f"{prefix}_{index + 1:0{number_of_digits}d}_b.cube",
+                )
+
         else:
             for i, index in enumerate(indices):
                 cube = self._make_cube(
                     values[:, i], grid_origin, npoints, scaled_axes, system
                 )
-                with open(f"{prefix}_{index + 1:0{number_of_digits}d}.cube", "w") as f:
-                    f.write(cube)
+                _write_file(
+                    cube, filepath, f"{prefix}_{index + 1:0{number_of_digits}d}.cube"
+                )
 
     def _make_cube(self, values, minr, npoints, axis, system):
         """

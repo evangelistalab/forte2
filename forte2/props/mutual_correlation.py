@@ -1,5 +1,6 @@
 import numpy as np
-from numpy.typing import NDArray, Any
+from typing import Any
+from numpy.typing import NDArray
 import scipy as sp
 
 from forte2 import cpp_helpers
@@ -67,6 +68,8 @@ class MutualCorrelationAnalysis:
     def __init__(self, solver, root=0, sub_solver_index=0):
         self.Q = None
 
+        self.active_mo_indices = solver.mo_space.active_indices[:]
+
         # extract the spin-dependent 1-RDM  from the solver
         γa, γb = solver.sub_solvers[sub_solver_index].make_sd_1rdm(root)
 
@@ -99,7 +102,7 @@ class MutualCorrelationAnalysis:
         total += self.M4.sum() / 24
         assert np.isclose(total, self.total_correlation, atol=1e-8, rtol=0)
 
-    def _compute_mutual_correlation_measures(self, λaa, λab, λbb):
+    def _compute_mutual_correlation_measures(self, λaa, λab, λbb) -> None:
         """Recomputes the mutual correlation measures from the current cumulant RDMs."""
         C_PQRS = self._spin_free_correlation(λaa, λab, λbb)
         self.total_correlation = self._total_correlation(λaa, λab, λbb)
@@ -199,11 +202,17 @@ class MutualCorrelationAnalysis:
         M2_vals = []
         for i in range(self.M2.shape[0]):
             for j in range(i + 1, self.M2.shape[1]):
-                M2_vals.append((self.M2[i, j], i, j))
+                M2_vals.append(
+                    (
+                        self.M2[i, j],
+                        self.active_mo_indices[i],
+                        self.active_mo_indices[j],
+                    )
+                )
         M2_vals.sort(reverse=True, key=lambda x: x[0])
 
         for val, i, j in M2_vals:
-            if val < threshold:
+            if val < print_threshold:
                 break
             s_lines.append(f"{i:>5} {j:>5}  {val:8.6f}")
 
