@@ -323,3 +323,21 @@ def atom_basis_to_bas(atom_basis):
                     bas[atom_symbol][-1].append([exp, coeff])
 
     return bas
+
+
+def conc_env(atm1, bas1, env1, atm2, bas2, env2):
+    """Concatenate two sets of libcint input arguments for cross integrals"""
+    off = len(env1)
+    natm_off = len(atm1)
+    atm2 = numpy.copy(atm2)
+    bas2 = numpy.copy(bas2)
+    atm2[:, PTR_COORD] += off
+    atm2[:, PTR_ZETA] += off
+    bas2[:, ATOM_OF] += natm_off
+    bas2[:, PTR_EXP] += off
+    bas2[:, PTR_COEFF] += off
+    return (
+        numpy.asarray(numpy.vstack((atm1, atm2)), dtype=numpy.int32),
+        numpy.asarray(numpy.vstack((bas1, bas2)), dtype=numpy.int32),
+        numpy.hstack((env1, env2)),
+    )

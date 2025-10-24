@@ -1,6 +1,7 @@
 import numpy as np
 
 from forte2 import ints
+from forte2.integrals.libcint_utils import conc_env
 
 
 def _parse_basis_args_1e(system, basis1, basis2):
@@ -582,3 +583,97 @@ def erfc_coulomb_2c(system, omega, basis1=None, basis2=None):
     """
     basis1, basis2 = _parse_basis_args_2c2e(system, basis1, basis2)
     return ints.erfc_coulomb_2c(basis1, basis2, omega)
+
+
+def _parse_basis_args_cint_1e(system, basis1, basis2):
+    # 2 possible cases:
+    # 1. both basis sets are None -> set both to system.basis
+    # 2. basis1 is provided, basis2 is None -> set basis2 to basis1
+    if basis1 is None and basis2 is None:
+        atm = system.basis.cint_atm
+        bas = system.basis.cint_bas
+        env = system.basis.cint_env
+        shell_slice = [0, system.basis.nshells, 0, system.basis.nshells]
+    elif basis1 is not None and basis2 is None:
+        atm = basis1.cint_atm
+        bas = basis1.cint_bas
+        env = basis1.cint_env
+        shell_slice = [0, basis1.nshells, 0, basis1.nshells]
+    elif basis1 is None and basis2 is not None:
+        raise ValueError("If basis2 is provided, basis1 must also be provided.")
+    else:
+        atm, bas, env = conc_env(
+            basis1.cint_atm,
+            basis1.cint_bas,
+            basis1.cint_env,
+            basis2.cint_atm,
+            basis2.cint_bas,
+            basis2.cint_env,
+        )
+        ns1 = basis1.nshells
+        ns2 = basis2.nshells
+        shell_slice = [0, ns1, ns1, ns1 + ns2]
+    return atm, bas, env, shell_slice
+
+
+def cint_overlap(system, basis1=None, basis2=None):
+    r"""
+    Compute the overlap integral between two basis sets using the Libcint library.
+
+    .. math::
+
+        S^{12}_{\mu\nu} = \int \chi^{1}_\mu(\mathbf{r}) \chi^{2}_\nu(\mathbf{r}) d\mathbf{r}
+
+    Parameters
+    ----------
+    system : System
+        The molecular system containing the basis sets.
+    basis1 : BasisSet, optional
+        The first basis set. If None, defaults to system.basis.
+    basis2 : BasisSet, optional
+        The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
+    """
+    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
+    return ints.cint_int1e_ovlp_sph(shell_slice, atm, bas, env)
+
+
+def cint_kinetic(system, basis1=None, basis2=None):
+    r"""
+    Compute the kinetic energy integral between two basis sets using the Libcint library.
+
+    .. math::
+
+        T^{12}_{\mu\nu} = -\frac{1}{2} \int \chi^{1}_\mu(\mathbf{r}) \nabla^2 \chi^{2}_\nu(\mathbf{r}) d\mathbf{r}
+
+    Parameters
+    ----------
+    system : System
+        The molecular system containing the basis sets.
+    basis1 : BasisSet, optional
+        The first basis set. If None, defaults to system.basis.
+    basis2 : BasisSet, optional
+        The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
+    """
+    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
+    return ints.cint_int1e_kin_sph(shell_slice, atm, bas, env)
+
+
+def cint_nuclear(system, basis1=None, basis2=None):
+    r"""
+    Compute the nuclear attraction integral between two basis sets using the Libcint library.
+
+    .. math::
+
+        V^{12}_{\mu\nu} = -\iint \chi^{1}_\mu(\mathbf{r}) \left(\sum_{A} \frac{Z_A}{|\mathbf{r} - \mathbf{R}_A|}\right) \chi^{2}_\nu(\mathbf{r}) d\mathbf{r}
+
+    Parameters
+    ----------
+    system : System
+        The molecular system containing the basis sets.
+    basis1 : BasisSet, optional
+        The first basis set. If None, defaults to system.basis.
+    basis2 : BasisSet, optional
+        The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
+    """
+    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
+    return ints.cint_int1e_nuc_sph(shell_slice, atm, bas, env)

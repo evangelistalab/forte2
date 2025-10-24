@@ -2,10 +2,13 @@ import json
 import itertools
 from importlib import resources
 import regex as re
+import numpy as np
 
 from forte2 import Basis, Shell
 from forte2.data import ATOM_SYMBOL_TO_Z
 from forte2.helpers import logger
+from forte2.integrals.libcint_utils import atom_basis_to_bas, make_env, PTR_ENV_START
+
 
 try:
     import basis_set_exchange as bse
@@ -20,6 +23,7 @@ def build_basis(
     geometry,
     embed_normalization_into_coefficients: bool = True,
     decontract: bool = False,
+    use_gaussian_charges: bool = False,
 ) -> Basis:
     """
     Assemble the basis set from JSON data or Basis Set Exchange, depending on availability.
@@ -102,7 +106,20 @@ def build_basis(
                 coords,
                 embed_normalization_into_coefficients,
             )
-    return basis, atom_basis
+
+    _bas = atom_basis_to_bas(atom_basis)
+    _env = np.zeros(PTR_ENV_START)
+    if use_gaussian_charges:
+        nucmod = "G"
+    else:
+        nucmod = {}
+    cint_atm, cint_bas, cint_env = make_env(
+        geometry.atoms, _bas, _env, nucmod=nucmod
+    )
+    basis.cint_atm = cint_atm
+    basis.cint_bas = cint_bas
+    basis.cint_env = cint_env
+    return basis
 
 
 def _parse_custom_basis_assignment(geometry, basis_assignment):

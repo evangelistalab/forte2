@@ -144,6 +144,9 @@ void export_basis_api(nb::module_& sub_m) {
         .def_prop_ro("max_nprim", &Basis::max_nprim)
         .def_prop_ro("nprim", &Basis::max_nprim)
         .def_prop_ro("nshells", &Basis::nshells)
+        .def_prop_rw("cint_atm", &Basis::get_cint_atm, &Basis::set_cint_atm)
+        .def_prop_rw("cint_bas", &Basis::get_cint_bas, &Basis::set_cint_bas)
+        .def_prop_rw("cint_env", &Basis::get_cint_env, &Basis::set_cint_env)
         .def("__repr__", [](const Basis& b) {
             std::ostringstream oss;
             oss << "<Basis '" << b.name() << "' with " << b.size() << " basis functions>";
@@ -345,11 +348,12 @@ void export_two_electron_api(nb::module_& sub_m) {
 }
 
 void export_libcint_compute_api(nb::module_& sub_m) {
-    sub_m.def("cint_int1e_ovlp_sph", &cint_int1e_ovlp_sph, "nao"_a, "atm"_a, "bas"_a, "env"_a,
-              "Compute the overlap integral matrix using libcint in spherical harmonics.");
-    sub_m.def("cint_int1e_kin_sph", &cint_int1e_kin_sph, "nao"_a, "atm"_a, "bas"_a, "env"_a,
+    sub_m.def("cint_int1e_ovlp_sph", &cint_int1e_ovlp_sph, "shell_slice"_a, "atm"_a, "bas"_a,
+              "env"_a, "Compute the overlap integral matrix using libcint in spherical harmonics.");
+    sub_m.def("cint_int1e_kin_sph", &cint_int1e_kin_sph, "shell_slice"_a, "atm"_a, "bas"_a, "env"_a,
               "Compute the kinetic energy integral matrix using libcint in spherical harmonics.");
-    sub_m.def("cint_int1e_nuc_sph", &cint_int1e_nuc_sph, "nao"_a, "atm"_a, "bas"_a, "env"_a,
-              "Compute the nuclear attraction integral matrix using libcint in spherical harmonics.");
+    sub_m.def(
+        "cint_int1e_nuc_sph", &cint_int1e_nuc_sph, "shell_slice"_a, "atm"_a, "bas"_a, "env"_a,
+        "Compute the nuclear attraction integral matrix using libcint in spherical harmonics.");
 }
 } // namespace forte2

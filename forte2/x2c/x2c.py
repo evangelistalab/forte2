@@ -50,7 +50,12 @@ def get_hcore_x2c(system):
         ], f"Invalid snso_type: {system.snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
 
     logger.log_info1(f"Number of contracted basis functions: {system.nbf}")
-    xbasis, _ = build_basis(system.basis_set, system.geom_helper, decontract=True)
+    xbasis = build_basis(
+        system.basis_set,
+        system.geom_helper,
+        decontract=True,
+        use_gaussian_charges=system.use_gaussian_charges,
+    )
     proj = _get_projection_matrix(system, xbasis)
 
     nbf_decon = len(xbasis)
@@ -90,9 +95,15 @@ def get_hcore_x2c(system):
         h1 = (hab + hba) / 2
         h2 = (hab - hba) / (-2j)
         h3 = (haa - hbb) / 2
-        h1 = _apply_snso_scaling(h1, system.basis, system.atoms, snso_type=system.snso_type)
-        h2 = _apply_snso_scaling(h2, system.basis, system.atoms, snso_type=system.snso_type)
-        h3 = _apply_snso_scaling(h3, system.basis, system.atoms, snso_type=system.snso_type)
+        h1 = _apply_snso_scaling(
+            h1, system.basis, system.atoms, snso_type=system.snso_type
+        )
+        h2 = _apply_snso_scaling(
+            h2, system.basis, system.atoms, snso_type=system.snso_type
+        )
+        h3 = _apply_snso_scaling(
+            h3, system.basis, system.atoms, snso_type=system.snso_type
+        )
         h_fw = np.block([[h0 + h3, h1 - 1j * h2], [h1 + 1j * h2, h0 - h3]])
 
     return h_fw

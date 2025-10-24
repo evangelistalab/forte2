@@ -16,8 +16,15 @@ using CIntorFunc = int (*)(double* buf, int* dims, int* shls, int* atm, int natm
 
 namespace forte2 {
 
-np_matrix_f cint_int1e_1comp(CIntorFunc intor, const size_t nao, np_matrix_int atm,
-                             np_matrix_int bas, np_vector env) {
+np_matrix_f cint_int1e_1comp(CIntorFunc intor, const std::vector<int>& shell_slice,
+                             np_matrix_int atm, np_matrix_int bas, np_vector env) {
+    const int ish_0 = static_cast<int>(shell_slice[0]);
+    const int ish_1 = static_cast<int>(shell_slice[1]);
+    const int jsh_0 = static_cast<int>(shell_slice[2]);
+    const int jsh_1 = static_cast<int>(shell_slice[3]);
+    const int nish = ish_1 - ish_0;
+    const int njsh = jsh_1 - jsh_0;
+
     int natm = atm.shape(0);
     int nbas = bas.shape(0);
 
@@ -30,20 +37,24 @@ np_matrix_f cint_int1e_1comp(CIntorFunc intor, const size_t nao, np_matrix_int a
         ao_offset[i + 1] = ao_offset[i] + CINTcgto_spheric(i, bas_data);
     }
 
-    auto ints = make_zeros<nb::numpy, double, 2, nb::f_contig>(std::array<size_t, 2>{nao, nao});
+    const int nao_i = ao_offset[ish_1] - ao_offset[ish_0];
+    const int nao_j = ao_offset[jsh_1] - ao_offset[jsh_0];
+
+    auto ints = make_zeros<nb::numpy, double, 2, nb::f_contig>(
+        std::array<size_t, 2>{static_cast<size_t>(nao_i), static_cast<size_t>(nao_j)});
     double* buf = ints.data();
 
     int shells[2];
-    int dims[2] = {static_cast<int>(nao), static_cast<int>(nao)};
+    int dims[2] = {nao_i, nao_j};
 
-    for (int i = 0; i < nbas; ++i) {
+    for (int i = 0; i < nish; ++i) {
         // dims[0] = ao_offset[i + 1] - ao_offset[i];
-        for (int j = 0; j < nbas; ++j) {
+        for (int j = 0; j < njsh; ++j) {
             // dims[1] = ao_offset[j + 1] - ao_offset[j];
             shells[0] = i;
             shells[1] = j;
             // Fortran ordering: i changes fastest
-            double* buf_ij = buf + ao_offset[i] + ao_offset[j] * nao;
+            double* buf_ij = buf + ao_offset[i] + ao_offset[j] * nao_i;
             intor(buf_ij, dims, shells, atm_data, natm, bas_data, nbas, env_data, NULL, NULL);
         }
     }
