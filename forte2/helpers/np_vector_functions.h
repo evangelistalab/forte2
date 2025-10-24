@@ -11,7 +11,7 @@ namespace forte2::vector {
 
 /// @brief Zero out a np_vector
 /// @param vec The vector to zero out
-template <typename T> void zero(nb::ndarray<nb::numpy, T, nb::ndim<1>, nb::c_contig> vec) {
+template <typename T> void zero(nb::ndarray<nb::numpy, T, nb::ndim<1>> vec) {
     auto vec_view = vec.view();
     for (size_t i{0}, maxi{vec.shape(0)}; i < maxi; ++i) {
         vec_view(i) = 0.0;
@@ -60,7 +60,7 @@ void daxpy(double a, nb::ndarray<nb::numpy, T, nb::ndim<1>> x,
 }
 
 /// @brief Check np_vector for contiguity and make a std::span from it
-template <typename T> std::span<T> as_span(nb::ndarray<nb::numpy, T, nb::ndim<1>, nb::c_contig> vec) {
+template <typename T> std::span<T> as_span(nb::ndarray<nb::numpy, T, nb::ndim<1>> vec) {
     if (vec.ndim() != 1) {
         throw std::runtime_error("np_vector must be 1-dimensional to convert to std::span.");
     }
