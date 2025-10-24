@@ -7,7 +7,7 @@ from forte2.system import System, ModelSystem, BasisInfo
 from forte2.jkbuilder import FockBuilder
 from forte2.base_classes.mixins import MOsMixin, SystemMixin
 from forte2.helpers import logger, DIIS
-from forte2.orbitals.orbital_utils import check_orbital_orthonormality
+from forte2.helpers.orbital_utils import check_orbital_orthonormality
 
 
 @dataclass

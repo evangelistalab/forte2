@@ -2,7 +2,7 @@ import numpy as np
 import scipy as sp
 
 from forte2.jkbuilder import FockBuilder
-from forte2.orbitals.orbital_utils import normalize_unitary_matrix
+from forte2.helpers.orbital_utils import normalize_unitary_matrix
 
 
 class OrbOptimizer:

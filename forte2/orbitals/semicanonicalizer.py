@@ -3,7 +3,7 @@ import numpy as np
 from forte2.system import System
 from forte2.state import MOSpace, EmbeddingMOSpace
 from forte2.jkbuilder import FockBuilder
-from forte2.orbitals.orbital_utils import (
+from forte2.helpers.orbital_utils import (
     check_orbital_orthonormality,
     normalize_unitary_matrix,
 )

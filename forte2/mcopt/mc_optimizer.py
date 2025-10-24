@@ -17,7 +17,7 @@ from forte2.ci.ci_utils import (
     pretty_print_ci_dets,
     pretty_print_ci_transition_props,
 )
-from forte2.orbitals.orbital_utils import check_orbital_orthonormality
+from forte2.helpers.orbital_utils import check_orbital_orthonormality
 from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
 
 

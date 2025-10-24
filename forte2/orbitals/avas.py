@@ -10,7 +10,7 @@ from forte2.base_classes.mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.system import System
 from forte2.system.basis_utils import BasisInfo, shell_label_to_lm
 from forte2.data import ATOM_SYMBOL_TO_Z
-from .orbital_utils import check_orbital_orthonormality
+from ..helpers.orbital_utils import check_orbital_orthonormality
 
 
 @dataclass
