@@ -263,3 +263,34 @@ def mutual_correlation_plot(
         logging.getLogger("fontTools").setLevel(logging.WARNING)
         plt.savefig(f"{output_file}.pdf", bbox_inches="tight")
     plt.show()
+
+
+if __name__ == "__main__":
+    from forte2.systems import System
+    from forte2.solvers.hf import RHF
+    from forte2.solvers.ci import CI
+    from forte2.states import State
+    from forte2.props.mutual_correlation import MutualCorrelationAnalysis
+
+    xyz = f"""
+    N 0.0 0.0 0.0
+    N 0.0 0.0 1.1
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    ci = CI(
+        State(system=system, multiplicity=1, ms=0.0), active_orbitals=list(range(10))
+    )(rhf)
+    ci.run()
+
+    mca = MutualCorrelationAnalysis(ci)
+
+    mutual_correlation_plot(
+        system,
+        ci.C[0],
+        indices=ci.mo_space.active_indices,
+        mca=mca,
+        output_file="mutual_correlation_N2",
+    )
