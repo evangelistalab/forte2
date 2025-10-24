@@ -263,11 +263,10 @@ class MutualCorrelationAnalysis:
             C_PQRS_trans = self._spin_free_correlation(λaa_trans, λab_trans, λbb_trans)
             M2_trans = self._dyad_mutual_correlation(C_PQRS_trans)
 
-            # compute the cost function
-            def cost(x):
-                return np.sum(x**k)
+            # compute the objective function value
+            obj = -np.sum(np.abs(M2_trans) ** k)
 
-            return -cost(M2_trans)
+            return obj
 
         # minimize the objective function as a function of the antisymmetric matrix A
         res = sp.optimize.minimize(objective, a, method=method)
