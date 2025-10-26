@@ -120,13 +120,16 @@ class MutualCorrelationAnalysis:
         )
 
     def _spin_free_correlation(self, λaa, λab, λbb) -> NDArray:
-        """Computes the spin-free correlation C_PQRS from the spin-dependent cumulant 2-RDMs."""
-        C_PQRS = 0.25 * (λaa**2).copy()
-        C_PQRS += 0.25 * (λab**2)
-        C_PQRS += 0.25 * np.einsum("ijlk->ijkl", λab**2)
-        C_PQRS += 0.25 * np.einsum("jikl->ijkl", λab**2)
-        C_PQRS += 0.25 * np.einsum("jilk->ijkl", λab**2)
-        C_PQRS += 0.25 * (λbb**2)
+        """
+        Computes the spin-free correlation C_PQRS from the spin-dependent cumulant 2-RDMs.
+        Here we take the absolute value squared of the cumulants so this can work with complex quantities.
+        """
+        C_PQRS = 0.25 * (np.abs(λaa) ** 2).copy()
+        C_PQRS += 0.25 * (np.abs(λab) ** 2)
+        C_PQRS += 0.25 * np.einsum("ijlk->ijkl", np.abs(λab) ** 2)
+        C_PQRS += 0.25 * np.einsum("jikl->ijkl", np.abs(λab) ** 2)
+        C_PQRS += 0.25 * np.einsum("jilk->ijkl", np.abs(λab) ** 2)
+        C_PQRS += 0.25 * (np.abs(λbb) ** 2)
         return C_PQRS
 
     def _orbital_correlation(self, C_PQRS) -> NDArray:
@@ -285,7 +288,8 @@ class MutualCorrelationAnalysis:
         Q = sp.linalg.expm(A)
         self.Q = Q
 
-        # Apply the orthogonal transformation to the RDMs
+        # Apply the orthogonal transformation to the 1-RDM and 2-RDM cumulants
+        self.Γ1 = np.einsum("pq,pi,qj->ij", self.Γ1, Q, Q)
         self.λaa = np.einsum("pqrs,pi,qj,rk,sl->ijkl", self.λaa, Q, Q, Q, Q)
         self.λab = np.einsum("pqrs,pi,qj,rk,sl->ijkl", self.λab, Q, Q, Q, Q)
         self.λbb = np.einsum("pqrs,pi,qj,rk,sl->ijkl", self.λbb, Q, Q, Q, Q)
