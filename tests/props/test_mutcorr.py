@@ -28,9 +28,6 @@ def test_mutual_correlation_h2_singlet():
     assert mca.M2[0, 0] == approx(0.0)
     assert mca.M2[1, 1] == approx(0.0)
 
-    summary = mca.mutual_correlation_matrix_summary()
-    assert float(summary.splitlines()[5].split()[-1]) == approx(0.75)
-
 
 def test_mutual_correlation_h2_triplet_lowspin():
     """Test mutual correlation analysis on H2 molecule in the triplet low-spin (ms=0) state in STO-6G basis at dissociation."""
@@ -129,3 +126,6 @@ def test_mutual_correlation_h6():
     mca = MutualCorrelationAnalysis(ci)
     assert mca.total_correlation == approx(0.815410515)
     assert mca.M2[2, 3] == approx(0.562132887)
+
+    summary = mca.mutual_correlation_matrix_summary()
+    assert float(summary.splitlines()[5].split()[-1]) == approx(0.562133)
