@@ -94,7 +94,7 @@ nanobind_add_module(
   integrals/one_electron.cc
   integrals/two_electron.cc
   integrals/value_at_points.cc
-  integrals/libcint_one_electron.cc
+  integrals/libcint_two_center.cc
   ci/ci_sigma_builder.cc
   ci/ci_sigma_builder_1rdm.cc
   ci/ci_sigma_builder_2rdm.cc

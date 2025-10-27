@@ -616,6 +616,42 @@ def _parse_basis_args_cint_1e(system, basis1, basis2):
     return atm, bas, env, shell_slice
 
 
+def _parse_basis_args_cint_2c2e(system, basis1, basis2):
+    # 2 possible cases:
+    # 1. both basis sets are None -> set both to system.auxiliary_basis
+    # 2. basis1 is provided, basis2 is None -> set basis2 to basis1
+    if basis1 is None and basis2 is None:
+        atm = system.auxiliary_basis.cint_atm
+        bas = system.auxiliary_basis.cint_bas
+        env = system.auxiliary_basis.cint_env
+        shell_slice = [
+            0,
+            system.auxiliary_basis.nshells,
+            0,
+            system.auxiliary_basis.nshells,
+        ]
+    elif basis1 is not None and basis2 is None:
+        atm = basis1.cint_atm
+        bas = basis1.cint_bas
+        env = basis1.cint_env
+        shell_slice = [0, basis1.nshells, 0, basis1.nshells]
+    elif basis1 is None and basis2 is not None:
+        raise ValueError("If basis2 is provided, basis1 must also be provided.")
+    else:
+        atm, bas, env = conc_env(
+            basis1.cint_atm,
+            basis1.cint_bas,
+            basis1.cint_env,
+            basis2.cint_atm,
+            basis2.cint_bas,
+            basis2.cint_env,
+        )
+        ns1 = basis1.nshells
+        ns2 = basis2.nshells
+        shell_slice = [0, ns1, ns1, ns1 + ns2]
+    return atm, bas, env, shell_slice
+
+
 def cint_overlap(system, basis1=None, basis2=None):
     r"""
     Compute the overlap integral between two basis sets using the Libcint library.
@@ -635,6 +671,27 @@ def cint_overlap(system, basis1=None, basis2=None):
     """
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
     return ints.cint_int1e_ovlp_sph(shell_slice, atm, bas, env)
+
+
+def cint_overlap_spinor(system, basis1=None, basis2=None):
+    r"""
+    Compute the overlap integral between two basis sets using the Libcint library.
+
+    .. math::
+
+        S^{12}_{\mu\nu} = \int \chi^{1}_\mu(\mathbf{r}) \chi^{2}_\nu(\mathbf{r}) d\mathbf{r}
+
+    Parameters
+    ----------
+    system : System
+        The molecular system containing the basis sets.
+    basis1 : BasisSet, optional
+        The first basis set. If None, defaults to system.basis.
+    basis2 : BasisSet, optional
+        The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
+    """
+    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
+    return ints.cint_int1e_ovlp_spinor(shell_slice, atm, bas, env)
 
 
 def cint_kinetic(system, basis1=None, basis2=None):
@@ -677,3 +734,52 @@ def cint_nuclear(system, basis1=None, basis2=None):
     """
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
     return ints.cint_int1e_nuc_sph(shell_slice, atm, bas, env)
+
+def cint_opVop_spinor(system, basis1=None, basis2=None):
+    r"""
+    Compute the small component nuclear potential integral between two basis sets using the Libcint library.
+
+    .. math::
+        W^{12}_{\mu\nu} = -\iint (\sigma\cdot\hat{p}) \chi^{1}_\mu(\mathbf{r}) \left(\sum_{A} \frac{Z_A}{|\mathbf{r} - \mathbf{R}_A|}\right) (\sigma\cdot\hat{p}) \chi^{2}_\nu(\mathbf{r}) d\mathbf{r}
+
+    Parameters
+    ----------
+    system : System
+        The molecular system containing the basis sets.
+    basis1 : BasisSet, optional
+        The first basis set. If None, defaults to system.basis.
+    basis2 : BasisSet, optional
+        The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
+
+    Returns
+    -------
+    opVop_spinor : ndarray
+        The small component nuclear potential integrals in spinor basis
+    """
+    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
+    return ints.cint_int1e_spnucsp_spinor(shell_slice, atm, bas, env)
+
+def cint_coulomb_2c(system, basis1=None, basis2=None):
+    r"""
+    Compute the two-center two-electron Coulomb integral between two basis sets using the Libcint library.
+
+    .. math::
+        ( P|Q ) = \iint \chi^{1}_P(\mathbf{r}_1) \frac{1}{r_{12}} \chi^{2}_Q(\mathbf{r}_2)
+        d\mathbf{r}_1 d\mathbf{r}_2
+
+    Parameters
+    ----------
+    system : System
+        The molecular system containing the basis sets.
+    basis1 : BasisSet, optional
+        The first basis set. If None, defaults to system.auxiliary_basis.
+    basis2 : BasisSet, optional
+        The second basis set. If None, defaults to system.auxiliary_basis, or basis1 if basis1 is provided.
+
+    Returns
+    -------
+    ndarray
+        The two-center two-electron Coulomb integral matrix.
+    """
+    atm, bas, env, shell_slice = _parse_basis_args_cint_2c2e(system, basis1, basis2)
+    return ints.cint_int2c2e_sph(shell_slice, atm, bas, env)
