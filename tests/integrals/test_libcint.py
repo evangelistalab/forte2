@@ -24,6 +24,18 @@ def test_libcint_ovlp_spinor():
     assert np.linalg.norm(s) == pytest.approx(5.169814764522727, rel=1e-6)
 
 
+def test_libcint_spnucsp_sph():
+    xyz = """
+    Ag 0 0 0
+    Ag 0 0 1
+    """
+    system = System(
+        xyz, basis_set="sto-3g", use_gaussian_charges=True, minao_basis_set=None
+    )
+    s = integrals.cint_opVop(system)
+    assert np.linalg.norm(s) == pytest.approx(5982385.012696481, rel=1e-6)
+
+
 def test_libcint_spnucsp_spinor():
     xyz = """
     Li 0 0 0

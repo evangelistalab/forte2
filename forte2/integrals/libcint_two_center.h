@@ -22,6 +22,8 @@ int int1e_nuc_sph(double* buf, int* dims, int* shls, int* atm, int natm, int* ba
                   double* env, CINTOpt* opt, double* cache);
 int int1e_nuc_spinor(double _Complex* buf, int* dims, int* shls, int* atm, int natm, int* bas,
                      int nbas, double* env, CINTOpt* opt, double* cache);
+int int1e_spnucsp_sph(double* buf, int* dims, int* shls, int* atm, int natm, int* bas, int nbas,
+                      double* env, CINTOpt* opt, double* cache);
 int int1e_spnucsp_spinor(double _Complex* buf, int* dims, int* shls, int* atm, int natm, int* bas,
                          int nbas, double* env, CINTOpt* opt, double* cache);
 int int1e_r_sph(double* buf, int* dims, int* shls, int* atm, int natm, int* bas, int nbas,
@@ -43,6 +45,8 @@ np_tensor3_f cint_int1e_nuc_sph(const std::vector<int>& shell_slice, np_matrix_i
                                 np_matrix_int bas, np_vector env);
 np_matrix_complex_f cint_int1e_nuc_spinor(const std::vector<int>& shell_slice, np_matrix_int atm,
                                           np_matrix_int bas, np_vector env);
+np_tensor3_f cint_int1e_spnucsp_sph(const std::vector<int>& shell_slice, np_matrix_int atm,
+                                    np_matrix_int bas, np_vector env);
 np_matrix_complex_f cint_int1e_spnucsp_spinor(const std::vector<int>& shell_slice,
                                               np_matrix_int atm, np_matrix_int bas, np_vector env);
 np_tensor3_f cint_int1e_r_sph(const std::vector<int>& shell_slice, np_matrix_int atm,

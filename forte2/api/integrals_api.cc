@@ -362,6 +362,10 @@ void export_libcint_compute_api(nb::module_& sub_m) {
     sub_m.def("cint_int1e_nuc_spinor", &cint_int1e_nuc_spinor, "shell_slice"_a, "atm"_a, "bas"_a,
               "env"_a,
               "Compute the nuclear attraction integral matrix using libcint in spinor basis.");
+    sub_m.def("cint_int1e_spnucsp_sph", &cint_int1e_spnucsp_sph, "shell_slice"_a, "atm"_a, "bas"_a,
+              "env"_a,
+              "Compute the small component of the nuclear attraction integral matrix using libcint "
+              "in spherical harmonics.");
     sub_m.def("cint_int1e_spnucsp_spinor", &cint_int1e_spnucsp_spinor, "shell_slice"_a, "atm"_a,
               "bas"_a, "env"_a,
               "Compute the small component of the nuclear attraction integral matrix using libcint "

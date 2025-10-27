@@ -735,6 +735,30 @@ def cint_nuclear(system, basis1=None, basis2=None):
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
     return ints.cint_int1e_nuc_sph(shell_slice, atm, bas, env)
 
+def cint_opVop(system, basis1=None, basis2=None):
+    r"""
+    Compute the small component nuclear potential integral between two basis sets using the Libcint library.
+
+    .. math::
+        W^{12}_{\mu\nu} = -\iint (\sigma\cdot\hat{p}) \chi^{1}_\mu(\mathbf{r}) \left(\sum_{A} \frac{Z_A}{|\mathbf{r} - \mathbf{R}_A|}\right) (\sigma\cdot\hat{p}) \chi^{2}_\nu(\mathbf{r}) d\mathbf{r}
+
+    Parameters
+    ----------
+    system : System
+        The molecular system containing the basis sets.
+    basis1 : BasisSet, optional
+        The first basis set. If None, defaults to system.basis.
+    basis2 : BasisSet, optional
+        The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
+
+    Returns
+    -------
+    opVop : ndarray
+        The small component nuclear potential integrals.
+    """
+    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
+    return ints.cint_int1e_spnucsp_sph(shell_slice, atm, bas, env)
+
 def cint_opVop_spinor(system, basis1=None, basis2=None):
     r"""
     Compute the small component nuclear potential integral between two basis sets using the Libcint library.

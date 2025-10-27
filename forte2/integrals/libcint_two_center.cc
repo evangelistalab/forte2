@@ -32,6 +32,11 @@ np_matrix_complex_f cint_int1e_nuc_spinor(const std::vector<int>& shell_slice, n
     return cint_int2c_1comp_spinor(int1e_nuc_spinor, shell_slice, atm, bas, env);
 }
 
+np_tensor3_f cint_int1e_spnucsp_sph(const std::vector<int>& shell_slice, np_matrix_int atm,
+                                    np_matrix_int bas, np_vector env) {
+    return cint_int2c<4>(int1e_spnucsp_sph, shell_slice, atm, bas, env);
+}
+
 np_matrix_complex_f cint_int1e_spnucsp_spinor(const std::vector<int>& shell_slice,
                                               np_matrix_int atm, np_matrix_int bas, np_vector env) {
     return cint_int2c_1comp_spinor(int1e_spnucsp_spinor, shell_slice, atm, bas, env);
