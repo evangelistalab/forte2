@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from forte2 import System, integrals
+from forte2.system.build_basis import build_basis
 
 
 def test_libcint_overlap():
@@ -26,7 +27,7 @@ def test_libcint_ovlp_spinor():
     assert np.linalg.norm(s_cint) == pytest.approx(5.169814764522727, rel=1e-6)
 
 
-def test_libcint_spnucsp_sph():
+def test_libcint_spnucsp_sph_with_gaussian_charges():
     xyz = """
     Ag 0 0 0
     Ag 0 0 1
@@ -36,6 +37,20 @@ def test_libcint_spnucsp_sph():
     )
     s = integrals.cint_opVop(system)
     assert np.linalg.norm(s) == pytest.approx(5982385.012696481, rel=1e-6)
+
+
+def test_libcint_spnucsp_sph():
+    xyz = """
+    Ag 0 0 0
+    Ag 0 0 1
+    """
+    system = System(xyz, basis_set="sto-3g", minao_basis_set=None)
+    s_cint = integrals.cint_opVop(system)
+    c_int2 = integrals.opVop(system)
+    for i in range(4):
+        # cint pauli ordering is [s_x, s_y, s_z, I_2], int2 is [I_2, s_x, s_y, s_z]
+        assert np.linalg.norm(s_cint[(i + 3) % 4] - c_int2[i]) < 1e-6
+    assert np.linalg.norm(s_cint) == pytest.approx(5982385.234519612, rel=1e-6)
 
 
 def test_libcint_spnucsp_spinor():
@@ -58,6 +73,24 @@ def test_libcint_kinetic():
     s_int2 = integrals.kinetic(system)
     assert np.linalg.norm(s_cint - s_int2) < 1e-6
     assert np.linalg.norm(s_cint) == pytest.approx(5.128923795496629, rel=1e-6)
+
+
+def test_libcint_kinetic_decontracted():
+    xyz = """
+    Li 0 0 0
+    Li 0 0 1.9
+    """
+    system = System(xyz, basis_set={"Li1": "decon-sto-3g", "Li2": "cc-pvdz"})
+    # xbasis = build_basis("sto-3g", system.geom_helper, decontract=True)
+    # print(xbasis.cint_bas)
+    # s_cint = integrals.cint_kinetic(system, basis1=xbasis)
+    # s_int2 = integrals.kinetic(system, basis1=xbasis)
+    # print(np.linalg.norm(s_int2))
+    # assert np.linalg.norm(s_cint - s_int2) < 1e-6
+    # assert np.linalg.norm(s_cint) == pytest.approx(36.523146675022836, rel=1e-6)
+
+
+test_libcint_kinetic_decontracted()
 
 
 def test_libcint_nuclear():
