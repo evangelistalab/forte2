@@ -759,6 +759,38 @@ def cint_opVop_spinor(system, basis1=None, basis2=None):
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
     return ints.cint_int1e_spnucsp_spinor(shell_slice, atm, bas, env)
 
+def cint_emultipole1(system, basis1=None, basis2=None, origin=None):
+    r"""
+    Compute the electric multipole moment integrals of up to first order (dipole)
+    between two basis sets using the Libcint library.
+    Note that the zeroth order (overlap) is also returned as the first element.
+
+    .. math::
+        \mu^{12}_{\mu\nu,\alpha} = \int \chi^{1}_\mu(\mathbf{r}) r_\alpha \chi^{2}_\nu(\mathbf{r}) d\mathbf{r}
+
+    where :math:`\alpha` represents the x, y, or z component.
+
+    Parameters
+    ----------
+    system : System
+        The molecular system containing the basis sets.
+    basis1 : BasisSet, optional
+        The first basis set. If None, defaults to system.basis.
+    basis2 : BasisSet, optional
+        The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
+    origin : array-like, optional
+        The origin for the multipole expansion. If None, defaults to [0.0, 0.0, 0.0].
+
+    Returns
+    -------
+    emultipole1 : ndarray
+        The first electric multipole moment integrals
+    """
+    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
+    # if origin is None:
+    #     origin = [0.0, 0.0, 0.0]
+    return ints.cint_int1e_r_sph(shell_slice, atm, bas, env)
+
 def cint_coulomb_2c(system, basis1=None, basis2=None):
     r"""
     Compute the two-center two-electron Coulomb integral between two basis sets using the Libcint library.

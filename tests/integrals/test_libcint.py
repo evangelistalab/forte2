@@ -67,3 +67,13 @@ def test_libcint_2c2e():
     system = System(xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pvtz-jkfit")
     s = integrals.cint_coulomb_2c(system)
     assert np.linalg.norm(s) == pytest.approx(159.31789654133004, rel=1e-6)
+
+
+def test_libcint_r_sph():
+    xyz = """
+    Li 0 0 0
+    Li 0 0 1.9
+    """
+    system = System(xyz, basis_set="sto-3g")
+    s = integrals.cint_emultipole1(system)
+    assert np.linalg.norm(s) == pytest.approx(11.66647604433945, rel=1e-6)

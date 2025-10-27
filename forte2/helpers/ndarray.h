@@ -137,6 +137,7 @@ auto make_ndarray(const std::array<size_t, N>& shape) {
 /// @tparam Type The type of the ndarray (e.g. nb::numpy, nb::pytorch, etc.)
 /// @tparam T The type of the data (e.g. double, float, etc.)
 /// @tparam N The number of dimensions of the ndarray
+/// @tparam Order The memory layout of the ndarray (e.g. nb::c_contig, nb::f_contig, etc.)
 /// @param shape The shape of the ndarray as an array of size N.
 /// @details The shape is a list of size N, where N is the number of dimensions.
 /// @return An ndarray of the given shape and type.
