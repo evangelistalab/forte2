@@ -21,9 +21,22 @@ if (NOT SKBUILD)
   after editing C++ files.")
 endif()
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../cmake")
+include(FetchContent)
 
-find_package(libcint REQUIRED)
+# Fetch libcint directly from GitHub
+FetchContent_Declare(
+  libcint
+  GIT_REPOSITORY https://github.com/sunqm/libcint.git
+  GIT_TAG v6.1.3    # "master", or specific commit/tag, e.g. v6.1.3
+)
+
+FetchContent_Populate(libcint)     # produces ${libcint_SOURCE_DIR} and ${libcint_BINARY_DIR}
+
+# Set option in cache *before* add_subdirectory so the subproject sees it.
+set(PYPZPX ON CACHE BOOL "Enable PYPZPX in libcint" FORCE)
+
+# configure/build in an isolated build dir:
+add_subdirectory(${libcint_SOURCE_DIR} ${libcint_BINARY_DIR} EXCLUDE_FROM_ALL)
 
 # Try to import all Python components potentially needed by nanobind
 find_package(Python 3.8
@@ -94,7 +107,6 @@ nanobind_add_module(
   integrals/one_electron.cc
   integrals/two_electron.cc
   integrals/value_at_points.cc
-  integrals/libcint_two_center.cc
   ci/ci_sigma_builder.cc
   ci/ci_sigma_builder_1rdm.cc
   ci/ci_sigma_builder_2rdm.cc
@@ -125,15 +137,31 @@ nanobind_add_module(
 target_link_libraries(_forte2 PRIVATE Libint2::int2)
 target_link_libraries(_forte2 PRIVATE Eigen3::Eigen)
 target_link_libraries(_forte2 PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
-target_link_libraries(_forte2 PRIVATE ${LIBCINT_LIBRARIES})
+target_link_libraries(_forte2 PRIVATE cint)
 
 target_include_directories(_forte2
   PUBLIC
     .
 )
 
+# Rename the cint library output, so we don't conflict with PySCF's libcint, if any
+set_target_properties(cint PROPERTIES
+    OUTPUT_NAME "cint_forte2"  # This makes it libcint_forte2.dylib
+)
+
+# Set rpath to use @loader_path so it finds the dylib in the same directory
+set_target_properties(_forte2 PROPERTIES
+    INSTALL_RPATH "@loader_path"
+    BUILD_WITH_INSTALL_RPATH TRUE
+)
+
 # Install directive for scikit-build-core
 install(TARGETS _forte2 LIBRARY DESTINATION forte2)
+
+# Install "libcint_forte2.dylib" (and shortened symlinks) alongside _forte2 to ensure it is found at runtime
+install(TARGETS cint 
+    LIBRARY DESTINATION forte2
+)
 
 # Enable Release build with high optimization flags if not already set
 if(NOT CMAKE_BUILD_TYPE)

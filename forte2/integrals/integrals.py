@@ -670,7 +670,8 @@ def cint_overlap(system, basis1=None, basis2=None):
         The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
     """
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
-    return ints.cint_int1e_ovlp_sph(shell_slice, atm, bas, env)
+    res = ints.cint_int1e_ovlp_sph(shell_slice, atm, bas, env)
+    return res.reshape(res.shape[:-1])
 
 
 def cint_overlap_spinor(system, basis1=None, basis2=None):
@@ -691,7 +692,8 @@ def cint_overlap_spinor(system, basis1=None, basis2=None):
         The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
     """
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
-    return ints.cint_int1e_ovlp_spinor(shell_slice, atm, bas, env)
+    res = ints.cint_int1e_ovlp_spinor(shell_slice, atm, bas, env)
+    return res.reshape(res.shape[:-1])
 
 
 def cint_kinetic(system, basis1=None, basis2=None):
@@ -712,7 +714,8 @@ def cint_kinetic(system, basis1=None, basis2=None):
         The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
     """
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
-    return ints.cint_int1e_kin_sph(shell_slice, atm, bas, env)
+    res = ints.cint_int1e_kin_sph(shell_slice, atm, bas, env)
+    return res.reshape(res.shape[:-1])
 
 
 def cint_nuclear(system, basis1=None, basis2=None):
@@ -733,7 +736,9 @@ def cint_nuclear(system, basis1=None, basis2=None):
         The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
     """
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
-    return ints.cint_int1e_nuc_sph(shell_slice, atm, bas, env)
+    res = ints.cint_int1e_nuc_sph(shell_slice, atm, bas, env)
+    return res.reshape(res.shape[:-1])
+
 
 def cint_opVop(system, basis1=None, basis2=None):
     r"""
@@ -757,7 +762,10 @@ def cint_opVop(system, basis1=None, basis2=None):
         The small component nuclear potential integrals.
     """
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
-    return ints.cint_int1e_spnucsp_sph(shell_slice, atm, bas, env)
+    res = ints.cint_int1e_spnucsp_sph(shell_slice, atm, bas, env)
+    # C-layout, first index is the integral component (slowest changing)
+    return np.rollaxis(res, -1, 0)
+
 
 def cint_opVop_spinor(system, basis1=None, basis2=None):
     r"""
@@ -781,7 +789,9 @@ def cint_opVop_spinor(system, basis1=None, basis2=None):
         The small component nuclear potential integrals in spinor basis
     """
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
-    return ints.cint_int1e_spnucsp_spinor(shell_slice, atm, bas, env)
+    res = ints.cint_int1e_spnucsp_spinor(shell_slice, atm, bas, env)
+    return res.reshape(res.shape[:-1])
+
 
 def cint_emultipole1(system, basis1=None, basis2=None, origin=None):
     r"""
@@ -813,7 +823,10 @@ def cint_emultipole1(system, basis1=None, basis2=None, origin=None):
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
     # if origin is None:
     #     origin = [0.0, 0.0, 0.0]
-    return ints.cint_int1e_r_sph(shell_slice, atm, bas, env)
+    res = ints.cint_int1e_r_sph(shell_slice, atm, bas, env)
+    # C-layout, first index is the integral component (slowest changing)
+    return np.rollaxis(res, -1, 0)
+
 
 def cint_coulomb_2c(system, basis1=None, basis2=None):
     r"""
@@ -838,4 +851,5 @@ def cint_coulomb_2c(system, basis1=None, basis2=None):
         The two-center two-electron Coulomb integral matrix.
     """
     atm, bas, env, shell_slice = _parse_basis_args_cint_2c2e(system, basis1, basis2)
-    return ints.cint_int2c2e_sph(shell_slice, atm, bas, env)
+    res = ints.cint_int2c2e_sph(shell_slice, atm, bas, env)
+    return res.reshape(res.shape[:-1])

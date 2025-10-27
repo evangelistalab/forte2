@@ -23,11 +23,11 @@ using CIntorFuncSpinor = int (*)(double _Complex* buf, int* dims, int* shls, int
 
 namespace forte2 {
 
-// templated function to compute two-center integrals with M components 
+// templated function to compute two-center integrals with M components
 // (i.e., 1 for scalar integrals, 3 for dipoles integrals, etc.)
 template <std::size_t M>
-np_tensor3_f cint_int2c(CIntorFunc intor, const std::vector<int>& shell_slice,
-                             np_matrix_int atm, np_matrix_int bas, np_vector env) {
+np_tensor3_f cint_int2c(CIntorFunc intor, const std::vector<int>& shell_slice, np_matrix_int atm,
+                        np_matrix_int bas, np_vector env) {
 
     const int ish_0 = static_cast<int>(shell_slice[0]);
     const int ish_1 = static_cast<int>(shell_slice[1]);
@@ -72,9 +72,9 @@ np_tensor3_f cint_int2c(CIntorFunc intor, const std::vector<int>& shell_slice,
     return ints;
 }
 
-np_matrix_complex_f cint_int2c_1comp_spinor(CIntorFuncSpinor intor,
-                                            const std::vector<int>& shell_slice, np_matrix_int atm,
-                                            np_matrix_int bas, np_vector env) {
+template <std::size_t M>
+np_tensor3_complex_f cint_int2c_spinor(CIntorFuncSpinor intor, const std::vector<int>& shell_slice,
+                                       np_matrix_int atm, np_matrix_int bas, np_vector env) {
 
     const int ish_0 = static_cast<int>(shell_slice[0]);
     const int ish_1 = static_cast<int>(shell_slice[1]);
@@ -98,8 +98,8 @@ np_matrix_complex_f cint_int2c_1comp_spinor(CIntorFuncSpinor intor,
     const int nao_i = ao_offset[ish_1] - ao_offset[ish_0];
     const int nao_j = ao_offset[jsh_1] - ao_offset[jsh_0];
 
-    auto ints = make_zeros<nb::numpy, std::complex<double>, 2, nb::f_contig>(
-        std::array<size_t, 2>{static_cast<size_t>(nao_i), static_cast<size_t>(nao_j)});
+    auto ints = make_zeros<nb::numpy, std::complex<double>, 3, nb::f_contig>(
+        std::array<size_t, 3>{static_cast<size_t>(nao_i), static_cast<size_t>(nao_j), M});
 
     auto buf = reinterpret_cast<double _Complex*>(ints.data());
 

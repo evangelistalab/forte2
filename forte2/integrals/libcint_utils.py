@@ -321,7 +321,6 @@ def atom_basis_to_bas(atom_basis):
                     if abs(coeff) < 1e-10:
                         continue
                     bas[atom_symbol][-1].append([exp, coeff])
-
     return bas
 
 
