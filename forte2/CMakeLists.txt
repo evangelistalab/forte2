@@ -151,16 +151,16 @@ set_target_properties(cint PROPERTIES
 
 # Set rpath to use @loader_path so it finds the dylib in the same directory
 set_target_properties(_forte2 PROPERTIES
-    INSTALL_RPATH "@loader_path"
+    INSTALL_RPATH "$ENV{CONDA_PREFIX}/lib"
     BUILD_WITH_INSTALL_RPATH TRUE
 )
 
 # Install directive for scikit-build-core
 install(TARGETS _forte2 LIBRARY DESTINATION forte2)
 
-# Install "libcint_forte2.dylib" (and shortened symlinks) alongside _forte2 to ensure it is found at runtime
+# Install "libcint_forte2.<version>.dylib/so" (and shortened symlinks)
 install(TARGETS cint 
-    LIBRARY DESTINATION forte2
+    LIBRARY DESTINATION "$ENV{CONDA_PREFIX}/lib"
 )
 
 # Enable Release build with high optimization flags if not already set
