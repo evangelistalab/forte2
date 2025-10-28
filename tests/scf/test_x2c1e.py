@@ -24,6 +24,26 @@ def test_sfx2c1e():
     assert scf.E == approx(escf)
 
 
+def test_sfx2c1e_with_gaussian_charges():
+    escf = -5192.003129895058
+    xyz = """
+    Br 0 0 0
+    Br 0 0 1.2
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVQZ",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
+        x2c_type="sf",
+        use_gaussian_charges=True,
+    )
+
+    scf = RHF(charge=0)(system)
+    scf.run()
+    assert scf.E == approx(escf)
+
+
 @pytest.mark.skip(reason="This test cannot be reliably reproduced.")
 def test_lindep_sfx2c1e():
     # psi4's x2c actually doesn't handle this case correctly

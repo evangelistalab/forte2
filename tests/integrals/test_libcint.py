@@ -81,16 +81,12 @@ def test_libcint_kinetic_decontracted():
     Li 0 0 1.9
     """
     system = System(xyz, basis_set={"Li1": "decon-sto-3g", "Li2": "cc-pvdz"})
-    # xbasis = build_basis("sto-3g", system.geom_helper, decontract=True)
-    # print(xbasis.cint_bas)
-    # s_cint = integrals.cint_kinetic(system, basis1=xbasis)
-    # s_int2 = integrals.kinetic(system, basis1=xbasis)
-    # print(np.linalg.norm(s_int2))
-    # assert np.linalg.norm(s_cint - s_int2) < 1e-6
-    # assert np.linalg.norm(s_cint) == pytest.approx(36.523146675022836, rel=1e-6)
+    xbasis = build_basis("sto-3g", system.geom_helper, decontract=True)
+    s_cint = integrals.cint_kinetic(system, basis1=xbasis)
+    s_int2 = integrals.kinetic(system, basis1=xbasis)
 
-
-test_libcint_kinetic_decontracted()
+    assert np.linalg.norm(s_cint - s_int2) < 1e-6
+    assert np.linalg.norm(s_cint) == pytest.approx(36.523146675022836, rel=1e-6)
 
 
 def test_libcint_nuclear():

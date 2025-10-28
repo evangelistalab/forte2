@@ -7,7 +7,7 @@ import numpy as np
 from forte2 import Basis, Shell
 from forte2.data import ATOM_SYMBOL_TO_Z
 from forte2.helpers import logger
-from forte2.integrals.libcint_utils import atom_basis_to_bas, make_env, PTR_ENV_START
+from forte2.integrals.libcint_utils import make_pre_atm_bas, make_env, PTR_ENV_START
 
 
 try:
@@ -91,7 +91,9 @@ def build_basis(
     basis.set_name(prefix + basis_name)
     # get the unique basis set data
     atom_basis = _get_atom_basis(fetch_map)
-    for (Z, coords), decon, bset in zip(geometry.atoms, if_decontract_atom_basis, basis_per_atom):
+    for (Z, coords), decon, bset in zip(
+        geometry.atoms, if_decontract_atom_basis, basis_per_atom
+    ):
         if decon:
             basis = _add_atom_basis_to_basis_decontracted(
                 basis,
@@ -107,15 +109,15 @@ def build_basis(
                 embed_normalization_into_coefficients,
             )
 
-    _bas = atom_basis_to_bas(atom_basis)
+    _atm, _bas = make_pre_atm_bas(
+        geometry.atoms, atom_basis, if_decontract_atom_basis, basis_per_atom
+    )
     _env = np.zeros(PTR_ENV_START)
     if use_gaussian_charges:
         nucmod = "G"
     else:
         nucmod = {}
-    cint_atm, cint_bas, cint_env = make_env(
-        geometry.atoms, _bas, _env, nucmod=nucmod
-    )
+    cint_atm, cint_bas, cint_env = make_env(_atm, _bas, _env, nucmod=nucmod)
     basis.cint_atm = cint_atm
     basis.cint_bas = cint_bas
     basis.cint_env = cint_env
@@ -187,7 +189,9 @@ def _get_atom_basis(fetch_map):
                     assert (
                         str(Z) in bfile["elements"]
                     ), f"Element {Z} not found in basis set {basis_name}."
-                    atom_basis[basis_name][Z] = bfile["elements"][str(Z)]["electron_shells"]
+                    atom_basis[basis_name][Z] = bfile["elements"][str(Z)][
+                        "electron_shells"
+                    ]
         else:
             if BSE_AVAILABLE:
                 logger.log_info1(
@@ -201,7 +205,9 @@ def _get_atom_basis(fetch_map):
                         raise RuntimeError(
                             f"[forte2] Basis Set Exchange does not have data for element Z={Z} in basis set {basis_name}!"
                         )
-                    atom_basis[basis_name][Z] = bse_basis["elements"][str(Z)]["electron_shells"]
+                    atom_basis[basis_name][Z] = bse_basis["elements"][str(Z)][
+                        "electron_shells"
+                    ]
             else:
                 raise RuntimeError(
                     f"[forte2] Basis file {basis_name}.json could not be found, and Basis Set Exchange is not available. "

@@ -5,7 +5,7 @@ import numpy
 import scipy
 import types
 
-from forte2.data import Z_TO_ATOM_SYMBOL, ATOM_DATA
+from forte2.data import Z_TO_ATOM_SYMBOL, ATOM_DATA, ATOM_SYMBOL_TO_Z
 
 c_double_p = ctypes.POINTER(ctypes.c_double)
 c_int_p = ctypes.POINTER(ctypes.c_int)
@@ -78,7 +78,7 @@ def make_env(atoms, basis, pre_env=[], nucmod={}):
 
     for ia, atom in enumerate(atoms):
         prop = {}
-        symb = Z_TO_ATOM_SYMBOL[atom[0]].capitalize()
+        symb = atom[0]
         nuclear_model = NUC_POINT
         if nucmod:
             if nucmod is None:
@@ -102,7 +102,7 @@ def make_env(atoms, basis, pre_env=[], nucmod={}):
         _env.append(env0)
 
     for ia, atom in enumerate(atoms):
-        symb = Z_TO_ATOM_SYMBOL[atom[0]].capitalize()
+        symb = atom[0]
         puresymb = _rm_digit(symb)
         if symb in _basdic:
             b = _basdic[symb].copy()
@@ -143,7 +143,7 @@ def make_atm_env(atom, ptr=0, nuclear_model=NUC_POINT, nucprop={}):
     """Convert the internal format :attr:`Mole._atom` to the format required
     by ``libcint`` integrals
     """
-    nuc_charge = atom[0]
+    nuc_charge = ATOM_SYMBOL_TO_Z[_rm_digit(atom[0]).upper()]
     if nuclear_model == NUC_POINT:
         zeta = 0
     elif nuclear_model == NUC_GAUSS:
@@ -301,26 +301,78 @@ def flatten(lst):
     return list(itertools.chain.from_iterable(lst))
 
 
-def atom_basis_to_bas(atom_basis):
+def make_pre_atm_bas(atoms, atom_basis, if_contract_atom_basis, basis_per_atom):
+    basis_atom_map = dict()
+    iatom = 0
+    # {"6": {("sto-3g", False): [0, 2, 5], ("cc-pvdz", True): [1,3,4], ...}, ...}
+    for (Z, _), decon, bset in zip(atoms, if_contract_atom_basis, basis_per_atom):
+        if Z not in basis_atom_map:
+            basis_atom_map[Z] = {(bset, decon): [iatom]}
+        else:
+            key = (bset, decon)
+            if key not in basis_atom_map[Z]:
+                basis_atom_map[Z][key] = [iatom]
+            else:
+                basis_atom_map[Z][key].append(iatom)
+        iatom += 1
+
+    pre_bas = {}
+    new_atom_names = [""] * len(atoms)
+    # new atom names are ["C1", "C2", "O1", "O2", ...]
+    for k, v in basis_atom_map.items():
+        ienv = 1
+        for (bset, decon), atom_indices in v.items():
+            new_name = f"{Z_TO_ATOM_SYMBOL[k]}{ienv}"
+            for idx in atom_indices:
+                new_atom_names[idx] = new_name
+            if new_name not in pre_bas:
+                pre_bas[new_name] = (bset, decon)
+            ienv += 1
+
+    atm = []
+    for new_name, (_, coords) in zip(new_atom_names, atoms):
+        atm.append([new_name, coords])
+
     bas = {}
-    for atom_id, basis in atom_basis.items():
-        atom_symbol = Z_TO_ATOM_SYMBOL[atom_id].capitalize()
-        for shell in basis:
-            angular_momentum = list(map(int, shell["angular_momentum"]))
-            exponents = list(map(float, shell["exponents"]))
-            if atom_symbol not in bas:
-                bas[atom_symbol] = []
-            for l, subshell_coefficients in itertools.zip_longest(
-                angular_momentum,
-                shell["coefficients"],
-                fillvalue=angular_momentum[-1],
-            ):
-                coefficients = list(map(float, subshell_coefficients))
-                bas[atom_symbol].append([l])
-                for exp, coeff in zip(exponents, coefficients):
-                    if abs(coeff) < 1e-10:
-                        continue
-                    bas[atom_symbol][-1].append([exp, coeff])
+    for atom_symbol, (bset, decon) in pre_bas.items():
+        Z = ATOM_SYMBOL_TO_Z[_rm_digit(atom_symbol).upper()]
+        if decon:
+            bas = _add_to_bas_decontracted(bas, atom_basis, bset, Z, atom_symbol)
+        else:
+            bas = _add_to_bas(bas, atom_basis, bset, Z, atom_symbol)
+
+    return atm, bas
+
+
+def _add_to_bas(bas, atom_basis, bset, Z, atom_symbol):
+    basis_data = atom_basis[bset][Z]
+    bas[atom_symbol] = []
+    for shell in basis_data:
+        angular_momentum = list(map(int, shell["angular_momentum"]))
+        exponents = list(map(float, shell["exponents"]))
+        for l, subshell_coefficients in itertools.zip_longest(
+            angular_momentum,
+            shell["coefficients"],
+            fillvalue=angular_momentum[-1],
+        ):
+            coefficients = list(map(float, subshell_coefficients))
+            bas[atom_symbol].append([l])
+            for exp, coeff in zip(exponents, coefficients):
+                if abs(coeff) < 1e-10:
+                    continue
+                bas[atom_symbol][-1].append([exp, coeff])
+    return bas
+
+
+def _add_to_bas_decontracted(bas, atom_basis, bset, Z, atom_symbol):
+    basis_data = atom_basis[bset][Z]
+    bas[atom_symbol] = []
+    for shell in basis_data:
+        angular_momentum = list(map(int, shell["angular_momentum"]))
+        exponents = list(map(float, shell["exponents"]))
+        for l in angular_momentum:
+            for alpha in exponents:
+                bas[atom_symbol].append([l, [alpha, 1.0]])
     return bas
 
 
