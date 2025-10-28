@@ -109,15 +109,16 @@ def build_basis(
                 embed_normalization_into_coefficients,
             )
 
-    _atm, _bas = make_pre_atm_bas(
+    # Make libcint data
+    _pre_atm, _pre_bas = make_pre_atm_bas(
         geometry.atoms, atom_basis, if_decontract_atom_basis, basis_per_atom
     )
-    _env = np.zeros(PTR_ENV_START)
+    _pre_env = np.zeros(PTR_ENV_START)
     if use_gaussian_charges:
         nucmod = "G"
     else:
         nucmod = {}
-    cint_atm, cint_bas, cint_env = make_env(_atm, _bas, _env, nucmod=nucmod)
+    cint_atm, cint_bas, cint_env = make_env(_pre_atm, _pre_bas, _pre_env, nucmod=nucmod)
     basis.cint_atm = cint_atm
     basis.cint_bas = cint_bas
     basis.cint_env = cint_env
@@ -176,6 +177,7 @@ def _parse_custom_basis_assignment(geometry, basis_assignment):
 
 
 def _get_atom_basis(fetch_map):
+    # atom_basis = {basis_name: {Z: basis_data}}
     atom_basis = {}
     for basis_name, atoms in fetch_map.items():
         if resources.is_resource("forte2.data.basis", f"{basis_name}.json"):

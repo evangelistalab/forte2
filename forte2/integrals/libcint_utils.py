@@ -302,9 +302,14 @@ def flatten(lst):
 
 
 def make_pre_atm_bas(atoms, atom_basis, if_contract_atom_basis, basis_per_atom):
+    # atm and bas in libcint format
+    # due to the possibility of the atoms of the same element being assigned 
+    # different basis sets, we need to create unique atom names for each
+    # occurrence of the element in the molecule for libcint
+
+    # {"6": {("sto-3g", False): [0, 2, 5], ("cc-pvdz", True): [1,3,4], ...}, ...}
     basis_atom_map = dict()
     iatom = 0
-    # {"6": {("sto-3g", False): [0, 2, 5], ("cc-pvdz", True): [1,3,4], ...}, ...}
     for (Z, _), decon, bset in zip(atoms, if_contract_atom_basis, basis_per_atom):
         if Z not in basis_atom_map:
             basis_atom_map[Z] = {(bset, decon): [iatom]}
@@ -316,6 +321,7 @@ def make_pre_atm_bas(atoms, atom_basis, if_contract_atom_basis, basis_per_atom):
                 basis_atom_map[Z][key].append(iatom)
         iatom += 1
 
+    # {"O1": ("cc-pvdz", False), "O2": ("sto-3g", True), ...}
     pre_bas = {}
     new_atom_names = [""] * len(atoms)
     # new atom names are ["C1", "C2", "O1", "O2", ...]
@@ -329,10 +335,12 @@ def make_pre_atm_bas(atoms, atom_basis, if_contract_atom_basis, basis_per_atom):
                 pre_bas[new_name] = (bset, decon)
             ienv += 1
 
+    # [["C1", [.0, .0, .0]], ["O1", [.0, .0, 1.0]], ...]
     atm = []
     for new_name, (_, coords) in zip(new_atom_names, atoms):
         atm.append([new_name, coords])
 
+    # {"C1": libcint_bas_data, "O1": libcint_bas_data, ...}
     bas = {}
     for atom_symbol, (bset, decon) in pre_bas.items():
         Z = ATOM_SYMBOL_TO_Z[_rm_digit(atom_symbol).upper()]

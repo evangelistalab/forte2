@@ -130,12 +130,9 @@ def _get_projection_matrix(system, xbasis):
 def _get_integrals(xbasis, system):
     S = integrals.overlap(system, xbasis)
     T = integrals.kinetic(system, xbasis)
+    # the V and W integrals know about Gaussian nuclear charges
     V = integrals.nuclear(system, xbasis)
-    if system.use_gaussian_charges:
-        W = integrals.cint_opVop(system, xbasis)
-        W = [W[3], W[0], W[1], W[2]]  # reorder to I2, sx, sy, sz
-    else:
-        W = integrals.opVop(system, xbasis)
+    W = integrals.opVop(system, xbasis)
     if system.x2c_type == "sf":
         return S, T, V, W[0]
     elif system.x2c_type == "so":
