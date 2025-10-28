@@ -137,16 +137,15 @@ void export_basis_api(nb::module_& sub_m) {
         .def("__getitem__", &Basis::operator[], "i"_a)
         .def("__len__", &Basis::size)
         .def_prop_ro("shell_first_and_size", &Basis::shell_first_and_size)
-        .def_prop_ro("center_first_and_last", &Basis::center_first_and_last)
+        .def_prop_ro("center_first_and_last", [](const Basis& b) { return b.center_first_and_last(false); })
+        .def_prop_ro("center_first_and_last_shell",
+                     [](const Basis& b) { return b.center_first_and_last(true); })
         .def_prop_ro("size", &Basis::size)
         .def_prop_ro("max_l", &Basis::max_l)
         .def_prop_ro("name", &Basis::name)
         .def_prop_ro("max_nprim", &Basis::max_nprim)
         .def_prop_ro("nprim", &Basis::max_nprim)
         .def_prop_ro("nshells", &Basis::nshells)
-        .def_prop_rw("cint_atm", &Basis::get_cint_atm, &Basis::set_cint_atm)
-        .def_prop_rw("cint_bas", &Basis::get_cint_bas, &Basis::set_cint_bas)
-        .def_prop_rw("cint_env", &Basis::get_cint_env, &Basis::set_cint_env)
         .def("__repr__", [](const Basis& b) {
             std::ostringstream oss;
             oss << "<Basis '" << b.name() << "' with " << b.size() << " basis functions>";

@@ -54,7 +54,6 @@ def get_hcore_x2c(system):
         system.basis_set,
         system.geom_helper,
         decontract=True,
-        use_gaussian_charges=system.use_gaussian_charges,
     )
     proj = _get_projection_matrix(system, xbasis)
 

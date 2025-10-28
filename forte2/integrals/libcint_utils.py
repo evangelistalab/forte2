@@ -183,7 +183,8 @@ def make_bas_env(basis_add, atom_id=0, ptr=0):
         es = b_coeff[:, 0]
         cs = b_coeff[:, 1:]
         nprim, nctr = cs.shape
-        cs = numpy.einsum("pi,p->pi", cs, gto_norm(angl, es))
+        # this part was already taken care of in build_basis
+        # cs = numpy.einsum("pi,p->pi", cs, gto_norm(angl, es))
         if NORMALIZE_GTO:
             cs = _nomalize_contracted_ao(angl, es, cs)
 
@@ -301,89 +302,6 @@ def flatten(lst):
     return list(itertools.chain.from_iterable(lst))
 
 
-def make_pre_atm_bas(atoms, atom_basis, if_contract_atom_basis, basis_per_atom):
-    # atm and bas in libcint format
-    # due to the possibility of the atoms of the same element being assigned 
-    # different basis sets, we need to create unique atom names for each
-    # occurrence of the element in the molecule for libcint
-
-    # {"6": {("sto-3g", False): [0, 2, 5], ("cc-pvdz", True): [1,3,4], ...}, ...}
-    basis_atom_map = dict()
-    iatom = 0
-    for (Z, _), decon, bset in zip(atoms, if_contract_atom_basis, basis_per_atom):
-        if Z not in basis_atom_map:
-            basis_atom_map[Z] = {(bset, decon): [iatom]}
-        else:
-            key = (bset, decon)
-            if key not in basis_atom_map[Z]:
-                basis_atom_map[Z][key] = [iatom]
-            else:
-                basis_atom_map[Z][key].append(iatom)
-        iatom += 1
-
-    # {"O1": ("cc-pvdz", False), "O2": ("sto-3g", True), ...}
-    pre_bas = {}
-    new_atom_names = [""] * len(atoms)
-    # new atom names are ["C1", "C2", "O1", "O2", ...]
-    for k, v in basis_atom_map.items():
-        ienv = 1
-        for (bset, decon), atom_indices in v.items():
-            new_name = f"{Z_TO_ATOM_SYMBOL[k]}{ienv}"
-            for idx in atom_indices:
-                new_atom_names[idx] = new_name
-            if new_name not in pre_bas:
-                pre_bas[new_name] = (bset, decon)
-            ienv += 1
-
-    # [["C1", [.0, .0, .0]], ["O1", [.0, .0, 1.0]], ...]
-    atm = []
-    for new_name, (_, coords) in zip(new_atom_names, atoms):
-        atm.append([new_name, coords])
-
-    # {"C1": libcint_bas_data, "O1": libcint_bas_data, ...}
-    bas = {}
-    for atom_symbol, (bset, decon) in pre_bas.items():
-        Z = ATOM_SYMBOL_TO_Z[_rm_digit(atom_symbol).upper()]
-        if decon:
-            bas = _add_to_bas_decontracted(bas, atom_basis, bset, Z, atom_symbol)
-        else:
-            bas = _add_to_bas(bas, atom_basis, bset, Z, atom_symbol)
-
-    return atm, bas
-
-
-def _add_to_bas(bas, atom_basis, bset, Z, atom_symbol):
-    basis_data = atom_basis[bset][Z]
-    bas[atom_symbol] = []
-    for shell in basis_data:
-        angular_momentum = list(map(int, shell["angular_momentum"]))
-        exponents = list(map(float, shell["exponents"]))
-        for l, subshell_coefficients in itertools.zip_longest(
-            angular_momentum,
-            shell["coefficients"],
-            fillvalue=angular_momentum[-1],
-        ):
-            coefficients = list(map(float, subshell_coefficients))
-            bas[atom_symbol].append([l])
-            for exp, coeff in zip(exponents, coefficients):
-                if abs(coeff) < 1e-10:
-                    continue
-                bas[atom_symbol][-1].append([exp, coeff])
-    return bas
-
-
-def _add_to_bas_decontracted(bas, atom_basis, bset, Z, atom_symbol):
-    basis_data = atom_basis[bset][Z]
-    bas[atom_symbol] = []
-    for shell in basis_data:
-        angular_momentum = list(map(int, shell["angular_momentum"]))
-        exponents = list(map(float, shell["exponents"]))
-        for l in angular_momentum:
-            for alpha in exponents:
-                bas[atom_symbol].append([l, [alpha, 1.0]])
-    return bas
-
-
 def conc_env(atm1, bas1, env1, atm2, bas2, env2):
     """Concatenate two sets of libcint input arguments for cross integrals"""
     off = len(env1)
@@ -400,3 +318,44 @@ def conc_env(atm1, bas1, env1, atm2, bas2, env2):
         numpy.asarray(numpy.vstack((bas1, bas2)), dtype=numpy.int32),
         numpy.hstack((env1, env2)),
     )
+
+def basis_to_cint_envs(system, basis):
+    """
+    Convert a Forte2 Basis object to libcint atm, bas, env objects.
+
+    Parameters
+    ----------
+    system : forte2.System
+        The system object containing the geometry and basis set.
+    basis : forte2.Basis
+        The basis object to be converted.
+    """
+    atoms = system.atoms
+    atom_counts = dict()
+    pre_bas = {}
+    pre_atm = []
+    # [(f0, l0), (f1, l1), ...]
+    shell_offsets = basis.center_first_and_last_shell
+    for ia, (f, l) in enumerate(shell_offsets):
+        Z = atoms[ia][0]
+        atom_counts[Z] = atom_counts.get(Z, 0) + 1
+        name = Z_TO_ATOM_SYMBOL[Z] + str(atom_counts[Z])
+        pre_atm.append([name, atoms[ia][1]])
+        pre_bas[name] = []
+        for ish in range(f, l):
+            shell_data = basis[ish]
+            am = shell_data.l
+            pre_bas[name].append([am])
+            alpha = shell_data.exponents
+            coeffs = shell_data.coeff
+            for a,c in zip(alpha, coeffs):
+                if abs(c) < 1e-10:
+                    continue
+                pre_bas[name][-1].append([a, c])
+
+    pre_env = numpy.zeros(PTR_ENV_START)
+    if system.use_gaussian_charges:
+        nucmod = "G"
+    else:
+        nucmod = {}
+    return make_env(pre_atm, pre_bas, pre_env, nucmod=nucmod)

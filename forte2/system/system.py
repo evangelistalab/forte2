@@ -173,11 +173,7 @@ class System:
             )
 
     def _init_basis(self):
-        self.basis = build_basis(
-            self.basis_set,
-            self.geom_helper,
-            use_gaussian_charges=self.use_gaussian_charges,
-        )
+        self.basis = build_basis(self.basis_set, self.geom_helper)
         logger.log_info1(
             f"Parsed {self.natoms} atoms with basis set of {self.basis.size} functions."
         )
@@ -185,9 +181,7 @@ class System:
         if not self.cholesky_tei:
             if self.auxiliary_basis_set is not None:
                 self.auxiliary_basis = build_basis(
-                    self.auxiliary_basis_set,
-                    self.geom_helper,
-                    use_gaussian_charges=self.use_gaussian_charges,
+                    self.auxiliary_basis_set, self.geom_helper
                 )
             else:
                 self.auxiliary_basis = None
@@ -197,9 +191,7 @@ class System:
                     "Using a separate auxiliary basis is not recommended!"
                 )
                 self.auxiliary_basis_set_corr = build_basis(
-                    self.auxiliary_basis_set_corr,
-                    self.geom_helper,
-                    use_gaussian_charges=self.use_gaussian_charges,
+                    self.auxiliary_basis_set_corr, self.geom_helper
                 )
             else:
                 self.auxiliary_basis_set_corr = self.auxiliary_basis
@@ -208,11 +200,7 @@ class System:
             self.auxiliary_basis_set_corr = None
 
         if self.minao_basis_set is not None:
-            self.minao_basis = build_basis(
-                self.minao_basis_set,
-                self.geom_helper,
-                use_gaussian_charges=self.use_gaussian_charges,
-            )
+            self.minao_basis = build_basis(self.minao_basis_set, self.geom_helper)
         else:
             self.minao_basis = None
 
@@ -226,7 +214,6 @@ class System:
                 "gaussian_charge",
                 self.geom_helper,
                 embed_normalization_into_coefficients=False,
-                use_gaussian_charges=self.use_gaussian_charges,
             )
 
     def _init_x2c(self):

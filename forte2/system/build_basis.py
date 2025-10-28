@@ -7,7 +7,6 @@ import numpy as np
 from forte2 import Basis, Shell
 from forte2.data import ATOM_SYMBOL_TO_Z
 from forte2.helpers import logger
-from forte2.integrals.libcint_utils import make_pre_atm_bas, make_env, PTR_ENV_START
 
 
 try:
@@ -23,7 +22,6 @@ def build_basis(
     geometry,
     embed_normalization_into_coefficients: bool = True,
     decontract: bool = False,
-    use_gaussian_charges: bool = False,
 ) -> Basis:
     """
     Assemble the basis set from JSON data or Basis Set Exchange, depending on availability.
@@ -109,19 +107,6 @@ def build_basis(
                 embed_normalization_into_coefficients,
             )
 
-    # Make libcint data
-    _pre_atm, _pre_bas = make_pre_atm_bas(
-        geometry.atoms, atom_basis, if_decontract_atom_basis, basis_per_atom
-    )
-    _pre_env = np.zeros(PTR_ENV_START)
-    if use_gaussian_charges:
-        nucmod = "G"
-    else:
-        nucmod = {}
-    cint_atm, cint_bas, cint_env = make_env(_pre_atm, _pre_bas, _pre_env, nucmod=nucmod)
-    basis.cint_atm = cint_atm
-    basis.cint_bas = cint_bas
-    basis.cint_env = cint_env
     return basis
 
 

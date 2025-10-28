@@ -33,7 +33,6 @@ def minao_initial_guess(system, H):
         "sap_helfem_large",
         system.geom_helper,
         embed_normalization_into_coefficients=False,
-        use_gaussian_charges=system.use_gaussian_charges,
     )
 
     # create a new basis that will be used to store the scaled coefficients
@@ -126,6 +125,7 @@ def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4):
     Ca = givens_rotation(C, cosq, sinq, homo_idx, homo_idx + 1)
     Cb = givens_rotation(C, cosq, -sinq, homo_idx, homo_idx + 1)
     return [Ca, Cb]
+
 
 def guess_mix_ghf(C, ha, hb, la, lb, mixing_parameter=np.pi / 4):
     """

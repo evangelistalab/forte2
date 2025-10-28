@@ -1,7 +1,7 @@
 import numpy as np
 
 from forte2 import ints
-from forte2.integrals.libcint_utils import conc_env
+from forte2.integrals.libcint_utils import conc_env, basis_to_cint_envs
 
 
 def _parse_basis_args_1e(system, basis1, basis2):
@@ -595,26 +595,17 @@ def _parse_basis_args_cint_1e(system, basis1, basis2):
     # 1. both basis sets are None -> set both to system.basis
     # 2. basis1 is provided, basis2 is None -> set basis2 to basis1
     if basis1 is None and basis2 is None:
-        atm = system.basis.cint_atm
-        bas = system.basis.cint_bas
-        env = system.basis.cint_env
+        atm, bas, env = basis_to_cint_envs(system, system.basis)
         shell_slice = [0, system.basis.nshells, 0, system.basis.nshells]
     elif basis1 is not None and basis2 is None:
-        atm = basis1.cint_atm
-        bas = basis1.cint_bas
-        env = basis1.cint_env
+        atm, bas, env = basis_to_cint_envs(system, basis1)
         shell_slice = [0, basis1.nshells, 0, basis1.nshells]
     elif basis1 is None and basis2 is not None:
         raise ValueError("If basis2 is provided, basis1 must also be provided.")
     else:
-        atm, bas, env = conc_env(
-            basis1.cint_atm,
-            basis1.cint_bas,
-            basis1.cint_env,
-            basis2.cint_atm,
-            basis2.cint_bas,
-            basis2.cint_env,
-        )
+        atm1, bas1, env1 = basis_to_cint_envs(system, basis1)
+        atm2, bas2, env2 = basis_to_cint_envs(system, basis2)
+        atm, bas, env = conc_env(atm1, bas1, env1, atm2, bas2, env2)
         ns1 = basis1.nshells
         ns2 = basis2.nshells
         shell_slice = [0, ns1, ns1, ns1 + ns2]
@@ -626,9 +617,7 @@ def _parse_basis_args_cint_2c2e(system, basis1, basis2):
     # 1. both basis sets are None -> set both to system.auxiliary_basis
     # 2. basis1 is provided, basis2 is None -> set basis2 to basis1
     if basis1 is None and basis2 is None:
-        atm = system.auxiliary_basis.cint_atm
-        bas = system.auxiliary_basis.cint_bas
-        env = system.auxiliary_basis.cint_env
+        atm, bas, env = basis_to_cint_envs(system, system.auxiliary_basis)
         shell_slice = [
             0,
             system.auxiliary_basis.nshells,
@@ -636,21 +625,14 @@ def _parse_basis_args_cint_2c2e(system, basis1, basis2):
             system.auxiliary_basis.nshells,
         ]
     elif basis1 is not None and basis2 is None:
-        atm = basis1.cint_atm
-        bas = basis1.cint_bas
-        env = basis1.cint_env
+        atm, bas, env = basis_to_cint_envs(system, basis1)
         shell_slice = [0, basis1.nshells, 0, basis1.nshells]
     elif basis1 is None and basis2 is not None:
         raise ValueError("If basis2 is provided, basis1 must also be provided.")
     else:
-        atm, bas, env = conc_env(
-            basis1.cint_atm,
-            basis1.cint_bas,
-            basis1.cint_env,
-            basis2.cint_atm,
-            basis2.cint_bas,
-            basis2.cint_env,
-        )
+        atm1, bas1, env1 = basis_to_cint_envs(system, basis1)
+        atm2, bas2, env2 = basis_to_cint_envs(system, basis2)
+        atm, bas, env = conc_env(atm1, bas1, env1, atm2, bas2, env2)
         ns1 = basis1.nshells
         ns2 = basis2.nshells
         shell_slice = [0, ns1, ns1, ns1 + ns2]
