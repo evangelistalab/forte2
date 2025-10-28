@@ -66,6 +66,23 @@ class Cube:
         self.overage = [overage, overage, overage]
 
     def run(self, system, C, indices=None, prefix="orbital", filepath="."):
+        """
+        Generate cube files for the given orbitals.
+
+        Parameters
+        ----------
+        system : forte2.system.System
+            The system object containing the molecular information.
+        C : NDArray
+            The molecular orbital coefficients matrix.
+        indices : List[int], optional
+            The indices of the orbitals to generate cube files for. If None, all orbitals are generated.
+        prefix : str, optional, default="orbital"
+            The prefix for the cube file names.
+        filepath : str, optional, default="."
+            The directory to save the cube files in.
+        """
+
         filepath = Path(filepath)
         # determine the indices of the orbitals to generate
         indices = indices if indices is not None else range(C.shape[1])
@@ -146,7 +163,7 @@ class Cube:
                 _write_file(
                     cube_a,
                     filepath,
-                    f"{prefix}_{index + 1:0{number_of_digits}d}_a.cube",
+                    f"{prefix}_{index:0{number_of_digits}d}_a.cube",
                 )
 
                 cube_b = self._make_cube(
@@ -155,7 +172,7 @@ class Cube:
                 _write_file(
                     cube_b,
                     filepath,
-                    f"{prefix}_{index + 1:0{number_of_digits}d}_b.cube",
+                    f"{prefix}_{index:0{number_of_digits}d}_b.cube",
                 )
 
         else:
@@ -164,7 +181,7 @@ class Cube:
                     values[:, i], grid_origin, npoints, scaled_axes, system
                 )
                 _write_file(
-                    cube, filepath, f"{prefix}_{index + 1:0{number_of_digits}d}.cube"
+                    cube, filepath, f"{prefix}_{index:0{number_of_digits}d}.cube"
                 )
 
     def _make_cube(self, values, minr, npoints, axis, system):

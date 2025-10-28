@@ -199,6 +199,7 @@ def mutual_correlation_plot(
     # find all the files with the pattern orbital_*.tga
     orbitals_filepath = pathlib.Path(orbitals_filepath)
 
+    # form a dictionary mapping orbital index (int) to tga file path
     tga_files = glob.glob(str(orbitals_filepath / pathlib.Path("orbital_*.tga")))
     tga_files_dict = {}
     for file in tga_files:
@@ -206,7 +207,7 @@ def mutual_correlation_plot(
         tga_files_dict[orbital_index] = file
 
     for i, (x, y) in enumerate(zip(x_coords, y_coords)):
-        orbital_index = indices[i] + 1
+        orbital_index = indices[i]
 
         x_img = (radius + offset) * x / radius
         y_img = (radius + offset) * y / radius
@@ -244,7 +245,7 @@ def mutual_correlation_plot(
         ax.text(
             x_coords[i] * 1.5,
             y_coords[i] * 1.5,
-            f"{val:.2f} ({indices[i]+1})",
+            f"{val:.2f} ({indices[i]})",
             ha="center",
             va="center",
             fontsize=fontsize,
