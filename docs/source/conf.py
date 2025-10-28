@@ -36,7 +36,7 @@ autoapi_options = [
     # "imported-members",
 ]
 
-autoapi_ignore = ["*/fetch_basis.py", "*/fetch_ccrepo.py"]
+autoapi_ignore = ["*/fetch_basis.py", "*/fetch_ccrepo.py", "*/utils/*"]
 
 numpydoc_show_class_members = False
 
