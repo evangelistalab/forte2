@@ -30,6 +30,11 @@ def test_cube():
     cube.run(system, scf.C[0])
     # assert if 24 cube files are created using glob
     assert len(glob.glob("*.cube")) == 24
+
+    # check that the orbitals are indexed from 0 to 23
+    assert os.path.isfile("orbital_00.cube")
+    assert os.path.isfile("orbital_23.cube")
+
     # clean up the cube files
     for file in glob.glob("*.cube"):
         os.remove(file)
