@@ -3,7 +3,7 @@ import glob
 
 from forte2 import System
 from forte2.scf import RHF, GHF
-from forte2.orbitals.cube import Cube
+from forte2.orbitals import CubeGenerator
 from forte2.helpers.comparisons import approx
 
 
@@ -26,7 +26,7 @@ def test_cube():
     scf.run()
     assert scf.E == approx(escf)
 
-    cube = Cube()
+    cube = CubeGenerator()
     cube.run(system, scf.C[0])
     # assert if 24 cube files are created using glob
     assert len(glob.glob("*.cube")) == 24
@@ -64,7 +64,7 @@ def test_cube_ghf():
     assert scf.E == approx(eref)
     assert scf.S2 == approx(s2ref)
 
-    cube = Cube()
+    cube = CubeGenerator()
     cube.run(system, scf.C[0], indices=list(range(12)))
     # assert if 24 cube files are created using glob
     assert len(glob.glob("*.cube")) == 24

@@ -56,18 +56,42 @@ def simple_grid(
     )
 
 
-class Cube:
+class CubeGenerator:
     """
-    Class to handle cube files.
+    Class to generate cube files from a given set of molecular orbitals.
+
+    Parameters
+    ----------
+    spacing : float, optional, default=0.2
+        The spacing between grid points in the cube file.
+    overage : float, optional, default=4.0
+        The amount of overage (in bohr) to add to the grid in each direction.
+
+    Usage
+    -----
+    ```
+    cube = CubeGenerator()
+    cube.run(system, C)
+    ```
+
     """
 
     def __init__(self, spacing=0.2, overage=4.0):
         self.spacing = [spacing, spacing, spacing]
         self.overage = [overage, overage, overage]
 
-    def run(self, system, C, indices=None, prefix="orbital", filepath="."):
+    def run(self, system, C, indices=None, prefix="orbital", filepath=".") -> None:
         """
         Generate cube files for the given orbitals.
+
+        This method generates cube files for the specified molecular orbitals
+        represented by the coefficient matrix `C`. The cube files are saved in the
+        specified directory with the given prefix. The files are named as:
+
+            {prefix}_{index:0{number_of_digits}d}.cube
+
+        where `index` is the zero-based index of the orbital and `number_of_digits` is
+        determined by the maximum index to ensure proper zero-padding.
 
         Parameters
         ----------
@@ -75,8 +99,9 @@ class Cube:
             The system object containing the molecular information.
         C : NDArray
             The molecular orbital coefficients matrix.
-        indices : List[int], optional
-            The indices of the orbitals to generate cube files for. If None, all orbitals are generated.
+        indices : List[int], optional, default=None
+            The indices (zero-based) of the orbitals to generate cube files for.
+            By default all orbitals are generated.
         prefix : str, optional, default="orbital"
             The prefix for the cube file names.
         filepath : str, optional, default="."
