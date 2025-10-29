@@ -4,5 +4,5 @@ from .system import (
     HubbardModel,
     compute_orthonormal_transformation,
 )
-from .build_basis import build_basis, BSE_AVAILABLE, load_basis
+from .build_basis import build_basis, BSE_AVAILABLE
 from .basis_utils import BasisInfo, get_shell_label, shell_label_to_lm
