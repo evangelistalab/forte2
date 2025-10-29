@@ -1,8 +1,11 @@
 import numpy as np
 from scipy.linalg import eigh
 import pytest
+from pathlib import Path
 
 from forte2 import System, ints, RHF
+
+THIS_DIR = Path(__file__).parent
 
 
 def test_system():
@@ -217,13 +220,14 @@ def test_custom_basis_with_decontract():
     H 0 0 2.5
     N 0 0 3.0
     """
+    hbas = THIS_DIR / "cc-pvdz-trunc.json"
     system = System(
         xyz=xyz,
         basis_set={
             "C1": "decon-cc-pvdz",
-            "O": "sto-6g",
+            "O": "sto-6g::N",
             "C2": "cc-pvtz",
-            "H2-3": "cc-pvdz",
+            "H2-3": str(hbas),
             "N2": "decon-def2-svp",
             "default": "ano-r0",
         },
@@ -233,5 +237,23 @@ def test_custom_basis_with_decontract():
             "default": "def2-universal-JKFIT",
         },
     )
-    assert len(system.basis) == 106
+    assert len(system.basis) == 100
     assert len(system.auxiliary_basis) == 594
+
+
+def test_ghost_atom():
+    xyz = """
+    H 0 0 0
+    H 0 0 1.0
+    X 0 0 0.5
+    """
+    system = System(
+        xyz=xyz,
+        basis_set={"H": "sto-3g", "X": "decon-cc-pvqz::H"},
+        auxiliary_basis_set={"default": "def2-universal-JKFIT::H"},
+        minao_basis_set={"default": "cc-pvtz-minao::H"},
+    )
+    assert len(system.basis) == 34
+    scf = RHF(charge=0, guess_type="hcore")(system)
+    scf.run()
+    assert scf.E == pytest.approx(-1.096696530945, rel=1e-8, abs=1e-8)
