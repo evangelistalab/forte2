@@ -69,6 +69,14 @@ class CISpinAdapter {
     /// @param csf_C csf coefficients
     void det_C_to_csf_C(np_vector det_C, np_vector csf_C);
 
+    /// @brief Return the range of CSFs corresponding to a given configuration
+    /// @param conf_idx the index of the configuration
+    /// @return a pair containing the start and end indices of the CSFs
+    std::pair<size_t, size_t> conf_to_csfs_range(size_t conf_idx) const;
+
+    /// @brief Return the number of configurations
+    size_t nconf() const;
+
     /// @brief Return the number of CSFs
     size_t ncsf() const;
 
@@ -161,6 +169,8 @@ class CISpinAdapter {
     int twoMs_ = 0;
     /// @brief The number of orbitals
     int norb_ = 0;
+    /// @brief The number of configurations
+    size_t nconf_ = 0;
     /// @brief The number of CSFs
     size_t ncsf_ = 0;
     /// @brief The number of determinants
@@ -185,6 +195,8 @@ class CISpinAdapter {
     std::vector<std::vector<std::tuple<size_t, size_t, double>>> N_to_overlaps_;
     /// @brief Stores the number of non-zero overlaps there are for each N and spin coupling
     std::vector<std::vector<size_t>> N_to_noverlaps_;
+    /// @brief A vector used to store the range of CSFs for each configuration
+    std::vector<std::pair<size_t, size_t>> conf_to_csfs_range_;
 
     /// @brief Compute the unique spin couplings
     /// @returns the number of couplings and CSFs

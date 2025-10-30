@@ -7,6 +7,7 @@
 #include "helpers/indexing.hpp"
 #include "helpers/blas.h"
 #include "helpers/logger.h"
+#include "helpers/unordered_dense.h"
 
 #include "ci_sigma_builder.h"
 
@@ -286,24 +287,51 @@ np_vector CISigmaBuilder::form_Hdiag_csf(const std::vector<Determinant>& dets,
                                          const CISpinAdapter& spin_adapter,
                                          bool spin_adapt_full_preconditioner) const {
     auto Hdiag = make_zeros<nb::numpy, double, 1>({spin_adapter.ncsf()});
-    auto Hdiag_view = Hdiag.view();
+    auto Hdiag_span = vector::as_span<double>(Hdiag);
     // Compute the diagonal elements of the Hamiltonian in the CSF basis
     if (spin_adapt_full_preconditioner) {
         // exact diagonal element of <I|H|I> = c_iI c_jI <i|H|j> in the CSF basis
         // this can be slow for 'deep' CSFs with many determinants, so in practice
         // this is not used
         for (size_t i{0}, imax{spin_adapter.ncsf()}; i < imax; ++i) {
-            Hdiag_view(i) = energy_csf(dets, spin_adapter, i);
+            Hdiag_span[i] = energy_csf(dets, spin_adapter, i);
         }
     } else {
         // approximate diagonal element of <I|H|I> in the CSF basis,
         // using only the diagonal contributions, i.e., <I|H|I> = c_iI c_iI <i|H|i>
-        for (size_t i{0}, imax{spin_adapter.ncsf()}; i < imax; ++i) {
-            double energy = 0.0;
-            for (const auto& [det_add_I, c_I] : spin_adapter.csf(i)) {
-                energy += c_I * c_I * slater_rules_.energy(dets[det_add_I]);
+
+        // loop over all configurations
+        for (size_t c{0}, cmax{spin_adapter.nconf()}; c < cmax; ++c) {
+            auto [csf_start, csf_end] = spin_adapter.conf_to_csfs_range(c);
+            // small CSF blocks (1 or 2) can be computed directly to avoid storage overhead
+            if (csf_end - csf_start <= 2) {
+                for (size_t i{csf_start}; i < csf_end; ++i) {
+                    double energy = 0.0;
+                    for (const auto& [det_add_I, c_I] : spin_adapter.csf(i)) {
+                        energy += c_I * c_I * slater_rules_.energy(dets[det_add_I]);
+                    }
+                    Hdiag_span[i] = energy;
+                }
+
             }
-            Hdiag_view(i) = energy;
+            // for larger CSF blocks we hash the determinant energy to avoid recomputing it
+            else {
+                ankerl::unordered_dense::map<size_t, double, std::hash<size_t>> det_energies;
+                for (size_t i{csf_start}; i < csf_end; ++i) {
+                    double energy = 0.0;
+                    for (const auto& [det_add_I, c_I] : spin_adapter.csf(i)) {
+                        // check if we have already computed the energy for this determinant
+                        if (auto it = det_energies.find(det_add_I); it != det_energies.end()) {
+                            energy += c_I * c_I * it->second;
+                        } else {
+                            double det_energy = slater_rules_.energy(dets[det_add_I]);
+                            det_energies[det_add_I] = det_energy;
+                            energy += c_I * c_I * det_energy;
+                        }
+                    }
+                    Hdiag_span[i] = energy;
+                }
+            }
         }
     }
     return Hdiag;

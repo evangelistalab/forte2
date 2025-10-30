@@ -1,4 +1,3 @@
-#include <set>
 #include <cmath>
 #include <cassert>
 #include <iostream>
@@ -6,6 +5,7 @@
 
 #include "helpers/timer.hpp"
 #include "helpers/np_vector_functions.h"
+#include "helpers/unordered_dense.h"
 #include "helpers/logger.h"
 
 #include "ci_spin_adapter.h"
@@ -55,33 +55,42 @@ CISpinAdapter::CISpinAdapter(int twoS, int twoMs, int norb)
     : twoS_(twoS), twoMs_(twoMs), norb_(norb), N_ncsf_(norb + 1, 0),
       N_to_det_occupations_(norb + 1), N_to_overlaps_(norb + 1), N_to_noverlaps_(norb + 1) {}
 
+size_t CISpinAdapter::nconf() const { return nconf_; }
+
 size_t CISpinAdapter::ncsf() const { return ncsf_; }
 
 size_t CISpinAdapter::ndet() const { return ndet_; }
 
+std::pair<size_t, size_t> CISpinAdapter::conf_to_csfs_range(size_t conf_idx) const {
+    return conf_to_csfs_range_[conf_idx];
+}
+
 void CISpinAdapter::det_C_to_csf_C(np_vector det_C, np_vector csf_C) {
     vector::zero<double>(csf_C);
+    auto csf_C_view = csf_C.view();
+    auto det_C_view = det_C.view();
     // loop over all the elements of csf_to_det_coeff_ and add the contribution to csf_C
     for (size_t i{0}; i < ncsf_; i++) {
         const auto& start = csf_to_det_bounds_[i];
         const auto& end = csf_to_det_bounds_[i + 1];
         for (size_t j{start}; j < end; j++) {
             const auto& [det_idx, coeff] = csf_to_det_coeff_[j];
-            csf_C(i) += coeff * det_C(det_idx);
+            csf_C_view(i) += coeff * det_C_view(det_idx);
         }
     }
 }
 
 void CISpinAdapter::csf_C_to_det_C(np_vector csf_C, np_vector det_C) {
     vector::zero<double>(det_C);
-
+    auto csf_C_view = csf_C.view();
+    auto det_C_view = det_C.view();
     // loop over all the elements of csf_to_det_coeff_ and add the contribution to det_C
     for (size_t i = 0; i < ncsf_; i++) {
         const auto& start = csf_to_det_bounds_[i];
         const auto& end = csf_to_det_bounds_[i + 1];
         for (size_t j = start; j < end; j++) {
             const auto& [det_idx, coeff] = csf_to_det_coeff_[j];
-            det_C(det_idx) += coeff * csf_C(i);
+            det_C_view(det_idx) += coeff * csf_C_view(i);
         }
     }
 }
@@ -130,22 +139,29 @@ void CISpinAdapter::prepare_couplings(const std::vector<Determinant>& dets) {
     ndet_ = dets.size();
     // build the address of each determinant
     det_hash<size_t> det_hash;
+    det_hash.reserve(ndet_);
     for (size_t i = 0; i < ndet_; i++) {
         det_hash[dets[i]] = i;
     }
 
-    // find all the configurations
     local_timer t1;
-    std::set<Configuration> confs;
+
+    // find all the configurations and filter those with at least twoS unpaired electrons
+    ankerl::unordered_dense::set<Configuration, Configuration::Hash> unique_confs;
     for (const auto& d : dets) {
-        confs.insert(Configuration(d));
+        if (auto conf = Configuration(d); conf.count_socc() >= twoS_) {
+            unique_confs.insert(conf);
+        }
     }
 
+    // store the configurations in a vector for easy access
+    confs_ = std::vector<Configuration>(unique_confs.begin(), unique_confs.end());
+
     // count the configurations with the same number of unpaired electrons (N)
-    for (const auto& conf : confs) {
+    for (const auto& conf : confs_) {
         // exclude configurations with more unpaired electrons than twoS
-        if (const auto N = conf.count_socc(); N >= twoS_)
-            N_ncsf_[N]++;
+        const auto N = conf.count_socc();
+        N_ncsf_[N]++;
     }
 
     // compute the number of couplings and CSFs for each allowed value of N
@@ -155,7 +171,6 @@ void CISpinAdapter::prepare_couplings(const std::vector<Determinant>& dets) {
     csf_to_det_coeff_.resize(ncoupling);
     csf_to_det_bounds_.resize(ncsf + 1);
 
-    confs_ = std::vector<Configuration>(confs.begin(), confs.end());
     // LOG(log_level_) << "Number of configuration state functions: " << ncsf;
     LOG(log_level_) << "Number of couplings: " << ncoupling;
     LOG(log_level_) << "Timing for identifying configurations: " << std::fixed
@@ -165,10 +180,13 @@ void CISpinAdapter::prepare_couplings(const std::vector<Determinant>& dets) {
     local_timer t2;
     ncsf_ = 0;
     ncoupling_ = 0;
+    auto previous_ncsf = ncsf_;
+    nconf_ = confs_.size();
+    conf_to_csfs_range_.reserve(confs_.size());
     for (const auto& conf : confs_) {
-        if (conf.count_socc() >= twoS_) {
-            conf_to_csfs(conf, det_hash);
-        }
+        conf_to_csfs(conf, det_hash);
+        conf_to_csfs_range_.emplace_back(previous_ncsf, ncsf_);
+        previous_ncsf = ncsf_;
     }
     LOG(log_level_) << "Timing for finding the CSFs: " << std::fixed << std::setprecision(3)
                     << t2.elapsed_seconds() << " s";
