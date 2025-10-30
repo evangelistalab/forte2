@@ -227,7 +227,7 @@ def test_custom_basis_with_decontract():
             "C1": "decon-cc-pvdz",
             "O": "sto-6g::N",
             "C2": "cc-pvtz",
-            "H2-3": str(hbas),
+            "H2-3": str(hbas)+"::H",
             "N2": "decon-def2-svp",
             "default": "ano-r0",
         },

@@ -198,7 +198,7 @@ def _load_basis(basis_name, Z):
     res : list[dict]
         The basis set data for the specified atomic number.
     """
-    if ".json" in basis_name:
+    if basis_name.endswith(".json"):
         assert os.path.isfile(
             basis_name
         ), f"[forte2] Basis file {basis_name} not found."
