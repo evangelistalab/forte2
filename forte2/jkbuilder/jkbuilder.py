@@ -26,10 +26,9 @@ class FockBuilder:
         This comes at the cost of doubling the memory footprint of the ``FockBuilder`` object.
     """
 
-    def __init__(self, system: System, use_aux_corr=False, store_B_pBq=False):
+    def __init__(self, system: System, use_aux_corr=False, store_B_pBq=True):
         self.store_B_pBq = store_B_pBq
         self.system = system
-        self.B_pBq = None
         if isinstance(system, ModelSystem):
             # special handling for ModelSystem
             nbf = system.nbf
@@ -139,8 +138,7 @@ class FockBuilder:
             ), "C must be a list with one element for two-component systems."
             C = [C[0][: self.nbf, :], C[0][self.nbf :, :]]
         # equivalent to "rPm,mi->rPi"
-        # Y = [self.BT @ Ci.conj() for Ci in C]
-        Y = [np.einsum("Pmr,mi->rPi", self.B, Ci.conj(), optimize=True) for Ci in C]
+        Y = [self.B_pBq @ Ci.conj() for Ci in C]
         if self.system.two_component:
             K = []
             for Yi in Y:
@@ -150,6 +148,7 @@ class FockBuilder:
         else:
             # equivalent to "mPi,nPi->mn"
             K = [np.tensordot(Yi.conj(), Yi, axes=([1, 2], [1, 2])) for Yi in Y]
+        return K
 
     def _build_K_Bpq(self, C):
         if self.system.two_component:
@@ -180,7 +179,7 @@ class FockBuilder:
         .. math::
 
             J_{\mu\nu} = \sum_{i}\sum_{\rho\sigma} (\mu\nu|\rho\sigma) C^*_{\rho i} C_{\sigma i}\\
-            K_{\mu\nu} = \sum_{i}\sum_{\rho\sigma} (\mu\rho|\nu\sigma) C^*_{\rho i} C_{\sigma i}
+            K_{\mu\nu} = \sum_{i}\sum_{\rho\sigma} (\mu\sigma|\rho\nu) C^*_{\rho i} C_{\sigma i}
 
         Parameters
         ----------
@@ -225,7 +224,7 @@ class FockBuilder:
 
         .. math::
             J_{\mu\nu} = \sum_{uv}\sum_{\rho\sigma} (\mu\nu|\rho\sigma) C^*_{\rho u} C_{\sigma v} \gamma_{uv}\\
-            K_{\mu\nu} = \sum_{uv}\sum_{\rho\sigma} (\mu\rho|\nu\sigma) C^*_{\rho u} C_{\sigma v} \gamma_{uv}
+            K_{\mu\nu} = \sum_{uv}\sum_{\rho\sigma} (\mu\sigma|\rho\nu) C^*_{\rho u} C_{\sigma v} \gamma_{uv}
 
         Parameters
         ----------
