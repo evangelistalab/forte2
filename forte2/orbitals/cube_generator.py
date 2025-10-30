@@ -7,7 +7,7 @@ from forte2 import ints
 
 
 def simple_grid(
-    atoms, spacing: tuple[float, float, float], overage: tuple[float, float, float]
+    atoms, spacing: tuple[float, float, float], padding: tuple[float, float, float]
 ):
     """
     Create a simple cubic grid around the given atoms.
@@ -18,8 +18,8 @@ def simple_grid(
         List of atoms, each represented as a tuple (Z, (x, y, z)).
     spacing : Tuple[float, float, float]
         The spacing between grid points in the x, y, and z directions.
-    overage : Tuple[float, float, float]
-        The amount of overage to add to the grid in the x, y, and z directions.
+    padding : Tuple[float, float, float]
+        The amount of padding (extra space) to add to the grid in the x, y, and z directions around the atoms when generating the grid.
 
     Returns
     -------
@@ -31,7 +31,7 @@ def simple_grid(
         The scaled axes for the grid.
     """
 
-    # find the orbital extents
+    # find the extents of the molecule based on atom positions
     xrange = (math.inf, -math.inf)
     yrange = (math.inf, -math.inf)
     zrange = (math.inf, -math.inf)
@@ -40,10 +40,12 @@ def simple_grid(
         yrange = (min(yrange[0], y), max(yrange[1], y))
         zrange = (min(zrange[0], z), max(zrange[1], z))
 
-    # add overage
-    xrange = (xrange[0] - overage[0], xrange[1] + overage[0])
-    yrange = (yrange[0] - overage[1], yrange[1] + overage[1])
-    zrange = (zrange[0] - overage[2], zrange[1] + overage[2])
+    # add padding
+    xrange = (xrange[0] - padding[0], xrange[1] + padding[0])
+    yrange = (yrange[0] - padding[1], yrange[1] + padding[1])
+    zrange = (zrange[0] - padding[2], zrange[1] + padding[2])
+
+    # compute the number of points
     npoints = (
         math.ceil((r[1] - r[0]) / s)
         for (r, s) in zip((xrange, yrange, zrange), spacing)
@@ -63,9 +65,9 @@ class CubeGenerator:
     Parameters
     ----------
     spacing : float, optional, default=0.2
-        The spacing between grid points in the cube file.
-    overage : float, optional, default=4.0
-        The amount of overage (in bohr) to add to the grid in each direction.
+        The spacing between grid points in the cube file (in bohr).
+    padding : float, optional, default=4.0
+        The extra space (in bohr) added in all directions around the atoms when generating the grid.
 
     Usage
     -----
@@ -76,9 +78,9 @@ class CubeGenerator:
 
     """
 
-    def __init__(self, spacing=0.2, overage=4.0):
+    def __init__(self, spacing=0.2, padding=4.0):
         self.spacing = [spacing, spacing, spacing]
-        self.overage = [overage, overage, overage]
+        self.padding = [padding, padding, padding]
 
     def run(self, system, C, indices=None, prefix="orbital", filepath=".") -> None:
         """
@@ -116,7 +118,7 @@ class CubeGenerator:
 
         # determine the grid points for the cube file
         grid_origin, npoints, scaled_axes = simple_grid(
-            system.atoms, spacing=self.spacing, overage=self.overage
+            system.atoms, spacing=self.spacing, padding=self.padding
         )
 
         logger.log(f"\nGenerating cube files with the following parameters:")
