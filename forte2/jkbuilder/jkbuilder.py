@@ -21,7 +21,7 @@ class FockBuilder:
         If a ModelSystem is provided, it will decompose the 4D ERI tensor using Cholesky decomposition with complete pivoting.
     use_aux_corr : bool, optional, default=False
         If True, uses ``system.auxiliary_basis_set_corr`` instead of ``system.auxiliary_basis``.
-    store_B_pBq : bool, optional, default=False
+    store_B_pBq : bool, optional, default=True
         If True, stores a (Nao, Naux, Nao)-shaped copy of the B tensor for faster K builds.
         This comes at the cost of doubling the memory footprint of the ``FockBuilder`` object.
     """
@@ -84,7 +84,7 @@ class FockBuilder:
         if self.store_B_pBq:
             memory_gb *= 2
             logger.log_info1(
-                f"Memory requirement: {memory_gb:.2f} GB (doubled due to storing B_pBq)"
+                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_pBq)"
             )
         else:
             logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
@@ -101,7 +101,7 @@ class FockBuilder:
         if self.store_B_pBq:
             memory_gb += 8 * (naux * nb**2) / (1024**3)
             logger.log_info1(
-                f"Memory requirement: {memory_gb:.2f} GB (doubled due to storing B_pBq)"
+                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_pBq)"
             )
         else:
             logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
