@@ -21,10 +21,15 @@ class FockBuilder:
         If a ModelSystem is provided, it will decompose the 4D ERI tensor using Cholesky decomposition with complete pivoting.
     use_aux_corr : bool, optional, default=False
         If True, uses ``system.auxiliary_basis_set_corr`` instead of ``system.auxiliary_basis``.
+    store_B_pBq : bool, optional, default=False
+        If True, stores a (Nao, Naux, Nao)-shaped copy of the B tensor for faster K builds.
+        This comes at the cost of doubling the memory footprint of the ``FockBuilder`` object.
     """
 
-    def __init__(self, system: System, use_aux_corr=False):
+    def __init__(self, system: System, use_aux_corr=False, store_B_pBq=False):
+        self.store_B_pBq = store_B_pBq
         self.system = system
+        self.B_pBq = None
         if isinstance(system, ModelSystem):
             # special handling for ModelSystem
             nbf = system.nbf
@@ -34,6 +39,8 @@ class FockBuilder:
             system.naux = self.B.shape[0]
             self.nbf = nbf
             self.naux = system.naux
+            if store_B_pBq:
+                self.B_pBq = self.B.transpose(2, 0, 1).copy()
             return
 
         if not system.cholesky_tei:
@@ -55,9 +62,10 @@ class FockBuilder:
             )
         self.naux = system.naux
         self.nbf = system.nbf
+        if store_B_pBq:
+            self.B_pBq = self.B.transpose(2, 0, 1).copy()
 
-    @staticmethod
-    def _build_B_cholesky(basis, cholesky_tol):
+    def _build_B_cholesky(self, basis, cholesky_tol):
         # Compute the memory requirements
         nbf = basis.size
         memory_gb = 8 * (nbf**4) / (1024**3)
@@ -74,19 +82,30 @@ class FockBuilder:
         naux = B.shape[0]
 
         memory_gb = 8 * (naux * nbf**2) / (1024**3)
-        logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
+        if self.store_B_pBq:
+            memory_gb *= 2
+            logger.log_info1(
+                f"Memory requirement: {memory_gb:.2f} GB (doubled due to storing B_pBq)"
+            )
+        else:
+            logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
         logger.log_info1(f"Number of system basis functions: {nbf}")
         logger.log_info1(f"Number of auxiliary basis functions: {naux}")
 
         return B, naux
 
-    @staticmethod
-    def _build_B_density_fitting(basis, auxiliary_basis):
+    def _build_B_density_fitting(self, basis, auxiliary_basis):
         # Compute the memory requirements
         nb = basis.size
         naux = auxiliary_basis.size
         memory_gb = 8 * (naux**2 + naux * nb**2) / (1024**3)
-        logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
+        if self.store_B_pBq:
+            memory_gb += 8 * (naux * nb**2) / (1024**3)
+            logger.log_info1(
+                f"Memory requirement: {memory_gb:.2f} GB (doubled due to storing B_pBq)"
+            )
+        else:
+            logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
         logger.log_info1(f"Number of system basis functions: {nb}")
         logger.log_info1(f"Number of auxiliary basis functions: {naux}")
 
@@ -113,7 +132,26 @@ class FockBuilder:
         J = [np.einsum("Pmn,Prs,sr->mn", self.B, self.B, Di, optimize=True) for Di in D]
         return J
 
-    def build_K(self, C):
+    def _build_K_pBq(self, C):
+        if self.system.two_component:
+            assert (
+                len(C) == 1
+            ), "C must be a list with one element for two-component systems."
+            C = [C[0][: self.nbf, :], C[0][self.nbf :, :]]
+        # equivalent to "rPm,mi->rPi"
+        # Y = [self.BT @ Ci.conj() for Ci in C]
+        Y = [np.einsum("Pmr,mi->rPi", self.B, Ci.conj(), optimize=True) for Ci in C]
+        if self.system.two_component:
+            K = []
+            for Yi in Y:
+                for Yj in Y:
+                    # equivalent to "mPi,nPi->mn"
+                    K.append(np.tensordot(Yi.conj(), Yj, axes=([1, 2], [1, 2])))
+        else:
+            # equivalent to "mPi,nPi->mn"
+            K = [np.tensordot(Yi.conj(), Yi, axes=([1, 2], [1, 2])) for Yi in Y]
+
+    def _build_K_Bpq(self, C):
         if self.system.two_component:
             assert (
                 len(C) == 1
@@ -128,6 +166,12 @@ class FockBuilder:
         else:
             K = [np.einsum("Pmi,Pni->mn", Yi.conj(), Yi, optimize=True) for Yi in Y]
         return K
+
+    def build_K(self, C):
+        if self.store_B_pBq:
+            return self._build_K_pBq(C)
+        else:
+            return self._build_K_Bpq(C)
 
     def build_JK(self, C):
         r"""
