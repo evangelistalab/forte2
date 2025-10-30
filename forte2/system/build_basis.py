@@ -83,18 +83,18 @@ def build_basis(
     basis.set_name(prefix + basis_name)
     # get the unique basis set data
     atom_basis = _get_atom_basis(fetch_map)
-    for (Z, coords), decon in zip(geometry.atoms, if_decontract_atom_basis):
+    for (Z, coords), decon, bset in zip(geometry.atoms, if_decontract_atom_basis, basis_per_atom):
         if decon:
             basis = _add_atom_basis_to_basis_decontracted(
                 basis,
-                atom_basis[Z],
+                atom_basis[bset][Z],
                 coords,
                 embed_normalization_into_coefficients,
             )
         else:
             basis = _add_atom_basis_to_basis(
                 basis,
-                atom_basis[Z],
+                atom_basis[bset][Z],
                 coords,
                 embed_normalization_into_coefficients,
             )
@@ -160,17 +160,19 @@ def _get_atom_basis(fetch_map):
                 f"{basis_name}.json"
             ).open("r") as f:
                 bfile = json.load(f)
+                atom_basis[basis_name] = {}
                 for Z in atoms:
                     # check if the atomic number is in the basis set
                     assert (
                         str(Z) in bfile["elements"]
                     ), f"Element {Z} not found in basis set {basis_name}."
-                    atom_basis[Z] = bfile["elements"][str(Z)]["electron_shells"]
+                    atom_basis[basis_name][Z] = bfile["elements"][str(Z)]["electron_shells"]
         else:
             if BSE_AVAILABLE:
                 logger.log_info1(
                     f"[forte2] Basis {basis_name} not found locally. Using Basis Set Exchange."
                 )
+                atom_basis[basis_name] = {}
                 for Z in atoms:
                     try:
                         bse_basis = bse.get_basis(basis_name, elements=Z)
@@ -178,7 +180,7 @@ def _get_atom_basis(fetch_map):
                         raise RuntimeError(
                             f"[forte2] Basis Set Exchange does not have data for element Z={Z} in basis set {basis_name}!"
                         )
-                    atom_basis[Z] = bse_basis["elements"][str(Z)]["electron_shells"]
+                    atom_basis[basis_name][Z] = bse_basis["elements"][str(Z)]["electron_shells"]
             else:
                 raise RuntimeError(
                     f"[forte2] Basis file {basis_name}.json could not be found, and Basis Set Exchange is not available. "

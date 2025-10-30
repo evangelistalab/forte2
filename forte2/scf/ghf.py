@@ -8,7 +8,7 @@ from forte2.helpers import logger
 from forte2.symmetry import real_sph_to_j_adapted
 from .scf_base import SCFBase
 from .rhf import RHF
-from .scf_utils import guess_mix, alpha_beta_mix, break_complex_conjugation_symmetry
+from .scf_utils import guess_mix_ghf, alpha_beta_mix, break_complex_conjugation_symmetry
 
 
 @dataclass
@@ -147,7 +147,14 @@ class GHF(SCFBase):
         C = RHF._initial_guess(self, H, guess_type)[0]
         if self.guess_mix and self.ms_guess is not None:
             if self.twicems_guess == 0:
-                C = guess_mix(C, self.nel - 1, twocomp=True)
+                mo_a, mo_b = self._guess_ms(C)
+                C = guess_mix_ghf(
+                    C,
+                    mo_a[self.na_guess - 1],
+                    mo_b[self.nb_guess - 1],
+                    mo_a[self.na_guess],
+                    mo_b[self.nb_guess],
+                )
         if self.alpha_beta_mix:
             C = alpha_beta_mix(C)
         if self.break_complex_symmetry:
@@ -226,7 +233,7 @@ class GHF(SCFBase):
         for i in range(nocc):
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{i+1:<4d} ({self.irrep_labels[i]}) {self.eps[0][i]:<12.6f} "
+            string += f"{i:<4d} ({self.irrep_labels[i]}) {self.eps[0][i]:<12.6f} "
         logger.log_info1(string)
 
         logger.log_info1("\nVirtual:")
@@ -235,9 +242,7 @@ class GHF(SCFBase):
             idx = nocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += (
-                f"{idx+1:<4d} ({self.irrep_labels[idx]}) {self.eps[0][idx]:<12.6f} "
-            )
+            string += f"{idx:<4d} ({self.irrep_labels[idx]}) {self.eps[0][idx]:<12.6f} "
         logger.log_info1(string)
 
     def _guess_ms(self, C):

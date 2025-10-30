@@ -293,7 +293,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
                     index_B_occ.append(glob_i)
                     if v > 0.5:
                         logger.log_info1(
-                            f"Warning! Occupied orbital {glob_i+1} has eigenvalue {v:8.6f} "
+                            f"Warning! Occupied orbital {glob_i} has eigenvalue {v:8.6f} "
                             "and is assigned to B."
                         )
 
@@ -304,7 +304,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
                     index_B_vir.append(glob_i)
                     if v > 0.5:
                         logger.log_info1(
-                            f"Warning! Virtual orbital {glob_i+1} has eigenvalue {v:8.6f} "
+                            f"Warning! Virtual orbital {glob_i} has eigenvalue {v:8.6f} "
                             "and is assigned to B."
                         )
         index_A_occ.sort()
@@ -385,14 +385,14 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         for i in index_A_occ:
             local = core_inds.index(i)
             val = lo_vals[local]
-            logger.log_info1(f"      {i+1:4d}  occupied  {val:8.6f}")
+            logger.log_info1(f"      {i:4d}  occupied  {val:8.6f}")
 
         for i in index_actv:
-            logger.log_info1(f"      {i+1:4d}  active    --")
+            logger.log_info1(f"      {i:4d}  active    --")
         for i in index_A_vir:
             local = virt_inds.index(i)
             val = lv_vals[local]
-            logger.log_info1(f"      {i+1:4d}  virtual   {val:8.6f}")
+            logger.log_info1(f"      {i:4d}  virtual   {val:8.6f}")
 
         # Environment B
         total_env = num_Bo + num_Bv
@@ -404,11 +404,11 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
             for i in index_B_occ:
                 local = core_inds.index(i)
                 val = lo_vals[local]
-                logger.log_info1(f"    {i+1:4d}   Occupied   {val:8.6f}")
+                logger.log_info1(f"    {i:4d}   Occupied   {val:8.6f}")
             for i in index_B_vir:
                 local = virt_inds.index(i)
                 val = lv_vals[local]
-                logger.log_info1(f"    {i+1:4d}   Virtual    {val:8.6f}")
+                logger.log_info1(f"    {i:4d}   Virtual    {val:8.6f}")
             logger.log_info1("    ============================")
         else:
             logger.log_info1(

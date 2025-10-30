@@ -136,7 +136,7 @@ class MOSymmetryDetector:
             self.labels, chars = self._assign_irrep_labels()
 
             for i, c in enumerate(chars):
-                logger.log_debug(f"orbital {i + 1}, character = {c}")
+                logger.log_debug(f"orbital {i}, character = {c}")
 
             self.irrep_indices = [
                 COTTON_LABELS[self.system.point_group][label] for label in self.labels

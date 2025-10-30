@@ -9,7 +9,12 @@ from .state import State, RelState, MOSpace
 from .scf import RHF, ROHF, UHF, CUHF, GHF
 from .ci import CI, RelCI
 from .x2c import x2c
-from .orbitals import AVAS, Cube, ASET
+from .orbitals import AVAS, CubeGenerator, Cube, ASET
 from .mcopt import MCOptimizer, RelMCOptimizer
 from .props import get_1e_property, mulliken_population
 from .helpers import logger, set_verbosity_level, comparisons
+
+from .mods_manager import load_mods, enable_mod
+
+# Automatically load any mods in the mods/ or ~/.forte2 directory
+load_mods()
