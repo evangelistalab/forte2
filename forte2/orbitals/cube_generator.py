@@ -7,7 +7,7 @@ from forte2 import ints
 
 
 def simple_grid(
-    atoms, spacing: tuple[float, float, float], overage: tuple[float, float, float]
+    atoms, spacing: tuple[float, float, float], padding: tuple[float, float, float]
 ):
     """
     Create a simple cubic grid around the given atoms.
@@ -18,8 +18,8 @@ def simple_grid(
         List of atoms, each represented as a tuple (Z, (x, y, z)).
     spacing : Tuple[float, float, float]
         The spacing between grid points in the x, y, and z directions.
-    overage : Tuple[float, float, float]
-        The amount of overage to add to the grid in the x, y, and z directions.
+    padding : Tuple[float, float, float]
+        The amount of padding (extra space) to add to the grid in the x, y, and z directions around the atoms when generating the grid.
 
     Returns
     -------
@@ -31,7 +31,7 @@ def simple_grid(
         The scaled axes for the grid.
     """
 
-    # find the orbital extents
+    # find the extents of the molecule based on atom positions
     xrange = (math.inf, -math.inf)
     yrange = (math.inf, -math.inf)
     zrange = (math.inf, -math.inf)
@@ -40,10 +40,12 @@ def simple_grid(
         yrange = (min(yrange[0], y), max(yrange[1], y))
         zrange = (min(zrange[0], z), max(zrange[1], z))
 
-    # add overage
-    xrange = (xrange[0] - overage[0], xrange[1] + overage[0])
-    yrange = (yrange[0] - overage[1], yrange[1] + overage[1])
-    zrange = (zrange[0] - overage[2], zrange[1] + overage[2])
+    # add padding
+    xrange = (xrange[0] - padding[0], xrange[1] + padding[0])
+    yrange = (yrange[0] - padding[1], yrange[1] + padding[1])
+    zrange = (zrange[0] - padding[2], zrange[1] + padding[2])
+
+    # compute the number of points
     npoints = (
         math.ceil((r[1] - r[0]) / s)
         for (r, s) in zip((xrange, yrange, zrange), spacing)
@@ -56,16 +58,58 @@ def simple_grid(
     )
 
 
-class Cube:
+class CubeGenerator:
     """
-    Class to handle cube files.
+    Class to generate cube files from a given set of molecular orbitals.
+
+    Parameters
+    ----------
+    spacing : float, optional, default=0.2
+        The spacing between grid points in the cube file (in bohr).
+    padding : float, optional, default=4.0
+        The extra space (in bohr) added in all directions around the atoms when generating the grid.
+
+    Usage
+    -----
+    ```
+    cube = CubeGenerator()
+    cube.run(system, C)
+    ```
+
     """
 
-    def __init__(self, spacing=0.2, overage=4.0):
+    def __init__(self, spacing=0.2, padding=4.0):
         self.spacing = [spacing, spacing, spacing]
-        self.overage = [overage, overage, overage]
+        self.padding = [padding, padding, padding]
 
-    def run(self, system, C, indices=None, prefix="orbital", filepath="."):
+    def run(self, system, C, indices=None, prefix="orbital", filepath=".") -> None:
+        """
+        Generate cube files for the given orbitals.
+
+        This method generates cube files for the specified molecular orbitals
+        represented by the coefficient matrix `C`. The cube files are saved in the
+        specified directory with the given prefix. The files are named as:
+
+            {prefix}_{index:0{number_of_digits}d}.cube
+
+        where `index` is the zero-based index of the orbital and `number_of_digits` is
+        determined by the maximum index to ensure proper zero-padding.
+
+        Parameters
+        ----------
+        system : forte2.system.System
+            The system object containing the molecular information.
+        C : NDArray
+            The molecular orbital coefficients matrix.
+        indices : List[int], optional, default=None
+            The indices (zero-based) of the orbitals to generate cube files for.
+            By default all orbitals are generated.
+        prefix : str, optional, default="orbital"
+            The prefix for the cube file names.
+        filepath : str, optional, default="."
+            The directory to save the cube files in.
+        """
+
         filepath = Path(filepath)
         # determine the indices of the orbitals to generate
         indices = indices if indices is not None else range(C.shape[1])
@@ -74,7 +118,7 @@ class Cube:
 
         # determine the grid points for the cube file
         grid_origin, npoints, scaled_axes = simple_grid(
-            system.atoms, spacing=self.spacing, overage=self.overage
+            system.atoms, spacing=self.spacing, padding=self.padding
         )
 
         logger.log(f"\nGenerating cube files with the following parameters:")
@@ -146,7 +190,7 @@ class Cube:
                 _write_file(
                     cube_a,
                     filepath,
-                    f"{prefix}_{index + 1:0{number_of_digits}d}_a.cube",
+                    f"{prefix}_{index:0{number_of_digits}d}_a.cube",
                 )
 
                 cube_b = self._make_cube(
@@ -155,7 +199,7 @@ class Cube:
                 _write_file(
                     cube_b,
                     filepath,
-                    f"{prefix}_{index + 1:0{number_of_digits}d}_b.cube",
+                    f"{prefix}_{index:0{number_of_digits}d}_b.cube",
                 )
 
         else:
@@ -164,7 +208,7 @@ class Cube:
                     values[:, i], grid_origin, npoints, scaled_axes, system
                 )
                 _write_file(
-                    cube, filepath, f"{prefix}_{index + 1:0{number_of_digits}d}.cube"
+                    cube, filepath, f"{prefix}_{index:0{number_of_digits}d}.cube"
                 )
 
     def _make_cube(self, values, minr, npoints, axis, system):
