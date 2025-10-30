@@ -312,7 +312,6 @@ np_vector CISigmaBuilder::form_Hdiag_csf(const std::vector<Determinant>& dets,
                     }
                     Hdiag_span[i] = energy;
                 }
-
             }
             // for larger CSF blocks we hash the determinant energy to avoid recomputing it
             else {
