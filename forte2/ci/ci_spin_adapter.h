@@ -72,7 +72,7 @@ class CISpinAdapter {
     /// @brief Return the range of CSFs corresponding to a given configuration
     /// @param conf_idx the index of the configuration
     /// @return a pair containing the start and end indices of the CSFs
-    std::pair<size_t, size_t> conf_to_csfs_range(size_t conf_idx) const;
+    const std::vector<std::pair<size_t, size_t>>& conf_to_csfs_range() const;
 
     /// @brief Return the number of configurations
     size_t nconf() const;
@@ -169,25 +169,31 @@ class CISpinAdapter {
     int twoMs_ = 0;
     /// @brief The number of orbitals
     int norb_ = 0;
-    /// @brief The number of configurations
-    size_t nconf_ = 0;
     /// @brief The number of CSFs
     size_t ncsf_ = 0;
     /// @brief The number of determinants
     size_t ndet_ = 0;
     /// @brief The number of spin couplings
     size_t ncoupling_ = 0;
-    /// @brief A vector with the starting index of each CSF in the determinant basis
+
+    /// The determinant composition of a CSF:
+    ///     CSF(i) = sum_j coeff_ij * Determinant(j)
+    /// is stored as a sparse list of pairs (determinant index, coefficient):
+    /// The two vectors below store the starting index of each CSF in this list and the
+    /// list of pairs
+
+    /// @brief The starting index of each CSF in the determinant basis
     std::vector<size_t> csf_to_det_bounds_;
-    /// @brief A vector used to store information on how to map the CSFs to determinants
+    /// @brief A map from the CSF index to the determinant index and coefficient
     std::vector<std::pair<size_t, double>> csf_to_det_coeff_;
-    /// @brief A vector used to store the configurations
+
+    /// @brief Electron configurations
     std::vector<Configuration> confs_;
 
     /// @brief The logging level for the class
     int log_level_ = 3;
 
-    /// @bried A vector with the number of CSFs with a given number of unpaired electrons (N)
+    /// @brief A vector with the number of CSFs with a given number of unpaired electrons (N)
     std::vector<size_t> N_ncsf_;
     /// @brief A vector used to store the determinant occupations for N unpaired electrons
     std::vector<std::vector<String>> N_to_det_occupations_;
@@ -195,7 +201,8 @@ class CISpinAdapter {
     std::vector<std::vector<std::tuple<size_t, size_t, double>>> N_to_overlaps_;
     /// @brief Stores the number of non-zero overlaps there are for each N and spin coupling
     std::vector<std::vector<size_t>> N_to_noverlaps_;
-    /// @brief A vector used to store the range of CSFs for each configuration
+    /// @brief A vector used to store the range of CSFs associated with each configuration
+    /// conf_to_csfs_range_[conf] = (start_csf_idx, end_csf_idx)
     std::vector<std::pair<size_t, size_t>> conf_to_csfs_range_;
 
     /// @brief Compute the unique spin couplings

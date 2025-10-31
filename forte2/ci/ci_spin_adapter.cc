@@ -55,14 +55,14 @@ CISpinAdapter::CISpinAdapter(int twoS, int twoMs, int norb)
     : twoS_(twoS), twoMs_(twoMs), norb_(norb), N_ncsf_(norb + 1, 0),
       N_to_det_occupations_(norb + 1), N_to_overlaps_(norb + 1), N_to_noverlaps_(norb + 1) {}
 
-size_t CISpinAdapter::nconf() const { return nconf_; }
+size_t CISpinAdapter::nconf() const { return confs_.size(); }
 
 size_t CISpinAdapter::ncsf() const { return ncsf_; }
 
 size_t CISpinAdapter::ndet() const { return ndet_; }
 
-std::pair<size_t, size_t> CISpinAdapter::conf_to_csfs_range(size_t conf_idx) const {
-    return conf_to_csfs_range_[conf_idx];
+const std::vector<std::pair<size_t, size_t>>& CISpinAdapter::conf_to_csfs_range() const {
+    return conf_to_csfs_range_;
 }
 
 void CISpinAdapter::det_C_to_csf_C(np_vector det_C, np_vector csf_C) {
@@ -149,6 +149,7 @@ void CISpinAdapter::prepare_couplings(const std::vector<Determinant>& dets) {
     // find all the configurations and filter those with at least twoS unpaired electrons
     ankerl::unordered_dense::set<Configuration, Configuration::Hash> unique_confs;
     for (const auto& d : dets) {
+        // remove duplicates by using a set and filter based on the number of unpaired electrons
         if (auto conf = Configuration(d); conf.count_socc() >= twoS_) {
             unique_confs.insert(conf);
         }
@@ -181,7 +182,6 @@ void CISpinAdapter::prepare_couplings(const std::vector<Determinant>& dets) {
     ncsf_ = 0;
     ncoupling_ = 0;
     auto previous_ncsf = ncsf_;
-    nconf_ = confs_.size();
     conf_to_csfs_range_.reserve(confs_.size());
     for (const auto& conf : confs_) {
         conf_to_csfs(conf, det_hash);
@@ -191,7 +191,7 @@ void CISpinAdapter::prepare_couplings(const std::vector<Determinant>& dets) {
     LOG(log_level_) << "Timing for finding the CSFs: " << std::fixed << std::setprecision(3)
                     << t2.elapsed_seconds() << " s";
 
-    // check that the number of couplings and CSFs is correct
+    // check that the number of couplings and CSFs is consistent
     assert(ncsf_ == ncsf);
     assert(ncoupling_ == ncoupling);
 }

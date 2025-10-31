@@ -296,13 +296,14 @@ np_vector CISigmaBuilder::form_Hdiag_csf(const std::vector<Determinant>& dets,
         for (size_t i{0}, imax{spin_adapter.ncsf()}; i < imax; ++i) {
             Hdiag_span[i] = energy_csf(dets, spin_adapter, i);
         }
-    } else {
-        // approximate diagonal element of <I|H|I> in the CSF basis,
-        // using only the diagonal contributions, i.e., <I|H|I> = c_iI c_iI <i|H|i>
+    }
+    // approximate diagonal element of <I|H|I> in the CSF basis,
+    // using only the diagonal contributions, i.e., <I|H|I> = c_iI c_iI <i|H|i>
+    else {
 
         // loop over all configurations
-        for (size_t c{0}, cmax{spin_adapter.nconf()}; c < cmax; ++c) {
-            auto [csf_start, csf_end] = spin_adapter.conf_to_csfs_range(c);
+        const auto& conf_to_csfs_range = spin_adapter.conf_to_csfs_range();
+        for (const auto& [csf_start, csf_end] : conf_to_csfs_range) {
             // small CSF blocks (1 or 2) can be computed directly to avoid storage overhead
             if (csf_end - csf_start <= 2) {
                 for (size_t i{csf_start}; i < csf_end; ++i) {
