@@ -3,8 +3,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from numpy.typing import NDArray
 
-from forte2.jkbuilder.jkbuilder import FockBuilder
-from forte2.system.system import System
+import forte2
 
 # module-level tokens
 o, v = object(), object()
@@ -25,9 +24,6 @@ class RestrictedMOIntegrals:
         Subspace of doubly occupied orbitals. Defaults to None.
     use_aux_corr : bool, optional, default=False
         If True, use ``system.auxiliary_basis_set_corr``, else use ``system.auxiliary_basis``.
-    fock_builder : FockBuilder, optional
-        An instance of FockBuilder to use for building the Fock matrix.
-        If not provided, a new FockBuilder will be created.
     antisymmetrize : bool, optional, default=False
         If True, antisymmetrize the two-electron integrals.
     spinorbital : bool, optional, default=False
@@ -43,21 +39,20 @@ class RestrictedMOIntegrals:
         The two-electron integrals stored in physicist's convention: V[p,q,r,s] = :math:`\langle pq | rs \rangle`.
     """
 
-    system: System
+    system: None
     C: NDArray
     orbitals: list
     core_orbitals: list = field(default_factory=list)
     use_aux_corr: bool = False
-    fock_builder: FockBuilder = None
     antisymmetrize: bool = False
     spinorbital: bool = False
 
     def __post_init__(self):
         self.norb = len(self.orbitals)
-        if self.fock_builder is None:
-            jkbuilder = FockBuilder(self.system, self.use_aux_corr)
+        if self.use_aux_corr:
+            jkbuilder = self.system.fock_builder_corr
         else:
-            jkbuilder = self.fock_builder
+            jkbuilder = self.system.fock_builder
         C = self.C[:, self.orbitals]
 
         # nuclear repulsion energy contribution to the energy
@@ -133,9 +128,6 @@ class SpinorbitalIntegrals:
         Subspace of doubly occupied orbitals. Defaults to None.
     use_aux_corr : bool, optional, default=False
         If True, use ``system.auxiliary_basis_set_corr``, else use ``system.auxiliary_basis``.
-    fock_builder : FockBuilder, optional
-        An instance of FockBuilder to use for building the Fock matrix.
-        If not provided, a new FockBuilder will be created.
     antisymmetrize : bool, optional, default=False
         If True, antisymmetrize the two-electron integrals.
     spinorbital : bool, optional, default=False
@@ -151,12 +143,11 @@ class SpinorbitalIntegrals:
         The two-electron integrals stored in physicist's convention: V[p,q,r,s] = :math:`\langle pq | rs \rangle`.
     """
 
-    system: System
+    system: None
     C: NDArray
     spinorbitals: list
     core_spinorbitals: list = field(default_factory=list)
     use_aux_corr: bool = False
-    fock_builder: FockBuilder = None
     antisymmetrize: bool = False
 
     def __post_init__(self):
@@ -165,10 +156,10 @@ class SpinorbitalIntegrals:
             self.C.shape[0] == self.system.nbf * 2
         ), "C must be in the spinorbital basis."
         self.norb = len(self.spinorbitals)
-        if self.fock_builder is None:
-            jkbuilder = FockBuilder(self.system, self.use_aux_corr)
+        if self.use_aux_corr:
+            jkbuilder = self.system.fock_builder_corr
         else:
-            jkbuilder = self.fock_builder
+            jkbuilder = self.system.fock_builder
         C = self.C[:, self.spinorbitals]
 
         # nuclear repulsion energy contribution to the energy

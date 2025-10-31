@@ -1,9 +1,10 @@
 import numpy as np
 import scipy as sp
 import itertools
+from functools import cached_property
 
+import forte2
 from forte2 import ints
-from forte2.system import System, ModelSystem
 from forte2.helpers import logger
 from forte2.helpers.matrix_functions import cholesky_wrapper
 
@@ -21,48 +22,64 @@ class FockBuilder:
         If a ModelSystem is provided, it will decompose the 4D ERI tensor using Cholesky decomposition with complete pivoting.
     use_aux_corr : bool, optional, default=False
         If True, uses ``system.auxiliary_basis_set_corr`` instead of ``system.auxiliary_basis``.
-    store_B_pBq : bool, optional, default=True
+    store_B_pQq : bool, optional, default=True
         If True, stores a (Nao, Naux, Nao)-shaped copy of the B tensor for faster K builds.
         This comes at the cost of doubling the memory footprint of the ``FockBuilder`` object.
+
+    Attributes
+    ----------
+    B_Qpq : NDArray
+        The B tensor with shape (Naux, Nao, Nao).
+    B_pQq : NDArray
+        The B tensor with shape (Nao, Naux, Nao). Only stored if `store_B_pQq` is True.
+    naux : int
+        The number of auxiliary basis functions.
+    nbf : int
+        The number of basis functions in the system.
     """
 
-    def __init__(self, system: System, use_aux_corr=False, store_B_pBq=True):
-        self.store_B_pBq = store_B_pBq
+    def __init__(self, system, use_aux_corr=False, store_B_pQq=True):
+        self.store_B_pQq = store_B_pQq
         self.system = system
-        if isinstance(system, ModelSystem):
-            # special handling for ModelSystem
-            nbf = system.nbf
-            eri = system.eri.reshape((nbf**2,) * 2)
-            self.B = cholesky_wrapper(eri, tol=-1)
-            self.B = self.B.reshape((self.B.shape[0], nbf, nbf))
-            system.naux = self.B.shape[0]
-            self.nbf = nbf
-            self.naux = system.naux
-            if store_B_pBq:
-                self.B_pBq = self.B.transpose(2, 0, 1).copy()
-            return
-
-        if not system.cholesky_tei:
-            basis = system.basis
-            if use_aux_corr:
-                assert hasattr(
-                    system, "auxiliary_basis_set_corr"
-                ), "The system does not have an auxiliary_basis_set_corr defined."
-                aux_basis = system.auxiliary_basis_set_corr
-            else:
-                assert hasattr(
-                    system, "auxiliary_basis"
-                ), "The system does not have an auxiliary_basis defined."
-                aux_basis = system.auxiliary_basis
-            self.B = self._build_B_density_fitting(basis, aux_basis)
-        else:
-            self.B, system.naux = self._build_B_cholesky(
-                system.basis, system.cholesky_tol
-            )
-        self.naux = system.naux
+        self.use_aux_corr = use_aux_corr
         self.nbf = system.nbf
-        if store_B_pBq:
-            self.B_pBq = self.B.transpose(2, 0, 1).copy()
+
+    @cached_property
+    def B_Qpq(self):
+        if isinstance(self.system, forte2.ModelSystem):
+            res, naux = self._build_B_model_system()
+        else:
+            if not self.system.cholesky_tei:
+                basis = self.system.basis
+                if self.use_aux_corr:
+                    assert hasattr(
+                        self.system, "auxiliary_basis_set_corr"
+                    ), "The system does not have an auxiliary_basis_set_corr defined."
+                    aux_basis = self.system.auxiliary_basis_set_corr
+                else:
+                    assert hasattr(
+                        self.system, "auxiliary_basis"
+                    ), "The system does not have an auxiliary_basis defined."
+                    aux_basis = self.system.auxiliary_basis
+                res, naux = self._build_B_density_fitting(basis, aux_basis)
+            else:
+                res, naux = self._build_B_cholesky(
+                    self.system.basis, self.system.cholesky_tol
+                )
+        self.naux = naux
+        return res
+
+    @cached_property
+    def B_pQq(self):
+        return self.B_Qpq.transpose(2, 0, 1).copy()
+    
+    def _build_B_model_system(self):
+        nbf = self.system.nbf
+        eri = self.system.eri.reshape((nbf**2,) * 2)
+        B = cholesky_wrapper(eri, tol=-1)
+        B = B.reshape((B.shape[0], nbf, nbf))
+        naux = B.shape[0]
+        return B, naux
 
     def _build_B_cholesky(self, basis, cholesky_tol):
         # Compute the memory requirements
@@ -81,10 +98,10 @@ class FockBuilder:
         naux = B.shape[0]
 
         memory_gb = 8 * (naux * nbf**2) / (1024**3)
-        if self.store_B_pBq:
+        if self.store_B_pQq:
             memory_gb *= 2
             logger.log_info1(
-                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_pBq)"
+                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_pQq)"
             )
         else:
             logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
@@ -98,10 +115,10 @@ class FockBuilder:
         nb = basis.size
         naux = auxiliary_basis.size
         memory_gb = 8 * (naux**2 + naux * nb**2) / (1024**3)
-        if self.store_B_pBq:
+        if self.store_B_pQq:
             memory_gb += 8 * (naux * nb**2) / (1024**3)
             logger.log_info1(
-                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_pBq)"
+                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_pQq)"
             )
         else:
             logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
@@ -125,20 +142,23 @@ class FockBuilder:
         B = np.einsum("PQ,Qmn->Pmn", M_inv_sqrt, Pmn, optimize=True)
         del Pmn
 
-        return B
+        return B, naux
 
     def build_J(self, D):
-        J = [np.einsum("Pmn,Prs,sr->mn", self.B, self.B, Di, optimize=True) for Di in D]
+        J = [
+            np.einsum("Pmn,Prs,sr->mn", self.B_Qpq, self.B_Qpq, Di, optimize=True)
+            for Di in D
+        ]
         return J
 
-    def _build_K_pBq(self, C):
+    def _build_K_pQq(self, C):
         if self.system.two_component:
             assert (
                 len(C) == 1
             ), "C must be a list with one element for two-component systems."
             C = [C[0][: self.nbf, :], C[0][self.nbf :, :]]
         # equivalent to "rPm,mi->rPi"
-        Y = [self.B_pBq @ Ci.conj() for Ci in C]
+        Y = [self.B_pQq @ Ci.conj() for Ci in C]
         if self.system.two_component:
             K = []
             for Yi in Y:
@@ -150,13 +170,13 @@ class FockBuilder:
             K = [np.tensordot(Yi.conj(), Yi, axes=([1, 2], [1, 2])) for Yi in Y]
         return K
 
-    def _build_K_Bpq(self, C):
+    def _build_K_Qpq(self, C):
         if self.system.two_component:
             assert (
                 len(C) == 1
             ), "C must be a list with one element for two-component systems."
             C = [C[0][: self.nbf, :], C[0][self.nbf :, :]]
-        Y = [np.einsum("Pmr,mi->Pri", self.B, Ci.conj(), optimize=True) for Ci in C]
+        Y = [np.einsum("Pmr,mi->Pri", self.B_Qpq, Ci.conj(), optimize=True) for Ci in C]
         if self.system.two_component:
             K = []
             for Yi in Y:
@@ -167,10 +187,10 @@ class FockBuilder:
         return K
 
     def build_K(self, C):
-        if self.store_B_pBq:
-            return self._build_K_pBq(C)
+        if self.store_B_pQq:
+            return self._build_K_pQq(C)
         else:
-            return self._build_K_Bpq(C)
+            return self._build_K_Qpq(C)
 
     def build_JK(self, C):
         r"""
@@ -289,8 +309,8 @@ class FockBuilder:
         """
         V = np.einsum(
             "Pmn,Prs,mi,rj,nk,sl->ijkl",
-            self.B,
-            self.B,
+            self.B_Qpq,
+            self.B_Qpq,
             C1.conj(),
             C2.conj(),
             C3,
@@ -374,8 +394,8 @@ class FockBuilder:
                 continue
             V += np.einsum(
                 "Pmn,Prs,mi,rj,nk,sl->ijkl",
-                self.B,
-                self.B,
+                self.B_Qpq,
+                self.B_Qpq,
                 C1[s1, :].conj(),
                 C2[s2, :].conj(),
                 C3[s3, :],

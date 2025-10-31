@@ -190,6 +190,7 @@ def test_gasci_rhf_8():
     assert ci.E[0] == approx(-55.598443621487)
     assert ci.E[1] == approx(-55.526088426266)
 
+
 def test_gasci_rhf_9():
     erhf = -76.05702512779526
     eci = -76.063385164755
@@ -209,13 +210,14 @@ def test_gasci_rhf_9():
     ci = CI(
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[6]),
         core_orbitals=[0, 1],
-        active_orbitals=[[2, 3, 4],[5, 6, 7]],
+        active_orbitals=[[2, 3, 4], [5, 6, 7]],
         econv=1e-12,
     )(rhf)
-    ci.run()    
+    ci.run()
 
     assert rhf.E == approx(erhf)
     assert ci.E[0] == approx(eci)
+
 
 def test_gasci_rhf_10():
     erhf = -76.05702512779526
@@ -236,14 +238,15 @@ def test_gasci_rhf_10():
     ci = CI(
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[4], gas_max=[8]),
         core_orbitals=[0],
-        active_orbitals=[[1, 2, 3, 4],[5, 6, 7]],    
+        active_orbitals=[[1, 2, 3, 4], [5, 6, 7]],
         econv=1e-10,
-        ci_algorithm='hz'
+        ci_algorithm="hz",
     )(rhf)
-    ci.run()    
+    ci.run()
 
-    assert rhf.E == approx(erhf)       
+    assert rhf.E == approx(erhf)
     assert ci.E[0] == approx(eci)
+
 
 def test_gasci_rhf_11():
     erhf = -76.05702512779526
@@ -264,12 +267,11 @@ def test_gasci_rhf_11():
     ci = CI(
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[4], gas_max=[8]),
         core_orbitals=[0],
-        active_orbitals=[[1, 2, 3, 4],[5, 6, 7]],    
+        active_orbitals=[[1, 2, 3, 4], [5, 6, 7]],
         econv=1e-10,
-        ci_algorithm='kh'
+        ci_algorithm="kh",
     )(rhf)
-    ci.run()    
+    ci.run()
 
-    assert rhf.E == approx(erhf)       
+    assert rhf.E == approx(erhf)
     assert ci.E[0] == approx(eci)
-    

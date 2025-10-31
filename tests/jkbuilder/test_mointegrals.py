@@ -2,7 +2,6 @@ import numpy as np
 
 from forte2 import System
 from forte2.jkbuilder.mointegrals import RestrictedMOIntegrals, SpinorbitalIntegrals
-from forte2.jkbuilder.jkbuilder import FockBuilder
 
 
 def test_restricted_mo_integrals():
@@ -18,15 +17,10 @@ def test_restricted_mo_integrals():
         unit="bohr",
     )
 
-    fock_builder = FockBuilder(system)
+    fock_builder = system.fock_builder
     C = np.random.rand(system.nbf, system.nbf)
-    ints = RestrictedMOIntegrals(
-        system,
-        C,
-        orbitals=list(range(C.shape[1])),
-        fock_builder=fock_builder,
-    )
-    B_mo = np.einsum("Bpq,pi,qj->Bij", fock_builder.B, C.conj(), C, optimize=True)
+    ints = RestrictedMOIntegrals(system, C, orbitals=list(range(C.shape[1])))
+    B_mo = np.einsum("Bpq,pi,qj->Bij", fock_builder.B_Qpq, C.conj(), C, optimize=True)
     V_ref = np.einsum("Bij,Bkl->ikjl", B_mo, B_mo, optimize=True)
     assert np.allclose(ints.V, V_ref), np.linalg.norm(ints.V - V_ref)
 
@@ -34,7 +28,6 @@ def test_restricted_mo_integrals():
         system,
         C,
         orbitals=list(range(C.shape[1])),
-        fock_builder=fock_builder,
         antisymmetrize=True,
     )
     V_ref_antisym = V_ref - V_ref.swapaxes(2, 3)
@@ -58,27 +51,18 @@ def test_spinorbital_integrals():
     system.two_component = True
 
     nbf = system.nbf * 2
-    fock_builder = FockBuilder(system)
+    fock_builder = system.fock_builder
     C = np.random.rand(nbf, nbf) + 1j * np.random.rand(nbf, nbf)
-    ints = SpinorbitalIntegrals(
-        system,
-        C,
-        spinorbitals=list(range(C.shape[1])),
-        fock_builder=fock_builder,
-    )
-    B_spinorbital = np.zeros((fock_builder.B.shape[0], nbf, nbf), dtype=complex)
-    B_spinorbital[:, : nbf // 2, : nbf // 2] = fock_builder.B
-    B_spinorbital[:, nbf // 2 :, nbf // 2 :] = fock_builder.B
+    ints = SpinorbitalIntegrals(system, C, spinorbitals=list(range(C.shape[1])))
+    B_spinorbital = np.zeros((fock_builder.B_Qpq.shape[0], nbf, nbf), dtype=complex)
+    B_spinorbital[:, : nbf // 2, : nbf // 2] = fock_builder.B_Qpq
+    B_spinorbital[:, nbf // 2 :, nbf // 2 :] = fock_builder.B_Qpq
     B_mo = np.einsum("Bpq,pi,qj->Bij", B_spinorbital, C.conj(), C, optimize=True)
     V_ref = np.einsum("Bij,Bkl->ikjl", B_mo, B_mo, optimize=True)
     assert np.allclose(ints.V, V_ref), np.linalg.norm(ints.V - V_ref)
 
     ints_antisym = SpinorbitalIntegrals(
-        system,
-        C,
-        spinorbitals=list(range(C.shape[1])),
-        fock_builder=fock_builder,
-        antisymmetrize=True,
+        system, C, spinorbitals=list(range(C.shape[1])), antisymmetrize=True
     )
     V_ref_antisym = V_ref - V_ref.swapaxes(2, 3)
     assert np.allclose(ints_antisym.V, V_ref_antisym), np.linalg.norm(

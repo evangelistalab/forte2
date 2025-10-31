@@ -11,6 +11,7 @@ from forte2.helpers.matrix_functions import (
     block_diag_2x2,
 )
 from forte2.x2c import get_hcore_x2c
+from forte2.jkbuilder import FockBuilder
 from .build_basis import build_basis
 from .geom_utils import GeometryHelper, parse_geometry
 
@@ -142,6 +143,10 @@ class System:
             self.linear_dep_trigger,
             self.ortho_thresh,
         )
+        self.fock_builder = FockBuilder(self)
+        # The B tensors here are lazily evaluated, so no overhead if not used
+        self.fock_builder_corr = FockBuilder(self, use_aux_corr=True)
+
 
     def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
@@ -342,6 +347,7 @@ class ModelSystem:
         self.Xorth = invsqrt_matrix(self.ints_overlap(), tol=1e-13)
         self.symmetry = False
         self.point_group = "C1"
+        self.fock_builder = FockBuilder(self)
 
     def ints_overlap(self):
         return self.overlap
