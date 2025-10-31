@@ -354,6 +354,7 @@ class ModelSystem:
         self.symmetry = False
         self.point_group = "C1"
         self.fock_builder = FockBuilder(self)
+        self.fock_builder_corr = self.fock_builder
 
     def ints_overlap(self):
         return self.overlap
