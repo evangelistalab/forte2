@@ -22,7 +22,7 @@ class FockBuilder:
         If a ModelSystem is provided, it will decompose the 4D ERI tensor using Cholesky decomposition with complete pivoting.
     use_aux_corr : bool, optional, default=False
         If True, uses ``system.auxiliary_basis_corr`` instead of ``system.auxiliary_basis``.
-    store_B_nQm : bool, optional, default=True
+    store_B_nPm : bool, optional, default=True
         If True, stores a (Nao, Naux, Nao)-shaped copy of the B tensor for faster K builds.
         This comes at the cost of doubling the memory footprint of the ``FockBuilder`` object.
 
@@ -30,16 +30,16 @@ class FockBuilder:
     ----------
     B_Pmn : NDArray
         The B tensor with shape (Naux, Nao, Nao).
-    B_nQm : NDArray
-        The B tensor with shape (Nao, Naux, Nao). Only stored if `store_B_nQm` is True.
+    B_nPm : NDArray
+        The B tensor with shape (Nao, Naux, Nao). Only stored if `store_B_nPm` is True.
     naux : int
         The number of auxiliary basis functions.
     nbf : int
         The number of basis functions in the system.
     """
 
-    def __init__(self, system, use_aux_corr=False, store_B_nQm=True):
-        self.store_B_nQm = store_B_nQm
+    def __init__(self, system, use_aux_corr=False, store_B_nPm=True):
+        self.store_B_nPm = store_B_nPm
         self.system = system
         self.use_aux_corr = use_aux_corr
         self.nbf = system.nbf
@@ -70,7 +70,7 @@ class FockBuilder:
         return res
 
     @cached_property
-    def B_nQm(self):
+    def B_nPm(self):
         return self.B_Pmn.transpose(2, 0, 1).copy()
 
     def _build_B_model_system(self):
@@ -98,10 +98,10 @@ class FockBuilder:
         naux = B.shape[0]
 
         memory_gb = 8 * (naux * nbf**2) / (1024**3)
-        if self.store_B_nQm:
+        if self.store_B_nPm:
             memory_gb *= 2
             logger.log_info1(
-                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_nQm)"
+                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_nPm)"
             )
         else:
             logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
@@ -115,10 +115,10 @@ class FockBuilder:
         nb = basis.size
         naux = auxiliary_basis.size
         memory_gb = 8 * (naux**2 + naux * nb**2) / (1024**3)
-        if self.store_B_nQm:
+        if self.store_B_nPm:
             memory_gb += 8 * (naux * nb**2) / (1024**3)
             logger.log_info1(
-                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_nQm)"
+                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_nPm)"
             )
         else:
             logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
@@ -158,7 +158,7 @@ class FockBuilder:
             ), "C must be a list with one element for two-component systems."
             C = [C[0][: self.nbf, :], C[0][self.nbf :, :]]
         # equivalent to "rPm,mi->rPi"
-        Y = [self.B_nQm @ Ci.conj() for Ci in C]
+        Y = [self.B_nPm @ Ci.conj() for Ci in C]
         if self.system.two_component:
             K = []
             for Yi in Y:
@@ -187,7 +187,7 @@ class FockBuilder:
         return K
 
     def build_K(self, C):
-        if self.store_B_nQm:
+        if self.store_B_nPm:
             return self._build_K_pQq(C)
         else:
             return self._build_K_Qpq(C)
