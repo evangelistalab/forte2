@@ -300,6 +300,7 @@ np_vector CISigmaBuilder::form_Hdiag_csf(const std::vector<Determinant>& dets,
     // approximate diagonal element of <I|H|I> in the CSF basis,
     // using only the diagonal contributions, i.e., <I|H|I> = c_iI c_iI <i|H|i>
     else {
+        ankerl::unordered_dense::map<size_t, double, std::hash<size_t>> det_energies;
 
         // loop over all configurations
         const auto& conf_to_csfs_range = spin_adapter.conf_to_csfs_range();
@@ -316,7 +317,7 @@ np_vector CISigmaBuilder::form_Hdiag_csf(const std::vector<Determinant>& dets,
             }
             // for larger CSF blocks we hash the determinant energy to avoid recomputing it
             else {
-                ankerl::unordered_dense::map<size_t, double, std::hash<size_t>> det_energies;
+                det_energies.clear();
                 for (size_t i{csf_start}; i < csf_end; ++i) {
                     double energy = 0.0;
                     for (const auto& [det_add_I, c_I] : spin_adapter.csf(i)) {
