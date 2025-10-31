@@ -325,7 +325,7 @@ np_vector CISigmaBuilder::form_Hdiag_csf(const std::vector<Determinant>& dets,
                         if (auto it = det_energies.find(det_add_I); it != det_energies.end()) {
                             energy += c_I * c_I * it->second;
                         } else {
-                            double det_energy = slater_rules_.energy(dets[det_add_I]);
+                            const double det_energy = slater_rules_.energy(dets[det_add_I]);
                             det_energies[det_add_I] = det_energy;
                             energy += c_I * c_I * det_energy;
                         }
