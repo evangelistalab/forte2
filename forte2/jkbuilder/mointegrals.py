@@ -1,9 +1,12 @@
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import numpy as np
 from numpy.typing import NDArray
 
-import forte2
+# Prevents circular imports during type checking
+if TYPE_CHECKING:
+    from forte2 import System
 
 # module-level tokens
 o, v = object(), object()
@@ -39,7 +42,7 @@ class RestrictedMOIntegrals:
         The two-electron integrals stored in physicist's convention: V[p,q,r,s] = :math:`\langle pq | rs \rangle`.
     """
 
-    system: None
+    system: "System"
     C: NDArray
     orbitals: list
     core_orbitals: list = field(default_factory=list)
@@ -143,7 +146,7 @@ class SpinorbitalIntegrals:
         The two-electron integrals stored in physicist's convention: V[p,q,r,s] = :math:`\langle pq | rs \rangle`.
     """
 
-    system: None
+    system: "System"
     C: NDArray
     spinorbitals: list
     core_spinorbitals: list = field(default_factory=list)

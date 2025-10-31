@@ -22,30 +22,30 @@ class FockBuilder:
         If a ModelSystem is provided, it will decompose the 4D ERI tensor using Cholesky decomposition with complete pivoting.
     use_aux_corr : bool, optional, default=False
         If True, uses ``system.auxiliary_basis_corr`` instead of ``system.auxiliary_basis``.
-    store_B_pQq : bool, optional, default=True
+    store_B_nQm : bool, optional, default=True
         If True, stores a (Nao, Naux, Nao)-shaped copy of the B tensor for faster K builds.
         This comes at the cost of doubling the memory footprint of the ``FockBuilder`` object.
 
     Attributes
     ----------
-    B_Qpq : NDArray
+    B_Pmn : NDArray
         The B tensor with shape (Naux, Nao, Nao).
-    B_pQq : NDArray
-        The B tensor with shape (Nao, Naux, Nao). Only stored if `store_B_pQq` is True.
+    B_nQm : NDArray
+        The B tensor with shape (Nao, Naux, Nao). Only stored if `store_B_nQm` is True.
     naux : int
         The number of auxiliary basis functions.
     nbf : int
         The number of basis functions in the system.
     """
 
-    def __init__(self, system, use_aux_corr=False, store_B_pQq=True):
-        self.store_B_pQq = store_B_pQq
+    def __init__(self, system, use_aux_corr=False, store_B_nQm=True):
+        self.store_B_nQm = store_B_nQm
         self.system = system
         self.use_aux_corr = use_aux_corr
         self.nbf = system.nbf
 
     @cached_property
-    def B_Qpq(self):
+    def B_Pmn(self):
         if isinstance(self.system, forte2.ModelSystem):
             res, naux = self._build_B_model_system()
         else:
@@ -70,9 +70,9 @@ class FockBuilder:
         return res
 
     @cached_property
-    def B_pQq(self):
-        return self.B_Qpq.transpose(2, 0, 1).copy()
-    
+    def B_nQm(self):
+        return self.B_Pmn.transpose(2, 0, 1).copy()
+
     def _build_B_model_system(self):
         nbf = self.system.nbf
         eri = self.system.eri.reshape((nbf**2,) * 2)
@@ -98,10 +98,10 @@ class FockBuilder:
         naux = B.shape[0]
 
         memory_gb = 8 * (naux * nbf**2) / (1024**3)
-        if self.store_B_pQq:
+        if self.store_B_nQm:
             memory_gb *= 2
             logger.log_info1(
-                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_pQq)"
+                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_nQm)"
             )
         else:
             logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
@@ -115,10 +115,10 @@ class FockBuilder:
         nb = basis.size
         naux = auxiliary_basis.size
         memory_gb = 8 * (naux**2 + naux * nb**2) / (1024**3)
-        if self.store_B_pQq:
+        if self.store_B_nQm:
             memory_gb += 8 * (naux * nb**2) / (1024**3)
             logger.log_info1(
-                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_pQq)"
+                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_nQm)"
             )
         else:
             logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
@@ -146,7 +146,7 @@ class FockBuilder:
 
     def build_J(self, D):
         J = [
-            np.einsum("Pmn,Prs,sr->mn", self.B_Qpq, self.B_Qpq, Di, optimize=True)
+            np.einsum("Pmn,Prs,sr->mn", self.B_Pmn, self.B_Pmn, Di, optimize=True)
             for Di in D
         ]
         return J
@@ -158,7 +158,7 @@ class FockBuilder:
             ), "C must be a list with one element for two-component systems."
             C = [C[0][: self.nbf, :], C[0][self.nbf :, :]]
         # equivalent to "rPm,mi->rPi"
-        Y = [self.B_pQq @ Ci.conj() for Ci in C]
+        Y = [self.B_nQm @ Ci.conj() for Ci in C]
         if self.system.two_component:
             K = []
             for Yi in Y:
@@ -176,7 +176,7 @@ class FockBuilder:
                 len(C) == 1
             ), "C must be a list with one element for two-component systems."
             C = [C[0][: self.nbf, :], C[0][self.nbf :, :]]
-        Y = [np.einsum("Pmr,mi->Pri", self.B_Qpq, Ci.conj(), optimize=True) for Ci in C]
+        Y = [np.einsum("Pmr,mi->Pri", self.B_Pmn, Ci.conj(), optimize=True) for Ci in C]
         if self.system.two_component:
             K = []
             for Yi in Y:
@@ -187,7 +187,7 @@ class FockBuilder:
         return K
 
     def build_K(self, C):
-        if self.store_B_pQq:
+        if self.store_B_nQm:
             return self._build_K_pQq(C)
         else:
             return self._build_K_Qpq(C)
@@ -309,8 +309,8 @@ class FockBuilder:
         """
         V = np.einsum(
             "Pmn,Prs,mi,rj,nk,sl->ijkl",
-            self.B_Qpq,
-            self.B_Qpq,
+            self.B_Pmn,
+            self.B_Pmn,
             C1.conj(),
             C2.conj(),
             C3,
@@ -394,8 +394,8 @@ class FockBuilder:
                 continue
             V += np.einsum(
                 "Pmn,Prs,mi,rj,nk,sl->ijkl",
-                self.B_Qpq,
-                self.B_Qpq,
+                self.B_Pmn,
+                self.B_Pmn,
                 C1[s1, :].conj(),
                 C2[s2, :].conj(),
                 C3[s3, :],
