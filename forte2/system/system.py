@@ -153,10 +153,11 @@ class System:
         else:
             self.fock_builder_corr = self.fock_builder
 
-
     def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
-        self.geom_helper = GeometryHelper(self.atoms, symmetry=self.symmetry, tol=self.symmetry_tol)
+        self.geom_helper = GeometryHelper(
+            self.atoms, symmetry=self.symmetry, tol=self.symmetry_tol
+        )
         self.atoms = self.geom_helper.atoms
         self.Zsum = self.geom_helper.Zsum
         self.natoms = self.geom_helper.natoms
@@ -210,8 +211,8 @@ class System:
         )
 
         self.nbf = self.basis.size
-        self.naux = self.auxiliary_basis.size if self.auxiliary_basis else 0
-        self.nminao = self.minao_basis.size if self.minao_basis else 0
+        self.naux = self.auxiliary_basis.size if self.auxiliary_basis else None
+        self.nminao = self.minao_basis.size if self.minao_basis else None
 
     def _init_x2c(self):
         if self.x2c_type is not None:

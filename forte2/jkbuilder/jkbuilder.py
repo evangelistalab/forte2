@@ -66,6 +66,8 @@ class FockBuilder:
                 res, naux = self._build_B_cholesky(
                     self.system.basis, self.system.cholesky_tol
                 )
+                # set the number of auxiliary basis, unknown before this point
+                self.system.naux = naux
         self.naux = naux
         return res
 
