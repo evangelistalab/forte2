@@ -158,7 +158,10 @@ class CISpinAdapter {
     };
 
     /// @brief Return the number of determinants in a CSF
-    size_t ncsf(size_t n) const { return csf_to_det_bounds_[n + 1] - csf_to_det_bounds_[n]; }
+    size_t ndets_in_csf(size_t n) const {
+        return csf_to_det_bounds_[n + 1] - csf_to_det_bounds_[n];
+    }
+
     /// @brief Return an iterable object for the CSFs
     CSFIterable csf(size_t n) const { return CSFIterable(*this, n); }
 
