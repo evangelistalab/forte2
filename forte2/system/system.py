@@ -83,7 +83,7 @@ class System:
         The basis set for the system, built from the provided `basis_set`.
     auxiliary_basis : ints.Basis
         The auxiliary basis set for the system, built from the provided `auxiliary_basis_set`.
-    auxiliary_basis_set_corr : ints.Basis
+    auxiliary_basis_corr : ints.Basis
         The auxiliary basis set for correlated calculations, built from the provided `auxiliary_basis_set_corr`.
     minao_basis : ints.Basis
         The minimal atomic orbital basis set, built from the provided `minao_basis_set`.
@@ -145,7 +145,13 @@ class System:
         )
         self.fock_builder = FockBuilder(self)
         # The B tensors here are lazily evaluated, so no overhead if not used
-        self.fock_builder_corr = FockBuilder(self, use_aux_corr=True)
+        if self.auxiliary_basis_set_corr is not None:
+            logger.log_warning(
+                "Building separate auxiliary basis for correlated calculations!"
+            )
+            self.fock_builder_corr = FockBuilder(self, use_aux_corr=True)
+        else:
+            self.fock_builder_corr = self.fock_builder
 
 
     def _init_geometry(self):
@@ -187,15 +193,15 @@ class System:
                 logger.log_warning(
                     "Using a separate auxiliary basis is not recommended!"
                 )
-                self.auxiliary_basis_set_corr = build_basis(
+                self.auxiliary_basis_corr = build_basis(
                     self.auxiliary_basis_set_corr,
                     self.geom_helper,
                 )
             else:
-                self.auxiliary_basis_set_corr = self.auxiliary_basis
+                self.auxiliary_basis_corr = self.auxiliary_basis
         else:
             self.auxiliary_basis = None
-            self.auxiliary_basis_set_corr = None
+            self.auxiliary_basis_corr = None
 
         self.minao_basis = (
             build_basis(self.minao_basis_set, self.geom_helper)

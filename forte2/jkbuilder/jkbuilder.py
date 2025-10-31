@@ -21,7 +21,7 @@ class FockBuilder:
         The system for which to build the Fock matrix.
         If a ModelSystem is provided, it will decompose the 4D ERI tensor using Cholesky decomposition with complete pivoting.
     use_aux_corr : bool, optional, default=False
-        If True, uses ``system.auxiliary_basis_set_corr`` instead of ``system.auxiliary_basis``.
+        If True, uses ``system.auxiliary_basis_corr`` instead of ``system.auxiliary_basis``.
     store_B_pQq : bool, optional, default=True
         If True, stores a (Nao, Naux, Nao)-shaped copy of the B tensor for faster K builds.
         This comes at the cost of doubling the memory footprint of the ``FockBuilder`` object.
@@ -53,9 +53,9 @@ class FockBuilder:
                 basis = self.system.basis
                 if self.use_aux_corr:
                     assert hasattr(
-                        self.system, "auxiliary_basis_set_corr"
-                    ), "The system does not have an auxiliary_basis_set_corr defined."
-                    aux_basis = self.system.auxiliary_basis_set_corr
+                        self.system, "auxiliary_basis_corr"
+                    ), "The system does not have an auxiliary_basis_corr defined."
+                    aux_basis = self.system.auxiliary_basis_corr
                 else:
                     assert hasattr(
                         self.system, "auxiliary_basis"
