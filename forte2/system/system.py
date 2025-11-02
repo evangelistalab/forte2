@@ -11,6 +11,7 @@ from forte2.helpers.matrix_functions import (
     block_diag_2x2,
 )
 from forte2.x2c import get_hcore_x2c
+from forte2.jkbuilder import FockBuilder
 from .build_basis import build_basis
 from .geom_utils import GeometryHelper, parse_geometry
 
@@ -82,7 +83,7 @@ class System:
         The basis set for the system, built from the provided `basis_set`.
     auxiliary_basis : ints.Basis
         The auxiliary basis set for the system, built from the provided `auxiliary_basis_set`.
-    auxiliary_basis_set_corr : ints.Basis
+    auxiliary_basis_corr : ints.Basis
         The auxiliary basis set for correlated calculations, built from the provided `auxiliary_basis_set_corr`.
     minao_basis : ints.Basis
         The minimal atomic orbital basis set, built from the provided `minao_basis_set`.
@@ -142,10 +143,21 @@ class System:
             self.linear_dep_trigger,
             self.ortho_thresh,
         )
+        self.fock_builder = FockBuilder(self)
+        # The B tensors here are lazily evaluated, so no overhead if not used
+        if self.auxiliary_basis_set_corr is not None:
+            logger.log_warning(
+                "Building separate auxiliary basis for correlated calculations!"
+            )
+            self.fock_builder_corr = FockBuilder(self, use_aux_corr=True)
+        else:
+            self.fock_builder_corr = self.fock_builder
 
     def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
-        self.geom_helper = GeometryHelper(self.atoms, symmetry=self.symmetry, tol=self.symmetry_tol)
+        self.geom_helper = GeometryHelper(
+            self.atoms, symmetry=self.symmetry, tol=self.symmetry_tol
+        )
         self.atoms = self.geom_helper.atoms
         self.Zsum = self.geom_helper.Zsum
         self.natoms = self.geom_helper.natoms
@@ -182,15 +194,15 @@ class System:
                 logger.log_warning(
                     "Using a separate auxiliary basis is not recommended!"
                 )
-                self.auxiliary_basis_set_corr = build_basis(
+                self.auxiliary_basis_corr = build_basis(
                     self.auxiliary_basis_set_corr,
                     self.geom_helper,
                 )
             else:
-                self.auxiliary_basis_set_corr = self.auxiliary_basis
+                self.auxiliary_basis_corr = self.auxiliary_basis
         else:
             self.auxiliary_basis = None
-            self.auxiliary_basis_set_corr = None
+            self.auxiliary_basis_corr = None
 
         self.minao_basis = (
             build_basis(self.minao_basis_set, self.geom_helper)
@@ -199,8 +211,8 @@ class System:
         )
 
         self.nbf = self.basis.size
-        self.naux = self.auxiliary_basis.size if self.auxiliary_basis else 0
-        self.nminao = self.minao_basis.size if self.minao_basis else 0
+        self.naux = self.auxiliary_basis.size if self.auxiliary_basis else None
+        self.nminao = self.minao_basis.size if self.minao_basis else None
 
     def _init_x2c(self):
         if self.x2c_type is not None:
@@ -342,6 +354,8 @@ class ModelSystem:
         self.Xorth = invsqrt_matrix(self.ints_overlap(), tol=1e-13)
         self.symmetry = False
         self.point_group = "C1"
+        self.fock_builder = FockBuilder(self)
+        self.fock_builder_corr = self.fock_builder
 
     def ints_overlap(self):
         return self.overlap

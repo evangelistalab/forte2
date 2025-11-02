@@ -7,7 +7,7 @@ from forte2.base_classes.active_space_solver import (
     RelActiveSpaceSolver,
 )
 from forte2.orbitals import Semicanonicalizer
-from forte2.jkbuilder import FockBuilder, RestrictedMOIntegrals, SpinorbitalIntegrals
+from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers import logger, LBFGS, DIIS
 from forte2.system.basis_utils import BasisInfo
 from forte2.ci.ci_utils import (
@@ -186,7 +186,7 @@ class MCOptimizer(ActiveSpaceSolver):
         """
         self._startup()
         self.Hcore = self.system.ints_hcore()  # hcore in AO basis
-        fock_builder = FockBuilder(self.system)
+        fock_builder = self.system.fock_builder
 
         # Intialize the two central objects for the two-step orbital-CI optimization:
         # orbital optimizer and CI optimizer
@@ -384,7 +384,6 @@ class MCOptimizer(ActiveSpaceSolver):
                 g1=g1,
                 C=self.C[0],
                 system=self.system,
-                fock_builder=fock_builder,
                 mix_inactive=not self.optimize_frozen_orbs,
                 mix_active=False,
             )
@@ -398,7 +397,6 @@ class MCOptimizer(ActiveSpaceSolver):
                     spinorbitals=self.mo_space.active_indices,
                     core_spinorbitals=self.mo_space.docc_indices,
                     use_aux_corr=True,
-                    fock_builder=fock_builder,  # avoid reinitialization of FockBuilder
                 )
             else:
                 ints = RestrictedMOIntegrals(
@@ -407,7 +405,6 @@ class MCOptimizer(ActiveSpaceSolver):
                     orbitals=self.mo_space.active_indices,
                     core_orbitals=self.mo_space.docc_indices,
                     use_aux_corr=True,
-                    fock_builder=fock_builder,  # avoid reinitialization of FockBuilder
                 )
             self.ci_solver.set_ints(ints.E, ints.H, ints.V)
             self.ci_solver.run()
