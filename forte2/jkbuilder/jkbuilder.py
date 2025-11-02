@@ -29,9 +29,9 @@ class FockBuilder:
     Attributes
     ----------
     B_Pmn : NDArray
-        The B tensor with shape (Naux, Nao, Nao).
+        The B tensor with shape (Naux, Nao, Nao). Lazily evaluated.
     B_nPm : NDArray
-        The B tensor with shape (Nao, Naux, Nao). Only stored if `store_B_nPm` is True.
+        The B tensor with shape (Nao, Naux, Nao). Lazily evaluated and only available if `store_B_nPm` is True.
     naux : int
         The number of auxiliary basis functions.
     nbf : int
@@ -73,7 +73,11 @@ class FockBuilder:
 
     @cached_property
     def B_nPm(self):
-        return self.B_Pmn.transpose(2, 0, 1).copy()
+        if not self.store_B_nPm:
+            raise AttributeError(
+                "B_nPm is not stored. Set store_B_nPm=True when initializing FockBuilder to enable this attribute."
+            )
+        return np.transpose(self.B_Pmn, (2, 0, 1))
 
     def _build_B_model_system(self):
         nbf = self.system.nbf
@@ -153,7 +157,7 @@ class FockBuilder:
         ]
         return J
 
-    def _build_K_pQq(self, C):
+    def _build_K_nPm(self, C):
         if self.system.two_component:
             assert (
                 len(C) == 1
@@ -172,7 +176,7 @@ class FockBuilder:
             K = [np.tensordot(Yi.conj(), Yi, axes=([1, 2], [1, 2])) for Yi in Y]
         return K
 
-    def _build_K_Qpq(self, C):
+    def _build_K_Pmn(self, C):
         if self.system.two_component:
             assert (
                 len(C) == 1
@@ -190,9 +194,9 @@ class FockBuilder:
 
     def build_K(self, C):
         if self.store_B_nPm:
-            return self._build_K_pQq(C)
+            return self._build_K_nPm(C)
         else:
-            return self._build_K_Qpq(C)
+            return self._build_K_Pmn(C)
 
     def build_JK(self, C):
         r"""
