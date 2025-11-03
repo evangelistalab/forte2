@@ -23,6 +23,7 @@ template <size_t N> class ConfigurationImpl : public BitArray<N> {
     using BitArray<N>::get_bit;
     using BitArray<N>::set_bit;
     using BitArray<N>::maskbit;
+    using Hash = typename BitArray<N>::Hash;
 
     /// the number of bits divided by two
     static constexpr size_t nbits_half = N / 2;
@@ -48,7 +49,9 @@ template <size_t N> class ConfigurationImpl : public BitArray<N> {
     /// Construct a configuration from a determinant object
     explicit ConfigurationImpl(const DeterminantImpl<N>& d) {
         for (size_t k = 0; k < nwords_half; ++k) {
+            // first half: doubly occupied
             words_[k] = d.words_[k] & d.words_[k + nwords_half];
+            // second half: singly occupied
             words_[k + nwords_half] = d.words_[k] ^ d.words_[k + nwords_half];
         }
     }

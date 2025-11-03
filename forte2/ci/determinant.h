@@ -1,6 +1,6 @@
 #pragma once
 
-#include <unordered_map>
+#include "helpers/unordered_dense.h"
 
 #include "determinant.hpp"
 #include "configuration.hpp"
@@ -15,6 +15,7 @@ using Determinant = DeterminantImpl<Norb2>;
 using Configuration = ConfigurationImpl<Norb2>;
 
 using det_vec = std::vector<Determinant>;
-template <typename T = double> using det_hash = std::unordered_map<Determinant, T>;
-using det_hash_it = std::unordered_map<Determinant, double>::iterator;
+
+template <typename T = double>
+using det_hash = ankerl::unordered_dense::map<Determinant, T, Determinant::Hash>;
 } // namespace forte2

@@ -1,9 +1,10 @@
 import numpy as np
 import scipy as sp
 import itertools
+from functools import cached_property
 
+import forte2
 from forte2 import ints
-from forte2.system import System, ModelSystem
 from forte2.helpers import logger
 from forte2.helpers.matrix_functions import cholesky_wrapper
 
@@ -20,44 +21,73 @@ class FockBuilder:
         The system for which to build the Fock matrix.
         If a ModelSystem is provided, it will decompose the 4D ERI tensor using Cholesky decomposition with complete pivoting.
     use_aux_corr : bool, optional, default=False
-        If True, uses ``system.auxiliary_basis_set_corr`` instead of ``system.auxiliary_basis``.
+        If True, uses ``system.auxiliary_basis_corr`` instead of ``system.auxiliary_basis``.
+    store_B_nPm : bool, optional, default=True
+        If True, stores a (Nao, Naux, Nao)-shaped copy of the B tensor for faster K builds.
+        This comes at the cost of doubling the memory footprint of the ``FockBuilder`` object.
+
+    Attributes
+    ----------
+    B_Pmn : NDArray
+        The B tensor with shape (Naux, Nao, Nao). Lazily evaluated.
+    B_nPm : NDArray
+        The B tensor with shape (Nao, Naux, Nao). Lazily evaluated and only available if `store_B_nPm` is True.
+    naux : int
+        The number of auxiliary basis functions.
+    nbf : int
+        The number of basis functions in the system.
     """
 
-    def __init__(self, system: System, use_aux_corr=False):
+    def __init__(self, system, use_aux_corr=False, store_B_nPm=True):
+        self.store_B_nPm = store_B_nPm
         self.system = system
-        if isinstance(system, ModelSystem):
-            # special handling for ModelSystem
-            nbf = system.nbf
-            eri = system.eri.reshape((nbf**2,) * 2)
-            self.B = cholesky_wrapper(eri, tol=-1)
-            self.B = self.B.reshape((self.B.shape[0], nbf, nbf))
-            system.naux = self.B.shape[0]
-            self.nbf = nbf
-            self.naux = system.naux
-            return
-
-        if not system.cholesky_tei:
-            basis = system.basis
-            if use_aux_corr:
-                assert hasattr(
-                    system, "auxiliary_basis_set_corr"
-                ), "The system does not have an auxiliary_basis_set_corr defined."
-                aux_basis = system.auxiliary_basis_set_corr
-            else:
-                assert hasattr(
-                    system, "auxiliary_basis"
-                ), "The system does not have an auxiliary_basis defined."
-                aux_basis = system.auxiliary_basis
-            self.B = self._build_B_density_fitting(basis, aux_basis)
-        else:
-            self.B, system.naux = self._build_B_cholesky(
-                system.basis, system.cholesky_tol
-            )
-        self.naux = system.naux
+        self.use_aux_corr = use_aux_corr
         self.nbf = system.nbf
 
-    @staticmethod
-    def _build_B_cholesky(basis, cholesky_tol):
+    @cached_property
+    def B_Pmn(self):
+        if isinstance(self.system, forte2.ModelSystem):
+            res, naux = self._build_B_model_system()
+        else:
+            if not self.system.cholesky_tei:
+                basis = self.system.basis
+                if self.use_aux_corr:
+                    assert hasattr(
+                        self.system, "auxiliary_basis_corr"
+                    ), "The system does not have an auxiliary_basis_corr defined."
+                    aux_basis = self.system.auxiliary_basis_corr
+                else:
+                    assert hasattr(
+                        self.system, "auxiliary_basis"
+                    ), "The system does not have an auxiliary_basis defined."
+                    aux_basis = self.system.auxiliary_basis
+                res, naux = self._build_B_density_fitting(basis, aux_basis)
+            else:
+                res, naux = self._build_B_cholesky(
+                    self.system.basis, self.system.cholesky_tol
+                )
+                # set the number of auxiliary basis, unknown before this point
+                self.system.naux = naux
+        self.naux = naux
+        return res
+
+    @cached_property
+    def B_nPm(self):
+        if not self.store_B_nPm:
+            raise AttributeError(
+                "B_nPm is not stored. Set store_B_nPm=True when initializing FockBuilder to enable this attribute."
+            )
+        return np.transpose(self.B_Pmn, (2, 0, 1))
+
+    def _build_B_model_system(self):
+        nbf = self.system.nbf
+        eri = self.system.eri.reshape((nbf**2,) * 2)
+        B = cholesky_wrapper(eri, tol=-1)
+        B = B.reshape((B.shape[0], nbf, nbf))
+        naux = B.shape[0]
+        return B, naux
+
+    def _build_B_cholesky(self, basis, cholesky_tol):
         # Compute the memory requirements
         nbf = basis.size
         memory_gb = 8 * (nbf**4) / (1024**3)
@@ -74,19 +104,30 @@ class FockBuilder:
         naux = B.shape[0]
 
         memory_gb = 8 * (naux * nbf**2) / (1024**3)
-        logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
+        if self.store_B_nPm:
+            memory_gb *= 2
+            logger.log_info1(
+                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_nPm)"
+            )
+        else:
+            logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
         logger.log_info1(f"Number of system basis functions: {nbf}")
         logger.log_info1(f"Number of auxiliary basis functions: {naux}")
 
         return B, naux
 
-    @staticmethod
-    def _build_B_density_fitting(basis, auxiliary_basis):
+    def _build_B_density_fitting(self, basis, auxiliary_basis):
         # Compute the memory requirements
         nb = basis.size
         naux = auxiliary_basis.size
         memory_gb = 8 * (naux**2 + naux * nb**2) / (1024**3)
-        logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
+        if self.store_B_nPm:
+            memory_gb += 8 * (naux * nb**2) / (1024**3)
+            logger.log_info1(
+                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_nPm)"
+            )
+        else:
+            logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
         logger.log_info1(f"Number of system basis functions: {nb}")
         logger.log_info1(f"Number of auxiliary basis functions: {naux}")
 
@@ -107,19 +148,41 @@ class FockBuilder:
         B = np.einsum("PQ,Qmn->Pmn", M_inv_sqrt, Pmn, optimize=True)
         del Pmn
 
-        return B
+        return B, naux
 
     def build_J(self, D):
-        J = [np.einsum("Pmn,Prs,sr->mn", self.B, self.B, Di, optimize=True) for Di in D]
+        J = [
+            np.einsum("Pmn,Prs,sr->mn", self.B_Pmn, self.B_Pmn, Di, optimize=True)
+            for Di in D
+        ]
         return J
 
-    def build_K(self, C):
+    def _build_K_nPm(self, C):
         if self.system.two_component:
             assert (
                 len(C) == 1
             ), "C must be a list with one element for two-component systems."
             C = [C[0][: self.nbf, :], C[0][self.nbf :, :]]
-        Y = [np.einsum("Pmr,mi->Pri", self.B, Ci.conj(), optimize=True) for Ci in C]
+        # equivalent to "rPm,mi->rPi"
+        Y = [self.B_nPm @ Ci.conj() for Ci in C]
+        if self.system.two_component:
+            K = []
+            for Yi in Y:
+                for Yj in Y:
+                    # equivalent to "mPi,nPi->mn"
+                    K.append(np.tensordot(Yi.conj(), Yj, axes=([1, 2], [1, 2])))
+        else:
+            # equivalent to "mPi,nPi->mn"
+            K = [np.tensordot(Yi.conj(), Yi, axes=([1, 2], [1, 2])) for Yi in Y]
+        return K
+
+    def _build_K_Pmn(self, C):
+        if self.system.two_component:
+            assert (
+                len(C) == 1
+            ), "C must be a list with one element for two-component systems."
+            C = [C[0][: self.nbf, :], C[0][self.nbf :, :]]
+        Y = [np.einsum("Pmr,mi->Pri", self.B_Pmn, Ci.conj(), optimize=True) for Ci in C]
         if self.system.two_component:
             K = []
             for Yi in Y:
@@ -129,6 +192,12 @@ class FockBuilder:
             K = [np.einsum("Pmi,Pni->mn", Yi.conj(), Yi, optimize=True) for Yi in Y]
         return K
 
+    def build_K(self, C):
+        if self.store_B_nPm:
+            return self._build_K_nPm(C)
+        else:
+            return self._build_K_Pmn(C)
+
     def build_JK(self, C):
         r"""
         Compute the Coulomb and exchange matrices for a given set of orbitals.
@@ -136,7 +205,7 @@ class FockBuilder:
         .. math::
 
             J_{\mu\nu} = \sum_{i}\sum_{\rho\sigma} (\mu\nu|\rho\sigma) C^*_{\rho i} C_{\sigma i}\\
-            K_{\mu\nu} = \sum_{i}\sum_{\rho\sigma} (\mu\rho|\nu\sigma) C^*_{\rho i} C_{\sigma i}
+            K_{\mu\nu} = \sum_{i}\sum_{\rho\sigma} (\mu\sigma|\rho\nu) C^*_{\rho i} C_{\sigma i}
 
         Parameters
         ----------
@@ -181,7 +250,7 @@ class FockBuilder:
 
         .. math::
             J_{\mu\nu} = \sum_{uv}\sum_{\rho\sigma} (\mu\nu|\rho\sigma) C^*_{\rho u} C_{\sigma v} \gamma_{uv}\\
-            K_{\mu\nu} = \sum_{uv}\sum_{\rho\sigma} (\mu\rho|\nu\sigma) C^*_{\rho u} C_{\sigma v} \gamma_{uv}
+            K_{\mu\nu} = \sum_{uv}\sum_{\rho\sigma} (\mu\sigma|\rho\nu) C^*_{\rho u} C_{\sigma v} \gamma_{uv}
 
         Parameters
         ----------
@@ -246,8 +315,8 @@ class FockBuilder:
         """
         V = np.einsum(
             "Pmn,Prs,mi,rj,nk,sl->ijkl",
-            self.B,
-            self.B,
+            self.B_Pmn,
+            self.B_Pmn,
             C1.conj(),
             C2.conj(),
             C3,
@@ -331,8 +400,8 @@ class FockBuilder:
                 continue
             V += np.einsum(
                 "Pmn,Prs,mi,rj,nk,sl->ijkl",
-                self.B,
-                self.B,
+                self.B_Pmn,
+                self.B_Pmn,
                 C1[s1, :].conj(),
                 C2[s2, :].conj(),
                 C3[s3, :],
