@@ -5,6 +5,7 @@ import numpy as np
 from forte2 import dsrg_utils
 from forte2.orbitals import Semicanonicalizer
 from .dsrg_base import DSRGBase
+from .utils import antisymmetrize_2body, cas_energy_given_cumulants
 
 MACHEPS = 1e-9
 TAYLOR_THRES = 1e-3
@@ -20,19 +21,12 @@ class DSRG_MRPT2(DSRGBase):
     """
     Driven similarity renormalization group second-order multireference perturbation theory (DSRG-MRPT2).
     """
+
     def get_integrals(self):
-        # always semi-canonicalize, to get the generalized Fock matrix
-        self.semicanonicalizer = Semicanonicalizer(
-            system=self.system,
-            mo_space=self.mo_space,
-            fock_builder=self.fock_builder,
-            mix_active=False,
-            # do not mix correlated and frozen orbitals after MCSCF
-            mix_inactive=False,
-        )
-        g1 = self.parent_method.make_average_1rdm()
+        g1 = self.ci_solver.make_average_1rdm()
+        # self._C are the MCSCF canonical orbitals. We always use canonical orbitals to build the generalized Fock matrix.
         self.semicanonicalizer.semi_canonicalize(g1=g1, C_contig=self._C)
-        self._C = self.semicanonicalizer.C_semican.copy()
+        self._C_semican = self.semicanonicalizer.C_semican.copy()
         self.fock = self.semicanonicalizer.fock_semican.copy()
         self.eps = self.semicanonicalizer.eps_semican.copy()
         self.delta_actv = self.eps[self.actv][:, None] - self.eps[self.actv][None, :]
@@ -40,16 +34,18 @@ class DSRG_MRPT2(DSRGBase):
 
         if self.two_component:
             ints = dict()
-            B = self.fock_builder.B
+            B = self.fock_builder.B_Pmn
             nbf = self.system.nbf
             B_so = np.zeros((B.shape[0], nbf * 2, nbf * 2), dtype=complex)
             B_so[:, :nbf, :nbf] = B
             B_so[:, nbf:, nbf:] = B
-            ints["B"] = np.einsum("Bpq,pi,qj->Bij", B_so, self._C.conj(), self._C)
+            ints["B"] = np.einsum(
+                "Bpq,pi,qj->Bij", B_so, self._C_semican.conj(), self._C_semican
+            )
             ints["F"] = self.fock - np.diag(np.diag(self.fock))  # remove diagonal
 
             cumulants = dict()
-            g1 = self.parent_method.make_average_1rdm()
+            # g1 = self.ci_solver.make_average_1rdm()
             cumulants["gamma1"] = np.einsum(
                 "ip,ij,jq->pq", self.Uactv, g1, self.Uactv.conj(), optimize=True
             )
@@ -57,7 +53,7 @@ class DSRG_MRPT2(DSRGBase):
                 np.eye(cumulants["gamma1"].shape[0], dtype=complex)
                 - cumulants["gamma1"]
             )
-            l2 = self.parent_method.make_average_2cumulant()
+            l2 = self.ci_solver.make_average_2cumulant()
             cumulants["lambda2"] = np.einsum(
                 "ip,jq,ijkl,kr,ls->pqrs",
                 self.Uactv,
@@ -67,7 +63,7 @@ class DSRG_MRPT2(DSRGBase):
                 self.Uactv.conj(),
                 optimize=True,
             )
-            l3 = self.parent_method.make_average_3cumulant()
+            l3 = self.ci_solver.make_average_3cumulant()
             cumulants["lambda3"] = np.einsum(
                 "ip,jq,kr,ijklmn,ls,mt,nu->pqrstu",
                 self.Uactv,
@@ -81,6 +77,13 @@ class DSRG_MRPT2(DSRGBase):
             )
 
             ints["V"] = dict()
+            ints["V"]["aaaa"] = np.einsum(
+                "Bux,Bvy->uvxy",
+                ints["B"][:, self.actv, self.actv],
+                ints["B"][:, self.actv, self.actv],
+                optimize=True,
+            )
+            ints["V"]["aaaa"] -= ints["V"]["aaaa"].swapaxes(2, 3)
             ints["V"]["caaa"] = np.einsum(
                 "Biu,Bvw->ivuw",
                 ints["B"][:, self.core, self.actv],
@@ -121,17 +124,31 @@ class DSRG_MRPT2(DSRGBase):
                 optimize=True,
             )
             ints["V"]["aavv"] -= ints["V"]["aavv"].swapaxes(2, 3)
+            ints["V"]["caca"] = np.einsum(
+                "Bij,Buv->iujv",
+                ints["B"][:, self.core, self.core],
+                ints["B"][:, self.actv, self.actv],
+                optimize=True,
+            )
             ints["eps"] = dict()
             ints["eps"]["core"] = self.eps[self.core].copy()
             ints["eps"]["actv"] = self.eps[self.actv].copy()
             ints["eps"]["virt"] = self.eps[self.virt].copy()
+            # <Psi_0 | bare H | Psi_0>, where Psi_0 is the current (possibly relaxed) reference
+
+            ints["E"] = cas_energy_given_cumulants(
+                self.E_core_orig, self.H_orig, self.V_orig, g1, l2
+            )
+
             return ints, cumulants
         else:
             raise NotImplementedError("Only two-component integrals are implemented.")
 
-    def solve_dsrg(self):
+    def solve_dsrg(self, form_hbar=False):
         self.T1, self.T2 = self._build_tamps()
         self.F_tilde, self.V_tilde = self._renormalize_integrals()
+        if form_hbar:
+            self.hbar_aa_df = np.zeros((self.nact, self.nact), dtype=complex)
         E = self._compute_pt2_energy(
             self.F_tilde,
             self.V_tilde,
@@ -141,14 +158,80 @@ class DSRG_MRPT2(DSRGBase):
             self.cumulants["eta1"],
             self.cumulants["lambda2"],
             self.cumulants["lambda3"],
+            form_hbar=form_hbar,
         )
-        self.E = E
+        print(E)
+        print(self.ints["E"])
+        E += self.ints["E"]
+        print(E)
         return E
 
     def do_reference_relaxation(self):
-        raise NotImplementedError(
-            "Reference relaxation for DSRG-MRPT2 is not yet implemented."
+        _hbar2 = self.ints["V"]["aaaa"].copy()
+        _C2 = 0.5 * self._compute_Hbar_aaaa(
+            self.F_tilde,
+            self.V_tilde,
+            self.T1,
+            self.T2,
+            self.cumulants["gamma1"],
+            self.cumulants["eta1"],
         )
+        # 0.5*[H, T-T+] = 0.5*([H, T] + [H, T]+)
+        _hbar2 += _C2 + np.einsum("ijab->abij", np.conj(_C2))
+
+        _hbar1 = self.fock[self.actv, self.actv].copy()
+        _C1 = 0.5 * self._compute_Hbar_aa(
+            self.F_tilde,
+            self.V_tilde,
+            self.T1,
+            self.T2,
+            self.cumulants["gamma1"],
+            self.cumulants["eta1"],
+            self.cumulants["lambda2"],
+        )
+        # 0.5*[H, T-T+] = 0.5*([H, T] + [H, T]+)
+        _hbar1 += _C1 + np.einsum("ia->ai", np.conj(_C1))
+
+        # see eq B.3. of JCP 146, 124132 (2017), but instead of gamma2, use lambda2
+        _e_scalar = (
+            -np.einsum("uv,uv->", _hbar1, self.cumulants["gamma1"])
+            - 0.25 * np.einsum("uvxy,uvxy->", _hbar2, self.cumulants["lambda2"])
+            + 0.75
+            * np.einsum(
+                "uvxy,ux,vy->",
+                _hbar2,
+                self.cumulants["gamma1"],
+                self.cumulants["gamma1"],
+            )
+            + 0.25
+            * np.einsum(
+                "uvxy,uy,vx->",
+                _hbar2,
+                self.cumulants["gamma1"],
+                self.cumulants["gamma1"],
+            )
+        ) + self.E
+
+        _hbar1 -= np.einsum("uxvy,xy->uv", _hbar2, self.cumulants["gamma1"])
+
+        _hbar1_canon = np.einsum(
+            "ip,pq,jq->ij", self.Uactv, _hbar1, self.Uactv.conj(), optimize=True
+        )
+        _hbar2_canon = np.einsum(
+            "ip,jq,pqrs,kr,ls->ijkl",
+            self.Uactv,
+            self.Uactv,
+            _hbar2,
+            self.Uactv.conj(),
+            self.Uactv.conj(),
+            optimize=True,
+        )
+
+        self.ci_solver.set_ints(_e_scalar, _hbar1_canon, _hbar2_canon)
+        self.ci_solver.run(use_asym_ints=True)
+        e_relaxed = self.ci_solver.compute_average_energy()
+        print(e_relaxed)
+        return e_relaxed
 
     def _build_tamps(self):
         # 1b: ca, cv, av
@@ -313,23 +396,58 @@ class DSRG_MRPT2(DSRGBase):
         )
         return F_tilde, V_tilde
 
-    def _compute_pt2_energy(self, F, V, T1, T2, gamma1, eta1, lambda2, lambda3):
+    def _compute_pt2_energy(
+        self, F, V, T1, T2, gamma1, eta1, lambda2, lambda3, form_hbar=False
+    ):
         E = 0.0
 
-        E += +1.000 * np.einsum("iu,iv,vu->", F["ca"], T1["ca"], eta1, optimize=True)
-        E += +1.000 * np.einsum("ia,ia->", F["cv"], T1["cv"], optimize=True)
-        E += +1.000 * np.einsum("ua,va,uv->", F["av"], T1["av"], gamma1, optimize=True)
-        E += -0.500 * np.einsum(
-            "iu,ixvw,vwux->", F["ca"], T2["caaa"], lambda2, optimize=True
+        E += +1.000 * np.einsum(
+            "iu,iv,vu->",
+            F["ca"],
+            T1["ca"],
+            eta1,
+            optimize=True,
+        )
+        E += +1.000 * np.einsum(
+            "ia,ia->",
+            F["cv"],
+            T1["cv"],
+            optimize=True,
+        )
+        E += +1.000 * np.einsum(
+            "ua,va,uv->",
+            F["av"],
+            T1["av"],
+            gamma1,
+            optimize=True,
         )
         E += -0.500 * np.einsum(
-            "ua,wxva,uvwx->", F["av"], T2["aaav"], lambda2, optimize=True
+            "iu,ixvw,vwux->",
+            F["ca"],
+            T2["caaa"],
+            lambda2,
+            optimize=True,
         )
         E += -0.500 * np.einsum(
-            "iu,ivwx,uvwx->", T1["ca"], V["caaa"], lambda2, optimize=True
+            "ua,wxva,uvwx->",
+            F["av"],
+            T2["aaav"],
+            lambda2,
+            optimize=True,
         )
         E += -0.500 * np.einsum(
-            "ua,vwxa,vwux->", T1["av"], V["aaav"], lambda2, optimize=True
+            "iu,ivwx,uvwx->",
+            T1["ca"],
+            V["caaa"],
+            lambda2,
+            optimize=True,
+        )
+        E += -0.500 * np.einsum(
+            "ua,vwxa,vwux->",
+            T1["av"],
+            V["aaav"],
+            lambda2,
+            optimize=True,
         )
         E += +0.250 * np.einsum(
             "ijuv,ijwx,vx,uw->",
@@ -441,8 +559,8 @@ class DSRG_MRPT2(DSRGBase):
             optimize=True,
         )
         E += self._compute_pt2_energy_ccvv()
-        E += self._compute_pt2_energy_cavv()
-        E += self._compute_pt2_energy_ccav()
+        E += self._compute_pt2_energy_cavv(form_hbar=form_hbar)
+        E += self._compute_pt2_energy_ccav(form_hbar=form_hbar)
 
         return E
 
@@ -474,12 +592,19 @@ class DSRG_MRPT2(DSRGBase):
 
         return E
 
-    def _compute_pt2_energy_cavv(self):
+    def _compute_pt2_energy_cavv(self, form_hbar=False):
         # E += +0.500 * np.einsum(
         #     "iuab,ivab,vu->",
         #     T2["cavv"],
         #     V["cavv"],
         #     gamma1,
+        #     optimize=True,
+        # )
+        # If relaxing the reference, also compute the cavv contribution to Hbar_aa
+        # _F += +0.500 * np.einsum(
+        #     "iuab,ivab->uv",
+        #     T2["cavv"],
+        #     V["cavv"],
         #     optimize=True,
         # )
         E = 0.0
@@ -512,10 +637,17 @@ class DSRG_MRPT2(DSRGBase):
                 self.cumulants["gamma1"],
                 optimize=True,
             )
+            if form_hbar:
+                self.hbar_aa_df += 0.500 * np.einsum(
+                    "uab,vab->uv",
+                    Vbare_i.conj(),
+                    Vr_i,
+                    optimize=True,
+                )
 
         return E
 
-    def _compute_pt2_energy_ccav(self):
+    def _compute_pt2_energy_ccav(self, form_hbar=False):
         # E += +0.500 * np.einsum(
         #     "ijua,ijva,uv->",
         #     T2["ccav"],
@@ -523,6 +655,14 @@ class DSRG_MRPT2(DSRGBase):
         #     eta1,
         #     optimize=True,
         # )
+        # If relaxing the reference, also compute the ccav contribution to Hbar_aa
+        # _F += -0.500 * np.einsum(
+        #     "ijua,ijva->vu",
+        #     T2["ccav"],
+        #     V["ccav"],
+        #     optimize=True,
+        # )
+
         E = 0.0
         Vbare_i = np.empty((self.ncore, self.nact, self.nvirt), dtype=complex)
         Vtmp = np.empty((self.ncore, self.nact, self.nvirt), dtype=complex)
@@ -553,5 +693,272 @@ class DSRG_MRPT2(DSRGBase):
                 self.cumulants["eta1"],
                 optimize=True,
             )
+            if form_hbar:
+                self.hbar_aa_df += -0.500 * np.einsum(
+                    "jua,jva->vu",
+                    Vbare_i.conj(),
+                    Vr_i,
+                    optimize=True,
+                )
 
         return E
+
+    def _compute_Hbar_aaaa(self, F, V, T1, T2, gamma1, eta1):
+        _V = np.zeros((self.nact,) * 4, dtype=complex)
+        _V += -0.500 * np.einsum(
+            "ua,wxva->wxuv",
+            F["av"],
+            T2["aaav"],
+            optimize=True,
+        )
+        _V += -0.500 * np.einsum(
+            "iu,ixvw->uxvw",
+            F["ca"],
+            T2["caaa"],
+            optimize=True,
+        )
+        _V += -0.500 * np.einsum(
+            "iu,ivwx->wxuv",
+            T1["ca"],
+            V["caaa"],
+            optimize=True,
+        )
+        _V += -0.500 * np.einsum(
+            "ua,vwxa->uxvw",
+            T1["av"],
+            V["aaav"],
+            optimize=True,
+        )
+        _V += +0.125 * np.einsum(
+            "uvab,wxab->uvwx",
+            T2["aavv"],
+            V["aavv"],
+            optimize=True,
+        )
+        _V += +0.250 * np.einsum(
+            "uvya,wxza,yz->uvwx",
+            T2["aaav"],
+            V["aaav"],
+            eta1,
+            optimize=True,
+        )
+        _V += +0.125 * np.einsum(
+            "ijuv,ijwx->wxuv",
+            T2["ccaa"],
+            V["ccaa"],
+            optimize=True,
+        )
+        _V += +0.250 * np.einsum(
+            "iyuv,izwx,zy->wxuv",
+            T2["caaa"],
+            V["caaa"],
+            gamma1,
+            optimize=True,
+        )
+        _V += +1.000 * np.einsum(
+            "ivua,iwxa->vxuw",
+            T2["caav"],
+            V["caav"],
+            optimize=True,
+        )
+        _V += +1.000 * np.einsum(
+            "ivuy,iwxz,yz->vxuw",
+            T2["caaa"],
+            V["caaa"],
+            eta1,
+            optimize=True,
+        )
+        _V += +1.000 * np.einsum(
+            "vyua,wzxa,zy->vxuw",
+            T2["aaav"],
+            V["aaav"],
+            gamma1,
+            optimize=True,
+        )
+
+        return antisymmetrize_2body(_V.conj(), "aaaa")
+
+    def _compute_Hbar_aa(self, F, V, T1, T2, gamma1, eta1, lambda2):
+        _F = self.hbar_aa_df.copy()
+        _F += -1.000 * np.einsum(
+            "iu,iv->uv",
+            F["ca"],
+            T1["ca"],
+            optimize=True,
+        )
+        _F += -1.000 * np.einsum(
+            "iw,ivux,xw->vu",
+            F["ca"],
+            T2["caaa"],
+            eta1,
+            optimize=True,
+        )
+        _F += -1.000 * np.einsum(
+            "ia,ivua->vu",
+            F["cv"],
+            T2["caav"],
+            optimize=True,
+        )
+        _F += +1.000 * np.einsum(
+            "ua,va->vu",
+            F["av"],
+            T1["av"],
+            optimize=True,
+        )
+        _F += +1.000 * np.einsum(
+            "wa,vxua,wx->vu",
+            F["av"],
+            T2["aaav"],
+            gamma1,
+            optimize=True,
+        )
+        _F += -1.000 * np.einsum(
+            "iw,iuvx,wx->vu",
+            T1["ca"],
+            V["caaa"],
+            eta1,
+            optimize=True,
+        )
+        _F += -1.000 * np.einsum(
+            "ia,iuva->vu",
+            T1["cv"],
+            V["caav"],
+            optimize=True,
+        )
+        _F += +1.000 * np.einsum(
+            "wa,uxva,xw->vu",
+            T1["av"],
+            V["aaav"],
+            gamma1,
+            optimize=True,
+        )
+        _F += -0.500 * np.einsum(
+            "ijuw,ijvx,wx->vu",
+            T2["ccaa"],
+            V["ccaa"],
+            eta1,
+            optimize=True,
+        )
+        _F += +0.500 * np.einsum(
+            "ivuw,ixyz,wxyz->vu",
+            T2["caaa"],
+            V["caaa"],
+            lambda2,
+            optimize=True,
+        )
+        _F += -1.000 * np.einsum(
+            "ixuw,iyvz,wz,yx->vu",
+            T2["caaa"],
+            V["caaa"],
+            eta1,
+            gamma1,
+            optimize=True,
+        )
+        _F += -1.000 * np.einsum(
+            "ixuw,iyvz,wyxz->vu",
+            T2["caaa"],
+            V["caaa"],
+            lambda2,
+            optimize=True,
+        )
+        # _F += -0.500 * np.einsum(
+        #     "ijua,ijva->vu",
+        #     T2["ccav"],
+        #     V["ccav"],
+        #     optimize=True,
+        # )
+        _F += -1.000 * np.einsum(
+            "iwua,ixva,xw->vu",
+            T2["caav"],
+            V["caav"],
+            gamma1,
+            optimize=True,
+        )
+        _F += -0.500 * np.einsum(
+            "vwua,xyza,xywz->vu",
+            T2["aaav"],
+            V["aaav"],
+            lambda2,
+            optimize=True,
+        )
+        _F += -0.500 * np.einsum(
+            "wxua,yzva,zx,yw->vu",
+            T2["aaav"],
+            V["aaav"],
+            gamma1,
+            gamma1,
+            optimize=True,
+        )
+        _F += -0.250 * np.einsum(
+            "wxua,yzva,yzwx->vu",
+            T2["aaav"],
+            V["aaav"],
+            lambda2,
+            optimize=True,
+        )
+        _F += +0.500 * np.einsum(
+            "iuwx,ivyz,xz,wy->uv",
+            T2["caaa"],
+            V["caaa"],
+            eta1,
+            eta1,
+            optimize=True,
+        )
+        _F += +0.250 * np.einsum(
+            "iuwx,ivyz,wxyz->uv",
+            T2["caaa"],
+            V["caaa"],
+            lambda2,
+            optimize=True,
+        )
+        _F += -0.500 * np.einsum(
+            "iywx,iuvz,wxyz->vu",
+            T2["caaa"],
+            V["caaa"],
+            lambda2,
+            optimize=True,
+        )
+        _F += +1.000 * np.einsum(
+            "iuwa,ivxa,wx->uv",
+            T2["caav"],
+            V["caav"],
+            eta1,
+            optimize=True,
+        )
+        _F += +1.000 * np.einsum(
+            "uxwa,vyza,wz,yx->uv",
+            T2["aaav"],
+            V["aaav"],
+            eta1,
+            gamma1,
+            optimize=True,
+        )
+        _F += +1.000 * np.einsum(
+            "uxwa,vyza,wyxz->uv",
+            T2["aaav"],
+            V["aaav"],
+            lambda2,
+            optimize=True,
+        )
+        _F += +0.500 * np.einsum(
+            "xywa,uzva,wzxy->vu",
+            T2["aaav"],
+            V["aaav"],
+            lambda2,
+            optimize=True,
+        )
+        # _F += +0.500 * np.einsum(
+        #     "iuab,ivab->uv",
+        #     T2["cavv"],
+        #     V["cavv"],
+        #     optimize=True,
+        # )
+        _F += +0.500 * np.einsum(
+            "uwab,vxab,xw->uv",
+            T2["aavv"],
+            V["aavv"],
+            gamma1,
+            optimize=True,
+        )
+
+        return _F.conj()

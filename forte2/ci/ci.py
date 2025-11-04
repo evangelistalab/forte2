@@ -213,7 +213,7 @@ class _CIBase:
             self.b_det = np.zeros((self.ndet))
             self.sigma_det = np.zeros((self.ndet))
 
-    def run(self):
+    def run(self, use_asym_ints=False):
         if not self.executed:
             self._ci_solver_startup()
 
@@ -227,6 +227,7 @@ class _CIBase:
                 self.ints.H,
                 self.ints.V,
                 self.log_level,
+                use_asym_ints,
             )
         else:
             self.ci_sigma_builder = CISigmaBuilder(
@@ -1714,14 +1715,14 @@ class RelCISolver(RelActiveSpaceSolver):
                 )
             )
 
-    def run(self):
+    def run(self, use_asym_ints=False):
         if self.first_run:
             self._startup()
             self.first_run = False
 
         self.evals_per_solver = []
         for ci_solver in self.sub_solvers:
-            ci_solver.run()
+            ci_solver.run(use_asym_ints=use_asym_ints)
             self.evals_per_solver.append(ci_solver.evals)
 
         self.evals_flat = np.concatenate(self.evals_per_solver)

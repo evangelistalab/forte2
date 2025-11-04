@@ -5,8 +5,7 @@ import numpy as np
 
 from forte2.base_classes import SystemMixin, MOsMixin, MOSpaceMixin, ActiveSpaceSolver
 from forte2.helpers import logger
-from forte2.jkbuilder import FockBuilder
-
+from forte2.orbitals import Semicanonicalizer
 
 @dataclass
 class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
@@ -94,7 +93,6 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
         self.two_component = self.system.two_component
 
         MOSpaceMixin.copy_from_upstream(self, self.parent_method)
-        perm = self.mo_space.orig_to_contig
         self.ncorr = self.mo_space.corr.stop - self.mo_space.corr.start
         self.ncore = self.mo_space.core.stop - self.mo_space.core.start
         self.nact = self.mo_space.actv.stop - self.mo_space.actv.start
@@ -112,34 +110,54 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
         self.pv = slice(self.nact, self.nact + self.nvirt)
 
         MOsMixin.copy_from_upstream(self, self.parent_method)
+        perm = self.mo_space.orig_to_contig
         self._C = self.C[0][:, perm].copy()
 
-        # only initialize the a new CI solver if reference relaxation is requested
-        # initialized in do_reference_relaxation()
-        self.ci_solver = None
+        # TODO: this interface should be homogenized
+        if hasattr(self.parent_method, "ci_solver"):
+            # parent method is RelMCOptimizer
+            self.ci_solver = self.parent_method.ci_solver
+        else:
+            # parent method is RelCISolver
+            self.ci_solver = self.parent_method
 
-        self.fock_builder = FockBuilder(system=self.system, use_aux_corr=True)
+        self.E_core_orig = self.ci_solver.sub_solvers[0].ints.E
+        self.H_orig = self.ci_solver.sub_solvers[0].ints.H.copy()
+        self.V_orig = self.ci_solver.sub_solvers[0].ints.V.copy()
 
+        self.semicanonicalizer = Semicanonicalizer(
+            system=self.system,
+            mo_space=self.mo_space,
+            mix_active=False,
+            # do not mix correlated core and frozen core orbitals after MCSCF
+            mix_inactive=False,
+        )
+
+        self.fock_builder = self.system.fock_builder
         self.ints, self.cumulants = self.get_integrals()
+        self.hbar = dict()
+        
 
     def run(self):
         self._startup()
+        form_hbar = self.nrelax > 0
 
-        self.E_fixed_ref = self.solve_dsrg()
+        self.E_fixed_ref = self.solve_dsrg(form_hbar)
         self.relax_energies[0, 0] = self.E_fixed_ref
-        self.relax_energies[0, 2] = self.parent_method.E
+        self.relax_energies[0, 2] = self.ci_solver.compute_average_energy()
         self.E = self.E_fixed_ref
 
         for irelax in range(self.nrelax):
             # "twice": DSRG -> relax -> DSRG -> done
-            if irelax == 2 and self.relax_reference == "twice":
+            if irelax == 1 and self.relax_reference == "twice":
                 self.converged = True
                 break
 
             self.E_relaxed_ref = self.do_reference_relaxation()
             self.E = self.E_relaxed_ref
             self.relax_energies[irelax, 1] = self.E_relaxed_ref
-            self.relax_energies[irelax, 2] = self.ci_solver.E
+            # TODO:fix
+            self.relax_energies[irelax, 2] = self.E_relaxed_ref
 
             # "once": DSRG -> relax -> done
             if self.relax_reference == "once":
@@ -150,7 +168,10 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
             if self.converged:
                 break
 
-            self.solve_dsrg()
+            if self.relax_reference == "twice":
+                form_hbar = False
+            self.ints, self.cumulants = self.get_integrals()
+            self.solve_dsrg(form_hbar=form_hbar)
         else:
             logger.log_warning(
                 f"DSRG reference relaxation did not converge in {self.nrelax} iterations."
