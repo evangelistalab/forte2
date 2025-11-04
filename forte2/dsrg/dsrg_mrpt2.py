@@ -3,7 +3,6 @@ from dataclasses import dataclass
 import numpy as np
 
 from forte2 import dsrg_utils
-from forte2.orbitals import Semicanonicalizer
 from .dsrg_base import DSRGBase
 from .utils import antisymmetrize_2body, cas_energy_given_cumulants
 
@@ -581,6 +580,7 @@ class DSRG_MRPT2(DSRGBase):
         return E
 
     def _compute_pt2_energy_ccvv(self):
+        # This computes the following contribution to the energy:
         # E += +0.250 * np.einsum("ijab,ijab->", T2["ccvv"], V["ccvv"], optimize=True)
         E = 0.0
         Vbare_i = np.empty((self.ncore, self.nvirt, self.nvirt), dtype=complex)
@@ -609,6 +609,7 @@ class DSRG_MRPT2(DSRGBase):
         return E
 
     def _compute_pt2_energy_cavv(self, form_hbar=False):
+        # This computes the following contribution to the energy:
         # E += +0.500 * np.einsum(
         #     "iuab,ivab,vu->",
         #     T2["cavv"],
@@ -664,6 +665,7 @@ class DSRG_MRPT2(DSRGBase):
         return E
 
     def _compute_pt2_energy_ccav(self, form_hbar=False):
+        # This computes the following contribution to the energy:
         # E += +0.500 * np.einsum(
         #     "ijua,ijva,uv->",
         #     T2["ccav"],
