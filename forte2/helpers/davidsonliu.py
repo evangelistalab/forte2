@@ -373,7 +373,7 @@ class DavidsonLiuSolver:
         collapse both b and sigma down to collapse_size using alpha:
             new_b = b[:, :basis_size] @ alpha[:, :collapse_size]
         """
-        k = self.collapse_size
+        k = min(self.collapse_size, self.basis_size)
         Bblk = self.b[:, : self.basis_size]
         self.orthonormality_check(
             Bblk,
