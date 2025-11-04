@@ -159,3 +159,26 @@ def test_rel_casscf_na_ghf():
     mc.run()
 
     assert mc.E == approx(emcscf)
+
+
+def test_rel_ci_br():
+    xyz = """
+    Br 0 0 0
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvtz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        x2c_type="so",
+        snso_type="row-dependent",
+    )
+    scf = GHF(charge=0)(system)
+    mc = RelMCOptimizer(
+        nel=35,
+        nroots=6,
+        active_orbitals=8,
+        core_orbitals=28,
+    )(scf)
+    mc.run()
+    assert mc.E == approx(-2597.0679040990)
