@@ -142,22 +142,25 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
         self._startup()
         form_hbar = self.nrelax > 0
 
-        self.E_fixed_ref = self.solve_dsrg(form_hbar)
-        self.relax_energies[0, 0] = self.E_fixed_ref
-        self.relax_energies[0, 2] = self.ci_solver.compute_average_energy()
-        self.E = self.E_fixed_ref
+        self.E_dsrg = self.solve_dsrg(form_hbar)
+        print(f"Reference energy: {self.ints['E']:.12f}")
+        print(f"DSRG energy: {self.E_dsrg:.12f}")
+        self.relax_energies[0, 0] = self.E_dsrg.real
+        # self.ints["E"] is <Psi_current| bare H |Psi_current>
+        self.relax_energies[0, 2] = self.ints["E"].real
+        self.E = self.E_dsrg
 
         for irelax in range(self.nrelax):
+            self.relax_energies[irelax, 0] = self.E_dsrg.real
+            self.relax_energies[irelax, 2] = self.ints["E"].real
             # "twice": DSRG -> relax -> DSRG -> done
             if irelax == 1 and self.relax_reference == "twice":
                 self.converged = True
                 break
 
             self.E_relaxed_ref = self.do_reference_relaxation()
-            self.E = self.E_relaxed_ref
-            self.relax_energies[irelax, 1] = self.E_relaxed_ref
-            # TODO:fix
-            self.relax_energies[irelax, 2] = self.E_relaxed_ref
+            print(f"Relaxed reference energy: {self.E_relaxed_ref:.12f}")
+            self.relax_energies[irelax, 1] = self.E_relaxed_ref.real
 
             # "once": DSRG -> relax -> done
             if self.relax_reference == "once":
@@ -171,7 +174,10 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
             if self.relax_reference == "twice":
                 form_hbar = False
             self.ints, self.cumulants = self.get_integrals()
-            self.solve_dsrg(form_hbar=form_hbar)
+            self.E_dsrg = self.solve_dsrg(form_hbar=form_hbar)
+            print(f"Reference energy: {self.ints['E']:.12f}")
+            print(f"DSRG energy: {self.E_dsrg:.12f}")
+            self.E = self.E_dsrg
         else:
             logger.log_warning(
                 f"DSRG reference relaxation did not converge in {self.nrelax} iterations."

@@ -216,6 +216,8 @@ class DavidsonLiuSolver:
         # check orthonormality of the initial basis
         self.orthonormality_check(self.b[:, : self.basis_size])
 
+        self.collapse_size = min(self.collapse_per_root * self.nroot, self.basis_size)
+
         self.iter = 0
         self.converged = False
 

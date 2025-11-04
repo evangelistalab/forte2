@@ -34,14 +34,6 @@ class DSRG_MRPT2(DSRGBase):
 
         if self.two_component:
             ints = dict()
-            B = self.fock_builder.B_Pmn
-            nbf = self.system.nbf
-            B_so = np.zeros((B.shape[0], nbf * 2, nbf * 2), dtype=complex)
-            B_so[:, :nbf, :nbf] = B
-            B_so[:, nbf:, nbf:] = B
-            ints["B"] = np.einsum(
-                "Bpq,pi,qj->Bij", B_so, self._C_semican.conj(), self._C_semican
-            )
             ints["F"] = self.fock - np.diag(np.diag(self.fock))  # remove diagonal
 
             cumulants = dict()
@@ -75,70 +67,97 @@ class DSRG_MRPT2(DSRGBase):
                 self.Uactv.conj(),
                 optimize=True,
             )
+            ints["E"] = cas_energy_given_cumulants(
+                self.E_core_orig, self.H_orig, self.V_orig, g1, l2
+            )
+
+            # Save blocks of spinorbital basis B tensor
+            B_so = dict()
+            C_core = self._C_semican[:, self.core]
+            C_actv = self._C_semican[:, self.actv]
+            C_virt = self._C_semican[:, self.virt]
+            B_so["cc"] = self.fock_builder.B_tensor_gen_block_spinor(
+                C_core, C_core
+            )
+            B_so["ca"] = self.fock_builder.B_tensor_gen_block_spinor(
+                C_core, C_actv
+            )
+            B_so["cv"] = self.fock_builder.B_tensor_gen_block_spinor(
+                C_core, C_virt
+            )
+            B_so["aa"] = self.fock_builder.B_tensor_gen_block_spinor(
+                C_actv, C_actv
+            )
+            B_so["av"] = self.fock_builder.B_tensor_gen_block_spinor(
+                C_actv, C_virt
+            )
 
             ints["V"] = dict()
             ints["V"]["aaaa"] = np.einsum(
                 "Bux,Bvy->uvxy",
-                ints["B"][:, self.actv, self.actv],
-                ints["B"][:, self.actv, self.actv],
+                B_so["aa"],
+                B_so["aa"],
                 optimize=True,
             )
             ints["V"]["aaaa"] -= ints["V"]["aaaa"].swapaxes(2, 3)
             ints["V"]["caaa"] = np.einsum(
                 "Biu,Bvw->ivuw",
-                ints["B"][:, self.core, self.actv],
-                ints["B"][:, self.actv, self.actv],
+                B_so["ca"],
+                B_so["aa"],
                 optimize=True,
             )
             ints["V"]["caaa"] -= ints["V"]["caaa"].swapaxes(2, 3)
             ints["V"]["aaav"] = np.einsum(
                 "Buv,Bwa->uwva",
-                ints["B"][:, self.actv, self.actv],
-                ints["B"][:, self.actv, self.virt],
+                B_so["aa"],
+                B_so["av"],
                 optimize=True,
             )
             ints["V"]["aaav"] -= ints["V"]["aaav"].swapaxes(0, 1)
             ints["V"]["ccaa"] = np.einsum(
                 "Biu,Bjv->ijuv",
-                ints["B"][:, self.core, self.actv],
-                ints["B"][:, self.core, self.actv],
+                B_so["ca"],
+                B_so["ca"],
                 optimize=True,
             )
             ints["V"]["ccaa"] -= ints["V"]["ccaa"].swapaxes(2, 3)
             ints["V"]["caav"] = np.einsum(
                 "Biu,Bva->ivua",
-                ints["B"][:, self.core, self.actv],
-                ints["B"][:, self.actv, self.virt],
+                B_so["ca"],
+                B_so["av"],
                 optimize=True,
             )
             ints["V"]["caav"] -= np.einsum(
                 "Bia,Bvu->ivua",
-                ints["B"][:, self.core, self.virt],
-                ints["B"][:, self.actv, self.actv],
+                B_so["cv"],
+                B_so["aa"],
                 optimize=True,
             )
             ints["V"]["aavv"] = np.einsum(
                 "Bua,Bvb->uvab",
-                ints["B"][:, self.actv, self.virt],
-                ints["B"][:, self.actv, self.virt],
+                B_so["av"],
+                B_so["av"],
                 optimize=True,
             )
             ints["V"]["aavv"] -= ints["V"]["aavv"].swapaxes(2, 3)
             ints["V"]["caca"] = np.einsum(
                 "Bij,Buv->iujv",
-                ints["B"][:, self.core, self.core],
-                ints["B"][:, self.actv, self.actv],
+                B_so["cc"],
+                B_so["aa"],
                 optimize=True,
             )
+
+            # These are used in on-the-fly energy/Hbar computations
+            ints["B"] = dict()
+            ints["B"]["ca"] = B_so["ca"].transpose(1, 2, 0).copy()
+            ints["B"]["cv"] = B_so["cv"].transpose(1, 2, 0).copy()
+            ints["B"]["av"] = B_so["av"].transpose(1, 2, 0).copy()
+
             ints["eps"] = dict()
             ints["eps"]["core"] = self.eps[self.core].copy()
             ints["eps"]["actv"] = self.eps[self.actv].copy()
             ints["eps"]["virt"] = self.eps[self.virt].copy()
             # <Psi_0 | bare H | Psi_0>, where Psi_0 is the current (possibly relaxed) reference
-
-            ints["E"] = cas_energy_given_cumulants(
-                self.E_core_orig, self.H_orig, self.V_orig, g1, l2
-            )
 
             return ints, cumulants
         else:
@@ -160,10 +179,7 @@ class DSRG_MRPT2(DSRGBase):
             self.cumulants["lambda3"],
             form_hbar=form_hbar,
         )
-        print(E)
-        print(self.ints["E"])
         E += self.ints["E"]
-        print(E)
         return E
 
     def do_reference_relaxation(self):
@@ -190,7 +206,7 @@ class DSRG_MRPT2(DSRGBase):
             self.cumulants["lambda2"],
         )
         # 0.5*[H, T-T+] = 0.5*([H, T] + [H, T]+)
-        _hbar1 += _C1 + np.einsum("ia->ai", np.conj(_C1))
+        _hbar1 += _C1 + _C1.conj().T
 
         # see eq B.3. of JCP 146, 124132 (2017), but instead of gamma2, use lambda2
         _e_scalar = (
@@ -210,7 +226,7 @@ class DSRG_MRPT2(DSRGBase):
                 self.cumulants["gamma1"],
                 self.cumulants["gamma1"],
             )
-        ) + self.E
+        ) + self.E_dsrg
 
         _hbar1 -= np.einsum("uxvy,xy->uv", _hbar2, self.cumulants["gamma1"])
 
@@ -230,7 +246,7 @@ class DSRG_MRPT2(DSRGBase):
         self.ci_solver.set_ints(_e_scalar, _hbar1_canon, _hbar2_canon)
         self.ci_solver.run(use_asym_ints=True)
         e_relaxed = self.ci_solver.compute_average_energy()
-        print(e_relaxed)
+        self.relax_eigvals = self.ci_solver.evals_flat.copy()
         return e_relaxed
 
     def _build_tamps(self):
@@ -570,12 +586,12 @@ class DSRG_MRPT2(DSRGBase):
         Vbare_i = np.empty((self.ncore, self.nvirt, self.nvirt), dtype=complex)
         Vtmp = np.empty((self.ncore, self.nvirt, self.nvirt), dtype=complex)
         Vr_i = np.empty((self.ncore, self.nvirt, self.nvirt), dtype=complex)
-        B_cv = self.ints["B"][:, self.core, self.virt]
+        B_cv = self.ints["B"]["cv"]
         for i in range(self.ncore):
             # T2 = conj(Vbare) * renorm
             # V = Vbare * (1 + exp)
             # So, we compute conj(Vbare) * Vr, where Vr = Vbare * renorm * (1 + exp)
-            np.einsum("Ba,Bjb->jab", B_cv[:, i, :], B_cv, optimize=True, out=Vbare_i)
+            np.einsum("aB,jbB->jba", B_cv[i, :, :], B_cv, optimize=True, out=Vbare_i)
             np.copyto(Vtmp, Vbare_i.swapaxes(1, 2))
             Vbare_i -= Vtmp
             # copy to Vr_i
@@ -588,7 +604,7 @@ class DSRG_MRPT2(DSRGBase):
                 self.ints["eps"]["virt"],
                 self.flow_param,
             )
-            E += 0.250 * np.einsum("jab,jab->", Vbare_i.conj(), Vr_i, optimize=True)
+            E += 0.250 * np.einsum("jba,jba->", Vbare_i.conj(), Vr_i, optimize=True)
 
         return E
 
@@ -611,13 +627,13 @@ class DSRG_MRPT2(DSRGBase):
         Vbare_i = np.empty((self.nact, self.nvirt, self.nvirt), dtype=complex)
         Vtmp = np.empty((self.nact, self.nvirt, self.nvirt), dtype=complex)
         Vr_i = np.empty((self.nact, self.nvirt, self.nvirt), dtype=complex)
-        B_av = self.ints["B"][:, self.actv, self.virt]
-        B_cv = self.ints["B"][:, self.core, self.virt]
+        B_av = self.ints["B"]["av"]
+        B_cv = self.ints["B"]["cv"]
         for i in range(self.ncore):
             # T2 = conj(Vbare) * renorm
             # V = Vbare * (1 + exp)
             # So, we compute Vbare * Vr, where Vr = Vbare * renorm * (1 + exp)
-            np.einsum("Ba,Bub->uab", B_cv[:, i, :], B_av, optimize=True, out=Vbare_i)
+            np.einsum("aB,ubB->uba", B_cv[i, :, :], B_av, optimize=True, out=Vbare_i)
             np.copyto(Vtmp, Vbare_i.swapaxes(1, 2))
             Vbare_i -= Vtmp
             # copy to Vr_i
@@ -631,7 +647,7 @@ class DSRG_MRPT2(DSRGBase):
                 self.flow_param,
             )
             E += 0.500 * np.einsum(
-                "uab,vab,uv->",
+                "uba,vba,uv->",
                 Vbare_i.conj(),
                 Vr_i,
                 self.cumulants["gamma1"],
@@ -639,7 +655,7 @@ class DSRG_MRPT2(DSRGBase):
             )
             if form_hbar:
                 self.hbar_aa_df += 0.500 * np.einsum(
-                    "uab,vab->uv",
+                    "uba,vba->uv",
                     Vbare_i.conj(),
                     Vr_i,
                     optimize=True,
@@ -667,14 +683,14 @@ class DSRG_MRPT2(DSRGBase):
         Vbare_i = np.empty((self.ncore, self.nact, self.nvirt), dtype=complex)
         Vtmp = np.empty((self.ncore, self.nact, self.nvirt), dtype=complex)
         Vr_i = np.empty((self.ncore, self.nact, self.nvirt), dtype=complex)
-        B_cv = self.ints["B"][:, self.core, self.virt]
-        B_ca = self.ints["B"][:, self.core, self.actv]
+        B_cv = self.ints["B"]["cv"]
+        B_ca = self.ints["B"]["ca"]
         for i in range(self.ncore):
             # T2 = conj(Vbare) * renorm
             # V = Vbare * (1 + exp)
             # So, we compute conj(Vbare) * Vr, where Vr = Vbare * renorm * (1 + exp)
-            np.einsum("Bu,Bja->jua", B_ca[:, i, :], B_cv, optimize=True, out=Vbare_i)
-            np.einsum("Ba,Bju->jua", B_cv[:, i, :], B_ca, optimize=True, out=Vtmp)
+            np.einsum("uB,jaB->jua", B_ca[i, :, :], B_cv, optimize=True, out=Vbare_i)
+            np.einsum("aB,juB->jua", B_cv[i, :, :], B_ca, optimize=True, out=Vtmp)
             Vbare_i -= Vtmp
             # copy to Vr_i
             Vr_i[:] = Vbare_i
