@@ -250,3 +250,73 @@ def pretty_print_ci_transition_props(
     if nbright == 0:
         logger.log_info1("No bright transitions found.")
     logger.log_info1("=" * width)
+
+
+def make_2cumulant(gamma1, gamma2):
+    """
+    Compute the 2-cumulant from the 1- and 2-RDMs.
+
+    This can be useful for computing averaged cumulants, since one cannot simply average
+    the 2-cumulants directly, as the relation between RDMs and cumulants is nonlinear.
+
+    Parameters
+    ----------
+    gamma1 : np.ndarray
+        The one-particle reduced density matrix (1-RDM).
+    gamma2 : np.ndarray
+        The two-particle reduced density matrix (2-RDM).
+
+    Returns
+    -------
+    np.ndarray
+        The two-particle cumulant (2-cumulant).
+    """
+    l2 = (
+        gamma2
+        - np.einsum("pr,qs->pqrs", gamma1, gamma1, optimize=True)
+        + np.einsum("ps,qr->pqrs", gamma1, gamma1, optimize=True)
+    )
+    return l2
+
+
+def make_3cumulant(gamma1, lambda2, gamma3):
+    """
+    Compute the 3-cumulant from the 1- and 3-RDMs and 2-cumulant.
+
+    This can be useful for computing averaged cumulants, since one cannot simply average
+    the 3-cumulants directly, as the relation between RDMs and cumulants is nonlinear.
+
+    Parameters
+    ----------
+    gamma1 : np.ndarray
+        The one-particle reduced density matrix (1-RDM).
+    lambda2 : np.ndarray
+        The two-particle reduced density cumulant.
+    gamma3 : np.ndarray
+        The three-particle reduced density matrix (3-RDM).
+
+    Returns
+    -------
+    np.ndarray
+        The three-particle cumulant (3-cumulant).
+    """
+    l3 = gamma3 - (
+        +np.einsum("ps,qrtu->pqrstu", gamma1, lambda2, optimize=True)
+        - np.einsum("pt,qrsu->pqrstu", gamma1, lambda2, optimize=True)
+        - np.einsum("pu,qrts->pqrstu", gamma1, lambda2, optimize=True)
+        - np.einsum("qs,prtu->pqrstu", gamma1, lambda2, optimize=True)
+        + np.einsum("qt,prsu->pqrstu", gamma1, lambda2, optimize=True)
+        + np.einsum("qu,prts->pqrstu", gamma1, lambda2, optimize=True)
+        - np.einsum("rs,qptu->pqrstu", gamma1, lambda2, optimize=True)
+        + np.einsum("rt,qpsu->pqrstu", gamma1, lambda2, optimize=True)
+        + np.einsum("ru,qpts->pqrstu", gamma1, lambda2, optimize=True)
+    )
+    l3 -= (
+        +np.einsum("ps,qt,ru->pqrstu", gamma1, gamma1, gamma1, optimize=True)
+        - np.einsum("pt,qs,ru->pqrstu", gamma1, gamma1, gamma1, optimize=True)
+        - np.einsum("ps,qu,rt->pqrstu", gamma1, gamma1, gamma1, optimize=True)
+        - np.einsum("pu,qt,rs->pqrstu", gamma1, gamma1, gamma1, optimize=True)
+        + np.einsum("pu,qs,rt->pqrstu", gamma1, gamma1, gamma1, optimize=True)
+        + np.einsum("pt,qu,rs->pqrstu", gamma1, gamma1, gamma1, optimize=True)
+    )
+    return l3

@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from forte2 import dsrg_utils
+from forte2.ci.ci_utils import make_2cumulant, make_3cumulant
 from .dsrg_base import DSRGBase
 from .utils import antisymmetrize_2body, cas_energy_given_cumulants
 
@@ -44,7 +45,9 @@ class DSRG_MRPT2(DSRGBase):
                 np.eye(cumulants["gamma1"].shape[0], dtype=complex)
                 - cumulants["gamma1"]
             )
-            l2 = self.ci_solver.make_average_2cumulant()
+            g2 = self.ci_solver.make_average_2rdm()
+            g3 = self.ci_solver.make_average_3rdm()
+            l2 = make_2cumulant(g1, g2)
             cumulants["lambda2"] = np.einsum(
                 "ip,jq,ijkl,kr,ls->pqrs",
                 self.Uactv,
@@ -54,7 +57,7 @@ class DSRG_MRPT2(DSRGBase):
                 self.Uactv.conj(),
                 optimize=True,
             )
-            l3 = self.ci_solver.make_average_3cumulant()
+            l3 = make_3cumulant(g1, l2, g3)
             cumulants["lambda3"] = np.einsum(
                 "ip,jq,kr,ijklmn,ls,mt,nu->pqrstu",
                 self.Uactv,
@@ -66,8 +69,9 @@ class DSRG_MRPT2(DSRGBase):
                 self.Uactv.conj(),
                 optimize=True,
             )
+
             ints["E"] = cas_energy_given_cumulants(
-                self.E_core_orig, self.H_orig, self.V_orig, g1, l2
+                self.E_core_orig, self.H_orig, self.V_orig, g1, g2
             )
 
             # Save blocks of spinorbital basis B tensor
@@ -75,21 +79,11 @@ class DSRG_MRPT2(DSRGBase):
             C_core = self._C_semican[:, self.core]
             C_actv = self._C_semican[:, self.actv]
             C_virt = self._C_semican[:, self.virt]
-            B_so["cc"] = self.fock_builder.B_tensor_gen_block_spinor(
-                C_core, C_core
-            )
-            B_so["ca"] = self.fock_builder.B_tensor_gen_block_spinor(
-                C_core, C_actv
-            )
-            B_so["cv"] = self.fock_builder.B_tensor_gen_block_spinor(
-                C_core, C_virt
-            )
-            B_so["aa"] = self.fock_builder.B_tensor_gen_block_spinor(
-                C_actv, C_actv
-            )
-            B_so["av"] = self.fock_builder.B_tensor_gen_block_spinor(
-                C_actv, C_virt
-            )
+            B_so["cc"] = self.fock_builder.B_tensor_gen_block_spinor(C_core, C_core)
+            B_so["ca"] = self.fock_builder.B_tensor_gen_block_spinor(C_core, C_actv)
+            B_so["cv"] = self.fock_builder.B_tensor_gen_block_spinor(C_core, C_virt)
+            B_so["aa"] = self.fock_builder.B_tensor_gen_block_spinor(C_actv, C_actv)
+            B_so["av"] = self.fock_builder.B_tensor_gen_block_spinor(C_actv, C_virt)
 
             ints["V"] = dict()
             ints["V"]["aaaa"] = np.einsum(
@@ -207,20 +201,12 @@ class DSRG_MRPT2(DSRGBase):
         # 0.5*[H, T-T+] = 0.5*([H, T] + [H, T]+)
         _hbar1 += _C1 + _C1.conj().T
 
-        # see eq B.3. of JCP 146, 124132 (2017), but instead of gamma2, use lambda2
+        # see eq 29 of Ann. Rev. Phys. Chem.
         _e_scalar = (
             -np.einsum("uv,uv->", _hbar1, self.cumulants["gamma1"])
             - 0.25 * np.einsum("uvxy,uvxy->", _hbar2, self.cumulants["lambda2"])
-            + 0.75
-            * np.einsum(
+            + 0.5*np.einsum(
                 "uvxy,ux,vy->",
-                _hbar2,
-                self.cumulants["gamma1"],
-                self.cumulants["gamma1"],
-            )
-            + 0.25
-            * np.einsum(
-                "uvxy,uy,vx->",
                 _hbar2,
                 self.cumulants["gamma1"],
                 self.cumulants["gamma1"],
@@ -298,7 +284,7 @@ class DSRG_MRPT2(DSRGBase):
             self.flow_param,
         )
 
-        t1_tmp = self.ints["F"][self.hole, self.part].conj()
+        t1_tmp = self.ints["F"][self.hole, self.part].conj().copy()
         t2_hapa = np.zeros(
             (self.nhole, self.nact, self.npart, self.nact), dtype=complex
         )
@@ -337,7 +323,7 @@ class DSRG_MRPT2(DSRGBase):
         return t1, t2
 
     def _renormalize_integrals(self):
-        f_temp = np.conj(self.ints["F"][self.hole, self.part])
+        f_temp = np.conj(self.ints["F"][self.hole, self.part]).copy()
         delta_ia = self.eps[self.hole][:, None] - self.eps[self.part][None, :]
         exp_delta_1 = np.exp(-self.flow_param * delta_ia**2)
         t2_hapa = np.zeros(

@@ -1424,22 +1424,6 @@ class CISolver(ActiveSpaceSolver):
 
         return rdm2
 
-    def make_average_2cumulant(self):
-        """
-        Make the average spin-free two-particle cumulant from the CI vectors.
-
-        Returns
-        -------
-        NDArray
-            Average spin-free two-particle cumulant.
-        """
-        lambda2 = np.zeros((self.norb,) * 4, dtype=self.dtype)
-        for i, ci_solver in enumerate(self.sub_solvers):
-            for j in range(ci_solver.nroot):
-                lambda2 += ci_solver.make_2cumulant(j) * self.weights[i][j]
-
-        return lambda2
-
     def make_average_3rdm(self):
         """
         Make the average spin-free three-particle RDM from the CI vectors.
@@ -1455,22 +1439,6 @@ class CISolver(ActiveSpaceSolver):
                 rdm3 += ci_solver.make_3rdm(j) * self.weights[i][j]
 
         return rdm3
-
-    def make_average_3cumulant(self):
-        """
-        Make the average spin-free three-particle cumulant from the CI vectors.
-
-        Returns
-        -------
-        NDArray
-            Average spin-free three-particle cumulant.
-        """
-        lambda3 = np.zeros((self.norb,) * 6, dtype=self.dtype)
-        for i, ci_solver in enumerate(self.sub_solvers):
-            for j in range(ci_solver.nroot):
-                lambda3 += ci_solver.make_3cumulant(j) * self.weights[i][j]
-
-        return lambda3
 
     def set_ints(self, scalar, oei, tei):
         """
@@ -1652,9 +1620,7 @@ class RelCISolver(RelActiveSpaceSolver):
     compute_average_energy = CISolver.compute_average_energy
     make_average_1rdm = CISolver.make_average_1rdm
     make_average_2rdm = CISolver.make_average_2rdm
-    make_average_2cumulant = CISolver.make_average_2cumulant
     make_average_3rdm = CISolver.make_average_3rdm
-    make_average_3cumulant = CISolver.make_average_3cumulant
     compute_natural_occupation_numbers = CISolver.compute_natural_occupation_numbers
     get_top_determinants = CISolver.get_top_determinants
     set_ints = CISolver.set_ints
