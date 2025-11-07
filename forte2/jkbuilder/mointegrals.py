@@ -48,7 +48,6 @@ class RestrictedMOIntegrals:
     core_orbitals: list = field(default_factory=list)
     use_aux_corr: bool = False
     antisymmetrize: bool = False
-    spinorbital: bool = False
 
     def __post_init__(self):
         self.norb = len(self.orbitals)

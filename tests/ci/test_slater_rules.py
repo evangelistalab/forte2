@@ -6,6 +6,7 @@ from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers.comparisons import approx
 from forte2.ci.ci import _CIBase
 from forte2.state import MOSpace, State
+from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 
 
 def test_slater_rules_1():
@@ -90,13 +91,13 @@ def test_slater_rules_1_complex():
     scf = RHF(charge=0, econv=1e-12)(system)
     scf.run()
 
-    orbitals = [0, 1]
+    C = convert_coeff_spatial_to_spinor(system, scf.C)
+    orbitals = [0, 1, 2, 3]
     norb = len(orbitals)
-    ints = RestrictedMOIntegrals(
-        system=scf.system, C=scf.C[0], orbitals=orbitals, spinorbital=True
-    )
+    system.two_component = True
+    ints = SpinorbitalIntegrals(system=system, C=C[0], spinorbitals=orbitals)
 
-    random_phase = np.diag(np.exp(1j * np.random.uniform(-np.pi, np.pi, size=norb * 2)))
+    random_phase = np.diag(np.exp(1j * np.random.uniform(-np.pi, np.pi, size=norb)))
     ints.H = random_phase.T.conj() @ ints.H @ random_phase
     ints.V = np.einsum(
         "pqrs,pi,qj,rk,sl->ijkl",
@@ -112,7 +113,7 @@ def test_slater_rules_1_complex():
         norb * 2, ints.E, ints.H.astype(complex), ints.V.astype(complex)
     )
 
-    dets = forte2.hilbert_space(norb * 2, scf.na + scf.nb, 0)
+    dets = forte2.hilbert_space(norb, scf.na + scf.nb, 0)
 
     H = np.zeros((len(dets), len(dets)), dtype=complex)
     for i in range(len(dets)):
@@ -141,18 +142,20 @@ def test_slater_rules_2_complex():
     scf = RHF(charge=0, econv=1e-10)(system)
     scf.run()
 
-    core_orbitals = [0]
-    orbitals = [1, 2, 3, 4, 5, 6]  # Active orbitals
+    C = convert_coeff_spatial_to_spinor(system, scf.C)
+    system.two_component = True
+
+    core_orbitals = [0, 1]
+    orbitals = list(range(2, 14))  # Active orbitals
     norb = len(orbitals)
-    ints = RestrictedMOIntegrals(
+    ints = SpinorbitalIntegrals(
         system=scf.system,
-        C=scf.C[0],
-        orbitals=orbitals,
-        core_orbitals=core_orbitals,
-        spinorbital=True,
+        C=C[0],
+        spinorbitals=orbitals,
+        core_spinorbitals=core_orbitals,
     )
 
-    random_phase = np.diag(np.exp(1j * np.random.uniform(-np.pi, np.pi, size=norb * 2)))
+    random_phase = np.diag(np.exp(1j * np.random.uniform(-np.pi, np.pi, size=norb)))
     ints.H = random_phase.T.conj() @ ints.H @ random_phase
     ints.V = np.einsum(
         "pqrs,pi,qj,rk,sl->ijkl",
@@ -165,13 +168,13 @@ def test_slater_rules_2_complex():
     )
 
     slater_rules = forte2.RelSlaterRules(
-        norb * 2, ints.E, ints.H.astype(complex), ints.V.astype(complex)
+        norb, ints.E, ints.H.astype(complex), ints.V.astype(complex)
     )
 
-    nca = scf.na - len(core_orbitals)
-    ncb = scf.nb - len(core_orbitals)
+    nca = scf.na - len(core_orbitals) // 2
+    ncb = scf.nb - len(core_orbitals) // 2
 
-    dets = forte2.hilbert_space(norb * 2, nca + ncb, 0)
+    dets = forte2.hilbert_space(norb, nca + ncb, 0)
 
     H = np.zeros((len(dets), len(dets)), dtype=complex)
     for i in range(len(dets)):
