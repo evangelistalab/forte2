@@ -1,22 +1,7 @@
 import numpy as np
-from pathlib import Path
 
 from forte2 import System, RHF, MCOptimizer, ASET, CI, State
 from forte2.helpers.comparisons import approx
-
-# Directory containing *this* file
-THIS_DIR = Path(__file__).resolve().parent
-
-
-def compare_orbital_coefficients(system, aset, filename):
-    """
-    This function compares the coefficient matrix from an ASET calculation
-    with a reference file stored in the folder reference_aset_orbitals.
-
-    Note: this can only handle nondegenerate orbitals.
-    """
-    C_test = np.load(THIS_DIR / f"reference_aset_orbitals/{filename}")
-    assert np.linalg.norm(aset.C[0]) == approx(np.linalg.norm(C_test))
 
 
 # Ref Energies come from forte1
@@ -60,9 +45,8 @@ def test_aset_1():
     ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
     ci.run()
 
-    compare_orbital_coefficients(system, aset, "test_aset_1_orbitals.npy")
-
     assert ci.E == approx(eci)
+    assert np.linalg.norm(aset.C[0]) == approx(6.154561429926419)
 
 
 def test_aset_2():
@@ -96,9 +80,8 @@ def test_aset_2():
     ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
     ci.run()
 
-    compare_orbital_coefficients(system, aset, "test_aset_2_orbitals.npy")
-
     assert ci.E == approx(eci)
+    assert np.linalg.norm(aset.C[0]) == approx(4.613137326686484)
 
 
 def test_aset_3():
@@ -141,9 +124,8 @@ def test_aset_3():
     ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
     ci.run()
 
-    compare_orbital_coefficients(system, aset, "test_aset_3_orbitals.npy")
-
     assert ci.E == approx(eci)
+    assert np.linalg.norm(aset.C[0]) == approx(6.154561429926422)
 
 
 def test_aset_4():
@@ -182,9 +164,8 @@ def test_aset_4():
     ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
     ci.run()
 
-    compare_orbital_coefficients(system, aset, "test_aset_4_orbitals.npy")
-
     assert ci.E == approx(eci)
+    assert np.linalg.norm(aset.C[0]) == approx(4.613137326686484)
 
 
 def test_aset_5():
@@ -220,6 +201,5 @@ def test_aset_5():
     ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
     ci.run()
 
-    compare_orbital_coefficients(system, aset, "test_aset_5_orbitals.npy")
-
     assert ci.E == approx(eci)
+    assert np.linalg.norm(aset.C[0]) == approx(6.914968055356702)
