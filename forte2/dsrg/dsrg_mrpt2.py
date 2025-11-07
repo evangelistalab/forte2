@@ -205,7 +205,8 @@ class DSRG_MRPT2(DSRGBase):
         _e_scalar = (
             -np.einsum("uv,uv->", _hbar1, self.cumulants["gamma1"])
             - 0.25 * np.einsum("uvxy,uvxy->", _hbar2, self.cumulants["lambda2"])
-            + 0.5*np.einsum(
+            + 0.5
+            * np.einsum(
                 "uvxy,ux,vy->",
                 _hbar2,
                 self.cumulants["gamma1"],
@@ -577,6 +578,7 @@ class DSRG_MRPT2(DSRGBase):
             # T2 = conj(Vbare) * renorm
             # V = Vbare * (1 + exp)
             # So, we compute conj(Vbare) * Vr, where Vr = Vbare * renorm * (1 + exp)
+            # this path is optimal because it is basically B_cv @ B_cv[i].T
             np.einsum("aB,jbB->jba", B_cv[i, :, :], B_cv, optimize=True, out=Vbare_i)
             np.copyto(Vtmp, Vbare_i.swapaxes(1, 2))
             Vbare_i -= Vtmp
@@ -590,7 +592,8 @@ class DSRG_MRPT2(DSRGBase):
                 self.ints["eps"]["virt"],
                 self.flow_param,
             )
-            E += 0.250 * np.einsum("jba,jba->", Vbare_i.conj(), Vr_i, optimize=True)
+            # equivalent to E += 0.250 * np.einsum("jba,jba->", Vbare_i.conj(), Vr_i, optimize=True)
+            E += 0.250 * np.sum(Vbare_i.conj() * Vr_i)
 
         return E
 
@@ -620,6 +623,7 @@ class DSRG_MRPT2(DSRGBase):
             # T2 = conj(Vbare) * renorm
             # V = Vbare * (1 + exp)
             # So, we compute Vbare * Vr, where Vr = Vbare * renorm * (1 + exp)
+            # again, this path is optimal because it is basically B_av @ B_cv[i].T
             np.einsum("aB,ubB->uba", B_cv[i, :, :], B_av, optimize=True, out=Vbare_i)
             np.copyto(Vtmp, Vbare_i.swapaxes(1, 2))
             Vbare_i -= Vtmp
@@ -641,11 +645,15 @@ class DSRG_MRPT2(DSRGBase):
                 optimize=True,
             )
             if form_hbar:
-                self.hbar_aa_df += 0.500 * np.einsum(
-                    "uba,vba->uv",
-                    Vbare_i.conj(),
-                    Vr_i,
-                    optimize=True,
+                # optimal path, fastest varying indices contracted away
+                # self.hbar_aa_df += 0.500 * np.einsum(
+                #     "uba,vba->uv",
+                #     Vbare_i.conj(),
+                #     Vr_i,
+                #     optimize=True,
+                # )
+                self.hbar_aa_df += 0.500 * np.tensordot(
+                    Vbare_i.conj(), Vr_i, axes=([1, 2], [1, 2])
                 )
 
         return E
@@ -668,17 +676,17 @@ class DSRG_MRPT2(DSRGBase):
         # )
 
         E = 0.0
-        Vbare_i = np.empty((self.ncore, self.nact, self.nvirt), dtype=complex)
-        Vtmp = np.empty((self.ncore, self.nact, self.nvirt), dtype=complex)
-        Vr_i = np.empty((self.ncore, self.nact, self.nvirt), dtype=complex)
+        Vbare_i = np.empty((self.ncore, self.nvirt, self.nact), dtype=complex)
+        Vtmp = np.empty((self.ncore, self.nvirt, self.nact), dtype=complex)
+        Vr_i = np.empty((self.ncore, self.nvirt, self.nact), dtype=complex)
         B_cv = self.ints["B"]["cv"]
         B_ca = self.ints["B"]["ca"]
         for i in range(self.ncore):
             # T2 = conj(Vbare) * renorm
             # V = Vbare * (1 + exp)
             # So, we compute conj(Vbare) * Vr, where Vr = Vbare * renorm * (1 + exp)
-            np.einsum("uB,jaB->jua", B_ca[i, :, :], B_cv, optimize=True, out=Vbare_i)
-            np.einsum("aB,juB->jua", B_cv[i, :, :], B_ca, optimize=True, out=Vtmp)
+            np.einsum("uB,jaB->jau", B_ca[i, :, :], B_cv, optimize=True, out=Vbare_i)
+            np.einsum("aB,juB->jau", B_cv[i, :, :], B_ca, optimize=True, out=Vtmp)
             Vbare_i -= Vtmp
             # copy to Vr_i
             Vr_i[:] = Vbare_i
@@ -686,12 +694,12 @@ class DSRG_MRPT2(DSRGBase):
                 Vr_i,
                 self.ints["eps"]["core"][i],
                 self.ints["eps"]["core"],
-                self.ints["eps"]["actv"],
                 self.ints["eps"]["virt"],
+                self.ints["eps"]["actv"],
                 self.flow_param,
             )
             E += 0.500 * np.einsum(
-                "jua,jva,uv->",
+                "jau,jav,uv->",
                 Vbare_i.conj(),
                 Vr_i,
                 self.cumulants["eta1"],
@@ -699,7 +707,7 @@ class DSRG_MRPT2(DSRGBase):
             )
             if form_hbar:
                 self.hbar_aa_df += -0.500 * np.einsum(
-                    "jua,jva->vu",
+                    "jau,jav->vu",
                     Vbare_i.conj(),
                     Vr_i,
                     optimize=True,
