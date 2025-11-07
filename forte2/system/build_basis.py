@@ -2,6 +2,7 @@ import json
 import itertools
 from importlib import resources
 import regex as re
+import os
 
 from forte2 import Basis, Shell
 from forte2.data import ATOM_SYMBOL_TO_Z
@@ -28,18 +29,28 @@ def build_basis(
     ----------
     basis_assignment : str or dict
         The basis set name or a dictionary with per-atom basis assignments.
-        It is also possible to assign different basis sets to specific atomic indices (e.g. "O2" for the second oxygen atom).
-        The dictionary should be in the format::
+        It is possible to assign different basis sets to specific atomic indices (e.g. "O2" for the second oxygen atom).
+        It is also possible to assign basis set for a different element than the atom itself using the syntax "basis::element", e.g. "O": "sto-6g::N" to assign nitrogen sto-6g basis functions to oxygen.
+        There are three sources for basis set data:
+            1. If the basis set name ends with ``.json``, it is treated as a local JSON file path.
+            2. If a JSON file with the basis set name exists in the ``forte2/data/basis`` directory, it is used.
+            3. If neither of the above is found, Basis Set Exchange is used (if available).
+
+        For example, a basis set assignment dictionary can look like::
 
             {
-                "H": "cc-pvtz",
-                "O2": "cc-pvqz",
+                "H": "cc-pvtz-truncated.json::Li",
+                "O2": "decon-cc-pvqz::N",
                 "default": "cc-pvdz"
             }
 
         where ``"default"`` is used for atoms not explicitly listed.
-    atoms : list[tuple(int, list[float])]
-        A list of tuples containing atomic numbers and coordinates.
+    geometry : forte2.geom.Geometry
+        The molecular geometry.
+    embed_normalization_into_coefficients : bool, optional, default=True
+        Whether to embed normalization factors into the contraction coefficients.
+    decontract : bool, optional, default=False
+        If True, all basis functions will be decontracted regardless of the basis set assignment.
 
     Returns
     -------
@@ -73,28 +84,42 @@ def build_basis(
     # e.g. {"cc-pvdz": {1, 2}, "sto-6g": {8}} (fetch H, He from cc-pvdz and O from sto-6g)
     fetch_map = {}
     for i, b in enumerate(basis_per_atom):
-        if b not in fetch_map:
-            fetch_map[b] = set()
-        Z = geometry.atoms[i][0]  # atomic number
-        fetch_map[b].add(Z)
+        if "::" in b:
+            # basis set with element specification (e.g., assign N basis to C)
+            bset, atom_symbol = b.split("::")
+            Z = ATOM_SYMBOL_TO_Z[atom_symbol.upper()]
+        else:
+            bset = b
+            Z = geometry.atoms[i][0]
+        if bset not in fetch_map:
+            fetch_map[bset] = set()
+        fetch_map[bset].add(Z)
 
     # set the basis name
     basis = Basis()
     basis.set_name(prefix + basis_name)
     # get the unique basis set data
     atom_basis = _get_atom_basis(fetch_map)
-    for (Z, coords), decon, bset in zip(geometry.atoms, if_decontract_atom_basis, basis_per_atom):
+    for (Z, coords), decon, bset in zip(
+        geometry.atoms, if_decontract_atom_basis, basis_per_atom
+    ):
+        if "::" in bset:
+            bset_loc, atom_symbol = bset.split("::")
+            Z_loc = ATOM_SYMBOL_TO_Z[atom_symbol.upper()]
+        else:
+            bset_loc = bset
+            Z_loc = Z
         if decon:
             basis = _add_atom_basis_to_basis_decontracted(
                 basis,
-                atom_basis[bset][Z],
+                atom_basis[bset_loc][Z_loc],
                 coords,
                 embed_normalization_into_coefficients,
             )
         else:
             basis = _add_atom_basis_to_basis(
                 basis,
-                atom_basis[bset][Z],
+                atom_basis[bset_loc][Z_loc],
                 coords,
                 embed_normalization_into_coefficients,
             )
@@ -152,39 +177,74 @@ def _parse_custom_basis_assignment(geometry, basis_assignment):
     return basis_per_atom
 
 
+def _load_basis(basis_name, Z):
+    """
+    Load the basis set data for a given atomic number.
+
+    This can be from three sources:
+    1. A local JSON file specified by `basis_name` (if it ends with .json)
+    2. A JSON file supplied in the `forte2/data/basis` directory
+    3. Basis Set Exchange (if available)
+
+    Parameters
+    ----------
+    basis_name : str
+        The name of the basis set or the path to a local JSON file.
+    Z : int
+        The atomic number of the element.
+
+    Returns
+    -------
+    res : list[dict]
+        The basis set data for the specified atomic number.
+    """
+    if basis_name.endswith(".json"):
+        assert os.path.isfile(
+            basis_name
+        ), f"[forte2] Basis file {basis_name} not found."
+        with open(basis_name, "r") as f:
+            bfile = json.load(f)
+            # check if the atomic number is in the basis set
+            assert (
+                str(Z) in bfile["elements"]
+            ), f"Element {Z} not found in basis set {basis_name}."
+            res = bfile["elements"][str(Z)]["electron_shells"]
+    elif resources.is_resource("forte2.data.basis", f"{basis_name}.json"):
+        with resources.files("forte2.data.basis").joinpath(f"{basis_name}.json").open(
+            "r"
+        ) as f:
+            bfile = json.load(f)
+            # check if the atomic number is in the basis set
+            assert (
+                str(Z) in bfile["elements"]
+            ), f"Element {Z} not found in basis set {basis_name}."
+            res = bfile["elements"][str(Z)]["electron_shells"]
+    else:
+        if BSE_AVAILABLE:
+            logger.log_info1(
+                f"[forte2] Basis {basis_name} not found locally. Using Basis Set Exchange."
+            )
+            try:
+                bse_basis = bse.get_basis(basis_name, elements=Z)
+            except KeyError:
+                raise RuntimeError(
+                    f"[forte2] Basis Set Exchange does not have data for element Z={Z} in basis set {basis_name}!"
+                )
+            res = bse_basis["elements"][str(Z)]["electron_shells"]
+        else:
+            raise RuntimeError(
+                f"[forte2] Basis file {basis_name}.json could not be found, and Basis Set Exchange is not available. "
+            )
+
+    return res
+
+
 def _get_atom_basis(fetch_map):
     atom_basis = {}
     for basis_name, atoms in fetch_map.items():
-        if resources.is_resource("forte2.data.basis", f"{basis_name}.json"):
-            with resources.files("forte2.data.basis").joinpath(
-                f"{basis_name}.json"
-            ).open("r") as f:
-                bfile = json.load(f)
-                atom_basis[basis_name] = {}
-                for Z in atoms:
-                    # check if the atomic number is in the basis set
-                    assert (
-                        str(Z) in bfile["elements"]
-                    ), f"Element {Z} not found in basis set {basis_name}."
-                    atom_basis[basis_name][Z] = bfile["elements"][str(Z)]["electron_shells"]
-        else:
-            if BSE_AVAILABLE:
-                logger.log_info1(
-                    f"[forte2] Basis {basis_name} not found locally. Using Basis Set Exchange."
-                )
-                atom_basis[basis_name] = {}
-                for Z in atoms:
-                    try:
-                        bse_basis = bse.get_basis(basis_name, elements=Z)
-                    except KeyError:
-                        raise RuntimeError(
-                            f"[forte2] Basis Set Exchange does not have data for element Z={Z} in basis set {basis_name}!"
-                        )
-                    atom_basis[basis_name][Z] = bse_basis["elements"][str(Z)]["electron_shells"]
-            else:
-                raise RuntimeError(
-                    f"[forte2] Basis file {basis_name}.json could not be found, and Basis Set Exchange is not available. "
-                )
+        atom_basis[basis_name] = {}
+        for Z in atoms:
+            atom_basis[basis_name][Z] = _load_basis(basis_name, Z)
     return atom_basis
 
 
