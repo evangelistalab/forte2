@@ -1,4 +1,5 @@
 #include <nanobind/nanobind.h>
+#include <nanobind/stl/bind_vector.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/array.h>
 #include <nanobind/stl/string.h>
@@ -12,12 +13,17 @@
 #include "ci/ci_spin_adapter.h"
 #include "ci/rel_ci_sigma_builder.h"
 
+// Must be at global scope:
+NB_MAKE_OPAQUE(std::vector<forte2::Determinant>);
+
 namespace nb = nanobind;
 using namespace nb::literals;
 
 namespace forte2 {
 
 void export_ci_strings_api(nb::module_& m) {
+    nb::bind_vector<std::vector<forte2::Determinant>>(m, "DeterminantVector");
+
     nb::class_<CIStrings>(m, "CIStrings")
         .def(nb::init<size_t, size_t, int, std::vector<std::vector<int>>, std::vector<int>,
                       std::vector<int>>(),
