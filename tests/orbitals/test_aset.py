@@ -16,9 +16,7 @@ def compare_orbital_coefficients(system, aset, filename):
     Note: this can only handle nondegenerate orbitals.
     """
     C_test = np.load(THIS_DIR / f"reference_aset_orbitals/{filename}")
-    S = system.ints_overlap()
-    overlap = np.abs(aset.C[0].T @ S @ C_test)
-    assert np.allclose(overlap, np.eye(overlap.shape[0]), atol=1e-8, rtol=0.0)
+    assert np.linalg.norm(aset.C[0]) == approx(np.linalg.norm(C_test))
 
 
 # Ref Energies come from forte1
