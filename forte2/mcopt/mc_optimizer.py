@@ -6,7 +6,7 @@ from forte2.base_classes.active_space_solver import (
     ActiveSpaceSolver,
     RelActiveSpaceSolver,
 )
-from forte2.orbitals import Semicanonicalizer
+from forte2.orbitals import Semicanonicalizer, ASET
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers import logger, LBFGS
 from forte2.system.basis_utils import BasisInfo
@@ -229,7 +229,9 @@ class MCOptimizer(ActiveSpaceSolver):
         logger.log_info1("Entering orbital optimization loop")
         logger.log_info1("\nConvergence criteria ('.' if satisfied, 'x' otherwise):")
         logger.log_info1(f"  {'1. RMS(grad)':<32} < {self.gconv:.1e}")
-        logger.log_info1(f"  {'2. max(abs(E_CI_i - E_CI_old_i))':<32} < {self.econv:.1e}")
+        logger.log_info1(
+            f"  {'2. max(abs(E_CI_i - E_CI_old_i))':<32} < {self.econv:.1e}"
+        )
         logger.log_info1(f"  {'3. abs(E_avg - E_avg_old)':<32} < {self.econv:.1e}\n")
 
         logger.log_info1("=" * width)
@@ -272,11 +274,15 @@ class MCOptimizer(ActiveSpaceSolver):
             # 2. Convergence checks
             _dg = self.lbfgs_solver.g - self.g_old
             self.dg_rms = np.sqrt(np.mean((_dg.conj() * _dg).real))
-            self.g_rms = np.sqrt(np.mean((self.lbfgs_solver.g.conj() * self.lbfgs_solver.g).real))
+            self.g_rms = np.sqrt(
+                np.mean((self.lbfgs_solver.g.conj() * self.lbfgs_solver.g).real)
+            )
             self.g_old = self.lbfgs_solver.g.copy()
             conv, conv_str = self._check_convergence()
             lbfgs_str = f"{self.lbfgs_solver.iter}/{'Y' if self.lbfgs_solver.converged else 'N'}"
-            iter_info = f"{self.iter:>10d} {self.E_avg.real:>20.10f} {self.E_orb.real:>20.10f} "
+            iter_info = (
+                f"{self.iter:>10d} {self.E_avg.real:>20.10f} {self.E_orb.real:>20.10f} "
+            )
             iter_info += f"{self.delta_ci_avg.real:>12.4e} {self.max_ci_de:>12.4e} {self.g_rms.real:>12.4e} {lbfgs_str:>8} {conv_str:>8}"
             if conv:
                 logger.log_info1(iter_info)
@@ -325,7 +331,9 @@ class MCOptimizer(ActiveSpaceSolver):
 
         logger.log_info1("=" * width)
         if self.converged:
-            logger.log_info1(f"Orbital optimization converged in {self.iter} iterations.")
+            logger.log_info1(
+                f"Orbital optimization converged in {self.iter} iterations."
+            )
         logger.log_info1(f"Final orbital optimized energy: {self.E_avg:.10f}")
 
         # undo _make_spaces_contiguous
@@ -335,6 +343,15 @@ class MCOptimizer(ActiveSpaceSolver):
         self._post_process()
 
         if self.final_orbital == "semicanonical":
+            if self.two_component:
+                g1 = self.ci_solver.make_average_1rdm()
+            else:
+                g1 = self.ci_solver.make_average_sf_1rdm()
+            mix_inactive = (
+                False
+                if isinstance(self.parent_method, ASET)
+                else not self.optimize_frozen_orbs
+            )
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
                 system=self.system,
@@ -430,7 +447,7 @@ class MCOptimizer(ActiveSpaceSolver):
         nrr[_virt, self.actv] = True
         nrr[self.actv, _core] = True
 
-        # remove active_fronzen indices from nonredundant rotations
+        # remove active_frozen indices from nonredundant rotations
         if self.active_frozen_orbitals is not None:
             contig_actv_froz = self.mo_space.contig_to_orig[self.active_frozen_orbitals]
             for idx in contig_actv_froz:

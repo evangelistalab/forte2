@@ -10,6 +10,7 @@ from forte2.helpers import logger
 from forte2.base_classes.mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.data import ATOM_SYMBOL_TO_Z
 from forte2.orbitals.semicanonicalizer import Semicanonicalizer
+from forte2.orbitals.avas import AVAS
 
 
 @dataclass
@@ -64,13 +65,13 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
     executed: bool = field(default=False, init=False)
 
     def __post_init__(self):
-        self._regex = r"^([A-Z][a-z]?)(\d+)?(?:-(\d+))?$"
+        self._regex = r"^([a-zA-Z]{1,2})(?:(\d+)(?:-(\d+))?)?$"
         self._check_parameters()
 
     def __call__(self, parent_method):
         assert isinstance(
-            parent_method, forte2.mcopt.MCOptimizer
-        ), f"Parent method must be MCSCF, got {type(parent_method)}"
+            parent_method, (forte2.mcopt.MCOptimizer, AVAS)
+        ), f"Parent method must be MCSCF or AVAS, got {type(parent_method)}"
         self.parent_method = parent_method
         return self
 
@@ -160,7 +161,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
             if not match:
                 raise ValueError(f"Invalid fragment specification: {token}")
 
-            symbol = match.group(1)  # e.g., "C"
+            symbol = match.group(1).upper()  # e.g., "C"
             start = match.group(2)  # e.g., "1"
             end = match.group(3)  # e.g., "3" (if it's a range)
 
@@ -332,7 +333,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
 
         frozen_core_inds = self.mo_space.frozen_core_indices
         frozen_virt_inds = self.mo_space.frozen_virtual_indices
-        g1 = self.parent_method.ci_solver.make_average_1rdm()
+        g1_sf = self.compute_g1_sf()
         emb_space = EmbeddingMOSpace(
             nmo=self.nmo,
             frozen_core_orbitals=frozen_core_inds,
@@ -362,6 +363,14 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
             "lo_vals": lo_vals,
             "lv_vals": lv_vals,
         }
+
+    def compute_g1_sf(self):
+        if isinstance(self.parent_method, forte2.mcopt.MCOptimizer):
+            g1_sf = self.parent_method.ci_solver.make_average_sf_1rdm()
+        else:
+            # RHF/ROHF case: g1_sf = identity in active space
+            g1_sf = np.eye(self.nactv)
+        return g1_sf
 
     def _print_embedding_info(self, **info: dict[str, np.ndarray | list[int]]) -> None:
         """
@@ -453,4 +462,5 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
                 )
             ),
         )
+        logger.log_info1(f"New MO space:\n{self.mo_space}")
         return self.mo_space
