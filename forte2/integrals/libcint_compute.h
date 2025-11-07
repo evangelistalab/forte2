@@ -8,12 +8,14 @@
 
 #include "helpers/ndarray.h"
 
+#if FORTE2_USE_LIBCINT
 extern "C" {
-#include <cint.h>
+#  include <cint.h>
 
 int CINTcgto_spheric(const int i, const int* bas);
 int CINTcgto_spinor(const int i, const int* bas);
 }
+#endif
 
 // Standard Libcint function pointer type
 using CIntorFunc = int (*)(double* buf, int* dims, int* shls, int* atm, int natm, int* bas,
@@ -45,7 +47,12 @@ np_tensor3_f cint_int2c(CIntorFunc intor, const std::vector<int>& shell_slice, n
 
     std::vector<int> ao_offset(nbas + 1, 0);
     for (int i = 0; i < nbas; ++i) {
+#if FORTE2_USE_LIBCINT
         ao_offset[i + 1] = ao_offset[i] + CINTcgto_spheric(i, bas_data);
+#else
+        (void) bas_data; // silence unused warning if compiled without libcint
+        ao_offset[i + 1] = ao_offset[i];
+#endif
     }
 
     const int nao_i = ao_offset[ish_1] - ao_offset[ish_0];
@@ -92,7 +99,12 @@ np_tensor3_complex_f cint_int2c_spinor(CIntorFuncSpinor intor, const std::vector
 
     std::vector<int> ao_offset(nbas + 1, 0);
     for (int i = 0; i < nbas; ++i) {
+#if FORTE2_USE_LIBCINT
         ao_offset[i + 1] = ao_offset[i] + CINTcgto_spinor(i, bas_data);
+#else
+        (void) bas_data;
+        ao_offset[i + 1] = ao_offset[i];
+#endif
     }
 
     const int nao_i = ao_offset[ish_1] - ao_offset[ish_0];

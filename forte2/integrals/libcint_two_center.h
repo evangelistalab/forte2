@@ -1,4 +1,8 @@
+// This header defines libcint-backed two-center integral wrappers.
+// It is only compiled when FORTE2_USE_LIBCINT is enabled.
 #pragma once
+
+#if FORTE2_USE_LIBCINT
 
 #include <complex.h>
 
@@ -75,3 +79,5 @@ DECL_CINT_FORTE2_FUNC_SPINOR(int1e_nuc, 1)
 DECL_CINT_FORTE2_FUNC_SPINOR(int1e_spnucsp, 1)
 #undef DECL_CINT_FORTE2_FUNC_SPINOR
 } // namespace forte2
+
+#endif // FORTE2_USE_LIBCINT

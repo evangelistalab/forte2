@@ -18,7 +18,10 @@
 #include "integrals/one_electron.h"
 #include "integrals/two_electron.h"
 #include "integrals/value_at_points.h"
-#include "integrals/libcint_two_center.h"
+// Libcint-backed functions are optional
+#if FORTE2_USE_LIBCINT
+#  include "integrals/libcint_two_center.h"
+#endif
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -51,7 +54,15 @@ void export_integrals_api(nb::module_& m) {
 
     export_value_at_points_api(sub_m);
 
+    // expose libcint utilities only if available
     export_libcint_compute_api(sub_m);
+
+    // Expose presence flag for Python-side checks
+#if FORTE2_USE_LIBCINT
+    sub_m.attr("HAS_LIBCINT") = nb::bool_(true);
+#else
+    sub_m.attr("HAS_LIBCINT") = nb::bool_(false);
+#endif
 }
 
 void export_shell_api(nb::module_& sub_m) {
@@ -346,6 +357,7 @@ void export_two_electron_api(nb::module_& sub_m) {
         "basis1"_a, "basis2"_a, "omega"_a);
 }
 
+#if FORTE2_USE_LIBCINT
 void export_libcint_compute_api(nb::module_& sub_m) {
     sub_m.def("cint_int1e_ovlp_sph", &cint_int1e_ovlp_sph, "shell_slice"_a, "atm"_a, "bas"_a,
               "env"_a, "Compute the overlap integral matrix using libcint in spherical harmonics.");
@@ -375,4 +387,11 @@ void export_libcint_compute_api(nb::module_& sub_m) {
               "Compute the two-center two-electron integral matrix using libcint in spherical "
               "harmonics.");
 }
+#else
+// When libcint is disabled, define a no-op exporter
+void export_libcint_compute_api(nb::module_& sub_m) {
+    // Intentionally empty: libcint-backed APIs are unavailable.
+    (void) sub_m;
+}
+#endif
 } // namespace forte2

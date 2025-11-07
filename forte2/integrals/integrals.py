@@ -4,6 +4,19 @@ from forte2 import ints
 from forte2.integrals.libcint_utils import conc_env, basis_to_cint_envs
 
 
+def _require_libcint():
+    """Ensure libcint-backed bindings are available.
+
+    Raises a RuntimeError with a helpful message if libcint was not compiled
+    into forte2 (CMake option USE_LIBCINT=OFF).
+    """
+    has_attr = getattr(ints, "HAS_LIBCINT", False)
+    if not has_attr:
+        raise RuntimeError(
+            "libcint-backed integrals are unavailable. Rebuild forte2 with USE_LIBCINT=ON to enable cibased APIs."
+        )
+
+
 def _parse_basis_args_1e(system, basis1, basis2):
     # 2 possible cases:
     # 1. both basis sets are None -> set both to system.basis
@@ -312,8 +325,9 @@ def opVop(system, basis1=None, basis2=None):
     """
     # libint2 does not support 1e-opVop with Gaussian charges
     if system.use_gaussian_charges:
+        # Requires libcint; raises a clear error if unavailable
         res = cint_opVop(system, basis1, basis2)
-        # [I2, sigma_x, sigma_y, sigma_z]
+        # Note: libcint returns [sigma_x, sigma_y, sigma_z, I2]. We reorder to [I2, sigma_x, sigma_y, sigma_z].
         return [res[3], res[0], res[1], res[2]]
     basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
     return ints.opVop(basis1, basis2, system.atoms)
@@ -662,6 +676,7 @@ def cint_overlap(system, basis1=None, basis2=None):
     basis2 : BasisSet, optional
         The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
     """
+    _require_libcint()
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
     res = ints.cint_int1e_ovlp_sph(shell_slice, atm, bas, env)
     return _f2c(res)
@@ -684,6 +699,7 @@ def cint_overlap_spinor(system, basis1=None, basis2=None):
     basis2 : BasisSet, optional
         The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
     """
+    _require_libcint()
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
     res = ints.cint_int1e_ovlp_spinor(shell_slice, atm, bas, env)
     return _f2c(res)
@@ -706,6 +722,7 @@ def cint_kinetic(system, basis1=None, basis2=None):
     basis2 : BasisSet, optional
         The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
     """
+    _require_libcint()
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
     res = ints.cint_int1e_kin_sph(shell_slice, atm, bas, env)
     return _f2c(res)
@@ -728,6 +745,7 @@ def cint_nuclear(system, basis1=None, basis2=None):
     basis2 : BasisSet, optional
         The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
     """
+    _require_libcint()
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
     res = ints.cint_int1e_nuc_sph(shell_slice, atm, bas, env)
     return _f2c(res)
@@ -754,6 +772,7 @@ def cint_opVop(system, basis1=None, basis2=None):
     opVop : ndarray
         The small component nuclear potential integrals.
     """
+    _require_libcint()
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
     res = ints.cint_int1e_spnucsp_sph(shell_slice, atm, bas, env)
     # C-layout, first index is the integral component (slowest changing)
@@ -781,6 +800,7 @@ def cint_opVop_spinor(system, basis1=None, basis2=None):
     opVop_spinor : ndarray
         The small component nuclear potential integrals in spinor basis
     """
+    _require_libcint()
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
     res = ints.cint_int1e_spnucsp_spinor(shell_slice, atm, bas, env)
     return _f2c(res)
@@ -813,6 +833,7 @@ def cint_emultipole1(system, basis1=None, basis2=None, origin=None):
     emultipole1 : ndarray
         The first electric multipole moment integrals
     """
+    _require_libcint()
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
     # if origin is None:
     #     origin = [0.0, 0.0, 0.0]
@@ -843,6 +864,7 @@ def cint_coulomb_2c(system, basis1=None, basis2=None):
     ndarray
         The two-center two-electron Coulomb integral matrix.
     """
+    _require_libcint()
     atm, bas, env, shell_slice = _parse_basis_args_cint_2c2e(system, basis1, basis2)
     res = ints.cint_int2c2e_sph(shell_slice, atm, bas, env)
     return _f2c(res)
