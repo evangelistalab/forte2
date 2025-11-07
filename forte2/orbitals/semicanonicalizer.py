@@ -2,7 +2,6 @@ import numpy as np
 
 from forte2.system import System
 from forte2.state import MOSpace, EmbeddingMOSpace
-from forte2.jkbuilder import FockBuilder
 
 
 class Semicanonicalizer:
@@ -21,9 +20,6 @@ class Semicanonicalizer:
         The molecular orbital coefficients, in the "original" order of the orbitals.
     system : System
         The system object containing the basis set and other properties.
-    fock_builder : FockBuilder, optional
-        An instance of FockBuilder to compute the Fock matrix.
-        If None, a new FockBuilder will be created.
     mix_inactive : bool, optional, default=False
         If True, frozen_core and core orbitals will be diagonalized together,
         virtual and frozen_virt also will be diagonalized together.
@@ -49,7 +45,6 @@ class Semicanonicalizer:
         C: np.ndarray,
         system: System,
         mo_space: MOSpace | EmbeddingMOSpace = None,
-        fock_builder: FockBuilder = None,
         mix_inactive: bool = False,
         mix_active: bool = False,
         do_frozen: bool = True,
@@ -63,7 +58,7 @@ class Semicanonicalizer:
             # factor of 0.5 to use (2J - K) throughout for Fock build
             self.g1 = 0.5 * g1
         self.system = system
-        self.fock_builder = fock_builder
+        self.fock_builder = system.fock_builder
         self._C = C[:, self.mo_space.orig_to_contig].copy()
         # these are only used for MOSpace
         self.mix_inactive = mix_inactive
@@ -71,9 +66,6 @@ class Semicanonicalizer:
         # these are only used for EmbeddingMOSpace
         self.do_frozen = do_frozen
         self.do_active = do_active
-
-        if self.fock_builder is None:
-            self.fock_builder = FockBuilder(self.system, use_aux_corr=True)
 
         self._semicanonicalize()
 

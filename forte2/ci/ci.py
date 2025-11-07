@@ -199,11 +199,14 @@ class _CIBase:
             self.dets = self.ci_strings.make_determinants()
 
             self.spin_adapter.prepare_couplings(self.dets)
-            logger.log(f"Number of CSFs: {self.spin_adapter.ncsf()}", self.log_level)
+            logger.log(
+                f"Number of configurations: {self.spin_adapter.nconf}", self.log_level
+            )
+            logger.log(f"Number of CSFs: {self.spin_adapter.ncsf}", self.log_level)
 
             # 1. Allocate memory for the CI vectors
             self.ndet = self.ci_strings.ndet
-            self.basis_size = self.spin_adapter.ncsf()
+            self.basis_size = self.spin_adapter.ncsf
 
             # Create the CI vectors that will hold the results of the sigma builder in the
             # determinant basis
