@@ -3,8 +3,10 @@ import pytest
 
 from forte2 import System, integrals
 from forte2.system.build_basis import build_basis
+from forte2.integrals import LIBCINT_AVAILABLE
 
 
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
 def test_libcint_overlap():
     xyz = """
     Li 0 0 0
@@ -17,6 +19,7 @@ def test_libcint_overlap():
     assert np.linalg.norm(s_cint) == pytest.approx(3.6556110774906956, rel=1e-6)
 
 
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
 def test_libcint_ovlp_spinor():
     xyz = """
     Li 0 0 0
@@ -27,6 +30,7 @@ def test_libcint_ovlp_spinor():
     assert np.linalg.norm(s_cint) == pytest.approx(5.169814764522727, rel=1e-6)
 
 
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
 def test_libcint_spnucsp_sph_with_gaussian_charges():
     xyz = """
     Ag 0 0 0
@@ -39,6 +43,7 @@ def test_libcint_spnucsp_sph_with_gaussian_charges():
     assert np.linalg.norm(s) == pytest.approx(5982385.012696481, rel=1e-6)
 
 
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
 def test_libcint_spnucsp_sph():
     xyz = """
     Ag 0 0 0
@@ -47,12 +52,14 @@ def test_libcint_spnucsp_sph():
     system = System(xyz, basis_set="sto-3g", minao_basis_set=None)
     s_cint = integrals.cint_opVop(system)
     c_int2 = integrals.opVop(system)
-    for i in range(4):
-        # cint pauli ordering is [s_x, s_y, s_z, I_2], int2 is [I_2, s_x, s_y, s_z]
-        assert np.linalg.norm(s_cint[(i + 3) % 4] - c_int2[i]) < 1e-6
+    assert np.linalg.norm(s_cint[3] - c_int2[0]) < 1e-6  # I2
+    assert np.linalg.norm(s_cint[0] - c_int2[1]) < 1e-6  # sigma_x
+    assert np.linalg.norm(s_cint[1] - c_int2[2]) < 1e-6  # sigma_y
+    assert np.linalg.norm(s_cint[2] - c_int2[3]) < 1e-6  # sigma_z
     assert np.linalg.norm(s_cint) == pytest.approx(5982385.234519612, rel=1e-6)
 
 
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
 def test_libcint_spnucsp_spinor():
     xyz = """
     Li 0 0 0
@@ -63,6 +70,7 @@ def test_libcint_spnucsp_spinor():
     assert np.linalg.norm(s) == pytest.approx(116.46738183606718, rel=1e-6)
 
 
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
 def test_libcint_kinetic():
     xyz = """
     Li 0 0 0
@@ -75,6 +83,7 @@ def test_libcint_kinetic():
     assert np.linalg.norm(s_cint) == pytest.approx(5.128923795496629, rel=1e-6)
 
 
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
 def test_libcint_kinetic_decontracted():
     xyz = """
     Li 0 0 0
@@ -89,6 +98,7 @@ def test_libcint_kinetic_decontracted():
     assert np.linalg.norm(s_cint) == pytest.approx(36.523146675022836, rel=1e-6)
 
 
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
 def test_libcint_nuclear():
     xyz = """
     Ag 0 0 0
@@ -106,6 +116,7 @@ def test_libcint_nuclear():
     )
 
 
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
 def test_libcint_2c2e():
     xyz = """
     N 0 0 0
@@ -118,6 +129,7 @@ def test_libcint_2c2e():
     assert np.linalg.norm(s_cint) == pytest.approx(159.31789654133004, rel=1e-6)
 
 
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
 def test_libcint_r_sph():
     xyz = """
     Li 0 0 0

@@ -3,17 +3,13 @@ import numpy as np
 from forte2 import ints
 from forte2.integrals.libcint_utils import conc_env, basis_to_cint_envs
 
+LIBCINT_AVAILABLE = getattr(ints, "HAS_LIBCINT", False)
+
 
 def _require_libcint():
-    """Ensure libcint-backed bindings are available.
-
-    Raises a RuntimeError with a helpful message if libcint was not compiled
-    into forte2 (CMake option USE_LIBCINT=OFF).
-    """
-    has_attr = getattr(ints, "HAS_LIBCINT", False)
-    if not has_attr:
+    if not LIBCINT_AVAILABLE:
         raise RuntimeError(
-            "libcint-backed integrals are unavailable. Rebuild forte2 with USE_LIBCINT=ON to enable cibased APIs."
+            "libcint integrals are unavailable. Rebuild forte2 with USE_LIBCINT=ON to enable libcint APIs."
         )
 
 
@@ -327,8 +323,9 @@ def opVop(system, basis1=None, basis2=None):
     if system.use_gaussian_charges:
         # Requires libcint; raises a clear error if unavailable
         res = cint_opVop(system, basis1, basis2)
-        # Note: libcint returns [sigma_x, sigma_y, sigma_z, I2]. We reorder to [I2, sigma_x, sigma_y, sigma_z].
-        return [res[3], res[0], res[1], res[2]]
+        # Note: libcint returns [sigma_x, sigma_y, sigma_z, I2]. 
+        # We reorder to [I2, sigma_z, sigma_x, sigma_y] (the same as libint2)
+        return [res[3], res[2], res[0], res[1]]
     basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
     return ints.opVop(basis1, basis2, system.atoms)
 
@@ -652,6 +649,7 @@ def _parse_basis_args_cint_2c2e(system, basis1, basis2):
         shell_slice = [0, ns1, ns1, ns1 + ns2]
     return atm, bas, env, shell_slice
 
+
 def _f2c(arr):
     if arr.shape[-1] == 1:
         return np.ascontiguousarray(arr[..., 0])
@@ -770,7 +768,8 @@ def cint_opVop(system, basis1=None, basis2=None):
     Returns
     -------
     opVop : ndarray
-        The small component nuclear potential integrals.
+        The small component nuclear potential integrals. Order of components:
+        [(p cross Vp)_x, (p cross Vp)_y, (p cross Vp)_z, p dot Vp]
     """
     _require_libcint()
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
