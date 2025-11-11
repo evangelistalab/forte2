@@ -1,8 +1,7 @@
-import regex as re
+import re
 from dataclasses import dataclass
 import numpy as np
 
-from forte2 import ints
 from forte2.helpers import logger
 from forte2.symmetry import rotation_mat, PGSymmetryDetector
 from forte2.data import ATOM_DATA, ATOM_SYMBOL_TO_Z, ANGSTROM_TO_BOHR

@@ -324,8 +324,8 @@ def opVop(system, basis1=None, basis2=None):
         # Requires libcint; raises a clear error if unavailable
         res = cint_opVop(system, basis1, basis2)
         # Note: libcint returns [sigma_x, sigma_y, sigma_z, I2]. 
-        # We reorder to [I2, sigma_z, sigma_x, sigma_y] (the same as libint2)
-        return [res[3], res[2], res[0], res[1]]
+        # We reorder to [I2, sigma_x, sigma_y, sigma_z] (the same as libint2)
+        return [res[3], res[0], res[1], res[2]]
     basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
     return ints.opVop(basis1, basis2, system.atoms)
 
