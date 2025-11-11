@@ -38,7 +38,7 @@ def test_mrpt2_n2_nonrel():
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
 
-    dsrg = DSRG_MRPT2(flow_param=0.5, relax_reference="once")(mc)
+    dsrg = DSRG_MRPT2(flow_param=0.5, relax_reference="iterate")(mc)
     dsrg.run()
 
     assert dsrg.relax_energies[0, 0] == approx(-109.238860710091)
@@ -167,20 +167,15 @@ def test_sf_mrpt2_n2():
 
     dsrg = SF_DSRG_MRPT2(flow_param=0.5, relax_reference="iterate")(mc)
     dsrg.run()
-    print(dsrg.relax_energies)
 
-    assert dsrg.relax_energies[0, 0] == approx(-109.238860710091)
-    assert dsrg.relax_energies[0, 1] == approx(-109.239311979963)
-    assert dsrg.relax_energies[0, 2] == approx(-109.081149196818)
+    assert dsrg.relax_energies[0, 0] == approx(-109.23886074061)
+    assert dsrg.relax_energies[0, 1] == approx(-109.23931193044)
+    assert dsrg.relax_energies[0, 2] == approx(-109.08114919682)
 
-    assert dsrg.relax_energies[1, 0] == approx(-109.238952001270)
-    assert dsrg.relax_energies[1, 1] == approx(-109.238952010521)
-    assert dsrg.relax_energies[1, 2] == approx(-109.080656324868)
+    assert dsrg.relax_energies[1, 0] == approx(-109.23895207574)
+    assert dsrg.relax_energies[1, 1] == approx(-109.23895208449)
+    assert dsrg.relax_energies[1, 2] == approx(-109.08065641191)
 
-    assert dsrg.relax_energies[2, 0] == approx(-109.238953941310)
-    assert dsrg.relax_energies[2, 1] == approx(-109.238953941321)
-    assert dsrg.relax_energies[2, 2] == approx(-109.080659175782)
-
-
-test_sf_mrpt2_n2()
-# test_mrpt2_n2_nonrel()
+    assert dsrg.relax_energies[2, 0] == approx(-109.23895388557)
+    assert dsrg.relax_energies[2, 1] == approx(-109.23895388557)
+    assert dsrg.relax_energies[2, 2] == approx(-109.08065911063)
