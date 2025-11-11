@@ -4,7 +4,11 @@ from typing import Annotated, overload
 
 from numpy.typing import ArrayLike
 
-from . import cpp_helpers as cpp_helpers, ints as ints
+from . import (
+    cpp_helpers as cpp_helpers,
+    dsrg_utils as dsrg_utils,
+    ints as ints
+)
 
 
 class CIStrings:
@@ -198,7 +202,7 @@ class CISigmaBuilder:
         """Compute the spin-free three-electron cumulant for debugging purposes"""
 
 class RelCISigmaBuilder:
-    def __init__(self, lists: CIStrings, E: float, H: Annotated[ArrayLike, dict(dtype='complex128', shape=(None, None))], V: Annotated[ArrayLike, dict(dtype='complex128', shape=(None, None, None, None))], log_level: int = 3) -> None:
+    def __init__(self, lists: CIStrings, E: float, H: Annotated[ArrayLike, dict(dtype='complex128', shape=(None, None))], V: Annotated[ArrayLike, dict(dtype='complex128', shape=(None, None, None, None))], log_level: int = 3, use_asym_ints: bool = False) -> None:
         """
         Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals
         """
@@ -248,6 +252,10 @@ class CISpinAdapter:
 
     def det_C_to_csf_C(self, det_C: Annotated[ArrayLike, dict(dtype='float64', shape=(None))], csf_C: Annotated[ArrayLike, dict(dtype='float64', shape=(None))]) -> None: ...
 
+    @property
+    def nconf(self) -> int: ...
+
+    @property
     def ncsf(self) -> int: ...
 
     def set_log_level(self, level: int) -> None:
@@ -258,33 +266,48 @@ class Determinant:
     def __init__(self, arg: Determinant) -> None: ...
 
     @overload
-    def __init__(self, arg: str, /) -> None: ...
+    def __init__(self, str: str) -> None:
+        """Build a determinant from a string representation"""
 
     @staticmethod
-    def zero() -> Determinant: ...
+    def zero() -> Determinant:
+        """Create a zero determinant with no electrons"""
 
-    def __eq__(self, arg: Determinant, /) -> bool: ...
+    maxnorb: int = ...
+    """The maximum number of orbitals supported by the Determinant class"""
 
-    def __lt__(self, arg: Determinant, /) -> bool: ...
+    def __eq__(self, arg: Determinant, /) -> bool:
+        """Check if two determinants are equal"""
 
-    def __hash__(self) -> int: ...
+    def __lt__(self, arg: Determinant, /) -> bool:
+        """Check if a determinant is less than another determinant"""
+
+    def __hash__(self) -> int:
+        """Get the hash of the determinant"""
 
     def __repr__(self) -> str:
         """String representation of the determinant"""
 
-    def set_na(self, arg0: int, arg1: bool, /) -> None: ...
+    def set_na(self, n: int, value: bool) -> None:
+        """Set the occupation of an alpha orbital"""
 
-    def set_nb(self, arg0: int, arg1: bool, /) -> None: ...
+    def set_nb(self, n: int, value: bool) -> None:
+        """Set the occupation of a beta orbital"""
 
-    def na(self, arg: int, /) -> bool: ...
+    def na(self, n: int) -> bool:
+        """Is orbital n occupied by an alpha electron?"""
 
-    def nb(self, arg: int, /) -> bool: ...
+    def nb(self, n: int) -> bool:
+        """Is orbital n occupied by a beta electron?"""
 
-    def count_a(self) -> int: ...
+    def count_a(self) -> int:
+        """Count the number of alpha electrons"""
 
-    def count_b(self) -> int: ...
+    def count_b(self) -> int:
+        """Count the number of beta electrons"""
 
-    def count(self) -> int: ...
+    def count(self) -> int:
+        """Count the total number of electrons"""
 
     def create_a(self, n: int) -> float:
         """
