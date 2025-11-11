@@ -37,7 +37,7 @@ def test_rel_gasscf_equivalence_to_nonrel():
 
 def test_rel_gasscf_h2o_core():
     escf = -76.105948393630
-    emcscf = -56.447577058599904
+    emcscf = -56.4188130704
 
     xyz = """
     O   0.0000000000  -0.0000000000  -0.0662628033
@@ -59,11 +59,10 @@ def test_rel_gasscf_h2o_core():
         core_orbitals=[2, 3],
         nroots=4,
         active_orbitals=[[0, 1], [4, 5, 6, 7, 8, 9, 10, 11]],
-        freeze_inter_gas_rots=True,
+        active_frozen_orbitals=[0, 1],
         do_diis=False,
     )(scf)
     mc.run()
 
     assert scf.E == approx(escf)
     assert mc.E == approx(emcscf)
-test_rel_gasscf_h2o_core()
