@@ -252,7 +252,7 @@ def pretty_print_ci_transition_props(
     logger.log_info1("=" * width)
 
 
-def make_2cumulant(gamma1, gamma2):
+def make_2cumulant_so(gamma1, gamma2):
     """
     Compute the 2-cumulant from the 1- and 2-RDMs.
 
@@ -279,7 +279,7 @@ def make_2cumulant(gamma1, gamma2):
     return l2
 
 
-def make_3cumulant(gamma1, lambda2, gamma3):
+def make_3cumulant_so(gamma1, lambda2, gamma3):
     """
     Compute the 3-cumulant from the 1- and 3-RDMs and 2-cumulant.
 
@@ -319,4 +319,70 @@ def make_3cumulant(gamma1, lambda2, gamma3):
         + np.einsum("pu,qs,rt->pqrstu", gamma1, gamma1, gamma1, optimize=True)
         + np.einsum("pt,qu,rs->pqrstu", gamma1, gamma1, gamma1, optimize=True)
     )
+    return l3
+
+def make_2cumulant_sf(gamma1, gamma2):
+    """
+    Compute the spin-free 2-cumulant from the 1- and 2- spin-free RDMs.
+    This can be useful for computing averaged cumulants, since one cannot simply average
+    the 2-cumulants directly, as the relation between RDMs and cumulants is nonlinear.
+
+    Parameters
+    ----------
+    gamma1 : np.ndarray
+        The one-particle spin-free reduced density matrix (sf-1-RDM).
+    gamma2 : np.ndarray
+        The two-particle spin-free reduced density matrix (sf-2-RDM).
+
+    Returns
+    -------
+    np.ndarray
+        The two-particle spin-free cumulant (sf-2-cumulant).
+    """
+    l2 = (
+        gamma2
+        - np.einsum("pr,qs->pqrs", gamma1, gamma1, optimize=True)
+        + 0.5 * np.einsum("ps,qr->pqrs", gamma1, gamma1, optimize=True)
+    )
+    return l2
+
+def make_3cumulant_sf(gamma1, gamma2, gamma3):
+    """
+    Compute the spin-free 3-cumulant from the 1-, 2-, and 3- spin-free RDMs.
+    This can be useful for computing averaged cumulants, since one cannot simply average
+    the 3-cumulants directly, as the relation between RDMs and cumulants is nonlinear.
+
+    Parameters
+    ----------
+    gamma1 : np.ndarray
+        The one-particle spin-free reduced density matrix (sf-1-RDM).
+    gamma2 : np.ndarray
+        The two-particle spin-free reduced density matrix (sf-2-RDM).
+    gamma3 : np.ndarray
+        The three-particle spin-free reduced density matrix (sf-3-RDM).
+
+    Returns
+    -------
+    np.ndarray
+        The three-particle spin-free cumulant (sf-3-cumulant).
+    """
+    l3 = gamma3 - (
+        +np.einsum("ps,qrtu->pqrstu", gamma1, gamma2, optimize=True)
+        + np.einsum("qt,prsu->pqrstu", gamma1, gamma2, optimize=True)
+        + np.einsum("ru,pqst->pqrstu", gamma1, gamma2, optimize=True)
+    )
+    l3 += 0.5 * (
+        +np.einsum("pt,qrsu->pqrstu", gamma1, gamma2, optimize=True)
+        + np.einsum("pu,qrts->pqrstu", gamma1, gamma2, optimize=True)
+        + np.einsum("qs,prtu->pqrstu", gamma1, gamma2, optimize=True)
+        + np.einsum("qu,prst->pqrstu", gamma1, gamma2, optimize=True)
+        + np.einsum("rs,pqut->pqrstu", gamma1, gamma2, optimize=True)
+        + np.einsum("rt,pqsu->pqrstu", gamma1, gamma2, optimize=True)
+    )
+    l3 += 2.0 * np.einsum("ps,qt,ru->pqrstu", gamma1, gamma1, gamma1, optimize=True)
+    l3 -= (np.einsum("ps,qu,rt->pqrstu", gamma1, gamma1, gamma1, optimize=True)
+        + np.einsum("pu,qt,rs->pqrstu", gamma1, gamma1, gamma1, optimize=True)
+        + np.einsum("pt,qs,ru->pqrstu", gamma1, gamma1, gamma1, optimize=True))
+    l3 += 0.5 * (np.einsum("pt,qu,rs->pqrstu", gamma1, gamma1, gamma1, optimize=True)
+        + np.einsum("pu,qs,rt->pqrstu", gamma1, gamma1, gamma1, optimize=True))
     return l3

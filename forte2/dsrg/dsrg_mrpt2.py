@@ -3,12 +3,9 @@ from dataclasses import dataclass
 import numpy as np
 
 from forte2 import dsrg_utils
-from forte2.ci.ci_utils import make_2cumulant, make_3cumulant
+from forte2.ci.ci_utils import make_2cumulant_so, make_3cumulant_so
 from .dsrg_base import DSRGBase
 from .utils import antisymmetrize_2body, cas_energy_given_cumulants
-
-MACHEPS = 1e-9
-TAYLOR_THRES = 1e-3
 
 compute_t1_block = dsrg_utils.compute_T1_block
 compute_t2_block = dsrg_utils.compute_T2_block
@@ -47,7 +44,7 @@ class DSRG_MRPT2(DSRGBase):
             )
             g2 = self.ci_solver.make_average_2rdm()
             g3 = self.ci_solver.make_average_3rdm()
-            l2 = make_2cumulant(g1, g2)
+            l2 = make_2cumulant_so(g1, g2)
             cumulants["lambda2"] = np.einsum(
                 "ip,jq,ijkl,kr,ls->pqrs",
                 self.Uactv,
@@ -57,7 +54,7 @@ class DSRG_MRPT2(DSRGBase):
                 self.Uactv.conj(),
                 optimize=True,
             )
-            l3 = make_3cumulant(g1, l2, g3)
+            l3 = make_3cumulant_so(g1, l2, g3)
             cumulants["lambda3"] = np.einsum(
                 "ip,jq,kr,ijklmn,ls,mt,nu->pqrstu",
                 self.Uactv,
@@ -133,12 +130,6 @@ class DSRG_MRPT2(DSRGBase):
                 optimize=True,
             )
             ints["V"]["aavv"] -= ints["V"]["aavv"].swapaxes(2, 3)
-            ints["V"]["caca"] = np.einsum(
-                "Bij,Buv->iujv",
-                B_so["cc"],
-                B_so["aa"],
-                optimize=True,
-            )
 
             # These are used in on-the-fly energy/Hbar computations
             ints["B"] = dict()
@@ -147,9 +138,9 @@ class DSRG_MRPT2(DSRGBase):
             ints["B"]["av"] = B_so["av"].transpose(1, 2, 0).copy()
 
             ints["eps"] = dict()
-            ints["eps"]["core"] = self.eps[self.core].copy()
-            ints["eps"]["actv"] = self.eps[self.actv].copy()
-            ints["eps"]["virt"] = self.eps[self.virt].copy()
+            ints["eps"]["c"] = self.eps[self.core].copy()
+            ints["eps"]["a"] = self.eps[self.actv].copy()
+            ints["eps"]["v"] = self.eps[self.virt].copy()
             # <Psi_0 | bare H | Psi_0>, where Psi_0 is the current (possibly relaxed) reference
 
             return ints, cumulants
@@ -158,12 +149,16 @@ class DSRG_MRPT2(DSRGBase):
 
     def solve_dsrg(self, form_hbar=False):
         self.T1, self.T2 = self._build_tamps()
-        self.F_tilde, self.V_tilde = self._renormalize_integrals()
+        self.F_tilde = self._renormalize_F()
+        # self.ints["V"] gets renormalizes to V_tilde in place for the following blocks:
+        # caaa, aaav, ccaa, caav, aavv
+        # The aaaa block is remains untouched, and can be safely used in reference relaxation
+        self._renormalize_V_in_place()
         if form_hbar:
             self.hbar_aa_df = np.zeros((self.nact, self.nact), dtype=complex)
         E = self._compute_pt2_energy(
             self.F_tilde,
-            self.V_tilde,
+            self.ints["V"],
             self.T1,
             self.T2,
             self.cumulants["gamma1"],
@@ -179,7 +174,7 @@ class DSRG_MRPT2(DSRGBase):
         _hbar2 = self.ints["V"]["aaaa"].copy()
         _C2 = 0.5 * self._compute_Hbar_aaaa(
             self.F_tilde,
-            self.V_tilde,
+            self.ints["V"],
             self.T1,
             self.T2,
             self.cumulants["gamma1"],
@@ -191,7 +186,7 @@ class DSRG_MRPT2(DSRGBase):
         _hbar1 = self.fock[self.actv, self.actv].copy()
         _C1 = 0.5 * self._compute_Hbar_aa(
             self.F_tilde,
-            self.V_tilde,
+            self.ints["V"],
             self.T1,
             self.T2,
             self.cumulants["gamma1"],
@@ -236,54 +231,15 @@ class DSRG_MRPT2(DSRGBase):
         return e_relaxed
 
     def _build_tamps(self):
-        # 1b: ca, cv, av
-        # 2b: caaa, aaav, ccaa, ccav, caav, ccvv, aavv, cavv
         t2 = dict()
-        t2["caaa"] = self.ints["V"]["caaa"].conj()
-        compute_t2_block(
-            t2["caaa"],
-            self.ints["eps"]["core"],
-            self.ints["eps"]["actv"],
-            self.ints["eps"]["actv"],
-            self.ints["eps"]["actv"],
-            self.flow_param,
-        )
-        t2["aaav"] = self.ints["V"]["aaav"].conj()
-        compute_t2_block(
-            t2["aaav"],
-            self.ints["eps"]["actv"],
-            self.ints["eps"]["actv"],
-            self.ints["eps"]["actv"],
-            self.ints["eps"]["virt"],
-            self.flow_param,
-        )
-        t2["ccaa"] = self.ints["V"]["ccaa"].conj()
-        compute_t2_block(
-            t2["ccaa"],
-            self.ints["eps"]["core"],
-            self.ints["eps"]["core"],
-            self.ints["eps"]["actv"],
-            self.ints["eps"]["actv"],
-            self.flow_param,
-        )
-        t2["caav"] = self.ints["V"]["caav"].conj()
-        compute_t2_block(
-            t2["caav"],
-            self.ints["eps"]["core"],
-            self.ints["eps"]["actv"],
-            self.ints["eps"]["actv"],
-            self.ints["eps"]["virt"],
-            self.flow_param,
-        )
-        t2["aavv"] = self.ints["V"]["aavv"].conj()
-        compute_t2_block(
-            t2["aavv"],
-            self.ints["eps"]["actv"],
-            self.ints["eps"]["actv"],
-            self.ints["eps"]["virt"],
-            self.ints["eps"]["virt"],
-            self.flow_param,
-        )
+
+        for key in ["caaa", "aaav", "ccaa", "caav", "aavv"]:
+            t2[key] = self.ints["V"][key].conj()
+            compute_t2_block(
+                t2[key],
+                *(self.ints["eps"][_] for _ in key),
+                self.flow_param,
+            )
 
         t1_tmp = self.ints["F"][self.hole, self.part].conj().copy()
         t2_hapa = np.zeros(
@@ -303,27 +259,17 @@ class DSRG_MRPT2(DSRGBase):
         t1["ca"] = t1_tmp[self.hc, self.pa].copy()
         t1["cv"] = t1_tmp[self.hc, self.pv].copy()
         t1["av"] = t1_tmp[self.ha, self.pv].copy()
-        compute_t1_block(
-            t1["ca"],
-            self.ints["eps"]["core"],
-            self.ints["eps"]["actv"],
-            self.flow_param,
-        )
-        compute_t1_block(
-            t1["cv"],
-            self.ints["eps"]["core"],
-            self.ints["eps"]["virt"],
-            self.flow_param,
-        )
-        compute_t1_block(
-            t1["av"],
-            self.ints["eps"]["actv"],
-            self.ints["eps"]["virt"],
-            self.flow_param,
-        )
+
+        for key in ["ca", "cv", "av"]:
+            compute_t1_block(
+                t1[key],
+                *(self.ints["eps"][_] for _ in key),
+                self.flow_param,
+            )
+
         return t1, t2
 
-    def _renormalize_integrals(self):
+    def _renormalize_F(self):
         f_temp = np.conj(self.ints["F"][self.hole, self.part]).copy()
         delta_ia = self.eps[self.hole][:, None] - self.eps[self.part][None, :]
         exp_delta_1 = np.exp(-self.flow_param * delta_ia**2)
@@ -350,53 +296,16 @@ class DSRG_MRPT2(DSRGBase):
         F_tilde["cv"] = f_temp[self.hc, self.pv].copy()
         F_tilde["av"] = f_temp[self.ha, self.pv].copy()
 
-        V_tilde = dict()
-        V_tilde["caaa"] = np.copy(self.ints["V"]["caaa"])
-        renormalize_V_block(
-            V_tilde["caaa"],
-            self.ints["eps"]["core"],
-            self.ints["eps"]["actv"],
-            self.ints["eps"]["actv"],
-            self.ints["eps"]["actv"],
-            self.flow_param,
-        )
-        V_tilde["aaav"] = np.copy(self.ints["V"]["aaav"])
-        renormalize_V_block(
-            V_tilde["aaav"],
-            self.ints["eps"]["actv"],
-            self.ints["eps"]["actv"],
-            self.ints["eps"]["actv"],
-            self.ints["eps"]["virt"],
-            self.flow_param,
-        )
-        V_tilde["ccaa"] = np.copy(self.ints["V"]["ccaa"])
-        renormalize_V_block(
-            V_tilde["ccaa"],
-            self.ints["eps"]["core"],
-            self.ints["eps"]["core"],
-            self.ints["eps"]["actv"],
-            self.ints["eps"]["actv"],
-            self.flow_param,
-        )
-        V_tilde["caav"] = np.copy(self.ints["V"]["caav"])
-        renormalize_V_block(
-            V_tilde["caav"],
-            self.ints["eps"]["core"],
-            self.ints["eps"]["actv"],
-            self.ints["eps"]["actv"],
-            self.ints["eps"]["virt"],
-            self.flow_param,
-        )
-        V_tilde["aavv"] = np.copy(self.ints["V"]["aavv"])
-        renormalize_V_block(
-            V_tilde["aavv"],
-            self.ints["eps"]["actv"],
-            self.ints["eps"]["actv"],
-            self.ints["eps"]["virt"],
-            self.ints["eps"]["virt"],
-            self.flow_param,
-        )
-        return F_tilde, V_tilde
+        return F_tilde
+
+    def _renormalize_V_in_place(self):
+        V_tilde = self.ints["V"]
+        for key in ["caaa", "aaav", "ccaa", "caav", "aavv"]:
+            renormalize_V_block(
+                V_tilde[key],
+                *(self.ints["eps"][_] for _ in key),
+                self.flow_param,
+            )
 
     def _compute_pt2_energy(
         self, F, V, T1, T2, gamma1, eta1, lambda2, lambda3, form_hbar=False
@@ -586,10 +495,10 @@ class DSRG_MRPT2(DSRGBase):
             Vr_i[:] = Vbare_i
             renormalize_3index(
                 Vr_i,
-                self.ints["eps"]["core"][i],
-                self.ints["eps"]["core"],
-                self.ints["eps"]["virt"],
-                self.ints["eps"]["virt"],
+                self.ints["eps"]["c"][i],
+                self.ints["eps"]["c"],
+                self.ints["eps"]["v"],
+                self.ints["eps"]["v"],
                 self.flow_param,
             )
             # equivalent to E += 0.250 * np.einsum("jba,jba->", Vbare_i.conj(), Vr_i, optimize=True)
@@ -631,10 +540,10 @@ class DSRG_MRPT2(DSRGBase):
             Vr_i[:] = Vbare_i
             renormalize_3index(
                 Vr_i,
-                self.ints["eps"]["core"][i],
-                self.ints["eps"]["actv"],
-                self.ints["eps"]["virt"],
-                self.ints["eps"]["virt"],
+                self.ints["eps"]["c"][i],
+                self.ints["eps"]["a"],
+                self.ints["eps"]["v"],
+                self.ints["eps"]["v"],
                 self.flow_param,
             )
             E += 0.500 * np.einsum(
@@ -692,10 +601,10 @@ class DSRG_MRPT2(DSRGBase):
             Vr_i[:] = Vbare_i
             renormalize_3index(
                 Vr_i,
-                self.ints["eps"]["core"][i],
-                self.ints["eps"]["core"],
-                self.ints["eps"]["virt"],
-                self.ints["eps"]["actv"],
+                self.ints["eps"]["c"][i],
+                self.ints["eps"]["c"],
+                self.ints["eps"]["v"],
+                self.ints["eps"]["a"],
                 self.flow_param,
             )
             E += 0.500 * np.einsum(
