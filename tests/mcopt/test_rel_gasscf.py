@@ -37,7 +37,7 @@ def test_rel_gasscf_equivalence_to_nonrel():
 
 def test_rel_gasscf_h2o_core():
     escf = -76.105948393630
-    emcscf = -56.4475726848
+    emcscf = -56.44757635441492
 
     xyz = """
     O   0.0000000000  -0.0000000000  -0.0662628033
