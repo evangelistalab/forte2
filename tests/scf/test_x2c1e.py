@@ -78,7 +78,7 @@ def test_lindep_sfx2c1e():
 
 
 def test_sox2c1e_water():
-    eghf = -76.081946869897
+    eghf = -76.08194686989626
     xyz = """
     O 0 0 0
     H 0 -0.757 0.587
@@ -113,12 +113,12 @@ def test_boettger_hbr():
     scf.run()
     assert EH_TO_WN * (
         scf.eps[0][scf.nel - 2] - scf.eps[0][scf.nel - 3]
-    ) == pytest.approx(2953.1938408944357, abs=1e-4)
+    ) == pytest.approx(2953.193840819996, abs=1e-4)
 
 
 def test_so_from_sf_water():
     euhf = -75.711680104122
-    eghf = -75.711686004089
+    eghf = -75.7116858952105
     xyz = """
     O 0 0 0
     H 0 -0.757 0.587
@@ -149,7 +149,7 @@ def test_so_from_sf_water():
 
 @pytest.mark.skipif(not BSE_AVAILABLE, reason="Basis set exchange is not available")
 def test_sox2c1e_sc():
-    l23_ref = 4.395077285344983
+    l23_ref = 4.395077289942328
     xyz = """Sc 0 0 0"""
     system = System(
         xyz=xyz,

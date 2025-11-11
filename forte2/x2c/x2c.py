@@ -113,7 +113,7 @@ def _block_diag(A):
 
 
 def _i_sigma_dot(A):
-    scalar, z, x, y = A
+    scalar, x, y, z = A
     return np.block([[scalar + z * 1j, x * 1j + y], [x * 1j - y, scalar - z * 1j]])
 
 
