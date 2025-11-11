@@ -5,6 +5,7 @@ from forte2 import System, GHF, RelMCOptimizer, AVAS, RHF, MCOptimizer, State
 from forte2.dsrg import DSRG_MRPT2, SF_DSRG_MRPT2
 from forte2.helpers.comparisons import approx
 
+
 @pytest.mark.slow
 def test_mrpt2_n2_nonrel():
     erhf = -108.954140898736
@@ -37,7 +38,7 @@ def test_mrpt2_n2_nonrel():
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
 
-    dsrg = DSRG_MRPT2(flow_param=0.5, relax_reference=False)(mc)
+    dsrg = DSRG_MRPT2(flow_param=0.5, relax_reference="once")(mc)
     dsrg.run()
 
     assert dsrg.relax_energies[0, 0] == approx(-109.238860710091)
@@ -135,6 +136,7 @@ def test_mrpt2_carbon_rel_sa():
         ]
     )
 
+
 def test_sf_mrpt2_n2():
     erhf = -108.954140898736
     emcscf = -109.0811491968
@@ -163,26 +165,22 @@ def test_sf_mrpt2_n2():
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
 
-    dsrg = SF_DSRG_MRPT2(flow_param=0.5, relax_reference=False)(mc)
+    dsrg = SF_DSRG_MRPT2(flow_param=0.5, relax_reference="iterate")(mc)
     dsrg.run()
     print(dsrg.relax_energies)
 
     assert dsrg.relax_energies[0, 0] == approx(-109.238860710091)
-    # assert dsrg.relax_energies[0, 1] == approx(-109.239311979963)
+    assert dsrg.relax_energies[0, 1] == approx(-109.239311979963)
     assert dsrg.relax_energies[0, 2] == approx(-109.081149196818)
+
+    assert dsrg.relax_energies[1, 0] == approx(-109.238952001270)
+    assert dsrg.relax_energies[1, 1] == approx(-109.238952010521)
+    assert dsrg.relax_energies[1, 2] == approx(-109.080656324868)
+
+    assert dsrg.relax_energies[2, 0] == approx(-109.238953941310)
+    assert dsrg.relax_energies[2, 1] == approx(-109.238953941321)
+    assert dsrg.relax_energies[2, 2] == approx(-109.080659175782)
+
+
 test_sf_mrpt2_n2()
 # test_mrpt2_n2_nonrel()
-# 0.005209165217659575
-# -0.003071647991714439
-# 0.0014987851246858865
-# 0.010909632549533189
-# -0.042626933540516165
-# -0.05148974549400777
-# -0.1131003700888919
-# -0.1383898705004378
-# -0.10438595373754272
-# -0.10794960975491602
-# -0.10786353180828948
-# -0.12563032875257776
-# -0.1493625407735119
-# -0.15622281800533427
