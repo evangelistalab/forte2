@@ -131,8 +131,8 @@ class SF_DSRG_MRPT2(DSRGBase):
 
         # These are used in on-the-fly energy/Hbar computations
         ints["B"] = dict()
-        ints["B"]["ac"] = B_mo["ac"].transpose(1, 2, 0).copy()
-        ints["B"]["vc"] = B_mo["vc"].transpose(1, 2, 0).copy()
+        ints["B"]["ac"] = B_mo["ac"].transpose(2, 1, 0).copy()
+        ints["B"]["vc"] = B_mo["vc"].transpose(2, 1, 0).copy()
         ints["B"]["va"] = B_mo["va"].transpose(1, 2, 0).copy()
 
         ints["eps"] = dict()
@@ -619,92 +619,123 @@ class SF_DSRG_MRPT2(DSRGBase):
         # This computes the following contribution to the energy:
         # E += +0.250 * np.einsum("ijab,ijab->", T2["ccvv"], V["ccvv"], optimize=True)
         E = 0.0
-        B_vc = self.ints["B"]["vc"]
-        _ec = self.ints["eps"]["c"]
-        _ev = self.ints["eps"]["v"]
+        cvB = self.ints["B"]["vc"]
+
+        Vbare_m = np.empty((self.ncore, self.nvirt, self.nvirt))
+        Vtmp = np.empty((self.ncore, self.nvirt, self.nvirt))
+        Vr_m = np.empty((self.ncore, self.nvirt, self.nvirt))
+
         for m in range(self.ncore):
-            J_m = np.einsum(
-                "eL,fnL->efn",
-                np.squeeze(B_vc[:, m, :]),
-                B_vc,
+            np.einsum(
+                "eB,nfB->nfe",
+                cvB[m, ...],
+                cvB,
                 optimize=True,
-            ).copy()
-            JK_m = 2.0 * J_m - np.einsum("efn->fen", J_m.copy())
+                out=Vr_m,
+            )
+            np.copyto(Vtmp, Vr_m.swapaxes(1, 2))
+            Vbare_m[:] = 2.0 * Vr_m - Vtmp
 
-            renormalize_CCVV(J_m, _ec[m], _ev, _ec, self.flow_param)
+            renormalize_3index(
+                Vr_m,
+                self.ints["eps"]["c"][m],
+                self.ints["eps"]["c"],
+                self.ints["eps"]["v"],
+                self.ints["eps"]["v"],
+                self.flow_param,
+            )
 
-            E += np.einsum("efn,efn->", J_m, JK_m, optimize=True)
+            E += np.einsum("nfe,nfe->", Vr_m, Vbare_m, optimize=True)
         return E
 
     def _compute_pt2_energy_cavv(self, form_hbar=False):
         E = 0.0
-        B_va = self.ints["B"]["va"]
-        B_vc = self.ints["B"]["vc"]
-        temp = np.zeros((self.nact,) * 2)
-        _ec = self.ints["eps"]["c"]
-        _ev = self.ints["eps"]["v"]
-        _ea = self.ints["eps"]["a"]
+        vaB = self.ints["B"]["va"]
+        cvB = self.ints["B"]["vc"]
+        Vbare_m = np.empty((self.nvirt, self.nvirt, self.nact))
+        Vtmp = np.empty((self.nvirt, self.nvirt, self.nact))
+        Vr_m = np.empty((self.nvirt, self.nvirt, self.nact))
 
         for m in range(self.ncore):
-            J_m = np.einsum(
-                "eL,fvL->efv",
-                np.squeeze(B_vc[:, m, :]),
-                B_va,
+            np.einsum(
+                "eB,fvB->efv",
+                cvB[m, ...],
+                vaB,
                 optimize=True,
-            ).copy()
-            JK_m = 2.0 * J_m - np.einsum("efv->fev", J_m).copy()
+                out=Vr_m,
+            )
+            np.copyto(Vtmp, Vr_m.swapaxes(0, 1))
+            Vbare_m[:] = 2.0 * Vr_m - Vtmp
 
-            renormalize_CAVV(JK_m, J_m, _ec[m], _ev, _ea, self.flow_param)
-            temp += np.einsum("efu,efv->uv", J_m, JK_m, optimize=True)
+            renormalize_3index(
+                Vr_m,
+                self.ints["eps"]["c"][m],
+                -self.ints["eps"]["v"],
+                self.ints["eps"]["v"],
+                -self.ints["eps"]["a"],
+                self.flow_param,
+            )
 
-        E += np.einsum("uv,uv->", temp, self.cumulants["gamma1"], optimize=True)
+            E += np.einsum(
+                "efu,efv,uv->", Vr_m, Vbare_m, self.cumulants["gamma1"], optimize=True
+            )
 
-        if form_hbar:
-            self.C1_VT2_CAVV = temp.copy()
-        del temp
+            # temp += np.einsum("efu,efv->uv", J_m, JK_m, optimize=True)
+
+        # if form_hbar:
+        #     self.C1_VT2_CAVV = temp.copy()
+        # del temp
 
         return E
 
     def _compute_pt2_energy_ccav(self, form_hbar=False):
         E = 0.0
-        temp = np.zeros((self.nact,) * 2)
-        _ec = self.ints["eps"]["c"]
-        _ev = self.ints["eps"]["v"]
-        _ea = self.ints["eps"]["a"]
-        B_vc = self.ints["B"]["vc"]
-        B_ac = self.ints["B"]["ac"]
+
+        cvB = self.ints["B"]["vc"]
+        caB = self.ints["B"]["ac"]
+
+        Vbare_m = np.empty((self.ncore, self.nact, self.nvirt))
+        Vtmp = np.empty((self.ncore, self.nact, self.nvirt))
+        Vr_m = np.empty((self.ncore, self.nact, self.nvirt))
+
         for m in range(self.ncore):
-            for n in range(0, self.ncore):
-                J_mn = np.einsum(
-                    "eL,uL->eu",
-                    np.squeeze(B_vc[:, m, :]),
-                    np.squeeze(B_ac[:, n, :]),
-                    optimize="optimal",
-                ).copy()
-                J_mn_2 = np.einsum(
-                    "eL,uL->eu",
-                    np.squeeze(B_vc[:, n, :]),
-                    np.squeeze(B_ac[:, m, :]),
-                    optimize="optimal",
-                ).copy()
-                JK_mn = 2.0 * J_mn - J_mn_2
+            # mneu
+            np.einsum(
+                "eB,nuB->nue",
+                cvB[m, ...],
+                caB,
+                optimize=True,
+                out=Vr_m,
+            )
+            # mnue
+            np.einsum(
+                "uB,neB->nue",
+                caB[m, ...],
+                cvB,
+                optimize=True,
+                out=Vtmp,
+            )
+            Vbare_m[:] = 2.0 * Vr_m - Vtmp
 
-                renormalize_CCAV(
-                    JK_mn,
-                    J_mn,
-                    _ec[m] + _ec[n],
-                    _ev,
-                    _ea,
-                    self.flow_param,
-                )
+            renormalize_3index(
+                Vr_m,
+                self.ints["eps"]["c"][m],
+                self.ints["eps"]["c"],
+                self.ints["eps"]["a"],
+                self.ints["eps"]["v"],
+                self.flow_param,
+            )
 
-                temp += np.einsum("eu,ev->uv", J_mn, JK_mn, optimize="optimal")
-        E += np.einsum("uv,uv->", temp, self.cumulants["eta1"], optimize="optimal")
+            E += np.einsum(
+                "nue,nve,uv->", Vr_m, Vbare_m, self.cumulants["eta1"], optimize=True
+            )
+            # temp += np.einsum("eu,ev->uv", J_mn, JK_mn, optimize="optimal")
+        # E += np.einsum("uv,uv->", temp, self.cumulants["eta1"], optimize="optimal")
 
-        if form_hbar:
-            self.C1_VT2_CCAV = temp.copy()
+        # if form_hbar:
+        #     self.C1_VT2_CCAV = temp.copy()
 
-        del temp
+        # del temp
         return E
 
     def _compute_Hbar_aaaa(self, F, V, T1, T2, gamma1, eta1):
