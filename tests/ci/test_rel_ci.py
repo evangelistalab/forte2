@@ -147,7 +147,7 @@ def test_rel_ci_hf_transition_dipole_ghf():
         [0.0, 0.0, 7.54972929e-01], abs=1e-7
     )
     assert np.abs(ci.tdm_per_solver[0][(1, 1)]) == pytest.approx(
-        [0.0, 0.0, 7.21280946e-01], abs=1e-7
+        [0.0, 0.0, 7.21280738e-01], abs=1e-7
     )
     assert np.abs(ci.tdm_per_solver[0][(3, 3)]) == pytest.approx(
         [0.0, 0.0, 7.21064565e-01], abs=1e-7

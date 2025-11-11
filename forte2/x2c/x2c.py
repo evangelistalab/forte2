@@ -1,5 +1,5 @@
 import numpy as np
-import scipy, scipy.constants
+import scipy
 
 from forte2 import ints
 from forte2.helpers import logger, eigh_gen

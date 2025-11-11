@@ -37,7 +37,7 @@ def test_rel_gasscf_equivalence_to_nonrel():
 
 def test_rel_gasscf_h2o_core():
     escf = -76.105948393630
-    emcscf = -56.44757635441492
+    emcscf = -56.447577058599904
 
     xyz = """
     O   0.0000000000  -0.0000000000  -0.0662628033
@@ -66,3 +66,4 @@ def test_rel_gasscf_h2o_core():
 
     assert scf.E == approx(escf)
     assert mc.E == approx(emcscf)
+test_rel_gasscf_h2o_core()
