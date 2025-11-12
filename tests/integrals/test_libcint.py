@@ -142,3 +142,19 @@ def test_libcint_r_sph():
         # s_int2 = [overlap, x, y, z], so skip the zeroth element
         assert np.linalg.norm(s_cint[i] - s_int2[i + 1]) < 1e-6
     assert np.linalg.norm(s_cint) == pytest.approx(11.66647604433945, rel=1e-6)
+
+
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_libcint_r_sph_shifted_origin():
+    xyz = """
+    Li 0 0 0
+    Li 0 0 1.9
+    """
+    system = System(xyz, basis_set="sto-3g")
+    origin = [0.1, -0.2, 0.3]
+    s_cint = integrals.cint_emultipole1(system, origin=origin)
+    s_int2 = integrals.emultipole1(system, origin=origin)
+    for i in range(3):
+        # s_int2 = [overlap, x, y, z], so skip the zeroth element
+        assert np.linalg.norm(s_cint[i] - s_int2[i + 1]) < 1e-6
+    assert np.linalg.norm(s_cint) == pytest.approx(11.116795764727945, rel=1e-6)

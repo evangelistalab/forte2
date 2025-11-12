@@ -319,7 +319,8 @@ def conc_env(atm1, bas1, env1, atm2, bas2, env2):
         numpy.hstack((env1, env2)),
     )
 
-def basis_to_cint_envs(system, basis):
+
+def basis_to_cint_envs(system, basis, common_origin=None):
     """
     Convert a Forte2 Basis object to libcint atm, bas, env objects.
 
@@ -348,7 +349,7 @@ def basis_to_cint_envs(system, basis):
             pre_bas[name].append([am])
             alpha = shell_data.exponents
             coeffs = shell_data.coeff
-            for a,c in zip(alpha, coeffs):
+            for a, c in zip(alpha, coeffs):
                 if abs(c) < 1e-10:
                     continue
                 pre_bas[name][-1].append([a, c])
@@ -358,4 +359,9 @@ def basis_to_cint_envs(system, basis):
         nucmod = "G"
     else:
         nucmod = {}
-    return make_env(pre_atm, pre_bas, pre_env, nucmod=nucmod)
+    atm, bas, env = make_env(pre_atm, pre_bas, pre_env, nucmod=nucmod)
+
+    if common_origin is not None:
+        env[PTR_COMMON_ORIG : PTR_COMMON_ORIG + 3] = common_origin
+
+    return atm, bas, env

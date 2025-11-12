@@ -11,7 +11,7 @@ Here are some examples of how to obtain the most common integrals. First one nee
     import forte2
 
     # Set up your molecular system
-    system = forte2.system(
+    system = forte2.System(
         xyz="""C 0 0 0
         N 0 0 1.4""",
         basis_set={"C": "cc-pvdz", "N": "cc-pvtz"},
@@ -35,7 +35,7 @@ Getting integrals through ``forte2.ints`` can be achieved as follows::
     kinetic = forte2.ints.kinetic(system.basis)
 
     # potential energy integrals
-    potential = forte2.ints.potential(system.basis, system.atoms)
+    potential = forte2.ints.nuclear(system.basis, system.atoms)
 
     # dipole integrals (ordered x,y,z)
     # the zeroth element is the overlap
@@ -59,7 +59,7 @@ Equivalently, getting integrals through ``forte2.integrals`` can be achieved as 
     kinetic = forte2.integrals.kinetic(system)
 
     # potential energy integrals
-    potential = forte2.integrals.potential(system)
+    potential = forte2.integrals.nuclear(system)
 
     # dipole integrals (ordered x,y,z)
     # the zeroth element is the overlap

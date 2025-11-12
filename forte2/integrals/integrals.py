@@ -601,21 +601,21 @@ def erfc_coulomb_2c(system, omega, basis1=None, basis2=None):
     return ints.erfc_coulomb_2c(basis1, basis2, omega)
 
 
-def _parse_basis_args_cint_1e(system, basis1, basis2):
+def _parse_basis_args_cint_1e(system, basis1, basis2, origin=None):
     # 2 possible cases:
     # 1. both basis sets are None -> set both to system.basis
     # 2. basis1 is provided, basis2 is None -> set basis2 to basis1
     if basis1 is None and basis2 is None:
-        atm, bas, env = basis_to_cint_envs(system, system.basis)
+        atm, bas, env = basis_to_cint_envs(system, system.basis, common_origin=origin)
         shell_slice = [0, system.basis.nshells, 0, system.basis.nshells]
     elif basis1 is not None and basis2 is None:
-        atm, bas, env = basis_to_cint_envs(system, basis1)
+        atm, bas, env = basis_to_cint_envs(system, basis1, common_origin=origin)
         shell_slice = [0, basis1.nshells, 0, basis1.nshells]
     elif basis1 is None and basis2 is not None:
         raise ValueError("If basis2 is provided, basis1 must also be provided.")
     else:
-        atm1, bas1, env1 = basis_to_cint_envs(system, basis1)
-        atm2, bas2, env2 = basis_to_cint_envs(system, basis2)
+        atm1, bas1, env1 = basis_to_cint_envs(system, basis1, common_origin=origin)
+        atm2, bas2, env2 = basis_to_cint_envs(system, basis2, common_origin=origin)
         atm, bas, env = conc_env(atm1, bas1, env1, atm2, bas2, env2)
         ns1 = basis1.nshells
         ns2 = basis2.nshells
@@ -623,12 +623,12 @@ def _parse_basis_args_cint_1e(system, basis1, basis2):
     return atm, bas, env, shell_slice
 
 
-def _parse_basis_args_cint_2c2e(system, basis1, basis2):
+def _parse_basis_args_cint_2c2e(system, basis1, basis2, origin=None):
     # 2 possible cases:
     # 1. both basis sets are None -> set both to system.auxiliary_basis
     # 2. basis1 is provided, basis2 is None -> set basis2 to basis1
     if basis1 is None and basis2 is None:
-        atm, bas, env = basis_to_cint_envs(system, system.auxiliary_basis)
+        atm, bas, env = basis_to_cint_envs(system, system.auxiliary_basis, common_origin=origin)
         shell_slice = [
             0,
             system.auxiliary_basis.nshells,
@@ -636,13 +636,13 @@ def _parse_basis_args_cint_2c2e(system, basis1, basis2):
             system.auxiliary_basis.nshells,
         ]
     elif basis1 is not None and basis2 is None:
-        atm, bas, env = basis_to_cint_envs(system, basis1)
+        atm, bas, env = basis_to_cint_envs(system, basis1, common_origin=origin)
         shell_slice = [0, basis1.nshells, 0, basis1.nshells]
     elif basis1 is None and basis2 is not None:
         raise ValueError("If basis2 is provided, basis1 must also be provided.")
     else:
-        atm1, bas1, env1 = basis_to_cint_envs(system, basis1)
-        atm2, bas2, env2 = basis_to_cint_envs(system, basis2)
+        atm1, bas1, env1 = basis_to_cint_envs(system, basis1, common_origin=origin)
+        atm2, bas2, env2 = basis_to_cint_envs(system, basis2, common_origin=origin)
         atm, bas, env = conc_env(atm1, bas1, env1, atm2, bas2, env2)
         ns1 = basis1.nshells
         ns2 = basis2.nshells
@@ -833,9 +833,7 @@ def cint_emultipole1(system, basis1=None, basis2=None, origin=None):
         The first electric multipole moment integrals
     """
     _require_libcint()
-    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
-    # if origin is None:
-    #     origin = [0.0, 0.0, 0.0]
+    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2, origin)
     res = ints.cint_int1e_r_sph(shell_slice, atm, bas, env)
     # C-layout, first index is the integral component (slowest changing)
     return _f2c(res)
