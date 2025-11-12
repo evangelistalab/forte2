@@ -101,7 +101,7 @@ std::array<np_matrix, 20> emultipole3(const Basis& basis1, const Basis& basis2,
                                       std::array<double, 3>& origin);
 
 /// @brief Compute the small-component nuclear potential  (sigma p ) V (sigma p) between two basis
-///        sets (<b1|op|b2>, with op = p.Vp, (p x Vp)_z, (p x Vp)_x, (p x Vp)_y).
+///        sets (<b1|op|b2>, with op = p.Vp, (p x Vp)_x, (p x Vp)_y, (p x Vp)_z).
 /// @param basis1 The basis set in the bra.
 /// @param basis2 The basis set in the ket.
 /// @param origin The origin of the multipole expansion.
@@ -109,9 +109,9 @@ std::array<np_matrix, 20> emultipole3(const Basis& basis1, const Basis& basis2,
 ///         of basis functions in basis1 and n2 is the number of basis functions in basis2.
 ///         The elements of the array correspond to the operators
 ///         opVop[0] = <b1|p.Vp|b2>
-///         opVop[1] = <b1|(p x Vp)_z|b2>
-///         opVop[2] = <b1|(p x Vp)_x|b2>
-///         opVop[3] = <b1|(p x Vp)_y|b2>
+///         opVop[1] = <b1|(p x Vp)_x|b2>
+///         opVop[2] = <b1|(p x Vp)_y|b2>
+///         opVop[3] = <b1|(p x Vp)_z|b2>
 std::array<np_matrix, 4> opVop(const Basis& basis1, const Basis& basis2,
                                std::vector<std::pair<double, std::array<double, 3>>>& charges);
 
