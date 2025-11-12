@@ -59,7 +59,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
     executed: bool = field(default=False, init=False)
 
     def __post_init__(self):
-        self._regex = r"^([a-zA-Z]{1,2})(?:(\d+)(?:-(\d+))?)?$"
+        self._regex = r"^([a-zA-Z]{1,2})(\d+(-\d+)?)?$"
         self._check_parameters()
 
     def __call__(self, parent_method):
