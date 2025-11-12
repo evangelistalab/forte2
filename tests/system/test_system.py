@@ -205,33 +205,19 @@ def test_zmatrix_0():
     assert scf.E == pytest.approx(E_ref, rel=1e-8, abs=1e-8)
 
 
-def test_custom_basis_with_decontract():
+def test_ghost_atom():
     xyz = """
-    C 0 0 0
-    O 0 0 1.2
-    H 0 0 1.5
-    N 0 0 1.7
-    H 0 0 1.8
-    C 0 0 2.0
-    O 0 0 2.2
-    H 0 0 2.5
-    N 0 0 3.0
+    H 0 0 0
+    H 0 0 1.0
+    X 0 0 0.5
     """
     system = System(
         xyz=xyz,
-        basis_set={
-            "C1": "decon-cc-pvdz",
-            "O": "sto-6g",
-            "C2": "cc-pvtz",
-            "H2-3": "cc-pvdz",
-            "N2": "decon-def2-svp",
-            "default": "ano-r0",
-        },
-        auxiliary_basis_set={
-            "C": "cc-pVQZ-JKFIT",
-            "O1": "decon-def2-universal-JKFIT",
-            "default": "def2-universal-JKFIT",
-        },
+        basis_set={"H": "sto-3g", "X": "decon-cc-pvqz::H"},
+        auxiliary_basis_set={"default": "def2-universal-JKFIT::H"},
+        minao_basis_set={"default": "cc-pvtz-minao::H"},
     )
-    assert len(system.basis) == 106
-    assert len(system.auxiliary_basis) == 594
+    assert len(system.basis) == 34
+    scf = RHF(charge=0, guess_type="hcore")(system)
+    scf.run()
+    assert scf.E == pytest.approx(-1.096696530945, rel=1e-8, abs=1e-8)
