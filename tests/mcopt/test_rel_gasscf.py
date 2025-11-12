@@ -36,6 +36,7 @@ def test_rel_gasscf_equivalence_to_nonrel():
 
 
 def test_rel_gasscf_h2o_core():
+    # 1s core excitation, targets the lowest singlet and triplet manifold (spin-orbit coupled together)
     escf = -76.105948393630
     emcscf = -56.4188130704
 
