@@ -9,37 +9,7 @@ from forte2.orbitals import Semicanonicalizer
 
 @dataclass
 class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
-    """
-    Base class for DSRG methods.
-
-    Parameters
-    ----------
-    flow_param : float, optional, default=0.5
-        The flow parameter (in atomic units) that controls the renormalization.
-    relax_reference : int | str | bool, optional, default=False
-        Relax the CI reference in response to dynamical correlation.
-        If an integer is given, it specifies the maximum number of relaxation iterations.
-        If a string is given, it must be one of 'once', 'twice', or 'iterate':
-            'once' : diagonalize the CI Hamiltonian once after computing the DSRG energy
-            'twice': after the first diagonalization, recompute the DSRG energy
-            'iterate': keep relaxing until convergence or reaching relax_maxiter.
-        If a boolean is given, True is equivalent to relax_maxiter and False means no relaxation.
-    relax_maxiter : int, optional, default=10
-        The maximum number of reference relaxation iterations.
-    relax_tol : float, optional, default=1e-6
-        The convergence tolerance for reference relaxation (in Hartree).
-
-    References
-    ----------
-    .. [1] F. A. Evangelista, "A driven similarity renormalization group approach to quantum many-body problems",
-           J. Chem. Phys. 2014, 141, 054109.
-    .. [2] C. Li and F. A. Evangelista, "Multireference driven similarity renormalization group: A second-order perturbative analysis",
-           J. Chem. Theory Comput. 2015, 11, 2097-2108.
-    .. [3] K. P. Hannon, C. Li, and F. A. Evangelista, "An integral-factorized implementation of the driven similarity renormalization group second-order multireference perturbation theory",
-              J. Chem. Phys. 2016, 144, 204111.
-    .. [4] C. Li and F. A. Evangelista, "Driven similarity renormalization group for excited states: A state-averaged perturbation theory",
-           J. Chem. Phys. 2018, 148, 124106.
-    """
+    """Base class for DSRG methods."""
 
     # ci_solver: CISolver
     flow_param: float = 0.5

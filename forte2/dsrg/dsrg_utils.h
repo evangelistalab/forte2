@@ -9,6 +9,8 @@
 
 namespace forte2 {
 
+/// @brief Computes the Taylor expansion of (1 - exp(-z^2)) / z up to the order n,
+/// where n is determined by the threshold TAYLOR_THRES.
 double taylor_exp(double z) {
     int n = static_cast<int>(0.5 * (15.0 / TAYLOR_THRES + 1)) + 1;
     if (n > 0) {
@@ -24,6 +26,7 @@ double taylor_exp(double z) {
     }
 }
 
+/// @brief Computes the regularized denominator (1 - exp(-s*x^2)) / x
 double regularized_denominator(double x, double s) {
     double z = std::sqrt(s) * x;
     if (fabs(z) <= MACHEPS) {
@@ -33,6 +36,16 @@ double regularized_denominator(double x, double s) {
     }
 }
 
+/// @brief Computes the renormalized T2 amplitudes for a given block.
+/// where T2_renorm = T2 * (1 - exp(-s*denom^2)) / denom
+/// @tparam T: Either double or std::complex<double>, for spin-free or two-component calculations
+/// respectively
+/// @param t2 The block of integrals to be renormalized
+/// @param ei The orbital energies corresponding to the first dimension of t2
+/// @param ej The orbital energies corresponding to the second dimension of t2
+/// @param ea The orbital energies corresponding to the third dimension of t2
+/// @param eb The orbital energies corresponding to the fourth dimension of t2
+/// @param flow_param The flow parameter controlling the renormalization
 template <typename T>
 void compute_T2_block(nb::ndarray<nb::numpy, T, nb::ndim<4>>& t2, np_vector& ei, np_vector& ej,
                       np_vector& ea, np_vector& eb, double flow_param) {
@@ -64,6 +77,14 @@ void compute_T2_block(nb::ndarray<nb::numpy, T, nb::ndim<4>>& t2, np_vector& ei,
     }
 }
 
+/// @brief Computes the renormalized T1 amplitudes for a given block.
+/// where T1_renorm = T1 * (1 - exp(-s*denom^2)) / denom
+/// @tparam T Either double or std::complex<double>, for spin-free or two-component calculations
+/// respectively
+/// @param t1 The block of T1 amplitudes to be renormalized
+/// @param ei The orbital energies corresponding to the first dimension of t1
+/// @param ea The orbital energies corresponding to the second dimension of t1
+/// @param flow_param The flow parameter controlling the renormalization
 template <typename T>
 void compute_T1_block(nb::ndarray<nb::numpy, T, nb::ndim<2>>& t1, np_vector& ei, np_vector& ea,
                       double flow_param) {
@@ -85,6 +106,16 @@ void compute_T1_block(nb::ndarray<nb::numpy, T, nb::ndim<2>>& t1, np_vector& ei,
     }
 }
 
+/// @brief Renormalizes a block of two-electron integrals.
+/// where V_renorm = V * (1 + exp(-s*denom^2))
+/// @tparam T: Either double or std::complex<double>, for spin-free or two-component calculations
+/// respectively
+/// @param v The block of integrals to be renormalized
+/// @param ei The orbital energies corresponding to the first dimension of v
+/// @param ej The orbital energies corresponding to the second dimension of v
+/// @param ea The orbital energies corresponding to the third dimension of v
+/// @param eb The orbital energies corresponding to the fourth dimension of v
+/// @param flow_param The flow parameter controlling the renormalization
 template <typename T>
 void renormalize_V_block(nb::ndarray<nb::numpy, T, nb::ndim<4>>& v, np_vector& ei, np_vector& ej,
                          np_vector& ea, np_vector& eb, double flow_param) {
@@ -117,6 +148,17 @@ void renormalize_V_block(nb::ndarray<nb::numpy, T, nb::ndim<4>>& v, np_vector& e
     }
 }
 
+/// @brief Renormalizes a block of three-index intermediates
+/// for on-the-fly computation of expensive contractions, where
+/// V_renorm = V * (1 + exp(-s*denom^2)) * (1 - exp(-s*denom^2)) / denom
+/// @tparam T Either double or std::complex<double>, for spin-free or two-component calculations
+/// respectively
+/// @param v The block of three-index integrals to be renormalized
+/// @param ep The orbital energy corresponding to the batched index of v
+/// @param eq The orbital energies corresponding to the first dimension of v
+/// @param er The orbital energies corresponding to the second dimension of v
+/// @param es The orbital energies corresponding to the third dimension of v
+/// @param flow_param The flow parameter controlling the renormalization
 template <typename T>
 void renormalize_3index(nb::ndarray<nb::numpy, T, nb::ndim<3>>& v, double& ep, np_vector& eq,
                         np_vector& er, np_vector& es, double flow_param) {

@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from forte2 import System, GHF, RelMCOptimizer, AVAS, RHF, MCOptimizer, State
-from forte2.dsrg import DSRG_MRPT2, SF_DSRG_MRPT2
+from forte2.dsrg import DSRG_MRPT2, RelDSRG_MRPT2
 from forte2.helpers.comparisons import approx
 
 
@@ -38,7 +38,7 @@ def test_mrpt2_n2_nonrel():
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
 
-    dsrg = DSRG_MRPT2(flow_param=0.5, relax_reference="iterate")(mc)
+    dsrg = RelDSRG_MRPT2(flow_param=0.5, relax_reference="iterate")(mc)
     dsrg.run()
 
     assert dsrg.relax_energies[0, 0] == approx(-109.238860710091)
@@ -80,7 +80,7 @@ def test_mrpt2_n2_sa_nonrel():
         nel=14, nroots=4, final_orbital="original", weights=[3, 1, 1, 1]
     )(avas)
 
-    dsrg = DSRG_MRPT2(flow_param=0.5, relax_reference="once")(mc)
+    dsrg = RelDSRG_MRPT2(flow_param=0.5, relax_reference="once")(mc)
     dsrg.run()
     assert dsrg.relax_energies[0, 2] == approx(-108.956246895213)
     assert dsrg.relax_energies[0, 0] == approx(-109.134006255948)
@@ -117,7 +117,7 @@ def test_mrpt2_carbon_rel_sa():
         gconv=1e-6,
         do_diis=False,
     )(mf)
-    dsrg = DSRG_MRPT2(flow_param=0.24, relax_reference="once")(mc)
+    dsrg = RelDSRG_MRPT2(flow_param=0.24, relax_reference="once")(mc)
     dsrg.run()
     assert dsrg.relax_energies[0, 2] == approx(-37.718966923805)
     assert dsrg.relax_energies[0, 0] == approx(-37.822217257747)
@@ -165,7 +165,7 @@ def test_sf_mrpt2_n2():
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
 
-    dsrg = SF_DSRG_MRPT2(flow_param=0.5, relax_reference="iterate")(mc)
+    dsrg = DSRG_MRPT2(flow_param=0.5, relax_reference="iterate")(mc)
     dsrg.run()
 
     assert dsrg.relax_energies[0, 0] == approx(-109.23886074061)
