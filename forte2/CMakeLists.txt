@@ -21,6 +21,28 @@ if (NOT SKBUILD)
   after editing C++ files.")
 endif()
 
+include(FetchContent)
+
+# Option to enable/disable libcint integration
+option(USE_LIBCINT "Enable libcint integration for two-center integrals" OFF)
+
+if (USE_LIBCINT)
+  # Fetch libcint directly from GitHub
+  FetchContent_Declare(
+    libcint
+    GIT_REPOSITORY https://github.com/sunqm/libcint.git
+    GIT_TAG v6.1.3    # "master", or specific commit/tag, e.g. v6.1.3
+  )
+
+  FetchContent_Populate(libcint)     # produces ${libcint_SOURCE_DIR} and ${libcint_BINARY_DIR}
+
+  # Set option in cache *before* add_subdirectory so the subproject sees it.
+  set(PYPZPX ON CACHE BOOL "Enable PYPZPX in libcint" FORCE)
+
+  # configure/build in an isolated build dir:
+  add_subdirectory(${libcint_SOURCE_DIR} ${libcint_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()
+
 # Try to import all Python components potentially needed by nanobind
 find_package(Python 3.8
   REQUIRED COMPONENTS Interpreter Development.Module
@@ -85,12 +107,12 @@ nanobind_add_module(
   api/sq_operator_string_api.cc
   helpers/combinatorial.cc
   helpers/string_algorithms.cc
-  ints/basis.cc
-  ints/fock_builder.cc
-  ints/nuclear_repulsion.cc
-  ints/one_electron.cc
-  ints/two_electron.cc
-  ints/value_at_points.cc
+  integrals/basis.cc
+  integrals/fock_builder.cc
+  integrals/nuclear_repulsion.cc
+  integrals/one_electron.cc
+  integrals/two_electron.cc
+  integrals/value_at_points.cc
   ci/ci_sigma_builder.cc
   ci/ci_sigma_builder_1rdm.cc
   ci/ci_sigma_builder_2rdm.cc
@@ -122,13 +144,41 @@ target_link_libraries(_forte2 PRIVATE Libint2::int2)
 target_link_libraries(_forte2 PRIVATE Eigen3::Eigen)
 target_link_libraries(_forte2 PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
 
+# Conditionally link libcint and expose macro to C++
+if (USE_LIBCINT)
+  target_link_libraries(_forte2 PRIVATE cint)
+  target_compile_definitions(_forte2 PRIVATE FORTE2_USE_LIBCINT=1)
+else()
+  target_compile_definitions(_forte2 PRIVATE FORTE2_USE_LIBCINT=0)
+endif()
+
 target_include_directories(_forte2
   PUBLIC
     .
 )
 
+if (USE_LIBCINT)
+  # Rename the cint library output, so we don't conflict with PySCF's libcint, if any
+  set_target_properties(cint PROPERTIES
+      OUTPUT_NAME "cint_forte2"  # This makes it libcint_forte2.dylib
+  )
+endif()
+
+# Set rpath to use @loader_path so it finds the dylib in the same directory
+set_target_properties(_forte2 PROPERTIES
+    INSTALL_RPATH "$ENV{CONDA_PREFIX}/lib"
+    BUILD_WITH_INSTALL_RPATH TRUE
+)
+
 # Install directive for scikit-build-core
 install(TARGETS _forte2 LIBRARY DESTINATION forte2)
+
+if (USE_LIBCINT)
+  # Install "libcint_forte2.<version>.dylib/so" (and shortened symlinks)
+  install(TARGETS cint 
+      LIBRARY DESTINATION "$ENV{CONDA_PREFIX}/lib"
+  )
+endif()
 
 # Enable Release build with high optimization flags if not already set
 if(NOT CMAKE_BUILD_TYPE)

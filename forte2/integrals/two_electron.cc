@@ -1,5 +1,5 @@
-#include "ints/two_electron.h"
-#include "ints/two_electron_compute.h"
+#include "integrals/two_electron.h"
+#include "integrals/two_electron_compute.h"
 
 namespace forte2 {
 

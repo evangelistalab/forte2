@@ -1,8 +1,7 @@
-import regex as re
+import re
 from dataclasses import dataclass
 import numpy as np
 
-from forte2 import ints
 from forte2.helpers import logger
 from forte2.symmetry import rotation_mat, PGSymmetryDetector
 from forte2.data import ATOM_DATA, ATOM_SYMBOL_TO_Z, ANGSTROM_TO_BOHR
@@ -225,7 +224,6 @@ class GeometryHelper:
         )
         self.atomic_positions = np.array([atom[1] for atom in self.atoms])
         self.centroid = np.mean(self.atomic_positions, axis=0)
-        self.nuclear_repulsion = ints.nuclear_repulsion(self.atoms)
 
         self.center_of_mass = np.einsum(
             "a,ax->x", self.atomic_masses, self.atomic_positions

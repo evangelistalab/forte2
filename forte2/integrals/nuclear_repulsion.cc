@@ -4,6 +4,7 @@
 #include <cmath>
 #include <stdexcept>
 #include <iostream>
+#include <cassert>
 
 namespace forte2 {
 

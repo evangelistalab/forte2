@@ -1,7 +1,7 @@
 import numpy as np
 import scipy as sp
 
-from forte2 import ints, Basis, Shell
+from forte2 import Basis, Shell, integrals
 from forte2.system import System
 from forte2.system.build_basis import build_basis
 from forte2.helpers.matrix_functions import givens_rotation
@@ -54,7 +54,7 @@ def minao_initial_guess(system, H):
         scaled_sap_basis.add(scaled_shell)
 
     # generate the SAP integrals (P|mn)
-    SAP_ints = ints.coulomb_3c(scaled_sap_basis, system.basis, system.basis)
+    SAP_ints = integrals.coulomb_3c(system, scaled_sap_basis)
 
     # generate the SAP potential V_mn = sum_P (P|mn)
     SAP_V = np.einsum("Pmn->mn", SAP_ints)
@@ -125,6 +125,7 @@ def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4):
     Ca = givens_rotation(C, cosq, sinq, homo_idx, homo_idx + 1)
     Cb = givens_rotation(C, cosq, -sinq, homo_idx, homo_idx + 1)
     return [Ca, Cb]
+
 
 def guess_mix_ghf(C, ha, hb, la, lb, mixing_parameter=np.pi / 4):
     """

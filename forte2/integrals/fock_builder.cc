@@ -1,7 +1,7 @@
-#include "ints/fock_builder.h"
+#include "integrals/fock_builder.h"
 
-#include "ints/basis.h"
-#include "ints/two_electron.h"
+#include "integrals/basis.h"
+#include "integrals/two_electron.h"
 
 namespace forte2 {
 

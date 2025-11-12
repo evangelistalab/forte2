@@ -34,6 +34,13 @@ wheel.py-api = "cp312"
 # The build type to use when building the project. Valid values are "Debug", "Release", "MinSizeRel", and "RelWithDebInfo".
 cmake.build-type = "Release"
 
+# Default CMake options (can be overridden via --config-settings or CMAKE_ARGS)
+[tool.scikit-build.cmake.define]
+# Toggle libcint integration (two-center integrals via libcint). Override with:
+#   pip install . --config-settings=cmake.define.USE_LIBCINT=ON
+# or: CMAKE_ARGS="-DUSE_LIBCINT=ON" pip install .
+USE_LIBCINT = "ON"
+
 [tool.cibuildwheel]
 # Necessary to see build output from the actual compilation
 build-verbosity = 1

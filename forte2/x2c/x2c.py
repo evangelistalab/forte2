@@ -1,7 +1,7 @@
 import numpy as np
 import scipy
 
-from forte2 import ints
+from forte2 import integrals
 from forte2.helpers import logger, eigh_gen
 from forte2.system.build_basis import build_basis
 
@@ -14,7 +14,7 @@ def _row_given_Z(Z):
     return np.searchsorted(ROW_Z_START, Z, side="right")
 
 
-def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
+def get_hcore_x2c(system):
     """
     Return the one-electron X2C core Hamiltonian matrix for the given system.
 
@@ -22,8 +22,6 @@ def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
     ----------
     system : forte2.system.System
         The system for which to compute the X2C core Hamiltonian.
-    x2c_type : str, optional, default="sf"
-        The type of X2C to use, either "sf" or "so" (spin-orbit).
     snso_type : str, optional
         The type of SNSO scaling to apply, if any. Options are "boettger", "dc", "dcb", or "row-dependent".
 
@@ -38,33 +36,37 @@ def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
     but adopts some numerical tricks from J. Chem. Phys. 131, 031104 (2009), especially
     for the spin-orbit case. See also PySCF's x2c module for reference.
     """
-    assert x2c_type in [
+    assert system.x2c_type in [
         "sf",
         "so",
-    ], f"Invalid x2c_type: {x2c_type}. Must be 'sf' or 'so'."
+    ], f"Invalid x2c_type: {system.x2c_type}. Must be 'sf' or 'so'."
 
-    if snso_type is not None:
-        assert snso_type.lower() in [
+    if system.snso_type is not None:
+        assert system.snso_type.lower() in [
             "boettger",
             "dc",
             "dcb",
             "row-dependent",
-        ], f"Invalid snso_type: {snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
+        ], f"Invalid snso_type: {system.snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
 
     logger.log_info1(f"Number of contracted basis functions: {system.nbf}")
-    xbasis = build_basis(system.basis_set, system.geom_helper, decontract=True)
-    proj = _get_projection_matrix(xbasis, system.basis, x2c_type=x2c_type)
+    xbasis = build_basis(
+        system.basis_set,
+        system.geom_helper,
+        decontract=True,
+    )
+    proj = _get_projection_matrix(system, xbasis)
 
     nbf_decon = len(xbasis)
     logger.log_info1(f"Number of decontracted basis functions: {nbf_decon}")
-    nbf = nbf_decon if x2c_type == "sf" else nbf_decon * 2
+    nbf = nbf_decon if system.x2c_type == "sf" else nbf_decon * 2
     # expensive way to get this for now but works for all types of contraction schemes
-    proj = _get_projection_matrix(xbasis, system.basis, x2c_type=x2c_type)
+    proj = _get_projection_matrix(system, xbasis)
 
-    S, T, V, W = _get_integrals(xbasis, system.atoms, x2c_type=x2c_type)
+    S, T, V, W = _get_integrals(xbasis, system)
 
     # build and solve the one-electron matrix Dirac equation
-    _, c_dirac = _solve_dirac_eq(S, T, V, W, nbf, x2c_type)
+    _, c_dirac = _solve_dirac_eq(S, T, V, W, nbf, x2c_type=system.x2c_type)
 
     # build the decoupling matrix X
     X = _get_decoupling_matrix(c_dirac, nbf)
@@ -78,13 +80,13 @@ def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
     # project back to the contracted basis
     h_fw = proj.conj().T @ h_fw @ proj
 
-    if snso_type is not None:
+    if system.snso_type is not None:
         nbf = system.nbf
         haa = h_fw[:nbf, :nbf]
         hab = h_fw[:nbf, nbf:]
         hba = h_fw[nbf:, :nbf]
         hbb = h_fw[nbf:, nbf:]
-        # the pauli representation of a spin-dependent operator. 
+        # the pauli representation of a spin-dependent operator.
         # h0 is spin-free, h1-3 are spin-dependent
         # SNSO is applied to the spin-dependent parts only.
         # see for example eq 4-6 of 10.1002/wcms.1436
@@ -92,9 +94,15 @@ def get_hcore_x2c(system, x2c_type="sf", snso_type=None):
         h1 = (hab + hba) / 2
         h2 = (hab - hba) / (-2j)
         h3 = (haa - hbb) / 2
-        h1 = _apply_snso_scaling(h1, system.basis, system.atoms, snso_type=snso_type)
-        h2 = _apply_snso_scaling(h2, system.basis, system.atoms, snso_type=snso_type)
-        h3 = _apply_snso_scaling(h3, system.basis, system.atoms, snso_type=snso_type)
+        h1 = _apply_snso_scaling(
+            h1, system.basis, system.atoms, snso_type=system.snso_type
+        )
+        h2 = _apply_snso_scaling(
+            h2, system.basis, system.atoms, snso_type=system.snso_type
+        )
+        h3 = _apply_snso_scaling(
+            h3, system.basis, system.atoms, snso_type=system.snso_type
+        )
         h_fw = np.block([[h0 + h3, h1 - 1j * h2], [h1 + 1j * h2, h0 - h3]])
 
     return h_fw
@@ -109,23 +117,24 @@ def _i_sigma_dot(A):
     return np.block([[scalar + z * 1j, x * 1j + y], [x * 1j - y, scalar - z * 1j]])
 
 
-def _get_projection_matrix(xbasis, basis, x2c_type):
+def _get_projection_matrix(system, xbasis):
     proj = scipy.linalg.solve(
-        ints.overlap(xbasis),
-        ints.overlap(xbasis, basis),
+        integrals.overlap(system, xbasis),
+        integrals.overlap(system, xbasis, system.basis),
         assume_a="pos",
     )
-    return proj if x2c_type == "sf" else _block_diag(proj)
+    return proj if system.x2c_type == "sf" else _block_diag(proj)
 
 
-def _get_integrals(xbasis, atoms, x2c_type):
-    S = ints.overlap(xbasis)
-    T = ints.kinetic(xbasis)
-    V = ints.nuclear(xbasis, atoms)
-    W = ints.opVop(xbasis, atoms)
-    if x2c_type == "sf":
+def _get_integrals(xbasis, system):
+    S = integrals.overlap(system, xbasis)
+    T = integrals.kinetic(system, xbasis)
+    # the V and W integrals know about Gaussian nuclear charges
+    V = integrals.nuclear(system, xbasis)
+    W = integrals.opVop(system, xbasis)
+    if system.x2c_type == "sf":
         return S, T, V, W[0]
-    elif x2c_type == "so":
+    elif system.x2c_type == "so":
         return _block_diag(S), _block_diag(T), _block_diag(V), _i_sigma_dot(W)
 
 

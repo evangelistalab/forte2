@@ -2,7 +2,7 @@
 
 #include <libint2.hpp>
 
-#include "ints/basis.h"
+#include "integrals/basis.h"
 
 #include "helpers/ndarray.h"
 
