@@ -360,7 +360,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         if isinstance(self.parent_method, forte2.mcopt.MCOptimizer):
             g1_sf = self.parent_method.ci_solver.make_average_sf_1rdm()
         else:
-            # RHF/ROHF case: g1_sf = identity in active space
+            # AVAS or other non-MCOptimizer case: g1_sf = identity in active space
             g1_sf = np.eye(self.nactv)
         return g1_sf
 
