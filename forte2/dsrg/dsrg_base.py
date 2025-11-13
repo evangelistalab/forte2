@@ -136,14 +136,6 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
                 logger.log_info1("-" * width)
             self.relax_energies[irelax, 0] = self.E_dsrg.real
             self.relax_energies[irelax, 2] = self.ints["E"].real
-            # "twice": DSRG -> relax -> DSRG -> done
-            if irelax == 1 and self.relax_reference == "twice":
-                self.converged = True
-                logger.log_info1(
-                    f"{irelax:>10d} {self.relax_energies[irelax,2]:>25.12f} {self.relax_energies[irelax,0]:>25.12f} {'-':^25}"
-                )
-                break
-
             self.E_relaxed_ref = self.do_reference_relaxation()
             self.relax_energies[irelax, 1] = self.E_relaxed_ref.real
 
@@ -160,8 +152,6 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
             if self.converged:
                 break
 
-            if self.relax_reference == "twice":
-                form_hbar = False
             self.ints, self.cumulants = self.get_integrals()
             self.E_dsrg = self.solve_dsrg(form_hbar=form_hbar)
             self.E = self.E_dsrg
@@ -184,8 +174,11 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
         return self
 
     def test_relaxation_convergence(self, irelax):
-        if irelax == 0 or self.relax_reference != "iterate":
+        if irelax == 0:
             return False
+
+        if irelax == self.nrelax - 1:
+            return True
 
         delta_fixed_ref = abs(
             self.relax_energies[irelax, 0] - self.relax_energies[irelax - 1, 0]
