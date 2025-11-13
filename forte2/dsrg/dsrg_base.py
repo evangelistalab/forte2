@@ -6,6 +6,8 @@ import numpy as np
 from forte2.base_classes import SystemMixin, MOsMixin, MOSpaceMixin, ActiveSpaceSolver
 from forte2.helpers import logger
 from forte2.orbitals import Semicanonicalizer
+from forte2.ci.ci_utils import pretty_print_ci_summary
+
 
 @dataclass
 class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
@@ -106,31 +108,48 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
         self.fock_builder = self.system.fock_builder
         self.ints, self.cumulants = self.get_integrals()
         self.hbar = dict()
-        
 
     def run(self):
         self._startup()
         form_hbar = self.nrelax > 0
 
         self.E_dsrg = self.solve_dsrg(form_hbar)
-        print(f"Reference energy: {self.ints['E']:.12f}")
-        print(f"DSRG energy: {self.E_dsrg:.12f}")
+
         self.relax_energies[0, 0] = self.E_dsrg.real
         # self.ints["E"] is <Psi_current| bare H |Psi_current>
         self.relax_energies[0, 2] = self.ints["E"].real
         self.E = self.E_dsrg
 
+        width = 88
         for irelax in range(self.nrelax):
+            if irelax == 0:
+                logger.log_info1("\n DSRG reference relaxation glossary")
+                logger.log_info1(" -E0      : <Psi_n     | bare H | Psi_n    >")
+                logger.log_info1(" -Edsrg   : <Psi_n     | Hbar   | Psi_n    >")
+                logger.log_info1(" -Erelaxed: <Psi_{n+1} | Hbar   | Psi_{n+1}>")
+                logger.log_info1("=" * width)
+                logger.log_info1("DSRG Reference Relaxation Summary".center(width))
+                logger.log_info1("=" * width)
+                logger.log_info1(
+                    f"{'Iteration':>10} {'E0 (a.u.)':>25} {'Edsrg (a.u.)':>25} {'Erelaxed (a.u.)':>25}"
+                )
+                logger.log_info1("-" * width)
             self.relax_energies[irelax, 0] = self.E_dsrg.real
             self.relax_energies[irelax, 2] = self.ints["E"].real
             # "twice": DSRG -> relax -> DSRG -> done
             if irelax == 1 and self.relax_reference == "twice":
                 self.converged = True
+                logger.log_info1(
+                    f"{irelax:>10d} {self.relax_energies[irelax,2]:>25.12f} {self.relax_energies[irelax,0]:>25.12f} {'-':^25}"
+                )
                 break
 
             self.E_relaxed_ref = self.do_reference_relaxation()
-            print(f"Relaxed reference energy: {self.E_relaxed_ref:.12f}")
             self.relax_energies[irelax, 1] = self.E_relaxed_ref.real
+
+            logger.log_info1(
+                f"{irelax:>10d} {self.relax_energies[irelax,2]:>25.12f} {self.relax_energies[irelax,0]:>25.12f} {self.relax_energies[irelax,1]:>25.12f}"
+            )
 
             # "once": DSRG -> relax -> done
             if self.relax_reference == "once":
@@ -145,13 +164,22 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
                 form_hbar = False
             self.ints, self.cumulants = self.get_integrals()
             self.E_dsrg = self.solve_dsrg(form_hbar=form_hbar)
-            print(f"Reference energy: {self.ints['E']:.12f}")
-            print(f"DSRG energy: {self.E_dsrg:.12f}")
             self.E = self.E_dsrg
         else:
             logger.log_warning(
                 f"DSRG reference relaxation did not converge in {self.nrelax} iterations."
             )
+        logger.log_info1("=" * width)
+        logger.log_info1("\nFinal DSRG energies (a.u.):")
+        logger.log_info1(f"  E0       : {self.ints['E'].real:.12f}")
+        logger.log_info1(f"  Edsrg    : {self.E_dsrg.real:.12f}")
+        if self.nrelax > 0:
+            logger.log_info1(f"  Erelaxed : {self.E_relaxed_ref.real:.12f}")
+            if len(self.relax_eigvals) > 1:
+                logger.log_info1("")
+                pretty_print_ci_summary(
+                    self.ci_solver.sa_info, self.ci_solver.evals_per_solver
+                )
         self.executed = True
         return self
 

@@ -4,6 +4,7 @@ import pytest
 from forte2 import System, GHF, RelMCOptimizer, AVAS, RHF, MCOptimizer, State
 from forte2.dsrg import DSRG_MRPT2, RelDSRG_MRPT2
 from forte2.helpers.comparisons import approx
+from forte2.data.atom_data import EH_TO_WN
 
 
 @pytest.mark.slow
@@ -179,3 +180,41 @@ def test_sf_mrpt2_n2():
     assert dsrg.relax_energies[2, 0] == approx(-109.23895388557)
     assert dsrg.relax_energies[2, 1] == approx(-109.23895388557)
     assert dsrg.relax_energies[2, 2] == approx(-109.08065911063)
+
+
+def test_mrpt2_br_rel_sa_gauss_nuc():
+    xyz = """
+    Br 0 0 0
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="decon-cc-pVTZ",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
+        x2c_type="so",
+        snso_type="row-dependent",
+        use_gaussian_charges=True,
+    )
+    # more stable convergence with Br- than Br
+    mf = GHF(
+        charge=-1, die_if_not_converged=False, econv=1e-10, dconv=1e-8, maxiter=200
+    )(system)
+    avas = AVAS(
+        selection_method="separate",
+        num_active_docc=7,
+        num_active_uocc=1,
+        subspace=["Br(4s)", "Br(4p)"],
+        diagonalize=True,
+    )(mf)
+    mc = RelMCOptimizer(
+        nel=35,
+        nroots=6,
+        active_orbitals=8,
+        core_orbitals=28,
+        do_diis=False,
+    )(avas)
+    dsrg = RelDSRG_MRPT2(flow_param=0.24, relax_reference="once")(mc)
+    dsrg.run()
+    assert (dsrg.relax_eigvals[4] - dsrg.relax_eigvals[3]) * EH_TO_WN == pytest.approx(
+        3729.6779694424913, rel=1e-4
+    )
