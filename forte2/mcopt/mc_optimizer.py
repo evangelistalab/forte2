@@ -143,7 +143,6 @@ class MCOptimizer(ActiveSpaceSolver):
         return self
 
     def _startup(self):
-        # initialize as a two-component solver if parent_method is two component
         super()._startup()
         # make the core, active, and virtual spaces contiguous
         # i.e., [core, gas1, gas2, ..., virt]
@@ -515,6 +514,9 @@ class MCOptimizer(ActiveSpaceSolver):
 
     def make_average_3cumulant(self):
         return self.ci_solver.make_average_3cumulant()
+    
+    def make_average_cumulants(self):
+        return self.ci_solver.make_average_cumulants()
 
 
 @dataclass

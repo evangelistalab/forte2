@@ -66,14 +66,14 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
 
         MOSpaceMixin.copy_from_upstream(self, self.parent_method)
         self.ncorr = self.mo_space.corr.stop - self.mo_space.corr.start
-        self.ncore = self.mo_space.core.stop - self.mo_space.core.start
-        self.nact = self.mo_space.actv.stop - self.mo_space.actv.start
-        self.nvirt = self.mo_space.virt.stop - self.mo_space.virt.start
+        self.ncore = self.mo_space.core_corr.stop - self.mo_space.core_corr.start
+        self.nact = self.mo_space.actv_corr.stop - self.mo_space.actv_corr.start
+        self.nvirt = self.mo_space.virt_corr.stop - self.mo_space.virt_corr.start
         self.nhole = self.ncore + self.nact
         self.npart = self.nact + self.nvirt
-        self.actv = self.mo_space.actv
-        self.core = self.mo_space.core
-        self.virt = self.mo_space.virt
+        self.actv = self.mo_space.actv_corr
+        self.core = self.mo_space.core_corr
+        self.virt = self.mo_space.virt_corr
         self.hole = slice(0, self.nhole)
         self.part = slice(self.ncore, self.ncorr)
         self.ha = self.actv

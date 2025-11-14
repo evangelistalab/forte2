@@ -3,7 +3,6 @@ from dataclasses import dataclass
 import numpy as np
 
 from forte2 import dsrg_utils
-from forte2.ci.ci_utils import make_2cumulant_so, make_3cumulant_so
 from .dsrg_base import DSRGBase
 from .utils import antisymmetrize_2body, cas_energy_given_cumulants
 
@@ -49,7 +48,7 @@ class RelDSRG_MRPT2(DSRGBase):
     """
 
     def get_integrals(self):
-        g1 = self.ci_solver.make_average_1rdm()
+        g1, g2, l2, l3 = self.ci_solver.make_average_cumulants()
         # self._C are the MCSCF canonical orbitals. We always use canonical orbitals to build the generalized Fock matrix.
         self.semicanonicalizer.semi_canonicalize(g1=g1, C_contig=self._C)
         self._C_semican = self.semicanonicalizer.C_semican.copy()
@@ -58,123 +57,116 @@ class RelDSRG_MRPT2(DSRGBase):
         self.delta_actv = self.eps[self.actv][:, None] - self.eps[self.actv][None, :]
         self.Uactv = self.semicanonicalizer.Uactv
 
-        if self.two_component:
-            ints = dict()
-            ints["F"] = self.fock - np.diag(np.diag(self.fock))  # remove diagonal
+        ints = dict()
+        ints["F"] = self.fock - np.diag(np.diag(self.fock))  # remove diagonal
 
-            cumulants = dict()
-            # g1 = self.ci_solver.make_average_1rdm()
-            cumulants["gamma1"] = np.einsum(
-                "ip,ij,jq->pq", self.Uactv, g1, self.Uactv.conj(), optimize=True
-            )
-            cumulants["eta1"] = (
-                np.eye(cumulants["gamma1"].shape[0], dtype=complex)
-                - cumulants["gamma1"]
-            )
-            g2 = self.ci_solver.make_average_2rdm()
-            g3 = self.ci_solver.make_average_3rdm()
-            l2 = make_2cumulant_so(g1, g2)
-            cumulants["lambda2"] = np.einsum(
-                "ip,jq,ijkl,kr,ls->pqrs",
-                self.Uactv,
-                self.Uactv,
-                l2,
-                self.Uactv.conj(),
-                self.Uactv.conj(),
-                optimize=True,
-            )
-            l3 = make_3cumulant_so(g1, l2, g3)
-            cumulants["lambda3"] = np.einsum(
-                "ip,jq,kr,ijklmn,ls,mt,nu->pqrstu",
-                self.Uactv,
-                self.Uactv,
-                self.Uactv,
-                l3,
-                self.Uactv.conj(),
-                self.Uactv.conj(),
-                self.Uactv.conj(),
-                optimize=True,
-            )
+        cumulants = dict()
+        # g1 = self.ci_solver.make_average_1rdm()
+        cumulants["gamma1"] = np.einsum(
+            "ip,ij,jq->pq", self.Uactv, g1, self.Uactv.conj(), optimize=True
+        )
+        cumulants["eta1"] = (
+            np.eye(cumulants["gamma1"].shape[0], dtype=complex)
+            - cumulants["gamma1"]
+        )
+        cumulants["lambda2"] = np.einsum(
+            "ip,jq,ijkl,kr,ls->pqrs",
+            self.Uactv,
+            self.Uactv,
+            l2,
+            self.Uactv.conj(),
+            self.Uactv.conj(),
+            optimize=True,
+        )
+        cumulants["lambda3"] = np.einsum(
+            "ip,jq,kr,ijklmn,ls,mt,nu->pqrstu",
+            self.Uactv,
+            self.Uactv,
+            self.Uactv,
+            l3,
+            self.Uactv.conj(),
+            self.Uactv.conj(),
+            self.Uactv.conj(),
+            optimize=True,
+        )
 
-            ints["E"] = cas_energy_given_cumulants(
-                self.E_core_orig, self.H_orig, self.V_orig, g1, g2
-            )
+        ints["E"] = cas_energy_given_cumulants(
+            self.E_core_orig, self.H_orig, self.V_orig, g1, g2
+        )
 
-            # Save blocks of spinorbital basis B tensor
-            B_so = dict()
-            C_core = self._C_semican[:, self.core]
-            C_actv = self._C_semican[:, self.actv]
-            C_virt = self._C_semican[:, self.virt]
-            B_so["cc"] = self.fock_builder.B_tensor_gen_block_spinor(C_core, C_core)
-            B_so["ca"] = self.fock_builder.B_tensor_gen_block_spinor(C_core, C_actv)
-            B_so["cv"] = self.fock_builder.B_tensor_gen_block_spinor(C_core, C_virt)
-            B_so["aa"] = self.fock_builder.B_tensor_gen_block_spinor(C_actv, C_actv)
-            B_so["av"] = self.fock_builder.B_tensor_gen_block_spinor(C_actv, C_virt)
+        # Save blocks of spinorbital basis B tensor
+        B_so = dict()
+        C_core = self._C_semican[:, self.core]
+        C_actv = self._C_semican[:, self.actv]
+        C_virt = self._C_semican[:, self.virt]
+        B_so["cc"] = self.fock_builder.B_tensor_gen_block_spinor(C_core, C_core)
+        B_so["ca"] = self.fock_builder.B_tensor_gen_block_spinor(C_core, C_actv)
+        B_so["cv"] = self.fock_builder.B_tensor_gen_block_spinor(C_core, C_virt)
+        B_so["aa"] = self.fock_builder.B_tensor_gen_block_spinor(C_actv, C_actv)
+        B_so["av"] = self.fock_builder.B_tensor_gen_block_spinor(C_actv, C_virt)
 
-            ints["V"] = dict()
-            ints["V"]["aaaa"] = np.einsum(
-                "Bux,Bvy->uvxy",
-                B_so["aa"],
-                B_so["aa"],
-                optimize=True,
-            )
-            ints["V"]["aaaa"] -= ints["V"]["aaaa"].swapaxes(2, 3)
-            ints["V"]["caaa"] = np.einsum(
-                "Biu,Bvw->ivuw",
-                B_so["ca"],
-                B_so["aa"],
-                optimize=True,
-            )
-            ints["V"]["caaa"] -= ints["V"]["caaa"].swapaxes(2, 3)
-            ints["V"]["aaav"] = np.einsum(
-                "Buv,Bwa->uwva",
-                B_so["aa"],
-                B_so["av"],
-                optimize=True,
-            )
-            ints["V"]["aaav"] -= ints["V"]["aaav"].swapaxes(0, 1)
-            ints["V"]["ccaa"] = np.einsum(
-                "Biu,Bjv->ijuv",
-                B_so["ca"],
-                B_so["ca"],
-                optimize=True,
-            )
-            ints["V"]["ccaa"] -= ints["V"]["ccaa"].swapaxes(2, 3)
-            ints["V"]["caav"] = np.einsum(
-                "Biu,Bva->ivua",
-                B_so["ca"],
-                B_so["av"],
-                optimize=True,
-            )
-            ints["V"]["caav"] -= np.einsum(
-                "Bia,Bvu->ivua",
-                B_so["cv"],
-                B_so["aa"],
-                optimize=True,
-            )
-            ints["V"]["aavv"] = np.einsum(
-                "Bua,Bvb->uvab",
-                B_so["av"],
-                B_so["av"],
-                optimize=True,
-            )
-            ints["V"]["aavv"] -= ints["V"]["aavv"].swapaxes(2, 3)
+        ints["V"] = dict()
+        ints["V"]["aaaa"] = np.einsum(
+            "Bux,Bvy->uvxy",
+            B_so["aa"],
+            B_so["aa"],
+            optimize=True,
+        )
+        ints["V"]["aaaa"] -= ints["V"]["aaaa"].swapaxes(2, 3)
+        ints["V"]["caaa"] = np.einsum(
+            "Biu,Bvw->ivuw",
+            B_so["ca"],
+            B_so["aa"],
+            optimize=True,
+        )
+        ints["V"]["caaa"] -= ints["V"]["caaa"].swapaxes(2, 3)
+        ints["V"]["aaav"] = np.einsum(
+            "Buv,Bwa->uwva",
+            B_so["aa"],
+            B_so["av"],
+            optimize=True,
+        )
+        ints["V"]["aaav"] -= ints["V"]["aaav"].swapaxes(0, 1)
+        ints["V"]["ccaa"] = np.einsum(
+            "Biu,Bjv->ijuv",
+            B_so["ca"],
+            B_so["ca"],
+            optimize=True,
+        )
+        ints["V"]["ccaa"] -= ints["V"]["ccaa"].swapaxes(2, 3)
+        ints["V"]["caav"] = np.einsum(
+            "Biu,Bva->ivua",
+            B_so["ca"],
+            B_so["av"],
+            optimize=True,
+        )
+        ints["V"]["caav"] -= np.einsum(
+            "Bia,Bvu->ivua",
+            B_so["cv"],
+            B_so["aa"],
+            optimize=True,
+        )
+        ints["V"]["aavv"] = np.einsum(
+            "Bua,Bvb->uvab",
+            B_so["av"],
+            B_so["av"],
+            optimize=True,
+        )
+        ints["V"]["aavv"] -= ints["V"]["aavv"].swapaxes(2, 3)
 
-            # These are used in on-the-fly energy/Hbar computations
-            ints["B"] = dict()
-            ints["B"]["ca"] = B_so["ca"].transpose(1, 2, 0).copy()
-            ints["B"]["cv"] = B_so["cv"].transpose(1, 2, 0).copy()
-            ints["B"]["av"] = B_so["av"].transpose(1, 2, 0).copy()
+        # These are used in on-the-fly energy/Hbar computations
+        ints["B"] = dict()
+        ints["B"]["ca"] = B_so["ca"].transpose(1, 2, 0).copy()
+        ints["B"]["cv"] = B_so["cv"].transpose(1, 2, 0).copy()
+        ints["B"]["av"] = B_so["av"].transpose(1, 2, 0).copy()
 
-            ints["eps"] = dict()
-            ints["eps"]["c"] = self.eps[self.core].copy()
-            ints["eps"]["a"] = self.eps[self.actv].copy()
-            ints["eps"]["v"] = self.eps[self.virt].copy()
-            # <Psi_0 | bare H | Psi_0>, where Psi_0 is the current (possibly relaxed) reference
+        ints["eps"] = dict()
+        ints["eps"]["c"] = self.eps[self.core].copy()
+        ints["eps"]["a"] = self.eps[self.actv].copy()
+        ints["eps"]["v"] = self.eps[self.virt].copy()
+        # <Psi_0 | bare H | Psi_0>, where Psi_0 is the current (possibly relaxed) reference
 
-            return ints, cumulants
-        else:
-            raise NotImplementedError("Only two-component integrals are implemented.")
+        return ints, cumulants
 
     def solve_dsrg(self, form_hbar=False):
         self.T1, self.T2 = self._build_tamps()

@@ -170,3 +170,37 @@ def test_mrpt2_se_rel_sa_gauss_nuc():
     assert (dsrg.relax_eigvals[5] - dsrg.relax_eigvals[4]) * EH_TO_WN == pytest.approx(
         1934.7036712902677, rel=1e-4
     )
+
+
+def test_mrpt2_s_rel_sa_gauss_nuc():
+    xyz = """
+    S 0 0 0
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="decon-cc-pVTZ",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
+        x2c_type="so",
+        snso_type="row-dependent",
+        use_gaussian_charges=True,
+    )
+    mf = GHF(
+        charge=0,
+        die_if_not_converged=False,
+        maxiter=50,
+    )(system)
+    mc = RelMCOptimizer(
+        nel=16,
+        nroots=9,
+        do_diis=False,
+        econv=1e-11,
+        gconv=1e-10,
+        core_orbitals=10,
+        active_orbitals=8,
+    )(mf)
+    dsrg = RelDSRG_MRPT2(flow_param=0.24, relax_reference="once")(mc)
+    dsrg.run()
+    assert (dsrg.relax_eigvals[5] - dsrg.relax_eigvals[4]) * EH_TO_WN == pytest.approx(
+        387.52343852668406, rel=1e-4
+    )

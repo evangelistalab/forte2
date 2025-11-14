@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 
 from .mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.state import StateAverageInfo, State, MOSpace
+from forte2.helpers import logger
 
 
 @dataclass
@@ -88,6 +89,7 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
         if provided_via_args == 1:
             if provided_via_mo_space:
                 # mo_space is provided directly
+                logger.log_info1("ActiveSpaceSolver: Using provided mo_space.")
                 return
 
             if provided_via_orbitals:
@@ -112,9 +114,11 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
                         else []
                     ),
                 )
+                logger.log_info1("ActiveSpaceSolver: mo_space constructed from provided orbital lists.")
                 return
         elif provided_via_parent:
             MOSpaceMixin.copy_from_upstream(self, self.parent_method)
+            logger.log_info1("ActiveSpaceSolver: mo_space copied from parent method.")
             return
 
 

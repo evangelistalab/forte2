@@ -279,7 +279,7 @@ def make_2cumulant_so(gamma1, gamma2):
     return l2
 
 
-def make_3cumulant_so(gamma1, lambda2, gamma3):
+def make_3cumulant_so(gamma1, gamma2, gamma3):
     """
     Compute the 3-cumulant from the 1- and 3-RDMs and 2-cumulant.
 
@@ -300,26 +300,33 @@ def make_3cumulant_so(gamma1, lambda2, gamma3):
     np.ndarray
         The three-particle cumulant (3-cumulant).
     """
-    l3 = gamma3 - (
-        +np.einsum("ps,qrtu->pqrstu", gamma1, lambda2, optimize=True)
-        - np.einsum("pt,qrsu->pqrstu", gamma1, lambda2, optimize=True)
-        - np.einsum("pu,qrts->pqrstu", gamma1, lambda2, optimize=True)
-        - np.einsum("qs,prtu->pqrstu", gamma1, lambda2, optimize=True)
-        + np.einsum("qt,prsu->pqrstu", gamma1, lambda2, optimize=True)
-        + np.einsum("qu,prts->pqrstu", gamma1, lambda2, optimize=True)
-        - np.einsum("rs,qptu->pqrstu", gamma1, lambda2, optimize=True)
-        + np.einsum("rt,qpsu->pqrstu", gamma1, lambda2, optimize=True)
-        + np.einsum("ru,qpts->pqrstu", gamma1, lambda2, optimize=True)
+    l3 = (
+        gamma3
+        - np.einsum("ps,qrtu->pqrstu", gamma1, gamma2)
+        + np.einsum("pt,qrsu->pqrstu", gamma1, gamma2)
+        + np.einsum("pu,qrts->pqrstu", gamma1, gamma2)
+        - np.einsum("qt,prsu->pqrstu", gamma1, gamma2)
+        + np.einsum("qs,prtu->pqrstu", gamma1, gamma2)
+        + np.einsum("qu,prst->pqrstu", gamma1, gamma2)
+        - np.einsum("ru,pqst->pqrstu", gamma1, gamma2)
+        + np.einsum("rs,pqut->pqrstu", gamma1, gamma2)
+        + np.einsum("rt,pqsu->pqrstu", gamma1, gamma2)
+        + 2
+        * (
+            np.einsum("ps,qt,ru->pqrstu", gamma1, gamma1, gamma1)
+            + np.einsum("pt,qu,rs->pqrstu", gamma1, gamma1, gamma1)
+            + np.einsum("pu,qs,rt->pqrstu", gamma1, gamma1, gamma1)
+        )
+        - 2
+        * (
+            np.einsum("ps,qu,rt->pqrstu", gamma1, gamma1, gamma1)
+            + np.einsum("pu,qt,rs->pqrstu", gamma1, gamma1, gamma1)
+            + np.einsum("pt,qs,ru->pqrstu", gamma1, gamma1, gamma1)
+        )
     )
-    l3 -= (
-        +np.einsum("ps,qt,ru->pqrstu", gamma1, gamma1, gamma1, optimize=True)
-        - np.einsum("pt,qs,ru->pqrstu", gamma1, gamma1, gamma1, optimize=True)
-        - np.einsum("ps,qu,rt->pqrstu", gamma1, gamma1, gamma1, optimize=True)
-        - np.einsum("pu,qt,rs->pqrstu", gamma1, gamma1, gamma1, optimize=True)
-        + np.einsum("pu,qs,rt->pqrstu", gamma1, gamma1, gamma1, optimize=True)
-        + np.einsum("pt,qu,rs->pqrstu", gamma1, gamma1, gamma1, optimize=True)
-    )
+
     return l3
+
 
 def make_2cumulant_sf(gamma1, gamma2):
     """
@@ -345,6 +352,7 @@ def make_2cumulant_sf(gamma1, gamma2):
         + 0.5 * np.einsum("ps,qr->pqrs", gamma1, gamma1, optimize=True)
     )
     return l2
+
 
 def make_3cumulant_sf(gamma1, gamma2, gamma3):
     """
@@ -380,9 +388,13 @@ def make_3cumulant_sf(gamma1, gamma2, gamma3):
         + np.einsum("rt,pqsu->pqrstu", gamma1, gamma2, optimize=True)
     )
     l3 += 2.0 * np.einsum("ps,qt,ru->pqrstu", gamma1, gamma1, gamma1, optimize=True)
-    l3 -= (np.einsum("ps,qu,rt->pqrstu", gamma1, gamma1, gamma1, optimize=True)
+    l3 -= (
+        np.einsum("ps,qu,rt->pqrstu", gamma1, gamma1, gamma1, optimize=True)
         + np.einsum("pu,qt,rs->pqrstu", gamma1, gamma1, gamma1, optimize=True)
-        + np.einsum("pt,qs,ru->pqrstu", gamma1, gamma1, gamma1, optimize=True))
-    l3 += 0.5 * (np.einsum("pt,qu,rs->pqrstu", gamma1, gamma1, gamma1, optimize=True)
-        + np.einsum("pu,qs,rt->pqrstu", gamma1, gamma1, gamma1, optimize=True))
+        + np.einsum("pt,qs,ru->pqrstu", gamma1, gamma1, gamma1, optimize=True)
+    )
+    l3 += 0.5 * (
+        np.einsum("pt,qu,rs->pqrstu", gamma1, gamma1, gamma1, optimize=True)
+        + np.einsum("pu,qs,rt->pqrstu", gamma1, gamma1, gamma1, optimize=True)
+    )
     return l3

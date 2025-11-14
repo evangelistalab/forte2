@@ -49,7 +49,7 @@ class DSRG_MRPT2(DSRGBase):
     """
 
     def get_integrals(self):
-        g1 = self.ci_solver.make_average_1rdm()
+        g1, g2, l2, l3 = self.ci_solver.make_average_cumulants()
         # self._C are the MCSCF canonical orbitals. We always use canonical orbitals to build the generalized Fock matrix.
         self.semicanonicalizer.semi_canonicalize(g1=g1, C_contig=self._C)
         self._C_semican = self.semicanonicalizer.C_semican.copy()
@@ -69,9 +69,6 @@ class DSRG_MRPT2(DSRGBase):
         cumulants["eta1"] = (
             2 * np.eye(cumulants["gamma1"].shape[0]) - cumulants["gamma1"]
         )
-        g2 = self.ci_solver.make_average_2rdm()
-        g3 = self.ci_solver.make_average_3rdm()
-        l2 = make_2cumulant_sf(g1, g2)
         cumulants["lambda2"] = np.einsum(
             "ip,jq,ijkl,kr,ls->pqrs",
             self.Uactv,
@@ -81,7 +78,6 @@ class DSRG_MRPT2(DSRGBase):
             self.Uactv.conj(),
             optimize=True,
         )
-        l3 = make_3cumulant_sf(g1, g2, g3)
         cumulants["lambda3"] = np.einsum(
             "ip,jq,kr,ijklmn,ls,mt,nu->pqrstu",
             self.Uactv,
