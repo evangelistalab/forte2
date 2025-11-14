@@ -71,3 +71,53 @@ def test_cube_ghf():
     # clean up the cube files
     for file in glob.glob("*.cube"):
         os.remove(file)
+
+
+def test_2ccube_ghf():
+    """
+    Test two-component cube generation (four fields per orbital).
+    """
+
+    eref = -75.427367675651
+    s2ref = 0.7525463566917241
+
+    xyz = """
+    O 0 0 0
+    H 0 0 1.1"""
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        x2c_type="so",
+    )
+
+    scf = GHF(charge=0, j_adapt=True)(system)
+    scf.run()
+    assert scf.E == approx(eref)
+    assert scf.S2 == approx(s2ref)
+
+    cube = CubeGenerator()
+    indices = list(range(9))
+    cube.run(system, scf.C[0], indices=indices, formats=("2ccube", "cube"))
+
+    # expect one .2ccube file per requested orbital
+    files = sorted(glob.glob("*.2ccube"))
+    assert len(files) == len(indices)
+    assert os.path.isfile("orbital_0.2ccube")
+
+    # sanity check data length: should be 4 * (nx*ny*nz)
+    with open("orbital_0.2ccube", "r") as f:
+        lines = f.read().splitlines()
+
+    natoms = int(lines[2].split()[0])
+    nx = abs(int(float(lines[3].split()[0])))
+    ny = abs(int(float(lines[4].split()[0])))
+    nz = abs(int(float(lines[5].split()[0])))
+    start_data = 6 + natoms
+    tokens = " ".join(lines[start_data:]).split()
+    assert len(tokens) == 4 * nx * ny * nz
+
+    # clean up the 2ccube files
+    for file in glob.glob("*.2ccube"):
+        os.remove(file)
