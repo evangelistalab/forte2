@@ -67,26 +67,26 @@ ci = setup_ci()
 def test_ci_1rdm():
 
     # test the 1-RDMs
-    rdm1_0_sparse = ci.make_1rdm_debug(0)
+    rdm1_0_sparse = ci.make_so_1rdm_debug(0)
     rdm1_0_sigma = ci.make_1rdm(0)
     assert (
         np.linalg.norm(rdm1_0_sparse - rdm1_0_sigma) < rdm_threshold
     ), f"Norm of the difference between rdm1_0_sparse and rdm1_0_sigma is too large: {np.linalg.norm(rdm1_0_sparse - rdm1_0_sigma):.12f}."
 
-    rdm1_1_sparse = ci.make_1rdm_debug(1)
+    rdm1_1_sparse = ci.make_so_1rdm_debug(1)
     rdm1_1_sigma = ci.make_1rdm(1)
     assert (
         np.linalg.norm(rdm1_1_sparse - rdm1_1_sigma) < rdm_threshold
     ), f"Norm of the difference between rdm1_1_sparse and rdm1_1_sigma is too large: {np.linalg.norm(rdm1_1_sparse - rdm1_1_sigma):.12f}."
 
     # test the 1-TDMs
-    tdm1_01_sparse = ci.make_1rdm_debug(0, 1)
+    tdm1_01_sparse = ci.make_so_1rdm_debug(0, 1)
     tdm1_01_sigma = ci.make_1rdm(0, 1)
     assert (
         np.linalg.norm(tdm1_01_sparse - tdm1_01_sigma) < rdm_threshold
     ), f"Norm of the difference between tdm1_01_sparse and tdm1_01_sigma is too large: {np.linalg.norm(tdm1_01_sparse - tdm1_01_sigma):.12f}."
 
-    tdm_10_sparse = ci.make_1rdm_debug(1, 0)
+    tdm_10_sparse = ci.make_so_1rdm_debug(1, 0)
     tdm_10_sigma = ci.make_1rdm(1, 0)
     assert (
         np.linalg.norm(tdm_10_sparse - tdm_10_sigma) < rdm_threshold
@@ -97,24 +97,24 @@ def test_ci_1rdm():
 
 def test_ci_2rdm():
     # test the 2-RDMs
-    rdm2_0_sparse = ci.make_2rdm_debug(0)
+    rdm2_0_sparse = ci.make_so_2rdm_debug(0)
     rdm2_0_sigma = ci.make_2rdm(0)
     assert (
         np.linalg.norm(rdm2_0_sparse - rdm2_0_sigma) < rdm_threshold
     ), f"Norm of the difference between rdm2_0_sparse and rdm2_0_sigma is too large: {np.linalg.norm(rdm2_0_sparse - rdm2_0_sigma):.12f}."
-    rdm2_1_sparse = ci.make_2rdm_debug(1)
+    rdm2_1_sparse = ci.make_so_2rdm_debug(1)
     rdm2_1_sigma = ci.make_2rdm(1)
     assert (
         np.linalg.norm(rdm2_1_sparse - rdm2_1_sigma) < rdm_threshold
     ), f"Norm of the difference between rdm2_1_sparse and rdm2_1_sigma is too large: {np.linalg.norm(rdm2_1_sparse - rdm2_1_sigma):.12f}."
 
     # test the 2-TDMs
-    tdm2_01_sparse = ci.make_2rdm_debug(0, 1)
+    tdm2_01_sparse = ci.make_so_2rdm_debug(0, 1)
     tdm2_01_sigma = ci.make_2rdm(0, 1)
     assert (
         np.linalg.norm(tdm2_01_sparse - tdm2_01_sigma) < rdm_threshold
     ), f"Norm of the difference between tdm2_01_sparse and tdm2_01_sigma is too large: {np.linalg.norm(tdm2_01_sparse - tdm2_01_sigma):.12f}."
-    tdm2_10_sparse = ci.make_2rdm_debug(1, 0)
+    tdm2_10_sparse = ci.make_so_2rdm_debug(1, 0)
     tdm2_10_sigma = ci.make_2rdm(1, 0)
     assert (
         np.linalg.norm(tdm2_10_sparse - tdm2_10_sigma) < rdm_threshold
@@ -125,24 +125,24 @@ def test_ci_2rdm():
 
 def test_ci_3rdm():
     # Test 3-RDMs
-    rdm3_0_sparse = ci.make_3rdm_debug(0)
+    rdm3_0_sparse = ci.make_so_3rdm_debug(0)
     rdm3_0_sigma = ci.make_3rdm(0)
     assert (
         np.linalg.norm(rdm3_0_sparse - rdm3_0_sigma) < rdm_threshold
     ), f"Norm of the difference between rdm3_0_sparse and rdm3_0_sigma is too large: {np.linalg.norm(rdm3_0_sparse - rdm3_0_sigma):.12f}."
-    rdm3_1_sparse = ci.make_3rdm_debug(1)
+    rdm3_1_sparse = ci.make_so_3rdm_debug(1)
     rdm3_1_sigma = ci.make_3rdm(1)
     assert (
         np.linalg.norm(rdm3_1_sparse - rdm3_1_sigma) < rdm_threshold
     ), f"Norm of the difference between rdm3_1_sparse and rdm3_1_sigma is too large: {np.linalg.norm(rdm3_1_sparse - rdm3_1_sigma):.12f}."
 
     # Test 3-TDMs
-    tdm3_01_sparse = ci.make_3rdm_debug(0, 1)
+    tdm3_01_sparse = ci.make_so_3rdm_debug(0, 1)
     tdm3_01_sigma = ci.make_3rdm(0, 1)
     assert (
         np.linalg.norm(tdm3_01_sparse - tdm3_01_sigma) < rdm_threshold
     ), f"Norm of the difference between tdm3_01_sparse and tdm3_01_sigma is too large: {np.linalg.norm(tdm3_01_sparse - tdm3_01_sigma):.12f}."
-    tdm3_10_sparse = ci.make_3rdm_debug(1, 0)
+    tdm3_10_sparse = ci.make_so_3rdm_debug(1, 0)
     tdm3_10_sigma = ci.make_3rdm(1, 0)
     assert (
         np.linalg.norm(tdm3_10_sparse - tdm3_10_sigma) < rdm_threshold

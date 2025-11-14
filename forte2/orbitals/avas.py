@@ -300,7 +300,7 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         else:
             ndocc = self.parent_method.ndocc
         nsocc = (
-            0 if not hasattr(self.parent_method, "nsocc") else self.parent_method.nsocc
+            getattr(self.parent_method, "nsocc", 0)
         )
         nuocc = self.parent_method.nuocc
 

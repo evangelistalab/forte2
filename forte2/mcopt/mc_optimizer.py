@@ -109,8 +109,8 @@ class MCOptimizer(ActiveSpaceSolver):
 
     ### CI solver parameters
     ci_maxiter: int = 100
-    ci_econv: float = 1e-10
-    ci_rconv: float = 1e-5
+    ci_econv: float = 1e-12
+    ci_rconv: float = 1e-6
     ci_guess_per_root: int = 2
     ci_ndets_per_guess: int = 10
     ci_collapse_per_root: int = 2
@@ -130,7 +130,6 @@ class MCOptimizer(ActiveSpaceSolver):
     converged: bool = field(default=False, init=False)
     executed: bool = field(default=False, init=False)
     two_component: bool = field(default=False, init=False)
-    dtype: type = field(default=float, init=False)
 
     def __call__(self, method):
         self.parent_method = method
@@ -144,7 +143,6 @@ class MCOptimizer(ActiveSpaceSolver):
         return self
 
     def _startup(self):
-        # initialize as a two-component solver if parent_method is two component
         super()._startup()
         # make the core, active, and virtual spaces contiguous
         # i.e., [core, gas1, gas2, ..., virt]
@@ -275,12 +273,8 @@ class MCOptimizer(ActiveSpaceSolver):
         self.E_orb_old = self.E_orb
         self.E_avg_old = self.E_avg
 
-        if self.two_component:
-            self.g1_act = self.ci_solver.make_average_1rdm()
-            g2_act = self.ci_solver.make_average_2rdm()
-        else:
-            self.g1_act = self.ci_solver.make_average_sf_1rdm()
-            g2_act = self.ci_solver.make_average_sf_2rdm()
+        self.g1_act = self.make_average_1rdm()
+        g2_act = self.make_average_2rdm()
         # ci_maxiter_save = self.ci_solver.get_maxiter()
         # self.ci_solver.set_maxiter(self.ci_maxiter)
 
@@ -333,12 +327,8 @@ class MCOptimizer(ActiveSpaceSolver):
             self.E_avg = self.ci_solver.compute_average_energy()
             self.E_ci = np.array(self.ci_solver.E)
             self.E = self.E_avg
-            if self.two_component:
-                self.g1_act = self.ci_solver.make_average_1rdm()
-                g2_act = self.ci_solver.make_average_2rdm()
-            else:
-                self.g1_act = self.ci_solver.make_average_sf_1rdm()
-                g2_act = self.ci_solver.make_average_sf_2rdm()
+            self.g1_act = self.make_average_1rdm()
+            g2_act = self.make_average_2rdm()
             self.orb_opt.set_rdms(self.g1_act, g2_act)
             self.iter += 1
         else:
@@ -375,19 +365,19 @@ class MCOptimizer(ActiveSpaceSolver):
         self._post_process()
 
         if self.final_orbital == "semicanonical":
-            if self.two_component:
-                g1 = self.ci_solver.make_average_1rdm()
-            else:
-                g1 = self.ci_solver.make_average_sf_1rdm()
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
-                g1=g1,
-                C=self.C[0],
                 system=self.system,
+                # semicanonicalize together if frozen orbitals are optimized
                 mix_inactive=self.optimize_frozen_orbs,
                 mix_active=False,
             )
-            self.C[0] = semi.C_semican.copy()
+            C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
+            semi.semi_canonicalize(
+                g1=self.make_average_1rdm(),
+                C_contig=C_contig,
+            )
+            self.C[0] = semi.C_semican[self.mo_space.contig_to_orig].copy()
 
             # recompute the CI vectors in the semicanonical basis
             if self.two_component:
@@ -510,11 +500,24 @@ class MCOptimizer(ActiveSpaceSolver):
         self.E_orb_old = self.E_orb
         return conv, conv_str
 
+    def make_average_1rdm(self):
+        return self.ci_solver.make_average_1rdm()
+
+    def make_average_2rdm(self):
+        return self.ci_solver.make_average_2rdm()
+
+    def make_average_2cumulant(self):
+        return self.ci_solver.make_average_2cumulant()
+
+    def make_average_3rdm(self):
+        return self.ci_solver.make_average_3rdm()
+
+    def make_average_3cumulant(self):
+        return self.ci_solver.make_average_3cumulant()
+    
+    def make_average_cumulants(self):
+        return self.ci_solver.make_average_cumulants()
+
 
 @dataclass
-class RelMCOptimizer(RelActiveSpaceSolver, MCOptimizer):
-    def __post_init__(self):
-        self.two_component = True
-        self.dtype = complex
-        RelActiveSpaceSolver.__post_init__(self)
-        MCOptimizer.__post_init__(self)
+class RelMCOptimizer(RelActiveSpaceSolver, MCOptimizer): ...

@@ -14,10 +14,6 @@ class Semicanonicalizer:
     ----------
     mo_space : MOSpace
         The molecular orbital space defining the subspaces.
-    g1 : np.ndarray
-        The active space 1-electron density matrix in the molecular orbital basis.
-    C : np.ndarray
-        The molecular orbital coefficients, in the "original" order of the orbitals.
     system : System
         The system object containing the basis set and other properties.
     mix_inactive : bool, optional, default=False
@@ -25,6 +21,21 @@ class Semicanonicalizer:
         virtual and frozen_virt also will be diagonalized together.
     mix_active : bool, optional, default=False
         If True, all GAS active orbitals will be diagonalized together.
+
+    Attributes
+    ----------
+    fock : np.ndarray
+        The generalized Fock matrix in the original basis.
+    fock_semican : np.ndarray
+        The generalized Fock matrix in the semi-canonical basis.
+    eps_semican : np.ndarray
+        The diagonal entries of the Fock matrix in the semi-canonical basis.
+    C_semican : np.ndarray
+        The molecular orbital coefficients in the semi-canonical basis.
+    U : np.ndarray
+        The unitary transformation matrix from the original to the semi-canonical basis.
+    Uactv : np.ndarray
+        The unitary transformation matrix within the active space.
 
     Notes
     -----
@@ -41,8 +52,6 @@ class Semicanonicalizer:
 
     def __init__(
         self,
-        g1: np.ndarray,
-        C: np.ndarray,
         system: System,
         mo_space: MOSpace | EmbeddingMOSpace = None,
         mix_inactive: bool = False,
@@ -52,14 +61,8 @@ class Semicanonicalizer:
     ):
         self.mo_space = mo_space
         self.two_component = system.two_component
-        if self.two_component:
-            self.g1 = g1
-        else:
-            # factor of 0.5 to use (2J - K) throughout for Fock build
-            self.g1 = 0.5 * g1
         self.system = system
         self.fock_builder = system.fock_builder
-        self._C = C[:, self.mo_space.orig_to_contig].copy()
         # these are only used for MOSpace
         self.mix_inactive = mix_inactive
         self.mix_active = mix_active
@@ -67,10 +70,20 @@ class Semicanonicalizer:
         self.do_frozen = do_frozen
         self.do_active = do_active
 
-        self._semicanonicalize()
 
-    def _semicanonicalize(self):
-        self.fock = self._build_fock()
+    def semi_canonicalize(self, g1, C_contig):
+        """
+        Perform the semi-canonicalization.
+
+        Parameters
+        ----------
+        g1 : np.ndarray
+            The active space 1-electron density matrix in the molecular orbital basis.
+        C_contig : np.ndarray
+            The molecular orbital coefficients, in the "contiguous" order of the orbitals.
+            Note that all other quantities are also defined in this order.
+        """
+        self.fock = self._build_fock(g1, C_contig)
         eps = np.zeros(self.mo_space.nmo)
         # U_init = I so that skipped blocks are not modified
         U = np.eye(self.mo_space.nmo, dtype=self.fock.dtype)
@@ -89,10 +102,9 @@ class Semicanonicalizer:
 
         self.U = U
         self.Uactv = U[self.mo_space.actv, self.mo_space.actv]
-        self.C_semican = (self._C @ U)[:, self.mo_space.contig_to_orig]
-        self.eps_semican = eps[self.mo_space.contig_to_orig]
-
-        return self
+        self.C_semican = C_contig @ U
+        self.eps_semican = eps
+        self.fock_semican = U.T.conj() @ self.fock @ U
 
     def _generate_elementary_spaces(self):
         slice_list = []
@@ -125,19 +137,20 @@ class Semicanonicalizer:
 
         return slice_list
 
-    def _build_fock(self):
+    def _build_fock(self, g1, C_contig):
         # core contribution to the generalized Fock matrix
         hcore = self.system.ints_hcore()
         # 'docc' slice includes frozen core in Fock build
         docc = self.mo_space.docc
-        C_docc = self._C[:, docc]
+        C_docc = C_contig[:, docc]
         J, K = self.fock_builder.build_JK([C_docc])
-        factor = 1 if self.two_component else 2
-        fock = hcore + factor * J[0] - K[0]
+        Jfactor = 1 if self.two_component else 2
+        gfactor = 1 if self.two_component else 0.5
+        fock = hcore + Jfactor * J[0] - K[0]
 
         # active contribution to the generalized Fock matrix
-        C_act = self._C[:, self.mo_space.actv]
-        J, K = self.fock_builder.build_JK_generalized(C_act, self.g1)
-        fock += factor * J - K
-        fock = np.einsum("pq,pi,qj->ij", fock, self._C.conj(), self._C, optimize=True)
+        C_act = C_contig[:, self.mo_space.actv]
+        J, K = self.fock_builder.build_JK_generalized(C_act, g1 * gfactor)
+        fock += Jfactor * J - K
+        fock = C_contig.conj().T @ fock @ C_contig
         return fock

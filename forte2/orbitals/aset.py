@@ -324,7 +324,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
 
         frozen_core_inds = self.mo_space.frozen_core_indices
         frozen_virt_inds = self.mo_space.frozen_virtual_indices
-        g1_sf = self.parent_method.ci_solver.make_average_sf_1rdm()
+        g1 = self.parent_method.ci_solver.make_average_1rdm()
         emb_space = EmbeddingMOSpace(
             nmo=self.nmo,
             frozen_core_orbitals=frozen_core_inds,
@@ -337,13 +337,12 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         )
 
         semican = Semicanonicalizer(
-            g1=g1_sf,
-            C=C,
             system=self.system,
             mo_space=emb_space,
             do_frozen=self.semicanonicalize_frozen,
             do_active=self.semicanonicalize_active,
         )
+        semican.semi_canonicalize(g1=g1, C_contig=C)
         self.C[0] = semican.C_semican.copy()
 
         return {

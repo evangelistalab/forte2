@@ -1,8 +1,9 @@
 from dataclasses import dataclass
-from abc import ABC
+from abc import ABC, abstractmethod
 
 from .mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.state import StateAverageInfo, State, MOSpace
+from forte2.helpers import logger
 
 
 @dataclass
@@ -20,6 +21,8 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
     die_if_not_converged: bool = False
 
     def __post_init__(self):
+        self.dtype = float
+        self.two_component = False
         self.sa_info = StateAverageInfo(
             states=self.states,
             nroots=self.nroots,
@@ -86,6 +89,7 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
         if provided_via_args == 1:
             if provided_via_mo_space:
                 # mo_space is provided directly
+                logger.log_info1("ActiveSpaceSolver: Using provided mo_space.")
                 return
 
             if provided_via_orbitals:
@@ -110,9 +114,11 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
                         else []
                     ),
                 )
+                logger.log_info1("ActiveSpaceSolver: mo_space constructed from provided orbital lists.")
                 return
         elif provided_via_parent:
             MOSpaceMixin.copy_from_upstream(self, self.parent_method)
+            logger.log_info1("ActiveSpaceSolver: mo_space copied from parent method.")
             return
 
 
@@ -130,5 +136,6 @@ class RelActiveSpaceSolver(ActiveSpaceSolver):
             mult = 1 if self.nel % 2 == 0 else 2
             ms = 0.0 if mult == 1 else 0.5
             self.states = State(nel=self.nel, multiplicity=mult, ms=ms)
-
         super().__post_init__()
+        self.dtype = complex
+        self.two_component = True

@@ -49,7 +49,6 @@ def get_hcore_x2c(system):
             "row-dependent",
         ], f"Invalid snso_type: {system.snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
 
-    logger.log_info1(f"Number of contracted basis functions: {system.nbf}")
     xbasis = build_basis(
         system.basis_set,
         system.geom_helper,
@@ -58,7 +57,6 @@ def get_hcore_x2c(system):
     proj = _get_projection_matrix(system, xbasis)
 
     nbf_decon = len(xbasis)
-    logger.log_info1(f"Number of decontracted basis functions: {nbf_decon}")
     nbf = nbf_decon if system.x2c_type == "sf" else nbf_decon * 2
     # expensive way to get this for now but works for all types of contraction schemes
     proj = _get_projection_matrix(system, xbasis)
