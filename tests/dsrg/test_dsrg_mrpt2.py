@@ -23,8 +23,8 @@ def test_sf_mrpt2_n2():
 
     mc = MCOptimizer(
         states=State(nel=14, multiplicity=1, ms=0.0),
-        active_orbitals=6,
         core_orbitals=4,
+        active_orbitals=6,
     )(rhf)
     mc.run()
 
@@ -59,21 +59,18 @@ def test_sf_mrpt2_o2_triplet():
         auxiliary_basis_set="cc-pVTZ-JKFIT",
     )
     mf = ROHF(charge=0, ms=1.0)(system)
-    avas = AVAS(
-        subspace=["O(2p)"],
-        selection_method="separate",
-        num_active_docc=3,
-        num_active_uocc=1,
-    )(mf)
     mc = MCOptimizer(
         states=State(nel=16, multiplicity=3, ms=1.0),
-    )(avas)
+        frozen_core_orbitals=2,
+        core_orbitals=2,
+        active_orbitals=6,
+    )(mf)
     dsrg = DSRG_MRPT2(flow_param=1.0, relax_reference="twice")(mc)
     dsrg.run()
 
-    assert dsrg.relax_energies[0, 0] == approx(-149.967302979728)
-    assert dsrg.relax_energies[0, 1] == approx(-149.968922391320)
-    assert dsrg.relax_energies[0, 2] == approx(-149.707577515943)
-    assert dsrg.relax_energies[1, 0] == approx(-149.969319174301)
-    assert dsrg.relax_energies[1, 1] == approx(-149.969319899594)
-    assert dsrg.relax_energies[1, 2] == approx(-149.705500926314)
+    assert dsrg.relax_energies[0, 0] == approx(-149.963322736742)
+    assert dsrg.relax_energies[0, 1] == approx(-149.964938525217)
+    assert dsrg.relax_energies[0, 2] == approx(-149.707577515944)
+    assert dsrg.relax_energies[1, 0] == approx(-149.96533377181)
+    assert dsrg.relax_energies[1, 1] == approx(-149.965334494277)
+    assert dsrg.relax_energies[1, 2] == approx(-149.70550603407)

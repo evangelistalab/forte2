@@ -71,6 +71,8 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
         self.nvirt = self.mo_space.virt_corr.stop - self.mo_space.virt_corr.start
         self.nhole = self.ncore + self.nact
         self.npart = self.nact + self.nvirt
+        self.frozen_core = self.mo_space.frozen_core
+        self.corr = self.mo_space.corr
         self.actv = self.mo_space.actv_corr
         self.core = self.mo_space.core_corr
         self.virt = self.mo_space.virt_corr

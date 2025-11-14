@@ -52,17 +52,17 @@ class DSRG_MRPT2(DSRGBase):
         g1, g2, l2, l3 = self.ci_solver.make_average_cumulants()
         # self._C are the MCSCF canonical orbitals. We always use canonical orbitals to build the generalized Fock matrix.
         self.semicanonicalizer.semi_canonicalize(g1=g1, C_contig=self._C)
-        self._C_semican = self.semicanonicalizer.C_semican.copy()
-        self.fock = self.semicanonicalizer.fock_semican.copy()
-        self.eps = self.semicanonicalizer.eps_semican.copy()
+        # Freeze core orbitals by removing them from the semicanonicalized quantities
+        # The energy contributions are accounted for in self.E_core_orig
+        self._C_semican = self.semicanonicalizer.C_semican[:, self.corr].copy()
+        self.fock = self.semicanonicalizer.fock_semican[self.corr, self.corr].copy()
+        self.eps = self.semicanonicalizer.eps_semican[self.corr].copy()
         self.delta_actv = self.eps[self.actv][:, None] - self.eps[self.actv][None, :]
-        self.Uactv = self.semicanonicalizer.Uactv
+        self.Uactv = self.semicanonicalizer.Uactv.copy()
 
         ints = dict()
-        # ints["F"] = self.fock - np.diag(np.diag(self.fock))  # remove diagonal
 
         cumulants = dict()
-        # g1 = self.ci_solver.make_average_1rdm()
         cumulants["gamma1"] = np.einsum(
             "ip,ij,jq->pq", self.Uactv, g1, self.Uactv.conj(), optimize=True
         )

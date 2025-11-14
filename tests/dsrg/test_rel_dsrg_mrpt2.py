@@ -30,8 +30,9 @@ def test_mrpt2_n2_nonrel():
 
     mc = RelMCOptimizer(
         nel=14,
+        frozen_core_orbitals=4,
+        core_orbitals=4,
         active_orbitals=12,
-        core_orbitals=8,
     )(rhf)
     mc.run()
 
@@ -41,21 +42,20 @@ def test_mrpt2_n2_nonrel():
     dsrg = RelDSRG_MRPT2(flow_param=0.5, relax_reference="iterate")(mc)
     dsrg.run()
 
-    assert dsrg.relax_energies[0, 0] == approx(-109.23886072869678)
-    assert dsrg.relax_energies[0, 1] == approx(-109.23931196762304)
-    assert dsrg.relax_energies[0, 2] == approx(-109.08114919682377)
+    assert dsrg.relax_energies[0, 0] == approx(-109.23447641615361)
+    assert dsrg.relax_energies[0, 1] == approx(-109.23492912085933)
+    assert dsrg.relax_energies[0, 2] == approx(-109.0811491968237)
 
-    assert dsrg.relax_energies[1, 0] == approx(-109.23895203485354)
-    assert dsrg.relax_energies[1, 1] == approx(-109.23895204377395)
-    assert dsrg.relax_energies[1, 2] == approx(-109.08065638972914)
+    assert dsrg.relax_energies[1, 0] == approx(-109.23456979285112)
+    assert dsrg.relax_energies[1, 1] == approx(-109.23456980167653)
+    assert dsrg.relax_energies[1, 2] == approx(-109.08065516005186)
 
-    assert dsrg.relax_energies[2, 0] == approx(-109.23895388776656)
-    assert dsrg.relax_energies[2, 1] == approx(-109.23895388776755)
-    assert dsrg.relax_energies[2, 2] == approx(-109.08065911651646)
+    assert dsrg.relax_energies[2, 0] == approx(-109.2345716278556)
+    assert dsrg.relax_energies[2, 1] == approx(-109.23457162785648)
+    assert dsrg.relax_energies[2, 2] == approx(-109.08065784569052)
 
 
 def test_mrpt2_n2_sa_nonrel():
-    # This should be strictly identical to test_mcscf_sa_diff_mult given a sufficiently robust MCSCF solver.
     xyz = """
     N 0.0 0.0 0.0
     N 0.0 0.0 1.2
@@ -137,8 +137,9 @@ def test_mrpt2_carbon_rel_sa():
     )
 
 
-@pytest.mark.slow
 def test_mrpt2_se_rel_sa_gauss_nuc():
+    # Test the zero-field splitting of Se atom with Gaussian nuclear charges
+    # Freezing all non-4s/4p orbitals (zero correlated core orbitals)
     xyz = """
     Se 0 0 0
     """
@@ -160,13 +161,13 @@ def test_mrpt2_se_rel_sa_gauss_nuc():
         nel=34,
         nroots=9,
         do_diis=False,
-        core_orbitals=28,
+        frozen_core_orbitals=28,
         active_orbitals=8,
     )(mf)
     dsrg = RelDSRG_MRPT2(flow_param=0.24, relax_reference="once")(mc)
     dsrg.run()
     assert (dsrg.relax_eigvals[5] - dsrg.relax_eigvals[4]) * EH_TO_WN == pytest.approx(
-        1934.7033793591593, rel=1e-4
+        1916.780124730304, rel=1e-4
     )
 
 
