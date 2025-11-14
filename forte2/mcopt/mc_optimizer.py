@@ -384,7 +384,7 @@ class MCOptimizer(ActiveSpaceSolver):
                 g1=g1,
                 C=self.C[0],
                 system=self.system,
-                mix_inactive=not self.optimize_frozen_orbs,
+                mix_inactive=self.optimize_frozen_orbs,
                 mix_active=False,
             )
             self.C[0] = semi.C_semican.copy()
