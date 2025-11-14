@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from numpy.typing import NDArray
 
-from forte2 import ints
+from forte2 import integrals
 from forte2.data import DEBYE_TO_AU, DEBYE_ANGSTROM_TO_AU, Z_TO_ATOM_SYMBOL
 from forte2.helpers import logger
 from forte2.helpers.matrix_functions import (
@@ -58,6 +58,8 @@ class System:
         This will center the molecule at its center of mass and reorient it along its principal axes of inertia.
     symmetry_tol : float, optional, default=1e-4
         The tolerance for detecting symmetry.
+    use_gaussian_charges : bool, optional, default=False
+        Whether to use Gaussian nuclear charge distributions instead of point charges.
 
     Attributes
     ----------
@@ -115,6 +117,7 @@ class System:
     cholesky_tol: float = 1e-6
     symmetry: bool = False
     symmetry_tol: float = 1e-4
+    use_gaussian_charges: bool = False
 
     ### Non-init attributes
     atoms: list[list[float, list[float, float, float]]] = field(
@@ -136,8 +139,9 @@ class System:
 
         self._init_geometry()
         self._init_basis()
+        self.nuclear_repulsion = integrals.nuclear_repulsion(self)
         self._init_x2c()
-        _S = ints.overlap(self.basis)
+        _S = integrals.overlap(self)
         self.Xorth, self.nmo = compute_orthonormal_transformation(
             _S,
             self.linear_dep_trigger,
@@ -165,7 +169,6 @@ class System:
         self.atomic_masses = self.geom_helper.atomic_masses
         self.atomic_positions = self.geom_helper.atomic_positions
         self.centroid = self.geom_helper.centroid
-        self.nuclear_repulsion = self.geom_helper.nuclear_repulsion
         self.center_of_mass = self.geom_helper.center_of_mass
         self.atom_counts = self.geom_helper.atom_counts
         self.atom_to_center = self.geom_helper.atom_to_center
@@ -185,11 +188,13 @@ class System:
         )
 
         if not self.cholesky_tei:
-            self.auxiliary_basis = (
-                build_basis(self.auxiliary_basis_set, self.geom_helper)
-                if self.auxiliary_basis_set is not None
-                else None
-            )
+            if self.auxiliary_basis_set is not None:
+                self.auxiliary_basis = build_basis(
+                    self.auxiliary_basis_set, self.geom_helper
+                )
+            else:
+                self.auxiliary_basis = None
+
             if self.auxiliary_basis_set_corr is not None:
                 logger.log_warning(
                     "Using a separate auxiliary basis is not recommended!"
@@ -204,15 +209,22 @@ class System:
             self.auxiliary_basis = None
             self.auxiliary_basis_corr = None
 
-        self.minao_basis = (
-            build_basis(self.minao_basis_set, self.geom_helper)
-            if self.minao_basis_set is not None
-            else None
-        )
+        if self.minao_basis_set is not None:
+            self.minao_basis = build_basis(self.minao_basis_set, self.geom_helper)
+        else:
+            self.minao_basis = None
 
         self.nbf = self.basis.size
         self.naux = self.auxiliary_basis.size if self.auxiliary_basis else None
         self.nminao = self.minao_basis.size if self.minao_basis else None
+
+        self.gaussian_charge_basis = None
+        if self.use_gaussian_charges:
+            self.gaussian_charge_basis = build_basis(
+                "gaussian_charge",
+                self.geom_helper,
+                embed_normalization_into_coefficients=False,
+            )
 
     def _init_x2c(self):
         if self.x2c_type is not None:
@@ -237,7 +249,7 @@ class System:
         NDArray
             Overlap integrals matrix.
         """
-        S = ints.overlap(self.basis)
+        S = integrals.overlap(self)
         if self.two_component:
             S = block_diag_2x2(S)
         return S
@@ -251,13 +263,11 @@ class System:
         NDArray
             Core Hamiltonian integrals matrix.
         """
-        if self.x2c_type == "sf":
-            H = get_hcore_x2c(self, x2c_type="sf")
-        elif self.x2c_type == "so":
-            H = get_hcore_x2c(self, x2c_type="so", snso_type=self.snso_type)
+        if self.x2c_type in ["sf", "so"]:
+            H = get_hcore_x2c(self)
         else:
-            T = ints.kinetic(self.basis)
-            V = ints.nuclear(self.basis, self.atoms)
+            T = integrals.kinetic(self)
+            V = integrals.nuclear(self)
             H = T + V
         if self.x2c_type in [None, "sf"] and self.two_component:
             H = block_diag_2x2(H)

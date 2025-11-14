@@ -12,12 +12,16 @@
 #include <nanobind/stl/pair.h>
 #include <nanobind/stl/string.h>
 
-#include "ints/basis.h"
-#include "ints/fock_builder.h"
-#include "ints/nuclear_repulsion.h"
-#include "ints/one_electron.h"
-#include "ints/two_electron.h"
-#include "ints/value_at_points.h"
+#include "integrals/basis.h"
+#include "integrals/fock_builder.h"
+#include "integrals/nuclear_repulsion.h"
+#include "integrals/one_electron.h"
+#include "integrals/two_electron.h"
+#include "integrals/value_at_points.h"
+// Libcint-backed functions are optional
+#if FORTE2_USE_LIBCINT
+#  include "integrals/libcint_two_center.h"
+#endif
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -33,6 +37,7 @@ void export_scalar_api(nb::module_& m);
 void export_one_electron_api(nb::module_& m);
 void export_two_electron_api(nb::module_& m);
 void export_value_at_points_api(nb::module_& m);
+void export_libcint_compute_api(nb::module_& m);
 
 void export_integrals_api(nb::module_& m) {
     nb::module_ sub_m = m.def_submodule("ints", "Integrals submodule");
@@ -48,6 +53,16 @@ void export_integrals_api(nb::module_& m) {
     export_two_electron_api(sub_m);
 
     export_value_at_points_api(sub_m);
+
+    // expose libcint utilities only if available
+    export_libcint_compute_api(sub_m);
+
+    // Expose presence flag for Python-side checks
+#if FORTE2_USE_LIBCINT
+    sub_m.attr("HAS_LIBCINT") = nb::bool_(true);
+#else
+    sub_m.attr("HAS_LIBCINT") = nb::bool_(false);
+#endif
 }
 
 void export_shell_api(nb::module_& sub_m) {
@@ -133,7 +148,9 @@ void export_basis_api(nb::module_& sub_m) {
         .def("__getitem__", &Basis::operator[], "i"_a)
         .def("__len__", &Basis::size)
         .def_prop_ro("shell_first_and_size", &Basis::shell_first_and_size)
-        .def_prop_ro("center_first_and_last", &Basis::center_first_and_last)
+        .def_prop_ro("center_first_and_last", [](const Basis& b) { return b.center_first_and_last(false); })
+        .def_prop_ro("center_first_and_last_shell",
+                     [](const Basis& b) { return b.center_first_and_last(true); })
         .def_prop_ro("size", &Basis::size)
         .def_prop_ro("max_l", &Basis::max_l)
         .def_prop_ro("name", &Basis::name)
@@ -340,4 +357,41 @@ void export_two_electron_api(nb::module_& sub_m) {
         "basis1"_a, "basis2"_a, "omega"_a);
 }
 
+#if FORTE2_USE_LIBCINT
+void export_libcint_compute_api(nb::module_& sub_m) {
+    sub_m.def("cint_int1e_ovlp_sph", &cint_int1e_ovlp_sph, "shell_slice"_a, "atm"_a, "bas"_a,
+              "env"_a, "Compute the overlap integral matrix using libcint in spherical harmonics.");
+    sub_m.def("cint_int1e_ovlp_spinor", &cint_int1e_ovlp_spinor, "shell_slice"_a, "atm"_a, "bas"_a,
+              "env"_a, "Compute the overlap integral matrix using libcint in spinor basis.");
+    sub_m.def("cint_int1e_kin_sph", &cint_int1e_kin_sph, "shell_slice"_a, "atm"_a, "bas"_a, "env"_a,
+              "Compute the kinetic energy integral matrix using libcint in spherical harmonics.");
+    sub_m.def("cint_int1e_kin_spinor", &cint_int1e_kin_spinor, "shell_slice"_a, "atm"_a, "bas"_a,
+              "env"_a, "Compute the kinetic energy integral matrix using libcint in spinor basis.");
+    sub_m.def(
+        "cint_int1e_nuc_sph", &cint_int1e_nuc_sph, "shell_slice"_a, "atm"_a, "bas"_a, "env"_a,
+        "Compute the nuclear attraction integral matrix using libcint in spherical harmonics.");
+    sub_m.def("cint_int1e_nuc_spinor", &cint_int1e_nuc_spinor, "shell_slice"_a, "atm"_a, "bas"_a,
+              "env"_a,
+              "Compute the nuclear attraction integral matrix using libcint in spinor basis.");
+    sub_m.def("cint_int1e_spnucsp_sph", &cint_int1e_spnucsp_sph, "shell_slice"_a, "atm"_a, "bas"_a,
+              "env"_a,
+              "Compute the small component of the nuclear attraction integral matrix using libcint "
+              "in spherical harmonics.");
+    sub_m.def("cint_int1e_spnucsp_spinor", &cint_int1e_spnucsp_spinor, "shell_slice"_a, "atm"_a,
+              "bas"_a, "env"_a,
+              "Compute the small component of the nuclear attraction integral matrix using libcint "
+              "in spinor basis.");
+    sub_m.def("cint_int1e_r_sph", &cint_int1e_r_sph, "shell_slice"_a, "atm"_a, "bas"_a, "env"_a,
+              "Compute the dipole integral matrix using libcint in spherical harmonics.");
+    sub_m.def("cint_int2c2e_sph", &cint_int2c2e_sph, "shell_slice"_a, "atm"_a, "bas"_a, "env"_a,
+              "Compute the two-center two-electron integral matrix using libcint in spherical "
+              "harmonics.");
+}
+#else
+// When libcint is disabled, define a no-op exporter
+void export_libcint_compute_api(nb::module_& sub_m) {
+    // Intentionally empty: libcint-backed APIs are unavailable.
+    (void) sub_m;
+}
+#endif
 } // namespace forte2

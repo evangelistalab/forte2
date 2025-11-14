@@ -1,12 +1,13 @@
 import json
 import itertools
 from importlib import resources
-import regex as re
+import re
 import os
 
 from forte2 import Basis, Shell
 from forte2.data import ATOM_SYMBOL_TO_Z
 from forte2.helpers import logger
+
 
 try:
     import basis_set_exchange as bse
@@ -45,7 +46,7 @@ def build_basis(
             }
 
         where ``"default"`` is used for atoms not explicitly listed.
-    geometry : forte2.geom.Geometry
+    geometry : forte2.system.geom_utils.GeometryHelper
         The molecular geometry.
     embed_normalization_into_coefficients : bool, optional, default=True
         Whether to embed normalization factors into the contraction coefficients.
@@ -123,6 +124,7 @@ def build_basis(
                 coords,
                 embed_normalization_into_coefficients,
             )
+
     return basis
 
 
@@ -240,6 +242,7 @@ def _load_basis(basis_name, Z):
 
 
 def _get_atom_basis(fetch_map):
+    # atom_basis = {basis_name: {Z: basis_data}}
     atom_basis = {}
     for basis_name, atoms in fetch_map.items():
         atom_basis[basis_name] = {}

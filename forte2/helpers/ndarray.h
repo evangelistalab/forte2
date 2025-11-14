@@ -12,6 +12,9 @@
 namespace nb = nanobind;
 
 // Aliases for ndarray types used in forte2
+// No contiguity requirement
+using np_vector_int = nb::ndarray<nb::numpy, int, nb::ndim<1>>;
+using np_matrix_int = nb::ndarray<nb::numpy, int, nb::ndim<2>>;
 using np_vector = nb::ndarray<nb::numpy, double, nb::ndim<1>>;
 using np_matrix = nb::ndarray<nb::numpy, double, nb::ndim<2>>;
 using np_tensor3 = nb::ndarray<nb::numpy, double, nb::ndim<3>>;
@@ -28,6 +31,56 @@ using np_tensor5_complex = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim
 using np_tensor6_complex = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<6>>;
 using np_tensor7_complex = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<7>>;
 using np_tensor8_complex = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<8>>;
+// C-contiguous versions
+using np_vector_c_int = nb::ndarray<nb::numpy, int, nb::ndim<1>, nb::c_contig>;
+using np_matrix_c_int = nb::ndarray<nb::numpy, int, nb::ndim<2>, nb::c_contig>;
+using np_vector_c = nb::ndarray<nb::numpy, double, nb::ndim<1>, nb::c_contig>;
+using np_matrix_c = nb::ndarray<nb::numpy, double, nb::ndim<2>, nb::c_contig>;
+using np_tensor3_c = nb::ndarray<nb::numpy, double, nb::ndim<3>, nb::c_contig>;
+using np_tensor4_c = nb::ndarray<nb::numpy, double, nb::ndim<4>, nb::c_contig>;
+using np_tensor5_c = nb::ndarray<nb::numpy, double, nb::ndim<5>, nb::c_contig>;
+using np_tensor6_c = nb::ndarray<nb::numpy, double, nb::ndim<6>, nb::c_contig>;
+using np_tensor7_c = nb::ndarray<nb::numpy, double, nb::ndim<7>, nb::c_contig>;
+using np_tensor8_c = nb::ndarray<nb::numpy, double, nb::ndim<8>, nb::c_contig>;
+using np_vector_complex_c = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<1>, nb::c_contig>;
+using np_matrix_complex_c = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<2>, nb::c_contig>;
+using np_tensor3_complex_c =
+    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<3>, nb::c_contig>;
+using np_tensor4_complex_c =
+    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<4>, nb::c_contig>;
+using np_tensor5_complex_c =
+    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<5>, nb::c_contig>;
+using np_tensor6_complex_c =
+    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<6>, nb::c_contig>;
+using np_tensor7_complex_c =
+    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<7>, nb::c_contig>;
+using np_tensor8_complex_c =
+    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<8>, nb::c_contig>;
+// Fortran-contiguous versions
+using np_vector_f_int = nb::ndarray<nb::numpy, int, nb::ndim<1>, nb::f_contig>;
+using np_matrix_f_int = nb::ndarray<nb::numpy, int, nb::ndim<2>, nb::f_contig>;
+using np_vector_f = nb::ndarray<nb::numpy, double, nb::ndim<1>, nb::f_contig>;
+using np_matrix_f = nb::ndarray<nb::numpy, double, nb::ndim<2>, nb::f_contig>;
+using np_tensor3_f = nb::ndarray<nb::numpy, double, nb::ndim<3>, nb::f_contig>;
+using np_tensor4_f = nb::ndarray<nb::numpy, double, nb::ndim<4>, nb::f_contig>;
+using np_tensor5_f = nb::ndarray<nb::numpy, double, nb::ndim<5>, nb::f_contig>;
+using np_tensor6_f = nb::ndarray<nb::numpy, double, nb::ndim<6>, nb::f_contig>;
+using np_tensor7_f = nb::ndarray<nb::numpy, double, nb::ndim<7>, nb::f_contig>;
+using np_tensor8_f = nb::ndarray<nb::numpy, double, nb::ndim<8>, nb::f_contig>;
+using np_vector_complex_f = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<1>, nb::f_contig>;
+using np_matrix_complex_f = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<2>, nb::f_contig>;
+using np_tensor3_complex_f =
+    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<3>, nb::f_contig>;
+using np_tensor4_complex_f =
+    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<4>, nb::f_contig>;
+using np_tensor5_complex_f =
+    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<5>, nb::f_contig>;
+using np_tensor6_complex_f =
+    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<6>, nb::f_contig>;
+using np_tensor7_complex_f =
+    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<7>, nb::f_contig>;
+using np_tensor8_complex_f =
+    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<8>, nb::f_contig>;
 
 template <typename Type, typename T, int N>
 nb::ndarray<Type, T, nb::ndim<N>> make_ndarray(std::unique_ptr<std::vector<T>> vec,
@@ -57,8 +110,8 @@ nb::ndarray<Type, T, nb::ndim<N>> make_ndarray(std::unique_ptr<std::vector<T>> v
 /// @details The shape is a list of size N, where N is the number of dimensions.
 /// @return An ndarray of the given shape and type.
 /// @note The ndarray is not initialized, so the data is not set to any value.
-template <typename Type, typename T, int N>
-nb::ndarray<Type, T, nb::ndim<N>> make_ndarray(const std::array<size_t, N>& shape) {
+template <typename Type, typename T, int N, typename Order = void>
+auto make_ndarray(const std::array<size_t, N>& shape) {
     // compute the number of elements in the array
     const auto size = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<size_t>());
 
@@ -69,8 +122,13 @@ nb::ndarray<Type, T, nb::ndim<N>> make_ndarray(const std::array<size_t, N>& shap
     nb::capsule deleter(array_ptr, [](void* p) noexcept { delete[] static_cast<T*>(p); });
 
     // construct the ndarray (a view on the array data) with shape and the deleter capsule
-    return nb::ndarray<Type, T, nb::ndim<N>>(array_ptr, static_cast<size_t>(N), shape.data(),
-                                             std::move(deleter));
+    if constexpr (std::is_void_v<Order>) {
+        return nb::ndarray<Type, T, nb::ndim<N>>(array_ptr, static_cast<size_t>(N), shape.data(),
+                                                 std::move(deleter));
+    } else {
+        return nb::ndarray<Type, T, nb::ndim<N>, Order>(array_ptr, static_cast<size_t>(N),
+                                                        shape.data(), std::move(deleter));
+    }
 }
 
 /// @brief Creates an ndarray of a given shape and type set to zero.
@@ -79,14 +137,15 @@ nb::ndarray<Type, T, nb::ndim<N>> make_ndarray(const std::array<size_t, N>& shap
 /// @tparam Type The type of the ndarray (e.g. nb::numpy, nb::pytorch, etc.)
 /// @tparam T The type of the data (e.g. double, float, etc.)
 /// @tparam N The number of dimensions of the ndarray
+/// @tparam Order The memory layout of the ndarray (e.g. nb::c_contig, nb::f_contig, etc.)
 /// @param shape The shape of the ndarray as an array of size N.
 /// @details The shape is a list of size N, where N is the number of dimensions.
 /// @return An ndarray of the given shape and type.
 /// @note The ndarray is not initialized, so the data is not set to any value.
-template <typename Type, typename T, int N>
-nb::ndarray<Type, T, nb::ndim<N>> make_zeros(const std::array<size_t, N>& shape) {
+template <typename Type, typename T, int N, typename Order = void>
+auto make_zeros(const std::array<size_t, N>& shape) {
     // allocate the ndarray
-    auto array = make_ndarray<Type, T, N>(shape);
+    auto array = make_ndarray<Type, T, N, Order>(shape);
 
     // get the data pointer and size
     auto data_ptr = array.data();

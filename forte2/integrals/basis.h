@@ -53,7 +53,10 @@ class Basis {
 
     /// @return a vector of pairs of the first and last index of the basis functions on a given
     /// center in the basis set.
-    std::vector<std::pair<std::size_t, std::size_t>> center_first_and_last() const;
+    /// @param count_shell If true, the first and last indices are for shells on the center, else
+    /// the indices are for basis functions.
+    std::vector<std::pair<std::size_t, std::size_t>>
+    center_first_and_last(bool count_shell = false) const;
 
   private:
     std::vector<libint2::Shell> shells_; // vector of shells in the basis set
