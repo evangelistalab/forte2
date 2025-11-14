@@ -114,7 +114,7 @@ def test_semican_fock_offdiag():
     mo_space = ci.mo_space
     semi = orbitals.Semicanonicalizer(
         mo_space=mo_space,
-        g1=ci.make_average_sf_1rdm(),
+        g1=ci.make_average_1rdm(),
         C=ci.C[0],
         system=system,
     )
@@ -140,7 +140,7 @@ def test_semican_fock_offdiag():
     mo_space = ci.mo_space
     semi = orbitals.Semicanonicalizer(
         mo_space=mo_space,
-        g1=ci.make_average_sf_1rdm(),
+        g1=ci.make_averagegit _1rdm(),
         C=ci.C[0],
         system=system,
     )

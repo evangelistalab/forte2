@@ -324,7 +324,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
 
         frozen_core_inds = self.mo_space.frozen_core_indices
         frozen_virt_inds = self.mo_space.frozen_virtual_indices
-        g1_sf = self.parent_method.ci_solver.make_average_sf_1rdm()
+        g1_sf = self.parent_method.ci_solver.make_average_1rdm()
         emb_space = EmbeddingMOSpace(
             nmo=self.nmo,
             frozen_core_orbitals=frozen_core_inds,

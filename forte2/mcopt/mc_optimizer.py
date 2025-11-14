@@ -279,8 +279,8 @@ class MCOptimizer(ActiveSpaceSolver):
             self.g1_act = self.ci_solver.make_average_1rdm()
             g2_act = self.ci_solver.make_average_2rdm()
         else:
-            self.g1_act = self.ci_solver.make_average_sf_1rdm()
-            g2_act = self.ci_solver.make_average_sf_2rdm()
+            self.g1_act = self.ci_solver.make_average_1rdm()
+            g2_act = self.ci_solver.make_average_2rdm()
         # ci_maxiter_save = self.ci_solver.get_maxiter()
         # self.ci_solver.set_maxiter(self.ci_maxiter)
 
@@ -337,8 +337,8 @@ class MCOptimizer(ActiveSpaceSolver):
                 self.g1_act = self.ci_solver.make_average_1rdm()
                 g2_act = self.ci_solver.make_average_2rdm()
             else:
-                self.g1_act = self.ci_solver.make_average_sf_1rdm()
-                g2_act = self.ci_solver.make_average_sf_2rdm()
+                self.g1_act = self.ci_solver.make_average_1rdm()
+                g2_act = self.ci_solver.make_average_2rdm()
             self.orb_opt.set_rdms(self.g1_act, g2_act)
             self.iter += 1
         else:
@@ -378,7 +378,7 @@ class MCOptimizer(ActiveSpaceSolver):
             if self.two_component:
                 g1 = self.ci_solver.make_average_1rdm()
             else:
-                g1 = self.ci_solver.make_average_sf_1rdm()
+                g1 = self.ci_solver.make_average_1rdm()
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
                 g1=g1,
