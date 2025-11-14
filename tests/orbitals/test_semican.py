@@ -178,6 +178,8 @@ def test_semican_orbitals():
         State(nel=24, multiplicity=1, ms=0.0),
         core_orbitals=10,
         active_orbitals=4,
+        ci_rconv=1e-10,
+        ci_econv=1e-12,
         final_orbital="semicanonical",
     )(rhf)
     mc.run()
