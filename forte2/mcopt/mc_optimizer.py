@@ -109,8 +109,8 @@ class MCOptimizer(ActiveSpaceSolver):
 
     ### CI solver parameters
     ci_maxiter: int = 100
-    ci_econv: float = 1e-10
-    ci_rconv: float = 1e-5
+    ci_econv: float = 1e-12
+    ci_rconv: float = 1e-6
     ci_guess_per_root: int = 2
     ci_ndets_per_guess: int = 10
     ci_collapse_per_root: int = 2

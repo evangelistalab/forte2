@@ -7,7 +7,6 @@ from forte2.helpers.comparisons import approx
 from forte2.data.atom_data import EH_TO_WN
 
 
-@pytest.mark.slow
 def test_mrpt2_n2_nonrel():
     erhf = -108.954140898736
     emcscf = -109.0811491968
@@ -42,17 +41,17 @@ def test_mrpt2_n2_nonrel():
     dsrg = RelDSRG_MRPT2(flow_param=0.5, relax_reference="iterate")(mc)
     dsrg.run()
 
-    assert dsrg.relax_energies[0, 0] == approx(-109.238860710091)
-    assert dsrg.relax_energies[0, 1] == approx(-109.239311979963)
-    assert dsrg.relax_energies[0, 2] == approx(-109.081149196818)
+    assert dsrg.relax_energies[0, 0] == approx(-109.23886072869678)
+    assert dsrg.relax_energies[0, 1] == approx(-109.23931196762304)
+    assert dsrg.relax_energies[0, 2] == approx(-109.08114919682377)
 
-    assert dsrg.relax_energies[1, 0] == approx(-109.238952001270)
-    assert dsrg.relax_energies[1, 1] == approx(-109.238952010521)
-    assert dsrg.relax_energies[1, 2] == approx(-109.080656324868)
+    assert dsrg.relax_energies[1, 0] == approx(-109.23895203485354)
+    assert dsrg.relax_energies[1, 1] == approx(-109.23895204377395)
+    assert dsrg.relax_energies[1, 2] == approx(-109.08065638972914)
 
-    assert dsrg.relax_energies[2, 0] == approx(-109.238953941310)
-    assert dsrg.relax_energies[2, 1] == approx(-109.238953941321)
-    assert dsrg.relax_energies[2, 2] == approx(-109.080659175782)
+    assert dsrg.relax_energies[2, 0] == approx(-109.23895388776656)
+    assert dsrg.relax_energies[2, 1] == approx(-109.23895388776755)
+    assert dsrg.relax_energies[2, 2] == approx(-109.08065911651646)
 
 
 def test_mrpt2_n2_sa_nonrel():
@@ -138,6 +137,7 @@ def test_mrpt2_carbon_rel_sa():
     )
 
 
+@pytest.mark.slow
 def test_mrpt2_se_rel_sa_gauss_nuc():
     xyz = """
     Se 0 0 0
@@ -160,15 +160,13 @@ def test_mrpt2_se_rel_sa_gauss_nuc():
         nel=34,
         nroots=9,
         do_diis=False,
-        econv=1e-11,
-        gconv=1e-10,
         core_orbitals=28,
         active_orbitals=8,
     )(mf)
     dsrg = RelDSRG_MRPT2(flow_param=0.24, relax_reference="once")(mc)
     dsrg.run()
     assert (dsrg.relax_eigvals[5] - dsrg.relax_eigvals[4]) * EH_TO_WN == pytest.approx(
-        1934.7036712902677, rel=1e-4
+        1934.7033793591593, rel=1e-4
     )
 
 

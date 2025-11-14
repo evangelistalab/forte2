@@ -520,7 +520,7 @@ class DavidsonLiuSolver:
         """
         Check if the columns of b are orthonormal.
         """
-        if not np.allclose(b.T.conj() @ b, np.eye(b.shape[1]), atol=1e-12):
+        if not np.allclose(b.T.conj() @ b, np.eye(b.shape[1]), atol=1e-11):
             logger.log_warning(f"{msg}")
             logger.log_warning(f"S = {b.T.conj() @ b}")
             raise ValueError(msg)

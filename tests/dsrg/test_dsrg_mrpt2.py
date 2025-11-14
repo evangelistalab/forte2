@@ -1,6 +1,3 @@
-import numpy as np
-import pytest
-
 from forte2 import System, RHF, MCOptimizer, State, AVAS, ROHF
 from forte2.dsrg import DSRG_MRPT2
 from forte2.helpers.comparisons import approx
@@ -51,9 +48,6 @@ def test_sf_mrpt2_n2():
 
 
 def test_sf_mrpt2_o2_triplet():
-    erhf = -149.598290821387
-    emcscf = -149.7432638235
-
     xyz = """
     O 0.0 0.0 0.0
     O 0.0 0.0 1.251

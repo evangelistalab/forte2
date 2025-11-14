@@ -1,7 +1,8 @@
 import numpy as np
 
-from forte2 import System, RHF, CI, MOSpace, orbitals, State, MCOptimizer
+from forte2 import System, RHF, CI, MOSpace, orbitals, State, MCOptimizer, integrals
 from forte2.helpers.comparisons import approx
+from forte2.orbitals import Semicanonicalizer
 
 
 def test_semican_rhf():
@@ -153,3 +154,41 @@ def test_semican_fock_offdiag():
     assert np.allclose(fock_cc, np.diag(np.diag(fock_cc)), rtol=0, atol=5e-8)
     assert np.allclose(fock_aa, np.diag(np.diag(fock_aa)), rtol=0, atol=5e-8)
     assert np.allclose(fock_vv, np.diag(np.diag(fock_vv)), rtol=0, atol=5e-8)
+
+
+def test_semican_orbitals():
+    # Test that repeated semicanonicalization gives the same orbitals
+    eci = -206.084138520360
+
+    xyz = """
+    N       -1.1226987119      2.0137160725     -0.0992218410                 
+    N       -0.1519067161      1.2402226172     -0.0345618482                 
+    H        0.7253474870      1.7181546089     -0.2678695726          
+    F       -2.2714806355      1.3880717623      0.2062454513     
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+    )
+
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    mc = MCOptimizer(
+        State(nel=24, multiplicity=1, ms=0.0),
+        core_orbitals=10,
+        active_orbitals=4,
+        final_orbital="semicanonical",
+    )(rhf)
+    mc.run()
+    c_mc = mc.C[0].copy()
+    assert mc.E == approx(eci)
+
+    semi = Semicanonicalizer(mo_space=mc.mo_space, system=system)
+    semi.semi_canonicalize(g1=mc.ci_solver.make_average_1rdm(), C_contig=mc.C[0])
+    c_semi = semi.C_semican.copy()
+    ovlp = integrals.overlap(system)
+
+    assert np.allclose(
+        np.abs(c_mc.T @ ovlp @ c_semi), np.eye(c_mc.shape[1]), rtol=0, atol=1e-8
+    )
