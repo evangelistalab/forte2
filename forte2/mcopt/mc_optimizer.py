@@ -381,12 +381,11 @@ class MCOptimizer(ActiveSpaceSolver):
                 g1 = self.ci_solver.make_average_1rdm()
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
-                g1=g1,
-                C=self.C[0],
                 system=self.system,
                 mix_inactive=not self.optimize_frozen_orbs,
                 mix_active=False,
             )
+            semi.semi_canonicalize(g1, self.C[0])
             self.C[0] = semi.C_semican.copy()
 
             # recompute the CI vectors in the semicanonical basis

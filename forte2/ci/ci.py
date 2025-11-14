@@ -521,7 +521,7 @@ class _CIBase:
                 self.dets, self.spin_adapter, I, J
             )
         # create the Hamiltonian matrix in the basis of the guess CSFs
-        Hguess = np.zeros((nguess_dets, nguess_dets), dtype=float)
+        Hguess = np.zeros((nguess_dets, nguess_dets), dtype=self.dtype)
         for i, I in enumerate(indices):
             for j, J in enumerate(indices):
                 if i >= j:
@@ -533,7 +533,7 @@ class _CIBase:
         evals_guess, evecs_guess = np.linalg.eigh(Hguess)
 
         # Select the lowest eigenvalues and their corresponding eigenvectors
-        guess_mat = np.zeros((self.basis_size, self.num_guess_states), dtype=float)
+        guess_mat = np.zeros((self.basis_size, self.num_guess_states), dtype=self.dtype)
         for i in range(self.num_guess_states):
             guess = evecs_guess[:, i]
             for j, d in enumerate(indices):
@@ -1401,7 +1401,7 @@ class CISolver(ActiveSpaceSolver):
         NDArray
             Average spin-free one-particle RDM.
         """
-        rdm1 = np.zeros((self.norb,) * 2, dtype=float)
+        rdm1 = np.zeros((self.norb,) * 2, dtype=self.dtype)
         for i, ci_solver in enumerate(self.sub_solvers):
             for j in range(ci_solver.nroot):
                 rdm1 += ci_solver.make_1rdm(j) * self.weights[i][j]
@@ -1416,7 +1416,7 @@ class CISolver(ActiveSpaceSolver):
         NDArray
             Average spin-free two-particle RDM.
         """
-        rdm2 = np.zeros((self.norb,) * 4, dtype=float)
+        rdm2 = np.zeros((self.norb,) * 4, dtype=self.dtype)
         for i, ci_solver in enumerate(self.sub_solvers):
             for j in range(ci_solver.nroot):
                 rdm2 += ci_solver.make_2rdm(j) * self.weights[i][j]
@@ -1432,7 +1432,7 @@ class CISolver(ActiveSpaceSolver):
         NDArray
             Average spin-free three-particle RDM.
         """
-        rdm3 = np.zeros((self.norb,) * 6, dtype=float)
+        rdm3 = np.zeros((self.norb,) * 6, dtype=self.dtype)
         for i, ci_solver in enumerate(self.sub_solvers):
             for j in range(ci_solver.nroot):
                 rdm3 += ci_solver.make_3rdm(j) * self.weights[i][j]

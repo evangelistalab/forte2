@@ -323,7 +323,7 @@ def opVop(system, basis1=None, basis2=None):
     if system.use_gaussian_charges:
         # Requires libcint; raises a clear error if unavailable
         res = cint_opVop(system, basis1, basis2)
-        # Note: libcint returns [sigma_x, sigma_y, sigma_z, I2]. 
+        # Note: libcint returns [sigma_x, sigma_y, sigma_z, I2].
         # We reorder to [I2, sigma_x, sigma_y, sigma_z] (the same as libint2)
         return [res[3], res[0], res[1], res[2]]
     basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
@@ -628,7 +628,9 @@ def _parse_basis_args_cint_2c2e(system, basis1, basis2, origin=None):
     # 1. both basis sets are None -> set both to system.auxiliary_basis
     # 2. basis1 is provided, basis2 is None -> set basis2 to basis1
     if basis1 is None and basis2 is None:
-        atm, bas, env = basis_to_cint_envs(system, system.auxiliary_basis, common_origin=origin)
+        atm, bas, env = basis_to_cint_envs(
+            system, system.auxiliary_basis, common_origin=origin
+        )
         shell_slice = [
             0,
             system.auxiliary_basis.nshells,
@@ -833,7 +835,9 @@ def cint_emultipole1(system, basis1=None, basis2=None, origin=None):
         The first electric multipole moment integrals
     """
     _require_libcint()
-    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2, origin)
+    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(
+        system, basis1, basis2, origin
+    )
     res = ints.cint_int1e_r_sph(shell_slice, atm, bas, env)
     # C-layout, first index is the integral component (slowest changing)
     return _f2c(res)

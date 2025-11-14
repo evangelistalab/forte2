@@ -337,13 +337,12 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         )
 
         semican = Semicanonicalizer(
-            g1=g1_sf,
-            C=C,
             system=self.system,
             mo_space=emb_space,
             do_frozen=self.semicanonicalize_frozen,
             do_active=self.semicanonicalize_active,
         )
+        semican.semi_canonicalize(g1_sf, C)
         self.C[0] = semican.C_semican.copy()
 
         return {
