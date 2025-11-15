@@ -30,8 +30,7 @@ def test_mrpt2_n2_nonrel():
 
     mc = RelMCOptimizer(
         nel=14,
-        frozen_core_orbitals=4,
-        core_orbitals=4,
+        core_orbitals=8,
         active_orbitals=12,
     )(rhf)
     mc.run()
@@ -39,7 +38,11 @@ def test_mrpt2_n2_nonrel():
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
 
-    dsrg = RelDSRG_MRPT2(flow_param=0.5, relax_reference="iterate")(mc)
+    dsrg = RelDSRG_MRPT2(
+        flow_param=0.5,
+        relax_reference="iterate",
+        frozen_core_orbitals=4,
+    )(mc)
     dsrg.run()
 
     assert dsrg.relax_energies[0, 0] == approx(-109.23447641615361)
@@ -161,10 +164,14 @@ def test_mrpt2_se_rel_sa_gauss_nuc():
         nel=34,
         nroots=9,
         do_diis=False,
-        frozen_core_orbitals=28,
+        core_orbitals=28,
         active_orbitals=8,
     )(mf)
-    dsrg = RelDSRG_MRPT2(flow_param=0.24, relax_reference="once")(mc)
+    dsrg = RelDSRG_MRPT2(
+        flow_param=0.24,
+        relax_reference="once",
+        frozen_core_orbitals=28,
+    )(mc)
     dsrg.run()
     assert (dsrg.relax_eigvals[5] - dsrg.relax_eigvals[4]) * EH_TO_WN == pytest.approx(
         1916.780124730304, rel=1e-4

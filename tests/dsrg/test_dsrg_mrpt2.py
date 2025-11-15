@@ -61,11 +61,14 @@ def test_sf_mrpt2_o2_triplet():
     mf = ROHF(charge=0, ms=1.0)(system)
     mc = MCOptimizer(
         states=State(nel=16, multiplicity=3, ms=1.0),
-        frozen_core_orbitals=2,
-        core_orbitals=2,
+        core_orbitals=4,
         active_orbitals=6,
     )(mf)
-    dsrg = DSRG_MRPT2(flow_param=1.0, relax_reference="twice")(mc)
+    dsrg = DSRG_MRPT2(
+        flow_param=1.0,
+        relax_reference="twice",
+        frozen_core_orbitals=2,
+    )(mc)
     dsrg.run()
 
     assert dsrg.relax_energies[0, 0] == approx(-149.963322736742)

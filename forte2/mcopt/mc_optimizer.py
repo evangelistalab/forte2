@@ -54,8 +54,6 @@ class MCOptimizer(ActiveSpaceSolver):
         Gradient convergence tolerance.
     die_if_not_converged : bool, optional, default=True
         If True, raises an error if the optimization does not converge.
-    optimize_frozen_orbs : bool, optional, default=True
-        Whether to optimize the frozen orbitals.
     freeze_inter_gas_rots : bool, optional, default=False
         Whether to freeze inter-GAS orbital rotations when multiple GASes are defined.
     micro_maxiter : int, optional, default=6
@@ -94,7 +92,6 @@ class MCOptimizer(ActiveSpaceSolver):
     """
 
     active_frozen_orbitals: list[int] = None
-    optimize_frozen_orbs: bool = True
     freeze_inter_gas_rots: bool = False
 
     ### Macroiteration parameters
@@ -149,12 +146,11 @@ class MCOptimizer(ActiveSpaceSolver):
         perm = self.mo_space.orig_to_contig
         # this is the contiguous coefficient matrix
         self._C = self.C[0][:, perm].copy()
-        # core slice will include frozen orbitals,
-        # if optimize_frozen_orbs is False, then the relevant
-        # gradients will be zeroed out by nrr
+        # core slice does not include frozen orbitals!
         self.core = self.mo_space.docc
         # self.actv will be a list if multiple GASes are defined
         self.actv = self.mo_space.actv
+        # virtual slice does not include frozen orbitals!
         self.virt = self.mo_space.uocc
 
         # check if all active_frozen_orbitals indices are in the active space
@@ -368,8 +364,7 @@ class MCOptimizer(ActiveSpaceSolver):
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
                 system=self.system,
-                # semicanonicalize together if frozen orbitals are optimized
-                mix_inactive=self.optimize_frozen_orbs,
+                mix_inactive=False,
                 mix_active=False,
             )
             C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
@@ -438,12 +433,9 @@ class MCOptimizer(ActiveSpaceSolver):
         nmo = self._C.shape[1]
         nrr = np.zeros((nmo, nmo), dtype=bool)
 
-        if self.optimize_frozen_orbs:
-            _core = self.mo_space.docc
-            _virt = self.mo_space.uocc
-        else:
-            _core = self.mo_space.core
-            _virt = self.mo_space.virt
+        # these do NOT include frozen orbitals!
+        _core = self.mo_space.core
+        _virt = self.mo_space.virt
 
         # GASn-GASm rotations
         if self.mo_space.ngas > 1 and not self.freeze_inter_gas_rots:

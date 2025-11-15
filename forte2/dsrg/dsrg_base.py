@@ -21,6 +21,10 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
     relax_maxiter: int = 10
     relax_tol: float = 1e-6
 
+    # options to freeze orbitals
+    frozen_core_orbitals: int | list[int] = None
+    frozen_virtual_orbitals: int | list[int] = None
+
     # Non-init attributes
     executed: bool = field(init=False, default=False)
     converged: bool = field(init=False, default=False)
@@ -65,6 +69,17 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
         self.two_component = self.system.two_component
 
         MOSpaceMixin.copy_from_upstream(self, self.parent_method)
+
+        # update the MOSpace object if frozen orbitals are specified
+        if (
+            self.frozen_core_orbitals is not None
+            or self.frozen_virtual_orbitals is not None
+        ):
+            self.mo_space = self.mo_space.update_frozen_orbitals(
+                frozen_core_orbitals=self.frozen_core_orbitals,
+                frozen_virtual_orbitals=self.frozen_virtual_orbitals,
+            )
+
         self.ncorr = self.mo_space.corr.stop - self.mo_space.corr.start
         self.ncore = self.mo_space.core_corr.stop - self.mo_space.core_corr.start
         self.nact = self.mo_space.actv_corr.stop - self.mo_space.actv_corr.start

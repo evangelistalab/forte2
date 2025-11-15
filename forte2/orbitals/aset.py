@@ -22,6 +22,10 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
     ----------
     fragment : list[str]
         List of atomic symbols defining the fragment.
+    frozen_core_orbitals : int | list[int], optional, default=None
+        Number or list of frozen core orbital indices.
+    frozen_virtual_orbitals : int | list[int], optional, default=None
+        Number or list of frozen virtual orbital indices.
     cutoff_method : str, optional, default="threshold"
         Method for choosing the embedding cutoff. Options include "threshold", "num_of_orbitals".
     cutoff : float, optional, default = 0.5
@@ -49,6 +53,8 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
     """
 
     fragment: list
+    frozen_core_orbitals: int | list[int] = None
+    frozen_virtual_orbitals: int | list[int] = None
     cutoff_method: str = "threshold"
     cutoff: float = 0.5
     num_A_occ: int = 0
@@ -74,7 +80,10 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
             self.parent_method.run()
         SystemMixin.copy_from_upstream(self, self.parent_method)
         MOsMixin.copy_from_upstream(self, self.parent_method)
-        self.mo_space = self.parent_method.mo_space
+        MOSpaceMixin.copy_from_upstream(self, self.parent_method)
+        self.mo_space = self.mo_space.update_frozen_orbitals(
+            self.frozen_core_orbitals, self.frozen_virtual_orbitals
+        )
         self.ncore = self.mo_space.ncore
         self.nactv = self.mo_space.nactv
 
