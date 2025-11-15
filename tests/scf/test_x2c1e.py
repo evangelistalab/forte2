@@ -90,6 +90,7 @@ def test_sox2c1e_water():
         basis_set="decon-cc-pvdz",
         auxiliary_basis_set="cc-pvtz-jkfit",
         x2c_type="so",
+        snso_type=None,
     )
     scf = GHF(charge=0)(system)
     scf.run()
@@ -140,6 +141,7 @@ def test_so_from_sf_water():
         basis_set="cc-pvqz",
         auxiliary_basis_set="cc-pvtz-jkfit",
         x2c_type="so",
+        snso_type=None,
     )
     scf_so = GHF(charge=1)(system)
     scf_so.C = convert_coeff_spatial_to_spinor(system, scf.C)

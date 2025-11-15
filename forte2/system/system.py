@@ -34,13 +34,13 @@ class System:
         A separate auxiliary basis set for all correlated calculations, either as a string or a dictionary (see `basis`).
     minao_basis : str | dict, optional, default="cc-pvtz-minao"
         The minimal atomic orbital basis set, used in IAO calculations, either as a string or a dictionary (see `basis`).
-    x2c_type : str, optional
+    x2c_type : str, optional, default=None
         The type of X2C transformation to be used. Options are "sf" for scalar
         relativistic effects or "so" for spin-orbit coupling. If None, no X2C transformation is applied.
-    snso_type : str, optional
+    snso_type : str, optional, default="row-dependent"
         The type of screened nuclear spin-orbit coupling scaling scheme to use.
         Only relevant if `x2c_type` is "so".
-        Options are "boettger", "dc", "dcb", or "row-dependent"
+        Options are None, "boettger", "dc", "dcb", or "row-dependent"
     unit : str, optional, default="angstrom"
         The unit for the atomic coordinates. Can be "angstrom" or "bohr".
     linear_dep_trigger : float, optional, default=1e-10
@@ -109,7 +109,7 @@ class System:
     auxiliary_basis_set_corr: str | dict = None
     minao_basis_set: str | dict = "cc-pvtz-minao"
     x2c_type: str = None
-    snso_type: str = None
+    snso_type: str = "row-dependent"
     unit: str = "angstrom"
     linear_dep_trigger: float = 1e-10
     ortho_thresh: float = 1e-8

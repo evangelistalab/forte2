@@ -42,6 +42,7 @@ def test_rel_casscf_hf_ghf():
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         unit="bohr",
         x2c_type="so",
+        snso_type=None,
     )
     scf = GHF(charge=0)(system)
     mc = RelMCOptimizer(
@@ -146,6 +147,7 @@ def test_rel_casscf_na_ghf():
         auxiliary_basis_set="def2-universal-jkfit",
         unit="bohr",
         x2c_type="so",
+        snso_type=None,
     )
     scf = GHF(charge=0)(system)
     mc = RelMCOptimizer(

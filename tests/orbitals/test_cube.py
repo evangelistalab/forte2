@@ -57,6 +57,7 @@ def test_cube_ghf():
         basis_set="cc-pVDZ",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         x2c_type="so",
+        snso_type=None,
     )
 
     scf = GHF(charge=0, j_adapt=True)(system)

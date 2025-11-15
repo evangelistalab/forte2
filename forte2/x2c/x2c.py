@@ -78,7 +78,7 @@ def get_hcore_x2c(system):
     # project back to the contracted basis
     h_fw = proj.conj().T @ h_fw @ proj
 
-    if system.snso_type is not None:
+    if system.x2c_type.lower() == "so" and system.snso_type is not None:
         nbf = system.nbf
         haa = h_fw[:nbf, :nbf]
         hab = h_fw[:nbf, nbf:]

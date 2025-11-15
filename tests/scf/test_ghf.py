@@ -87,6 +87,7 @@ def test_j_adapted_ghf():
         basis_set="cc-pVDZ",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         x2c_type="so",
+        snso_type=None,
     )
     scf = GHF(charge=0, j_adapt=False)(system)
     scf.run()
@@ -98,6 +99,7 @@ def test_j_adapted_ghf():
         basis_set="cc-pVDZ",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         x2c_type="so",
+        snso_type=None,
     )
     scf = GHF(charge=0, j_adapt=True)(system)
     scf.run()
