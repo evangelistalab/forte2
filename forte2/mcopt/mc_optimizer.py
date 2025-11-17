@@ -379,11 +379,6 @@ class MCOptimizer(ActiveSpaceSolver):
                 g1 = self.ci_solver.make_average_1rdm()
             else:
                 g1 = self.ci_solver.make_average_sf_1rdm()
-            mix_inactive = (
-                False
-                if isinstance(self.parent_method, ASET)
-                else not self.optimize_frozen_orbs
-            )
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
                 g1=g1,
