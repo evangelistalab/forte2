@@ -1459,9 +1459,9 @@ class CISolver(ActiveSpaceSolver):
         dm2 = self.make_average_2rdm()
         dm3 = self.make_average_3rdm()
         if self.two_component:
-            return self.make_3cumulant_so(dm1, dm2, dm3)
+            return make_3cumulant_so(dm1, dm2, dm3)
         else:
-            return self.make_3cumulant_sf(dm1, dm2, dm3)
+            return make_3cumulant_sf(dm1, dm2, dm3)
         
     def make_average_cumulants(self):
         dm1 = self.make_average_1rdm()

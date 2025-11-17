@@ -258,6 +258,7 @@ def make_2cumulant_so(gamma1, gamma2):
 
     This can be useful for computing averaged cumulants, since one cannot simply average
     the 2-cumulants directly, as the relation between RDMs and cumulants is nonlinear.
+    See text around eq. 7 om J. Chem. Phys. 148, 124106 (2018) for more details.
 
     Parameters
     ----------
@@ -285,6 +286,7 @@ def make_3cumulant_so(gamma1, gamma2, gamma3):
 
     This can be useful for computing averaged cumulants, since one cannot simply average
     the 3-cumulants directly, as the relation between RDMs and cumulants is nonlinear.
+    See text around eq. 7 om J. Chem. Phys. 148, 124106 (2018) for more details.
 
     Parameters
     ----------
@@ -331,6 +333,7 @@ def make_3cumulant_so(gamma1, gamma2, gamma3):
 def make_2cumulant_sf(gamma1, gamma2):
     """
     Compute the spin-free 2-cumulant from the 1- and 2- spin-free RDMs.
+
     This can be useful for computing averaged cumulants, since one cannot simply average
     the 2-cumulants directly, as the relation between RDMs and cumulants is nonlinear.
 
@@ -357,8 +360,10 @@ def make_2cumulant_sf(gamma1, gamma2):
 def make_3cumulant_sf(gamma1, gamma2, gamma3):
     """
     Compute the spin-free 3-cumulant from the 1-, 2-, and 3- spin-free RDMs.
+
     This can be useful for computing averaged cumulants, since one cannot simply average
     the 3-cumulants directly, as the relation between RDMs and cumulants is nonlinear.
+    See text around eq. 7 om J. Chem. Phys. 148, 124106 (2018) for more details.
 
     Parameters
     ----------
