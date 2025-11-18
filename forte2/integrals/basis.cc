@@ -54,7 +54,8 @@ std::vector<std::pair<std::size_t, std::size_t>> Basis::shell_first_and_size() c
     return result;
 }
 
-std::pair<std::size_t, std::size_t> Basis::shell_slice_to_basis_slice(std::pair<std::size_t, std::size_t> shell_slice) const {
+std::pair<std::size_t, std::size_t>
+Basis::shell_slice_to_basis_slice(std::pair<std::size_t, std::size_t> shell_slice) const {
     if (shell_slice.first >= shells_.size() || shell_slice.second > shells_.size() ||
         shell_slice.first >= shell_slice.second) {
         throw std::out_of_range("Shell slice out of range.");
@@ -68,10 +69,10 @@ std::pair<std::size_t, std::size_t> Basis::shell_slice_to_basis_slice(std::pair<
         last += shells_[i].size();
     }
     return {first, last};
-
 }
 
-std::vector<std::pair<std::size_t, std::size_t>> Basis::center_first_and_last(bool count_shell) const {
+std::vector<std::pair<std::size_t, std::size_t>>
+Basis::center_first_and_last(bool count_shell) const {
     std::vector<std::pair<std::size_t, std::size_t>> result;
     if (shells_.empty()) {
         return result;
@@ -95,6 +96,25 @@ std::vector<std::pair<std::size_t, std::size_t>> Basis::center_first_and_last(bo
     }
     result.emplace_back(first, last);
     return result;
+}
+
+std::pair<std::size_t, std::size_t>
+Basis::basis_index_to_shell_index(std::size_t basis_index) const {
+    if (basis_index >= size_) {
+        throw std::out_of_range("basis_index_to_shell_index: index out of range.");
+    }
+    std::size_t shell_index = 0;
+    std::size_t count = 0;
+    std::size_t count_prev = 0;
+    for (const auto& shell : shells_) {
+        count += shell.size();
+        if (basis_index < count) {
+            return {shell_index, basis_index - count_prev};
+        }
+        count_prev = count;
+        ++shell_index;
+    }
+    throw std::runtime_error("basis_index_to_shell_index: failed to find shell index.");
 }
 
 std::string shell_label(int l, int idx) {

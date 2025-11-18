@@ -37,6 +37,12 @@ np_tensor4 coulomb_4c_by_shell_slices(
 /// @return A 1D ndarray of length n*n, where n is the number of basis functions in the basis.
 np_vector coulomb_4c_diagonal(const Basis& basis);
 
+/// @brief Compute a row of the coulomb integrals ([i] [j] | 1 / r_12 | k l), where i, j are fixed
+/// @param basis The basis set for both electrons.
+/// @param row The row index corresponding to basis function indices (i, j).
+/// @return A 1D ndarray of length n*n, where n is the number of basis functions in the basis.
+np_vector coulomb_4c_row(const Basis& basis, std::size_t row);
+
 /// @brief Compute the coulomb integrals (b1 | 1  / r_12 | b2 b3).
 /// @param basis1 The basis set in the bra for electron 1 center 1.
 /// @param basis2 The basis set in the ket for electron 2 center 2.

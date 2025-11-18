@@ -18,6 +18,10 @@ np_vector coulomb_4c_diagonal(const Basis& basis) {
     return compute_two_electron_4c_diagonal<libint2::Operator::coulomb>(basis);
 }
 
+np_vector coulomb_4c_row(const Basis& basis, std::size_t row) {
+    return compute_two_electron_4c_row<libint2::Operator::coulomb>(basis, row);
+}
+
 np_tensor3 coulomb_3c(const Basis& b1, const Basis& b2, const Basis& b3) {
     return compute_two_electron_3c_multi_async<libint2::Operator::coulomb>(b1, b2, b3);
 }

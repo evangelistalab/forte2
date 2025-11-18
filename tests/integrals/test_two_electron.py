@@ -91,3 +91,23 @@ def test_two_electron_integral_diagonal():
 
     Vdiag = forte2.ints.coulomb_4c_diagonal(system.basis)
     assert np.allclose(Vdiag, Vref, atol=1e-8, rtol=0)
+
+
+def test_two_electron_integral_row():
+    xyz = """
+    O   0.000000000000     0.000000000000    -0.061664597388
+    H   0.000000000000    -0.711620616370     0.489330954643
+    H   0.000000000000     0.711620616370     0.489330954643
+    """
+    system = forte2.System(xyz=xyz, basis_set="sto-3g")
+
+    Vref = forte2.ints.coulomb_4c(system.basis)
+    nbf = system.nbf
+    Vref = Vref.reshape((nbf**2,) * 2)
+    rng = np.random.default_rng(42)
+
+    for _ in range(20):
+        row = rng.integers(0, nbf**2)
+        Vref_row = Vref[row, :]
+        Vrow = forte2.ints.coulomb_4c_row(system.basis, row)
+        assert np.allclose(Vrow, Vref_row, atol=1e-8, rtol=0)

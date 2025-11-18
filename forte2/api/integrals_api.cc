@@ -153,6 +153,7 @@ void export_basis_api(nb::module_& sub_m) {
         .def_prop_ro("center_first_and_last_shell",
                      [](const Basis& b) { return b.center_first_and_last(true); })
         .def("shell_slice_to_basis_slice", &Basis::shell_slice_to_basis_slice, "shell_slice"_a)
+        .def("basis_index_to_shell_index", &Basis::basis_index_to_shell_index, "basis_index"_a)
         .def_prop_ro("size", &Basis::size)
         .def_prop_ro("max_l", &Basis::max_l)
         .def_prop_ro("name", &Basis::name)
@@ -328,6 +329,11 @@ void export_two_electron_api(nb::module_& sub_m) {
     sub_m.def(
         "coulomb_4c_diagonal", [](const Basis& basis) { return coulomb_4c_diagonal(basis); },
         "basis"_a);
+
+    sub_m.def(
+        "coulomb_4c_row",
+        [](const Basis& basis, std::size_t row) { return coulomb_4c_row(basis, row); }, "basis"_a,
+        "row"_a);
 
     sub_m.def(
         "coulomb_3c",

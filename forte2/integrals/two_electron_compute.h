@@ -218,7 +218,8 @@ template <libint2::Operator Op, typename Params = NoParams>
 }
 
 template <libint2::Operator Op, typename Params = NoParams>
-[[nodiscard]] auto compute_two_electron_4c_diagonal(const Basis& basis, Params const& params = Params{}) -> np_vector {
+[[nodiscard]] auto compute_two_electron_4c_diagonal(const Basis& basis,
+                                                    Params const& params = Params{}) -> np_vector {
 
     // Initialize libint2
     libint2::initialize();
@@ -279,6 +280,82 @@ template <libint2::Operator Op, typename Params = NoParams>
     return ints;
 }
 
+template <libint2::Operator Op, typename Params = NoParams>
+[[nodiscard]] auto compute_two_electron_4c_row(const Basis& basis, const std::size_t row,
+                                               Params const& params = Params{}) -> np_vector {
+
+    // Initialize libint2
+    libint2::initialize();
+
+    // Prepare engine
+    const auto max_nprim = basis.max_nprim();
+    const auto max_l = basis.max_l();
+    libint2::Engine engine(Op, max_nprim, max_l);
+
+    if constexpr (not std::is_same_v<Params, NoParams>) {
+        engine.set_params(params);
+    }
+
+    const auto& results = engine.results();
+
+    // Get the number of shells in the basis
+    auto nshells = basis.nshells();
+
+    // Get arrays of indices of the first basis in a shell and the size of each shell
+    const auto first_size = basis.shell_first_and_size();
+
+    const auto nb = basis.size();
+
+    const auto bas1 = row / nb;
+    const auto bas2 = row % nb;
+    const auto [s1, idx1] = basis.basis_index_to_shell_index(bas1);
+    const auto [s2, idx2] = basis.basis_index_to_shell_index(bas2);
+    const auto shell1 = basis[s1];
+    const auto shell2 = basis[s2];
+    const auto [f1, n1] = first_size[s1];
+    const auto [f2, n2] = first_size[s2];
+
+    if (bas1 >= nb || bas2 >= nb) {
+        throw std::out_of_range("compute_two_electron_4c_row: index out of range.");
+    }
+
+
+    // Allocate a vector for the row
+    // [TODO]: we can optimize this further by only allocating the upper triangular part
+    auto ints = make_zeros<nb::numpy, double, 1>({nb * nb});
+    auto v = ints.view();
+
+    // Loop over shell quartets and fill each buffer
+    for (std::size_t s3 = 0; s3 < nshells; ++s3) {
+        const auto& shell3 = basis[s3];
+        const auto [f3, n3] = first_size[s3];
+
+        for (std::size_t s4 = 0; s4 < nshells; ++s4) {
+            const auto& shell4 = basis[s4];
+            const auto [f4, n4] = first_size[s4];
+
+            // Compute the integrals for this shell quartet
+            engine.compute(shell1, shell2, shell3, shell4);
+
+            // Loop over the components of this operator and fill the buffers
+            // We only need the integrals under shell1[idx1], shell2[idx2]
+            std::size_t ijkl = (idx1 * n2 + idx2) * n3 * n4;
+            if (const auto buf = results[0]; buf) {
+                for (std::size_t i = 0; i < n3; ++i) {
+                    for (std::size_t j = 0; j < n4; ++j, ++ijkl) {
+                        // find the composite index for s3_i s4_j
+                        const auto index = (f3 + i) * nb + (f4 + j);
+                        v(index) = static_cast<double>(buf[ijkl]);
+                    }
+                }
+            }
+        }
+    }
+
+    // Finalize libint2
+    libint2::finalize();
+    return ints;
+}
 
 template <libint2::Operator Op, typename Params = NoParams>
 [[nodiscard]] auto compute_two_electron_3c_multi(const Basis& basis1, const Basis& basis2,
