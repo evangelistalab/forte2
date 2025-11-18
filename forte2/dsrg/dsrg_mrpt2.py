@@ -2,15 +2,14 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from forte2 import dsrg_utils
-from forte2.ci.ci_utils import make_2cumulant_sf, make_3cumulant_sf
 from .dsrg_base import DSRGBase
-from .utils import cas_energy_given_cumulants
-
-compute_t1_block = dsrg_utils.compute_T1_block
-compute_t2_block = dsrg_utils.compute_T2_block
-renormalize_V_block = dsrg_utils.renormalize_V_block
-renormalize_3index = dsrg_utils.renormalize_3index
+from .utils import (
+    cas_energy_given_cumulants,
+    compute_t1_block,
+    compute_t2_block,
+    renormalize_V_block,
+    renormalize_3index,
+)
 
 
 @dataclass

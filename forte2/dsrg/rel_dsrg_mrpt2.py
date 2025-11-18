@@ -2,20 +2,21 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from forte2 import dsrg_utils
 from .dsrg_base import DSRGBase
-from .utils import antisymmetrize_2body, cas_energy_given_cumulants
-
-compute_t1_block = dsrg_utils.compute_T1_block
-compute_t2_block = dsrg_utils.compute_T2_block
-renormalize_V_block = dsrg_utils.renormalize_V_block
-renormalize_3index = dsrg_utils.renormalize_3index
+from .utils import (
+    antisymmetrize_2body,
+    cas_energy_given_cumulants,
+    compute_t1_block,
+    compute_t2_block,
+    renormalize_V_block,
+    renormalize_3index,
+)
 
 
 @dataclass
 class RelDSRG_MRPT2(DSRGBase):
     """
-    Two-component relativistic driven similarity renormalization group 
+    Two-component relativistic driven similarity renormalization group
     second-order multireference perturbation theory (2C-DSRG-MRPT2).
 
     Parameters
@@ -68,8 +69,7 @@ class RelDSRG_MRPT2(DSRGBase):
             "ip,ij,jq->pq", self.Uactv, g1, self.Uactv.conj(), optimize=True
         )
         cumulants["eta1"] = (
-            np.eye(cumulants["gamma1"].shape[0], dtype=complex)
-            - cumulants["gamma1"]
+            np.eye(cumulants["gamma1"].shape[0], dtype=complex) - cumulants["gamma1"]
         )
         cumulants["lambda2"] = np.einsum(
             "ip,jq,ijkl,kr,ls->pqrs",
