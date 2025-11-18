@@ -6,7 +6,7 @@ from forte2.base_classes.active_space_solver import (
     ActiveSpaceSolver,
     RelActiveSpaceSolver,
 )
-from forte2.orbitals import Semicanonicalizer
+from forte2.orbitals import Semicanonicalizer, ASET
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers import logger, LBFGS, DIIS
 from forte2.system.basis_utils import BasisInfo
@@ -465,7 +465,7 @@ class MCOptimizer(ActiveSpaceSolver):
         nrr[_virt, self.actv] = True
         nrr[self.actv, _core] = True
 
-        # remove active_fronzen indices from nonredundant rotations
+        # remove active_frozen indices from nonredundant rotations
         if self.active_frozen_orbitals is not None:
             contig_actv_froz = self.mo_space.contig_to_orig[self.active_frozen_orbitals]
             for idx in contig_actv_froz:
