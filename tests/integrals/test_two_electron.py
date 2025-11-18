@@ -1,6 +1,6 @@
 import numpy as np
 
-import forte2
+import forte2, forte2.integrals
 from forte2.helpers.comparisons import approx
 
 
@@ -111,3 +111,17 @@ def test_two_electron_integral_row():
         Vref_row = Vref[row, :]
         Vrow = forte2.ints.coulomb_4c_row(system.basis, row)
         assert np.allclose(Vrow, Vref_row, atol=1e-8, rtol=0)
+
+
+def test_two_electron_integral_cholesky():
+    xyz = "Pd 0 0 0"
+    system = forte2.System(xyz=xyz, basis_set="sto-3g", minao_basis_set=None)
+
+    Vref = forte2.ints.coulomb_4c(system.basis)
+    nbf = system.nbf
+    Vref = Vref.reshape((nbf**2,) * 2)
+
+    chol = forte2.integrals.CholeskyIntegrals(system.basis, memory=2000, delta=1e-7)
+    L = chol._compute()
+    Vchol = L.T @ L
+    assert np.linalg.norm(Vchol - Vref) < 1e-6

@@ -4,7 +4,6 @@ __author__ = "Forte2 Developers"
 from ._forte2 import *
 from ._forte2 import ints
 from ._forte2.ints import Basis, Shell
-from .integrals import integrals
 from .system import System, ModelSystem, HubbardModel
 from .state import State, RelState, MOSpace
 from .scf import RHF, ROHF, UHF, CUHF, GHF
