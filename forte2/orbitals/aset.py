@@ -173,9 +173,14 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
                 continue
 
             else:
-                # Convert 1-based user indices to 0-based Python indices
-                start_idx = int(start) - 1
-                end_idx = int(end) if end else start_idx + 1
+                # Handle ranges like "1-3" or single indices like "2"
+                if "-" in start:
+                    start_str, end_str = start.split("-", 1)
+                    start_idx = int(start_str) - 1
+                    end_idx = int(end_str)
+                else:
+                    start_idx = int(start) - 1
+                    end_idx = int(end) if end else start_idx + 1
 
                 # Bounds check
                 if end_idx > len(element_atoms):
