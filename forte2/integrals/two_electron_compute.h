@@ -218,6 +218,69 @@ template <libint2::Operator Op, typename Params = NoParams>
 }
 
 template <libint2::Operator Op, typename Params = NoParams>
+[[nodiscard]] auto compute_two_electron_4c_diagonal(const Basis& basis, Params const& params = Params{}) -> np_vector {
+
+    // Initialize libint2
+    libint2::initialize();
+
+    // Prepare engine
+    const auto max_nprim = basis.max_nprim();
+    const auto max_l = basis.max_l();
+    libint2::Engine engine(Op, max_nprim, max_l);
+
+    if constexpr (not std::is_same_v<Params, NoParams>) {
+        engine.set_params(params);
+    }
+
+    const auto& results = engine.results();
+
+    // Get the number of shells in the basis
+    auto nshells = basis.nshells();
+
+    // Get arrays of indices of the first basis in a shell and the size of each shell
+    const auto first_size = basis.shell_first_and_size();
+
+    const auto nb = basis.size();
+
+    // Allocate a vector for the diagonal
+    // [TODO]: we can optimize this further by only allocating the upper triangular part
+    auto ints = make_zeros<nb::numpy, double, 1>({nb * nb});
+    auto v = ints.view();
+
+    // Loop over shell quartets and fill each buffer
+    for (std::size_t s1 = 0; s1 < nshells; ++s1) {
+        const auto& shell1 = basis[s1];
+        const auto [f1, n1] = first_size[s1];
+
+        for (std::size_t s2 = 0; s2 < nshells; ++s2) {
+            const auto& shell2 = basis[s2];
+            const auto [f2, n2] = first_size[s2];
+
+            // Compute the integrals for this shell quartet
+            engine.compute(shell1, shell2, shell1, shell2);
+
+            // Loop over the components of this operator and fill the buffers
+            if (const auto buf = results[0]; buf) {
+                for (std::size_t i = 0, ijkl = 0; i < n1; ++i) {
+                    for (std::size_t j = 0; j < n2; ++j) {
+                        // find the composite index for s1_i s2_j
+                        const auto index = (f1 + i) * nb + (f2 + j);
+                        v(index) = static_cast<double>(buf[ijkl]);
+                        // skip to the next diagonal ijkl
+                        ijkl += n1 * n2 + 1;
+                    }
+                }
+            }
+        }
+    }
+
+    // Finalize libint2
+    libint2::finalize();
+    return ints;
+}
+
+
+template <libint2::Operator Op, typename Params = NoParams>
 [[nodiscard]] auto compute_two_electron_3c_multi(const Basis& basis1, const Basis& basis2,
                                                  const Basis& basis3,
                                                  Params const& params = Params{}) -> np_tensor3 {

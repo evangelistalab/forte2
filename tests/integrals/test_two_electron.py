@@ -75,3 +75,19 @@ def test_two_electron_integrals_by_shell_slices():
             atol=1e-8,
             rtol=0,
         )
+
+
+def test_two_electron_integral_diagonal():
+    xyz = """
+    O   0.000000000000     0.000000000000    -0.061664597388
+    H   0.000000000000    -0.711620616370     0.489330954643
+    H   0.000000000000     0.711620616370     0.489330954643
+    """
+    system = forte2.System(xyz=xyz, basis_set="sto-3g")
+
+    Vref = forte2.ints.coulomb_4c(system.basis)
+    nbf = system.nbf
+    Vref = np.diag(Vref.reshape((nbf**2,) * 2))
+
+    Vdiag = forte2.ints.coulomb_4c_diagonal(system.basis)
+    assert np.allclose(Vdiag, Vref, atol=1e-8, rtol=0)
