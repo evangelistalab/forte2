@@ -112,3 +112,26 @@ def test_custom_basis_with_decontract():
     )
     assert len(system.basis) == 100
     assert len(system.auxiliary_basis) == 594
+
+
+@pytest.mark.skipif(not BSE_AVAILABLE, reason="basis_set_exchange not installed")
+def test_custom_basis_assignment_with_autoaux():
+    # Test for custom basis assignment
+    xyz = """
+    H  1  1  1
+    P  1  1 -1
+    V  1 -1  1
+    Mn  1 -1 -1
+    Mn -1  1  1
+    V -1  1 -1
+    P -1 -1  1
+    H -1 -1 -1 
+    """
+    system = System(
+        xyz=xyz,
+        basis_set={"H": "cc-pvdz", "P": "ano-pv5z", "default": "sap_helfem_large"},
+        auxiliary_basis_set={"H": "cc-pvtz-jkfit", "default": "ano-rcc-vdz-autoaux"},
+        unit="bohr",
+    )
+    assert system.nbf == 204
+    assert system.naux == 1670
