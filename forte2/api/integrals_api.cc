@@ -20,7 +20,7 @@
 #include "integrals/value_at_points.h"
 // Libcint-backed functions are optional
 #if FORTE2_USE_LIBCINT
-#  include "integrals/libcint_two_center.h"
+#include "integrals/libcint_two_center.h"
 #endif
 
 namespace nb = nanobind;
@@ -148,9 +148,11 @@ void export_basis_api(nb::module_& sub_m) {
         .def("__getitem__", &Basis::operator[], "i"_a)
         .def("__len__", &Basis::size)
         .def_prop_ro("shell_first_and_size", &Basis::shell_first_and_size)
-        .def_prop_ro("center_first_and_last", [](const Basis& b) { return b.center_first_and_last(false); })
+        .def_prop_ro("center_first_and_last",
+                     [](const Basis& b) { return b.center_first_and_last(false); })
         .def_prop_ro("center_first_and_last_shell",
                      [](const Basis& b) { return b.center_first_and_last(true); })
+        .def("shell_slice_to_basis_slice", &Basis::shell_slice_to_basis_slice, "shell_slice"_a)
         .def_prop_ro("size", &Basis::size)
         .def_prop_ro("max_l", &Basis::max_l)
         .def_prop_ro("name", &Basis::name)
@@ -316,6 +318,13 @@ void export_two_electron_api(nb::module_& sub_m) {
         "basis"_a);
 
     sub_m.def(
+        "coulomb_4c_by_shell_slices",
+        [](const Basis& basis, const std::vector<std::pair<std::size_t, std::size_t>>& shell_slices) {
+            return coulomb_4c_by_shell_slices(basis, basis, basis, basis, shell_slices);
+        },
+        "basis"_a, "shell_slices"_a);
+
+    sub_m.def(
         "coulomb_3c",
         [](const Basis& basis1, const Basis& basis2, const Basis& basis3) {
             return coulomb_3c(basis1, basis2, basis3);
@@ -391,7 +400,7 @@ void export_libcint_compute_api(nb::module_& sub_m) {
 // When libcint is disabled, define a no-op exporter
 void export_libcint_compute_api(nb::module_& sub_m) {
     // Intentionally empty: libcint-backed APIs are unavailable.
-    (void) sub_m;
+    (void)sub_m;
 }
 #endif
 } // namespace forte2

@@ -7,6 +7,13 @@ np_tensor4 coulomb_4c(const Basis& b1, const Basis& b2, const Basis& b3, const B
     return compute_two_electron_4c_multi<libint2::Operator::coulomb>(b1, b2, b3, b4);
 }
 
+np_tensor4 coulomb_4c_by_shell_slices(
+    const Basis& b1, const Basis& b2, const Basis& b3, const Basis& b4,
+    const std::vector<std::pair<std::size_t, std::size_t>>& shell_slices) {
+    return compute_two_electron_4c_by_shell_slices<libint2::Operator::coulomb>(
+        b1, b2, b3, b4, shell_slices);
+}
+
 np_tensor3 coulomb_3c(const Basis& b1, const Basis& b2, const Basis& b3) {
     return compute_two_electron_3c_multi_async<libint2::Operator::coulomb>(b1, b2, b3);
 }

@@ -54,6 +54,23 @@ std::vector<std::pair<std::size_t, std::size_t>> Basis::shell_first_and_size() c
     return result;
 }
 
+std::pair<std::size_t, std::size_t> Basis::shell_slice_to_basis_slice(std::pair<std::size_t, std::size_t> shell_slice) const {
+    if (shell_slice.first >= shells_.size() || shell_slice.second > shells_.size() ||
+        shell_slice.first >= shell_slice.second) {
+        throw std::out_of_range("Shell slice out of range.");
+    }
+    std::size_t first = 0;
+    for (std::size_t i = 0; i < shell_slice.first; ++i) {
+        first += shells_[i].size();
+    }
+    std::size_t last = first;
+    for (std::size_t i = shell_slice.first; i < shell_slice.second; ++i) {
+        last += shells_[i].size();
+    }
+    return {first, last};
+
+}
+
 std::vector<std::pair<std::size_t, std::size_t>> Basis::center_first_and_last(bool count_shell) const {
     std::vector<std::pair<std::size_t, std::size_t>> result;
     if (shells_.empty()) {
