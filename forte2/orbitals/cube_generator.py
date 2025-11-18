@@ -6,6 +6,56 @@ from forte2.helpers import logger
 from forte2 import ints
 
 
+def write_orbital_cubes(
+    system,
+    C,
+    indices=None,
+    prefix="orbital",
+    filepath=".",
+    formats=("cube",),
+    spacing=0.2,
+    padding=4.0,
+):
+    """A convenience function to write cube files for molecular orbitals.
+
+    Parameters
+    ----------
+    system : forte2.system.System
+        The system object containing the molecular information.
+    C : NDArray
+        The molecular orbital coefficients matrix.
+    indices : List[int], optional, default=None
+        The indices (zero-based) of the orbitals to generate cube files for.
+        By default all orbitals are generated.
+    prefix : str, optional, default="orbital"
+        The prefix for the cube file names.
+    filepath : str, optional, default="."
+        The directory to save the cube files in.
+    formats : Tuple[str, ...], optional, default=("cube",)
+        Output formats to generate. Supported values:
+          - "cube": standard CUBE files. For two-component systems, writes
+            separate alpha and beta magnitude files ("_a.cube" and "_b.cube").
+          - "2ccube": two-component cube files (".2ccube"). For two-component
+            systems only, writes four datasets consecutively per orbital in the
+            order: alpha real, alpha imag, beta real, beta imag.
+        Multiple formats can be requested at once, e.g., formats=("cube","2ccube").
+    spacing : float, optional, default=0.2
+        The spacing between grid points in the cube file (in bohr).
+    padding : float, optional, default=4.0
+        The extra space (in bohr) added in all directions around the atoms when generating the grid.
+
+    Usage
+    -----
+    ```
+    write_orbital_cubes(system, C, indices=[0,1,2], prefix="orbital", filepath="cubes/", formats=("cube","2ccube"))
+    ```
+    """
+    gen = CubeGenerator(spacing=spacing, padding=padding)
+    return gen.write_cubes(
+        system, C, indices=indices, prefix=prefix, filepath=filepath, formats=formats
+    )
+
+
 def simple_grid(
     atoms, spacing: tuple[float, float, float], padding: tuple[float, float, float]
 ):
@@ -82,7 +132,7 @@ class CubeGenerator:
         self.spacing = [spacing, spacing, spacing]
         self.padding = [padding, padding, padding]
 
-    def run(
+    def write_cubes(
         self,
         system,
         C,

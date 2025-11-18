@@ -3,7 +3,7 @@ import glob
 
 from forte2 import System
 from forte2.scf import RHF, GHF
-from forte2.orbitals import CubeGenerator
+from forte2.orbitals import write_orbital_cubes
 from forte2.helpers.comparisons import approx
 
 
@@ -26,8 +26,9 @@ def test_cube():
     scf.run()
     assert scf.E == approx(escf)
 
-    cube = CubeGenerator()
-    cube.run(system, scf.C[0])
+    # generate cube files for all 24 orbitals
+    write_orbital_cubes(system, scf.C[0])
+
     # assert if 24 cube files are created using glob
     assert len(glob.glob("*.cube")) == 24
 
@@ -64,8 +65,9 @@ def test_cube_ghf():
     assert scf.E == approx(eref)
     assert scf.S2 == approx(s2ref)
 
-    cube = CubeGenerator()
-    cube.run(system, scf.C[0], indices=list(range(12)))
+    # generate cube files for first 12 orbitals only
+    write_orbital_cubes(system, scf.C[0], indices=list(range(12)))
+
     # assert if 24 cube files are created using glob
     assert len(glob.glob("*.cube")) == 24
     # clean up the cube files
@@ -97,13 +99,12 @@ def test_2ccube_ghf():
     assert scf.E == approx(eref)
     assert scf.S2 == approx(s2ref)
 
-    cube = CubeGenerator()
     indices = list(range(9))
-    cube.run(system, scf.C[0], indices=indices, formats=("2ccube", "cube"))
-
+    write_orbital_cubes(system, scf.C[0], formats=("cube", "2ccube"), indices=indices)
     # expect one .2ccube file per requested orbital
     files = sorted(glob.glob("*.2ccube"))
-    assert len(files) == len(indices)
+
+    assert len(files) == 9
     assert os.path.isfile("orbital_0.2ccube")
 
     # sanity check data length: should be 4 * (nx*ny*nz)
