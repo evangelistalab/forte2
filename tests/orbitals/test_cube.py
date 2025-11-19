@@ -122,3 +122,6 @@ def test_2ccube_ghf():
     # clean up the 2ccube files
     for file in glob.glob("*.2ccube"):
         os.remove(file)
+    # clean up the cube files
+    for file in glob.glob("*.cube"):
+        os.remove(file)
