@@ -46,9 +46,7 @@ def write_orbital_cubes(
 
     Usage
     -----
-    ```
-    write_orbital_cubes(system, C, indices=[0,1,2], prefix="orbital", filepath="cubes/", formats=("cube","2ccube"))
-    ```
+    >>> write_orbital_cubes(system, C, indices=[0,1,2], prefix="orbital", filepath="cubes/", formats=("cube","2ccube"))
     """
     gen = CubeGenerator(spacing=spacing, padding=padding)
     return gen.write_cubes(
