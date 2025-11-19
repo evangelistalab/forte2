@@ -177,6 +177,13 @@ class CubeGenerator:
         """
 
         filepath = Path(filepath)
+        
+        # validate formats
+        supported_formats = {"cube", "2ccube"}
+        invalid_formats = set(formats) - supported_formats
+        if invalid_formats:
+            logger.log(f"Warning: Ignoring unsupported formats: {invalid_formats}")
+        
         # determine the indices of the orbitals to generate
         indices = indices if indices is not None else range(C.shape[1])
         max_index = max(indices)
