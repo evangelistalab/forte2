@@ -12,7 +12,7 @@ def write_orbital_cubes(
     indices=None,
     prefix="orbital",
     filepath=".",
-    formats=("cube",),
+    format=("cube",),
     spacing=0.2,
     padding=4.0,
 ):
@@ -31,7 +31,7 @@ def write_orbital_cubes(
         The prefix for the cube file names.
     filepath : str, optional, default="."
         The directory to save the cube files in.
-    formats : Tuple[str, ...], optional, default=("cube",)
+    format : Tuple[str, ...] or str, optional, default=("cube",)
         Output formats to generate. Supported values:
           - "cube": standard CUBE files. For two-component systems, writes
             separate alpha and beta magnitude files ("_a.cube" and "_b.cube").
@@ -46,11 +46,14 @@ def write_orbital_cubes(
 
     Usage
     -----
-    >>> write_orbital_cubes(system, C, indices=[0,1,2], prefix="orbital", filepath="cubes/", formats=("cube","2ccube"))
+    >>> write_orbital_cubes(system, C, indices=[0,1,2], prefix="orbital", filepath="cubes/", format=("cube","2ccube"))
     """
+    # if format is a single string, convert it to a tuple
+    if isinstance(format, str):
+        format = (format,)
     gen = CubeGenerator(spacing=spacing, padding=padding)
     return gen.write_cubes(
-        system, C, indices=indices, prefix=prefix, filepath=filepath, formats=formats
+        system, C, indices=indices, prefix=prefix, filepath=filepath, formats=format
     )
 
 

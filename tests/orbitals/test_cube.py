@@ -100,7 +100,7 @@ def test_2ccube_ghf():
     assert scf.S2 == approx(s2ref)
 
     indices = list(range(9))
-    write_orbital_cubes(system, scf.C[0], formats=("cube", "2ccube"), indices=indices)
+    write_orbital_cubes(system, scf.C[0], format=("cube", "2ccube"), indices=indices)
     # expect one .2ccube file per requested orbital
     files = sorted(glob.glob("*.2ccube"))
 
