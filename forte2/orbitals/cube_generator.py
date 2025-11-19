@@ -175,6 +175,13 @@ class CubeGenerator:
         """
 
         filepath = Path(filepath)
+
+        # validate formats
+        supported_formats = {"cube", "2ccube"}
+        invalid_formats = set(formats) - supported_formats
+        if invalid_formats:
+            logger.log(f"Warning: Ignoring unsupported cube formats: {invalid_formats}")
+
         # determine the indices of the orbitals to generate
         indices = indices if indices is not None else range(C.shape[1])
         max_index = max(indices)
@@ -326,44 +333,45 @@ class CubeGenerator:
                     "Requested '2ccube' output for a one-component system; skipping this format."
                 )
 
-    def _make_cube(self, values, minr, npoints, axis, system):
+    def _make_header_and_coords(self, minr, npoints, axis, atoms, label):
         """
-        Create a cube file from the values.
+        Create the header and atom section of the cube file.
         """
-        # write the cube file
-        header = f"""Forte2 Cube File.
+        header = f"""{label}
 
-{len(system.atoms):6d} {minr[0]:10.6f} {minr[1]:10.6f} {minr[2]:10.6f}
+{len(atoms):6d} {minr[0]:10.6f} {minr[1]:10.6f} {minr[2]:10.6f}
 {npoints[0]:6d} {axis[0][0]:10.6f} {axis[0][1]:10.6f} {axis[0][2]:10.6f}
 {npoints[1]:6d} {axis[1][0]:10.6f} {axis[1][1]:10.6f} {axis[1][2]:10.6f}
 {npoints[2]:6d} {axis[2][0]:10.6f} {axis[2][1]:10.6f} {axis[2][2]:10.6f}"""
 
-        atoms = "\n".join(
+        coords = "\n".join(
             f"{Z:3d} {0.0:10.6f} {x:10.6f} {y:10.6f} {z:10.6f}"
-            for Z, (x, y, z) in system.atoms
+            for Z, (x, y, z) in atoms
+        )
+        return header, coords
+
+    def _make_cube(self, values, minr, npoints, axis, system):
+        """
+        Create a cube file from the values on a grid.
+        """
+        # write the cube file
+        header, coords = self._make_header_and_atoms(
+            minr, npoints, axis, system.atoms, "Forte2 Cube File"
         )
 
         v = values.flatten()
         lines = [
             " ".join(f"{x:.5E}" for x in v[i : i + 6]) for i in range(0, len(v), 6)
         ]
-        return header + "\n" + atoms + "\n" + "\n".join(lines)
+        return header + "\n" + coords + "\n" + "\n".join(lines)
 
     def _make_2ccube(self, a_re, a_im, b_re, b_im, minr, npoints, axis, system):
         """
         Create a two-component cube file containing four datasets written consecutively
         in the order: alpha real, alpha imag, beta real, beta imag.
         """
-        header = f"""Forte2 Cube File.
-
-{len(system.atoms):6d} {minr[0]:10.6f} {minr[1]:10.6f} {minr[2]:10.6f}
-{npoints[0]:6d} {axis[0][0]:10.6f} {axis[0][1]:10.6f} {axis[0][2]:10.6f}
-{npoints[1]:6d} {axis[1][0]:10.6f} {axis[1][1]:10.6f} {axis[1][2]:10.6f}
-{npoints[2]:6d} {axis[2][0]:10.6f} {axis[2][1]:10.6f} {axis[2][2]:10.6f}"""
-
-        atoms = "\n".join(
-            f"{Z:3d} {0.0:10.6f} {x:10.6f} {y:10.6f} {z:10.6f}"
-            for Z, (x, y, z) in system.atoms
+        header, coords = self._make_header_and_atoms(
+            minr, npoints, axis, system.atoms, "Forte2 2-Component Cube File"
         )
 
         v = np.concatenate(
@@ -377,4 +385,4 @@ class CubeGenerator:
         lines = [
             " ".join(f"{x:.5E}" for x in v[i : i + 6]) for i in range(0, len(v), 6)
         ]
-        return header + "\n" + atoms + "\n" + "\n".join(lines)
+        return header + "\n" + coords + "\n" + "\n".join(lines)
