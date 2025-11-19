@@ -1,6 +1,8 @@
 import numpy as np
+import pytest
 
 import forte2, forte2.integrals
+from forte2.system import BSE_AVAILABLE
 from forte2.helpers.comparisons import approx
 
 
@@ -125,3 +127,16 @@ def test_two_electron_integral_cholesky():
     L = chol._compute()
     Vchol = L.T @ L
     assert np.linalg.norm(Vchol - Vref) < 1e-3
+
+
+@pytest.mark.skipif(not BSE_AVAILABLE, reason="BSE module is not available")
+def test_3c2e():
+    xyz = "Au 0 0 0"
+    system = forte2.System(
+        xyz=xyz,
+        basis_set="ano-rcc",
+        minao_basis_set=None,
+        auxiliary_basis_set="def2-universal-jkfit",
+    )
+    ref = forte2.integrals.coulomb_3c(system)
+    assert np.linalg.norm(ref) == approx(239.55734891969408)
