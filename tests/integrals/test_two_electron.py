@@ -121,11 +121,11 @@ def test_two_electron_integral_cholesky():
 
     Vref = forte2.integrals.coulomb_4c(system)
     nbf = system.nbf
-    Vref = Vref.reshape((nbf**2,) * 2)
 
     chol = forte2.integrals.CholeskyIntegrals(system.basis, memory=2000, delta=1e-4)
-    L = chol._compute()
-    Vchol = L.T @ L
+    chol.compute()
+    B = chol.B
+    Vchol = np.einsum("Bpq,Brs->pqrs", B, B)
     assert np.linalg.norm(Vchol - Vref) < 1e-3
 
 
