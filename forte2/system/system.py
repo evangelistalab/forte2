@@ -53,6 +53,8 @@ class System:
         If True, auxiliary basis sets (if any) will be disregarded, and the B tensor will be built using the Cholesky decomposition of the 4D ERI tensor instead.
     cholesky_tol : float, optional, default=1e-6
         The tolerance for the Cholesky decomposition of the 4D ERI tensor. Only used if `cholesky_tei` is True.
+    cholesky_memory : int, optional, default=1024
+        Memory limit in MB for storage for the on-the-fly Cholesky decomposition.
     symmetry : bool, optional, default=False
         Whether to automatically detect the largest Abelian point group symmetry of the molecule.
         This will center the molecule at its center of mass and reorient it along its principal axes of inertia.
@@ -115,6 +117,7 @@ class System:
     ortho_thresh: float = 1e-8
     cholesky_tei: bool = False
     cholesky_tol: float = 1e-6
+    cholesky_memory: int = 1024
     symmetry: bool = False
     symmetry_tol: float = 1e-4
     use_gaussian_charges: bool = False
@@ -147,13 +150,20 @@ class System:
             self.linear_dep_trigger,
             self.ortho_thresh,
         )
-        self.fock_builder = FockBuilder(self)
+        self.fock_builder = FockBuilder(
+            self, cholesky_tol=self.cholesky_tol, cholesky_memory=self.cholesky_memory
+        )
         # The B tensors here are lazily evaluated, so no overhead if not used
         if self.auxiliary_basis_set_corr is not None:
             logger.log_warning(
                 "Building separate auxiliary basis for correlated calculations!"
             )
-            self.fock_builder_corr = FockBuilder(self, use_aux_corr=True)
+            self.fock_builder_corr = FockBuilder(
+                self,
+                use_aux_corr=True,
+                cholesky_tol=self.cholesky_tol,
+                cholesky_memory=self.cholesky_memory,
+            )
         else:
             self.fock_builder_corr = self.fock_builder
 

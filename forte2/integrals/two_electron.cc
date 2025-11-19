@@ -19,7 +19,7 @@ np_vector coulomb_4c_diagonal(const Basis& basis) {
 }
 
 np_vector coulomb_4c_row(const Basis& basis, std::size_t row) {
-    return compute_two_electron_4c_row<libint2::Operator::coulomb>(basis, row);
+    return compute_two_electron_4c_row_async<libint2::Operator::coulomb>(basis, row);
 }
 
 np_tensor3 coulomb_3c(const Basis& b1, const Basis& b2, const Basis& b3) {

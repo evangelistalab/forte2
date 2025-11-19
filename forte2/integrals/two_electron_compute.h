@@ -4,7 +4,7 @@
 
 #include "helpers/ndarray.h"
 #include "helpers/logger.h"
-
+#include "helpers/np_vector_functions.h"
 #include "integrals/basis.h"
 
 namespace forte2 {
@@ -246,7 +246,7 @@ template <libint2::Operator Op, typename Params = NoParams>
     // Allocate a vector for the diagonal
     // [TODO]: we can optimize this further by only allocating the upper triangular part
     auto ints = make_zeros<nb::numpy, double, 1>({nb * nb});
-    auto v = ints.view();
+    auto ints_span = vector::as_span<double>(ints);
 
     // Loop over shell quartets and fill each buffer
     for (std::size_t s1 = 0; s1 < nshells; ++s1) {
@@ -266,7 +266,7 @@ template <libint2::Operator Op, typename Params = NoParams>
                     for (std::size_t j = 0; j < n2; ++j) {
                         // find the composite index for s1_i s2_j
                         const auto index = (f1 + i) * nb + (f2 + j);
-                        v(index) = static_cast<double>(buf[ijkl]);
+                        ints_span[index] = static_cast<double>(buf[ijkl]);
                         // skip to the next diagonal ijkl
                         ijkl += n1 * n2 + 1;
                     }
@@ -281,22 +281,15 @@ template <libint2::Operator Op, typename Params = NoParams>
 }
 
 template <libint2::Operator Op, typename Params = NoParams>
-[[nodiscard]] auto compute_two_electron_4c_row(const Basis& basis, const std::size_t row,
+[[nodiscard]] auto compute_two_electron_4c_row_async(const Basis& basis, const std::size_t row,
                                                Params const& params = Params{}) -> np_vector {
-
+    const auto start = std::chrono::high_resolution_clock::now();
     // Initialize libint2
     libint2::initialize();
 
     // Prepare engine
     const auto max_nprim = basis.max_nprim();
     const auto max_l = basis.max_l();
-    libint2::Engine engine(Op, max_nprim, max_l);
-
-    if constexpr (not std::is_same_v<Params, NoParams>) {
-        engine.set_params(params);
-    }
-
-    const auto& results = engine.results();
 
     // Get the number of shells in the basis
     auto nshells = basis.nshells();
@@ -310,8 +303,8 @@ template <libint2::Operator Op, typename Params = NoParams>
     const auto bas2 = row % nb;
     const auto [s1, idx1] = basis.basis_index_to_shell_index(bas1);
     const auto [s2, idx2] = basis.basis_index_to_shell_index(bas2);
-    const auto shell1 = basis[s1];
-    const auto shell2 = basis[s2];
+    const auto& shell1 = basis[s1];
+    const auto& shell2 = basis[s2];
     const auto [f1, n1] = first_size[s1];
     const auto [f2, n2] = first_size[s2];
 
@@ -319,41 +312,70 @@ template <libint2::Operator Op, typename Params = NoParams>
         throw std::out_of_range("compute_two_electron_4c_row: index out of range.");
     }
 
-
     // Allocate a vector for the row
-    // [TODO]: we can optimize this further by only allocating the upper triangular part
     auto ints = make_zeros<nb::numpy, double, 1>({nb * nb});
-    auto v = ints.view();
+    auto ints_v = ints.view();
 
-    // Loop over shell quartets and fill each buffer
-    for (std::size_t s3 = 0; s3 < nshells; ++s3) {
-        const auto& shell3 = basis[s3];
-        const auto [f3, n3] = first_size[s3];
+    const std::size_t num_threads = std::thread::hardware_concurrency();
+    std::vector<std::future<void>> futures;
 
-        for (std::size_t s4 = 0; s4 < nshells; ++s4) {
-            const auto& shell4 = basis[s4];
-            const auto [f4, n4] = first_size[s4];
+    auto kernel = [&](std::size_t s3_begin, std::size_t s3_end) {
+        libint2::Engine engine(Op, max_nprim, max_l);
 
-            // Compute the integrals for this shell quartet
-            engine.compute(shell1, shell2, shell3, shell4);
+        if constexpr (not std::is_same_v<Params, NoParams>) {
+            engine.set_params(params);
+        }
+        const auto& results = engine.results();
 
-            // Loop over the components of this operator and fill the buffers
-            // We only need the integrals under shell1[idx1], shell2[idx2]
-            std::size_t ijkl = (idx1 * n2 + idx2) * n3 * n4;
-            if (const auto buf = results[0]; buf) {
+        // Loop over shell quartets and fill each buffer
+        for (std::size_t s3 = s3_begin; s3 < s3_end; ++s3) {
+            const auto& shell3 = basis[s3];
+            const auto [f3, n3] = first_size[s3];
+
+            // s3 and s4 are symmetric in the integral, so we can exploit that
+            for (std::size_t s4 = 0; s4 <= s3; ++s4) {
+                const auto& shell4 = basis[s4];
+                const auto [f4, n4] = first_size[s4];
+
+                engine.compute(shell1, shell2, shell3, shell4);
+
+                const auto buf = results[0];
+                if (not buf) {
+                    continue;
+                }
+
+                // Loop over the components of this operator and fill the buffers
+                // We only need the integrals under shell1[idx1], shell2[idx2]
+                std::size_t ijkl = (idx1 * n2 + idx2) * n3 * n4;
                 for (std::size_t i = 0; i < n3; ++i) {
                     for (std::size_t j = 0; j < n4; ++j, ++ijkl) {
-                        // find the composite index for s3_i s4_j
-                        const auto index = (f3 + i) * nb + (f4 + j);
-                        v(index) = static_cast<double>(buf[ijkl]);
+                        ints_v((f3 + i) * nb + (f4 + j)) = static_cast<double>(buf[ijkl]);
+                        ints_v((f4 + j) * nb + (f3 + i)) = static_cast<double>(buf[ijkl]);
                     }
                 }
             }
         }
+    };
+
+    // Divide the work among threads
+    const std::size_t block_size = (nshells + num_threads - 1) / num_threads;
+    for (std::size_t t = 0; t < num_threads; ++t) {
+        const std::size_t s3_begin = t * block_size;
+        const std::size_t s3_end = std::min(s3_begin + block_size, nshells);
+        if (s3_begin < s3_end) {
+            futures.emplace_back(std::async(std::launch::async, kernel, s3_begin, s3_end));
+        }
+    }
+
+    for (auto& fut : futures) {
+        fut.get();
     }
 
     // Finalize libint2
     libint2::finalize();
+    const auto end = std::chrono::high_resolution_clock::now();
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    LOG_INFO1 << "[forte2] Two-electron integrals row timing: " << elapsed.count() << " ms\n";
     return ints;
 }
 

@@ -16,7 +16,7 @@ class CholeskyIntegrals:
     def _compute_row(self, pivot):
         return ints.coulomb_4c_row(self.basis, pivot)
 
-    def _compute(self):
+    def compute(self):
         n = self.nbf**2
         Q = 0
 
@@ -47,9 +47,11 @@ class CholeskyIntegrals:
             row = self._compute_row(pivot)
 
             # subtract previous contributions
-            for P in range(Q):
-                alpha = L[P][pivots[Q]]
-                row -= alpha * L[P]
+            if Q > 0:
+                L_temp = np.vstack(L[:Q])  # shape (Q, n)
+                alphas = L_temp[:, pivots[Q]]  # shape (Q, )
+                row -= alphas @ L_temp
+                del L_temp
 
             # scale
             row /= L_QQ
@@ -71,8 +73,6 @@ class CholeskyIntegrals:
 
         # stack into final L
         if Q == 0:
-            self.L_ = np.empty((0, n))
-        else:
-            self.L_ = np.vstack(L[:Q])
+            raise RuntimeError("Cholesky: No Cholesky vectors were computed.")
 
-        return self.L_
+        self.B = np.vstack(L[:Q]).reshape((Q, self.nbf, self.nbf)).copy()

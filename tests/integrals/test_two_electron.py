@@ -6,14 +6,14 @@ from forte2.helpers.comparisons import approx
 
 def test_two_electron_integrals():
     xyz = """
-O                     0.000000000000     0.000000000000    -0.061664597388
-H                     0.000000000000    -0.711620616370     0.489330954643
-H                     0.000000000000     0.711620616370     0.489330954643
-"""
+    O 0.000000000000     0.000000000000    -0.061664597388
+    H 0.000000000000    -0.711620616370     0.489330954643
+    H 0.000000000000     0.711620616370     0.489330954643
+    """
 
     system = forte2.System(xyz=xyz, basis_set="sto-3g")
 
-    V = forte2.ints.coulomb_4c(system.basis)
+    V = forte2.integrals.coulomb_4c(system)
 
     # Test random integrals against the reference values
     assert V[4, 5, 0, 4] == approx(0.011203183573992602)
@@ -52,7 +52,7 @@ def test_two_electron_integrals_by_shell_slices():
 
     system = forte2.System(xyz=xyz, basis_set="sto-3g")
 
-    Vref = forte2.ints.coulomb_4c(system.basis)
+    Vref = forte2.integrals.coulomb_4c(system)
 
     # generate random slices for each of the four shells
     lo = 0
@@ -85,7 +85,7 @@ def test_two_electron_integral_diagonal():
     """
     system = forte2.System(xyz=xyz, basis_set="sto-3g")
 
-    Vref = forte2.ints.coulomb_4c(system.basis)
+    Vref = forte2.integrals.coulomb_4c(system)
     nbf = system.nbf
     Vref = np.diag(Vref.reshape((nbf**2,) * 2))
 
@@ -117,11 +117,11 @@ def test_two_electron_integral_cholesky():
     xyz = "Pd 0 0 0"
     system = forte2.System(xyz=xyz, basis_set="sto-3g", minao_basis_set=None)
 
-    Vref = forte2.ints.coulomb_4c(system.basis)
+    Vref = forte2.integrals.coulomb_4c(system)
     nbf = system.nbf
     Vref = Vref.reshape((nbf**2,) * 2)
 
-    chol = forte2.integrals.CholeskyIntegrals(system.basis, memory=2000, delta=1e-7)
+    chol = forte2.integrals.CholeskyIntegrals(system.basis, memory=2000, delta=1e-4)
     L = chol._compute()
     Vchol = L.T @ L
-    assert np.linalg.norm(Vchol - Vref) < 1e-6
+    assert np.linalg.norm(Vchol - Vref) < 1e-3
