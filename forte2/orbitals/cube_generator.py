@@ -355,7 +355,7 @@ class CubeGenerator:
         Create a cube file from the values on a grid.
         """
         # write the cube file
-        header, coords = self._make_header_and_atoms(
+        header, coords = self._make_header_and_coords(
             minr, npoints, axis, system.atoms, "Forte2 Cube File"
         )
 
@@ -370,7 +370,7 @@ class CubeGenerator:
         Create a two-component cube file containing four datasets written consecutively
         in the order: alpha real, alpha imag, beta real, beta imag.
         """
-        header, coords = self._make_header_and_atoms(
+        header, coords = self._make_header_and_coords(
             minr, npoints, axis, system.atoms, "Forte2 2-Component Cube File"
         )
 
