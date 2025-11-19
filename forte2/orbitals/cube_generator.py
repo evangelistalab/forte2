@@ -370,10 +370,10 @@ class CubeGenerator:
 
         v = np.concatenate(
             [
-                np.array(a_re).flatten(),
-                np.array(a_im).flatten(),
-                np.array(b_re).flatten(),
-                np.array(b_im).flatten(),
+                a_re.flatten(),
+                a_im.flatten(),
+                b_re.flatten(),
+                b_im.flatten(),
             ]
         )
         lines = [
