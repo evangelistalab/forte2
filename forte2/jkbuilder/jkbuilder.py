@@ -5,6 +5,7 @@ from functools import cached_property
 
 import forte2
 from forte2 import ints
+from forte2.integrals import CholeskyIntegrals
 from forte2.helpers import logger
 from forte2.helpers.matrix_functions import cholesky_wrapper
 
@@ -25,6 +26,10 @@ class FockBuilder:
     store_B_nPm : bool, optional, default=True
         If True, stores a (Nao, Naux, Nao)-shaped copy of the B tensor for faster K builds.
         This comes at the cost of doubling the memory footprint of the ``FockBuilder`` object.
+    cholesky_tol : float, optional, default=1e-4
+        The threshold for the Cholesky decomposition.
+    cholesky_memory : int, optional, default=1024
+        Memory limit in MB for storage.
 
     Attributes
     ----------
@@ -38,11 +43,20 @@ class FockBuilder:
         The number of basis functions in the system.
     """
 
-    def __init__(self, system, use_aux_corr=False, store_B_nPm=True):
+    def __init__(
+        self,
+        system,
+        use_aux_corr=False,
+        store_B_nPm=True,
+        cholesky_tol=1e-4,
+        cholesky_memory=1024,
+    ):
         self.store_B_nPm = store_B_nPm
         self.system = system
         self.use_aux_corr = use_aux_corr
         self.nbf = system.nbf
+        self.cholesky_tol = cholesky_tol
+        self.cholesky_memory = cholesky_memory
 
     @cached_property
     def B_Pmn(self):
@@ -63,10 +77,10 @@ class FockBuilder:
                     aux_basis = self.system.auxiliary_basis
                 res, naux = self._build_B_density_fitting(basis, aux_basis)
             else:
-                res, naux = self._build_B_cholesky(
-                    self.system.basis, self.system.cholesky_tol
+                res, naux = self._build_B_cholesky_on_the_fly(
+                    self.system.basis, self.cholesky_tol, self.cholesky_memory
                 )
-                # set the number of auxiliary basis, unknown before this point
+                # set the number of auxiliary basis, unset before this point
                 self.system.naux = naux
         self.naux = naux
         return res
@@ -87,7 +101,7 @@ class FockBuilder:
         naux = B.shape[0]
         return B, naux
 
-    def _build_B_cholesky(self, basis, cholesky_tol):
+    def _build_B_cholesky_full_eri(self, basis, cholesky_tol):
         # Compute the memory requirements
         nbf = basis.size
         memory_gb = 8 * (nbf**4) / (1024**3)
@@ -104,6 +118,29 @@ class FockBuilder:
         naux = B.shape[0]
 
         memory_gb = 8 * (naux * nbf**2) / (1024**3)
+        if self.store_B_nPm:
+            memory_gb *= 2
+            logger.log_info1(
+                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_nPm)"
+            )
+        else:
+            logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
+        logger.log_info1(f"Number of system basis functions: {nbf}")
+        logger.log_info1(f"Number of auxiliary basis functions: {naux}")
+
+        return B, naux
+
+    def _build_B_cholesky_on_the_fly(self, basis, cholesky_tol, memory=1024):
+        nbf = basis.size
+        chol = CholeskyIntegrals(basis, memory=memory, delta=cholesky_tol)
+        memory_gb = memory / 1024
+
+        logger.log_info1("Building B tensor using on-the-fly Cholesky decomposition")
+        logger.log_info1(f"Memory restriction: {memory_gb:.2f} GB")
+        chol.compute()
+        B = chol.B
+        naux = B.shape[0]
+
         if self.store_B_nPm:
             memory_gb *= 2
             logger.log_info1(

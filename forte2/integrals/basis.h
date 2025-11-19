@@ -58,6 +58,18 @@ class Basis {
     std::vector<std::pair<std::size_t, std::size_t>>
     center_first_and_last(bool count_shell = false) const;
 
+    /// @brief Convert a shell slice to a basis function slice.
+    /// @param shell_slice A pair of the first and last shell indices.
+    /// @return A pair of the first and last basis function indices corresponding to the shell
+    /// slice.
+    std::pair<std::size_t, std::size_t>
+    shell_slice_to_basis_slice(std::pair<std::size_t, std::size_t> shell_slice) const;
+
+    /// @brief Return the shell index of a given basis function index.
+    /// @param basis_index The basis function index.
+    /// @return A pair of the shell index and the index of the basis function within the shell.
+    std::pair<std::size_t, std::size_t> basis_index_to_shell_index(std::size_t basis_index) const;
+
   private:
     std::vector<libint2::Shell> shells_; // vector of shells in the basis set
     size_t size_ = 0;                    // total number of basis functions
