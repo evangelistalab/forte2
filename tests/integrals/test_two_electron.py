@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 import forte2, forte2.integrals
-from forte2.system import BSE_AVAILABLE
+from forte2.system import BSE_AVAILABLE, build_basis
 from forte2.helpers.comparisons import approx
 
 
@@ -54,5 +54,14 @@ def test_3c2e():
         minao_basis_set=None,
         auxiliary_basis_set="def2-universal-jkfit",
     )
+    forte2.set_verbosity_level(5)
     ref = forte2.integrals.coulomb_3c(system)
     assert np.linalg.norm(ref) == approx(239.55734891969408)
+
+    # force the 3c2e integral routine to not use symmetry optimizations
+    basis = build_basis("ano-rcc", system.geom_helper)
+    ref2 = forte2.integrals.coulomb_3c(
+        system, system.auxiliary_basis, system.basis, basis
+    )
+    assert np.linalg.norm(ref2 - ref) < 1e-10
+    assert np.linalg.norm(ref2) == approx(239.55734891969408)
