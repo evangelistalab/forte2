@@ -252,13 +252,21 @@ template <libint2::Operator Op, typename Params = NoParams>
                     std::size_t offset_sym = f1 * nb3 * nb2 + f3 * nb2 + f2; // for s3 > s2
 
                     // Loop over the components of this operator and fill the buffers
-                    for (std::size_t i = 0, ijk = 0; i < n1; ++i) {
-                        for (std::size_t j = 0; j < n2; ++j) {
-                            for (std::size_t k = 0; k < n3; ++k, ++ijk) {
-                                data[offset + i * nb2 * nb3 + j * nb3 + k] =
-                                    static_cast<double>(buf[ijk]);
-                                if (s2 != s3) {
-                                    data[offset_sym + i * nb3 * nb2 + k * nb2 + j] =
+                    if (s2 != s3) {
+                        for (std::size_t i = 0, ijk = 0; i < n1; ++i) {
+                            for (std::size_t j = 0; j < n2; ++j) {
+                                for (std::size_t k = 0; k < n3; ++k, ++ijk) {
+                                    const auto val = static_cast<double>(buf[ijk]);
+                                    data[offset + i * nb2 * nb3 + j * nb3 + k] = val;
+                                    data[offset_sym + i * nb3 * nb2 + k * nb2 + j] = val;
+                                }
+                            }
+                        }
+                    } else {
+                        for (std::size_t i = 0, ijk = 0; i < n1; ++i) {
+                            for (std::size_t j = 0; j < n2; ++j) {
+                                for (std::size_t k = 0; k < n3; ++k, ++ijk) {
+                                    data[offset + i * nb2 * nb3 + j * nb3 + k] =
                                         static_cast<double>(buf[ijk]);
                                 }
                             }
