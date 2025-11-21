@@ -232,7 +232,7 @@ def _load_basis(basis_name, Z):
             bse_basis = bse.get_basis(basis_name.replace("-autoaux", ""), elements=Z, get_aux=1)
         except KeyError:
             raise RuntimeError(
-                f"[forte2] Basis Set Exchange could not generate AutoAux basis for element Z={Z} with basis set {basis_name}!"
+                f"[forte2] Basis Set Exchange could not generate AutoAux basis for element Z={Z} with basis set {basis_name.replace('-autoaux', '')}!"
             )
         res = bse_basis["elements"][str(Z)]["electron_shells"]
     else:
