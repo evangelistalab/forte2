@@ -150,7 +150,7 @@ def test_so_from_sf_water():
 @pytest.mark.skipif(not BSE_AVAILABLE, reason="Basis set exchange is not available")
 def test_sox2c1e_sc():
     l23_ref = 4.395077289942328
-    xyz = """Sc 0 0 0"""
+    xyz = "Sc 0 0 0"
     system = System(
         xyz=xyz,
         basis_set="sapporo-dkh3-dzp-2012-diffuse",
@@ -162,3 +162,4 @@ def test_sox2c1e_sc():
     scf.run()
     l23_splitting = EH_TO_EV * (scf.eps[0][6] - scf.eps[0][5])
     assert l23_splitting == pytest.approx(l23_ref, abs=1e-5)
+

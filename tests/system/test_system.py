@@ -160,14 +160,13 @@ def test_custom_basis_rhf():
 
 
 def test_zmatrix_0():
-    # Test for Z-matrix input
+    # Test for Z-matrix input, with mixed line breaks, spacings and indentations
     zmat = """
-    C
-    C    1    1.333
-    H    1    1.079    2    121.4
-    H    1    1.079    2    121.4    3    180.0
+    C;C    1    1.333
+        H    1    1.079    2    121.4
+H 1    1.079    2 121.4    3    180.0
     H    2    1.079    1    121.4    3      0.0
-    H    2    1.079    1    121.4    3    180.0
+            H    2    1.079    1    121.4    3    180.0
     """
     system = System(
         xyz=zmat,

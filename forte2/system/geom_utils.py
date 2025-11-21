@@ -23,24 +23,26 @@ def parse_geometry(geom, unit):
     atoms : list[tuple(int, NDArray)]
         List of (Z, coords) tuples in Bohr.
     """
-    lines = [line for line in geom.strip().splitlines() if line.strip()]
+    # Gives the user the option to break line with either newline or semicolon
+    geom = geom.replace(";", "\n")
+    lines = [line.strip() for line in geom.splitlines() if line.strip()]
     if not lines:
         raise ValueError("Empty geometry string provided.")
 
     if re.match(r"^([A-Z][a-z]?)$", lines[0]):
-        return parse_zmatrix(geom, unit)
+        return parse_zmatrix(lines, unit)
     else:
-        return parse_xyz(geom, unit)
+        return parse_xyz(lines, unit)
 
 
-def parse_xyz(xyz, unit):
+def parse_xyz(lines, unit):
     r"""
     Parse an XYZ string into a list of atoms.
 
     Parameters
     ----------
-    xyz : str
-        The XYZ formatted string containing atom symbols and coordinates.
+    lines : list[str]
+        The lines containing the XYZ atom symbols and coordinates.
     unit : str
         The unit of the coordinates, either "bohr" or "angstrom".
 
@@ -67,7 +69,7 @@ def parse_xyz(xyz, unit):
 
     """
     atoms = []
-    for line in xyz.split("\n"):
+    for line in lines:
         # look for lines of the form "Li 0.0 0.0 0.0" or "N -10 0 0" and capture the element symbol and coordinates
         # Use regex to match the expected format
         m = re.match(
@@ -98,13 +100,15 @@ def parse_xyz(xyz, unit):
     return atoms
 
 
-def parse_zmatrix(zmat, unit):
+def parse_zmatrix(lines, unit):
     """Parse a Z-matrix string into a list of atoms.
 
     Parameters
     ----------
-        zmat (str): The Z-matrix formatted string containing atom symbols and coordinates.
-        unit (str): The unit of the coordinates, either "bohr" or "angstrom".
+    lines : list[str]
+        The lines containing the Z-matrix atom symbols and coordinates.
+    unit : str
+        The unit of the coordinates, either "bohr" or "angstrom".
 
     Returns
     -------
@@ -134,7 +138,6 @@ def parse_zmatrix(zmat, unit):
 
     atoms = []
     coords = []
-    lines = [line.strip() for line in zmat.strip().splitlines() if line.strip()]
     conv = 1.0 if unit == "bohr" else ANGSTROM_TO_BOHR
 
     for i, line in enumerate(lines):
