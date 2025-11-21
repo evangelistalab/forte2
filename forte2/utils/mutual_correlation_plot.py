@@ -11,7 +11,7 @@ from matplotlib.patches import PathPatch
 from PIL import Image
 import pathlib
 
-from forte2.orbitals import CubeGenerator
+from forte2.orbitals import write_orbital_cubes
 
 # retina display settings
 try:
@@ -164,8 +164,9 @@ def mutual_correlation_plot(
     """
 
     # generate cube files for the orbitals
-    cube = CubeGenerator()
-    cube.run(system, C, indices=indices, filepath=orbitals_filepath, prefix="orbital")
+    write_orbital_cubes(
+        system, C, indices=indices, filepath=orbitals_filepath, prefix="orbital"
+    )
 
     # run VMDCube
     try:
