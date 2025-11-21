@@ -23,11 +23,8 @@ def test_casscf_frozen_co():
 
     mc = MCOptimizer(
         states=State(system=system, multiplicity=1, ms=0.0),
-        frozen_core_orbitals=[0],
-        core_orbitals=[1, 2, 3],
-        active_orbitals=[4, 5, 6, 7, 8, 9],
-        frozen_virtual_orbitals=[25, 26, 27],
-        optimize_frozen_orbs=True,
+        core_orbitals=4,
+        active_orbitals=6,
         ci_algorithm="exact",
     )(avas)
     mc.run()
@@ -39,7 +36,6 @@ def test_casscf_frozen_co():
         core_orbitals=3,
         active_orbitals=6,
         frozen_virtual_orbitals=3,
-        optimize_frozen_orbs=False,
     )(avas)
     mc.run()
     assert mc.E == approx(emcscf_frz)

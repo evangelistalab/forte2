@@ -330,3 +330,44 @@ def test_ci_rdms_1():
     compare_rdms(ci)
 
     assert ci.E[0] == approx(-100.019788438077)
+
+
+def test_ci_rdms_sa():
+    xyz = """
+    H 0.0 0.0 0.0
+    F 0.0 0.0 2.0
+    """
+
+    system = System(
+        xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
+    )
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    ci = CI(
+        states=[
+            State(nel=10, multiplicity=1, ms=0.0),
+            State(nel=10, multiplicity=3, ms=1.0),
+        ],
+        nroots=[2, 1],
+        core_orbitals=[0],
+        active_orbitals=[1, 2, 3, 4, 5, 6],
+        do_test_rdms=True,
+    )(rhf)
+    ci.run()
+    compare_rdms(ci)
+
+    assert ci.E[0] == approx(-100.01978843799819)
+    assert ci.E[1] == approx(-99.68758394141096)
+    assert ci.E[2] == approx(-99.7052645828813)
+
+    g1 = ci.make_average_1rdm()
+    l2 = ci.make_average_2cumulant()
+    e_avg = ci.compute_average_energy()
+    ci_ints = ci.sub_solvers[0].ints
+
+    e_from_cumulants = ci_ints.E
+    e_from_cumulants += np.einsum("pq,pq->", ci_ints.H, g1)
+    e_from_cumulants += 0.5 * np.einsum("pqrs,pqrs->", ci_ints.V, l2)
+    e_from_cumulants += 0.5 * np.einsum("pqrs,pr,qs->", ci_ints.V, g1, g1)
+    e_from_cumulants -= 0.25 * np.einsum("pqrs,ps,qr->", ci_ints.V, g1, g1)
+
+    assert e_avg == approx(e_from_cumulants)

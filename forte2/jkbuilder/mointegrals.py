@@ -48,7 +48,6 @@ class RestrictedMOIntegrals:
     core_orbitals: list = field(default_factory=list)
     use_aux_corr: bool = False
     antisymmetrize: bool = False
-    spinorbital: bool = False
 
     def __post_init__(self):
         self.norb = len(self.orbitals)
@@ -82,38 +81,9 @@ class RestrictedMOIntegrals:
             self.H += np.einsum("mi,mn,nj->ij", C, 2 * J[0] - K[0], C)
 
         # two-electron integrals
-        self.V = jkbuilder.two_electron_integrals_block(
-            C, antisymmetrize=self.antisymmetrize
-        )
-
-        if self.spinorbital:
-            self._convert_to_spinorbital()
-
-    def _convert_to_spinorbital(self):
-        """
-        Convert restricted spatial orbitals into spinorbitals.
-        """
-        nso = 2 * self.norb
-
-        temp = self.H.copy()
-        self.H = np.zeros((nso, nso))
-        self.H[::2, ::2] = temp
-        self.H[1::2, 1::2] = temp
-
-        temp = self.V.copy()
-        self.V = np.zeros((nso, nso, nso, nso))
+        self.V = jkbuilder.two_electron_integrals_block(C)
         if self.antisymmetrize:
-            self.V[::2, ::2, ::2, ::2] = temp - temp.transpose(0, 1, 3, 2)  # v(aa)
-            self.V[1::2, 1::2, 1::2, 1::2] = temp - temp.transpose(0, 1, 3, 2)  # v(bb)
-            self.V[::2, 1::2, ::2, 1::2] = temp
-            self.V[1::2, ::2, 1::2, ::2] = temp.transpose(1, 0, 3, 2)
-            self.V[::2, 1::2, 1::2, ::2] = -temp.transpose(0, 1, 3, 2)
-            self.V[1::2, ::2, ::2, 1::2] = -temp.transpose(1, 0, 2, 3)
-        else:
-            self.V[::2, ::2, ::2, ::2] = temp
-            self.V[1::2, 1::2, 1::2, 1::2] = temp
-            self.V[::2, 1::2, ::2, 1::2] = temp
-            self.V[1::2, ::2, 1::2, ::2] = temp.transpose(1, 0, 3, 2)
+            self.V -= self.V.swapaxes(2, 3)
 
 
 @dataclass
@@ -189,9 +159,9 @@ class SpinorbitalIntegrals:
             self.H += np.einsum("mi,mn,nj->ij", C.conj(), J[0] - K[0], C)
 
         # two-electron integrals
-        self.V = jkbuilder.two_electron_integrals_block_spinor(
-            C, antisymmetrize=self.antisymmetrize
-        )
+        self.V = jkbuilder.two_electron_integrals_block_spinor(C)
+        if self.antisymmetrize:
+            self.V -= self.V.swapaxes(2, 3)
 
 
 @dataclass

@@ -73,6 +73,7 @@ def test_rel_ci_hf_ghf():
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         unit="bohr",
         x2c_type="so",
+        snso_type=None,
     )
     scf = GHF(charge=0)(system)
     ci = RelCI(
@@ -127,6 +128,7 @@ def test_rel_ci_hf_transition_dipole_ghf():
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         unit="bohr",
         x2c_type="so",
+        snso_type=None,
     )
     scf = GHF(charge=0)(system)
     ci = RelCI(
