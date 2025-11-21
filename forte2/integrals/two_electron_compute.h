@@ -99,7 +99,7 @@ template <libint2::Operator Op, typename Params = NoParams>
 
     const auto end = std::chrono::high_resolution_clock::now();
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    LOG_INFO1 << "[forte2] Two-electron integrals timing: " << elapsed.count() << " ms\n";
+    LOG_INFO2 << "[forte2] Two-electron integrals timing: " << elapsed.count() << " ms\n";
 
     return ints;
 }
@@ -180,8 +180,8 @@ template <libint2::Operator Op, typename Params = NoParams>
 
     const auto end = std::chrono::high_resolution_clock::now();
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    LOG_INFO1 << "[forte2] Three-center two-electron integrals timing: " << elapsed.count() / 1000.0
-             << " s\n";
+    LOG_INFO2 << "[forte2] Three-center two-electron integrals timing: " << elapsed.count() / 1000.0
+              << " s\n";
 
     return ints;
 }
@@ -213,14 +213,71 @@ template <libint2::Operator Op, typename Params = NoParams>
     const auto first_size3 = basis3.shell_first_and_size();
 
     auto ints = make_zeros<nb::numpy, double, 3>({nb1, nb2, nb3});
-    auto v = ints.view();
+    auto data = ints.data();
 
     const std::size_t num_threads = std::thread::hardware_concurrency();
     std::vector<std::future<void>> tasks;
 
     /// This lambda function computes the integrals for a given range of shells
     /// in the first basis and fills the buffer.
-    auto kernel = [&](std::size_t s1_begin, std::size_t s1_end) {
+    auto kernel_sym = [&](std::size_t s1_begin, std::size_t s1_end) {
+        libint2::Engine engine(Op, max_nprim, max_l);
+        engine.set(libint2::BraKet::xs_xx);
+        if constexpr (!std::is_same_v<Params, NoParams>) {
+            engine.set_params(params);
+        }
+        const auto& results = engine.results();
+
+        // Loop over the given range of shells in basis1
+        for (std::size_t s1 = s1_begin; s1 < s1_end; ++s1) {
+            const auto& shell1 = basis1[s1];
+            const auto [f1, n1] = first_size1[s1];
+
+            // Loop over the shells in basis2 and basis3
+            for (std::size_t s2 = 0; s2 < nshells2; ++s2) {
+                const auto& shell2 = basis2[s2];
+                const auto [f2, n2] = first_size2[s2];
+                for (std::size_t s3 = 0; s3 <= s2; ++s3) {
+                    const auto& shell3 = basis3[s3];
+
+                    // Compute the integrals for this shell triplet
+                    engine.compute(shell1, shell2, shell3);
+                    auto buf = results[0];
+                    if (!buf)
+                        continue;
+
+                    const auto [f3, n3] = first_size3[s3];
+
+                    std::size_t offset = f1 * nb2 * nb3 + f2 * nb3 + f3;     // for s3 <= s2
+                    std::size_t offset_sym = f1 * nb3 * nb2 + f3 * nb2 + f2; // for s3 > s2
+
+                    // Loop over the components of this operator and fill the buffers
+                    if (s2 != s3) {
+                        for (std::size_t i = 0, ijk = 0; i < n1; ++i) {
+                            for (std::size_t j = 0; j < n2; ++j) {
+                                for (std::size_t k = 0; k < n3; ++k, ++ijk) {
+                                    const auto val = static_cast<double>(buf[ijk]);
+                                    data[offset + i * nb2 * nb3 + j * nb3 + k] = val;
+                                    data[offset_sym + i * nb3 * nb2 + k * nb2 + j] = val;
+                                }
+                            }
+                        }
+                    } else {
+                        for (std::size_t i = 0, ijk = 0; i < n1; ++i) {
+                            for (std::size_t j = 0; j < n2; ++j) {
+                                for (std::size_t k = 0; k < n3; ++k, ++ijk) {
+                                    data[offset + i * nb2 * nb3 + j * nb3 + k] =
+                                        static_cast<double>(buf[ijk]);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    auto kernel_nosym = [&](std::size_t s1_begin, std::size_t s1_end) {
         libint2::Engine engine(Op, max_nprim, max_l);
         engine.set(libint2::BraKet::xs_xx);
         if constexpr (!std::is_same_v<Params, NoParams>) {
@@ -242,15 +299,19 @@ template <libint2::Operator Op, typename Params = NoParams>
 
                     // Compute the integrals for this shell triplet
                     engine.compute(shell1, shell2, shell3);
+                    auto buf = results[0];
+                    if (!buf)
+                        continue;
 
-                    // Loop over the components of this operator and fill the buffers
-                    if (const auto buf = results[0]; buf) {
-                        const auto [f3, n3] = first_size3[s3];
-                        for (std::size_t i = 0, ijk = 0; i < n1; ++i) {
-                            for (std::size_t j = 0; j < n2; ++j) {
-                                for (std::size_t k = 0; k < n3; ++k, ++ijk) {
-                                    v(f1 + i, f2 + j, f3 + k) = static_cast<double>(buf[ijk]);
-                                }
+                    const auto [f3, n3] = first_size3[s3];
+
+                    std::size_t offset = f1 * nb2 * nb3 + f2 * nb3 + f3;
+
+                    for (std::size_t i = 0, ijk = 0; i < n1; ++i) {
+                        for (std::size_t j = 0; j < n2; ++j) {
+                            for (std::size_t k = 0; k < n3; ++k, ++ijk) {
+                                data[offset + i * nb2 * nb3 + j * nb3 + k] =
+                                    static_cast<double>(buf[ijk]);
                             }
                         }
                     }
@@ -265,7 +326,11 @@ template <libint2::Operator Op, typename Params = NoParams>
         std::size_t begin = t * block_size;
         std::size_t end = std::min(begin + block_size, nshells1);
         if (begin < end) {
-            tasks.emplace_back(std::async(std::launch::async, kernel, begin, end));
+            if (&basis2 == &basis3) {
+                tasks.emplace_back(std::async(std::launch::async, kernel_sym, begin, end));
+            } else {
+                tasks.emplace_back(std::async(std::launch::async, kernel_nosym, begin, end));
+            }
         }
     }
 
@@ -279,8 +344,8 @@ template <libint2::Operator Op, typename Params = NoParams>
 
     const auto end = std::chrono::high_resolution_clock::now();
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    LOG_INFO1 << "[forte2] Three-center two-electron integrals timing: " << elapsed.count() / 1000.0
-             << " s\n";
+    LOG_INFO2 << "[forte2] Three-center two-electron integrals timing: " << elapsed.count() / 1000.0
+              << " s\n";
 
     return ints;
 }
@@ -349,8 +414,8 @@ template <libint2::Operator Op, typename Params = NoParams>
 
     const auto end = std::chrono::high_resolution_clock::now();
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    LOG_INFO1 << "[forte2] Two-center two-electron integrals timing: " << elapsed.count() / 1000.0
-             << " s\n";
+    LOG_INFO2 << "[forte2] Two-center two-electron integrals timing: " << elapsed.count() / 1000.0
+              << " s\n";
 
     return ints;
 }

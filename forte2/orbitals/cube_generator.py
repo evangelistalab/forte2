@@ -6,6 +6,57 @@ from forte2.helpers import logger
 from forte2 import ints
 
 
+def write_orbital_cubes(
+    system,
+    C,
+    indices=None,
+    prefix="orbital",
+    filepath=".",
+    format=("cube",),
+    spacing=0.2,
+    padding=4.0,
+):
+    """A convenience function to write cube files for molecular orbitals.
+
+    Parameters
+    ----------
+    system : forte2.system.System
+        The system object containing the molecular information.
+    C : NDArray
+        The molecular orbital coefficients matrix.
+    indices : List[int], optional, default=None
+        The indices (zero-based) of the orbitals to generate cube files for.
+        By default all orbitals are generated.
+    prefix : str, optional, default="orbital"
+        The prefix for the cube file names.
+    filepath : str, optional, default="."
+        The directory to save the cube files in.
+    format : Tuple[str, ...] or str, optional, default=("cube",)
+        Output formats to generate. Supported values:
+          - "cube": standard CUBE files. For two-component systems, writes
+            separate alpha and beta magnitude files ("_a.cube" and "_b.cube").
+          - "2ccube": two-component cube files (".2ccube"). For two-component
+            systems only, writes four datasets consecutively per orbital in the
+            order: alpha real, alpha imag, beta real, beta imag.
+        Multiple formats can be requested at once, e.g., formats=("cube","2ccube").
+    spacing : float, optional, default=0.2
+        The spacing between grid points in the cube file (in bohr).
+    padding : float, optional, default=4.0
+        The extra space (in bohr) added in all directions around the atoms when generating the grid.
+
+    Usage
+    -----
+    >>> write_orbital_cubes(system, C, indices=[0,1,2], prefix="orbital", filepath="cubes/", format=("cube","2ccube"))
+    """
+    # if format is a single string, convert it to a tuple
+    if isinstance(format, str):
+        format = (format,)
+    gen = CubeGenerator(spacing=spacing, padding=padding)
+    return gen.write_cubes(
+        system, C, indices=indices, prefix=prefix, filepath=filepath, formats=format
+    )
+
+
 def simple_grid(
     atoms, spacing: tuple[float, float, float], padding: tuple[float, float, float]
 ):
@@ -82,7 +133,15 @@ class CubeGenerator:
         self.spacing = [spacing, spacing, spacing]
         self.padding = [padding, padding, padding]
 
-    def run(self, system, C, indices=None, prefix="orbital", filepath=".") -> None:
+    def write_cubes(
+        self,
+        system,
+        C,
+        indices=None,
+        prefix="orbital",
+        filepath=".",
+        formats=("cube",),
+    ) -> None:
         """
         Generate cube files for the given orbitals.
 
@@ -108,9 +167,24 @@ class CubeGenerator:
             The prefix for the cube file names.
         filepath : str, optional, default="."
             The directory to save the cube files in.
+        formats : Tuple[str, ...], optional, default=("cube",)
+            Output formats to generate. Supported values:
+              - "cube": standard CUBE files. For two-component systems, writes
+                separate alpha and beta magnitude files ("_a.cube" and "_b.cube").
+              - "2ccube": two-component cube files (".2ccube"). For two-component
+                systems only, writes four datasets consecutively per orbital in the
+                order: alpha real, alpha imag, beta real, beta imag.
+            Multiple formats can be requested at once, e.g., formats=("cube","2ccube").
         """
 
         filepath = Path(filepath)
+
+        # validate formats
+        supported_formats = {"cube", "2ccube"}
+        invalid_formats = set(formats) - supported_formats
+        if invalid_formats:
+            logger.log(f"Warning: Ignoring unsupported cube formats: {invalid_formats}")
+
         # determine the indices of the orbitals to generate
         indices = indices if indices is not None else range(C.shape[1])
         max_index = max(indices)
@@ -182,54 +256,136 @@ class CubeGenerator:
 
         # write the cube files
         if system.two_component:
-            # for two-component systems, write the magnitude of alpha and beta parts in separate cube files
-            for i, index in enumerate(indices):
-                cube_a = self._make_cube(
-                    np.abs(values_a[:, i]), grid_origin, npoints, scaled_axes, system
-                )
-                _write_file(
-                    cube_a,
-                    filepath,
-                    f"{prefix}_{index:0{number_of_digits}d}_a.cube",
-                )
+            # two-component systems
+            # 1) standard cube magnitude outputs if requested
+            if "cube" in formats:
+                for i, index in enumerate(indices):
+                    cube_a = self._make_cube(
+                        np.abs(values_a[:, i]),
+                        grid_origin,
+                        npoints,
+                        scaled_axes,
+                        system,
+                    )
+                    _write_file(
+                        cube_a,
+                        filepath,
+                        f"{prefix}_{index:0{number_of_digits}d}_a.cube",
+                    )
 
-                cube_b = self._make_cube(
-                    np.abs(values_b[:, i]), grid_origin, npoints, scaled_axes, system
-                )
-                _write_file(
-                    cube_b,
-                    filepath,
-                    f"{prefix}_{index:0{number_of_digits}d}_b.cube",
-                )
+                    cube_b = self._make_cube(
+                        np.abs(values_b[:, i]),
+                        grid_origin,
+                        npoints,
+                        scaled_axes,
+                        system,
+                    )
+                    _write_file(
+                        cube_b,
+                        filepath,
+                        f"{prefix}_{index:0{number_of_digits}d}_b.cube",
+                    )
+
+            # 2) two-component four-field output if requested
+            if "2ccube" in formats:
+                # ensure we have separate real/imag pieces
+                # If the coefficient matrix is real, imag parts are zeros.
+                have_complex = np.iscomplexobj(values_a) or np.iscomplexobj(values_b)
+                for i, index in enumerate(indices):
+                    a_re = values_a[:, i].real.astype(float)
+                    a_im = (
+                        values_a[:, i].imag.astype(float)
+                        if have_complex
+                        else np.zeros_like(a_re)
+                    )
+                    b_re = values_b[:, i].real.astype(float)
+                    b_im = (
+                        values_b[:, i].imag.astype(float)
+                        if have_complex
+                        else np.zeros_like(b_re)
+                    )
+
+                    twocc = self._make_2ccube(
+                        a_re,
+                        a_im,
+                        b_re,
+                        b_im,
+                        grid_origin,
+                        npoints,
+                        scaled_axes,
+                        system,
+                    )
+                    _write_file(
+                        twocc,
+                        filepath,
+                        f"{prefix}_{index:0{number_of_digits}d}.2ccube",
+                    )
 
         else:
-            for i, index in enumerate(indices):
-                cube = self._make_cube(
-                    values[:, i], grid_origin, npoints, scaled_axes, system
-                )
-                _write_file(
-                    cube, filepath, f"{prefix}_{index:0{number_of_digits}d}.cube"
+            # one-component systems
+            if "cube" in formats:
+                for i, index in enumerate(indices):
+                    cube = self._make_cube(
+                        values[:, i], grid_origin, npoints, scaled_axes, system
+                    )
+                    _write_file(
+                        cube, filepath, f"{prefix}_{index:0{number_of_digits}d}.cube"
+                    )
+            if "2ccube" in formats:
+                logger.log(
+                    "Requested '2ccube' output for a one-component system; skipping this format."
                 )
 
-    def _make_cube(self, values, minr, npoints, axis, system):
+    def _make_header_and_coords(self, minr, npoints, axis, atoms, label):
         """
-        Create a cube file from the values.
+        Create the header and atom section of the cube file.
         """
-        # write the cube file
-        header = f"""Forte2 Cube File.
+        header = f"""{label}
 
-{len(system.atoms):6d} {minr[0]:10.6f} {minr[1]:10.6f} {minr[2]:10.6f}
+{len(atoms):6d} {minr[0]:10.6f} {minr[1]:10.6f} {minr[2]:10.6f}
 {npoints[0]:6d} {axis[0][0]:10.6f} {axis[0][1]:10.6f} {axis[0][2]:10.6f}
 {npoints[1]:6d} {axis[1][0]:10.6f} {axis[1][1]:10.6f} {axis[1][2]:10.6f}
 {npoints[2]:6d} {axis[2][0]:10.6f} {axis[2][1]:10.6f} {axis[2][2]:10.6f}"""
 
-        atoms = "\n".join(
+        coords = "\n".join(
             f"{Z:3d} {0.0:10.6f} {x:10.6f} {y:10.6f} {z:10.6f}"
-            for Z, (x, y, z) in system.atoms
+            for Z, (x, y, z) in atoms
+        )
+        return header, coords
+
+    def _make_cube(self, values, minr, npoints, axis, system):
+        """
+        Create a cube file from the values on a grid.
+        """
+        # write the cube file
+        header, coords = self._make_header_and_coords(
+            minr, npoints, axis, system.atoms, "Forte2 Cube File"
         )
 
         v = values.flatten()
         lines = [
             " ".join(f"{x:.5E}" for x in v[i : i + 6]) for i in range(0, len(v), 6)
         ]
-        return header + "\n" + atoms + "\n" + "\n".join(lines)
+        return header + "\n" + coords + "\n" + "\n".join(lines)
+
+    def _make_2ccube(self, a_re, a_im, b_re, b_im, minr, npoints, axis, system):
+        """
+        Create a two-component cube file containing four datasets written consecutively
+        in the order: alpha real, alpha imag, beta real, beta imag.
+        """
+        header, coords = self._make_header_and_coords(
+            minr, npoints, axis, system.atoms, "Forte2 2-Component Cube File"
+        )
+
+        v = np.concatenate(
+            [
+                a_re.flatten(),
+                a_im.flatten(),
+                b_re.flatten(),
+                b_im.flatten(),
+            ]
+        )
+        lines = [
+            " ".join(f"{x:.5E}" for x in v[i : i + 6]) for i in range(0, len(v), 6)
+        ]
+        return header + "\n" + coords + "\n" + "\n".join(lines)
