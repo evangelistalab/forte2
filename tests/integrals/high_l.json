@@ -1,0 +1,69 @@
+{
+    "molssi_bse_schema": {
+        "schema_type": "complete",
+        "schema_version": "0.1"
+    },
+    "revision_description": "Data from S. Lehtola",
+    "revision_date": "2020-05-05",
+    "elements": {
+        "1": {
+            "electron_shells": [
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        0
+                    ],
+                    "exponents": [
+                        "3.570467226624002e-02",
+                        "1.156831381426176e-01",
+                        "3.748133675820811e-01"
+                    ],
+                    "coefficients": [
+                        [
+                            "-4.997072916195289e-01",
+                            "3.129881482718586e-01",
+                            "-8.132808566523297e-01"
+                        ]
+                    ]
+                },
+                {
+                    "function_type": "gto",
+                    "region": "",
+                    "angular_momentum": [
+                        14
+                    ],
+                    "exponents": [
+                        "2.00000"
+                    ],
+                    "coefficients": [
+                        [
+                            "1.0000000"
+                        ]
+                    ]
+                }
+            ],
+            "references": [
+                {
+                    "reference_description": "sap_helfem_small",
+                    "reference_keys": [
+                        "lehtola2020b"
+                    ]
+                }
+            ]
+        }
+    },
+    "version": "1",
+    "function_types": [
+        "gto"
+    ],
+    "names": [
+        "sap_helfem_small"
+    ],
+    "tags": [],
+    "family": "lehtola_sap",
+    "description": "sap_helfem_small",
+    "role": "guess",
+    "auxiliaries": {},
+    "name": "sap_helfem_small"
+}

@@ -447,8 +447,21 @@ def coulomb_3c(system, basis1=None, basis2=None, basis3=None):
     coulomb_3c : ndarray
         The three-center two-electron Coulomb integral tensor.
     """
-    basis1, basis2, basis3 = _parse_basis_args_3c2e(system, basis1, basis2, basis3)
-    return ints.coulomb_3c(basis1, basis2, basis3)
+    _basis1, _basis2, _basis3 = _parse_basis_args_3c2e(system, basis1, basis2, basis3)
+
+    # max angular momentum supported:
+    # libcint: 14
+    # libint: 6
+    max_l = max(_basis1.max_l, _basis2.max_l, _basis3.max_l)
+    if max_l > 14:
+        raise ValueError(
+            f"coulomb_3c integral with basis functions of angular momentum > 14 "
+            f"is not supported (max_l = {max_l})"
+        )
+    elif max_l > 6:
+        return cint_coulomb_3c(system, basis1, basis2, basis3)
+    else:
+        return ints.coulomb_3c(_basis1, _basis2, _basis3)
 
 
 def coulomb_2c(system, basis1=None, basis2=None):
