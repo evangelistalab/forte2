@@ -323,7 +323,7 @@ def opVop(system, basis1=None, basis2=None):
     if system.use_gaussian_charges:
         # Requires libcint; raises a clear error if unavailable
         res = cint_opVop(system, basis1, basis2)
-        # Note: libcint returns [sigma_x, sigma_y, sigma_z, I2]. 
+        # Note: libcint returns [sigma_x, sigma_y, sigma_z, I2].
         # We reorder to [I2, sigma_x, sigma_y, sigma_z] (the same as libint2)
         return [res[3], res[0], res[1], res[2]]
     else:
@@ -629,7 +629,9 @@ def _parse_basis_args_cint_2c2e(system, basis1, basis2, origin=None):
     # 1. both basis sets are None -> set both to system.auxiliary_basis
     # 2. basis1 is provided, basis2 is None -> set basis2 to basis1
     if basis1 is None and basis2 is None:
-        atm, bas, env = basis_to_cint_envs(system, system.auxiliary_basis, common_origin=origin)
+        atm, bas, env = basis_to_cint_envs(
+            system, system.auxiliary_basis, common_origin=origin
+        )
         shell_slice = [
             0,
             system.auxiliary_basis.nshells,
@@ -648,6 +650,48 @@ def _parse_basis_args_cint_2c2e(system, basis1, basis2, origin=None):
         ns1 = basis1.nshells
         ns2 = basis2.nshells
         shell_slice = [0, ns1, ns1, ns1 + ns2]
+    return atm, bas, env, shell_slice
+
+
+def _parse_basis_args_cint_3c2e(system, basis1, basis2, basis3, origin=None):
+    # Note that cint computes (ij | P)
+    # 3 possible cases:
+    # 1. all basis sets are None -> set basis1 and basis2 to system.basis, and basis3 to system.auxiliary,
+    # 2. basis1 and basis 2 are None, and basis3 is provided -> set basis1 and basis2 to system.basis
+    # 3. all basis sets are provided
+    if basis1 is None and basis2 is None and basis3 is None:
+        atm, bas, env = basis_to_cint_envs(system, system.basis, common_origin=origin)
+        aux_atm, aux_bas, aux_env = basis_to_cint_envs(
+            system, system.auxiliary_basis, common_origin=origin
+        )
+        atm, bas, env = conc_env(atm, bas, env, aux_atm, aux_bas, aux_env)
+        nsh_basis = system.basis.nshells
+        nsh_aux = system.auxiliary_basis.nshells
+        shell_slice = [0, nsh_basis, 0, nsh_basis, nsh_basis, nsh_basis + nsh_aux]
+    elif basis1 is not None and basis2 is None and basis3 is not None:
+        atm, bas, env = basis_to_cint_envs(system, system.basis, common_origin=origin)
+        aux_atm, aux_bas, aux_env = basis_to_cint_envs(
+            system, basis3, common_origin=origin
+        )
+        atm, bas, env = conc_env(atm, bas, env, aux_atm, aux_bas, aux_env)
+        nsh_basis = system.basis.nshells
+        nsh_aux = basis3.nshells
+        shell_slice = [0, nsh_basis, 0, nsh_basis, nsh_basis, nsh_basis + nsh_aux]
+    elif basis2 is None and basis3 is not None:
+        raise ValueError("If basis2 is provided, basis1 must also be provided.")
+    else:
+        atm1, bas1, env1 = basis_to_cint_envs(system, basis1, common_origin=origin)
+        atm2, bas2, env2 = basis_to_cint_envs(system, basis2, common_origin=origin)
+        aux_atm, aux_bas, aux_env = basis_to_cint_envs(
+            system, basis3, common_origin=origin
+        )
+        atm, bas, env = conc_env(
+            atm1, bas1, env1, atm2, bas2, env2, aux_atm, aux_bas, aux_env
+        )
+        ns1 = basis1.nshells
+        ns2 = basis2.nshells
+        ns3 = basis3.nshells
+        shell_slice = [0, ns1, ns1, ns1 + ns2, ns1 + ns2, ns1 + ns2 + ns3]
     return atm, bas, env, shell_slice
 
 
@@ -834,7 +878,9 @@ def cint_emultipole1(system, basis1=None, basis2=None, origin=None):
         The first electric multipole moment integrals
     """
     _require_libcint()
-    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2, origin)
+    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(
+        system, basis1, basis2, origin
+    )
     res = ints.cint_int1e_r_sph(shell_slice, atm, bas, env)
     # C-layout, first index is the integral component (slowest changing)
     return _f2c(res)
@@ -866,3 +912,12 @@ def cint_coulomb_2c(system, basis1=None, basis2=None):
     atm, bas, env, shell_slice = _parse_basis_args_cint_2c2e(system, basis1, basis2)
     res = ints.cint_int2c2e_sph(shell_slice, atm, bas, env)
     return _f2c(res)
+
+
+def cint_coulomb_3c(system, basis1=None, basis2=None, basis3=None):
+    _require_libcint()
+    atm, bas, env, shell_slice = _parse_basis_args_cint_3c2e(
+        system, basis1, basis2, basis3
+    )
+    res = ints.cint_int3c2e_sph(shell_slice, atm, bas, env)
+    return res.transpose(2, 0, 1).copy()  # copy makes sure it's C-contiguous
