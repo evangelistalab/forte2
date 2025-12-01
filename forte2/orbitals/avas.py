@@ -251,7 +251,7 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         logger.log_info1("-" * 41)
         for i in self.minao_subspace:
             label = self.minao_labels[i[0]]
-            logger.log_info1(f"{label} {self.minao_subspace[1][2]:<12.6f}")
+            logger.log_info1(f"{label} {i[2]:<12.6f}")
         logger.log_info1("-" * 41)
         expl = self.subspace_counter < len(self.minao_subspace)
         logger.log_info1(

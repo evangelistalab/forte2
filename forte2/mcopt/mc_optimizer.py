@@ -115,7 +115,7 @@ class MCOptimizer(ActiveSpaceSolver):
     ci_energy_shift: float = None
 
     ### DIIS parameters
-    do_diis: bool = None
+    do_diis: bool = False
     diis_start: int = 15
     diis_nvec: int = 8
     diis_min: int = 4
