@@ -32,30 +32,42 @@ def _parse_basis_args_2c2e(system, basis1, basis2):
     # 1. both basis sets are None -> set both to system.auxiliary_basis
     # 2. basis1 is provided, basis2 is None -> set basis2 to basis1
     if basis1 is None and basis2 is None:
-        basis1 = system.auxiliary_basis
-        basis2 = system.auxiliary_basis
+        b1 = system.auxiliary_basis
+        b2 = system.auxiliary_basis
     elif basis1 is not None and basis2 is None:
-        basis2 = basis1
+        b1 = basis1
+        b2 = basis1
+    elif basis1 is not None and basis2 is not None:
+        b1 = basis1
+        b2 = basis2
     elif basis1 is None and basis2 is not None:
         raise ValueError("If basis2 is provided, basis1 must also be provided.")
-    return basis1, basis2
+    return b1, b2
 
 
 def _parse_basis_args_3c2e(system, basis1, basis2, basis3):
-    # 3 possible cases:
-    # 1. all basis sets are None -> set basis1 to system.auxiliary, basis2 and basis3 to system.basis
-    # 2. basis1 is provided, basis2 and basis3 are None -> set basis2 and basis3 to system.basis
-    # 3. all basis sets are provided
+    # basis1 defaults to system.auxiliary_basis if not provided
+    # basis2 and 3 default to system.basis if not provided
+    # if basis2 is provided and basis3 is not, basis3 = basis2
+    # if both provided, use as is
     if basis1 is None:
-        basis1 = system.auxiliary_basis
-    if basis2 is None and basis3 is not None:
-        raise ValueError("If basis3 is provided, basis2 must also be provided.")
-    if basis2 is None:
-        basis2 = system.basis
-    if basis3 is None:
-        basis3 = system.basis
+        b1 = system.auxiliary_basis
+    else:
+        b1 = basis1
 
-    return basis1, basis2, basis3
+    if basis2 is None and basis3 is None:
+        b2 = system.basis
+        b3 = system.basis
+    elif basis2 is not None and basis3 is None:
+        b2 = basis2
+        b3 = basis2
+    elif basis2 is not None and basis3 is not None:
+        b2 = basis2
+        b3 = basis3
+    elif basis2 is None and basis3 is not None:
+        raise ValueError("If basis3 is provided, basis2 must also be provided.")
+
+    return b1, b2, b3
 
 
 def _parse_basis_args_4c2e(system, basis1, basis2, basis3, basis4):
@@ -680,44 +692,29 @@ def _parse_basis_args_cint_2c2e(system, basis1, basis2, origin=None):
 
 
 def _parse_basis_args_cint_3c2e(system, basis1, basis2, basis3, origin=None):
-    # Note that cint computes (ij | P)
-    # 3 possible cases:
-    # 1. all basis sets are None -> set basis1 and basis2 to system.basis, and basis3 to system.auxiliary,
-    # 2. basis1 and basis 2 are None, and basis3 is provided -> set basis1 and basis2 to system.basis
-    # 3. all basis sets are provided
-    if basis1 is None and basis2 is None and basis3 is None:
-        atm, bas, env = basis_to_cint_envs(system, system.basis, common_origin=origin)
-        aux_atm, aux_bas, aux_env = basis_to_cint_envs(
-            system, system.auxiliary_basis, common_origin=origin
-        )
-        atm, bas, env = conc_env(atm, bas, env, aux_atm, aux_bas, aux_env)
-        nsh_basis = system.basis.nshells
+    # Note that cint expects (ij | P), but we output in (P | ij) layout like libint2.
+    # We handle all 8 possible cases for basis set inputs
+    if basis1 is None:
+        aux_atm, aux_bas, aux_env = basis_to_cint_envs(system, system.auxiliary_basis, common_origin=origin)
         nsh_aux = system.auxiliary_basis.nshells
-        shell_slice = [0, nsh_basis, 0, nsh_basis, nsh_basis, nsh_basis + nsh_aux]
-    elif basis1 is not None and basis2 is None and basis3 is not None:
-        atm, bas, env = basis_to_cint_envs(system, system.basis, common_origin=origin)
-        aux_atm, aux_bas, aux_env = basis_to_cint_envs(
-            system, basis3, common_origin=origin
-        )
-        atm, bas, env = conc_env(atm, bas, env, aux_atm, aux_bas, aux_env)
-        nsh_basis = system.basis.nshells
-        nsh_aux = basis3.nshells
-        shell_slice = [0, nsh_basis, 0, nsh_basis, nsh_basis, nsh_basis + nsh_aux]
-    elif basis2 is None and basis3 is not None:
-        raise ValueError("If basis2 is provided, basis1 must also be provided.")
     else:
-        atm1, bas1, env1 = basis_to_cint_envs(system, basis1, common_origin=origin)
-        atm2, bas2, env2 = basis_to_cint_envs(system, basis2, common_origin=origin)
-        aux_atm, aux_bas, aux_env = basis_to_cint_envs(
-            system, basis3, common_origin=origin
-        )
-        atm, bas, env = conc_env(
-            atm1, bas1, env1, atm2, bas2, env2, aux_atm, aux_bas, aux_env
-        )
-        ns1 = basis1.nshells
-        ns2 = basis2.nshells
-        ns3 = basis3.nshells
-        shell_slice = [0, ns1, ns1, ns1 + ns2, ns1 + ns2, ns1 + ns2 + ns3]
+        aux_atm, aux_bas, aux_env = basis_to_cint_envs(system, basis1, common_origin=origin)
+        nsh_aux = basis1.nshells
+
+    if basis2 is None and basis3 is None:
+        bas_atm, bas_bas, bas_env = basis_to_cint_envs(system, system.basis, common_origin=origin)
+        nsh_bas = system.basis.nshells
+        shell_slice = [0, nsh_bas, 0, nsh_bas, nsh_bas, nsh_bas + nsh_aux]
+    elif basis2 is not None and basis3 is None:
+        bas_atm, bas_bas, bas_env = basis_to_cint_envs(system, basis2, common_origin=origin)
+        nsh_bas = basis2.nshells
+        shell_slice = [0, nsh_bas, 0, nsh_bas, nsh_bas, nsh_bas + nsh_aux]
+    elif basis2 is not None and basis3 is not None:
+        raise ValueError("libcint doesn't support (P|QR) with three different basis sets.")
+    else:
+        raise ValueError("If basis3 is provided, basis2 must also be provided.")
+    
+    atm, bas, env = conc_env(bas_atm, bas_bas, bas_env, aux_atm, aux_bas, aux_env)
     return atm, bas, env, shell_slice
 
 
