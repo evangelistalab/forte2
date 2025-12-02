@@ -486,8 +486,21 @@ def coulomb_2c(system, basis1=None, basis2=None):
     coulomb_2c : ndarray
         The two-center two-electron Coulomb integral matrix.
     """
-    basis1, basis2 = _parse_basis_args_2c2e(system, basis1, basis2)
-    return ints.coulomb_2c(basis1, basis2)
+    _basis1, _basis2 = _parse_basis_args_2c2e(system, basis1, basis2)
+
+    # max angular momentum supported:
+    # libcint: 14
+    # libint: 6
+    max_l = max(_basis1.max_l, _basis2.max_l)
+    if max_l > 14:
+        raise ValueError(
+            f"coulomb_2c integral with basis functions of angular momentum > 14 "
+            f"is not supported (max_l = {max_l})"
+        )
+    elif max_l > 6:
+        return cint_coulomb_2c(system, basis1, basis2)
+    else:
+        return ints.coulomb_2c(_basis1, _basis2)
 
 
 def erf_coulomb_3c(system, omega, basis1=None, basis2=None, basis3=None):
