@@ -1,6 +1,6 @@
 ipykernel
 nbsphinx
-sphinx=8.1.3
+sphinx==8.1.3
 pydata-sphinx-theme
 numpydoc
 sphinx_autodoc_typehints
