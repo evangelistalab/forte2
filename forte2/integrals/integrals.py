@@ -32,30 +32,42 @@ def _parse_basis_args_2c2e(system, basis1, basis2):
     # 1. both basis sets are None -> set both to system.auxiliary_basis
     # 2. basis1 is provided, basis2 is None -> set basis2 to basis1
     if basis1 is None and basis2 is None:
-        basis1 = system.auxiliary_basis
-        basis2 = system.auxiliary_basis
+        b1 = system.auxiliary_basis
+        b2 = system.auxiliary_basis
     elif basis1 is not None and basis2 is None:
-        basis2 = basis1
+        b1 = basis1
+        b2 = basis1
+    elif basis1 is not None and basis2 is not None:
+        b1 = basis1
+        b2 = basis2
     elif basis1 is None and basis2 is not None:
         raise ValueError("If basis2 is provided, basis1 must also be provided.")
-    return basis1, basis2
+    return b1, b2
 
 
 def _parse_basis_args_3c2e(system, basis1, basis2, basis3):
-    # 3 possible cases:
-    # 1. all basis sets are None -> set basis1 to system.auxiliary, basis2 and basis3 to system.basis
-    # 2. basis1 is provided, basis2 and basis3 are None -> set basis2 and basis3 to system.basis
-    # 3. all basis sets are provided
+    # basis1 defaults to system.auxiliary_basis if not provided
+    # basis2 and 3 default to system.basis if not provided
+    # if basis2 is provided and basis3 is not, basis3 = basis2
+    # if both provided, use as is
     if basis1 is None:
-        basis1 = system.auxiliary_basis
-    if basis2 is None and basis3 is not None:
-        raise ValueError("If basis3 is provided, basis2 must also be provided.")
-    if basis2 is None:
-        basis2 = system.basis
-    if basis3 is None:
-        basis3 = system.basis
+        b1 = system.auxiliary_basis
+    else:
+        b1 = basis1
 
-    return basis1, basis2, basis3
+    if basis2 is None and basis3 is None:
+        b2 = system.basis
+        b3 = system.basis
+    elif basis2 is not None and basis3 is None:
+        b2 = basis2
+        b3 = basis2
+    elif basis2 is not None and basis3 is not None:
+        b2 = basis2
+        b3 = basis3
+    elif basis2 is None and basis3 is not None:
+        raise ValueError("If basis3 is provided, basis2 must also be provided.")
+
+    return b1, b2, b3
 
 
 def _parse_basis_args_4c2e(system, basis1, basis2, basis3, basis4):
@@ -323,7 +335,7 @@ def opVop(system, basis1=None, basis2=None):
     if system.use_gaussian_charges:
         # Requires libcint; raises a clear error if unavailable
         res = cint_opVop(system, basis1, basis2)
-        # Note: libcint returns [sigma_x, sigma_y, sigma_z, I2]. 
+        # Note: libcint returns [sigma_x, sigma_y, sigma_z, I2].
         # We reorder to [I2, sigma_x, sigma_y, sigma_z] (the same as libint2)
         return [res[3], res[0], res[1], res[2]]
     basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
@@ -447,8 +459,21 @@ def coulomb_3c(system, basis1=None, basis2=None, basis3=None):
     coulomb_3c : ndarray
         The three-center two-electron Coulomb integral tensor.
     """
-    basis1, basis2, basis3 = _parse_basis_args_3c2e(system, basis1, basis2, basis3)
-    return ints.coulomb_3c(basis1, basis2, basis3)
+    _basis1, _basis2, _basis3 = _parse_basis_args_3c2e(system, basis1, basis2, basis3)
+
+    # max angular momentum supported:
+    # libcint: 14
+    # libint: 6
+    max_l = max(_basis1.max_l, _basis2.max_l, _basis3.max_l)
+    if max_l > 14:
+        raise ValueError(
+            f"coulomb_3c integral with basis functions of angular momentum > 14 "
+            f"is not supported (max_l = {max_l})"
+        )
+    elif max_l > 6:
+        return cint_coulomb_3c(system, basis1, basis2, basis3)
+    else:
+        return ints.coulomb_3c(_basis1, _basis2, _basis3)
 
 
 def coulomb_2c(system, basis1=None, basis2=None):
@@ -473,8 +498,21 @@ def coulomb_2c(system, basis1=None, basis2=None):
     coulomb_2c : ndarray
         The two-center two-electron Coulomb integral matrix.
     """
-    basis1, basis2 = _parse_basis_args_2c2e(system, basis1, basis2)
-    return ints.coulomb_2c(basis1, basis2)
+    _basis1, _basis2 = _parse_basis_args_2c2e(system, basis1, basis2)
+
+    # max angular momentum supported:
+    # libcint: 14
+    # libint: 6
+    max_l = max(_basis1.max_l, _basis2.max_l)
+    if max_l > 14:
+        raise ValueError(
+            f"coulomb_2c integral with basis functions of angular momentum > 14 "
+            f"is not supported (max_l = {max_l})"
+        )
+    elif max_l > 6:
+        return cint_coulomb_2c(system, basis1, basis2)
+    else:
+        return ints.coulomb_2c(_basis1, _basis2)
 
 
 def erf_coulomb_3c(system, omega, basis1=None, basis2=None, basis3=None):
@@ -628,7 +666,9 @@ def _parse_basis_args_cint_2c2e(system, basis1, basis2, origin=None):
     # 1. both basis sets are None -> set both to system.auxiliary_basis
     # 2. basis1 is provided, basis2 is None -> set basis2 to basis1
     if basis1 is None and basis2 is None:
-        atm, bas, env = basis_to_cint_envs(system, system.auxiliary_basis, common_origin=origin)
+        atm, bas, env = basis_to_cint_envs(
+            system, system.auxiliary_basis, common_origin=origin
+        )
         shell_slice = [
             0,
             system.auxiliary_basis.nshells,
@@ -647,6 +687,33 @@ def _parse_basis_args_cint_2c2e(system, basis1, basis2, origin=None):
         ns1 = basis1.nshells
         ns2 = basis2.nshells
         shell_slice = [0, ns1, ns1, ns1 + ns2]
+    return atm, bas, env, shell_slice
+
+
+def _parse_basis_args_cint_3c2e(system, basis1, basis2, basis3, origin=None):
+    # Note that cint expects (ij | P), but we output in (P | ij) layout like libint2.
+    # We handle all 8 possible cases for basis set inputs
+    if basis1 is None:
+        aux_atm, aux_bas, aux_env = basis_to_cint_envs(system, system.auxiliary_basis, common_origin=origin)
+        nsh_aux = system.auxiliary_basis.nshells
+    else:
+        aux_atm, aux_bas, aux_env = basis_to_cint_envs(system, basis1, common_origin=origin)
+        nsh_aux = basis1.nshells
+
+    if basis2 is None and basis3 is None:
+        bas_atm, bas_bas, bas_env = basis_to_cint_envs(system, system.basis, common_origin=origin)
+        nsh_bas = system.basis.nshells
+        shell_slice = [0, nsh_bas, 0, nsh_bas, nsh_bas, nsh_bas + nsh_aux]
+    elif basis2 is not None and basis3 is None:
+        bas_atm, bas_bas, bas_env = basis_to_cint_envs(system, basis2, common_origin=origin)
+        nsh_bas = basis2.nshells
+        shell_slice = [0, nsh_bas, 0, nsh_bas, nsh_bas, nsh_bas + nsh_aux]
+    elif basis2 is not None and basis3 is not None:
+        raise ValueError("libcint doesn't support (P|QR) with three different basis sets.")
+    else:
+        raise ValueError("If basis3 is provided, basis2 must also be provided.")
+    
+    atm, bas, env = conc_env(bas_atm, bas_bas, bas_env, aux_atm, aux_bas, aux_env)
     return atm, bas, env, shell_slice
 
 
@@ -833,7 +900,9 @@ def cint_emultipole1(system, basis1=None, basis2=None, origin=None):
         The first electric multipole moment integrals
     """
     _require_libcint()
-    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2, origin)
+    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(
+        system, basis1, basis2, origin
+    )
     res = ints.cint_int1e_r_sph(shell_slice, atm, bas, env)
     # C-layout, first index is the integral component (slowest changing)
     return _f2c(res)
@@ -865,3 +934,12 @@ def cint_coulomb_2c(system, basis1=None, basis2=None):
     atm, bas, env, shell_slice = _parse_basis_args_cint_2c2e(system, basis1, basis2)
     res = ints.cint_int2c2e_sph(shell_slice, atm, bas, env)
     return _f2c(res)
+
+
+def cint_coulomb_3c(system, basis1=None, basis2=None, basis3=None):
+    _require_libcint()
+    atm, bas, env, shell_slice = _parse_basis_args_cint_3c2e(
+        system, basis1, basis2, basis3
+    )
+    res = ints.cint_int3c2e_sph(shell_slice, atm, bas, env)
+    return res.transpose(2, 0, 1).copy()  # copy makes sure it's C-contiguous

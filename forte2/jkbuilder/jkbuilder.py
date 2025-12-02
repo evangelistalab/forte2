@@ -4,7 +4,7 @@ import itertools
 from functools import cached_property
 
 import forte2
-from forte2 import ints
+from forte2 import integrals
 from forte2.helpers import logger
 from forte2.helpers.matrix_functions import cholesky_wrapper
 
@@ -95,7 +95,7 @@ class FockBuilder:
         logger.log_info1(
             f"Temporary memory requirement for 4-index integrals: {memory_gb:.2f} GB"
         )
-        eri_full = ints.coulomb_4c(basis)
+        eri_full = integrals.coulomb_4c(self.system)
         eri = eri_full.reshape((nbf**2,) * 2)
 
         B = cholesky_wrapper(eri, tol=cholesky_tol)
@@ -132,7 +132,7 @@ class FockBuilder:
         logger.log_info1(f"Number of auxiliary basis functions: {naux}")
 
         # Compute the integrals (P|Q) with P, Q in the auxiliary basis
-        M = ints.coulomb_2c(auxiliary_basis, auxiliary_basis)
+        M = integrals.coulomb_2c(self.system, auxiliary_basis)
 
         # Decompose M = L L.T
         L = sp.linalg.cholesky(M)
@@ -142,7 +142,7 @@ class FockBuilder:
         M_inv_sqrt = sp.linalg.solve_triangular(L.T, I, lower=True)
 
         # Compute the integrals (P|mn) with P in the auxiliary basis and m, n in the system basis
-        Pmn = ints.coulomb_3c(auxiliary_basis, basis, basis)
+        Pmn = integrals.coulomb_3c(self.system, auxiliary_basis)
 
         # Compute B[P|mn] = M^{-1/2}[P|Q] (Q|mn)
         B = np.einsum("PQ,Qmn->Pmn", M_inv_sqrt, Pmn, optimize=True)
