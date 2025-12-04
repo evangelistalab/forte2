@@ -109,6 +109,9 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
         else:
             # parent method is RelCISolver
             self.ci_solver = self.parent_method
+        if self.parent_method.final_orbital != "semicanonical":
+            # Prepare for change of basis after semicanonicalization
+            self.ci_solver.reset_eigensolver()
 
         self.E_core_orig = self.ci_solver.sub_solvers[0].ints.E
         self.H_orig = self.ci_solver.sub_solvers[0].ints.H.copy()

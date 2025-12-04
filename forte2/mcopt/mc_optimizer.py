@@ -373,7 +373,7 @@ class MCOptimizer(ActiveSpaceSolver):
                 g1=self.make_average_1rdm(),
                 C_contig=C_contig,
             )
-            self.C[0] = semi.C_semican[self.mo_space.contig_to_orig].copy()
+            self.C[0] = semi.C_semican[:, self.mo_space.contig_to_orig].copy()
 
             # recompute the CI vectors in the semicanonical basis
             if self.two_component:
@@ -393,6 +393,8 @@ class MCOptimizer(ActiveSpaceSolver):
                     use_aux_corr=True,
                 )
             self.ci_solver.set_ints(ints.E, ints.H, ints.V)
+            # Basis change, can't restart from previous CI vectors *reliably*
+            self.ci_solver.reset_eigensolver()
             self.ci_solver.run()
 
         self.executed = True

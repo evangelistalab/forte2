@@ -127,7 +127,7 @@ class _CIBase:
 
     ### Non-init attributes
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
-    first_run: bool = field(default=True, init=False)
+    rebuild_guess: bool = field(default=True, init=False)
     executed: bool = field(default=False, init=False)
 
     def __post_init__(self):
@@ -314,10 +314,11 @@ class _CIBase:
         # 4. Compute diagonal of the Hamiltonian
         self.eigensolver.add_h_diag(Hdiag)
 
-        # 5. Build the guess vectors if this is the first run
-        if self.first_run:
+        # 5. (Re-)build the guess vectors if requested. 
+        # This is always done on the first run at least, but can be forced again by e.g. reset_eigensolver.
+        if self.rebuild_guess:
             self._build_guess_vectors(Hdiag)
-            self.first_run = False
+            self.rebuild_guess = False
 
         if self.two_component:
             if self.ci_algorithm.lower() == "sparse":
@@ -1240,6 +1241,10 @@ class _CIBase:
             top_dets_per_root.append(top_dets)
 
         return top_dets_per_root
+    
+    def reset_eigensolver(self):
+        self.eigensolver = None
+        self.rebuild_guess = True
 
 
 @dataclass
@@ -1387,6 +1392,16 @@ class CISolver(ActiveSpaceSolver):
 
         self.executed = True
         return self
+    
+    def reset_eigensolver(self):
+        """
+        Reset the eigensolver for each sub-solver. 
+        This forces a re-initialization of the eigensolver in the next run, 
+        and also forces re-computation of the guess vectors.
+        This is useful whenever the integrals have changed (e.g. after semi-canonicalization).
+        """
+        for ci_solver in self.sub_solvers:
+            ci_solver.reset_eigensolver()
 
     def compute_average_energy(self):
         """
@@ -1663,6 +1678,7 @@ class RelCISolver(RelActiveSpaceSolver):
     get_top_determinants = CISolver.get_top_determinants
     set_ints = CISolver.set_ints
     compute_transition_properties = CISolver.compute_transition_properties
+    reset_eigensolver = CISolver.reset_eigensolver
 
     def __call__(self, parent_method):
         self.parent_method = parent_method

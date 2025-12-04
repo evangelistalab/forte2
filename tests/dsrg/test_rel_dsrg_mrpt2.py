@@ -80,7 +80,12 @@ def test_mrpt2_n2_sa_nonrel():
         diagonalize=True,
     )(rhf)
     mc = RelMCOptimizer(
-        nel=14, nroots=4, final_orbital="original", weights=[3, 1, 1, 1]
+        nel=14,
+        nroots=4,
+        final_orbital="original",
+        weights=[3, 1, 1, 1],
+        ci_econv=1e-12,
+        ci_rconv=1e-9,
     )(avas)
 
     dsrg = RelDSRG_MRPT2(flow_param=0.5, relax_reference="once")(mc)
@@ -96,6 +101,9 @@ def test_mrpt2_n2_sa_nonrel():
             -109.03182032,
         ]
     )
+
+
+test_mrpt2_n2_sa_nonrel()
 
 
 def test_mrpt2_carbon_rel_sa():
