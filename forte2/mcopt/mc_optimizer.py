@@ -219,6 +219,7 @@ class MCOptimizer(ActiveSpaceSolver):
             collapse_per_root=self.ci_collapse_per_root,
             basis_per_root=self.ci_basis_per_root,
             energy_shift=self.ci_energy_shift,
+            ci_algorithm=self.ci_algorithm,
         )(self.parent_method)
         # iteration 0: one step of CI optimization to bootstrap the orbital optimization
         self.iter = 0

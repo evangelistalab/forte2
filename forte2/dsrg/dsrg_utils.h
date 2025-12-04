@@ -4,8 +4,8 @@
 #include <cassert>
 #include "helpers/ndarray.h"
 
-#define MACHEPS 1e-9
-#define TAYLOR_THRES 1e-3
+#define TAYLOR_THRES 3
+#define SMALL 1e-3
 
 namespace forte2 {
 
@@ -29,7 +29,7 @@ double taylor_exp(double z) {
 /// @brief Computes the regularized denominator (1 - exp(-s*x^2)) / x
 double regularized_denominator(double x, double s) {
     double z = std::sqrt(s) * x;
-    if (fabs(z) <= MACHEPS) {
+    if (fabs(z) <= SMALL) {
         return taylor_exp(z) * std::sqrt(s);
     } else {
         return (1. - std::exp(-s * x * x)) / x;
