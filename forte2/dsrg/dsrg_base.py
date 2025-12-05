@@ -31,6 +31,16 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
 
     def __call__(self, parent_method):
         self.parent_method = parent_method
+        assert isinstance(self.parent_method, ActiveSpaceSolver), (
+            "Parent method must be an ActiveSpaceSolver."
+        
+        )
+        # This is to ensure that the CI vectors are converged after 
+        # the basis is changed to semicanonical orbitals.
+        # We could handle it here, but it's cleaner to enforce it at the parent method level.
+        assert self.parent_method.final_orbital.lower() == "semicanonical", (
+            "The final_orbital of the parent method must be 'semicanonical' for DSRG methods."
+        )
         return self
 
     def __post_init__(self):
@@ -61,7 +71,6 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
         self.relax_energies = np.zeros((self.nrelax + 1, 3))
 
     def _startup(self):
-        assert isinstance(self.parent_method, ActiveSpaceSolver)
         if not self.parent_method.executed:
             self.parent_method.run()
 
@@ -109,9 +118,6 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
         else:
             # parent method is RelCISolver
             self.ci_solver = self.parent_method
-        if self.parent_method.final_orbital != "semicanonical":
-            # Prepare for change of basis after semicanonicalization
-            self.ci_solver.reset_eigensolver()
 
         self.E_core_orig = self.ci_solver.sub_solvers[0].ints.E
         self.H_orig = self.ci_solver.sub_solvers[0].ints.H.copy()

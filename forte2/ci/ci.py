@@ -1506,6 +1506,19 @@ class CISolver(ActiveSpaceSolver):
         for ci_solver in self.sub_solvers:
             ci_solver.set_ints(scalar, oei, tei)
 
+    def set_maxiter(self, maxiter):
+        """
+        Set the maximum number of iterations for the CI solver.
+
+        Parameters
+        ----------
+        maxiter : int
+            The maximum number of iterations to set.
+        """
+        self.maxiter = maxiter
+        for ci_solver in self.sub_solvers:
+            ci_solver.set_maxiter(maxiter)
+
     def compute_natural_occupation_numbers(self):
         """
         Compute the natural occupation numbers for the CI states.
@@ -1622,7 +1635,10 @@ class CI(CISolver):
                 use_aux_corr=True,
             )
             self.set_ints(ints.E, ints.H, ints.V)
+            self.reset_eigensolver()
+            self.set_maxiter(500)
             super().run()
+            self.set_maxiter(self.maxiter)
 
         return self
 
@@ -1679,6 +1695,7 @@ class RelCISolver(RelActiveSpaceSolver):
     set_ints = CISolver.set_ints
     compute_transition_properties = CISolver.compute_transition_properties
     reset_eigensolver = CISolver.reset_eigensolver
+    set_maxiter = CISolver.set_maxiter
 
     def __call__(self, parent_method):
         self.parent_method = parent_method
@@ -1780,7 +1797,10 @@ class RelCI(RelCISolver):
                 use_aux_corr=True,
             )
             self.set_ints(ints.E, ints.H, ints.V)
+            self.reset_eigensolver()
+            self.set_maxiter(500)
             super().run()
+            self.set_maxiter(self.maxiter)
 
         return self
 

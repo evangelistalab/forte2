@@ -168,7 +168,7 @@ def test_slater_rules_2_complex():
     )
 
     slater_rules = forte2.RelSlaterRules(
-        norb, ints.E, ints.H.astype(complex), ints.V.astype(complex)
+        norb, ints.E.real, ints.H.astype(complex), ints.V.astype(complex)
     )
 
     nca = scf.na - len(core_orbitals) // 2
@@ -254,3 +254,4 @@ def test_slater_rules_3_complex():
 
     assert E == approx(eref)
     assert E == approx(ci.E[0])
+test_slater_rules_2_complex()
