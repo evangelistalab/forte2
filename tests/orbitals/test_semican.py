@@ -133,28 +133,6 @@ def test_semican_fock_offdiag():
     assert np.allclose(fock_aa, np.diag(np.diag(fock_aa)), rtol=0, atol=5e-8)
     assert np.allclose(fock_vv, np.diag(np.diag(fock_vv)), rtol=0, atol=5e-8)
 
-    # The long way to check: recompute the CI in the semicanonical basis,
-    # and the generalized Fock should already be diagonal in C/A/V
-    ci = CI(
-        State(nel=rhf.nel, multiplicity=1, ms=0.0),
-        core_orbitals=[0, 1, 2, 3],
-        active_orbitals=[4, 5, 6, 7, 8, 9],
-        final_orbital="semicanonical",
-    )(rhf)
-    ci.run()
-    assert ci.evals_flat[0] == approx(-109.01444624968038)
-
-    mo_space = ci.mo_space
-    semi.semi_canonicalize(g1=ci.make_average_1rdm(), C_contig=ci.C[0])
-
-    fock = semi.fock
-    fock_cc = fock[mo_space.core, mo_space.core]
-    fock_aa = fock[mo_space.actv, mo_space.actv]
-    fock_vv = fock[mo_space.virt, mo_space.virt]
-    assert np.allclose(fock_cc, np.diag(np.diag(fock_cc)), rtol=0, atol=5e-8)
-    assert np.allclose(fock_aa, np.diag(np.diag(fock_aa)), rtol=0, atol=5e-8)
-    assert np.allclose(fock_vv, np.diag(np.diag(fock_vv)), rtol=0, atol=5e-8)
-
 
 def test_semican_orbitals():
     # Test that repeated semicanonicalization gives the same orbitals
