@@ -43,7 +43,7 @@ NB_MODULE(_forte2, m) {
     export_sparse_exp_api(m);
     export_sparse_fact_exp_api(m);
     export_sq_operator_string_api(m);
-    m.attr("__version__") = "0.2.2";
+    m.attr("__version__") = "0.3.0";
     m.attr("__author__") = "Forte2 Developers";
 }
 } // namespace forte2
