@@ -266,7 +266,9 @@ class DavidsonLiuSolver:
             # precondition
             denom = lamr[np.newaxis, :] - self.h_diag[:, np.newaxis]
             mask = np.abs(denom) > 1e-6
-            R = np.where(mask, R / denom, 0.0)
+            # vectorize division only where denom is not too small, setting others to 0
+            R[~mask] = 0.0
+            np.divide(R, denom, out=R, where=mask)
             self.r[:, : self.nroot] = R
 
             # norms & convergence
@@ -359,12 +361,12 @@ class DavidsonLiuSolver:
         )
 
         # orthonormalize final evecs
-        # Qf, _ = qr(evecs, mode="reduced")
+        Qf, _ = qr(evecs, mode="reduced")
         self.basis_size = self.nroot
-        self.b[:, : self.nroot] = evecs
+        self.b[:, : self.nroot] = Qf
         self.sigma_size = 0
         self._executed = True
-        return lamr, evecs
+        return lamr, Qf
 
     def _collapse(self, alpha):
         """

@@ -317,9 +317,8 @@ def test_dl_restart_2():
     assert evals[0] == approx(ref_evals2[0])
 
 
-def test_dl_restart_3():
-    """Test restarting DavidsonLiuSolver with a rotated matrix.
-    Calling solve() twice with an updated sigma-builder and diagonal."""
+def test_dl_restart_from_unconverged():
+    """Test restarting DavidsonLiuSolver from an unconverged solution."""
     size = 500
     nroot = 10
     rng = np.random.default_rng(42)
@@ -335,29 +334,16 @@ def test_dl_restart_3():
         nroot=nroot,
         collapse_per_root=2,
         basis_per_root=5,
-        maxiter=500,
+        maxiter=10,
     )
     solver.add_h_diag(np.diag(matrix))
     solver.add_sigma_builder(sigma_builder)
     guesses = np.eye(size)[:, :nroot]
     solver.add_guesses(guesses)
     evals, _ = solver.solve()
-    assert solver.converged
-    assert evals[:nroot] == approx(ref_evals[:nroot])
 
-    # Update the matrix.
-    # generate a random unitary rotation
-    u, _, vt = np.linalg.svd(rng.random((size, size)))
-    rot = u @ vt
-    matrix2 = rot.T @ matrix @ rot
-
-    def sigma_builder2(basis_block: np.ndarray, sigma_block: np.ndarray) -> None:
-        sigma_block[:] = matrix2 @ basis_block
-
-    solver.add_h_diag(np.diag(matrix2))
-    solver.add_sigma_builder(sigma_builder2)
-    evals, _ = solver.solve()
-    assert solver.converged
+    while not solver.converged:
+        evals, _ = solver.solve()
 
     assert evals[:nroot] == approx(ref_evals[:nroot])
 
