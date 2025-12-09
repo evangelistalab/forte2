@@ -107,7 +107,7 @@ def eigh_gen(A, B=None, remove_lindep=True, orth_tol=1e-7, orth_method="canonica
         else:  # TODO: add partial cholesky: 10.1063/1.5139948
             raise ValueError("Invalid orthogonalization method.")
 
-        A = X.T @ A @ X
+        A = X.T.conj() @ A @ X
         e, c = np.linalg.eigh(A)
         return e, X @ c
     else:
@@ -184,7 +184,7 @@ def cholesky_wrapper(M, tol):
     return B
 
 
-def block_diag_2x2(M, complex=True):
+def block_diag_2x2(M, force_complex=True):
     """
     Return a block-diagonal matrix with two copies of `M` on the diagonal.
     Note this is **not** a function to block-diagonalize a matrix.
@@ -193,7 +193,7 @@ def block_diag_2x2(M, complex=True):
     ----------
     M : NDArray
         The matrix to convert, shape (n, n).
-    complex : bool, optional, default=True
+    force_complex : bool, optional, default=True
         If True, the output will be explicitly converted to complex type.
 
     Returns
@@ -202,7 +202,7 @@ def block_diag_2x2(M, complex=True):
         The block-diagonal matrix, shape (2n, 2n).
     """
     A = sp.linalg.block_diag(M, M)
-    if complex and not np.iscomplexobj(A):
+    if force_complex and not np.iscomplexobj(A):
         return A.astype(np.complex128)
     else:
         return A
@@ -214,13 +214,13 @@ def i_sigma_dot(scalar, x, y, z):
 
     Parameters
     ----------
-    scalar : float or complex
+    scalar : ndarray
         The scalar component.
-    x : float or complex
+    x : ndarray
         The x component.
-    y : float or complex
+    y : ndarray
         The y component.
-    z : float or complex
+    z : ndarray
         The z component.
 
     Returns

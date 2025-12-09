@@ -79,9 +79,11 @@ def test_j_adapted_ghf():
     # The two bases should yield the same result
     eref = -75.427367675651
     s2ref = 0.7525463566917241
+
     xyz = """
     O 0 0 0
-    H 0 0 1.1"""
+    H 0 0 1.1
+    """
     system = System(
         xyz=xyz,
         basis_set="cc-pVDZ",

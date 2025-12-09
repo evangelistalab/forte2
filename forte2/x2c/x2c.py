@@ -92,18 +92,18 @@ class X2CHelper:
         self.X = self._get_decoupling_matrix(c_dirac)
 
         # build the transformation matrix R
-        self.R = self._get_transformation_matrix(S, T, self.X, tol=X2C_LINDEP_TOL)
+        self.R = self._get_transformation_matrix(S, T, tol=X2C_LINDEP_TOL)
 
         # build the Foldy-Wouthuysen Hamiltonian
-        h_fw = self._build_foldy_wouthuysen_hamiltonian(self.X, self.R, T, V, W)
+        h_fw = self._build_foldy_wouthuysen_hamiltonian(T, V, W)
 
         # project back to the contracted basis
         h_fw = self.proj.conj().T @ h_fw @ self.proj
 
         if self.snso_type is not None:
             nbf = self.system.nbf
-            hab = h_fw[:nbf, nbf:]
             haa = h_fw[:nbf, :nbf]
+            hab = h_fw[:nbf, nbf:]
             hba = h_fw[nbf:, :nbf]
             hbb = h_fw[nbf:, nbf:]
             # the pauli representation of a spin-dependent operator.
@@ -125,6 +125,11 @@ class X2CHelper:
     def electric_dipole_moment(self, origin=None):
         """
         Compute the electric dipole moment integrals with picture change correction.
+
+        Parameters
+        ----------
+        origin : list or NDArray, optional
+            The origin for the dipole moment integrals. If None, the origin is set to (0, 0, 0).
 
         Returns
         -------
@@ -214,9 +219,9 @@ class X2CHelper:
             return S, T, V, W[0]
         elif self.system.x2c_type == "so":
             return (
-                block_diag_2x2(S),
-                block_diag_2x2(T),
-                block_diag_2x2(V),
+                block_diag_2x2(S, force_complex=False),
+                block_diag_2x2(T, force_complex=False),
+                block_diag_2x2(V, force_complex=False),
                 i_sigma_dot(*W),
             )
 
@@ -244,12 +249,12 @@ class X2CHelper:
         cspos = c_dirac[nbf:, nbf:]
         return cspos @ scipy.linalg.pinv(clpos)
 
-    def _get_transformation_matrix(self, S, T, X, tol=1e-9):
+    def _get_transformation_matrix(self, S, T, tol=1e-9):
         """
         This implementation follows eqs 26-34 of J. Chem. Phys. 131, 031104 (2009),
         which avoids doing matrix inversions and leads to a more numerically stable transformation.
         """
-        S_tilde = S + (0.5 / LIGHT_SPEED**2) * X.conj().T @ T @ X
+        S_tilde = S + (0.5 / LIGHT_SPEED**2) * self.X.conj().T @ T @ self.X
         lam, z = eigh_gen(
             S_tilde, S, remove_lindep=True, orth_tol=tol, orth_method="canonical"
         )
@@ -264,15 +269,15 @@ class X2CHelper:
         # SSS12 = forte2.helpers.invsqrt_matrix(SSS, tol=tol)
         # return S12 @ SSS12 @ Ssqrt
 
-    def _build_foldy_wouthuysen_hamiltonian(self, X, R, T, V, W):
+    def _build_foldy_wouthuysen_hamiltonian(self, T, V, W):
         L = (
-            T @ X
-            + X.conj().T @ T
-            - X.conj().T @ T @ X
+            T @ self.X
+            + self.X.conj().T @ T
+            - self.X.conj().T @ T @ self.X
             + V
-            + (0.25 / LIGHT_SPEED**2) * X.conj().T @ W @ X
+            + (0.25 / LIGHT_SPEED**2) * self.X.conj().T @ W @ self.X
         )
-        return R.conj().T @ L @ R
+        return self.R.conj().T @ L @ self.R
 
     def _apply_snso_scaling(self, ints):
         """
