@@ -838,6 +838,39 @@ def cint_emultipole1(system, basis1=None, basis2=None, origin=None):
     # C-layout, first index is the integral component (slowest changing)
     return _f2c(res)
 
+def cint_sprsp(system, basis1=None, basis2=None, origin=None):
+    r"""
+    Compute the small-component dipole integral between two basis sets using the Libcint library.
+
+    .. math::
+        D^{12}_{\mu\nu,\alpha} = \int (\sigma\cdot\hat{p}) \chi^{1}_\mu(\mathbf{r}) r_\alpha (\sigma\cdot\hat{p}) \chi^{2}_\nu(\mathbf{r}) d\mathbf{r}
+
+    where :math:`\alpha` represents the x, y, or z component.
+
+    Parameters
+    ----------
+    system : System
+        The molecular system containing the basis sets.
+    basis1 : BasisSet, optional
+        The first basis set. If None, defaults to system.basis.
+    basis2 : BasisSet, optional
+        The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
+    origin : array-like, optional
+        The origin for the multipole expansion. If None, defaults to [0.0, 0.0, 0.0].
+    
+    Returns
+    -------
+    sprsp : ndarray
+        The small-component dipole integrals. Order of components:
+        [ mu_{x, sigma_x}, mu_{x, sigma_y}, mu_{x, sigma_z}, mu_{x, I2},
+          mu_{y, sigma_x}, mu_{y, sigma_y}, mu_{y, sigma_z}, mu_{y, I2},
+          mu_{z, sigma_x}, mu_{z, sigma_y}, mu_{z, sigma_z}, mu_{z, I2} ]
+    """
+    _require_libcint()
+    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2, origin)
+    res = ints.cint_int1e_sprsp_sph(shell_slice, atm, bas, env)
+    # C-layout, first index is the integral component (slowest changing)
+    return _f2c(res)
 
 def cint_coulomb_2c(system, basis1=None, basis2=None):
     r"""

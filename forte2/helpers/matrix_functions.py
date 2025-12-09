@@ -183,6 +183,7 @@ def cholesky_wrapper(M, tol):
     B = np.triu(C)[:rank, inv_piv]
     return B
 
+
 def block_diag_2x2(M, complex=True):
     """
     Return a block-diagonal matrix with two copies of `M` on the diagonal.
@@ -201,7 +202,30 @@ def block_diag_2x2(M, complex=True):
         The block-diagonal matrix, shape (2n, 2n).
     """
     A = sp.linalg.block_diag(M, M)
-    if complex:
+    if complex and not np.iscomplexobj(A):
         return A.astype(np.complex128)
     else:
         return A
+
+
+def i_sigma_dot(scalar, x, y, z):
+    """
+    Construct the matrix i * (I2, sigma_x, sigma_y, sigma_z) dot (scalar, x, y, z).
+
+    Parameters
+    ----------
+    scalar : float or complex
+        The scalar component.
+    x : float or complex
+        The x component.
+    y : float or complex
+        The y component.
+    z : float or complex
+        The z component.
+
+    Returns
+    -------
+    NDArray
+        The 2x2 matrix representation.
+    """
+    return np.block([[scalar + z * 1j, x * 1j + y], [x * 1j - y, scalar - z * 1j]])
