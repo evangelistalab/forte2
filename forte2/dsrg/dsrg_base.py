@@ -69,6 +69,7 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
             self.nrelax = 0
         # [Edsrg(fixed_reference), Edsrg(relaxed_reference), Eref]
         self.relax_energies = np.zeros((self.nrelax + 1, 3))
+        self.relax_eigvals_history = []
 
     def _startup(self):
         if not self.parent_method.executed:
@@ -163,6 +164,7 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
             self.relax_energies[irelax, 0] = self.E_dsrg.real
             self.relax_energies[irelax, 2] = self.ints["E"].real
             self.E_relaxed_ref = self.do_reference_relaxation()
+            self.relax_eigvals_history.append(self.relax_eigvals)
             self.relax_energies[irelax, 1] = self.E_relaxed_ref.real
 
             logger.log_info1(
@@ -196,6 +198,7 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
                 pretty_print_ci_summary(
                     self.ci_solver.sa_info, self.ci_solver.evals_per_solver
                 )
+        self.relax_eigvals_history = np.array(self.relax_eigvals_history)
         self.executed = True
         return self
 
