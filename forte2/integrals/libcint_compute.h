@@ -1,5 +1,5 @@
 #pragma once
-
+#include <thread>
 #include <complex.h>
 #include <variant>
 #include <future>
@@ -135,7 +135,7 @@ void fill_3c_sym(np_tensor3_f& ints) {
     const auto nsym = ints.shape(0);
     const auto nk = ints.shape(2);
 
-    const size_t num_threads = std::thread::hardware_concurrency();
+    const size_t num_threads = std::max(std::size_t(1), std::thread::hardware_concurrency());
     std::vector<std::future<void>> tasks;
 
     // The symmetry is in the i and j indices

@@ -694,25 +694,35 @@ def _parse_basis_args_cint_3c2e(system, basis1, basis2, basis3, origin=None):
     # Note that cint expects (ij | P), but we output in (P | ij) layout like libint2.
     # We handle all 8 possible cases for basis set inputs
     if basis1 is None:
-        aux_atm, aux_bas, aux_env = basis_to_cint_envs(system, system.auxiliary_basis, common_origin=origin)
+        aux_atm, aux_bas, aux_env = basis_to_cint_envs(
+            system, system.auxiliary_basis, common_origin=origin
+        )
         nsh_aux = system.auxiliary_basis.nshells
     else:
-        aux_atm, aux_bas, aux_env = basis_to_cint_envs(system, basis1, common_origin=origin)
+        aux_atm, aux_bas, aux_env = basis_to_cint_envs(
+            system, basis1, common_origin=origin
+        )
         nsh_aux = basis1.nshells
 
     if basis2 is None and basis3 is None:
-        bas_atm, bas_bas, bas_env = basis_to_cint_envs(system, system.basis, common_origin=origin)
+        bas_atm, bas_bas, bas_env = basis_to_cint_envs(
+            system, system.basis, common_origin=origin
+        )
         nsh_bas = system.basis.nshells
         shell_slice = [0, nsh_bas, 0, nsh_bas, nsh_bas, nsh_bas + nsh_aux]
     elif basis2 is not None and basis3 is None:
-        bas_atm, bas_bas, bas_env = basis_to_cint_envs(system, basis2, common_origin=origin)
+        bas_atm, bas_bas, bas_env = basis_to_cint_envs(
+            system, basis2, common_origin=origin
+        )
         nsh_bas = basis2.nshells
         shell_slice = [0, nsh_bas, 0, nsh_bas, nsh_bas, nsh_bas + nsh_aux]
-    elif basis2 is not None and basis3 is not None:
-        raise ValueError("libcint doesn't support (P|QR) with three different basis sets.")
+    elif basis2 is not None and basis3 is not None and basis2 != basis3:
+        raise ValueError(
+            "libcint doesn't support (P|QR) with Q and R being different basis sets."
+        )
     else:
         raise ValueError("If basis3 is provided, basis2 must also be provided.")
-    
+
     atm, bas, env = conc_env(bas_atm, bas_bas, bas_env, aux_atm, aux_bas, aux_env)
     return atm, bas, env, shell_slice
 
