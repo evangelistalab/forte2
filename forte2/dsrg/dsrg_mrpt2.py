@@ -35,6 +35,20 @@ class DSRG_MRPT2(DSRGBase):
     relax_tol : float, optional, default=1e-6
         The convergence tolerance for reference relaxation (in Hartree).
 
+    Attributes
+    ----------
+    E_dsrg : float
+        The DSRG-MRPT2 total energy evaluated with the current reference.
+    E_relaxed_ref : float
+        The DSRG-MRPT2 total energy after reference relaxation.
+    relax_energies : NDArray
+        The history of DSRG-MRPT2 total energies during reference relaxation.
+        Given as [[Edsrg(fixed_reference), Edsrg(relaxed_reference), Eref], ...].
+    relax_eigvals : np.ndarray
+        The eigenvalues of the relaxed CI Hamiltonian.
+    relax_eigvals_history : NDArray
+        The history of eigenvalues of the relaxed CI Hamiltonian during relaxation.
+
     References
     ----------
     .. [1] F. A. Evangelista, "A driven similarity renormalization group approach to quantum many-body problems",
