@@ -6,7 +6,6 @@
 #include "helpers/blas.h"
 #include "helpers/logger.h"
 #include "helpers/memory.h"
-#include "helpers/parallel.h"
 
 #include "ci_sigma_builder.h"
 
