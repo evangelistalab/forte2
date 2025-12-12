@@ -1,5 +1,4 @@
 #pragma once
-#include <thread>
 #include <complex.h>
 #include <variant>
 #include <future>
@@ -7,6 +6,7 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
 
+#include "helpers/parallel.h"
 #include "helpers/ndarray.h"
 
 #if FORTE2_USE_LIBCINT
@@ -135,7 +135,7 @@ void fill_3c_sym(np_tensor3_f& ints) {
     const auto nsym = ints.shape(0);
     const auto nk = ints.shape(2);
 
-    const size_t num_threads = std::max(std::size_t(1), std::thread::hardware_concurrency());
+    const auto num_threads = get_num_threads();
     std::vector<std::future<void>> tasks;
 
     // The symmetry is in the i and j indices
@@ -204,7 +204,7 @@ np_tensor3_f cint_int3c(CIntorFunc intor, const std::vector<int>& shell_slice, n
     double* buf = ints.data();
     int dims[3] = {nao_i, nao_j, nao_k};
 
-    const std::size_t num_threads = std::thread::hardware_concurrency();
+    const auto num_threads = get_num_threads();
     std::vector<std::future<void>> tasks;
 
     auto kernel = [&](std::size_t ksh_begin, std::size_t ksh_end) {
