@@ -1,4 +1,4 @@
-// This header defines libcint-backed two-center integral wrappers.
+// This header defines libcint-backed three-center integral wrappers.
 // It is only compiled when FORTE2_USE_LIBCINT is enabled.
 #pragma once
 
