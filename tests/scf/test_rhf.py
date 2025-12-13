@@ -1,6 +1,9 @@
+import pytest
+
 from forte2 import System
 from forte2.scf import RHF
 from forte2.helpers.comparisons import approx
+from forte2.system import BSE_AVAILABLE
 
 
 def test_rhf():
@@ -71,3 +74,20 @@ def test_rhf_level_shift():
     mf = RHF(charge=0, level_shift=0.5, do_diis=False)(system)
     mf.run()
     assert mf.E == approx(eref)
+
+
+@pytest.mark.skipif(not BSE_AVAILABLE, reason="basis_set_exchange not installed")
+def test_rhf_cr2_autoaux():
+    xyz = """
+    Cr 0 0 0
+    Cr 0 0 1.681
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvtz",
+        auxiliary_basis_set="cc-pvtz-autoaux",
+    )
+    scf = RHF(charge=0)(system)
+    scf.run()
+
+    assert scf.E == approx(-2085.926511540128)

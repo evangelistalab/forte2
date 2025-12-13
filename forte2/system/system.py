@@ -206,6 +206,13 @@ class System:
             else:
                 self.auxiliary_basis_corr = self.auxiliary_basis
         else:
+            if (
+                self.auxiliary_basis_set is not None
+                or self.auxiliary_basis_set_corr is not None
+            ):
+                logger.log_warning(
+                    "Ignoring provided auxiliary basis sets since cholesky_tei=True!"
+                )
             self.auxiliary_basis = None
             self.auxiliary_basis_corr = None
 

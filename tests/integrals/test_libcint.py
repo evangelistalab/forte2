@@ -1,5 +1,9 @@
 import numpy as np
 import pytest
+from pathlib import Path
+
+THIS_DIR = Path(__file__).parent
+
 
 from forte2 import System, integrals
 from forte2.system.build_basis import build_basis
@@ -17,6 +21,20 @@ def test_libcint_overlap():
     s_int2 = integrals.overlap(system)
     assert np.linalg.norm(s_cint - s_int2) < 1e-6
     assert np.linalg.norm(s_cint) == pytest.approx(3.6556110774906956, rel=1e-6)
+
+
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_libcint_overlap_cross():
+    xyz = """
+    Li 0 0 0
+    Li 0 0 1.9
+    """
+    system = System(xyz, basis_set="sto-3g", auxiliary_basis_set="def2-universal-jkfit")
+    s_cint = integrals.cint_overlap(system, system.basis, system.auxiliary_basis)
+    s_int2 = integrals.overlap(system, system.basis, system.auxiliary_basis)
+
+    assert np.linalg.norm(s_cint - s_int2) < 1e-6
+    assert np.linalg.norm(s_cint) == pytest.approx(6.263577351975621, rel=1e-6)
 
 
 @pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
@@ -130,6 +148,19 @@ def test_libcint_2c2e():
 
 
 @pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_libcint_2c2e_cross():
+    xyz = """
+    N 0 0 0
+    N 0 0 1.1
+    """
+    system = System(xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pvtz-jkfit")
+    s_cint = integrals.cint_coulomb_2c(system, system.basis, system.auxiliary_basis)
+    s_int2 = integrals.coulomb_2c(system, system.basis, system.auxiliary_basis)
+    assert np.linalg.norm(s_cint - s_int2) < 1e-6
+    assert np.linalg.norm(s_cint) == pytest.approx(149.6527772441834, rel=1e-6)
+
+
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
 def test_libcint_r_sph():
     xyz = """
     Li 0 0 0
@@ -158,6 +189,34 @@ def test_libcint_r_sph_shifted_origin():
         # s_int2 = [overlap, x, y, z], so skip the zeroth element
         assert np.linalg.norm(s_cint[i] - s_int2[i + 1]) < 1e-6
     assert np.linalg.norm(s_cint) == pytest.approx(11.116795764727945, rel=1e-6)
+
+
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_libcint_coulomb_3c():
+    xyz = """
+    O
+    H 1 1.1
+    H 1 1.1 2 104.5
+    """
+    system = System(xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pvtz-jkfit")
+    s_cint = integrals.cint_coulomb_3c(system)
+    s_int2 = integrals.coulomb_3c(system)
+
+    assert np.linalg.norm(s_cint - s_int2) < 1e-6
+    assert np.linalg.norm(s_cint) == pytest.approx(60.4085268377979, rel=1e-6)
+
+
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_libcint_coulomb_3c_high_l():
+    xyz = "H 0 0 0\nH 0 0 1.0"
+    system = System(
+        xyz,
+        basis_set="sap_helfem_small",
+        auxiliary_basis_set=str(THIS_DIR / "high_l.json"),
+        minao_basis_set=None,
+    )
+    s_cint = integrals.coulomb_3c(system)
+    assert np.linalg.norm(s_cint) == pytest.approx(16.215155263070397, rel=1e-6)
 
 
 @pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
