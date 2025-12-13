@@ -112,7 +112,7 @@ def test_custom_basis_with_decontract():
 
 @pytest.mark.skipif(not BSE_AVAILABLE, reason="basis_set_exchange not installed")
 def test_custom_basis_assignment_with_autoaux():
-    # Test for custom basis assignment
+    # Test for custom basis assignment with autoaux
     xyz = """
     H  1  1  1
     P  1  1 -1
