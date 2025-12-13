@@ -221,22 +221,34 @@ def _load_basis(basis_name, Z):
                 str(Z) in bfile["elements"]
             ), f"Element {Z} not found in basis set {basis_name}."
             res = bfile["elements"][str(Z)]["electron_shells"]
-    else:
-        if BSE_AVAILABLE:
-            logger.log_info1(
-                f"[forte2] Basis {basis_name} not found locally. Using Basis Set Exchange."
-            )
-            try:
-                bse_basis = bse.get_basis(basis_name, elements=Z)
-            except KeyError:
-                raise RuntimeError(
-                    f"[forte2] Basis Set Exchange does not have data for element Z={Z} in basis set {basis_name}!"
-                )
-            res = bse_basis["elements"][str(Z)]["electron_shells"]
-        else:
+    elif basis_name.endswith("-autoaux"):
+        assert (
+            BSE_AVAILABLE
+        ), f"[forte2] AutoAux basis requested, but basis_set_exchange is not available."
+        logger.log_info1(
+            f"[forte2] Generating AutoAux basis for element Z={Z} using Basis Set Exchange."
+        )
+        try:
+            bse_basis = bse.get_basis(basis_name.replace("-autoaux", ""), elements=Z, get_aux=1)
+        except KeyError:
             raise RuntimeError(
-                f"[forte2] Basis file {basis_name}.json could not be found, and Basis Set Exchange is not available. "
+                f"[forte2] Basis Set Exchange could not generate AutoAux basis for element Z={Z} with basis set {basis_name.replace('-autoaux', '')}!"
             )
+        res = bse_basis["elements"][str(Z)]["electron_shells"]
+    else:
+        assert (
+            BSE_AVAILABLE
+        ), f"[forte2] Basis file {basis_name}.json not found locally, and basis_set_exchange is not available."
+        logger.log_info1(
+            f"[forte2] Basis {basis_name} not found locally. Using Basis Set Exchange."
+        )
+        try:
+            bse_basis = bse.get_basis(basis_name, elements=Z)
+        except KeyError:
+            raise RuntimeError(
+                f"[forte2] Basis Set Exchange does not have data for element Z={Z} in basis set {basis_name}!"
+            )
+        res = bse_basis["elements"][str(Z)]["electron_shells"]
 
     return res
 

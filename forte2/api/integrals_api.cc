@@ -20,7 +20,8 @@
 #include "integrals/value_at_points.h"
 // Libcint-backed functions are optional
 #if FORTE2_USE_LIBCINT
-#  include "integrals/libcint_two_center.h"
+#include "integrals/libcint_two_center.h"
+#include "integrals/libcint_three_center.h"
 #endif
 
 namespace nb = nanobind;
@@ -385,6 +386,9 @@ void export_libcint_compute_api(nb::module_& sub_m) {
               "Compute the dipole integral matrix using libcint in spherical harmonics.");
     sub_m.def("cint_int2c2e_sph", &cint_int2c2e_sph, "shell_slice"_a, "atm"_a, "bas"_a, "env"_a,
               "Compute the two-center two-electron integral matrix using libcint in spherical "
+              "harmonics.");
+    sub_m.def("cint_int3c2e_sph", &cint_int3c2e_sph, "shell_slice"_a, "atm"_a, "bas"_a, "env"_a,
+              "Compute the three-center two-electron integral matrix using libcint in spherical "
               "harmonics.");
 }
 #else
