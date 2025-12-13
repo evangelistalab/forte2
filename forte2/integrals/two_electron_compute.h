@@ -4,6 +4,7 @@
 
 #include "helpers/ndarray.h"
 #include "helpers/logger.h"
+#include "helpers/parallel.h"
 
 #include "integrals/basis.h"
 
@@ -215,7 +216,7 @@ template <libint2::Operator Op, typename Params = NoParams>
     auto ints = make_zeros<nb::numpy, double, 3>({nb1, nb2, nb3});
     auto data = ints.data();
 
-    const std::size_t num_threads = std::thread::hardware_concurrency();
+    const auto num_threads = get_num_threads();
     std::vector<std::future<void>> tasks;
 
     /// This lambda function computes the integrals for a given range of shells
