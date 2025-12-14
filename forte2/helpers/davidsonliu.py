@@ -276,10 +276,12 @@ class DavidsonLiuSolver:
             max_de = np.max(np.abs(lamr - self.lam_old[: self.nroot]))
             max_r = rnorms.max()
 
-            conv_e = np.all(np.abs(lamr - self.lam_old[: self.nroot]) < self.e_tol)
-            conv_r = np.all(rnorms < self.r_tol)
+            conv_e = max_de < self.e_tol
+            conv_r = max_r < self.r_tol
             if (conv_e and conv_r) or (self.basis_size == self.size):
                 self.converged = True
+                break
+            if self.iter == self.maxiter - 1:
                 break
             self.lam_old[: self.nroot] = lamr
 
@@ -360,13 +362,11 @@ class DavidsonLiuSolver:
             self.b[:, : self.basis_size] @ self.alpha[: self.basis_size, : self.nroot]
         )
 
-        # orthonormalize final evecs
-        Qf, _ = qr(evecs, mode="reduced")
         self.basis_size = self.nroot
-        self.b[:, : self.nroot] = Qf
+        self.b[:, : self.nroot] = evecs
         self.sigma_size = 0
         self._executed = True
-        return lamr, Qf
+        return lamr, evecs
 
     def _collapse(self, alpha):
         """
