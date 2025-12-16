@@ -300,7 +300,8 @@ def test_dl_restart_2():
     solver.add_sigma_builder(sigma_builder)
     guesses = np.eye(size)[:, :nroot]
     solver.add_guesses(guesses)
-    solver.solve()
+    evals, _ = solver.solve()
+    assert evals[0] == approx(ref_evals[0])
 
     # Update the matrix.
     matrix2 = np.array([[-2, 1, 1, 1], [1, 0, 1, 1], [1, 1, 0, 1], [1, 1, 1, 0]])
@@ -314,6 +315,37 @@ def test_dl_restart_2():
     evals, _ = solver.solve()
 
     assert evals[0] == approx(ref_evals2[0])
+
+
+def test_dl_restart_from_unconverged():
+    """Test restarting DavidsonLiuSolver from an unconverged solution."""
+    size = 500
+    nroot = 10
+    rng = np.random.default_rng(42)
+    matrix = rng.random((size, size))
+    matrix = 0.05 * (matrix + matrix.T) + np.diag(rng.uniform(2, 4, size))
+    ref_evals, _ = np.linalg.eigh(matrix)
+
+    def sigma_builder(basis_block: np.ndarray, sigma_block: np.ndarray) -> None:
+        sigma_block[:] = matrix @ basis_block
+
+    solver = DavidsonLiuSolver(
+        size=size,
+        nroot=nroot,
+        collapse_per_root=2,
+        basis_per_root=5,
+        maxiter=10,
+    )
+    solver.add_h_diag(np.diag(matrix))
+    solver.add_sigma_builder(sigma_builder)
+    guesses = np.eye(size)[:, :nroot]
+    solver.add_guesses(guesses)
+    evals, _ = solver.solve()
+
+    while not solver.converged:
+        evals, _ = solver.solve()
+
+    assert evals[:nroot] == approx(ref_evals[:nroot])
 
 
 def test_dl_shift():
