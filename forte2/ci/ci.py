@@ -1608,6 +1608,25 @@ class CISolver(ActiveSpaceSolver):
             self.fosc_per_solver.append(foscdict)
             self.tdm_per_solver.append(tdmdict)
 
+    def update_weights(self, isolver, new_weights):
+        """
+        Update the weights for a specific sub-solver.
+
+        Parameters
+        ----------
+        isolver : int
+            The index of the sub-solver to update.
+        new_weights : list[float]
+            The new weights for the roots of the specified sub-solver.
+        """
+        if len(new_weights) != self.sa_info.nroots[isolver]:
+            raise ValueError(
+                "Length of new_weights must match the number of roots for the specified sub-solver."
+            )
+        self.sa_info.weights[isolver] = new_weights
+        self.weights = self.sa_info.weights
+        self.weights_flat = np.concatenate(self.weights)
+
 
 @dataclass
 class CI(CISolver):
@@ -1702,6 +1721,7 @@ class RelCISolver(RelActiveSpaceSolver):
     compute_transition_properties = CISolver.compute_transition_properties
     reset_eigensolver = CISolver.reset_eigensolver
     set_maxiter = CISolver.set_maxiter
+    update_weights = CISolver.update_weights
 
     def __call__(self, parent_method):
         self.parent_method = parent_method
