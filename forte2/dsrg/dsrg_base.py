@@ -127,6 +127,10 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
         self.ci_evecs_prev = []
         for solver in self.ci_solver.sub_solvers:
             self.ci_evecs_prev.append(solver.evecs.copy())
+            _, u_indices, counts = np.unique(solver.evals.round(decimals=6), return_index=True, return_counts=True)
+            # keep track of the degenerate subspaces, if nondegenerate, just a list of length-1 slices
+            self.ci_subspaces_prev = [slice(idx, idx + count) for idx, count in zip(u_indices, counts)]
+        
 
         self.semicanonicalizer = Semicanonicalizer(
             system=self.system,
