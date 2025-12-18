@@ -171,7 +171,7 @@ def test_rel_ci_br():
         x2c_type="so",
         snso_type="row-dependent",
     )
-    scf = GHF(charge=0)(system)
+    scf = GHF(charge=-1)(system)
     mc = RelMCOptimizer(
         nel=35,
         nroots=6,
