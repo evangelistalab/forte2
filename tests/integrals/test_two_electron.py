@@ -1,13 +1,17 @@
-import forte2
+import numpy as np
+import pytest
+
+import forte2, forte2.integrals
+from forte2.system import BSE_AVAILABLE, build_basis
 from forte2.helpers.comparisons import approx
 
 
 def test_two_electron_integrals():
     xyz = """
-O                     0.000000000000     0.000000000000    -0.061664597388
-H                     0.000000000000    -0.711620616370     0.489330954643
-H                     0.000000000000     0.711620616370     0.489330954643
-"""
+    O 0.000000000000     0.000000000000    -0.061664597388
+    H 0.000000000000    -0.711620616370     0.489330954643
+    H 0.000000000000     0.711620616370     0.489330954643
+    """
 
     system = forte2.System(xyz=xyz, basis_set="sto-3g")
 
@@ -39,3 +43,25 @@ H                     0.000000000000     0.711620616370     0.489330954643
     assert V[0, 3, 1, 5] == approx(0.004687753192919011)
     assert V[1, 0, 6, 2] == approx(0.056745507084677765)
     assert V[0, 5, 5, 3] == approx(0.012314281459575225)
+
+
+@pytest.mark.skipif(not BSE_AVAILABLE, reason="BSE module is not available")
+def test_3c2e():
+    xyz = "Au 0 0 0"
+    system = forte2.System(
+        xyz=xyz,
+        basis_set="ano-rcc",
+        minao_basis_set=None,
+        auxiliary_basis_set="def2-universal-jkfit",
+    )
+    forte2.set_verbosity_level(5)
+    ref = forte2.integrals.coulomb_3c(system)
+    assert np.linalg.norm(ref) == approx(239.55734891969408)
+
+    # force the 3c2e integral routine to not use symmetry optimizations
+    basis = build_basis("ano-rcc", system.geom_helper)
+    ref2 = forte2.integrals.coulomb_3c(
+        system, system.auxiliary_basis, system.basis, basis
+    )
+    assert np.linalg.norm(ref2 - ref) < 1e-10
+    assert np.linalg.norm(ref2) == approx(239.55734891969408)

@@ -54,7 +54,7 @@ std::vector<std::pair<std::size_t, std::size_t>> Basis::shell_first_and_size() c
     return result;
 }
 
-std::vector<std::pair<std::size_t, std::size_t>> Basis::center_first_and_last() const {
+std::vector<std::pair<std::size_t, std::size_t>> Basis::center_first_and_last(bool count_shell) const {
     std::vector<std::pair<std::size_t, std::size_t>> result;
     if (shells_.empty()) {
         return result;
@@ -74,7 +74,7 @@ std::vector<std::pair<std::size_t, std::size_t>> Basis::center_first_and_last() 
             z0 = z;
             first = last;
         }
-        last += shell.size();
+        last += count_shell ? 1 : shell.size();
     }
     result.emplace_back(first, last);
     return result;

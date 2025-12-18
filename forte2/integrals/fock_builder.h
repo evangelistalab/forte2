@@ -8,7 +8,7 @@
 // namespace nb = nanobind;
 
 #include "helpers/ndarray.h"
-#include "ints/basis.h"
+#include "integrals/basis.h"
 
 namespace forte2 {
 class Basis;

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, ints
+from forte2 import System, integrals
 from forte2.helpers.matrix_functions import cholesky_wrapper
 
 
@@ -13,7 +13,7 @@ def test_cholesky_tei():
     """
 
     system = System(xyz=xyz, basis_set="cc-pvdz", cholesky_tei=True, cholesky_tol=1e-10)
-    eri = ints.coulomb_4c(system.basis)
+    eri = integrals.coulomb_4c(system)
     eri = eri.reshape((system.nbf**2,) * 2)
     B = cholesky_wrapper(eri, tol=1e-14)
     assert np.linalg.norm(B.T @ B - eri) < 1e-10

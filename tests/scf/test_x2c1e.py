@@ -24,6 +24,26 @@ def test_sfx2c1e():
     assert scf.E == approx(escf)
 
 
+def test_sfx2c1e_with_gaussian_charges():
+    escf = -5192.003129895058
+    xyz = """
+    Br 0 0 0
+    Br 0 0 1.2
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVQZ",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
+        x2c_type="sf",
+        use_gaussian_charges=True,
+    )
+
+    scf = RHF(charge=0)(system)
+    scf.run()
+    assert scf.E == approx(escf)
+
+
 @pytest.mark.skip(reason="This test cannot be reliably reproduced.")
 def test_lindep_sfx2c1e():
     # psi4's x2c actually doesn't handle this case correctly
@@ -58,7 +78,7 @@ def test_lindep_sfx2c1e():
 
 
 def test_sox2c1e_water():
-    eghf = -76.081946869897
+    eghf = -76.08194686989626
     xyz = """
     O 0 0 0
     H 0 -0.757 0.587
@@ -93,12 +113,12 @@ def test_boettger_hbr():
     scf.run()
     assert EH_TO_WN * (
         scf.eps[0][scf.nel - 2] - scf.eps[0][scf.nel - 3]
-    ) == pytest.approx(2953.1938408944357, abs=1e-4)
+    ) == pytest.approx(2953.193840819996, abs=1e-4)
 
 
 def test_so_from_sf_water():
     euhf = -75.711680104122
-    eghf = -75.711686004089
+    eghf = -75.7116858952105
     xyz = """
     O 0 0 0
     H 0 -0.757 0.587
@@ -129,8 +149,8 @@ def test_so_from_sf_water():
 
 @pytest.mark.skipif(not BSE_AVAILABLE, reason="Basis set exchange is not available")
 def test_sox2c1e_sc():
-    l23_ref = 4.395077285344983
-    xyz = """Sc 0 0 0"""
+    l23_ref = 4.395077289942328
+    xyz = "Sc 0 0 0"
     system = System(
         xyz=xyz,
         basis_set="sapporo-dkh3-dzp-2012-diffuse",
@@ -142,3 +162,4 @@ def test_sox2c1e_sc():
     scf.run()
     l23_splitting = EH_TO_EV * (scf.eps[0][6] - scf.eps[0][5])
     assert l23_splitting == pytest.approx(l23_ref, abs=1e-5)
+

@@ -66,7 +66,8 @@ void daxpy(double a, nb::ndarray<nb::numpy, T, nb::ndim<2>> x,
 }
 
 /// @brief Print the contents of a np_matrix to standard output
-template <typename T> void print(nb::ndarray<nb::numpy, T, nb::ndim<2>> mat, std::string label) {
+template <typename T>
+void print(nb::ndarray<nb::numpy, T, nb::ndim<2>> mat, std::string label) {
     std::cout << label << ":" << std::endl;
     auto mat_view = mat.view();
     for (size_t i{0}, maxi{mat.shape(0)}; i < maxi; ++i) {

@@ -1,6 +1,6 @@
 import numpy as np
 
-from forte2 import ints
+from forte2 import integrals
 from forte2.data import DEBYE_TO_AU, ANGSTROM_TO_BOHR
 from forte2.helpers.matrix_functions import block_diag_2x2
 
@@ -60,12 +60,12 @@ def get_1e_property(system, g1, property_name, origin=None, unit="debye"):
 
     match property_name:
         case "kinetic_energy":
-            oei = ints.kinetic(system.basis)
+            oei = integrals.kinetic(system)
         case "nuclear_attraction_energy":
-            oei = ints.nuclear(system.basis, system.atoms)
+            oei = integrals.nuclear(system)
         case "electric_dipole":
             origin = _origin_check(origin)
-            _, *oei = ints.emultipole1(system.basis, origin=origin)
+            _, *oei = integrals.emultipole1(system, origin=origin)
             factor = -1.0 / DEBYE_TO_AU if unit == "debye" else -1.0
         case "dipole":
             e_dip = get_1e_property(
@@ -75,7 +75,7 @@ def get_1e_property(system, g1, property_name, origin=None, unit="debye"):
             return e_dip + nuc_dip
         case "electric_quadrupole":
             origin = _origin_check(origin)
-            *_, xx, xy, xz, yy, yz, zz = ints.emultipole2(system.basis, origin=origin)
+            *_, xx, xy, xz, yy, yz, zz = integrals.emultipole2(system, origin=origin)
             oei = [xx, xy, xz, yy, yz, zz]
             factor = (
                 -1.0 / (DEBYE_TO_AU * ANGSTROM_TO_BOHR) if unit == "debye" else -1.0
@@ -122,7 +122,7 @@ def mulliken_population(system, g1):
     -----
     See eq 3.196 in Szabo and Ostlund.
     """
-    ovlp = ints.overlap(system.basis)
+    ovlp = integrals.overlap(system)
     psdiag = np.einsum("pq,qp->p", g1, ovlp)
     center_first_and_last = system.basis.center_first_and_last
     charges = system.atomic_charges

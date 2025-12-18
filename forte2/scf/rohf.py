@@ -101,7 +101,7 @@ class ROHF(SCFBase):
         for i in range(ndocc):
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{i+1:<4d} ({self.irrep_labels[i]}) {self.eps[0][i]:<12.6f} "
+            string += f"{i:<4d} ({self.irrep_labels[i]}) {self.eps[0][i]:<12.6f} "
         logger.log_info1(string)
 
         if nsocc > 0:
@@ -112,7 +112,7 @@ class ROHF(SCFBase):
                 if i % orb_per_row == 0:
                     string += "\n"
                 string += (
-                    f"{idx+1:<4d} ({self.irrep_labels[idx]}) {self.eps[0][idx]:<12.6f} "
+                    f"{idx:<4d} ({self.irrep_labels[idx]}) {self.eps[0][idx]:<12.6f} "
                 )
             logger.log_info1(string)
 
@@ -122,9 +122,7 @@ class ROHF(SCFBase):
             idx = ndocc + nsocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += (
-                f"{idx+1:<4d} ({self.irrep_labels[idx]}) {self.eps[0][idx]:<12.6f} "
-            )
+            string += f"{idx:<4d} ({self.irrep_labels[idx]}) {self.eps[0][idx]:<12.6f} "
         logger.log_info1(string)
 
     def _print_ao_composition(self):

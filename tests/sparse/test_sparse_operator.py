@@ -455,8 +455,6 @@ def test_sparse_operator_list_add():
 
 
 def test_sparse_operator_hamiltonian():
-    from forte2.jkbuilder.jkbuilder import FockBuilder
-
     erhf = -76.021765988335
     xyz = """
     O            0.000000000000     0.000000000000    -0.061664597388
@@ -487,7 +485,7 @@ def test_sparse_operator_hamiltonian():
     )
     C = scf.C[0]
     oei = np.einsum("pq,pi,qj->ij", oei, C, C, optimize=True)
-    jkbuilder = FockBuilder(system)
+    jkbuilder = system.fock_builder
     eri = jkbuilder.two_electron_integrals_block(C)
     ham = forte2.sparse_operator_hamiltonian(scalar, oei, eri)
     Href = forte2.apply_op(ham, hf_state)

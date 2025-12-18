@@ -4,7 +4,6 @@ import time
 
 import numpy as np
 from forte2.system import System, ModelSystem, BasisInfo
-from forte2.jkbuilder import FockBuilder
 from forte2.base_classes.mixins import MOsMixin, SystemMixin
 from forte2.helpers import logger, DIIS
 
@@ -131,7 +130,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         Vnn = self._get_nuclear_repulsion()
         S = self._get_overlap()
         H = self._get_hcore()
-        fock_builder = FockBuilder(self.system)
+        fock_builder = self.system.fock_builder
 
         self.nbf = self.system.nbf
         self.naux = self.system.naux

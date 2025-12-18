@@ -1,4 +1,5 @@
 #include <nanobind/nanobind.h>
+#include <nanobind/stl/bind_vector.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/array.h>
 #include <nanobind/stl/string.h>
@@ -12,12 +13,17 @@
 #include "ci/ci_spin_adapter.h"
 #include "ci/rel_ci_sigma_builder.h"
 
+// Must be at global scope:
+NB_MAKE_OPAQUE(std::vector<forte2::Determinant>);
+
 namespace nb = nanobind;
 using namespace nb::literals;
 
 namespace forte2 {
 
 void export_ci_strings_api(nb::module_& m) {
+    nb::bind_vector<std::vector<forte2::Determinant>>(m, "DeterminantVector");
+
     nb::class_<CIStrings>(m, "CIStrings")
         .def(nb::init<size_t, size_t, int, std::vector<std::vector<int>>, std::vector<int>,
                       std::vector<int>>(),
@@ -142,7 +148,8 @@ void export_ci_spin_adapter_api(nb::module_& m) {
         .def("prepare_couplings", &CISpinAdapter::prepare_couplings, "dets"_a)
         .def("csf_C_to_det_C", &CISpinAdapter::csf_C_to_det_C, "csf_C"_a, "det_C"_a)
         .def("det_C_to_csf_C", &CISpinAdapter::det_C_to_csf_C, "det_C"_a, "csf_C"_a)
-        .def("ncsf", [](CISpinAdapter& self) { return self.ncsf(); })
+        .def_prop_ro("nconf", &CISpinAdapter::nconf)
+        .def_prop_ro("ncsf", &CISpinAdapter::ncsf)
         .def("set_log_level", &CISpinAdapter::set_log_level, "level"_a,
              "Set the logging level for the class");
     // .def("ndet", &CISpinAdapter::ndet);

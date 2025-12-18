@@ -153,7 +153,7 @@ class UHF(SCFBase):
         for i in range(naocc):
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{i+1:<4d} ({self.irrep_labels[0][i]}) {self.eps[0][i]:<12.6f} "
+            string += f"{i:<4d} ({self.irrep_labels[0][i]}) {self.eps[0][i]:<12.6f} "
         logger.log_info1(string)
 
         logger.log_info1("\nAlpha Virtual:")
@@ -163,7 +163,7 @@ class UHF(SCFBase):
             if i % orb_per_row == 0:
                 string += "\n"
             string += (
-                f"{idx+1:<4d} ({self.irrep_labels[0][idx]}) {self.eps[0][idx]:<12.6f} "
+                f"{idx:<4d} ({self.irrep_labels[0][idx]}) {self.eps[0][idx]:<12.6f} "
             )
         logger.log_info1(string)
 
@@ -172,7 +172,7 @@ class UHF(SCFBase):
         for i in range(nbocc):
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{i+1:<4d} ({self.irrep_labels[1][i]}) {self.eps[1][i]:<12.6f} "
+            string += f"{i:<4d} ({self.irrep_labels[1][i]}) {self.eps[1][i]:<12.6f} "
         logger.log_info1(string)
 
         logger.log_info1("\nBeta Virtual:")
@@ -182,7 +182,7 @@ class UHF(SCFBase):
             if i % orb_per_row == 0:
                 string += "\n"
             string += (
-                f"{idx+1:<4d} ({self.irrep_labels[1][idx]}) {self.eps[1][idx]:<12.6f} "
+                f"{idx:<4d} ({self.irrep_labels[1][idx]}) {self.eps[1][idx]:<12.6f} "
             )
         logger.log_info1(string)
 

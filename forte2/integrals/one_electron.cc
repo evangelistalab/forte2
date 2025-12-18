@@ -1,5 +1,7 @@
-#include "ints/one_electron.h"
-#include "ints/one_electron_compute.h"
+#include <span>
+
+#include "integrals/one_electron.h"
+#include "integrals/one_electron_compute.h"
 
 namespace forte2 {
 np_matrix overlap(const Basis& b1, const Basis& b2) {
