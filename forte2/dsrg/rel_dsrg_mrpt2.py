@@ -2,7 +2,6 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from forte2.helpers import logger
 from .dsrg_base import DSRGBase
 from .utils import (
     antisymmetrize_2body,
@@ -239,34 +238,9 @@ class RelDSRG_MRPT2(DSRGBase):
 
         self.ci_solver.set_ints(_e_scalar, _hbar1_canon, _hbar2_canon)
         self.ci_solver.run(use_asym_ints=True)
-        self._reorder_weights()
         e_relaxed = self.ci_solver.compute_average_energy()
         self.relax_eigvals = self.ci_solver.evals_flat.copy()
         return e_relaxed
-
-    def _reorder_weights(self):
-        for i, solver in enumerate(self.ci_solver.sub_solvers):
-            overlap = np.abs(solver.evecs.conj().T @ self.ci_evecs_prev[i])
-            max_overlap = np.max(overlap, axis=1)
-            permutation = np.argmax(overlap, axis=1)
-            do_warn = len(permutation) != len(set(permutation)) or np.any(
-                max_overlap <= 0.5
-            )
-            if do_warn:
-                logger.log_warning(
-                    f"DSRG reference relaxation: Relaxed states in sub-solver {i} are likely wrong due to root flipping."
-                    "Please increase the number of states in the sub-solver."
-                )
-                logger.log_warning(f"Max overlap for sub-solver {i}: {max_overlap}")
-                logger.log_warning(f"Permutation attempted for sub-solver {i}: {permutation}")
-                logger.log_warning(f"Overlap matrix (<current | previous>):\n{overlap}")
-            else:
-                if np.allclose(permutation, np.arange(len(permutation))):
-                    continue  # no need to reorder
-                new_weights = solver.weights[permutation].copy()
-                self.ci_solver.update_weights(i, new_weights)
-                self.ci_evecs_prev[i] = solver.evecs[:, permutation].copy()
-            
 
     def _build_tamps(self):
         t2 = dict()
