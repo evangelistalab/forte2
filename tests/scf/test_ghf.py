@@ -77,14 +77,14 @@ def test_ghf_complex_perturbation():
 
 def test_j_adapted_ghf():
     # The two bases should yield the same result
-    eref = -75.427367675651
-    s2ref = 0.7525463566917241
+    eref = -399.12328000812687
+    s2ref = 0.7547419587209125
     xyz = """
-    O 0 0 0
+    S 0 0 0
     H 0 0 1.1"""
     system = System(
         xyz=xyz,
-        basis_set="cc-pVDZ",
+        basis_set="decon-cc-pVDZ",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         x2c_type="so",
     )
@@ -95,7 +95,7 @@ def test_j_adapted_ghf():
 
     system = System(
         xyz=xyz,
-        basis_set="cc-pVDZ",
+        basis_set="decon-cc-pVDZ",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         x2c_type="so",
     )
