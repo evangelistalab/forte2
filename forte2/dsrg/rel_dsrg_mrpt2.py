@@ -246,27 +246,11 @@ class RelDSRG_MRPT2(DSRGBase):
 
     def _reorder_weights(self):
         for i, solver in enumerate(self.ci_solver.sub_solvers):
-            overlap = solver.evecs.conj().T @ self.ci_evecs_prev[i]
-            overlap = np.real(overlap.conj() * overlap)
-            _, u_indices, counts = np.unique(solver.evals.round(decimals=6), return_index=True, return_counts=True)
-            # keep track of the degenerate subspaces, if nondegenerate, just a list of length-1 slices
-            ci_subspaces = [slice(idx, idx + count) for idx, count in zip(u_indices, counts)]
-            if len(ci_subspaces) != len(self.ci_subspaces_prev):
-                logger.log_warning(
-                    f"DSRG reference relaxation: Number of degenerate subspaces changed in sub-solver {i}."
-                    "Please increase the number of states in the sub-solver."
-                )
-                continue
-            subspace_overlap = np.zeros((len(ci_subspaces), len(ci_subspaces))) 
-            for ii, isl in enumerate(ci_subspaces):
-                isize = isl.stop - isl.start
-                for jj, jsl in enumerate(self.ci_subspaces_prev):
-                    jsize = jsl.stop - jsl.start
-                    subspace_overlap[ii, jj] = np.sum(overlap[isl, jsl]) / min(isize, jsize)
-            max_overlap = np.max(subspace_overlap, axis=1)
-            permutation = np.argmax(subspace_overlap, axis=1)
+            overlap = np.abs(solver.evecs.conj().T @ self.ci_evecs_prev[i])
+            max_overlap = np.max(overlap, axis=1)
+            permutation = np.argmax(overlap, axis=1)
             do_warn = len(permutation) != len(set(permutation)) or np.any(
-                max_overlap <= 0.25
+                max_overlap <= 0.5
             )
             if do_warn:
                 logger.log_warning(
@@ -275,17 +259,13 @@ class RelDSRG_MRPT2(DSRGBase):
                 )
                 logger.log_warning(f"Max overlap for sub-solver {i}: {max_overlap}")
                 logger.log_warning(f"Permutation attempted for sub-solver {i}: {permutation}")
-                logger.log_warning(f"Subspace overlap matrix (<current | previous>):\n{subspace_overlap}")
+                logger.log_warning(f"Overlap matrix (<current | previous>):\n{overlap}")
             else:
                 if np.allclose(permutation, np.arange(len(permutation))):
                     continue  # no need to reorder
-                new_weights = np.array(self.ci_solver.weights[i])
-                new_weights = np.concatenate([new_weights[ci_subspaces[ii]] for ii in permutation])
+                new_weights = solver.weights[permutation].copy()
                 self.ci_solver.update_weights(i, new_weights)
-                self.ci_evecs_prev[i] = np.concatenate(
-                    [solver.evecs[:, ci_subspaces[ii]] for ii in permutation],
-                    axis=1,
-                )
+                self.ci_evecs_prev[i] = solver.evecs[:, permutation].copy()
             
 
     def _build_tamps(self):
