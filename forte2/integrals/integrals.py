@@ -473,7 +473,9 @@ def coulomb_3c(system, basis1=None, basis2=None, basis3=None):
     else:
         try:
             res = ints.coulomb_3c(_basis1, _basis2, _basis3)
-        except RuntimeError:
+        except RuntimeError as e:
+            if "lmax_exceeded" not in str(e):
+                raise
             res = cint_coulomb_3c(system, basis1, basis2, basis3)
         return res
 
@@ -514,7 +516,9 @@ def coulomb_2c(system, basis1=None, basis2=None):
     else:
         try:
             res = ints.coulomb_2c(_basis1, _basis2)
-        except RuntimeError:
+        except RuntimeError as e:
+            if "lmax_exceeded" not in str(e):
+                raise
             res = cint_coulomb_2c(system, basis1, basis2)
         return res
 
