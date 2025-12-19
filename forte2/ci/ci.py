@@ -33,8 +33,6 @@ from .ci_utils import (
     pretty_print_ci_transition_props,
     make_2cumulant_sf,
     make_2cumulant_so,
-    make_2cumulant_sf,
-    make_2cumulant_so,
     make_3cumulant_sf,
     make_3cumulant_so,
 )
@@ -220,6 +218,14 @@ class _CIBase:
             self.sigma_det = np.zeros((self.ndet))
 
     def run(self, use_asym_ints=False):
+        if use_asym_ints:
+            assert (
+                self.two_component
+            ), "Antisymmetric integrals only supported for two-component CI."
+            assert (
+                self.ci_algorithm.lower() == "hz"
+            ), "Antisymmetric integrals only supported for 'hz' algorithm."
+
         if not self.executed:
             self._ci_solver_startup()
 
@@ -314,7 +320,7 @@ class _CIBase:
         # 4. Compute diagonal of the Hamiltonian
         self.eigensolver.add_h_diag(Hdiag)
 
-        # 5. (Re-)build the guess vectors if requested. 
+        # 5. (Re-)build the guess vectors if requested.
         # This is always done on the first run at least, but can be forced again by e.g. reset_eigensolver.
         if self.rebuild_guess:
             self._build_guess_vectors(Hdiag)
@@ -1241,7 +1247,7 @@ class _CIBase:
             top_dets_per_root.append(top_dets)
 
         return top_dets_per_root
-    
+
     def reset_eigensolver(self):
         self.eigensolver = None
         self.rebuild_guess = True
@@ -1392,11 +1398,11 @@ class CISolver(ActiveSpaceSolver):
 
         self.executed = True
         return self
-    
+
     def reset_eigensolver(self):
         """
-        Reset the eigensolver for each sub-solver. 
-        This forces a re-initialization of the eigensolver in the next run, 
+        Reset the eigensolver for each sub-solver.
+        This forces a re-initialization of the eigensolver in the next run,
         and also forces re-computation of the guess vectors.
         This is useful whenever the integrals have changed (e.g. after semi-canonicalization).
         """
@@ -1460,7 +1466,7 @@ class CISolver(ActiveSpaceSolver):
                 rdm3 += ci_solver.make_3rdm(j) * self.weights[i][j]
 
         return rdm3
-    
+
     def make_average_2cumulant(self):
         dm1 = self.make_average_1rdm()
         dm2 = self.make_average_2rdm()
@@ -1468,7 +1474,7 @@ class CISolver(ActiveSpaceSolver):
             return make_2cumulant_so(dm1, dm2)
         else:
             return make_2cumulant_sf(dm1, dm2)
-        
+
     def make_average_3cumulant(self):
         dm1 = self.make_average_1rdm()
         dm2 = self.make_average_2rdm()
@@ -1477,7 +1483,7 @@ class CISolver(ActiveSpaceSolver):
             return make_3cumulant_so(dm1, dm2, dm3)
         else:
             return make_3cumulant_sf(dm1, dm2, dm3)
-        
+
     def make_average_cumulants(self):
         dm1 = self.make_average_1rdm()
         dm2 = self.make_average_2rdm()

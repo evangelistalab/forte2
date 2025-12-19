@@ -31,16 +31,15 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
 
     def __call__(self, parent_method):
         self.parent_method = parent_method
-        assert isinstance(self.parent_method, ActiveSpaceSolver), (
-            "Parent method must be an ActiveSpaceSolver."
-        
-        )
-        # This is to ensure that the CI vectors are converged after 
+        assert isinstance(
+            self.parent_method, ActiveSpaceSolver
+        ), "Parent method must be an ActiveSpaceSolver."
+        # This is to ensure that the CI vectors are converged after
         # the basis is changed to semicanonical orbitals.
         # We could handle it here, but it's cleaner to enforce it at the parent method level.
-        assert self.parent_method.final_orbital.lower() == "semicanonical", (
-            "The final_orbital of the parent method must be 'semicanonical' for DSRG methods."
-        )
+        assert (
+            self.parent_method.final_orbital.lower() == "semicanonical"
+        ), "The final_orbital of the parent method must be 'semicanonical' for DSRG methods."
         return self
 
     def __post_init__(self):

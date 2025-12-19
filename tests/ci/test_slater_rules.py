@@ -254,4 +254,3 @@ def test_slater_rules_3_complex():
 
     assert E == approx(eref)
     assert E == approx(ci.E[0])
-test_slater_rules_2_complex()

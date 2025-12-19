@@ -40,7 +40,7 @@ class System:
     snso_type : str, optional, default="row-dependent"
         The type of screened nuclear spin-orbit coupling scaling scheme to use.
         Only relevant if `x2c_type` is "so".
-        Options are None, "boettger", "dc", "dcb", or "row-dependent"
+        Options are None, "boettger", "dc", "dcb", or "row-dependent".
     unit : str, optional, default="angstrom"
         The unit for the atomic coordinates. Can be "angstrom" or "bohr".
     linear_dep_trigger : float, optional, default=1e-10
