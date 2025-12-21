@@ -4,15 +4,15 @@
 #include <cassert>
 #include "helpers/ndarray.h"
 
-#define TAYLOR_THRES 3
-#define SMALL 1e-3
+constexpr double taylor_threshold = 3;
+constexpr double taylor_epsilon = 1e-3;
 
 namespace forte2 {
 
 /// @brief Computes the Taylor expansion of (1 - exp(-z^2)) / z up to the order n,
 /// where n is determined by the threshold TAYLOR_THRES.
 double taylor_exp(double z) {
-    int n = static_cast<int>(0.5 * (15.0 / TAYLOR_THRES + 1)) + 1;
+    int n = static_cast<int>(0.5 * (15.0 / taylor_threshold + 1)) + 1;
     if (n > 0) {
         double value = z;
         double tmp = z;
@@ -29,7 +29,7 @@ double taylor_exp(double z) {
 /// @brief Computes the regularized denominator (1 - exp(-s*x^2)) / x
 double regularized_denominator(double x, double s) {
     double z = std::sqrt(s) * x;
-    if (fabs(z) <= SMALL) {
+    if (fabs(z) <= taylor_epsilon) {
         return taylor_exp(z) * std::sqrt(s);
     } else {
         return (1. - std::exp(-s * x * x)) / x;

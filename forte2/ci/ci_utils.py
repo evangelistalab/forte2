@@ -254,7 +254,7 @@ def pretty_print_ci_transition_props(
 
 def make_2cumulant_so(gamma1, gamma2):
     """
-    Compute the 2-cumulant from the 1- and 2-RDMs.
+    Compute the 2-cumulant from the spinorbital 1- and 2-RDMs.
 
     This can be useful for computing averaged cumulants, since one cannot simply average
     the 2-cumulants directly, as the relation between RDMs and cumulants is nonlinear.
@@ -282,7 +282,7 @@ def make_2cumulant_so(gamma1, gamma2):
 
 def make_3cumulant_so(gamma1, gamma2, gamma3):
     """
-    Compute the 3-cumulant from the 1- and 3-RDMs and 2-cumulant.
+    Compute the 3-cumulant from the spinorbital 1-, 2-, and 3-RDMs.
 
     This can be useful for computing averaged cumulants, since one cannot simply average
     the 3-cumulants directly, as the relation between RDMs and cumulants is nonlinear.
