@@ -523,7 +523,11 @@ class DavidsonLiuSolver:
         Check if the columns of b are orthonormal.
         """
         if not np.allclose(b.T.conj() @ b, np.eye(b.shape[1]), atol=1e-11):
+            S = b.T.conj() @ b
             logger.log_warning(f"{msg}")
+            logger.log_warning(
+                f"Largest deviation from orthonormality: {np.max(np.abs(S - np.eye(S.shape[0])))}"
+            )
             logger.log_warning(f"S = {b.T.conj() @ b}")
             raise ValueError(msg)
 

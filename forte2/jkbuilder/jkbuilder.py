@@ -293,7 +293,6 @@ class FockBuilder:
 
             \langle pq | rs \rangle = \iint \phi^*_p(r_1) \phi^*_q(r_2) \frac{1}{r_{12}} \phi_r(r_1) \phi_s(r_2) dr_1 dr_2
 
-
         Parameters
         ----------
         C1 : NDArray
@@ -304,9 +303,6 @@ class FockBuilder:
             Coefficient matrix for the third set of orbitals (index r).
         C4 : NDArray
             Coefficient matrix for the fourth set of orbitals (index s).
-        antisymmetrize : bool, optional, default=False
-            Whether to antisymmetrize the integrals. If True, the integrals are antisymmetrized as:
-            V[p,q,r,s] = :math:`\langle pq || rs \rangle = \langle pq | rs \rangle - \langle pq | sr \rangle`
 
         Returns
         -------

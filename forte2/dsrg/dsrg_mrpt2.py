@@ -4,7 +4,7 @@ import numpy as np
 
 from .dsrg_base import DSRGBase
 from .utils import (
-    cas_energy_given_cumulants,
+    cas_energy_given_RDMs,
     compute_t1_block,
     compute_t2_block,
     renormalize_V_block,
@@ -103,7 +103,7 @@ class DSRG_MRPT2(DSRGBase):
             optimize=True,
         )
 
-        ints["E"] = cas_energy_given_cumulants(
+        ints["E"] = cas_energy_given_RDMs(
             self.E_core_orig, self.H_orig, self.V_orig, g1, g2
         )
         #  ["vvaa", "aacc", "avca", "avac", "vaaa", "aaca", "aaaa"]

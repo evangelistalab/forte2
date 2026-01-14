@@ -1608,6 +1608,24 @@ class CISolver(ActiveSpaceSolver):
             self.fosc_per_solver.append(foscdict)
             self.tdm_per_solver.append(tdmdict)
 
+    def get_convergence_status(self):
+        """
+        Get the convergence status of each sub-solver.
+
+        Returns
+        -------
+        list[bool]
+            A list of booleans indicating whether each sub-solver has converged.
+        """
+        status = []
+        for ci_solver in self.sub_solvers:
+            if ci_solver.eigensolver is None:
+                # Exact diagonalization
+                status.append(True)
+            else:
+                status.append(ci_solver.eigensolver.converged)
+        return status
+
 
 @dataclass
 class CI(CISolver):
@@ -1702,6 +1720,7 @@ class RelCISolver(RelActiveSpaceSolver):
     compute_transition_properties = CISolver.compute_transition_properties
     reset_eigensolver = CISolver.reset_eigensolver
     set_maxiter = CISolver.set_maxiter
+    get_convergence_status = CISolver.get_convergence_status
 
     def __call__(self, parent_method):
         self.parent_method = parent_method

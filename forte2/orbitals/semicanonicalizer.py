@@ -78,7 +78,8 @@ class Semicanonicalizer:
         Parameters
         ----------
         g1 : np.ndarray
-            The active space 1-electron density matrix in the molecular orbital basis.
+            The active space 1-electron density matrix in the molecular orbital basis. 
+            Spin-summed if non-relativistic, spin-orbital if relativistic.
         C_contig : np.ndarray
             The molecular orbital coefficients, in the "contiguous" order of the orbitals.
             Note that all other quantities are also defined in this order.

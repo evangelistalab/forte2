@@ -158,7 +158,7 @@ def test_mrpt2_se_rel_sa_gauss_nuc():
         use_gaussian_charges=True,
     )
     mf = GHF(
-        charge=0,
+        charge=-1,
         die_if_not_converged=False,
         maxiter=50,
     )(system)

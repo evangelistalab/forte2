@@ -344,10 +344,8 @@ class MCOptimizer(ActiveSpaceSolver):
             self.orb_opt.Fcore[self.actv, self.actv],
             self.orb_opt.get_active_space_ints(),
         )
-        # make sure the CI is fully converged at the final orbitals
-        self.ci_solver.set_maxiter(500)
+
         self.ci_solver.run()
-        self.ci_solver.set_maxiter(self.ci_maxiter)
         self.E_ci = np.array(self.ci_solver.E)
         self.E_avg = self.ci_solver.compute_average_energy()
         logger.log_info1(
@@ -398,9 +396,14 @@ class MCOptimizer(ActiveSpaceSolver):
             self.ci_solver.set_ints(ints.E, ints.H, ints.V)
             # Basis change, can't restart from previous CI vectors *reliably*
             self.ci_solver.reset_eigensolver()
-            self.ci_solver.set_maxiter(500)
             self.ci_solver.run()
-            self.ci_solver.set_maxiter(self.ci_maxiter)
+
+        convergence_status = self.ci_solver.get_convergence_status()
+        if not all(convergence_status):
+            logger.log_warning(
+                f"CI solver did not converge for all roots: {convergence_status}"
+            )
+            logger.log_warning("Consider increasing ci_maxiter.")
 
         self.executed = True
         return self
@@ -514,7 +517,7 @@ class MCOptimizer(ActiveSpaceSolver):
 
     def make_average_3cumulant(self):
         return self.ci_solver.make_average_3cumulant()
-    
+
     def make_average_cumulants(self):
         return self.ci_solver.make_average_cumulants()
 
