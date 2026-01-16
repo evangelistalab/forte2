@@ -1,8 +1,9 @@
 import numpy as np
 
-from forte2 import System, RHF, CI, State
+from forte2 import System, RHF, CI, State, ci
 from forte2.props import MutualCorrelationAnalysis
 from forte2.helpers.comparisons import approx
+from forte2.props import MP2CumulantBuilder
 
 
 def test_mutual_correlation_h2_singlet():
@@ -21,12 +22,17 @@ def test_mutual_correlation_h2_singlet():
 
     mca = MutualCorrelationAnalysis(ci, root=0, sub_solver_index=0)
 
+    print(mca.M2[0, 1])
+    print(mca.mutual_correlation_matrix_summary())
     # verify some known values for H2 in STO-6G at dissociation
     assert mca.total_correlation == approx(0.875)
     assert mca.M2[0, 1] == approx(0.75)
     assert mca.M2[1, 0] == approx(0.75)
     assert mca.M2[0, 0] == approx(0.0)
     assert mca.M2[1, 1] == approx(0.0)
+
+
+# test_mutual_correlation_h2_singlet()
 
 
 def test_mutual_correlation_h2_triplet_lowspin():
@@ -129,3 +135,74 @@ def test_mutual_correlation_h6():
 
     summary = mca.mutual_correlation_matrix_summary()
     assert float(summary.splitlines()[5].split()[-1]) == approx(0.562133)
+
+
+def test_mp2_cumulant_builder_h6():
+    """
+    Test the MP2CumulantBuilder on H6 molecule in STO-3G basis.
+    """
+
+    xyz = f"""
+    H 0.0 0.0 0.0
+    H 0.0 0.0 1.0
+    H 0.0 0.0 2.0
+    H 0.0 0.0 4.0
+    H 0.0 0.0 5.0
+    H 0.0 0.0 6.0
+    """
+
+    system = System(xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    mp2 = MP2CumulantBuilder()(rhf)
+    mp2.run()
+    mca = MutualCorrelationAnalysis(mp2)
+    assert mca.total_correlation == approx(0.19617472)
+    assert mca.M2[2, 3] == approx(0.15169236)
+
+    summary = mca.mutual_correlation_matrix_summary()
+    assert float(summary.splitlines()[5].split()[-1]) == approx(0.151692)
+
+
+def test_mp2_cumulant_builder_h2():
+    """Test mutual correlation analysis on H2 molecule in STO-6G basis at bonding."""
+
+    xyz = f"""
+    H 0.0 0.0 0.0
+    H 0.0 0.0 1.0
+    """
+
+    system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    mp2 = MP2CumulantBuilder()(rhf)
+    mp2.run()
+    mca = MutualCorrelationAnalysis(mp2)
+
+    assert mca.total_correlation == approx(0.01117574)
+    assert mca.M2[0, 1] == approx(0.01111530)
+
+    summary = mca.mutual_correlation_matrix_summary()
+    assert float(summary.splitlines()[5].split()[-1]) == approx(0.011115)
+
+
+def test_mp2_cumulant_builder_h2_dissociation():
+    """Test mutual correlation analysis on H2 molecule in STO-6G basis at dissociation."""
+
+    xyz = f"""
+    H 0.0 0.0 0.0
+    H 0.0 0.0 10.0
+    """
+
+    system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    mp2 = MP2CumulantBuilder()(rhf)
+    mp2.run()
+    mca = MutualCorrelationAnalysis(mp2)
+
+    assert mca.total_correlation == approx(214.76943305)
+    assert mca.M2[0, 1] == approx(147.05864784)
+
+    summary = mca.mutual_correlation_matrix_summary()
+    assert float(summary.splitlines()[5].split()[-1]) == approx(147.058648)

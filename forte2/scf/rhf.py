@@ -7,6 +7,7 @@ from forte2.helpers import logger
 from forte2.symmetry import MOSymmetryDetector
 from .scf_base import SCFBase
 from .scf_utils import minao_initial_guess, core_initial_guess
+from forte2.state import MOSpace
 
 
 @dataclass
@@ -106,6 +107,7 @@ class RHF(SCFBase):
 
     def _post_process(self):
         super()._post_process()
+        self._build_mo_space()
         self._print_ao_composition()
 
     def _print_ao_composition(self):
@@ -121,6 +123,15 @@ class RHF(SCFBase):
         basis_info.print_ao_composition(
             self.C[0], list(range(self.na, min(self.na + 5, self.nmo)))
         )
+
+    def _build_mo_space(self):
+        if self.ndocc > 0:
+            self.mo_space = MOSpace(
+                nmo=self.nmo,
+                core_orbitals=list(range(self.ndocc)),
+            )
+        else:
+            self.mo_space = None
 
     def _assign_orbital_symmetries(self):
         S = self._get_overlap()
