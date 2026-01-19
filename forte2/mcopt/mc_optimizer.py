@@ -55,6 +55,9 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         Whether to compute and report transition dipole moments at the end of the optimization.
     final_orbital : str, optional, default="semicanonical"
         Whether to return the final orbitals in the semicanonical basis or the original basis.
+    lambda_penalty : float, optional, default=0.0
+    The penalty parameter for active space orbital rotation.
+    A non-zero value adds a penalty term to the energy to discourage deviation from a reference space.
 
     Notes
     -----
@@ -68,6 +71,9 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
     active_frozen_orbitals: list[int] = None
     freeze_inter_gas_rots: bool = False
+
+    ### Penalty parameters
+    lambda_penalty: float = 0.0
 
     ### Macroiteration parameters
     maxiter: int = 50
@@ -181,6 +187,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             self.Hcore,
             self.system.nuclear_repulsion,
             self.nrr,
+            self.lambda_penalty,
             compute_active_hessian=self.mo_space.ngas > 1
             and not self.freeze_inter_gas_rots,
         )
@@ -385,6 +392,22 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             logger.log_warning("Consider increasing ci_maxiter.")
 
         self.executed = True
+
+        if self.lambda_penalty > 0.0:
+            logger.log_info1(
+                f"Using penalty parameter lambda = {self.lambda_penalty:.4f} for active space orbital rotation."
+            )
+            self.delta_act = self.orb_opt.active_space_deviation()
+            if self.delta_act > 1e-4:
+                logger.log_info1(
+                    f"Final active-space deviation ||P_A - P_ref||_F = {self.delta_act:.10e}"
+                )
+            else:
+                logger.log_info1(f"The final active-space deviation is under 1e-4.")
+
+        elif self.lambda_penalty < 0.0:
+            raise ValueError("Penalty parameter lambda must be non-negative.")
+
         return self
 
     def _post_process(self):
