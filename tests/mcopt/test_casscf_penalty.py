@@ -107,6 +107,3 @@ def test_casscf_cyclopropene():
 
     assert mc.E == approx(emcscf)
     assert mc.delta_act == approx(Dev)
-
-
-test_casscf_cyclopropene()
