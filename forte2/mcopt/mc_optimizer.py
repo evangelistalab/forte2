@@ -39,6 +39,9 @@ class MCOptimizer(ActiveSpaceSolver):
         The number of weights must match the number of roots for each state.
         If not provided, equal weights are assumed for all states.
         If a single list is provided, `states` must be a single `State` object.
+    lambda_penalty : float, optional, default=0.0
+        The penalty parameter for active space orbital rotation.
+        A non-zero value adds a penalty term to the energy to discourage deviation from a reference space.
     mo_space : MOSpace, optional
         A `MOSpace` object defining the partitioning of the molecular orbitals.
         If not provided, CISolver must be called with a parent method that has MOSpaceMixin (e.g., AVAS).
@@ -96,6 +99,9 @@ class MCOptimizer(ActiveSpaceSolver):
     active_frozen_orbitals: list[int] = None
     optimize_frozen_orbs: bool = True
     freeze_inter_gas_rots: bool = False
+
+    ### Penalty parameters
+    lambda_penalty: float = 0.0
 
     ### Macroiteration parameters
     maxiter: int = 50
@@ -204,6 +210,7 @@ class MCOptimizer(ActiveSpaceSolver):
             self.Hcore,
             self.system.nuclear_repulsion,
             self.nrr,
+            self.lambda_penalty,
             compute_active_hessian=self.mo_space.ngas > 1
             and not self.freeze_inter_gas_rots,
         )
@@ -410,6 +417,22 @@ class MCOptimizer(ActiveSpaceSolver):
             self.ci_solver.run()
 
         self.executed = True
+
+        if self.lambda_penalty > 0.0:
+            logger.log_info1(
+                f"Using penalty parameter lambda = {self.lambda_penalty:.4f} for active space orbital rotation."
+            )
+            self.delta_act = self.orb_opt.active_space_deviation()
+            if self.delta_act > 1e-4:
+                logger.log_info1(
+                    f"Final active-space deviation ||P_A - P_ref||_F = {self.delta_act:.10e}"
+                )
+            else:
+                logger.log_info1(f"The final active-space deviation is under 1e-4.")
+
+        elif self.lambda_penalty < 0.0:
+            raise ValueError("Penalty parameter lambda must be non-negative.")
+
         return self
 
     def _post_process(self):

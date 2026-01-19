@@ -13,6 +13,7 @@ class OrbOptimizer:
         hcore: np.ndarray,
         e_nuc: float,
         nrr: np.ndarray,
+        lambda_penalty: float = 0.0,
         compute_active_hessian: bool = False,
     ):
         self.core, self.actv, self.virt = extents
@@ -30,6 +31,8 @@ class OrbOptimizer:
         self.nrot = self.nrr.sum()
         self.e_nuc = e_nuc
         self.compute_active_hessian = compute_active_hessian
+        self.nmo = self.C.shape[1]
+        self.lambda_penalty = lambda_penalty
 
         # the skew-hermitian rotation matrix, C_current = C_0 @ exp(R)
         self.R = np.zeros(self.nrot, dtype=float)
@@ -153,6 +156,19 @@ class OrbOptimizer:
         # (rt|vw) D_tu,vw, where (rt|vw) = <rv|tw>
         self.A_pq[:, self.actv] += np.einsum("rvtw,tuvw->ru", self.eri_gaaa, self.g2)
 
+        if self.lambda_penalty > 0:
+            PA = self._build_active_projector()
+            PR = self._build_ref_projector()
+
+            penalty_term = -self.lambda_penalty * (PR @ PA - PA @ PR)
+            # Debug sanity checks (temporary?)
+            if np.allclose(self.R, 0.0):
+                assert (
+                    np.linalg.norm(penalty_term) < 1e-12
+                ), "Penalty nonzero at iteration 0"
+
+            self.A_pq += penalty_term
+
         # screen small gradients to prevent symmetry breaking
         self.A_pq[np.abs(self.A_pq) < 1e-12] = 0.0
 
@@ -188,6 +204,11 @@ class OrbOptimizer:
             diag_F[None, self.core] * diag_g1[:, None] - diag_grad[self.actv, None]
         )
 
+        if self.lambda_penalty > 0:
+            lam = self.lambda_penalty
+            orbhess[self.virt, self.actv] += 4.0 * lam
+            orbhess[self.actv, self.core] += 4.0 * lam
+
         # if GAS: compute active-active block [see SI of J. Chem. Phys. 152, 074102 (2020)]
         if self.compute_active_hessian:
             eri_actv = self.get_active_space_ints()
@@ -210,6 +231,38 @@ class OrbOptimizer:
         orbhess *= self.nrr
 
         return orbhess
+
+    def _build_ref_projector(self):
+        """Build reference projector, invariant under orbital rotations.
+        P_ref is defined in the basis of the initial active orbitals C_a0.
+        """
+        if hasattr(self, "P_ref"):
+            return self.P_ref
+
+        self.P_ref = np.zeros((self.nmo, self.nmo))
+
+        self.P_ref[self.actv, self.actv] = np.eye(self.nact)
+        return self.P_ref
+
+    def _build_active_projector(self):
+        """Build active-space projector."""
+        Uact = self.U[:, self.actv]
+        return Uact @ Uact.T.conj()
+
+    def active_space_deviation(self):
+        PA = self._build_active_projector()
+        PR = self._build_ref_projector()
+        return np.linalg.norm(PA - PR, ord="fro")
+
+    def _penalty_energy(self):
+        PA = self._build_active_projector()
+        PR = self._build_ref_projector()
+        return self.lambda_penalty * np.trace((PA - PR) @ (PA - PR))
+
+    def _penalty_gradient_matrix(self):
+        PA = self._build_active_projector()
+        PR = self._build_ref_projector()
+        return -self.lambda_penalty * (PR @ PA - PA @ PR)
 
 
 class RelOrbOptimizer(OrbOptimizer):
