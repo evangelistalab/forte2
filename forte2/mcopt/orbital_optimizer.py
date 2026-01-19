@@ -13,8 +13,8 @@ class OrbOptimizer:
         hcore: np.ndarray,
         e_nuc: float,
         nrr: np.ndarray,
-        lambda_penalty: float = 0.0,
         compute_active_hessian: bool = False,
+        lambda_penalty: float = 0.0,
     ):
         self.core, self.actv, self.virt = extents
         self.C = C
@@ -275,6 +275,7 @@ class RelOrbOptimizer(OrbOptimizer):
         e_nuc: float,
         nrr: np.ndarray,
         compute_active_hessian: bool = False,
+        lambda_penalty: float = 0.0,
     ):
         super().__init__(
             C,

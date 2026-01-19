@@ -210,9 +210,9 @@ class MCOptimizer(ActiveSpaceSolver):
             self.Hcore,
             self.system.nuclear_repulsion,
             self.nrr,
-            self.lambda_penalty,
             compute_active_hessian=self.mo_space.ngas > 1
             and not self.freeze_inter_gas_rots,
+            lambda_penalty=self.lambda_penalty,
         )
 
         _CISolver = RelCISolver if self.two_component else CISolver
