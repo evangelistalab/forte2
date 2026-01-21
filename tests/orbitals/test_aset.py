@@ -1,7 +1,7 @@
 import numpy as np
 from pathlib import Path
 
-from forte2 import System, RHF, MCOptimizer, ASET, CI, State
+from forte2 import System, RHF, MCOptimizer, ASET, CI, State, AVAS
 from forte2.helpers.comparisons import approx
 
 # Directory containing *this* file
@@ -225,3 +225,46 @@ def test_aset_5():
     compare_orbital_coefficients(system, aset, "test_aset_5_orbitals.npy")
 
     assert ci.E == approx(eci)
+
+
+def test_aset_6():
+    """
+    Test AVAS->ASET->CASSCF.
+    """
+    emc = -8.9191503904
+    xyz = """
+    Li 0.0000000000 0.0000000000 -0.7975000000
+    H 0.0000000000 0.0000000000 2.3925000000
+    H 2.4000000000 0.0000000000 -0.3700000000
+    H 2.4000000000 0.0000000000 1.1100000000
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="def2-universal-JKFIT",
+    )
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    avas = AVAS(
+        subspace=["Li(2s)", "H1(1s)"],
+        selection_method="separate",
+        num_active_docc=1,
+        num_active_uocc=1,
+    )(rhf)
+    aset = ASET(
+        fragment=["Li", "H1"],
+        cutoff_method="num_of_orbitals",
+        num_A_occ=1,
+        num_A_vir=1,
+    )(avas)
+    mc = MCOptimizer(
+        State(nel=6, multiplicity=1, ms=0.0),
+        maxiter=800,
+        do_diis=False,
+        optimize_frozen_orbs=False,
+        ci_maxiter=500,
+    )(aset)
+    mc.run()
+
+    compare_orbital_coefficients(system, aset, "test_aset_6_orbitals.npy")
+
+    assert mc.E == approx(emc)
