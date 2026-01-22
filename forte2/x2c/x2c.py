@@ -49,7 +49,6 @@ def get_hcore_x2c(system):
             "row-dependent",
         ], f"Invalid snso_type: {system.snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
 
-    logger.log_info1(f"Number of contracted basis functions: {system.nbf}")
     xbasis = build_basis(
         system.basis_set,
         system.geom_helper,
@@ -58,7 +57,6 @@ def get_hcore_x2c(system):
     proj = _get_projection_matrix(system, xbasis)
 
     nbf_decon = len(xbasis)
-    logger.log_info1(f"Number of decontracted basis functions: {nbf_decon}")
     nbf = nbf_decon if system.x2c_type == "sf" else nbf_decon * 2
     # expensive way to get this for now but works for all types of contraction schemes
     proj = _get_projection_matrix(system, xbasis)
@@ -80,7 +78,7 @@ def get_hcore_x2c(system):
     # project back to the contracted basis
     h_fw = proj.conj().T @ h_fw @ proj
 
-    if system.snso_type is not None:
+    if system.x2c_type.lower() == "so" and system.snso_type is not None:
         nbf = system.nbf
         haa = h_fw[:nbf, :nbf]
         hab = h_fw[:nbf, nbf:]
@@ -213,7 +211,7 @@ def _apply_snso_scaling(ints, basis, atoms, snso_type):
             Ql = np.array([0.0, 2.97, 11.93, 29.84, 64.0, 115.0, 188.0, 287.0])
         case "row-dependent":
             Ql = {
-                1: np.array([0, 2.32, 10.64, 28.38, 60, 110, 182, 280]),
+                1: np.array([0, 2.97, 11.93, 29.84, 64, 115, 188, 287]),
                 2: np.array([0, 2.80, 11.93, 29.84, 64, 115, 188, 287]),
                 3: np.array([0, 2.95, 11.93, 29.84, 64, 115, 188, 287]),
                 4: np.array([0, 3.09, 11.49, 29.84, 64, 115, 188, 287]),

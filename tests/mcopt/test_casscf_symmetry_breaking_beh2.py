@@ -9,7 +9,7 @@ def test_casscf_symmetry_breaking():
     """
 
     erhf = -15.59967761106774
-    emcscf = -15.6284020142
+    emcscf = -15.6284019812
 
     xyz = """
     Be        0.000000000000     0.000000000000     0.000000000000
@@ -30,6 +30,7 @@ def test_casscf_symmetry_breaking():
         core_orbitals=[0, 1],
         active_orbitals=[2, 3],
         econv=1e-9,
+        maxiter=500,
     )(rhf)
     mc.run()
 

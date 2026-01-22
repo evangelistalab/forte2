@@ -54,8 +54,6 @@ class MCOptimizer(ActiveSpaceSolver):
         Gradient convergence tolerance.
     die_if_not_converged : bool, optional, default=True
         If True, raises an error if the optimization does not converge.
-    optimize_frozen_orbs : bool, optional, default=True
-        Whether to optimize the frozen orbitals.
     freeze_inter_gas_rots : bool, optional, default=False
         Whether to freeze inter-GAS orbital rotations when multiple GASes are defined.
     micro_maxiter : int, optional, default=6
@@ -94,7 +92,6 @@ class MCOptimizer(ActiveSpaceSolver):
     """
 
     active_frozen_orbitals: list[int] = None
-    optimize_frozen_orbs: bool = True
     freeze_inter_gas_rots: bool = False
 
     ### Macroiteration parameters
@@ -109,8 +106,8 @@ class MCOptimizer(ActiveSpaceSolver):
 
     ### CI solver parameters
     ci_maxiter: int = 100
-    ci_econv: float = 1e-10
-    ci_rconv: float = 1e-5
+    ci_econv: float = 1e-12
+    ci_rconv: float = 1e-6
     ci_guess_per_root: int = 2
     ci_ndets_per_guess: int = 10
     ci_collapse_per_root: int = 2
@@ -118,7 +115,7 @@ class MCOptimizer(ActiveSpaceSolver):
     ci_energy_shift: float = None
 
     ### DIIS parameters
-    do_diis: bool = None
+    do_diis: bool = False
     diis_start: int = 15
     diis_nvec: int = 8
     diis_min: int = 4
@@ -130,7 +127,6 @@ class MCOptimizer(ActiveSpaceSolver):
     converged: bool = field(default=False, init=False)
     executed: bool = field(default=False, init=False)
     two_component: bool = field(default=False, init=False)
-    dtype: type = field(default=float, init=False)
 
     def __call__(self, method):
         self.parent_method = method
@@ -144,19 +140,17 @@ class MCOptimizer(ActiveSpaceSolver):
         return self
 
     def _startup(self):
-        # initialize as a two-component solver if parent_method is two component
         super()._startup()
         # make the core, active, and virtual spaces contiguous
         # i.e., [core, gas1, gas2, ..., virt]
         perm = self.mo_space.orig_to_contig
         # this is the contiguous coefficient matrix
         self._C = self.C[0][:, perm].copy()
-        # core slice will include frozen orbitals,
-        # if optimize_frozen_orbs is False, then the relevant
-        # gradients will be zeroed out by nrr
+        # core slice does not include frozen orbitals!
         self.core = self.mo_space.docc
         # self.actv will be a list if multiple GASes are defined
         self.actv = self.mo_space.actv
+        # virtual slice does not include frozen orbitals!
         self.virt = self.mo_space.uocc
 
         # check if all active_frozen_orbitals indices are in the active space
@@ -225,6 +219,7 @@ class MCOptimizer(ActiveSpaceSolver):
             collapse_per_root=self.ci_collapse_per_root,
             basis_per_root=self.ci_basis_per_root,
             energy_shift=self.ci_energy_shift,
+            ci_algorithm=self.ci_algorithm,
         )(self.parent_method)
         # iteration 0: one step of CI optimization to bootstrap the orbital optimization
         self.iter = 0
@@ -275,12 +270,8 @@ class MCOptimizer(ActiveSpaceSolver):
         self.E_orb_old = self.E_orb
         self.E_avg_old = self.E_avg
 
-        if self.two_component:
-            self.g1_act = self.ci_solver.make_average_1rdm()
-            g2_act = self.ci_solver.make_average_2rdm()
-        else:
-            self.g1_act = self.ci_solver.make_average_sf_1rdm()
-            g2_act = self.ci_solver.make_average_sf_2rdm()
+        self.g1_act = self.make_average_1rdm()
+        g2_act = self.make_average_2rdm()
         # ci_maxiter_save = self.ci_solver.get_maxiter()
         # self.ci_solver.set_maxiter(self.ci_maxiter)
 
@@ -333,12 +324,8 @@ class MCOptimizer(ActiveSpaceSolver):
             self.E_avg = self.ci_solver.compute_average_energy()
             self.E_ci = np.array(self.ci_solver.E)
             self.E = self.E_avg
-            if self.two_component:
-                self.g1_act = self.ci_solver.make_average_1rdm()
-                g2_act = self.ci_solver.make_average_2rdm()
-            else:
-                self.g1_act = self.ci_solver.make_average_sf_1rdm()
-                g2_act = self.ci_solver.make_average_sf_2rdm()
+            self.g1_act = self.make_average_1rdm()
+            g2_act = self.make_average_2rdm()
             self.orb_opt.set_rdms(self.g1_act, g2_act)
             self.iter += 1
         else:
@@ -357,6 +344,7 @@ class MCOptimizer(ActiveSpaceSolver):
             self.orb_opt.Fcore[self.actv, self.actv],
             self.orb_opt.get_active_space_ints(),
         )
+
         self.ci_solver.run()
         self.E_ci = np.array(self.ci_solver.E)
         self.E_avg = self.ci_solver.compute_average_energy()
@@ -375,19 +363,18 @@ class MCOptimizer(ActiveSpaceSolver):
         self._post_process()
 
         if self.final_orbital == "semicanonical":
-            if self.two_component:
-                g1 = self.ci_solver.make_average_1rdm()
-            else:
-                g1 = self.ci_solver.make_average_sf_1rdm()
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
-                g1=g1,
-                C=self.C[0],
                 system=self.system,
-                mix_inactive=self.optimize_frozen_orbs,
+                mix_inactive=False,
                 mix_active=False,
             )
-            self.C[0] = semi.C_semican.copy()
+            C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
+            semi.semi_canonicalize(
+                g1=self.make_average_1rdm(),
+                C_contig=C_contig,
+            )
+            self.C[0] = semi.C_semican[:, self.mo_space.contig_to_orig].copy()
 
             # recompute the CI vectors in the semicanonical basis
             if self.two_component:
@@ -407,7 +394,16 @@ class MCOptimizer(ActiveSpaceSolver):
                     use_aux_corr=True,
                 )
             self.ci_solver.set_ints(ints.E, ints.H, ints.V)
+            # Basis change, can't restart from previous CI vectors *reliably*
+            self.ci_solver.reset_eigensolver()
             self.ci_solver.run()
+
+        convergence_status = self.ci_solver.get_convergence_status()
+        if not all(convergence_status):
+            logger.log_warning(
+                f"CI solver did not converge for all roots: {convergence_status}"
+            )
+            logger.log_warning("Consider increasing ci_maxiter.")
 
         self.executed = True
         return self
@@ -448,12 +444,9 @@ class MCOptimizer(ActiveSpaceSolver):
         nmo = self._C.shape[1]
         nrr = np.zeros((nmo, nmo), dtype=bool)
 
-        if self.optimize_frozen_orbs:
-            _core = self.mo_space.docc
-            _virt = self.mo_space.uocc
-        else:
-            _core = self.mo_space.core
-            _virt = self.mo_space.virt
+        # these do NOT include frozen orbitals!
+        _core = self.mo_space.core
+        _virt = self.mo_space.virt
 
         # GASn-GASm rotations
         if self.mo_space.ngas > 1 and not self.freeze_inter_gas_rots:
@@ -510,11 +503,24 @@ class MCOptimizer(ActiveSpaceSolver):
         self.E_orb_old = self.E_orb
         return conv, conv_str
 
+    def make_average_1rdm(self):
+        return self.ci_solver.make_average_1rdm()
+
+    def make_average_2rdm(self):
+        return self.ci_solver.make_average_2rdm()
+
+    def make_average_2cumulant(self):
+        return self.ci_solver.make_average_2cumulant()
+
+    def make_average_3rdm(self):
+        return self.ci_solver.make_average_3rdm()
+
+    def make_average_3cumulant(self):
+        return self.ci_solver.make_average_3cumulant()
+
+    def make_average_cumulants(self):
+        return self.ci_solver.make_average_cumulants()
+
 
 @dataclass
-class RelMCOptimizer(RelActiveSpaceSolver, MCOptimizer):
-    def __post_init__(self):
-        self.two_component = True
-        self.dtype = complex
-        RelActiveSpaceSolver.__post_init__(self)
-        MCOptimizer.__post_init__(self)
+class RelMCOptimizer(RelActiveSpaceSolver, MCOptimizer): ...

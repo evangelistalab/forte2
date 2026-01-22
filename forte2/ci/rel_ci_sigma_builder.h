@@ -19,7 +19,7 @@ class RelCISigmaBuilder {
   public:
     // == Class Constructor ==
     RelCISigmaBuilder(const CIStrings& lists, double E, np_matrix_complex& H, np_tensor4_complex& V,
-                      int log_level = 3);
+                      int log_level = 3, bool use_asym_ints = false);
 
     // == Class Public Functions ==
 
@@ -37,7 +37,7 @@ class RelCISigmaBuilder {
     std::string get_algorithm() const;
 
     /// @brief Set the one and two-electron integrals for the Hamiltonian
-    void set_Hamiltonian(double E, np_matrix_complex H, np_tensor4_complex V);
+    void set_Hamiltonian(double E, np_matrix_complex H, np_tensor4_complex V, bool use_asym_ints = false);
 
     /// @brief Set the logging level for the class
     void set_log_level(int level) { log_level_ = level; }
@@ -125,6 +125,8 @@ class RelCISigmaBuilder {
     np_matrix_complex H_;
     /// @brief Two-electron integrals in the form of a tensor V[p][q][r][s] = <pq|rs> = (pr|qs)
     np_tensor4_complex V_;
+    /// @brief Whether to use antisymmetrized integrals for the Hamiltonian construction
+    bool use_asym_ints_ = false;
     /// @brief Object for computing the energy and Slater determinants
     RelSlaterRules rel_slater_rules_;
     /// @brief Memory size for temporary buffers in bytes (default 1 GB)
