@@ -138,8 +138,8 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             ), f"Cutoff {self.cutoff} is smaller than 1-evals_threshold, {1-self.evals_threshold}, no orbitals will be selected."
         elif self.selection_method == "separate":
             assert (
-                self.num_active_docc > 0 and self.num_active_uocc > 0
-            ), "Number of active occupied and virtual orbitals must be positive."
+                self.num_active_docc + self.num_active_uocc > 0
+            ), "Sum of active occupied and unoccupied orbitals must be positive."
         elif self.selection_method == "total":
             assert self.num_active > 0, "Number of active orbitals must be positive."
 
