@@ -62,6 +62,10 @@ class RelDSRG_MRPT2(DSRGBase):
            J. Chem. Phys. 2018, 148, 124106.
     """
 
+    siso: bool = False
+    x2c_type: str = "so"
+    snso_type: str = "row-dependent"
+
     def get_integrals(self):
         g1, g2, l2, l3 = self.ci_solver.make_average_cumulants()
         # self._C are the MCSCF canonical orbitals. We always use canonical orbitals to build the generalized Fock matrix.
@@ -226,6 +230,20 @@ class RelDSRG_MRPT2(DSRGBase):
         _hbar1_canon = np.einsum(
             "ip,pq,jq->ij", self.Uactv, _hbar1, self.Uactv.conj(), optimize=True
         )
+        if self.siso:
+            # subtract original 1e Hamiltonian
+            _C = self.parent_method.C[0]
+            _hbar1_canon -= (_C.conj().T @ self.system.ints_hcore() @ _C)[self.actv, self.actv]
+            self.x2c_type_save = self.system.x2c_type
+            self.snso_type_save = self.system.snso_type
+            self.system.x2c_type = self.x2c_type
+            self.system.snso_type = self.snso_type
+            # add requested 1e Hamiltonian
+            _hbar1_canon += (_C.conj().T @ self.system.ints_hcore() @ _C)[self.actv, self.actv]
+            # revert so that DSRG uses original H1
+            self.system.x2c_type = self.x2c_type_save
+            self.system.snso_type = self.snso_type_save
+
         _hbar2_canon = np.einsum(
             "ip,jq,pqrs,kr,ls->ijkl",
             self.Uactv,
