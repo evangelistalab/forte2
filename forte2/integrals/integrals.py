@@ -464,17 +464,21 @@ def coulomb_3c(system, basis1=None, basis2=None, basis3=None):
 
     # max angular momentum supported:
     # libcint: 14
-    # libint: 6
+    # libint: 5-7 (depending on architecture)
     max_l = max(_basis1.max_l, _basis2.max_l, _basis3.max_l)
     if max_l > 14:
         raise ValueError(
             f"coulomb_3c integral with basis functions of angular momentum > 14 "
             f"is not supported (max_l = {max_l})"
         )
-    elif max_l > 6:
-        return cint_coulomb_3c(system, basis1, basis2, basis3)
     else:
-        return ints.coulomb_3c(_basis1, _basis2, _basis3)
+        try:
+            res = ints.coulomb_3c(_basis1, _basis2, _basis3)
+        except RuntimeError as e:
+            if "lmax_exceeded" not in str(e):
+                raise
+            res = cint_coulomb_3c(system, basis1, basis2, basis3)
+        return res
 
 
 def coulomb_2c(system, basis1=None, basis2=None):
@@ -503,17 +507,21 @@ def coulomb_2c(system, basis1=None, basis2=None):
 
     # max angular momentum supported:
     # libcint: 14
-    # libint: 6
+    # libint: 5-7 (depending on architecture)
     max_l = max(_basis1.max_l, _basis2.max_l)
     if max_l > 14:
         raise ValueError(
             f"coulomb_2c integral with basis functions of angular momentum > 14 "
             f"is not supported (max_l = {max_l})"
         )
-    elif max_l > 6:
-        return cint_coulomb_2c(system, basis1, basis2)
     else:
-        return ints.coulomb_2c(_basis1, _basis2)
+        try:
+            res = ints.coulomb_2c(_basis1, _basis2)
+        except RuntimeError as e:
+            if "lmax_exceeded" not in str(e):
+                raise
+            res = cint_coulomb_2c(system, basis1, basis2)
+        return res
 
 
 def erf_coulomb_3c(system, omega, basis1=None, basis2=None, basis3=None):
