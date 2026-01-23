@@ -47,7 +47,7 @@ def test_two_electron_integrals():
 
 @pytest.mark.skipif(not BSE_AVAILABLE, reason="BSE module is not available")
 def test_3c2e():
-    xyz = "Au 0 0 0"
+    xyz = "Al 0 0 0"
     system = forte2.System(
         xyz=xyz,
         basis_set="ano-rcc",
@@ -56,7 +56,7 @@ def test_3c2e():
     )
     forte2.set_verbosity_level(5)
     ref = forte2.integrals.coulomb_3c(system)
-    assert np.linalg.norm(ref) == approx(239.55734891969408)
+    assert np.linalg.norm(ref) == approx(116.39332464579758)
 
     # force the 3c2e integral routine to not use symmetry optimizations
     basis = build_basis("ano-rcc", system.geom_helper)
@@ -64,4 +64,4 @@ def test_3c2e():
         system, system.auxiliary_basis, system.basis, basis
     )
     assert np.linalg.norm(ref2 - ref) < 1e-10
-    assert np.linalg.norm(ref2) == approx(239.55734891969408)
+    assert np.linalg.norm(ref2) == approx(116.39332464579758)
