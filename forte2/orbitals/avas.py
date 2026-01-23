@@ -140,6 +140,8 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             assert (
                 self.num_active_docc + self.num_active_uocc > 0
             ), "Sum of active occupied and unoccupied orbitals must be positive."
+            assert self.num_active_docc >= 0, "Number of active occupied orbitals cannot be negative."
+            assert self.num_active_uocc >= 0, "Number of active unoccupied orbitals cannot be negative."
         elif self.selection_method == "total":
             assert self.num_active > 0, "Number of active orbitals must be positive."
 

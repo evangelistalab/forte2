@@ -21,6 +21,22 @@ def test_avas_inputs():
             subspace=["N(2p)"],
         )(rhf)
 
+    with pytest.raises(Exception):
+        avas = AVAS(
+            selection_method="separate",
+            subspace=["N(2p)"],
+            num_active_docc=3,
+            num_active_uocc=-1,
+        )(rhf)
+
+    with pytest.raises(Exception):
+        avas = AVAS(
+            selection_method="separate",
+            subspace=["N(2p)"],
+            num_active_docc=-3,
+            num_active_uocc=3,
+        )(rhf)
+
     # don't raise if one of num_active_docc/vir = 0
     avas = AVAS(
         selection_method="separate",
@@ -393,3 +409,4 @@ def test_avas_zero_uocc():
     )(mf)
     mc = MCOptimizer(states=State(nel=35, multiplicity=2, ms=0.5), nroots=3)(avas)
     mc.run()
+    assert mc.E_avg == approx(-2572.3646258078)
