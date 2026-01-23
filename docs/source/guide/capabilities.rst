@@ -33,6 +33,11 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Support for CAS-SCF and GAS-SCF/ORMAS-SCF, with state-averaging
   * Two-component CAS/GAS/ORMAS-SCF
   * Atomic valence active space (AVAS) active space selection (support for both one- and two-component Hartree-Fock) [4]_
+
+* Multi-reference driven similarity renormalization group (MR-DSRG) methods
+  
+  * Non-relativistic DSRG-MRPT2 with reference relaxation and state-averaging [7]_
+  * Two-component relativistic DSRG-MRPT2 with reference relaxation and state-averaging
   
 * Various orbital manipulation routines
   
@@ -50,4 +55,4 @@ References
 .. [4] Sayfutyarova, E. R.; Sun, Q.; Chan, G. K.-L.; Knizia, G. Automated Construction of Molecular Active Spaces from Atomic Valence Orbitals. J. Chem. Theory Comput. 2017, 13 (9), 4063-4078. https://doi.org/10.1021/acs.jctc.7b00128.
 .. [5] He, N.; Evangelista, F. A. A Zeroth-Order Active-Space Frozen-Orbital Embedding Scheme for Multireference Calculations. The Journal of Chemical Physics 2020, 152 (9), 094107. https://doi.org/10.1063/1.5142481.
 .. [6] Knizia, G. Intrinsic Atomic Orbitals: An Unbiased Bridge between Quantum Theory and Chemical Concepts. J. Chem. Theory Comput. 2013, 9 (11), 4834-4843. https://doi.org/10.1021/ct400687b.
-
+.. [7] Li, C.; Evangelista, F. A. Multireference Driven Similarity Renormalization Group: A Second-Order Perturbative Analysis. J. Chem. Theory Comput. 2015, 11 (5), 2097-2108. https://doi.org/10.1021/acs.jctc.5b00134.
