@@ -31,6 +31,10 @@ from .ci_utils import (
     pretty_print_ci_nat_occ_numbers,
     pretty_print_ci_dets,
     pretty_print_ci_transition_props,
+    make_2cumulant_sf,
+    make_2cumulant_so,
+    make_3cumulant_sf,
+    make_3cumulant_so,
 )
 
 
@@ -121,7 +125,7 @@ class _CIBase:
 
     ### Non-init attributes
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
-    first_run: bool = field(default=True, init=False)
+    rebuild_guess: bool = field(default=True, init=False)
     executed: bool = field(default=False, init=False)
 
     def __post_init__(self):
@@ -213,7 +217,15 @@ class _CIBase:
             self.b_det = np.zeros((self.ndet))
             self.sigma_det = np.zeros((self.ndet))
 
-    def run(self):
+    def run(self, use_asym_ints=False):
+        if use_asym_ints:
+            assert (
+                self.two_component
+            ), "Antisymmetric integrals only supported for two-component CI."
+            assert (
+                self.ci_algorithm.lower() == "hz"
+            ), "Antisymmetric integrals only supported for 'hz' algorithm."
+
         if not self.executed:
             self._ci_solver_startup()
 
@@ -227,6 +239,7 @@ class _CIBase:
                 self.ints.H,
                 self.ints.V,
                 self.log_level,
+                use_asym_ints,
             )
         else:
             self.ci_sigma_builder = CISigmaBuilder(
@@ -307,10 +320,11 @@ class _CIBase:
         # 4. Compute diagonal of the Hamiltonian
         self.eigensolver.add_h_diag(Hdiag)
 
-        # 5. Build the guess vectors if this is the first run
-        if self.first_run:
+        # 5. (Re-)build the guess vectors if requested.
+        # This is always done on the first run at least, but can be forced again by e.g. reset_eigensolver.
+        if self.rebuild_guess:
             self._build_guess_vectors(Hdiag)
-            self.first_run = False
+            self.rebuild_guess = False
 
         if self.two_component:
             if self.ci_algorithm.lower() == "sparse":
@@ -540,6 +554,123 @@ class _CIBase:
                 guess_mat[d, i] = guess[j]
 
         self.eigensolver.add_guesses(guess_mat)
+
+    def make_1rdm(self, left_root: int, right_root: int | None = None):
+        """
+        Make the one-particle RDM for two CI roots.
+        Spin-free for non-relativistic CI (use make_sd_* for spin-dependent RDMs).
+        Spin(or)-orbital for two-component CI.
+
+        Parameters
+        ----------
+        left_root : int
+            the CI root for the bra state.
+        right_root : int | None, optional (default=left_root)
+            the CI root for the ket state.
+
+        Returns
+        -------
+        NDArray
+            One-particle RDM.
+        """
+        if self.two_component:
+            return self.make_so_1rdm(left_root, right_root)
+        else:
+            return self.make_sf_1rdm(left_root, right_root)
+
+    def make_2rdm(self, left_root: int, right_root: int | None = None):
+        """
+        Make the two-particle RDM for two CI roots.
+        Spin-free for non-relativistic CI (use make_sd_* for spin-dependent RDMs).
+        Spin(or)-orbital for two-component CI.
+
+        Parameters
+        ----------
+        left_root : int
+            the CI root for the bra state.
+        right_root : int | None, optional (default=left_root)
+            the CI root for the ket state.
+
+        Returns
+        -------
+        NDArray
+            Two-particle RDM.
+        """
+        if self.two_component:
+            return self.make_so_2rdm(left_root, right_root)
+        else:
+            return self.make_sf_2rdm(left_root, right_root)
+
+    def make_2cumulant(self, left_root: int, right_root: int | None = None):
+        """
+        Make the two-particle cumulant for two CI roots.
+        Spin-free for non-relativistic CI (use make_sd_* for spin-dependent RDMs).
+        Spin(or)-orbital for two-component CI.
+
+        Parameters
+        ----------
+        left_root : int
+            the CI root for the bra state.
+        right_root : int | None, optional (default=left_root)
+            the CI root for the ket state.
+
+        Returns
+        -------
+        NDArray
+            Two-particle cumulant.
+        """
+        if self.two_component:
+            l2 = self.make_so_2cumulant(left_root, right_root)
+        else:
+            l2 = self.make_sf_2cumulant(left_root, right_root)
+        return l2
+
+    def make_3rdm(self, left_root: int, right_root: int | None = None):
+        """
+        Make the three-particle RDM for two CI roots.
+        Spin-free for non-relativistic CI (use make_sd_* for spin-dependent RDMs).
+        Spin(or)-orbital for two-component CI.
+
+        Parameters
+        ----------
+        left_root : int
+            the CI root for the bra state.
+        right_root : int | None, optional (default=left_root)
+            the CI root for the ket state.
+
+        Returns
+        -------
+        NDArray
+            Three-particle RDM.
+        """
+        if self.two_component:
+            return self.make_so_3rdm(left_root, right_root)
+        else:
+            return self.make_sf_3rdm(left_root, right_root)
+
+    def make_3cumulant(self, left_root: int, right_root: int | None = None):
+        """
+        Make the three-particle cumulant for two CI roots.
+        Spin-free for non-relativistic CI (use make_sd_* for spin-dependent RDMs).
+        Spin(or)-orbital for two-component CI.
+
+        Parameters
+        ----------
+        left_root : int
+            the CI root for the bra state.
+        right_root : int | None, optional (default=left_root)
+            the CI root for the ket state.
+
+        Returns
+        -------
+        NDArray
+            Three-particle cumulant.
+        """
+        if self.two_component:
+            l3 = self.make_so_3cumulant(left_root, right_root)
+        else:
+            l3 = self.make_sf_3cumulant(left_root, right_root)
+        return l3
 
     def make_sd_1rdm(self, left_root: int, right_root: int | None = None):
         r"""
@@ -799,7 +930,7 @@ class _CIBase:
             )
         return self.ci_sigma_builder.sf_3cumulant(left_ci_vec_det, right_ci_vec_det)
 
-    def make_1rdm(self, left_root: int, right_root: int = None):
+    def make_so_1rdm(self, left_root: int, right_root: int = None):
         """
         Make the one-particle RDM for two CI roots. For two-component CI only.
 
@@ -827,7 +958,7 @@ class _CIBase:
 
         return rdm
 
-    def make_1rdm_debug(self, left_root: int, right_root: int = None):
+    def make_so_1rdm_debug(self, left_root: int, right_root: int = None):
         """
         Make the one-particle RDM for two CI roots. For two-component CI only.
 
@@ -857,7 +988,7 @@ class _CIBase:
 
         return rdm
 
-    def make_2rdm_debug(self, left_root: int, right_root: int = None):
+    def make_so_2rdm_debug(self, left_root: int, right_root: int = None):
         """
         Make the two-particle RDM for two CI roots. For two-component CI only.
         Parameters
@@ -886,7 +1017,7 @@ class _CIBase:
 
         return rdm
 
-    def make_2cumulant(self, left_root: int, right_root: int = None):
+    def make_so_2cumulant(self, left_root: int, right_root: int = None):
         """
         Make the cumulant of the two-particle RDM for two CI roots. For two-component CI only.
 
@@ -914,7 +1045,7 @@ class _CIBase:
         )
         return lambda2
 
-    def make_2rdm(self, left_root: int, right_root: int = None):
+    def make_so_2rdm(self, left_root: int, right_root: int = None):
         """
         Make the two-particle RDM for two CI roots. For two-component CI only.
 
@@ -942,7 +1073,7 @@ class _CIBase:
 
         return rdm
 
-    def make_2cumulant_debug(self, left_root: int, right_root: int = None):
+    def make_so_2cumulant_debug(self, left_root: int, right_root: int = None):
         """
         Make the cumulant of the two-particle RDM for two CI roots. For two-component CI only.
 
@@ -963,8 +1094,8 @@ class _CIBase:
         ), "make_2cumulant_debug is only available for two-component CI."
         if right_root is None:
             right_root = left_root
-        rdm1 = self.make_1rdm(left_root, right_root)
-        rdm2 = self.make_2rdm(left_root, right_root)
+        rdm1 = self.make_so_1rdm_debug(left_root, right_root)
+        rdm2 = self.make_so_2rdm_debug(left_root, right_root)
         lambda2 = (
             rdm2
             - np.einsum("pr,qs->pqrs", rdm1, rdm1, optimize=True)
@@ -972,7 +1103,7 @@ class _CIBase:
         )
         return lambda2
 
-    def make_3rdm_debug(self, left_root: int, right_root: int = None):
+    def make_so_3rdm_debug(self, left_root: int, right_root: int = None):
         assert (
             self.two_component
         ), "make_3rdm_debug is only available for two-component CI."
@@ -986,7 +1117,7 @@ class _CIBase:
 
         return rdm
 
-    def make_3rdm(self, left_root: int, right_root: int = None):
+    def make_so_3rdm(self, left_root: int, right_root: int = None):
         assert self.two_component, "make_3rdm is only available for two-component CI."
         if right_root is None:
             right_root = left_root
@@ -998,7 +1129,7 @@ class _CIBase:
 
         return rdm
 
-    def make_3cumulant(self, left_root: int, right_root: int = None):
+    def make_so_3cumulant(self, left_root: int, right_root: int = None):
         assert (
             self.two_component
         ), "make_3cumulant is only available for two-component CI."
@@ -1116,6 +1247,10 @@ class _CIBase:
             top_dets_per_root.append(top_dets)
 
         return top_dets_per_root
+
+    def reset_eigensolver(self):
+        self.eigensolver = None
+        self.rebuild_guess = True
 
 
 @dataclass
@@ -1264,6 +1399,16 @@ class CISolver(ActiveSpaceSolver):
         self.executed = True
         return self
 
+    def reset_eigensolver(self):
+        """
+        Reset the eigensolver for each sub-solver.
+        This forces a re-initialization of the eigensolver in the next run,
+        and also forces re-computation of the guess vectors.
+        This is useful whenever the integrals have changed (e.g. after semi-canonicalization).
+        """
+        for ci_solver in self.sub_solvers:
+            ci_solver.reset_eigensolver()
+
     def compute_average_energy(self):
         """
         Compute the average energy from the CI roots using the weights.
@@ -1275,7 +1420,7 @@ class CISolver(ActiveSpaceSolver):
         """
         return np.dot(self.weights_flat, self.evals_flat)
 
-    def make_average_sf_1rdm(self):
+    def make_average_1rdm(self):
         """
         Make the average spin-free one-particle RDM from the CI vectors.
 
@@ -1284,13 +1429,13 @@ class CISolver(ActiveSpaceSolver):
         NDArray
             Average spin-free one-particle RDM.
         """
-        rdm1 = np.zeros((self.norb,) * 2)
+        rdm1 = np.zeros((self.norb,) * 2, dtype=self.dtype)
         for i, ci_solver in enumerate(self.sub_solvers):
             for j in range(ci_solver.nroot):
-                rdm1 += ci_solver.make_sf_1rdm(j) * self.weights[i][j]
+                rdm1 += ci_solver.make_1rdm(j) * self.weights[i][j]
         return rdm1
 
-    def make_average_sf_2rdm(self):
+    def make_average_2rdm(self):
         """
         Make the average spin-free two-particle RDM from the CI vectors.
 
@@ -1299,12 +1444,57 @@ class CISolver(ActiveSpaceSolver):
         NDArray
             Average spin-free two-particle RDM.
         """
-        rdm2 = np.zeros((self.norb,) * 4)
+        rdm2 = np.zeros((self.norb,) * 4, dtype=self.dtype)
         for i, ci_solver in enumerate(self.sub_solvers):
             for j in range(ci_solver.nroot):
-                rdm2 += ci_solver.make_sf_2rdm(j) * self.weights[i][j]
+                rdm2 += ci_solver.make_2rdm(j) * self.weights[i][j]
 
         return rdm2
+
+    def make_average_3rdm(self):
+        """
+        Make the average spin-free three-particle RDM from the CI vectors.
+
+        Returns
+        -------
+        NDArray
+            Average spin-free three-particle RDM.
+        """
+        rdm3 = np.zeros((self.norb,) * 6, dtype=self.dtype)
+        for i, ci_solver in enumerate(self.sub_solvers):
+            for j in range(ci_solver.nroot):
+                rdm3 += ci_solver.make_3rdm(j) * self.weights[i][j]
+
+        return rdm3
+
+    def make_average_2cumulant(self):
+        dm1 = self.make_average_1rdm()
+        dm2 = self.make_average_2rdm()
+        if self.two_component:
+            return make_2cumulant_so(dm1, dm2)
+        else:
+            return make_2cumulant_sf(dm1, dm2)
+
+    def make_average_3cumulant(self):
+        dm1 = self.make_average_1rdm()
+        dm2 = self.make_average_2rdm()
+        dm3 = self.make_average_3rdm()
+        if self.two_component:
+            return make_3cumulant_so(dm1, dm2, dm3)
+        else:
+            return make_3cumulant_sf(dm1, dm2, dm3)
+
+    def make_average_cumulants(self):
+        dm1 = self.make_average_1rdm()
+        dm2 = self.make_average_2rdm()
+        dm3 = self.make_average_3rdm()
+        if self.two_component:
+            lambda2 = make_2cumulant_so(dm1, dm2)
+            lambda3 = make_3cumulant_so(dm1, dm2, dm3)
+        else:
+            lambda2 = make_2cumulant_sf(dm1, dm2)
+            lambda3 = make_3cumulant_sf(dm1, dm2, dm3)
+        return dm1, dm2, lambda2, lambda3
 
     def set_ints(self, scalar, oei, tei):
         """
@@ -1321,6 +1511,19 @@ class CISolver(ActiveSpaceSolver):
         """
         for ci_solver in self.sub_solvers:
             ci_solver.set_ints(scalar, oei, tei)
+
+    def set_maxiter(self, maxiter):
+        """
+        Set the maximum number of iterations for the CI solver.
+
+        Parameters
+        ----------
+        maxiter : int
+            The maximum number of iterations to set.
+        """
+        self.maxiter = maxiter
+        for ci_solver in self.sub_solvers:
+            ci_solver.set_maxiter(maxiter)
 
     def compute_natural_occupation_numbers(self):
         """
@@ -1368,8 +1571,8 @@ class CISolver(ActiveSpaceSolver):
 
         Cact = C[:, self.active_indices]
         Ccore = C[:, self.core_indices]
-        # factor of 2 for spin-summed 1-RDM
-        rdm_core = 2 * np.einsum("pi,qi->pq", Ccore, Ccore.conj(), optimize=True)
+        factor = 1.0 if self.two_component else 2.0
+        rdm_core = factor * np.einsum("pi,qi->pq", Ccore, Ccore.conj(), optimize=True)
         # this includes nuclear dipole contribution
         core_dip = get_1e_property(
             self.system, rdm_core, property_name="dipole", unit="au"
@@ -1381,17 +1584,20 @@ class CISolver(ActiveSpaceSolver):
             tdmdict = OrderedDict()
             foscdict = OrderedDict()
             for i in range(ci_solver.nroot):
-                rdm = ci_solver.make_sf_1rdm(i)
-                rdm = np.einsum("ij,pi,qj->pq", rdm, Cact, Cact.conj(), optimize=True)
+                rdm = ci_solver.make_1rdm(i)
+                # Different (back-)transformation rules for RDMs:
+                # O_{mu}^{nu} = C_{mu}^p <phi_p|O|phi^q> C^q_{nu} = C^H O[mo] C
+                # rdm^{mu}_{nu} = C^{mu}_p <a^p a_q> C^q_{nu} = C^* rdm[mo] C^T
+                rdm = np.einsum("ij,pi,qj->pq", rdm, Cact.conj(), Cact, optimize=True)
                 dip = get_1e_property(
                     self.system, rdm, property_name="electric_dipole", unit="au"
                 )
                 tdmdict[(i, i)] = dip + core_dip
                 foscdict[(i, i)] = 0.0  # No oscillator strength for i->i transitions
                 for j in range(i + 1, ci_solver.nroot):
-                    tdm = ci_solver.make_sf_1rdm(i, j)
+                    tdm = ci_solver.make_1rdm(i, j)
                     tdm = np.einsum(
-                        "ij,pi,qj->pq", tdm, Cact, Cact.conj(), optimize=True
+                        "ij,pi,qj->pq", tdm, Cact.conj(), Cact, optimize=True
                     )
                     tdip = get_1e_property(
                         self.system, tdm, property_name="electric_dipole", unit="au"
@@ -1401,6 +1607,24 @@ class CISolver(ActiveSpaceSolver):
                     foscdict[(i, j)] = (2 / 3) * vte * np.linalg.norm(tdip) ** 2
             self.fosc_per_solver.append(foscdict)
             self.tdm_per_solver.append(tdmdict)
+
+    def get_convergence_status(self):
+        """
+        Get the convergence status of each sub-solver.
+
+        Returns
+        -------
+        list[bool]
+            A list of booleans indicating whether each sub-solver has converged.
+        """
+        status = []
+        for ci_solver in self.sub_solvers:
+            if ci_solver.eigensolver is None:
+                # Exact diagonalization
+                status.append(True)
+            else:
+                status.append(ci_solver.eigensolver.converged)
+        return status
 
 
 @dataclass
@@ -1420,11 +1644,11 @@ class CI(CISolver):
         if self.final_orbital == "semicanonical":
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
-                g1=self.make_average_sf_1rdm(),
-                C=self.C[0],
                 system=self.system,
             )
-            self.C[0] = semi.C_semican.copy()
+            C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
+            semi.semi_canonicalize(g1=self.make_average_1rdm(), C_contig=C_contig)
+            self.C[0] = semi.C_semican[self.mo_space.contig_to_orig].copy()
 
             # recompute the CI vectors in the semicanonical basis
             ints = RestrictedMOIntegrals(
@@ -1435,7 +1659,10 @@ class CI(CISolver):
                 use_aux_corr=True,
             )
             self.set_ints(ints.E, ints.H, ints.V)
+            self.reset_eigensolver()
+            self.set_maxiter(500)
             super().run()
+            self.set_maxiter(self.maxiter)
 
         return self
 
@@ -1479,6 +1706,21 @@ class RelCISolver(RelActiveSpaceSolver):
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
     first_run: bool = field(default=True, init=False)
     executed: bool = field(default=False, init=False)
+
+    compute_average_energy = CISolver.compute_average_energy
+    make_average_1rdm = CISolver.make_average_1rdm
+    make_average_2rdm = CISolver.make_average_2rdm
+    make_average_3rdm = CISolver.make_average_3rdm
+    make_average_2cumulant = CISolver.make_average_2cumulant
+    make_average_3cumulant = CISolver.make_average_3cumulant
+    make_average_cumulants = CISolver.make_average_cumulants
+    compute_natural_occupation_numbers = CISolver.compute_natural_occupation_numbers
+    get_top_determinants = CISolver.get_top_determinants
+    set_ints = CISolver.set_ints
+    compute_transition_properties = CISolver.compute_transition_properties
+    reset_eigensolver = CISolver.reset_eigensolver
+    set_maxiter = CISolver.set_maxiter
+    get_convergence_status = CISolver.get_convergence_status
 
     def __call__(self, parent_method):
         self.parent_method = parent_method
@@ -1535,14 +1777,14 @@ class RelCISolver(RelActiveSpaceSolver):
                 )
             )
 
-    def run(self):
+    def run(self, use_asym_ints=False):
         if self.first_run:
             self._startup()
             self.first_run = False
 
         self.evals_per_solver = []
         for ci_solver in self.sub_solvers:
-            ci_solver.run()
+            ci_solver.run(use_asym_ints=use_asym_ints)
             self.evals_per_solver.append(ci_solver.evals)
 
         self.evals_flat = np.concatenate(self.evals_per_solver)
@@ -1552,146 +1794,6 @@ class RelCISolver(RelActiveSpaceSolver):
 
         self.executed = True
         return self
-
-    def compute_natural_occupation_numbers(self):
-        """
-        Compute the natural occupation numbers for the CI states.
-
-        Returns
-        -------
-        (norb, nroot) NDArray
-            The natural occupation numbers for each root.
-        """
-        nos = []
-        for ci_solver in self.sub_solvers:
-            nos.append(ci_solver.compute_natural_occupation_numbers())
-        self.nat_occs = np.concatenate(nos, axis=1)
-
-    def compute_transition_properties(self, C=None):
-        """
-        Compute the transition dipole moments and oscillator strengths from the spin-free 1-TDMs.
-        The results are stored in `self.tdm_per_solver` and `self.fosc_per_solver`.
-        """
-        if not self.executed:
-            raise RuntimeError("CI solver has not been executed yet.")
-
-        if C is None:
-            C = self.C[0]
-
-        Cact = C[:, self.active_indices]
-        Ccore = C[:, self.core_indices]
-        rdm_core = np.einsum("pi,qi->pq", Ccore, Ccore.conj(), optimize=True)
-        # this includes nuclear dipole contribution
-        core_dip = get_1e_property(
-            self.system, rdm_core, property_name="dipole", unit="au"
-        )
-        self.tdm_per_solver = []
-        self.fosc_per_solver = []
-
-        for ici, ci_solver in enumerate(self.sub_solvers):
-            tdmdict = OrderedDict()
-            foscdict = OrderedDict()
-            for i in range(ci_solver.nroot):
-                rdm = ci_solver.make_1rdm(i)
-                # Different (back-)transformation rules for RDMs:
-                # O_{mu}^{nu} = C_{mu}^p <phi_p|O|phi^q> C^q_{nu} = C^H O[mo] C
-                # rdm^{mu}_{nu} = C^{mu}_p <a^p a_q> C^q_{nu} = C^* rdm[mo] C^T
-                rdm = np.einsum("ij,pi,qj->pq", rdm, Cact.conj(), Cact, optimize=True)
-                dip = get_1e_property(
-                    self.system, rdm, property_name="electric_dipole", unit="au"
-                )
-                tdmdict[(i, i)] = dip + core_dip
-                foscdict[(i, i)] = 0.0  # No oscillator strength for i->i transitions
-                for j in range(i + 1, ci_solver.nroot):
-                    tdm = ci_solver.make_1rdm(i, j)
-                    tdm = np.einsum(
-                        "ij,pi,qj->pq", tdm, Cact.conj(), Cact, optimize=True
-                    )
-                    tdip = get_1e_property(
-                        self.system, tdm, property_name="electric_dipole", unit="au"
-                    )
-                    tdmdict[(i, j)] = tdip
-                    vte = self.evals_per_solver[ici][j] - self.evals_per_solver[ici][i]
-                    foscdict[(i, j)] = (2 / 3) * vte * np.linalg.norm(tdip) ** 2
-            self.fosc_per_solver.append(foscdict)
-            self.tdm_per_solver.append(tdmdict)
-
-    def get_top_determinants(self, n=5):
-        """
-        Get the top `n` determinants for each root based on their coefficients in the CI vector.
-
-        Parameters
-        ----------
-        n : int, optional, default=5
-            The number of top determinants to return.
-
-        Returns
-        -------
-        top_dets : list[list[tuple[Determinant, float]]]]
-            top_dets[i] contains a list of tuples (Determinant, coefficient) for the `i`-th root.
-        """
-        top_dets = []
-        for ci_solver in self.sub_solvers:
-            top_dets += ci_solver.get_top_determinants(n)
-        return top_dets
-
-    def set_ints(self, scalar, oei, tei):
-        """
-        Set the active-space integrals for the CI solver.
-
-        Parameters
-        ----------
-        scalar : float
-            The scalar energy term.
-        oei : NDArray
-            One-electron active-space integrals in the MO basis.
-        tei : NDArray
-            Two-electron active-space integrals in the MO basis.
-        """
-        for ci_solver in self.sub_solvers:
-            ci_solver.set_ints(scalar, oei, tei)
-
-    def compute_average_energy(self):
-        """
-        Compute the average energy from the CI roots using the weights.
-
-        Returns
-        -------
-        float
-            Average energy of the CI roots.
-        """
-        return np.dot(self.weights_flat, self.evals_flat)
-
-    def make_average_1rdm(self):
-        """
-        Make the average one-particle RDM from the CI vectors.
-
-        Returns
-        -------
-        NDArray
-            Average one-particle RDM.
-        """
-        rdm1 = np.zeros((self.norb,) * 2, dtype=np.complex128)
-        for i, ci_solver in enumerate(self.sub_solvers):
-            for j in range(ci_solver.nroot):
-                rdm1 += ci_solver.make_1rdm(j) * self.weights[i][j]
-        return rdm1
-
-    def make_average_2rdm(self):
-        """
-        Make the average two-particle RDM from the CI vectors.
-
-        Returns
-        -------
-        NDArray
-            Average two-particle RDM.
-        """
-        rdm2 = np.zeros((self.norb,) * 4, dtype=np.complex128)
-        for i, ci_solver in enumerate(self.sub_solvers):
-            for j in range(ci_solver.nroot):
-                rdm2 += ci_solver.make_2rdm(j) * self.weights[i][j]
-
-        return rdm2
 
 
 @dataclass
@@ -1705,11 +1807,11 @@ class RelCI(RelCISolver):
         if self.final_orbital == "semicanonical":
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
-                g1=self.make_average_1rdm(),
-                C=self.C[0],
                 system=self.system,
             )
-            self.C[0] = semi.C_semican.copy()
+            C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
+            semi.semi_canonicalize(g1=self.make_average_1rdm(), C_contig=C_contig)
+            self.C[0] = semi.C_semican[self.mo_space.contig_to_orig].copy()
 
             # recompute the CI vectors in the semicanonical basis
             ints = SpinorbitalIntegrals(
@@ -1720,7 +1822,10 @@ class RelCI(RelCISolver):
                 use_aux_corr=True,
             )
             self.set_ints(ints.E, ints.H, ints.V)
+            self.reset_eigensolver()
+            self.set_maxiter(500)
             super().run()
+            self.set_maxiter(self.maxiter)
 
         return self
 

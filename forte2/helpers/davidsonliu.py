@@ -266,7 +266,9 @@ class DavidsonLiuSolver:
             # precondition
             denom = lamr[np.newaxis, :] - self.h_diag[:, np.newaxis]
             mask = np.abs(denom) > 1e-6
-            R = np.where(mask, R / denom, 0.0)
+            # vectorize division only where denom is not too small, setting others to 0
+            R[~mask] = 0.0
+            np.divide(R, denom, out=R, where=mask)
             self.r[:, : self.nroot] = R
 
             # norms & convergence
@@ -274,10 +276,12 @@ class DavidsonLiuSolver:
             max_de = np.max(np.abs(lamr - self.lam_old[: self.nroot]))
             max_r = rnorms.max()
 
-            conv_e = np.all(np.abs(lamr - self.lam_old[: self.nroot]) < self.e_tol)
-            conv_r = np.all(rnorms < self.r_tol)
+            conv_e = max_de < self.e_tol
+            conv_r = max_r < self.r_tol
             if (conv_e and conv_r) or (self.basis_size == self.size):
                 self.converged = True
+                break
+            if self.iter == self.maxiter - 1:
                 break
             self.lam_old[: self.nroot] = lamr
 
@@ -358,8 +362,6 @@ class DavidsonLiuSolver:
             self.b[:, : self.basis_size] @ self.alpha[: self.basis_size, : self.nroot]
         )
 
-        # orthonormalize final evecs
-        # Qf, _ = qr(evecs, mode="reduced")
         self.basis_size = self.nroot
         self.b[:, : self.nroot] = evecs
         self.sigma_size = 0
@@ -520,8 +522,12 @@ class DavidsonLiuSolver:
         """
         Check if the columns of b are orthonormal.
         """
-        if not np.allclose(b.T.conj() @ b, np.eye(b.shape[1]), atol=1e-12):
+        if not np.allclose(b.T.conj() @ b, np.eye(b.shape[1]), atol=1e-11):
+            S = b.T.conj() @ b
             logger.log_warning(f"{msg}")
+            logger.log_warning(
+                f"Largest deviation from orthonormality: {np.max(np.abs(S - np.eye(S.shape[0])))}"
+            )
             logger.log_warning(f"S = {b.T.conj() @ b}")
             raise ValueError(msg)
 

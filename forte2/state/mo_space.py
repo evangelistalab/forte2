@@ -353,6 +353,68 @@ class MOSpace:
         self.contig_to_orig = _mo_space.contig_to_orig
         self.orig_to_contig = _mo_space.orig_to_contig
 
+    def update_frozen_orbitals(
+        self,
+        frozen_core_orbitals: int | list[int] = None,
+        frozen_virtual_orbitals: int | list[int] = None,
+    ):
+        """
+        Return a new `MOSpace` object with a new set of frozen core and virtual orbitals.
+        These have to be a subset of the current core/virtual and frozen core/virtual orbitals.
+
+        Parameters
+        ----------
+        frozen_core_orbitals : int | list[int]
+            A list of integers indicating the new frozen core orbital indices.
+            If an integer is provided, the lowest `frozen_core_orbitals` orbitals will be frozen.
+        frozen_virtual_orbitals : int | list[int]
+            A list of integers indicating the new frozen virtual orbital indices.
+            If an integer is provided, the highest `frozen_virtual_orbitals` orbitals will be frozen.
+        """
+        if frozen_core_orbitals is None and frozen_virtual_orbitals is None:
+            return self
+
+        if frozen_core_orbitals is None:
+            frozen_core_orbitals = 0
+        if frozen_virtual_orbitals is None:
+            frozen_virtual_orbitals = 0
+
+        # convert integers to lists
+        if isinstance(frozen_core_orbitals, int):
+            frozen_core_orbitals = list(range(frozen_core_orbitals))
+        if isinstance(frozen_virtual_orbitals, int):
+            frozen_virtual_orbitals = list(
+                range(self.nmo - frozen_virtual_orbitals, self.nmo)
+            )
+
+        assert len(frozen_core_orbitals) == len(
+            set(frozen_core_orbitals)
+        ), "Frozen core orbitals must be unique."
+        assert set(frozen_core_orbitals).issubset(
+            set(self.core_orbitals + self.frozen_core_orbitals)
+        ), "Frozen core orbitals must be a subset of the current core orbitals."
+
+        assert len(frozen_virtual_orbitals) == len(
+            set(frozen_virtual_orbitals)
+        ), "Frozen virtual orbitals must be unique."
+        assert set(frozen_virtual_orbitals).issubset(
+            set(self.virtual_indices + self.frozen_virtual_orbitals)
+        ), "Frozen virtual orbitals must be a subset of the current virtual orbitals."
+
+        new_core_orbitals = sorted(
+            list(
+                set(self.core_orbitals + self.frozen_core_orbitals)
+                - set(frozen_core_orbitals)
+            )
+        )
+        return self.__class__(
+            nmo=self.nmo,
+            frozen_core_orbitals=frozen_core_orbitals,
+            core_orbitals=new_core_orbitals,
+            active_orbitals=self.active_orbitals,
+            frozen_virtual_orbitals=frozen_virtual_orbitals,
+        )
+
 
 @dataclass
 class EmbeddingMOSpace:

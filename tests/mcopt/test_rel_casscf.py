@@ -42,6 +42,7 @@ def test_rel_casscf_hf_ghf():
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         unit="bohr",
         x2c_type="so",
+        snso_type=None,
     )
     scf = GHF(charge=0)(system)
     mc = RelMCOptimizer(
@@ -79,11 +80,8 @@ def test_rel_casscf_frozen_co_equivalent_to_nonrel():
 
     mc = RelMCOptimizer(
         nel=14,
-        frozen_core_orbitals=2,
-        core_orbitals=6,
+        core_orbitals=8,
         active_orbitals=12,
-        frozen_virtual_orbitals=6,
-        optimize_frozen_orbs=True,
     )(avas)
     mc.run()
     assert mc.E == approx(emcscf)
@@ -94,7 +92,6 @@ def test_rel_casscf_frozen_co_equivalent_to_nonrel():
         core_orbitals=6,
         active_orbitals=12,
         frozen_virtual_orbitals=6,
-        optimize_frozen_orbs=False,
     )(avas)
     mc.run()
     assert mc.E == approx(emcscf_frz)
@@ -146,6 +143,7 @@ def test_rel_casscf_na_ghf():
         auxiliary_basis_set="def2-universal-jkfit",
         unit="bohr",
         x2c_type="so",
+        snso_type=None,
     )
     scf = GHF(charge=0)(system)
     mc = RelMCOptimizer(
@@ -173,7 +171,7 @@ def test_rel_ci_br():
         x2c_type="so",
         snso_type="row-dependent",
     )
-    scf = GHF(charge=0)(system)
+    scf = GHF(charge=-1)(system)
     mc = RelMCOptimizer(
         nel=35,
         nroots=6,

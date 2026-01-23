@@ -211,9 +211,9 @@ def test_libcint_coulomb_3c_high_l():
     xyz = "H 0 0 0\nH 0 0 1.0"
     system = System(
         xyz,
-        basis_set="sap_helfem_small",
+        basis_set="sap_helfem_large",
         auxiliary_basis_set=str(THIS_DIR / "high_l.json"),
         minao_basis_set=None,
     )
     s_cint = integrals.coulomb_3c(system)
-    assert np.linalg.norm(s_cint) == pytest.approx(16.215155263070397, rel=1e-6)
+    assert np.linalg.norm(s_cint) == pytest.approx(15.857035710505492, rel=1e-6)

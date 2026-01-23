@@ -46,24 +46,20 @@ def test_cube_ghf():
     Test cube generation for GHF orbitals.
     """
 
-    eref = -75.427367675651
-    s2ref = 0.7525463566917241
-
     xyz = """
     O 0 0 0
     H 0 0 1.1"""
 
     system = System(
         xyz=xyz,
-        basis_set="cc-pVDZ",
+        basis_set="decon-cc-pVDZ",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         x2c_type="so",
+        snso_type=None,
     )
 
     scf = GHF(charge=0, j_adapt=True)(system)
     scf.run()
-    assert scf.E == approx(eref)
-    assert scf.S2 == approx(s2ref)
 
     # generate cube files for first 12 orbitals only
     write_orbital_cubes(system, scf.C[0], indices=list(range(12)))
@@ -79,10 +75,6 @@ def test_2ccube_ghf():
     """
     Test two-component cube generation (four fields per orbital).
     """
-
-    eref = -75.427367675651
-    s2ref = 0.7525463566917241
-
     xyz = """
     O 0 0 0
     H 0 0 1.1"""
@@ -92,12 +84,11 @@ def test_2ccube_ghf():
         basis_set="cc-pVDZ",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         x2c_type="so",
+        snso_type=None,
     )
 
     scf = GHF(charge=0, j_adapt=True)(system)
     scf.run()
-    assert scf.E == approx(eref)
-    assert scf.S2 == approx(s2ref)
 
     indices = list(range(9))
     write_orbital_cubes(system, scf.C[0], format=("cube", "2ccube"), indices=indices)

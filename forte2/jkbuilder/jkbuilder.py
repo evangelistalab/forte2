@@ -281,7 +281,7 @@ class FockBuilder:
         J, K = self.build_JK([Cp])
         return J[0], K[0]
 
-    def two_electron_integrals_gen_block(self, C1, C2, C3, C4, antisymmetrize=False):
+    def two_electron_integrals_gen_block(self, C1, C2, C3, C4):
         r"""
         Compute the two-electron integrals for a given set of orbitals. This method is
         general and can handle different sets of orbitals for each index (p, q, r, s).
@@ -293,7 +293,6 @@ class FockBuilder:
 
             \langle pq | rs \rangle = \iint \phi^*_p(r_1) \phi^*_q(r_2) \frac{1}{r_{12}} \phi_r(r_1) \phi_s(r_2) dr_1 dr_2
 
-
         Parameters
         ----------
         C1 : NDArray
@@ -304,9 +303,6 @@ class FockBuilder:
             Coefficient matrix for the third set of orbitals (index r).
         C4 : NDArray
             Coefficient matrix for the fourth set of orbitals (index s).
-        antisymmetrize : bool, optional, default=False
-            Whether to antisymmetrize the integrals. If True, the integrals are antisymmetrized as:
-            V[p,q,r,s] = :math:`\langle pq || rs \rangle = \langle pq | rs \rangle - \langle pq | sr \rangle`
 
         Returns
         -------
@@ -323,11 +319,9 @@ class FockBuilder:
             C4,
             optimize=True,
         )
-        if antisymmetrize:
-            V -= np.einsum("ijkl->ijlk", V)
         return V
 
-    def two_electron_integrals_block(self, C, antisymmetrize=False):
+    def two_electron_integrals_block(self, C):
         r"""
         Compute the two-electron integrals for a given set of orbitals.
 
@@ -342,20 +336,15 @@ class FockBuilder:
         ----------
         C : NDArray
             Coefficient matrix for the set of orbitals.
-        antisymmetrize : bool, optional, default=False
-            Whether to antisymmetrize the integrals. If True, the integrals are antisymmetrized as:
-            V[p,q,r,s] = :math:`\langle pq || rs \rangle = \langle pq | rs \rangle - \langle pq | sr \rangle`
 
         Returns
         -------
         V : NDArray
             The two-electron integrals in the form of a 4D array.
         """
-        return self.two_electron_integrals_gen_block(C, C, C, C, antisymmetrize)
+        return self.two_electron_integrals_gen_block(C, C, C, C)
 
-    def two_electron_integrals_gen_block_spinor(
-        self, C1, C2, C3, C4, antisymmetrize=False
-    ):
+    def two_electron_integrals_gen_block_spinor(self, C1, C2, C3, C4):
         r"""
         Compute the two-electron integrals for a given set of orbitals. This method is
         general and can handle different sets of orbitals for each index (p, q, r, s).
@@ -378,9 +367,6 @@ class FockBuilder:
             Coefficient matrix for the third set of orbitals (index r).
         C4 : NDArray
             Coefficient matrix for the fourth set of orbitals (index s).
-        antisymmetrize : bool, optional, default=False
-            Whether to antisymmetrize the integrals. If True, the integrals are antisymmetrized as:
-            V[p,q,r,s] = :math:`\langle pq || rs \rangle = \langle pq | rs \rangle - \langle pq | sr \rangle`
 
         Returns
         -------
@@ -409,11 +395,9 @@ class FockBuilder:
                 optimize=True,
             )
 
-        if antisymmetrize:
-            V -= np.einsum("ijkl->ijlk", V)
         return V
 
-    def two_electron_integrals_block_spinor(self, C, antisymmetrize=False):
+    def two_electron_integrals_block_spinor(self, C):
         r"""
         Compute the two-electron integrals for a given set of spin-orbitals.
 
@@ -437,4 +421,80 @@ class FockBuilder:
         V : NDArray
             The two-electron integrals in the form of a 4D array.
         """
-        return self.two_electron_integrals_gen_block_spinor(C, C, C, C, antisymmetrize)
+        return self.two_electron_integrals_gen_block_spinor(C, C, C, C)
+
+    def B_tensor_gen_block(self, C1, C2):
+        r"""
+        Compute the MO basis B tensor for a given set of orbitals. This method is
+        general and can handle different sets of orbitals for each index (p, q).
+
+        The resulting B tensor is stored in a 3D array with the following convention:
+        B[P,m,n] = :math:`(P | mn)`, where
+
+        .. math::
+
+            (P | mn) = \iint \phi_P(r_1)  \frac{1}{r_{12}} \phi_m(r_2) \phi_n(r_2)dr_1 dr_2
+
+        Parameters
+        ----------
+        C1 : NDArray
+            Coefficient matrix for the first set of orbitals (index p).
+        C2 : NDArray
+            Coefficient matrix for the second set of orbitals (index q).
+
+        Returns
+        -------
+        B : NDArray
+            The B tensor in the form of a 3D array.
+        """
+        B = np.einsum(
+            "Pmn,mi,nj->Pij",
+            self.B_Pmn,
+            C1.conj(),
+            C2,
+            optimize=True,
+        )
+        return B
+
+    def B_tensor_gen_block_spinor(self, C1, C2):
+        r"""
+        Compute the spinorbital basis B tensor for a given set of spin-orbitals. This method is
+        general and can handle different sets of orbitals for each index (p, q).
+
+        The resulting B tensor is stored in a 3D array with the following convention:
+        B[P,m,n] = :math:`(P | mn)`, where
+
+        .. math::
+
+            (P | mn) = \iint \phi_P(r_1)  \frac{1}{r_{12}} \phi_m(r_2) \phi_n(r_2)dr_1 dr_2
+
+        Parameters
+        ----------
+        C1 : NDArray
+            Coefficient matrix for the first set of spin-orbitals (index p).
+        C2 : NDArray
+            Coefficient matrix for the second set of spin-orbitals (index q).
+
+        Returns
+        -------
+        B : NDArray
+            The B tensor in the form of a 3D array.
+        """
+        nbf = self.nbf
+        _a = slice(0, nbf)
+        _b = slice(nbf, nbf * 2)
+        B = np.einsum(
+            "Pmn,mi,nj->Pij",
+            self.B_Pmn,
+            C1[_a, :].conj(),
+            C2[_a, :],
+            optimize=True,
+        )
+        B += np.einsum(
+            "Pmn,mi,nj->Pij",
+            self.B_Pmn,
+            C1[_b, :].conj(),
+            C2[_b, :],
+            optimize=True,
+        )
+        return B
