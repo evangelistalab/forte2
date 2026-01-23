@@ -86,12 +86,12 @@ def test_aset_2():
     rhf = RHF(charge=0, econv=1e-12)(system)
     mc = MCOptimizer(
         State(nel=24, multiplicity=1, ms=0.0),
-        frozen_core_orbitals=[0, 1, 2],
-        core_orbitals=[3, 4, 5, 6, 7, 8, 9],
-        active_orbitals=[10, 11, 12, 13],
+        core_orbitals=10,
+        active_orbitals=4,
     )(rhf)
     aset = ASET(
         fragment=["N", "H"],
+        frozen_core_orbitals=3,
         cutoff_method="threshold",
         cutoff=0.99,
     )(mc)
@@ -119,7 +119,7 @@ def test_aset_3():
     H        0.7545456004      2.2023392001     -1.0052240245
     H        0.8387453665      1.5599644558      0.6466877402
     H        0.2749376338      3.2174213526      0.3670138598
-"""
+    """
 
     system = System(
         xyz=xyz,
@@ -130,12 +130,12 @@ def test_aset_3():
     rhf = RHF(charge=0, econv=1e-12)(system)
     mc = MCOptimizer(
         State(nel=24, multiplicity=1, ms=0.0),
-        frozen_core_orbitals=[0, 1, 2],
-        core_orbitals=[3, 4, 5, 6, 7, 8, 9, 10],
-        active_orbitals=[11, 12],
+        core_orbitals=11,
+        active_orbitals=2,
     )(rhf)
     aset = ASET(
         fragment=["C1-2", "H1-3"],
+        frozen_core_orbitals=3,
         cutoff_method="threshold",
         semicanonicalize_active=False,
         semicanonicalize_frozen=False,
@@ -169,13 +169,13 @@ def test_aset_4():
     rhf = RHF(charge=0, econv=1e-10)(system)
     mc = MCOptimizer(
         State(nel=24, multiplicity=1, ms=0.0),
-        frozen_core_orbitals=[0, 1, 2],
-        core_orbitals=[3, 4, 5, 6, 7, 8, 9],
-        active_orbitals=[10, 11, 12, 13],
+        core_orbitals=10,
+        active_orbitals=4,
         econv=1e-9,
     )(rhf)
     aset = ASET(
         fragment=["N", "H"],
+        frozen_core_orbitals=3,
         cutoff_method="num_of_orbitals",
         num_A_occ=5,
         num_A_vir=1,
@@ -204,7 +204,7 @@ def test_aset_5():
     H           -1.899218748385     1.428566644507    -0.416125458480
     H           -0.863484663283    -0.665562244675    -1.411954335033
     H           -0.645242334465    -1.402514539204     0.216831010104
-"""
+    """
 
     system = System(
         xyz=xyz,
