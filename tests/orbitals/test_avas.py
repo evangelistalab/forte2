@@ -21,6 +21,14 @@ def test_avas_inputs():
             subspace=["N(2p)"],
         )(rhf)
 
+    # don't raise if one of num_active_docc/vir = 0
+    avas = AVAS(
+        selection_method="separate",
+        subspace=["F(2p)"],
+        num_active_docc=3,
+        num_active_uocc=0,
+    )(rhf)
+
     # raise if 1-cutoff < evals_threshold
     with pytest.raises(Exception):
         avas = AVAS(
@@ -103,8 +111,6 @@ def test_avas_separate_n2():
     casci = CI(states=State(nel=14, multiplicity=1, ms=0.0))(avas)
     casci.run()
     assert casci.E[0] == approx(eref_casci_avas_diagonalize)
-
-
 
 
 def test_avas_separate_n2_ghf_equivalent_to_rhf():
@@ -370,3 +376,20 @@ def test_avas_subspace_planes_h2co_casscf():
     mc = MCOptimizer(states=State(nel=rhf.nel, multiplicity=1, ms=0.0))(avas)
     mc.run()
     assert mc.E_ci[0] == approx(eref_avas)
+
+
+def test_avas_zero_uocc():
+    xyz = """
+    Br 0 0 0
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
+    mf = ROHF(charge=0, ms=0.5)(system)
+    avas = AVAS(
+        selection_method="separate",
+        subspace=["Br(4s)", "Br(4p)"],
+        num_active_docc=3,
+        num_active_uocc=0,
+    )(mf)
+    mc = MCOptimizer(states=State(nel=35, multiplicity=2, ms=0.5), nroots=3)(avas)
+    mc.run()
