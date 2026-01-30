@@ -353,7 +353,8 @@ class MCOptimizer(ActiveSpaceSolver):
         )
 
         logger.log_info1("=" * width)
-        logger.log_info1(f"Orbital optimization converged in {self.iter} iterations.")
+        if self.converged:
+            logger.log_info1(f"Orbital optimization converged in {self.iter} iterations.")
         logger.log_info1(f"Final orbital optimized energy: {self.E_avg:.10f}")
 
         # undo _make_spaces_contiguous
