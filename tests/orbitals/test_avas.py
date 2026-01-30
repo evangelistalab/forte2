@@ -40,7 +40,7 @@ def test_avas_inputs():
     # don't raise if one of num_active_docc/vir = 0
     avas = AVAS(
         selection_method="separate",
-        subspace=["F(2p)"],
+        subspace=["N(2p)"],
         num_active_docc=3,
         num_active_uocc=0,
     )(rhf)
