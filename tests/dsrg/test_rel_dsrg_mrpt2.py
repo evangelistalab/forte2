@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from forte2 import System, GHF, RelMCOptimizer, AVAS
-from forte2.dsrg import RelDSRG_MRPT2
+from forte2.dsrg import RelDSRG_MRPT2, RelDSRG_MRPT2_Slow
 from forte2.helpers.comparisons import approx
 from forte2.data.atom_data import EH_TO_WN
 
@@ -176,7 +176,7 @@ def test_mrpt2_se_rel_sa_gauss_nuc():
     )(mc)
     dsrg.run()
     assert (dsrg.relax_eigvals[5] - dsrg.relax_eigvals[4]) * EH_TO_WN == pytest.approx(
-        1916.780124730304, rel=1e-4
+        1916.780243598663, rel=1e-4
     )
 
 
@@ -210,5 +210,48 @@ def test_mrpt2_s_rel_sa_gauss_nuc():
     dsrg = RelDSRG_MRPT2(flow_param=0.24, relax_reference="once")(mc)
     dsrg.run()
     assert (dsrg.relax_eigvals[5] - dsrg.relax_eigvals[4]) * EH_TO_WN == pytest.approx(
-        387.52343852668406, rel=1e-4
+        387.5234521376601, rel=1e-4
     )
+
+
+def test_mrpt2_sh_with_slow():
+    xyz = """
+    S 0 0 0
+    H 0 0 1.4
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvtz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        x2c_type="so",
+        snso_type="row-dependent",
+        use_gaussian_charges=True,
+    )
+    mf = GHF(
+        charge=0,
+        die_if_not_converged=False,
+        maxiter=50,
+    )(system)
+    mc = RelMCOptimizer(
+        nel=17,
+        nroots=4,
+        core_orbitals=10,
+        active_orbitals=10,
+    )(mf)
+    dsrg = RelDSRG_MRPT2(flow_param=0.5, relax_reference="iterate")(mc)
+    dsrg.run()
+
+    mc = RelMCOptimizer(
+        nel=17,
+        nroots=4,
+        core_orbitals=10,
+        active_orbitals=10,
+    )(mf)
+    dsrg_slow = RelDSRG_MRPT2_Slow(flow_param=0.5, relax_reference="iterate")(mc)
+    dsrg_slow.run()
+
+    assert dsrg.relax_energies == approx(dsrg_slow.relax_energies)
+    assert dsrg.relax_eigvals == approx(dsrg_slow.relax_eigvals)
+    assert dsrg.relax_eigvals_history == approx(dsrg_slow.relax_eigvals_history)
+    assert dsrg.E_dsrg == approx(dsrg_slow.E_dsrg)
