@@ -153,8 +153,12 @@ class _CIBase:
 
     def _ci_solver_startup(self):
         if self.two_component:
+            _nactel = self.state.nel - self.ncore
+            assert (
+                _nactel >= 0
+            ), f"Number of active electrons {_nactel} must be non-negative."
             self.ci_strings = CIStrings(
-                self.state.nel - self.ncore,
+                _nactel,
                 0,
                 self.state.symmetry,
                 self.active_orbsym,
@@ -162,9 +166,17 @@ class _CIBase:
                 self.state.gas_max,
             )
         else:
+            _nactel_a = self.state.na - self.ncore
+            _nactel_b = self.state.nb - self.ncore
+            assert (
+                _nactel_a >= 0
+            ), f"Number of active α electrons {_nactel_a} must be non-negative."
+            assert (
+                _nactel_b >= 0
+            ), f"Number of active β electrons {_nactel_b} must be non-negative."
             self.ci_strings = CIStrings(
-                self.state.na - self.ncore,
-                self.state.nb - self.ncore,
+                _nactel_a,
+                _nactel_b,
                 self.state.symmetry,
                 self.active_orbsym,
                 self.gas_min,
