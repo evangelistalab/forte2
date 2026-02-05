@@ -34,9 +34,8 @@ void export_ci_strings_api(nb::module_& m) {
                     throw nb::value_error("Number of alpha electrons must be non-negative.");
                 if (nb < 0)
                     throw nb::value_error("Number of beta electrons must be non-negative.");
-                new (self)
-                    CIStrings(static_cast<size_t>(na), static_cast<size_t>(nb), symmetry,
-                              std::move(orbital_symmetry), std::move(gas_min), std::move(gas_max));
+                new (self) CIStrings(static_cast<size_t>(na), static_cast<size_t>(nb), symmetry,
+                                     orbital_symmetry, gas_min, gas_max);
             },
             "na"_a, "nb"_a, "symmetry"_a, "orbital_symmetry"_a, "gas_min"_a, "gas_max"_a,
             "Initialize the CIStrings with number of alpha and beta electrons, symmetry, "
