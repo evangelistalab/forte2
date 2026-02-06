@@ -254,3 +254,55 @@ def test_slater_rules_3_complex():
 
     assert E == approx(eref)
     assert E == approx(ci.E[0])
+
+
+def test_slater_rules_4_complex_antisym():
+    # same setup as above, but use antisymmetrized TEIs.
+
+    eref = -80.43551643145948
+    rng = np.random.default_rng(12)
+    norb = 12
+    h1 = rng.random((norb, norb)) + 1j * rng.random((norb, norb))
+    h2 = rng.random((norb, norb, norb, norb)) + 1j * rng.random(
+        (norb, norb, norb, norb)
+    )
+    # Restore permutation symmetry
+    h1 = h1 + h1.T.conj()
+    # pyscf uses chemist's notation, forte2 uses physicist's notation
+    h2 = h2.swapaxes(1, 2)
+    h2 = h2 + h2.transpose(2, 3, 0, 1).conj()
+    h2 = h2 + h2.transpose(1, 0, 3, 2)
+    h2 = h2 + h2.transpose(3, 2, 1, 0).conj()
+    h2 -= h2.swapaxes(2, 3)
+
+    slater_rules = forte2.RelSlaterRules(norb, 0.0, h1, h2, tei_is_asym=True)
+    dets = forte2.hilbert_space(norb, 8, 0)
+    H = np.zeros((len(dets), len(dets)), dtype=complex)
+    for i in range(len(dets)):
+        # no triangular loop: explicitly construct both i,j and j,i to check Hermiticity
+        for j in range(len(dets)):
+            H[i, j] = slater_rules.slater_rules(dets[i], dets[j])
+    assert np.allclose(H, H.T.conj()), "Slater rules matrix is not Hermitian"
+    E = np.linalg.eigvalsh(H)[0]
+
+    fakeints = SpinorbitalIntegrals.__new__(SpinorbitalIntegrals)
+    fakeints.E = 0.0
+    fakeints.H = h1
+    fakeints.V = h2
+    mo_space = MOSpace(nmo=norb, active_orbitals=list(range(norb)))
+    state = State(nel=8, multiplicity=1, ms=0.0)
+    ci = _CIBase(
+        mo_space=mo_space,
+        state=state,
+        ints=fakeints,
+        nroot=1,
+        active_orbsym=[[0] * norb],
+        maxiter=200,
+        do_test_rdms=True,
+        ci_algorithm="hz",
+        two_component=True,
+    )
+    ci.run(use_asym_ints=True)
+
+    assert E == approx(eref)
+    assert E == approx(ci.E[0])

@@ -223,8 +223,8 @@ class _CIBase:
                 self.two_component
             ), "Antisymmetric integrals only supported for two-component CI."
             assert (
-                self.ci_algorithm.lower() == "hz"
-            ), "Antisymmetric integrals only supported for 'hz' algorithm."
+                self.ci_algorithm.lower() in ["hz", "exact"]
+            ), "Antisymmetric integrals only supported for 'hz' and 'exact' algorithms."
 
         if not self.executed:
             self._ci_solver_startup()
@@ -260,7 +260,7 @@ class _CIBase:
             logger.log(f"Final CI Energy Root {i}: {e:20.12f} [Eh]", self.log_level)
 
         if self.do_test_rdms:
-            self._test_rdms()
+            self._test_rdms(use_asym_ints)
 
         self.executed = True
 
@@ -411,7 +411,7 @@ class _CIBase:
         self.evals = self.evals_full[: self.nroot]
         self.evecs = self.evecs_full[:, : self.nroot]
 
-    def _test_rdms(self):
+    def _test_rdms(self, use_asym_ints=False):
         # Compute the RDMs from the CI vectors
         # and verify the energy from the RDMs matches the CI energy
         logger.log("\nComputing RDMs from CI vectors.\n", self.log_level)
@@ -422,7 +422,8 @@ class _CIBase:
 
                 rdms_energy = self.ints.E
                 rdms_energy += np.einsum("ij,ij", rdm1, self.ints.H)
-                rdms_energy += 0.5 * np.einsum("ijkl,ijkl", rdm2, self.ints.V)
+                factor = 0.25 if use_asym_ints else 0.5
+                rdms_energy += factor * np.einsum("ijkl,ijkl", rdm2, self.ints.V)
                 logger.log(
                     f"CI energy from RDMs: {rdms_energy:.12f} Eh", self.log_level
                 )
@@ -433,7 +434,10 @@ class _CIBase:
                     f"RDMs for root {root} validated successfully.\n", self.log_level
                 )
                 return
-
+        if use_asym_ints:
+            raise NotImplementedError(
+                "The 'use_asym_ints' option is not implemented for non-relativistic CI."
+            )
         for root in range(self.nroot):
             root_rdms = {}
             root_rdms["rdm1"] = self.make_sf_1rdm(root)
