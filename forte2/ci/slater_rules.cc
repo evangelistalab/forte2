@@ -28,7 +28,7 @@ double SlaterRules::energy(const Determinant& det) const {
         Iac = Ia;
         for (int AA = A + 1; AA < naocc; ++AA) {
             int q = Iac.find_and_clear_first_one();
-            energy += v(p, q, p, q) - v(p, q, q, p); // <pq||pq> - <pq|qp>
+            energy += v(p, q, p, q) - v(p, q, q, p); // <pq|pq> - <pq|qp>
         }
 
         Ibc = Ib;
@@ -44,7 +44,7 @@ double SlaterRules::energy(const Determinant& det) const {
         Ibc = Ib;
         for (int BB = B + 1; BB < nbocc; ++BB) {
             int q = Ibc.find_and_clear_first_one();
-            energy += v(p, q, p, q) - v(p, q, q, p); // <pq||pq> - <pq|qp>
+            energy += v(p, q, p, q) - v(p, q, q, p); // <pq|pq> - <pq|qp>
         }
     }
 
@@ -219,10 +219,10 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
 
 RelSlaterRules::RelSlaterRules(int nspinor, double scalar_energy,
                                np_matrix_complex one_electron_integrals,
-                               np_tensor4_complex two_electron_integrals)
+                               np_tensor4_complex two_electron_integrals, bool tei_is_asym)
     : nspinor_(nspinor), scalar_energy_(scalar_energy),
       one_electron_integrals_(one_electron_integrals),
-      two_electron_integrals_(two_electron_integrals) {}
+      two_electron_integrals_(two_electron_integrals), tei_is_asym_(tei_is_asym) {}
 
 double RelSlaterRules::energy(const Determinant& det) const {
     std::complex<double> energy = scalar_energy_;
@@ -231,10 +231,19 @@ double RelSlaterRules::energy(const Determinant& det) const {
     auto v = two_electron_integrals_.view();
 
     auto occ = det.get_alfa_occ(nspinor_);
-    for (auto p : occ) {
-        energy += h(p, p); // <p|p>
-        for (auto q : occ) {
-            energy += 0.5 * (v(p, q, p, q) - v(p, q, q, p)); // <pq||pq>
+    if (tei_is_asym_) {
+        for (auto p : occ) {
+            energy += h(p, p); // <p|p>
+            for (auto q : occ) {
+                energy += 0.5 * v(p, q, p, q); // <pq||pq>
+            }
+        }
+    } else {
+        for (auto p : occ) {
+            energy += h(p, p); // <p|p>
+            for (auto q : occ) {
+                energy += 0.5 * (v(p, q, p, q) - v(p, q, q, p)); // <pq||pq>
+            }
         }
     }
 
@@ -275,10 +284,17 @@ std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
 
         auto occ = lhs.get_alfa_occ(nspinor_);
 
-        for (auto j : occ) {
-            matrix_element += v(i, j, a, j) - v(i, j, j, a); // \sum_j<ij||aj>
+        if (tei_is_asym_) {
+            for (auto j : occ) {
+                matrix_element += v(i, j, a, j); // \sum_j<ij||aj>
+            }
+            matrix_element *= sign;
+        } else {
+            for (auto j : occ) {
+                matrix_element += v(i, j, a, j) - v(i, j, j, a); // \sum_j<ij||aj>
+            }
+            matrix_element *= sign;
         }
-        matrix_element *= sign;
     }
 
     if (ndiff == 2) {
@@ -287,7 +303,8 @@ std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
         size_t a = excitation_connection[1][0];
         size_t b = excitation_connection[1][1];
         double sign = lhs.slater_sign_aaaa(i, j, a, b);
-        matrix_element += sign * (v(i, j, a, b) - v(i, j, b, a)); // <ij||ab>
+        auto v_el = tei_is_asym_ ? v(i, j, a, b) : v(i, j, a, b) - v(i, j, b, a); // <ij||ab>
+        matrix_element += sign * v_el; // <ij||ab>
     }
 
     return matrix_element;
