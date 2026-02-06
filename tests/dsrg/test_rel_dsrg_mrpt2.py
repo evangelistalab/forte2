@@ -241,6 +241,7 @@ def test_mrpt2_sh_with_slow():
     )(mf)
     dsrg = RelDSRG_MRPT2(flow_param=0.5, relax_reference="iterate")(mc)
     dsrg.run()
+    assert np.abs(dsrg.E_dsrg.imag) < 1e-12
 
     mc = RelMCOptimizer(
         nel=17,
@@ -250,6 +251,56 @@ def test_mrpt2_sh_with_slow():
     )(mf)
     dsrg_slow = RelDSRG_MRPT2_Slow(flow_param=0.5, relax_reference="iterate")(mc)
     dsrg_slow.run()
+    assert np.abs(dsrg_slow.E_dsrg.imag) < 1e-12
+
+    ref_relax_energies = np.array(
+        [
+            [-399.255354002208, -399.25587285397, -399.075510442869],
+            [-399.255767074381, -399.255767109027, -399.074948640803],
+            [-399.255766234638, -399.255766234645, -399.074947874659],
+        ]
+    )
+    ref_relax_eigvals = np.array(
+        [
+            -399.256582458238 + 0.0j,
+            -399.256582458085 + 0.0j,
+            -399.254950011206 + 0.0j,
+            -399.254950011051 + 0.0j,
+        ]
+    )
+    ref_relax_eigvals_history = np.array(
+        [
+            [
+                -399.256688903703,
+                -399.256688903582,
+                -399.255056804358,
+                -399.255056804235,
+            ],
+            [
+                -399.2565833348,
+                -399.256583334644,
+                -399.25495088341,
+                -399.254950883254,
+            ],
+            [
+                -399.256582458238,
+                -399.256582458085,
+                -399.254950011206,
+                -399.254950011051,
+            ],
+        ]
+    )
+    ref_E = -399.25576623463775
+
+    assert dsrg.relax_energies[:3, :] == approx(ref_relax_energies)
+    assert dsrg.relax_eigvals == approx(ref_relax_eigvals)
+    assert dsrg.relax_eigvals_history == approx(ref_relax_eigvals_history)
+    assert dsrg.E_dsrg == approx(ref_E)
+
+    assert dsrg_slow.relax_energies[:3, :] == approx(ref_relax_energies)
+    assert dsrg_slow.relax_eigvals == approx(ref_relax_eigvals)
+    assert dsrg_slow.relax_eigvals_history == approx(ref_relax_eigvals_history)
+    assert dsrg_slow.E_dsrg == approx(ref_E)
 
     assert dsrg.relax_energies == approx(dsrg_slow.relax_energies)
     assert dsrg.relax_eigvals == approx(dsrg_slow.relax_eigvals)
