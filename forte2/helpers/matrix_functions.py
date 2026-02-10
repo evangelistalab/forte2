@@ -213,3 +213,25 @@ def block_diag_2x2(M, complex=True):
         return A.astype(np.complex128)
     else:
         return A
+
+def i_sigma_dot(scalar, x, y, z):
+    """
+    Construct the matrix i * (I2, sigma_x, sigma_y, sigma_z) dot (scalar, x, y, z).
+
+    Parameters
+    ----------
+    scalar : ndarray
+        The scalar component.
+    x : ndarray
+        The x component.
+    y : ndarray
+        The y component.
+    z : ndarray
+        The z component.
+
+    Returns
+    -------
+    NDArray
+        The 2x2 matrix representation.
+    """
+    return np.block([[scalar + z * 1j, x * 1j + y], [x * 1j - y, scalar - z * 1j]])

@@ -10,7 +10,7 @@ from forte2.helpers.matrix_functions import (
     canonical_orth,
     block_diag_2x2,
 )
-from forte2.x2c import get_hcore_x2c
+from forte2.x2c import X2CHelper
 from forte2.jkbuilder import FockBuilder
 from .build_basis import build_basis
 from .geom_utils import GeometryHelper, parse_geometry
@@ -239,6 +239,7 @@ class System:
                 "sf",
                 "so",
             ], f"x2c_type {self.x2c_type} is not supported. Use None, 'sf' or 'so'."
+            self.x2c_helper = X2CHelper(self)
         else:
             return
         if self.x2c_type == "so":
@@ -271,7 +272,7 @@ class System:
             Core Hamiltonian integrals matrix.
         """
         if self.x2c_type in ["sf", "so"]:
-            H = get_hcore_x2c(self)
+            H = self.x2c_helper.hcore_x2c
         else:
             T = integrals.kinetic(self)
             V = integrals.nuclear(self)
