@@ -43,7 +43,7 @@ def invsqrt_matrix(M, tol=1e-7):
     return invsqrt_M
 
 
-def canonical_orth(S, tol=1e-7):
+def canonical_orth(S, tol=1e-7, return_U=False):
     """
     Compute the canonical orthogonalization given the metric matrix S.
 
@@ -53,11 +53,15 @@ def canonical_orth(S, tol=1e-7):
         Metric matrix (must be positive semi-definite).
     tol : float, optional, default=1e-7
         Eigenvalue threshold below which values are treated as zero.
+    return_U : bool, optional, default=False
+        If True, also return the set of eigenvectors corresponding to non-zero eigenvalues.
 
     Returns
     -------
     X : NDArray
         The (possibly rectangular) canonical orthogonalization matrix X, such that ``X.T @ S @ X = I``.
+    U : NDArray, optional
+        The eigenvectors corresponding to non-zero eigenvalues, returned if `return_U` is True
 
     Raises
     ------
@@ -69,8 +73,12 @@ def canonical_orth(S, tol=1e-7):
     if np.any(sevals < -MACHEPS):
         raise ValueError("Matrix must be positive semi-definite.")
     trunc_indices = np.where(sevals > tol)[0]
-    X = sevecs[:, trunc_indices] / np.sqrt(sevals[trunc_indices])
-    return X
+    U = sevecs[:, trunc_indices]
+    X = U / np.sqrt(sevals[trunc_indices])
+    if return_U:
+        return X, U
+    else:
+        return X
 
 
 def eigh_gen(A, B=None, remove_lindep=True, orth_tol=1e-7, orth_method="canonical"):
