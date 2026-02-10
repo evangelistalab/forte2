@@ -1733,7 +1733,7 @@ class RelCISolver(RelActiveSpaceSolver):
     def _startup(self):
         super()._startup(two_component=True)
         if not self.system.two_component:
-            self.C = convert_coeff_spatial_to_spinor(self.system, self.C)
+            self.C = convert_coeff_spatial_to_spinor(self.C)
             self.system.two_component = True
 
         self.norb = self.mo_space.nactv

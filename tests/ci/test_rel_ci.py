@@ -42,7 +42,7 @@ def test_rel_ci_hf():
     )
     scf = RHF(charge=0, econv=1e-10)(system)
     scf.run()
-    C = convert_coeff_spatial_to_spinor(system, scf.C)[0]
+    C = convert_coeff_spatial_to_spinor(scf.C)[0]
     nmo = C.shape[1]
     random_phase = np.diag(np.exp(1j * np.random.uniform(-np.pi, np.pi, size=nmo)))
     C = C @ random_phase

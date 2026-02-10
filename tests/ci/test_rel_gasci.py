@@ -10,7 +10,7 @@ from forte2.system.build_basis import BSE_AVAILABLE
 
 def prepare_rhf_coeff_for_relci(rhf, system):
     rhf = rhf.run()
-    C = convert_coeff_spatial_to_spinor(system, rhf.C)[0]
+    C = convert_coeff_spatial_to_spinor(rhf.C)[0]
     nmo = C.shape[1]
     random_phase = np.diag(np.exp(1j * np.random.uniform(-np.pi, np.pi, size=nmo)))
     C = C @ random_phase

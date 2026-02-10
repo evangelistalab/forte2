@@ -144,7 +144,7 @@ def test_so_from_sf_water():
         snso_type=None,
     )
     scf_so = GHF(charge=1)(system)
-    scf_so.C = convert_coeff_spatial_to_spinor(system, scf.C)
+    scf_so.C = convert_coeff_spatial_to_spinor(scf.C)
     scf_so.run()
     assert scf_so.E == approx(eghf)
 
