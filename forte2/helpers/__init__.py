@@ -7,6 +7,7 @@ from .matrix_functions import (
     block_diag_2x2,
     random_unitary,
     i_sigma_dot,
+    orthonormalize,
 )
 from .diis import DIIS
 from . import logger  # setup logging configuration
