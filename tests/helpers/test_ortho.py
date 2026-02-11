@@ -34,7 +34,7 @@ def test_canonical_orth():
     S = np.eye(10) + np.abs(generator.random((10, 10)) * 0.05)
     S = 0.5 * (S + S.T)
 
-    X, Xm1 = canonical_orth(S, tol=1e-10, return_inverse=True)
+    X, Xm1, _ = canonical_orth(S, tol=1e-10)
     assert np.allclose(X.T @ S @ X, np.eye(10))
     assert np.allclose(Xm1 @ X, np.eye(10))
     assert np.allclose(X @ Xm1, np.eye(10))

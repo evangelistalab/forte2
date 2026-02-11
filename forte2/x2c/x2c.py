@@ -4,7 +4,7 @@ import numpy as np
 import scipy
 
 from forte2 import integrals
-from forte2.helpers import logger, block_diag_2x2, i_sigma_dot, orthonormalize
+from forte2.helpers import logger, block_diag_2x2, i_sigma_dot, canonical_orth
 from forte2.system.build_basis import build_basis
 
 LIGHT_SPEED = 137.035999177
@@ -141,10 +141,8 @@ class X2CHelper:
         W = integrals.opVop(self.system, self.xbasis)
 
         # Get orthonormal transformation for X2C
-        northo, Xorth_l, Xorthm1_l = orthonormalize(
-            S, ortho_thresh=self.ortho_thresh, return_inverse=True
-        )
-        northo = Xorth_l.shape[1]
+        Xorth_l, Xorthm1_l, info = canonical_orth(S, self.ortho_thresh, print_info=True)
+        northo = info["n_kept"]
         logger.log_info1(
             f"Number of orthogonalized decontracted basis functions: {northo}"
         )
