@@ -3,9 +3,10 @@ from dataclasses import dataclass
 import numpy as np
 
 from forte2.system.basis_utils import BasisInfo
-from forte2.system import ModelSystem, compute_orthonormal_transformation
+from forte2.system import ModelSystem
 from forte2.helpers import logger
 from forte2.symmetry import real_sph_to_j_adapted
+from forte2.helpers import orthonormalize
 from .scf_base import SCFBase
 from .rhf import RHF
 from .scf_utils import guess_mix_ghf, alpha_beta_mix, break_complex_conjugation_symmetry
@@ -58,10 +59,8 @@ class GHF(SCFBase):
             self.Usph2j = np.vstack((ua, ub))
             S = system.ints_overlap()
             S_spinor = self.Usph2j.conj().T @ S @ self.Usph2j
-            self.Xorth_spinor, _ = compute_orthonormal_transformation(
-                S_spinor,
-                system.linear_dep_trigger,
-                system.ortho_thresh,
+            self.nmo_spinor, self.Xorth_spinor = orthonormalize(
+                S_spinor, system.ortho_thresh
             )
         self = super().__call__(system)
         self._parse_state()

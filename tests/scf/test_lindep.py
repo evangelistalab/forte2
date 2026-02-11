@@ -6,7 +6,7 @@ from forte2.helpers.comparisons import approx
 
 
 def test_lindep_rhf():
-    erhf = -4.071545222979
+    erhf = -4.071076569404
     xyz = "\n".join([f"H 0 0 {i}" for i in range(10)])
 
     system = System(
@@ -24,12 +24,12 @@ def test_lindep_rhf():
     scf = RHF(charge=0, econv=1e-10, dconv=1e-8)(system)
     scf.run()
     assert scf.nbf == 90
-    assert scf.nmo == 81
+    assert scf.nmo == 79
     assert scf.E == approx(erhf)
 
 
 def test_lindep_ghf():
-    erhf = -4.071545223158
+    erhf = -4.071076569404
     xyz = "\n".join([f"H 0 0 {i}" for i in range(10)])
 
     system = System(
@@ -47,5 +47,5 @@ def test_lindep_ghf():
 
     scf.run()
     assert scf.nbf == 90
-    assert scf.nmo == 81
+    assert scf.nmo == 79
     assert scf.E == approx(erhf)
