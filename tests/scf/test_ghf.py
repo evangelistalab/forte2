@@ -23,14 +23,15 @@ def test_equivalence_to_rhf():
 
 def test_equivalence_to_uhf():
     # This is the same test as test_uhf_coulson_fischer
-    euhf = -1.000297175136
-    s2uhf = 0.987426195959
+    euhf = -1.000027890395
+    s2uhf = 0.9874559102128492
+
     xyz = """
     H 0 0 0
     H 0 0 2.7"""
     system = System(
         xyz=xyz,
-        basis_set="cc-pVQZ",
+        basis_set="cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
     )
     scf = GHF(charge=0, ms_guess=0.0, guess_mix=True)(system)
