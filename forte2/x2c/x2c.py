@@ -4,10 +4,9 @@ import numpy as np
 import scipy
 
 from forte2 import integrals
-from forte2.helpers import logger, block_diag_2x2, i_sigma_dot, canonical_orth
+from forte2.helpers import logger, block_diag_2x2, i_sigma_dot, orthonormalize
 from forte2.system.build_basis import build_basis
 
-X2C_LINDEP_TOL = 5e-8
 LIGHT_SPEED = 137.035999177
 ROW_Z_START = np.array([1, 3, 11, 19, 37, 55, 87])
 
@@ -43,8 +42,9 @@ class X2CHelper:
     for the spin-orbit case. See also PySCF's x2c module for reference.
     """
 
-    def __init__(self, system):
+    def __init__(self, system, ortho_thresh=1e-8):
         self.system = system
+        self.ortho_thresh = ortho_thresh
         self.x2c_type = system.x2c_type.lower()
         assert self.x2c_type in [
             "sf",
@@ -92,7 +92,7 @@ class X2CHelper:
         self.X = self._get_decoupling_matrix(c_dirac)
 
         # build the transformation matrix R
-        self.R = self._get_transformation_matrix(S, T, tol=X2C_LINDEP_TOL)
+        self.R = self._get_transformation_matrix(S, T)
 
         # build the Foldy-Wouthuysen Hamiltonian
         h_fw = self._build_foldy_wouthuysen_hamiltonian(T, V, W)
@@ -141,7 +141,9 @@ class X2CHelper:
         W = integrals.opVop(self.system, self.xbasis)
 
         # Get orthonormal transformation for X2C
-        Xorth_l, Xorthm1_l = canonical_orth(S, tol=X2C_LINDEP_TOL, return_inverse=True)
+        northo, Xorth_l, Xorthm1_l = orthonormalize(
+            S, ortho_thresh=self.ortho_thresh, return_inverse=True
+        )
         northo = Xorth_l.shape[1]
         logger.log_info1(
             f"Number of orthogonalized decontracted basis functions: {northo}"
@@ -185,7 +187,7 @@ class X2CHelper:
         cspos = c_dirac[north:, north:]
         return cspos @ scipy.linalg.pinv(clpos)
 
-    def _get_transformation_matrix(self, S, T, tol=1e-9):
+    def _get_transformation_matrix(self, S, T):
         """
         This implementation follows eqs 26-34 of J. Chem. Phys. 131, 031104 (2009),
         which avoids doing matrix inversions and leads to a more numerically stable transformation.
