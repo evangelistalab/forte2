@@ -43,7 +43,7 @@ def invsqrt_matrix(M, tol=1e-7):
     return invsqrt_M
 
 
-def canonical_orth(S, tol=1e-7):
+def canonical_orth(S, tol=1e-7, return_inverse=False):
     """
     Compute the canonical orthogonalization given the metric matrix S.
 
@@ -53,11 +53,15 @@ def canonical_orth(S, tol=1e-7):
         Metric matrix (must be positive semi-definite).
     tol : float, optional, default=1e-7
         Eigenvalue threshold below which values are treated as zero.
+    return_inverse : bool, optional, default=False
+        If True, also return the inverse of the orthogonalization matrix, such that ``X @ X_inv = I``.
 
     Returns
     -------
     X : NDArray
         The (possibly rectangular) canonical orthogonalization matrix X, such that ``X.T @ S @ X = I``.
+    Xm1 : NDArray, optional
+        The inverse of the orthogonalization matrix, such that ``X @ Xm1 = I``. Only returned if `return_inverse` is True.
 
     Raises
     ------
@@ -69,8 +73,15 @@ def canonical_orth(S, tol=1e-7):
     if np.any(sevals < -MACHEPS):
         raise ValueError("Matrix must be positive semi-definite.")
     trunc_indices = np.where(sevals > tol)[0]
-    X = sevecs[:, trunc_indices] / np.sqrt(sevals[trunc_indices])
-    return X
+    U = sevecs[:, trunc_indices]
+    # X = U @ s^{-1/2}, so the s_i^{-1/2}'s scale the columns
+    X = U / np.sqrt(sevals[trunc_indices])
+    if return_inverse:
+        # X^{-1} = s^{1/2} @ U.+, so the s_i^{1/2}'s scale the rows
+        Xm1 = np.sqrt(sevals[trunc_indices])[:, None] * U.T.conj()
+        return X, Xm1
+    else:
+        return X
 
 
 def eigh_gen(A, B=None, remove_lindep=True, orth_tol=1e-7, orth_method="canonical"):
@@ -183,6 +194,7 @@ def cholesky_wrapper(M, tol):
     B = np.triu(C)[:rank, inv_piv]
     return B
 
+
 def block_diag_2x2(M, complex=True):
     """
     Return a block-diagonal matrix with two copies of `M` on the diagonal.
@@ -205,3 +217,54 @@ def block_diag_2x2(M, complex=True):
         return A.astype(np.complex128)
     else:
         return A
+
+
+def random_unitary(size, complex=False, rng=None):
+    """
+    Generate a random unitary matrix of given size.
+
+    Parameters
+    ----------
+    size : int
+        The size of the unitary matrix (size x size).
+    complex : bool, optional, default=False
+        If True, generate a complex unitary matrix; otherwise, generate a real orthogonal matrix.
+    rng : np.random.Generator, optional
+        A random number generator for reproducibility.
+
+    Returns
+    -------
+    NDArray
+        A random unitary (or orthogonal) matrix of shape (size, size).
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+    A = rng.random((size, size))
+    if complex:
+        A += 1j * rng.random((size, size))
+    A += A.T.conj()  # make it Hermitian
+    U, _, Vh = np.linalg.svd(A)
+    return U @ Vh
+
+
+def i_sigma_dot(scalar, x, y, z):
+    """
+    Construct the matrix i * (I2, sigma_x, sigma_y, sigma_z) dot (scalar, x, y, z).
+
+    Parameters
+    ----------
+    scalar : ndarray
+        The scalar component.
+    x : ndarray
+        The x component.
+    y : ndarray
+        The y component.
+    z : ndarray
+        The z component.
+
+    Returns
+    -------
+    NDArray
+        The 2x2 matrix representation.
+    """
+    return np.block([[scalar + z * 1j, x * 1j + y], [x * 1j - y, scalar - z * 1j]])

@@ -91,7 +91,7 @@ def test_slater_rules_1_complex():
     scf = RHF(charge=0, econv=1e-12)(system)
     scf.run()
 
-    C = convert_coeff_spatial_to_spinor(system, scf.C)
+    C = convert_coeff_spatial_to_spinor(scf.C)
     orbitals = [0, 1, 2, 3]
     norb = len(orbitals)
     system.two_component = True
@@ -142,7 +142,7 @@ def test_slater_rules_2_complex():
     scf = RHF(charge=0, econv=1e-10)(system)
     scf.run()
 
-    C = convert_coeff_spatial_to_spinor(system, scf.C)
+    C = convert_coeff_spatial_to_spinor(scf.C)
     system.two_component = True
 
     core_orbitals = [0, 1]

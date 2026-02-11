@@ -166,7 +166,7 @@ class GHF(SCFBase):
         D_spinor = np.block([[Daa, Dab], [Dba, Dbb]])
         sdf = S @ D_spinor @ F[0]
         AO_grad = sdf.conj().T - sdf
-        AO_grad = self.Xorth.T @ AO_grad @ self.Xorth
+        AO_grad = self.Xorth.conj().T @ AO_grad @ self.Xorth
 
         return AO_grad
 
