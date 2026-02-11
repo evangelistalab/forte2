@@ -52,7 +52,7 @@ def canonical_orth(S, tol=1e-7, return_inverse=False):
     S : NDArray
         Metric matrix (must be positive semi-definite).
     tol : float, optional, default=1e-7
-        Eigenvalue threshold below which values are treated as zero.
+        Relative threshold t for which values below t * max_eigenvalue are treated as zero.
     return_inverse : bool, optional, default=False
         If True, also return the inverse of the orthogonalization matrix, such that ``X @ X_inv = I``.
 
@@ -70,9 +70,10 @@ def canonical_orth(S, tol=1e-7, return_inverse=False):
     """
     # Compute the inverse square root of S
     sevals, sevecs = np.linalg.eigh(S)
+    max_seval = sevals[-1]
     if np.any(sevals < -MACHEPS):
         raise ValueError("Matrix must be positive semi-definite.")
-    trunc_indices = np.where(sevals > tol)[0]
+    trunc_indices = np.where(sevals > tol * max_seval)[0]
     U = sevecs[:, trunc_indices]
     # X = U @ s^{-1/2}, so the s_i^{-1/2}'s scale the columns
     X = U / np.sqrt(sevals[trunc_indices])
@@ -82,6 +83,37 @@ def canonical_orth(S, tol=1e-7, return_inverse=False):
         return X, Xm1
     else:
         return X
+
+
+def orthonormalize(S, ortho_thresh, return_inverse=False):
+    """
+    Orthonormalize the AO basis, catch and remove linear dependencies.
+
+    Parameters
+    ----------
+    S : NDArray
+        The overlap matrix of the basis functions.
+    ortho_thresh : float
+        Linear combinations of AO basis functions with relative overlap eigenvalues below this threshold will be removed
+        during orthogonalization.
+    return_inverse : bool, optional, default=False
+        If True, also return the inverse of the orthogonalization matrix, such that ``Xorth @ Xorth_inv = I``.
+
+    Returns
+    -------
+    north : int
+        The number of linearly independent combinations of atomic orbitals in the system.
+    Xorth : NDArray
+        The orthonormalization matrix for the basis functions.
+    Xorth_inv : NDArray, optional
+        The inverse of the orthogonalization matrix, such that ``Xorth @ Xorth_inv = I``. Only returned if `return_inverse` is True.
+    """
+    Xorth, Xorth_inv = canonical_orth(S, tol=ortho_thresh, return_inverse=True)
+    north = Xorth.shape[1]
+    if return_inverse:
+        return north, Xorth, Xorth_inv
+    else:
+        return north, Xorth
 
 
 def eigh_gen(A, B=None, remove_lindep=True, orth_tol=1e-7, orth_method="canonical"):

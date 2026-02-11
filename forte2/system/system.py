@@ -4,8 +4,9 @@ from numpy.typing import NDArray
 
 from forte2 import integrals
 from forte2.data import DEBYE_TO_AU, DEBYE_ANGSTROM_TO_AU, Z_TO_ATOM_SYMBOL
-from forte2.helpers import logger
-from forte2.helpers.matrix_functions import (
+from forte2.helpers import (
+    logger,
+    orthonormalize,
     invsqrt_matrix,
     canonical_orth,
     block_diag_2x2,
@@ -43,9 +44,6 @@ class System:
         Options are None, "boettger", "dc", "dcb", or "row-dependent".
     unit : str, optional, default="angstrom"
         The unit for the atomic coordinates. Can be "angstrom" or "bohr".
-    linear_dep_trigger : float, optional, default=1e-10
-        The trigger for detecting linear dependencies in the overlap matrix. If the ratio of the minimum to
-        maximum eigenvalue of the overlap matrix falls below this value, linear dependencies will be removed.
     ortho_thresh : float, optional, default=1e-8
         Linear combinations of AO basis functions with overlap eigenvalues below this threshold will be removed
         during orthogonalization.
@@ -111,7 +109,6 @@ class System:
     x2c_type: str = None
     snso_type: str = "row-dependent"
     unit: str = "angstrom"
-    linear_dep_trigger: float = 1e-10
     ortho_thresh: float = 1e-8
     cholesky_tei: bool = False
     cholesky_tol: float = 1e-6
@@ -142,11 +139,7 @@ class System:
         self.nuclear_repulsion = integrals.nuclear_repulsion(self)
         self._init_x2c()
         _S = integrals.overlap(self)
-        self.Xorth, self.nmo = compute_orthonormal_transformation(
-            _S,
-            self.linear_dep_trigger,
-            self.ortho_thresh,
-        )
+        self.nmo, self.Xorth = orthonormalize(_S, self.ortho_thresh)
         self.fock_builder = FockBuilder(self)
         # The B tensors here are lazily evaluated, so no overhead if not used
         if self.auxiliary_basis_set_corr is not None:
@@ -239,7 +232,7 @@ class System:
                 "sf",
                 "so",
             ], f"x2c_type {self.x2c_type} is not supported. Use None, 'sf' or 'so'."
-            self.x2c_helper = X2CHelper(self)
+            self.x2c_helper = X2CHelper(self, ortho_thresh=self.ortho_thresh)
         else:
             return
         if self.x2c_type == "so":
