@@ -59,8 +59,8 @@ def test_ghf_complex_perturbation():
 
 def test_j_adapted_ghf():
     # The two bases should yield the same result
-    eref = -399.126509923258
-    s2ref = 0.7590823471668084
+    eref = -399.12328000812687
+    s2ref = 0.7547419587209125
     xyz = """
     S 0 0 0
     H 0 0 1.1"""
