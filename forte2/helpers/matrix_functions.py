@@ -43,7 +43,7 @@ def invsqrt_matrix(M, tol=1e-7):
     return invsqrt_M
 
 
-def canonical_orth(S, tol=1e-7, return_U=False):
+def canonical_orth(S, tol=1e-7, return_inverse=False):
     """
     Compute the canonical orthogonalization given the metric matrix S.
 
@@ -53,15 +53,15 @@ def canonical_orth(S, tol=1e-7, return_U=False):
         Metric matrix (must be positive semi-definite).
     tol : float, optional, default=1e-7
         Eigenvalue threshold below which values are treated as zero.
-    return_U : bool, optional, default=False
-        If True, also return the set of eigenvectors corresponding to non-zero eigenvalues.
+    return_inverse : bool, optional, default=False
+        If True, also return the inverse of the orthogonalization matrix, such that ``X @ X_inv = I``.
 
     Returns
     -------
     X : NDArray
         The (possibly rectangular) canonical orthogonalization matrix X, such that ``X.T @ S @ X = I``.
-    U : NDArray, optional
-        The eigenvectors corresponding to non-zero eigenvalues, returned if `return_U` is True
+    Xm1 : NDArray, optional
+        The inverse of the orthogonalization matrix, such that ``X @ Xm1 = I``. Only returned if `return_inverse` is True.
 
     Raises
     ------
@@ -74,9 +74,12 @@ def canonical_orth(S, tol=1e-7, return_U=False):
         raise ValueError("Matrix must be positive semi-definite.")
     trunc_indices = np.where(sevals > tol)[0]
     U = sevecs[:, trunc_indices]
+    # X = U @ s^{-1/2}, so the s_i^{-1/2}'s scale the columns
     X = U / np.sqrt(sevals[trunc_indices])
-    if return_U:
-        return X, U
+    if return_inverse:
+        # X^{-1} = s^{1/2} @ U.+, so the s_i^{1/2}'s scale the rows
+        Xm1 = np.sqrt(sevals[trunc_indices])[:, None] * U.T.conj()
+        return X, Xm1
     else:
         return X
 

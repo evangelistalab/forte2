@@ -4,7 +4,7 @@ import numpy as np
 import scipy
 
 from forte2 import integrals
-from forte2.helpers import logger, eigh_gen, block_diag_2x2, i_sigma_dot
+from forte2.helpers import logger, block_diag_2x2, i_sigma_dot, canonical_orth
 from forte2.system.build_basis import build_basis
 
 X2C_LINDEP_TOL = 5e-8
@@ -97,11 +97,11 @@ class X2CHelper:
         # build the Foldy-Wouthuysen Hamiltonian
         h_fw = self._build_foldy_wouthuysen_hamiltonian(T, V, W)
 
-        # project back to the contracted basis
-        h_fw = self.proj.conj().T @ h_fw @ self.proj
+        # return to original non-orthogonal AO basis
+        h_fw = self.Xorthm1_l.conj().T @ h_fw @ self.Xorthm1_l
 
         if self.x2c_type.lower() == "so" and self.snso_type is not None:
-            nbf = self.system.nbf
+            nbf = self.nbf // 2
             haa = h_fw[:nbf, :nbf]
             hab = h_fw[:nbf, nbf:]
             hba = h_fw[nbf:, :nbf]
@@ -119,6 +119,9 @@ class X2CHelper:
             h3 = self._apply_snso_scaling(h3)
             h_fw = np.block([[h0 + h3, h1 - 1j * h2], [h1 + 1j * h2, h0 - h3]])
 
+        # project back to the contracted basis
+        h_fw = self.proj.conj().T @ h_fw @ self.proj
+
         self.executed = True
         return h_fw
 
@@ -130,44 +133,57 @@ class X2CHelper:
         )
         return proj if self.system.x2c_type == "sf" else block_diag_2x2(proj)
 
-
     def _get_integrals(self):
         S = integrals.overlap(self.system, self.xbasis)
         T = integrals.kinetic(self.system, self.xbasis)
         # the V and W integrals know about Gaussian nuclear charges
         V = integrals.nuclear(self.system, self.xbasis)
         W = integrals.opVop(self.system, self.xbasis)
-        if self.system.x2c_type == "sf":
-            return S, T, V, W[0]
-        elif self.system.x2c_type == "so":
-            return block_diag_2x2(S), block_diag_2x2(T), block_diag_2x2(V), i_sigma_dot(*W)
 
+        # Get orthonormal transformation for X2C
+        Xorth_l, Xorthm1_l = canonical_orth(S, tol=X2C_LINDEP_TOL, return_inverse=True)
+        northo = Xorth_l.shape[1]
+        logger.log_info1(
+            f"Number of orthogonalized decontracted basis functions: {northo}"
+        )
+
+        if self.system.x2c_type == "sf":
+            S = np.eye(Xorth_l.shape[1])
+            T = Xorth_l.conj().T @ T @ Xorth_l
+            V = Xorth_l.conj().T @ V @ Xorth_l
+            W = Xorth_l.conj().T @ W[0] @ Xorth_l
+        elif self.system.x2c_type == "so":
+            Xorth_l = block_diag_2x2(Xorth_l)
+            Xorthm1_l = block_diag_2x2(Xorthm1_l)
+            S = np.eye(Xorth_l.shape[1], dtype=complex)
+            T = Xorth_l.conj().T @ block_diag_2x2(T) @ Xorth_l
+            V = Xorth_l.conj().T @ block_diag_2x2(V) @ Xorth_l
+            W = Xorth_l.conj().T @ i_sigma_dot(*W) @ Xorth_l
+            northo *= 2
+
+        self.Xorth_l = Xorth_l
+        self.Xorthm1_l = Xorthm1_l
+        self.northo = northo
+        return S, T, V, W
 
     def _solve_dirac_eq(self, S, T, V, W):
         dtype = np.float64 if self.x2c_type == "sf" else np.complex128
-        nbf = self.nbf
-        D = np.zeros((nbf * 2,) * 2, dtype=dtype)
-        M = np.zeros((nbf * 2,) * 2, dtype=dtype)
-        D[:nbf, :nbf] = V
-        D[nbf:, nbf:] = (0.25 / LIGHT_SPEED**2) * W - T
-        D[:nbf, nbf:] = T
-        D[nbf:, :nbf] = T
-        M[:nbf, :nbf] = S
-        M[nbf:, nbf:] = (0.5 / LIGHT_SPEED**2) * T
-
-        # TODO: handle scipy.LinAlgError when it arises
-        # haven't seen it even with some very ill-conditioned systems
-        # (H10, aug-dz, cond number ~ 2e14), gives sensible results
-        # trying to remove ANY linear dependencies seems to break variationality
+        north = self.northo
+        D = np.zeros((north * 2,) * 2, dtype=dtype)
+        M = np.zeros((north * 2,) * 2, dtype=dtype)
+        D[:north, :north] = V
+        D[north:, north:] = (0.25 / LIGHT_SPEED**2) * W - T
+        D[:north, north:] = T
+        D[north:, :north] = T
+        M[:north, :north] = S
+        M[north:, north:] = (0.5 / LIGHT_SPEED**2) * T
         return scipy.linalg.eigh(D, M)
 
-
     def _get_decoupling_matrix(self, c_dirac):
-        nbf = self.nbf
-        clpos = c_dirac[:nbf, nbf:]
-        cspos = c_dirac[nbf:, nbf:]
+        north = self.northo
+        clpos = c_dirac[:north, north:]
+        cspos = c_dirac[north:, north:]
         return cspos @ scipy.linalg.pinv(clpos)
-
 
     def _get_transformation_matrix(self, S, T, tol=1e-9):
         """
@@ -175,9 +191,8 @@ class X2CHelper:
         which avoids doing matrix inversions and leads to a more numerically stable transformation.
         """
         S_tilde = S + (0.5 / LIGHT_SPEED**2) * self.X.conj().T @ T @ self.X
-        lam, z = eigh_gen(
-            S_tilde, S, remove_lindep=True, orth_tol=tol, orth_method="canonical"
-        )
+        # S is guaranteed to be identity in the orthonormal basis
+        lam, z = np.linalg.eigh(S_tilde)
         idx = lam > 1e-14
         R = (z[:, idx] / np.sqrt(lam[idx])) @ z[:, idx].T.conj() @ S
         return R
@@ -189,7 +204,6 @@ class X2CHelper:
         # SSS12 = forte2.helpers.invsqrt_matrix(SSS, tol=tol)
         # return S12 @ SSS12 @ Ssqrt
 
-
     def _build_foldy_wouthuysen_hamiltonian(self, T, V, W):
         L = (
             T @ self.X
@@ -200,20 +214,22 @@ class X2CHelper:
         )
         return self.R.conj().T @ L @ self.R
 
-
     def _apply_snso_scaling(self, ints):
         """
         Apply the 'screened-nuclear-spin-orbit' (SNSO) scaling to the core Hamiltonian.
         Original paper ('Boettger'): Phys. Rev. B 62, 7809 (2000)
         Re-parameterized schemes ('DC'/'DCB'/'Row-dependent'): J. Chem. Theory Comput. 19, 5785 (2023)
         """
-        basis = self.system.basis
+        # applied in the decontracted basis before recontraction (if requested)
+        basis = self.xbasis
         atoms = self.system.atoms
 
         if self.snso_type is None:
             return ints
         if basis.max_l > 7:
-            raise RuntimeError("SNSO scaling is not implemented for basis sets with l > 7.")
+            raise RuntimeError(
+                "SNSO scaling is not implemented for basis sets with l > 7."
+            )
         match self.snso_type.lower():
             case "boettger":
                 Ql = np.array([0.0, 2.0, 10.0, 28.0, 60.0, 110.0, 182.0, 280.0])
