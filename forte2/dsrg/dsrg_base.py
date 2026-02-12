@@ -140,6 +140,10 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
         form_hbar = self.nrelax > 0
 
         self.E_dsrg = self.solve_dsrg(form_hbar)
+        if abs(self.E_dsrg.imag) > 1e-12:
+            logger.log_warning(
+                f"DSRG energy has a significant imaginary component: {self.E_dsrg.imag}"
+            )
 
         self.relax_energies[0, 0] = self.E_dsrg.real
         # self.ints["E"] is <Psi_current| bare H |Psi_current>
@@ -181,6 +185,10 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
 
             self.ints, self.cumulants = self.get_integrals()
             self.E_dsrg = self.solve_dsrg(form_hbar=form_hbar)
+            if abs(self.E_dsrg.imag) > 1e-12:
+                logger.log_warning(
+                    f"DSRG energy has a significant imaginary component: {self.E_dsrg.imag}"
+                )
             self.E = self.E_dsrg
         else:
             logger.log_warning(

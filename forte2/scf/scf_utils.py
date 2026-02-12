@@ -216,14 +216,12 @@ def break_complex_conjugation_symmetry(C, pert_strength=0.1):
     return C
 
 
-def convert_coeff_spatial_to_spinor(system, C, complex=True):
+def convert_coeff_spatial_to_spinor(C, complex=True):
     """
     Convert spatial orbital MO coefficients to spinor(bital) MO coefficients
 
     Parameters
     ----------
-    system : forte2.System
-        The system object containing the atoms and basis set.
     C : list of NDArray
         The MO coefficients in spatial orbital basis.
     complex : bool, optional, default=True
@@ -234,10 +232,10 @@ def convert_coeff_spatial_to_spinor(system, C, complex=True):
     list of NDArray
         The MO coefficients in spinor(bital) basis.
     """
-    dtype = np.complex128 if complex else np.float64
-    nbf = system.nbf
-    C_2c = np.zeros((nbf * 2,) * 2, dtype=dtype)
     assert isinstance(C, list)
+    dtype = np.complex128 if complex else np.float64
+    nbf = C[0].shape[0]
+    C_2c = np.zeros((nbf * 2,) * 2, dtype=dtype)
     if len(C) == 2:
         # UHF
         assert C[0].shape[0] == nbf
@@ -253,3 +251,25 @@ def convert_coeff_spatial_to_spinor(system, C, complex=True):
     else:
         raise RuntimeError(f"Coefficient of length {len(C)} not recognized!")
     return [C_2c]
+
+
+def one_comp_to_two_comp(scf, system):
+    """
+    Convert a one-component R/RO/UHF object to a two-component GHF object by
+    converting the MO coefficients to spinor basis and updating the system object.
+
+    Parameters
+    ----------
+    scf : SCF object
+        The one-component SCF object.
+    system : System
+        The system object.
+
+    Returns
+    -------
+    (SCF object, System)
+        The two-component SCF object and the updated system object.
+    """
+    scf.C = convert_coeff_spatial_to_spinor(scf.C)
+    system.two_component = True
+    return scf, system

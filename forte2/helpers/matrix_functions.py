@@ -1,6 +1,8 @@
 import numpy as np
 import scipy as sp
 
+from . import logger
+
 MACHEPS = 1e-14
 
 
@@ -43,7 +45,7 @@ def invsqrt_matrix(M, tol=1e-7):
     return invsqrt_M
 
 
-def canonical_orth(S, tol=1e-7):
+def canonical_orth(S, tol=1e-7, print_info=False):
     """
     Compute the canonical orthogonalization given the metric matrix S.
 
@@ -52,12 +54,26 @@ def canonical_orth(S, tol=1e-7):
     S : NDArray
         Metric matrix (must be positive semi-definite).
     tol : float, optional, default=1e-7
-        Eigenvalue threshold below which values are treated as zero.
+        Relative threshold t for which values below t * max_eigenvalue are treated as zero.
+    print_info : bool, optional, default=False
+        If True, print additional information about the eigenvalues and orthogonalization process,
+        only if any eigenvalues are discarded.
 
     Returns
     -------
     X : NDArray
         The (possibly rectangular) canonical orthogonalization matrix X, such that ``X.T @ S @ X = I``.
+    Xm1 : NDArray
+        The inverse of the orthogonalization matrix, such that ``X @ Xm1 = I``.
+    info : dict
+        A dictionary containing additional information, including:
+        - "max_eigenvalue": The largest eigenvalue of S.
+        - "min_eigenvalue": The smallest eigenvalue of S.
+        - "condition_number": The condition number of S (max_eigenvalue / min_eigenvalue).
+        - "n_discarded": The number of eigenvalues discarded due to being below the threshold.
+        - "n_kept": The number of eigenvalues kept.
+        - "largest_discarded_eigenvalue": The largest eigenvalue that was discarded.
+        - "smallest_kept_eigenvalue": The smallest eigenvalue that was kept.
 
     Raises
     ------
@@ -65,12 +81,44 @@ def canonical_orth(S, tol=1e-7):
         If the matrix S is not positive semi-definite.
     """
     # Compute the inverse square root of S
+    info = {}
     sevals, sevecs = np.linalg.eigh(S)
+    max_seval = sevals[-1]
+    info["max_eigenvalue"] = max_seval
+    info["min_eigenvalue"] = sevals[0]
+    info["condition_number"] = max_seval / sevals[0]
     if np.any(sevals < -MACHEPS):
         raise ValueError("Matrix must be positive semi-definite.")
-    trunc_indices = np.where(sevals > tol)[0]
-    X = sevecs[:, trunc_indices] / np.sqrt(sevals[trunc_indices])
-    return X
+
+    # indices equal and above discard_idx are kept
+    ndiscard = np.searchsorted(sevals, tol * max_seval)
+    info["n_discarded"] = ndiscard
+    info["n_kept"] = len(sevals) - ndiscard
+    info["largest_discarded_eigenvalue"] = sevals[ndiscard - 1] if ndiscard > 0 else 0.0
+    info["smallest_kept_eigenvalue"] = (
+        sevals[ndiscard] if ndiscard < len(sevals) else 0.0
+    )
+    U = sevecs[:, ndiscard:]
+    # X = U @ s^{-1/2}, so the s_i^{-1/2}'s scale the columns
+    X = U / np.sqrt(sevals[ndiscard:])
+    # X^{-1} = s^{1/2} @ U.+, so the s_i^{1/2}'s scale the rows
+    Xm1 = np.sqrt(sevals[ndiscard:])[:, None] * U.T.conj()
+
+    if print_info and info["n_discarded"] > 0:
+        logger.log_info1("Canonical orthogonalization info:")
+        logger.log_info1(f"  Max eigenvalue: {info['max_eigenvalue']:.4e}")
+        logger.log_info1(f"  Min eigenvalue: {info['min_eigenvalue']:.4e}")
+        logger.log_info1(f"  Condition number: {info['condition_number']:.4e}")
+        logger.log_info1(f"  Number of discarded eigenvalues: {info['n_discarded']}")
+        logger.log_info1(f"  Number of kept eigenvalues: {info['n_kept']}")
+        logger.log_info1(
+            f"  Largest discarded eigenvalue: {info['largest_discarded_eigenvalue']:.4e}"
+        )
+        logger.log_info1(
+            f"  Smallest kept eigenvalue: {info['smallest_kept_eigenvalue']:.4e}"
+        )
+
+    return X, Xm1, info
 
 
 def eigh_gen(A, B=None, remove_lindep=True, orth_tol=1e-7, orth_method="canonical"):
@@ -101,7 +149,7 @@ def eigh_gen(A, B=None, remove_lindep=True, orth_tol=1e-7, orth_method="canonica
 
     if remove_lindep:
         if orth_method == "canonical":
-            X = canonical_orth(B, orth_tol)
+            X, *_ = canonical_orth(B, orth_tol)
         elif orth_method == "symmetric":
             X = invsqrt_matrix(B, orth_tol)
         else:  # TODO: add partial cholesky: 10.1063/1.5139948
@@ -183,6 +231,7 @@ def cholesky_wrapper(M, tol):
     B = np.triu(C)[:rank, inv_piv]
     return B
 
+
 def block_diag_2x2(M, complex=True):
     """
     Return a block-diagonal matrix with two copies of `M` on the diagonal.
@@ -205,3 +254,54 @@ def block_diag_2x2(M, complex=True):
         return A.astype(np.complex128)
     else:
         return A
+
+
+def random_unitary(size, complex=False, rng=None):
+    """
+    Generate a random unitary matrix of given size.
+
+    Parameters
+    ----------
+    size : int
+        The size of the unitary matrix (size x size).
+    complex : bool, optional, default=False
+        If True, generate a complex unitary matrix; otherwise, generate a real orthogonal matrix.
+    rng : np.random.Generator, optional
+        A random number generator for reproducibility.
+
+    Returns
+    -------
+    NDArray
+        A random unitary (or orthogonal) matrix of shape (size, size).
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+    A = rng.random((size, size))
+    if complex:
+        A += 1j * rng.random((size, size))
+    A += A.T.conj()  # make it Hermitian
+    U, _, Vh = np.linalg.svd(A)
+    return U @ Vh
+
+
+def i_sigma_dot(scalar, x, y, z):
+    """
+    Construct the matrix i * (I2, sigma_x, sigma_y, sigma_z) dot (scalar, x, y, z).
+
+    Parameters
+    ----------
+    scalar : ndarray
+        The scalar component.
+    x : ndarray
+        The x component.
+    y : ndarray
+        The y component.
+    z : ndarray
+        The z component.
+
+    Returns
+    -------
+    NDArray
+        The 2x2 matrix representation.
+    """
+    return np.block([[scalar + z * 1j, x * 1j + y], [x * 1j - y, scalar - z * 1j]])

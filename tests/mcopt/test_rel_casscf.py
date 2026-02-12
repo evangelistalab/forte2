@@ -1,7 +1,19 @@
-from forte2 import System, GHF
+import numpy as np
+
+from forte2 import System, GHF, RHF
 from forte2.helpers.comparisons import approx
+from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 from forte2.mcopt import RelMCOptimizer
 from forte2.orbitals import AVAS
+
+
+def rhf_to_ghf_with_random_phase(rhf):
+    C = convert_coeff_spatial_to_spinor(rhf.C)[0]
+    nmo = C.shape[1]
+    rng = np.random.default_rng(1234)
+    random_phase = np.diag(np.exp(1j * rng.uniform(-np.pi, np.pi, size=nmo)))
+    rhf.C[0] = C @ random_phase
+    return rhf
 
 
 def test_rel_casscf_hf_equivalence_to_nonrel():
@@ -15,7 +27,10 @@ def test_rel_casscf_hf_equivalence_to_nonrel():
     system = System(
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    scf = GHF(charge=0, econv=1e-10)(system)
+    scf = RHF(charge=0, econv=1e-10)(system)
+    scf.run()
+    scf = rhf_to_ghf_with_random_phase(scf)
+    system.two_component = True
     mc = RelMCOptimizer(
         nel=10,
         core_orbitals=2,
