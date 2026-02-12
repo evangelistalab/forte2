@@ -73,6 +73,6 @@ def test_lindep_x2c():
         use_gaussian_charges=True,
         ortho_thresh=5e-10,
     )
-    scf = GHF(charge=0, econv=1e-10, dconv=1e-8)(system)
+    scf = GHF(charge=0)(system)
     scf.run()
     assert scf.E == approx_loose(eref)
