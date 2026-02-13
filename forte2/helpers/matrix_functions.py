@@ -231,6 +231,7 @@ def cholesky_wrapper(M, tol):
     B = np.triu(C)[:rank, inv_piv]
     return B
 
+
 def block_diag_2x2(M, complex=True):
     """
     Return a block-diagonal matrix with two copies of `M` on the diagonal.
@@ -253,6 +254,35 @@ def block_diag_2x2(M, complex=True):
         return A.astype(np.complex128)
     else:
         return A
+
+
+def random_unitary(size, complex=False, rng=None):
+    """
+    Generate a random unitary matrix of given size.
+
+    Parameters
+    ----------
+    size : int
+        The size of the unitary matrix (size x size).
+    complex : bool, optional, default=False
+        If True, generate a complex unitary matrix; otherwise, generate a real orthogonal matrix.
+    rng : np.random.Generator, optional
+        A random number generator for reproducibility.
+
+    Returns
+    -------
+    NDArray
+        A random unitary (or orthogonal) matrix of shape (size, size).
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+    A = rng.random((size, size))
+    if complex:
+        A += 1j * rng.random((size, size))
+    A += A.T.conj()  # make it Hermitian
+    U, _, Vh = np.linalg.svd(A)
+    return U @ Vh
+
 
 def i_sigma_dot(scalar, x, y, z):
     """
