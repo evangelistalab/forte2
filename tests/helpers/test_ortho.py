@@ -1,7 +1,7 @@
 import numpy as np
 import scipy as sp
 
-from forte2.helpers import invsqrt_matrix, eigh_gen
+from forte2.helpers import invsqrt_matrix, eigh_gen, canonical_orth
 from forte2.helpers.comparisons import approx
 
 
@@ -33,6 +33,12 @@ def test_canonical_orth():
     H += H.T
     S = np.eye(10) + np.abs(generator.random((10, 10)) * 0.05)
     S = 0.5 * (S + S.T)
+
+    X, Xm1, _ = canonical_orth(S, tol=1e-10)
+    assert np.allclose(X.T @ S @ X, np.eye(10))
+    assert np.allclose(Xm1 @ X, np.eye(10))
+    assert np.allclose(X @ Xm1, np.eye(10))
+
     e_sp, c_sp = sp.linalg.eigh(H, S)
     e_ft, c_ft = eigh_gen(H, S, remove_lindep=True, orth_method="canonical")
 

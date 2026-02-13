@@ -4,13 +4,8 @@ from numpy.typing import NDArray
 
 from forte2 import integrals
 from forte2.data import DEBYE_TO_AU, DEBYE_ANGSTROM_TO_AU, Z_TO_ATOM_SYMBOL
-from forte2.helpers import logger
-from forte2.helpers.matrix_functions import (
-    invsqrt_matrix,
-    canonical_orth,
-    block_diag_2x2,
-)
-from forte2.x2c import get_hcore_x2c
+from forte2.helpers import logger, invsqrt_matrix, canonical_orth, block_diag_2x2
+from forte2.x2c import X2CHelper
 from forte2.jkbuilder import FockBuilder
 from .build_basis import build_basis
 from .geom_utils import GeometryHelper, parse_geometry
@@ -43,9 +38,6 @@ class System:
         Options are None, "boettger", "dc", "dcb", or "row-dependent".
     unit : str, optional, default="angstrom"
         The unit for the atomic coordinates. Can be "angstrom" or "bohr".
-    linear_dep_trigger : float, optional, default=1e-10
-        The trigger for detecting linear dependencies in the overlap matrix. If the ratio of the minimum to
-        maximum eigenvalue of the overlap matrix falls below this value, linear dependencies will be removed.
     ortho_thresh : float, optional, default=1e-8
         Linear combinations of AO basis functions with overlap eigenvalues below this threshold will be removed
         during orthogonalization.
@@ -111,7 +103,6 @@ class System:
     x2c_type: str = None
     snso_type: str = "row-dependent"
     unit: str = "angstrom"
-    linear_dep_trigger: float = 1e-10
     ortho_thresh: float = 1e-8
     cholesky_tei: bool = False
     cholesky_tol: float = 1e-6
@@ -142,11 +133,8 @@ class System:
         self.nuclear_repulsion = integrals.nuclear_repulsion(self)
         self._init_x2c()
         _S = integrals.overlap(self)
-        self.Xorth, self.nmo = compute_orthonormal_transformation(
-            _S,
-            self.linear_dep_trigger,
-            self.ortho_thresh,
-        )
+        self.Xorth, _, info = canonical_orth(_S, self.ortho_thresh, print_info=True)
+        self.nmo = info["n_kept"]
         self.fock_builder = FockBuilder(self)
         # The B tensors here are lazily evaluated, so no overhead if not used
         if self.auxiliary_basis_set_corr is not None:
@@ -239,6 +227,7 @@ class System:
                 "sf",
                 "so",
             ], f"x2c_type {self.x2c_type} is not supported. Use None, 'sf' or 'so'."
+            self.x2c_helper = X2CHelper(self, ortho_thresh=self.ortho_thresh)
         else:
             return
         if self.x2c_type == "so":
@@ -271,7 +260,7 @@ class System:
             Core Hamiltonian integrals matrix.
         """
         if self.x2c_type in ["sf", "so"]:
-            H = get_hcore_x2c(self)
+            H = self.x2c_helper.hcore_x2c
         else:
             T = integrals.kinetic(self)
             V = integrals.nuclear(self)
@@ -500,52 +489,3 @@ class HubbardModel(ModelSystem):
         self.eri = np.zeros((nsites_flat,) * 4)
         for i in range(nsites_flat):
             self.eri[i, i, i, i] = self.U
-
-
-def compute_orthonormal_transformation(S, lindep_trigger, ortho_thresh):
-    """
-    Orthonormalize the AO basis, catch and remove linear dependencies.
-
-    Parameters
-    ----------
-    S : NDArray
-        The overlap matrix of the basis functions.
-    lindep_trigger : float
-        The trigger for detecting linear dependencies in the overlap matrix.
-        If the ratio of the minimum to maximum eigenvalue of the overlap matrix falls below this value,
-        linear dependencies will be removed.
-    ortho_thresh : float
-        Linear combinations of AO basis functions with overlap eigenvalues below this threshold will be removed
-        during orthogonalization.
-
-    Returns
-    -------
-    Xorth : NDArray
-        The orthonormalization matrix for the basis functions.
-    nmo : int
-        The number of linearly independent combinations of atomic orbitals in the system.
-    """
-    e, _ = np.linalg.eigh(S)
-    nmo = nbf = S.shape[0]
-    if min(e) / max(e) < lindep_trigger:
-        logger.log_warning("Linear dependencies detected in overlap matrix S!")
-        logger.log_debug(
-            f"Max eigenvalue: {np.max(e):.2e}. \n"
-            f"Min eigenvalue: {np.min(e):.2e}. \n"
-            f"Condition number: {max(e)/min(e):.2e}. \n"
-            f"Removing linear dependencies with threshold {ortho_thresh:.2e}."
-        )
-        nmo -= np.sum(e < ortho_thresh)
-        if nmo < nbf:
-            logger.log_warning(
-                f"Reduced number of basis functions from {nbf} to {nmo} due to linear dependencies."
-            )
-        else:
-            logger.log_warning(
-                "Linear dependencies detected, but no basis functions were removed. Consider changing linear_dep_trigger or ortho_thresh."
-            )
-        Xorth = canonical_orth(S, tol=ortho_thresh)
-    else:
-        # no linear dependencies, use symmetric orthogonalization
-        Xorth = invsqrt_matrix(S, tol=1e-13)
-    return Xorth, nmo
