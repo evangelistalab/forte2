@@ -138,10 +138,11 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             ), f"Cutoff {self.cutoff} is smaller than 1-evals_threshold, {1-self.evals_threshold}, no orbitals will be selected."
         elif self.selection_method == "separate":
             assert (
-                self.num_active_docc + self.num_active_uocc > 0
-            ), "Sum of active occupied and unoccupied orbitals must be positive."
-            assert self.num_active_docc >= 0, "Number of active occupied orbitals cannot be negative."
-            assert self.num_active_uocc >= 0, "Number of active unoccupied orbitals cannot be negative."
+                self.num_active_docc >= 0
+            ), "Number of active occupied orbitals cannot be negative."
+            assert (
+                self.num_active_uocc >= 0
+            ), "Number of active unoccupied orbitals cannot be negative."
         elif self.selection_method == "total":
             assert self.num_active > 0, "Number of active orbitals must be positive."
 
@@ -301,9 +302,7 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             ndocc = self.parent_method.nocc
         else:
             ndocc = self.parent_method.ndocc
-        nsocc = (
-            getattr(self.parent_method, "nsocc", 0)
-        )
+        nsocc = getattr(self.parent_method, "nsocc", 0)
         nuocc = self.parent_method.nuocc
 
         CpsC = self.C[0].T.conj() @ self.ao_projector @ self.C[0]

@@ -410,3 +410,21 @@ def test_avas_zero_uocc():
     mc = MCOptimizer(states=State(nel=35, multiplicity=2, ms=0.5), nroots=3)(avas)
     mc.run()
     assert mc.E_avg == approx(-2572.3646258078)
+
+
+def test_avas_zero_uocc2():
+    xyz = """
+    C 0 0 0
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
+    mf = ROHF(charge=0, ms=2.0)(system)
+    avas = AVAS(
+        selection_method="separate",
+        subspace=["C(2s)", "C(2p)"],
+        num_active_docc=0,
+        num_active_uocc=0,
+    )(mf)
+    mc = MCOptimizer(states=State(nel=6, multiplicity=5, ms=2.0), nroots=1)(avas)
+    mc.run()
+    assert mc.E_avg == approx(-37.5906751187)
