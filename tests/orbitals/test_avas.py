@@ -21,6 +21,30 @@ def test_avas_inputs():
             subspace=["N(2p)"],
         )(rhf)
 
+    with pytest.raises(Exception):
+        avas = AVAS(
+            selection_method="separate",
+            subspace=["N(2p)"],
+            num_active_docc=3,
+            num_active_uocc=-1,
+        )(rhf)
+
+    with pytest.raises(Exception):
+        avas = AVAS(
+            selection_method="separate",
+            subspace=["N(2p)"],
+            num_active_docc=-3,
+            num_active_uocc=3,
+        )(rhf)
+
+    # don't raise if one of num_active_docc/vir = 0
+    avas = AVAS(
+        selection_method="separate",
+        subspace=["N(2p)"],
+        num_active_docc=3,
+        num_active_uocc=0,
+    )(rhf)
+
     # raise if 1-cutoff < evals_threshold
     with pytest.raises(Exception):
         avas = AVAS(
@@ -59,7 +83,24 @@ def test_avas_subspace():
         avas = AVAS(
             selection_method="separate",
             subspace=["N(3p)"],
+            num_active_docc=3,
+            num_active_uocc=3,
         )(rhf)
+
+    with pytest.raises(Exception):
+        avas = AVAS(
+            selection_method="separate",
+            subspace=["N(2p), N(2s)"],
+            num_active_docc=5,
+            num_active_uocc=3,
+        )(rhf)
+
+    avas = AVAS(
+        selection_method="separate",
+        subspace=[" N(2p)  "],
+        num_active_docc=3,
+        num_active_uocc=3,
+    )(rhf)
 
 
 def test_avas_separate_n2():
@@ -103,8 +144,6 @@ def test_avas_separate_n2():
     casci = CI(states=State(nel=14, multiplicity=1, ms=0.0))(avas)
     casci.run()
     assert casci.E[0] == approx(eref_casci_avas_diagonalize)
-
-
 
 
 def test_avas_separate_n2_ghf_equivalent_to_rhf():
@@ -370,3 +409,39 @@ def test_avas_subspace_planes_h2co_casscf():
     mc = MCOptimizer(states=State(nel=rhf.nel, multiplicity=1, ms=0.0))(avas)
     mc.run()
     assert mc.E_ci[0] == approx(eref_avas)
+
+
+def test_avas_zero_uocc():
+    xyz = """
+    Br 0 0 0
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
+    mf = ROHF(charge=0, ms=0.5)(system)
+    avas = AVAS(
+        selection_method="separate",
+        subspace=["Br(4s)", "Br(4p)"],
+        num_active_docc=3,
+        num_active_uocc=0,
+    )(mf)
+    mc = MCOptimizer(states=State(nel=35, multiplicity=2, ms=0.5), nroots=3)(avas)
+    mc.run()
+    assert mc.E_avg == approx(-2572.3646258078)
+
+
+def test_avas_zero_uocc2():
+    xyz = """
+    C 0 0 0
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
+    mf = ROHF(charge=0, ms=2.0)(system)
+    avas = AVAS(
+        selection_method="separate",
+        subspace=["C(2s)", "C(2p)"],
+        num_active_docc=0,
+        num_active_uocc=0,
+    )(mf)
+    mc = MCOptimizer(states=State(nel=6, multiplicity=5, ms=2.0), nroots=1)(avas)
+    mc.run()
+    assert mc.E_avg == approx(-37.5906751187)

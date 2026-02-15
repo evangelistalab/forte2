@@ -75,8 +75,17 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
     executed: bool = field(init=False, default=False)
 
     def __post_init__(self):
-        self._regex = "([a-zA-Z]{1,2})([0-9]+)?-?([0-9]+)?\\(?((?:\\/?[1-9]{1}[spdfgh]{1}[a-zA-Z0-9-]*)*)\\)?"
-        self._check_parameters()
+        # Regex explaination:
+        # ^...$ : make sure the whole string matches the pattern, e.g. the string "N(2p), N(2s)" will be rejected since it contains a comma which isn't present in the pattern, instead of "N(2p)" or "N(2s)" which are valid.
+        # Group 1: ([a-zA-Z]{1,2}) - match the element symbol (1 or 2 letters)
+        #   Example: "C", "N", "Ce", etc.
+        # Group 2: ([0-9]+)? - optionally match the start index (one or more digits)
+        #   Example: "C1", "N2", etc. If not specified, it means all atoms of that element.
+        # Group 3: -?([0-9]+)? - optionally match a dash followed by the end index (one or more digits)
+        #   Example: "C1-3" means carbon atoms 1, 2, and 3. If not specified, it means only the start index atom (e.g. "C1") or all atoms if start index is also not specified (e.g. "C").
+        # Group 4: \(?((?:\/?[1-9]{1}[spdfgh]{1}[a-zA-Z0-9-]*)*)\)? - optionally match a parenthesis containing the subset of AOs
+        #   Example: "C(2p)", "C(1s)", "C(2s)", "Ce(4fzx2-zy2)", etc. The subset can be empty, which means all AOs of the specified atoms.
+        self._regex = "^([a-zA-Z]{1,2})([0-9]+)?-?([0-9]+)?\\(?((?:\\/?[1-9]{1}[spdfgh]{1}[a-zA-Z0-9-]*)*)\\)?$"
 
     def __call__(self, parent_method):
         assert isinstance(
@@ -87,32 +96,32 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
                 "*** AVAS will take all singly occupied orbitals to be active! ***"
             )
         self.parent_method = parent_method
-        return self
+        self._check_parameters()
 
-    def run(self):
-        if not self.parent_method.executed:
-            self.parent_method.run()
         SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
-        self.nmo = self.C[0].shape[1]
-        self.two_component = self.system.two_component
-        self.dtype = float if not self.two_component else complex
-
         self.basis_info = BasisInfo(self.system, self.system.basis)
         minao_info = BasisInfo(self.system, self.system.minao_basis)
         self.minao_labels = minao_info.basis_labels
         self.atom_to_aos = minao_info.atom_to_aos
 
-        logger.log_info1("\nEntering Atomic Valence Active Space (AVAS) procedure")
-        logger.log_info1("\n1. Parsing the subspace specification")
+        logger.log_info1("\nAVAS: parsing the subspace specification...")
         self.atom_normals = self._parse_subspace_pi_planes()
         self.subspace_counter = 0
         self.minao_subspace = []
         for subspace in self.subspace:
             self._parse_subspace(subspace)
         self._print_subspace_info()
+        return self
 
-        logger.log_info1("\n2. Building the AVAS projector")
+    def run(self):
+        if not self.parent_method.executed:
+            self.parent_method.run()
+        MOsMixin.copy_from_upstream(self, self.parent_method)
+        self.nmo = self.C[0].shape[1]
+        self.two_component = self.system.two_component
+        self.dtype = float if not self.two_component else complex
+
+        logger.log_info1("\nAVAS: building the AVAS projector...")
         self.ao_projector = self._make_ao_space_projector()
         self._make_avas_orbitals()
         self.executed = True
@@ -138,14 +147,36 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             ), f"Cutoff {self.cutoff} is smaller than 1-evals_threshold, {1-self.evals_threshold}, no orbitals will be selected."
         elif self.selection_method == "separate":
             assert (
-                self.num_active_docc > 0 and self.num_active_uocc > 0
-            ), "Number of active occupied and virtual orbitals must be positive."
+                self.num_active_docc >= 0
+            ), "Number of active occupied orbitals cannot be negative."
+            assert (
+                self.num_active_uocc >= 0
+            ), "Number of active unoccupied orbitals cannot be negative."
+            if isinstance(self.parent_method, ROHF):
+                nactv = (
+                    int(self.parent_method.ms) * 2
+                    + self.num_active_docc
+                    + self.num_active_uocc
+                )
+                assert (
+                    nactv > 0
+                ), f"ROHF reference given, but num_active_docc + num_active_uocc + ms * 2 = {nactv}, at least one active orbital must be selected."
+            else:
+                nactv = self.num_active_docc + self.num_active_uocc
+                assert (
+                    nactv > 0
+                ), f"Number of active orbitals must be positive, got {nactv}."
         elif self.selection_method == "total":
             assert self.num_active > 0, "Number of active orbitals must be positive."
 
     def _parse_subspace(self, ss_str):
+        # get rid of leading and trailing whitespaces
+        ss_str = ss_str.strip()
         found = False
-        mgroups = re.match(self._regex, ss_str).groups()
+        m = re.match(self._regex, ss_str)
+        if not m:
+            raise ValueError(f'Invalid subspace specification: "{ss_str}"')
+        mgroups = m.groups()
 
         # m[0] is the element symbol
         try:
@@ -299,9 +330,7 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             ndocc = self.parent_method.nocc
         else:
             ndocc = self.parent_method.ndocc
-        nsocc = (
-            getattr(self.parent_method, "nsocc", 0)
-        )
+        nsocc = getattr(self.parent_method, "nsocc", 0)
         nuocc = self.parent_method.nuocc
 
         CpsC = self.C[0].T.conj() @ self.ao_projector @ self.C[0]
@@ -381,7 +410,7 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         s_act_sum = 0.0
 
         logger.log_info1(
-            f"\n3. Constructing AVAS orbitals using the {self.selection_method} selection method"
+            f"\nAVAS: constructing AVAS orbitals using the {self.selection_method} selection method"
         )
         if self.selection_method == "separate":
             nact_docc = nact_uocc = 0
@@ -492,7 +521,7 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         logger.log_info1(f"\nNumber of core orbitals:      {self.ncore}")
         logger.log_info1(f"Number of active orbitals:    {self.nactv}")
 
-        logger.log_info1("\n4. Canonicalizing the AVAS orbitals")
+        logger.log_info1("\nAVAS: canonicalizing the AVAS orbitals")
         # reminder that C_tilde will have zero SOCC coefficients, if ROHF
         C_tilde = self.C[0] @ U
         fock = self.parent_method.F[0]
