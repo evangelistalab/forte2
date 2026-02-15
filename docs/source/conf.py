@@ -1,5 +1,5 @@
 project = "Forte2"
-copyright = "2025, Evangelista Lab"
+copyright = "2025-2026, Evangelista Lab"
 author = "Evangelista Lab"
 release = "0.3.0"
 
