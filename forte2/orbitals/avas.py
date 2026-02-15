@@ -76,7 +76,6 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
 
     def __post_init__(self):
         self._regex = "([a-zA-Z]{1,2})([0-9]+)?-?([0-9]+)?\\(?((?:\\/?[1-9]{1}[spdfgh]{1}[a-zA-Z0-9-]*)*)\\)?"
-        self._check_parameters()
 
     def __call__(self, parent_method):
         assert isinstance(
@@ -87,6 +86,7 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
                 "*** AVAS will take all singly occupied orbitals to be active! ***"
             )
         self.parent_method = parent_method
+        self._check_parameters()
         return self
 
     def run(self):
@@ -138,11 +138,23 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             ), f"Cutoff {self.cutoff} is smaller than 1-evals_threshold, {1-self.evals_threshold}, no orbitals will be selected."
         elif self.selection_method == "separate":
             assert (
-                self.num_active_docc >= 0
-            ), "Number of active occupied orbitals cannot be negative."
+                    self.num_active_docc >= 0
+                ), "Number of active occupied orbitals cannot be negative."
             assert (
                 self.num_active_uocc >= 0
             ), "Number of active unoccupied orbitals cannot be negative."
+            if isinstance(self.parent_method, ROHF):
+                nactv = (
+                    int(self.parent_method.ms) * 2
+                    + self.num_active_docc
+                    + self.num_active_uocc
+                )
+                assert (
+                    nactv > 0
+                ), f"ROHF reference given, but num_active_docc + num_active_uocc + ms * 2 = {nactv}, at least one active orbital must be selected."
+            else:
+                nactv = self.num_active_docc + self.num_active_uocc
+                assert nactv > 0, f"Number of active orbitals must be positive, got {nactv}." 
         elif self.selection_method == "total":
             assert self.num_active > 0, "Number of active orbitals must be positive."
 
