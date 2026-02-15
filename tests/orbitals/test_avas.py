@@ -83,7 +83,24 @@ def test_avas_subspace():
         avas = AVAS(
             selection_method="separate",
             subspace=["N(3p)"],
+            num_active_docc=3,
+            num_active_uocc=3,
         )(rhf)
+
+    with pytest.raises(Exception):
+        avas = AVAS(
+            selection_method="separate",
+            subspace=["N(2p), N(2s)"],
+            num_active_docc=5,
+            num_active_uocc=3,
+        )(rhf)
+
+    avas = AVAS(
+        selection_method="separate",
+        subspace=[" N(2p)  "],
+        num_active_docc=3,
+        num_active_uocc=3,
+    )(rhf)
 
 
 def test_avas_separate_n2():
