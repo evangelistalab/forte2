@@ -12,7 +12,7 @@
 Forte2 is a standalone, open-source suite of quantum chemistry methods, with a focus on multi-reference and relativistic methods.
 
 **Code authors**: [Evangelista Lab](https://evangelistalab.org/index.html)  
-**Documentation**: [forte2.readthedocs.io](http://forte2.readthedocs.io/en/latest/)  
+**Documentation**: [Read the Docs](http://forte2.readthedocs.io/en/latest/)
 
 > [!WARNING]
 > Forte2 is currently in pre-release development.
@@ -84,8 +84,8 @@ mcscf = forte2.MCOptimizer(
 pt = forte2.DSRG_MRPT2(s=0.5)(mcscf)
 
 pt.run()
-print(pt.E[0])
 ```
+This sets up a state-averaged driven similarity renormalization group second-order multi-reference perturbation theory (DSRG-MRPT2) calculation on the nitrogen molecule, using the cc-pvDZ basis set and the cc-pVTZ-JKFIT auxiliary basis set, with an initial active space most resembling the 6 nitrogen 2p orbitals, automatically selected by the AVAS procedure.
 
 ## Obtaining integrals
 
