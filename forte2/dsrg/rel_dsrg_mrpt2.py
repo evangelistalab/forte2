@@ -238,6 +238,7 @@ class RelDSRG_MRPT2(DSRGBase):
             self.snso_type_save = self.system.snso_type
             self.system.x2c_type = self.x2c_type
             self.system.snso_type = self.snso_type
+            self.system.reset_x2c()
             # add requested 1e Hamiltonian
             _hbar1_canon += (_C.conj().T @ self.system.ints_hcore() @ _C)[self.actv, self.actv]
             # revert so that DSRG uses original H1

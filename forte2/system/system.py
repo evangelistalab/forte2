@@ -233,6 +233,12 @@ class System:
         if self.x2c_type == "so":
             self.two_component = True
 
+    def reset_x2c(self):
+        """
+        Reset the X2C transformation with the current system parameters.
+        """
+        self._init_x2c()
+
     def __repr__(self):
         return f"System(atoms={self.atoms}, basis_set={self.basis}, auxiliary_basis_set={self.auxiliary_basis})"
 
