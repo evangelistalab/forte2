@@ -17,10 +17,10 @@ This allows you to chain methods together in a very flexible way, with argument 
 
 Setting up a molecular system is as simple as:
 
->>> system = forte2.system(
+>>> system = forte2.System(
     xyz="C 0 0 0; N 0 0 1.4", 
     basis_set="cc-pvdz", 
-    auxiliary_basis_set="cc-pvdz-jkfit",
+    auxiliary_basis_set="cc-pvtz-jkfit",
     )
 
 You can then attach a Hartree-Fock calculation on the system:

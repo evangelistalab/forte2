@@ -19,11 +19,11 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         Charge of the system.
     do_diis : bool, optional, default=True
         Whether to perform DIIS acceleration.
-    diis_start : int, optional, default=4
+    diis_start : int, optional, default=1
         Which iteration to start collecting DIIS error vectors.
     diis_nvec : int, optional, default=8
         How many DIIS error vectors to keep.
-    diis_min : int, optional, default=3
+    diis_min : int, optional, default=2
         Minimum number of DIIS vectors to perform extrapolation.
     econv : float, optional, default=1e-9
         Energy convergence threshold.
@@ -32,7 +32,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
     maxiter : int, optional, default=100
         Maximum iteration for SCF.
     guess_type : str, optional, default="minao"
-        Initial guess type for the SCF calculation. Can be "minao" or "hcore".
+        Initial guess type for the SCF calculation. Can be "minao" (SAP) or "hcore".
     level_shift : float, optional
         Level shift for the SCF calculation. If None, no level shift is applied.
     level_shift_thresh : float, optional, default=1e-5
