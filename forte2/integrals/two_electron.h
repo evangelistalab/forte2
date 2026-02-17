@@ -17,7 +17,7 @@ class Basis;
 /// @return A 4D ndarray of shape (n1, n2, n3, n4), where ni is the number of basis functions in
 ///         basisi
 ndarray<double, 4> coulomb_4c(const Basis& basis1, const Basis& basis2, const Basis& basis3,
-                      const Basis& basis4);
+                              const Basis& basis4);
 
 /// @brief Compute the coulomb integrals (b1 | 1  / r_12 | b2 b3).
 /// @param basis1 The basis set in the bra for electron 1 center 1.
@@ -42,7 +42,7 @@ ndarray<double, 2> coulomb_2c(const Basis& b1, const Basis& b2);
 /// @return A 3D ndarray of shape (n1, n2, n3), where ni is the number of basis functions in
 ///         basisi
 ndarray<double, 3> erf_coulomb_3c(const Basis& basis1, const Basis& basis2, const Basis& basis3,
-                          double omega);
+                                  double omega);
 
 /// @brief Compute the ERF-coulomb integrals (b1 | erf(omega r_12) / r_12 | b2).
 /// @param basis1 The basis set in the bra for electron 1 center 1.
@@ -60,7 +60,7 @@ ndarray<double, 2> erf_coulomb_2c(const Basis& basis1, const Basis& basis2, doub
 /// @return A 3D ndarray of shape (n1, n2, n3), where ni is the number of basis functions in
 ///         basisi
 ndarray<double, 3> erfc_coulomb_3c(const Basis& basis1, const Basis& basis2, const Basis& basis3,
-                           double omega);
+                                   double omega);
 
 /// @brief Compute the ERFC-coulomb integrals (b1 | erfc(omega r_12) / r_12 | b2).
 /// @param basis1 The basis set in the bra for electron 1 center 1.

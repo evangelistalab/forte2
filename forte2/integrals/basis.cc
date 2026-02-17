@@ -54,7 +54,8 @@ std::vector<std::pair<std::size_t, std::size_t>> Basis::shell_first_and_size() c
     return result;
 }
 
-std::vector<std::pair<std::size_t, std::size_t>> Basis::center_first_and_last(bool count_shell) const {
+std::vector<std::pair<std::size_t, std::size_t>>
+Basis::center_first_and_last(bool count_shell) const {
     std::vector<std::pair<std::size_t, std::size_t>> result;
     if (shells_.empty()) {
         return result;

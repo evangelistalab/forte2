@@ -46,7 +46,7 @@ template <libint2::Operator Op, std::size_t M, typename Params = NoParams>
     // Wrap each buffer into an ndarray with memory management
     std::array<ndarray<double, 2>, M> ints;
     for (std::size_t k = 0; k < M; ++k) {
-        ints[k] = make_zeros<nb::numpy, double, 2>({nb1, nb2});
+        ints[k] = make_zeros<double, 2>({nb1, nb2});
     }
 
     for (std::size_t s1 = 0; s1 < nshells1; ++s1) {

@@ -22,10 +22,11 @@ SparseState get_sparse_state(ndarray<std::complex<double>, 1> c, const CIStrings
     return state;
 }
 
-ndarray<std::complex<double>, 2> RelCISigmaBuilder::compute_1rdm_debug(ndarray<std::complex<double>, 1> C_left,
-                                                        ndarray<std::complex<double>, 1> C_right) const {
+ndarray<std::complex<double>, 2>
+RelCISigmaBuilder::compute_1rdm_debug(ndarray<std::complex<double>, 1> C_left,
+                                      ndarray<std::complex<double>, 1> C_right) const {
     const auto norb = lists_.norb();
-    auto rdm = make_zeros<nb::numpy, std::complex<double>, 2>({norb, norb});
+    auto rdm = make_zeros<std::complex<double>, 2>({norb, norb});
     auto rdm_v = rdm.view();
 
     auto state_vector_l = get_sparse_state(C_left, lists_);
@@ -54,11 +55,12 @@ ndarray<std::complex<double>, 2> RelCISigmaBuilder::compute_1rdm_debug(ndarray<s
     return rdm;
 }
 
-ndarray<std::complex<double>, 4> RelCISigmaBuilder::compute_2rdm_debug(ndarray<std::complex<double>, 1> C_left,
-                                                         ndarray<std::complex<double>, 1> C_right) const {
+ndarray<std::complex<double>, 4>
+RelCISigmaBuilder::compute_2rdm_debug(ndarray<std::complex<double>, 1> C_left,
+                                      ndarray<std::complex<double>, 1> C_right) const {
     const size_t norb = lists_.norb();
     const size_t npairs = (norb * (norb - 1)) / 2;
-    auto rdm = make_zeros<nb::numpy, std::complex<double>, 2>({npairs, npairs});
+    auto rdm = make_zeros<std::complex<double>, 2>({npairs, npairs});
     auto rdm_v = rdm.view();
 
     auto state_vector_l = get_sparse_state(C_left, lists_);
@@ -93,12 +95,13 @@ ndarray<std::complex<double>, 4> RelCISigmaBuilder::compute_2rdm_debug(ndarray<s
     return matrix::packed_tensor4_to_tensor4<std::complex<double>>(rdm);
 }
 
-ndarray<std::complex<double>, 6> RelCISigmaBuilder::compute_3rdm_debug(ndarray<std::complex<double>, 1> C_left,
-                                                         ndarray<std::complex<double>, 1> C_right) const {
+ndarray<std::complex<double>, 6>
+RelCISigmaBuilder::compute_3rdm_debug(ndarray<std::complex<double>, 1> C_left,
+                                      ndarray<std::complex<double>, 1> C_right) const {
     const size_t norb = lists_.norb();
     const size_t ntriplets = (norb * (norb - 1) * (norb - 2)) / 6;
 
-    auto rdm = make_zeros<nb::numpy, std::complex<double>, 2>({ntriplets, ntriplets});
+    auto rdm = make_zeros<std::complex<double>, 2>({ntriplets, ntriplets});
     auto rdm_v = rdm.view();
 
     auto state_vector_l = get_sparse_state(C_left, lists_);
@@ -137,8 +140,7 @@ ndarray<std::complex<double>, 6> RelCISigmaBuilder::compute_3rdm_debug(ndarray<s
         }
     }
 
-    auto rdm_full =
-        make_zeros<nb::numpy, std::complex<double>, 6>({norb, norb, norb, norb, norb, norb});
+    auto rdm_full = make_zeros<std::complex<double>, 6>({norb, norb, norb, norb, norb, norb});
     auto rdm_full_v = rdm_full.view();
     for (size_t p{2}, pqr{0}; p < norb; ++p) {
         for (size_t q{1}; q < p; ++q) {

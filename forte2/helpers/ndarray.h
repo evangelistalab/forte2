@@ -12,15 +12,10 @@
 namespace nb = nanobind;
 
 // Aliases for ndarray types used in forte2
-// No contiguity requirement
-template <typename T, int N> using ndarray = nb::ndarray<nb::numpy, T, nb::ndim<N>>;
-// C-contiguous
-template <typename T, int N> using ndarray_c = nb::ndarray<nb::numpy, T, nb::ndim<N>, nb::c_contig>;
-// Fortran-contiguous
-template <typename T, int N> using ndarray_f = nb::ndarray<nb::numpy, T, nb::ndim<N>, nb::f_contig>;
+template <typename T, int N, typename... Extra> using ndarray = nb::ndarray<nb::numpy, T, nb::ndim<N>, Extra...>;
 
-template <typename Type, typename T, int N>
-nb::ndarray<Type, T, nb::ndim<N>> make_ndarray(std::unique_ptr<std::vector<T>> vec,
+template <typename T, int N, typename... Extra>
+ndarray<T, N, Extra...> make_ndarray(std::unique_ptr<std::vector<T>> vec,
                                                const std::array<size_t, N>& shape) {
     // raw pointer to the data
     T* data_ptr = vec->data();
@@ -33,7 +28,7 @@ nb::ndarray<Type, T, nb::ndim<N>> make_ndarray(std::unique_ptr<std::vector<T>> v
     nb::capsule deleter(heap_vec, [](void* p) noexcept { delete static_cast<std::vector<T>*>(p); });
 
     // construct the ndarray(view) with shape and the deleter capsule
-    return nb::ndarray<Type, T, nb::ndim<N>>(data_ptr, static_cast<size_t>(N), shape.data(),
+    return nb::ndarray<nb::numpy, T, nb::ndim<N>, Extra...>(data_ptr, static_cast<size_t>(N), shape.data(),
                                              std::move(deleter));
 }
 
@@ -47,7 +42,7 @@ nb::ndarray<Type, T, nb::ndim<N>> make_ndarray(std::unique_ptr<std::vector<T>> v
 /// @details The shape is a list of size N, where N is the number of dimensions.
 /// @return An ndarray of the given shape and type.
 /// @note The ndarray is not initialized, so the data is not set to any value.
-template <typename Type, typename T, int N, typename Order = void>
+template <typename T, int N, typename... Extra>
 auto make_ndarray(const std::array<size_t, N>& shape) {
     // compute the number of elements in the array
     const auto size = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<size_t>());
@@ -59,13 +54,8 @@ auto make_ndarray(const std::array<size_t, N>& shape) {
     nb::capsule deleter(array_ptr, [](void* p) noexcept { delete[] static_cast<T*>(p); });
 
     // construct the ndarray (a view on the array data) with shape and the deleter capsule
-    if constexpr (std::is_void_v<Order>) {
-        return nb::ndarray<Type, T, nb::ndim<N>>(array_ptr, static_cast<size_t>(N), shape.data(),
-                                                 std::move(deleter));
-    } else {
-        return nb::ndarray<Type, T, nb::ndim<N>, Order>(array_ptr, static_cast<size_t>(N),
-                                                        shape.data(), std::move(deleter));
-    }
+    return nb::ndarray<nb::numpy, T, nb::ndim<N>, Extra...>(array_ptr, static_cast<size_t>(N), shape.data(),
+                                                std::move(deleter));
 }
 
 /// @brief Creates an ndarray of a given shape and type set to zero.
@@ -79,10 +69,10 @@ auto make_ndarray(const std::array<size_t, N>& shape) {
 /// @details The shape is a list of size N, where N is the number of dimensions.
 /// @return An ndarray of the given shape and type.
 /// @note The ndarray is not initialized, so the data is not set to any value.
-template <typename Type, typename T, int N, typename Order = void>
+template <typename T, int N, typename... Extra>
 auto make_zeros(const std::array<size_t, N>& shape) {
     // allocate the ndarray
-    auto array = make_ndarray<Type, T, N, Order>(shape);
+    auto array = make_ndarray<T, N, Extra...>(shape);
 
     // get the data pointer and size
     auto data_ptr = array.data();

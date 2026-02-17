@@ -23,8 +23,8 @@ double scatter_b_time_write = 0.0;
 double transpose_1_time = 0.0;
 double transpose_2_time = 0.0;
 
-CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, ndarray<double, 2>& H, ndarray<double, 4>& V,
-                               int log_level)
+CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, ndarray<double, 2>& H,
+                               ndarray<double, 4>& V, int log_level)
     : lists_(lists), E_(E), H_(H), V_(V), slater_rules_(lists.norb(), E, H, V),
       log_level_(log_level) {
     // Find the size of the largest symmetry block
@@ -284,9 +284,9 @@ double CISigmaBuilder::energy_csf(const std::vector<Determinant>& dets,
 }
 
 ndarray<double, 1> CISigmaBuilder::form_Hdiag_csf(const std::vector<Determinant>& dets,
-                                         const CISpinAdapter& spin_adapter,
-                                         bool spin_adapt_full_preconditioner) const {
-    auto Hdiag = make_zeros<nb::numpy, double, 1>({spin_adapter.ncsf()});
+                                                  const CISpinAdapter& spin_adapter,
+                                                  bool spin_adapt_full_preconditioner) const {
+    auto Hdiag = make_zeros<double, 1>({spin_adapter.ncsf()});
     auto Hdiag_span = vector::as_span<double>(Hdiag);
     // Compute the diagonal elements of the Hamiltonian in the CSF basis
     if (spin_adapt_full_preconditioner) {
@@ -339,14 +339,14 @@ ndarray<double, 1> CISigmaBuilder::form_Hdiag_csf(const std::vector<Determinant>
 }
 
 ndarray<double, 2> CISigmaBuilder::form_H_csf(const std::vector<Determinant>& dets,
-                                     const CISpinAdapter& spin_adapter) const {
+                                              const CISpinAdapter& spin_adapter) const {
     size_t ncsf = spin_adapter.ncsf();
     if (ncsf * ncsf * sizeof(double) > memory_size_) {
         throw std::runtime_error("Not enough memory to form the full Hamiltonian matrix in the CSF "
                                  "basis. Increase the memory limit or use a different algorithm.");
     }
 
-    auto H = make_zeros<nb::numpy, double, 2>({ncsf, ncsf});
+    auto H = make_zeros<double, 2>({ncsf, ncsf});
     auto H_view = H.view();
     // Compute the full Hamiltonian matrix in the CSF basis
     for (size_t I{0}, imax{ncsf}; I < imax; ++I) {

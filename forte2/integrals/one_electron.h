@@ -30,7 +30,7 @@ ndarray<double, 2> kinetic(const Basis& basis1, const Basis& basis2);
 /// @return A 2D ndarray of shape (n1, n2), where n1 is the number of basis functions in
 ///         basis1 and n2 is the number of basis functions in basis2.
 ndarray<double, 2> nuclear(const Basis& basis1, const Basis& basis2,
-                  std::vector<std::pair<double, std::array<double, 3>>>& charges);
+                           std::vector<std::pair<double, std::array<double, 3>>>& charges);
 
 /// @brief Compute the multipolte integrals between two basis sets up to order 1
 ///        (<b1|op|b2>, with op = 1, x, y, z).
@@ -45,7 +45,7 @@ ndarray<double, 2> nuclear(const Basis& basis1, const Basis& basis2,
 ///         emultipole1[2] = <b1|y|b2>
 ///         emultipole1[3] = <b1|z|b2>
 std::array<ndarray<double, 2>, 4> emultipole1(const Basis& basis1, const Basis& basis2,
-                                     std::array<double, 3>& origin);
+                                              std::array<double, 3>& origin);
 
 /// @brief Compute the multipolte integrals between two basis sets up to order 2
 ///        (<b1|op|b2>, with op = 1, x, y, z, xx, xy, xz, yy, yz, zz).
@@ -66,7 +66,7 @@ std::array<ndarray<double, 2>, 4> emultipole1(const Basis& basis1, const Basis& 
 ///         emultipole2[8] = <b1|yz|b2>
 ///         emultipole2[9] = <b1|zz|b2>
 std::array<ndarray<double, 2>, 10> emultipole2(const Basis& basis1, const Basis& basis2,
-                                      std::array<double, 3>& origin);
+                                               std::array<double, 3>& origin);
 
 /// @brief Compute the multipolte integrals between two basis sets up to order 3
 ///        (<b1|op|b2>, with op = 1, x, y, z, xx, xy, xz, yy, yz, zz, xxx, xxy, xxz, xyy, xyz, xzz,
@@ -98,7 +98,7 @@ std::array<ndarray<double, 2>, 10> emultipole2(const Basis& basis1, const Basis&
 ///         emultipole3[18] = <b1|yzz|b2>
 ///         emultipole3[19] = <b1|zzz|b2>
 std::array<ndarray<double, 2>, 20> emultipole3(const Basis& basis1, const Basis& basis2,
-                                      std::array<double, 3>& origin);
+                                               std::array<double, 3>& origin);
 
 /// @brief Compute the small-component nuclear potential  (sigma p ) V (sigma p) between two basis
 ///        sets (<b1|op|b2>, with op = p.Vp, (p x Vp)_x, (p x Vp)_y, (p x Vp)_z).
@@ -112,8 +112,9 @@ std::array<ndarray<double, 2>, 20> emultipole3(const Basis& basis1, const Basis&
 ///         opVop[1] = <b1|(p x Vp)_x|b2>
 ///         opVop[2] = <b1|(p x Vp)_y|b2>
 ///         opVop[3] = <b1|(p x Vp)_z|b2>
-std::array<ndarray<double, 2>, 4> opVop(const Basis& basis1, const Basis& basis2,
-                               std::vector<std::pair<double, std::array<double, 3>>>& charges);
+std::array<ndarray<double, 2>, 4>
+opVop(const Basis& basis1, const Basis& basis2,
+      std::vector<std::pair<double, std::array<double, 3>>>& charges);
 
 /// @brief Compute the nuclear attraction integrals with the error function attenuation
 ///        between two basis sets (<b1|V|b2>, with

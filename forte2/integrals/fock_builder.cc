@@ -20,8 +20,8 @@ FockBuilder::build(std::vector<ndarray<double, 2>>& density_matrices) {
     std::vector<ndarray<double, 2>> J(nd);
     std::vector<ndarray<double, 2>> K(nd);
     for (std::size_t k = 0; k < density_matrices.size(); ++k) {
-        J[k] = make_ndarray<nb::numpy, double, 2>({nb, nb});
-        K[k] = make_ndarray<nb::numpy, double, 2>({nb, nb});
+        J[k] = make_ndarray<double, 2>({nb, nb});
+        K[k] = make_ndarray<double, 2>({nb, nb});
     }
 
     opt_fock_build(density_matrices, integrals_, J, K);
@@ -30,7 +30,8 @@ FockBuilder::build(std::vector<ndarray<double, 2>>& density_matrices) {
 }
 
 void FockBuilder::naive_fock_build(const std::vector<ndarray<double, 2>>& density_matrices,
-                                   const ndarray<double, 4>& integrals, std::vector<ndarray<double, 2>>& J,
+                                   const ndarray<double, 4>& integrals,
+                                   std::vector<ndarray<double, 2>>& J,
                                    std::vector<ndarray<double, 2>>& K) {
     const std::size_t nd = density_matrices.size();
 
@@ -57,7 +58,8 @@ void FockBuilder::naive_fock_build(const std::vector<ndarray<double, 2>>& densit
 }
 
 void FockBuilder::opt_fock_build(const std::vector<ndarray<double, 2>>& density_matrices,
-                                 const ndarray<double, 4>& integrals, std::vector<ndarray<double, 2>>& J,
+                                 const ndarray<double, 4>& integrals,
+                                 std::vector<ndarray<double, 2>>& J,
                                  std::vector<ndarray<double, 2>>& K) {
     const std::size_t nd = density_matrices.size();
 

@@ -36,15 +36,16 @@ DECL_CINT_FUNC_SPH(int3c2e)
 namespace forte2 {
 // define the Forte2 wrappers for the Libcint integrals
 // These generate definitions of the form:
-// ndarray_f<double, 3> cint_int1e_ovlp_sph(const std::vector<int>& shell_slice, ndarray<int, 2> atm,
-// ndarray<int, 2> bas,
+// ndarray<double, 3, nb::f_contig> cint_int1e_ovlp_sph(const std::vector<int>& shell_slice,
+// ndarray<int, 2> atm, ndarray<int, 2> bas,
 //                                 ndarray<double, 1> env) {
 //     return cint_int2c<1>(int1e_ovlp_sph, shell_slice, atm, bas, env);
 // }
 #define DECL_CINT_FORTE2_FUNC_SPH(name)                                                            \
-    ndarray_f<double, 3> cint_##name##_sph(const std::vector<int>& shell_slice, ndarray<int, 2> atm,         \
-                                   ndarray<int, 2> bas, ndarray<double, 1> env) {                             \
-        return cint_int3c(name##_sph, shell_slice, atm, bas, env);                               \
+    ndarray<double, 3, nb::f_contig> cint_##name##_sph(const std::vector<int>& shell_slice,        \
+                                                       ndarray<int, 2> atm, ndarray<int, 2> bas,   \
+                                                       ndarray<double, 1> env) {                   \
+        return cint_int3c(name##_sph, shell_slice, atm, bas, env);                                 \
     }
 
 DECL_CINT_FORTE2_FUNC_SPH(int3c2e)

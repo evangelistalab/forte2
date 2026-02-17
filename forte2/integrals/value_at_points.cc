@@ -37,8 +37,9 @@ void evaluate_shell(const libint2::Shell& shell, const std::array<double, 3>& po
     }
 }
 
-ndarray<double, 2> basis_at_points(const Basis& basis, const std::vector<std::array<double, 3>>& points) {
-    auto values = make_zeros<nb::numpy, double, 2>({points.size(), basis.size()});
+ndarray<double, 2> basis_at_points(const Basis& basis,
+                                   const std::vector<std::array<double, 3>>& points) {
+    auto values = make_zeros<double, 2>({points.size(), basis.size()});
     auto v = values.view();
     std::vector<double> buffer(64);
     std::size_t first_basis = 0;
@@ -60,10 +61,11 @@ ndarray<double, 2> basis_at_points(const Basis& basis, const std::vector<std::ar
     return values;
 }
 
-ndarray<double, 2> orbitals_at_points(const Basis& basis, const std::vector<std::array<double, 3>>& points,
-                             ndarray<double, 2> C) {
+ndarray<double, 2> orbitals_at_points(const Basis& basis,
+                                      const std::vector<std::array<double, 3>>& points,
+                                      ndarray<double, 2> C) {
     auto norb = C.shape(1);
-    auto values = make_zeros<nb::numpy, double, 2>({points.size(), norb});
+    auto values = make_zeros<double, 2>({points.size(), norb});
     auto v = values.view();
     std::vector<double> buffer(16);
     std::size_t first_basis = 0;
@@ -105,9 +107,10 @@ std::vector<std::array<double, 3>> regular_grid(const std::array<double, 3> min,
     return points;
 }
 
-ndarray<double, 2> orbitals_on_grid(const Basis& basis, ndarray<double, 2> C, const std::array<double, 3> min,
-                           const std::array<size_t, 3> npoints,
-                           const std::vector<std::array<double, 3>> axis) {
+ndarray<double, 2> orbitals_on_grid(const Basis& basis, ndarray<double, 2> C,
+                                    const std::array<double, 3> min,
+                                    const std::array<size_t, 3> npoints,
+                                    const std::vector<std::array<double, 3>> axis) {
     auto points = regular_grid(min, npoints, axis);
     auto values = orbitals_at_points(basis, points, C);
     return values;

@@ -11,11 +11,12 @@
 
 namespace forte2 {
 
-ndarray<std::complex<double>, 2> RelCISigmaBuilder::compute_1rdm(ndarray<std::complex<double>, 1> C_left,
-                                                  ndarray<std::complex<double>, 1> C_right) const {
+ndarray<std::complex<double>, 2>
+RelCISigmaBuilder::compute_1rdm(ndarray<std::complex<double>, 1> C_left,
+                                ndarray<std::complex<double>, 1> C_right) const {
     const auto na = lists_.na();
     const auto norb = lists_.norb();
-    auto rdm = make_zeros<nb::numpy, std::complex<double>, 2>({norb, norb});
+    auto rdm = make_zeros<std::complex<double>, 2>({norb, norb});
 
     // skip building the RDM if there are no electrons or there are zero orbitals
     if (na < 1 || norb < 1)
@@ -70,8 +71,9 @@ ndarray<std::complex<double>, 2> RelCISigmaBuilder::compute_1rdm(ndarray<std::co
     return rdm;
 }
 
-ndarray<std::complex<double>, 4> RelCISigmaBuilder::compute_2rdm(ndarray<std::complex<double>, 1> C_left,
-                                                   ndarray<std::complex<double>, 1> C_right) const {
+ndarray<std::complex<double>, 4>
+RelCISigmaBuilder::compute_2rdm(ndarray<std::complex<double>, 1> C_left,
+                                ndarray<std::complex<double>, 1> C_right) const {
     Spin spin = Spin::Alpha; // placeholder spin
 
     const auto na = lists_.na();
@@ -79,12 +81,12 @@ ndarray<std::complex<double>, 4> RelCISigmaBuilder::compute_2rdm(ndarray<std::co
 
     // if there are less than two orbitals or two electrons, return an empty matrix
     if (norb < 2 || na < 2) {
-        return make_zeros<nb::numpy, std::complex<double>, 4>({norb, norb, norb, norb});
+        return make_zeros<std::complex<double>, 4>({norb, norb, norb, norb});
     }
 
     // calculate the number of pairs of orbitals p > q
     const size_t npairs = (norb * (norb - 1)) / 2;
-    auto rdm = make_zeros<nb::numpy, std::complex<double>, 2>({npairs, npairs});
+    auto rdm = make_zeros<std::complex<double>, 2>({npairs, npairs});
 
     auto Cl_span = vector::as_span<std::complex<double>>(C_left);
     auto Cr_span = vector::as_span<std::complex<double>>(C_right);
@@ -149,8 +151,9 @@ ndarray<std::complex<double>, 4> RelCISigmaBuilder::compute_2rdm(ndarray<std::co
     return matrix::packed_tensor4_to_tensor4<std::complex<double>>(rdm);
 }
 
-ndarray<std::complex<double>, 4> RelCISigmaBuilder::compute_2cumulant(ndarray<std::complex<double>, 1> C_left,
-                                                        ndarray<std::complex<double>, 1> C_right) const {
+ndarray<std::complex<double>, 4>
+RelCISigmaBuilder::compute_2cumulant(ndarray<std::complex<double>, 1> C_left,
+                                     ndarray<std::complex<double>, 1> C_right) const {
     // Compute the 1-RDM
     auto G1 = compute_1rdm(C_left, C_right);
     // Compute the 2-RDM (this will hold the cumulant)
@@ -173,8 +176,9 @@ ndarray<std::complex<double>, 4> RelCISigmaBuilder::compute_2cumulant(ndarray<st
     return L2;
 }
 
-ndarray<std::complex<double>, 6> RelCISigmaBuilder::compute_3rdm(ndarray<std::complex<double>, 1> C_left,
-                                                   ndarray<std::complex<double>, 1> C_right) const {
+ndarray<std::complex<double>, 6>
+RelCISigmaBuilder::compute_3rdm(ndarray<std::complex<double>, 1> C_left,
+                                ndarray<std::complex<double>, 1> C_right) const {
     Spin spin = Spin::Alpha; // placeholder spin
     const auto na = lists_.na();
     const auto nb = lists_.nb();
@@ -182,11 +186,11 @@ ndarray<std::complex<double>, 6> RelCISigmaBuilder::compute_3rdm(ndarray<std::co
 
     // if there are less than three orbitals or 3 electrons, return an empty matrix
     if (norb < 3 || na < 3) {
-        return make_zeros<nb::numpy, std::complex<double>, 6>({norb, norb, norb, norb, norb, norb});
+        return make_zeros<std::complex<double>, 6>({norb, norb, norb, norb, norb, norb});
     }
 
     const size_t ntriplets = (norb * (norb - 1) * (norb - 2)) / 6;
-    auto rdm = make_zeros<nb::numpy, std::complex<double>, 2>({ntriplets, ntriplets});
+    auto rdm = make_zeros<std::complex<double>, 2>({ntriplets, ntriplets});
 
     auto Cl_span = vector::as_span<std::complex<double>>(C_left);
     auto Cr_span = vector::as_span<std::complex<double>>(C_right);
@@ -249,8 +253,7 @@ ndarray<std::complex<double>, 6> RelCISigmaBuilder::compute_3rdm(ndarray<std::co
     }
 
     auto rdm_v = rdm.view();
-    auto rdm_full =
-        make_zeros<nb::numpy, std::complex<double>, 6>({norb, norb, norb, norb, norb, norb});
+    auto rdm_full = make_zeros<std::complex<double>, 6>({norb, norb, norb, norb, norb, norb});
     auto rdm_full_v = rdm_full.view();
     for (size_t p{2}, pqr{0}; p < norb; ++p) {
         for (size_t q{1}; q < p; ++q) {
@@ -314,8 +317,9 @@ ndarray<std::complex<double>, 6> RelCISigmaBuilder::compute_3rdm(ndarray<std::co
     return rdm_full;
 }
 
-ndarray<std::complex<double>, 6> RelCISigmaBuilder::compute_3cumulant(ndarray<std::complex<double>, 1> C_left,
-                                                        ndarray<std::complex<double>, 1> C_right) const {
+ndarray<std::complex<double>, 6>
+RelCISigmaBuilder::compute_3cumulant(ndarray<std::complex<double>, 1> C_left,
+                                     ndarray<std::complex<double>, 1> C_right) const {
     // Compute the 1-RDM
     auto G1 = compute_1rdm(C_left, C_right);
     // Compute the 2-RDM

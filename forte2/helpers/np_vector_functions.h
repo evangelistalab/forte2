@@ -9,20 +9,20 @@
 
 namespace forte2::vector {
 
-/// @brief Zero out a ndarray<double, 1>
+/// @brief Zero out a ndarray<T, 1>
 /// @param vec The vector to zero out
-template <typename T> void zero(ndarray<T, 1> vec) {
-    auto vec_view = vec.view();
-    for (size_t i{0}, maxi{vec.shape(0)}; i < maxi; ++i) {
-        vec_view(i) = 0.0;
+template <typename T, typename... Extra>
+void zero(nb::ndarray<nb::numpy, T, nb::ndim<1>, Extra...> vec) {
+    auto v = vec.view();
+    for (size_t i = 0, n = vec.shape(0); i < n; ++i) {
+        v(i) = T(0);
     }
 }
 
 /// @brief Copy the contents of one ndarray<double, 1> to another
 /// @param src The source vector to copy from
 /// @param dest The destination vector to copy to
-template <typename T>
-void copy(ndarray<T, 1> src, ndarray<T, 1> dest) {
+template <typename T> void copy(ndarray<T, 1> src, ndarray<T, 1> dest) {
     if (src.shape(0) != dest.shape(0)) {
         throw std::runtime_error("Source and destination vectors must have the same shape.");
     }
@@ -46,8 +46,7 @@ template <typename T> void scale(ndarray<T, 1> vec, double factor) {
 /// @param a The scalar multiplier
 /// @param x The source vector to multiply
 /// @param y The destination vector to add to
-template <typename T>
-void daxpy(double a, ndarray<T, 1> x, ndarray<T, 1> y) {
+template <typename T> void daxpy(double a, ndarray<T, 1> x, ndarray<T, 1> y) {
     if (x.shape(0) != y.shape(0)) {
         throw std::runtime_error("Source and destination vectors must have the same shape.");
     }
@@ -61,7 +60,8 @@ void daxpy(double a, ndarray<T, 1> x, ndarray<T, 1> y) {
 /// @brief Check ndarray<double, 1> for contiguity and make a std::span from it
 template <typename T> std::span<T> as_span(ndarray<T, 1> vec) {
     if (vec.ndim() != 1) {
-        throw std::runtime_error("ndarray<double, 1> must be 1-dimensional to convert to std::span.");
+        throw std::runtime_error(
+            "ndarray<double, 1> must be 1-dimensional to convert to std::span.");
     }
     if (vec.stride(0) != 1) {
         throw std::runtime_error("ndarray<double, 1> must have stride 1 to convert to std::span.");

@@ -246,7 +246,7 @@ void export_sparse_operator_api(nb::module_& m) {
             "matrix",
             [](const SparseOperator& sop, const std::vector<Determinant>& dets,
                double screen_thresh) {
-                auto elements = make_zeros<nb::numpy, std::complex<double>, 2>(
+                auto elements = make_zeros<std::complex<double>, 2>(
                     std::array<size_t, 2>({dets.size(), dets.size()}));
                 for (size_t i = 0; const auto& deti : dets) {
                     SparseState deti_state;

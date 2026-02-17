@@ -16,7 +16,8 @@ struct NoParams {};
 template <libint2::Operator Op, typename Params = NoParams>
 [[nodiscard]] auto compute_two_electron_4c_multi(const Basis& basis1, const Basis& basis2,
                                                  const Basis& basis3, const Basis& basis4,
-                                                 Params const& params = Params{}) -> ndarray<double, 4> {
+                                                 Params const& params = Params{})
+    -> ndarray<double, 4> {
     const auto start = std::chrono::high_resolution_clock::now();
 
     // Initialize libint2
@@ -54,7 +55,7 @@ template <libint2::Operator Op, typename Params = NoParams>
     const auto first_size4 = basis4.shell_first_and_size();
 
     // Allocate a four index tensor
-    auto ints = make_zeros<nb::numpy, double, 4>({nb1, nb2, nb3, nb4});
+    auto ints = make_zeros<double, 4>({nb1, nb2, nb3, nb4});
     auto v = ints.view();
 
     // Loop over shell quartets and fill each buffer
@@ -108,7 +109,8 @@ template <libint2::Operator Op, typename Params = NoParams>
 template <libint2::Operator Op, typename Params = NoParams>
 [[nodiscard]] auto compute_two_electron_3c_multi(const Basis& basis1, const Basis& basis2,
                                                  const Basis& basis3,
-                                                 Params const& params = Params{}) -> ndarray<double, 3> {
+                                                 Params const& params = Params{})
+    -> ndarray<double, 3> {
     const auto start = std::chrono::high_resolution_clock::now();
 
     // Initialize libint2
@@ -143,7 +145,7 @@ template <libint2::Operator Op, typename Params = NoParams>
     const auto first_size3 = basis3.shell_first_and_size();
 
     // Allocate three index tensor
-    auto ints = make_zeros<nb::numpy, double, 3>({nb1, nb2, nb3});
+    auto ints = make_zeros<double, 3>({nb1, nb2, nb3});
     auto v = ints.view();
 
     // Loop over the shell triplets and fill the buffer
@@ -213,7 +215,7 @@ template <libint2::Operator Op, typename Params = NoParams>
     const auto first_size2 = basis2.shell_first_and_size();
     const auto first_size3 = basis3.shell_first_and_size();
 
-    auto ints = make_zeros<nb::numpy, double, 3>({nb1, nb2, nb3});
+    auto ints = make_zeros<double, 3>({nb1, nb2, nb3});
     auto data = ints.data();
 
     const auto num_threads = get_num_threads();
@@ -353,7 +355,8 @@ template <libint2::Operator Op, typename Params = NoParams>
 
 template <libint2::Operator Op, typename Params = NoParams>
 [[nodiscard]] auto compute_two_electron_2c_multi(const Basis& basis1, const Basis& basis2,
-                                                 Params const& params = Params{}) -> ndarray<double, 2> {
+                                                 Params const& params = Params{})
+    -> ndarray<double, 2> {
     const auto start = std::chrono::high_resolution_clock::now();
 
     // Initialize libint2
@@ -383,7 +386,7 @@ template <libint2::Operator Op, typename Params = NoParams>
     const auto first_size_1 = basis1.shell_first_and_size();
     const auto first_size_2 = basis2.shell_first_and_size();
 
-    auto ints = make_zeros<nb::numpy, double, 2>({nb1, nb2});
+    auto ints = make_zeros<double, 2>({nb1, nb2});
     auto v = ints.view();
 
     // Loop over the shell pairs and fill the buffer

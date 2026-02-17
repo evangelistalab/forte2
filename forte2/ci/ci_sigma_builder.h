@@ -53,8 +53,8 @@ class CISigmaBuilder {
     ///        otherwise use approximate diagonal elements.
     /// @return The diagonal elements of the Hamiltonian matrix
     ndarray<double, 1> form_Hdiag_csf(const std::vector<Determinant>& dets,
-                             const CISpinAdapter& spin_adapter,
-                             bool spin_adapt_full_preconditioner) const;
+                                      const CISpinAdapter& spin_adapter,
+                                      bool spin_adapt_full_preconditioner) const;
 
     /// @brief Compute the energy (diagonal Hamiltonian element) of a CSF
     /// @param dets The list of determinants
@@ -69,7 +69,7 @@ class CISigmaBuilder {
     /// @param spin_adapter The spin adapter for the CSF
     /// @return The full Hamiltonian matrix in the CSF basis
     ndarray<double, 2> form_H_csf(const std::vector<Determinant>& dets,
-                         const CISpinAdapter& spin_adapter) const;
+                                  const CISpinAdapter& spin_adapter) const;
 
     /// @brief Compute the Slater rules for the CSF matrix element
     /// @param dets The list of determinants
@@ -104,7 +104,8 @@ class CISigmaBuilder {
     /// @return The one-electron reduced density matrix stored as
     ///        gamma(spin)[p][q] = <L| a^+_p a_q |R> with p,q orbitals of spin alpha/beta
     /// @note If the number of orbitals is 0, a matrix of shape (0, 0) is returned
-    ndarray<double, 2> compute_s_1rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right, Spin spin) const;
+    ndarray<double, 2> compute_s_1rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right,
+                                      Spin spin) const;
 
     /// @brief Compute the alpha one-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -136,7 +137,8 @@ class CISigmaBuilder {
     /// @return The two-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(sigma)[p>q][r>s] = <L| a^+_p a^+_q a_s a_r |R>
     ///        with p > q, and r > s orbitals of spin sigma
-    ndarray<double, 2> compute_ss_2rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right, Spin spin) const;
+    ndarray<double, 2> compute_ss_2rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right,
+                                       Spin spin) const;
 
     /// @brief Compute the alpha-alpha two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -178,7 +180,8 @@ class CISigmaBuilder {
     /// @return The cumulant of the two-electron spin-free reduced density matrix stored as a tensor
     ///        lambda[p][q][r][s] = gamma[p][q][r][s] - gamma[p][r] * gamma[q][s] +
     ///                              0.5 * gamma[p][s] * gamma[q][r]
-    ndarray<double, 4> compute_sf_2cumulant(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
+    ndarray<double, 4> compute_sf_2cumulant(ndarray<double, 1> C_left,
+                                            ndarray<double, 1> C_right) const;
 
     /// @brief Compute the three-electron same-spin reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -187,7 +190,8 @@ class CISigmaBuilder {
     /// @return The three-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(sigma)[p>q>r][s>t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
     ///        with p > q > r, and s > t > u orbitals of spin sigma
-    ndarray<double, 2> compute_sss_3rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right, Spin spin) const;
+    ndarray<double, 2> compute_sss_3rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right,
+                                        Spin spin) const;
 
     /// @brief Compute the alpha-alpha-alpha three-electron same-spin reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -195,7 +199,8 @@ class CISigmaBuilder {
     /// @return The three-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(aaa)[p>q>r][s>t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
     ///        with p > q > r, and s > t > u orbitals of spin alpha
-    ndarray<double, 2> compute_aaa_3rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
+    ndarray<double, 2> compute_aaa_3rdm(ndarray<double, 1> C_left,
+                                        ndarray<double, 1> C_right) const;
 
     /// @brief Compute the beta-beta-beta three-electron same-spin reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -203,7 +208,8 @@ class CISigmaBuilder {
     /// @return The three-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(bbb)[p>q>r][s>t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
     ///        with p > q > r, and s > t > u orbitals of spin beta
-    ndarray<double, 2> compute_bbb_3rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
+    ndarray<double, 2> compute_bbb_3rdm(ndarray<double, 1> C_left,
+                                        ndarray<double, 1> C_right) const;
 
     /// @brief Compute the aab mixed-spin three-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -211,7 +217,8 @@ class CISigmaBuilder {
     /// @return The three-electron mixed-spin reduced density matrix stored as a tensor
     ///        gamma[p>q][r][s>t][u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
     ///        with p > q and s > t are alpha spin orbitals and r,u are beta spin orbitals
-    ndarray<double, 4> compute_aab_3rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
+    ndarray<double, 4> compute_aab_3rdm(ndarray<double, 1> C_left,
+                                        ndarray<double, 1> C_right) const;
 
     /// @brief Compute the abb mixed-spin three-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -219,7 +226,8 @@ class CISigmaBuilder {
     /// @return The three-electron mixed-spin reduced density matrix stored as a tensor
     ///        gamma[p][q>r][s][t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
     ///        with p and s are alpha spin orbitals and q > r and u > t are beta spin orbitals
-    ndarray<double, 4> compute_abb_3rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
+    ndarray<double, 4> compute_abb_3rdm(ndarray<double, 1> C_left,
+                                        ndarray<double, 1> C_right) const;
 
     /// @brief Compute the spin-free three-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -235,31 +243,47 @@ class CISigmaBuilder {
     /// @return The cumulant of the three-electron spin-free reduced density matrix stored as a
     /// tensor
     ///        lambda[p][q][r][s][t][u] = gamma[p][q][r][s][t][u] + ...
-    ndarray<double, 6> compute_sf_3cumulant(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
+    ndarray<double, 6> compute_sf_3cumulant(ndarray<double, 1> C_left,
+                                            ndarray<double, 1> C_right) const;
 
     // == Debugging Functions ==
     // The following are debugging functions that compute reduced density matrices that parallel
     // the definition of the functions above.
-    ndarray<double, 2> compute_a_1rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right, bool alfa) const;
+    ndarray<double, 2> compute_a_1rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right,
+                                            bool alfa) const;
 
-    ndarray<double, 2> compute_aa_2rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right, bool alfa) const;
-    ndarray<double, 4> compute_ab_2rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
+    ndarray<double, 2> compute_aa_2rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right,
+                                             bool alfa) const;
+    ndarray<double, 4> compute_ab_2rdm_debug(ndarray<double, 1> C_left,
+                                             ndarray<double, 1> C_right) const;
 
-    ndarray<double, 2> compute_aaa_3rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right, bool alfa) const;
-    ndarray<double, 4> compute_aab_3rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
-    ndarray<double, 4> compute_abb_3rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
+    ndarray<double, 2> compute_aaa_3rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right,
+                                              bool alfa) const;
+    ndarray<double, 4> compute_aab_3rdm_debug(ndarray<double, 1> C_left,
+                                              ndarray<double, 1> C_right) const;
+    ndarray<double, 4> compute_abb_3rdm_debug(ndarray<double, 1> C_left,
+                                              ndarray<double, 1> C_right) const;
 
-    ndarray<double, 2> compute_aaaa_4rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right, bool alfa) const;
-    ndarray<double, 4> compute_aaab_4rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
-    ndarray<double, 4> compute_aabb_4rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
-    ndarray<double, 4> compute_abbb_4rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
+    ndarray<double, 2> compute_aaaa_4rdm_debug(ndarray<double, 1> C_left,
+                                               ndarray<double, 1> C_right, bool alfa) const;
+    ndarray<double, 4> compute_aaab_4rdm_debug(ndarray<double, 1> C_left,
+                                               ndarray<double, 1> C_right) const;
+    ndarray<double, 4> compute_aabb_4rdm_debug(ndarray<double, 1> C_left,
+                                               ndarray<double, 1> C_right) const;
+    ndarray<double, 4> compute_abbb_4rdm_debug(ndarray<double, 1> C_left,
+                                               ndarray<double, 1> C_right) const;
 
-    ndarray<double, 2> compute_sf_1rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
-    ndarray<double, 4> compute_sf_2rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
-    ndarray<double, 6> compute_sf_3rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
+    ndarray<double, 2> compute_sf_1rdm_debug(ndarray<double, 1> C_left,
+                                             ndarray<double, 1> C_right) const;
+    ndarray<double, 4> compute_sf_2rdm_debug(ndarray<double, 1> C_left,
+                                             ndarray<double, 1> C_right) const;
+    ndarray<double, 6> compute_sf_3rdm_debug(ndarray<double, 1> C_left,
+                                             ndarray<double, 1> C_right) const;
 
-    ndarray<double, 4> compute_sf_2cumulant_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
-    ndarray<double, 6> compute_sf_3cumulant_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
+    ndarray<double, 4> compute_sf_2cumulant_debug(ndarray<double, 1> C_left,
+                                                  ndarray<double, 1> C_right) const;
+    ndarray<double, 6> compute_sf_3cumulant_debug(ndarray<double, 1> C_left,
+                                                  ndarray<double, 1> C_right) const;
 
   private:
     // == Class Private Variables ==

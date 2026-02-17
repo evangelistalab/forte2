@@ -114,7 +114,9 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
                         else []
                     ),
                 )
-                logger.log_info1("ActiveSpaceSolver: mo_space constructed from provided orbital lists.")
+                logger.log_info1(
+                    "ActiveSpaceSolver: mo_space constructed from provided orbital lists."
+                )
                 return
         elif provided_via_parent:
             MOSpaceMixin.copy_from_upstream(self, self.parent_method)

@@ -19,10 +19,11 @@ SparseState get_sparse_state(ndarray<double, 1> c, const CIStrings& lists) {
     return state;
 }
 
-ndarray<double, 2> CISigmaBuilder::compute_a_1rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right,
-                                               bool alfa) const {
+ndarray<double, 2> CISigmaBuilder::compute_a_1rdm_debug(ndarray<double, 1> C_left,
+                                                        ndarray<double, 1> C_right,
+                                                        bool alfa) const {
     const size_t norb = lists_.norb();
-    auto g1_ref = make_zeros<nb::numpy, double, 2>({norb, norb});
+    auto g1_ref = make_zeros<double, 2>({norb, norb});
 
     auto state_vector_l = get_sparse_state(C_left, lists_);
     auto state_vector_r = get_sparse_state(C_right, lists_);
@@ -54,11 +55,12 @@ ndarray<double, 2> CISigmaBuilder::compute_a_1rdm_debug(ndarray<double, 1> C_lef
     return g1_ref;
 }
 
-ndarray<double, 2> CISigmaBuilder::compute_aa_2rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right,
-                                                bool alfa) const {
+ndarray<double, 2> CISigmaBuilder::compute_aa_2rdm_debug(ndarray<double, 1> C_left,
+                                                         ndarray<double, 1> C_right,
+                                                         bool alfa) const {
     const size_t norb = lists_.norb();
     const size_t npairs = (norb * (norb - 1)) / 2;
-    auto g2_ref = make_zeros<nb::numpy, double, 2>({npairs, npairs});
+    auto g2_ref = make_zeros<double, 2>({npairs, npairs});
 
     auto state_vector_l = get_sparse_state(C_left, lists_);
     auto state_vector_r = get_sparse_state(C_right, lists_);
@@ -98,9 +100,10 @@ ndarray<double, 2> CISigmaBuilder::compute_aa_2rdm_debug(ndarray<double, 1> C_le
     return g2_ref;
 }
 
-ndarray<double, 4> CISigmaBuilder::compute_ab_2rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
+ndarray<double, 4> CISigmaBuilder::compute_ab_2rdm_debug(ndarray<double, 1> C_left,
+                                                         ndarray<double, 1> C_right) const {
     const size_t norb = lists_.norb();
-    auto g2_ref = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
+    auto g2_ref = make_zeros<double, 4>({norb, norb, norb, norb});
 
     auto state_vector_l = get_sparse_state(C_left, lists_);
     auto state_vector_r = get_sparse_state(C_right, lists_);
@@ -133,11 +136,12 @@ ndarray<double, 4> CISigmaBuilder::compute_ab_2rdm_debug(ndarray<double, 1> C_le
     return g2_ref;
 }
 
-ndarray<double, 2> CISigmaBuilder::compute_aaa_3rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right,
-                                                 bool alfa) const {
+ndarray<double, 2> CISigmaBuilder::compute_aaa_3rdm_debug(ndarray<double, 1> C_left,
+                                                          ndarray<double, 1> C_right,
+                                                          bool alfa) const {
     const size_t norb = lists_.norb();
     const size_t ntriplets = (norb * (norb - 1) * (norb - 2)) / 6;
-    auto g3_ref = make_zeros<nb::numpy, double, 2>({ntriplets, ntriplets});
+    auto g3_ref = make_zeros<double, 2>({ntriplets, ntriplets});
 
     auto state_vector_l = get_sparse_state(C_left, lists_);
     auto state_vector_r = get_sparse_state(C_right, lists_);
@@ -185,12 +189,13 @@ ndarray<double, 2> CISigmaBuilder::compute_aaa_3rdm_debug(ndarray<double, 1> C_l
     return g3_ref;
 }
 
-ndarray<double, 4> CISigmaBuilder::compute_aab_3rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
+ndarray<double, 4> CISigmaBuilder::compute_aab_3rdm_debug(ndarray<double, 1> C_left,
+                                                          ndarray<double, 1> C_right) const {
     const size_t norb = lists_.norb();
     // the number of orbital pairs i > j of the same spin
     const size_t npair = (norb * (norb - 1)) / 2;
 
-    auto g3_ref = make_zeros<nb::numpy, double, 4>({npair, norb, npair, norb});
+    auto g3_ref = make_zeros<double, 4>({npair, norb, npair, norb});
 
     auto state_vector_l = get_sparse_state(C_left, lists_);
     auto state_vector_r = get_sparse_state(C_right, lists_);
@@ -229,12 +234,13 @@ ndarray<double, 4> CISigmaBuilder::compute_aab_3rdm_debug(ndarray<double, 1> C_l
     return g3_ref;
 }
 
-ndarray<double, 4> CISigmaBuilder::compute_abb_3rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
+ndarray<double, 4> CISigmaBuilder::compute_abb_3rdm_debug(ndarray<double, 1> C_left,
+                                                          ndarray<double, 1> C_right) const {
     const size_t norb = lists_.norb();
     // the number of orbital pairs i > j of the same spin
     const size_t npair = (norb * (norb - 1)) / 2;
 
-    auto g3_ref = make_zeros<nb::numpy, double, 4>({norb, npair, norb, npair});
+    auto g3_ref = make_zeros<double, 4>({norb, npair, norb, npair});
 
     auto state_vector_l = get_sparse_state(C_left, lists_);
     auto state_vector_r = get_sparse_state(C_right, lists_);
@@ -273,11 +279,12 @@ ndarray<double, 4> CISigmaBuilder::compute_abb_3rdm_debug(ndarray<double, 1> C_l
     return g3_ref;
 }
 
-ndarray<double, 2> CISigmaBuilder::compute_aaaa_4rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right,
-                                                  bool alfa) const {
+ndarray<double, 2> CISigmaBuilder::compute_aaaa_4rdm_debug(ndarray<double, 1> C_left,
+                                                           ndarray<double, 1> C_right,
+                                                           bool alfa) const {
     const size_t norb = lists_.norb();
     const size_t quadruplets = (norb * (norb - 1) * (norb - 2) * (norb - 3)) / 24;
-    auto g4_ref = make_zeros<nb::numpy, double, 2>({quadruplets, quadruplets});
+    auto g4_ref = make_zeros<double, 2>({quadruplets, quadruplets});
 
     auto state_vector_l = get_sparse_state(C_left, lists_);
     auto state_vector_r = get_sparse_state(C_right, lists_);
@@ -333,11 +340,12 @@ ndarray<double, 2> CISigmaBuilder::compute_aaaa_4rdm_debug(ndarray<double, 1> C_
     return g4_ref;
 }
 
-ndarray<double, 4> CISigmaBuilder::compute_aaab_4rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
+ndarray<double, 4> CISigmaBuilder::compute_aaab_4rdm_debug(ndarray<double, 1> C_left,
+                                                           ndarray<double, 1> C_right) const {
     const size_t norb = lists_.norb();
     const size_t ntriplets = (norb * (norb - 1) * (norb - 2)) / 6;
 
-    auto g4_ref = make_zeros<nb::numpy, double, 4>({ntriplets, norb, ntriplets, norb});
+    auto g4_ref = make_zeros<double, 4>({ntriplets, norb, ntriplets, norb});
 
     auto state_vector_l = get_sparse_state(C_left, lists_);
     auto state_vector_r = get_sparse_state(C_right, lists_);
@@ -382,11 +390,12 @@ ndarray<double, 4> CISigmaBuilder::compute_aaab_4rdm_debug(ndarray<double, 1> C_
     return g4_ref;
 }
 
-ndarray<double, 4> CISigmaBuilder::compute_aabb_4rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
+ndarray<double, 4> CISigmaBuilder::compute_aabb_4rdm_debug(ndarray<double, 1> C_left,
+                                                           ndarray<double, 1> C_right) const {
     const size_t norb = lists_.norb();
     const size_t npair = (norb * (norb - 1)) / 2;
 
-    auto g4_ref = make_zeros<nb::numpy, double, 4>({npair, npair, npair, npair});
+    auto g4_ref = make_zeros<double, 4>({npair, npair, npair, npair});
 
     auto state_vector_l = get_sparse_state(C_left, lists_);
     auto state_vector_r = get_sparse_state(C_right, lists_);
@@ -431,11 +440,12 @@ ndarray<double, 4> CISigmaBuilder::compute_aabb_4rdm_debug(ndarray<double, 1> C_
     return g4_ref;
 }
 
-ndarray<double, 4> CISigmaBuilder::compute_abbb_4rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
+ndarray<double, 4> CISigmaBuilder::compute_abbb_4rdm_debug(ndarray<double, 1> C_left,
+                                                           ndarray<double, 1> C_right) const {
     const size_t norb = lists_.norb();
     const size_t ntriplet = (norb * (norb - 1) * (norb - 2)) / 6;
 
-    auto g4_ref = make_zeros<nb::numpy, double, 4>({norb, ntriplet, norb, ntriplet});
+    auto g4_ref = make_zeros<double, 4>({norb, ntriplet, norb, ntriplet});
 
     auto state_vector_l = get_sparse_state(C_left, lists_);
     auto state_vector_r = get_sparse_state(C_right, lists_);
@@ -480,7 +490,8 @@ ndarray<double, 4> CISigmaBuilder::compute_abbb_4rdm_debug(ndarray<double, 1> C_
     return g4_ref;
 }
 
-ndarray<double, 2> CISigmaBuilder::compute_sf_1rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
+ndarray<double, 2> CISigmaBuilder::compute_sf_1rdm_debug(ndarray<double, 1> C_left,
+                                                         ndarray<double, 1> C_right) const {
     auto rdm_sf = compute_a_1rdm_debug(C_left, C_right, true);
     auto rdm_b = compute_a_1rdm_debug(C_left, C_right, false);
 
@@ -496,9 +507,10 @@ ndarray<double, 2> CISigmaBuilder::compute_sf_1rdm_debug(ndarray<double, 1> C_le
     return rdm_sf;
 }
 
-ndarray<double, 4> CISigmaBuilder::compute_sf_2rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
+ndarray<double, 4> CISigmaBuilder::compute_sf_2rdm_debug(ndarray<double, 1> C_left,
+                                                         ndarray<double, 1> C_right) const {
     auto norb = lists_.norb();
-    auto rdm_sf = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
+    auto rdm_sf = make_zeros<double, 4>({norb, norb, norb, norb});
 
     auto rdm_aa = compute_aa_2rdm_debug(C_left, C_right, true);
     auto rdm_bb = compute_aa_2rdm_debug(C_left, C_right, false);
@@ -535,9 +547,10 @@ ndarray<double, 4> CISigmaBuilder::compute_sf_2rdm_debug(ndarray<double, 1> C_le
     return rdm_sf;
 }
 
-ndarray<double, 6> CISigmaBuilder::compute_sf_3rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
+ndarray<double, 6> CISigmaBuilder::compute_sf_3rdm_debug(ndarray<double, 1> C_left,
+                                                         ndarray<double, 1> C_right) const {
     auto norb = lists_.norb();
-    auto rdm_sf = make_zeros<nb::numpy, double, 6>({norb, norb, norb, norb, norb, norb});
+    auto rdm_sf = make_zeros<double, 6>({norb, norb, norb, norb, norb, norb});
 
     auto rdm_aaa = compute_aaa_3rdm_debug(C_left, C_right, true);
     auto rdm_bbb = compute_aaa_3rdm_debug(C_left, C_right, false);
@@ -675,9 +688,10 @@ ndarray<double, 6> CISigmaBuilder::compute_sf_3rdm_debug(ndarray<double, 1> C_le
     return rdm_sf;
 }
 
-ndarray<double, 4> CISigmaBuilder::compute_sf_2cumulant_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
+ndarray<double, 4> CISigmaBuilder::compute_sf_2cumulant_debug(ndarray<double, 1> C_left,
+                                                              ndarray<double, 1> C_right) const {
     auto norb = lists_.norb();
-    auto cdm2_sf = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
+    auto cdm2_sf = make_zeros<double, 4>({norb, norb, norb, norb});
 
     auto cdm1 = compute_sf_1rdm_debug(C_left, C_right);
     auto cdm2 = compute_sf_2rdm_debug(C_left, C_right);
@@ -702,9 +716,10 @@ ndarray<double, 4> CISigmaBuilder::compute_sf_2cumulant_debug(ndarray<double, 1>
     return cdm2_sf;
 }
 
-ndarray<double, 6> CISigmaBuilder::compute_sf_3cumulant_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
+ndarray<double, 6> CISigmaBuilder::compute_sf_3cumulant_debug(ndarray<double, 1> C_left,
+                                                              ndarray<double, 1> C_right) const {
     auto norb = lists_.norb();
-    auto cdm3_sf = make_zeros<nb::numpy, double, 6>({norb, norb, norb, norb, norb, norb});
+    auto cdm3_sf = make_zeros<double, 6>({norb, norb, norb, norb, norb, norb});
 
     auto cdm1 = compute_sf_1rdm_debug(C_left, C_right);
     auto cdm2 = compute_sf_2rdm_debug(C_left, C_right);

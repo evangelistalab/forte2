@@ -18,8 +18,9 @@ namespace forte2 {
 class RelCISigmaBuilder {
   public:
     // == Class Constructor ==
-    RelCISigmaBuilder(const CIStrings& lists, double E, ndarray<std::complex<double>, 2>& H, ndarray<std::complex<double>, 4>& V,
-                      int log_level = 3, bool use_asym_ints = false);
+    RelCISigmaBuilder(const CIStrings& lists, double E, ndarray<std::complex<double>, 2>& H,
+                      ndarray<std::complex<double>, 4>& V, int log_level = 3,
+                      bool use_asym_ints = false);
 
     // == Class Public Functions ==
 
@@ -37,7 +38,8 @@ class RelCISigmaBuilder {
     std::string get_algorithm() const;
 
     /// @brief Set the one and two-electron integrals for the Hamiltonian
-    void set_Hamiltonian(double E, ndarray<std::complex<double>, 2> H, ndarray<std::complex<double>, 4> V, bool use_asym_ints = false);
+    void set_Hamiltonian(double E, ndarray<std::complex<double>, 2> H,
+                         ndarray<std::complex<double>, 4> V, bool use_asym_ints = false);
 
     /// @brief Set the logging level for the class
     void set_log_level(int level) { log_level_ = level; }
@@ -61,7 +63,8 @@ class RelCISigmaBuilder {
     /// @brief Apply the Hamiltonian to the wave function
     /// @param basis The basis vector
     /// @param sigma The resulting sigma vector |sigma> = H |basis>
-    void Hamiltonian(ndarray<std::complex<double>, 1> basis, ndarray<std::complex<double>, 1> sigma) const;
+    void Hamiltonian(ndarray<std::complex<double>, 1> basis,
+                     ndarray<std::complex<double>, 1> sigma) const;
 
     /// @brief Compute the spin-dependent one-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -70,7 +73,8 @@ class RelCISigmaBuilder {
     /// @return The one-electron reduced density matrix stored as
     ///        gamma(spin)[p][q] = <L| a^+_p a_q |R> with p,q orbitals of spin alpha/beta
     /// @note If the number of orbitals is 0, a matrix of shape (0, 0) is returned
-    ndarray<std::complex<double>, 2> compute_1rdm(ndarray<std::complex<double>, 1> C_left, ndarray<std::complex<double>, 1> C_right) const;
+    ndarray<std::complex<double>, 2> compute_1rdm(ndarray<std::complex<double>, 1> C_left,
+                                                  ndarray<std::complex<double>, 1> C_right) const;
 
     /// @brief Compute the same-spin two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -79,7 +83,8 @@ class RelCISigmaBuilder {
     /// @return The two-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(sigma)[p>q][r>s] = <L| a^+_p a^+_q a_s a_r |R>
     ///        with p > q, and r > s orbitals of spin sigma
-    ndarray<std::complex<double>, 4> compute_2rdm(ndarray<std::complex<double>, 1> C_left, ndarray<std::complex<double>, 1> C_right) const;
+    ndarray<std::complex<double>, 4> compute_2rdm(ndarray<std::complex<double>, 1> C_left,
+                                                  ndarray<std::complex<double>, 1> C_right) const;
 
     /// @brief Compute the cumulant of the spin-free two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -87,7 +92,9 @@ class RelCISigmaBuilder {
     /// @return The cumulant of the two-electron spin-free reduced density matrix stored as a tensor
     ///        lambda[p][q][r][s] = gamma[p][q][r][s] - gamma[p][r] * gamma[q][s] +
     ///                              0.5 * gamma[p][s] * gamma[q][r]
-    ndarray<std::complex<double>, 4> compute_2cumulant(ndarray<std::complex<double>, 1> C_left, ndarray<std::complex<double>, 1> C_right) const;
+    ndarray<std::complex<double>, 4>
+    compute_2cumulant(ndarray<std::complex<double>, 1> C_left,
+                      ndarray<std::complex<double>, 1> C_right) const;
 
     /// @brief Compute the three-electron same-spin reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -96,7 +103,8 @@ class RelCISigmaBuilder {
     /// @return The three-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(sigma)[p>q>r][s>t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
     ///        with p > q > r, and s > t > u orbitals of spin sigma
-    ndarray<std::complex<double>, 6> compute_3rdm(ndarray<std::complex<double>, 1> C_left, ndarray<std::complex<double>, 1> C_right) const;
+    ndarray<std::complex<double>, 6> compute_3rdm(ndarray<std::complex<double>, 1> C_left,
+                                                  ndarray<std::complex<double>, 1> C_right) const;
 
     /// @brief Compute the cumulant of the spin-free three-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -104,13 +112,19 @@ class RelCISigmaBuilder {
     /// @return The cumulant of the three-electron spin-free reduced density matrix stored as a
     /// tensor
     ///        lambda[p][q][r][s][t][u] = gamma[p][q][r][s][t][u] + ...
-    ndarray<std::complex<double>, 6> compute_3cumulant(ndarray<std::complex<double>, 1> C_left, ndarray<std::complex<double>, 1> C_right) const;
+    ndarray<std::complex<double>, 6>
+    compute_3cumulant(ndarray<std::complex<double>, 1> C_left,
+                      ndarray<std::complex<double>, 1> C_right) const;
 
-    ndarray<std::complex<double>, 2> compute_1rdm_debug(ndarray<std::complex<double>, 1> C_left, ndarray<std::complex<double>, 1> C_right) const;
-    ndarray<std::complex<double>, 4> compute_2rdm_debug(ndarray<std::complex<double>, 1> C_left,
-                                          ndarray<std::complex<double>, 1> C_right) const;
-    ndarray<std::complex<double>, 6> compute_3rdm_debug(ndarray<std::complex<double>, 1> C_left,
-                                          ndarray<std::complex<double>, 1> C_right) const;
+    ndarray<std::complex<double>, 2>
+    compute_1rdm_debug(ndarray<std::complex<double>, 1> C_left,
+                       ndarray<std::complex<double>, 1> C_right) const;
+    ndarray<std::complex<double>, 4>
+    compute_2rdm_debug(ndarray<std::complex<double>, 1> C_left,
+                       ndarray<std::complex<double>, 1> C_right) const;
+    ndarray<std::complex<double>, 6>
+    compute_3rdm_debug(ndarray<std::complex<double>, 1> C_left,
+                       ndarray<std::complex<double>, 1> C_right) const;
 
   private:
     // == Class Private Variables ==

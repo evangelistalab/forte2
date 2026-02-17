@@ -15,16 +15,16 @@
 extern "C" {
 #include <cint.h>
 
-// Declare APIs to Libcint functions: they have identical signatures, 
+// Declare APIs to Libcint functions: they have identical signatures,
 // except for the buffer type (double* for spherical, double _Complex* for spinor)
 
 // These generate declarations of the form:
 // int int1e_ovlp_sph(double* buf, int* dims, int* shls, int* atm, int natm, int* bas, int nbas,
 //                   double* env, CINTOpt* opt, double* cache);
 
-// To add a new integral, consult the available Libcint functions, 
+// To add a new integral, consult the available Libcint functions,
 // at https://github.com/sunqm/libcint/blob/master/include/cint_funcs.h
-// and see the number of components it will require, 
+// and see the number of components it will require,
 // at https://github.com/pyscf/pyscf/blob/master/pyscf/gto/moleintor.py
 #define DECL_CINT_FUNC_SPH(name)                                                                   \
     int name##_sph(double* buf, int* dims, int* shls, int* atm, int natm, int* bas, int nbas,      \
@@ -50,15 +50,17 @@ DECL_CINT_FUNC_SPINOR(int1e_spnucsp)
 namespace forte2 {
 // define the Forte2 wrappers for the Libcint integrals
 // These generate definitions of the form:
-// ndarray_f<double, 3> cint_int1e_ovlp_sph(const std::vector<int>& shell_slice, ndarray<int, 2> atm, ndarray<int, 2> bas, 
+// ndarray<double, 3, nb::f_contig> cint_int1e_ovlp_sph(const std::vector<int>& shell_slice,
+// ndarray<int, 2> atm, ndarray<int, 2> bas,
 //                                 ndarray<double, 1> env) {
 //     return cint_int2c<1>(int1e_ovlp_sph, shell_slice, atm, bas, env);
 // }
-#define DECL_CINT_FORTE2_FUNC_SPH(name, comp) \
-ndarray_f<double, 3> cint_##name##_sph(const std::vector<int>& shell_slice, ndarray<int, 2> atm, ndarray<int, 2> bas, \
-                        ndarray<double, 1> env) { \
-    return cint_int2c<comp>(name##_sph, shell_slice, atm, bas, env); \
-}
+#define DECL_CINT_FORTE2_FUNC_SPH(name, comp)                                                      \
+    ndarray<double, 3, nb::f_contig> cint_##name##_sph(const std::vector<int>& shell_slice,        \
+                                                       ndarray<int, 2> atm, ndarray<int, 2> bas,   \
+                                                       ndarray<double, 1> env) {                   \
+        return cint_int2c<comp>(name##_sph, shell_slice, atm, bas, env);                           \
+    }
 
 DECL_CINT_FORTE2_FUNC_SPH(int1e_ovlp, 1)
 DECL_CINT_FORTE2_FUNC_SPH(int1e_kin, 1)
@@ -68,11 +70,12 @@ DECL_CINT_FORTE2_FUNC_SPH(int1e_r, 3)
 DECL_CINT_FORTE2_FUNC_SPH(int2c2e, 1)
 #undef DECL_CINT_FORTE2_FUNC_SPH
 
-#define DECL_CINT_FORTE2_FUNC_SPINOR(name, comp) \
-ndarray_f<std::complex<double>, 3> cint_##name##_spinor(const std::vector<int>& shell_slice, ndarray<int, 2> atm, \
-                                   ndarray<int, 2> bas, ndarray<double, 1> env) { \
-    return cint_int2c_spinor<comp>(name##_spinor, shell_slice, atm, bas, env); \
-}
+#define DECL_CINT_FORTE2_FUNC_SPINOR(name, comp)                                                   \
+    ndarray<std::complex<double>, 3, nb::f_contig> cint_##name##_spinor(                           \
+        const std::vector<int>& shell_slice, ndarray<int, 2> atm, ndarray<int, 2> bas,             \
+        ndarray<double, 1> env) {                                                                  \
+        return cint_int2c_spinor<comp>(name##_spinor, shell_slice, atm, bas, env);                 \
+    }
 DECL_CINT_FORTE2_FUNC_SPINOR(int1e_ovlp, 1)
 DECL_CINT_FORTE2_FUNC_SPINOR(int1e_kin, 1)
 DECL_CINT_FORTE2_FUNC_SPINOR(int1e_nuc, 1)

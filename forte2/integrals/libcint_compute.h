@@ -29,8 +29,9 @@ namespace forte2 {
 // templated function to compute two-center integrals with M components
 // (i.e., 1 for scalar integrals, 3 for dipoles integrals, etc.)
 template <std::size_t M>
-ndarray_f<double, 3> cint_int2c(CIntorFunc intor, const std::vector<int>& shell_slice, ndarray<int, 2> atm,
-                        ndarray<int, 2> bas, ndarray<double, 1> env) {
+ndarray<double, 3, nb::f_contig> cint_int2c(CIntorFunc intor, const std::vector<int>& shell_slice,
+                                            ndarray<int, 2> atm, ndarray<int, 2> bas,
+                                            ndarray<double, 1> env) {
 
     const int ish_0 = static_cast<int>(shell_slice[0]);
     const int ish_1 = static_cast<int>(shell_slice[1]);
@@ -54,7 +55,7 @@ ndarray_f<double, 3> cint_int2c(CIntorFunc intor, const std::vector<int>& shell_
     const int nao_i = ao_offset[ish_1] - ao_offset[ish_0];
     const int nao_j = ao_offset[jsh_1] - ao_offset[jsh_0];
 
-    auto ints = make_zeros<nb::numpy, double, 3, nb::f_contig>(
+    auto ints = make_zeros<double, 3, nb::f_contig>(
         std::array<size_t, 3>{static_cast<size_t>(nao_i), static_cast<size_t>(nao_j), M});
 
     double* buf = ints.data();
@@ -80,8 +81,9 @@ ndarray_f<double, 3> cint_int2c(CIntorFunc intor, const std::vector<int>& shell_
 }
 
 template <std::size_t M>
-ndarray_f<std::complex<double>, 3> cint_int2c_spinor(CIntorFuncSpinor intor, const std::vector<int>& shell_slice,
-                                       ndarray<int, 2> atm, ndarray<int, 2> bas, ndarray<double, 1> env) {
+ndarray<std::complex<double>, 3, nb::f_contig>
+cint_int2c_spinor(CIntorFuncSpinor intor, const std::vector<int>& shell_slice, ndarray<int, 2> atm,
+                  ndarray<int, 2> bas, ndarray<double, 1> env) {
 
     const int ish_0 = static_cast<int>(shell_slice[0]);
     const int ish_1 = static_cast<int>(shell_slice[1]);
@@ -105,7 +107,7 @@ ndarray_f<std::complex<double>, 3> cint_int2c_spinor(CIntorFuncSpinor intor, con
     const int nao_i = ao_offset[ish_1] - ao_offset[ish_0];
     const int nao_j = ao_offset[jsh_1] - ao_offset[jsh_0];
 
-    auto ints = make_zeros<nb::numpy, std::complex<double>, 3, nb::f_contig>(
+    auto ints = make_zeros<std::complex<double>, 3, nb::f_contig>(
         std::array<size_t, 3>{static_cast<size_t>(nao_i), static_cast<size_t>(nao_j), M});
 
     auto buf = reinterpret_cast<double _Complex*>(ints.data());
@@ -130,7 +132,7 @@ ndarray_f<std::complex<double>, 3> cint_int2c_spinor(CIntorFuncSpinor intor, con
     return ints;
 }
 
-void fill_3c_sym(ndarray_f<double, 3>& ints) {
+void fill_3c_sym(ndarray<double, 3, nb::f_contig>& ints) {
     auto data = ints.data();
     const auto nsym = ints.shape(0);
     const auto nk = ints.shape(2);
@@ -166,8 +168,9 @@ void fill_3c_sym(ndarray_f<double, 3>& ints) {
 }
 
 // function to compute three-center integrals
-ndarray_f<double, 3> cint_int3c(CIntorFunc intor, const std::vector<int>& shell_slice, ndarray<int, 2> atm,
-                        ndarray<int, 2> bas, ndarray<double, 1> env) {
+ndarray<double, 3, nb::f_contig> cint_int3c(CIntorFunc intor, const std::vector<int>& shell_slice,
+                                            ndarray<int, 2> atm, ndarray<int, 2> bas,
+                                            ndarray<double, 1> env) {
     const int ish_0 = static_cast<int>(shell_slice[0]);
     const int ish_1 = static_cast<int>(shell_slice[1]);
     const int jsh_0 = static_cast<int>(shell_slice[2]);
@@ -198,7 +201,7 @@ ndarray_f<double, 3> cint_int3c(CIntorFunc intor, const std::vector<int>& shell_
     const int nao_j = ao_offset[jsh_1] - ao_offset[jsh_0];
     const int nao_k = ao_offset[ksh_1] - ao_offset[ksh_0];
 
-    auto ints = make_zeros<nb::numpy, double, 3, nb::f_contig>(std::array<size_t, 3>{
+    auto ints = make_zeros<double, 3, nb::f_contig>(std::array<size_t, 3>{
         static_cast<size_t>(nao_i), static_cast<size_t>(nao_j), static_cast<size_t>(nao_k)});
 
     double* buf = ints.data();

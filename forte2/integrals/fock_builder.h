@@ -32,8 +32,9 @@ class FockBuilder {
                           const ndarray<double, 4>& integrals, std::vector<ndarray<double, 2>>& J,
                           std::vector<ndarray<double, 2>>& K);
 
-    void opt_fock_build(const std::vector<ndarray<double, 2>>& density_matrices, const ndarray<double, 4>& integrals,
-                        std::vector<ndarray<double, 2>>& J, std::vector<ndarray<double, 2>>& K);
+    void opt_fock_build(const std::vector<ndarray<double, 2>>& density_matrices,
+                        const ndarray<double, 4>& integrals, std::vector<ndarray<double, 2>>& J,
+                        std::vector<ndarray<double, 2>>& K);
 
     // void df_fock_build(const std::vector<ndarray<double, 2>>& density_matrices,
     //                    ndarray<double, 2>& PQ,

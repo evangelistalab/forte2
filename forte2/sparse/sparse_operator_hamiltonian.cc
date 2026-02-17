@@ -2,7 +2,8 @@
 
 namespace forte2 {
 
-SparseOperator sparse_operator_hamiltonian(double scalar_energy, ndarray<double, 2> one_electron_integrals,
+SparseOperator sparse_operator_hamiltonian(double scalar_energy,
+                                           ndarray<double, 2> one_electron_integrals,
                                            ndarray<double, 4> two_electron_integrals,
                                            double screen_thresh) {
     size_t nmo = one_electron_integrals.shape(0);

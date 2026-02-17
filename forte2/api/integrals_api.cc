@@ -150,7 +150,8 @@ void export_basis_api(nb::module_& sub_m) {
         .def("__getitem__", &Basis::operator[], "i"_a)
         .def("__len__", &Basis::size)
         .def_prop_ro("shell_first_and_size", &Basis::shell_first_and_size)
-        .def_prop_ro("center_first_and_last", [](const Basis& b) { return b.center_first_and_last(false); })
+        .def_prop_ro("center_first_and_last",
+                     [](const Basis& b) { return b.center_first_and_last(false); })
         .def_prop_ro("center_first_and_last_shell",
                      [](const Basis& b) { return b.center_first_and_last(true); })
         .def_prop_ro("size", &Basis::size)
@@ -396,7 +397,7 @@ void export_libcint_compute_api(nb::module_& sub_m) {
 // When libcint is disabled, define a no-op exporter
 void export_libcint_compute_api(nb::module_& sub_m) {
     // Intentionally empty: libcint-backed APIs are unavailable.
-    (void) sub_m;
+    (void)sub_m;
 }
 #endif
 } // namespace forte2

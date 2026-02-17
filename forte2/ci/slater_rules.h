@@ -37,7 +37,8 @@ class RelSlaterRules {
   public:
     // ==> Class Constructors <==
 
-    RelSlaterRules(int nspinor, double scalar_energy, ndarray<std::complex<double>, 2> one_electron_integrals,
+    RelSlaterRules(int nspinor, double scalar_energy,
+                   ndarray<std::complex<double>, 2> one_electron_integrals,
                    ndarray<std::complex<double>, 4> two_electron_integrals);
 
     // ==> Class Interface <==
