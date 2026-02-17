@@ -153,9 +153,10 @@ void CISigmaBuilder::set_Hamiltonian(double E, ndarray<double, 2> H, ndarray<dou
     }
 }
 
-void CISigmaBuilder::Hamiltonian(ndarray<double, 1> basis, ndarray<double, 1> sigma) const {
+void CISigmaBuilder::Hamiltonian(ndarray<double, 1, nb::c_contig> basis,
+                                 ndarray<double, 1, nb::c_contig> sigma) const {
     local_timer t;
-    vector::zero<double>(sigma);
+    vector::zero<double, nb::c_contig>(sigma);
     auto b_span = vector::as_span<double>(basis);
     auto s_span = vector::as_span<double>(sigma);
 

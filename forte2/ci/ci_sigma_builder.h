@@ -83,7 +83,8 @@ class CISigmaBuilder {
     /// @brief Apply the Hamiltonian to the wave function
     /// @param basis The basis vector
     /// @param sigma The resulting sigma vector |sigma> = H |basis>
-    void Hamiltonian(ndarray<double, 1> basis, ndarray<double, 1> sigma) const;
+    void Hamiltonian(ndarray<double, 1, nb::c_contig> basis,
+                     ndarray<double, 1, nb::c_contig> sigma) const;
 
     /// @brief Return the average build time for the Hamiltonian components
     std::vector<double> avg_build_time() const {

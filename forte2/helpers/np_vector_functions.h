@@ -69,6 +69,10 @@ template <typename T> std::span<T> as_span(ndarray<T, 1> vec) {
     return std::span<T>(vec.data(), vec.shape(0));
 }
 
+template <typename T> std::span<T> as_span(ndarray<T, 1, nb::c_contig> vec) {
+    return std::span<T>(vec.data(), vec.shape(0));
+}
+
 /// @brief Print the contents of a ndarray<double, 1> to standard output
 template <typename T> void print(ndarray<T, 1> vec, std::string label) {
     std::cout << label << ":" << std::endl;
