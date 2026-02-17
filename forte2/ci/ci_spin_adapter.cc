@@ -65,7 +65,7 @@ const std::vector<std::pair<size_t, size_t>>& CISpinAdapter::conf_to_csfs_range(
     return conf_to_csfs_range_;
 }
 
-void CISpinAdapter::det_C_to_csf_C(np_vector det_C, np_vector csf_C) {
+void CISpinAdapter::det_C_to_csf_C(ndarray<double, 1> det_C, ndarray<double, 1> csf_C) {
     vector::zero<double>(csf_C);
     auto csf_C_view = csf_C.view();
     auto det_C_view = det_C.view();
@@ -80,7 +80,7 @@ void CISpinAdapter::det_C_to_csf_C(np_vector det_C, np_vector csf_C) {
     }
 }
 
-void CISpinAdapter::csf_C_to_det_C(np_vector csf_C, np_vector det_C) {
+void CISpinAdapter::csf_C_to_det_C(ndarray<double, 1> csf_C, ndarray<double, 1> det_C) {
     vector::zero<double>(det_C);
     auto csf_C_view = csf_C.view();
     auto det_C_view = det_C.view();

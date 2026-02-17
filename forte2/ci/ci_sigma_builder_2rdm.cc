@@ -8,7 +8,7 @@
 
 namespace forte2 {
 
-np_matrix CISigmaBuilder::compute_ss_2rdm(np_vector C_left, np_vector C_right, Spin spin) const {
+ndarray<double, 2> CISigmaBuilder::compute_ss_2rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right, Spin spin) const {
     local_timer timer;
 
     const auto na = lists_.na();
@@ -89,15 +89,15 @@ np_matrix CISigmaBuilder::compute_ss_2rdm(np_vector C_left, np_vector C_right, S
     return rdm;
 }
 
-np_matrix CISigmaBuilder::compute_aa_2rdm(np_vector C_left, np_vector C_right) const {
+ndarray<double, 2> CISigmaBuilder::compute_aa_2rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     return compute_ss_2rdm(C_left, C_right, Spin::Alpha);
 }
 
-np_matrix CISigmaBuilder::compute_bb_2rdm(np_vector C_left, np_vector C_right) const {
+ndarray<double, 2> CISigmaBuilder::compute_bb_2rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     return compute_ss_2rdm(C_left, C_right, Spin::Beta);
 }
 
-np_tensor4 CISigmaBuilder::compute_ab_2rdm(np_vector C_left, np_vector C_right) const {
+ndarray<double, 4> CISigmaBuilder::compute_ab_2rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     local_timer timer;
 
     const auto na = lists_.na();
@@ -174,7 +174,7 @@ np_tensor4 CISigmaBuilder::compute_ab_2rdm(np_vector C_left, np_vector C_right) 
     return rdm;
 }
 
-np_tensor4 CISigmaBuilder::compute_sf_2rdm(np_vector C_left, np_vector C_right) const {
+ndarray<double, 4> CISigmaBuilder::compute_sf_2rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     size_t norb = lists_.norb();
     auto rdm_sf = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
 
@@ -225,7 +225,7 @@ np_tensor4 CISigmaBuilder::compute_sf_2rdm(np_vector C_left, np_vector C_right) 
     return rdm_sf;
 }
 
-np_tensor4 CISigmaBuilder::compute_sf_2cumulant(np_vector C_left, np_vector C_right) const {
+ndarray<double, 4> CISigmaBuilder::compute_sf_2cumulant(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     // Compute the spin-free 1-RDM
     auto G1 = compute_sf_1rdm(C_left, C_right);
     // Compute the spin-free 2-RDM (this will hold the cumulant)

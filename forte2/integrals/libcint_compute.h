@@ -29,8 +29,8 @@ namespace forte2 {
 // templated function to compute two-center integrals with M components
 // (i.e., 1 for scalar integrals, 3 for dipoles integrals, etc.)
 template <std::size_t M>
-np_tensor3_f cint_int2c(CIntorFunc intor, const std::vector<int>& shell_slice, np_matrix_int atm,
-                        np_matrix_int bas, np_vector env) {
+ndarray_f<double, 3> cint_int2c(CIntorFunc intor, const std::vector<int>& shell_slice, ndarray<int, 2> atm,
+                        ndarray<int, 2> bas, ndarray<double, 1> env) {
 
     const int ish_0 = static_cast<int>(shell_slice[0]);
     const int ish_1 = static_cast<int>(shell_slice[1]);
@@ -80,8 +80,8 @@ np_tensor3_f cint_int2c(CIntorFunc intor, const std::vector<int>& shell_slice, n
 }
 
 template <std::size_t M>
-np_tensor3_complex_f cint_int2c_spinor(CIntorFuncSpinor intor, const std::vector<int>& shell_slice,
-                                       np_matrix_int atm, np_matrix_int bas, np_vector env) {
+ndarray_f<std::complex<double>, 3> cint_int2c_spinor(CIntorFuncSpinor intor, const std::vector<int>& shell_slice,
+                                       ndarray<int, 2> atm, ndarray<int, 2> bas, ndarray<double, 1> env) {
 
     const int ish_0 = static_cast<int>(shell_slice[0]);
     const int ish_1 = static_cast<int>(shell_slice[1]);
@@ -130,7 +130,7 @@ np_tensor3_complex_f cint_int2c_spinor(CIntorFuncSpinor intor, const std::vector
     return ints;
 }
 
-void fill_3c_sym(np_tensor3_f& ints) {
+void fill_3c_sym(ndarray_f<double, 3>& ints) {
     auto data = ints.data();
     const auto nsym = ints.shape(0);
     const auto nk = ints.shape(2);
@@ -166,8 +166,8 @@ void fill_3c_sym(np_tensor3_f& ints) {
 }
 
 // function to compute three-center integrals
-np_tensor3_f cint_int3c(CIntorFunc intor, const std::vector<int>& shell_slice, np_matrix_int atm,
-                        np_matrix_int bas, np_vector env) {
+ndarray_f<double, 3> cint_int3c(CIntorFunc intor, const std::vector<int>& shell_slice, ndarray<int, 2> atm,
+                        ndarray<int, 2> bas, ndarray<double, 1> env) {
     const int ish_0 = static_cast<int>(shell_slice[0]);
     const int ish_1 = static_cast<int>(shell_slice[1]);
     const int jsh_0 = static_cast<int>(shell_slice[2]);

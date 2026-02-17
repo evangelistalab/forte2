@@ -22,7 +22,7 @@ enum class CIAlgorithm {
 class CISigmaBuilder {
   public:
     // == Class Constructor ==
-    CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V,
+    CISigmaBuilder(const CIStrings& lists, double E, ndarray<double, 2>& H, ndarray<double, 4>& V,
                    int log_level = 3);
 
     // == Class Public Functions ==
@@ -41,7 +41,7 @@ class CISigmaBuilder {
     std::string get_algorithm() const;
 
     /// @brief Set the one and two-electron integrals for the Hamiltonian
-    void set_Hamiltonian(double E, np_matrix H, np_tensor4 V);
+    void set_Hamiltonian(double E, ndarray<double, 2> H, ndarray<double, 4> V);
 
     /// @brief Set the logging level for the class
     void set_log_level(int level) { log_level_ = level; }
@@ -52,7 +52,7 @@ class CISigmaBuilder {
     /// @param spin_adapt_full_preconditioner If true, use the exact diagonal elements,
     ///        otherwise use approximate diagonal elements.
     /// @return The diagonal elements of the Hamiltonian matrix
-    np_vector form_Hdiag_csf(const std::vector<Determinant>& dets,
+    ndarray<double, 1> form_Hdiag_csf(const std::vector<Determinant>& dets,
                              const CISpinAdapter& spin_adapter,
                              bool spin_adapt_full_preconditioner) const;
 
@@ -68,7 +68,7 @@ class CISigmaBuilder {
     /// @param dets The list of determinants
     /// @param spin_adapter The spin adapter for the CSF
     /// @return The full Hamiltonian matrix in the CSF basis
-    np_matrix form_H_csf(const std::vector<Determinant>& dets,
+    ndarray<double, 2> form_H_csf(const std::vector<Determinant>& dets,
                          const CISpinAdapter& spin_adapter) const;
 
     /// @brief Compute the Slater rules for the CSF matrix element
@@ -83,7 +83,7 @@ class CISigmaBuilder {
     /// @brief Apply the Hamiltonian to the wave function
     /// @param basis The basis vector
     /// @param sigma The resulting sigma vector |sigma> = H |basis>
-    void Hamiltonian(np_vector basis, np_vector sigma) const;
+    void Hamiltonian(ndarray<double, 1> basis, ndarray<double, 1> sigma) const;
 
     /// @brief Return the average build time for the Hamiltonian components
     std::vector<double> avg_build_time() const {
@@ -104,7 +104,7 @@ class CISigmaBuilder {
     /// @return The one-electron reduced density matrix stored as
     ///        gamma(spin)[p][q] = <L| a^+_p a_q |R> with p,q orbitals of spin alpha/beta
     /// @note If the number of orbitals is 0, a matrix of shape (0, 0) is returned
-    np_matrix compute_s_1rdm(np_vector C_left, np_vector C_right, Spin spin) const;
+    ndarray<double, 2> compute_s_1rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right, Spin spin) const;
 
     /// @brief Compute the alpha one-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -112,7 +112,7 @@ class CISigmaBuilder {
     /// @return The one-electron reduced density matrix stored as
     ///        gamma(alpha)[p][q] = <L| a^+_p a_q |R> with p,q orbitals of spin alpha
     /// @note If the number of orbitals is 0, a matrix of shape (0, 0) is returned
-    np_matrix compute_a_1rdm(np_vector C_left, np_vector C_right) const;
+    ndarray<double, 2> compute_a_1rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
 
     /// @brief Compute the beta one-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -120,14 +120,14 @@ class CISigmaBuilder {
     /// @return The one-electron reduced density matrix stored as
     ///        gamma(beta)[p][q] = <L| b^+_p b_q |R> with p,q orbitals of spin beta
     /// @note If the number of orbitals is 0, a matrix of shape (0, 0) is returned
-    np_matrix compute_b_1rdm(np_vector C_left, np_vector C_right) const;
+    ndarray<double, 2> compute_b_1rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
 
     /// @brief Compute the spin-free one-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
     /// @param C_right The right-hand side coefficients
     /// @return The spin-free one-electron reduced density matrix stored as
     ///        Gamma[p][q] = gamma(alpha)[p][q] + gamma(beta)[p][q]
-    np_matrix compute_sf_1rdm(np_vector C_left, np_vector C_right) const;
+    ndarray<double, 2> compute_sf_1rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
 
     /// @brief Compute the same-spin two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -136,7 +136,7 @@ class CISigmaBuilder {
     /// @return The two-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(sigma)[p>q][r>s] = <L| a^+_p a^+_q a_s a_r |R>
     ///        with p > q, and r > s orbitals of spin sigma
-    np_matrix compute_ss_2rdm(np_vector C_left, np_vector C_right, Spin spin) const;
+    ndarray<double, 2> compute_ss_2rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right, Spin spin) const;
 
     /// @brief Compute the alpha-alpha two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -144,7 +144,7 @@ class CISigmaBuilder {
     /// @return The two-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(sigma)[p>q][r>s] = <L| a^+_p a^+_q a_s a_r |R>
     ///        with p > q, and r > s orbitals of spin sigma
-    np_matrix compute_aa_2rdm(np_vector C_left, np_vector C_right) const;
+    ndarray<double, 2> compute_aa_2rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
 
     /// @brief Compute the beta-beta two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -152,7 +152,7 @@ class CISigmaBuilder {
     /// @return The two-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(sigma)[p>q][r>s] = <L| a^+_p a^+_q a_s a_r |R>
     ///        with p > q, and r > s orbitals of spin sigma
-    np_matrix compute_bb_2rdm(np_vector C_left, np_vector C_right) const;
+    ndarray<double, 2> compute_bb_2rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
 
     /// @brief Compute the mixed-spin two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -160,7 +160,7 @@ class CISigmaBuilder {
     /// @return The two-electron mixed-spin reduced density matrix stored as a tensor
     ///        gamma[p][q][r][s] = <L| a^+_p a^+_q a_s a_r |R>
     ///        with p,r orbitals of spin alpha and q,s orbitals of spin beta
-    np_tensor4 compute_ab_2rdm(np_vector C_left, np_vector C_right) const;
+    ndarray<double, 4> compute_ab_2rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
 
     /// @brief Compute the spin-free two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -170,7 +170,7 @@ class CISigmaBuilder {
     ///                            gamma(bb)[p][q][r][s] +
     ///                            gamma(ab)[p][q][r][s]
     ///                            gamma(ab)[q][p][s][r]
-    np_tensor4 compute_sf_2rdm(np_vector C_left, np_vector C_right) const;
+    ndarray<double, 4> compute_sf_2rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
 
     /// @brief Compute the cumulant of the spin-free two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -178,7 +178,7 @@ class CISigmaBuilder {
     /// @return The cumulant of the two-electron spin-free reduced density matrix stored as a tensor
     ///        lambda[p][q][r][s] = gamma[p][q][r][s] - gamma[p][r] * gamma[q][s] +
     ///                              0.5 * gamma[p][s] * gamma[q][r]
-    np_tensor4 compute_sf_2cumulant(np_vector C_left, np_vector C_right) const;
+    ndarray<double, 4> compute_sf_2cumulant(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
 
     /// @brief Compute the three-electron same-spin reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -187,7 +187,7 @@ class CISigmaBuilder {
     /// @return The three-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(sigma)[p>q>r][s>t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
     ///        with p > q > r, and s > t > u orbitals of spin sigma
-    np_matrix compute_sss_3rdm(np_vector C_left, np_vector C_right, Spin spin) const;
+    ndarray<double, 2> compute_sss_3rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right, Spin spin) const;
 
     /// @brief Compute the alpha-alpha-alpha three-electron same-spin reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -195,7 +195,7 @@ class CISigmaBuilder {
     /// @return The three-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(aaa)[p>q>r][s>t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
     ///        with p > q > r, and s > t > u orbitals of spin alpha
-    np_matrix compute_aaa_3rdm(np_vector C_left, np_vector C_right) const;
+    ndarray<double, 2> compute_aaa_3rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
 
     /// @brief Compute the beta-beta-beta three-electron same-spin reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -203,7 +203,7 @@ class CISigmaBuilder {
     /// @return The three-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(bbb)[p>q>r][s>t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
     ///        with p > q > r, and s > t > u orbitals of spin beta
-    np_matrix compute_bbb_3rdm(np_vector C_left, np_vector C_right) const;
+    ndarray<double, 2> compute_bbb_3rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
 
     /// @brief Compute the aab mixed-spin three-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -211,7 +211,7 @@ class CISigmaBuilder {
     /// @return The three-electron mixed-spin reduced density matrix stored as a tensor
     ///        gamma[p>q][r][s>t][u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
     ///        with p > q and s > t are alpha spin orbitals and r,u are beta spin orbitals
-    np_tensor4 compute_aab_3rdm(np_vector C_left, np_vector C_right) const;
+    ndarray<double, 4> compute_aab_3rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
 
     /// @brief Compute the abb mixed-spin three-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -219,7 +219,7 @@ class CISigmaBuilder {
     /// @return The three-electron mixed-spin reduced density matrix stored as a tensor
     ///        gamma[p][q>r][s][t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
     ///        with p and s are alpha spin orbitals and q > r and u > t are beta spin orbitals
-    np_tensor4 compute_abb_3rdm(np_vector C_left, np_vector C_right) const;
+    ndarray<double, 4> compute_abb_3rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
 
     /// @brief Compute the spin-free three-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -227,7 +227,7 @@ class CISigmaBuilder {
     /// @return The three-electron spin-free reduced density matrix stored as a tensor
     ///        gamma[p][q][r][s][t][u] = gamma(aaa)[p][q][r][s][t][u] +
     ///                                  gamma(bbb)[p][q][r][s][t][u] + ...
-    np_tensor6 compute_sf_3rdm(np_vector C_left, np_vector C_right) const;
+    ndarray<double, 6> compute_sf_3rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
 
     /// @brief Compute the cumulant of the spin-free three-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -235,31 +235,31 @@ class CISigmaBuilder {
     /// @return The cumulant of the three-electron spin-free reduced density matrix stored as a
     /// tensor
     ///        lambda[p][q][r][s][t][u] = gamma[p][q][r][s][t][u] + ...
-    np_tensor6 compute_sf_3cumulant(np_vector C_left, np_vector C_right) const;
+    ndarray<double, 6> compute_sf_3cumulant(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
 
     // == Debugging Functions ==
     // The following are debugging functions that compute reduced density matrices that parallel
     // the definition of the functions above.
-    np_matrix compute_a_1rdm_debug(np_vector C_left, np_vector C_right, bool alfa) const;
+    ndarray<double, 2> compute_a_1rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right, bool alfa) const;
 
-    np_matrix compute_aa_2rdm_debug(np_vector C_left, np_vector C_right, bool alfa) const;
-    np_tensor4 compute_ab_2rdm_debug(np_vector C_left, np_vector C_right) const;
+    ndarray<double, 2> compute_aa_2rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right, bool alfa) const;
+    ndarray<double, 4> compute_ab_2rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
 
-    np_matrix compute_aaa_3rdm_debug(np_vector C_left, np_vector C_right, bool alfa) const;
-    np_tensor4 compute_aab_3rdm_debug(np_vector C_left, np_vector C_right) const;
-    np_tensor4 compute_abb_3rdm_debug(np_vector C_left, np_vector C_right) const;
+    ndarray<double, 2> compute_aaa_3rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right, bool alfa) const;
+    ndarray<double, 4> compute_aab_3rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
+    ndarray<double, 4> compute_abb_3rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
 
-    np_matrix compute_aaaa_4rdm_debug(np_vector C_left, np_vector C_right, bool alfa) const;
-    np_tensor4 compute_aaab_4rdm_debug(np_vector C_left, np_vector C_right) const;
-    np_tensor4 compute_aabb_4rdm_debug(np_vector C_left, np_vector C_right) const;
-    np_tensor4 compute_abbb_4rdm_debug(np_vector C_left, np_vector C_right) const;
+    ndarray<double, 2> compute_aaaa_4rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right, bool alfa) const;
+    ndarray<double, 4> compute_aaab_4rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
+    ndarray<double, 4> compute_aabb_4rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
+    ndarray<double, 4> compute_abbb_4rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
 
-    np_matrix compute_sf_1rdm_debug(np_vector C_left, np_vector C_right) const;
-    np_tensor4 compute_sf_2rdm_debug(np_vector C_left, np_vector C_right) const;
-    np_tensor6 compute_sf_3rdm_debug(np_vector C_left, np_vector C_right) const;
+    ndarray<double, 2> compute_sf_1rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
+    ndarray<double, 4> compute_sf_2rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
+    ndarray<double, 6> compute_sf_3rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
 
-    np_tensor4 compute_sf_2cumulant_debug(np_vector C_left, np_vector C_right) const;
-    np_tensor6 compute_sf_3cumulant_debug(np_vector C_left, np_vector C_right) const;
+    ndarray<double, 4> compute_sf_2cumulant_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
+    ndarray<double, 6> compute_sf_3cumulant_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const;
 
   private:
     // == Class Private Variables ==
@@ -271,9 +271,9 @@ class CISigmaBuilder {
     /// @brief The scalar energy
     double E_;
     /// @brief One-electron integrals in the form of a matrix H[p][q] = <p|H|q> = h_pq
-    np_matrix H_;
+    ndarray<double, 2> H_;
     /// @brief Two-electron integrals in the form of a tensor V[p][q][r][s] = <pq|rs> = (pr|qs)
-    np_tensor4 V_;
+    ndarray<double, 4> V_;
     /// @brief Object for computing the energy and Slater determinants
     SlaterRules slater_rules_;
     /// @brief Memory size for temporary buffers in bytes (default 1 GB)

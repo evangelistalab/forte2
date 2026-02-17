@@ -47,8 +47,8 @@ double regularized_denominator(double x, double s) {
 /// @param eb The orbital energies corresponding to the fourth dimension of t2
 /// @param flow_param The flow parameter controlling the renormalization
 template <typename T>
-void compute_T2_block(nb::ndarray<nb::numpy, T, nb::ndim<4>>& t2, np_vector& ei, np_vector& ej,
-                      np_vector& ea, np_vector& eb, double flow_param) {
+void compute_T2_block(ndarray<T, 4>& t2, ndarray<double, 1>& ei, ndarray<double, 1>& ej,
+                      ndarray<double, 1>& ea, ndarray<double, 1>& eb, double flow_param) {
     auto t2_v = t2.view();
     auto ei_v = ei.view();
     auto ej_v = ej.view();
@@ -86,7 +86,7 @@ void compute_T2_block(nb::ndarray<nb::numpy, T, nb::ndim<4>>& t2, np_vector& ei,
 /// @param ea The orbital energies corresponding to the second dimension of t1
 /// @param flow_param The flow parameter controlling the renormalization
 template <typename T>
-void compute_T1_block(nb::ndarray<nb::numpy, T, nb::ndim<2>>& t1, np_vector& ei, np_vector& ea,
+void compute_T1_block(ndarray<T, 2>& t1, ndarray<double, 1>& ei, ndarray<double, 1>& ea,
                       double flow_param) {
     auto t1_v = t1.view();
     auto ei_v = ei.view();
@@ -117,8 +117,8 @@ void compute_T1_block(nb::ndarray<nb::numpy, T, nb::ndim<2>>& t1, np_vector& ei,
 /// @param eb The orbital energies corresponding to the fourth dimension of v
 /// @param flow_param The flow parameter controlling the renormalization
 template <typename T>
-void renormalize_V_block(nb::ndarray<nb::numpy, T, nb::ndim<4>>& v, np_vector& ei, np_vector& ej,
-                         np_vector& ea, np_vector& eb, double flow_param) {
+void renormalize_V_block(ndarray<T, 4>& v, ndarray<double, 1>& ei, ndarray<double, 1>& ej,
+                         ndarray<double, 1>& ea, ndarray<double, 1>& eb, double flow_param) {
     auto v_v = v.view();
     auto ei_v = ei.view();
     auto ej_v = ej.view();
@@ -160,8 +160,8 @@ void renormalize_V_block(nb::ndarray<nb::numpy, T, nb::ndim<4>>& v, np_vector& e
 /// @param es The orbital energies corresponding to the third dimension of v
 /// @param flow_param The flow parameter controlling the renormalization
 template <typename T>
-void renormalize_3index(nb::ndarray<nb::numpy, T, nb::ndim<3>>& v, double& ep, np_vector& eq,
-                        np_vector& er, np_vector& es, double flow_param) {
+void renormalize_3index(ndarray<T, 3>& v, double& ep, ndarray<double, 1>& eq,
+                        ndarray<double, 1>& er, ndarray<double, 1>& es, double flow_param) {
     auto v_v = v.view();
     auto eq_v = eq.view();
     auto er_v = er.view();

@@ -10,15 +10,15 @@ FockBuilder::FockBuilder(const Basis& basis, const Basis& auxiliary_basis)
     integrals_ = coulomb_4c(basis_, basis_, basis_, basis_);
 }
 
-std::pair<std::vector<np_matrix>, std::vector<np_matrix>>
-FockBuilder::build(std::vector<np_matrix>& density_matrices) {
+std::pair<std::vector<ndarray<double, 2>>, std::vector<ndarray<double, 2>>>
+FockBuilder::build(std::vector<ndarray<double, 2>>& density_matrices) {
     // Get the number of basis functions in each basis
     const std::size_t nb = basis_.size();
     const std::size_t nd = density_matrices.size();
 
     // Allocate the J and K matrices
-    std::vector<np_matrix> J(nd);
-    std::vector<np_matrix> K(nd);
+    std::vector<ndarray<double, 2>> J(nd);
+    std::vector<ndarray<double, 2>> K(nd);
     for (std::size_t k = 0; k < density_matrices.size(); ++k) {
         J[k] = make_ndarray<nb::numpy, double, 2>({nb, nb});
         K[k] = make_ndarray<nb::numpy, double, 2>({nb, nb});
@@ -29,9 +29,9 @@ FockBuilder::build(std::vector<np_matrix>& density_matrices) {
     return {J, K};
 }
 
-void FockBuilder::naive_fock_build(const std::vector<np_matrix>& density_matrices,
-                                   const np_tensor4& integrals, std::vector<np_matrix>& J,
-                                   std::vector<np_matrix>& K) {
+void FockBuilder::naive_fock_build(const std::vector<ndarray<double, 2>>& density_matrices,
+                                   const ndarray<double, 4>& integrals, std::vector<ndarray<double, 2>>& J,
+                                   std::vector<ndarray<double, 2>>& K) {
     const std::size_t nd = density_matrices.size();
 
     // Compute the J and K matrices
@@ -56,9 +56,9 @@ void FockBuilder::naive_fock_build(const std::vector<np_matrix>& density_matrice
     }
 }
 
-void FockBuilder::opt_fock_build(const std::vector<np_matrix>& density_matrices,
-                                 const np_tensor4& integrals, std::vector<np_matrix>& J,
-                                 std::vector<np_matrix>& K) {
+void FockBuilder::opt_fock_build(const std::vector<ndarray<double, 2>>& density_matrices,
+                                 const ndarray<double, 4>& integrals, std::vector<ndarray<double, 2>>& J,
+                                 std::vector<ndarray<double, 2>>& K) {
     const std::size_t nd = density_matrices.size();
 
     // Compute the J and K matrices

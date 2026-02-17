@@ -8,7 +8,7 @@
 
 namespace forte2 {
 
-np_matrix CISigmaBuilder::compute_sss_3rdm(np_vector C_left, np_vector C_right, Spin spin) const {
+ndarray<double, 2> CISigmaBuilder::compute_sss_3rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right, Spin spin) const {
     local_timer timer;
 
     const auto na = lists_.na();
@@ -88,15 +88,15 @@ np_matrix CISigmaBuilder::compute_sss_3rdm(np_vector C_left, np_vector C_right, 
     return rdm;
 }
 
-np_matrix CISigmaBuilder::compute_aaa_3rdm(np_vector C_left, np_vector C_right) const {
+ndarray<double, 2> CISigmaBuilder::compute_aaa_3rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     return compute_sss_3rdm(C_left, C_right, Spin::Alpha);
 }
 
-np_matrix CISigmaBuilder::compute_bbb_3rdm(np_vector C_left, np_vector C_right) const {
+ndarray<double, 2> CISigmaBuilder::compute_bbb_3rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     return compute_sss_3rdm(C_left, C_right, Spin::Beta);
 }
 
-np_tensor4 CISigmaBuilder::compute_aab_3rdm(np_vector C_left, np_vector C_right) const {
+ndarray<double, 4> CISigmaBuilder::compute_aab_3rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     local_timer timer;
     const auto na = lists_.na();
     const auto nb = lists_.nb();
@@ -185,7 +185,7 @@ np_tensor4 CISigmaBuilder::compute_aab_3rdm(np_vector C_left, np_vector C_right)
     return rdm;
 }
 
-np_tensor4 CISigmaBuilder::compute_abb_3rdm(np_vector C_left, np_vector C_right) const {
+ndarray<double, 4> CISigmaBuilder::compute_abb_3rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     local_timer timer;
     const auto na = lists_.na();
     const auto nb = lists_.nb();
@@ -274,7 +274,7 @@ np_tensor4 CISigmaBuilder::compute_abb_3rdm(np_vector C_left, np_vector C_right)
     return rdm;
 }
 
-np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) const {
+ndarray<double, 6> CISigmaBuilder::compute_sf_3rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     auto norb = lists_.norb();
     auto rdm_sf = make_zeros<nb::numpy, double, 6>({norb, norb, norb, norb, norb, norb});
 
@@ -429,7 +429,7 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) 
     return rdm_sf;
 }
 
-np_tensor6 CISigmaBuilder::compute_sf_3cumulant(np_vector C_left, np_vector C_right) const {
+ndarray<double, 6> CISigmaBuilder::compute_sf_3cumulant(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     // Compute the spin-free 1-RDM
     auto sf_1rdm = compute_sf_1rdm(C_left, C_right);
     // Compute the spin-free 2-RDM

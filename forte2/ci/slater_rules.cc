@@ -2,8 +2,8 @@
 
 namespace forte2 {
 
-SlaterRules::SlaterRules(int norb, double scalar_energy, np_matrix one_electron_integrals,
-                         np_tensor4 two_electron_integrals)
+SlaterRules::SlaterRules(int norb, double scalar_energy, ndarray<double, 2> one_electron_integrals,
+                         ndarray<double, 4> two_electron_integrals)
     : norb_(norb), scalar_energy_(scalar_energy), one_electron_integrals_(one_electron_integrals),
       two_electron_integrals_(two_electron_integrals) {}
 
@@ -218,8 +218,8 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
 }
 
 RelSlaterRules::RelSlaterRules(int nspinor, double scalar_energy,
-                               np_matrix_complex one_electron_integrals,
-                               np_tensor4_complex two_electron_integrals)
+                               ndarray<std::complex<double>, 2> one_electron_integrals,
+                               ndarray<std::complex<double>, 4> two_electron_integrals)
     : nspinor_(nspinor), scalar_energy_(scalar_energy),
       one_electron_integrals_(one_electron_integrals),
       two_electron_integrals_(two_electron_integrals) {}

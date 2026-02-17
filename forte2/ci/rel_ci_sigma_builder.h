@@ -18,7 +18,7 @@ namespace forte2 {
 class RelCISigmaBuilder {
   public:
     // == Class Constructor ==
-    RelCISigmaBuilder(const CIStrings& lists, double E, np_matrix_complex& H, np_tensor4_complex& V,
+    RelCISigmaBuilder(const CIStrings& lists, double E, ndarray<std::complex<double>, 2>& H, ndarray<std::complex<double>, 4>& V,
                       int log_level = 3, bool use_asym_ints = false);
 
     // == Class Public Functions ==
@@ -37,7 +37,7 @@ class RelCISigmaBuilder {
     std::string get_algorithm() const;
 
     /// @brief Set the one and two-electron integrals for the Hamiltonian
-    void set_Hamiltonian(double E, np_matrix_complex H, np_tensor4_complex V, bool use_asym_ints = false);
+    void set_Hamiltonian(double E, ndarray<std::complex<double>, 2> H, ndarray<std::complex<double>, 4> V, bool use_asym_ints = false);
 
     /// @brief Set the logging level for the class
     void set_log_level(int level) { log_level_ = level; }
@@ -48,7 +48,7 @@ class RelCISigmaBuilder {
     /// @param spin_adapt_full_preconditioner If true, use the exact diagonal elements,
     ///        otherwise use approximate diagonal elements.
     /// @return The diagonal elements of the Hamiltonian matrix
-    np_vector_complex form_Hdiag(const std::vector<Determinant>& dets) const;
+    ndarray<std::complex<double>, 1> form_Hdiag(const std::vector<Determinant>& dets) const;
 
     /// @brief Compute the Hamiltonian matrix element between two determinants
     /// @param dets The list of determinants
@@ -61,7 +61,7 @@ class RelCISigmaBuilder {
     /// @brief Apply the Hamiltonian to the wave function
     /// @param basis The basis vector
     /// @param sigma The resulting sigma vector |sigma> = H |basis>
-    void Hamiltonian(np_vector_complex basis, np_vector_complex sigma) const;
+    void Hamiltonian(ndarray<std::complex<double>, 1> basis, ndarray<std::complex<double>, 1> sigma) const;
 
     /// @brief Compute the spin-dependent one-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -70,7 +70,7 @@ class RelCISigmaBuilder {
     /// @return The one-electron reduced density matrix stored as
     ///        gamma(spin)[p][q] = <L| a^+_p a_q |R> with p,q orbitals of spin alpha/beta
     /// @note If the number of orbitals is 0, a matrix of shape (0, 0) is returned
-    np_matrix_complex compute_1rdm(np_vector_complex C_left, np_vector_complex C_right) const;
+    ndarray<std::complex<double>, 2> compute_1rdm(ndarray<std::complex<double>, 1> C_left, ndarray<std::complex<double>, 1> C_right) const;
 
     /// @brief Compute the same-spin two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -79,7 +79,7 @@ class RelCISigmaBuilder {
     /// @return The two-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(sigma)[p>q][r>s] = <L| a^+_p a^+_q a_s a_r |R>
     ///        with p > q, and r > s orbitals of spin sigma
-    np_tensor4_complex compute_2rdm(np_vector_complex C_left, np_vector_complex C_right) const;
+    ndarray<std::complex<double>, 4> compute_2rdm(ndarray<std::complex<double>, 1> C_left, ndarray<std::complex<double>, 1> C_right) const;
 
     /// @brief Compute the cumulant of the spin-free two-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -87,7 +87,7 @@ class RelCISigmaBuilder {
     /// @return The cumulant of the two-electron spin-free reduced density matrix stored as a tensor
     ///        lambda[p][q][r][s] = gamma[p][q][r][s] - gamma[p][r] * gamma[q][s] +
     ///                              0.5 * gamma[p][s] * gamma[q][r]
-    np_tensor4_complex compute_2cumulant(np_vector_complex C_left, np_vector_complex C_right) const;
+    ndarray<std::complex<double>, 4> compute_2cumulant(ndarray<std::complex<double>, 1> C_left, ndarray<std::complex<double>, 1> C_right) const;
 
     /// @brief Compute the three-electron same-spin reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -96,7 +96,7 @@ class RelCISigmaBuilder {
     /// @return The three-electron same-spin reduced density matrix stored as a matrix
     ///        gamma(sigma)[p>q>r][s>t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
     ///        with p > q > r, and s > t > u orbitals of spin sigma
-    np_tensor6_complex compute_3rdm(np_vector_complex C_left, np_vector_complex C_right) const;
+    ndarray<std::complex<double>, 6> compute_3rdm(ndarray<std::complex<double>, 1> C_left, ndarray<std::complex<double>, 1> C_right) const;
 
     /// @brief Compute the cumulant of the spin-free three-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -104,13 +104,13 @@ class RelCISigmaBuilder {
     /// @return The cumulant of the three-electron spin-free reduced density matrix stored as a
     /// tensor
     ///        lambda[p][q][r][s][t][u] = gamma[p][q][r][s][t][u] + ...
-    np_tensor6_complex compute_3cumulant(np_vector_complex C_left, np_vector_complex C_right) const;
+    ndarray<std::complex<double>, 6> compute_3cumulant(ndarray<std::complex<double>, 1> C_left, ndarray<std::complex<double>, 1> C_right) const;
 
-    np_matrix_complex compute_1rdm_debug(np_vector_complex C_left, np_vector_complex C_right) const;
-    np_tensor4_complex compute_2rdm_debug(np_vector_complex C_left,
-                                          np_vector_complex C_right) const;
-    np_tensor6_complex compute_3rdm_debug(np_vector_complex C_left,
-                                          np_vector_complex C_right) const;
+    ndarray<std::complex<double>, 2> compute_1rdm_debug(ndarray<std::complex<double>, 1> C_left, ndarray<std::complex<double>, 1> C_right) const;
+    ndarray<std::complex<double>, 4> compute_2rdm_debug(ndarray<std::complex<double>, 1> C_left,
+                                          ndarray<std::complex<double>, 1> C_right) const;
+    ndarray<std::complex<double>, 6> compute_3rdm_debug(ndarray<std::complex<double>, 1> C_left,
+                                          ndarray<std::complex<double>, 1> C_right) const;
 
   private:
     // == Class Private Variables ==
@@ -122,9 +122,9 @@ class RelCISigmaBuilder {
     /// @brief The scalar energy
     double E_;
     /// @brief One-electron integrals in the form of a matrix H[p][q] = <p|H|q> = h_pq
-    np_matrix_complex H_;
+    ndarray<std::complex<double>, 2> H_;
     /// @brief Two-electron integrals in the form of a tensor V[p][q][r][s] = <pq|rs> = (pr|qs)
-    np_tensor4_complex V_;
+    ndarray<std::complex<double>, 4> V_;
     /// @brief Whether to use antisymmetrized integrals for the Hamiltonian construction
     bool use_asym_ints_ = false;
     /// @brief Object for computing the energy and Slater determinants

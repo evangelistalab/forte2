@@ -50,7 +50,7 @@ void export_ci_strings_api(nb::module_& m) {
 
 void export_ci_sigma_builder_api(nb::module_& m) {
     nb::class_<CISigmaBuilder>(m, "CISigmaBuilder")
-        .def(nb::init<const CIStrings&, double, np_matrix&, np_tensor4&, int>(), "lists"_a, "E"_a,
+        .def(nb::init<const CIStrings&, double, ndarray<double, 2>&, ndarray<double, 4>&, int>(), "lists"_a, "E"_a,
              "H"_a, "V"_a, "log_level"_a = 3,
              "Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals")
         .def("set_algorithm", &CISigmaBuilder::set_algorithm, "algorithm"_a,
@@ -157,7 +157,7 @@ void export_ci_spin_adapter_api(nb::module_& m) {
 
 void export_rel_ci_sigma_builder_api(nb::module_& m) {
     nb::class_<RelCISigmaBuilder>(m, "RelCISigmaBuilder")
-        .def(nb::init<const CIStrings&, double, np_matrix_complex&, np_tensor4_complex&, int,
+        .def(nb::init<const CIStrings&, double, ndarray<std::complex<double>, 2>&, ndarray<std::complex<double>, 4>&, int,
                       bool>(),
              "lists"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3, "use_asym_ints"_a = false,
              "Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals")

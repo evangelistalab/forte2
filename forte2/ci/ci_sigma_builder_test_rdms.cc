@@ -9,7 +9,7 @@
 
 namespace forte2 {
 
-SparseState get_sparse_state(np_vector c, const CIStrings& lists) {
+SparseState get_sparse_state(ndarray<double, 1> c, const CIStrings& lists) {
     auto c_span = vector::as_span<double>(c);
     SparseState state;
     auto dets = lists.make_determinants();
@@ -19,7 +19,7 @@ SparseState get_sparse_state(np_vector c, const CIStrings& lists) {
     return state;
 }
 
-np_matrix CISigmaBuilder::compute_a_1rdm_debug(np_vector C_left, np_vector C_right,
+ndarray<double, 2> CISigmaBuilder::compute_a_1rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right,
                                                bool alfa) const {
     const size_t norb = lists_.norb();
     auto g1_ref = make_zeros<nb::numpy, double, 2>({norb, norb});
@@ -54,7 +54,7 @@ np_matrix CISigmaBuilder::compute_a_1rdm_debug(np_vector C_left, np_vector C_rig
     return g1_ref;
 }
 
-np_matrix CISigmaBuilder::compute_aa_2rdm_debug(np_vector C_left, np_vector C_right,
+ndarray<double, 2> CISigmaBuilder::compute_aa_2rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right,
                                                 bool alfa) const {
     const size_t norb = lists_.norb();
     const size_t npairs = (norb * (norb - 1)) / 2;
@@ -98,7 +98,7 @@ np_matrix CISigmaBuilder::compute_aa_2rdm_debug(np_vector C_left, np_vector C_ri
     return g2_ref;
 }
 
-np_tensor4 CISigmaBuilder::compute_ab_2rdm_debug(np_vector C_left, np_vector C_right) const {
+ndarray<double, 4> CISigmaBuilder::compute_ab_2rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     const size_t norb = lists_.norb();
     auto g2_ref = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
 
@@ -133,7 +133,7 @@ np_tensor4 CISigmaBuilder::compute_ab_2rdm_debug(np_vector C_left, np_vector C_r
     return g2_ref;
 }
 
-np_matrix CISigmaBuilder::compute_aaa_3rdm_debug(np_vector C_left, np_vector C_right,
+ndarray<double, 2> CISigmaBuilder::compute_aaa_3rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right,
                                                  bool alfa) const {
     const size_t norb = lists_.norb();
     const size_t ntriplets = (norb * (norb - 1) * (norb - 2)) / 6;
@@ -185,7 +185,7 @@ np_matrix CISigmaBuilder::compute_aaa_3rdm_debug(np_vector C_left, np_vector C_r
     return g3_ref;
 }
 
-np_tensor4 CISigmaBuilder::compute_aab_3rdm_debug(np_vector C_left, np_vector C_right) const {
+ndarray<double, 4> CISigmaBuilder::compute_aab_3rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     const size_t norb = lists_.norb();
     // the number of orbital pairs i > j of the same spin
     const size_t npair = (norb * (norb - 1)) / 2;
@@ -229,7 +229,7 @@ np_tensor4 CISigmaBuilder::compute_aab_3rdm_debug(np_vector C_left, np_vector C_
     return g3_ref;
 }
 
-np_tensor4 CISigmaBuilder::compute_abb_3rdm_debug(np_vector C_left, np_vector C_right) const {
+ndarray<double, 4> CISigmaBuilder::compute_abb_3rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     const size_t norb = lists_.norb();
     // the number of orbital pairs i > j of the same spin
     const size_t npair = (norb * (norb - 1)) / 2;
@@ -273,7 +273,7 @@ np_tensor4 CISigmaBuilder::compute_abb_3rdm_debug(np_vector C_left, np_vector C_
     return g3_ref;
 }
 
-np_matrix CISigmaBuilder::compute_aaaa_4rdm_debug(np_vector C_left, np_vector C_right,
+ndarray<double, 2> CISigmaBuilder::compute_aaaa_4rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right,
                                                   bool alfa) const {
     const size_t norb = lists_.norb();
     const size_t quadruplets = (norb * (norb - 1) * (norb - 2) * (norb - 3)) / 24;
@@ -333,7 +333,7 @@ np_matrix CISigmaBuilder::compute_aaaa_4rdm_debug(np_vector C_left, np_vector C_
     return g4_ref;
 }
 
-np_tensor4 CISigmaBuilder::compute_aaab_4rdm_debug(np_vector C_left, np_vector C_right) const {
+ndarray<double, 4> CISigmaBuilder::compute_aaab_4rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     const size_t norb = lists_.norb();
     const size_t ntriplets = (norb * (norb - 1) * (norb - 2)) / 6;
 
@@ -382,7 +382,7 @@ np_tensor4 CISigmaBuilder::compute_aaab_4rdm_debug(np_vector C_left, np_vector C
     return g4_ref;
 }
 
-np_tensor4 CISigmaBuilder::compute_aabb_4rdm_debug(np_vector C_left, np_vector C_right) const {
+ndarray<double, 4> CISigmaBuilder::compute_aabb_4rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     const size_t norb = lists_.norb();
     const size_t npair = (norb * (norb - 1)) / 2;
 
@@ -431,7 +431,7 @@ np_tensor4 CISigmaBuilder::compute_aabb_4rdm_debug(np_vector C_left, np_vector C
     return g4_ref;
 }
 
-np_tensor4 CISigmaBuilder::compute_abbb_4rdm_debug(np_vector C_left, np_vector C_right) const {
+ndarray<double, 4> CISigmaBuilder::compute_abbb_4rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     const size_t norb = lists_.norb();
     const size_t ntriplet = (norb * (norb - 1) * (norb - 2)) / 6;
 
@@ -480,7 +480,7 @@ np_tensor4 CISigmaBuilder::compute_abbb_4rdm_debug(np_vector C_left, np_vector C
     return g4_ref;
 }
 
-np_matrix CISigmaBuilder::compute_sf_1rdm_debug(np_vector C_left, np_vector C_right) const {
+ndarray<double, 2> CISigmaBuilder::compute_sf_1rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     auto rdm_sf = compute_a_1rdm_debug(C_left, C_right, true);
     auto rdm_b = compute_a_1rdm_debug(C_left, C_right, false);
 
@@ -496,7 +496,7 @@ np_matrix CISigmaBuilder::compute_sf_1rdm_debug(np_vector C_left, np_vector C_ri
     return rdm_sf;
 }
 
-np_tensor4 CISigmaBuilder::compute_sf_2rdm_debug(np_vector C_left, np_vector C_right) const {
+ndarray<double, 4> CISigmaBuilder::compute_sf_2rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     auto norb = lists_.norb();
     auto rdm_sf = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
 
@@ -535,7 +535,7 @@ np_tensor4 CISigmaBuilder::compute_sf_2rdm_debug(np_vector C_left, np_vector C_r
     return rdm_sf;
 }
 
-np_tensor6 CISigmaBuilder::compute_sf_3rdm_debug(np_vector C_left, np_vector C_right) const {
+ndarray<double, 6> CISigmaBuilder::compute_sf_3rdm_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     auto norb = lists_.norb();
     auto rdm_sf = make_zeros<nb::numpy, double, 6>({norb, norb, norb, norb, norb, norb});
 
@@ -675,7 +675,7 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm_debug(np_vector C_left, np_vector C_r
     return rdm_sf;
 }
 
-np_tensor4 CISigmaBuilder::compute_sf_2cumulant_debug(np_vector C_left, np_vector C_right) const {
+ndarray<double, 4> CISigmaBuilder::compute_sf_2cumulant_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     auto norb = lists_.norb();
     auto cdm2_sf = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
 
@@ -702,7 +702,7 @@ np_tensor4 CISigmaBuilder::compute_sf_2cumulant_debug(np_vector C_left, np_vecto
     return cdm2_sf;
 }
 
-np_tensor6 CISigmaBuilder::compute_sf_3cumulant_debug(np_vector C_left, np_vector C_right) const {
+ndarray<double, 6> CISigmaBuilder::compute_sf_3cumulant_debug(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     auto norb = lists_.norb();
     auto cdm3_sf = make_zeros<nb::numpy, double, 6>({norb, norb, norb, norb, norb, norb});
 

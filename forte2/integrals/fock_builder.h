@@ -18,27 +18,27 @@ class FockBuilder {
     FockBuilder(const Basis& basis, const Basis& auxiliary_basis = Basis());
 
     /// @brief Build the Coulomb and Exchange matrices.
-    std::pair<std::vector<np_matrix>, std::vector<np_matrix>>
-    build(std::vector<np_matrix>& density_matrices);
+    std::pair<std::vector<ndarray<double, 2>>, std::vector<ndarray<double, 2>>>
+    build(std::vector<ndarray<double, 2>>& density_matrices);
 
   private:
     Basis basis_;
     Basis auxiliary_basis_;
-    np_tensor4 integrals_;
-    np_matrix PQ;
-    np_tensor3 mnP;
+    ndarray<double, 4> integrals_;
+    ndarray<double, 2> PQ;
+    ndarray<double, 3> mnP;
 
-    void naive_fock_build(const std::vector<np_matrix>& density_matrices,
-                          const np_tensor4& integrals, std::vector<np_matrix>& J,
-                          std::vector<np_matrix>& K);
+    void naive_fock_build(const std::vector<ndarray<double, 2>>& density_matrices,
+                          const ndarray<double, 4>& integrals, std::vector<ndarray<double, 2>>& J,
+                          std::vector<ndarray<double, 2>>& K);
 
-    void opt_fock_build(const std::vector<np_matrix>& density_matrices, const np_tensor4& integrals,
-                        std::vector<np_matrix>& J, std::vector<np_matrix>& K);
+    void opt_fock_build(const std::vector<ndarray<double, 2>>& density_matrices, const ndarray<double, 4>& integrals,
+                        std::vector<ndarray<double, 2>>& J, std::vector<ndarray<double, 2>>& K);
 
-    // void df_fock_build(const std::vector<np_matrix>& density_matrices,
-    //                    np_matrix& PQ,
-    //                    np_tensor3& mnP, std::vector<np_matrix>&
-    //                    J, std::vector<np_matrix>& K);
+    // void df_fock_build(const std::vector<ndarray<double, 2>>& density_matrices,
+    //                    ndarray<double, 2>& PQ,
+    //                    ndarray<double, 3>& mnP, std::vector<ndarray<double, 2>>&
+    //                    J, std::vector<ndarray<double, 2>>& K);
 };
 
 } // namespace forte2

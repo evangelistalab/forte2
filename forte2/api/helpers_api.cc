@@ -21,11 +21,11 @@ void export_helpers_api(nb::module_& m) {
     sub_m.def("triplet_index_abb", &triplet_index_abb<size_t>);
     sub_m.def(
         "packed_tensor4_to_tensor4",
-        [](np_matrix m) { return matrix::packed_tensor4_to_tensor4<double>(m); }, "m"_a,
+        [](ndarray<double, 2> m) { return matrix::packed_tensor4_to_tensor4<double>(m); }, "m"_a,
         "Expand a packed 4D tensor stored as a 2D matrix into a full 4D tensor");
     sub_m.def(
         "packed_tensor4_to_tensor4",
-        [](np_matrix_complex m) {
+        [](ndarray<std::complex<double>, 2> m) {
             return matrix::packed_tensor4_to_tensor4<std::complex<double>>(m);
         },
         "m"_a, "Expand a packed 4D tensor stored as a 2D matrix into a full 4D tensor");

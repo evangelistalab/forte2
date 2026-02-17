@@ -11,8 +11,8 @@
 
 namespace forte2 {
 
-np_matrix_complex RelCISigmaBuilder::compute_1rdm(np_vector_complex C_left,
-                                                  np_vector_complex C_right) const {
+ndarray<std::complex<double>, 2> RelCISigmaBuilder::compute_1rdm(ndarray<std::complex<double>, 1> C_left,
+                                                  ndarray<std::complex<double>, 1> C_right) const {
     const auto na = lists_.na();
     const auto norb = lists_.norb();
     auto rdm = make_zeros<nb::numpy, std::complex<double>, 2>({norb, norb});
@@ -70,8 +70,8 @@ np_matrix_complex RelCISigmaBuilder::compute_1rdm(np_vector_complex C_left,
     return rdm;
 }
 
-np_tensor4_complex RelCISigmaBuilder::compute_2rdm(np_vector_complex C_left,
-                                                   np_vector_complex C_right) const {
+ndarray<std::complex<double>, 4> RelCISigmaBuilder::compute_2rdm(ndarray<std::complex<double>, 1> C_left,
+                                                   ndarray<std::complex<double>, 1> C_right) const {
     Spin spin = Spin::Alpha; // placeholder spin
 
     const auto na = lists_.na();
@@ -149,8 +149,8 @@ np_tensor4_complex RelCISigmaBuilder::compute_2rdm(np_vector_complex C_left,
     return matrix::packed_tensor4_to_tensor4<std::complex<double>>(rdm);
 }
 
-np_tensor4_complex RelCISigmaBuilder::compute_2cumulant(np_vector_complex C_left,
-                                                        np_vector_complex C_right) const {
+ndarray<std::complex<double>, 4> RelCISigmaBuilder::compute_2cumulant(ndarray<std::complex<double>, 1> C_left,
+                                                        ndarray<std::complex<double>, 1> C_right) const {
     // Compute the 1-RDM
     auto G1 = compute_1rdm(C_left, C_right);
     // Compute the 2-RDM (this will hold the cumulant)
@@ -173,8 +173,8 @@ np_tensor4_complex RelCISigmaBuilder::compute_2cumulant(np_vector_complex C_left
     return L2;
 }
 
-np_tensor6_complex RelCISigmaBuilder::compute_3rdm(np_vector_complex C_left,
-                                                   np_vector_complex C_right) const {
+ndarray<std::complex<double>, 6> RelCISigmaBuilder::compute_3rdm(ndarray<std::complex<double>, 1> C_left,
+                                                   ndarray<std::complex<double>, 1> C_right) const {
     Spin spin = Spin::Alpha; // placeholder spin
     const auto na = lists_.na();
     const auto nb = lists_.nb();
@@ -314,8 +314,8 @@ np_tensor6_complex RelCISigmaBuilder::compute_3rdm(np_vector_complex C_left,
     return rdm_full;
 }
 
-np_tensor6_complex RelCISigmaBuilder::compute_3cumulant(np_vector_complex C_left,
-                                                        np_vector_complex C_right) const {
+ndarray<std::complex<double>, 6> RelCISigmaBuilder::compute_3cumulant(ndarray<std::complex<double>, 1> C_left,
+                                                        ndarray<std::complex<double>, 1> C_right) const {
     // Compute the 1-RDM
     auto G1 = compute_1rdm(C_left, C_right);
     // Compute the 2-RDM

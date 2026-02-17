@@ -62,12 +62,12 @@ class CISpinAdapter {
     /// @brief Convert a coefficient vector from the CSF basis to the determinant basis
     /// @param csf_C csf coefficients
     /// @param det_C determinant coefficients
-    void csf_C_to_det_C(np_vector csf_C, np_vector det_C);
+    void csf_C_to_det_C(ndarray<double, 1> csf_C, ndarray<double, 1> det_C);
 
     /// @brief Convert a coefficient vector from the determinant basis to the CSF basis
     /// @param det_C determinant coefficients
     /// @param csf_C csf coefficients
-    void det_C_to_csf_C(np_vector det_C, np_vector csf_C);
+    void det_C_to_csf_C(ndarray<double, 1> det_C, ndarray<double, 1> csf_C);
 
     /// @brief Return the range of CSFs corresponding to a given configuration
     /// @param conf_idx the index of the configuration

@@ -2,8 +2,8 @@
 
 namespace forte2 {
 
-SparseOperator sparse_operator_hamiltonian(double scalar_energy, np_matrix one_electron_integrals,
-                                           np_tensor4 two_electron_integrals,
+SparseOperator sparse_operator_hamiltonian(double scalar_energy, ndarray<double, 2> one_electron_integrals,
+                                           ndarray<double, 4> two_electron_integrals,
                                            double screen_thresh) {
     size_t nmo = one_electron_integrals.shape(0);
     if (one_electron_integrals.shape(1) != nmo || two_electron_integrals.shape(0) != nmo ||
@@ -53,8 +53,8 @@ SparseOperator sparse_operator_hamiltonian(double scalar_energy, np_matrix one_e
 }
 
 SparseOperator sparse_operator_hamiltonian(double scalar_energy,
-                                           np_matrix_complex one_electron_integrals,
-                                           np_tensor4_complex two_electron_integrals,
+                                           ndarray<std::complex<double>, 2> one_electron_integrals,
+                                           ndarray<std::complex<double>, 4> two_electron_integrals,
                                            double screen_thresh) {
     size_t nspinor = one_electron_integrals.shape(0);
     if (one_electron_integrals.shape(1) != nspinor || two_electron_integrals.shape(0) != nspinor ||

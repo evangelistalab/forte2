@@ -13,74 +13,11 @@ namespace nb = nanobind;
 
 // Aliases for ndarray types used in forte2
 // No contiguity requirement
-using np_vector_int = nb::ndarray<nb::numpy, int, nb::ndim<1>>;
-using np_matrix_int = nb::ndarray<nb::numpy, int, nb::ndim<2>>;
-using np_vector = nb::ndarray<nb::numpy, double, nb::ndim<1>>;
-using np_matrix = nb::ndarray<nb::numpy, double, nb::ndim<2>>;
-using np_tensor3 = nb::ndarray<nb::numpy, double, nb::ndim<3>>;
-using np_tensor4 = nb::ndarray<nb::numpy, double, nb::ndim<4>>;
-using np_tensor5 = nb::ndarray<nb::numpy, double, nb::ndim<5>>;
-using np_tensor6 = nb::ndarray<nb::numpy, double, nb::ndim<6>>;
-using np_tensor7 = nb::ndarray<nb::numpy, double, nb::ndim<7>>;
-using np_tensor8 = nb::ndarray<nb::numpy, double, nb::ndim<8>>;
-using np_vector_complex = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<1>>;
-using np_matrix_complex = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<2>>;
-using np_tensor3_complex = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<3>>;
-using np_tensor4_complex = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<4>>;
-using np_tensor5_complex = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<5>>;
-using np_tensor6_complex = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<6>>;
-using np_tensor7_complex = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<7>>;
-using np_tensor8_complex = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<8>>;
-// C-contiguous versions
-using np_vector_c_int = nb::ndarray<nb::numpy, int, nb::ndim<1>, nb::c_contig>;
-using np_matrix_c_int = nb::ndarray<nb::numpy, int, nb::ndim<2>, nb::c_contig>;
-using np_vector_c = nb::ndarray<nb::numpy, double, nb::ndim<1>, nb::c_contig>;
-using np_matrix_c = nb::ndarray<nb::numpy, double, nb::ndim<2>, nb::c_contig>;
-using np_tensor3_c = nb::ndarray<nb::numpy, double, nb::ndim<3>, nb::c_contig>;
-using np_tensor4_c = nb::ndarray<nb::numpy, double, nb::ndim<4>, nb::c_contig>;
-using np_tensor5_c = nb::ndarray<nb::numpy, double, nb::ndim<5>, nb::c_contig>;
-using np_tensor6_c = nb::ndarray<nb::numpy, double, nb::ndim<6>, nb::c_contig>;
-using np_tensor7_c = nb::ndarray<nb::numpy, double, nb::ndim<7>, nb::c_contig>;
-using np_tensor8_c = nb::ndarray<nb::numpy, double, nb::ndim<8>, nb::c_contig>;
-using np_vector_complex_c = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<1>, nb::c_contig>;
-using np_matrix_complex_c = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<2>, nb::c_contig>;
-using np_tensor3_complex_c =
-    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<3>, nb::c_contig>;
-using np_tensor4_complex_c =
-    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<4>, nb::c_contig>;
-using np_tensor5_complex_c =
-    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<5>, nb::c_contig>;
-using np_tensor6_complex_c =
-    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<6>, nb::c_contig>;
-using np_tensor7_complex_c =
-    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<7>, nb::c_contig>;
-using np_tensor8_complex_c =
-    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<8>, nb::c_contig>;
-// Fortran-contiguous versions
-using np_vector_f_int = nb::ndarray<nb::numpy, int, nb::ndim<1>, nb::f_contig>;
-using np_matrix_f_int = nb::ndarray<nb::numpy, int, nb::ndim<2>, nb::f_contig>;
-using np_vector_f = nb::ndarray<nb::numpy, double, nb::ndim<1>, nb::f_contig>;
-using np_matrix_f = nb::ndarray<nb::numpy, double, nb::ndim<2>, nb::f_contig>;
-using np_tensor3_f = nb::ndarray<nb::numpy, double, nb::ndim<3>, nb::f_contig>;
-using np_tensor4_f = nb::ndarray<nb::numpy, double, nb::ndim<4>, nb::f_contig>;
-using np_tensor5_f = nb::ndarray<nb::numpy, double, nb::ndim<5>, nb::f_contig>;
-using np_tensor6_f = nb::ndarray<nb::numpy, double, nb::ndim<6>, nb::f_contig>;
-using np_tensor7_f = nb::ndarray<nb::numpy, double, nb::ndim<7>, nb::f_contig>;
-using np_tensor8_f = nb::ndarray<nb::numpy, double, nb::ndim<8>, nb::f_contig>;
-using np_vector_complex_f = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<1>, nb::f_contig>;
-using np_matrix_complex_f = nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<2>, nb::f_contig>;
-using np_tensor3_complex_f =
-    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<3>, nb::f_contig>;
-using np_tensor4_complex_f =
-    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<4>, nb::f_contig>;
-using np_tensor5_complex_f =
-    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<5>, nb::f_contig>;
-using np_tensor6_complex_f =
-    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<6>, nb::f_contig>;
-using np_tensor7_complex_f =
-    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<7>, nb::f_contig>;
-using np_tensor8_complex_f =
-    nb::ndarray<nb::numpy, std::complex<double>, nb::ndim<8>, nb::f_contig>;
+template <typename T, int N> using ndarray = nb::ndarray<nb::numpy, T, nb::ndim<N>>;
+// C-contiguous
+template <typename T, int N> using ndarray_c = nb::ndarray<nb::numpy, T, nb::ndim<N>, nb::c_contig>;
+// Fortran-contiguous
+template <typename T, int N> using ndarray_f = nb::ndarray<nb::numpy, T, nb::ndim<N>, nb::f_contig>;
 
 template <typename Type, typename T, int N>
 nb::ndarray<Type, T, nb::ndim<N>> make_ndarray(std::unique_ptr<std::vector<T>> vec,

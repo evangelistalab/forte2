@@ -332,8 +332,8 @@ void export_sparse_operator_api(nb::module_& m) {
     // overloaded: real Hamiltonian
     m.def(
         "sparse_operator_hamiltonian",
-        [](double scalar_energy, np_matrix one_electron_integrals,
-           np_tensor4 two_electron_integrals, double screen_thresh) {
+        [](double scalar_energy, ndarray<double, 2> one_electron_integrals,
+           ndarray<double, 4> two_electron_integrals, double screen_thresh) {
             return sparse_operator_hamiltonian(scalar_energy, one_electron_integrals,
                                                two_electron_integrals, screen_thresh);
         },
@@ -343,8 +343,8 @@ void export_sparse_operator_api(nb::module_& m) {
     // overloaded: complex Hamiltonian
     m.def(
         "sparse_operator_hamiltonian",
-        [](double scalar_energy, np_matrix_complex one_electron_integrals,
-           np_tensor4_complex two_electron_integrals, double screen_thresh) {
+        [](double scalar_energy, ndarray<std::complex<double>, 2> one_electron_integrals,
+           ndarray<std::complex<double>, 4> two_electron_integrals, double screen_thresh) {
             return sparse_operator_hamiltonian(scalar_energy, one_electron_integrals,
                                                two_electron_integrals, screen_thresh);
         },

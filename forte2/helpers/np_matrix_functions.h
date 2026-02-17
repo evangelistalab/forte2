@@ -9,9 +9,9 @@
 
 namespace forte2::matrix {
 
-/// @brief Zero out a np_matrix
+/// @brief Zero out a ndarray<double, 2>
 /// @param mat The matrix to zero out
-template <typename T> void zero(nb::ndarray<nb::numpy, T, nb::ndim<2>> mat) {
+template <typename T> void zero(ndarray<T, 2> mat) {
     auto mat_view = mat.view();
     for (size_t i{0}, maxi{mat.shape(0)}; i < maxi; ++i) {
         for (size_t j{0}, maxj{mat.shape(1)}; j < maxj; ++j) {
@@ -20,11 +20,11 @@ template <typename T> void zero(nb::ndarray<nb::numpy, T, nb::ndim<2>> mat) {
     }
 }
 
-/// @brief Copy the contents of one np_matrix to another
+/// @brief Copy the contents of one ndarray<double, 2> to another
 /// @param src The source matrix to copy from
 /// @param dest The destination matrix to copy to
 template <typename T>
-void copy(nb::ndarray<nb::numpy, T, nb::ndim<2>> src, nb::ndarray<nb::numpy, T, nb::ndim<2>> dest) {
+void copy(ndarray<T, 2> src, ndarray<T, 2> dest) {
     if (src.shape(0) != dest.shape(0) || src.shape(1) != dest.shape(1)) {
         throw std::runtime_error("Source and destination matrices must have the same shape.");
     }
@@ -37,10 +37,10 @@ void copy(nb::ndarray<nb::numpy, T, nb::ndim<2>> src, nb::ndarray<nb::numpy, T, 
     }
 }
 
-/// @brief Scale a np_matrix by a factor
+/// @brief Scale a ndarray<double, 2> by a factor
 /// @param mat The matrix to scale
 /// @param factor The scaling factor
-template <typename T> void scale(nb::ndarray<nb::numpy, T, nb::ndim<2>> mat, double factor) {
+template <typename T> void scale(ndarray<T, 2> mat, double factor) {
     auto mat_view = mat.view();
     for (size_t i{0}, maxi{mat.shape(0)}; i < maxi; ++i) {
         for (size_t j{0}, maxj{mat.shape(1)}; j < maxj; ++j) {
@@ -51,8 +51,7 @@ template <typename T> void scale(nb::ndarray<nb::numpy, T, nb::ndim<2>> mat, dou
 
 /// @brief Perform the operation y[:,:] = a * x[:,:] + y[:,:]
 template <typename T>
-void daxpy(double a, nb::ndarray<nb::numpy, T, nb::ndim<2>> x,
-           nb::ndarray<nb::numpy, T, nb::ndim<2>> y) {
+void daxpy(double a, ndarray<T, 2> x, ndarray<T, 2> y) {
     if (x.shape(0) != y.shape(0) || x.shape(1) != y.shape(1)) {
         throw std::runtime_error("Source and destination matrices must have the same shape.");
     }
@@ -65,9 +64,9 @@ void daxpy(double a, nb::ndarray<nb::numpy, T, nb::ndim<2>> x,
     }
 }
 
-/// @brief Print the contents of a np_matrix to standard output
+/// @brief Print the contents of a ndarray<double, 2> to standard output
 template <typename T>
-void print(nb::ndarray<nb::numpy, T, nb::ndim<2>> mat, std::string label) {
+void print(ndarray<T, 2> mat, std::string label) {
     std::cout << label << ":" << std::endl;
     auto mat_view = mat.view();
     for (size_t i{0}, maxi{mat.shape(0)}; i < maxi; ++i) {
@@ -87,8 +86,7 @@ void print(nb::ndarray<nb::numpy, T, nb::ndim<2>> mat, std::string label) {
 /// @param M The input 2D matrix.
 /// @return The expanded 4D tensor.
 template <typename T>
-nb::ndarray<nb::numpy, T, nb::ndim<4>>
-packed_tensor4_to_tensor4(nb::ndarray<nb::numpy, T, nb::ndim<2>> m) {
+ndarray<T, 4> packed_tensor4_to_tensor4(ndarray<T, 2> m) {
     const auto nrows = m.shape(0);
     const auto ncols = m.shape(1);
     auto nr = inv_pair_index_gt(nrows - 1).first + 1;

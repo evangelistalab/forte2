@@ -11,8 +11,8 @@ class SlaterRules {
   public:
     // ==> Class Constructors <==
 
-    SlaterRules(int norb, double scalar_energy, np_matrix one_electron_integrals,
-                np_tensor4 two_electron_integrals);
+    SlaterRules(int norb, double scalar_energy, ndarray<double, 2> one_electron_integrals,
+                ndarray<double, 4> two_electron_integrals);
 
     // ==> Class Interface <==
 
@@ -28,17 +28,17 @@ class SlaterRules {
     /// Scalar energy term
     double scalar_energy_;
     /// Effective one-electron integrals (restricted)
-    np_matrix one_electron_integrals_;
+    ndarray<double, 2> one_electron_integrals_;
     /// Two-electron integrals (restricted) in the form V[p,q,r,s] = <pq|rs>
-    np_tensor4 two_electron_integrals_;
+    ndarray<double, 4> two_electron_integrals_;
 };
 
 class RelSlaterRules {
   public:
     // ==> Class Constructors <==
 
-    RelSlaterRules(int nspinor, double scalar_energy, np_matrix_complex one_electron_integrals,
-                   np_tensor4_complex two_electron_integrals);
+    RelSlaterRules(int nspinor, double scalar_energy, ndarray<std::complex<double>, 2> one_electron_integrals,
+                   ndarray<std::complex<double>, 4> two_electron_integrals);
 
     // ==> Class Interface <==
 
@@ -54,9 +54,9 @@ class RelSlaterRules {
     /// Scalar energy term
     double scalar_energy_;
     /// Effective one-electron integrals (restricted)
-    np_matrix_complex one_electron_integrals_;
+    ndarray<std::complex<double>, 2> one_electron_integrals_;
     /// Two-electron integrals (restricted) in the form V[p,q,r,s] = <pq|rs>
-    np_tensor4_complex two_electron_integrals_;
+    ndarray<std::complex<double>, 4> two_electron_integrals_;
 };
 
 } // namespace forte2

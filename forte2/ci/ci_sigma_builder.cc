@@ -23,7 +23,7 @@ double scatter_b_time_write = 0.0;
 double transpose_1_time = 0.0;
 double transpose_2_time = 0.0;
 
-CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, np_matrix& H, np_tensor4& V,
+CISigmaBuilder::CISigmaBuilder(const CIStrings& lists, double E, ndarray<double, 2>& H, ndarray<double, 4>& V,
                                int log_level)
     : lists_(lists), E_(E), H_(H), V_(V), slater_rules_(lists.norb(), E, H, V),
       log_level_(log_level) {
@@ -68,7 +68,7 @@ void CISigmaBuilder::set_memory(int mb) {
     memory_size_ = mb * 1024 * 1024; // Convert MB to bytes
 }
 
-void CISigmaBuilder::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
+void CISigmaBuilder::set_Hamiltonian(double E, ndarray<double, 2> H, ndarray<double, 4> V) {
     E_ = E;
 
     if (H.ndim() != 2) {
@@ -153,7 +153,7 @@ void CISigmaBuilder::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
     }
 }
 
-void CISigmaBuilder::Hamiltonian(np_vector basis, np_vector sigma) const {
+void CISigmaBuilder::Hamiltonian(ndarray<double, 1> basis, ndarray<double, 1> sigma) const {
     local_timer t;
     vector::zero<double>(sigma);
     auto b_span = vector::as_span<double>(basis);
@@ -283,7 +283,7 @@ double CISigmaBuilder::energy_csf(const std::vector<Determinant>& dets,
     return matrix_element;
 }
 
-np_vector CISigmaBuilder::form_Hdiag_csf(const std::vector<Determinant>& dets,
+ndarray<double, 1> CISigmaBuilder::form_Hdiag_csf(const std::vector<Determinant>& dets,
                                          const CISpinAdapter& spin_adapter,
                                          bool spin_adapt_full_preconditioner) const {
     auto Hdiag = make_zeros<nb::numpy, double, 1>({spin_adapter.ncsf()});
@@ -338,7 +338,7 @@ np_vector CISigmaBuilder::form_Hdiag_csf(const std::vector<Determinant>& dets,
     return Hdiag;
 }
 
-np_matrix CISigmaBuilder::form_H_csf(const std::vector<Determinant>& dets,
+ndarray<double, 2> CISigmaBuilder::form_H_csf(const std::vector<Determinant>& dets,
                                      const CISpinAdapter& spin_adapter) const {
     size_t ncsf = spin_adapter.ncsf();
     if (ncsf * ncsf * sizeof(double) > memory_size_) {

@@ -6,7 +6,7 @@
 
 namespace forte2 {
 
-np_matrix CISigmaBuilder::compute_s_1rdm(np_vector C_left, np_vector C_right, Spin spin) const {
+ndarray<double, 2> CISigmaBuilder::compute_s_1rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right, Spin spin) const {
     const auto na = lists_.na();
     const auto nb = lists_.nb();
     const auto norb = lists_.norb();
@@ -62,15 +62,15 @@ np_matrix CISigmaBuilder::compute_s_1rdm(np_vector C_left, np_vector C_right, Sp
     return rdm;
 }
 
-np_matrix CISigmaBuilder::compute_a_1rdm(np_vector C_left, np_vector C_right) const {
+ndarray<double, 2> CISigmaBuilder::compute_a_1rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     return compute_s_1rdm(C_left, C_right, Spin::Alpha);
 }
 
-np_matrix CISigmaBuilder::compute_b_1rdm(np_vector C_left, np_vector C_right) const {
+ndarray<double, 2> CISigmaBuilder::compute_b_1rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     return compute_s_1rdm(C_left, C_right, Spin::Beta);
 }
 
-np_matrix CISigmaBuilder::compute_sf_1rdm(np_vector C_left, np_vector C_right) const {
+ndarray<double, 2> CISigmaBuilder::compute_sf_1rdm(ndarray<double, 1> C_left, ndarray<double, 1> C_right) const {
     auto sf_1rdm = make_zeros<nb::numpy, double, 2>({lists_.norb(), lists_.norb()});
     if (lists_.norb() > 0) {
         auto a_1rdm = compute_a_1rdm(C_left, C_right);

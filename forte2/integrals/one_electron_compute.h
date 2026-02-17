@@ -14,7 +14,7 @@ struct NoParams {};
 template <libint2::Operator Op, std::size_t M, typename Params = NoParams>
 [[nodiscard]] auto compute_one_electron_multi(const Basis& basis1, const Basis& basis2,
                                               Params const& params = Params{})
-    -> std::array<np_matrix, M> {
+    -> std::array<ndarray<double, 2>, M> {
 
     // Initialize libint2
     libint2::initialize();
@@ -44,7 +44,7 @@ template <libint2::Operator Op, std::size_t M, typename Params = NoParams>
 
     // Allocate M separate flat buffers
     // Wrap each buffer into an ndarray with memory management
-    std::array<np_matrix, M> ints;
+    std::array<ndarray<double, 2>, M> ints;
     for (std::size_t k = 0; k < M; ++k) {
         ints[k] = make_zeros<nb::numpy, double, 2>({nb1, nb2});
     }

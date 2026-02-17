@@ -12,8 +12,8 @@
 
 namespace forte2 {
 
-RelCISigmaBuilder::RelCISigmaBuilder(const CIStrings& lists, double E, np_matrix_complex& H,
-                                     np_tensor4_complex& V, int log_level, bool use_asym_ints)
+RelCISigmaBuilder::RelCISigmaBuilder(const CIStrings& lists, double E, ndarray<std::complex<double>, 2>& H,
+                                     ndarray<std::complex<double>, 4>& V, int log_level, bool use_asym_ints)
     : lists_(lists), E_(E), H_(H), V_(V), rel_slater_rules_(lists.norb(), E, H, V),
       log_level_(log_level), use_asym_ints_(use_asym_ints) {
     // Find the size of the largest symmetry block
@@ -57,7 +57,7 @@ void RelCISigmaBuilder::set_memory(int mb) {
     memory_size_ = mb * 1024 * 1024; // Convert MB to bytes
 }
 
-void RelCISigmaBuilder::set_Hamiltonian(double E, np_matrix_complex H, np_tensor4_complex V,
+void RelCISigmaBuilder::set_Hamiltonian(double E, ndarray<std::complex<double>, 2> H, ndarray<std::complex<double>, 4> V,
                                         bool use_asym_ints) {
     E_ = E;
 
@@ -144,7 +144,7 @@ void RelCISigmaBuilder::set_Hamiltonian(double E, np_matrix_complex H, np_tensor
     // }
 }
 
-void RelCISigmaBuilder::Hamiltonian(np_vector_complex basis, np_vector_complex sigma) const {
+void RelCISigmaBuilder::Hamiltonian(ndarray<std::complex<double>, 1> basis, ndarray<std::complex<double>, 1> sigma) const {
     vector::zero<std::complex<double>>(sigma);
     auto b_span = vector::as_span<std::complex<double>>(basis);
     auto s_span = vector::as_span<std::complex<double>>(sigma);
@@ -217,7 +217,7 @@ void scatter_block(std::span<std::complex<double>> source, std::span<std::comple
     }
 }
 
-np_vector_complex RelCISigmaBuilder::form_Hdiag(const std::vector<Determinant>& dets) const {
+ndarray<std::complex<double>, 1> RelCISigmaBuilder::form_Hdiag(const std::vector<Determinant>& dets) const {
     auto Hdiag = make_zeros<nb::numpy, std::complex<double>, 1>({dets.size()});
     auto Hdiag_view = Hdiag.view();
     // Compute the diagonal elements of the Hamiltonian in the determinantal basis
