@@ -233,12 +233,6 @@ class System:
         if self.x2c_type == "so":
             self.two_component = True
 
-    def reset_x2c(self):
-        """
-        Reset the X2C transformation with the current system parameters.
-        """
-        self._init_x2c()
-
     def __repr__(self):
         return f"System(atoms={self.atoms}, basis_set={self.basis}, auxiliary_basis_set={self.auxiliary_basis})"
 
@@ -266,7 +260,7 @@ class System:
             Core Hamiltonian integrals matrix.
         """
         if self.x2c_type in ["sf", "so"]:
-            H = self.x2c_helper.hcore_x2c
+            H = self.x2c_helper.hcore_x2c()
         else:
             T = integrals.kinetic(self)
             V = integrals.nuclear(self)

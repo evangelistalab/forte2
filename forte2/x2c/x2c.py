@@ -73,7 +73,6 @@ class X2CHelper:
         self.nbf = nbf_decon if self.system.x2c_type == "sf" else nbf_decon * 2
         self.executed = False
 
-    @cached_property
     def hcore_x2c(self):
         """
         Return the one-electron X2C core Hamiltonian matrix for the given system.
