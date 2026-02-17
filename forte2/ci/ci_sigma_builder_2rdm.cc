@@ -8,8 +8,9 @@
 
 namespace forte2 {
 
-ndarray<double, 2> CISigmaBuilder::compute_ss_2rdm(ndarray<double, 1> C_left,
-                                                   ndarray<double, 1> C_right, Spin spin) const {
+ndarray<double, 2, nb::c_contig>
+CISigmaBuilder::compute_ss_2rdm(ndarray<double, 1, nb::c_contig> C_left,
+                                ndarray<double, 1, nb::c_contig> C_right, Spin spin) const {
     local_timer timer;
 
     const auto na = lists_.na();
@@ -18,12 +19,12 @@ ndarray<double, 2> CISigmaBuilder::compute_ss_2rdm(ndarray<double, 1> C_left,
 
     // if there are less than two orbitals, return an empty matrix
     if (norb < 2) {
-        return make_zeros<double, 2>({0, 0});
+        return make_zeros<double, 2, nb::c_contig>({0, 0});
     }
 
     // calculate the number of pairs of orbitals p > q
     const size_t npairs = (norb * (norb - 1)) / 2;
-    auto rdm = make_zeros<double, 2>({npairs, npairs});
+    auto rdm = make_zeros<double, 2, nb::c_contig>({npairs, npairs});
 
     // skip building the RDM if there are not enough electrons
     if ((is_alpha(spin) and (na < 2)) or (is_beta(spin) and (nb < 2)))
@@ -90,18 +91,21 @@ ndarray<double, 2> CISigmaBuilder::compute_ss_2rdm(ndarray<double, 1> C_left,
     return rdm;
 }
 
-ndarray<double, 2> CISigmaBuilder::compute_aa_2rdm(ndarray<double, 1> C_left,
-                                                   ndarray<double, 1> C_right) const {
+ndarray<double, 2, nb::c_contig>
+CISigmaBuilder::compute_aa_2rdm(ndarray<double, 1, nb::c_contig> C_left,
+                                ndarray<double, 1, nb::c_contig> C_right) const {
     return compute_ss_2rdm(C_left, C_right, Spin::Alpha);
 }
 
-ndarray<double, 2> CISigmaBuilder::compute_bb_2rdm(ndarray<double, 1> C_left,
-                                                   ndarray<double, 1> C_right) const {
+ndarray<double, 2, nb::c_contig>
+CISigmaBuilder::compute_bb_2rdm(ndarray<double, 1, nb::c_contig> C_left,
+                                ndarray<double, 1, nb::c_contig> C_right) const {
     return compute_ss_2rdm(C_left, C_right, Spin::Beta);
 }
 
-ndarray<double, 4> CISigmaBuilder::compute_ab_2rdm(ndarray<double, 1> C_left,
-                                                   ndarray<double, 1> C_right) const {
+ndarray<double, 4, nb::c_contig>
+CISigmaBuilder::compute_ab_2rdm(ndarray<double, 1, nb::c_contig> C_left,
+                                ndarray<double, 1, nb::c_contig> C_right) const {
     local_timer timer;
 
     const auto na = lists_.na();
@@ -110,7 +114,7 @@ ndarray<double, 4> CISigmaBuilder::compute_ab_2rdm(ndarray<double, 1> C_left,
     const auto norb2 = norb * norb;
     const auto norb3 = norb2 * norb;
 
-    auto rdm = make_zeros<double, 4>({norb, norb, norb, norb});
+    auto rdm = make_zeros<double, 4, nb::c_contig>({norb, norb, norb, norb});
 
     // skip building the RDM if there are no electrons or there are zero orbitals
     if ((na < 1) or (nb < 1) or (norb < 1)) {
@@ -178,10 +182,11 @@ ndarray<double, 4> CISigmaBuilder::compute_ab_2rdm(ndarray<double, 1> C_left,
     return rdm;
 }
 
-ndarray<double, 4> CISigmaBuilder::compute_sf_2rdm(ndarray<double, 1> C_left,
-                                                   ndarray<double, 1> C_right) const {
+ndarray<double, 4, nb::c_contig>
+CISigmaBuilder::compute_sf_2rdm(ndarray<double, 1, nb::c_contig> C_left,
+                                ndarray<double, 1, nb::c_contig> C_right) const {
     size_t norb = lists_.norb();
-    auto rdm_sf = make_zeros<double, 4>({norb, norb, norb, norb});
+    auto rdm_sf = make_zeros<double, 4, nb::c_contig>({norb, norb, norb, norb});
 
     if (norb < 1) {
         return rdm_sf; // No 2-RDM for less than 1 orbitals
@@ -230,8 +235,9 @@ ndarray<double, 4> CISigmaBuilder::compute_sf_2rdm(ndarray<double, 1> C_left,
     return rdm_sf;
 }
 
-ndarray<double, 4> CISigmaBuilder::compute_sf_2cumulant(ndarray<double, 1> C_left,
-                                                        ndarray<double, 1> C_right) const {
+ndarray<double, 4, nb::c_contig>
+CISigmaBuilder::compute_sf_2cumulant(ndarray<double, 1, nb::c_contig> C_left,
+                                     ndarray<double, 1, nb::c_contig> C_right) const {
     // Compute the spin-free 1-RDM
     auto G1 = compute_sf_1rdm(C_left, C_right);
     // Compute the spin-free 2-RDM (this will hold the cumulant)

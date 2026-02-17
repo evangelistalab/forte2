@@ -8,8 +8,9 @@
 
 namespace forte2 {
 
-ndarray<double, 2> CISigmaBuilder::compute_sss_3rdm(ndarray<double, 1> C_left,
-                                                    ndarray<double, 1> C_right, Spin spin) const {
+ndarray<double, 2, nb::c_contig>
+CISigmaBuilder::compute_sss_3rdm(ndarray<double, 1, nb::c_contig> C_left,
+                                 ndarray<double, 1, nb::c_contig> C_right, Spin spin) const {
     local_timer timer;
 
     const auto na = lists_.na();
@@ -18,11 +19,11 @@ ndarray<double, 2> CISigmaBuilder::compute_sss_3rdm(ndarray<double, 1> C_left,
 
     // if there are less than three orbitals, return an empty matrix
     if (norb < 3) {
-        return make_zeros<double, 2>({0, 0});
+        return make_zeros<double, 2, nb::c_contig>({0, 0});
     }
 
     const size_t ntriplets = (norb * (norb - 1) * (norb - 2)) / 6;
-    auto rdm = make_zeros<double, 2>({ntriplets, ntriplets});
+    auto rdm = make_zeros<double, 2, nb::c_contig>({ntriplets, ntriplets});
 
     // skip building the RDM if there are not enough electrons
     if ((is_alpha(spin) and (na < 3)) or (is_beta(spin) and (nb < 3)))
@@ -89,18 +90,21 @@ ndarray<double, 2> CISigmaBuilder::compute_sss_3rdm(ndarray<double, 1> C_left,
     return rdm;
 }
 
-ndarray<double, 2> CISigmaBuilder::compute_aaa_3rdm(ndarray<double, 1> C_left,
-                                                    ndarray<double, 1> C_right) const {
+ndarray<double, 2, nb::c_contig>
+CISigmaBuilder::compute_aaa_3rdm(ndarray<double, 1, nb::c_contig> C_left,
+                                 ndarray<double, 1, nb::c_contig> C_right) const {
     return compute_sss_3rdm(C_left, C_right, Spin::Alpha);
 }
 
-ndarray<double, 2> CISigmaBuilder::compute_bbb_3rdm(ndarray<double, 1> C_left,
-                                                    ndarray<double, 1> C_right) const {
+ndarray<double, 2, nb::c_contig>
+CISigmaBuilder::compute_bbb_3rdm(ndarray<double, 1, nb::c_contig> C_left,
+                                 ndarray<double, 1, nb::c_contig> C_right) const {
     return compute_sss_3rdm(C_left, C_right, Spin::Beta);
 }
 
-ndarray<double, 4> CISigmaBuilder::compute_aab_3rdm(ndarray<double, 1> C_left,
-                                                    ndarray<double, 1> C_right) const {
+ndarray<double, 4, nb::c_contig>
+CISigmaBuilder::compute_aab_3rdm(ndarray<double, 1, nb::c_contig> C_left,
+                                 ndarray<double, 1, nb::c_contig> C_right) const {
     local_timer timer;
     const auto na = lists_.na();
     const auto nb = lists_.nb();
@@ -108,13 +112,13 @@ ndarray<double, 4> CISigmaBuilder::compute_aab_3rdm(ndarray<double, 1> C_left,
 
     // if there are less than two orbitals, return an empty matrix
     if (norb < 2) {
-        return make_zeros<double, 4>({0, 0, 0, 0});
+        return make_zeros<double, 4, nb::c_contig>({0, 0, 0, 0});
     }
 
     // the number of orbital pairs i > j of the same spin
     const size_t npair = (norb * (norb - 1)) / 2;
 
-    auto rdm = make_zeros<double, 4>({npair, norb, npair, norb});
+    auto rdm = make_zeros<double, 4, nb::c_contig>({npair, norb, npair, norb});
 
     auto stride1 = norb;
     auto stride2 = stride1 * npair;
@@ -189,8 +193,9 @@ ndarray<double, 4> CISigmaBuilder::compute_aab_3rdm(ndarray<double, 1> C_left,
     return rdm;
 }
 
-ndarray<double, 4> CISigmaBuilder::compute_abb_3rdm(ndarray<double, 1> C_left,
-                                                    ndarray<double, 1> C_right) const {
+ndarray<double, 4, nb::c_contig>
+CISigmaBuilder::compute_abb_3rdm(ndarray<double, 1, nb::c_contig> C_left,
+                                 ndarray<double, 1, nb::c_contig> C_right) const {
     local_timer timer;
     const auto na = lists_.na();
     const auto nb = lists_.nb();
@@ -198,13 +203,13 @@ ndarray<double, 4> CISigmaBuilder::compute_abb_3rdm(ndarray<double, 1> C_left,
 
     // if there are less than two orbitals, return an empty matrix
     if (norb < 2) {
-        return make_zeros<double, 4>({0, 0, 0, 0});
+        return make_zeros<double, 4, nb::c_contig>({0, 0, 0, 0});
     }
 
     // the number of orbital pairs i > j of the same spin
     const size_t npair = (norb * (norb - 1)) / 2;
 
-    auto rdm = make_zeros<double, 4>({norb, npair, norb, npair});
+    auto rdm = make_zeros<double, 4, nb::c_contig>({norb, npair, norb, npair});
 
     auto stride1 = npair;
     auto stride2 = stride1 * norb;
@@ -279,10 +284,11 @@ ndarray<double, 4> CISigmaBuilder::compute_abb_3rdm(ndarray<double, 1> C_left,
     return rdm;
 }
 
-ndarray<double, 6> CISigmaBuilder::compute_sf_3rdm(ndarray<double, 1> C_left,
-                                                   ndarray<double, 1> C_right) const {
+ndarray<double, 6, nb::c_contig>
+CISigmaBuilder::compute_sf_3rdm(ndarray<double, 1, nb::c_contig> C_left,
+                                ndarray<double, 1, nb::c_contig> C_right) const {
     auto norb = lists_.norb();
-    auto rdm_sf = make_zeros<double, 6>({norb, norb, norb, norb, norb, norb});
+    auto rdm_sf = make_zeros<double, 6, nb::c_contig>({norb, norb, norb, norb, norb, norb});
 
     if (norb < 2) {
         return rdm_sf; // No 3-RDM for less than 2 orbitals
@@ -435,8 +441,9 @@ ndarray<double, 6> CISigmaBuilder::compute_sf_3rdm(ndarray<double, 1> C_left,
     return rdm_sf;
 }
 
-ndarray<double, 6> CISigmaBuilder::compute_sf_3cumulant(ndarray<double, 1> C_left,
-                                                        ndarray<double, 1> C_right) const {
+ndarray<double, 6, nb::c_contig>
+CISigmaBuilder::compute_sf_3cumulant(ndarray<double, 1, nb::c_contig> C_left,
+                                     ndarray<double, 1, nb::c_contig> C_right) const {
     // Compute the spin-free 1-RDM
     auto sf_1rdm = compute_sf_1rdm(C_left, C_right);
     // Compute the spin-free 2-RDM
