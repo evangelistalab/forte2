@@ -45,33 +45,37 @@ class X2CHelper:
     def __init__(self, system, ortho_thresh=1e-8):
         self.system = system
         self.ortho_thresh = ortho_thresh
-        self.x2c_type = system.x2c_type.lower()
-        assert self.x2c_type in [
-            "sf",
-            "so",
-        ], f"Invalid x2c_type: {self.x2c_type}. Must be 'sf' or 'so'."
-        self.snso_type = system.snso_type.lower() if system.snso_type else None
-        if self.snso_type is not None:
-            assert self.snso_type in [
-                "boettger",
-                "dc",
-                "dcb",
-                "row-dependent",
-            ], f"Invalid snso_type: {self.snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
-
-        logger.log_info1(f"Number of contracted basis functions: {self.system.nbf}")
 
         self.xbasis = build_basis(
             system.basis_set,
             system.geom_helper,
             decontract=True,
         )
+
+    def _setup(self):
+        """
+        Set up the X2C transformation, called by hcore_x2c every time
+        to allow for changes in the system parameters (e.g. geometry, x2c_type).
+        """
+        assert self.system.x2c_type in [
+            "sf",
+            "so",
+        ], f"Invalid x2c_type: {self.system.x2c_type}. Must be 'sf' or 'so'."
+
+        if self.system.snso_type is not None:
+            assert self.system.snso_type.lower() in [
+                "boettger",
+                "dc",
+                "dcb",
+                "row-dependent",
+            ], f"Invalid snso_type: {self.system.snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
+
+        logger.log_info1(f"Number of contracted basis functions: {self.system.nbf}")
         self.proj = self._get_projection_matrix()
 
         nbf_decon = len(self.xbasis)
         logger.log_info1(f"Number of decontracted basis functions: {nbf_decon}")
         self.nbf = nbf_decon if self.system.x2c_type == "sf" else nbf_decon * 2
-        self.executed = False
 
     def hcore_x2c(self):
         """
@@ -82,6 +86,7 @@ class X2CHelper:
         NDArray
             The X2C core Hamiltonian matrix in the contracted basis.
         """
+        self._setup()
         S, T, V, W = self._get_integrals()
 
         # build and solve the one-electron matrix Dirac equation
@@ -99,7 +104,7 @@ class X2CHelper:
         # return to original non-orthogonal AO basis
         h_fw = self.Xorthm1_l.conj().T @ h_fw @ self.Xorthm1_l
 
-        if self.x2c_type.lower() == "so" and self.snso_type is not None:
+        if self.system.x2c_type.lower() == "so" and self.system.snso_type is not None:
             nbf = self.nbf // 2
             haa = h_fw[:nbf, :nbf]
             hab = h_fw[:nbf, nbf:]
@@ -166,7 +171,7 @@ class X2CHelper:
         return S, T, V, W
 
     def _solve_dirac_eq(self, S, T, V, W):
-        dtype = np.float64 if self.x2c_type == "sf" else np.complex128
+        dtype = np.float64 if self.system.x2c_type == "sf" else np.complex128
         north = self.northo
         D = np.zeros((north * 2,) * 2, dtype=dtype)
         M = np.zeros((north * 2,) * 2, dtype=dtype)
@@ -223,13 +228,13 @@ class X2CHelper:
         basis = self.xbasis
         atoms = self.system.atoms
 
-        if self.snso_type is None:
+        if self.system.snso_type is None:
             return ints
         if basis.max_l > 7:
             raise RuntimeError(
                 "SNSO scaling is not implemented for basis sets with l > 7."
             )
-        match self.snso_type.lower():
+        match self.system.snso_type.lower():
             case "boettger":
                 Ql = np.array([0.0, 2.0, 10.0, 28.0, 60.0, 110.0, 182.0, 280.0])
             case "dc":
@@ -248,7 +253,7 @@ class X2CHelper:
                 }
             case _:
                 raise ValueError(
-                    f"Invalid SNSO type: {self.snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
+                    f"Invalid SNSO type: {self.system.snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
                 )
 
         center_first = np.array([_[0] for _ in basis.center_first_and_last])
