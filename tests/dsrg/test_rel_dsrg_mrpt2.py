@@ -5,6 +5,7 @@ from forte2 import System, GHF, RelMCOptimizer, AVAS, ROHF, MCOptimizer, State
 from forte2.dsrg import RelDSRG_MRPT2, RelDSRG_MRPT2_Slow
 from forte2.helpers.comparisons import approx, approx_loose
 from forte2.data.atom_data import EH_TO_WN
+from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 
 
 def test_mrpt2_n2_nonrel():
@@ -308,9 +309,9 @@ def test_mrpt2_sh_with_slow():
     assert dsrg.E_dsrg == approx(dsrg_slow.E_dsrg)
 
 
-def test_siso_pt2():
+def test_siso_pt2_phosphorus():
     xyz = """
-    Br 0 0 0
+    P 0 0 0
     """
 
     system = System(
@@ -327,47 +328,103 @@ def test_siso_pt2():
         ms=0.5,
         die_if_not_converged=False,
     )(system)
-    avas = AVAS(
-        subspace=["Br(4s)", "Br(4p)"],
-        selection_method="separate",
-        num_active_docc=3,
-        num_active_uocc=0,
-    )(scf)
+
     mc = MCOptimizer(
-        states=State(nel=35, multiplicity=2, ms=0.5),
-        nroots=3,
+        states=[
+            State(nel=15, multiplicity=4, ms=1.5),
+            State(nel=15, multiplicity=2, ms=0.5),
+        ],
+        nroots=[1, 5],
         maxiter=100,
-    )(avas)
+        active_orbitals=4,
+        core_orbitals=5,
+    )(scf)
     mc.run()
 
+    # Convert the MCSCF MO coefficients into two-component spinors
     system.two_component = True
-    from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
-
     mc.C = convert_coeff_spatial_to_spinor(mc.C)
-
+    # Diagonalize the CI Hamiltonian in the two-component basis
     ci = RelMCOptimizer(
-        nel=35,
-        nroots=6,
-        maxiter=1,
-        core_orbitals=28,
+        nel=15,
+        nroots=14,
+        maxiter=0,
+        core_orbitals=10,
         active_orbitals=8,
     )(mc)
     ci.run()
 
+    # the "siso" option only turns on the X2C Hamiltonian for reference relaxation
     pt = RelDSRG_MRPT2(
         flow_param=0.50,
         relax_reference="once",
         siso=True,
     )(ci)
     pt.run()
-    from forte2.data.atom_data import EH_TO_WN
+    assert (pt.relax_eigvals[8] - pt.relax_eigvals[7]) * EH_TO_WN == pytest.approx(
+        8.914376243446005, abs=1e-3
+    )  # this is ~5e-9 Hartree
 
-    assert (pt.relax_eigvals[4] - pt.relax_eigvals[3]) * EH_TO_WN == approx_loose(
-        3419.103906148624
+
+def test_so_pt2_phosphorus():
+    xyz = """
+    P 0 0 0
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="decon-ano-rcc",
+        auxiliary_basis_set="ano-rcc-autoaux",
+        minao_basis_set="ano-r0",
+        x2c_type="sf",
+        use_gaussian_charges=True,
     )
+    scf = ROHF(
+        charge=0,
+        maxiter=50,
+        ms=0.5,
+        die_if_not_converged=False,
+    )(system)
+
+    mc = MCOptimizer(
+        states=[
+            State(nel=15, multiplicity=4, ms=1.5),
+            State(nel=15, multiplicity=2, ms=0.5),
+        ],
+        nroots=[1, 5],
+        maxiter=100,
+        active_orbitals=4,
+        core_orbitals=5,
+    )(scf)
+    mc.run()
+
+    # Convert the MCSCF MO coefficients into two-component spinors
+    system.two_component = True
+    mc.C = convert_coeff_spatial_to_spinor(mc.C)
+    # Diagonalize the CI Hamiltonian in the two-component basis
+    ci = RelMCOptimizer(
+        nel=15,
+        nroots=14,
+        maxiter=0,
+        core_orbitals=10,
+        active_orbitals=8,
+    )(mc)
+    ci.run()
+
+    # turn on X2C
+    system.x2c_type = "so"
+    system.snso_type = "row-dependent"
+    pt = RelDSRG_MRPT2(
+        flow_param=0.50,
+        relax_reference="once",
+    )(ci)
+    pt.run()
+    assert (pt.relax_eigvals[8] - pt.relax_eigvals[7]) * EH_TO_WN == pytest.approx(
+        11.716487792882816, abs=1e-3
+    )  # this is ~5e-9 Hartree
 
 
-def test_so_pt2():
+def test_so_pt2_bromine():
     xyz = """
     Br 0 0 0
     """
@@ -400,14 +457,12 @@ def test_so_pt2():
     mc.run()
 
     system.two_component = True
-    from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
-
     mc.C = convert_coeff_spatial_to_spinor(mc.C)
 
     ci = RelMCOptimizer(
         nel=35,
         nroots=6,
-        maxiter=1,
+        maxiter=0,
         core_orbitals=28,
         active_orbitals=8,
     )(mc)
@@ -420,8 +475,7 @@ def test_so_pt2():
         relax_reference="once",
     )(ci)
     pt.run()
-    from forte2.data.atom_data import EH_TO_WN
 
     assert (pt.relax_eigvals[4] - pt.relax_eigvals[3]) * EH_TO_WN == approx_loose(
-        3703.6986841466082
+        3703.698683547775
     )
