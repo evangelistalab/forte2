@@ -232,14 +232,17 @@ class RelDSRG_MRPT2(DSRGBase):
         )
         if self.siso:
             # subtract original 1e Hamiltonian
+            # self.actv is the active slice relative to the correlated space
+            # we want the active slice relative to the full MO space, since hcore is defined in that space
+            _actv = self.mo_space.actv
             _C = self.parent_method.C[0]
-            _hbar1_canon -= (_C.conj().T @ self.system.ints_hcore() @ _C)[self.actv, self.actv]
+            _hbar1_canon -= (_C.conj().T @ self.system.ints_hcore() @ _C)[_actv, _actv]
             self.x2c_type_save = self.system.x2c_type
             self.snso_type_save = self.system.snso_type
             self.system.x2c_type = self.x2c_type
             self.system.snso_type = self.snso_type
             # add requested 1e Hamiltonian
-            _hbar1_canon += (_C.conj().T @ self.system.ints_hcore() @ _C)[self.actv, self.actv]
+            _hbar1_canon += (_C.conj().T @ self.system.ints_hcore() @ _C)[_actv, _actv]
             # revert so that DSRG uses original H1
             self.system.x2c_type = self.x2c_type_save
             self.system.snso_type = self.snso_type_save

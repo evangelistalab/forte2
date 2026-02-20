@@ -479,3 +479,60 @@ def test_so_pt2_bromine():
     assert (pt.relax_eigvals[4] - pt.relax_eigvals[3]) * EH_TO_WN == approx_loose(
         3703.698683547775
     )
+
+
+def test_siso_pt2_bromine_frozen_core():
+    xyz = """
+    Br 0 0 0
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="decon-ano-rcc",
+        auxiliary_basis_set="ano-rcc-autoaux",
+        minao_basis_set="ano-r0",
+        x2c_type="sf",
+        use_gaussian_charges=True,
+    )
+    scf = ROHF(
+        charge=0,
+        maxiter=50,
+        ms=0.5,
+        die_if_not_converged=False,
+    )(system)
+    avas = AVAS(
+        subspace=["Br(4s)", "Br(4p)"],
+        selection_method="separate",
+        num_active_docc=3,
+        num_active_uocc=0,
+    )(scf)
+    mc = MCOptimizer(
+        states=State(nel=35, multiplicity=2, ms=0.5),
+        nroots=3,
+        maxiter=100,
+    )(avas)
+    mc.run()
+
+    system.two_component = True
+    mc.C = convert_coeff_spatial_to_spinor(mc.C)
+
+    ci = RelMCOptimizer(
+        nel=35,
+        nroots=6,
+        maxiter=0,
+        core_orbitals=28,
+        active_orbitals=8,
+    )(mc)
+    ci.run()
+
+    pt = RelDSRG_MRPT2(
+        flow_param=0.50,
+        siso=True,
+        frozen_core_orbitals=28,
+        relax_reference="once",
+    )(ci)
+    pt.run()
+
+    assert (pt.relax_eigvals[4] - pt.relax_eigvals[3]) * EH_TO_WN == approx_loose(
+        3419.099158700063
+    )
