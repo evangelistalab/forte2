@@ -1,6 +1,7 @@
 import numpy as np
 
 from forte2 import System, RHF, CI, State
+from forte2.dsrg.df_mp2 import DFRHFMP2, MP2MCASolverLike
 from forte2.props import MutualCorrelationAnalysis
 from forte2.helpers.comparisons import approx
 
@@ -129,3 +130,69 @@ def test_mutual_correlation_h6():
 
     summary = mca.mutual_correlation_matrix_summary()
     assert float(summary.splitlines()[5].split()[-1]) == approx(0.562133)
+
+
+def test_mp2_mutual_correlation_h6_orbopt():
+    """Test mutual correlation analysis on H6 and the sto-3g basis."""
+
+    xyz = f"""
+    H 0.0 0.0 0.0
+    H 0.0 0.0 1.0
+    H 0.0 0.0 2.0
+    H 0.0 0.0 4.0
+    H 0.0 0.0 5.0
+    H 0.0 0.0 6.0
+    """
+
+    system = System(xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    mp2 = DFRHFMP2(compute_1rdm=True, compute_2rdm=True)(rhf)
+    mp2.run()
+
+    lambda2_sf = mp2.make_mp2_sf_2cumulants(mp2.gamma1_sf, mp2.gamma2_sf)
+
+    solver_like = MP2MCASolverLike(
+        gamma1_sf=mp2.gamma1_sf,
+        lambda2_sf=lambda2_sf,
+        orbital_indices=list(range(mp2.gamma1_sf.shape[0])),
+    )
+
+    mca = MutualCorrelationAnalysis(solver_like)
+    assert mca.total_correlation == approx(0.368831408224)
+    assert mca.M2[2, 3] == approx(0.271962367746)
+
+    summary = mca.mutual_correlation_matrix_summary()
+    assert float(summary.splitlines()[5].split()[-1]) == approx(0.271962)
+
+
+def test_mp2_mutual_correlation_h2_orbopt():
+    """Test mutual correlation analysis on H2 molecule in cc-pVDZ basis at 2.0 Angstroms separation."""
+
+    xyz = f"""
+    H 0.0 0.0 0.0
+    H 0.0 0.0 2.0
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    mp2 = DFRHFMP2(compute_1rdm=True, compute_2rdm=True)(rhf)
+    mp2.run()
+
+    lambda2_sf = mp2.make_mp2_sf_2cumulants(mp2.gamma1_sf, mp2.gamma2_sf)
+
+    solver_like = MP2MCASolverLike(
+        gamma1_sf=mp2.gamma1_sf,
+        lambda2_sf=lambda2_sf,
+        orbital_indices=list(range(mp2.gamma1_sf.shape[0])),
+    )
+
+    mca = MutualCorrelationAnalysis(solver_like)
+    print(mca.total_correlation)
+    assert mca.total_correlation == approx(0.110739645849)
+    assert mca.M2[0, 1] == approx(0.094402435879)
+
+    summary = mca.mutual_correlation_matrix_summary()
+
+    assert float(summary.splitlines()[5].split()[-1]) == approx(0.094402)

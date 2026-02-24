@@ -68,28 +68,50 @@ class MutualCorrelationAnalysis:
     def __init__(self, solver, root=0, sub_solver_index=0):
         self.Q = None
 
-        self.active_mo_indices = solver.mo_space.active_indices[:]
+        if hasattr(solver, "λaa") and hasattr(solver, "λab") and hasattr(solver, "λbb"):
 
-        # extract the spin-dependent 1-RDM  from the solver
-        γa, γb = solver.sub_solvers[sub_solver_index].make_sd_1rdm(root)
+            self.λaa = solver.λaa
+            self.λab = solver.λab
+            self.λbb = solver.λbb
+            self.Γ1 = solver.Γ1
 
-        # compute the spin-dependent 1-RDM
-        self.Γ1 = γa + γb
+        else:
+            # extract the spin-dependent 1-RDM  from the solver
+            γa, γb = solver.sub_solvers[sub_solver_index].make_sd_1rdm(root)
 
-        # extract the spin-dependent 2-RDM from the solver
-        γaa, γab, γbb = solver.sub_solvers[sub_solver_index].make_sd_2rdm(root)
+            # compute the spin-dependent 1-RDM
+            self.Γ1 = γa + γb
 
-        # convert packed 2-RDMs to full tensors (only the aa and bb components are packed)
-        γaa = cpp_helpers.packed_tensor4_to_tensor4(γaa)
-        γbb = cpp_helpers.packed_tensor4_to_tensor4(γbb)
+            # extract the spin-dependent 2-RDM from the solver
+            γaa, γab, γbb = solver.sub_solvers[sub_solver_index].make_sd_2rdm(root)
 
-        # convert the spin-dependent 2-RDMs to cumulants
-        self.λaa = (
-            γaa - np.einsum("pr,qs->pqrs", γa, γa) + np.einsum("ps,qr->pqrs", γa, γa)
-        )
-        self.λab = γab - np.einsum("pr,qs->pqrs", γa, γb)
-        self.λbb = (
-            γbb - np.einsum("pr,qs->pqrs", γb, γb) + np.einsum("ps,qr->pqrs", γb, γb)
+            # convert packed 2-RDMs to full tensors (only the aa and bb components are packed)
+            γaa = cpp_helpers.packed_tensor4_to_tensor4(γaa)
+            γbb = cpp_helpers.packed_tensor4_to_tensor4(γbb)
+
+            # convert the spin-dependent 2-RDMs to cumulants
+            self.λaa = (
+                γaa
+                - np.einsum("pr,qs->pqrs", γa, γa)
+                + np.einsum("ps,qr->pqrs", γa, γa)
+            )
+            self.λab = γab - np.einsum("pr,qs->pqrs", γa, γb)
+            self.λbb = (
+                γbb
+                - np.einsum("pr,qs->pqrs", γb, γb)
+                + np.einsum("ps,qr->pqrs", γb, γb)
+            )
+
+        norb = self.Γ1.shape[0]
+
+        if hasattr(solver, "orbital_indices"):
+            self.corr_mo_indices = solver.orbital_indices[:]
+        else:
+            self.corr_mo_indices = list(range(norb))
+
+        active = getattr(getattr(solver, "mo_space", None), "active_indices", None)
+        self.active_mo_indices = (
+            list(active) if active is not None else self.corr_mo_indices[:]
         )
 
         # compute the various mutual correlation measures
