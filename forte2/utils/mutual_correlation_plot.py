@@ -234,19 +234,23 @@ def mutual_correlation_plot(
             # If the file doesn't exist, just skip
             print(f"Warning: Could not find file {tga_file}")
 
-    if mca.M1.shape[0] != num_orbitals:
-        raise ValueError(
-            "The number of orbitals used in the MutualCorrelationAnalysis object does not match the number of orbitals provided."
-        )
+    # if mca.M1.shape[0] != num_orbitals:
+    #     raise ValueError(
+    #         "The number of orbitals used in the MutualCorrelationAnalysis object does not match the number of orbitals provided."
+    #     )
 
     # Label each orbital with the occupation number and index
     for i in range(num_orbitals):
-        val = mca.Γ1[i, i]
+        p = indices[i]
+        if mca.M1.shape[0] != num_orbitals:
+            val = mca.Γ1[p, p]
+        else:
+            val = mca.Γ1[i, i]
         color, alpha = get_color_and_alpha_smooth(val, 0.01, 2, cmap)
         ax.text(
             x_coords[i] * 1.5,
             y_coords[i] * 1.5,
-            f"{val:.2f} ({indices[i]})",
+            f"{val:.2f} ({p})",
             ha="center",
             va="center",
             fontsize=fontsize,
@@ -263,7 +267,12 @@ def mutual_correlation_plot(
     # Plot mutual correlation connections
     for i in range(num_orbitals):
         for j in range(i + 1, num_orbitals):
-            val = mca.M2[i, j]
+            if mca.M1.shape[0] != num_orbitals:
+                p = indices[i]  # <-- add
+                q = indices[j]  # <-- add
+                val = mca.M2[p, q]  # <-- change
+            else:
+                val = mca.M2[i, j]
             plot_smooth_connection(ax, x_coords, y_coords, i, j, val, vmin, vmax, cmap)
 
     # Formatting
