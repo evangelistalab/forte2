@@ -1,5 +1,5 @@
-from dataclasses import dataclass
-from abc import ABC
+from dataclasses import dataclass, field
+from abc import ABC, abstractmethod
 import time
 
 import numpy as np
@@ -10,147 +10,108 @@ from forte2.helpers import logger
 
 
 @dataclass
-class DFRHFMP2(SystemMixin, MOsMixin, ABC):
-    """
-    Density-Fitted Møller–Plesset perturbation theory (DF-MP2) method with RHF canonical orbitals.
+class DFMP2Base(SystemMixin, MOsMixin, ABC):
+    """Base class for density-fitted MP2 methods. Not meant to be used directly.
 
     Parameters
     ----------
-    compute_1rdm
+    compute_1rdm : bool
         If True, build the spin-free 1-RDM (unrelaxed MP2).
-    compute_1rdm_ar
+    compute_1rdm_ao : bool
         If True, build the spin-free 1-RDM in AO basis.
-    compute_2rdm
+    compute_2rdm : bool
         If True, build the spin-free 2-RDM (potentially large).
-    compute_cumulants
-        If True, build 2-body cumulant (and 1-body hole RDM if needed).
-        Usually implies compute_rdm2 unless you implement a direct cumulant builder.
+    compute_cumulants : bool
+        If True, build the 2-body cumulant (and 1-body hole RDM if needed).
+        Usually implies compute_2rdm.
 
-    Returns
-    -------
-    float
-        MP2 total energy (E_HF + E_corr).
+    Attributes
+    ----------
+    parent_method : RHF or ROHF
+        Reference wavefunction object providing orbitals, orbital energies,
+        occupation numbers, and Fock builder.
+    C : ndarray
+        Molecular orbital coefficient matrix in AO basis.
+    eps : ndarray
+        Orbital energies in the working (possibly semicanonical) basis.
+    nocc : int
+        Number of correlated occupied orbitals.
+    nvir : int
+        Number of correlated virtual orbitals.
+    B_iaQ : ndarray
+        Density-fitted three-index integrals (ia|Q).
+    t2 : ndarray
+        MP2 double-excitation amplitudes.
+    E_corr : float
+        MP2 correlation energy.
+    E_total : float
+        Total energy (E_reference + E_corr).
+    gamma1_sf : ndarray or None
+        Spin-free one-particle reduced density matrix (if requested).
+    gamma2_sf : ndarray or None
+        Spin-free two-particle reduced density matrix (if requested).
+    lambda2_sf : ndarray or None
+        Spin-free two-body cumulant (if requested).
+    executed : bool
+        Whether the MP2 calculation has been executed.
+
+    Raises
+    ------
+    TypeError
+        If the provided reference is not a supported SCF method
+        (e.g., RHF or ROHF).
+    RuntimeError
+        If required reference data (orbitals, energies, integrals)
+        are unavailable or inconsistent.
+    NotImplementedError
+        If a subclass does not implement required amplitude-building
+        routines.
     """
 
     compute_1rdm: bool = False
     compute_1rdm_ao: bool = False
     compute_2rdm: bool = False
     compute_cumulants: bool = False
-    executed: bool = False
+    executed: bool = field(default=False, init=False)
 
     def __call__(self, parent_method):
         self.parent_method = parent_method
-        assert isinstance(
-            self.parent_method, (RHF, ROHF)
-        ), "Parent method must be of RHF of ROHF reference."
+        if not isinstance(parent_method, (RHF, ROHF)):
+            raise TypeError("DFMP2 requires an RHF or ROHF reference.")
         return self
 
-    def _startup(self):
-        if not self.parent_method.executed:
-            self.parent_method.run()
-
-        # Copy system + MO information
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
-
-        # MO reordering (contiguous correlated space)
-        self.C = self.C[0].copy()
-        self.eps = self.parent_method.eps[0].copy()
-
-        self.nocc = self.parent_method.na
-        self.nvir = self.parent_method.nuocc
-
-        self.fock_builder = self.system.fock_builder
-
     def run(self):
-        """
-        Run DF-RHF-MP2.
-        """
-        import time
-
-        t0 = time.monotonic()
-        logger.log_info1("Starting DF-RHF-MP2 calculation.")
-
         self._startup()
 
-        self.B_iaQ = self._build_df_iaQ()  # shape (nocc, nvir, naux)
+        self.B_iaQ = self._build_df_iaQ()
 
-        # --- energies
-        self.t2, self.t2_as, self.E_corr = self._build_t2_all(B=self.B_iaQ)
+        self.t2, self.t2_as, self.E_corr = self._build_t2_all(self.B_iaQ)
+
         self.E_total = self.parent_method.E + self.E_corr
 
-        # --- optional density info
+        self._postprocess_rdms()
+
+        self.executed = True
+        return self.E_total
+
+    def _postprocess_rdms(self):
         self.gamma1_sf = None
         self.gamma2_sf = None
         self.lambda2_sf = None
 
-        logger.log_info1("DF-RHF-MP2 calculation completed.")
-        logger.log_info1(f"E(corr)  = {self.E_corr:.13f} Eh")
-        logger.log_info1(f"E(total) = {self.E_total:.13f} Eh")
-        logger.log_info1(f"||t2|| = {np.linalg.norm(self.t2)}")
-
         if self.compute_1rdm:
-            self.gamma1_sf = self.make_mp2_sf_1rdm_intermediates(B=self.B_iaQ)
+            self.gamma1_sf = self.make_mp2_sf_1rdm_intermediates(self.B_iaQ)
+
             if self.compute_1rdm_ao:
                 self.gamma1_sf_ao = self.gamma1_mo_to_ao(self.gamma1_sf)
 
         if self.compute_2rdm or self.compute_cumulants:
-            self.gamma2_sf = self.make_mp2_sf_2rdm(t2=self.t2, dm1=self.gamma1_sf)
+            self.gamma2_sf = self.make_mp2_sf_2rdm(self.t2, self.gamma1_sf)
 
-        self.executed = True
-        dt = time.monotonic() - t0
-
-        logger.log_info1(f"Time     = {dt:.3f} s")
-
-        return self.E_total
-
-    def _build_t2_all(self, B):
-        """
-        Build all MP2 amplitudes t_{ij}^{ab} and antisymmetrized t̃_{ij}^{ab}.
-
-        Shapes
-        ------
-        B: (nocc, nvir, naux)
-        t2, t2_as: (nocc, nocc, nvir, nvir)
-
-        Energy
-        ------
-        E_corr = Σ_{ijab} (2(ia|jb) - (ib|ja)) * (ia|jb) / Δ_{ij}^{ab}
-            = Σ_{ijab} (2 g_{ij}^{ab} - g_{ij}^{ba}) * t_{ij}^{ab}
-        """
-        eps_i = self.eps[: self.nocc]
-        eps_a = self.eps[self.nocc :]
-
-        nocc, nvir = self.nocc, self.nvir
-        t2 = np.empty((nocc, nocc, nvir, nvir))
-        # antisym only in (a,b): t̃ = 2t - t^{ba}
-        t2_as = np.empty_like(t2)
-
-        E_corr = 0.0
-
-        for i in range(nocc):
-            Bi = B[i]  # (nvir, naux)
-            for j in range(nocc):
-                Bj = B[j]
-                gijab = Bi @ Bj.T  # (a,b)
-                denom = eps_i[i] + eps_i[j] - eps_a[:, None] - eps_a[None, :]
-                tiny = 1e-12
-                mask = np.abs(denom) < tiny
-                n_bad = np.count_nonzero(mask)
-                if n_bad:
-                    logger.log_warning(
-                        f"MP2 denom clamp: {n_bad} / {denom.size} elements < {tiny:g}"
-                    )
-                denom = np.where(mask, np.inf, denom)
-                tijab = gijab / denom
-
-                t2[i, j] = tijab
-                t2_as[i, j] = 2.0 * tijab - tijab.T
-
-                # energy contribution
-                E_corr += np.sum((2.0 * gijab - gijab.T) * tijab)
-
-        return t2, t2_as, E_corr
+        if self.compute_cumulants:
+            self.lambda2_sf = self.make_mp2_sf_2cumulants(
+                self.gamma1_sf, self.gamma2_sf
+            )
 
     def _build_df_iaQ(self):
         """
@@ -306,6 +267,279 @@ class DFRHFMP2(SystemMixin, MOsMixin, ABC):
         e2 = 0.5 * np.einsum("pqrs,prqs", V, gamma2, optimize=True)
 
         return Ecore + e1 + e2
+
+    @abstractmethod
+    def _startup(self): ...
+
+    @abstractmethod
+    def _build_t2_all(self, B): ...
+
+
+@dataclass
+class DFRHFMP2(DFMP2Base):
+    """
+    Density-Fitted Møller–Plesset perturbation theory (DF-MP2) method with RHF canonical orbitals.
+
+    Parameters
+    ----------
+    compute_1rdm
+        If True, build the spin-free 1-RDM (unrelaxed MP2).
+    compute_1rdm_ao
+        If True, build the spin-free 1-RDM in AO basis.
+    compute_2rdm
+        If True, build the spin-free 2-RDM (potentially large).
+    compute_cumulants
+        If True, build 2-body cumulant (and 1-body hole RDM if needed).
+    Returns
+    -------
+    float
+        MP2 total energy (E_HF + E_corr).
+    """
+
+    def _startup(self):
+        if not self.parent_method.executed:
+            self.parent_method.run()
+
+        # Copy system + MO information
+        SystemMixin.copy_from_upstream(self, self.parent_method)
+        MOsMixin.copy_from_upstream(self, self.parent_method)
+
+        # MO reordering (contiguous correlated space)
+        self.C = self.C[0].copy()
+        self.eps = self.parent_method.eps[0].copy()
+
+        self.nocc = self.parent_method.na
+        self.nvir = self.parent_method.nuocc
+
+        self.fock_builder = self.system.fock_builder
+
+    def _build_t2_all(self, B):
+        """
+        Build all MP2 amplitudes t_{ij}^{ab} and antisymmetrized t̃_{ij}^{ab}.
+
+        Shapes
+        ------
+        B: (nocc, nvir, naux)
+        t2, t2_as: (nocc, nocc, nvir, nvir)
+
+        Energy
+        ------
+        E_corr = Σ_{ijab} (2(ia|jb) - (ib|ja)) * (ia|jb) / Δ_{ij}^{ab}
+            = Σ_{ijab} (2 g_{ij}^{ab} - g_{ij}^{ba}) * t_{ij}^{ab}
+        """
+        eps_i = self.eps[: self.nocc]
+        eps_a = self.eps[self.nocc :]
+
+        nocc, nvir = self.nocc, self.nvir
+        t2 = np.empty((nocc, nocc, nvir, nvir))
+        # antisym only in (a,b): t̃ = 2t - t^{ba}
+        t2_as = np.empty_like(t2)
+
+        E_corr = 0.0
+
+        for i in range(nocc):
+            Bi = B[i]  # (nvir, naux)
+            for j in range(nocc):
+                Bj = B[j]
+                gijab = Bi @ Bj.T  # (a,b)
+                denom = eps_i[i] + eps_i[j] - eps_a[:, None] - eps_a[None, :]
+                tiny = 1e-12
+                mask = np.abs(denom) < tiny
+                n_bad = np.count_nonzero(mask)
+                if n_bad:
+                    logger.log_warning(
+                        f"MP2 denom clamp: {n_bad} / {denom.size} elements < {tiny:g}"
+                    )
+                denom = np.where(mask, np.inf, denom)
+                tijab = gijab / denom
+
+                t2[i, j] = tijab
+                t2_as[i, j] = 2.0 * tijab - tijab.T
+
+                # energy contribution
+                E_corr += np.sum((2.0 * gijab - gijab.T) * tijab)
+
+        return t2, t2_as, E_corr
+
+
+@dataclass
+class DFROHFMP2(DFMP2Base):
+    """
+    Density-Fitted Møller–Plesset perturbation theory (DF-MP2) method with ROHF canonical orbitals.
+
+    Parameters
+    ----------
+    compute_1rdm
+        If True, build the spin-free 1-RDM (unrelaxed MP2).
+    compute_1rdm_ao
+        If True, build the spin-free 1-RDM in AO basis.
+    compute_2rdm
+        If True, build the spin-free 2-RDM (potentially large).
+    compute_cumulants
+        If True, build 2-body cumulant (and 1-body hole RDM if needed).
+    Returns
+    -------
+    float
+        MP2 total energy (E_HF + E_corr).
+    """
+
+    def _startup(self):
+        if not self.parent_method.executed:
+            self.parent_method.run()
+
+        # Copy system + MO information
+        SystemMixin.copy_from_upstream(self, self.parent_method)
+        MOsMixin.copy_from_upstream(self, self.parent_method)
+
+        # MO reordering (contiguous correlated space)
+        self.C = self.C[0].copy()
+        self.eps = self.parent_method.eps[0].copy()
+
+        self.docc = (self.parent_method.na + self.parent_method.nb) // 2
+        self.socc = self.parent_method.na - self.docc
+        self.nocc = self.docc + self.socc
+        self.nvir = self.parent_method.nuocc
+
+        self.fock_builder = self.system.fock_builder
+
+    def _build_t2_all(self, B):
+        nd = self.ndocc
+        ns = self.socc
+        nvir = self.nvir
+
+        eps = self.eps
+        eps_d = eps[:nd]
+        eps_s = eps[nd : nd + ns]
+        eps_v = eps[nd + ns :]
+
+        E_corr = 0.0
+        t2 = np.empty((self.nocc, self.nocc, nvir, nvir))
+        t2_as = np.empty_like(t2)
+
+        # doubly-doubly contribution
+        for i in range(nd):
+            Bi = B[i]  # (nvir, naux)
+            for j in range(nd):
+                Bj = B[j]
+                gijab = Bi @ Bj.T  # (a,b)
+                denom = eps_d[i] + eps_d[j] - eps_v[:, None] - eps_v[None, :]
+                tiny = 1e-12
+                mask = np.abs(denom) < tiny
+                n_bad = np.count_nonzero(mask)
+                if n_bad:
+                    logger.log_warning(
+                        f"MP2 denom clamp: {n_bad} / {denom.size} elements < {tiny:g}"
+                    )
+                denom = np.where(mask, np.inf, denom)
+                tijab = gijab / denom
+
+                t2[i, j] = tijab
+                t2_as[i, j] = 2.0 * tijab - tijab.T
+
+                E_corr += np.sum((2.0 * gijab - gijab.T) * tijab)
+
+        # doubly-singly occupied contribution (only i or j in singly occupied block)
+        for i in range(nd):
+            Bi = B[i]  # (nvir, naux)
+            for r in range(ns):
+                idx_r = nd + r
+                Br = B[idx_r]
+                girab = Bi @ Br.T  # (a,b)
+                denom = eps_s[r] + eps_d[i] - eps_v[:, None] - eps_v[None, :]
+                tiny = 1e-12
+                mask = np.abs(denom) < tiny
+                n_bad = np.count_nonzero(mask)
+                if n_bad:
+                    logger.log_warning(
+                        f"MP2 denom clamp: {n_bad} / {denom.size} elements < {tiny:g}"
+                    )
+                denom = np.where(mask, np.inf, denom)
+                tirab = girab / denom
+
+                t2[i, idx_r] = tirab
+                t2_as[i, idx_r] = tirab  # no antisymmetry for single occupancy
+
+                E_corr += np.sum(girab * tirab)
+
+        # singly-singly occupied contribution (i,j both in singly occupied block)
+        for r in range(ns):
+            idx_r = nd + r
+            Br = B[idx_r]  # (nvir, naux)
+
+            for s in range(ns):
+                idx_s = nd + s
+                Bs = B[idx_s]
+
+                grsab = Br @ Bs.T  # (a,b)
+                denom = eps_s[r] + eps_s[s] - eps_v[:, None] - eps_v[None, :]
+                tiny = 1e-12
+                mask = np.abs(denom) < tiny
+                n_bad = np.count_nonzero(mask)
+                if n_bad:
+                    logger.log_warning(
+                        f"MP2 denom clamp: {n_bad} / {denom.size} elements < {tiny:g}"
+                    )
+                denom = np.where(mask, np.inf, denom)
+                trsab = grsab / denom
+
+                t2[idx_r, idx_s] = trsab
+                t2_as[idx_r, idx_s] = trsab  # no antisymmetry for single occupancy
+
+                factor = 0.5 if r == s else 1.0
+                E_corr += factor * np.sum(grsab * trsab)
+        return t2, t2_as, E_corr
+
+
+@dataclass
+class DFUHFMP2(DFMP2Base):
+    """
+    Density-Fitted Møller–Plesset perturbation theory (DF-MP2) method with UHF canonical orbitals.
+
+    Parameters
+    ----------
+    compute_1rdm
+        If True, build the spin-free 1-RDM (unrelaxed MP2).
+    compute_1rdm_ar
+        If True, build the spin-free 1-RDM in AO basis.
+    compute_2rdm
+        If True, build the spin-free 2-RDM (potentially large).
+    compute_cumulants
+        If True, build 2-body cumulant (and 1-body hole RDM if needed).
+        Usually implies compute_rdm2 unless you implement a direct cumulant builder.
+
+    Returns
+    -------
+    float
+        MP2 total energy (E_HF + E_corr).
+    """
+
+    def _startup(self):
+        if not self.parent_method.executed:
+            self.parent_method.run()
+
+        # Copy system + MO information
+        SystemMixin.copy_from_upstream(self, self.parent_method)
+        MOsMixin.copy_from_upstream(self, self.parent_method)
+
+        # MO reordering (contiguous correlated space)
+        self.Ca = self.C[0].copy()
+        self.Cb = self.C[1].copy()
+        self.eps_a = self.parent_method.eps[0].copy()
+        self.eps_b = self.parent_method.eps[1].copy()
+
+        self.naocc = self.parent_method.na
+        self.navir = self.parent_method.nuocc
+
+        self.nbocc = self.parent_method.nb
+        self.nbvir = self.parent_method.nvocc
+
+        self.fock_builder = self.system.fock_builder
+
+    def _build_df_iaQ(self, Ba, Bb):
+        raise NotImplementedError("DF-UHF-MP2 df_iaQ builder not implemented yet.")
+
+    def _build_t2_all(self, Ba, Bb):
+        raise NotImplementedError("DF-UHF-MP2 t2 builder not implemented yet.")
 
 
 # @dataclass
