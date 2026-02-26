@@ -1,5 +1,3 @@
-from functools import cached_property
-
 import numpy as np
 import scipy
 
@@ -35,8 +33,6 @@ class X2CHelper:
 
     Attributes
     ----------
-    hcore_x2c : NDArray
-        The one-electron X2C core Hamiltonian matrix in the (re-)contracted basis.
     X : NDArray
         The decoupling matrix used in the X2C transformation.
     R : NDArray
@@ -81,7 +77,6 @@ class X2CHelper:
         logger.log_info1(f"Number of decontracted basis functions: {nbf_decon}")
         self.nbf = nbf_decon if self.system.x2c_type == "sf" else nbf_decon * 2
 
-    @cached_property
     def hcore_x2c(self):
         """
         Return the one-electron X2C core Hamiltonian matrix for the given system.
