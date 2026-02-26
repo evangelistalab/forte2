@@ -4,7 +4,13 @@ from numpy.typing import NDArray
 
 from forte2 import integrals
 from forte2.data import DEBYE_TO_AU, DEBYE_ANGSTROM_TO_AU, Z_TO_ATOM_SYMBOL
-from forte2.helpers import logger, invsqrt_matrix, canonical_orth, block_diag_2x2
+from forte2.helpers import (
+    logger,
+    invsqrt_matrix,
+    canonical_orth,
+    block_diag_2x2,
+    print_metric_info,
+)
 from forte2.x2c import X2CHelper
 from forte2.jkbuilder import FockBuilder
 from .build_basis import build_basis
@@ -133,7 +139,8 @@ class System:
         self.nuclear_repulsion = integrals.nuclear_repulsion(self)
         self._init_x2c()
         _S = integrals.overlap(self)
-        self.Xorth, _, info = canonical_orth(_S, self.ortho_thresh, print_info=True)
+        self.Xorth, _, info = canonical_orth(_S, self.ortho_thresh)
+        print_metric_info(info)
         self.nmo = info["n_kept"]
         self.fock_builder = FockBuilder(self)
         # The B tensors here are lazily evaluated, so no overhead if not used
@@ -260,7 +267,7 @@ class System:
             Core Hamiltonian integrals matrix.
         """
         if self.x2c_type in ["sf", "so"]:
-            H = self.x2c_helper.hcore_x2c
+            H = self.x2c_helper.hcore_x2c()
         else:
             T = integrals.kinetic(self)
             V = integrals.nuclear(self)
@@ -357,7 +364,7 @@ class ModelSystem:
         self.nbf = self.hcore.shape[0]
         self.nmo = self.nbf
         self.naux = 0
-        self.Xorth = invsqrt_matrix(self.ints_overlap(), tol=1e-13)
+        self.Xorth, *_ = invsqrt_matrix(self.ints_overlap(), rtol=1e-13)
         self.symmetry = False
         self.point_group = "C1"
         self.fock_builder = FockBuilder(self)

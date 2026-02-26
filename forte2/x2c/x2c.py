@@ -4,7 +4,14 @@ import numpy as np
 import scipy
 
 from forte2 import integrals
-from forte2.helpers import logger, block_diag_2x2, i_sigma_dot, canonical_orth
+from forte2.helpers import (
+    logger,
+    block_diag_2x2,
+    i_sigma_dot,
+    canonical_orth,
+    invsqrt_matrix,
+    print_metric_info,
+)
 from forte2.system.build_basis import build_basis
 
 LIGHT_SPEED = 137.035999177
@@ -23,11 +30,11 @@ class X2CHelper:
     ----------
     system : System
         The molecular system for which to compute the X2C Hamiltonian.
+    ortho_thresh : float, optional, default=1e-8
+        Relative threshold for canonical orthogonalization. Eigenvalues of the overlap matrix below ortho_thresh * max_eigenvalue will be treated as zero and discarded in the orthogonalization process. This can help improve numerical stability when the basis set has near-linear dependencies.
 
     Attributes
     ----------
-    hcore_x2c : NDArray
-        The one-electron X2C core Hamiltonian matrix in the (re-)contracted basis.
     X : NDArray
         The decoupling matrix used in the X2C transformation.
     R : NDArray
@@ -71,9 +78,7 @@ class X2CHelper:
         nbf_decon = len(self.xbasis)
         logger.log_info1(f"Number of decontracted basis functions: {nbf_decon}")
         self.nbf = nbf_decon if self.system.x2c_type == "sf" else nbf_decon * 2
-        self.executed = False
 
-    @cached_property
     def hcore_x2c(self):
         """
         Return the one-electron X2C core Hamiltonian matrix for the given system.
@@ -122,7 +127,6 @@ class X2CHelper:
         # project back to the contracted basis
         h_fw = self.proj.conj().T @ h_fw @ self.proj
 
-        self.executed = True
         return h_fw
 
     def _get_projection_matrix(self):
@@ -141,7 +145,8 @@ class X2CHelper:
         W = integrals.opVop(self.system, self.xbasis)
 
         # Get orthonormal transformation for X2C
-        Xorth_l, Xorthm1_l, info = canonical_orth(S, self.ortho_thresh, print_info=True)
+        Xorth_l, Xorthm1_l, info = canonical_orth(S, self.ortho_thresh)
+        print_metric_info(info)
         northo = info["n_kept"]
         logger.log_info1(
             f"Number of orthogonalized decontracted basis functions: {northo}"
@@ -192,10 +197,11 @@ class X2CHelper:
         """
         S_tilde = S + (0.5 / LIGHT_SPEED**2) * self.X.conj().T @ T @ self.X
         # S is guaranteed to be identity in the orthonormal basis
-        lam, z = np.linalg.eigh(S_tilde)
-        idx = lam > 1e-14
-        R = (z[:, idx] / np.sqrt(lam[idx])) @ z[:, idx].T.conj() @ S
-        return R
+        # so we just need to compute the inverse square root of S_tilde
+        # the tolerance used here isn't self.ortho_thresh because we're already in the
+        # orthonormal basis, it's just an additional numerical guard against division by zero.
+        S_tilde_m12, *_ = invsqrt_matrix(S_tilde, rtol=1e-12)
+        return S_tilde_m12 @ S
         # This was the old way (Cheng and Gauss), worked fine for sfx2c1e, but seems unusable for sox2c1e
         # S_tilde = S + (0.5 / c0**2) * X.conj().T @ T @ X
         # Ssqrt = scipy.linalg.sqrtm(S)
