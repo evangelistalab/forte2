@@ -4,7 +4,13 @@ import numpy as np
 import scipy
 
 from forte2 import integrals
-from forte2.helpers import logger, block_diag_2x2, i_sigma_dot, canonical_orth
+from forte2.helpers import (
+    logger,
+    block_diag_2x2,
+    i_sigma_dot,
+    canonical_orth,
+    invsqrt_matrix,
+)
 from forte2.system.build_basis import build_basis
 
 LIGHT_SPEED = 137.035999177
@@ -192,10 +198,10 @@ class X2CHelper:
         """
         S_tilde = S + (0.5 / LIGHT_SPEED**2) * self.X.conj().T @ T @ self.X
         # S is guaranteed to be identity in the orthonormal basis
-        lam, z = np.linalg.eigh(S_tilde)
-        idx = lam > 1e-14
-        R = (z[:, idx] / np.sqrt(lam[idx])) @ z[:, idx].T.conj() @ S
-        return R
+        # so we just need to compute the inverse square root of S_tilde
+        # the tolerance used here isn't self.ortho_thresh because we're already in the
+        # orthonormal basis, it's just an additional numerical guard against division by zero.
+        return invsqrt_matrix(S_tilde, tol=1e-12) @ S
         # This was the old way (Cheng and Gauss), worked fine for sfx2c1e, but seems unusable for sox2c1e
         # S_tilde = S + (0.5 / c0**2) * X.conj().T @ T @ X
         # Ssqrt = scipy.linalg.sqrtm(S)
