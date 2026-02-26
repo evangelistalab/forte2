@@ -10,6 +10,7 @@ from forte2.helpers import (
     i_sigma_dot,
     canonical_orth,
     invsqrt_matrix,
+    print_metric_info,
 )
 from forte2.system.build_basis import build_basis
 
@@ -147,7 +148,8 @@ class X2CHelper:
         W = integrals.opVop(self.system, self.xbasis)
 
         # Get orthonormal transformation for X2C
-        Xorth_l, Xorthm1_l, info = canonical_orth(S, self.ortho_thresh, print_info=True)
+        Xorth_l, Xorthm1_l, info = canonical_orth(S, self.ortho_thresh)
+        print_metric_info(info)
         northo = info["n_kept"]
         logger.log_info1(
             f"Number of orthogonalized decontracted basis functions: {northo}"
@@ -201,7 +203,8 @@ class X2CHelper:
         # so we just need to compute the inverse square root of S_tilde
         # the tolerance used here isn't self.ortho_thresh because we're already in the
         # orthonormal basis, it's just an additional numerical guard against division by zero.
-        return invsqrt_matrix(S_tilde, tol=1e-12) @ S
+        S_tilde_m12, *_ = invsqrt_matrix(S_tilde, rtol=1e-12)
+        return S_tilde_m12 @ S
         # This was the old way (Cheng and Gauss), worked fine for sfx2c1e, but seems unusable for sox2c1e
         # S_tilde = S + (0.5 / c0**2) * X.conj().T @ T @ X
         # Ssqrt = scipy.linalg.sqrtm(S)

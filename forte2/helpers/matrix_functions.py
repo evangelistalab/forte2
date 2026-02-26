@@ -6,46 +6,85 @@ from . import logger
 MACHEPS = 1e-14
 
 
-def invsqrt_matrix(M, tol=1e-7):
+def _eigh_metric_kernel(S, rtol=1e-7):
+    info = {}
+    sevals, sevecs = np.linalg.eigh(S)
+    if np.any(sevals < -MACHEPS):
+        raise ValueError("The metric matrix must be positive semi-definite.")
+    max_seval = sevals[-1]
+    info["max_eigenvalue"] = max_seval
+    info["min_eigenvalue"] = sevals[0]
+    info["condition_number"] = max_seval / sevals[0]
+
+    # indices equal and above discard_idx are kept
+    ndiscard = np.searchsorted(sevals, rtol * max_seval)
+    info["n_discarded"] = ndiscard
+    info["n_kept"] = len(sevals) - ndiscard
+    info["largest_discarded_eigenvalue"] = sevals[ndiscard - 1] if ndiscard > 0 else 0.0
+    info["smallest_kept_eigenvalue"] = (
+        sevals[ndiscard] if ndiscard < len(sevals) else 0.0
+    )
+    return sevals, sevecs, info
+
+
+def print_metric_info(info):
+    logger.log_info1(f"  Max eigenvalue: {info['max_eigenvalue']:.3e}")
+    logger.log_info1(f"  Min eigenvalue: {info['min_eigenvalue']:.3e}")
+    logger.log_info1(f"  Condition number: {info['condition_number']:.3e}")
+    logger.log_info1(f"  Number of discarded eigenvalues: {info['n_discarded']}")
+    logger.log_info1(f"  Number of kept eigenvalues: {info['n_kept']}")
+    logger.log_info1(
+        f"  Largest discarded eigenvalue: {info['largest_discarded_eigenvalue']:.3e}"
+    )
+    logger.log_info1(
+        f"  Smallest kept eigenvalue: {info['smallest_kept_eigenvalue']:.3e}"
+    )
+
+
+def invsqrt_matrix(M, rtol=1e-7, precomp=None):
     """
     Compute the inverse square root of a symmetric (Hermitian) matrix A.
-    Small eigenvalues below 'tol' are treated as zero (pseudo-inverse style).
 
     Parameters
     ----------
     M : NDArray
         A symmetric matrix (must be positive semi-definite).
-    tol : float, optional, default=1e-7
-        Eigenvalue threshold below which values are treated as zero.
+    rtol : float, optional, default=1e-7
+        Relative threshold for treating eigenvalues as zero. Eigenvalues smaller than rtol * max_eigenvalue will be discarded in the computation of the inverse square root.
+    precomp : tuple(NDArray, NDArray, dict), optional
+        If provided, should be the output of _eigh_metric_kernel(M, rtol=rtol), i.e., (eigenvalues, eigenvectors, info). This allows reusing the eigen-decomposition if it has already been computed for the same matrix M with the same rtol, which can be more efficient if multiple functions need to use the same decomposition.
 
     Returns
     -------
     invsqrt_M : NDArray
         The inverse square root of A.
-
-    Raises
-    ------
-    ValueError
-        If the matrix M is not positive semi-definite.
+    sqrt_M : NDArray
+        The square root of A.
+    info : dict
+        A dictionary containing additional information from the eigen-decomposition, including:
+        - "max_eigenvalue": The largest eigenvalue of M.
+        - "min_eigenvalue": The smallest eigenvalue of M.
+        - "condition_number": The condition number of M (max_eigenvalue / min_eigenvalue).
+        - "n_discarded": The number of eigenvalues discarded due to being below the threshold.
+        - "n_kept": The number of eigenvalues kept.
+        - "largest_discarded_eigenvalue": The largest eigenvalue that was discarded.
+        - "smallest_kept_eigenvalue": The smallest eigenvalue that was kept.
     """
-    # Symmetric eigenvalue decomposition
-    evals, evecs = np.linalg.eigh(M)
-    if np.any(evals < -MACHEPS):
-        raise ValueError("Matrix must be positive semi-definite.")
-    # Inverse sqrt eigenvalues with threshold
-    invsqrt_evals = np.zeros_like(evals)
-    for i, val in enumerate(evals):
-        if val > tol:
-            invsqrt_evals[i] = 1.0 / np.sqrt(val)
-        else:
-            invsqrt_evals[i] = 0.0  # treat small/singular values carefully
+    if not precomp:
+        evals, evecs, info = _eigh_metric_kernel(M, rtol=rtol)
+    else:
+        evals, evecs, info = precomp
 
-    # Rebuild the matrix
-    invsqrt_M = evecs @ np.diag(invsqrt_evals) @ evecs.T.conj()
-    return invsqrt_M
+    ndiscard = info["n_discarded"]
+    evecs_trunc = evecs[:, ndiscard:]
+    evals_trunc = evals[ndiscard:]
+
+    invsqrt_M = (evecs_trunc / np.sqrt(evals_trunc)) @ evecs_trunc.T.conj()
+    sqrt_M = (evecs_trunc * np.sqrt(evals_trunc)) @ evecs_trunc.T.conj()
+    return invsqrt_M, sqrt_M, info
 
 
-def canonical_orth(S, rtol=1e-7, print_info=False):
+def canonical_orth(S, rtol=1e-7, precomp=None):
     r"""
     Compute the canonical orthogonalization given the metric matrix S.
 
@@ -55,9 +94,8 @@ def canonical_orth(S, rtol=1e-7, print_info=False):
         Metric matrix (must be positive semi-definite).
     rtol : float, optional, default=1e-7
         Relative threshold t for which values below t * max_eigenvalue are treated as zero.
-    print_info : bool, optional, default=False
-        If True, print additional information about the eigenvalues and orthogonalization process,
-        only if any eigenvalues are discarded.
+    precomp : tuple(NDArray, NDArray, dict), optional
+        If provided, should be the output of _eigh_metric_kernel(S, rtol=rtol), i.e., (eigenvalues, eigenvectors, info). This allows reusing the eigen-decomposition if it has already been computed for the same matrix S with the same rtol, which can be more efficient if multiple functions need to use the same decomposition.
 
     Returns
     -------
@@ -91,48 +129,22 @@ def canonical_orth(S, rtol=1e-7, print_info=False):
     ValueError
         If the matrix S is not positive semi-definite.
     """
-    # Compute the inverse square root of S
-    info = {}
-    sevals, sevecs = np.linalg.eigh(S)
-    max_seval = sevals[-1]
-    info["max_eigenvalue"] = max_seval
-    info["min_eigenvalue"] = sevals[0]
-    info["condition_number"] = max_seval / sevals[0]
-    if np.any(sevals < -MACHEPS):
-        raise ValueError("Matrix must be positive semi-definite.")
+    if not precomp:
+        sevals, sevecs, info = _eigh_metric_kernel(S, rtol=rtol)
+    else:
+        sevals, sevecs, info = precomp
 
-    # indices equal and above discard_idx are kept
-    ndiscard = np.searchsorted(sevals, rtol * max_seval)
-    info["n_discarded"] = ndiscard
-    info["n_kept"] = len(sevals) - ndiscard
-    info["largest_discarded_eigenvalue"] = sevals[ndiscard - 1] if ndiscard > 0 else 0.0
-    info["smallest_kept_eigenvalue"] = (
-        sevals[ndiscard] if ndiscard < len(sevals) else 0.0
-    )
+    ndiscard = info["n_discarded"]
     U = sevecs[:, ndiscard:]
     # X = U @ s^{-1/2}, so the s_i^{-1/2}'s scale the columns
     X = U / np.sqrt(sevals[ndiscard:])
     # X^{-1} = s^{1/2} @ U.+, so the s_i^{1/2}'s scale the rows
     Xm1 = np.sqrt(sevals[ndiscard:])[:, None] * U.T.conj()
 
-    if print_info and info["n_discarded"] > 0:
-        logger.log_info1("Canonical orthogonalization info:")
-        logger.log_info1(f"  Max eigenvalue: {info['max_eigenvalue']:.4e}")
-        logger.log_info1(f"  Min eigenvalue: {info['min_eigenvalue']:.4e}")
-        logger.log_info1(f"  Condition number: {info['condition_number']:.4e}")
-        logger.log_info1(f"  Number of discarded eigenvalues: {info['n_discarded']}")
-        logger.log_info1(f"  Number of kept eigenvalues: {info['n_kept']}")
-        logger.log_info1(
-            f"  Largest discarded eigenvalue: {info['largest_discarded_eigenvalue']:.4e}"
-        )
-        logger.log_info1(
-            f"  Smallest kept eigenvalue: {info['smallest_kept_eigenvalue']:.4e}"
-        )
-
     return X, Xm1, info
 
 
-def eigh_gen(A, B=None, remove_lindep=True, orth_tol=1e-7, orth_method="canonical"):
+def eigh_gen(A, B=None, rtol=1e-7, mode="canonical"):
     """
     Solve the generalized eigenvalue problem ``A @ x = lambda * B @ x``.
 
@@ -142,35 +154,43 @@ def eigh_gen(A, B=None, remove_lindep=True, orth_tol=1e-7, orth_method="canonica
         The matrix A.
     B : NDArray
         The matrix B. If None, the identity matrix is used.
-    remove_lindep : bool, optional, default=True
-        If True, perform orthogonalization to remove linear dependencies, else use ``sp.linalg.eigh``.
-    orth_tol : float, optional, default=1e-7
-        Eigenvalue threshold below which values are treated as zero.
-    orth_method : str, optional, default="canonical"
-        Orthogonalization method. Options are "canonical" or "symmetric".
-        "canonical" should be used when there are linear dependencies in the basis functions.
+    rtol : float, optional, default=1e-7
+        Relative threshold for removing linear dependencies, passed to the orthogonalization step.
+    mode : str, optional, default="canonical"
+        - "auto": Automatically choose the orthogonalization method based on the condition number of B. If the inverse condition number of B is larger than rtol, use symmetric orthogonalization; otherwise, use canonical orthogonalization.
+        - "canonical": Always use canonical orthogonalization.
+        - "symmetric": Always use symmetric orthogonalization.
 
     Returns
     -------
-    tuple(NDArray, NDArray)
-        A tuple containing the eigenvalues and eigenvectors.
+    tuple(NDArray, NDArray, dict)
+        A tuple containing the eigenvalues, eigenvectors, and additional information.
     """
     if B is None:
-        B = np.eye(A.shape[0])
+        return np.linalg.eigh(A)
 
-    if remove_lindep:
-        if orth_method == "canonical":
-            X, *_ = canonical_orth(B, orth_tol)
-        elif orth_method == "symmetric":
-            X = invsqrt_matrix(B, orth_tol)
-        else:  # TODO: add partial cholesky: 10.1063/1.5139948
-            raise ValueError("Invalid orthogonalization method.")
+    assert mode in [
+        "auto",
+        "canonical",
+        "symmetric",
+    ], "Invalid mode for eigh_gen. Must be 'auto', 'canonical', or 'symmetric'."
 
-        A = X.T @ A @ X
-        e, c = np.linalg.eigh(A)
-        return e, X @ c
-    else:
-        return sp.linalg.eigh(A, B)
+    Bevals, Bevecs, info = _eigh_metric_kernel(B, rtol=rtol)
+    if mode == "auto":
+        inv_cond = info["min_eigenvalue"] / info["max_eigenvalue"]
+        if inv_cond > rtol:
+            mode = "symmetric"
+        else:
+            mode = "canonical"
+
+    if mode == "canonical":
+        X, *_ = canonical_orth(B, rtol=rtol, precomp=(Bevals, Bevecs, info))
+    elif mode == "symmetric":
+        X, *_ = invsqrt_matrix(B, rtol=rtol, precomp=(Bevals, Bevecs, info))
+
+    A = X.T @ A @ X
+    e, c = np.linalg.eigh(A)
+    return e, X @ c, info
 
 
 def givens_rotation(A, c, s, i, j, column=True):
