@@ -71,13 +71,13 @@ def test_uhf_imcompatible_params():
 
 
 def test_coulson_fischer():
-    erhf = -0.854139014387
-    euhf = -1.000297175136
-    s2uhf = 0.987426195958
+    erhf = -0.852767190652
+    euhf = -1.000027890395
+    s2uhf = 0.9874559102128492
     xyz = """
     H 0 0 0
     H 0 0 2.7"""
-    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
+    system = System(xyz=xyz, basis_set="cc-pVTZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
     rhf = RHF(charge=0)(system)
     rhf.run()
     assert rhf.E == approx(erhf)

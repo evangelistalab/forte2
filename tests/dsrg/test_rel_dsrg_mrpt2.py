@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from forte2 import System, GHF, RelMCOptimizer, AVAS
-from forte2.dsrg import RelDSRG_MRPT2
+from forte2.dsrg import RelDSRG_MRPT2, RelDSRG_MRPT2_Slow
 from forte2.helpers.comparisons import approx
 from forte2.data.atom_data import EH_TO_WN
 
@@ -176,7 +176,7 @@ def test_mrpt2_se_rel_sa_gauss_nuc():
     )(mc)
     dsrg.run()
     assert (dsrg.relax_eigvals[5] - dsrg.relax_eigvals[4]) * EH_TO_WN == pytest.approx(
-        1916.780124730304, rel=1e-4
+        1916.780243598663, rel=1e-4
     )
 
 
@@ -210,5 +210,99 @@ def test_mrpt2_s_rel_sa_gauss_nuc():
     dsrg = RelDSRG_MRPT2(flow_param=0.24, relax_reference="once")(mc)
     dsrg.run()
     assert (dsrg.relax_eigvals[5] - dsrg.relax_eigvals[4]) * EH_TO_WN == pytest.approx(
-        387.52343852668406, rel=1e-4
+        387.5234521376601, rel=1e-4
     )
+
+
+def test_mrpt2_sh_with_slow():
+    xyz = """
+    S 0 0 0
+    H 0 0 1.4
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvtz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        x2c_type="so",
+        snso_type="row-dependent",
+        use_gaussian_charges=True,
+    )
+    mf = GHF(
+        charge=0,
+        die_if_not_converged=False,
+        maxiter=50,
+    )(system)
+    mc = RelMCOptimizer(
+        nel=17,
+        nroots=4,
+        core_orbitals=10,
+        active_orbitals=10,
+    )(mf)
+    dsrg = RelDSRG_MRPT2(flow_param=0.5, relax_reference="iterate")(mc)
+    dsrg.run()
+    assert np.abs(dsrg.E_dsrg.imag) < 1e-12
+
+    mc = RelMCOptimizer(
+        nel=17,
+        nroots=4,
+        core_orbitals=10,
+        active_orbitals=10,
+    )(mf)
+    dsrg_slow = RelDSRG_MRPT2_Slow(flow_param=0.5, relax_reference="iterate")(mc)
+    dsrg_slow.run()
+    assert np.abs(dsrg_slow.E_dsrg.imag) < 1e-12
+
+    ref_relax_energies = np.array(
+        [
+            [-399.255354002208, -399.25587285397, -399.075510442869],
+            [-399.255767074381, -399.255767109027, -399.074948640803],
+            [-399.255766234638, -399.255766234645, -399.074947874659],
+        ]
+    )
+    ref_relax_eigvals = np.array(
+        [
+            -399.256582458238 + 0.0j,
+            -399.256582458085 + 0.0j,
+            -399.254950011206 + 0.0j,
+            -399.254950011051 + 0.0j,
+        ]
+    )
+    ref_relax_eigvals_history = np.array(
+        [
+            [
+                -399.256688903703,
+                -399.256688903582,
+                -399.255056804358,
+                -399.255056804235,
+            ],
+            [
+                -399.2565833348,
+                -399.256583334644,
+                -399.25495088341,
+                -399.254950883254,
+            ],
+            [
+                -399.256582458238,
+                -399.256582458085,
+                -399.254950011206,
+                -399.254950011051,
+            ],
+        ]
+    )
+    ref_E = -399.25576623463775
+
+    assert dsrg.relax_energies[:3, :] == approx(ref_relax_energies)
+    assert dsrg.relax_eigvals == approx(ref_relax_eigvals)
+    assert dsrg.relax_eigvals_history == approx(ref_relax_eigvals_history)
+    assert dsrg.E_dsrg == approx(ref_E)
+
+    assert dsrg_slow.relax_energies[:3, :] == approx(ref_relax_energies)
+    assert dsrg_slow.relax_eigvals == approx(ref_relax_eigvals)
+    assert dsrg_slow.relax_eigvals_history == approx(ref_relax_eigvals_history)
+    assert dsrg_slow.E_dsrg == approx(ref_E)
+
+    assert dsrg.relax_energies == approx(dsrg_slow.relax_energies)
+    assert dsrg.relax_eigvals == approx(dsrg_slow.relax_eigvals)
+    assert dsrg.relax_eigvals_history == approx(dsrg_slow.relax_eigvals_history)
+    assert dsrg.E_dsrg == approx(dsrg_slow.E_dsrg)

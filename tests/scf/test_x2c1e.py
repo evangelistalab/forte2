@@ -144,7 +144,7 @@ def test_so_from_sf_water():
         snso_type=None,
     )
     scf_so = GHF(charge=1)(system)
-    scf_so.C = convert_coeff_spatial_to_spinor(system, scf.C)
+    scf_so.C = convert_coeff_spatial_to_spinor(scf.C)
     scf_so.run()
     assert scf_so.E == approx(eghf)
 
@@ -164,4 +164,3 @@ def test_sox2c1e_sc():
     scf.run()
     l23_splitting = EH_TO_EV * (scf.eps[0][6] - scf.eps[0][5])
     assert l23_splitting == pytest.approx(l23_ref, abs=1e-5)
-

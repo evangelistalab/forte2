@@ -311,7 +311,7 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         # Subspace overlap matrix
         Sss = Cms.T.conj() @ Smm @ Cms
         # Orthogonalize Sss: Xss = Sss^(-1/2)
-        Xss = invsqrt_matrix(Sss)
+        Xss, *_ = invsqrt_matrix(Sss)
         # Build overlap matrix between subspace and computational (large) basis
         Sml = ints.overlap(self.system.minao_basis, self.system.basis)
         # Project into subspace

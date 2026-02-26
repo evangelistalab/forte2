@@ -9,12 +9,11 @@ from .utils import (
     compute_t1_block,
     compute_t2_block,
     renormalize_V_block,
-    renormalize_3index,
 )
 
 
 @dataclass
-class RelDSRG_MRPT2(DSRGBase):
+class RelDSRG_MRPT2_Slow(DSRGBase):
     """
     Two-component relativistic driven similarity renormalization group
     second-order multireference perturbation theory (2C-DSRG-MRPT2).
@@ -115,66 +114,30 @@ class RelDSRG_MRPT2(DSRGBase):
         C_core = self._C_semican[:, self.core]
         C_actv = self._C_semican[:, self.actv]
         C_virt = self._C_semican[:, self.virt]
-        B_so["cc"] = self.fock_builder.B_tensor_gen_block_spinor(C_core, C_core)
-        B_so["ca"] = self.fock_builder.B_tensor_gen_block_spinor(C_core, C_actv)
-        B_so["cv"] = self.fock_builder.B_tensor_gen_block_spinor(C_core, C_virt)
-        B_so["aa"] = self.fock_builder.B_tensor_gen_block_spinor(C_actv, C_actv)
-        B_so["av"] = self.fock_builder.B_tensor_gen_block_spinor(C_actv, C_virt)
+        # B_so["cc"] = self.fock_builder.B_tensor_gen_block_spinor(C_core, C_core)
+        # B_so["ca"] = self.fock_builder.B_tensor_gen_block_spinor(C_core, C_actv)
+        # B_so["cv"] = self.fock_builder.B_tensor_gen_block_spinor(C_core, C_virt)
+        # B_so["aa"] = self.fock_builder.B_tensor_gen_block_spinor(C_actv, C_actv)
+        # B_so["av"] = self.fock_builder.B_tensor_gen_block_spinor(C_actv, C_virt)
+        V_so = self.fock_builder.two_electron_integrals_block_spinor(self._C_semican)
+        V_so = V_so - V_so.swapaxes(2, 3)  # antisymmetrize
 
         ints["V"] = dict()
-        ints["V"]["aaaa"] = np.einsum(
-            "Bux,Bvy->uvxy",
-            B_so["aa"],
-            B_so["aa"],
-            optimize=True,
-        )
-        ints["V"]["aaaa"] -= ints["V"]["aaaa"].swapaxes(2, 3)
-        ints["V"]["caaa"] = np.einsum(
-            "Biu,Bvw->ivuw",
-            B_so["ca"],
-            B_so["aa"],
-            optimize=True,
-        )
-        ints["V"]["caaa"] -= ints["V"]["caaa"].swapaxes(2, 3)
-        ints["V"]["aaav"] = np.einsum(
-            "Buv,Bwa->uwva",
-            B_so["aa"],
-            B_so["av"],
-            optimize=True,
-        )
-        ints["V"]["aaav"] -= ints["V"]["aaav"].swapaxes(0, 1)
-        ints["V"]["ccaa"] = np.einsum(
-            "Biu,Bjv->ijuv",
-            B_so["ca"],
-            B_so["ca"],
-            optimize=True,
-        )
-        ints["V"]["ccaa"] -= ints["V"]["ccaa"].swapaxes(2, 3)
-        ints["V"]["caav"] = np.einsum(
-            "Biu,Bva->ivua",
-            B_so["ca"],
-            B_so["av"],
-            optimize=True,
-        )
-        ints["V"]["caav"] -= np.einsum(
-            "Bia,Bvu->ivua",
-            B_so["cv"],
-            B_so["aa"],
-            optimize=True,
-        )
-        ints["V"]["aavv"] = np.einsum(
-            "Bua,Bvb->uvab",
-            B_so["av"],
-            B_so["av"],
-            optimize=True,
-        )
-        ints["V"]["aavv"] -= ints["V"]["aavv"].swapaxes(2, 3)
+        ints["V"]["aaaa"] = V_so[self.actv, self.actv, self.actv, self.actv].copy()
+        ints["V"]["caaa"] = V_so[self.core, self.actv, self.actv, self.actv].copy()
+        ints["V"]["aaav"] = V_so[self.actv, self.actv, self.actv, self.virt].copy()
+        ints["V"]["ccaa"] = V_so[self.core, self.core, self.actv, self.actv].copy()
+        ints["V"]["caav"] = V_so[self.core, self.actv, self.actv, self.virt].copy()
+        ints["V"]["aavv"] = V_so[self.actv, self.actv, self.virt, self.virt].copy()
+        ints["V"]["cavv"] = V_so[self.core, self.actv, self.virt, self.virt].copy()
+        ints["V"]["ccvv"] = V_so[self.core, self.core, self.virt, self.virt].copy()
+        ints["V"]["ccav"] = V_so[self.core, self.core, self.actv, self.virt].copy()
 
         # These are used in on-the-fly energy/Hbar computations
-        ints["B"] = dict()
-        ints["B"]["ca"] = B_so["ca"].transpose(1, 2, 0).copy()
-        ints["B"]["cv"] = B_so["cv"].transpose(1, 2, 0).copy()
-        ints["B"]["av"] = B_so["av"].transpose(1, 2, 0).copy()
+        # ints["B"] = dict()
+        # ints["B"]["ca"] = B_so["ca"].transpose(1, 2, 0).copy()
+        # ints["B"]["cv"] = B_so["cv"].transpose(1, 2, 0).copy()
+        # ints["B"]["av"] = B_so["av"].transpose(1, 2, 0).copy()
 
         ints["eps"] = dict()
         ints["eps"]["c"] = self.eps[self.core].copy()
@@ -188,7 +151,7 @@ class RelDSRG_MRPT2(DSRGBase):
         self.T1, self.T2 = self._build_tamps()
         self.F_tilde = self._renormalize_F()
         # self.ints["V"] gets renormalizes to V_tilde in place for the following blocks:
-        # caaa, aaav, ccaa, caav, aavv
+        # caaa, aaav, ccaa, caav, aavv, cavv, ccvv, ccav
         # The aaaa block is remains untouched, and can be safely used in reference relaxation
         self._renormalize_V_in_place()
         if form_hbar:
@@ -245,7 +208,7 @@ class RelDSRG_MRPT2(DSRGBase):
     def _build_tamps(self):
         t2 = dict()
 
-        for key in ["caaa", "aaav", "ccaa", "caav", "aavv"]:
+        for key in ["caaa", "aaav", "ccaa", "caav", "aavv", "cavv", "ccvv", "ccav"]:
             t2[key] = self.ints["V"][key].conj()
             compute_t2_block(
                 t2[key],
@@ -312,7 +275,7 @@ class RelDSRG_MRPT2(DSRGBase):
 
     def _renormalize_V_in_place(self):
         V_tilde = self.ints["V"]
-        for key in ["caaa", "aaav", "ccaa", "caav", "aavv"]:
+        for key in ["caaa", "aaav", "ccaa", "caav", "aavv", "cavv", "ccvv", "ccav"]:
             renormalize_V_block(
                 V_tilde[key],
                 *(self.ints["eps"][_] for _ in key),
@@ -479,159 +442,23 @@ class RelDSRG_MRPT2(DSRGBase):
             self.cumulants["lambda2"],
             optimize=True,
         )
-        E += self._compute_pt2_energy_ccvv()
-        E += self._compute_pt2_energy_cavv(form_hbar=form_hbar)
-        E += self._compute_pt2_energy_ccav(form_hbar=form_hbar)
-
-        return E
-
-    def _compute_pt2_energy_ccvv(self):
-        # This computes the following contribution to the energy:
-        # E += +0.250 * np.einsum("ijab,ijab->", T2["ccvv"], V["ccvv"], optimize=True)
-        E = 0.0
-        Vbare_i = np.empty((self.ncore, self.nvirt, self.nvirt), dtype=complex)
-        Vtmp = np.empty((self.ncore, self.nvirt, self.nvirt), dtype=complex)
-        Vr_i = np.empty((self.ncore, self.nvirt, self.nvirt), dtype=complex)
-        B_cv = self.ints["B"]["cv"]
-        for i in range(self.ncore):
-            # T2 = conj(Vbare) * renorm
-            # V = Vbare * (1 + exp)
-            # So, we compute conj(Vbare) * Vr, where Vr = Vbare * renorm * (1 + exp)
-            # this path is optimal because it is basically B_cv @ B_cv[i].T
-            np.einsum("aB,jbB->jba", B_cv[i, :, :], B_cv, optimize=True, out=Vbare_i)
-            np.copyto(Vtmp, Vbare_i.swapaxes(1, 2))
-            Vbare_i -= Vtmp
-            # copy to Vr_i
-            Vr_i[:] = Vbare_i
-            renormalize_3index(
-                Vr_i,
-                self.ints["eps"]["c"][i],
-                self.ints["eps"]["c"],
-                self.ints["eps"]["v"],
-                self.ints["eps"]["v"],
-                self.flow_param,
-            )
-            # equivalent to E += 0.250 * np.einsum("jba,jba->", Vbare_i.conj(), Vr_i, optimize=True)
-            E += 0.250 * np.sum(Vbare_i.conj() * Vr_i)
-
-        return E
-
-    def _compute_pt2_energy_cavv(self, form_hbar=False):
-        # This computes the following contribution to the energy:
-        # E += +0.500 * np.einsum(
-        #     "iuab,ivab,vu->",
-        #     T2["cavv"],
-        #     V["cavv"],
-        #     gamma1,
-        #     optimize=True,
-        # )
-        # If relaxing the reference, also compute the cavv contribution to Hbar_aa
-        # _F += +0.500 * np.einsum(
-        #     "iuab,ivab->uv",
-        #     T2["cavv"],
-        #     V["cavv"],
-        #     optimize=True,
-        # )
-        E = 0.0
-        Vbare_i = np.empty((self.nact, self.nvirt, self.nvirt), dtype=complex)
-        Vtmp = np.empty((self.nact, self.nvirt, self.nvirt), dtype=complex)
-        Vr_i = np.empty((self.nact, self.nvirt, self.nvirt), dtype=complex)
-        B_av = self.ints["B"]["av"]
-        B_cv = self.ints["B"]["cv"]
-        for i in range(self.ncore):
-            # T2 = conj(Vbare) * renorm
-            # V = Vbare * (1 + exp)
-            # So, we compute Vbare * Vr, where Vr = Vbare * renorm * (1 + exp)
-            # again, this path is optimal because it is basically B_av @ B_cv[i].T
-            np.einsum("aB,ubB->uba", B_cv[i, :, :], B_av, optimize=True, out=Vbare_i)
-            np.copyto(Vtmp, Vbare_i.swapaxes(1, 2))
-            Vbare_i -= Vtmp
-            # copy to Vr_i
-            Vr_i[:] = Vbare_i
-            renormalize_3index(
-                Vr_i,
-                self.ints["eps"]["c"][i],
-                self.ints["eps"]["a"],
-                self.ints["eps"]["v"],
-                self.ints["eps"]["v"],
-                self.flow_param,
-            )
-            E += 0.500 * np.einsum(
-                "uba,vba,vu->",
-                Vbare_i.conj(),
-                Vr_i,
-                self.cumulants["gamma1"],
-                optimize=True,
-            )
-            if form_hbar:
-                # optimal path, fastest varying indices contracted away
-                # self.hbar_aa_df += 0.500 * np.einsum(
-                #     "uba,vba->uv",
-                #     Vbare_i.conj(),
-                #     Vr_i,
-                #     optimize=True,
-                # )
-                self.hbar_aa_df += 0.500 * np.tensordot(
-                    Vbare_i.conj(), Vr_i, axes=([1, 2], [1, 2])
-                )
-
-        return E
-
-    def _compute_pt2_energy_ccav(self, form_hbar=False):
-        # This computes the following contribution to the energy:
-        # E += +0.500 * np.einsum(
-        #     "ijua,ijva,uv->",
-        #     T2["ccav"],
-        #     V["ccav"],
-        #     eta1,
-        #     optimize=True,
-        # )
-        # If relaxing the reference, also compute the ccav contribution to Hbar_aa
-        # _F += -0.500 * np.einsum(
-        #     "ijua,ijva->vu",
-        #     T2["ccav"],
-        #     V["ccav"],
-        #     optimize=True,
-        # )
-
-        E = 0.0
-        Vbare_i = np.empty((self.ncore, self.nvirt, self.nact), dtype=complex)
-        Vtmp = np.empty((self.ncore, self.nvirt, self.nact), dtype=complex)
-        Vr_i = np.empty((self.ncore, self.nvirt, self.nact), dtype=complex)
-        B_cv = self.ints["B"]["cv"]
-        B_ca = self.ints["B"]["ca"]
-        for i in range(self.ncore):
-            # T2 = conj(Vbare) * renorm
-            # V = Vbare * (1 + exp)
-            # So, we compute conj(Vbare) * Vr, where Vr = Vbare * renorm * (1 + exp)
-            np.einsum("uB,jaB->jau", B_ca[i, :, :], B_cv, optimize=True, out=Vbare_i)
-            np.einsum("aB,juB->jau", B_cv[i, :, :], B_ca, optimize=True, out=Vtmp)
-            Vbare_i -= Vtmp
-            # copy to Vr_i
-            Vr_i[:] = Vbare_i
-            renormalize_3index(
-                Vr_i,
-                self.ints["eps"]["c"][i],
-                self.ints["eps"]["c"],
-                self.ints["eps"]["v"],
-                self.ints["eps"]["a"],
-                self.flow_param,
-            )
-            E += 0.500 * np.einsum(
-                "jau,jav,uv->",
-                Vbare_i.conj(),
-                Vr_i,
-                self.cumulants["eta1"],
-                optimize=True,
-            )
-            if form_hbar:
-                self.hbar_aa_df += -0.500 * np.einsum(
-                    "jau,jav->vu",
-                    Vbare_i.conj(),
-                    Vr_i,
-                    optimize=True,
-                )
-
+        E += +0.250 * np.einsum(
+            "ijab,ijab->", self.T2["ccvv"], self.ints["V"]["ccvv"], optimize=True
+        )
+        E += +0.500 * np.einsum(
+            "iuab,ivab,vu->",
+            self.T2["cavv"],
+            self.ints["V"]["cavv"],
+            self.cumulants["gamma1"],
+            optimize=True,
+        )
+        E += +0.500 * np.einsum(
+            "ijua,ijva,uv->",
+            self.T2["ccav"],
+            self.ints["V"]["ccav"],
+            self.cumulants["eta1"],
+            optimize=True,
+        )
         return E
 
     def _compute_Hbar_aaaa(self):
@@ -792,12 +619,12 @@ class RelDSRG_MRPT2(DSRGBase):
             self.cumulants["lambda2"],
             optimize=True,
         )
-        # _F += -0.500 * np.einsum(
-        #     "ijua,ijva->vu",
-        #     self.T2["ccav"],
-        #     self.ints["V"]["ccav"],
-        #     optimize=True,
-        # )
+        _F += -0.500 * np.einsum(
+            "ijua,ijva->vu",
+            self.T2["ccav"],
+            self.ints["V"]["ccav"],
+            optimize=True,
+        )
         _F += -1.000 * np.einsum(
             "iwua,ixva,xw->vu",
             self.T2["caav"],
@@ -878,12 +705,12 @@ class RelDSRG_MRPT2(DSRGBase):
             self.cumulants["lambda2"],
             optimize=True,
         )
-        # _F += +0.500 * np.einsum(
-        #     "iuab,ivab->uv",
-        #     self.T2["cavv"],
-        #     self.ints["V"]["cavv"],
-        #     optimize=True,
-        # )
+        _F += +0.500 * np.einsum(
+            "iuab,ivab->uv",
+            self.T2["cavv"],
+            self.ints["V"]["cavv"],
+            optimize=True,
+        )
         _F += +0.500 * np.einsum(
             "uwab,vxab,xw->uv",
             self.T2["aavv"],
