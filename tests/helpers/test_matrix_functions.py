@@ -91,3 +91,18 @@ def test_canonical_orth_with_lindep():
     assert len(e) == 1
     assert e[0] == approx(0.75)
     assert c.flatten() == approx([0.5, 0.5])
+
+
+def test_canonical_orth_with_lindep_2():
+    # fix the seed for reproducibility
+    rng = np.random.default_rng(42)
+    size = 50
+
+    s_eigh = rng.uniform(0.95, 1.05, size - 5)
+    s_eigh = np.concatenate([s_eigh, 1e-12 * rng.uniform(0.5, 1.5, 5)])
+    u_rand = random_unitary(size, cmplx=False, rng=rng, rotation=True)
+    S = u_rand @ np.diag(s_eigh) @ u_rand.T
+
+    X, Xm1, _ = canonical_orth(S, rtol=1e-10)
+    assert np.allclose(X.T @ S @ X, np.eye(size - 5))
+    assert np.allclose(Xm1 @ X, np.eye(size - 5))
