@@ -79,6 +79,21 @@ class X2CHelper:
         logger.log_info1(f"Number of decontracted basis functions: {nbf_decon}")
         self.nbf = nbf_decon if self.system.x2c_type == "sf" else nbf_decon * 2
 
+        self.S = integrals.overlap(self.system, self.xbasis)
+        self.T = integrals.kinetic(self.system, self.xbasis)
+        # the V and W integrals know about Gaussian nuclear charges
+        self.V = integrals.nuclear(self.system, self.xbasis)
+        self.W = integrals.opVop(self.system, self.xbasis)
+
+        # Get orthonormal transformation for X2C
+        self.Xorth_l, self.Xorthm1_l, self.orth_info = canonical_orth(
+            self.S, self.ortho_thresh
+        )
+        print_metric_info(self.orth_info)
+        logger.log_info1(
+            f"Number of orthogonalized decontracted basis functions: {self.orth_info['n_kept']}"
+        )
+
     def hcore_x2c(self):
         """
         Return the one-electron X2C core Hamiltonian matrix for the given system.
@@ -103,7 +118,8 @@ class X2CHelper:
         h_fw = self._build_foldy_wouthuysen_hamiltonian(T, V, W)
 
         # return to original non-orthogonal AO basis
-        h_fw = self.Xorthm1_l.conj().T @ h_fw @ self.Xorthm1_l
+        _, Xorthm1 = self._get_Xorth()
+        h_fw = Xorthm1.conj().T @ h_fw @ Xorthm1
 
         if self.x2c_type.lower() == "so" and self.snso_type is not None:
             nbf = self.nbf // 2
@@ -137,43 +153,36 @@ class X2CHelper:
         )
         return proj if self.system.x2c_type == "sf" else block_diag_2x2(proj)
 
-    def _get_integrals(self):
-        S = integrals.overlap(self.system, self.xbasis)
-        T = integrals.kinetic(self.system, self.xbasis)
-        # the V and W integrals know about Gaussian nuclear charges
-        V = integrals.nuclear(self.system, self.xbasis)
-        W = integrals.opVop(self.system, self.xbasis)
-
-        # Get orthonormal transformation for X2C
-        Xorth_l, Xorthm1_l, info = canonical_orth(S, self.ortho_thresh)
-        print_metric_info(info)
-        northo = info["n_kept"]
-        logger.log_info1(
-            f"Number of orthogonalized decontracted basis functions: {northo}"
-        )
-
+    def _get_Xorth(self):
         if self.system.x2c_type == "sf":
-            S = np.eye(Xorth_l.shape[1])
-            T = Xorth_l.conj().T @ T @ Xorth_l
-            V = Xorth_l.conj().T @ V @ Xorth_l
-            W = Xorth_l.conj().T @ W[0] @ Xorth_l
+            return self.Xorth_l, self.Xorthm1_l
         elif self.system.x2c_type == "so":
-            Xorth_l = block_diag_2x2(Xorth_l)
-            Xorthm1_l = block_diag_2x2(Xorthm1_l)
-            S = np.eye(Xorth_l.shape[1], dtype=complex)
-            T = Xorth_l.conj().T @ block_diag_2x2(T) @ Xorth_l
-            V = Xorth_l.conj().T @ block_diag_2x2(V) @ Xorth_l
-            W = Xorth_l.conj().T @ i_sigma_dot(*W) @ Xorth_l
-            northo *= 2
+            return block_diag_2x2(self.Xorth_l), block_diag_2x2(self.Xorthm1_l)
 
-        self.Xorth_l = Xorth_l
-        self.Xorthm1_l = Xorthm1_l
-        self.northo = northo
+    def _get_northo(self):
+        if self.system.x2c_type == "sf":
+            return self.orth_info["n_kept"]
+        elif self.system.x2c_type == "so":
+            return self.orth_info["n_kept"] * 2
+
+    def _get_integrals(self):
+        Xorth, _ = self._get_Xorth()
+        if self.system.x2c_type == "sf":
+            S = np.eye(Xorth.shape[1])
+            T = Xorth.conj().T @ self.T @ Xorth
+            V = Xorth.conj().T @ self.V @ Xorth
+            W = Xorth.conj().T @ self.W[0] @ Xorth
+        elif self.system.x2c_type == "so":
+            S = np.eye(Xorth.shape[1], dtype=complex)
+            T = Xorth.conj().T @ block_diag_2x2(self.T) @ Xorth
+            V = Xorth.conj().T @ block_diag_2x2(self.V) @ Xorth
+            W = Xorth.conj().T @ i_sigma_dot(*self.W) @ Xorth
+
         return S, T, V, W
 
     def _solve_dirac_eq(self, S, T, V, W):
         dtype = np.float64 if self.x2c_type == "sf" else np.complex128
-        north = self.northo
+        north = self._get_northo()
         D = np.zeros((north * 2,) * 2, dtype=dtype)
         M = np.zeros((north * 2,) * 2, dtype=dtype)
         D[:north, :north] = V
@@ -185,7 +194,7 @@ class X2CHelper:
         return scipy.linalg.eigh(D, M)
 
     def _get_decoupling_matrix(self, c_dirac):
-        north = self.northo
+        north = self._get_northo()
         clpos = c_dirac[:north, north:]
         cspos = c_dirac[north:, north:]
         return cspos @ scipy.linalg.pinv(clpos)
