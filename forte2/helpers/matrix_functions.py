@@ -45,15 +45,15 @@ def invsqrt_matrix(M, tol=1e-7):
     return invsqrt_M
 
 
-def canonical_orth(S, tol=1e-7, print_info=False):
-    """
+def canonical_orth(S, rtol=1e-7, print_info=False):
+    r"""
     Compute the canonical orthogonalization given the metric matrix S.
 
     Parameters
     ----------
     S : NDArray
         Metric matrix (must be positive semi-definite).
-    tol : float, optional, default=1e-7
+    rtol : float, optional, default=1e-7
         Relative threshold t for which values below t * max_eigenvalue are treated as zero.
     print_info : bool, optional, default=False
         If True, print additional information about the eigenvalues and orthogonalization process,
@@ -64,7 +64,7 @@ def canonical_orth(S, tol=1e-7, print_info=False):
     X : NDArray
         The (possibly rectangular) canonical orthogonalization matrix X, such that ``X.T @ S @ X = I``.
     Xm1 : NDArray
-        The inverse of the orthogonalization matrix, such that ``X @ Xm1 = I``.
+        The inverse of the orthogonalization matrix, such that ``Xm1 @ X = I``.
     info : dict
         A dictionary containing additional information, including:
         - "max_eigenvalue": The largest eigenvalue of S.
@@ -74,6 +74,17 @@ def canonical_orth(S, tol=1e-7, print_info=False):
         - "n_kept": The number of eigenvalues kept.
         - "largest_discarded_eigenvalue": The largest eigenvalue that was discarded.
         - "smallest_kept_eigenvalue": The smallest eigenvalue that was kept.
+
+    Notes
+    -----
+    The canonical orthogonalization is defined as follows:
+
+    .. math::
+        \mathbf{X}_{\eta} = \mathbf{U}_{\eta} \mathbf{s}^{-1/2}_{\eta},
+
+    where :math:`\mathbf{U}_{\eta}` are the eigenvectors of :math:`\mathbf{S}` corresponding to eigenvalues larger than :math:`\eta`, :math:`\mathbf{s}^{-1/2}_{\eta}` is a diagonal matrix containing the inverse square roots of those eigenvalues, and :math:`\eta=\mathrm{rtol} \times \max(\mathbf{s})` is the threshold for discarding small eigenvalues.
+
+    The resulting matrix :math:`\mathbf{X}_{\eta}` satisfies :math:`\mathbf{X}_{\eta}^{\dagger} \mathbf{S} \mathbf{X}_{\eta} = \mathbf{I}_{\eta}`. If any eigenvalues are discarded, the resulting :math:`\mathbf{X}_{\eta}` will be rectangular with fewer columns than rows, and the inverse :math:`\mathbf{X}_{\eta}^{-1}` will be a left-inverse satisfying :math:`\mathbf{X}_{\eta}^{-1} \mathbf{X}_{\eta} = \mathbf{I}_{\eta}` but not necessarily :math:`\mathbf{X}_{\eta} \mathbf{X}_{\eta}^{-1} = \mathbf{I}`.
 
     Raises
     ------
@@ -91,7 +102,7 @@ def canonical_orth(S, tol=1e-7, print_info=False):
         raise ValueError("Matrix must be positive semi-definite.")
 
     # indices equal and above discard_idx are kept
-    ndiscard = np.searchsorted(sevals, tol * max_seval)
+    ndiscard = np.searchsorted(sevals, rtol * max_seval)
     info["n_discarded"] = ndiscard
     info["n_kept"] = len(sevals) - ndiscard
     info["largest_discarded_eigenvalue"] = sevals[ndiscard - 1] if ndiscard > 0 else 0.0
@@ -256,32 +267,65 @@ def block_diag_2x2(M, complex=True):
         return A
 
 
-def random_unitary(size, complex=False, rng=None):
+def random_unitary(size, cmplx=True, rng=None, rotation=True):
     """
-    Generate a random unitary matrix of given size.
+    Generate a random orthogonal/unitary matrix of given size.
 
     Parameters
     ----------
     size : int
-        The size of the unitary matrix (size x size).
-    complex : bool, optional, default=False
+        The size of the matrix.
+    cmplx : bool, optional, default=True
         If True, generate a complex unitary matrix; otherwise, generate a real orthogonal matrix.
     rng : np.random.Generator, optional
         A random number generator for reproducibility.
+    rotation : bool, optional, default=True
+        If True, return a proper rotation (determinant = 1) by adjusting the sign of the last column if necessary. If False, the determinant may be -1.
+
+    Notes
+    -----
+    The QR of a random (not necessarily Hermitian) matrix with normally distributed entries can give an orthogonal/unitary matrix.
+    However, due to the way QR works, the distribution of the resulting matrices is not uniform over O(n) or U(n).
+    To ensure a uniform distribution (Haar measure), we need to adjust the signs/phases of the columns based on the diagonal of R.
+    This method is commonly used to generate random unitary/orthogonal matrices that are uniformly distributed over the appropriate group (O(n) or U(n)).
+    These matrices will have determinant ±1 for O(n) and determinant with magnitude 1 and arbitrary phase for U(n).
+    For special groups (determinant = 1), we can further adjust the sign/phase of a single column (here chosen as the first column) to ensure the determinant is exactly 1, which gives us a uniform distribution over SO(n) or SU(n)).
+    See more at https://case.edu/artsci/math/mwmeckes/elizabeth/Meckes_SAMSI_Lecture2.pdf
 
     Returns
     -------
     NDArray
         A random unitary (or orthogonal) matrix of shape (size, size).
+        It is guaranteed to be uniformly distributed over the appropriate group ((S)O(n) or (S)U(n)).
     """
     if rng is None:
         rng = np.random.default_rng()
-    A = rng.random((size, size))
-    if complex:
-        A += 1j * rng.random((size, size))
-    A += A.T.conj()  # make it Hermitian
-    U, _, Vh = np.linalg.svd(A)
-    return U @ Vh
+
+    if cmplx:
+        A = rng.standard_normal((size, size)) + 1j * rng.standard_normal((size, size))
+        Q, R = np.linalg.qr(A, mode="complete")
+
+        d = np.diag(R)
+        d = d / np.abs(d)  # unit phases (assumes no zeros)
+        Q = Q * np.conj(d)  # scales columns by conjugate phases
+
+        if rotation:  # SU(n)
+            detQ = np.linalg.det(Q)
+            Q[:, 0] *= np.conj(detQ)  # makes det exactly 1 (since |detQ|=1)
+    else:
+        A = rng.standard_normal((size, size))
+        Q, R = np.linalg.qr(A, mode="complete")
+
+        d = np.sign(np.diag(R))
+        d[d == 0] = 1.0
+        Q = Q * d  # scales columns
+
+        if rotation:  # SO(n)
+            sgn, _ = np.linalg.slogdet(Q)
+            if sgn < 0:
+                Q[:, 0] *= -1.0
+
+    return Q
 
 
 def i_sigma_dot(scalar, x, y, z):
@@ -302,6 +346,6 @@ def i_sigma_dot(scalar, x, y, z):
     Returns
     -------
     NDArray
-        The 2x2 matrix representation.
+        The resulting matrix, with double the dimensions of the input arrays.
     """
     return np.block([[scalar + z * 1j, x * 1j + y], [x * 1j - y, scalar - z * 1j]])

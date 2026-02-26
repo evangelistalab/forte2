@@ -1,7 +1,7 @@
 import numpy as np
 import scipy as sp
 
-from forte2.helpers import invsqrt_matrix, eigh_gen, canonical_orth
+from forte2.helpers import invsqrt_matrix, eigh_gen, canonical_orth, random_unitary
 from forte2.helpers.comparisons import approx
 
 
@@ -34,16 +34,40 @@ def test_canonical_orth():
     S = np.eye(10) + np.abs(generator.random((10, 10)) * 0.05)
     S = 0.5 * (S + S.T)
 
-    X, Xm1, _ = canonical_orth(S, tol=1e-10)
+    X, Xm1, _ = canonical_orth(S, rtol=1e-10)
     assert np.allclose(X.T @ S @ X, np.eye(10))
     assert np.allclose(Xm1 @ X, np.eye(10))
-    assert np.allclose(X @ Xm1, np.eye(10))
+    # X @ Xm1 is not necessarily identity
 
     e_sp, c_sp = sp.linalg.eigh(H, S)
     e_ft, c_ft = eigh_gen(H, S, remove_lindep=True, orth_method="canonical")
 
     assert np.allclose(e_sp, e_ft)
     assert np.linalg.norm(c_sp @ c_sp.T - c_ft @ c_ft.T) < 1e-6
+
+
+def test_random_unitary():
+    rng = np.random.default_rng(42)
+    for size in np.arange(10, 101, 10):
+        U = random_unitary(size, cmplx=False, rng=rng, rotation=False)
+        assert np.allclose(U.T @ U, np.eye(size))
+        assert np.allclose(U @ U.T, np.eye(size))
+        assert np.isclose(np.abs(np.linalg.det(U)), 1.0)
+    for size in np.arange(10, 101, 10):
+        U = random_unitary(size, cmplx=True, rng=rng, rotation=False)
+        assert np.allclose(U.T.conj() @ U, np.eye(size))
+        assert np.allclose(U @ U.T.conj(), np.eye(size))
+        assert np.isclose(np.abs(np.linalg.det(U)), 1.0)
+    for size in np.arange(10, 101, 10):
+        U = random_unitary(size, cmplx=False, rng=rng, rotation=True)
+        assert np.allclose(U.T @ U, np.eye(size))
+        assert np.allclose(U @ U.T, np.eye(size))
+        assert np.isclose(np.linalg.det(U), 1.0)
+    for size in np.arange(10, 101, 10):
+        U = random_unitary(size, cmplx=True, rng=rng, rotation=True)
+        assert np.allclose(U.T.conj() @ U, np.eye(size))
+        assert np.allclose(U @ U.T.conj(), np.eye(size))
+        assert np.isclose(np.linalg.det(U), 1.0)
 
 
 def test_symmetric_orth():

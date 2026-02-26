@@ -23,6 +23,8 @@ class X2CHelper:
     ----------
     system : System
         The molecular system for which to compute the X2C Hamiltonian.
+    ortho_thresh : float, optional, default=1e-8
+        Relative threshold for canonical orthogonalization. Eigenvalues of the overlap matrix below ortho_thresh * max_eigenvalue will be treated as zero and discarded in the orthogonalization process. This can help improve numerical stability when the basis set has near-linear dependencies.
 
     Attributes
     ----------
@@ -71,7 +73,6 @@ class X2CHelper:
         nbf_decon = len(self.xbasis)
         logger.log_info1(f"Number of decontracted basis functions: {nbf_decon}")
         self.nbf = nbf_decon if self.system.x2c_type == "sf" else nbf_decon * 2
-        self.executed = False
 
     @cached_property
     def hcore_x2c(self):
@@ -122,7 +123,6 @@ class X2CHelper:
         # project back to the contracted basis
         h_fw = self.proj.conj().T @ h_fw @ self.proj
 
-        self.executed = True
         return h_fw
 
     def _get_projection_matrix(self):
