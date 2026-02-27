@@ -16,6 +16,7 @@
 #include "integrals/fock_builder.h"
 #include "integrals/nuclear_repulsion.h"
 #include "integrals/one_electron.h"
+#include "integrals/one_electron_deriv.h"
 #include "integrals/two_electron.h"
 #include "integrals/value_at_points.h"
 // Libcint-backed functions are optional
@@ -36,6 +37,7 @@ void export_shell_api(nb::module_& m);
 void export_basis_api(nb::module_& m);
 void export_scalar_api(nb::module_& m);
 void export_one_electron_api(nb::module_& m);
+void export_one_electron_deriv_api(nb::module_& m);
 void export_two_electron_api(nb::module_& m);
 void export_value_at_points_api(nb::module_& m);
 void export_libcint_compute_api(nb::module_& m);
@@ -50,6 +52,8 @@ void export_integrals_api(nb::module_& m) {
     export_scalar_api(sub_m);
 
     export_one_electron_api(sub_m);
+
+    export_one_electron_deriv_api(sub_m);
 
     export_two_electron_api(sub_m);
 
@@ -150,7 +154,8 @@ void export_basis_api(nb::module_& sub_m) {
         .def("__getitem__", &Basis::operator[], "i"_a)
         .def("__len__", &Basis::size)
         .def_prop_ro("shell_first_and_size", &Basis::shell_first_and_size)
-        .def_prop_ro("center_first_and_last", [](const Basis& b) { return b.center_first_and_last(false); })
+        .def_prop_ro("center_first_and_last",
+                     [](const Basis& b) { return b.center_first_and_last(false); })
         .def_prop_ro("center_first_and_last_shell",
                      [](const Basis& b) { return b.center_first_and_last(true); })
         .def_prop_ro("size", &Basis::size)
@@ -305,6 +310,16 @@ ndarray, shape = (nb1, nb2)
         "basis1"_a, "basis2"_a, "omega_charges"_a);
 }
 
+void export_one_electron_deriv_api(nb::module_& sub_m) {
+    sub_m.def(
+        "overlap_deriv",
+        [](const Basis& basis1, const Basis& basis2, const np_matrix& dm,
+           std::vector<std::pair<double, std::array<double, 3>>> charges) {
+            return overlap_deriv(basis1, basis2, dm, charges);
+        },
+        "basis1"_a, "basis2"_a, "dm"_a, "charges"_a);
+}
+
 void export_two_electron_api(nb::module_& sub_m) {
     sub_m.def(
         "coulomb_4c",
@@ -396,7 +411,7 @@ void export_libcint_compute_api(nb::module_& sub_m) {
 // When libcint is disabled, define a no-op exporter
 void export_libcint_compute_api(nb::module_& sub_m) {
     // Intentionally empty: libcint-backed APIs are unavailable.
-    (void) sub_m;
+    (void)sub_m;
 }
 #endif
 } // namespace forte2
