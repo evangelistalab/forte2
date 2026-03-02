@@ -1,8 +1,7 @@
-from scipy.linalg import eigh
 import numpy as np
 
 import forte2
-from forte2.helpers.comparisons import approx
+from forte2.helpers.comparisons import approx_abs
 from forte2.data.atom_data import ANGSTROM_TO_BOHR
 
 rng = np.random.default_rng(seed=42)
@@ -13,6 +12,7 @@ def _set_up_tests(xyz0, xyzp, xyzm, basis_set):
     systemp = forte2.System(xyz=xyzp, basis_set=basis_set)
     systemm = forte2.System(xyz=xyzm, basis_set=basis_set)
     nbasis = len(system0.basis)
+    # set up a random symmetric positive definite density matrix
     dm = rng.standard_normal(size=(nbasis, nbasis))
     dm = dm @ dm.T
     return system0, systemp, systemm, dm
@@ -34,7 +34,7 @@ def test_overlap_deriv_h2_minbas():
     sm = forte2.integrals.overlap(systemm)
     s_deriv_num = np.einsum("ij,ij->", sp - sm, dm) / (2 * dz * ANGSTROM_TO_BOHR)
 
-    assert s_deriv_analytical[5] == approx(s_deriv_num)
+    assert s_deriv_analytical[5] == approx_abs(s_deriv_num, atol=1e-7)
 
 
 def test_kinetic_deriv_h2_minbas():
@@ -53,7 +53,7 @@ def test_kinetic_deriv_h2_minbas():
     sm = forte2.integrals.kinetic(systemm)
     s_deriv_num = np.einsum("ij,ij->", sp - sm, dm) / (2 * dz * ANGSTROM_TO_BOHR)
 
-    assert s_deriv_analytical[5] == approx(s_deriv_num)
+    assert s_deriv_analytical[5] == approx_abs(s_deriv_num, atol=1e-7)
 
 
 def test_nuclear_deriv_h2_minbas():
@@ -71,7 +71,7 @@ def test_nuclear_deriv_h2_minbas():
     sp = forte2.integrals.nuclear(systemp)
     sm = forte2.integrals.nuclear(systemm)
     s_deriv_num = np.einsum("ij,ij->", sp - sm, dm) / (2 * dz * ANGSTROM_TO_BOHR)
-    assert s_deriv_analytical[5] == approx(s_deriv_num)
+    assert s_deriv_analytical[5] == approx_abs(s_deriv_num, atol=1e-7)
 
 
 def test_overlap_deriv_h2o_dz():
@@ -90,7 +90,7 @@ def test_overlap_deriv_h2o_dz():
     sm = forte2.integrals.overlap(systemm)
     s_deriv_num = np.einsum("ij,ij->", sp - sm, dm) / (2 * delta * ANGSTROM_TO_BOHR)
 
-    assert s_deriv_analytical[5] == approx(s_deriv_num)
+    assert s_deriv_analytical[5] == approx_abs(s_deriv_num, atol=1e-7)
 
     xyz0 = f"O 0 0 0\n H 0 0 1.0\n H 0 1.0 0"
     xyzp = f"O 0 {delta:.10f} 0\n H 0 0 1.0\n H 0 1.0 0"
@@ -105,7 +105,7 @@ def test_overlap_deriv_h2o_dz():
     sm = forte2.integrals.overlap(systemm)
     s_deriv_num = np.einsum("ij,ij->", sp - sm, dm) / (2 * delta * ANGSTROM_TO_BOHR)
 
-    assert s_deriv_analytical[1] == approx(s_deriv_num)
+    assert s_deriv_analytical[1] == approx_abs(s_deriv_num, atol=1e-7)
 
     xyz0 = f"O 0 0 0\n H 0 0 1.0\n H 0 1.0 0"
     xyzp = f"O 0 0 0\n H 0 0 1.0\n H {delta:.10f} 1.0 0"
@@ -120,7 +120,7 @@ def test_overlap_deriv_h2o_dz():
     sm = forte2.integrals.overlap(systemm)
     s_deriv_num = np.einsum("ij,ij->", sp - sm, dm) / (2 * delta * ANGSTROM_TO_BOHR)
 
-    assert s_deriv_analytical[6] == approx(s_deriv_num)
+    assert s_deriv_analytical[6] == approx_abs(s_deriv_num, atol=1e-7)
 
 
 def test_kinetic_deriv_h2o_dz():
@@ -139,7 +139,7 @@ def test_kinetic_deriv_h2o_dz():
     sm = forte2.integrals.kinetic(systemm)
     s_deriv_num = np.einsum("ij,ij->", sp - sm, dm) / (2 * delta * ANGSTROM_TO_BOHR)
 
-    assert s_deriv_analytical[5] == approx(s_deriv_num)
+    assert s_deriv_analytical[5] == approx_abs(s_deriv_num, atol=1e-7)
 
     xyz0 = f"O 0 0 0\n H 0 0 1.0\n H 0 1.0 0"
     xyzp = f"O 0 {delta:.10f} 0\n H 0 0 1.0\n H 0 1.0 0"
@@ -154,7 +154,7 @@ def test_kinetic_deriv_h2o_dz():
     sm = forte2.integrals.kinetic(systemm)
     s_deriv_num = np.einsum("ij,ij->", sp - sm, dm) / (2 * delta * ANGSTROM_TO_BOHR)
 
-    assert s_deriv_analytical[1] == approx(s_deriv_num)
+    assert s_deriv_analytical[1] == approx_abs(s_deriv_num, atol=1e-7)
 
     xyz0 = f"O 0 0 0\n H 0 0 1.0\n H 0 1.0 0"
     xyzp = f"O 0 0 0\n H 0 0 1.0\n H {delta:.10f} 1.0 0"
@@ -169,7 +169,7 @@ def test_kinetic_deriv_h2o_dz():
     sm = forte2.integrals.kinetic(systemm)
     s_deriv_num = np.einsum("ij,ij->", sp - sm, dm) / (2 * delta * ANGSTROM_TO_BOHR)
 
-    assert s_deriv_analytical[6] == approx(s_deriv_num)
+    assert s_deriv_analytical[6] == approx_abs(s_deriv_num, atol=1e-7)
 
 
 def test_nuclear_deriv_h2o_dz():
@@ -187,7 +187,7 @@ def test_nuclear_deriv_h2o_dz():
     sp = forte2.integrals.nuclear(systemp)
     sm = forte2.integrals.nuclear(systemm)
     s_deriv_num = np.einsum("ij,ij->", sp - sm, dm) / (2 * delta * ANGSTROM_TO_BOHR)
-    assert s_deriv_analytical[5] == approx(s_deriv_num)
+    assert s_deriv_analytical[5] == approx_abs(s_deriv_num, atol=1e-7)
 
     xyz0 = f"O 0 0 0\n H 0 0 1.0\n H 0 1.0 0"
     xyzp = f"O 0 {delta:.10f} 0\n H 0 0 1.0\n H 0 1.0 0"
@@ -202,7 +202,7 @@ def test_nuclear_deriv_h2o_dz():
     sm = forte2.integrals.nuclear(systemm)
     s_deriv_num = np.einsum("ij,ij->", sp - sm, dm) / (2 * delta * ANGSTROM_TO_BOHR)
 
-    assert s_deriv_analytical[1] == approx(s_deriv_num)
+    assert s_deriv_analytical[1] == approx_abs(s_deriv_num, atol=1e-7)
 
     xyz0 = f"O 0 0 0\n H 0 0 1.0\n H 0 1.0 0"
     xyzp = f"O 0 0 0\n H 0 0 1.0\n H {delta:.10f} 1.0 0"
@@ -217,4 +217,4 @@ def test_nuclear_deriv_h2o_dz():
     sm = forte2.integrals.nuclear(systemm)
     s_deriv_num = np.einsum("ij,ij->", sp - sm, dm) / (2 * delta * ANGSTROM_TO_BOHR)
 
-    assert s_deriv_analytical[6] == approx(s_deriv_num)
+    assert s_deriv_analytical[6] == approx_abs(s_deriv_num, atol=1e-7)
