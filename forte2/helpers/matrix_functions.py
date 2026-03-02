@@ -11,6 +11,8 @@ def _eigh_metric_kernel(S, rtol=1e-7):
     sevals, sevecs = np.linalg.eigh(S)
     if np.any(sevals < -MACHEPS):
         raise ValueError("The metric matrix must be positive semi-definite.")
+    # zero out the eigenvalues that are negative due to numerical noise
+    sevals[sevals < 0] = 0.0
     max_seval = sevals[-1]
     info["max_eigenvalue"] = max_seval
     info["min_eigenvalue"] = sevals[0]
