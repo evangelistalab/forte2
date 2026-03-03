@@ -108,7 +108,6 @@ nanobind_add_module(
   helpers/combinatorial.cc
   helpers/string_algorithms.cc
   integrals/basis.cc
-  integrals/fock_builder.cc
   integrals/nuclear_repulsion.cc
   integrals/one_electron.cc
   integrals/one_electron_deriv.cc

@@ -13,7 +13,6 @@
 #include <nanobind/stl/string.h>
 
 #include "integrals/basis.h"
-#include "integrals/fock_builder.h"
 #include "integrals/nuclear_repulsion.h"
 #include "integrals/one_electron.h"
 #include "integrals/one_electron_deriv.h"

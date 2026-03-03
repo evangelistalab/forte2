@@ -8,9 +8,6 @@
 
 namespace forte2 {
 
-// Define a no-params struct to use as a template parameter
-struct NoParams {};
-
 template <libint2::Operator Op, std::size_t M>
 [[nodiscard]] auto
 compute_one_electron_deriv(const Basis& basis1, const Basis& basis2, const np_matrix& dm,
