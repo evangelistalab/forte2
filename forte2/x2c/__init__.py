@@ -1,1 +1,1 @@
-from .x2c import get_hcore_x2c
+from .x2c import X2CHelper

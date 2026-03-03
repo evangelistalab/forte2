@@ -123,7 +123,7 @@ def _orthogonalize(C, S):
     """
 
     X = C.T.conj() @ S @ C
-    X_invsqrt = invsqrt_matrix(X)
+    X_invsqrt, *_ = invsqrt_matrix(X)
     return C @ X_invsqrt
 
 
