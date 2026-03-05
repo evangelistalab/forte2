@@ -25,7 +25,6 @@ def test_gasscf_1():
         core_orbitals=2,
         active_orbitals=(3, 3),
         freeze_inter_gas_rots=True,
-        do_diis=False,
     )(rhf)
     mc.run()
 
@@ -58,7 +57,6 @@ def test_gasscf_h2o_core():
         core_orbitals=[1],
         active_orbitals=[[0], [2, 3, 4, 5]],
         freeze_inter_gas_rots=True,
-        do_diis=False,
     )(rhf)
     mc.run()
 
@@ -87,7 +85,6 @@ def test_gasscf_2():
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[6]),
         core_orbitals=[0, 1],
         active_orbitals=[[2, 3, 4], [5]],
-        do_diis=False,
         econv=1e-8,
         gconv=1e-7,
         maxiter=100,
@@ -123,7 +120,6 @@ def test_gasscf_3():
     mc = MCOptimizer(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
         active_orbitals=[[0], [1, 2, 3, 4, 5, 6, 7, 8]],
-        do_diis=True,
         econv=1e-8,
         gconv=1e-7,
         maxiter=100,
@@ -157,7 +153,6 @@ def test_gasscf_5():
         freeze_inter_gas_rots=True,
         econv=1e-10,
         gconv=1e-8,
-        do_diis=False,
     )(rhf)
     mc.run()
 

@@ -23,7 +23,6 @@ def test_gasscf_equiv_to_casscf():
         State(nel=10, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1],
         active_orbitals=[[2, 3, 4, 5, 6, 7], []],
-        do_diis=False,
         econv=1e-8,
         gconv=1e-7,
         maxiter=500,
