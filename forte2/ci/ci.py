@@ -201,7 +201,7 @@ class _CIBase:
                 "No determinants could be generated for the given state and orbitals."
             )
         if self.two_component:
-            # no "spin-adaptation" for 2c, we use a basis of determiants directly
+            # no "spin-adaptation" for 2c, we use a basis of determinants directly
             self.ndet = self.ci_strings.ndet
             self.basis_size = self.ndet
             self.dets = self.ci_strings.make_determinants()
