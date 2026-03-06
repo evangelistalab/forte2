@@ -32,6 +32,8 @@ void export_sci_helper_api(nb::module_& m) {
              "Set the number of batches each thread will process in parallel sections")
         .def("set_energies", &SelectedCIHelper::set_energies, "e"_a,
              "Set the energies of the roots")
+        .def("set_frozen_creation", &SelectedCIHelper::set_frozen_creation, "frozen_creation"_a,
+             "Set orbitals excluded from creation in selection")
         .def("set_screening_criterion", &SelectedCIHelper::set_screening_criterion, "criterion"_a,
              "Set the screening criterion.")
         .def("select_hbci_ref", &SelectedCIHelper::select_hbci_ref, "var_threshold"_a,
@@ -40,6 +42,12 @@ void export_sci_helper_api(nb::module_& m) {
              "Perform HBCI selection with the given thresholds")
         .def("compute_spin2", &SelectedCIHelper::compute_spin2,
              "Compute the expectation value of S^2 for each root and return as a list")
+        .def("a_1rdm", &SelectedCIHelper::compute_a_1rdm, "left_root"_a, "right_root"_a,
+             "Compute alpha-spin 1-RDM between two roots")
+        .def("b_1rdm", &SelectedCIHelper::compute_b_1rdm, "left_root"_a, "right_root"_a,
+             "Compute beta-spin 1-RDM between two roots")
+        .def("sf_1rdm", &SelectedCIHelper::compute_sf_1rdm, "left_root"_a, "right_root"_a,
+             "Compute spin-free 1-RDM between two roots")
         .def("dets", &SelectedCIHelper::variational_dets,
              "Return the determinants in the variational space")
         .def("ndets", &SelectedCIHelper::num_dets_var,

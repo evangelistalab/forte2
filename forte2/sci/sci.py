@@ -18,7 +18,7 @@ from forte2 import (
     SelectedCIHelper,
 )
 from forte2.helpers.table import AsciiTable
-from forte2.state import State, MOSpace, state
+from forte2.state import State, MOSpace
 from forte2.helpers.comparisons import approx
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
 from forte2.base_classes.active_space_solver import (
@@ -203,6 +203,8 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
         self.sci_helper.set_num_threads(self.num_threads)
         self.sci_helper.set_num_batches_per_thread(self.num_batches_per_thread)
         self.sci_helper.set_screening_criterion(self.screening_criterion)
+        if self.frozen_creation:
+            self.sci_helper.set_frozen_creation(self.frozen_creation)
 
         print()
         old_energy = 0.0
@@ -276,11 +278,15 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
 
             self.ndet = self.sci_helper.ndets()
             self.dets = self.sci_helper.dets()
+            # Keep determinant guesses aligned with the current CI basis for subsequent reruns.
+            self.guess_determinants = list(self.dets)
 
             self.b_det = np.zeros((self.ndet))
             self.sigma_det = np.zeros((self.ndet))
 
             # Save the current CI vectors as the guess for the next iteration
+            # Here we assume that new determinants are added to the end of the list
+            # so we can just take the first part of the CI vectors as the guess for the next iteration
             num_guess = min(self.evecs.shape[1], self.nroot)
             self.guess_c = np.zeros((self.ndet, num_guess), dtype=self.dtype)
             self.guess_c[0 : self.evecs.shape[0], 0:num_guess] = self.evecs[
@@ -289,8 +295,12 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
 
             if self.ci_algorithm.lower() == "exact":
                 self._do_exact_diagonalization()
-            else:
+            elif self.ci_algorithm.lower() == "string":
                 self._do_iterative_ci()
+            else:
+                raise ValueError(
+                    f"Unknown CI algorithm: {self.ci_algorithm}. Must be 'exact' or 'string'."
+                )
 
             # logger.log(f"CI Energy Roots: {self.evals}", self.log_level)
 
@@ -611,18 +621,6 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
                 H[i, j] = self.slater_rules.slater_rules(dets[i], dets[j])
                 H[j, i] = np.conj(H[i, j])
 
-        H2 = self.sci_helper.fullHamiltonian()
-
-        print(f"Error = {np.linalg.norm(H - H2)}")
-
-        for i in range(self.ndet):
-            for j in range(self.ndet):
-                if not np.isclose(H[i, j], H2[i, j]):
-                    print(
-                        f"Error at {i}, {j}: there is {H2[i, j]} but should be {H[i, j]}"
-                    )
-                    print(f"Diff: {dets[i].str(self.norb)} vs {dets[j].str(self.norb)}")
-
         self.evals_full, self.evecs_full = np.linalg.eigh(H)
         if self.energy_shift is not None:
             argsort = np.argsort(np.abs(self.evals_full - self.energy_shift))
@@ -752,18 +750,10 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
         assert (
             not self.two_component
         ), "make_sd_1rdm is only available for non-relativistic CI."
-
-        left_ci_vec_det = np.zeros((self.ndet))
-        self.spin_adapter.csf_C_to_det_C(self.evecs[:, left_root], left_ci_vec_det)
         if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(
-                self.evecs[:, right_root], right_ci_vec_det
-            )
-        a = self.ci_sigma_builder.a_1rdm(left_ci_vec_det, right_ci_vec_det)
-        b = self.ci_sigma_builder.b_1rdm(left_ci_vec_det, right_ci_vec_det)
+            right_root = left_root
+        a = self.sci_helper.a_1rdm(left_root, right_root)
+        b = self.sci_helper.b_1rdm(left_root, right_root)
         return a, b
 
     def make_sf_1rdm(self, left_root: int, right_root: int | None = None):
@@ -785,17 +775,9 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
         assert (
             not self.two_component
         ), "make_sf_1rdm is only available for non-relativistic CI."
-
-        left_ci_vec_det = np.zeros((self.ndet))
-        self.spin_adapter.csf_C_to_det_C(self.evecs[:, left_root], left_ci_vec_det)
         if right_root is None:
-            return self.ci_sigma_builder.sf_1rdm(
-                self.evecs[:, left_root], self.evecs[:, left_root]
-            )
-
-        return self.ci_sigma_builder.sf_1rdm(
-            self.evecs[:, left_root], self.evecs[:, right_root]
-        )
+            right_root = left_root
+        return self.sci_helper.sf_1rdm(left_root, right_root)
 
     def compute_natural_occupation_numbers(self):
         """
@@ -808,13 +790,13 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
         """
         if not self.executed:
             raise RuntimeError("CI solver has not been executed yet.")
-        no = np.zeros((self.norb, self.nroot))
         if self.two_component:
-            _make_1rdm = lambda i: self.make_1rdm(i)
-        else:
-            _make_1rdm = lambda i: self.make_sf_1rdm(i)
+            raise NotImplementedError(
+                "Natural occupation numbers are only implemented for non-relativistic SelectedCI."
+            )
+        no = np.zeros((self.norb, self.nroot))
         for i in range(self.nroot):
-            g1 = _make_1rdm(i)
+            g1 = self.make_sf_1rdm(i)
             no[:, i] = np.linalg.eigvalsh(g1)[::-1]
 
         return no
@@ -1075,12 +1057,9 @@ class SelectedCISolver(SelectedCIParams, DavidsonLiuParams, ActiveSpaceSolver):
         NDArray
             Average spin-free two-particle RDM.
         """
-        rdm2 = np.zeros((self.norb,) * 4)
-        for i, ci_solver in enumerate(self.sub_solvers):
-            for j in range(ci_solver.nroot):
-                rdm2 += ci_solver.make_sf_2rdm(j) * self.weights[i][j]
-
-        return rdm2
+        raise NotImplementedError(
+            "Average spin-free 2-RDM is not implemented for SelectedCI."
+        )
 
     def set_ints(self, scalar, oei, tei):
         """
@@ -1195,11 +1174,10 @@ class SelectedCI(SelectedCISolver):
         self._post_process()
         if self.final_orbital == "semicanonical":
             semi = Semicanonicalizer(
-                mo_space=self.mo_space,
-                g1=self.make_average_sf_1rdm(),
-                C=self.C[0],
                 system=self.system,
+                mo_space=self.mo_space,
             )
+            semi.semi_canonicalize(g1=self.make_average_sf_1rdm(), C_contig=self.C[0])
             self.C[0] = semi.C_semican.copy()
 
             # recompute the CI vectors in the semicanonical basis
