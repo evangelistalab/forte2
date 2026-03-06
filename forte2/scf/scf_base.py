@@ -6,6 +6,7 @@ import numpy as np
 from forte2.system import System, ModelSystem, BasisInfo
 from forte2.base_classes.mixins import MOsMixin, SystemMixin
 from forte2.helpers import logger, DIIS
+from forte2.symmetry import MOSymmetryDetector
 
 
 @dataclass
@@ -100,6 +101,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
                 self.level_shift = (self.level_shift, self.level_shift)
             if isinstance(self.level_shift, tuple) and len(self.level_shift) != 2:
                 raise ValueError("Tuple level_shift must have length 2 for UHF.")
+
         return self
 
     def _eigh(self, F):
@@ -247,6 +249,10 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         return self.system.nuclear_repulsion
 
     def _post_process(self):
+        self.mosym = MOSymmetryDetector(
+            self.system,
+            self.basis_info,
+        )
         self._get_occupation()
         self._assign_orbital_symmetries()
         self._print_orbital_energies()

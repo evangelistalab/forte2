@@ -1,6 +1,6 @@
 import numpy as np
 
-from forte2.helpers import logger, block_diag_2x2
+from forte2.helpers import logger
 from .sym_utils import (
     SYMMETRY_OPS,
     CHARACTER_TABLE,
@@ -74,21 +74,8 @@ class MOSymmetryDetector:
         Forte2 System object with symmetry information
     info : forte2.BasisInfo
         Forte2 BasisInfo object with basis set information
-    S : ndarray
-        AO overlap matrix
-    C : ndarray
-        MO coefficient matrix (columns are MOs)
-    eps : ndarray
-        MO energies
-    tol : float, optional, default=1e-6
-        tolerance for matching atomic positions under symmetry operations
-
-    Attributes
-    ----------
-    irrep_indices : list of int
-        List of irrep indices for each MO according to COTTON_LABELS
-    labels : list of str
-        List of irrep labels for each MO (e.g. 'a1', 'b2', etc.)
+    atol : float, optional, default=1e-6
+        Absolute tolerance for matching atomic positions under symmetry operations
 
     Notes
     -----
@@ -112,37 +99,41 @@ class MOSymmetryDetector:
     that are mixed together to obtain MOs that purely transform as irreps of the Abelian subgroup.
     """
 
-    def __init__(self, system, info, S, C, eps, tol=1e-6):
+    def __init__(self, system, info, atol=1e-6):
         self.system = system
         self.info = info
-        self.S = S
-        self.C = C
-        self.eps = eps
-        self.tol = tol
+        self.S = system.ints_overlap()
         self.two_component = self.system.two_component
+        self.atol = atol
+        # set to false in _compute_characters if the MOs are not fully symmetrized after 2 rounds of diagonalization
+        # which happens only for spatial symmetry-broken cases
+        self.success = True
 
-    def run(self):
-        if self.system.point_group == "C1":
-            self.labels = ["a" for _ in range(self.C.shape[1])]
-            self.irrep_indices = [0 for _ in range(self.C.shape[1])]
-        else:
+        if self.system.point_group.upper() != "C1":
             # step 1: build symmetry transformation matrices
             symmetry_ops = get_symmetry_ops(self.system.point_group)
 
             # step 2: build U matrices (permutation * phase)
             self.U_ops = self._build_U_matrices(symmetry_ops)
 
+    def run(self, C, eps):
+        self.success = True
+        if self.system.point_group.upper() == "C1":
+            labels = ["a" for _ in range(C.shape[1])]
+            irrep_indices = [0 for _ in range(C.shape[1])]
+        else:
             # step 3: assign irrep labels
-            self.labels, chars = self._assign_irrep_labels()
+            labels, chars = self._assign_irrep_labels(C, eps)
 
             for i, c in enumerate(chars):
                 logger.log_debug(f"orbital {i}, character = {c}")
 
-            self.irrep_indices = [
-                COTTON_LABELS[self.system.point_group][label] for label in self.labels
+            irrep_indices = [
+                COTTON_LABELS[self.system.point_group][label] for label in labels
             ]
+        return labels, irrep_indices
 
-    def _compute_characters(self):
+    def _compute_characters(self, C, eps):
         """
         Compute the characters of all MO vectors across all symmetry operators in the point group.
         """
@@ -159,8 +150,8 @@ class MOSymmetryDetector:
             mixed_indices = None
             rep_of_mixed_operator = None
             for op, U in self.U_ops.items():
-                rep = X @ U @ self.C
-                if np.allclose(np.abs(rep), np.eye(rep.shape[0]), atol=self.tol):
+                rep = X @ U @ C
+                if np.allclose(np.abs(rep), np.eye(rep.shape[0]), atol=self.atol):
                     continue
                 else:
                     # Triply degenerate group, need another diagonalization
@@ -172,7 +163,7 @@ class MOSymmetryDetector:
             return reps_are_diagonal, mixed_indices, rep_of_mixed_operator
 
         for i in range(3):
-            X = self.C.T.conj() @ self.S
+            X = C.T.conj() @ self.S
             reps_are_diagonal, mixed_indices, rep_of_mixed_operator = (
                 _are_reps_diagonal(X)
             )
@@ -182,31 +173,30 @@ class MOSymmetryDetector:
             # if for some reason the MOs are still not fully symmetrized,
             # we just set all irreps to totally symmetric in the else clause below
             elif i < 2:
-                self._project_onto_irrep(rep_of_mixed_operator, mixed_indices)
+                self._project_onto_irrep(C, eps, rep_of_mixed_operator, mixed_indices)
         else:
             for op, U in self.U_ops.items():
-                rep = X @ U @ self.C
-                if not np.allclose(np.abs(rep), np.eye(rep.shape[0]), atol=self.tol):
+                rep = X @ U @ C
+                if not np.allclose(np.abs(rep), np.eye(rep.shape[0]), atol=self.atol):
                     logger.log_warning(
                         f"Warning: MO space is not fully symmetrized after projection! Failed for op {op}, "
                         "setting all MO irreps to totally symmetric!"
                     )
-            return np.ones((self.C.shape[1], len(self.U_ops)))
+                    self.success = False
+            return np.ones((C.shape[1], len(self.U_ops)))
 
-        return np.column_stack(
-            [np.diag(X @ U @ self.C) for op, U in self.U_ops.items()]
-        )
+        return np.column_stack([np.diag(X @ U @ C) for op, U in self.U_ops.items()])
 
-    def _project_onto_irrep(self, rep_of_mixed_operator, mixed_indices):
+    def _project_onto_irrep(self, C, eps, rep_of_mixed_operator, mixed_indices):
         # group the MOs that mix together into degenerate subsets and diagonalize each subset
         degenerate_subsets = [set([mixed_indices[0]])]
-        ep_current_subset = self.eps[mixed_indices[0]]
+        ep_current_subset = eps[mixed_indices[0]]
         for i in mixed_indices[1:]:
-            if abs(self.eps[i] - ep_current_subset) < self.tol:
+            if abs(eps[i] - ep_current_subset) < self.atol:
                 degenerate_subsets[-1].add(i)
             else:
                 degenerate_subsets.append(set([i]))
-                ep_current_subset = self.eps[i]
+                ep_current_subset = eps[i]
         # assert that all degenerate subsets are contiguous
         for subset in degenerate_subsets:
             assert max(subset) - min(subset) + 1 == len(
@@ -219,15 +209,15 @@ class MOSymmetryDetector:
 
         for sl in degen_slices:
             rep_sub = rep_of_mixed_operator[sl, sl]
-            _, c = np.linalg.eigh(rep_sub)
-            self.C[:, sl] = self.C[:, sl] @ c
+            _, sc = np.linalg.eigh(rep_sub)
+            C[:, sl] = C[:, sl] @ sc
 
-    def _assign_irrep_labels(self):
+    def _assign_irrep_labels(self, C, eps):
         """
         Assigns the MO irrep labels in `point_group` by matching the character vectors to their expected values.
         """
         # Compute character vector for each orbital in all symmetry ops
-        chars = self._compute_characters()
+        chars = self._compute_characters(C, eps)
 
         # Compare the character vector to the expected results and pick the closest match
         table = CHARACTER_TABLE[self.system.point_group]
@@ -260,7 +250,7 @@ class MOSymmetryDetector:
                 for j, b in enumerate(self.system.atoms):
                     if (a[0] == b[0]) and (
                         np.linalg.norm(v - self.system.prin_atomic_positions[j])
-                        < self.tol
+                        < self.atol
                     ):
                         # get basis fcns centered on atom b
                         basis_b = [
@@ -278,3 +268,16 @@ class MOSymmetryDetector:
                         break
             U_ops[op_label] = U
         return U_ops
+
+    def symmetrize_operator(self, op):
+        """
+        Symmetrize a one-electron operator by group-averaging it over the point group operations.
+        """
+        sym_op = []
+        for iop in op:
+            isym_op = np.zeros_like(iop)
+            for op_label, U in self.U_ops.items():
+                isym_op += U.T @ iop @ U
+            isym_op /= len(self.U_ops)
+            sym_op.append(isym_op)
+        return sym_op
