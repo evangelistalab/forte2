@@ -54,18 +54,6 @@ class DFMP2Base(SystemMixin, MOsMixin, ABC):
         Spin-free two-body cumulant (if requested).
     executed : bool
         Whether the MP2 calculation has been executed.
-
-    Raises
-    ------
-    TypeError
-        If the provided reference is not a supported SCF method
-        (e.g., RHF or ROHF).
-    RuntimeError
-        If required reference data (orbitals, energies, integrals)
-        are unavailable or inconsistent.
-    NotImplementedError
-        If a subclass does not implement required amplitude-building
-        routines.
     """
 
     compute_1rdm: bool = False
