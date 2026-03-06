@@ -81,6 +81,8 @@ class DFMP2Base(SystemMixin, MOsMixin, ABC):
         return self
 
     def run(self):
+        t0 = time.monotonic()
+
         self._startup()
 
         self.B_iaQ = self._build_df_iaQ()
@@ -91,7 +93,19 @@ class DFMP2Base(SystemMixin, MOsMixin, ABC):
 
         self._postprocess_rdms()
 
+        # Print information
+        if isinstance(self.parent_method, RHF):
+            logger.log_info1("DF-RHF-MP2 calculation completed.")
+        elif isinstance(self.parent_method, ROHF):
+            logger.log_info1("DF-ROHF-MP2 calculation completed.")
+
+        logger.log_info1(f"E(corr) = {self.E_corr:.13f} Eh")
+        logger.log_info1(f"E(total) = {self.E_total:.13f} Eh")
+        logger.log_info1(f"||t2|| = {np.linalg.norm(self.t2)}")
+
         self.executed = True
+        dt = time.monotonic() - t0
+        logger.log_info1(f"Time = {dt:.3f} s")
         return self.E_total
 
     def _postprocess_rdms(self):
@@ -403,7 +417,7 @@ class DFROHFMP2(DFMP2Base):
         self.fock_builder = self.system.fock_builder
 
     def _build_t2_all(self, B):
-        nd = self.ndocc
+        nd = self.docc
         ns = self.socc
         nvir = self.nvir
 
