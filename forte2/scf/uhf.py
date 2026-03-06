@@ -187,26 +187,11 @@ class UHF(SCFBase):
         logger.log_info1(string)
 
     def _assign_orbital_symmetries(self):
-        S = self._get_overlap()
-        mosym_a = MOSymmetryDetector(
-            self.system,
-            self.basis_info,
-            S,
-            self.C[0],
-            self.eps[0],
-        )
-        mosym_a.run()
+        a_labels, a_irrep_indices = self.mosym.run(self.C[0], self.eps[0])
+        b_labels, b_irrep_indices = self.mosym.run(self.C[1], self.eps[1])
 
-        mosym_b = MOSymmetryDetector(
-            self.system,
-            self.basis_info,
-            S,
-            self.C[1],
-            self.eps[1],
-        )
-        mosym_b.run()
-        self.irrep_labels = [mosym_a.labels, mosym_b.labels]
-        self.irrep_indices = [mosym_a.irrep_indices, mosym_b.irrep_indices]
+        self.irrep_labels = [a_labels, b_labels]
+        self.irrep_indices = [a_irrep_indices, b_irrep_indices]
 
     def _print_ao_composition(self):
         if isinstance(self.system, ModelSystem):
@@ -223,9 +208,9 @@ class UHF(SCFBase):
         )
         logger.log_info1("\nAO Composition of Beta MOs (HOMO-5 to HOMO):")
         basis_info.print_ao_composition(
-            self.C[1], list(range(max(self.na - 5, 0), self.na))
+            self.C[1], list(range(max(self.nb - 5, 0), self.nb))
         )
         logger.log_info1("\nAO Composition of Beta MOs (LUMO to LUMO+5):")
         basis_info.print_ao_composition(
-            self.C[1], list(range(self.na, min(self.na + 5, self.nmo)))
+            self.C[1], list(range(self.nb, min(self.nb + 5, self.nmo)))
         )

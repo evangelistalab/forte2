@@ -123,14 +123,4 @@ class RHF(SCFBase):
         )
 
     def _assign_orbital_symmetries(self):
-        S = self._get_overlap()
-        mosym = MOSymmetryDetector(
-            self.system,
-            self.basis_info,
-            S,
-            self.C[0],
-            self.eps[0],
-        )
-        mosym.run()
-        self.irrep_labels = mosym.labels
-        self.irrep_indices = mosym.irrep_indices
+        self.irrep_labels, self.irrep_indices = self.mosym.run(self.C[0], self.eps[0])

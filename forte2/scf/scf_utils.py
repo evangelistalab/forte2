@@ -5,6 +5,7 @@ from forte2 import Basis, Shell, integrals
 from forte2.system import System
 from forte2.system.build_basis import build_basis
 from forte2.helpers.matrix_functions import givens_rotation
+from forte2.helpers import logger
 
 
 def minao_initial_guess(system, H):
@@ -253,3 +254,35 @@ def convert_coeff_spatial_to_spinor(system, C, complex=True):
     else:
         raise RuntimeError(f"Coefficient of length {len(C)} not recognized!")
     return [C_2c]
+
+
+def repair_symmetry(scf_obj):
+    """
+    Repair the spatial symmetry of the MOs if a broken-symmetry solution is suspected.
+    This is done by symmetrizing the Fock matrix over the point group operations, rediagonalizing it, and reassigning the MO symmetries.
+    Warning: this changes the MO coefficients and energies to be non-canonical, so it should only be followed calculations that do not rely on canonical orbitals (e.g. FCI or CASSCF).
+
+    Parameters
+    ----------
+    scf_obj : SCFBase object
+        The SCF object containing the MOs to be repaired.
+
+    Returns
+    -------
+    SCFBase object
+        The SCF object with repaired MOs.
+    """
+    if not scf_obj.system.symmetry:
+        return
+    if not scf_obj.executed:
+        scf_obj.run()
+    if scf_obj.mosym.success:
+        return
+    F = scf_obj.mosym.symmetrize_operator(scf_obj.F)
+    scf_obj.eps, scf_obj.C = scf_obj._diagonalize_fock(F)
+    scf_obj._assign_orbital_symmetries()
+    scf_obj._print_orbital_energies()
+    logger.log_info1(
+        "Symmetry repaired. Orbital coefficients are non-canonical and should only be used for initial guesses for subsequent calculations that do not rely on canonical orbitals (e.g. FCI or CASSCF)."
+    )
+    return scf_obj
