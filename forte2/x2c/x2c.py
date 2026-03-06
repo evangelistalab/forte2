@@ -117,11 +117,11 @@ class X2CHelper:
         h_fw = Xorthm1.conj().T @ h_fw @ Xorthm1
 
         if self.system.x2c_type.lower() == "so" and self.snso_type is not None:
-            north = self._get_northo() // 2
-            haa = h_fw[:north, :north]
-            hab = h_fw[:north, north:]
-            hba = h_fw[north:, :north]
-            hbb = h_fw[north:, north:]
+            nbf = len(self.xbasis)
+            haa = h_fw[:nbf, :nbf]
+            hab = h_fw[:nbf, nbf:]
+            hba = h_fw[nbf:, :nbf]
+            hbb = h_fw[nbf:, nbf:]
             # the pauli representation of a spin-dependent operator.
             # h0 is spin-free, h1-3 are spin-dependent
             # SNSO is applied to the spin-dependent parts only.
