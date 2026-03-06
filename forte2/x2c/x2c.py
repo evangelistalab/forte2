@@ -71,6 +71,12 @@ class X2CHelper:
             decontract=True,
         )
 
+        self.proj = scipy.linalg.solve(
+            integrals.overlap(self.system, self.xbasis),
+            integrals.overlap(self.system, self.xbasis, self.system.basis),
+            assume_a="pos",
+        )
+
         nbf_decon = len(self.xbasis)
         logger.log_info1(f"Number of decontracted basis functions: {nbf_decon}")
 
@@ -142,12 +148,7 @@ class X2CHelper:
         return h_fw
 
     def _get_projection_matrix(self):
-        proj = scipy.linalg.solve(
-            integrals.overlap(self.system, self.xbasis),
-            integrals.overlap(self.system, self.xbasis, self.system.basis),
-            assume_a="pos",
-        )
-        return proj if self.system.x2c_type == "sf" else block_diag_2x2(proj)
+        return self.proj if self.system.x2c_type == "sf" else block_diag_2x2(self.proj)
 
     def _get_Xorth(self):
         if self.system.x2c_type == "sf":
