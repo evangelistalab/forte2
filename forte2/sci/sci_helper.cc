@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <iostream>
 #include <iomanip>
 
@@ -190,11 +191,25 @@ void SelectedCIHelper::set_energies(np_vector e) {
     }
 }
 
-void SelectedCIHelper::set_screening_criterion(std::string criterion) {
+void SelectedCIHelper::set_screening_criterion(const std::string& criterion) {
     if (criterion == "ehbci") {
         screening_criterion_ = ScreeningCriterion::eHBCI;
-    } else {
+    } else if (criterion == "hbci") {
         screening_criterion_ = ScreeningCriterion::HBCI;
+    } else {
+        throw std::runtime_error("Unknown screening criterion: " + criterion +
+                                 ". Supported criteria are 'hbci' and 'ehbci'.");
+    }
+}
+
+void SelectedCIHelper::set_energy_correction(const std::string& correction) {
+    if (correction == "variational") {
+        energy_correction_ = EnergyCorrection::Variational;
+    } else if (correction == "pt2") {
+        energy_correction_ = EnergyCorrection::PT2;
+    } else {
+        throw std::runtime_error("Unknown energy correction method: " + correction +
+                                 ". Supported methods are 'variational' and 'pt2'.");
     }
 }
 

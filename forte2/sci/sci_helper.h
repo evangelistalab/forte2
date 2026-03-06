@@ -66,8 +66,11 @@ class SelectedCIHelper {
     /// @brief Set the orbital that should be excluded from the list of creation operators
     void set_frozen_creation(const std::vector<size_t>& frozen_creation);
 
-    /// @brief Set the screening criterion
-    void set_screening_criterion(std::string criterion);
+    /// @brief Set the screening criterion (hbci or ehbci)
+    void set_screening_criterion(const std::string& criterion);
+
+    /// @brief Set the energy correction method (variational or pt2)
+    void set_energy_correction(const std::string& correction);
 
     /// @return The energies of the roots
     const std::vector<double>& energies() const { return root_energies_; }

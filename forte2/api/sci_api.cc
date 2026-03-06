@@ -35,7 +35,9 @@ void export_sci_helper_api(nb::module_& m) {
         .def("set_frozen_creation", &SelectedCIHelper::set_frozen_creation, "frozen_creation"_a,
              "Set orbitals excluded from creation in selection")
         .def("set_screening_criterion", &SelectedCIHelper::set_screening_criterion, "criterion"_a,
-             "Set the screening criterion.")
+             "Set the screening criterion for selection ('hbci' or 'ehbci')")
+        .def("set_energy_correction", &SelectedCIHelper::set_energy_correction, "correction"_a,
+             "Set the energy correction method for selection ('variational' or 'pt2')")
         .def("select_hbci_ref", &SelectedCIHelper::select_hbci_ref, "var_threshold"_a,
              "pt2_threshold"_a, "Perform HBCI selection with the given threshold")
         .def("select_hbci", &SelectedCIHelper::select_hbci, "var_threshold"_a, "pt2_threshold"_a,
