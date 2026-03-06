@@ -77,13 +77,6 @@ class MOSymmetryDetector:
     atol : float, optional, default=1e-6
         Absolute tolerance for matching atomic positions under symmetry operations
 
-    Attributes
-    ----------
-    irrep_indices : list of int
-        List of irrep indices for each MO according to COTTON_LABELS
-    labels : list of str
-        List of irrep labels for each MO (e.g. 'a1', 'b2', etc.)
-
     Notes
     -----
     We compute symmetry irreps for MOs a posteriori by computing the character of each MO
@@ -124,6 +117,7 @@ class MOSymmetryDetector:
             self.U_ops = self._build_U_matrices(symmetry_ops)
 
     def run(self, C, eps):
+        self.success = True
         if self.system.point_group.upper() == "C1":
             labels = ["a" for _ in range(C.shape[1])]
             irrep_indices = [0 for _ in range(C.shape[1])]
