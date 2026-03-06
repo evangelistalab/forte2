@@ -49,7 +49,7 @@ class SelectedCIParams:
     guess_occ_window: int = 2
     guess_vir_window: int = 2
     num_threads: int = 4
-    ci_algorithm: str = "string"
+    ci_algorithm: str = "sparse"
     num_batches_per_thread: int = 4
     do_spin_penalty: bool = True
     guess_dets: list[Determinant] = field(default_factory=list)
@@ -93,10 +93,10 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
         The logging level for the CI solver. Defaults to the global logger's verbosity level.
     die_if_not_converged : bool, optional, default=False
         If True, raise an error if the CI solver does not converge.
-    ci_algorithm : str, optional, default="string"
+    ci_algorithm : str, optional, default="sparse"
         The algorithm used for the CI sigma builder.
         The options are:
-            - "string": A string-based algorithm
+            - "sparse": A sparse string-based algorithm
             - "exact": Exact diagonalization
     guess_per_root : int, optional, default=2
         The number of guess vectors for each root.
@@ -156,14 +156,14 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
 
         if self.two_component:
             assert self.ci_algorithm.lower() in [
-                "string",
+                "sparse",
                 "exact",
-            ], "Two-component CI algorithm must be 'string' or 'exact'."
+            ], f"Two-component CI algorithm must be 'sparse' or 'exact'. Got '{self.ci_algorithm}'."
         else:
             assert self.ci_algorithm.lower() in [
-                "string",
+                "sparse",
                 "exact",
-            ], "CI algorithm must be 'string' or 'exact'."
+            ], f"CI algorithm must be 'sparse' or 'exact'. Got '{self.ci_algorithm}'."
 
     def _sci_solver_startup(self):
         # Create the Slater rules object
@@ -295,11 +295,11 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
 
             if self.ci_algorithm.lower() == "exact":
                 self._do_exact_diagonalization()
-            elif self.ci_algorithm.lower() == "string":
+            elif self.ci_algorithm.lower() == "sparse":
                 self._do_iterative_ci()
             else:
                 raise ValueError(
-                    f"Unknown CI algorithm: {self.ci_algorithm}. Must be 'exact' or 'string'."
+                    f"Unknown CI algorithm: {self.ci_algorithm}. Must be 'exact' or 'sparse'."
                 )
 
             # logger.log(f"CI Energy Roots: {self.evals}", self.log_level)
