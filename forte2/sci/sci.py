@@ -55,6 +55,7 @@ class SelectedCIParams:
     guess_dets: list[Determinant] = field(default_factory=list)
     frozen_creation: list[int] = field(default_factory=list)
     screening_criterion: str = "hbci"
+    energy_correction: str = "pt2"
 
 
 @dataclass
@@ -203,6 +204,7 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
         self.sci_helper.set_num_threads(self.num_threads)
         self.sci_helper.set_num_batches_per_thread(self.num_batches_per_thread)
         self.sci_helper.set_screening_criterion(self.screening_criterion)
+        self.sci_helper.set_energy_correction(self.energy_correction)
         if self.frozen_creation:
             self.sci_helper.set_frozen_creation(self.frozen_creation)
 
