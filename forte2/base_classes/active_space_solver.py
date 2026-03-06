@@ -35,13 +35,12 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
             "semicanonical",
             "original",
         ], "final_orbital must be either 'semicanonical' or 'original'."
-
         assert self.ci_algorithm.lower() in [
             "hz",
             "kh",
             "exact",
             "sparse",
-        ], "ci_algorithm must be one of 'hz', 'kh', 'exact', or 'sparse'."
+        ], f"ci_algorithm must be one of 'exact', 'hz', 'kh', or 'sparse'. Got '{self.ci_algorithm}'."
 
     def _startup(self, two_component=False):
         if not self.parent_method.executed:
@@ -114,7 +113,9 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
                         else []
                     ),
                 )
-                logger.log_info1("ActiveSpaceSolver: mo_space constructed from provided orbital lists.")
+                logger.log_info1(
+                    "ActiveSpaceSolver: mo_space constructed from provided orbital lists."
+                )
                 return
         elif provided_via_parent:
             MOSpaceMixin.copy_from_upstream(self, self.parent_method)
