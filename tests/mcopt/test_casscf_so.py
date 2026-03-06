@@ -1,3 +1,4 @@
+import pytest
 from forte2 import (
     System,
     AVAS,
@@ -8,7 +9,6 @@ from forte2 import (
 )
 from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 from forte2.data import EH_TO_WN
-from forte2.helpers.comparisons import approx_loose
 
 
 def test_casscf_so():
@@ -45,4 +45,4 @@ def test_casscf_so():
     ci = RelCI(nel=35, nroots=6, core_orbitals=28, active_orbitals=8)(rhf)
     ci.run()
 
-    assert (ci.E[4] - ci.E[3]) * EH_TO_WN == approx_loose(3416.391762052979)
+    assert (ci.E[4] - ci.E[3]) * EH_TO_WN == pytest.approx(3416.391762052979, abs=1e-4)
