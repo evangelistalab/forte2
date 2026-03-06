@@ -149,7 +149,7 @@ class _CIBase:
                 "hz",
                 "kh",
                 "exact",
-            ], "CI algorithm must be 'hz', 'kh', or 'exact'."
+            ], f"CI algorithm must be 'hz', 'kh', or 'exact'. Got '{self.ci_algorithm}'."
 
     def _ci_solver_startup(self):
         if self.two_component:
