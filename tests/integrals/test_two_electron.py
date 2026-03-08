@@ -65,3 +65,92 @@ def test_3c2e():
     )
     assert np.linalg.norm(ref2 - ref) < 1e-10
     assert np.linalg.norm(ref2) == approx(116.39332464579758)
+
+
+def test_3c2e_by_slice():
+    xyz = "O 0 0 0\n H 0 0 1\n H 0 1 0"
+    system = forte2.System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+    )
+    ref = forte2.integrals.coulomb_3c(system)
+    nshaux = system.auxiliary_basis.nshells
+    nshb = system.basis.nshells
+    first_size_aux = system.auxiliary_basis.shell_first_and_size
+    first_size_b = system.basis.shell_first_and_size
+
+    rng = np.random.default_rng(1234)
+    for _ in range(20):
+        ish0 = rng.integers(0, nshaux - 1)
+        ish1 = rng.integers(ish0 + 1, nshaux)
+        jsh0 = rng.integers(0, nshb - 1)
+        jsh1 = rng.integers(jsh0 + 1, nshb)
+        ksh0 = rng.integers(0, nshb - 1)
+        ksh1 = rng.integers(ksh0 + 1, nshb)
+
+        ib0 = first_size_aux[ish0][0]
+        ib1 = first_size_aux[ish1 - 1][0] + first_size_aux[ish1 - 1][1]
+        jb0 = first_size_b[jsh0][0]
+        jb1 = first_size_b[jsh1 - 1][0] + first_size_b[jsh1 - 1][1]
+        kb0 = first_size_b[ksh0][0]
+        kb1 = first_size_b[ksh1 - 1][0] + first_size_b[ksh1 - 1][1]
+
+        shell_slices = [(ish0, ish1), (jsh0, jsh1), (ksh0, ksh1)]
+        slice_ref = forte2.ints.coulomb_3c_by_shell(
+            system.auxiliary_basis, system.basis, system.basis, shell_slices
+        )
+        assert np.linalg.norm(slice_ref - ref[ib0:ib1, jb0:jb1, kb0:kb1]) < 1e-8
+
+
+def test_3c2e_by_slice_with_prealloc_buffer():
+    xyz = "O 0 0 0\n H 0 0 1\n H 0 1 0"
+    system = forte2.System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+    )
+    ref = forte2.integrals.coulomb_3c(system)
+    naux = len(system.auxiliary_basis)
+    nb = len(system.basis)
+    # random buffer that cannot hold the full integral tensor
+    buf = np.zeros((naux - 10, nb - 3, nb - 4))
+    nshaux = system.auxiliary_basis.nshells
+    nshb = system.basis.nshells
+    first_size_aux = system.auxiliary_basis.shell_first_and_size
+    first_size_b = system.basis.shell_first_and_size
+
+    rng = np.random.default_rng(1234)
+    for _ in range(20):
+        ish0 = rng.integers(0, nshaux - 1)
+        ish1 = rng.integers(ish0 + 1, nshaux)
+        jsh0 = rng.integers(0, nshb - 1)
+        jsh1 = rng.integers(jsh0 + 1, nshb)
+        ksh0 = rng.integers(0, nshb - 1)
+        ksh1 = rng.integers(ksh0 + 1, nshb)
+
+        ib0 = first_size_aux[ish0][0]
+        ib1 = first_size_aux[ish1 - 1][0] + first_size_aux[ish1 - 1][1]
+        jb0 = first_size_b[jsh0][0]
+        jb1 = first_size_b[jsh1 - 1][0] + first_size_b[jsh1 - 1][1]
+        kb0 = first_size_b[ksh0][0]
+        kb1 = first_size_b[ksh1 - 1][0] + first_size_b[ksh1 - 1][1]
+
+        if (
+            ib1 - ib0 > buf.shape[0]
+            or jb1 - jb0 > buf.shape[1]
+            or kb1 - kb0 > buf.shape[2]
+        ):
+            continue
+
+        shell_slices = [(ish0, ish1), (jsh0, jsh1), (ksh0, ksh1)]
+        forte2.ints.coulomb_3c_by_shell(
+            system.auxiliary_basis, system.basis, system.basis, shell_slices, buf
+        )
+        assert (
+            np.linalg.norm(
+                buf[: ib1 - ib0, : jb1 - jb0, : kb1 - kb0]
+                - ref[ib0:ib1, jb0:jb1, kb0:kb1]
+            )
+            < 1e-8
+        )
