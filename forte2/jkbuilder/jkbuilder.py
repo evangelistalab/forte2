@@ -1,7 +1,8 @@
-import numpy as np
-import scipy as sp
 import itertools
 from functools import cached_property
+import numpy as np
+import scipy as sp
+import math
 
 import forte2
 from forte2 import integrals
@@ -498,3 +499,109 @@ class FockBuilder:
             optimize=True,
         )
         return B
+
+
+class FockBuilderOTF:
+    """
+    Class to build the Fock matrix on-the-fly without storing the B tensor. This is useful for large systems where storing the B tensor is not feasible.
+
+    Parameters
+    ----------
+    system : System
+        The system for which to build the Fock matrix.
+    use_aux_corr : bool, optional, default=False
+        If True, uses ``system.auxiliary_basis_corr`` instead of ``system.auxiliary_basis``.
+    memory_threshold_mb : float, optional, default=4000
+        The memory threshold in MB for deciding how to compute the J and K matrices. If the estimated memory requirement for storing the B tensor exceeds this threshold, the J and K matrices will be computed in a more memory-efficient way that does not require storing the B tensor.
+    """
+
+    def __init__(self, system, use_aux_corr=False, memory_threshold_mb=4000):
+        self.system = system
+        self.use_aux_corr = use_aux_corr
+        self.nbf = system.nbf
+        self.memory_threshold_mb = memory_threshold_mb
+        self.auxbasis = (
+            self.system.auxiliary_basis_corr
+            if self.use_aux_corr
+            else self.system.auxiliary_basis
+        )
+        self.basis = self.system.basis
+        self.nshb = self.basis.nshells
+        self.naux = len(self.auxbasis)
+        self.nshaux = self.auxbasis.nshells
+        self.metric = self._build_metric()
+
+    def _allocate_B_buffer(self):
+        # we want two B buffers, holding B_Pmn and B_nPm, hence the division by 2 at the end
+        self.blksize = math.ceil(
+            self.memory_threshold_mb * 1024**2 / (8 * self.nbf**2) / 2
+        )
+        self.aux_first_and_size = self.auxbasis.shell_first_and_size
+        max_nbasis_in_shell = max(size for _, size in self.aux_first_and_size)
+        if self.blksize < max_nbasis_in_shell:
+            raise ValueError(
+                f"Memory threshold {self.memory_threshold_mb} is too low to even hold the largest shell of the auxiliary basis. Please increase the memory threshold to at least {8 * max_nbasis_in_shell * self.nbf**2 / 1024**2:.2f} MB."
+            )
+        self._Pmn_buf = np.zeros((self.blksize, self.nbf, self.nbf))
+        self._nPm_buf = np.zeros((self.blksize, self.nbf, self.nbf))
+
+    def _build_metric(self):
+        M = integrals.coulomb_2c(self.system, self.auxbasis)
+        L = sp.linalg.cholesky(M)
+        I = np.eye(M.shape[0])
+        M_inv_sqrt = sp.linalg.solve_triangular(L.T, I, lower=True)
+        return M_inv_sqrt
+
+    def build_J(self, D, buf):
+        J = [np.einsum("Pmn,Prs,sr->mn", buf, buf, Di, optimize=True) for Di in D]
+        return J
+
+    def build_K(self, C, buf):
+        if self.system.two_component:
+            assert (
+                len(C) == 1
+            ), "C must be a list with one element for two-component systems."
+            C = [C[0][: self.nbf, :], C[0][self.nbf :, :]]
+        # equivalent to "rPm,mi->rPi"
+        Y = [buf @ Ci.conj() for Ci in C]
+        if self.system.two_component:
+            K = []
+            for Yi in Y:
+                for Yj in Y:
+                    # equivalent to "mPi,nPi->mn"
+                    K.append(np.tensordot(Yi.conj(), Yj, axes=([1, 2], [1, 2])))
+        else:
+            # equivalent to "mPi,nPi->mn"
+            K = [np.tensordot(Yi.conj(), Yi, axes=([1, 2], [1, 2])) for Yi in Y]
+        return K
+
+    def build_JK(self, C):
+        D = [np.einsum("mi,ni->mn", Ci, Ci.conj(), optimize=True) for Ci in C]
+        if self.system.two_component:
+            assert (
+                len(C) == 1
+            ), "C must be a list with one element for two-component systems."
+            # build_J only needs the aa and bb parts of the density matrix
+            D = [D[0][: self.nbf, : self.nbf], D[0][self.nbf :, self.nbf :]]
+
+        ish0 = 0
+        ish1 = 0
+        while ish1 < self.nshaux:
+            # get the max shell slice that start at ishell and has less than blksize basis functions
+            curr_size = 0
+            while curr_size + self.aux_first_and_size[ish1][1] <= self.blksize:
+                curr_size += self.aux_first_and_size[ish1][1]
+                ish1 += 1
+                if ish1 == self.nshaux:
+                    break
+            forte2.ints.coulomb_3c_by_slice(
+                self.system,
+                self.auxbasis,
+                self.basis,
+                self.basis,
+                [(ish0, ish1), (0, self.nshb), (0, self.nshb)],
+                self._Pmn_buf,
+            )
+            ish0 = ish1
+            np.copyto(self._nPm_buf, self._Pmn_buf.transpose((2, 0, 1)))
+
