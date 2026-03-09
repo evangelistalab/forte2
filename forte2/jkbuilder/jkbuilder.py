@@ -151,20 +151,10 @@ class FockBuilder:
         return B, naux
 
     def build_J(self, D):
-
-        nb = self.nbf
-        J = [np.zeros((nb, nb), dtype=Di.dtype) for Di in D]
-
-        block = 64  # auxiliary block size
-
-        for P0 in range(0, self.naux, block):
-            P1 = min(P0 + block, self.naux)
-
-            B = self.B_Pmn[P0:P1]  # shape (Pblock, nb, nb)
-
-            for i, Di in enumerate(D):
-                J[i] += np.einsum("Pmn,Prs,sr->mn", B, B, Di, optimize=True)
-
+        J = [
+            np.einsum("Pmn,Prs,sr->mn", self.B_Pmn, self.B_Pmn, Di, optimize=True)
+            for Di in D
+        ]
         return J
 
     def _build_K_nPm(self, C):
@@ -199,21 +189,7 @@ class FockBuilder:
                 for Yj in Y:
                     K.append(np.einsum("Pmi,Pni->mn", Yi.conj(), Yj, optimize=True))
         else:
-            nb = self.nbf
-            K = [np.zeros((nb, nb)) for _ in C]
-
-            block = 64
-
-            for P0 in range(0, self.naux, block):
-                P1 = min(P0 + block, self.naux)
-
-                B = self.B_Pmn[P0:P1]  # (Pblock, nb, nb)
-
-                Y = [np.einsum("Pmr,mi->Pri", B, Ci.conj(), optimize=True) for Ci in C]
-
-                for i, Yi in enumerate(Y):
-                    K[i] += np.einsum("Pmi,Pni->mn", Yi.conj(), Yi, optimize=True)
-
+            K = [np.einsum("Pmi,Pni->mn", Yi.conj(), Yi, optimize=True) for Yi in Y]
         return K
 
     def build_K(self, C):
