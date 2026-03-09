@@ -1,4 +1,4 @@
-\documentclass[aip,preprint]{revtex4-1}
+\documentclass[notitlepage,pra,aps,preprint]{revtex4-1}
 
 \usepackage[utf8]{inputenc}
 \usepackage{amsmath}
@@ -15,9 +15,11 @@
 \author{Francesco A. Evangelista}
 \email{francesco.evangelista@emory.edu}
 \affiliation{Department of Chemistry and Cherry Emerson Center for Scientific Computation, Emory University, Atlanta, GA 30322, USA}
+\author{Zijun Zhao}
+\email{brian.zhaozijun@gmail.com}
+\affiliation{Department of Chemistry and Cherry Emerson Center for Scientific Computation, Emory University, Atlanta, GA 30322, USA}
 
 \date{\today}
-
 
 \maketitle
 
@@ -25,15 +27,15 @@
 In this note, we consider ways to implement the 
 Coulomb matrix:
 \begin{equation}
-J_{\mu \nu} = \sum_{\rho \sigma} (\mu \nu | \rho \sigma) D_{\rho \sigma},
+J_{\mu \nu} = \sum_{\rho \sigma} (\mu \nu | \rho \sigma) D_{\sigma \rho},
 \end{equation}
 and the exchange matrix:
 \begin{equation}
-K_{\mu \nu} = \sum_{\rho \sigma} (\mu \rho | \nu \sigma) D_{\rho \sigma},
+K_{\mu \nu} = \sum_{\rho \sigma} (\mu \sigma | \rho \nu) D_{\sigma \rho},
 \end{equation}
 where we take the density matrix to be defined as
 \begin{equation}
-D_{\rho \sigma} = \sum_i^{\mathrm{occ}} n_i C_{\rho i} C_{\sigma i}.
+D_{\sigma \rho} = \sum_i^{\mathrm{occ}} n_i C_{\sigma i} C^*_{\rho i}.
 \end{equation}
 
 Let's consider an auxiliary basis and the corresponding approximation to the four-center Coulomb integrals
@@ -49,21 +51,49 @@ where we have defined
 B^{P}_{\mu \nu} = \sum_Q (P|Q)^{-1/2} (Q|\mu \nu).
 \end{equation}
 
+The matrix inverse and inverse square root of the Coulomb metric $A\equiv (P|Q)$ can be computed by Cholesky decomposition:
+\begin{equation}
+A = L L^T,
+\end{equation}
+the matrix inverse is 
+\begin{equation}
+\label{eq:inv}
+A^{-1} = L^{-T} L^{-1},
+\end{equation}
+which can be obtained by two triangular solves (\textit{e.g.}, with \texttt{scipy.linalg.solve\_triangular}):
+\begin{equation}
+Lx = I, \quad L^T y = x
+\end{equation}
+where $x = L^{-1}$ and $y = A^{-1}$.
+From \cref{eq:inv}, we can also identify $L^{-1}$ as a valid choice for $A^{-1/2}$ in our context, since $L^{-1}_{PR}(R|\rho \sigma) = B^{P}_{\rho \sigma}$, and the contraction of the B tensors yields the original four-center integrals:
+\begin{align}
+\sum_{P} B^{P}_{\mu \nu} B^{P}_{\rho \sigma} 
+& = \sum_{PQR}(\mu \nu | P) L^{-\text{T}}_{PQ} L^{-1}_{QR} (R|\rho \sigma) \\
+& = \sum_{PQ}(\mu \nu | P) (P|Q)^{-1} (Q|\rho \sigma) \\
+& = (\mu \nu | \rho \sigma).
+\end{align}
+
 \section{Coulomb matrix algorithm}
 
 The Coulomb matrix can be computed efficiently as
 \begin{equation}
 \begin{split}
 J_{\mu \nu} = \sum_{P} B^{P}_{\mu \nu}
-\underbrace{\left( \sum_{\rho \sigma}B^{P}_{\rho \sigma} D_{\rho \sigma} \right)}_{b^P}=
+\underbrace{\left( \sum_{\rho \sigma}B^{P}_{\rho \sigma} D_{\sigma \rho} \right)}_{b^P}=
 \sum_{P} B^{P}_{\mu \nu} b^P.
 \end{split}
 \end{equation}
-If we cannot store the B tensors, then we can do the following:
+If the B tensors can be stored, then the contraction as written above can be directly implemented with \texttt{numpy.einsum} without further optimization, \textit{i.e.},
+\begin{quote}
+    \texttt{np.einsum("Pmn,Prs,sr->mn", B, B, D, optimize=True)}
+\end{quote}
+This contraction is cached-friendly since the contraction happens over the outer indices.
+
+However, if we cannot store the B tensors, then we can do the following:
 \begin{equation}
 \begin{split}
 J_{\mu \nu} & = \sum_{PQ} (\mu \nu | P) (P|Q)^{-1}
-\underbrace{\sum_{\rho \sigma} (Q|\rho \sigma) D_{\rho \sigma}}_{a_Q} \\
+\underbrace{\sum_{\rho \sigma} (Q|\rho \sigma) D_{\sigma \rho}}_{a_Q} \\
  & = \sum_{P} (\mu \nu | P) \underbrace{\sum_{Q} (P|Q)^{-1} a_Q}_{b_P} \\
  & = \sum_{P} (\mu \nu | P) b_P
 \end{split}
@@ -73,9 +103,9 @@ The Coulomb operator can be implemented in the following way.
 \begin{enumerate}
     \item Compute the vector of size $N_\mathrm{aux}$ on the fly without storage:
 \begin{equation}
-a_Q = \sum_{\rho \geq \sigma} (Q|\rho \sigma) D_{\rho \sigma} (1+\delta_{\rho \sigma})
+a_Q = \sum_{\rho \geq \sigma} (Q|\rho \sigma) D_{\sigma \rho} (1+\delta_{\rho \sigma})
 \end{equation}
-In this step, one can apply screening based on $D_{\rho \sigma}$ and $(Q|\rho \sigma)$. 
+In this step, one can apply screening based on $D_{\sigma \rho}$ and $(Q|\rho \sigma)$. 
 
     \item Matrix vector multiplication
 \begin{equation}
@@ -94,44 +124,52 @@ The exchange matrix can be computed efficiently as
 \begin{equation}
 \begin{split}
 K_{\mu \nu} &= \sum_{P} \sum_{i}
-\sum_{\rho \sigma} B^{P}_{\mu \rho} B^{P}_{\nu \sigma} C_{\rho i} C_{\sigma i} n_i \\
+\sum_{\sigma \rho} B^{P}_{\mu \sigma} B^{P}_{\rho \nu} C_{\sigma i} C^*_{\rho i} n_i \\
 &= \sum_{P} \sum_{i}
-\left(\sum_{\rho} B^{P}_{\mu \rho}  C_{\rho i}\sqrt{n_i} \right)
-\underbrace{\left(\sum_{\sigma} B^{P}_{\nu \sigma} C_{\sigma i} \sqrt{n_i}\right)}_{Y_{P \nu i}} \\
+\underbrace{\left(\sum_{\sigma} B^{P}_{\mu \sigma}  C_{\sigma i}\sqrt{n_i} \right)}_{Y_{P \mu i}}
+\left(\sum_{\rho} B^{P}_{\rho \nu} C^*_{\rho i} \sqrt{n_i}\right) \\
 &= \sum_{P} \sum_{i}
-Y_{P \mu i} Y_{P \nu i}
+Y_{P \mu i} Y^*_{P \nu i}
 \end{split}
 \end{equation}
-With the most expensive step being the evaluation of $Y_{P \mu i}$ which scales as $N_\mathrm{aux} N^2 O$ and requires additional storage of $N_\mathrm{aux} N O$.
+If the B tensors can be stored, then, again, the contractions above can be directly implemented with \texttt{numpy.einsum}:
+\begin{quote}
+    \texttt{Y = np.einsum("Pms,si->Pmi", B, Ci, optimize=True)}\\
+    \texttt{K = np.einsum("Pmi,Pni->mn", Y, Y.conj(), optimize=True)}
+\end{quote}
+These contractions are already cache-friendly since contractions happen over the outer indices.
+
+When the B tensors cannot be stored, we need to perform the contractions on the fly. 
+The most expensive step is the evaluation of $Y_{P \mu i}$ which scales as $N_\mathrm{aux} N_{\mathrm{AO}}^2 N_{\mathrm{occ}}$ and requires additional storage of $N_\mathrm{aux} N_{\mathrm{AO}} N_{\mathrm{occ}}$.
 
 \begin{equation}
 \begin{split}
-Y_{P \mu i} & = \sum_{\rho} B^{P}_{\mu \rho} C_{\rho i}\sqrt{n_i} \\
-& = \sum_{\rho} \sum_{Q} (P|Q)^{-1/2} (Q | \mu \rho) C_{\rho i}\sqrt{n_i} \\
-& = \sum_{Q} (P|Q)^{-1/2} \sum_{\rho} (Q | \mu \rho) C_{\rho i}\sqrt{n_i} \\
+Y_{P \mu i} & = \sum_{\sigma} B^{P}_{\mu \sigma} C_{\sigma i}\sqrt{n_i} \\
+& = \sum_{\sigma} \sum_{Q} (P|Q)^{-1/2} (Q | \mu \sigma) C_{\sigma i}\sqrt{n_i} \\
+& = \sum_{Q} (P|Q)^{-1/2} \sum_{\sigma} (Q | \mu \sigma) C_{\sigma i}\sqrt{n_i} \\
 & = \sum_{Q} (P|Q)^{-1/2} X_{Q \mu i},
 \end{split}
 \end{equation}
 where
 \begin{equation}
-X_{Q \mu i} = \sum_{\rho} (Q | \mu \rho) C_{\rho i}\sqrt{n_i}
+X_{Q \mu i} = \sum_{\sigma} (Q | \mu \sigma) C_{\sigma i}\sqrt{n_i}
 \end{equation}
 
 The exchange operator can be implemented in the following way.
 \begin{enumerate}
-    \item Compute the tensor $X_{Q \mu i}$ with storage cost of $N_\mathrm{aux} N O$ by doing one on-the-fly pass over the three-center integrals, evaluating only the part $\mu \geq \rho$ and using the fact that $(Q | \mu \rho)=(Q | \rho \mu)$:
+    \item Compute the tensor $X_{Q \mu i}$ with storage cost of $N_\mathrm{aux} N_{\mathrm{AO}} N_{\mathrm{occ}}$ by doing one on-the-fly pass over the three-center integrals, evaluating only the part $\mu \geq \sigma$ and using the fact that $(Q | \mu \sigma)=(Q | \sigma \mu)$:
 \begin{equation}
-X_{Q \mu i} = \sum_{\rho} (Q | \mu \rho) C_{\rho i} \sqrt{n_i}
+X_{Q \mu i} = \sum_{\sigma} (Q | \mu \sigma) C_{\sigma i} \sqrt{n_i}
 \end{equation}
-Here if the orbital is localized, then one can apply screening based on only those shells on which $C_{\rho i}$ has support and this can be combined with integral screening of $(Q | \mu \rho)$.
+Here if the orbital is localized, then one can apply screening based on only those shells on which $C_{\sigma i}$ has support and this can be combined with integral screening of $(Q | \mu \sigma)$.
 
-    \item Compute the matrix-tensor product which yields an intermediate of the same dimension ($N_\mathrm{aux} N O$):
+    \item Compute the matrix-tensor product which yields an intermediate of the same dimension ($N_\mathrm{aux} N_{\mathrm{AO}} N_{\mathrm{occ}}$):
 \begin{equation}
 Y_{P \mu i} = \sum_{Q} (P|Q)^{-1/2} X_{Q \mu i},
 \end{equation}
     \item Contract the two tensors:
 \begin{equation}
-K_{\mu \nu} = \sum_{P} \sum_{i} Y_{P \mu i} Y_{P \nu i}
+K_{\mu \nu} = \sum_{P} \sum_{i} Y_{P \mu i} Y^*_{P \nu i}
 \end{equation}
 \end{enumerate}
 If we cannot store the full $X_{Q \mu i}$ then we can do the following. Split the sum over $i$ into
@@ -141,15 +179,15 @@ If we cannot store the full $X_{Q \mu i}$ then we can do the following. Split th
 where $[i]_\alpha$ indicates a range of indices $[i]_\alpha = \{n_{\alpha-1}, n_{\alpha-1} + 1, n_{\alpha-1} + 2, \ldots, n_{\alpha} - 1\}$ where $n_{\alpha-1}$ and $n_{\alpha}$ are the start and end (excluded) of the range.
 Then we can split the ranges evenly and determine the maximum size of the slice of the tensor $X_{Q\mu [i]_\alpha}$ that fits in memory:
 \begin{equation}
-r = \frac{N_\mathrm{aux} N O}{\textrm{memory}}
+r = \frac{N_\mathrm{aux} N_{\mathrm{AO}} N_{\mathrm{occ}}}{\textrm{memory}}
 \end{equation}
 
 Then the algorithm is implemented by performing $r$ passes over the three-center integrals and storing
 \begin{equation}
-X_{Q \mu [i]_\alpha} = \sum_{\rho} (Q | \mu \rho) C_{\rho [i]_\alpha}\sqrt{n_{[i]_\alpha}}
+X_{Q \mu [i]_\alpha} = \sum_{\sigma} (Q | \mu \sigma) C_{\sigma [i]_\alpha}\sqrt{n_{[i]_\alpha}}
 \end{equation}
 which is then transformed to $Y$ and accumulated into the exchange matrix.
-Since we need to do two passes for the Coulomb matrix, we can go ahead and use these two passes to compute both $J$ and $K$ at the same time reducing the storage cost of the exchange algorithm to $N_\mathrm{aux} N O/2$.
+Since we need to do two passes for the Coulomb matrix, we can go ahead and use these two passes to compute both $J$ and $K$ at the same time reducing the storage cost of the exchange algorithm to $N_\mathrm{aux} N_{\mathrm{AO}} N_{\mathrm{occ}}/2$.
 
 \section{Integral screening}
 

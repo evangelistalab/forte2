@@ -23,24 +23,18 @@ class FockBuilder:
         If a ModelSystem is provided, it will decompose the 4D ERI tensor using Cholesky decomposition with complete pivoting.
     use_aux_corr : bool, optional, default=False
         If True, uses ``system.auxiliary_basis_corr`` instead of ``system.auxiliary_basis``.
-    store_B_nPm : bool, optional, default=True
-        If True, stores a (Nao, Naux, Nao)-shaped copy of the B tensor for faster K builds.
-        This comes at the cost of doubling the memory footprint of the ``FockBuilder`` object.
 
     Attributes
     ----------
     B_Pmn : NDArray
         The B tensor with shape (Naux, Nao, Nao). Lazily evaluated.
-    B_nPm : NDArray
-        The B tensor with shape (Nao, Naux, Nao). Lazily evaluated and only available if `store_B_nPm` is True.
     naux : int
         The number of auxiliary basis functions.
     nbf : int
         The number of basis functions in the system.
     """
 
-    def __init__(self, system, use_aux_corr=False, store_B_nPm=True):
-        self.store_B_nPm = store_B_nPm
+    def __init__(self, system, use_aux_corr=False):
         self.system = system
         self.use_aux_corr = use_aux_corr
         self.nbf = system.nbf
@@ -72,14 +66,6 @@ class FockBuilder:
         self.naux = naux
         return res
 
-    @cached_property
-    def B_nPm(self):
-        if not self.store_B_nPm:
-            raise AttributeError(
-                "B_nPm is not stored. Set store_B_nPm=True when initializing FockBuilder to enable this attribute."
-            )
-        return np.transpose(self.B_Pmn, (2, 0, 1))
-
     def _build_B_model_system(self):
         nbf = self.system.nbf
         eri = self.system.eri.reshape((nbf**2,) * 2)
@@ -105,13 +91,7 @@ class FockBuilder:
         naux = B.shape[0]
 
         memory_gb = 8 * (naux * nbf**2) / (1024**3)
-        if self.store_B_nPm:
-            memory_gb *= 2
-            logger.log_info1(
-                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_nPm)"
-            )
-        else:
-            logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
+        logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
         logger.log_info1(f"Number of system basis functions: {nbf}")
         logger.log_info1(f"Number of auxiliary basis functions: {naux}")
 
@@ -122,13 +102,7 @@ class FockBuilder:
         nb = basis.size
         naux = auxiliary_basis.size
         memory_gb = 8 * (naux**2 + naux * nb**2) / (1024**3)
-        if self.store_B_nPm:
-            memory_gb += 8 * (naux * nb**2) / (1024**3)
-            logger.log_info1(
-                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_nPm)"
-            )
-        else:
-            logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
+        logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
         logger.log_info1(f"Number of system basis functions: {nb}")
         logger.log_info1(f"Number of auxiliary basis functions: {naux}")
 
@@ -136,11 +110,11 @@ class FockBuilder:
         M = integrals.coulomb_2c(self.system, auxiliary_basis)
 
         # Decompose M = L L.T
-        L = sp.linalg.cholesky(M)
+        L = sp.linalg.cholesky(M, lower=True)
 
-        # Solve L.T X = I, or X = L.T^{-1} = M^{-1/2}
+        # Solve L X = I, or X = L^{-1} = M^{-1/2}
         I = np.eye(M.shape[0])
-        M_inv_sqrt = sp.linalg.solve_triangular(L.T, I, lower=True)
+        M_inv_sqrt = sp.linalg.solve_triangular(L, I, lower=True)
 
         # Compute the integrals (P|mn) with P in the auxiliary basis and m, n in the system basis
         Pmn = integrals.coulomb_3c(self.system, auxiliary_basis)
@@ -158,46 +132,21 @@ class FockBuilder:
         ]
         return J
 
-    def _build_K_nPm(self, C):
-        if self.system.two_component:
-            assert (
-                len(C) == 1
-            ), "C must be a list with one element for two-component systems."
-            C = [C[0][: self.nbf, :], C[0][self.nbf :, :]]
-        # equivalent to "rPm,mi->rPi"
-        Y = [self.B_nPm @ Ci.conj() for Ci in C]
-        if self.system.two_component:
-            K = []
-            for Yi in Y:
-                for Yj in Y:
-                    # equivalent to "mPi,nPi->mn"
-                    K.append(np.tensordot(Yi.conj(), Yj, axes=([1, 2], [1, 2])))
-        else:
-            # equivalent to "mPi,nPi->mn"
-            K = [np.tensordot(Yi.conj(), Yi, axes=([1, 2], [1, 2])) for Yi in Y]
-        return K
-
-    def _build_K_Pmn(self, C):
-        if self.system.two_component:
-            assert (
-                len(C) == 1
-            ), "C must be a list with one element for two-component systems."
-            C = [C[0][: self.nbf, :], C[0][self.nbf :, :]]
-        Y = [np.einsum("Pmr,mi->Pri", self.B_Pmn, Ci.conj(), optimize=True) for Ci in C]
-        if self.system.two_component:
-            K = []
-            for Yi in Y:
-                for Yj in Y:
-                    K.append(np.einsum("Pmi,Pni->mn", Yi.conj(), Yj, optimize=True))
-        else:
-            K = [np.einsum("Pmi,Pni->mn", Yi.conj(), Yi, optimize=True) for Yi in Y]
-        return K
-
     def build_K(self, C):
-        if self.store_B_nPm:
-            return self._build_K_nPm(C)
+        if self.system.two_component:
+            assert (
+                len(C) == 1
+            ), "C must be a list with one element for two-component systems."
+            C = [C[0][: self.nbf, :], C[0][self.nbf :, :]]
+        Y = [np.einsum("Pms,si->Pmi", self.B_Pmn, Ci, optimize=True) for Ci in C]
+        if self.system.two_component:
+            K = []
+            for Yi in Y:
+                for Yj in Y:
+                    K.append(np.einsum("Pmi,Pni->mn", Yi, Yj.conj(), optimize=True))
         else:
-            return self._build_K_Pmn(C)
+            K = [np.einsum("Pmi,Pni->mn", Yi, Yi.conj(), optimize=True) for Yi in Y]
+        return K
 
     def build_JK(self, C):
         r"""
@@ -205,8 +154,8 @@ class FockBuilder:
 
         .. math::
 
-            J_{\mu\nu} = \sum_{i}\sum_{\rho\sigma} (\mu\nu|\rho\sigma) C^*_{\rho i} C_{\sigma i}\\
-            K_{\mu\nu} = \sum_{i}\sum_{\rho\sigma} (\mu\sigma|\rho\nu) C^*_{\rho i} C_{\sigma i}
+            J_{\mu\nu} = \sum_{i}\sum_{\rho\sigma} (\mu\nu|\rho\sigma) C_{\sigma i} C^*_{\rho i}\\
+            K_{\mu\nu} = \sum_{i}\sum_{\rho\sigma} (\mu\sigma|\rho\nu) C_{\sigma i} C^*_{\rho i}
 
         Parameters
         ----------
@@ -529,25 +478,51 @@ class FockBuilderOTF:
         self.nshb = self.basis.nshells
         self.naux = len(self.auxbasis)
         self.nshaux = self.auxbasis.nshells
-        self.metric = self._build_metric()
-        self._allocate_B_buffer()
+        self._build_metric()
+        self._allocate_buffers()
 
-    def _allocate_B_buffer(self):
-        self.blksize = min(
-            math.ceil(self.memory_threshold_mb * 1024**2 / (8 * self.nbf**2)), self.naux
+    def _allocate_buffers(self):
+        """
+        We need three buffers:
+        1. The Pmn buffer for storing the (P|mn) integrals for a block of auxiliary shells.
+        2. The Qmi buffer for storing the largest intermediate in the K build for a block of occupied indices.
+        3. The Pmi buffer to hold (P|Q)^{-1/2} (Q|mi).
+        Therefore, for a given memory budget, we need to balance the three buffers. The Pmn buffer scales as pblksize * nbf^2, while the Qmi buffer scales as naux * nbf * iblksize. So heuristically we can set pblksize = (naux/nbf) * iblksize.
+        """
+        # total size = nb^2 p + 2 * nb * na * i ~= 3 * nb * na * i
+        self.iblksize = min(
+            self.nbf,
+            math.ceil(
+                self.memory_threshold_mb * 1024**2 / (8 * 3 * self.nbf * self.naux)
+            ),
         )
+        self.pblksize = min(
+            self.naux, math.ceil((self.naux / self.nbf) * self.iblksize)
+        )
+
         self.aux_first_and_size = self.auxbasis.shell_first_and_size
         max_nbasis_in_shell = max(size for _, size in self.aux_first_and_size)
-        if self.blksize < max_nbasis_in_shell:
-            raise ValueError(
-                f"[FockBuilderOTF]: Memory threshold {self.memory_threshold_mb} is too low to even hold the largest shell of the auxiliary basis. Please increase the memory threshold to at least {8 * max_nbasis_in_shell * self.nbf**2 / 1024**2:.2f} MB."
+        if self.pblksize < max_nbasis_in_shell:
+            suggested_mem_mb = math.ceil(
+                3 * max_nbasis_in_shell * self.naux**2 * 8 / 1024**2
             )
-        self._Pmn_buf = np.zeros((self.blksize, self.nbf, self.nbf))
-        alloc_size_mb = self.blksize * self.nbf**2 * 8 / 1024**2
+            raise ValueError(
+                f"[FockBuilderOTF]: Memory threshold {self.memory_threshold_mb} is too low to even hold the largest shell of the auxiliary basis. Please increase the memory threshold to at least {suggested_mem_mb} MB."
+            )
+        self._Pmn_buf = np.zeros((self.pblksize, self.nbf, self.nbf))
+        alloc_size_mb_P = self.pblksize * self.nbf**2 * 8 / 1024**2
         logger.log_info1(
-            f"[FockBuilderOTF]: Allocated buffer for B_Pmn with shape {self._Pmn_buf.shape} and size {alloc_size_mb:.2f} MB"
+            f"[FockBuilderOTF]: Allocated buffer for ([P]|mn) with shape {self._Pmn_buf.shape} and size {alloc_size_mb_P:.2f} MB"
         )
-        # self._nPm_buf = np.zeros((self.blksize, self.nbf, self.nbf))
+        self._Qmi_buf = np.zeros((self.naux, self.nbf, self.iblksize))
+        self._Pmi_buf = np.zeros((self.naux, self.nbf, self.iblksize))
+        alloc_size_mb_Q = self.naux * self.nbf * self.iblksize * 8 / 1024**2
+        logger.log_info1(
+            f"[FockBuilderOTF]: Allocated buffers for X_Qm[i] and X_Pm[i] with shape {self._Qmi_buf.shape} and size {alloc_size_mb_Q*2:.2f} MB"
+        )
+        logger.log_info1(
+            f"[FockBuilderOTF]: Memory budget: {self.memory_threshold_mb:.2f} MB, total allocated buffer size: {alloc_size_mb_P + 2*alloc_size_mb_Q:.2f} MB"
+        )
 
     def _build_metric(self):
         # compute the metric (P|Q)^{-1}
@@ -561,15 +536,17 @@ class FockBuilderOTF:
         # 2. solve L.T X = Y for X = M^{-1}
         I = np.eye(M.shape[0])
         Y = sp.linalg.solve_triangular(L, I, lower=True)
-        M_inv = sp.linalg.solve_triangular(L.T, Y, lower=False)
-        return M_inv
+        self.Mm1 = sp.linalg.solve_triangular(L.T, Y, lower=False)
+
+        # M^{-1/2} = L^{-T}
+        self.Mm12 = sp.linalg.solve_triangular(L, I, lower=True)
 
     def _find_aux_shell_block(self, pshell0):
         # find the block of auxiliary shells that fit in the buffer, starting from pshell0
         pshell1 = pshell0
         fs = self.aux_first_and_size
         nb = 0
-        while pshell1 < self.nshaux and nb + fs[pshell1][1] <= self.blksize:
+        while pshell1 < self.nshaux and nb + fs[pshell1][1] <= self.pblksize:
             nb += fs[pshell1][1]
             pshell1 += 1
         return pshell0, pshell1
@@ -593,11 +570,15 @@ class FockBuilderOTF:
                 self.aux_first_and_size[pshell1 - 1][0]
                 + self.aux_first_and_size[pshell1 - 1][1]
             )
-            bP[pb0:pb1] = np.einsum(
-                "Pmn,nm->P", self._Pmn_buf[: pb1 - pb0, ...], D[0], optimize=True
+            np.einsum(
+                "Pmn,nm->P",
+                self._Pmn_buf[: pb1 - pb0, ...],
+                D[0],
+                optimize=True,
+                out=bP[pb0:pb1],
             )
             pshell0 = pshell1
-        bP = self.metric @ bP
+        bP = self.Mm1 @ bP
 
         J = np.zeros_like(D)
         # 3. Batch over the (raw) P index again to build the J matrix
@@ -622,3 +603,51 @@ class FockBuilderOTF:
             pshell0 = pshell1
 
         return J
+
+    def build_K(self, C):
+        i0, i1 = 0, 0
+        K = np.zeros((self.nbf, self.nbf), dtype=C[0].dtype)
+        nocc = C[0].shape[1]
+        # batch over occupied indices
+        while i0 < nocc:
+            i1 = min(i1 + self.iblksize, nocc)
+            ctemp = np.ascontiguousarray(C[0][:, i0:i1])
+            # batch over the auxiliary shells
+            pshell0, pshell1 = 0, 0
+            while pshell0 < self.nshaux:
+                pshell0, pshell1 = self._find_aux_shell_block(pshell0)
+                pb0 = self.aux_first_and_size[pshell0][0]
+                pb1 = (
+                    self.aux_first_and_size[pshell1 - 1][0]
+                    + self.aux_first_and_size[pshell1 - 1][1]
+                )
+                forte2.ints.coulomb_3c_by_shell(
+                    self.auxbasis,
+                    self.basis,
+                    self.basis,
+                    [(pshell0, pshell1), (0, self.nshb), (0, self.nshb)],
+                    self._Pmn_buf,
+                )
+                np.einsum(
+                    "Qms,si->Qmi",
+                    self._Pmn_buf[: pb1 - pb0, ...],
+                    ctemp,
+                    optimize=True,
+                    out=self._Qmi_buf[pb0:pb1, :, : i1 - i0],
+                )
+                pshell0 = pshell1
+            np.einsum(
+                "PQ,Qmi->Pmi",
+                self.Mm12,
+                self._Qmi_buf[:, :, : i1 - i0],
+                optimize=True,
+                out=self._Pmi_buf[:, :, : i1 - i0],
+            )
+            K += np.einsum(
+                "Pmi,Pni->mn",
+                self._Pmi_buf[:, :, : i1 - i0],
+                self._Pmi_buf[:, :, : i1 - i0].conj(),
+                optimize=True,
+            )
+            i0 = i1
+        return K
