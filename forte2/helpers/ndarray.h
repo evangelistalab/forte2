@@ -9,7 +9,7 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
 
-#include <helpers/numeric.hpp>
+#include "helpers/numeric.hpp"
 
 namespace nb = nanobind;
 
