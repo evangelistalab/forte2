@@ -1,6 +1,6 @@
 import numpy as np
 
-from forte2 import System
+from forte2 import System, jkbuilder, integrals
 from forte2.jkbuilder.mointegrals import RestrictedMOIntegrals, SpinorbitalIntegrals
 
 
@@ -140,3 +140,32 @@ def test_jkbuilder_general_complex():
 
     assert np.allclose(Jact, Jact_ref), np.linalg.norm(Jact - Jact_ref)
     assert np.allclose(Kact, Kact_ref), np.linalg.norm(Kact - Kact_ref)
+
+
+def test_jkbuilder_on_the_fly_J():
+    xyz = """
+    N 0.0 0.0 0.0
+    N 0.0 0.0 2.0
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvqz",
+        auxiliary_basis_set="cc-pvqz-jkfit",
+        unit="bohr",
+    )
+
+    nmo = system.nbf
+    rng = np.random.default_rng(12345)
+    C = rng.standard_normal((nmo, nmo))
+    occ = slice(0, 5)
+    Cocc = C[:, occ]
+    D = [Cocc @ Cocc.T.conj()]
+
+    fb = system.fock_builder
+    J_ref = fb.build_J(D)
+
+    fb_otf = jkbuilder.FockBuilderOTF(system, memory_threshold_mb=2)
+    J_otf = fb_otf.build_J(D)
+
+    assert np.allclose(J_otf, J_ref), np.linalg.norm(J_otf - J_ref)

@@ -530,78 +530,95 @@ class FockBuilderOTF:
         self.naux = len(self.auxbasis)
         self.nshaux = self.auxbasis.nshells
         self.metric = self._build_metric()
+        self._allocate_B_buffer()
 
     def _allocate_B_buffer(self):
-        # we want two B buffers, holding B_Pmn and B_nPm, hence the division by 2 at the end
-        self.blksize = math.ceil(
-            self.memory_threshold_mb * 1024**2 / (8 * self.nbf**2) / 2
+        self.blksize = min(
+            math.ceil(self.memory_threshold_mb * 1024**2 / (8 * self.nbf**2)), self.naux
         )
         self.aux_first_and_size = self.auxbasis.shell_first_and_size
         max_nbasis_in_shell = max(size for _, size in self.aux_first_and_size)
         if self.blksize < max_nbasis_in_shell:
             raise ValueError(
-                f"Memory threshold {self.memory_threshold_mb} is too low to even hold the largest shell of the auxiliary basis. Please increase the memory threshold to at least {8 * max_nbasis_in_shell * self.nbf**2 / 1024**2:.2f} MB."
+                f"[FockBuilderOTF]: Memory threshold {self.memory_threshold_mb} is too low to even hold the largest shell of the auxiliary basis. Please increase the memory threshold to at least {8 * max_nbasis_in_shell * self.nbf**2 / 1024**2:.2f} MB."
             )
         self._Pmn_buf = np.zeros((self.blksize, self.nbf, self.nbf))
-        self._nPm_buf = np.zeros((self.blksize, self.nbf, self.nbf))
+        alloc_size_mb = self.blksize * self.nbf**2 * 8 / 1024**2
+        logger.log_info1(
+            f"[FockBuilderOTF]: Allocated buffer for B_Pmn with shape {self._Pmn_buf.shape} and size {alloc_size_mb:.2f} MB"
+        )
+        # self._nPm_buf = np.zeros((self.blksize, self.nbf, self.nbf))
 
     def _build_metric(self):
+        # compute the metric (P|Q)^{-1}
+        # M = (P|Q)
         M = integrals.coulomb_2c(self.system, self.auxbasis)
-        L = sp.linalg.cholesky(M)
+        # M = L L.T
+        L = sp.linalg.cholesky(M, lower=True)
+        # M^{-1} = L^{-T} L^{-1}
+        # two triangular solves to get M^{-1}:
+        # 1. solve L Y = I for Y = L^{-1}
+        # 2. solve L.T X = Y for X = M^{-1}
         I = np.eye(M.shape[0])
-        M_inv_sqrt = sp.linalg.solve_triangular(L.T, I, lower=True)
-        return M_inv_sqrt
+        Y = sp.linalg.solve_triangular(L, I, lower=True)
+        M_inv = sp.linalg.solve_triangular(L.T, Y, lower=False)
+        return M_inv
 
-    def build_J(self, D, buf):
-        J = [np.einsum("Pmn,Prs,sr->mn", buf, buf, Di, optimize=True) for Di in D]
-        return J
+    def _find_aux_shell_block(self, pshell0):
+        # find the block of auxiliary shells that fit in the buffer, starting from pshell0
+        pshell1 = pshell0
+        fs = self.aux_first_and_size
+        nb = 0
+        while pshell1 < self.nshaux and nb + fs[pshell1][1] <= self.blksize:
+            nb += fs[pshell1][1]
+            pshell1 += 1
+        return pshell0, pshell1
 
-    def build_K(self, C, buf):
-        if self.system.two_component:
-            assert (
-                len(C) == 1
-            ), "C must be a list with one element for two-component systems."
-            C = [C[0][: self.nbf, :], C[0][self.nbf :, :]]
-        # equivalent to "rPm,mi->rPi"
-        Y = [buf @ Ci.conj() for Ci in C]
-        if self.system.two_component:
-            K = []
-            for Yi in Y:
-                for Yj in Y:
-                    # equivalent to "mPi,nPi->mn"
-                    K.append(np.tensordot(Yi.conj(), Yj, axes=([1, 2], [1, 2])))
-        else:
-            # equivalent to "mPi,nPi->mn"
-            K = [np.tensordot(Yi.conj(), Yi, axes=([1, 2], [1, 2])) for Yi in Y]
-        return K
-
-    def build_JK(self, C):
-        D = [np.einsum("mi,ni->mn", Ci, Ci.conj(), optimize=True) for Ci in C]
-        if self.system.two_component:
-            assert (
-                len(C) == 1
-            ), "C must be a list with one element for two-component systems."
-            # build_J only needs the aa and bb parts of the density matrix
-            D = [D[0][: self.nbf, : self.nbf], D[0][self.nbf :, self.nbf :]]
-
-        ish0 = 0
-        ish1 = 0
-        while ish1 < self.nshaux:
-            # get the max shell slice that start at ishell and has less than blksize basis functions
-            curr_size = 0
-            while curr_size + self.aux_first_and_size[ish1][1] <= self.blksize:
-                curr_size += self.aux_first_and_size[ish1][1]
-                ish1 += 1
-                if ish1 == self.nshaux:
-                    break
-            forte2.ints.coulomb_3c_by_slice(
-                self.system,
+    def build_J(self, D):
+        # 1. Batch over the (raw) P index of (P|mn) integrals
+        pshell0, pshell1 = 0, 0
+        bP = np.zeros(self.naux, dtype=D[0].dtype)
+        while pshell0 < self.nshaux:
+            pshell0, pshell1 = self._find_aux_shell_block(pshell0)
+            # 2. Compute the B_Pmn blocks for the current batch of auxiliary shells
+            forte2.ints.coulomb_3c_by_shell(
                 self.auxbasis,
                 self.basis,
                 self.basis,
-                [(ish0, ish1), (0, self.nshb), (0, self.nshb)],
+                [(pshell0, pshell1), (0, self.nshb), (0, self.nshb)],
                 self._Pmn_buf,
             )
-            ish0 = ish1
-            np.copyto(self._nPm_buf, self._Pmn_buf.transpose((2, 0, 1)))
+            pb0 = self.aux_first_and_size[pshell0][0]
+            pb1 = (
+                self.aux_first_and_size[pshell1 - 1][0]
+                + self.aux_first_and_size[pshell1 - 1][1]
+            )
+            bP[pb0:pb1] = np.einsum(
+                "Pmn,nm->P", self._Pmn_buf[: pb1 - pb0, ...], D[0], optimize=True
+            )
+            pshell0 = pshell1
+        bP = self.metric @ bP
 
+        J = np.zeros_like(D)
+        # 3. Batch over the (raw) P index again to build the J matrix
+        pshell0, pshell1 = 0, 0
+        while pshell0 < self.nshaux:
+            pshell0, pshell1 = self._find_aux_shell_block(pshell0)
+            pb0 = self.aux_first_and_size[pshell0][0]
+            pb1 = (
+                self.aux_first_and_size[pshell1 - 1][0]
+                + self.aux_first_and_size[pshell1 - 1][1]
+            )
+            forte2.ints.coulomb_3c_by_shell(
+                self.auxbasis,
+                self.basis,
+                self.basis,
+                [(pshell0, pshell1), (0, self.nshb), (0, self.nshb)],
+                self._Pmn_buf,
+            )
+            J += np.einsum(
+                "Pmn,P->mn", self._Pmn_buf[: pb1 - pb0, ...], bP[pb0:pb1], optimize=True
+            )
+            pshell0 = pshell1
+
+        return J
