@@ -481,6 +481,8 @@ class FockBuilderOTF:
         self._build_metric()
         self._allocate_buffers()
 
+    build_JK_generalized = FockBuilder.build_JK_generalized
+
     def _allocate_buffers(self):
         """
         We need three buffers:
@@ -551,10 +553,10 @@ class FockBuilderOTF:
             pshell1 += 1
         return pshell0, pshell1
 
-    def build_J(self, D):
+    def _J_kernel(self, D):
         # 1. Batch over the (raw) P index of (P|mn) integrals
         pshell0, pshell1 = 0, 0
-        bP = np.zeros(self.naux, dtype=D[0].dtype)
+        bP = np.zeros(self.naux, dtype=D.dtype)
         while pshell0 < self.nshaux:
             pshell0, pshell1 = self._find_aux_shell_block(pshell0)
             # 2. Compute the B_Pmn blocks for the current batch of auxiliary shells
@@ -573,7 +575,7 @@ class FockBuilderOTF:
             np.einsum(
                 "Pmn,nm->P",
                 self._Pmn_buf[: pb1 - pb0, ...],
-                D[0],
+                D,
                 optimize=True,
                 out=bP[pb0:pb1],
             )
@@ -604,14 +606,14 @@ class FockBuilderOTF:
 
         return J
 
-    def build_K(self, C):
+    def _K_kernel(self, C):
         i0, i1 = 0, 0
-        K = np.zeros((self.nbf, self.nbf), dtype=C[0].dtype)
-        nocc = C[0].shape[1]
+        K = np.zeros((self.nbf, self.nbf), dtype=C.dtype)
+        nocc = C.shape[1]
         # batch over occupied indices
         while i0 < nocc:
             i1 = min(i1 + self.iblksize, nocc)
-            ctemp = np.ascontiguousarray(C[0][:, i0:i1])
+            ctemp = np.ascontiguousarray(C[:, i0:i1])
             # batch over the auxiliary shells
             pshell0, pshell1 = 0, 0
             while pshell0 < self.nshaux:
@@ -652,22 +654,22 @@ class FockBuilderOTF:
             i0 = i1
         return K
 
-    def build_JK(self, C):
-        D = [np.einsum("mi,ni->mn", Ci, Ci.conj(), optimize=True) for Ci in C]
+    def _JK_kernel(self, C):
+        D = np.einsum("mi,ni->mn", C, C.conj(), optimize=True)
         # For the J build
-        bP = np.zeros(self.naux, dtype=D[0].dtype)
+        bP = np.zeros(self.naux, dtype=D.dtype)
 
         # The J build is 2-pass, and the number of passes for the K build
         # is ceil(nocc / iblksize)
         J_pass = 0
-        J = np.zeros_like(D[0])
-        K = np.zeros_like(D[0])
-        nocc = C[0].shape[1]
+        J = np.zeros_like(D)
+        K = np.zeros_like(D)
+        nocc = C.shape[1]
         # batch over occupied indices
         i0, i1 = 0, 0
         while i0 < nocc:
             i1 = min(i1 + self.iblksize, nocc)
-            ctemp = np.ascontiguousarray(C[0][:, i0:i1])
+            ctemp = np.ascontiguousarray(C[:, i0:i1])
             # batch over the auxiliary shells
             pshell0, pshell1 = 0, 0
             while pshell0 < self.nshaux:
@@ -696,7 +698,7 @@ class FockBuilderOTF:
                     np.einsum(
                         "Pmn,nm->P",
                         self._Pmn_buf[: pb1 - pb0, ...],
-                        D[0],
+                        D,
                         optimize=True,
                         out=bP[pb0:pb1],
                     )
@@ -750,4 +752,27 @@ class FockBuilderOTF:
                     optimize=True,
                 )
                 pshell0 = pshell1
+        return J, K
+
+    def build_J(self, D):
+        return [self._J_kernel(Di) for Di in D]
+
+    def build_K(self, C):
+        if self.system.two_component:
+            raise NotImplementedError(
+                "K build for two-component systems is not implemented in FockBuilderOTF yet."
+            )
+        return [self._K_kernel(Ci) for Ci in C]
+
+    def build_JK(self, C):
+        if self.system.two_component:
+            raise NotImplementedError(
+                "JK build for two-component systems is not implemented in FockBuilderOTF yet."
+            )
+        J = []
+        K = []
+        for Ci in C:
+            Ji, Ki = self._JK_kernel(Ci)
+            J.append(Ji)
+            K.append(Ki)
         return J, K

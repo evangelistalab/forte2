@@ -177,3 +177,36 @@ def test_jkbuilder_on_the_fly():
     J_otf, K_otf = fb_otf.build_JK([Cocc])
     assert np.allclose(J_otf, J_ref), np.linalg.norm(J_otf - J_ref)
     assert np.allclose(K_otf, K_ref), np.linalg.norm(K_otf - K_ref)
+
+
+def test_jkbuilder_on_the_fly_general():
+    xyz = """
+    N 0.0 0.0 0.0
+    N 0.0 0.0 2.0
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvqz",
+        auxiliary_basis_set="cc-pvqz-jkfit",
+        unit="bohr",
+    )
+
+    nmo = system.nbf
+    rng = np.random.default_rng(12345)
+    C = rng.standard_normal((nmo, nmo))
+    actv = slice(12, 24)
+    Cact = C[:, actv]
+    nact = actv.stop - actv.start
+    rdm1 = rng.standard_normal((nact, nact))
+    rdm1 += rdm1.T.conj()
+    rdm1 = rdm1 @ rdm1.T.conj()
+
+    fb = system.fock_builder
+    J_ref, K_ref = fb.build_JK_generalized(Cact, rdm1)
+
+    fb_otf = jkbuilder.FockBuilderOTF(system, memory_threshold_mb=4.5)
+    J_otf, K_otf = fb_otf.build_JK_generalized(Cact, rdm1)
+
+    assert np.allclose(J_otf, J_ref), np.linalg.norm(J_otf - J_ref)
+    assert np.allclose(K_otf, K_ref), np.linalg.norm(K_otf - K_ref)
