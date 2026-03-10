@@ -172,4 +172,8 @@ def test_jkbuilder_on_the_fly():
 
     assert np.allclose(J_otf, J_ref), np.linalg.norm(J_otf - J_ref)
     assert np.allclose(K_otf, K_ref), np.linalg.norm(K_otf - K_ref)
-test_jkbuilder_on_the_fly()
+
+    # separately test the combined JK builder, since the algorithm is different for the combined builder
+    J_otf, K_otf = fb_otf.build_JK([Cocc])
+    assert np.allclose(J_otf, J_ref), np.linalg.norm(J_otf - J_ref)
+    assert np.allclose(K_otf, K_ref), np.linalg.norm(K_otf - K_ref)

@@ -87,7 +87,7 @@ If the B tensors can be stored, then the contraction as written above can be dir
 \begin{quote}
     \texttt{np.einsum("Pmn,Prs,sr->mn", B, B, D, optimize=True)}
 \end{quote}
-This contraction is cached-friendly since the contraction happens over the outer indices.
+This contraction is cache-friendly since the contraction happens over the outer indices.
 
 However, if we cannot store the B tensors, then we can do the following:
 \begin{equation}

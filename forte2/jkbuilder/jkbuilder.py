@@ -651,3 +651,103 @@ class FockBuilderOTF:
             )
             i0 = i1
         return K
+
+    def build_JK(self, C):
+        D = [np.einsum("mi,ni->mn", Ci, Ci.conj(), optimize=True) for Ci in C]
+        # For the J build
+        bP = np.zeros(self.naux, dtype=D[0].dtype)
+
+        # The J build is 2-pass, and the number of passes for the K build
+        # is ceil(nocc / iblksize)
+        J_pass = 0
+        J = np.zeros_like(D[0])
+        K = np.zeros_like(D[0])
+        nocc = C[0].shape[1]
+        # batch over occupied indices
+        i0, i1 = 0, 0
+        while i0 < nocc:
+            i1 = min(i1 + self.iblksize, nocc)
+            ctemp = np.ascontiguousarray(C[0][:, i0:i1])
+            # batch over the auxiliary shells
+            pshell0, pshell1 = 0, 0
+            while pshell0 < self.nshaux:
+                pshell0, pshell1 = self._find_aux_shell_block(pshell0)
+                pb0 = self.aux_first_and_size[pshell0][0]
+                pb1 = (
+                    self.aux_first_and_size[pshell1 - 1][0]
+                    + self.aux_first_and_size[pshell1 - 1][1]
+                )
+                forte2.ints.coulomb_3c_by_shell(
+                    self.auxbasis,
+                    self.basis,
+                    self.basis,
+                    [(pshell0, pshell1), (0, self.nshb), (0, self.nshb)],
+                    self._Pmn_buf,
+                )
+                np.einsum(
+                    "Qms,si->Qmi",
+                    self._Pmn_buf[: pb1 - pb0, ...],
+                    ctemp,
+                    optimize=True,
+                    out=self._Qmi_buf[pb0:pb1, :, : i1 - i0],
+                )
+
+                if J_pass == 0:
+                    np.einsum(
+                        "Pmn,nm->P",
+                        self._Pmn_buf[: pb1 - pb0, ...],
+                        D[0],
+                        optimize=True,
+                        out=bP[pb0:pb1],
+                    )
+                elif J_pass == 1:
+                    J += np.einsum(
+                        "Pmn,P->mn",
+                        self._Pmn_buf[: pb1 - pb0, ...],
+                        bP[pb0:pb1],
+                        optimize=True,
+                    )
+                pshell0 = pshell1
+            np.einsum(
+                "PQ,Qmi->Pmi",
+                self.Mm12,
+                self._Qmi_buf[:, :, : i1 - i0],
+                optimize=True,
+                out=self._Pmi_buf[:, :, : i1 - i0],
+            )
+            K += np.einsum(
+                "Pmi,Pni->mn",
+                self._Pmi_buf[:, :, : i1 - i0],
+                self._Pmi_buf[:, :, : i1 - i0].conj(),
+                optimize=True,
+            )
+            if J_pass == 0:
+                bP = self.Mm1 @ bP
+            J_pass += 1
+            i0 = i1
+
+        if J_pass == 1:
+            # only one pass done for J, need to do the second pass
+            pshell0, pshell1 = 0, 0
+            while pshell0 < self.nshaux:
+                pshell0, pshell1 = self._find_aux_shell_block(pshell0)
+                pb0 = self.aux_first_and_size[pshell0][0]
+                pb1 = (
+                    self.aux_first_and_size[pshell1 - 1][0]
+                    + self.aux_first_and_size[pshell1 - 1][1]
+                )
+                forte2.ints.coulomb_3c_by_shell(
+                    self.auxbasis,
+                    self.basis,
+                    self.basis,
+                    [(pshell0, pshell1), (0, self.nshb), (0, self.nshb)],
+                    self._Pmn_buf,
+                )
+                J += np.einsum(
+                    "Pmn,P->mn",
+                    self._Pmn_buf[: pb1 - pb0, ...],
+                    bP[pb0:pb1],
+                    optimize=True,
+                )
+                pshell0 = pshell1
+        return J, K
