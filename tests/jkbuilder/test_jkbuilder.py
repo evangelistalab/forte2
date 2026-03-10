@@ -167,16 +167,16 @@ def test_jkbuilder_on_the_fly():
     K_ref = fb.build_K([Cocc])
 
     fb_otf = jkbuilder.FockBuilderOTF(system, memory_threshold_mb=4.5)
-    J_otf = fb_otf.build_J(D)
-    K_otf = fb_otf.build_K([Cocc])
+    J_otf = fb_otf.build_J(D)[0]
+    K_otf = fb_otf.build_K([Cocc])[0]
 
     assert np.allclose(J_otf, J_ref), np.linalg.norm(J_otf - J_ref)
     assert np.allclose(K_otf, K_ref), np.linalg.norm(K_otf - K_ref)
 
     # separately test the combined JK builder, since the algorithm is different for the combined builder
     J_otf, K_otf = fb_otf.build_JK([Cocc])
-    assert np.allclose(J_otf, J_ref), np.linalg.norm(J_otf - J_ref)
-    assert np.allclose(K_otf, K_ref), np.linalg.norm(K_otf - K_ref)
+    assert np.allclose(J_otf[0], J_ref[0]), np.linalg.norm(J_otf[0] - J_ref[0])
+    assert np.allclose(K_otf[0], K_ref[0]), np.linalg.norm(K_otf[0] - K_ref[0])
 
 
 def test_jkbuilder_on_the_fly_general():
@@ -208,5 +208,51 @@ def test_jkbuilder_on_the_fly_general():
     fb_otf = jkbuilder.FockBuilderOTF(system, memory_threshold_mb=4.5)
     J_otf, K_otf = fb_otf.build_JK_generalized(Cact, rdm1)
 
+    assert np.allclose(J_otf, J_ref), np.linalg.norm(J_otf - J_ref)
+    assert np.allclose(K_otf, K_ref), np.linalg.norm(K_otf - K_ref)
+
+
+def test_jkbuilder_on_the_fly_complex():
+    xyz = """
+    N 0.0 0.0 0.0
+    N 0.0 0.0 2.0
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvqz",
+        auxiliary_basis_set="cc-pvqz-jkfit",
+        unit="bohr",
+        x2c_type="so",
+        snso_type=None,
+    )
+
+    nmo = system.nbf * 2
+    rng = np.random.default_rng(12345)
+    C = rng.standard_normal((nmo, nmo)) + 1j * rng.standard_normal((nmo, nmo))
+    occ = slice(0, 100)
+    Cocc = C[:, occ]
+    D = [Cocc @ Cocc.T.conj()]
+    nbf = system.nbf
+    D = [D[0][:nbf, :nbf], D[0][nbf:, nbf:]]
+
+    fb = system.fock_builder
+    Jaa_ref, Jbb_ref = fb.build_J(D)
+    Kaa_ref, Kab_ref, Kba_ref, Kbb_ref = fb.build_K([Cocc])
+
+    fb_otf = jkbuilder.FockBuilderOTF(system, memory_threshold_mb=30)
+    Jaa_otf, Jbb_otf = fb_otf.build_J(D)
+    Kaa_otf, Kab_otf, Kba_otf, Kbb_otf = fb_otf.build_K([Cocc])
+
+    assert np.allclose(Jaa_otf, Jaa_ref), np.linalg.norm(Jaa_otf - Jaa_ref)
+    assert np.allclose(Jbb_otf, Jbb_ref), np.linalg.norm(Jbb_otf - Jbb_ref)
+
+    assert np.allclose(Kaa_otf, Kaa_ref), np.linalg.norm(Kaa_otf - Kaa_ref)
+    assert np.allclose(Kab_otf, Kab_ref), np.linalg.norm(Kab_otf - Kab_ref)
+    assert np.allclose(Kba_otf, Kba_ref), np.linalg.norm(Kba_otf - Kba_ref)
+    assert np.allclose(Kbb_otf, Kbb_ref), np.linalg.norm(Kbb_otf - Kbb_ref)
+
+    [J_ref], [K_ref] = fb.build_JK([Cocc])
+    [J_otf], [K_otf] = fb_otf.build_JK([Cocc])
     assert np.allclose(J_otf, J_ref), np.linalg.norm(J_otf - J_ref)
     assert np.allclose(K_otf, K_ref), np.linalg.norm(K_otf - K_ref)

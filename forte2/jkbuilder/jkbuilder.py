@@ -491,12 +491,15 @@ class FockBuilderOTF:
         3. The Pmi buffer to hold (P|Q)^{-1/2} (Q|mi).
         Therefore, for a given memory budget, we need to balance the three buffers. The Pmn buffer scales as pblksize * nbf^2, while the Qmi buffer scales as naux * nbf * iblksize. So heuristically we can set pblksize = (naux/nbf) * iblksize.
         """
-        # total size = nb^2 p + 2 * nb * na * i ~= 3 * nb * na * i
+        _cmplx = self.system.two_component
+        nbytes = 16 if _cmplx else 8
+        # number of buffers of variable types (Pmn is always real, but Pmi/Qmi are complex for two-component systems)
+        nbuf_vt = 3 if _cmplx else 2
+        # total size = 8 * nb^2 p + nbytes * nbuf_vt * nb * na * i ~= (nbuf_vt * nbytes + 8) * nb * na * i
+        total_bytes_per_iblk = (nbuf_vt * nbytes + 8) * self.nbf * self.naux
         self.iblksize = min(
             self.nbf,
-            math.ceil(
-                self.memory_threshold_mb * 1024**2 / (8 * 3 * self.nbf * self.naux)
-            ),
+            math.ceil(self.memory_threshold_mb * 1024**2 / total_bytes_per_iblk),
         )
         self.pblksize = min(
             self.naux, math.ceil((self.naux / self.nbf) * self.iblksize)
@@ -506,25 +509,45 @@ class FockBuilderOTF:
         max_nbasis_in_shell = max(size for _, size in self.aux_first_and_size)
         if self.pblksize < max_nbasis_in_shell:
             suggested_mem_mb = math.ceil(
-                3 * max_nbasis_in_shell * self.naux**2 * 8 / 1024**2
+                (nbuf_vt * nbytes + 8) * max_nbasis_in_shell * self.naux**2 / 1024**2
             )
             raise ValueError(
-                f"[FockBuilderOTF]: Memory threshold {self.memory_threshold_mb} is too low to even hold the largest shell of the auxiliary basis. Please increase the memory threshold to at least {suggested_mem_mb} MB."
+                f"[FockBuilderOTF]: Memory threshold {self.memory_threshold_mb} is too low to even hold the largest shell of the auxiliary basis. Please increase the memory threshold to {suggested_mem_mb} MB."
             )
+        # this buffer always holds a block of real (P|mn) integrals, even for two-component systems
         self._Pmn_buf = np.zeros((self.pblksize, self.nbf, self.nbf))
         alloc_size_mb_P = self.pblksize * self.nbf**2 * 8 / 1024**2
         logger.log_info1(
             f"[FockBuilderOTF]: Allocated buffer for ([P]|mn) with shape {self._Pmn_buf.shape} and size {alloc_size_mb_P:.2f} MB"
         )
-        self._Qmi_buf = np.zeros((self.naux, self.nbf, self.iblksize))
-        self._Pmi_buf = np.zeros((self.naux, self.nbf, self.iblksize))
-        alloc_size_mb_Q = self.naux * self.nbf * self.iblksize * 8 / 1024**2
+        self._Qmi_buf = np.zeros(
+            (self.naux, self.nbf, self.iblksize), dtype=complex if _cmplx else float
+        )
+        if _cmplx:
+            self._Qmi_buf2 = np.zeros(
+                (self.naux, self.nbf, self.iblksize), dtype=complex if _cmplx else float
+            )
+        self._Pmi_buf = np.zeros(
+            (self.naux, self.nbf, self.iblksize), dtype=complex if _cmplx else float
+        )
+        alloc_size_mb_Q = self.naux * self.nbf * self.iblksize * nbytes / 1024**2
         logger.log_info1(
-            f"[FockBuilderOTF]: Allocated buffers for X_Qm[i] and X_Pm[i] with shape {self._Qmi_buf.shape} and size {alloc_size_mb_Q*2:.2f} MB"
+            f"[FockBuilderOTF]: Allocated buffers for X_Qm[i] and X_Pm[i] with shape {self._Qmi_buf.shape} and size {alloc_size_mb_Q*nbuf_vt:.2f} MB"
         )
         logger.log_info1(
-            f"[FockBuilderOTF]: Memory budget: {self.memory_threshold_mb:.2f} MB, total allocated buffer size: {alloc_size_mb_P + 2*alloc_size_mb_Q:.2f} MB"
+            f"[FockBuilderOTF]: Memory budget: {self.memory_threshold_mb:.2f} MB, total allocated buffer size: {alloc_size_mb_P + nbuf_vt*alloc_size_mb_Q:.2f} MB"
         )
+        self.cmplx = _cmplx
+
+    def _require_complex(self):
+        if not self.system.two_component:
+            return
+        if not self.cmplx:
+            # deallocate all buffers first
+            del self._Pmn_buf
+            del self._Qmi_buf
+            del self._Pmi_buf
+            self._allocate_buffers()
 
     def _build_metric(self):
         # compute the metric (P|Q)^{-1}
@@ -551,27 +574,30 @@ class FockBuilderOTF:
         while pshell1 < self.nshaux and nb + fs[pshell1][1] <= self.pblksize:
             nb += fs[pshell1][1]
             pshell1 += 1
-        return pshell0, pshell1
+        pb0 = self.aux_first_and_size[pshell0][0]
+        pb1 = (
+            self.aux_first_and_size[pshell1 - 1][0]
+            + self.aux_first_and_size[pshell1 - 1][1]
+        )
+        return pshell0, pshell1, pb0, pb1
+
+    def _fill_Pmn_buffer(self, pshell0, pshell1):
+        forte2.ints.coulomb_3c_by_shell(
+            self.auxbasis,
+            self.basis,
+            self.basis,
+            [(pshell0, pshell1), (0, self.nshb), (0, self.nshb)],
+            self._Pmn_buf,
+        )
 
     def _J_kernel(self, D):
         # 1. Batch over the (raw) P index of (P|mn) integrals
         pshell0, pshell1 = 0, 0
         bP = np.zeros(self.naux, dtype=D.dtype)
         while pshell0 < self.nshaux:
-            pshell0, pshell1 = self._find_aux_shell_block(pshell0)
+            pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
             # 2. Compute the B_Pmn blocks for the current batch of auxiliary shells
-            forte2.ints.coulomb_3c_by_shell(
-                self.auxbasis,
-                self.basis,
-                self.basis,
-                [(pshell0, pshell1), (0, self.nshb), (0, self.nshb)],
-                self._Pmn_buf,
-            )
-            pb0 = self.aux_first_and_size[pshell0][0]
-            pb1 = (
-                self.aux_first_and_size[pshell1 - 1][0]
-                + self.aux_first_and_size[pshell1 - 1][1]
-            )
+            self._fill_Pmn_buffer(pshell0, pshell1)
             np.einsum(
                 "Pmn,nm->P",
                 self._Pmn_buf[: pb1 - pb0, ...],
@@ -586,19 +612,8 @@ class FockBuilderOTF:
         # 3. Batch over the (raw) P index again to build the J matrix
         pshell0, pshell1 = 0, 0
         while pshell0 < self.nshaux:
-            pshell0, pshell1 = self._find_aux_shell_block(pshell0)
-            pb0 = self.aux_first_and_size[pshell0][0]
-            pb1 = (
-                self.aux_first_and_size[pshell1 - 1][0]
-                + self.aux_first_and_size[pshell1 - 1][1]
-            )
-            forte2.ints.coulomb_3c_by_shell(
-                self.auxbasis,
-                self.basis,
-                self.basis,
-                [(pshell0, pshell1), (0, self.nshb), (0, self.nshb)],
-                self._Pmn_buf,
-            )
+            pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
+            self._fill_Pmn_buffer(pshell0, pshell1)
             J += np.einsum(
                 "Pmn,P->mn", self._Pmn_buf[: pb1 - pb0, ...], bP[pb0:pb1], optimize=True
             )
@@ -617,19 +632,8 @@ class FockBuilderOTF:
             # batch over the auxiliary shells
             pshell0, pshell1 = 0, 0
             while pshell0 < self.nshaux:
-                pshell0, pshell1 = self._find_aux_shell_block(pshell0)
-                pb0 = self.aux_first_and_size[pshell0][0]
-                pb1 = (
-                    self.aux_first_and_size[pshell1 - 1][0]
-                    + self.aux_first_and_size[pshell1 - 1][1]
-                )
-                forte2.ints.coulomb_3c_by_shell(
-                    self.auxbasis,
-                    self.basis,
-                    self.basis,
-                    [(pshell0, pshell1), (0, self.nshb), (0, self.nshb)],
-                    self._Pmn_buf,
-                )
+                pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
+                self._fill_Pmn_buffer(pshell0, pshell1)
                 np.einsum(
                     "Qms,si->Qmi",
                     self._Pmn_buf[: pb1 - pb0, ...],
@@ -654,6 +658,80 @@ class FockBuilderOTF:
             i0 = i1
         return K
 
+    def _K_kernel_2c(self, Ca, Cb):
+        if Ca.shape[1] != Cb.shape[1]:
+            raise ValueError(
+                "Ca and Cb must have the same number of columns (occupied orbitals)"
+            )
+        # K = [Kaa, Kab, Kbb], the Kba block is Kab^+
+        K = [np.zeros((self.nbf, self.nbf), dtype=Ca.dtype) for _ in range(3)]
+        nocc = Ca.shape[1]
+        # batch over occupied indices
+        i0, i1 = 0, 0
+        while i0 < nocc:
+            i1 = min(i1 + self.iblksize, nocc)
+            catemp = np.ascontiguousarray(Ca[:, i0:i1])
+            cbtemp = np.ascontiguousarray(Cb[:, i0:i1])
+            # batch over the auxiliary shells
+            pshell0, pshell1 = 0, 0
+            while pshell0 < self.nshaux:
+                pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
+                self._fill_Pmn_buffer(pshell0, pshell1)
+                np.einsum(
+                    "Qms,si->Qmi",
+                    self._Pmn_buf[: pb1 - pb0, ...],
+                    catemp,
+                    optimize=True,
+                    out=self._Qmi_buf[pb0:pb1, :, : i1 - i0],
+                )
+                np.einsum(
+                    "Qms,si->Qmi",
+                    self._Pmn_buf[: pb1 - pb0, ...],
+                    cbtemp,
+                    optimize=True,
+                    out=self._Qmi_buf2[pb0:pb1, :, : i1 - i0],
+                )
+                pshell0 = pshell1
+            # _Pmi_buf holds the alpha block of Pmi
+            np.einsum(
+                "PQ,Qmi->Pmi",
+                self.Mm12,
+                self._Qmi_buf[:, :, : i1 - i0],
+                optimize=True,
+                out=self._Pmi_buf[:, :, : i1 - i0],
+            )
+            # _Qmi_buf holds the beta block of Pmi
+            np.einsum(
+                "PQ,Qmi->Pmi",
+                self.Mm12,
+                self._Qmi_buf2[:, :, : i1 - i0],
+                optimize=True,
+                out=self._Qmi_buf[:, :, : i1 - i0],
+            )
+            # aa contribution
+            K[0] += np.einsum(
+                "Pmi,Pni->mn",
+                self._Pmi_buf[:, :, : i1 - i0],
+                self._Pmi_buf[:, :, : i1 - i0].conj(),
+                optimize=True,
+            )
+            # ab contribution
+            K[1] += np.einsum(
+                "Pmi,Pni->mn",
+                self._Pmi_buf[:, :, : i1 - i0],
+                self._Qmi_buf[:, :, : i1 - i0].conj(),
+                optimize=True,
+            )
+            # bb contribution
+            K[2] += np.einsum(
+                "Pmi,Pni->mn",
+                self._Qmi_buf[:, :, : i1 - i0],
+                self._Qmi_buf[:, :, : i1 - i0].conj(),
+                optimize=True,
+            )
+            i0 = i1
+        return K
+
     def _JK_kernel(self, C):
         D = np.einsum("mi,ni->mn", C, C.conj(), optimize=True)
         # For the J build
@@ -673,19 +751,8 @@ class FockBuilderOTF:
             # batch over the auxiliary shells
             pshell0, pshell1 = 0, 0
             while pshell0 < self.nshaux:
-                pshell0, pshell1 = self._find_aux_shell_block(pshell0)
-                pb0 = self.aux_first_and_size[pshell0][0]
-                pb1 = (
-                    self.aux_first_and_size[pshell1 - 1][0]
-                    + self.aux_first_and_size[pshell1 - 1][1]
-                )
-                forte2.ints.coulomb_3c_by_shell(
-                    self.auxbasis,
-                    self.basis,
-                    self.basis,
-                    [(pshell0, pshell1), (0, self.nshb), (0, self.nshb)],
-                    self._Pmn_buf,
-                )
+                pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
+                self._fill_Pmn_buffer(pshell0, pshell1)
                 np.einsum(
                     "Qms,si->Qmi",
                     self._Pmn_buf[: pb1 - pb0, ...],
@@ -732,23 +799,149 @@ class FockBuilderOTF:
             # only one pass done for J, need to do the second pass
             pshell0, pshell1 = 0, 0
             while pshell0 < self.nshaux:
-                pshell0, pshell1 = self._find_aux_shell_block(pshell0)
-                pb0 = self.aux_first_and_size[pshell0][0]
-                pb1 = (
-                    self.aux_first_and_size[pshell1 - 1][0]
-                    + self.aux_first_and_size[pshell1 - 1][1]
-                )
-                forte2.ints.coulomb_3c_by_shell(
-                    self.auxbasis,
-                    self.basis,
-                    self.basis,
-                    [(pshell0, pshell1), (0, self.nshb), (0, self.nshb)],
-                    self._Pmn_buf,
-                )
+                pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
+                self._fill_Pmn_buffer(pshell0, pshell1)
                 J += np.einsum(
                     "Pmn,P->mn",
                     self._Pmn_buf[: pb1 - pb0, ...],
                     bP[pb0:pb1],
+                    optimize=True,
+                )
+                pshell0 = pshell1
+        return J, K
+
+    def _JK_kernel_2c(self, Ca, Cb):
+        if Ca.shape[1] != Cb.shape[1]:
+            raise ValueError(
+                "Ca and Cb must have the same number of columns (occupied orbitals)"
+            )
+        # J only needs the spin-diagonal blocks of D
+        Da = np.einsum("mi,ni->mn", Ca, Ca.conj(), optimize=True)
+        Db = np.einsum("mi,ni->mn", Cb, Cb.conj(), optimize=True)
+        # For the J build
+        bPa = np.zeros(self.naux, dtype=complex)
+        bPb = np.zeros(self.naux, dtype=complex)
+
+        # The J build is 2-pass, and the number of passes for the K build
+        # is ceil(nocc / iblksize)
+        J_pass = 0
+        # [Jaa, Jbb]
+        J = [np.zeros((self.nbf, self.nbf), dtype=complex) for _ in range(2)]
+        # [Kaa, Kab, Kbb], Kba is Kab^+
+        K = [np.zeros((self.nbf, self.nbf), dtype=complex) for _ in range(3)]
+        nocc = Ca.shape[1]
+        # batch over occupied indices
+        i0, i1 = 0, 0
+        while i0 < nocc:
+            i1 = min(i1 + self.iblksize, nocc)
+            catemp = np.ascontiguousarray(Ca[:, i0:i1])
+            cbtemp = np.ascontiguousarray(Cb[:, i0:i1])
+            # batch over the auxiliary shells
+            pshell0, pshell1 = 0, 0
+            while pshell0 < self.nshaux:
+                pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
+                self._fill_Pmn_buffer(pshell0, pshell1)
+                np.einsum(
+                    "Qms,si->Qmi",
+                    self._Pmn_buf[: pb1 - pb0, ...],
+                    catemp,
+                    optimize=True,
+                    out=self._Qmi_buf[pb0:pb1, :, : i1 - i0],
+                )
+                np.einsum(
+                    "Qms,si->Qmi",
+                    self._Pmn_buf[: pb1 - pb0, ...],
+                    cbtemp,
+                    optimize=True,
+                    out=self._Qmi_buf2[pb0:pb1, :, : i1 - i0],
+                )
+
+                if J_pass == 0:
+                    np.einsum(
+                        "Pmn,nm->P",
+                        self._Pmn_buf[: pb1 - pb0, ...],
+                        Da,
+                        optimize=True,
+                        out=bPa[pb0:pb1],
+                    )
+                    np.einsum(
+                        "Pmn,nm->P",
+                        self._Pmn_buf[: pb1 - pb0, ...],
+                        Db,
+                        optimize=True,
+                        out=bPb[pb0:pb1],
+                    )
+                elif J_pass == 1:
+                    J[0] += np.einsum(
+                        "Pmn,P->mn",
+                        self._Pmn_buf[: pb1 - pb0, ...],
+                        bPa[pb0:pb1],
+                        optimize=True,
+                    )
+                    J[1] += np.einsum(
+                        "Pmn,P->mn",
+                        self._Pmn_buf[: pb1 - pb0, ...],
+                        bPb[pb0:pb1],
+                        optimize=True,
+                    )
+                pshell0 = pshell1
+            np.einsum(
+                "PQ,Qmi->Pmi",
+                self.Mm12,
+                self._Qmi_buf[:, :, : i1 - i0],
+                optimize=True,
+                out=self._Pmi_buf[:, :, : i1 - i0],
+            )
+            np.einsum(
+                "PQ,Qmi->Pmi",
+                self.Mm12,
+                self._Qmi_buf2[:, :, : i1 - i0],
+                optimize=True,
+                out=self._Qmi_buf[:, :, : i1 - i0],
+            )
+            # Kaa contribution
+            K[0] += np.einsum(
+                "Pmi,Pni->mn",
+                self._Pmi_buf[:, :, : i1 - i0],
+                self._Pmi_buf[:, :, : i1 - i0].conj(),
+                optimize=True,
+            )
+            # Kab contribution
+            K[1] += np.einsum(
+                "Pmi,Pni->mn",
+                self._Pmi_buf[:, :, : i1 - i0],
+                self._Qmi_buf[:, :, : i1 - i0].conj(),
+                optimize=True,
+            )
+            # Kbb contribution
+            K[2] += np.einsum(
+                "Pmi,Pni->mn",
+                self._Qmi_buf[:, :, : i1 - i0],
+                self._Qmi_buf[:, :, : i1 - i0].conj(),
+                optimize=True,
+            )
+            if J_pass == 0:
+                bPa = self.Mm1 @ bPa
+                bPb = self.Mm1 @ bPb
+            J_pass += 1
+            i0 = i1
+
+        if J_pass == 1:
+            # only one pass done for J, need to do the second pass
+            pshell0, pshell1 = 0, 0
+            while pshell0 < self.nshaux:
+                pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
+                self._fill_Pmn_buffer(pshell0, pshell1)
+                J[0] += np.einsum(
+                    "Pmn,P->mn",
+                    self._Pmn_buf[: pb1 - pb0, ...],
+                    bPa[pb0:pb1],
+                    optimize=True,
+                )
+                J[1] += np.einsum(
+                    "Pmn,P->mn",
+                    self._Pmn_buf[: pb1 - pb0, ...],
+                    bPb[pb0:pb1],
                     optimize=True,
                 )
                 pshell0 = pshell1
@@ -759,20 +952,44 @@ class FockBuilderOTF:
 
     def build_K(self, C):
         if self.system.two_component:
-            raise NotImplementedError(
-                "K build for two-component systems is not implemented in FockBuilderOTF yet."
-            )
-        return [self._K_kernel(Ci) for Ci in C]
+            self._require_complex()
+            assert (
+                len(C) == 1
+            ), "C must be a list with one element for two-component systems."
+            C = [C[0][: self.nbf, :], C[0][self.nbf :, :]]
+            Kaa, Kab, Kbb = self._K_kernel_2c(C[0], C[1])
+            Kba = np.copy(Kab.conj().T)
+            return [Kaa, Kab, Kba, Kbb]
+        else:
+            return [self._K_kernel(Ci) for Ci in C]
 
     def build_JK(self, C):
         if self.system.two_component:
-            raise NotImplementedError(
-                "JK build for two-component systems is not implemented in FockBuilderOTF yet."
-            )
-        J = []
-        K = []
-        for Ci in C:
-            Ji, Ki = self._JK_kernel(Ci)
-            J.append(Ji)
-            K.append(Ki)
+            self._require_complex()
+            assert (
+                len(C) == 1
+            ), "C must be a list with one element for two-component systems."
+            nbf = self.nbf
+            Ca = C[0][:nbf, :]
+            Cb = C[0][nbf:, :]
+            [Jaa, Jbb], [Kaa, Kab, Kbb] = self._JK_kernel_2c(Ca, Cb)
+            Kba = np.copy(Kab.conj().T)
+            J_spinor = np.zeros((nbf * 2,) * 2, dtype=complex)
+            K_spinor = np.zeros((nbf * 2,) * 2, dtype=complex)
+            # fill the spinor J and K matrices from the spin blocks
+            J_spinor[:nbf, :nbf] += Jaa + Jbb
+            J_spinor[nbf:, nbf:] += Jaa + Jbb
+            K_spinor[:nbf, :nbf] += Kaa
+            K_spinor[nbf:, nbf:] += Kbb
+            K_spinor[:nbf, nbf:] += Kab
+            K_spinor[nbf:, :nbf] += Kba
+            J, K = [J_spinor], [K_spinor]
+        else:
+            J = []
+            K = []
+            for Ci in C:
+                Ji, Ki = self._JK_kernel(Ci)
+                J.append(Ji)
+                K.append(Ki)
+
         return J, K
