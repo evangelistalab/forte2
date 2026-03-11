@@ -1,6 +1,7 @@
 import numpy as np
+import pytest
 
-from forte2 import System, jkbuilder, integrals
+from forte2 import System, jkbuilder
 from forte2.jkbuilder.mointegrals import RestrictedMOIntegrals, SpinorbitalIntegrals
 
 
@@ -256,3 +257,112 @@ def test_jkbuilder_on_the_fly_complex():
     [J_otf], [K_otf] = fb_otf.build_JK([Cocc])
     assert np.allclose(J_otf, J_ref), np.linalg.norm(J_otf - J_ref)
     assert np.allclose(K_otf, K_ref), np.linalg.norm(K_otf - K_ref)
+
+
+@pytest.mark.slow
+def test_jkbuilder_timing():
+    rng = np.random.default_rng(12345)
+    xyz = """
+C       -4.1589713086     -0.5186115349      0.3160200342                 
+C       -5.0814955444     -0.3344236419     -0.6366808615                 
+C       -2.9966275704     -1.4613439204      0.1915004691                 
+C       -1.6640967733     -0.7130602960      0.2640639983                 
+C       -0.4800713386     -1.6753670427      0.1493887365                 
+C        0.8528810407     -0.9284549887      0.2203322205                 
+C        2.0365732446     -1.8901611656      0.1037025056                 
+C        3.3692975111     -1.1426086589      0.1715960082                 
+C        4.5532154282     -2.1037518119      0.0526883976                 
+C        5.8857253488     -1.3555110496      0.1173781401                 
+C        7.0698564462     -2.3161746871     -0.0034615130                 
+C        8.4022173266     -1.5674927103      0.0588100193                 
+C        9.5855238862     -2.5272655309     -0.0629082490                 
+H       -4.2470729164      0.0341380257      1.2493378758                 
+H       -5.0397999159     -0.8652596995     -1.5826741610                 
+H       -5.9035740665      0.3587510603     -0.4867732131                 
+H        7.0015476730     -2.8661654031     -0.9499564940                 
+H        7.0262660568     -3.0564793114      0.8046523056                 
+H        8.4709469327     -1.0176682416      1.0054025601                 
+H        8.4455360517     -0.8266770260     -0.7488994953                 
+H        4.4863345167     -2.6535288439     -0.8940254784                 
+H        4.5079403596     -2.8441823506      0.8605853766                 
+H        5.9531920821     -0.8065264993      1.0645089568                 
+H        5.9302681239     -0.6143495378     -0.6899011321                 
+H        1.9714915503     -2.4395596861     -0.8433569102                 
+H        1.9891621553     -2.6308603523      0.9112288992                 
+H        3.4350726520     -0.5941542321      1.1191523092                 
+H        3.4158618055     -0.4010422212     -0.6351954144                 
+H       -0.5433520659     -2.2242668036     -0.7980851023                 
+H       -0.5294951762     -2.4163175504      0.9565669767                 
+H        0.9169285536     -0.3803129448      1.1681847868                 
+H        0.9015160934     -0.1866829700     -0.5861467857                 
+H       -3.0534680087     -2.0235170797     -0.7486685079                 
+H       -3.0562233557     -2.1945025711      1.0047550944                 
+H       -1.5975674014     -0.1627214725      1.2112101778                 
+H       -1.6119429394      0.0294843429     -0.5423397107                 
+C       10.9119492057     -1.7866776831     -0.0025410272                 
+H        9.5234901330     -3.0769912423     -1.0093017594                 
+H        9.5497047995     -3.2671492813      0.7451678969                 
+H       10.9933587365     -1.0606567425     -0.8177776658                 
+H       11.7442035730     -2.4919182653     -0.0914131049                 
+H       11.0197822000     -1.2517330135      0.9464255705                 
+"""
+    import time
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        unit="bohr",
+    )
+    nbf = system.nbf
+
+    occ = slice(0, 56)
+    C = rng.standard_normal((nbf, nbf))
+    Cocc = C[:, occ]
+    D = Cocc @ Cocc.T.conj()
+
+    fb = system.fock_builder
+    fb_otf = jkbuilder.FockBuilderOTF(system, memory_threshold_mb=1000)
+    # trigger lazy evaluation
+    a = fb.B_Pmn
+    b = fb.B_nPm
+
+    t0 = time.time()
+    K_ref = fb.build_K([Cocc])[0]
+    t1 = time.time()
+    print(f"incore K builder took {t1 - t0:.2f} seconds")
+
+    t0 = time.time()
+    K_ref = fb._build_K_Pmn([Cocc])[0]
+    t1 = time.time()
+    print(f"incore K builder took {t1 - t0:.2f} seconds")
+
+    t0 = time.time()
+    K_ref = fb._build_K_nPm([Cocc])[0]
+    t1 = time.time()
+    print(f"incore K builder took {t1 - t0:.2f} seconds")
+
+    t0 = time.time()
+    K_otf = fb_otf.build_K([Cocc])[0]
+    t1 = time.time()
+    print(f"on-the-fly K builder took {t1 - t0:.2f} seconds")
+
+    t0 = time.time()
+    J_ref = fb.build_J([D])[0]
+    t1 = time.time()
+    print(f"incore J builder took {t1 - t0:.2f} seconds")
+
+    t0 = time.time()
+    J_otf = fb_otf.build_J([D])[0]
+    t1 = time.time()
+    print(f"on-the-fly J builder took {t1 - t0:.2f} seconds")
+
+    t0 = time.time()
+    res = fb.build_JK([Cocc])
+    t1 = time.time()
+    print(f"incore JK builder took {t1 - t0:.2f} seconds")
+
+    t0 = time.time()
+    res = fb_otf.build_JK([Cocc])
+    t1 = time.time()
+    print(f"on-the-fly JK builder took {t1 - t0:.2f} seconds")

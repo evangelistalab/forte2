@@ -30,7 +30,9 @@ def _eigh_metric_kernel(S, rtol=1e-7):
     return sevals, sevecs, info
 
 
-def print_metric_info(info):
+def print_metric_info(info, description=None):
+    if description:
+        logger.log_info1(f"{description}:")
     logger.log_info1(f"  Max eigenvalue: {info['max_eigenvalue']:.3e}")
     logger.log_info1(f"  Min eigenvalue: {info['min_eigenvalue']:.3e}")
     logger.log_info1(f"  Condition number: {info['condition_number']:.3e}")

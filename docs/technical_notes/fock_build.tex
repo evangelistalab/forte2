@@ -1,4 +1,4 @@
-\documentclass[notitlepage,pra,aps,preprint]{revtex4-1}
+\documentclass[aip,preprint]{revtex4-1}
 
 \usepackage[utf8]{inputenc}
 \usepackage{amsmath}
@@ -138,7 +138,14 @@ If the B tensors can be stored, then, again, the contractions above can be direc
     \texttt{Y = np.einsum("Pms,si->Pmi", B, Ci, optimize=True)}\\
     \texttt{K = np.einsum("Pmi,Pni->mn", Y, Y.conj(), optimize=True)}
 \end{quote}
-These contractions are already cache-friendly since contractions happen over the outer indices.
+These contractions however, are not cache-friendly since the K contraction happens over the first and third indices, making memory access strided.
+A better contraction would have been
+\begin{quote}
+    \texttt{Y = np.einsum("nPr,ri->nPi", B, Ci.conj(), optimize=True)}\\
+    \texttt{K = np.einsum("mPi,nPi->mn", Y.conj(), Y, optimize=True)}
+\end{quote}
+which requires the B tensors to be stored in a transposed (nPm) order.
+Doing this greatly improves the cache performance (3-5x speedup) of the K contraction at the cost of doubling the memory requirements.
 
 When the B tensors cannot be stored, we need to perform the contractions on the fly. 
 The most expensive step is the evaluation of $Y_{P \mu i}$ which scales as $N_\mathrm{aux} N_{\mathrm{AO}}^2 N_{\mathrm{occ}}$ and requires additional storage of $N_\mathrm{aux} N_{\mathrm{AO}} N_{\mathrm{occ}}$.

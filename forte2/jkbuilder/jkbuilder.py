@@ -7,7 +7,11 @@ import math
 import forte2
 from forte2 import integrals
 from forte2.helpers import logger
-from forte2.helpers.matrix_functions import cholesky_wrapper
+from forte2.helpers.matrix_functions import (
+    cholesky_wrapper,
+    invsqrt_matrix,
+    print_metric_info,
+)
 
 
 class FockBuilder:
@@ -23,6 +27,12 @@ class FockBuilder:
         If a ModelSystem is provided, it will decompose the 4D ERI tensor using Cholesky decomposition with complete pivoting.
     use_aux_corr : bool, optional, default=False
         If True, uses ``system.auxiliary_basis_corr`` instead of ``system.auxiliary_basis``.
+    store_B_nPm : bool, optional, default=True
+        If True, stores a (Nao, Naux, Nao)-shaped copy of the B tensor for faster K builds.
+        This comes at the cost of doubling the memory footprint of the ``FockBuilder`` object.
+    metric_ortho_rtol : float, optional
+        The relative tolerance for checking the orthogonality of the Coulomb metric in density fitting.
+        If None, defaults to ``system.ortho_thresh``.
 
     Attributes
     ----------
@@ -34,10 +44,18 @@ class FockBuilder:
         The number of basis functions in the system.
     """
 
-    def __init__(self, system, use_aux_corr=False):
+    def __init__(
+        self, system, use_aux_corr=False, store_B_nPm=True, metric_ortho_rtol=None
+    ):
         self.system = system
         self.use_aux_corr = use_aux_corr
+        self.metric_ortho_rtol = (
+            metric_ortho_rtol
+            if metric_ortho_rtol is not None
+            else self.system.ortho_thresh
+        )
         self.nbf = system.nbf
+        self.store_B_nPm = store_B_nPm
 
     @cached_property
     def B_Pmn(self):
@@ -66,6 +84,14 @@ class FockBuilder:
         self.naux = naux
         return res
 
+    @cached_property
+    def B_nPm(self):
+        if not self.store_B_nPm:
+            raise AttributeError(
+                "B_nPm is not stored. Set store_B_nPm=True when initializing FockBuilder to enable this attribute."
+            )
+        return np.ascontiguousarray(self.B_Pmn.transpose((2, 0, 1)))
+
     def _build_B_model_system(self):
         nbf = self.system.nbf
         eri = self.system.eri.reshape((nbf**2,) * 2)
@@ -91,7 +117,13 @@ class FockBuilder:
         naux = B.shape[0]
 
         memory_gb = 8 * (naux * nbf**2) / (1024**3)
-        logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
+        if self.store_B_nPm:
+            memory_gb *= 2
+            logger.log_info1(
+                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_nPm)"
+            )
+        else:
+            logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
         logger.log_info1(f"Number of system basis functions: {nbf}")
         logger.log_info1(f"Number of auxiliary basis functions: {naux}")
 
@@ -102,25 +134,27 @@ class FockBuilder:
         nb = basis.size
         naux = auxiliary_basis.size
         memory_gb = 8 * (naux**2 + naux * nb**2) / (1024**3)
-        logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
+        if self.store_B_nPm:
+            memory_gb *= 2
+            logger.log_info1(
+                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_nPm)"
+            )
+        else:
+            logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
+
         logger.log_info1(f"Number of system basis functions: {nb}")
         logger.log_info1(f"Number of auxiliary basis functions: {naux}")
 
         # Compute the integrals (P|Q) with P, Q in the auxiliary basis
         M = integrals.coulomb_2c(self.system, auxiliary_basis)
-
-        # Decompose M = L L.T
-        L = sp.linalg.cholesky(M, lower=True)
-
-        # Solve L X = I, or X = L^{-1} = M^{-1/2}
-        I = np.eye(M.shape[0])
-        M_inv_sqrt = sp.linalg.solve_triangular(L, I, lower=True)
+        X, _, info = invsqrt_matrix(M, rtol=self.metric_ortho_rtol)
+        print_metric_info(info, "Density fitting Coulomb metric (P|Q)")
 
         # Compute the integrals (P|mn) with P in the auxiliary basis and m, n in the system basis
         Pmn = integrals.coulomb_3c(self.system, auxiliary_basis)
 
         # Compute B[P|mn] = M^{-1/2}[P|Q] (Q|mn)
-        B = np.einsum("PQ,Qmn->Pmn", M_inv_sqrt, Pmn, optimize=True)
+        B = np.einsum("PQ,Qmn->Pmn", X, Pmn, optimize=True)
         del Pmn
 
         return B, naux
@@ -132,7 +166,7 @@ class FockBuilder:
         ]
         return J
 
-    def build_K(self, C):
+    def _build_K_Pmn(self, C):
         if self.system.two_component:
             assert (
                 len(C) == 1
@@ -147,6 +181,31 @@ class FockBuilder:
         else:
             K = [np.einsum("Pmi,Pni->mn", Yi, Yi.conj(), optimize=True) for Yi in Y]
         return K
+
+    def _build_K_nPm(self, C):
+        if self.system.two_component:
+            assert (
+                len(C) == 1
+            ), "C must be a list with one element for two-component systems."
+            C = [C[0][: self.nbf, :], C[0][self.nbf :, :]]
+        # equivalent to "rPm,mi->rPi"
+        Y = [self.B_nPm @ Ci.conj() for Ci in C]
+        if self.system.two_component:
+            K = []
+            for Yi in Y:
+                for Yj in Y:
+                    # equivalent to "mPi,nPi->mn"
+                    K.append(np.tensordot(Yi.conj(), Yj, axes=([1, 2], [1, 2])))
+        else:
+            # equivalent to "mPi,nPi->mn"
+            K = [np.tensordot(Yi.conj(), Yi, axes=([1, 2], [1, 2])) for Yi in Y]
+        return K
+
+    def build_K(self, C):
+        if self.store_B_nPm:
+            return self._build_K_nPm(C)
+        else:
+            return self._build_K_Pmn(C)
 
     def build_JK(self, C):
         r"""
@@ -325,7 +384,7 @@ class FockBuilder:
         """
         nbf = self.nbf
         V = np.zeros(
-            (C1.shape[1], C2.shape[1], C3.shape[1], C4.shape[1]), dtype=complex
+            (C1.shape[1], C2.shape[1], C3.shape[1], C4.shape[1]), dtype=np.complex128
         )
         _a = slice(0, nbf)
         _b = slice(nbf, nbf * 2)
@@ -464,7 +523,13 @@ class FockBuilderOTF:
         The memory threshold in MB for deciding how to compute the J and K matrices. If the estimated memory requirement for storing the B tensor exceeds this threshold, the J and K matrices will be computed in a more memory-efficient way that does not require storing the B tensor.
     """
 
-    def __init__(self, system, use_aux_corr=False, memory_threshold_mb=4000):
+    def __init__(
+        self,
+        system,
+        use_aux_corr=False,
+        memory_threshold_mb=4000,
+        metric_ortho_rtol=None,
+    ):
         self.system = system
         self.use_aux_corr = use_aux_corr
         self.nbf = system.nbf
@@ -478,6 +543,11 @@ class FockBuilderOTF:
         self.nshb = self.basis.nshells
         self.naux = len(self.auxbasis)
         self.nshaux = self.auxbasis.nshells
+        self.metric_ortho_rtol = (
+            metric_ortho_rtol
+            if metric_ortho_rtol is not None
+            else self.system.ortho_thresh
+        )
         self._build_metric()
         self._allocate_buffers()
 
@@ -521,14 +591,17 @@ class FockBuilderOTF:
             f"[FockBuilderOTF]: Allocated buffer for ([P]|mn) with shape {self._Pmn_buf.shape} and size {alloc_size_mb_P:.2f} MB"
         )
         self._Qmi_buf = np.zeros(
-            (self.naux, self.nbf, self.iblksize), dtype=complex if _cmplx else float
+            (self.naux, self.nbf, self.iblksize),
+            dtype=np.complex128 if _cmplx else float,
         )
         if _cmplx:
             self._Qmi_buf2 = np.zeros(
-                (self.naux, self.nbf, self.iblksize), dtype=complex if _cmplx else float
+                (self.naux, self.nbf, self.iblksize),
+                dtype=np.complex128 if _cmplx else float,
             )
         self._Pmi_buf = np.zeros(
-            (self.naux, self.nbf, self.iblksize), dtype=complex if _cmplx else float
+            (self.naux, self.nbf, self.iblksize),
+            dtype=np.complex128 if _cmplx else float,
         )
         alloc_size_mb_Q = self.naux * self.nbf * self.iblksize * nbytes / 1024**2
         logger.log_info1(
@@ -553,18 +626,23 @@ class FockBuilderOTF:
         # compute the metric (P|Q)^{-1}
         # M = (P|Q)
         M = integrals.coulomb_2c(self.system, self.auxbasis)
-        # M = L L.T
-        L = sp.linalg.cholesky(M, lower=True)
-        # M^{-1} = L^{-T} L^{-1}
-        # two triangular solves to get M^{-1}:
-        # 1. solve L Y = I for Y = L^{-1}
-        # 2. solve L.T X = Y for X = M^{-1}
-        I = np.eye(M.shape[0])
-        Y = sp.linalg.solve_triangular(L, I, lower=True)
-        self.Mm1 = sp.linalg.solve_triangular(L.T, Y, lower=False)
+        X, Xm1, info = invsqrt_matrix(M, rtol=self.metric_ortho_rtol)
+        print_metric_info(info, "Density fitting Coulomb metric (P|Q)")
+        self.Mm12 = X
+        self.Mm1 = X.T @ X
 
-        # M^{-1/2} = L^{-T}
-        self.Mm12 = sp.linalg.solve_triangular(L, I, lower=True)
+        # # M = L L.T
+        # L = sp.linalg.cholesky(M, lower=True)
+        # # M^{-1} = L^{-T} L^{-1}
+        # # two triangular solves to get M^{-1}:
+        # # 1. solve L Y = I for Y = L^{-1}
+        # # 2. solve L.T X = Y for X = M^{-1}
+        # I = np.eye(M.shape[0])
+        # Y = sp.linalg.solve_triangular(L, I, lower=True)
+        # self.Mm1 = sp.linalg.solve_triangular(L.T, Y, lower=False)
+
+        # # M^{-1/2} = L^{-T}
+        # self.Mm12 = sp.linalg.solve_triangular(L, I, lower=True)
 
     def _find_aux_shell_block(self, pshell0):
         # find the block of auxiliary shells that fit in the buffer, starting from pshell0
@@ -819,16 +897,16 @@ class FockBuilderOTF:
         Da = np.einsum("mi,ni->mn", Ca, Ca.conj(), optimize=True)
         Db = np.einsum("mi,ni->mn", Cb, Cb.conj(), optimize=True)
         # For the J build
-        bPa = np.zeros(self.naux, dtype=complex)
-        bPb = np.zeros(self.naux, dtype=complex)
+        bPa = np.zeros(self.naux, dtype=np.complex128)
+        bPb = np.zeros(self.naux, dtype=np.complex128)
 
         # The J build is 2-pass, and the number of passes for the K build
         # is ceil(nocc / iblksize)
         J_pass = 0
         # [Jaa, Jbb]
-        J = [np.zeros((self.nbf, self.nbf), dtype=complex) for _ in range(2)]
+        J = [np.zeros((self.nbf, self.nbf), dtype=np.complex128) for _ in range(2)]
         # [Kaa, Kab, Kbb], Kba is Kab^+
-        K = [np.zeros((self.nbf, self.nbf), dtype=complex) for _ in range(3)]
+        K = [np.zeros((self.nbf, self.nbf), dtype=np.complex128) for _ in range(3)]
         nocc = Ca.shape[1]
         # batch over occupied indices
         i0, i1 = 0, 0
@@ -974,8 +1052,8 @@ class FockBuilderOTF:
             Cb = C[0][nbf:, :]
             [Jaa, Jbb], [Kaa, Kab, Kbb] = self._JK_kernel_2c(Ca, Cb)
             Kba = np.copy(Kab.conj().T)
-            J_spinor = np.zeros((nbf * 2,) * 2, dtype=complex)
-            K_spinor = np.zeros((nbf * 2,) * 2, dtype=complex)
+            J_spinor = np.zeros((nbf * 2,) * 2, dtype=np.complex128)
+            K_spinor = np.zeros((nbf * 2,) * 2, dtype=np.complex128)
             # fill the spinor J and K matrices from the spin blocks
             J_spinor[:nbf, :nbf] += Jaa + Jbb
             J_spinor[nbf:, nbf:] += Jaa + Jbb
