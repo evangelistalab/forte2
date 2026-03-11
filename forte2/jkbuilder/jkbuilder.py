@@ -528,12 +528,14 @@ class FockBuilderOTF:
         system,
         use_aux_corr=False,
         memory_threshold_mb=4000,
+        store_B_nPm=False,
         metric_ortho_rtol=None,
     ):
         self.system = system
         self.use_aux_corr = use_aux_corr
         self.nbf = system.nbf
         self.memory_threshold_mb = memory_threshold_mb
+        self.store_B_nPm = store_B_nPm
         self.auxbasis = (
             self.system.auxiliary_basis_corr
             if self.use_aux_corr
@@ -565,6 +567,8 @@ class FockBuilderOTF:
         nbytes = 16 if _cmplx else 8
         # number of buffers of variable types (Pmn is always real, but Pmi/Qmi are complex for two-component systems)
         nbuf_vt = 3 if _cmplx else 2
+        # the tranposed buffer makes K builds much faster
+        nbuf_vt += 1 if self.store_B_nPm else 0
         # total size = 8 * nb^2 p + nbytes * nbuf_vt * nb * na * i ~= (nbuf_vt * nbytes + 8) * nb * na * i
         total_bytes_per_iblk = (nbuf_vt * nbytes + 8) * self.nbf * self.naux
         self.iblksize = min(
@@ -603,6 +607,11 @@ class FockBuilderOTF:
             (self.naux, self.nbf, self.iblksize),
             dtype=np.complex128 if _cmplx else float,
         )
+        if self.store_B_nPm:
+            self._mPi_buf = np.zeros(
+                (self.nbf, self.naux, self.iblksize),
+                dtype=np.complex128 if _cmplx else float,
+            )
         alloc_size_mb_Q = self.naux * self.nbf * self.iblksize * nbytes / 1024**2
         logger.log_info1(
             f"[FockBuilderOTF]: Allocated buffers for X_Qm[i] and X_Pm[i] with shape {self._Qmi_buf.shape} and size {alloc_size_mb_Q*nbuf_vt:.2f} MB"
@@ -727,12 +736,27 @@ class FockBuilderOTF:
                 optimize=True,
                 out=self._Pmi_buf[:, :, : i1 - i0],
             )
-            K += np.einsum(
-                "Pmi,Pni->mn",
-                self._Pmi_buf[:, :, : i1 - i0],
-                self._Pmi_buf[:, :, : i1 - i0].conj(),
-                optimize=True,
-            )
+            if self.store_B_nPm:
+                # store the transposed Pmi buffer for faster K builds
+                np.einsum(
+                    "Pmi->mPi",
+                    self._Pmi_buf[:, :, : i1 - i0],
+                    optimize=True,
+                    out=self._mPi_buf[:, :, : i1 - i0],
+                )
+                K += np.einsum(
+                    "mPi,nPi->mn",
+                    self._mPi_buf[:, :, : i1 - i0].conj(),
+                    self._mPi_buf[:, :, : i1 - i0],
+                    optimize=True,
+                )
+            else:
+                K += np.einsum(
+                    "Pmi,Pni->mn",
+                    self._Pmi_buf[:, :, : i1 - i0],
+                    self._Pmi_buf[:, :, : i1 - i0].conj(),
+                    optimize=True,
+                )
             i0 = i1
         return K
 
