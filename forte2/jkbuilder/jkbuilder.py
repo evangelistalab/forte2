@@ -570,9 +570,12 @@ class FockBuilderOTF:
         # the tranposed buffer makes K builds much faster
         nbuf_vt += 1 if self.store_B_nPm else 0
         # total size = 8 * nb^2 p + nbytes * nbuf_vt * nb * na * i ~= (nbuf_vt * nbytes + 8) * nb * na * i
+        # guess the number of occupied orbitals. This is useful to prevent cases where the iblksize is too large,
+        # which can lead to the last dimensions of the buffers being sliced, leading to inefficient memory access
+        guess_nocc = self.system.Zsum // 2
         total_bytes_per_iblk = (nbuf_vt * nbytes + 8) * self.nbf * self.naux
         self.iblksize = min(
-            self.nbf,
+            guess_nocc,
             math.ceil(self.memory_threshold_mb * 1024**2 / total_bytes_per_iblk),
         )
         self.pblksize = min(
