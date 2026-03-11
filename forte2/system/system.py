@@ -44,9 +44,11 @@ class System:
         Options are None, "boettger", "dc", "dcb", or "row-dependent".
     unit : str, optional, default="angstrom"
         The unit for the atomic coordinates. Can be "angstrom" or "bohr".
-    ortho_thresh : float, optional, default=1e-8
-        Linear combinations of AO basis functions with overlap eigenvalues below this threshold will be removed
-        during orthogonalization.
+    overlap_ortho_rtol : float, optional, default=1e-8
+        The relative tolerance for the orthogonalization of the overlap matrix.
+    df_ortho_rtol : float | None, optional, default=None
+        The relative tolerance for the orthogonalization of Coulomb metric in the density fitting procedure.
+        If None, a complete Cholesky decomposition of the Coulomb metric is performed without truncation.
     cholesky_tei : bool, optional, default=False
         If True, auxiliary basis sets (if any) will be disregarded, and the B tensor will be built using the Cholesky decomposition of the 4D ERI tensor instead.
     cholesky_tol : float, optional, default=1e-6
@@ -109,7 +111,8 @@ class System:
     x2c_type: str = None
     snso_type: str = "row-dependent"
     unit: str = "angstrom"
-    ortho_thresh: float = 1e-8
+    overlap_ortho_rtol: float = 1e-8
+    df_ortho_rtol: float | None = None
     cholesky_tei: bool = False
     cholesky_tol: float = 1e-6
     symmetry: bool = False
@@ -139,7 +142,7 @@ class System:
         self.nuclear_repulsion = integrals.nuclear_repulsion(self)
         self._init_x2c()
         _S = integrals.overlap(self)
-        self.Xorth, _, info = canonical_orth(_S, self.ortho_thresh)
+        self.Xorth, _, info = canonical_orth(_S, self.overlap_ortho_rtol)
         print_metric_info(info)
         self.nmo = info["n_kept"]
         self.fock_builder = FockBuilder(self)
@@ -234,7 +237,7 @@ class System:
                 "sf",
                 "so",
             ], f"x2c_type {self.x2c_type} is not supported. Use None, 'sf' or 'so'."
-            self.x2c_helper = X2CHelper(self, ortho_thresh=self.ortho_thresh)
+            self.x2c_helper = X2CHelper(self)
         else:
             return
         if self.x2c_type == "so":
@@ -367,6 +370,7 @@ class ModelSystem:
         self.Xorth, *_ = invsqrt_matrix(self.ints_overlap(), rtol=1e-13)
         self.symmetry = False
         self.point_group = "C1"
+        self.df_ortho_rtol = None
         self.fock_builder = FockBuilder(self)
         self.fock_builder_corr = self.fock_builder
 

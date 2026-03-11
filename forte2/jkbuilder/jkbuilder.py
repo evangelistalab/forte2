@@ -30,9 +30,6 @@ class FockBuilder:
     store_B_nPm : bool, optional, default=True
         If True, stores a (Nao, Naux, Nao)-shaped copy of the B tensor for faster K builds.
         This comes at the cost of doubling the memory footprint of the ``FockBuilder`` object.
-    metric_ortho_rtol : float, optional
-        The relative tolerance for checking the orthogonality of the Coulomb metric in density fitting.
-        If None, defaults to ``system.ortho_thresh``.
 
     Attributes
     ----------
@@ -44,16 +41,10 @@ class FockBuilder:
         The number of basis functions in the system.
     """
 
-    def __init__(
-        self, system, use_aux_corr=False, store_B_nPm=True, metric_ortho_rtol=None
-    ):
+    def __init__(self, system, use_aux_corr=False, store_B_nPm=True):
         self.system = system
         self.use_aux_corr = use_aux_corr
-        self.metric_ortho_rtol = (
-            metric_ortho_rtol
-            if metric_ortho_rtol is not None
-            else self.system.ortho_thresh
-        )
+        self.metric_ortho_rtol = self.system.df_ortho_rtol
         self.nbf = system.nbf
         self.store_B_nPm = store_B_nPm
 
@@ -147,8 +138,14 @@ class FockBuilder:
 
         # Compute the integrals (P|Q) with P, Q in the auxiliary basis
         M = integrals.coulomb_2c(self.system, auxiliary_basis)
-        X, _, info = invsqrt_matrix(M, rtol=self.metric_ortho_rtol)
-        print_metric_info(info, "Density fitting Coulomb metric (P|Q)")
+        if self.metric_ortho_rtol is not None:
+            X, _, info = invsqrt_matrix(M, rtol=self.metric_ortho_rtol)
+            print_metric_info(info, "Density fitting Coulomb metric (P|Q)")
+        else:
+            # M = L L^T
+            L = sp.linalg.cholesky(M, lower=True)
+            # M^{-1/2} = L^{-T} L^{-1}, so L^{-1} can be considered as M^{-1/2}
+            X = sp.linalg.solve_triangular(L, np.eye(naux), lower=True)
 
         # Compute the integrals (P|mn) with P in the auxiliary basis and m, n in the system basis
         Pmn = integrals.coulomb_3c(self.system, auxiliary_basis)
@@ -529,7 +526,6 @@ class FockBuilderOTF:
         use_aux_corr=False,
         memory_threshold_mb=4000,
         store_B_nPm=False,
-        metric_ortho_rtol=None,
     ):
         self.system = system
         self.use_aux_corr = use_aux_corr
@@ -545,11 +541,7 @@ class FockBuilderOTF:
         self.nshb = self.basis.nshells
         self.naux = len(self.auxbasis)
         self.nshaux = self.auxbasis.nshells
-        self.metric_ortho_rtol = (
-            metric_ortho_rtol
-            if metric_ortho_rtol is not None
-            else self.system.ortho_thresh
-        )
+        self.metric_ortho_rtol = self.system.df_ortho_rtol
         self._build_metric()
         self._allocate_buffers()
 
@@ -637,24 +629,25 @@ class FockBuilderOTF:
     def _build_metric(self):
         # compute the metric (P|Q)^{-1}
         # M = (P|Q)
-        M = integrals.coulomb_2c(self.system, self.auxbasis)
-        X, Xm1, info = invsqrt_matrix(M, rtol=self.metric_ortho_rtol)
-        print_metric_info(info, "Density fitting Coulomb metric (P|Q)")
-        self.Mm12 = X
-        self.Mm1 = X.T @ X
+        if self.metric_ortho_rtol is not None:
+            M = integrals.coulomb_2c(self.system, self.auxbasis)
+            X, Xm1, info = invsqrt_matrix(M, rtol=self.metric_ortho_rtol)
+            print_metric_info(info, "Density fitting Coulomb metric (P|Q)")
+            self.Mm12 = X
+            self.Mm1 = X.T @ X
+        else:
+            # M = L L.T
+            L = sp.linalg.cholesky(M, lower=True)
+            # M^{-1} = L^{-T} L^{-1}
+            # two triangular solves to get M^{-1}:
+            # 1. solve L Y = I for Y = L^{-1}
+            # 2. solve L.T X = Y for X = M^{-1}
+            I = np.eye(M.shape[0])
+            Y = sp.linalg.solve_triangular(L, I, lower=True)
+            self.Mm1 = sp.linalg.solve_triangular(L.T, Y, lower=False)
 
-        # # M = L L.T
-        # L = sp.linalg.cholesky(M, lower=True)
-        # # M^{-1} = L^{-T} L^{-1}
-        # # two triangular solves to get M^{-1}:
-        # # 1. solve L Y = I for Y = L^{-1}
-        # # 2. solve L.T X = Y for X = M^{-1}
-        # I = np.eye(M.shape[0])
-        # Y = sp.linalg.solve_triangular(L, I, lower=True)
-        # self.Mm1 = sp.linalg.solve_triangular(L.T, Y, lower=False)
-
-        # # M^{-1/2} = L^{-T}
-        # self.Mm12 = sp.linalg.solve_triangular(L, I, lower=True)
+            # M^{-1/2} = L^{-T}
+            self.Mm12 = sp.linalg.solve_triangular(L, I, lower=True)
 
     def _find_aux_shell_block(self, pshell0):
         # find the block of auxiliary shells that fit in the buffer, starting from pshell0
