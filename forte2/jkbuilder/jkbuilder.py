@@ -629,9 +629,9 @@ class FockBuilderOTF:
     def _build_metric(self):
         # compute the metric (P|Q)^{-1}
         # M = (P|Q)
+        M = integrals.coulomb_2c(self.system, self.auxbasis)
         if self.metric_ortho_rtol is not None:
-            M = integrals.coulomb_2c(self.system, self.auxbasis)
-            X, Xm1, info = invsqrt_matrix(M, rtol=self.metric_ortho_rtol)
+            X, _, info = invsqrt_matrix(M, rtol=self.metric_ortho_rtol)
             print_metric_info(info, "Density fitting Coulomb metric (P|Q)")
             self.Mm12 = X
             self.Mm1 = X.T @ X
