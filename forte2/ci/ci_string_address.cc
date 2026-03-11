@@ -1,5 +1,5 @@
 #include "ci_string_address.h"
-#include "helpers/sum.hpp"
+#include "helpers/numeric.hpp"
 
 namespace forte2 {
 
