@@ -12,7 +12,7 @@ from forte2.helpers import (
     print_metric_info,
 )
 from forte2.x2c import X2CHelper
-from forte2.jkbuilder import FockBuilder
+from forte2.jkbuilder import FockBuilder, FockBuilderOTF
 from .build_basis import build_basis
 from .geom_utils import GeometryHelper, parse_geometry
 
@@ -60,6 +60,9 @@ class System:
         The tolerance for detecting symmetry.
     use_gaussian_charges : bool, optional, default=False
         Whether to use Gaussian nuclear charge distributions instead of point charges.
+    memory_threshold_mb : float | None, optional, default=None
+        If set, the Fock builder will have a memory footprint smaller than the threshold.
+        If None, the the in-core Fock builder algorithm will be used with no special memory limit.
 
     Attributes
     ----------
@@ -118,6 +121,7 @@ class System:
     symmetry: bool = False
     symmetry_tol: float = 1e-4
     use_gaussian_charges: bool = False
+    memory_threshold_mb: float | None = None
 
     ### Non-init attributes
     atoms: list[list[float, list[float, float, float]]] = field(
@@ -145,7 +149,8 @@ class System:
         self.Xorth, _, info = canonical_orth(_S, self.overlap_ortho_rtol)
         print_metric_info(info)
         self.nmo = info["n_kept"]
-        self.fock_builder = FockBuilder(self)
+        self.fock_builder = self._init_fock_builder()
+
         # The B tensors here are lazily evaluated, so no overhead if not used
         if self.auxiliary_basis_set_corr is not None:
             logger.log_warning(
@@ -242,6 +247,31 @@ class System:
             return
         if self.x2c_type == "so":
             self.two_component = True
+
+    def _init_fock_builder(self):
+        if self.memory_threshold_mb is not None and self.cholesky_tei:
+            raise ValueError(
+                "If cholesky_tei is True, memory_threshold_mb must be None."
+            )
+        if self.memory_threshold_mb is None:
+            return FockBuilder(self)
+        b_tensor_size_mb = 8 * self.naux * self.nbf**2 / (1024**2)
+        metric_size_mb = 8 * self.naux**2 / (1024**2)
+        if b_tensor_size_mb + metric_size_mb > self.memory_threshold_mb:
+            logger.log_info1(
+                f"Memory threshold of {self.memory_threshold_mb} MB is too low to store the B tensor and metric. Using on-the-fly Fock builder."
+            )
+            return FockBuilderOTF(self, memory_threshold_mb=self.memory_threshold_mb)
+        elif b_tensor_size_mb + 2 * metric_size_mb > self.memory_threshold_mb:
+            logger.log_info1(
+                f"Memory threshold of {self.memory_threshold_mb} MB is too low to store the transposed B tensor. Using in-core Fock builder without storing transposed B tensor."
+            )
+            return FockBuilder(self, store_B_nPm=False)
+        else:
+            logger.log_info1(
+                f"Memory threshold of {self.memory_threshold_mb} MB is sufficient to store the B tensor and metric. Using in-core Fock builder with stored B tensor."
+            )
+            return FockBuilder(self, store_B_nPm=True)
 
     def __repr__(self):
         return f"System(atoms={self.atoms}, basis_set={self.basis}, auxiliary_basis_set={self.auxiliary_basis})"

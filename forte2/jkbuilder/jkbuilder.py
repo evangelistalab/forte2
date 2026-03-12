@@ -126,7 +126,7 @@ class FockBuilder:
         naux = auxiliary_basis.size
         memory_gb = 8 * (naux**2 + naux * nb**2) / (1024**3)
         if self.store_B_nPm:
-            memory_gb *= 2
+            memory_gb += 8 * (naux * nb**2) / (1024**3)
             logger.log_info1(
                 f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_nPm)"
             )
@@ -577,7 +577,7 @@ class FockBuilderOTF:
                 (nbuf_vt * nbytes + 8) * max_nbasis_in_shell * self.naux**2 / 1024**2
             )
             raise ValueError(
-                f"[FockBuilderOTF]: Memory threshold {self.memory_threshold_mb} is too low to even hold the largest shell of the auxiliary basis. Please increase the memory threshold to {suggested_mem_mb} MB."
+                f"[FockBuilderOTF]: Memory threshold {self.memory_threshold_mb} is too low to even hold the largest shell of the auxiliary basis (of size {max_nbasis_in_shell})). Please increase the memory threshold to {suggested_mem_mb} MB."
             )
         # this buffer always holds a block of real (P|mn) integrals, even for two-component systems
         self._Pmn_buf = np.zeros((self.pblksize, self.nbf, self.nbf))
@@ -625,7 +625,7 @@ class FockBuilderOTF:
             X, _, info = invsqrt_matrix(M, rtol=self.metric_ortho_rtol)
             print_metric_info(info, "Density fitting Coulomb metric (P|Q)")
             self.Mm12 = X
-            self.Mm1 = X.T @ X
+            self.Mm1 = np.einsum("PQ,QR->PR", X, X, optimize=True)
         else:
             # M = L L.T
             L = sp.linalg.cholesky(M, lower=True)
@@ -635,10 +635,9 @@ class FockBuilderOTF:
             # 2. solve L.T X = Y for X = M^{-1}
             I = np.eye(M.shape[0])
             Y = sp.linalg.solve_triangular(L, I, lower=True)
-            self.Mm1 = sp.linalg.solve_triangular(L.T, Y, lower=False)
-
-            # M^{-1/2} = L^{-T}
-            self.Mm12 = sp.linalg.solve_triangular(L, I, lower=True)
+            # M^{-1/2} = L^{-1}
+            self.Mm12 = Y
+            self.Mm1 = np.einsum("QP,QR->PR", Y, Y, optimize=True)
 
     def _find_aux_shell_block(self, pshell0):
         # find the block of auxiliary shells that fit in the buffer, starting from pshell0
