@@ -257,3 +257,38 @@ def test_jkbuilder_on_the_fly_complex():
     [J_otf], [K_otf] = fb_otf.build_JK([Cocc])
     assert np.allclose(J_otf, J_ref), np.linalg.norm(J_otf - J_ref)
     assert np.allclose(K_otf, K_ref), np.linalg.norm(K_otf - K_ref)
+
+
+def test_jkbuilder_on_the_fly_large():
+    xyz = """
+    Cr 0.0 0.0 0.0
+    Cr 0.0 0.0 2.0
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvtz",
+        auxiliary_basis_set="cc-pvtz-autoaux",
+        df_ortho_rtol=1e-8,
+    )
+
+    nmo = system.nbf
+    rng = np.random.default_rng(12345)
+    Cocc = rng.standard_normal((nmo, 24))
+    D = [Cocc @ Cocc.T.conj()]
+
+    fb = system.fock_builder
+    J_ref = fb.build_J(D)
+    K_ref = fb.build_K([Cocc])
+
+    fb_otf = jkbuilder.FockBuilderOTF(system, memory_threshold_mb=100)
+    J_otf = fb_otf.build_J(D)[0]
+    K_otf = fb_otf.build_K([Cocc])[0]
+
+    assert np.linalg.norm(J_otf - J_ref) < 1e-8
+    assert np.linalg.norm(K_otf - K_ref) < 1e-8
+
+    # separately test the combined JK builder, since the algorithm is different for the combined builder
+    J_otf, K_otf = fb_otf.build_JK([Cocc])
+    assert np.linalg.norm(J_otf[0] - J_ref[0]) < 1e-8
+    assert np.linalg.norm(K_otf[0] - K_ref[0]) < 1e-8

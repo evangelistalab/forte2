@@ -51,7 +51,7 @@ where we have defined
 B^{P}_{\mu \nu} = \sum_Q (P|Q)^{-1/2} (Q|\mu \nu).
 \end{equation}
 
-The matrix inverse and inverse square root of the Coulomb metric $A\equiv (P|Q)$ can be computed by Cholesky decomposition:
+The matrix inverse square root of the Coulomb metric $A\equiv (P|Q)$ can be computed by Cholesky decomposition:
 \begin{equation}
 A = L L^T,
 \end{equation}
@@ -60,12 +60,7 @@ the matrix inverse is
 \label{eq:inv}
 A^{-1} = L^{-T} L^{-1},
 \end{equation}
-which can be obtained by two triangular solves (\textit{e.g.}, with \texttt{scipy.linalg.solve\_triangular}):
-\begin{equation}
-Lx = I, \quad L^T y = x
-\end{equation}
-where $x = L^{-1}$ and $y = A^{-1}$.
-From \cref{eq:inv}, we can also identify $L^{-1}$ as a valid choice for $A^{-1/2}$ in our context, since $L^{-1}_{PR}(R|\rho \sigma) = B^{P}_{\rho \sigma}$, and the contraction of the B tensors yields the original four-center integrals:
+From \cref{eq:inv}, we can identify $L^{-1}$ as a valid choice for $A^{-1/2}$ in our context, since $L^{-1}_{PR}(R|\rho \sigma) = B^{P}_{\rho \sigma}$, and the contraction of the B tensors yields the original four-center integrals:
 \begin{align}
 \sum_{P} B^{P}_{\mu \nu} B^{P}_{\rho \sigma} 
 & = \sum_{PQR}(\mu \nu | P) L^{-\text{T}}_{PQ} L^{-1}_{QR} (R|\rho \sigma) \\
@@ -109,6 +104,7 @@ In this step, one can apply screening based on $D_{\sigma \rho}$ and $(Q|\rho \s
 
     \item Matrix vector multiplication
 \begin{equation}
+\label{eq:bp}
 b_P = \sum_{Q} (P|Q)^{-1} a_Q
 \end{equation}
     \item Second pass over all the three-center integrals
@@ -117,6 +113,23 @@ J_{\mu \nu} = \sum_{P} (\mu \nu | P) b_P, \quad \text{ for } \mu \geq \nu.
 \end{equation}
 In this step, one can apply integral screening of $(\mu \nu | P)$ to reduce the evaluation cost.
 \end{enumerate}
+
+Note in \cref{eq:bp}, we require the application of the inverse of the Coulomb metric to a vector.
+There are at least four, in principle equivalent, ways to do this:
+\begin{enumerate}
+    \item Use the pre-computed $L^{-1}$ to form $A^{-1}=L^{-T} L^{-1}$ and do a matrix-vector product with the problem vector: $b_Q = A^{-1} a_Q$.
+    \item Two triangular solves with $L$ on the problem vector $a_Q$: first solve $L z = a_Q$ for $z$ and then solve $L^T b_P = z$ for $b_P$.
+    \item Compute the eigen-decomposition of the Coulomb metric $A = U s U^T$ and threshold the eigenvalues to get $A_{\eta}^{-1} = U_{\eta} s_{\eta}^{-1} U_{\eta}^T$ where $s_{\eta}$ are the eigenvalues above some threshold $\eta$ and $U_{\eta}$ are the corresponding eigenvectors. Then do a matrix-vector product with the problem vector: $b_P = A_{\eta}^{-1}a_Q$.
+    \item Compute the same $U_{\eta}$ and $s_{\eta}$ as above, but apply it to each problem vector without forming $A_{\eta}^{-1}$: $b_P = U_{\eta} (U_{\eta}^T a_Q / s_{\eta})$.
+\end{enumerate}
+The first two methods cannot deal with Coulomb metrics that have large condition numbers. The first and third methods at first seem appealing, since we pre-compute a `universal' $A^{-1}$ and just do matrix-vector products later.
+Turns out, forming of $A^{-1}$ directly, as in the first and third methods is not numerically stable, since the error of these operations is on the order of $\text{cond}(A)^2\epsilon$, whereas the error of the second and fourth methods is on the order of $\text{cond}(A)\epsilon$.
+
+If ill-conditioning is not a problem, then \texttt{scipy} offers a very succint way to carry out method 2:
+\begin{quote}
+    \texttt{bP = scipy.linalg.cho\_solve((L, True), aQ)}
+\end{quote}
+which does the two triangular solves with the Cholesky factor $L$ in one call.
 
 \section{Exchange matrix algorithm}
 

@@ -11,6 +11,7 @@ from forte2.helpers.matrix_functions import (
     cholesky_wrapper,
     invsqrt_matrix,
     print_metric_info,
+    _eigh_metric_kernel,
 )
 
 
@@ -622,22 +623,27 @@ class FockBuilderOTF:
         # M = (P|Q)
         M = integrals.coulomb_2c(self.system, self.auxbasis)
         if self.metric_ortho_rtol is not None:
-            X, _, info = invsqrt_matrix(M, rtol=self.metric_ortho_rtol)
+            _precomp = _eigh_metric_kernel(M, rtol=self.metric_ortho_rtol)
+            self.Mm12, _, info = invsqrt_matrix(M, precomp=_precomp)
             print_metric_info(info, "Density fitting Coulomb metric (P|Q)")
-            self.Mm12 = X
-            self.Mm1 = np.einsum("PQ,QR->PR", X, X, optimize=True)
+            sevals = _precomp[0]
+            sevecs = _precomp[1]
+            ndiscard = _precomp[2]["n_discarded"]
+            self.sevals = sevals[ndiscard:]
+            self.sevecs = sevecs[:, ndiscard:]
         else:
             # M = L L.T
-            L = sp.linalg.cholesky(M, lower=True)
-            # M^{-1} = L^{-T} L^{-1}
-            # two triangular solves to get M^{-1}:
-            # 1. solve L Y = I for Y = L^{-1}
-            # 2. solve L.T X = Y for X = M^{-1}
+            self.L = sp.linalg.cholesky(M, lower=True)
             I = np.eye(M.shape[0])
-            Y = sp.linalg.solve_triangular(L, I, lower=True)
-            # M^{-1/2} = L^{-1}
-            self.Mm12 = Y
-            self.Mm1 = np.einsum("QP,QR->PR", Y, Y, optimize=True)
+            self.Mm12 = sp.linalg.solve_triangular(self.L, I, lower=True)
+
+    def _apply_Mm1(self, y):
+        """Compute x = (P|Q)^{-1} y without forming (P|Q)^{-1}"""
+        if self.metric_ortho_rtol is not None:
+            # x = U s^{-1} U^T y
+            return self.sevecs @ ((self.sevecs.T @ y) / self.sevals)
+        else:
+            return sp.linalg.cho_solve((self.L, True), y)
 
     def _find_aux_shell_block(self, pshell0):
         # find the block of auxiliary shells that fit in the buffer, starting from pshell0
@@ -679,7 +685,7 @@ class FockBuilderOTF:
                 out=bP[pb0:pb1],
             )
             pshell0 = pshell1
-        bP = self.Mm1 @ bP
+        bP = self._apply_Mm1(bP)
 
         J = np.zeros_like(D)
         # 3. Batch over the (raw) P index again to build the J matrix
@@ -864,7 +870,7 @@ class FockBuilderOTF:
                 optimize=True,
             )
             if J_pass == 0:
-                bP = self.Mm1 @ bP
+                bP = self._apply_Mm1(bP)
             J_pass += 1
             i0 = i1
 
