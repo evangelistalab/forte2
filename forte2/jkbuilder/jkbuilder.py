@@ -525,13 +525,11 @@ class FockBuilderOTF:
         system,
         use_aux_corr=False,
         memory_threshold_mb=4000,
-        store_B_nPm=False,
     ):
         self.system = system
         self.use_aux_corr = use_aux_corr
         self.nbf = system.nbf
         self.memory_threshold_mb = memory_threshold_mb
-        self.store_B_nPm = store_B_nPm
         self.auxbasis = (
             self.system.auxiliary_basis_corr
             if self.use_aux_corr
@@ -559,8 +557,6 @@ class FockBuilderOTF:
         nbytes = 16 if _cmplx else 8
         # number of buffers of variable types (Pmn is always real, but Pmi/Qmi are complex for two-component systems)
         nbuf_vt = 3 if _cmplx else 2
-        # the tranposed buffer makes K builds much faster
-        nbuf_vt += 1 if self.store_B_nPm else 0
         # total size = 8 * nb^2 p + nbytes * nbuf_vt * nb * na * i ~= (nbuf_vt * nbytes + 8) * nb * na * i
         # guess the number of occupied orbitals. This is useful to prevent cases where the iblksize is too large,
         # which can lead to the last dimensions of the buffers being sliced, leading to inefficient memory access
@@ -602,11 +598,6 @@ class FockBuilderOTF:
             (self.naux, self.nbf, self.iblksize),
             dtype=np.complex128 if _cmplx else float,
         )
-        if self.store_B_nPm:
-            self._mPi_buf = np.zeros(
-                (self.nbf, self.naux, self.iblksize),
-                dtype=np.complex128 if _cmplx else float,
-            )
         alloc_size_mb_Q = self.naux * self.nbf * self.iblksize * nbytes / 1024**2
         logger.log_info1(
             f"[FockBuilderOTF]: Allocated buffers for X_Qm[i] and X_Pm[i] with shape {self._Qmi_buf.shape} and size {alloc_size_mb_Q*nbuf_vt:.2f} MB"
@@ -732,27 +723,12 @@ class FockBuilderOTF:
                 optimize=True,
                 out=self._Pmi_buf[:, :, : i1 - i0],
             )
-            if self.store_B_nPm:
-                # store the transposed Pmi buffer for faster K builds
-                np.einsum(
-                    "Pmi->mPi",
-                    self._Pmi_buf[:, :, : i1 - i0],
-                    optimize=True,
-                    out=self._mPi_buf[:, :, : i1 - i0],
-                )
-                K += np.einsum(
-                    "mPi,nPi->mn",
-                    self._mPi_buf[:, :, : i1 - i0].conj(),
-                    self._mPi_buf[:, :, : i1 - i0],
-                    optimize=True,
-                )
-            else:
-                K += np.einsum(
-                    "Pmi,Pni->mn",
-                    self._Pmi_buf[:, :, : i1 - i0],
-                    self._Pmi_buf[:, :, : i1 - i0].conj(),
-                    optimize=True,
-                )
+            K += np.einsum(
+                "Pmi,Pni->mn",
+                self._Pmi_buf[:, :, : i1 - i0],
+                self._Pmi_buf[:, :, : i1 - i0].conj(),
+                optimize=True,
+            )
             i0 = i1
         return K
 
@@ -1091,3 +1067,72 @@ class FockBuilderOTF:
                 K.append(Ki)
 
         return J, K
+
+    def B_tensor_gen_block(self, C1, C2):
+        n1 = C1.shape[1]
+        n2 = C2.shape[1]
+        B = np.zeros((self.naux, n1, n2), dtype=C1.dtype)
+        pshell0, pshell1 = 0, 0
+        while pshell0 < self.nshaux:
+            pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
+            self._fill_Pmn_buffer(pshell0, pshell1)
+            np.einsum(
+                "Pmn,mi,nj->Pij",
+                self._Pmn_buf[: pb1 - pb0, ...],
+                C1.conj(),
+                C2,
+                optimize=True,
+                out=B[pb0:pb1, :, :],
+            )
+            pshell0 = pshell1
+        # here a new tensor the same size as B is allocated
+        return np.einsum("PQ,Qmn->Pmn", self.Mm12, B, optimize=True)
+
+    def B_tensor_gen_block_spinor(self, C1, C2):
+        nbf = self.nbf
+        _a = slice(0, nbf)
+        _b = slice(nbf, nbf * 2)
+        B = np.zeros((self.naux, C1.shape[1], C2.shape[1]), dtype=C1.dtype)
+        Btemp = np.zeros((self.naux, C1.shape[1], C2.shape[1]), dtype=C1.dtype)
+        pshell0, pshell1 = 0, 0
+        while pshell0 < self.nshaux:
+            pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
+            self._fill_Pmn_buffer(pshell0, pshell1)
+            np.einsum(
+                "Pmn,mi,nj->Pij",
+                self._Pmn_buf[: pb1 - pb0, ...],
+                C1[_a, :].conj(),
+                C2[_a, :],
+                optimize=True,
+                out=B[pb0:pb1, :, :],
+            )
+            np.einsum(
+                "Pmn,mi,nj->Pij",
+                self._Pmn_buf[: pb1 - pb0, ...],
+                C1[_b, :].conj(),
+                C2[_b, :],
+                optimize=True,
+                out=Btemp[pb0:pb1, :, :],
+            )
+            B[pb0:pb1, :, :] += Btemp[pb0:pb1, :, :]
+            pshell0 = pshell1
+        np.einsum("PQ,Qmn->Pmn", self.Mm12, B, optimize=True, out=Btemp)
+        return Btemp
+
+    def two_electron_integrals_gen_block(self, C1, C2, C3, C4):
+        B12 = self.B_tensor_gen_block(C1, C2)
+        B34 = self.B_tensor_gen_block(C3, C4)
+        return np.einsum("Pij,Pkl->ikjl", B12, B34, optimize=True)
+
+    def two_electron_integrals_block(self, C):
+        B = self.B_tensor_gen_block(C, C)
+        return np.einsum("Pij,Pkl->ikjl", B, B, optimize=True)
+
+    def two_electron_integrals_gen_block_spinor(self, C1, C2, C3, C4):
+        B12 = self.B_tensor_gen_block_spinor(C1, C2)
+        B34 = self.B_tensor_gen_block_spinor(C3, C4)
+        return np.einsum("Pij,Pkl->ikjl", B12, B34, optimize=True)
+
+    def two_electron_integrals_block_spinor(self, C):
+        B = self.B_tensor_gen_block_spinor(C, C)
+        return np.einsum("Pij,Pkl->ikjl", B, B, optimize=True)
