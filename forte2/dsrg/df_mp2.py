@@ -111,9 +111,7 @@ class DFMP2Base(SystemMixin, MOsMixin, ABC):
             self.gamma2_sf = self.make_mp2_sf_2rdm(self.t2, self.gamma1_sf)
 
         if self.compute_cumulants:
-            self.lambda2_sf = self.make_mp2_sf_2cumulants(
-                self.gamma1_sf, self.gamma2_sf
-            )
+            self.lambda2_sf = self.t2_as
 
     def _build_df_iaQ(self):
         """
