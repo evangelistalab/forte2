@@ -261,14 +261,14 @@ def test_jkbuilder_on_the_fly_complex():
 
 def test_jkbuilder_on_the_fly_large():
     xyz = """
-    Cr 0.0 0.0 0.0
-    Cr 0.0 0.0 2.0
+    Cl 0.0 0.0 0.0
+    Cl 0.0 0.0 2.0
     """
 
     system = System(
         xyz=xyz,
-        basis_set="cc-pvtz",
-        auxiliary_basis_set="cc-pvtz-autoaux",
+        basis_set="cc-pvqz",
+        auxiliary_basis_set="cc-pvqz-autoaux",
         df_ortho_rtol=1e-8,
     )
 
@@ -281,7 +281,7 @@ def test_jkbuilder_on_the_fly_large():
     J_ref = fb.build_J(D)
     K_ref = fb.build_K([Cocc])
 
-    fb_otf = jkbuilder.FockBuilderOTF(system, memory_threshold_mb=100)
+    fb_otf = jkbuilder.FockBuilderOTF(system, memory_threshold_mb=15)
     J_otf = fb_otf.build_J(D)[0]
     K_otf = fb_otf.build_K([Cocc])[0]
 
