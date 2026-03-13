@@ -50,11 +50,10 @@ class X2CHelper:
     def __init__(self, system, ortho_thresh=1e-8):
         self.system = system
         self.ortho_thresh = ortho_thresh
-        self.x2c_type = system.x2c_type.lower()
-        assert self.x2c_type in [
+        assert self.system.x2c_type in [
             "sf",
             "so",
-        ], f"Invalid x2c_type: {self.x2c_type}. Must be 'sf' or 'so'."
+        ], f"Invalid x2c_type: {self.system.x2c_type}. Must be 'sf' or 'so'."
         self.snso_type = system.snso_type.lower() if system.snso_type else None
         if self.snso_type is not None:
             assert self.snso_type in [
@@ -71,11 +70,15 @@ class X2CHelper:
             system.geom_helper,
             decontract=True,
         )
-        self.proj = self._get_projection_matrix()
+
+        self.proj = scipy.linalg.solve(
+            integrals.overlap(self.system, self.xbasis),
+            integrals.overlap(self.system, self.xbasis, self.system.basis),
+            assume_a="pos",
+        )
 
         nbf_decon = len(self.xbasis)
         logger.log_info1(f"Number of decontracted basis functions: {nbf_decon}")
-        self.nbf = nbf_decon if self.system.x2c_type == "sf" else nbf_decon * 2
 
         self.S = integrals.overlap(self.system, self.xbasis)
         self.T = integrals.kinetic(self.system, self.xbasis)
@@ -119,8 +122,8 @@ class X2CHelper:
         _, Xorthm1 = self._get_Xorth()
         h_fw = Xorthm1.conj().T @ h_fw @ Xorthm1
 
-        if self.x2c_type.lower() == "so" and self.snso_type is not None:
-            nbf = self.nbf // 2
+        if self.system.x2c_type.lower() == "so" and self.snso_type is not None:
+            nbf = len(self.xbasis)
             haa = h_fw[:nbf, :nbf]
             hab = h_fw[:nbf, nbf:]
             hba = h_fw[nbf:, :nbf]
@@ -139,17 +142,13 @@ class X2CHelper:
             h_fw = np.block([[h0 + h3, h1 - 1j * h2], [h1 + 1j * h2, h0 - h3]])
 
         # project back to the contracted basis
-        h_fw = self.proj.conj().T @ h_fw @ self.proj
+        proj = self._get_projection_matrix()
+        h_fw = proj.conj().T @ h_fw @ proj
 
         return h_fw
 
     def _get_projection_matrix(self):
-        proj = scipy.linalg.solve(
-            integrals.overlap(self.system, self.xbasis),
-            integrals.overlap(self.system, self.xbasis, self.system.basis),
-            assume_a="pos",
-        )
-        return proj if self.system.x2c_type == "sf" else block_diag_2x2(proj)
+        return self.proj if self.system.x2c_type == "sf" else block_diag_2x2(self.proj)
 
     def _get_Xorth(self):
         if self.system.x2c_type == "sf":
@@ -179,7 +178,7 @@ class X2CHelper:
         return S, T, V, W
 
     def _solve_dirac_eq(self, S, T, V, W):
-        dtype = np.float64 if self.x2c_type == "sf" else np.complex128
+        dtype = np.float64 if self.system.x2c_type == "sf" else np.complex128
         north = self._get_northo()
         D = np.zeros((north * 2,) * 2, dtype=dtype)
         M = np.zeros((north * 2,) * 2, dtype=dtype)
