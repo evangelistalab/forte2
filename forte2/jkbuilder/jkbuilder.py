@@ -1000,8 +1000,8 @@ class FockBuilderOTF:
                 optimize=True,
             )
             if J_pass == 0:
-                bPa = self.Mm1 @ bPa
-                bPb = self.Mm1 @ bPb
+                bPa = self._apply_Mm1(bPa)
+                bPb = self._apply_Mm1(bPb)
             J_pass += 1
             i0 = i1
 
