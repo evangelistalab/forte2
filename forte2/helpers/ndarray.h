@@ -9,6 +9,8 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
 
+#include <helpers/numeric.hpp>
+
 namespace nb = nanobind;
 
 // Aliases for ndarray types used in forte2
@@ -113,7 +115,7 @@ nb::ndarray<Type, T, nb::ndim<N>> make_ndarray(std::unique_ptr<std::vector<T>> v
 template <typename Type, typename T, int N, typename Order = void>
 auto make_ndarray(const std::array<size_t, N>& shape) {
     // compute the number of elements in the array
-    const auto size = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<size_t>());
+    const auto size = forte2::math::product(shape);
 
     // allocate a vector of the right size
     T* array_ptr = new T[size];
@@ -149,10 +151,25 @@ auto make_zeros(const std::array<size_t, N>& shape) {
 
     // get the data pointer and size
     auto data_ptr = array.data();
-    auto size = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<size_t>());
+    auto size = forte2::math::product(shape);
 
     // fill the data with zeros
     std::fill(data_ptr, data_ptr + size, static_cast<T>(0));
 
     return array;
+}
+
+template <typename Type, typename T, int N>
+auto fortran_to_c(nb::ndarray<Type, T, nb::ndim<N>, nb::f_contig>& arr) {
+    std::array<std::size_t, N> C_shape;
+    std::array<std::int64_t, N> C_strides;
+    for (std::size_t i = 0; i < static_cast<std::size_t>(N); ++i) {
+        C_shape[i] = arr.shape(N - 1 - i);
+        C_strides[i] = arr.stride(N - 1 - i);
+    }
+    T* data = arr.data();
+
+    nb::object owner = arr.cast();
+
+    return nb::ndarray<Type, T, nb::ndim<N>, nb::c_contig>(data, static_cast<std::size_t>(N), C_shape.data(), owner, C_strides.data());
 }

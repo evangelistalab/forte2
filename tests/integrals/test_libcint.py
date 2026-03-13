@@ -70,10 +70,10 @@ def test_libcint_spnucsp_sph():
     system = System(xyz, basis_set="sto-3g", minao_basis_set=None)
     s_cint = integrals.cint_opVop(system)
     c_int2 = integrals.opVop(system)
-    assert np.linalg.norm(s_cint[3] - c_int2[0]) < 1e-6  # I2
-    assert np.linalg.norm(s_cint[0] - c_int2[1]) < 1e-6  # sigma_x
-    assert np.linalg.norm(s_cint[1] - c_int2[2]) < 1e-6  # sigma_y
-    assert np.linalg.norm(s_cint[2] - c_int2[3]) < 1e-6  # sigma_z
+    assert np.linalg.norm(s_cint[3] - c_int2[0]) < 1e-6  # sigma_x
+    assert np.linalg.norm(s_cint[0] - c_int2[1]) < 1e-6  # sigma_y
+    assert np.linalg.norm(s_cint[1] - c_int2[2]) < 1e-6  # sigma_z
+    assert np.linalg.norm(s_cint[2] - c_int2[3]) < 1e-6  # I2
     assert np.linalg.norm(s_cint) == pytest.approx(5982385.234519612, rel=1e-6)
 
 

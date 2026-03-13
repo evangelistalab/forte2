@@ -29,13 +29,13 @@ namespace forte2 {
 // templated function to compute two-center integrals with M components
 // (i.e., 1 for scalar integrals, 3 for dipoles integrals, etc.)
 template <std::size_t M>
-np_tensor3_f cint_int2c(CIntorFunc intor, const std::vector<int>& shell_slice, np_matrix_int atm,
+np_tensor3_c cint_int2c(CIntorFunc intor, const std::vector<int>& shell_slice, np_matrix_int atm,
                         np_matrix_int bas, np_vector env) {
 
-    const int ish_0 = static_cast<int>(shell_slice[0]);
-    const int ish_1 = static_cast<int>(shell_slice[1]);
-    const int jsh_0 = static_cast<int>(shell_slice[2]);
-    const int jsh_1 = static_cast<int>(shell_slice[3]);
+    const int jsh_0 = static_cast<int>(shell_slice[0]);
+    const int jsh_1 = static_cast<int>(shell_slice[1]);
+    const int ish_0 = static_cast<int>(shell_slice[2]);
+    const int ish_1 = static_cast<int>(shell_slice[3]);
     const int nish = ish_1 - ish_0;
     const int njsh = jsh_1 - jsh_0;
 
@@ -76,17 +76,17 @@ np_tensor3_f cint_int2c(CIntorFunc intor, const std::vector<int>& shell_slice, n
         }
     }
 
-    return ints;
+    return fortran_to_c<nb::numpy, double, 3>(ints);
 }
 
 template <std::size_t M>
-np_tensor3_complex_f cint_int2c_spinor(CIntorFuncSpinor intor, const std::vector<int>& shell_slice,
+np_tensor3_complex_c cint_int2c_spinor(CIntorFuncSpinor intor, const std::vector<int>& shell_slice,
                                        np_matrix_int atm, np_matrix_int bas, np_vector env) {
 
-    const int ish_0 = static_cast<int>(shell_slice[0]);
-    const int ish_1 = static_cast<int>(shell_slice[1]);
-    const int jsh_0 = static_cast<int>(shell_slice[2]);
-    const int jsh_1 = static_cast<int>(shell_slice[3]);
+    const int jsh_0 = static_cast<int>(shell_slice[0]);
+    const int jsh_1 = static_cast<int>(shell_slice[1]);
+    const int ish_0 = static_cast<int>(shell_slice[2]);
+    const int ish_1 = static_cast<int>(shell_slice[3]);
     const int nish = ish_1 - ish_0;
     const int njsh = jsh_1 - jsh_0;
 
@@ -127,7 +127,7 @@ np_tensor3_complex_f cint_int2c_spinor(CIntorFuncSpinor intor, const std::vector
         }
     }
 
-    return ints;
+    return fortran_to_c<nb::numpy, std::complex<double>, 3>(ints);
 }
 
 void fill_3c_sym(np_tensor3_f& ints) {
@@ -166,14 +166,14 @@ void fill_3c_sym(np_tensor3_f& ints) {
 }
 
 // function to compute three-center integrals
-np_tensor3_f cint_int3c(CIntorFunc intor, const std::vector<int>& shell_slice, np_matrix_int atm,
+np_tensor3_c cint_int3c(CIntorFunc intor, const std::vector<int>& shell_slice, np_matrix_int atm,
                         np_matrix_int bas, np_vector env) {
-    const int ish_0 = static_cast<int>(shell_slice[0]);
-    const int ish_1 = static_cast<int>(shell_slice[1]);
+    const int ksh_0 = static_cast<int>(shell_slice[0]);
+    const int ksh_1 = static_cast<int>(shell_slice[1]);
     const int jsh_0 = static_cast<int>(shell_slice[2]);
     const int jsh_1 = static_cast<int>(shell_slice[3]);
-    const int ksh_0 = static_cast<int>(shell_slice[4]);
-    const int ksh_1 = static_cast<int>(shell_slice[5]);
+    const int ish_0 = static_cast<int>(shell_slice[4]);
+    const int ish_1 = static_cast<int>(shell_slice[5]);
 
     // Whether i and j shells are identical, if they are we can exploit symmetry
     bool ij_sym = (ish_0 == jsh_0) && (ish_1 == jsh_1);
@@ -264,7 +264,7 @@ np_tensor3_f cint_int3c(CIntorFunc intor, const std::vector<int>& shell_slice, n
         fill_3c_sym(ints);
     }
 
-    return ints;
+    return fortran_to_c<nb::numpy, double, 3>(ints);
 }
 
 } // namespace forte2

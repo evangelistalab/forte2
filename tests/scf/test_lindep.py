@@ -14,7 +14,7 @@ def test_lindep_rhf():
         basis_set="aug-cc-pvdz",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
         unit="bohr",
-        ortho_thresh=2e-7,
+        overlap_ortho_rtol=2e-7,
     )
 
     ovlp = system.ints_overlap()
@@ -37,7 +37,7 @@ def test_lindep_ghf():
         basis_set="aug-cc-pvdz",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
         unit="bohr",
-        ortho_thresh=2e-7,
+        overlap_ortho_rtol=2e-7,
     )
 
     ovlp = system.ints_overlap()
@@ -71,7 +71,7 @@ def test_lindep_x2c():
         x2c_type="so",
         snso_type="row-dependent",
         use_gaussian_charges=True,
-        ortho_thresh=5e-10,
+        overlap_ortho_rtol=5e-10,
     )
     scf = GHF(charge=0)(system)
     scf.run()

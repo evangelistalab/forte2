@@ -91,3 +91,20 @@ def test_rhf_cr2_autoaux():
     scf.run()
 
     assert scf.E == approx(-2085.926511540128)
+
+
+def test_rhf_cl2_otf():
+    xyz = """
+    Cl 0 0 0
+    Cl 0 0 1.681
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvqz",
+        auxiliary_basis_set="cc-pvqz-jkfit",
+        memory_threshold_mb=20,
+    )
+    scf = RHF(charge=0)(system)
+    scf.run()
+
+    assert scf.E == approx(-918.943349338796)

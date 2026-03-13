@@ -1,6 +1,5 @@
 #include "determinant.h"
 #include "ci_string_class.h"
-// #include "helpers/sum.hpp"
 
 namespace forte2 {
 StringClass::StringClass(size_t symmetry, const std::vector<std::vector<int>>& orbital_symmetry,

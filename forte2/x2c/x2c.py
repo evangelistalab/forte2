@@ -28,8 +28,8 @@ class X2CHelper:
     ----------
     system : System
         The molecular system for which to compute the X2C Hamiltonian.
-    ortho_thresh : float, optional, default=1e-8
-        Relative threshold for canonical orthogonalization. Eigenvalues of the overlap matrix below ortho_thresh * max_eigenvalue will be treated as zero and discarded in the orthogonalization process. This can help improve numerical stability when the basis set has near-linear dependencies.
+    overlap_ortho_rtol : float, optional, default=1e-8
+        Relative threshold for canonical orthogonalization. Eigenvalues of the overlap matrix below overlap_ortho_rtol * max_eigenvalue will be treated as zero and discarded in the orthogonalization process. This can help improve numerical stability when the basis set has near-linear dependencies.
 
     Attributes
     ----------
@@ -47,9 +47,9 @@ class X2CHelper:
     for the spin-orbit case. See also PySCF's x2c module for reference.
     """
 
-    def __init__(self, system, ortho_thresh=1e-8):
+    def __init__(self, system):
         self.system = system
-        self.ortho_thresh = ortho_thresh
+        self.overlap_ortho_rtol = system.overlap_ortho_rtol
         self.x2c_type = system.x2c_type.lower()
         assert self.x2c_type in [
             "sf",
@@ -85,7 +85,7 @@ class X2CHelper:
 
         # Get orthonormal transformation for X2C
         self.Xorth_l, self.Xorthm1_l, self.orth_info = canonical_orth(
-            self.S, self.ortho_thresh
+            self.S, self.overlap_ortho_rtol
         )
         print_metric_info(self.orth_info)
         logger.log_info1(
@@ -205,7 +205,7 @@ class X2CHelper:
         S_tilde = S + (0.5 / LIGHT_SPEED**2) * self.X.conj().T @ T @ self.X
         # S is guaranteed to be identity in the orthonormal basis
         # so we just need to compute the inverse square root of S_tilde
-        # the tolerance used here isn't self.ortho_thresh because we're already in the
+        # the tolerance used here isn't self.overlap_ortho_rtol because we're already in the
         # orthonormal basis, it's just an additional numerical guard against division by zero.
         S_tilde_m12, *_ = invsqrt_matrix(S_tilde, rtol=1e-12)
         return S_tilde_m12 @ S

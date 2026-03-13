@@ -67,7 +67,7 @@ def test_lindep_sfx2c1e():
         auxiliary_basis_set="cc-pVQZ-JKFIT",
         unit="bohr",
         x2c_type="sf",
-        ortho_thresh=2e-7,
+        overlap_ortho_rtol=2e-7,
     )
 
     scf = RHF(charge=0, econv=1e-10, dconv=1e-8)(system)
