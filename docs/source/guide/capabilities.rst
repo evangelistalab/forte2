@@ -39,7 +39,7 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Zeroth order active space embedding theory (ASET(0)) [5]_
   * Intrinsic atomic orbitals (IAO) [6]_
   * Intrinsic bond orbitals (IBO) [6]_
-  * A cube file generator for visualizing molecular orbitals
+  * Cube and Molden file generators for visualizing molecular orbitals
   
 
 References
@@ -50,4 +50,3 @@ References
 .. [4] Sayfutyarova, E. R.; Sun, Q.; Chan, G. K.-L.; Knizia, G. Automated Construction of Molecular Active Spaces from Atomic Valence Orbitals. J. Chem. Theory Comput. 2017, 13 (9), 4063-4078. https://doi.org/10.1021/acs.jctc.7b00128.
 .. [5] He, N.; Evangelista, F. A. A Zeroth-Order Active-Space Frozen-Orbital Embedding Scheme for Multireference Calculations. The Journal of Chemical Physics 2020, 152 (9), 094107. https://doi.org/10.1063/1.5142481.
 .. [6] Knizia, G. Intrinsic Atomic Orbitals: An Unbiased Bridge between Quantum Theory and Chemical Concepts. J. Chem. Theory Comput. 2013, 9 (11), 4834-4843. https://doi.org/10.1021/ct400687b.
-

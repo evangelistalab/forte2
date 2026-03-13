@@ -1,6 +1,7 @@
 import numpy as np
 
 from forte2 import System, State, MCOptimizer
+from forte2.orbitals.semicanonicalizer import Semicanonicalizer
 from forte2.scf import RHF, ROHF, UHF
 from forte2.orbitals import write_molden
 from forte2.system.basis_utils import ml_from_shell_index_cca
@@ -61,6 +62,23 @@ def _parse_mo_blocks(text):
         blocks.append(current)
 
     return blocks
+
+
+def _expected_mcopt_energies(mc):
+    orig_to_contig = np.asarray(mc.mo_space.orig_to_contig, dtype=int)
+
+    if mc.final_orbital == "original":
+        return np.diag(mc.orb_opt.Fock)[orig_to_contig]
+
+    semi = Semicanonicalizer(
+        mo_space=mc.mo_space,
+        system=mc.system,
+        mix_inactive=False,
+        mix_active=False,
+    )
+    C_contig = mc.C[0][:, orig_to_contig].copy()
+    semi.semi_canonicalize(g1=mc.make_average_1rdm(), C_contig=C_contig)
+    return semi.eps_semican[orig_to_contig]
 
 
 def test_molden_writer_rhf(tmp_path):
@@ -195,7 +213,8 @@ def test_molden_writer_mcopt(tmp_path):
     blocks = _parse_mo_blocks(path.read_text())
     assert len(blocks) == system.nmo
     assert all(block["spin"] == "Alpha" for block in blocks)
-    assert all(block["ene"] == approx(0.0) for block in blocks)
+    parsed_energies = np.asarray([block["ene"] for block in blocks], dtype=float)
+    assert parsed_energies == approx(_expected_mcopt_energies(mc))
 
     expected_occupations = np.zeros(system.nmo, dtype=float)
     expected_occupations[np.asarray(mc.mo_space.docc_indices, dtype=int)] = 2.0
@@ -204,3 +223,27 @@ def test_molden_writer_mcopt(tmp_path):
     )
     parsed_occupations = np.asarray([block["occup"] for block in blocks], dtype=float)
     assert parsed_occupations == approx(expected_occupations)
+
+
+def test_molden_writer_mcopt_original_orbitals(tmp_path):
+    xyz = f"""
+    H 0.0 0.0 0.0
+    H 0.0 0.0 {0.529177210903 * 2}
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    mc = MCOptimizer(
+        State(nel=2, multiplicity=1, ms=0.0),
+        active_orbitals=[0, 1],
+        final_orbital="original",
+    )(rhf)
+    mc.run()
+
+    path = tmp_path / "h2_mcopt_original.molden"
+    write_molden(mc, path)
+
+    blocks = _parse_mo_blocks(path.read_text())
+    assert len(blocks) == system.nmo
+    parsed_energies = np.asarray([block["ene"] for block in blocks], dtype=float)
+    assert parsed_energies == approx(_expected_mcopt_energies(mc))

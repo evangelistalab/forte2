@@ -1,13 +1,26 @@
 """Molden-format writer for molecular orbitals."""
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 
 from forte2.data import Z_TO_ATOM_SYMBOL
 from forte2.system.basis_utils import AM_LABELS, ml_from_shell_index_cca
+from .semicanonicalizer import Semicanonicalizer
 
 __all__ = ["write_molden"]
+
+
+@dataclass(frozen=True)
+class _MoldenBlock:
+    """Container for one Molden MO block."""
+
+    coeff: np.ndarray
+    energies: np.ndarray
+    occupations: np.ndarray
+    sym_labels: list[str]
+    spin: str
 
 
 def write_molden(obj, path="orbitals.molden") -> None:
@@ -122,19 +135,13 @@ def _validate_molden_object(obj):
     return system, coeff_arrays
 
 
-def _extract_rhf_mo_block(obj, coeff: np.ndarray) -> dict:
-    occupations = np.zeros(coeff.shape[1], dtype=float)
-    occupations[: _get_ndocc(obj)] = 2.0
-    return {
-        "coeff": coeff,
-        "energies": _get_energy_block(obj, 0, coeff.shape[1]),
-        "occupations": occupations,
-        "sym_labels": _get_irrep_labels(obj, 0, coeff.shape[1]),
-        "spin": "Alpha",
-    }
+def _extract_rhf_mo_block(obj, coeff: np.ndarray) -> _MoldenBlock:
+    norb = coeff.shape[1]
+    occupations = _filled_prefix_occupations(_get_ndocc(obj), norb, value=2.0)
+    return _build_molden_block(obj, coeff, occupations)
 
 
-def _extract_rohf_mo_block(obj, coeff: np.ndarray) -> dict:
+def _extract_rohf_mo_block(obj, coeff: np.ndarray) -> _MoldenBlock:
     ndocc = getattr(obj, "ndocc", None)
     nsocc = getattr(obj, "nsocc", None)
 
@@ -151,61 +158,96 @@ def _extract_rohf_mo_block(obj, coeff: np.ndarray) -> dict:
     occupations = np.zeros(coeff.shape[1], dtype=float)
     occupations[:ndocc] = 2.0
     occupations[ndocc : ndocc + nsocc] = 1.0
-    return {
-        "coeff": coeff,
-        "energies": _get_energy_block(obj, 0, coeff.shape[1]),
-        "occupations": occupations,
-        "sym_labels": _get_irrep_labels(obj, 0, coeff.shape[1]),
-        "spin": "Alpha",
-    }
+    return _build_molden_block(obj, coeff, occupations)
 
 
-def _extract_uhf_mo_blocks(obj, coeff_blocks: list[np.ndarray]) -> list[dict]:
-    energies = _get_energy_blocks(obj, 2, coeff_blocks[0].shape[1])
+def _extract_uhf_mo_blocks(obj, coeff_blocks: list[np.ndarray]) -> list[_MoldenBlock]:
+    norb = coeff_blocks[0].shape[1]
+    energies = _get_energy_blocks(obj, 2, norb)
     occupations = [
-        _binary_occupations(_get_electron_count(obj, "na"), coeff_blocks[0].shape[1]),
-        _binary_occupations(_get_electron_count(obj, "nb"), coeff_blocks[1].shape[1]),
+        _filled_prefix_occupations(_get_electron_count(obj, "na"), norb, value=1.0),
+        _filled_prefix_occupations(_get_electron_count(obj, "nb"), norb, value=1.0),
     ]
     spins = ["Alpha", "Beta"]
 
     blocks = []
     for ispin in range(2):
         blocks.append(
-            {
-                "coeff": coeff_blocks[ispin],
-                "energies": energies[ispin],
-                "occupations": occupations[ispin],
-                "sym_labels": _get_irrep_labels(obj, ispin, coeff_blocks[ispin].shape[1]),
-                "spin": spins[ispin],
-            }
+            _build_molden_block(
+                obj,
+                coeff_blocks[ispin],
+                occupations[ispin],
+                spin=spins[ispin],
+                block_index=ispin,
+                energies=energies[ispin],
+            )
         )
     return blocks
 
 
-def _extract_mcopt_mo_block(obj, coeff: np.ndarray) -> dict:
-    occupations = np.zeros(coeff.shape[1], dtype=float)
+def _extract_mcopt_mo_block(obj, coeff: np.ndarray) -> _MoldenBlock:
+    norb = coeff.shape[1]
+    occupations = np.zeros(norb, dtype=float)
     occupations[np.asarray(obj.mo_space.docc_indices, dtype=int)] = 2.0
 
-    g1_act = np.asarray(obj.make_average_1rdm())
-    if g1_act.ndim != 2 or g1_act.shape[0] != g1_act.shape[1]:
-        raise RuntimeError("MCOpt active-space 1-RDM has an invalid shape.")
-    if g1_act.shape[0] != obj.mo_space.nactv:
-        raise RuntimeError("MCOpt active-space 1-RDM does not match the active space.")
-
+    g1_act = _get_mcopt_active_density(obj)
     active_occ = np.real_if_close(np.diag(g1_act)).astype(float)
     occupations[np.asarray(obj.mo_space.active_indices, dtype=int)] = np.clip(
         active_occ, 0.0, 2.0
     )
 
-    return {
-        "coeff": coeff,
-        "energies": _get_energy_block(
-            obj, 0, coeff.shape[1], allow_missing=True, default_value=0.0
-        ),
-        "occupations": occupations,
-        "sym_labels": _get_irrep_labels(obj, 0, coeff.shape[1]),
-        "spin": "Alpha",
-    }
+    return _build_molden_block(
+        obj,
+        coeff,
+        occupations,
+        energies=_get_mcopt_energies(obj, g1_act, norb),
+    )
+
+
+def _get_mcopt_active_density(obj) -> np.ndarray:
+    g1_act = np.asarray(obj.make_average_1rdm())
+    if g1_act.ndim != 2 or g1_act.shape[0] != g1_act.shape[1]:
+        raise RuntimeError("MCOpt active-space 1-RDM has an invalid shape.")
+    if g1_act.shape[0] != obj.mo_space.nactv:
+        raise RuntimeError("MCOpt active-space 1-RDM does not match the active space.")
+    return g1_act
+
+
+def _get_mcopt_energies(obj, g1_act: np.ndarray, norb: int) -> np.ndarray:
+    orig_to_contig = np.asarray(obj.mo_space.orig_to_contig, dtype=int)
+    final_orbital = getattr(obj, "final_orbital", "semicanonical")
+
+    if final_orbital == "original":
+        if not hasattr(obj, "orb_opt") or not hasattr(obj.orb_opt, "Fock"):
+            raise RuntimeError(
+                "MCOpt generalized Fock matrix is unavailable after optimization."
+            )
+        if not np.allclose(obj.C[0][:, orig_to_contig], obj.orb_opt.C):
+            raise RuntimeError(
+                "MCOpt generalized Fock matrix does not match the final orbital basis."
+            )
+        energies_contig = np.real_if_close(np.diag(np.asarray(obj.orb_opt.Fock))).astype(
+            float
+        )
+    elif final_orbital == "semicanonical":
+        semi = Semicanonicalizer(
+            mo_space=obj.mo_space,
+            system=obj.system,
+            mix_inactive=False,
+            mix_active=False,
+        )
+        C_contig = obj.C[0][:, orig_to_contig].copy()
+        semi.semi_canonicalize(g1=g1_act, C_contig=C_contig)
+        energies_contig = np.asarray(semi.eps_semican, dtype=float)
+    else:
+        raise NotImplementedError(
+            f"Unsupported MCOpt final_orbital setting: {final_orbital!r}"
+        )
+
+    if energies_contig.shape != (norb,):
+        raise RuntimeError("MCOpt generalized Fock diagonal has an invalid shape.")
+
+    return energies_contig[orig_to_contig]
 
 
 def _get_energy_blocks(
@@ -243,6 +285,27 @@ def _get_energy_block(
         allow_missing=allow_missing,
         default_value=default_value,
     )[block_index]
+
+
+def _build_molden_block(
+    obj,
+    coeff: np.ndarray,
+    occupations: np.ndarray,
+    *,
+    spin: str = "Alpha",
+    block_index: int = 0,
+    energies: np.ndarray | None = None,
+) -> _MoldenBlock:
+    norb = coeff.shape[1]
+    if energies is None:
+        energies = _get_energy_block(obj, block_index, norb)
+    return _MoldenBlock(
+        coeff=coeff,
+        energies=energies,
+        occupations=occupations,
+        sym_labels=_get_irrep_labels(obj, block_index, norb),
+        spin=spin,
+    )
 
 
 def _get_irrep_labels(obj, block_index: int, norb: int) -> list[str]:
@@ -284,9 +347,9 @@ def _get_electron_count(obj, attr: str) -> int:
     return int(value)
 
 
-def _binary_occupations(nocc: int, norb: int) -> np.ndarray:
+def _filled_prefix_occupations(nocc: int, norb: int, value: float) -> np.ndarray:
     occupations = np.zeros(norb, dtype=float)
-    occupations[:nocc] = 1.0
+    occupations[:nocc] = value
     return occupations
 
 
@@ -371,15 +434,15 @@ def _format_gto(basis) -> list[str]:
     return lines
 
 
-def _format_mo(mo_blocks: list[dict], permutation: np.ndarray) -> list[str]:
+def _format_mo(mo_blocks: list[_MoldenBlock], permutation: np.ndarray) -> list[str]:
     lines = ["[MO]"]
     for block in mo_blocks:
-        coeff = block["coeff"][permutation, :]
+        coeff = block.coeff[permutation, :]
         for imo in range(coeff.shape[1]):
-            lines.append(f"Sym= {block['sym_labels'][imo]}")
-            lines.append(f"Ene= {block['energies'][imo]: .14f}")
-            lines.append(f"Spin= {block['spin']}")
-            lines.append(f"Occup= {block['occupations'][imo]: .14f}")
+            lines.append(f"Sym= {block.sym_labels[imo]}")
+            lines.append(f"Ene= {block.energies[imo]: .14f}")
+            lines.append(f"Spin= {block.spin}")
+            lines.append(f"Occup= {block.occupations[imo]: .14f}")
             for iao, value in enumerate(coeff[:, imo], start=1):
                 lines.append(f"{iao:4d} {value: .14E}")
     return lines
