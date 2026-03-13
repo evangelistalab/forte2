@@ -55,7 +55,7 @@ namespace forte2 {
 //     return cint_int2c<1>(int1e_ovlp_sph, shell_slice, atm, bas, env);
 // }
 #define DECL_CINT_FORTE2_FUNC_SPH(name, comp) \
-np_tensor3_f cint_##name##_sph(const std::vector<int>& shell_slice, np_matrix_int atm, np_matrix_int bas, \
+np_tensor3_c cint_##name##_sph(const std::vector<int>& shell_slice, np_matrix_int atm, np_matrix_int bas, \
                         np_vector env) { \
     return cint_int2c<comp>(name##_sph, shell_slice, atm, bas, env); \
 }
@@ -69,7 +69,7 @@ DECL_CINT_FORTE2_FUNC_SPH(int2c2e, 1)
 #undef DECL_CINT_FORTE2_FUNC_SPH
 
 #define DECL_CINT_FORTE2_FUNC_SPINOR(name, comp) \
-np_tensor3_complex_f cint_##name##_spinor(const std::vector<int>& shell_slice, np_matrix_int atm, \
+np_tensor3_complex_c cint_##name##_spinor(const std::vector<int>& shell_slice, np_matrix_int atm, \
                                    np_matrix_int bas, np_vector env) { \
     return cint_int2c_spinor<comp>(name##_spinor, shell_slice, atm, bas, env); \
 }
