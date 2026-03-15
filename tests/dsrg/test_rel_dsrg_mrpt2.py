@@ -120,7 +120,6 @@ def test_mrpt2_carbon_rel_sa():
         core_orbitals=2,
         econv=1e-8,
         gconv=1e-6,
-        do_diis=False,
     )(mf)
     dsrg = RelDSRG_MRPT2(flow_param=0.24, relax_reference="once")(mc)
     dsrg.run()
@@ -165,7 +164,6 @@ def test_mrpt2_se_rel_sa_gauss_nuc():
     mc = RelMCOptimizer(
         nel=34,
         nroots=9,
-        do_diis=False,
         core_orbitals=28,
         active_orbitals=8,
     )(mf)
@@ -201,7 +199,6 @@ def test_mrpt2_s_rel_sa_gauss_nuc():
     mc = RelMCOptimizer(
         nel=16,
         nroots=9,
-        do_diis=False,
         econv=1e-11,
         gconv=1e-10,
         core_orbitals=10,
