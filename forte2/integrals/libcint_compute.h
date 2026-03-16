@@ -167,7 +167,7 @@ void fill_3c_sym(np_tensor3_f& ints) {
 
 // function to compute three-center integrals
 np_tensor3_c cint_int3c(CIntorFunc intor, const std::vector<int>& shell_slice, np_matrix_int atm,
-                        np_matrix_int bas, np_vector env) {
+                        np_matrix_int bas, np_vector env, np_tensor3_c& ints) {
     const int ksh_0 = static_cast<int>(shell_slice[0]);
     const int ksh_1 = static_cast<int>(shell_slice[1]);
     const int jsh_0 = static_cast<int>(shell_slice[2]);
@@ -176,7 +176,7 @@ np_tensor3_c cint_int3c(CIntorFunc intor, const std::vector<int>& shell_slice, n
     const int ish_1 = static_cast<int>(shell_slice[5]);
 
     // Whether i and j shells are identical, if they are we can exploit symmetry
-    bool ij_sym = (ish_0 == jsh_0) && (ish_1 == jsh_1);
+    bool ij_sym = false;
 
     const int nish = ish_1 - ish_0;
     const int njsh = jsh_1 - jsh_0;
@@ -198,10 +198,17 @@ np_tensor3_c cint_int3c(CIntorFunc intor, const std::vector<int>& shell_slice, n
     const int nao_j = ao_offset[jsh_1] - ao_offset[jsh_0];
     const int nao_k = ao_offset[ksh_1] - ao_offset[ksh_0];
 
-    auto ints = make_zeros<nb::numpy, double, 3, nb::f_contig>(std::array<size_t, 3>{
-        static_cast<size_t>(nao_i), static_cast<size_t>(nao_j), static_cast<size_t>(nao_k)});
+    // ints.shape = {k, j, i}
+    // ints_f.shape = {i, j, k}
+    auto ints_f = c_to_fortran<nb::numpy, double, 3>(ints);
 
-    double* buf = ints.data();
+    // these are used to calcaulate the offset
+    // works even if ints shape is larger than nao_i/j/k
+    // const int dim_i = static_cast<int>(ints_f.shape(0));
+    // const int dim_j = static_cast<int>(ints_f.shape(1));
+    // const int dim_k = static_cast<int>(ints_f.shape(2));
+
+    double* buf = ints_f.data();
     int dims[3] = {nao_i, nao_j, nao_k};
 
     const auto num_threads = get_num_threads();
@@ -261,10 +268,47 @@ np_tensor3_c cint_int3c(CIntorFunc intor, const std::vector<int>& shell_slice, n
     }
 
     if (ij_sym) {
-        fill_3c_sym(ints);
+        fill_3c_sym(ints_f);
     }
 
-    return fortran_to_c<nb::numpy, double, 3>(ints);
+    // no copy of underlying storage, but python object changed
+    return fortran_to_c<nb::numpy, double, 3>(ints_f);
+}
+
+// function to compute three-center integrals
+np_tensor3_c cint_int3c(CIntorFunc intor, const std::vector<int>& shell_slice, np_matrix_int atm,
+                        np_matrix_int bas, np_vector env) {
+    const int ksh_0 = static_cast<int>(shell_slice[0]);
+    const int ksh_1 = static_cast<int>(shell_slice[1]);
+    const int jsh_0 = static_cast<int>(shell_slice[2]);
+    const int jsh_1 = static_cast<int>(shell_slice[3]);
+    const int ish_0 = static_cast<int>(shell_slice[4]);
+    const int ish_1 = static_cast<int>(shell_slice[5]);
+
+    const int nish = ish_1 - ish_0;
+    const int njsh = jsh_1 - jsh_0;
+    const int nksh = ksh_1 - ksh_0;
+
+    int natm = atm.shape(0);
+    int nbas = bas.shape(0);
+
+    auto* atm_data = atm.data();
+    auto* bas_data = bas.data();
+    auto* env_data = env.data();
+
+    std::vector<int> ao_offset(nbas + 1, 0);
+    for (int i = 0; i < nbas; ++i) {
+        ao_offset[i + 1] = ao_offset[i] + CINTcgto_spheric(i, bas_data);
+    }
+
+    const int nao_i = ao_offset[ish_1] - ao_offset[ish_0];
+    const int nao_j = ao_offset[jsh_1] - ao_offset[jsh_0];
+    const int nao_k = ao_offset[ksh_1] - ao_offset[ksh_0];
+
+    auto ints = make_zeros<nb::numpy, double, 3, nb::c_contig>(std::array<size_t, 3>{
+        static_cast<size_t>(nao_k), static_cast<size_t>(nao_j), static_cast<size_t>(nao_i)});
+
+    return cint_int3c(intor, shell_slice, atm, bas, env, ints);
 }
 
 } // namespace forte2

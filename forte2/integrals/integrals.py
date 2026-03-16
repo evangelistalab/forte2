@@ -964,3 +964,55 @@ def cint_coulomb_3c(system, basis1=None, basis2=None, basis3=None):
     )
     res = ints.cint_int3c2e_sph(shell_slice, atm, bas, env)
     return res
+
+
+class CInt3cBySlice:
+    def __init__(self, system):
+        _require_libcint()
+        self.system = system
+        self.atm, self.bas, self.env, _ = _parse_basis_args_cint_3c2e(
+            system, None, None, None
+        )
+        self.nauxsh = system.auxiliary_basis.nshells
+        self.nprimsh = system.basis.nshells
+        self.first_size_aux = system.auxiliary_basis.shell_first_and_size
+        self.first_size_prim = system.basis.shell_first_and_size
+
+    def _convert_shell_slices(self, shell_slices):
+        auxsh = (shell_slices[0][0] + self.nprimsh, shell_slices[0][1] + self.nprimsh)
+        prim1sh = shell_slices[1]
+        prim2sh = shell_slices[2]
+        return [*auxsh, *prim1sh, *prim2sh]
+
+    def _get_shape(self, shell_slices):
+        ib0 = self.first_size_aux[shell_slices[0][0]][0]
+        ib1 = (
+            self.first_size_aux[shell_slices[0][1] - 1][0]
+            + self.first_size_aux[shell_slices[0][1] - 1][1]
+        )
+        jb0 = self.first_size_prim[shell_slices[1][0]][0]
+        jb1 = (
+            self.first_size_prim[shell_slices[1][1] - 1][0]
+            + self.first_size_prim[shell_slices[1][1] - 1][1]
+        )
+        kb0 = self.first_size_prim[shell_slices[2][0]][0]
+        kb1 = (
+            self.first_size_prim[shell_slices[2][1] - 1][0]
+            + self.first_size_prim[shell_slices[2][1] - 1][1]
+        )
+        return (ib1 - ib0, jb1 - jb0, kb1 - kb0)
+
+    def compute(self, shell_slices, buf):
+        """
+        Compute the three-center two-electron Coulomb integrals for the given shell slices.
+
+        Parameters
+        ----------
+        shell_slices : list[tuple]
+            A list of tuples, where each tuple contains the shell slice indices for the auxiliary basis and the two primary bases in the format:
+            [(aux_start, aux_end), (prim1_start, prim1_end), (prim2_start, prim2_end)]
+        """
+        shape = self._get_shape(shell_slices)
+        buf1 = np.ndarray(shape, buffer=buf)
+        shls = self._convert_shell_slices(shell_slices)
+        return ints.cint_int3c2e_sph(shls, self.atm, self.bas, self.env, buf1)

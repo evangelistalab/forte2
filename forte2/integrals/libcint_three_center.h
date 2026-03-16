@@ -44,7 +44,11 @@ namespace forte2 {
 #define DECL_CINT_FORTE2_FUNC_SPH(name)                                                            \
     np_tensor3_c cint_##name##_sph(const std::vector<int>& shell_slice, np_matrix_int atm,         \
                                    np_matrix_int bas, np_vector env) {                             \
-        return cint_int3c(name##_sph, shell_slice, atm, bas, env);                               \
+        return cint_int3c(name##_sph, shell_slice, atm, bas, env);                                 \
+    }                                                                                              \
+    np_tensor3_c cint_##name##_sph(const std::vector<int>& shell_slice, np_matrix_int atm,         \
+                                   np_matrix_int bas, np_vector env, np_tensor3_c& ints) {         \
+        return cint_int3c(name##_sph, shell_slice, atm, bas, env, ints);                           \
     }
 
 DECL_CINT_FORTE2_FUNC_SPH(int3c2e)
