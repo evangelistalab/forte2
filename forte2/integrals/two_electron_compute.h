@@ -354,13 +354,9 @@ template <libint2::Operator Op, typename Params = NoParams>
 template <libint2::Operator Op, typename Params = NoParams>
 void compute_two_electron_3c_by_shell(
     const Basis& basis1, const Basis& basis2, const Basis& basis3,
-    const std::vector<std::pair<std::size_t, std::size_t>>& shell_slices, np_tensor3& buffer,
+    const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices, np_tensor3& buffer,
     Params const& params = Params{}) {
     const auto start = std::chrono::high_resolution_clock::now();
-
-    if (shell_slices.size() != 3) {
-        throw std::invalid_argument("shell_slices must have size 3");
-    }
 
     if (shell_slices[0].first >= shell_slices[0].second ||
         shell_slices[1].first >= shell_slices[1].second ||
@@ -386,14 +382,15 @@ void compute_two_electron_3c_by_shell(
     const auto first_size2 = basis2.shell_first_and_size();
     const auto first_size3 = basis3.shell_first_and_size();
 
+    const auto offsets1 = basis1.shell_offsets();
+    const auto offsets2 = basis2.shell_offsets();
+    const auto offsets3 = basis3.shell_offsets();
+
     // nb = index of first basis function in last shell - index of first basis function in first
     // shell + size of last shell
-    const std::size_t nb1 =
-        first_size1[ish1 - 1].first - first_size1[ish0].first + first_size1[ish1 - 1].second;
-    const std::size_t nb2 =
-        first_size2[jsh1 - 1].first - first_size2[jsh0].first + first_size2[jsh1 - 1].second;
-    const std::size_t nb3 =
-        first_size3[ksh1 - 1].first - first_size3[ksh0].first + first_size3[ksh1 - 1].second;
+    const std::size_t nb1 = offsets1[ish1] - offsets1[ish0];
+    const std::size_t nb2 = offsets2[jsh1] - offsets2[jsh0];
+    const std::size_t nb3 = offsets3[ksh1] - offsets3[ksh0];
 
     const std::size_t first1 = first_size1[ish0].first;
     const std::size_t first2 = first_size2[jsh0].first;
@@ -500,7 +497,7 @@ void compute_two_electron_3c_by_shell(
 template <libint2::Operator Op, typename Params = NoParams>
 [[nodiscard]] auto compute_two_electron_3c_by_shell(
     const Basis& basis1, const Basis& basis2, const Basis& basis3,
-    const std::vector<std::pair<std::size_t, std::size_t>>& shell_slices,
+    const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices,
     Params const& params = Params{}) -> np_tensor3 {
     if (shell_slices.size() != 3) {
         throw std::invalid_argument("shell_slices must have size 3");

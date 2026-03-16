@@ -975,8 +975,8 @@ class CInt3cBySlice:
         )
         self.nauxsh = system.auxiliary_basis.nshells
         self.nprimsh = system.basis.nshells
-        self.first_size_aux = system.auxiliary_basis.shell_first_and_size
-        self.first_size_prim = system.basis.shell_first_and_size
+        self.sh_offset_aux = system.auxiliary_basis.shell_offsets
+        self.sh_offset_prim = system.basis.shell_offsets
 
     def _convert_shell_slices(self, shell_slices):
         auxsh = (shell_slices[0][0] + self.nprimsh, shell_slices[0][1] + self.nprimsh)
@@ -985,21 +985,13 @@ class CInt3cBySlice:
         return [*auxsh, *prim1sh, *prim2sh]
 
     def _get_shape(self, shell_slices):
-        ib0 = self.first_size_aux[shell_slices[0][0]][0]
-        ib1 = (
-            self.first_size_aux[shell_slices[0][1] - 1][0]
-            + self.first_size_aux[shell_slices[0][1] - 1][1]
-        )
-        jb0 = self.first_size_prim[shell_slices[1][0]][0]
-        jb1 = (
-            self.first_size_prim[shell_slices[1][1] - 1][0]
-            + self.first_size_prim[shell_slices[1][1] - 1][1]
-        )
-        kb0 = self.first_size_prim[shell_slices[2][0]][0]
-        kb1 = (
-            self.first_size_prim[shell_slices[2][1] - 1][0]
-            + self.first_size_prim[shell_slices[2][1] - 1][1]
-        )
+        ib0 = self.sh_offset_aux[shell_slices[0][0]]
+        ib1 = self.sh_offset_aux[shell_slices[0][1]]
+        jb0 = self.sh_offset_prim[shell_slices[1][0]]
+        jb1 = self.sh_offset_prim[shell_slices[1][1]]
+        kb0 = self.sh_offset_prim[shell_slices[2][0]]
+        kb1 = self.sh_offset_prim[shell_slices[2][1]]
+
         return (ib1 - ib0, jb1 - jb0, kb1 - kb0)
 
     def compute(self, shell_slices, buf):

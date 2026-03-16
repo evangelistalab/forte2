@@ -5,7 +5,7 @@ from pathlib import Path
 THIS_DIR = Path(__file__).parent
 
 
-from forte2 import System, integrals, ints
+from forte2 import System, integrals
 from forte2.system.build_basis import build_basis
 from forte2.integrals import LIBCINT_AVAILABLE
 
@@ -252,9 +252,6 @@ def test_libcint_coulomb_3c_prealloc():
         shell_slices = [(ish0, ish1), (jsh0, jsh1), (ksh0, ksh1)]
         buf1 = cint_computer.compute(shell_slices, buf)
         assert np.linalg.norm(buf1 - ref[ib0:ib1, jb0:jb1, kb0:kb1]) < 1e-8
-
-
-test_libcint_coulomb_3c_prealloc()
 
 
 @pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")

@@ -176,7 +176,7 @@ np_tensor3_c cint_int3c(CIntorFunc intor, const std::vector<int>& shell_slice, n
     const int ish_1 = static_cast<int>(shell_slice[5]);
 
     // Whether i and j shells are identical, if they are we can exploit symmetry
-    bool ij_sym = false;
+    bool ij_sym = (ish_0 == jsh_0) && (ish_1 == jsh_1);
 
     const int nish = ish_1 - ish_0;
     const int njsh = jsh_1 - jsh_0;
@@ -198,15 +198,18 @@ np_tensor3_c cint_int3c(CIntorFunc intor, const std::vector<int>& shell_slice, n
     const int nao_j = ao_offset[jsh_1] - ao_offset[jsh_0];
     const int nao_k = ao_offset[ksh_1] - ao_offset[ksh_0];
 
+    if (ints.shape(0) != static_cast<size_t>(nao_k) ||
+        ints.shape(1) != static_cast<size_t>(nao_j) ||
+        ints.shape(2) != static_cast<size_t>(nao_i)) {
+        std::string msg = "Buffer shape must be (";
+        msg += std::to_string(nao_k) + ", " + std::to_string(nao_j) + ", " + std::to_string(nao_i) +
+               ")";
+        throw std::invalid_argument(msg);
+    }
+
     // ints.shape = {k, j, i}
     // ints_f.shape = {i, j, k}
     auto ints_f = c_to_fortran<nb::numpy, double, 3>(ints);
-
-    // these are used to calcaulate the offset
-    // works even if ints shape is larger than nao_i/j/k
-    // const int dim_i = static_cast<int>(ints_f.shape(0));
-    // const int dim_j = static_cast<int>(ints_f.shape(1));
-    // const int dim_k = static_cast<int>(ints_f.shape(2));
 
     double* buf = ints_f.data();
     int dims[3] = {nao_i, nao_j, nao_k};

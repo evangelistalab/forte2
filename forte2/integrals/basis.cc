@@ -54,6 +54,18 @@ std::vector<std::pair<std::size_t, std::size_t>> Basis::shell_first_and_size() c
     return result;
 }
 
+std::vector<std::size_t> Basis::shell_offsets() const {
+    auto first_size = shell_first_and_size();
+    auto n_shells = nshells();
+    std::vector<std::size_t> offsets(n_shells + 1);
+    for (std::size_t i = 0; i < n_shells; ++i) {
+        offsets[i] = first_size[i].first;
+    }
+    offsets[n_shells] = size();
+    return offsets;
+
+}
+
 std::vector<std::pair<std::size_t, std::size_t>> Basis::center_first_and_last(bool count_shell) const {
     std::vector<std::pair<std::size_t, std::size_t>> result;
     if (shells_.empty()) {

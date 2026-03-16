@@ -51,6 +51,10 @@ class Basis {
     ///         in the shell, and the size is the number of basis functions in the shell.
     std::vector<std::pair<std::size_t, std::size_t>> shell_first_and_size() const;
 
+    /// @return a vector of the indices of the first basis function in each shell. The last element
+    ///         is the total number of basis functions in the basis set.
+    std::vector<std::size_t> shell_offsets() const;
+
     /// @return a vector of pairs of the first and last index of the basis functions on a given
     /// center in the basis set.
     /// @param count_shell If true, the first and last indices are for shells on the center, else

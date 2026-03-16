@@ -31,19 +31,19 @@ np_tensor3 coulomb_3c(const Basis& basis1, const Basis& basis2, const Basis& bas
 /// @param basis1 The basis set in the bra for electron 1 center 1.
 /// @param basis2 The basis set in the ket for electron 2 center 2.
 /// @param basis3 The basis set in the ket for electron 2 center 3.
-/// @param shell_slices A vector of tuples specifying the shell ranges to compute for each basis
+/// @param shell_slices A 3-array of tuples specifying the shell ranges to compute for each basis
 /// @return A 3D ndarray of shape (n1, n2, n3), where ni is the number of basis functions in basisi
 np_tensor3 coulomb_3c_by_shell(const Basis& basis1, const Basis& basis2, const Basis& basis3, 
-                               const std::vector<std::pair<std::size_t, std::size_t>>& shell_slices);
+                               const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices);
 
 /// @brief Compute the coulomb integrals (b1 | 1  / r_12 | b2), by shells, into a provided buffer.
 /// @param basis1 The basis set in the bra for electron 1 center 1.
 /// @param basis2 The basis set in the ket for electron 2 center 2.
 /// @param basis3 The basis set in the ket for electron 2 center 3.
-/// @param shell_slices A vector of tuples specifying the shell ranges to compute for each basis
+/// @param shell_slices A 3-array of tuples specifying the shell ranges to compute for each basis
 /// @param buffer A 3D ndarray of shape of at least (n1, n2, n3) to store the results, where ni is the number of basis functions in basisi
 void coulomb_3c_by_shell(const Basis& basis1, const Basis& basis2, const Basis& basis3,
-                         const std::vector<std::pair<std::size_t, std::size_t>>& shell_slices,
+                         const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices,
                          np_tensor3& buffer);
 
 /// @brief Compute the coulomb integrals (b1 | 1  / r_12 | b2).

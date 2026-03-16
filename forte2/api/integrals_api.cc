@@ -13,7 +13,6 @@
 #include <nanobind/stl/string.h>
 
 #include "integrals/basis.h"
-#include "integrals/fock_builder.h"
 #include "integrals/nuclear_repulsion.h"
 #include "integrals/one_electron.h"
 #include "integrals/two_electron.h"
@@ -150,6 +149,7 @@ void export_basis_api(nb::module_& sub_m) {
         .def("__getitem__", &Basis::operator[], "i"_a)
         .def("__len__", &Basis::size)
         .def_prop_ro("shell_first_and_size", &Basis::shell_first_and_size)
+        .def_prop_ro("shell_offsets", &Basis::shell_offsets)
         .def_prop_ro("center_first_and_last",
                      [](const Basis& b) { return b.center_first_and_last(false); })
         .def_prop_ro("center_first_and_last_shell",
@@ -328,7 +328,7 @@ void export_two_electron_api(nb::module_& sub_m) {
     sub_m.def(
         "coulomb_3c_by_shell",
         [](const Basis& basis1, const Basis& basis2, const Basis& basis3,
-           const std::vector<std::pair<std::size_t, std::size_t>>& shell_slices) {
+           const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices) {
             return coulomb_3c_by_shell(basis1, basis2, basis3, shell_slices);
         },
         "basis1"_a, "basis2"_a, "basis3"_a, "shell_slices"_a);
@@ -336,7 +336,7 @@ void export_two_electron_api(nb::module_& sub_m) {
     sub_m.def(
         "coulomb_3c_by_shell",
         [](const Basis& basis1, const Basis& basis2, const Basis& basis3,
-           const std::vector<std::pair<std::size_t, std::size_t>>& shell_slices,
+           const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices,
            np_tensor3& buffer) {
             coulomb_3c_by_shell(basis1, basis2, basis3, shell_slices, buffer);
         },

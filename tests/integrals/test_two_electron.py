@@ -143,14 +143,11 @@ def test_3c2e_by_slice_with_prealloc_buffer():
         ):
             continue
 
+        shape = (ib1 - ib0, jb1 - jb0, kb1 - kb0)
+
         shell_slices = [(ish0, ish1), (jsh0, jsh1), (ksh0, ksh1)]
+        buf1 = np.ndarray(shape, buffer=buf)
         forte2.ints.coulomb_3c_by_shell(
-            system.auxiliary_basis, system.basis, system.basis, shell_slices, buf
+            system.auxiliary_basis, system.basis, system.basis, shell_slices, buf1
         )
-        assert (
-            np.linalg.norm(
-                buf[: ib1 - ib0, : jb1 - jb0, : kb1 - kb0]
-                - ref[ib0:ib1, jb0:jb1, kb0:kb1]
-            )
-            < 1e-8
-        )
+        assert np.linalg.norm(buf1 - ref[ib0:ib1, jb0:jb1, kb0:kb1]) < 1e-8

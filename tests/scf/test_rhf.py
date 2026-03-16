@@ -1,9 +1,11 @@
 import pytest
 
-from forte2 import System
+from forte2 import System, ints
 from forte2.scf import RHF
 from forte2.helpers.comparisons import approx
 from forte2.system import BSE_AVAILABLE
+
+LIBCINT_AVAILABLE = getattr(ints, "HAS_LIBCINT", False)
 
 
 def test_rhf():
@@ -93,7 +95,10 @@ def test_rhf_cr2_autoaux():
     assert scf.E == approx(-2085.926511540128)
 
 
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
 def test_rhf_cl2_otf():
+    from forte2.jkbuilder import FockBuilderOTF
+
     xyz = """
     Cl 0 0 0
     Cl 0 0 1.681
@@ -102,7 +107,10 @@ def test_rhf_cl2_otf():
         xyz=xyz,
         basis_set="cc-pvqz",
         auxiliary_basis_set="cc-pvqz-jkfit",
-        memory_threshold_mb=20,
+    )
+    # force OTF libcint backend for this test
+    system.fock_builder = FockBuilderOTF(
+        system, memory_threshold_mb=40, backend="libcint"
     )
     scf = RHF(charge=0)(system)
     scf.run()

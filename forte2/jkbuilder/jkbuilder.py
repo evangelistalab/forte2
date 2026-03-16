@@ -519,6 +519,8 @@ class FockBuilderOTF:
         If True, uses ``system.auxiliary_basis_corr`` instead of ``system.auxiliary_basis``.
     memory_threshold_mb : float, optional, default=4000
         The memory threshold in MB for deciding how to compute the J and K matrices. If the estimated memory requirement for storing the B tensor exceeds this threshold, the J and K matrices will be computed in a more memory-efficient way that does not require storing the B tensor.
+    backend : str, optional, default="auto"
+        The backend to use for computing the three-center two-electron integrals. Options are "auto", "libint2", and "libcint". If "auto", the backend will be chosen based on the maximum angular momentum of the auxiliary basis.
     """
 
     def __init__(
@@ -526,7 +528,13 @@ class FockBuilderOTF:
         system,
         use_aux_corr=False,
         memory_threshold_mb=4000,
+        backend="auto",
     ):
+        if backend.lower() not in ["auto", "libint2", "libcint"]:
+            raise ValueError(
+                f"Invalid backend {backend}. Must be one of 'auto', 'libint2', or 'libcint'."
+            )
+        self.backend = backend.lower()
         self.system = system
         self.use_aux_corr = use_aux_corr
         self.nbf = system.nbf
@@ -540,11 +548,43 @@ class FockBuilderOTF:
         self.nshb = self.basis.nshells
         self.naux = len(self.auxbasis)
         self.nshaux = self.auxbasis.nshells
+        self.aux_sh_offsets = self.auxbasis.shell_offsets
         self.metric_ortho_rtol = self.system.df_ortho_rtol
+
         self._build_metric()
         self._allocate_buffers()
+        self._init_integral_engine()
 
     build_JK_generalized = FockBuilder.build_JK_generalized
+
+    def _init_integral_engine(self):
+        def libint2_compute(pshell0, pshell1):
+            forte2.ints.coulomb_3c_by_shell(
+                self.auxbasis,
+                self.basis,
+                self.basis,
+                [(pshell0, pshell1), (0, self.nshb), (0, self.nshb)],
+                self._Pmn_buf,
+            )
+            pb0 = self.aux_sh_offsets[pshell0]
+            pb1 = self.aux_sh_offsets[pshell1]
+            return self._Pmn_buf[: pb1 - pb0, ...]
+
+        def libcint_compute(pshell0, pshell1):
+            return self._cint_computer.compute(
+                [(pshell0, pshell1), (0, self.nshb), (0, self.nshb)], self._Pmn_buf
+            )
+
+        if self.backend == "auto":
+            max_l = max(self.auxbasis.max_l, self.basis.max_l)
+            _backend = integrals._choose_backend(max_l)
+        else:
+            _backend = self.backend
+        if _backend == "libint2":
+            self.compute_int3c2e_slice = libint2_compute
+        else:  # libcint
+            self._cint_computer = integrals.CInt3cBySlice(self.system)
+            self.compute_int3c2e_slice = libcint_compute
 
     def _allocate_buffers(self):
         """
@@ -571,8 +611,7 @@ class FockBuilderOTF:
             self.naux, math.ceil((self.naux / self.nbf) * self.iblksize)
         )
 
-        self.aux_first_and_size = self.auxbasis.shell_first_and_size
-        max_nbasis_in_shell = max(size for _, size in self.aux_first_and_size)
+        max_nbasis_in_shell = self.auxbasis.max_nprim
         if self.pblksize < max_nbasis_in_shell:
             suggested_mem_mb = math.ceil(
                 (nbuf_vt * nbytes + 8) * max_nbasis_in_shell * self.naux**2 / 1024**2
@@ -648,26 +687,16 @@ class FockBuilderOTF:
     def _find_aux_shell_block(self, pshell0):
         # find the block of auxiliary shells that fit in the buffer, starting from pshell0
         pshell1 = pshell0
-        fs = self.aux_first_and_size
-        nb = 0
-        while pshell1 < self.nshaux and nb + fs[pshell1][1] <= self.pblksize:
-            nb += fs[pshell1][1]
+        offsets = self.aux_sh_offsets
+        i0 = offsets[pshell0]
+        while pshell1 < self.nshaux and offsets[pshell1 + 1] - i0 <= self.pblksize:
             pshell1 += 1
-        pb0 = self.aux_first_and_size[pshell0][0]
-        pb1 = (
-            self.aux_first_and_size[pshell1 - 1][0]
-            + self.aux_first_and_size[pshell1 - 1][1]
-        )
+        pb0 = self.aux_sh_offsets[pshell0]
+        pb1 = self.aux_sh_offsets[pshell1]
         return pshell0, pshell1, pb0, pb1
 
     def _fill_Pmn_buffer(self, pshell0, pshell1):
-        forte2.ints.coulomb_3c_by_shell(
-            self.auxbasis,
-            self.basis,
-            self.basis,
-            [(pshell0, pshell1), (0, self.nshb), (0, self.nshb)],
-            self._Pmn_buf,
-        )
+        return self.compute_int3c2e_slice(pshell0, pshell1)
 
     def _J_kernel(self, D):
         # 1. Batch over the (raw) P index of (P|mn) integrals
@@ -676,10 +705,11 @@ class FockBuilderOTF:
         while pshell0 < self.nshaux:
             pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
             # 2. Compute the B_Pmn blocks for the current batch of auxiliary shells
-            self._fill_Pmn_buffer(pshell0, pshell1)
+            _buf = self._fill_Pmn_buffer(pshell0, pshell1)
+            # print(_buf.shape, D.shape, bP[pb0:pb1].shape)
             np.einsum(
                 "Pmn,nm->P",
-                self._Pmn_buf[: pb1 - pb0, ...],
+                _buf,
                 D,
                 optimize=True,
                 out=bP[pb0:pb1],
@@ -692,10 +722,8 @@ class FockBuilderOTF:
         pshell0, pshell1 = 0, 0
         while pshell0 < self.nshaux:
             pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
-            self._fill_Pmn_buffer(pshell0, pshell1)
-            J += np.einsum(
-                "Pmn,P->mn", self._Pmn_buf[: pb1 - pb0, ...], bP[pb0:pb1], optimize=True
-            )
+            _buf = self._fill_Pmn_buffer(pshell0, pshell1)
+            J += np.einsum("Pmn,P->mn", _buf, bP[pb0:pb1], optimize=True)
             pshell0 = pshell1
 
         return J
@@ -712,10 +740,10 @@ class FockBuilderOTF:
             pshell0, pshell1 = 0, 0
             while pshell0 < self.nshaux:
                 pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
-                self._fill_Pmn_buffer(pshell0, pshell1)
+                _buf = self._fill_Pmn_buffer(pshell0, pshell1)
                 np.einsum(
                     "Qms,si->Qmi",
-                    self._Pmn_buf[: pb1 - pb0, ...],
+                    _buf,
                     ctemp,
                     optimize=True,
                     out=self._Qmi_buf[pb0:pb1, :, : i1 - i0],
@@ -755,17 +783,17 @@ class FockBuilderOTF:
             pshell0, pshell1 = 0, 0
             while pshell0 < self.nshaux:
                 pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
-                self._fill_Pmn_buffer(pshell0, pshell1)
+                _buf = self._fill_Pmn_buffer(pshell0, pshell1)
                 np.einsum(
                     "Qms,si->Qmi",
-                    self._Pmn_buf[: pb1 - pb0, ...],
+                    _buf,
                     catemp,
                     optimize=True,
                     out=self._Qmi_buf[pb0:pb1, :, : i1 - i0],
                 )
                 np.einsum(
                     "Qms,si->Qmi",
-                    self._Pmn_buf[: pb1 - pb0, ...],
+                    _buf,
                     cbtemp,
                     optimize=True,
                     out=self._Qmi_buf2[pb0:pb1, :, : i1 - i0],
@@ -831,10 +859,10 @@ class FockBuilderOTF:
             pshell0, pshell1 = 0, 0
             while pshell0 < self.nshaux:
                 pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
-                self._fill_Pmn_buffer(pshell0, pshell1)
+                _buf = self._fill_Pmn_buffer(pshell0, pshell1)
                 np.einsum(
                     "Qms,si->Qmi",
-                    self._Pmn_buf[: pb1 - pb0, ...],
+                    _buf,
                     ctemp,
                     optimize=True,
                     out=self._Qmi_buf[pb0:pb1, :, : i1 - i0],
@@ -843,7 +871,7 @@ class FockBuilderOTF:
                 if J_pass == 0:
                     np.einsum(
                         "Pmn,nm->P",
-                        self._Pmn_buf[: pb1 - pb0, ...],
+                        _buf,
                         D,
                         optimize=True,
                         out=bP[pb0:pb1],
@@ -851,7 +879,7 @@ class FockBuilderOTF:
                 elif J_pass == 1:
                     J += np.einsum(
                         "Pmn,P->mn",
-                        self._Pmn_buf[: pb1 - pb0, ...],
+                        _buf,
                         bP[pb0:pb1],
                         optimize=True,
                     )
@@ -879,10 +907,10 @@ class FockBuilderOTF:
             pshell0, pshell1 = 0, 0
             while pshell0 < self.nshaux:
                 pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
-                self._fill_Pmn_buffer(pshell0, pshell1)
+                _buf = self._fill_Pmn_buffer(pshell0, pshell1)
                 J += np.einsum(
                     "Pmn,P->mn",
-                    self._Pmn_buf[: pb1 - pb0, ...],
+                    _buf,
                     bP[pb0:pb1],
                     optimize=True,
                 )
@@ -919,17 +947,17 @@ class FockBuilderOTF:
             pshell0, pshell1 = 0, 0
             while pshell0 < self.nshaux:
                 pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
-                self._fill_Pmn_buffer(pshell0, pshell1)
+                _buf = self._fill_Pmn_buffer(pshell0, pshell1)
                 np.einsum(
                     "Qms,si->Qmi",
-                    self._Pmn_buf[: pb1 - pb0, ...],
+                    _buf,
                     catemp,
                     optimize=True,
                     out=self._Qmi_buf[pb0:pb1, :, : i1 - i0],
                 )
                 np.einsum(
                     "Qms,si->Qmi",
-                    self._Pmn_buf[: pb1 - pb0, ...],
+                    _buf,
                     cbtemp,
                     optimize=True,
                     out=self._Qmi_buf2[pb0:pb1, :, : i1 - i0],
@@ -938,14 +966,14 @@ class FockBuilderOTF:
                 if J_pass == 0:
                     np.einsum(
                         "Pmn,nm->P",
-                        self._Pmn_buf[: pb1 - pb0, ...],
+                        _buf,
                         Da,
                         optimize=True,
                         out=bPa[pb0:pb1],
                     )
                     np.einsum(
                         "Pmn,nm->P",
-                        self._Pmn_buf[: pb1 - pb0, ...],
+                        _buf,
                         Db,
                         optimize=True,
                         out=bPb[pb0:pb1],
@@ -953,13 +981,13 @@ class FockBuilderOTF:
                 elif J_pass == 1:
                     J[0] += np.einsum(
                         "Pmn,P->mn",
-                        self._Pmn_buf[: pb1 - pb0, ...],
+                        _buf,
                         bPa[pb0:pb1],
                         optimize=True,
                     )
                     J[1] += np.einsum(
                         "Pmn,P->mn",
-                        self._Pmn_buf[: pb1 - pb0, ...],
+                        _buf,
                         bPb[pb0:pb1],
                         optimize=True,
                     )
@@ -1010,16 +1038,16 @@ class FockBuilderOTF:
             pshell0, pshell1 = 0, 0
             while pshell0 < self.nshaux:
                 pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
-                self._fill_Pmn_buffer(pshell0, pshell1)
+                _buf = self._fill_Pmn_buffer(pshell0, pshell1)
                 J[0] += np.einsum(
                     "Pmn,P->mn",
-                    self._Pmn_buf[: pb1 - pb0, ...],
+                    _buf,
                     bPa[pb0:pb1],
                     optimize=True,
                 )
                 J[1] += np.einsum(
                     "Pmn,P->mn",
-                    self._Pmn_buf[: pb1 - pb0, ...],
+                    _buf,
                     bPb[pb0:pb1],
                     optimize=True,
                 )
@@ -1080,10 +1108,10 @@ class FockBuilderOTF:
         pshell0, pshell1 = 0, 0
         while pshell0 < self.nshaux:
             pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
-            self._fill_Pmn_buffer(pshell0, pshell1)
+            _buf = self._fill_Pmn_buffer(pshell0, pshell1)
             np.einsum(
                 "Pmn,mi,nj->Pij",
-                self._Pmn_buf[: pb1 - pb0, ...],
+                _buf,
                 C1.conj(),
                 C2,
                 optimize=True,
@@ -1102,10 +1130,10 @@ class FockBuilderOTF:
         pshell0, pshell1 = 0, 0
         while pshell0 < self.nshaux:
             pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
-            self._fill_Pmn_buffer(pshell0, pshell1)
+            _buf = self._fill_Pmn_buffer(pshell0, pshell1)
             np.einsum(
                 "Pmn,mi,nj->Pij",
-                self._Pmn_buf[: pb1 - pb0, ...],
+                _buf,
                 C1[_a, :].conj(),
                 C2[_a, :],
                 optimize=True,
