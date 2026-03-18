@@ -168,8 +168,6 @@ class MCOptimizer(ActiveSpaceSolver):
                 )
 
         self.nrr = self._get_nonredundant_rotations()
-        # MO symmetry detector
-        self.mosym = self.parent_method.mosym
 
     def run(self):
         """
