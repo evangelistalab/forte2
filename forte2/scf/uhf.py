@@ -187,8 +187,8 @@ class UHF(SCFBase):
         logger.log_info1(string)
 
     def _assign_orbital_symmetries(self):
-        a_labels, a_irrep_indices = self.mosym.run(self.C[0], self.eps[0])
-        b_labels, b_irrep_indices = self.mosym.run(self.C[1], self.eps[1])
+        a_labels, a_irrep_indices, self.C[0], _ = self.mosym.run(self.C[0], self.eps[0])
+        b_labels, b_irrep_indices, self.C[1], _ = self.mosym.run(self.C[1], self.eps[1])
 
         self.irrep_labels = [a_labels, b_labels]
         self.irrep_indices = [a_irrep_indices, b_irrep_indices]

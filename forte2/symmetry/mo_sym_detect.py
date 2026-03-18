@@ -117,21 +117,45 @@ class MOSymmetryDetector:
             self.U_ops = self._build_U_matrices(symmetry_ops)
 
     def run(self, C, eps):
+        """
+        Project the MOs onto irreps of the point group and assign irrep labels.
+
+        Parameters
+        ----------
+        C : NDArray, shape (nbf, nmo)
+            MO coefficient matrix
+        eps : NDArray, shape (nmo,)
+            Orbital energies for detecting degenerate subsets of MOs that need to be symmetrized together
+        
+        Returns
+        -------
+        labels : list[str]
+            Irrep labels for each MO, e.g. ['A1', 'B2', ...]
+        irrep_indices : list[int]
+            Irrep index for each MO, e.g. [0, 1, ...]
+        C : NDArray, shape (nbf, nmo)
+            MO coefficient matrix after symmetrization
+        Usym : NDArray, shape (nmo, nmo)
+            Unitary transformation applied to the original MOs to symmetrize them.
+            This is guaranteed to only mix degenerate MOs together.
+            C_orig @ Usym = C_symm
+        """
         self.success = True
+        # this is re-initialized everytime run() is called
+        self.Usym = np.eye(C.shape[1])
+        # don't change the original C matrix
+        C_loc = C.copy()
         if self.system.point_group.upper() == "C1":
             labels = ["a" for _ in range(C.shape[1])]
             irrep_indices = [0 for _ in range(C.shape[1])]
         else:
             # step 3: assign irrep labels
-            labels, chars = self._assign_irrep_labels(C, eps)
-
-            for i, c in enumerate(chars):
-                logger.log_debug(f"orbital {i}, character = {c}")
+            labels, _ = self._assign_irrep_labels(C_loc, eps)
 
             irrep_indices = [
                 COTTON_LABELS[self.system.point_group][label] for label in labels
             ]
-        return labels, irrep_indices
+        return labels, irrep_indices, C_loc, self.Usym
 
     def _compute_characters(self, C, eps):
         """
@@ -211,6 +235,7 @@ class MOSymmetryDetector:
             rep_sub = rep_of_mixed_operator[sl, sl]
             _, sc = np.linalg.eigh(rep_sub)
             C[:, sl] = C[:, sl] @ sc
+            self.Usym[sl, sl] = sc
 
     def _assign_irrep_labels(self, C, eps):
         """

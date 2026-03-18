@@ -123,4 +123,6 @@ class RHF(SCFBase):
         )
 
     def _assign_orbital_symmetries(self):
-        self.irrep_labels, self.irrep_indices = self.mosym.run(self.C[0], self.eps[0])
+        self.irrep_labels, self.irrep_indices, self.C[0], _ = self.mosym.run(
+            self.C[0], self.eps[0]
+        )
