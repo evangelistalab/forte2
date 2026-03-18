@@ -1421,6 +1421,34 @@ class CISolver(ActiveSpaceSolver):
         for ci_solver in self.sub_solvers:
             ci_solver.reset_eigensolver()
 
+    def reset_active_orbsym(self, active_orbsym):
+        ints = self.sub_solvers[0].ints
+        self.sub_solvers = []
+        for i, state in enumerate(self.sa_info.states):
+            # Create a CI solver for each state and MOSpace
+            self.sub_solvers.append(
+                _CIBase(
+                    mo_space=self.mo_space,
+                    ints=ints,
+                    state=state,
+                    nroot=self.sa_info.nroots[i],
+                    active_orbsym=active_orbsym,
+                    do_test_rdms=self.do_test_rdms,
+                    die_if_not_converged=self.die_if_not_converged,
+                    ci_algorithm=self.ci_algorithm,
+                    guess_per_root=self.guess_per_root,
+                    ndets_per_guess=self.ndets_per_guess,
+                    collapse_per_root=self.collapse_per_root,
+                    basis_per_root=self.basis_per_root,
+                    maxiter=self.maxiter,
+                    econv=self.econv,
+                    rconv=self.rconv,
+                    energy_shift=self.energy_shift,
+                    log_level=self.log_level,
+                )
+            )
+
+
     def compute_average_energy(self):
         """
         Compute the average energy from the CI roots using the weights.

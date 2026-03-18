@@ -21,10 +21,15 @@ class MOsMixin:
         assert hasattr(
             upstream, "irrep_labels"
         ), "upstream must have an 'irrep_labels' attribute"
+        # assert hasattr(
+        #     upstream, "mosym"
+        # ), "upstream must have a 'mosym' attribute"
         # copy each matrix
         new.C = [arr.copy() for arr in upstream.C]
         new.irrep_indices = upstream.irrep_indices.copy()
         new.irrep_labels = upstream.irrep_labels.copy()
+        # the MOSymmetryDetector object for hot-labelling irreps of orbitals
+        # new.mosym = upstream.mosym
 
 
 @dataclass

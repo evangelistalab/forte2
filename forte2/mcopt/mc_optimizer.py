@@ -168,6 +168,8 @@ class MCOptimizer(ActiveSpaceSolver):
                 )
 
         self.nrr = self._get_nonredundant_rotations()
+        # MO symmetry detector
+        self.mosym = self.parent_method.mosym
 
     def run(self):
         """
@@ -348,13 +350,15 @@ class MCOptimizer(ActiveSpaceSolver):
         self.ci_solver.run()
         self.E_ci = np.array(self.ci_solver.E)
         self.E_avg = self.ci_solver.compute_average_energy()
-        logger.log_info1(
-            f"{'Final CI':>10} {self.E_avg:>20.10f} {'-':>12} {self.E_orb:>20.10f} {'-':>12} {'-':>12} {'-':>6} {conv_str:>10s}"
-        )
+        # logger.log_info1(
+        #     f"{'Final CI':>10} {self.E_avg:>20.10f} {'-':>12} {self.E_orb:>20.10f} {'-':>12} {'-':>12} {'-':>6} {conv_str:>10s}"
+        # )
 
         logger.log_info1("=" * width)
         if self.converged:
-            logger.log_info1(f"Orbital optimization converged in {self.iter} iterations.")
+            logger.log_info1(
+                f"Orbital optimization converged in {self.iter} iterations."
+            )
         logger.log_info1(f"Final orbital optimized energy: {self.E_avg:.10f}")
 
         # undo _make_spaces_contiguous
@@ -364,18 +368,22 @@ class MCOptimizer(ActiveSpaceSolver):
         self._post_process()
 
         if self.final_orbital == "semicanonical":
-            semi = Semicanonicalizer(
+            self.semi = Semicanonicalizer(
                 mo_space=self.mo_space,
                 system=self.system,
                 mix_inactive=False,
                 mix_active=False,
             )
             C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
-            semi.semi_canonicalize(
+            self.semi.semi_canonicalize(
                 g1=self.make_average_1rdm(),
                 C_contig=C_contig,
             )
-            self.C[0] = semi.C_semican[:, self.mo_space.contig_to_orig].copy()
+            self.C[0] = self.semi.C_semican[:, self.mo_space.contig_to_orig].copy()
+            self.eps = [self.semi.eps_semican.copy()]
+            self.irrep_labels, self.irrep_indices = self.mosym.run(
+                self.C[0], self.eps[0]
+            )
 
             # recompute the CI vectors in the semicanonical basis
             if self.two_component:
@@ -397,6 +405,11 @@ class MCOptimizer(ActiveSpaceSolver):
             self.ci_solver.set_ints(ints.E, ints.H, ints.V)
             # Basis change, can't restart from previous CI vectors *reliably*
             self.ci_solver.reset_eigensolver()
+            active_orbsym = [
+                [self.irrep_indices[i] for i in active_space]
+                for active_space in self.mo_space.active_orbitals
+            ]
+            self.ci_solver.reset_active_orbsym(active_orbsym)
             self.ci_solver.run()
 
         convergence_status = self.ci_solver.get_convergence_status()
