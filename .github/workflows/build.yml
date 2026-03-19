@@ -5,6 +5,8 @@ on:
   pull_request:
   schedule:
     - cron: '30 15 * * *'
+  merge_group:
+    types: [checks_requested]
 
 jobs:
   build:
