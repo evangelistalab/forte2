@@ -141,7 +141,7 @@ class MOSymmetryDetector:
             C_orig @ Usym = C_symm
         """
         self.success = True
-        # this is re-initialized everytime run() is called
+        # this is re-initialized every time run() is called
         self.Usym = np.eye(C.shape[1])
         # don't change the original C matrix
         C_loc = C.copy()

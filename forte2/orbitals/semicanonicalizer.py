@@ -101,7 +101,7 @@ class Semicanonicalizer:
                 U[sl, sl] = c
 
         self.U = U
-        self.Uactv = U[self.mo_space.actv, self.mo_space.actv]
+        self.Uactv = U[self.mo_space.actv, self.mo_space.actv].copy()
         self.C_semican = C_contig @ U
         self.eps_semican = eps
         self.fock_semican = U.T.conj() @ self.fock @ U
@@ -120,11 +120,12 @@ class Semicanonicalizer:
         irrep_labels : list of str
             Irrep label for each MO, e.g. ['A1', 'B2', ...]
         irrep_indices : list of int
-            Irrep index for each MO, e.g. [0, 1, ...]
+            Irrep index (0-indexed) for each MO, e.g. [0, 3, ...]
         """
         labels, indices, C_sym, U_sym = mosym.run(self.C_semican, self.eps_semican)
         self.C_semican = C_sym
         self.U = self.U @ U_sym
+        self.Uactv = self.U[self.mo_space.actv, self.mo_space.actv].copy()
         self.fock_semican = U_sym.T.conj() @ self.fock_semican @ U_sym
         return labels, indices
 

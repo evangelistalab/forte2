@@ -380,9 +380,6 @@ class MCOptimizer(ActiveSpaceSolver):
             new_irrep_labels, new_irrep_indices = self.semi.symmetrize(self.mosym)
             self.C[0] = self.semi.C_semican[:, self.mo_space.contig_to_orig].copy()
             self.eps = [self.semi.eps_semican.copy()]
-            # new_irrep_labels, new_irrep_indices, self.C[0], _ = self.mosym.run(
-            #     self.C[0], self.eps[0]
-            # )
             irreps_changed = not np.array_equal(new_irrep_indices, self.irrep_indices)
             if irreps_changed:
                 self.irrep_labels = new_irrep_labels
