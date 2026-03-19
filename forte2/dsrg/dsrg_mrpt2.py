@@ -107,7 +107,6 @@ class DSRG_MRPT2(DSRGBase):
             optimize=True,
         )
 
-        
         #  ["vvaa", "aacc", "avca", "avac", "vaaa", "aaca", "aaaa"]
         # Save blocks of spinorbital basis B tensor
         B_mo = dict()
