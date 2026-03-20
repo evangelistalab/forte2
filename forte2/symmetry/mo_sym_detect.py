@@ -1,6 +1,6 @@
 import numpy as np
 
-from forte2.helpers import logger
+from forte2.helpers import logger, block_diag_2x2
 from .sym_utils import (
     SYMMETRY_OPS,
     CHARACTER_TABLE,
@@ -72,10 +72,12 @@ class MOSymmetryDetector:
     ----------
     system : forte2.System
         Forte2 System object with symmetry information
-    info : forte2.BasisInfo
+    basis_info : forte2.BasisInfo
         Forte2 BasisInfo object with basis set information
-    atol : float, optional, default=1e-6
+    geom_atol : float, optional, default=1e-6
         Absolute tolerance for matching atomic positions under symmetry operations
+    energy_atol : float, optional, default=1e-6
+        Absolute tolerance for matching orbital energies when determining degenerate subsets of MOs that need to be symmetrized together
 
     Notes
     -----
@@ -99,15 +101,11 @@ class MOSymmetryDetector:
     that are mixed together to obtain MOs that purely transform as irreps of the Abelian subgroup.
     """
 
-    def __init__(self, system, info, atol=1e-6):
+    def __init__(self, system, basis_info, geom_atol=1e-6, energy_atol=1e-6):
         self.system = system
-        self.info = info
-        self.S = system.ints_overlap()
-        self.two_component = self.system.two_component
-        self.atol = atol
-        # set to false in _compute_characters if the MOs are not fully symmetrized after 2 rounds of diagonalization
-        # which happens only for spatial symmetry-broken cases
-        self.success = True
+        self.basis_info = basis_info
+        self.geom_atol = geom_atol
+        self.energy_atol = energy_atol
 
         if self.system.point_group.upper() != "C1":
             # step 1: build symmetry transformation matrices
@@ -115,6 +113,12 @@ class MOSymmetryDetector:
 
             # step 2: build U matrices (permutation * phase)
             self.U_ops = self._build_U_matrices(symmetry_ops)
+
+    def _get_U_ops(self):
+        if self.system.two_component:
+            return {op: block_diag_2x2(U) for op, U in self.U_ops.items()}
+        else:
+            return self.U_ops
 
     def run(self, C, eps):
         """
@@ -126,7 +130,7 @@ class MOSymmetryDetector:
             MO coefficient matrix
         eps : NDArray, shape (nmo,)
             Orbital energies for detecting degenerate subsets of MOs that need to be symmetrized together
-        
+
         Returns
         -------
         labels : list[str]
@@ -139,30 +143,53 @@ class MOSymmetryDetector:
             Unitary transformation applied to the original MOs to symmetrize them.
             This is guaranteed to only mix degenerate MOs together.
             C_orig @ Usym = C_symm
+        success : bool
+            Whether the symmetrization was successful. If False, the returned irrep labels and indices have been set to totally symmetric, and the original MOs have been returned without modification.
         """
-        self.success = True
-        # this is re-initialized every time run() is called
-        self.Usym = np.eye(C.shape[1])
+        self.success = False
         # don't change the original C matrix
         C_loc = C.copy()
         if self.system.point_group.upper() == "C1":
             labels = ["a" for _ in range(C.shape[1])]
             irrep_indices = [0 for _ in range(C.shape[1])]
+            Usym = np.eye(C.shape[1])
+            self.success = True
         else:
-            # step 3: assign irrep labels
-            labels, _ = self._assign_irrep_labels(C_loc, eps)
+            # Compute character vector for each orbital in all symmetry ops
+            chars, Usym, self.success = self._compute_characters(C_loc, eps)
+            # assign irrep labels
+            labels = self._assign_irrep_labels(chars)
 
             irrep_indices = [
                 COTTON_LABELS[self.system.point_group][label] for label in labels
             ]
-        return labels, irrep_indices, C_loc, self.Usym
+        return labels, irrep_indices, C_loc, Usym
 
     def _compute_characters(self, C, eps):
         """
         Compute the characters of all MO vectors across all symmetry operators in the point group.
+
+        Parameters
+        ----------
+        C : NDArray, shape (nbf, nmo)
+            MO coefficient matrix
+        eps : NDArray, shape (nmo,)
+            Orbital energies for detecting degenerate subsets of MOs that need to be symmetrized together
+
+        Returns
+        -------
+        chars : NDArray, shape (n_mo, n_ops)
+            The character of each MO under each symmetry operation,
+        Usym : NDArray, shape (n_mo, n_mo)
+            Total unitary transformation applied to the original MOs to symmetrize them. This is guaranteed to only mix degenerate MOs together.
+        success : bool
+            Whether the symmetrization was successful.
         """
+        U_ops = self._get_U_ops()
+        S = self.system.ints_overlap()
 
         def _find_mixed_indices(rep):
+            # find MOs that do not have pure characters (i.e. are mixed by the symmetry operation)
             mixed_indices = []
             for i in range(rep.shape[0]):
                 if (np.abs(rep[:, i]) > 1e-6).sum() > 1:
@@ -170,12 +197,14 @@ class MOSymmetryDetector:
             return mixed_indices
 
         def _are_reps_diagonal(X):
+            # check if the representation matrices are diagonal
+            # return the indices of the MOs that are mixed by the first symmetry operation that we find that has non-diagonal representation matrices, along with the representation matrix of that operator
             reps_are_diagonal = True
             mixed_indices = None
             rep_of_mixed_operator = None
-            for op, U in self.U_ops.items():
+            for op, U in U_ops.items():
                 rep = X @ U @ C
-                if np.allclose(np.abs(rep), np.eye(rep.shape[0]), atol=self.atol):
+                if np.allclose(np.abs(rep), np.eye(rep.shape[0]), atol=self.geom_atol):
                     continue
                 else:
                     # Triply degenerate group, need another diagonalization
@@ -186,8 +215,10 @@ class MOSymmetryDetector:
                     break
             return reps_are_diagonal, mixed_indices, rep_of_mixed_operator
 
+        # Usym accumulates the total unitary transformation applied to the original MOs to symmetrize them.
+        Usym = np.eye(C.shape[1])
         for i in range(3):
-            X = C.T.conj() @ self.S
+            X = C.T.conj() @ S
             reps_are_diagonal, mixed_indices, rep_of_mixed_operator = (
                 _are_reps_diagonal(X)
             )
@@ -197,26 +228,33 @@ class MOSymmetryDetector:
             # if for some reason the MOs are still not fully symmetrized,
             # we just set all irreps to totally symmetric in the else clause below
             elif i < 2:
-                self._project_onto_irrep(C, eps, rep_of_mixed_operator, mixed_indices)
+                self._project_onto_irrep(
+                    C, eps, rep_of_mixed_operator, mixed_indices, Usym
+                )
         else:
-            for op, U in self.U_ops.items():
+            for op, U in U_ops.items():
                 rep = X @ U @ C
-                if not np.allclose(np.abs(rep), np.eye(rep.shape[0]), atol=self.atol):
+                if not np.allclose(
+                    np.abs(rep), np.eye(rep.shape[0]), atol=self.geom_atol
+                ):
                     logger.log_warning(
                         f"Warning: MO space is not fully symmetrized after projection! Failed for op {op}, "
                         "setting all MO irreps to totally symmetric!"
                     )
-                    self.success = False
-            return np.ones((C.shape[1], len(self.U_ops)))
+            return np.ones((C.shape[1], len(U_ops))), np.eye(C.shape[1]), False
 
-        return np.column_stack([np.diag(X @ U @ C) for op, U in self.U_ops.items()])
+        return (
+            np.column_stack([np.diag(X @ U @ C) for op, U in U_ops.items()]),
+            Usym,
+            True,
+        )
 
-    def _project_onto_irrep(self, C, eps, rep_of_mixed_operator, mixed_indices):
+    def _project_onto_irrep(self, C, eps, rep_of_mixed_operator, mixed_indices, Usym):
         # group the MOs that mix together into degenerate subsets and diagonalize each subset
         degenerate_subsets = [set([mixed_indices[0]])]
         ep_current_subset = eps[mixed_indices[0]]
         for i in mixed_indices[1:]:
-            if abs(eps[i] - ep_current_subset) < self.atol:
+            if abs(eps[i] - ep_current_subset) < self.energy_atol:
                 degenerate_subsets[-1].add(i)
             else:
                 degenerate_subsets.append(set([i]))
@@ -235,15 +273,12 @@ class MOSymmetryDetector:
             rep_sub = rep_of_mixed_operator[sl, sl]
             _, sc = np.linalg.eigh(rep_sub)
             C[:, sl] = C[:, sl] @ sc
-            self.Usym[sl, sl] = sc
+            Usym[sl, sl] = Usym[sl, sl] @ sc
 
-    def _assign_irrep_labels(self, C, eps):
+    def _assign_irrep_labels(self, chars):
         """
         Assigns the MO irrep labels in `point_group` by matching the character vectors to their expected values.
         """
-        # Compute character vector for each orbital in all symmetry ops
-        chars = self._compute_characters(C, eps)
-
         # Compare the character vector to the expected results and pick the closest match
         table = CHARACTER_TABLE[self.system.point_group]
         T = np.array([table[name] for name in table])  # (n_irrep, |G|)
@@ -253,7 +288,7 @@ class MOSymmetryDetector:
         dists = np.sum((chars[:, None, :] - T[None, :, :]) ** 2, axis=2)  # (M, n_irrep)
         best = np.argmin(dists, axis=1)
         labels = [names[k] for k in best]
-        return labels, chars
+        return labels
 
     def _build_U_matrices(self, symmetry_operations):
         r"""
@@ -271,15 +306,19 @@ class MOSymmetryDetector:
                     R @ self.system.prin_atomic_positions[i]
                 )  # apply symmetry operation in principal axis frame
                 # get basis fcns centered on atom a
-                basis_a = [bas for bas in self.info.basis_labels if bas.iatom == i]
+                basis_a = [
+                    bas for bas in self.basis_info.basis_labels if bas.iatom == i
+                ]
                 for j, b in enumerate(self.system.atoms):
                     if (a[0] == b[0]) and (
                         np.linalg.norm(v - self.system.prin_atomic_positions[j])
-                        < self.atol
+                        < self.geom_atol
                     ):
                         # get basis fcns centered on atom b
                         basis_b = [
-                            bas for bas in self.info.basis_labels if bas.iatom == j
+                            bas
+                            for bas in self.basis_info.basis_labels
+                            if bas.iatom == j
                         ]
                         for bas1 in basis_a:
                             sgn = local_sign(bas1.l, bas1.ml, op_label)
@@ -302,7 +341,7 @@ class MOSymmetryDetector:
         for iop in op:
             isym_op = np.zeros_like(iop)
             for op_label, U in self.U_ops.items():
-                isym_op += U.T @ iop @ U
+                isym_op += U.T.conj() @ iop @ U
             isym_op /= len(self.U_ops)
             sym_op.append(isym_op)
         return sym_op

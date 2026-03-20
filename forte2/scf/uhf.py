@@ -5,7 +5,6 @@ import numpy as np
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
 from forte2.helpers import logger
-from forte2.symmetry import MOSymmetryDetector
 from .scf_base import SCFBase
 from .rhf import RHF
 from .scf_utils import guess_mix

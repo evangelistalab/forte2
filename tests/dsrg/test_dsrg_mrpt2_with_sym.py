@@ -1,4 +1,3 @@
-import pytest
 from forte2 import System, RHF, MCOptimizer, State, DSRG_MRPT2
 from forte2.scf.scf_utils import repair_symmetry
 from forte2.helpers.comparisons import approx
