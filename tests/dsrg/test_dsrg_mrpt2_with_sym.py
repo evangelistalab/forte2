@@ -3,7 +3,7 @@ from forte2.scf.scf_utils import repair_symmetry
 from forte2.helpers.comparisons import approx
 
 
-def test_dsrg_mrpt2_with_sym_1():
+def test_dsrg_mrpt2_with_sym_c2_1():
     xyz = """
     C 0.0 0.0 0.0
     C 0.0 0.0 2.1
@@ -30,7 +30,7 @@ def test_dsrg_mrpt2_with_sym_1():
     assert pt.relax_eigvals == approx([-75.5589037326, -75.5546573565, -75.5331537682])
 
 
-def test_dsrg_mrpt2_with_sym_2():
+def test_dsrg_mrpt2_with_sym_c2_2():
     # Validated against the following forte1 input:
     # import forte
 
@@ -86,3 +86,33 @@ def test_dsrg_mrpt2_with_sym_2():
     pt = DSRG_MRPT2(relax_reference="twice")(mc)
     pt.run()
     assert pt.relax_eigvals == approx([-75.7202896794, -75.6479318059, -75.6375093503])
+
+
+def test_dsrg_mrpt2_with_sym_ch4():
+    xyz = """
+    C 0.881018195 4.336586688 4.172509116
+    H 1.899108274 4.213611337 3.803066093
+    H 0.897015796 4.915685304 5.095822368
+    H 0.284205956 4.860075328 3.425586572
+    H 0.443742755 3.356974782 4.365561431
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        symmetry=True,
+    )
+    rhf = RHF(charge=0, econv=1e-12)(system)
+    mc = MCOptimizer(
+        states=[
+            State(nel=10, multiplicity=1, ms=0.0),
+            State(nel=10, multiplicity=1, ms=0.0, symmetry=1),
+        ],
+        nroots=[1, 1],
+        core_orbitals=1,
+        active_orbitals=9,
+    )(rhf)
+    mc.run()
+    pt = DSRG_MRPT2(relax_reference="twice")(mc)
+    pt.run()
+    assert pt.relax_eigvals == approx([-40.3707279648, -39.9189047144])

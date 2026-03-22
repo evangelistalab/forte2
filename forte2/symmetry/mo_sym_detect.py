@@ -101,7 +101,7 @@ class MOSymmetryDetector:
     that are mixed together to obtain MOs that purely transform as irreps of the Abelian subgroup.
     """
 
-    def __init__(self, system, basis_info, geom_atol=1e-6, energy_atol=1e-6):
+    def __init__(self, system, basis_info, geom_atol=1e-5, energy_atol=1e-6):
         self.system = system
         self.basis_info = basis_info
         self.geom_atol = geom_atol
@@ -234,12 +234,11 @@ class MOSymmetryDetector:
         else:
             for op, U in U_ops.items():
                 rep = X @ U @ C
-                if not np.allclose(
-                    np.abs(rep), np.eye(rep.shape[0]), atol=self.geom_atol
-                ):
+                maxerr = np.max(np.abs(np.abs(rep) - np.eye(rep.shape[0])))
+                if maxerr > self.geom_atol:
                     logger.log_warning(
                         f"Warning: MO space is not fully symmetrized after projection! Failed for op {op}, "
-                        "setting all MO irreps to totally symmetric!"
+                        f"with a max deviation of {maxerr:.2e}. Setting all MO irreps to totally symmetric!"
                     )
             return np.ones((C.shape[1], len(U_ops))), np.eye(C.shape[1]), False
 
