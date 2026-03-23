@@ -69,9 +69,8 @@ void parallel_for_async_ranges(std::vector<std::pair<std::size_t, std::size_t>> 
         std::size_t block_begin = ranges[t].first;
         std::size_t block_end = ranges[t].second;
         if (block_begin < block_end) {
-            tasks.emplace_back(std::async(std::launch::async, [=] {
-                func(block_begin, block_end);
-            }));
+            tasks.emplace_back(
+                std::async(std::launch::async, [=] { func(block_begin, block_end); }));
         }
     }
     for (auto& task : tasks) {
@@ -89,9 +88,7 @@ void parallel_for_thread_ranges(std::vector<std::pair<std::size_t, std::size_t>>
         std::size_t block_begin = ranges[t].first;
         std::size_t block_end = ranges[t].second;
         if (block_begin < block_end) {
-            threads.emplace_back([=] {
-                func(block_begin, block_end);
-            });
+            threads.emplace_back([=] { func(block_begin, block_end); });
         }
     }
     for (auto& thread : threads) {
@@ -108,6 +105,12 @@ template <typename F> void parallel_for(std::size_t begin, std::size_t end, F&& 
     std::iota(indices.begin(), indices.end(), begin);
     std::for_each(std::execution::par_unseq, indices.begin(), indices.end(), func);
 }
+
+template <typename F>
+void parallel_for_ranges(std::vector<std::pair<std::size_t, std::size_t>> ranges, F&& func) {
+    std::for_each(std::execution::par_unseq, ranges.begin(), ranges.end(),
+                  [&](const auto& range) { func(range.first, range.second); });
+}
 #elif defined(__APPLE__)
 template <typename F> void parallel_for(std::size_t begin, std::size_t end, F&& func) {
     std::size_t count = end - begin;
@@ -116,9 +119,23 @@ template <typename F> void parallel_for(std::size_t begin, std::size_t end, F&& 
       func(begin + i);
     });
 }
+
+template <typename F>
+void parallel_for_ranges(std::vector<std::pair<std::size_t, std::size_t>> ranges, F&& func) {
+    std::size_t ntasks = ranges.size();
+
+    dispatch_apply(ntasks, DISPATCH_APPLY_AUTO, ^(size_t t) {
+      func(ranges[t].first, ranges[t].second);
+    });
+}
 #else
 template <typename F> void parallel_for(std::size_t begin, std::size_t end, F&& func) {
     parallel_for_thread(begin, end, std::forward<F>(func));
+}
+
+template <typename F>
+void parallel_for_ranges(std::vector<std::pair<std::size_t, std::size_t>> ranges, F&& func) {
+    parallel_for_thread_ranges(ranges, std::forward<F>(func));
 }
 #endif
 

@@ -332,9 +332,9 @@ template <libint2::Operator Op, typename Params = NoParams>
     }
 
     if (&basis2 == &basis3) {
-        parallel_for_async_ranges(shell_ranges, kernel_sym);
+        parallel_for_ranges(shell_ranges, kernel_sym);
     } else {
-        parallel_for_async_ranges(shell_ranges, kernel_nosym);
+        parallel_for_ranges(shell_ranges, kernel_nosym);
     }
 
     // Finalize libint2
@@ -477,7 +477,7 @@ void compute_two_electron_3c_by_shell(
         }
     }
 
-    parallel_for_async_ranges(shell_ranges, kernel);
+    parallel_for_ranges(shell_ranges, kernel);
 
     // Finalize libint2
     libint2::finalize();
