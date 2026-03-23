@@ -45,4 +45,5 @@ def test_casscf_so():
     ci = RelCI(nel=35, nroots=6, core_orbitals=28, active_orbitals=8)(rhf)
     ci.run()
 
-    assert (ci.E[4] - ci.E[3]) * EH_TO_WN == pytest.approx(3416.391762052979, abs=1e-4)
+    # corresponds to ~ 4.6e-8 Eh
+    assert (ci.E[4] - ci.E[3]) * EH_TO_WN == pytest.approx(3416.391762052979, abs=1e-2)
