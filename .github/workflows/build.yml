@@ -5,6 +5,8 @@ on:
   pull_request:
   schedule:
     - cron: '30 15 * * *'
+  merge_group:
+    types: [checks_requested]
 
 jobs:
   build:
@@ -16,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-22.04, macos-latest]
+        os: [ubuntu-latest, ubuntu-22.04, macos-latest, ubuntu-24.04-arm, ubuntu-22.04-arm]
 
 
     steps:

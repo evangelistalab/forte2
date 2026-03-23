@@ -103,3 +103,21 @@ def test_equivalence_to_high_spin_uhf():
     scf.run()
     assert scf.E == approx(euhf)
     assert scf.S2 == approx(s2uhf)
+
+
+def test_equivalence_to_uhf():
+    # this is the same test as test_uhf.py::test_uhf_singlet
+    euhf = -76.061466407194
+    s2uhf = 0.0
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.061664597388
+    H            0.000000000000    -0.711620616369     0.489330954643
+    H            0.000000000000     0.711620616369     0.489330954643
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
+
+    scf = GHF(charge=0)(system)
+    scf.run()
+    assert scf.E == approx(euhf)
+    assert scf.S2 == approx(s2uhf)

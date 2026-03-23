@@ -25,12 +25,21 @@ void export_ci_strings_api(nb::module_& m) {
     nb::bind_vector<std::vector<forte2::Determinant>>(m, "DeterminantVector");
 
     nb::class_<CIStrings>(m, "CIStrings")
-        .def(nb::init<size_t, size_t, int, std::vector<std::vector<int>>, std::vector<int>,
-                      std::vector<int>>(),
-             "na"_a, "nb"_a, "symmetry"_a, "orbital_symmetry"_a, "gas_min"_a, "gas_max"_a,
-             "Initialize the CIStrings with number of alpha and beta electrons, symmetry, "
-             "orbital symmetry, minimum and maximum number of electrons in each GAS space, and "
-             "logging level")
+        .def(
+            "__init__",
+            [](CIStrings* self, Py_ssize_t na, Py_ssize_t nb, int symmetry,
+               std::vector<std::vector<int>> orbital_symmetry, std::vector<int> gas_min,
+               std::vector<int> gas_max) {
+                if (na < 0)
+                    throw nb::value_error("Number of alpha electrons must be non-negative.");
+                if (nb < 0)
+                    throw nb::value_error("Number of beta electrons must be non-negative.");
+                new (self) CIStrings(static_cast<size_t>(na), static_cast<size_t>(nb), symmetry,
+                                     orbital_symmetry, gas_min, gas_max);
+            },
+            "na"_a, "nb"_a, "symmetry"_a, "orbital_symmetry"_a, "gas_min"_a, "gas_max"_a,
+            "Initialize the CIStrings with number of alpha and beta electrons, symmetry, "
+            "orbital symmetry, minimum and maximum number of electrons in each GAS space")
         .def_prop_ro("alfa_address", &CIStrings::alfa_address)
         .def_prop_ro("na", &CIStrings::na)
         .def_prop_ro("nb", &CIStrings::nb)

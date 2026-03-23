@@ -3,8 +3,6 @@ import scipy as sp
 
 from . import logger
 
-from . import logger
-
 MACHEPS = 1e-14
 
 
@@ -13,10 +11,13 @@ def _eigh_metric_kernel(S, rtol=1e-7):
     sevals, sevecs = np.linalg.eigh(S)
     if np.any(sevals < -MACHEPS):
         raise ValueError("The metric matrix must be positive semi-definite.")
+    # zero out the eigenvalues that are negative due to numerical noise
+    sevals[sevals < 0] = 0.0
     max_seval = sevals[-1]
     info["max_eigenvalue"] = max_seval
     info["min_eigenvalue"] = sevals[0]
-    info["condition_number"] = max_seval / sevals[0]
+    info["condition_number"] = max_seval / sevals[0] if sevals[0] > 0 else np.inf
+    info["inverse_condition_number"] = sevals[0] / max_seval if sevals[0] > 0 else 0.0
 
     # indices equal and above discard_idx are kept
     ndiscard = np.searchsorted(sevals, rtol * max_seval)
@@ -33,6 +34,9 @@ def print_metric_info(info):
     logger.log_info1(f"  Max eigenvalue: {info['max_eigenvalue']:.3e}")
     logger.log_info1(f"  Min eigenvalue: {info['min_eigenvalue']:.3e}")
     logger.log_info1(f"  Condition number: {info['condition_number']:.3e}")
+    logger.log_info1(
+        f"  Inverse condition number: {info['inverse_condition_number']:.3e}"
+    )
     logger.log_info1(f"  Number of discarded eigenvalues: {info['n_discarded']}")
     logger.log_info1(f"  Number of kept eigenvalues: {info['n_kept']}")
     logger.log_info1(
@@ -146,7 +150,7 @@ def canonical_orth(S, rtol=1e-7, precomp=None):
     return X, Xm1, info
 
 
-def eigh_gen(A, B=None, rtol=1e-7, mode="canonical"):
+def eigh_gen(A, B, rtol=1e-7, mode="canonical"):
     """
     Solve the generalized eigenvalue problem ``A @ x = lambda * B @ x``.
 
@@ -155,7 +159,7 @@ def eigh_gen(A, B=None, rtol=1e-7, mode="canonical"):
     A : NDArray
         The matrix A.
     B : NDArray
-        The matrix B. If None, the identity matrix is used.
+        The metric matrix B (must be positive semi-definite). If identity, the problem reduces to a standard eigenvalue problem.
     rtol : float, optional, default=1e-7
         Relative threshold for removing linear dependencies, passed to the orthogonalization step.
     mode : str, optional, default="canonical"
@@ -168,9 +172,6 @@ def eigh_gen(A, B=None, rtol=1e-7, mode="canonical"):
     tuple(NDArray, NDArray, dict)
         A tuple containing the eigenvalues, eigenvectors, and additional information.
     """
-    if B is None:
-        return np.linalg.eigh(A)
-
     assert mode in [
         "auto",
         "canonical",
@@ -179,7 +180,7 @@ def eigh_gen(A, B=None, rtol=1e-7, mode="canonical"):
 
     Bevals, Bevecs, info = _eigh_metric_kernel(B, rtol=rtol)
     if mode == "auto":
-        inv_cond = info["min_eigenvalue"] / info["max_eigenvalue"]
+        inv_cond = info["inverse_condition_number"]
         if inv_cond > rtol:
             mode = "symmetric"
         else:
