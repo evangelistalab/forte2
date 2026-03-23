@@ -216,9 +216,6 @@ template <libint2::Operator Op, typename Params = NoParams>
     auto ints = make_zeros<nb::numpy, double, 3>({nb1, nb2, nb3});
     auto data = ints.data();
 
-    const auto num_threads = get_num_threads();
-    std::vector<std::future<void>> tasks;
-
     /// This lambda function computes the integrals for a given range of shells
     /// in the first basis and fills the buffer.
     auto kernel_sym = [&](std::size_t s1_begin, std::size_t s1_end) {
@@ -321,23 +318,23 @@ template <libint2::Operator Op, typename Params = NoParams>
         }
     };
 
+    const auto num_threads = get_num_threads();
+    std::vector<std::pair<std::size_t, std::size_t>> shell_ranges;
+
     /// Divide the work among threads in contiguous blocks of first shells
     const std::size_t block_size = (nshells1 + num_threads - 1) / num_threads;
     for (std::size_t t = 0; t < num_threads; ++t) {
         std::size_t begin = t * block_size;
         std::size_t end = std::min(begin + block_size, nshells1);
         if (begin < end) {
-            if (&basis2 == &basis3) {
-                tasks.emplace_back(std::async(std::launch::async, kernel_sym, begin, end));
-            } else {
-                tasks.emplace_back(std::async(std::launch::async, kernel_nosym, begin, end));
-            }
+            shell_ranges.emplace_back(begin, end);
         }
     }
 
-    // Wait for all tasks to finish
-    for (auto& task : tasks) {
-        task.get();
+    if (&basis2 == &basis3) {
+        parallel_for_async_ranges(shell_ranges, kernel_sym);
+    } else {
+        parallel_for_async_ranges(shell_ranges, kernel_nosym);
     }
 
     // Finalize libint2
@@ -407,9 +404,6 @@ void compute_two_electron_3c_by_shell(
 
     auto data = buffer.data();
 
-    const auto num_threads = get_num_threads();
-    std::vector<std::future<void>> tasks;
-
     // Initialize libint2
     libint2::initialize();
 
@@ -470,20 +464,20 @@ void compute_two_electron_3c_by_shell(
         }
     };
 
+    const auto num_threads = get_num_threads();
+    std::vector<std::pair<std::size_t, std::size_t>> shell_ranges;
+
     /// Divide the work among threads in contiguous blocks of first shells
     const std::size_t block_size = (ish1 - ish0 + num_threads - 1) / num_threads;
     for (std::size_t t = 0; t < num_threads; ++t) {
         std::size_t begin = ish0 + t * block_size;
         std::size_t end = std::min(begin + block_size, ish1);
         if (begin < end) {
-            tasks.emplace_back(std::async(std::launch::async, kernel, begin, end));
+            shell_ranges.emplace_back(begin, end);
         }
     }
 
-    // Wait for all tasks to finish
-    for (auto& task : tasks) {
-        task.get();
-    }
+    parallel_for_async_ranges(shell_ranges, kernel);
 
     // Finalize libint2
     libint2::finalize();
