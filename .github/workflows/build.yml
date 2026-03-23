@@ -51,7 +51,7 @@ jobs:
       run: |
         conda activate forte
         cd $HOME/work/forte2/forte2/tests
-        if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "merge_group" ]]; then
+        if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "merge_group" || "${{github.event_name}}" == "pull_request"]]; then
           pytest -v --cov --cov-branch --cov-report=xml
         else
           pytest -v -m "not slow" --cov --cov-branch --cov-report=xml
