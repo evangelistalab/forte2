@@ -129,6 +129,13 @@ def pretty_print_ci_nat_occ_numbers(
         line = f"Root {j:<3d}"
         line += "".join([f"{nat_occs[i, j]:<11.6f}" for i in range(norb)])
         logger.log_info1(line)
+    # if state-averaging, also print the average natural occupation numbers from the average 1-RDM
+    if nroots > 1:
+        logger.log_info1("-" * width)
+        avg_line = "Avg     " + "".join(
+            [f"{nat_occs[i, -1]:<11.6f}" for i in range(norb)]
+        )
+        logger.log_info1(avg_line)
 
     logger.log_info1("=" * width)
     logger.log_info1(
