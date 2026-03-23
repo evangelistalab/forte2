@@ -109,16 +109,6 @@ class RelDSRG_MRPT2_Slow(DSRGBase):
             self.E_core_orig, self.H_orig, self.V_orig, g1, g2
         )
 
-        # Save blocks of spinorbital basis B tensor
-        B_so = dict()
-        C_core = self._C_semican[:, self.core]
-        C_actv = self._C_semican[:, self.actv]
-        C_virt = self._C_semican[:, self.virt]
-        # B_so["cc"] = self.fock_builder.B_tensor_gen_block_spinor(C_core, C_core)
-        # B_so["ca"] = self.fock_builder.B_tensor_gen_block_spinor(C_core, C_actv)
-        # B_so["cv"] = self.fock_builder.B_tensor_gen_block_spinor(C_core, C_virt)
-        # B_so["aa"] = self.fock_builder.B_tensor_gen_block_spinor(C_actv, C_actv)
-        # B_so["av"] = self.fock_builder.B_tensor_gen_block_spinor(C_actv, C_virt)
         V_so = self.fock_builder.two_electron_integrals_block_spinor(self._C_semican)
         V_so = V_so - V_so.swapaxes(2, 3)  # antisymmetrize
 
@@ -132,12 +122,6 @@ class RelDSRG_MRPT2_Slow(DSRGBase):
         ints["V"]["cavv"] = V_so[self.core, self.actv, self.virt, self.virt].copy()
         ints["V"]["ccvv"] = V_so[self.core, self.core, self.virt, self.virt].copy()
         ints["V"]["ccav"] = V_so[self.core, self.core, self.actv, self.virt].copy()
-
-        # These are used in on-the-fly energy/Hbar computations
-        # ints["B"] = dict()
-        # ints["B"]["ca"] = B_so["ca"].transpose(1, 2, 0).copy()
-        # ints["B"]["cv"] = B_so["cv"].transpose(1, 2, 0).copy()
-        # ints["B"]["av"] = B_so["av"].transpose(1, 2, 0).copy()
 
         ints["eps"] = dict()
         ints["eps"]["c"] = self.eps[self.core].copy()

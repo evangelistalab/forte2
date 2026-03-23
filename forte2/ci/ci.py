@@ -445,7 +445,7 @@ class _CIBase:
                 logger.log(
                     f"RDMs for root {root} validated successfully.\n", self.log_level
                 )
-                return
+            return
         if use_asym_ints:
             raise NotImplementedError(
                 "The 'use_asym_ints' option is not implemented for non-relativistic CI."
