@@ -26,7 +26,6 @@ def test_rel_gasscf_equivalence_to_nonrel():
         RelState(nel=10, gas_min=[3], gas_max=[6]),
         core_orbitals=4,
         active_orbitals=(6, 6),
-        do_diis=False,
         freeze_inter_gas_rots=True,
     )(hf)
     mc.run()
@@ -62,7 +61,6 @@ def test_rel_gasscf_h2o_core():
         nroots=4,
         active_orbitals=[[0, 1], [4, 5, 6, 7, 8, 9, 10, 11]],
         active_frozen_orbitals=[0, 1],
-        do_diis=False,
     )(scf)
     mc.run()
 

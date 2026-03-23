@@ -1540,6 +1540,8 @@ class CISolver(ActiveSpaceSolver):
     def compute_natural_occupation_numbers(self):
         """
         Compute the natural occupation numbers for the CI states.
+        The first `nroots` columns of the resulting array correspond to the natural occupation numbers for each root,
+        while the last column corresponds to the natural occupation numbers from the average 1-RDM.
 
         Returns
         -------
@@ -1549,6 +1551,9 @@ class CISolver(ActiveSpaceSolver):
         nos = []
         for ci_solver in self.sub_solvers:
             nos.append(ci_solver.compute_natural_occupation_numbers())
+        if self.ncis > 1:
+            g1_avg = self.make_average_1rdm()
+            nos.append(np.linalg.eigvalsh(g1_avg)[::-1][:, np.newaxis])
         self.nat_occs = np.concatenate(nos, axis=1)
 
     def get_top_determinants(self, n=5):
