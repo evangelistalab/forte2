@@ -35,7 +35,6 @@ def test_rel_casscf_hf_equivalence_to_nonrel():
         nel=10,
         core_orbitals=2,
         active_orbitals=12,
-        do_diis=False,
         maxiter=200,
     )(scf)
     mc.run()
@@ -65,7 +64,6 @@ def test_rel_casscf_hf_ghf():
         nroots=1,
         core_orbitals=2,
         active_orbitals=12,
-        do_diis=False,
         maxiter=200,
     )(scf)
     mc.run()
@@ -166,7 +164,6 @@ def test_rel_casscf_na_ghf():
         nroots=8,
         core_orbitals=10,
         active_orbitals=8,
-        do_diis=False,
         maxiter=500,
     )(scf)
     mc.run()
