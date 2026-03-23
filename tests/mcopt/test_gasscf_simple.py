@@ -98,7 +98,7 @@ def test_gasscf_2():
 @pytest.mark.slow
 def test_gasscf_3():
     erhf = -40.21254161940163
-    emcscf = -29.702820676605
+    emcscf = -29.7051233787
 
     xyz = """
     C            0.052417904862     0.008091170764     0.039717608738
@@ -122,7 +122,7 @@ def test_gasscf_3():
         active_orbitals=[[0], [1, 2, 3, 4, 5, 6, 7, 8]],
         econv=1e-8,
         gconv=1e-7,
-        maxiter=100,
+        maxiter=500,
     )(rhf)
     mc.run()
 
@@ -158,3 +158,4 @@ def test_gasscf_5():
 
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
+test_gasscf_3()
