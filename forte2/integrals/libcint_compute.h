@@ -214,44 +214,57 @@ np_tensor3_c cint_int3c(CIntorFunc intor, const std::vector<int>& shell_slice, n
     double* buf = ints_f.data();
     int dims[3] = {nao_i, nao_j, nao_k};
 
-    auto kernel = [&](std::size_t k) {
+    // we collapse the k and j loops to hopefully get better load balancing
+    auto kernel_ijsym = [&](std::size_t kj) {
         int shells[3];
         int shell_offset_i, shell_offset_j, shell_offset_k;
+        // kj = j + k * njsh
+        std::size_t j = jsh_0 + kj % njsh;
+        std::size_t k = ksh_0 + kj / njsh;
         // Fortran looping: k changes slowest so it is the outermost loop
-        shells[2] = k;
+        shells[2] = static_cast<int>(k);
         shell_offset_k = ao_offset[k] - ao_offset[ksh_0];
-        if (ij_sym) {
-            for (int j = jsh_0; j < jsh_1; ++j) {
-                shells[1] = j;
-                shell_offset_j = ao_offset[j] - ao_offset[jsh_0];
-                for (int i = ish_0; i <= j; ++i) {
-                    shells[0] = i;
-                    shell_offset_i = ao_offset[i] - ao_offset[ish_0];
-                    // Fortran ordering: i changes fastest
-                    auto buf_ijk = buf + shell_offset_i + shell_offset_j * nao_i +
-                                    shell_offset_k * nao_i * nao_j;
-                    intor(buf_ijk, dims, shells, atm_data, natm, bas_data, nbas, env_data, NULL,
-                            NULL);
-                }
-            }
-        } else {
-            for (int j = jsh_0; j < jsh_1; ++j) {
-                shells[1] = j;
-                shell_offset_j = ao_offset[j] - ao_offset[jsh_0];
-                for (int i = ish_0; i < ish_1; ++i) {
-                    shells[0] = i;
-                    shell_offset_i = ao_offset[i] - ao_offset[ish_0];
-                    // Fortran ordering: i changes fastest
-                    auto buf_ijk = buf + shell_offset_i + shell_offset_j * nao_i +
-                                    shell_offset_k * nao_i * nao_j;
-                    intor(buf_ijk, dims, shells, atm_data, natm, bas_data, nbas, env_data, NULL,
-                            NULL);
-                }
-            }
+        shells[1] = static_cast<int>(j);
+        shell_offset_j = ao_offset[j] - ao_offset[jsh_0];
+        for (int i = ish_0; i <= j; ++i) {
+            shells[0] = i;
+            shell_offset_i = ao_offset[i] - ao_offset[ish_0];
+            // Fortran ordering: i changes fastest
+            auto buf_ijk =
+                buf + shell_offset_i + shell_offset_j * nao_i + shell_offset_k * nao_i * nao_j;
+            intor(buf_ijk, dims, shells, atm_data, natm, bas_data, nbas, env_data, NULL, NULL);
         }
     };
 
-    parallel_for(ksh_0, ksh_1, kernel);
+    auto kernel_nosym = [&](std::size_t kj) {
+        int shells[3];
+        int shell_offset_i, shell_offset_j, shell_offset_k;
+        // kj = j + k * njsh
+        std::size_t j = jsh_0 + kj % njsh;
+        std::size_t k = ksh_0 + kj / njsh;
+        // Fortran looping: k changes slowest so it is the outermost loop
+        shells[2] = static_cast<int>(k);
+        shell_offset_k = ao_offset[k] - ao_offset[ksh_0];
+        shells[1] = static_cast<int>(j);
+        shell_offset_j = ao_offset[j] - ao_offset[jsh_0];
+        for (int i = ish_0; i < ish_1; ++i) {
+            shells[0] = i;
+            shell_offset_i = ao_offset[i] - ao_offset[ish_0];
+            // Fortran ordering: i changes fastest
+            auto buf_ijk =
+                buf + shell_offset_i + shell_offset_j * nao_i + shell_offset_k * nao_i * nao_j;
+            intor(buf_ijk, dims, shells, atm_data, natm, bas_data, nbas, env_data, NULL, NULL);
+        }
+    };
+
+    std::size_t kj_0 = 0;
+    std::size_t kj_1 = static_cast<std::size_t>(njsh) * static_cast<std::size_t>(nksh);
+
+    if (ij_sym) {
+        parallel_for(kj_0, kj_1, kernel_ijsym);
+    } else {
+        parallel_for(kj_0, kj_1, kernel_nosym);
+    }
 
     if (ij_sym) {
         fill_3c_sym(ints_f);
