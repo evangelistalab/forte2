@@ -158,4 +158,3 @@ def test_gasscf_5():
 
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
-test_gasscf_3()
