@@ -1257,22 +1257,10 @@ class CISolver(ActiveSpaceSolver):
         A `MOSpace` object defining the partitioning of the molecular orbitals.
         If not provided, CISolver must be called with a parent method that has MOSpaceMixin (e.g., AVAS).
         If provided, it overrides the one from the parent method.
-    guess_per_root : int, optional, default=2
-        The number of guess vectors for each root.
-    ndets_per_guess : int, optional, default=10
-        The number of determinants per guess vector.
-    collapse_per_root : int, optional, default=2
-        The number of determinants to collapse per root.
-    basis_per_root : int, optional, default=4
-        The maximum number of basis vectors per root.
-    maxiter : int, optional, default=100
-        The maximum number of iterations for the Davidson-Liu solver.
-    econv : float, optional, default=1e-10
-        The energy convergence threshold for the solver.
-    rconv : float, optional, default=1e-5
-        The residual convergence threshold for the solver.
-    energy_shift : float, optional, default=None
-        An energy shift to find roots around. If None, no shift is applied.
+    davidson_liu_params : DavidsonLiuParams, optional
+        Parameters for the Davidson-Liu eigensolver. If not provided, default parameters are used.
+    ci_params : CIParams, optional
+        Parameters for the CI solver. If not provided, default parameters are used.
     do_test_rdms : bool, optional, default=False
         If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
     log_level : int, optional
