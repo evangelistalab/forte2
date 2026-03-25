@@ -166,16 +166,15 @@ class _SelectedCIBase:
         if self.sci_params.frozen_creation:
             self.sci_helper.set_frozen_creation(self.sci_params.frozen_creation)
 
-        print()
         old_energy = 0.0
         for cycle in range(self.sci_params.maxcycle):
-            print(f"{'=' * 67}")
-            print(f"Selected CI Cycle {cycle + 1}")
-            print(f"{'=' * 67}")
+            logger.log_info1(f"\n{'=' * 67}")
+            logger.log_info1(f"Selected CI Cycle {cycle + 1}")
+            logger.log_info1(f"{'=' * 67}")
 
-            print(f"Algorithm: {self.sci_params.selection_algorithm}")
-            print(f"  var_threshold = {self.sci_params.var_threshold}")
-            print(f"  pt2_threshold = {self.sci_params.pt2_threshold}")
+            logger.log_info1(f"Algorithm: {self.sci_params.selection_algorithm}")
+            logger.log_info1(f"  var_threshold = {self.sci_params.var_threshold}")
+            logger.log_info1(f"  pt2_threshold = {self.sci_params.pt2_threshold}")
 
             if self.sci_params.selection_algorithm.lower() == "hbci_ref":
                 self.sci_helper.select_hbci_ref(
@@ -296,9 +295,11 @@ class _SelectedCIBase:
             self.sci_params.guess_dets
         )
 
-        print("Initial guess determinants (by energy):")
+        logger.log_info1("Initial guess determinants (by energy):")
         for d in self.sci_params.guess_dets:
-            print(f"  {d.str(self.norb)}: {self.slater_rules.energy(d):20.12f}")
+            logger.log_info1(
+                f"  {d.str(self.norb)}: {self.slater_rules.energy(d):20.12f}"
+            )
 
         ndet = len(self.sci_params.guess_dets)
         S2guess = np.zeros((ndet, ndet), dtype=self.dtype)
@@ -315,7 +316,7 @@ class _SelectedCIBase:
                 S2guess[j, i] = np.conj(S2guess[i, j])
 
         svals, svecs = np.linalg.eigh(S2guess)
-        print(f"S^2 values of the guess determinants: {svals}")
+        logger.log_info1(f"S^2 values of the guess determinants: {svals}")
         # find the multiplicity of the eigenvalue closest to S(S+1)
         S = (self.state.multiplicity - 1) / 2
         target_s2 = S * (S + 1)
@@ -325,7 +326,7 @@ class _SelectedCIBase:
         # find the indices of the eigenvalues that are not close to target_s2
         not_close_idx = [i for i in range(len(svals)) if i not in close_idx]
 
-        print(
+        logger.log_info1(
             f"Target S(S+1) = {target_s2}, found {len(close_idx)} eigenvalues close to it."
         )
 
@@ -350,13 +351,13 @@ class _SelectedCIBase:
             else evecs[:, : self.nroot].copy()
         )
         energies = evals[: self.nroot].copy()
-        print(f"Initial guess energies: {energies}")
-        print(f"Initial guess states:")
+        logger.log_info1(f"Initial guess energies: {energies}")
+        logger.log_info1(f"Initial guess states:")
         for r in range(c.shape[1]):
-            print(f"  Root {r}:")
+            logger.log_info1(f"  Root {r}:")
             for i in range(c.shape[0]):
                 if abs(c[i, r]) > 1e-4:
-                    print(
+                    logger.log_info1(
                         f"    {self.sci_params.guess_dets[i].str(self.norb)}: {c[i, r]:20.12f}"
                     )
         return self.sci_params.guess_dets, c, energies, S2project_out
