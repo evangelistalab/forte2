@@ -1,5 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from forte2 import Determinant
 
 @dataclass
 class DavidsonLiuParams:
@@ -80,3 +81,22 @@ class CIParams:
             "exact",
             "sparse",
         ], "ci_algorithm must be one of 'hz', 'kh', 'exact', or 'sparse'."
+
+@dataclass
+class SelectedCIParams:
+    ### Selected CI parameters
+    maxcycle: int = 10
+    var_threshold: float = 5e-4
+    pt2_threshold: float = 1e-8
+    selection_algorithm: str = "hbci"
+    guess_occ_window: int = 2
+    guess_vir_window: int = 2
+    num_threads: int = 4
+    ci_algorithm: str = "sparse"
+    num_batches_per_thread: int = 4
+    do_spin_penalty: bool = True
+    guess_dets: list[Determinant] = field(default_factory=list)
+    frozen_creation: list[int] = field(default_factory=list)
+    screening_criterion: str = "hbci"
+    energy_correction: str = "pt2"
+    energy_shift: float = None

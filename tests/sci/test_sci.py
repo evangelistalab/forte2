@@ -1,10 +1,11 @@
 import numpy as np
+import pytest
+
 from forte2 import System, State, Determinant
 from forte2.scf import RHF
 from forte2.sci import SelectedCI
 from forte2.helpers.comparisons import approx
-
-import pytest
+from forte2.base_classes.params import SelectedCIParams
 
 
 def _h4_rhf():
@@ -28,9 +29,9 @@ def test_sci1():
     sci = SelectedCI(
         states=State(nel=4, multiplicity=1, ms=0.0),
         active_orbitals=list(range(4)),
-        selection_algorithm="hbci",
-        var_threshold=1e-12,
-        pt2_threshold=0.0,
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci", var_threshold=1e-12, pt2_threshold=0.0
+        ),
     )(rhf)
     sci.run()
 
@@ -56,11 +57,13 @@ def test_sci2():
     sci = SelectedCI(
         states=State(nel=6, multiplicity=1, ms=0.0),
         active_orbitals=list(range(12)),
-        selection_algorithm="hbci",
-        var_threshold=1e-4,
-        pt2_threshold=0.0,
-        guess_occ_window=0,
-        guess_vir_window=0,
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-4,
+            pt2_threshold=0.0,
+            guess_occ_window=0,
+            guess_vir_window=0,
+        ),
         nroots=1,
     )(rhf)
 
@@ -69,6 +72,7 @@ def test_sci2():
     assert sci.E[0] == pytest.approx(-3.321294103198, abs=1e-9)
 
 
+@pytest.mark.slow
 def test_sci3():
     """Test SelectedCI on multiple states without spin penalty."""
     xyz = f"""
@@ -87,13 +91,15 @@ def test_sci3():
     sci = SelectedCI(
         states=State(nel=6, multiplicity=1, ms=0.0),
         active_orbitals=list(range(12)),
-        selection_algorithm="hbci",
-        var_threshold=1e-5,
-        pt2_threshold=0.0,
-        guess_occ_window=2,
-        guess_vir_window=2,
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-5,
+            pt2_threshold=0.0,
+            guess_occ_window=2,
+            guess_vir_window=2,
+            do_spin_penalty=False,
+        ),
         nroots=4,
-        do_spin_penalty=False,
     )(rhf)
 
     sci.run()
@@ -102,6 +108,7 @@ def test_sci3():
     assert sci.E[3] == pytest.approx(-3.0403077216, abs=1e-8)
 
 
+@pytest.mark.slow
 def test_sci4():
     """Test SelectedCI on multiple states with spin penalty."""
     xyz = f"""
@@ -120,13 +127,15 @@ def test_sci4():
     sci = SelectedCI(
         states=State(nel=6, multiplicity=1, ms=0.0),
         active_orbitals=list(range(12)),
-        selection_algorithm="hbci",
-        var_threshold=1e-5,
-        pt2_threshold=0.0,
-        guess_occ_window=2,
-        guess_vir_window=2,
         nroots=2,
-        do_spin_penalty=True,
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-5,
+            pt2_threshold=0.0,
+            guess_occ_window=2,
+            guess_vir_window=2,
+            do_spin_penalty=True,
+        ),
     )(rhf)
 
     sci.run()
@@ -135,6 +144,7 @@ def test_sci4():
     assert sci.E[1] == pytest.approx(-3.0403076453, abs=1e-8)
 
 
+@pytest.mark.slow
 def test_sci5():
     """Test SelectedCI on a core-ionized state."""
     xyz = f"""
@@ -148,11 +158,13 @@ def test_sci5():
     sci0 = SelectedCI(
         states=State(nel=10, multiplicity=1, ms=0.0),
         active_orbitals=list(range(12)),
-        selection_algorithm="hbci",
-        var_threshold=1e-5,
-        pt2_threshold=0.0,
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-5,
+            pt2_threshold=0.0,
+            do_spin_penalty=True,
+        ),
         nroots=1,
-        do_spin_penalty=True,
     )(rhf)
 
     sci0.run()
@@ -160,12 +172,14 @@ def test_sci5():
     sci = SelectedCI(
         states=State(nel=9, multiplicity=2, ms=0.5),
         active_orbitals=list(range(12)),
-        selection_algorithm="hbci",
-        var_threshold=1e-5,
-        pt2_threshold=0.0,
-        guess_dets=[Determinant("a2222")],
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-5,
+            pt2_threshold=0.0,
+            do_spin_penalty=True,
+            guess_dets=[Determinant("a2222")],
+        ),
         nroots=1,
-        do_spin_penalty=True,
     )(rhf)
 
     sci.run()
@@ -177,6 +191,7 @@ def test_sci5():
     print(sci.E[0])
 
 
+@pytest.mark.slow
 def test_sci6():
     """Test SelectedCI on a core-excited state."""
     xyz = """
@@ -190,13 +205,15 @@ def test_sci6():
     sci = SelectedCI(
         states=State(nel=10, multiplicity=1, ms=0.0),
         active_orbitals=list(range(12)),
-        selection_algorithm="hbci_ref",
-        var_threshold=3e-4,
-        pt2_threshold=0.0,
-        guess_dets=[Determinant("a2222b"), Determinant("b2222a")],
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci_ref",
+            var_threshold=3e-4,
+            pt2_threshold=0.0,
+            guess_dets=[Determinant("a2222b"), Determinant("b2222a")],
+            do_spin_penalty=True,
+            screening_criterion="hbci",
+        ),
         nroots=1,
-        do_spin_penalty=True,
-        screening_criterion="hbci",
         die_if_not_converged=False,
     )(rhf)
 
@@ -213,10 +230,12 @@ def test_sci_exact_algorithm():
     sci = SelectedCI(
         states=State(nel=4, multiplicity=1, ms=0.0),
         active_orbitals=list(range(4)),
-        selection_algorithm="hbci",
-        var_threshold=1e-12,
-        pt2_threshold=0.0,
-        ci_algorithm="exact",
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-12,
+            pt2_threshold=0.0,
+            ci_algorithm="exact",
+        ),
     )(rhf)
     sci.run()
 
@@ -230,9 +249,11 @@ def test_sci_make_sf_1rdm():
     sci = SelectedCI(
         states=State(nel=4, multiplicity=1, ms=0.0),
         active_orbitals=list(range(4)),
-        selection_algorithm="hbci",
-        var_threshold=1e-12,
-        pt2_threshold=0.0,
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-12,
+            pt2_threshold=0.0,
+        ),
     )(rhf)
     sci.run()
 
@@ -249,9 +270,11 @@ def test_sci_semicanonical_final_orbital():
     sci = SelectedCI(
         states=State(nel=4, multiplicity=1, ms=0.0),
         active_orbitals=list(range(4)),
-        selection_algorithm="hbci",
-        var_threshold=1e-12,
-        pt2_threshold=0.0,
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-12,
+            pt2_threshold=0.0,
+        ),
         final_orbital="semicanonical",
     )(rhf)
     sci.run()

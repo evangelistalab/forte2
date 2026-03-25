@@ -3,7 +3,6 @@ from dataclasses import dataclass, field
 from collections import OrderedDict
 from itertools import combinations
 
-
 import numpy as np
 
 from forte2 import (
@@ -25,6 +24,7 @@ from forte2.base_classes.active_space_solver import (
     ActiveSpaceSolver,
     RelActiveSpaceSolver,
 )
+from forte2.base_classes.params import SelectedCIParams, DavidsonLiuParams
 from forte2.helpers import logger
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.props import get_1e_property
@@ -38,41 +38,8 @@ from forte2.ci.ci_utils import (
     pretty_print_ci_transition_props,
 )
 
-
 @dataclass
-class SelectedCIParams:
-    ### Selected CI parameters
-    maxcycle: int = 10
-    var_threshold: float = 5e-4
-    pt2_threshold: float = 1e-8
-    selection_algorithm: str = "hbci"
-    guess_occ_window: int = 2
-    guess_vir_window: int = 2
-    num_threads: int = 4
-    ci_algorithm: str = "sparse"
-    num_batches_per_thread: int = 4
-    do_spin_penalty: bool = True
-    guess_dets: list[Determinant] = field(default_factory=list)
-    frozen_creation: list[int] = field(default_factory=list)
-    screening_criterion: str = "hbci"
-    energy_correction: str = "pt2"
-
-
-@dataclass
-class DavidsonLiuParams:
-    ### Davidson-Liu parameters
-    guess_per_root: int = 2
-    ndets_per_guess: int = 10
-    collapse_per_root: int = 2
-    basis_per_root: int = 4
-    maxiter: int = 100
-    econv: float = 1e-10
-    rconv: float = 1e-5
-    energy_shift: float = None
-
-
-@dataclass
-class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
+class _SelectedCIBase:
     """
     A general selected configuration interaction (CI) solver class for a single `State`.
     Although possible, is not recommended to instantiate this class directly.
@@ -140,6 +107,9 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
     die_if_not_converged: bool = False
     slater_rules: SlaterRules = field(default=None, init=False)
 
+    sci_params: SelectedCIParams = field(default_factory=SelectedCIParams)
+    davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
+
     ### Non-init attributes
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
     first_run: bool = field(default=True, init=False)
@@ -156,15 +126,15 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
         self.dtype = complex if self.two_component else float
 
         if self.two_component:
-            assert self.ci_algorithm.lower() in [
+            assert self.sci_params.ci_algorithm.lower() in [
                 "sparse",
                 "exact",
-            ], f"Two-component CI algorithm must be 'sparse' or 'exact'. Got '{self.ci_algorithm}'."
+            ], f"Two-component CI algorithm must be 'sparse' or 'exact'. Got '{self.sci_params.ci_algorithm}'."
         else:
-            assert self.ci_algorithm.lower() in [
+            assert self.sci_params.ci_algorithm.lower() in [
                 "sparse",
                 "exact",
-            ], f"CI algorithm must be 'sparse' or 'exact'. Got '{self.ci_algorithm}'."
+            ], f"CI algorithm must be 'sparse' or 'exact'. Got '{self.sci_params.ci_algorithm}'."
 
     def _sci_solver_startup(self):
         # Create the Slater rules object
@@ -178,7 +148,9 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
             self.guess_c,
             self.guess_energies,
             self.project_out,
-        ) = self._initial_guess(self.guess_occ_window, self.guess_vir_window)
+        ) = self._initial_guess(
+            self.sci_params.guess_occ_window, self.sci_params.guess_vir_window
+        )
         self.evecs = self.guess_c.copy()
 
         self.ndet = len(self.guess_determinants)
@@ -201,35 +173,39 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
 
         self.sci_helper.set_c(self.guess_c)
         self.sci_helper.set_energies(self.guess_energies)
-        self.sci_helper.set_num_threads(self.num_threads)
-        self.sci_helper.set_num_batches_per_thread(self.num_batches_per_thread)
-        self.sci_helper.set_screening_criterion(self.screening_criterion)
-        self.sci_helper.set_energy_correction(self.energy_correction)
-        if self.frozen_creation:
-            self.sci_helper.set_frozen_creation(self.frozen_creation)
+        self.sci_helper.set_num_threads(self.sci_params.num_threads)
+        self.sci_helper.set_num_batches_per_thread(
+            self.sci_params.num_batches_per_thread
+        )
+        self.sci_helper.set_screening_criterion(self.sci_params.screening_criterion)
+        self.sci_helper.set_energy_correction(self.sci_params.energy_correction)
+        if self.sci_params.frozen_creation:
+            self.sci_helper.set_frozen_creation(self.sci_params.frozen_creation)
 
         print()
         old_energy = 0.0
-        for cycle in range(self.maxcycle):
+        for cycle in range(self.sci_params.maxcycle):
             print(f"{'=' * 67}")
             print(f"Selected CI Cycle {cycle + 1}")
             print(f"{'=' * 67}")
 
-            print(f"Algorithm: {self.selection_algorithm}")
-            print(f"  var_threshold = {self.var_threshold}")
-            print(f"  pt2_threshold = {self.pt2_threshold}")
+            print(f"Algorithm: {self.sci_params.selection_algorithm}")
+            print(f"  var_threshold = {self.sci_params.var_threshold}")
+            print(f"  pt2_threshold = {self.sci_params.pt2_threshold}")
 
-            if self.selection_algorithm.lower() == "hbci_ref":
+            if self.sci_params.selection_algorithm.lower() == "hbci_ref":
                 self.sci_helper.select_hbci_ref(
-                    var_threshold=self.var_threshold, pt2_threshold=self.pt2_threshold
+                    var_threshold=self.sci_params.var_threshold,
+                    pt2_threshold=self.sci_params.pt2_threshold,
                 )
-            elif self.selection_algorithm.lower() == "hbci":
+            elif self.sci_params.selection_algorithm.lower() == "hbci":
                 self.sci_helper.select_hbci(
-                    var_threshold=self.var_threshold, pt2_threshold=self.pt2_threshold
+                    var_threshold=self.sci_params.var_threshold,
+                    pt2_threshold=self.sci_params.pt2_threshold,
                 )
             else:
                 raise ValueError(
-                    f"Unknown selection algorithm: {self.selection_algorithm}"
+                    f"Unknown selection algorithm: {self.sci_params.selection_algorithm}"
                 )
 
             e_var = self.sci_helper.energies()
@@ -295,13 +271,13 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
                 :, 0:num_guess
             ]
 
-            if self.ci_algorithm.lower() == "exact":
+            if self.sci_params.ci_algorithm.lower() == "exact":
                 self._do_exact_diagonalization()
-            elif self.ci_algorithm.lower() == "sparse":
+            elif self.sci_params.ci_algorithm.lower() == "sparse":
                 self._do_iterative_ci()
             else:
                 raise ValueError(
-                    f"Unknown CI algorithm: {self.ci_algorithm}. Must be 'exact' or 'sparse'."
+                    f"Unknown CI algorithm: {self.sci_params.ci_algorithm}. Must be 'exact' or 'sparse'."
                 )
 
             # logger.log(f"CI Energy Roots: {self.evals}", self.log_level)
@@ -312,7 +288,7 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
             delta_energy = np.average(self.evals) - old_energy
             old_energy = np.average(self.evals)
 
-            if abs(delta_energy) < self.econv:
+            if abs(delta_energy) < self.davidson_liu_params.e_tol:
                 logger.log(
                     f"Selected CI converged in {cycle + 1} cycles.", self.log_level
                 )
@@ -324,28 +300,28 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
 
     def _initial_guess(self, window_occ=0, window_vir=0):
         # If there are no guess determinants, generate some based on occupation windows
-        if len(self.guess_dets) == 0:
-            self.guess_dets = self._generate_initial_guess_dets(window_occ, window_vir)
+        if len(self.sci_params.guess_dets) == 0:
+            self.sci_params.guess_dets = self._generate_initial_guess_dets(window_occ, window_vir)
         else:
-            self._check_guess_dets(self.guess_dets)
+            self._check_guess_dets(self.sci_params.guess_dets)
 
         # Check that we have all spin complement pairs
-        self.guess_dets = self._generate_spin_complement_pairs(self.guess_dets)
+        self.sci_params.guess_dets = self._generate_spin_complement_pairs(self.sci_params.guess_dets)
 
         print("Initial guess determinants (by energy):")
-        for d in self.guess_dets:
+        for d in self.sci_params.guess_dets:
             print(f"  {d.str(self.norb)}: {self.slater_rules.energy(d):20.12f}")
 
-        ndet = len(self.guess_dets)
+        ndet = len(self.sci_params.guess_dets)
         S2guess = np.zeros((ndet, ndet), dtype=self.dtype)
         Hguess = np.zeros((ndet, ndet), dtype=self.dtype)
         for i in range(ndet):
             for j in range(i + 1):
                 Hguess[i, j] = self.slater_rules.slater_rules(
-                    self.guess_dets[i], self.guess_dets[j]
+                    self.sci_params.guess_dets[i], self.sci_params.guess_dets[j]
                 )
                 Hguess[j, i] = np.conj(Hguess[i, j])
-                S2guess[i, j] = spin2(self.guess_dets[i], self.guess_dets[j])
+                S2guess[i, j] = spin2(self.sci_params.guess_dets[i], self.sci_params.guess_dets[j])
                 S2guess[j, i] = np.conj(S2guess[i, j])
 
         svals, svecs = np.linalg.eigh(S2guess)
@@ -366,15 +342,21 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
         # project the guess determinants into the S^2 subspace
         S2sub = svecs[:, close_idx]
         S2project_out = (
-            [svecs[:, i].copy() for i in not_close_idx] if self.do_spin_penalty else []
+            [svecs[:, i].copy() for i in not_close_idx]
+            if self.sci_params.do_spin_penalty
+            else []
         )
 
-        Hguess = S2sub.conj().T @ Hguess @ S2sub if self.do_spin_penalty else Hguess
+        Hguess = (
+            S2sub.conj().T @ Hguess @ S2sub
+            if self.sci_params.do_spin_penalty
+            else Hguess
+        )
         # Diagonalize the Hamiltonian to get the initial guess coefficients
         evals, evecs = np.linalg.eigh(Hguess)
         c = (
             S2sub @ evecs[:, : self.nroot].copy()
-            if self.do_spin_penalty
+            if self.sci_params.do_spin_penalty
             else evecs[:, : self.nroot].copy()
         )
         energies = evals[: self.nroot].copy()
@@ -384,8 +366,8 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
             print(f"  Root {r}:")
             for i in range(c.shape[0]):
                 if abs(c[i, r]) > 1e-4:
-                    print(f"    {self.guess_dets[i].str(self.norb)}: {c[i, r]:20.12f}")
-        return self.guess_dets, c, energies, S2project_out
+                    print(f"    {self.sci_params.guess_dets[i].str(self.norb)}: {c[i, r]:20.12f}")
+        return self.sci_params.guess_dets, c, energies, S2project_out
 
     def _generate_initial_guess_dets(self, window_occ, window_vir):
         logger.log("Generating initial determinant guess")
@@ -517,12 +499,8 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
         self.eigensolver = DavidsonLiuSolver(
             size=self.ndet,  # size of the basis (number of CSF if we spin adapt)
             nroot=self.nroot,
-            collapse_per_root=self.collapse_per_root,
-            basis_per_root=self.basis_per_root,
-            e_tol=self.econv,  # eigenvalue convergence
-            r_tol=self.rconv,  # residual convergence
-            maxiter=self.maxiter,
-            eta=self.energy_shift,
+            davidson_liu_params=self.davidson_liu_params,
+            energy_shift=self.sci_params.energy_shift,
             log_level=self.log_level,
             dtype=complex if self.two_component else float,
         )
@@ -624,8 +602,8 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
                 H[j, i] = np.conj(H[i, j])
 
         self.evals_full, self.evecs_full = np.linalg.eigh(H)
-        if self.energy_shift is not None:
-            argsort = np.argsort(np.abs(self.evals_full - self.energy_shift))
+        if self.sci_params.energy_shift is not None:
+            argsort = np.argsort(np.abs(self.evals_full - self.sci_params.energy_shift))
             self.evals_full = self.evals_full[argsort]
             self.evecs_full = self.evecs_full[:, argsort]
 
@@ -889,7 +867,7 @@ class _SelectedCIBase(SelectedCIParams, DavidsonLiuParams):
 
 
 @dataclass
-class SelectedCISolver(SelectedCIParams, DavidsonLiuParams, ActiveSpaceSolver):
+class SelectedCISolver(ActiveSpaceSolver):
     """
     A general configuration interaction (CI) solver class.
     This solver is can be called iteratively, e.g., in a MCSCF loop or a DSRG reference relaxation loop.
@@ -950,6 +928,8 @@ class SelectedCISolver(SelectedCIParams, DavidsonLiuParams, ActiveSpaceSolver):
 
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
+    sci_params: SelectedCIParams = field(default_factory=SelectedCIParams)
+    davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
 
     ### Non-init attributes
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
