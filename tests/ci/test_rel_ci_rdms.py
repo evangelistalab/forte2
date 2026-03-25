@@ -4,6 +4,7 @@ from forte2 import State, MOSpace
 from forte2.jkbuilder import SpinorbitalIntegrals
 from forte2.ci.ci import _CIBase
 from forte2.helpers.comparisons import approx
+from forte2.base_classes import CIParams, DavidsonLiuParams
 
 rdm_threshold = 1e-12
 
@@ -51,8 +52,6 @@ def setup_ci():
         ints=fakeints,
         nroot=2,
         active_orbsym=[[0] * norb],
-        maxiter=200,
-        ci_algorithm="hz",
         two_component=True,
     )
     ci.run()

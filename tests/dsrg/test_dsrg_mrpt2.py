@@ -77,3 +77,4 @@ def test_sf_mrpt2_o2_triplet():
     assert dsrg.relax_energies[1, 0] == approx(-149.96533377181)
     assert dsrg.relax_energies[1, 1] == approx(-149.965334494277)
     assert dsrg.relax_energies[1, 2] == approx(-149.70550603407)
+test_sf_mrpt2_o2_triplet()

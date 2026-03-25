@@ -3,6 +3,7 @@ import pytest
 
 from forte2 import System, ROHF, CI, State
 from forte2.helpers.comparisons import approx
+from forte2.base_classes import DavidsonLiuParams
 
 
 def molecule(n, r=1.0):
@@ -30,7 +31,6 @@ def timing(n):
     ci = CI(
         State(nel=n, multiplicity=multiplicity, ms=ms),
         active_orbitals=list(range(n)),
-        econv=1e-12,
     )(rohf)
     start = time.monotonic()
     ci.run()
