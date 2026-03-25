@@ -30,7 +30,6 @@ def timing(n):
     ci = CI(
         State(nel=n, multiplicity=multiplicity, ms=ms),
         active_orbitals=list(range(n)),
-        econv=1e-12,
     )(rohf)
     start = time.monotonic()
     ci.run()

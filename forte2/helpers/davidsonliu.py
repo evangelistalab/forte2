@@ -1,10 +1,14 @@
+from dataclasses import dataclass, field
+
 import numpy as np
 from numpy.linalg import eigh, qr, norm
 
 from forte2.helpers import logger
 from forte2.helpers.table import AsciiTable
+from forte2.base_classes.params import DavidsonLiuParams
 
 
+@dataclass
 class DavidsonLiuSolver:
     """
     Davidson-Liu solver for iterative diagonalization of Hermitian matrices.
@@ -15,17 +19,9 @@ class DavidsonLiuSolver:
         Dimension of the matrix / number of basis vectors.
     nroot : int
         Number of roots to find.
-    basis_per_root : int, optional, default=4
-        Number of basis vectors to keep per root.
-    collapse_per_root : int, optional, default=2
-        Number of vectors to collapse to per root.
-    maxiter : int, optional, default=100
-        Maximum number of iterations to perform.
-    e_tol : float, optional, default=1e-12
-        Convergence tolerance for eigenvalues.
-    r_tol : float, optional, default=1e-6
-        Convergence tolerance for residuals.
-    eta : float, optional
+    davidson_liu_params : DavidsonLiuParams, optional
+        Parameters for the Davidson-Liu solver.
+    energy_shift : float, optional
         Target eigenvalue shift for sorting eigenpairs.
         If None, no shift is applied.
     log_level : int, optional, default=logger.get_verbosity_level()
@@ -41,71 +37,50 @@ class DavidsonLiuSolver:
         Whether the solver has converged.
     """
 
-    def __init__(
-        self,
-        size: int,
-        nroot: int,
-        basis_per_root: int = 4,
-        collapse_per_root: int = 2,
-        maxiter: int = 100,
-        e_tol: float = 1e-12,
-        r_tol: float = 1e-6,
-        eta: float | None = None,
-        log_level: int = logger.get_verbosity_level(),
-        dtype: type = np.float64,
-    ):
-        # size of the space
-        self.size = size
-        # number of roots to find
-        self.nroot = nroot
-        # number of vectors to collapse per root
-        self.collapse_per_root = collapse_per_root
-        # basis size per root
-        self.basis_per_root = basis_per_root
-        # maximum number of iterations
-        self.maxiter = maxiter
-        # convergence tolerance for eigenvalues
-        self.e_tol = e_tol
-        # convergence tolerance for residuals
-        self.r_tol = r_tol
-        # eigenvalue target shift
-        self.eta = eta
-        # logging level
-        self.log_level = log_level
-        # data type
-        self.dtype = dtype
+    size: int
+    nroot: int
+    davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
+    energy_shift: float = field(default=None)
+    log_level: int = field(default=logger.get_verbosity_level())
+    dtype: type = field(default=np.float64)
 
+    def __post_init__(self):
+        self.collapse_per_root = self.davidson_liu_params.collapse_per_root
+        # basis size per root
+        self.basis_per_root = self.davidson_liu_params.basis_per_root
+        # maximum number of iterations
+        self.maxiter = self.davidson_liu_params.maxiter
+        # convergence tolerance for eigenvalues
+        self.e_tol = self.davidson_liu_params.e_tol
+        # convergence tolerance for residuals
+        self.r_tol = self.davidson_liu_params.r_tol
         # sanity checks
-        if size <= 0:
+        if self.size <= 0:
             raise ValueError(
                 "Davidson-Liu solver called with space of dimension smaller than 1."
             )
-        if nroot <= 0:
+        if self.nroot <= 0:
             raise ValueError("Davidson-Liu solver called with zero roots.")
-        if collapse_per_root < 1:
-            raise ValueError(
-                f"Davidson-Liu solver: collapse_per_root ({collapse_per_root}) must be greater than or equal to 1."
-            )
-        if basis_per_root < collapse_per_root + 1:
-            raise ValueError(
-                f"Davidson-Liu solver: basis_per_root ({basis_per_root}) must be greater than or equal to collapse_per_root + 1 ({collapse_per_root + 1})."
-            )
 
         assert np.issubdtype(self.dtype, np.floating) or np.issubdtype(
             self.dtype, np.complexfloating
         ), "dtype must be a float or complex type"
 
         # fixed subspace and collapse dims
-        self.collapse_size = min(collapse_per_root * nroot, size)
-        self.max_subspace_size = min(basis_per_root * nroot, size)
+        self.collapse_size = min(self.collapse_per_root * self.nroot, self.size)
+        self.max_subspace_size = min(self.basis_per_root * self.nroot, self.size)
 
         # allocate all arrays as (size, subspace_size) so each column is a vector
-        self.b = np.zeros((size, self.max_subspace_size), dtype=self.dtype)  # basis
+        self.b = np.zeros(
+            (self.size, self.max_subspace_size), dtype=self.dtype
+        )  # basis
         self.sigma = np.zeros(
-            (size, self.max_subspace_size), dtype=self.dtype
+            (self.size, self.max_subspace_size), dtype=self.dtype
         )  # H·basis
-        self.r = np.zeros((size, self.max_subspace_size), dtype=self.dtype)  # residuals
-        self.h_diag = None  # matrix diagonal, shape (size,)
+        self.r = np.zeros(
+            (self.size, self.max_subspace_size), dtype=self.dtype
+        )  # residuals
+        self.h_diag = None  # matrix diagonal, shape (self.size,)
 
         ## subspace Hamiltonian and eigenpairs
         self.G = np.zeros(
@@ -253,8 +228,8 @@ class DavidsonLiuSolver:
             lam, alpha = eigh(Gm)
 
             # sort eigenpair around user-specified shift
-            if self.eta is not None:
-                idx = np.argsort(np.abs(lam - self.eta))
+            if self.energy_shift is not None:
+                idx = np.argsort(np.abs(lam - self.energy_shift))
                 lam = lam[idx]
                 alpha = alpha[:, idx]
 
@@ -548,6 +523,8 @@ class DavidsonLiuSolver:
         logger.log(f"  Size of collapsed space:  {self.collapse_size}", self.log_level)
         logger.log(f"  Energy convergence:       {self.e_tol}", self.log_level)
         logger.log(f"  Residual convergence:     {self.r_tol}", self.log_level)
-        if self.eta is not None:
-            logger.log(f"  Target eigenval shift:    {self.eta}", self.log_level)
+        if self.energy_shift is not None:
+            logger.log(
+                f"  Target eigenval shift:    {self.energy_shift}", self.log_level
+            )
         logger.log(f"  Maximum iterations:       {self.maxiter}\n", self.log_level)

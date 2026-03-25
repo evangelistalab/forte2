@@ -51,8 +51,6 @@ def setup_ci():
         ints=fakeints,
         nroot=2,
         active_orbsym=[[0] * norb],
-        maxiter=200,
-        ci_algorithm="hz",
         two_component=True,
     )
     ci.run()

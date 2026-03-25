@@ -3,6 +3,7 @@ import pytest
 from forte2 import System, RHF, CI, State
 from forte2.helpers.comparisons import approx
 from forte2.system.build_basis import BSE_AVAILABLE
+from forte2.base_classes import CIParams, DavidsonLiuParams
 
 
 def test_gasci_rhf_1():
@@ -17,7 +18,7 @@ def test_gasci_rhf_1():
     ci = CI(
         active_orbitals=[[0], [1]],
         states=State(nel=2, multiplicity=1, ms=0.0, gas_min=[0], gas_max=[2]),
-        econv=1e-12,
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
     )(rhf)
     ci.run()
 
@@ -87,7 +88,7 @@ def test_gasci_rhf_4():
     ci = CI(
         active_orbitals=[[0, 1, 2, 3, 4], [5, 6]],
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[6, 0], gas_max=[10, 4]),
-        econv=1e-12,
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
     )(rhf)
     ci.run()
 
@@ -110,7 +111,7 @@ def test_gasci_rhf_5():
     ci = CI(
         active_orbitals=[[0], [1, 2, 3, 4, 5, 6]],
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[0], gas_max=[1]),
-        econv=1e-14,
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-14),
     )(rhf)
     ci.run()
 
@@ -157,7 +158,7 @@ def test_gasci_rhf_7():
         active_orbitals=[[0], [1, 2, 3, 4, 5, 6]],
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
         nroots=2,
-        econv=1e-12,
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
     )(rhf)
     ci.run()
 
@@ -182,7 +183,7 @@ def test_gasci_rhf_8():
         active_orbitals=[[0], [1, 2, 3, 4, 5, 6]],
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
         nroots=2,
-        econv=1e-12,
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
     )(rhf)
     ci.run()
 
@@ -211,7 +212,7 @@ def test_gasci_rhf_9():
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[6]),
         core_orbitals=[0, 1],
         active_orbitals=[[2, 3, 4], [5, 6, 7]],
-        econv=1e-12,
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
     )(rhf)
     ci.run()
 
@@ -239,8 +240,7 @@ def test_gasci_rhf_10():
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[4], gas_max=[8]),
         core_orbitals=[0],
         active_orbitals=[[1, 2, 3, 4], [5, 6, 7]],
-        econv=1e-10,
-        ci_algorithm="hz",
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-10),
     )(rhf)
     ci.run()
 
@@ -268,8 +268,8 @@ def test_gasci_rhf_11():
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[4], gas_max=[8]),
         core_orbitals=[0],
         active_orbitals=[[1, 2, 3, 4], [5, 6, 7]],
-        econv=1e-10,
-        ci_algorithm="kh",
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-10),
+        ci_params=CIParams(ci_algorithm="kh"),
     )(rhf)
     ci.run()
 

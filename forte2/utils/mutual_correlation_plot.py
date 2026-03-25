@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-from matplotlib.patches import Polygon
 from matplotlib import colormaps
 from matplotlib import offsetbox
 from matplotlib.path import Path

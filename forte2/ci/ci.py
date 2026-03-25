@@ -20,6 +20,7 @@ from forte2.base_classes.active_space_solver import (
     ActiveSpaceSolver,
     RelActiveSpaceSolver,
 )
+from forte2.base_classes.params import DavidsonLiuParams, CIParams
 from forte2.helpers import logger
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.props import get_1e_property
@@ -61,33 +62,10 @@ class _CIBase:
         The logging level for the CI solver. Defaults to the global logger's verbosity level.
     die_if_not_converged : bool, optional, default=False
         If True, raise an error if the CI solver does not converge.
-    ci_algorithm : str, optional, default="hz"
-        The algorithm used for the CI sigma builder.
-        Non-relativistic options are:
-            - "hz": Harrison-Zarrabian
-            - "kh": Knowles-Handy
-            - "exact": Exact diagonalization
-        Two-component (relativistic) options are:
-            - "hz": Harrison-Zarrabian
-            - "exact": Exact diagonalization
-            - "sparse": Sigma builder using sparse representation of the Hamiltonian and states.
-                Recommended for debug use only.
-    guess_per_root : int, optional, default=2
-        The number of guess vectors for each root.
-    ndets_per_guess : int, optional, default=10
-        The number of determinants per guess vector.
-    collapse_per_root : int, optional, default=2
-        The number of determinants to collapse per root.
-    basis_per_root : int, optional, default=4
-        The maximum number of basis vectors per root.
-    maxiter : int, optional, default=100
-        The maximum number of iterations for the Davidson-Liu solver.
-    econv : float, optional, default=1e-10
-        The energy convergence threshold for the solver.
-    rconv : float, optional, default=1e-5
-        The residual convergence threshold for the solver.
-    energy_shift : float, optional, default=None
-        An energy shift to find roots around. If None, no shift is applied.
+    ci_params : CIParams, optional
+        Parameters for the CI solver, including choice of algorithm and memory limits.
+    davidson_liu_params : DavidsonLiuParams, optional
+        Parameters for the Davidson-Liu eigensolver.
 
     Attributes
     ----------
@@ -109,22 +87,10 @@ class _CIBase:
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
     die_if_not_converged: bool = False
-
-    ### Sigma builder parameters
-    ci_algorithm: str = "hz"
-
-    ### Davidson-Liu parameters
-    guess_per_root: int = 2
-    ndets_per_guess: int = 10
-    collapse_per_root: int = 2
-    basis_per_root: int = 4
-    maxiter: int = 100
-    econv: float = 1e-10
-    rconv: float = 1e-5
-    energy_shift: float = None
+    ci_params: CIParams = field(default_factory=CIParams)
+    davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
 
     ### Non-init attributes
-    ci_builder_memory: int = field(default=1024, init=False)  # in MB
     rebuild_guess: bool = field(default=True, init=False)
     executed: bool = field(default=False, init=False)
 
@@ -139,13 +105,13 @@ class _CIBase:
         self.dtype = complex if self.two_component else float
 
         if self.two_component:
-            assert self.ci_algorithm.lower() in [
+            assert self.ci_params.ci_algorithm.lower() in [
                 "hz",
                 "sparse",
                 "exact",
             ], "Two-component CI only supports 'hz', 'sparse', or 'exact' algorithms."
         else:
-            assert self.ci_algorithm.lower() in [
+            assert self.ci_params.ci_algorithm.lower() in [
                 "hz",
                 "kh",
                 "exact",
@@ -234,9 +200,11 @@ class _CIBase:
             assert (
                 self.two_component
             ), "Antisymmetric integrals only supported for two-component CI."
-            assert (
-                self.ci_algorithm.lower() in ["hz", "exact"]
-            ), "Antisymmetric integrals only supported for 'hz' and 'exact' algorithms."
+            assert self.ci_params.ci_algorithm.lower() in [
+                "hz",
+                "harrison-zarrabian",
+                "exact",
+            ], "Antisymmetric integrals only supported for 'hz'/'harrison-zarrabian' and 'exact' algorithms."
 
         if not self.executed:
             self._ci_solver_startup()
@@ -261,8 +229,8 @@ class _CIBase:
                 self.ints.V,
                 self.log_level,
             )
-        self.ci_sigma_builder.set_memory(self.ci_builder_memory)
-        if self.ci_algorithm.lower() == "exact":
+        self.ci_sigma_builder.set_memory(self.ci_params.ci_builder_memory)
+        if self.ci_params.ci_algorithm.lower() == "exact":
             self._do_exact_diagonalization()
         else:
             self._do_iterative_ci()
@@ -284,13 +252,13 @@ class _CIBase:
         Harrison-Zarrabian or Knowles-Handy sigma builder algorithm.
         """
         if self.two_component:
-            assert self.ci_algorithm.lower() in [
+            assert self.ci_params.ci_algorithm.lower() in [
                 "hz",
                 "sparse",
             ], "For two-component CI, only the Harrison-Zarrabian (hz) algorithm is supported."
             self.ci_sigma_builder.set_algorithm("hz")
         else:
-            self.ci_sigma_builder.set_algorithm(self.ci_algorithm)
+            self.ci_sigma_builder.set_algorithm(self.ci_params.ci_algorithm)
 
         logger.log(
             f"Using CI algorithm: {self.ci_sigma_builder.get_algorithm()}",
@@ -319,12 +287,8 @@ class _CIBase:
             self.eigensolver = DavidsonLiuSolver(
                 size=self.basis_size,  # size of the basis (number of CSF if we spin adapt)
                 nroot=self.nroot,
-                collapse_per_root=self.collapse_per_root,
-                basis_per_root=self.basis_per_root,
-                e_tol=self.econv,  # eigenvalue convergence
-                r_tol=self.rconv,  # residual convergence
-                maxiter=self.maxiter,
-                eta=self.energy_shift,
+                davidson_liu_params=self.davidson_liu_params,
+                energy_shift=self.ci_params.energy_shift,
                 log_level=self.log_level,
                 dtype=complex if self.two_component else float,
             )
@@ -339,7 +303,7 @@ class _CIBase:
             self.rebuild_guess = False
 
         if self.two_component:
-            if self.ci_algorithm.lower() == "sparse":
+            if self.ci_params.ci_algorithm.lower() == "sparse":
                 ham = sparse_operator_hamiltonian(
                     self.ints.E.real,
                     self.ints.H,
@@ -415,8 +379,8 @@ class _CIBase:
             H = self.ci_sigma_builder.form_H_csf(self.dets, self.spin_adapter)
 
         self.evals_full, self.evecs_full = np.linalg.eigh(H)
-        if self.energy_shift is not None:
-            argsort = np.argsort(np.abs(self.evals_full - self.energy_shift))
+        if self.ci_params.energy_shift is not None:
+            argsort = np.argsort(np.abs(self.evals_full - self.ci_params.energy_shift))
             self.evals_full = self.evals_full[argsort]
             self.evecs_full = self.evecs_full[:, argsort]
 
@@ -531,14 +495,14 @@ class _CIBase:
     def _build_guess_vectors(self, Hdiag):
         """Build the guess vectors for the CI calculation."""
         # determine the number of guess vectors
-        self.num_guess_states = min(self.guess_per_root * self.nroot, self.basis_size)
+        self.num_guess_states = min(self.davidson_liu_params.guess_per_root * self.nroot, self.basis_size)
         logger.log(f"Number of guess states: {self.num_guess_states}", self.log_level)
-        nguess_dets = min(self.ndets_per_guess * self.num_guess_states, self.basis_size)
+        nguess_dets = min(self.davidson_liu_params.ndets_per_guess * self.num_guess_states, self.basis_size)
         logger.log(f"Number of guess basis: {nguess_dets}", self.log_level)
 
         # find the indices of the elements of Hdiag with the lowest values
-        if self.energy_shift is not None:
-            indices = np.argsort(np.abs(Hdiag - self.energy_shift))[:nguess_dets]
+        if self.ci_params.energy_shift is not None:
+            indices = np.argsort(np.abs(Hdiag - self.ci_params.energy_shift))[:nguess_dets]
         else:
             indices = np.argsort(Hdiag)[:nguess_dets]
 
@@ -560,7 +524,7 @@ class _CIBase:
                     Hguess[j, i] = np.conj(Hij)
 
         # Diagonalize the Hamiltonian to get the initial guess vectors
-        evals_guess, evecs_guess = np.linalg.eigh(Hguess)
+        _, evecs_guess = np.linalg.eigh(Hguess)
 
         # Select the lowest eigenvalues and their corresponding eigenvectors
         guess_mat = np.zeros((self.basis_size, self.num_guess_states), dtype=self.dtype)
@@ -1294,22 +1258,10 @@ class CISolver(ActiveSpaceSolver):
         A `MOSpace` object defining the partitioning of the molecular orbitals.
         If not provided, CISolver must be called with a parent method that has MOSpaceMixin (e.g., AVAS).
         If provided, it overrides the one from the parent method.
-    guess_per_root : int, optional, default=2
-        The number of guess vectors for each root.
-    ndets_per_guess : int, optional, default=10
-        The number of determinants per guess vector.
-    collapse_per_root : int, optional, default=2
-        The number of determinants to collapse per root.
-    basis_per_root : int, optional, default=4
-        The maximum number of basis vectors per root.
-    maxiter : int, optional, default=100
-        The maximum number of iterations for the Davidson-Liu solver.
-    econv : float, optional, default=1e-10
-        The energy convergence threshold for the solver.
-    rconv : float, optional, default=1e-5
-        The residual convergence threshold for the solver.
-    energy_shift : float, optional, default=None
-        An energy shift to find roots around. If None, no shift is applied.
+    davidson_liu_params : DavidsonLiuParams, optional
+        Parameters for the Davidson-Liu eigensolver. If not provided, default parameters are used.
+    ci_params : CIParams, optional
+        Parameters for the CI solver. If not provided, default parameters are used.
     do_test_rdms : bool, optional, default=False
         If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
     log_level : int, optional
@@ -1329,21 +1281,13 @@ class CISolver(ActiveSpaceSolver):
         The average energy computed from the state-averaged CI roots.
     """
 
-    ### Davidson-Liu parameters
-    guess_per_root: int = 2
-    ndets_per_guess: int = 10
-    collapse_per_root: int = 2
-    basis_per_root: int = 4
-    maxiter: int = 100
-    econv: float = 1e-10
-    rconv: float = 1e-5
-    energy_shift: float = None
+    davidson_liu_params : DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
+    ci_params : CIParams = field(default_factory=CIParams)
 
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
 
     ### Non-init attributes
-    ci_builder_memory: int = field(default=1024, init=False)  # in MB
     first_run: bool = field(default=True, init=False)
     executed: bool = field(default=False, init=False)
 
@@ -1384,15 +1328,8 @@ class CISolver(ActiveSpaceSolver):
                     active_orbsym=active_orbsym,
                     do_test_rdms=self.do_test_rdms,
                     die_if_not_converged=self.die_if_not_converged,
-                    ci_algorithm=self.ci_algorithm,
-                    guess_per_root=self.guess_per_root,
-                    ndets_per_guess=self.ndets_per_guess,
-                    collapse_per_root=self.collapse_per_root,
-                    basis_per_root=self.basis_per_root,
-                    maxiter=self.maxiter,
-                    econv=self.econv,
-                    rconv=self.rconv,
-                    energy_shift=self.energy_shift,
+                    ci_params=self.ci_params,
+                    davidson_liu_params=self.davidson_liu_params,
                     log_level=self.log_level,
                 )
             )
@@ -1710,21 +1647,13 @@ class RelCISolver(RelActiveSpaceSolver):
     Relativistic Configuration Interaction
     """
 
-    ### Davidson-Liu parameters
-    guess_per_root: int = 2
-    ndets_per_guess: int = 10
-    collapse_per_root: int = 2
-    basis_per_root: int = 4
-    maxiter: int = 100
-    econv: float = 1e-10
-    rconv: float = 1e-5
-    energy_shift: float = None
+    davidson_liu_params : DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
+    ci_params : CIParams = field(default_factory=CIParams)
 
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
 
     ### Non-init attributes
-    ci_builder_memory: int = field(default=1024, init=False)  # in MB
     first_run: bool = field(default=True, init=False)
     executed: bool = field(default=False, init=False)
 
@@ -1784,15 +1713,8 @@ class RelCISolver(RelActiveSpaceSolver):
                     nroot=self.sa_info.nroots[i],
                     active_orbsym=active_orbsym,
                     do_test_rdms=self.do_test_rdms,
-                    ci_algorithm=self.ci_algorithm,
-                    guess_per_root=self.guess_per_root,
-                    ndets_per_guess=self.ndets_per_guess,
-                    collapse_per_root=self.collapse_per_root,
-                    basis_per_root=self.basis_per_root,
-                    maxiter=self.maxiter,
-                    econv=self.econv,
-                    rconv=self.rconv,
-                    energy_shift=self.energy_shift,
+                    davidson_liu_params=self.davidson_liu_params,
+                    ci_params=self.ci_params,
                     log_level=self.log_level,
                     two_component=True,
                 )
