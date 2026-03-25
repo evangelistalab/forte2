@@ -38,6 +38,7 @@ from forte2.ci.ci_utils import (
     pretty_print_ci_transition_props,
 )
 
+
 @dataclass
 class _SelectedCIBase:
     """
@@ -47,6 +48,10 @@ class _SelectedCIBase:
 
     Parameters
     ----------
+    sci_params : SelectedCIParams, optional
+        Parameters for the selected CI solver.
+    davidson_liu_params : DavidsonLiuParams, optional
+        Parameters for the Davidson-Liu eigensolver.
     mo_space : MOSpace
         Specifies the GASes and core orbitals.
     state : State
@@ -61,27 +66,8 @@ class _SelectedCIBase:
         The logging level for the CI solver. Defaults to the global logger's verbosity level.
     die_if_not_converged : bool, optional, default=False
         If True, raise an error if the CI solver does not converge.
-    ci_algorithm : str, optional, default="sparse"
-        The algorithm used for the CI sigma builder.
-        The options are:
-            - "sparse": A sparse string-based algorithm
-            - "exact": Exact diagonalization
-    guess_per_root : int, optional, default=2
-        The number of guess vectors for each root.
-    ndets_per_guess : int, optional, default=10
-        The number of determinants per guess vector.
-    collapse_per_root : int, optional, default=2
-        The number of determinants to collapse per root.
-    basis_per_root : int, optional, default=4
-        The maximum number of basis vectors per root.
-    maxiter : int, optional, default=100
-        The maximum number of iterations for the Davidson-Liu solver.
-    econv : float, optional, default=1e-10
-        The energy convergence threshold for the solver.
-    rconv : float, optional, default=1e-5
-        The residual convergence threshold for the solver.
-    energy_shift : float, optional, default=None
-        An energy shift to find roots around. If None, no shift is applied.
+    two_component : bool, optional, default=False
+        Whether the system is two-component (relativistic).
 
     Attributes
     ----------
@@ -95,22 +81,20 @@ class _SelectedCIBase:
     """
 
     ### Init attributes
+    sci_params: SelectedCIParams = field(default_factory=SelectedCIParams)
+    davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
     mo_space: MOSpace = field(default=None)
     state: State = field(default=None)
     ints: RestrictedMOIntegrals = field(default=None)
     nroot: int = field(default=1)
-
     active_orbsym: list[int] = field(default_factory=list)
     two_component: bool = False
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
     die_if_not_converged: bool = False
-    slater_rules: SlaterRules = field(default=None, init=False)
-
-    sci_params: SelectedCIParams = field(default_factory=SelectedCIParams)
-    davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
 
     ### Non-init attributes
+    slater_rules: SlaterRules = field(default=None, init=False)
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
     first_run: bool = field(default=True, init=False)
     executed: bool = field(default=False, init=False)
@@ -301,12 +285,16 @@ class _SelectedCIBase:
     def _initial_guess(self, window_occ=0, window_vir=0):
         # If there are no guess determinants, generate some based on occupation windows
         if len(self.sci_params.guess_dets) == 0:
-            self.sci_params.guess_dets = self._generate_initial_guess_dets(window_occ, window_vir)
+            self.sci_params.guess_dets = self._generate_initial_guess_dets(
+                window_occ, window_vir
+            )
         else:
             self._check_guess_dets(self.sci_params.guess_dets)
 
         # Check that we have all spin complement pairs
-        self.sci_params.guess_dets = self._generate_spin_complement_pairs(self.sci_params.guess_dets)
+        self.sci_params.guess_dets = self._generate_spin_complement_pairs(
+            self.sci_params.guess_dets
+        )
 
         print("Initial guess determinants (by energy):")
         for d in self.sci_params.guess_dets:
@@ -321,7 +309,9 @@ class _SelectedCIBase:
                     self.sci_params.guess_dets[i], self.sci_params.guess_dets[j]
                 )
                 Hguess[j, i] = np.conj(Hguess[i, j])
-                S2guess[i, j] = spin2(self.sci_params.guess_dets[i], self.sci_params.guess_dets[j])
+                S2guess[i, j] = spin2(
+                    self.sci_params.guess_dets[i], self.sci_params.guess_dets[j]
+                )
                 S2guess[j, i] = np.conj(S2guess[i, j])
 
         svals, svecs = np.linalg.eigh(S2guess)
@@ -366,7 +356,9 @@ class _SelectedCIBase:
             print(f"  Root {r}:")
             for i in range(c.shape[0]):
                 if abs(c[i, r]) > 1e-4:
-                    print(f"    {self.sci_params.guess_dets[i].str(self.norb)}: {c[i, r]:20.12f}")
+                    print(
+                        f"    {self.sci_params.guess_dets[i].str(self.norb)}: {c[i, r]:20.12f}"
+                    )
         return self.sci_params.guess_dets, c, energies, S2project_out
 
     def _generate_initial_guess_dets(self, window_occ, window_vir):
@@ -874,45 +866,14 @@ class SelectedCISolver(ActiveSpaceSolver):
 
     Parameters
     ----------
-    states : State | list[State]
-        The electronic states for which the CI is solved. Can be a single state or a list of states.
-        A state-averaged CI is performed if multiple states are provided.
-    nroots : int | list[int], optional, default=1
-        The number of roots to compute.
-        If a list is provided, each element corresponds to the number of roots for each state.
-        If a single integer is provided, `states` must be a single `State` object.
-    weights : list[float] | list[list[float]], optional
-        The weights for state averaging.
-        If a list of lists is provided, each sublist corresponds to the weights for each state.
-        The number of weights must match the number of roots for each state.
-        If not provided, equal weights are assumed for all states.
-        If a single list is provided, `states` must be a single `State` object.
-    mo_space : MOSpace, optional
-        A `MOSpace` object defining the partitioning of the molecular orbitals.
-        If not provided, CISolver must be called with a parent method that has MOSpaceMixin (e.g., AVAS).
-        If provided, it overrides the one from the parent method.
-    guess_per_root : int, optional, default=2
-        The number of guess vectors for each root.
-    ndets_per_guess : int, optional, default=10
-        The number of determinants per guess vector.
-    collapse_per_root : int, optional, default=2
-        The number of determinants to collapse per root.
-    basis_per_root : int, optional, default=4
-        The maximum number of basis vectors per root.
-    maxiter : int, optional, default=100
-        The maximum number of iterations for the Davidson-Liu solver.
-    econv : float, optional, default=1e-10
-        The energy convergence threshold for the solver.
-    rconv : float, optional, default=1e-5
-        The residual convergence threshold for the solver.
-    energy_shift : float, optional, default=None
-        An energy shift to find roots around. If None, no shift is applied.
+    sci_params : SelectedCIParams, optional
+        Parameters specific to the selected CI algorithm.
+    davidson_liu_params : DavidsonLiuParams, optional
+        Parameters for the Davidson-Liu iterative eigensolver.
     do_test_rdms : bool, optional, default=False
         If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
     log_level : int, optional
         The logging level for the CI solver. Defaults to the global logger's verbosity level.
-    ci_algorithm : str, optional, valid choices=["hz", "kh"], default="hz"
-        The algorithm used for the CI sigma builder.
 
     Attributes
     ----------
@@ -926,10 +887,10 @@ class SelectedCISolver(ActiveSpaceSolver):
         The average energy computed from the state-averaged CI roots.
     """
 
-    do_test_rdms: bool = False
-    log_level: int = field(default=logger.get_verbosity_level())
     sci_params: SelectedCIParams = field(default_factory=SelectedCIParams)
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
+    do_test_rdms: bool = False
+    log_level: int = field(default=logger.get_verbosity_level())
 
     ### Non-init attributes
     ci_builder_memory: int = field(default=1024, init=False)  # in MB
@@ -975,9 +936,9 @@ class SelectedCISolver(ActiveSpaceSolver):
             # Create a CI solver for each state and MOSpace
 
             kwargs = self._collect_child_kwargs(_SelectedCIBase)
+            # these are needed by _SelectedCIBase but not present as attributes of SelectedCISolver
             kwargs.update(
                 {
-                    "mo_space": self.mo_space,
                     "ints": ints,
                     "state": state,
                     "nroot": self.sa_info.nroots[i],
@@ -1143,8 +1104,8 @@ class SelectedCISolver(ActiveSpaceSolver):
 @dataclass
 class SelectedCI(SelectedCISolver):
     """
-    CI solver specialized for a single CI calculation. (i.e., not used in a loop).
-    See `CISolver` for all parameters and attributes.
+    Selected CI solver specialized for a single CI calculation. (i.e., not used in a loop).
+    See `SelectedCISolver` for all parameters and attributes.
     """
 
     die_if_not_converged: bool = True

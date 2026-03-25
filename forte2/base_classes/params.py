@@ -84,7 +84,45 @@ class CIParams:
 
 @dataclass
 class SelectedCIParams:
-    ### Selected CI parameters
+    """
+    Parameters for the Selected CI solver.
+
+    Parameters
+    ----------
+    maxcycle: int, optional, default=10
+        The maximum number of selection cycles.
+    var_threshold: float, optional, default=5e-4
+        The threshold for including determinants in the variational space based on their contribution to the wavefunction.
+    pt2_threshold: float, optional, default=1e-8
+        The threshold for including determinants in the perturbative correction based on their second-order energy contribution.
+    selection_algorithm: str, optional, default="hbci"
+        The algorithm used for selecting determinants. Options are "hbci" and "hbci_ref".
+    guess_occ_window: int, optional, default=2
+        The number of occupied orbitals to consider when generating guess determinants.
+    guess_vir_window: int, optional, default=2
+        The number of virtual orbitals to consider when generating guess determinants.
+    num_threads: int, optional, default=4
+        The number of threads to use for parallel selection and diagonalization.
+    ci_algorithm: str, optional, default="sparse"
+        The algorithm used for the CI diagonalization. Options are "exact" and "sparse".
+    num_batches_per_thread: int, optional, default=4
+        The number of batches of determinants to process per thread during selection and diagonalization.
+    do_spin_penalty: bool, optional, default=True
+        Whether to apply a spin penalty to the Hamiltonian to enforce correct spin symmetry.
+    guess_dets: list[Determinant], optional
+        A list of determinants to use as the initial guess for the CI wavefunction. 
+        If not provided, the guess determinants will be generated based on the guess_occ_window and guess_vir_window parameters.
+    frozen_creation: list[int], optional
+        A list of orbital indices for which creation operators are frozen (i.e., not allowed to be occupied in the selected determinants). 
+        This is used to enforce certain symmetries or to exclude certain orbitals from the selection process.
+    screening_criterion: str, optional, default="hbci"
+        The criterion used to screen determinants during selection. Options are "hbci" and "pt2".
+    energy_correction: str, optional, default="pt2"
+        The method used to compute the energy correction from the determinants that are not included in the variational space. 
+        Options are "pt2" and "none".
+    energy_shift: float, optional, default=None
+        An energy shift applied during selection to target specific roots. If None, no shift is applied.
+    """
     maxcycle: int = 10
     var_threshold: float = 5e-4
     pt2_threshold: float = 1e-8

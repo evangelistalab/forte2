@@ -56,16 +56,16 @@ class _CIBase:
         The molecular orbital integrals for the system.
     nroot : int
         The number of roots to compute.
+    ci_params : CIParams, optional
+        Parameters for the CI solver, including choice of algorithm and memory limits.
+    davidson_liu_params : DavidsonLiuParams, optional
+        Parameters for the Davidson-Liu eigensolver.
     do_test_rdms : bool, optional, default=False
         If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
     log_level : int, optional
         The logging level for the CI solver. Defaults to the global logger's verbosity level.
     die_if_not_converged : bool, optional, default=False
         If True, raise an error if the CI solver does not converge.
-    ci_params : CIParams, optional
-        Parameters for the CI solver, including choice of algorithm and memory limits.
-    davidson_liu_params : DavidsonLiuParams, optional
-        Parameters for the Davidson-Liu eigensolver.
 
     Attributes
     ----------
@@ -83,12 +83,12 @@ class _CIBase:
     ints: RestrictedMOIntegrals
     nroot: int
     active_orbsym: list[int]
+    ci_params: CIParams = field(default_factory=CIParams)
+    davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
     two_component: bool = False
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
     die_if_not_converged: bool = False
-    ci_params: CIParams = field(default_factory=CIParams)
-    davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
 
     ### Non-init attributes
     rebuild_guess: bool = field(default=True, init=False)
@@ -495,14 +495,21 @@ class _CIBase:
     def _build_guess_vectors(self, Hdiag):
         """Build the guess vectors for the CI calculation."""
         # determine the number of guess vectors
-        self.num_guess_states = min(self.davidson_liu_params.guess_per_root * self.nroot, self.basis_size)
+        self.num_guess_states = min(
+            self.davidson_liu_params.guess_per_root * self.nroot, self.basis_size
+        )
         logger.log(f"Number of guess states: {self.num_guess_states}", self.log_level)
-        nguess_dets = min(self.davidson_liu_params.ndets_per_guess * self.num_guess_states, self.basis_size)
+        nguess_dets = min(
+            self.davidson_liu_params.ndets_per_guess * self.num_guess_states,
+            self.basis_size,
+        )
         logger.log(f"Number of guess basis: {nguess_dets}", self.log_level)
 
         # find the indices of the elements of Hdiag with the lowest values
         if self.ci_params.energy_shift is not None:
-            indices = np.argsort(np.abs(Hdiag - self.ci_params.energy_shift))[:nguess_dets]
+            indices = np.argsort(np.abs(Hdiag - self.ci_params.energy_shift))[
+                :nguess_dets
+            ]
         else:
             indices = np.argsort(Hdiag)[:nguess_dets]
 
@@ -1241,33 +1248,14 @@ class CISolver(ActiveSpaceSolver):
 
     Parameters
     ----------
-    states : State | list[State]
-        The electronic states for which the CI is solved. Can be a single state or a list of states.
-        A state-averaged CI is performed if multiple states are provided.
-    nroots : int | list[int], optional, default=1
-        The number of roots to compute.
-        If a list is provided, each element corresponds to the number of roots for each state.
-        If a single integer is provided, `states` must be a single `State` object.
-    weights : list[float] | list[list[float]], optional
-        The weights for state averaging.
-        If a list of lists is provided, each sublist corresponds to the weights for each state.
-        The number of weights must match the number of roots for each state.
-        If not provided, equal weights are assumed for all states.
-        If a single list is provided, `states` must be a single `State` object.
-    mo_space : MOSpace, optional
-        A `MOSpace` object defining the partitioning of the molecular orbitals.
-        If not provided, CISolver must be called with a parent method that has MOSpaceMixin (e.g., AVAS).
-        If provided, it overrides the one from the parent method.
-    davidson_liu_params : DavidsonLiuParams, optional
-        Parameters for the Davidson-Liu eigensolver. If not provided, default parameters are used.
     ci_params : CIParams, optional
         Parameters for the CI solver. If not provided, default parameters are used.
+    davidson_liu_params : DavidsonLiuParams, optional
+        Parameters for the Davidson-Liu eigensolver. If not provided, default parameters are used.
     do_test_rdms : bool, optional, default=False
         If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
     log_level : int, optional
         The logging level for the CI solver. Defaults to the global logger's verbosity level.
-    ci_algorithm : str, optional, valid choices=["hz", "kh"], default="hz"
-        The algorithm used for the CI sigma builder.
 
     Attributes
     ----------
@@ -1281,9 +1269,8 @@ class CISolver(ActiveSpaceSolver):
         The average energy computed from the state-averaged CI roots.
     """
 
-    davidson_liu_params : DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
-    ci_params : CIParams = field(default_factory=CIParams)
-
+    ci_params: CIParams = field(default_factory=CIParams)
+    davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
 
@@ -1319,20 +1306,27 @@ class CISolver(ActiveSpaceSolver):
         ]
         for i, state in enumerate(self.sa_info.states):
             # Create a CI solver for each state and MOSpace
-            self.sub_solvers.append(
-                _CIBase(
-                    mo_space=self.mo_space,
-                    ints=ints,
-                    state=state,
-                    nroot=self.sa_info.nroots[i],
-                    active_orbsym=active_orbsym,
-                    do_test_rdms=self.do_test_rdms,
-                    die_if_not_converged=self.die_if_not_converged,
-                    ci_params=self.ci_params,
-                    davidson_liu_params=self.davidson_liu_params,
-                    log_level=self.log_level,
-                )
+
+            kwargs = self._collect_child_kwargs(_CIBase)
+            # these are needed by _CIBase but not present as attributes of CISolver
+            kwargs.update(
+                {
+                    "ints": ints,
+                    "state": state,
+                    "nroot": self.sa_info.nroots[i],
+                    "active_orbsym": active_orbsym,
+                }
             )
+            self.sub_solvers.append(_CIBase(**kwargs))
+
+    def _collect_child_kwargs(self, target_cls):
+        """Collect keyword arguments for child solvers."""
+        # Defer import to avoid polluting top-level namespace
+        from dataclasses import fields as _dc_fields
+
+        # Take all init fields of the target dataclass and copy values from `self` if present
+        names = {f.name for f in _dc_fields(target_cls) if f.init}
+        return {n: getattr(self, n) for n in names if hasattr(self, n)}
 
     def run(self):
         if self.first_run:
@@ -1647,8 +1641,8 @@ class RelCISolver(RelActiveSpaceSolver):
     Relativistic Configuration Interaction
     """
 
-    davidson_liu_params : DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
-    ci_params : CIParams = field(default_factory=CIParams)
+    davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
+    ci_params: CIParams = field(default_factory=CIParams)
 
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
