@@ -1,4 +1,4 @@
-from forte2 import System, RHF, MCOptimizer, State, AVAS, ROHF
+from forte2 import System, RHF, MCOptimizer, State, ROHF
 from forte2.dsrg import DSRG_MRPT2
 from forte2.helpers.comparisons import approx
 

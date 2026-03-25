@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from abc import ABC, abstractmethod
+from abc import ABC
 
 from .mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.state import StateAverageInfo, State, MOSpace

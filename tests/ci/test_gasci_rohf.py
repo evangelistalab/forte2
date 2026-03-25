@@ -1,6 +1,6 @@
 from forte2 import System, ROHF, CI, State
 from forte2.helpers.comparisons import approx
-from forte2.base_classes import CIParams, DavidsonLiuParams
+from forte2.base_classes import DavidsonLiuParams
 
 
 def test_gasci_rohf_1():

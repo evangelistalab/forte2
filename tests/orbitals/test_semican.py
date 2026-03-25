@@ -3,7 +3,7 @@ import numpy as np
 from forte2 import System, RHF, CI, MOSpace, orbitals, State, MCOptimizer, integrals
 from forte2.helpers.comparisons import approx
 from forte2.orbitals import Semicanonicalizer
-from forte2.base_classes import CIParams, DavidsonLiuParams
+from forte2.base_classes import DavidsonLiuParams
 
 
 def test_semican_rhf():

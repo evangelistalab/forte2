@@ -1,6 +1,6 @@
 from forte2 import System, RHF, CI, State, AVAS, ROHF
 from forte2.helpers.comparisons import approx
-from forte2.base_classes import CIParams, DavidsonLiuParams
+from forte2.base_classes import CIParams
 
 ci_params = CIParams(ci_algorithm="exact")
 
