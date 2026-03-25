@@ -1,11 +1,6 @@
 import sys
 
 
-import sys
-
-import sys
-
-
 def format_ansi(
     text: str,
     fg: str | None = None,
@@ -228,75 +223,3 @@ class AsciiTable:
         if not seq:
             return text
         return f"\033[{';'.join(seq)}m{text}\033[0m"
-
-
-# class AsciiTable:
-#     def __init__(self, columns, formats=None, sep_major="=", sep_minor="-", padding=3):
-#         if formats is None:
-#             formats = ["{:<}"] * len(columns)
-#         if len(columns) != len(formats):
-#             raise ValueError("columns and formats must have same length")
-
-#         self.columns = list(columns)
-#         self.formats = list(formats)
-#         self.padding = " " * padding
-#         self.sep_major = sep_major
-#         self.sep_minor = sep_minor
-
-#         # Compute per-column widths = max(header length, inferred format width)
-#         self.col_widths = []
-#         for col, fmt in zip(self.columns, self.formats):
-#             fmt_width = self._infer_format_width(fmt)
-#             self.col_widths.append(max(len(str(col)), fmt_width))
-
-#         # Precompute total width for consistent separators
-#         self.total_width = self._total_width()
-
-#     # ---------- public API ----------
-#     def header(self) -> str:
-#         major = self.sep_major * self.total_width
-#         header_line = self._format_header_line()
-#         minor = self.sep_minor * self.total_width
-#         return f"{major}\n{header_line}\n{minor}"
-
-#     def row(self, *values) -> str:
-#         parts = []
-#         for val, fmt, width in zip(values, self.formats, self.col_widths):
-#             cell = self._safe_format(fmt, val)
-#             if len(cell) < width:
-#                 cell = cell.rjust(width)
-#             parts.append(cell)
-#         return self.padding.join(parts)
-
-#     def footer(self) -> str:
-#         return self.sep_major * self.total_width
-
-#     # ---------- internals ----------
-#     def _total_width(self) -> int:
-#         return sum(self.col_widths) + len(self.padding) * (len(self.columns) - 1)
-
-#     def _format_header_line(self) -> str:
-#         # Right-align headers inside their column widths
-#         return self.padding.join(
-#             col.rjust(w) for col, w in zip(self.columns, self.col_widths)
-#         )
-
-#     def _safe_format(self, fmt: str, value) -> str:
-#         try:
-#             return fmt.format(value)
-#         except Exception:
-#             return str(value)
-
-#     def _infer_format_width(self, fmt: str) -> int:
-#         probes = (0, 0.0, "")
-#         for p in probes:
-#             try:
-#                 s = fmt.format(p)
-#                 return len(s)
-#             except Exception:
-#                 continue
-#         try:
-#             s = "{}".format("")
-#             return len(s)
-#         except Exception:
-#             return 0

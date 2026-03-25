@@ -187,9 +187,6 @@ def test_sci5():
     # This value is sensitive to the selected space growth details; keep a practical tolerance.
     assert sci.E[0] == pytest.approx(-96.5578779686, abs=5e-3)
 
-    print(sci0.E[0])
-    print(sci.E[0])
-
 
 @pytest.mark.slow
 def test_sci6():
