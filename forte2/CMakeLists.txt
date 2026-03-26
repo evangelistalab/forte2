@@ -133,6 +133,7 @@ nanobind_add_module(
   ci/rel_ci_sigma_builder_rdm_debug.cc
   ci/rel_ci_sigma_builder_harrison_zarrabian.cc
   ci/slater_rules.cc
+  dsrg/dsrg_utils.cc
   sci/sci_helper.cc
   sci/sci_helper_select_hbci.cc
   sci/sci_helper_sigma_build.cc
