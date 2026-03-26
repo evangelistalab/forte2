@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 
 from forte2 import Determinant
 
+
 @dataclass
 class DavidsonLiuParams:
     """
@@ -43,6 +44,7 @@ class DavidsonLiuParams:
                 f"Davidson-Liu solver: basis_per_root ({self.basis_per_root}) must be greater than or equal to collapse_per_root + 1 ({self.collapse_per_root + 1})."
             )
 
+
 @dataclass
 class CIParams:
     """
@@ -82,6 +84,7 @@ class CIParams:
             "sparse",
         ], "ci_algorithm must be one of 'hz', 'kh', 'exact', or 'sparse'."
 
+
 @dataclass
 class SelectedCIParams:
     """
@@ -110,19 +113,33 @@ class SelectedCIParams:
     do_spin_penalty: bool, optional, default=True
         Whether to apply a spin penalty to the Hamiltonian to enforce correct spin symmetry.
     guess_dets: list[Determinant], optional
-        A list of determinants to use as the initial guess for the CI wavefunction. 
+        A list of determinants to use as the initial guess for the CI wavefunction.
         If not provided, the guess determinants will be generated based on the guess_occ_window and guess_vir_window parameters.
     frozen_creation: list[int], optional
-        A list of orbital indices for which creation operators are frozen (i.e., not allowed to be occupied in the selected determinants). 
+        A list of orbital indices for which creation operators are frozen (i.e., not allowed to be occupied in the selected determinants).
         This is used to enforce certain symmetries or to exclude certain orbitals from the selection process.
     screening_criterion: str, optional, default="hbci"
-        The criterion used to screen determinants during selection. Options are "hbci" and "pt2".
+        The criterion used to screen determinants during selection. Options are "hbci" and "ehbci".
     energy_correction: str, optional, default="pt2"
-        The method used to compute the energy correction from the determinants that are not included in the variational space. 
+        The method used to compute the energy correction from the determinants that are not included in the variational space.
         Options are "pt2" and "none".
     energy_shift: float, optional, default=None
         An energy shift applied during selection to target specific roots. If None, no shift is applied.
+    pt2_renormalizer: str, optional, default="none"
+        The method used to renormalize the PT2 energy correction.
+        Options are:
+            - "none": No renormalization.
+            - "shift": Apply a small shift to the denominators in the PT2 expression to avoid divergences:
+                1 / denom -> 1 / (denom + pt2_renormalizer_strength)
+                Ept2 -> 0 as pt2_renormalizer_strength -> inf
+            - "dsrg": Use a DSRG-inspired renormalization of the PT2 correction:
+                1 / denom -> (1 / denom) * (1 - exp(-denom^2 * pt2_renormalizer_strength))
+                Ept2 -> 0 as pt2_renormalizer_strength -> 0, Ept2 -> unrenormalized PT2 as pt2_renormalizer_strength -> inf
+    pt2_renormalizer_strength: float, optional, default=0.0
+        The strength of the PT2 renormalization.
+        Note that the interpretation of this parameter depends on the choice of pt2_renormalizer (see above).
     """
+
     maxcycle: int = 10
     var_threshold: float = 5e-4
     pt2_threshold: float = 1e-8
@@ -138,3 +155,17 @@ class SelectedCIParams:
     screening_criterion: str = "hbci"
     energy_correction: str = "pt2"
     energy_shift: float = None
+    pt2_renormalizer: str = "none"
+    pt2_renormalizer_strength: float = 0.0
+
+    def __post_init__(self):
+        if self.ci_algorithm.lower() not in ["exact", "sparse"]:
+            raise ValueError("ci_algorithm must be 'exact' or 'sparse'")
+        if self.selection_algorithm.lower() not in ["hbci", "hbci_ref"]:
+            raise ValueError("selection_algorithm must be 'hbci' or 'hbci_ref'")
+        if self.screening_criterion.lower() not in ["hbci", "ehbci"]:
+            raise ValueError("screening_criterion must be 'hbci' or 'ehbci'")
+        if self.energy_correction.lower() not in ["variational", "pt2"]:
+            raise ValueError("energy_correction must be 'variational' or 'pt2'")
+        if self.pt2_renormalizer.lower() not in ["none", "shift", "dsrg"]:
+            raise ValueError("pt2_renormalizer must be 'none', 'shift', or 'dsrg'")

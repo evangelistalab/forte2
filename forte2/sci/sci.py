@@ -74,7 +74,7 @@ class _SelectedCIBase:
     eigensolver : DavidsonLiuSolver
         The eigensolver used to find the roots of the CI problem.
     E (evals) : NDArray
-        The eigenvalues (energielapsed:.3fes) of the CI problem.
+        The eigenvalues (energies) of the CI problem.
     evecs : NDArray
         The eigenvectors (CI coefficients) of the CI problem.
 
@@ -163,6 +163,10 @@ class _SelectedCIBase:
         )
         self.sci_helper.set_screening_criterion(self.sci_params.screening_criterion)
         self.sci_helper.set_energy_correction(self.sci_params.energy_correction)
+        self.sci_helper.set_pt2_renormalizer(
+            self.sci_params.pt2_renormalizer.lower(),
+            self.sci_params.pt2_renormalizer_strength,
+        )
         if self.sci_params.frozen_creation:
             self.sci_helper.set_frozen_creation(self.sci_params.frozen_creation)
 
@@ -191,10 +195,10 @@ class _SelectedCIBase:
                     f"Unknown selection algorithm: {self.sci_params.selection_algorithm}"
                 )
 
-            e_var = self.sci_helper.energies()
-            ept2_var = self.sci_helper.ept2_var()
-            ept2_pt = self.sci_helper.ept2_pt()
-            spin2_var = self.sci_helper.compute_spin2()
+            self.e_var = self.sci_helper.energies()
+            self.ept2_var = self.sci_helper.ept2_var()
+            self.ept2_pt = self.sci_helper.ept2_pt()
+            self.spin2_var = self.sci_helper.compute_spin2()
 
             summary = "\nSummary of selection:"
             summary += (
@@ -225,10 +229,10 @@ class _SelectedCIBase:
                 logger.log(
                     table.row(
                         r,
-                        e_var[r],
-                        spin2_var[r],
-                        e_var[r] + ept2_var[r],
-                        e_var[r] + ept2_var[r] + ept2_pt[r],
+                        self.e_var[r],
+                        self.spin2_var[r],
+                        self.e_var[r] + self.ept2_var[r],
+                        self.e_var[r] + self.ept2_var[r] + self.ept2_pt[r],
                     )
                     # f"{r:>4} {e_var[r]:20.12f} {e_var[r] + ept2_var[r]:20.12f} {e_var[r] + ept2_var[r] + ept2_pt[r]:20.12f}",
                     ,
@@ -954,14 +958,23 @@ class SelectedCISolver(ActiveSpaceSolver):
             self.first_run = False
 
         self.evals_per_solver = []
+        self.ept2_var_per_solver = []
+        self.ept2_pt_per_solver = []
         for ci_solver in self.sub_solvers:
             ci_solver.run()
             self.evals_per_solver.append(ci_solver.evals)
+            self.ept2_var_per_solver.append(ci_solver.ept2_var)
+            self.ept2_pt_per_solver.append(ci_solver.ept2_pt)
 
         self.evals_flat = np.concatenate(self.evals_per_solver)
+        self.ept2_var_flat = np.concatenate(self.ept2_var_per_solver)
+        self.ept2_pt_flat = np.concatenate(self.ept2_pt_per_solver)
+        self.etot_flat = self.evals_flat + self.ept2_var_flat + self.ept2_pt_flat
         self.E_avg = self.compute_average_energy()
 
         self.E = self.evals_flat
+        self.E_pt2 = self.ept2_var_flat + self.ept2_pt_flat
+        self.E_tot = self.etot_flat
 
         self.executed = True
         return self

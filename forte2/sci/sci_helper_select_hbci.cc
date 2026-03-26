@@ -16,12 +16,14 @@ namespace forte2 {
 double SelectedCIHelper::compute_delta_ept2(double delta, double v) const {
     if (energy_correction_ == EnergyCorrection::Variational) {
         return -0.5 * (delta + std::sqrt(delta * delta + 4.0 * v * v));
-        // if (delta > 0) {
-        //     return -0.5 * (delta - std::sqrt(delta * delta + 4.0 * v * v));
-        // } else {
-        // }
     } else if (energy_correction_ == EnergyCorrection::PT2) {
-        return v * v / delta;
+        if (pt2_renormalizer_ == PT2Renormalizer::Shift) {
+            return v * v / (delta + pt2_renormalizer_strength_);
+        } else if (pt2_renormalizer_ == PT2Renormalizer::DSRG) {
+            return v * v * regularized_denominator(delta, pt2_renormalizer_strength_);
+        } else {
+            return v * v / delta;
+        }
     }
     throw std::runtime_error("Unknown energy correction method");
     return 0.0;

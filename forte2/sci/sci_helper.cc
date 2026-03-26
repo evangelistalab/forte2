@@ -213,6 +213,22 @@ void SelectedCIHelper::set_energy_correction(const std::string& correction) {
     }
 }
 
+void SelectedCIHelper::set_pt2_renormalizer(const std::string& renormalizer, double strength) {
+    if (renormalizer == "none") {
+        pt2_renormalizer_ = PT2Renormalizer::None;
+        pt2_renormalizer_strength_ = 0.0;
+    } else if (renormalizer == "shift") {
+        pt2_renormalizer_ = PT2Renormalizer::Shift;
+        pt2_renormalizer_strength_ = strength;
+    } else if (renormalizer == "dsrg") {
+        pt2_renormalizer_ = PT2Renormalizer::DSRG;
+        pt2_renormalizer_strength_ = strength;
+    } else {
+        throw std::runtime_error("Unknown PT2 renormalization method: " + renormalizer +
+                                 ". Supported methods are 'none', 'shift', and 'dsrg'.");
+    }
+}
+
 np_vector SelectedCIHelper::Hdiag() const {
     auto Hdiag = make_zeros<nb::numpy, double, 1>({dets_.size()});
     auto Hdiag_view = Hdiag.view();

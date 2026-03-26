@@ -27,7 +27,7 @@ double taylor_exp(double z) {
 }
 
 /// @brief Computes the regularized denominator (1 - exp(-s*x^2)) / x
-double regularized_denominator(double x, double s) {
+inline double regularized_denominator(double x, double s) {
     double z = std::sqrt(s) * x;
     if (fabs(z) <= taylor_epsilon) {
         return taylor_exp(z) * std::sqrt(s);

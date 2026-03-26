@@ -1,4 +1,3 @@
-
 #include "helpers/logger.h"
 #include "helpers/timer.hpp"
 #include "helpers/ndarray.h"

@@ -38,6 +38,9 @@ void export_sci_helper_api(nb::module_& m) {
              "Set the screening criterion for selection ('hbci' or 'ehbci')")
         .def("set_energy_correction", &SelectedCIHelper::set_energy_correction, "correction"_a,
              "Set the energy correction method for selection ('variational' or 'pt2')")
+        .def("set_pt2_renormalizer", &SelectedCIHelper::set_pt2_renormalizer, "renormalizer"_a,
+             "strength"_a = 0.5,
+             "Set the PT2 renormalization method ('none', 'shift', 'dsrg') and its strength")
         .def("select_hbci_ref", &SelectedCIHelper::select_hbci_ref, "var_threshold"_a,
              "pt2_threshold"_a, "Perform HBCI selection with the given threshold")
         .def("select_hbci", &SelectedCIHelper::select_hbci, "var_threshold"_a, "pt2_threshold"_a,
