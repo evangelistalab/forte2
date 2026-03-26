@@ -247,9 +247,8 @@ class SelectedCIHelper {
     /// @brief The Slater rules for the current set of determinants
     SlaterRules slater_rules_;
 
-    /// @brief Do frozen creation
-    /// @brief The mask that controls frozen creation
-    String frozen_creation_mask_;
+    /// @brief The mask that controls which spatial orbitals cannot be created into.
+    String frozen_creation_mask_ = String::zero();
 
     /// @brief Orbital energies: e[p] = <p|H|p>
     std::vector<double> epsilon_;
@@ -286,6 +285,14 @@ class SelectedCIHelper {
     inline const double& Va(std::size_t p, std::size_t q, std::size_t r,
                             std::size_t s) const noexcept {
         return v_a_[p * norb3_ + q * norb2_ + r * norb_ + s];
+    }
+
+    inline bool creation_allowed(std::size_t orbital) const noexcept {
+        return !frozen_creation_mask_.get_bit(orbital);
+    }
+
+    inline bool creation_allowed(std::size_t orbital1, std::size_t orbital2) const noexcept {
+        return creation_allowed(orbital1) && creation_allowed(orbital2);
     }
 
     /// @brief The number of roots to compute

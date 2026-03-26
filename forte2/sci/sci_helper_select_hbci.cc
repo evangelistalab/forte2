@@ -88,6 +88,8 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
 
         for (const auto& i : aocc_span) {
             for (const auto& a : avir_span) {
+                if (!creation_allowed(a))
+                    continue;
                 // const double integral = h_[i * norb_ + a];
                 const double integral = slater_rules_.singles_coupling_a(i, a, det);
                 const double criterion = std::fabs(integral * max_abs_c);
@@ -112,6 +114,8 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
 
         for (const auto& i : bocc_span) {
             for (const auto& a : bvir_span) {
+                if (!creation_allowed(a))
+                    continue;
                 // const double integral =
                 //     slater_rules_.singles_coupling(i, a, bocc, aocc); // h_[i * norb_ + a];
                 const double integral = slater_rules_.singles_coupling_b(i, a, det);
@@ -141,6 +145,8 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
                 for (const auto& a : avir_span) {
                     for (const auto& b : avir_span) {
                         if (a >= b)
+                            continue;
+                        if (!creation_allowed(a, b))
                             continue;
 
                         const double integral = Va(i, j, a, b);
@@ -173,6 +179,8 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
                     for (const auto& b : bvir_span) {
                         if (a >= b)
                             continue;
+                        if (!creation_allowed(a, b))
+                            continue;
                         const double integral = Va(i, j, a, b);
                         const double criterion = std::fabs(integral * max_abs_c);
                         if (criterion < pt2_threshold)
@@ -199,6 +207,8 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
             for (const auto& j : bocc_span) {
                 for (const auto& a : avir_span) {
                     for (const auto& b : bvir_span) {
+                        if (!creation_allowed(a, b))
+                            continue;
                         const double integral = V(i, j, a, b);
                         const double criterion = std::fabs(integral * max_abs_c);
                         if (criterion < pt2_threshold)
@@ -448,6 +458,8 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
         // single alpha excitations
         for (const auto& i : aocc) {
             for (const auto& a : avir) {
+                if (!creation_allowed(a))
+                    continue;
                 auto [new_a_str, sign] = create_single_excitation(a_str, i, a);
                 if (String::Hash()(new_a_str) % num_batches != batch_id) {
                     continue;
@@ -487,7 +499,8 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
                     if (std::fabs(coupling * abs_c_max_block) < pt2_threshold)
                         break;
 
-                    if ((a >= b) or a_str.get_bit(a) or a_str.get_bit(b))
+                    if ((a >= b) or a_str.get_bit(a) or a_str.get_bit(b) or
+                        !creation_allowed(a, b))
                         continue;
 
                     auto [new_a_str, sign] = create_double_excitation(a_str, i, j, a, b);
@@ -523,6 +536,8 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
         // double alpha-beta excitations
         for (const auto& i : aocc) {
             for (const auto& a : avir) {
+                if (!creation_allowed(a))
+                    continue;
                 // find the new alpha string after excitation and the sign and store it
                 auto [new_a_str, a_sign] = create_single_excitation(a_str, i, a);
 
@@ -537,6 +552,8 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
                     // break early if the integrals are too small
                     if (std::fabs(coupling * abs_c_max_block) < pt2_threshold)
                         break;
+                    if (!creation_allowed(b))
+                        continue;
 
                     for (size_t k{0};
                          const auto& [b_str_idx, det_index] : second_string_to_det_index) {
@@ -583,6 +600,8 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
             // single beta excitations
             for (const auto& i : bocc) {
                 for (const auto& a : bvir) {
+                    if (!creation_allowed(a))
+                        continue;
                     new_det.set_b_string(b_str); // push the current beta string to compute coupling
                     // const double integral = h_[i * norb_ + a];
                     const double integral = slater_rules_.singles_coupling_b(i, a, new_det);
@@ -615,7 +634,8 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
                         if (criterion < pt2_threshold)
                             break;
 
-                        if ((a >= b) or b_str.get_bit(a) or b_str.get_bit(b))
+                        if ((a >= b) or b_str.get_bit(a) or b_str.get_bit(b) or
+                            !creation_allowed(a, b))
                             continue;
 
                         auto [new_b_str, sign] = create_double_excitation(b_str, i, j, a, b);

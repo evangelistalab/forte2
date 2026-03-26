@@ -88,6 +88,9 @@ void SelectedCIHelper::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
 void SelectedCIHelper::set_frozen_creation(const std::vector<size_t>& frozen_creation) {
     frozen_creation_mask_.clear();
     for (auto i : frozen_creation) {
+        if (i >= norb_) {
+            throw std::runtime_error("Frozen creation orbital index is out of range.");
+        }
         frozen_creation_mask_.set_bit(i, true);
     }
 }

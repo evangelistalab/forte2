@@ -282,3 +282,33 @@ def test_sci_semicanonical_final_orbital():
     sci.run()
 
     assert sci.E[0] == approx(-2.180967812920)
+
+
+@pytest.mark.parametrize("selection_algorithm", ["hbci_ref", "hbci"])
+def test_sci_frozen_creation_blocks_selected_growth(selection_algorithm):
+    """Frozen creation orbitals should be excluded from SCI selection."""
+    rhf = _h4_rhf()
+
+    common_kwargs = dict(
+        states=State(nel=4, multiplicity=1, ms=0.0),
+        active_orbitals=list(range(4)),
+        selection_algorithm=selection_algorithm,
+        guess_occ_window=0,
+        guess_vir_window=0,
+        var_threshold=1e-12,
+        pt2_threshold=0.0,
+        maxcycle=1,
+        ci_algorithm="exact",
+        num_threads=1,
+        num_batches_per_thread=1,
+    )
+
+    sci_unfrozen = SelectedCI(**common_kwargs)(rhf)
+    sci_unfrozen.run()
+
+    sci_frozen = SelectedCI(**common_kwargs, frozen_creation=[2, 3])(rhf)
+    sci_frozen.run()
+
+    assert sci_unfrozen.sub_solvers[0].sci_helper.ndets() > 1
+    assert sci_frozen.sub_solvers[0].sci_helper.ndets() == 1
+    assert sci_frozen.sub_solvers[0].sci_helper.dets()[0] == Determinant("2200")
