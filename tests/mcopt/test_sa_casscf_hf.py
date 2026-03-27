@@ -1,3 +1,5 @@
+import pytest
+
 from forte2 import System, RHF, MCOptimizer, State
 from forte2.helpers.comparisons import approx
 
@@ -34,10 +36,19 @@ def test_sa_casscf_hf():
     assert mc.E_ci[2] == approx(emcscf_root_3)
     assert mc.E_ci[3] == approx(emcscf_root_4)
 
+    # if energy is converged to ~1e-8, properties are converged to ~1e-4
     # transition dipole moment of 0->3 transition
-    assert abs(mc.ci_solver.tdm_per_solver[0][(0, 3)][2]) == approx(1.1357911621720147)
+    assert abs(mc.ci_solver.tdm_per_solver[0][(0, 3)][2]) == pytest.approx(
+        1.1357911621720147, abs=1e-4
+    )
     # transition oscillator strength of 0->3 transition
-    assert mc.ci_solver.fosc_per_solver[0][(0, 3)] == approx(0.4525407586932925)
+    assert mc.ci_solver.fosc_per_solver[0][(0, 3)] == pytest.approx(
+        0.4525407586932925, abs=1e-4
+    )
     # total dipole of state 0, 1
-    assert abs(mc.ci_solver.tdm_per_solver[0][(0, 0)][2]) == approx(0.7244112903260456)
-    assert abs(mc.ci_solver.tdm_per_solver[0][(1, 1)][2]) == approx(0.8239033452222257)
+    assert abs(mc.ci_solver.tdm_per_solver[0][(0, 0)][2]) == pytest.approx(
+        0.7244112903260456, abs=1e-4
+    )
+    assert abs(mc.ci_solver.tdm_per_solver[0][(1, 1)][2]) == pytest.approx(
+        0.8239033452222257, abs=1e-4
+    )
