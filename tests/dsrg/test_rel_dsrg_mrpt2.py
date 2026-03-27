@@ -1,11 +1,10 @@
 import numpy as np
 import pytest
 
-from forte2 import System, GHF, RelMCOptimizer, AVAS, ROHF, MCOptimizer, State
+from forte2 import System, GHF, RelMCOptimizer, AVAS
 from forte2.dsrg import RelDSRG_MRPT2, RelDSRG_MRPT2_Slow, RelDSRG_MRPT2_Slow
-from forte2.helpers.comparisons import approx, approx_loose
+from forte2.helpers.comparisons import approx
 from forte2.data.atom_data import EH_TO_WN
-from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 
 
 def test_mrpt2_n2_nonrel():
