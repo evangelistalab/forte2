@@ -17,10 +17,10 @@ double SelectedCIHelper::compute_delta_ept2(double delta, double v) const {
     if (energy_correction_ == EnergyCorrection::Variational) {
         return -0.5 * (delta + std::sqrt(delta * delta + 4.0 * v * v));
     } else if (energy_correction_ == EnergyCorrection::PT2) {
-        if (pt2_renormalizer_ == PT2Renormalizer::Shift) {
-            return v * v / (delta + pt2_renormalizer_strength_);
-        } else if (pt2_renormalizer_ == PT2Renormalizer::DSRG) {
-            return v * v * regularized_denominator(delta, pt2_renormalizer_strength_);
+        if (pt2_regularizer_ == PT2Regularizer::Shift) {
+            return v * v / (delta + pt2_regularizer_strength_);
+        } else if (pt2_regularizer_ == PT2Regularizer::DSRG) {
+            return v * v * regularized_denominator(delta, pt2_regularizer_strength_);
         } else {
             return v * v / delta;
         }

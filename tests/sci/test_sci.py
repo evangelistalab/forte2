@@ -63,8 +63,8 @@ def test_sci2():
             pt2_threshold=0.0,
             guess_occ_window=0,
             guess_vir_window=0,
-            pt2_renormalizer="dsrg",
-            pt2_renormalizer_strength=0.2,
+            pt2_regularizer="dsrg",
+            pt2_regularizer_strength=0.2,
         ),
         nroots=1,
     )(rhf)
@@ -73,7 +73,7 @@ def test_sci2():
 
     # this is the variational energy
     assert sci.E[0] == pytest.approx(-3.321294103198, abs=1e-9)
-    # this is the renormalized PT2 correction
+    # this is the regularized PT2 correction
     assert sci.E_pt2[0] == pytest.approx(-2.53555293e-05, abs=1e-9)
 
 

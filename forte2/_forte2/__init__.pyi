@@ -313,6 +313,11 @@ class SelectedCIHelper:
         Set the energy correction method for selection ('variational' or 'pt2')
         """
 
+    def set_pt2_regularizer(self, regularizer: str, strength: float = 0.5) -> None:
+        """
+        Set the PT2 regularization method ('none', 'shift', 'dsrg') and its strength
+        """
+
     def select_hbci_ref(self, var_threshold: float, pt2_threshold: float) -> None:
         """Perform HBCI selection with the given threshold"""
 

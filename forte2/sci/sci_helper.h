@@ -23,8 +23,8 @@ enum class ScreeningCriterion { HBCI, eHBCI };
 /// @brief Energy correction method for selected CI
 enum class EnergyCorrection { PT2, Variational };
 
-/// @brief Energy correction renormalization method
-enum class PT2Renormalizer { None, Shift, DSRG };
+/// @brief Energy correction regularization method
+enum class PT2Regularizer { None, Shift, DSRG };
 
 /// @brief A helper class for selected CI methods such as CIPSI and HBCI
 /// This class manages selection and sigma vector computation for selected CI methods.
@@ -75,8 +75,8 @@ class SelectedCIHelper {
     /// @brief Set the energy correction method (variational or pt2)
     void set_energy_correction(const std::string& correction);
 
-    /// @brief Set the PT2 renormalization method (none, shift, dsrg)
-    void set_pt2_renormalizer(const std::string& renormalizer, double strength = 0.5);
+    /// @brief Set the PT2 regularization method (none, shift, dsrg)
+    void set_pt2_regularizer(const std::string& regularizer, double strength = 0.5);
 
     /// @return The energies of the roots
     const std::vector<double>& energies() const { return root_energies_; }
@@ -211,9 +211,9 @@ class SelectedCIHelper {
     /// @brief Energy correction method for selected CI
     EnergyCorrection energy_correction_ = EnergyCorrection::PT2; // Default to PT2 correction
 
-    /// @brief PT2 renormalization method
-    PT2Renormalizer pt2_renormalizer_ = PT2Renormalizer::None; // Default to no renormalization
-    double pt2_renormalizer_strength_ = 0.0; // Default strength
+    /// @brief PT2 regularization method
+    PT2Regularizer pt2_regularizer_ = PT2Regularizer::None; // Default to no regularization
+    double pt2_regularizer_strength_ = 0.0; // Default strength
 
     /// @brief logging level for the class
     int log_level_ = 3;

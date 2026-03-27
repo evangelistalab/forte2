@@ -125,19 +125,19 @@ class SelectedCIParams:
         Options are "pt2" and "none".
     energy_shift: float, optional, default=None
         An energy shift applied during selection to target specific roots. If None, no shift is applied.
-    pt2_renormalizer: str, optional, default="none"
-        The method used to renormalize the PT2 energy correction.
+    pt2_regularizer: str, optional, default="none"
+        The method used to regularize the PT2 energy correction.
         Options are:
-            - "none": No renormalization.
+            - "none": No regularization.
             - "shift": Apply a small shift to the denominators in the PT2 expression to avoid divergences:
-                1 / denom -> 1 / (denom + pt2_renormalizer_strength)
-                Ept2 -> 0 as pt2_renormalizer_strength -> inf
-            - "dsrg": Use a DSRG-inspired renormalization of the PT2 correction:
-                1 / denom -> (1 / denom) * (1 - exp(-denom^2 * pt2_renormalizer_strength))
-                Ept2 -> 0 as pt2_renormalizer_strength -> 0, Ept2 -> unrenormalized PT2 as pt2_renormalizer_strength -> inf
-    pt2_renormalizer_strength: float, optional, default=0.0
-        The strength of the PT2 renormalization.
-        Note that the interpretation of this parameter depends on the choice of pt2_renormalizer (see above).
+                1 / denom -> 1 / (denom + pt2_regularizer_strength)
+                Ept2 -> 0 as pt2_regularizer_strength -> inf
+            - "dsrg": Use a DSRG-inspired regularization of the PT2 correction:
+                1 / denom -> (1 / denom) * (1 - exp(-denom^2 * pt2_regularizer_strength))
+                Ept2 -> 0 as pt2_regularizer_strength -> 0, Ept2 -> unregularized PT2 as pt2_regularizer_strength -> inf
+    pt2_regularizer_strength: float, optional, default=0.0
+        The strength of the PT2 regularization.
+        Note that the interpretation of this parameter depends on the choice of pt2_regularizer (see above).
     """
 
     maxcycle: int = 10
@@ -155,8 +155,8 @@ class SelectedCIParams:
     screening_criterion: str = "hbci"
     energy_correction: str = "pt2"
     energy_shift: float = None
-    pt2_renormalizer: str = "none"
-    pt2_renormalizer_strength: float = 0.0
+    pt2_regularizer: str = "none"
+    pt2_regularizer_strength: float = 0.0
 
     def __post_init__(self):
         if self.ci_algorithm.lower() not in ["exact", "sparse"]:
@@ -167,5 +167,5 @@ class SelectedCIParams:
             raise ValueError("screening_criterion must be 'hbci' or 'ehbci'")
         if self.energy_correction.lower() not in ["variational", "pt2"]:
             raise ValueError("energy_correction must be 'variational' or 'pt2'")
-        if self.pt2_renormalizer.lower() not in ["none", "shift", "dsrg"]:
-            raise ValueError("pt2_renormalizer must be 'none', 'shift', or 'dsrg'")
+        if self.pt2_regularizer.lower() not in ["none", "shift", "dsrg"]:
+            raise ValueError("pt2_regularizer must be 'none', 'shift', or 'dsrg'")

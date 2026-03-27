@@ -163,9 +163,9 @@ class _SelectedCIBase:
         )
         self.sci_helper.set_screening_criterion(self.sci_params.screening_criterion)
         self.sci_helper.set_energy_correction(self.sci_params.energy_correction)
-        self.sci_helper.set_pt2_renormalizer(
-            self.sci_params.pt2_renormalizer.lower(),
-            self.sci_params.pt2_renormalizer_strength,
+        self.sci_helper.set_pt2_regularizer(
+            self.sci_params.pt2_regularizer.lower(),
+            self.sci_params.pt2_regularizer_strength,
         )
         if self.sci_params.frozen_creation:
             self.sci_helper.set_frozen_creation(self.sci_params.frozen_creation)

@@ -213,18 +213,18 @@ void SelectedCIHelper::set_energy_correction(const std::string& correction) {
     }
 }
 
-void SelectedCIHelper::set_pt2_renormalizer(const std::string& renormalizer, double strength) {
-    if (renormalizer == "none") {
-        pt2_renormalizer_ = PT2Renormalizer::None;
-        pt2_renormalizer_strength_ = 0.0;
-    } else if (renormalizer == "shift") {
-        pt2_renormalizer_ = PT2Renormalizer::Shift;
-        pt2_renormalizer_strength_ = strength;
-    } else if (renormalizer == "dsrg") {
-        pt2_renormalizer_ = PT2Renormalizer::DSRG;
-        pt2_renormalizer_strength_ = strength;
+void SelectedCIHelper::set_pt2_regularizer(const std::string& regularizer, double strength) {
+    if (regularizer == "none") {
+        pt2_regularizer_ = PT2Regularizer::None;
+        pt2_regularizer_strength_ = 0.0;
+    } else if (regularizer == "shift") {
+        pt2_regularizer_ = PT2Regularizer::Shift;
+        pt2_regularizer_strength_ = strength;
+    } else if (regularizer == "dsrg") {
+        pt2_regularizer_ = PT2Regularizer::DSRG;
+        pt2_regularizer_strength_ = strength;
     } else {
-        throw std::runtime_error("Unknown PT2 renormalization method: " + renormalizer +
+        throw std::runtime_error("Unknown PT2 regularization method: " + regularizer +
                                  ". Supported methods are 'none', 'shift', and 'dsrg'.");
     }
 }
