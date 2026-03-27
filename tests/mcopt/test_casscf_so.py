@@ -38,7 +38,7 @@ def test_casscf_so():
 
     system.two_component = True
 
-    C_2c = convert_coeff_spatial_to_spinor(system, mc.C)
+    C_2c = convert_coeff_spatial_to_spinor(mc.C)
     rhf.C = C_2c
     system.x2c_type = "so"
     system.snso_type = "row-dependent"

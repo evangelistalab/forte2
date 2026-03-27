@@ -14,7 +14,7 @@ namespace forte2 {
 
 RelCISigmaBuilder::RelCISigmaBuilder(const CIStrings& lists, double E, np_matrix_complex& H,
                                      np_tensor4_complex& V, int log_level, bool use_asym_ints)
-    : lists_(lists), E_(E), H_(H), V_(V), rel_slater_rules_(lists.norb(), E, H, V),
+    : lists_(lists), E_(E), H_(H), V_(V), rel_slater_rules_(lists.norb(), E, H, V, use_asym_ints),
       log_level_(log_level), use_asym_ints_(use_asym_ints) {
     // Find the size of the largest symmetry block
     size_t max_size = 0;
