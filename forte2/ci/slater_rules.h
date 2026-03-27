@@ -38,7 +38,7 @@ class RelSlaterRules {
     // ==> Class Constructors <==
 
     RelSlaterRules(int nspinor, double scalar_energy, np_matrix_complex one_electron_integrals,
-                   np_tensor4_complex two_electron_integrals);
+                   np_tensor4_complex two_electron_integrals, bool tei_is_asym = false);
 
     // ==> Class Interface <==
 
@@ -57,6 +57,8 @@ class RelSlaterRules {
     np_matrix_complex one_electron_integrals_;
     /// Two-electron integrals (restricted) in the form V[p,q,r,s] = <pq|rs>
     np_tensor4_complex two_electron_integrals_;
+    /// Flag indicating if the two-electron integrals are antisymmetric (i.e. <pq||rs> = <pq|rs> - <pq|sr>)
+    bool tei_is_asym_;
 };
 
 } // namespace forte2
