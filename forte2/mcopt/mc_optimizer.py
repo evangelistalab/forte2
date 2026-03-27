@@ -8,7 +8,7 @@ from forte2.base_classes.active_space_solver import (
 )
 from forte2.orbitals import Semicanonicalizer
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
-from forte2.helpers import logger, LBFGS, DIIS
+from forte2.helpers import logger, LBFGS
 from forte2.system.basis_utils import BasisInfo
 from forte2.ci.ci_utils import (
     pretty_print_ci_summary,
@@ -72,14 +72,6 @@ class MCOptimizer(ActiveSpaceSolver):
         - ci_rconv
         - ci_energy_shift
         All parameters have the same default values.
-    do_diis : bool, optional
-        Whether DIIS acceleration is used.
-    diis_start : int, optional, default=15
-        Start saving DIIS vectors after this many iterations.
-    diis_nvec : int, optional, default=8
-        The number of vectors to keep in the DIIS.
-    diis_min : int, optional, default=4
-        The minimum number of vectors to perform extrapolation.
     do_transition_dipole : bool, optional, default=False
         Whether to compute transition dipole moments.
 
@@ -113,12 +105,6 @@ class MCOptimizer(ActiveSpaceSolver):
     ci_collapse_per_root: int = 2
     ci_basis_per_root: int = 4
     ci_energy_shift: float = None
-
-    ### DIIS parameters
-    do_diis: bool = False
-    diis_start: int = 15
-    diis_nvec: int = 8
-    diis_min: int = 4
 
     ### Post-iteration
     do_transition_dipole: bool = False
@@ -235,13 +221,6 @@ class MCOptimizer(ActiveSpaceSolver):
             dtype=self.dtype,
         )
 
-        diis = DIIS(
-            diis_start=self.diis_start,
-            diis_nvec=self.diis_nvec,
-            diis_min=self.diis_min,
-            do_diis=self.do_diis,
-        )
-
         width = 115
 
         logger.log_info1(self.mo_space)
@@ -249,15 +228,13 @@ class MCOptimizer(ActiveSpaceSolver):
 
         logger.log_info1("Entering orbital optimization loop")
         logger.log_info1("\nConvergence criteria ('.' if satisfied, 'x' otherwise):")
-        logger.log_info1(f"  {'1. RMS(grad - grad_old)':<25} < {self.gconv:.1e}")
-        logger.log_info1(f"  {'2. ||E_CI - E_orb||':<25} < {self.econv:.1e}")
-        logger.log_info1(f"  {'3. ||E_CI - E_CI_old||':<25} < {self.econv:.1e}")
-        logger.log_info1(f"  {'4. ||E_avg - E_avg_old||':<25} < {self.econv:.1e}")
-        logger.log_info1(f"  {'5. ||E_orb - E_orb_old||':<25} < {self.econv:.1e}\n")
+        logger.log_info1(f"  {'1. RMS(grad)':<32} < {self.gconv:.1e}")
+        logger.log_info1(f"  {'2. max(abs(E_CI_i - E_CI_old_i))':<32} < {self.econv:.1e}")
+        logger.log_info1(f"  {'3. abs(E_avg - E_avg_old)':<32} < {self.econv:.1e}\n")
 
         logger.log_info1("=" * width)
         logger.log_info1(
-            f'{"Iteration":>10} {"E_CI":>20} {"ΔE_CI":>12} {"E_orb":>20} {"ΔE_orb":>12} {"RMS(Δgrad)":>12} {"#micro":>8} {"Conv":>8} {"DIIS":>5}'
+            f'{"Iteration":>10} {"E_avg":>20} {"E_orb":>20} {"ΔE_avg":>12} {"max(ΔE_ci)":>12} {"RMS(grad)":>12} {"#micro":>8} {"Conv":>8}'
         )
         logger.log_info1("-" * width)
 
@@ -285,7 +262,7 @@ class MCOptimizer(ActiveSpaceSolver):
         self.g_old = np.zeros(self.orb_opt.nrot, dtype=self.dtype)
 
         # This holds the *overall* orbital rotation, C_current = C_0 @ exp(R)
-        # It's used as the initial guess at the start of each orbital optimization, and also for DIIS
+        # It's used as the initial guess at the start of each orbital optimization
         R = np.zeros(self.orb_opt.nrot, dtype=self.dtype)
 
         while self.iter < self.maxiter:
@@ -294,27 +271,21 @@ class MCOptimizer(ActiveSpaceSolver):
             self._C = self.orb_opt.C.copy()
             # 2. Convergence checks
             _dg = self.lbfgs_solver.g - self.g_old
-            self.g_rms = np.sqrt(np.mean((_dg.conj() * _dg).real))
+            self.dg_rms = np.sqrt(np.mean((_dg.conj() * _dg).real))
+            self.g_rms = np.sqrt(np.mean((self.lbfgs_solver.g.conj() * self.lbfgs_solver.g).real))
             self.g_old = self.lbfgs_solver.g.copy()
             conv, conv_str = self._check_convergence()
             lbfgs_str = f"{self.lbfgs_solver.iter}/{'Y' if self.lbfgs_solver.converged else 'N'}"
-            iter_info = f"{self.iter:>10d} {self.E_avg.real:>20.10f} {self.delta_ci_avg.real:>12.4e} "
-            iter_info += f"{self.E_orb.real:>20.10f} {self.delta_orb.real:>12.4e} {self.g_rms.real:>12.4e} {lbfgs_str:>8} {conv_str:>8}"
+            iter_info = f"{self.iter:>10d} {self.E_avg.real:>20.10f} {self.E_orb.real:>20.10f} "
+            iter_info += f"{self.delta_ci_avg.real:>12.4e} {self.max_ci_de:>12.4e} {self.g_rms.real:>12.4e} {lbfgs_str:>8} {conv_str:>8}"
             if conv:
                 logger.log_info1(iter_info)
                 self.converged = True
                 break
 
-            # 3. DIIS Extrapolation
-            R = diis.update(R, self.g_old)
-            iter_info += f" {diis.status:>5s}"
             logger.log_info1(iter_info)
-            # if diis has performed extrapolation
-            if "E" in diis.status:
-                # orb_opt.evaluate updates the 1 and 2-electron integrals for CI
-                _ = self.orb_opt.evaluate(R)
 
-            # 4. Optimize CI expansion at fixed orbitals
+            # 3. Optimize CI expansion at fixed orbitals
             self.ci_solver.set_ints(
                 self.orb_opt.Ecore + self.system.nuclear_repulsion,
                 self.orb_opt.Fcore[self.actv, self.actv],
@@ -349,11 +320,12 @@ class MCOptimizer(ActiveSpaceSolver):
         self.E_ci = np.array(self.ci_solver.E)
         self.E_avg = self.ci_solver.compute_average_energy()
         logger.log_info1(
-            f"{'Final CI':>10} {self.E_avg:>20.10f} {'-':>12} {self.E_orb:>20.10f} {'-':>12} {'-':>12} {'-':>6} {'':>10s}"
+            f"{'Final CI':>10} {self.E_avg:>20.10f} {self.E_orb:>20.10f} {'-':>12} {'-':>12} {'-':>12} {'-':>8} {'':>8}"
         )
 
         logger.log_info1("=" * width)
-        logger.log_info1(f"Orbital optimization converged in {self.iter} iterations.")
+        if self.converged:
+            logger.log_info1(f"Orbital optimization converged in {self.iter} iterations.")
         logger.log_info1(f"Final orbital optimized energy: {self.E_avg:.10f}")
 
         # undo _make_spaces_contiguous
@@ -478,21 +450,17 @@ class MCOptimizer(ActiveSpaceSolver):
 
     def _check_convergence(self):
         is_grad_conv = self.g_rms < self.gconv
-        is_ci_orb_conv = abs(self.E_orb - self.E_avg) < self.econv
-        is_ci_eigval_conv = np.all(abs(self.E_ci - self.E_ci_old) < self.econv)
+
+        self.max_ci_de = np.max(np.abs(self.E_ci - self.E_ci_old))
+        is_ci_eigval_conv = self.max_ci_de < self.econv
 
         self.delta_ci_avg = self.E_avg - self.E_avg_old
         is_ci_avg_conv = abs(self.delta_ci_avg) < self.econv
 
-        self.delta_orb = self.E_orb - self.E_orb_old
-        is_orb_conv = abs(self.E_orb - self.E_orb_old) < self.econv
-
         criteria = [
             is_grad_conv,
-            is_ci_orb_conv,
             is_ci_eigval_conv,
             is_ci_avg_conv,
-            is_orb_conv,
         ]
 
         conv = all(criteria)

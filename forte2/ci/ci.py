@@ -153,8 +153,12 @@ class _CIBase:
 
     def _ci_solver_startup(self):
         if self.two_component:
+            _nactel = self.state.nel - self.ncore
+            assert (
+                _nactel >= 0
+            ), f"Number of active electrons {_nactel} must be non-negative."
             self.ci_strings = CIStrings(
-                self.state.nel - self.ncore,
+                _nactel,
                 0,
                 self.state.symmetry,
                 self.active_orbsym,
@@ -162,9 +166,17 @@ class _CIBase:
                 self.state.gas_max,
             )
         else:
+            _nactel_a = self.state.na - self.ncore
+            _nactel_b = self.state.nb - self.ncore
+            assert (
+                _nactel_a >= 0
+            ), f"Number of active α electrons {_nactel_a} must be non-negative."
+            assert (
+                _nactel_b >= 0
+            ), f"Number of active β electrons {_nactel_b} must be non-negative."
             self.ci_strings = CIStrings(
-                self.state.na - self.ncore,
-                self.state.nb - self.ncore,
+                _nactel_a,
+                _nactel_b,
                 self.state.symmetry,
                 self.active_orbsym,
                 self.gas_min,
@@ -433,7 +445,7 @@ class _CIBase:
                 logger.log(
                     f"RDMs for root {root} validated successfully.\n", self.log_level
                 )
-                return
+            return
         if use_asym_ints:
             raise NotImplementedError(
                 "The 'use_asym_ints' option is not implemented for non-relativistic CI."
@@ -1532,6 +1544,8 @@ class CISolver(ActiveSpaceSolver):
     def compute_natural_occupation_numbers(self):
         """
         Compute the natural occupation numbers for the CI states.
+        The first `nroots` columns of the resulting array correspond to the natural occupation numbers for each root,
+        while the last column corresponds to the natural occupation numbers from the average 1-RDM.
 
         Returns
         -------
@@ -1541,6 +1555,9 @@ class CISolver(ActiveSpaceSolver):
         nos = []
         for ci_solver in self.sub_solvers:
             nos.append(ci_solver.compute_natural_occupation_numbers())
+        if self.ncis > 1:
+            g1_avg = self.make_average_1rdm()
+            nos.append(np.linalg.eigvalsh(g1_avg)[::-1][:, np.newaxis])
         self.nat_occs = np.concatenate(nos, axis=1)
 
     def get_top_determinants(self, n=5):

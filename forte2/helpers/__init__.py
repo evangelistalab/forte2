@@ -1,4 +1,5 @@
 from .matrix_functions import (
+    print_metric_info,
     invsqrt_matrix,
     canonical_orth,
     eigh_gen,

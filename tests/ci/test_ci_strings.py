@@ -1,4 +1,21 @@
+import pytest
 from forte2 import CIStrings, State, MOSpace
+
+
+def test_ci_strings_input():
+    # negative number of electrons
+    with pytest.raises(ValueError):
+        ci_strings = CIStrings(-1, 0, 0, [[]], [], [])
+
+    with pytest.raises(ValueError):
+        ci_strings = CIStrings(-1, -1, 0, [[]], [], [])
+
+    with pytest.raises(ValueError):
+        ci_strings = CIStrings(1, -1, 0, [[]], [], [])
+
+    # wrong type (list instead of list[list]) for orbital_symmetry
+    with pytest.raises(TypeError):
+        ci_strings = CIStrings(1, 1, 0, [0], [], [])
 
 
 def test_ci_strings_singlet():

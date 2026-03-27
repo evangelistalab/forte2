@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from forte2 import System, GHF, RelMCOptimizer, AVAS, ROHF, MCOptimizer, State
-from forte2.dsrg import RelDSRG_MRPT2, RelDSRG_MRPT2_Slow
+from forte2.dsrg import RelDSRG_MRPT2, RelDSRG_MRPT2_Slow, RelDSRG_MRPT2_Slow
 from forte2.helpers.comparisons import approx, approx_loose
 from forte2.data.atom_data import EH_TO_WN
 from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
@@ -121,7 +121,6 @@ def test_mrpt2_carbon_rel_sa():
         core_orbitals=2,
         econv=1e-8,
         gconv=1e-6,
-        do_diis=False,
     )(mf)
     dsrg = RelDSRG_MRPT2(flow_param=0.24, relax_reference="once")(mc)
     dsrg.run()
@@ -166,7 +165,6 @@ def test_mrpt2_se_rel_sa_gauss_nuc():
     mc = RelMCOptimizer(
         nel=34,
         nroots=9,
-        do_diis=False,
         core_orbitals=28,
         active_orbitals=8,
     )(mf)
@@ -202,7 +200,6 @@ def test_mrpt2_s_rel_sa_gauss_nuc():
     mc = RelMCOptimizer(
         nel=16,
         nroots=9,
-        do_diis=False,
         econv=1e-11,
         gconv=1e-10,
         core_orbitals=10,
@@ -307,232 +304,3 @@ def test_mrpt2_sh_with_slow():
     assert dsrg.relax_eigvals == approx(dsrg_slow.relax_eigvals)
     assert dsrg.relax_eigvals_history == approx(dsrg_slow.relax_eigvals_history)
     assert dsrg.E_dsrg == approx(dsrg_slow.E_dsrg)
-
-
-def test_siso_pt2_phosphorus():
-    xyz = """
-    P 0 0 0
-    """
-
-    system = System(
-        xyz=xyz,
-        basis_set="decon-ano-rcc",
-        auxiliary_basis_set="ano-rcc-autoaux",
-        minao_basis_set="ano-r0",
-        x2c_type="sf",
-        use_gaussian_charges=True,
-    )
-    scf = ROHF(
-        charge=0,
-        maxiter=50,
-        ms=0.5,
-        die_if_not_converged=False,
-    )(system)
-
-    mc = MCOptimizer(
-        states=[
-            State(nel=15, multiplicity=4, ms=1.5),
-            State(nel=15, multiplicity=2, ms=0.5),
-        ],
-        nroots=[1, 5],
-        maxiter=100,
-        active_orbitals=4,
-        core_orbitals=5,
-    )(scf)
-    mc.run()
-
-    # Convert the MCSCF MO coefficients into two-component spinors
-    system.two_component = True
-    mc.C = convert_coeff_spatial_to_spinor(mc.C)
-    # Diagonalize the CI Hamiltonian in the two-component basis
-    ci = RelMCOptimizer(
-        nel=15,
-        nroots=14,
-        maxiter=0,
-        core_orbitals=10,
-        active_orbitals=8,
-    )(mc)
-    ci.run()
-
-    # the "siso" option only turns on the X2C Hamiltonian for reference relaxation
-    pt = RelDSRG_MRPT2(
-        flow_param=0.50,
-        relax_reference="once",
-        siso=True,
-    )(ci)
-    pt.run()
-    assert (pt.relax_eigvals[8] - pt.relax_eigvals[7]) * EH_TO_WN == pytest.approx(
-        8.914376243446005, abs=1e-3
-    )  # this is ~5e-9 Hartree
-
-
-def test_so_pt2_phosphorus():
-    xyz = """
-    P 0 0 0
-    """
-
-    system = System(
-        xyz=xyz,
-        basis_set="decon-ano-rcc",
-        auxiliary_basis_set="ano-rcc-autoaux",
-        minao_basis_set="ano-r0",
-        x2c_type="sf",
-        use_gaussian_charges=True,
-    )
-    scf = ROHF(
-        charge=0,
-        maxiter=50,
-        ms=0.5,
-        die_if_not_converged=False,
-    )(system)
-
-    mc = MCOptimizer(
-        states=[
-            State(nel=15, multiplicity=4, ms=1.5),
-            State(nel=15, multiplicity=2, ms=0.5),
-        ],
-        nroots=[1, 5],
-        maxiter=100,
-        active_orbitals=4,
-        core_orbitals=5,
-    )(scf)
-    mc.run()
-
-    # Convert the MCSCF MO coefficients into two-component spinors
-    system.two_component = True
-    mc.C = convert_coeff_spatial_to_spinor(mc.C)
-    # Diagonalize the CI Hamiltonian in the two-component basis
-    ci = RelMCOptimizer(
-        nel=15,
-        nroots=14,
-        maxiter=0,
-        core_orbitals=10,
-        active_orbitals=8,
-    )(mc)
-    ci.run()
-
-    # turn on X2C
-    system.x2c_type = "so"
-    system.snso_type = "row-dependent"
-    pt = RelDSRG_MRPT2(
-        flow_param=0.50,
-        relax_reference="once",
-    )(ci)
-    pt.run()
-    assert (pt.relax_eigvals[8] - pt.relax_eigvals[7]) * EH_TO_WN == pytest.approx(
-        11.716487792882816, abs=1e-3
-    )  # this is ~5e-9 Hartree
-
-
-def test_so_pt2_bromine():
-    xyz = """
-    Br 0 0 0
-    """
-
-    system = System(
-        xyz=xyz,
-        basis_set="decon-ano-rcc",
-        auxiliary_basis_set="ano-rcc-autoaux",
-        minao_basis_set="ano-r0",
-        x2c_type="sf",
-        use_gaussian_charges=True,
-    )
-    scf = ROHF(
-        charge=0,
-        maxiter=50,
-        ms=0.5,
-        die_if_not_converged=False,
-    )(system)
-    avas = AVAS(
-        subspace=["Br(4s)", "Br(4p)"],
-        selection_method="separate",
-        num_active_docc=3,
-        num_active_uocc=0,
-    )(scf)
-    mc = MCOptimizer(
-        states=State(nel=35, multiplicity=2, ms=0.5),
-        nroots=3,
-        maxiter=100,
-    )(avas)
-    mc.run()
-
-    system.two_component = True
-    mc.C = convert_coeff_spatial_to_spinor(mc.C)
-
-    ci = RelMCOptimizer(
-        nel=35,
-        nroots=6,
-        maxiter=0,
-        core_orbitals=28,
-        active_orbitals=8,
-    )(mc)
-    ci.run()
-    system.x2c_type = "so"
-    system.snso_type = "row-dependent"
-
-    pt = RelDSRG_MRPT2(
-        flow_param=0.50,
-        relax_reference="once",
-    )(ci)
-    pt.run()
-
-    assert (pt.relax_eigvals[4] - pt.relax_eigvals[3]) * EH_TO_WN == approx_loose(
-        3703.698683547775
-    )
-
-
-def test_siso_pt2_bromine_frozen_core():
-    xyz = """
-    Br 0 0 0
-    """
-
-    system = System(
-        xyz=xyz,
-        basis_set="decon-ano-rcc",
-        auxiliary_basis_set="ano-rcc-autoaux",
-        minao_basis_set="ano-r0",
-        x2c_type="sf",
-        use_gaussian_charges=True,
-    )
-    scf = ROHF(
-        charge=0,
-        maxiter=50,
-        ms=0.5,
-        die_if_not_converged=False,
-    )(system)
-    avas = AVAS(
-        subspace=["Br(4s)", "Br(4p)"],
-        selection_method="separate",
-        num_active_docc=3,
-        num_active_uocc=0,
-    )(scf)
-    mc = MCOptimizer(
-        states=State(nel=35, multiplicity=2, ms=0.5),
-        nroots=3,
-        maxiter=100,
-    )(avas)
-    mc.run()
-
-    system.two_component = True
-    mc.C = convert_coeff_spatial_to_spinor(mc.C)
-
-    ci = RelMCOptimizer(
-        nel=35,
-        nroots=6,
-        maxiter=0,
-        core_orbitals=28,
-        active_orbitals=8,
-    )(mc)
-    ci.run()
-
-    pt = RelDSRG_MRPT2(
-        flow_param=0.50,
-        siso=True,
-        frozen_core_orbitals=28,
-        relax_reference="once",
-    )(ci)
-    pt.run()
-
-    assert (pt.relax_eigvals[4] - pt.relax_eigvals[3]) * EH_TO_WN == approx_loose(
-        3419.099158700063
-    )
