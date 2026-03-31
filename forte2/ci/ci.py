@@ -16,10 +16,7 @@ from forte2 import (
 from forte2.state import State, MOSpace
 from forte2.helpers.comparisons import approx
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
-from forte2.base_classes.active_space_solver import (
-    ActiveSpaceSolver,
-    RelActiveSpaceSolver,
-)
+from forte2.base_classes import CIBase, RelCIBase
 from forte2.base_classes.params import DavidsonLiuParams, CIParams
 from forte2.helpers import logger
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
@@ -40,7 +37,7 @@ from .ci_utils import (
 
 
 @dataclass
-class _CIBase:
+class _CISingleStateSolver:
     """
     A general configuration interaction (CI) solver class for a single `State`.
     Although possible, is not recommended to instantiate this class directly.
@@ -1241,7 +1238,7 @@ class _CIBase:
 
 
 @dataclass
-class CISolver(ActiveSpaceSolver):
+class CISolver(CIBase):
     """
     A general configuration interaction (CI) solver class.
     This solver is can be called iteratively, e.g., in a MCSCF loop or a DSRG reference relaxation loop.
@@ -1259,7 +1256,7 @@ class CISolver(ActiveSpaceSolver):
 
     Attributes
     ----------
-    sub_solvers : list[_CIBase]
+    sub_solvers : list[_CISingleStateSolver]
         A list of CI solvers for each state in the state-averaged CI.
     evals_per_solver : list[NDArray]
         The eigenvalues (energies) computed by each sub-solver.
@@ -1273,14 +1270,6 @@ class CISolver(ActiveSpaceSolver):
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
-
-    ### Non-init attributes
-    first_run: bool = field(default=True, init=False)
-    executed: bool = field(default=False, init=False)
-
-    def __call__(self, method):
-        self.parent_method = method
-        return self
 
     def _startup(self):
         super()._startup()
@@ -1307,8 +1296,8 @@ class CISolver(ActiveSpaceSolver):
         for i, state in enumerate(self.sa_info.states):
             # Create a CI solver for each state and MOSpace
 
-            kwargs = self._collect_child_kwargs(_CIBase)
-            # these are needed by _CIBase but not present as attributes of CISolver
+            kwargs = self._collect_child_kwargs(_CISingleStateSolver)
+            # these are needed by _CISingleStateSolver but not present as attributes of CISolver
             kwargs.update(
                 {
                     "ints": ints,
@@ -1317,16 +1306,7 @@ class CISolver(ActiveSpaceSolver):
                     "active_orbsym": active_orbsym,
                 }
             )
-            self.sub_solvers.append(_CIBase(**kwargs))
-
-    def _collect_child_kwargs(self, target_cls):
-        """Collect keyword arguments for child solvers."""
-        # Defer import to avoid polluting top-level namespace
-        from dataclasses import fields as _dc_fields
-
-        # Take all init fields of the target dataclass and copy values from `self` if present
-        names = {f.name for f in _dc_fields(target_cls) if f.init}
-        return {n: getattr(self, n) for n in names if hasattr(self, n)}
+            self.sub_solvers.append(_CISingleStateSolver(**kwargs))
 
     def run(self):
         if self.first_run:
@@ -1345,17 +1325,7 @@ class CISolver(ActiveSpaceSolver):
 
         self.executed = True
         return self
-
-    def reset_eigensolver(self):
-        """
-        Reset the eigensolver for each sub-solver.
-        This forces a re-initialization of the eigensolver in the next run,
-        and also forces re-computation of the guess vectors.
-        This is useful whenever the integrals have changed (e.g. after semi-canonicalization).
-        """
-        for ci_solver in self.sub_solvers:
-            ci_solver.reset_eigensolver()
-
+    
     def compute_average_energy(self):
         """
         Compute the average energy from the CI roots using the weights.
@@ -1366,6 +1336,16 @@ class CISolver(ActiveSpaceSolver):
             Average energy of the CI roots.
         """
         return np.dot(self.weights_flat, self.evals_flat)
+
+    def reset_eigensolver(self):
+        """
+        Reset the eigensolver for each sub-solver.
+        This forces a re-initialization of the eigensolver in the next run,
+        and also forces re-computation of the guess vectors.
+        This is useful whenever the integrals have changed (e.g. after semi-canonicalization).
+        """
+        for ci_solver in self.sub_solvers:
+            ci_solver.reset_eigensolver()
 
     def make_average_1rdm(self):
         """
@@ -1636,7 +1616,7 @@ class CI(CISolver):
 
 
 @dataclass
-class RelCISolver(RelActiveSpaceSolver):
+class RelCISolver(RelCIBase):
     """
     Relativistic Configuration Interaction
     """
@@ -1646,10 +1626,6 @@ class RelCISolver(RelActiveSpaceSolver):
 
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
-
-    ### Non-init attributes
-    first_run: bool = field(default=True, init=False)
-    executed: bool = field(default=False, init=False)
 
     compute_average_energy = CISolver.compute_average_energy
     make_average_1rdm = CISolver.make_average_1rdm
@@ -1666,12 +1642,8 @@ class RelCISolver(RelActiveSpaceSolver):
     set_maxiter = CISolver.set_maxiter
     get_convergence_status = CISolver.get_convergence_status
 
-    def __call__(self, parent_method):
-        self.parent_method = parent_method
-        return self
-
     def _startup(self):
-        super()._startup(two_component=True)
+        super()._startup()
         if not self.system.two_component:
             self.C = convert_coeff_spatial_to_spinor(self.C)
             self.system.two_component = True
@@ -1699,20 +1671,19 @@ class RelCISolver(RelActiveSpaceSolver):
 
         for i, state in enumerate(self.sa_info.states):
             # Create a CI solver for each state and MOSpace
-            self.sub_solvers.append(
-                _CIBase(
-                    mo_space=self.mo_space,
-                    ints=ints,
-                    state=state,
-                    nroot=self.sa_info.nroots[i],
-                    active_orbsym=active_orbsym,
-                    do_test_rdms=self.do_test_rdms,
-                    davidson_liu_params=self.davidson_liu_params,
-                    ci_params=self.ci_params,
-                    log_level=self.log_level,
-                    two_component=True,
-                )
+
+            kwargs = self._collect_child_kwargs(_CISingleStateSolver)
+            # these are needed by _CISingleStateSolver but not present as attributes of RelCISolver
+            kwargs.update(
+                {
+                    "ints": ints,
+                    "state": state,
+                    "nroot": self.sa_info.nroots[i],
+                    "active_orbsym": active_orbsym,
+                    "two_component": True,
+                }
             )
+            self.sub_solvers.append(_CISingleStateSolver(**kwargs))
 
     def run(self, use_asym_ints=False):
         if self.first_run:

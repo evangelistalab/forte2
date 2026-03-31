@@ -20,27 +20,17 @@ from forte2.helpers.table import AsciiTable
 from forte2.state import State, MOSpace
 from forte2.helpers.comparisons import approx
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
-from forte2.base_classes.active_space_solver import (
-    ActiveSpaceSolver,
-    RelActiveSpaceSolver,
-)
+from forte2.base_classes import CIBase
 from forte2.base_classes.params import SelectedCIParams, DavidsonLiuParams
 from forte2.helpers import logger
-from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
+from forte2.jkbuilder import RestrictedMOIntegrals
 from forte2.props import get_1e_property
 from forte2.orbitals import Semicanonicalizer
-from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
-from forte2.ci.ci_utils import (
-    pretty_print_gas_info,
-    pretty_print_ci_summary,
-    pretty_print_ci_nat_occ_numbers,
-    pretty_print_ci_dets,
-    pretty_print_ci_transition_props,
-)
+from forte2.ci.ci_utils import pretty_print_ci_summary, pretty_print_ci_dets
 
 
 @dataclass
-class _SelectedCIBase:
+class _SelectedCISingleStateSolver:
     """
     A general selected configuration interaction (CI) solver class for a single `State`.
     Although possible, is not recommended to instantiate this class directly.
@@ -864,7 +854,7 @@ class _SelectedCIBase:
 
 
 @dataclass
-class SelectedCISolver(ActiveSpaceSolver):
+class SelectedCISolver(CIBase):
     """
     A general configuration interaction (CI) solver class.
     This solver is can be called iteratively, e.g., in a MCSCF loop or a DSRG reference relaxation loop.
@@ -882,7 +872,7 @@ class SelectedCISolver(ActiveSpaceSolver):
 
     Attributes
     ----------
-    sub_solvers : list[_CIBase]
+    sub_solvers : list[_SelectedCISingleStateSolver]
         A list of CI solvers for each state in the state-averaged CI.
     evals_per_solver : list[NDArray]
         The eigenvalues (energies) computed by each sub-solver.
@@ -896,24 +886,6 @@ class SelectedCISolver(ActiveSpaceSolver):
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
-
-    ### Non-init attributes
-    ci_builder_memory: int = field(default=1024, init=False)  # in MB
-    first_run: bool = field(default=True, init=False)
-    executed: bool = field(default=False, init=False)
-
-    def __call__(self, method):
-        self.parent_method = method
-        return self
-
-    def _collect_child_kwargs(self, target_cls):
-        """Collect keyword arguments for child solvers."""
-        # Defer import to avoid polluting top-level namespace
-        from dataclasses import fields as _dc_fields
-
-        # Take all init fields of the target dataclass and copy values from `self` if present
-        names = {f.name for f in _dc_fields(target_cls) if f.init}
-        return {n: getattr(self, n) for n in names if hasattr(self, n)}
 
     def _startup(self):
         super()._startup()
@@ -940,8 +912,8 @@ class SelectedCISolver(ActiveSpaceSolver):
         for i, state in enumerate(self.sa_info.states):
             # Create a CI solver for each state and MOSpace
 
-            kwargs = self._collect_child_kwargs(_SelectedCIBase)
-            # these are needed by _SelectedCIBase but not present as attributes of SelectedCISolver
+            kwargs = self._collect_child_kwargs(_SelectedCISingleStateSolver)
+            # these are needed by _SelectedCISingleStateSolver but not present as attributes of SelectedCISolver
             kwargs.update(
                 {
                     "ints": ints,
@@ -950,9 +922,10 @@ class SelectedCISolver(ActiveSpaceSolver):
                     "active_orbsym": active_orbsym,
                 }
             )
-            self.sub_solvers.append(_SelectedCIBase(**kwargs))
+            self.sub_solvers.append(_SelectedCISingleStateSolver(**kwargs))
 
     def run(self):
+        # override the run method in the base class
         if self.first_run:
             self._startup()
             self.first_run = False
