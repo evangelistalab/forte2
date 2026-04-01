@@ -610,16 +610,17 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
         new_det.set_a_string(a_str);
         for (size_t k{0}; const auto& [b_str_idx, det_index] : second_string_to_det_index) {
             const String& b_str = ab_list_.sorted_second_string(b_str_idx);
-            b_str.find_set_bits(bocc, nob);
-            compute_fast_virtual(bocc, bvir, norb_);
+            auto b_str_annihilation_masked = b_str & ~frozen_annihilation_mask_;
+            b_str_annihilation_masked.find_set_bits(bocc, nob);
+            auto b_str_creation_masked = (~b_str & norb_mask) & ~frozen_creation_mask_;
+            b_str_creation_masked.find_set_bits(bvir, nvb);
+            // compute_fast_virtual(bocc, bvir, norb_);
+            std::span<size_t> bocc_span(bocc.data(), nob);
+            std::span<size_t> bvir_span(bvir.data(), nvb);
 
             // single beta excitations
-            for (const auto& i : bocc) {
-                if (!annihilation_allowed(i))
-                    continue;
-                for (const auto& a : bvir) {
-                    if (!creation_allowed(a))
-                        continue;
+            for (const auto& i : bocc_span) {
+                for (const auto& a : bvir_span) {
                     new_det.set_b_string(b_str); // push the current beta string to compute coupling
                     // const double integral = h_[i * norb_ + a];
                     const double integral = slater_rules_.singles_coupling_b(i, a, new_det);
@@ -642,11 +643,9 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
             }
 
             // double beta-beta excitations
-            for (const auto& i : bocc) {
-                if (!annihilation_allowed(i))
-                    continue;
-                for (const auto& j : bocc) {
-                    if (i >= j || !annihilation_allowed(j))
+            for (const auto& i : bocc_span) {
+                for (const auto& j : bocc_span) {
+                    if (i >= j)
                         continue;
                     const auto& v_list = va_sorted_[i * norb_ + j];
                     for (const auto& [coupling, integral, a, b] : v_list) {

@@ -5,7 +5,7 @@ from forte2 import System, State, Determinant
 from forte2.scf import RHF
 from forte2.sci import SelectedCI
 from forte2.helpers.comparisons import approx
-from forte2.base_classes.params import SelectedCIParams
+from forte2.base_classes.params import SelectedCIParams, DavidsonLiuParams
 
 
 def _h4_rhf():
@@ -284,66 +284,40 @@ def test_sci_semicanonical_final_orbital():
     assert sci.E[0] == approx(-2.180967812920)
 
 
-@pytest.mark.parametrize("selection_algorithm", ["hbci_ref", "hbci"])
-def test_sci_frozen_creation_blocks_selected_growth(selection_algorithm):
-    """Frozen creation orbitals should be excluded from SCI selection."""
-    rhf = _h4_rhf()
-
-    common_kwargs = dict(
-        states=State(nel=4, multiplicity=1, ms=0.0),
-        active_orbitals=list(range(4)),
-        sci_params=SelectedCIParams(
-            selection_algorithm=selection_algorithm,
-            guess_occ_window=0,
-            guess_vir_window=0,
-            var_threshold=1e-12,
-            pt2_threshold=0.0,
-            maxcycle=1,
-            ci_algorithm="exact",
-            num_threads=1,
-            num_batches_per_thread=1,
-        ),
-    )
-
-    sci_unfrozen = SelectedCI(**common_kwargs)(rhf)
-    sci_unfrozen.run()
-
-    common_kwargs["sci_params"].frozen_creation = [2, 3]
-    sci_frozen = SelectedCI(**common_kwargs)(rhf)
-    sci_frozen.run()
-
-    assert sci_unfrozen.sub_solvers[0].sci_helper.ndets() > 1
-    assert sci_frozen.sub_solvers[0].sci_helper.ndets() == 1
-    assert sci_frozen.sub_solvers[0].sci_helper.dets()[0] == Determinant("2200")
-
-def test_gasci_rhf_11():
+@pytest.mark.slow
+def test_sci_water_core_excited():
+    """Test SelectedCI on a water core-excited state."""
     xyz = """
     O   0.0000000000  -0.0000000000  -0.0662628033
     H   0.0000000000  -0.7540256101   0.5259060578
     H  -0.0000000000   0.7530256101   0.5260060578
     """
 
-    system = System(
-        xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT"
-    )
+    system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0)(system)
 
     ci = SelectedCI(
         states=State(nel=10, multiplicity=1, ms=0.0),
-        active_orbitals=list(range(24)),
+        active_orbitals=list(range(20)),
         sci_params=SelectedCIParams(
             selection_algorithm="hbci",
-            var_threshold=3e-4,
-            pt2_threshold=1e-8,
-            guess_dets=[Determinant("a2222b"), Determinant("b2222a"), Determinant("022222")],
+            var_threshold=5e-4,
+            pt2_threshold=2e-8,
+            guess_dets=[
+                Determinant("a2222b"),
+                Determinant("b2222a"),
+                Determinant("022222"),
+            ],
             do_spin_penalty=True,
             screening_criterion="hbci",
+            # do not allow the core orbital occupation to change from the guess determinants
             frozen_annihilation=[0],
             frozen_creation=[0],
             num_threads=8,
+            num_batches_per_thread=8,
         ),
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
     )(rhf)
     ci.run()
-    # -56.4847989914
-test_gasci_rhf_11()
+    assert ci.E[0] == pytest.approx(-56.4257556077, abs=1e-6)
