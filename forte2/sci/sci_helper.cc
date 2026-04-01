@@ -143,7 +143,11 @@ void SelectedCIHelper::update_hbci_ints() {
             std::vector<std::tuple<double, double, u_int32_t, u_int32_t>> v_list;
             v_list.reserve(norb_ * norb_);
             for (size_t r{0}; r < norb_; ++r) {
+                if (!creation_allowed(r))
+                    continue;
                 for (size_t s{0}; s < norb_; ++s) {
+                    if (!creation_allowed(s))
+                        continue;
                     const double delta = epsilon_[p] + epsilon_[q] - epsilon_[r] - epsilon_[s];
                     const double v = Va(p, q, r, s);
                     const double val = evaluate_criterion(delta, v, screening_criterion_);
@@ -165,7 +169,11 @@ void SelectedCIHelper::update_hbci_ints() {
             std::vector<std::tuple<double, double, u_int32_t, u_int32_t>> v_list;
             v_list.reserve(norb_ * norb_);
             for (size_t q{0}; q < norb_; ++q) {
+                if (!annihilation_allowed(q))
+                    continue;
                 for (size_t s{0}; s < norb_; ++s) {
+                    if (!creation_allowed(s))
+                        continue;
                     const double delta = epsilon_[p] + epsilon_[q] - epsilon_[r] - epsilon_[s];
                     const double v = V(p, q, r, s);
                     const double val = evaluate_criterion(delta, v, screening_criterion_);

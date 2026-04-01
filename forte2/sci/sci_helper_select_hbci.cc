@@ -518,7 +518,7 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
                     if (std::fabs(coupling * abs_c_max_block) < pt2_threshold)
                         break;
 
-                    if ((a >= b) or a_str.get_bit(a) or a_str.get_bit(b) or !creation_allowed(a, b))
+                    if ((a >= b) or a_str.get_bit(a) or a_str.get_bit(b))
                         continue;
 
                     auto [new_a_str, sign] = create_double_excitation(a_str, i, j, a, b);
@@ -568,9 +568,6 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
                     // break early if the integrals are too small
                     if (std::fabs(coupling * abs_c_max_block) < pt2_threshold)
                         break;
-                    if (!creation_allowed(b) || !annihilation_allowed(j))
-                        continue;
-
                     for (size_t k{0};
                          const auto& [b_str_idx, det_index] : second_string_to_det_index) {
                         const String& b_str = ab_list_.sorted_second_string(b_str_idx);
@@ -653,8 +650,7 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
                         if (criterion < pt2_threshold)
                             break;
 
-                        if ((a >= b) or b_str.get_bit(a) or b_str.get_bit(b) or
-                            !creation_allowed(a, b))
+                        if ((a >= b) or b_str.get_bit(a) or b_str.get_bit(b))
                             continue;
 
                         auto [new_b_str, sign] = create_double_excitation(b_str, i, j, a, b);

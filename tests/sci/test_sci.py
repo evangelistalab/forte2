@@ -30,7 +30,9 @@ def test_sci1():
         states=State(nel=4, multiplicity=1, ms=0.0),
         active_orbitals=list(range(4)),
         sci_params=SelectedCIParams(
-            selection_algorithm="hbci", var_threshold=1e-12, pt2_threshold=0.0
+            selection_algorithm="hbci",
+            var_threshold=1e-12,
+            pt2_threshold=0.0,
         ),
     )(rhf)
     sci.run()
@@ -321,3 +323,92 @@ def test_sci_water_core_excited():
     )(rhf)
     ci.run()
     assert ci.E[0] == pytest.approx(-56.4257556077, abs=1e-6)
+
+
+def test_sci_n2_multiple_roots():
+    """Test that multiple roots can be converged for N2."""
+    xyz = """
+    N 0.0 0.0 0.0
+    N 0.0 0.0 1.1
+    """
+
+    system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
+    rhf = RHF(charge=0)(system)
+    sci = SelectedCI(
+        states=State(nel=14, multiplicity=1, ms=0.0),
+        active_orbitals=list(range(10)),
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-8,
+            pt2_threshold=0.0,
+            do_spin_penalty=True,
+            screening_criterion="hbci",
+            guess_occ_window=3,
+            guess_vir_window=3,
+        ),
+        die_if_not_converged=False,
+        nroots=2,
+    )(rhf)
+    sci.run()
+    assert sci.E[0] == pytest.approx(-108.701835367773, abs=1e-8)
+    assert sci.E[1] == pytest.approx(-108.359465928102, abs=1e-8)
+
+
+def test_sci_n2_core_excited_multiple():
+    """Test that multiple roots can be converged for N2."""
+    xyz = """
+    N 0.0 0.0 0.0
+    N 0.0 0.0 1.1
+    """
+
+    system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
+    rhf = RHF(charge=0)(system)
+    # from forte2 import CI
+    # from forte2.base_classes.params import CIParams
+    # ci = CI(
+    #     states=State(nel=14, multiplicity=1, ms=0.0, gas_max=[1], gas_min=[0]),
+    #     active_orbitals=[[0], list(range(1, 10))],
+    #     nroots=3,
+    # )(rhf)
+    # ci = CI(
+    #     states=State(nel=14, multiplicity=1, ms=0.0),
+    #     active_orbitals=list(range(10)),
+    #     nroots=3,
+    #     ci_params=CIParams(energy_shift=-93.5),
+    # )(rhf)
+    # ci.run()
+    # 0      1    0.0      0       -93.3674525437         0.33333
+    # 1      1    0.0      0       -93.3674525437         0.33333
+    # 2      1    0.0      0       -93.0468937833         0.33333
+    # no cvs:
+    #      0      1    0.0      0       -93.5803534938         0.33333
+    #  1      1    0.0      0       -93.5803534938         0.33333
+    #  2      1    0.0      0       -93.5808722646         0.33333
+    sci = SelectedCI(
+        states=State(nel=14, multiplicity=1, ms=0.0),
+        active_orbitals=list(range(10)),
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci_ref",
+            var_threshold=1e-8,
+            pt2_threshold=0.0,
+            do_spin_penalty=False,
+            guess_dets=[
+                Determinant("a222222b"),
+                Determinant("b222222a"),
+                Determinant("02222222"),
+                Determinant("0222222ab"),
+                Determinant("0222222ba"),
+            ],
+            screening_criterion="hbci",
+            frozen_annihilation=[0],
+            frozen_creation=[0],
+            # pt2_regularizer="shift",
+            # pt2_regularizer_strength=1e-6,
+        ),
+        die_if_not_converged=False,
+        nroots=3,
+    )(rhf)
+    sci.run()
+
+
+test_sci_n2_core_excited_multiple()
