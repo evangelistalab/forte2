@@ -95,6 +95,16 @@ void SelectedCIHelper::set_frozen_creation(const std::vector<size_t>& frozen_cre
     }
 }
 
+void SelectedCIHelper::set_frozen_annihilation(const std::vector<size_t>& frozen_annihilation) {
+    frozen_annihilation_mask_.clear();
+    for (auto i : frozen_annihilation) {
+        if (i >= norb_) {
+            throw std::runtime_error("Frozen annihilation orbital index is out of range.");
+        }
+        frozen_annihilation_mask_.set_bit(i, true);
+    }
+}
+
 double evaluate_criterion(double delta, double v, ScreeningCriterion criterion) {
     if (criterion == ScreeningCriterion::eHBCI) {
         return v * v / (std::fabs(delta) + 1e-3);

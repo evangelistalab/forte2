@@ -69,6 +69,9 @@ class SelectedCIHelper {
     /// @brief Set the orbital that should be excluded from the list of creation operators
     void set_frozen_creation(const std::vector<size_t>& frozen_creation);
 
+    /// @brief Set the orbital that should be excluded from the list of annihilation operators
+    void set_frozen_annihilation(const std::vector<size_t>& frozen_annihilation);
+
     /// @brief Set the screening criterion (hbci or ehbci)
     void set_screening_criterion(const std::string& criterion);
 
@@ -84,7 +87,7 @@ class SelectedCIHelper {
     /// @return The PT2 energy contributions of the roots due to the new variational determinants
     const std::vector<double>& ept2_var() const { return ept2_var_; }
 
-    /// @return The PT2 energy contributions of the roots due to the determinat excluded
+    /// @return The PT2 energy contributions of the roots due to the determinant excluded
     const std::vector<double>& ept2_pt() const { return ept2_pt_; }
 
     /// @return The number of determinants in the variational space
@@ -250,6 +253,9 @@ class SelectedCIHelper {
     /// @brief The mask that controls which spatial orbitals cannot be created into.
     String frozen_creation_mask_ = String::zero();
 
+    /// @brief The mask that controls which spatial orbitals cannot be annihilated from.
+    String frozen_annihilation_mask_ = String::zero();
+
     /// @brief Orbital energies: e[p] = <p|H|p>
     std::vector<double> epsilon_;
     /// @brief One-electron integrals: H[p][q] = <p|H|q> = h_pq
@@ -293,6 +299,14 @@ class SelectedCIHelper {
 
     inline bool creation_allowed(std::size_t orbital1, std::size_t orbital2) const noexcept {
         return creation_allowed(orbital1) && creation_allowed(orbital2);
+    }
+
+    inline bool annihilation_allowed(std::size_t orbital) const noexcept {
+        return !frozen_annihilation_mask_.get_bit(orbital);
+    }
+
+    inline bool annihilation_allowed(std::size_t orbital1, std::size_t orbital2) const noexcept {
+        return annihilation_allowed(orbital1) && annihilation_allowed(orbital2);
     }
 
     /// @brief The number of roots to compute

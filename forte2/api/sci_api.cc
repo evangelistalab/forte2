@@ -34,6 +34,8 @@ void export_sci_helper_api(nb::module_& m) {
              "Set the energies of the roots")
         .def("set_frozen_creation", &SelectedCIHelper::set_frozen_creation, "frozen_creation"_a,
              "Set orbitals excluded from creation in selection")
+        .def("set_frozen_annihilation", &SelectedCIHelper::set_frozen_annihilation,
+             "frozen_annihilation"_a, "Set orbitals excluded from annihilation in selection")
         .def("set_screening_criterion", &SelectedCIHelper::set_screening_criterion, "criterion"_a,
              "Set the screening criterion for selection ('hbci' or 'ehbci')")
         .def("set_energy_correction", &SelectedCIHelper::set_energy_correction, "correction"_a,

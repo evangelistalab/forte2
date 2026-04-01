@@ -159,6 +159,8 @@ class _SelectedCISingleStateSolver:
         )
         if self.sci_params.frozen_creation:
             self.sci_helper.set_frozen_creation(self.sci_params.frozen_creation)
+        if self.sci_params.frozen_annihilation:
+            self.sci_helper.set_frozen_annihilation(self.sci_params.frozen_annihilation)
 
         old_energy = 0.0
         for cycle in range(self.sci_params.maxcycle):

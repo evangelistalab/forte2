@@ -87,6 +87,8 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
         std::span<size_t> bvir_span(bvir.data(), nvb);
 
         for (const auto& i : aocc_span) {
+            if (!annihilation_allowed(i))
+                continue;
             for (const auto& a : avir_span) {
                 if (!creation_allowed(a))
                     continue;
@@ -113,6 +115,8 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
         }
 
         for (const auto& i : bocc_span) {
+            if (!annihilation_allowed(i))
+                continue;
             for (const auto& a : bvir_span) {
                 if (!creation_allowed(a))
                     continue;
@@ -139,14 +143,16 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
         }
 
         for (const auto& i : aocc_span) {
+            if (!annihilation_allowed(i))
+                continue;
             for (const auto& j : aocc_span) {
-                if (i >= j)
+                if (i >= j || !annihilation_allowed(j))
                     continue;
                 for (const auto& a : avir_span) {
+                    if (!creation_allowed(a))
+                        continue;
                     for (const auto& b : avir_span) {
-                        if (a >= b)
-                            continue;
-                        if (!creation_allowed(a, b))
+                        if (a >= b || !creation_allowed(b))
                             continue;
 
                         const double integral = Va(i, j, a, b);
@@ -172,14 +178,16 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
         }
 
         for (const auto& i : bocc_span) {
+            if (!annihilation_allowed(i))
+                continue;
             for (const auto& j : bocc_span) {
-                if (i >= j)
+                if (i >= j || !annihilation_allowed(j))
                     continue;
                 for (const auto& a : bvir_span) {
+                    if (!creation_allowed(a))
+                        continue;
                     for (const auto& b : bvir_span) {
-                        if (a >= b)
-                            continue;
-                        if (!creation_allowed(a, b))
+                        if (a >= b || !creation_allowed(b))
                             continue;
                         const double integral = Va(i, j, a, b);
                         const double criterion = std::fabs(integral * max_abs_c);
@@ -204,10 +212,16 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
         }
 
         for (const auto& i : aocc_span) {
+            if (!annihilation_allowed(i))
+                continue;
             for (const auto& j : bocc_span) {
+                if (!annihilation_allowed(j))
+                    continue;
                 for (const auto& a : avir_span) {
+                    if (!creation_allowed(a))
+                        continue;
                     for (const auto& b : bvir_span) {
-                        if (!creation_allowed(a, b))
+                        if (!creation_allowed(b))
                             continue;
                         const double integral = V(i, j, a, b);
                         const double criterion = std::fabs(integral * max_abs_c);
@@ -268,7 +282,7 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
         ept2_pt_[r] = pt;
     }
 
-    c_.resize(dets_.size(), 0.0);
+    c_.resize(dets_.size() * nroots_, 0.0);
 
     compute_det_energies();
     prepare_strings();
@@ -451,12 +465,16 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
             ++k;
         }
 
-        // find the occupied and empty orbitals for the current alpha string
+        // // find the occupied and empty orbitals for the current alpha string
+        // auto masked_a_str = a_str & ~frozen_creation_mask_;
+
         a_str.find_set_bits(aocc, noa);
         compute_fast_virtual(aocc, avir, norb_);
 
         // single alpha excitations
         for (const auto& i : aocc) {
+            if (!annihilation_allowed(i))
+                continue;
             for (const auto& a : avir) {
                 if (!creation_allowed(a))
                     continue;
@@ -490,8 +508,10 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
 
         // double alpha-alpha excitations
         for (const auto& i : aocc) {
+            if (!annihilation_allowed(i))
+                continue;
             for (const auto& j : aocc) {
-                if (i >= j)
+                if (i >= j || !annihilation_allowed(j))
                     continue;
                 const auto& v_list = va_sorted_[i * norb_ + j];
                 for (const auto& [coupling, integral, a, b] : v_list) {
@@ -535,6 +555,8 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
 
         // double alpha-beta excitations
         for (const auto& i : aocc) {
+            if (!annihilation_allowed(i))
+                continue;
             for (const auto& a : avir) {
                 if (!creation_allowed(a))
                     continue;
@@ -552,7 +574,7 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
                     // break early if the integrals are too small
                     if (std::fabs(coupling * abs_c_max_block) < pt2_threshold)
                         break;
-                    if (!creation_allowed(b))
+                    if (!creation_allowed(b) || !annihilation_allowed(j))
                         continue;
 
                     for (size_t k{0};

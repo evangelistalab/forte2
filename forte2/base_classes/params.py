@@ -118,6 +118,9 @@ class SelectedCIParams:
     frozen_creation: list[int], optional
         A list of orbital indices for which creation operators are frozen (i.e., not allowed to be occupied in the selected determinants).
         This is used to enforce certain symmetries or to exclude certain orbitals from the selection process.
+    frozen_annihilation: list[int], optional
+        A list of orbital indices for which annihilation operators are frozen (i.e., not allowed to be unoccupied in the selected determinants).
+        This is used to enforce certain symmetries or to exclude certain orbitals from the selection process.
     screening_criterion: str, optional, default="hbci"
         The criterion used to screen determinants during selection. Options are "hbci" and "ehbci".
     energy_correction: str, optional, default="pt2"
@@ -152,6 +155,7 @@ class SelectedCIParams:
     do_spin_penalty: bool = True
     guess_dets: list[Determinant] = field(default_factory=list)
     frozen_creation: list[int] = field(default_factory=list)
+    frozen_annihilation: list[int] = field(default_factory=list)
     screening_criterion: str = "hbci"
     energy_correction: str = "pt2"
     energy_shift: float = None
