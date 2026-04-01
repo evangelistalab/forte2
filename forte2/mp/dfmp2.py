@@ -1,6 +1,9 @@
 from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
+import os
+import sys
 import time
+import resource
 
 import numpy as np
 
@@ -73,50 +76,61 @@ class MP2Base(SystemMixin, MOsMixin, ABC):
     compute_1rdm_ao: bool = False
     compute_2rdm: bool = False
     compute_cumulants: bool = False
+    store_t2: bool = False
     executed: bool = field(default=False, init=False)
 
     def __call__(self, parent_method):
         self.parent_method = parent_method
         if not isinstance(parent_method, (RHF, ROHF, UHF)):
-            raise TypeError("MP2 requires an RHF or ROHF reference.")
+            raise TypeError("MP2 requires an RHF, ROHF, or UHF reference.")
         return self
 
     def run(self):
         t0 = time.monotonic()
+        mem0 = self._memory_snapshot()
 
         self._startup()
+        need_t2 = self._needs_t2_storage()
 
         self.B_iaQ = self._build_df_iaQ()
 
-        self.t2, self.t2_as, self.E_corr = self._build_t2_all(self.B_iaQ)
+        self.t2, self.t2_as, self.E_corr = self._build_t2_all(
+            self.B_iaQ, store_t2=need_t2
+        )
 
         self.E_total = self.parent_method.E + self.E_corr
 
         self._postprocess_rdms()
 
-        # Print information
-        if isinstance(self.parent_method, RHF):
-            logger.log_info1("RHF-MP2 calculation completed.")
-        elif isinstance(self.parent_method, ROHF):
-            logger.log_info1("ROHF-MP2 calculation completed.")
-        elif isinstance(self.parent_method, UHF):
-            logger.log_info1("UHF-MP2 calculation completed.")
-
-        logger.log_info1(f"E(corr) = {self.E_corr:.13f} Eh")
-        logger.log_info1(f"E(total) = {self.E_total:.13f} Eh")
-        logger.log_info1(f"||t2|| = {np.linalg.norm(self.t2)}")
-
         self.executed = True
-        dt = time.monotonic() - t0
-        logger.log_info1(f"Time = {dt:.3f} s")
+        self._log_completion(time.monotonic() - t0, self._t2_norm(), mem0)
         return self.E_total
 
-    def _postprocess_rdms(self):
+    def _initialize_rdm_outputs(self):
         self.gamma1_sf = None
+        self.gamma1_sf_ao = None
         self.gamma2_sf = None
         self.lambda2_sf = None
 
-        if self.compute_1rdm:
+    def _needs_t2_storage(self) -> bool:
+        return (
+            self.store_t2
+            or self.compute_1rdm
+            or self.compute_1rdm_ao
+            or self.compute_2rdm
+            or self.compute_cumulants
+        )
+
+    def _postprocess_rdms(self):
+        self._initialize_rdm_outputs()
+        need_gamma1 = (
+            self.compute_1rdm
+            or self.compute_1rdm_ao
+            or self.compute_2rdm
+            or self.compute_cumulants
+        )
+
+        if need_gamma1:
             self.gamma1_sf = self.make_mp2_sf_1rdm_intermediates(self.B_iaQ)
 
             if self.compute_1rdm_ao:
@@ -134,6 +148,83 @@ class MP2Base(SystemMixin, MOsMixin, ABC):
                 "MP2Base._postprocess_rdms should not be used for UHF. "
                 "Use UHFMP2 workflow instead."
             )
+
+    def _memory_snapshot(self):
+        return {
+            "peak_rss_mb": self._peak_rss_mb(),
+            "current_rss_mb": self._current_rss_mb(),
+        }
+
+    def _peak_rss_mb(self):
+        peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        if sys.platform == "darwin":
+            return peak / 1024**2
+        return peak / 1024.0
+
+    def _current_rss_mb(self):
+        try:
+            import psutil
+        except ImportError:
+            return None
+        return psutil.Process(os.getpid()).memory_info().rss / 1024**2
+
+    def _log_memory(self, start_mem):
+        end_peak = self._peak_rss_mb()
+        peak_delta = max(0.0, end_peak - start_mem["peak_rss_mb"])
+        logger.log_info1(f"Peak RSS = {end_peak:.1f} MB (delta {peak_delta:.1f} MB)")
+
+        end_current = self._current_rss_mb()
+        start_current = start_mem["current_rss_mb"]
+        if end_current is not None:
+            if start_current is not None:
+                current_delta = end_current - start_current
+                logger.log_info1(
+                    f"Current RSS = {end_current:.1f} MB (delta {current_delta:.1f} MB)"
+                )
+            else:
+                logger.log_info1(f"Current RSS = {end_current:.1f} MB")
+
+    def _log_completion(self, elapsed: float, t2_norm: float | None, start_mem):
+        logger.log_info1(f"{self._reference_label()}-MP2 calculation completed.")
+        logger.log_info1(f"E(corr) = {self.E_corr:.13f} Eh")
+        logger.log_info1(f"E(total) = {self.E_total:.13f} Eh")
+        if t2_norm is None:
+            logger.log_info1("||t2|| = not stored")
+        else:
+            logger.log_info1(f"||t2|| = {t2_norm}")
+        self._log_memory(start_mem)
+        logger.log_info1(f"Time = {elapsed:.3f} s")
+
+    def _reference_label(self) -> str:
+        return "MP2"
+
+    def _t2_norm(self):
+        if getattr(self, "t2", None) is None:
+            return None
+        return np.linalg.norm(self.t2)
+
+    def _copy_restricted_reference(self):
+        if not self.parent_method.executed:
+            self.parent_method.run()
+
+        SystemMixin.copy_from_upstream(self, self.parent_method)
+        MOsMixin.copy_from_upstream(self, self.parent_method)
+
+        self.C = self.C[0].copy()
+        self.eps = self.parent_method.eps[0].copy()
+        self.fock_builder = self.system.fock_builder
+
+    def _build_restricted_df_iaQ(self, nocc: int):
+        C_occ = self.C[:, :nocc]
+        C_vir = self.C[:, nocc:]
+
+        B_Qia = self.fock_builder.B_tensor_gen_block(C_occ, C_vir)
+        assert B_Qia.shape[1] == nocc, f"B occ mismatch: {B_Qia.shape[1]} vs {nocc}"
+        assert (
+            B_Qia.shape[2] == self.nvir
+        ), f"B vir mismatch: {B_Qia.shape[2]} vs {self.nvir}"
+
+        return B_Qia.transpose(1, 2, 0).copy()
 
     def make_mp2_sf_1rdm_intermediates(self, B: np.ndarray) -> np.ndarray:
         """
@@ -281,7 +372,7 @@ class MP2Base(SystemMixin, MOsMixin, ABC):
     def _startup(self): ...
 
     @abstractmethod
-    def _build_t2_all(self, B): ...
+    def _build_t2_all(self, B, store_t2=True): ...
 
 
 @dataclass
@@ -305,22 +396,13 @@ class RHFMP2(MP2Base):
         MP2 total energy (E_HF + E_corr).
     """
 
+    def _reference_label(self) -> str:
+        return "RHF"
+
     def _startup(self):
-        if not self.parent_method.executed:
-            self.parent_method.run()
-
-        # Copy system + MO information
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
-
-        # MO reordering (contiguous correlated space)
-        self.C = self.C[0].copy()
-        self.eps = self.parent_method.eps[0].copy()
-
+        self._copy_restricted_reference()
         self.nocc = self.parent_method.na
         self.nvir = self.parent_method.nuocc
-
-        self.fock_builder = self.system.fock_builder
 
     def _build_df_iaQ(self):
         """
@@ -330,20 +412,9 @@ class RHFMP2(MP2Base):
         --------
             B_iaQ: 3-index integrals (ia|Q) as a numpy array of shape (n_occ, n_vir, n_aux).
         """
-        C_occ = self.C[:, : self.nocc]  # Occupied MOs
-        C_vir = self.C[:, self.nocc :]  # Virtual MOs
+        return self._build_restricted_df_iaQ(self.nocc)
 
-        B_Qia = self.fock_builder.B_tensor_gen_block(C_occ, C_vir)
-        assert (
-            B_Qia.shape[1] == self.nocc
-        ), f"B occ mismatch: {B_Qia.shape[0]} vs {self.nocc}"
-        assert (
-            B_Qia.shape[2] == self.nvir
-        ), f"B vir mismatch: {B_Qia.shape[1]} vs {self.nvir}"
-
-        return B_Qia.transpose(1, 2, 0).copy()  # Shape (n_occ, n_vir, n_aux)
-
-    def _build_t2_all(self, B):
+    def _build_t2_all(self, B, store_t2=True):
         """
         Build all MP2 amplitudes t_{ij}^{ab} and antisymmetrized t̃_{ij}^{ab}.
 
@@ -361,9 +432,9 @@ class RHFMP2(MP2Base):
         eps_a = self.eps[self.nocc :]
 
         nocc, nvir = self.nocc, self.nvir
-        t2 = np.empty((nocc, nocc, nvir, nvir))
+        t2 = np.empty((nocc, nocc, nvir, nvir)) if store_t2 else None
         # antisym only in (a,b): t̃ = 2t - t^{ba}
-        t2_as = np.empty_like(t2)
+        t2_as = np.empty_like(t2) if store_t2 else None
 
         E_corr = 0.0
 
@@ -374,8 +445,9 @@ class RHFMP2(MP2Base):
                 gijab = Bi @ Bj.T  # (a,b)
                 denom = eps_i[i] + eps_i[j] - eps_a[:, None] - eps_a[None, :]
                 tijab = self._safe_divide(gijab, denom)
-                t2[i, j] = tijab
-                t2_as[i, j] = 2.0 * tijab - tijab.T
+                if store_t2:
+                    t2[i, j] = tijab
+                    t2_as[i, j] = 2.0 * tijab - tijab.T
 
                 # energy contribution
                 E_corr += np.sum((2.0 * gijab - gijab.T) * tijab)
@@ -404,23 +476,34 @@ class ROHFMP2(MP2Base):
         MP2 total energy (E_HF + E_corr).
     """
 
+    def _reference_label(self) -> str:
+        return "ROHF"
+
     def run(self):
         t0 = time.monotonic()
+        mem0 = self._memory_snapshot()
 
         self._startup()
+        need_t2 = self._needs_t2_storage()
 
         self.B_iaQ = self._build_df_iaQ()
 
-        self.t2, self.t2_as, self.E_corr = self._build_t2_all(self.B_iaQ)
+        self.t2, self.t2_as, self.E_corr = self._build_t2_all(
+            self.B_iaQ, store_t2=need_t2
+        )
 
         self.E_total = self.parent_method.E + self.E_corr
 
         # ---- custom RDM pipeline ----
-        self.gamma1_sf = None
-        self.gamma2_sf = None
-        self.lambda2_sf = None
+        self._initialize_rdm_outputs()
+        need_gamma1 = (
+            self.compute_1rdm
+            or self.compute_1rdm_ao
+            or self.compute_2rdm
+            or self.compute_cumulants
+        )
 
-        if self.compute_1rdm or self.compute_1rdm_ao:
+        if need_gamma1:
             self.gamma1_a, self.gamma1_b = self.make_rohf_1rdm()
 
             self.gamma1_sf = self.gamma1_a + self.gamma1_b
@@ -437,51 +520,22 @@ class ROHFMP2(MP2Base):
                 self.gamma1_sf, self.gamma2_sf
             )
 
-        logger.log_info1("ROHF-MP2 calculation completed.")
-        logger.log_info1(f"E(corr) = {self.E_corr:.13f} Eh")
-        logger.log_info1(f"E(total) = {self.E_total:.13f} Eh")
-        logger.log_info1(f"||t2|| = {np.linalg.norm(self.t2)}")
-
         self.executed = True
-        dt = time.monotonic() - t0
-        logger.log_info1(f"Time = {dt:.3f} s")
-
+        self._log_completion(time.monotonic() - t0, self._t2_norm(), mem0)
         return self.E_total
 
     def _startup(self):
-        if not self.parent_method.executed:
-            self.parent_method.run()
-
-        # Copy system + MO information
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
-
-        # MO reordering (contiguous correlated space)
-        self.C = self.C[0].copy()
-        self.eps = self.parent_method.eps[0].copy()
+        self._copy_restricted_reference()
 
         self.docc = (self.parent_method.na + self.parent_method.nb) // 2
         self.socc = self.parent_method.na - self.docc
         self.nocc = self.docc + self.socc
         self.nvir = self.parent_method.nuocc
 
-        self.fock_builder = self.system.fock_builder
-
     def _build_df_iaQ(self):
-        nd = self.docc
-        ns = self.socc
+        return self._build_restricted_df_iaQ(self.nocc)
 
-        C_occ = self.C[:, : nd + ns]
-        C_vir = self.C[:, nd + ns :]
-
-        B_Qia = self.fock_builder.B_tensor_gen_block(C_occ, C_vir)
-
-        assert B_Qia.shape[1] == self.nocc
-        assert B_Qia.shape[2] == self.nvir
-
-        return B_Qia.transpose(1, 2, 0).copy()
-
-    def _build_t2_all(self, B):
+    def _build_t2_all(self, B, store_t2=True):
         nd = self.docc
         ns = self.socc
         nvir = self.nvir
@@ -492,8 +546,8 @@ class ROHFMP2(MP2Base):
         eps_v = eps[nd + ns :]
 
         E_corr = 0.0
-        t2 = np.empty((self.nocc, self.nocc, nvir, nvir))
-        t2_as = np.empty_like(t2)
+        t2 = np.empty((self.nocc, self.nocc, nvir, nvir)) if store_t2 else None
+        t2_as = np.empty_like(t2) if store_t2 else None
 
         # doubly-doubly contribution
         for i in range(nd):
@@ -504,8 +558,9 @@ class ROHFMP2(MP2Base):
                 denom = eps_d[i] + eps_d[j] - eps_v[:, None] - eps_v[None, :]
                 tijab = self._safe_divide(gijab, denom)
 
-                t2[i, j] = tijab
-                t2_as[i, j] = 2.0 * tijab - tijab.T
+                if store_t2:
+                    t2[i, j] = tijab
+                    t2_as[i, j] = 2.0 * tijab - tijab.T
 
                 E_corr += np.sum((2.0 * gijab - gijab.T) * tijab)
 
@@ -519,11 +574,12 @@ class ROHFMP2(MP2Base):
                 denom = eps_s[r] + eps_d[i] - eps_v[:, None] - eps_v[None, :]
                 tirab = self._safe_divide(girab, denom)
 
-                t2[i, idx_r] = tirab
-                t2[idx_r, i] = tirab.T
+                if store_t2:
+                    t2[i, idx_r] = tirab
+                    t2[idx_r, i] = tirab.T
 
-                t2_as[i, idx_r] = tirab
-                t2_as[idx_r, i] = tirab.T
+                    t2_as[i, idx_r] = tirab
+                    t2_as[idx_r, i] = tirab.T
 
                 E_corr += 2.0 * np.sum(girab * tirab)
 
@@ -540,11 +596,12 @@ class ROHFMP2(MP2Base):
                 denom = eps_s[r] + eps_s[s] - eps_v[:, None] - eps_v[None, :]
                 trsab = self._safe_divide(grsab, denom)
 
-                t2[idx_r, idx_s] = trsab
-                t2[idx_s, idx_r] = trsab.T
+                if store_t2:
+                    t2[idx_r, idx_s] = trsab
+                    t2[idx_s, idx_r] = trsab.T
 
-                t2_as[idx_r, idx_s] = trsab
-                t2_as[idx_s, idx_r] = trsab.T
+                    t2_as[idx_r, idx_s] = trsab
+                    t2_as[idx_s, idx_r] = trsab.T
 
                 factor = 0.5 if r == s else 1.0
                 E_corr += factor * np.sum(grsab * trsab)
@@ -642,6 +699,18 @@ class UHFMP2(MP2Base):
         MP2 total energy (E_HF + E_corr).
     """
 
+    def _reference_label(self) -> str:
+        return "UHF"
+
+    def _t2_norm(self):
+        if any(getattr(self, attr, None) is None for attr in ("t2_a", "t2_b", "t2_ab")):
+            return None
+        return (
+            np.linalg.norm(self.t2_a)
+            + np.linalg.norm(self.t2_b)
+            + np.linalg.norm(self.t2_ab)
+        )
+
     def _startup(self):
         if not self.parent_method.executed:
             self.parent_method.run()
@@ -671,30 +740,32 @@ class UHFMP2(MP2Base):
 
     def run(self):
         t0 = time.monotonic()
+        mem0 = self._memory_snapshot()
 
         self._startup()
+        need_t2 = self._needs_t2_storage()
 
         self.B_iaQ = self._build_df_iaQ()
         self.Ba_iaQ, self.Bb_iaQ = self.B_iaQ
 
-        (self.t2_a, self.t2_b, self.t2_ab, self.E_corr) = self._build_t2_all(self.B_iaQ)
+        (self.t2_a, self.t2_b, self.t2_ab, self.E_corr) = self._build_t2_all(
+            self.B_iaQ, store_t2=need_t2
+        )
 
         self.E_total = self.parent_method.E + self.E_corr
-        self.gamma1_sf = None
-        self.gamma2_sf = None
-        self.lambda2_sf = None
-        # MP2Base assumes spin-restricted tensors. UHF overrides all RDM builders.
-        if (
+        self._initialize_rdm_outputs()
+        need_gamma1 = (
             self.compute_1rdm
             or self.compute_1rdm_ao
             or self.compute_2rdm
             or self.compute_cumulants
-        ):
-            if self.compute_1rdm or self.compute_1rdm_ao:
-                self.make_mp2_sf_1rdm_intermediates(self.B_iaQ)
+        )
+        # MP2Base assumes spin-restricted tensors. UHF overrides all RDM builders.
+        if need_gamma1:
+            self.make_mp2_sf_1rdm_intermediates(self.B_iaQ)
 
-                if self.compute_1rdm_ao:
-                    self.gamma1_sf_ao = self.gamma1_mo_to_ao(self.gamma1_sf)
+            if self.compute_1rdm_ao:
+                self.gamma1_sf_ao = self.gamma1_mo_to_ao(self.gamma1_sf)
 
         if self.compute_2rdm or self.compute_cumulants:
             self.gamma2_sf = self.make_mp2_sf_2rdm()
@@ -704,19 +775,8 @@ class UHFMP2(MP2Base):
                 self.gamma1_sf, self.gamma2_sf
             )
 
-        logger.log_info1("UHF-MP2 calculation completed.")
-        logger.log_info1(f"E(corr) = {self.E_corr:.13f} Eh")
-        logger.log_info1(f"E(total) = {self.E_total:.13f} Eh")
-        norm = (
-            np.linalg.norm(self.t2_a)
-            + np.linalg.norm(self.t2_b)
-            + np.linalg.norm(self.t2_ab)
-        )
-        logger.log_info1(f"||t2|| = {norm}")
-
         self.executed = True
-        dt = time.monotonic() - t0
-        logger.log_info1(f"Time = {dt:.3f} s")
+        self._log_completion(time.monotonic() - t0, self._t2_norm(), mem0)
         return self.E_total
 
     def _build_df_iaQ(self):
@@ -747,7 +807,7 @@ class UHFMP2(MP2Base):
             Bb_Qia.transpose(1, 2, 0).copy(),
         )
 
-    def _build_t2_all(self, B):
+    def _build_t2_all(self, B, store_t2=True):
         Ba, Bb = B
 
         eps_a_i = self.eps_a[: self.naocc]
@@ -759,9 +819,9 @@ class UHFMP2(MP2Base):
         nbocc, nbvir = self.nbocc, self.nbvir
 
         # allocate
-        t2_a = np.zeros((naocc, naocc, navir, navir))
-        t2_b = np.zeros((nbocc, nbocc, nbvir, nbvir))
-        t2_ab = np.zeros((naocc, nbocc, navir, nbvir))
+        t2_a = np.zeros((naocc, naocc, navir, navir)) if store_t2 else None
+        t2_b = np.zeros((nbocc, nbocc, nbvir, nbvir)) if store_t2 else None
+        t2_ab = np.zeros((naocc, nbocc, navir, nbvir)) if store_t2 else None
 
         E_corr = 0.0
 
@@ -784,7 +844,8 @@ class UHFMP2(MP2Base):
 
                 tijab = self._safe_divide(g_as, denom)
 
-                t2_a[i, j] = tijab
+                if store_t2:
+                    t2_a[i, j] = tijab
 
                 # energy (same-spin → 1/4 factor)
                 E_corr += 0.25 * np.sum(g_as * tijab)
@@ -806,7 +867,8 @@ class UHFMP2(MP2Base):
 
                 tijab = self._safe_divide(g_as, denom)
 
-                t2_b[i, j] = tijab
+                if store_t2:
+                    t2_b[i, j] = tijab
 
                 E_corr += 0.25 * np.sum(g_as * tijab)
 
@@ -827,7 +889,8 @@ class UHFMP2(MP2Base):
 
                 tijab = self._safe_divide(gijab, denom)
 
-                t2_ab[i, j] = tijab
+                if store_t2:
+                    t2_ab[i, j] = tijab
 
                 # opposite-spin → no 1/4 factor
                 E_corr += np.sum(gijab * tijab)
@@ -909,7 +972,7 @@ class UHFMP2(MP2Base):
         return gamma1_sf
 
     def gamma1_mo_to_ao(self, gamma1_sf):
-        return self.C @ gamma1_sf @ self.C.T
+        return self.Ca @ self.gamma1_a @ self.Ca.T + self.Cb @ self.gamma1_b @ self.Cb.T
 
     def make_mp2_sf_2rdm(self):
         t2_a = self.t2_a
