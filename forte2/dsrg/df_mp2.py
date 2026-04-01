@@ -10,7 +10,7 @@ from forte2.helpers import logger
 
 
 @dataclass
-class DFMP2Base(SystemMixin, MOsMixin, ABC):
+class MP2Base(SystemMixin, MOsMixin, ABC):
     """Base class for density-fitted MP2 methods. Not meant to be used directly.
 
     Parameters
@@ -54,6 +54,19 @@ class DFMP2Base(SystemMixin, MOsMixin, ABC):
         Spin-free two-body cumulant (if requested).
     executed : bool
         Whether the MP2 calculation has been executed.
+
+    NOTE:
+    -----
+    This base class assumes spin-restricted tensors:
+        B: (nocc, nvir, naux)
+        t2: (nocc, nocc, nvir, nvir)
+
+    UHF overrides:
+        - _build_df_iaQ
+        - _build_t2_all
+        - RDM builders
+
+    and does NOT use base-class tensor conventions.
     """
 
     compute_1rdm: bool = False
@@ -64,8 +77,8 @@ class DFMP2Base(SystemMixin, MOsMixin, ABC):
 
     def __call__(self, parent_method):
         self.parent_method = parent_method
-        if not isinstance(parent_method, (RHF, ROHF)):
-            raise TypeError("DFMP2 requires an RHF or ROHF reference.")
+        if not isinstance(parent_method, (RHF, ROHF, UHF)):
+            raise TypeError("MP2 requires an RHF or ROHF reference.")
         return self
 
     def run(self):
@@ -83,9 +96,11 @@ class DFMP2Base(SystemMixin, MOsMixin, ABC):
 
         # Print information
         if isinstance(self.parent_method, RHF):
-            logger.log_info1("DF-RHF-MP2 calculation completed.")
+            logger.log_info1("RHF-MP2 calculation completed.")
         elif isinstance(self.parent_method, ROHF):
-            logger.log_info1("DF-ROHF-MP2 calculation completed.")
+            logger.log_info1("ROHF-MP2 calculation completed.")
+        elif isinstance(self.parent_method, UHF):
+            logger.log_info1("UHF-MP2 calculation completed.")
 
         logger.log_info1(f"E(corr) = {self.E_corr:.13f} Eh")
         logger.log_info1(f"E(total) = {self.E_total:.13f} Eh")
@@ -114,21 +129,11 @@ class DFMP2Base(SystemMixin, MOsMixin, ABC):
             self.lambda2_sf = self.make_mp2_sf_2cumulants(
                 self.gamma1_sf, self.gamma2_sf
             )
-
-    def _build_df_iaQ(self):
-        """
-        Build 3-index integrals (ia|Q) using density fitting.
-
-        Returns:
-        --------
-            B_iaQ: 3-index integrals (ia|Q) as a numpy array of shape (n_occ, n_vir, n_aux).
-        """
-        C_occ = self.C[:, : self.nocc]  # Occupied MOs
-        C_vir = self.C[:, self.nocc :]  # Virtual MOs
-
-        B_Qia = self.fock_builder.B_tensor_gen_block(C_occ, C_vir)
-
-        return B_Qia.transpose(1, 2, 0).copy()  # Shape (n_occ, n_vir, n_aux)
+        if isinstance(self.parent_method, UHF):
+            raise RuntimeError(
+                "MP2Base._postprocess_rdms should not be used for UHF. "
+                "Use UHFMP2 workflow instead."
+            )
 
     def make_mp2_sf_1rdm_intermediates(self, B: np.ndarray) -> np.ndarray:
         """
@@ -156,15 +161,7 @@ class DFMP2Base(SystemMixin, MOsMixin, ABC):
             g_jab = np.einsum("aQ,jbQ->jab", B[i], B, optimize=True)  # (j,a,b)
 
             denom = (eps_o[i] + eps_o[:, None, None]) - ea_ab[None, :, :]  # (j,a,b)
-            tiny = 1e-12
-            mask = np.abs(denom) < tiny
-            n_bad = np.count_nonzero(mask)
-            if n_bad:
-                logger.log_warning(
-                    f"MP2 denom clamp: {n_bad} / {denom.size} elements < {tiny:g}"
-                )
-            denom = np.where(mask, np.inf, denom)
-            t2i = g_jab / denom  # (j,a,b)
+            t2i = self._safe_divide(g_jab, denom)
 
             l2i = t2i  # real case; for complex use t2i.conj()
 
@@ -270,6 +267,16 @@ class DFMP2Base(SystemMixin, MOsMixin, ABC):
 
         return Ecore + e1 + e2
 
+    def _safe_divide(self, num, denom, tiny=1e-12, label="MP2 denom"):
+        mask = np.abs(denom) < tiny
+        n_bad = np.count_nonzero(mask)
+        if n_bad:
+            logger.log_warning(f"{label}: {n_bad} / {denom.size} elements < {tiny:g}")
+        return num / np.where(mask, np.inf, denom)
+
+    @abstractmethod
+    def _build_df_iaQ(self): ...
+
     @abstractmethod
     def _startup(self): ...
 
@@ -278,7 +285,7 @@ class DFMP2Base(SystemMixin, MOsMixin, ABC):
 
 
 @dataclass
-class DFRHFMP2(DFMP2Base):
+class RHFMP2(MP2Base):
     """
     Density-Fitted Møller–Plesset perturbation theory (DF-MP2) method with RHF canonical orbitals.
 
@@ -315,6 +322,27 @@ class DFRHFMP2(DFMP2Base):
 
         self.fock_builder = self.system.fock_builder
 
+    def _build_df_iaQ(self):
+        """
+        Build 3-index integrals (ia|Q) using density fitting.
+
+        Returns:
+        --------
+            B_iaQ: 3-index integrals (ia|Q) as a numpy array of shape (n_occ, n_vir, n_aux).
+        """
+        C_occ = self.C[:, : self.nocc]  # Occupied MOs
+        C_vir = self.C[:, self.nocc :]  # Virtual MOs
+
+        B_Qia = self.fock_builder.B_tensor_gen_block(C_occ, C_vir)
+        assert (
+            B_Qia.shape[1] == self.nocc
+        ), f"B occ mismatch: {B_Qia.shape[0]} vs {self.nocc}"
+        assert (
+            B_Qia.shape[2] == self.nvir
+        ), f"B vir mismatch: {B_Qia.shape[1]} vs {self.nvir}"
+
+        return B_Qia.transpose(1, 2, 0).copy()  # Shape (n_occ, n_vir, n_aux)
+
     def _build_t2_all(self, B):
         """
         Build all MP2 amplitudes t_{ij}^{ab} and antisymmetrized t̃_{ij}^{ab}.
@@ -345,16 +373,7 @@ class DFRHFMP2(DFMP2Base):
                 Bj = B[j]
                 gijab = Bi @ Bj.T  # (a,b)
                 denom = eps_i[i] + eps_i[j] - eps_a[:, None] - eps_a[None, :]
-                tiny = 1e-12
-                mask = np.abs(denom) < tiny
-                n_bad = np.count_nonzero(mask)
-                if n_bad:
-                    logger.log_warning(
-                        f"MP2 denom clamp: {n_bad} / {denom.size} elements < {tiny:g}"
-                    )
-                denom = np.where(mask, np.inf, denom)
-                tijab = gijab / denom
-
+                tijab = self._safe_divide(gijab, denom)
                 t2[i, j] = tijab
                 t2_as[i, j] = 2.0 * tijab - tijab.T
 
@@ -365,7 +384,7 @@ class DFRHFMP2(DFMP2Base):
 
 
 @dataclass
-class DFROHFMP2(DFMP2Base):
+class ROHFMP2(MP2Base):
     """
     Density-Fitted Møller–Plesset perturbation theory (DF-MP2) method with ROHF canonical orbitals.
 
@@ -385,6 +404,50 @@ class DFROHFMP2(DFMP2Base):
         MP2 total energy (E_HF + E_corr).
     """
 
+    def run(self):
+        t0 = time.monotonic()
+
+        self._startup()
+
+        self.B_iaQ = self._build_df_iaQ()
+
+        self.t2, self.t2_as, self.E_corr = self._build_t2_all(self.B_iaQ)
+
+        self.E_total = self.parent_method.E + self.E_corr
+
+        # ---- custom RDM pipeline ----
+        self.gamma1_sf = None
+        self.gamma2_sf = None
+        self.lambda2_sf = None
+
+        if self.compute_1rdm or self.compute_1rdm_ao:
+            self.gamma1_a, self.gamma1_b = self.make_rohf_1rdm()
+
+            self.gamma1_sf = self.gamma1_a + self.gamma1_b
+            self.gamma1_sf = 0.5 * (self.gamma1_sf + self.gamma1_sf.T)
+
+            if self.compute_1rdm_ao:
+                self.gamma1_sf_ao = self.gamma1_mo_to_ao(self.gamma1_sf)
+
+        if self.compute_2rdm or self.compute_cumulants:
+            self.gamma2_sf = self.make_rohf_2rdm()
+
+        if self.compute_cumulants:
+            self.lambda2_sf = self.make_mp2_sf_2cumulants(
+                self.gamma1_sf, self.gamma2_sf
+            )
+
+        logger.log_info1("ROHF-MP2 calculation completed.")
+        logger.log_info1(f"E(corr) = {self.E_corr:.13f} Eh")
+        logger.log_info1(f"E(total) = {self.E_total:.13f} Eh")
+        logger.log_info1(f"||t2|| = {np.linalg.norm(self.t2)}")
+
+        self.executed = True
+        dt = time.monotonic() - t0
+        logger.log_info1(f"Time = {dt:.3f} s")
+
+        return self.E_total
+
     def _startup(self):
         if not self.parent_method.executed:
             self.parent_method.run()
@@ -403,6 +466,20 @@ class DFROHFMP2(DFMP2Base):
         self.nvir = self.parent_method.nuocc
 
         self.fock_builder = self.system.fock_builder
+
+    def _build_df_iaQ(self):
+        nd = self.docc
+        ns = self.socc
+
+        C_occ = self.C[:, : nd + ns]
+        C_vir = self.C[:, nd + ns :]
+
+        B_Qia = self.fock_builder.B_tensor_gen_block(C_occ, C_vir)
+
+        assert B_Qia.shape[1] == self.nocc
+        assert B_Qia.shape[2] == self.nvir
+
+        return B_Qia.transpose(1, 2, 0).copy()
 
     def _build_t2_all(self, B):
         nd = self.docc
@@ -425,15 +502,7 @@ class DFROHFMP2(DFMP2Base):
                 Bj = B[j]
                 gijab = Bi @ Bj.T  # (a,b)
                 denom = eps_d[i] + eps_d[j] - eps_v[:, None] - eps_v[None, :]
-                tiny = 1e-12
-                mask = np.abs(denom) < tiny
-                n_bad = np.count_nonzero(mask)
-                if n_bad:
-                    logger.log_warning(
-                        f"MP2 denom clamp: {n_bad} / {denom.size} elements < {tiny:g}"
-                    )
-                denom = np.where(mask, np.inf, denom)
-                tijab = gijab / denom
+                tijab = self._safe_divide(gijab, denom)
 
                 t2[i, j] = tijab
                 t2_as[i, j] = 2.0 * tijab - tijab.T
@@ -448,20 +517,15 @@ class DFROHFMP2(DFMP2Base):
                 Br = B[idx_r]
                 girab = Bi @ Br.T  # (a,b)
                 denom = eps_s[r] + eps_d[i] - eps_v[:, None] - eps_v[None, :]
-                tiny = 1e-12
-                mask = np.abs(denom) < tiny
-                n_bad = np.count_nonzero(mask)
-                if n_bad:
-                    logger.log_warning(
-                        f"MP2 denom clamp: {n_bad} / {denom.size} elements < {tiny:g}"
-                    )
-                denom = np.where(mask, np.inf, denom)
-                tirab = girab / denom
+                tirab = self._safe_divide(girab, denom)
 
                 t2[i, idx_r] = tirab
-                t2_as[i, idx_r] = tirab  # no antisymmetry for single occupancy
+                t2[idx_r, i] = tirab.T
 
-                E_corr += np.sum(girab * tirab)
+                t2_as[i, idx_r] = tirab
+                t2_as[idx_r, i] = tirab.T
+
+                E_corr += 2.0 * np.sum(girab * tirab)
 
         # singly-singly occupied contribution (i,j both in singly occupied block)
         for r in range(ns):
@@ -474,26 +538,89 @@ class DFROHFMP2(DFMP2Base):
 
                 grsab = Br @ Bs.T  # (a,b)
                 denom = eps_s[r] + eps_s[s] - eps_v[:, None] - eps_v[None, :]
-                tiny = 1e-12
-                mask = np.abs(denom) < tiny
-                n_bad = np.count_nonzero(mask)
-                if n_bad:
-                    logger.log_warning(
-                        f"MP2 denom clamp: {n_bad} / {denom.size} elements < {tiny:g}"
-                    )
-                denom = np.where(mask, np.inf, denom)
-                trsab = grsab / denom
+                trsab = self._safe_divide(grsab, denom)
 
                 t2[idx_r, idx_s] = trsab
-                t2_as[idx_r, idx_s] = trsab  # no antisymmetry for single occupancy
+                t2[idx_s, idx_r] = trsab.T
+
+                t2_as[idx_r, idx_s] = trsab
+                t2_as[idx_s, idx_r] = trsab.T
 
                 factor = 0.5 if r == s else 1.0
                 E_corr += factor * np.sum(grsab * trsab)
+
         return t2, t2_as, E_corr
+
+    def make_rohf_1rdm(self):
+        nd = self.docc
+        ns = self.socc
+        nocc = self.nocc
+        nvir = self.nvir
+        nmo = nocc + nvir
+
+        gamma1_a = np.zeros((nmo, nmo))
+        gamma1_b = np.zeros((nmo, nmo))
+
+        # --- reference occupations ---
+        # doubly occupied
+        gamma1_a[:nd, :nd] += np.eye(nd)
+        gamma1_b[:nd, :nd] += np.eye(nd)
+
+        # singly occupied (alpha only)
+        gamma1_a[nd : nd + ns, nd : nd + ns] += np.eye(ns)
+
+        # --- MP2 corrections (reuse t2 structure) ---
+        t2 = self.t2
+        t2_as = self.t2_as
+
+        t2_dd = t2[:nd, :nd]
+        t2_as_dd = t2_as[:nd, :nd]
+
+        doo = -0.5 * np.einsum("imef,jmef->ij", t2_as_dd, t2_dd)
+
+        # vir-vir correction
+        dvv = 0.5 * np.einsum("mnae,mnbe->ab", t2_as, t2, optimize=True)
+
+        # alpha: doubly occupied block
+        gamma1_a[:nd, :nd] += doo + doo.T
+
+        gamma1_b[:nd, :nd] += doo[:nd, :nd] + doo[:nd, :nd].T  # beta only sees doubly
+
+        gamma1_a[nocc:, nocc:] += dvv + dvv.T
+        gamma1_b[nocc:, nocc:] += dvv + dvv.T
+
+        return gamma1_a, gamma1_b
+
+    def make_rohf_2rdm(self):
+        nocc, nvir = self.nocc, self.nvir
+        nmo = nocc + nvir
+
+        dm2 = np.zeros((nmo, nmo, nmo, nmo))
+
+        o = np.arange(nocc)
+        v = np.arange(nocc, nmo)
+
+        t2 = self.t2
+
+        # OVOV block (same as RHF approx)
+        dovov = (2.0 * t2.transpose(0, 2, 1, 3) - t2.transpose(0, 3, 1, 2)) * 2.0
+
+        dm2[np.ix_(o, v, o, v)] = dovov
+        dm2[np.ix_(v, o, v, o)] = dovov.transpose(1, 0, 3, 2)
+
+        # add disconnected part from gamma1
+        dm1 = self.gamma1_sf
+
+        term1 = np.einsum("qp,sr->pqrs", dm1, dm1)
+        term2 = np.einsum("qr,sp->pqrs", dm1, dm1)
+
+        dm2 += term1 - 0.5 * term2
+
+        return dm2
 
 
 @dataclass
-class DFUHFMP2(DFMP2Base):
+class UHFMP2(MP2Base):
     """
     Density-Fitted Møller–Plesset perturbation theory (DF-MP2) method with UHF canonical orbitals.
 
@@ -529,529 +656,374 @@ class DFUHFMP2(DFMP2Base):
         self.eps_a = self.parent_method.eps[0].copy()
         self.eps_b = self.parent_method.eps[1].copy()
 
+        # occupations
         self.naocc = self.parent_method.na
-        self.navir = self.parent_method.nuocc
-
         self.nbocc = self.parent_method.nb
-        self.nbvir = self.parent_method.nvocc
+
+        # total MOs
+        self.nmo = self.parent_method.nmo
+
+        # virtuals
+        self.navir = self.nmo - self.naocc
+        self.nbvir = self.nmo - self.nbocc
 
         self.fock_builder = self.system.fock_builder
 
-    def _build_df_iaQ(self, Ba, Bb):
-        raise NotImplementedError("DF-UHF-MP2 df_iaQ builder not implemented yet.")
-
-    def _build_t2_all(self, Ba, Bb):
-        raise NotImplementedError("DF-UHF-MP2 t2 builder not implemented yet.")
-
-
-# @dataclass
-# class DFUHFMP2(SystemMixin, MOsMixin, ABC):
-#     """
-#     Density-Fitted Møller–Plesset perturbation theory (DF-MP2) method with UHF canonical orbitals.
-
-#     Parameters
-#     ----------
-#     compute_1rdm
-#         If True, build the spin-free 1-RDM (unrelaxed MP2).
-#     compute_1rdm_ar
-#         If True, build the spin-free 1-RDM in AO basis.
-#     compute_2rdm
-#         If True, build the spin-free 2-RDM (potentially large).
-#     compute_cumulants
-#         If True, build 2-body cumulant (and 1-body hole RDM if needed).
-#         Usually implies compute_rdm2 unless you implement a direct cumulant builder.
-
-#     Returns
-#     -------
-#     float
-#         MP2 total energy (E_HF + E_corr).
-#     """
-
-#     compute_1rdm: bool = False
-#     compute_1rdm_ao: bool = False
-#     compute_2rdm: bool = False
-#     compute_cumulants: bool = False
-#     executed: bool = False
-
-#     def __call__(self, parent_method):
-#         self.parent_method = parent_method
-#         assert isinstance(
-#             self.parent_method, UHF
-#         ), "Parent method must be of UHF reference."
-#         return self
-
-#     def _startup(self):
-#         if not self.parent_method.executed:
-#             self.parent_method.run()
-
-#     # Copy system + MO information
-#     SystemMixin.copy_from_upstream(self, self.parent_method)
-#     MOsMixin.copy_from_upstream(self, self.parent_method)
-
-#     # MO reordering (contiguous correlated space)
-#     self.Ca = self.C[0].copy()
-#     self.Cb = self.C[1].copy()
-#     self.eps_a = self.parent_method.eps[0].copy()
-#     self.eps_b = self.parent_method.eps[1].copy()
-
-#     self.naocc = self.parent_method.na
-#     self.navir = self.parent_method.nuocc
-
-#     self.nbocc = self.parent_method.nb
-#     self.nbvir = self.parent_method.nvocc
-
-#     self.fock_builder = self.system.fock_builder
-
-# def run(self):
-#     """
-#     Run DF-UHF-MP2.
-#     """
-#     import time
-
-#     t0 = time.monotonic()
-#     logger.log_info1("Starting DF-UHF-MP2 calculation.")
-
-#     self._startup()
-
-#     self.Ba_iaQ, self.Bb_iaQ = self._build_df_iaQ()  # shape (nocc, nvir, naux)
-
-#     # --- energies
-#     (
-#         self.t2,
-#         self.t2_as,
-#         self.t2_b,
-#         self.t2_b_as,
-#         self.t2_ab,
-#         self.t2_ab_as,
-#         self.E_corr,
-#     ) = self._build_t2_all(Ba=self.Ba_iaQ, Bb=self.Bb_iaQ)
-#     self.E_total = self.parent_method.E + self.E_corr
-
-#     # --- optional density info
-#     self.gamma1_sf = None
-#     self.gamma2_sf = None
-#     self.lambda2_sf = None
-
-#     logger.log_info1("DF-RHF-MP2 calculation completed.")
-#     logger.log_info1(f"E(corr)  = {self.E_corr:.13f} Eh")
-#     logger.log_info1(f"E(total) = {self.E_total:.13f} Eh")
-#     logger.log_info1(f"||t2|| = {np.linalg.norm(self.t2)}")
-
-#     if self.compute_1rdm:
-#         self.gamma1_a_sf, self.gamma1_b_sf = self.make_mp2_sf_1rdm_intermediates(
-#             Ba=self.Ba_iaQ, Bb=self.Bb_iaQ
-#         )
-#         if self.compute_1rdm_ao:
-#             self.gamma1_sf_ao = self.gamma1_mo_to_ao(
-#                 self.gamma1_a_sf + self.gamma1_b_sf
-#             )
-
-#     if self.compute_2rdm or self.compute_cumulants:
-#         self.gamma2_sf = self.make_mp2_sf_2rdm(
-#             t2_a=self.t2_as,
-#             t2_b=self.t2_b_as,
-#             dm1a=self.gamma1_a_sf,
-#             dm1b=self.gamma1_b_sf,
-#         )
-
-#     self.executed = True
-#     dt = time.monotonic() - t0
-
-#     logger.log_info1(f"Time     = {dt:.3f} s")
-
-#     return self.E_total
-
-# def _build_t2_all(self, Ba, Bb):
-#     """
-#     Build all MP2 amplitudes t_{ij}^{ab} and antisymmetrized t̃_{ij}^{ab}.
-
-#     Shapes
-#     ------
-#     B: (nocc, nvir, naux)
-#     t2, t2_as: (nocc, nocc, nvir, nvir)
-
-#     Energy
-#     ------
-#     E_corr = Σ_{ijab} (2(ia|jb) - (ib|ja)) * (ia|jb) / Δ_{ij}^{ab}
-#         = Σ_{ijab} (2 g_{ij}^{ab} - g_{ij}^{ba}) * t_{ij}^{ab}
-#     """
-#     eps_a_i = self.eps_a[: self.naocc]
-#     eps_a_a = self.eps_a[self.naocc :]
-
-#     eps_b_i = self.eps_b[: self.nbocc]
-#     eps_b_a = self.eps_b[self.nbocc :]
-#     naocc, navir = self.naocc, self.navir
-#     nbocc, nbvir = self.nbocc, self.nbvir
-#     t2_a = np.empty((naocc, naocc, navir, navir))
-#     t2_b = np.empty((nbocc, nbocc, nbvir, nbvir))
-#     # antisym only in (a,b): t̃ = 2t - t^{ba}
-#     t2_a_as = np.empty_like(t2_a)
-#     t2_b_as = np.empty_like(t2_b)
-
-#     E_corr = 0.0
-
-#     for i in range(naocc):
-#         Bi = Ba[i]  # (navir, naux)
-#         for j in range(naocc):
-#             Bj = Ba[j]
-#             gijab_a = Bi @ Bj.T  # (navir, navir)
-#             denom_a = eps_a_i[i] + eps_a_i[j] - eps_a_a[:, None] - eps_a_a[None, :]
-#             tiny = 1e-12
-#             mask = np.abs(denom_a) < tiny
-#             n_bad = np.count_nonzero(mask)
-#             if n_bad:
-#                 logger.log_warning(
-#                     f"MP2 denom clamp: {n_bad} / {denom_a.size} elements < {tiny:g}"
-#                 )
-#             denom_a = np.where(mask, np.inf, denom_a)
-#             tijab_a = gijab_a / denom_a
-
-#             t2_a[i, j] = tijab_a
-#             t2_a_as[i, j] = tijab_a - tijab_a.T
-
-#             # energy contribution
-#             E_corr += np.sum((gijab_a - gijab_a.T) * tijab_a)
-
-#     for i in range(nbocc):
-#         Bi = Bb[i]  # (nbvir, naux)
-#         for j in range(nbocc):
-#             Bj = Bb[j]
-#             gijab_b = Bi @ Bj.T  # (nbvir, nbvir)
-#             denom_b = eps_b_i[i] + eps_b_i[j] - eps_b_a[:, None] - eps_b_a[None, :]
-#             tiny = 1e-12
-#             mask = np.abs(denom_b) < tiny
-#             n_bad = np.count_nonzero(mask)
-#             if n_bad:
-#                 logger.log_warning(
-#                     f"MP2 denom clamp: {n_bad} / {denom_b.size} elements < {tiny:g}"
-#                 )
-#             denom_b = np.where(mask, np.inf, denom_b)
-#             tijab_b = gijab_b / denom_b
-
-#             t2_b[i, j] = tijab_b
-#             t2_b_as[i, j] = tijab_b - tijab_b.T
-#             E_corr += np.sum((gijab_b - gijab_b.T) * tijab_b)
-
-#     # Build alpha-beta integrals
-#     Ea = eps_a_a[:, None]
-#     Eb = eps_b_a[None, :]
-#     for i in range(naocc):
-#         Bi = Ba[i]  # (navir, naux)
-#         for j in range(nbocc):
-#             Bj = Bb[j]  # (nbvir, naux)
-
-#             gijab_ab = Bi @ Bj.T  # (navir, nbvir)
-
-#             denom_ab = eps_a_i[i] + eps_b_i[j] - Ea - Eb  # (a,b)
-
-#             tiny = 1e-12
-#             mask = np.abs(denom_ab) < tiny
-#             n_bad = np.count_nonzero(mask)
-#             if n_bad:
-#                 logger.log_warning(
-#                     f"MP2 denom clamp: {n_bad} / {denom_ab.size} elements < {tiny:g}"
-#                 )
-
-#             denom_ab = np.where(mask, np.inf, denom_ab)
-
-#             t2_ab = gijab_ab / denom_ab
-#             E_corr += np.sum(gijab_ab * t2_ab)
-
-#     return t2_a, t2_a_as, t2_b, t2_b_as, t2_ab, E_corr
-
-# def _build_df_iaQ(self):
-#     """
-#     Build 3-index integrals (ia|Q) using density fitting.
-
-#     Returns:
-#     --------
-#         B_iaQ alpha: 3-index integrals (ia|Q) as a numpy array of shape (n_occ, n_vir, n_aux).
-#         B_iaQ beta: 3-index integrals (ia|Q) as a numpy array of shape (n_occ, n_vir, n_aux).
-#     """
-#     Ca_occ = self.Ca[:, : self.naocc]  # Alpha Occupied MOs
-#     Ca_vir = self.Ca[:, self.naocc :]  # Alpha Virtual MOs
-
-#     Cb_occ = self.Cb[:, : self.nbocc]  # Beta Occupied MOs
-#     Cb_vir = self.Cb[:, self.nbocc :]  # Beta Virtual MOs
-
-#     Ba_Qia = self.fock_builder.B_tensor_gen_block(Ca_occ, Ca_vir)
-#     Bb_Qia = self.fock_builder.B_tensor_gen_block(Cb_occ, Cb_vir)
-
-#     return (
-#         Ba_Qia.transpose(1, 2, 0).copy(),
-#         Bb_Qia.transpose(1, 2, 0).copy(),
-#     )
-
-# def make_mp2_sf_1rdm_intermediates(
-#     self, Ba: np.ndarray, Bb: np.ndarray
-# ) -> np.ndarray:
-#     """
-#     Fast unrelaxed spin-summed MP2 1-RDM (PySCF-style) using DF factors B[i,a,Q].
-#     No full t2 tensor is formed.
-
-#     Returns gamma with:
-#     gamma_oo = 2I - (dm1occ + dm1occ.T)
-#     gamma_vv =      (dm1vir + dm1vir.T)
-#     where dm1occ, dm1vir match PySCF's _gamma1_intermediates (up to symmetry handling).
-#     """
-#     eps_a_o = self.eps_a[: self.naocc]
-#     eps_b_o = self.eps_b[: self.nbocc]
-#     eps_a_v = self.eps_a[self.naocc :]
-#     eps_b_v = self.eps_b[self.nbocc :]
-#     naocc, navir = self.naocc, self.navir
-#     nbocc, nbvir = self.nbocc, self.nbvir
-#     namo = naocc + navir
-#     nbmo = nbocc + nbvir
-
-#     dm1aocc = np.zeros((naocc, naocc))
-#     dm1avir = np.zeros((navir, navir))
-
-#     dm1bocc = np.zeros((nbocc, nbocc))
-#     dm1bvir = np.zeros((nbvir, nbvir))
-
-#     ea_ab = eps_a_v[:, None] + eps_a_v[None, :]  # (a,b)
-#     eb_ab = eps_b_v[:, None] + eps_b_v[None, :]  # (b,a)
-
-#     for i in range(naocc):
-#         # g_jab = (ia|jb) for all j,a,b via DF
-#         # B[i]: (a,Q), B: (j,b,Q)
-#         g_jab = np.einsum("aQ,jbQ->jab", Ba[i], Ba, optimize=True)  # (j,a,b)
-#         denom = (eps_a_o[i] + eps_a_o[:, None, None]) - ea_ab[None, :, :]  # (j,a,b)
-#         tiny = 1e-12
-#         mask = np.abs(denom) < tiny
-#         n_bad = np.count_nonzero(mask)
-#         if n_bad:
-#             logger.log_warning(
-#                 f"MP2 denom clamp: {n_bad} / {denom.size} elements < {tiny:g}"
-#             )
-#         denom = np.where(mask, np.inf, denom)
-#         t2i = g_jab / denom  # (j,a,b)
-
-#         l2i = t2i  # real case; for complex use t2i.conj()
-
-#         # dm1vir += einsum('jca,jcb->ba', l2i, t2i) - einsum('jca,jbc->ba', l2i, t2i)
-#         dm1avir += np.einsum("jca,jcb->ba", l2i, t2i, optimize=True) - np.einsum(
-#             "jca,jbc->ba", l2i, t2i, optimize=True
-#         )
-
-#         # dm1occ += einsum('iab,jab->ij', l2i, t2i) - einsum('iab,jba->ij', l2i, t2i)
-#         dm1aocc += np.einsum("iab,jab->ij", l2i, t2i, optimize=True) - np.einsum(
-#             "iab,jba->ij", l2i, t2i, optimize=True
-#         )
-#     for i in range(nbocc):
-#         # g_jab = (ia|jb) for all j,a,b via DF
-#         # B[i]: (a,Q), B: (j,b,Q)
-#         g_jab = np.einsum("aQ,jbQ->jab", Bb[i], Bb, optimize=True)  # (j,a,b)
-#         denom = (eps_b_o[i] + eps_b_o[:, None, None]) - eb_ab[None, :, :]  # (j,a,b)
-#         tiny = 1e-12
-#         mask = np.abs(denom) < tiny
-#         n_bad = np.count_nonzero(mask)
-#         if n_bad:
-#             logger.log_warning(
-#                 f"MP2 denom clamp: {n_bad} / {denom.size} elements < {tiny:g}"
-#             )
-#         denom = np.where(mask, np.inf, denom)
-#         t2i = g_jab / denom  # (j,a,b)
-
-#         l2i = t2i  # real case; for complex use t2i.conj()
-
-#         # dm1vir += einsum('jca,jcb->ba', l2i, t2i) - einsum('jca,jbc->ba', l2i, t2i)
-#         dm1bvir += np.einsum("jca,jcb->ba", l2i, t2i, optimize=True) - np.einsum(
-#             "jca,jbc->ba", l2i, t2i, optimize=True
-#         )
-
-#         # dm1occ += einsum('iab,jab->ij') - einsum('iab,jba->ij')
-#         dm1bocc += np.einsum("iab,jab->ij", l2i, t2i, optimize=True) - np.einsum(
-#             "iab,jba->ij", l2i, t2i, optimize=True
-#         )
-
-#     for i in range(naocc):
-#         Bi = Ba[i]  # (navir, naux)
-#         for j in range(nbocc):
-#             Bj = Bb[j]  # (nbvir, naux)
-
-#             gijab_ab = Bi @ Bj.T
-
-#             denom_ab = eps_a_o[i] + eps_b_o[j] - eps_a_v[:, None] - eps_b_v[None, :]
-
-#             tiny = 1e-12
-#             mask = np.abs(denom_ab) < tiny
-#             n_bad = np.count_nonzero(mask)
-#             if n_bad:
-#                 logger.log_warning(
-#                     f"MP2 denom clamp: {n_bad} / {denom_ab.size} elements < {tiny:g}"
-#                 )
-
-#             denom_ab = np.where(mask, np.inf, denom_ab)
-
-#             t2_ab = gijab_ab / denom_ab
-
-#             dm1aocc += np.einsum("iab,jab->ij", t2_ab, t2_ab, optimize=True)
-#             dm1bocc += np.einsum("iab,jab->ij", t2_ab, t2_ab, optimize=True)
-#             dm1abocc += np.einsum("iab,jab->ij", t2_ab, t2_ab, optimize=True)
-#             dm1avir += np.einsum("iab,jab->ab", t2_ab, t2_ab, optimize=True)
-#             dm1bvir += np.einsum("iab,jab->ab", t2_ab, t2_ab, optimize=True)
-
-#     gamma_a = np.zeros((namo, namo))
-#     gamma_b = np.zeros((nbmo, nbmo))
-#     gamma_a[:naocc, :naocc] = np.eye(naocc) - (dm1aocc + dm1aocc.T)
-#     gamma_a[naocc:, naocc:] = dm1avir + dm1avir.T
-
-#     gamma_b[:nbocc, :nbocc] = np.eye(nbocc) - (dm1bocc + dm1bocc.T)
-#     gamma_b[nbocc:, nbocc:] = dm1bvir + dm1bvir.T
-#     return gamma_a, gamma_b
-
-# def gamma1_mo_to_ao(
-#     self, gamma1_a_mo: np.ndarray, gamma1_b_mo: np.ndarray
-# ) -> np.ndarray:
-#     """
-#     Transform spin-free 1-RDM from MO basis to AO basis.
-
-#     Convention:
-#     MO coefficients C are AO->MO: phi_p = sum_mu C[mu,p] chi_mu
-#     gamma_AO = C gamma_MO C^T  (real orbitals; use C.conj() for complex)
-#     """
-#     Ca = self.Ca  # shape (nao, nmo)
-#     Cb = self.Cb  # shape (nao, nmo)
-#     return Ca @ gamma1_a_mo @ Ca.T + Cb @ gamma1_b_mo @ Cb.T
-
-# def make_mp2_sf_2rdm(self, t2_a, t2_b, t2_ab, dm1a, dm1b):
-#     naocc, navir = self.naocc, self.navir
-#     nbocc, nbvir = self.nbocc, self.nbvir
-#     namo = naocc + navir
-#     nbmo = nbocc + nbvir
-
-#     dm2_a = np.zeros((namo, namo, namo, namo), dtype=t2_a.dtype)
-#     dm2_b = np.zeros((nbmo, nbmo, nbmo, nbmo), dtype=t2_b.dtype)
-#     dm2_ab = np.zeros((namo, nbmo, namo, nbmo), dtype=t2_ab.dtype)
-#     o_a = np.arange(naocc)
-#     v_a = np.arange(naocc, namo)
-#     o_b = np.arange(nbocc)
-#     v_b = np.arange(nbocc, nbmo)
-
-#     # -------------------------
-#     # (1) OVOV / VOVO from t2
-#     # -------------------------
-#     # Build dovov_iajb with shape (i,a,j,b)
-#     # dovov = (t2[i,j,a,b] - t2[i,j,b,a]), but rearranged to (i,a,j,b)
-#     dovov_a_iajb = t2_a.transpose(0, 2, 1, 3) - t2_a.transpose(0, 3, 1, 2)
-#     dovov_b_iajb = t2_b.transpose(0, 2, 1, 3) - t2_b.transpose(0, 3, 1, 2)
-#     dovov_ab_iajb = t2_ab.transpose(0, 2, 1, 3)
-#     # Fill dm2[o, v, o, v]
-#     dm2_a[np.ix_(o_a, v_a, o_a, v_a)] = dovov_a_iajb
-#     dm2_b[np.ix_(o_b, v_b, o_b, v_b)] = dovov_b_iajb  # same shape for beta block
-#     dm2_ab[np.ix_(o_a, v_b, o_a, v_b)] = dovov_ab_iajb
-
-#     # For real case: dm2[v,i,v,j] = dovov[a,j,b] with axes (a,b,j)
-#     dm2_a[np.ix_(v_a, o_a, v_a, o_a)] = dovov_a_iajb.transpose(1, 0, 3, 2)
-#     dm2_b[np.ix_(v_b, o_b, v_b, o_b)] = dovov_b_iajb.transpose(1, 0, 3, 2)
-#     dm2_ab[np.ix_(v_a, o_b, v_a, o_b)] = dovov_ab_iajb.transpose(1, 0, 3, 2)
-#     # -------------------------
-#     # (2) Addback from dm1 + constants
-#     # -------------------------
-#     dm1a_work = dm1a.copy()
-#     dm1a_work[o_a, o_a] -= 1.0  # subtract 2 on occupied diagonal only
-#     dm1aT = dm1a_work.T
-
-#     dm1b_work = dm1b.copy()
-#     dm1b_work[o_b, o_b] -= 1.0  # subtract 2 on occupied diagonal only
-#     dm1bT = dm1b_work.T
-
-#     o_a = np.arange(naocc)
-#     o_b = np.arange(nbocc)
-
-#     dm2_a[o_a[:, None], o_a[:, None], :, :] += dm1aT[
-#         None, :, :
-#     ]  # (nocc,nmo,nmo) += (1,nmo,nmo)
-#     dm2_a[:, :, o_a[None, :], o_a[None, :]] += dm1aT[
-#         :, :, None
-#     ]  # (nmo,nmo,nocc) += (nmo,nmo,1)
-#     dm2_a[:, o_a[:, None], o_a[None, :], :] -= dm1aT[
-#         :, None, :
-#     ]  # (nmo,nocc,nmo) -= (nmo,1,nmo)
-#     dm2_a[o_a[None, :], :, :, o_a[:, None]] -= dm1a_work[
-#         None, :, :
-#     ]  # (nocc,nmo,nmo) -= (1,nmo,nmo)
-
-#     dm2_b[o_b[:, None], o_b[:, None], :, :] += dm1bT[
-#         None, :, :
-#     ]  # (nocc,nmo,nmo) += (1,nmo,nmo)
-#     dm2_b[:, :, o_b[None, :], o_b[None, :]] += dm1bT[
-#         :, :, None
-#     ]  # (nmo,nmo,nocc) += (nmo,nmo,1)
-#     dm2_b[:, o_b[:, None], o_b[None, :], :] -= dm1bT[
-#         :, None, :
-#     ]  # (nmo,nocc,nmo) -= (nmo,1,nmo)
-#     dm2_b[o_b[None, :], :, :, o_b[:, None]] -= dm1b_work[
-#         None, :, :
-#     ]  # (nocc,nmo,nmo) -= (1,nmo,nmo)
-
-#     # constants:
-#     # dm2[i,i,j,j] += 1
-#     dm2_a[o_a[:, None], o_a[:, None], o_a[None, :], o_a[None, :]] += 1.0
-#     dm2_b[o_b[:, None], o_b[:, None], o_b[None, :], o_b[None, :]] += 1.0
-#     # dm2[i,j,j,i] -= 1
-#     dm2_a[o_a[:, None], o_a[None, :], o_a[None, :], o_a[:, None]] -= 1.0
-#     dm2_b[o_b[:, None], o_b[None, :], o_b[None, :], o_b[:, None]] -= 1.0
-
-#     return dm2_a, dm2_b, dm2_ab
-
-# def make_mp2_sf_2cumulants(
-#     self, gamma1_a, gamma1_b, gamma2_a, gamma2_b, gamma_2_ab
-# ):
-#     """
-#     PySCF conventions:
-#     dm1[q,p] = <p† q>
-#     dm2[p,q,r,s] = < p† r† s q >
-
-#     Disconnected/HF-like part:
-#     dm2^(0)[p,q,r,s] = dm1[q,p]*dm1[s,r] - 1/2 * dm1[q,r]*dm1[s,p]
-#     """
-#     dm1_a = gamma1_a
-#     dm1_b = gamma1_b
-#     dm2_a = gamma2_a
-#     dm2_b = gamma2_b
-#     dm2_ab = gamma_2_ab
-
-#     term1_a = np.einsum("qp,sr->pqrs", dm1_a, dm1_a, optimize=True)
-#     term2_a = np.einsum("qr,sp->pqrs", dm1_a, dm1_a, optimize=True)
-#     dm2_0_a = term1_a - 0.5 * term2_a
-
-#     term1_b = np.einsum("qp,sr->pqrs", dm1_b, dm1_b, optimize=True)
-#     term2_b = np.einsum("qr,sp->pqrs", dm1_b, dm1_b, optimize=True)
-#     dm2_0_b = term1_b - 0.5 * term2_b
-
-#     dm2_0_ab = np.einsum("qp,sr->pqrs", dm1_a, dm1_b, optimize=True)
-
-#     lambda_aa = dm2_a - dm2_0_a
-#     lambda_bb = dm2_b - dm2_0_b
-#     lambda_ab = dm2_ab - dm2_0_ab
-#     lambda_total = lambda_aa + lambda_bb + lambda_ab
-
-#     return lambda_total
-
-# def mp2_E_given_rdms(self, Ecore, H, V, gamma1_a, gamma1_b, gamma2_a, gamma2_b):
-#     """
-#     Computes mp2 Energy from comtracting rdms
-#     """
-#     e1 = np.einsum("pq,qp->", H, gamma1_a + gamma1_b, optimize=True)
-#     e2 = 0.5 * np.einsum("pqrs,prqs", V, gamma2_a + gamma2_b, optimize=True)
-
-#     return Ecore + e1 + e2
-
-# def natural_orbitals_from_gamma1(C_mo: np.ndarray, gamma1_mo: np.ndarray):
-#     # Symmetrize for numerical stability (MP2 1-RDM may be slightly non-symmetric)
-#     g = 0.5 * (gamma1_mo + gamma1_mo.T)
-
-#     # Natural occupations (n) and rotation (U) in the MO basis
-#     n, U = np.linalg.eigh(g)  # ascending
-#     idx = np.argsort(n)[::-1]  # descending occupations
-#     n = n[idx]
-#     U = U[:, idx]
-
-#     # AO->NO coefficients
-#     C_no = C_mo @ U
-#     return C_no, n, U
+    def run(self):
+        t0 = time.monotonic()
+
+        self._startup()
+
+        self.B_iaQ = self._build_df_iaQ()
+        self.Ba_iaQ, self.Bb_iaQ = self.B_iaQ
+
+        (self.t2_a, self.t2_b, self.t2_ab, self.E_corr) = self._build_t2_all(self.B_iaQ)
+
+        self.E_total = self.parent_method.E + self.E_corr
+        self.gamma1_sf = None
+        self.gamma2_sf = None
+        self.lambda2_sf = None
+        # MP2Base assumes spin-restricted tensors. UHF overrides all RDM builders.
+        if (
+            self.compute_1rdm
+            or self.compute_1rdm_ao
+            or self.compute_2rdm
+            or self.compute_cumulants
+        ):
+            if self.compute_1rdm or self.compute_1rdm_ao:
+                self.make_mp2_sf_1rdm_intermediates(self.B_iaQ)
+
+                if self.compute_1rdm_ao:
+                    self.gamma1_sf_ao = self.gamma1_mo_to_ao(self.gamma1_sf)
+
+        if self.compute_2rdm or self.compute_cumulants:
+            self.gamma2_sf = self.make_mp2_sf_2rdm()
+
+        if self.compute_cumulants:
+            self.lambda2_sf = self.make_mp2_sf_2cumulants(
+                self.gamma1_sf, self.gamma2_sf
+            )
+
+        logger.log_info1("UHF-MP2 calculation completed.")
+        logger.log_info1(f"E(corr) = {self.E_corr:.13f} Eh")
+        logger.log_info1(f"E(total) = {self.E_total:.13f} Eh")
+        norm = (
+            np.linalg.norm(self.t2_a)
+            + np.linalg.norm(self.t2_b)
+            + np.linalg.norm(self.t2_ab)
+        )
+        logger.log_info1(f"||t2|| = {norm}")
+
+        self.executed = True
+        dt = time.monotonic() - t0
+        logger.log_info1(f"Time = {dt:.3f} s")
+        return self.E_total
+
+    def _build_df_iaQ(self):
+        """
+        Build spin-resolved 3-index integrals (ia|Q) using density fitting.
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray]
+            Alpha and beta DF tensors with shapes
+            ``(naocc, navir, naux)`` and ``(nbocc, nbvir, naux)``.
+        """
+        Ca_occ = self.Ca[:, : self.naocc]
+        Ca_vir = self.Ca[:, self.naocc :]
+        Cb_occ = self.Cb[:, : self.nbocc]
+        Cb_vir = self.Cb[:, self.nbocc :]
+
+        Ba_Qia = self.fock_builder.B_tensor_gen_block(Ca_occ, Ca_vir)
+        Bb_Qia = self.fock_builder.B_tensor_gen_block(Cb_occ, Cb_vir)
+
+        assert Ba_Qia.shape[1] == self.naocc
+        assert Ba_Qia.shape[2] == self.navir
+        assert Bb_Qia.shape[1] == self.nbocc
+        assert Bb_Qia.shape[2] == self.nbvir
+
+        return (
+            Ba_Qia.transpose(1, 2, 0).copy(),
+            Bb_Qia.transpose(1, 2, 0).copy(),
+        )
+
+    def _build_t2_all(self, B):
+        Ba, Bb = B
+
+        eps_a_i = self.eps_a[: self.naocc]
+        eps_a_a = self.eps_a[self.naocc :]
+        eps_b_i = self.eps_b[: self.nbocc]
+        eps_b_a = self.eps_b[self.nbocc :]
+
+        naocc, navir = self.naocc, self.navir
+        nbocc, nbvir = self.nbocc, self.nbvir
+
+        # allocate
+        t2_a = np.zeros((naocc, naocc, navir, navir))
+        t2_b = np.zeros((nbocc, nbocc, nbvir, nbvir))
+        t2_ab = np.zeros((naocc, nbocc, navir, nbvir))
+
+        E_corr = 0.0
+        tiny = 1e-12
+
+        # =========================
+        # ALPHA-ALPHA
+        # =========================
+        for i in range(naocc):
+            Bi = Ba[i]  # (navir, naux)
+            for j in range(naocc):
+                Bj = Ba[j]
+
+                # (ia|Q)(jb|Q) → (ab)
+                gijab = Bi @ Bj.T
+                gijba = gijab.T
+
+                # antisymmetrized integrals
+                g_as = gijab - gijba
+
+                denom = eps_a_i[i] + eps_a_i[j] - eps_a_a[:, None] - eps_a_a[None, :]
+
+                tijab = self._safe_divide(g_as, denom, tiny)
+
+                t2_a[i, j] = tijab
+
+                # energy (same-spin → 1/4 factor)
+                E_corr += 0.25 * np.sum(g_as * tijab)
+
+        # =========================
+        # BETA-BETA
+        # =========================
+        for i in range(nbocc):
+            Bi = Bb[i]
+            for j in range(nbocc):
+                Bj = Bb[j]
+
+                gijab = Bi @ Bj.T
+                gijba = gijab.T
+
+                g_as = gijab - gijba
+
+                denom = eps_b_i[i] + eps_b_i[j] - eps_b_a[:, None] - eps_b_a[None, :]
+
+                tijab = self._safe_divide(g_as, denom, tiny)
+
+                t2_b[i, j] = tijab
+
+                E_corr += 0.25 * np.sum(g_as * tijab)
+
+        # =========================
+        # ALPHA-BETA
+        # =========================
+        Ea = eps_a_a[:, None]
+        Eb = eps_b_a[None, :]
+
+        for i in range(naocc):
+            Bi = Ba[i]
+            for j in range(nbocc):
+                Bj = Bb[j]
+
+                gijab = Bi @ Bj.T  # no antisymmetrization
+
+                denom = eps_a_i[i] + eps_b_i[j] - Ea - Eb
+
+                tijab = self._safe_divide(gijab, denom, tiny)
+
+                t2_ab[i, j] = tijab
+
+                # opposite-spin → no 1/4 factor
+                E_corr += np.sum(gijab * tijab)
+
+        return t2_a, t2_b, t2_ab, E_corr
+
+    def make_mp2_sf_1rdm_intermediates(self, B):
+        # Ensure amplitudes exist
+        if not all(hasattr(self, attr) for attr in ("t2_a", "t2_b", "t2_ab")):
+            self.t2_a, self.t2_b, self.t2_ab, _ = self._build_t2_all(B)
+
+        t2_a = self.t2_a
+        t2_b = self.t2_b
+        t2_ab = self.t2_ab
+
+        naocc, navir = self.naocc, self.navir
+        nbocc, nbvir = self.nbocc, self.nbvir
+
+        # =========================
+        # ALPHA BLOCKS
+        # =========================
+
+        # occupied-occupied
+        doo_a = -0.5 * (
+            np.einsum("imef,jmef->ij", t2_a, t2_a, optimize=True)
+            + np.einsum("iMef,jMef->ij", t2_ab, t2_ab, optimize=True)
+        )
+
+        # virtual-virtual
+        dvv_a = 0.5 * (
+            np.einsum("mnae,mnbe->ab", t2_a, t2_a, optimize=True)
+            + np.einsum("mNae,mNbe->ab", t2_ab, t2_ab, optimize=True)
+        )
+
+        # =========================
+        # BETA BLOCKS
+        # =========================
+
+        doo_b = -0.5 * (
+            np.einsum("imef,jmef->ij", t2_b, t2_b, optimize=True)
+            + np.einsum("mief,mjef->ij", t2_ab, t2_ab, optimize=True)
+        )
+
+        dvv_b = 0.5 * (
+            np.einsum("mnae,mnbe->ab", t2_b, t2_b, optimize=True)
+            + np.einsum("mnea,mneb->ab", t2_ab, t2_ab, optimize=True)
+        )
+
+        # =========================
+        # BUILD DENSITY MATRICES
+        # =========================
+
+        gamma1_a = np.zeros((self.nmo, self.nmo), dtype=t2_a.dtype)
+        gamma1_b = np.zeros((self.nmo, self.nmo), dtype=t2_b.dtype)
+
+        # reference occupations
+        gamma1_a[:naocc, :naocc] = np.eye(naocc)
+        gamma1_b[:nbocc, :nbocc] = np.eye(nbocc)
+
+        # add MP2 corrections
+        gamma1_a[:naocc, :naocc] += doo_a
+        gamma1_a[naocc:, naocc:] += dvv_a
+
+        gamma1_b[:nbocc, :nbocc] += doo_b
+        gamma1_b[nbocc:, nbocc:] += dvv_b
+
+        # enforce Hermiticity
+        gamma1_a = 0.5 * (gamma1_a + gamma1_a.T)
+        gamma1_b = 0.5 * (gamma1_b + gamma1_b.T)
+
+        # spin-free
+        gamma1_sf = gamma1_a + gamma1_b
+        gamma1_sf = 0.5 * (gamma1_sf + gamma1_sf.T)
+
+        self.gamma1_a = gamma1_a
+        self.gamma1_b = gamma1_b
+        self.gamma1_sf = gamma1_sf
+
+        return gamma1_sf
+
+    def gamma1_mo_to_ao(self, gamma1_sf):
+        return self.C @ gamma1_sf @ self.C.T
+
+    def make_mp2_sf_2rdm(self):
+        t2_a = self.t2_a
+        t2_b = self.t2_b
+        t2_ab = self.t2_ab
+
+        nmo = self.nmo
+        naocc, navir = self.naocc, self.navir
+        nbocc, nbvir = self.nbocc, self.nbvir
+
+        oa = np.arange(naocc)
+        va = np.arange(naocc, nmo)
+        ob = np.arange(nbocc)
+        vb = np.arange(nbocc, nmo)
+
+        # =========================
+        # Allocate spin blocks
+        # =========================
+        dm2_aa = np.zeros((nmo, nmo, nmo, nmo))
+        dm2_bb = np.zeros((nmo, nmo, nmo, nmo))
+        dm2_ab = np.zeros((nmo, nmo, nmo, nmo))
+
+        # =========================
+        # SAME-SPIN (αα)
+        # =========================
+        # (ijab)
+        dm2_aa[np.ix_(oa, oa, va, va)] += t2_a
+        dm2_aa[np.ix_(va, va, oa, oa)] += t2_a.transpose(2, 3, 0, 1)
+
+        # antisymmetry permutations
+        dm2_aa[np.ix_(oa, oa, va, va)] -= t2_a.transpose(0, 1, 3, 2)
+        dm2_aa[np.ix_(va, va, oa, oa)] -= t2_a.transpose(3, 2, 0, 1)
+
+        # =========================
+        # SAME-SPIN (ββ)
+        # =========================
+        dm2_bb[np.ix_(ob, ob, vb, vb)] += t2_b
+        dm2_bb[np.ix_(vb, vb, ob, ob)] += t2_b.transpose(2, 3, 0, 1)
+
+        dm2_bb[np.ix_(ob, ob, vb, vb)] -= t2_b.transpose(0, 1, 3, 2)
+        dm2_bb[np.ix_(vb, vb, ob, ob)] -= t2_b.transpose(3, 2, 0, 1)
+
+        # =========================
+        # OPPOSITE-SPIN (αβ)
+        # =========================
+        dm2_ab[np.ix_(oa, ob, va, vb)] += t2_ab
+        dm2_ab[np.ix_(va, vb, oa, ob)] += t2_ab.transpose(2, 3, 0, 1)
+
+        # =========================
+        # Add reference (HF) part
+        # =========================
+        gamma1_a = self.gamma1_a
+        gamma1_b = self.gamma1_b
+
+        # αα
+        dm2_aa += np.einsum("pr,qs->pqrs", gamma1_a, gamma1_a) - np.einsum(
+            "ps,qr->pqrs", gamma1_a, gamma1_a
+        )
+
+        # ββ
+        dm2_bb += np.einsum("pr,qs->pqrs", gamma1_b, gamma1_b) - np.einsum(
+            "ps,qr->pqrs", gamma1_b, gamma1_b
+        )
+
+        # αβ
+        dm2_ab += np.einsum("pr,qs->pqrs", gamma1_a, gamma1_b)
+
+        # =========================
+        # Spin-free assembly
+        # =========================
+        gamma2_sf = dm2_aa + dm2_bb + dm2_ab + dm2_ab.transpose(1, 0, 3, 2)
+
+        # =========================
+        # Enforce symmetries
+        # =========================
+        gamma2_sf = 0.5 * (gamma2_sf + gamma2_sf.transpose(1, 0, 3, 2))
+        gamma2_sf = 0.5 * (gamma2_sf + gamma2_sf.transpose(2, 3, 0, 1))
+
+        return gamma2_sf
+
+    def make_mp2_sf_2cumulants(self, gamma1, gamma2):
+        term1 = np.einsum("pr,qs->pqrs", gamma1, gamma1)
+        term2 = np.einsum("ps,qr->pqrs", gamma1, gamma1)
+        dm2_0 = term1 - 0.5 * term2
+        return gamma2 - dm2_0
+
+    def mp2_E_given_rdms(self, Ecore, H, V, gamma1_a, gamma1_b, gamma2_a, gamma2_b):
+        """
+        Computes mp2 Energy from comtracting rdms
+        """
+        e1 = np.einsum("pq,qp->", H, gamma1_a + gamma1_b, optimize=True)
+
+        gamma2_aa = gamma2_a
+        gamma2_ab = None
+        gamma2_bb = gamma2_b
+
+        if isinstance(gamma2_a, tuple):
+            if len(gamma2_a) == 3:
+                gamma2_aa, gamma2_ab, gamma2_bb = gamma2_a
+            elif len(gamma2_a) == 2:
+                gamma2_aa, gamma2_ab = gamma2_a
+
+        if isinstance(gamma2_b, tuple):
+            if len(gamma2_b) == 3:
+                gamma2_aa, gamma2_ab, gamma2_bb = gamma2_b
+            elif len(gamma2_b) == 2:
+                gamma2_ab, gamma2_bb = gamma2_b
+
+        e2 = 0.5 * np.einsum("pqrs,prqs", V, gamma2_aa + gamma2_bb, optimize=True)
+        if gamma2_ab is not None:
+            e2 += np.einsum("pqrs,prqs", V, gamma2_ab, optimize=True)
+
+        return Ecore + e1 + e2
 
 
 class MP2MCASolverLike:
