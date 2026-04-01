@@ -1,8 +1,9 @@
 import time
-
+import numpy as np
 from forte2 import System
-from forte2.scf import RHF
+from forte2.scf import RHF, ROHF, UHF
 from forte2.helpers.comparisons import approx
+from forte2.mp.dfmp2 import RHFMP2, ROHFMP2, UHFMP2
 
 
 def test_mp2():
@@ -49,3 +50,108 @@ def test_mp2():
     print(f"Time taken: {end - start:.4f} seconds")
 
     assert Emp2 == approx(energy_mp2)
+
+def test_rhf_mp2():
+    erhf = -76.0614664072629
+    emp2 = -76.3710978833093
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.061664597388
+    H            0.000000000000    -0.711620616369     0.489330954643
+    H            0.000000000000     0.711620616369     0.489330954643
+    """
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
+    scf = RHF(charge=0)(system)
+    mp2 = RHFMP2(compute_1rdm=True, compute_2rdm=True, compute_cumulants=True)(scf)
+    mp2.run()
+
+    assert scf.E == approx(erhf)
+    assert mp2.E_total == approx(emp2)
+
+def test_h4_rhf_mp2():
+    erhf = -1.998839903161
+    emp2 = -2.0915387810627
+    xyz = """
+  H   -2.7270878    1.9884277    1.0000000
+  H   -1.8074993    2.0159410    -1.0000000
+  H   -1.8213175    1.0960448    0.0000000
+  H   -2.7409060    1.0685315    0.0000000
+    """
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
+    scf = RHF(charge=0)(system)
+    mp2 = RHFMP2(compute_1rdm=True)(scf)
+    mp2.run()
+
+    assert scf.E == approx(erhf)
+    assert mp2.E_total == approx(emp2)
+
+def test_singlet_rohf_mp2():
+    # Test the ROHF implementation with a simple example (this is equivalent to RHF)
+    erohf = -76.061466407194
+    emp2 = -76.37109788330923
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.061664597388
+    H            0.000000000000    -0.711620616369     0.489330954643
+    H            0.000000000000     0.711620616369     0.489330954643
+    """
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
+
+    scf = ROHF(charge=0, ms=0)(system)
+    mp2 = ROHFMP2()(scf)
+    mp2.run()
+
+    assert scf.E == approx(erohf)
+    assert mp2.E_total == approx(emp2)
+
+def test_triplet_h2o_rohf_mp2():
+    erohf = -75.805109024040
+    emp2 = -76.1475807766528
+
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.061664597388
+    H            0.000000000000    -0.711620616369     0.489330954643
+    H            0.000000000000     0.711620616369     0.489330954643
+    """
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
+
+    scf = ROHF(charge=0, ms=1)(system)
+    mp2 = ROHFMP2()(scf)
+    mp2.run()
+
+    assert scf.E == approx(erohf)
+    assert mp2.E_total == approx(emp2)
+
+def test_triplet_h2o_uhf_mp2():
+    euhf = -75.810772399321
+    emp2 = -76.0662395867740
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.061664597388
+    H            0.000000000000    -0.711620616369     0.489330954643
+    H            0.000000000000     0.711620616369     0.489330954643
+    """
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
+
+    scf = UHF(charge=0, ms=1)(system)
+    mp2 = UHFMP2()(scf)
+    mp2.run()
+
+    assert scf.E == approx(euhf)
+    assert mp2.E_total == approx(emp2)
+
+def test_h2o_uhf_mp2():
+    # euhf = -75.810772399321
+    emp2 = -76.3710978831473
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.061664597388
+    H            0.000000000000    -0.711620616369     0.489330954643
+    H            0.000000000000     0.711620616369     0.489330954643
+    """
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
+
+    scf = UHF(charge=0, ms=0)(system)
+    mp2 = UHFMP2()(scf)
+    mp2.run()
+
+    # assert scf.E == approx(euhf)
+    assert mp2.E_total == approx(emp2)
+
+test_h2o_uhf_mp2()
