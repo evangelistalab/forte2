@@ -278,7 +278,7 @@ template <size_t N> class BitArray {
     }
 
     /// not operator
-    BitArray<N> operator~() {
+    BitArray<N> operator~() const {
         BitArray<N> res(*this);
         res.flip();
         return res;

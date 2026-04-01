@@ -418,7 +418,6 @@ void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
 std::pair<std::vector<DetMap>, std::vector<DetMap>>
 SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, size_t num_batches,
                                     size_t batch_id) {
-    // We assume all determinants have the same number of electrons
     std::vector<size_t> aocc(na_);
     std::vector<size_t> bocc(nb_);
     std::vector<size_t> avir(norb_ - na_);
@@ -427,7 +426,7 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
     size_t checks_count = 0;
     double e_pt2 = 0.0;
 
-    size_t noa, nob;
+    size_t noa, nob, nva, nvb;
 
     std::vector<DetMap> V_map(nroots_);
     std::vector<DetMap> PT_map(nroots_);
@@ -443,6 +442,9 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
     // allocate the temporary storage for the largest block of alpha strings
     std::vector<double> abs_c_max(max_block_size, 0.0);
     std::vector<double> c_block(max_block_size * nroots_, 0.0);
+
+    String norb_mask = String::zero();
+    norb_mask.fill_up_to(norb_);
 
     Determinant new_det;
     // Loop over all unique alpha strings
@@ -465,19 +467,18 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
             ++k;
         }
 
-        // // find the occupied and empty orbitals for the current alpha string
-        // auto masked_a_str = a_str & ~frozen_creation_mask_;
+        // find the occupied and empty orbitals for the current alpha string
+        auto a_str_annihilation_masked = a_str & ~frozen_annihilation_mask_;
+        a_str_annihilation_masked.find_set_bits(aocc, noa);
+        auto a_str_creation_masked = (~a_str & norb_mask) & ~frozen_creation_mask_;
+        a_str_creation_masked.find_set_bits(avir, nva);
 
-        a_str.find_set_bits(aocc, noa);
-        compute_fast_virtual(aocc, avir, norb_);
+        std::span<size_t> aocc_span(aocc.data(), noa);
+        std::span<size_t> avir_span(avir.data(), nva);
 
         // single alpha excitations
-        for (const auto& i : aocc) {
-            if (!annihilation_allowed(i))
-                continue;
-            for (const auto& a : avir) {
-                if (!creation_allowed(a))
-                    continue;
+        for (const auto& i : aocc_span) {
+            for (const auto& a : avir_span) {
                 auto [new_a_str, sign] = create_single_excitation(a_str, i, a);
                 if (String::Hash()(new_a_str) % num_batches != batch_id) {
                     continue;
@@ -507,11 +508,9 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
         }
 
         // double alpha-alpha excitations
-        for (const auto& i : aocc) {
-            if (!annihilation_allowed(i))
-                continue;
-            for (const auto& j : aocc) {
-                if (i >= j || !annihilation_allowed(j))
+        for (const auto& i : aocc_span) {
+            for (const auto& j : aocc_span) {
+                if (i >= j)
                     continue;
                 const auto& v_list = va_sorted_[i * norb_ + j];
                 for (const auto& [coupling, integral, a, b] : v_list) {
@@ -519,8 +518,7 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
                     if (std::fabs(coupling * abs_c_max_block) < pt2_threshold)
                         break;
 
-                    if ((a >= b) or a_str.get_bit(a) or a_str.get_bit(b) or
-                        !creation_allowed(a, b))
+                    if ((a >= b) or a_str.get_bit(a) or a_str.get_bit(b) or !creation_allowed(a, b))
                         continue;
 
                     auto [new_a_str, sign] = create_double_excitation(a_str, i, j, a, b);
@@ -554,12 +552,8 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
         }
 
         // double alpha-beta excitations
-        for (const auto& i : aocc) {
-            if (!annihilation_allowed(i))
-                continue;
-            for (const auto& a : avir) {
-                if (!creation_allowed(a))
-                    continue;
+        for (const auto& i : aocc_span) {
+            for (const auto& a : avir_span) {
                 // find the new alpha string after excitation and the sign and store it
                 auto [new_a_str, a_sign] = create_single_excitation(a_str, i, a);
 
@@ -621,6 +615,8 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
 
             // single beta excitations
             for (const auto& i : bocc) {
+                if (!annihilation_allowed(i))
+                    continue;
                 for (const auto& a : bvir) {
                     if (!creation_allowed(a))
                         continue;
@@ -647,8 +643,10 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
 
             // double beta-beta excitations
             for (const auto& i : bocc) {
+                if (!annihilation_allowed(i))
+                    continue;
                 for (const auto& j : bocc) {
-                    if (i >= j)
+                    if (i >= j || !annihilation_allowed(j))
                         continue;
                     const auto& v_list = va_sorted_[i * norb_ + j];
                     for (const auto& [coupling, integral, a, b] : v_list) {
