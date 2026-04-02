@@ -11,16 +11,9 @@ class RMP2(MP2Base):
     """
     Density-Fitted Møller-Plesset perturbation theory (DF-MP2) method with RHF canonical orbitals.
 
-    Parameters
-    ----------
-    compute_1rdm
-        If True, build the spin-free 1-RDM (unrelaxed MP2).
-    compute_1rdm_ao
-        If True, build the spin-free 1-RDM in AO basis.
-    compute_2rdm
-        If True, build the spin-free 2-RDM (potentially large).
-    compute_cumulants
-        If True, build 2-body cumulant (and 1-body hole RDM if needed).
+    Request optional quantities with the fluent helpers inherited from
+    :class:`MP2Base`, for example ``RMP2().compute_1rdm().compute_2rdm()``.
+
     Returns
     -------
     float
