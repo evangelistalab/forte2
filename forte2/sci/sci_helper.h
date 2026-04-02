@@ -182,6 +182,12 @@ class SelectedCIHelper {
                             const SelectedCIStrings& list, size_t i, size_t j,
                             double int_sign) const;
 
+    /// @brief Find matching determinants for the given excitation and accumulate their
+    /// contributions to sigma using atomic updates
+    void find_matching_dets_atomic(std::span<double> basis, std::span<double> sigma,
+                                   const SelectedCIStrings& list, size_t i, size_t j,
+                                   double int_sign) const;
+
     /// @brief Select new variational and PT2 determinants using a batch approach
     /// @param var_threshold The threshold for variational selection
     /// @param pt2_threshold The threshold for PT2 selection
@@ -216,7 +222,7 @@ class SelectedCIHelper {
 
     /// @brief PT2 regularization method
     PT2Regularizer pt2_regularizer_ = PT2Regularizer::None; // Default to no regularization
-    double pt2_regularizer_strength_ = 0.0; // Default strength
+    double pt2_regularizer_strength_ = 0.0;                 // Default strength
 
     /// @brief logging level for the class
     int log_level_ = 3;
