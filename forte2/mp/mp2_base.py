@@ -16,17 +16,18 @@ from forte2.helpers import logger
 class MP2Base(SystemMixin, MOsMixin, ABC):
     """Base class for density-fitted MP2 methods. Not meant to be used directly.
 
-    Parameters
-    ----------
-    compute_1rdm : bool
-        If True, build the spin-free 1-RDM (unrelaxed MP2).
-    compute_1rdm_ao : bool
-        If True, build the spin-free 1-RDM in AO basis.
-    compute_2rdm : bool
-        If True, build the spin-free 2-RDM (potentially large).
-    compute_cumulants : bool
-        If True, build the 2-body cumulant (and 1-body hole RDM if needed).
-        Usually implies compute_2rdm.
+    Request optional quantities before ``run()`` using the fluent helpers:
+
+    ``compute_1rdm()``
+        Build the spin-free 1-RDM (unrelaxed MP2).
+    ``compute_1rdm_ao()``
+        Build the spin-free 1-RDM in AO basis.
+    ``compute_2rdm()``
+        Build the spin-free 2-RDM (potentially large).
+    ``compute_cumulants()``
+        Build the 2-body cumulant and any required lower-rank RDMs.
+    ``store_t2()``
+        Retain the MP2 amplitudes after the energy evaluation.
 
     Attributes
     ----------
@@ -72,15 +73,39 @@ class MP2Base(SystemMixin, MOsMixin, ABC):
     and does NOT use base-class tensor conventions.
     """
 
-    compute_1rdm: bool = False
-    compute_1rdm_ao: bool = False
-    compute_2rdm: bool = False
-    compute_cumulants: bool = False
-    store_t2: bool = False
+    _compute_1rdm: bool = field(default=False, init=False, repr=False)
+    _compute_1rdm_ao: bool = field(default=False, init=False, repr=False)
+    _compute_2rdm: bool = field(default=False, init=False, repr=False)
+    _compute_cumulants: bool = field(default=False, init=False, repr=False)
+    _store_t2: bool = field(default=False, init=False, repr=False)
     executed: bool = field(default=False, init=False)
 
     @abstractmethod
     def __call__(self, parent_method): ...
+
+    def compute_1rdm(self):
+        self._compute_1rdm = True
+        return self
+
+    def compute_1rdm_ao(self):
+        self._compute_1rdm = True
+        self._compute_1rdm_ao = True
+        return self
+
+    def compute_2rdm(self):
+        self._compute_1rdm = True
+        self._compute_2rdm = True
+        return self
+
+    def compute_cumulants(self):
+        self._compute_1rdm = True
+        self._compute_2rdm = True
+        self._compute_cumulants = True
+        return self
+
+    def store_t2(self):
+        self._store_t2 = True
+        return self
 
     def run(self):
         t0 = time.monotonic()
@@ -110,33 +135,35 @@ class MP2Base(SystemMixin, MOsMixin, ABC):
         self.lambda2_sf = None
 
     def _needs_t2_storage(self) -> bool:
-        return (
-            self.store_t2
-            or self.compute_1rdm
-            or self.compute_1rdm_ao
-            or self.compute_2rdm
-            or self.compute_cumulants
-        )
+        """
+        Determine whether full t2 storage is required.
+
+        Full amplitudes are only needed when they are explicitly requested
+        or when postprocessing requires the 2-RDM / cumulants. The MP2 1-RDM
+        builders can be formed directly from DF intermediates and may rebuild
+        amplitudes internally without retaining the full tensors on the object.
+        """
+        return self._store_t2 or self._compute_2rdm or self._compute_cumulants
 
     def _postprocess_rdms(self):
         self._initialize_rdm_outputs()
         need_gamma1 = (
-            self.compute_1rdm
-            or self.compute_1rdm_ao
-            or self.compute_2rdm
-            or self.compute_cumulants
+            self._compute_1rdm
+            or self._compute_1rdm_ao
+            or self._compute_2rdm
+            or self._compute_cumulants
         )
 
         if need_gamma1:
             self.gamma1_sf = self.make_mp2_sf_1rdm_intermediates(self.B_iaQ)
 
-            if self.compute_1rdm_ao:
+            if self._compute_1rdm_ao:
                 self.gamma1_sf_ao = self.gamma1_mo_to_ao(self.gamma1_sf)
 
-        if self.compute_2rdm or self.compute_cumulants:
+        if self._compute_2rdm or self._compute_cumulants:
             self.gamma2_sf = self.make_mp2_sf_2rdm(self.t2, self.gamma1_sf)
 
-        if self.compute_cumulants:
+        if self._compute_cumulants:
             self.lambda2_sf = self.make_mp2_sf_2cumulants(
                 self.gamma1_sf, self.gamma2_sf
             )
