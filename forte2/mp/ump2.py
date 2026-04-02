@@ -309,7 +309,7 @@ class UMP2(MP2Base):
 
         return gamma1_sf
 
-    def gamma1_mo_to_ao(self, gamma1_sf):
+    def gamma1_mo_to_ao(self):
         return self.Ca @ self.gamma1_a @ self.Ca.T + self.Cb @ self.gamma1_b @ self.Cb.T
 
     def make_mp2_sf_2rdm(self):
