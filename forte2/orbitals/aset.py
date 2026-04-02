@@ -262,7 +262,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         Perform Orbital Partitioning for ASET.
         """
         # Copy the input orbitals and sort them into blocks of frozen core, core, active, ...
-        C = self.parent_method.C[0][:, self.mo_space.orig_to_contig]
+        C = self.parent_method.C[0][:, self.mo_space.orig_to_contig].copy()
 
         # Build the fragment projector
         P_ao_frag = self.P_ao_frag
