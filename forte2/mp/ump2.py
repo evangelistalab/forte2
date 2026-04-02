@@ -23,7 +23,7 @@ class UMP2(MP2Base):
         If True, build the spin-free 2-RDM (potentially large).
     compute_cumulants
         If True, build 2-body cumulant (and 1-body hole RDM if needed).
-        Usually implies compute_rdm2 unless you implement a direct cumulant builder.
+        Usually implies compute_2rdm unless you implement a direct cumulant builder.
 
     Returns
     -------
