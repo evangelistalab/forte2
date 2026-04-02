@@ -348,7 +348,7 @@ class MP2Base(SystemMixin, MOsMixin, ABC):
 
     def mp2_E_given_rdms(self, Ecore, H, V, gamma1, gamma2):
         """
-        Computes mp2 Energy from comtracting rdms
+        Computes mp2 Energy from contracting rdms
         """
         e1 = np.einsum("pq,qp->", H, gamma1, optimize=True)
         e2 = 0.5 * np.einsum("pqrs,prqs", V, gamma2, optimize=True)
