@@ -6,10 +6,40 @@ from forte2.scf import RHF, ROHF, UHF
 from forte2.helpers.comparisons import approx
 from forte2.mp import RMP2, ROMP2, UMP2
 
-# reference values from Psi4 using the cc-pVQZ basis set and the cc-pVQZ-JKFIT auxiliary basis set
+
+def assert_uhf_rdm_invariants(mp2, na, nb):
+    assert mp2.gamma1_a is not None
+    assert mp2.gamma1_b is not None
+    assert mp2.gamma1_sf is not None
+    assert mp2.gamma2_sf is not None
+
+    assert np.trace(mp2.gamma1_a) == approx(na)
+    assert np.trace(mp2.gamma1_b) == approx(nb)
+    assert np.trace(mp2.gamma1_sf) == approx(na + nb)
+
+    assert np.max(np.abs(mp2.gamma1_a - mp2.gamma1_a.T)) == approx(0.0)
+    assert np.max(np.abs(mp2.gamma1_b - mp2.gamma1_b.T)) == approx(0.0)
+    assert np.max(np.abs(mp2.gamma1_sf - mp2.gamma1_sf.T)) == approx(0.0)
+
+    assert np.max(
+        np.abs(mp2.gamma2_sf - mp2.gamma2_sf.transpose(1, 0, 3, 2))
+    ) == approx(0.0)
+    assert np.max(
+        np.abs(mp2.gamma2_sf - mp2.gamma2_sf.transpose(2, 3, 0, 1))
+    ) == approx(0.0)
+
+
+def assert_t2_not_stored(mp2):
+    assert getattr(mp2, "t2", None) is None
+    assert getattr(mp2, "t2_as", None) is None
+    assert getattr(mp2, "t2_a", None) is None
+    assert getattr(mp2, "t2_b", None) is None
+    assert getattr(mp2, "t2_ab", None) is None
 
 
 def test_mp2():
+    # reference values from Psi4 using the cc-pVQZ basis set and the cc-pVQZ-JKFIT auxiliary basis set
+
     energy_scf = -76.0614664072629836
     energy_mp2 = -76.3710978841482984
 
@@ -54,6 +84,9 @@ def test_mp2():
     assert Emp2 == approx(energy_mp2)
 
 
+# Tests below use reference values from PYSCF using the cc-pVQZ basis set and the cc-pVQZ-JKFIT auxiliary basis set
+
+
 def test_rhf_mp2():
     erhf = -76.0614664072629
     emp2 = -76.3710978833093
@@ -64,7 +97,7 @@ def test_rhf_mp2():
     """
     system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
     scf = RHF(charge=0)(system)
-    mp2 = RMP2(compute_1rdm=True, compute_2rdm=True, compute_cumulants=True)(scf)
+    mp2 = RMP2().compute_1rdm().compute_2rdm().compute_cumulants()(scf)
     mp2.run()
 
     moints = RestrictedMOIntegrals(system, scf.C[0], list(range(scf.nmo)))
@@ -77,6 +110,26 @@ def test_rhf_mp2():
     assert scf.E == approx(erhf)
     assert mp2.E_total == approx(emp2)
     assert mp2_rdm_E == approx(emp2)
+
+
+def test_rhf_mp2_1rdm_does_not_store_t2():
+    erhf = -76.0614664072629
+    emp2 = -76.3710978833093
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.061664597388
+    H            0.000000000000    -0.711620616369     0.489330954643
+    H            0.000000000000     0.711620616369     0.489330954643
+    """
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
+
+    scf = RHF(charge=0)(system)
+    mp2 = RMP2().compute_1rdm()(scf)
+    mp2.run()
+
+    assert scf.E == approx(erhf)
+    assert mp2.E_total == approx(emp2)
+    assert np.trace(mp2.gamma1_sf) == approx(scf.na + scf.nb)
+    assert_t2_not_stored(mp2)
 
 
 def test_h4_rhf_mp2():
@@ -117,7 +170,7 @@ def test_singlet_rohf_mp2():
 
 def test_triplet_h2o_rohf_mp2():
     erohf = -75.805109024040
-    emp2 = -76.1475807766528
+    emp2 = -76.0707816462552
 
     xyz = """
     O            0.000000000000     0.000000000000    -0.061664597388
@@ -127,7 +180,7 @@ def test_triplet_h2o_rohf_mp2():
     system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
 
     scf = ROHF(charge=0, ms=1)(system)
-    mp2 = ROMP2(compute_1rdm=True, compute_2rdm=True)(scf)
+    mp2 = ROMP2()(scf)
     mp2.run()
 
     assert scf.E == approx(erohf)
@@ -150,6 +203,46 @@ def test_triplet_h2o_uhf_mp2():
 
     assert scf.E == approx(euhf)
     assert mp2.E_total == approx(emp2)
+
+
+def test_triplet_h2o_uhf_mp2_rdms():
+    euhf = -75.810772399321
+    emp2 = -76.0662395867740
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.061664597388
+    H            0.000000000000    -0.711620616369     0.489330954643
+    H            0.000000000000     0.711620616369     0.489330954643
+    """
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
+
+    scf = UHF(charge=0, ms=1)(system)
+    mp2 = UMP2().compute_1rdm().compute_2rdm()(scf)
+    mp2.run()
+
+    assert scf.E == approx(euhf)
+    assert mp2.E_total == approx(emp2)
+    assert_uhf_rdm_invariants(mp2, scf.na, scf.nb)
+
+
+def test_triplet_h2o_uhf_mp2_1rdm_does_not_store_t2():
+    euhf = -75.810772399321
+    emp2 = -76.0662395867740
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.061664597388
+    H            0.000000000000    -0.711620616369     0.489330954643
+    H            0.000000000000     0.711620616369     0.489330954643
+    """
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
+
+    scf = UHF(charge=0, ms=1)(system)
+    mp2 = UMP2().compute_1rdm()(scf)
+    mp2.run()
+
+    assert scf.E == approx(euhf)
+    assert mp2.E_total == approx(emp2)
+    assert np.trace(mp2.gamma1_a) == approx(scf.na)
+    assert np.trace(mp2.gamma1_b) == approx(scf.nb)
+    assert_t2_not_stored(mp2)
 
 
 def test_h2o_uhf_mp2():
