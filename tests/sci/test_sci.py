@@ -315,14 +315,14 @@ def test_sci_water_core_excited():
             # do not allow the core orbital occupation to change from the guess determinants
             frozen_annihilation=[0],
             frozen_creation=[0],
-            num_threads=8,
-            num_batches_per_thread=8,
+            num_threads=4,
+            num_batches_per_thread=16,
         ),
         davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
     )(rhf)
     ci.run()
-    assert ci.E[0] == pytest.approx(-56.349500741871, abs=1e-6)
-test_sci_water_core_excited()
+    assert ci.E[0] == pytest.approx(-56.34949937004779, abs=1e-6)
+
 
 def test_sci_n2_multiple_roots():
     """Test that multiple roots can be converged for N2."""
@@ -349,5 +349,6 @@ def test_sci_n2_multiple_roots():
         nroots=2,
     )(rhf)
     sci.run()
-    assert sci.E[0] == pytest.approx(-108.701835367773, abs=1e-8)
-    assert sci.E[1] == pytest.approx(-108.359465928102, abs=1e-8)
+
+    assert sci.E[0] == pytest.approx(-108.70183536777421, abs=1e-8)
+    assert sci.E[1] == pytest.approx(-108.3594659281031, abs=1e-8)

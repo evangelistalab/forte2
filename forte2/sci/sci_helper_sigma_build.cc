@@ -15,10 +15,7 @@ namespace {
 
 inline void atomic_add(double& x, double delta) {
     std::atomic_ref<double> ref(x);
-    double old = ref.load(std::memory_order_relaxed);
-    while (!ref.compare_exchange_weak(old, old + delta, std::memory_order_relaxed,
-                                      std::memory_order_relaxed)) {
-    }
+    ref.fetch_add(delta, std::memory_order_relaxed);
 }
 
 template <typename WorkFn>
