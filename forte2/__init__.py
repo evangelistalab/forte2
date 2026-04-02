@@ -15,7 +15,7 @@ from .mcopt import MCOptimizer, RelMCOptimizer
 from .props import get_1e_property, mulliken_population
 from .helpers import logger, set_verbosity_level, comparisons
 from .dsrg import DSRG_MRPT2, RelDSRG_MRPT2
-from .mp import RHFMP2, ROHFMP2, UHFMP2
+from .mp import RMP2, ROMP2, UMP2
 
 from .mods_manager import load_mods, enable_mod
 
