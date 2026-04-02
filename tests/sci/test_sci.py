@@ -33,6 +33,8 @@ def test_sci1():
             selection_algorithm="hbci",
             var_threshold=1e-12,
             pt2_threshold=0.0,
+            num_threads=4,
+            num_batches_per_thread=16,
         ),
     )(rhf)
     sci.run()
@@ -67,6 +69,8 @@ def test_sci2():
             guess_vir_window=0,
             pt2_regularizer="dsrg",
             pt2_regularizer_strength=0.2,
+            num_threads=4,
+            num_batches_per_thread=16,
         ),
         nroots=1,
     )(rhf)
@@ -79,7 +83,6 @@ def test_sci2():
     assert sci.E_pt2[0] == pytest.approx(-2.53555293e-05, abs=1e-9)
 
 
-@pytest.mark.slow
 def test_sci3():
     """Test SelectedCI on multiple states without spin penalty."""
     xyz = f"""
@@ -105,6 +108,8 @@ def test_sci3():
             guess_occ_window=2,
             guess_vir_window=2,
             do_spin_penalty=False,
+            num_threads=4,
+            num_batches_per_thread=16,
         ),
         nroots=4,
     )(rhf)
@@ -115,7 +120,6 @@ def test_sci3():
     assert sci.E[3] == pytest.approx(-3.0403077216, abs=1e-8)
 
 
-@pytest.mark.slow
 def test_sci4():
     """Test SelectedCI on multiple states with spin penalty."""
     xyz = f"""
@@ -142,6 +146,8 @@ def test_sci4():
             guess_occ_window=2,
             guess_vir_window=2,
             do_spin_penalty=True,
+            num_threads=4,
+            num_batches_per_thread=16,
         ),
     )(rhf)
 
@@ -170,6 +176,8 @@ def test_sci5():
             var_threshold=1e-5,
             pt2_threshold=0.0,
             do_spin_penalty=True,
+            num_threads=4,
+            num_batches_per_thread=16,
         ),
         nroots=1,
     )(rhf)
@@ -185,6 +193,8 @@ def test_sci5():
             pt2_threshold=0.0,
             do_spin_penalty=True,
             guess_dets=[Determinant("a2222")],
+            num_threads=4,
+            num_batches_per_thread=16,
         ),
         nroots=1,
     )(rhf)
@@ -216,6 +226,8 @@ def test_sci6():
             guess_dets=[Determinant("a2222b"), Determinant("b2222a")],
             do_spin_penalty=True,
             screening_criterion="hbci",
+            num_threads=4,
+            num_batches_per_thread=16,
         ),
         nroots=1,
         die_if_not_converged=False,
@@ -223,8 +235,7 @@ def test_sci6():
 
     sci.run()
 
-    assert np.isfinite(sci.E[0])
-    assert sci.E[0] < -95.0
+    assert sci.E[0] == approx(-95.67969625695353)
 
 
 def test_sci_exact_algorithm():
@@ -345,6 +356,8 @@ def test_sci_n2_multiple_roots():
             screening_criterion="hbci",
             guess_occ_window=3,
             guess_vir_window=3,
+            num_threads=4,
+            num_batches_per_thread=16,
         ),
         die_if_not_converged=False,
         nroots=2,
@@ -353,3 +366,36 @@ def test_sci_n2_multiple_roots():
 
     assert sci.E[0] == pytest.approx(-108.70183536777421, abs=1e-8)
     assert sci.E[1] == pytest.approx(-108.3594659281031, abs=1e-8)
+
+def test_sci_water_valence_excitation():
+    """Test SelectedCI on a water valence-excited state."""
+    xyz = """
+    O   0.0000000000  -0.0000000000  -0.0662628033
+    H   0.0000000000  -0.7540256101   0.5259060578
+    H  -0.0000000000   0.7530256101   0.5260060578
+    """
+
+    system = System(xyz=xyz, basis_set="6-31g", auxiliary_basis_set="cc-pVTZ-JKFIT")
+    rhf = RHF(charge=0)(system)
+
+    sci = SelectedCI(
+        states=State(nel=10, multiplicity=1, ms=0.0),
+        active_orbitals=list(range(13)),
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=3e-4,
+            pt2_threshold=1e-8,
+            do_spin_penalty=True,
+            screening_criterion="hbci",
+            guess_occ_window=3,
+            guess_vir_window=1,
+            num_threads=4,
+            num_batches_per_thread=16,
+        ),
+        die_if_not_converged=False,
+        nroots=4,
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
+    )(rhf)
+    sci.run()
+    # assert sci.E[0] == pytest.approx(-75.005188, abs=1e-6)
+test_sci_water_valence_excitation()
