@@ -1,7 +1,7 @@
 import numpy as np
 from pathlib import Path
 
-from forte2 import System, RHF, MCOptimizer, ASET, CI, State
+from forte2 import System, RHF, MCOptimizer, ASET, CI, State, AVAS
 from forte2.helpers.comparisons import approx
 
 # Directory containing *this* file
@@ -21,7 +21,7 @@ def compare_orbital_coefficients(system, aset, filename):
     assert np.allclose(overlap, np.eye(overlap.shape[0]), atol=1e-8, rtol=0.0)
 
 
-# Ref Energies come from forte1
+# Ref Energies come from Forte
 
 
 def test_aset_1():

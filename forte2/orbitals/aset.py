@@ -10,6 +10,7 @@ from forte2.helpers import logger
 from forte2.base_classes.mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.data import ATOM_SYMBOL_TO_Z
 from forte2.orbitals.semicanonicalizer import Semicanonicalizer
+from forte2.orbitals.avas import AVAS
 
 
 @dataclass
@@ -64,13 +65,13 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
     executed: bool = field(default=False, init=False)
 
     def __post_init__(self):
-        self._regex = r"^([A-Z][a-z]?)(\d+)?(?:-(\d+))?$"
+        self._regex = r"^([a-zA-Z]{1,2})(\d+(-\d+)?)?$"
         self._check_parameters()
 
     def __call__(self, parent_method):
         assert isinstance(
-            parent_method, forte2.mcopt.MCOptimizer
-        ), f"Parent method must be MCSCF, got {type(parent_method)}"
+            parent_method, (forte2.mcopt.MCOptimizer, AVAS)
+        ), f"Parent method must be MCSCF or AVAS, got {type(parent_method)}"
         self.parent_method = parent_method
         return self
 
@@ -160,7 +161,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
             if not match:
                 raise ValueError(f"Invalid fragment specification: {token}")
 
-            symbol = match.group(1)  # e.g., "C"
+            symbol = match.group(1).upper()  # e.g., "C"
             start = match.group(2)  # e.g., "1"
             end = match.group(3)  # e.g., "3" (if it's a range)
 
@@ -181,9 +182,14 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
                 continue
 
             else:
-                # Convert 1-based user indices to 0-based Python indices
-                start_idx = int(start) - 1
-                end_idx = int(end) if end else start_idx + 1
+                # Handle ranges like "1-3" or single indices like "2"
+                if "-" in start:
+                    start_str, end_str = start.split("-", 1)
+                    start_idx = int(start_str) - 1
+                    end_idx = int(end_str)
+                else:
+                    start_idx = int(start) - 1
+                    end_idx = int(end) if end else start_idx + 1
 
                 # Bounds check
                 if end_idx > len(element_atoms):
@@ -256,7 +262,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         Perform Orbital Partitioning for ASET.
         """
         # Copy the input orbitals and sort them into blocks of frozen core, core, active, ...
-        C = self.parent_method.C[0][:, self.mo_space.orig_to_contig]
+        C = self.parent_method.C[0][:, self.mo_space.orig_to_contig].copy()
 
         # Build the fragment projector
         P_ao_frag = self.P_ao_frag
@@ -332,7 +338,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
 
         frozen_core_inds = self.mo_space.frozen_core_indices
         frozen_virt_inds = self.mo_space.frozen_virtual_indices
-        g1 = self.parent_method.ci_solver.make_average_1rdm()
+        g1_sf = self.compute_g1_sf()
         emb_space = EmbeddingMOSpace(
             nmo=self.nmo,
             frozen_core_orbitals=frozen_core_inds,
@@ -350,7 +356,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
             do_frozen=self.semicanonicalize_frozen,
             do_active=self.semicanonicalize_active,
         )
-        semican.semi_canonicalize(g1=g1, C_contig=C)
+        semican.semi_canonicalize(g1=g1_sf, C_contig=C)
         self.C[0] = semican.C_semican.copy()
 
         return {
@@ -362,6 +368,14 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
             "lo_vals": lo_vals,
             "lv_vals": lv_vals,
         }
+
+    def compute_g1_sf(self):
+        if isinstance(self.parent_method, forte2.mcopt.MCOptimizer):
+            g1_sf = self.parent_method.ci_solver.make_average_1rdm()
+        else:
+            # AVAS or other non-MCOptimizer case: g1_sf = identity in active space
+            g1_sf = np.eye(self.nactv)
+        return g1_sf
 
     def _print_embedding_info(self, **info: dict[str, np.ndarray | list[int]]) -> None:
         """
@@ -453,4 +467,5 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
                 )
             ),
         )
+        logger.log_info1(f"New MO space:\n{self.mo_space}")
         return self.mo_space
