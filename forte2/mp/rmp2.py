@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .mp2_base import MP2Base
+from forte2.scf import RHF
 
 
 @dataclass
@@ -25,6 +26,12 @@ class RMP2(MP2Base):
     float
         MP2 total energy (E_HF + E_corr).
     """
+
+    def __call__(self, parent_method):
+        self.parent_method = parent_method
+        if not isinstance(parent_method, RHF):
+            raise TypeError("RMP2 requires an RHF reference.")
+        return self
 
     def _reference_label(self) -> str:
         return "RHF"
