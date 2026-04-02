@@ -316,9 +316,10 @@ class UMP2(MP2Base):
         # =========================
         # Allocate spin blocks
         # =========================
-        dm2_aa = np.zeros((nmo, nmo, nmo, nmo))
-        dm2_bb = np.zeros((nmo, nmo, nmo, nmo))
-        dm2_ab = np.zeros((nmo, nmo, nmo, nmo))
+        common_dtype = np.result_type(t2_a, t2_b, t2_ab)
+        dm2_aa = np.zeros((nmo, nmo, nmo, nmo), dtype=common_dtype)
+        dm2_bb = np.zeros((nmo, nmo, nmo, nmo), dtype=common_dtype)
+        dm2_ab = np.zeros((nmo, nmo, nmo, nmo), dtype=common_dtype)
 
         # =========================
         # SAME-SPIN (αα)
