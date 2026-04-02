@@ -230,6 +230,11 @@ def test_aset_5():
 def test_aset_6():
     """
     Test AVAS->ASET->CASSCF.
+
+    The ASET virtual selection is not unique here: several virtual orbitals
+    have fragment-projector eigenvalue 1.0, so different LAPACK backends may
+    pick a different but equally valid representative. Check the converged
+    energy and MO-space partition instead of exact orbital coefficients.
     """
     emc = -8.9205699275
     xyz = """
@@ -263,6 +268,9 @@ def test_aset_6():
     )(aset)
     mc.run()
 
-    compare_orbital_coefficients(system, aset, "test_aset_6_orbitals.npy")
-
+    assert aset.mo_space.ncore == 1
+    assert aset.mo_space.nactv == 2
+    assert aset.mo_space.nvirt == 1
+    assert len(aset.mo_space.frozen_core_indices) == 1
+    assert len(aset.mo_space.frozen_virtual_indices) == 24
     assert mc.E == approx(emc)

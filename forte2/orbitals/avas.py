@@ -394,12 +394,17 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         logger.log_info1(
             f"Sum of {sigma_type}values of the projected overlap: {s_sum:.6f}"
         )
-        argsort = np.argsort(np.concatenate((s_docc, s_uocc)))[::-1]
-        sigmas = np.concatenate((s_docc, s_uocc))[argsort]
-        occupations = np.concatenate(([1] * ndocc, [0] * nuocc), dtype=int)[argsort]
-        indices = np.concatenate(
+        sigma_all = np.concatenate((s_docc, s_uocc))
+        occupation_all = np.concatenate(([1] * ndocc, [0] * nuocc), dtype=int)
+        index_all = np.concatenate(
             (np.arange(ndocc), np.arange(nuocc) + ndocc + nsocc), dtype=int
-        )[argsort]
+        )
+        # Use a deterministic tie break on the original MO index so AVAS
+        # selections do not depend on platform-specific eigensolver ordering.
+        order = np.lexsort((index_all, -sigma_all))
+        sigmas = sigma_all[order]
+        occupations = occupation_all[order]
+        indices = index_all[order]
         nsig = len(sigmas)
 
         act_docc = []
