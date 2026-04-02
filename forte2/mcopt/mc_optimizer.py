@@ -346,20 +346,12 @@ class MCOptimizer(ActiveSpaceSolver):
             if self.two_component:
                 g1 = self.ci_solver.make_average_1rdm()
             else:
-                g1 = self.ci_solver.make_average_sf_1rdm()
-            mix_inactive = (
-                False
-                if isinstance(self.parent_method, ASET)
-                else not self.optimize_frozen_orbs
-            )
+                g1 = self.ci_solver.make_average_1rdm()
+            mix_inactive = False
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
                 system=self.system,
-<<<<<<< HEAD
-                mix_inactive=False,
-=======
                 mix_inactive=mix_inactive,
->>>>>>> a75b16f (1. Fixed ASET bug, now fragment allows atoms with more than 1 letter.)
                 mix_active=False,
             )
             C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()

@@ -21,7 +21,7 @@ def compare_orbital_coefficients(system, aset, filename):
     assert np.allclose(overlap, np.eye(overlap.shape[0]), atol=1e-8, rtol=0.0)
 
 
-# Ref Energies come from forte1
+# Ref Energies come from Forte
 
 
 def test_aset_1():
@@ -231,7 +231,7 @@ def test_aset_6():
     """
     Test AVAS->ASET->CASSCF.
     """
-    emc = -8.9191503904
+    emc = -8.9205699275
     xyz = """
     Li 0.0000000000 0.0000000000 -0.7975000000
     H 0.0000000000 0.0000000000 2.3925000000
@@ -259,8 +259,6 @@ def test_aset_6():
     mc = MCOptimizer(
         State(nel=6, multiplicity=1, ms=0.0),
         maxiter=800,
-        do_diis=False,
-        optimize_frozen_orbs=False,
         ci_maxiter=500,
     )(aset)
     mc.run()

@@ -356,7 +356,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
             do_frozen=self.semicanonicalize_frozen,
             do_active=self.semicanonicalize_active,
         )
-        semican.semi_canonicalize(g1=g1, C_contig=C)
+        semican.semi_canonicalize(g1=g1_sf, C_contig=C)
         self.C[0] = semican.C_semican.copy()
 
         return {
@@ -371,7 +371,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
 
     def compute_g1_sf(self):
         if isinstance(self.parent_method, forte2.mcopt.MCOptimizer):
-            g1_sf = self.parent_method.ci_solver.make_average_sf_1rdm()
+            g1_sf = self.parent_method.ci_solver.make_average_1rdm()
         else:
             # AVAS or other non-MCOptimizer case: g1_sf = identity in active space
             g1_sf = np.eye(self.nactv)
