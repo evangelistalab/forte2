@@ -355,7 +355,11 @@ class MCOptimizer(ActiveSpaceSolver):
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
                 system=self.system,
+<<<<<<< HEAD
                 mix_inactive=False,
+=======
+                mix_inactive=mix_inactive,
+>>>>>>> a75b16f (1. Fixed ASET bug, now fragment allows atoms with more than 1 letter.)
                 mix_active=False,
             )
             C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
