@@ -288,6 +288,8 @@ def test_sci_semicanonical_final_orbital():
 
 @pytest.mark.slow
 def test_sci_water_core_excited():
+    from forte2 import CIStrings
+
     """Test SelectedCI on a water core-excited state."""
     xyz = """
     O   0.0000000000  -0.0000000000  -0.0662628033
@@ -298,6 +300,9 @@ def test_sci_water_core_excited():
     system = System(xyz=xyz, basis_set="6-31g", auxiliary_basis_set="cc-pVTZ-JKFIT")
     rhf = RHF(charge=0)(system)
 
+    ci_strings = CIStrings(5, 5, 0, [[0], [0], [0, 0, 0, 0]], [0, 2], [1, 2])
+    guess_dets = ci_strings.make_determinants()
+
     ci = SelectedCI(
         states=State(nel=10, multiplicity=1, ms=0.0),
         active_orbitals=list(range(13)),
@@ -305,11 +310,7 @@ def test_sci_water_core_excited():
             selection_algorithm="hbci",
             var_threshold=1e-5,
             pt2_threshold=1e-10,
-            guess_dets=[
-                Determinant("a2222b"),
-                Determinant("b2222a"),
-                Determinant("022222"),
-            ],
+            guess_dets=guess_dets,
             do_spin_penalty=True,
             screening_criterion="hbci",
             # do not allow the core orbital occupation to change from the guess determinants
