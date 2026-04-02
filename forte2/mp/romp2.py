@@ -4,6 +4,7 @@ import time
 import numpy as np
 
 from .mp2_base import MP2Base
+from forte2.scf import ROHF
 
 
 @dataclass
@@ -26,6 +27,12 @@ class ROMP2(MP2Base):
     float
         MP2 total energy (E_HF + E_corr).
     """
+
+    def __call__(self, parent_method):
+        self.parent_method = parent_method
+        if not isinstance(parent_method, ROHF):
+            raise TypeError("ROMP2 requires an ROHF reference.")
+        return self
 
     def _reference_label(self) -> str:
         return "ROHF"
