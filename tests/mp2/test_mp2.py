@@ -3,7 +3,7 @@ import numpy as np
 from forte2 import System
 from forte2.scf import RHF, ROHF
 from forte2.helpers.comparisons import approx
-from forte2.mp import RMP2, ROMP2
+from forte2.dsrg.df_mp2 import DFRHFMP2, DFROHFMP2, MP2MCASolverLike
 
 
 def test_mp2():
@@ -63,7 +63,7 @@ def test_rhf_mp2():
     """
     system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
     scf = RHF(charge=0)(system)
-    mp2 = RMP2(compute_1rdm=True, compute_2rdm=True, compute_cumulants=True)(scf)
+    mp2 = DFRHFMP2(compute_1rdm=True, compute_2rdm=True, compute_cumulants=True)(scf)
     mp2.run()
 
     assert scf.E == approx(erhf)
@@ -83,7 +83,7 @@ def test_h4_rhf_mp2():
     """
     system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
     scf = RHF(charge=0)(system)
-    mp2 = RMP2(compute_1rdm=True)(scf)
+    mp2 = DFRHFMP2(compute_1rdm=True)(scf)
     mp2.run()
 
     assert scf.E == approx(erhf)
@@ -102,7 +102,7 @@ def test_rohf_mp2():
     """
     system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
     scf = ROHF(charge=0, ms=0.0)(system)
-    mp2 = ROMP2(compute_1rdm=True, compute_2rdm=True, compute_cumulants=True)(scf)
+    mp2 = DFROHFMP2(compute_1rdm=True, compute_2rdm=True, compute_cumulants=True)(scf)
     mp2.run()
 
     assert scf.E == approx(erhf)
@@ -123,11 +123,14 @@ def test_triplet_h2o_rohf_mp2():
     system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
 
     scf = ROHF(charge=0, ms=1)(system)
-    mp2 = ROMP2()(scf)
+    mp2 = DFROHFMP2()(scf)
     mp2.run()
 
     assert scf.E == approx(erohf)
     assert mp2.E_total == approx(emp2)
+
+
+test_triplet_h2o_rohf_mp2()
 
 
 def test_singlet_rohf_mp2():
@@ -143,7 +146,7 @@ def test_singlet_rohf_mp2():
     system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
 
     scf = ROHF(charge=0, ms=0)(system)
-    mp2 = ROMP2()(scf)
+    mp2 = DFROHFMP2()(scf)
     mp2.run()
 
     assert scf.E == approx(erohf)
