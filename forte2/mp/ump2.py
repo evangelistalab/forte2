@@ -5,6 +5,7 @@ import numpy as np
 
 from .mp2_base import MP2Base
 from forte2.base_classes import SystemMixin, MOsMixin
+from forte2.scf import UHF
 
 
 @dataclass
@@ -29,6 +30,12 @@ class UMP2(MP2Base):
     float
         MP2 total energy (E_HF + E_corr).
     """
+
+    def __call__(self, parent_method):
+        self.parent_method = parent_method
+        if not isinstance(parent_method, UHF):
+            raise TypeError("UMP2 requires an UHF reference.")
+        return self
 
     def _reference_label(self) -> str:
         return "UHF"
