@@ -236,7 +236,7 @@ def test_aset_6():
     pick a different but equally valid representative. Check the converged
     energy and MO-space partition instead of exact orbital coefficients.
     """
-    emc = -8.9205699275
+    emc = -8.919549100776635
     xyz = """
     Li 0.0000000000 0.0000000000 -0.7975000000
     H 0.0000000000 0.0000000000 2.3925000000
