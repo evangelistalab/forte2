@@ -67,14 +67,18 @@ class RMP2(MP2Base):
         t2_as = np.empty_like(t2) if store_t2 else None
 
         E_corr = 0.0
+        gijab = np.empty((nvir, nvir))
+        tijab = np.empty((nvir, nvir))
+
+        eps_vir = np.ascontiguousarray(eps_a[:, None] + eps_a[None, :])
 
         for i in range(nocc):
             Bi = B[i]  # (nvir, naux)
             for j in range(nocc):
                 Bj = B[j]
-                gijab = Bi @ Bj.T  # (a,b)
-                denom = eps_i[i] + eps_i[j] - eps_a[:, None] - eps_a[None, :]
-                tijab = self._safe_divide(gijab, denom)
+                np.dot(Bi, Bj.T, out=gijab)
+                denom = eps_i[i] + eps_i[j] - eps_vir
+                self._safe_divide(gijab, denom, out=tijab)
                 if store_t2:
                     t2[i, j] = tijab
                     t2_as[i, j] = 2.0 * tijab - tijab.T
