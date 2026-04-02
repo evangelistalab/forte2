@@ -84,7 +84,6 @@ class UMP2(MP2Base):
         need_t2 = self._needs_t2_storage()
 
         self.B_iaQ = self._build_df_iaQ()
-        self.Ba_iaQ, self.Bb_iaQ = self.B_iaQ
 
         (self.t2_a, self.t2_b, self.t2_ab, self.E_corr) = self._build_t2_all(
             self.B_iaQ, store_t2=need_t2
