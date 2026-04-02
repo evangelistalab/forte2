@@ -8,7 +8,7 @@ import resource
 import numpy as np
 
 from forte2.base_classes import SystemMixin, MOsMixin
-from forte2.scf import RHF, ROHF, UHF
+from forte2.scf import UHF
 from forte2.helpers import logger
 
 
@@ -58,7 +58,7 @@ class MP2Base(SystemMixin, MOsMixin, ABC):
     executed : bool
         Whether the MP2 calculation has been executed.
 
-    NOTE:
+    Note
     -----
     This base class assumes spin-restricted tensors:
         B: (nocc, nvir, naux)
@@ -79,11 +79,8 @@ class MP2Base(SystemMixin, MOsMixin, ABC):
     store_t2: bool = False
     executed: bool = field(default=False, init=False)
 
-    def __call__(self, parent_method):
-        self.parent_method = parent_method
-        if not isinstance(parent_method, (RHF, ROHF, UHF)):
-            raise TypeError("MP2 requires an RHF, ROHF, or UHF reference.")
-        return self
+    @abstractmethod
+    def __call__(self, parent_method): ...
 
     def run(self):
         t0 = time.monotonic()
@@ -376,4 +373,3 @@ class MP2Base(SystemMixin, MOsMixin, ABC):
 
     @abstractmethod
     def _build_t2_all(self, B, store_t2=True): ...
-
