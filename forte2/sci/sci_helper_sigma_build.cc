@@ -312,7 +312,6 @@ void SelectedCIHelper::H2ab(std::span<double> basis, std::span<double> sigma) co
     if (num_threads_ <= 1) {
         // Loop over all unique alpha strings
         for (size_t i{0}; i < first_string_size; ++i) {
-            const auto& [istart, iend] = ab_list_.range(i);
             const auto& i_map = ab_list_.second_string_to_det_index()[i];
             const auto& sublist_a = ab_list_.one_hole_first_string_list()[i];
             for (const auto& [p, hole_idx, sign_p] : sublist_a) {
@@ -349,7 +348,6 @@ void SelectedCIHelper::H2ab(std::span<double> basis, std::span<double> sigma) co
     }
 
     run_parallel_indices(first_string_size, num_threads_, [&](size_t i) {
-        const auto& [istart, iend] = ab_list_.range(i);
         const auto& i_map = ab_list_.second_string_to_det_index()[i];
         const auto& sublist_a = ab_list_.one_hole_first_string_list()[i];
         for (const auto& [p, hole_idx, sign_p] : sublist_a) {
