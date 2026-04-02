@@ -358,12 +358,15 @@ class MP2Base(SystemMixin, MOsMixin, ABC):
 
         return Ecore + e1 + e2
 
-    def _safe_divide(self, num, denom, tiny=1e-12, label="MP2 denom"):
+    def _safe_divide(self, num, denom, out=None, tiny=1e-12, label="MP2 denom"):
         mask = np.abs(denom) < tiny
         n_bad = np.count_nonzero(mask)
         if n_bad:
             logger.log_warning(f"{label}: {n_bad} / {denom.size} elements < {tiny:g}")
-        return num / np.where(mask, np.inf, denom)
+        if out is None:
+            return np.divide(num, np.where(mask, np.inf, denom))
+        else:
+            return np.divide(num, np.where(mask, np.inf, denom), out=out)
 
     @abstractmethod
     def _build_df_iaQ(self): ...
