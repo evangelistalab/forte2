@@ -236,8 +236,8 @@ class UMP2(MP2Base):
         return t2_a, t2_b, t2_ab, E_corr
 
     def make_mp2_sf_1rdm_intermediates(self, B):
-        # Ensure amplitudes exist
-        if not all(hasattr(self, attr) for attr in ("t2_a", "t2_b", "t2_ab")):
+        # Ensure amplitudes exist and are not None
+        if not all(getattr(self, attr, None) is not None for attr in ("t2_a", "t2_b", "t2_ab")):
             self.t2_a, self.t2_b, self.t2_ab, _ = self._build_t2_all(B)
 
         t2_a = self.t2_a
