@@ -30,7 +30,7 @@ class MP2Base(SystemMixin, MOsMixin, ABC):
 
     Attributes
     ----------
-    parent_method : RHF or ROHF
+    parent_method : RHF, ROHF, or UHF
         Reference wavefunction object providing orbitals, orbital energies,
         occupation numbers, and Fock builder.
     C : ndarray
