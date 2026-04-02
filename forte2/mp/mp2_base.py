@@ -143,7 +143,7 @@ class MP2Base(SystemMixin, MOsMixin, ABC):
         if isinstance(self.parent_method, UHF):
             raise RuntimeError(
                 "MP2Base._postprocess_rdms should not be used for UHF. "
-                "Use UHFMP2 workflow instead."
+                "Use UMP2 workflow instead."
             )
 
     def _memory_snapshot(self):
