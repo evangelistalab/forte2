@@ -86,8 +86,6 @@ class ROMP2(MP2Base):
             self.t2_ab = mp2.t2_ab
 
         self.executed = True
-        self._log_completion(time.monotonic() - t0, mp2._t2_norm(), mem0)
-
         return self.E_total
 
     def _startup(self):
