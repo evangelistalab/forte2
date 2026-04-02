@@ -4,7 +4,9 @@ import time
 import numpy as np
 
 from .mp2_base import MP2Base
-from forte2.scf import ROHF
+from .ump2 import UMP2
+from forte2.helpers import logger
+from forte2.scf import ROHF, UHF
 
 
 @dataclass
@@ -12,16 +14,9 @@ class ROMP2(MP2Base):
     """
     Density-Fitted Møller-Plesset perturbation theory (DF-MP2) method with ROHF canonical orbitals.
 
-    Parameters
-    ----------
-    compute_1rdm
-        If True, build the spin-free 1-RDM (unrelaxed MP2).
-    compute_1rdm_ao
-        If True, build the spin-free 1-RDM in AO basis.
-    compute_2rdm
-        If True, build the spin-free 2-RDM (potentially large).
-    compute_cumulants
-        If True, build 2-body cumulant (and 1-body hole RDM if needed).
+    Request optional quantities with the fluent helpers inherited from
+    :class:`MP2Base`, for example ``ROMP2().compute_1rdm().compute_2rdm()``.
+
     Returns
     -------
     float
@@ -42,44 +37,57 @@ class ROMP2(MP2Base):
         mem0 = self._memory_snapshot()
 
         self._startup()
-        need_t2 = self._needs_t2_storage()
 
-        self.B_iaQ = self._build_df_iaQ()
+        self._log_rohf_remap()
 
-        self.t2, self.t2_as, self.E_corr = self._build_t2_all(
-            self.B_iaQ, store_t2=need_t2
-        )
+        # ---- build UHF-like object ----
+        uhf_like = self._build_uhf_from_rohf()
 
+        # ---- call UHF MP2 ----
+        mp2 = UMP2()
+        if self._compute_1rdm:
+            mp2.compute_1rdm()
+        if self._compute_1rdm_ao:
+            mp2.compute_1rdm_ao()
+        if self._compute_2rdm:
+            mp2.compute_2rdm()
+        if self._compute_cumulants:
+            mp2.compute_cumulants()
+        if self._store_t2:
+            mp2.store_t2()
+        mp2 = mp2(uhf_like)
+        mp2.run()
+
+        # ---- copy results ----
+        self.B_iaQ = mp2.B_iaQ
+        self.E_corr = mp2.E_corr
         self.E_total = self.parent_method.E + self.E_corr
 
-        # ---- custom RDM pipeline ----
-        self._initialize_rdm_outputs()
-        need_gamma1 = (
-            self.compute_1rdm
-            or self.compute_1rdm_ao
-            or self.compute_2rdm
-            or self.compute_cumulants
-        )
+        if self._compute_1rdm:
+            self.gamma1_a = mp2.gamma1_a
+            self.gamma1_b = mp2.gamma1_b
+            self.gamma1_sf = mp2.gamma1_sf
 
-        if need_gamma1:
-            self.gamma1_a, self.gamma1_b = self.make_rohf_1rdm()
+        if self._compute_1rdm_ao:
+            self.gamma1_sf_ao = mp2.gamma1_sf_ao
 
-            self.gamma1_sf = self.gamma1_a + self.gamma1_b
-            self.gamma1_sf = 0.5 * (self.gamma1_sf + self.gamma1_sf.T)
+        if self._compute_2rdm:
+            self.gamma2_sf = mp2.gamma2_sf
+            self.gamma2_aa = mp2.gamma2_aa
+            self.gamma2_ab = mp2.gamma2_ab
+            self.gamma2_bb = mp2.gamma2_bb
 
-            if self.compute_1rdm_ao:
-                self.gamma1_sf_ao = self.gamma1_mo_to_ao(self.gamma1_sf)
+        if self._compute_cumulants:
+            self.lambda2_sf = mp2.lambda2_sf
 
-        if self.compute_2rdm or self.compute_cumulants:
-            self.gamma2_sf = self.make_rohf_2rdm()
-
-        if self.compute_cumulants:
-            self.lambda2_sf = self.make_mp2_sf_2cumulants(
-                self.gamma1_sf, self.gamma2_sf
-            )
+        if self._store_t2:
+            self.t2_a = mp2.t2_a
+            self.t2_b = mp2.t2_b
+            self.t2_ab = mp2.t2_ab
 
         self.executed = True
-        self._log_completion(time.monotonic() - t0, self._t2_norm(), mem0)
+        self._log_completion(time.monotonic() - t0, mp2._t2_norm(), mem0)
+
         return self.E_total
 
     def _startup(self):
@@ -94,141 +102,66 @@ class ROMP2(MP2Base):
         return self._build_restricted_df_iaQ(self.nocc)
 
     def _build_t2_all(self, B, store_t2=True):
-        nd = self.docc
-        ns = self.socc
-        nvir = self.nvir
+        return UMP2._build_t2_all(self, B, store_t2=store_t2)
 
-        eps = self.eps
-        eps_d = eps[:nd]
-        eps_s = eps[nd : nd + ns]
-        eps_v = eps[nd + ns :]
+    def _build_uhf_from_rohf(self):
+        """
+        Build a fake UHF object from ROHF orbitals.
+        """
 
-        E_corr = 0.0
-        t2 = np.empty((self.nocc, self.nocc, nvir, nvir)) if store_t2 else None
-        t2_as = np.empty_like(t2) if store_t2 else None
+        class FakeUHF(UHF):
+            pass
 
-        # doubly-doubly contribution
-        for i in range(nd):
-            Bi = B[i]  # (nvir, naux)
-            for j in range(nd):
-                Bj = B[j]
-                gijab = Bi @ Bj.T  # (a,b)
-                denom = eps_d[i] + eps_d[j] - eps_v[:, None] - eps_v[None, :]
-                tijab = self._safe_divide(gijab, denom)
+        rohf = self.parent_method
+        uhf = object.__new__(FakeUHF)
 
-                if store_t2:
-                    t2[i, j] = tijab
-                    t2_as[i, j] = 2.0 * tijab - tijab.T
+        C = rohf.C[0]
+        eps = rohf.eps[0]
 
-                E_corr += np.sum((2.0 * gijab - gijab.T) * tijab)
+        nd = (rohf.na + rohf.nb) // 2
+        ns = rohf.na - nd
+        nmo = rohf.nmo
 
-        # doubly-singly occupied contribution (only i or j in singly occupied block)
-        for i in range(nd):
-            Bi = B[i]  # (nvir, naux)
-            for r in range(ns):
-                idx_r = nd + r
-                Br = B[idx_r]
-                girab = Bi @ Br.T  # (a,b)
-                denom = eps_s[r] + eps_d[i] - eps_v[:, None] - eps_v[None, :]
-                tirab = self._safe_divide(girab, denom)
+        # ---- orbital coefficients ----
+        uhf.C = (C.copy(), C.copy())
 
-                if store_t2:
-                    t2[i, idx_r] = tirab
-                    t2[idx_r, i] = tirab.T
+        # ---- orbital energies ----
+        uhf.eps = (eps.copy(), eps.copy())
 
-                    t2_as[i, idx_r] = tirab
-                    t2_as[idx_r, i] = tirab.T
+        # ---- occupations ----
+        occ_a = np.zeros(nmo)
+        occ_b = np.zeros(nmo)
 
-                E_corr += 2.0 * np.sum(girab * tirab)
-
-        # singly-singly occupied contribution (i,j both in singly occupied block)
-        for r in range(ns):
-            idx_r = nd + r
-            Br = B[idx_r]  # (nvir, naux)
-
-            for s in range(ns):
-                idx_s = nd + s
-                Bs = B[idx_s]
-
-                grsab = Br @ Bs.T  # (a,b)
-                denom = eps_s[r] + eps_s[s] - eps_v[:, None] - eps_v[None, :]
-                trsab = self._safe_divide(grsab, denom)
-
-                if store_t2:
-                    t2[idx_r, idx_s] = trsab
-                    t2[idx_s, idx_r] = trsab.T
-
-                    t2_as[idx_r, idx_s] = trsab
-                    t2_as[idx_s, idx_r] = trsab.T
-
-                factor = 0.5 if r == s else 1.0
-                E_corr += factor * np.sum(grsab * trsab)
-
-        return t2, t2_as, E_corr
-
-    def make_rohf_1rdm(self):
-        nd = self.docc
-        ns = self.socc
-        nocc = self.nocc
-        nvir = self.nvir
-        nmo = nocc + nvir
-
-        gamma1_a = np.zeros((nmo, nmo))
-        gamma1_b = np.zeros((nmo, nmo))
-
-        # --- reference occupations ---
         # doubly occupied
-        gamma1_a[:nd, :nd] += np.eye(nd)
-        gamma1_b[:nd, :nd] += np.eye(nd)
+        occ_a[:nd] = 1
+        occ_b[:nd] = 1
 
-        # singly occupied (alpha only)
-        gamma1_a[nd : nd + ns, nd : nd + ns] += np.eye(ns)
+        # singly occupied → alpha only
+        occ_a[nd : nd + ns] = 1
 
-        # --- MP2 corrections (reuse t2 structure) ---
-        t2 = self.t2
-        t2_as = self.t2_as
+        uhf.occ = (occ_a, occ_b)
 
-        t2_dd = t2[:nd, :nd]
-        t2_as_dd = t2_as[:nd, :nd]
+        # ---- electron counts ----
+        uhf.charge = rohf.charge
+        uhf.ms = rohf.ms
+        uhf.na = rohf.na
+        uhf.nb = rohf.nb
+        uhf.nmo = rohf.nmo
+        uhf.nbf = rohf.nbf
+        uhf.executed = True
+        uhf.irrep_indices = [rohf.irrep_indices.copy(), rohf.irrep_indices.copy()]
+        uhf.irrep_labels = [rohf.irrep_labels.copy(), rohf.irrep_labels.copy()]
 
-        doo = -0.5 * np.einsum("imef,jmef->ij", t2_as_dd, t2_dd)
+        # ---- pass integrals / DF builder ----
+        uhf.system = rohf.system
+        uhf.fock_builder = rohf.system.fock_builder
 
-        # vir-vir correction
-        dvv = 0.5 * np.einsum("mnae,mnbe->ab", t2_as, t2, optimize=True)
+        # ---- energies ----
+        uhf.E = rohf.E
 
-        # alpha: doubly occupied block
-        gamma1_a[:nd, :nd] += doo + doo.T
+        return uhf
 
-        gamma1_b[:nd, :nd] += doo[:nd, :nd] + doo[:nd, :nd].T  # beta only sees doubly
-
-        gamma1_a[nocc:, nocc:] += dvv + dvv.T
-        gamma1_b[nocc:, nocc:] += dvv + dvv.T
-
-        return gamma1_a, gamma1_b
-
-    def make_rohf_2rdm(self):
-        nocc, nvir = self.nocc, self.nvir
-        nmo = nocc + nvir
-
-        dm2 = np.zeros((nmo, nmo, nmo, nmo))
-
-        o = np.arange(nocc)
-        v = np.arange(nocc, nmo)
-
-        t2 = self.t2
-
-        # OVOV block (same as RHF approx)
-        dovov = (2.0 * t2.transpose(0, 2, 1, 3) - t2.transpose(0, 3, 1, 2)) * 2.0
-
-        dm2[np.ix_(o, v, o, v)] = dovov
-        dm2[np.ix_(v, o, v, o)] = dovov.transpose(1, 0, 3, 2)
-
-        # add disconnected part from gamma1
-        dm1 = self.gamma1_sf
-
-        term1 = np.einsum("qp,sr->pqrs", dm1, dm1)
-        term2 = np.einsum("qr,sp->pqrs", dm1, dm1)
-
-        dm2 += term1 - 0.5 * term2
-
-        return dm2
+    def _log_rohf_remap(self):
+        logger.log_info1(
+            "ROHF reference detected. Mapping ROHF orbitals to a UHF representation and performing UHF-MP2."
+        )

@@ -13,17 +13,8 @@ class UMP2(MP2Base):
     """
     Density-Fitted Møller-Plesset perturbation theory (DF-MP2) method with UHF canonical orbitals.
 
-    Parameters
-    ----------
-    compute_1rdm
-        If True, build the spin-free 1-RDM (unrelaxed MP2).
-    compute_1rdm_ao
-        If True, build the spin-free 1-RDM in AO basis.
-    compute_2rdm
-        If True, build the spin-free 2-RDM (potentially large).
-    compute_cumulants
-        If True, build 2-body cumulant (and 1-body hole RDM if needed).
-        Usually implies compute_2rdm unless you implement a direct cumulant builder.
+    Request optional quantities with the fluent helpers inherited from
+    :class:`MP2Base`, for example ``UMP2().compute_1rdm().compute_2rdm()``.
 
     Returns
     -------
@@ -91,23 +82,26 @@ class UMP2(MP2Base):
 
         self.E_total = self.parent_method.E + self.E_corr
         self._initialize_rdm_outputs()
+        self.gamma2_aa = None
+        self.gamma2_ab = None
+        self.gamma2_bb = None
         need_gamma1 = (
-            self.compute_1rdm
-            or self.compute_1rdm_ao
-            or self.compute_2rdm
-            or self.compute_cumulants
+            self._compute_1rdm
+            or self._compute_1rdm_ao
+            or self._compute_2rdm
+            or self._compute_cumulants
         )
         # MP2Base assumes spin-restricted tensors. UHF overrides all RDM builders.
         if need_gamma1:
             self.make_mp2_sf_1rdm_intermediates(self.B_iaQ)
 
-            if self.compute_1rdm_ao:
+            if self._compute_1rdm_ao:
                 self.gamma1_sf_ao = self.gamma1_mo_to_ao(self.gamma1_sf)
 
-        if self.compute_2rdm or self.compute_cumulants:
+        if self._compute_2rdm or self._compute_cumulants:
             self.gamma2_sf = self.make_mp2_sf_2rdm()
 
-        if self.compute_cumulants:
+        if self._compute_cumulants:
             self.lambda2_sf = self.make_mp2_sf_2cumulants(
                 self.gamma1_sf, self.gamma2_sf
             )
@@ -161,6 +155,15 @@ class UMP2(MP2Base):
         t2_ab = np.zeros((naocc, nbocc, navir, nbvir)) if store_t2 else None
 
         E_corr = 0.0
+        gijab_aa = np.empty((navir, navir))
+        tijab_aa = np.empty((navir, navir))
+        gijab_bb = np.empty((nbvir, nbvir))
+        tijab_bb = np.empty((nbvir, nbvir))
+        gijab_ab = np.empty((navir, nbvir))
+        tijab_ab = np.empty((navir, nbvir))
+        eps_aa_vv = np.ascontiguousarray(eps_a_a[:, None] + eps_a_a[None, :])
+        eps_bb_vv = np.ascontiguousarray(eps_b_a[:, None] + eps_b_a[None, :])
+        eps_ab_vv = np.ascontiguousarray(eps_a_a[:, None] + eps_b_a[None, :])
 
         # =========================
         # ALPHA-ALPHA
@@ -170,22 +173,16 @@ class UMP2(MP2Base):
             for j in range(naocc):
                 Bj = Ba[j]
 
-                # (ia|Q)(jb|Q) → (ab)
-                gijab = Bi @ Bj.T
-                gijba = gijab.T
-
-                # antisymmetrized integrals
-                g_as = gijab - gijba
-
-                denom = eps_a_i[i] + eps_a_i[j] - eps_a_a[:, None] - eps_a_a[None, :]
-
-                tijab = self._safe_divide(g_as, denom)
+                np.dot(Bi, Bj.T, out=gijab_aa)
+                g_as = gijab_aa - gijab_aa.T
+                denom = eps_a_i[i] + eps_a_i[j] - eps_aa_vv
+                self._safe_divide(g_as, denom, out=tijab_aa)
 
                 if store_t2:
-                    t2_a[i, j] = tijab
+                    t2_a[i, j] = tijab_aa
 
                 # energy (same-spin → 1/4 factor)
-                E_corr += 0.25 * np.sum(g_as * tijab)
+                E_corr += 0.25 * np.sum(g_as * tijab_aa)
 
         # =========================
         # BETA-BETA
@@ -195,53 +192,44 @@ class UMP2(MP2Base):
             for j in range(nbocc):
                 Bj = Bb[j]
 
-                gijab = Bi @ Bj.T
-                gijba = gijab.T
-
-                g_as = gijab - gijba
-
-                denom = eps_b_i[i] + eps_b_i[j] - eps_b_a[:, None] - eps_b_a[None, :]
-
-                tijab = self._safe_divide(g_as, denom)
+                np.dot(Bi, Bj.T, out=gijab_bb)
+                g_as = gijab_bb - gijab_bb.T
+                denom = eps_b_i[i] + eps_b_i[j] - eps_bb_vv
+                self._safe_divide(g_as, denom, out=tijab_bb)
 
                 if store_t2:
-                    t2_b[i, j] = tijab
+                    t2_b[i, j] = tijab_bb
 
-                E_corr += 0.25 * np.sum(g_as * tijab)
+                E_corr += 0.25 * np.sum(g_as * tijab_bb)
 
         # =========================
         # ALPHA-BETA
         # =========================
-        Ea = eps_a_a[:, None]
-        Eb = eps_b_a[None, :]
-
         for i in range(naocc):
             Bi = Ba[i]
             for j in range(nbocc):
                 Bj = Bb[j]
 
-                gijab = Bi @ Bj.T  # no antisymmetrization
-
-                denom = eps_a_i[i] + eps_b_i[j] - Ea - Eb
-
-                tijab = self._safe_divide(gijab, denom)
+                np.dot(Bi, Bj.T, out=gijab_ab)
+                denom = eps_a_i[i] + eps_b_i[j] - eps_ab_vv
+                self._safe_divide(gijab_ab, denom, out=tijab_ab)
 
                 if store_t2:
-                    t2_ab[i, j] = tijab
+                    t2_ab[i, j] = tijab_ab
 
                 # opposite-spin → no 1/4 factor
-                E_corr += np.sum(gijab * tijab)
+                E_corr += np.sum(gijab_ab * tijab_ab)
 
         return t2_a, t2_b, t2_ab, E_corr
 
     def make_mp2_sf_1rdm_intermediates(self, B):
-        # Ensure amplitudes exist and are not None
-        if not all(getattr(self, attr, None) is not None for attr in ("t2_a", "t2_b", "t2_ab")):
-            self.t2_a, self.t2_b, self.t2_ab, _ = self._build_t2_all(B)
-
-        t2_a = self.t2_a
-        t2_b = self.t2_b
-        t2_ab = self.t2_ab
+        # Rebuild amplitudes locally when they were not requested for storage.
+        if all(getattr(self, attr, None) is not None for attr in ("t2_a", "t2_b", "t2_ab")):
+            t2_a = self.t2_a
+            t2_b = self.t2_b
+            t2_ab = self.t2_ab
+        else:
+            t2_a, t2_b, t2_ab, _ = self._build_t2_all(B, store_t2=True)
 
         naocc = self.naocc
         nbocc = self.nbocc
@@ -380,6 +368,9 @@ class UMP2(MP2Base):
         # =========================
         # Spin-free assembly
         # =========================
+        self.gamma2_aa = dm2_aa
+        self.gamma2_ab = dm2_ab
+        self.gamma2_bb = dm2_bb
         gamma2_sf = dm2_aa + dm2_bb + dm2_ab + dm2_ab.transpose(1, 0, 3, 2)
 
         # =========================
