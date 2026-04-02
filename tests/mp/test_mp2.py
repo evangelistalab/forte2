@@ -4,7 +4,7 @@ from forte2 import System
 from forte2.jkbuilder.mointegrals import RestrictedMOIntegrals
 from forte2.scf import RHF, ROHF, UHF
 from forte2.helpers.comparisons import approx
-from forte2.mp.dfmp2 import RHFMP2, ROHFMP2, UHFMP2
+from forte2.mp import RMP2, ROMP2, UMP2
 
 # reference values from Psi4 using the cc-pVQZ basis set and the cc-pVQZ-JKFIT auxiliary basis set
 
@@ -64,7 +64,7 @@ def test_rhf_mp2():
     """
     system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
     scf = RHF(charge=0)(system)
-    mp2 = RHFMP2(compute_1rdm=True, compute_2rdm=True, compute_cumulants=True)(scf)
+    mp2 = RMP2(compute_1rdm=True, compute_2rdm=True, compute_cumulants=True)(scf)
     mp2.run()
 
     moints = RestrictedMOIntegrals(system, scf.C[0], list(range(scf.nmo)))
@@ -90,7 +90,7 @@ def test_h4_rhf_mp2():
     """
     system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
     scf = RHF(charge=0)(system)
-    mp2 = RHFMP2()(scf)
+    mp2 = RMP2()(scf)
     mp2.run()
 
     assert scf.E == approx(erhf)
@@ -108,7 +108,7 @@ def test_singlet_rohf_mp2():
     system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
 
     scf = ROHF(charge=0, ms=0)(system)
-    mp2 = ROHFMP2()(scf)
+    mp2 = ROMP2()(scf)
     mp2.run()
 
     assert scf.E == approx(erohf)
@@ -127,7 +127,7 @@ def test_triplet_h2o_rohf_mp2():
     system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
 
     scf = ROHF(charge=0, ms=1)(system)
-    mp2 = ROHFMP2(compute_1rdm=True, compute_2rdm=True)(scf)
+    mp2 = ROMP2(compute_1rdm=True, compute_2rdm=True)(scf)
     mp2.run()
 
     assert scf.E == approx(erohf)
@@ -145,7 +145,7 @@ def test_triplet_h2o_uhf_mp2():
     system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
 
     scf = UHF(charge=0, ms=1)(system)
-    mp2 = UHFMP2()(scf)
+    mp2 = UMP2()(scf)
     mp2.run()
 
     assert scf.E == approx(euhf)
@@ -163,7 +163,7 @@ def test_h2o_uhf_mp2():
     system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
 
     scf = UHF(charge=0, ms=0)(system)
-    mp2 = UHFMP2()(scf)
+    mp2 = UMP2()(scf)
     mp2.run()
 
     assert scf.E == approx(euhf)
