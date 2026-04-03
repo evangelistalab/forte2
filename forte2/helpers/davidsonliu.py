@@ -93,7 +93,7 @@ class DavidsonLiuSolver:
 
         ## configuration parameters
         # The threshold used to discard correction vectors
-        self.schmidt_discard_threshold = 1e-7
+        self.schmidt_discard_threshold = 5e-9
         # The threshold used to guarantee orthogonality among the roots
         self.schmidt_orthogonality_threshold = 1e-12
 
@@ -150,6 +150,14 @@ class DavidsonLiuSolver:
         """
         self._proj_out = [np.asarray(v, self.dtype) for v in project_out]
 
+    def do_project_out(self, vecs):
+        if not hasattr(self, "_proj_out"):
+            return
+        for v in self._proj_out:
+            # v shape (size,)
+            coeffs = v.conj() @ vecs  # shape (nroot,)
+            vecs -= np.outer(v, coeffs)
+
     def solve(self):
 
         self._print_information()
@@ -177,11 +185,7 @@ class DavidsonLiuSolver:
             else:
                 G = self._guesses
 
-            if hasattr(self, "_proj_out"):
-                for v in self._proj_out:
-                    # v shape (size,)
-                    coeffs = v @ G  # shape (nroot,)
-                    G -= np.outer(v, coeffs.conj())
+            self.do_project_out(G)
 
             # orthonormalize via QR
             Q, _ = qr(G, mode="reduced")
@@ -223,6 +227,7 @@ class DavidsonLiuSolver:
             # 3. form and diagonalize subspace Hamiltonian
             Bblk = self.b[:, : self.basis_size]
             Sblk = self.sigma[:, : self.basis_size]
+            self.do_project_out(Sblk)
             Gm = Bblk.T.conj() @ Sblk
             Gm = 0.5 * (Gm + Gm.T.conj())  # Hermitize
             lam, alpha = eigh(Gm)
@@ -280,11 +285,7 @@ class DavidsonLiuSolver:
             R0 -= Bblk @ (Bblk.T.conj() @ R0)
 
             # 6b. project out undesirable vectors if provided
-            if hasattr(self, "_proj_out"):
-                for v in self._proj_out:
-                    # v shape (size,)
-                    coeffs = v @ R0  # shape (nroot,)
-                    R0 -= np.outer(v, coeffs.conj())
+            self.do_project_out(R0)
 
             # write back the cleaned residuals
             self.r[:, : self.nroot] = R0
@@ -316,11 +317,8 @@ class DavidsonLiuSolver:
                     )
                 else:
                     temp = self._rng.uniform(-1.0, 1.0, size=(self.size, missing))
-                if hasattr(self, "_proj_out"):
-                    for v in self._proj_out:
-                        # v shape (size,)
-                        coeffs = v @ temp  # shape (nroot,)
-                        temp -= np.outer(v, coeffs.conj())
+
+                self.do_project_out(temp)
 
                 added2 = self.add_rows_and_orthonormalize(
                     self.b[:, : self.basis_size],
@@ -373,57 +371,6 @@ class DavidsonLiuSolver:
             newB,
             f"\nAfter collapse: Checking orthonormality of newB with size {newB.shape[1]}",
         )
-
-    # def add_rows_and_orthonormalize(
-    #     self, A_existing: np.ndarray, B_candidates: np.ndarray, A_slots: np.ndarray
-    # ) -> int:
-    #     """
-    #     Add candidate vectors from B_candidates into A_slots, orthonormalizing each against
-    #     the existing basis in A_existing and previously added vectors. Returns the number
-    #     of vectors actually added.
-    #     """
-    #     added = 0
-    #     n_existing = A_existing.shape[1]
-
-    #     # Loop over candidate vectors in B_candidates
-    #     for j in range(B_candidates.shape[1]):
-    #         # Make a working copy of the j-th column of B_candidates
-    #         v = B_candidates[:, j].copy()
-
-    #         # 1) Orthogonalize v against the existing basis A_existing
-    #         for i in range(n_existing):
-    #             ai = A_existing[:, i]
-    #             v -= np.dot(ai, v) * ai
-
-    #         # 2) Orthogonalize against any vectors already added into A_slots
-    #         for i in range(added):
-    #             si = A_slots[:, i]
-    #             v -= np.dot(si, v) * si
-
-    #         # 3) Discard if v projected is too small (below discard threshold)
-    #         normv = norm(v)
-    #         if normv < self.schmidt_discard_threshold:
-    #             continue
-
-    #         # 4) Normalize v
-    #         v /= normv
-
-    #         # 5) Check orthogonality to both sets
-    #         max_overlap = 0.0
-    #         if n_existing > 0:
-    #             overlaps_existing = np.abs(A_existing.T @ v)
-    #             max_overlap = overlaps_existing.max()
-    #         if added > 0:
-    #             overlaps_new = np.abs(A_slots[:, :added].T @ v)
-    #             max_overlap = max(max_overlap, overlaps_new.max())
-    #         if max_overlap > self.schmidt_orthogonality_threshold:
-    #             continue
-
-    #         # 6) Accept: store into the next free column of A_slots
-    #         A_slots[:, added] = v
-    #         added += 1
-
-    #     return added
 
     def add_rows_and_orthonormalize(
         self, A_existing: np.ndarray, B_candidates: np.ndarray, A_slots: np.ndarray

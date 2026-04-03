@@ -266,6 +266,40 @@ def test_project_out():
     assert evals[0] == approx(ref_evals[1])
 
 
+def test_project_out_eigenvector():
+    """Test projecting out an eigenvector.
+    The solver should converge to the next eigenvalue."""
+    size = 500
+    nroot = 5
+    rng = np.random.default_rng(42)
+    A = rng.standard_normal((size, size))
+    A = A + A.T  # make it symmetric
+    ref_evals, ref_evecs = np.linalg.eigh(A)
+    # Project out the first and third eigenvectors
+    proj_out = ref_evecs[:, [0, 2]]
+
+    def sigma_builder(basis_block: np.ndarray, sigma_block: np.ndarray) -> None:
+        sigma_block[:] = A @ basis_block
+
+    solver = DavidsonLiuSolver(
+        size=size,
+        nroot=nroot,
+        davidson_liu_params=DavidsonLiuParams(
+            maxiter=500, collapse_per_root=2, basis_per_root=5
+        ),
+    )
+    solver.add_h_diag(np.diag(A))
+    solver.add_sigma_builder(sigma_builder)
+    solver.add_project_out(proj_out.T)  # pass as rows
+    evals, _ = solver.solve()
+
+    assert evals[0] == approx(ref_evals[1]), f"Expected {ref_evals[1]}, got {evals[0]}"
+    assert evals[1] == approx(ref_evals[3]), f"Expected {ref_evals[3]}, got {evals[1]}"
+    assert evals[2] == approx(ref_evals[4]), f"Expected {ref_evals[4]}, got {evals[2]}"
+    assert evals[3] == approx(ref_evals[5]), f"Expected {ref_evals[5]}, got {evals[3]}"
+    assert evals[4] == approx(ref_evals[6]), f"Expected {ref_evals[6]}, got {evals[4]}"
+
+
 def test_dl_restart_1():
     """Test restarting DavidsonLiuSolver.
     Calling solve() twice with the same matrix."""
