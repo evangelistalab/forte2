@@ -148,28 +148,37 @@ class DavidsonLiuSolver:
 
     def add_project_out(self, project_out):
         """
-        project_out: list of arrays each shape (size,)
+        Add vectors to project out during the solve.
+
+        Parameters
+        ----------
+        project_out: list of arrays
+            Each array should have the same dtype and shape, but can have lengths less than or equal to `size`.
+            The vectors will be orthogonalized and stored as rows for projection during the solve.
+            If the lengths are less than `size`, they will be zero-padded to `size` for projection.
         """
         if len(project_out) == 0:
             return
         for v in project_out:
-            if len(v) != self.size:
+            if len(v) > self.size:
                 raise ValueError(
-                    f"Each project_out vector must have length equal to size ({self.size}), but got {len(v)}"
+                    f"Each project_out vector must have length at most {self.size}, but got {len(v)}"
                 )
         # orthogonalize and store the project_out vectors as rows for easier projection later
         A = np.stack(project_out, axis=1)  # shape (size, n_proj)
         # orthogonalize via QR
         Q, _ = qr(A, mode="reduced")
-        self._proj_out = [np.ascontiguousarray(Q[:, i]) for i in range(Q.shape[1])]
+        self._proj_out = np.ascontiguousarray(Q.T)  # shape (n_proj, size)
 
-    def do_project_out(self, vecs):
+    def do_project_out(self, A):
         if not hasattr(self, "_proj_out"):
             return
-        for v in self._proj_out:
-            # v shape (size,)
-            coeffs = v.conj() @ vecs  # shape (nroot,)
-            vecs -= np.outer(v, coeffs)
+        proj_size = self._proj_out.shape[1]
+        for u in self._proj_out:
+            # u shape (size,)
+            # A -> (1 - u u.H) A
+            v = u.conj() @ A[:proj_size]
+            A[:proj_size] -= u[:, np.newaxis] * v
 
     def solve(self):
 
@@ -240,6 +249,8 @@ class DavidsonLiuSolver:
             # 3. form and diagonalize subspace Hamiltonian
             Bblk = self.b[:, : self.basis_size]
             Sblk = self.sigma[:, : self.basis_size]
+            # 3b. project out undesirable directions in the sigma vectors, if provided
+            self.do_project_out(Sblk)
             Gm = Bblk.T.conj() @ Sblk
             Gm = 0.5 * (Gm + Gm.T.conj())  # Hermitize
             lam, alpha = eigh(Gm)

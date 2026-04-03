@@ -502,12 +502,7 @@ class _SelectedCISingleStateSolver:
 
         # Project out any states as needed
         if len(self.project_out) > 0:
-            project_out = []
-            for vec in self.project_out:
-                resized_vec = vec.copy()
-                resized_vec.resize(self.ndet)
-                project_out.append(resized_vec)
-            self.eigensolver.add_project_out(project_out)
+            self.eigensolver.add_project_out(self.project_out)
 
         if self.two_component:
             if self.ci_algorithm.lower() == "sparse":
