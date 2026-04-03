@@ -93,9 +93,11 @@ class DavidsonLiuSolver:
 
         ## configuration parameters
         # The threshold used to discard correction vectors
-        self.schmidt_discard_threshold = 5e-9
+        self.schmidt_discard_threshold = 1e-8
         # The threshold used to guarantee orthogonality among the roots
         self.schmidt_orthogonality_threshold = 1e-12
+        # The threshold used in the Davidson preconditioner denominator to avoid division by small numbers
+        self.preconditioner_denom_threshold = 1e-8
 
         ## bookkeeping
         # size of the basis block
@@ -148,7 +150,18 @@ class DavidsonLiuSolver:
         """
         project_out: list of arrays each shape (size,)
         """
-        self._proj_out = [np.asarray(v, self.dtype) for v in project_out]
+        if len(project_out) == 0:
+            return
+        for v in project_out:
+            if len(v) != self.size:
+                raise ValueError(
+                    f"Each project_out vector must have length equal to size ({self.size}), but got {len(v)}"
+                )
+        # orthogonalize and store the project_out vectors as rows for easier projection later
+        A = np.stack(project_out, axis=1)  # shape (size, n_proj)
+        # orthogonalize via QR
+        Q, _ = qr(A, mode="reduced")
+        self._proj_out = [np.ascontiguousarray(Q[:, i]) for i in range(Q.shape[1])]
 
     def do_project_out(self, vecs):
         if not hasattr(self, "_proj_out"):
@@ -208,7 +221,7 @@ class DavidsonLiuSolver:
                 "{:>+12.4e}",
                 "{:>+12.4e}",
                 "{:>4}",
-                "{:>7}",
+                "{:>35}",
             ],
         )
 
@@ -227,7 +240,6 @@ class DavidsonLiuSolver:
             # 3. form and diagonalize subspace Hamiltonian
             Bblk = self.b[:, : self.basis_size]
             Sblk = self.sigma[:, : self.basis_size]
-            self.do_project_out(Sblk)
             Gm = Bblk.T.conj() @ Sblk
             Gm = 0.5 * (Gm + Gm.T.conj())  # Hermitize
             lam, alpha = eigh(Gm)
@@ -249,12 +261,18 @@ class DavidsonLiuSolver:
             Balpha = Bblk @ ar  # (size, nroot)
             Salpha = Sblk @ ar  # (size, nroot)
             R = Salpha - Balpha * lamr[np.newaxis, :]
-
             rnorms = norm(R, axis=0)
+            if hasattr(self, "_proj_out"):
+                rproj = R.copy()
+                self.do_project_out(rproj)
+                rproj_norms = norm(rproj, axis=0)
+                r_delta = np.abs(rnorms - rproj_norms)
+            else:
+                r_delta = None
 
             # precondition
             denom = lamr[np.newaxis, :] - self.h_diag[:, np.newaxis]
-            mask = np.abs(denom) > 1e-6
+            mask = np.abs(denom) > self.preconditioner_denom_threshold
             # vectorize division only where denom is not too small, setting others to 0
             R[~mask] = 0.0
             np.divide(R, denom, out=R, where=mask)
@@ -300,11 +318,13 @@ class DavidsonLiuSolver:
                 self.b[:, : self.basis_size],
                 R0[:, :to_add],
                 self.b[:, self.basis_size :],
-                # self.b, self.basis_size, R0, to_add
             )
             self.basis_size += added
             # if we couldn't add enough, fill with random orthogonal vectors
             msg = ""
+            if r_delta is not None:
+                msg += f"max r leakage {r_delta.max():.2e}"
+
             if added < to_add:
                 missing = to_add - added
                 # 'float' and 'np.float64' are not subdtypes of np.complexfloating
@@ -327,7 +347,8 @@ class DavidsonLiuSolver:
                     # self.b, self.basis_size, temp, missing
                 )
                 self.basis_size += added2
-                msg = f"+{added2} rand"
+                sep = ", " if msg else ""
+                msg += f"{sep}+{added2} rand"
 
             logger.log(
                 table.row(self.iter, avg_e, max_de, max_r, self.basis_size, msg),

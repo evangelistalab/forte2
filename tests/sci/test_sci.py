@@ -367,6 +367,7 @@ def test_sci_n2_multiple_roots():
     assert sci.E[0] == pytest.approx(-108.70183536777421, abs=1e-8)
     assert sci.E[1] == pytest.approx(-108.3594659281031, abs=1e-8)
 
+
 def test_sci_water_valence_excitation():
     """Test SelectedCI on a water valence-excited state."""
     xyz = """
@@ -393,9 +394,9 @@ def test_sci_water_valence_excitation():
             num_batches_per_thread=16,
         ),
         die_if_not_converged=False,
-        nroots=4,
+        nroots=2,
         davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
     )(rhf)
     sci.run()
-    # assert sci.E[0] == pytest.approx(-75.005188, abs=1e-6)
-test_sci_water_valence_excitation()
+    assert sci.E[0] == pytest.approx(-76.12037086, abs=1e-6)
+    assert sci.E[1] == pytest.approx(-75.80852593, abs=1e-6)
