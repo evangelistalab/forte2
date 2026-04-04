@@ -1,4 +1,6 @@
 import numpy as np
+from numpy.typing import NDArray
+
 from dataclasses import dataclass, field
 
 from forte2.ci import CISolver, RelCISolver
@@ -229,7 +231,9 @@ class MCOptimizer(ActiveSpaceSolver):
         logger.log_info1("Entering orbital optimization loop")
         logger.log_info1("\nConvergence criteria ('.' if satisfied, 'x' otherwise):")
         logger.log_info1(f"  {'1. RMS(grad)':<32} < {self.gconv:.1e}")
-        logger.log_info1(f"  {'2. max(abs(E_CI_i - E_CI_old_i))':<32} < {self.econv:.1e}")
+        logger.log_info1(
+            f"  {'2. max(abs(E_CI_i - E_CI_old_i))':<32} < {self.econv:.1e}"
+        )
         logger.log_info1(f"  {'3. abs(E_avg - E_avg_old)':<32} < {self.econv:.1e}\n")
 
         logger.log_info1("=" * width)
@@ -272,11 +276,15 @@ class MCOptimizer(ActiveSpaceSolver):
             # 2. Convergence checks
             _dg = self.lbfgs_solver.g - self.g_old
             self.dg_rms = np.sqrt(np.mean((_dg.conj() * _dg).real))
-            self.g_rms = np.sqrt(np.mean((self.lbfgs_solver.g.conj() * self.lbfgs_solver.g).real))
+            self.g_rms = np.sqrt(
+                np.mean((self.lbfgs_solver.g.conj() * self.lbfgs_solver.g).real)
+            )
             self.g_old = self.lbfgs_solver.g.copy()
             conv, conv_str = self._check_convergence()
             lbfgs_str = f"{self.lbfgs_solver.iter}/{'Y' if self.lbfgs_solver.converged else 'N'}"
-            iter_info = f"{self.iter:>10d} {self.E_avg.real:>20.10f} {self.E_orb.real:>20.10f} "
+            iter_info = (
+                f"{self.iter:>10d} {self.E_avg.real:>20.10f} {self.E_orb.real:>20.10f} "
+            )
             iter_info += f"{self.delta_ci_avg.real:>12.4e} {self.max_ci_de:>12.4e} {self.g_rms.real:>12.4e} {lbfgs_str:>8} {conv_str:>8}"
             if conv:
                 logger.log_info1(iter_info)
@@ -325,7 +333,9 @@ class MCOptimizer(ActiveSpaceSolver):
 
         logger.log_info1("=" * width)
         if self.converged:
-            logger.log_info1(f"Orbital optimization converged in {self.iter} iterations.")
+            logger.log_info1(
+                f"Orbital optimization converged in {self.iter} iterations."
+            )
         logger.log_info1(f"Final orbital optimized energy: {self.E_avg:.10f}")
 
         # undo _make_spaces_contiguous
@@ -488,6 +498,75 @@ class MCOptimizer(ActiveSpaceSolver):
 
     def make_average_cumulants(self):
         return self.ci_solver.make_average_cumulants()
+
+    def _solver_index_check(self, solver_index):
+        if solver_index is None:
+            if len(self.ci_solver.sub_solvers) == 1:
+                solver_index = 0
+            else:
+                raise ValueError(
+                    "solver_index must be specified for when MCOptimizer uses multiple CI solvers"
+                )
+        if solver_index < 0 or solver_index >= len(self.ci_solver.sub_solvers):
+            raise ValueError(
+                f"solver_index must be between 0 and {len(self.ci_solver.sub_solvers)-1}"
+            )
+        return solver_index
+
+    def make_sd_1rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+        solver_index: int | None = None,
+    ) -> tuple[NDArray, NDArray]:
+        solver_index = self._solver_index_check(solver_index)
+        return self.ci_solver.sub_solvers[solver_index].make_sd_1rdm(
+            left_root, right_root
+        )
+
+    def make_sd_2rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+        solver_index: int | None = None,
+    ) -> tuple[NDArray, NDArray, NDArray]:
+        solver_index = self._solver_index_check(solver_index)
+        return self.ci_solver.sub_solvers[solver_index].make_sd_2rdm(
+            left_root, right_root
+        )
+
+    def make_sd_3rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+        solver_index: int | None = None,
+    ) -> tuple[NDArray, NDArray, NDArray, NDArray]:
+        solver_index = self._solver_index_check(solver_index)
+        return self.ci_solver.sub_solvers[solver_index].make_sd_3rdm(
+            left_root, right_root
+        )
+
+    def make_sf_1rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+        solver_index: int | None = None,
+    ) -> NDArray:
+        solver_index = self._solver_index_check(solver_index)
+        return self.ci_solver.sub_solvers[solver_index].make_sf_1rdm(
+            left_root, right_root
+        )
+
+    def make_sf_2rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+        solver_index: int | None = None,
+    ) -> NDArray:
+        solver_index = self._solver_index_check(solver_index)
+        return self.ci_solver.sub_solvers[solver_index].make_sf_2rdm(
+            left_root, right_root
+        )
 
 
 @dataclass

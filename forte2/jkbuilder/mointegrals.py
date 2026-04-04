@@ -19,6 +19,8 @@ class RestrictedMOIntegrals:
 
     Parameters
     ----------
+    system : System
+        The system for which to compute the integrals.
     C : NDArray
         The coefficient matrix for the molecular orbitals.
     orbitals : list[int]
@@ -29,8 +31,6 @@ class RestrictedMOIntegrals:
         If True, use ``system.auxiliary_basis_corr``, else use ``system.auxiliary_basis``.
     antisymmetrize : bool, optional, default=False
         If True, antisymmetrize the two-electron integrals.
-    spinorbital : bool, optional, default=False
-        If True, the integrals are converted to the spin-orbital basis.
 
     Attributes
     ----------
@@ -40,12 +40,18 @@ class RestrictedMOIntegrals:
         The effective one-electron integrals.
     V : NDArray
         The two-electron integrals stored in physicist's convention: V[p,q,r,s] = :math:`\langle pq | rs \rangle`.
+
+    Examples
+    --------
+    >>> ints = RestrictedMOIntegrals(system=system, C=rhf.C[0], orbitals=orbitals, core_orbitals=core_orbitals)
+    >>> ints.H  # one-electron integrals in the MO basis
+    >>> ints.V  # two-electron integrals in the MO basis
     """
 
     system: "System"
     C: NDArray
     orbitals: list
-    core_orbitals: list = field(default_factory=list)
+    core_orbitals: list[int] | range = field(default_factory=list)
     use_aux_corr: bool = False
     antisymmetrize: bool = False
 
@@ -93,18 +99,18 @@ class SpinorbitalIntegrals:
 
     Parameters
     ----------
+    system : System
+        The system for which to compute the integrals.
     C : NDArray
-        The coefficient matrix for the molecular orbitals.
-    orbitals : list[int]
-        Subspace of the orbitals for which to compute the integrals.
-    core_orbitals : list[int], optional
-        Subspace of doubly occupied orbitals. Defaults to None.
+        The coefficient matrix for the spinorbitals (dimension nbf*2 x nmo*2).
+    spinorbitals : list[int]
+        Subspace of the spinorbitals for which to compute the integrals (max dimension nmo*2).
+    core_spinorbitals : list[int], optional
+        Subspace of doubly occupied spinorbitals. Defaults to None.
     use_aux_corr : bool, optional, default=False
         If True, use ``system.auxiliary_basis_corr``, else use ``system.auxiliary_basis``.
     antisymmetrize : bool, optional, default=False
         If True, antisymmetrize the two-electron integrals.
-    spinorbital : bool, optional, default=False
-        If True, the integrals are converted to the spin-orbital basis.
 
     Attributes
     ----------
@@ -167,7 +173,7 @@ class SpinorbitalIntegrals:
 @dataclass
 class SRRestrictedMOIntegrals:
     r"""
-    Class to compute molecular orbital integrals for a given set of restricted orbitals
+    Class to obtain slices of molecular orbital integrals for a given set of restricted orbitals
     for use in SR correlation methods.
 
     Parameters
@@ -189,17 +195,23 @@ class SRRestrictedMOIntegrals:
     virtual: int = 0
 
     def __post_init__(self):
-        if not self.ints.spinorbital:
-            raise ValueError(
-                "Expected restricted spin-orbital integrals (ints.spinorbital == True)."
-            )
-
+        # verify the type of the integrals
+        assert isinstance(
+            self.ints, RestrictedMOIntegrals
+        ), "ints must be an instance of RestrictedMOIntegrals."
         self.o = slice(0, self.ints.system.nel - self.frozen)
         self.v = slice(self.ints.system.nel, self.ints.system.nbf - self.virtual)
 
         self.build_fock()
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: tuple[str, ...]) -> NDArray:
+        r"""Get slices of the integrals. Uses 'o' and 'v'  for occupied and virtual orbitals.
+        Examples
+        --------
+        >>> ints["o", "o"]  # occupied-occupied block of the Fock matrix
+        >>> ints["o", "v", "o", "v"]  # V[o, v, o, v] block of the two-electron integrals
+        """
+
         idx = tuple(self.o if k == "o" else self.v if k == "v" else k for k in key)
         if len(idx) == 2:
             return self.F[idx]
@@ -207,21 +219,20 @@ class SRRestrictedMOIntegrals:
             return self.ints.V[idx]
         raise IndexError("Use 2 indices for H or 4 indices for V.")
 
-    def build_fock(self):
+    def build_fock(self) -> None:
         self.F = self.ints.H + np.einsum("piqi->pq", self.ints.V[:, self.o, :, self.o])
         self.eps_o = np.diag(self.F[self.o, self.o])
         self.eps_v = np.diag(self.F[self.v, self.v])
 
-    def scf_energy(self):
+    def scf_energy(self) -> float:
         E = np.einsum("ii->", self.ints.H[self.o, self.o]) + 0.5 * np.einsum(
             "ijij->", self.ints.V[self.o, self.o, self.o, self.o]
         )
         E += self.ints.system.nuclear_repulsion
         return E
 
-    def scf_energy_fock(self):
-        E = np.einsum("ii->", self.F[self.o, self.o]) - 0.5 * np.einsum(
-            "ijij->", self.ints.V[self.o, self.o, self.o, self.o]
-        )
-        E += self.ints.system.nuclear_repulsion
+    def scf_energy_fock(self) -> float:
+        E = self.ints.system.nuclear_repulsion
+        E += np.einsum("ii->", self.F[self.o, self.o])
+        E -= 0.5 * np.einsum("ijij->", self.ints.V[self.o, self.o, self.o, self.o])
         return E
