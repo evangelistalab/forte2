@@ -234,9 +234,10 @@ class _CIBase:
             assert (
                 self.two_component
             ), "Antisymmetric integrals only supported for two-component CI."
-            assert (
-                self.ci_algorithm.lower() in ["hz", "exact"]
-            ), "Antisymmetric integrals only supported for 'hz' and 'exact' algorithms."
+            assert self.ci_algorithm.lower() in [
+                "hz",
+                "exact",
+            ], "Antisymmetric integrals only supported for 'hz' and 'exact' algorithms."
 
         if not self.executed:
             self._ci_solver_startup()
@@ -1320,7 +1321,7 @@ class CISolver(ActiveSpaceSolver):
     Attributes
     ----------
     sub_solvers : list[_CIBase]
-        A list of CI solvers for each state in the state-averaged CI.
+        A list of CI solvers for each state in the state-averaged CI (each solver for a different spin/GAS restriction).
     evals_per_solver : list[NDArray]
         The eigenvalues (energies) computed by each sub-solver.
     evals_flat, E : NDArray
