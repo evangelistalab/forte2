@@ -352,9 +352,6 @@ def test_sci_water_core_excited():
     assert ci.E[0] == pytest.approx(-56.34437851987155, abs=1e-6)
 
 
-test_sci_water_core_excited()
-
-
 def test_sci_n2_multiple_roots():
     """Test that multiple roots can be converged for N2."""
     xyz = """
