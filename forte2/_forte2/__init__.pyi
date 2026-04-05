@@ -305,6 +305,9 @@ class SelectedCIHelper:
     def set_frozen_creation(self, frozen_creation: Sequence[int]) -> None:
         """Set orbitals excluded from creation in selection"""
 
+    def set_frozen_annihilation(self, frozen_annihilation: Sequence[int]) -> None:
+        """Set orbitals excluded from annihilation in selection"""
+
     def set_screening_criterion(self, criterion: str) -> None:
         """Set the screening criterion for selection ('hbci' or 'ehbci')"""
 
@@ -603,6 +606,9 @@ class SlaterRules:
 
     def energy(self, arg: Determinant, /) -> float: ...
 
+    def energies(self, dets: DeterminantVector) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]:
+        """Compute the energies of a vector of determinants"""
+
     def slater_rules(self, lhs: Determinant, rhs: Determinant) -> float: ...
 
 class RelSlaterRules:
@@ -612,6 +618,9 @@ class RelSlaterRules:
         """
 
     def energy(self, arg: Determinant, /) -> float: ...
+
+    def energies(self, dets: DeterminantVector) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]:
+        """Compute the energies of a vector of determinants"""
 
     def slater_rules(self, lhs: Determinant, rhs: Determinant) -> complex: ...
 

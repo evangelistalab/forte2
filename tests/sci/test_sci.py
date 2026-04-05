@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, State, Determinant
+from forte2 import System, State, Determinant, CIStrings
 from forte2.scf import RHF
 from forte2.sci import SelectedCI
 from forte2.helpers.comparisons import approx
@@ -299,9 +299,20 @@ def test_sci_semicanonical_final_orbital():
 
 @pytest.mark.slow
 def test_sci_water_core_excited():
-    from forte2 import CIStrings
-
     """Test SelectedCI on a water core-excited state."""
+    # This should be converged to the following GASCI input
+    # from forte2.ci import CI
+    # ci = CI(
+    #     states=State(nel=10, multiplicity=1, ms=0.0, gas_max=[1], gas_min=[1]),
+    #     active_orbitals=[[0], list(range(1, 13))],
+    #     nroots=3,
+    #     davidson_liu_params=DavidsonLiuParams(
+    #         e_tol=1e-10,
+    #         r_tol=1e-5,
+    #     ),
+    # )(rhf)
+    # ci.run()
+
     xyz = """
     O   0.0000000000  -0.0000000000  -0.0662628033
     H   0.0000000000  -0.7540256101   0.5259060578
@@ -311,7 +322,8 @@ def test_sci_water_core_excited():
     system = System(xyz=xyz, basis_set="6-31g", auxiliary_basis_set="cc-pVTZ-JKFIT")
     rhf = RHF(charge=0)(system)
 
-    ci_strings = CIStrings(5, 5, 0, [[0], [0], [0, 0, 0, 0]], [0, 2], [1, 2])
+    ci_strings = CIStrings(5, 5, 0, [[0], [0], [0] * 11], [0, 2], [1, 2])
+    # this has FCI length, but will be wittled down by the HBCI initial guess
     guess_dets = ci_strings.make_determinants()
 
     ci = SelectedCI(
@@ -330,10 +342,17 @@ def test_sci_water_core_excited():
             num_threads=4,
             num_batches_per_thread=16,
         ),
-        davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
+        davidson_liu_params=DavidsonLiuParams(
+            e_tol=1e-10,
+            r_tol=1e-5,
+        ),
     )(rhf)
     ci.run()
-    assert ci.E[0] == pytest.approx(-56.34949937004779, abs=1e-6)
+
+    assert ci.E[0] == pytest.approx(-56.34437851987155, abs=1e-6)
+
+
+test_sci_water_core_excited()
 
 
 def test_sci_n2_multiple_roots():

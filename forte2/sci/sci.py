@@ -286,16 +286,36 @@ class _SelectedCISingleStateSolver:
         else:
             self._check_guess_dets(self.sci_params.guess_dets)
 
+        # use the determinantal energies to refine the guess determinants
+        # if there are more than needed for the initial guess
+        # this can be controlled by DavidsonLiuParams
+        guess_hdiag = self.slater_rules.energies(self.sci_params.guess_dets)
+        nguess_dets = len(self.sci_params.guess_dets)
+        num_guess_states = min(
+            self.davidson_liu_params.guess_per_root * self.nroot, nguess_dets
+        )
+        logger.log(f"Number of guess states: {num_guess_states}", self.log_level)
+        nguess_dets = min(
+            self.davidson_liu_params.ndets_per_guess * num_guess_states,
+            nguess_dets,
+        )
+        logger.log(f"Number of guess basis: {nguess_dets}", self.log_level)
+
+        # find the indices of the elements of Hdiag with the lowest values
+        # subject to an optional energy shift, which can be used to target specific states (e.g. excited states)
+        if self.sci_params.energy_shift is not None:
+            indices = np.argsort(np.abs(guess_hdiag - self.sci_params.energy_shift))[
+                :nguess_dets
+            ]
+        else:
+            indices = np.argsort(guess_hdiag)[:nguess_dets]
+
+        self.sci_params.guess_dets = [self.sci_params.guess_dets[i] for i in indices]
+
         # Check that we have all spin complement pairs
         self.sci_params.guess_dets = self._generate_spin_complement_pairs(
             self.sci_params.guess_dets
         )
-
-        logger.log_info1("Initial guess determinants (by energy):")
-        for d in self.sci_params.guess_dets:
-            logger.log_info1(
-                f"  {d.str(self.norb)}: {self.slater_rules.energy(d):20.12f}"
-            )
 
         ndet = len(self.sci_params.guess_dets)
         S2guess = np.zeros((ndet, ndet), dtype=self.dtype)
@@ -317,7 +337,7 @@ class _SelectedCISingleStateSolver:
         S = (self.state.multiplicity - 1) / 2
         target_s2 = S * (S + 1)
         close_idx = [
-            i for i, v in enumerate(svals) if np.isclose(v, target_s2, atol=1e-4)
+            i for i, v in enumerate(svals) if np.isclose(v, target_s2, atol=1e-8)
         ]
         # find the indices of the eigenvalues that are not close to target_s2
         not_close_idx = [i for i in range(len(svals)) if i not in close_idx]

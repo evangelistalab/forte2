@@ -75,6 +75,15 @@ double SlaterRules::energy(const Determinant& det) const {
     return energy;
 }
 
+np_vector SlaterRules::energies(const std::vector<Determinant>& dets) const {
+    auto energies = make_zeros<nb::numpy, double, 1>({dets.size()});
+    auto energies_view = energies.view();
+    for (size_t i{0}; i < dets.size(); ++i) {
+        energies_view(i) = energy(dets[i]);
+    }
+    return energies;
+}
+
 double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs) const {
     // we first check that the two determinants have equal Ms
     if ((lhs.count_a() != rhs.count_a()) or (lhs.count_b() != rhs.count_b()))
@@ -285,6 +294,15 @@ double RelSlaterRules::energy(const Determinant& det) const {
     return energy.real();
 }
 
+np_vector RelSlaterRules::energies(const std::vector<Determinant>& dets) const {
+    auto energies = make_zeros<nb::numpy, double, 1>({dets.size()});
+    auto energies_view = energies.view();
+    for (size_t i{0}; i < dets.size(); ++i) {
+        energies_view(i) = energy(dets[i]);
+    }
+    return energies;
+}
+
 std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
                                                   const Determinant& rhs) const {
     // make sure the two determinants have the same number of electrons
@@ -339,7 +357,7 @@ std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
         size_t b = excitation_connection[1][1];
         double sign = lhs.slater_sign_aaaa(i, j, a, b);
         auto v_el = tei_is_asym_ ? v(i, j, a, b) : v(i, j, a, b) - v(i, j, b, a); // <ij||ab>
-        matrix_element += sign * v_el; // <ij||ab>
+        matrix_element += sign * v_el;                                            // <ij||ab>
     }
 
     return matrix_element;
