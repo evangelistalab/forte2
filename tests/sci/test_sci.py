@@ -370,18 +370,23 @@ def test_sci_n2_multiple_roots():
             pt2_threshold=0.0,
             do_spin_penalty=True,
             screening_criterion="hbci",
-            guess_occ_window=7,
+            guess_occ_window=3,
             guess_vir_window=3,
             num_threads=4,
             num_batches_per_thread=16,
         ),
         die_if_not_converged=False,
         nroots=2,
+        davidson_liu_params=DavidsonLiuParams(
+            e_tol=1e-10,
+            r_tol=1e-5,
+            ndets_per_guess=20,
+        ),
     )(rhf)
     sci.run()
 
-    assert sci.E[0] == pytest.approx(-108.70183536777421, abs=1e-8)
-    assert sci.E[1] == pytest.approx(-108.3594659281031, abs=1e-8)
+    assert sci.E[0] == pytest.approx(-108.70183536777276, abs=1e-8)
+    assert sci.E[1] == pytest.approx(-108.35946592810289, abs=1e-8)
 
 
 def test_sci_water_valence_excitation():

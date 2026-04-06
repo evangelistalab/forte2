@@ -15,6 +15,7 @@ from forte2 import (
     SparseState,
     SlaterRules,
     SelectedCIHelper,
+    CIStrings,
 )
 from forte2.helpers.table import AsciiTable
 from forte2.state import State, MOSpace
@@ -380,66 +381,39 @@ class _SelectedCISingleStateSolver:
 
     def _generate_initial_guess_dets(self, window_occ, window_vir):
         logger.log("Generating initial determinant guess")
-        # create the initial guess determinant
-        d0 = Determinant.zero()
+
         if self.two_component:
-            na = self.state.nel - self.ncore
+            na = self.state.nel
             nb = 0
+            ncore = self.state.nel - window_occ
+            ncel = ncore
         else:
-            na = self.state.na - self.ncore
-            nb = self.state.nb - self.ncore
-        for i in range(na):
-            d0.set_na(i, True)
-        for i in range(nb):
-            d0.set_nb(i, True)
+            na = self.state.na
+            nb = self.state.nb
+            ncore = self.state.nel // 2 - window_occ
+            ncel = 2 * ncore
 
-        n_guess_dets = max(8, 2 * self.nroot + 4)
+        nactv = window_occ + window_vir
+        if ncel == 0:
+            ci_strings = CIStrings(
+                na,
+                nb,
+                0,
+                [[0] * nactv],
+                [],
+                [],
+            )
+        else:
 
-        # define a window around HOMO and LUMO to generate excitations
-        occ_a = range(max(0, na - window_occ), na)
-        occ_b = range(max(0, nb - window_occ), nb)
-        vir_a = range(na, min(self.norb, na + window_vir))
-        vir_b = range(nb, min(self.norb, nb + window_vir))
-
-        det_energy = {d0: self.slater_rules.energy(d0)}
-
-        # Alpha excitations
-        for i in occ_a:
-            for a in vir_a:
-                d1 = Determinant(d0)
-                d1.set_na(i, False)
-                d1.set_na(a, True)
-                det_energy[d1] = self.slater_rules.energy(d1)
-
-        # Beta excitations
-        for i in occ_b:
-            for a in vir_b:
-                d1 = Determinant(d0)
-                d1.set_nb(i, False)
-                d1.set_nb(a, True)
-                det_energy[d1] = self.slater_rules.energy(d1)
-
-        # Pair excitations
-        n_pairs = min(na, nb)
-        n_occ = max(na, nb)
-        occ_pair = range(max(0, n_pairs - window_occ), n_pairs)
-        vir_pair = range(n_occ, min(self.norb, n_occ + window_vir))
-        for i in occ_pair:
-            for a in vir_pair:
-                d1 = Determinant(d0)
-                d1.set_na(i, False)
-                d1.set_nb(i, False)
-                d1.set_na(a, True)
-                d1.set_nb(a, True)
-                det_energy[d1] = self.slater_rules.energy(d1)
-
-        # Sort the determinants by energy
-        sorted_dets = sorted(det_energy.items(), key=lambda x: x[1])
-
-        # Form the Hamiltonian matrix in this basis
-        guess_dets = [d for d, e in sorted_dets[: min(n_guess_dets, len(sorted_dets))]]
-
-        return guess_dets
+            ci_strings = CIStrings(
+                na,
+                nb,
+                0,
+                [[0] * ncore, [0] * nactv],
+                [ncel],
+                [ncel],
+            )
+        return ci_strings.make_determinants()
 
     def _generate_spin_complement_pairs(self, guess_dets):
         # find all the unique electronic configurations
