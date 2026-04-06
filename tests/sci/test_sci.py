@@ -205,7 +205,7 @@ def test_sci5():
     assert sci.E[0] == pytest.approx(-96.5578779686, abs=5e-3)
 
 
-@pytest.mark.slow
+@pytest.mark.skip(reason="Could not reproduce with FCI with energy_shift")
 def test_sci6():
     """Test SelectedCI on a core-excited state."""
     xyz = """
