@@ -47,4 +47,3 @@ def test_rhf_cu():
     mf = RHF(charge=-1)(system)
     mf.run()
     assert mf.E == approx(eref)
-test_cadmium_imidazole_complex()

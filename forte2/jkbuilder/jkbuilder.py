@@ -706,7 +706,6 @@ class FockBuilderOTF:
             pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
             # 2. Compute the B_Pmn blocks for the current batch of auxiliary shells
             _buf = self._fill_Pmn_buffer(pshell0, pshell1)
-            # print(_buf.shape, D.shape, bP[pb0:pb1].shape)
             np.einsum(
                 "Pmn,nm->P",
                 _buf,
