@@ -41,16 +41,9 @@ class UMP2(MP2Base):
         )
 
     def _startup(self):
-        if not self.parent_method.executed:
-            self.parent_method.run()
-
-        # Copy system + MO information
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
-
-        # MO reordering (contiguous correlated space)
-        self.Ca = self.C[0].copy()
-        self.Cb = self.C[1].copy()
+        super()._startup()
+        self.Ca = self.C[0]
+        self.Cb = self.C[1]
         self.eps_a = self.parent_method.eps[0].copy()
         self.eps_b = self.parent_method.eps[1].copy()
 
@@ -65,46 +58,17 @@ class UMP2(MP2Base):
         self.navir = self.nmo - self.naocc
         self.nbvir = self.nmo - self.nbocc
 
-        self.fock_builder = self.system.fock_builder
-
     def run(self):
         t0 = time.monotonic()
         mem0 = self._memory_snapshot()
 
         self._startup()
-        need_t2 = self._needs_t2_storage()
 
         self.B_iaQ = self._build_df_iaQ()
 
-        (self.t2_a, self.t2_b, self.t2_ab, self.E_corr) = self._build_t2_all(
-            self.B_iaQ, store_t2=need_t2
-        )
+        (self.t2_a, self.t2_b, self.t2_ab, self.E_corr) = self._build_t2_all(self.B_iaQ)
 
         self.E_total = self.parent_method.E + self.E_corr
-        self._initialize_rdm_outputs()
-        self.gamma2_aa = None
-        self.gamma2_ab = None
-        self.gamma2_bb = None
-        need_gamma1 = (
-            self._compute_1rdm
-            or self._compute_1rdm_ao
-            or self._compute_2rdm
-            or self._compute_cumulants
-        )
-        # MP2Base assumes spin-restricted tensors. UHF overrides all RDM builders.
-        if need_gamma1:
-            self.make_mp2_sf_1rdm_intermediates(self.B_iaQ)
-
-            if self._compute_1rdm_ao:
-                self.gamma1_sf_ao = self.gamma1_mo_to_ao(self.gamma1_sf)
-
-        if self._compute_2rdm or self._compute_cumulants:
-            self.gamma2_sf = self.make_mp2_sf_2rdm()
-
-        if self._compute_cumulants:
-            self.lambda2_sf = self.make_mp2_sf_2cumulants(
-                self.gamma1_sf, self.gamma2_sf
-            )
 
         self.executed = True
         self._log_completion(time.monotonic() - t0, self._t2_norm(), mem0)
@@ -138,7 +102,7 @@ class UMP2(MP2Base):
             Bb_Qia.transpose(1, 2, 0).copy(),
         )
 
-    def _build_t2_all(self, B, store_t2=True):
+    def _build_t2_all(self, B):
         Ba, Bb = B
 
         eps_a_i = self.eps_a[: self.naocc]
@@ -150,9 +114,9 @@ class UMP2(MP2Base):
         nbocc, nbvir = self.nbocc, self.nbvir
 
         # allocate
-        t2_a = np.zeros((naocc, naocc, navir, navir)) if store_t2 else None
-        t2_b = np.zeros((nbocc, nbocc, nbvir, nbvir)) if store_t2 else None
-        t2_ab = np.zeros((naocc, nbocc, navir, nbvir)) if store_t2 else None
+        t2_a = np.zeros((naocc, naocc, navir, navir)) if self.store_t2 else None
+        t2_b = np.zeros((nbocc, nbocc, nbvir, nbvir)) if self.store_t2 else None
+        t2_ab = np.zeros((naocc, nbocc, navir, nbvir)) if self.store_t2 else None
 
         E_corr = 0.0
         gijab_aa = np.empty((navir, navir))
@@ -178,7 +142,7 @@ class UMP2(MP2Base):
                 denom = eps_a_i[i] + eps_a_i[j] - eps_aa_vv
                 self._safe_divide(g_as, denom, out=tijab_aa)
 
-                if store_t2:
+                if self.store_t2:
                     t2_a[i, j] = tijab_aa
 
                 # energy (same-spin → 1/4 factor)
@@ -197,7 +161,7 @@ class UMP2(MP2Base):
                 denom = eps_b_i[i] + eps_b_i[j] - eps_bb_vv
                 self._safe_divide(g_as, denom, out=tijab_bb)
 
-                if store_t2:
+                if self.store_t2:
                     t2_b[i, j] = tijab_bb
 
                 E_corr += 0.25 * np.sum(g_as * tijab_bb)
@@ -214,7 +178,7 @@ class UMP2(MP2Base):
                 denom = eps_a_i[i] + eps_b_i[j] - eps_ab_vv
                 self._safe_divide(gijab_ab, denom, out=tijab_ab)
 
-                if store_t2:
+                if self.store_t2:
                     t2_ab[i, j] = tijab_ab
 
                 # opposite-spin → no 1/4 factor
@@ -222,14 +186,17 @@ class UMP2(MP2Base):
 
         return t2_a, t2_b, t2_ab, E_corr
 
-    def make_mp2_sf_1rdm_intermediates(self, B):
+    def _make_mp2_1rdm_intermediates(self):
+        B = self.B_iaQ
         # Rebuild amplitudes locally when they were not requested for storage.
-        if all(getattr(self, attr, None) is not None for attr in ("t2_a", "t2_b", "t2_ab")):
+        if all(
+            getattr(self, attr, None) is not None for attr in ("t2_a", "t2_b", "t2_ab")
+        ):
             t2_a = self.t2_a
             t2_b = self.t2_b
             t2_ab = self.t2_ab
         else:
-            t2_a, t2_b, t2_ab, _ = self._build_t2_all(B, store_t2=True)
+            t2_a, t2_b, t2_ab, _ = self._build_t2_all(B)
 
         naocc = self.naocc
         nbocc = self.nbocc
@@ -285,21 +252,15 @@ class UMP2(MP2Base):
         # enforce Hermiticity
         gamma1_a = 0.5 * (gamma1_a + gamma1_a.T)
         gamma1_b = 0.5 * (gamma1_b + gamma1_b.T)
+        return gamma1_a, gamma1_b
 
+    def _make_mp2_sf_1rdm(self, gamma1_a, gamma1_b):
         # spin-free
         gamma1_sf = gamma1_a + gamma1_b
         gamma1_sf = 0.5 * (gamma1_sf + gamma1_sf.T)
-
-        self.gamma1_a = gamma1_a
-        self.gamma1_b = gamma1_b
-        self.gamma1_sf = gamma1_sf
-
         return gamma1_sf
 
-    def gamma1_mo_to_ao(self):
-        return self.Ca @ self.gamma1_a @ self.Ca.T + self.Cb @ self.gamma1_b @ self.Cb.T
-
-    def make_mp2_sf_2rdm(self):
+    def _make_mp2_2rdm(self, gamma1_a, gamma1_b):
         t2_a = self.t2_a
         t2_b = self.t2_b
         t2_ab = self.t2_ab
@@ -317,101 +278,117 @@ class UMP2(MP2Base):
         # Allocate spin blocks
         # =========================
         common_dtype = np.result_type(t2_a, t2_b, t2_ab)
-        dm2_aa = np.zeros((nmo, nmo, nmo, nmo), dtype=common_dtype)
-        dm2_bb = np.zeros((nmo, nmo, nmo, nmo), dtype=common_dtype)
-        dm2_ab = np.zeros((nmo, nmo, nmo, nmo), dtype=common_dtype)
+        gamma2_aa = np.zeros((nmo, nmo, nmo, nmo), dtype=common_dtype)
+        gamma2_bb = np.zeros((nmo, nmo, nmo, nmo), dtype=common_dtype)
+        gamma2_ab = np.zeros((nmo, nmo, nmo, nmo), dtype=common_dtype)
 
         # =========================
         # SAME-SPIN (αα)
         # =========================
         # (ijab)
-        dm2_aa[np.ix_(oa, oa, va, va)] += t2_a
-        dm2_aa[np.ix_(va, va, oa, oa)] += t2_a.transpose(2, 3, 0, 1)
+        gamma2_aa[np.ix_(oa, oa, va, va)] += t2_a
+        gamma2_aa[np.ix_(va, va, oa, oa)] += t2_a.transpose(2, 3, 0, 1)
 
         # antisymmetry permutations
-        dm2_aa[np.ix_(oa, oa, va, va)] -= t2_a.transpose(0, 1, 3, 2)
-        dm2_aa[np.ix_(va, va, oa, oa)] -= t2_a.transpose(3, 2, 0, 1)
+        gamma2_aa[np.ix_(oa, oa, va, va)] -= t2_a.transpose(0, 1, 3, 2)
+        gamma2_aa[np.ix_(va, va, oa, oa)] -= t2_a.transpose(3, 2, 0, 1)
 
         # =========================
         # SAME-SPIN (ββ)
         # =========================
-        dm2_bb[np.ix_(ob, ob, vb, vb)] += t2_b
-        dm2_bb[np.ix_(vb, vb, ob, ob)] += t2_b.transpose(2, 3, 0, 1)
+        gamma2_bb[np.ix_(ob, ob, vb, vb)] += t2_b
+        gamma2_bb[np.ix_(vb, vb, ob, ob)] += t2_b.transpose(2, 3, 0, 1)
 
-        dm2_bb[np.ix_(ob, ob, vb, vb)] -= t2_b.transpose(0, 1, 3, 2)
-        dm2_bb[np.ix_(vb, vb, ob, ob)] -= t2_b.transpose(3, 2, 0, 1)
+        gamma2_bb[np.ix_(ob, ob, vb, vb)] -= t2_b.transpose(0, 1, 3, 2)
+        gamma2_bb[np.ix_(vb, vb, ob, ob)] -= t2_b.transpose(3, 2, 0, 1)
 
         # =========================
         # OPPOSITE-SPIN (αβ)
         # =========================
-        dm2_ab[np.ix_(oa, ob, va, vb)] += t2_ab
-        dm2_ab[np.ix_(va, vb, oa, ob)] += t2_ab.transpose(2, 3, 0, 1)
+        gamma2_ab[np.ix_(oa, ob, va, vb)] += t2_ab
+        gamma2_ab[np.ix_(va, vb, oa, ob)] += t2_ab.transpose(2, 3, 0, 1)
 
         # =========================
         # Add reference (HF) part
         # =========================
-        gamma1_a = self.gamma1_a
-        gamma1_b = self.gamma1_b
-
         # αα
-        dm2_aa += np.einsum("pr,qs->pqrs", gamma1_a, gamma1_a) - np.einsum(
+        gamma2_aa += np.einsum("pr,qs->pqrs", gamma1_a, gamma1_a) - np.einsum(
             "ps,qr->pqrs", gamma1_a, gamma1_a
         )
 
         # ββ
-        dm2_bb += np.einsum("pr,qs->pqrs", gamma1_b, gamma1_b) - np.einsum(
+        gamma2_bb += np.einsum("pr,qs->pqrs", gamma1_b, gamma1_b) - np.einsum(
             "ps,qr->pqrs", gamma1_b, gamma1_b
         )
 
         # αβ
-        dm2_ab += np.einsum("pr,qs->pqrs", gamma1_a, gamma1_b)
+        gamma2_ab += np.einsum("pr,qs->pqrs", gamma1_a, gamma1_b)
 
-        # =========================
-        # Spin-free assembly
-        # =========================
-        self.gamma2_aa = dm2_aa
-        self.gamma2_ab = dm2_ab
-        self.gamma2_bb = dm2_bb
-        gamma2_sf = dm2_aa + dm2_bb + dm2_ab + dm2_ab.transpose(1, 0, 3, 2)
+        return gamma2_aa, gamma2_ab, gamma2_bb
 
-        # =========================
-        # Enforce symmetries
-        # =========================
+    def _make_mp2_sf_2rdm(self, gamma2_aa, gamma2_ab, gamma2_bb):
+        gamma2_sf = gamma2_aa + gamma2_bb + gamma2_ab + gamma2_ab.transpose(1, 0, 3, 2)
+
+        # # =========================
+        # # Enforce symmetries
+        # # =========================
         gamma2_sf = 0.5 * (gamma2_sf + gamma2_sf.transpose(1, 0, 3, 2))
         gamma2_sf = 0.5 * (gamma2_sf + gamma2_sf.transpose(2, 3, 0, 1))
-
         return gamma2_sf
 
-    def make_mp2_sf_2cumulants(self, gamma1, gamma2):
+    def _make_mp2_sf_2cumulants(self, gamma1, gamma2):
         term1 = np.einsum("pr,qs->pqrs", gamma1, gamma1)
         term2 = np.einsum("ps,qr->pqrs", gamma1, gamma1)
-        dm2_0 = term1 - 0.5 * term2
-        return gamma2 - dm2_0
+        gamma2_0 = term1 - 0.5 * term2
+        return gamma2 - gamma2_0
 
-    def mp2_E_given_rdms(self, Ecore, H, V, gamma1_a, gamma1_b, gamma2_a, gamma2_b):
+    def energy_given_rdms(
+        self, Ecore, H, V, gamma1_a, gamma1_b, gamma2_aa, gamma2_bb, gamma2_ab
+    ):
         """
-        Computes mp2 Energy from comtracting rdms
+        Computes the MP2 energy from comtracting rdms
         """
         e1 = np.einsum("pq,qp->", H, gamma1_a + gamma1_b, optimize=True)
 
-        gamma2_aa = gamma2_a
-        gamma2_ab = None
-        gamma2_bb = gamma2_b
-
-        if isinstance(gamma2_a, tuple):
-            if len(gamma2_a) == 3:
-                gamma2_aa, gamma2_ab, gamma2_bb = gamma2_a
-            elif len(gamma2_a) == 2:
-                gamma2_aa, gamma2_ab = gamma2_a
-
-        if isinstance(gamma2_b, tuple):
-            if len(gamma2_b) == 3:
-                gamma2_aa, gamma2_ab, gamma2_bb = gamma2_b
-            elif len(gamma2_b) == 2:
-                gamma2_ab, gamma2_bb = gamma2_b
-
         e2 = 0.5 * np.einsum("pqrs,prqs", V, gamma2_aa + gamma2_bb, optimize=True)
-        if gamma2_ab is not None:
-            e2 += np.einsum("pqrs,prqs", V, gamma2_ab, optimize=True)
+        e2 += np.einsum("pqrs,prqs", V, gamma2_ab, optimize=True)
 
         return Ecore + e1 + e2
+
+    def make_1rdm_sd(self):
+        return self._make_mp2_1rdm_intermediates()
+
+    def make_1rdm_sf(self):
+        gamma1_a, gamma1_b = self._make_mp2_1rdm_intermediates()
+        return self._make_mp2_sf_1rdm(gamma1_a, gamma1_b)
+
+    def make_2rdm_sd(self, gamma1=None):
+        if gamma1 is None:
+            gamma1_a, gamma1_b = self.make_1rdm_sd()
+        return self._make_mp2_2rdm(gamma1_a, gamma1_b)
+
+    def make_2rdm_sf(self, gamma1=None):
+        if gamma1 is None:
+            gamma1_a, gamma1_b = self.make_1rdm_sd()
+        else:
+            gamma1_a, gamma1_b = gamma1
+        gamma2_aa, gamma2_ab, gamma2_bb = self._make_mp2_2rdm(gamma1_a, gamma1_b)
+        return self._make_mp2_sf_2rdm(gamma2_aa, gamma2_ab, gamma2_bb)
+
+    make_1rdm = make_1rdm_sf
+    make_2rdm = make_2rdm_sf
+
+    def make_2cumulant(self, gamma1_sf=None, gamma2_sf=None):
+        if gamma1_sf is None:
+            gamma1_sf = self.make_1rdm_sf()
+        if gamma2_sf is None:
+            gamma2_sf = self.make_2rdm_sf()
+        return self._make_mp2_sf_2cumulants(gamma1_sf, gamma2_sf)
+
+    def make_cumulants(self):
+        gamma1_a, gamma1_b = self._make_mp2_1rdm_intermediates()
+        gamma2_aa, gamma2_ab, gamma2_bb = self._make_mp2_2rdm(gamma1_a, gamma1_b)
+        gamma1_sf = self._make_mp2_sf_1rdm(gamma1_a, gamma1_b)
+        gamma2_sf = self._make_mp2_sf_2rdm(gamma2_aa, gamma2_ab, gamma2_bb)
+        lambda2_sf = self._make_mp2_sf_2cumulants(gamma1_sf, gamma2_sf)
+        return gamma1_sf, gamma2_sf, lambda2_sf
