@@ -191,10 +191,15 @@ class SelectedCIHelper {
                                    double int_sign) const;
 
     /// @brief Select new variational and PT2 determinants using a batch approach
+    /// @param V_map The map to accumulate variational determinants and their contributions
+    /// @param PT_map The map to accumulate PT2 determinants and their contributions
+    /// @param V_coeffs The vector to accumulate the coefficients of the variational determinants
+    /// @param PT_coeffs The vector to accumulate the coefficients of the PT2 determinants
     /// @param var_threshold The threshold for variational selection
     /// @param pt2_threshold The threshold for PT2 selection
     /// @param num_batches The total number of batches
     /// @param batch_id The batch index to process
+    /// @param existing_dets The set of determinants already in the variational space to skip
     void select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map, std::vector<double>& V_coeffs,
                            std::vector<double>& PT_coeffs, double var_threshold,
                            double pt2_threshold, size_t num_batches, size_t batch_id,
