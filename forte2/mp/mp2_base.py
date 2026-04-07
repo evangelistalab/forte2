@@ -252,13 +252,12 @@ class MP2Base(SystemMixin, MOsMixin, ABC):
 
     def make_mp2_sf_1rdm_intermediates(self, B: np.ndarray) -> np.ndarray:
         """
-        Fast unrelaxed spin-summed MP2 1-RDM (PySCF-style) using DF factors B[i,a,Q].
+        Fast unrelaxed spin-summed MP2 1-RDM using DF factors B[i,a,Q].
         No full t2 tensor is formed.
 
         Returns gamma with:
         gamma_oo = 2I - (dm1occ + dm1occ.T)
         gamma_vv =      (dm1vir + dm1vir.T)
-        where dm1occ, dm1vir match PySCF's _gamma1_intermediates (up to symmetry handling).
         """
         eps_o = self.eps[: self.nocc]
         eps_v = self.eps[self.nocc :]
@@ -357,7 +356,6 @@ class MP2Base(SystemMixin, MOsMixin, ABC):
 
     def make_mp2_sf_2cumulants(self, gamma1, gamma2):
         """
-        PySCF conventions:
         dm1[q,p] = <p† q>
         dm2[p,q,r,s] = < p† r† s q >
 
