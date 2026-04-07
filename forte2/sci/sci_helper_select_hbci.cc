@@ -306,8 +306,16 @@ void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
     std::vector<std::vector<double>> local_ept2_pt(num_threads_, std::vector<double>(nroots_, 0.0));
     std::vector<std::vector<std::tuple<size_t, size_t, double>>> thread_log_data(num_threads_);
 
+    DetSet existing_dets(dets_.begin(), dets_.end());
+
     // worker function for each thread that processes batches of determinants
     auto worker = [&](size_t thread_id) {
+        // persistent storage for this thread to avoid repeated allocations
+        // The maps are cleared at the beginning of select_hbci_batch
+        // but underlying memory is reused and enlarged if needed
+        DetRootMap V_map, PT_map;
+        std::vector<double> V_coeffs, PT_coeffs;
+
         while (true) {
             // Get the next batch ID for this thread
             size_t batch_id = next_batch.fetch_add(1);
@@ -316,41 +324,44 @@ void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
 
             local_timer batch_timer;
 
-            auto [V_map, PT_map] =
-                select_hbci_batch(var_threshold, pt2_threshold, num_batches, batch_id);
+            select_hbci_batch(V_map, PT_map, V_coeffs, PT_coeffs, var_threshold, pt2_threshold,
+                              num_batches, batch_id, existing_dets);
 
-            // Filter out existing determinants
-            for (size_t r = 0; r < nroots_; ++r) {
-                for (const auto& det : dets_) {
-                    V_map[r].erase(det);
-                    PT_map[r].erase(det);
-                }
-                for (const auto& [det, _] : V_map[0])
-                    PT_map[r].erase(det);
+            // Filter out determinants in PT_map that are already in the new variational space
+            // (V_map) Both have already been filtered against the existing variational space in
+            // select_hbci_batch
+            for (const auto& [det, _] : V_map) {
+                PT_map.erase(det);
             }
 
-            std::vector<Determinant> new_dets_local;
-            new_dets_local.reserve(V_map[0].size());
-            for (const auto& [det, _] : V_map[0])
-                new_dets_local.push_back(det);
+            // Compute energy contributions for new variational and PT2 determinants.
+            for (const auto& [det, idx] : V_map) {
+                const double energy = slater_rules_.energy(det);
+                for (size_t r{0}; r < nroots_; ++r) {
+                    local_ept2_var[thread_id][r] +=
+                        compute_delta_ept2(root_energies_[r] - energy, V_coeffs[idx + r]);
+                }
+            }
 
-            // Compute contributions
-            for (size_t r = 0; r < nroots_; ++r) {
-                double var = 0.0, pt = 0.0;
-                for (const auto& [det, val] : V_map[r])
-                    var += compute_delta_ept2(root_energies_[r] - slater_rules_.energy(det), val);
-                for (const auto& [det, val] : PT_map[r])
-                    pt += compute_delta_ept2(root_energies_[r] - slater_rules_.energy(det), val);
-                local_ept2_var[thread_id][r] += var;
-                local_ept2_pt[thread_id][r] += pt;
+            for (const auto& [det, idx] : PT_map) {
+                const double energy = slater_rules_.energy(det);
+                for (size_t r{0}; r < nroots_; ++r) {
+                    local_ept2_pt[thread_id][r] +=
+                        compute_delta_ept2(root_energies_[r] - energy, PT_coeffs[idx + r]);
+                }
             }
 
             // Append to thread-local container (no locks)
+            std::vector<Determinant> new_dets_local;
+            new_dets_local.reserve(V_map.size());
+            for (const auto& [det, _] : V_map)
+                new_dets_local.push_back(det);
+
             thread_new_dets[thread_id].insert(thread_new_dets[thread_id].end(),
                                               new_dets_local.begin(), new_dets_local.end());
 
             thread_log_data[thread_id].push_back(
-                {batch_id, PT_map[0].size(), batch_timer.elapsed_seconds()});
+                {batch_id, PT_map.size(), batch_timer.elapsed_seconds()});
         }
     };
 
@@ -415,9 +426,37 @@ void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
     selection_time_ = selection_timer.elapsed_seconds();
 }
 
-std::pair<std::vector<DetMap>, std::vector<DetMap>>
-SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, size_t num_batches,
-                                    size_t batch_id) {
+void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
+                                         std::vector<double>& V_coeffs,
+                                         std::vector<double>& PT_coeffs, double var_threshold,
+                                         double pt2_threshold, size_t num_batches, size_t batch_id,
+                                         const DetSet& existing_dets) {
+    V_map.clear();
+    PT_map.clear();
+    V_coeffs.clear();
+    PT_coeffs.clear();
+
+    auto accumulate = [&](DetRootMap& map, std::vector<double>& coeffs, const Determinant& det,
+                          double prefactor, const double* c) {
+        // try_emplace returns an iterator to the existing element if the determinant is already in
+        // the map
+        size_t loc = coeffs.size();
+        auto [it, inserted] = map.try_emplace(det, loc);
+        if (inserted) {
+            // new determinant, need to append to coeffs vector
+            for (size_t r{0}; r < nroots_; ++r) {
+                coeffs.push_back(prefactor * c[r]);
+            }
+        } else {
+            // idx is the starting index in the coeffs vector for this determinant
+            size_t idx = it->second;
+            // existing determinant, just update the coefficients
+            for (size_t r{0}; r < nroots_; ++r) {
+                coeffs[idx + r] += prefactor * c[r];
+            }
+        }
+    };
+
     std::vector<size_t> aocc(na_);
     std::vector<size_t> bocc(nb_);
     std::vector<size_t> avir(norb_ - na_);
@@ -427,10 +466,6 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
     double e_pt2 = 0.0;
 
     size_t noa, nob, nva, nvb;
-
-    std::vector<DetMap> V_map(nroots_);
-    std::vector<DetMap> PT_map(nroots_);
-
     const auto a_string_size = ab_list_.first_string_size();
 
     // precompute the maximum block size for the temporary storage
@@ -447,6 +482,7 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
     norb_mask.fill_up_to(norb_);
 
     Determinant new_det;
+    auto hash = String::Hash();
     // Loop over all unique alpha strings
     for (size_t i{0}; i < a_string_size; ++i) {
         const String& a_str = ab_list_.sorted_first_string(i);
@@ -479,8 +515,8 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
         // single alpha excitations
         for (const auto& i : aocc_span) {
             for (const auto& a : avir_span) {
-                auto [new_a_str, sign] = create_single_excitation(a_str, i, a);
-                if (String::Hash()(new_a_str) % num_batches != batch_id) {
+                auto [new_a_str, sign] = create_single_excitation_fast(a_str, i, a);
+                if (hash(new_a_str) % num_batches != batch_id) {
                     continue;
                 }
                 new_det.set_a_string(new_a_str);
@@ -492,13 +528,13 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
                     const double integral = slater_rules_.singles_coupling_a(i, a, new_det);
                     const double criterion = std::fabs(integral * abs_c_max[k]);
                     if (criterion > pt2_threshold) {
-                        if (criterion > var_threshold) {
-                            for (size_t r{0}; r < nroots_; ++r) {
-                                V_map[r][new_det] += sign * integral * c_block[k * nroots_ + r];
-                            }
-                        } else {
-                            for (size_t r{0}; r < nroots_; ++r) {
-                                PT_map[r][new_det] += sign * integral * c_block[k * nroots_ + r];
+                        // if the determinant is already in the variational space, skip it
+                        if (!existing_dets.count(new_det)) {
+                            const double* coeffs = c_block.data() + k * nroots_;
+                            if (criterion > var_threshold) {
+                                accumulate(V_map, V_coeffs, new_det, sign * integral, coeffs);
+                            } else {
+                                accumulate(PT_map, PT_coeffs, new_det, sign * integral, coeffs);
                             }
                         }
                     }
@@ -521,9 +557,9 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
                     if ((a >= b) or a_str.get_bit(a) or a_str.get_bit(b))
                         continue;
 
-                    auto [new_a_str, sign] = create_double_excitation(a_str, i, j, a, b);
+                    auto [new_a_str, sign] = create_double_excitation_fast(a_str, i, j, a, b);
 
-                    if (String::Hash()(new_a_str) % num_batches != batch_id) {
+                    if (hash(new_a_str) % num_batches != batch_id) {
                         continue;
                     }
 
@@ -533,15 +569,13 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
                         if (criterion > pt2_threshold) {
                             new_det.set_a_string(new_a_str);
                             new_det.set_b_string(ab_list_.sorted_second_string(b_str_idx));
-
-                            if (criterion > var_threshold) {
-                                for (size_t r{0}; r < nroots_; ++r) {
-                                    V_map[r][new_det] += sign * integral * c_block[k * nroots_ + r];
-                                }
-                            } else {
-                                for (size_t r{0}; r < nroots_; ++r) {
-                                    PT_map[r][new_det] +=
-                                        sign * integral * c_block[k * nroots_ + r];
+                            // if the determinant is already in the variational space, skip it
+                            if (!existing_dets.count(new_det)) {
+                                const double* coeffs = c_block.data() + k * nroots_;
+                                if (criterion > var_threshold) {
+                                    accumulate(V_map, V_coeffs, new_det, sign * integral, coeffs);
+                                } else {
+                                    accumulate(PT_map, PT_coeffs, new_det, sign * integral, coeffs);
                                 }
                             }
                         }
@@ -555,9 +589,9 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
         for (const auto& i : aocc_span) {
             for (const auto& a : avir_span) {
                 // find the new alpha string after excitation and the sign and store it
-                auto [new_a_str, a_sign] = create_single_excitation(a_str, i, a);
+                auto [new_a_str, a_sign] = create_single_excitation_fast(a_str, i, a);
 
-                if (String::Hash()(new_a_str) % num_batches != batch_id) {
+                if (hash(new_a_str) % num_batches != batch_id) {
                     continue;
                 }
 
@@ -580,17 +614,16 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
 
                         const double criterion = std::fabs(coupling * abs_c_max[k]);
                         if (criterion > pt2_threshold) {
-                            auto [new_b_str, b_sign] = create_single_excitation(b_str, j, b);
+                            auto [new_b_str, b_sign] = create_single_excitation_fast(b_str, j, b);
                             new_det.set_b_string(new_b_str);
-                            if (criterion > var_threshold) {
-                                for (size_t r{0}; r < nroots_; ++r) {
-                                    V_map[r][new_det] +=
-                                        a_sign * b_sign * integral * c_block[k * nroots_ + r];
-                                }
-                            } else {
-                                for (size_t r{0}; r < nroots_; ++r) {
-                                    PT_map[r][new_det] +=
-                                        a_sign * b_sign * integral * c_block[k * nroots_ + r];
+                            if (!existing_dets.count(new_det)) {
+                                const double* coeffs = c_block.data() + k * nroots_;
+                                if (criterion > var_threshold) {
+                                    accumulate(V_map, V_coeffs, new_det, a_sign * b_sign * integral,
+                                               coeffs);
+                                } else {
+                                    accumulate(PT_map, PT_coeffs, new_det,
+                                               a_sign * b_sign * integral, coeffs);
                                 }
                             }
                         }
@@ -601,7 +634,7 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
         }
 
         // beta excitations
-        if (String::Hash()(a_str) % num_batches != batch_id)
+        if (hash(a_str) % num_batches != batch_id)
             continue;
 
         new_det.set_a_string(a_str);
@@ -611,7 +644,6 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
             b_str_annihilation_masked.find_set_bits(bocc, nob);
             auto b_str_creation_masked = (~b_str & norb_mask) & ~frozen_creation_mask_;
             b_str_creation_masked.find_set_bits(bvir, nvb);
-            // compute_fast_virtual(bocc, bvir, norb_);
             std::span<size_t> bocc_span(bocc.data(), nob);
             std::span<size_t> bvir_span(bvir.data(), nvb);
 
@@ -623,16 +655,14 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
                     const double integral = slater_rules_.singles_coupling_b(i, a, new_det);
                     const double criterion = std::fabs(integral * abs_c_max[k]);
                     if (criterion > pt2_threshold) {
-                        auto [new_b_str, sign] = create_single_excitation(b_str, i, a);
+                        auto [new_b_str, sign] = create_single_excitation_fast(b_str, i, a);
                         new_det.set_b_string(new_b_str); // push the new beta string
-
-                        if (criterion > var_threshold) {
-                            for (size_t r{0}; r < nroots_; ++r) {
-                                V_map[r][new_det] += sign * integral * c_block[k * nroots_ + r];
-                            }
-                        } else {
-                            for (size_t r{0}; r < nroots_; ++r) {
-                                PT_map[r][new_det] += sign * integral * c_block[k * nroots_ + r];
+                        if (!existing_dets.count(new_det)) {
+                            const double* coeffs = c_block.data() + k * nroots_;
+                            if (criterion > var_threshold) {
+                                accumulate(V_map, V_coeffs, new_det, sign * integral, coeffs);
+                            } else {
+                                accumulate(PT_map, PT_coeffs, new_det, sign * integral, coeffs);
                             }
                         }
                     }
@@ -653,17 +683,15 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
                         if ((a >= b) or b_str.get_bit(a) or b_str.get_bit(b))
                             continue;
 
-                        auto [new_b_str, sign] = create_double_excitation(b_str, i, j, a, b);
+                        auto [new_b_str, sign] = create_double_excitation_fast(b_str, i, j, a, b);
                         new_det.set_a_string(a_str);
                         new_det.set_b_string(new_b_str);
-
-                        if (criterion > var_threshold) {
-                            for (size_t r{0}; r < nroots_; ++r) {
-                                V_map[r][new_det] += sign * integral * c_block[k * nroots_ + r];
-                            }
-                        } else {
-                            for (size_t r{0}; r < nroots_; ++r) {
-                                PT_map[r][new_det] += sign * integral * c_block[k * nroots_ + r];
+                        if (!existing_dets.count(new_det)) {
+                            const double* coeffs = c_block.data() + k * nroots_;
+                            if (criterion > var_threshold) {
+                                accumulate(V_map, V_coeffs, new_det, sign * integral, coeffs);
+                            } else {
+                                accumulate(PT_map, PT_coeffs, new_det, sign * integral, coeffs);
                             }
                         }
                     }
@@ -672,7 +700,6 @@ SelectedCIHelper::select_hbci_batch(double var_threshold, double pt2_threshold, 
             k++;
         }
     }
-    return {V_map, PT_map};
 }
 
 } // namespace forte2

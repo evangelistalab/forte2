@@ -16,6 +16,8 @@ namespace forte2 {
 
 /// @brief A hash map from determinants to double values
 using DetMap = ankerl::unordered_dense::map<Determinant, double, Determinant::Hash>;
+using DetRootMap = ankerl::unordered_dense::map<Determinant, size_t, Determinant::Hash>;
+using DetSet = ankerl::unordered_dense::set<Determinant, Determinant::Hash>;
 
 /// @brief Screening criteria for selected CI
 enum class ScreeningCriterion { HBCI, eHBCI };
@@ -193,10 +195,10 @@ class SelectedCIHelper {
     /// @param pt2_threshold The threshold for PT2 selection
     /// @param num_batches The total number of batches
     /// @param batch_id The batch index to process
-    std::pair<std::vector<DetMap>, std::vector<DetMap>> select_hbci_batch(double var_threshold,
-                                                                          double pt2_threshold,
-                                                                          size_t num_batches,
-                                                                          size_t batch_id);
+    void select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map, std::vector<double>& V_coeffs,
+                           std::vector<double>& PT_coeffs, double var_threshold,
+                           double pt2_threshold, size_t num_batches, size_t batch_id,
+                           const DetSet& existing_dets);
 
     /// @brief Compute the expectation value of S^2 for a given batch of determinants
     /// @param num_batches The total number of batches

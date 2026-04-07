@@ -22,6 +22,23 @@ std::pair<String, double> create_double_excitation(const String& str, size_t i, 
     return {new_str, sign};
 }
 
+std::pair<String, double> create_single_excitation_fast(const String& str, size_t i, size_t a) {
+    String new_str = str;
+    double sign = new_str.destroy_fast(i);
+    sign *= new_str.create_fast(a);
+    return {new_str, sign};
+}
+
+std::pair<String, double> create_double_excitation_fast(const String& str, size_t i, size_t j,
+                                                        size_t a, size_t b) {
+    String new_str = str;
+    double sign = new_str.destroy_fast(i);
+    sign *= new_str.destroy_fast(j);
+    sign *= new_str.create_fast(b);
+    sign *= new_str.create_fast(a);
+    return {new_str, sign};
+}
+
 std::pair<Determinant, double> create_single_a_excitation(const Determinant& det, size_t i,
                                                           size_t a) {
     Determinant new_det = det;

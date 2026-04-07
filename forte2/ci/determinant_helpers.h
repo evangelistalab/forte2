@@ -27,6 +27,26 @@ std::pair<String, double> create_single_excitation(const String& str, size_t i, 
 std::pair<String, double> create_double_excitation(const String& str, size_t i, size_t j, size_t a,
                                                    size_t b);
 
+/// @brief Create a single excitation from orbital i to orbital a using the fast creation and
+///        destruction methods that assume the excitation is valid (i is occupied and a is virtual)
+/// @param str The original string
+/// @param i The index of the occupied orbital
+/// @param a The index of the virtual orbital
+/// @return The new string with the single excitation
+std::pair<String, double> create_single_excitation_fast(const String& str, size_t i, size_t a);
+
+/// @brief Create a double excitation from orbitals i,j to orbitals a,b using the fast creation and
+///        destruction methods that assume the excitation is valid (i,j are occupied and a,b are
+///        virtual)
+/// @param str The original string
+/// @param i The index of the first occupied orbital
+/// @param j The index of the second occupied orbital
+/// @param a The index of the first virtual orbital
+/// @param b The index of the second virtual orbital
+/// @return The new string with the double excitation
+std::pair<String, double> create_double_excitation_fast(const String& str, size_t i, size_t j,
+                                                        size_t a, size_t b);
+
 /// @brief Create a single excitation from alpha orbital i to alpha orbital a
 /// @param det The original determinant
 /// @param i The index of the occupied alpha orbital

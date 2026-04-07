@@ -52,7 +52,7 @@ double SlaterRules::energy(const Determinant& det) const {
         tempI = Ia;
         for (int AA = A + 1; AA < naocc; ++AA) {
             int q = tempI.find_and_clear_first_one();
-            energy += JK(p, q); // <pq||pq> - <pq|qp>
+            energy += JK(p, q); // <pq|pq> - <pq|qp>
         }
 
         tempI = Ib;
@@ -114,9 +114,9 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
                 matrix_element += h(p, p);
             for (size_t q = 0; q < norb_; ++q) {
                 if (lhs.na(p) and lhs.na(q))
-                    matrix_element += 0.5 * JK(p, q); // <pq||pq> - <pq|qp>
+                    matrix_element += 0.5 * JK(p, q); // <pq|pq> - <pq|qp>
                 if (lhs.nb(p) and lhs.nb(q))
-                    matrix_element += 0.5 * JK(p, q); // <pq||pq> - <pq|qp>
+                    matrix_element += 0.5 * JK(p, q); // <pq|pq> - <pq|qp>
                 if (lhs.na(p) and lhs.nb(q))
                     matrix_element += J(p, q); // <pq|pq>
             }

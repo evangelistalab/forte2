@@ -339,13 +339,14 @@ def test_sci_water_core_excited():
             # do not allow the core orbital occupation to change from the guess determinants
             frozen_annihilation=[0],
             frozen_creation=[0],
-            num_threads=4,
+            num_threads=8,
             num_batches_per_thread=16,
         ),
         davidson_liu_params=DavidsonLiuParams(
             e_tol=1e-10,
             r_tol=1e-5,
         ),
+        nroots=3,
     )(rhf)
     ci.run()
 
@@ -406,12 +407,12 @@ def test_sci_water_valence_excitation():
         sci_params=SelectedCIParams(
             selection_algorithm="hbci",
             var_threshold=3e-4,
-            pt2_threshold=1e-8,
+            pt2_threshold=1e-10,
             do_spin_penalty=True,
             screening_criterion="hbci",
             guess_occ_window=3,
             guess_vir_window=1,
-            num_threads=4,
+            num_threads=8,
             num_batches_per_thread=16,
         ),
         die_if_not_converged=False,

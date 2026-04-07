@@ -657,19 +657,29 @@ template <size_t N> class BitArray {
         }
     }
 
+
+    double create_fast(int n) {
+        set_bit(n, true);
+        return slater_sign(n);
+    }
+
+    double destroy_fast(int n) {
+        set_bit(n, false);
+        return slater_sign(n);
+    }
+
     double create(int n) {
         if (get_bit(n))
             return 0.0;
-        set_bit(n, true);
-        return slater_sign(n);
+        return create_fast(n);
     }
 
     double destroy(int n) {
         if (not get_bit(n))
             return 0.0;
-        set_bit(n, false);
-        return slater_sign(n);
+        return destroy_fast(n);
     }
+
 
     /// @brief Find the irreducible representation of a product of spin orbitals
     /// @param temp the input BitArray
