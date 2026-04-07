@@ -229,3 +229,24 @@ class UHF(SCFBase):
         basis_info.print_ao_composition(
             self.C[1], list(range(self.na, min(self.na + 5, self.nmo)))
         )
+
+
+def rohf_to_uhf(rohf):
+    """
+    Convert a ROHF object to a fake UHF object by copying the orbitals and orbital energies.
+
+    Parameters
+    ----------
+    rohf : ROHF
+        The ROHF object to convert.
+
+    Returns
+    -------
+    UHF
+        The fake UHF object with the same orbitals and orbital energies as the ROHF object.
+    """
+    uhf = UHF(charge=rohf.charge, ms=rohf.ms)(rohf.system)
+    uhf.C = [rohf.C[0].copy(), rohf.C[0].copy()]
+    uhf.D = [rohf.D[0].copy(), rohf.D[0].copy()]
+    uhf.eps = [rohf.eps[0].copy(), rohf.eps[0].copy()]
+    return uhf
