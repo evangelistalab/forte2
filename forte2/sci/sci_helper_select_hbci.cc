@@ -297,8 +297,6 @@ void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
     const size_t num_batches = num_batches_per_thread_ * num_threads_; // total number of batches
 
     std::atomic<size_t> next_batch(0);
-    std::mutex merge_mutex;
-    std::mutex log_mutex;
 
     std::vector<std::vector<Determinant>> thread_new_dets(num_threads_);
     std::vector<std::vector<double>> local_ept2_var(num_threads_,
