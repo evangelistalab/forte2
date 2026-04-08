@@ -4,7 +4,6 @@
 #include "helpers/np_vector_functions.h"
 #include "helpers/np_matrix_functions.h"
 
-#include <atomic>
 #include <future>
 
 #include "sci_helper.h"
@@ -12,11 +11,6 @@
 namespace forte2 {
 
 namespace {
-
-inline void atomic_add(double& x, double delta) {
-    std::atomic_ref<double> ref(x);
-    ref.fetch_add(delta, std::memory_order_relaxed);
-}
 
 template <typename WorkFn>
 void run_parallel_indices(size_t count, size_t num_threads, WorkFn&& work) {
@@ -113,35 +107,6 @@ void SelectedCIHelper::find_matching_dets(std::span<double> basis, std::span<dou
     }
 }
 
-void SelectedCIHelper::find_matching_dets_atomic(std::span<double> basis, std::span<double> sigma,
-                                                 const SelectedCIStrings& list, size_t i, size_t j,
-                                                 double int_sign) const {
-    // Find the range of determinants with the current alpha string
-    const auto& [istart, iend] = list.range(i);
-    const auto& [jstart, jend] = list.range(j);
-    const auto& det_permutation = list.det_permutation();
-
-    // Here we choose to loop over the smaller range and look up the deteminants in the larger range
-    // by using the hash map
-    if (iend - istart >= jend - jstart) {
-        const auto& i_map = list.second_string_to_det_index()[i];
-        for (size_t jj{jstart}; jj < jend; ++jj) {
-            const auto idx_j = list.sorted_dets_second_string(jj);
-            if (const auto it = i_map.find(idx_j); it != i_map.end()) {
-                atomic_add(sigma[it->second], int_sign * basis[det_permutation[jj]]);
-            }
-        }
-    } else {
-        const auto& j_map = list.second_string_to_det_index()[j];
-        for (size_t ii{istart}; ii < iend; ++ii) {
-            const auto idx_i = list.sorted_dets_second_string(ii);
-            if (const auto it = j_map.find(idx_i); it != j_map.end()) {
-                atomic_add(sigma[det_permutation[ii]], int_sign * basis[it->second]);
-            }
-        }
-    }
-}
-
 void SelectedCIHelper::H1a(std::span<double> basis, std::span<double> sigma) const {
     const auto first_string_size = ab_list_.first_string_size();
 
@@ -176,7 +141,7 @@ void SelectedCIHelper::H1a(std::span<double> basis, std::span<double> sigma) con
                 if (std::fabs(h_pq) < integral_threshold)
                     continue;
                 const double sign = sign_p * sign_q;
-                find_matching_dets_atomic(basis, sigma, ab_list_, i, j, h_pq * sign);
+                find_matching_dets(basis, sigma, ab_list_, i, j, h_pq * sign);
             }
         }
     });
@@ -216,7 +181,7 @@ void SelectedCIHelper::H1b(std::span<double> basis, std::span<double> sigma) con
                 if (std::fabs(h_pq) < integral_threshold)
                     continue;
                 const double sign = sign_p * sign_q;
-                find_matching_dets_atomic(basis, sigma, ba_list_, i, j, h_pq * sign);
+                find_matching_dets(basis, sigma, ba_list_, i, j, h_pq * sign);
             }
         }
     });
@@ -256,7 +221,7 @@ void SelectedCIHelper::H2a(std::span<double> basis, std::span<double> sigma) con
                 if (std::fabs(v_pqrs) < integral_threshold)
                     continue;
                 const double sign = sign_pq * sign_rs;
-                find_matching_dets_atomic(basis, sigma, ab_list_, i, j, v_pqrs * sign);
+                find_matching_dets(basis, sigma, ab_list_, i, j, v_pqrs * sign);
             }
         }
     });
@@ -296,7 +261,7 @@ void SelectedCIHelper::H2b(std::span<double> basis, std::span<double> sigma) con
                 if (std::fabs(v_pqrs) < integral_threshold)
                     continue;
                 const double sign = sign_pq * sign_rs;
-                find_matching_dets_atomic(basis, sigma, ba_list_, i, j, v_pqrs * sign);
+                find_matching_dets(basis, sigma, ba_list_, i, j, v_pqrs * sign);
             }
         }
     });
@@ -369,8 +334,7 @@ void SelectedCIHelper::H2ab(std::span<double> basis, std::span<double> sigma) co
                             const double sign = sign_p * sign_q * sign_r * sign_s;
                             // Check if the determinant with the new beta string exists
                             if (const auto it = i_map.find(k); it != i_map.end()) {
-                                atomic_add(sigma[it->second],
-                                           v_pqrs * sign * basis[det_permutation[jj]]);
+                                sigma[it->second] += v_pqrs * sign * basis[det_permutation[jj]];
                             }
                         }
                     }

@@ -184,12 +184,6 @@ class SelectedCIHelper {
                             const SelectedCIStrings& list, size_t i, size_t j,
                             double int_sign) const;
 
-    /// @brief Find matching determinants for the given excitation and accumulate their
-    /// contributions to sigma using atomic updates
-    void find_matching_dets_atomic(std::span<double> basis, std::span<double> sigma,
-                                   const SelectedCIStrings& list, size_t i, size_t j,
-                                   double int_sign) const;
-
     /// @brief Select new variational and PT2 determinants using a batch approach
     /// @param V_map The map to accumulate variational determinants and their contributions
     /// @param PT_map The map to accumulate PT2 determinants and their contributions

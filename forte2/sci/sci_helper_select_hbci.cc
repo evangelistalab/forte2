@@ -315,6 +315,7 @@ void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
         // but underlying memory is reused and enlarged if needed
         DetRootMap V_map, PT_map;
         std::vector<double> V_coeffs, PT_coeffs;
+        std::vector<Determinant> new_dets_local;
 
         while (true) {
             // Get the next batch ID for this thread
@@ -352,7 +353,7 @@ void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
             }
 
             // Append to thread-local container (no locks)
-            std::vector<Determinant> new_dets_local;
+            new_dets_local.clear();
             new_dets_local.reserve(V_map.size());
             for (const auto& [det, _] : V_map)
                 new_dets_local.push_back(det);
