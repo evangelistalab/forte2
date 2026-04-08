@@ -11,25 +11,20 @@ from forte2.mp import RMP2, ROMP2, UMP2
 
 
 def assert_uhf_rdm_invariants(mp2, na, nb):
-    assert mp2.gamma1_a is not None
-    assert mp2.gamma1_b is not None
-    assert mp2.gamma1_sf is not None
-    assert mp2.gamma2_sf is not None
+    gamma1_a, gamma1_b = mp2.make_1rdm_sd()
+    gamma1_sf = mp2.make_1rdm_sf()
+    gamma2_sf = mp2.make_2rdm_sf((gamma1_a, gamma1_b))
 
-    assert np.trace(mp2.gamma1_a) == approx(na)
-    assert np.trace(mp2.gamma1_b) == approx(nb)
-    assert np.trace(mp2.gamma1_sf) == approx(na + nb)
+    assert np.trace(gamma1_a) == approx(na)
+    assert np.trace(gamma1_b) == approx(nb)
+    assert np.trace(gamma1_sf) == approx(na + nb)
 
-    assert np.max(np.abs(mp2.gamma1_a - mp2.gamma1_a.T)) == approx(0.0)
-    assert np.max(np.abs(mp2.gamma1_b - mp2.gamma1_b.T)) == approx(0.0)
-    assert np.max(np.abs(mp2.gamma1_sf - mp2.gamma1_sf.T)) == approx(0.0)
+    assert np.max(np.abs(gamma1_a - gamma1_a.T)) == approx(0.0)
+    assert np.max(np.abs(gamma1_b - gamma1_b.T)) == approx(0.0)
+    assert np.max(np.abs(gamma1_sf - gamma1_sf.T)) == approx(0.0)
 
-    assert np.max(
-        np.abs(mp2.gamma2_sf - mp2.gamma2_sf.transpose(1, 0, 3, 2))
-    ) == approx(0.0)
-    assert np.max(
-        np.abs(mp2.gamma2_sf - mp2.gamma2_sf.transpose(2, 3, 0, 1))
-    ) == approx(0.0)
+    assert np.max(np.abs(gamma2_sf - gamma2_sf.transpose(1, 0, 3, 2))) == approx(0.0)
+    assert np.max(np.abs(gamma2_sf - gamma2_sf.transpose(2, 3, 0, 1))) == approx(0.0)
 
 
 def assert_t2_not_stored(mp2):
@@ -214,7 +209,6 @@ def test_triplet_h2o_uhf_mp2():
     assert mp2.E_total == approx(emp2)
 
 
-@pytest.mark.skip(reason="UMP2 under construction")
 def test_triplet_h2o_uhf_mp2_rdms():
     euhf = -75.810772399321
     emp2 = -76.0662395867740
@@ -228,9 +222,6 @@ def test_triplet_h2o_uhf_mp2_rdms():
     scf = UHF(charge=0, ms=1)(system)
     mp2 = UMP2(store_t2=True)(scf)
     mp2.run()
-
-    g1 = mp2.make_1rdm()
-    g2 = mp2.make_2rdm(g1)
 
     assert scf.E == approx(euhf)
     assert mp2.E_total == approx(emp2)
