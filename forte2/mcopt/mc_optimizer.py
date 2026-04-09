@@ -8,6 +8,7 @@ from forte2.base_classes.active_space_solver import (
     ActiveSpaceSolver,
     RelActiveSpaceSolver,
 )
+from forte2.base_classes.params import DavidsonLiuParams, CIParams
 from forte2.orbitals import Semicanonicalizer
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers import logger, LBFGS
@@ -62,18 +63,10 @@ class MCOptimizer(ActiveSpaceSolver):
         Maximum number of microiterations for L-BFGS.
     max_rotation : float, optional, default=0.2
         Maximum orbital rotation size for L-BFGS.
-    ci_* : various, optional
-        Various parameters for the CI solver. See `CISolver` for details.
-        Available parameters:
-        - ci_guess_per_root
-        - ci_ndets_per_guess
-        - ci_collapse_per_root
-        - ci_basis_per_root
-        - ci_maxiter
-        - ci_econv
-        - ci_rconv
-        - ci_energy_shift
-        All parameters have the same default values.
+    ci_params : CIParams, optional
+        Parameters for the CI solver.
+    davidson_liu_params : DavidsonLiuParams, optional
+        Parameters for the Davidson-Liu solver used in the CI optimization.
     do_transition_dipole : bool, optional, default=False
         Whether to compute transition dipole moments.
 
@@ -99,14 +92,8 @@ class MCOptimizer(ActiveSpaceSolver):
     max_rotation: float = 0.2
 
     ### CI solver parameters
-    ci_maxiter: int = 100
-    ci_econv: float = 1e-12
-    ci_rconv: float = 1e-6
-    ci_guess_per_root: int = 2
-    ci_ndets_per_guess: int = 10
-    ci_collapse_per_root: int = 2
-    ci_basis_per_root: int = 4
-    ci_energy_shift: float = None
+    ci_params: CIParams = field(default_factory=CIParams)
+    davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
 
     ### Post-iteration
     do_transition_dipole: bool = False
@@ -199,15 +186,8 @@ class MCOptimizer(ActiveSpaceSolver):
             weights=self.sa_info.weights,
             log_level=self.ci_solver_verbosity,
             die_if_not_converged=False,
-            econv=self.ci_econv,
-            rconv=self.ci_rconv,
-            maxiter=self.ci_maxiter,
-            guess_per_root=self.ci_guess_per_root,
-            ndets_per_guess=self.ci_ndets_per_guess,
-            collapse_per_root=self.ci_collapse_per_root,
-            basis_per_root=self.ci_basis_per_root,
-            energy_shift=self.ci_energy_shift,
-            ci_algorithm=self.ci_algorithm,
+            ci_params=self.ci_params,
+            davidson_liu_params=self.davidson_liu_params,
         )(self.parent_method)
         # iteration 0: one step of CI optimization to bootstrap the orbital optimization
         self.iter = 0

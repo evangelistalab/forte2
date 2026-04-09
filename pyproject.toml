@@ -33,6 +33,10 @@ wheel.py-api = "cp312"
 
 # The build type to use when building the project. Valid values are "Debug", "Release", "MinSizeRel", and "RelWithDebInfo".
 cmake.build-type = "Release"
+# Extra CMake arguments to pass to the build system
+#cmake.args = [
+#    "-DCMAKE_CXX_FLAGS='-fsanitize=address -fno-omit-frame-pointer'"
+#]
 
 # Default CMake options (can be overridden via --config-settings or CMAKE_ARGS)
 [tool.scikit-build.cmake.define]

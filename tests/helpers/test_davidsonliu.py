@@ -2,6 +2,7 @@ import numpy as np
 
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
 from forte2.helpers.comparisons import approx
+from forte2.base_classes.params import DavidsonLiuParams
 
 
 def test_davidson_vs_numpy():
@@ -18,7 +19,9 @@ def test_davidson_vs_numpy():
 
     # 3. Instantiate and configure solver
     solver = DavidsonLiuSolver(
-        size=size, nroot=nroot, collapse_per_root=3, basis_per_root=6
+        size=size,
+        nroot=nroot,
+        davidson_liu_params=DavidsonLiuParams(collapse_per_root=3, basis_per_root=6),
     )
     solver.add_h_diag(np.diag(H))
     solver.add_sigma_builder(sigma_builder)
@@ -59,8 +62,7 @@ def test_davidson_vs_numpy_complex():
     solver = DavidsonLiuSolver(
         size=size,
         nroot=nroot,
-        collapse_per_root=3,
-        basis_per_root=6,
+        davidson_liu_params=DavidsonLiuParams(collapse_per_root=3, basis_per_root=6),
         dtype=np.complex128,
     )
     solver.add_h_diag(np.diag(H))
@@ -101,7 +103,9 @@ def test_dl_1():
 
     # 3. Instantiate the solver and add diagonal elements
     solver = DavidsonLiuSolver(
-        size=size, nroot=nroot, collapse_per_root=1, basis_per_root=5
+        size=size,
+        nroot=nroot,
+        davidson_liu_params=DavidsonLiuParams(collapse_per_root=1, basis_per_root=5),
     )
     solver.add_h_diag(np.diag(matrix))
 
@@ -133,7 +137,9 @@ def test_dl_2():
 
     # Instantiate and configure the solver
     solver = DavidsonLiuSolver(
-        size=size, nroot=nroot, collapse_per_root=1, basis_per_root=5
+        size=size,
+        nroot=nroot,
+        davidson_liu_params=DavidsonLiuParams(collapse_per_root=1, basis_per_root=5),
     )
     solver.add_h_diag(np.diag(matrix))
 
@@ -171,8 +177,7 @@ def solve_dl(size, nroot):
     solver = DavidsonLiuSolver(
         size=size,
         nroot=nroot,
-        collapse_per_root=1,
-        basis_per_root=5,
+        davidson_liu_params=DavidsonLiuParams(collapse_per_root=1, basis_per_root=5),
     )
     # Add the diagonal of the matrix
     solver.add_h_diag(np.diag(matrix))
@@ -222,7 +227,9 @@ def test_dl_no_guess():
 
     # Instantiate the solver without an explicit guess.
     solver = DavidsonLiuSolver(
-        size=size, nroot=nroot, collapse_per_root=1, basis_per_root=5
+        size=size,
+        nroot=nroot,
+        davidson_liu_params=DavidsonLiuParams(collapse_per_root=1, basis_per_root=5),
     )
     solver.add_h_diag(np.diag(matrix))
     solver.add_sigma_builder(sigma_builder)
@@ -246,7 +253,9 @@ def test_project_out():
         sigma_block[:] = matrix @ basis_block
 
     solver = DavidsonLiuSolver(
-        size=size, nroot=nroot, collapse_per_root=1, basis_per_root=5
+        size=size,
+        nroot=nroot,
+        davidson_liu_params=DavidsonLiuParams(collapse_per_root=1, basis_per_root=5),
     )
     solver.add_h_diag(np.diag(matrix))
     solver.add_sigma_builder(sigma_builder)
@@ -269,7 +278,9 @@ def test_dl_restart_1():
         sigma_block[:] = matrix @ basis_block
 
     solver = DavidsonLiuSolver(
-        size=size, nroot=nroot, collapse_per_root=1, basis_per_root=5
+        size=size,
+        nroot=nroot,
+        davidson_liu_params=DavidsonLiuParams(collapse_per_root=1, basis_per_root=5),
     )
     solver.add_h_diag(np.diag(matrix))
     solver.add_sigma_builder(sigma_builder)
@@ -294,7 +305,9 @@ def test_dl_restart_2():
         sigma_block[:] = matrix @ basis_block
 
     solver = DavidsonLiuSolver(
-        size=size, nroot=nroot, collapse_per_root=1, basis_per_root=5
+        size=size,
+        nroot=nroot,
+        davidson_liu_params=DavidsonLiuParams(collapse_per_root=1, basis_per_root=5),
     )
     solver.add_h_diag(np.diag(matrix))
     solver.add_sigma_builder(sigma_builder)
@@ -332,9 +345,9 @@ def test_dl_restart_from_unconverged():
     solver = DavidsonLiuSolver(
         size=size,
         nroot=nroot,
-        collapse_per_root=2,
-        basis_per_root=5,
-        maxiter=10,
+        davidson_liu_params=DavidsonLiuParams(
+            collapse_per_root=2, basis_per_root=5, maxiter=10
+        ),
     )
     solver.add_h_diag(np.diag(matrix))
     solver.add_sigma_builder(sigma_builder)
@@ -373,7 +386,10 @@ def test_dl_shift():
     # 4. Instantiate and configure solver
 
     solver = DavidsonLiuSolver(
-        size=size, nroot=nroot, collapse_per_root=5, basis_per_root=10, eta=eta
+        size=size,
+        nroot=nroot,
+        davidson_liu_params=DavidsonLiuParams(collapse_per_root=5, basis_per_root=10),
+        energy_shift=eta,
     )
     solver.add_h_diag(np.diag(H))
     solver.add_sigma_builder(sigma_builder)

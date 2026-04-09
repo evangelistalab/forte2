@@ -69,6 +69,9 @@ class Basis:
     def center_first_and_last(self) -> list[tuple[int, int]]: ...
 
     @property
+    def center_first_and_last_shell(self) -> list[tuple[int, int]]: ...
+
+    @property
     def size(self) -> int: ...
 
     @property
@@ -189,3 +192,60 @@ def orbitals_at_points(basis: Basis, points: Sequence[Sequence[float]], C: Annot
     """
 
 def orbitals_on_grid(basis: Basis, C: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], min: Sequence[float], npoints: Sequence[int], axis: Sequence[Sequence[float]]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]: ...
+
+def cint_int1e_ovlp_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='F')]:
+    """
+    Compute the overlap integral matrix using libcint in spherical harmonics.
+    """
+
+def cint_int1e_ovlp_spinor(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None), order='F')]:
+    """Compute the overlap integral matrix using libcint in spinor basis."""
+
+def cint_int1e_kin_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='F')]:
+    """
+    Compute the kinetic energy integral matrix using libcint in spherical harmonics.
+    """
+
+def cint_int1e_kin_spinor(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None), order='F')]:
+    """
+    Compute the kinetic energy integral matrix using libcint in spinor basis.
+    """
+
+def cint_int1e_nuc_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='F')]:
+    """
+    Compute the nuclear attraction integral matrix using libcint in spherical harmonics.
+    """
+
+def cint_int1e_nuc_spinor(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None), order='F')]:
+    """
+    Compute the nuclear attraction integral matrix using libcint in spinor basis.
+    """
+
+def cint_int1e_spnucsp_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='F')]:
+    """
+    Compute the small component of the nuclear attraction integral matrix using libcint in spherical harmonics.
+    """
+
+def cint_int1e_spnucsp_spinor(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None), order='F')]:
+    """
+    Compute the small component of the nuclear attraction integral matrix using libcint in spinor basis.
+    """
+
+def cint_int1e_r_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='F')]:
+    """
+    Compute the dipole integral matrix using libcint in spherical harmonics.
+    """
+
+def cint_int2c2e_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='F')]:
+    """
+    Compute the two-center two-electron integral matrix using libcint in spherical harmonics.
+    """
+
+def cint_int3c2e_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='F')]:
+    """
+    Compute the three-center two-electron integral matrix using libcint in spherical harmonics.
+    """
+
+HAS_LIBCINT: bool = True
+
+libint2_max_am: int = 6

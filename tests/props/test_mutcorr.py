@@ -1,8 +1,7 @@
-import numpy as np
-
 from forte2 import System, RHF, CI, State
 from forte2.props import MutualCorrelationAnalysis
 from forte2.helpers.comparisons import approx
+from forte2.base_classes import DavidsonLiuParams
 
 
 def test_mutual_correlation_h2_singlet():
@@ -16,7 +15,11 @@ def test_mutual_correlation_h2_singlet():
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci = CI(State(system=system, multiplicity=1, ms=0.0), active_orbitals=[0, 1])(rhf)
+    ci = CI(
+        State(system=system, multiplicity=1, ms=0.0),
+        active_orbitals=[0, 1],
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
+    )(rhf)
     ci.run()
 
     mca = MutualCorrelationAnalysis(ci, root=0, sub_solver_index=0)
@@ -40,7 +43,11 @@ def test_mutual_correlation_h2_triplet_lowspin():
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci = CI(State(system=system, multiplicity=3, ms=0.0), active_orbitals=[0, 1])(rhf)
+    ci = CI(
+        State(system=system, multiplicity=3, ms=0.0),
+        active_orbitals=[0, 1],
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
+    )(rhf)
     ci.run()
 
     mca = MutualCorrelationAnalysis(ci, root=0, sub_solver_index=0)
@@ -64,7 +71,11 @@ def test_mutual_correlation_h2_triplet_highspin():
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    ci = CI(State(system=system, multiplicity=3, ms=1.0), active_orbitals=[0, 1])(rhf)
+    ci = CI(
+        State(system=system, multiplicity=3, ms=1.0),
+        active_orbitals=[0, 1],
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
+    )(rhf)
     ci.run()
 
     mca = MutualCorrelationAnalysis(ci, root=0, sub_solver_index=0)
@@ -89,7 +100,9 @@ def test_mutual_correlation_h2_orbopt():
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CI(
-        State(system=system, multiplicity=1, ms=0.0), active_orbitals=list(range(10))
+        State(system=system, multiplicity=1, ms=0.0),
+        active_orbitals=list(range(10)),
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
     )(rhf)
     ci.run()
 
@@ -119,7 +132,9 @@ def test_mutual_correlation_h6():
 
     rhf = RHF(charge=0, econv=1e-12)(system)
     ci = CI(
-        State(system=system, multiplicity=1, ms=0.0), active_orbitals=list(range(6))
+        State(system=system, multiplicity=1, ms=0.0),
+        active_orbitals=list(range(6)),
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
     )(rhf)
     ci.run()
 

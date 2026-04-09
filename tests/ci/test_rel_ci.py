@@ -137,7 +137,6 @@ def test_rel_ci_hf_transition_dipole_ghf():
         core_orbitals=2,
         active_orbitals=12,
         do_transition_dipole=True,
-        ci_algorithm="hz",
         do_test_rdms=True,
     )(scf)
     ci.run()
