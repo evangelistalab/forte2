@@ -74,16 +74,19 @@ def test_mcoptimizer_rdm_accessors_multi_solver():
 
     singlet_solver, triplet_solver = mc.ci_solver.sub_solvers
 
-    with pytest.raises(ValueError, match="solver_index must be specified"):
-        mc.make_sd_1rdm(0)
+    with pytest.raises(ValueError, match="Cross-state RDMs are not supported"):
+        mc.make_sd_1rdm(1, 2)
+
+    with pytest.raises(ValueError, match="absolute_root must be between 0"):
+        mc.make_sd_2rdm(1, 7)
 
     np.testing.assert_allclose(
-        mc.make_sf_1rdm(1, solver_index=0),
+        mc.make_sf_1rdm(1),
         singlet_solver.make_sf_1rdm(1),
         rtol=0.0,
         atol=1e-12,
     )
     assert_tuple_allclose(
-        mc.make_sd_2rdm(0, solver_index=1),
+        mc.make_sd_2rdm(2),
         triplet_solver.make_sd_2rdm(0),
     )

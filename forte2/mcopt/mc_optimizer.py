@@ -499,73 +499,99 @@ class MCOptimizer(ActiveSpaceSolver):
     def make_average_cumulants(self):
         return self.ci_solver.make_average_cumulants()
 
-    def _solver_index_check(self, solver_index):
-        if solver_index is None:
-            if len(self.ci_solver.sub_solvers) == 1:
-                solver_index = 0
-            else:
-                raise ValueError(
-                    "solver_index must be specified for when MCOptimizer uses multiple CI solvers"
-                )
-        if solver_index < 0 or solver_index >= len(self.ci_solver.sub_solvers):
+    def _get_state_root(self, absolute_root) -> tuple[int, int]:
+        if absolute_root < 0 or absolute_root >= self.sa_info.nroots_sum:
             raise ValueError(
-                f"solver_index must be between 0 and {len(self.ci_solver.sub_solvers)-1}"
+                f"absolute_root must be between 0 and {self.sa_info.nroots_sum - 1}, but got {absolute_root}."
             )
-        return solver_index
+        return self.sa_info.absolute_root_map[absolute_root]
+
+    def _validate_rdm_inputs(self, left_root, right_root):
+        left_state, left_root_in_state = self._get_state_root(left_root)
+        if right_root is not None:
+            right_state, right_root_in_state = self._get_state_root(right_root)
+        else:
+            right_state = left_state
+            right_root_in_state = left_root_in_state
+
+        if left_state != right_state:
+            raise ValueError(
+                f"Cross-state RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
+            )
+        return left_state, right_state, left_root_in_state, right_root_in_state
 
     def make_sd_1rdm(
         self,
         left_root: int,
         right_root: int | None = None,
-        solver_index: int | None = None,
     ) -> tuple[NDArray, NDArray]:
-        solver_index = self._solver_index_check(solver_index)
-        return self.ci_solver.sub_solvers[solver_index].make_sd_1rdm(
-            left_root, right_root
+        """
+        Make the spin-dependent 1-RDMs
+        """
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+        return self.ci_solver.sub_solvers[left_state].make_sd_1rdm(
+            left_root_in_state, right_root_in_state
         )
 
     def make_sd_2rdm(
         self,
         left_root: int,
         right_root: int | None = None,
-        solver_index: int | None = None,
     ) -> tuple[NDArray, NDArray, NDArray]:
-        solver_index = self._solver_index_check(solver_index)
-        return self.ci_solver.sub_solvers[solver_index].make_sd_2rdm(
-            left_root, right_root
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+
+        if left_state != right_state:
+            raise ValueError(
+                f"Cross-state RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
+            )
+        return self.ci_solver.sub_solvers[left_state].make_sd_2rdm(
+            left_root_in_state, right_root_in_state
         )
 
     def make_sd_3rdm(
         self,
         left_root: int,
         right_root: int | None = None,
-        solver_index: int | None = None,
     ) -> tuple[NDArray, NDArray, NDArray, NDArray]:
-        solver_index = self._solver_index_check(solver_index)
-        return self.ci_solver.sub_solvers[solver_index].make_sd_3rdm(
-            left_root, right_root
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+
+        if left_state != right_state:
+            raise ValueError(
+                f"Cross-state RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
+            )
+        return self.ci_solver.sub_solvers[left_state].make_sd_3rdm(
+            left_root_in_state, right_root_in_state
         )
 
     def make_sf_1rdm(
         self,
         left_root: int,
         right_root: int | None = None,
-        solver_index: int | None = None,
     ) -> NDArray:
-        solver_index = self._solver_index_check(solver_index)
-        return self.ci_solver.sub_solvers[solver_index].make_sf_1rdm(
-            left_root, right_root
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+        return self.ci_solver.sub_solvers[left_state].make_sf_1rdm(
+            left_root_in_state, right_root_in_state
         )
 
     def make_sf_2rdm(
         self,
         left_root: int,
         right_root: int | None = None,
-        solver_index: int | None = None,
     ) -> NDArray:
-        solver_index = self._solver_index_check(solver_index)
-        return self.ci_solver.sub_solvers[solver_index].make_sf_2rdm(
-            left_root, right_root
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+
+        return self.ci_solver.sub_solvers[left_state].make_sf_2rdm(
+            left_root_in_state, right_root_in_state
         )
 
 
