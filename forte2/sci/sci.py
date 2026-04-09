@@ -226,12 +226,9 @@ class _SelectedCISingleStateSolver:
                         self.spin2_var[r],
                         self.e_var[r] + self.ept2_var[r],
                         self.e_var[r] + self.ept2_var[r] + self.ept2_pt[r],
-                    )
-                    # f"{r:>4} {e_var[r]:20.12f} {e_var[r] + ept2_var[r]:20.12f} {e_var[r] + ept2_var[r] + ept2_pt[r]:20.12f}",
-                    ,
+                    ),
                     self.log_level,
                 )
-            # logger.log("=" * 67, self.log_level)
             logger.log(table.footer(), self.log_level)
 
             self.ndet = self.sci_helper.ndets()
@@ -260,8 +257,6 @@ class _SelectedCISingleStateSolver:
                     f"Unknown CI algorithm: {self.sci_params.ci_algorithm}. Must be 'exact' or 'sparse'."
                 )
 
-            # logger.log(f"CI Energy Roots: {self.evals}", self.log_level)
-
             self.sci_helper.set_c(self.evecs)
             self.sci_helper.set_energies(self.evals)
 
@@ -273,6 +268,77 @@ class _SelectedCISingleStateSolver:
                     f"Selected CI converged in {cycle + 1} cycles.", self.log_level
                 )
                 break
+        else:
+            logger.log(
+                f"Selected CI did not converge in {self.sci_params.maxcycle} cycles.", self.log_level
+            )
+
+        # final selection to update var' and pt2 contributions with the final CI coefficients
+        logger.log_info1(f"\n{'=' * 67}")
+        logger.log_info1(f"Final Selected CI Cycle")
+        logger.log_info1(f"{'=' * 67}")
+
+        logger.log_info1(f"Algorithm: {self.sci_params.selection_algorithm}")
+        logger.log_info1(f"  var_threshold = {self.sci_params.var_threshold}")
+        logger.log_info1(f"  pt2_threshold = {self.sci_params.pt2_threshold}")
+
+        if self.sci_params.selection_algorithm.lower() == "hbci_ref":
+            self.sci_helper.select_hbci_ref(
+                var_threshold=self.sci_params.var_threshold,
+                pt2_threshold=self.sci_params.pt2_threshold,
+            )
+        elif self.sci_params.selection_algorithm.lower() == "hbci":
+            self.sci_helper.select_hbci(
+                var_threshold=self.sci_params.var_threshold,
+                pt2_threshold=self.sci_params.pt2_threshold,
+            )
+        else:
+            raise ValueError(
+                f"Unknown selection algorithm: {self.sci_params.selection_algorithm}"
+            )
+
+        self.e_var = self.sci_helper.energies()
+        self.ept2_var = self.sci_helper.ept2_var()
+        self.ept2_pt = self.sci_helper.ept2_pt()
+        self.spin2_var = self.sci_helper.compute_spin2()
+
+        summary = "\nSummary of selection:"
+        summary += (
+            f"\n  Variational added:     {self.sci_helper.num_new_dets_var()}"
+        )
+        summary += (
+            f"\n  Perturbative included: {self.sci_helper.num_new_dets_pt2()}"
+        )
+        summary += f"\n  Total determinants:    {self.sci_helper.ndets()}"
+        summary += (
+            f"\n  Selection time:        {self.sci_helper.selection_time():.3f} s\n"
+        )
+        logger.log(summary, self.log_level)
+
+        table = AsciiTable(
+            columns=[
+                "Root",
+                "E (var) [Eh]",
+                "S^2 (var)",
+                "E (var') [Eh]",
+                "E (var'+PT2) [Eh]",
+            ],
+            formats=["{:>4}", "{:>20.12f}", "{:>6.3f}", "{:>20.12f}", "{:>20.12f}"],
+        )
+
+        logger.log(table.header(), self.log_level)
+        for r in range(self.nroot):
+            logger.log(
+                table.row(
+                    r,
+                    self.e_var[r],
+                    self.spin2_var[r],
+                    self.e_var[r] + self.ept2_var[r],
+                    self.e_var[r] + self.ept2_var[r] + self.ept2_pt[r],
+                ),
+                self.log_level,
+            )
+        logger.log(table.footer(), self.log_level)
 
         self.executed = True
 

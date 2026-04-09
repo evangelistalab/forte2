@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+import time
 
 import numpy as np
 from numpy.linalg import eigh, qr, norm
@@ -223,20 +224,22 @@ class DavidsonLiuSolver:
         self.converged = False
 
         table = AsciiTable(
-            columns=["Iter", "⟨E⟩", "max(ΔE)", "max(r)", "basis", "note"],
+            columns=["Iter", "⟨E⟩", "max(ΔE)", "max(r)", "basis", "time (s)", "note"],
             formats=[
                 "{:>4}",
                 "{:>20.12f}",
                 "{:>+12.4e}",
                 "{:>+12.4e}",
                 "{:>4}",
-                "{:>35}",
+                "{:>10.4f}",
+                "{:>20}",
             ],
         )
 
         logger.log(table.header(), self.log_level)
 
         for self.iter in range(self.maxiter):
+            t0 = time.perf_counter()
             # 2. compute new sigma block if needed
             m_new = self.basis_size - self.sigma_size
             if m_new > 0:
@@ -334,7 +337,8 @@ class DavidsonLiuSolver:
             # if we couldn't add enough, fill with random orthogonal vectors
             msg = ""
             if r_delta is not None:
-                msg += f"max r leakage {r_delta.max():.2e}"
+                if r_delta.max() > 1e-9:
+                    msg += f"r leakage {r_delta.max():.2e}"
 
             if added < to_add:
                 missing = to_add - added
@@ -360,9 +364,11 @@ class DavidsonLiuSolver:
                 self.basis_size += added2
                 sep = ", " if msg else ""
                 msg += f"{sep}+{added2} rand"
+            
+            t1 = time.perf_counter()
 
             logger.log(
-                table.row(self.iter, avg_e, max_de, max_r, self.basis_size, msg),
+                table.row(self.iter, avg_e, max_de, max_r, self.basis_size, t1 - t0, msg),
                 self.log_level,
             )
 

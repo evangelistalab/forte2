@@ -12,6 +12,7 @@ namespace forte2 {
 
 namespace {
 
+// A helper function to run a loop in parallel over a given number of indices. The work function is called with the index as argument.
 template <typename WorkFn>
 void run_parallel_indices(size_t count, size_t num_threads, WorkFn&& work) {
     if (num_threads <= 1 || count == 0) {
@@ -93,6 +94,11 @@ void SelectedCIHelper::find_matching_dets(std::span<double> basis, std::span<dou
         for (size_t jj{jstart}; jj < jend; ++jj) {
             const auto idx_j = list.sorted_dets_second_string(jj);
             if (const auto it = i_map.find(idx_j); it != i_map.end()) {
+                // NOTE: when find_matching_dets is called from different threads, 
+                // this increment is contention-free, because each thread is working
+                // on its own alpha string (i), and the sigma updates are on disjoint sets of determinants
+                // because they have different alpha strings
+                // Same logic applies to the other branch of this if statement
                 sigma[it->second] += int_sign * basis[det_permutation[jj]];
             }
         }
@@ -216,6 +222,8 @@ void SelectedCIHelper::H2ab(std::span<double> basis, std::span<double> sigma) co
                             const double sign = sign_p * sign_q * sign_r * sign_s;
                             // Check if the determinant with the new beta string exists
                             if (const auto it = i_map.find(k); it != i_map.end()) {
+                                // See the comment in find_matching_dets about why this increment is 
+                                // contention-free when called from different threads
                                 sigma[it->second] += v_pqrs * sign * basis[det_permutation[jj]];
                             }
                         }

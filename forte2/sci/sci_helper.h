@@ -16,7 +16,9 @@ namespace forte2 {
 
 /// @brief A hash map from determinants to double values
 using DetMap = ankerl::unordered_dense::map<Determinant, double, Determinant::Hash>;
+/// @brief A hash map from determinants to their index in a coefficient vector
 using DetRootMap = ankerl::unordered_dense::map<Determinant, size_t, Determinant::Hash>;
+/// @brief A set of determinants
 using DetSet = ankerl::unordered_dense::set<Determinant, Determinant::Hash>;
 
 /// @brief Screening criteria for selected CI

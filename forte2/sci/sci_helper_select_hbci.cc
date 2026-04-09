@@ -439,8 +439,8 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
 
     auto accumulate = [&](DetRootMap& map, std::vector<double>& coeffs, const Determinant& det,
                           double prefactor, const std::span<double>& c) {
-        // try_emplace returns an iterator to the existing element if the determinant is already in
-        // the map
+        // try_emplace returns an iterator to the existing element 
+        // if the determinant is already in the map
         size_t loc = coeffs.size();
         auto [it, emplaced] = map.try_emplace(det, loc);
         if (emplaced) {
@@ -480,6 +480,7 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
     std::vector<double> abs_c_max(max_block_size, 0.0);
     std::vector<double> c_block(max_block_size * nroots_, 0.0);
 
+    // norb_mask is used to compute the allowed virtual creation indices
     String norb_mask = String::zero();
     norb_mask.fill_up_to(norb_);
 
@@ -505,19 +506,25 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
             ++k;
         }
 
-        // find the occupied and empty orbitals for the current alpha string
+        // find the occupied and virtual orbitals for the current alpha string
         auto a_str_annihilation_masked = a_str & ~frozen_annihilation_mask_;
+        // noa is the number of occupied alpha orbitals that we are allowed to annihilate from
         a_str_annihilation_masked.find_set_bits(aocc, noa);
         auto a_str_creation_masked = (~a_str & norb_mask) & ~frozen_creation_mask_;
+        // nva is the number of virtual alpha orbitals that we are allowed to create into
         a_str_creation_masked.find_set_bits(avir, nva);
 
+        // spans are more convenient for range-based for loops below
         std::span<size_t> aocc_span(aocc.data(), noa);
         std::span<size_t> avir_span(avir.data(), nva);
 
         // single alpha excitations
         for (const auto& i : aocc_span) {
             for (const auto& a : avir_span) {
+                // *_fast avoids checking if i and a are already occupied/unoccupied
+                // since we already know they are
                 auto [new_a_str, sign] = create_single_excitation_fast(a_str, i, a);
+                // determine if this determinant belongs to the current batch
                 if (hash(new_a_str) % num_batches != batch_id) {
                     continue;
                 }
@@ -526,6 +533,8 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
                 for (size_t k{0}; const auto& [b_str_idx, det_index] : second_string_to_det_index) {
                     const String& b_str = ab_list_.sorted_second_string(b_str_idx);
                     new_det.set_b_string(b_str);
+                    // singles_coupling_a can be expensive to compute
+                    // a possible replacement here is h(i, a)
                     const double integral = slater_rules_.singles_coupling_a(i, a, new_det);
                     const double criterion = std::fabs(integral * abs_c_max[k]);
                     if (criterion > pt2_threshold) {
