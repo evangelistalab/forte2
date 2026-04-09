@@ -1260,7 +1260,7 @@ class CISolver(CIBase):
     Attributes
     ----------
     sub_solvers : list[_CISingleStateSolver]
-        A list of CI solvers for each state in the state-averaged CI.
+        A list of CI solvers for each state in the state-averaged CI (each solver for a different spin/GAS restriction).
     evals_per_solver : list[NDArray]
         The eigenvalues (energies) computed by each sub-solver.
     evals_flat, E : NDArray

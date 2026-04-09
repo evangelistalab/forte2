@@ -173,6 +173,8 @@ class _SelectedCISingleStateSolver:
             logger.log_info1(f"  var_threshold = {self.sci_params.var_threshold}")
             logger.log_info1(f"  pt2_threshold = {self.sci_params.pt2_threshold}")
 
+            old_ndets = self.sci_helper.ndets()
+
             if self.sci_params.selection_algorithm.lower() == "hbci_ref":
                 self.sci_helper.select_hbci_ref(
                     var_threshold=self.sci_params.var_threshold,
@@ -188,33 +190,40 @@ class _SelectedCISingleStateSolver:
                     f"Unknown selection algorithm: {self.sci_params.selection_algorithm}"
                 )
 
+            # These are the CI energies of each root
             self.e_var = self.sci_helper.energies()
-            self.ept2_var = self.sci_helper.ept2_var()
-            self.ept2_pt = self.sci_helper.ept2_pt()
+            # These are the expectation values of S^2 for each root computed from the CI vectors
             self.spin2_var = self.sci_helper.compute_spin2()
+            # These are the PT2 corrections due to the new variational determinants added in this cycle
+            self.ept2_var = self.sci_helper.ept2_var()
+            # These are the PT2 corrections due to the new perturbative determinants added in this cycle
+            self.ept2_pt = self.sci_helper.ept2_pt()
+
 
             summary = "\nSummary of selection:"
             summary += (
-                f"\n  Variational added:     {self.sci_helper.num_new_dets_var()}"
+                f"\n  {'Initial # of variational determinants:':<40}{old_ndets}"
             )
             summary += (
-                f"\n  Perturbative included: {self.sci_helper.num_new_dets_pt2()}"
+                f"\n  {'Variational added:':<40}{self.sci_helper.num_new_dets_var()}"
             )
-            summary += f"\n  Total determinants:    {self.sci_helper.ndets()}"
+            summary += f"\n  {'Total variational determinants:':<40}{self.sci_helper.ndets()}"
             summary += (
-                f"\n  Selection time:        {self.sci_helper.selection_time():.3f} s\n"
+                f"\n  {'Perturbatively included:':<40}{self.sci_helper.num_new_dets_pt2()}"
+            )
+            summary += (
+                f"\n  {'Selection time:':<40}{self.sci_helper.selection_time():.3f} s\n"
             )
             logger.log(summary, self.log_level)
 
             table = AsciiTable(
                 columns=[
                     "Root",
-                    "E (var) [Eh]",
-                    "S^2 (var)",
-                    "E (var') [Eh]",
-                    "E (var'+PT2) [Eh]",
+                    "E (CI) [Eh]",
+                    "S^2 (CI)",
+                    "E (CI) + E (PT2) [Eh]",
                 ],
-                formats=["{:>4}", "{:>20.12f}", "{:>6.3f}", "{:>20.12f}", "{:>20.12f}"],
+                formats=["{:>4}", "{:>20.12f}", "{:>6.3f}", "{:>20.12f}"],
             )
 
             logger.log(table.header(), self.log_level)
@@ -224,7 +233,6 @@ class _SelectedCISingleStateSolver:
                         r,
                         self.e_var[r],
                         self.spin2_var[r],
-                        self.e_var[r] + self.ept2_var[r],
                         self.e_var[r] + self.ept2_var[r] + self.ept2_pt[r],
                     ),
                     self.log_level,
