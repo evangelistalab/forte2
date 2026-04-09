@@ -125,7 +125,7 @@ class SelectedCIParams:
         The criterion used to screen determinants during selection. Options are "hbci" and "ehbci".
     energy_correction: str, optional, default="pt2"
         The method used to compute the energy correction from the determinants that are not included in the variational space.
-        Options are "pt2" and "none".
+        Options are "pt2" and "variational".
     energy_shift: float, optional, default=None
         An energy shift applied during selection to target specific roots. If None, no shift is applied.
     pt2_regularizer: str, optional, default="none"

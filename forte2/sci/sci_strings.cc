@@ -11,6 +11,9 @@
 namespace forte2 {
 
 SelectedCIStrings::SelectedCIStrings(size_t norb, std::vector<Determinant>& dets) : norb_(norb) {
+    if (dets.empty()) {
+        throw std::runtime_error("The list of determinants cannot be empty.");
+    }
     initialize_sorted_strings(dets);
     build_second_string_to_det_index();
 
@@ -29,11 +32,11 @@ void SelectedCIStrings::initialize_sorted_strings(std::vector<Determinant>& dets
 
     ndets_ = dets.size();
 
-    size_t i = 0;
     String first_string{dets[0].a_string()};
     String second_string{dets[0].b_string()};
     String old_first_string{first_string};
 
+    size_t i = 0;
     first_string_range_.push_back({i, i + 1});
     sorted_first_string_.push_back(first_string);
     sorted_second_string_.push_back(second_string);
