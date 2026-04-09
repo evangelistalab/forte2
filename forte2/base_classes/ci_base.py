@@ -33,6 +33,7 @@ class CIBase(ActiveSpaceSolver):
     def run(self): ...
 
 
+@dataclass
 class RelCIBase(RelActiveSpaceSolver):
     ### Non-init attributes
     first_run: bool = field(default=True, init=False)

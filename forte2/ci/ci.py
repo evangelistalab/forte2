@@ -104,15 +104,18 @@ class _CISingleStateSolver:
         if self.two_component:
             assert self.ci_params.ci_algorithm.lower() in [
                 "hz",
+                "harrison-zarrabian",
                 "sparse",
                 "exact",
             ], "Two-component CI only supports 'hz', 'sparse', or 'exact' algorithms."
         else:
             assert self.ci_params.ci_algorithm.lower() in [
                 "hz",
+                "harrison-zarrabian",
                 "kh",
+                "knowles-handy",
                 "exact",
-            ], f"CI algorithm must be 'hz', 'kh', or 'exact'. Got '{self.ci_algorithm}'."
+            ], f"CI algorithm must be 'hz', 'kh', or 'exact'. Got '{self.ci_params.ci_algorithm}'."
 
     def _ci_solver_startup(self):
         if self.two_component:
@@ -255,7 +258,7 @@ class _CISingleStateSolver:
             ], "For two-component CI, only the Harrison-Zarrabian (hz) algorithm is supported."
             self.ci_sigma_builder.set_algorithm("hz")
         else:
-            self.ci_sigma_builder.set_algorithm(self.ci_params.ci_algorithm)
+            self.ci_sigma_builder.set_algorithm(self.ci_params.ci_algorithm.lower())
 
         logger.log(
             f"Using CI algorithm: {self.ci_sigma_builder.get_algorithm()}",

@@ -391,10 +391,12 @@ void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
             total_dets += num_pt_dets;
             total_time += time;
         }
-        std::cout << "Thread " << t << " processed " << total_batches << " batches, found "
+
+        LOG_INFO1 << "Thread " << t << " processed " << total_batches << " batches, found "
                   << total_dets << " new determinants in " << total_time << " seconds (avg "
-                  << total_time / total_batches << " s/batch, " << total_dets / total_time
-                  << " dets/s)" << std::endl;
+                  << total_time / total_batches << " s/batch, "
+                  << (total_time > 0.0 ? std::to_string(total_dets / total_time) : "N/A")
+                  << " dets/s)";
     }
 
     // count the new determinants
@@ -443,7 +445,7 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
         auto [it, emplaced] = map.try_emplace(det, loc);
         if (emplaced) {
             // new determinant, need to append to coeffs vector
-            for (auto & c_r : c) {
+            for (auto& c_r : c) {
                 coeffs.push_back(prefactor * c_r);
             }
         } else {
@@ -570,7 +572,8 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
                             new_det.set_b_string(ab_list_.sorted_second_string(b_str_idx));
                             // if the determinant is already in the variational space, skip it
                             if (!existing_dets.count(new_det)) {
-                                auto coeffs = std::span<double>(c_block.data() + k * nroots_, nroots_);
+                                auto coeffs =
+                                    std::span<double>(c_block.data() + k * nroots_, nroots_);
                                 if (criterion > var_threshold) {
                                     accumulate(V_map, V_coeffs, new_det, sign * integral, coeffs);
                                 } else {
@@ -616,7 +619,8 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
                             auto [new_b_str, b_sign] = create_single_excitation_fast(b_str, j, b);
                             new_det.set_b_string(new_b_str);
                             if (!existing_dets.count(new_det)) {
-                                auto coeffs = std::span<double>(c_block.data() + k * nroots_, nroots_);
+                                auto coeffs =
+                                    std::span<double>(c_block.data() + k * nroots_, nroots_);
                                 if (criterion > var_threshold) {
                                     accumulate(V_map, V_coeffs, new_det, a_sign * b_sign * integral,
                                                coeffs);

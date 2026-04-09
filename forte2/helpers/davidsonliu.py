@@ -155,7 +155,7 @@ class DavidsonLiuSolver:
         project_out: list of arrays
             Each array should have the same dtype and shape, but can have lengths less than or equal to `size`.
             The vectors will be orthogonalized and stored as rows for projection during the solve.
-            If the lengths are less than `size`, they will be zero-padded to `size` for projection.
+            If the lengths are less than `size`, they will be considered to be zero-padded to `size` during projection.
         """
         if len(project_out) == 0:
             return
