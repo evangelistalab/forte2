@@ -436,22 +436,23 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
     PT_coeffs.clear();
 
     auto accumulate = [&](DetRootMap& map, std::vector<double>& coeffs, const Determinant& det,
-                          double prefactor, const double* c) {
+                          double prefactor, const std::span<double>& c) {
         // try_emplace returns an iterator to the existing element if the determinant is already in
         // the map
         size_t loc = coeffs.size();
-        auto [it, inserted] = map.try_emplace(det, loc);
-        if (inserted) {
+        auto [it, emplaced] = map.try_emplace(det, loc);
+        if (emplaced) {
             // new determinant, need to append to coeffs vector
-            for (size_t r{0}; r < nroots_; ++r) {
-                coeffs.push_back(prefactor * c[r]);
+            for (auto & c_r : c) {
+                coeffs.push_back(prefactor * c_r);
             }
         } else {
             // idx is the starting index in the coeffs vector for this determinant
             size_t idx = it->second;
             // existing determinant, just update the coefficients
-            for (size_t r{0}; r < nroots_; ++r) {
-                coeffs[idx + r] += prefactor * c[r];
+            for (size_t r{0}; auto& c_r : c) {
+                coeffs[idx + r] += prefactor * c_r;
+                r++;
             }
         }
     };
@@ -523,13 +524,12 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
                 for (size_t k{0}; const auto& [b_str_idx, det_index] : second_string_to_det_index) {
                     const String& b_str = ab_list_.sorted_second_string(b_str_idx);
                     new_det.set_b_string(b_str);
-                    // const double integral = h_[i * norb_ + a];
                     const double integral = slater_rules_.singles_coupling_a(i, a, new_det);
                     const double criterion = std::fabs(integral * abs_c_max[k]);
                     if (criterion > pt2_threshold) {
                         // if the determinant is already in the variational space, skip it
                         if (!existing_dets.count(new_det)) {
-                            const double* coeffs = c_block.data() + k * nroots_;
+                            auto coeffs = std::span<double>(c_block.data() + k * nroots_, nroots_);
                             if (criterion > var_threshold) {
                                 accumulate(V_map, V_coeffs, new_det, sign * integral, coeffs);
                             } else {
@@ -570,7 +570,7 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
                             new_det.set_b_string(ab_list_.sorted_second_string(b_str_idx));
                             // if the determinant is already in the variational space, skip it
                             if (!existing_dets.count(new_det)) {
-                                const double* coeffs = c_block.data() + k * nroots_;
+                                auto coeffs = std::span<double>(c_block.data() + k * nroots_, nroots_);
                                 if (criterion > var_threshold) {
                                     accumulate(V_map, V_coeffs, new_det, sign * integral, coeffs);
                                 } else {
@@ -616,7 +616,7 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
                             auto [new_b_str, b_sign] = create_single_excitation_fast(b_str, j, b);
                             new_det.set_b_string(new_b_str);
                             if (!existing_dets.count(new_det)) {
-                                const double* coeffs = c_block.data() + k * nroots_;
+                                auto coeffs = std::span<double>(c_block.data() + k * nroots_, nroots_);
                                 if (criterion > var_threshold) {
                                     accumulate(V_map, V_coeffs, new_det, a_sign * b_sign * integral,
                                                coeffs);
@@ -650,14 +650,13 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
             for (const auto& i : bocc_span) {
                 for (const auto& a : bvir_span) {
                     new_det.set_b_string(b_str); // push the current beta string to compute coupling
-                    // const double integral = h_[i * norb_ + a];
                     const double integral = slater_rules_.singles_coupling_b(i, a, new_det);
                     const double criterion = std::fabs(integral * abs_c_max[k]);
                     if (criterion > pt2_threshold) {
                         auto [new_b_str, sign] = create_single_excitation_fast(b_str, i, a);
                         new_det.set_b_string(new_b_str); // push the new beta string
                         if (!existing_dets.count(new_det)) {
-                            const double* coeffs = c_block.data() + k * nroots_;
+                            auto coeffs = std::span<double>(c_block.data() + k * nroots_, nroots_);
                             if (criterion > var_threshold) {
                                 accumulate(V_map, V_coeffs, new_det, sign * integral, coeffs);
                             } else {
@@ -686,7 +685,7 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
                         new_det.set_a_string(a_str);
                         new_det.set_b_string(new_b_str);
                         if (!existing_dets.count(new_det)) {
-                            const double* coeffs = c_block.data() + k * nroots_;
+                            auto coeffs = std::span<double>(c_block.data() + k * nroots_, nroots_);
                             if (criterion > var_threshold) {
                                 accumulate(V_map, V_coeffs, new_det, sign * integral, coeffs);
                             } else {
