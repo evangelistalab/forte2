@@ -1,4 +1,6 @@
 import numpy as np
+from numpy.typing import NDArray
+
 from dataclasses import dataclass, field
 
 from forte2.ci import CISolver, RelCISolver
@@ -6,6 +8,7 @@ from forte2.base_classes.active_space_solver import (
     ActiveSpaceSolver,
     RelActiveSpaceSolver,
 )
+from forte2.base_classes.params import DavidsonLiuParams, CIParams
 from forte2.orbitals import Semicanonicalizer
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers import logger, LBFGS
@@ -60,18 +63,10 @@ class MCOptimizer(ActiveSpaceSolver):
         Maximum number of microiterations for L-BFGS.
     max_rotation : float, optional, default=0.2
         Maximum orbital rotation size for L-BFGS.
-    ci_* : various, optional
-        Various parameters for the CI solver. See `CISolver` for details.
-        Available parameters:
-        - ci_guess_per_root
-        - ci_ndets_per_guess
-        - ci_collapse_per_root
-        - ci_basis_per_root
-        - ci_maxiter
-        - ci_econv
-        - ci_rconv
-        - ci_energy_shift
-        All parameters have the same default values.
+    ci_params : CIParams, optional
+        Parameters for the CI solver.
+    davidson_liu_params : DavidsonLiuParams, optional
+        Parameters for the Davidson-Liu solver used in the CI optimization.
     do_transition_dipole : bool, optional, default=False
         Whether to compute transition dipole moments.
 
@@ -97,14 +92,8 @@ class MCOptimizer(ActiveSpaceSolver):
     max_rotation: float = 0.2
 
     ### CI solver parameters
-    ci_maxiter: int = 100
-    ci_econv: float = 1e-12
-    ci_rconv: float = 1e-6
-    ci_guess_per_root: int = 2
-    ci_ndets_per_guess: int = 10
-    ci_collapse_per_root: int = 2
-    ci_basis_per_root: int = 4
-    ci_energy_shift: float = None
+    ci_params: CIParams = field(default_factory=CIParams)
+    davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
 
     ### Post-iteration
     do_transition_dipole: bool = False
@@ -197,15 +186,8 @@ class MCOptimizer(ActiveSpaceSolver):
             weights=self.sa_info.weights,
             log_level=self.ci_solver_verbosity,
             die_if_not_converged=False,
-            econv=self.ci_econv,
-            rconv=self.ci_rconv,
-            maxiter=self.ci_maxiter,
-            guess_per_root=self.ci_guess_per_root,
-            ndets_per_guess=self.ci_ndets_per_guess,
-            collapse_per_root=self.ci_collapse_per_root,
-            basis_per_root=self.ci_basis_per_root,
-            energy_shift=self.ci_energy_shift,
-            ci_algorithm=self.ci_algorithm,
+            ci_params=self.ci_params,
+            davidson_liu_params=self.davidson_liu_params,
         )(self.parent_method)
         # iteration 0: one step of CI optimization to bootstrap the orbital optimization
         self.iter = 0
@@ -229,7 +211,9 @@ class MCOptimizer(ActiveSpaceSolver):
         logger.log_info1("Entering orbital optimization loop")
         logger.log_info1("\nConvergence criteria ('.' if satisfied, 'x' otherwise):")
         logger.log_info1(f"  {'1. RMS(grad)':<32} < {self.gconv:.1e}")
-        logger.log_info1(f"  {'2. max(abs(E_CI_i - E_CI_old_i))':<32} < {self.econv:.1e}")
+        logger.log_info1(
+            f"  {'2. max(abs(E_CI_i - E_CI_old_i))':<32} < {self.econv:.1e}"
+        )
         logger.log_info1(f"  {'3. abs(E_avg - E_avg_old)':<32} < {self.econv:.1e}\n")
 
         logger.log_info1("=" * width)
@@ -272,11 +256,15 @@ class MCOptimizer(ActiveSpaceSolver):
             # 2. Convergence checks
             _dg = self.lbfgs_solver.g - self.g_old
             self.dg_rms = np.sqrt(np.mean((_dg.conj() * _dg).real))
-            self.g_rms = np.sqrt(np.mean((self.lbfgs_solver.g.conj() * self.lbfgs_solver.g).real))
+            self.g_rms = np.sqrt(
+                np.mean((self.lbfgs_solver.g.conj() * self.lbfgs_solver.g).real)
+            )
             self.g_old = self.lbfgs_solver.g.copy()
             conv, conv_str = self._check_convergence()
             lbfgs_str = f"{self.lbfgs_solver.iter}/{'Y' if self.lbfgs_solver.converged else 'N'}"
-            iter_info = f"{self.iter:>10d} {self.E_avg.real:>20.10f} {self.E_orb.real:>20.10f} "
+            iter_info = (
+                f"{self.iter:>10d} {self.E_avg.real:>20.10f} {self.E_orb.real:>20.10f} "
+            )
             iter_info += f"{self.delta_ci_avg.real:>12.4e} {self.max_ci_de:>12.4e} {self.g_rms.real:>12.4e} {lbfgs_str:>8} {conv_str:>8}"
             if conv:
                 logger.log_info1(iter_info)
@@ -325,7 +313,9 @@ class MCOptimizer(ActiveSpaceSolver):
 
         logger.log_info1("=" * width)
         if self.converged:
-            logger.log_info1(f"Orbital optimization converged in {self.iter} iterations.")
+            logger.log_info1(
+                f"Orbital optimization converged in {self.iter} iterations."
+            )
         logger.log_info1(f"Final orbital optimized energy: {self.E_avg:.10f}")
 
         # undo _make_spaces_contiguous
@@ -488,6 +478,101 @@ class MCOptimizer(ActiveSpaceSolver):
 
     def make_average_cumulants(self):
         return self.ci_solver.make_average_cumulants()
+
+    def _get_state_root(self, absolute_root) -> tuple[int, int]:
+        if absolute_root < 0 or absolute_root >= self.sa_info.nroots_sum:
+            raise ValueError(
+                f"absolute_root must be between 0 and {self.sa_info.nroots_sum - 1}, but got {absolute_root}."
+            )
+        return self.sa_info.absolute_root_map[absolute_root]
+
+    def _validate_rdm_inputs(self, left_root, right_root):
+        left_state, left_root_in_state = self._get_state_root(left_root)
+        if right_root is not None:
+            right_state, right_root_in_state = self._get_state_root(right_root)
+        else:
+            right_state = left_state
+            right_root_in_state = left_root_in_state
+
+        if left_state != right_state:
+            raise ValueError(
+                f"Cross-state RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
+            )
+        return left_state, right_state, left_root_in_state, right_root_in_state
+
+    def make_sd_1rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+    ) -> tuple[NDArray, NDArray]:
+        """
+        Make the spin-dependent 1-RDMs
+        """
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+        return self.ci_solver.sub_solvers[left_state].make_sd_1rdm(
+            left_root_in_state, right_root_in_state
+        )
+
+    def make_sd_2rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+    ) -> tuple[NDArray, NDArray, NDArray]:
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+
+        if left_state != right_state:
+            raise ValueError(
+                f"Cross-state RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
+            )
+        return self.ci_solver.sub_solvers[left_state].make_sd_2rdm(
+            left_root_in_state, right_root_in_state
+        )
+
+    def make_sd_3rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+    ) -> tuple[NDArray, NDArray, NDArray, NDArray]:
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+
+        if left_state != right_state:
+            raise ValueError(
+                f"Cross-state RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
+            )
+        return self.ci_solver.sub_solvers[left_state].make_sd_3rdm(
+            left_root_in_state, right_root_in_state
+        )
+
+    def make_sf_1rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+    ) -> NDArray:
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+        return self.ci_solver.sub_solvers[left_state].make_sf_1rdm(
+            left_root_in_state, right_root_in_state
+        )
+
+    def make_sf_2rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+    ) -> NDArray:
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+
+        return self.ci_solver.sub_solvers[left_state].make_sf_2rdm(
+            left_root_in_state, right_root_in_state
+        )
 
 
 @dataclass

@@ -46,6 +46,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     using BitArray<N>::find_first_one;
     using BitArray<N>::find_last_one;
     using BitArray<N>::clear;
+    using BitArray<N>::find_set_bits;
     using Hash = typename BitArray<N>::Hash;
 
     /// the number of bits divided by two
@@ -114,7 +115,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// Construct the determinant from an occupation vector that
     /// specifies the alpha and beta strings.  occupation = [Ia,Ib]
     explicit DeterminantImpl(const BitArray<nbits_half>& Ia, const BitArray<nbits_half>& Ib) {
-        this->set_str(Ia, Ib);
+        this->set_strings(Ia, Ib);
     }
 
     /// String constructor. Convert a std::string to a determinant.
@@ -150,20 +151,20 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     void set_nb(size_t pos, bool val) { set_bit(pos + beta_bit_offset, val); }
 
     /// set the alpha/beta strings
-    void set_str(const BitArray<nbits_half>& sa, const BitArray<nbits_half>& sb) {
+    void set_strings(const BitArray<nbits_half>& sa, const BitArray<nbits_half>& sb) {
         for (size_t n = 0; n < nwords_half; n++) {
             words_[n] = sa.get_word(n);
             words_[n + nwords_half] = sb.get_word(n);
         }
     }
 
-    void set_alfa_str(const BitArray<nbits_half>& sa) {
+    void set_a_string(const BitArray<nbits_half>& sa) {
         for (size_t n = 0; n < nwords_half; n++) {
             words_[n] = sa.get_word(n);
         }
     }
 
-    void set_beta_str(const BitArray<nbits_half>& sb) {
+    void set_b_string(const BitArray<nbits_half>& sb) {
         for (size_t n = 0; n < nwords_half; n++) {
             words_[n + nwords_half] = sb.get_word(n);
         }
@@ -277,6 +278,38 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
             }
         }
         return vir;
+    }
+
+    /// @brief Find the occupied alpha orbitals and store them in occ
+    /// @param occ a vector to store the occupied orbitals
+    /// @param n the number of occupied orbitals found
+    void get_fast_a_occ(std::vector<size_t>& occ, size_t& n) const {
+        n = 0;
+        uint64_t x;
+        for (size_t begin{0}; begin < nwords_half; ++begin) {
+            x = words_[begin];
+            const size_t base = begin * bits_per_word;
+            while (x) {
+                occ[n++] = base + std::countr_zero(x);
+                x &= (x - 1); // clear lowest set bit
+            }
+        }
+    }
+
+    /// @brief Find the occupied beta orbitals and store them in occ
+    /// @param occ a vector to store the occupied orbitals
+    /// @param n the number of occupied orbitals found
+    void get_fast_b_occ(std::vector<size_t>& occ, size_t& n) const {
+        n = 0;
+        uint64_t x;
+        for (size_t begin{0}; begin < nwords_half; ++begin) {
+            x = words_[begin + nwords_half];
+            const size_t base = begin * bits_per_word;
+            while (x) {
+                occ[n++] = base + std::countr_zero(x);
+                x &= (x - 1); // clear lowest set bit
+            }
+        }
     }
 
     /// Apply the alpha creation operator a^+_n to this determinant
@@ -460,6 +493,48 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         }
     }
 
+    /// @brief Apply a function to each occupied alpha orbital.
+    /// @tparam Func Callable of the form void(size_t)
+    void for_all_a(auto&& func) const noexcept {
+        for (size_t begin = 0; begin < nwords_half; ++begin) {
+            uint64_t x = words_[begin];
+            const size_t base = begin * bits_per_word;
+            while (x) {
+                const size_t pos = base + std::countr_zero(x);
+                func(pos);
+                x &= (x - 1); // clear the lowest set bit
+            }
+        }
+    }
+
+    /// @brief Apply a function to each occupied beta orbital.
+    /// @tparam Func Callable of the form void(size_t)
+    void for_all_b(auto&& func) const noexcept {
+        for (size_t begin = 0; begin < nwords_half; ++begin) {
+            uint64_t x = words_[begin + nwords_half];
+            const size_t base = begin * bits_per_word;
+            while (x) {
+                const size_t pos = base + std::countr_zero(x);
+                func(pos);
+                x &= (x - 1);
+            }
+        }
+    }
+
+    /// @brief Apply a function to each occupied spin orbital.
+    /// @tparam Func Callable of the form void(size_t)
+    void for_all(auto&& func) const noexcept {
+        for (size_t begin = 0; begin < nwords_; ++begin) {
+            uint64_t x = words_[begin];
+            const size_t base = begin * bits_per_word;
+            while (x) {
+                const size_t pos = base + std::countr_zero(x);
+                func(pos);
+                x &= (x - 1); // clear the lowest set bit
+            }
+        }
+    }
+
     /// Find the index of the first alpha bit set to 1
     uint64_t find_first_one_alfa() const { return find_first_one(0, nwords_half); }
 
@@ -532,7 +607,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         return slater_sign_bbbb(i, j, a, b);
     }
 
-    BitArray<nbits_half> get_alfa_bits() const {
+    BitArray<nbits_half> a_string() const {
         BitArray<nbits_half> s;
         for (size_t i = 0; i < nwords_half; i++) {
             s.set_word(i, words_[i]);
@@ -540,7 +615,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         return s;
     }
 
-    BitArray<nbits_half> get_beta_bits() const {
+    BitArray<nbits_half> b_string() const {
         BitArray<nbits_half> s;
         for (size_t i = 0; i < nwords_half; i++) {
             s.set_word(i, words_[nwords_half + i]);
@@ -562,7 +637,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     }
 
     BitArray<nbits_half> get_bits(DetSpinType spin_type) const {
-        return (spin_type == DetSpinType::Alpha ? get_alfa_bits() : get_beta_bits());
+        return (spin_type == DetSpinType::Alpha ? a_string() : b_string());
     }
 
     /// Zero the alpha part of a determinant
@@ -578,20 +653,21 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     }
 
     /// Swap the alpha and beta bits of a determinant
-    DeterminantImpl<N> spin_flip() const {
-        DeterminantImpl<N> d(*this);
+    DeterminantImpl<N> spin_flip() const noexcept {
+        DeterminantImpl<N> d;
         for (size_t n = 0; n < nwords_half; n++) {
-            std::swap(d.words_[n], d.words_[n + nwords_half]);
+            d.words_[n] = words_[n + nwords_half];
+            d.words_[n + nwords_half] = words_[n];
         }
         return d;
     }
 
     /// Describe the excitation connection of a determinant d,
-    /// relative to this one. The excitation connection is defined 
+    /// relative to this one. The excitation connection is defined
     /// as the creation and annihilation operators that need to be applied
     /// to this determinant to obtain d.
     /// The excitation connection is a vector of 4 vectors:
-    /// [[alfa annihilation], [alfa creation], 
+    /// [[alfa annihilation], [alfa creation],
     ///  [beta annihilation], [beta creation]]
     std::vector<std::vector<size_t>> excitation_connection(const DeterminantImpl<N>& d) const {
         std::vector<std::vector<size_t>> excitation(4);
@@ -950,4 +1026,5 @@ template <size_t N> struct hash<forte2::DeterminantImpl<N>> {
         return HashT{}(d);
     }
 };
+
 } // namespace std

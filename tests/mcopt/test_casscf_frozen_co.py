@@ -1,5 +1,6 @@
 from forte2 import System, AVAS, MCOptimizer, State, RHF
 from forte2.helpers.comparisons import approx
+from forte2.base_classes import CIParams
 
 
 def test_casscf_frozen_co():
@@ -25,7 +26,7 @@ def test_casscf_frozen_co():
         states=State(system=system, multiplicity=1, ms=0.0),
         core_orbitals=4,
         active_orbitals=6,
-        ci_algorithm="exact",
+        ci_params=CIParams(ci_algorithm="exact"),
     )(avas)
     mc.run()
     assert mc.E == approx(emcscf)

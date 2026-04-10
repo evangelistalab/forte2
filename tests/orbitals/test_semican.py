@@ -3,6 +3,7 @@ import numpy as np
 from forte2 import System, RHF, CI, MOSpace, orbitals, State, MCOptimizer, integrals
 from forte2.helpers.comparisons import approx
 from forte2.orbitals import Semicanonicalizer
+from forte2.base_classes import DavidsonLiuParams
 
 
 def test_semican_rhf():
@@ -156,8 +157,7 @@ def test_semican_orbitals():
         State(nel=24, multiplicity=1, ms=0.0),
         core_orbitals=10,
         active_orbitals=4,
-        ci_rconv=1e-10,
-        ci_econv=1e-12,
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-12, r_tol=1e-10),
         final_orbital="semicanonical",
     )(rhf)
     mc.run()

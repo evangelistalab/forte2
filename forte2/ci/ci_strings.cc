@@ -194,8 +194,8 @@ std::vector<Determinant> CIStrings::make_determinants() const {
 }
 
 size_t CIStrings::determinant_address(const Determinant& d) const {
-    const auto Ia = d.get_alfa_bits();
-    const auto Ib = d.get_beta_bits();
+    const auto Ia = d.a_string();
+    const auto Ib = d.b_string();
     const auto& [addIa, class_Ia] = alfa_address_->address_and_class(Ia);
     const auto& [addIb, class_Ib] = beta_address_->address_and_class(Ib);
     const auto n = string_class_->block_index(class_Ia, class_Ib);
@@ -218,8 +218,8 @@ Determinant CIStrings::determinant(size_t address) const {
     const size_t beta_size = beta_address_->strpcls(class_Ib);
     const size_t addIa = shift / beta_size;
     const size_t addIb = shift % beta_size;
-    String Ia = alfa_str(class_Ia, addIa);
-    String Ib = beta_str(class_Ib, addIb);
+    String Ia{alfa_str(class_Ia, addIa)};
+    String Ib{beta_str(class_Ib, addIb)};
     return Determinant(Ia, Ib);
 }
 

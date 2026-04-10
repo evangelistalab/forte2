@@ -27,6 +27,7 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Spin-adapted CI (CSF basis) for non-relativistic Hamiltonians
   * Support for generalized active spaces (GAS) / occupation-restricted multiple active spaces (ORMAS)
   * Two-component CI for relativistic Hamiltonians
+  * Heat-bath configuration interaction (HBCI) with support for excited states and occupation restrictions [7]_
   
 * Multi-configuration self-consistent field (MCSCF) methods
   
@@ -50,4 +51,4 @@ References
 .. [4] Sayfutyarova, E. R.; Sun, Q.; Chan, G. K.-L.; Knizia, G. Automated Construction of Molecular Active Spaces from Atomic Valence Orbitals. J. Chem. Theory Comput. 2017, 13 (9), 4063-4078. https://doi.org/10.1021/acs.jctc.7b00128.
 .. [5] He, N.; Evangelista, F. A. A Zeroth-Order Active-Space Frozen-Orbital Embedding Scheme for Multireference Calculations. The Journal of Chemical Physics 2020, 152 (9), 094107. https://doi.org/10.1063/1.5142481.
 .. [6] Knizia, G. Intrinsic Atomic Orbitals: An Unbiased Bridge between Quantum Theory and Chemical Concepts. J. Chem. Theory Comput. 2013, 9 (11), 4834-4843. https://doi.org/10.1021/ct400687b.
-
+.. [7] Holmes, A. A.; Umrigar, C. J.; Sharma, S. Excited States Using Semistochastic Heat-Bath Configuration Interaction. J. Chem. Phys. 2017, 147 (16), 164111. https://doi.org/10.1063/1.4998614.

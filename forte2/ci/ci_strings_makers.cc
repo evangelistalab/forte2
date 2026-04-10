@@ -35,8 +35,7 @@ StringList make_strings_with_occupation(size_t num_spaces, int nirrep,
             // generate all the strings for the n-th GAS space with gas_ne electrons in gas_norb
             // orbitals
             if ((gas_ne >= 0) and (gas_ne <= gas_norb)) {
-                String I;
-                I.clear();
+                auto I = String::zero();
                 for (int i = std::max(0, gas_norb - gas_ne); i < gas_norb; ++i)
                     I[i] = true; // Generate the string 000011111
 
@@ -44,8 +43,7 @@ StringList make_strings_with_occupation(size_t num_spaces, int nirrep,
                 const auto I_end = std::next(I.begin(), gas_norb);
 
                 do {
-                    String J;
-                    J.clear();
+                    auto J = String::zero();
                     for (int i = 0; i < gas_norb; ++i) {
                         if (I[i])
                             J[space_mos[n][i]] = true;
@@ -58,8 +56,7 @@ StringList make_strings_with_occupation(size_t num_spaces, int nirrep,
         auto product_strings = math::cartesian_product(gas_space_string);
 
         for (const auto& strings : product_strings) {
-            String I;
-            I.clear();
+            auto I = String::zero();
             for (const auto& J : strings) {
                 I |= J;
             }
@@ -223,7 +220,6 @@ H1List make_1h_list(const StringList& strings, std::shared_ptr<StringAddress> ad
     if ((k >= 0) and (k <= n)) { // check that (n > 0) makes sense.
         for (const auto& string_class : strings) {
             for (const auto& I : string_class) {
-                // std::cout << "String " < < < < std::endl;
                 const auto& [add_I, class_I] = addresser->address_and_class(I);
                 for (size_t p = 0; p < nmo; ++p) {
                     if (I[p]) {

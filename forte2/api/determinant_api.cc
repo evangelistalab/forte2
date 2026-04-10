@@ -99,6 +99,10 @@ void export_determinant_api(nb::module_& m) {
         .def(
             "str", [](const Determinant& d, int n) { return str(d, n); },
             "n"_a = Determinant::norb(), "Get the string representation of the Slater determinant");
+
+    m.def(
+        "spin2", [](const Determinant& d1, const Determinant& d2) { return spin2(d1, d2); },
+        "Compute the S^2 value between two determinants");
 }
 
 void export_configuration_api(nb::module_& m) {

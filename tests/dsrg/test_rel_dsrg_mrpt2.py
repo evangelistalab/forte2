@@ -140,7 +140,7 @@ def test_mrpt2_carbon_rel_sa():
         ]
     )
 
-
+@pytest.mark.slow
 def test_mrpt2_se_rel_sa_gauss_nuc():
     # Test the zero-field splitting of Se atom with Gaussian nuclear charges
     # Freezing all non-4s/4p orbitals (zero correlated core orbitals)
@@ -210,7 +210,7 @@ def test_mrpt2_s_rel_sa_gauss_nuc():
         387.5234521376601, rel=1e-4
     )
 
-
+@pytest.mark.slow
 def test_mrpt2_sh_with_slow():
     xyz = """
     S 0 0 0

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from abc import ABC, abstractmethod
+from abc import ABC
 
 from .mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.state import StateAverageInfo, State, MOSpace
@@ -17,7 +17,6 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
     active_orbitals: list[int] | list[list[int]] = None
     frozen_virtual_orbitals: list[int] = None
     final_orbital: str = "semicanonical"
-    ci_algorithm: str = "hz"
     die_if_not_converged: bool = False
 
     def __post_init__(self):
@@ -35,13 +34,6 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
             "semicanonical",
             "original",
         ], "final_orbital must be either 'semicanonical' or 'original'."
-
-        assert self.ci_algorithm.lower() in [
-            "hz",
-            "kh",
-            "exact",
-            "sparse",
-        ], "ci_algorithm must be one of 'hz', 'kh', 'exact', or 'sparse'."
 
     def _startup(self, two_component=False):
         if not self.parent_method.executed:
@@ -114,7 +106,9 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
                         else []
                     ),
                 )
-                logger.log_info1("ActiveSpaceSolver: mo_space constructed from provided orbital lists.")
+                logger.log_info1(
+                    "ActiveSpaceSolver: mo_space constructed from provided orbital lists."
+                )
                 return
         elif provided_via_parent:
             MOSpaceMixin.copy_from_upstream(self, self.parent_method)

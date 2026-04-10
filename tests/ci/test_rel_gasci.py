@@ -6,6 +6,7 @@ from forte2.ci import RelCI
 from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 from forte2.helpers.comparisons import approx
 from forte2.system.build_basis import BSE_AVAILABLE
+from forte2.base_classes import DavidsonLiuParams
 
 
 def prepare_rhf_coeff_for_relci(rhf, system):
@@ -37,7 +38,7 @@ def test_rel_gasci_rhf_1():
     ci = RelCI(
         active_orbitals=[[0, 1], [2, 3]],
         states=RelState(nel=2, gas_min=[0], gas_max=[2]),
-        econv=1e-12,
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
     )(rhf)
     ci.run()
 
@@ -113,7 +114,7 @@ def test_rel_gasci_rhf_4():
     ci = RelCI(
         active_orbitals=(10, 4),
         states=RelState(nel=10, gas_min=[6, 0], gas_max=[10, 4]),
-        econv=1e-12,
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
     )(rhf)
     ci.run()
 
@@ -139,9 +140,9 @@ def test_rel_gasci_rhf_5():
         active_orbitals=(2, 12),
         states=RelState(nel=10, gas_min=[0], gas_max=[1]),
         nroots=4,
-        basis_per_root=10,
-        ndets_per_guess=20,
-        maxiter=200,
+        davidson_liu_params=DavidsonLiuParams(
+            basis_per_root=10, ndets_per_guess=20, maxiter=200
+        ),
     )(rhf)
     ci.run()
 
