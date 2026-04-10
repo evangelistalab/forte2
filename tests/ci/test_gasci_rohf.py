@@ -1,5 +1,6 @@
 from forte2 import System, ROHF, CI, State
 from forte2.helpers.comparisons import approx
+from forte2.base_classes import DavidsonLiuParams
 
 
 def test_gasci_rohf_1():
@@ -22,7 +23,7 @@ def test_gasci_rohf_1():
     ci = CI(
         active_orbitals=[[0], [1, 2, 3, 4, 5, 6, 7, 8]],
         states=State(nel=9, multiplicity=2, ms=0.5, gas_min=[1], gas_max=[1]),
-        econv=1e-12,
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
     )(rhf)
     ci.run()
 
@@ -50,7 +51,7 @@ def test_gasci_rohf_2():
     ci = CI(
         active_orbitals=[[0], [1, 2, 3, 4, 5, 6, 7, 8]],
         states=State(nel=9, multiplicity=2, ms=0.5, gas_min=[1], gas_max=[1]),
-        econv=1e-12,
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
     )(rhf)
     ci.run()
 

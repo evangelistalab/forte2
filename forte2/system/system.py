@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from numpy.typing import NDArray
 
-from forte2 import integrals
+from forte2 import integrals, Basis
 from forte2.data import DEBYE_TO_AU, DEBYE_ANGSTROM_TO_AU, Z_TO_ATOM_SYMBOL
 from forte2.helpers import (
     logger,
@@ -108,6 +108,7 @@ class System:
 
     xyz: str
     basis_set: str | dict
+    # These are the arguments that users can provide at initialization.
     auxiliary_basis_set: str | dict = None
     auxiliary_basis_set_corr: str | dict = None
     minao_basis_set: str | dict = "cc-pvtz-minao"
@@ -134,6 +135,9 @@ class System:
     nminao: int = field(init=False, default=None)
     Xorth: NDArray = field(init=False, default=None)
     two_component: bool = field(init=False, default=False)
+    # Basis set objects build from arguments provided at initialization.
+    auxiliary_basis: Basis = field(init=False, default=None)
+    auxiliary_basis_corr: Basis = field(init=False, default=None)
 
     def __post_init__(self):
         assert self.unit in [
@@ -216,8 +220,6 @@ class System:
                 logger.log_warning(
                     "Ignoring provided auxiliary basis sets since cholesky_tei=True!"
                 )
-            self.auxiliary_basis = None
-            self.auxiliary_basis_corr = None
 
         if self.minao_basis_set is not None:
             self.minao_basis = build_basis(self.minao_basis_set, self.geom_helper)

@@ -86,7 +86,7 @@ class DeterminantVector:
 class CIStrings:
     def __init__(self, na: int, nb: int, symmetry: int, orbital_symmetry: Sequence[Sequence[int]], gas_min: Sequence[int], gas_max: Sequence[int]) -> None:
         """
-        Initialize the CIStrings with number of alpha and beta electrons, symmetry, orbital symmetry, minimum and maximum number of electrons in each GAS space, and logging level
+        Initialize the CIStrings with number of alpha and beta electrons, symmetry, orbital symmetry, minimum and maximum number of electrons in each GAS space
         """
 
     @property
@@ -273,6 +273,106 @@ class CISigmaBuilder:
     def sf_3cumulant_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None, None, None))]:
         """Compute the spin-free three-electron cumulant for debugging purposes"""
 
+class SelectedCIHelper:
+    def __init__(self, norb: int, dets: Sequence[Determinant], c: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))], log_level: int = 3) -> None:
+        """
+        Initialize the SelectedCIHelper with the number of orbitals, initial determinants, energy, Hamiltonian, and integrals
+        """
+
+    def set_Hamiltonian(self, E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]) -> None:
+        """Set the Hamiltonian integrals"""
+
+    def Hamiltonian(self, basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None:
+        """Apply the Hamiltonian to the basis and store the result in sigma"""
+
+    def Hdiag(self) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]:
+        """Return the diagonal of the Hamiltonian matrix"""
+
+    def set_c(self, c: Annotated[NDArray[numpy.float64], dict(shape=(None, None))]) -> None:
+        """Set the CI coefficients"""
+
+    def set_num_threads(self, n: int) -> None:
+        """Set the number of threads to use in parallel sections"""
+
+    def set_num_batches_per_thread(self, n: int) -> None:
+        """
+        Set the number of batches each thread will process in parallel sections
+        """
+
+    def set_energies(self, e: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None:
+        """Set the energies of the roots"""
+
+    def set_frozen_creation(self, frozen_creation: Sequence[int]) -> None:
+        """Set orbitals excluded from creation in selection"""
+
+    def set_frozen_annihilation(self, frozen_annihilation: Sequence[int]) -> None:
+        """Set orbitals excluded from annihilation in selection"""
+
+    def set_screening_criterion(self, criterion: str) -> None:
+        """Set the screening criterion for selection ('hbci' or 'ehbci')"""
+
+    def set_energy_correction(self, correction: str) -> None:
+        """
+        Set the energy correction method for selection ('variational' or 'pt2')
+        """
+
+    def set_pt2_regularizer(self, regularizer: str, strength: float = 0.5) -> None:
+        """
+        Set the PT2 regularization method ('none', 'shift', 'dsrg') and its strength
+        """
+
+    def select_hbci_ref(self, var_threshold: float, pt2_threshold: float) -> None:
+        """Perform HBCI selection with the given threshold"""
+
+    def select_hbci(self, var_threshold: float, pt2_threshold: float) -> None:
+        """Perform HBCI selection with the given thresholds"""
+
+    def compute_spin2(self) -> list[float]:
+        """
+        Compute the expectation value of S^2 for each root and return as a list
+        """
+
+    def a_1rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+        """Compute alpha-spin 1-RDM between two roots"""
+
+    def b_1rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+        """Compute beta-spin 1-RDM between two roots"""
+
+    def sf_1rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+        """Compute spin-free 1-RDM between two roots"""
+
+    def dets(self) -> list[Determinant]:
+        """Return the determinants in the variational space"""
+
+    def ndets(self) -> int:
+        """Return the number of determinants in the variational space"""
+
+    def energies(self) -> list[float]:
+        """Return the energies of the roots"""
+
+    def ept2_var(self) -> list[float]:
+        """
+        Return the variational part of the Epstein-Nesbet second-order energy correction
+        """
+
+    def ept2_pt(self) -> list[float]:
+        """
+        Return the perturbative part of the Epstein-Nesbet second-order energy correction
+        """
+
+    def num_new_dets_var(self) -> int:
+        """
+        Return the number of new variational determinants added in the last selection
+        """
+
+    def num_new_dets_pt2(self) -> int:
+        """
+        Return the number of new perturbative determinants added in the last selection
+        """
+
+    def selection_time(self) -> float:
+        """Return the total selection time"""
+
 class RelCISigmaBuilder:
     def __init__(self, lists: CIStrings, E: float, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], log_level: int = 3, use_asym_ints: bool = False) -> None:
         """
@@ -420,6 +520,14 @@ class Determinant:
         """Get the string representation of the Slater determinant"""
 
 @overload
+def spin2(arg0: Determinant, arg1: Determinant, /) -> float:
+    """Compute the S^2 value between two determinants"""
+
+@overload
+def spin2(arg0: SparseState, arg1: SparseState, /) -> complex:
+    """Calculate the <left_state|S^2|right_state> expectation value"""
+
+@overload
 def hilbert_space(nmo: int, na: int, nb: int, nirrep: int = 1, mo_symmetry: Sequence[int] = [], symmetry: int = 0) -> list[Determinant]:
     """
     Generate the Hilbert space for a given number of electrons and orbitals.If information about the symmetry of the MOs is not provided, it assumes that all MOs have symmetry 0.
@@ -491,16 +599,28 @@ def get_log_level() -> int:
     """Get the current logging verbosity level"""
 
 class SlaterRules:
-    def __init__(self, norb: int, scalar_energy: float, one_electron_integrals: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], two_electron_integrals: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]) -> None: ...
+    def __init__(self, norb: int, scalar_energy: float, one_electron_integrals: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], two_electron_integrals: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]) -> None:
+        """
+        Initialize a SlaterRules object with the number of orbitals, scalar energy, one-electron integrals, and two-electron integrals in physicist's notation.
+        """
 
     def energy(self, arg: Determinant, /) -> float: ...
+
+    def energies(self, dets: DeterminantVector) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]:
+        """Compute the energies of a vector of determinants"""
 
     def slater_rules(self, lhs: Determinant, rhs: Determinant) -> float: ...
 
 class RelSlaterRules:
-    def __init__(self, nspinor: int, scalar_energy: float, one_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], two_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))]) -> None: ...
+    def __init__(self, nspinor: int, scalar_energy: float, one_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], two_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], tei_is_asym: bool = False) -> None:
+        """
+        Initialize a RelSlaterRules object with the number of spinor(orbitals), scalar energy, one-electron integrals, two-electron integrals in physicist's notation, and a flag indicating if the two-electron integrals are antisymmetric.
+        """
 
     def energy(self, arg: Determinant, /) -> float: ...
+
+    def energies(self, dets: DeterminantVector) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]:
+        """Compute the energies of a vector of determinants"""
 
     def slater_rules(self, lhs: Determinant, rhs: Determinant) -> complex: ...
 
@@ -598,9 +718,6 @@ def apply_antiherm(sop: SparseOperator, state0: SparseState, screen_thresh: floa
 def apply_number_projector(arg0: int, arg1: int, arg2: SparseState, /) -> SparseState: ...
 
 def get_projection(arg0: SparseOperatorList, arg1: SparseState, arg2: SparseState, /) -> list[complex]: ...
-
-def spin2(arg0: SparseState, arg1: SparseState, /) -> complex:
-    """Calculate the <left_state|S^2|right_state> expectation value"""
 
 def overlap(arg0: SparseState, arg1: SparseState, /) -> complex: ...
 

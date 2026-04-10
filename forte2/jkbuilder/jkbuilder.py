@@ -56,16 +56,15 @@ class FockBuilder:
         else:
             if not self.system.cholesky_tei:
                 basis = self.system.basis
-                if self.use_aux_corr:
-                    assert hasattr(
-                        self.system, "auxiliary_basis_corr"
-                    ), "The system does not have an auxiliary_basis_corr defined."
-                    aux_basis = self.system.auxiliary_basis_corr
-                else:
-                    assert hasattr(
-                        self.system, "auxiliary_basis"
-                    ), "The system does not have an auxiliary_basis defined."
-                    aux_basis = self.system.auxiliary_basis
+                aux_basis = (
+                    self.system.auxiliary_basis_corr
+                    if self.use_aux_corr
+                    else self.system.auxiliary_basis
+                )
+                if aux_basis is None:
+                    raise ValueError(
+                        "Auxiliary basis is not defined. Define auxiliary_basis_set/auxiliary_basis_set_corr or set cholesky_tei to True."
+                    )
                 res, naux = self._build_B_density_fitting(basis, aux_basis)
             else:
                 res, naux = self._build_B_cholesky(

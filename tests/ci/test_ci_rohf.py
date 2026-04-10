@@ -24,6 +24,7 @@ def test_rohf_ci_1():
 
 
 def test_rohf_ci_2():
+    from forte2.base_classes import CIParams
     xyz = """
     H 0.0 0.0 0.0
     F 0.0 0.0 2.0
@@ -38,7 +39,7 @@ def test_rohf_ci_2():
         core_orbitals=[0],
         states=State(system=system, charge=1, multiplicity=2, ms=-0.5),
         nroots=2,
-        ci_algorithm="exact",
+        ci_params=CIParams(ci_algorithm="exact"),
     )(rhf)
     ci.run()
 
