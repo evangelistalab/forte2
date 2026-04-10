@@ -66,6 +66,20 @@ class RelDSRG_MRPT2(DSRGBase):
     x2c_type: str = "so"
     snso_type: str = "row-dependent"
 
+    def __post_init__(self):
+        super().__post_init__()
+        if self.siso and self.nrelax != 1:
+            raise ValueError(
+                "If siso is True, relax_reference must be set to 'once' or 1."
+            )
+        if self.siso:
+            if self.x2c_type.lower() != "so":
+                raise ValueError("If siso is True, x2c_type must be 'so'.")
+            if self.snso_type.lower() not in ["row-dependent", "dc", "dcb", "boettger"]:
+                raise ValueError(
+                    "If siso is True, snso_type must be one of 'row-dependent', 'dc', 'dcb', or 'boettger'."
+                )
+
     def get_integrals(self):
         g1, g2, l2, l3 = self.ci_solver.make_average_cumulants()
         # self._C are the MCSCF canonical orbitals. We always use canonical orbitals to build the generalized Fock matrix.
@@ -237,15 +251,15 @@ class RelDSRG_MRPT2(DSRGBase):
             _actv = self.mo_space.actv
             _C = self.parent_method.C[0]
             _hbar1_canon -= (_C.conj().T @ self.system.ints_hcore() @ _C)[_actv, _actv]
-            self.x2c_type_save = self.system.x2c_type
-            self.snso_type_save = self.system.snso_type
+            _x2c_type_save = self.system.x2c_type
+            _snso_type_save = self.system.snso_type
             self.system.x2c_type = self.x2c_type
             self.system.snso_type = self.snso_type
             # add requested 1e Hamiltonian
             _hbar1_canon += (_C.conj().T @ self.system.ints_hcore() @ _C)[_actv, _actv]
             # revert so that DSRG uses original H1
-            self.system.x2c_type = self.x2c_type_save
-            self.system.snso_type = self.snso_type_save
+            self.system.x2c_type = _x2c_type_save
+            self.system.snso_type = _snso_type_save
 
         _hbar2_canon = np.einsum(
             "ip,jq,pqrs,kr,ls->ijkl",
