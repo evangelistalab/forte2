@@ -89,7 +89,7 @@ def test_lindep_x2c_quick():
         basis_set="aug-cc-pvdz",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
         unit="bohr",
-        ortho_thresh=2e-7,
+        overlap_ortho_rtol=2e-7,
         x2c_type="so",
         snso_type="row-dependent",
     )
