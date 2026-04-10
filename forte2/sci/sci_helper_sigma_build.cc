@@ -377,8 +377,6 @@ np_matrix SelectedCIHelper::compute_bb_2rdm(size_t left_root, size_t right_root)
 }
 
 np_tensor4 SelectedCIHelper::compute_ab_2rdm(size_t left_root, size_t right_root) const {
-    local_timer timer;
-
     auto rdm = make_zeros<nb::numpy, double, 4>({norb_, norb_, norb_, norb_});
     double* rdm_data = rdm.data();
 
@@ -404,7 +402,7 @@ np_tensor4 SelectedCIHelper::compute_ab_2rdm(size_t left_root, size_t right_root
                             const double sign = sign_p * sign_q * sign_r * sign_s;
                             // Check if the determinant with the new beta string exists
                             if (const auto it = i_map.find(k); it != i_map.end()) {
-                                rdm_data[p * norb3_ + r * norb2_ + q * norb_ + s] +=
+                                rdm_data[q * norb3_ + r * norb2_ + p * norb_ + s] +=
                                     sign * c_[nroots_ * it->second + left_root] *
                                     c_[nroots_ * det_permutation[jj] + right_root];
                             }

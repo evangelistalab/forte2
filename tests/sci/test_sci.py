@@ -290,6 +290,7 @@ def test_sci_make_rdms():
             selection_algorithm="hbci",
             var_threshold=1e-12,
             pt2_threshold=0.0,
+            guess_dets=[Determinant("22")],
         ),
     )(rhf)
     sci.run()
@@ -299,17 +300,14 @@ def test_sci_make_rdms():
     )(rhf)
     ci.run()
 
+    # Test the 1-RDM
     sf_1rdm = sci.sub_solvers[0].make_sf_1rdm(0)
     sf_1rdm_ci = ci.make_average_1rdm()
     assert np.allclose(sf_1rdm, sf_1rdm_ci, atol=1e-8)
 
+    # Test the 2-RDM
     sf_2rdm = sci.sub_solvers[0].make_sf_2rdm(0)
     sf_2rdm_ci = ci.make_average_2rdm()
-
-    print("SCI 2-RDM:")
-    print(sf_2rdm - sf_2rdm_ci)
-    # print("CI 2-RDM:")
-    # print(sf_2rdm_ci)
     assert np.allclose(sf_2rdm, sf_2rdm_ci, atol=1e-8)
 
 
