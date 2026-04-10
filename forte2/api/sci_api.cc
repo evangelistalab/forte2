@@ -50,11 +50,19 @@ void export_sci_helper_api(nb::module_& m) {
         .def("compute_spin2", &SelectedCIHelper::compute_spin2,
              "Compute the expectation value of S^2 for each root and return as a list")
         .def("a_1rdm", &SelectedCIHelper::compute_a_1rdm, "left_root"_a, "right_root"_a,
-             "Compute alpha-spin 1-RDM between two roots")
+             "Compute the alpha-spin 1-RDM between two roots")
         .def("b_1rdm", &SelectedCIHelper::compute_b_1rdm, "left_root"_a, "right_root"_a,
-             "Compute beta-spin 1-RDM between two roots")
+             "Compute the beta-spin 1-RDM between two roots")
         .def("sf_1rdm", &SelectedCIHelper::compute_sf_1rdm, "left_root"_a, "right_root"_a,
-             "Compute spin-free 1-RDM between two roots")
+             "Compute the spin-free 1-RDM between two roots")
+        .def("aa_2rdm", &SelectedCIHelper::compute_aa_2rdm, "left_root"_a, "right_root"_a,
+             "Compute the alpha-alpha 2-RDM between two roots")
+        .def("bb_2rdm", &SelectedCIHelper::compute_bb_2rdm, "left_root"_a, "right_root"_a,
+             "Compute the beta-beta 2-RDM between two roots")
+        .def("ab_2rdm", &SelectedCIHelper::compute_ab_2rdm, "left_root"_a, "right_root"_a,
+             "Compute the alpha-beta 2-RDM between two roots")
+        .def("sf_2rdm", &SelectedCIHelper::compute_sf_2rdm, "left_root"_a, "right_root"_a,
+             "Compute the spin-free 2-RDM between two roots")
         .def("dets", &SelectedCIHelper::variational_dets,
              "Return the determinants in the variational space")
         .def("ndets", &SelectedCIHelper::num_dets_var,
