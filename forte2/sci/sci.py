@@ -1069,9 +1069,11 @@ class SelectedCISolver(CIBase):
         NDArray
             Average spin-free two-particle RDM.
         """
-        raise NotImplementedError(
-            "Average spin-free 2-RDM is not implemented for SelectedCI."
-        )
+        rdm2 = np.zeros((self.norb,) * 4)
+        for i, ci_solver in enumerate(self.sub_solvers):
+            for j in range(ci_solver.nroot):
+                rdm2 += ci_solver.make_sf_2rdm(j) * self.weights[i][j]
+        return rdm2
 
     def set_ints(self, scalar, oei, tei):
         """
