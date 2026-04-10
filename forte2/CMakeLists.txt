@@ -116,6 +116,7 @@ nanobind_add_module(
   integrals/value_at_points.cc
   ci/ci_sigma_builder.cc
   ci/ci_sigma_builder_1rdm.cc
+  ci/ci_sigma_builder_1trdm.cc
   ci/ci_sigma_builder_2rdm.cc
   ci/ci_sigma_builder_3rdm.cc
   ci/ci_sigma_builder_test_rdms.cc

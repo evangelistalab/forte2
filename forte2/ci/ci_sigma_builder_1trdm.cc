@@ -3,6 +3,7 @@
 #include "helpers/np_vector_functions.h"
 
 #include "ci_sigma_builder.h"
+#include "ci_strings_makers.h"
 
 namespace forte2 {
 
@@ -52,7 +53,7 @@ np_matrix CISigmaBuilder::compute_s_1trdm(const CISigmaBuilder& sigmabuilder_rig
     // <Ja|a^{+}_p a_q|Ia> CL_{Ja,K} CR_{Ia,K}
 
     // loop over blocks of matrix C
-    for (const auto& [nI, class_Ia, class_Ib] : lists_right->determinant_classes()) {
+    for (const auto& [nI, class_Ia, class_Ib] : lists_right.determinant_classes()) {
         if (lists_right->detpblk(nI) == 0)
             continue;
 
