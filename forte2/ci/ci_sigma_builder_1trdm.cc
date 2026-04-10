@@ -48,23 +48,27 @@ np_matrix CISigmaBuilder::compute_s_1trdm(const CISigmaBuilder& sigmabuilder_rig
     VOListMap vo_list = find_ov_string_map(lists_left, lists_right, spin);
 
     auto rdm_data = rdm.data();
+    auto Cl_span = vector::as_span<double>(C_left);
+    auto Cr_span = vector::as_span<double>(C_right);
 
     // Here we compute the RDMs for the case of different irreps
     // <Ja|a^{+}_p a_q|Ia> CL_{Ja,K} CR_{Ia,K}
 
     // loop over blocks of matrix C
     for (const auto& [nI, class_Ia, class_Ib] : lists_right.determinant_classes()) {
-        if (lists_right->detpblk(nI) == 0)
+        if (lists_right.block_size(nI) == 0)
             continue;
 
-        auto Cr = C_right.gather_C_block(GenCIVector::get_CR(), alfa, alfa_address_right,
-                                         beta_address_right, class_Ia, class_Ib, false);
+        auto tr = gather_block(Cr_span, TR, spin, lists_left, class_Ia, class_Ib);
 
-        for (const auto& [nJ, class_Ja, class_Jb] : lists_left->determinant_classes()) {
+        // auto Cr = C_right.gather_C_block(GenCIVector::get_CR(), alfa, alfa_address_right,
+        //                                  beta_address_right, class_Ia, class_Ib, false);
+
+        for (const auto& [nJ, class_Ja, class_Jb] : lists_left.determinant_classes()) {
             // check if the string class on which we don't act is the same for I and J
             // here we cannot assume that the two classes must coincide. So we just check if
             // there are elements in the string list for the given pair of classes
-            if (alfa) {
+            if (is_alpha(spin)) {
                 if (string_list.count(std::make_pair(class_Ib, class_Jb)) == 0)
                     continue;
             } else {
@@ -72,26 +76,36 @@ np_matrix CISigmaBuilder::compute_s_1trdm(const CISigmaBuilder& sigmabuilder_rig
                     continue;
             }
 
-            if (lists_left->detpblk(nJ) == 0)
+            if (lists_left.block_size(nJ) == 0)
                 continue;
 
-            auto Cl = C_left.gather_C_block(GenCIVector::get_CL(), alfa, alfa_address_left,
-                                            beta_address_left, class_Ja, class_Jb, false);
+            auto tl =
+                gather_block(Cl_span, sigmabuilder_right.TL, spin, lists_right, class_Ja, class_Jb);
 
-            const auto& string_list_block = alfa ? string_list[std::make_pair(class_Ib, class_Jb)]
-                                                 : string_list[std::make_pair(class_Ia, class_Ja)];
+            // auto Cl = C_left.gather_C_block(GenCIVector::get_CL(), alfa, alfa_address_left,
+            //                                 beta_address_left, class_Ja, class_Jb, false);
 
-            const auto& pq_vo_list = alfa ? vo_list[std::make_pair(class_Ia, class_Ja)]
-                                          : vo_list[std::make_pair(class_Ib, class_Jb)];
+            const auto& string_list_block = is_alpha(spin)
+                                                ? string_list[std::make_pair(class_Ib, class_Jb)]
+                                                : string_list[std::make_pair(class_Ia, class_Ja)];
+
+            const auto& pq_vo_list = is_alpha(spin) ? vo_list[std::make_pair(class_Ia, class_Ja)]
+                                                    : vo_list[std::make_pair(class_Ib, class_Jb)];
+
+            const size_t maxL_left = is_alpha(spin) ? beta_address_left->strpcls(class_Ib)
+                                                    : alfa_address_left->strpcls(class_Ia);
+
+            const size_t maxL_right = is_alpha(spin) ? beta_address_right->strpcls(class_Jb)
+                                                     : alfa_address_right->strpcls(class_Ja); //???
 
             for (const auto& [pq, vo_list] : pq_vo_list) {
                 const auto& [p, q] = pq;
                 double rdm_element = 0.0;
                 for (const auto& [sign, I, J] : vo_list) {
                     for (const auto& [Ip, Jp] : string_list_block)
-                        rdm_element += sign * Cl[J][Jp] * Cr[I][Ip];
+                        rdm_element += sign * tl[J * maxL_left + Jp] * tr[I * maxL_right + Ip];
                 }
-                rdm_data[p * ncmo + q] += rdm_element;
+                rdm_data[p * norb + q] += rdm_element;
             }
         }
     }
