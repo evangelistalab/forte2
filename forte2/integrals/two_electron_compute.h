@@ -318,23 +318,10 @@ template <libint2::Operator Op, typename Params = NoParams>
         }
     };
 
-    const auto num_threads = get_num_threads();
-    std::vector<std::pair<std::size_t, std::size_t>> shell_ranges;
-
-    /// Divide the work among threads in contiguous blocks of first shells
-    const std::size_t block_size = (nshells1 + num_threads - 1) / num_threads;
-    for (std::size_t t = 0; t < num_threads; ++t) {
-        std::size_t begin = t * block_size;
-        std::size_t end = std::min(begin + block_size, nshells1);
-        if (begin < end) {
-            shell_ranges.emplace_back(begin, end);
-        }
-    }
-
     if (&basis2 == &basis3) {
-        parallel_for_ranges(shell_ranges, kernel_sym);
+        parallel_for_chunked(nshells1, kernel_sym);
     } else {
-        parallel_for_ranges(shell_ranges, kernel_nosym);
+        parallel_for_chunked(nshells1, kernel_nosym);
     }
 
     // Finalize libint2
@@ -464,20 +451,7 @@ void compute_two_electron_3c_by_shell(
         }
     };
 
-    const auto num_threads = get_num_threads();
-    std::vector<std::pair<std::size_t, std::size_t>> shell_ranges;
-
-    /// Divide the work among threads in contiguous blocks of first shells
-    const std::size_t block_size = (ish1 - ish0 + num_threads - 1) / num_threads;
-    for (std::size_t t = 0; t < num_threads; ++t) {
-        std::size_t begin = ish0 + t * block_size;
-        std::size_t end = std::min(begin + block_size, ish1);
-        if (begin < end) {
-            shell_ranges.emplace_back(begin, end);
-        }
-    }
-
-    parallel_for_ranges(shell_ranges, kernel);
+    parallel_for_chunked(ish0, ish1, kernel);
 
     // Finalize libint2
     libint2::finalize();

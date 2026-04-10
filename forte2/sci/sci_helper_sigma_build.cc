@@ -4,37 +4,9 @@
 #include "helpers/np_vector_functions.h"
 #include "helpers/np_matrix_functions.h"
 
-#include <future>
-
 #include "sci_helper.h"
 
 namespace forte2 {
-
-namespace {
-
-// A helper function to run a loop in parallel over a given number of indices. The work function is called with the index as argument.
-template <typename WorkFn>
-void run_parallel_indices(size_t count, size_t num_threads, WorkFn&& work) {
-    if (num_threads <= 1 || count == 0) {
-        for (size_t i{0}; i < count; ++i)
-            work(i);
-        return;
-    }
-
-    std::vector<std::future<void>> workers;
-    workers.reserve(num_threads);
-    for (size_t t{0}; t < num_threads; ++t) {
-        workers.push_back(std::async(std::launch::async, [count, num_threads, t, &work]() {
-            for (size_t i{t}; i < count; i += num_threads)
-                work(i);
-        }));
-    }
-
-    for (auto& w : workers)
-        w.get();
-}
-
-} // namespace
 
 void SelectedCIHelper::compute_det_energies() {
     // compute the energy of all the determinants
@@ -94,11 +66,11 @@ void SelectedCIHelper::find_matching_dets(std::span<double> basis, std::span<dou
         for (size_t jj{jstart}; jj < jend; ++jj) {
             const auto idx_j = list.sorted_dets_second_string(jj);
             if (const auto it = i_map.find(idx_j); it != i_map.end()) {
-                // NOTE: when find_matching_dets is called from different threads, 
+                // NOTE: when find_matching_dets is called from different threads,
                 // this increment is contention-free, because each thread is working
-                // on its own alpha string (i), and the sigma updates are on disjoint sets of determinants
-                // because they have different alpha strings
-                // Same logic applies to the other branch of this if statement
+                // on its own alpha string (i), and the sigma updates are on disjoint sets of
+                // determinants because they have different alpha strings Same logic applies to the
+                // other branch of this if statement
                 sigma[it->second] += int_sign * basis[det_permutation[jj]];
             }
         }
@@ -116,7 +88,7 @@ void SelectedCIHelper::find_matching_dets(std::span<double> basis, std::span<dou
 void SelectedCIHelper::H1a(std::span<double> basis, std::span<double> sigma) const {
     const auto first_string_size = ab_list_.first_string_size();
 
-    run_parallel_indices(first_string_size, num_threads_, [&](size_t i) {
+    parallel_for(first_string_size, [&](size_t i) {
         const auto& sublist = ab_list_.one_hole_first_string_list()[i];
         for (const auto& [p, hole_idx, sign_p] : sublist) {
             const auto& inv_sublist = ab_list_.one_hole_first_string_list_inv()[hole_idx];
@@ -136,7 +108,7 @@ void SelectedCIHelper::H1a(std::span<double> basis, std::span<double> sigma) con
 void SelectedCIHelper::H1b(std::span<double> basis, std::span<double> sigma) const {
     const auto first_string_size = ba_list_.first_string_size();
 
-    run_parallel_indices(first_string_size, num_threads_, [&](size_t i) {
+    parallel_for(first_string_size, [&](size_t i) {
         const auto& sublist = ba_list_.one_hole_first_string_list()[i];
         for (const auto& [p, hole_idx, sign_p] : sublist) {
             const auto& inv_sublist = ba_list_.one_hole_first_string_list_inv()[hole_idx];
@@ -156,7 +128,7 @@ void SelectedCIHelper::H1b(std::span<double> basis, std::span<double> sigma) con
 void SelectedCIHelper::H2a(std::span<double> basis, std::span<double> sigma) const {
     const auto first_string_size = ab_list_.first_string_size();
 
-    run_parallel_indices(first_string_size, num_threads_, [&](size_t i) {
+    parallel_for(first_string_size, [&](size_t i) {
         const auto& sublist = ab_list_.two_hole_string_list()[i];
         for (const auto& [p, q, hole_idx, sign_pq] : sublist) { // (p < q)
             const auto& inv_sublist = ab_list_.two_hole_string_list_inv()[hole_idx];
@@ -176,7 +148,7 @@ void SelectedCIHelper::H2a(std::span<double> basis, std::span<double> sigma) con
 void SelectedCIHelper::H2b(std::span<double> basis, std::span<double> sigma) const {
     const auto first_string_size = ba_list_.first_string_size();
 
-    run_parallel_indices(first_string_size, num_threads_, [&](size_t i) {
+    parallel_for(first_string_size, [&](size_t i) {
         const auto& sublist = ba_list_.two_hole_string_list()[i];
         for (const auto& [p, q, hole_idx, sign_pq] : sublist) { // (p < q)
             const auto& inv_sublist = ba_list_.two_hole_string_list_inv()[hole_idx];
@@ -197,7 +169,7 @@ void SelectedCIHelper::H2ab(std::span<double> basis, std::span<double> sigma) co
     const auto first_string_size = ab_list_.first_string_size();
     const auto& det_permutation = ab_list_.det_permutation();
 
-    run_parallel_indices(first_string_size, num_threads_, [&](size_t i) {
+    parallel_for(first_string_size, [&](size_t i) {
         const auto& i_map = ab_list_.second_string_to_det_index()[i];
         const auto& sublist_a = ab_list_.one_hole_first_string_list()[i];
         for (const auto& [p, hole_idx, sign_p] : sublist_a) {
@@ -222,7 +194,7 @@ void SelectedCIHelper::H2ab(std::span<double> basis, std::span<double> sigma) co
                             const double sign = sign_p * sign_q * sign_r * sign_s;
                             // Check if the determinant with the new beta string exists
                             if (const auto it = i_map.find(k); it != i_map.end()) {
-                                // See the comment in find_matching_dets about why this increment is 
+                                // See the comment in find_matching_dets about why this increment is
                                 // contention-free when called from different threads
                                 sigma[it->second] += v_pqrs * sign * basis[det_permutation[jj]];
                             }
