@@ -199,18 +199,15 @@ class _SelectedCISingleStateSolver:
             # These are the PT2 corrections due to the new perturbative determinants added in this cycle
             self.ept2_pt = self.sci_helper.ept2_pt()
 
-
             summary = "\nSummary of selection:"
-            summary += (
-                f"\n  {'Initial # of variational determinants:':<40}{old_ndets}"
-            )
+            summary += f"\n  {'Initial # of variational determinants:':<40}{old_ndets}"
             summary += (
                 f"\n  {'Variational added:':<40}{self.sci_helper.num_new_dets_var()}"
             )
-            summary += f"\n  {'Total variational determinants:':<40}{self.sci_helper.ndets()}"
             summary += (
-                f"\n  {'Perturbatively included:':<40}{self.sci_helper.num_new_dets_pt2()}"
+                f"\n  {'Total variational determinants:':<40}{self.sci_helper.ndets()}"
             )
+            summary += f"\n  {'Perturbatively included:':<40}{self.sci_helper.num_new_dets_pt2()}"
             summary += (
                 f"\n  {'Selection time:':<40}{self.sci_helper.selection_time():.3f} s\n"
             )
@@ -278,7 +275,8 @@ class _SelectedCISingleStateSolver:
                 break
         else:
             logger.log(
-                f"Selected CI did not converge in {self.sci_params.maxcycle} cycles.", self.log_level
+                f"Selected CI did not converge in {self.sci_params.maxcycle} cycles.",
+                self.log_level,
             )
 
         # final selection to update var' and pt2 contributions with the final CI coefficients
@@ -289,6 +287,8 @@ class _SelectedCISingleStateSolver:
         logger.log_info1(f"Algorithm: {self.sci_params.selection_algorithm}")
         logger.log_info1(f"  var_threshold = {self.sci_params.var_threshold}")
         logger.log_info1(f"  pt2_threshold = {self.sci_params.pt2_threshold}")
+
+        old_ndets = self.sci_helper.ndets()
 
         if self.sci_params.selection_algorithm.lower() == "hbci_ref":
             self.sci_helper.select_hbci_ref(
@@ -310,28 +310,28 @@ class _SelectedCISingleStateSolver:
         self.ept2_pt = self.sci_helper.ept2_pt()
         self.spin2_var = self.sci_helper.compute_spin2()
 
-        summary = "\nSummary of selection:"
+        summary = "\nSummary of final selection:"
+        summary += f"\n  {'Initial # of variational determinants:':<40}{old_ndets}"
+        summary += f"\n  {'Variational added:':<40}{self.sci_helper.num_new_dets_var()}"
         summary += (
-            f"\n  Variational added:     {self.sci_helper.num_new_dets_var()}"
+            f"\n  {'Total variational determinants:':<40}{self.sci_helper.ndets()}"
         )
         summary += (
-            f"\n  Perturbative included: {self.sci_helper.num_new_dets_pt2()}"
+            f"\n  {'Perturbatively included:':<40}{self.sci_helper.num_new_dets_pt2()}"
         )
-        summary += f"\n  Total determinants:    {self.sci_helper.ndets()}"
         summary += (
-            f"\n  Selection time:        {self.sci_helper.selection_time():.3f} s\n"
+            f"\n  {'Selection time:':<40}{self.sci_helper.selection_time():.3f} s\n"
         )
         logger.log(summary, self.log_level)
 
         table = AsciiTable(
             columns=[
                 "Root",
-                "E (var) [Eh]",
+                "E (CI) [Eh]",
                 "S^2 (var)",
-                "E (var') [Eh]",
-                "E (var'+PT2) [Eh]",
+                "E (CI) + E (PT2) [Eh]",
             ],
-            formats=["{:>4}", "{:>20.12f}", "{:>6.3f}", "{:>20.12f}", "{:>20.12f}"],
+            formats=["{:>4}", "{:>20.12f}", "{:>6.3f}", "{:>20.12f}"],
         )
 
         logger.log(table.header(), self.log_level)
@@ -341,12 +341,14 @@ class _SelectedCISingleStateSolver:
                     r,
                     self.e_var[r],
                     self.spin2_var[r],
-                    self.e_var[r] + self.ept2_var[r],
                     self.e_var[r] + self.ept2_var[r] + self.ept2_pt[r],
                 ),
                 self.log_level,
             )
         logger.log(table.footer(), self.log_level)
+
+        if self.do_test_rdms:
+            self._test_rdms()
 
         self.executed = True
 
@@ -634,14 +636,6 @@ class _SelectedCISingleStateSolver:
                     self.log_level,
                 )
 
-        # if not self.two_component:
-        #     h_tot, h_aabb, h_aaaa, h_bbbb = self.ci_sigma_builder.avg_build_time()
-        #     logger.log("\nAverage CI Sigma Builder time summary:", self.log_level)
-        #     logger.log(f"h_aabb time:    {h_aabb:.3f} s/build", self.log_level)
-        #     logger.log(f"h_aaaa time:    {h_aaaa:.3f} s/build", self.log_level)
-        #     logger.log(f"h_bbbb time:    {h_bbbb:.3f} s/build", self.log_level)
-        #     logger.log(f"total time:     {h_tot:.3f} s/build\n", self.log_level)
-
     def _do_exact_diagonalization(self):
         logger.log("Using CI algorithm: Exact Diagonalization", self.log_level)
 
@@ -693,14 +687,9 @@ class _SelectedCISingleStateSolver:
             root_rdms["rdm2_ab"] = rdm2_ab
             root_rdms["rdm2_bb"] = rdm2_bb
 
-            rdm2_aa_full, _, rdm2_bb_full = self.make_sd_2rdm(root)
             # Convert to full-dimension RDMs
-            root_rdms["rdm2_aa_full"] = cpp_helpers.packed_tensor4_to_tensor4(
-                rdm2_aa_full
-            )
-            root_rdms["rdm2_bb_full"] = cpp_helpers.packed_tensor4_to_tensor4(
-                rdm2_bb_full
-            )
+            root_rdms["rdm2_aa_full"] = cpp_helpers.packed_tensor4_to_tensor4(rdm2_aa)
+            root_rdms["rdm2_bb_full"] = cpp_helpers.packed_tensor4_to_tensor4(rdm2_bb)
 
             root_rdms["rdm2_sf"] = self.make_sf_2rdm(root)
 
@@ -728,7 +717,7 @@ class _SelectedCISingleStateSolver:
                 f"CI energy from RDMs:           {rdms_energy:.12f} Eh", self.log_level
             )
             assert np.isclose(
-                self.E[root], rdms_energy
+                self.e_var[root], rdms_energy
             ), f"CI energy {self.E[root]} Eh does not match RDMs energy {rdms_energy} Eh"
 
             rdms_energy = (
@@ -742,7 +731,7 @@ class _SelectedCISingleStateSolver:
                 f"CI energy from expanded RDMs:  {rdms_energy:.12f} Eh", self.log_level
             )
 
-            assert self.E[root] == approx(rdms_energy)
+            assert self.e_var[root] == approx(rdms_energy)
 
             rdms_energy = (
                 self.ints.E
@@ -757,7 +746,7 @@ class _SelectedCISingleStateSolver:
                 f"CI energy from spin-free RDMs: {rdms_energy:.12f} Eh", self.log_level
             )
 
-            assert self.E[root] == approx(rdms_energy)
+            assert self.e_var[root] == approx(rdms_energy)
 
             logger.log(
                 f"RDMs for root {root} validated successfully.\n", self.log_level
@@ -788,6 +777,32 @@ class _SelectedCISingleStateSolver:
         b = self.sci_helper.b_1rdm(left_root, right_root)
         return a, b
 
+    def make_sd_2rdm(self, left_root: int, right_root: int | None = None):
+        r"""
+        Make the spin-dependent two-particle RDM for two CI roots.
+
+        Parameters
+        ----------
+        left_root : int
+            the CI root for the bra state.
+        right_root : int | None, optional (default=left_root)
+            the CI root for the ket state.
+
+        Returns
+        -------
+        tuple[NDArray, NDArray, NDArray]:
+            Spin-dependent two-particle RDMs (aa, ab, bb).
+        """
+        assert (
+            not self.two_component
+        ), "make_sd_2rdm is only available for non-relativistic CI."
+        if right_root is None:
+            right_root = left_root
+        aa = self.sci_helper.aa_2rdm(left_root, right_root)
+        ab = self.sci_helper.ab_2rdm(left_root, right_root)
+        bb = self.sci_helper.bb_2rdm(left_root, right_root)
+        return aa, ab, bb
+
     def make_sf_1rdm(self, left_root: int, right_root: int | None = None):
         """
         Make the spin-free one-particle RDM for two CI roots.
@@ -810,6 +825,29 @@ class _SelectedCISingleStateSolver:
         if right_root is None:
             right_root = left_root
         return self.sci_helper.sf_1rdm(left_root, right_root)
+
+    def make_sf_2rdm(self, left_root: int, right_root: int | None = None):
+        """
+        Make the spin-free two-particle RDM for two CI roots.
+
+        Parameters
+        ----------
+        left_root : int
+            the CI root for the bra state.
+        right_root : int | None, optional (default=left_root)
+            the CI root for the ket state.
+
+        Returns
+        -------
+        NDArray
+            Spin-free two-particle RDM in chemist's notation.
+        """
+        assert (
+            not self.two_component
+        ), "make_sf_2rdm is only available for non-relativistic CI."
+        if right_root is None:
+            right_root = left_root
+        return self.sci_helper.sf_2rdm(left_root, right_root)
 
     def compute_natural_occupation_numbers(self):
         """
@@ -1052,9 +1090,11 @@ class SelectedCISolver(CIBase):
         NDArray
             Average spin-free two-particle RDM.
         """
-        raise NotImplementedError(
-            "Average spin-free 2-RDM is not implemented for SelectedCI."
-        )
+        rdm2 = np.zeros((self.norb,) * 4)
+        for i, ci_solver in enumerate(self.sub_solvers):
+            for j in range(ci_solver.nroot):
+                rdm2 += ci_solver.make_sf_2rdm(j) * self.weights[i][j]
+        return rdm2
 
     def set_ints(self, scalar, oei, tei):
         """

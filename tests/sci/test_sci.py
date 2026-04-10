@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from forte2 import System, State, Determinant, CIStrings
+from forte2.ci import CI
 from forte2.scf import RHF
 from forte2.sci import SelectedCI
 from forte2.helpers.comparisons import approx
@@ -73,6 +74,7 @@ def test_sci2():
             num_batches_per_thread=16,
         ),
         nroots=1,
+        do_test_rdms=True,
     )(rhf)
 
     sci.run()
@@ -112,6 +114,7 @@ def test_sci3():
             num_batches_per_thread=16,
         ),
         nroots=4,
+        do_test_rdms=True,
     )(rhf)
 
     sci.run()
@@ -139,6 +142,7 @@ def test_sci4():
         states=State(nel=6, multiplicity=1, ms=0.0),
         active_orbitals=list(range(12)),
         nroots=2,
+        do_test_rdms=True,
         sci_params=SelectedCIParams(
             selection_algorithm="hbci",
             var_threshold=1e-5,
@@ -276,6 +280,38 @@ def test_sci_make_sf_1rdm():
     assert rdm1.shape == (4, 4)
     assert np.trace(rdm1) == pytest.approx(4.0, abs=1e-8)
     assert sci.E[0] == approx(-2.180967812920)
+
+
+def test_sci_make_rdms():
+    """Test 1- and 2-RDMs from SelectedCI."""
+    rhf = _h4_rhf()
+
+    sci = SelectedCI(
+        states=State(nel=4, multiplicity=1, ms=0.0),
+        active_orbitals=list(range(4)),
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-12,
+            pt2_threshold=0.0,
+            guess_dets=[Determinant("22")],
+        ),
+    )(rhf)
+    sci.run()
+
+    ci = CI(
+        states=State(nel=4, multiplicity=1, ms=0.0), active_orbitals=list(range(4))
+    )(rhf)
+    ci.run()
+
+    # Test the 1-RDM
+    sf_1rdm = sci.make_average_sf_1rdm()
+    sf_1rdm_ci = ci.make_average_1rdm()
+    assert np.allclose(sf_1rdm, sf_1rdm_ci, atol=1e-8)
+
+    # Test the 2-RDM
+    sf_2rdm = sci.make_average_sf_2rdm()
+    sf_2rdm_ci = ci.make_average_2rdm()
+    assert np.allclose(sf_2rdm, sf_2rdm_ci, atol=1e-8)
 
 
 def test_sci_semicanonical_final_orbital():
@@ -417,6 +453,7 @@ def test_sci_water_valence_excitation():
         die_if_not_converged=False,
         nroots=2,
         davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
+        do_test_rdms=True,
     )(rhf)
     sci.run()
     assert sci.E[0] == pytest.approx(-76.12037086, abs=1e-6)

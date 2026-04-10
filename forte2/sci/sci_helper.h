@@ -153,6 +153,38 @@ class SelectedCIHelper {
     ///        Gamma[p][q] = gamma(alpha)[p][q] + gamma(beta)[p][q]
     np_matrix compute_sf_1rdm(size_t left_root, size_t right_root) const;
 
+    /// @brief Compute the alpha-alpha two-electron reduced density matrix
+    /// @param left_root The left-hand side root index
+    /// @param right_root The right-hand side root index
+    /// @return The alpha-alpha two-electron reduced density matrix stored in a packed format as
+    ///         Gamma_aa[pq][rs] = <L| a^+_p a^+_q a_s a_r |R> with p>q and r>s
+    /// @note If the number of orbitals is less than 2, a matrix of shape (0, 0) is returned
+    np_matrix compute_aa_2rdm(size_t left_root, size_t right_root) const;
+
+    /// @brief Compute the beta-beta two-electron reduced density matrix
+    /// @param left_root The left-hand side root index
+    /// @param right_root The right-hand side root index
+    /// @return The beta-beta two-electron reduced density matrix stored in a packed format as
+    ///         Gamma_bb[pq][rs] = <L| b^+_p b^+_q b_s b_r |R> with p>q and r>s
+    /// @note If the number of orbitals is less than 2, a matrix of shape (0, 0) is returned
+    np_matrix compute_bb_2rdm(size_t left_root, size_t right_root) const;
+
+    /// @brief Compute the alpha-beta two-electron reduced density matrix
+    /// @param left_root The left-hand side root index
+    /// @param right_root The right-hand side root index
+    /// @return The alpha-beta two-electron reduced density matrix stored as
+    ///         Gamma_ab[p][q][r][s] = <L| a^+_p b^+_q b_s a_r |R> with p,r orbitals of spin alpha
+    ///         and q,s orbitals of spin beta
+    /// @note If the number of orbitals is 0, a tensor of shape (0, 0, 0, 0) is returned
+    np_tensor4 compute_ab_2rdm(size_t left_root, size_t right_root) const;
+
+    /// @brief Compute the spin-free two-electron reduced density matrix
+    /// @param left_root The left-hand side root index
+    /// @param right_root The right-hand side root index
+    /// @return The spin-free two-electron reduced density matrix stored as
+    ///         Gamma_sf[p][q][r][s] = Gamma_aa[pq][rs] + Gamma_bb[pq][rs] + Gamma_ab[p][r][q][s]
+    np_tensor4 compute_sf_2rdm(size_t left_root, size_t right_root) const;
+
   private:
     // == Class Private Methods ==
     /// @brief Compute the energies of all determinants in the variational space
@@ -190,7 +222,8 @@ class SelectedCIHelper {
     /// @brief Select new variational and PT2 determinants using a batch approach
     /// @param V_map The map to accumulate variational determinants and their contributions
     /// @param PT_map The map to accumulate PT2 determinants and their contributions
-    /// @param V_coeffs The vector to accumulate the coefficients of the variational determinants
+    /// @param V_coeffs The vector to accumulate the coefficients of the variational
+    /// determinants
     /// @param PT_coeffs The vector to accumulate the coefficients of the PT2 determinants
     /// @param var_threshold The threshold for variational selection
     /// @param pt2_threshold The threshold for PT2 selection
