@@ -135,34 +135,17 @@ void fill_3c_sym(np_tensor3_f& ints) {
     const auto nsym = ints.shape(0);
     const auto nk = ints.shape(2);
 
-    const auto num_threads = get_num_threads();
-    std::vector<std::future<void>> tasks;
-
     // The symmetry is in the i and j indices
     // Fortran looping: k changes slowest, then j, then i
     // This will be slightly wasteful since we will overwrite values in
     // the upper triangulars of the diagonal shell pairs
-    auto kernel = [&](std::size_t k0, std::size_t k1) {
-        for (std::size_t k = k0; k < k1; ++k) {
-            for (std::size_t j = 0; j < nsym; ++j) {
-                for (std::size_t i = j + 1; i < nsym; ++i) {
-                    data[i + j * nsym + k * nsym * nsym] = data[j + i * nsym + k * nsym * nsym];
-                }
+    parallel_for(nk, [&](std::size_t k) {
+        for (std::size_t j = 0; j < nsym; ++j) {
+            for (std::size_t i = j + 1; i < nsym; ++i) {
+                data[i + j * nsym + k * nsym * nsym] = data[j + i * nsym + k * nsym * nsym];
             }
         }
-    };
-
-    const std::size_t block_size = (nk + num_threads - 1) / num_threads;
-    for (std::size_t t = 0; t < num_threads; ++t) {
-        const std::size_t k_begin = t * block_size;
-        const std::size_t k_end = std::min((t + 1) * block_size, nk);
-        if (k_begin < k_end) {
-            tasks.emplace_back(std::async(std::launch::async, kernel, k_begin, k_end));
-        }
-    }
-    for (auto& task : tasks) {
-        task.get();
-    }
+    });
 }
 
 // function to compute three-center integrals
