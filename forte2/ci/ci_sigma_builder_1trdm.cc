@@ -61,9 +61,6 @@ np_matrix CISigmaBuilder::compute_s_1trdm(const CISigmaBuilder& sigmabuilder_rig
 
         auto tr = gather_block(Cr_span, TR, spin, lists_left, class_Ia, class_Ib);
 
-        // auto Cr = C_right.gather_C_block(GenCIVector::get_CR(), alfa, alfa_address_right,
-        //                                  beta_address_right, class_Ia, class_Ib, false);
-
         for (const auto& [nJ, class_Ja, class_Jb] : lists_left.determinant_classes()) {
             // check if the string class on which we don't act is the same for I and J
             // here we cannot assume that the two classes must coincide. So we just check if
@@ -82,9 +79,6 @@ np_matrix CISigmaBuilder::compute_s_1trdm(const CISigmaBuilder& sigmabuilder_rig
             auto tl =
                 gather_block(Cl_span, sigmabuilder_right.TL, spin, lists_right, class_Ja, class_Jb);
 
-            // auto Cl = C_left.gather_C_block(GenCIVector::get_CL(), alfa, alfa_address_left,
-            //                                 beta_address_left, class_Ja, class_Jb, false);
-
             const auto& string_list_block = is_alpha(spin)
                                                 ? string_list[std::make_pair(class_Ib, class_Jb)]
                                                 : string_list[std::make_pair(class_Ia, class_Ja)];
@@ -96,7 +90,7 @@ np_matrix CISigmaBuilder::compute_s_1trdm(const CISigmaBuilder& sigmabuilder_rig
                                                     : alfa_address_left->strpcls(class_Ia);
 
             const size_t maxL_right = is_alpha(spin) ? beta_address_right->strpcls(class_Jb)
-                                                     : alfa_address_right->strpcls(class_Ja); //???
+                                                     : alfa_address_right->strpcls(class_Ja);
 
             for (const auto& [pq, vo_list] : pq_vo_list) {
                 const auto& [p, q] = pq;
