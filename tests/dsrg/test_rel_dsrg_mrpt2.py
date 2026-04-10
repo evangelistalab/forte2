@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from forte2 import System, GHF, RelMCOptimizer, AVAS
-from forte2.dsrg import RelDSRG_MRPT2, RelDSRG_MRPT2_Slow
+from forte2 import System, GHF, RelMCOptimizer, AVAS, ROHF, MCOptimizer, State
+from forte2.dsrg import RelDSRG_MRPT2, RelDSRG_MRPT2_Slow, RelDSRG_MRPT2_Slow
 from forte2.helpers.comparisons import approx
 from forte2.data.atom_data import EH_TO_WN
 
@@ -140,6 +140,7 @@ def test_mrpt2_carbon_rel_sa():
         ]
     )
 
+
 @pytest.mark.slow
 def test_mrpt2_se_rel_sa_gauss_nuc():
     # Test the zero-field splitting of Se atom with Gaussian nuclear charges
@@ -209,6 +210,69 @@ def test_mrpt2_s_rel_sa_gauss_nuc():
     assert (dsrg.relax_eigvals[5] - dsrg.relax_eigvals[4]) * EH_TO_WN == pytest.approx(
         387.5234521376601, rel=1e-4
     )
+
+
+def test_mrpt2_as_rel_sa_gauss_nuc_siso():
+    xyz = """
+    As 0 0 0
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="decon-cc-pvtz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        minao_basis_set="ano-r0",
+        x2c_type="sf",
+        use_gaussian_charges=True,
+    )
+    scf = ROHF(
+        charge=0,
+        maxiter=50,
+        ms=0.5,
+        die_if_not_converged=False,
+    )(system)
+    avas = AVAS(
+        subspace=["As(4s)", "As(4p)"],
+        selection_method="separate",
+        num_active_docc=2,
+        num_active_uocc=1,
+    )(scf)
+    mc = MCOptimizer(
+        states=[
+            State(nel=33, multiplicity=4, ms=1.5),
+            State(nel=33, multiplicity=2, ms=0.5),
+        ],
+        nroots=[1, 5],
+        maxiter=100,
+    )(avas)
+    mc.run()
+
+    system.two_component = True
+    from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
+
+    mc.C = convert_coeff_spatial_to_spinor(mc.C)
+
+    ci = RelMCOptimizer(
+        nel=33,
+        nroots=14,
+        maxiter=1,
+        core_orbitals=28,
+        active_orbitals=8,
+    )(mc)
+    ci.run()
+
+    pt = RelDSRG_MRPT2(
+        flow_param=0.24,
+        relax_reference="once",
+        siso=True,
+        frozen_core_orbitals=28,
+    )(ci)
+    pt.run()
+
+    assert (pt.relax_eigvals[8] - pt.relax_eigvals[7]) * EH_TO_WN == pytest.approx(
+        178.51462351761845, rel=1e-4
+    )
+
 
 @pytest.mark.slow
 def test_mrpt2_sh_with_slow():
