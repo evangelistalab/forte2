@@ -342,6 +342,9 @@ class _SelectedCISingleStateSolver:
             )
         logger.log(table.footer(), self.log_level)
 
+        if self.do_test_rdms:
+            self._test_rdms()
+
         self.executed = True
 
         return self
@@ -628,14 +631,6 @@ class _SelectedCISingleStateSolver:
                     self.log_level,
                 )
 
-        # if not self.two_component:
-        #     h_tot, h_aabb, h_aaaa, h_bbbb = self.ci_sigma_builder.avg_build_time()
-        #     logger.log("\nAverage CI Sigma Builder time summary:", self.log_level)
-        #     logger.log(f"h_aabb time:    {h_aabb:.3f} s/build", self.log_level)
-        #     logger.log(f"h_aaaa time:    {h_aaaa:.3f} s/build", self.log_level)
-        #     logger.log(f"h_bbbb time:    {h_bbbb:.3f} s/build", self.log_level)
-        #     logger.log(f"total time:     {h_tot:.3f} s/build\n", self.log_level)
-
     def _do_exact_diagonalization(self):
         logger.log("Using CI algorithm: Exact Diagonalization", self.log_level)
 
@@ -687,14 +682,9 @@ class _SelectedCISingleStateSolver:
             root_rdms["rdm2_ab"] = rdm2_ab
             root_rdms["rdm2_bb"] = rdm2_bb
 
-            rdm2_aa_full, _, rdm2_bb_full = self.make_sd_2rdm(root)
             # Convert to full-dimension RDMs
-            root_rdms["rdm2_aa_full"] = cpp_helpers.packed_tensor4_to_tensor4(
-                rdm2_aa_full
-            )
-            root_rdms["rdm2_bb_full"] = cpp_helpers.packed_tensor4_to_tensor4(
-                rdm2_bb_full
-            )
+            root_rdms["rdm2_aa_full"] = cpp_helpers.packed_tensor4_to_tensor4(rdm2_aa)
+            root_rdms["rdm2_bb_full"] = cpp_helpers.packed_tensor4_to_tensor4(rdm2_bb)
 
             root_rdms["rdm2_sf"] = self.make_sf_2rdm(root)
 
@@ -722,7 +712,7 @@ class _SelectedCISingleStateSolver:
                 f"CI energy from RDMs:           {rdms_energy:.12f} Eh", self.log_level
             )
             assert np.isclose(
-                self.E[root], rdms_energy
+                self.e_var[root], rdms_energy
             ), f"CI energy {self.E[root]} Eh does not match RDMs energy {rdms_energy} Eh"
 
             rdms_energy = (
@@ -736,7 +726,7 @@ class _SelectedCISingleStateSolver:
                 f"CI energy from expanded RDMs:  {rdms_energy:.12f} Eh", self.log_level
             )
 
-            assert self.E[root] == approx(rdms_energy)
+            assert self.e_var[root] == approx(rdms_energy)
 
             rdms_energy = (
                 self.ints.E
@@ -751,7 +741,7 @@ class _SelectedCISingleStateSolver:
                 f"CI energy from spin-free RDMs: {rdms_energy:.12f} Eh", self.log_level
             )
 
-            assert self.E[root] == approx(rdms_energy)
+            assert self.e_var[root] == approx(rdms_energy)
 
             logger.log(
                 f"RDMs for root {root} validated successfully.\n", self.log_level
@@ -781,6 +771,32 @@ class _SelectedCISingleStateSolver:
         a = self.sci_helper.a_1rdm(left_root, right_root)
         b = self.sci_helper.b_1rdm(left_root, right_root)
         return a, b
+
+    def make_sd_2rdm(self, left_root: int, right_root: int | None = None):
+        r"""
+        Make the spin-dependent two-particle RDM for two CI roots.
+
+        Parameters
+        ----------
+        left_root : int
+            the CI root for the bra state.
+        right_root : int | None, optional (default=left_root)
+            the CI root for the ket state.
+
+        Returns
+        -------
+        tuple[NDArray, NDArray, NDArray]:
+            Spin-dependent two-particle RDMs (aa, ab, bb).
+        """
+        assert (
+            not self.two_component
+        ), "make_sd_2rdm is only available for non-relativistic CI."
+        if right_root is None:
+            right_root = left_root
+        aa = self.sci_helper.aa_2rdm(left_root, right_root)
+        ab = self.sci_helper.ab_2rdm(left_root, right_root)
+        bb = self.sci_helper.bb_2rdm(left_root, right_root)
+        return aa, ab, bb
 
     def make_sf_1rdm(self, left_root: int, right_root: int | None = None):
         """

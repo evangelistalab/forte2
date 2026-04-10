@@ -333,13 +333,25 @@ class SelectedCIHelper:
         """
 
     def a_1rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
-        """Compute alpha-spin 1-RDM between two roots"""
+        """Compute the alpha-spin 1-RDM between two roots"""
 
     def b_1rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
-        """Compute beta-spin 1-RDM between two roots"""
+        """Compute the beta-spin 1-RDM between two roots"""
 
     def sf_1rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
-        """Compute spin-free 1-RDM between two roots"""
+        """Compute the spin-free 1-RDM between two roots"""
+
+    def aa_2rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+        """Compute the alpha-alpha 2-RDM between two roots"""
+
+    def bb_2rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+        """Compute the beta-beta 2-RDM between two roots"""
+
+    def ab_2rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
+        """Compute the alpha-beta 2-RDM between two roots"""
+
+    def sf_2rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
+        """Compute the spin-free 2-RDM between two roots"""
 
     def dets(self) -> list[Determinant]:
         """Return the determinants in the variational space"""

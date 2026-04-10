@@ -74,6 +74,7 @@ def test_sci2():
             num_batches_per_thread=16,
         ),
         nroots=1,
+        do_test_rdms=True,
     )(rhf)
 
     sci.run()
@@ -113,6 +114,7 @@ def test_sci3():
             num_batches_per_thread=16,
         ),
         nroots=4,
+        do_test_rdms=True,
     )(rhf)
 
     sci.run()
@@ -140,6 +142,7 @@ def test_sci4():
         states=State(nel=6, multiplicity=1, ms=0.0),
         active_orbitals=list(range(12)),
         nroots=2,
+        do_test_rdms=True,
         sci_params=SelectedCIParams(
             selection_algorithm="hbci",
             var_threshold=1e-5,
@@ -450,6 +453,7 @@ def test_sci_water_valence_excitation():
         die_if_not_converged=False,
         nroots=2,
         davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
+        do_test_rdms=True,
     )(rhf)
     sci.run()
     assert sci.E[0] == pytest.approx(-76.12037086, abs=1e-6)
