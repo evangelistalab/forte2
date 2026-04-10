@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from forte2 import System, State, Determinant, CIStrings
+from forte2.ci.ci import CI
 from forte2.scf import RHF
 from forte2.sci import SelectedCI
 from forte2.helpers.comparisons import approx
@@ -276,6 +277,43 @@ def test_sci_make_sf_1rdm():
     assert rdm1.shape == (4, 4)
     assert np.trace(rdm1) == pytest.approx(4.0, abs=1e-8)
     assert sci.E[0] == approx(-2.180967812920)
+
+
+def test_sci_make_rdms():
+    """Test 1- and 2-RDMs from SelectedCI."""
+    rhf = _h4_rhf()
+
+    sci = SelectedCI(
+        states=State(nel=4, multiplicity=1, ms=0.0),
+        active_orbitals=list(range(4)),
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-12,
+            pt2_threshold=0.0,
+        ),
+    )(rhf)
+    sci.run()
+
+    ci = CI(
+        states=State(nel=4, multiplicity=1, ms=0.0), active_orbitals=list(range(4))
+    )(rhf)
+    ci.run()
+
+    sf_1rdm = sci.sub_solvers[0].make_sf_1rdm(0)
+    sf_1rdm_ci = ci.make_average_1rdm()
+    assert np.allclose(sf_1rdm, sf_1rdm_ci, atol=1e-8)
+
+    sf_2rdm = sci.sub_solvers[0].make_sf_2rdm(0)
+    sf_2rdm_ci = ci.make_average_2rdm()
+
+    print("SCI 2-RDM:")
+    print(sf_2rdm - sf_2rdm_ci)
+    # print("CI 2-RDM:")
+    # print(sf_2rdm_ci)
+    assert np.allclose(sf_2rdm, sf_2rdm_ci, atol=1e-8)
+
+
+test_sci_make_rdms()
 
 
 def test_sci_semicanonical_final_orbital():

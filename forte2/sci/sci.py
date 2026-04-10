@@ -199,18 +199,15 @@ class _SelectedCISingleStateSolver:
             # These are the PT2 corrections due to the new perturbative determinants added in this cycle
             self.ept2_pt = self.sci_helper.ept2_pt()
 
-
             summary = "\nSummary of selection:"
-            summary += (
-                f"\n  {'Initial # of variational determinants:':<40}{old_ndets}"
-            )
+            summary += f"\n  {'Initial # of variational determinants:':<40}{old_ndets}"
             summary += (
                 f"\n  {'Variational added:':<40}{self.sci_helper.num_new_dets_var()}"
             )
-            summary += f"\n  {'Total variational determinants:':<40}{self.sci_helper.ndets()}"
             summary += (
-                f"\n  {'Perturbatively included:':<40}{self.sci_helper.num_new_dets_pt2()}"
+                f"\n  {'Total variational determinants:':<40}{self.sci_helper.ndets()}"
             )
+            summary += f"\n  {'Perturbatively included:':<40}{self.sci_helper.num_new_dets_pt2()}"
             summary += (
                 f"\n  {'Selection time:':<40}{self.sci_helper.selection_time():.3f} s\n"
             )
@@ -278,7 +275,8 @@ class _SelectedCISingleStateSolver:
                 break
         else:
             logger.log(
-                f"Selected CI did not converge in {self.sci_params.maxcycle} cycles.", self.log_level
+                f"Selected CI did not converge in {self.sci_params.maxcycle} cycles.",
+                self.log_level,
             )
 
         # final selection to update var' and pt2 contributions with the final CI coefficients
@@ -311,12 +309,8 @@ class _SelectedCISingleStateSolver:
         self.spin2_var = self.sci_helper.compute_spin2()
 
         summary = "\nSummary of selection:"
-        summary += (
-            f"\n  Variational added:     {self.sci_helper.num_new_dets_var()}"
-        )
-        summary += (
-            f"\n  Perturbative included: {self.sci_helper.num_new_dets_pt2()}"
-        )
+        summary += f"\n  Variational added:     {self.sci_helper.num_new_dets_var()}"
+        summary += f"\n  Perturbative included: {self.sci_helper.num_new_dets_pt2()}"
         summary += f"\n  Total determinants:    {self.sci_helper.ndets()}"
         summary += (
             f"\n  Selection time:        {self.sci_helper.selection_time():.3f} s\n"
@@ -810,6 +804,29 @@ class _SelectedCISingleStateSolver:
         if right_root is None:
             right_root = left_root
         return self.sci_helper.sf_1rdm(left_root, right_root)
+
+    def make_sf_2rdm(self, left_root: int, right_root: int | None = None):
+        """
+        Make the spin-free two-particle RDM for two CI roots.
+
+        Parameters
+        ----------
+        left_root : int
+            the CI root for the bra state.
+        right_root : int | None, optional (default=left_root)
+            the CI root for the ket state.
+
+        Returns
+        -------
+        NDArray
+            Spin-free two-particle RDM in chemist's notation.
+        """
+        assert (
+            not self.two_component
+        ), "make_sf_2rdm is only available for non-relativistic CI."
+        if right_root is None:
+            right_root = left_root
+        return self.sci_helper.sf_2rdm(left_root, right_root)
 
     def compute_natural_occupation_numbers(self):
         """
