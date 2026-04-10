@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from forte2 import System, State, Determinant, CIStrings
-from forte2.ci.ci import CI
+from forte2.ci import CI
 from forte2.scf import RHF
 from forte2.sci import SelectedCI
 from forte2.helpers.comparisons import approx

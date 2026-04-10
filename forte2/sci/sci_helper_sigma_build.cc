@@ -385,6 +385,8 @@ np_tensor4 SelectedCIHelper::compute_ab_2rdm(size_t left_root, size_t right_root
     // Loop over all unique alpha strings
     for (size_t i{0}; i < first_string_size; ++i) {
         const auto& i_map = ab_list_.second_string_to_det_index()[i];
+        // Loop over all single excitations in the alpha string.
+        // a+_q a_p |i_a> -> +/-|j_a>
         const auto& sublist_a = ab_list_.one_hole_first_string_list()[i];
         for (const auto& [p, hole_idx, sign_p] : sublist_a) {
             const auto& inv_sublist_a = ab_list_.one_hole_first_string_list_inv()[hole_idx];
@@ -393,13 +395,17 @@ np_tensor4 SelectedCIHelper::compute_ab_2rdm(size_t left_root, size_t right_root
                 // Loop over all the beta strings with the same alpha string
                 for (size_t jj{jstart}; jj < jend; ++jj) {
                     const auto idx_j = ab_list_.sorted_dets_second_string(jj);
-                    // Now loop over single excitations in the beta string
+                    // Loop over single excitations in the beta string.
+                    // a+_s a_r |j_b> -> +/-|k_b>
                     const auto& sublist_b = ab_list_.one_hole_second_string_list()[idx_j];
                     for (const auto& [r, hole_idx_b, sign_r] : sublist_b) {
                         const auto& inv_sublist_b =
                             ab_list_.one_hole_second_string_list_inv()[hole_idx_b];
                         for (const auto& [s, k, sign_s] : inv_sublist_b) {
                             const double sign = sign_p * sign_q * sign_r * sign_s;
+                            // Here we get (leaving note since this is a bit subtle):
+                            //     <j_a k_b|a+_r a_s a+_q a_p|i_a i_b>
+                            //   = <j_a k_b|a+_q a+_r a_s a_p|i_a i_b> = gamma2(q_a,r_b,p_a,s_b)
                             // Check if the determinant with the new beta string exists
                             if (const auto it = i_map.find(k); it != i_map.end()) {
                                 rdm_data[q * norb3_ + r * norb2_ + p * norb_ + s] +=
