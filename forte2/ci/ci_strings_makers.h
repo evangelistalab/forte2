@@ -70,4 +70,9 @@ H3List make_3h_list(const StringList& strings, std::shared_ptr<StringAddress> ad
 H1List2 make_1h_list2(const StringList& strings, std::shared_ptr<StringAddress> address,
                       std::shared_ptr<StringAddress> address_1h);
 
+std::map<std::pair<int, int>, std::vector<std::pair<int, int>>>
+find_string_map(const CIStrings& list_left, const CIStrings& list_right, Spin spin);
+
+VOListMap find_ov_string_map(const CIStrings& list_left, const CIStrings& list_right, Spin spin);
+
 } // namespace forte2

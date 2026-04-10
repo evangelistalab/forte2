@@ -1,0 +1,100 @@
+#include "helpers/timer.hpp"
+#include "helpers/np_matrix_functions.h"
+#include "helpers/np_vector_functions.h"
+
+#include "ci_sigma_builder.h"
+
+namespace forte2 {
+
+np_matrix CISigmaBuilder::compute_s_1trdm(const CISigmaBuilder& sigmabuilder_right,
+                                          np_vector C_left, np_vector C_right, Spin spin) const {
+    const auto& sigmabuilder_left = *this;
+
+    const auto& lists_left = sigmabuilder_left.lists_;
+    const auto& lists_right = sigmabuilder_right.lists_;
+
+    // Get the number of electrons
+    const auto na_left = lists_left.na();
+    const auto nb_left = lists_left.nb();
+    const auto na_right = lists_right.na();
+    const auto nb_right = lists_right.nb();
+    const auto norb = lists_left.norb();
+
+    if (lists_left.norb() != lists_right.norb()) {
+        throw std::runtime_error("FCI transition RDMs: The number of MOs must be the same in "
+                                 "the two wave functions.");
+    }
+
+    if (na_left != na_right or nb_left != nb_right) {
+        throw std::runtime_error("FCI transition RDMs: The number of alfa and beta electrons "
+                                 "must be the same in the "
+                                 "two wave functions.");
+    }
+    auto rdm = make_zeros<nb::numpy, double, 2>({norb, norb});
+    if ((is_alpha(spin) and (na_left < 1)) or (is_beta(spin) and (nb_left < 1)) or (norb < 1))
+        return rdm;
+
+    const auto& alfa_address_left = lists_left.alfa_address();
+    const auto& beta_address_left = lists_left.beta_address();
+    const auto& alfa_address_right = lists_right.alfa_address();
+    const auto& beta_address_right = lists_right.beta_address();
+
+    // Compute the lists that map the strings of the right and left wave functions. We only need
+    // strings for the part that is left untouched by the a^+_p a_q operator.
+    auto string_list = find_string_map(lists_left, lists_right, spin);
+    // Compute the VO lists that map the strings of the right and left wave functions. We only
+    // need strings for the part that is affected by the a^+_p a_q operator.
+    VOListMap vo_list = find_ov_string_map(lists_left, lists_right, spin);
+
+    auto rdm_data = rdm.data();
+
+    // Here we compute the RDMs for the case of different irreps
+    // <Ja|a^{+}_p a_q|Ia> CL_{Ja,K} CR_{Ia,K}
+
+    // loop over blocks of matrix C
+    for (const auto& [nI, class_Ia, class_Ib] : lists_right->determinant_classes()) {
+        if (lists_right->detpblk(nI) == 0)
+            continue;
+
+        auto Cr = C_right.gather_C_block(GenCIVector::get_CR(), alfa, alfa_address_right,
+                                         beta_address_right, class_Ia, class_Ib, false);
+
+        for (const auto& [nJ, class_Ja, class_Jb] : lists_left->determinant_classes()) {
+            // check if the string class on which we don't act is the same for I and J
+            // here we cannot assume that the two classes must coincide. So we just check if
+            // there are elements in the string list for the given pair of classes
+            if (alfa) {
+                if (string_list.count(std::make_pair(class_Ib, class_Jb)) == 0)
+                    continue;
+            } else {
+                if (string_list.count(std::make_pair(class_Ia, class_Ja)) == 0)
+                    continue;
+            }
+
+            if (lists_left->detpblk(nJ) == 0)
+                continue;
+
+            auto Cl = C_left.gather_C_block(GenCIVector::get_CL(), alfa, alfa_address_left,
+                                            beta_address_left, class_Ja, class_Jb, false);
+
+            const auto& string_list_block = alfa ? string_list[std::make_pair(class_Ib, class_Jb)]
+                                                 : string_list[std::make_pair(class_Ia, class_Ja)];
+
+            const auto& pq_vo_list = alfa ? vo_list[std::make_pair(class_Ia, class_Ja)]
+                                          : vo_list[std::make_pair(class_Ib, class_Jb)];
+
+            for (const auto& [pq, vo_list] : pq_vo_list) {
+                const auto& [p, q] = pq;
+                double rdm_element = 0.0;
+                for (const auto& [sign, I, J] : vo_list) {
+                    for (const auto& [Ip, Jp] : string_list_block)
+                        rdm_element += sign * Cl[J][Jp] * Cr[I][Ip];
+                }
+                rdm_data[p * ncmo + q] += rdm_element;
+            }
+        }
+    }
+    return rdm;
+}
+
+} // namespace forte2

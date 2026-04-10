@@ -261,6 +261,9 @@ class CISigmaBuilder {
     np_tensor4 compute_sf_2cumulant_debug(np_vector C_left, np_vector C_right) const;
     np_tensor6 compute_sf_3cumulant_debug(np_vector C_left, np_vector C_right) const;
 
+    np_matrix compute_s_1trdm(const CISigmaBuilder& sigmabuilder_right, np_vector C_left,
+                              np_vector C_right, Spin spin) const;
+
   private:
     // == Class Private Variables ==
 
