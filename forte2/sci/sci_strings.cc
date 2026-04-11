@@ -19,9 +19,11 @@ SelectedCIStrings::SelectedCIStrings(size_t norb, std::vector<Determinant>& dets
 
     build_one_hole_strings_and_lists(sorted_first_string_, one_hole_first_strings_,
                                      one_hole_first_string_list_, one_hole_first_string_list_inv_,
+                                     one_hole_first_string_list_by_orbital_,
                                      one_hole_first_strings_index_);
     build_one_hole_strings_and_lists(sorted_second_string_, one_hole_second_strings_,
                                      one_hole_second_string_list_, one_hole_second_string_list_inv_,
+                                     one_hole_second_string_list_by_orbital_,
                                      one_hole_second_strings_index_);
     build_two_hole_strings();
 }
@@ -92,6 +94,7 @@ void SelectedCIStrings::build_one_hole_strings_and_lists(
     const std::vector<String>& sorted_strings, std::vector<String>& one_hole_strings,
     std::vector<std::vector<std::tuple<size_t, size_t, double>>>& list,
     std::vector<std::vector<std::tuple<size_t, size_t, double>>>& inverse_list,
+    std::vector<std::vector<std::tuple<size_t, size_t, double>>>& list_by_orbital,
     ankerl::unordered_dense::map<String, size_t, String::Hash>& index_map) {
     list.reserve(sorted_strings.size());
     std::vector<size_t> occ(norb_, 0); // at most norb occupied orbitals
@@ -124,6 +127,15 @@ void SelectedCIStrings::build_one_hole_strings_and_lists(
     for (size_t i = 0, imax{sorted_strings.size()}; i < imax; ++i) {
         for (const auto& [orb, hole_idx, sign] : list[i]) {
             inverse_list[hole_idx].emplace_back(orb, i, sign);
+        }
+    }
+
+    // build a list of one-hole strings sorted by the index of the orbital that was removed (for
+    // efficient access when looping over orbitals)
+    list_by_orbital.resize(norb_);
+    for (size_t i = 0, imax{sorted_strings.size()}; i < imax; ++i) {
+        for (const auto& [orb, hole_idx, sign] : list[i]) {
+            list_by_orbital[orb].emplace_back(hole_idx, i, sign);
         }
     }
 }

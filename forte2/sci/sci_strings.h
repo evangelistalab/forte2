@@ -75,6 +75,15 @@ class SelectedCIStrings {
         return one_hole_first_string_list_inv_;
     }
 
+    /// @return The substitution list of one-hole strings sorted by the index of the orbital that
+    /// was removed
+    /// Stores orbital -> tuples of (hole_idx, I, sign) where I is the index of the string and
+    /// hole_idx is the index of the removed orbital
+    const std::vector<std::vector<std::tuple<size_t, size_t, double>>>&
+    one_hole_first_string_list_by_orbital() const {
+        return one_hole_first_string_list_by_orbital_;
+    }
+
     /// @return The one-hole strings for the second string
     const std::vector<String>& one_hole_second_strings() const { return one_hole_second_strings_; }
 
@@ -88,6 +97,15 @@ class SelectedCIStrings {
     const std::vector<std::vector<std::tuple<size_t, size_t, double>>>&
     one_hole_second_string_list_inv() const {
         return one_hole_second_string_list_inv_;
+    }
+
+    /// @return The substitution list of one-hole strings for the second string sorted by the
+    /// index of the orbital that was removed
+    /// Stores orbital -> tuples of (hole_idx, I, sign) where I is the index of the string and
+    /// hole_idx is the index of the removed orbital
+    const std::vector<std::vector<std::tuple<size_t, size_t, double>>>&
+    one_hole_second_string_list_by_orbital() const {
+        return one_hole_second_string_list_by_orbital_;
     }
 
     /// @return The two-hole strings
@@ -113,6 +131,7 @@ class SelectedCIStrings {
         const std::vector<String>& sorted_strings, std::vector<String>& one_hole_strings,
         std::vector<std::vector<std::tuple<size_t, size_t, double>>>& list,
         std::vector<std::vector<std::tuple<size_t, size_t, double>>>& inverse_list,
+        std::vector<std::vector<std::tuple<size_t, size_t, double>>>& list_by_orbital,
         ankerl::unordered_dense::map<String, size_t, String::Hash>& index_map);
     void build_two_hole_strings();
 
@@ -159,6 +178,11 @@ class SelectedCIStrings {
     /// @brief Precomputed list of one-particle strings with sign for each orbital (inverse)
     /// Stores K -> tuples of (orbital, I, sign) where I is the index of the string
     std::vector<std::vector<std::tuple<size_t, size_t, double>>> one_hole_first_string_list_inv_;
+    /// @brief Precomputed list of one-hole strings sorted by the index of the orbital that was
+    /// removed Stores orbital -> tuples of (hole_idx, I, sign) where I is the index of the string
+    /// and hole_idx is the index of the removed orbital
+    std::vector<std::vector<std::tuple<size_t, size_t, double>>>
+        one_hole_first_string_list_by_orbital_;
 
     /// @brief Precomputed list of one-hole strings
     std::vector<String> one_hole_second_strings_;
@@ -170,6 +194,11 @@ class SelectedCIStrings {
     /// @brief Precomputed list of one-particle strings with sign for each orbital (inverse)
     /// Stores K -> tuples of (orbital, I, sign) where I is the index of the string
     std::vector<std::vector<std::tuple<size_t, size_t, double>>> one_hole_second_string_list_inv_;
+    /// @brief Precomputed list of one-hole strings sorted by the index of the orbital that was
+    /// removed Stores orbital -> tuples of (hole_idx, I, sign) where I is the index of the string
+    /// and hole_idx is the index of the removed orbital
+    std::vector<std::vector<std::tuple<size_t, size_t, double>>>
+        one_hole_second_string_list_by_orbital_;
 
     /// @brief Two-hole strings
     std::vector<String> two_hole_strings_;
