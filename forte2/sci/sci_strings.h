@@ -84,6 +84,12 @@ class SelectedCIStrings {
         return one_hole_first_string_list_by_orbital_;
     }
 
+    /// @brief Map from one-hole string to its index
+    const ankerl::unordered_dense::map<String, size_t, String::Hash>&
+    one_hole_first_strings_index() const {
+        return one_hole_first_strings_index_;
+    }
+
     /// @return The one-hole strings for the second string
     const std::vector<String>& one_hole_second_strings() const { return one_hole_second_strings_; }
 

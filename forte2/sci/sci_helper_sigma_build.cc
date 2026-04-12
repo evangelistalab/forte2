@@ -471,4 +471,95 @@ np_tensor4 SelectedCIHelper::compute_sf_2rdm(size_t left_root, size_t right_root
 
     return rdm_sf;
 }
+
+double SelectedCIHelper::find_matching_dets_1trdm(size_t left_root, size_t right_root,
+                                                  const SelectedCIStrings& left_list,
+                                                  const SelectedCIStrings& right_list,
+                                                  const std::vector<double>& left_c,
+                                                  const std::vector<double>& right_c, size_t i,
+                                                  size_t j, double sign) const {
+    double result = 0.0;
+
+    // Find the range of determinants with the current alpha string
+    const auto& [istart, iend] = left_list.range(i);
+    const auto& [jstart, jend] = right_list.range(j);
+    const auto& det_permutation = right_list.det_permutation();
+
+    // Here we choose to loop over the smaller range and look up the deteminants in the larger range
+    // by using the hash map
+    if (iend - istart >= jend - jstart) {
+        const auto& i_map = left_list.second_string_to_det_index()[i];
+        for (size_t jj{jstart}; jj < jend; ++jj) {
+            const auto idx_j = right_list.sorted_dets_second_string(jj);
+            if (const auto it = i_map.find(idx_j); it != i_map.end()) {
+                result += sign * left_c[nroots_ * it->second + left_root] *
+                          right_c[nroots_ * det_permutation[jj] + right_root];
+            }
+        }
+    } else {
+        const auto& j_map = right_list.second_string_to_det_index()[j];
+        for (size_t ii{istart}; ii < iend; ++ii) {
+            const auto idx_i = left_list.sorted_dets_second_string(ii);
+            if (const auto it = j_map.find(idx_i); it != j_map.end()) {
+                result += sign * left_c[nroots_ * det_permutation[ii] + left_root] *
+                          right_c[nroots_ * it->second + right_root];
+            }
+        }
+    }
+
+    return result;
+}
+
+np_matrix SelectedCIHelper::compute_s_1trdm(const SelectedCIHelper& right_helper, size_t left_root,
+                                            size_t right_root, Spin spin) const {
+    const auto& left_helper = *this;
+
+    const auto& left_c = left_helper.c_;
+    const auto& right_c = right_helper.c_;
+
+    auto rdm = make_zeros<nb::numpy, double, 2>({norb_, norb_});
+    double* rdm_data = rdm.data();
+
+    // pick the appropriate string lists based on the spin
+    const auto& left_list = is_alpha(spin) ? left_helper.ab_list_ : left_helper.ba_list_;
+    const auto& right_list = is_alpha(spin) ? right_helper.ab_list_ : right_helper.ba_list_;
+
+    const auto right_first_string_size = right_list.first_string_size();
+    const auto& right_one_hole_first_strings = right_list.one_hole_first_strings();
+    const auto& left_one_hole_first_strings_index = left_list.one_hole_first_strings_index();
+
+    // Loop over all unique strings of the right state
+    for (size_t j{0}; j < right_first_string_size; ++j) {
+        const auto& sublist_right = right_list.one_hole_first_string_list()[j];
+        // loop over all single excitations in the right string. a_p |j> -> +/-|k>
+        for (const auto& [p, right_hole_idx, sign_p] : sublist_right) {
+            // get the one-hole alpha string from the right solver
+            const auto& K = right_one_hole_first_strings[right_hole_idx];
+            // find the index of the one-hole alpha string K in the left solver
+            if (const auto it = left_one_hole_first_strings_index.find(K);
+                it != left_one_hole_first_strings_index.end()) {
+                // if found, get the corresponding inv_sublist on the left
+                const auto& inv_sublist = left_list.one_hole_first_string_list_inv()[it->second];
+                for (const auto& [q, i, sign_q] : inv_sublist) {
+                    const double sign = sign_p * sign_q;
+                    rdm_data[p * norb_ + q] += find_matching_dets_1trdm(
+                        left_root, right_root, left_list, right_list, left_c, right_c, i, j, sign);
+                }
+            }
+        }
+    }
+
+    return rdm;
+}
+
+np_matrix SelectedCIHelper::compute_a_1trdm(const SelectedCIHelper& right_helper, size_t left_root,
+                                            size_t right_root) const {
+    return compute_s_1trdm(right_helper, left_root, right_root, Spin::Alpha);
+}
+
+np_matrix SelectedCIHelper::compute_b_1trdm(const SelectedCIHelper& right_helper, size_t left_root,
+                                            size_t right_root) const {
+    return compute_s_1trdm(right_helper, left_root, right_root, Spin::Beta);
+}
+
 } // namespace forte2

@@ -63,6 +63,12 @@ void export_sci_helper_api(nb::module_& m) {
              "Compute the alpha-beta 2-RDM between two roots")
         .def("sf_2rdm", &SelectedCIHelper::compute_sf_2rdm, "left_root"_a, "right_root"_a,
              "Compute the spin-free 2-RDM between two roots")
+        .def("a_1trdm", &SelectedCIHelper::compute_a_1trdm, "left_helper"_a, "left_root"_a,
+             "right_root"_a,
+             "Compute the alpha-spin 1-transition RDM between two roots in different helpers")
+        .def("b_1trdm", &SelectedCIHelper::compute_b_1trdm, "left_helper"_a, "left_root"_a,
+             "right_root"_a,
+             "Compute the beta-spin 1-transition RDM between two roots in different helpers")
         .def("dets", &SelectedCIHelper::variational_dets,
              "Return the determinants in the variational space")
         .def("ndets", &SelectedCIHelper::num_dets_var,

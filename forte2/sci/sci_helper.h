@@ -6,6 +6,7 @@
 #include <span>
 
 #include "helpers/ndarray.h"
+#include "helpers/spin.h"
 
 #include "ci/determinant.h"
 #include "ci/slater_rules.h"
@@ -184,6 +185,26 @@ class SelectedCIHelper {
     ///         Gamma_sf[p][q][r][s] = Gamma_aa[pq][rs] + Gamma_bb[pq][rs] + Gamma_ab[p][r][q][s]
     np_tensor4 compute_sf_2rdm(size_t left_root, size_t right_root) const;
 
+    /// @brief Compute the alpha transition one-electron reduced density matrix
+    /// @param helper_right The right-hand side SelectedCIHelper
+    /// @param left_root The left-hand side root index
+    /// @param right_root The right-hand side root index
+    /// @return The one-electron reduced density matrix stored as
+    ///        gamma(alpha)[p][q] = <L| a^+_p a_q |R> with p,q orbitals of spin alpha
+    /// @note If the number of orbitals is 0, a matrix of shape (0, 0) is returned
+    np_matrix compute_a_1trdm(const SelectedCIHelper& helper_right, size_t left_root,
+                              size_t right_root) const;
+
+    /// @brief Compute the beta one-electron reduced density matrix
+    /// @param helper_right The right-hand side SelectedCIHelper
+    /// @param left_root The left-hand side root index
+    /// @param right_root The right-hand side root index
+    /// @return The one-electron reduced density matrix stored as
+    ///        gamma(beta)[p][q] = <L| b^+_p b_q |R> with p,q orbitals of spin beta
+    /// @note If the number of orbitals is 0, a matrix of shape (0, 0) is returned
+    np_matrix compute_b_1trdm(const SelectedCIHelper& helper_right, size_t left_root,
+                              size_t right_root) const;
+
   private:
     // == Class Private Methods ==
     /// @brief Compute the energies of all determinants in the variational space
@@ -244,6 +265,25 @@ class SelectedCIHelper {
     double find_matching_dets_1rdm(size_t left_root, size_t right_root,
                                    const SelectedCIStrings& list, size_t i, size_t j,
                                    double sign) const;
+
+    np_matrix compute_s_1trdm(const SelectedCIHelper& helper_right, size_t left_root,
+                              size_t right_root, Spin spin) const;
+
+    /// @brief Find matching determinants for the given excitation and compute their
+    /// contributions to the one-electron transition reduced density matrix
+    /// @param left_root The left-hand side root index (in the left SelectedCIHelper)
+    /// @param right_root The right-hand side root index (in the right SelectedCIHelper)
+    /// @param left_list The list of determinants for the left state
+    /// @param right_list The list of determinants for the right state
+    /// @param i The index of the excitation in the left list
+    /// @param j The index of the excitation in the right list
+    /// @param sign
+    double find_matching_dets_1trdm(size_t left_root, size_t right_root,
+                                    const SelectedCIStrings& left_list,
+                                    const SelectedCIStrings& right_list,
+                                    const std::vector<double>& left_c,
+                                    const std::vector<double>& right_c, size_t i, size_t j,
+                                    double sign) const;
 
     // == Class Private Variables ==
 
