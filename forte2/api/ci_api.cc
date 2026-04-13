@@ -77,6 +77,8 @@ void export_ci_sigma_builder_api(nb::module_& m) {
         .def("slater_rules_csf", &CISigmaBuilder::slater_rules_csf, "dets"_a, "spin_adapter"_a,
              "I"_a, "J"_a)
         .def("Hamiltonian", &CISigmaBuilder::Hamiltonian, "basis"_a, "sigma"_a)
+        .def("make_sparse_state", &CISigmaBuilder::make_sparse_state, "C"_a,
+             "Convert a CI vector to a sparse state")
         // Spin-free RDMs and cumulants
         .def("sf_1rdm", &CISigmaBuilder::compute_sf_1rdm, "C_left"_a, "C_right"_a,
              "Compute the spin-free one-electron reduced density matrix")
@@ -107,6 +109,12 @@ void export_ci_sigma_builder_api(nb::module_& m) {
              "Compute the alpha-beta-beta three-electron reduced density matrix")
         .def("bbb_3rdm", &CISigmaBuilder::compute_bbb_3rdm, "C_left"_a, "C_right"_a,
              "Compute the beta-beta-beta three-electron reduced density matrix")
+        .def("a_1trdm", &CISigmaBuilder::compute_a_1trdm, "sigmabuilder_right"_a, "C_left"_a,
+             "C_right"_a, "Compute the alpha one-electron transition reduced density matrix")
+        .def("b_1trdm", &CISigmaBuilder::compute_b_1trdm, "sigmabuilder_right"_a, "C_left"_a,
+             "C_right"_a, "Compute the beta one-electron transition reduced density matrix")
+        .def("sf_1trdm", &CISigmaBuilder::compute_sf_1trdm, "sigmabuilder_right"_a, "C_left"_a,
+             "C_right"_a, "Compute the spin-free one-electron transition reduced density matrix")
         .def("avg_build_time", &CISigmaBuilder::avg_build_time)
         .def("set_log_level", &CISigmaBuilder::set_log_level, "level"_a,
              "Set the logging level for the class")

@@ -542,6 +542,24 @@ class _CISingleStateSolver:
 
         self.eigensolver.add_guesses(guess_mat)
 
+    def csf_C_to_det_C(self, csf_vec):
+        """
+        Convert a CI vector in the CSF basis to the determinant basis.
+
+        Parameters
+        ----------
+        csf_vec : NDArray
+            CI vector in the CSF basis.
+
+        Returns
+        -------
+        NDArray
+            CI vector in the determinant basis.
+        """
+        det_vec = np.zeros((self.ndet))
+        self.spin_adapter.csf_C_to_det_C(csf_vec, det_vec)
+        return det_vec
+
     def make_1rdm(self, left_root: int, right_root: int | None = None):
         """
         Make the one-particle RDM for two CI roots.
@@ -679,15 +697,11 @@ class _CISingleStateSolver:
             not self.two_component
         ), "make_sd_1rdm is only available for non-relativistic CI."
 
-        left_ci_vec_det = np.zeros((self.ndet))
-        self.spin_adapter.csf_C_to_det_C(self.evecs[:, left_root], left_ci_vec_det)
+        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
         if right_root is None:
             right_ci_vec_det = left_ci_vec_det
         else:
-            right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(
-                self.evecs[:, right_root], right_ci_vec_det
-            )
+            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
         a = self.ci_sigma_builder.a_1rdm(left_ci_vec_det, right_ci_vec_det)
         b = self.ci_sigma_builder.b_1rdm(left_ci_vec_det, right_ci_vec_det)
         return a, b
@@ -712,15 +726,11 @@ class _CISingleStateSolver:
             not self.two_component
         ), "make_sd_2rdm is only available for non-relativistic CI."
 
-        left_ci_vec_det = np.zeros((self.ndet))
-        self.spin_adapter.csf_C_to_det_C(self.evecs[:, left_root], left_ci_vec_det)
+        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
         if right_root is None:
             right_ci_vec_det = left_ci_vec_det
         else:
-            right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(
-                self.evecs[:, right_root], right_ci_vec_det
-            )
+            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
         aa = self.ci_sigma_builder.aa_2rdm(left_ci_vec_det, right_ci_vec_det)
         ab = self.ci_sigma_builder.ab_2rdm(left_ci_vec_det, right_ci_vec_det)
         bb = self.ci_sigma_builder.bb_2rdm(left_ci_vec_det, right_ci_vec_det)
@@ -746,15 +756,11 @@ class _CISingleStateSolver:
             not self.two_component
         ), "make_sd_3rdm is only available for non-relativistic CI."
 
-        left_ci_vec_det = np.zeros((self.ndet))
-        self.spin_adapter.csf_C_to_det_C(self.evecs[:, left_root], left_ci_vec_det)
+        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
         if right_root is None:
             right_ci_vec_det = left_ci_vec_det
         else:
-            right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(
-                self.evecs[:, right_root], right_ci_vec_det
-            )
+            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
 
         aaa = self.ci_sigma_builder.aaa_3rdm(left_ci_vec_det, right_ci_vec_det)
         aab = self.ci_sigma_builder.aab_3rdm(left_ci_vec_det, right_ci_vec_det)
@@ -782,15 +788,11 @@ class _CISingleStateSolver:
             not self.two_component
         ), "make_sf_1rdm is only available for non-relativistic CI."
 
-        left_ci_vec_det = np.zeros((self.ndet))
-        self.spin_adapter.csf_C_to_det_C(self.evecs[:, left_root], left_ci_vec_det)
+        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
         if right_root is None:
             right_ci_vec_det = left_ci_vec_det
         else:
-            right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(
-                self.evecs[:, right_root], right_ci_vec_det
-            )
+            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
         return self.ci_sigma_builder.sf_1rdm(left_ci_vec_det, right_ci_vec_det)
 
     def make_sf_2rdm(self, left_root: int, right_root: int | None = None):
@@ -813,15 +815,11 @@ class _CISingleStateSolver:
             not self.two_component
         ), "make_sf_2rdm is only available for non-relativistic CI."
 
-        left_ci_vec_det = np.zeros((self.ndet))
-        self.spin_adapter.csf_C_to_det_C(self.evecs[:, left_root], left_ci_vec_det)
+        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
         if right_root is None:
             right_ci_vec_det = left_ci_vec_det
         else:
-            right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(
-                self.evecs[:, right_root], right_ci_vec_det
-            )
+            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
         return self.ci_sigma_builder.sf_2rdm(left_ci_vec_det, right_ci_vec_det)
 
     def make_sf_3rdm(self, left_root: int, right_root: int | None = None):
@@ -844,15 +842,11 @@ class _CISingleStateSolver:
             not self.two_component
         ), "make_sf_3rdm is only available for non-relativistic CI."
 
-        left_ci_vec_det = np.zeros((self.ndet))
-        self.spin_adapter.csf_C_to_det_C(self.evecs[:, left_root], left_ci_vec_det)
+        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
         if right_root is None:
             right_ci_vec_det = left_ci_vec_det
         else:
-            right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(
-                self.evecs[:, right_root], right_ci_vec_det
-            )
+            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
         return self.ci_sigma_builder.sf_3rdm(left_ci_vec_det, right_ci_vec_det)
 
     def make_sf_2cumulant(self, left_root: int, right_root: int | None = None):
@@ -875,15 +869,11 @@ class _CISingleStateSolver:
             not self.two_component
         ), "make_sf_2cumulant is only available for non-relativistic CI."
 
-        left_ci_vec_det = np.zeros((self.ndet))
-        self.spin_adapter.csf_C_to_det_C(self.evecs[:, left_root], left_ci_vec_det)
+        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
         if right_root is None:
             right_ci_vec_det = left_ci_vec_det
         else:
-            right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(
-                self.evecs[:, right_root], right_ci_vec_det
-            )
+            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
         return self.ci_sigma_builder.sf_2cumulant(left_ci_vec_det, right_ci_vec_det)
 
     def make_sf_3cumulant(self, left_root: int, right_root: int | None = None):
@@ -906,15 +896,11 @@ class _CISingleStateSolver:
             not self.two_component
         ), "make_sf_3cumulant is only available for non-relativistic CI."
 
-        left_ci_vec_det = np.zeros((self.ndet))
-        self.spin_adapter.csf_C_to_det_C(self.evecs[:, left_root], left_ci_vec_det)
+        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
         if right_root is None:
             right_ci_vec_det = left_ci_vec_det
         else:
-            right_ci_vec_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(
-                self.evecs[:, right_root], right_ci_vec_det
-            )
+            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
         return self.ci_sigma_builder.sf_3cumulant(left_ci_vec_det, right_ci_vec_det)
 
     def make_so_1rdm(self, left_root: int, right_root: int = None):
@@ -1225,8 +1211,7 @@ class _CISingleStateSolver:
 
         for i in range(self.nroot):
             top_dets = []
-            ci_det = np.zeros((self.ndet))
-            self.spin_adapter.csf_C_to_det_C(self.evecs[:, i], ci_det)
+            ci_det = self.csf_C_to_det_C(self.evecs[:, i])
             argsort = np.argsort(np.abs(ci_det))[::-1]  # descending in absolute coeff
             for j in range(n):
                 if j < len(argsort):

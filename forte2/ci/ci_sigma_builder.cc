@@ -360,4 +360,17 @@ np_matrix CISigmaBuilder::form_H_csf(const std::vector<Determinant>& dets,
     return H;
 }
 
+SparseState CISigmaBuilder::make_sparse_state(const np_vector& C) const {
+    SparseState state;
+    auto C_span = vector::as_span<double>(C);
+    if (C_span.size() != lists_.ndet()) {
+        throw std::runtime_error("Size of CI vector does not match the number of determinants.");
+    }
+    auto dets = lists_.make_determinants();
+    for (size_t i{0}, maxi{dets.size()}; i < maxi; ++i) {
+        state[dets[i]] = C_span[i];
+    }
+    return state;
+}
+
 } // namespace forte2

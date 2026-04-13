@@ -106,4 +106,23 @@ np_matrix CISigmaBuilder::compute_s_1trdm(const CISigmaBuilder& sigmabuilder_rig
     return rdm;
 }
 
+np_matrix CISigmaBuilder::compute_a_1trdm(CISigmaBuilder& sigmabuilder_right, np_vector C_left, np_vector C_right) const {
+    return compute_s_1trdm(sigmabuilder_right, C_left, C_right, Spin::Alpha);
+}
+
+np_matrix CISigmaBuilder::compute_b_1trdm(CISigmaBuilder& sigmabuilder_right, np_vector C_left, np_vector C_right) const {
+    return compute_s_1trdm(sigmabuilder_right, C_left, C_right, Spin::Beta);
+}
+
+np_matrix CISigmaBuilder::compute_sf_1trdm(CISigmaBuilder& sigmabuilder_right, np_vector C_left, np_vector C_right) const {
+    auto sf_1trdm = make_zeros<nb::numpy, double, 2>({lists_.norb(), lists_.norb()});
+    if (lists_.norb() > 0) {
+        auto a_1trdm = compute_a_1trdm(sigmabuilder_right, C_left, C_right);
+        auto b_1trdm = compute_b_1trdm(sigmabuilder_right, C_left, C_right);
+        matrix::daxpy<double>(1.0, a_1trdm, sf_1trdm);
+        matrix::daxpy<double>(1.0, b_1trdm, sf_1trdm);
+    }
+    return sf_1trdm;
+}
+
 } // namespace forte2
