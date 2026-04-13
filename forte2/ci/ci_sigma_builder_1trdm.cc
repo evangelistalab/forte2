@@ -47,7 +47,7 @@ np_matrix CISigmaBuilder::compute_s_1trdm(const CISigmaBuilder& sigmabuilder_rig
     auto string_list = find_string_map(lists_left, lists_right, spin);
     // Compute the VO lists that map the strings of the right and left wave functions. We only
     // need strings for the part that is affected by the a^+_p a_q operator.
-    VOListMap vo_list = find_ov_string_map(lists_left, lists_right, spin);
+    VOListMap vo_list_map = find_ov_string_map(lists_left, lists_right, spin);
 
     auto Cl_span = vector::as_span<double>(C_left);
     auto Cr_span = vector::as_span<double>(C_right);
@@ -84,8 +84,8 @@ np_matrix CISigmaBuilder::compute_s_1trdm(const CISigmaBuilder& sigmabuilder_rig
                                                 ? string_list[std::make_pair(class_Ib, class_Jb)]
                                                 : string_list[std::make_pair(class_Ia, class_Ja)];
 
-            const auto& pq_vo_list = is_alpha(spin) ? vo_list[std::make_pair(class_Ia, class_Ja)]
-                                                    : vo_list[std::make_pair(class_Ib, class_Jb)];
+            const auto& pq_vo_list = is_alpha(spin) ? vo_list_map[std::make_pair(class_Ia, class_Ja)]
+                                                    : vo_list_map[std::make_pair(class_Ib, class_Jb)];
 
             const size_t maxL_left = is_alpha(spin) ? beta_address_left->strpcls(class_Jb)
                                                     : alfa_address_left->strpcls(class_Ja);
@@ -107,17 +107,17 @@ np_matrix CISigmaBuilder::compute_s_1trdm(const CISigmaBuilder& sigmabuilder_rig
     return rdm;
 }
 
-np_matrix CISigmaBuilder::compute_a_1trdm(CISigmaBuilder& sigmabuilder_right, np_vector C_left,
+np_matrix CISigmaBuilder::compute_a_1trdm(const CISigmaBuilder& sigmabuilder_right, np_vector C_left,
                                           np_vector C_right) const {
     return compute_s_1trdm(sigmabuilder_right, C_left, C_right, Spin::Alpha);
 }
 
-np_matrix CISigmaBuilder::compute_b_1trdm(CISigmaBuilder& sigmabuilder_right, np_vector C_left,
+np_matrix CISigmaBuilder::compute_b_1trdm(const CISigmaBuilder& sigmabuilder_right, np_vector C_left,
                                           np_vector C_right) const {
     return compute_s_1trdm(sigmabuilder_right, C_left, C_right, Spin::Beta);
 }
 
-np_matrix CISigmaBuilder::compute_sf_1trdm(CISigmaBuilder& sigmabuilder_right, np_vector C_left,
+np_matrix CISigmaBuilder::compute_sf_1trdm(const CISigmaBuilder& sigmabuilder_right, np_vector C_left,
                                            np_vector C_right) const {
     auto sf_1trdm = make_zeros<nb::numpy, double, 2>({lists_.norb(), lists_.norb()});
     if (lists_.norb() > 0) {

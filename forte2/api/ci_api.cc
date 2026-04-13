@@ -77,7 +77,7 @@ void export_ci_sigma_builder_api(nb::module_& m) {
         .def("slater_rules_csf", &CISigmaBuilder::slater_rules_csf, "dets"_a, "spin_adapter"_a,
              "I"_a, "J"_a)
         .def("Hamiltonian", &CISigmaBuilder::Hamiltonian, "basis"_a, "sigma"_a)
-        .def("make_sparse_state", &CISigmaBuilder::make_sparse_state, "C"_a,
+        .def("make_sparse_state", &CISigmaBuilder::make_sparse_state, "C"_a, "threshold"_a = 1e-12,
              "Convert a CI vector to a sparse state")
         // Spin-free RDMs and cumulants
         .def("sf_1rdm", &CISigmaBuilder::compute_sf_1rdm, "C_left"_a, "C_right"_a,

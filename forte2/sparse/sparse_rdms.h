@@ -10,7 +10,8 @@ enum class Spin3 { aaa, aab, abb, bbb };
 enum class Spin4 { aaaa, aaab, aabb, abbb, bbbb };
 
 template <Spin1 S>
-np_matrix compute_1rdm(SparseState state_left, SparseState state_right, std::size_t norb) {
+np_matrix compute_1rdm(const SparseState& state_left, const SparseState& state_right,
+                       std::size_t norb) {
     auto g1_ref = make_zeros<nb::numpy, double, 2>({norb, norb});
 
     Determinant J;
@@ -41,7 +42,8 @@ np_matrix compute_1rdm(SparseState state_left, SparseState state_right, std::siz
 }
 
 template <Spin2 S>
-np_tensor4 compute_2rdm(SparseState state_left, SparseState state_right, std::size_t norb) {
+np_tensor4 compute_2rdm(const SparseState& state_left, const SparseState& state_right,
+                        std::size_t norb) {
     auto g2_ref = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
     auto g2_view = g2_ref.view();
 
@@ -76,8 +78,8 @@ np_tensor4 compute_2rdm(SparseState state_left, SparseState state_right, std::si
                                 rdm += sign * to_double(state_left[J] * c_I);
                             }
                         }
-                        g2_view(p, q, r, s) = rdm;
                     }
+                    g2_view(p, q, r, s) = rdm;
                 }
             }
         }
@@ -86,7 +88,8 @@ np_tensor4 compute_2rdm(SparseState state_left, SparseState state_right, std::si
 }
 
 template <Spin3 S>
-np_tensor6 compute_3rdm(SparseState state_left, SparseState state_right, std::size_t norb) {
+np_tensor6 compute_3rdm(const SparseState& state_left, const SparseState& state_right,
+                        std::size_t norb) {
     auto g3_ref = make_zeros<nb::numpy, double, 6>({norb, norb, norb, norb, norb, norb});
     auto g3_view = g3_ref.view();
 
@@ -148,21 +151,22 @@ np_tensor6 compute_3rdm(SparseState state_left, SparseState state_right, std::si
 }
 
 template <Spin4 S>
-np_tensor8 compute_4rdm(SparseState state_left, SparseState state_right, std::size_t norb) {
+np_tensor8 compute_4rdm(const SparseState& state_left, const SparseState& state_right,
+                        std::size_t norb) {
     auto g4_ref =
         make_zeros<nb::numpy, double, 8>({norb, norb, norb, norb, norb, norb, norb, norb});
     auto g4_view = g4_ref.view();
 
     Determinant J;
 
-    for (size_t p{0}; p < norb; ++p) {
-        for (size_t q{0}; q < norb; ++q) {
-            for (size_t r{0}; r < norb; ++r) {
-                for (size_t s{0}; s < norb; ++s) {
-                    for (size_t t{0}; t < norb; ++t) {
-                        for (size_t u{0}; u < norb; ++u) {
-                            for (size_t v{0}; v < norb; ++v) {
-                                for (size_t w{0}; w < norb; ++w) {
+    for (std::size_t p{0}; p < norb; ++p) {
+        for (std::size_t q{0}; q < norb; ++q) {
+            for (std::size_t r{0}; r < norb; ++r) {
+                for (std::size_t s{0}; s < norb; ++s) {
+                    for (std::size_t t{0}; t < norb; ++t) {
+                        for (std::size_t u{0}; u < norb; ++u) {
+                            for (std::size_t v{0}; v < norb; ++v) {
+                                for (std::size_t w{0}; w < norb; ++w) {
                                     double rdm = 0.0;
                                     for (const auto& [I, c_I] : state_right) {
                                         J = I;
@@ -231,59 +235,73 @@ np_tensor8 compute_4rdm(SparseState state_left, SparseState state_right, std::si
     return g4_ref;
 }
 
-auto compute_a_1rdm(SparseState state_left, SparseState state_right, std::size_t norb) {
+auto compute_a_1rdm(const SparseState& state_left, const SparseState& state_right,
+                    std::size_t norb) {
     return compute_1rdm<Spin1::a>(state_left, state_right, norb);
 }
 
-auto compute_b_1rdm(SparseState state_left, SparseState state_right, std::size_t norb) {
+auto compute_b_1rdm(const SparseState& state_left, const SparseState& state_right,
+                    std::size_t norb) {
     return compute_1rdm<Spin1::b>(state_left, state_right, norb);
 }
 
-auto compute_aa_2rdm(SparseState state_left, SparseState state_right, std::size_t norb) {
+auto compute_aa_2rdm(const SparseState& state_left, const SparseState& state_right,
+                     std::size_t norb) {
     return compute_2rdm<Spin2::aa>(state_left, state_right, norb);
 }
 
-auto compute_ab_2rdm(SparseState state_left, SparseState state_right, std::size_t norb) {
+auto compute_ab_2rdm(const SparseState& state_left, const SparseState& state_right,
+                     std::size_t norb) {
     return compute_2rdm<Spin2::ab>(state_left, state_right, norb);
 }
 
-auto compute_bb_2rdm(SparseState state_left, SparseState state_right, std::size_t norb) {
+auto compute_bb_2rdm(const SparseState& state_left, const SparseState& state_right,
+                     std::size_t norb) {
     return compute_2rdm<Spin2::bb>(state_left, state_right, norb);
 }
 
-auto compute_aaa_3rdm(SparseState state_left, SparseState state_right, std::size_t norb) {
+auto compute_aaa_3rdm(const SparseState& state_left, const SparseState& state_right,
+                      std::size_t norb) {
     return compute_3rdm<Spin3::aaa>(state_left, state_right, norb);
 }
 
-auto compute_aab_3rdm(SparseState state_left, SparseState state_right, std::size_t norb) {
+auto compute_aab_3rdm(const SparseState& state_left, const SparseState& state_right,
+                      std::size_t norb) {
     return compute_3rdm<Spin3::aab>(state_left, state_right, norb);
 }
 
-auto compute_abb_3rdm(SparseState state_left, SparseState state_right, std::size_t norb) {
+auto compute_abb_3rdm(const SparseState& state_left, const SparseState& state_right,
+                      std::size_t norb) {
     return compute_3rdm<Spin3::abb>(state_left, state_right, norb);
 }
 
-auto compute_bbb_3rdm(SparseState state_left, SparseState state_right, std::size_t norb) {
+auto compute_bbb_3rdm(const SparseState& state_left, const SparseState& state_right,
+                      std::size_t norb) {
     return compute_3rdm<Spin3::bbb>(state_left, state_right, norb);
 }
 
-auto compute_aaaa_4rdm(SparseState state_left, SparseState state_right, std::size_t norb) {
+auto compute_aaaa_4rdm(const SparseState& state_left, const SparseState& state_right,
+                       std::size_t norb) {
     return compute_4rdm<Spin4::aaaa>(state_left, state_right, norb);
 }
 
-auto compute_aaab_4rdm(SparseState state_left, SparseState state_right, std::size_t norb) {
+auto compute_aaab_4rdm(const SparseState& state_left, const SparseState& state_right,
+                       std::size_t norb) {
     return compute_4rdm<Spin4::aaab>(state_left, state_right, norb);
 }
 
-auto compute_aabb_4rdm(SparseState state_left, SparseState state_right, std::size_t norb) {
+auto compute_aabb_4rdm(const SparseState& state_left, const SparseState& state_right,
+                       std::size_t norb) {
     return compute_4rdm<Spin4::aabb>(state_left, state_right, norb);
 }
 
-auto compute_abbb_4rdm(SparseState state_left, SparseState state_right, std::size_t norb) {
+auto compute_abbb_4rdm(const SparseState& state_left, const SparseState& state_right,
+                       std::size_t norb) {
     return compute_4rdm<Spin4::abbb>(state_left, state_right, norb);
 }
 
-auto compute_bbbb_4rdm(SparseState state_left, SparseState state_right, std::size_t norb) {
+auto compute_bbbb_4rdm(const SparseState& state_left, const SparseState& state_right,
+                       std::size_t norb) {
     return compute_4rdm<Spin4::bbbb>(state_left, state_right, norb);
 }
 

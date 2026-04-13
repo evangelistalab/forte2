@@ -12,7 +12,6 @@ from forte2 import (
     compute_bb_2rdm,
     cpp_helpers,
 )
-from forte2.helpers.comparisons import approx
 from forte2.base_classes import DavidsonLiuParams
 
 
@@ -68,7 +67,7 @@ def test_ci_tdm_same_solver():
             assert np.allclose(tdm2_bb, tdm2_bb_ref)
 
 
-def test_gasci_tdm():
+def test_gasci_tdm_different_solvers():
     xyz = """
     O  0.000000000000  0.000000000000 -0.069592187400
     H  0.000000000000 -0.783151105291  0.552239257834
@@ -103,13 +102,17 @@ def test_gasci_tdm():
     state_right = right_sb.make_sparse_state(C_right)
 
     a_1trdm, b_1trdm = ci.make_sd_1rdm(0, 1)
+    sf_1trdm = ci.make_sf_1rdm(0, 1)
     a_1trdm_ref = compute_a_1rdm(state_left, state_right, 6)
     b_1trdm_ref = compute_b_1rdm(state_left, state_right, 6)
     assert np.allclose(a_1trdm, a_1trdm_ref)
     assert np.allclose(b_1trdm, b_1trdm_ref)
+    assert np.allclose(sf_1trdm, a_1trdm_ref + b_1trdm_ref)
 
     a_1trdm, b_1trdm = ci.make_sd_1rdm(1, 0)
+    sf_1trdm = ci.make_sf_1rdm(1, 0)
     a_1trdm_ref = compute_a_1rdm(state_right, state_left, 6)
     b_1trdm_ref = compute_b_1rdm(state_right, state_left, 6)
     assert np.allclose(a_1trdm, a_1trdm_ref)
     assert np.allclose(b_1trdm, b_1trdm_ref)
+    assert np.allclose(sf_1trdm, a_1trdm_ref + b_1trdm_ref)

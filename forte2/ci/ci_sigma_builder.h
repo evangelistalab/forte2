@@ -101,8 +101,9 @@ class CISigmaBuilder {
 
     /// @brief Convert a CI vector to a sparse state
     /// @param C The CI vector to convert
+    /// @param threshold The threshold for including determinants in the sparse state
     /// @return The corresponding sparse state
-    SparseState make_sparse_state(const np_vector& C) const;
+    SparseState make_sparse_state(const np_vector& C, double threshold = 1e-12) const;
 
     /// @brief Compute the spin-dependent one-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -271,11 +272,11 @@ class CISigmaBuilder {
     np_matrix compute_s_1trdm(const CISigmaBuilder& sigmabuilder_right, np_vector C_left,
                               np_vector C_right, Spin spin) const;
 
-    np_matrix compute_a_1trdm(CISigmaBuilder& sigmabuilder_right, np_vector C_left,
+    np_matrix compute_a_1trdm(const CISigmaBuilder& sigmabuilder_right, np_vector C_left,
                               np_vector C_right) const;
-    np_matrix compute_b_1trdm(CISigmaBuilder& sigmabuilder_right, np_vector C_left,
+    np_matrix compute_b_1trdm(const CISigmaBuilder& sigmabuilder_right, np_vector C_left,
                               np_vector C_right) const;
-    np_matrix compute_sf_1trdm(CISigmaBuilder& sigmabuilder_right, np_vector C_left,
+    np_matrix compute_sf_1trdm(const CISigmaBuilder& sigmabuilder_right, np_vector C_left,
                                np_vector C_right) const;
 
   private:

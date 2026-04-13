@@ -1655,8 +1655,17 @@ class CISolver(CIBase):
                 left_root_in_state, right_root_in_state
             )
         else:
-            a_1trdm, b_1trdm = self.make_sd_1rdm(left_root, right_root)
-            return a_1trdm + b_1trdm
+            left_solver = self.sub_solvers[left_state]
+            right_solver = self.sub_solvers[right_state]
+            left_sb = left_solver.ci_sigma_builder
+            right_sb = right_solver.ci_sigma_builder
+            C_left = left_solver.csf_C_to_det_C(
+                left_solver.evecs[:, left_root_in_state]
+            )
+            C_right = right_solver.csf_C_to_det_C(
+                right_solver.evecs[:, right_root_in_state]
+            )
+            return left_sb.sf_1trdm(right_sb, C_left, C_right)
 
     def make_sf_2rdm(
         self,
