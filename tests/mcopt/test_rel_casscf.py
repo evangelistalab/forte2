@@ -171,7 +171,7 @@ def test_rel_casscf_na_ghf():
     assert mc.E == approx(emcscf)
 
 
-def test_rel_ci_br():
+def test_rel_casscf_br():
     xyz = """
     Br 0 0 0
     """

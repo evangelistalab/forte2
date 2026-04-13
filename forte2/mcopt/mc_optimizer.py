@@ -25,7 +25,7 @@ from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
 
 
 @dataclass
-class MCOptimizer(ActiveSpaceSolver):
+class MCOptimizerBase(ActiveSpaceSolver):
     """
     Two-step optimizer for multi-configurational wavefunctions.
 
@@ -65,7 +65,7 @@ class MCOptimizer(ActiveSpaceSolver):
         Maximum number of microiterations for L-BFGS.
     max_rotation : float, optional, default=0.2
         Maximum orbital rotation size for L-BFGS.
-    ci_solver : CIBase | RelCIBase, optional
+    ci_solver : CIBase | RelCIBase | None, optional
         Custom CI solver to use in the optimization.
         If not provided, a default CISolver or RelCISolver will be used based on the `two_component` flag.
     ci_params : CIParams, optional
@@ -97,7 +97,7 @@ class MCOptimizer(ActiveSpaceSolver):
     max_rotation: float = 0.2
 
     ### CI solver parameters
-    ci_solver: CIBase | RelCIBase = field(default=None)
+    ci_solver: CIBase | RelCIBase | None = field(default=None)
     ci_params: CIParams = field(default_factory=CIParams)
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
 
@@ -203,7 +203,10 @@ class MCOptimizer(ActiveSpaceSolver):
                 die_if_not_converged=False,
                 ci_params=self.ci_params,
                 davidson_liu_params=self.davidson_liu_params,
-            )(self.parent_method)
+            )
+        self.ci_solver = self.ci_solver(
+            self.parent_method
+        )  # make sure to pass parent method to CI solver
         # iteration 0: one step of CI optimization to bootstrap the orbital optimization
         self.iter = 0
         self.ci_solver.run()
@@ -494,6 +497,8 @@ class MCOptimizer(ActiveSpaceSolver):
     def make_average_cumulants(self):
         return self.ci_solver.make_average_cumulants()
 
+
+class MCOptimizer(MCOptimizerBase):
     def make_sd_1rdm(
         self,
         left_root: int,
@@ -531,4 +536,4 @@ class MCOptimizer(ActiveSpaceSolver):
 
 
 @dataclass
-class RelMCOptimizer(RelActiveSpaceSolver, MCOptimizer): ...
+class RelMCOptimizer(RelActiveSpaceSolver, MCOptimizerBase): ...

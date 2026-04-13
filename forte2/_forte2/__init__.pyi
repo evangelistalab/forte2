@@ -158,7 +158,7 @@ class CISigmaBuilder:
 
     def Hamiltonian(self, basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None: ...
 
-    def make_sparse_state(self, C: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> SparseState:
+    def make_sparse_state(self, C: Annotated[NDArray[numpy.float64], dict(shape=(None,))], threshold: float = 1e-12) -> SparseState:
         """Convert a CI vector to a sparse state"""
 
     def sf_1rdm(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:

@@ -30,8 +30,9 @@ np_matrix compute_1rdm(const SparseState& state_left, const SparseState& state_r
                     sign *= J.create_b(p);
                 }
                 if (sign != 0) {
-                    if (state_left.count(J) != 0) {
-                        rdm += sign * to_double(state_left[J] * c_I);
+                    auto it = state_left.find(J);
+                    if (it != state_left.end()) {
+                        rdm += sign * to_double(it->second * c_I);
                     }
                 }
             }
@@ -74,8 +75,9 @@ np_tensor4 compute_2rdm(const SparseState& state_left, const SparseState& state_
                             sign *= J.create_a(p);
                         }
                         if (sign != 0) {
-                            if (state_left.count(J) != 0) {
-                                rdm += sign * to_double(state_left[J] * c_I);
+                            auto it = state_left.find(J);
+                            if (it != state_left.end()) {
+                                rdm += sign * to_double(it->second * c_I);
                             }
                         }
                     }
@@ -135,8 +137,9 @@ np_tensor6 compute_3rdm(const SparseState& state_left, const SparseState& state_
                                     sign *= J.create_a(p);
                                 }
                                 if (sign != 0) {
-                                    if (state_left.count(J) != 0) {
-                                        rdm += sign * to_double(state_left[J] * c_I);
+                                    auto it = state_left.find(J);
+                                    if (it != state_left.end()) {
+                                        rdm += sign * to_double(it->second * c_I);
                                     }
                                 }
                             }
@@ -218,8 +221,9 @@ np_tensor8 compute_4rdm(const SparseState& state_left, const SparseState& state_
                                             sign *= J.create_a(p);
                                         }
                                         if (sign != 0) {
-                                            if (state_left.count(J) != 0) {
-                                                rdm += sign * to_double(state_left[J] * c_I);
+                                            auto it = state_left.find(J);
+                                            if (it != state_left.end()) {
+                                                rdm += sign * to_double(it->second * c_I);
                                             }
                                         }
                                     }
