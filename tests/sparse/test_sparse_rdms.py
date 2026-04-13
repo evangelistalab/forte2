@@ -31,6 +31,7 @@ def test_ci_tdm_same_solver():
         core_orbitals=[0, 1, 2, 3],
         active_orbitals=[4, 5, 6, 7, 8, 9],
         nroots=3,
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
     )(rhf)
     ci.run()
 
@@ -86,6 +87,7 @@ def test_gasci_tdm():
             State(nel=10, multiplicity=1, ms=0.0, gas_min=[2], gas_max=[2]),
         ],
         nroots=[1, 1],
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5),
     )(rhf)
     ci.run()
 
@@ -97,9 +99,17 @@ def test_gasci_tdm():
     C_left = left_solver.csf_C_to_det_C(left_solver.evecs[:, 0])
     C_right = right_solver.csf_C_to_det_C(right_solver.evecs[:, 0])
 
-    state_left = left_solver.ci_sigma_builder.make_sparse_state(C_left)
-    state_right = right_solver.ci_sigma_builder.make_sparse_state(C_right)
+    state_left = left_sb.make_sparse_state(C_left)
+    state_right = right_sb.make_sparse_state(C_right)
 
-    a_1trdm = left_sb.a_1trdm(right_sb, C_left, C_right)
+    a_1trdm, b_1trdm = ci.make_sd_1rdm(0, 1)
     a_1trdm_ref = compute_a_1rdm(state_left, state_right, 6)
+    b_1trdm_ref = compute_b_1rdm(state_left, state_right, 6)
     assert np.allclose(a_1trdm, a_1trdm_ref)
+    assert np.allclose(b_1trdm, b_1trdm_ref)
+
+    a_1trdm, b_1trdm = ci.make_sd_1rdm(1, 0)
+    a_1trdm_ref = compute_a_1rdm(state_right, state_left, 6)
+    b_1trdm_ref = compute_b_1rdm(state_right, state_left, 6)
+    assert np.allclose(a_1trdm, a_1trdm_ref)
+    assert np.allclose(b_1trdm, b_1trdm_ref)

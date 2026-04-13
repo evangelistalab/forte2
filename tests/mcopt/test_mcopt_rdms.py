@@ -73,7 +73,10 @@ def test_mcoptimizer_rdm_accessors_multi_solver():
 
     singlet_solver, triplet_solver = mc.ci_solver.sub_solvers
 
-    with pytest.raises(ValueError, match="Cross-state RDMs are not supported"):
+    with pytest.raises(
+        ValueError,
+        match="Cross-state RDMs are only supported for states with the same number of alpha and beta electrons",
+    ):
         mc.make_sd_1rdm(1, 2)
 
     with pytest.raises(ValueError, match="absolute_root must be between 0"):

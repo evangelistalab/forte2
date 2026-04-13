@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from collections import OrderedDict
 
 import numpy as np
+from numpy.typing import NDArray
 
 from forte2 import (
     CIStrings,
@@ -1313,7 +1314,7 @@ class CISolver(CIBase):
 
         self.executed = True
         return self
-    
+
     def compute_average_energy(self):
         """
         Compute the average energy from the CI roots using the weights.
@@ -1545,6 +1546,135 @@ class CISolver(CIBase):
             else:
                 status.append(ci_solver.eigensolver.converged)
         return status
+
+    def _get_state_root(self, absolute_root) -> tuple[int, int]:
+        if absolute_root < 0 or absolute_root >= self.sa_info.nroots_sum:
+            raise ValueError(
+                f"absolute_root must be between 0 and {self.sa_info.nroots_sum - 1}, but got {absolute_root}."
+            )
+        return self.sa_info.absolute_root_map[absolute_root]
+
+    def _validate_rdm_inputs(self, left_root, right_root):
+        left_state, left_root_in_state = self._get_state_root(left_root)
+        if right_root is not None:
+            right_state, right_root_in_state = self._get_state_root(right_root)
+        else:
+            right_state = left_state
+            right_root_in_state = left_root_in_state
+
+        if left_state != right_state:
+            # check that they have the same na and nb
+            if (
+                self.sa_info.states[left_state].na
+                != self.sa_info.states[right_state].na
+                or self.sa_info.states[left_state].nb
+                != self.sa_info.states[right_state].nb
+            ):
+                raise ValueError(
+                    f"Cross-state RDMs are only supported for states with the same number of alpha and beta electrons."
+                )
+
+        return left_state, right_state, left_root_in_state, right_root_in_state
+
+    def make_sd_1rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+    ) -> tuple[NDArray, NDArray]:
+        """
+        Make the spin-dependent 1-RDMs
+        """
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+        if left_state == right_state:
+            return self.sub_solvers[left_state].make_sd_1rdm(
+                left_root_in_state, right_root_in_state
+            )
+        else:
+            left_solver = self.sub_solvers[left_state]
+            right_solver = self.sub_solvers[right_state]
+            left_sb = left_solver.ci_sigma_builder
+            right_sb = right_solver.ci_sigma_builder
+
+            C_left = left_solver.csf_C_to_det_C(
+                left_solver.evecs[:, left_root_in_state]
+            )
+            C_right = right_solver.csf_C_to_det_C(
+                right_solver.evecs[:, right_root_in_state]
+            )
+
+            a_1trdm = left_sb.a_1trdm(right_sb, C_left, C_right)
+            b_1trdm = left_sb.b_1trdm(right_sb, C_left, C_right)
+            return a_1trdm, b_1trdm
+
+    def make_sd_2rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+    ) -> tuple[NDArray, NDArray, NDArray]:
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+
+        if left_state != right_state:
+            raise ValueError(
+                f"Cross-state 2-RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
+            )
+        return self.sub_solvers[left_state].make_sd_2rdm(
+            left_root_in_state, right_root_in_state
+        )
+
+    def make_sd_3rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+    ) -> tuple[NDArray, NDArray, NDArray, NDArray]:
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+
+        if left_state != right_state:
+            raise ValueError(
+                f"Cross-state 3-RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
+            )
+        return self.sub_solvers[left_state].make_sd_3rdm(
+            left_root_in_state, right_root_in_state
+        )
+
+    def make_sf_1rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+    ) -> NDArray:
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+        if left_state == right_state:
+            return self.sub_solvers[left_state].make_sf_1rdm(
+                left_root_in_state, right_root_in_state
+            )
+        else:
+            a_1trdm, b_1trdm = self.make_sd_1rdm(left_root, right_root)
+            return a_1trdm + b_1trdm
+
+    def make_sf_2rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+    ) -> NDArray:
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+
+        if left_state == right_state:
+            return self.sub_solvers[left_state].make_sf_2rdm(
+                left_root_in_state, right_root_in_state
+            )
+        else:
+            raise ValueError(
+                f"Cross-state 2-RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
+            )
 
 
 @dataclass

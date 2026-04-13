@@ -4,9 +4,11 @@ from numpy.typing import NDArray
 from dataclasses import dataclass, field
 
 from forte2.ci import CISolver, RelCISolver
-from forte2.base_classes.active_space_solver import (
+from forte2.base_classes import (
     ActiveSpaceSolver,
     RelActiveSpaceSolver,
+    CIBase,
+    RelCIBase,
 )
 from forte2.base_classes.params import DavidsonLiuParams, CIParams
 from forte2.orbitals import Semicanonicalizer
@@ -63,6 +65,9 @@ class MCOptimizer(ActiveSpaceSolver):
         Maximum number of microiterations for L-BFGS.
     max_rotation : float, optional, default=0.2
         Maximum orbital rotation size for L-BFGS.
+    ci_solver : CIBase | RelCIBase, optional
+        Custom CI solver to use in the optimization.
+        If not provided, a default CISolver or RelCISolver will be used based on the `two_component` flag.
     ci_params : CIParams, optional
         Parameters for the CI solver.
     davidson_liu_params : DavidsonLiuParams, optional
@@ -92,6 +97,7 @@ class MCOptimizer(ActiveSpaceSolver):
     max_rotation: float = 0.2
 
     ### CI solver parameters
+    ci_solver: CIBase | RelCIBase = field(default=None)
     ci_params: CIParams = field(default_factory=CIParams)
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
 
@@ -102,6 +108,14 @@ class MCOptimizer(ActiveSpaceSolver):
     converged: bool = field(default=False, init=False)
     executed: bool = field(default=False, init=False)
     two_component: bool = field(default=False, init=False)
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.ci_solver is not None:
+            if not isinstance(self.ci_solver, (CIBase, RelCIBase)):
+                raise ValueError(
+                    f"ci_solver must be an instance of CIBase or RelCIBase, but got {type(self.ci_solver)}."
+                )
 
     def __call__(self, method):
         self.parent_method = method
@@ -177,18 +191,19 @@ class MCOptimizer(ActiveSpaceSolver):
             and not self.freeze_inter_gas_rots,
         )
 
-        _CISolver = RelCISolver if self.two_component else CISolver
-        self.ci_solver = _CISolver(
-            states=self.states,
-            core_orbitals=self.mo_space.docc_orbitals,
-            active_orbitals=self.mo_space.active_orbitals,
-            nroots=self.sa_info.nroots,
-            weights=self.sa_info.weights,
-            log_level=self.ci_solver_verbosity,
-            die_if_not_converged=False,
-            ci_params=self.ci_params,
-            davidson_liu_params=self.davidson_liu_params,
-        )(self.parent_method)
+        if self.ci_solver is None:
+            _CISolver = RelCISolver if self.two_component else CISolver
+            self.ci_solver = _CISolver(
+                states=self.states,
+                core_orbitals=self.mo_space.docc_orbitals,
+                active_orbitals=self.mo_space.active_orbitals,
+                nroots=self.sa_info.nroots,
+                weights=self.sa_info.weights,
+                log_level=self.ci_solver_verbosity,
+                die_if_not_converged=False,
+                ci_params=self.ci_params,
+                davidson_liu_params=self.davidson_liu_params,
+            )(self.parent_method)
         # iteration 0: one step of CI optimization to bootstrap the orbital optimization
         self.iter = 0
         self.ci_solver.run()
@@ -479,100 +494,40 @@ class MCOptimizer(ActiveSpaceSolver):
     def make_average_cumulants(self):
         return self.ci_solver.make_average_cumulants()
 
-    def _get_state_root(self, absolute_root) -> tuple[int, int]:
-        if absolute_root < 0 or absolute_root >= self.sa_info.nroots_sum:
-            raise ValueError(
-                f"absolute_root must be between 0 and {self.sa_info.nroots_sum - 1}, but got {absolute_root}."
-            )
-        return self.sa_info.absolute_root_map[absolute_root]
-
-    def _validate_rdm_inputs(self, left_root, right_root):
-        left_state, left_root_in_state = self._get_state_root(left_root)
-        if right_root is not None:
-            right_state, right_root_in_state = self._get_state_root(right_root)
-        else:
-            right_state = left_state
-            right_root_in_state = left_root_in_state
-
-        if left_state != right_state:
-            raise ValueError(
-                f"Cross-state RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
-            )
-        return left_state, right_state, left_root_in_state, right_root_in_state
-
     def make_sd_1rdm(
         self,
         left_root: int,
         right_root: int | None = None,
     ) -> tuple[NDArray, NDArray]:
-        """
-        Make the spin-dependent 1-RDMs
-        """
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-        return self.ci_solver.sub_solvers[left_state].make_sd_1rdm(
-            left_root_in_state, right_root_in_state
-        )
+        return self.ci_solver.make_sd_1rdm(left_root, right_root)
 
     def make_sd_2rdm(
         self,
         left_root: int,
         right_root: int | None = None,
     ) -> tuple[NDArray, NDArray, NDArray]:
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-
-        if left_state != right_state:
-            raise ValueError(
-                f"Cross-state RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
-            )
-        return self.ci_solver.sub_solvers[left_state].make_sd_2rdm(
-            left_root_in_state, right_root_in_state
-        )
+        return self.ci_solver.make_sd_2rdm(left_root, right_root)
 
     def make_sd_3rdm(
         self,
         left_root: int,
         right_root: int | None = None,
     ) -> tuple[NDArray, NDArray, NDArray, NDArray]:
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-
-        if left_state != right_state:
-            raise ValueError(
-                f"Cross-state RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
-            )
-        return self.ci_solver.sub_solvers[left_state].make_sd_3rdm(
-            left_root_in_state, right_root_in_state
-        )
+        return self.ci_solver.make_sd_3rdm(left_root, right_root)
 
     def make_sf_1rdm(
         self,
         left_root: int,
         right_root: int | None = None,
     ) -> NDArray:
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-        return self.ci_solver.sub_solvers[left_state].make_sf_1rdm(
-            left_root_in_state, right_root_in_state
-        )
+        return self.ci_solver.make_sf_1rdm(left_root, right_root)
 
     def make_sf_2rdm(
         self,
         left_root: int,
         right_root: int | None = None,
     ) -> NDArray:
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-
-        return self.ci_solver.sub_solvers[left_state].make_sf_2rdm(
-            left_root_in_state, right_root_in_state
-        )
+        return self.ci_solver.make_sf_2rdm(left_root, right_root)
 
 
 @dataclass
