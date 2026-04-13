@@ -345,9 +345,9 @@ find_string_map(const CIStrings& list_left, const CIStrings& list_right, Spin sp
 
 VOListMap find_ov_string_map(const CIStrings& list_left, const CIStrings& list_right, Spin spin) {
     const auto& strings_right =
-        is_alpha(spin) ? list_right.beta_strings() : list_right.alfa_strings();
-    const auto& I_address = is_alpha(spin) ? list_right.beta_address() : list_right.alfa_address();
-    const auto& J_address = is_alpha(spin) ? list_left.beta_address() : list_left.alfa_address();
+        is_alpha(spin) ? list_right.alfa_strings() : list_right.beta_strings();
+    const auto& I_address = is_alpha(spin) ? list_right.alfa_address() : list_right.beta_address();
+    const auto& J_address = is_alpha(spin) ? list_left.alfa_address() : list_left.beta_address();
     auto vo_list = make_vo_list(strings_right, I_address, J_address);
     return vo_list;
 }

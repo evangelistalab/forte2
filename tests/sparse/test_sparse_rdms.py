@@ -102,5 +102,4 @@ def test_gasci_tdm():
 
     a_1trdm = left_sb.a_1trdm(right_sb, C_left, C_right)
     a_1trdm_ref = compute_a_1rdm(state_left, state_right, 6)
-
     assert np.allclose(a_1trdm, a_1trdm_ref)
