@@ -65,9 +65,6 @@ class MCOptimizerBase(ActiveSpaceSolver):
         Maximum number of microiterations for L-BFGS.
     max_rotation : float, optional, default=0.2
         Maximum orbital rotation size for L-BFGS.
-    ci_solver : CIBase | RelCIBase | None, optional
-        Custom CI solver to use in the optimization.
-        If not provided, a default CISolver or RelCISolver will be used based on the `two_component` flag.
     ci_params : CIParams, optional
         Parameters for the CI solver.
     davidson_liu_params : DavidsonLiuParams, optional
@@ -97,7 +94,6 @@ class MCOptimizerBase(ActiveSpaceSolver):
     max_rotation: float = 0.2
 
     ### CI solver parameters
-    ci_solver: CIBase | RelCIBase | None = field(default=None)
     ci_params: CIParams = field(default_factory=CIParams)
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
 
@@ -108,14 +104,6 @@ class MCOptimizerBase(ActiveSpaceSolver):
     converged: bool = field(default=False, init=False)
     executed: bool = field(default=False, init=False)
     two_component: bool = field(default=False, init=False)
-
-    def __post_init__(self):
-        super().__post_init__()
-        if self.ci_solver is not None:
-            if not isinstance(self.ci_solver, (CIBase, RelCIBase)):
-                raise ValueError(
-                    f"ci_solver must be an instance of CIBase or RelCIBase, but got {type(self.ci_solver)}."
-                )
 
     def __call__(self, method):
         self.parent_method = method
@@ -191,22 +179,18 @@ class MCOptimizerBase(ActiveSpaceSolver):
             and not self.freeze_inter_gas_rots,
         )
 
-        if self.ci_solver is None:
-            _CISolver = RelCISolver if self.two_component else CISolver
-            self.ci_solver = _CISolver(
-                states=self.states,
-                core_orbitals=self.mo_space.docc_orbitals,
-                active_orbitals=self.mo_space.active_orbitals,
-                nroots=self.sa_info.nroots,
-                weights=self.sa_info.weights,
-                log_level=self.ci_solver_verbosity,
-                die_if_not_converged=False,
-                ci_params=self.ci_params,
-                davidson_liu_params=self.davidson_liu_params,
-            )
-        self.ci_solver = self.ci_solver(
-            self.parent_method
-        )  # make sure to pass parent method to CI solver
+        _CISolver = RelCISolver if self.two_component else CISolver
+        self.ci_solver = _CISolver(
+            states=self.states,
+            core_orbitals=self.mo_space.docc_orbitals,
+            active_orbitals=self.mo_space.active_orbitals,
+            nroots=self.sa_info.nroots,
+            weights=self.sa_info.weights,
+            log_level=self.ci_solver_verbosity,
+            die_if_not_converged=False,
+            ci_params=self.ci_params,
+            davidson_liu_params=self.davidson_liu_params,
+        )(self.parent_method)
         # iteration 0: one step of CI optimization to bootstrap the orbital optimization
         self.iter = 0
         self.ci_solver.run()
