@@ -1,6 +1,6 @@
 import pytest
 
-from forte2 import System, RHF, MCOptimizer, State
+from forte2 import System, RHF, MCOptimizer, State, CISolver
 from forte2.helpers.comparisons import approx
 
 
@@ -20,10 +20,13 @@ def test_gasscf_1():
 
     rhf = RHF(charge=0)(system)
 
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[6]),
         core_orbitals=2,
         active_orbitals=(3, 3),
+    )
+    mc = MCOptimizer(
+        ci_solver,
         freeze_inter_gas_rots=True,
     )(rhf)
     mc.run()
@@ -47,7 +50,7 @@ def test_gasscf_h2o_core():
 
     rhf = RHF(charge=0)(system)
 
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         states=[
             State(nel=10, multiplicity=1, ms=0.0, gas_min=[0], gas_max=[1]),
             State(nel=10, multiplicity=3, ms=1.0, gas_min=[0], gas_max=[1]),
@@ -56,6 +59,9 @@ def test_gasscf_h2o_core():
         weights=[[1.0], [3.0]],
         core_orbitals=[1],
         active_orbitals=[[0], [2, 3, 4, 5]],
+    )
+    mc = MCOptimizer(
+        ci_solver,
         freeze_inter_gas_rots=True,
     )(rhf)
     mc.run()
@@ -81,10 +87,13 @@ def test_gasscf_2():
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
 
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[6]),
         core_orbitals=[0, 1],
         active_orbitals=[[2, 3, 4], [5]],
+    )
+    mc = MCOptimizer(
+        ci_solver,
         econv=1e-8,
         gconv=1e-7,
         maxiter=100,
@@ -117,9 +126,12 @@ def test_gasscf_3():
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
 
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
         active_orbitals=[[0], [1, 2, 3, 4, 5, 6, 7, 8]],
+    )
+    mc = MCOptimizer(
+        ci_solver,
         econv=1e-8,
         gconv=1e-7,
         maxiter=500,
@@ -146,10 +158,13 @@ def test_gasscf_5():
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
 
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[6, 0], gas_max=[8, 2]),
         core_orbitals=[0],
         active_orbitals=[[1, 2, 3, 4], [5, 6]],
+    )
+    mc = MCOptimizer(
+        ci_solver,
         freeze_inter_gas_rots=True,
         econv=1e-10,
         gconv=1e-8,

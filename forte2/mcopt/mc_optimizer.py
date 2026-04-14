@@ -104,7 +104,6 @@ class MCOptimizer(SystemMixin, MOsMixin, MOSpaceMixin):
     ### Non-init attributes
     converged: bool = field(default=False, init=False)
     executed: bool = field(default=False, init=False)
-    two_component: bool = field(default=False, init=False)
 
     def _post_init__(self):
         if not isinstance(self.ci_solver, (CIBase, RelCIBase)):
@@ -193,7 +192,7 @@ class MCOptimizer(SystemMixin, MOsMixin, MOSpaceMixin):
         #       (this is typically done iteratively with micro-iterations using L-BFGS)
         #     2. minimize energy wrt CI expansion at current orbitals
         #       (this is just the diagonalization of the active-space CI Hamiltonian)
-        _OrbOptimizer = RelOrbOptimizer if self.two_component else OrbOptimizer
+        _OrbOptimizer = RelOrbOptimizer if self.system.two_component else OrbOptimizer
         self.orb_opt = _OrbOptimizer(
             self._C,
             (self.core, self.actv, self.virt),
@@ -364,7 +363,7 @@ class MCOptimizer(SystemMixin, MOsMixin, MOSpaceMixin):
             self.C[0] = semi.C_semican[:, self.mo_space.contig_to_orig].copy()
 
             # recompute the CI vectors in the semicanonical basis
-            if self.two_component:
+            if self.system.two_component:
                 ints = SpinorbitalIntegrals(
                     system=self.system,
                     C=self.C[0],
@@ -403,7 +402,7 @@ class MCOptimizer(SystemMixin, MOsMixin, MOSpaceMixin):
         )
         top_dets = self.ci_solver.get_top_determinants()
         pretty_print_ci_dets(self.ci_solver.sa_info, self.mo_space, top_dets)
-        if not self.two_component:
+        if not self.system.two_component:
             # TODO: enable AO composition for 2c
             self._print_ao_composition()
         if self.do_transition_dipole:
@@ -598,7 +597,3 @@ class MCOptimizer(SystemMixin, MOsMixin, MOSpaceMixin):
         return self.ci_solver.sub_solvers[left_state].make_sf_2rdm(
             left_root_in_state, right_root_in_state
         )
-
-
-@dataclass
-class RelMCOptimizer(MCOptimizer): ...

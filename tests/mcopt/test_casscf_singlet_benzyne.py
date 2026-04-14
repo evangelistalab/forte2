@@ -1,4 +1,4 @@
-from forte2 import System, RHF, MCOptimizer, State
+from forte2 import System, RHF, MCOptimizer, State, CISolver
 from forte2.helpers.comparisons import approx
 
 
@@ -27,11 +27,12 @@ def test_casscf_singlet_benzyne():
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=40, multiplicity=1, ms=0.0),
         core_orbitals=list(range(19)),
         active_orbitals=[19, 20],
-    )(rhf)
+    )
+    mc = MCOptimizer(ci_solver)(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)

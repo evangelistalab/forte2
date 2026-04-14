@@ -1,6 +1,6 @@
 import pytest
 
-from forte2 import System, RHF, MCOptimizer, State
+from forte2 import System, RHF, MCOptimizer, State, CISolver
 from forte2.helpers.comparisons import approx
 
 
@@ -20,11 +20,14 @@ def test_sa_casscf_hf():
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pvtz-jkfit")
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=10, multiplicity=1, ms=0.0),
         core_orbitals=[0],
         active_orbitals=[1, 2, 3, 4, 5],
         nroots=4,
+    )
+    mc = MCOptimizer(
+        ci_solver,
         do_transition_dipole=True,
     )(rhf)
     mc.run()

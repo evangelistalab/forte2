@@ -1,6 +1,6 @@
 import pytest
 
-from forte2 import System, AVAS, CI, RHF, ROHF, State, MCOptimizer, GHF, RelCI
+from forte2 import System, AVAS, CI, RHF, ROHF, State, MCOptimizer, GHF, RelCI, CISolver
 from forte2.helpers.comparisons import approx
 
 
@@ -406,7 +406,8 @@ def test_avas_subspace_planes_h2co_casscf():
         sigma=1.0,
         diagonalize=True,
     )(rhf)
-    mc = MCOptimizer(states=State(nel=rhf.nel, multiplicity=1, ms=0.0))(avas)
+    ci_solver = CISolver(states=State(nel=rhf.nel, multiplicity=1, ms=0.0))
+    mc = MCOptimizer(ci_solver)(avas)
     mc.run()
     assert mc.E_ci[0] == approx(eref_avas)
 
@@ -424,7 +425,8 @@ def test_avas_zero_uocc():
         num_active_docc=3,
         num_active_uocc=0,
     )(mf)
-    mc = MCOptimizer(states=State(nel=35, multiplicity=2, ms=0.5), nroots=3)(avas)
+    ci_solver = CISolver(states=State(nel=35, multiplicity=2, ms=0.5), nroots=3)
+    mc = MCOptimizer(ci_solver)(avas)
     mc.run()
     assert mc.E_avg == approx(-2572.3646258078)
 
@@ -442,6 +444,7 @@ def test_avas_zero_uocc2():
         num_active_docc=0,
         num_active_uocc=0,
     )(mf)
-    mc = MCOptimizer(states=State(nel=6, multiplicity=5, ms=2.0), nroots=1)(avas)
+    ci_solver = CISolver(states=State(nel=6, multiplicity=5, ms=2.0), nroots=1)
+    mc = MCOptimizer(ci_solver)(avas)
     mc.run()
     assert mc.E_avg == approx(-37.5906751187)

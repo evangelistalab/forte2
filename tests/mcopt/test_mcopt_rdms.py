@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, RHF, MCOptimizer, State
+from forte2 import System, RHF, MCOptimizer, State, CISolver
 from forte2.base_classes import DavidsonLiuParams
 
 
@@ -23,12 +23,13 @@ def test_mcoptimizer_rdm_accessors_single_solver():
     )
     rhf = RHF(charge=0, econv=1e-12)(system)
 
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=2, multiplicity=1, ms=0.0),
         active_orbitals=[0, 1],
         nroots=2,
         davidson_liu_params=DavidsonLiuParams(e_tol=1e-12, r_tol=1e-10),
-    )(rhf)
+    )
+    mc = MCOptimizer(ci_solver)(rhf)
     mc.run()
 
     solver = mc.ci_solver.sub_solvers[0]
@@ -62,13 +63,14 @@ def test_mcoptimizer_rdm_accessors_multi_solver():
 
     singlet = State(nel=10, multiplicity=1, ms=0.0)
     triplet = State(nel=10, multiplicity=3, ms=1.0)
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         states=[singlet, triplet],
         nroots=[2, 1],
         core_orbitals=[0],
         active_orbitals=[1, 2, 3, 4, 5, 6, 7],
         davidson_liu_params=DavidsonLiuParams(e_tol=1e-8, r_tol=1e-4),
-    )(rhf)
+    )
+    mc = MCOptimizer(ci_solver)(rhf)
     mc.run()
 
     singlet_solver, triplet_solver = mc.ci_solver.sub_solvers
@@ -89,3 +91,4 @@ def test_mcoptimizer_rdm_accessors_multi_solver():
         mc.make_sd_2rdm(2),
         triplet_solver.make_sd_2rdm(0),
     )
+test_mcoptimizer_rdm_accessors_multi_solver()

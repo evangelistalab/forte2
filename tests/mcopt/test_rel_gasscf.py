@@ -1,7 +1,6 @@
 import pytest
 
-from forte2 import System, GHF, RelState
-from forte2.mcopt import RelMCOptimizer
+from forte2 import System, GHF, RelState, MCOptimizer, RelCISolver
 from forte2.helpers.comparisons import approx
 
 
@@ -22,10 +21,13 @@ def test_rel_gasscf_equivalence_to_nonrel():
 
     hf = GHF(charge=0, econv=1e-12, dconv=1e-12)(system)
 
-    mc = RelMCOptimizer(
+    ci_solver = RelCISolver(
         RelState(nel=10, gas_min=[3], gas_max=[6]),
         core_orbitals=4,
         active_orbitals=(6, 6),
+    )
+    mc = MCOptimizer(
+        ci_solver,
         freeze_inter_gas_rots=True,
     )(hf)
     mc.run()
@@ -55,11 +57,14 @@ def test_rel_gasscf_h2o_core():
 
     scf = GHF(charge=0)(system)
 
-    mc = RelMCOptimizer(
+    ci_solver = RelCISolver(
         RelState(nel=10, gas_min=[0], gas_max=[1]),
         core_orbitals=[2, 3],
         nroots=4,
         active_orbitals=[[0, 1], [4, 5, 6, 7, 8, 9, 10, 11]],
+    )
+    mc = MCOptimizer(
+        ci_solver,
         active_frozen_orbitals=[0, 1],
     )(scf)
     mc.run()

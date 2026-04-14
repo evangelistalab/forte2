@@ -1,6 +1,16 @@
 import numpy as np
 
-from forte2 import System, RHF, CI, MOSpace, orbitals, State, MCOptimizer, integrals
+from forte2 import (
+    System,
+    RHF,
+    CI,
+    MOSpace,
+    orbitals,
+    State,
+    MCOptimizer,
+    integrals,
+    CISolver,
+)
 from forte2.helpers.comparisons import approx
 from forte2.orbitals import Semicanonicalizer
 from forte2.base_classes import DavidsonLiuParams
@@ -71,10 +81,13 @@ def test_semican_casscf():
     )
     rhf = RHF(charge=0, econv=1e-12)(system)
     rhf.run()
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=rhf.nel, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1, 2, 3],
         active_orbitals=[4, 5, 6, 7, 8, 9],
+    )
+    mc = MCOptimizer(
+        ci_solver,
         final_orbital="semicanonical",
     )(rhf)
     mc.run()
@@ -82,11 +95,12 @@ def test_semican_casscf():
     assert eci_orig == approx(-109.0811491968)
 
     rhf.C[0] = mc.C[0].copy()
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=rhf.nel, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1, 2, 3],
         active_orbitals=[4, 5, 6, 7, 8, 9],
-    )(rhf)
+    )
+    mc = MCOptimizer(ci_solver)(rhf)
     mc.run()
     assert mc.ci_solver.evals_flat[0] == approx(eci_orig)
 
@@ -153,11 +167,14 @@ def test_semican_orbitals():
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=24, multiplicity=1, ms=0.0),
         core_orbitals=10,
         active_orbitals=4,
         davidson_liu_params=DavidsonLiuParams(e_tol=1e-12, r_tol=1e-10),
+    )
+    mc = MCOptimizer(
+        ci_solver,
         final_orbital="semicanonical",
     )(rhf)
     mc.run()

@@ -1,7 +1,7 @@
 import numpy as np
 from pathlib import Path
 
-from forte2 import System, RHF, MCOptimizer, ASET, CI, State
+from forte2 import System, RHF, MCOptimizer, ASET, CI, State, CISolver
 from forte2.helpers.comparisons import approx
 
 # Directory containing *this* file
@@ -49,11 +49,12 @@ def test_aset_1():
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=24, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
         active_orbitals=[11, 12],
-    )(rhf)
+    )
+    mc = MCOptimizer(ci_solver)(rhf)
     aset = ASET(
         fragment=["C1-2", "H1-3"],
         cutoff_method="threshold",
@@ -84,11 +85,12 @@ def test_aset_2():
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=24, multiplicity=1, ms=0.0),
         core_orbitals=10,
         active_orbitals=4,
-    )(rhf)
+    )
+    mc = MCOptimizer(ci_solver)(rhf)
     aset = ASET(
         fragment=["N", "H"],
         frozen_core_orbitals=3,
@@ -128,11 +130,12 @@ def test_aset_3():
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=24, multiplicity=1, ms=0.0),
         core_orbitals=11,
         active_orbitals=2,
-    )(rhf)
+    )
+    mc = MCOptimizer(ci_solver)(rhf)
     aset = ASET(
         fragment=["C1-2", "H1-3"],
         frozen_core_orbitals=3,
@@ -167,10 +170,13 @@ def test_aset_4():
     )
 
     rhf = RHF(charge=0, econv=1e-10)(system)
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=24, multiplicity=1, ms=0.0),
         core_orbitals=10,
         active_orbitals=4,
+    )
+    mc = MCOptimizer(
+        ci_solver,
         econv=1e-9,
     )(rhf)
     aset = ASET(
@@ -213,11 +219,12 @@ def test_aset_5():
     )
 
     rhf = RHF(charge=0, econv=1e-12)(system)
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(system=system, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
         active_orbitals=[15, 16],
-    )(rhf)
+    )
+    mc = MCOptimizer(ci_solver)(rhf)
     aset = ASET(fragment=["C1-2", "H1-3"], cutoff_method="threshold")(mc)
     ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
     ci.run()

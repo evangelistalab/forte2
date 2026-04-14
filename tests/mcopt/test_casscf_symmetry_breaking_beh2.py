@@ -1,4 +1,4 @@
-from forte2 import System, RHF, MCOptimizer, State
+from forte2 import System, RHF, MCOptimizer, State, CISolver
 from forte2.helpers.comparisons import approx
 
 
@@ -25,10 +25,13 @@ def test_casscf_symmetry_breaking():
     )
 
     rhf = RHF(charge=0, econv=1e-10)(system)
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=6, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1],
         active_orbitals=[2, 3],
+    )
+    mc = MCOptimizer(
+        ci_solver,
         econv=1e-9,
         maxiter=500,
     )(rhf)

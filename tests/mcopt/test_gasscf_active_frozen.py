@@ -1,6 +1,6 @@
 import pytest
 
-from forte2 import System, RHF, MCOptimizer, State
+from forte2 import System, RHF, MCOptimizer, State, CISolver
 from forte2.helpers.comparisons import approx
 
 
@@ -26,9 +26,12 @@ def test_gasscf_ch4_active_frozen_1s():
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
 
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
         active_orbitals=[[0], [1, 2, 3, 4, 5, 6, 7, 8]],
+    )
+    mc = MCOptimizer(
+        ci_solver,
         active_frozen_orbitals=[0],
         maxiter=500,
     )(rhf)
@@ -60,9 +63,12 @@ def test_gasscf_ch4_active_frozen_1s_highest_active():
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
 
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
         active_orbitals=[[0], [1, 2, 3, 4, 5, 6, 7, 8]],
+    )
+    mc = MCOptimizer(
+        ci_solver,
         active_frozen_orbitals=[0, 8],
         maxiter=100,
     )(rhf)
@@ -94,9 +100,12 @@ def test_gasscf_ch4_active_frozen_1s_highest_active_noncontiguous():
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
 
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
         active_orbitals=[[0], [1, 2, 3, 4, 5, 6, 7, 9]],
+    )
+    mc = MCOptimizer(
+        ci_solver,
         active_frozen_orbitals=[0, 9],
         maxiter=500,
     )(rhf)

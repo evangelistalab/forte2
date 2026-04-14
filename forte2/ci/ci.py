@@ -1723,7 +1723,13 @@ class RelCI(RelCISolver):
     do_transition_dipole: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
 
-    __post_init__ = CI.__post_init__
+    def __post_init__(self):
+        super().__post_init__()
+        if self.final_orbital not in ["original", "semicanonical"]:
+            raise ValueError(
+                f"Invalid value for final_orbital: {self.final_orbital}. "
+                "Must be 'original' or 'semicanonical'."
+            )
 
     def run(self):
         super().run()
