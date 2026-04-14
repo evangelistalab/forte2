@@ -13,6 +13,7 @@ from forte2 import (
     cpp_helpers,
 )
 from forte2.base_classes import DavidsonLiuParams
+from forte2.helpers.comparisons import approx
 
 
 def test_ci_tdm_same_solver():
@@ -80,6 +81,7 @@ def test_gasci_tdm_different_solvers():
 
     rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-8)(system)
     ci = CI(
+        core_orbitals=[1],
         active_orbitals=[[0], [2, 3, 4, 5, 6]],
         states=[
             State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
@@ -102,7 +104,7 @@ def test_gasci_tdm_different_solvers():
     state_right = right_sb.make_sparse_state(C_right)
 
     a_1trdm, b_1trdm = ci.make_sd_1rdm(0, 1)
-    sf_1trdm = ci.make_sf_1rdm(0, 1)
+    sf_1trdm = ci.make_1rdm(0, 1)
     a_1trdm_ref = compute_a_1rdm(state_left, state_right, 6)
     b_1trdm_ref = compute_b_1rdm(state_left, state_right, 6)
     assert np.allclose(a_1trdm, a_1trdm_ref)
@@ -110,6 +112,7 @@ def test_gasci_tdm_different_solvers():
     assert np.allclose(sf_1trdm, a_1trdm_ref + b_1trdm_ref)
 
     a_1trdm, b_1trdm = ci.make_sd_1rdm(1, 0)
+    # make_sf_1rdm and make_1rdm are synonymous
     sf_1trdm = ci.make_sf_1rdm(1, 0)
     a_1trdm_ref = compute_a_1rdm(state_right, state_left, 6)
     b_1trdm_ref = compute_b_1rdm(state_right, state_left, 6)

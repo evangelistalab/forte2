@@ -391,8 +391,8 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             self.ci_solver.compute_transition_properties(self.C[0])
             pretty_print_ci_transition_props(
                 self.ci_solver.sa_info,
-                self.ci_solver.tdm_per_solver,
-                self.ci_solver.fosc_per_solver,
+                self.ci_solver.transition_dipoles,
+                self.ci_solver.oscillator_strengths,
                 self.ci_solver.evals_per_solver,
             )
 

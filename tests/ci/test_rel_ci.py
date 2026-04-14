@@ -108,10 +108,10 @@ def test_rel_ci_hf_transition_dipole_equivalence_to_rhf():
         do_transition_dipole=True,
     )(scf)
     ci.run()
-    assert np.abs(ci.tdm_per_solver[0][(0, 0)]) == pytest.approx(
+    assert np.abs(ci.transition_dipoles[(0, 0)]) == pytest.approx(
         [0.0, 0.0, 0.756780349], abs=1e-6
     )
-    assert np.abs(ci.tdm_per_solver[0][(1, 1)]) == pytest.approx(
+    assert np.abs(ci.transition_dipoles[(1, 1)]) == pytest.approx(
         [0.0, 0.0, 0.721450697], abs=1e-6
     )
 
@@ -144,15 +144,15 @@ def test_rel_ci_hf_transition_dipole_ghf():
     assert ci.E[1] == approx(-99.7875319545)
     assert ci.E[3] == approx(-99.7866432345)
 
-    assert np.abs(ci.tdm_per_solver[0][(0, 0)]) == pytest.approx(
+    assert np.abs(ci.transition_dipoles[(0, 0)]) == pytest.approx(
         [0.0, 0.0, 7.54972929e-01], abs=1e-6
     )
-    assert np.abs(ci.tdm_per_solver[0][(1, 1)]) == pytest.approx(
+    assert np.abs(ci.transition_dipoles[(1, 1)]) == pytest.approx(
         [0.0, 0.0, 7.21280467e-01], abs=1e-6
     )
-    assert np.abs(ci.tdm_per_solver[0][(3, 3)]) == pytest.approx(
+    assert np.abs(ci.transition_dipoles[(3, 3)]) == pytest.approx(
         [0.0, 0.0, 7.21064890e-01], abs=1e-6
     )
-    assert np.abs(ci.fosc_per_solver[0][(0, 3)]) == pytest.approx(
+    assert np.abs(ci.oscillator_strengths[(0, 3)]) == pytest.approx(
         1.711178808962322e-05, abs=1e-6
     )

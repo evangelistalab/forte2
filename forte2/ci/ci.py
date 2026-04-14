@@ -1483,7 +1483,21 @@ class CISolver(CIBase):
     def compute_transition_properties(self, C=None):
         """
         Compute the transition dipole moments and oscillator strengths from the spin-free 1-TDMs.
-        The results are stored in `self.tdm_per_solver` and `self.fosc_per_solver`.
+        The results are stored in `self.transition_dipoles` and `self.oscillator_strengths`.
+
+        Parameters
+        ----------
+        C : NDArray, optional
+            The MO coefficients. If not provided, the MO coefficients from the first sub-solver are used.
+
+        Returns
+        -------
+        transition_dipoles : dict[tuple[int, int], NDArray]
+            A dictionary mapping pairs of CI roots (absolute_root_i, absolute_root_j) to their transition dipole moments.
+            This is also saved in `self.transition_dipoles`.
+        oscillator_strengths : dict[tuple[int, int], float]
+            A dictionary mapping pairs of CI roots (absolute_root_i, absolute_root_j) to their oscillator strengths.
+            This is also saved in `self.oscillator_strengths`.
         """
         if not self.executed:
             raise RuntimeError("CI solver has not been executed yet.")
@@ -1499,36 +1513,53 @@ class CISolver(CIBase):
         core_dip = get_1e_property(
             self.system, rdm_core, property_name="dipole", unit="au"
         )
-        self.tdm_per_solver = []
-        self.fosc_per_solver = []
-
-        for ici, ci_solver in enumerate(self.sub_solvers):
-            tdmdict = OrderedDict()
-            foscdict = OrderedDict()
-            for i in range(ci_solver.nroot):
-                rdm = ci_solver.make_1rdm(i)
-                # Different (back-)transformation rules for RDMs:
-                # O_{mu}^{nu} = C_{mu}^p <phi_p|O|phi^q> C^q_{nu} = C^H O[mo] C
-                # rdm^{mu}_{nu} = C^{mu}_p <a^p a_q> C^q_{nu} = C^* rdm[mo] C^T
-                rdm = np.einsum("ij,pi,qj->pq", rdm, Cact.conj(), Cact, optimize=True)
-                dip = get_1e_property(
-                    self.system, rdm, property_name="electric_dipole", unit="au"
-                )
-                tdmdict[(i, i)] = dip + core_dip
-                foscdict[(i, i)] = 0.0  # No oscillator strength for i->i transitions
-                for j in range(i + 1, ci_solver.nroot):
-                    tdm = ci_solver.make_1rdm(i, j)
+        self.transition_dipoles = OrderedDict()
+        self.oscillator_strengths = OrderedDict()
+        for ici in range(self.sa_info.nroots_sum):
+            istate, iroot_in_state = self._get_state_root(ici)
+            rdm = self.sub_solvers[istate].make_1rdm(iroot_in_state)
+            # Different (back-)transformation rules for RDMs:
+            # O_{mu}^{nu} = C_{mu}^p <phi_p|O|phi^q> C^q_{nu} = C^H O[mo] C
+            # rdm^{mu}_{nu} = C^{mu}_p <a^p a_q> C^q_{nu} = C^* rdm[mo] C^T
+            rdm = np.einsum("ij,pi,qj->pq", rdm, Cact.conj(), Cact, optimize=True)
+            dip = get_1e_property(
+                self.system, rdm, property_name="electric_dipole", unit="au"
+            )
+            self.transition_dipoles[(ici, ici)] = dip + core_dip
+            # No oscillator strength for i->i transitions
+            self.oscillator_strengths[(ici, ici)] = 0.0
+            for jci in range(ici + 1, self.sa_info.nroots_sum):
+                jstate, jroot_in_state = self._get_state_root(jci)
+                try:
+                    vte = (
+                        self.evals_per_solver[jstate][jroot_in_state]
+                        - self.evals_per_solver[istate][iroot_in_state]
+                    )
+                    # Reverse the order of states for negative VTE to ensure the transition dipole 
+                    # is always computed from lower to higher state.
+                    if vte < 0:
+                        _ici, _jci = jci, ici
+                        vte = -vte
+                    else:
+                        _ici, _jci = ici, jci
+                    tdm = self.make_1rdm(_ici, _jci)
                     tdm = np.einsum(
                         "ij,pi,qj->pq", tdm, Cact.conj(), Cact, optimize=True
                     )
                     tdip = get_1e_property(
                         self.system, tdm, property_name="electric_dipole", unit="au"
                     )
-                    tdmdict[(i, j)] = tdip
-                    vte = self.evals_per_solver[ici][j] - self.evals_per_solver[ici][i]
-                    foscdict[(i, j)] = (2 / 3) * vte * np.linalg.norm(tdip) ** 2
-            self.fosc_per_solver.append(foscdict)
-            self.tdm_per_solver.append(tdmdict)
+                    self.transition_dipoles[(_ici, _jci)] = tdip
+                    self.oscillator_strengths[(_ici, _jci)] = (
+                        (2 / 3) * vte * np.linalg.norm(tdip) ** 2
+                    )
+                except (ValueError, NotImplementedError):
+                    # ValueError: for non-relativistic CI if the two states have different na and nb,
+                    #   and thus cross-state RDMs are not supported.
+                    # NotImplementedError: for two-component CI, cross-state RDMs are not implemented yet.
+                    continue
+
+        return self.transition_dipoles, self.oscillator_strengths
 
     def get_convergence_status(self):
         """
@@ -1686,6 +1717,9 @@ class CISolver(CIBase):
                 f"Cross-state 2-RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
             )
 
+    make_1rdm = make_sf_1rdm
+    make_2rdm = make_sf_2rdm
+
 
 @dataclass
 class CI(CISolver):
@@ -1746,8 +1780,8 @@ class CI(CISolver):
             self.compute_transition_properties()
             pretty_print_ci_transition_props(
                 self.sa_info,
-                self.tdm_per_solver,
-                self.fosc_per_solver,
+                self.transition_dipoles,
+                self.oscillator_strengths,
                 self.evals_per_solver,
             )
 
@@ -1778,6 +1812,8 @@ class RelCISolver(RelCIBase):
     reset_eigensolver = CISolver.reset_eigensolver
     set_maxiter = CISolver.set_maxiter
     get_convergence_status = CISolver.get_convergence_status
+    _get_state_root = CISolver._get_state_root
+    _validate_rdm_inputs = CISolver._validate_rdm_inputs
 
     def _startup(self):
         super()._startup()
@@ -1840,6 +1876,32 @@ class RelCISolver(RelCIBase):
         self.executed = True
         return self
 
+    def make_1rdm(self, left_root: int, right_root: int | None = None):
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+        if left_state == right_state:
+            return self.sub_solvers[left_state].make_1rdm(
+                left_root_in_state, right_root_in_state
+            )
+        else:
+            raise NotImplementedError(
+                f"Cross-state 1-RDMs are not supported for RelCI. Got left_root in state {left_state} and right_root in state {right_state}."
+            )
+
+    def make_2rdm(self, left_root: int, right_root: int | None = None):
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+        if left_state == right_state:
+            return self.sub_solvers[left_state].make_2rdm(
+                left_root_in_state, right_root_in_state
+            )
+        else:
+            raise NotImplementedError(
+                f"Cross-state 2-RDMs are not supported for RelCI. Got left_root in state {left_state} and right_root in state {right_state}."
+            )
+
 
 @dataclass
 class RelCI(RelCISolver):
@@ -1894,7 +1956,7 @@ class RelCI(RelCISolver):
             self.compute_transition_properties()
             pretty_print_ci_transition_props(
                 self.sa_info,
-                self.tdm_per_solver,
-                self.fosc_per_solver,
+                self.transition_dipoles,
+                self.oscillator_strengths,
                 self.evals_per_solver,
             )
