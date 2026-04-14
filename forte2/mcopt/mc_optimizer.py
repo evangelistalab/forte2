@@ -4,11 +4,15 @@ from numpy.typing import NDArray
 from dataclasses import dataclass, field
 
 from forte2.ci import CISolver, RelCISolver
-from forte2.base_classes.active_space_solver import (
+from forte2.base_classes import (
     ActiveSpaceSolver,
     RelActiveSpaceSolver,
+    CIBase,
+    RelCIBase,
+    SystemMixin,
+    MOsMixin,
+    MOSpaceMixin,
 )
-from forte2.base_classes.params import DavidsonLiuParams, CIParams
 from forte2.orbitals import Semicanonicalizer
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers import logger, LBFGS
@@ -23,7 +27,7 @@ from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
 
 
 @dataclass
-class MCOptimizer(ActiveSpaceSolver):
+class MCOptimizer(SystemMixin, MOsMixin, MOSpaceMixin):
     """
     Two-step optimizer for multi-configurational wavefunctions.
 
@@ -78,6 +82,8 @@ class MCOptimizer(ActiveSpaceSolver):
     An earlier implementation (CASSCF only) used J. Chem. Phys. 142, 224103 (2015).
     """
 
+    ci_solver: CIBase | RelCIBase | None = field(default=None)
+
     active_frozen_orbitals: list[int] = None
     freeze_inter_gas_rots: bool = False
 
@@ -91,17 +97,26 @@ class MCOptimizer(ActiveSpaceSolver):
     micro_maxiter: int = 6
     max_rotation: float = 0.2
 
-    ### CI solver parameters
-    ci_params: CIParams = field(default_factory=CIParams)
-    davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
-
     ### Post-iteration
     do_transition_dipole: bool = False
+    final_orbital: str = "semicanonical"
 
     ### Non-init attributes
     converged: bool = field(default=False, init=False)
     executed: bool = field(default=False, init=False)
     two_component: bool = field(default=False, init=False)
+
+    def _post_init__(self):
+        if not isinstance(self.ci_solver, (CIBase, RelCIBase)):
+            raise ValueError("ci_solver must be an instance of CIBase or RelCIBase.")
+
+        if self.final_orbital not in [
+            "semicanonical",
+            "original",
+        ]:
+            raise ValueError(
+                "final_orbital must be either 'semicanonical' or 'original'."
+            )
 
     def __call__(self, method):
         self.parent_method = method
@@ -115,7 +130,20 @@ class MCOptimizer(ActiveSpaceSolver):
         return self
 
     def _startup(self):
-        super()._startup()
+        if not self.parent_method.executed:
+            self.parent_method.run()
+
+        SystemMixin.copy_from_upstream(self, self.parent_method)
+        MOsMixin.copy_from_upstream(self, self.parent_method)
+
+        # make sure to register parent_method
+        self.ci_solver = self.ci_solver(self.parent_method)
+        # iteration 0: one step of CI optimization to bootstrap the orbital optimization
+        self.iter = 0
+        self.ci_solver.run()
+        self.mo_space = self.ci_solver.mo_space
+        self.dtype = self.ci_solver.dtype
+
         # make the core, active, and virtual spaces contiguous
         # i.e., [core, gas1, gas2, ..., virt]
         perm = self.mo_space.orig_to_contig
@@ -177,21 +205,18 @@ class MCOptimizer(ActiveSpaceSolver):
             and not self.freeze_inter_gas_rots,
         )
 
-        _CISolver = RelCISolver if self.two_component else CISolver
-        self.ci_solver = _CISolver(
-            states=self.states,
-            core_orbitals=self.mo_space.docc_orbitals,
-            active_orbitals=self.mo_space.active_orbitals,
-            nroots=self.sa_info.nroots,
-            weights=self.sa_info.weights,
-            log_level=self.ci_solver_verbosity,
-            die_if_not_converged=False,
-            ci_params=self.ci_params,
-            davidson_liu_params=self.davidson_liu_params,
-        )(self.parent_method)
-        # iteration 0: one step of CI optimization to bootstrap the orbital optimization
-        self.iter = 0
-        self.ci_solver.run()
+        # _CISolver = RelCISolver if self.two_component else CISolver
+        # self.ci_solver = _CISolver(
+        #     states=self.states,
+        #     core_orbitals=self.mo_space.docc_orbitals,
+        #     active_orbitals=self.mo_space.active_orbitals,
+        #     nroots=self.sa_info.nroots,
+        #     weights=self.sa_info.weights,
+        #     log_level=self.ci_solver_verbosity,
+        #     die_if_not_converged=False,
+        #     ci_params=self.ci_params,
+        #     davidson_liu_params=self.davidson_liu_params,
+        # )(self.parent_method)
 
         # Initialize the LBFGS solver that finds the optimal orbital
         # at fixed CI expansion using the gradient and diagonal Hessian
@@ -361,7 +386,7 @@ class MCOptimizer(ActiveSpaceSolver):
             self.ci_solver.run()
 
         convergence_status = self.ci_solver.get_convergence_status()
-        if not all(convergence_status):
+        if convergence_status and not all(convergence_status):
             logger.log_warning(
                 f"CI solver did not converge for all roots: {convergence_status}"
             )
@@ -371,20 +396,20 @@ class MCOptimizer(ActiveSpaceSolver):
         return self
 
     def _post_process(self):
-        pretty_print_ci_summary(self.sa_info, self.ci_solver.evals_per_solver)
+        pretty_print_ci_summary(self.ci_solver.sa_info, self.ci_solver.evals_per_solver)
         self.ci_solver.compute_natural_occupation_numbers()
         pretty_print_ci_nat_occ_numbers(
-            self.sa_info, self.mo_space, self.ci_solver.nat_occs
+            self.ci_solver.sa_info, self.mo_space, self.ci_solver.nat_occs
         )
         top_dets = self.ci_solver.get_top_determinants()
-        pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
+        pretty_print_ci_dets(self.ci_solver.sa_info, self.mo_space, top_dets)
         if not self.two_component:
             # TODO: enable AO composition for 2c
             self._print_ao_composition()
         if self.do_transition_dipole:
             self.ci_solver.compute_transition_properties(self.C[0])
             pretty_print_ci_transition_props(
-                self.sa_info,
+                self.ci_solver.sa_info,
                 self.ci_solver.tdm_per_solver,
                 self.ci_solver.fosc_per_solver,
                 self.ci_solver.evals_per_solver,
@@ -576,4 +601,4 @@ class MCOptimizer(ActiveSpaceSolver):
 
 
 @dataclass
-class RelMCOptimizer(RelActiveSpaceSolver, MCOptimizer): ...
+class RelMCOptimizer(MCOptimizer): ...
