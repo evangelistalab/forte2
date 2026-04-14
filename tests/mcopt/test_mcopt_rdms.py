@@ -94,4 +94,3 @@ def test_mcoptimizer_rdm_accessors_multi_solver():
         mc.make_sd_2rdm(2),
         triplet_solver.make_sd_2rdm(0),
     )
-test_mcoptimizer_rdm_accessors_multi_solver()

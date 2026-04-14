@@ -1230,7 +1230,7 @@ class SelectedCI(SelectedCISolver):
                 system=self.system,
                 mo_space=self.mo_space,
             )
-            semi.semi_canonicalize(g1=self.make_average_sf_1rdm(), C_contig=self.C[0])
+            semi.semi_canonicalize(g1=self.make_average_1rdm(), C_contig=self.C[0])
             self.C[0] = semi.C_semican.copy()
 
             # recompute the CI vectors in the semicanonical basis

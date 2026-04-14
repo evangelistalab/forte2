@@ -1,7 +1,5 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass, field
-
-import numpy as np
 
 from .active_space_solver import ActiveSpaceSolver, RelActiveSpaceSolver
 

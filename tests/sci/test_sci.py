@@ -304,12 +304,12 @@ def test_sci_make_rdms():
     ci.run()
 
     # Test the 1-RDM
-    sf_1rdm = sci.make_average_sf_1rdm()
+    sf_1rdm = sci.make_average_1rdm()
     sf_1rdm_ci = ci.make_average_1rdm()
     assert np.allclose(sf_1rdm, sf_1rdm_ci, atol=1e-8)
 
     # Test the 2-RDM
-    sf_2rdm = sci.make_average_sf_2rdm()
+    sf_2rdm = sci.make_average_2rdm()
     sf_2rdm_ci = ci.make_average_2rdm()
     assert np.allclose(sf_2rdm, sf_2rdm_ci, atol=1e-8)
 

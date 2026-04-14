@@ -1,12 +1,11 @@
+from abc import ABC
+from dataclasses import dataclass, field
+
 import numpy as np
 from numpy.typing import NDArray
 
-from dataclasses import dataclass, field
 
-from forte2.ci import CISolver, RelCISolver
 from forte2.base_classes import (
-    ActiveSpaceSolver,
-    RelActiveSpaceSolver,
     CIBase,
     RelCIBase,
     SystemMixin,
@@ -29,7 +28,7 @@ from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
 
 
 @dataclass
-class MCOptimizerBase(SystemMixin, MOsMixin, MOSpaceMixin):
+class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
     """
     Two-step optimizer for multi-configurational wavefunctions.
 
