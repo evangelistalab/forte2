@@ -333,6 +333,9 @@ class SelectedCIHelper:
         Set the PT2 regularization method ('none', 'shift', 'dsrg') and its strength
         """
 
+    def set_use_claude_algorithms(self, use_claude_algorithms: bool) -> None:
+        """Enable or disable the optimized Claude sigma-build kernels"""
+
     def select_hbci_ref(self, var_threshold: float, pt2_threshold: float) -> None:
         """Perform HBCI selection with the given threshold"""
 
@@ -396,6 +399,24 @@ class SelectedCIHelper:
 
     def selection_time(self) -> float:
         """Return the total selection time"""
+
+    def H2ab(self, basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None:
+        """Apply the alpha-beta 2e Hamiltonian (loop version)"""
+
+    def H2ab_claude(self, basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None:
+        """Apply the alpha-beta 2e Hamiltonian (Claude version)"""
+
+    def H2aa(self, basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None:
+        """Apply the alpha-alpha 2e Hamiltonian (loop version)"""
+
+    def H2bb(self, basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None:
+        """Apply the beta-beta 2e Hamiltonian (loop version)"""
+
+    def H2aa_claude(self, basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None:
+        """Apply the alpha-alpha 2e Hamiltonian (Claude version)"""
+
+    def H2bb_claude(self, basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None:
+        """Apply the beta-beta 2e Hamiltonian (Claude version)"""
 
 class RelCISigmaBuilder:
     def __init__(self, lists: CIStrings, E: float, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], log_level: int = 3, use_asym_ints: bool = False) -> None:
@@ -539,9 +560,6 @@ class Determinant:
 
     def excitation_connection(self, arg: Determinant, /) -> list[list[int]]:
         """Get the excitation connection between this and another determinant"""
-
-    def str(self, n: int = 64) -> str:
-        """Get the string representation of the Slater determinant"""
 
 @overload
 def spin2(arg0: Determinant, arg1: Determinant, /) -> float:

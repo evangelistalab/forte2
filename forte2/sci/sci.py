@@ -162,6 +162,7 @@ class _SelectedCISingleStateSolver:
             self.sci_params.pt2_regularizer.lower(),
             self.sci_params.pt2_regularizer_strength,
         )
+        self.sci_helper.set_use_claude_algorithms(self.sci_params.use_claude_algorithms)
         if self.sci_params.frozen_creation:
             self.sci_helper.set_frozen_creation(self.sci_params.frozen_creation)
         if self.sci_params.frozen_annihilation:
