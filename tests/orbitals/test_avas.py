@@ -12,7 +12,7 @@ def test_avas_inputs():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
 
     # raise if num_active_docc/vir <= 0
     with pytest.raises(Exception):
@@ -76,7 +76,7 @@ def test_avas_subspace():
         minao_basis_set="sto-3g",
     )
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
 
     # sto-3g does not have 3p orbitals
     with pytest.raises(Exception):
@@ -115,7 +115,7 @@ def test_avas_separate_n2():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     casci = CI(
         active_orbitals=[4, 5, 6, 7, 8, 9],
         core_orbitals=[0, 1, 2, 3],
@@ -158,7 +158,7 @@ def test_avas_separate_n2_ghf_equivalent_to_rhf():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    mf = GHF(charge=0, econv=1e-12)(system)
+    mf = GHF(charge=0, e_tol=1e-12)(system)
     casci = RelCI(
         nel=14,
         active_orbitals=12,
@@ -200,7 +200,7 @@ def test_avas_rohf_n2plus():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = ROHF(charge=1, ms=0.5, econv=1e-12)(system)
+    rhf = ROHF(charge=1, ms=0.5, e_tol=1e-12)(system)
     avas = AVAS(
         selection_method="separate",
         subspace=["N(2p)"],
@@ -223,7 +223,7 @@ def test_avas_rohf_n2minus():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = ROHF(charge=-1, ms=0.5, econv=1e-12)(system)
+    rhf = ROHF(charge=-1, ms=0.5, e_tol=1e-12)(system)
     avas = AVAS(
         selection_method="separate",
         subspace=["N(2p)"],
@@ -248,7 +248,7 @@ def test_avas_cumulative_h2co_all():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-10)(system)
     avas = AVAS(
         selection_method="cumulative",
         subspace=["C1(2px)", "O(2px)"],
@@ -273,7 +273,7 @@ def test_avas_cumulative_h2co_98pc():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-10)(system)
     avas = AVAS(
         selection_method="cumulative",
         subspace=["C(2px)", "O1(2px)"],
@@ -297,7 +297,7 @@ def test_avas_total_h2co():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-10)(system)
     avas = AVAS(
         selection_method="total",
         subspace=["C(2px)", "O1(2px)"],
@@ -321,7 +321,7 @@ def test_avas_total_h2co_ghf_equivalent_to_rhf():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = GHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    rhf = GHF(charge=0, e_tol=1e-12, d_tol=1e-10)(system)
     avas = AVAS(
         selection_method="total",
         subspace=["C(2px)", "O1(2px)"],
@@ -346,7 +346,7 @@ def test_avas_separate_h2co():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-10)(system)
     avas = AVAS(
         selection_method="separate",
         subspace=["C(2px)", "O(2px)"],
@@ -373,7 +373,7 @@ def test_avas_subspace_planes_h2co():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-10)(system)
     avas = AVAS(
         selection_method="cumulative",
         subspace=["C(2p)", "O(2p)"],
@@ -398,7 +398,7 @@ def test_avas_subspace_planes_h2co_casscf():
     """
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-10)(system)
     avas = AVAS(
         selection_method="cumulative",
         subspace=["C(2p)", "O(2p)"],

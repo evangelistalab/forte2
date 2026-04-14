@@ -14,7 +14,7 @@ def test_mcscf_noncontiguous_spaces():
     """
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     rhf.run()
     assert rhf.E == approx(erhf)
 

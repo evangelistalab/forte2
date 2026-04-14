@@ -19,7 +19,7 @@ def test_sa_casscf_c2():
         auxiliary_basis_set="cc-pVTZ-JKFIT",
     )
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     avas = AVAS(
         selection_method="separate",
         num_active_docc=4,

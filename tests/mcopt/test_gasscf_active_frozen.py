@@ -24,7 +24,7 @@ def test_gasscf_ch4_active_frozen_1s():
         unit="bohr",
     )
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-12)(system)
 
     ci_solver = CISolver(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
@@ -61,7 +61,7 @@ def test_gasscf_ch4_active_frozen_1s_highest_active():
         unit="bohr",
     )
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-12)(system)
 
     ci_solver = CISolver(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
@@ -98,7 +98,7 @@ def test_gasscf_ch4_active_frozen_1s_highest_active_noncontiguous():
         unit="bohr",
     )
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-12)(system)
 
     ci_solver = CISolver(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),

@@ -17,7 +17,7 @@ def test_rel_ci_h2():
     system = System(
         xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    scf = GHF(charge=0, econv=1e-12)(system)
+    scf = GHF(charge=0, e_tol=1e-12)(system)
     scf.run()
     C = scf.C[0]
     nmo = C.shape[1]
@@ -40,7 +40,7 @@ def test_rel_ci_hf():
     system = System(
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    scf = RHF(charge=0, econv=1e-10)(system)
+    scf = RHF(charge=0, e_tol=1e-10)(system)
     scf.run()
     C = convert_coeff_spatial_to_spinor(scf.C)[0]
     nmo = C.shape[1]

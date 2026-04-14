@@ -48,7 +48,7 @@ def test_aset_1():
         auxiliary_basis_set="def2-universal-JKFIT",
     )
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci_solver = CISolver(
         State(nel=24, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
@@ -84,7 +84,7 @@ def test_aset_2():
         auxiliary_basis_set="def2-universal-JKFIT",
     )
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci_solver = CISolver(
         State(nel=24, multiplicity=1, ms=0.0),
         core_orbitals=10,
@@ -129,7 +129,7 @@ def test_aset_3():
         auxiliary_basis_set="def2-universal-JKFIT",
     )
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci_solver = CISolver(
         State(nel=24, multiplicity=1, ms=0.0),
         core_orbitals=11,
@@ -169,7 +169,7 @@ def test_aset_4():
         auxiliary_basis_set="def2-universal-JKFIT",
     )
 
-    rhf = RHF(charge=0, econv=1e-10)(system)
+    rhf = RHF(charge=0, e_tol=1e-10)(system)
     ci_solver = CISolver(
         State(nel=24, multiplicity=1, ms=0.0),
         core_orbitals=10,
@@ -177,7 +177,7 @@ def test_aset_4():
     )
     mc = MCOptimizer(
         ci_solver,
-        econv=1e-9,
+        e_tol=1e-9,
     )(rhf)
     aset = ASET(
         fragment=["N", "H"],
@@ -218,7 +218,7 @@ def test_aset_5():
         auxiliary_basis_set="def2-universal-JKFIT",
     )
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci_solver = CISolver(
         State(system=system, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],

@@ -85,7 +85,7 @@ def test_gasscf_2():
         xyz=xyz, basis_set="cc-pVTZ", auxiliary_basis_set="def2-universal-jkfit"
     )
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-12)(system)
 
     ci_solver = CISolver(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[6]),
@@ -94,8 +94,8 @@ def test_gasscf_2():
     )
     mc = MCOptimizer(
         ci_solver,
-        econv=1e-8,
-        gconv=1e-7,
+        e_tol=1e-8,
+        g_tol=1e-7,
         maxiter=100,
     )(rhf)
     mc.run()
@@ -124,7 +124,7 @@ def test_gasscf_3():
         unit="bohr",
     )
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-12)(system)
 
     ci_solver = CISolver(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
@@ -132,8 +132,8 @@ def test_gasscf_3():
     )
     mc = MCOptimizer(
         ci_solver,
-        econv=1e-8,
-        gconv=1e-7,
+        e_tol=1e-8,
+        g_tol=1e-7,
         maxiter=500,
     )(rhf)
     mc.run()
@@ -156,7 +156,7 @@ def test_gasscf_5():
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="def2-universal-jkfit"
     )
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-12)(system)
 
     ci_solver = CISolver(
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[6, 0], gas_max=[8, 2]),
@@ -166,8 +166,8 @@ def test_gasscf_5():
     mc = MCOptimizer(
         ci_solver,
         freeze_inter_gas_rots=True,
-        econv=1e-10,
-        gconv=1e-8,
+        e_tol=1e-10,
+        g_tol=1e-8,
     )(rhf)
     mc.run()
 

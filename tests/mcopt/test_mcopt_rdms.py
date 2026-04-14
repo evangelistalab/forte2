@@ -21,7 +21,7 @@ def test_mcoptimizer_rdm_accessors_single_solver():
         basis_set="cc-pvdz",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
     )
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
 
     ci_solver = CISolver(
         State(nel=2, multiplicity=1, ms=0.0),
@@ -59,7 +59,7 @@ def test_mcoptimizer_rdm_accessors_multi_solver():
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         unit="bohr",
     )
-    rhf = RHF(charge=0, econv=1e-8)(system)
+    rhf = RHF(charge=0, e_tol=1e-8)(system)
 
     singlet = State(nel=10, multiplicity=1, ms=0.0)
     triplet = State(nel=10, multiplicity=3, ms=1.0)

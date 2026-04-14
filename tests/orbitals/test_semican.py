@@ -26,7 +26,7 @@ def test_semican_rhf():
     system = System(
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     rhf.run()
     mo_space = MOSpace(
         core_orbitals=[0, 1, 2, 3], active_orbitals=[4, 5, 6, 7, 8, 9], nmo=system.nmo
@@ -47,7 +47,7 @@ def test_semican_ci():
     system = System(
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     rhf.run()
     ci = CI(
         State(nel=rhf.nel, multiplicity=1, ms=0.0),
@@ -79,7 +79,7 @@ def test_semican_casscf():
     system = System(
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     rhf.run()
     ci_solver = CISolver(
         State(nel=rhf.nel, multiplicity=1, ms=0.0),
@@ -115,7 +115,7 @@ def test_semican_fock_offdiag():
     system = System(
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     rhf.run()
     ci = CI(
         State(nel=rhf.nel, multiplicity=1, ms=0.0),
@@ -166,7 +166,7 @@ def test_semican_orbitals():
         auxiliary_basis_set="def2-universal-JKFIT",
     )
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci_solver = CISolver(
         State(nel=24, multiplicity=1, ms=0.0),
         core_orbitals=10,

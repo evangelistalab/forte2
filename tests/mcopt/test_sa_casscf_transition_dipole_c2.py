@@ -15,7 +15,7 @@ def test_sa_casscf_c2_transition_dipole():
         auxiliary_basis_set="cc-pVTZ-JKFIT",
     )
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     singlet = State(nel=rhf.nel, multiplicity=1, ms=0.0)
     triplet = State(nel=rhf.nel, multiplicity=3, ms=0.0)
     avas = AVAS(

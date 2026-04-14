@@ -15,7 +15,7 @@ def test_sa_casscf_same_mult():
     """
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci_solver = CISolver(
         State(nel=14, multiplicity=1, ms=0.0),
         active_orbitals=[4, 5, 6, 7, 8, 9],
@@ -24,7 +24,7 @@ def test_sa_casscf_same_mult():
     )
     mc = MCOptimizer(
         ci_solver,
-        gconv=1e-7,
+        g_tol=1e-7,
     )(rhf)
     mc.run()
     assert rhf.E == approx(erhf)
@@ -40,7 +40,7 @@ def test_sa_mcscf_diff_mult_with_avas():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     avas = AVAS(
         selection_method="separate",
         num_active_docc=3,
@@ -88,7 +88,7 @@ def test_sa_casscf_diff_mult():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     singlet = State(nel=rhf.nel, multiplicity=1, ms=0.0)
     triplet = State(nel=rhf.nel, multiplicity=3, ms=0.0)
     ci_solver = CISolver(

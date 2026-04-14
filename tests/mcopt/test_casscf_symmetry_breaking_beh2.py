@@ -24,7 +24,7 @@ def test_casscf_symmetry_breaking():
         unit="bohr",
     )
 
-    rhf = RHF(charge=0, econv=1e-10)(system)
+    rhf = RHF(charge=0, e_tol=1e-10)(system)
     ci_solver = CISolver(
         State(nel=6, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1],
@@ -32,7 +32,7 @@ def test_casscf_symmetry_breaking():
     )
     mc = MCOptimizer(
         ci_solver,
-        econv=1e-9,
+        e_tol=1e-9,
         maxiter=500,
     )(rhf)
     mc.run()

@@ -173,9 +173,15 @@ class _SelectedCISingleStateSolver:
             logger.log(f"Selected CI Cycle {cycle + 1}", self.log_level)
             logger.log(f"{'=' * 67}", self.log_level)
 
-            logger.log(f"Algorithm: {self.sci_params.selection_algorithm}", self.log_level)
-            logger.log(f"  var_threshold = {self.sci_params.var_threshold}", self.log_level)
-            logger.log(f"  pt2_threshold = {self.sci_params.pt2_threshold}", self.log_level)
+            logger.log(
+                f"Algorithm: {self.sci_params.selection_algorithm}", self.log_level
+            )
+            logger.log(
+                f"  var_threshold = {self.sci_params.var_threshold}", self.log_level
+            )
+            logger.log(
+                f"  pt2_threshold = {self.sci_params.pt2_threshold}", self.log_level
+            )
 
             old_ndets = self.sci_helper.ndets()
 
@@ -419,7 +425,8 @@ class _SelectedCISingleStateSolver:
         not_close_idx = [i for i in range(len(svals)) if i not in close_idx]
 
         logger.log(
-            f"Target S(S+1) = {target_s2}, found {len(close_idx)} eigenvalues close to it."
+            f"Target S(S+1) = {target_s2}, found {len(close_idx)} eigenvalues close to it.",
+            self.log_level,
         )
 
         # project the guess determinants into the S^2 subspace

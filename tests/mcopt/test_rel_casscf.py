@@ -26,7 +26,7 @@ def test_rel_casscf_hf_equivalence_to_nonrel():
     system = System(
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    scf = RHF(charge=0, econv=1e-10)(system)
+    scf = RHF(charge=0, e_tol=1e-10)(system)
     scf.run()
     scf = rhf_to_ghf_with_random_phase(scf)
     system.two_component = True
@@ -82,7 +82,7 @@ def test_rel_casscf_frozen_co_equivalent_to_nonrel():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = GHF(charge=0, econv=1e-12)(system)
+    rhf = GHF(charge=0, e_tol=1e-12)(system)
     avas = AVAS(
         subspace=["C(2p)", "O(2p)"],
         selection_method="separate",
@@ -128,7 +128,7 @@ def test_rel_casscf_frozen_co_x2c():
         snso_type="row-dependent",
     )
 
-    mf = GHF(charge=0, econv=1e-12)(system)
+    mf = GHF(charge=0, e_tol=1e-12)(system)
     avas = AVAS(
         subspace=["C(2p)", "O(2p)"],
         selection_method="separate",

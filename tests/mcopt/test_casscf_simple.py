@@ -13,7 +13,7 @@ def test_casscf_h2():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci_solver = CISolver(State(nel=2, multiplicity=1, ms=0.0), active_orbitals=[0, 1])
     mc = MCOptimizer(ci_solver)(rhf)
     mc.run()
@@ -32,7 +32,7 @@ def test_casscf_n2():
     """
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci_solver = CISolver(
         State(nel=14, multiplicity=1, ms=0.0),
         active_orbitals=[4, 5, 6, 7, 8, 9],
@@ -40,7 +40,7 @@ def test_casscf_n2():
     )
     mc = MCOptimizer(
         ci_solver,
-        gconv=1e-7,
+        g_tol=1e-7,
     )(rhf)
     mc.run()
     assert rhf.E == approx(erhf)
@@ -64,7 +64,7 @@ def test_casscf_water():
         unit="angstrom",
     )
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-12)(system)
     ci_solver = CISolver(
         State(nel=10, multiplicity=1, ms=0.0),
         active_orbitals=[1, 2, 3, 4, 5, 6],
@@ -72,8 +72,8 @@ def test_casscf_water():
     )
     mc = MCOptimizer(
         ci_solver,
-        gconv=1e-6,
-        econv=1e-10,
+        g_tol=1e-6,
+        e_tol=1e-10,
     )(rhf)
     mc.run()
 

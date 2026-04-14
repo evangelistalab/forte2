@@ -24,7 +24,7 @@ def test_ci_tdm_same_solver():
     system = System(
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         State(nel=14, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1, 2, 3],
@@ -78,7 +78,7 @@ def test_gasci_tdm_different_solvers():
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="def2-universal-jkfit"
     )
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-8)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-8)(system)
     ci = CI(
         active_orbitals=[[0], [2, 3, 4, 5, 6]],
         states=[

@@ -24,7 +24,7 @@ def test_casscf_cyclopropene():
         auxiliary_basis_set="def2-universal-JKFIT",
     )
 
-    rhf = RHF(charge=0, econv=1e-6)(system)
+    rhf = RHF(charge=0, e_tol=1e-6)(system)
     avas = AVAS(
         subspace=["C(2p)"],
         subspace_pi_planes=[["C1-3"]],

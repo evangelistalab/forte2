@@ -17,7 +17,7 @@ def _h4_rhf():
     H 0.0 0.0 3.0
     """
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
-    return RHF(charge=0, econv=1e-14)(system)
+    return RHF(charge=0, e_tol=1e-14)(system)
 
 
 def test_sci1():
@@ -57,7 +57,7 @@ def test_sci2():
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-10)(system)
+    rhf = RHF(charge=0, e_tol=1e-10)(system)
 
     sci = SelectedCI(
         states=State(nel=6, multiplicity=1, ms=0.0),
@@ -98,7 +98,7 @@ def test_sci3():
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-10)(system)
+    rhf = RHF(charge=0, e_tol=1e-10)(system)
 
     sci = SelectedCI(
         states=State(nel=6, multiplicity=1, ms=0.0),
@@ -136,7 +136,7 @@ def test_sci4():
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-10)(system)
+    rhf = RHF(charge=0, e_tol=1e-10)(system)
 
     sci = SelectedCI(
         states=State(nel=6, multiplicity=1, ms=0.0),
@@ -170,7 +170,7 @@ def test_sci5():
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", cholesky_tei=True, cholesky_tol=1e-16)
 
-    rhf = RHF(charge=0, econv=1e-10)(system)
+    rhf = RHF(charge=0, e_tol=1e-10)(system)
 
     sci0 = SelectedCI(
         states=State(nel=10, multiplicity=1, ms=0.0),
@@ -218,7 +218,7 @@ def test_sci6():
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", cholesky_tei=True, cholesky_tol=1e-16)
 
-    rhf = RHF(charge=0, econv=1e-10)(system)
+    rhf = RHF(charge=0, e_tol=1e-10)(system)
 
     sci = SelectedCI(
         states=State(nel=10, multiplicity=1, ms=0.0),
@@ -386,6 +386,92 @@ def test_sci_water_core_excited():
     ci.run()
 
     assert ci.E[0] == pytest.approx(-56.34437851987155, abs=1e-6)
+
+
+@pytest.mark.slow
+def test_sci_water_core_excited_with_gasscf_orbs():
+    """Test SelectedCI on a water core-excited state."""
+    # This should be converged to the following GASCI input
+    # from forte2 import CISolver, MCOptimizer, CI
+    # xyz = """
+    # O   0.0000000000  -0.0000000000  -0.0662628033
+    # H   0.0000000000  -0.7540256101   0.5259060578
+    # H  -0.0000000000   0.7530256101   0.5260060578
+    # """
+
+    # system = System(xyz=xyz, basis_set="6-31g", auxiliary_basis_set="cc-pVTZ-JKFIT")
+    # rhf = RHF(charge=0)(system)
+
+    # ci = CISolver(
+    #     states=State(nel=10, multiplicity=1, ms=0.0, gas_max=[1, 2], gas_min=[1, 2]),
+    #     active_orbitals=[[0], [1], list(range(2, 7))],
+    #     davidson_liu_params=DavidsonLiuParams(
+    #         e_tol=1e-10,
+    #         r_tol=1e-5,
+    #     ),
+    # )
+    # mc = MCOptimizer(ci)(rhf)
+    # mc.run()
+
+    # ci = CI(
+    #     states=State(nel=10, multiplicity=1, ms=0.0, gas_max=[1], gas_min=[1]),
+    #     active_orbitals=[[0], list(range(1, 13))],
+    #     davidson_liu_params=DavidsonLiuParams(
+    #         e_tol=1e-10,
+    #         r_tol=1e-5,
+    #     ),
+    # )(mc)
+    # ci.run()
+
+    from forte2 import CISolver, MCOptimizer
+
+    xyz = """
+    O   0.0000000000  -0.0000000000  -0.0662628033
+    H   0.0000000000  -0.7540256101   0.5259060578
+    H  -0.0000000000   0.7530256101   0.5260060578
+    """
+
+    system = System(xyz=xyz, basis_set="6-31g", auxiliary_basis_set="cc-pVTZ-JKFIT")
+    rhf = RHF(charge=0)(system)
+
+    # Small active space GASSCF to get good initial orbitals for sCI
+    ci = CISolver(
+        states=State(nel=10, multiplicity=1, ms=0.0, gas_max=[1, 2], gas_min=[1, 2]),
+        active_orbitals=[[0], [1], list(range(2, 7))],
+        davidson_liu_params=DavidsonLiuParams(
+            e_tol=1e-10,
+            r_tol=1e-5,
+        ),
+    )
+    mc = MCOptimizer(ci)(rhf)
+    mc.run()
+
+    guess_dets = ci.sub_solvers[0].ci_strings.make_determinants()
+
+    ci = SelectedCI(
+        states=State(nel=10, multiplicity=1, ms=0.0),
+        active_orbitals=list(range(13)),
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-5,
+            pt2_threshold=1e-10,
+            guess_dets=guess_dets,
+            do_spin_penalty=True,
+            screening_criterion="hbci",
+            # do not allow the core orbital occupation to change from the guess determinants
+            frozen_annihilation=[0],
+            frozen_creation=[0],
+            num_threads=4,
+            num_batches_per_thread=16,
+        ),
+        davidson_liu_params=DavidsonLiuParams(
+            e_tol=1e-10,
+            r_tol=1e-5,
+        ),
+    )(mc)
+    ci.run()
+
+    assert ci.E[0] == pytest.approx(-56.3574249874, abs=1e-6)
 
 
 def test_sci_n2_multiple_roots():

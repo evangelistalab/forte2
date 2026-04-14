@@ -14,7 +14,7 @@ def test_casscf_frozen_co():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     avas = AVAS(
         subspace=["C(2p)", "O(2p)"],
         selection_method="separate",

@@ -19,7 +19,7 @@ def test_rel_gasscf_equivalence_to_nonrel():
         xyz=xyz, basis_set="cc-pVTZ", auxiliary_basis_set="def2-universal-jkfit"
     )
 
-    hf = GHF(charge=0, econv=1e-12, dconv=1e-12)(system)
+    hf = GHF(charge=0, e_tol=1e-12, d_tol=1e-12)(system)
 
     ci_solver = RelCISolver(
         RelState(nel=10, gas_min=[3], gas_max=[6]),

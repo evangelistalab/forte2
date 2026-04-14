@@ -123,8 +123,8 @@ def test_mrpt2_carbon_rel_sa():
     )
     mc = MCOptimizer(
         ci_solver,
-        econv=1e-8,
-        gconv=1e-6,
+        e_tol=1e-8,
+        g_tol=1e-6,
     )(mf)
     dsrg = RelDSRG_MRPT2(flow_param=0.24, relax_reference="once")(mc)
     dsrg.run()
@@ -211,8 +211,8 @@ def test_mrpt2_s_rel_sa_gauss_nuc():
     )
     mc = MCOptimizer(
         ci_solver,
-        econv=1e-11,
-        gconv=1e-10,
+        e_tol=1e-11,
+        g_tol=1e-10,
     )(mf)
     dsrg = RelDSRG_MRPT2(flow_param=0.24, relax_reference="once")(mc)
     dsrg.run()

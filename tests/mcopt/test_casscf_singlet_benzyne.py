@@ -26,7 +26,7 @@ def test_casscf_singlet_benzyne():
         unit="bohr",
     )
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci_solver = CISolver(
         State(nel=40, multiplicity=1, ms=0.0),
         core_orbitals=list(range(19)),

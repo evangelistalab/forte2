@@ -11,8 +11,6 @@ from forte2.base_classes import (
     SystemMixin,
     MOsMixin,
     MOSpaceMixin,
-    CIBase,
-    RelCIBase,
 )
 from forte2.orbitals import Semicanonicalizer
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
@@ -34,31 +32,16 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
     Parameters
     ----------
-    states : State | list[State]
-        The electronic states for which the CI is solved. Can be a single state or a list of states.
-        A state-averaged CI is performed if multiple states are provided.
-    nroots : int | list[int], optional, default=1
-        The number of roots to compute.
-        If a list is provided, each element corresponds to the number of roots for each state.
-        If a single integer is provided, `states` must be a single `State` object.
-    weights : list[float] | list[list[float]], optional
-        The weights for state averaging.
-        If a list of lists is provided, each sublist corresponds to the weights for each state.
-        The number of weights must match the number of roots for each state.
-        If not provided, equal weights are assumed for all states.
-        If a single list is provided, `states` must be a single `State` object.
-    mo_space : MOSpace, optional
-        A `MOSpace` object defining the partitioning of the molecular orbitals.
-        If not provided, CISolver must be called with a parent method that has MOSpaceMixin (e.g., AVAS).
-        If provided, it overrides the one from the parent method.
+    ci_solver : CIBase | RelCIBase
+        The CI solver to use. This should be an instance of a class that inherits from CIBase or RelCIBase.
     active_frozen_orbitals : list[int], optional
         List of active orbital indices to be frozen in the MCSCF optimization.
         If provided, all gradients involving these orbitals will be zeroed out.
     maxiter : int, optional, default=50
         Maximum number of macroiterations.
-    econv : float, optional, default=1e-8
+    e_tol : float, optional, default=1e-8
         Energy convergence tolerance.
-    gconv : float, optional, default=1e-7
+    g_tol : float, optional, default=1e-7
         Gradient convergence tolerance.
     die_if_not_converged : bool, optional, default=True
         If True, raises an error if the optimization does not converge.
@@ -68,12 +51,10 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         Maximum number of microiterations for L-BFGS.
     max_rotation : float, optional, default=0.2
         Maximum orbital rotation size for L-BFGS.
-    ci_params : CIParams, optional
-        Parameters for the CI solver.
-    davidson_liu_params : DavidsonLiuParams, optional
-        Parameters for the Davidson-Liu solver used in the CI optimization.
     do_transition_dipole : bool, optional, default=False
-        Whether to compute transition dipole moments.
+        Whether to compute and report transition dipole moments at the end of the optimization.
+    final_orbital : str, optional, default="semicanonical"
+        Whether to return the final orbitals in the semicanonical basis or the original basis.
 
     Notes
     -----
@@ -83,15 +64,15 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
     An earlier implementation (CASSCF only) used J. Chem. Phys. 142, 224103 (2015).
     """
 
-    ci_solver: CIBase | RelCIBase | None = field(default=None)
+    ci_solver: CIBase | RelCIBase
 
     active_frozen_orbitals: list[int] = None
     freeze_inter_gas_rots: bool = False
 
     ### Macroiteration parameters
     maxiter: int = 50
-    econv: float = 1e-8
-    gconv: float = 1e-7
+    e_tol: float = 1e-8
+    g_tol: float = 1e-7
     die_if_not_converged: bool = True
 
     ### L-BFGS solver (microiteration) parameters
@@ -106,7 +87,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
     converged: bool = field(default=False, init=False)
     executed: bool = field(default=False, init=False)
 
-    def _post_init__(self):
+    def __post_init__(self):
         if not isinstance(self.ci_solver, (CIBase, RelCIBase)):
             raise ValueError("ci_solver must be an instance of CIBase or RelCIBase.")
 
@@ -221,7 +202,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         # Initialize the LBFGS solver that finds the optimal orbital
         # at fixed CI expansion using the gradient and diagonal Hessian
         self.lbfgs_solver = LBFGS(
-            epsilon=self.gconv,
+            epsilon=self.g_tol,
             max_dir=self.max_rotation,
             step_length_method="max_correction",
             maxiter=self.micro_maxiter,
@@ -235,11 +216,11 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
         logger.log_info1("Entering orbital optimization loop")
         logger.log_info1("\nConvergence criteria ('.' if satisfied, 'x' otherwise):")
-        logger.log_info1(f"  {'1. RMS(grad)':<32} < {self.gconv:.1e}")
+        logger.log_info1(f"  {'1. RMS(grad)':<32} < {self.g_tol:.1e}")
         logger.log_info1(
-            f"  {'2. max(abs(E_CI_i - E_CI_old_i))':<32} < {self.econv:.1e}"
+            f"  {'2. max(abs(E_CI_i - E_CI_old_i))':<32} < {self.e_tol:.1e}"
         )
-        logger.log_info1(f"  {'3. abs(E_avg - E_avg_old)':<32} < {self.econv:.1e}\n")
+        logger.log_info1(f"  {'3. abs(E_avg - E_avg_old)':<32} < {self.e_tol:.1e}\n")
 
         logger.log_info1("=" * width)
         logger.log_info1(
@@ -464,13 +445,13 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         return nrr
 
     def _check_convergence(self):
-        is_grad_conv = self.g_rms < self.gconv
+        is_grad_conv = self.g_rms < self.g_tol
 
         self.max_ci_de = np.max(np.abs(self.E_ci - self.E_ci_old))
-        is_ci_eigval_conv = self.max_ci_de < self.econv
+        is_ci_eigval_conv = self.max_ci_de < self.e_tol
 
         self.delta_ci_avg = self.E_avg - self.E_avg_old
-        is_ci_avg_conv = abs(self.delta_ci_avg) < self.econv
+        is_ci_avg_conv = abs(self.delta_ci_avg) < self.e_tol
 
         criteria = [
             is_grad_conv,
