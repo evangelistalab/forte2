@@ -14,7 +14,7 @@ def test_mutual_correlation_h2_singlet():
 
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         State(system=system, multiplicity=1, ms=0.0),
         active_orbitals=[0, 1],
@@ -42,7 +42,7 @@ def test_mutual_correlation_h2_triplet_lowspin():
 
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         State(system=system, multiplicity=3, ms=0.0),
         active_orbitals=[0, 1],
@@ -70,7 +70,7 @@ def test_mutual_correlation_h2_triplet_highspin():
 
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         State(system=system, multiplicity=3, ms=1.0),
         active_orbitals=[0, 1],
@@ -98,7 +98,7 @@ def test_mutual_correlation_h2_orbopt():
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         State(system=system, multiplicity=1, ms=0.0),
         active_orbitals=list(range(10)),
@@ -130,7 +130,7 @@ def test_mutual_correlation_h6():
 
     system = System(xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         State(system=system, multiplicity=1, ms=0.0),
         active_orbitals=list(range(6)),

@@ -306,7 +306,7 @@ if __name__ == "__main__":
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         State(system=system, multiplicity=1, ms=0.0), active_orbitals=list(range(10))
     )(rhf)

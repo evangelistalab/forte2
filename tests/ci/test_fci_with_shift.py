@@ -12,7 +12,7 @@ def test_fci_co_o_core_exc():
 
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         State(nel=14, multiplicity=1, ms=0.0),
         active_orbitals=list(range(system.nbf)),
@@ -31,7 +31,7 @@ def test_fci_co_c_core_exc():
 
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         State(nel=14, multiplicity=1, ms=0.0),
         active_orbitals=list(range(system.nbf)),

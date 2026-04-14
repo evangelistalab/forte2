@@ -19,7 +19,7 @@ def test_slater_rules_1():
     system = System(
         xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    scf = RHF(charge=0, econv=1e-12)(system)
+    scf = RHF(charge=0, e_tol=1e-12)(system)
     scf.run()
 
     orbitals = [0, 1]
@@ -51,7 +51,7 @@ def test_slater_rules_2():
     system = System(
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    scf = RHF(charge=0, econv=1e-10)(system)
+    scf = RHF(charge=0, e_tol=1e-10)(system)
     scf.run()
 
     core_orbitals = [0]
@@ -89,7 +89,7 @@ def test_slater_rules_1_complex():
     system = System(
         xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    scf = RHF(charge=0, econv=1e-12)(system)
+    scf = RHF(charge=0, e_tol=1e-12)(system)
     scf.run()
 
     C = convert_coeff_spatial_to_spinor(scf.C)
@@ -140,7 +140,7 @@ def test_slater_rules_2_complex():
     system = System(
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    scf = RHF(charge=0, econv=1e-10)(system)
+    scf = RHF(charge=0, e_tol=1e-10)(system)
     scf.run()
 
     C = convert_coeff_spatial_to_spinor(scf.C)

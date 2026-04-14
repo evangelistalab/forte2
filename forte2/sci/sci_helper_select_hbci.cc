@@ -392,7 +392,7 @@ void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
             total_time += time;
         }
 
-        LOG_INFO1 << "Thread " << t << " processed " << total_batches << " batches, found "
+        LOG(log_level_) << "Thread " << t << " processed " << total_batches << " batches, found "
                   << total_dets << " new determinants in " << total_time << " seconds (avg "
                   << total_time / total_batches << " s/batch, "
                   << (total_time > 0.0 ? std::to_string(total_dets / total_time) : "N/A")
