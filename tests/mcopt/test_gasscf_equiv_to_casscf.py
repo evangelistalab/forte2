@@ -1,4 +1,4 @@
-from forte2 import System, RHF, MCOptimizer, State
+from forte2 import System, RHF, MCOptimizer, State, CISolver
 from forte2.helpers.comparisons import approx
 
 
@@ -19,10 +19,13 @@ def test_gasscf_equiv_to_casscf():
 
     rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
 
-    casscf = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=10, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1],
         active_orbitals=[[2, 3, 4, 5, 6, 7], []],
+    )
+    casscf = MCOptimizer(
+        ci_solver,
         econv=1e-8,
         gconv=1e-7,
         maxiter=500,

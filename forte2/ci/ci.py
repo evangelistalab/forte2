@@ -1258,7 +1258,8 @@ class CISolver(CIBase):
     ci_params: CIParams = field(default_factory=CIParams)
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
     do_test_rdms: bool = False
-    log_level: int = field(default=logger.get_verbosity_level())
+    # If used as a solver, log at warning level
+    log_level: int = field(default=logger.get_verbosity_level() + 1)
 
     def _startup(self):
         super()._startup()
@@ -1696,6 +1697,15 @@ class CI(CISolver):
     die_if_not_converged: bool = True
     final_orbital: str = "original"
     do_transition_dipole: bool = False
+    log_level: int = field(default=logger.get_verbosity_level())
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.final_orbital not in ["original", "semicanonical"]:
+            raise ValueError(
+                f"Invalid value for final_orbital: {self.final_orbital}. "
+                "Must be 'original' or 'semicanonical'."
+            )
 
     def run(self):
         super().run()
@@ -1752,7 +1762,7 @@ class RelCISolver(RelCIBase):
     ci_params: CIParams = field(default_factory=CIParams)
 
     do_test_rdms: bool = False
-    log_level: int = field(default=logger.get_verbosity_level())
+    log_level: int = field(default=logger.get_verbosity_level() + 1)
 
     compute_average_energy = CISolver.compute_average_energy
     make_average_1rdm = CISolver.make_average_1rdm
@@ -1835,6 +1845,15 @@ class RelCISolver(RelCIBase):
 class RelCI(RelCISolver):
     final_orbital: str = "original"
     do_transition_dipole: bool = False
+    log_level: int = field(default=logger.get_verbosity_level())
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.final_orbital not in ["original", "semicanonical"]:
+            raise ValueError(
+                f"Invalid value for final_orbital: {self.final_orbital}. "
+                "Must be 'original' or 'semicanonical'."
+            )
 
     def run(self):
         super().run()

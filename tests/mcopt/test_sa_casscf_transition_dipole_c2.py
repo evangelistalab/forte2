@@ -1,4 +1,4 @@
-from forte2 import System, RHF, MCOptimizer, AVAS, State
+from forte2 import System, RHF, MCOptimizer, AVAS, State, CISolver
 from forte2.helpers.comparisons import approx
 
 
@@ -24,7 +24,8 @@ def test_sa_casscf_c2_transition_dipole():
         num_active_uocc=4,
         subspace=["C(2s)", "C(2p)"],
     )(rhf)
-    mc = MCOptimizer([singlet, triplet], nroots=[2, 2], do_transition_dipole=True)(avas)
+    ci_solver = CISolver([singlet, triplet], nroots=[2, 2])
+    mc = MCOptimizer(ci_solver, do_transition_dipole=True)(avas)
     mc.run()
     assert mc.ci_solver.evals_per_solver[0][0] == approx(-75.6107427252)
     assert mc.ci_solver.evals_per_solver[0][1] == approx(-75.5314535451)

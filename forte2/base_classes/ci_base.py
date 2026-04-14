@@ -8,7 +8,6 @@ from .active_space_solver import ActiveSpaceSolver, RelActiveSpaceSolver
 
 @dataclass
 class CIBase(ActiveSpaceSolver):
-
     ### Non-init attributes
     first_run: bool = field(default=True, init=False)
     executed: bool = field(default=False, init=False)
@@ -32,6 +31,12 @@ class CIBase(ActiveSpaceSolver):
     @abstractmethod
     def run(self): ...
 
+    @abstractmethod
+    def reset_eigensolver(self): ...
+
+    @abstractmethod
+    def get_convergence_status(self): ...
+
 
 @dataclass
 class RelCIBase(RelActiveSpaceSolver):
@@ -47,3 +52,9 @@ class RelCIBase(RelActiveSpaceSolver):
 
     @abstractmethod
     def run(self, use_asym_ints=False): ...
+
+    @abstractmethod
+    def reset_eigensolver(self): ...
+
+    @abstractmethod
+    def get_convergence_status(self): ...

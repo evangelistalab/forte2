@@ -81,7 +81,7 @@ class _SelectedCISingleStateSolver:
     active_orbsym: list[int] = field(default_factory=list)
     two_component: bool = False
     do_test_rdms: bool = False
-    log_level: int = field(default=logger.get_verbosity_level())
+    log_level: int = field(default=logger.get_verbosity_level() + 1)
     die_if_not_converged: bool = False
 
     ### Non-init attributes
@@ -91,6 +91,10 @@ class _SelectedCISingleStateSolver:
     executed: bool = field(default=False, init=False)
 
     def __post_init__(self):
+        if self.two_component:
+            raise NotImplementedError(
+                "Two-component selected CI is not yet implemented."
+            )
         self.norb = self.mo_space.nactv
         self.ncore = self.mo_space.ncore + self.mo_space.nfrozen_core
         self.ngas = self.mo_space.ngas
@@ -165,13 +169,13 @@ class _SelectedCISingleStateSolver:
 
         old_energy = 0.0
         for cycle in range(self.sci_params.maxcycle):
-            logger.log_info1(f"\n{'=' * 67}")
-            logger.log_info1(f"Selected CI Cycle {cycle + 1}")
-            logger.log_info1(f"{'=' * 67}")
+            logger.log(f"\n{'=' * 67}", self.log_level)
+            logger.log(f"Selected CI Cycle {cycle + 1}", self.log_level)
+            logger.log(f"{'=' * 67}", self.log_level)
 
-            logger.log_info1(f"Algorithm: {self.sci_params.selection_algorithm}")
-            logger.log_info1(f"  var_threshold = {self.sci_params.var_threshold}")
-            logger.log_info1(f"  pt2_threshold = {self.sci_params.pt2_threshold}")
+            logger.log(f"Algorithm: {self.sci_params.selection_algorithm}", self.log_level)
+            logger.log(f"  var_threshold = {self.sci_params.var_threshold}", self.log_level)
+            logger.log(f"  pt2_threshold = {self.sci_params.pt2_threshold}", self.log_level)
 
             old_ndets = self.sci_helper.ndets()
 
@@ -280,13 +284,13 @@ class _SelectedCISingleStateSolver:
             )
 
         # final selection to update var' and pt2 contributions with the final CI coefficients
-        logger.log_info1(f"\n{'=' * 67}")
-        logger.log_info1(f"Final Selected CI Cycle")
-        logger.log_info1(f"{'=' * 67}")
+        logger.log(f"\n{'=' * 67}", self.log_level)
+        logger.log(f"Final Selected CI Cycle", self.log_level)
+        logger.log(f"{'=' * 67}", self.log_level)
 
-        logger.log_info1(f"Algorithm: {self.sci_params.selection_algorithm}")
-        logger.log_info1(f"  var_threshold = {self.sci_params.var_threshold}")
-        logger.log_info1(f"  pt2_threshold = {self.sci_params.pt2_threshold}")
+        logger.log(f"Algorithm: {self.sci_params.selection_algorithm}", self.log_level)
+        logger.log(f"  var_threshold = {self.sci_params.var_threshold}", self.log_level)
+        logger.log(f"  pt2_threshold = {self.sci_params.pt2_threshold}", self.log_level)
 
         if self.sci_params.selection_algorithm.lower() == "hbci_ref":
             self.sci_helper.select_hbci_ref(
@@ -404,7 +408,7 @@ class _SelectedCISingleStateSolver:
                 S2guess[j, i] = np.conj(S2guess[i, j])
 
         svals, svecs = np.linalg.eigh(S2guess)
-        logger.log_info1(f"S^2 values of the guess determinants: {svals}")
+        logger.log(f"S^2 values of the guess determinants: {svals}", self.log_level)
         # find the multiplicity of the eigenvalue closest to S(S+1)
         S = (self.state.multiplicity - 1) / 2
         target_s2 = S * (S + 1)
@@ -414,7 +418,7 @@ class _SelectedCISingleStateSolver:
         # find the indices of the eigenvalues that are not close to target_s2
         not_close_idx = [i for i in range(len(svals)) if i not in close_idx]
 
-        logger.log_info1(
+        logger.log(
             f"Target S(S+1) = {target_s2}, found {len(close_idx)} eigenvalues close to it."
         )
 
@@ -439,36 +443,47 @@ class _SelectedCISingleStateSolver:
             else evecs[:, : self.nroot].copy()
         )
         energies = evals[: self.nroot].copy()
-        logger.log_info1(f"Initial guess energies: {energies}")
-        logger.log_info1(f"Initial guess states:")
+        logger.log(f"Initial guess energies: {energies}", self.log_level)
+        logger.log(f"Initial guess states:", self.log_level)
         for r in range(c.shape[1]):
-            logger.log_info1(f"  Root {r}:")
+            logger.log(f"  Root {r}:", self.log_level)
             for i in range(c.shape[0]):
                 if abs(c[i, r]) > 1e-4:
-                    logger.log_info1(
-                        f"    {self.sci_params.guess_dets[i].str(self.norb)}: {c[i, r]:20.12f}"
+                    logger.log(
+                        f"    {self.sci_params.guess_dets[i].str(self.norb)}: {c[i, r]:20.12f}",
+                        self.log_level,
                     )
         return self.sci_params.guess_dets, c, energies, S2project_out
 
     def _generate_initial_guess_dets(self, window_occ, window_vir):
-        logger.log("Generating initial determinant guess")
+        logger.log("Generating initial determinant guess", self.log_level)
 
-        if self.two_component:
-            na = self.state.nel
-            nb = 0
-            ncore = self.state.nel - window_occ
-            ncel = ncore
-        else:
-            na = self.state.na
-            nb = self.state.nb
-            ncore = self.state.nel // 2 - window_occ
-            ncel = 2 * ncore
+        na_active = self.state.na - self.ncore
+        nb_active = self.state.nb - self.ncore
+        nel_active = na_active + nb_active
+
+        if window_occ + window_vir == 0:
+            logger.log_warning(
+                "No guess determinants provided and guess occupation windows set to 0. "
+                "Using the Hartree-Fock determinant as the only guess."
+                "This is not recommended if spin penalty is used."
+            )
+            # use the Hartree-Fock determinant as the guess
+            d0 = Determinant.zero()
+            for i in range(na_active):
+                d0.set_na(i, True)
+            for i in range(nb_active):
+                d0.set_nb(i, True)
+            return [d0]
+
+        nocc = nel_active // 2 - window_occ
+        noccel = 2 * nocc
 
         nactv = window_occ + window_vir
-        if ncel == 0:
+        if noccel == 0:
             ci_strings = CIStrings(
-                na,
-                nb,
+                na_active,
+                nb_active,
                 0,
                 [[0] * nactv],
                 [],
@@ -477,12 +492,12 @@ class _SelectedCISingleStateSolver:
         else:
 
             ci_strings = CIStrings(
-                na,
-                nb,
+                na_active,
+                nb_active,
                 0,
-                [[0] * ncore, [0] * nactv],
-                [ncel],
-                [ncel],
+                [[0] * nocc, [0] * nactv],
+                [noccel],
+                [noccel],
             )
         return ci_strings.make_determinants()
 
@@ -983,7 +998,7 @@ class SelectedCISolver(CIBase):
     sci_params: SelectedCIParams = field(default_factory=SelectedCIParams)
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
     do_test_rdms: bool = False
-    log_level: int = field(default=logger.get_verbosity_level())
+    log_level: int = field(default=logger.get_verbosity_level() + 1)
 
     def _startup(self):
         super()._startup()
@@ -1061,7 +1076,7 @@ class SelectedCISolver(CIBase):
         """
         return np.dot(self.weights_flat, self.evals_flat)
 
-    def make_average_sf_1rdm(self):
+    def make_average_1rdm(self):
         """
         Make the average spin-free one-particle RDM from the CI vectors.
 
@@ -1076,7 +1091,7 @@ class SelectedCISolver(CIBase):
                 rdm1 += ci_solver.make_sf_1rdm(j) * self.weights[i][j]
         return rdm1
 
-    def make_average_sf_2rdm(self):
+    def make_average_2rdm(self):
         """
         Make the average spin-free two-particle RDM from the CI vectors.
 
@@ -1187,6 +1202,13 @@ class SelectedCISolver(CIBase):
             self.fosc_per_solver.append(foscdict)
             self.tdm_per_solver.append(tdmdict)
 
+    def reset_eigensolver(self):
+        # sCI eigensolver gets reset every iteration anyway
+        pass
+
+    def get_convergence_status(self):
+        pass
+
 
 @dataclass
 class SelectedCI(SelectedCISolver):
@@ -1198,6 +1220,7 @@ class SelectedCI(SelectedCISolver):
     die_if_not_converged: bool = True
     final_orbital: str = "original"
     do_transition_dipole: bool = False
+    log_level: int = field(default=logger.get_verbosity_level())
 
     def run(self):
         super().run()

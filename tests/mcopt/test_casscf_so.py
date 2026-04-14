@@ -5,6 +5,7 @@ from forte2 import (
     ROHF,
     MCOptimizer,
     State,
+    CISolver,
     RelCI,
 )
 from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
@@ -30,10 +31,11 @@ def test_casscf_so():
         num_active_uocc=0,
         subspace=["Br(4s)", "Br(4p)"],
     )(rhf)
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         states=State(nel=35, multiplicity=2, ms=0.5),
         nroots=3,
-    )(avas)
+    )
+    mc = MCOptimizer(ci_solver)(avas)
     mc.run()
 
     system.two_component = True

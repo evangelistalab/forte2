@@ -1,4 +1,4 @@
-from forte2 import System, AVAS, MCOptimizer, State, RHF
+from forte2 import System, AVAS, MCOptimizer, State, RHF, CISolver
 from forte2.helpers.comparisons import approx
 from forte2.base_classes import CIParams
 
@@ -22,21 +22,23 @@ def test_casscf_frozen_co():
         num_active_uocc=3,
     )(rhf)
 
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         states=State(system=system, multiplicity=1, ms=0.0),
         core_orbitals=4,
         active_orbitals=6,
         ci_params=CIParams(ci_algorithm="exact"),
-    )(avas)
+    )
+    mc = MCOptimizer(ci_solver)(avas)
     mc.run()
     assert mc.E == approx(emcscf)
 
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         states=State(system=system, multiplicity=1, ms=0.0),
         frozen_core_orbitals=1,
         core_orbitals=3,
         active_orbitals=6,
         frozen_virtual_orbitals=3,
     )(avas)
+    mc = MCOptimizer(ci_solver)(avas)
     mc.run()
     assert mc.E == approx(emcscf_frz)
