@@ -7,6 +7,7 @@
 #include <nanobind/ndarray.h>
 
 #include "sci/sci_helper.h"
+#include "helpers/np_vector_functions.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -43,6 +44,9 @@ void export_sci_helper_api(nb::module_& m) {
         .def("set_pt2_regularizer", &SelectedCIHelper::set_pt2_regularizer, "regularizer"_a,
              "strength"_a = 0.5,
              "Set the PT2 regularization method ('none', 'shift', 'dsrg') and its strength")
+        .def("set_use_claude_algorithms", &SelectedCIHelper::set_use_claude_algorithms,
+             "use_claude_algorithms"_a,
+             "Enable or disable the optimized Claude sigma-build kernels")
         .def("select_hbci_ref", &SelectedCIHelper::select_hbci_ref, "var_threshold"_a,
              "pt2_threshold"_a, "Perform HBCI selection with the given threshold")
         .def("select_hbci", &SelectedCIHelper::select_hbci, "var_threshold"_a, "pt2_threshold"_a,
@@ -82,7 +86,42 @@ void export_sci_helper_api(nb::module_& m) {
              "Return the number of new variational determinants added in the last selection")
         .def("num_new_dets_pt2", &SelectedCIHelper::num_new_dets_pt2,
              "Return the number of new perturbative determinants added in the last selection")
-        .def("selection_time", &SelectedCIHelper::selection_time,
-             "Return the total selection time");
+        .def("selection_time", &SelectedCIHelper::selection_time, "Return the total selection time")
+        .def(
+            "H2ab",
+            [](SelectedCIHelper& h, np_vector basis, np_vector sigma) {
+                h.H2ab(vector::as_span<double>(basis), vector::as_span<double>(sigma));
+            },
+            "basis"_a, "sigma"_a, "Apply the alpha-beta 2e Hamiltonian (loop version)")
+        .def(
+            "H2ab_claude",
+            [](SelectedCIHelper& h, np_vector basis, np_vector sigma) {
+                h.H2ab_claude(vector::as_span<double>(basis), vector::as_span<double>(sigma));
+            },
+            "basis"_a, "sigma"_a, "Apply the alpha-beta 2e Hamiltonian (Claude version)")
+        .def(
+            "H2aa",
+            [](SelectedCIHelper& h, np_vector basis, np_vector sigma) {
+                h.H2aa(vector::as_span<double>(basis), vector::as_span<double>(sigma));
+            },
+            "basis"_a, "sigma"_a, "Apply the alpha-alpha 2e Hamiltonian (loop version)")
+        .def(
+            "H2bb",
+            [](SelectedCIHelper& h, np_vector basis, np_vector sigma) {
+                h.H2bb(vector::as_span<double>(basis), vector::as_span<double>(sigma));
+            },
+            "basis"_a, "sigma"_a, "Apply the beta-beta 2e Hamiltonian (loop version)")
+        .def(
+            "H2aa_claude",
+            [](SelectedCIHelper& h, np_vector basis, np_vector sigma) {
+                h.H2aa_claude(vector::as_span<double>(basis), vector::as_span<double>(sigma));
+            },
+            "basis"_a, "sigma"_a, "Apply the alpha-alpha 2e Hamiltonian (Claude version)")
+        .def(
+            "H2bb_claude",
+            [](SelectedCIHelper& h, np_vector basis, np_vector sigma) {
+                h.H2bb_claude(vector::as_span<double>(basis), vector::as_span<double>(sigma));
+            },
+            "basis"_a, "sigma"_a, "Apply the beta-beta 2e Hamiltonian (Claude version)");
 }
 } // namespace forte2

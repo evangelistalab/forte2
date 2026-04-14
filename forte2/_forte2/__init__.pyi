@@ -5,12 +5,7 @@ from typing import Annotated, overload
 import numpy
 from numpy.typing import NDArray
 
-from . import (
-    cpp_helpers as cpp_helpers,
-    dsrg_utils as dsrg_utils,
-    ints as ints
-)
-
+from . import cpp_helpers as cpp_helpers, dsrg_utils as dsrg_utils, ints as ints
 
 class DeterminantVector:
     @overload
@@ -26,20 +21,15 @@ class DeterminantVector:
         """Construct from an iterable object"""
 
     def __len__(self) -> int: ...
-
     def __bool__(self) -> bool:
         """Check whether the vector is nonempty"""
 
     def __repr__(self) -> str: ...
-
     def __iter__(self) -> Iterator[Determinant]: ...
-
     @overload
     def __getitem__(self, arg: int, /) -> Determinant: ...
-
     @overload
     def __getitem__(self, arg: slice, /) -> DeterminantVector: ...
-
     def clear(self) -> None:
         """Remove all items from list."""
 
@@ -57,26 +47,18 @@ class DeterminantVector:
 
     @overload
     def __setitem__(self, arg0: int, arg1: Determinant, /) -> None: ...
-
     @overload
     def __setitem__(self, arg0: slice, arg1: DeterminantVector, /) -> None: ...
-
     @overload
     def __delitem__(self, arg: int, /) -> None: ...
-
     @overload
     def __delitem__(self, arg: slice, /) -> None: ...
-
     def __eq__(self, arg: object, /) -> bool: ...
-
     def __ne__(self, arg: object, /) -> bool: ...
-
     @overload
     def __contains__(self, arg: Determinant, /) -> bool: ...
-
     @overload
     def __contains__(self, arg: object, /) -> bool: ...
-
     def count(self, arg: Determinant, /) -> int:
         """Return number of occurrences of `arg`."""
 
@@ -84,55 +66,56 @@ class DeterminantVector:
         """Remove first occurrence of `arg`."""
 
 class CIStrings:
-    def __init__(self, na: int, nb: int, symmetry: int, orbital_symmetry: Sequence[Sequence[int]], gas_min: Sequence[int], gas_max: Sequence[int]) -> None:
+    def __init__(
+        self,
+        na: int,
+        nb: int,
+        symmetry: int,
+        orbital_symmetry: Sequence[Sequence[int]],
+        gas_min: Sequence[int],
+        gas_max: Sequence[int],
+    ) -> None:
         """
         Initialize the CIStrings with number of alpha and beta electrons, symmetry, orbital symmetry, minimum and maximum number of electrons in each GAS space
         """
 
     @property
     def alfa_address(self) -> "std::__1::shared_ptr<forte2::StringAddress>": ...
-
     @property
     def na(self) -> int: ...
-
     @property
     def nb(self) -> int: ...
-
     @property
     def symmetry(self) -> int: ...
-
     @property
     def nas(self) -> int: ...
-
     @property
     def nbs(self) -> int: ...
-
     @property
     def ndet(self) -> int: ...
-
     @property
     def ngas_spaces(self) -> int: ...
-
     @property
     def gas_size(self) -> list[int]: ...
-
     @property
     def gas_alfa_occupations(self) -> list[list[int]]: ...
-
     @property
     def gas_beta_occupations(self) -> list[list[int]]: ...
-
     @property
     def gas_occupations(self) -> list[tuple[int, int]]: ...
-
     def determinant(self, address: int) -> Determinant: ...
-
     def determinant_index(self, d: Determinant) -> int: ...
-
     def make_determinants(self) -> DeterminantVector: ...
 
 class CISigmaBuilder:
-    def __init__(self, lists: CIStrings, E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))], log_level: int = 3) -> None:
+    def __init__(
+        self,
+        lists: CIStrings,
+        E: float,
+        H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))],
+        V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))],
+        log_level: int = 3,
+    ) -> None:
         """
         Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals
         """
@@ -146,149 +129,307 @@ class CISigmaBuilder:
     def set_memory(self, memory: int) -> None:
         """Set the memory limit for the builder (in MB)"""
 
-    def form_Hdiag_csf(self, dets: DeterminantVector, spin_adapter: CISpinAdapter, spin_adapt_full_preconditioner: bool = False) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]: ...
-
-    def energy_csf(self, dets: DeterminantVector, spin_adapter: CISpinAdapter, I: int) -> float:
+    def form_Hdiag_csf(
+        self,
+        dets: DeterminantVector,
+        spin_adapter: CISpinAdapter,
+        spin_adapt_full_preconditioner: bool = False,
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]: ...
+    def energy_csf(
+        self, dets: DeterminantVector, spin_adapter: CISpinAdapter, I: int
+    ) -> float:
         """Compute the energy of a CSF"""
 
-    def form_H_csf(self, dets: DeterminantVector, spin_adapter: CISpinAdapter) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    def form_H_csf(
+        self, dets: DeterminantVector, spin_adapter: CISpinAdapter
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """Form the full Hamiltonian matrix in the CSF basis"""
 
-    def slater_rules_csf(self, dets: DeterminantVector, spin_adapter: CISpinAdapter, I: int, J: int) -> float: ...
-
-    def Hamiltonian(self, basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None: ...
-
-    def sf_1rdm(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    def slater_rules_csf(
+        self, dets: DeterminantVector, spin_adapter: CISpinAdapter, I: int, J: int
+    ) -> float: ...
+    def Hamiltonian(
+        self,
+        basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> None: ...
+    def sf_1rdm(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """Compute the spin-free one-electron reduced density matrix"""
 
-    def sf_2rdm(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
+    def sf_2rdm(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
         """Compute the spin-free two-electron reduced density matrix"""
 
-    def sf_3rdm(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None, None, None))]:
+    def sf_3rdm(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[
+        NDArray[numpy.float64], dict(shape=(None, None, None, None, None, None))
+    ]:
         """Compute the spin-free three-electron reduced density matrix"""
 
-    def sf_2cumulant(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
+    def sf_2cumulant(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
         """Compute the spin-free two-electron cumulant"""
 
-    def sf_3cumulant(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None, None, None))]:
+    def sf_3cumulant(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[
+        NDArray[numpy.float64], dict(shape=(None, None, None, None, None, None))
+    ]:
         """Compute the spin-free three-electron cumulant"""
 
-    def a_1rdm(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    def a_1rdm(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """Compute the alpha one-electron reduced density matrix"""
 
-    def b_1rdm(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    def b_1rdm(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """Compute the beta one-electron reduced density matrix"""
 
-    def aa_2rdm(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    def aa_2rdm(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """Compute the alpha-alpha two-electron reduced density matrix"""
 
-    def bb_2rdm(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    def bb_2rdm(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """Compute the beta-beta two-electron reduced density matrix"""
 
-    def ab_2rdm(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
+    def ab_2rdm(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
         """Compute the alpha-beta two-electron reduced density matrix"""
 
-    def aaa_3rdm(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    def aaa_3rdm(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """Compute the alpha-alpha-alpha three-electron reduced density matrix"""
 
-    def aab_3rdm(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
+    def aab_3rdm(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
         """Compute the alpha-alpha-beta three-electron reduced density matrix"""
 
-    def abb_3rdm(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
+    def abb_3rdm(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
         """Compute the alpha-beta-beta three-electron reduced density matrix"""
 
-    def bbb_3rdm(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    def bbb_3rdm(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """Compute the beta-beta-beta three-electron reduced density matrix"""
 
     def avg_build_time(self) -> list[float]: ...
-
     def set_log_level(self, level: int) -> None:
         """Set the logging level for the class"""
 
-    def a_1rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))], alfa: bool) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]: ...
-
-    def aa_2rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))], alfa: bool) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    def a_1rdm_debug(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        alfa: bool,
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]: ...
+    def aa_2rdm_debug(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        alfa: bool,
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """
         Compute the two-electron same-spin reduced density matrix for debugging purposes
         """
 
-    def ab_2rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
+    def ab_2rdm_debug(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
         """
         Compute the two-electron mixed-spin reduced density matrix for debugging purposes
         """
 
-    def aaa_3rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))], alfa: bool) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    def aaa_3rdm_debug(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        alfa: bool,
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """
         Compute the three-electron same-spin reduced density matrix for debugging purposes
         """
 
-    def aab_3rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
+    def aab_3rdm_debug(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
         """
         Compute the aab mixed-spin three-electron reduced density matrix for debugging purposes
         """
 
-    def abb_3rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
+    def abb_3rdm_debug(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
         """
         Compute the abb mixed-spin three-electron reduced density matrix for debugging purposes
         """
 
-    def aaaa_4rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))], alfa: bool) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    def aaaa_4rdm_debug(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        alfa: bool,
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """
         Compute the four-electron same-spin reduced density matrix for debugging purposes
         """
 
-    def aaab_4rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
+    def aaab_4rdm_debug(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
         """
         Compute the aaab mixed-spin four-electron reduced density matrix for debugging purposes
         """
 
-    def aabb_4rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
+    def aabb_4rdm_debug(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
         """
         Compute the aabb mixed-spin four-electron reduced density matrix for debugging purposes
         """
 
-    def abbb_4rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
+    def abbb_4rdm_debug(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
         """
         Compute the abbb mixed-spin four-electron reduced density matrix for debugging purposes
         """
 
-    def sf_1rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    def sf_1rdm_debug(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """
         Compute the spin-free one-electron reduced density matrix for debugging purposes
         """
 
-    def sf_2rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
+    def sf_2rdm_debug(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
         """
         Compute the spin-free two-electron reduced density matrix for debugging purposes
         """
 
-    def sf_3rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None, None, None))]:
+    def sf_3rdm_debug(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[
+        NDArray[numpy.float64], dict(shape=(None, None, None, None, None, None))
+    ]:
         """
         Compute the spin-free three-electron reduced density matrix for debugging purposes
         """
 
-    def sf_2cumulant_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
+    def sf_2cumulant_debug(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
         """Compute the spin-free two-electron cumulant for debugging purposes"""
 
-    def sf_3cumulant_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None, None, None))]:
+    def sf_3cumulant_debug(
+        self,
+        C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> Annotated[
+        NDArray[numpy.float64], dict(shape=(None, None, None, None, None, None))
+    ]:
         """Compute the spin-free three-electron cumulant for debugging purposes"""
 
 class SelectedCIHelper:
-    def __init__(self, norb: int, dets: Sequence[Determinant], c: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))], log_level: int = 3) -> None:
+    def __init__(
+        self,
+        norb: int,
+        dets: Sequence[Determinant],
+        c: Annotated[NDArray[numpy.float64], dict(shape=(None, None))],
+        E: float,
+        H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))],
+        V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))],
+        log_level: int = 3,
+    ) -> None:
         """
         Initialize the SelectedCIHelper with the number of orbitals, initial determinants, energy, Hamiltonian, and integrals
         """
 
-    def set_Hamiltonian(self, E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]) -> None:
+    def set_Hamiltonian(
+        self,
+        E: float,
+        H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))],
+        V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))],
+    ) -> None:
         """Set the Hamiltonian integrals"""
 
-    def Hamiltonian(self, basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None:
+    def Hamiltonian(
+        self,
+        basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> None:
         """Apply the Hamiltonian to the basis and store the result in sigma"""
 
     def Hdiag(self) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]:
         """Return the diagonal of the Hamiltonian matrix"""
 
-    def set_c(self, c: Annotated[NDArray[numpy.float64], dict(shape=(None, None))]) -> None:
+    def set_c(
+        self, c: Annotated[NDArray[numpy.float64], dict(shape=(None, None))]
+    ) -> None:
         """Set the CI coefficients"""
 
     def set_num_threads(self, n: int) -> None:
@@ -299,7 +440,9 @@ class SelectedCIHelper:
         Set the number of batches each thread will process in parallel sections
         """
 
-    def set_energies(self, e: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None:
+    def set_energies(
+        self, e: Annotated[NDArray[numpy.float64], dict(shape=(None,))]
+    ) -> None:
         """Set the energies of the roots"""
 
     def set_frozen_creation(self, frozen_creation: Sequence[int]) -> None:
@@ -321,6 +464,9 @@ class SelectedCIHelper:
         Set the PT2 regularization method ('none', 'shift', 'dsrg') and its strength
         """
 
+    def set_use_claude_algorithms(self, use_claude_algorithms: bool) -> None:
+        """Enable or disable the optimized Claude sigma-build kernels"""
+
     def select_hbci_ref(self, var_threshold: float, pt2_threshold: float) -> None:
         """Perform HBCI selection with the given threshold"""
 
@@ -332,26 +478,82 @@ class SelectedCIHelper:
         Compute the expectation value of S^2 for each root and return as a list
         """
 
-    def a_1rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    def a_1rdm(
+        self, left_root: int, right_root: int
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """Compute the alpha-spin 1-RDM between two roots"""
 
-    def b_1rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    def b_1rdm(
+        self, left_root: int, right_root: int
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """Compute the beta-spin 1-RDM between two roots"""
 
-    def sf_1rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    def sf_1rdm(
+        self, left_root: int, right_root: int
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """Compute the spin-free 1-RDM between two roots"""
 
-    def aa_2rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    def aa_2rdm(
+        self, left_root: int, right_root: int
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """Compute the alpha-alpha 2-RDM between two roots"""
 
-    def bb_2rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    def bb_2rdm(
+        self, left_root: int, right_root: int
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """Compute the beta-beta 2-RDM between two roots"""
 
-    def ab_2rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
+    def ab_2rdm(
+        self, left_root: int, right_root: int
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
         """Compute the alpha-beta 2-RDM between two roots"""
 
-    def sf_2rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
+    def sf_2rdm(
+        self, left_root: int, right_root: int
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
         """Compute the spin-free 2-RDM between two roots"""
+
+    def H2ab(
+        self,
+        basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> None:
+        """Apply the alpha-beta 2e Hamiltonian (loop version)"""
+
+    def H2ab_claude(
+        self,
+        basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> None:
+        """Apply the alpha-beta 2e Hamiltonian (Claude version)"""
+
+    def H2aa(
+        self,
+        basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> None:
+        """Apply the alpha-alpha 2e Hamiltonian (loop version)"""
+
+    def H2bb(
+        self,
+        basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> None:
+        """Apply the beta-beta 2e Hamiltonian (loop version)"""
+
+    def H2aa_claude(
+        self,
+        basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> None:
+        """Apply the alpha-alpha 2e Hamiltonian (Claude version)"""
+
+    def H2bb_claude(
+        self,
+        basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> None:
+        """Apply the beta-beta 2e Hamiltonian (Claude version)"""
 
     def dets(self) -> list[Determinant]:
         """Return the determinants in the variational space"""
@@ -386,7 +588,15 @@ class SelectedCIHelper:
         """Return the total selection time"""
 
 class RelCISigmaBuilder:
-    def __init__(self, lists: CIStrings, E: float, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], log_level: int = 3, use_asym_ints: bool = False) -> None:
+    def __init__(
+        self,
+        lists: CIStrings,
+        E: float,
+        H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))],
+        V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))],
+        log_level: int = 3,
+        use_asym_ints: bool = False,
+    ) -> None:
         """
         Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals
         """
@@ -400,55 +610,95 @@ class RelCISigmaBuilder:
     def set_memory(self, memory: int) -> None:
         """Set the memory limit for the builder (in MB)"""
 
-    def form_Hdiag(self, dets: DeterminantVector) -> Annotated[NDArray[numpy.complex128], dict(shape=(None,))]: ...
-
+    def form_Hdiag(
+        self, dets: DeterminantVector
+    ) -> Annotated[NDArray[numpy.complex128], dict(shape=(None,))]: ...
     def slater_rules(self, dets: DeterminantVector, I: int, J: int) -> complex: ...
-
-    def Hamiltonian(self, basis: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> None: ...
-
-    def so_1rdm(self, C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None))]:
+    def Hamiltonian(
+        self,
+        basis: Annotated[NDArray[numpy.complex128], dict(shape=(None,))],
+        sigma: Annotated[NDArray[numpy.complex128], dict(shape=(None,))],
+    ) -> None: ...
+    def so_1rdm(
+        self,
+        C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None))]:
         """Compute the spin-orbital one-electron reduced density matrix"""
 
-    def so_2rdm(self, C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))]:
+    def so_2rdm(
+        self,
+        C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))]:
         """Compute the spin-orbital two-electron reduced density matrix"""
 
-    def so_2cumulant(self, C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))]:
+    def so_2cumulant(
+        self,
+        C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))]:
         """Compute the spin-orbital two-electron cumulant"""
 
-    def so_3rdm(self, C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None, None, None))]:
+    def so_3rdm(
+        self,
+        C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))],
+    ) -> Annotated[
+        NDArray[numpy.complex128], dict(shape=(None, None, None, None, None, None))
+    ]:
         """Compute the spin-orbital three-electron reduced density matrix"""
 
-    def so_3cumulant(self, C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None, None, None))]:
+    def so_3cumulant(
+        self,
+        C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))],
+    ) -> Annotated[
+        NDArray[numpy.complex128], dict(shape=(None, None, None, None, None, None))
+    ]:
         """Compute the spin-orbital three-electron cumulant"""
 
-    def so_1rdm_debug(self, C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None))]: ...
-
-    def so_2rdm_debug(self, C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))]: ...
-
-    def so_3rdm_debug(self, C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None, None, None))]: ...
+    def so_1rdm_debug(
+        self,
+        C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None))]: ...
+    def so_2rdm_debug(
+        self,
+        C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))],
+    ) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))]: ...
+    def so_3rdm_debug(
+        self,
+        C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))],
+        C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))],
+    ) -> Annotated[
+        NDArray[numpy.complex128], dict(shape=(None, None, None, None, None, None))
+    ]: ...
 
 class CISpinAdapter:
     def __init__(self, twoS: int, twoMs: int, norb: int) -> None: ...
-
     def prepare_couplings(self, dets: DeterminantVector) -> None: ...
-
-    def csf_C_to_det_C(self, csf_C: Annotated[NDArray[numpy.float64], dict(shape=(None,))], det_C: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None: ...
-
-    def det_C_to_csf_C(self, det_C: Annotated[NDArray[numpy.float64], dict(shape=(None,))], csf_C: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None: ...
-
+    def csf_C_to_det_C(
+        self,
+        csf_C: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        det_C: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> None: ...
+    def det_C_to_csf_C(
+        self,
+        det_C: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+        csf_C: Annotated[NDArray[numpy.float64], dict(shape=(None,))],
+    ) -> None: ...
     @property
     def nconf(self) -> int: ...
-
     @property
     def ncsf(self) -> int: ...
-
     def set_log_level(self, level: int) -> None:
         """Set the logging level for the class"""
 
 class Determinant:
     @overload
     def __init__(self, arg: Determinant) -> None: ...
-
     @overload
     def __init__(self, str: str) -> None:
         """Build a determinant from a string representation"""
@@ -456,7 +706,6 @@ class Determinant:
     @staticmethod
     def zero() -> Determinant:
         """Create a zero determinant with no electrons"""
-
     maxnorb: int = ...
     """The maximum number of orbitals supported by the Determinant class"""
 
@@ -522,7 +771,14 @@ class Determinant:
     def slater_sign_reverse(self, arg: int, /) -> float:
         """Get the sign of the Slater determinant"""
 
-    def gen_excitation(self, arg0: Sequence[int], arg1: Sequence[int], arg2: Sequence[int], arg3: Sequence[int], /) -> float:
+    def gen_excitation(
+        self,
+        arg0: Sequence[int],
+        arg1: Sequence[int],
+        arg2: Sequence[int],
+        arg3: Sequence[int],
+        /,
+    ) -> float:
         """Apply a generic excitation"""
 
     def excitation_connection(self, arg: Determinant, /) -> list[list[int]]:
@@ -540,13 +796,29 @@ def spin2(arg0: SparseState, arg1: SparseState, /) -> complex:
     """Calculate the <left_state|S^2|right_state> expectation value"""
 
 @overload
-def hilbert_space(nmo: int, na: int, nb: int, nirrep: int = 1, mo_symmetry: Sequence[int] = [], symmetry: int = 0) -> list[Determinant]:
+def hilbert_space(
+    nmo: int,
+    na: int,
+    nb: int,
+    nirrep: int = 1,
+    mo_symmetry: Sequence[int] = [],
+    symmetry: int = 0,
+) -> list[Determinant]:
     """
     Generate the Hilbert space for a given number of electrons and orbitals.If information about the symmetry of the MOs is not provided, it assumes that all MOs have symmetry 0.
     """
 
 @overload
-def hilbert_space(nmo: int, na: int, nb: int, ref: Determinant, truncation: int, nirrep: int = 1, mo_symmetry: Sequence[int] = [], symmetry: int = 0) -> list[Determinant]:
+def hilbert_space(
+    nmo: int,
+    na: int,
+    nb: int,
+    ref: Determinant,
+    truncation: int,
+    nirrep: int = 1,
+    mo_symmetry: Sequence[int] = [],
+    symmetry: int = 0,
+) -> list[Determinant]:
     """
     Generate the Hilbert space for a given number of electrons, orbitals, and the truncation level.If information about the symmetry of the MOs is not provided, it assumes that all MOs have symmetry 0.A reference determinant must be provided to establish the excitation rank.
     """
@@ -611,27 +883,50 @@ def get_log_level() -> int:
     """Get the current logging verbosity level"""
 
 class SlaterRules:
-    def __init__(self, norb: int, scalar_energy: float, one_electron_integrals: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], two_electron_integrals: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]) -> None:
+    def __init__(
+        self,
+        norb: int,
+        scalar_energy: float,
+        one_electron_integrals: Annotated[
+            NDArray[numpy.float64], dict(shape=(None, None))
+        ],
+        two_electron_integrals: Annotated[
+            NDArray[numpy.float64], dict(shape=(None, None, None, None))
+        ],
+    ) -> None:
         """
         Initialize a SlaterRules object with the number of orbitals, scalar energy, one-electron integrals, and two-electron integrals in physicist's notation.
         """
 
     def energy(self, arg: Determinant, /) -> float: ...
-
-    def energies(self, dets: DeterminantVector) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]:
+    def energies(
+        self, dets: DeterminantVector
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]:
         """Compute the energies of a vector of determinants"""
 
     def slater_rules(self, lhs: Determinant, rhs: Determinant) -> float: ...
 
 class RelSlaterRules:
-    def __init__(self, nspinor: int, scalar_energy: float, one_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], two_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], tei_is_asym: bool = False) -> None:
+    def __init__(
+        self,
+        nspinor: int,
+        scalar_energy: float,
+        one_electron_integrals: Annotated[
+            NDArray[numpy.complex128], dict(shape=(None, None))
+        ],
+        two_electron_integrals: Annotated[
+            NDArray[numpy.complex128], dict(shape=(None, None, None, None))
+        ],
+        tei_is_asym: bool = False,
+    ) -> None:
         """
         Initialize a RelSlaterRules object with the number of spinor(orbitals), scalar energy, one-electron integrals, two-electron integrals in physicist's notation, and a flag indicating if the two-electron integrals are antisymmetric.
         """
 
     def energy(self, arg: Determinant, /) -> float: ...
-
-    def energies(self, dets: DeterminantVector) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]:
+    def energies(
+        self, dets: DeterminantVector
+    ) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]:
         """Compute the energies of a vector of determinants"""
 
     def slater_rules(self, lhs: Determinant, rhs: Determinant) -> complex: ...
@@ -656,18 +951,14 @@ class SparseState:
         """Create a SparseState with a single determinant"""
 
     def items(self) -> Iterator[tuple[Determinant, complex]]: ...
-
     def str(self, arg: int, /) -> str: ...
-
     def size(self) -> int: ...
-
     def norm(self, p: int = 2) -> float:
         """
         Calculate the p-norm of the SparseState (default p = 2, p = -1 for infinity norm)
         """
 
     def add(self, arg0: Determinant, arg1: complex, /) -> None: ...
-
     def __add__(self, arg: SparseState, /) -> SparseState:
         """Add two SparseStates"""
 
@@ -690,23 +981,18 @@ class SparseState:
         """Multiply this SparseState by a scalar"""
 
     def __len__(self) -> int: ...
-
     def __eq__(self, arg: SparseState, /) -> bool: ...
-
     def __repr__(self) -> str: ...
-
     def __str__(self) -> str: ...
-
-    def map(self) -> "ankerl::unordered_dense::v4_5_0::detail::table<forte2::DeterminantImpl<128ul>, std::__1::complex<double>, std::__1::hash<forte2::DeterminantImpl<128ul>>, std::__1::equal_to<forte2::DeterminantImpl<128ul>>, std::__1::allocator<std::__1::pair<forte2::DeterminantImpl<128ul>, std::__1::complex<double>>>, ankerl::unordered_dense::v4_5_0::bucket_type::standard, ankerl::unordered_dense::v4_5_0::detail::default_container_t, false>": ...
-
-    def elements(self) -> "ankerl::unordered_dense::v4_5_0::detail::table<forte2::DeterminantImpl<128ul>, std::__1::complex<double>, std::__1::hash<forte2::DeterminantImpl<128ul>>, std::__1::equal_to<forte2::DeterminantImpl<128ul>>, std::__1::allocator<std::__1::pair<forte2::DeterminantImpl<128ul>, std::__1::complex<double>>>, ankerl::unordered_dense::v4_5_0::bucket_type::standard, ankerl::unordered_dense::v4_5_0::detail::default_container_t, false>": ...
-
+    def map(
+        self,
+    ) -> "ankerl::unordered_dense::v4_5_0::detail::table<forte2::DeterminantImpl<128ul>, std::__1::complex<double>, std::__1::hash<forte2::DeterminantImpl<128ul>>, std::__1::equal_to<forte2::DeterminantImpl<128ul>>, std::__1::allocator<std::__1::pair<forte2::DeterminantImpl<128ul>, std::__1::complex<double>>>, ankerl::unordered_dense::v4_5_0::bucket_type::standard, ankerl::unordered_dense::v4_5_0::detail::default_container_t, false>": ...
+    def elements(
+        self,
+    ) -> "ankerl::unordered_dense::v4_5_0::detail::table<forte2::DeterminantImpl<128ul>, std::__1::complex<double>, std::__1::hash<forte2::DeterminantImpl<128ul>>, std::__1::equal_to<forte2::DeterminantImpl<128ul>>, std::__1::allocator<std::__1::pair<forte2::DeterminantImpl<128ul>, std::__1::complex<double>>>, ankerl::unordered_dense::v4_5_0::bucket_type::standard, ankerl::unordered_dense::v4_5_0::detail::default_container_t, false>": ...
     def __getitem__(self, arg: Determinant, /) -> complex: ...
-
     def __setitem__(self, arg0: Determinant, arg1: complex, /) -> None: ...
-
     def __contains__(self, arg: Determinant, /) -> int: ...
-
     def apply(self, arg: SparseOperator, /) -> SparseState:
         """Apply an operator to this SparseState and return a new SparseState"""
 
@@ -716,23 +1002,25 @@ class SparseState:
         """
 
     def number_project(self, arg0: int, arg1: int, /) -> SparseState: ...
-
     def spin2(self) -> complex:
         """Calculate the expectation value of S^2 for this SparseState"""
 
     def overlap(self, arg: SparseState, /) -> complex:
         """Calculate the overlap between this SparseState and another SparseState"""
 
-def apply_op(sop: SparseOperator, state0: SparseState, screen_thresh: float = 1e-12) -> SparseState: ...
-
-def apply_antiherm(sop: SparseOperator, state0: SparseState, screen_thresh: float = 1e-12) -> SparseState: ...
-
-def apply_number_projector(arg0: int, arg1: int, arg2: SparseState, /) -> SparseState: ...
-
-def get_projection(arg0: SparseOperatorList, arg1: SparseState, arg2: SparseState, /) -> list[complex]: ...
-
+def apply_op(
+    sop: SparseOperator, state0: SparseState, screen_thresh: float = 1e-12
+) -> SparseState: ...
+def apply_antiherm(
+    sop: SparseOperator, state0: SparseState, screen_thresh: float = 1e-12
+) -> SparseState: ...
+def apply_number_projector(
+    arg0: int, arg1: int, arg2: SparseState, /
+) -> SparseState: ...
+def get_projection(
+    arg0: SparseOperatorList, arg1: SparseState, arg2: SparseState, /
+) -> list[complex]: ...
 def overlap(arg0: SparseState, arg1: SparseState, /) -> complex: ...
-
 def normalize(arg: SparseState, /) -> SparseState:
     """Returns a normalized version of the input SparseState"""
 
@@ -760,11 +1048,20 @@ class SparseOperator:
         """Add a term to the operator"""
 
     @overload
-    def add(self, str: str, coefficient: complex = ..., allow_reordering: bool = False) -> None:
+    def add(
+        self, str: str, coefficient: complex = ..., allow_reordering: bool = False
+    ) -> None:
         """Add a term to the operator from a string representation"""
 
     @overload
-    def add(self, acre: Sequence[int], bcre: Sequence[int], aann: Sequence[int], bann: Sequence[int], coeff: complex = ...) -> None:
+    def add(
+        self,
+        acre: Sequence[int],
+        bcre: Sequence[int],
+        aann: Sequence[int],
+        bann: Sequence[int],
+        coeff: complex = ...,
+    ) -> None:
         """
         Add a term to the operator by passing lists of creation and annihilation indices. This version is faster than the string version and does not check for reordering
         """
@@ -773,7 +1070,6 @@ class SparseOperator:
         """Remove a term"""
 
     def __iter__(self) -> Iterator[tuple[SQOperatorString, complex]]: ...
-
     def __getitem__(self, arg: str, /) -> complex:
         """Get the coefficient of a term"""
 
@@ -854,20 +1150,28 @@ class SparseOperator:
     def __str__(self) -> str:
         """Get a string representation of the operator"""
 
-    def apply_to_state(self, state: SparseState, screen_thresh: float = 1e-12) -> SparseState:
+    def apply_to_state(
+        self, state: SparseState, screen_thresh: float = 1e-12
+    ) -> SparseState:
         """Apply the operator to a state"""
 
-    def matrix(self, dets: Sequence[Determinant], screen_thresh: float = 1e-12) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None))]:
+    def matrix(
+        self, dets: Sequence[Determinant], screen_thresh: float = 1e-12
+    ) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None))]:
         """
         Compute the matrix elements of the operator between a list of determinants
         """
 
 @overload
-def sparse_operator(s: str, coefficient: complex = ..., allow_reordering: bool = False) -> SparseOperator:
+def sparse_operator(
+    s: str, coefficient: complex = ..., allow_reordering: bool = False
+) -> SparseOperator:
     """Create a SparseOperator object from a string and a complex"""
 
 @overload
-def sparse_operator(list: Sequence[tuple[str, complex]], allow_reordering: bool = False) -> SparseOperator:
+def sparse_operator(
+    list: Sequence[tuple[str, complex]], allow_reordering: bool = False
+) -> SparseOperator:
     """Create a SparseOperator object from a list of Tuple[str, complex]"""
 
 @overload
@@ -881,66 +1185,82 @@ def sparse_operator(list: Sequence[tuple[SQOperatorString, complex]]) -> SparseO
     """
 
 def new_product(arg0: SparseOperator, arg1: SparseOperator, /) -> SparseOperator: ...
-
 @overload
-def sparse_operator_hamiltonian(scalar_energy: float, one_electron_integrals: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], two_electron_integrals: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))], screen_thresh: float = 1e-12) -> SparseOperator:
+def sparse_operator_hamiltonian(
+    scalar_energy: float,
+    one_electron_integrals: Annotated[NDArray[numpy.float64], dict(shape=(None, None))],
+    two_electron_integrals: Annotated[
+        NDArray[numpy.float64], dict(shape=(None, None, None, None))
+    ],
+    screen_thresh: float = 1e-12,
+) -> SparseOperator:
     """
     Create a SparseOperator object representing the second quantized Hamiltonian.
     """
 
 @overload
-def sparse_operator_hamiltonian(scalar_energy: float, one_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], two_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], screen_thresh: float = 1e-12) -> SparseOperator: ...
+def sparse_operator_hamiltonian(
+    scalar_energy: float,
+    one_electron_integrals: Annotated[
+        NDArray[numpy.complex128], dict(shape=(None, None))
+    ],
+    two_electron_integrals: Annotated[
+        NDArray[numpy.complex128], dict(shape=(None, None, None, None))
+    ],
+    screen_thresh: float = 1e-12,
+) -> SparseOperator: ...
 
 class SparseOperatorList:
     """A class to represent a list of sparse operators"""
 
     @overload
     def __init__(self) -> None: ...
-
     @overload
     def __init__(self, arg: SparseOperatorList) -> None: ...
-
     @overload
     def add(self, arg0: SQOperatorString, arg1: complex, /) -> None: ...
-
     @overload
-    def add(self, str: str, coefficient: complex = ..., allow_reordering: bool = False) -> None: ...
-
+    def add(
+        self, str: str, coefficient: complex = ..., allow_reordering: bool = False
+    ) -> None: ...
     @overload
-    def add(self, acre: Sequence[int], bcre: Sequence[int], aann: Sequence[int], bann: Sequence[int], coeff: complex = ...) -> None:
+    def add(
+        self,
+        acre: Sequence[int],
+        bcre: Sequence[int],
+        aann: Sequence[int],
+        bann: Sequence[int],
+        coeff: complex = ...,
+    ) -> None:
         """
         Add a term to the operator by passing lists of creation and annihilation indices. This version is faster than the string version and does not check for reordering
         """
 
-    def add_term(self, op_list: Sequence["std::__1::tuple<bool, bool, int>"], value: float = 0.0, allow_reordering: bool = False) -> None: ...
-
+    def add_term(
+        self,
+        op_list: Sequence["std::__1::tuple<bool, bool, int>"],
+        value: float = 0.0,
+        allow_reordering: bool = False,
+    ) -> None: ...
     def to_operator(self) -> SparseOperator: ...
-
     def remove(self, arg: str, /) -> None:
         """Remove a specific element from the vector space"""
 
     def __len__(self) -> int: ...
-
     def __iter__(self) -> Iterator[tuple[SQOperatorString, complex]]: ...
-
     def __repr__(self) -> str: ...
-
     def __str__(self) -> str: ...
-
     @overload
     def __getitem__(self, arg: int, /) -> complex:
         """Get the coefficient of a term"""
 
     @overload
     def __getitem__(self, arg: str, /) -> complex: ...
-
     def __setitem__(self, arg0: int, arg1: complex, /) -> None:
         """Set the coefficient of a term"""
 
     def coefficients(self) -> list[complex]: ...
-
     def set_coefficients(self, arg: Sequence[complex], /) -> None: ...
-
     def reverse(self) -> SparseOperatorList:
         """Reverse the order of the operators"""
 
@@ -967,25 +1287,35 @@ class SparseOperatorList:
         Add (concatenate) a SparseOperatorList object to this SparseOperatorList object
         """
 
-    def apply_to_state(self, state: SparseState, screen_thresh: float = 1e-12) -> SparseState:
+    def apply_to_state(
+        self, state: SparseState, screen_thresh: float = 1e-12
+    ) -> SparseState:
         """Apply the operator to a state"""
 
 @overload
-def operator_list(s: str, coefficient: complex = ..., allow_reordering: bool = False) -> SparseOperatorList:
+def operator_list(
+    s: str, coefficient: complex = ..., allow_reordering: bool = False
+) -> SparseOperatorList:
     """Create a SparseOperatorList object from a string and a complex"""
 
 @overload
-def operator_list(list: Sequence[tuple[str, complex]], allow_reordering: bool = False) -> SparseOperatorList:
+def operator_list(
+    list: Sequence[tuple[str, complex]], allow_reordering: bool = False
+) -> SparseOperatorList:
     """Create a SparseOperatorList object from a list of Tuple[str, complex]"""
 
 @overload
-def operator_list(s: SQOperatorString, coefficient: complex = ...) -> SparseOperatorList:
+def operator_list(
+    s: SQOperatorString, coefficient: complex = ...
+) -> SparseOperatorList:
     """
     Create a SparseOperatorList object from a SQOperatorString and a complex
     """
 
 @overload
-def operator_list(list: Sequence[tuple[SQOperatorString, complex]]) -> SparseOperatorList:
+def operator_list(
+    list: Sequence[tuple[SQOperatorString, complex]],
+) -> SparseOperatorList:
     """
     Create a SparseOperatorList object from a list of Tuple[SQOperatorString, complex]
     """
@@ -994,27 +1324,34 @@ class SparseExp:
     """A class to compute the exponential of a sparse operator"""
 
     def __init__(self, maxk: int = 19, screen_thresh: float = 1e-12) -> None: ...
-
     @overload
-    def apply_op(self, sop: SparseOperator, state: SparseState, scaling_factor: float = 1.0) -> SparseState:
+    def apply_op(
+        self, sop: SparseOperator, state: SparseState, scaling_factor: float = 1.0
+    ) -> SparseState:
         """
         Apply the exponential of a SparseOperator to a state: exp(scaling_factor * sop) |state>
         """
 
     @overload
-    def apply_op(self, sop: SparseOperatorList, state: SparseState, scaling_factor: float = 1.0) -> SparseState:
+    def apply_op(
+        self, sop: SparseOperatorList, state: SparseState, scaling_factor: float = 1.0
+    ) -> SparseState:
         """
         Apply the exponential of a SparseOperatorList to a state: exp(scaling_factor * sop) |state>
         """
 
     @overload
-    def apply_antiherm(self, sop: SparseOperator, state: SparseState, scaling_factor: float = 1.0) -> SparseState:
+    def apply_antiherm(
+        self, sop: SparseOperator, state: SparseState, scaling_factor: float = 1.0
+    ) -> SparseState:
         """
         Apply the antihermitian exponential of a SparseOperator to a state: exp(scaling_factor * (sop - sop^dagger)) |state>
         """
 
     @overload
-    def apply_antiherm(self, sop: SparseOperatorList, state: SparseState, scaling_factor: float = 1.0) -> SparseState:
+    def apply_antiherm(
+        self, sop: SparseOperatorList, state: SparseState, scaling_factor: float = 1.0
+    ) -> SparseState:
         """
         Apply the antihermitian exponential of a SparseOperatorList to a state: exp(scaling_factor * (sop - sop^dagger)) |state
         """
@@ -1025,24 +1362,36 @@ class SparseFactExp:
     """
 
     def __init__(self, screen_thresh: float = 1e-12) -> None: ...
-
-    def apply_op(self, sop: SparseOperatorList, state: SparseState, inverse: bool = False, reverse: bool = False) -> SparseState:
+    def apply_op(
+        self,
+        sop: SparseOperatorList,
+        state: SparseState,
+        inverse: bool = False,
+        reverse: bool = False,
+    ) -> SparseState:
         """
         Apply the factorized exponential of a SparseOperator to a state: ... exp(op2) exp(op1) |state>. inverse=True computes the inverse, and reverse=Trueapplies the operators in reverse order
         """
 
-    def apply_antiherm(self, sop: SparseOperatorList, state: SparseState, inverse: bool = False, reverse: bool = False) -> SparseState:
+    def apply_antiherm(
+        self,
+        sop: SparseOperatorList,
+        state: SparseState,
+        inverse: bool = False,
+        reverse: bool = False,
+    ) -> SparseState:
         """
         Apply the factorized antihermitian exponential of a SparseOperator to a state: ... exp(op2 - op2^dagger) exp(op1 - op1^dagger) |state>. inverse=True computes the inverse, and reverse=True applies the operators in reverse order
         """
 
-    def apply_antiherm_deriv(self, sqop: SQOperatorString, t: complex, state: SparseState) -> tuple[SparseState, SparseState]: ...
+    def apply_antiherm_deriv(
+        self, sqop: SQOperatorString, t: complex, state: SparseState
+    ) -> tuple[SparseState, SparseState]: ...
 
 class SQOperatorString:
     """A class to represent a string of creation/annihilation operators"""
 
     def __init__(self, arg0: Determinant, arg1: Determinant, /) -> None: ...
-
     def cre(self) -> Determinant:
         """Get the creation operator string"""
 
@@ -1085,7 +1434,9 @@ class SQOperatorString:
     def is_nilpotent(self) -> bool:
         """Check if the operator string is nilpotent"""
 
-    def op_tuple(self) -> "std::__1::vector<std::__1::tuple<bool, bool, int>, std::__1::allocator<std::__1::tuple<bool, bool, int>>>":
+    def op_tuple(
+        self,
+    ) -> "std::__1::vector<std::__1::tuple<bool, bool, int>, std::__1::allocator<std::__1::tuple<bool, bool, int>>>":
         """Get the operator tuple"""
 
     def __eq__(self, arg: SQOperatorString, /) -> bool:
@@ -1115,4 +1466,4 @@ class CommutatorType(enum.Enum):
 def commutator_type(lhs: SQOperatorString, rhs: SQOperatorString) -> CommutatorType:
     """Get the commutator type of two operator strings"""
 
-__author__: str = 'Forte2 Developers'
+__author__: str = "Forte2 Developers"
