@@ -694,8 +694,9 @@ class UHFMP2(MP2Base):
                 self.make_mp2_sf_1rdm_intermediates(self.B_iaQ)
 
                 if self.compute_1rdm_ao:
-                    self.gamma1_sf_ao = self.gamma1_mo_to_ao(self.gamma1_sf)
-
+                    self.gamma1_sf_ao = self.gamma1_mo_to_ao(
+                        self.gamma1_a, self.gamma1_b
+                    )
         if self.compute_2rdm or self.compute_cumulants:
             self.gamma2_sf = self.make_mp2_sf_2rdm()
 
@@ -909,8 +910,18 @@ class UHFMP2(MP2Base):
 
         return gamma1_sf
 
-    def gamma1_mo_to_ao(self, gamma1_sf):
-        return self.C @ gamma1_sf @ self.C.T
+    def gamma1_mo_to_ao(self, gamma1_a=None, gamma1_b=None):
+        if gamma1_a is None:
+            gamma1_a = self.gamma1_a
+        if gamma1_b is None:
+            gamma1_b = self.gamma1_b
+
+        Ca = self.C[0]
+        Cb = self.C[1]
+
+        gamma1_ao = Ca @ gamma1_a @ Ca.T + Cb @ gamma1_b @ Cb.T
+        gamma1_ao = 0.5 * (gamma1_ao + gamma1_ao.T)
+        return gamma1_ao
 
     def make_mp2_sf_2rdm(self):
         t2_a = self.t2_a
@@ -989,6 +1000,10 @@ class UHFMP2(MP2Base):
         gamma2_sf = 0.5 * (gamma2_sf + gamma2_sf.transpose(1, 0, 3, 2))
         gamma2_sf = 0.5 * (gamma2_sf + gamma2_sf.transpose(2, 3, 0, 1))
 
+        self.dm2_aa = dm2_aa
+        self.dm2_bb = dm2_bb
+        self.dm2_ab = dm2_ab
+
         return gamma2_sf
 
     def make_mp2_sf_2cumulants(self, gamma1, gamma2):
@@ -996,6 +1011,28 @@ class UHFMP2(MP2Base):
         term2 = np.einsum("ps,qr->pqrs", gamma1, gamma1)
         dm2_0 = term1 - 0.5 * term2
         return gamma2 - dm2_0
+
+    def make_mp2_spin_cumulants(self):
+        γa = self.gamma1_a
+        γb = self.gamma1_b
+
+        # build spin-resolved verison
+
+        # --- αα cumulant ---
+        term1_aa = np.einsum("pr,qs->pqrs", γa, γa)
+        term2_aa = np.einsum("ps,qr->pqrs", γa, γa)
+        λaa = self.dm2_aa - (term1_aa - term2_aa)
+
+        # --- ββ cumulant ---
+        term1_bb = np.einsum("pr,qs->pqrs", γb, γb)
+        term2_bb = np.einsum("ps,qr->pqrs", γb, γb)
+        λbb = self.dm2_bb - (term1_bb - term2_bb)
+
+        # --- αβ cumulant ---
+        term_ab = np.einsum("pr,qs->pqrs", γa, γb)
+        λab = self.dm2_ab - term_ab
+
+        return λaa, λab, λbb
 
     def mp2_E_given_rdms(self, Ecore, H, V, gamma1_a, gamma1_b, gamma2_a, gamma2_b):
         """
@@ -1030,36 +1067,159 @@ class MP2MCASolverLike:
     def __init__(
         self,
         gamma1_sf: np.ndarray,
-        lambda2_sf: np.ndarray,
-        U: np.ndarray | None = None,
-        orbital_indices=None,
+        gamma1_ao: np.ndarray,
+        lambda2_sf: np.ndarray = None,
+        lambda2_aa: np.ndarray = None,
+        lambda2_ab: np.ndarray = None,
+        lambda2_bb: np.ndarray = None,
+        C_ref: np.ndarray | None = None,
+        C_ref_b: np.ndarray | None = None,
+        C_no: np.ndarray | None = None,
+        restricted: bool = True,
     ):
-        norb = gamma1_sf.shape[0]
+        norb = C_no.shape[1]
 
-        if U is not None:
-            # Rotate 1-RDM and 2-cumulant ONCE into NO basis
-            Γ1 = U.T @ gamma1_sf @ U
-            λsf_no = np.einsum(
-                "pqrs,pi,qj,rk,sl->ijkl", lambda2_sf, U, U, U, U, optimize=True
+        # --- 1. build Γ1 in NO basis (always AO → NO) ---
+        gamma1_ao = 0.5 * (gamma1_ao + gamma1_ao.T)
+
+        Γ1_no = np.einsum(
+            "ab,ai,bj->ij",
+            gamma1_ao,
+            C_no,
+            C_no,
+            optimize=True,
+        )
+
+        self.Γ1 = 0.5 * (Γ1_no + Γ1_no.T)
+
+        if restricted:
+            # ==========================================
+            # RESTRICTED (RHF / ROHF)
+            # ==========================================
+            if lambda2_sf is None:
+                raise ValueError("Need lambda2_sf for restricted case")
+
+            if C_ref is None:
+                raise ValueError("Need C_ref for AO transform")
+
+            # --- MO → AO ---
+            λ2_ao = np.einsum(
+                "pqrs,ap,bq,cr,ds->abcd",
+                lambda2_sf,
+                C_ref,
+                C_ref,
+                C_ref,
+                C_ref,
+                optimize=True,
             )
 
-            # Map spin-free cumulant into λab only (your convention)
-            self.λaa = np.zeros((norb, norb, norb, norb), dtype=lambda2_sf.dtype)
-            self.λbb = np.zeros_like(self.λaa)
-            self.λab = 0.5 * λsf_no
+            # --- AO → NO ---
+            λsf_no = np.einsum(
+                "abcd,ai,bj,ck,dl->ijkl",
+                λ2_ao,
+                C_no,
+                C_no,
+                C_no,
+                C_no,
+                optimize=True,
+            )
 
-            self.Γ1 = Γ1
-            self.orbital_indices = list(range(norb))  # NO labels
-            self.U_no = U
+            λsf_no = 0.5 * (λsf_no + λsf_no.transpose(1, 0, 3, 2))
+
+            self.λaa = np.zeros_like(λsf_no)
+            self.λbb = np.zeros_like(λsf_no)
+            self.λab = λsf_no
+
+            print("[Restricted]")
+            print("max |λ2_sf| (MO):", np.max(np.abs(lambda2_sf)))
+            print("max |λ2_no| (NO):", np.max(np.abs(λsf_no)))
 
         else:
-            self.Γ1 = gamma1_sf
-            self.λaa = np.zeros((norb, norb, norb, norb), dtype=lambda2_sf.dtype)
-            self.λbb = np.zeros_like(self.λaa)
-            self.λab = 0.5 * lambda2_sf
+            # ==========================================
+            # UNRESTRICTED (UHF)
+            # ==========================================
+            if lambda2_aa is None or lambda2_ab is None or lambda2_bb is None:
+                raise ValueError("Need spin-resolved λ2 for UHF")
 
-            self.orbital_indices = (
-                list(orbital_indices)
-                if orbital_indices is not None
-                else list(range(norb))
+            if C_ref is None or C_ref_b is None:
+                raise ValueError("Need both Ca and Cb")
+
+            # --- αα ---
+            λaa_ao = np.einsum(
+                "pqrs,ap,bq,cr,ds->abcd",
+                lambda2_aa,
+                C_ref,
+                C_ref,
+                C_ref,
+                C_ref,
+                optimize=True,
             )
+
+            # --- ββ ---
+            λbb_ao = np.einsum(
+                "pqrs,ap,bq,cr,ds->abcd",
+                lambda2_bb,
+                C_ref_b,
+                C_ref_b,
+                C_ref_b,
+                C_ref_b,
+                optimize=True,
+            )
+
+            # --- αβ ---
+            λab_ao = np.einsum(
+                "pqrs,ap,bq,cr,ds->abcd",
+                lambda2_ab,
+                C_ref,
+                C_ref_b,
+                C_ref,
+                C_ref_b,
+                optimize=True,
+            )
+
+            # --- AO → NO ---
+            λaa_no = np.einsum(
+                "abcd,ai,bj,ck,dl->ijkl",
+                λaa_ao,
+                C_no,
+                C_no,
+                C_no,
+                C_no,
+                optimize=True,
+            )
+
+            λbb_no = np.einsum(
+                "abcd,ai,bj,ck,dl->ijkl",
+                λbb_ao,
+                C_no,
+                C_no,
+                C_no,
+                C_no,
+                optimize=True,
+            )
+
+            λab_no = np.einsum(
+                "abcd,ai,bj,ck,dl->ijkl",
+                λab_ao,
+                C_no,
+                C_no,
+                C_no,
+                C_no,
+                optimize=True,
+            )
+
+            # symmetry cleanup
+            λaa_no = 0.5 * (λaa_no + λaa_no.transpose(1, 0, 3, 2))
+            λbb_no = 0.5 * (λbb_no + λbb_no.transpose(1, 0, 3, 2))
+            λab_no = 0.5 * (λab_no + λab_no.transpose(1, 0, 3, 2))
+
+            self.λaa = λaa_no
+            self.λbb = λbb_no
+            self.λab = λab_no
+
+            print("[Unrestricted]")
+            print("max |λaa|:", np.max(np.abs(λaa_no)))
+            print("max |λab|:", np.max(np.abs(λab_no)))
+            print("max |λbb|:", np.max(np.abs(λbb_no)))
+
+        self.orbital_indices = list(range(norb))
