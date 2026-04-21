@@ -171,6 +171,34 @@ def test_singlet_rohf_mp2():
     assert mp2.E_total == approx(emp2)
 
 
+def test_sd_sf_cumulants():
+    euhf = -76.061466407177
+    emp2 = -76.3710978831473
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.061664597388
+    H            0.000000000000    -0.711620616369     0.489330954643
+    H            0.000000000000     0.711620616369     0.489330954643
+    """
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
+
+    scf = UHF(charge=0, ms=0)(system)
+    mp2 = UMP2(store_t2=True)(scf)
+    mp2.run()
+
+    lambda2_sf = mp2._make_mp2_sf_2cumulants(mp2.make_1rdm_sf(), mp2.make_2rdm_sf())
+    lambda2_aa, lambda2_ab, lambda2_bb = mp2.make_2cumulant_sd()
+    lambda2_sf_from_sd = (
+        lambda2_aa + lambda2_bb + lambda2_ab + lambda2_ab.transpose(1, 0, 3, 2)
+    )
+
+    assert scf.E == approx(euhf)
+    assert mp2.E_total == approx(emp2)
+    assert np.allclose(lambda2_sf, lambda2_sf_from_sd, atol=1e-10)
+
+
+test_sd_sf_cumulants()
+
+
 @pytest.mark.skip(reason="ROMP2 canonicalization under construction")
 def test_triplet_h2o_rohf_mp2():
     erohf = -75.805109024040
