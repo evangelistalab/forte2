@@ -392,3 +392,51 @@ class UMP2(MP2Base):
         gamma2_sf = self._make_mp2_sf_2rdm(gamma2_aa, gamma2_ab, gamma2_bb)
         lambda2_sf = self._make_mp2_sf_2cumulants(gamma1_sf, gamma2_sf)
         return gamma1_sf, gamma2_sf, lambda2_sf
+
+    def make_2cumulant_sd(self, gamma1=None, gamma2=None):
+        """
+        Spin-resolved MP2 2-cumulants.
+
+        Returns
+        -------
+        lambda2_aa, lambda2_ab, lambda2_bb
+        """
+
+        # build RDMs if not provided
+        if gamma1 is None:
+            gamma1_a, gamma1_b = self.make_1rdm_sd()
+        else:
+            gamma1_a, gamma1_b = gamma1
+
+        if gamma2 is None:
+            gamma2_aa, gamma2_ab, gamma2_bb = self._make_mp2_2rdm(gamma1_a, gamma1_b)
+        else:
+            gamma2_aa, gamma2_ab, gamma2_bb = gamma2
+
+        # =========================
+        # SAME-SPIN (αα)
+        # =========================
+        term1_aa = np.einsum("pr,qs->pqrs", gamma1_a, gamma1_a)
+        term2_aa = np.einsum("ps,qr->pqrs", gamma1_a, gamma1_a)
+        lambda2_aa = gamma2_aa - (term1_aa - term2_aa)
+
+        # =========================
+        # SAME-SPIN (ββ)
+        # =========================
+        term1_bb = np.einsum("pr,qs->pqrs", gamma1_b, gamma1_b)
+        term2_bb = np.einsum("ps,qr->pqrs", gamma1_b, gamma1_b)
+        lambda2_bb = gamma2_bb - (term1_bb - term2_bb)
+
+        # =========================
+        # OPPOSITE-SPIN (αβ)
+        # =========================
+        term_ab = np.einsum("pr,qs->pqrs", gamma1_a, gamma1_b)
+        lambda2_ab = gamma2_ab - term_ab
+
+        lambda2_aa = 0.5 * (lambda2_aa - lambda2_aa.transpose(0, 1, 3, 2))
+        lambda2_aa = 0.5 * (lambda2_aa - lambda2_aa.transpose(1, 0, 2, 3))
+
+        lambda2_bb = 0.5 * (lambda2_bb - lambda2_bb.transpose(0, 1, 3, 2))
+        lambda2_bb = 0.5 * (lambda2_bb - lambda2_bb.transpose(1, 0, 2, 3))
+
+        return lambda2_aa, lambda2_ab, lambda2_bb
