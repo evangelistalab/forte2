@@ -298,3 +298,178 @@ class MutualCorrelationAnalysis:
         self._compute_mutual_correlation_measures(self.λaa, self.λab, self.λbb)
 
         return self.Q
+
+
+class UMP2MPQFast:
+    """
+    Exact dyad mutual correlation M2 for UMP2 in spin-resolved form.
+
+    Indices p,q,r,s are spatial MO indices in [0, nmo).
+    """
+
+    def __init__(self, mp2):
+        self.mp2 = mp2
+        self.nmo = mp2.nmo
+        self.naocc = mp2.naocc
+        self.nbocc = mp2.nbocc
+        self.navir = mp2.navir
+        self.nbvir = mp2.nbvir
+
+        if any(getattr(mp2, name, None) is None for name in ("t2_a", "t2_b", "t2_ab")):
+            raise ValueError("UMP2 t2 amplitudes must be stored.")
+
+        self.t2_a = mp2.t2_a
+        self.t2_b = mp2.t2_b
+        self.t2_ab = mp2.t2_ab
+
+        self.M2 = None
+
+    def _oa(self, p):
+        return 0 <= p < self.naocc
+
+    def _va(self, p):
+        return self.naocc <= p < self.nmo
+
+    def _ob(self, p):
+        return 0 <= p < self.nbocc
+
+    def _vb(self, p):
+        return self.nbocc <= p < self.nmo
+
+    def _a_vir(self, p):
+        return p - self.naocc
+
+    def _b_vir(self, p):
+        return p - self.nbocc
+
+    def lambda2_aa_elem(self, p, q, r, s):
+        # connected aa block only; disconnected cancels exactly
+        val = 0.0
+
+        # (oo,vv)
+        if self._oa(p) and self._oa(q) and self._va(r) and self._va(s):
+            a = self._a_vir(r)
+            b = self._a_vir(s)
+            val += self.t2_a[p, q, a, b]
+            val -= self.t2_a[p, q, b, a]
+            return val
+
+        # (vv,oo)
+        if self._va(p) and self._va(q) and self._oa(r) and self._oa(s):
+            a = self._a_vir(p)
+            b = self._a_vir(q)
+            val += self.t2_a[r, s, a, b]
+            val -= self.t2_a[r, s, b, a]
+            return val
+
+        return 0.0
+
+    def lambda2_bb_elem(self, p, q, r, s):
+        val = 0.0
+
+        if self._ob(p) and self._ob(q) and self._vb(r) and self._vb(s):
+            a = self._b_vir(r)
+            b = self._b_vir(s)
+            val += self.t2_b[p, q, a, b]
+            val -= self.t2_b[p, q, b, a]
+            return val
+
+        if self._vb(p) and self._vb(q) and self._ob(r) and self._ob(s):
+            a = self._b_vir(p)
+            b = self._b_vir(q)
+            val += self.t2_b[r, s, a, b]
+            val -= self.t2_b[r, s, b, a]
+            return val
+
+        return 0.0
+
+    def lambda2_ab_elem(self, p, q, r, s):
+        # alpha index positions are 1st and 3rd; beta positions are 2nd and 4th
+        if self._oa(p) and self._ob(q) and self._va(r) and self._vb(s):
+            a = self._a_vir(r)
+            b = self._b_vir(s)
+            return self.t2_ab[p, q, a, b]
+
+        if self._va(p) and self._vb(q) and self._oa(r) and self._ob(s):
+            a = self._a_vir(p)
+            b = self._b_vir(q)
+            return self.t2_ab[r, s, a, b]
+
+        return 0.0
+
+    def C_elem(self, p, q, r, s):
+        aa = self.lambda2_aa_elem(p, q, r, s)
+        bb = self.lambda2_bb_elem(p, q, r, s)
+        ab1 = self.lambda2_ab_elem(p, q, r, s)
+        ab2 = self.lambda2_ab_elem(p, q, s, r)
+        ab3 = self.lambda2_ab_elem(q, p, r, s)
+        ab4 = self.lambda2_ab_elem(q, p, s, r)
+
+        return 0.25 * (
+            abs(aa) ** 2
+            + abs(bb) ** 2
+            + abs(ab1) ** 2
+            + abs(ab2) ** 2
+            + abs(ab3) ** 2
+            + abs(ab4) ** 2
+        )
+
+    def make_M2(self):
+        M2 = np.zeros((self.nmo, self.nmo))
+        for p in range(self.nmo):
+            for q in range(p + 1, self.nmo):
+                val = (
+                    4.0 * self.C_elem(p, p, p, q)
+                    + 2.0 * self.C_elem(p, p, q, q)
+                    + 4.0 * self.C_elem(p, q, p, q)
+                    + 4.0 * self.C_elem(p, q, q, q)
+                )
+                M2[p, q] = M2[q, p] = val
+
+        self.M2 = M2
+        return self.M2
+
+    def MPQ_matrix_summary(self, print_threshold: float = 7.5e-4) -> str:
+        """
+        Generates a summary of the mutual correlation matrix M2.
+
+        Parameters
+        ----------
+        print_threshold : float, optional, default=7.5e-4
+            Only values greater than this threshold are printed.
+
+        Returns
+        -------
+        summary : str
+            A formatted string summarizing the mutual correlation matrix M2.
+        """
+        if self.M2 is None:
+            self.make_M2()
+        s_lines = [
+            f"Mutual Correlation Matrix M2 (only values > {print_threshold:.1e}):",
+            "=====================",
+            "    P     Q      M_PQ",
+            "---------------------",
+        ]
+
+        # get the upper triangle indices and values
+        M2_vals = []
+        for i in range(self.M2.shape[0]):
+            for j in range(i + 1, self.M2.shape[1]):
+                M2_vals.append(
+                    (
+                        self.M2[i, j],
+                        list(range(self.nmo))[i],
+                        list(range(self.nmo))[j],
+                    )
+                )
+        M2_vals.sort(reverse=True, key=lambda x: x[0])
+
+        for val, i, j in M2_vals:
+            if val < print_threshold:
+                break
+            s_lines.append(f"{i:>5} {j:>5}  {val:8.6f}")
+
+        s_lines.append("=====================")
+
+        return "\n".join(s_lines)
