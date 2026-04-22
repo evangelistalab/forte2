@@ -146,7 +146,6 @@ class MP2Base(SystemMixin, MOsMixin, ABC):
             return None
         return np.linalg.norm(self.t2)
 
-
     def _safe_divide(self, num, denom, out=None, tiny=1e-12, label="MP2 denom"):
         mask = np.abs(denom) < tiny
         n_bad = np.count_nonzero(mask)
@@ -172,3 +171,165 @@ class MP2Base(SystemMixin, MOsMixin, ABC):
 
     @abstractmethod
     def _build_t2_all(self, B): ...
+
+
+class MP2MCASolverLike:
+    def __init__(
+        self,
+        gamma1_sf: np.ndarray,
+        gamma1_ao: np.ndarray,
+        lambda2_sf: np.ndarray = None,
+        lambda2_aa: np.ndarray = None,
+        lambda2_ab: np.ndarray = None,
+        lambda2_bb: np.ndarray = None,
+        C_ref: np.ndarray | None = None,
+        C_ref_b: np.ndarray | None = None,
+        C_no: np.ndarray | None = None,
+        restricted: bool = True,
+    ):
+        norb = C_no.shape[1]
+
+        # --- 1. build Γ1 in NO basis (always AO → NO) ---
+        gamma1_ao = 0.5 * (gamma1_ao + gamma1_ao.T)
+
+        Γ1_no = np.einsum(
+            "ab,ai,bj->ij",
+            gamma1_ao,
+            C_no,
+            C_no,
+            optimize=True,
+        )
+
+        self.Γ1 = 0.5 * (Γ1_no + Γ1_no.T)
+
+        if restricted:
+            # ==========================================
+            # RESTRICTED (RHF / ROHF)
+            # ==========================================
+            if lambda2_sf is None:
+                raise ValueError("Need lambda2_sf for restricted case")
+
+            if C_ref is None:
+                raise ValueError("Need C_ref for AO transform")
+
+            # --- MO → AO ---
+            λ2_ao = np.einsum(
+                "pqrs,ap,bq,cr,ds->abcd",
+                lambda2_sf,
+                C_ref,
+                C_ref,
+                C_ref,
+                C_ref,
+                optimize=True,
+            )
+
+            # --- AO → NO ---
+            λsf_no = np.einsum(
+                "abcd,ai,bj,ck,dl->ijkl",
+                λ2_ao,
+                C_no,
+                C_no,
+                C_no,
+                C_no,
+                optimize=True,
+            )
+
+            λsf_no = 0.5 * (λsf_no + λsf_no.transpose(1, 0, 3, 2))
+
+            self.λaa = np.zeros_like(λsf_no)
+            self.λbb = np.zeros_like(λsf_no)
+            self.λab = λsf_no
+
+            print("[Restricted]")
+            print("max |λ2_sf| (MO):", np.max(np.abs(lambda2_sf)))
+            print("max |λ2_no| (NO):", np.max(np.abs(λsf_no)))
+
+        else:
+            # ==========================================
+            # UNRESTRICTED (UHF)
+            # ==========================================
+            if lambda2_aa is None or lambda2_ab is None or lambda2_bb is None:
+                raise ValueError("Need spin-resolved λ2 for UHF")
+
+            if C_ref is None or C_ref_b is None:
+                raise ValueError("Need both Ca and Cb")
+
+            # --- αα ---
+            λaa_ao = np.einsum(
+                "pqrs,ap,bq,cr,ds->abcd",
+                lambda2_aa,
+                C_ref,
+                C_ref,
+                C_ref,
+                C_ref,
+                optimize=True,
+            )
+
+            # --- ββ ---
+            λbb_ao = np.einsum(
+                "pqrs,ap,bq,cr,ds->abcd",
+                lambda2_bb,
+                C_ref_b,
+                C_ref_b,
+                C_ref_b,
+                C_ref_b,
+                optimize=True,
+            )
+
+            # --- αβ ---
+            λab_ao = np.einsum(
+                "pqrs,ap,bq,cr,ds->abcd",
+                lambda2_ab,
+                C_ref,
+                C_ref_b,
+                C_ref,
+                C_ref_b,
+                optimize=True,
+            )
+            # --- AO → NO ---
+            λaa_no = np.einsum(
+                "abcd,ai,bj,ck,dl->ijkl",
+                λaa_ao,
+                C_no,
+                C_no,
+                C_no,
+                C_no,
+                optimize=True,
+            )
+
+            λbb_no = np.einsum(
+                "abcd,ai,bj,ck,dl->ijkl",
+                λbb_ao,
+                C_no,
+                C_no,
+                C_no,
+                C_no,
+                optimize=True,
+            )
+
+            λab_no = np.einsum(
+                "abcd,ai,bj,ck,dl->ijkl",
+                λab_ao,
+                C_no,
+                C_no,
+                C_no,
+                C_no,
+                optimize=True,
+            )
+
+            # symmetry cleanup
+            # symmetry cleanup
+            λaa_no = 0.5 * (λaa_no + λaa_no.transpose(1, 0, 3, 2))
+            λbb_no = 0.5 * (λbb_no + λbb_no.transpose(1, 0, 3, 2))
+            λab_no = 0.5 * (λab_no + λab_no.transpose(1, 0, 3, 2))
+
+            self.λaa = λaa_no
+            self.λbb = λbb_no
+            self.λab = λab_no
+
+            print("[Unrestricted]")
+            print("max |λaa|:", np.max(np.abs(λaa_no)))
+            print("max |λab|:", np.max(np.abs(λab_no)))
+            print("max |λbb|:", np.max(np.abs(λbb_no)))
+
+        self.orbital_indices = list(range(norb))

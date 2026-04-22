@@ -8,6 +8,7 @@ from forte2.jkbuilder.mointegrals import RestrictedMOIntegrals
 from forte2.scf import RHF, ROHF, UHF
 from forte2.helpers.comparisons import approx
 from forte2.mp import RMP2, ROMP2, UMP2
+from forte2.props import UMP2MPQFast, MutualCorrelationAnalysis
 
 
 def assert_uhf_rdm_invariants(mp2, na, nb):
@@ -196,9 +197,6 @@ def test_sd_sf_cumulants():
     assert np.allclose(lambda2_sf, lambda2_sf_from_sd, atol=1e-10)
 
 
-test_sd_sf_cumulants()
-
-
 @pytest.mark.skip(reason="ROMP2 canonicalization under construction")
 def test_triplet_h2o_rohf_mp2():
     erohf = -75.805109024040
@@ -296,3 +294,48 @@ def test_h2o_uhf_mp2():
 
     assert scf.E == approx(euhf)
     assert mp2.E_total == approx(emp2)
+
+
+def test_fast_mpq():
+    euhf = -76.061466407177
+    emp2 = -76.3710978831473
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.061664597388
+    H            0.000000000000    -0.711620616369     0.489330954643
+    H            0.000000000000     0.711620616369     0.489330954643
+    """
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
+
+    scf = UHF(charge=0, ms=0)(system)
+    mp2 = UMP2(store_t2=True)(scf)
+    mp2.run()
+
+    lambda2_aa, lambda2_ab, lambda2_bb = mp2.make_2cumulant_sd()
+
+    fast = UMP2MPQFast(mp2)
+
+    for p in range(mp2.nmo):
+        for q in range(mp2.nmo):
+            for r in range(mp2.nmo):
+                for s in range(mp2.nmo):
+                    assert (
+                        abs(fast.lambda2_aa_elem(p, q, r, s) - lambda2_aa[p, q, r, s])
+                        < 1e-10
+                    )
+                    assert (
+                        abs(fast.lambda2_ab_elem(p, q, r, s) - lambda2_ab[p, q, r, s])
+                        < 1e-10
+                    )
+                    assert (
+                        abs(fast.lambda2_bb_elem(p, q, r, s) - lambda2_bb[p, q, r, s])
+                        < 1e-10
+                    )
+    summary = fast.MPQ_matrix_summary()
+
+    print(summary)
+
+    assert scf.E == approx(euhf)
+    assert mp2.E_total == approx(emp2)
+
+
+test_fast_mpq()
