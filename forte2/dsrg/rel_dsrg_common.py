@@ -31,7 +31,7 @@ class _RelDSRGHelper:
         self.all_1_labels = set(["".join(_) for _ in product(["c", "a", "v"], repeat=2)])
         self.non_od_1_labels = self.all_1_labels - self.od_1_labels
         self.all_2_labels = set(["".join(_) for _ in product(["c", "a", "v"], repeat=4)])
-        large_labels = set(["vvvv", "avvv"])
+        large_labels = set(["vvvv", "avvv", "cvvv"])
         self.all_2_labels -= large_labels
         self.non_od_2_labels = self.all_2_labels - self.od_2_labels
         self.dims = {
