@@ -95,8 +95,8 @@ void SelectedCIHelper::find_matching_dets(std::span<double> basis, std::span<dou
     const auto& [jstart, jend] = list.range(j);
     const auto& det_permutation = list.det_permutation();
 
-    // Here we choose to loop over the smaller range and look up the deteminants in the larger range
-    // by using the hash map
+    // Here we choose to loop over the smaller range and look up the determinants in the larger
+    // range by using the hash map
     if (iend - istart >= jend - jstart) {
         const auto& i_map = list.second_string_to_det_index()[i];
         for (size_t jj{jstart}; jj < jend; ++jj) {
@@ -588,8 +588,8 @@ double SelectedCIHelper::find_matching_dets_1rdm(size_t left_root, size_t right_
     const auto& [jstart, jend] = list.range(j);
     const auto& det_permutation = list.det_permutation();
 
-    // Here we choose to loop over the smaller range and look up the deteminants in the larger range
-    // by using the hash map
+    // Here we choose to loop over the smaller range and look up the determinants in the larger
+    // range by using the hash map
     if (iend - istart >= jend - jstart) {
         const auto& i_map = list.second_string_to_det_index()[i];
         for (size_t jj{jstart}; jj < jend; ++jj) {
@@ -825,17 +825,18 @@ double SelectedCIHelper::find_matching_dets_1trdm(size_t left_root, size_t right
     // Find the range of determinants with the current alpha string
     const auto& [istart, iend] = left_list.range(i);
     const auto& [jstart, jend] = right_list.range(j);
-    const auto& det_permutation = right_list.det_permutation();
+    const auto& right_det_permutation = right_list.det_permutation();
+    const auto& left_det_permutation = left_list.det_permutation();
 
-    // Here we choose to loop over the smaller range and look up the deteminants in the larger range
-    // by using the hash map
+    // Here we choose to loop over the smaller range and look up the determinants in the larger
+    // range by using the hash map
     if (iend - istart >= jend - jstart) {
         const auto& i_map = left_list.second_string_to_det_index()[i];
         for (size_t jj{jstart}; jj < jend; ++jj) {
             const auto idx_j = right_list.sorted_dets_second_string(jj);
             if (const auto it = i_map.find(idx_j); it != i_map.end()) {
                 result += sign * left_c[nroots_ * it->second + left_root] *
-                          right_c[nroots_ * det_permutation[jj] + right_root];
+                          right_c[nroots_ * right_det_permutation[jj] + right_root];
             }
         }
     } else {
@@ -843,7 +844,7 @@ double SelectedCIHelper::find_matching_dets_1trdm(size_t left_root, size_t right
         for (size_t ii{istart}; ii < iend; ++ii) {
             const auto idx_i = left_list.sorted_dets_second_string(ii);
             if (const auto it = j_map.find(idx_i); it != j_map.end()) {
-                result += sign * left_c[nroots_ * det_permutation[ii] + left_root] *
+                result += sign * left_c[nroots_ * left_det_permutation[ii] + left_root] *
                           right_c[nroots_ * it->second + right_root];
             }
         }
