@@ -22,7 +22,7 @@ def test_lindep_rhf():
     assert np.linalg.cond(ovlp) > 1e14
 
     # test diis with linear dependency as well with tight convergence
-    scf = RHF(charge=0, econv=1e-10, dconv=1e-8)(system)
+    scf = RHF(charge=0, e_tol=1e-10, d_tol=1e-8)(system)
     scf.run()
     assert scf.nbf == 90
     assert scf.nmo == 79
@@ -98,7 +98,7 @@ def test_lindep_x2c_quick():
     assert np.linalg.cond(ovlp) > 1e14
 
     # test diis with linear dependency as well with tight convergence
-    scf = GHF(charge=0, econv=1e-10, dconv=1e-8)(system)
+    scf = GHF(charge=0, e_tol=1e-10, d_tol=1e-8)(system)
     scf.run()
     assert scf.nbf == 90
     assert scf.nmo == 79

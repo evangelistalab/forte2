@@ -105,6 +105,7 @@ nanobind_add_module(
   api/sparse_exp_api.cc
   api/sparse_operator_api.cc
   api/sparse_state_api.cc
+  api/sparse_rdms_api.cc
   api/sq_operator_string_api.cc
   helpers/combinatorial.cc
   helpers/string_algorithms.cc
@@ -116,6 +117,7 @@ nanobind_add_module(
   integrals/value_at_points.cc
   ci/ci_sigma_builder.cc
   ci/ci_sigma_builder_1rdm.cc
+  ci/ci_sigma_builder_1trdm.cc
   ci/ci_sigma_builder_2rdm.cc
   ci/ci_sigma_builder_3rdm.cc
   ci/ci_sigma_builder_test_rdms.cc

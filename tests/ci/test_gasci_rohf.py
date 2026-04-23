@@ -19,7 +19,7 @@ def test_gasci_rohf_1():
         unit="bohr",
     )
 
-    rhf = ROHF(charge=1, ms=0.5, econv=1e-12, dconv=1e-8)(system)
+    rhf = ROHF(charge=1, ms=0.5, e_tol=1e-12, d_tol=1e-8)(system)
     ci = CI(
         active_orbitals=[[0], [1, 2, 3, 4, 5, 6, 7, 8]],
         states=State(nel=9, multiplicity=2, ms=0.5, gas_min=[1], gas_max=[1]),
@@ -47,7 +47,7 @@ def test_gasci_rohf_2():
         unit="bohr",
     )
 
-    rhf = ROHF(charge=1, ms=0.5, econv=1e-12, dconv=1e-8)(system)
+    rhf = ROHF(charge=1, ms=0.5, e_tol=1e-12, d_tol=1e-8)(system)
     ci = CI(
         active_orbitals=[[0], [1, 2, 3, 4, 5, 6, 7, 8]],
         states=State(nel=9, multiplicity=2, ms=0.5, gas_min=[1], gas_max=[1]),
@@ -70,7 +70,7 @@ def test_gasci_rohf_3():
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="def2-universal-jkfit"
     )
 
-    rhf = ROHF(charge=0, econv=1e-12, dconv=1e-8, ms=1.0)(system)
+    rhf = ROHF(charge=0, e_tol=1e-12, d_tol=1e-8, ms=1.0)(system)
     ci = CI(
         active_orbitals=[[0], [1, 2, 3, 4, 5, 6]],
         states=State(nel=10, multiplicity=3, ms=1.0, gas_min=[0], gas_max=[1]),

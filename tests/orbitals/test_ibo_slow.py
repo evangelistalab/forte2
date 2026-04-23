@@ -22,7 +22,7 @@ def test_ibo_acrylic_acid():
     """
 
     system = System(xyz=xyz, basis_set="cc-pVTZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     rhf.run()
     C_occ = rhf.C[0][:, : rhf.ndocc]
     ibo = IBO(system, C_occ)

@@ -1,4 +1,4 @@
-from forte2 import System, RHF, MCOptimizer, AVAS, State
+from forte2 import System, RHF, MCOptimizer, AVAS, State, CISolver
 from forte2.helpers.comparisons import approx
 
 
@@ -19,14 +19,15 @@ def test_sa_casscf_c2():
         auxiliary_basis_set="cc-pVTZ-JKFIT",
     )
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     avas = AVAS(
         selection_method="separate",
         num_active_docc=4,
         num_active_uocc=4,
         subspace=["C(2s)", "C(2p)"],
     )(rhf)
-    mc = MCOptimizer(State(nel=rhf.nel, multiplicity=1, ms=0.0), nroots=3)(avas)
+    ci_solver = CISolver(State(nel=rhf.nel, multiplicity=1, ms=0.0), nroots=3)
+    mc = MCOptimizer(ci_solver)(avas)
     mc.run()
 
     assert rhf.E == approx(erhf)

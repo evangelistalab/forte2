@@ -1,14 +1,17 @@
+from abc import ABC
+from dataclasses import dataclass, field
+
 import numpy as np
 from numpy.typing import NDArray
 
-from dataclasses import dataclass, field
 
-from forte2.ci import CISolver, RelCISolver
-from forte2.base_classes.active_space_solver import (
-    ActiveSpaceSolver,
-    RelActiveSpaceSolver,
+from forte2.base_classes import (
+    CIBase,
+    RelCIBase,
+    SystemMixin,
+    MOsMixin,
+    MOSpaceMixin,
 )
-from forte2.base_classes.params import DavidsonLiuParams, CIParams
 from forte2.orbitals import Semicanonicalizer
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers import logger, LBFGS
@@ -23,37 +26,22 @@ from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
 
 
 @dataclass
-class MCOptimizer(ActiveSpaceSolver):
+class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
     """
     Two-step optimizer for multi-configurational wavefunctions.
 
     Parameters
     ----------
-    states : State | list[State]
-        The electronic states for which the CI is solved. Can be a single state or a list of states.
-        A state-averaged CI is performed if multiple states are provided.
-    nroots : int | list[int], optional, default=1
-        The number of roots to compute.
-        If a list is provided, each element corresponds to the number of roots for each state.
-        If a single integer is provided, `states` must be a single `State` object.
-    weights : list[float] | list[list[float]], optional
-        The weights for state averaging.
-        If a list of lists is provided, each sublist corresponds to the weights for each state.
-        The number of weights must match the number of roots for each state.
-        If not provided, equal weights are assumed for all states.
-        If a single list is provided, `states` must be a single `State` object.
-    mo_space : MOSpace, optional
-        A `MOSpace` object defining the partitioning of the molecular orbitals.
-        If not provided, CISolver must be called with a parent method that has MOSpaceMixin (e.g., AVAS).
-        If provided, it overrides the one from the parent method.
+    ci_solver : CIBase | RelCIBase
+        The CI solver to use. This should be an instance of a class that inherits from CIBase or RelCIBase.
     active_frozen_orbitals : list[int], optional
         List of active orbital indices to be frozen in the MCSCF optimization.
         If provided, all gradients involving these orbitals will be zeroed out.
     maxiter : int, optional, default=50
         Maximum number of macroiterations.
-    econv : float, optional, default=1e-8
+    e_tol : float, optional, default=1e-8
         Energy convergence tolerance.
-    gconv : float, optional, default=1e-7
+    g_tol : float, optional, default=1e-7
         Gradient convergence tolerance.
     die_if_not_converged : bool, optional, default=True
         If True, raises an error if the optimization does not converge.
@@ -63,12 +51,10 @@ class MCOptimizer(ActiveSpaceSolver):
         Maximum number of microiterations for L-BFGS.
     max_rotation : float, optional, default=0.2
         Maximum orbital rotation size for L-BFGS.
-    ci_params : CIParams, optional
-        Parameters for the CI solver.
-    davidson_liu_params : DavidsonLiuParams, optional
-        Parameters for the Davidson-Liu solver used in the CI optimization.
     do_transition_dipole : bool, optional, default=False
-        Whether to compute transition dipole moments.
+        Whether to compute and report transition dipole moments at the end of the optimization.
+    final_orbital : str, optional, default="semicanonical"
+        Whether to return the final orbitals in the semicanonical basis or the original basis.
 
     Notes
     -----
@@ -78,30 +64,40 @@ class MCOptimizer(ActiveSpaceSolver):
     An earlier implementation (CASSCF only) used J. Chem. Phys. 142, 224103 (2015).
     """
 
+    ci_solver: CIBase | RelCIBase
+
     active_frozen_orbitals: list[int] = None
     freeze_inter_gas_rots: bool = False
 
     ### Macroiteration parameters
     maxiter: int = 50
-    econv: float = 1e-8
-    gconv: float = 1e-7
+    e_tol: float = 1e-8
+    g_tol: float = 1e-7
     die_if_not_converged: bool = True
 
     ### L-BFGS solver (microiteration) parameters
     micro_maxiter: int = 6
     max_rotation: float = 0.2
 
-    ### CI solver parameters
-    ci_params: CIParams = field(default_factory=CIParams)
-    davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
-
     ### Post-iteration
     do_transition_dipole: bool = False
+    final_orbital: str = "semicanonical"
 
     ### Non-init attributes
     converged: bool = field(default=False, init=False)
     executed: bool = field(default=False, init=False)
-    two_component: bool = field(default=False, init=False)
+
+    def __post_init__(self):
+        if not isinstance(self.ci_solver, (CIBase, RelCIBase)):
+            raise ValueError("ci_solver must be an instance of CIBase or RelCIBase.")
+
+        if self.final_orbital not in [
+            "semicanonical",
+            "original",
+        ]:
+            raise ValueError(
+                "final_orbital must be either 'semicanonical' or 'original'."
+            )
 
     def __call__(self, method):
         self.parent_method = method
@@ -115,7 +111,20 @@ class MCOptimizer(ActiveSpaceSolver):
         return self
 
     def _startup(self):
-        super()._startup()
+        if not self.parent_method.executed:
+            self.parent_method.run()
+
+        SystemMixin.copy_from_upstream(self, self.parent_method)
+        MOsMixin.copy_from_upstream(self, self.parent_method)
+
+        # make sure to register parent_method
+        self.ci_solver = self.ci_solver(self.parent_method)
+        # iteration 0: one step of CI optimization to bootstrap the orbital optimization
+        self.iter = 0
+        self.ci_solver.run()
+        self.mo_space = self.ci_solver.mo_space
+        self.dtype = self.ci_solver.dtype
+
         # make the core, active, and virtual spaces contiguous
         # i.e., [core, gas1, gas2, ..., virt]
         perm = self.mo_space.orig_to_contig
@@ -165,7 +174,7 @@ class MCOptimizer(ActiveSpaceSolver):
         #       (this is typically done iteratively with micro-iterations using L-BFGS)
         #     2. minimize energy wrt CI expansion at current orbitals
         #       (this is just the diagonalization of the active-space CI Hamiltonian)
-        _OrbOptimizer = RelOrbOptimizer if self.two_component else OrbOptimizer
+        _OrbOptimizer = RelOrbOptimizer if self.system.two_component else OrbOptimizer
         self.orb_opt = _OrbOptimizer(
             self._C,
             (self.core, self.actv, self.virt),
@@ -177,26 +186,23 @@ class MCOptimizer(ActiveSpaceSolver):
             and not self.freeze_inter_gas_rots,
         )
 
-        _CISolver = RelCISolver if self.two_component else CISolver
-        self.ci_solver = _CISolver(
-            states=self.states,
-            core_orbitals=self.mo_space.docc_orbitals,
-            active_orbitals=self.mo_space.active_orbitals,
-            nroots=self.sa_info.nroots,
-            weights=self.sa_info.weights,
-            log_level=self.ci_solver_verbosity,
-            die_if_not_converged=False,
-            ci_params=self.ci_params,
-            davidson_liu_params=self.davidson_liu_params,
-        )(self.parent_method)
-        # iteration 0: one step of CI optimization to bootstrap the orbital optimization
-        self.iter = 0
-        self.ci_solver.run()
+        # _CISolver = RelCISolver if self.two_component else CISolver
+        # self.ci_solver = _CISolver(
+        #     states=self.states,
+        #     core_orbitals=self.mo_space.docc_orbitals,
+        #     active_orbitals=self.mo_space.active_orbitals,
+        #     nroots=self.sa_info.nroots,
+        #     weights=self.sa_info.weights,
+        #     log_level=self.ci_solver_verbosity,
+        #     die_if_not_converged=False,
+        #     ci_params=self.ci_params,
+        #     davidson_liu_params=self.davidson_liu_params,
+        # )(self.parent_method)
 
         # Initialize the LBFGS solver that finds the optimal orbital
         # at fixed CI expansion using the gradient and diagonal Hessian
         self.lbfgs_solver = LBFGS(
-            epsilon=self.gconv,
+            epsilon=self.g_tol,
             max_dir=self.max_rotation,
             step_length_method="max_correction",
             maxiter=self.micro_maxiter,
@@ -210,11 +216,11 @@ class MCOptimizer(ActiveSpaceSolver):
 
         logger.log_info1("Entering orbital optimization loop")
         logger.log_info1("\nConvergence criteria ('.' if satisfied, 'x' otherwise):")
-        logger.log_info1(f"  {'1. RMS(grad)':<32} < {self.gconv:.1e}")
+        logger.log_info1(f"  {'1. RMS(grad)':<32} < {self.g_tol:.1e}")
         logger.log_info1(
-            f"  {'2. max(abs(E_CI_i - E_CI_old_i))':<32} < {self.econv:.1e}"
+            f"  {'2. max(abs(E_CI_i - E_CI_old_i))':<32} < {self.e_tol:.1e}"
         )
-        logger.log_info1(f"  {'3. abs(E_avg - E_avg_old)':<32} < {self.econv:.1e}\n")
+        logger.log_info1(f"  {'3. abs(E_avg - E_avg_old)':<32} < {self.e_tol:.1e}\n")
 
         logger.log_info1("=" * width)
         logger.log_info1(
@@ -339,7 +345,7 @@ class MCOptimizer(ActiveSpaceSolver):
             self.C[0] = semi.C_semican[:, self.mo_space.contig_to_orig].copy()
 
             # recompute the CI vectors in the semicanonical basis
-            if self.two_component:
+            if self.system.two_component:
                 ints = SpinorbitalIntegrals(
                     system=self.system,
                     C=self.C[0],
@@ -361,7 +367,7 @@ class MCOptimizer(ActiveSpaceSolver):
             self.ci_solver.run()
 
         convergence_status = self.ci_solver.get_convergence_status()
-        if not all(convergence_status):
+        if convergence_status and not all(convergence_status):
             logger.log_warning(
                 f"CI solver did not converge for all roots: {convergence_status}"
             )
@@ -371,22 +377,22 @@ class MCOptimizer(ActiveSpaceSolver):
         return self
 
     def _post_process(self):
-        pretty_print_ci_summary(self.sa_info, self.ci_solver.evals_per_solver)
+        pretty_print_ci_summary(self.ci_solver.sa_info, self.ci_solver.evals_per_solver)
         self.ci_solver.compute_natural_occupation_numbers()
         pretty_print_ci_nat_occ_numbers(
-            self.sa_info, self.mo_space, self.ci_solver.nat_occs
+            self.ci_solver.sa_info, self.mo_space, self.ci_solver.nat_occs
         )
         top_dets = self.ci_solver.get_top_determinants()
-        pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
-        if not self.two_component:
+        pretty_print_ci_dets(self.ci_solver.sa_info, self.mo_space, top_dets)
+        if not self.system.two_component:
             # TODO: enable AO composition for 2c
             self._print_ao_composition()
         if self.do_transition_dipole:
             self.ci_solver.compute_transition_properties(self.C[0])
             pretty_print_ci_transition_props(
-                self.sa_info,
-                self.ci_solver.tdm_per_solver,
-                self.ci_solver.fosc_per_solver,
+                self.ci_solver.sa_info,
+                self.ci_solver.transition_dipoles,
+                self.ci_solver.oscillator_strengths,
                 self.ci_solver.evals_per_solver,
             )
 
@@ -439,13 +445,13 @@ class MCOptimizer(ActiveSpaceSolver):
         return nrr
 
     def _check_convergence(self):
-        is_grad_conv = self.g_rms < self.gconv
+        is_grad_conv = self.g_rms < self.g_tol
 
         self.max_ci_de = np.max(np.abs(self.E_ci - self.E_ci_old))
-        is_ci_eigval_conv = self.max_ci_de < self.econv
+        is_ci_eigval_conv = self.max_ci_de < self.e_tol
 
         self.delta_ci_avg = self.E_avg - self.E_avg_old
-        is_ci_avg_conv = abs(self.delta_ci_avg) < self.econv
+        is_ci_avg_conv = abs(self.delta_ci_avg) < self.e_tol
 
         criteria = [
             is_grad_conv,
@@ -479,101 +485,39 @@ class MCOptimizer(ActiveSpaceSolver):
     def make_average_cumulants(self):
         return self.ci_solver.make_average_cumulants()
 
-    def _get_state_root(self, absolute_root) -> tuple[int, int]:
-        if absolute_root < 0 or absolute_root >= self.sa_info.nroots_sum:
-            raise ValueError(
-                f"absolute_root must be between 0 and {self.sa_info.nroots_sum - 1}, but got {absolute_root}."
-            )
-        return self.sa_info.absolute_root_map[absolute_root]
 
-    def _validate_rdm_inputs(self, left_root, right_root):
-        left_state, left_root_in_state = self._get_state_root(left_root)
-        if right_root is not None:
-            right_state, right_root_in_state = self._get_state_root(right_root)
-        else:
-            right_state = left_state
-            right_root_in_state = left_root_in_state
-
-        if left_state != right_state:
-            raise ValueError(
-                f"Cross-state RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
-            )
-        return left_state, right_state, left_root_in_state, right_root_in_state
-
+class MCOptimizer(MCOptimizerBase):
     def make_sd_1rdm(
         self,
         left_root: int,
         right_root: int | None = None,
     ) -> tuple[NDArray, NDArray]:
-        """
-        Make the spin-dependent 1-RDMs
-        """
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-        return self.ci_solver.sub_solvers[left_state].make_sd_1rdm(
-            left_root_in_state, right_root_in_state
-        )
+        return self.ci_solver.make_sd_1rdm(left_root, right_root)
 
     def make_sd_2rdm(
         self,
         left_root: int,
         right_root: int | None = None,
     ) -> tuple[NDArray, NDArray, NDArray]:
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-
-        if left_state != right_state:
-            raise ValueError(
-                f"Cross-state RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
-            )
-        return self.ci_solver.sub_solvers[left_state].make_sd_2rdm(
-            left_root_in_state, right_root_in_state
-        )
+        return self.ci_solver.make_sd_2rdm(left_root, right_root)
 
     def make_sd_3rdm(
         self,
         left_root: int,
         right_root: int | None = None,
     ) -> tuple[NDArray, NDArray, NDArray, NDArray]:
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-
-        if left_state != right_state:
-            raise ValueError(
-                f"Cross-state RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
-            )
-        return self.ci_solver.sub_solvers[left_state].make_sd_3rdm(
-            left_root_in_state, right_root_in_state
-        )
+        return self.ci_solver.make_sd_3rdm(left_root, right_root)
 
     def make_sf_1rdm(
         self,
         left_root: int,
         right_root: int | None = None,
     ) -> NDArray:
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-        return self.ci_solver.sub_solvers[left_state].make_sf_1rdm(
-            left_root_in_state, right_root_in_state
-        )
+        return self.ci_solver.make_sf_1rdm(left_root, right_root)
 
     def make_sf_2rdm(
         self,
         left_root: int,
         right_root: int | None = None,
     ) -> NDArray:
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-
-        return self.ci_solver.sub_solvers[left_state].make_sf_2rdm(
-            left_root_in_state, right_root_in_state
-        )
-
-
-@dataclass
-class RelMCOptimizer(RelActiveSpaceSolver, MCOptimizer): ...
+        return self.ci_solver.make_sf_2rdm(left_root, right_root)

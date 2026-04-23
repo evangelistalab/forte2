@@ -25,10 +25,10 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         How many DIIS error vectors to keep.
     diis_min : int, optional, default=3
         Minimum number of DIIS vectors to perform extrapolation.
-    econv : float, optional, default=1e-9
-        Energy convergence threshold.
-    dconv : float, optional, default=1e-6
-        RMS density change convergence threshold.
+    e_tol : float, optional, default=1e-9
+        Energy convergence tolerance.
+    d_tol : float, optional, default=1e-6
+        RMS density change convergence tolerance.
     maxiter : int, optional, default=100
         Maximum iteration for SCF.
     guess_type : str, optional, default="minao"
@@ -64,8 +64,8 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
     diis_start: int = 1
     diis_nvec: int = 8
     diis_min: int = 2
-    econv: float = 1e-9
-    dconv: float = 1e-6
+    e_tol: float = 1e-9
+    d_tol: float = 1e-6
     maxiter: int = 100
     guess_type: str = "minao"
     level_shift: float = None
@@ -150,8 +150,8 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         logger.log_info1(f"Number of basis functions: {self.nbf}")
         logger.log_info1(f"Number of orthogonalized basis functions: {self.nmo}")
         logger.log_info1(f"Number of auxiliary basis functions: {self.naux}")
-        logger.log_info1(f"Energy convergence criterion: {self.econv:e}")
-        logger.log_info1(f"Density convergence criterion: {self.dconv:e}")
+        logger.log_info1(f"Energy convergence criterion: {self.e_tol:e}")
+        logger.log_info1(f"Density convergence criterion: {self.d_tol:e}")
         logger.log_info1(f"DIIS acceleration: {diis.do_diis}")
         logger.log_info1(f"\n==> {self.method} SCF ROUTINE <==")
         self.iter = 0
@@ -200,7 +200,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
                 f"{iter+1:4d} {self.E:20.12f} {deltaE:12.4e} {deltaD:12.4e} {np.linalg.norm(AO_grad):12.4e} {self.S2:10.5f} {diis.status:>5s}"
             )
 
-            if np.abs(deltaE) < self.econv and deltaD < self.dconv:
+            if np.abs(deltaE) < self.e_tol and deltaD < self.d_tol:
                 logger.log_info1("=" * width)
                 logger.log_info1(f"{self.method} iterations converged\n")
                 # perform final iteration
