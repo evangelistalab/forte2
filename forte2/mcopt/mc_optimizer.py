@@ -347,14 +347,10 @@ class MCOptimizer(ActiveSpaceSolver):
             self.semi.semi_canonicalize(
                 g1=self.make_average_1rdm(),
                 C_contig=C_contig,
+                irrep_indices=self.irrep_indices,
             )
-            new_irrep_labels, new_irrep_indices = self.semi.symmetrize(self.mosym)
             self.C[0] = self.semi.C_semican[:, self.mo_space.contig_to_orig].copy()
             self.eps = [self.semi.eps_semican.copy()]
-            irreps_changed = not np.array_equal(new_irrep_indices, self.irrep_indices)
-            if irreps_changed:
-                self.irrep_labels = new_irrep_labels
-                self.irrep_indices = new_irrep_indices
 
             # recompute the CI vectors in the semicanonical basis
             if self.two_component:
@@ -376,12 +372,6 @@ class MCOptimizer(ActiveSpaceSolver):
             self.ci_solver.set_ints(ints.E, ints.H, ints.V)
             # Basis change, can't restart from previous CI vectors *reliably*
             self.ci_solver.reset_eigensolver()
-            if self.system.point_group.upper() != "C1" and irreps_changed:
-                active_orbsym = [
-                    [self.irrep_indices[i] for i in active_space]
-                    for active_space in self.mo_space.active_orbitals
-                ]
-                self.ci_solver.reset_active_orbsym(active_orbsym)
             self.ci_solver.run()
 
         convergence_status = self.ci_solver.get_convergence_status()

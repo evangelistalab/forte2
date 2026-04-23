@@ -347,6 +347,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         semican = Semicanonicalizer(
             system=self.system,
             mo_space=emb_space,
+            irrep_indices=self.irrep_indices,
             do_frozen=self.semicanonicalize_frozen,
             do_active=self.semicanonicalize_active,
         )

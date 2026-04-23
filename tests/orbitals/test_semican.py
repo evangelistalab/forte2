@@ -3,6 +3,7 @@ import numpy as np
 from forte2 import System, RHF, CI, MOSpace, orbitals, State, MCOptimizer, integrals
 from forte2.helpers.comparisons import approx
 from forte2.orbitals import Semicanonicalizer
+from forte2.scf import RepairSymmetry
 
 
 def test_semican_rhf():
@@ -172,3 +173,43 @@ def test_semican_orbitals():
     assert np.allclose(
         np.abs(c_mc.T @ ovlp @ c_semi), np.eye(c_mc.shape[1]), rtol=0, atol=1e-8
     )
+
+
+def test_semican_preserves_irreps():
+    xyz = """
+    C 0.0 0.0 0.0
+    C 0.0 0.0 1.8
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        symmetry=True,
+    )
+    ref = RepairSymmetry()(RHF(charge=0)(system))
+    ci = CI(
+        states=State(nel=12, multiplicity=1, ms=0.0, symmetry=0),
+        core_orbitals=2,
+        active_orbitals=8,
+    )(ref)
+    ci.run()
+
+    semi = Semicanonicalizer(
+        mo_space=ci.mo_space,
+        system=system,
+        irrep_indices=ci.irrep_indices,
+    )
+    semi.semi_canonicalize(
+        g1=ci.make_average_1rdm(),
+        C_contig=ci.C[0][:, ci.mo_space.orig_to_contig].copy(),
+    )
+
+    _, irrep_indices, _, _, success = ci.mosym.run(
+        semi.C_semican[:, ci.mo_space.contig_to_orig].copy(),
+        semi.eps_semican[ci.mo_space.contig_to_orig].copy(),
+        repair=False,
+    )
+
+    assert success
+    assert np.array_equal(irrep_indices, ci.irrep_indices)

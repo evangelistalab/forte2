@@ -120,9 +120,9 @@ class MOSymmetryDetector:
         else:
             return self.U_ops
 
-    def run(self, C, eps):
+    def run(self, C, eps, repair=False):
         """
-        Project the MOs onto irreps of the point group and assign irrep labels.
+        Assign irrep labels to the MOs and optionally symmetrize them.
 
         Parameters
         ----------
@@ -130,6 +130,10 @@ class MOSymmetryDetector:
             MO coefficient matrix
         eps : NDArray, shape (nmo,)
             Orbital energies for detecting degenerate subsets of MOs that need to be symmetrized together
+        repair : bool, optional, default=False
+            If True, actively symmetrize mixed degenerate MO subspaces. If False,
+            only analyze the current orbitals and report failure when they are not
+            already symmetry adapted.
 
         Returns
         -------
@@ -144,28 +148,39 @@ class MOSymmetryDetector:
             This is guaranteed to only mix degenerate MOs together.
             C_orig @ Usym = C_symm
         success : bool
-            Whether the symmetrization was successful. If False, the returned irrep labels and indices have been set to totally symmetric, and the original MOs have been returned without modification.
+            Whether the orbitals are symmetry adapted after the requested operation.
+            If False, the original MOs are returned without modification. The
+            irrep labels are still inferred from a projected symmetry-adapted
+            copy when possible.
         """
-        self.success = False
-        # don't change the original C matrix
+        success = False
+        # Do not change the original C matrix unless a repaired copy is explicitly requested.
         C_loc = C.copy()
         if self.system.point_group.upper() == "C1":
             labels = ["a" for _ in range(C.shape[1])]
             irrep_indices = [0 for _ in range(C.shape[1])]
-            Usym = np.eye(C.shape[1])
-            self.success = True
+            Usym = np.eye(C.shape[1], dtype=C.dtype)
+            success = True
         else:
             # Compute character vector for each orbital in all symmetry ops
-            chars, Usym, self.success = self._compute_characters(C_loc, eps)
+            chars, Usym, C_loc, success = self._compute_characters(
+                C_loc, eps, repair=repair
+            )
+            if (not repair) and (not success):
+                scratch_chars, _, _, scratch_success = self._compute_characters(
+                    C.copy(), eps, repair=True
+                )
+                if scratch_success:
+                    chars = scratch_chars
             # assign irrep labels
             labels = self._assign_irrep_labels(chars)
 
             irrep_indices = [
                 COTTON_LABELS[self.system.point_group][label] for label in labels
             ]
-        return labels, irrep_indices, C_loc, Usym
+        return labels, irrep_indices, C_loc, Usym, success
 
-    def _compute_characters(self, C, eps):
+    def _compute_characters(self, C, eps, repair=False):
         """
         Compute the characters of all MO vectors across all symmetry operators in the point group.
 
@@ -175,6 +190,9 @@ class MOSymmetryDetector:
             MO coefficient matrix
         eps : NDArray, shape (nmo,)
             Orbital energies for detecting degenerate subsets of MOs that need to be symmetrized together
+        repair : bool, optional, default=False
+            If True, actively symmetrize mixed degenerate MO subspaces. If False,
+            only analyze the current orbitals.
 
         Returns
         -------
@@ -182,11 +200,15 @@ class MOSymmetryDetector:
             The character of each MO under each symmetry operation,
         Usym : NDArray, shape (n_mo, n_mo)
             Total unitary transformation applied to the original MOs to symmetrize them. This is guaranteed to only mix degenerate MOs together.
+        C : NDArray, shape (nbf, nmo)
+            The original MO coefficient matrix if `repair=False` or if the
+            symmetrization fails, otherwise the repaired MO coefficient matrix.
         success : bool
-            Whether the symmetrization was successful.
+            Whether the orbitals are symmetry adapted after the requested operation.
         """
         U_ops = self._get_U_ops()
         S = self.system.ints_overlap()
+        C_orig = C.copy()
 
         def _find_mixed_indices(rep):
             # find MOs that do not have pure characters (i.e. are mixed by the symmetry operation)
@@ -216,13 +238,15 @@ class MOSymmetryDetector:
             return reps_are_diagonal, mixed_indices, rep_of_mixed_operator
 
         # Usym accumulates the total unitary transformation applied to the original MOs to symmetrize them.
-        Usym = np.eye(C.shape[1])
+        Usym = np.eye(C.shape[1], dtype=C.dtype)
         for i in range(3):
             X = C.T.conj() @ S
             reps_are_diagonal, mixed_indices, rep_of_mixed_operator = (
                 _are_reps_diagonal(X)
             )
             if reps_are_diagonal:
+                break
+            if not repair:
                 break
             # we only allow up to 2 rounds of diagonalization
             # if for some reason the MOs are still not fully symmetrized,
@@ -232,19 +256,34 @@ class MOSymmetryDetector:
                     C, eps, rep_of_mixed_operator, mixed_indices, Usym
                 )
         else:
+            pass
+
+        if not reps_are_diagonal:
             for op, U in U_ops.items():
                 rep = X @ U @ C
                 maxerr = np.max(np.abs(np.abs(rep) - np.eye(rep.shape[0])))
                 if maxerr > self.geom_atol:
-                    logger.log_warning(
-                        f"Warning: MO space is not fully symmetrized after projection! Failed for op {op}, "
-                        f"with a max deviation of {maxerr:.2e}. Setting all MO irreps to totally symmetric!"
-                    )
-            return np.ones((C.shape[1], len(U_ops))), np.eye(C.shape[1]), False
+                    if repair:
+                        logger.log_warning(
+                            f"Warning: MO space is not fully symmetrized after projection! Failed for op {op}, "
+                            f"with a max deviation of {maxerr:.2e}. Setting all MO irreps to totally symmetric!"
+                        )
+                    else:
+                        logger.log_warning(
+                            f"Warning: MO space is not symmetry adapted for op {op}, "
+                            f"with a max deviation of {maxerr:.2e}. Use RepairSymmetry()(reference) before CI/CASSCF/DSRG."
+                        )
+            return (
+                np.ones((C.shape[1], len(U_ops))),
+                np.eye(C.shape[1], dtype=C.dtype),
+                C_orig,
+                False,
+            )
 
         return (
             np.column_stack([np.diag(X @ U @ C) for op, U in U_ops.items()]),
             Usym,
+            C,
             True,
         )
 
@@ -336,11 +375,14 @@ class MOSymmetryDetector:
         """
         Symmetrize a one-electron operator by group-averaging it over the point group operations.
         """
+        if self.system.point_group.upper() == "C1":
+            return [iop.copy() for iop in op]
+        U_ops = self._get_U_ops()
         sym_op = []
         for iop in op:
             isym_op = np.zeros_like(iop)
-            for op_label, U in self.U_ops.items():
+            for op_label, U in U_ops.items():
                 isym_op += U.T.conj() @ iop @ U
-            isym_op /= len(self.U_ops)
+            isym_op /= len(U_ops)
             sym_op.append(isym_op)
         return sym_op

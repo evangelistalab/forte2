@@ -1,5 +1,5 @@
 from forte2 import System, RHF, MCOptimizer, State, DSRG_MRPT2
-from forte2.scf.scf_utils import repair_symmetry
+from forte2.scf import RepairSymmetry
 from forte2.helpers.comparisons import approx
 
 
@@ -16,14 +16,13 @@ def test_dsrg_mrpt2_with_sym_c2_1():
         symmetry=True,
     )
 
-    rhf = RHF(charge=0)(system)
-    rhf = repair_symmetry(rhf)
+    ref = RepairSymmetry()(RHF(charge=0)(system))
     mc = MCOptimizer(
         states=State(nel=12, multiplicity=1, ms=0.0, symmetry=0),
         nroots=3,
         core_orbitals=2,
         active_orbitals=8,
-    )(rhf)
+    )(ref)
     mc.run()
     pt = DSRG_MRPT2(relax_reference="once")(mc)
     pt.run()
@@ -74,14 +73,13 @@ def test_dsrg_mrpt2_with_sym_c2_2():
         symmetry=True,
     )
 
-    rhf = RHF(charge=0)(system)
-    rhf = repair_symmetry(rhf)
+    ref = RepairSymmetry()(RHF(charge=0)(system))
     mc = MCOptimizer(
         states=State(nel=12, multiplicity=1, ms=0.0, symmetry=0),
         nroots=3,
         core_orbitals=2,
         active_orbitals=8,
-    )(rhf)
+    )(ref)
     mc.run()
     pt = DSRG_MRPT2(relax_reference="twice")(mc)
     pt.run()
@@ -102,7 +100,7 @@ def test_dsrg_mrpt2_with_sym_ch4():
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         symmetry=True,
     )
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    ref = RepairSymmetry()(RHF(charge=0, econv=1e-12)(system))
     mc = MCOptimizer(
         states=[
             State(nel=10, multiplicity=1, ms=0.0),
@@ -111,7 +109,7 @@ def test_dsrg_mrpt2_with_sym_ch4():
         nroots=[1, 1],
         core_orbitals=1,
         active_orbitals=9,
-    )(rhf)
+    )(ref)
     mc.run()
     pt = DSRG_MRPT2(relax_reference="twice")(mc)
     pt.run()

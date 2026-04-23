@@ -1,5 +1,5 @@
 from forte2 import System, RHF, MCOptimizer, State
-from forte2.scf import repair_symmetry
+from forte2.scf import RepairSymmetry
 from forte2.helpers.comparisons import approx
 
 
@@ -30,15 +30,14 @@ def test_c2_symmetry_repair():
     )
 
     rhf = RHF(charge=0)(system)
-    rhf.run()
-    rhf = repair_symmetry(rhf)
+    ref = RepairSymmetry()(rhf)
 
     mcscf = MCOptimizer(
         states=State(nel=12, multiplicity=1, ms=0.0, symmetry=0),
         nroots=3,
         core_orbitals=2,
         active_orbitals=8,
-    )(rhf)
+    )(ref)
     mcscf.run()
 
     ref_ci = [-75.4911788852, -75.4879859747, -75.4732134962]

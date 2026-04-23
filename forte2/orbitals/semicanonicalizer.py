@@ -54,6 +54,7 @@ class Semicanonicalizer:
         self,
         system: System,
         mo_space: MOSpace | EmbeddingMOSpace = None,
+        irrep_indices: list[int] | np.ndarray = None,
         mix_inactive: bool = False,
         mix_active: bool = False,
         do_frozen: bool = True,
@@ -63,6 +64,7 @@ class Semicanonicalizer:
         self.two_component = system.two_component
         self.system = system
         self.fock_builder = system.fock_builder
+        self.irrep_indices = irrep_indices
         # these are only used for MOSpace
         self.mix_inactive = mix_inactive
         self.mix_active = mix_active
@@ -70,7 +72,7 @@ class Semicanonicalizer:
         self.do_frozen = do_frozen
         self.do_active = do_active
 
-    def semi_canonicalize(self, g1, C_contig):
+    def semi_canonicalize(self, g1, C_contig, irrep_indices=None):
         """
         Perform the semi-canonicalization.
 
@@ -82,52 +84,35 @@ class Semicanonicalizer:
         C_contig : np.ndarray
             The molecular orbital coefficients, in the "contiguous" order of the orbitals.
             Note that all other quantities are also defined in this order.
+        irrep_indices : list[int] | np.ndarray, optional
+            Irrep index for each orbital in the original MO ordering. If provided,
+            semicanonicalization is performed within each irrep block of each
+            elementary orbital space, preserving symmetry by construction.
         """
+        if irrep_indices is not None:
+            self.irrep_indices = irrep_indices
         self.fock = self._build_fock(g1, C_contig)
         eps = np.zeros(self.mo_space.nmo)
         # U_init = I so that skipped blocks are not modified
         U = np.eye(self.mo_space.nmo, dtype=self.fock.dtype)
 
-        def _eigh(sl):
-            return np.linalg.eigh(self.fock[sl, sl])
-
         slice_list = self._generate_elementary_spaces()
+        irrep_blocks = self._get_contiguous_irrep_indices()
 
         for sl in slice_list:
-            # avoid calling eigh on empty arrays
-            if sl.stop - sl.start > 0:
-                e, c = _eigh(sl)
-                eps[sl] = e
-                U[sl, sl] = c
+            block_indices = np.arange(sl.start, sl.stop, dtype=int)
+            for idx in self._partition_indices_by_irrep(block_indices, irrep_blocks):
+                if idx.size == 0:
+                    continue
+                e, c = np.linalg.eigh(self.fock[np.ix_(idx, idx)])
+                eps[idx] = e
+                U[np.ix_(idx, idx)] = c
 
         self.U = U
         self.Uactv = U[self.mo_space.actv, self.mo_space.actv].copy()
         self.C_semican = C_contig @ U
         self.eps_semican = eps
         self.fock_semican = U.T.conj() @ self.fock @ U
-
-    def symmetrize(self, mosym):
-        """
-        Symmetrize the semi-canonical orbitals using the provided MOSymmetryDetector object.
-
-        Parameters
-        ----------
-        mosym : MOSymmetryDetector
-            The MOSymmetryDetector object used to symmetrize the orbitals.
-
-        Returns
-        -------
-        irrep_labels : list of str
-            Irrep label for each MO, e.g. ['A1', 'B2', ...]
-        irrep_indices : list of int
-            Irrep index (0-indexed) for each MO, e.g. [0, 3, ...]
-        """
-        labels, indices, C_sym, U_sym = mosym.run(self.C_semican, self.eps_semican)
-        self.C_semican = C_sym
-        self.U = self.U @ U_sym
-        self.Uactv = self.U[self.mo_space.actv, self.mo_space.actv].copy()
-        self.fock_semican = U_sym.T.conj() @ self.fock_semican @ U_sym
-        return labels, indices
 
     def _generate_elementary_spaces(self):
         slice_list = []
@@ -159,6 +144,34 @@ class Semicanonicalizer:
                 slice_list.append(self.mo_space.frozen_virt)
 
         return slice_list
+
+    def _get_contiguous_irrep_indices(self):
+        if self.irrep_indices is None or self.system.point_group.upper() == "C1":
+            return None
+        irrep_indices = np.asarray(self.irrep_indices)
+        if irrep_indices.ndim != 1:
+            raise ValueError(
+                "Semicanonicalizer expects a flat irrep index vector for the current MO basis."
+            )
+        if irrep_indices.shape[0] != self.mo_space.nmo:
+            raise ValueError(
+                f"Expected {self.mo_space.nmo} irrep indices, got {irrep_indices.shape[0]}."
+            )
+        return irrep_indices[self.mo_space.contig_to_orig]
+
+    def _partition_indices_by_irrep(self, indices, contig_irreps):
+        if contig_irreps is None or indices.size == 0:
+            return [indices]
+
+        blocks = []
+        seen = []
+        for idx in indices:
+            irrep = contig_irreps[idx]
+            if irrep in seen:
+                continue
+            seen.append(irrep)
+            blocks.append(indices[contig_irreps[indices] == irrep])
+        return blocks
 
     def _build_fock(self, g1, C_contig):
         # core contribution to the generalized Fock matrix

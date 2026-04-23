@@ -88,10 +88,11 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         self._regex = "^([a-zA-Z]{1,2})([0-9]+)?-?([0-9]+)?\\(?((?:\\/?[1-9]{1}[spdfgh]{1}[a-zA-Z0-9-]*)*)\\)?$"
 
     def __call__(self, parent_method):
+        self.reference_method = getattr(parent_method, "reference_method", parent_method)
         assert isinstance(
-            parent_method, (RHF, ROHF, GHF)
+            self.reference_method, (RHF, ROHF, GHF)
         ), f"Parent method must be RHF, ROHF, or GHF, got {type(parent_method)}"
-        if isinstance(parent_method, ROHF):
+        if isinstance(self.reference_method, ROHF):
             logger.log_info1(
                 "*** AVAS will take all singly occupied orbitals to be active! ***"
             )
@@ -152,9 +153,9 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             assert (
                 self.num_active_uocc >= 0
             ), "Number of active unoccupied orbitals cannot be negative."
-            if isinstance(self.parent_method, ROHF):
+            if isinstance(self.reference_method, ROHF):
                 nactv = (
-                    int(self.parent_method.ms) * 2
+                    int(self.reference_method.ms) * 2
                     + self.num_active_docc
                     + self.num_active_uocc
                 )

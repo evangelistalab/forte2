@@ -70,18 +70,11 @@ class DSRG_MRPT2(DSRGBase):
             self.E_core_orig, self.H_orig, self.V_orig, g1, g2
         )
 
-        self.semicanonicalizer.semi_canonicalize(g1=g1, C_contig=self._C)
-        new_irrep_labels, new_irrep_indices = self.semicanonicalizer.symmetrize(
-            self.mosym
+        self.semicanonicalizer.semi_canonicalize(
+            g1=g1,
+            C_contig=self._C,
+            irrep_indices=self.irrep_indices,
         )
-        irreps_changed = not np.array_equal(new_irrep_indices, self.irrep_indices)
-        if irreps_changed:
-            self.irrep_labels = new_irrep_labels
-            self.irrep_indices = new_irrep_indices
-            # do NOT update active_orbsym in the CI solver because 
-            # the semican U = U_semican @ U_sym, and
-            # we transform back to the original basis for CI, so the active_orbsym
-            # seen by the CI solver is unchanged.
 
         # Freeze core orbitals by removing them from the semicanonicalized quantities
         # The energy contributions are accounted for in self.E_core_orig

@@ -1696,8 +1696,12 @@ class CI(CISolver):
                 system=self.system,
             )
             C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
-            semi.semi_canonicalize(g1=self.make_average_1rdm(), C_contig=C_contig)
-            self.C[0] = semi.C_semican[self.mo_space.contig_to_orig].copy()
+            semi.semi_canonicalize(
+                g1=self.make_average_1rdm(),
+                C_contig=C_contig,
+                irrep_indices=self.irrep_indices,
+            )
+            self.C[0] = semi.C_semican[:, self.mo_space.contig_to_orig].copy()
 
             # recompute the CI vectors in the semicanonical basis
             ints = RestrictedMOIntegrals(
@@ -1859,8 +1863,12 @@ class RelCI(RelCISolver):
                 system=self.system,
             )
             C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
-            semi.semi_canonicalize(g1=self.make_average_1rdm(), C_contig=C_contig)
-            self.C[0] = semi.C_semican[self.mo_space.contig_to_orig].copy()
+            semi.semi_canonicalize(
+                g1=self.make_average_1rdm(),
+                C_contig=C_contig,
+                irrep_indices=self.irrep_indices,
+            )
+            self.C[0] = semi.C_semican[:, self.mo_space.contig_to_orig].copy()
 
             # recompute the CI vectors in the semicanonical basis
             ints = SpinorbitalIntegrals(
