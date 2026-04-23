@@ -195,8 +195,9 @@ class RelDSRG_MRPT3(DSRGBase):
         ints["B"] = dict()
         C_core = self._C_semican[:, self.core]
         C_actv = self._C_semican[:, self.actv]
-        C_virt = self._C_semican[:, self.virt].conj()
-        ints["B"]["vv"] = self.fock_builder.B_tensor_gen_block_spinor(C_virt, C_virt).transpose(1, 2, 0).copy()
+        C_virt = self._C_semican[:, self.virt]
+        ints["B"]["vv"] = self.fock_builder.B_tensor_gen_block_spinor(C_virt, C_virt).transpose(1, 2, 0).conj()
+        ints["B"]["av"] = self.fock_builder.B_tensor_gen_block_spinor(C_actv, C_virt).transpose(1, 2, 0).conj()
 
         return ints, cumulants
 
