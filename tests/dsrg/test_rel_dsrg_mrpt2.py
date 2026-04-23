@@ -140,6 +140,7 @@ def test_mrpt2_carbon_rel_sa():
         ]
     )
 
+
 @pytest.mark.slow
 def test_mrpt2_se_rel_sa_gauss_nuc():
     # Test the zero-field splitting of Se atom with Gaussian nuclear charges
@@ -209,6 +210,7 @@ def test_mrpt2_s_rel_sa_gauss_nuc():
     assert (dsrg.relax_eigvals[5] - dsrg.relax_eigvals[4]) * EH_TO_WN == pytest.approx(
         387.5234521376601, rel=1e-4
     )
+
 
 @pytest.mark.slow
 def test_mrpt2_sh_with_slow():

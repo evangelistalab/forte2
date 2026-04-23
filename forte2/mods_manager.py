@@ -18,10 +18,20 @@ def load_mods():
     Mods are expected to be python files with a register(forte2) function of the form
 
     ```python
-    # ~/.forte2/mods/my_mod.py
+    # ~/.forte2/mods/my_mod/my_mod.py
+
+    def new_feature(**args, **kwargs):
+        ...
 
     def register(forte2):
-        ...
+        forte2.new_feature = new_feature
+    ```
+
+    And remember to include an __init__.py file in the mods/my_mod/ directory to make it a package:
+
+    ```python
+    # ~/.forte2/mods/my_mod/__init__.py
+    from .my_mod import register
     ```
     """
     user_path = Path.home() / ".forte2/mods"
@@ -41,6 +51,10 @@ def load_mods():
                 mod = importlib.import_module(name)
                 if hasattr(mod, "register"):
                     mod.register(importlib.import_module("forte2"))
+                else:
+                    logger.log_warning(
+                        f"[mods_manager] mod {name} from {path} does not have a register(forte2) function"
+                    )
             except Exception as e:
                 logger.log_warning(
                     f"[mods_manager] failed to load mod {name} from {path}: {e}"
@@ -58,10 +72,20 @@ def enable_mod(modname: str, paths=None):
     Optional mods are expected to be python files with a register(forte2) function of the form
 
     ```python
-    # ~/.forte2/optional_mods/my_mod.py
+    # ~/.forte2/optional_mods/my_mod/my_mod.py
+
+    def new_feature(**args, **kwargs):
+        ...
 
     def register(forte2):
-        ...
+        forte2.new_feature = new_feature
+    ```
+
+    And remember to include an __init__.py file in the optional_mods/my_mod/ directory to make it a package:
+
+    ```python
+    # ~/.forte2/optional_mods/my_mod/__init__.py
+    from .my_mod import register
     ```
 
     Parameters

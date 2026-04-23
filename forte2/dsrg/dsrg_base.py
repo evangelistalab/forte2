@@ -7,6 +7,8 @@ from forte2.base_classes import SystemMixin, MOsMixin, MOSpaceMixin, ActiveSpace
 from forte2.helpers import logger
 from forte2.orbitals import Semicanonicalizer
 from forte2.ci.ci_utils import pretty_print_ci_summary
+from .dsrg_common import _DSRGHelper
+from .rel_dsrg_common import _RelDSRGHelper
 
 
 @dataclass
@@ -106,6 +108,8 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
         self.pa = slice(0, self.nact)
         self.hc = self.core
         self.pv = slice(self.nact, self.nact + self.nvirt)
+
+        self.dsrg_helper = _RelDSRGHelper(self) if self.two_component else _DSRGHelper(self)
 
         MOsMixin.copy_from_upstream(self, self.parent_method)
         perm = self.mo_space.orig_to_contig
