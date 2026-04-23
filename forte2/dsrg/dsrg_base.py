@@ -8,6 +8,8 @@ from forte2.mcopt.mc_optimizer import MCOptimizerBase
 from forte2.helpers import logger
 from forte2.orbitals import Semicanonicalizer
 from forte2.ci.ci_utils import pretty_print_ci_summary
+from .dsrg_common import _DSRGHelper
+from .rel_dsrg_common import _RelDSRGHelper
 
 
 @dataclass
@@ -103,7 +105,7 @@ class DSRGBase(Method):
         self.hc = self.core
         self.pv = slice(self.nact, self.nact + self.nvirt)
 
-        self.mos = self.parent_method.mos.copy()
+        self.dsrg_helper = _RelDSRGHelper(self) if self.two_component else _DSRGHelper(self)
         perm = self.mo_space.orig_to_contig
         self._C = self.mos.C[0][:, perm].copy()
 
