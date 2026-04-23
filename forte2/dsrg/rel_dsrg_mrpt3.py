@@ -199,6 +199,8 @@ class RelDSRG_MRPT3(DSRGBase):
         ints["B"]["vv"] = self.fock_builder.B_tensor_gen_block_spinor(C_virt, C_virt).transpose(1, 2, 0).conj()
         ints["B"]["av"] = self.fock_builder.B_tensor_gen_block_spinor(C_actv, C_virt).transpose(1, 2, 0).conj()
         ints["B"]["cv"] = self.fock_builder.B_tensor_gen_block_spinor(C_core, C_virt).transpose(1, 2, 0).conj()
+        ints["B"]["vc"] = ints["B"]["cv"].transpose(1, 0, 2).conj()
+        ints["B"]["va"] = ints["B"]["av"].transpose(1, 0, 2).conj()
 
         return ints, cumulants
 
@@ -459,6 +461,7 @@ class RelDSRG_MRPT3(DSRGBase):
         H1_T2_C2_non_od(self.Htilde1A1_2b, _temp_1b, self.T2_1, self.cumulants)
         H2_T1_C2_non_od(self.Htilde1A1_2b, _temp_2b, self.T1_1, self.cumulants)
         H2_T2_C2_non_od(self.Htilde1A1_2b, _temp_2b, self.T2_1, self.cumulants)
+        H2_T2_C1_large(self.Htilde1A1_1b, self.ints['B'], self.T2_1, self.cumulants, scale=2.0)
         H2_T1_C2_large(self.Htilde1A1_2b, self.ints['B'], self.T1_1, self.cumulants, scale=2.0)
         H2_T2_C2_large(self.Htilde1A1_2b, self.ints['B'], self.T2_1, self.cumulants, scale=2.0)
         hermitize_and_antisymmetrize_two_body(self.Htilde1A1_2b)

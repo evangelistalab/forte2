@@ -347,8 +347,6 @@ def H2_T2_C1_non_od(C1, V, T2, cumulants, scale=1.0):
 	C1["cv"] += scale * -1.000 * np.einsum('iuab,jbiv,vu->ja', T2['cavv'], V['cvca'], gamma1, optimize=True)
 	C1["cv"] += scale * -0.500 * np.einsum('uvab,ibwx,xv,wu->ia', T2['aavv'], V['cvaa'], gamma1, gamma1, optimize=True)
 	C1["cv"] += scale * -0.250 * np.einsum('uvab,ibwx,wxuv->ia', T2['aavv'], V['cvaa'], lambda2, optimize=True)
-	C1["cv"] += scale * -0.500 * np.einsum('ijab,abjc->ic', T2['ccvv'], V['vvcv'], optimize=True)
-	C1["cv"] += scale * -0.500 * np.einsum('iuab,abvc,vu->ic', T2['cavv'], V['vvav'], gamma1, optimize=True)
 	C1["ca"] += scale * +0.500 * np.einsum('iuvw,xyzr,ru,wzxy->iv', T2['caaa'], V['aaaa'], eta1, lambda2, optimize=True)
 	C1["ca"] += scale * -0.500 * np.einsum('iuvw,xyzr,wy,zrux->iv', T2['caaa'], V['aaaa'], eta1, lambda2, optimize=True)
 	C1["ca"] += scale * +0.500 * np.einsum('iuvw,xyzr,ru,wzxy->iv', T2['caaa'], V['aaaa'], gamma1, lambda2, optimize=True)
@@ -385,8 +383,25 @@ def H2_T2_C1_non_od(C1, V, T2, cumulants, scale=1.0):
 	C1["av"] += scale * -1.000 * np.einsum('uvwa,xayb,wx,yv->ub', T2['aaav'], V['avav'], eta1, gamma1, optimize=True)
 	C1["av"] += scale * -1.000 * np.einsum('uvwa,xayb,wyvx->ub', T2['aaav'], V['avav'], lambda2, optimize=True)
 	C1["av"] += scale * -0.500 * np.einsum('uvwa,xayb,wyuv->xb', T2['aaav'], V['avav'], lambda2, optimize=True)
-	C1["av"] += scale * +0.500 * np.einsum('iuab,abic->uc', T2['cavv'], V['vvcv'], optimize=True)
-	C1["av"] += scale * -0.500 * np.einsum('uvab,abwc,wv->uc', T2['aavv'], V['vvav'], gamma1, optimize=True)
+
+def H2_T2_C1_large(C1, B, T2, cumulants, scale=1.0):
+	gamma1 = cumulants["gamma1"]
+	nv = B['vv'].shape[0]
+	for a in range(nv):
+	# C1["cv"] += scale * -0.500 * np.einsum('ijab,abjc->ic', T2['ccvv'], V['vvcv'], optimize=True)
+		C1["cv"] += scale * -0.500 * np.einsum('ijb,jP,bcP->ic', T2['ccvv'][..., a, :], B['vc'][a, ...], B['vv'], optimize="optimal")
+		C1["cv"] += scale * +0.500 * np.einsum('ijb,cP,bjP->ic', T2['ccvv'][..., a, :], B['vv'][a, ...], B['vc'], optimize="optimal")
+	# C1["cv"] += scale * -0.500 * np.einsum('iuab,abvc,vu->ic', T2['cavv'], V['vvav'], gamma1, optimize=True)
+		C1["cv"] += scale * -0.500 * np.einsum('iub,vP,bcP,vu->ic', T2['cavv'][..., a, :], B['va'][a, ...], B['vv'], gamma1, optimize="optimal")
+		C1["cv"] += scale * +0.500 * np.einsum('iub,cP,bvP,vu->ic', T2['cavv'][..., a, :], B['vv'][a, ...], B['va'], gamma1, optimize="optimal")
+	# C1["av"] += scale * +0.500 * np.einsum('iuab,abic->uc', T2['cavv'], V['vvcv'], optimize=True)
+		C1["av"] += scale * +0.500 * np.einsum('iub,iP,bcP->uc', T2['cavv'][..., a, :], B['vc'][a, ...], B['vv'], optimize="optimal")
+		C1["av"] += scale * -0.500 * np.einsum('iub,cP,biP->uc', T2['cavv'][..., a, :], B['vv'][a, ...], B['vc'], optimize="optimal")
+	# C1["av"] += scale * -0.500 * np.einsum('uvab,abwc,wv->uc', T2['aavv'], V['vvav'], gamma1, optimize=True)
+		C1["av"] += scale * -0.500 * np.einsum('uvb,wP,bcP,wv->uc', T2['aavv'][..., a, :], B['va'][a, ...], B['vv'], gamma1, optimize=True)
+		C1["av"] += scale * +0.500 * np.einsum('uvb,cP,bwP,wv->uc', T2['aavv'][..., a, :], B['vv'][a, ...], B['va'], gamma1, optimize=True)
+
+
 
 def H1_T2_C2_non_od(C2, F, T2, cumulants, scale=1.0):
 	# 22 lines
@@ -474,7 +489,6 @@ def H2_T2_C2_non_od(C2, V, T2, cumulants, scale=1.0):
 	C2["ccav"] += scale * +0.500 * np.einsum('ijua,vawb,uv->ijwb', T2['ccav'], V['avav'], eta1, optimize=True)
 	C2["ccav"] += scale * +1.000 * np.einsum('ijab,kbju->ikua', T2['ccvv'], V['cvca'], optimize=True)
 	C2["ccav"] += scale * -1.000 * np.einsum('iuab,jbvw,wu->ijva', T2['cavv'], V['cvaa'], gamma1, optimize=True)
-	C2["ccav"] += scale * +0.250 * np.einsum('ijab,abuc->ijuc', T2['ccvv'], V['vvav'], optimize=True)
 	C2["ccaa"] += scale * +0.125 * np.einsum('ijuv,klij->kluv', T2['ccaa'], V['cccc'], optimize=True)
 	C2["ccaa"] += scale * +0.250 * np.einsum('iuvw,jkix,xu->jkvw', T2['caaa'], V['ccca'], gamma1, optimize=True)
 	C2["ccaa"] += scale * -1.000 * np.einsum('ijuv,kwjx,vw->ikux', T2['ccaa'], V['caca'], eta1, optimize=True)
@@ -496,7 +510,6 @@ def H2_T2_C2_non_od(C2, V, T2, cumulants, scale=1.0):
 	C2["caav"] += scale * +1.000 * np.einsum('iuva,waxb,vw->iuxb', T2['caav'], V['avav'], eta1, optimize=True)
 	C2["caav"] += scale * +1.000 * np.einsum('iuab,jbiv->juva', T2['cavv'], V['cvca'], optimize=True)
 	C2["caav"] += scale * +1.000 * np.einsum('uvab,ibwx,xv->iuwa', T2['aavv'], V['cvaa'], gamma1, optimize=True)
-	C2["caav"] += scale * +0.500 * np.einsum('iuab,abvc->iuvc', T2['cavv'], V['vvav'], optimize=True)
 	C2["aavv"] += scale * -1.000 * np.einsum('iuva,wxib,vx->uwab', T2['caav'], V['aacv'], eta1, optimize=True)
 	C2["aavv"] += scale * -0.125 * np.einsum('uvab,wxyz,zv,yu->wxab', T2['aavv'], V['aaaa'], eta1, eta1, optimize=True)
 	C2["aavv"] += scale * +0.125 * np.einsum('uvab,wxyz,zv,yu->wxab', T2['aavv'], V['aaaa'], gamma1, gamma1, optimize=True)
@@ -519,7 +532,6 @@ def H2_T2_C2_non_od(C2, V, T2, cumulants, scale=1.0):
 	C2["aaav"] += scale * -1.000 * np.einsum('uvwa,xyzr,rv,wy->uxza', T2['aaav'], V['aaaa'], eta1, gamma1, optimize=True)
 	C2["aaav"] += scale * +1.000 * np.einsum('uvwa,xyzr,wy,rv->uxza', T2['aaav'], V['aaaa'], eta1, gamma1, optimize=True)
 	C2["aaav"] += scale * +0.500 * np.einsum('uvwa,xayb,wx->uvyb', T2['aaav'], V['avav'], eta1, optimize=True)
-	C2["aaav"] += scale * +0.250 * np.einsum('uvab,abwc->uvwc', T2['aavv'], V['vvav'], optimize=True)
 	C2["cavv"] += scale * +1.000 * np.einsum('ijua,vwjb,uw->ivab', T2['ccav'], V['aacv'], eta1, optimize=True)
 	C2["cavv"] += scale * +1.000 * np.einsum('iuva,jwib,vw->juab', T2['caav'], V['cacv'], eta1, optimize=True)
 	C2["cavv"] += scale * +0.250 * np.einsum('ijab,kuij->kuab', T2['ccvv'], V['cacc'], optimize=True)
@@ -556,5 +568,17 @@ def H2_T2_C2_large(C2, B, T2, cumulants, scale=1.0):
 	# C2["ccvv"] += scale * +0.250 * np.einsum('ijua,vabc,uv->ijbc', T2['ccav'], V['avvv'], eta1, optimize=True)
 		C2["ccvv"] += scale * +0.250 * np.einsum('iju,vbP,cP,uv->ijbc', T2['ccav'][..., a], B['av'], B['vv'][a, ...], eta1, optimize="optimal")
 		C2["ccvv"] += scale * -0.250 * np.einsum('iju,vcP,bP,uv->ijbc', T2['ccav'][..., a], B['av'], B['vv'][a, ...], eta1, optimize="optimal")
+
+	# C2["ccav"] += scale * +0.250 * np.einsum('ijab,abuc->ijuc', T2['ccvv'], V['vvav'], optimize=True)
+		C2["ccav"] += scale * +0.250 * np.einsum('ijb,uP,bcP->ijuc', T2['ccvv'][..., a, :], B['va'][a, ...], B['vv'], optimize="optimal")
+		C2["ccav"] += scale * -0.250 * np.einsum('ijb,cP,buP->ijuc', T2['ccvv'][..., a, :], B['vv'][a, ...], B['va'], optimize="optimal")
+
+	# C2["caav"] += scale * +0.500 * np.einsum('iuab,abvc->iuvc', T2['cavv'], V['vvav'], optimize=True)
+		C2["caav"] += scale * +0.500 * np.einsum('iub,vP,bcP->iuvc', T2['cavv'][..., a, :], B['va'][a, ...], B['vv'], optimize="optimal")
+		C2["caav"] += scale * -0.500 * np.einsum('iub,cP,bvP->iuvc', T2['cavv'][..., a, :], B['vv'][a, ...], B['va'], optimize="optimal")
+
+	# C2["aaav"] += scale * +0.250 * np.einsum('uvab,abwc->uvwc', T2['aavv'], V['vvav'], optimize=True)
+		C2["aaav"] += scale * +0.250 * np.einsum('uvb,wP,bcP->uvwc', T2['aavv'][..., a, :], B['va'][a, ...], B['vv'], optimize="optimal")
+		C2["aaav"] += scale * -0.250 * np.einsum('uvb,cP,bwP->uvwc', T2['aavv'][..., a, :], B['vv'][a, ...], B['va'], optimize="optimal")
 
 # fmt: on
