@@ -54,7 +54,7 @@ def test_mrpt2_n2_nonrel():
     assert dsrg.relax_energies[2] == approx(
         [-109.25344824472272, -109.25344824472299, -109.08026606599341]
     )
-test_mrpt2_n2_nonrel()
+
 
 def test_mrpt3_n_atom_rel_sa():
     xyz = """
@@ -68,7 +68,7 @@ def test_mrpt3_n_atom_rel_sa():
         x2c_type="so",
         snso_type="row-dependent",
     )
-    mf = GHF(charge=0, die_if_not_converged=False)(system)
+    mf = GHF(charge=-1, die_if_not_converged=False)(system)
     mc = RelMCOptimizer(
         nel=7,
         nroots=14,
@@ -79,3 +79,6 @@ def test_mrpt3_n_atom_rel_sa():
     )(mf)
     dsrg = RelDSRG_MRPT3(flow_param=0.35, relax_reference="once")(mc)
     dsrg.run()
+    assert (dsrg.relax_eigvals[4] - dsrg.relax_eigvals[3]) * EH_TO_WN == pytest.approx(
+        19959.81596, abs=1e-2
+    )
