@@ -1,6 +1,4 @@
 from dataclasses import dataclass
-from itertools import product
-from copy import deepcopy
 
 import numpy as np
 
@@ -193,6 +191,12 @@ class RelDSRG_MRPT3(DSRGBase):
             -self.flow_param
             * (ints["eps"]["h"][:, None] - ints["eps"]["p"][None, :]) ** 2
         )
+
+        ints["B"] = dict()
+        C_core = self._C_semican[:, self.core]
+        C_actv = self._C_semican[:, self.actv]
+        C_virt = self._C_semican[:, self.virt].conj()
+        ints["B"]["vv"] = self.fock_builder.B_tensor_gen_block_spinor(C_virt, C_virt).transpose(1, 2, 0).copy()
 
         return ints, cumulants
 
@@ -453,6 +457,7 @@ class RelDSRG_MRPT3(DSRGBase):
         H1_T2_C2_non_od(self.Htilde1A1_2b, _temp_1b, self.T2_1, self.cumulants)
         H2_T1_C2_non_od(self.Htilde1A1_2b, _temp_2b, self.T1_1, self.cumulants)
         H2_T2_C2_non_od(self.Htilde1A1_2b, _temp_2b, self.T2_1, self.cumulants)
+        H2_T2_C2_large(self.Htilde1A1_2b, self.ints['B'], self.T2_1, self.cumulants, scale=2.0)
         hermitize_and_antisymmetrize_two_body(self.Htilde1A1_2b)
         hermitize_one_body(self.Htilde1A1_1b)
         self.T1_2, self.T2_2 = self._build_tamps(
