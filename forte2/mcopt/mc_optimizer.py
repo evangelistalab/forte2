@@ -229,7 +229,9 @@ class MCOptimizer(ActiveSpaceSolver):
         logger.log_info1("Entering orbital optimization loop")
         logger.log_info1("\nConvergence criteria ('.' if satisfied, 'x' otherwise):")
         logger.log_info1(f"  {'1. RMS(grad)':<32} < {self.gconv:.1e}")
-        logger.log_info1(f"  {'2. max(abs(E_CI_i - E_CI_old_i))':<32} < {self.econv:.1e}")
+        logger.log_info1(
+            f"  {'2. max(abs(E_CI_i - E_CI_old_i))':<32} < {self.econv:.1e}"
+        )
         logger.log_info1(f"  {'3. abs(E_avg - E_avg_old)':<32} < {self.econv:.1e}\n")
 
         logger.log_info1("=" * width)
@@ -272,11 +274,15 @@ class MCOptimizer(ActiveSpaceSolver):
             # 2. Convergence checks
             _dg = self.lbfgs_solver.g - self.g_old
             self.dg_rms = np.sqrt(np.mean((_dg.conj() * _dg).real))
-            self.g_rms = np.sqrt(np.mean((self.lbfgs_solver.g.conj() * self.lbfgs_solver.g).real))
+            self.g_rms = np.sqrt(
+                np.mean((self.lbfgs_solver.g.conj() * self.lbfgs_solver.g).real)
+            )
             self.g_old = self.lbfgs_solver.g.copy()
             conv, conv_str = self._check_convergence()
             lbfgs_str = f"{self.lbfgs_solver.iter}/{'Y' if self.lbfgs_solver.converged else 'N'}"
-            iter_info = f"{self.iter:>10d} {self.E_avg.real:>20.10f} {self.E_orb.real:>20.10f} "
+            iter_info = (
+                f"{self.iter:>10d} {self.E_avg.real:>20.10f} {self.E_orb.real:>20.10f} "
+            )
             iter_info += f"{self.delta_ci_avg.real:>12.4e} {self.max_ci_de:>12.4e} {self.g_rms.real:>12.4e} {lbfgs_str:>8} {conv_str:>8}"
             if conv:
                 logger.log_info1(iter_info)
@@ -325,7 +331,9 @@ class MCOptimizer(ActiveSpaceSolver):
 
         logger.log_info1("=" * width)
         if self.converged:
-            logger.log_info1(f"Orbital optimization converged in {self.iter} iterations.")
+            logger.log_info1(
+                f"Orbital optimization converged in {self.iter} iterations."
+            )
         logger.log_info1(f"Final orbital optimized energy: {self.E_avg:.10f}")
 
         # undo _make_spaces_contiguous
@@ -492,3 +500,24 @@ class MCOptimizer(ActiveSpaceSolver):
 
 @dataclass
 class RelMCOptimizer(RelActiveSpaceSolver, MCOptimizer): ...
+
+
+@dataclass
+class MCOptimizerWithNO(MCOptimizer):
+    def __init__(self, *args, C_no=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._C_no_user = C_no  # store NOs
+
+    def _startup(self):
+        # let base class set up everything
+        super()._startup()
+
+        if self._C_no_user is not None:
+            # overwrite BOTH spins in the local copy used by the optimizer
+            self.C[0] = self._C_no_user.copy()
+            if len(self.C) > 1:
+                self.C[1] = self._C_no_user.copy()
+
+            # IMPORTANT: also update the contiguous copy used internally
+            perm = self.mo_space.orig_to_contig
+            self._C = self.C[0][:, perm].copy()

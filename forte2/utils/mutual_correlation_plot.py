@@ -234,14 +234,19 @@ def mutual_correlation_plot(
             # If the file doesn't exist, just skip
             print(f"Warning: Could not find file {tga_file}")
 
-    if mca.M1.shape[0] != num_orbitals:
+    plot_indices = list(indices)
+
+    if mca.M1.shape[0] <= max(plot_indices):
         raise ValueError(
-            "The number of orbitals used in the MutualCorrelationAnalysis object does not match the number of orbitals provided."
+            "The MutualCorrelationAnalysis object does not contain the requested global orbital indices."
         )
+
+    Gamma1_diag_plot = np.diag(mca.Γ1)[plot_indices]
+    M2_plot = mca.M2[np.ix_(plot_indices, plot_indices)]
 
     # Label each orbital with the occupation number and index
     for i in range(num_orbitals):
-        val = mca.Γ1[i, i]
+        val = Gamma1_diag_plot[i]
         color, alpha = get_color_and_alpha_smooth(val, 0.01, 2, cmap)
         ax.text(
             x_coords[i] * 1.5,
@@ -263,8 +268,40 @@ def mutual_correlation_plot(
     # Plot mutual correlation connections
     for i in range(num_orbitals):
         for j in range(i + 1, num_orbitals):
-            val = mca.M2[i, j]
+            val = M2_plot[i, j]
             plot_smooth_connection(ax, x_coords, y_coords, i, j, val, vmin, vmax, cmap)
+
+    # if mca.M1.shape[0] != num_orbitals:
+    #     raise ValueError(
+    #         "The number of orbitals used in the MutualCorrelationAnalysis object does not match the number of orbitals provided."
+    #     )
+
+    # Label each orbital with the occupation number and index
+    # for i in range(num_orbitals):
+    #     val = mca.Γ1[i, i]
+    #     color, alpha = get_color_and_alpha_smooth(val, 0.01, 2, cmap)
+    #     ax.text(
+    #         x_coords[i] * 1.5,
+    #         y_coords[i] * 1.5,
+    #         f"{val:.2f} ({indices[i]})",
+    #         ha="center",
+    #         va="center",
+    #         fontsize=fontsize,
+    #     )
+    #     r = 0.05
+    #     circle = plt.Circle(
+    #         (x_coords[i], y_coords[i]),
+    #         r,
+    #         alpha=1.0,
+    #         zorder=2,
+    #     )
+    #     ax.add_artist(circle)
+
+    # # Plot mutual correlation connections
+    # for i in range(num_orbitals):
+    #     for j in range(i + 1, num_orbitals):
+    #         val = mca.M2[i, j]
+    #         plot_smooth_connection(ax, x_coords, y_coords, i, j, val, vmin, vmax, cmap)
 
     # Formatting
     ax.set_xlim(-3, 3)
