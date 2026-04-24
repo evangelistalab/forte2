@@ -7,7 +7,7 @@ from forte2.helpers.comparisons import approx
 from forte2.data.atom_data import EH_TO_WN
 
 
-def test_mrpt2_n2_nonrel():
+def test_mrpt3_n2_nonrel():
     erhf = -108.954140898736
     emcscf = -109.0811491968
 
@@ -56,9 +56,9 @@ def test_mrpt2_n2_nonrel():
     )
 
 
-def test_mrpt3_n_atom_rel_sa():
+def test_mrpt3_f_atom_rel_sa():
     xyz = """
-    N 0 0 0
+    F 0 0 0
     """
 
     system = System(
@@ -67,11 +67,12 @@ def test_mrpt3_n_atom_rel_sa():
         auxiliary_basis_set="cc-pVQZ-JKFIT",
         x2c_type="so",
         snso_type="row-dependent",
+        use_gaussian_charges=True,
     )
     mf = GHF(charge=-1, die_if_not_converged=False)(system)
     mc = RelMCOptimizer(
-        nel=7,
-        nroots=14,
+        nel=9,
+        nroots=6,
         active_orbitals=8,
         core_orbitals=2,
         econv=1e-8,
@@ -80,6 +81,5 @@ def test_mrpt3_n_atom_rel_sa():
     dsrg = RelDSRG_MRPT3(flow_param=0.35, relax_reference="once")(mc)
     dsrg.run()
     assert (dsrg.relax_eigvals[4] - dsrg.relax_eigvals[3]) * EH_TO_WN == pytest.approx(
-        19959.81596, abs=1e-2
+        400.1722015310902, abs=1e-2
     )
-test_mrpt2_n2_nonrel()
