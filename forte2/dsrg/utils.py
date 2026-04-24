@@ -33,6 +33,9 @@ def hermitize_and_antisymmetrize_two_body_dense(T):
 
 def hermitize_and_antisymmetrize_two_body(T):
     blks = set(T.keys())
+    for Tblk in T.values():
+        np.conj(Tblk, out=Tblk) 
+
     # Hermitize first
     for blk in T.keys():
         if blk not in blks:
@@ -61,6 +64,8 @@ def hermitize_and_antisymmetrize_two_body(T):
 
 def hermitize_one_body(T):
     blks = set(T.keys())
+    for Tblk in T.values():
+        np.conj(Tblk, out=Tblk)
     for blk in T.keys():
         if blk not in blks:
             continue
