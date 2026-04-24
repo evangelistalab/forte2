@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, GHF, RelMCOptimizer, AVAS
+from forte2 import System, GHF, RelMCOptimizer
 from forte2.dsrg import RelDSRG_MRPT3
 from forte2.helpers.comparisons import approx
 from forte2.data.atom_data import EH_TO_WN
@@ -83,3 +83,4 @@ def test_mrpt3_f_atom_rel_sa():
     assert (dsrg.relax_eigvals[4] - dsrg.relax_eigvals[3]) * EH_TO_WN == pytest.approx(
         400.1722015310902, abs=1e-2
     )
+test_mrpt3_n2_nonrel()
