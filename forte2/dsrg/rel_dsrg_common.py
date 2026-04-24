@@ -35,8 +35,7 @@ class _RelDSRGHelper:
         self.all_2_labels = set(
             ["".join(_) for _ in product(["c", "a", "v"], repeat=4)]
         )
-        # large_labels = set(["vvvv", "avvv", "cvvv", "vvav", "vvcv"])
-        large_labels = set(["vvvv"])
+        large_labels = set(["vvvv", "avvv", "cvvv", "vvav", "vvcv"])
         self.all_2_labels -= large_labels
         self.non_od_2_labels = self.all_2_labels - self.od_2_labels
         self.dims = {
@@ -652,8 +651,6 @@ class _RelDSRGHelper:
         C1["av"] += scale * -1.000 * np.einsum('uvwa,xbya,wy,xv->ub', T2['aaav'], V['avav'], e1, g1, optimize=True)
         C1["av"] += scale * -1.000 * np.einsum('uvwa,xbya,wxvy->ub', T2['aaav'], V['avav'], l2, optimize=True)
         C1["av"] += scale * -0.500 * np.einsum('uvwa,xbya,wxuv->yb', T2['aaav'], V['avav'], l2, optimize=True)
-        C1["av"] += scale * +0.500 * np.einsum('iuab,icab->uc', T2['cavv'], V['cvvv'], optimize=True)
-        C1["av"] += scale * -0.500 * np.einsum('uvab,wcab,wv->uc', T2['aavv'], V['avvv'], g1, optimize=True)
         C1["cv"] += scale * -0.500 * np.einsum('ijuv,jawx,vx,uw->ia', T2['ccaa'], V['cvaa'], e1, e1, optimize=True)
         C1["cv"] += scale * -0.250 * np.einsum('ijuv,jawx,uvwx->ia', T2['ccaa'], V['cvaa'], l2, optimize=True)
         C1["cv"] += scale * -0.500 * np.einsum('iuvw,iajx,vwux->ja', T2['caaa'], V['cvca'], l2, optimize=True)
@@ -672,8 +669,6 @@ class _RelDSRGHelper:
         C1["cv"] += scale * -1.000 * np.einsum('iuab,ivjb,vu->ja', T2['cavv'], V['cacv'], g1, optimize=True)
         C1["cv"] += scale * -0.500 * np.einsum('uvab,wxib,xv,wu->ia', T2['aavv'], V['aacv'], g1, g1, optimize=True)
         C1["cv"] += scale * -0.250 * np.einsum('uvab,wxib,wxuv->ia', T2['aavv'], V['aacv'], l2, optimize=True)
-        C1["cv"] += scale * -0.500 * np.einsum('ijab,jcab->ic', T2['ccvv'], V['cvvv'], optimize=True)
-        C1["cv"] += scale * -0.500 * np.einsum('iuab,vcab,vu->ic', T2['cavv'], V['avvv'], g1, optimize=True)
         C1["ca"] += scale * +0.500 * np.einsum('iuvw,xyzr,yu,wxzr->iv', T2['caaa'], V['aaaa'], e1, l2, optimize=True)
         C1["ca"] += scale * -0.500 * np.einsum('iuvw,xyzr,wr,xyuz->iv', T2['caaa'], V['aaaa'], e1, l2, optimize=True)
         C1["ca"] += scale * +0.500 * np.einsum('iuvw,xyzr,yu,wxzr->iv', T2['caaa'], V['aaaa'], g1, l2, optimize=True)
@@ -694,6 +689,32 @@ class _RelDSRGHelper:
         C1["ca"] += scale * -0.500 * np.einsum('iuvw,ixjy,vwuy->jx', T2['caaa'], V['caca'], l2, optimize=True)
         C1["ca"] += scale * +0.500 * np.einsum('uvwa,xyia,wyuv->ix', T2['aaav'], V['aacv'], l2, optimize=True)
     
+    def H2_T2_C1_non_od_large(self, C1, B, T2, cumulants, scale=1.0):
+        g1 = cumulants['gamma1']
+        # C1["av"] += scale * +0.500 * np.einsum('iuab,icab->uc', T2['cavv'], V['cvvv'], optimize=True)
+        for u in range(self.nact):
+            Cu = C1["av"][u]
+            Tu = T2['cavv'][:, u, ...]
+            Cu += scale * +0.500 * np.einsum('iab,Pia,Pcb->c', Tu, B['cv'], B['vv'], optimize="optimal")
+            Cu += scale * -0.500 * np.einsum('iab,Pib,Pca->c', Tu, B['cv'], B['vv'], optimize="optimal")
+
+        # C1["av"] += scale * -0.500 * np.einsum('uvab,wcab,wv->uc', T2['aavv'], V['avvv'], g1, optimize=True)
+            Tu = T2['aavv'][u]
+            Cu += scale * -0.500 * np.einsum('vab,Pwa,Pcb,wv->c', Tu, B['av'], B['vv'], g1, optimize="optimal")
+            Cu += scale * +0.500 * np.einsum('vab,Pwb,Pca,wv->c', Tu, B['av'], B['vv'], g1, optimize="optimal")
+
+        # C1["cv"] += scale * -0.500 * np.einsum('ijab,jcab->ic', T2['ccvv'], V['cvvv'], optimize=True)
+        for i in range(self.ncore):
+            Ci = C1["cv"][i]
+            Ti = T2['ccvv'][i]
+            Ci += scale * -0.500 * np.einsum('jab,Pja,Pcb->c', Ti, B['cv'], B['vv'], optimize="optimal")
+            Ci += scale * +0.500 * np.einsum('jab,Pjb,Pca->c', Ti, B['cv'], B['vv'], optimize="optimal")
+
+        # C1["cv"] += scale * -0.500 * np.einsum('iuab,vcab,vu->ic', T2['cavv'], V['avvv'], g1, optimize=True)
+            Ti = T2['cavv'][i]
+            Ci += scale * -0.500 * np.einsum('uab,Pva,Pcb,vu->c', Ti, B['av'], B['vv'], g1, optimize="optimal")
+            Ci += scale * +0.500 * np.einsum('uab,Pvb,Pca,vu->c', Ti, B['av'], B['vv'], g1, optimize="optimal")
+
     @staticmethod
     def H1_T2_C2_non_od(C2, F, T2, cumulants, scale=1.0):
         # 22 lines
@@ -736,7 +757,6 @@ class _RelDSRGHelper:
         l3 = cumulants['lambda3']
 
         C2["ccvv"] += scale * -0.500 * np.einsum('ia,ibjk->jkab', T1['cv'], V['cvcc'], optimize=True)
-        C2["ccvv"] += scale * -0.500 * np.einsum('ia,bcja->ijbc', T1['cv'], V['vvcv'], optimize=True)
         C2["caav"] += scale * -1.000 * np.einsum('iu,iajv->jvua', T1['ca'], V['cvca'], optimize=True)
         C2["caav"] += scale * +1.000 * np.einsum('ia,iujv->jvua', T1['cv'], V['caca'], optimize=True)
         C2["caav"] += scale * -1.000 * np.einsum('ia,ubva->ivub', T1['cv'], V['avav'], optimize=True)
@@ -753,11 +773,34 @@ class _RelDSRGHelper:
         C2["ccaa"] += scale * -0.500 * np.einsum('iu,ivjk->jkuv', T1['ca'], V['cacc'], optimize=True)
         C2["ccaa"] += scale * -0.500 * np.einsum('ia,uvja->ijuv', T1['cv'], V['aacv'], optimize=True)
         C2["cavv"] += scale * -1.000 * np.einsum('ia,ibju->juab', T1['cv'], V['cvca'], optimize=True)
-        C2["cavv"] += scale * -0.500 * np.einsum('ia,bcua->iubc', T1['cv'], V['vvav'], optimize=True)
-        C2["cavv"] += scale * +0.500 * np.einsum('ua,bcia->iubc', T1['av'], V['vvcv'], optimize=True)
         C2["aavv"] += scale * -0.500 * np.einsum('ia,ibuv->uvab', T1['cv'], V['cvaa'], optimize=True)
-        C2["aavv"] += scale * -0.500 * np.einsum('ua,bcva->uvbc', T1['av'], V['vvav'], optimize=True)
     
+    def H2_T1_C2_non_od_large(self, C2, B, T1, cumulants, scale=1.0):
+        # C2["ccvv"] += scale * -0.500 * np.einsum('ia,bcja->ijbc', T1['cv'], V['vvcv'], optimize=True)
+        for i in range(self.ncore):
+            Ti = T1['cv'][i]
+            Ci = C2["ccvv"][i]
+            Ci += scale * -0.500 * np.einsum('a,Pbj,Pca->jbc', Ti, B['vc'], B['vv'], optimize="optimal")
+            Ci += scale * +0.500 * np.einsum('a,Pba,Pcj->jbc', Ti, B['vv'], B['vc'], optimize="optimal")
+
+        # C2["cavv"] += scale * -0.500 * np.einsum('ia,bcua->iubc', T1['cv'], V['vvav'], optimize=True)
+            Ci = C2["cavv"][i]
+            Ci += scale * -0.500 * np.einsum('a,Pbu,Pca->ubc', Ti, B['va'], B['vv'], optimize="optimal")
+            Ci += scale * +0.500 * np.einsum('a,Pba,Pcu->ubc', Ti, B['vv'], B['va'], optimize="optimal")
+
+        # C2["cavv"] += scale * +0.500 * np.einsum('ua,bcia->iubc', T1['av'], V['vvcv'], optimize=True)
+        for u in range(self.nact):
+            Tu = T1['av'][u]
+            Cu = C2["cavv"][:,u,...]
+            Cu += scale * +0.500 * np.einsum('a,Pbi,Pca->ibc', Tu, B['vc'], B['vv'], optimize="optimal")
+            Cu += scale * -0.500 * np.einsum('a,Pba,Pci->ibc', Tu, B['vv'], B['vc'], optimize="optimal")
+
+        # C2["aavv"] += scale * -0.500 * np.einsum('ua,bcva->uvbc', T1['av'], V['vvav'], optimize=True)
+            Cu = C2["aavv"][u]
+            Cu += scale * -0.500 * np.einsum('a,Pbv,Pca->vbc', Tu, B['va'], B['vv'], optimize=True)
+            Cu += scale * +0.500 * np.einsum('a,Pba,Pcv->vbc', Tu, B['vv'], B['va'], optimize=True)
+
+
     @staticmethod
     def H2_T2_C2_non_od(C2, V, T2, cumulants, scale=1.0):
         # 74 lines
@@ -768,7 +811,6 @@ class _RelDSRGHelper:
         l3 = cumulants['lambda3']
 
         C2["ccvv"] += scale * +1.000 * np.einsum('ijua,jbkv,uv->ikab', T2['ccav'], V['cvca'], e1, optimize=True)
-        C2["ccvv"] += scale * +0.250 * np.einsum('ijua,bcva,uv->ijbc', T2['ccav'], V['vvav'], e1, optimize=True)
         C2["ccvv"] += scale * +0.125 * np.einsum('ijab,ijkl->klab', T2['ccvv'], V['cccc'], optimize=True)
         C2["ccvv"] += scale * +0.250 * np.einsum('iuab,ivjk,vu->jkab', T2['cavv'], V['cacc'], g1, optimize=True)
         C2["ccvv"] += scale * -1.000 * np.einsum('ijab,jckb->ikac', T2['ccvv'], V['cvcv'], optimize=True)
@@ -796,7 +838,6 @@ class _RelDSRGHelper:
         C2["ccav"] += scale * +0.500 * np.einsum('ijua,vbwa,uw->ijvb', T2['ccav'], V['avav'], e1, optimize=True)
         C2["ccav"] += scale * +1.000 * np.einsum('ijab,jukb->ikua', T2['ccvv'], V['cacv'], optimize=True)
         C2["ccav"] += scale * -1.000 * np.einsum('iuab,vwjb,wu->ijva', T2['cavv'], V['aacv'], g1, optimize=True)
-        C2["ccav"] += scale * +0.250 * np.einsum('ijab,ucab->ijuc', T2['ccvv'], V['avvv'], optimize=True)
         C2["caaa"] += scale * +0.250 * np.einsum('ijuv,ijkw->kwuv', T2['ccaa'], V['ccca'], optimize=True)
         C2["caaa"] += scale * +0.500 * np.einsum('iuvw,ixjy,xu->jyvw', T2['caaa'], V['caca'], g1, optimize=True)
         C2["caaa"] += scale * -1.000 * np.einsum('iuvw,xyzr,yu,wr->izvx', T2['caaa'], V['aaaa'], e1, g1, optimize=True)
@@ -823,7 +864,6 @@ class _RelDSRGHelper:
         C2["ccaa"] += scale * -0.125 * np.einsum('ijuv,wxyz,vz,uy->ijwx', T2['ccaa'], V['aaaa'], g1, g1, optimize=True)
         C2["cavv"] += scale * +1.000 * np.einsum('ijua,jbvw,uw->ivab', T2['ccav'], V['cvaa'], e1, optimize=True)
         C2["cavv"] += scale * +1.000 * np.einsum('iuva,ibjw,vw->juab', T2['caav'], V['cvca'], e1, optimize=True)
-        C2["cavv"] += scale * +0.500 * np.einsum('iuva,bcwa,vw->iubc', T2['caav'], V['vvav'], e1, optimize=True)
         C2["cavv"] += scale * +0.250 * np.einsum('ijab,ijku->kuab', T2['ccvv'], V['ccca'], optimize=True)
         C2["cavv"] += scale * +0.500 * np.einsum('iuab,ivjw,vu->jwab', T2['cavv'], V['caca'], g1, optimize=True)
         C2["cavv"] += scale * -1.000 * np.einsum('ijab,jcub->iuac', T2['ccvv'], V['cvav'], optimize=True)
@@ -896,5 +936,35 @@ class _RelDSRGHelper:
                 Tuv = Tu[v,...]
                 Cuv += scale * +0.250 * np.einsum('wa,Pbx,Pca,wx->bc', Tuv, B['va'], B['vv'], e1, optimize="optimal")
                 Cuv += scale * -0.250 * np.einsum('wa,Pba,Pcx,wx->bc', Tuv, B['vv'], B['va'], e1, optimize="optimal")
+
+        # C2["ccvv"] += scale * +0.250 * np.einsum('ijua,bcva,uv->ijbc', T2['ccav'], V['vvav'], e1, optimize=True)
+        for i in range(self.ncore):
+            Ci = C2["ccvv"][i,...]
+            Ti = T2['ccav'][i,...]
+            for j in range(self.ncore):
+                Cij = Ci[j,...]
+                Tij = Ti[j,...]
+                Cij += scale * +0.250 * np.einsum('ua,Pbv,Pca,uv->bc', Tij, B['va'], B['vv'], e1, optimize="optimal")
+                Cij += scale * -0.250 * np.einsum('ua,Pba,Pcv,uv->bc', Tij, B['vv'], B['va'], e1, optimize="optimal")
+
+        # C2["ccav"] += scale * +0.250 * np.einsum('ijab,ucab->ijuc', T2['ccvv'], V['avvv'], optimize=True)
+        for i in range(self.ncore):
+            Ci = C2["ccav"][i,...]
+            Ti = T2['ccvv'][i,...]
+            for j in range(self.ncore):
+                Cij = Ci[j,...]
+                Tij = Ti[j,...]
+                Cij += scale * +0.250 * np.einsum('ab,Pua,Pcb->uc', Tij, B['av'], B['vv'], optimize="optimal")
+                Cij += scale * -0.250 * np.einsum('ab,Pub,Pca->uc', Tij, B['av'], B['vv'], optimize="optimal")
+
+        # C2["cavv"] += scale * +0.500 * np.einsum('iuva,bcwa,vw->iubc', T2['caav'], V['vvav'], e1, optimize=True)
+        for i in range(self.ncore):
+            Ci = C2["cavv"][i,...]
+            Ti = T2['caav'][i,...]
+            for u in range(self.nact):
+                Ciu = Ci[u,...]
+                Tiu = Ti[u,...]
+                Ciu += scale * +0.500 * np.einsum('va,Pbw,Pca,vw->bc', Tiu, B['va'], B['vv'], e1, optimize="optimal")
+                Ciu += scale * -0.500 * np.einsum('va,Pba,Pcw,vw->bc', Tiu, B['vv'], B['va'], e1, optimize="optimal")
 
     # fmt: on
