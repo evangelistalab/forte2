@@ -4,66 +4,14 @@ import numpy as np
 
 from .dsrg_base import DSRGBase
 from .utils import (
-    antisymmetrize_2body,
+    hermitize_one_body,
+    hermitize_and_antisymmetrize_two_body,
+    hermitize_and_antisymmetrize_two_body_dense,
     cas_energy_given_RDMs,
     compute_t1_block,
     compute_t2_block,
     renormalize_V_block,
 )
-from .wicked_contractions import *
-
-
-def hermitize_and_antisymmetrize_two_body_dense(T):
-    # antisymmetrize the residual
-    T += np.einsum(
-        "ijab->abij", T.conj()
-    )  # This is the Hermitized version (i.e., [H,A]), which should then be antisymmetrized
-    temp = T.copy()
-    T -= np.einsum("ijab->jiab", temp)
-    T += np.einsum("ijab->jiba", temp)
-    T -= np.einsum("ijab->ijba", temp)
-
-
-def hermitize_and_antisymmetrize_two_body(T):
-    blks = set(T.keys())
-    # Hermitize first
-    for blk in T.keys():
-        if blk not in blks:
-            continue
-        herm_blk = blk[2:] + blk[:2]
-        if herm_blk in T.keys():
-            temp = T[blk].copy()
-            T[blk] += T[herm_blk].transpose(2, 3, 0, 1).conj()
-            T[herm_blk] += temp.transpose(2, 3, 0, 1).conj()
-            blks.remove(blk)
-            blks.remove(herm_blk)
-
-    for blk in T.keys():
-        ij_same = blk[0] == blk[1]
-        kl_same = blk[2] == blk[3]
-        if not (ij_same or kl_same):
-            continue
-        temp = T[blk].copy()
-        if ij_same:
-            T[blk] -= temp.transpose(1, 0, 2, 3)
-        if kl_same:
-            T[blk] -= temp.transpose(0, 1, 3, 2)
-        if ij_same and kl_same:
-            T[blk] += temp.transpose(1, 0, 3, 2)
-
-
-def hermitize_one_body(T):
-    blks = set(T.keys())
-    for blk in T.keys():
-        if blk not in blks:
-            continue
-        herm_blk = blk[1] + blk[0]
-        if herm_blk in T.keys():
-            temp = T[blk].T.conj()
-            T[blk] += T[herm_blk].T.conj()
-            T[herm_blk] += temp
-            blks.remove(blk)
-            blks.remove(herm_blk)
 
 
 @dataclass
@@ -196,9 +144,21 @@ class RelDSRG_MRPT3(DSRGBase):
         C_core = self._C_semican[:, self.core]
         C_actv = self._C_semican[:, self.actv]
         C_virt = self._C_semican[:, self.virt]
-        ints["B"]["vv"] = self.fock_builder.B_tensor_gen_block_spinor(C_virt, C_virt).transpose(1, 2, 0).conj()
-        ints["B"]["av"] = self.fock_builder.B_tensor_gen_block_spinor(C_actv, C_virt).transpose(1, 2, 0).conj()
-        ints["B"]["cv"] = self.fock_builder.B_tensor_gen_block_spinor(C_core, C_virt).transpose(1, 2, 0).conj()
+        ints["B"]["vv"] = (
+            self.fock_builder.B_tensor_gen_block_spinor(C_virt, C_virt)
+            .transpose(1, 2, 0)
+            .conj()
+        )
+        ints["B"]["av"] = (
+            self.fock_builder.B_tensor_gen_block_spinor(C_actv, C_virt)
+            .transpose(1, 2, 0)
+            .conj()
+        )
+        ints["B"]["cv"] = (
+            self.fock_builder.B_tensor_gen_block_spinor(C_core, C_virt)
+            .transpose(1, 2, 0)
+            .conj()
+        )
         ints["B"]["vc"] = ints["B"]["cv"].transpose(1, 0, 2).conj()
         ints["B"]["va"] = ints["B"]["av"].transpose(1, 0, 2).conj()
 
@@ -321,29 +281,33 @@ class RelDSRG_MRPT3(DSRGBase):
 
         self.H0A1_1b = self.dsrg_helper.make_tensor(self.dsrg_helper.od_1_labels)
         self.H0A1_2b = self.dsrg_helper.make_tensor(self.dsrg_helper.od_2_labels)
-        H1_T2_C2_non_od(self.H0A1_2b, self.ints["F0"], self.T2_1, self.cumulants)
-        H1_T1_C1_non_od(self.H0A1_1b, self.ints["F0"], self.T1_1, self.cumulants)
+        self.dsrg_helper.H1_T2_C2_non_od(
+            self.H0A1_2b, self.ints["F0"], self.T2_1, self.cumulants
+        )
+        self.dsrg_helper.H1_T1_C1_non_od(
+            self.H0A1_1b, self.ints["F0"], self.T1_1, self.cumulants
+        )
         hermitize_and_antisymmetrize_two_body(self.H0A1_2b)
         hermitize_one_body(self.H0A1_1b)
 
         H0A1A1_1b = self.dsrg_helper.make_tensor(self.dsrg_helper.od_1_labels)
         H0A1A1_2b = self.dsrg_helper.make_tensor(self.dsrg_helper.od_2_labels)
 
-        H1_T1_C1(H0A1A1_1b, self.H0A1_1b, self.T1_1, self.cumulants)
-        H1_T2_C1(H0A1A1_1b, self.H0A1_1b, self.T2_1, self.cumulants)
-        H2_T1_C1(H0A1A1_1b, self.H0A1_2b, self.T1_1, self.cumulants)
-        H2_T2_C1(H0A1A1_1b, self.H0A1_2b, self.T2_1, self.cumulants)
-        H1_T2_C2(H0A1A1_2b, self.H0A1_1b, self.T2_1, self.cumulants)
-        H2_T1_C2(H0A1A1_2b, self.H0A1_2b, self.T1_1, self.cumulants)
-        H2_T2_C2(H0A1A1_2b, self.H0A1_2b, self.T2_1, self.cumulants)
+        self.dsrg_helper.H1_T1_C1(H0A1A1_1b, self.H0A1_1b, self.T1_1, self.cumulants)
+        self.dsrg_helper.H1_T2_C1(H0A1A1_1b, self.H0A1_1b, self.T2_1, self.cumulants)
+        self.dsrg_helper.H2_T1_C1(H0A1A1_1b, self.H0A1_2b, self.T1_1, self.cumulants)
+        self.dsrg_helper.H2_T2_C1(H0A1A1_1b, self.H0A1_2b, self.T2_1, self.cumulants)
+        self.dsrg_helper.H1_T2_C2(H0A1A1_2b, self.H0A1_1b, self.T2_1, self.cumulants)
+        self.dsrg_helper.H2_T1_C2(H0A1A1_2b, self.H0A1_2b, self.T1_1, self.cumulants)
+        self.dsrg_helper.H2_T2_C2(H0A1A1_2b, self.H0A1_2b, self.T2_1, self.cumulants)
         hermitize_and_antisymmetrize_two_body(H0A1A1_2b)
         hermitize_one_body(H0A1A1_1b)
 
-        E = H_T_C0(
+        E = self.dsrg_helper.H_T_C0(
             H0A1A1_1b, H0A1A1_2b, self.T1_1, self.T2_1, self.cumulants, scale=-1.0 / 6
         )
         if form_hbar:
-            H_T_C1_aa(
+            self.dsrg_helper.H_T_C1_aa(
                 self.hbar1,
                 H0A1A1_1b,
                 H0A1A1_2b,
@@ -352,7 +316,7 @@ class RelDSRG_MRPT3(DSRGBase):
                 self.cumulants,
                 scale=-1.0 / 12,
             )
-            H_T_C2_aaaa(
+            self.dsrg_helper.H_T_C2_aaaa(
                 self.hbar2,
                 H0A1A1_1b,
                 H0A1A1_2b,
@@ -403,7 +367,7 @@ class RelDSRG_MRPT3(DSRGBase):
                 self.flow_param,
             )
 
-        E = H_T_C0(
+        E = self.dsrg_helper.H_T_C0(
             self.F_1_tilde,
             self.V_1_tilde,
             self.T1_1,
@@ -411,7 +375,7 @@ class RelDSRG_MRPT3(DSRGBase):
             self.cumulants,
         )
         if form_hbar:
-            H_T_C1_aa(
+            self.dsrg_helper.H_T_C1_aa(
                 self.hbar1,
                 self.F_1_tilde,
                 self.V_1_tilde,
@@ -420,7 +384,7 @@ class RelDSRG_MRPT3(DSRGBase):
                 self.cumulants,
                 scale=0.5,
             )
-            H_T_C2_aaaa(
+            self.dsrg_helper.H_T_C2_aaaa(
                 self.hbar2,
                 self.F_1_tilde,
                 self.V_1_tilde,
@@ -440,13 +404,27 @@ class RelDSRG_MRPT3(DSRGBase):
         for blk in self.H0A1_2b.keys():
             self.H0A1_2b[blk] += 2 * self.ints["V"][blk].conj()
 
-        H1_T1_C1(self.Htilde1A1_1b, self.H0A1_1b, self.T1_1, self.cumulants)
-        H1_T2_C1(self.Htilde1A1_1b, self.H0A1_1b, self.T2_1, self.cumulants)
-        H2_T1_C1(self.Htilde1A1_1b, self.H0A1_2b, self.T1_1, self.cumulants)
-        H2_T2_C1(self.Htilde1A1_1b, self.H0A1_2b, self.T2_1, self.cumulants)
-        H1_T2_C2(self.Htilde1A1_2b, self.H0A1_1b, self.T2_1, self.cumulants)
-        H2_T1_C2(self.Htilde1A1_2b, self.H0A1_2b, self.T1_1, self.cumulants)
-        H2_T2_C2(self.Htilde1A1_2b, self.H0A1_2b, self.T2_1, self.cumulants)
+        self.dsrg_helper.H1_T1_C1(
+            self.Htilde1A1_1b, self.H0A1_1b, self.T1_1, self.cumulants
+        )
+        self.dsrg_helper.H1_T2_C1(
+            self.Htilde1A1_1b, self.H0A1_1b, self.T2_1, self.cumulants
+        )
+        self.dsrg_helper.H2_T1_C1(
+            self.Htilde1A1_1b, self.H0A1_2b, self.T1_1, self.cumulants
+        )
+        self.dsrg_helper.H2_T2_C1(
+            self.Htilde1A1_1b, self.H0A1_2b, self.T2_1, self.cumulants
+        )
+        self.dsrg_helper.H1_T2_C2(
+            self.Htilde1A1_2b, self.H0A1_1b, self.T2_1, self.cumulants
+        )
+        self.dsrg_helper.H2_T1_C2(
+            self.Htilde1A1_2b, self.H0A1_2b, self.T1_１, self.cumulants
+        )
+        self.dsrg_helper.H2_T2_C2(
+            self.Htilde1A1_2b, self.H0A1_2b, self.T2_1, self.cumulants
+        )
 
         _temp_1b = self.dsrg_helper.make_tensor(self.dsrg_helper.non_od_1_labels)
         _temp_2b = self.dsrg_helper.make_tensor(self.dsrg_helper.non_od_2_labels)
@@ -455,23 +433,43 @@ class RelDSRG_MRPT3(DSRGBase):
         for blk in _temp_2b.keys():
             _temp_2b[blk] = 2 * self.ints["V"][blk].conj()
 
-        H1_T1_C1_non_od(self.Htilde1A1_1b, _temp_1b, self.T1_1, self.cumulants)
-        H2_T1_C1_non_od(self.Htilde1A1_1b, _temp_2b, self.T1_1, self.cumulants)
-        H2_T2_C1_non_od(self.Htilde1A1_1b, _temp_2b, self.T2_1, self.cumulants)
-        H1_T2_C2_non_od(self.Htilde1A1_2b, _temp_1b, self.T2_1, self.cumulants)
-        H2_T1_C2_non_od(self.Htilde1A1_2b, _temp_2b, self.T1_1, self.cumulants)
-        H2_T2_C2_non_od(self.Htilde1A1_2b, _temp_2b, self.T2_1, self.cumulants)
-        H2_T2_C1_large(self.Htilde1A1_1b, self.ints['B'], self.T2_1, self.cumulants, scale=2.0)
-        H2_T1_C2_large(self.Htilde1A1_2b, self.ints['B'], self.T1_1, self.cumulants, scale=2.0)
-        H2_T2_C2_large(self.Htilde1A1_2b, self.ints['B'], self.T2_1, self.cumulants, scale=2.0)
+        self.dsrg_helper.H1_T1_C1_non_od(
+            self.Htilde1A1_1b, _temp_1b, self.T1_1, self.cumulants
+        )
+        self.dsrg_helper.H2_T1_C1_non_od(
+            self.Htilde1A1_1b, _temp_2b, self.T1_1, self.cumulants
+        )
+        self.dsrg_helper.H2_T2_C1_non_od(
+            self.Htilde1A1_1b, _temp_2b, self.T2_1, self.cumulants
+        )
+        self.dsrg_helper.H1_T2_C2_non_od(
+            self.Htilde1A1_2b, _temp_1b, self.T2_1, self.cumulants
+        )
+        self.dsrg_helper.H2_T1_C2_non_od(
+            self.Htilde1A1_2b, _temp_2b, self.T1_1, self.cumulants
+        )
+        self.dsrg_helper.H2_T2_C2_non_od(
+            self.Htilde1A1_2b, _temp_2b, self.T2_1, self.cumulants
+        )
+        self.dsrg_helper.H2_T2_C1_large(
+            self.Htilde1A1_1b, self.ints["B"], self.T2_1, self.cumulants, scale=2.0
+        )
+        self.dsrg_helper.H2_T1_C2_large(
+            self.Htilde1A1_2b, self.ints["B"], self.T1_1, self.cumulants, scale=2.0
+        )
+        self.dsrg_helper.H2_T2_C2_large(
+            self.Htilde1A1_2b, self.ints["B"], self.T2_1, self.cumulants, scale=2.0
+        )
         hermitize_and_antisymmetrize_two_body(self.Htilde1A1_2b)
         hermitize_one_body(self.Htilde1A1_1b)
         self.T1_2, self.T2_2 = self._build_tamps(
             self.Htilde1A1_1b, self.Htilde1A1_2b, conj=False, factor=0.5
         )
-        E = H_T_C0(self.H0A1_1b, self.H0A1_2b, self.T1_2, self.T2_2, self.cumulants)
+        E = self.dsrg_helper.H_T_C0(
+            self.H0A1_1b, self.H0A1_2b, self.T1_2, self.T2_2, self.cumulants
+        )
         if form_hbar:
-            H_T_C1_aa(
+            self.dsrg_helper.H_T_C1_aa(
                 self.hbar1,
                 self.H0A1_1b,
                 self.H0A1_2b,
@@ -480,7 +478,7 @@ class RelDSRG_MRPT3(DSRGBase):
                 self.cumulants,
                 scale=0.5,
             )
-            H_T_C2_aaaa(
+            self.dsrg_helper.H_T_C2_aaaa(
                 self.hbar2,
                 self.H0A1_1b,
                 self.H0A1_2b,
@@ -494,8 +492,12 @@ class RelDSRG_MRPT3(DSRGBase):
     def _compute_energy_pt3_3(self, form_hbar):
         H0A2_1b = self.dsrg_helper.make_tensor(self.dsrg_helper.od_1_labels)
         H0A2_2b = self.dsrg_helper.make_tensor(self.dsrg_helper.od_2_labels)
-        H1_T2_C2_non_od(H0A2_2b, self.ints["F0"], self.T2_2, self.cumulants)
-        H1_T1_C1_non_od(H0A2_1b, self.ints["F0"], self.T1_2, self.cumulants)
+        self.dsrg_helper.H1_T2_C2_non_od(
+            H0A2_2b, self.ints["F0"], self.T2_2, self.cumulants
+        )
+        self.dsrg_helper.H1_T1_C1_non_od(
+            H0A2_1b, self.ints["F0"], self.T1_2, self.cumulants
+        )
         hermitize_and_antisymmetrize_two_body(H0A2_2b)
         hermitize_one_body(H0A2_1b)
 
@@ -506,7 +508,7 @@ class RelDSRG_MRPT3(DSRGBase):
             T *= 0.5
             T += H0A2_2b[blk]
 
-        E = H_T_C0(
+        E = self.dsrg_helper.H_T_C0(
             self.Htilde1A1_1b,
             self.Htilde1A1_2b,
             self.T1_1,
@@ -514,7 +516,7 @@ class RelDSRG_MRPT3(DSRGBase):
             self.cumulants,
         )
         if form_hbar:
-            H_T_C1_aa(
+            self.dsrg_helper.H_T_C1_aa(
                 self.hbar1,
                 self.Htilde1A1_1b,
                 self.Htilde1A1_2b,
@@ -523,7 +525,7 @@ class RelDSRG_MRPT3(DSRGBase):
                 self.cumulants,
                 scale=0.5,
             )
-            H_T_C2_aaaa(
+            self.dsrg_helper.H_T_C2_aaaa(
                 self.hbar2,
                 self.Htilde1A1_1b,
                 self.Htilde1A1_2b,
