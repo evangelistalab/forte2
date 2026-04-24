@@ -282,7 +282,7 @@ class RelDSRG_MRPT2(DSRGBase):
         return t1, t2
 
     def _renormalize_F(self):
-        f_temp = np.conj(self.ints["F"][self.hole, self.part]).copy()
+        f_temp = np.conj(self.ints["F"][self.hole, self.part])
         delta_ia = self.eps[self.hole][:, None] - self.eps[self.part][None, :]
         exp_delta_1 = np.exp(-self.flow_param * delta_ia**2)
         t2_hapa = np.zeros(

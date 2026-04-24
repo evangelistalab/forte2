@@ -106,7 +106,8 @@ class RelDSRG_MRPT3(DSRGBase):
 
         ints = dict()
         _sl = {"c": self.core, "a": self.actv, "v": self.virt}
-        F_temp = self.fock - np.diag(np.diag(self.fock))  # remove diagonal
+        # we store the F and V tensors transposed to help with cache locality in contractions.
+        F_temp = np.conj(self.fock - np.diag(np.diag(self.fock)))  # remove diagonal
         ints["F"] = self.dsrg_helper.make_tensor(self.dsrg_helper.all_1_labels)
         for blk in ints["F"].keys():
             ints["F"][blk] = F_temp[_sl[blk[0]], _sl[blk[1]]].copy()
@@ -114,13 +115,13 @@ class RelDSRG_MRPT3(DSRGBase):
         ints["E"] = cas_energy_given_RDMs(
             self.E_core_orig, self.H_orig, self.V_orig, g1, g2
         )
-        V_so = self.fock_builder.two_electron_integrals_block_spinor(self._C_semican)
+        V_so = self.fock_builder.two_electron_integrals_block_spinor(
+            self._C_semican.conj()
+        )
         V_so -= V_so.swapaxes(2, 3)  # antisymmetrize
         ints["V"] = self.dsrg_helper.make_tensor(self.dsrg_helper.all_2_labels)
         for blk in ints["V"].keys():
-            ints["V"][blk] = V_so[
-                _sl[blk[0]], _sl[blk[1]], _sl[blk[2]], _sl[blk[3]]
-            ].copy()
+            ints["V"][blk] = V_so[_sl[blk[0]], _sl[blk[1]], _sl[blk[2]], _sl[blk[3]]]
 
         # store the diagonal of the Fock matrix for later use in T1 denominators
         ints["eps"] = dict()
@@ -144,23 +145,11 @@ class RelDSRG_MRPT3(DSRGBase):
         C_core = self._C_semican[:, self.core]
         C_actv = self._C_semican[:, self.actv]
         C_virt = self._C_semican[:, self.virt]
-        ints["B"]["vv"] = (
-            self.fock_builder.B_tensor_gen_block_spinor(C_virt, C_virt)
-            .transpose(1, 2, 0)
-            .conj()
-        )
-        ints["B"]["av"] = (
-            self.fock_builder.B_tensor_gen_block_spinor(C_actv, C_virt)
-            .transpose(1, 2, 0)
-            .conj()
-        )
-        ints["B"]["cv"] = (
-            self.fock_builder.B_tensor_gen_block_spinor(C_core, C_virt)
-            .transpose(1, 2, 0)
-            .conj()
-        )
-        ints["B"]["vc"] = ints["B"]["cv"].transpose(1, 0, 2).conj()
-        ints["B"]["va"] = ints["B"]["av"].transpose(1, 0, 2).conj()
+        ints["B"]["vv"] = self.fock_builder.B_tensor_gen_block_spinor(C_virt, C_virt)
+        ints["B"]["av"] = self.fock_builder.B_tensor_gen_block_spinor(C_actv, C_virt)
+        ints["B"]["cv"] = self.fock_builder.B_tensor_gen_block_spinor(C_core, C_virt)
+        ints["B"]["vc"] = ints["B"]["cv"].transpose(0, 2, 1).conj()
+        ints["B"]["va"] = ints["B"]["av"].transpose(0, 2, 1).conj()
 
         return ints, cumulants
 
@@ -183,10 +172,10 @@ class RelDSRG_MRPT3(DSRGBase):
 
     def do_reference_relaxation(self):
         self.hbar1 += self.hbar1.T.conj()
-        self.hbar1 += self.fock[self.actv, self.actv].conj()
+        self.hbar1 += self.fock[self.actv, self.actv]
 
         hermitize_and_antisymmetrize_two_body_dense(self.hbar2)
-        self.hbar2 += self.ints["V"]["aaaa"].conj()
+        self.hbar2 += self.ints["V"]["aaaa"]
 
         # see eq 29 of Ann. Rev. Phys. Chem.
         _e_scalar = (
@@ -276,7 +265,7 @@ class RelDSRG_MRPT3(DSRGBase):
 
     def _compute_energy_pt3_1(self, form_hbar):
         self.T1_1, self.T2_1 = self._build_tamps(
-            self.ints["F"], self.ints["V"], conj=True
+            self.ints["F"], self.ints["V"], conj=False
         )
 
         self.H0A1_1b = self.dsrg_helper.make_tensor(self.dsrg_helper.od_1_labels)
@@ -350,20 +339,20 @@ class RelDSRG_MRPT3(DSRGBase):
                 self.cumulants["gamma1"],
             ),
         )
-        F_1_tilde_tmp = F_1_tilde_tmp.T
-        self.F_1_tilde = self.dsrg_helper.make_tensor(self.dsrg_helper.ph_1_labels)
+        np.conj(F_1_tilde_tmp, out=F_1_tilde_tmp)
+        self.F_1_tilde = self.dsrg_helper.make_tensor(self.dsrg_helper.hp_1_labels)
         for blk in self.F_1_tilde.keys():
-            self.F_1_tilde[blk] = F_1_tilde_tmp[_psl[blk[0]], _hsl[blk[1]]].copy()
+            self.F_1_tilde[blk] = F_1_tilde_tmp[_hsl[blk[0]], _psl[blk[1]]].copy()
 
-        self.V_1_tilde = self.dsrg_helper.make_tensor(self.dsrg_helper.ph_2_labels)
+        self.V_1_tilde = self.dsrg_helper.make_tensor(self.dsrg_helper.hp_2_labels)
         for blk in self.V_1_tilde.keys():
             self.V_1_tilde[blk] = self.ints["V"][blk].conj()
             renormalize_V_block(
                 self.V_1_tilde[blk],
-                -self.ints["eps"][blk[0]],
-                -self.ints["eps"][blk[1]],
-                -self.ints["eps"][blk[2]],
-                -self.ints["eps"][blk[3]],
+                self.ints["eps"][blk[0]],
+                self.ints["eps"][blk[1]],
+                self.ints["eps"][blk[2]],
+                self.ints["eps"][blk[3]],
                 self.flow_param,
             )
 
@@ -420,7 +409,7 @@ class RelDSRG_MRPT3(DSRGBase):
             self.Htilde1A1_2b, self.H0A1_1b, self.T2_1, self.cumulants
         )
         self.dsrg_helper.H2_T1_C2(
-            self.Htilde1A1_2b, self.H0A1_2b, self.T1_１, self.cumulants
+            self.Htilde1A1_2b, self.H0A1_2b, self.T1_1, self.cumulants
         )
         self.dsrg_helper.H2_T2_C2(
             self.Htilde1A1_2b, self.H0A1_2b, self.T2_1, self.cumulants
@@ -451,19 +440,19 @@ class RelDSRG_MRPT3(DSRGBase):
         self.dsrg_helper.H2_T2_C2_non_od(
             self.Htilde1A1_2b, _temp_2b, self.T2_1, self.cumulants
         )
-        self.dsrg_helper.H2_T2_C1_large(
-            self.Htilde1A1_1b, self.ints["B"], self.T2_1, self.cumulants, scale=2.0
-        )
-        self.dsrg_helper.H2_T1_C2_large(
-            self.Htilde1A1_2b, self.ints["B"], self.T1_1, self.cumulants, scale=2.0
-        )
-        self.dsrg_helper.H2_T2_C2_large(
+        # self.dsrg_helper.H2_T2_C1_large(
+        #     self.Htilde1A1_1b, self.ints["B"], self.T2_1, self.cumulants, scale=2.0
+        # )
+        # self.dsrg_helper.H2_T1_C2_large(
+        #     self.Htilde1A1_2b, self.ints["B"], self.T1_1, self.cumulants, scale=2.0
+        # )
+        self.dsrg_helper.H2_T2_C2_non_od_large(
             self.Htilde1A1_2b, self.ints["B"], self.T2_1, self.cumulants, scale=2.0
         )
         hermitize_and_antisymmetrize_two_body(self.Htilde1A1_2b)
         hermitize_one_body(self.Htilde1A1_1b)
         self.T1_2, self.T2_2 = self._build_tamps(
-            self.Htilde1A1_1b, self.Htilde1A1_2b, conj=False, factor=0.5
+            self.Htilde1A1_1b, self.Htilde1A1_2b, conj=True, factor=0.5
         )
         E = self.dsrg_helper.H_T_C0(
             self.H0A1_1b, self.H0A1_2b, self.T1_2, self.T2_2, self.cumulants
