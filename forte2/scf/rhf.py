@@ -125,9 +125,9 @@ class RHF(SCFBase):
         (
             self.irrep_labels,
             self.irrep_indices,
-            _,
+            self.C[0],
             _,
             self.mosym_success,
         ) = self.mosym.run(
-            self.C[0], self.eps[0], repair=False
+            self.C[0], self.eps[0], repair=True
         )

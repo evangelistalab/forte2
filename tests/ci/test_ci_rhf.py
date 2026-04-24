@@ -61,9 +61,6 @@ def test_ci_n2_with_symmetry():
         active_orbitals=6,
     )(rhf)
     ci.run()
-    # write_orbital_cubes(
-    #     system, rhf2.C[0], indices=list(range(10)), prefix="n2_orbital_repaired_"
-    # )
 
     eref_singlet = -109.004622061660
     assert ci.E[0] == approx(eref_singlet)
@@ -84,21 +81,15 @@ def test_ci_ch4_with_symmetry():
         symmetry=True,
     )
     rhf = RHF(charge=0, econv=1e-12)(system)
-    rhf2 = RepairSymmetry()(rhf)
-    rhf2.run()
+    ci = CI(
+        states=State(nel=10, multiplicity=1, ms=0.0),
+        core_orbitals=1,
+        active_orbitals=8,
+    )(rhf)
+    ci.run()
 
-    # ci = CI(
-    #     states=State(nel=10, multiplicity=1, ms=0.0),
-    #     core_orbitals=1,
-    #     active_orbitals=8,
-    # )(rhf2)
-    # ci.run()
-
-    # # reference energy obtained without symmetry
-    # assert ci.E[0] == approx(-40.2116319300)
-
-
-test_ci_n2_with_symmetry()
+    # reference energy obtained without symmetry
+    assert ci.E[0] == approx(-40.2116319300)
 
 
 def test_sa_ci_n2():
