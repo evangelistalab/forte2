@@ -27,7 +27,11 @@ from forte2.helpers import logger
 from forte2.jkbuilder import RestrictedMOIntegrals
 from forte2.props import get_1e_property
 from forte2.orbitals import Semicanonicalizer
-from forte2.ci.ci_utils import pretty_print_ci_summary, pretty_print_ci_dets
+from forte2.ci.ci_utils import (
+    pretty_print_ci_summary,
+    pretty_print_ci_dets,
+    pretty_print_ci_transition_props,
+)
 
 
 @dataclass
@@ -486,8 +490,15 @@ class _SelectedCISingleStateSolver:
 
         nocc = nel_active // 2 - window_occ
         noccel = 2 * nocc
-
         nactv = window_occ + window_vir
+
+        if nocc + nactv > self.norb:
+            raise ValueError(
+                f"Not enough orbitals to generate guess determinants with the specified occupation windows.\n"
+                f"Number of occupied orbitals needed: {nocc + nactv}, number of active orbitals available: {self.norb}.\n"
+                f"Reduce guess_occ_window and/or guess_vir_window to generate valid guess determinants."
+            )
+
         if noccel == 0:
             ci_strings = CIStrings(
                 na_active,
@@ -498,7 +509,6 @@ class _SelectedCISingleStateSolver:
                 [],
             )
         else:
-
             ci_strings = CIStrings(
                 na_active,
                 nb_active,
@@ -1084,6 +1094,79 @@ class SelectedCISolver(CIBase):
         """
         return np.dot(self.weights_flat, self.evals_flat)
 
+    def _get_state_root(self, absolute_root) -> tuple[int, int]:
+        if absolute_root < 0 or absolute_root >= self.sa_info.nroots_sum:
+            raise ValueError(
+                f"absolute_root must be between 0 and {self.sa_info.nroots_sum - 1}, but got {absolute_root}."
+            )
+        return self.sa_info.absolute_root_map[absolute_root]
+
+    def _validate_rdm_inputs(self, left_root, right_root):
+        left_state, left_root_in_state = self._get_state_root(left_root)
+        if right_root is not None:
+            right_state, right_root_in_state = self._get_state_root(right_root)
+        else:
+            right_state = left_state
+            right_root_in_state = left_root_in_state
+
+        if left_state != right_state:
+            if (
+                self.sa_info.states[left_state].na != self.sa_info.states[right_state].na
+                or self.sa_info.states[left_state].nb
+                != self.sa_info.states[right_state].nb
+            ):
+                raise ValueError(
+                    "Cross-state RDMs are only supported for states with the same number of alpha and beta electrons."
+                )
+
+        return left_state, right_state, left_root_in_state, right_root_in_state
+
+    def make_sd_1rdm(self, left_root: int, right_root: int | None = None):
+        """
+        Make the spin-dependent one-particle RDM for two absolute CI roots.
+        """
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+        if left_state == right_state:
+            return self.sub_solvers[left_state].make_sd_1rdm(
+                left_root_in_state, right_root_in_state
+            )
+
+        left_solver = self.sub_solvers[left_state]
+        right_solver = self.sub_solvers[right_state]
+        a_1trdm = left_solver.sci_helper.a_1trdm(
+            right_solver.sci_helper, left_root_in_state, right_root_in_state
+        )
+        b_1trdm = left_solver.sci_helper.b_1trdm(
+            right_solver.sci_helper, left_root_in_state, right_root_in_state
+        )
+        return a_1trdm, b_1trdm
+
+    def make_sf_1rdm(self, left_root: int, right_root: int | None = None):
+        """
+        Make the spin-free one-particle RDM for two absolute CI roots.
+        """
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+        if left_state == right_state:
+            return self.sub_solvers[left_state].make_sf_1rdm(
+                left_root_in_state, right_root_in_state
+            )
+
+        left_solver = self.sub_solvers[left_state]
+        right_solver = self.sub_solvers[right_state]
+        return left_solver.sci_helper.sf_1trdm(
+            right_solver.sci_helper, left_root_in_state, right_root_in_state
+        )
+
+    def make_1rdm(self, left_root: int, right_root: int | None = None):
+        """
+        Make the spin-free one-particle RDM for two absolute CI roots.
+        """
+        return self.make_sf_1rdm(left_root, right_root)
+
     def make_average_1rdm(self):
         """
         Make the average spin-free one-particle RDM from the CI vectors.
@@ -1166,7 +1249,7 @@ class SelectedCISolver(CIBase):
     def compute_transition_properties(self, C=None):
         """
         Compute the transition dipole moments and oscillator strengths from the spin-free 1-TDMs.
-        The results are stored in `self.tdm_per_solver` and `self.fosc_per_solver`.
+        The results are stored in `self.transition_dipoles` and `self.oscillator_strengths`.
         """
         if not self.executed:
             raise RuntimeError("CI solver has not been executed yet.")
@@ -1182,33 +1265,45 @@ class SelectedCISolver(CIBase):
         core_dip = get_1e_property(
             self.system, rdm_core, property_name="dipole", unit="au"
         )
-        self.tdm_per_solver = []
-        self.fosc_per_solver = []
+        self.transition_dipoles = OrderedDict()
+        self.oscillator_strengths = OrderedDict()
 
-        for ici, ci_solver in enumerate(self.sub_solvers):
-            tdmdict = OrderedDict()
-            foscdict = OrderedDict()
-            for i in range(ci_solver.nroot):
-                rdm = ci_solver.make_sf_1rdm(i)
-                rdm = np.einsum("ij,pi,qj->pq", rdm, Cact, Cact.conj(), optimize=True)
-                dip = get_1e_property(
-                    self.system, rdm, property_name="electric_dipole", unit="au"
-                )
-                tdmdict[(i, i)] = dip + core_dip
-                foscdict[(i, i)] = 0.0  # No oscillator strength for i->i transitions
-                for j in range(i + 1, ci_solver.nroot):
-                    tdm = ci_solver.make_sf_1rdm(i, j)
+        for ici in range(self.sa_info.nroots_sum):
+            istate, iroot_in_state = self._get_state_root(ici)
+            rdm = self.sub_solvers[istate].make_sf_1rdm(iroot_in_state)
+            rdm = np.einsum("ij,pi,qj->pq", rdm, Cact.conj(), Cact, optimize=True)
+            dip = get_1e_property(
+                self.system, rdm, property_name="electric_dipole", unit="au"
+            )
+            self.transition_dipoles[(ici, ici)] = dip + core_dip
+            self.oscillator_strengths[(ici, ici)] = 0.0
+            for jci in range(ici + 1, self.sa_info.nroots_sum):
+                jstate, jroot_in_state = self._get_state_root(jci)
+                try:
+                    vte = (
+                        self.evals_per_solver[jstate][jroot_in_state]
+                        - self.evals_per_solver[istate][iroot_in_state]
+                    )
+                    if vte < 0:
+                        _ici, _jci = jci, ici
+                        vte = -vte
+                    else:
+                        _ici, _jci = ici, jci
+                    tdm = self.make_1rdm(_ici, _jci)
                     tdm = np.einsum(
-                        "ij,pi,qj->pq", tdm, Cact, Cact.conj(), optimize=True
+                        "ij,pi,qj->pq", tdm, Cact.conj(), Cact, optimize=True
                     )
                     tdip = get_1e_property(
                         self.system, tdm, property_name="electric_dipole", unit="au"
                     )
-                    tdmdict[(i, j)] = tdip
-                    vte = self.evals_per_solver[ici][j] - self.evals_per_solver[ici][i]
-                    foscdict[(i, j)] = (2 / 3) * vte * np.linalg.norm(tdip) ** 2
-            self.fosc_per_solver.append(foscdict)
-            self.tdm_per_solver.append(tdmdict)
+                    self.transition_dipoles[(_ici, _jci)] = tdip
+                    self.oscillator_strengths[(_ici, _jci)] = (
+                        (2 / 3) * vte * np.linalg.norm(tdip) ** 2
+                    )
+                except (ValueError, NotImplementedError):
+                    continue
+
+        return self.transition_dipoles, self.oscillator_strengths
 
     def reset_eigensolver(self):
         # sCI eigensolver gets reset every iteration anyway
@@ -1261,11 +1356,11 @@ class SelectedCI(SelectedCISolver):
         top_dets = self.get_top_determinants()
         pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
 
-        # if self.do_transition_dipole:
-        #     self.compute_transition_properties()
-        #     pretty_print_ci_transition_props(
-        #         self.sa_info,
-        #         self.tdm_per_solver,
-        #         self.fosc_per_solver,
-        #         self.evals_per_solver,
-        #     )
+        if self.do_transition_dipole:
+            self.compute_transition_properties()
+            pretty_print_ci_transition_props(
+                self.sa_info,
+                self.transition_dipoles,
+                self.oscillator_strengths,
+                self.evals_per_solver,
+            )

@@ -1,3 +1,5 @@
+"""Helpers submodule"""
+
 from typing import Annotated, overload
 
 import numpy

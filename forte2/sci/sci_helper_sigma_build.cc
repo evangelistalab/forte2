@@ -818,7 +818,8 @@ double SelectedCIHelper::find_matching_dets_1trdm(size_t left_root, size_t right
                                                   const SelectedCIStrings& left_list,
                                                   const SelectedCIStrings& right_list,
                                                   const std::vector<double>& left_c,
-                                                  const std::vector<double>& right_c, size_t i,
+                                                  const std::vector<double>& right_c,
+                                                  size_t left_nroots, size_t right_nroots, size_t i,
                                                   size_t j, double sign) const {
     double result = 0.0;
 
@@ -835,8 +836,8 @@ double SelectedCIHelper::find_matching_dets_1trdm(size_t left_root, size_t right
         for (size_t jj{jstart}; jj < jend; ++jj) {
             const auto idx_j = right_list.sorted_dets_second_string(jj);
             if (const auto it = i_map.find(idx_j); it != i_map.end()) {
-                result += sign * left_c[nroots_ * it->second + left_root] *
-                          right_c[nroots_ * right_det_permutation[jj] + right_root];
+                result += sign * left_c[left_nroots * it->second + left_root] *
+                          right_c[right_nroots * right_det_permutation[jj] + right_root];
             }
         }
     } else {
@@ -844,8 +845,8 @@ double SelectedCIHelper::find_matching_dets_1trdm(size_t left_root, size_t right
         for (size_t ii{istart}; ii < iend; ++ii) {
             const auto idx_i = left_list.sorted_dets_second_string(ii);
             if (const auto it = j_map.find(idx_i); it != j_map.end()) {
-                result += sign * left_c[nroots_ * left_det_permutation[ii] + left_root] *
-                          right_c[nroots_ * it->second + right_root];
+                result += sign * left_c[left_nroots * left_det_permutation[ii] + left_root] *
+                          right_c[right_nroots * it->second + right_root];
             }
         }
     }
@@ -857,8 +858,22 @@ np_matrix SelectedCIHelper::compute_s_1trdm(const SelectedCIHelper& right_helper
                                             size_t right_root, Spin spin) const {
     const auto& left_helper = *this;
 
+    if (left_helper.norb_ != right_helper.norb_) {
+        throw std::runtime_error("SCI transition RDMs: The number of MOs must be the same in the "
+                                 "two wave functions.");
+    }
+    if (left_helper.na_ != right_helper.na_ || left_helper.nb_ != right_helper.nb_) {
+        throw std::runtime_error("SCI transition RDMs: The number of alpha and beta electrons must "
+                                 "be the same in the two wave functions.");
+    }
+    if (left_root >= left_helper.nroots_ || right_root >= right_helper.nroots_) {
+        throw std::runtime_error("SCI transition RDMs: Root index out of range.");
+    }
+
     const auto& left_c = left_helper.c_;
     const auto& right_c = right_helper.c_;
+    const auto left_nroots = left_helper.nroots_;
+    const auto right_nroots = right_helper.nroots_;
 
     auto rdm = make_zeros<nb::numpy, double, 2>({norb_, norb_});
     double* rdm_data = rdm.data();
@@ -885,8 +900,9 @@ np_matrix SelectedCIHelper::compute_s_1trdm(const SelectedCIHelper& right_helper
                 const auto& inv_sublist = left_list.one_hole_first_string_list_inv()[it->second];
                 for (const auto& [q, i, sign_q] : inv_sublist) {
                     const double sign = sign_p * sign_q;
-                    rdm_data[p * norb_ + q] += find_matching_dets_1trdm(
-                        left_root, right_root, left_list, right_list, left_c, right_c, i, j, sign);
+                    rdm_data[q * norb_ + p] += find_matching_dets_1trdm(
+                        left_root, right_root, left_list, right_list, left_c, right_c, left_nroots,
+                        right_nroots, i, j, sign);
                 }
             }
         }
@@ -903,6 +919,18 @@ np_matrix SelectedCIHelper::compute_a_1trdm(const SelectedCIHelper& right_helper
 np_matrix SelectedCIHelper::compute_b_1trdm(const SelectedCIHelper& right_helper, size_t left_root,
                                             size_t right_root) const {
     return compute_s_1trdm(right_helper, left_root, right_root, Spin::Beta);
+}
+
+np_matrix SelectedCIHelper::compute_sf_1trdm(const SelectedCIHelper& right_helper, size_t left_root,
+                                             size_t right_root) const {
+    auto sf_1trdm = make_zeros<nb::numpy, double, 2>({norb_, norb_});
+    if (norb_ > 0) {
+        auto a_1trdm = compute_a_1trdm(right_helper, left_root, right_root);
+        auto b_1trdm = compute_b_1trdm(right_helper, left_root, right_root);
+        matrix::daxpy<double>(1.0, a_1trdm, sf_1trdm);
+        matrix::daxpy<double>(1.0, b_1trdm, sf_1trdm);
+    }
+    return sf_1trdm;
 }
 
 } // namespace forte2

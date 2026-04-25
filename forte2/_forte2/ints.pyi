@@ -1,3 +1,5 @@
+"""Integrals submodule"""
+
 from collections.abc import Sequence
 from typing import Annotated, overload
 

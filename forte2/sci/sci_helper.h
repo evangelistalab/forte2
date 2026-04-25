@@ -224,6 +224,16 @@ class SelectedCIHelper {
     np_matrix compute_b_1trdm(const SelectedCIHelper& helper_right, size_t left_root,
                               size_t right_root) const;
 
+    /// @brief Compute the spin-free transition one-electron reduced density matrix
+    /// @param helper_right The right-hand side SelectedCIHelper
+    /// @param left_root The left-hand side root index
+    /// @param right_root The right-hand side root index
+    /// @return The spin-free one-electron reduced density matrix stored as
+    ///        gamma(sf)[p][q] = gamma(alpha)[p][q] + gamma(beta)[p][q]
+    /// @note If the number of orbitals is 0, a matrix of shape (0, 0) is returned
+    np_matrix compute_sf_1trdm(const SelectedCIHelper& helper_right, size_t left_root,
+                               size_t right_root) const;
+
   private:
     // == Class Private Methods ==
     /// @brief Compute the energies of all determinants in the variational space
@@ -298,8 +308,8 @@ class SelectedCIHelper {
                                     const SelectedCIStrings& left_list,
                                     const SelectedCIStrings& right_list,
                                     const std::vector<double>& left_c,
-                                    const std::vector<double>& right_c, size_t i, size_t j,
-                                    double sign) const;
+                                    const std::vector<double>& right_c, size_t left_nroots,
+                                    size_t right_nroots, size_t i, size_t j, double sign) const;
 
     // == Class Private Variables ==
 
