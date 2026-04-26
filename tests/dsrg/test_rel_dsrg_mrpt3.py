@@ -83,4 +83,3 @@ def test_mrpt3_f_atom_rel_sa():
     assert (dsrg.relax_eigvals[4] - dsrg.relax_eigvals[3]) * EH_TO_WN == pytest.approx(
         400.1722015310902, abs=1e-2
     )
-test_mrpt3_n2_nonrel()
