@@ -460,39 +460,6 @@ def test_sci_transition_dipole_different_nroots_matches_ci():
             ci.oscillator_strengths[key], abs=1e-5
         )
 
-
-def test_sci_claude_algorithms_flag():
-    """Claude sigma kernels should be opt-in and preserve the SCI energy."""
-    rhf = _h4_rhf()
-
-    sci_default = SelectedCI(
-        states=State(nel=4, multiplicity=1, ms=0.0),
-        active_orbitals=list(range(4)),
-        sci_params=SelectedCIParams(
-            selection_algorithm="hbci",
-            var_threshold=1e-12,
-            pt2_threshold=0.0,
-            use_claude_algorithms=False,
-        ),
-    )(rhf)
-    sci_default.run()
-
-    sci_claude = SelectedCI(
-        states=State(nel=4, multiplicity=1, ms=0.0),
-        active_orbitals=list(range(4)),
-        sci_params=SelectedCIParams(
-            selection_algorithm="hbci",
-            var_threshold=1e-12,
-            pt2_threshold=0.0,
-            use_claude_algorithms=True,
-        ),
-    )(rhf)
-    sci_claude.run()
-
-    assert sci_default.E[0] == approx(-2.180967812920)
-    assert sci_claude.E[0] == approx(sci_default.E[0])
-
-
 def test_sci_make_rdms():
     """Test 1- and 2-RDMs from SelectedCI."""
     rhf = _h4_rhf()

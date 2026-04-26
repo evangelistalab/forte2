@@ -141,9 +141,6 @@ class SelectedCIParams:
     pt2_regularizer_strength: float, optional, default=0.0
         The strength of the PT2 regularization.
         Note that the interpretation of this parameter depends on the choice of pt2_regularizer (see above).
-    use_claude_algorithms: bool, optional, default=False
-        If True, use the optimized Claude sigma-build kernels during SCI Hamiltonian application.
-        If False, use the reference loop-based H2aa/H2bb/H2ab kernels.
     """
 
     maxcycle: int = 10
@@ -164,7 +161,6 @@ class SelectedCIParams:
     energy_shift: float = None
     pt2_regularizer: str = "none"
     pt2_regularizer_strength: float = 0.0
-    use_claude_algorithms: bool = False
 
     def __post_init__(self):
         if self.ci_algorithm.lower() not in ["exact", "sparse"]:

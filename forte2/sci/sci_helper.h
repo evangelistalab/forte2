@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <functional>
 #include <vector>
 #include <cmath>
@@ -87,11 +86,6 @@ class SelectedCIHelper {
     /// @brief Set the PT2 regularization method (none, shift, dsrg)
     void set_pt2_regularizer(const std::string& regularizer, double strength = 0.5);
 
-    /// @brief Enable or disable the optimized Claude sigma-build kernels
-    void set_use_claude_algorithms(bool use_claude_algorithms) {
-        use_claude_algorithms_ = use_claude_algorithms;
-    }
-
     /// @return The energies of the roots
     const std::vector<double>& energies() const { return root_energies_; }
 
@@ -131,19 +125,6 @@ class SelectedCIHelper {
     /// @param basis The coefficients of the determinants
     /// @param sigma The coefficients of the sigma vector
     void Hamiltonian(np_vector basis, np_vector sigma) const;
-
-    /// @brief Apply the alpha-beta part of the two-electron Hamiltonian (loop version)
-    void H2ab(std::span<double> basis, std::span<double> sigma) const;
-    /// @brief Apply the alpha-beta part of the two-electron Hamiltonian (Claude version)
-    void H2ab_claude(std::span<double> basis, std::span<double> sigma) const;
-    /// @brief Apply the alpha-alpha part of the two-electron Hamiltonian (loop version)
-    void H2aa(std::span<double> basis, std::span<double> sigma) const;
-    /// @brief Apply the beta-beta part of the two-electron Hamiltonian (loop version)
-    void H2bb(std::span<double> basis, std::span<double> sigma) const;
-    /// @brief Apply the alpha-alpha part of the two-electron Hamiltonian (Claude version)
-    void H2aa_claude(std::span<double> basis, std::span<double> sigma) const;
-    /// @brief Apply the beta-beta part of the two-electron Hamiltonian (Claude version)
-    void H2bb_claude(std::span<double> basis, std::span<double> sigma) const;
 
     /// @brief Compute the expectation value of S^2 for each root
     /// @return A vector of <S^2> values for each root
@@ -258,6 +239,9 @@ class SelectedCIHelper {
     void H0(std::span<double> basis, std::span<double> sigma) const;
     void H1a(std::span<double> basis, std::span<double> sigma) const;
     void H1b(std::span<double> basis, std::span<double> sigma) const;
+    void H2a(std::span<double> basis, std::span<double> sigma) const;
+    void H2b(std::span<double> basis, std::span<double> sigma) const;
+    void H2ab(std::span<double> basis, std::span<double> sigma) const;
 
     /// @brief Find matching determinants for the given excitation and accumulate their
     /// contributions to the sigma vector
@@ -334,9 +318,6 @@ class SelectedCIHelper {
 
     /// @brief Number of batches per thread for parallelization
     size_t num_batches_per_thread_ = 1;
-
-    /// @brief Whether to use the optimized Claude sigma-build kernels in Hamiltonian()
-    bool use_claude_algorithms_ = false;
 
     /// @brief Number of orbitals
     const size_t norb_;
@@ -456,29 +437,6 @@ class SelectedCIHelper {
 
     /// @brief Time taken for the last selection step
     double selection_time_ = 0.0;
-
-    // === H2ab_claude cache (mutable for lazy initialization in const method) ===
-    /// @brief Pre-computed V(p,r,q,s) matrix reshaped as V_mat[p*norb+r, q*norb+s]
-    mutable std::vector<double> h2ab_claude_V_mat_;
-    /// @brief pair_to_col[Ka * nKb + Kb] = column index, SIZE_MAX if inactive
-    mutable std::vector<size_t> h2ab_claude_pair_to_col_;
-    /// @brief Number of active (Ka, Kb) pairs in the current CI space
-    mutable size_t h2ab_claude_Kpairs_ = 0;
-    /// @brief Sparse D: D_cols_[col] = {qs, value} non-zero entries for that (Ka,Kb) column
-    /// Each column has at most na*nb entries (one per (q,s) pair of removed electrons)
-    mutable std::vector<std::vector<std::pair<uint32_t, double>>> h2ab_claude_D_cols_;
-
-    // === H2aa_claude scratch (same pattern as H2ab_claude, using two-hole alpha strings) ===
-    /// @brief pair_to_col_aa[Ka * nIb + Ib] = column index, SIZE_MAX if inactive
-    mutable std::vector<size_t> h2aa_claude_pair_to_col_;
-    /// @brief Sparse D: D_cols[col] = {rs_label, coeff} per active (Ka, Ib) pair
-    mutable std::vector<std::vector<std::pair<uint32_t, double>>> h2aa_claude_D_cols_;
-
-    // === H2bb_claude scratch (same pattern as H2ab_claude, using two-hole beta strings) ===
-    /// @brief pair_to_col_bb[Kb * nBa + Ia] = column index, SIZE_MAX if inactive
-    mutable std::vector<size_t> h2bb_claude_pair_to_col_;
-    /// @brief Sparse D: D_cols[col] = {rs_label, coeff} per active (Kb, Ia) pair
-    mutable std::vector<std::vector<std::pair<uint32_t, double>>> h2bb_claude_D_cols_;
 };
 
 } // namespace forte2

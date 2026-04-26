@@ -83,7 +83,6 @@ void SelectedCIHelper::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
     }
 
     update_hbci_ints();
-    h2ab_claude_V_mat_.clear(); // invalidate the H2ab_claude integral cache
 }
 
 void SelectedCIHelper::set_frozen_creation(const std::vector<size_t>& frozen_creation) {
@@ -144,8 +143,7 @@ void SelectedCIHelper::update_hbci_ints() {
             std::vector<std::tuple<double, double, u_int32_t, u_int32_t>> v_list;
             v_list.reserve(norb_ * norb_);
             for (size_t r{0}; r < norb_; ++r) {
-                // we screen out integrals where the annihilation orbital is frozen since they will
-                // never contribute
+                // we screen out integrals where the annihilation orbital is frozen since they will never contribute
                 if (!creation_allowed(r))
                     continue;
                 for (size_t s{0}; s < norb_; ++s) {
@@ -172,8 +170,7 @@ void SelectedCIHelper::update_hbci_ints() {
             std::vector<std::tuple<double, double, u_int32_t, u_int32_t>> v_list;
             v_list.reserve(norb_ * norb_);
             for (size_t q{0}; q < norb_; ++q) {
-                // we screen out integrals where the annihilation orbital is frozen since they will
-                // never contribute
+                // we screen out integrals where the annihilation orbital is frozen since they will never contribute
                 if (!annihilation_allowed(q))
                     continue;
                 for (size_t s{0}; s < norb_; ++s) {

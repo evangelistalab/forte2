@@ -46,9 +46,6 @@ class SelectedCIStrings {
     /// @return The number of unique first strings
     size_t first_string_size() const { return sorted_first_string_.size(); }
 
-    /// @return The number of unique second strings
-    size_t second_string_size() const { return sorted_second_string_.size(); }
-
     /// @return For a given first string, this maps the second string index to the determinant index
     /// in the original ordering
     const std::vector<ankerl::unordered_dense::map<size_t, size_t, std::hash<size_t>>>&
