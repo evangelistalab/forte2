@@ -555,6 +555,9 @@ class Determinant:
     def excitation_connection(self, arg: Determinant, /) -> list[list[int]]:
         """Get the excitation connection between this and another determinant"""
 
+    def str(self, n: int = 64) -> str:
+        """Get the string representation of the Slater determinant"""
+
 @overload
 def spin2(arg0: Determinant, arg1: Determinant, /) -> float:
     """Compute the S^2 value between two determinants"""
