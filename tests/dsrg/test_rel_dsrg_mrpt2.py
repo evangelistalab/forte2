@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from forte2 import System, GHF, RelMCOptimizer, AVAS
-from forte2.dsrg import RelDSRG_MRPT2, RelDSRG_MRPT2_Slow
+from forte2.dsrg import RelDSRG_MRPT2
 from forte2.helpers.comparisons import approx
 from forte2.data.atom_data import EH_TO_WN
 
@@ -213,7 +213,7 @@ def test_mrpt2_s_rel_sa_gauss_nuc():
 
 
 @pytest.mark.slow
-def test_mrpt2_sh_with_slow():
+def test_mrpt2_sh():
     xyz = """
     S 0 0 0
     H 0 0 1.4
@@ -241,16 +241,6 @@ def test_mrpt2_sh_with_slow():
     dsrg = RelDSRG_MRPT2(flow_param=0.5, relax_reference="iterate")(mc)
     dsrg.run()
     assert np.abs(dsrg.E_dsrg.imag) < 1e-12
-
-    mc = RelMCOptimizer(
-        nel=17,
-        nroots=4,
-        core_orbitals=10,
-        active_orbitals=10,
-    )(mf)
-    dsrg_slow = RelDSRG_MRPT2_Slow(flow_param=0.5, relax_reference="iterate")(mc)
-    dsrg_slow.run()
-    assert np.abs(dsrg_slow.E_dsrg.imag) < 1e-12
 
     ref_relax_energies = np.array(
         [
@@ -295,13 +285,3 @@ def test_mrpt2_sh_with_slow():
     assert dsrg.relax_eigvals == approx(ref_relax_eigvals)
     assert dsrg.relax_eigvals_history == approx(ref_relax_eigvals_history)
     assert dsrg.E_dsrg == approx(ref_E)
-
-    assert dsrg_slow.relax_energies[:3, :] == approx(ref_relax_energies)
-    assert dsrg_slow.relax_eigvals == approx(ref_relax_eigvals)
-    assert dsrg_slow.relax_eigvals_history == approx(ref_relax_eigvals_history)
-    assert dsrg_slow.E_dsrg == approx(ref_E)
-
-    assert dsrg.relax_energies == approx(dsrg_slow.relax_energies)
-    assert dsrg.relax_eigvals == approx(dsrg_slow.relax_eigvals)
-    assert dsrg.relax_eigvals_history == approx(dsrg_slow.relax_eigvals_history)
-    assert dsrg.E_dsrg == approx(dsrg_slow.E_dsrg)
