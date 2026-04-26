@@ -331,9 +331,7 @@ def test_sci_1trdm_validates_helper_compatibility():
     h3 = np.zeros((3, 3))
     v3 = np.zeros((3, 3, 3, 3))
 
-    helper = SelectedCIHelper(
-        2, [Determinant("20")], np.array([[1.0]]), 0.0, h2, v2, 0
-    )
+    helper = SelectedCIHelper(2, [Determinant("20")], np.array([[1.0]]), 0.0, h2, v2, 0)
     different_norb = SelectedCIHelper(
         3, [Determinant("200")], np.array([[1.0]]), 0.0, h3, v3, 0
     )
