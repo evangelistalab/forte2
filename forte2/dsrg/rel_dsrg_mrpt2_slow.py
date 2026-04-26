@@ -267,11 +267,11 @@ class RelDSRG_MRPT2_Slow(DSRGBase):
             )
 
     def _compute_pt2_energy(self, form_hbar=False):
-        return self.dsrg_helper.evaluate_H_T_C0(
-            self.T1,
-            self.T2,
+        return self.dsrg_helper.H_T_C0(
             self.F_tilde,
             self.ints["V"],
+            self.T1,
+            self.T2,
             self.cumulants,
             store_large=True,
         )

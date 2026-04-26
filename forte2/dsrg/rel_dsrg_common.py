@@ -44,190 +44,6 @@ class _RelDSRGHelper:
             "v": self.nvirt,
         }
 
-    def evaluate_H_T_C0(self, t1, t2, h1, h2, cumulants, store_large=False):
-        E = 0.0
-        g1 = cumulants["gamma1"]
-        e1 = cumulants["eta1"]
-        l2 = cumulants["lambda2"]
-        l3 = cumulants["lambda3"]
-
-        E += +1.000 * np.einsum(
-            "iu,iv,vu->",
-            h1["ca"],
-            t1["ca"],
-            e1,
-            optimize=True,
-        )
-        E += +1.000 * np.einsum(
-            "ia,ia->",
-            h1["cv"],
-            t1["cv"],
-            optimize=True,
-        )
-        E += +1.000 * np.einsum(
-            "ua,va,uv->",
-            h1["av"],
-            t1["av"],
-            g1,
-            optimize=True,
-        )
-        E += -0.500 * np.einsum(
-            "iu,ixvw,vwux->",
-            h1["ca"],
-            t2["caaa"],
-            l2,
-            optimize=True,
-        )
-        E += -0.500 * np.einsum(
-            "ua,wxva,uvwx->",
-            h1["av"],
-            t2["aaav"],
-            l2,
-            optimize=True,
-        )
-        E += -0.500 * np.einsum(
-            "iu,ivwx,uvwx->",
-            t1["ca"],
-            h2["caaa"],
-            l2,
-            optimize=True,
-        )
-        E += -0.500 * np.einsum(
-            "ua,vwxa,vwux->",
-            t1["av"],
-            h2["aaav"],
-            l2,
-            optimize=True,
-        )
-        E += +0.250 * np.einsum(
-            "ijuv,ijwx,vx,uw->",
-            t2["ccaa"],
-            h2["ccaa"],
-            e1,
-            e1,
-            optimize=True,
-        )
-        E += +0.125 * np.einsum(
-            "ijuv,ijwx,uvwx->",
-            t2["ccaa"],
-            h2["ccaa"],
-            l2,
-            optimize=True,
-        )
-        E += +0.500 * np.einsum(
-            "iwuv,ixyz,vz,uy,xw->",
-            t2["caaa"],
-            h2["caaa"],
-            e1,
-            e1,
-            g1,
-            optimize=True,
-        )
-        E += +1.000 * np.einsum(
-            "iwuv,ixyz,vz,uxwy->",
-            t2["caaa"],
-            h2["caaa"],
-            e1,
-            l2,
-            optimize=True,
-        )
-        E += +0.250 * np.einsum(
-            "iwuv,ixyz,xw,uvyz->",
-            t2["caaa"],
-            h2["caaa"],
-            g1,
-            l2,
-            optimize=True,
-        )
-        E += +0.250 * np.einsum(
-            "iwuv,ixyz,uvxwyz->",
-            t2["caaa"],
-            h2["caaa"],
-            l3,
-            optimize=True,
-        )
-        E += +1.000 * np.einsum(
-            "ivua,iwxa,ux,wv->",
-            t2["caav"],
-            h2["caav"],
-            e1,
-            g1,
-            optimize=True,
-        )
-        E += +1.000 * np.einsum(
-            "ivua,iwxa,uwvx->",
-            t2["caav"],
-            h2["caav"],
-            l2,
-            optimize=True,
-        )
-        E += +0.500 * np.einsum(
-            "vwua,xyza,uz,yw,xv->",
-            t2["aaav"],
-            h2["aaav"],
-            e1,
-            g1,
-            g1,
-            optimize=True,
-        )
-        E += +0.250 * np.einsum(
-            "vwua,xyza,uz,xyvw->",
-            t2["aaav"],
-            h2["aaav"],
-            e1,
-            l2,
-            optimize=True,
-        )
-        E += +1.000 * np.einsum(
-            "vwua,xyza,yw,uxvz->",
-            t2["aaav"],
-            h2["aaav"],
-            g1,
-            l2,
-            optimize=True,
-        )
-        E += -0.250 * np.einsum(
-            "vwua,xyza,uxyvwz->",
-            t2["aaav"],
-            h2["aaav"],
-            l3,
-            optimize=True,
-        )
-        E += +0.250 * np.einsum(
-            "uvab,wxab,xv,wu->",
-            t2["aavv"],
-            h2["aavv"],
-            g1,
-            g1,
-            optimize=True,
-        )
-        E += +0.125 * np.einsum(
-            "uvab,wxab,wxuv->",
-            t2["aavv"],
-            h2["aavv"],
-            l2,
-            optimize=True,
-        )
-        if store_large:
-            E += +0.250 * np.einsum(
-                "ijab,ijab->", t2["ccvv"], h2["ccvv"], optimize=True
-            )
-            E += +0.500 * np.einsum(
-                "iuab,ivab,vu->",
-                t2["cavv"],
-                h2["cavv"],
-                g1,
-                optimize=True,
-            )
-            E += +0.500 * np.einsum(
-                "ijua,ijva,uv->",
-                t2["ccav"],
-                h2["ccav"],
-                e1,
-                optimize=True,
-            )
-        return E
-
     def make_tensor(self, labels):
         d = dict()
         for label in labels:
@@ -237,7 +53,7 @@ class _RelDSRGHelper:
 
     # fmt: off
     @staticmethod
-    def H_T_C0(F, V, T1, T2, cumulants, scale=1.0):
+    def H_T_C0(F, V, T1, T2, cumulants, scale=1.0, store_large=True):
         # 24 lines
 
         g1 = cumulants['gamma1']
@@ -259,22 +75,24 @@ class _RelDSRGHelper:
         C0 += scale * +1.000 * np.einsum('iuvw,ixyz,wz,vxuy->', T2['caaa'], V['caaa'], e1, l2, optimize=True)
         C0 += scale * +0.250 * np.einsum('iuvw,ixyz,xu,vwyz->', T2['caaa'], V['caaa'], g1, l2, optimize=True)
         C0 += scale * +0.250 * np.einsum('iuvw,ixyz,vwxuyz->', T2['caaa'], V['caaa'], l3, optimize=True)
-        C0 += scale * +0.500 * np.einsum('ijua,ijva,uv->', T2['ccav'], V['ccav'], e1, optimize=True)
         C0 += scale * +1.000 * np.einsum('iuva,iwxa,vx,wu->', T2['caav'], V['caav'], e1, g1, optimize=True)
         C0 += scale * +1.000 * np.einsum('iuva,iwxa,vwux->', T2['caav'], V['caav'], l2, optimize=True)
         C0 += scale * +0.500 * np.einsum('uvwa,xyza,wz,yv,xu->', T2['aaav'], V['aaav'], e1, g1, g1, optimize=True)
         C0 += scale * +0.250 * np.einsum('uvwa,xyza,wz,xyuv->', T2['aaav'], V['aaav'], e1, l2, optimize=True)
         C0 += scale * +1.000 * np.einsum('uvwa,xyza,yv,wxuz->', T2['aaav'], V['aaav'], g1, l2, optimize=True)
         C0 += scale * -0.250 * np.einsum('uvwa,xyza,wxyuvz->', T2['aaav'], V['aaav'], l3, optimize=True)
-        C0 += scale * +0.250 * np.einsum('ijab,ijab->', T2['ccvv'], V['ccvv'], optimize=True)
-        C0 += scale * +0.500 * np.einsum('iuab,ivab,vu->', T2['cavv'], V['cavv'], g1, optimize=True)
         C0 += scale * +0.250 * np.einsum('uvab,wxab,xv,wu->', T2['aavv'], V['aavv'], g1, g1, optimize=True)
         C0 += scale * +0.125 * np.einsum('uvab,wxab,wxuv->', T2['aavv'], V['aavv'], l2, optimize=True)
+
+        if store_large:
+            C0 += scale * +0.500 * np.einsum('ijua,ijva,uv->', T2['ccav'], V['ccav'], e1, optimize=True)
+            C0 += scale * +0.250 * np.einsum('ijab,ijab->', T2['ccvv'], V['ccvv'], optimize=True)
+            C0 += scale * +0.500 * np.einsum('iuab,ivab,vu->', T2['cavv'], V['cavv'], g1, optimize=True)
 
         return C0
     
     @staticmethod
-    def H_T_C1_aa(C1, F, V, T1, T2, cumulants, scale=1.0):
+    def H_T_C1_aa(C1, F, V, T1, T2, cumulants, scale=1.0, store_large=True):
         # 26 lines
 
         g1 = cumulants['gamma1']
@@ -294,7 +112,6 @@ class _RelDSRGHelper:
         C1 += scale * +0.500 * np.einsum('iuvw,ixyz,wxyz->uv', T2['caaa'], V['caaa'], l2, optimize=True)
         C1 += scale * -1.000 * np.einsum('iuvw,ixyz,wz,xu->yv', T2['caaa'], V['caaa'], e1, g1, optimize=True)
         C1 += scale * -1.000 * np.einsum('iuvw,ixyz,wxuz->yv', T2['caaa'], V['caaa'], l2, optimize=True)
-        C1 += scale * -0.500 * np.einsum('ijua,ijva->vu', T2['ccav'], V['ccav'], optimize=True)
         C1 += scale * -1.000 * np.einsum('iuva,iwxa,wu->xv', T2['caav'], V['caav'], g1, optimize=True)
         C1 += scale * -0.500 * np.einsum('uvwa,xyza,xyvz->uw', T2['aaav'], V['aaav'], l2, optimize=True)
         C1 += scale * -0.500 * np.einsum('uvwa,xyza,yv,xu->zw', T2['aaav'], V['aaav'], g1, g1, optimize=True)
@@ -306,8 +123,12 @@ class _RelDSRGHelper:
         C1 += scale * +1.000 * np.einsum('uvwa,xyza,wz,yv->ux', T2['aaav'], V['aaav'], e1, g1, optimize=True)
         C1 += scale * +1.000 * np.einsum('uvwa,xyza,wyvz->ux', T2['aaav'], V['aaav'], l2, optimize=True)
         C1 += scale * +0.500 * np.einsum('uvwa,xyza,wyuv->zx', T2['aaav'], V['aaav'], l2, optimize=True)
-        C1 += scale * +0.500 * np.einsum('iuab,ivab->uv', T2['cavv'], V['cavv'], optimize=True)
         C1 += scale * +0.500 * np.einsum('uvab,wxab,xv->uw', T2['aavv'], V['aavv'], g1, optimize=True)
+
+        if store_large:
+            C1 += scale * -0.500 * np.einsum('ijua,ijva->vu', T2['ccav'], V['ccav'], optimize=True)
+            C1 += scale * +0.500 * np.einsum('iuab,ivab->uv', T2['cavv'], V['cavv'], optimize=True)
+
     
     @staticmethod
     def H_T_C2_aaaa(C2, F, V, T1, T2, cumulants, scale=1.0):
