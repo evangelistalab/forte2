@@ -473,6 +473,15 @@ class _SelectedCISingleStateSolver:
         nb_active = self.state.nb - self.ncore
         nel_active = na_active + nb_active
 
+        if window_occ < 0:
+            raise ValueError(
+                f"guess_occ_window must be non-negative, got {window_occ}."
+            )
+        if window_vir < 0:
+            raise ValueError(
+                f"guess_vir_window must be non-negative, got {window_vir}."
+            )
+
         if window_occ + window_vir == 0:
             logger.log_warning(
                 "No guess determinants provided and guess occupation windows set to 0. "
@@ -488,6 +497,12 @@ class _SelectedCISingleStateSolver:
             return [d0]
 
         nocc = nel_active // 2 - window_occ
+        if nocc < 0:
+            raise ValueError(
+                f"guess_occ_window={window_occ} is larger than the number of active "
+                f"occupied orbital pairs ({nel_active // 2}). Reduce guess_occ_window "
+                "to generate valid guess determinants."
+            )
         noccel = 2 * nocc
         nactv = window_occ + window_vir
 

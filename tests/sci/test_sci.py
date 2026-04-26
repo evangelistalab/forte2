@@ -4,6 +4,7 @@ import pytest
 from forte2 import (
     System,
     State,
+    MOSpace,
     Determinant,
     CIStrings,
     SelectedCIHelper,
@@ -14,6 +15,7 @@ from forte2 import (
 from forte2.ci import CI
 from forte2.scf import RHF
 from forte2.sci import SelectedCI
+from forte2.sci.sci import _SelectedCISingleStateSolver
 from forte2.helpers.comparisons import approx
 from forte2.base_classes.params import SelectedCIParams, DavidsonLiuParams
 
@@ -400,6 +402,28 @@ def test_sci_1trdm_validates_helper_compatibility():
 
     with pytest.raises(RuntimeError, match="Root index out of range"):
         helper.a_1trdm(two_root_helper, 0, 2)
+
+
+@pytest.mark.parametrize(
+    ("window_occ", "window_vir", "message"),
+    [
+        (-1, 1, "guess_occ_window must be non-negative"),
+        (1, -1, "guess_vir_window must be non-negative"),
+        (3, 0, "guess_occ_window=3 is larger than the number of active"),
+    ],
+)
+def test_sci_initial_guess_validates_occupation_windows(
+    window_occ, window_vir, message
+):
+    """SelectedCI initial determinant guesses validate occupation windows."""
+    solver = _SelectedCISingleStateSolver(
+        sci_params=SelectedCIParams(),
+        mo_space=MOSpace(nmo=4, active_orbitals=list(range(4))),
+        state=State(nel=4, multiplicity=1, ms=0.0),
+    )
+
+    with pytest.raises(ValueError, match=message):
+        solver._generate_initial_guess_dets(window_occ, window_vir)
 
 
 def test_sci_transition_dipole_matches_ci():
