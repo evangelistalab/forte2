@@ -325,31 +325,63 @@ def test_sci_1trdm_allows_different_root_counts():
 
 def test_sci_1trdm_matches_second_strings_between_different_spaces():
     """SelectedCI transition 1-RDMs match spectator strings across different spaces."""
-    norb = 3
+    norb = 4
     h = np.zeros((norb, norb))
     v = np.zeros((norb, norb, norb, norb))
-    expected = np.zeros((norb, norb))
-    expected[1, 0] = 1.0
 
-    left_dets = [Determinant("ab0"), Determinant("ba0")]
-    left_c = np.array([[0.0], [1.0]])
+    def reference_1trdm(left_dets, right_dets, left_c, right_c, spin):
+        rdm = np.zeros((norb, norb))
+        left_det_index = {det: idx for idx, det in enumerate(left_dets)}
+        destroy = f"destroy_{spin}"
+        create = f"create_{spin}"
+
+        for right_idx, right_det in enumerate(right_dets):
+            for p in range(norb):
+                det_p = Determinant(right_det)
+                sign_p = getattr(det_p, destroy)(p)
+                if sign_p == 0.0:
+                    continue
+
+                for q in range(norb):
+                    det_q = Determinant(det_p)
+                    sign_q = getattr(det_q, create)(q)
+                    left_idx = left_det_index.get(det_q)
+                    if sign_q != 0.0 and left_idx is not None:
+                        rdm[q, p] += (
+                            sign_p * sign_q * left_c[left_idx, 0] * right_c[right_idx, 0]
+                        )
+
+        return rdm
+
+    left_dets = [
+        Determinant("ab00"),
+        Determinant("ba00"),
+        Determinant("0ab0"),
+        Determinant("0ba0"),
+        Determinant("a00b"),
+        Determinant("00ab"),
+    ]
+    right_dets = [
+        Determinant("2000"),
+        Determinant("ab00"),
+        Determinant("0a0b"),
+        Determinant("b0a0"),
+        Determinant("00ab"),
+        Determinant("a00b"),
+    ]
+    left_c = np.array([[0.3], [-0.5], [0.7], [1.1], [-0.2], [0.4]])
+    right_c = np.array([[0.6], [-0.8], [0.5], [1.2], [-0.3], [0.9]])
+
+    expected_a = reference_1trdm(left_dets, right_dets, left_c, right_c, "a")
+    expected_b = reference_1trdm(left_dets, right_dets, left_c, right_c, "b")
+    assert np.count_nonzero(np.abs(expected_a) > 1e-12) > 4
+    assert np.count_nonzero(np.abs(expected_b) > 1e-12) > 4
+
     left_helper = SelectedCIHelper(norb, left_dets, left_c, 0.0, h, v, 0)
-
-    right_helper = SelectedCIHelper(
-        norb, [Determinant("200")], np.array([[1.0]]), 0.0, h, v, 0
-    )
-    assert np.allclose(left_helper.a_1trdm(right_helper, 0, 0), expected)
-
-    right_helper_larger_block = SelectedCIHelper(
-        norb,
-        [Determinant("200"), Determinant("ab0")],
-        np.array([[1.0], [0.0]]),
-        0.0,
-        h,
-        v,
-        0,
-    )
-    assert np.allclose(left_helper.a_1trdm(right_helper_larger_block, 0, 0), expected)
+    right_helper = SelectedCIHelper(norb, right_dets, right_c, 0.0, h, v, 0)
+    assert np.allclose(left_helper.a_1trdm(right_helper, 0, 0), expected_a)
+    assert np.allclose(left_helper.b_1trdm(right_helper, 0, 0), expected_b)
+    assert np.allclose(left_helper.sf_1trdm(right_helper, 0, 0), expected_a + expected_b)
 
 
 def test_sci_1trdm_validates_helper_compatibility():
