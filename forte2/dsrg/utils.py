@@ -7,19 +7,6 @@ renormalize_V_block = dsrg_utils.renormalize_V_block
 renormalize_3index = dsrg_utils.renormalize_3index
 
 
-def antisymmetrize_2body(T, indices):
-    # antisymmetrize the residual
-    T_anti = np.zeros(T.shape, dtype=T.dtype)
-    T_anti += np.einsum("ijab->ijab", T)
-    if indices[0] == indices[1]:
-        T_anti -= np.einsum("ijab->jiab", T)
-        if indices[2] == indices[3]:
-            T_anti += np.einsum("ijab->jiba", T)
-    if indices[2] == indices[3]:
-        T_anti -= np.einsum("ijab->ijba", T)
-    return T_anti
-
-
 def hermitize_and_antisymmetrize_two_body_dense(T):
     # antisymmetrize the residual
     T += np.einsum(
@@ -34,7 +21,7 @@ def hermitize_and_antisymmetrize_two_body_dense(T):
 def hermitize_and_antisymmetrize_two_body(T):
     blks = set(T.keys())
     for Tblk in T.values():
-        np.conj(Tblk, out=Tblk) 
+        np.conj(Tblk, out=Tblk)
 
     # Hermitize first
     for blk in T.keys():
