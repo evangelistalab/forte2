@@ -488,12 +488,13 @@ double SelectedCIHelper::find_matching_dets_1trdm(size_t left_root, size_t right
     const auto& left_det_permutation = left_list.det_permutation();
 
     // Here we choose to loop over the smaller range and look up the determinants in the larger
-    // range by using the hash map. The map keys are list-local second-string indices, so translate
-    // through the actual second-string value before crossing from one helper's list to the other.
+    // range by using the hash map. The map keys are list-local second-string indices, so we
+    // map from the right <-> left actual second-string index.
     if (iend - istart >= jend - jstart) {
         const auto& i_map = left_list.second_string_to_det_index()[i];
         for (size_t jj{jstart}; jj < jend; ++jj) {
             const auto right_idx_j = right_list.sorted_dets_second_string(jj);
+            // find the corresponding second string in the left list and get its index
             const auto& second_string_j = right_list.sorted_second_string(right_idx_j);
             const auto left_idx_j = left_list.find_second_string_index(second_string_j);
             if (left_idx_j.has_value()) {
@@ -507,6 +508,7 @@ double SelectedCIHelper::find_matching_dets_1trdm(size_t left_root, size_t right
         const auto& j_map = right_list.second_string_to_det_index()[j];
         for (size_t ii{istart}; ii < iend; ++ii) {
             const auto left_idx_i = left_list.sorted_dets_second_string(ii);
+            // find the corresponding second string in the right list and get its index
             const auto& second_string_i = left_list.sorted_second_string(left_idx_i);
             const auto right_idx_i = right_list.find_second_string_index(second_string_i);
             if (right_idx_i.has_value()) {

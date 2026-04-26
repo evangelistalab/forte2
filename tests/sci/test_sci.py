@@ -505,6 +505,7 @@ def test_sci_transition_dipole_different_nroots_matches_ci():
             ci.oscillator_strengths[key], abs=1e-5
         )
 
+
 def test_sci_make_rdms():
     """Test 1- and 2-RDMs from SelectedCI."""
     rhf = _h4_rhf()
