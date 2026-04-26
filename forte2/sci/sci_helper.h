@@ -189,17 +189,17 @@ class SelectedCIHelper {
     /// @param helper_right The right-hand side SelectedCIHelper
     /// @param left_root The left-hand side root index
     /// @param right_root The right-hand side root index
-    /// @return The one-electron reduced density matrix stored as
+    /// @return The one-electron transition reduced density matrix stored as
     ///        gamma(alpha)[p][q] = <L| a^+_p a_q |R> with p,q orbitals of spin alpha
     /// @note If the number of orbitals is 0, a matrix of shape (0, 0) is returned
     np_matrix compute_a_1trdm(const SelectedCIHelper& helper_right, size_t left_root,
                               size_t right_root) const;
 
-    /// @brief Compute the beta one-electron reduced density matrix
+    /// @brief Compute the beta one-electron transition reduced density matrix
     /// @param helper_right The right-hand side SelectedCIHelper
     /// @param left_root The left-hand side root index
     /// @param right_root The right-hand side root index
-    /// @return The one-electron reduced density matrix stored as
+    /// @return The one-electron transition reduced density matrix stored as
     ///        gamma(beta)[p][q] = <L| b^+_p b_q |R> with p,q orbitals of spin beta
     /// @note If the number of orbitals is 0, a matrix of shape (0, 0) is returned
     np_matrix compute_b_1trdm(const SelectedCIHelper& helper_right, size_t left_root,
