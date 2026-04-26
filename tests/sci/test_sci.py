@@ -1,7 +1,16 @@
 import numpy as np
 import pytest
 
-from forte2 import System, State, Determinant, CIStrings, SelectedCIHelper
+from forte2 import (
+    System,
+    State,
+    Determinant,
+    CIStrings,
+    SelectedCIHelper,
+    SparseState,
+    compute_a_1rdm,
+    compute_b_1rdm,
+)
 from forte2.ci import CI
 from forte2.scf import RHF
 from forte2.sci import SelectedCI
@@ -329,30 +338,6 @@ def test_sci_1trdm_matches_second_strings_between_different_spaces():
     h = np.zeros((norb, norb))
     v = np.zeros((norb, norb, norb, norb))
 
-    def reference_1trdm(left_dets, right_dets, left_c, right_c, spin):
-        rdm = np.zeros((norb, norb))
-        left_det_index = {det: idx for idx, det in enumerate(left_dets)}
-        destroy = f"destroy_{spin}"
-        create = f"create_{spin}"
-
-        for right_idx, right_det in enumerate(right_dets):
-            for p in range(norb):
-                det_p = Determinant(right_det)
-                sign_p = getattr(det_p, destroy)(p)
-                if sign_p == 0.0:
-                    continue
-
-                for q in range(norb):
-                    det_q = Determinant(det_p)
-                    sign_q = getattr(det_q, create)(q)
-                    left_idx = left_det_index.get(det_q)
-                    if sign_q != 0.0 and left_idx is not None:
-                        rdm[q, p] += (
-                            sign_p * sign_q * left_c[left_idx, 0] * right_c[right_idx, 0]
-                        )
-
-        return rdm
-
     left_dets = [
         Determinant("ab00"),
         Determinant("ba00"),
@@ -372,8 +357,10 @@ def test_sci_1trdm_matches_second_strings_between_different_spaces():
     left_c = np.array([[0.3], [-0.5], [0.7], [1.1], [-0.2], [0.4]])
     right_c = np.array([[0.6], [-0.8], [0.5], [1.2], [-0.3], [0.9]])
 
-    expected_a = reference_1trdm(left_dets, right_dets, left_c, right_c, "a")
-    expected_b = reference_1trdm(left_dets, right_dets, left_c, right_c, "b")
+    left_state = SparseState(dict(zip(left_dets, left_c[:, 0])))
+    right_state = SparseState(dict(zip(right_dets, right_c[:, 0])))
+    expected_a = compute_a_1rdm(left_state, right_state, norb)
+    expected_b = compute_b_1rdm(left_state, right_state, norb)
     assert np.count_nonzero(np.abs(expected_a) > 1e-12) > 4
     assert np.count_nonzero(np.abs(expected_b) > 1e-12) > 4
 
