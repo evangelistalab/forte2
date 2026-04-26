@@ -1,11 +1,10 @@
 import numpy as np
 import pytest
 
-from forte2 import System, State, Determinant, CIStrings
+from forte2 import System, State, Determinant, CIStrings, SelectedCIHelper
 from forte2.ci import CI
 from forte2.scf import RHF
 from forte2.sci import SelectedCI
-from forte2._forte2 import SelectedCIHelper
 from forte2.helpers.comparisons import approx
 from forte2.base_classes.params import SelectedCIParams, DavidsonLiuParams
 
