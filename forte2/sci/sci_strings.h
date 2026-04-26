@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <vector>
 
 #include "helpers/unordered_dense.h"
@@ -30,6 +31,14 @@ class SelectedCIStrings {
 
     /// @return The i-th sorted second string
     const String& sorted_second_string(size_t i) const { return sorted_second_string_[i]; }
+
+    /// @return The local index of a second string, if present
+    std::optional<size_t> find_second_string_index(const String& string) const {
+        if (const auto it = second_string_index_.find(string); it != second_string_index_.end()) {
+            return it->second;
+        }
+        return std::nullopt;
+    }
 
     /// @return The permutation that sorts the determinants (perm[i] gives the index in the original
     /// det ordering)

@@ -323,6 +323,35 @@ def test_sci_1trdm_allows_different_root_counts():
     )
 
 
+def test_sci_1trdm_matches_second_strings_between_different_spaces():
+    """SelectedCI transition 1-RDMs match spectator strings across different spaces."""
+    norb = 3
+    h = np.zeros((norb, norb))
+    v = np.zeros((norb, norb, norb, norb))
+    expected = np.zeros((norb, norb))
+    expected[1, 0] = 1.0
+
+    left_dets = [Determinant("ab0"), Determinant("ba0")]
+    left_c = np.array([[0.0], [1.0]])
+    left_helper = SelectedCIHelper(norb, left_dets, left_c, 0.0, h, v, 0)
+
+    right_helper = SelectedCIHelper(
+        norb, [Determinant("200")], np.array([[1.0]]), 0.0, h, v, 0
+    )
+    assert np.allclose(left_helper.a_1trdm(right_helper, 0, 0), expected)
+
+    right_helper_larger_block = SelectedCIHelper(
+        norb,
+        [Determinant("200"), Determinant("ab0")],
+        np.array([[1.0], [0.0]]),
+        0.0,
+        h,
+        v,
+        0,
+    )
+    assert np.allclose(left_helper.a_1trdm(right_helper_larger_block, 0, 0), expected)
+
+
 def test_sci_1trdm_validates_helper_compatibility():
     """SelectedCI transition 1-RDMs validate helper compatibility."""
     h2 = np.zeros((2, 2))

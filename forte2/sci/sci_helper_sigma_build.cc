@@ -488,23 +488,32 @@ double SelectedCIHelper::find_matching_dets_1trdm(size_t left_root, size_t right
     const auto& left_det_permutation = left_list.det_permutation();
 
     // Here we choose to loop over the smaller range and look up the determinants in the larger
-    // range by using the hash map
+    // range by using the hash map. The map keys are list-local second-string indices, so translate
+    // through the actual second-string value before crossing from one helper's list to the other.
     if (iend - istart >= jend - jstart) {
         const auto& i_map = left_list.second_string_to_det_index()[i];
         for (size_t jj{jstart}; jj < jend; ++jj) {
             const auto idx_j = right_list.sorted_dets_second_string(jj);
-            if (const auto it = i_map.find(idx_j); it != i_map.end()) {
-                result += sign * left_c[left_nroots * it->second + left_root] *
-                          right_c[right_nroots * right_det_permutation[jj] + right_root];
+            const auto& second_string_j = right_list.sorted_second_string(idx_j);
+            const auto left_idx_j = left_list.find_second_string_index(second_string_j);
+            if (left_idx_j.has_value()) {
+                if (const auto it = i_map.find(*left_idx_j); it != i_map.end()) {
+                    result += sign * left_c[left_nroots * it->second + left_root] *
+                              right_c[right_nroots * right_det_permutation[jj] + right_root];
+                }
             }
         }
     } else {
         const auto& j_map = right_list.second_string_to_det_index()[j];
         for (size_t ii{istart}; ii < iend; ++ii) {
             const auto idx_i = left_list.sorted_dets_second_string(ii);
-            if (const auto it = j_map.find(idx_i); it != j_map.end()) {
-                result += sign * left_c[left_nroots * left_det_permutation[ii] + left_root] *
-                          right_c[right_nroots * it->second + right_root];
+            const auto& second_string_i = left_list.sorted_second_string(idx_i);
+            const auto right_idx_i = right_list.find_second_string_index(second_string_i);
+            if (right_idx_i.has_value()) {
+                if (const auto it = j_map.find(*right_idx_i); it != j_map.end()) {
+                    result += sign * left_c[left_nroots * left_det_permutation[ii] + left_root] *
+                              right_c[right_nroots * it->second + right_root];
+                }
             }
         }
     }
