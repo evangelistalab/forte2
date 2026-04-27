@@ -370,7 +370,9 @@ def test_sci_1trdm_matches_second_strings_between_different_spaces():
     right_helper = SelectedCIHelper(norb, right_dets, right_c, 0.0, h, v, 0)
     assert np.allclose(left_helper.a_1trdm(right_helper, 0, 0), expected_a)
     assert np.allclose(left_helper.b_1trdm(right_helper, 0, 0), expected_b)
-    assert np.allclose(left_helper.sf_1trdm(right_helper, 0, 0), expected_a + expected_b)
+    assert np.allclose(
+        left_helper.sf_1trdm(right_helper, 0, 0), expected_a + expected_b
+    )
 
 
 def test_sci_1trdm_validates_helper_compatibility():
@@ -606,8 +608,7 @@ def test_sci_water_core_excited():
     system = System(xyz=xyz, basis_set="6-31g", auxiliary_basis_set="cc-pVTZ-JKFIT")
     rhf = RHF(charge=0)(system)
 
-    ci_strings = CIStrings(5, 5, 0, [[0], [0], [0] * 11], [0, 2], [1, 2])
-    # this has FCI length, but will be wittled down by the HBCI initial guess
+    ci_strings = CIStrings(5, 5, 0, [[0], [0], [0] * 11], [1, 2], [1, 2])
     guess_dets = ci_strings.make_determinants()
 
     ci = SelectedCI(
@@ -792,3 +793,71 @@ def test_sci_water_valence_excitation():
     sci.run()
     assert sci.E[0] == pytest.approx(-76.12037086, abs=1e-6)
     assert sci.E[1] == pytest.approx(-75.80852593, abs=1e-6)
+
+
+@pytest.mark.slow
+def test_sci_1tdm_water_core_excited_and_gs():
+    """Test the 1-TDM between a water core-excited state and the ground state."""
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.069592187400
+    H            0.000000000000    -0.783151105291     0.552239257834
+    H            0.000000000000     0.783151105291     0.552239257834
+    """
+
+    system = System(
+        xyz=xyz, basis_set="6-31g", auxiliary_basis_set="def2-universal-jkfit"
+    )
+    rhf = RHF(charge=0)(system)
+
+    gs_params = SelectedCIParams(
+        var_threshold=1e-4,
+        pt2_threshold=1e-8,
+        guess_occ_window=3,
+        guess_vir_window=1,
+        num_threads=4,
+        num_batches_per_thread=16,
+    )
+    gs_ci_params = DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5)
+
+    # the singly core-excited determinants make the largest contributions
+    # to the final state, so we can use a large set here
+    ci_strings_s = CIStrings(5, 5, 0, [[0], [0], [0] * 11], [1, 2], [1, 2])
+    # if the doubly core-excited determinants are included together with the
+    # singles, they will almost certainly be filtered out by the initial guess routine
+    # due to them being much higher in energy.
+    # So we need to pin a small set of them to ensure they are included in the variational space.
+    # This is necessary because orbital 0 is frozen, so if they're not included in the initial guess,
+    # they will never be generated.
+    # Allowing annihilation in the 0-th orbital is theoretically able to overcome this,
+    # but the interals involved are sufficiently small that, unless a very tight threshold is used,
+    # the doubles will alwayus be rejected in the selection process.
+    ci_strings_d = CIStrings(
+        5, 5, 0, [[0], [0, 0, 0, 0], [0], [0] * 7], [0, 8, 2], [0, 8, 2]
+    )
+    gas_guess_dets = ci_strings_s.make_determinants()
+    pinned_guess_dets = ci_strings_d.make_determinants()
+    gas_params = gs_params.copy(
+        guess_dets=gas_guess_dets,
+        frozen_annihilation=[0],
+        frozen_creation=[0],
+        pinned_guess_dets=pinned_guess_dets,
+    )
+    # the defaul ndets_per_guess is too small, causing convergence onto a higher root.
+    gas_ci_params = gs_ci_params.copy(ndets_per_guess=50)
+
+    sci = SelectedCI(
+        states=[
+            State(nel=10, multiplicity=1, ms=0.0),
+            State(nel=10, multiplicity=1, ms=0.0),
+        ],
+        active_orbitals=list(range(13)),
+        sci_params=[gas_params, gs_params],
+        davidson_liu_params=[gas_ci_params, gs_ci_params],
+        nroots=[1, 1],
+        do_transition_dipole=True,
+    )(rhf)
+    sci.run()
+
+    assert sci.E[0] == pytest.approx(-56.36320838, abs=1e-8)
+    assert sci.E[1] == pytest.approx(-76.12086372, abs=1e-8)
+    assert sci.oscillator_strengths[(1, 0)] == pytest.approx(0.020634, abs=1e-4)

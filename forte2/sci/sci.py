@@ -131,9 +131,7 @@ class _SelectedCISingleStateSolver:
             self.guess_c,
             self.guess_energies,
             self.project_out,
-        ) = self._initial_guess(
-            self.sci_params.guess_occ_window, self.sci_params.guess_vir_window
-        )
+        ) = self._initial_guess()
         self.evecs = self.guess_c.copy()
 
         self.ndet = len(self.guess_determinants)
@@ -205,13 +203,15 @@ class _SelectedCISingleStateSolver:
                 )
 
             # These are the CI energies of each root
-            self.e_var = self.sci_helper.energies()
+            self.e_var = np.array(self.sci_helper.energies())
             # These are the expectation values of S^2 for each root computed from the CI vectors
-            self.spin2_var = self.sci_helper.compute_spin2()
+            self.spin2_var = np.array(self.sci_helper.compute_spin2())
             # These are the PT2 corrections due to the new variational determinants added in this cycle
-            self.ept2_var = self.sci_helper.ept2_var()
+            self.ept2_var = np.array(self.sci_helper.ept2_var())
             # These are the PT2 corrections due to the new perturbative determinants added in this cycle
-            self.ept2_pt = self.sci_helper.ept2_pt()
+            self.ept2_pt = np.array(self.sci_helper.ept2_pt())
+            # These are the total energies of each root including the new variational and perturbative contributions
+            self.e_tot = self.e_var + self.ept2_var + self.ept2_pt
 
             summary = "\nSummary of selection:"
             summary += f"\n  {'Initial # of variational determinants:':<40}{old_ndets}"
@@ -244,7 +244,7 @@ class _SelectedCISingleStateSolver:
                         r,
                         self.e_var[r],
                         self.spin2_var[r],
-                        self.e_var[r] + self.ept2_var[r] + self.ept2_pt[r],
+                        self.e_tot[r],
                     ),
                     self.log_level,
                 )
@@ -317,10 +317,11 @@ class _SelectedCISingleStateSolver:
                 f"Unknown selection algorithm: {self.sci_params.selection_algorithm}"
             )
 
-        self.e_var = self.sci_helper.energies()
-        self.ept2_var = self.sci_helper.ept2_var()
-        self.ept2_pt = self.sci_helper.ept2_pt()
-        self.spin2_var = self.sci_helper.compute_spin2()
+        self.e_var = np.array(self.sci_helper.energies())
+        self.ept2_var = np.array(self.sci_helper.ept2_var())
+        self.ept2_pt = np.array(self.sci_helper.ept2_pt())
+        self.spin2_var = np.array(self.sci_helper.compute_spin2())
+        self.e_tot = self.e_var + self.ept2_var + self.ept2_pt
 
         summary = "\nSummary of selection:"
         summary += f"\n  Variational added:     {self.sci_helper.num_new_dets_var()}"
@@ -350,7 +351,7 @@ class _SelectedCISingleStateSolver:
                     self.e_var[r],
                     self.spin2_var[r],
                     self.e_var[r] + self.ept2_var[r],
-                    self.e_var[r] + self.ept2_var[r] + self.ept2_pt[r],
+                    self.e_tot[r],
                 ),
                 self.log_level,
             )
@@ -363,7 +364,9 @@ class _SelectedCISingleStateSolver:
 
         return self
 
-    def _initial_guess(self, window_occ=0, window_vir=0):
+    def _initial_guess(self):
+        window_occ = self.sci_params.guess_occ_window
+        window_vir = self.sci_params.guess_vir_window
         # If there are no guess determinants, generate some based on occupation windows
         if len(self.sci_params.guess_dets) == 0:
             self.sci_params.guess_dets = self._generate_initial_guess_dets(
@@ -397,6 +400,7 @@ class _SelectedCISingleStateSolver:
             indices = np.argsort(guess_hdiag)[:nguess_dets]
 
         self.sci_params.guess_dets = [self.sci_params.guess_dets[i] for i in indices]
+        self.sci_params.guess_dets += self.sci_params.pinned_guess_dets
 
         # Check that we have all spin complement pairs
         self.sci_params.guess_dets = self._generate_spin_complement_pairs(
@@ -559,6 +563,13 @@ class _SelectedCISingleStateSolver:
                     dcomp.set_nb(orb, True)
                 spin_complete_guess_dets.append(dcomp)
         return spin_complete_guess_dets
+    
+    def _generate_complete_guess_space(self, guess_dets, complete_guess_space):
+        if not complete_guess_space:
+            return guess_dets
+        
+        # generate the complete guess space
+        ci_strings = CIStrings()
 
     def _check_guess_dets(self, guess_dets):
         for d in guess_dets:
@@ -1006,10 +1017,14 @@ class SelectedCISolver(CIBase):
 
     Parameters
     ----------
-    sci_params : SelectedCIParams, optional
+    sci_params : SelectedCIParams or list[SelectedCIParams], optional
         Parameters specific to the selected CI algorithm.
-    davidson_liu_params : DavidsonLiuParams, optional
+        If a list is provided, it should have one entry per state.
+        If only a single SelectedCIParams is provided, it will be used for all states.
+    davidson_liu_params : DavidsonLiuParams or list[DavidsonLiuParams], optional
         Parameters for the Davidson-Liu iterative eigensolver.
+        If a list is provided, it should have one entry per state.
+        If only a single DavidsonLiuParams is provided, it will be used for all states.
     do_test_rdms : bool, optional, default=False
         If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
     log_level : int, optional
@@ -1019,21 +1034,57 @@ class SelectedCISolver(CIBase):
     ----------
     sub_solvers : list[_SelectedCISingleStateSolver]
         A list of CI solvers for each state in the state-averaged CI.
-    evals_per_solver : list[NDArray]
-        The eigenvalues (energies) computed by each sub-solver.
-    evals_flat, E : NDArray
-        The flattened array of eigenvalues from all sub-solvers.
+    evar/evals_[per_solver/flat] : list[NDArray] / NDArray
+        The variational eigenvalues (energies) computed by each sub-solver / concatenated into a single array.
+    ept2_var_[per_solver/flat] : list[NDArray] / NDArray
+        The PT2 correction due to the new variational determinants, computed by each sub-solver / concatenated into a single array.
+    ept2_pt_[per_solver/flat] : list[NDArray] / NDArray
+        The PT2 correction due to the perturbative determinants, computed by each sub-solver / concatenated into a single array.
+    etot_[per_solver/flat] : list[NDArray] / NDArray
+        The total energy (variational + PT2) computed by each sub-solver / concatenated into a single array.
+    E : NDArray
+        Alias for `evar_flat`, the variational energies of the CI roots.
+    E_pt2 : NDArray
+        The total PT2 correction (variational + perturbative) for each CI root.
+    E_tot : NDArray
+        Alias for `etot_flat`, the total energies of the CI roots.
     E_avg : float
-        The average energy computed from the state-averaged CI roots.
+        The average variational energy computed from the state-averaged CI roots.
     """
 
-    sci_params: SelectedCIParams = field(default_factory=SelectedCIParams)
+    sci_params: SelectedCIParams | list[SelectedCIParams] = field(
+        default_factory=SelectedCIParams
+    )
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level() + 1)
 
     def _startup(self):
         super()._startup()
+        if self.sa_info.ncis > 1:
+            if not isinstance(self.sci_params, list):
+                logger.log_warning(
+                    f"Multiple states specified but only one set of SelectedCIParams provided. Using the same parameters for all states."
+                )
+                self.sci_params = [self.sci_params] * self.sa_info.ncis
+            if len(self.sci_params) != self.sa_info.ncis:
+                raise ValueError(
+                    f"Number of SelectedCIParams provided ({len(self.sci_params)}) does not match the number of states ({self.sa_info.ncis})."
+                )
+            if not isinstance(self.davidson_liu_params, list):
+                logger.log_warning(
+                    f"Multiple states specified but only one set of DavidsonLiuParams provided. Using the same parameters for all states."
+                )
+                self.davidson_liu_params = [
+                    self.davidson_liu_params
+                ] * self.sa_info.ncis
+            if len(self.davidson_liu_params) != self.sa_info.ncis:
+                raise ValueError(
+                    f"Number of DavidsonLiuParams provided ({len(self.davidson_liu_params)}) does not match the number of states ({self.sa_info.ncis})."
+                )
+        else:
+            self.sci_params = [self.sci_params]
+            self.davidson_liu_params = [self.davidson_liu_params]
         self.norb = self.mo_space.nactv
         # no distinction between core and frozen core in the CI solver
         self.core_indices = (
@@ -1061,6 +1112,8 @@ class SelectedCISolver(CIBase):
             # these are needed by _SelectedCISingleStateSolver but not present as attributes of SelectedCISolver
             kwargs.update(
                 {
+                    "sci_params": self.sci_params[i],
+                    "davidson_liu_params": self.davidson_liu_params[i],
                     "ints": ints,
                     "state": state,
                     "nroot": self.sa_info.nroots[i],
@@ -1075,22 +1128,26 @@ class SelectedCISolver(CIBase):
             self._startup()
             self.first_run = False
 
-        self.evals_per_solver = []
+        self.evar_per_solver = []
         self.ept2_var_per_solver = []
         self.ept2_pt_per_solver = []
+        self.etot_per_solver = []
         for ci_solver in self.sub_solvers:
             ci_solver.run()
-            self.evals_per_solver.append(ci_solver.evals)
+            self.evar_per_solver.append(ci_solver.evals)
             self.ept2_var_per_solver.append(ci_solver.ept2_var)
             self.ept2_pt_per_solver.append(ci_solver.ept2_pt)
+            self.etot_per_solver.append(ci_solver.e_tot)
+        self.evals_per_solver = self.evar_per_solver
 
-        self.evals_flat = np.concatenate(self.evals_per_solver)
+        self.evar_flat = np.concatenate(self.evar_per_solver)
+        self.evals_flat = self.evar_flat
         self.ept2_var_flat = np.concatenate(self.ept2_var_per_solver)
         self.ept2_pt_flat = np.concatenate(self.ept2_pt_per_solver)
-        self.etot_flat = self.evals_flat + self.ept2_var_flat + self.ept2_pt_flat
+        self.etot_flat = np.concatenate(self.etot_per_solver)
         self.E_avg = self.compute_average_energy()
 
-        self.E = self.evals_flat
+        self.E = self.evar_flat
         self.E_pt2 = self.ept2_var_flat + self.ept2_pt_flat
         self.E_tot = self.etot_flat
 
@@ -1106,34 +1163,7 @@ class SelectedCISolver(CIBase):
         float
             Average energy of the CI roots.
         """
-        return np.dot(self.weights_flat, self.evals_flat)
-
-    def _get_state_root(self, absolute_root) -> tuple[int, int]:
-        if absolute_root < 0 or absolute_root >= self.sa_info.nroots_sum:
-            raise ValueError(
-                f"absolute_root must be between 0 and {self.sa_info.nroots_sum - 1}, but got {absolute_root}."
-            )
-        return self.sa_info.absolute_root_map[absolute_root]
-
-    def _validate_rdm_inputs(self, left_root, right_root):
-        left_state, left_root_in_state = self._get_state_root(left_root)
-        if right_root is not None:
-            right_state, right_root_in_state = self._get_state_root(right_root)
-        else:
-            right_state = left_state
-            right_root_in_state = left_root_in_state
-
-        if left_state != right_state:
-            if (
-                self.sa_info.states[left_state].na != self.sa_info.states[right_state].na
-                or self.sa_info.states[left_state].nb
-                != self.sa_info.states[right_state].nb
-            ):
-                raise ValueError(
-                    "Cross-state RDMs are only supported for states with the same number of alpha and beta electrons."
-                )
-
-        return left_state, right_state, left_root_in_state, right_root_in_state
+        return np.dot(self.weights_flat, self.evar_flat)
 
     def make_sd_1rdm(self, left_root: int, right_root: int | None = None):
         """
@@ -1295,8 +1325,8 @@ class SelectedCISolver(CIBase):
                 jstate, jroot_in_state = self._get_state_root(jci)
                 try:
                     vte = (
-                        self.evals_per_solver[jstate][jroot_in_state]
-                        - self.evals_per_solver[istate][iroot_in_state]
+                        self.evar_per_solver[jstate][jroot_in_state]
+                        - self.evar_per_solver[istate][iroot_in_state]
                     )
                     if vte < 0:
                         _ici, _jci = jci, ici
@@ -1364,9 +1394,16 @@ class SelectedCI(SelectedCISolver):
         return self
 
     def _post_process(self):
-        pretty_print_ci_summary(self.sa_info, self.evals_per_solver)
-        # self.compute_natural_occupation_numbers()
-        # pretty_print_ci_nat_occ_numbers(self.sa_info, self.mo_space, self.nat_occs)
+        pretty_print_ci_summary(
+            self.sa_info,
+            self.evar_per_solver,
+            header="\nSelected CI energy (variational)",
+        )
+        pretty_print_ci_summary(
+            self.sa_info,
+            self.etot_per_solver,
+            header="\nSelected CI energy (variational + PT2)",
+        )
         top_dets = self.get_top_determinants()
         pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
 
@@ -1376,5 +1413,5 @@ class SelectedCI(SelectedCISolver):
                 self.sa_info,
                 self.transition_dipoles,
                 self.oscillator_strengths,
-                self.evals_per_solver,
+                self.evar_per_solver,
             )

@@ -41,3 +41,4 @@ def test_sciscf_n2_multiple_roots():
     mc.run()
     assert ci_solver.E[0] == approx(-109.0799734286)
     assert ci_solver.E[1] == approx(-108.6858467105)
+test_sciscf_n2_multiple_roots()
