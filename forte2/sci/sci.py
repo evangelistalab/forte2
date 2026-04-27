@@ -368,27 +368,30 @@ class _SelectedCISingleStateSolver:
         window_occ = self.sci_params.guess_occ_window
         window_vir = self.sci_params.guess_vir_window
         # If there are no guess determinants, generate some based on occupation windows
-        if len(self.sci_params.guess_dets) == 0:
+        if (
+            len(self.sci_params.guess_dets) + len(self.sci_params.pinned_guess_dets)
+            == 0
+        ):
             self.sci_params.guess_dets = self._generate_initial_guess_dets(
                 window_occ, window_vir
             )
         else:
             self._check_guess_dets(self.sci_params.guess_dets)
+            self._check_guess_dets(self.sci_params.pinned_guess_dets)
 
         # use the determinantal energies to refine the guess determinants
         # if there are more than needed for the initial guess
         # this can be controlled by DavidsonLiuParams
-        guess_hdiag = self.slater_rules.energies(self.sci_params.guess_dets)
-        nguess_dets = len(self.sci_params.guess_dets)
-        num_guess_states = min(
-            self.davidson_liu_params.guess_per_root * self.nroot, nguess_dets
-        )
-        logger.log(f"Number of guess states: {num_guess_states}", self.log_level)
-        nguess_dets = min(
-            self.davidson_liu_params.ndets_per_guess * num_guess_states,
-            nguess_dets,
-        )
-        logger.log(f"Number of guess basis: {nguess_dets}", self.log_level)
+        if len(self.sci_params.guess_dets) > 0:
+            guess_hdiag = self.slater_rules.energies(self.sci_params.guess_dets)
+            nguess_dets = len(self.sci_params.guess_dets)
+            num_guess_states = min(
+                self.davidson_liu_params.guess_per_root * self.nroot, nguess_dets
+            )
+            nguess_dets = min(
+                self.davidson_liu_params.ndets_per_guess * num_guess_states,
+                nguess_dets,
+            )
 
         # find the indices of the elements of Hdiag with the lowest values
         # subject to an optional energy shift, which can be used to target specific states (e.g. excited states)
@@ -405,6 +408,10 @@ class _SelectedCISingleStateSolver:
         # Check that we have all spin complement pairs
         self.sci_params.guess_dets = self._generate_spin_complement_pairs(
             self.sci_params.guess_dets
+        )
+        logger.log(
+            f"Number of guess determinants: {len(self.sci_params.guess_dets)}",
+            self.log_level,
         )
 
         ndet = len(self.sci_params.guess_dets)
@@ -459,14 +466,15 @@ class _SelectedCISingleStateSolver:
         )
         energies = evals[: self.nroot].copy()
         logger.log(f"Initial guess energies: {energies}", self.log_level)
-        logger.log(f"Initial guess states:", self.log_level)
+        # log the following at a more verbose log level
+        logger.log(f"Initial guess states:", self.log_level + 1)
         for r in range(c.shape[1]):
-            logger.log(f"  Root {r}:", self.log_level)
+            logger.log(f"  Root {r}:", self.log_level + 1)
             for i in range(c.shape[0]):
                 if abs(c[i, r]) > 1e-4:
                     logger.log(
                         f"    {self.sci_params.guess_dets[i].str(self.norb)}: {c[i, r]:20.12f}",
-                        self.log_level,
+                        self.log_level + 1,
                     )
         return self.sci_params.guess_dets, c, energies, S2project_out
 
@@ -563,13 +571,6 @@ class _SelectedCISingleStateSolver:
                     dcomp.set_nb(orb, True)
                 spin_complete_guess_dets.append(dcomp)
         return spin_complete_guess_dets
-    
-    def _generate_complete_guess_space(self, guess_dets, complete_guess_space):
-        if not complete_guess_space:
-            return guess_dets
-        
-        # generate the complete guess space
-        ci_strings = CIStrings()
 
     def _check_guess_dets(self, guess_dets):
         for d in guess_dets:
@@ -1055,7 +1056,7 @@ class SelectedCISolver(CIBase):
     sci_params: SelectedCIParams | list[SelectedCIParams] = field(
         default_factory=SelectedCIParams
     )
-    davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
+    davidson_liu_params: DavidsonLiuParams | list[DavidsonLiuParams] = field(default_factory=DavidsonLiuParams)
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level() + 1)
 
