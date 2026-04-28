@@ -490,139 +490,222 @@ class UMP2MPQFast:
         return "\n".join(s_lines)
 
 
-import numpy as np
-
-
 class RMP2MPQFast:
-    def __init__(self, mp2, use_block_no=True, U=None):
+    def __init__(self, mp2, U=None):
         self.mp2 = mp2
         self.nmo = mp2.nocc + mp2.nvir
         self.nocc = mp2.nocc
         self.nvir = mp2.nvir
-        self.Γ1 = mp2.make_1rdm()
 
         if mp2.t2 is None:
             raise ValueError("RMP2 t2 amplitudes must be stored.")
 
-        # --- build 1-RDM ---
+        # --- 1-RDM ---
         self.Γ1 = mp2.make_1rdm()
 
         # --- choose rotation ---
         if U is not None:
             self.U = U
-        elif use_block_no:
-            self.U = self._build_block_no_rotation(self.Γ1)
+            self.occs = np.diag(U.T @ self.Γ1 @ U)
         else:
-            self.U = np.eye(self.nmo)
+            self.U, self.occs = self._build_block_no_rotation(self.Γ1)
+
+        Uo = self.U[: self.nocc, : self.nocc]  # occupied block
+        Uv = self.U[self.nocc :, self.nocc :]  # virtual block
+
+        # --- fast masks (critical for performance) ---
+        self.occ_mask = np.zeros(self.nmo, dtype=bool)
+        self.occ_mask[: self.nocc] = True
+
+        self.vir_mask = ~self.occ_mask
 
         # --- rotate t2 ---
-        self.t2 = self._rotate_t2(mp2.t2, self.U)
-        self.t2_ss = self.t2 - self.t2.transpose(0, 1, 3, 2)
+        self.t2_no = self._rotate_t2(mp2.t2, Uo, Uv)
 
-        # --- rotated orbitals + occupations ---
+        self.gamma_oooo = 0.5 * np.einsum(
+            "ijab,klab->ijkl", self.t2_no, self.t2_no, optimize=True
+        )
+        self.gamma_vvvv = 0.5 * np.einsum(
+            "ijab,ijcd->abcd", self.t2_no, self.t2_no, optimize=True
+        )
+        self.gamma_ovov = np.einsum(
+            "imac,jmbc->iajb", self.t2_no, self.t2_no, optimize=True
+        )
+
+        # --- rotated orbitals ---
         self.C_no = mp2.C[0] @ self.U
-        self.occs = np.diag(self.U.T @ self.Γ1 @ self.U)
 
         self.M1 = None
         self.M2 = None
 
     # =========================
-    # Orbital partition helpers
+    # Partition helpers (FAST)
     # =========================
     def _o(self, p):
-        return 0 <= p < self.nocc
+        return self.occ_mask[p]
 
     def _v(self, p):
-        return self.nocc <= p < self.nmo
-
-    def _vir(self, p):
-        return p - self.nocc
+        return self.vir_mask[p]
 
     # =========================
-    # Block-NO construction
+    # Full NO construction
     # =========================
-    def _build_block_no_rotation(self, gamma1):
+    def _build_block_no_rotation(self, Gamma1):
         nocc = self.nocc
         nmo = self.nmo
 
-        # split blocks
-        γoo = gamma1[:nocc, :nocc]
-        γvv = gamma1[nocc:, nocc:]
+        # --- split blocks ---
+        Goo = Gamma1[:nocc, :nocc]
+        Gvv = Gamma1[nocc:, nocc:]
 
-        # diagonalize each block
-        occ_vals, Uo = np.linalg.eigh(γoo)
-        vir_vals, Uv = np.linalg.eigh(γvv)
+        # --- diagonalize each block ---
+        occ_vals, Uo = np.linalg.eigh(Goo)
+        vir_vals, Uv = np.linalg.eigh(Gvv)
 
-        # sort descending
-        idx_o = np.argsort(occ_vals)[::-1]
-        idx_v = np.argsort(vir_vals)[::-1]
+        # --- sort descending within each block ---
+        occ_order = np.argsort(occ_vals)[::-1]
+        vir_order = np.argsort(vir_vals)[::-1]
 
-        Uo = Uo[:, idx_o]
-        Uv = Uv[:, idx_v]
+        occ_vals = occ_vals[occ_order]
+        vir_vals = vir_vals[vir_order]
 
-        # assemble full U
+        Uo = Uo[:, occ_order]
+        Uv = Uv[:, vir_order]
+
+        # --- assemble full block-diagonal rotation ---
         U = np.eye(nmo)
         U[:nocc, :nocc] = Uo
         U[nocc:, nocc:] = Uv
 
-        return U
+        # --- combined occupations ---
+        occs = np.diag(U.T @ Gamma1 @ U)
+
+        return U, occs
 
     # =========================
-    # Rotate t2 (block-consistent)
+    # Rotate t2 → full space
     # =========================
-    def _rotate_t2(self, t2, U):
-        """
-        Rotate t2[i,j,a,b] -> t2'[i,j,a,b]
-        using block-diagonal U:
-            i,j in occ space
-            a,b in vir space
-        """
-        Uo = U[: self.nocc, : self.nocc]
-        Uv = U[self.nocc :, self.nocc :]
+    def _rotate_t2(self, t2, Uo, Uv):
+        t2_no = np.einsum(
+            "pi,qj,ijab,ar,bs->pqrs", Uo.T, Uo.T, t2, Uv, Uv, optimize=True
+        )
+        return t2_no
 
-        # transform: ijab -> pqrs but still in (occ,occ,vir,vir)
-        t2_rot = np.einsum("pi,qj,ra,sb,ijab->pqrs", Uo, Uo, Uv, Uv, t2, optimize=True)
+    def occ_index(self, p):
+        return p
 
-        return t2_rot
+    def vir_index(self, p):
+        return p - self.nocc
 
     # =========================
-    # Lambda elements (unchanged logic)
+    # Lambda elements
     # =========================
+
     def lambda2_aa_elem(self, p, q, r, s):
+
+        val = 0.0
+
+        # ---- FIRST ORDER (existing) ----
         if self._o(p) and self._o(q) and self._v(r) and self._v(s):
-            a = self._vir(r)
-            b = self._vir(s)
-            return self.t2_ss[p, q, a, b]
+            i, j = p, q
+            a, b = r - self.nocc, s - self.nocc
+
+            val += (
+                self.t2_no[i, j, a, b]
+                - self.t2_no[i, j, b, a]
+                - self.t2_no[j, i, a, b]
+                + self.t2_no[j, i, b, a]
+            )
 
         if self._v(p) and self._v(q) and self._o(r) and self._o(s):
-            a = self._vir(p)
-            b = self._vir(q)
-            return self.t2_ss[r, s, a, b]
+            i, j = r, s
+            a, b = p - self.nocc, q - self.nocc
 
-        return 0.0
+            val += (
+                self.t2_no[i, j, a, b]
+                - self.t2_no[i, j, b, a]
+                - self.t2_no[j, i, a, b]
+                + self.t2_no[j, i, b, a]
+            )
+
+        # ---- SECOND ORDER (NEW) ----
+        if self._o(p) and self._o(q) and self._o(r) and self._o(s):
+            val += self.gamma_oooo[p, q, r, s]
+
+        if self._v(p) and self._v(q) and self._v(r) and self._v(s):
+            a, b, c, d = p - self.nocc, q - self.nocc, r - self.nocc, s - self.nocc
+            val += self.gamma_vvvv[a, b, c, d]
+
+        return val
+
+    # def lambda2_aa_elem(self, p, q, r, s):
+    #     if self._o(p) and self._o(q) and self._v(r) and self._v(s):
+    #         i = p
+    #         j = q
+    #         a = r - self.nocc
+    #         b = s - self.nocc
+
+    #         return (
+    #             self.t2_no[i, j, a, b]
+    #             - self.t2_no[i, j, b, a]
+    #             - self.t2_no[j, i, a, b]
+    #             + self.t2_no[j, i, b, a]
+    #         )
+
+    #     if self._v(p) and self._v(q) and self._o(r) and self._o(s):
+    #         i = r
+    #         j = s
+    #         a = p - self.nocc
+    #         b = q - self.nocc
+
+    #         return (
+    #             self.t2_no[i, j, a, b]
+    #             - self.t2_no[i, j, b, a]
+    #             - self.t2_no[j, i, a, b]
+    #             + self.t2_no[j, i, b, a]
+    #         )
+
+    #     return 0.0
 
     def lambda2_bb_elem(self, p, q, r, s):
         return self.lambda2_aa_elem(p, q, r, s)
 
     def lambda2_ab_elem(self, p, q, r, s):
+
+        val = 0.0
+
+        # ---- FIRST ORDER (existing) ----
         if self._o(p) and self._o(q) and self._v(r) and self._v(s):
-            a = self._vir(r)
-            b = self._vir(s)
-            return self.t2[p, q, a, b]
+            i, j = p, q
+            a, b = r - self.nocc, s - self.nocc
+            val += self.t2_no[i, j, a, b]
 
         if self._v(p) and self._v(q) and self._o(r) and self._o(s):
-            a = self._vir(p)
-            b = self._vir(q)
-            return self.t2[r, s, a, b]
+            i, j = r, s
+            a, b = p - self.nocc, q - self.nocc
+            val += self.t2_no[i, j, a, b]
 
-        return 0.0
+        # ---- SECOND ORDER (NEW) ----
+        if self._o(p) and self._v(q) and self._o(r) and self._v(s):
+            i, a = p, q - self.nocc
+            j, b = r, s - self.nocc
+            val += self.gamma_ovov[i, a, j, b]
+
+        if self._v(p) and self._o(q) and self._v(r) and self._o(s):
+            j, b = q, p - self.nocc
+            i, a = s, r - self.nocc
+            val += self.gamma_ovov[i, a, j, b]
+
+        return val
 
     # =========================
     # Cumulant contribution
     # =========================
     def C_elem(self, p, q, r, s):
+
         aa = self.lambda2_aa_elem(p, q, r, s)
         bb = self.lambda2_bb_elem(p, q, r, s)
+
         ab1 = self.lambda2_ab_elem(p, q, r, s)
         ab2 = self.lambda2_ab_elem(p, q, s, r)
         ab3 = self.lambda2_ab_elem(q, p, r, s)
@@ -672,21 +755,9 @@ class RMP2MPQFast:
         return self.M2
 
     def MPQ_matrix_summary(self, print_threshold: float = 7.5e-4) -> str:
-        """
-        Generates a summary of the mutual correlation matrix M2.
-
-        Parameters
-        ----------
-        print_threshold : float, optional, default=7.5e-4
-            Only values greater than this threshold are printed.
-
-        Returns
-        -------
-        summary : str
-            A formatted string summarizing the mutual correlation matrix M2.
-        """
         if self.M2 is None:
             self.make_M2()
+
         s_lines = [
             f"Mutual Correlation Matrix M2 (only values > {print_threshold:.1e}):",
             "=====================",
@@ -694,17 +765,11 @@ class RMP2MPQFast:
             "---------------------",
         ]
 
-        # get the upper triangle indices and values
         M2_vals = []
-        for i in range(self.M2.shape[0]):
-            for j in range(i + 1, self.M2.shape[1]):
-                M2_vals.append(
-                    (
-                        self.M2[i, j],
-                        list(range(self.nmo))[i],
-                        list(range(self.nmo))[j],
-                    )
-                )
+        for i in range(self.nmo):
+            for j in range(i + 1, self.nmo):
+                M2_vals.append((self.M2[i, j], i, j))
+
         M2_vals.sort(reverse=True, key=lambda x: x[0])
 
         for val, i, j in M2_vals:
@@ -713,153 +778,19 @@ class RMP2MPQFast:
             s_lines.append(f"{i:>5} {j:>5}  {val:8.6f}")
 
         s_lines.append("=====================")
-
         return "\n".join(s_lines)
 
+    @staticmethod
+    def mpq_memory_bytes(nmo, dtype_bytes=8):
+        return dtype_bytes * (nmo**2)
 
-# class RMP2MPQFast:
-#     def __init__(self, mp2):
-#         self.mp2 = mp2
-#         self.nmo = mp2.nocc + mp2.nvir
-#         self.nocc = mp2.nocc
-#         self.nvir = mp2.nvir
+    @staticmethod
+    def full_T_memory_bytes(nmo, dtype_bytes=8):
+        return dtype_bytes * (nmo**4)
 
-#         if mp2.t2 is None:
-#             raise ValueError("RMP2 t2 amplitudes must be stored.")
-
-#         self.t2 = mp2.t2
-#         self.t2_ss = self.t2 - self.t2.transpose(0, 1, 3, 2)
-
-#         self.M1 = None
-#         self.M2 = None
-#         self.Γ1 = mp2.make_1rdm()
-
-#     def _o(self, p):
-#         return 0 <= p < self.nocc
-
-#     def _v(self, p):
-#         return self.nocc <= p < self.nmo
-
-#     def _vir(self, p):
-#         return p - self.nocc
-
-#     def lambda2_aa_elem(self, p, q, r, s):
-#         if self._o(p) and self._o(q) and self._v(r) and self._v(s):
-#             a = self._vir(r)
-#             b = self._vir(s)
-#             return self.t2_ss[p, q, a, b]
-
-#         if self._v(p) and self._v(q) and self._o(r) and self._o(s):
-#             a = self._vir(p)
-#             b = self._vir(q)
-#             return self.t2_ss[r, s, a, b]
-
-#         return 0.0
-
-#     def lambda2_bb_elem(self, p, q, r, s):
-#         return self.lambda2_aa_elem(p, q, r, s)
-
-#     def lambda2_ab_elem(self, p, q, r, s):
-#         if self._o(p) and self._o(q) and self._v(r) and self._v(s):
-#             a = self._vir(r)
-#             b = self._vir(s)
-#             return self.t2[p, q, a, b]
-
-#         if self._v(p) and self._v(q) and self._o(r) and self._o(s):
-#             a = self._vir(p)
-#             b = self._vir(q)
-#             return self.t2[r, s, a, b]
-
-#         return 0.0
-
-#     def C_elem(self, p, q, r, s):
-#         aa = self.lambda2_aa_elem(p, q, r, s)
-#         bb = self.lambda2_bb_elem(p, q, r, s)
-#         ab1 = self.lambda2_ab_elem(p, q, r, s)
-#         ab2 = self.lambda2_ab_elem(p, q, s, r)
-#         ab3 = self.lambda2_ab_elem(q, p, r, s)
-#         ab4 = self.lambda2_ab_elem(q, p, s, r)
-
-#         return 0.25 * (
-#             abs(aa) ** 2
-#             + abs(bb) ** 2
-#             + abs(ab1) ** 2
-#             + abs(ab2) ** 2
-#             + abs(ab3) ** 2
-#             + abs(ab4) ** 2
-#         )
-
-#     def make_measures(self):
-#         M1 = np.zeros(self.nmo)
-#         M2 = np.zeros((self.nmo, self.nmo))
-
-#         for p in range(self.nmo):
-#             M1[p] = self.C_elem(p, p, p, p)
-
-#         for p in range(self.nmo):
-#             for q in range(p + 1, self.nmo):
-#                 val = (
-#                     4.0 * self.C_elem(p, p, p, q)
-#                     + 2.0 * self.C_elem(p, p, q, q)
-#                     + 4.0 * self.C_elem(p, q, p, q)
-#                     + 4.0 * self.C_elem(p, q, q, q)
-#                 )
-#                 M2[p, q] = M2[q, p] = val
-#         self.M1 = M1
-#         self.M2 = M2
-#         return self.M1, self.M2
-
-#     def make_M1(self):
-#         if self.M1 is None:
-#             self.make_measures()
-#         return self.M1
-
-#     def make_M2(self):
-#         if self.M2 is None:
-#             self.make_measures()
-#         return self.M2
-
-#     def MPQ_matrix_summary(self, print_threshold: float = 7.5e-4) -> str:
-#         """
-#         Generates a summary of the mutual correlation matrix M2.
-
-#         Parameters
-#         ----------
-#         print_threshold : float, optional, default=7.5e-4
-#             Only values greater than this threshold are printed.
-
-#         Returns
-#         -------
-#         summary : str
-#             A formatted string summarizing the mutual correlation matrix M2.
-#         """
-#         if self.M2 is None:
-#             self.make_M2()
-#         s_lines = [
-#             f"Mutual Correlation Matrix M2 (only values > {print_threshold:.1e}):",
-#             "=====================",
-#             "    P     Q      M_PQ",
-#             "---------------------",
-#         ]
-
-#         # get the upper triangle indices and values
-#         M2_vals = []
-#         for i in range(self.M2.shape[0]):
-#             for j in range(i + 1, self.M2.shape[1]):
-#                 M2_vals.append(
-#                     (
-#                         self.M2[i, j],
-#                         list(range(self.nmo))[i],
-#                         list(range(self.nmo))[j],
-#                     )
-#                 )
-#         M2_vals.sort(reverse=True, key=lambda x: x[0])
-
-#         for val, i, j in M2_vals:
-#             if val < print_threshold:
-#                 break
-#             s_lines.append(f"{i:>5} {j:>5}  {val:8.6f}")
-
-#         s_lines.append("=====================")
-
-#         return "\n".join(s_lines)
+    @staticmethod
+    def format_bytes(n):
+        for unit in ["B", "KB", "MB", "GB", "TB"]:
+            if n < 1024:
+                return f"{n:.2f} {unit}"
+            n /= 1024

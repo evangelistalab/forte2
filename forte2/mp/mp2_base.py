@@ -98,6 +98,9 @@ class MP2Base(SystemMixin, MOsMixin, ABC):
             "current_rss_mb": self._current_rss_mb(),
         }
 
+    def t2_memory_bytes(nocc, nvir, dtype_bytes=8):
+        return dtype_bytes * (nocc**2) * (nvir**2)
+
     def _peak_rss_mb(self):
         peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         if sys.platform == "darwin":
