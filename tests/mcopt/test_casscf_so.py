@@ -8,6 +8,7 @@ from forte2 import (
     CISolver,
     RelCI,
     RelCISolver,
+    NonRelToRelConverter,
 )
 from forte2.data import EH_TO_WN
 
@@ -36,14 +37,16 @@ def test_casscf_so():
         nroots=3,
     )
     mc = MCOptimizer(ci_solver)(avas)
+    conv = NonRelToRelConverter(
+        x2c_type_override="so",
+        snso_type_override="row-dependent",
+    )(mc)
     ci = RelCI(
         nel=35,
         nroots=6,
         core_orbitals=28,
         active_orbitals=8,
-        x2c_type_override="so",
-        snso_type_override="row-dependent",
-    )(mc)
+    )(conv)
     ci.run()
 
     # corresponds to ~ 4.6e-8 Eh
@@ -72,15 +75,17 @@ def test_2c_casscf_with_rohf():
         num_active_uocc=0,
         subspace=["Br(4s)", "Br(4p)"],
     )(rhf)
+    conv = NonRelToRelConverter(
+        x2c_type_override="so",
+        snso_type_override="row-dependent",
+    )(avas)
     ci_solver = RelCISolver(
         nel=35,
         nroots=6,
         core_orbitals=28,
         active_orbitals=8,
-        x2c_type_override="so",
-        snso_type_override="row-dependent",
     )
-    mc = MCOptimizer(ci_solver)(avas)
+    mc = MCOptimizer(ci_solver)(conv)
     mc.run()
     # corresponds to ~ 4.6e-8 Eh
     assert (ci_solver.E[4] - ci_solver.E[3]) * EH_TO_WN == pytest.approx(

@@ -23,7 +23,6 @@ from forte2.helpers import logger
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.props import get_1e_property
 from forte2.orbitals import Semicanonicalizer
-from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 from .ci_utils import (
     pretty_print_gas_info,
     pretty_print_ci_summary,
@@ -1802,14 +1801,6 @@ class RelCISolver(RelCIBase):
         If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
     log_level : int, optional
         The logging level for the CI solver. Defaults to the global logger's verbosity level.
-    x2c_type_override : str | None, optional
-        The type of X2C Hamiltonian to use. Must be either 'so' (spin-orbit) or 'sf' (spin-free).
-        If provided, `System.x2c_type` will be overwritten by this value.
-        If None, the X2C type will be determined by the `System` object.
-    snso_type_override : str | None, optional
-        The type of SNSO correction to use. Must be one of 'boettger', 'dc', 'dcb', or 'row-dependent'.
-        If provided, `System.snso_type` will be overwritten by this value.
-        If None, the SNSO type will be determined by the `System` object.
     """
 
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
@@ -1817,9 +1808,6 @@ class RelCISolver(RelCIBase):
 
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level() + 1)
-
-    x2c_type_override: str | None = None
-    snso_type_override: str | None = None
 
     compute_average_energy = CISolver.compute_average_energy
     make_average_1rdm = CISolver.make_average_1rdm
@@ -1838,51 +1826,8 @@ class RelCISolver(RelCIBase):
     _get_state_root = CISolver._get_state_root
     _validate_rdm_inputs = CISolver._validate_rdm_inputs
 
-    def __post_init__(self):
-        super().__post_init__()
-        if not isinstance(self.x2c_type_override, (str, type(None))):
-            raise ValueError(
-                f"x2c_type_override must be a string or None, but got {type(self.x2c_type_override)}."
-            )
-        if not isinstance(self.snso_type_override, (str, type(None))):
-            raise ValueError(
-                f"snso_type_override must be a string or None, but got {type(self.snso_type_override)}."
-            )
-        if self.x2c_type_override is not None:
-            self.x2c_type_override = self.x2c_type_override.lower()
-            if self.x2c_type_override not in ["so", "sf"]:
-                raise ValueError(
-                    f"Invalid x2c_type_override: {self.x2c_type_override}. Must be 'so' or 'sf'."
-                )
-        if self.snso_type_override is not None:
-            self.snso_type_override = self.snso_type_override.lower()
-            if self.snso_type_override not in [
-                "boettger",
-                "dc",
-                "dcb",
-                "row-dependent",
-            ]:
-                raise ValueError(
-                    f"Invalid snso_type_override: {self.snso_type_override}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
-                )
-
-    def _apply_x2c_overrides(self):
-        if not self.system.two_component:
-            self.C = convert_coeff_spatial_to_spinor(self.C)
-            self.system.two_component = True
-        x2c_type_save = self.system.x2c_type
-        if self.x2c_type_override is not None:
-            self.system.x2c_type = self.x2c_type_override
-        if self.snso_type_override is not None:
-            self.system.snso_type = self.snso_type_override
-        # if system.x2c_type was None at system init, the x2c_helper object
-        # was never built. This if clause will catch that and build the x2c_helper object with the correct x2c_type and snso_type.
-        if x2c_type_save is None and self.system.x2c_type is not None:
-            self.system._init_x2c()
-
     def _startup(self):
         super()._startup()
-        self._apply_x2c_overrides()
 
         self.norb = self.mo_space.nactv
         # no distinction between core and frozen core in the CI solver

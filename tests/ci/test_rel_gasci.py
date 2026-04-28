@@ -3,7 +3,7 @@ import numpy as np
 
 from forte2 import System, RHF, ROHF, RelState
 from forte2.ci import RelCI
-from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
+from forte2.orbitals import convert_coeff_spatial_to_spinor
 from forte2.helpers.comparisons import approx
 from forte2.system.build_basis import BSE_AVAILABLE
 from forte2.base_classes import DavidsonLiuParams

@@ -2,7 +2,7 @@ import numpy as np
 
 from forte2 import System, GHF, RHF, RelCISolver, MCOptimizer
 from forte2.helpers.comparisons import approx
-from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
+from forte2.orbitals import convert_coeff_spatial_to_spinor
 from forte2.orbitals import AVAS
 
 
