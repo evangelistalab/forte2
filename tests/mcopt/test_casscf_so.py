@@ -8,7 +8,6 @@ from forte2 import (
     CISolver,
     RelCI,
 )
-from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 from forte2.data import EH_TO_WN
 
 
@@ -36,15 +35,14 @@ def test_casscf_so():
         nroots=3,
     )
     mc = MCOptimizer(ci_solver)(avas)
-    mc.run()
-
-    system.two_component = True
-
-    C_2c = convert_coeff_spatial_to_spinor(mc.C)
-    rhf.C = C_2c
-    system.x2c_type = "so"
-    system.snso_type = "row-dependent"
-    ci = RelCI(nel=35, nroots=6, core_orbitals=28, active_orbitals=8)(rhf)
+    ci = RelCI(
+        nel=35,
+        nroots=6,
+        core_orbitals=28,
+        active_orbitals=8,
+        x2c_type="so",
+        snso_type="row-dependent",
+    )(mc)
     ci.run()
 
     # corresponds to ~ 4.6e-8 Eh

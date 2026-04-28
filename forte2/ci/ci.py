@@ -1535,7 +1535,7 @@ class CISolver(CIBase):
                         self.evals_per_solver[jstate][jroot_in_state]
                         - self.evals_per_solver[istate][iroot_in_state]
                     )
-                    # Reverse the order of states for negative VTE to ensure the transition dipole 
+                    # Reverse the order of states for negative VTE to ensure the transition dipole
                     # is always computed from lower to higher state.
                     if vte < 0:
                         _ici, _jci = jci, ici
@@ -1789,7 +1789,25 @@ class CI(CISolver):
 @dataclass
 class RelCISolver(RelCIBase):
     """
-    Relativistic Configuration Interaction
+    A general two-component configuration interaction (2C-CI) solver class.
+    If a non-relativistic method is the parent method, then the CI solver will automatically convert the MO coefficients to spinors and set the system to two-component. The X2C Hamiltonian type and SNSO correction can be specified by the user via the `x2c_type` and `snso_type` parameters, or they will be inherited from the `System` object if not provided.
+
+    Parameters
+    ----------
+    davidson_liu_params : DavidsonLiuParams, optional
+        Parameters for the Davidson-Liu eigensolver. If not provided, default parameters are used.
+    ci_params : CIParams, optional
+        Parameters for the CI solver. If not provided, default parameters are used.
+    do_test_rdms : bool, optional, default=False
+        If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
+    log_level : int, optional
+        The logging level for the CI solver. Defaults to the global logger's verbosity level.
+    x2c_type : str, optional
+        The type of X2C Hamiltonian to use. Must be either 'so' (spin-orbit) or 'sf' (spin-free).
+        If provided, `System.x2c_type` will be overwritten by this value.
+    snso_type : str, optional
+        The type of SNSO correction to use. Must be one of 'boettger', 'dc', 'dcb', or 'row-dependent'.
+        If provided, `System.snso_type` will be overwritten by this value.
     """
 
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
@@ -1797,6 +1815,9 @@ class RelCISolver(RelCIBase):
 
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level() + 1)
+
+    x2c_type: str | None = None
+    snso_type: str | None = None
 
     compute_average_energy = CISolver.compute_average_energy
     make_average_1rdm = CISolver.make_average_1rdm
@@ -1815,11 +1836,30 @@ class RelCISolver(RelCIBase):
     _get_state_root = CISolver._get_state_root
     _validate_rdm_inputs = CISolver._validate_rdm_inputs
 
+    def __post_init__(self):
+        super().__post_init__()
+        if self.x2c_type:
+            self.x2c_type = self.x2c_type.lower()
+            if self.x2c_type not in ["so", "sf"]:
+                raise ValueError(
+                    f"Invalid x2c_type: {self.x2c_type}. Must be 'so' or 'sf'."
+                )
+        if self.snso_type:
+            self.snso_type = self.snso_type.lower()
+            if self.snso_type not in ["boettger", "dc", "dcb", "row-dependent"]:
+                raise ValueError(
+                    f"Invalid snso_type: {self.snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
+                )
+
     def _startup(self):
         super()._startup()
         if not self.system.two_component:
             self.C = convert_coeff_spatial_to_spinor(self.C)
             self.system.two_component = True
+        if self.x2c_type is not None:
+            self.system.x2c_type = self.x2c_type
+        if self.snso_type is not None:
+            self.system.snso_type = self.snso_type
 
         self.norb = self.mo_space.nactv
         # no distinction between core and frozen core in the CI solver
