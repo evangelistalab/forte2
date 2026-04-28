@@ -41,8 +41,8 @@ def test_casscf_so():
         nroots=6,
         core_orbitals=28,
         active_orbitals=8,
-        x2c_type="so",
-        snso_type="row-dependent",
+        x2c_type_override="so",
+        snso_type_override="row-dependent",
     )(mc)
     ci.run()
 
@@ -77,8 +77,8 @@ def test_2c_casscf_with_rohf():
         nroots=6,
         core_orbitals=28,
         active_orbitals=8,
-        x2c_type="so",
-        snso_type="row-dependent",
+        x2c_type_override="so",
+        snso_type_override="row-dependent",
     )
     mc = MCOptimizer(ci_solver)(avas)
     mc.run()
