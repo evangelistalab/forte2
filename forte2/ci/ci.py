@@ -1790,7 +1790,7 @@ class CI(CISolver):
 class RelCISolver(RelCIBase):
     """
     A general two-component configuration interaction (2C-CI) solver class.
-    If a non-relativistic method is the parent method, then the CI solver will automatically convert the MO coefficients to spinors and set the system to two-component. The X2C Hamiltonian type and SNSO correction can be specified by the user via the `x2c_type` and `snso_type` parameters, or they will be inherited from the `System` object if not provided.
+    If a non-relativistic method is the parent method, then the CI solver will automatically convert the MO coefficients to spinors and set the system to two-component. The X2C Hamiltonian type and SNSO correction can be specified by the user via the `x2c_type_override` and `snso_type_override` parameters, or they will be inherited from the `System` object if not provided.
 
     Parameters
     ----------
@@ -1805,11 +1805,11 @@ class RelCISolver(RelCIBase):
     x2c_type_override : str | None, optional
         The type of X2C Hamiltonian to use. Must be either 'so' (spin-orbit) or 'sf' (spin-free).
         If provided, `System.x2c_type` will be overwritten by this value.
-        If None, the X2C type will be determined by the parent method or the `System` object.
+        If None, the X2C type will be determined by the `System` object.
     snso_type_override : str | None, optional
         The type of SNSO correction to use. Must be one of 'boettger', 'dc', 'dcb', or 'row-dependent'.
         If provided, `System.snso_type` will be overwritten by this value.
-        If None, the X2C type will be determined by the parent method or the `System` object.
+        If None, the SNSO type will be determined by the `System` object.
     """
 
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
@@ -1840,13 +1840,21 @@ class RelCISolver(RelCIBase):
 
     def __post_init__(self):
         super().__post_init__()
-        if self.x2c_type_override:
+        if not isinstance(self.x2c_type_override, (str, type(None))):
+            raise ValueError(
+                f"x2c_type_override must be a string or None, but got {type(self.x2c_type_override)}."
+            )
+        if not isinstance(self.snso_type_override, (str, type(None))):
+            raise ValueError(
+                f"snso_type_override must be a string or None, but got {type(self.snso_type_override)}."
+            )
+        if self.x2c_type_override is not None:
             self.x2c_type_override = self.x2c_type_override.lower()
             if self.x2c_type_override not in ["so", "sf"]:
                 raise ValueError(
                     f"Invalid x2c_type_override: {self.x2c_type_override}. Must be 'so' or 'sf'."
                 )
-        if self.snso_type_override:
+        if self.snso_type_override is not None:
             self.snso_type_override = self.snso_type_override.lower()
             if self.snso_type_override not in [
                 "boettger",
