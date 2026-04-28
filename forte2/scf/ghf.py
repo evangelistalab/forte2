@@ -59,7 +59,7 @@ class GHF(SCFBase):
             self.Usph2j = np.vstack((ua, ub))
             S = system.ints_overlap()
             S_spinor = self.Usph2j.conj().T @ S @ self.Usph2j
-            self.Xorth_spinor, _, info = canonical_orth(S_spinor, system.ortho_thresh)
+            self.Xorth_spinor, _, info = canonical_orth(S_spinor, system.overlap_ortho_rtol)
             self.nmo_spinor = info["n_kept"]
         self = super().__call__(system)
         self._parse_state()

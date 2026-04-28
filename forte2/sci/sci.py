@@ -302,6 +302,8 @@ class _SelectedCISingleStateSolver:
         logger.log(f"  var_threshold = {self.sci_params.var_threshold}", self.log_level)
         logger.log(f"  pt2_threshold = {self.sci_params.pt2_threshold}", self.log_level)
 
+        old_ndets = self.sci_helper.ndets()
+
         if self.sci_params.selection_algorithm.lower() == "hbci_ref":
             self.sci_helper.select_hbci_ref(
                 var_threshold=self.sci_params.var_threshold,
@@ -323,24 +325,28 @@ class _SelectedCISingleStateSolver:
         self.spin2_var = np.array(self.sci_helper.compute_spin2())
         self.e_tot = self.e_var + self.ept2_var + self.ept2_pt
 
-        summary = "\nSummary of selection:"
-        summary += f"\n  Variational added:     {self.sci_helper.num_new_dets_var()}"
-        summary += f"\n  Perturbative included: {self.sci_helper.num_new_dets_pt2()}"
-        summary += f"\n  Total determinants:    {self.sci_helper.ndets()}"
+        summary = "\nSummary of final selection:"
+        summary += f"\n  {'Initial # of variational determinants:':<40}{old_ndets}"
+        summary += f"\n  {'Variational added:':<40}{self.sci_helper.num_new_dets_var()}"
         summary += (
-            f"\n  Selection time:        {self.sci_helper.selection_time():.3f} s\n"
+            f"\n  {'Total variational determinants:':<40}{self.sci_helper.ndets()}"
+        )
+        summary += (
+            f"\n  {'Perturbatively included:':<40}{self.sci_helper.num_new_dets_pt2()}"
+        )
+        summary += (
+            f"\n  {'Selection time:':<40}{self.sci_helper.selection_time():.3f} s\n"
         )
         logger.log(summary, self.log_level)
 
         table = AsciiTable(
             columns=[
                 "Root",
-                "E (var) [Eh]",
+                "E (CI) [Eh]",
                 "S^2 (var)",
-                "E (var') [Eh]",
-                "E (var'+PT2) [Eh]",
+                "E (CI) + E (PT2) [Eh]",
             ],
-            formats=["{:>4}", "{:>20.12f}", "{:>6.3f}", "{:>20.12f}", "{:>20.12f}"],
+            formats=["{:>4}", "{:>20.12f}", "{:>6.3f}", "{:>20.12f}"],
         )
 
         logger.log(table.header(), self.log_level)

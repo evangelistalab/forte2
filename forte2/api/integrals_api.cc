@@ -13,7 +13,6 @@
 #include <nanobind/stl/string.h>
 
 #include "integrals/basis.h"
-#include "integrals/fock_builder.h"
 #include "integrals/nuclear_repulsion.h"
 #include "integrals/one_electron.h"
 #include "integrals/two_electron.h"
@@ -150,7 +149,9 @@ void export_basis_api(nb::module_& sub_m) {
         .def("__getitem__", &Basis::operator[], "i"_a)
         .def("__len__", &Basis::size)
         .def_prop_ro("shell_first_and_size", &Basis::shell_first_and_size)
-        .def_prop_ro("center_first_and_last", [](const Basis& b) { return b.center_first_and_last(false); })
+        .def_prop_ro("shell_offsets", &Basis::shell_offsets)
+        .def_prop_ro("center_first_and_last",
+                     [](const Basis& b) { return b.center_first_and_last(false); })
         .def_prop_ro("center_first_and_last_shell",
                      [](const Basis& b) { return b.center_first_and_last(true); })
         .def_prop_ro("size", &Basis::size)
@@ -158,6 +159,7 @@ void export_basis_api(nb::module_& sub_m) {
         .def_prop_ro("name", &Basis::name)
         .def_prop_ro("max_nprim", &Basis::max_nprim)
         .def_prop_ro("nprim", &Basis::max_nprim)
+        .def_prop_ro("max_ncontr", &Basis::max_ncontr)
         .def_prop_ro("nshells", &Basis::nshells)
         .def("__repr__", [](const Basis& b) {
             std::ostringstream oss;
@@ -325,6 +327,23 @@ void export_two_electron_api(nb::module_& sub_m) {
         "basis1"_a, "basis2"_a, "basis3"_a);
 
     sub_m.def(
+        "coulomb_3c_by_shell",
+        [](const Basis& basis1, const Basis& basis2, const Basis& basis3,
+           const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices) {
+            return coulomb_3c_by_shell(basis1, basis2, basis3, shell_slices);
+        },
+        "basis1"_a, "basis2"_a, "basis3"_a, "shell_slices"_a);
+
+    sub_m.def(
+        "coulomb_3c_by_shell",
+        [](const Basis& basis1, const Basis& basis2, const Basis& basis3,
+           const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices,
+           np_tensor3& buffer) {
+            coulomb_3c_by_shell(basis1, basis2, basis3, shell_slices, buffer);
+        },
+        "basis1"_a, "basis2"_a, "basis3"_a, "shell_slices"_a, "buffer"_a);
+
+    sub_m.def(
         "coulomb_2c",
         [](const Basis& basis1, const Basis& basis2) { return coulomb_2c(basis1, basis2); },
         "basis1"_a, "basis2"_a);
@@ -388,15 +407,26 @@ void export_libcint_compute_api(nb::module_& sub_m) {
     sub_m.def("cint_int2c2e_sph", &cint_int2c2e_sph, "shell_slice"_a, "atm"_a, "bas"_a, "env"_a,
               "Compute the two-center two-electron integral matrix using libcint in spherical "
               "harmonics.");
-    sub_m.def("cint_int3c2e_sph", &cint_int3c2e_sph, "shell_slice"_a, "atm"_a, "bas"_a, "env"_a,
-              "Compute the three-center two-electron integral matrix using libcint in spherical "
-              "harmonics.");
+    sub_m.def(
+        "cint_int3c2e_sph",
+        [](const std::vector<int>& shell_slice, np_matrix_int atm, np_matrix_int bas,
+           np_vector env) { return cint_int3c2e_sph(shell_slice, atm, bas, env); },
+        "shell_slice"_a, "atm"_a, "bas"_a, "env"_a,
+        "Compute the three-center two-electron integral tensor using libcint in spherical "
+        "harmonics.");
+    sub_m.def(
+        "cint_int3c2e_sph",
+        [](const std::vector<int>& shell_slice, np_matrix_int atm, np_matrix_int bas, np_vector env,
+           np_tensor3_c& ints) { return cint_int3c2e_sph(shell_slice, atm, bas, env, ints); },
+        "shell_slice"_a, "atm"_a, "bas"_a, "env"_a, "ints"_a,
+        "Compute the three-center two-electron integral tensor using libcint in spherical "
+        "harmonics, with a user-provided buffer for the result.");
 }
 #else
 // When libcint is disabled, define a no-op exporter
 void export_libcint_compute_api(nb::module_& sub_m) {
     // Intentionally empty: libcint-backed APIs are unavailable.
-    (void) sub_m;
+    (void)sub_m;
 }
 #endif
 } // namespace forte2

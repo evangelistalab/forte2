@@ -147,12 +147,14 @@ def test_mrpt2_carbon_rel_sa():
 
 
 @pytest.mark.slow
-def test_mrpt2_se_rel_sa_gauss_nuc():
+def test_mrpt2_se_rel_sa_gauss_nuc_jk_otf():
     # Test the zero-field splitting of Se atom with Gaussian nuclear charges
     # Freezing all non-4s/4p orbitals (zero correlated core orbitals)
     xyz = """
     Se 0 0 0
     """
+
+    from forte2.jkbuilder import FockBuilderOTF
 
     system = System(
         xyz=xyz,
@@ -162,6 +164,10 @@ def test_mrpt2_se_rel_sa_gauss_nuc():
         snso_type="row-dependent",
         use_gaussian_charges=True,
     )
+    system.fock_builder = FockBuilderOTF(
+        system, memory_threshold_mb=20, backend="libcint"
+    )
+
     mf = GHF(
         charge=-1,
         die_if_not_converged=False,

@@ -107,88 +107,6 @@ template <libint2::Operator Op, typename Params = NoParams>
 
 template <libint2::Operator Op, typename Params = NoParams>
 [[nodiscard]] auto compute_two_electron_3c_multi(const Basis& basis1, const Basis& basis2,
-                                                 const Basis& basis3,
-                                                 Params const& params = Params{}) -> np_tensor3 {
-    const auto start = std::chrono::high_resolution_clock::now();
-
-    // Initialize libint2
-    libint2::initialize();
-
-    // Prepare engine
-    const auto max_nprim =
-        std::max(std::max(basis1.max_nprim(), basis2.max_nprim()), basis3.max_nprim());
-    const auto max_l = std::max(std::max(basis1.max_l(), basis2.max_l()), basis3.max_l());
-    libint2::Engine engine(Op, max_nprim, max_l);
-    engine.set(libint2::BraKet::xs_xx);
-
-    if constexpr (not std::is_same_v<Params, NoParams>) {
-        engine.set_params(params);
-    }
-
-    const auto& results = engine.results();
-
-    // Get the number of basis functions in each basis
-    const std::size_t nb1 = basis1.size();
-    const std::size_t nb2 = basis2.size();
-    const std::size_t nb3 = basis3.size();
-
-    // Loop over shell pairs and fill each buffer
-    auto nshells1 = basis1.nshells();
-    auto nshells2 = basis2.nshells();
-    auto nshells3 = basis3.nshells();
-
-    // Get arrays of indices of the first basis in a shell and the size of each shell
-    const auto first_size1 = basis1.shell_first_and_size();
-    const auto first_size2 = basis2.shell_first_and_size();
-    const auto first_size3 = basis3.shell_first_and_size();
-
-    // Allocate three index tensor
-    auto ints = make_zeros<nb::numpy, double, 3>({nb1, nb2, nb3});
-    auto v = ints.view();
-
-    // Loop over the shell triplets and fill the buffer
-    for (std::size_t s1 = 0; s1 < nshells1; ++s1) {
-        const auto& shell1 = basis1[s1];
-        const auto [f1, n1] = first_size1[s1];
-
-        for (std::size_t s2 = 0; s2 < nshells2; ++s2) {
-            const auto& shell2 = basis2[s2];
-            const auto [f2, n2] = first_size2[s2];
-
-            for (std::size_t s3 = 0; s3 < nshells3; ++s3) {
-                const auto& shell3 = basis3[s3];
-
-                // Compute the integrals for this shell triplet
-                engine.compute(shell1, shell2, shell3);
-
-                // Loop over the components of this operator and fill the buffers
-                if (const auto buf = results[0]; buf) {
-                    const auto [f3, n3] = first_size3[s3];
-                    for (std::size_t i = 0, ijk = 0; i != n1; ++i) {
-                        for (std::size_t j = 0; j != n2; ++j) {
-                            for (std::size_t k = 0; k != n3; ++k, ++ijk) {
-                                v(f1 + i, f2 + j, f3 + k) = static_cast<double>(buf[ijk]);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Finalize libint2
-    libint2::finalize();
-
-    const auto end = std::chrono::high_resolution_clock::now();
-    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    LOG_INFO2 << "[forte2] Three-center two-electron integrals timing: " << elapsed.count() / 1000.0
-              << " s\n";
-
-    return ints;
-}
-
-template <libint2::Operator Op, typename Params = NoParams>
-[[nodiscard]] auto compute_two_electron_3c_multi_async(const Basis& basis1, const Basis& basis2,
                                                        const Basis& basis3,
                                                        Params const& params = Params{})
     -> np_tensor3 {
@@ -215,9 +133,6 @@ template <libint2::Operator Op, typename Params = NoParams>
 
     auto ints = make_zeros<nb::numpy, double, 3>({nb1, nb2, nb3});
     auto data = ints.data();
-
-    const auto num_threads = get_num_threads();
-    std::vector<std::future<void>> tasks;
 
     /// This lambda function computes the integrals for a given range of shells
     /// in the first basis and fills the buffer.
@@ -321,23 +236,10 @@ template <libint2::Operator Op, typename Params = NoParams>
         }
     };
 
-    /// Divide the work among threads in contiguous blocks of first shells
-    const std::size_t block_size = (nshells1 + num_threads - 1) / num_threads;
-    for (std::size_t t = 0; t < num_threads; ++t) {
-        std::size_t begin = t * block_size;
-        std::size_t end = std::min(begin + block_size, nshells1);
-        if (begin < end) {
-            if (&basis2 == &basis3) {
-                tasks.emplace_back(std::async(std::launch::async, kernel_sym, begin, end));
-            } else {
-                tasks.emplace_back(std::async(std::launch::async, kernel_nosym, begin, end));
-            }
-        }
-    }
-
-    // Wait for all tasks to finish
-    for (auto& task : tasks) {
-        task.get();
+    if (&basis2 == &basis3) {
+        parallel_for_chunked(nshells1, kernel_sym);
+    } else {
+        parallel_for_chunked(nshells1, kernel_nosym);
     }
 
     // Finalize libint2
@@ -349,6 +251,184 @@ template <libint2::Operator Op, typename Params = NoParams>
               << " s\n";
 
     return ints;
+}
+
+template <libint2::Operator Op, typename Params = NoParams>
+void compute_two_electron_3c_by_shell(
+    const Basis& basis1, const Basis& basis2, const Basis& basis3,
+    const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices, np_tensor3& buffer,
+    Params const& params = Params{}) {
+    const auto start = std::chrono::high_resolution_clock::now();
+
+    if (shell_slices[0].first >= shell_slices[0].second ||
+        shell_slices[1].first >= shell_slices[1].second ||
+        shell_slices[2].first >= shell_slices[2].second) {
+        throw std::invalid_argument(
+            "shell_slices indices must be in the form of (start, end) with start < end");
+    }
+
+    if (shell_slices[0].second > basis1.nshells() || shell_slices[1].second > basis2.nshells() ||
+        shell_slices[2].second > basis3.nshells()) {
+        throw std::invalid_argument(
+            "shell_slices indices must be within the number of shells in each basis");
+    }
+
+    const std::size_t ish0 = shell_slices[0].first;
+    const std::size_t ish1 = shell_slices[0].second;
+    const std::size_t jsh0 = shell_slices[1].first;
+    const std::size_t jsh1 = shell_slices[1].second;
+    const std::size_t ksh0 = shell_slices[2].first;
+    const std::size_t ksh1 = shell_slices[2].second;
+
+    const auto first_size1 = basis1.shell_first_and_size();
+    const auto first_size2 = basis2.shell_first_and_size();
+    const auto first_size3 = basis3.shell_first_and_size();
+
+    const auto offsets1 = basis1.shell_offsets();
+    const auto offsets2 = basis2.shell_offsets();
+    const auto offsets3 = basis3.shell_offsets();
+
+    // nb = index of first basis function in last shell - index of first basis function in first
+    // shell + size of last shell
+    const std::size_t nb1 = offsets1[ish1] - offsets1[ish0];
+    const std::size_t nb2 = offsets2[jsh1] - offsets2[jsh0];
+    const std::size_t nb3 = offsets3[ksh1] - offsets3[ksh0];
+
+    const std::size_t first1 = first_size1[ish0].first;
+    const std::size_t first2 = first_size2[jsh0].first;
+    const std::size_t first3 = first_size3[ksh0].first;
+
+    if (buffer.shape(0) < nb1 || buffer.shape(1) < nb2 || buffer.shape(2) < nb3) {
+        std::string msg = "Buffer shape (" + std::to_string(buffer.shape(0)) + ", " +
+                          std::to_string(buffer.shape(1)) + ", " + std::to_string(buffer.shape(2)) +
+                          ") is too small for the given shell slices with sizes (" +
+                          std::to_string(nb1) + ", " + std::to_string(nb2) + ", " +
+                          std::to_string(nb3) + ")";
+        throw std::invalid_argument(msg);
+    }
+
+    auto data = buffer.data();
+
+    // Initialize libint2
+    libint2::initialize();
+
+    const auto max_nprim =
+        std::max(std::max(basis1.max_nprim(), basis2.max_nprim()), basis3.max_nprim());
+    const auto max_l = std::max(std::max(basis1.max_l(), basis2.max_l()), basis3.max_l());
+
+    // strides to compute the offset in the buffer for a given shell triplet
+    const std::size_t stride1 = buffer.shape(0);
+    const std::size_t stride2 = buffer.shape(1);
+    const std::size_t stride3 = buffer.shape(2);
+
+    /// This lambda function computes the integrals for a given range of shells
+    /// in the first basis and fills the buffer.
+    auto kernel = [&](std::size_t s1_begin, std::size_t s1_end) {
+        libint2::Engine engine(Op, max_nprim, max_l);
+        engine.set(libint2::BraKet::xs_xx);
+        if constexpr (!std::is_same_v<Params, NoParams>) {
+            engine.set_params(params);
+        }
+        const auto& results = engine.results();
+
+        // Loop over the given range of shells in basis1
+        for (std::size_t s1 = s1_begin; s1 < s1_end; ++s1) {
+            const auto& shell1 = basis1[s1];
+            auto [f1, n1] = first_size1[s1];
+            f1 -= first1; // adjust f1 to be the index in the sliced basis
+
+            // Loop over the shells in basis2 and basis3
+            for (std::size_t s2 = jsh0; s2 < jsh1; ++s2) {
+                const auto& shell2 = basis2[s2];
+                auto [f2, n2] = first_size2[s2];
+                f2 -= first2; // adjust f2 to be the index in the sliced basis
+                for (std::size_t s3 = ksh0; s3 < ksh1; ++s3) {
+                    const auto& shell3 = basis3[s3];
+
+                    // Compute the integrals for this shell triplet
+                    engine.compute(shell1, shell2, shell3);
+                    auto buf = results[0];
+                    if (!buf)
+                        continue;
+
+                    auto [f3, n3] = first_size3[s3];
+                    f3 -= first3; // adjust f3 to be the index in the sliced basis
+
+                    std::size_t offset = f1 * stride2 * stride3 + f2 * stride3 + f3;
+
+                    for (std::size_t i = 0, ijk = 0; i < n1; ++i) {
+                        for (std::size_t j = 0; j < n2; ++j) {
+                            for (std::size_t k = 0; k < n3; ++k, ++ijk) {
+                                data[offset + i * stride2 * stride3 + j * stride3 + k] =
+                                    static_cast<double>(buf[ijk]);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    parallel_for_chunked(ish0, ish1, kernel);
+
+    // Finalize libint2
+    libint2::finalize();
+
+    const auto end = std::chrono::high_resolution_clock::now();
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    LOG_INFO2 << "[forte2] Three-center two-electron integrals timing: " << elapsed.count() / 1000.0
+              << " s\n";
+}
+
+template <libint2::Operator Op, typename Params = NoParams>
+[[nodiscard]] auto compute_two_electron_3c_by_shell(
+    const Basis& basis1, const Basis& basis2, const Basis& basis3,
+    const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices,
+    Params const& params = Params{}) -> np_tensor3 {
+    if (shell_slices.size() != 3) {
+        throw std::invalid_argument("shell_slices must have size 3");
+    }
+
+    if (shell_slices[0].first >= shell_slices[0].second ||
+        shell_slices[1].first >= shell_slices[1].second ||
+        shell_slices[2].first >= shell_slices[2].second) {
+        throw std::invalid_argument(
+            "shell_slices indices must be in the form of (start, end) with start < end");
+    }
+
+    if (shell_slices[0].second > basis1.nshells() || shell_slices[1].second > basis2.nshells() ||
+        shell_slices[2].second > basis3.nshells()) {
+        throw std::invalid_argument(
+            "shell_slices indices must be within the number of shells in each basis");
+    }
+
+    const std::size_t ish0 = shell_slices[0].first;
+    const std::size_t ish1 = shell_slices[0].second;
+    const std::size_t jsh0 = shell_slices[1].first;
+    const std::size_t jsh1 = shell_slices[1].second;
+    const std::size_t ksh0 = shell_slices[2].first;
+    const std::size_t ksh1 = shell_slices[2].second;
+
+    const auto first_size1 = basis1.shell_first_and_size();
+    const auto first_size2 = basis2.shell_first_and_size();
+    const auto first_size3 = basis3.shell_first_and_size();
+
+    // nb = index of first basis function in last shell - index of first basis function in first
+    // shell + size of last shell
+    const std::size_t nb1 =
+        first_size1[ish1 - 1].first - first_size1[ish0].first + first_size1[ish1 - 1].second;
+    const std::size_t nb2 =
+        first_size2[jsh1 - 1].first - first_size2[jsh0].first + first_size2[jsh1 - 1].second;
+    const std::size_t nb3 =
+        first_size3[ksh1 - 1].first - first_size3[ksh0].first + first_size3[ksh1 - 1].second;
+
+    const std::size_t first1 = first_size1[ish0].first;
+    const std::size_t first2 = first_size2[jsh0].first;
+    const std::size_t first3 = first_size3[ksh0].first;
+
+    auto buffer = make_zeros<nb::numpy, double, 3>({nb1, nb2, nb3});
+    compute_two_electron_3c_by_shell<Op>(basis1, basis2, basis3, shell_slices, buffer, params);
+    return buffer;
 }
 
 template <libint2::Operator Op, typename Params = NoParams>

@@ -70,10 +70,10 @@ def test_libcint_spnucsp_sph():
     system = System(xyz, basis_set="sto-3g", minao_basis_set=None)
     s_cint = integrals.cint_opVop(system)
     c_int2 = integrals.opVop(system)
-    assert np.linalg.norm(s_cint[3] - c_int2[0]) < 1e-6  # I2
-    assert np.linalg.norm(s_cint[0] - c_int2[1]) < 1e-6  # sigma_x
-    assert np.linalg.norm(s_cint[1] - c_int2[2]) < 1e-6  # sigma_y
-    assert np.linalg.norm(s_cint[2] - c_int2[3]) < 1e-6  # sigma_z
+    assert np.linalg.norm(s_cint[3] - c_int2[0]) < 1e-6  # sigma_x
+    assert np.linalg.norm(s_cint[0] - c_int2[1]) < 1e-6  # sigma_y
+    assert np.linalg.norm(s_cint[1] - c_int2[2]) < 1e-6  # sigma_z
+    assert np.linalg.norm(s_cint[2] - c_int2[3]) < 1e-6  # I2
     assert np.linalg.norm(s_cint) == pytest.approx(5982385.234519612, rel=1e-6)
 
 
@@ -204,6 +204,54 @@ def test_libcint_coulomb_3c():
 
     assert np.linalg.norm(s_cint - s_int2) < 1e-6
     assert np.linalg.norm(s_cint) == pytest.approx(60.4085268377979, rel=1e-6)
+
+
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_libcint_coulomb_3c_prealloc():
+    xyz = """
+    O
+    H 1 1.1
+    H 1 1.1 2 104.5
+    """
+    system = System(xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pvtz-jkfit")
+    ref = integrals.coulomb_3c(system)
+    cint_computer = integrals.CInt3cBySlice(system)
+
+    naux = len(system.auxiliary_basis)
+    nb = len(system.basis)
+    # random buffer that cannot hold the full integral tensor
+    buf = np.zeros((naux - 10, nb - 5, nb - 5))
+    nshaux = system.auxiliary_basis.nshells
+    nshb = system.basis.nshells
+    first_size_aux = system.auxiliary_basis.shell_first_and_size
+    first_size_b = system.basis.shell_first_and_size
+
+    rng = np.random.default_rng(12345)
+    for _ in range(20):
+        ish0 = rng.integers(0, nshaux - 1)
+        ish1 = rng.integers(ish0 + 1, nshaux)
+        jsh0 = rng.integers(0, nshb - 1)
+        jsh1 = rng.integers(jsh0 + 1, nshb)
+        ksh0 = rng.integers(0, nshb - 1)
+        ksh1 = rng.integers(ksh0 + 1, nshb)
+
+        ib0 = first_size_aux[ish0][0]
+        ib1 = first_size_aux[ish1 - 1][0] + first_size_aux[ish1 - 1][1]
+        jb0 = first_size_b[jsh0][0]
+        jb1 = first_size_b[jsh1 - 1][0] + first_size_b[jsh1 - 1][1]
+        kb0 = first_size_b[ksh0][0]
+        kb1 = first_size_b[ksh1 - 1][0] + first_size_b[ksh1 - 1][1]
+
+        if (
+            ib1 - ib0 > buf.shape[0]
+            or jb1 - jb0 > buf.shape[1]
+            or kb1 - kb0 > buf.shape[2]
+        ):
+            continue
+
+        shell_slices = [(ish0, ish1), (jsh0, jsh1), (ksh0, ksh1)]
+        buf1 = cint_computer.compute(shell_slices, buf)
+        assert np.linalg.norm(buf1 - ref[ib0:ib1, jb0:jb1, kb0:kb1]) < 1e-8
 
 
 @pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
