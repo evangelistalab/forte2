@@ -61,7 +61,8 @@ def test_2c_casscf_with_rohf():
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c_type="sf",
+        x2c_type=None,
+        snso_type=None,
     )
 
     rhf = ROHF(charge=0, ms=0.5)(system)

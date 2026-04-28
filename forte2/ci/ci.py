@@ -1802,12 +1802,14 @@ class RelCISolver(RelCIBase):
         If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
     log_level : int, optional
         The logging level for the CI solver. Defaults to the global logger's verbosity level.
-    x2c_type : str, optional
+    x2c_type_override : str | None, optional
         The type of X2C Hamiltonian to use. Must be either 'so' (spin-orbit) or 'sf' (spin-free).
         If provided, `System.x2c_type` will be overwritten by this value.
-    snso_type : str, optional
+        If None, the X2C type will be determined by the parent method or the `System` object.
+    snso_type_override : str | None, optional
         The type of SNSO correction to use. Must be one of 'boettger', 'dc', 'dcb', or 'row-dependent'.
         If provided, `System.snso_type` will be overwritten by this value.
+        If None, the X2C type will be determined by the parent method or the `System` object.
     """
 
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
@@ -1816,8 +1818,8 @@ class RelCISolver(RelCIBase):
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level() + 1)
 
-    x2c_type: str | None = None
-    snso_type: str | None = None
+    x2c_type_override: str | None = None
+    snso_type_override: str | None = None
 
     compute_average_energy = CISolver.compute_average_energy
     make_average_1rdm = CISolver.make_average_1rdm
@@ -1838,28 +1840,41 @@ class RelCISolver(RelCIBase):
 
     def __post_init__(self):
         super().__post_init__()
-        if self.x2c_type:
-            self.x2c_type = self.x2c_type.lower()
-            if self.x2c_type not in ["so", "sf"]:
+        if self.x2c_type_override:
+            self.x2c_type_override = self.x2c_type_override.lower()
+            if self.x2c_type_override not in ["so", "sf"]:
                 raise ValueError(
-                    f"Invalid x2c_type: {self.x2c_type}. Must be 'so' or 'sf'."
+                    f"Invalid x2c_type_override: {self.x2c_type_override}. Must be 'so' or 'sf'."
                 )
-        if self.snso_type:
-            self.snso_type = self.snso_type.lower()
-            if self.snso_type not in ["boettger", "dc", "dcb", "row-dependent"]:
+        if self.snso_type_override:
+            self.snso_type_override = self.snso_type_override.lower()
+            if self.snso_type_override not in [
+                "boettger",
+                "dc",
+                "dcb",
+                "row-dependent",
+            ]:
                 raise ValueError(
-                    f"Invalid snso_type: {self.snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
+                    f"Invalid snso_type_override: {self.snso_type_override}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
                 )
 
-    def _startup(self):
-        super()._startup()
+    def _apply_x2c_overrides(self):
         if not self.system.two_component:
             self.C = convert_coeff_spatial_to_spinor(self.C)
             self.system.two_component = True
-        if self.x2c_type is not None:
-            self.system.x2c_type = self.x2c_type
-        if self.snso_type is not None:
-            self.system.snso_type = self.snso_type
+        x2c_type_save = self.system.x2c_type
+        if self.x2c_type_override is not None:
+            self.system.x2c_type = self.x2c_type_override
+        if self.snso_type_override is not None:
+            self.system.snso_type = self.snso_type_override
+        # if system.x2c_type was None at system init, the x2c_helper object
+        # was never built. This if clause will catch that and build the x2c_helper object with the correct x2c_type and snso_type.
+        if x2c_type_save is None and self.system.x2c_type is not None:
+            self.system._init_x2c()
+
+    def _startup(self):
+        super()._startup()
+        self._apply_x2c_overrides()
 
         self.norb = self.mo_space.nactv
         # no distinction between core and frozen core in the CI solver

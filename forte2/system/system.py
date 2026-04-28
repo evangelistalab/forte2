@@ -107,8 +107,8 @@ class System:
     auxiliary_basis_set: str | dict = None
     auxiliary_basis_set_corr: str | dict = None
     minao_basis_set: str | dict = "cc-pvtz-minao"
-    x2c_type: str = None
-    snso_type: str = "row-dependent"
+    x2c_type: str | None = None
+    snso_type: str | None = "row-dependent"
     unit: str = "angstrom"
     ortho_thresh: float = 1e-8
     cholesky_tei: bool = False
