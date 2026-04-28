@@ -136,6 +136,9 @@ nanobind_add_module(
   ci/slater_rules.cc
   dsrg/dsrg_utils.cc
   sci/sci_helper.cc
+  sci/sci_helper_1rdm.cc
+  sci/sci_helper_1trdm.cc
+  sci/sci_helper_2rdm.cc
   sci/sci_helper_select_hbci.cc
   sci/sci_helper_sigma_build.cc
   sci/sci_helper_spin.cc
