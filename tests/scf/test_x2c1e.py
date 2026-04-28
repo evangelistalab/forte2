@@ -70,7 +70,7 @@ def test_lindep_sfx2c1e():
         overlap_ortho_rtol=2e-7,
     )
 
-    scf = RHF(charge=0, econv=1e-10, dconv=1e-8)(system)
+    scf = RHF(charge=0, e_tol=1e-10, d_tol=1e-8)(system)
     scf.run()
     assert scf.E == approx(erhf)
     assert scf.nbf == 90

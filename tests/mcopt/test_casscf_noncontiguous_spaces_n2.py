@@ -1,4 +1,4 @@
-from forte2 import System, RHF, MCOptimizer, State
+from forte2 import System, RHF, MCOptimizer, State, CISolver
 from forte2.helpers.comparisons import approx
 
 
@@ -14,7 +14,7 @@ def test_mcscf_noncontiguous_spaces():
     """
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     rhf.run()
     assert rhf.E == approx(erhf)
 
@@ -24,8 +24,9 @@ def test_mcscf_noncontiguous_spaces():
     virt = sorted(set(range(system.nbf)) - set(core + actv))
     rhf.C[0][:, core + actv + virt] = rhf.C[0]
 
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=14, multiplicity=1, ms=0.0), active_orbitals=actv, core_orbitals=core
-    )(rhf)
+    )
+    mc = MCOptimizer(ci_solver)(rhf)
     mc.run()
     assert mc.E == approx(ecasscf)

@@ -11,7 +11,7 @@ def test_rohf_ci_1():
     system = System(
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    rhf = ROHF(charge=1, ms=0.5, econv=1e-12)(system)
+    rhf = ROHF(charge=1, ms=0.5, e_tol=1e-12)(system)
     ci = CI(
         states=State(system=system, charge=1, multiplicity=2, ms=0.5),
         core_orbitals=[0],
@@ -33,7 +33,7 @@ def test_rohf_ci_2():
     system = System(
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    rhf = ROHF(charge=1, ms=-0.5, econv=1e-12)(system)
+    rhf = ROHF(charge=1, ms=-0.5, e_tol=1e-12)(system)
     ci = CI(
         active_orbitals=[1, 2, 3, 4, 5, 6],
         core_orbitals=[0],

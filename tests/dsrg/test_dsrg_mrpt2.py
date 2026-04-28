@@ -1,4 +1,4 @@
-from forte2 import System, RHF, MCOptimizer, State, ROHF
+from forte2 import System, RHF, MCOptimizer, State, ROHF, CISolver
 from forte2.dsrg import DSRG_MRPT2
 from forte2.helpers.comparisons import approx
 
@@ -21,11 +21,12 @@ def test_sf_mrpt2_n2():
     rhf = RHF(charge=0)(system)
     rhf.run()
 
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         states=State(nel=14, multiplicity=1, ms=0.0),
         core_orbitals=4,
         active_orbitals=6,
-    )(rhf)
+    )
+    mc = MCOptimizer(ci_solver)(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)
@@ -59,11 +60,12 @@ def test_sf_mrpt2_o2_triplet():
         auxiliary_basis_set="cc-pVTZ-JKFIT",
     )
     mf = ROHF(charge=0, ms=1.0)(system)
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         states=State(nel=16, multiplicity=3, ms=1.0),
         core_orbitals=4,
         active_orbitals=6,
-    )(mf)
+    )
+    mc = MCOptimizer(ci_solver)(mf)
     dsrg = DSRG_MRPT2(
         flow_param=1.0,
         relax_reference="twice",

@@ -33,7 +33,7 @@ def test_rel_gasci_rhf_1():
 
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     rhf, system = prepare_rhf_coeff_for_relci(rhf, system)
     ci = RelCI(
         active_orbitals=[[0, 1], [2, 3]],
@@ -54,7 +54,7 @@ def test_rel_gasci_rhf_2():
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     rhf, system = prepare_rhf_coeff_for_relci(rhf, system)
     system.two_component = True
     ci = RelCI(
@@ -84,7 +84,7 @@ def test_rel_gasci_rhf_3():
         auxiliary_basis_set_corr="def2-svp-rifit",
     )
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     rhf, system = prepare_rhf_coeff_for_relci(rhf, system)
     system.two_component = True
     ci = RelCI(
@@ -108,7 +108,7 @@ def test_rel_gasci_rhf_4():
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="def2-universal-jkfit"
     )
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-8)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-8)(system)
     rhf, system = prepare_rhf_coeff_for_relci(rhf, system)
     system.two_component = True
     ci = RelCI(
@@ -133,7 +133,7 @@ def test_rel_gasci_rhf_5():
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="def2-universal-jkfit"
     )
 
-    rhf = RHF(charge=0, econv=1e-14, dconv=1e-8)(system)
+    rhf = RHF(charge=0, e_tol=1e-14, d_tol=1e-8)(system)
     rhf, system = prepare_rhf_coeff_for_relci(rhf, system)
     system.two_component = True
     ci = RelCI(
@@ -162,7 +162,7 @@ def test_rel_gasci_rohf_3():
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="def2-universal-jkfit"
     )
 
-    rhf = ROHF(charge=0, econv=1e-12, dconv=1e-8, ms=1.0)(system)
+    rhf = ROHF(charge=0, e_tol=1e-12, d_tol=1e-8, ms=1.0)(system)
     rhf, system = prepare_rhf_coeff_for_relci(rhf, system)
     ci = RelCI(
         active_orbitals=(2, 12),

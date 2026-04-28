@@ -16,7 +16,6 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
     core_orbitals: list[int] = None
     active_orbitals: list[int] | list[list[int]] = None
     frozen_virtual_orbitals: list[int] = None
-    final_orbital: str = "semicanonical"
     die_if_not_converged: bool = False
 
     def __post_init__(self):
@@ -30,10 +29,6 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
         self.ncis = self.sa_info.ncis
         self.weights = self.sa_info.weights
         self.weights_flat = self.sa_info.weights_flat
-        assert self.final_orbital in [
-            "semicanonical",
-            "original",
-        ], "final_orbital must be either 'semicanonical' or 'original'."
 
     def _startup(self, two_component=False):
         if not self.parent_method.executed:
