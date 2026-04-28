@@ -241,7 +241,7 @@ def mutual_correlation_plot(
             "The MutualCorrelationAnalysis object does not contain the requested global orbital indices."
         )
 
-    Gamma1_diag_plot = np.diag(mca.Γ1)[plot_indices]
+    Gamma1_diag_plot = mca.occs[plot_indices]
     M2_plot = mca.M2[np.ix_(plot_indices, plot_indices)]
 
     # Label each orbital with the occupation number and index
