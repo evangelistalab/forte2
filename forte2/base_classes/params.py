@@ -1,10 +1,33 @@
 from dataclasses import dataclass, field
+from abc import ABC
 
 from forte2 import Determinant
 
 
 @dataclass
-class DavidsonLiuParams:
+class ParamsBase(ABC):
+    def copy(self, **kwargs):
+        """Create a copy of this Params object, optionally overriding some fields."""
+        # copy all fields from self
+        fields = {
+            f.name: getattr(self, f.name) for f in self.__dataclass_fields__.values()
+        }
+        # override with any provided kwargs
+        for key, value in kwargs.items():
+            if key not in fields:
+                raise ValueError(
+                    f"{self.__class__.__name__} has no field named '{key}'"
+                )
+            fields[key] = value
+        # initialize a new instance of the same class with the updated fields
+        # this ordering makes sure that the __post_init__ method is called with the updated fields,
+        # so any validation logic there will be applied to the new values
+        new_instance = type(self)(**fields)
+        return new_instance
+
+
+@dataclass
+class DavidsonLiuParams(ParamsBase):
     """
     Parameters for the Davidson-Liu eigenvalue solver.
 
@@ -46,7 +69,7 @@ class DavidsonLiuParams:
 
 
 @dataclass
-class CIParams:
+class CIParams(ParamsBase):
     """
     Parameters for the CI solver.
 
@@ -86,7 +109,7 @@ class CIParams:
 
 
 @dataclass
-class SelectedCIParams:
+class SelectedCIParams(ParamsBase):
     """
     Parameters for the Selected CI solver.
 
@@ -114,7 +137,13 @@ class SelectedCIParams:
         Whether to apply a spin penalty to the Hamiltonian to enforce correct spin symmetry.
     guess_dets: list[Determinant], optional
         A list of determinants to use as the initial guess for the CI wavefunction.
+        Note that this set will be further filtered by `DavidsonLiuParams.ndets_per_guess` using the determinantal energies,
+        before finally being enlarged to a spin-complete set.
+        Therefore, it is not recommended to provide energetically disjoint guess determinants, as the higher energy ones will likely be filtered out.
+        Use `pinned_guess_dets` to ensure certain determinants are included in the guess without relying on their energies.
         If not provided, the guess determinants will be generated based on the guess_occ_window and guess_vir_window parameters.
+    pinned_guess_dets: list[Determinant], optional
+        A list of determinants that are pinned to the initial guess, ensuring they are included in the variational space.
     frozen_creation: list[int], optional
         A list of orbital indices for which creation operators are frozen (i.e., not allowed to be occupied in the selected determinants).
         This is used to enforce certain symmetries or to exclude certain orbitals from the selection process.
@@ -154,6 +183,7 @@ class SelectedCIParams:
     num_batches_per_thread: int = 4
     do_spin_penalty: bool = True
     guess_dets: list[Determinant] = field(default_factory=list)
+    pinned_guess_dets: list[Determinant] = field(default_factory=list)
     frozen_creation: list[int] = field(default_factory=list)
     frozen_annihilation: list[int] = field(default_factory=list)
     screening_criterion: str = "hbci"

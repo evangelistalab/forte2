@@ -365,6 +365,21 @@ class SelectedCIHelper:
     def sf_2rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
         """Compute the spin-free 2-RDM between two roots"""
 
+    def a_1trdm(self, right_helper: SelectedCIHelper, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+        """
+        Compute the alpha-spin 1-transition RDM between two roots in different helpers
+        """
+
+    def b_1trdm(self, right_helper: SelectedCIHelper, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+        """
+        Compute the beta-spin 1-transition RDM between two roots in different helpers
+        """
+
+    def sf_1trdm(self, right_helper: SelectedCIHelper, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+        """
+        Compute the spin-free 1-transition RDM between two roots in different helpers
+        """
+
     def dets(self) -> list[Determinant]:
         """Return the determinants in the variational space"""
 
