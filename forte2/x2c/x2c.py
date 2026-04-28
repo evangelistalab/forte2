@@ -28,8 +28,6 @@ class X2CHelper:
     ----------
     system : System
         The molecular system for which to compute the X2C Hamiltonian.
-    overlap_ortho_rtol : float, optional, default=1e-8
-        Relative threshold for canonical orthogonalization. Eigenvalues of the overlap matrix below overlap_ortho_rtol * max_eigenvalue will be treated as zero and discarded in the orthogonalization process. This can help improve numerical stability when the basis set has near-linear dependencies.
 
     Attributes
     ----------

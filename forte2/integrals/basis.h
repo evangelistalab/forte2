@@ -37,6 +37,9 @@ class Basis {
     /// @return the max number of primitives in a shell
     std::size_t max_nprim() const;
 
+    /// @return the max number of contractions in a shell
+    std::size_t max_ncontr() const;
+
     /// @return the vector of shells in the basis set
     const std::vector<libint2::Shell>& shells() const;
 
@@ -66,6 +69,7 @@ class Basis {
     std::vector<libint2::Shell> shells_; // vector of shells in the basis set
     size_t size_ = 0;                    // total number of basis functions
     size_t max_nprim_ = 0;               // max number of primitives in shells
+    size_t max_ncontr_ = 0;              // max number of contractions in shells
     int max_l_ = 0;                      // max angular momentum of shells
     std::string name_ = "unnamed basis"; // name of the basis set
 };

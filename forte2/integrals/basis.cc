@@ -21,6 +21,7 @@ void Basis::add(const libint2::Shell& shell) {
     shells_.push_back(shell);
     max_l_ = std::max(max_l_, shell.contr[0].l);
     max_nprim_ = std::max(max_nprim_, shell.nprim());
+    max_ncontr_ = std::max(max_ncontr_, shell.ncontr());
     size_ += shell.contr[0].size();
 }
 
@@ -42,6 +43,8 @@ int Basis::max_l() const { return max_l_; }
 std::string Basis::name() const { return name_; }
 
 std::size_t Basis::max_nprim() const { return max_nprim_; }
+
+std::size_t Basis::max_ncontr() const { return max_ncontr_; }
 
 std::vector<std::pair<std::size_t, std::size_t>> Basis::shell_first_and_size() const {
     std::vector<std::pair<std::size_t, std::size_t>> result;

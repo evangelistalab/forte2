@@ -255,6 +255,10 @@ class System:
             raise ValueError(
                 "If cholesky_tei is True, memory_threshold_mb must be None."
             )
+        if self.memory_threshold_mb is not None and self.auxiliary_basis is None:
+            raise ValueError(
+                "If memory_threshold_mb is set, auxiliary_basis_set must be provided to determine the size of the B tensor."
+            )
         if self.memory_threshold_mb is None:
             return FockBuilder(self)
         b_tensor_size_mb = 8 * self.naux * self.nbf**2 / (1024**2)

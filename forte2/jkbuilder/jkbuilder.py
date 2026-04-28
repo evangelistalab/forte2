@@ -615,7 +615,7 @@ class FockBuilderOTF:
         )
         self.pblksize = min(self.naux, maxpblksize)
 
-        max_nbasis_in_shell = self.auxbasis.max_nprim
+        max_nbasis_in_shell = self.auxbasis.max_ncontr
         if self.pblksize < max_nbasis_in_shell:
             suggested_mem_mb = math.ceil(
                 (nbuf_vt * nbytes + 8) * max_nbasis_in_shell * self.naux**2 / 1024**2

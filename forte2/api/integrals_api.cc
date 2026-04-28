@@ -159,6 +159,7 @@ void export_basis_api(nb::module_& sub_m) {
         .def_prop_ro("name", &Basis::name)
         .def_prop_ro("max_nprim", &Basis::max_nprim)
         .def_prop_ro("nprim", &Basis::max_nprim)
+        .def_prop_ro("max_ncontr", &Basis::max_ncontr)
         .def_prop_ro("nshells", &Basis::nshells)
         .def("__repr__", [](const Basis& b) {
             std::ostringstream oss;
