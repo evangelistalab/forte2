@@ -1,8 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, RHF, GHF
-from forte2.orbitals import convert_coeff_spatial_to_spinor
+from forte2 import System, RHF, GHF, NonRelToRelConverter
 from forte2.helpers.comparisons import approx
 from forte2.ci import RelCI
 
@@ -18,14 +17,9 @@ def test_rel_ci_h2():
         xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     scf = GHF(charge=0, e_tol=1e-12)(system)
-    scf.run()
-    C = scf.C[0]
-    nmo = C.shape[1]
-    random_phase = np.diag(np.exp(1j * np.random.uniform(-np.pi, np.pi, size=nmo)))
-    C = C @ random_phase
-    scf.C[0] = C
+    conv = NonRelToRelConverter(apply_random_phase=True)(scf)
 
-    ci = RelCI(nel=2, active_orbitals=4, do_test_rdms=True)(scf)
+    ci = RelCI(nel=2, active_orbitals=4, do_test_rdms=True)(conv)
     ci.run()
     assert ci.E[0] == approx(-1.096071975854)
 
@@ -41,20 +35,14 @@ def test_rel_ci_hf():
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     scf = RHF(charge=0, e_tol=1e-10)(system)
-    scf.run()
-    C = convert_coeff_spatial_to_spinor(scf.C)[0]
-    nmo = C.shape[1]
-    random_phase = np.diag(np.exp(1j * np.random.uniform(-np.pi, np.pi, size=nmo)))
-    C = C @ random_phase
-    scf.C[0] = C
-    system.two_component = True
+    conv = NonRelToRelConverter(apply_random_phase=True)(scf)
 
     ci = RelCI(
         nel=10,
         core_orbitals=2,
         active_orbitals=12,
         do_test_rdms=True,
-    )(scf)
+    )(conv)
     ci.run()
     assert ci.E[0] == approx(-100.019788438077)
 
