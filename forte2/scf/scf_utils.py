@@ -272,8 +272,6 @@ def repair_symmetry(scf_obj):
     """
     if not scf_obj.system.symmetry:
         return scf_obj
-    if not scf_obj.executed:
-        scf_obj.run()
     if scf_obj.mosym.success:
         return scf_obj
     F = scf_obj.mosym.symmetrize_operator(scf_obj.F)

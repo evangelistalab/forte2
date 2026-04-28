@@ -7,6 +7,7 @@ from forte2.system import System, ModelSystem, BasisInfo
 from forte2.base_classes.mixins import MOsMixin, SystemMixin
 from forte2.helpers import logger, DIIS
 from forte2.symmetry import MOSymmetryDetector
+from .scf_utils import repair_symmetry
 
 
 @dataclass
@@ -40,6 +41,10 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         If energy change is below this threshold, level shift is turned off.
     die_if_not_converged : bool, optional, default=True
         Whether to raise an error if the SCF calculation does not converge.
+    repair_symmetry : bool, optional, default=False
+        Whether to perform symmetry repair after the SCF calculation, useful if a broken-symmetry solution is suspected.
+        This is done by symmetrizing the Fock matrix over the point group operations, rediagonalizing it, and reassigning the MO symmetries.
+        WARNING: This causes the MO coefficients and orbital energies to be non-canonical, so it should only be followed by calculations that do not rely on canonical orbitals (e.g. FCI or CASSCF).
 
     Attributes
     ----------
@@ -72,6 +77,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
     level_shift: float = None
     level_shift_thresh: float = 1e-5
     die_if_not_converged: bool = True
+    repair_symmetry: bool = False
 
     executed: bool = field(default=False, init=False)
     converged: bool = field(default=False, init=False)
@@ -296,3 +302,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
 
     @abstractmethod
     def _print_ao_composition(self): ...
+
+    def _repair_symmetry(self):
+        if self.repair_symmetry:
+            self = repair_symmetry(self)

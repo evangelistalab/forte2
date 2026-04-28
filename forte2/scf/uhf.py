@@ -192,6 +192,8 @@ class UHF(SCFBase):
         self.irrep_labels = [a_labels, b_labels]
         self.irrep_indices = [a_irrep_indices, b_irrep_indices]
 
+        self._repair_symmetry()
+
     def _print_ao_composition(self):
         if isinstance(self.system, ModelSystem):
             # send a PR if you want this changed

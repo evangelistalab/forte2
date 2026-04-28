@@ -1,5 +1,4 @@
 from forte2 import System, RHF, MCOptimizer, State, DSRG_MRPT2
-from forte2.scf.scf_utils import repair_symmetry
 from forte2.helpers.comparisons import approx
 
 
@@ -16,8 +15,7 @@ def test_dsrg_mrpt2_with_sym_c2_1():
         symmetry=True,
     )
 
-    rhf = RHF(charge=0)(system)
-    rhf = repair_symmetry(rhf)
+    rhf = RHF(charge=0, repair_symmetry=True)(system)
     mc = MCOptimizer(
         states=State(nel=12, multiplicity=1, ms=0.0, symmetry=0),
         nroots=3,
@@ -74,8 +72,7 @@ def test_dsrg_mrpt2_with_sym_c2_2():
         symmetry=True,
     )
 
-    rhf = RHF(charge=0)(system)
-    rhf = repair_symmetry(rhf)
+    rhf = RHF(charge=0, repair_symmetry=True)(system)
     mc = MCOptimizer(
         states=State(nel=12, multiplicity=1, ms=0.0, symmetry=0),
         nroots=3,
