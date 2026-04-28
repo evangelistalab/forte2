@@ -318,7 +318,7 @@ def test_ci_rdms_1():
     system = System(
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         states=State(nel=10, multiplicity=1, ms=0.0),
         core_orbitals=[0],
@@ -341,7 +341,7 @@ def test_ci_rdms_sa():
     system = System(
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         states=[
             State(nel=10, multiplicity=1, ms=0.0),

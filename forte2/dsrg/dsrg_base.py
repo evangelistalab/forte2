@@ -3,7 +3,8 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from forte2.base_classes import SystemMixin, MOsMixin, MOSpaceMixin, ActiveSpaceSolver
+from forte2.base_classes import SystemMixin, MOsMixin, MOSpaceMixin, CIBase, RelCIBase
+from forte2.mcopt.mc_optimizer import MCOptimizerBase
 from forte2.helpers import logger
 from forte2.orbitals import Semicanonicalizer
 from forte2.ci.ci_utils import pretty_print_ci_summary
@@ -32,8 +33,8 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
     def __call__(self, parent_method):
         self.parent_method = parent_method
         assert isinstance(
-            self.parent_method, ActiveSpaceSolver
-        ), "Parent method must be an ActiveSpaceSolver."
+            self.parent_method, (CIBase, RelCIBase, MCOptimizerBase)
+        ), "Parent method must be an instance of CIBase, RelCIBase, or MCOptimizerBase."
         # This is to ensure that the CI vectors are converged after
         # the basis is changed to semicanonical orbitals.
         # We could handle it here, but it's cleaner to enforce it at the parent method level.
@@ -140,6 +141,10 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
         form_hbar = self.nrelax > 0
 
         self.E_dsrg = self.solve_dsrg(form_hbar)
+        if abs(self.E_dsrg.imag) > 1e-12:
+            logger.log_warning(
+                f"DSRG energy has a significant imaginary component: {self.E_dsrg.imag}"
+            )
 
         self.relax_energies[0, 0] = self.E_dsrg.real
         # self.ints["E"] is <Psi_current| bare H |Psi_current>
@@ -181,6 +186,10 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
 
             self.ints, self.cumulants = self.get_integrals()
             self.E_dsrg = self.solve_dsrg(form_hbar=form_hbar)
+            if abs(self.E_dsrg.imag) > 1e-12:
+                logger.log_warning(
+                    f"DSRG energy has a significant imaginary component: {self.E_dsrg.imag}"
+                )
             self.E = self.E_dsrg
         else:
             logger.log_warning(

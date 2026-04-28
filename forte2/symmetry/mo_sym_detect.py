@@ -1,6 +1,6 @@
 import numpy as np
 
-from forte2.helpers import logger, block_diag_2x2
+from forte2.helpers import logger
 from .sym_utils import (
     SYMMETRY_OPS,
     CHARACTER_TABLE,

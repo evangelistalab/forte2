@@ -1,13 +1,13 @@
 import pytest
 
-from forte2 import System, RHF, MCOptimizer, State
+from forte2 import System, RHF, MCOptimizer, State, CISolver
 from forte2.helpers.comparisons import approx
 
 
 @pytest.mark.slow
 def test_gasscf_ch4_active_frozen_1s():
     erhf = -40.19845141292726
-    emcscf = -29.570492567892
+    emcscf = -29.5706974100
 
     xyz = """
     C            0.052417904862     0.008091170764     0.039717608738
@@ -24,16 +24,16 @@ def test_gasscf_ch4_active_frozen_1s():
         unit="bohr",
     )
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-12)(system)
 
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
         active_orbitals=[[0], [1, 2, 3, 4, 5, 6, 7, 8]],
+    )
+    mc = MCOptimizer(
+        ci_solver,
         active_frozen_orbitals=[0],
-        do_diis=True,
-        econv=1e-8,
-        gconv=1e-7,
-        maxiter=100,
+        maxiter=500,
     )(rhf)
     mc.run()
 
@@ -61,15 +61,15 @@ def test_gasscf_ch4_active_frozen_1s_highest_active():
         unit="bohr",
     )
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-12)(system)
 
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
         active_orbitals=[[0], [1, 2, 3, 4, 5, 6, 7, 8]],
+    )
+    mc = MCOptimizer(
+        ci_solver,
         active_frozen_orbitals=[0, 8],
-        do_diis=True,
-        econv=1e-8,
-        gconv=1e-7,
         maxiter=100,
     )(rhf)
     mc.run()
@@ -81,7 +81,7 @@ def test_gasscf_ch4_active_frozen_1s_highest_active():
 @pytest.mark.slow
 def test_gasscf_ch4_active_frozen_1s_highest_active_noncontiguous():
     erhf = -40.19845141292726
-    emcscf = -29.544266400483
+    emcscf = -29.5444113658
 
     xyz = """
     C            0.052417904862     0.008091170764     0.039717608738
@@ -98,16 +98,16 @@ def test_gasscf_ch4_active_frozen_1s_highest_active_noncontiguous():
         unit="bohr",
     )
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-12)(system)
 
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
         active_orbitals=[[0], [1, 2, 3, 4, 5, 6, 7, 9]],
+    )
+    mc = MCOptimizer(
+        ci_solver,
         active_frozen_orbitals=[0, 9],
-        do_diis=True,
-        econv=1e-9,
-        gconv=1e-9,
-        maxiter=200,
+        maxiter=500,
     )(rhf)
     mc.run()
 

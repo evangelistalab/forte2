@@ -3,8 +3,11 @@ name: build
 on: 
   push:
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   schedule:
     - cron: '30 15 * * *'
+  merge_group:
+    types: [checks_requested]
 
 jobs:
   build:
@@ -16,8 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-22.04, macos-latest]
-
+        os: [ubuntu-latest, ubuntu-22.04, macos-latest, ubuntu-24.04-arm, ubuntu-22.04-arm]
 
     steps:
     - name: Checkout code
@@ -45,11 +47,11 @@ jobs:
         pip list
 
     - name: Run Forte2 pytest tests
-      if: steps.compile-forte2.outcome == 'success' && '!cancelled()'
+      if: ${{ steps.compile-forte2.outcome == 'success' && !cancelled() }}
       run: |
         conda activate forte
         cd $HOME/work/forte2/forte2/tests
-        if [ "${{ github.event_name }}" == "schedule" ]; then
+        if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "merge_group" || ( "${{ github.event_name }}" == "pull_request" && "${{ contains(github.event.pull_request.labels.*.name, 'ready') }}" == "true" ) ]]; then
           pytest -v --cov --cov-branch --cov-report=xml
         else
           pytest -v -m "not slow" --cov --cov-branch --cov-report=xml

@@ -557,7 +557,7 @@ class RelDSRG_MRPT2(DSRGBase):
                 self.flow_param,
             )
             E += 0.500 * np.einsum(
-                "uba,vba,uv->",
+                "uba,vba,vu->",
                 Vbare_i.conj(),
                 Vr_i,
                 self.cumulants["gamma1"],

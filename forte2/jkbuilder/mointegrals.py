@@ -19,18 +19,18 @@ class RestrictedMOIntegrals:
 
     Parameters
     ----------
+    system : System
+        The system for which to compute the integrals.
     C : NDArray
         The coefficient matrix for the molecular orbitals.
     orbitals : list[int]
         Subspace of the orbitals for which to compute the integrals.
     core_orbitals : list[int], optional
-        Subspace of doubly occupied orbitals. Defaults to None.
+        Subspace of doubly occupied orbitals.
     use_aux_corr : bool, optional, default=False
         If True, use ``system.auxiliary_basis_corr``, else use ``system.auxiliary_basis``.
     antisymmetrize : bool, optional, default=False
         If True, antisymmetrize the two-electron integrals.
-    spinorbital : bool, optional, default=False
-        If True, the integrals are converted to the spin-orbital basis.
 
     Attributes
     ----------
@@ -40,12 +40,18 @@ class RestrictedMOIntegrals:
         The effective one-electron integrals.
     V : NDArray
         The two-electron integrals stored in physicist's convention: V[p,q,r,s] = :math:`\langle pq | rs \rangle`.
+
+    Examples
+    --------
+    >>> ints = RestrictedMOIntegrals(system=system, C=rhf.C[0], orbitals=orbitals, core_orbitals=core_orbitals)
+    >>> ints.H  # one-electron integrals in the MO basis
+    >>> ints.V  # two-electron integrals in the MO basis
     """
 
     system: "System"
     C: NDArray
-    orbitals: list
-    core_orbitals: list = field(default_factory=list)
+    orbitals: list[int] | range
+    core_orbitals: list[int] | range = field(default_factory=list)
     use_aux_corr: bool = False
     antisymmetrize: bool = False
 
@@ -55,7 +61,7 @@ class RestrictedMOIntegrals:
             jkbuilder = self.system.fock_builder_corr
         else:
             jkbuilder = self.system.fock_builder
-        C = self.C[:, self.orbitals]
+        C = np.ascontiguousarray(self.C[:, self.orbitals])
 
         # nuclear repulsion energy contribution to the energy
         self.E = self.system.nuclear_repulsion
@@ -68,7 +74,7 @@ class RestrictedMOIntegrals:
 
         if self.core_orbitals:
             # compute the J and K matrices contributions from the core orbitals
-            Ccore = self.C[:, self.core_orbitals]
+            Ccore = np.ascontiguousarray(self.C[:, self.core_orbitals])
 
             # one-electron contributions to the energy
             self.E += 2.0 * np.einsum("mi,mn,ni->", Ccore, H_ao, Ccore)
@@ -93,18 +99,18 @@ class SpinorbitalIntegrals:
 
     Parameters
     ----------
-    C : NDArray
-        The coefficient matrix for the molecular orbitals.
-    orbitals : list[int]
-        Subspace of the orbitals for which to compute the integrals.
-    core_orbitals : list[int], optional
-        Subspace of doubly occupied orbitals. Defaults to None.
+    system : System
+        The system for which to compute the integrals.
+    C : NDArray, shape (2*nbf, *)
+        The coefficient matrix for the spinorbitals.
+    spinorbitals : list[int] | range
+        Subspace of the spinorbitals for which to compute the integrals.
+    core_spinorbitals : list[int] | range, optional
+        Subspace of doubly occupied spinorbitals.
     use_aux_corr : bool, optional, default=False
         If True, use ``system.auxiliary_basis_corr``, else use ``system.auxiliary_basis``.
     antisymmetrize : bool, optional, default=False
         If True, antisymmetrize the two-electron integrals.
-    spinorbital : bool, optional, default=False
-        If True, the integrals are converted to the spin-orbital basis.
 
     Attributes
     ----------
@@ -118,8 +124,8 @@ class SpinorbitalIntegrals:
 
     system: "System"
     C: NDArray
-    spinorbitals: list
-    core_spinorbitals: list = field(default_factory=list)
+    spinorbitals: list[int] | range
+    core_spinorbitals: list[int] | range = field(default_factory=list)
     use_aux_corr: bool = False
     antisymmetrize: bool = False
 
@@ -133,7 +139,7 @@ class SpinorbitalIntegrals:
             jkbuilder = self.system.fock_builder_corr
         else:
             jkbuilder = self.system.fock_builder
-        C = self.C[:, self.spinorbitals]
+        C = np.ascontiguousarray(self.C[:, self.spinorbitals])
 
         # nuclear repulsion energy contribution to the energy
         self.E = self.system.nuclear_repulsion
@@ -146,7 +152,7 @@ class SpinorbitalIntegrals:
 
         if len(self.core_spinorbitals) > 0:
             # compute the J and K matrices contributions from the core orbitals
-            Ccore = self.C[:, self.core_spinorbitals]
+            Ccore = np.ascontiguousarray(self.C[:, self.core_spinorbitals])
 
             # one-electron contributions to the energy
             self.E += np.einsum("mi,mn,ni->", Ccore.conj(), H_ao, Ccore)
@@ -162,66 +168,3 @@ class SpinorbitalIntegrals:
         self.V = jkbuilder.two_electron_integrals_block_spinor(C)
         if self.antisymmetrize:
             self.V -= self.V.swapaxes(2, 3)
-
-
-@dataclass
-class SRRestrictedMOIntegrals:
-    r"""
-    Class to compute molecular orbital integrals for a given set of restricted orbitals
-    for use in SR correlation methods.
-
-    Parameters
-    ----------
-    moints : RestrictedMOIntegrals
-        The integrals in the MO basis
-    frozen : int, optional
-        Number of frozen core orbitals to be excluded from the correlated calculation. Defaults to 0.
-    virtual : int, optional
-        Number of virtual orbitals to be excluded from the correlated calculation. Defaults to 0.
-
-
-    Attributes
-    ----------
-    """
-
-    ints: RestrictedMOIntegrals
-    frozen: int = 0
-    virtual: int = 0
-
-    def __post_init__(self):
-        if not self.ints.spinorbital:
-            raise ValueError(
-                "Expected restricted spin-orbital integrals (ints.spinorbital == True)."
-            )
-
-        self.o = slice(0, self.ints.system.nel - self.frozen)
-        self.v = slice(self.ints.system.nel, self.ints.system.nbf - self.virtual)
-
-        self.build_fock()
-
-    def __getitem__(self, key):
-        idx = tuple(self.o if k == "o" else self.v if k == "v" else k for k in key)
-        if len(idx) == 2:
-            return self.F[idx]
-        if len(idx) == 4:
-            return self.ints.V[idx]
-        raise IndexError("Use 2 indices for H or 4 indices for V.")
-
-    def build_fock(self):
-        self.F = self.ints.H + np.einsum("piqi->pq", self.ints.V[:, self.o, :, self.o])
-        self.eps_o = np.diag(self.F[self.o, self.o])
-        self.eps_v = np.diag(self.F[self.v, self.v])
-
-    def scf_energy(self):
-        E = np.einsum("ii->", self.ints.H[self.o, self.o]) + 0.5 * np.einsum(
-            "ijij->", self.ints.V[self.o, self.o, self.o, self.o]
-        )
-        E += self.ints.system.nuclear_repulsion
-        return E
-
-    def scf_energy_fock(self):
-        E = np.einsum("ii->", self.F[self.o, self.o]) - 0.5 * np.einsum(
-            "ijij->", self.ints.V[self.o, self.o, self.o, self.o]
-        )
-        E += self.ints.system.nuclear_repulsion
-        return E

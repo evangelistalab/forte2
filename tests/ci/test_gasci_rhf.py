@@ -3,6 +3,7 @@ import pytest
 from forte2 import System, RHF, CI, State
 from forte2.helpers.comparisons import approx
 from forte2.system.build_basis import BSE_AVAILABLE
+from forte2.base_classes import CIParams, DavidsonLiuParams
 
 
 def test_gasci_rhf_1():
@@ -13,11 +14,11 @@ def test_gasci_rhf_1():
 
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         active_orbitals=[[0], [1]],
         states=State(nel=2, multiplicity=1, ms=0.0, gas_min=[0], gas_max=[2]),
-        econv=1e-12,
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
     )(rhf)
     ci.run()
 
@@ -33,7 +34,7 @@ def test_gasci_rhf_2():
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         active_orbitals=[[0], [1]],
         states=State(nel=2, multiplicity=1, ms=0.0, gas_min=[1, 0], gas_max=[2, 1]),
@@ -61,7 +62,7 @@ def test_gasci_rhf_3():
         auxiliary_basis_set_corr="def2-svp-rifit",
     )
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         active_orbitals=[[0], [1]],
         states=State(nel=2, multiplicity=1, ms=0.0, gas_min=[0, 0], gas_max=[2, 2]),
@@ -83,11 +84,11 @@ def test_gasci_rhf_4():
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="def2-universal-jkfit"
     )
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-8)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-8)(system)
     ci = CI(
         active_orbitals=[[0, 1, 2, 3, 4], [5, 6]],
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[6, 0], gas_max=[10, 4]),
-        econv=1e-12,
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
     )(rhf)
     ci.run()
 
@@ -106,11 +107,11 @@ def test_gasci_rhf_5():
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="def2-universal-jkfit"
     )
 
-    rhf = RHF(charge=0, econv=1e-14, dconv=1e-8)(system)
+    rhf = RHF(charge=0, e_tol=1e-14, d_tol=1e-8)(system)
     ci = CI(
         active_orbitals=[[0], [1, 2, 3, 4, 5, 6]],
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[0], gas_max=[1]),
-        econv=1e-14,
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-14),
     )(rhf)
     ci.run()
 
@@ -128,7 +129,7 @@ def test_gasci_rhf_6():
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="def2-universal-jkfit"
     )
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-8)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-8)(system)
     ci = CI(
         active_orbitals=(3, 4, 3),
         states=State(
@@ -152,12 +153,12 @@ def test_gasci_rhf_7():
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="def2-universal-jkfit"
     )
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-8)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-8)(system)
     ci = CI(
         active_orbitals=[[0], [1, 2, 3, 4, 5, 6]],
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
         nroots=2,
-        econv=1e-12,
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
     )(rhf)
     ci.run()
 
@@ -177,12 +178,12 @@ def test_gasci_rhf_8():
         xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="def2-universal-jkfit"
     )
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-8)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-8)(system)
     ci = CI(
         active_orbitals=[[0], [1, 2, 3, 4, 5, 6]],
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[1], gas_max=[1]),
         nroots=2,
-        econv=1e-12,
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
     )(rhf)
     ci.run()
 
@@ -205,13 +206,13 @@ def test_gasci_rhf_9():
         xyz=xyz, basis_set="cc-pVTZ", auxiliary_basis_set="def2-universal-jkfit"
     )
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-12)(system)
 
     ci = CI(
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[3], gas_max=[6]),
         core_orbitals=[0, 1],
         active_orbitals=[[2, 3, 4], [5, 6, 7]],
-        econv=1e-12,
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-12),
     )(rhf)
     ci.run()
 
@@ -233,14 +234,13 @@ def test_gasci_rhf_10():
         xyz=xyz, basis_set="cc-pVTZ", auxiliary_basis_set="def2-universal-jkfit"
     )
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-6)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-6)(system)
 
     ci = CI(
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[4], gas_max=[8]),
         core_orbitals=[0],
         active_orbitals=[[1, 2, 3, 4], [5, 6, 7]],
-        econv=1e-10,
-        ci_algorithm="hz",
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-10),
     )(rhf)
     ci.run()
 
@@ -262,14 +262,14 @@ def test_gasci_rhf_11():
         xyz=xyz, basis_set="cc-pVTZ", auxiliary_basis_set="def2-universal-jkfit"
     )
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-6)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-6)(system)
 
     ci = CI(
         states=State(nel=10, multiplicity=1, ms=0.0, gas_min=[4], gas_max=[8]),
         core_orbitals=[0],
         active_orbitals=[[1, 2, 3, 4], [5, 6, 7]],
-        econv=1e-10,
-        ci_algorithm="kh",
+        davidson_liu_params=DavidsonLiuParams(e_tol=1e-10),
+        ci_params=CIParams(ci_algorithm="kh"),
     )(rhf)
     ci.run()
 

@@ -64,6 +64,7 @@ void export_integrals_api(nb::module_& m) {
 #else
     sub_m.attr("HAS_LIBCINT") = nb::bool_(false);
 #endif
+    sub_m.attr("libint2_max_am") = nb::int_(LIBINT2_MAX_AM);
 }
 
 void export_shell_api(nb::module_& sub_m) {

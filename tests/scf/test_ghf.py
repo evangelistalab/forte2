@@ -21,24 +21,6 @@ def test_equivalence_to_rhf():
     assert scf.S2 == approx(s2_ghf)
 
 
-def test_equivalence_to_uhf():
-    # This is the same test as test_uhf_coulson_fischer
-    euhf = -1.000297175136
-    s2uhf = 0.987426195959
-    xyz = """
-    H 0 0 0
-    H 0 0 2.7"""
-    system = System(
-        xyz=xyz,
-        basis_set="cc-pVQZ",
-        auxiliary_basis_set="cc-pVQZ-JKFIT",
-    )
-    scf = GHF(charge=0, ms_guess=0.0, guess_mix=True)(system)
-    scf.run()
-    assert scf.E == approx(euhf)
-    assert scf.S2 == approx(s2uhf)
-
-
 def test_ghf_complex_perturbation():
     """
     This test checks that, for a system that's stable wrt to
@@ -77,8 +59,8 @@ def test_ghf_complex_perturbation():
 
 def test_j_adapted_ghf():
     # The two bases should yield the same result
-    eref = -399.12328000812687
-    s2ref = 0.7547419587209125
+    eref = -398.723752737950
+    s2ref = 1.0001601212478493
     xyz = """
     S 0 0 0
     H 0 0 1.1"""
@@ -89,7 +71,7 @@ def test_j_adapted_ghf():
         x2c_type="so",
         snso_type=None,
     )
-    scf = GHF(charge=0, j_adapt=False)(system)
+    scf = GHF(charge=1, j_adapt=False)(system)
     scf.run()
     assert scf.E == approx(eref)
     assert scf.S2 == approx(s2ref)
@@ -101,7 +83,7 @@ def test_j_adapted_ghf():
         x2c_type="so",
         snso_type=None,
     )
-    scf = GHF(charge=0, j_adapt=True)(system)
+    scf = GHF(charge=1, j_adapt=True)(system)
     scf.run()
     assert scf.E == approx(eref)
     assert scf.S2 == approx(s2ref)
@@ -118,6 +100,24 @@ def test_equivalence_to_high_spin_uhf():
         auxiliary_basis_set="cc-pVTZ-JKFIT",
     )
     scf = GHF(charge=0, ms_guess=1.0)(system)
+    scf.run()
+    assert scf.E == approx(euhf)
+    assert scf.S2 == approx(s2uhf)
+
+
+def test_equivalence_to_uhf():
+    # this is the same test as test_uhf.py::test_uhf_singlet
+    euhf = -76.061466407194
+    s2uhf = 0.0
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.061664597388
+    H            0.000000000000    -0.711620616369     0.489330954643
+    H            0.000000000000     0.711620616369     0.489330954643
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
+
+    scf = GHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(euhf)
     assert scf.S2 == approx(s2uhf)

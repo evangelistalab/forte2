@@ -123,7 +123,7 @@ def _orthogonalize(C, S):
     """
 
     X = C.T.conj() @ S @ C
-    X_invsqrt = invsqrt_matrix(X)
+    X_invsqrt, *_ = invsqrt_matrix(X)
     return C @ X_invsqrt
 
 
@@ -139,7 +139,7 @@ class IBO(IAO):
         The occupied molecular orbital coefficients.
     maxiter : int, optional, default=10
         The maximum number of iterations for the IBO optimization.
-    gconv : float, optional, default=1e-8
+    g_tol : float, optional, default=1e-8
         The RMS gradient convergence criterion for the IBO optimization.
 
     Notes
@@ -151,10 +151,10 @@ class IBO(IAO):
     https://sites.psu.edu/knizia/software/
     """
 
-    def __init__(self, system: System, C_occ: np.ndarray, maxiter=10, gconv=1e-8):
+    def __init__(self, system: System, C_occ: np.ndarray, maxiter=10, g_tol=1e-8):
         super().__init__(system, C_occ)
         self.maxiter = maxiter
-        self.gconv = gconv
+        self.g_tol = g_tol
         self.C_ibo = self._make_ibo()
 
     def _make_ibo(self):
@@ -194,13 +194,13 @@ class IBO(IAO):
                     )
                     C_occ_iao[:, i] = i_new.copy()
                     C_occ_iao[:, j] = j_new.copy()
-            if np.sqrt(grad) < self.gconv:
+            if np.sqrt(grad) < self.g_tol:
                 logger.log_info1(f"\nIBO converged after {ibo_iter} iterations.")
                 break
             ibo_iter += 1
         else:
             raise RuntimeError(
-                f"IBO did not converge after {self.maxiter} iterations. Change `maxiter` or `gconv`."
+                f"IBO did not converge after {self.maxiter} iterations. Change `maxiter` or `g_tol`."
             )
 
         # (nbf, nminao) @ (nminao, nocc) = (nbf, nocc)

@@ -2,15 +2,16 @@ from dataclasses import dataclass, field
 import numpy as np
 from numpy.typing import NDArray
 
-from forte2 import integrals
+from forte2 import integrals, Basis
 from forte2.data import DEBYE_TO_AU, DEBYE_ANGSTROM_TO_AU, Z_TO_ATOM_SYMBOL
-from forte2.helpers import logger
-from forte2.helpers.matrix_functions import (
+from forte2.helpers import (
+    logger,
     invsqrt_matrix,
     canonical_orth,
     block_diag_2x2,
+    print_metric_info,
 )
-from forte2.x2c import get_hcore_x2c
+from forte2.x2c import X2CHelper
 from forte2.jkbuilder import FockBuilder
 from .build_basis import build_basis
 from .geom_utils import GeometryHelper, parse_geometry
@@ -43,9 +44,6 @@ class System:
         Options are None, "boettger", "dc", "dcb", or "row-dependent".
     unit : str, optional, default="angstrom"
         The unit for the atomic coordinates. Can be "angstrom" or "bohr".
-    linear_dep_trigger : float, optional, default=1e-10
-        The trigger for detecting linear dependencies in the overlap matrix. If the ratio of the minimum to
-        maximum eigenvalue of the overlap matrix falls below this value, linear dependencies will be removed.
     ortho_thresh : float, optional, default=1e-8
         Linear combinations of AO basis functions with overlap eigenvalues below this threshold will be removed
         during orthogonalization.
@@ -105,13 +103,13 @@ class System:
 
     xyz: str
     basis_set: str | dict
+    # These are the arguments that users can provide at initialization.
     auxiliary_basis_set: str | dict = None
     auxiliary_basis_set_corr: str | dict = None
     minao_basis_set: str | dict = "cc-pvtz-minao"
     x2c_type: str = None
     snso_type: str = "row-dependent"
     unit: str = "angstrom"
-    linear_dep_trigger: float = 1e-10
     ortho_thresh: float = 1e-8
     cholesky_tei: bool = False
     cholesky_tol: float = 1e-6
@@ -130,6 +128,9 @@ class System:
     nminao: int = field(init=False, default=None)
     Xorth: NDArray = field(init=False, default=None)
     two_component: bool = field(init=False, default=False)
+    # Basis set objects build from arguments provided at initialization.
+    auxiliary_basis: Basis = field(init=False, default=None)
+    auxiliary_basis_corr: Basis = field(init=False, default=None)
 
     def __post_init__(self):
         assert self.unit in [
@@ -142,11 +143,9 @@ class System:
         self.nuclear_repulsion = integrals.nuclear_repulsion(self)
         self._init_x2c()
         _S = integrals.overlap(self)
-        self.Xorth, self.nmo = compute_orthonormal_transformation(
-            _S,
-            self.linear_dep_trigger,
-            self.ortho_thresh,
-        )
+        self.Xorth, _, info = canonical_orth(_S, self.ortho_thresh)
+        print_metric_info(info)
+        self.nmo = info["n_kept"]
         self.fock_builder = FockBuilder(self)
         # The B tensors here are lazily evaluated, so no overhead if not used
         if self.auxiliary_basis_set_corr is not None:
@@ -213,8 +212,6 @@ class System:
                 logger.log_warning(
                     "Ignoring provided auxiliary basis sets since cholesky_tei=True!"
                 )
-            self.auxiliary_basis = None
-            self.auxiliary_basis_corr = None
 
         if self.minao_basis_set is not None:
             self.minao_basis = build_basis(self.minao_basis_set, self.geom_helper)
@@ -239,6 +236,7 @@ class System:
                 "sf",
                 "so",
             ], f"x2c_type {self.x2c_type} is not supported. Use None, 'sf' or 'so'."
+            self.x2c_helper = X2CHelper(self, ortho_thresh=self.ortho_thresh)
         else:
             return
         if self.x2c_type == "so":
@@ -271,7 +269,7 @@ class System:
             Core Hamiltonian integrals matrix.
         """
         if self.x2c_type in ["sf", "so"]:
-            H = get_hcore_x2c(self)
+            H = self.x2c_helper.hcore_x2c()
         else:
             T = integrals.kinetic(self)
             V = integrals.nuclear(self)
@@ -368,7 +366,7 @@ class ModelSystem:
         self.nbf = self.hcore.shape[0]
         self.nmo = self.nbf
         self.naux = 0
-        self.Xorth = invsqrt_matrix(self.ints_overlap(), tol=1e-13)
+        self.Xorth, *_ = invsqrt_matrix(self.ints_overlap(), rtol=1e-13)
         self.symmetry = False
         self.point_group = "C1"
         self.fock_builder = FockBuilder(self)
@@ -500,52 +498,3 @@ class HubbardModel(ModelSystem):
         self.eri = np.zeros((nsites_flat,) * 4)
         for i in range(nsites_flat):
             self.eri[i, i, i, i] = self.U
-
-
-def compute_orthonormal_transformation(S, lindep_trigger, ortho_thresh):
-    """
-    Orthonormalize the AO basis, catch and remove linear dependencies.
-
-    Parameters
-    ----------
-    S : NDArray
-        The overlap matrix of the basis functions.
-    lindep_trigger : float
-        The trigger for detecting linear dependencies in the overlap matrix.
-        If the ratio of the minimum to maximum eigenvalue of the overlap matrix falls below this value,
-        linear dependencies will be removed.
-    ortho_thresh : float
-        Linear combinations of AO basis functions with overlap eigenvalues below this threshold will be removed
-        during orthogonalization.
-
-    Returns
-    -------
-    Xorth : NDArray
-        The orthonormalization matrix for the basis functions.
-    nmo : int
-        The number of linearly independent combinations of atomic orbitals in the system.
-    """
-    e, _ = np.linalg.eigh(S)
-    nmo = nbf = S.shape[0]
-    if min(e) / max(e) < lindep_trigger:
-        logger.log_warning("Linear dependencies detected in overlap matrix S!")
-        logger.log_debug(
-            f"Max eigenvalue: {np.max(e):.2e}. \n"
-            f"Min eigenvalue: {np.min(e):.2e}. \n"
-            f"Condition number: {max(e)/min(e):.2e}. \n"
-            f"Removing linear dependencies with threshold {ortho_thresh:.2e}."
-        )
-        nmo -= np.sum(e < ortho_thresh)
-        if nmo < nbf:
-            logger.log_warning(
-                f"Reduced number of basis functions from {nbf} to {nmo} due to linear dependencies."
-            )
-        else:
-            logger.log_warning(
-                "Linear dependencies detected, but no basis functions were removed. Consider changing linear_dep_trigger or ortho_thresh."
-            )
-        Xorth = canonical_orth(S, tol=ortho_thresh)
-    else:
-        # no linear dependencies, use symmetric orthogonalization
-        Xorth = invsqrt_matrix(S, tol=1e-13)
-    return Xorth, nmo

@@ -13,6 +13,20 @@ def _require_libcint():
         )
 
 
+def _choose_backend(max_l):
+    max_l_libint = ints.libint2_max_am
+    max_l_libcint = 14
+    if max_l <= max_l_libint:
+        return "libint2"
+    elif max_l <= max_l_libcint:
+        _require_libcint()
+        return "libcint"
+    else:
+        raise ValueError(
+            f"Integrals with angular momentum > {max_l_libcint} are not supported (max_l = {max_l})"
+        )
+
+
 def _parse_basis_args_1e(system, basis1, basis2):
     # 2 possible cases:
     # 1. both basis sets are None -> set both to system.basis
@@ -462,19 +476,15 @@ def coulomb_3c(system, basis1=None, basis2=None, basis3=None):
     """
     _basis1, _basis2, _basis3 = _parse_basis_args_3c2e(system, basis1, basis2, basis3)
 
-    # max angular momentum supported:
-    # libcint: 14
-    # libint: 6
     max_l = max(_basis1.max_l, _basis2.max_l, _basis3.max_l)
-    if max_l > 14:
-        raise ValueError(
-            f"coulomb_3c integral with basis functions of angular momentum > 14 "
-            f"is not supported (max_l = {max_l})"
-        )
-    elif max_l > 6:
-        return cint_coulomb_3c(system, basis1, basis2, basis3)
+    _backend = _choose_backend(max_l)
+
+    if _backend == "libint2":
+        res = ints.coulomb_3c(_basis1, _basis2, _basis3)
     else:
-        return ints.coulomb_3c(_basis1, _basis2, _basis3)
+        res = cint_coulomb_3c(system, basis1, basis2, basis3)
+
+    return res
 
 
 def coulomb_2c(system, basis1=None, basis2=None):
@@ -501,19 +511,14 @@ def coulomb_2c(system, basis1=None, basis2=None):
     """
     _basis1, _basis2 = _parse_basis_args_2c2e(system, basis1, basis2)
 
-    # max angular momentum supported:
-    # libcint: 14
-    # libint: 6
     max_l = max(_basis1.max_l, _basis2.max_l)
-    if max_l > 14:
-        raise ValueError(
-            f"coulomb_2c integral with basis functions of angular momentum > 14 "
-            f"is not supported (max_l = {max_l})"
-        )
-    elif max_l > 6:
-        return cint_coulomb_2c(system, basis1, basis2)
+    _backend = _choose_backend(max_l)
+    if _backend == "libint2":
+        res = ints.coulomb_2c(_basis1, _basis2)
     else:
-        return ints.coulomb_2c(_basis1, _basis2)
+        res = cint_coulomb_2c(system, basis1, basis2)
+
+    return res
 
 
 def erf_coulomb_3c(system, omega, basis1=None, basis2=None, basis3=None):
