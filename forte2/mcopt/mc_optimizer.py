@@ -115,8 +115,6 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             self.parent_method.run()
 
         SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
-
         # make sure to register parent_method
         self.ci_solver = self.ci_solver(self.parent_method)
         # iteration 0: one step of CI optimization to bootstrap the orbital optimization
@@ -125,6 +123,10 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         self.mo_space = self.ci_solver.mo_space
         self.dtype = self.ci_solver.dtype
 
+        # MOs are not copied from upstream and instead from the CI solver
+        # This is because the CI solver (namely, RelCISolver) can change the orbitals
+        # in this case, converting from non-relativistic to two-component MOs.
+        MOsMixin.copy_from_upstream(self, self.ci_solver)
         # make the core, active, and virtual spaces contiguous
         # i.e., [core, gas1, gas2, ..., virt]
         perm = self.mo_space.orig_to_contig
