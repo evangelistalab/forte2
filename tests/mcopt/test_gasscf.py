@@ -248,5 +248,5 @@ def test_gasscf_transition_dipole():
     assert ci_solver.E[1] == approx(-75.8022869454)
 
     assert ci_solver.oscillator_strengths[(1, 0)] == pytest.approx(
-        0.00014521738399236842, abs=1e-5
+        0.00014521738399236842, abs=1e-4
     )

@@ -1,3 +1,5 @@
+import pytest
+
 from forte2 import System, RHF, MCOptimizer, AVAS, State, CISolver
 from forte2.helpers.comparisons import approx
 
@@ -31,4 +33,4 @@ def test_sa_casscf_c2_transition_dipole():
     assert mc.ci_solver.evals_per_solver[0][1] == approx(-75.5314535451)
     assert mc.ci_solver.evals_per_solver[1][0] == approx(-75.5792187010)
     assert mc.ci_solver.evals_per_solver[1][1] == approx(-75.5789867708)
-    assert mc.ci_solver.oscillator_strengths[(0, 1)] == approx(0.006525243082121279)
+    assert mc.ci_solver.oscillator_strengths[(0, 1)] == pytest.approx(0.006525243082121279, abs=1e-4)

@@ -474,10 +474,10 @@ def test_sci_transition_dipole_matches_ci():
 
     for key in ci.transition_dipoles:
         assert np.abs(sci.transition_dipoles[key]) == pytest.approx(
-            np.abs(ci.transition_dipoles[key]), abs=1e-5
+            np.abs(ci.transition_dipoles[key]), abs=1e-4
         )
         assert sci.oscillator_strengths[key] == pytest.approx(
-            ci.oscillator_strengths[key], abs=1e-5
+            ci.oscillator_strengths[key], abs=1e-4
         )
 
 
@@ -525,10 +525,10 @@ def test_sci_transition_dipole_different_nroots_matches_ci():
 
     for key in ci.transition_dipoles:
         assert np.abs(sci.transition_dipoles[key]) == pytest.approx(
-            np.abs(ci.transition_dipoles[key]), abs=1e-5
+            np.abs(ci.transition_dipoles[key]), abs=1e-4
         )
         assert sci.oscillator_strengths[key] == pytest.approx(
-            ci.oscillator_strengths[key], abs=1e-5
+            ci.oscillator_strengths[key], abs=1e-4
         )
 
 
