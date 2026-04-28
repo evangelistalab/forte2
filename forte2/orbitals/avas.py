@@ -43,10 +43,6 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         Number of active unoccupied orbitals.
     num_active : int, optional, default=0
         Total number of active orbitals. Again, this is on top of any singly occupied orbitals if an ROHF reference is used.
-    energy_weighting : float, optional, default=0.0
-        The parameter for energy weighting of the projected overlap matrix. If 0, no energy weighting is applied.
-        The eigenvalues of the projected overlap matrix are weighted by a factor of exp(-energy_weighting * |e - e_HOMO/LUMO|) for core/virtual
-        MOs, while the singly occupied MOs are untouched.
 
     Notes
     -----
@@ -74,7 +70,6 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
     num_active: int = 0
     num_active_docc: int = 0
     num_active_uocc: int = 0
-    energy_weighting: float = 0.0
 
     executed: bool = field(init=False, default=False)
 
