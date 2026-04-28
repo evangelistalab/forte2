@@ -822,6 +822,7 @@ def test_sci_1tdm_water_core_excited_and_gs():
     # the singly core-excited determinants make the largest contributions
     # to the final state, so we can use a large set here
     ci_strings_s = CIStrings(5, 5, 0, [[0], [0], [0] * 11], [1, 2], [1, 2])
+    gas_guess_dets = ci_strings_s.make_determinants()
     # if the doubly core-excited determinants are included together with the
     # singles, they will almost certainly be filtered out by the initial guess routine
     # due to them being much higher in energy.
@@ -831,11 +832,11 @@ def test_sci_1tdm_water_core_excited_and_gs():
     # Allowing annihilation in the 0-th orbital is theoretically able to overcome this,
     # but the interals involved are sufficiently small that, unless a very tight threshold is used,
     # the doubles will alwayus be rejected in the selection process.
-    ci_strings_d = CIStrings(
-        5, 5, 0, [[0], [0, 0, 0, 0], [0], [0] * 7], [0, 8, 2], [0, 8, 2]
-    )
-    gas_guess_dets = ci_strings_s.make_determinants()
-    pinned_guess_dets = ci_strings_d.make_determinants()
+    pinned_guess_dets = [
+        Determinant("022222"),
+        Determinant("02222ab"),
+        Determinant("02222ba"),
+    ]
     gas_params = gs_params.copy(
         guess_dets=gas_guess_dets,
         frozen_annihilation=[0],
