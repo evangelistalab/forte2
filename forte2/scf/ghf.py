@@ -54,6 +54,10 @@ class GHF(SCFBase):
 
     def __call__(self, system):
         system.two_component = True
+        if system.symmetry:
+            logger.log_warning(
+                "Only symmetry detection, not iterative projection, is currently implemented for GHF. The resulting orbitals will be symmetry labeled only if the solution isn't symmetry broken."
+            )
         if self.j_adapt:
             ua, ub = real_sph_to_j_adapted(system.basis)
             self.Usph2j = np.vstack((ua, ub))
@@ -84,7 +88,7 @@ class GHF(SCFBase):
                 self.na_guess >= 0 and self.nb_guess >= 0
             ), f"{self._scf_type} requires non-negative number of alpha and beta electrons."
 
-    def _build_fock(self, H, fock_builder, S):
+    def _build_fock(self, H, fock_builder, S, symmetrize=False):
         Jaa, Jbb = fock_builder.build_J([self.D[0], self.D[3]])
         nbf = Jaa.shape[0]
         if self.iter == 0 and self.ms_guess is not None:

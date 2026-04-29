@@ -15,14 +15,13 @@ def test_dsrg_mrpt2_with_sym_c2_1():
         symmetry=True,
     )
 
-    rhf = RHF(charge=0, repair_symmetry=True)(system)
+    rhf = RHF(charge=0)(system)
     mc = MCOptimizer(
         states=State(nel=12, multiplicity=1, ms=0.0, symmetry=0),
         nroots=3,
         core_orbitals=2,
         active_orbitals=8,
     )(rhf)
-    mc.run()
     pt = DSRG_MRPT2(relax_reference="once")(mc)
     pt.run()
     assert pt.relax_eigvals == approx([-75.5589037326, -75.5546573565, -75.5331537682])
@@ -72,14 +71,13 @@ def test_dsrg_mrpt2_with_sym_c2_2():
         symmetry=True,
     )
 
-    rhf = RHF(charge=0, repair_symmetry=True)(system)
+    rhf = RHF(charge=0)(system)
     mc = MCOptimizer(
         states=State(nel=12, multiplicity=1, ms=0.0, symmetry=0),
         nroots=3,
         core_orbitals=2,
         active_orbitals=8,
     )(rhf)
-    mc.run()
     pt = DSRG_MRPT2(relax_reference="twice")(mc)
     pt.run()
     assert pt.relax_eigvals == approx([-75.7202896794, -75.6479318059, -75.6375093503])
@@ -109,7 +107,6 @@ def test_dsrg_mrpt2_with_sym_ch4():
         core_orbitals=1,
         active_orbitals=9,
     )(rhf)
-    mc.run()
     pt = DSRG_MRPT2(relax_reference="twice")(mc)
     pt.run()
     assert pt.relax_eigvals == approx([-40.3707279648, -39.9189047144])

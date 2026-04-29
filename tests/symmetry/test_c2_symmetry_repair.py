@@ -28,7 +28,7 @@ def test_c2_symmetry_repair():
         symmetry=True,
     )
 
-    rhf = RHF(charge=0, repair_symmetry=True)(system)
+    rhf = RHF(charge=0)(system)
     mcscf = MCOptimizer(
         states=State(nel=12, multiplicity=1, ms=0.0, symmetry=0),
         nroots=3,

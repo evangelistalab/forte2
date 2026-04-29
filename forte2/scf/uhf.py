@@ -52,10 +52,12 @@ class UHF(SCFBase):
             self.na >= 0 and self.nb >= 0
         ), f"{self._scf_type} requires non-negative number of alpha and beta electrons."
 
-    def _build_fock(self, H, fock_builder, S):
+    def _build_fock(self, H, fock_builder, S, symmetrize=False):
         Ja, Jb = fock_builder.build_J(self.D)
         K = fock_builder.build_K([self.C[0][:, : self.na], self.C[1][:, : self.nb]])
         F = [H + Ja + Jb - k for k in K]
+        if symmetrize:
+            F = self.mosym.symmetrize_operator(F)
 
         F_canon = F
 
@@ -192,7 +194,6 @@ class UHF(SCFBase):
         self.irrep_labels = [a_labels, b_labels]
         self.irrep_indices = [a_irrep_indices, b_irrep_indices]
 
-        self._repair_symmetry()
 
     def _print_ao_composition(self):
         if isinstance(self.system, ModelSystem):

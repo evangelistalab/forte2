@@ -45,8 +45,8 @@ class CUHF(SCFBase):
         self._parse_state()
         return self
 
-    def _build_fock(self, H, fock_builder, S):
-        F, _ = UHF._build_fock(self, H, fock_builder, S)
+    def _build_fock(self, H, fock_builder, S, symmetrize=False):
+        F, _ = UHF._build_fock(self, H, fock_builder, S, symmetrize)
 
         F_canon = self._build_canonical_fock(F, S)
 

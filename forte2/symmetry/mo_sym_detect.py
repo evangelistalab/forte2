@@ -336,6 +336,8 @@ class MOSymmetryDetector:
         """
         Symmetrize a one-electron operator by group-averaging it over the point group operations.
         """
+        if self.system.point_group.upper() == "C1":
+            return op
         sym_op = []
         for iop in op:
             isym_op = np.zeros_like(iop)

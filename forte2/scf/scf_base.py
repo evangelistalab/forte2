@@ -7,7 +7,6 @@ from forte2.system import System, ModelSystem, BasisInfo
 from forte2.base_classes.mixins import MOsMixin, SystemMixin
 from forte2.helpers import logger, DIIS
 from forte2.symmetry import MOSymmetryDetector
-from .scf_utils import repair_symmetry
 
 
 @dataclass
@@ -41,10 +40,6 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         If energy change is below this threshold, level shift is turned off.
     die_if_not_converged : bool, optional, default=True
         Whether to raise an error if the SCF calculation does not converge.
-    repair_symmetry : bool, optional, default=False
-        Whether to perform symmetry repair after the SCF calculation, useful if a broken-symmetry solution is suspected.
-        This is done by symmetrizing the Fock matrix over the point group operations, rediagonalizing it, and reassigning the MO symmetries.
-        WARNING: This causes the MO coefficients and orbital energies to be non-canonical, so it should only be followed by calculations that do not rely on canonical orbitals (e.g. FCI or CASSCF).
 
     Attributes
     ----------
@@ -77,7 +72,6 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
     level_shift: float = None
     level_shift_thresh: float = 1e-5
     die_if_not_converged: bool = True
-    repair_symmetry: bool = False
 
     executed: bool = field(default=False, init=False)
     converged: bool = field(default=False, init=False)
@@ -149,6 +143,12 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         else:
             self.basis_info = BasisInfo(self.system, self.system.basis)
 
+        self.mosym = MOSymmetryDetector(
+            self.system,
+            self.basis_info,
+        )
+        _do_symmetrize = self.system.symmetry and self.system.point_group.upper() != "C1"
+
         logger.log_info1(f"Number of electrons: {self.nel}")
         if self._scf_type() != "GHF":  # not good quantum numbers for GHF
             logger.log_info1(f"Number of alpha electrons: {self.na}")
@@ -166,7 +166,9 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         if self.C is None:
             self.C = self._initial_guess(H, guess_type=self.guess_type)
         self.D = self._build_density_matrix()
-        F, F_canon = self._build_fock(H, fock_builder, S)
+        # do not symmetrize the first iteration's Fock matrix
+        # this has been observed to sometimes bias to higher solutions (see test_n2plus_with_sym)
+        F, F_canon = self._build_fock(H, fock_builder, S, symmetrize=False)
         self.F = F_canon
         self.E = Vnn + self._energy(H, F)
 
@@ -191,7 +193,9 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
             self.D = self._build_density_matrix()
             # 4. Build the (non-extrapolated) Fock matrix
             # (there is a slot for canonicalized F to accommodate ROHF and CUHF methods - admittedly weird for RHF/UHF)
-            F, F_canon = self._build_fock(H, fock_builder, S)
+            # during SCF iterations, symmetrize the Fock matrix so that the MOs transform
+            # as irreps of the point group
+            F, F_canon = self._build_fock(H, fock_builder, S, symmetrize=_do_symmetrize)
             self.F = F_canon
             # 5. Compute new HF energy from the non-extrapolated Fock matrix
             self.E = Vnn + self._energy(H, F)
@@ -214,7 +218,9 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
                 # perform final iteration
                 self.eps, self.C = self._diagonalize_fock(F_canon)
                 self.D = self._build_density_matrix()
-                F, F_canon = self._build_fock(H, fock_builder, S)
+                # do not symmetrize the last iteration's Fock matrix,
+                # since this operation can break canonicality
+                F, F_canon = self._build_fock(H, fock_builder, S, symmetrize=False)
                 self.F = F_canon
                 self.E = Vnn + self._energy(H, F)
                 logger.log_info1(f"Final {self.method} Energy: {self.E:20.12f}")
@@ -255,17 +261,13 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         return self.system.nuclear_repulsion
 
     def _post_process(self):
-        self.mosym = MOSymmetryDetector(
-            self.system,
-            self.basis_info,
-        )
         self._get_occupation()
         self._assign_orbital_symmetries()
         self._print_orbital_energies()
         self._print_ao_composition()
 
     @abstractmethod
-    def _build_fock(self, H, fock_builder, S): ...
+    def _build_fock(self, H, fock_builder, S, symmetrize=False): ...
 
     @abstractmethod
     def _build_density_matrix(self): ...
@@ -302,7 +304,3 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
 
     @abstractmethod
     def _print_ao_composition(self): ...
-
-    def _repair_symmetry(self):
-        if self.repair_symmetry:
-            self = repair_symmetry(self)

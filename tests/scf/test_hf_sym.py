@@ -543,3 +543,23 @@ def test_rhf_n2_d2h():
                     raise AssertionError(
                         f"Symmetry assignment wrong beyond ag/b1g, b2g/b3g and b2u/b3u interchanges: {e1} != {e2}."
                     )
+
+
+def test_n2plus_with_sym():
+    xyz = """
+    N 0.0 0.0 0.0
+    N 0.0 0.0 2.0
+    """
+
+    system = forte2.System(
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        symmetry=True,
+    )
+
+    rhf = forte2.ROHF(charge=0, ms=1.0)(system)
+    rhf.run()
+
+    assert rhf.E == approx(-108.481990990204)
+    assert rhf.irrep_indices[:8] == [0, 5, 0, 5, 0, 6, 7, 2]

@@ -25,11 +25,13 @@ class RHF(SCFBase):
         self.ms = 0
         self.na = self.nb = self.nel // 2
 
-    def _build_fock(self, H, fock_builder, S):
+    def _build_fock(self, H, fock_builder, S, symmetrize=False):
         J = fock_builder.build_J(self.D)[0]
         K = fock_builder.build_K([self.C[0][:, : self.na]])[0]
-        F = H + 2.0 * J - K
-        return [F], [F]
+        F = [H + 2.0 * J - K]
+        if symmetrize:
+            F = self.mosym.symmetrize_operator(F)
+        return F, F
 
     def _build_density_matrix(self):
         D = np.einsum("mi,ni->mn", self.C[0][:, : self.na], self.C[0][:, : self.na])
@@ -125,4 +127,3 @@ class RHF(SCFBase):
         self.irrep_labels, self.irrep_indices, self.C[0], _ = self.mosym.run(
             self.C[0], self.eps[0]
         )
-        self._repair_symmetry()
