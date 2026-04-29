@@ -115,8 +115,10 @@ class SelectedCIParams(ParamsBase):
 
     Parameters
     ----------
-    maxcycle: int, optional, default=10
+    maxcycle: int, optional, default=15
         The maximum number of selection cycles.
+    e_tol: float, optional, default=1e-8
+        The energy convergence threshold for selected CI macroiterations.
     var_threshold: float, optional, default=5e-4
         The threshold for including determinants in the variational space based on their contribution to the wavefunction.
     pt2_threshold: float, optional, default=1e-8
@@ -172,7 +174,8 @@ class SelectedCIParams(ParamsBase):
         Note that the interpretation of this parameter depends on the choice of pt2_regularizer (see above).
     """
 
-    maxcycle: int = 10
+    maxcycle: int = 15
+    e_tol: float = 1e-8
     var_threshold: float = 5e-4
     pt2_threshold: float = 1e-8
     selection_algorithm: str = "hbci"
