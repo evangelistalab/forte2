@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from forte2 import System
 from forte2.scf import RHF, GHF
@@ -21,7 +22,7 @@ def test_lindep_rhf():
     assert np.linalg.cond(ovlp) > 1e14
 
     # test diis with linear dependency as well with tight convergence
-    scf = RHF(charge=0, econv=1e-10, dconv=1e-8)(system)
+    scf = RHF(charge=0, e_tol=1e-10, d_tol=1e-8)(system)
     scf.run()
     assert scf.nbf == 90
     assert scf.nmo == 79
@@ -51,6 +52,7 @@ def test_lindep_ghf():
     assert scf.E == approx(erhf)
 
 
+@pytest.mark.slow
 def test_lindep_x2c():
     # This tests the handling of linear dependencies in the X2C transformation
     # The basis sets are decontracted during X2C, resulting in cond(S) ~ 8e9.
@@ -76,3 +78,28 @@ def test_lindep_x2c():
     scf = GHF(charge=0)(system)
     scf.run()
     assert scf.E == approx_loose(eref)
+
+
+def test_lindep_x2c_quick():
+    erhf = -4.071160097112
+    xyz = "\n".join([f"H 0 0 {i}" for i in range(10)])
+
+    system = System(
+        xyz=xyz,
+        basis_set="aug-cc-pvdz",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
+        unit="bohr",
+        ortho_thresh=2e-7,
+        x2c_type="so",
+        snso_type="row-dependent",
+    )
+
+    ovlp = system.ints_overlap()
+    assert np.linalg.cond(ovlp) > 1e14
+
+    # test diis with linear dependency as well with tight convergence
+    scf = GHF(charge=0, e_tol=1e-10, d_tol=1e-8)(system)
+    scf.run()
+    assert scf.nbf == 90
+    assert scf.nmo == 79
+    assert scf.E == approx(erhf)

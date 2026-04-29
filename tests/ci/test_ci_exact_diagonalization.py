@@ -1,5 +1,8 @@
 from forte2 import System, RHF, CI, State, AVAS, ROHF
 from forte2.helpers.comparisons import approx
+from forte2.base_classes import CIParams
+
+ci_params = CIParams(ci_algorithm="exact")
 
 
 def test_ci_1():
@@ -10,11 +13,11 @@ def test_ci_1():
 
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         State(system=system, multiplicity=1, ms=0.0),
         active_orbitals=[0, 1],
-        ci_algorithm="exact",
+        ci_params=ci_params,
     )(rhf)
     ci.run()
 
@@ -31,12 +34,12 @@ def test_ci_2():
     system = System(
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         states=State(nel=10, multiplicity=1, ms=0.0),
         core_orbitals=[0],
         active_orbitals=[1, 2, 3, 4, 5, 6],
-        ci_algorithm="exact",
+        ci_params=ci_params,
     )(rhf)
     ci.run()
 
@@ -51,7 +54,7 @@ def test_sa_ci_n2():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     singlet = State(nel=14, multiplicity=1, ms=0.0)
     triplet = State(nel=14, multiplicity=3, ms=0.0)
     ci = CI(
@@ -60,7 +63,7 @@ def test_sa_ci_n2():
         active_orbitals=6,
         nroots=[1, 2],
         weights=[[1.0], [0.85, 0.15]],
-        ci_algorithm="exact",
+        ci_params=ci_params,
     )(rhf)
     ci.run()
     eref_singlet = -109.004622061660
@@ -87,7 +90,7 @@ def test_sa_ci_with_avas():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     avas = AVAS(
         selection_method="separate",
         num_active_docc=3,
@@ -103,7 +106,7 @@ def test_sa_ci_with_avas():
         states=[singlet, triplet],
         nroots=[1, 2],
         weights=[[1.0], [0.85, 0.15]],
-        ci_algorithm="exact",
+        ci_params=ci_params,
     )(avas)
     saci.run()
 
@@ -124,18 +127,18 @@ def test_ci_tdm():
     system = System(
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         State(nel=14, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1, 2, 3],
         active_orbitals=[4, 5, 6, 7, 8, 9],
         nroots=10,
         do_transition_dipole=True,
-        ci_algorithm="exact",
+        ci_params=ci_params,
     )(rhf)
     ci.run()
-    assert abs(ci.tdm_per_solver[0][(0, 6)][2]) == approx(1.5435316739347478)
-    assert ci.fosc_per_solver[0][(0, 6)] == approx(1.1589808047738437)
+    assert abs(ci.transition_dipoles[(0, 6)][2]) == approx(1.5435316739347478)
+    assert ci.oscillator_strengths[(0, 6)] == approx(1.1589808047738437)
 
 
 def test_ci_no_active():
@@ -155,12 +158,12 @@ def test_ci_no_active():
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     state = State(nel=10, multiplicity=1, ms=0.0)
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         states=state,
         core_orbitals=[0, 1, 2, 3, 4],
         active_orbitals=[],
-        ci_algorithm="exact",
+        ci_params=ci_params,
     )(rhf)
     ci.run()
 
@@ -184,12 +187,12 @@ def test_ci_single_determinant1():
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     state = State(nel=10, multiplicity=1, ms=0.0)
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         states=state,
         core_orbitals=[0, 1, 2, 3],
         active_orbitals=[4],
-        ci_algorithm="exact",
+        ci_params=ci_params,
     )(rhf)
     ci.run()
 
@@ -213,12 +216,12 @@ def test_ci_single_determinant2():
         xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     state = State(nel=10, multiplicity=1, ms=0.0)
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         states=state,
         core_orbitals=[],
         active_orbitals=[0, 1, 2, 3, 4],
-        ci_algorithm="exact",
+        ci_params=ci_params,
     )(rhf)
     ci.run()
 
@@ -240,11 +243,11 @@ def test_ci_single_determinant3():
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = ROHF(charge=0, ms=1.0, econv=1e-12)(system)
+    rhf = ROHF(charge=0, ms=1.0, e_tol=1e-12)(system)
     ci = CI(
         State(nel=2, multiplicity=3, ms=1.0),
         active_orbitals=[0, 1],
-        ci_algorithm="exact",
+        ci_params=ci_params,
     )(rhf)
     ci.run()
 
@@ -266,11 +269,11 @@ def test_ci_single_csf1():
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = ROHF(charge=0, ms=1.0, econv=1e-12)(system)
+    rhf = ROHF(charge=0, ms=1.0, e_tol=1e-12)(system)
     ci = CI(
         State(nel=2, multiplicity=3, ms=0.0),
         active_orbitals=[0, 1],
-        ci_algorithm="exact",
+        ci_params=ci_params,
     )(rhf)
     ci.run()
 

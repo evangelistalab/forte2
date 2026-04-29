@@ -100,10 +100,12 @@ nanobind_add_module(
   api/helpers_api.cc
   api/integrals_api.cc
   api/logging_api.cc
+  api/sci_api.cc
   api/slater_rules_api.cc
   api/sparse_exp_api.cc
   api/sparse_operator_api.cc
   api/sparse_state_api.cc
+  api/sparse_rdms_api.cc
   api/sq_operator_string_api.cc
   helpers/combinatorial.cc
   helpers/string_algorithms.cc
@@ -115,6 +117,7 @@ nanobind_add_module(
   integrals/value_at_points.cc
   ci/ci_sigma_builder.cc
   ci/ci_sigma_builder_1rdm.cc
+  ci/ci_sigma_builder_1trdm.cc
   ci/ci_sigma_builder_2rdm.cc
   ci/ci_sigma_builder_3rdm.cc
   ci/ci_sigma_builder_test_rdms.cc
@@ -132,6 +135,15 @@ nanobind_add_module(
   ci/rel_ci_sigma_builder_rdm_debug.cc
   ci/rel_ci_sigma_builder_harrison_zarrabian.cc
   ci/slater_rules.cc
+  dsrg/dsrg_utils.cc
+  sci/sci_helper.cc
+  sci/sci_helper_1rdm.cc
+  sci/sci_helper_1trdm.cc
+  sci/sci_helper_2rdm.cc
+  sci/sci_helper_select_hbci.cc
+  sci/sci_helper_sigma_build.cc
+  sci/sci_helper_spin.cc
+  sci/sci_strings.cc
   sparse/sparse_exp.cc
   sparse/sparse_operator.cc
   sparse/sparse_operator_hamiltonian.cc

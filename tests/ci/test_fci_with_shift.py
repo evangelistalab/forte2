@@ -1,5 +1,6 @@
 from forte2 import System, RHF, CI, State
 from forte2.helpers.comparisons import approx
+from forte2.base_classes import CIParams
 
 
 def test_fci_co_o_core_exc():
@@ -11,11 +12,11 @@ def test_fci_co_o_core_exc():
 
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         State(nel=14, multiplicity=1, ms=0.0),
         active_orbitals=list(range(system.nbf)),
-        energy_shift=-92,
+        ci_params=CIParams(energy_shift=-92),
     )(rhf)
     ci.run()
     assert ci.E[0] == approx(efci)
@@ -30,11 +31,11 @@ def test_fci_co_c_core_exc():
 
     system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         State(nel=14, multiplicity=1, ms=0.0),
         active_orbitals=list(range(system.nbf)),
-        energy_shift=-102,
+        ci_params=CIParams(energy_shift=-102),
     )(rhf)
     ci.run()
     assert ci.E[0] == approx(efci)

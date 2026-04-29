@@ -4,9 +4,10 @@ import forte2
 from forte2 import System, RHF
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers.comparisons import approx
-from forte2.ci.ci import _CIBase
+from forte2.ci.ci import _CISingleStateSolver
 from forte2.state import MOSpace, State
 from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
+from forte2.base_classes import DavidsonLiuParams
 
 
 def test_slater_rules_1():
@@ -18,7 +19,7 @@ def test_slater_rules_1():
     system = System(
         xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    scf = RHF(charge=0, econv=1e-12)(system)
+    scf = RHF(charge=0, e_tol=1e-12)(system)
     scf.run()
 
     orbitals = [0, 1]
@@ -50,7 +51,7 @@ def test_slater_rules_2():
     system = System(
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    scf = RHF(charge=0, econv=1e-10)(system)
+    scf = RHF(charge=0, e_tol=1e-10)(system)
     scf.run()
 
     core_orbitals = [0]
@@ -88,7 +89,7 @@ def test_slater_rules_1_complex():
     system = System(
         xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    scf = RHF(charge=0, econv=1e-12)(system)
+    scf = RHF(charge=0, e_tol=1e-12)(system)
     scf.run()
 
     C = convert_coeff_spatial_to_spinor(scf.C)
@@ -139,7 +140,7 @@ def test_slater_rules_2_complex():
     system = System(
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    scf = RHF(charge=0, econv=1e-10)(system)
+    scf = RHF(charge=0, e_tol=1e-10)(system)
     scf.run()
 
     C = convert_coeff_spatial_to_spinor(scf.C)
@@ -239,16 +240,15 @@ def test_slater_rules_3_complex():
     fakeints.V = h2
     mo_space = MOSpace(nmo=norb, active_orbitals=list(range(norb)))
     state = State(nel=8, multiplicity=1, ms=0.0)
-    ci = _CIBase(
+    ci = _CISingleStateSolver(
         mo_space=mo_space,
         state=state,
         ints=fakeints,
         nroot=1,
         active_orbsym=[[0] * norb],
-        maxiter=200,
         do_test_rdms=True,
-        ci_algorithm="hz",
         two_component=True,
+        davidson_liu_params=DavidsonLiuParams(maxiter=200),
     )
     ci.run()
 
@@ -291,15 +291,14 @@ def test_slater_rules_4_complex_antisym():
     fakeints.V = h2
     mo_space = MOSpace(nmo=norb, active_orbitals=list(range(norb)))
     state = State(nel=8, multiplicity=1, ms=0.0)
-    ci = _CIBase(
+    ci = _CISingleStateSolver(
         mo_space=mo_space,
         state=state,
         ints=fakeints,
         nroot=1,
         active_orbsym=[[0] * norb],
-        maxiter=200,
+        davidson_liu_params=DavidsonLiuParams(maxiter=200),
         do_test_rdms=True,
-        ci_algorithm="hz",
         two_component=True,
     )
     ci.run(use_asym_ints=True)

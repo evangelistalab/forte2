@@ -17,7 +17,7 @@ def test_rel_ci_h2():
     system = System(
         xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    scf = GHF(charge=0, econv=1e-12)(system)
+    scf = GHF(charge=0, e_tol=1e-12)(system)
     scf.run()
     C = scf.C[0]
     nmo = C.shape[1]
@@ -40,7 +40,7 @@ def test_rel_ci_hf():
     system = System(
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    scf = RHF(charge=0, econv=1e-10)(system)
+    scf = RHF(charge=0, e_tol=1e-10)(system)
     scf.run()
     C = convert_coeff_spatial_to_spinor(scf.C)[0]
     nmo = C.shape[1]
@@ -108,10 +108,10 @@ def test_rel_ci_hf_transition_dipole_equivalence_to_rhf():
         do_transition_dipole=True,
     )(scf)
     ci.run()
-    assert np.abs(ci.tdm_per_solver[0][(0, 0)]) == pytest.approx(
+    assert np.abs(ci.transition_dipoles[(0, 0)]) == pytest.approx(
         [0.0, 0.0, 0.756780349], abs=1e-6
     )
-    assert np.abs(ci.tdm_per_solver[0][(1, 1)]) == pytest.approx(
+    assert np.abs(ci.transition_dipoles[(1, 1)]) == pytest.approx(
         [0.0, 0.0, 0.721450697], abs=1e-6
     )
 
@@ -137,7 +137,6 @@ def test_rel_ci_hf_transition_dipole_ghf():
         core_orbitals=2,
         active_orbitals=12,
         do_transition_dipole=True,
-        ci_algorithm="hz",
         do_test_rdms=True,
     )(scf)
     ci.run()
@@ -145,15 +144,15 @@ def test_rel_ci_hf_transition_dipole_ghf():
     assert ci.E[1] == approx(-99.7875319545)
     assert ci.E[3] == approx(-99.7866432345)
 
-    assert np.abs(ci.tdm_per_solver[0][(0, 0)]) == pytest.approx(
+    assert np.abs(ci.transition_dipoles[(0, 0)]) == pytest.approx(
         [0.0, 0.0, 7.54972929e-01], abs=1e-6
     )
-    assert np.abs(ci.tdm_per_solver[0][(1, 1)]) == pytest.approx(
+    assert np.abs(ci.transition_dipoles[(1, 1)]) == pytest.approx(
         [0.0, 0.0, 7.21280467e-01], abs=1e-6
     )
-    assert np.abs(ci.tdm_per_solver[0][(3, 3)]) == pytest.approx(
+    assert np.abs(ci.transition_dipoles[(3, 3)]) == pytest.approx(
         [0.0, 0.0, 7.21064890e-01], abs=1e-6
     )
-    assert np.abs(ci.fosc_per_solver[0][(0, 3)]) == pytest.approx(
+    assert np.abs(ci.oscillator_strengths[(0, 3)]) == pytest.approx(
         1.711178808962322e-05, abs=1e-6
     )

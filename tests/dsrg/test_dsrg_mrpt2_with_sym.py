@@ -1,4 +1,4 @@
-from forte2 import System, RHF, MCOptimizer, State, DSRG_MRPT2
+from forte2 import System, RHF, MCOptimizer, State, DSRG_MRPT2, CISolver
 from forte2.helpers.comparisons import approx
 
 
@@ -16,12 +16,14 @@ def test_dsrg_mrpt2_with_sym_c2_1():
     )
 
     rhf = RHF(charge=0)(system)
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         states=State(nel=12, multiplicity=1, ms=0.0, symmetry=0),
         nroots=3,
         core_orbitals=2,
         active_orbitals=8,
-    )(rhf)
+    )
+    mc = MCOptimizer(ci_solver)(rhf)
+
     pt = DSRG_MRPT2(relax_reference="once")(mc)
     pt.run()
     assert pt.relax_eigvals == approx([-75.5589037326, -75.5546573565, -75.5331537682])
@@ -72,12 +74,13 @@ def test_dsrg_mrpt2_with_sym_c2_2():
     )
 
     rhf = RHF(charge=0)(system)
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         states=State(nel=12, multiplicity=1, ms=0.0, symmetry=0),
         nroots=3,
         core_orbitals=2,
         active_orbitals=8,
-    )(rhf)
+    )
+    mc = MCOptimizer(ci_solver)(rhf)
     pt = DSRG_MRPT2(relax_reference="twice")(mc)
     pt.run()
     assert pt.relax_eigvals == approx([-75.7202896794, -75.6479318059, -75.6375093503])
@@ -97,8 +100,8 @@ def test_dsrg_mrpt2_with_sym_ch4():
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         symmetry=True,
     )
-    rhf = RHF(charge=0, econv=1e-12)(system)
-    mc = MCOptimizer(
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = CISolver(
         states=[
             State(nel=10, multiplicity=1, ms=0.0),
             State(nel=10, multiplicity=1, ms=0.0, symmetry=1),
@@ -106,7 +109,8 @@ def test_dsrg_mrpt2_with_sym_ch4():
         nroots=[1, 1],
         core_orbitals=1,
         active_orbitals=9,
-    )(rhf)
+    )
+    mc = MCOptimizer(ci_solver)(rhf)
     pt = DSRG_MRPT2(relax_reference="twice")(mc)
     pt.run()
     assert pt.relax_eigvals == approx([-40.3707279648, -39.9189047144])
