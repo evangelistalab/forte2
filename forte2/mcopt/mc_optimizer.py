@@ -331,24 +331,30 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         self._post_process()
 
         if self.final_orbital == "semicanonical":
-            semi = Semicanonicalizer(
+            self.semi = Semicanonicalizer(
                 mo_space=self.mo_space,
                 system=self.system,
                 mix_inactive=False,
                 mix_active=False,
             )
             C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
-            semi.semi_canonicalize(
+            self.semi.semi_canonicalize(
                 g1=self.make_average_1rdm(),
                 C_contig=C_contig,
             )
-            self.C[0] = semi.C_semican[:, self.mo_space.contig_to_orig].copy()
+            new_irrep_labels, new_irrep_indices = self.semi.symmetrize(self.mosym)
+            self.C[0] = self.semi.C_semican[:, self.mo_space.contig_to_orig].copy()
+            self.eps = [self.semi.eps_semican.copy()]
+            irreps_changed = not np.array_equal(new_irrep_indices, self.irrep_indices)
+            if irreps_changed:
+                self.irrep_labels = new_irrep_labels
+                self.irrep_indices = new_irrep_indices
 
             # recompute the CI vectors in the semicanonical basis
             if self.system.two_component:
                 ints = SpinorbitalIntegrals(
                     system=self.system,
-                    C=self.C[0],
+                    C=self.C[0].copy(),
                     spinorbitals=self.mo_space.active_indices,
                     core_spinorbitals=self.mo_space.docc_indices,
                     use_aux_corr=True,
@@ -356,7 +362,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             else:
                 ints = RestrictedMOIntegrals(
                     system=self.system,
-                    C=self.C[0],
+                    C=self.C[0].copy(),
                     orbitals=self.mo_space.active_indices,
                     core_orbitals=self.mo_space.docc_indices,
                     use_aux_corr=True,
@@ -364,6 +370,12 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             self.ci_solver.set_ints(ints.E, ints.H, ints.V)
             # Basis change, can't restart from previous CI vectors *reliably*
             self.ci_solver.reset_eigensolver()
+            if self.system.point_group.upper() != "C1" and irreps_changed:
+                active_orbsym = [
+                    [self.irrep_indices[i] for i in active_space]
+                    for active_space in self.mo_space.active_orbitals
+                ]
+                self.ci_solver.reset_active_orbsym(active_orbsym)
             self.ci_solver.run()
 
         convergence_status = self.ci_solver.get_convergence_status()

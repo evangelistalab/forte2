@@ -70,7 +70,6 @@ class Semicanonicalizer:
         self.do_frozen = do_frozen
         self.do_active = do_active
 
-
     def semi_canonicalize(self, g1, C_contig):
         """
         Perform the semi-canonicalization.
@@ -78,7 +77,7 @@ class Semicanonicalizer:
         Parameters
         ----------
         g1 : np.ndarray
-            The active space 1-electron density matrix in the molecular orbital basis. 
+            The active space 1-electron density matrix in the molecular orbital basis.
             Spin-summed if non-relativistic, spin-orbital if relativistic.
         C_contig : np.ndarray
             The molecular orbital coefficients, in the "contiguous" order of the orbitals.
@@ -102,10 +101,33 @@ class Semicanonicalizer:
                 U[sl, sl] = c
 
         self.U = U
-        self.Uactv = U[self.mo_space.actv, self.mo_space.actv]
+        self.Uactv = U[self.mo_space.actv, self.mo_space.actv].copy()
         self.C_semican = C_contig @ U
         self.eps_semican = eps
         self.fock_semican = U.T.conj() @ self.fock @ U
+
+    def symmetrize(self, mosym):
+        """
+        Symmetrize the semi-canonical orbitals using the provided MOSymmetryDetector object.
+
+        Parameters
+        ----------
+        mosym : MOSymmetryDetector
+            The MOSymmetryDetector object used to symmetrize the orbitals.
+
+        Returns
+        -------
+        irrep_labels : list of str
+            Irrep label for each MO, e.g. ['A1', 'B2', ...]
+        irrep_indices : list of int
+            Irrep index (0-indexed) for each MO, e.g. [0, 3, ...]
+        """
+        labels, indices, C_sym, U_sym = mosym.run(self.C_semican, self.eps_semican)
+        self.C_semican = C_sym
+        self.U = self.U @ U_sym
+        self.Uactv = self.U[self.mo_space.actv, self.mo_space.actv].copy()
+        self.fock_semican = U_sym.T.conj() @ self.fock_semican @ U_sym
+        return labels, indices
 
     def _generate_elementary_spaces(self):
         slice_list = []

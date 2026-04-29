@@ -4,7 +4,6 @@ import numpy as np
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
 from forte2.helpers import logger
-from forte2.symmetry import MOSymmetryDetector
 from .scf_base import SCFBase
 from .scf_utils import minao_initial_guess, core_initial_guess
 
@@ -26,11 +25,13 @@ class RHF(SCFBase):
         self.ms = 0
         self.na = self.nb = self.nel // 2
 
-    def _build_fock(self, H, fock_builder, S):
+    def _build_fock(self, H, fock_builder, S, symmetrize=False):
         J = fock_builder.build_J(self.D)[0]
         K = fock_builder.build_K([self.C[0][:, : self.na]])[0]
-        F = H + 2.0 * J - K
-        return [F], [F]
+        F = [H + 2.0 * J - K]
+        if symmetrize:
+            F = self.mosym.symmetrize_operator(F)
+        return F, F
 
     def _build_density_matrix(self):
         D = np.einsum("mi,ni->mn", self.C[0][:, : self.na], self.C[0][:, : self.na])
@@ -123,14 +124,6 @@ class RHF(SCFBase):
         )
 
     def _assign_orbital_symmetries(self):
-        S = self._get_overlap()
-        mosym = MOSymmetryDetector(
-            self.system,
-            self.basis_info,
-            S,
-            self.C[0],
-            self.eps[0],
+        self.irrep_labels, self.irrep_indices, self.C[0], _ = self.mosym.run(
+            self.C[0], self.eps[0]
         )
-        mosym.run()
-        self.irrep_labels = mosym.labels
-        self.irrep_indices = mosym.irrep_indices

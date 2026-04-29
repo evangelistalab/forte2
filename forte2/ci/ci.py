@@ -1316,6 +1316,24 @@ class CISolver(CIBase):
         self.executed = True
         return self
 
+    def reset_active_orbsym(self, active_orbsym):
+        ints = self.sub_solvers[0].ints
+        self.sub_solvers = []
+        for i, state in enumerate(self.sa_info.states):
+            # Create a CI solver for each state and MOSpace
+
+            kwargs = self._collect_child_kwargs(_CISingleStateSolver)
+            # these are needed by _CISingleStateSolver but not present as attributes of CISolver
+            kwargs.update(
+                {
+                    "ints": ints,
+                    "state": state,
+                    "nroot": self.sa_info.nroots[i],
+                    "active_orbsym": active_orbsym,
+                }
+            )
+            self.sub_solvers.append(_CISingleStateSolver(**kwargs))
+
     def compute_average_energy(self):
         """
         Compute the average energy from the CI roots using the weights.

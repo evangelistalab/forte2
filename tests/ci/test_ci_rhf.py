@@ -60,6 +60,7 @@ def test_ci_n2_with_symmetry():
     ci.run()
     eref_singlet = -109.004622061660
     assert ci.E[0] == approx(eref_singlet)
+    assert not all([i == 0 for i in rhf.irrep_indices])
 
 
 def test_ci_ch4_with_symmetry():
@@ -86,6 +87,7 @@ def test_ci_ch4_with_symmetry():
 
     # reference energy obtained without symmetry
     assert ci.E[0] == approx(-40.2116319300)
+    assert not all([i == 0 for i in rhf.irrep_indices])
 
 
 def test_sa_ci_n2():

@@ -5,7 +5,6 @@ import numpy as np
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
 from forte2.helpers import logger
-from forte2.symmetry import MOSymmetryDetector
 from .scf_base import SCFBase
 from .rhf import RHF
 from .scf_utils import guess_mix
@@ -53,10 +52,12 @@ class UHF(SCFBase):
             self.na >= 0 and self.nb >= 0
         ), f"{self._scf_type} requires non-negative number of alpha and beta electrons."
 
-    def _build_fock(self, H, fock_builder, S):
+    def _build_fock(self, H, fock_builder, S, symmetrize=False):
         Ja, Jb = fock_builder.build_J(self.D)
         K = fock_builder.build_K([self.C[0][:, : self.na], self.C[1][:, : self.nb]])
         F = [H + Ja + Jb - k for k in K]
+        if symmetrize:
+            F = self.mosym.symmetrize_operator(F)
 
         F_canon = F
 
@@ -187,26 +188,12 @@ class UHF(SCFBase):
         logger.log_info1(string)
 
     def _assign_orbital_symmetries(self):
-        S = self._get_overlap()
-        mosym_a = MOSymmetryDetector(
-            self.system,
-            self.basis_info,
-            S,
-            self.C[0],
-            self.eps[0],
-        )
-        mosym_a.run()
+        a_labels, a_irrep_indices, self.C[0], _ = self.mosym.run(self.C[0], self.eps[0])
+        b_labels, b_irrep_indices, self.C[1], _ = self.mosym.run(self.C[1], self.eps[1])
 
-        mosym_b = MOSymmetryDetector(
-            self.system,
-            self.basis_info,
-            S,
-            self.C[1],
-            self.eps[1],
-        )
-        mosym_b.run()
-        self.irrep_labels = [mosym_a.labels, mosym_b.labels]
-        self.irrep_indices = [mosym_a.irrep_indices, mosym_b.irrep_indices]
+        self.irrep_labels = [a_labels, b_labels]
+        self.irrep_indices = [a_irrep_indices, b_irrep_indices]
+
 
     def _print_ao_composition(self):
         if isinstance(self.system, ModelSystem):
@@ -223,9 +210,9 @@ class UHF(SCFBase):
         )
         logger.log_info1("\nAO Composition of Beta MOs (HOMO-5 to HOMO):")
         basis_info.print_ao_composition(
-            self.C[1], list(range(max(self.na - 5, 0), self.na))
+            self.C[1], list(range(max(self.nb - 5, 0), self.nb))
         )
         logger.log_info1("\nAO Composition of Beta MOs (LUMO to LUMO+5):")
         basis_info.print_ao_composition(
-            self.C[1], list(range(self.na, min(self.na + 5, self.nmo)))
+            self.C[1], list(range(self.nb, min(self.nb + 5, self.nmo)))
         )

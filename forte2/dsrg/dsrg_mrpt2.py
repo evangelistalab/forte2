@@ -62,9 +62,27 @@ class DSRG_MRPT2(DSRGBase):
     """
 
     def get_integrals(self):
+        ints = dict()
+
         g1, g2, l2, l3 = self.ci_solver.make_average_cumulants()
-        # self._C are the MCSCF canonical orbitals. We always use canonical orbitals to build the generalized Fock matrix.
+
+        ints["E"] = cas_energy_given_RDMs(
+            self.E_core_orig, self.H_orig, self.V_orig, g1, g2
+        )
+
         self.semicanonicalizer.semi_canonicalize(g1=g1, C_contig=self._C)
+        new_irrep_labels, new_irrep_indices = self.semicanonicalizer.symmetrize(
+            self.mosym
+        )
+        irreps_changed = not np.array_equal(new_irrep_indices, self.irrep_indices)
+        if irreps_changed:
+            self.irrep_labels = new_irrep_labels
+            self.irrep_indices = new_irrep_indices
+            # do NOT update active_orbsym in the CI solver because 
+            # the semican U = U_semican @ U_sym, and
+            # we transform back to the original basis for CI, so the active_orbsym
+            # seen by the CI solver is unchanged.
+
         # Freeze core orbitals by removing them from the semicanonicalized quantities
         # The energy contributions are accounted for in self.E_core_orig
         self._C_semican = self.semicanonicalizer.C_semican[:, self.corr].copy()
@@ -72,8 +90,6 @@ class DSRG_MRPT2(DSRGBase):
         self.eps = self.semicanonicalizer.eps_semican[self.corr].copy()
         self.delta_actv = self.eps[self.actv][:, None] - self.eps[self.actv][None, :]
         self.Uactv = self.semicanonicalizer.Uactv.copy()
-
-        ints = dict()
 
         cumulants = dict()
         cumulants["gamma1"] = np.einsum(
@@ -103,9 +119,6 @@ class DSRG_MRPT2(DSRGBase):
             optimize=True,
         )
 
-        ints["E"] = cas_energy_given_RDMs(
-            self.E_core_orig, self.H_orig, self.V_orig, g1, g2
-        )
         #  ["vvaa", "aacc", "avca", "avac", "vaaa", "aaca", "aaaa"]
         # Save blocks of spinorbital basis B tensor
         B_mo = dict()

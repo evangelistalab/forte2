@@ -39,10 +39,12 @@ class ROHF(SCFBase):
         self._parse_state()
         return self
 
-    def _build_fock(self, H, fock_builder, S):
+    def _build_fock(self, H, fock_builder, S, symmetrize=False):
         Ja, Jb = fock_builder.build_J(self.D)
         K = fock_builder.build_K([self.C[0][:, : self.na], self.C[0][:, : self.nb]])
         F = [H + Ja + Jb - k for k in K]
+        if symmetrize:
+            F = self.mosym.symmetrize_operator(F)
 
         F_canon = self._build_canonical_fock(F, S)
 
