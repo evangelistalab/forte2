@@ -33,3 +33,4 @@ def test_casscf_n2_cholesky():
     mc.run()
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
+    assert not all([i == 0 for i in mc.irrep_indices])

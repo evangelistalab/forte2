@@ -27,6 +27,7 @@ def test_dsrg_mrpt2_with_sym_c2_1():
     pt = DSRG_MRPT2(relax_reference="once")(mc)
     pt.run()
     assert pt.relax_eigvals == approx([-75.5589037326, -75.5546573565, -75.5331537682])
+    assert not all([i == 0 for i in pt.irrep_indices])
 
 
 def test_dsrg_mrpt2_with_sym_c2_2():
@@ -84,6 +85,7 @@ def test_dsrg_mrpt2_with_sym_c2_2():
     pt = DSRG_MRPT2(relax_reference="twice")(mc)
     pt.run()
     assert pt.relax_eigvals == approx([-75.7202896794, -75.6479318059, -75.6375093503])
+    assert not all([i == 0 for i in pt.irrep_indices])
 
 
 def test_dsrg_mrpt2_with_sym_ch4():
@@ -114,3 +116,4 @@ def test_dsrg_mrpt2_with_sym_ch4():
     pt = DSRG_MRPT2(relax_reference="twice")(mc)
     pt.run()
     assert pt.relax_eigvals == approx([-40.3707279648, -39.9189047144])
+    assert not all([i == 0 for i in pt.irrep_indices])

@@ -1,4 +1,4 @@
-from forte2 import System, RHF, MCOptimizer, State
+from forte2 import System, RHF, MCOptimizer, State, CISolver
 from forte2.helpers.comparisons import approx
 
 
@@ -29,13 +29,15 @@ def test_c2_symmetry_repair():
     )
 
     rhf = RHF(charge=0)(system)
-    mcscf = MCOptimizer(
+    ci_solver = CISolver(
         states=State(nel=12, multiplicity=1, ms=0.0, symmetry=0),
         nroots=3,
         core_orbitals=2,
         active_orbitals=8,
-    )(rhf)
-    mcscf.run()
+    )
+    mc = MCOptimizer(ci_solver)(rhf)
+    mc.run()
 
     ref_ci = [-75.4911788852, -75.4879859747, -75.4732134962]
-    assert mcscf.E_ci == approx(ref_ci)
+    assert mc.E_ci == approx(ref_ci)
+    assert not all([i == 0 for i in mc.irrep_indices])
