@@ -1789,7 +1789,6 @@ class CI(CISolver):
 class RelCISolver(RelCIBase):
     """
     A general two-component configuration interaction (2C-CI) solver class.
-    If a non-relativistic method is the parent method, then the CI solver will automatically convert the MO coefficients to spinors and set the system to two-component. The X2C Hamiltonian type and SNSO correction can be specified by the user via the `x2c_type_override` and `snso_type_override` parameters, or they will be inherited from the `System` object if not provided.
 
     Parameters
     ----------
