@@ -187,16 +187,7 @@ class UMP2(MP2Base):
         return t2_a, t2_b, t2_ab, E_corr
 
     def _make_mp2_1rdm_intermediates(self):
-        B = self.B_iaQ
-        # Rebuild amplitudes locally when they were not requested for storage.
-        if all(
-            getattr(self, attr, None) is not None for attr in ("t2_a", "t2_b", "t2_ab")
-        ):
-            t2_a = self.t2_a
-            t2_b = self.t2_b
-            t2_ab = self.t2_ab
-        else:
-            t2_a, t2_b, t2_ab, _ = self._build_t2_all(B)
+        t2_a, t2_b, t2_ab = self._get_t2_all()
 
         naocc = self.naocc
         nbocc = self.nbocc
@@ -206,30 +197,22 @@ class UMP2(MP2Base):
         # =========================
 
         # occupied-occupied
-        doo_a = -0.5 * (
-            np.einsum("imef,jmef->ij", t2_a, t2_a, optimize=True)
-            + np.einsum("iMef,jMef->ij", t2_ab, t2_ab, optimize=True)
-        )
+        doo_a = -0.5 * np.einsum("imef,jmef->ij", t2_a, t2_a, optimize=True)
+        doo_a -= np.einsum("iMef,jMef->ij", t2_ab, t2_ab, optimize=True)
 
         # virtual-virtual
-        dvv_a = 0.5 * (
-            np.einsum("mnae,mnbe->ab", t2_a, t2_a, optimize=True)
-            + np.einsum("mNae,mNbe->ab", t2_ab, t2_ab, optimize=True)
-        )
+        dvv_a = 0.5 * np.einsum("mnae,mnbe->ab", t2_a, t2_a, optimize=True)
+        dvv_a += np.einsum("mNae,mNbe->ab", t2_ab, t2_ab, optimize=True)
 
         # =========================
         # BETA BLOCKS
         # =========================
 
-        doo_b = -0.5 * (
-            np.einsum("imef,jmef->ij", t2_b, t2_b, optimize=True)
-            + np.einsum("mief,mjef->ij", t2_ab, t2_ab, optimize=True)
-        )
+        doo_b = -0.5 * np.einsum("imef,jmef->ij", t2_b, t2_b, optimize=True)
+        doo_b -= np.einsum("mief,mjef->ij", t2_ab, t2_ab, optimize=True)
 
-        dvv_b = 0.5 * (
-            np.einsum("mnae,mnbe->ab", t2_b, t2_b, optimize=True)
-            + np.einsum("mnea,mneb->ab", t2_ab, t2_ab, optimize=True)
-        )
+        dvv_b = 0.5 * np.einsum("mnae,mnbe->ab", t2_b, t2_b, optimize=True)
+        dvv_b += np.einsum("mnea,mneb->ab", t2_ab, t2_ab, optimize=True)
 
         # =========================
         # BUILD DENSITY MATRICES
@@ -252,6 +235,8 @@ class UMP2(MP2Base):
         # enforce Hermiticity
         gamma1_a = 0.5 * (gamma1_a + gamma1_a.T)
         gamma1_b = 0.5 * (gamma1_b + gamma1_b.T)
+        self.gamma1_a = gamma1_a
+        self.gamma1_b = gamma1_b
         return gamma1_a, gamma1_b
 
     def _make_mp2_sf_1rdm(self, gamma1_a, gamma1_b):
@@ -260,10 +245,35 @@ class UMP2(MP2Base):
         gamma1_sf = 0.5 * (gamma1_sf + gamma1_sf.T)
         return gamma1_sf
 
+    def _make_gamma1_ao_sd(self, gamma1_a, gamma1_b):
+        gamma1_ao_a = self.Ca @ gamma1_a @ self.Ca.T
+        gamma1_ao_b = self.Cb @ gamma1_b @ self.Cb.T
+        return (
+            0.5 * (gamma1_ao_a + gamma1_ao_a.T),
+            0.5 * (gamma1_ao_b + gamma1_ao_b.T),
+        )
+
+    def _make_gamma1_ao_sf(self, gamma1_a, gamma1_b):
+        gamma1_ao_a, gamma1_ao_b = self._make_gamma1_ao_sd(gamma1_a, gamma1_b)
+        gamma1_ao = gamma1_ao_a + gamma1_ao_b
+        gamma1_ao = 0.5 * (gamma1_ao + gamma1_ao.T)
+        return gamma1_ao
+
+    def _get_t2_all(self):
+        if all(
+            getattr(self, attr, None) is not None for attr in ("t2_a", "t2_b", "t2_ab")
+        ):
+            return self.t2_a, self.t2_b, self.t2_ab
+        store_t2 = self.store_t2
+        self.store_t2 = True
+        try:
+            t2_a, t2_b, t2_ab, _ = self._build_t2_all(self.B_iaQ)
+        finally:
+            self.store_t2 = store_t2
+        return t2_a, t2_b, t2_ab
+
     def _make_mp2_2rdm(self, gamma1_a, gamma1_b):
-        t2_a = self.t2_a
-        t2_b = self.t2_b
-        t2_ab = self.t2_ab
+        t2_a, t2_b, t2_ab = self._get_t2_all()
 
         nmo = self.nmo
         naocc, navir = self.naocc, self.navir
@@ -289,18 +299,11 @@ class UMP2(MP2Base):
         gamma2_aa[np.ix_(oa, oa, va, va)] += t2_a
         gamma2_aa[np.ix_(va, va, oa, oa)] += t2_a.transpose(2, 3, 0, 1)
 
-        # antisymmetry permutations
-        gamma2_aa[np.ix_(oa, oa, va, va)] -= t2_a.transpose(0, 1, 3, 2)
-        gamma2_aa[np.ix_(va, va, oa, oa)] -= t2_a.transpose(3, 2, 0, 1)
-
         # =========================
         # SAME-SPIN (ββ)
         # =========================
         gamma2_bb[np.ix_(ob, ob, vb, vb)] += t2_b
         gamma2_bb[np.ix_(vb, vb, ob, ob)] += t2_b.transpose(2, 3, 0, 1)
-
-        gamma2_bb[np.ix_(ob, ob, vb, vb)] -= t2_b.transpose(0, 1, 3, 2)
-        gamma2_bb[np.ix_(vb, vb, ob, ob)] -= t2_b.transpose(3, 2, 0, 1)
 
         # =========================
         # OPPOSITE-SPIN (αβ)
@@ -365,6 +368,8 @@ class UMP2(MP2Base):
     def make_2rdm_sd(self, gamma1=None):
         if gamma1 is None:
             gamma1_a, gamma1_b = self.make_1rdm_sd()
+        else:
+            gamma1_a, gamma1_b = gamma1
         return self._make_mp2_2rdm(gamma1_a, gamma1_b)
 
     def make_2rdm_sf(self, gamma1=None):
@@ -377,6 +382,15 @@ class UMP2(MP2Base):
 
     make_1rdm = make_1rdm_sf
     make_2rdm = make_2rdm_sf
+
+    def gamma1_mo_to_ao(self, gamma1=None):
+        if gamma1 is None:
+            gamma1_a, gamma1_b = self.make_1rdm_sd()
+        else:
+            gamma1_a, gamma1_b = gamma1
+        return self._make_gamma1_ao(gamma1_a, gamma1_b)
+
+    make_1rdm_ao = gamma1_mo_to_ao
 
     def make_2cumulant(self, gamma1_sf=None, gamma2_sf=None):
         if gamma1_sf is None:
@@ -392,6 +406,12 @@ class UMP2(MP2Base):
         gamma2_sf = self._make_mp2_sf_2rdm(gamma2_aa, gamma2_ab, gamma2_bb)
         lambda2_sf = self._make_mp2_sf_2cumulants(gamma1_sf, gamma2_sf)
         return gamma1_sf, gamma2_sf, lambda2_sf
+
+    def make_cumulants_sd(self):
+        gamma1 = self.make_1rdm_sd()
+        gamma2 = self.make_2rdm_sd(gamma1)
+        lambda2 = self.make_2cumulant_sd(gamma1, gamma2)
+        return gamma1, gamma2, lambda2
 
     def make_2cumulant_sd(self, gamma1=None, gamma2=None):
         """
