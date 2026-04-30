@@ -77,10 +77,12 @@ avas = forte2.AVAS(
     num_active_docc=3,
     num_active_uocc=3,
 )(rhf)
-mcscf = forte2.MCOptimizer(
+ci_solver = forte2.CISolver(
     states=[forte2.State(nel=14, multiplicity=1, ms=0.0),
             forte2.State(nel=14, multiplicity=3, ms=0.0)],
-)(avas)
+)
+mcscf = forte2.MCSCF(ci_solver=ci_solver)(avas)
+
 pt = forte2.DSRG_MRPT2(s=0.5)(mcscf)
 
 pt.run()
@@ -111,12 +113,12 @@ B = forte2.integrals.coulomb_3c(system)
 ## Capabilities
 
 Forte2 is under active development, with an emphasis on multi-reference and relativistic methods.
-Current capabilities include:
+Current capabilities include (non-exhaustive, see also the [Capabilities](https://forte2.readthedocs.io/en/latest/guide/capabilities.html) section of the user guide for more details):
 
 - All methods use density-fitted or Cholesky-decomposed two-electron integrals
-- Model Hamiltonians and molecular symmetry support (largest Abelian subgroup)
 - Non-relativistic and relativistic SCF (RHF, ROHF, UHF, CUHF, GHF)
 - CI methods including spin-adapted CI, GAS/ORMAS, and relativistic CI
+- Heat-bath CI (HCI)
 - MCSCF methods (CAS/GAS/ORMAS), with state averaging, and relativistic variants thereof
 - AVAS active-space selection (one- and two-component workflows)
 - DSRG-MRPT2 (non-relativistic and relativistic)
@@ -129,6 +131,6 @@ For detailed method documentation and theory references, see:
 
 ## Contributing
 
-We are open to contributions of all kinds, including bug reports, feature requests, documentation improvements, and code contributions.
+We welcome contributions of all kinds, including bug reports, feature requests, documentation improvements, and code contributions.
 
 For code contributions, see notes on coding style and docstring standards in the [Contributor Guide](http://forte2.readthedocs.io/en/latest/contributor.html).
