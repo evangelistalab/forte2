@@ -307,8 +307,9 @@ class UMP2MPQFast:
     Indices p,q,r,s are spatial MO indices in [0, nmo).
     """
 
-    def __init__(self, mp2):
+    def __init__(self, mp2, Ua=None, Ub=None):
         self.mp2 = mp2
+
         self.nmo = mp2.nmo
         self.naocc = mp2.naocc
         self.nbocc = mp2.nbocc
@@ -318,13 +319,106 @@ class UMP2MPQFast:
         if any(getattr(mp2, name, None) is None for name in ("t2_a", "t2_b", "t2_ab")):
             raise ValueError("UMP2 t2 amplitudes must be stored.")
 
-        self.t2_a = mp2.t2_a
-        self.t2_b = mp2.t2_b
-        self.t2_ab = mp2.t2_ab
+        # --- 1-RDMs (spin-resolved) ---
+        self.γa, self.γb = mp2.make_1rdm_sd()
+
+        # --- rotations ---
+        if Ua is None:
+            self.Ua, self.occs_a = self._build_block_no_rotation(self.γa, self.naocc)
+        else:
+            self.Ua = Ua
+            self.occs_a = np.diag(Ua.T @ self.γa @ Ua)
+
+        if Ub is None:
+            self.Ub, self.occs_b = self._build_block_no_rotation(self.γb, self.nbocc)
+        else:
+            self.Ub = Ub
+            self.occs_b = np.diag(Ub.T @ self.γb @ Ub)
+
+        # --- split rotations ---
+        Uoa = self.Ua[: self.naocc, : self.naocc]
+        Uva = self.Ua[self.naocc :, self.naocc :]
+
+        Uob = self.Ub[: self.nbocc, : self.nbocc]
+        Uvb = self.Ub[self.nbocc :, self.nbocc :]
+
+        # --- rotate amplitudes ---
+        self.t2_a = self._rotate_t2(self.mp2.t2_a, Uoa, Uva)
+        self.t2_b = self._rotate_t2(self.mp2.t2_b, Uob, Uvb)
+
+        self.t2_ab = np.einsum(
+            "pi,qj,ijab,ar,bs->pqrs",
+            Uoa.T,
+            Uob.T,
+            self.mp2.t2_ab,
+            Uva,
+            Uvb,
+            optimize=True,
+        )
+
+        # --- SECOND ORDER TERMS ---
+
+        # alpha-alpha
+        self.gamma_oooo_aa = 0.5 * np.einsum(
+            "ijab,klab->ijkl", self.t2_a, self.t2_a, optimize=True
+        )
+        self.gamma_vvvv_aa = 0.5 * np.einsum(
+            "ijab,ijcd->abcd", self.t2_a, self.t2_a, optimize=True
+        )
+
+        # beta-beta
+        self.gamma_oooo_bb = 0.5 * np.einsum(
+            "ijab,klab->ijkl", self.t2_b, self.t2_b, optimize=True
+        )
+        self.gamma_vvvv_bb = 0.5 * np.einsum(
+            "ijab,ijcd->abcd", self.t2_b, self.t2_b, optimize=True
+        )
+
+        # alpha-beta (ONLY ovov block exists)
+        self.gamma_ovov_ab = np.einsum(
+            "imac,jmbc->iajb", self.t2_ab, self.t2_ab, optimize=True
+        )
 
         self.M1 = None
         self.M2 = None
-        self.Γ1 = mp2.make_1rdm_sf()
+        self.Γ1 = self.γa + self.γb
+
+    @property
+    def occs(self):
+        # spin-summed occupations for plotting
+        return self.occs_a + self.occs_b
+
+    def _build_block_no_rotation(self, Gamma1, nocc):
+        nmo = Gamma1.shape[0]
+
+        Goo = Gamma1[:nocc, :nocc]
+        Gvv = Gamma1[nocc:, nocc:]
+
+        occ_vals, Uo = np.linalg.eigh(Goo)
+        vir_vals, Uv = np.linalg.eigh(Gvv)
+
+        occ_order = np.argsort(occ_vals)[::-1]
+        vir_order = np.argsort(vir_vals)[::-1]
+
+        Uo = Uo[:, occ_order]
+        Uv = Uv[:, vir_order]
+
+        U = np.eye(nmo)
+        U[:nocc, :nocc] = Uo
+        U[nocc:, nocc:] = Uv
+
+        return U, None
+
+    def _rotate_t2(self, t2, Uo, Uv):
+        return np.einsum(
+            "pi,qj,ijab,ar,bs->pqrs",
+            Uo.T,
+            Uo.T,
+            t2,
+            Uv,
+            Uv,
+            optimize=True,
+        )
 
     def _oa(self, p):
         return 0 <= p < self.naocc
@@ -345,57 +439,106 @@ class UMP2MPQFast:
         return p - self.nbocc
 
     def lambda2_aa_elem(self, p, q, r, s):
-        sign = 1
-
-        if p > q:
-            p, q = q, p
-            sign *= -1
-        if r > s:
-            r, s = s, r
-            sign *= -1
+        val = 0.0
 
         if self._oa(p) and self._oa(q) and self._va(r) and self._va(s):
-            a = self._a_vir(r)
-            b = self._a_vir(s)
-
-            val = self.t2_a[p, q, a, b] - self.t2_a[p, q, b, a]
-            return sign * val
+            a, b = self._a_vir(r), self._a_vir(s)
+            val += (
+                self.t2_a[p, q, a, b]
+                - self.t2_a[p, q, b, a]
+                - self.t2_a[q, p, a, b]
+                + self.t2_a[q, p, b, a]
+            )
 
         if self._va(p) and self._va(q) and self._oa(r) and self._oa(s):
-            a = self._a_vir(p)
-            b = self._a_vir(q)
+            a, b = self._a_vir(p), self._a_vir(q)
+            val += (
+                self.t2_a[r, s, a, b]
+                - self.t2_a[r, s, b, a]
+                - self.t2_a[s, r, a, b]
+                + self.t2_a[s, r, b, a]
+            )
 
-            val = self.t2_a[r, s, a, b] - self.t2_a[r, s, b, a]
-            return sign * val
+        # second order
+        if self._oa(p) and self._oa(q) and self._oa(r) and self._oa(s):
+            val += self.gamma_oooo_aa[p, q, r, s]
 
-        return 0.0
+        if self._va(p) and self._va(q) and self._va(r) and self._va(s):
+            a, b, c, d = (
+                self._a_vir(p),
+                self._a_vir(q),
+                self._a_vir(r),
+                self._a_vir(s),
+            )
+            val += self.gamma_vvvv_aa[a, b, c, d]
+
+        return val
 
     def lambda2_bb_elem(self, p, q, r, s):
+        val = 0.0
+
         if self._ob(p) and self._ob(q) and self._vb(r) and self._vb(s):
-            a = self._b_vir(r)
-            b = self._b_vir(s)
-            return self.t2_b[p, q, a, b]
+            a, b = self._b_vir(r), self._b_vir(s)
+            val += (
+                self.t2_b[p, q, a, b]
+                - self.t2_b[p, q, b, a]
+                - self.t2_b[q, p, a, b]
+                + self.t2_b[q, p, b, a]
+            )
 
         if self._vb(p) and self._vb(q) and self._ob(r) and self._ob(s):
-            a = self._b_vir(p)
-            b = self._b_vir(q)
-            return self.t2_b[r, s, a, b]
+            a, b = self._b_vir(p), self._b_vir(q)
+            val += (
+                self.t2_b[r, s, a, b]
+                - self.t2_b[r, s, b, a]
+                - self.t2_b[s, r, a, b]
+                + self.t2_b[s, r, b, a]
+            )
 
-        return 0.0
+        if self._ob(p) and self._ob(q) and self._ob(r) and self._ob(s):
+            val += self.gamma_oooo_bb[p, q, r, s]
+
+        if self._vb(p) and self._vb(q) and self._vb(r) and self._vb(s):
+            a, b, c, d = (
+                self._b_vir(p),
+                self._b_vir(q),
+                self._b_vir(r),
+                self._b_vir(s),
+            )
+            val += self.gamma_vvvv_bb[a, b, c, d]
+
+        return val
 
     def lambda2_ab_elem(self, p, q, r, s):
-        # alpha index positions are 1st and 3rd; beta positions are 2nd and 4th
+        val = 0.0
+
+        # ---------- FIRST ORDER ----------
         if self._oa(p) and self._ob(q) and self._va(r) and self._vb(s):
-            a = self._a_vir(r)
-            b = self._b_vir(s)
-            return self.t2_ab[p, q, a, b]
+            val += self.t2_ab[p, q, self._a_vir(r), self._b_vir(s)]
 
         if self._va(p) and self._vb(q) and self._oa(r) and self._ob(s):
-            a = self._a_vir(p)
-            b = self._b_vir(q)
-            return self.t2_ab[r, s, a, b]
+            val += self.t2_ab[r, s, self._a_vir(p), self._b_vir(q)]
+        # ---------- SECOND ORDER (corrected) ----------
 
-        return 0.0
+        # (oα, vβ, oα, vβ)
+        if self._oa(p) and self._vb(q) and self._oa(r) and self._vb(s):
+            i = p
+            j = r
+            b1 = self._b_vir(q)
+            b2 = self._b_vir(s)
+
+            val += self.gamma_ovov_ab[i, b1, j, b2]
+
+        # symmetric partner (IMPORTANT: do NOT reuse virtual as occupied)
+        if self._oa(r) and self._vb(s) and self._oa(p) and self._vb(q):
+            i = r
+            j = p
+            b1 = self._b_vir(s)
+            b2 = self._b_vir(q)
+
+            val += self.gamma_ovov_ab[i, b1, j, b2]
+
+        return val
 
     def C_elem(self, p, q, r, s):
         aa = self.lambda2_aa_elem(p, q, r, s)
@@ -628,7 +771,7 @@ class RMP2MPQFast:
                 + self.t2_no[j, i, b, a]
             )
 
-        # ---- SECOND ORDER (NEW) ----
+        # ---- SECOND ORDER ----
         if self._o(p) and self._o(q) and self._o(r) and self._o(s):
             val += self.gamma_oooo[p, q, r, s]
 
