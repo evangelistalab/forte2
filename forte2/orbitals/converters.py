@@ -73,6 +73,7 @@ def list_spatial_to_spinor(lst):
         raise RuntimeError(f"List of length {len(lst)} not recognized!")
     return [lst_2c]
 
+
 @dataclass
 class SpatialToSpinorConverter(MOsMixin, SystemMixin):
     """
@@ -143,7 +144,7 @@ class SpatialToSpinorConverter(MOsMixin, SystemMixin):
     def run(self):
         if not self.parent_method.executed:
             self.parent_method.run()
-        MOsMixin.copy_from_upstream(self, self.parent_method)
+        MOsMixin.copy_from_upstream(self, self.parent_method, only_alpha=True)
         SystemMixin.copy_from_upstream(self, self.parent_method)
         if hasattr(self.parent_method, "mo_space"):
             self.mo_space = self.parent_method.mo_space
@@ -161,14 +162,13 @@ class SpatialToSpinorConverter(MOsMixin, SystemMixin):
                 np.exp(1j * self.rng.uniform(-np.pi, np.pi, size=nmo))
             )
             self.C[0] = self.C[0] @ random_phase
-        x2c_type_save = self.system.x2c_type
         if self.x2c_type_override is not None:
             self.system.x2c_type = self.x2c_type_override
         if self.snso_type_override is not None:
             self.system.snso_type = self.snso_type_override
         # if system.x2c_type was None at system init, the x2c_helper object
         # was never built. This if clause will catch that and build the x2c_helper object with the correct x2c_type and snso_type.
-        if x2c_type_save is None and self.system.x2c_type is not None:
+        if self.system.x2c_helper is None:
             self.system._init_x2c()
 
         self.executed = True

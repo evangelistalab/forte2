@@ -123,5 +123,5 @@ def test_2c_casscf_with_uhf():
     mc.run()
     # corresponds to ~ 4.6e-8 Eh
     assert (ci_solver.E[2] - ci_solver.E[1]) * EH_TO_WN == pytest.approx(
-        208.52002024473313, abs=1e-2
+        135.46252372483025, abs=1e-2
     )
