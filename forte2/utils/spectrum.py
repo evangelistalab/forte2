@@ -154,7 +154,7 @@ if __name__ == "__main__":
     )
     mc.run()
 
-    # select transitions properties between state 0 and states 1, 2, 3 4
+    # select transitions properties between state 0 and states 1, 2, 3, and 4
     vte = list(ci_solver.vertical_transition_energies.values())[1:5]
     fosc = list(ci_solver.oscillator_strengths.values())[1:5]
 
