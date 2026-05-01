@@ -23,7 +23,6 @@ from forte2.helpers import logger
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.props import get_1e_property
 from forte2.orbitals import Semicanonicalizer
-from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 from .ci_utils import (
     pretty_print_gas_info,
     pretty_print_ci_summary,
@@ -1280,7 +1279,7 @@ class CISolver(CIBase):
 
         self.sub_solvers = []
         active_orbsym = [
-            [self.irrep_indices[i] for i in active_space]
+            [self.irrep_indices[0][i] for i in active_space]
             for active_space in self.mo_space.active_orbitals
         ]
         for i, state in enumerate(self.sa_info.states):
@@ -1589,35 +1588,6 @@ class CISolver(CIBase):
                 status.append(ci_solver.eigensolver.converged)
         return status
 
-    def _get_state_root(self, absolute_root) -> tuple[int, int]:
-        if absolute_root < 0 or absolute_root >= self.sa_info.nroots_sum:
-            raise ValueError(
-                f"absolute_root must be between 0 and {self.sa_info.nroots_sum - 1}, but got {absolute_root}."
-            )
-        return self.sa_info.absolute_root_map[absolute_root]
-
-    def _validate_rdm_inputs(self, left_root, right_root):
-        left_state, left_root_in_state = self._get_state_root(left_root)
-        if right_root is not None:
-            right_state, right_root_in_state = self._get_state_root(right_root)
-        else:
-            right_state = left_state
-            right_root_in_state = left_root_in_state
-
-        if left_state != right_state:
-            # check that they have the same na and nb
-            if (
-                self.sa_info.states[left_state].na
-                != self.sa_info.states[right_state].na
-                or self.sa_info.states[left_state].nb
-                != self.sa_info.states[right_state].nb
-            ):
-                raise ValueError(
-                    f"Cross-state RDMs are only supported for states with the same number of alpha and beta electrons."
-                )
-
-        return left_state, right_state, left_root_in_state, right_root_in_state
-
     def make_sd_1rdm(
         self,
         left_root: int,
@@ -1799,7 +1769,18 @@ class CI(CISolver):
 @dataclass
 class RelCISolver(RelCIBase):
     """
-    Relativistic Configuration Interaction
+    A general two-component configuration interaction (2C-CI) solver class.
+
+    Parameters
+    ----------
+    davidson_liu_params : DavidsonLiuParams, optional
+        Parameters for the Davidson-Liu eigensolver. If not provided, default parameters are used.
+    ci_params : CIParams, optional
+        Parameters for the CI solver. If not provided, default parameters are used.
+    do_test_rdms : bool, optional, default=False
+        If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
+    log_level : int, optional
+        The logging level for the CI solver. Defaults to the global logger's verbosity level.
     """
 
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
@@ -1827,9 +1808,6 @@ class RelCISolver(RelCIBase):
 
     def _startup(self):
         super()._startup()
-        if not self.system.two_component:
-            self.C = convert_coeff_spatial_to_spinor(self.C)
-            self.system.two_component = True
 
         self.norb = self.mo_space.nactv
         # no distinction between core and frozen core in the CI solver
@@ -1848,7 +1826,7 @@ class RelCISolver(RelCIBase):
 
         self.sub_solvers = []
         active_orbsym = [
-            [self.irrep_indices[i] for i in active_space]
+            [self.irrep_indices[0][i] for i in active_space]
             for active_space in self.mo_space.active_orbitals
         ]
 

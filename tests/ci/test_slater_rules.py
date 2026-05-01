@@ -6,7 +6,7 @@ from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers.comparisons import approx
 from forte2.ci.ci import _CISingleStateSolver
 from forte2.state import MOSpace, State
-from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
+from forte2.orbitals import convert_coeff_spatial_to_spinor
 from forte2.base_classes import DavidsonLiuParams
 
 

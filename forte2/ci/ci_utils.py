@@ -56,7 +56,9 @@ def pretty_print_gas_info(ci_strings: CIStrings):
 
 
 def pretty_print_ci_summary(
-    sa_info: StateAverageInfo, eigvals_per_solver: list[list[float]]
+    sa_info: StateAverageInfo,
+    eigvals_per_solver: list[list[float]],
+    header="\nCI energy summary",
 ):
     """
     Pretty print the CI energy summary for the given CI states and eigenvalues.
@@ -67,6 +69,8 @@ def pretty_print_ci_summary(
         An instance of `StateAverageInfo` that holds information about the states and their properties.
     eigvals_per_solver : list[list[float]]
         A list of lists containing the eigenvalues (energies) for each CI solver.
+    header : str, optional, default="CI energy summary"
+        A header string to display at the top of the summary.
     """
     ncis = sa_info.ncis
     mult = [state.multiplicity for state in sa_info.states]
@@ -75,7 +79,7 @@ def pretty_print_ci_summary(
     weights = sa_info.weights
     nroots = sa_info.nroots
 
-    logger.log_info1("CI energy summary:")
+    logger.log_info1(f"{header}:")
     width = 64
     logger.log_info1("=" * width)
     logger.log_info1(
