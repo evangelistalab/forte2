@@ -3,7 +3,7 @@ import numpy as np
 
 from forte2 import System, RHF, ROHF, RelState
 from forte2.ci import RelCI
-from forte2.orbitals import NonRelToRelConverter
+from forte2.orbitals import SpatialToSpinorConverter
 from forte2.helpers.comparisons import approx
 from forte2.system.build_basis import BSE_AVAILABLE
 from forte2.base_classes import DavidsonLiuParams
@@ -19,7 +19,7 @@ def test_rel_gasci_rhf_1():
 
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     # rhf, system = prepare_rhf_coeff_for_relci(rhf, system)
-    conv = NonRelToRelConverter(apply_random_phase=True)(rhf)
+    conv = SpatialToSpinorConverter(apply_random_phase=True)(rhf)
     ci = RelCI(
         active_orbitals=[[0, 1], [2, 3]],
         states=RelState(nel=2, gas_min=[0], gas_max=[2]),
@@ -40,7 +40,7 @@ def test_rel_gasci_rhf_2():
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     rhf = RHF(charge=0, e_tol=1e-12)(system)
-    conv = NonRelToRelConverter(apply_random_phase=True)(rhf)
+    conv = SpatialToSpinorConverter(apply_random_phase=True)(rhf)
     ci = RelCI(
         active_orbitals=[[0, 1], [2, 3]],
         states=RelState(nel=2, gas_min=[1, 0], gas_max=[2, 1]),
@@ -69,7 +69,7 @@ def test_rel_gasci_rhf_3():
     )
 
     rhf = RHF(charge=0, e_tol=1e-12)(system)
-    conv = NonRelToRelConverter(apply_random_phase=True)(rhf)
+    conv = SpatialToSpinorConverter(apply_random_phase=True)(rhf)
     ci = RelCI(
         active_orbitals=[[0, 1], [2, 3]],
         states=RelState(nel=2, gas_min=[0, 0], gas_max=[2, 2]),
@@ -92,7 +92,7 @@ def test_rel_gasci_rhf_4():
     )
 
     rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-8)(system)
-    conv = NonRelToRelConverter(apply_random_phase=True)(rhf)
+    conv = SpatialToSpinorConverter(apply_random_phase=True)(rhf)
     ci = RelCI(
         active_orbitals=(10, 4),
         states=RelState(nel=10, gas_min=[6, 0], gas_max=[10, 4]),
@@ -116,7 +116,7 @@ def test_rel_gasci_rhf_5():
     )
 
     rhf = RHF(charge=0, e_tol=1e-14, d_tol=1e-8)(system)
-    conv = NonRelToRelConverter(apply_random_phase=True)(rhf)
+    conv = SpatialToSpinorConverter(apply_random_phase=True)(rhf)
     ci = RelCI(
         active_orbitals=(2, 12),
         states=RelState(nel=10, gas_min=[0], gas_max=[1]),
@@ -144,7 +144,7 @@ def test_rel_gasci_rohf_3():
     )
 
     rhf = ROHF(charge=0, e_tol=1e-12, d_tol=1e-8, ms=1.0)(system)
-    conv = NonRelToRelConverter(apply_random_phase=True)(rhf)
+    conv = SpatialToSpinorConverter(apply_random_phase=True)(rhf)
     ci = RelCI(
         active_orbitals=(2, 12),
         states=RelState(nel=10, gas_min=[0], gas_max=[1]),

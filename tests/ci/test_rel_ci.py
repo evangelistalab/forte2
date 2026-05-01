@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, RHF, GHF, NonRelToRelConverter
+from forte2 import System, RHF, GHF, SpatialToSpinorConverter
 from forte2.helpers.comparisons import approx
 from forte2.ci import RelCI
 
@@ -17,7 +17,7 @@ def test_rel_ci_h2():
         xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     scf = GHF(charge=0, e_tol=1e-12)(system)
-    conv = NonRelToRelConverter(apply_random_phase=True)(scf)
+    conv = SpatialToSpinorConverter(apply_random_phase=True)(scf)
 
     ci = RelCI(nel=2, active_orbitals=4, do_test_rdms=True)(conv)
     ci.run()
@@ -35,7 +35,7 @@ def test_rel_ci_hf():
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     scf = RHF(charge=0, e_tol=1e-10)(system)
-    conv = NonRelToRelConverter(apply_random_phase=True)(scf)
+    conv = SpatialToSpinorConverter(apply_random_phase=True)(scf)
 
     ci = RelCI(
         nel=10,

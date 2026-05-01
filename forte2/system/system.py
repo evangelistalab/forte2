@@ -145,7 +145,7 @@ class System:
         _S = integrals.overlap(self)
         self.Xorth, _, info = canonical_orth(_S, self.ortho_thresh)
         print_metric_info(info)
-        self.nmo = info["n_kept"]
+        self.nmo = int(info["n_kept"])
         self.fock_builder = FockBuilder(self)
         # The B tensors here are lazily evaluated, so no overhead if not used
         if self.auxiliary_basis_set_corr is not None:

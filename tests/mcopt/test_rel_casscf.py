@@ -1,6 +1,6 @@
 import numpy as np
 
-from forte2 import System, GHF, RHF, RelCISolver, MCOptimizer, NonRelToRelConverter
+from forte2 import System, GHF, RHF, RelCISolver, MCOptimizer, SpatialToSpinorConverter
 from forte2.helpers.comparisons import approx
 from forte2.orbitals import AVAS
 
@@ -17,7 +17,7 @@ def test_rel_casscf_hf_equivalence_to_nonrel():
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
     scf = RHF(charge=0, e_tol=1e-10)(system)
-    conv = NonRelToRelConverter(apply_random_phase=True)(scf)
+    conv = SpatialToSpinorConverter(apply_random_phase=True)(scf)
     ci_solver = RelCISolver(
         nel=10,
         core_orbitals=2,

@@ -9,7 +9,7 @@ class MOsMixin:
     """
 
     @classmethod
-    def copy_from_upstream(cls, new, upstream) -> None:
+    def copy_from_upstream(cls, new, upstream, only_alpha=False) -> None:
         assert isinstance(new, MOsMixin), "new must be an instance of MOsMixin"
         assert isinstance(
             upstream, MOsMixin
@@ -22,9 +22,14 @@ class MOsMixin:
             upstream, "irrep_labels"
         ), "upstream must have an 'irrep_labels' attribute"
         # copy each matrix
-        new.C = [arr.copy() for arr in upstream.C]
-        new.irrep_indices = upstream.irrep_indices.copy()
-        new.irrep_labels = upstream.irrep_labels.copy()
+        if only_alpha:
+            new.C = [upstream.C[0].copy()]
+            new.irrep_indices = [upstream.irrep_indices[0].copy()]
+            new.irrep_labels = [upstream.irrep_labels[0].copy()]
+        else:
+            new.C = [arr.copy() for arr in upstream.C]
+            new.irrep_indices = [ind.copy() for ind in upstream.irrep_indices]
+            new.irrep_labels = [label.copy() for label in upstream.irrep_labels]
 
 
 @dataclass

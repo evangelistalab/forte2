@@ -1,6 +1,4 @@
 from dataclasses import dataclass, field
-
-from forte2.scf import rhf
 import numpy as np
 
 from forte2.base_classes.mixins import MOsMixin, SystemMixin
@@ -25,11 +23,14 @@ def convert_coeff_spatial_to_spinor(C, complex=True):
     assert isinstance(C, list)
     dtype = np.complex128 if complex else np.float64
     nbf = C[0].shape[0]
-    C_2c = np.zeros((nbf * 2,) * 2, dtype=dtype)
+    nmo = C[0].shape[1]
+    C_2c = np.zeros((nbf * 2, nmo * 2), dtype=dtype)
     if len(C) == 2:
         # UHF
-        assert C[0].shape[0] == nbf
-        assert C[1].shape[0] == nbf
+        if C[1].shape[0] != nbf or C[1].shape[1] != nmo:
+            raise ValueError(
+                f"C[1] has shape {C[1].shape}, but expected ({nbf}, {nmo})."
+            )
         # |a^0_{alfa AO} b^0_{alfa AO} ... |
         # |a^0_{beta AO} b^0_{beta AO} ... |
         C_2c[:nbf, ::2] = C[0]
@@ -43,10 +44,39 @@ def convert_coeff_spatial_to_spinor(C, complex=True):
     return [C_2c]
 
 
-@dataclass
-class NonRelToRelConverter(MOsMixin, SystemMixin):
+def list_spatial_to_spinor(lst):
     """
-    A converter class to convert a non-relativistic method to a relativistic method by converting the MO coefficients to spinor basis and updating the system object.
+    Convert a list of spatial orbital objects to a list of spinor orbital objects by either duplicating each element (RHF/ROHF case) or interleaving two lists (UHF case).
+
+    Parameters
+    ----------
+    lst : list of list of objects
+        A list of lists of spatial orbital objects. The outer list is over spin (length 1 for RHF/ROHF, length 2 for UHF), and the inner lists are over nmos.
+
+    Returns
+    -------
+    list[list]
+        A list of spinor orbital objects.
+    """
+    assert isinstance(lst, list)
+    if len(lst) == 2:
+        # UHF case: interleave the two lists
+        if len(lst[0]) != len(lst[1]):
+            raise ValueError(
+                f"lst[0] has length {len(lst[0])} but lst[1] has length {len(lst[1])}."
+            )
+        lst_2c = [obj for pair in zip(lst[0], lst[1]) for obj in pair]
+    elif len(lst) == 1:
+        # RHF/ROHF case: duplicate each element
+        lst_2c = [obj for obj in lst[0] for _ in (0, 1)]
+    else:
+        raise RuntimeError(f"List of length {len(lst)} not recognized!")
+    return [lst_2c]
+
+@dataclass
+class SpatialToSpinorConverter(MOsMixin, SystemMixin):
+    """
+    A converter class to convert a spatial-orbital-based method to a spinor-based method by converting the MO coefficients to spinor basis and updating the system object.
 
     Parameters
     ----------
@@ -115,10 +145,15 @@ class NonRelToRelConverter(MOsMixin, SystemMixin):
             self.parent_method.run()
         MOsMixin.copy_from_upstream(self, self.parent_method)
         SystemMixin.copy_from_upstream(self, self.parent_method)
+        if hasattr(self.parent_method, "mo_space"):
+            self.mo_space = self.parent_method.mo_space
+
         if not self.system.two_component:
             self.C = convert_coeff_spatial_to_spinor(self.C)
-            self.irrep_labels = [l for sub in self.irrep_labels for l in (sub, sub)]
-            self.irrep_indices = [i for sub in self.irrep_indices for i in (sub, sub)]
+            self.irrep_labels = list_spatial_to_spinor(self.irrep_labels)
+            self.irrep_indices = list_spatial_to_spinor(self.irrep_indices)
+            if hasattr(self.parent_method, "mo_space"):
+                self.mo_space = self.mo_space.to_spinorbital_basis()
             self.system.two_component = True
         if self.apply_random_phase:
             nmo = self.C[0].shape[1]

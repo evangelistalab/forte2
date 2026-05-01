@@ -434,7 +434,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
         # zero out rotations between orbitals of different irreps
         if self.system.point_group.upper() != "C1":
-            _irrid = np.array(self.irrep_indices)
+            _irrid = np.array(self.irrep_indices[0])
             # equivalent to:
             # for i, j in range(nmo):
             #   if i^j != 0:

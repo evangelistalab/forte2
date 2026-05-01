@@ -1279,7 +1279,7 @@ class CISolver(CIBase):
 
         self.sub_solvers = []
         active_orbsym = [
-            [self.irrep_indices[i] for i in active_space]
+            [self.irrep_indices[0][i] for i in active_space]
             for active_space in self.mo_space.active_orbitals
         ]
         for i, state in enumerate(self.sa_info.states):
@@ -1845,7 +1845,7 @@ class RelCISolver(RelCIBase):
 
         self.sub_solvers = []
         active_orbsym = [
-            [self.irrep_indices[i] for i in active_space]
+            [self.irrep_indices[0][i] for i in active_space]
             for active_space in self.mo_space.active_orbitals
         ]
 
