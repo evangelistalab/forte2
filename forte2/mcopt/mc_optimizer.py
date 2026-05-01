@@ -8,9 +8,7 @@ from numpy.typing import NDArray
 from forte2.base_classes import (
     CIBase,
     RelCIBase,
-    SystemMixin,
-    MOsMixin,
-    MOSpaceMixin,
+    Method,
 )
 from forte2.orbitals import Semicanonicalizer
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
@@ -26,7 +24,7 @@ from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
 
 
 @dataclass
-class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
+class MCOptimizerBase(Method):
     """
     Two-step optimizer for multi-configurational wavefunctions.
 
@@ -98,9 +96,12 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             raise ValueError(
                 "final_orbital must be either 'semicanonical' or 'original'."
             )
+        
+        self.requires = {"system", "mo_coeff"}
+        self.provides = {"system", "mo_coeff", "mo_space"}
 
     def __call__(self, method):
-        self.parent_method = method
+        self._register_parent_method(method)
         # make sure we don't print the CI output at INFO1 level
         current_verbosity = logger.get_verbosity_level()
         # only log subproblem if the verbosity is higher than INFO1
@@ -114,8 +115,8 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         if not self.parent_method.executed:
             self.parent_method.run()
 
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
+        self.system = self.parent_method.system
+        self.mo_coeff = self.parent_method.mo_coeff.copy()
         # make sure to register parent_method
         self.ci_solver = self.ci_solver(self.parent_method)
         # iteration 0: one step of CI optimization to bootstrap the orbital optimization
@@ -128,7 +129,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         # i.e., [core, gas1, gas2, ..., virt]
         perm = self.mo_space.orig_to_contig
         # this is the contiguous coefficient matrix
-        self._C = self.C[0][:, perm].copy()
+        self._C = self.mo_coeff.C[0][:, perm].copy()
         # core slice does not include frozen orbitals!
         self.core = self.mo_space.docc
         # self.actv will be a list if multiple GASes are defined
@@ -325,7 +326,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
         # undo _make_spaces_contiguous
         perm = self.mo_space.contig_to_orig
-        self.C[0] = self._C[:, perm].copy()
+        self.mo_coeff.C[0] = self._C[:, perm].copy()
 
         self._post_process()
 
@@ -336,18 +337,18 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
                 mix_inactive=False,
                 mix_active=False,
             )
-            C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
+            C_contig = self.mo_coeff.C[0][:, self.mo_space.orig_to_contig].copy()
             semi.semi_canonicalize(
                 g1=self.make_average_1rdm(),
                 C_contig=C_contig,
             )
-            self.C[0] = semi.C_semican[:, self.mo_space.contig_to_orig].copy()
+            self.mo_coeff.C[0] = semi.C_semican[:, self.mo_space.contig_to_orig].copy()
 
             # recompute the CI vectors in the semicanonical basis
             if self.system.two_component:
                 ints = SpinorbitalIntegrals(
                     system=self.system,
-                    C=self.C[0],
+                    C=self.mo_coeff.C[0],
                     spinorbitals=self.mo_space.active_indices,
                     core_spinorbitals=self.mo_space.docc_indices,
                     use_aux_corr=True,
@@ -355,7 +356,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             else:
                 ints = RestrictedMOIntegrals(
                     system=self.system,
-                    C=self.C[0],
+                    C=self.mo_coeff.C[0],
                     orbitals=self.mo_space.active_indices,
                     core_orbitals=self.mo_space.docc_indices,
                     use_aux_corr=True,
@@ -387,7 +388,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             # TODO: enable AO composition for 2c
             self._print_ao_composition()
         if self.do_transition_dipole:
-            self.ci_solver.compute_transition_properties(self.C[0])
+            self.ci_solver.compute_transition_properties(self.mo_coeff.C[0])
             pretty_print_ci_transition_props(
                 self.ci_solver.sa_info,
                 self.ci_solver.transition_dipoles,
@@ -399,11 +400,11 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         basis_info = BasisInfo(self.system, self.system.basis)
         logger.log_info1("\nAO Composition of core MOs:")
         basis_info.print_ao_composition(
-            self.C[0], list(range(self.core.start, self.core.stop))
+            self.mo_coeff.C[0], list(range(self.core.start, self.core.stop))
         )
         logger.log_info1("\nAO Composition of active MOs:")
         basis_info.print_ao_composition(
-            self.C[0], list(range(self.actv.start, self.actv.stop))
+            self.mo_coeff.C[0], list(range(self.actv.start, self.actv.stop))
         )
 
     def _get_nonredundant_rotations(self):
@@ -434,7 +435,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
         # zero out rotations between orbitals of different irreps
         if self.system.point_group.upper() != "C1":
-            _irrid = np.array(self.irrep_indices[0])
+            _irrid = np.array(self.mo_coeff.irrep_indices[0])
             # equivalent to:
             # for i, j in range(nmo):
             #   if i^j != 0:

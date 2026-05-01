@@ -11,7 +11,7 @@ class CIBase(ActiveSpaceSolver):
     executed: bool = field(default=False, init=False)
 
     def __call__(self, parent_method):
-        self.parent_method = parent_method
+        self._register_parent_method(parent_method)
         return self
 
     def _collect_child_kwargs(self, target_cls):

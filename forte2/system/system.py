@@ -238,7 +238,7 @@ class System:
             ], f"x2c_type {self.x2c_type} is not supported. Use None, 'sf' or 'so'."
             self.x2c_helper = X2CHelper(self, ortho_thresh=self.ortho_thresh)
         else:
-            return
+            self.x2c_helper = None
         if self.x2c_type == "so":
             self.two_component = True
 

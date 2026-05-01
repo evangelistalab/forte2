@@ -33,6 +33,10 @@ class ROHF(SCFBase):
     _assign_orbital_symmetries = RHF._assign_orbital_symmetries
     _apply_level_shift = RHF._apply_level_shift
 
+    def __post_init__(self):
+        super().__post_init__()
+        self.two_component = False
+
     def __call__(self, system):
         system.two_component = False
         self = super().__call__(system)

@@ -52,6 +52,10 @@ class GHF(SCFBase):
     _diis_update = RHF._diis_update
     _assign_orbital_symmetries = RHF._assign_orbital_symmetries
 
+    def __post_init__(self):
+        super().__post_init__()
+        self.two_component = True
+
     def __call__(self, system):
         system.two_component = True
         if self.j_adapt:

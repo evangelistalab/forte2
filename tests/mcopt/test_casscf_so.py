@@ -125,3 +125,4 @@ def test_2c_casscf_with_uhf():
     assert (ci_solver.E[2] - ci_solver.E[1]) * EH_TO_WN == pytest.approx(
         208.52002024473313, abs=1e-2
     )
+test_2c_casscf_with_rohf()

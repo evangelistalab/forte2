@@ -27,6 +27,10 @@ class UHF(SCFBase):
     ms: float = None
     guess_mix: bool = False  # only used if ms == 0
 
+    def __post_init__(self):
+        super().__post_init__()
+        self.two_component = False
+
     def __call__(self, system):
         system.two_component = False
         self = super().__call__(system)

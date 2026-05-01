@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from forte2.base_classes import SystemMixin, MOsMixin, MOSpaceMixin, CIBase, RelCIBase
+from forte2.base_classes import Method, CIBase, RelCIBase
 from forte2.mcopt.mc_optimizer import MCOptimizerBase
 from forte2.helpers import logger
 from forte2.orbitals import Semicanonicalizer
@@ -11,7 +11,7 @@ from forte2.ci.ci_utils import pretty_print_ci_summary
 
 
 @dataclass
-class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
+class DSRGBase(Method):
     """Base class for DSRG methods."""
 
     # ci_solver: CISolver
@@ -27,11 +27,14 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
     frozen_virtual_orbitals: int | list[int] = None
 
     # Non-init attributes
-    executed: bool = field(init=False, default=False)
     converged: bool = field(init=False, default=False)
 
+    def __post_init__(self):
+        self.requires = {"system", "mo_coeff", "mo_space"}
+        self.provides = {"system", "mo_coeff", "mo_space"}
+
     def __call__(self, parent_method):
-        self.parent_method = parent_method
+        self._register_parent_method(parent_method)
         assert isinstance(
             self.parent_method, (CIBase, RelCIBase, MCOptimizerBase)
         ), "Parent method must be an instance of CIBase, RelCIBase, or MCOptimizerBase."
@@ -75,10 +78,9 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
         if not self.parent_method.executed:
             self.parent_method.run()
 
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        self.two_component = self.system.two_component
-
-        MOSpaceMixin.copy_from_upstream(self, self.parent_method)
+        self.system = self.parent_method.system
+        self.mo_coeff = self.parent_method.mo_coeff.copy()
+        self.mo_space = self.parent_method.mo_space
 
         # update the MOSpace object if frozen orbitals are specified
         if (
@@ -108,9 +110,9 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
         self.hc = self.core
         self.pv = slice(self.nact, self.nact + self.nvirt)
 
-        MOsMixin.copy_from_upstream(self, self.parent_method)
+        self.mo_coeff = self.parent_method.mo_coeff.copy()
         perm = self.mo_space.orig_to_contig
-        self._C = self.C[0][:, perm].copy()
+        self._C = self.mo_coeff.C[0][:, perm].copy()
 
         # TODO: this interface should be homogenized
         if hasattr(self.parent_method, "ci_solver"):

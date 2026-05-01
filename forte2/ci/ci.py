@@ -1271,7 +1271,7 @@ class CISolver(CIBase):
 
         ints = RestrictedMOIntegrals(
             self.system,
-            self.C[0],
+            self.mo_coeff.C[0],
             self.active_indices,
             self.core_indices,
             use_aux_corr=True,
@@ -1279,7 +1279,7 @@ class CISolver(CIBase):
 
         self.sub_solvers = []
         active_orbsym = [
-            [self.irrep_indices[0][i] for i in active_space]
+            [self.mo_coeff.irrep_indices[0][i] for i in active_space]
             for active_space in self.mo_space.active_orbitals
         ]
         for i, state in enumerate(self.sa_info.states):
@@ -1502,7 +1502,7 @@ class CISolver(CIBase):
             raise RuntimeError("CI solver has not been executed yet.")
 
         if C is None:
-            C = self.C[0]
+            C = self.mo_coeff.C[0]
 
         Cact = C[:, self.active_indices]
         Ccore = C[:, self.core_indices]
@@ -1748,14 +1748,14 @@ class CI(CISolver):
                 mo_space=self.mo_space,
                 system=self.system,
             )
-            C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
+            C_contig = self.mo_coeff.C[0][:, self.mo_space.orig_to_contig].copy()
             semi.semi_canonicalize(g1=self.make_average_1rdm(), C_contig=C_contig)
-            self.C[0] = semi.C_semican[self.mo_space.contig_to_orig].copy()
+            self.mo_coeff.C[0] = semi.C_semican[self.mo_space.contig_to_orig].copy()
 
             # recompute the CI vectors in the semicanonical basis
             ints = RestrictedMOIntegrals(
                 self.system,
-                self.C[0],
+                self.mo_coeff.C[0],
                 self.active_indices,
                 self.core_indices,
                 use_aux_corr=True,
@@ -1837,7 +1837,7 @@ class RelCISolver(RelCIBase):
 
         ints = SpinorbitalIntegrals(
             self.system,
-            self.C[0],
+            self.mo_coeff.C[0],
             self.active_indices,
             self.core_indices,
             use_aux_corr=True,
@@ -1845,7 +1845,7 @@ class RelCISolver(RelCIBase):
 
         self.sub_solvers = []
         active_orbsym = [
-            [self.irrep_indices[0][i] for i in active_space]
+            [self.mo_coeff.irrep_indices[0][i] for i in active_space]
             for active_space in self.mo_space.active_orbitals
         ]
 
@@ -1932,14 +1932,14 @@ class RelCI(RelCISolver):
                 mo_space=self.mo_space,
                 system=self.system,
             )
-            C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
+            C_contig = self.mo_coeff.C[0][:, self.mo_space.orig_to_contig].copy()
             semi.semi_canonicalize(g1=self.make_average_1rdm(), C_contig=C_contig)
-            self.C[0] = semi.C_semican[self.mo_space.contig_to_orig].copy()
+            self.mo_coeff.C[0] = semi.C_semican[self.mo_space.contig_to_orig].copy()
 
             # recompute the CI vectors in the semicanonical basis
             ints = SpinorbitalIntegrals(
                 self.system,
-                self.C[0],
+                self.mo_coeff.C[0],
                 self.active_indices,
                 self.core_indices,
                 use_aux_corr=True,
