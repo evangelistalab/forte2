@@ -415,6 +415,44 @@ class MOSpace:
             frozen_virtual_orbitals=frozen_virtual_orbitals,
         )
 
+    def to_spinorbital_basis(self):
+        nmo_2c = self.nmo * 2
+
+        frozen_core_orbitals_2c = [
+            [i * 2, i * 2 + 1] for i in self.frozen_core_orbitals
+        ]
+        # flatten
+        frozen_core_orbitals_2c = [
+            orb for sublist in frozen_core_orbitals_2c for orb in sublist
+        ]
+
+        core_orbitals_2c = [[i * 2, i * 2 + 1] for i in self.core_orbitals]
+        # flatten
+        core_orbitals_2c = [orb for sublist in core_orbitals_2c for orb in sublist]
+
+        active_orbitals_2c = []
+        for sublist in self.active_orbitals:
+            sublist_2c = [[i * 2, i * 2 + 1] for i in sublist]
+            # flatten
+            sublist_2c = [orb for subsublist in sublist_2c for orb in subsublist]
+            active_orbitals_2c.append(sublist_2c)
+
+        frozen_virtual_orbitals_2c = [
+            [i * 2, i * 2 + 1] for i in self.frozen_virtual_orbitals
+        ]
+        # flatten
+        frozen_virtual_orbitals_2c = [
+            orb for sublist in frozen_virtual_orbitals_2c for orb in sublist
+        ]
+
+        return self.__class__(
+            nmo=nmo_2c,
+            frozen_core_orbitals=frozen_core_orbitals_2c,
+            core_orbitals=core_orbitals_2c,
+            active_orbitals=active_orbitals_2c,
+            frozen_virtual_orbitals=frozen_virtual_orbitals_2c,
+        )
+
 
 @dataclass
 class EmbeddingMOSpace:

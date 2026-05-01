@@ -23,7 +23,6 @@ from forte2.helpers import logger
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.props import get_1e_property
 from forte2.orbitals import Semicanonicalizer
-from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 from .ci_utils import (
     pretty_print_gas_info,
     pretty_print_ci_summary,
@@ -1280,7 +1279,7 @@ class CISolver(CIBase):
 
         self.sub_solvers = []
         active_orbsym = [
-            [self.irrep_indices[i] for i in active_space]
+            [self.irrep_indices[0][i] for i in active_space]
             for active_space in self.mo_space.active_orbitals
         ]
         for i, state in enumerate(self.sa_info.states):
@@ -1760,7 +1759,18 @@ class CI(CISolver):
 @dataclass
 class RelCISolver(RelCIBase):
     """
-    Relativistic Configuration Interaction
+    A general two-component configuration interaction (2C-CI) solver class.
+
+    Parameters
+    ----------
+    davidson_liu_params : DavidsonLiuParams, optional
+        Parameters for the Davidson-Liu eigensolver. If not provided, default parameters are used.
+    ci_params : CIParams, optional
+        Parameters for the CI solver. If not provided, default parameters are used.
+    do_test_rdms : bool, optional, default=False
+        If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
+    log_level : int, optional
+        The logging level for the CI solver. Defaults to the global logger's verbosity level.
     """
 
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
@@ -1788,9 +1798,6 @@ class RelCISolver(RelCIBase):
 
     def _startup(self):
         super()._startup()
-        if not self.system.two_component:
-            self.C = convert_coeff_spatial_to_spinor(self.C)
-            self.system.two_component = True
 
         self.norb = self.mo_space.nactv
         # no distinction between core and frozen core in the CI solver
@@ -1809,7 +1816,7 @@ class RelCISolver(RelCIBase):
 
         self.sub_solvers = []
         active_orbsym = [
-            [self.irrep_indices[i] for i in active_space]
+            [self.irrep_indices[0][i] for i in active_space]
             for active_space in self.mo_space.active_orbitals
         ]
 
