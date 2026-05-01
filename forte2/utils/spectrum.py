@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Literal
 from numpy.typing import NDArray
+from forte2.data import EH_TO_EV
 
 
 def convolution(
@@ -11,6 +12,7 @@ def convolution(
     convolution_type: Literal["lorentzian", "gaussian"] = "lorentzian",
     npts: int = 10000,
     return_as_components: bool = False,
+    normalize: bool = True,
 ):
     """
     Calculate spectrum convolution for pairs of vertical transition energy and oscillator strengths.
@@ -45,7 +47,7 @@ def convolution(
         The spectrum convolution.
     """
 
-    vte_arr = np.asarray(vte, dtype=float)
+    vte_arr = np.asarray(vte, dtype=float) * EH_TO_EV
     fosc_arr = np.asarray(fosc, dtype=float)
 
     try:
@@ -100,15 +102,19 @@ def convolution(
             f"Invalid convolution algorithm {convolution_type!r}. Expected 'lorentzian' or 'gaussian'."
         )
 
-    if not return_as_components:
+    if return_as_components:
+        spectrum = spectrum.T
+    else:
         spectrum = spectrum.sum(axis=0)
+
+    if normalize:
+        spectrum = spectrum / np.max(spectrum)
 
     return x_axis, spectrum
 
 
 if __name__ == "__main__":
     from forte2.system import System
-    from forte2.data import EH_TO_EV
     from forte2.scf import RHF
     from forte2.ci import CISolver
     from forte2.state import State
@@ -143,10 +149,15 @@ if __name__ == "__main__":
     vte = list(ci_solver.vertical_transition_energies.values())[1:5]
     fosc = list(ci_solver.oscillator_strengths.values())[1:5]
 
-    vte_eV = np.array(vte) * EH_TO_EV
+    for a in [True, False]:
+        for b in [True, False]:
+            spectrum_range, spectrum_convolution = convolution(
+                vte, fosc, return_as_components=a, normalize=b
+            )
 
-    spectrum_range, spectrum_convolution = convolution(vte_eV, fosc)
-
-    plt.plot(spectrum_range, spectrum_convolution)
-    plt.savefig(f"spectrum_convolution_H2O.pdf", bbox_inches="tight")
-    plt.show()
+            plt.plot(spectrum_range, spectrum_convolution)
+            plt.savefig(
+                f"spectrum_convolution_H2O_return_as_components_{a}_normalize_{b}.pdf",
+                bbox_inches="tight",
+            )
+            plt.show()
