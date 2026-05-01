@@ -44,7 +44,6 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
     num_active : int, optional, default=0
         Total number of active orbitals. Again, this is on top of any singly occupied orbitals if an ROHF reference is used.
 
-
     Notes
     -----
     The allow subspace specification is a list of strings, non-exhaustive examples::
@@ -373,10 +372,13 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
                 "The eigenvalues of the projected overlap matrix will be used to select the AVAS orbitals."
             )
             U = np.zeros((self.nmo, self.nmo), dtype=self.dtype)
+            # smallest to largest eigenvalues for occupied
             s_docc, Udocc = np.linalg.eigh(CpsC[docc_sl, docc_sl])
             U[docc_sl, docc_sl] = Udocc
             s_uocc, Uuocc = np.linalg.eigh(CpsC[uocc_sl, uocc_sl])
-            U[uocc_sl, uocc_sl] = Uuocc
+            # largest to smallest eigenvalues for virtual
+            s_uocc = s_uocc[::-1]
+            U[uocc_sl, uocc_sl] = Uuocc[:, ::-1]
             sigma_type = "eigen"
         else:
             logger.log_info1(
@@ -488,12 +490,15 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
         logger.log_info1("=" * 25)
         logger.log_info1(f"{'# ^':<5} {sigma_type+' *':<12} {'occ':<6}")
         logger.log_info1("-" * 25)
-        for i in act_docc:
-            logger.log_info1(f"{i:<5d} {s_docc[i]:<12.6f} {'2':<6}")
+        for i in act_uocc[::-1]:
+            logger.log_info1(f"{i:<5d} {s_uocc[i - ndocc - nsocc]:<12.6f} {'0':<6}")
+        logger.log_info1("-" * 25)
         for i in range(ndocc, ndocc + nsocc):
             logger.log_info1(f"{i:<5d} {'-':<12} {'1 **':<6}")
-        for i in act_uocc:
-            logger.log_info1(f"{i:<5d} {s_uocc[i - ndocc - nsocc]:<12.6f} {'0':<6}")
+        if nsocc > 0:
+            logger.log_info1("-" * 25)
+        for i in act_docc:
+            logger.log_info1(f"{i:<5d} {s_docc[i]:<12.6f} {'2':<6}")
         logger.log_info1("=" * 25)
         logger.log_info1(
             "^ These indices are internal to the re-sorted AVAS orbitals, and may not correspond to the original MOs."
