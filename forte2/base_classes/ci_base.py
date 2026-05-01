@@ -47,6 +47,10 @@ class RelCIBase(RelActiveSpaceSolver):
 
     def _startup(self):
         super()._startup(two_component=True)
+        if not self.system.two_component:
+            raise ValueError(
+                "RelCISolver requires a two-component system. Please use a parent method that can provide a two-component wavefunction."
+            )
 
     @abstractmethod
     def run(self, use_asym_ints=False): ...
