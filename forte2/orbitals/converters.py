@@ -75,7 +75,7 @@ def list_spatial_to_spinor(lst):
 
 
 @dataclass
-class SpatialToSpinorConverter(MOsMixin, SystemMixin):
+class SpinorUpcaster(MOsMixin, SystemMixin):
     """
     A converter class to convert a spatial-orbital-based method to a spinor-based method by converting the MO coefficients to spinor basis and updating the system object.
 

@@ -16,7 +16,7 @@ from .orbitals import (
     Cube,
     ASET,
     write_orbital_cubes,
-    SpatialToSpinorConverter,
+    SpinorUpcaster,
 )
 from .mcopt import MCOptimizer
 from .props import get_1e_property, mulliken_population

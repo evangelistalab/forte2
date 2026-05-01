@@ -9,7 +9,7 @@ from forte2 import (
     CISolver,
     RelCI,
     RelCISolver,
-    SpatialToSpinorConverter,
+    SpinorUpcaster,
 )
 from forte2.data import EH_TO_WN
 
@@ -38,7 +38,7 @@ def test_casscf_so():
         nroots=3,
     )
     mc = MCOptimizer(ci_solver)(avas)
-    conv = SpatialToSpinorConverter(
+    conv = SpinorUpcaster(
         x2c_type_override="so",
         snso_type_override="row-dependent",
     )(mc)
@@ -76,7 +76,7 @@ def test_2c_casscf_with_rohf():
         num_active_uocc=0,
         subspace=["F(2s)", "F(2p)"],
     )(rhf)
-    conv = SpatialToSpinorConverter(
+    conv = SpinorUpcaster(
         x2c_type_override="so",
         snso_type_override="row-dependent",
     )(avas)
@@ -109,7 +109,7 @@ def test_2c_casscf_with_uhf():
     )
 
     uhf = UHF(charge=0, ms=0.5)(system)
-    conv = SpatialToSpinorConverter(
+    conv = SpinorUpcaster(
         x2c_type_override="so",
         snso_type_override="row-dependent",
     )(uhf)
