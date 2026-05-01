@@ -55,6 +55,28 @@ class MO:
                 raise ValueError(
                     f"Length of irrep_labels[{i}] and irrep_indices[{i}] must match number of MOs ({self.nmo}), but got {len(labels)} and {len(indices)}."
                 )
+            
+    @property
+    def Ca(self):
+        if self.spinorbital:
+            raise ValueError("Ca is not defined for generalized MO objects.")
+        return self.C[0]
+    
+    @property
+    def Cb(self):
+        if self.spinorbital:
+            raise ValueError("Cb is not defined for generalized MO objects.")
+        if self.restricted:
+            return self.C[0]
+        else:
+            return self.C[1]
+        
+    @property
+    def Cso(self):
+        if not self.spinorbital:
+            raise ValueError("Cso is only defined for generalized MO objects.")
+        return self.C[0]
+
 
     def copy(self):
         return self.__class__(
