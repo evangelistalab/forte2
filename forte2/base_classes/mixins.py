@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from forte2.helpers import logger
 
 
 @dataclass
@@ -23,6 +24,7 @@ class MOsMixin:
         ), "upstream must have an 'irrep_labels' attribute"
         # copy each matrix
         if only_alpha:
+            logger.log_warning("Only copying alpha MOs from upstream method!")
             new.C = [upstream.C[0].copy()]
             new.irrep_indices = [upstream.irrep_indices[0].copy()]
             new.irrep_labels = [upstream.irrep_labels[0].copy()]
