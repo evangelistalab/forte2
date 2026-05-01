@@ -142,18 +142,19 @@ if __name__ == "__main__":
     gs = State(nel=10, multiplicity=1, ms=0.0, gas_min=[0], gas_max=[2])
     cex = State(nel=10, multiplicity=1, ms=0.0, gas_min=[0], gas_max=[1])
 
-    rhf = RHF(charge=0, e_tol=1e-14, d_tol=1e-8)(system)
+    rhf = RHF(charge=0)(system)
     ci_solver = CISolver(
         nroots=[1, 4],
         weights=[[0], [1, 1, 1, 1]],
         active_orbitals=[[0], [1, 2, 3, 4, 5, 6]],
         states=[gs, cex],
     )
-    mc = MCOptimizer(
-        ci_solver, maxiter=300, active_frozen_orbitals=[0], do_transition_dipole=True
-    )(rhf)
+    mc = MCOptimizer(ci_solver, active_frozen_orbitals=[0], do_transition_dipole=True)(
+        rhf
+    )
     mc.run()
 
+    # select transitions properties between state 0 and states 1, 2, 3 4
     vte = list(ci_solver.vertical_transition_energies.values())[1:5]
     fosc = list(ci_solver.oscillator_strengths.values())[1:5]
 
