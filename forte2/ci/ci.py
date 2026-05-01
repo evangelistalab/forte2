@@ -14,6 +14,7 @@ from forte2 import (
     apply_op,
     sparse_operator_hamiltonian,
 )
+from forte2.data.atom_data import EH_TO_EV
 from forte2.state import State, MOSpace
 from forte2.helpers.comparisons import approx
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
@@ -1482,7 +1483,7 @@ class CISolver(CIBase):
 
     def compute_transition_properties(self, C=None):
         """
-        Compute the transition dipole moments and oscillator strengths from the spin-free 1-TDMs.
+        Compute the transition dipole moments, oscillator strengths, and vertical transition energies from the spin-free 1-TDMs.
         The results are stored in `self.transition_dipoles` and `self.oscillator_strengths`.
 
         Parameters
@@ -1498,6 +1499,9 @@ class CISolver(CIBase):
         oscillator_strengths : dict[tuple[int, int], float]
             A dictionary mapping pairs of CI roots (absolute_root_i, absolute_root_j) to their oscillator strengths.
             This is also saved in `self.oscillator_strengths`.
+        vertical_transition_energies : dict[tuple[int, int], float]
+            A dictionary mapping pairs of CI roots (absolute_root_i, absolute_root_j) to their vertical transition energies.
+            This is also saved in `self.vertical_transition_energies`.
         """
         if not self.executed:
             raise RuntimeError("CI solver has not been executed yet.")
@@ -1515,6 +1519,7 @@ class CISolver(CIBase):
         )
         self.transition_dipoles = OrderedDict()
         self.oscillator_strengths = OrderedDict()
+        self.vertical_transition_energies = OrderedDict()
         for ici in range(self.sa_info.nroots_sum):
             istate, iroot_in_state = self._get_state_root(ici)
             rdm = self.sub_solvers[istate].make_1rdm(iroot_in_state)
@@ -1526,8 +1531,9 @@ class CISolver(CIBase):
                 self.system, rdm, property_name="electric_dipole", unit="au"
             )
             self.transition_dipoles[(ici, ici)] = dip + core_dip
-            # No oscillator strength for i->i transitions
+            # No oscillator strength or vetical transition energy for i->i transitions
             self.oscillator_strengths[(ici, ici)] = 0.0
+            self.vertical_transition_energies[(ici, ici)] = 0.0
             for jci in range(ici + 1, self.sa_info.nroots_sum):
                 jstate, jroot_in_state = self._get_state_root(jci)
                 try:
@@ -1535,7 +1541,7 @@ class CISolver(CIBase):
                         self.evals_per_solver[jstate][jroot_in_state]
                         - self.evals_per_solver[istate][iroot_in_state]
                     )
-                    # Reverse the order of states for negative VTE to ensure the transition dipole 
+                    # Reverse the order of states for negative VTE to ensure the transition dipole
                     # is always computed from lower to higher state.
                     if vte < 0:
                         _ici, _jci = jci, ici
@@ -1553,13 +1559,18 @@ class CISolver(CIBase):
                     self.oscillator_strengths[(_ici, _jci)] = (
                         (2 / 3) * vte * np.linalg.norm(tdip) ** 2
                     )
+                    self.vertical_transition_energies[(_ici, _jci)] = vte
                 except (ValueError, NotImplementedError):
                     # ValueError: for non-relativistic CI if the two states have different na and nb,
                     #   and thus cross-state RDMs are not supported.
                     # NotImplementedError: for two-component CI, cross-state RDMs are not implemented yet.
                     continue
 
-        return self.transition_dipoles, self.oscillator_strengths
+        return (
+            self.transition_dipoles,
+            self.oscillator_strengths,
+            self.vertical_transition_energies,
+        )
 
     def get_convergence_status(self):
         """
