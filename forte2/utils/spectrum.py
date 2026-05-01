@@ -35,9 +35,11 @@ def convolution(
     return_as_components : bool
         If True, return the individual convolution components for each
         vertical transition energy / oscillator strength pair as rows in a
-        two-dimensional array with shape ``(len(vte), npts)``. If False,
+        two-dimensional array with shape ``(npts, len(vte))``. If False,
         return the summed spectrum as a one-dimensional array with shape
         ``(npts,)``.
+    normalize : bool
+        If True, normalize convolution curve.
 
     Returns
     -------
@@ -70,6 +72,12 @@ def convolution(
     if vte_arr.shape != fosc_arr.shape:
         raise ValueError(
             f"Parameters vte and fosc must have same shape, got {vte_arr.shape} and {fosc_arr.shape}."
+        )
+
+    thrs = 1e-4
+    if (np.max(fosc_arr) < thrs) and normalize:
+        raise ValueError(
+            f"Cannot normalize convolution, no oscillator strength with magnitude greater than {thrs} found."
         )
 
     if bounds is None:

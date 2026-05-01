@@ -14,7 +14,6 @@ from forte2 import (
     apply_op,
     sparse_operator_hamiltonian,
 )
-from forte2.data.atom_data import EH_TO_EV
 from forte2.state import State, MOSpace
 from forte2.helpers.comparisons import approx
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
