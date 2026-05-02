@@ -85,6 +85,14 @@ void export_determinant_api(nb::module_& m) {
             "slater_sign", [](const Determinant& d, size_t n) { return d.slater_sign(n); },
             "Get the sign of the Slater determinant")
         .def(
+            "slater_sign_aa",
+            [](const Determinant& d, int n, int m) { return d.slater_sign_aa(n, m); },
+            "n"_a, "m"_a, "Get the alpha-alpha pair sign of the Slater determinant")
+        .def(
+            "slater_sign_bb",
+            [](const Determinant& d, int n, int m) { return d.slater_sign_bb(n, m); },
+            "n"_a, "m"_a, "Get the beta-beta pair sign of the Slater determinant")
+        .def(
             "slater_sign_reverse",
             [](const Determinant& d, size_t n) { return d.slater_sign_reverse(n); },
             "Get the sign of the Slater determinant")
@@ -103,6 +111,11 @@ void export_determinant_api(nb::module_& m) {
     m.def(
         "spin2", [](const Determinant& d1, const Determinant& d2) { return spin2(d1, d2); },
         "Compute the S^2 value between two determinants");
+
+    m.def(
+        "ui64_find_highest_one_bit",
+        [](uint64_t x) { return ui64_find_highest_one_bit(x); }, "x"_a,
+        "Find the highest set bit in a 64-bit word");
 }
 
 void export_configuration_api(nb::module_& m) {

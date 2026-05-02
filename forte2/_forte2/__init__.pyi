@@ -546,6 +546,12 @@ class Determinant:
     def slater_sign(self, arg: int, /) -> float:
         """Get the sign of the Slater determinant"""
 
+    def slater_sign_aa(self, n: int, m: int) -> float:
+        """Get the alpha-alpha pair sign of the Slater determinant"""
+
+    def slater_sign_bb(self, n: int, m: int) -> float:
+        """Get the beta-beta pair sign of the Slater determinant"""
+
     def slater_sign_reverse(self, arg: int, /) -> float:
         """Get the sign of the Slater determinant"""
 
@@ -561,6 +567,9 @@ class Determinant:
 @overload
 def spin2(arg0: Determinant, arg1: Determinant, /) -> float:
     """Compute the S^2 value between two determinants"""
+
+def ui64_find_highest_one_bit(x: int) -> int:
+    """Find the highest set bit in a 64-bit word"""
 
 @overload
 def spin2(arg0: SparseState, arg1: SparseState, /) -> complex:
@@ -1118,6 +1127,9 @@ class SQOperatorString:
     def ann(self) -> Determinant:
         """Get the annihilation operator string"""
 
+    def sign_mask(self) -> Determinant:
+        """Get the precomputed sign mask"""
+
     def str(self) -> str:
         """Get the string representation of the operator string"""
 
@@ -1172,6 +1184,11 @@ class SQOperatorString:
 def sqop(s: str, allow_reordering: bool = False) -> tuple[SQOperatorString, float]:
     """
     Create an operator string from a string representation (default: no not allow reordering)
+    """
+
+def compute_sign_mask_fast(cre: Determinant, ann: Determinant) -> Determinant:
+    """
+    Compute the sign mask associated with a set of creation and annihilation operators
     """
 
 class CommutatorType(enum.Enum):

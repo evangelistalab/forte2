@@ -1,5 +1,33 @@
 from forte2 import Determinant
 
+PARITY_ALPHA_OCC = (0, 1, 5, 17, 62, 63)
+PARITY_BETA_OCC = (0, 3, 11, 31, 62, 63)
+PARITY_TEST_INDICES = (0, 1, 5, 17, 62, 63, 64, 65, 67, 95, 126, 127)
+PAIR_ALPHA_OCC = (0, 1, 5, 17, 31, 62, 63)
+PAIR_BETA_OCC = (0, 3, 11, 31, 47, 62, 63)
+
+
+def _det_with_occupations(alpha_occ, beta_occ):
+    d = Determinant.zero()
+    for i in alpha_occ:
+        d.set_na(i, True)
+    for i in beta_occ:
+        d.set_nb(i, True)
+    return d
+
+
+def _spin_occupation(d, i):
+    if i < Determinant.maxnorb:
+        return d.na(i)
+    return d.nb(i - Determinant.maxnorb)
+
+
+def _expected_interval_sign(occ, n, m):
+    lo = min(n, m)
+    hi = max(n, m)
+    count = sum(i in occ for i in range(lo + 1, hi))
+    return 1 if count % 2 == 0 else -1
+
 
 def test_determinant():
     # Test the determinant class initialization with the zero static method
@@ -202,6 +230,53 @@ def test_det_slater_sign():
     assert d.slater_sign_reverse(4) == -1
     assert d.slater_sign_reverse(5) == 1
     assert d.slater_sign_reverse(6) == 1
+
+
+def test_det_slater_sign_matches_naive_parity():
+    """Test Slater signs against a direct occupation count."""
+
+    d = _det_with_occupations(PARITY_ALPHA_OCC, PARITY_BETA_OCC)
+
+    for i in PARITY_TEST_INDICES:
+        count = sum(_spin_occupation(d, j) for j in range(i))
+        expected = 1 if count % 2 == 0 else -1
+        assert d.slater_sign(i) == expected
+
+
+def test_det_slater_sign_reverse_matches_naive_parity():
+    """Test reverse Slater signs against a direct occupation count."""
+
+    d = _det_with_occupations(PARITY_ALPHA_OCC, PARITY_BETA_OCC)
+
+    for i in PARITY_TEST_INDICES:
+        count = sum(
+            _spin_occupation(d, j) for j in range(i + 1, 2 * Determinant.maxnorb)
+        )
+        expected = 1 if count % 2 == 0 else -1
+        assert d.slater_sign_reverse(i) == expected
+
+
+def test_det_pair_slater_sign_matches_naive_interval_parity():
+    """Test pair Slater signs against direct interval occupation counts."""
+
+    d = _det_with_occupations(PAIR_ALPHA_OCC, PAIR_BETA_OCC)
+
+    pairs = [
+        (0, 0),
+        (0, 1),
+        (0, 2),
+        (1, 5),
+        (5, 1),
+        (0, 63),
+        (63, 0),
+        (62, 63),
+        (17, 62),
+        (31, 63),
+    ]
+
+    for n, m in pairs:
+        assert d.slater_sign_aa(n, m) == _expected_interval_sign(PAIR_ALPHA_OCC, n, m)
+        assert d.slater_sign_bb(n, m) == _expected_interval_sign(PAIR_BETA_OCC, n, m)
 
 
 def test_spin_flip():

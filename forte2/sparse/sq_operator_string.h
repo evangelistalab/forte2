@@ -195,4 +195,7 @@ std::vector<std::pair<SQOperatorString, double>> commutator_fast(const SQOperato
 void compute_sign_mask(const Determinant& cre, const Determinant& ann, Determinant& sign_mask,
                        Determinant& idx);
 
+// Compute the sign mask using a suffix parity scan of the operator mask
+void compute_sign_mask_fast(const Determinant& cre, const Determinant& ann, Determinant& sign_mask);
+
 } // namespace forte2

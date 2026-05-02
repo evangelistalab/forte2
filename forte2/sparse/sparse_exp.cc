@@ -71,13 +71,12 @@ SparseState SparseFactExp::apply_op(const SparseOperatorList& sop, const SparseS
 
     Determinant new_det;
     Determinant sign_mask;
-    Determinant idx;
     for (size_t m = 0, nterms = sop.size(); m < nterms; m++) {
         size_t n = (inverse ^ reverse) ? nterms - m - 1 : m;
         const auto& [sqop, coefficient] = sop(n);
         bool is_idempotent = !sqop.is_nilpotent();
 
-        compute_sign_mask(sqop.cre(), sqop.ann(), sign_mask, idx);
+        compute_sign_mask_fast(sqop.cre(), sqop.ann(), sign_mask);
         const auto t = (inverse ? -1.0 : 1.0) * coefficient;
         const auto screen_thresh_div_t = screen_thresh_ / std::abs(t);
         // loop over all determinants
@@ -114,14 +113,13 @@ SparseState SparseFactExp::apply_antiherm(const SparseOperatorList& sop, const S
 
     Determinant new_det;
     Determinant sign_mask;
-    Determinant idx;
     for (size_t m = 0, nterms = sop.size(); m < nterms; m++) {
         size_t n = (inverse ^ reverse) ? nterms - m - 1 : m;
 
         const auto& [sqop, coefficient] = sop(n);
         bool is_idempotent = !sqop.is_nilpotent();
 
-        compute_sign_mask(sqop.cre(), sqop.ann(), sign_mask, idx);
+        compute_sign_mask_fast(sqop.cre(), sqop.ann(), sign_mask);
         const auto t = (inverse ? -1.0 : 1.0) * coefficient;
         const auto screen_thresh_div_t = screen_thresh_ / std::abs(t);
         // loop over all determinants
@@ -169,7 +167,6 @@ SparseFactExp::apply_antiherm_deriv(const SQOperatorString& sqop, const sparse_s
 
     Determinant new_det;
     Determinant sign_mask;
-    Determinant idx;
     if (not sqop.is_nilpotent()) {
         std::string msg = "apply_antiherm_deriv is implemented only for nilpotent operators."
                           "Operator " +
@@ -177,7 +174,7 @@ SparseFactExp::apply_antiherm_deriv(const SQOperatorString& sqop, const sparse_s
         throw std::runtime_error(msg);
     }
 
-    compute_sign_mask(sqop.cre(), sqop.ann(), sign_mask, idx);
+    compute_sign_mask_fast(sqop.cre(), sqop.ann(), sign_mask);
 
     const auto tabs = std::abs(t);
     const auto sint = std::sin(tabs);

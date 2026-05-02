@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <bit>
+#include <cstdint>
 #include <numeric>
 #include <regex>
 
@@ -32,8 +34,7 @@ SQOperatorString::SQOperatorString() {}
 
 SQOperatorString::SQOperatorString(const Determinant& cre, const Determinant& ann)
     : cre_(cre), ann_(ann) {
-    Determinant temp = Determinant::zero();
-    compute_sign_mask(cre_, ann_, sign_mask_, temp);
+    compute_sign_mask_fast(cre_, ann_, sign_mask_);
 }
 
 SQOperatorString::SQOperatorString(const std::vector<size_t>& acre, const std::vector<size_t>& bcre,
@@ -41,8 +42,7 @@ SQOperatorString::SQOperatorString(const std::vector<size_t>& acre, const std::v
                                    const std::vector<size_t>& bann) {
     cre_ = Determinant(acre, bcre);
     ann_ = Determinant(aann, bann);
-    Determinant temp = Determinant::zero();
-    compute_sign_mask(cre_, ann_, sign_mask_, temp);
+    compute_sign_mask_fast(cre_, ann_, sign_mask_);
 }
 
 SQOperatorString::SQOperatorString(const std::initializer_list<size_t> acre,
@@ -51,8 +51,7 @@ SQOperatorString::SQOperatorString(const std::initializer_list<size_t> acre,
                                    const std::initializer_list<size_t> bann) {
     cre_ = Determinant(acre, bcre);
     ann_ = Determinant(aann, bann);
-    Determinant temp = Determinant::zero();
-    compute_sign_mask(cre_, ann_, sign_mask_, temp);
+    compute_sign_mask_fast(cre_, ann_, sign_mask_);
 }
 
 const Determinant& SQOperatorString::cre() const { return cre_; }
@@ -330,6 +329,9 @@ void process_cre(const SQOperatorString& lhs, const SQOperatorString& rhs,
 
     // find the first right alpha creation operator to move
     auto i = rhs.cre().find_first_one();
+    if (i == ui64_bit_not_found) {
+        return;
+    }
     // remove the operator from the right
     // if a corresponding left annihilation operator exists, permute the operators and
     // introduce a contraction
@@ -376,6 +378,9 @@ void process_ann(const SQOperatorString& lhs, const SQOperatorString& rhs,
 
     // find the last right annihilation operator to move
     auto i = rhs.ann().find_last_one();
+    if (i == ui64_bit_not_found) {
+        return;
+    }
     // if the left annihilation operator does not exist, move the operator in place
     // otherwise we get a collision and the operator is removed
     if (lhs.ann().get_bit(i) == false) {
@@ -584,7 +589,7 @@ void SQOperatorProductComputer::product(
         phase_ *= ((lhs_ann_.count_all() * ucon_rhs_cre_.count_all()) % 2) == 0 ? 1.0 : -1.0;
         // 1.b move the uncontracted rhs creation operators to the left creation ops
         // double cre_perm_phase = (lhs_cre_.count_all() % 2) == 0 ? 1.0 : -1.0;
-        for (size_t i = ucon_rhs_cre_.fast_find_and_clear_first_one(0); i != ~0ULL;
+        for (size_t i = ucon_rhs_cre_.fast_find_and_clear_first_one(0); i != ui64_bit_not_found;
              i = ucon_rhs_cre_.fast_find_and_clear_first_one(i)) {
             // remove op i and find the sign for permuting it to the left of the right creation ops
             rhs_cre_.set_bit(i, false);
@@ -599,7 +604,7 @@ void SQOperatorProductComputer::product(
     // 2.a phase adjustment due to permutation of the operator with right creation ops
     if (const auto ucon_rhs_ann_count = ucon_rhs_ann_.count_all(); ucon_rhs_ann_count > 0) {
         phase_ *= ((rhs_cre_.count_all() * ucon_rhs_ann_count) % 2) == 0 ? 1.0 : -1.0;
-        for (size_t i = ucon_rhs_ann_.fast_find_and_clear_first_one(0); i != ~0ULL;
+        for (size_t i = ucon_rhs_ann_.fast_find_and_clear_first_one(0); i != ui64_bit_not_found;
              i = ucon_rhs_ann_.fast_find_and_clear_first_one(i)) {
             // remove op i and find the sign for permuting it with the right creation ops
             rhs_ann_.set_bit(i, false);
@@ -620,7 +625,7 @@ void SQOperatorProductComputer::product(
         rhs_ann_ -= rhs_comm_trivial_; // remove the trivially contracted operators from the right
         ucon_rhs_cre_ = rhs_cre_;      // now this holds the operators that need to be contracted
         // adjust the phase due to the trivial contractions
-        for (size_t i = rhs_comm_trivial_.fast_find_and_clear_first_one(0); i != ~0ULL;
+        for (size_t i = rhs_comm_trivial_.fast_find_and_clear_first_one(0); i != ui64_bit_not_found;
              i = rhs_comm_trivial_.fast_find_and_clear_first_one(i)) {
             phase_ *= rhs_cre_.slater_sign_reverse(i) * rhs_ann_.slater_sign_reverse(i);
         }
@@ -635,7 +640,7 @@ void SQOperatorProductComputer::product(
         rhs_cre_ -= lhs_comm_trivial_;
         lhs_ann_ -= lhs_comm_trivial_;
         // ops adjust the phase due to the trivial contractions
-        for (size_t i = lhs_comm_trivial_.fast_find_and_clear_first_one(0); i != ~0ULL;
+        for (size_t i = lhs_comm_trivial_.fast_find_and_clear_first_one(0); i != ui64_bit_not_found;
              i = lhs_comm_trivial_.fast_find_and_clear_first_one(i)) {
             phase_ *= lhs_ann_.slater_sign(i) * rhs_cre_.slater_sign(i);
         }
@@ -656,7 +661,7 @@ void SQOperatorProductComputer::product(
     // adjustment to move them to the left and form pairs with the left annihilation operators
     ucon_rhs_cre_ = rhs_cre_; // now this holds the operators that need to be contracted
     // NOTE: this was not checked yet
-    for (size_t i = ucon_rhs_cre_.fast_find_and_clear_first_one(0); i != ~0ULL;
+    for (size_t i = ucon_rhs_cre_.fast_find_and_clear_first_one(0); i != ui64_bit_not_found;
          i = ucon_rhs_cre_.fast_find_and_clear_first_one(i)) {
         phase_ *= lhs_ann_.slater_sign(i) * rhs_cre_.slater_sign(i);
     }
@@ -705,14 +710,27 @@ void compute_sign_mask(const Determinant& cre, const Determinant& ann, Determina
                        Determinant& idx) {
     sign_mask.clear();
     idx = ann; // temp is for looping over the operators
-    for (size_t i = idx.fast_find_and_clear_first_one(0); i != ~0ULL;
+    for (size_t i = idx.fast_find_and_clear_first_one(0); i != ui64_bit_not_found;
          i = idx.fast_find_and_clear_first_one(i)) {
         sign_mask.xor_up_to(i);
     }
     idx = cre;
-    for (size_t i = idx.fast_find_and_clear_first_one(0); i != ~0ULL;
+    for (size_t i = idx.fast_find_and_clear_first_one(0); i != ui64_bit_not_found;
          i = idx.fast_find_and_clear_first_one(i)) {
         sign_mask.xor_up_to(i);
+    }
+}
+
+void compute_sign_mask_fast(const Determinant& cre, const Determinant& ann,
+                            Determinant& sign_mask) {
+    bool higher_word_parity = false;
+    for (size_t n = Determinant::nwords_; n-- > 0;) {
+        const uint64_t ops = cre.words_[n] ^ ann.words_[n];
+        sign_mask.words_[n] = ui64_exclusive_suffix_xor(ops);
+        if (higher_word_parity) {
+            sign_mask.words_[n] = ~sign_mask.words_[n];
+        }
+        higher_word_parity ^= static_cast<bool>(std::popcount(ops) & 1);
     }
 }
 

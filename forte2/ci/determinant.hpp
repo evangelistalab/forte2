@@ -540,17 +540,17 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
 
     /// Find the index of the first beta bit set to 1 (spatial orbital index)
     uint64_t find_first_one_beta() const {
-        if (auto res = find_first_one(nwords_half, nwords_); res != ~uint64_t(0))
+        if (auto res = find_first_one(nwords_half, nwords_); res != ui64_bit_not_found)
             return res - norb();
-        return ~uint64_t(0);
+        return ui64_bit_not_found;
     }
 
     uint64_t find_last_one_alfa() const { return find_last_one(0, nwords_half); }
 
     uint64_t find_last_one_beta() const {
-        if (auto res = find_last_one(nwords_half, nwords_); res != ~uint64_t(0))
+        if (auto res = find_last_one(nwords_half, nwords_); res != ui64_bit_not_found)
             return res - norb();
-        return ~uint64_t(0);
+        return ui64_bit_not_found;
     }
 
     /// Return the number of alpha/beta pairs

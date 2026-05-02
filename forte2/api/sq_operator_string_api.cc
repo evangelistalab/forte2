@@ -17,6 +17,7 @@ void export_sq_operator_string_api(nb::module_& m) {
         .def(nb::init<const Determinant&, const Determinant&>())
         .def("cre", &SQOperatorString::cre, "Get the creation operator string")
         .def("ann", &SQOperatorString::ann, "Get the annihilation operator string")
+        .def("sign_mask", &SQOperatorString::sign_mask, "Get the precomputed sign mask")
         .def("str", &SQOperatorString::str, "Get the string representation of the operator string")
         .def("count", &SQOperatorString::count, "Get the number of operators")
         .def("adjoint", &SQOperatorString::adjoint, "Get the adjoint operator string")
@@ -66,6 +67,16 @@ void export_sq_operator_string_api(nb::module_& m) {
         "s"_a, "allow_reordering"_a = false,
         "Create an operator string from a string representation (default: no not allow "
         "reordering)");
+
+    m.def(
+        "compute_sign_mask_fast",
+        [](const Determinant& cre, const Determinant& ann) {
+            Determinant sign_mask = Determinant::zero();
+            compute_sign_mask_fast(cre, ann, sign_mask);
+            return sign_mask;
+        },
+        "cre"_a, "ann"_a,
+        "Compute the sign mask associated with a set of creation and annihilation operators");
 
     nb::enum_<CommutatorType>(m, "CommutatorType")
         .value("commute", CommutatorType::Commute)
