@@ -1,24 +1,104 @@
 #include "slater_rules.h"
 
-#include <stdexcept>
+#include <array>
+#include <bit>
+#include <cstdint>
 
 namespace {
 
-std::size_t checked_norb(int norb) {
-    if (norb < 0) {
-        throw std::invalid_argument("SlaterRules: norb must be non-negative.");
+/// Holds the orbital differences between two determinants, restricted to the active
+/// spatial-orbital range used by this SlaterRules object.
+///
+/// The *_lhs_only strings contain occupied orbitals in lhs that are unoccupied in rhs.
+/// The *_rhs_only strings contain the matching occupied orbitals in rhs. These are the
+/// annihilation and creation orbital sets needed to connect rhs to lhs. The *_common
+/// strings contain orbitals occupied in both determinants and are used in single-excitation
+/// contractions.
+struct ExcitationWords {
+    forte2::String a_lhs_only = forte2::String::zero();
+    forte2::String a_rhs_only = forte2::String::zero();
+    forte2::String b_lhs_only = forte2::String::zero();
+    forte2::String b_rhs_only = forte2::String::zero();
+    forte2::String a_common = forte2::String::zero();
+    forte2::String b_common = forte2::String::zero();
+    int na_lhs_only = 0;
+    int na_rhs_only = 0;
+    int nb_lhs_only = 0;
+    int nb_rhs_only = 0;
+};
+
+/// Return a word mask that keeps only spatial orbitals below norb.
+///
+/// Determinants can store more orbitals than a given SlaterRules active space. This mask lets
+/// the excitation analysis ignore bits outside the integral arrays without mutating either input
+/// determinant. For full words inside the active space the mask is all ones; for words beyond the
+/// active space it is zero.
+std::uint64_t active_word_mask(std::size_t word_idx, std::size_t norb) {
+    constexpr auto bits_per_word = forte2::Determinant::bits_per_word;
+    const std::size_t first_bit = word_idx * bits_per_word;
+    if (first_bit >= norb) {
+        return 0;
     }
-    return static_cast<std::size_t>(norb);
+    const std::size_t remaining_bits = norb - first_bit;
+    if (remaining_bits >= bits_per_word) {
+        return ~std::uint64_t(0);
+    }
+    return (std::uint64_t(1) << remaining_bits) - std::uint64_t(1);
 }
 
-std::size_t checked_norb2(int norb) {
-    const auto n = checked_norb(norb);
-    return n * n;
+/// Return the first two set-bit indices in ascending order.
+///
+/// SlaterRules only needs the explicit orbital indices for single and double excitations. The
+/// caller has already counted the excitation rank, so this helper intentionally stops after two
+/// bits and leaves missing entries as ui64_bit_not_found.
+std::array<std::size_t, 2> first_two_set_bits(const forte2::String& bit_string) {
+    std::array<std::size_t, 2> result{ui64_bit_not_found, ui64_bit_not_found};
+    std::size_t n = 0;
+    bit_string.for_each_set_bit([&](std::size_t p) {
+        if (n < result.size()) {
+            result[n++] = p;
+        }
+        return n < result.size();
+    });
+    return result;
 }
 
-std::size_t checked_norb3(int norb) {
-    const auto n = checked_norb(norb);
-    return n * n * n;
+/// Build masked alpha/beta difference words and their popcounts for lhs and rhs.
+///
+/// The result gives a compact classification of the connection between two determinants:
+/// equal determinants, alpha/beta singles, doubles, or disconnected pairs. This avoids scanning
+/// each orbital with na()/nb() in the fast Slater-rule path while preserving the original
+/// spin-separated excitation cases.
+ExcitationWords build_excitation_words(const forte2::Determinant& lhs,
+                                       const forte2::Determinant& rhs, std::size_t norb) {
+    ExcitationWords result;
+    for (std::size_t word_idx = 0; word_idx < forte2::Determinant::nwords_half; ++word_idx) {
+        const std::uint64_t mask = active_word_mask(word_idx, norb);
+        const std::uint64_t lhs_a = lhs.get_word(word_idx) & mask;
+        const std::uint64_t rhs_a = rhs.get_word(word_idx) & mask;
+        const std::uint64_t lhs_b =
+            lhs.get_word(word_idx + forte2::Determinant::nwords_half) & mask;
+        const std::uint64_t rhs_b =
+            rhs.get_word(word_idx + forte2::Determinant::nwords_half) & mask;
+
+        const std::uint64_t a_lhs_only = lhs_a & ~rhs_a;
+        const std::uint64_t a_rhs_only = rhs_a & ~lhs_a;
+        const std::uint64_t b_lhs_only = lhs_b & ~rhs_b;
+        const std::uint64_t b_rhs_only = rhs_b & ~lhs_b;
+
+        result.a_lhs_only.set_word(word_idx, a_lhs_only);
+        result.a_rhs_only.set_word(word_idx, a_rhs_only);
+        result.b_lhs_only.set_word(word_idx, b_lhs_only);
+        result.b_rhs_only.set_word(word_idx, b_rhs_only);
+        result.a_common.set_word(word_idx, lhs_a & rhs_a);
+        result.b_common.set_word(word_idx, lhs_b & rhs_b);
+
+        result.na_lhs_only += std::popcount(a_lhs_only);
+        result.na_rhs_only += std::popcount(a_rhs_only);
+        result.nb_lhs_only += std::popcount(b_lhs_only);
+        result.nb_rhs_only += std::popcount(b_rhs_only);
+    }
+    return result;
 }
 
 } // namespace
@@ -27,7 +107,7 @@ namespace forte2 {
 
 SlaterRules::SlaterRules(int norb, double scalar_energy, np_matrix one_electron_integrals,
                          np_tensor4 two_electron_integrals)
-    : norb_(checked_norb(norb)), norb2_(checked_norb2(norb)), norb3_(checked_norb3(norb)),
+    : norb_(norb), norb2_(norb * norb), norb3_(norb * norb * norb),
       scalar_energy_(scalar_energy) {
 
     // Precompute the one-electron, Coulomb and Exchange integrals
@@ -76,7 +156,9 @@ double SlaterRules::energy(const Determinant& det) const {
 
         det.for_each_b_occ([&](size_t q) {
             energy += J(p, q); // <pq|pq>
+            return true;
         });
+        return true;
     });
 
     det.for_each_b_occ([&](size_t p) {
@@ -89,9 +171,32 @@ double SlaterRules::energy(const Determinant& det) const {
             energy += JK(q, p); // <pq|pq> - <pq|qp>
             return true;
         });
+        return true;
     });
 
     return energy;
+}
+
+double SlaterRules::singles_coupling_a(size_t i, size_t a, const Determinant& d) const noexcept {
+    double coupling = h(i, a);
+    d.for_each_a_occ([&](size_t j) {
+        coupling += f_JK(i, a, j);
+    });
+    d.for_each_b_occ([&](size_t j) {
+        coupling += f_J(i, a, j);
+    });
+    return coupling;
+}
+
+double SlaterRules::singles_coupling_b(size_t i, size_t a, const Determinant& d) const noexcept {
+    double coupling = h(i, a);
+    d.for_each_a_occ([&](size_t j) {
+        coupling += f_J(i, a, j);
+    });
+    d.for_each_b_occ([&](size_t j) {
+        coupling += f_JK(i, a, j);
+    });
+    return coupling;
 }
 
 np_vector SlaterRules::energies(const std::vector<Determinant>& dets) const {
@@ -104,6 +209,82 @@ np_vector SlaterRules::energies(const std::vector<Determinant>& dets) const {
 }
 
 double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs) const {
+    const auto excitation = build_excitation_words(lhs, rhs, norb_);
+
+    if ((excitation.na_lhs_only != excitation.na_rhs_only) or
+        (excitation.nb_lhs_only != excitation.nb_rhs_only)) {
+        return 0.0;
+    }
+
+    const int excitation_rank = excitation.na_lhs_only + excitation.nb_lhs_only;
+    if (excitation_rank > 2) {
+        return 0.0;
+    }
+
+    if (excitation_rank == 0) {
+        return energy(lhs);
+    }
+
+    if ((excitation.na_lhs_only == 1) and (excitation.nb_lhs_only == 0)) {
+        const auto lhs_a = first_two_set_bits(excitation.a_lhs_only);
+        const auto rhs_a = first_two_set_bits(excitation.a_rhs_only);
+        const auto i = lhs_a[0];
+        const auto j = rhs_a[0];
+        const double sign = lhs.slater_sign_aa(static_cast<int>(i), static_cast<int>(j));
+        return sign * singles_coupling_a(i, j, rhs);
+    }
+
+    if ((excitation.na_lhs_only == 0) and (excitation.nb_lhs_only == 1)) {
+        const auto lhs_b = first_two_set_bits(excitation.b_lhs_only);
+        const auto rhs_b = first_two_set_bits(excitation.b_rhs_only);
+        const auto i = lhs_b[0];
+        const auto j = rhs_b[0];
+        const double sign = lhs.slater_sign_bb(static_cast<int>(i), static_cast<int>(j));
+        return sign * singles_coupling_b(i, j, rhs);
+    }
+
+    if ((excitation.na_lhs_only == 2) and (excitation.nb_lhs_only == 0)) {
+        const auto lhs_a = first_two_set_bits(excitation.a_lhs_only);
+        const auto rhs_a = first_two_set_bits(excitation.a_rhs_only);
+        const auto i = lhs_a[0];
+        const auto j = lhs_a[1];
+        const auto k = rhs_a[0];
+        const auto l = rhs_a[1];
+        const double sign = lhs.slater_sign_aaaa(static_cast<int>(i), static_cast<int>(j),
+                                                 static_cast<int>(k), static_cast<int>(l));
+        return sign * va(i, j, k, l); // <ij||kl>
+    }
+
+    if ((excitation.na_lhs_only == 0) and (excitation.nb_lhs_only == 2)) {
+        const auto lhs_b = first_two_set_bits(excitation.b_lhs_only);
+        const auto rhs_b = first_two_set_bits(excitation.b_rhs_only);
+        const auto i = lhs_b[0];
+        const auto j = lhs_b[1];
+        const auto k = rhs_b[0];
+        const auto l = rhs_b[1];
+        const double sign = lhs.slater_sign_bbbb(static_cast<int>(i), static_cast<int>(j),
+                                                 static_cast<int>(k), static_cast<int>(l));
+        return sign * va(i, j, k, l); // <ij||kl>
+    }
+
+    if ((excitation.na_lhs_only == 1) and (excitation.nb_lhs_only == 1)) {
+        const auto lhs_a = first_two_set_bits(excitation.a_lhs_only);
+        const auto rhs_a = first_two_set_bits(excitation.a_rhs_only);
+        const auto lhs_b = first_two_set_bits(excitation.b_lhs_only);
+        const auto rhs_b = first_two_set_bits(excitation.b_rhs_only);
+        const auto i = lhs_a[0];
+        const auto j = lhs_b[0];
+        const auto k = rhs_a[0];
+        const auto l = rhs_b[0];
+        const double sign = lhs.slater_sign_aa(static_cast<int>(i), static_cast<int>(k)) *
+                            lhs.slater_sign_bb(static_cast<int>(j), static_cast<int>(l));
+        return sign * v(i, j, k, l); // <ij|kl>
+    }
+
+    return 0.0;
+}
+
+double SlaterRules::slater_rules_reference(const Determinant& lhs, const Determinant& rhs) const {
     // we first check that the two determinants have equal Ms
     if ((lhs.count_a() != rhs.count_a()) or (lhs.count_b() != rhs.count_b()))
         return 0.0;
@@ -264,20 +445,6 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
     }
 
     return (matrix_element);
-}
-
-double SlaterRules::singles_coupling_a(size_t i, size_t a, const Determinant& d) const noexcept {
-    double coupling = h(i, a);
-    d.for_all_a([&](size_t j) { coupling += f_JK(i, a, j); });
-    d.for_all_b([&](size_t j) { coupling += f_J(i, a, j); });
-    return coupling;
-}
-
-double SlaterRules::singles_coupling_b(size_t i, size_t a, const Determinant& d) const noexcept {
-    double coupling = h(i, a);
-    d.for_all_a([&](size_t j) { coupling += f_J(i, a, j); });
-    d.for_all_b([&](size_t j) { coupling += f_JK(i, a, j); });
-    return coupling;
 }
 
 RelSlaterRules::RelSlaterRules(int nspinor, double scalar_energy,

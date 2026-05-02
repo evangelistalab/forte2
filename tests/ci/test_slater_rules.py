@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 
 import forte2
 from forte2 import System, RHF
@@ -11,9 +10,126 @@ from forte2.orbitals import convert_coeff_spatial_to_spinor
 from forte2.base_classes import DavidsonLiuParams
 
 
-def test_slater_rules_rejects_negative_norb():
-    with pytest.raises(ValueError, match="norb must be non-negative"):
-        forte2.SlaterRules(-1, 0.0, np.zeros((0, 0)), np.zeros((0, 0, 0, 0)))
+def _determinant(alpha_occ, beta_occ):
+    det = forte2.Determinant.zero()
+    for p in alpha_occ:
+        det.set_na(p, True)
+    for p in beta_occ:
+        det.set_nb(p, True)
+    return det
+
+
+def _symmetric_integrals(norb):
+    rng = np.random.default_rng(12345)
+    h = rng.normal(size=(norb, norb))
+    h = 0.5 * (h + h.T)
+    v = rng.normal(size=(norb, norb, norb, norb))
+    v = 0.5 * (v + v.transpose(1, 0, 3, 2))
+    v = 0.5 * (v + v.transpose(2, 3, 0, 1))
+    return h, v
+
+
+def _main_diagonal_energy(norb, scalar_energy, h, v, det):
+    """Reference the main-branch diagonal Slater-rule loop structure."""
+
+    alpha = [p for p in range(norb) if det.na(p)]
+    beta = [p for p in range(norb) if det.nb(p)]
+
+    energy = scalar_energy
+    for a_idx, p in enumerate(alpha):
+        energy += h[p, p]
+        for q in alpha[a_idx + 1 :]:
+            energy += v[p, q, p, q] - v[p, q, q, p]
+        for q in beta:
+            energy += v[p, q, p, q]
+
+    for b_idx, p in enumerate(beta):
+        energy += h[p, p]
+        for q in beta[b_idx + 1 :]:
+            energy += v[p, q, p, q] - v[p, q, q, p]
+
+    return energy
+
+
+def test_slater_rules_diagonal_edge_cases_match_main_formula():
+    norb = 4
+    scalar_energy = 0.37
+    h, v = _symmetric_integrals(norb)
+    slater_rules = forte2.SlaterRules(norb, scalar_energy, h, v)
+
+    dets = [
+        _determinant([], []),  # no electrons
+        _determinant(range(norb), range(norb)),  # all active spin orbitals occupied
+        _determinant([0, norb - 1], [1, norb - 2]),  # first/last active orbitals
+    ]
+
+    for det in dets:
+        expected = _main_diagonal_energy(norb, scalar_energy, h, v, det)
+        assert slater_rules.energy(det) == approx(expected)
+        assert slater_rules.slater_rules(det, det) == approx(expected)
+        assert slater_rules.slater_rules_reference(det, det) == approx(expected)
+
+
+def test_slater_rules_returns_zero_for_incompatible_determinants():
+    norb = 4
+    h, v = _symmetric_integrals(norb)
+    slater_rules = forte2.SlaterRules(norb, 0.0, h, v)
+
+    cases = [
+        (_determinant([0], []), _determinant([], [])),  # different electron count
+        (_determinant([0], [0]), _determinant([], [])),  # different electron count
+        (_determinant([0, 1], []), _determinant([], [])),  # different electron count
+        (_determinant([0, 1], []), _determinant([0], [1])),  # same N, different Ms
+        (_determinant([0, 1], [0]), _determinant([0], [0, 1])),  # same N, different Ms
+        (_determinant([0, 1], [0, 1]), _determinant([2, 3], [2, 3])),  # rank > 2
+    ]
+
+    for lhs, rhs in cases:
+        assert slater_rules.slater_rules(lhs, rhs) == 0.0
+        assert slater_rules.slater_rules_reference(lhs, rhs) == 0.0
+
+
+def test_slater_rules_fast_matches_reference_for_excitation_classes():
+    norb = 8
+    h, v = _symmetric_integrals(norb)
+    slater_rules = forte2.SlaterRules(norb, 0.37, h, v)
+
+    rhs = _determinant([0, 2, 5], [1, 3, 6])
+    cases = [
+        rhs,  # diagonal
+        _determinant([0, 4, 5], [1, 3, 6]),  # alpha single
+        _determinant([0, 2, 5], [1, 4, 6]),  # beta single
+        _determinant([1, 4, 5], [1, 3, 6]),  # alpha-alpha double
+        _determinant([0, 2, 5], [0, 4, 6]),  # beta-beta double
+        _determinant([0, 4, 5], [1, 4, 6]),  # alpha-beta double
+        _determinant([1, 3, 4], [1, 3, 6]),  # higher-rank alpha excitation
+        _determinant([0, 2, 5, 7], [1, 3, 6]),  # unequal alpha electron count
+    ]
+
+    for lhs in cases:
+        for left, right in ((lhs, rhs), (rhs, lhs)):
+            fast = slater_rules.slater_rules(left, right)
+            reference = slater_rules.slater_rules_reference(left, right)
+            assert fast == approx(reference)
+
+
+def test_slater_rules_fast_matches_reference_exhaustive_small_space():
+    norb = 4
+    h, v = _symmetric_integrals(norb)
+    slater_rules = forte2.SlaterRules(norb, -0.19, h, v)
+
+    dets = []
+    for alpha_mask in range(1 << norb):
+        alpha = [p for p in range(norb) if alpha_mask & (1 << p)]
+        for beta_mask in range(1 << norb):
+            beta = [p for p in range(norb) if beta_mask & (1 << p)]
+            dets.append(_determinant(alpha, beta))
+
+    for lhs in dets:
+        for rhs in dets:
+            fast = slater_rules.slater_rules(lhs, rhs)
+            reference = slater_rules.slater_rules_reference(lhs, rhs)
+            assert fast == approx(reference)
 
 
 def test_slater_rules_1():
@@ -37,15 +153,23 @@ def test_slater_rules_1():
     dets = forte2.hilbert_space(norb, scf.na, scf.nb)
 
     H = np.zeros((len(dets), len(dets)))
+    H_reference = np.zeros_like(H)
     for i, I in enumerate(dets):
         for j, J in enumerate(dets):
             H[i, j] = slater_rules.slater_rules(I, J)
+            H_reference[i, j] = slater_rules.slater_rules_reference(I, J)
+
+    assert np.allclose(H, H_reference, atol=1e-12)
 
     evals = np.linalg.eigvalsh(H)
+    evals_reference = np.linalg.eigvalsh(H_reference)
 
     assert np.isclose(
         evals[0], -1.096071975854
     ), "Slater rules test failed for H2 molecule"
+    assert np.isclose(
+        evals_reference[0], -1.096071975854
+    ), "Reference Slater rules test failed for H2 molecule"
 
 
 def test_slater_rules_2():

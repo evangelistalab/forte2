@@ -279,6 +279,30 @@ def test_det_pair_slater_sign_matches_naive_interval_parity():
         assert d.slater_sign_bb(n, m) == _expected_interval_sign(PAIR_BETA_OCC, n, m)
 
 
+def test_det_slater_sign_edge_empty_and_full_determinants():
+    """Test optimized Slater signs on empty and fully occupied edge cases."""
+
+    empty = Determinant.zero()
+    full = _det_with_occupations(range(Determinant.maxnorb), range(Determinant.maxnorb))
+    test_indices = (0, 1, 62, 63, 64, 65, 126, 127)
+
+    for i in test_indices:
+        assert empty.slater_sign(i) == 1
+        assert empty.slater_sign_reverse(i) == 1
+
+        count_before = i
+        count_after = 2 * Determinant.maxnorb - i - 1
+        assert full.slater_sign(i) == (1 if count_before % 2 == 0 else -1)
+        assert full.slater_sign_reverse(i) == (1 if count_after % 2 == 0 else -1)
+
+    for n, m in ((0, 63), (63, 0), (0, 1), (62, 63)):
+        expected = _expected_interval_sign(range(Determinant.maxnorb), n, m)
+        assert empty.slater_sign_aa(n, m) == 1
+        assert empty.slater_sign_bb(n, m) == 1
+        assert full.slater_sign_aa(n, m) == expected
+        assert full.slater_sign_bb(n, m) == expected
+
+
 def test_spin_flip():
     """Test spin flip functions"""
     d = Determinant("2ba0ab0aabb")

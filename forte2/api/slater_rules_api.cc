@@ -15,7 +15,8 @@ void export_slater_rules_api(nb::module_& m) {
              "one-electron integrals, and two-electron integrals in physicist's notation.")
         .def("energy", &SlaterRules::energy)
         .def("energies", &SlaterRules::energies, "dets"_a, "Compute the energies of a vector of determinants")
-        .def("slater_rules", &SlaterRules::slater_rules, "lhs"_a, "rhs"_a);
+        .def("slater_rules", &SlaterRules::slater_rules, "lhs"_a, "rhs"_a)
+        .def("slater_rules_reference", &SlaterRules::slater_rules_reference, "lhs"_a, "rhs"_a);
 }
 
 void export_rel_slater_rules_api(nb::module_& m) {

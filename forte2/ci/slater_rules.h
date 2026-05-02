@@ -37,6 +37,9 @@ class SlaterRules {
     /// Compute the matrix element of the Hamiltonian between two determinants
     double slater_rules(const Determinant& lhs, const Determinant& rhs) const;
 
+    /// Compute the matrix element using the original scan-based implementation
+    double slater_rules_reference(const Determinant& lhs, const Determinant& rhs) const;
+
     // ==> Helper Functions <==
 
     /// @return The one-electron integral h[p,q] = <p|h|q>

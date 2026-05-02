@@ -30,12 +30,19 @@ def _assert_sign_mask_fast_consistent(acre=(), bcre=(), aann=(), bann=()):
 
 
 def test_compute_sign_mask_fast_matches_reference():
+    norb = forte2.Determinant.maxnorb
+    all_occ = tuple(range(norb))
     cases = [
         ((), (), (), ()),
         ((0,), (), (), ()),
         ((63,), (), (), ()),
         ((), (0,), (), ()),
         ((), (63,), (), ()),
+        (all_occ, (), (), ()),
+        ((), all_occ, (), ()),
+        ((), (), all_occ, ()),
+        ((), (), (), all_occ),
+        (all_occ, all_occ, all_occ, all_occ),
         ((0, 2, 63), (), (1, 2, 62), ()),
         ((), (0, 2, 63), (), (1, 2, 62)),
         ((0, 63), (0, 63), (0, 63), (0, 63)),
@@ -45,7 +52,6 @@ def test_compute_sign_mask_fast_matches_reference():
         _assert_sign_mask_fast_consistent(acre, bcre, aann, bann)
 
     rng = random.Random(7)
-    norb = forte2.Determinant.maxnorb
     for _ in range(100):
         acre = rng.sample(range(norb), rng.randrange(9))
         bcre = rng.sample(range(norb), rng.randrange(9))

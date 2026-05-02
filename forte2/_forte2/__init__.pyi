@@ -659,6 +659,8 @@ class SlaterRules:
 
     def slater_rules(self, lhs: Determinant, rhs: Determinant) -> float: ...
 
+    def slater_rules_reference(self, lhs: Determinant, rhs: Determinant) -> float: ...
+
 class RelSlaterRules:
     def __init__(self, nspinor: int, scalar_energy: float, one_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], two_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], tei_is_asym: bool = False) -> None:
         """
