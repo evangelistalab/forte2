@@ -1,8 +1,10 @@
 #pragma once
 
-#include <string>
-#include <vector>
+#include <functional>
 #include <iostream>
+#include <string>
+#include <type_traits>
+#include <vector>
 
 #include "bitarray.hpp"
 #include "bitwise_operations.hpp"
@@ -46,6 +48,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     using BitArray<N>::find_first_one;
     using BitArray<N>::find_last_one;
     using BitArray<N>::clear;
+    using BitArray<N>::for_each_set_bit;
     using BitArray<N>::find_set_bits;
     using Hash = typename BitArray<N>::Hash;
 
@@ -208,6 +211,36 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         }
     }
 
+    /// Apply a callable to each occupied alpha orbital, in ascending orbital order.
+    ///
+    /// The callback may return either void or a bool-like value. Void callbacks always continue.
+    /// Bool callbacks continue when they return true and stop early when they return false.
+    /// @param func a callable that accepts the alpha orbital index as a size_t
+    /// @return true if all occupied alpha orbitals were visited, false if the callback stopped
+    template <typename Func> bool for_each_a_occ(Func&& func) const {
+        return for_each_set_bit(func, 0, nwords_half);
+    }
+
+    /// Apply a callable to each occupied beta orbital, in ascending orbital order.
+    ///
+    /// The callback may return either void or a bool-like value. Void callbacks always continue.
+    /// Bool callbacks continue when they return true and stop early when they return false.
+    /// The callback receives beta orbital indices in the spatial-orbital range [0, norb()).
+    /// @param func a callable that accepts the beta orbital index as a size_t
+    /// @return true if all occupied beta orbitals were visited, false if the callback stopped
+    template <typename Func> bool for_each_b_occ(Func&& func) const {
+        return for_each_set_bit(
+            [&](size_t pos) {
+                const size_t orb = pos - beta_bit_offset;
+                if constexpr (std::is_void_v<std::invoke_result_t<Func&, size_t>>) {
+                    std::invoke(func, orb);
+                } else {
+                    return std::invoke(func, orb);
+                }
+            },
+            nwords_half, nwords_);
+    }
+
     /// Return a vector of occupied alpha orbitals
     std::vector<int> get_alfa_occ(int norb) const {
         std::vector<int> occ;
@@ -218,11 +251,14 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
                 "), which is larger than the maximum number of alpha orbitals (" +
                 std::to_string(nbits_half) + ").");
         }
-        for (int p = 0; p < norb; ++p) {
-            if (na(p)) {
-                occ.push_back(p);
+        const size_t limit = static_cast<size_t>(norb);
+        for_each_a_occ([&](size_t p) {
+            if (p >= limit) {
+                return false;
             }
-        }
+            occ.push_back(static_cast<int>(p));
+            return true;
+        });
         return occ;
     }
 
@@ -236,11 +272,14 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
                 "), which is larger than the maximum number of beta orbitals (" +
                 std::to_string(nbits_half) + ").");
         }
-        for (int p = 0; p < norb; ++p) {
-            if (nb(p)) {
-                occ.push_back(p);
+        const size_t limit = static_cast<size_t>(norb);
+        for_each_b_occ([&](size_t p) {
+            if (p >= limit) {
+                return false;
             }
-        }
+            occ.push_back(static_cast<int>(p));
+            return true;
+        });
         return occ;
     }
 
@@ -285,15 +324,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @param n the number of occupied orbitals found
     void get_fast_a_occ(std::vector<size_t>& occ, size_t& n) const {
         n = 0;
-        uint64_t x;
-        for (size_t begin{0}; begin < nwords_half; ++begin) {
-            x = words_[begin];
-            const size_t base = begin * bits_per_word;
-            while (x) {
-                occ[n++] = base + std::countr_zero(x);
-                x &= (x - 1); // clear lowest set bit
-            }
-        }
+        for_each_a_occ([&](size_t p) { occ[n++] = p; });
     }
 
     /// @brief Find the occupied beta orbitals and store them in occ
@@ -301,15 +332,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @param n the number of occupied orbitals found
     void get_fast_b_occ(std::vector<size_t>& occ, size_t& n) const {
         n = 0;
-        uint64_t x;
-        for (size_t begin{0}; begin < nwords_half; ++begin) {
-            x = words_[begin + nwords_half];
-            const size_t base = begin * bits_per_word;
-            while (x) {
-                occ[n++] = base + std::countr_zero(x);
-                x &= (x - 1); // clear lowest set bit
-            }
-        }
+        for_each_b_occ([&](size_t p) { occ[n++] = p; });
     }
 
     /// Apply the alpha creation operator a^+_n to this determinant
@@ -860,43 +883,48 @@ template <size_t N>
 double apply_operator_to_det(DeterminantImpl<N>& d, const DeterminantImpl<N>& cre,
                              const DeterminantImpl<N>& ann) {
     // loop over the annihilation operators (in ascending order)
-    DeterminantImpl<N> temp(ann); // temp is for bookkeeping
-    size_t n = temp.count();
     double sign = 1.0;
-    for (size_t i = 0; i < n; ++i) {
-        // find the next annihilation operator
-        const uint64_t orb = temp.find_and_clear_first_one();
+    // The bool return lets for_each_set_bit stop as soon as an operator cannot be applied.
+    const bool can_annihilate = ann.for_each_set_bit([&](size_t orb) {
         // if this bit is set
         if (d.get_bit(orb) == 1) {
             // compute the sign
             sign *= d.slater_sign(orb);
             // set the bit to zero
             d.set_bit(orb, false);
+            return true;
         } else {
-            return 0.0;
+            return false;
         }
+    });
+    if (not can_annihilate) {
+        return 0.0;
     }
+
     // loop over the creation operators (in ascending order)
-    temp = cre;
-    n = temp.count();
-    for (size_t i = 0; i < n; ++i) {
-        // find the next creation operator
-        const uint64_t orb = temp.find_and_clear_first_one();
+    const size_t ncre = cre.count();
+    // Stop immediately if a creation operator would target an already occupied orbital.
+    const bool can_create = cre.for_each_set_bit([&](size_t orb) {
         // if this bit is unset
         if (d.get_bit(orb) == 0) {
             // compute the sign
             sign *= d.slater_sign(orb);
-            // set the bit to zero
+            // set the bit to one
             d.set_bit(orb, true);
+            return true;
         } else {
-            return 0.0;
+            return false;
         }
+    });
+    if (not can_create) {
+        return 0.0;
     }
+
     // the creation operators are applied in the opposite order of the way
     // they are supposed to be applied (we should apply them in descending order).
     // this factor keeps into account the permutation sign for
     // reversing the order of the creation operators.
-    sign *= 1.0 - 2.0 * ((n / 2) % 2);
+    sign *= 1.0 - 2.0 * ((ncre / 2) % 2);
     return sign;
 }
 

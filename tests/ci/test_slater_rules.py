@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 import forte2
 from forte2 import System, RHF
@@ -8,6 +9,11 @@ from forte2.ci.ci import _CISingleStateSolver
 from forte2.state import MOSpace, State
 from forte2.orbitals import convert_coeff_spatial_to_spinor
 from forte2.base_classes import DavidsonLiuParams
+
+
+def test_slater_rules_rejects_negative_norb():
+    with pytest.raises(ValueError, match="norb must be non-negative"):
+        forte2.SlaterRules(-1, 0.0, np.zeros((0, 0)), np.zeros((0, 0, 0, 0)))
 
 
 def test_slater_rules_1():

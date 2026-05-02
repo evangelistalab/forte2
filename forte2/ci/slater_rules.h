@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include <complex>
 #include "helpers/ndarray.h"
 
@@ -39,29 +40,33 @@ class SlaterRules {
     // ==> Helper Functions <==
 
     /// @return The one-electron integral h[p,q] = <p|h|q>
-    double h(int p, int q) const noexcept { return h_[p * norb_ + q]; }
+    double h(std::size_t p, std::size_t q) const noexcept { return h_[p * norb_ + q]; }
 
     /// @return The two-electron integral V[p,q,r,s] = <pq|rs>
-    double v(int p, int q, int r, int s) const noexcept {
+    double v(std::size_t p, std::size_t q, std::size_t r, std::size_t s) const noexcept {
         return v_[p * norb3_ + q * norb2_ + r * norb_ + s];
     }
 
     /// @return The anti-symmetrized two-electron integral Va[p,q,r,s] <pq||rs> = <pq|rs> - <pq|sr>
-    double va(int p, int q, int r, int s) const noexcept {
+    double va(std::size_t p, std::size_t q, std::size_t r, std::size_t s) const noexcept {
         return va_[p * norb3_ + q * norb2_ + r * norb_ + s];
     }
 
     /// @return The Coulomb integral J[p,q] = <pq|pq>
-    double J(int p, int q) const noexcept { return J_[p * norb_ + q]; }
+    double J(std::size_t p, std::size_t q) const noexcept { return J_[p * norb_ + q]; }
 
     /// @return The Coulomb - exchange integral JK[p,q] = <pq|pq> - <pq|qp>
-    double JK(int p, int q) const noexcept { return JK_[p * norb_ + q]; }
+    double JK(std::size_t p, std::size_t q) const noexcept { return JK_[p * norb_ + q]; }
 
     /// @return The Fock-Coulomb integral f_J[p,q,r] = <pr|qr>
-    double f_J(int p, int q, int r) const noexcept { return f_J_[p * norb2_ + q * norb_ + r]; }
+    double f_J(std::size_t p, std::size_t q, std::size_t r) const noexcept {
+        return f_J_[p * norb2_ + q * norb_ + r];
+    }
 
     /// @return The Fock-Coulomb-Exchange integral f_JK[p,q,r] = <pr|qr> - <pr|rq>
-    double f_JK(int p, int q, int r) const noexcept { return f_JK_[p * norb2_ + q * norb_ + r]; }
+    double f_JK(std::size_t p, std::size_t q, std::size_t r) const noexcept {
+        return f_JK_[p * norb2_ + q * norb_ + r];
+    }
 
     /// @brief Compute the singles coupling for alpha spin
     double singles_coupling_a(size_t i, size_t a, const Determinant& d) const noexcept;
@@ -71,11 +76,11 @@ class SlaterRules {
 
   private:
     /// @brief Number of orbitals
-    const int norb_;
+    const std::size_t norb_;
     /// @brief Precomputed values to speed up access to two-electron integrals
-    const int norb2_;
+    const std::size_t norb2_;
     /// @brief Precomputed values to speed up access to two-electron integrals
-    const int norb3_;
+    const std::size_t norb3_;
     /// Scalar energy term
     double scalar_energy_;
     /// Two-electron integrals (restricted) in the form V[p,q,r,s] = <pq|rs>

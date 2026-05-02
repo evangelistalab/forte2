@@ -1,7 +1,11 @@
 #pragma once
 
 #include <array>
+#include <functional>
 #include <span>
+#include <stdexcept>
+#include <type_traits>
+#include <vector>
 
 #include "bitwise_operations.hpp"
 
@@ -45,15 +49,22 @@ template <size_t N> class BitArray {
 
     using container_t = std::array<word_t, nwords_>;
 
+    /// @brief Default constructor. The bits are initialized to random values (performance)
     BitArray() = default;
 
     BitArray(const std::vector<bool>& v) {
+        if (v.size() > nbits) {
+            throw std::invalid_argument("BitArray input vector is larger than the bit array size.");
+        }
+        clear();
         for (size_t i = 0; const auto b : v) {
             set_bit(i, b);
             ++i;
         }
     }
 
+    /// @brief Static method to create a BitArray object with all bits set to zero.
+    /// Users should use this method instead of the default constructor.
     static BitArray zero() {
         BitArray b;
         b.clear();
@@ -192,19 +203,31 @@ template <size_t N> class BitArray {
         }
     }
 
+    /// @brief Set the first n bits and clear the rest.
+    ///
+    /// This fills the half-open bit range [0, n). For example, fill_up_to(70) sets global bits
+    /// 0 through 69, leaving bit 70 unset. If n <= 0 all bits are cleared; if n >= nbits all bits
+    /// are set.
     void fill_up_to(int n) {
         clear();
-        if (static_cast<size_t>(n) >= bits_per_word) {
-            size_t last_full_word = whichword(n);
-            for (size_t k = 0; k < last_full_word; ++k) {
-                words_[k] = ~u_int64_t(0);
-            }
-        }
-        if (whichbit(n) == 0)
+        if (n <= 0) {
             return;
-        uint64_t mask = ~0;
-        mask = mask >> (64 - n);
-        words_[whichword(n)] = mask;
+        }
+        const size_t end = static_cast<size_t>(n);
+        if (end >= nbits) {
+            words_.fill(~word_t(0));
+            return;
+        }
+
+        const size_t full_words = whichword(end);
+        for (size_t k = 0; k < full_words; ++k) {
+            words_[k] = ~word_t(0);
+        }
+
+        const size_t bit_idx = whichbit(end);
+        if (bit_idx != 0) {
+            words_[full_words] = (word_t(1) << bit_idx) - word_t(1);
+        }
     }
 
     /// @brief XOR the bits up to the nth bit
@@ -323,7 +346,7 @@ template <size_t N> class BitArray {
     }
 
     /// Bitwise OR operator (|=)
-    BitArray<N> operator|=(const BitArray<N>& lhs) {
+    BitArray<N>& operator|=(const BitArray<N>& lhs) {
         for (size_t n = 0; n < nwords_; n++) {
             words_[n] |= lhs.words_[n];
         }
@@ -340,7 +363,7 @@ template <size_t N> class BitArray {
     }
 
     /// Bitwise XOR operator (^=)
-    BitArray<N> operator^=(const BitArray<N>& lhs) {
+    BitArray<N>& operator^=(const BitArray<N>& lhs) {
         for (size_t n = 0; n < nwords_; n++) {
             words_[n] ^= lhs.words_[n];
         }
@@ -366,7 +389,7 @@ template <size_t N> class BitArray {
     }
 
     /// Bitwise AND operator (&=)
-    BitArray<N> operator&=(const BitArray<N>& lhs) {
+    BitArray<N>& operator&=(const BitArray<N>& lhs) {
         for (size_t n = 0; n < nwords_; n++) {
             words_[n] &= lhs.words_[n];
         }
@@ -383,7 +406,7 @@ template <size_t N> class BitArray {
     }
 
     /// Bitwise difference operator (-=)
-    BitArray<N> operator-=(const BitArray<N>& lhs) {
+    BitArray<N>& operator-=(const BitArray<N>& lhs) {
         for (size_t n = 0; n < nwords_; n++) {
             words_[n] &= ~lhs.words_[n];
         }
@@ -479,6 +502,37 @@ template <size_t N> class BitArray {
         return ui64_bit_not_found;
     }
 
+    /// Apply a callable to each bit set to one, in ascending bit-index order.
+    ///
+    /// The callback may return either void or a bool-like value. Void callbacks always continue.
+    /// Bool callbacks continue when they return true and stop early when they return false.
+    /// @param func a callable that accepts the bit index as a size_t
+    /// @param begin the index of the first word to test
+    /// @param end the index of the last word to test (not included)
+    /// @return true if all selected bits were visited, false if the callback stopped the traversal
+    template <typename Func>
+    bool for_each_set_bit(Func&& func, size_t begin = 0, size_t end = nwords_) const {
+        for (; begin < end; ++begin) {
+            uint64_t x = words_[begin];
+            const size_t base = begin * bits_per_word;
+            while (x) {
+                const size_t pos = base + std::countr_zero(x);
+                // if the callback returns void, we ignore the return value and always continue
+                if constexpr (std::is_void_v<std::invoke_result_t<Func&, size_t>>) {
+                    std::invoke(func, pos);
+                }
+                // if the callback returns a bool-like value, we check it
+                else {
+                    if (!std::invoke(func, pos)) {
+                        return false;
+                    }
+                }
+                x &= (x - 1); // clear lowest set bit
+            }
+        }
+        return true;
+    }
+
     /// Find all the bits set to one and store their indices in the vector occ
     /// @param occ a vector of integers where the indices of the bits set to one are stored
     /// @param n the number of bits set to one
@@ -487,15 +541,7 @@ template <size_t N> class BitArray {
     void find_set_bits(std::vector<size_t>& occ, size_t& n, size_t begin = 0,
                        size_t end = nwords_) const {
         n = 0;
-        uint64_t x;
-        for (; begin < end; ++begin) {
-            x = words_[begin];
-            const size_t base = begin * bits_per_word;
-            while (x) {
-                occ[n++] = base + std::countr_zero(x);
-                x &= (x - 1); // clear lowest set bit
-            }
-        }
+        for_each_set_bit([&](size_t pos) { occ[n++] = pos; }, begin, end);
     }
 
     /// @brief This templated function is used to generate fast tests for binary conditions
@@ -657,7 +703,6 @@ template <size_t N> class BitArray {
         }
     }
 
-
     double create_fast(int n) {
         set_bit(n, true);
         return slater_sign(n);
@@ -679,7 +724,6 @@ template <size_t N> class BitArray {
             return 0.0;
         return destroy_fast(n);
     }
-
 
     /// @brief Find the irreducible representation of a product of spin orbitals
     /// @param temp the input BitArray
@@ -809,8 +853,8 @@ template <size_t N> class BitArray {
 
     // ==> Private Data <==
 
-    /// The bits stored as a vector of words (initialized to zero at construction)
-    container_t words_; // = {};
+    /// The bits stored as a vector of words (random initialization at construction)
+    container_t words_;
 };
 
 template <size_t N> std::string str(const BitArray<N>& ba, int n = BitArray<N>::nbits) {

@@ -1,10 +1,34 @@
 #include "slater_rules.h"
 
+#include <stdexcept>
+
+namespace {
+
+std::size_t checked_norb(int norb) {
+    if (norb < 0) {
+        throw std::invalid_argument("SlaterRules: norb must be non-negative.");
+    }
+    return static_cast<std::size_t>(norb);
+}
+
+std::size_t checked_norb2(int norb) {
+    const auto n = checked_norb(norb);
+    return n * n;
+}
+
+std::size_t checked_norb3(int norb) {
+    const auto n = checked_norb(norb);
+    return n * n * n;
+}
+
+} // namespace
+
 namespace forte2 {
 
 SlaterRules::SlaterRules(int norb, double scalar_energy, np_matrix one_electron_integrals,
                          np_tensor4 two_electron_integrals)
-    : norb_(norb), norb2_(norb * norb), norb3_(norb * norb * norb), scalar_energy_(scalar_energy) {
+    : norb_(checked_norb(norb)), norb2_(checked_norb2(norb)), norb3_(checked_norb3(norb)),
+      scalar_energy_(scalar_energy) {
 
     // Precompute the one-electron, Coulomb and Exchange integrals
     h_.resize(norb_ * norb_);
@@ -17,16 +41,16 @@ SlaterRules::SlaterRules(int norb, double scalar_energy, np_matrix one_electron_
     auto h_view = one_electron_integrals.view();
     auto v_view = two_electron_integrals.view();
 
-    for (int p = 0; p < norb_; ++p) {
-        for (int q = 0; q < norb_; ++q) {
+    for (std::size_t p = 0; p < norb_; ++p) {
+        for (std::size_t q = 0; q < norb_; ++q) {
             h_[p * norb_ + q] = h_view(p, q);                             // <p|h|q>
             J_[p * norb_ + q] = v_view(p, q, p, q);                       // <pq|pq>
             JK_[p * norb_ + q] = v_view(p, q, p, q) - v_view(p, q, q, p); // <pq|pq> - <pq|qp>
-            for (int r = 0; r < norb_; ++r) {
+            for (std::size_t r = 0; r < norb_; ++r) {
                 f_J_[p * norb2_ + q * norb_ + r] = v_view(p, r, q, r); // <pr|qr>
                 f_JK_[p * norb2_ + q * norb_ + r] =
                     v_view(p, r, q, r) - v_view(p, r, r, q); // <pr|qr> - <pr|rq>
-                for (int s = 0; s < norb_; ++s) {
+                for (std::size_t s = 0; s < norb_; ++s) {
                     v_[p * norb3_ + q * norb2_ + r * norb_ + s] = v_view(p, q, r, s); // <pq|rs>
                     va_[p * norb3_ + q * norb2_ + r * norb_ + s] =
                         v_view(p, q, r, s) - v_view(p, q, s, r); // <pq||rs> = <pq|rs> - <pq|sr>
@@ -38,39 +62,34 @@ SlaterRules::SlaterRules(int norb, double scalar_energy, np_matrix one_electron_
 
 double SlaterRules::energy(const Determinant& det) const {
     double energy = scalar_energy_;
-    String Ia = det.a_string();
-    String Ib = det.b_string();
-    String tempI;
 
-    int naocc = Ia.count();
-    int nbocc = Ib.count();
-
-    for (int A = 0; A < naocc; ++A) {
-        int p = Ia.find_and_clear_first_one();
+    det.for_each_a_occ([&](size_t p) {
         energy += h(p, p);
 
-        tempI = Ia;
-        for (int AA = A + 1; AA < naocc; ++AA) {
-            int q = tempI.find_and_clear_first_one();
-            energy += JK(p, q); // <pq|pq> - <pq|qp>
-        }
+        det.for_each_a_occ([&](size_t q) {
+            if (q >= p) {
+                return false;
+            }
+            energy += JK(q, p); // <pq|pq> - <pq|qp>
+            return true;
+        });
 
-        tempI = Ib;
-        for (int B = 0; B < nbocc; ++B) {
-            int q = tempI.find_and_clear_first_one();
+        det.for_each_b_occ([&](size_t q) {
             energy += J(p, q); // <pq|pq>
-        }
-    }
+        });
+    });
 
-    for (int B = 0; B < nbocc; ++B) {
-        int p = Ib.find_and_clear_first_one();
+    det.for_each_b_occ([&](size_t p) {
         energy += h(p, p);
-        tempI = Ib;
-        for (int BB = B + 1; BB < nbocc; ++BB) {
-            int q = tempI.find_and_clear_first_one();
-            energy += JK(p, q); // <pq|pq> - <pq|qp>
-        }
-    }
+
+        det.for_each_b_occ([&](size_t q) {
+            if (q >= p) {
+                return false;
+            }
+            energy += JK(q, p); // <pq|pq> - <pq|qp>
+            return true;
+        });
+    });
 
     return energy;
 }

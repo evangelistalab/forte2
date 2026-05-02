@@ -589,30 +589,28 @@ void SQOperatorProductComputer::product(
         phase_ *= ((lhs_ann_.count_all() * ucon_rhs_cre_.count_all()) % 2) == 0 ? 1.0 : -1.0;
         // 1.b move the uncontracted rhs creation operators to the left creation ops
         // double cre_perm_phase = (lhs_cre_.count_all() % 2) == 0 ? 1.0 : -1.0;
-        for (size_t i = ucon_rhs_cre_.fast_find_and_clear_first_one(0); i != ui64_bit_not_found;
-             i = ucon_rhs_cre_.fast_find_and_clear_first_one(i)) {
+        ucon_rhs_cre_.for_each_set_bit([&](size_t i) {
             // remove op i and find the sign for permuting it to the left of the right creation ops
             rhs_cre_.set_bit(i, false);
             phase_ *= rhs_cre_.slater_sign(i);
             // add the op to the left and find the computing the phase
             lhs_cre_.set_bit(i, true);
             phase_ *= lhs_cre_.slater_sign_reverse(i); // * cre_perm_phase;
-        }
+        });
     }
 
     // Step 2. Move the uncontracted rhs annihilation operators to the left
     // 2.a phase adjustment due to permutation of the operator with right creation ops
     if (const auto ucon_rhs_ann_count = ucon_rhs_ann_.count_all(); ucon_rhs_ann_count > 0) {
         phase_ *= ((rhs_cre_.count_all() * ucon_rhs_ann_count) % 2) == 0 ? 1.0 : -1.0;
-        for (size_t i = ucon_rhs_ann_.fast_find_and_clear_first_one(0); i != ui64_bit_not_found;
-             i = ucon_rhs_ann_.fast_find_and_clear_first_one(i)) {
+        ucon_rhs_ann_.for_each_set_bit([&](size_t i) {
             // remove op i and find the sign for permuting it with the right creation ops
             rhs_ann_.set_bit(i, false);
             phase_ *= rhs_ann_.slater_sign_reverse(i);
             // add the op to the left computing the phase
             lhs_ann_.set_bit(i, true);
             phase_ *= lhs_ann_.slater_sign(i);
-        }
+        });
     }
 
     // Step 3. Find the number component operators on the right that can be treated trivially
@@ -625,10 +623,9 @@ void SQOperatorProductComputer::product(
         rhs_ann_ -= rhs_comm_trivial_; // remove the trivially contracted operators from the right
         ucon_rhs_cre_ = rhs_cre_;      // now this holds the operators that need to be contracted
         // adjust the phase due to the trivial contractions
-        for (size_t i = rhs_comm_trivial_.fast_find_and_clear_first_one(0); i != ui64_bit_not_found;
-             i = rhs_comm_trivial_.fast_find_and_clear_first_one(i)) {
+        rhs_comm_trivial_.for_each_set_bit([&](size_t i) {
             phase_ *= rhs_cre_.slater_sign_reverse(i) * rhs_ann_.slater_sign_reverse(i);
-        }
+        });
     }
 
     // Step 4. Find the anti-number component operators on the right that can be treated trivially
@@ -640,10 +637,9 @@ void SQOperatorProductComputer::product(
         rhs_cre_ -= lhs_comm_trivial_;
         lhs_ann_ -= lhs_comm_trivial_;
         // ops adjust the phase due to the trivial contractions
-        for (size_t i = lhs_comm_trivial_.fast_find_and_clear_first_one(0); i != ui64_bit_not_found;
-             i = lhs_comm_trivial_.fast_find_and_clear_first_one(i)) {
+        lhs_comm_trivial_.for_each_set_bit([&](size_t i) {
             phase_ *= lhs_ann_.slater_sign(i) * rhs_cre_.slater_sign(i);
-        }
+        });
     }
 
     // At this point we have moved all the uncontracted rhs creation and annihilation operators
@@ -661,10 +657,9 @@ void SQOperatorProductComputer::product(
     // adjustment to move them to the left and form pairs with the left annihilation operators
     ucon_rhs_cre_ = rhs_cre_; // now this holds the operators that need to be contracted
     // NOTE: this was not checked yet
-    for (size_t i = ucon_rhs_cre_.fast_find_and_clear_first_one(0); i != ui64_bit_not_found;
-         i = ucon_rhs_cre_.fast_find_and_clear_first_one(i)) {
+    ucon_rhs_cre_.for_each_set_bit([&](size_t i) {
         phase_ *= lhs_ann_.slater_sign(i) * rhs_cre_.slater_sign(i);
-    }
+    });
     // find the set bits of the operators that can be contracted and store it in set_bits_
     rhs_cre_.find_set_bits(set_bits_, ncontr);
     // now this holds the left annihilation ops not paired with creation ops
@@ -709,16 +704,13 @@ void SQOperatorProductComputer::commutator(
 void compute_sign_mask(const Determinant& cre, const Determinant& ann, Determinant& sign_mask,
                        Determinant& idx) {
     sign_mask.clear();
-    idx = ann; // temp is for looping over the operators
-    for (size_t i = idx.fast_find_and_clear_first_one(0); i != ui64_bit_not_found;
-         i = idx.fast_find_and_clear_first_one(i)) {
+    ann.for_each_set_bit([&](size_t i) {
         sign_mask.xor_up_to(i);
-    }
-    idx = cre;
-    for (size_t i = idx.fast_find_and_clear_first_one(0); i != ui64_bit_not_found;
-         i = idx.fast_find_and_clear_first_one(i)) {
+    });
+    cre.for_each_set_bit([&](size_t i) {
         sign_mask.xor_up_to(i);
-    }
+    });
+    idx.clear();
 }
 
 void compute_sign_mask_fast(const Determinant& cre, const Determinant& ann,
