@@ -717,11 +717,12 @@ void compute_sign_mask_fast(const Determinant& cre, const Determinant& ann,
                             Determinant& sign_mask) {
     bool higher_word_parity = false;
     for (size_t n = Determinant::nwords_; n-- > 0;) {
-        const uint64_t ops = cre.words_[n] ^ ann.words_[n];
-        sign_mask.words_[n] = ui64_exclusive_suffix_xor(ops);
+        const uint64_t ops = cre.get_word(n) ^ ann.get_word(n);
+        uint64_t mask = ui64_exclusive_suffix_xor(ops);
         if (higher_word_parity) {
-            sign_mask.words_[n] = ~sign_mask.words_[n];
+            mask = ~mask;
         }
+        sign_mask.set_word(n, mask);
         higher_word_parity ^= static_cast<bool>(std::popcount(ops) & 1);
     }
 }

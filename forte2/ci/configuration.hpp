@@ -13,16 +13,18 @@ namespace forte2 {
  * [word 1][word 2]...[word K][word K+1]...[word 2K]
  */
 template <size_t N> class ConfigurationImpl : public BitArray<N> {
+  protected:
+    using BitArray<N>::maskbit;
+    using BitArray<N>::words_;
+
   public:
     // Since the template parent (BitArray) of this template class is not instantiated during the
     // compilation pass, here we declare all the member variables and functions inherited and used
     using BitArray<N>::nbits;
     using BitArray<N>::nwords_;
-    using BitArray<N>::words_;
     using BitArray<N>::count;
     using BitArray<N>::get_bit;
     using BitArray<N>::set_bit;
-    using BitArray<N>::maskbit;
     using Hash = typename BitArray<N>::Hash;
 
     /// the number of bits divided by two
@@ -50,9 +52,9 @@ template <size_t N> class ConfigurationImpl : public BitArray<N> {
     explicit ConfigurationImpl(const DeterminantImpl<N>& d) {
         for (size_t k = 0; k < nwords_half; ++k) {
             // first half: doubly occupied
-            words_[k] = d.words_[k] & d.words_[k + nwords_half];
+            words_[k] = d.get_word(k) & d.get_word(k + nwords_half);
             // second half: singly occupied
-            words_[k + nwords_half] = d.words_[k] ^ d.words_[k + nwords_half];
+            words_[k + nwords_half] = d.get_word(k) ^ d.get_word(k + nwords_half);
         }
     }
 

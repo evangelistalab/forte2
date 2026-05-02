@@ -1,10 +1,16 @@
 #pragma once
 
 #include <array>
+#include <bit>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
-#include <span>
+#include <iterator>
+#include <ostream>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "bitwise_operations.hpp"
@@ -40,7 +46,7 @@ template <size_t N> class BitArray {
     static_assert(N % bits_per_word == 0, "The size of the BitArray (N) must be a multiple of 64");
 
     /// the number of words needed to store n bits
-    static constexpr size_t bits_to_words(size_t n) {
+    static constexpr size_t bits_to_words(size_t n) noexcept {
         return n / bits_per_word + (n % bits_per_word != 0);
     }
 
@@ -74,19 +80,19 @@ template <size_t N> class BitArray {
     /// @brief A class to access the bits of a BitArray object as if they were a vector of bools
     class Proxy {
       public:
-        Proxy(word_t& word, size_t index) : word_(word), mask_(maskbit(index)) {}
+        constexpr Proxy(word_t& word, size_t index) noexcept : word_(word), mask_(maskbit(index)) {}
 
         // conversion to bool for read access
-        operator bool() const { return word_ & mask_; }
+        constexpr operator bool() const noexcept { return word_ & mask_; }
 
         // assignment operator for write access
-        Proxy& operator=(bool val) {
+        Proxy& operator=(bool val) noexcept {
             word_ ^= (-val ^ word_) & mask_; // if-free implementation
             return *this;
         }
 
         // assignment operator for write access
-        Proxy& operator=(const Proxy& other) {
+        Proxy& operator=(const Proxy& other) noexcept {
             if (this != &other) { // check for self-assignment
                 *this = static_cast<bool>(other);
             }
@@ -94,7 +100,7 @@ template <size_t N> class BitArray {
         }
 
         // swap function
-        friend void swap(Proxy a, Proxy b) {
+        friend void swap(Proxy a, Proxy b) noexcept {
             bool temp = static_cast<bool>(a);
             a = static_cast<bool>(b);
             b = temp;
@@ -108,13 +114,13 @@ template <size_t N> class BitArray {
     /// @brief Access the bits of a BitArray object as if they were a vector of bools
     /// @param index the index of the bit to access
     /// @return a Proxy object that can be used to read or write the bit
-    Proxy operator[](size_t index) { return Proxy(getword(index), whichbit(index)); }
+    Proxy operator[](size_t index) noexcept { return Proxy(getword(index), whichbit(index)); }
 
     /// @brief Access the bits of a BitArray object as if they were a vector of bools (const
     /// version)
     /// @param index the index of the bit to access
     /// @return the value of the bit
-    bool operator[](size_t index) const { return get_bit(index); }
+    constexpr bool operator[](size_t index) const noexcept { return get_bit(index); }
 
     class iterator {
       public:
@@ -127,7 +133,7 @@ template <size_t N> class BitArray {
         iterator(typename container_t::iterator word_it, size_t index)
             : word_it_(word_it), index_(index) {}
 
-        reference operator*() const { return Proxy(*word_it_, index_); }
+        reference operator*() const noexcept { return Proxy(*word_it_, index_); }
 
         iterator& operator++() {
             ++index_;
@@ -160,39 +166,39 @@ template <size_t N> class BitArray {
             return copy;
         }
 
-        bool operator==(const iterator& other) const {
+        bool operator==(const iterator& other) const noexcept {
             return (word_it_ == other.word_it_) and (index_ == other.index_);
         }
 
-        bool operator!=(const iterator& other) const { return !(*this == other); }
+        bool operator!=(const iterator& other) const noexcept { return !(*this == other); }
 
       private:
         typename container_t::iterator word_it_;
         size_t index_;
     };
 
-    iterator begin() { return iterator(words_.begin(), 0); }
-    iterator end() { return iterator(words_.end(), 0); }
+    iterator begin() noexcept { return iterator(words_.begin(), 0); }
+    iterator end() noexcept { return iterator(words_.end(), 0); }
 
     // get the value of bit in position pos
-    bool get_bit(size_t pos) const { return getword(pos) & maskbit(pos); }
+    constexpr bool get_bit(size_t pos) const noexcept { return getword(pos) & maskbit(pos); }
 
     /// set bit in position pos to the value val
-    void set_bit(size_t pos, bool val) {
+    void set_bit(size_t pos, bool val) noexcept {
         getword(pos) ^= (-val ^ getword(pos)) & maskbit(pos); // if-free implementation
     }
 
     /// get a word in position pos
-    word_t get_word(size_t pos) const { return words_[pos]; }
+    constexpr word_t get_word(size_t pos) const noexcept { return words_[pos]; }
 
     /// set a word in position pos
-    void set_word(size_t pos, word_t word) { words_[pos] = word; }
+    void set_word(size_t pos, word_t word) noexcept { words_[pos] = word; }
 
     /// return the number of bits
-    size_t get_nbits() const { return nbits; }
+    constexpr size_t get_nbits() const noexcept { return nbits; }
 
     /// set all bits (including unused) to zero
-    void clear() {
+    constexpr void clear() noexcept {
         if constexpr (N == 64) {
             words_[0] = word_t(0);
         } else if constexpr (N == 128) {
@@ -208,7 +214,7 @@ template <size_t N> class BitArray {
     /// This fills the half-open bit range [0, n). For example, fill_up_to(70) sets global bits
     /// 0 through 69, leaving bit 70 unset. If n <= 0 all bits are cleared; if n >= nbits all bits
     /// are set.
-    void fill_up_to(int n) {
+    void fill_up_to(int n) noexcept {
         clear();
         if (n <= 0) {
             return;
@@ -232,7 +238,7 @@ template <size_t N> class BitArray {
 
     /// @brief XOR the bits up to the nth bit
     /// @param n
-    void xor_up_to(size_t n) {
+    void xor_up_to(size_t n) noexcept {
         if (n == 0)
             return; // Nothing to XOR if n == 0
 
@@ -253,13 +259,13 @@ template <size_t N> class BitArray {
     }
 
     /// flip all bits
-    void flip() {
+    constexpr void flip() noexcept {
         for (word_t& w : words_)
             w = ~w;
     }
 
     /// equal operator
-    bool operator==(const BitArray<N>& lhs) const {
+    constexpr bool operator==(const BitArray<N>& lhs) const noexcept {
         if constexpr (N == 64) {
             return (this->words_[0] == lhs.words_[0]);
         } else if constexpr (N == 128) {
@@ -280,7 +286,7 @@ template <size_t N> class BitArray {
     }
 
     /// not equal operator
-    bool operator!=(const BitArray<N>& lhs) const {
+    constexpr bool operator!=(const BitArray<N>& lhs) const noexcept {
         if constexpr (N == 64) {
             return (this->words_[0] != lhs.words_[0]);
         } else if constexpr (N == 128) {
@@ -301,14 +307,14 @@ template <size_t N> class BitArray {
     }
 
     /// not operator
-    BitArray<N> operator~() const {
+    constexpr BitArray<N> operator~() const noexcept {
         BitArray<N> res(*this);
         res.flip();
         return res;
     }
 
     /// Less than operator
-    bool operator<(const BitArray<N>& lhs) const {
+    constexpr bool operator<(const BitArray<N>& lhs) const noexcept {
         if constexpr (N == 64) {
             return (this->words_[0] < lhs.words_[0]);
         } else if constexpr (N == 128) {
@@ -337,7 +343,7 @@ template <size_t N> class BitArray {
     }
 
     /// Bitwise OR operator (|)
-    BitArray<N> operator|(const BitArray<N>& lhs) const {
+    constexpr BitArray<N> operator|(const BitArray<N>& lhs) const noexcept {
         BitArray<N> result;
         for (size_t n = 0; n < nwords_; n++) {
             result.words_[n] = words_[n] | lhs.words_[n];
@@ -346,7 +352,7 @@ template <size_t N> class BitArray {
     }
 
     /// Bitwise OR operator (|=)
-    BitArray<N>& operator|=(const BitArray<N>& lhs) {
+    BitArray<N>& operator|=(const BitArray<N>& lhs) noexcept {
         for (size_t n = 0; n < nwords_; n++) {
             words_[n] |= lhs.words_[n];
         }
@@ -354,7 +360,7 @@ template <size_t N> class BitArray {
     }
 
     /// Bitwise XOR operator (^)
-    BitArray<N> operator^(const BitArray<N>& lhs) const {
+    constexpr BitArray<N> operator^(const BitArray<N>& lhs) const noexcept {
         BitArray<N> result;
         for (size_t n = 0; n < nwords_; n++) {
             result.words_[n] = words_[n] ^ lhs.words_[n];
@@ -363,7 +369,7 @@ template <size_t N> class BitArray {
     }
 
     /// Bitwise XOR operator (^=)
-    BitArray<N>& operator^=(const BitArray<N>& lhs) {
+    BitArray<N>& operator^=(const BitArray<N>& lhs) noexcept {
         for (size_t n = 0; n < nwords_; n++) {
             words_[n] ^= lhs.words_[n];
         }
@@ -371,7 +377,7 @@ template <size_t N> class BitArray {
     }
 
     /// Bitwise plus without carrying operator (+)
-    BitArray<N> operator+(const BitArray<N>& lhs) const {
+    constexpr BitArray<N> operator+(const BitArray<N>& lhs) const noexcept {
         BitArray<N> result;
         for (size_t n = 0; n < nwords_; n++) {
             result.words_[n] = words_[n] ^ lhs.words_[n];
@@ -380,7 +386,7 @@ template <size_t N> class BitArray {
     }
 
     /// Bitwise AND operator (&)
-    BitArray<N> operator&(const BitArray<N>& lhs) const {
+    constexpr BitArray<N> operator&(const BitArray<N>& lhs) const noexcept {
         BitArray<N> result;
         for (size_t n = 0; n < nwords_; n++) {
             result.words_[n] = words_[n] & lhs.words_[n];
@@ -389,7 +395,7 @@ template <size_t N> class BitArray {
     }
 
     /// Bitwise AND operator (&=)
-    BitArray<N>& operator&=(const BitArray<N>& lhs) {
+    BitArray<N>& operator&=(const BitArray<N>& lhs) noexcept {
         for (size_t n = 0; n < nwords_; n++) {
             words_[n] &= lhs.words_[n];
         }
@@ -397,7 +403,7 @@ template <size_t N> class BitArray {
     }
 
     /// Bitwise difference operator (-)
-    BitArray<N> operator-(const BitArray<N>& lhs) const {
+    constexpr BitArray<N> operator-(const BitArray<N>& lhs) const noexcept {
         BitArray<N> result;
         for (size_t n = 0; n < nwords_; n++) {
             result.words_[n] = words_[n] & (~lhs.words_[n]);
@@ -406,27 +412,28 @@ template <size_t N> class BitArray {
     }
 
     /// Bitwise difference operator (-=)
-    BitArray<N>& operator-=(const BitArray<N>& lhs) {
+    BitArray<N>& operator-=(const BitArray<N>& lhs) noexcept {
         for (size_t n = 0; n < nwords_; n++) {
             words_[n] &= ~lhs.words_[n];
         }
         return *this;
     }
 
-    /// Count the number of bits set to true in the words included in the range [begin,end)
-    int count(size_t begin = 0, size_t end = nwords_) const {
-        int c = 0;
+    /// Count the number of set bits in the word range [begin, end).
+    /// begin and end are word indices, not bit indices.
+    constexpr size_t count(size_t begin = 0, size_t end = nwords_) const noexcept {
+        size_t c = 0;
         for (; begin < end; ++begin) {
             c += std::popcount(this->words_[begin]);
         }
         return c;
     }
 
-    size_t count_all() const {
+    constexpr size_t count_all() const noexcept {
         // with constexpr we compile only one of these cases
         if constexpr (N == 128) {
             return std::popcount(words_[0]) + std::popcount(words_[1]);
-        } else if (N == 256) {
+        } else if constexpr (N == 256) {
             return std::popcount(words_[0]) + std::popcount(words_[1]) + std::popcount(words_[2]) +
                    std::popcount(words_[3]);
         } else {
@@ -438,9 +445,10 @@ template <size_t N> class BitArray {
         }
     }
 
-    /// Find the first bit set to one (starting from the lowest index)
+    /// Find the first bit set to one in the word range [begin, end), starting from the lowest bit
+    /// index. begin and end are word indices, not bit indices.
     /// @return the index of the the first bit, or if all bits are zero, returns ~0
-    uint64_t find_first_one(size_t begin = 0, size_t end = nwords_) const {
+    uint64_t find_first_one(size_t begin = 0, size_t end = nwords_) const noexcept {
         for (; begin < end; ++begin) {
             // find the first word != 0
             if (words_[begin] != word_t(0)) {
@@ -450,55 +458,16 @@ template <size_t N> class BitArray {
         return ui64_bit_not_found;
     }
 
-    /// Find the last bit set to one
+    /// Find the last bit set to one in the word range [begin, end).
+    /// begin and end are word indices, not bit indices.
     /// @return the index of the last bit, or if all bits are zero, returns ~0
-    uint64_t find_last_one(size_t begin = 0, size_t end = nwords_) const {
+    uint64_t find_last_one(size_t begin = 0, size_t end = nwords_) const noexcept {
         for (; begin < end; --end) {
             const size_t word_idx = end - 1;
             if (words_[word_idx] != word_t(0)) {
                 return ui64_find_highest_one_bit(words_[word_idx]) + word_idx * bits_per_word;
             }
         }
-        return ui64_bit_not_found;
-    }
-
-    /// Clear the first bit set to one (starting from the lowest index)
-    void clear_first_one() {
-        for (size_t n = 0; n < nwords_; n++) {
-            // find the first word != 0
-            if (words_[n] != word_t(0)) {
-                words_[n] = ui64_clear_lowest_one_bit(words_[n]);
-                return;
-            }
-        }
-    }
-
-    /// Find the first bit set to one and clear it (starting from the lowest index)
-    /// @return the index of the the first bit, or if all bits are zero, returns ~0
-    uint64_t find_and_clear_first_one() {
-        for (size_t n = 0; n < nwords_; n++) {
-            // find a word that is not 0
-            if (words_[n] != word_t(0)) {
-                // get the lowest set bit
-                return ui64_find_and_clear_lowest_one_bit(words_[n]) + n * bits_per_word;
-            }
-        }
-        // if the BitArray object is zero then return ~0
-        return ui64_bit_not_found;
-    }
-
-    /// Find the first bit set to one and clear it (starting from the lowest index)
-    /// @return the index of the the first bit, or if all bits are zero, returns ~0
-    uint64_t fast_find_and_clear_first_one(size_t n) {
-        n = whichword(n);
-        for (; n < nwords_; n++) {
-            // find a word that is not 0
-            if (words_[n] != word_t(0)) {
-                // get the lowest set bit
-                return ui64_find_and_clear_lowest_one_bit(words_[n]) + n * bits_per_word;
-            }
-        }
-        // if the BitArray object is zero then return ~0
         return ui64_bit_not_found;
     }
 
@@ -678,8 +647,8 @@ template <size_t N> class BitArray {
                     count += std::popcount(words_[k]);
                 }
             }
-            return (count % 2 == 0) ? ui64_sign(getword(n), whichbit(n))
-                                    : -ui64_sign(getword(n), whichbit(n));
+            const double word_sign = ui64_sign(getword(n), whichbit(n));
+            return (count % 2 == 0) ? word_sign : -word_sign;
         }
     }
 
@@ -698,8 +667,8 @@ template <size_t N> class BitArray {
                     count += std::popcount(words_[k]);
                 }
             }
-            return (count % 2 == 0) ? ui64_sign_reverse(getword(n), whichbit(n))
-                                    : -ui64_sign_reverse(getword(n), whichbit(n));
+            const double word_sign = ui64_sign_reverse(getword(n), whichbit(n));
+            return (count % 2 == 0) ? word_sign : -word_sign;
         }
     }
 
@@ -726,26 +695,11 @@ template <size_t N> class BitArray {
     }
 
     /// @brief Find the irreducible representation of a product of spin orbitals
-    /// @param temp the input BitArray
     /// @param irrep a vector of irrep values
     /// @return the irrep
     int symmetry(const std::vector<int>& irrep) const {
         int sym = 0;
-        uint64_t pos;
-        // loop over all words
-        for (size_t n = 0; n < nwords_; n++) {
-            pos = 0;
-            // find all 1s in this word
-            while (pos < 64) { // this could be replaced by a loop
-                // find the lowest set bit starting at pos
-                pos = ui64_find_lowest_one_bit_at_pos(words_[n], pos);
-                // If pos is less than 64 compute the symmetry and increment
-                if (pos < 64) {
-                    sym ^= irrep[pos + n * bits_per_word];
-                    pos++; // must be here
-                }
-            }
-        }
+        for_each_set_bit([&](size_t pos) { sym ^= irrep[pos]; });
         return sym;
     }
 
@@ -828,11 +782,12 @@ template <size_t N> class BitArray {
         }
     };
 
-    // ==> Private Functions <==
+  protected:
+    // ==> Protected Functions <==
 
     // These functions are used to address bits in the BitArray.
-    // They should not be used outside the class because they contain details of the
-    // implementation.
+    // Derived classes use them for word-level specializations, but they are not part of the public
+    // BitArray API.
 
     /// the index of the word where the bit in position pos is found
     static constexpr size_t whichword(size_t pos) noexcept { return pos / bits_per_word; }
@@ -846,12 +801,12 @@ template <size_t N> class BitArray {
     }
 
     /// the word where bit in position pos is found
-    word_t& getword(size_t pos) { return words_[whichword(pos)]; }
+    constexpr word_t& getword(size_t pos) noexcept { return words_[whichword(pos)]; }
 
     /// the word where bit in position pos is found (const version)
-    const word_t& getword(size_t pos) const { return words_[whichword(pos)]; }
+    constexpr const word_t& getword(size_t pos) const noexcept { return words_[whichword(pos)]; }
 
-    // ==> Private Data <==
+    // ==> Protected Data <==
 
     /// The bits stored as a vector of words (random initialization at construction)
     container_t words_;
@@ -880,15 +835,7 @@ template <size_t N> std::ostream& operator<<(std::ostream& os, const BitArray<N>
 } // namespace forte2
 
 namespace std {
-template <size_t N>
-void swap(typename forte2::BitArray<N>::Proxy& a, typename forte2::BitArray<N>::Proxy& b) {
-    bool temp_a = static_cast<bool>(a);
-    bool temp_b = static_cast<bool>(b);
-    a = temp_b;
-    b = temp_a;
-}
-
-// specialization of std::hash for forte2::OccupationVector
+// specialization of std::hash for forte2::BitArray
 template <size_t N> struct hash<forte2::BitArray<N>> {
     std::size_t operator()(const forte2::BitArray<N>& d) const noexcept {
         using HashT = typename forte2::BitArray<N>::Hash;

@@ -98,3 +98,33 @@ def test_ci_strings_triplet():
         (2, 2),
         (2, 3),
     ]
+
+
+def test_ci_strings_symmetry_uses_all_set_bits():
+    orbital_symmetry = [[i % 4 for i in range(59)], [1], [2], [3], [1], [2]]
+    target_symmetry = 3
+    ci_strings = CIStrings(
+        3,
+        3,
+        target_symmetry,
+        orbital_symmetry,
+        [1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1],
+    )
+
+    mo_symmetry = [sym for gas_symmetry in orbital_symmetry for sym in gas_symmetry]
+
+    def direct_symmetry(det):
+        sym = 0
+        for p, irrep in enumerate(mo_symmetry):
+            if det.na(p):
+                sym ^= irrep
+            if det.nb(p):
+                sym ^= irrep
+        return sym
+
+    dets = ci_strings.make_determinants()
+
+    assert dets
+    assert all(det.na(63) != det.nb(63) for det in dets)
+    assert all(direct_symmetry(det) == target_symmetry for det in dets)

@@ -24,20 +24,22 @@ enum class DetSpinType { Alpha, Beta };
  * [word 1][word 2]...[word K][word K+1]...[word 2K]
  */
 template <size_t N> class DeterminantImpl : public BitArray<N> {
+  protected:
+    using BitArray<N>::getword;
+    using BitArray<N>::maskbit;
+    using BitArray<N>::whichbit;
+    using BitArray<N>::whichword;
+    using BitArray<N>::words_;
+
   public:
     // Since the template parent (BitArray) of this template class is not instantiated during the
     // compilation pass, here we declare all the member variables and functions inherited and used
     using BitArray<N>::nbits;
     using BitArray<N>::bits_per_word;
     using BitArray<N>::nwords_;
-    using BitArray<N>::words_;
     using BitArray<N>::count;
     using BitArray<N>::get_bit;
     using BitArray<N>::set_bit;
-    using BitArray<N>::maskbit;
-    using BitArray<N>::whichbit;
-    using BitArray<N>::whichword;
-    using BitArray<N>::getword;
     using BitArray<N>::slater_sign;
     using BitArray<N>::operator|;
     using BitArray<N>::operator^;
@@ -960,34 +962,34 @@ inline double faster_apply_operator_to_det(const DeterminantImpl<N>& d, Determin
     size_t n = 0;
     if constexpr (N == 128) {
         // specialization for 64 + 64 bits
-        new_d.words_[0] = d.words_[0] & (~ann.words_[0]);
-        new_d.words_[1] = d.words_[1] & (~ann.words_[1]);
-        n += std::popcount(new_d.words_[0] & sign.words_[0]);
-        n += std::popcount(new_d.words_[1] & sign.words_[1]);
-        new_d.words_[0] |= cre.words_[0];
-        new_d.words_[1] |= cre.words_[1];
+        const auto w0 = d.get_word(0) & (~ann.get_word(0));
+        const auto w1 = d.get_word(1) & (~ann.get_word(1));
+        n += std::popcount(w0 & sign.get_word(0));
+        n += std::popcount(w1 & sign.get_word(1));
+        new_d.set_word(0, w0 | cre.get_word(0));
+        new_d.set_word(1, w1 | cre.get_word(1));
     } else if constexpr (N == 256) {
-        new_d.words_[0] = d.words_[0] & (~ann.words_[0]);
-        new_d.words_[1] = d.words_[1] & (~ann.words_[1]);
-        new_d.words_[2] = d.words_[2] & (~ann.words_[2]);
-        new_d.words_[3] = d.words_[3] & (~ann.words_[3]);
-        n += std::popcount(new_d.words_[0] & sign.words_[0]);
-        n += std::popcount(new_d.words_[1] & sign.words_[1]);
-        n += std::popcount(new_d.words_[2] & sign.words_[2]);
-        n += std::popcount(new_d.words_[3] & sign.words_[3]);
-        new_d.words_[0] |= cre.words_[0];
-        new_d.words_[1] |= cre.words_[1];
-        new_d.words_[2] |= cre.words_[2];
-        new_d.words_[3] |= cre.words_[3];
+        const auto w0 = d.get_word(0) & (~ann.get_word(0));
+        const auto w1 = d.get_word(1) & (~ann.get_word(1));
+        const auto w2 = d.get_word(2) & (~ann.get_word(2));
+        const auto w3 = d.get_word(3) & (~ann.get_word(3));
+        n += std::popcount(w0 & sign.get_word(0));
+        n += std::popcount(w1 & sign.get_word(1));
+        n += std::popcount(w2 & sign.get_word(2));
+        n += std::popcount(w3 & sign.get_word(3));
+        new_d.set_word(0, w0 | cre.get_word(0));
+        new_d.set_word(1, w1 | cre.get_word(1));
+        new_d.set_word(2, w2 | cre.get_word(2));
+        new_d.set_word(3, w3 | cre.get_word(3));
     } else {
         // loop over the words
         for (size_t i = 0; i < DeterminantImpl<N>::nwords_; ++i) {
             // apply the annihilation operator
-            new_d.words_[i] = d.words_[i] & (~ann.words_[i]);
+            const auto w = d.get_word(i) & (~ann.get_word(i));
             // compute the sign
-            n += std::popcount(new_d.words_[i] & sign.words_[i]);
+            n += std::popcount(w & sign.get_word(i));
             // apply the creation operator
-            new_d.words_[i] |= cre.words_[i];
+            new_d.set_word(i, w | cre.get_word(i));
         }
     }
     return 1.0 - 2.0 * (n & 1);

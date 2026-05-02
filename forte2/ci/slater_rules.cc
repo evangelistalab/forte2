@@ -6,97 +6,64 @@
 
 namespace {
 
-/// Holds the orbital differences between two determinants, restricted to the active
-/// spatial-orbital range used by this SlaterRules object.
+/// Holds the connection between two determinants over the stored determinant words.
 ///
-/// The *_lhs_only strings contain occupied orbitals in lhs that are unoccupied in rhs.
-/// The *_rhs_only strings contain the matching occupied orbitals in rhs. These are the
-/// annihilation and creation orbital sets needed to connect rhs to lhs. The *_common
-/// strings contain orbitals occupied in both determinants and are used in single-excitation
-/// contractions.
-struct ExcitationWords {
-    forte2::String a_lhs_only = forte2::String::zero();
-    forte2::String a_rhs_only = forte2::String::zero();
-    forte2::String b_lhs_only = forte2::String::zero();
-    forte2::String b_rhs_only = forte2::String::zero();
-    forte2::String a_common = forte2::String::zero();
-    forte2::String b_common = forte2::String::zero();
+/// The *_lhs_only arrays contain occupied orbitals in lhs that are unoccupied in rhs. The
+/// *_rhs_only arrays contain the matching occupied orbitals in rhs. At most two indices are stored
+/// per spin/direction because Slater rules only need explicit orbital labels through doubles; the
+/// counters still record the full popcount so disconnected higher-rank pairs are detected.
+struct SlaterConnection {
+    std::array<std::size_t, 2> a_lhs_only{ui64_bit_not_found, ui64_bit_not_found};
+    std::array<std::size_t, 2> a_rhs_only{ui64_bit_not_found, ui64_bit_not_found};
+    std::array<std::size_t, 2> b_lhs_only{ui64_bit_not_found, ui64_bit_not_found};
+    std::array<std::size_t, 2> b_rhs_only{ui64_bit_not_found, ui64_bit_not_found};
     int na_lhs_only = 0;
     int na_rhs_only = 0;
     int nb_lhs_only = 0;
     int nb_rhs_only = 0;
 };
 
-/// Return a word mask that keeps only spatial orbitals below norb.
+/// Count set bits in one word and store the first two global bit indices seen.
 ///
-/// Determinants can store more orbitals than a given SlaterRules active space. This mask lets
-/// the excitation analysis ignore bits outside the integral arrays without mutating either input
-/// determinant. For full words inside the active space the mask is all ones; for words beyond the
-/// active space it is zero.
-std::uint64_t active_word_mask(std::size_t word_idx, std::size_t norb) {
-    constexpr auto bits_per_word = forte2::Determinant::bits_per_word;
-    const std::size_t first_bit = word_idx * bits_per_word;
-    if (first_bit >= norb) {
-        return 0;
-    }
-    const std::size_t remaining_bits = norb - first_bit;
-    if (remaining_bits >= bits_per_word) {
-        return ~std::uint64_t(0);
-    }
-    return (std::uint64_t(1) << remaining_bits) - std::uint64_t(1);
-}
-
-/// Return the first two set-bit indices in ascending order.
-///
-/// SlaterRules only needs the explicit orbital indices for single and double excitations. The
-/// caller has already counted the excitation rank, so this helper intentionally stops after two
-/// bits and leaves missing entries as ui64_bit_not_found.
-std::array<std::size_t, 2> first_two_set_bits(const forte2::String& bit_string) {
-    std::array<std::size_t, 2> result{ui64_bit_not_found, ui64_bit_not_found};
-    std::size_t n = 0;
-    bit_string.for_each_set_bit([&](std::size_t p) {
-        if (n < result.size()) {
-            result[n++] = p;
+/// Words are scanned in ascending order, so the first two stored entries are also the first two
+/// orbital indices. The counter is incremented for every set bit, even after the fixed array is
+/// full, because the excitation rank check still needs the complete count.
+void collect_connection_bits(std::uint64_t bits, std::size_t base,
+                             std::array<std::size_t, 2>& indices, int& count) {
+    constexpr int max_stored_indices = 2;
+    while (bits) {
+        if (count < max_stored_indices) {
+            indices[count] = base + std::countr_zero(bits);
         }
-        return n < result.size();
-    });
-    return result;
+        ++count;
+        bits &= bits - 1;
+    }
 }
 
-/// Build masked alpha/beta difference words and their popcounts for lhs and rhs.
+/// Build alpha/beta connection indices and popcounts for lhs and rhs.
 ///
 /// The result gives a compact classification of the connection between two determinants:
-/// equal determinants, alpha/beta singles, doubles, or disconnected pairs. This avoids scanning
-/// each orbital with na()/nb() in the fast Slater-rule path while preserving the original
-/// spin-separated excitation cases.
-ExcitationWords build_excitation_words(const forte2::Determinant& lhs,
-                                       const forte2::Determinant& rhs, std::size_t norb) {
-    ExcitationWords result;
+/// equal determinants, alpha/beta singles, doubles, or disconnected pairs. It avoids storing full
+/// temporary bit strings and records only the orbital labels Slater rules need.
+SlaterConnection build_slater_connection(const forte2::Determinant& lhs,
+                                         const forte2::Determinant& rhs) {
+    SlaterConnection result;
     for (std::size_t word_idx = 0; word_idx < forte2::Determinant::nwords_half; ++word_idx) {
-        const std::uint64_t mask = active_word_mask(word_idx, norb);
-        const std::uint64_t lhs_a = lhs.get_word(word_idx) & mask;
-        const std::uint64_t rhs_a = rhs.get_word(word_idx) & mask;
-        const std::uint64_t lhs_b =
-            lhs.get_word(word_idx + forte2::Determinant::nwords_half) & mask;
-        const std::uint64_t rhs_b =
-            rhs.get_word(word_idx + forte2::Determinant::nwords_half) & mask;
+        const std::uint64_t lhs_a = lhs.get_word(word_idx);
+        const std::uint64_t rhs_a = rhs.get_word(word_idx);
+        const std::uint64_t lhs_b = lhs.get_word(word_idx + forte2::Determinant::nwords_half);
+        const std::uint64_t rhs_b = rhs.get_word(word_idx + forte2::Determinant::nwords_half);
 
         const std::uint64_t a_lhs_only = lhs_a & ~rhs_a;
         const std::uint64_t a_rhs_only = rhs_a & ~lhs_a;
         const std::uint64_t b_lhs_only = lhs_b & ~rhs_b;
         const std::uint64_t b_rhs_only = rhs_b & ~lhs_b;
 
-        result.a_lhs_only.set_word(word_idx, a_lhs_only);
-        result.a_rhs_only.set_word(word_idx, a_rhs_only);
-        result.b_lhs_only.set_word(word_idx, b_lhs_only);
-        result.b_rhs_only.set_word(word_idx, b_rhs_only);
-        result.a_common.set_word(word_idx, lhs_a & rhs_a);
-        result.b_common.set_word(word_idx, lhs_b & rhs_b);
-
-        result.na_lhs_only += std::popcount(a_lhs_only);
-        result.na_rhs_only += std::popcount(a_rhs_only);
-        result.nb_lhs_only += std::popcount(b_lhs_only);
-        result.nb_rhs_only += std::popcount(b_rhs_only);
+        const std::size_t base = word_idx * forte2::Determinant::bits_per_word;
+        collect_connection_bits(a_lhs_only, base, result.a_lhs_only, result.na_lhs_only);
+        collect_connection_bits(a_rhs_only, base, result.a_rhs_only, result.na_rhs_only);
+        collect_connection_bits(b_lhs_only, base, result.b_lhs_only, result.nb_lhs_only);
+        collect_connection_bits(b_rhs_only, base, result.b_rhs_only, result.nb_rhs_only);
     }
     return result;
 }
@@ -107,8 +74,7 @@ namespace forte2 {
 
 SlaterRules::SlaterRules(int norb, double scalar_energy, np_matrix one_electron_integrals,
                          np_tensor4 two_electron_integrals)
-    : norb_(norb), norb2_(norb * norb), norb3_(norb * norb * norb),
-      scalar_energy_(scalar_energy) {
+    : norb_(norb), norb2_(norb * norb), norb3_(norb * norb * norb), scalar_energy_(scalar_energy) {
 
     // Precompute the one-electron, Coulomb and Exchange integrals
     h_.resize(norb_ * norb_);
@@ -179,23 +145,15 @@ double SlaterRules::energy(const Determinant& det) const {
 
 double SlaterRules::singles_coupling_a(size_t i, size_t a, const Determinant& d) const noexcept {
     double coupling = h(i, a);
-    d.for_each_a_occ([&](size_t j) {
-        coupling += f_JK(i, a, j);
-    });
-    d.for_each_b_occ([&](size_t j) {
-        coupling += f_J(i, a, j);
-    });
+    d.for_each_a_occ([&](size_t j) { coupling += f_JK(i, a, j); });
+    d.for_each_b_occ([&](size_t j) { coupling += f_J(i, a, j); });
     return coupling;
 }
 
 double SlaterRules::singles_coupling_b(size_t i, size_t a, const Determinant& d) const noexcept {
     double coupling = h(i, a);
-    d.for_each_a_occ([&](size_t j) {
-        coupling += f_J(i, a, j);
-    });
-    d.for_each_b_occ([&](size_t j) {
-        coupling += f_JK(i, a, j);
-    });
+    d.for_each_a_occ([&](size_t j) { coupling += f_J(i, a, j); });
+    d.for_each_b_occ([&](size_t j) { coupling += f_JK(i, a, j); });
     return coupling;
 }
 
@@ -209,78 +167,64 @@ np_vector SlaterRules::energies(const std::vector<Determinant>& dets) const {
 }
 
 double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs) const {
-    const auto excitation = build_excitation_words(lhs, rhs, norb_);
+    const auto connection = build_slater_connection(lhs, rhs);
 
-    if ((excitation.na_lhs_only != excitation.na_rhs_only) or
-        (excitation.nb_lhs_only != excitation.nb_rhs_only)) {
+    if ((connection.na_lhs_only != connection.na_rhs_only) or
+        (connection.nb_lhs_only != connection.nb_rhs_only)) {
         return 0.0;
     }
 
-    const int excitation_rank = excitation.na_lhs_only + excitation.nb_lhs_only;
-    if (excitation_rank > 2) {
+    const int nadiff = connection.na_lhs_only;
+    const int nbdiff = connection.nb_lhs_only;
+    if (nadiff + nbdiff > 2) {
         return 0.0;
     }
 
-    if (excitation_rank == 0) {
+    // Encode the spin-resolved excitation rank in a small dispatch key. The preceding rank guard
+    // is required because the key is only unique for diagonal, singles, and doubles.
+    switch (nadiff * 4 + nbdiff) {
+    case 0:
         return energy(lhs);
-    }
-
-    if ((excitation.na_lhs_only == 1) and (excitation.nb_lhs_only == 0)) {
-        const auto lhs_a = first_two_set_bits(excitation.a_lhs_only);
-        const auto rhs_a = first_two_set_bits(excitation.a_rhs_only);
-        const auto i = lhs_a[0];
-        const auto j = rhs_a[0];
+    case 4: {
+        const auto i = connection.a_lhs_only[0];
+        const auto j = connection.a_rhs_only[0];
         const double sign = lhs.slater_sign_aa(static_cast<int>(i), static_cast<int>(j));
         return sign * singles_coupling_a(i, j, rhs);
     }
-
-    if ((excitation.na_lhs_only == 0) and (excitation.nb_lhs_only == 1)) {
-        const auto lhs_b = first_two_set_bits(excitation.b_lhs_only);
-        const auto rhs_b = first_two_set_bits(excitation.b_rhs_only);
-        const auto i = lhs_b[0];
-        const auto j = rhs_b[0];
+    case 1: {
+        const auto i = connection.b_lhs_only[0];
+        const auto j = connection.b_rhs_only[0];
         const double sign = lhs.slater_sign_bb(static_cast<int>(i), static_cast<int>(j));
         return sign * singles_coupling_b(i, j, rhs);
     }
-
-    if ((excitation.na_lhs_only == 2) and (excitation.nb_lhs_only == 0)) {
-        const auto lhs_a = first_two_set_bits(excitation.a_lhs_only);
-        const auto rhs_a = first_two_set_bits(excitation.a_rhs_only);
-        const auto i = lhs_a[0];
-        const auto j = lhs_a[1];
-        const auto k = rhs_a[0];
-        const auto l = rhs_a[1];
+    case 8: {
+        const auto i = connection.a_lhs_only[0];
+        const auto j = connection.a_lhs_only[1];
+        const auto k = connection.a_rhs_only[0];
+        const auto l = connection.a_rhs_only[1];
         const double sign = lhs.slater_sign_aaaa(static_cast<int>(i), static_cast<int>(j),
                                                  static_cast<int>(k), static_cast<int>(l));
         return sign * va(i, j, k, l); // <ij||kl>
     }
-
-    if ((excitation.na_lhs_only == 0) and (excitation.nb_lhs_only == 2)) {
-        const auto lhs_b = first_two_set_bits(excitation.b_lhs_only);
-        const auto rhs_b = first_two_set_bits(excitation.b_rhs_only);
-        const auto i = lhs_b[0];
-        const auto j = lhs_b[1];
-        const auto k = rhs_b[0];
-        const auto l = rhs_b[1];
+    case 2: {
+        const auto i = connection.b_lhs_only[0];
+        const auto j = connection.b_lhs_only[1];
+        const auto k = connection.b_rhs_only[0];
+        const auto l = connection.b_rhs_only[1];
         const double sign = lhs.slater_sign_bbbb(static_cast<int>(i), static_cast<int>(j),
                                                  static_cast<int>(k), static_cast<int>(l));
         return sign * va(i, j, k, l); // <ij||kl>
     }
-
-    if ((excitation.na_lhs_only == 1) and (excitation.nb_lhs_only == 1)) {
-        const auto lhs_a = first_two_set_bits(excitation.a_lhs_only);
-        const auto rhs_a = first_two_set_bits(excitation.a_rhs_only);
-        const auto lhs_b = first_two_set_bits(excitation.b_lhs_only);
-        const auto rhs_b = first_two_set_bits(excitation.b_rhs_only);
-        const auto i = lhs_a[0];
-        const auto j = lhs_b[0];
-        const auto k = rhs_a[0];
-        const auto l = rhs_b[0];
+    case 5: {
+        const auto i = connection.a_lhs_only[0];
+        const auto j = connection.b_lhs_only[0];
+        const auto k = connection.a_rhs_only[0];
+        const auto l = connection.b_rhs_only[0];
         const double sign = lhs.slater_sign_aa(static_cast<int>(i), static_cast<int>(k)) *
                             lhs.slater_sign_bb(static_cast<int>(j), static_cast<int>(l));
         return sign * v(i, j, k, l); // <ij|kl>
     }
-
+    }
     return 0.0;
 }
 
