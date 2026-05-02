@@ -1,7 +1,7 @@
 project = "Forte2"
 copyright = "2025-2026, Evangelista Lab"
 author = "Evangelista Lab"
-release = "0.3.0"
+release = "2026.5.1"
 
 extensions = [
     "autoapi.extension",
