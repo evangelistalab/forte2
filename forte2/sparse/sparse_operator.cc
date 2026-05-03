@@ -98,11 +98,11 @@ SparseOperator operator*(const SparseOperator& lhs, const SparseOperator& rhs) {
 SparseOperator product(const SparseOperator& lhs, const SparseOperator& rhs) {
     SQOperatorProductComputer computer;
     SparseOperator C;
+    const std::function<void(const SQOperatorString&, const sparse_scalar_t)> add_to_C =
+        [&C](const SQOperatorString& sqop, const sparse_scalar_t c) { C.add(sqop, c); };
     for (const auto& [lhs_op, lhs_c] : lhs.elements()) {
         for (const auto& [rhs_op, rhs_c] : rhs.elements()) {
-            computer.product(
-                lhs_op, rhs_op, lhs_c * rhs_c,
-                [&C](const SQOperatorString& sqop, const sparse_scalar_t c) { C.add(sqop, c); });
+            computer.product(lhs_op, rhs_op, lhs_c * rhs_c, add_to_C);
         }
     }
     return C;
@@ -112,11 +112,14 @@ SparseOperator commutator(const SparseOperator& lhs, const SparseOperator& rhs) 
     // place the elements in a map to avoid duplicates and to simplify the addition
     SQOperatorProductComputer computer;
     SparseOperator C;
+    const std::function<void(const SQOperatorString&, const sparse_scalar_t)> add_to_C =
+        [&C](const SQOperatorString& sqop, const sparse_scalar_t c) { C[sqop] += c; };
     for (const auto& [lhs_op, lhs_c] : lhs.elements()) {
         for (const auto& [rhs_op, rhs_c] : rhs.elements()) {
-            computer.commutator(
-                lhs_op, rhs_op, lhs_c * rhs_c,
-                [&C](const SQOperatorString& sqop, const sparse_scalar_t c) { C[sqop] += c; });
+            if (do_ops_commute(lhs_op, rhs_op)) {
+                continue;
+            }
+            computer.commutator(lhs_op, rhs_op, lhs_c * rhs_c, add_to_C);
         }
     }
     return C;

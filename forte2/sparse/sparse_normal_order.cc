@@ -6,6 +6,7 @@
 #include <format>
 #include <stdexcept>
 #include <tuple>
+#include <unordered_map>
 
 #include "helpers/string_algorithms.h"
 
@@ -20,6 +21,43 @@ struct NormalOp {
     bool creation;
     bool alpha;
     int orbital;
+};
+
+using NormalOrderExpansion = std::vector<std::pair<NormalOrderedString, sparse_scalar_t>>;
+using SparseExpansion = std::vector<std::pair<SQOperatorString, sparse_scalar_t>>;
+
+struct NormalOrderCacheKey {
+    Determinant reference;
+    SQOperatorString sqop;
+    int max_rank;
+
+    bool operator==(const NormalOrderCacheKey& other) const {
+        return reference == other.reference and sqop == other.sqop and max_rank == other.max_rank;
+    }
+};
+
+struct NormalOrderCacheKeyHash {
+    std::size_t operator()(const NormalOrderCacheKey& key) const {
+        std::size_t h = std::hash<Determinant>()(key.reference);
+        h = hash_combine(h, SQOperatorString::Hash{}(key.sqop));
+        return hash_combine(h, std::hash<int>()(key.max_rank));
+    }
+};
+
+struct SparseExpansionCacheKey {
+    Determinant reference;
+    NormalOrderedString term;
+
+    bool operator==(const SparseExpansionCacheKey& other) const {
+        return reference == other.reference and term == other.term;
+    }
+};
+
+struct SparseExpansionCacheKeyHash {
+    std::size_t operator()(const SparseExpansionCacheKey& key) const {
+        std::size_t h = std::hash<Determinant>()(key.reference);
+        return hash_combine(h, NormalOrderedString::Hash{}(key.term));
+    }
 };
 
 std::vector<NormalOp> to_normal_ops(const op_tuple_t& ops) {
@@ -140,16 +178,17 @@ bool make_normal_ordered_string(const Determinant& reference, const std::vector<
 
 void normal_order_term(const Determinant& reference, const std::vector<NormalOp>& ops,
                        sparse_scalar_t coefficient, NormalOrderedSparseOperator& result,
-                       double screen_thresh) {
+                       double screen_thresh, int max_rank) {
     if (std::abs(coefficient) <= screen_thresh) {
         return;
     }
+    const int max_count = max_rank < 0 ? -1 : 2 * max_rank;
 
     for (size_t i = 0; i + 1 < ops.size(); ++i) {
         if (normal_less(reference, ops[i + 1], ops[i])) {
             auto swapped = ops;
             std::swap(swapped[i], swapped[i + 1]);
-            normal_order_term(reference, swapped, -coefficient, result, screen_thresh);
+            normal_order_term(reference, swapped, -coefficient, result, screen_thresh, max_rank);
 
             const double contraction = contraction_value(reference, ops[i], ops[i + 1]);
             if (contraction != 0.0) {
@@ -157,16 +196,82 @@ void normal_order_term(const Determinant& reference, const std::vector<NormalOp>
                 contracted.erase(contracted.begin() + static_cast<std::ptrdiff_t>(i),
                                  contracted.begin() + static_cast<std::ptrdiff_t>(i + 2));
                 normal_order_term(reference, contracted, contraction * coefficient, result,
-                                  screen_thresh);
+                                  screen_thresh, max_rank);
             }
             return;
         }
     }
 
+    if (max_count >= 0 and static_cast<int>(ops.size()) > max_count) {
+        return;
+    }
     NormalOrderedString term;
     if (make_normal_ordered_string(reference, ops, term)) {
         result.add(term, coefficient);
     }
+}
+
+const NormalOrderExpansion& normal_order_expansion(const Determinant& reference,
+                                                   const SQOperatorString& sqop, int max_rank) {
+    thread_local std::unordered_map<NormalOrderCacheKey, NormalOrderExpansion,
+                                    NormalOrderCacheKeyHash>
+        cache;
+    constexpr size_t max_cache_size = 500000;
+    if (cache.size() > max_cache_size) {
+        cache.clear();
+    }
+
+    NormalOrderCacheKey key{reference, sqop, max_rank};
+    if (auto it = cache.find(key); it != cache.end()) {
+        return it->second;
+    }
+
+    auto [it, inserted] = cache.emplace(std::move(key), NormalOrderExpansion{});
+    NormalOrderedSparseOperator ordered(reference);
+    normal_order_term(reference, to_normal_ops(sqop.op_tuple()), sparse_scalar_t(1.0), ordered, 0.0,
+                      max_rank);
+
+    auto& expansion = it->second;
+    expansion.reserve(ordered.size());
+    for (const auto& [term, coefficient] : ordered.elements()) {
+        if (max_rank < 0 or term.count() <= 2 * max_rank) {
+            expansion.emplace_back(term, coefficient);
+        }
+    }
+    return expansion;
+}
+
+const SparseExpansion& sparse_expansion(const Determinant& reference,
+                                        const NormalOrderedString& term) {
+    thread_local std::unordered_map<SparseExpansionCacheKey, SparseExpansion,
+                                    SparseExpansionCacheKeyHash>
+        cache;
+    constexpr size_t max_cache_size = 500000;
+    if (cache.size() > max_cache_size) {
+        cache.clear();
+    }
+
+    SparseExpansionCacheKey key{reference, term};
+    if (auto it = cache.find(key); it != cache.end()) {
+        return it->second;
+    }
+
+    auto [it, inserted] = cache.emplace(std::move(key), SparseExpansion{});
+
+    auto zero = Determinant::zero();
+    const auto identity = SQOperatorString(zero, zero);
+    SparseOperator expanded(identity, sparse_scalar_t(1.0));
+    for (const auto& op : physical_ops(term, reference)) {
+        SparseOperator op_as_sparse(one_op_sparse_string(op), sparse_scalar_t(1.0));
+        expanded = expanded * op_as_sparse;
+    }
+
+    auto& expansion = it->second;
+    expansion.reserve(expanded.size());
+    for (const auto& [sqop, coefficient] : expanded.elements()) {
+        expansion.emplace_back(sqop, coefficient);
+    }
+    return expansion;
 }
 
 } // namespace
@@ -329,22 +434,15 @@ SparseOperator NormalOrderedSparseOperator::to_sparse_operator(double screen_thr
             "NormalOrderedSparseOperator::to_sparse_operator: screen_thresh must be non-negative");
     }
 
-    auto zero = Determinant::zero();
-    const auto identity = SQOperatorString(zero, zero);
     SparseOperator result;
 
     for (const auto& [term, coefficient] : this->elements()) {
         if (std::abs(coefficient) <= screen_thresh) {
             continue;
         }
-
-        SparseOperator expanded(identity, sparse_scalar_t(1.0));
-        for (const auto& op : physical_ops(term, reference_)) {
-            SparseOperator op_as_sparse(one_op_sparse_string(op), sparse_scalar_t(1.0));
-            expanded = expanded * op_as_sparse;
+        for (const auto& [sqop, factor] : sparse_expansion(reference_, term)) {
+            result.add(sqop, coefficient * factor);
         }
-        expanded *= coefficient;
-        result += expanded;
     }
 
     SparseOperator cleaned;
@@ -407,8 +505,12 @@ NormalOrderedSparseOperator normal_order(const SparseOperator& op, const Determi
 
     NormalOrderedSparseOperator result(reference);
     for (const auto& [sqop, coefficient] : op.elements()) {
-        normal_order_term(reference, to_normal_ops(sqop.op_tuple()), coefficient, result,
-                          screen_thresh);
+        if (std::abs(coefficient) <= screen_thresh) {
+            continue;
+        }
+        for (const auto& [term, factor] : normal_order_expansion(reference, sqop, max_rank)) {
+            result.add(term, coefficient * factor);
+        }
     }
 
     NormalOrderedSparseOperator cleaned(reference);

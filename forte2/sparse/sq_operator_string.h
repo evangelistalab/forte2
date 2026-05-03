@@ -140,10 +140,10 @@ class SQOperatorProductComputer {
   public:
     SQOperatorProductComputer() = default;
     void product(const SQOperatorString& lhs, const SQOperatorString& rhs, sparse_scalar_t factor,
-                 std::function<void(const SQOperatorString&, const sparse_scalar_t)> func);
+                 const std::function<void(const SQOperatorString&, const sparse_scalar_t)>& func);
     void commutator(const SQOperatorString& lhs, const SQOperatorString& rhs,
                     sparse_scalar_t factor,
-                    std::function<void(const SQOperatorString&, const sparse_scalar_t)> func);
+                    const std::function<void(const SQOperatorString&, const sparse_scalar_t)>& func);
 
   private:
     constexpr static size_t max_contracted_ops_ = 32;
