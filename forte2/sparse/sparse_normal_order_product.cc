@@ -16,6 +16,8 @@ struct NormalTermData {
     const NormalOrderedString* term;
     sparse_scalar_t coefficient;
     int count;
+    int cre_count;
+    int ann_count;
 };
 
 struct PairContribution {
@@ -35,7 +37,9 @@ std::vector<NormalTermData> collect_terms(const NormalOrderedSparseOperator& op,
     terms.reserve(op.size());
     for (const auto& [term, coefficient] : op.elements()) {
         if (above_threshold(coefficient, screen_thresh_squared)) {
-            terms.push_back({&term, coefficient, term.count()});
+            const int cre_count = static_cast<int>(term.cre().count_all());
+            const int ann_count = static_cast<int>(term.ann().count_all());
+            terms.push_back({&term, coefficient, cre_count + ann_count, cre_count, ann_count});
         }
     }
     return terms;
@@ -60,10 +64,22 @@ PairContribution analyze_pair(const NormalTermData& lhs, const NormalTermData& r
     const int total_count = lhs.count + rhs.count;
     const int max_count = 2 * max_rank;
     if (total_count > max_count) {
-        const int lhs_rhs_contractions = lhs.term->ann().fast_a_and_b_count(rhs.term->cre());
-        const int rhs_lhs_contractions = rhs.term->ann().fast_a_and_b_count(lhs.term->cre());
-        return {total_count - 2 * lhs_rhs_contractions <= max_count,
-                total_count - 2 * rhs_lhs_contractions <= max_count, false};
+        const int required_contractions = (total_count - max_count + 1) / 2;
+        bool lhs_rhs = false;
+        if (lhs.ann_count >= required_contractions and rhs.cre_count >= required_contractions) {
+            lhs_rhs = lhs.term->ann().fast_a_and_b_count(rhs.term->cre()) >=
+                      required_contractions;
+        }
+        bool rhs_lhs = false;
+        if (rhs.ann_count >= required_contractions and lhs.cre_count >= required_contractions) {
+            rhs_lhs = rhs.term->ann().fast_a_and_b_count(lhs.term->cre()) >=
+                      required_contractions;
+        }
+        return {lhs_rhs, rhs_lhs, false};
+    }
+
+    if ((lhs.count * rhs.count) % 2 != 0) {
+        return {true, true, false};
     }
 
     const auto common_l_cre_r_cre = lhs.term->cre().fast_a_and_b_count(rhs.term->cre());
@@ -72,7 +88,7 @@ PairContribution analyze_pair(const NormalTermData& lhs, const NormalTermData& r
     const auto common_l_ann_r_cre = lhs.term->ann().fast_a_and_b_count(rhs.term->cre());
     const bool commute =
         common_l_cre_r_cre == 0 and common_l_ann_r_ann == 0 and common_l_ann_r_cre == 0 and
-        common_l_cre_r_ann == 0 and ((lhs.count * rhs.count) % 2) == 0;
+        common_l_cre_r_ann == 0;
     return {true, true, commute};
 }
 
