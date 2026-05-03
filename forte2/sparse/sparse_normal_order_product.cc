@@ -82,13 +82,21 @@ PairContribution analyze_pair(const NormalTermData& lhs, const NormalTermData& r
         return {true, true, false};
     }
 
-    const auto common_l_cre_r_cre = lhs.term->cre().fast_a_and_b_count(rhs.term->cre());
-    const auto common_l_cre_r_ann = lhs.term->cre().fast_a_and_b_count(rhs.term->ann());
-    const auto common_l_ann_r_ann = lhs.term->ann().fast_a_and_b_count(rhs.term->ann());
-    const auto common_l_ann_r_cre = lhs.term->ann().fast_a_and_b_count(rhs.term->cre());
+    const bool common_l_cre_r_cre =
+        lhs.cre_count > 0 and rhs.cre_count > 0 and
+        not lhs.term->cre().fast_a_and_b_eq_zero(rhs.term->cre());
+    const bool common_l_cre_r_ann =
+        lhs.cre_count > 0 and rhs.ann_count > 0 and
+        not lhs.term->cre().fast_a_and_b_eq_zero(rhs.term->ann());
+    const bool common_l_ann_r_ann =
+        lhs.ann_count > 0 and rhs.ann_count > 0 and
+        not lhs.term->ann().fast_a_and_b_eq_zero(rhs.term->ann());
+    const bool common_l_ann_r_cre =
+        lhs.ann_count > 0 and rhs.cre_count > 0 and
+        not lhs.term->ann().fast_a_and_b_eq_zero(rhs.term->cre());
     const bool commute =
-        common_l_cre_r_cre == 0 and common_l_ann_r_ann == 0 and common_l_ann_r_cre == 0 and
-        common_l_cre_r_ann == 0;
+        not common_l_cre_r_cre and not common_l_ann_r_ann and not common_l_ann_r_cre and
+        not common_l_cre_r_ann;
     return {true, true, commute};
 }
 
