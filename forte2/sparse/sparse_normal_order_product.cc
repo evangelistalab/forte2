@@ -11,6 +11,24 @@ namespace forte2 {
 
 namespace {
 
+struct NormalTermData {
+    const NormalOrderedString* term;
+    sparse_scalar_t coefficient;
+    int count;
+};
+
+std::vector<NormalTermData> collect_terms(const NormalOrderedSparseOperator& op,
+                                          double screen_thresh) {
+    std::vector<NormalTermData> terms;
+    terms.reserve(op.size());
+    for (const auto& [term, coefficient] : op.elements()) {
+        if (std::abs(coefficient) > screen_thresh) {
+            terms.push_back({&term, coefficient, term.count()});
+        }
+    }
+    return terms;
+}
+
 NormalOrderedSparseOperator clean_normal_ordered_operator(const NormalOrderedSparseOperator& op,
                                                           int max_rank, double screen_thresh) {
     NormalOrderedSparseOperator cleaned(op.reference());
@@ -24,14 +42,14 @@ NormalOrderedSparseOperator clean_normal_ordered_operator(const NormalOrderedSpa
     return cleaned;
 }
 
-bool do_normal_ops_commute(const NormalOrderedString& lhs, const NormalOrderedString& rhs) {
-    const auto common_l_cre_r_cre = lhs.cre().fast_a_and_b_count(rhs.cre());
-    const auto common_l_cre_r_ann = lhs.cre().fast_a_and_b_count(rhs.ann());
-    const auto common_l_ann_r_ann = lhs.ann().fast_a_and_b_count(rhs.ann());
-    const auto common_l_ann_r_cre = lhs.ann().fast_a_and_b_count(rhs.cre());
+bool do_normal_ops_commute(const NormalTermData& lhs, const NormalTermData& rhs) {
+    const auto common_l_cre_r_cre = lhs.term->cre().fast_a_and_b_count(rhs.term->cre());
+    const auto common_l_cre_r_ann = lhs.term->cre().fast_a_and_b_count(rhs.term->ann());
+    const auto common_l_ann_r_ann = lhs.term->ann().fast_a_and_b_count(rhs.term->ann());
+    const auto common_l_ann_r_cre = lhs.term->ann().fast_a_and_b_count(rhs.term->cre());
     if (common_l_cre_r_cre == 0 and common_l_ann_r_ann == 0 and common_l_ann_r_cre == 0 and
         common_l_cre_r_ann == 0) {
-        return ((lhs.count() * rhs.count()) % 2) == 0;
+        return ((lhs.count * rhs.count) % 2) == 0;
     }
     return false;
 }
@@ -232,6 +250,17 @@ bool NormalOrderedProductComputer::could_product_contribute(const NormalOrderedS
     return lower_bound_count <= 2 * max_rank_;
 }
 
+bool could_product_contribute(const NormalTermData& lhs, const NormalTermData& rhs, int max_rank) {
+    const int total_count = lhs.count + rhs.count;
+    if (total_count <= 2 * max_rank) {
+        return true;
+    }
+
+    const int max_contractions = lhs.term->ann().fast_a_and_b_count(rhs.term->cre());
+    const int lower_bound_count = total_count - 2 * max_contractions;
+    return lower_bound_count <= 2 * max_rank;
+}
+
 NormalOrderedSparseOperator
 NormalOrderedProductComputer::commutator(const NormalOrderedSparseOperator& lhs,
                                          const NormalOrderedSparseOperator& rhs) const {
@@ -241,8 +270,10 @@ NormalOrderedProductComputer::commutator(const NormalOrderedSparseOperator& lhs,
     }
 
     TruncatedNormalProductComputer computer(max_rank_);
+    const auto lhs_terms = collect_terms(lhs, screen_thresh_);
+    const auto rhs_terms = collect_terms(rhs, screen_thresh_);
     NormalOrderedSparseOperator result(lhs.reference());
-    result.reserve(std::min(lhs.size() * rhs.size(), std::size_t{250000}));
+    result.reserve(std::min(lhs_terms.size() * rhs_terms.size(), std::size_t{250000}));
 
     const std::function<void(const NormalOrderedString&, const sparse_scalar_t)> add_to_result =
         [this, &result](const NormalOrderedString& term, const sparse_scalar_t coefficient) {
@@ -251,14 +282,16 @@ NormalOrderedProductComputer::commutator(const NormalOrderedSparseOperator& lhs,
             }
         };
 
-    for (const auto& [lhs_term, lhs_coefficient] : lhs.elements()) {
-        for (const auto& [rhs_term, rhs_coefficient] : rhs.elements()) {
-            const sparse_scalar_t factor = lhs_coefficient * rhs_coefficient;
+    for (const auto& lhs_term : lhs_terms) {
+        for (const auto& rhs_term : rhs_terms) {
+            const sparse_scalar_t factor = lhs_term.coefficient * rhs_term.coefficient;
             if (std::abs(factor) < screen_thresh_) {
                 continue;
             }
-            const bool lhs_rhs_contributes = could_product_contribute(lhs_term, rhs_term);
-            const bool rhs_lhs_contributes = could_product_contribute(rhs_term, lhs_term);
+            const bool lhs_rhs_contributes =
+                ::forte2::could_product_contribute(lhs_term, rhs_term, max_rank_);
+            const bool rhs_lhs_contributes =
+                ::forte2::could_product_contribute(rhs_term, lhs_term, max_rank_);
             if (not lhs_rhs_contributes and not rhs_lhs_contributes) {
                 continue;
             }
@@ -266,10 +299,10 @@ NormalOrderedProductComputer::commutator(const NormalOrderedSparseOperator& lhs,
                 continue;
             }
             if (lhs_rhs_contributes) {
-                computer.product(lhs_term, rhs_term, factor, add_to_result);
+                computer.product(*lhs_term.term, *rhs_term.term, factor, add_to_result);
             }
             if (rhs_lhs_contributes) {
-                computer.product(rhs_term, lhs_term, -factor, add_to_result);
+                computer.product(*rhs_term.term, *lhs_term.term, -factor, add_to_result);
             }
         }
     }
