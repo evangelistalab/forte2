@@ -111,3 +111,28 @@ def test_normal_order_many_body_rank_truncation():
     inline_one_body = forte2.normal_order(op, reference, max_rank=1)
     assert inline_one_body == one_body
     assert no_op.truncate(2) == no_op
+
+
+def test_rank_screened_commutator_matches_truncated_commutator():
+    lhs = forte2.sparse_operator(
+        [
+            ("[1a+ 0a-]", 0.2),
+            ("[2a+ 2b+ 1b- 0a-]", -0.3),
+            ("[1a+ 2a+ 1b+ 2b+ 0b- 0a-]", 0.4),
+        ]
+    )
+    rhs = forte2.sparse_operator(
+        [
+            ("[0a+ 1a-]", 0.5),
+            ("[1a+ 1b+ 0b- 0a-]", -0.7),
+            ("[1a+ 2a+ 1b+ 2b+ 0b- 0a-]", 0.9),
+        ]
+    )
+    reference = det("200")
+
+    generic = forte2.normal_order(lhs.commutator(rhs), reference, max_rank=2).to_sparse_operator()
+    screened = forte2.normal_order(
+        lhs.rank_screened_commutator(rhs, max_rank=2), reference, max_rank=2
+    ).to_sparse_operator()
+
+    assert screened == generic

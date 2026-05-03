@@ -11,6 +11,7 @@
 #include "helpers/string_algorithms.h"
 
 #include "sparse/sparse_operator.h"
+#include "sparse/sparse_operator_product.h"
 #include "sparse/sparse_state.h"
 #include "sparse/sparse_operator_hamiltonian.h"
 #include "sparse/sparse_exp.h"
@@ -160,6 +161,14 @@ void export_sparse_operator_api(nb::module_& sub_m) {
                 return commutator(lhs, rhs);
             },
             "Compute the commutator of two SparseOperator objects")
+        .def(
+            "rank_screened_commutator",
+            [](const SparseOperator& lhs, const SparseOperator& rhs, int max_rank,
+               double screen_thresh) {
+                return rank_screened_commutator(lhs, rhs, max_rank, screen_thresh);
+            },
+            "rhs"_a, "max_rank"_a, "screen_thresh"_a = 1.0e-12,
+            "Compute a commutator while skipping term pairs that cannot contribute to max_rank")
         .def(
             "__itruediv__",
             [](SparseOperator& self, sparse_scalar_t scalar) {

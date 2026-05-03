@@ -148,6 +148,7 @@ nanobind_add_module(
   sparse/sparse_exp.cc
   sparse/sparse_operator.cc
   sparse/sparse_operator_hamiltonian.cc
+  sparse/sparse_operator_product.cc
   sparse/sparse_normal_order.cc
   sparse/sparse_state_functions.cc
   sparse/sparse_state.cc
