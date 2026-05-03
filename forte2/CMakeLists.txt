@@ -104,6 +104,7 @@ nanobind_add_module(
   api/det_api.cc
   api/dsrg_utils_api.cc
   api/sparse_ops_api.cc
+  api/sparse_normal_order_api.cc
   api/rdms_api.cc
   helpers/combinatorial.cc
   helpers/string_algorithms.cc
@@ -147,6 +148,7 @@ nanobind_add_module(
   sparse/sparse_exp.cc
   sparse/sparse_operator.cc
   sparse/sparse_operator_hamiltonian.cc
+  sparse/sparse_normal_order.cc
   sparse/sparse_state_functions.cc
   sparse/sparse_state.cc
   sparse/sq_operator_string.cc
