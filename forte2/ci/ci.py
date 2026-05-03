@@ -1481,7 +1481,7 @@ class CISolver(CIBase):
 
     def compute_transition_properties(self, C=None):
         """
-        Compute the transition dipole moments and oscillator strengths from the spin-free 1-TDMs.
+        Compute the transition dipole moments, oscillator strengths, and vertical transition energies from the spin-free 1-TDMs.
         The results are stored in `self.transition_dipoles` and `self.oscillator_strengths`.
 
         Parameters
@@ -1497,6 +1497,9 @@ class CISolver(CIBase):
         oscillator_strengths : dict[tuple[int, int], float]
             A dictionary mapping pairs of CI roots (absolute_root_i, absolute_root_j) to their oscillator strengths.
             This is also saved in `self.oscillator_strengths`.
+        vertical_transition_energies : dict[tuple[int, int], float]
+            A dictionary mapping pairs of CI roots (absolute_root_i, absolute_root_j) to their vertical transition energies.
+            This is also saved in `self.vertical_transition_energies`.
         """
         if not self.executed:
             raise RuntimeError("CI solver has not been executed yet.")
@@ -1514,6 +1517,7 @@ class CISolver(CIBase):
         )
         self.transition_dipoles = OrderedDict()
         self.oscillator_strengths = OrderedDict()
+        self.vertical_transition_energies = OrderedDict()
         for ici in range(self.sa_info.nroots_sum):
             istate, iroot_in_state = self._get_state_root(ici)
             rdm = self.sub_solvers[istate].make_1rdm(iroot_in_state)
@@ -1525,8 +1529,9 @@ class CISolver(CIBase):
                 self.system, rdm, property_name="electric_dipole", unit="au"
             )
             self.transition_dipoles[(ici, ici)] = dip + core_dip
-            # No oscillator strength for i->i transitions
+            # No oscillator strength or vetical transition energy for i->i transitions
             self.oscillator_strengths[(ici, ici)] = 0.0
+            self.vertical_transition_energies[(ici, ici)] = 0.0
             for jci in range(ici + 1, self.sa_info.nroots_sum):
                 jstate, jroot_in_state = self._get_state_root(jci)
                 try:
@@ -1552,13 +1557,18 @@ class CISolver(CIBase):
                     self.oscillator_strengths[(_ici, _jci)] = (
                         (2 / 3) * vte * np.linalg.norm(tdip) ** 2
                     )
+                    self.vertical_transition_energies[(_ici, _jci)] = vte
                 except (ValueError, NotImplementedError):
                     # ValueError: for non-relativistic CI if the two states have different na and nb,
                     #   and thus cross-state RDMs are not supported.
                     # NotImplementedError: for two-component CI, cross-state RDMs are not implemented yet.
                     continue
 
-        return self.transition_dipoles, self.oscillator_strengths
+        return (
+            self.transition_dipoles,
+            self.oscillator_strengths,
+            self.vertical_transition_energies,
+        )
 
     def get_convergence_status(self):
         """
@@ -1577,35 +1587,6 @@ class CISolver(CIBase):
             else:
                 status.append(ci_solver.eigensolver.converged)
         return status
-
-    def _get_state_root(self, absolute_root) -> tuple[int, int]:
-        if absolute_root < 0 or absolute_root >= self.sa_info.nroots_sum:
-            raise ValueError(
-                f"absolute_root must be between 0 and {self.sa_info.nroots_sum - 1}, but got {absolute_root}."
-            )
-        return self.sa_info.absolute_root_map[absolute_root]
-
-    def _validate_rdm_inputs(self, left_root, right_root):
-        left_state, left_root_in_state = self._get_state_root(left_root)
-        if right_root is not None:
-            right_state, right_root_in_state = self._get_state_root(right_root)
-        else:
-            right_state = left_state
-            right_root_in_state = left_root_in_state
-
-        if left_state != right_state:
-            # check that they have the same na and nb
-            if (
-                self.sa_info.states[left_state].na
-                != self.sa_info.states[right_state].na
-                or self.sa_info.states[left_state].nb
-                != self.sa_info.states[right_state].nb
-            ):
-                raise ValueError(
-                    f"Cross-state RDMs are only supported for states with the same number of alpha and beta electrons."
-                )
-
-        return left_state, right_state, left_root_in_state, right_root_in_state
 
     def make_sd_1rdm(
         self,

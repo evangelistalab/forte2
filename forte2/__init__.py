@@ -1,4 +1,4 @@
-__version__ = "0.2.2"
+__version__ = "0.3.0"
 __author__ = "Forte2 Developers"
 
 from ._forte2 import *
@@ -16,7 +16,7 @@ from .orbitals import (
     Cube,
     ASET,
     write_orbital_cubes,
-    SpatialToSpinorConverter,
+    SpinorUpcaster,
 )
 from .mcopt import MCOptimizer
 from .props import get_1e_property, mulliken_population

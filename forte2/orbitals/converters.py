@@ -5,7 +5,7 @@ from forte2.base_classes import Method
 
 
 @dataclass
-class SpatialToSpinorConverter(Method):
+class SpinorUpcaster(Method):
     """
     A converter class to convert a spatial-orbital-based method to a spinor-based method by converting the MO coefficients to spinor basis and updating the system object.
 
