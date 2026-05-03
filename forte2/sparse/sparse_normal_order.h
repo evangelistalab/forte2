@@ -66,7 +66,8 @@ class NormalOrderedString {
   private:
     Determinant cre_ = Determinant::zero();
     Determinant ann_ = Determinant::zero();
-    Determinant sign_mask_ = Determinant::zero();
+    mutable Determinant sign_mask_ = Determinant::zero();
+    mutable bool sign_mask_valid_ = false;
 };
 
 /// @brief A sparse operator in determinant-normal-ordered form.

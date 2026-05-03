@@ -279,16 +279,20 @@ const SparseExpansion& sparse_expansion(const Determinant& reference,
 NormalOrderedString::NormalOrderedString() = default;
 
 NormalOrderedString::NormalOrderedString(const Determinant& cre, const Determinant& ann)
-    : cre_(cre), ann_(ann) {
-    Determinant temp = Determinant::zero();
-    compute_sign_mask(cre_, ann_, sign_mask_, temp);
-}
+    : cre_(cre), ann_(ann) {}
 
 const Determinant& NormalOrderedString::cre() const { return cre_; }
 
 const Determinant& NormalOrderedString::ann() const { return ann_; }
 
-const Determinant& NormalOrderedString::sign_mask() const { return sign_mask_; }
+const Determinant& NormalOrderedString::sign_mask() const {
+    if (not sign_mask_valid_) {
+        Determinant temp = Determinant::zero();
+        compute_sign_mask(cre_, ann_, sign_mask_, temp);
+        sign_mask_valid_ = true;
+    }
+    return sign_mask_;
+}
 
 bool NormalOrderedString::is_identity() const {
     return cre_.count_all() == 0 and ann_.count_all() == 0;
