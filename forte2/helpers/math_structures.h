@@ -90,6 +90,9 @@ class VectorSpace {
     /// @return the number of elements in the vector space
     size_t size() const { return elements_.size(); }
 
+    /// @brief Reserve storage for at least n elements.
+    void reserve(size_t n) { elements_.reserve(n); }
+
     /// @return an iterator to the beginning of the object
     inline auto begin() { return elements_.begin(); }
     /// @return an iterator to the beginning of the object (const)

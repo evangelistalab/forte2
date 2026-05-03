@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <stdexcept>
@@ -34,6 +35,7 @@ SparseOperator RankScreenedProductComputer::commutator(const SparseOperator& lhs
                                                        const SparseOperator& rhs) const {
     SQOperatorProductComputer computer;
     SparseOperator result;
+    result.reserve(std::min(lhs.size() * rhs.size(), std::size_t{250000}));
     const std::function<void(const SQOperatorString&, const sparse_scalar_t)> add_to_result =
         [&result](const SQOperatorString& sqop, const sparse_scalar_t c) { result[sqop] += c; };
 
