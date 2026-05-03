@@ -17,6 +17,12 @@ struct NormalTermData {
     int count;
 };
 
+struct PairContribution {
+    bool lhs_rhs;
+    bool rhs_lhs;
+    bool commute;
+};
+
 std::vector<NormalTermData> collect_terms(const NormalOrderedSparseOperator& op,
                                           double screen_thresh) {
     std::vector<NormalTermData> terms;
@@ -42,16 +48,25 @@ NormalOrderedSparseOperator clean_normal_ordered_operator(const NormalOrderedSpa
     return cleaned;
 }
 
-bool do_normal_ops_commute(const NormalTermData& lhs, const NormalTermData& rhs) {
+PairContribution analyze_pair(const NormalTermData& lhs, const NormalTermData& rhs,
+                              int max_rank) {
+    const int total_count = lhs.count + rhs.count;
+    const int max_count = 2 * max_rank;
+    if (total_count > max_count) {
+        const int lhs_rhs_contractions = lhs.term->ann().fast_a_and_b_count(rhs.term->cre());
+        const int rhs_lhs_contractions = rhs.term->ann().fast_a_and_b_count(lhs.term->cre());
+        return {total_count - 2 * lhs_rhs_contractions <= max_count,
+                total_count - 2 * rhs_lhs_contractions <= max_count, false};
+    }
+
     const auto common_l_cre_r_cre = lhs.term->cre().fast_a_and_b_count(rhs.term->cre());
     const auto common_l_cre_r_ann = lhs.term->cre().fast_a_and_b_count(rhs.term->ann());
     const auto common_l_ann_r_ann = lhs.term->ann().fast_a_and_b_count(rhs.term->ann());
     const auto common_l_ann_r_cre = lhs.term->ann().fast_a_and_b_count(rhs.term->cre());
-    if (common_l_cre_r_cre == 0 and common_l_ann_r_ann == 0 and common_l_ann_r_cre == 0 and
-        common_l_cre_r_ann == 0) {
-        return ((lhs.count * rhs.count) % 2) == 0;
-    }
-    return false;
+    const bool commute =
+        common_l_cre_r_cre == 0 and common_l_ann_r_ann == 0 and common_l_ann_r_cre == 0 and
+        common_l_cre_r_ann == 0 and ((lhs.count * rhs.count) % 2) == 0;
+    return {true, true, commute};
 }
 
 class TruncatedNormalProductComputer {
@@ -250,17 +265,6 @@ bool NormalOrderedProductComputer::could_product_contribute(const NormalOrderedS
     return lower_bound_count <= 2 * max_rank_;
 }
 
-bool could_product_contribute(const NormalTermData& lhs, const NormalTermData& rhs, int max_rank) {
-    const int total_count = lhs.count + rhs.count;
-    if (total_count <= 2 * max_rank) {
-        return true;
-    }
-
-    const int max_contractions = lhs.term->ann().fast_a_and_b_count(rhs.term->cre());
-    const int lower_bound_count = total_count - 2 * max_contractions;
-    return lower_bound_count <= 2 * max_rank;
-}
-
 NormalOrderedSparseOperator
 NormalOrderedProductComputer::commutator(const NormalOrderedSparseOperator& lhs,
                                          const NormalOrderedSparseOperator& rhs) const {
@@ -288,20 +292,17 @@ NormalOrderedProductComputer::commutator(const NormalOrderedSparseOperator& lhs,
             if (std::abs(factor) < screen_thresh_) {
                 continue;
             }
-            const bool lhs_rhs_contributes =
-                ::forte2::could_product_contribute(lhs_term, rhs_term, max_rank_);
-            const bool rhs_lhs_contributes =
-                ::forte2::could_product_contribute(rhs_term, lhs_term, max_rank_);
-            if (not lhs_rhs_contributes and not rhs_lhs_contributes) {
+            const auto contribution = analyze_pair(lhs_term, rhs_term, max_rank_);
+            if (not contribution.lhs_rhs and not contribution.rhs_lhs) {
                 continue;
             }
-            if (do_normal_ops_commute(lhs_term, rhs_term)) {
+            if (contribution.commute) {
                 continue;
             }
-            if (lhs_rhs_contributes) {
+            if (contribution.lhs_rhs) {
                 computer.product(*lhs_term.term, *rhs_term.term, factor, add_to_result);
             }
-            if (rhs_lhs_contributes) {
+            if (contribution.rhs_lhs) {
                 computer.product(*rhs_term.term, *lhs_term.term, -factor, add_to_result);
             }
         }
