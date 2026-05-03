@@ -1,6 +1,7 @@
 #include "sparse/sparse_normal_order_product.h"
 
 #include <algorithm>
+#include <bit>
 #include <bitset>
 #include <cmath>
 #include <functional>
@@ -154,8 +155,10 @@ class TruncatedNormalProductComputer {
         }
 
         size_t nbits = ncontr;
-        rhs_cre_.find_set_bits(set_bits_, nbits);
-        rhs_cre_ = lhs_ann_ - rhs_cre_;
+        auto contracted_rhs_cre = rhs_cre_;
+        contracted_rhs_cre.find_set_bits(set_bits_, nbits);
+        rhs_cre_ = lhs_ann_ - contracted_rhs_cre;
+        const auto identity_lhs_ann = rhs_cre_;
 
         for (size_t i = 0; i < ncontr; i++) {
             sign_[i] = (rhs_cre_.slater_sign_reverse(set_bits_[i]) *
@@ -175,21 +178,15 @@ class TruncatedNormalProductComputer {
             throw std::runtime_error("TruncatedNormalProductComputer: contraction mask overflow");
         }
 
-        auto emit_mask = [this, ncontr, &func](unsigned long long mask) {
+        auto emit_mask = [this, &identity_lhs_ann, &func](unsigned long long mask) {
             auto new_lhs_cre = lhs_cre_;
-            auto new_lhs_ann = lhs_ann_;
+            auto new_lhs_ann = identity_lhs_ann;
             double contraction_phase = 1.0;
-            for (size_t j = 0; j < ncontr; j++) {
-                if ((mask >> j) & 1ULL) {
-                    if (sign_[j]) {
-                        contraction_phase *= -1.0;
-                    }
-                    new_lhs_cre.set_bit(set_bits_[j], true);
-                    new_lhs_ann.set_bit(set_bits_[j], true);
-                    contraction_phase *= -1.0;
-                } else {
-                    new_lhs_ann.set_bit(set_bits_[j], false);
-                }
+            for (auto bits = mask; bits != 0; bits &= bits - 1) {
+                const auto j = std::countr_zero(bits);
+                contraction_phase *= sign_[j] ? 1.0 : -1.0;
+                new_lhs_cre.set_bit(set_bits_[j], true);
+                new_lhs_ann.set_bit(set_bits_[j], true);
             }
             func(NormalOrderedString(new_lhs_cre, new_lhs_ann), phase_ * contraction_phase);
         };
