@@ -8,6 +8,7 @@
 #include "helpers/string_algorithms.h"
 
 #include "sparse/sparse_normal_order.h"
+#include "sparse/sparse_normal_order_product.h"
 #include "sparse/sparse_state.h"
 
 namespace nb = nanobind;
@@ -84,6 +85,63 @@ void export_sparse_normal_order_api(nb::module_& m) {
              "screen_thresh"_a = 1.0e-12, "Return a copy with terms above max_rank removed")
         .def("__repr__", [](const NormalOrderedSparseOperator& op) { return join(op.str(), "\n"); })
         .def("__str__", [](const NormalOrderedSparseOperator& op) { return join(op.str(), "\n"); })
+        .def(
+            "__add__",
+            [](const NormalOrderedSparseOperator& lhs, const NormalOrderedSparseOperator& rhs) {
+                return lhs + rhs;
+            },
+            "Add two normal-ordered operators")
+        .def(
+            "__iadd__",
+            [](NormalOrderedSparseOperator& lhs, const NormalOrderedSparseOperator& rhs)
+                -> NormalOrderedSparseOperator& {
+                lhs += rhs;
+                return lhs;
+            },
+            "Add a normal-ordered operator in place")
+        .def(
+            "__sub__",
+            [](const NormalOrderedSparseOperator& lhs, const NormalOrderedSparseOperator& rhs) {
+                return lhs - rhs;
+            },
+            "Subtract two normal-ordered operators")
+        .def(
+            "__isub__",
+            [](NormalOrderedSparseOperator& lhs, const NormalOrderedSparseOperator& rhs)
+                -> NormalOrderedSparseOperator& {
+                lhs -= rhs;
+                return lhs;
+            },
+            "Subtract a normal-ordered operator in place")
+        .def(
+            "__mul__",
+            [](const NormalOrderedSparseOperator& op, sparse_scalar_t scalar) { return op * scalar; },
+            "Multiply a normal-ordered operator by a scalar")
+        .def(
+            "__rmul__",
+            [](const NormalOrderedSparseOperator& op, sparse_scalar_t scalar) { return op * scalar; },
+            "Multiply a scalar by a normal-ordered operator")
+        .def(
+            "__neg__",
+            [](const NormalOrderedSparseOperator& op) { return -op; },
+            "Negate the normal-ordered operator")
+        .def(
+            "norm", [](const NormalOrderedSparseOperator& op) { return op.norm(); },
+            "Compute the norm of the normal-ordered operator")
+        .def(
+            "adjoint",
+            [](const NormalOrderedSparseOperator& op, double screen_thresh) {
+                return adjoint(op, screen_thresh);
+            },
+            "screen_thresh"_a = 1.0e-12, "Return the adjoint")
+        .def(
+            "commutator",
+            [](const NormalOrderedSparseOperator& lhs, const NormalOrderedSparseOperator& rhs,
+               int max_rank, double screen_thresh) {
+                return normal_ordered_commutator(lhs, rhs, max_rank, screen_thresh);
+            },
+            "rhs"_a, "max_rank"_a, "screen_thresh"_a = 1.0e-12,
+            "Compute a normal-ordered commutator truncated to max_rank")
         .def("to_sparse_operator", &NormalOrderedSparseOperator::to_sparse_operator,
              "screen_thresh"_a = 1.0e-12,
              "Convert this normal-ordered operator back to a SparseOperator")

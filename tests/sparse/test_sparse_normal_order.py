@@ -136,3 +136,43 @@ def test_rank_screened_commutator_matches_truncated_commutator():
     ).to_sparse_operator()
 
     assert screened == generic
+
+
+def test_normal_ordered_commutator_matches_sparse_commutator():
+    lhs = forte2.sparse_operator(
+        [
+            ("[0a+ 0a-]", 0.4),
+            ("[1a+ 0a-]", -0.2),
+            ("[1a+ 1b+ 0b- 0a-]", 0.3),
+        ]
+    )
+    rhs = forte2.sparse_operator(
+        [
+            ("[0a+ 1a-]", 0.5),
+            ("[1b+ 0b-]", -0.7),
+            ("[1a+ 1b+ 0b- 0a-]", 0.9),
+        ]
+    )
+    reference = det("20")
+
+    lhs_no = forte2.normal_order(lhs, reference, max_rank=2)
+    rhs_no = forte2.normal_order(rhs, reference, max_rank=2)
+    direct_no = lhs_no.commutator(rhs_no, max_rank=2)
+    sparse_no = forte2.normal_order(lhs.commutator(rhs), reference, max_rank=2)
+
+    assert direct_no == sparse_no
+    assert direct_no.to_sparse_operator() == sparse_no.to_sparse_operator()
+
+
+def test_normal_ordered_adjoint_round_trip():
+    op = forte2.sparse_operator(
+        [
+            ("[1a+ 0a-]", 0.2 + 0.3j),
+            ("[1a+ 1b+ 0b- 0a-]", -0.5j),
+        ]
+    )
+    reference = det("20")
+
+    no_op = forte2.normal_order(op, reference, max_rank=2)
+    assert no_op.adjoint().adjoint() == no_op
+    assert no_op.adjoint().to_sparse_operator() == op.adjoint()
