@@ -1,7 +1,6 @@
 #include "sparse/sparse_normal_order_product.h"
 
 #include <algorithm>
-#include <bit>
 #include <bitset>
 #include <cmath>
 #include <functional>
@@ -143,11 +142,7 @@ class TruncatedNormalProductComputer {
             throw std::runtime_error("TruncatedNormalProductComputer: contraction mask overflow");
         }
 
-        const unsigned long long limit = 1ULL << ncontr;
-        for (unsigned long long mask = 0; mask < limit; ++mask) {
-            if (std::popcount(mask) > max_swapped) {
-                continue;
-            }
+        auto emit_mask = [this, ncontr, &func](unsigned long long mask) {
             auto new_lhs_cre = lhs_cre_;
             auto new_lhs_ann = lhs_ann_;
             double contraction_phase = 1.0;
@@ -164,6 +159,26 @@ class TruncatedNormalProductComputer {
                 }
             }
             func(NormalOrderedString(new_lhs_cre, new_lhs_ann), phase_ * contraction_phase);
+        };
+
+        const auto next_combination = [](unsigned long long mask) {
+            const unsigned long long smallest = mask & -mask;
+            const unsigned long long ripple = mask + smallest;
+            return (((ripple ^ mask) >> 2) / smallest) | ripple;
+        };
+
+        const unsigned long long limit = 1ULL << ncontr;
+        const auto max_bits = std::min<int>(max_swapped, static_cast<int>(ncontr));
+        for (int nbits = 0; nbits <= max_bits; ++nbits) {
+            if (nbits == 0) {
+                emit_mask(0);
+                continue;
+            }
+            unsigned long long mask = (1ULL << nbits) - 1ULL;
+            while (mask < limit) {
+                emit_mask(mask);
+                mask = next_combination(mask);
+            }
         }
     }
 
