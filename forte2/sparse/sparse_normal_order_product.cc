@@ -1,23 +1,16 @@
 #include "sparse/sparse_normal_order_product.h"
 
 #include <algorithm>
+#include <bit>
+#include <bitset>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <stdexcept>
-
-#include "sparse/sq_operator_string.h"
 
 namespace forte2 {
 
 namespace {
-
-SQOperatorString as_quasiparticle_string(const NormalOrderedString& term) {
-    return SQOperatorString(term.cre(), term.ann());
-}
-
-NormalOrderedString as_normal_ordered_string(const SQOperatorString& term) {
-    return NormalOrderedString(term.cre(), term.ann());
-}
 
 NormalOrderedSparseOperator clean_normal_ordered_operator(const NormalOrderedSparseOperator& op,
                                                           int max_rank, double screen_thresh) {
@@ -31,6 +24,164 @@ NormalOrderedSparseOperator clean_normal_ordered_operator(const NormalOrderedSpa
     }
     return cleaned;
 }
+
+bool do_normal_ops_commute(const NormalOrderedString& lhs, const NormalOrderedString& rhs) {
+    const auto common_l_cre_r_cre = lhs.cre().fast_a_and_b_count(rhs.cre());
+    const auto common_l_cre_r_ann = lhs.cre().fast_a_and_b_count(rhs.ann());
+    const auto common_l_ann_r_ann = lhs.ann().fast_a_and_b_count(rhs.ann());
+    const auto common_l_ann_r_cre = lhs.ann().fast_a_and_b_count(rhs.cre());
+    if (common_l_cre_r_cre == 0 and common_l_ann_r_ann == 0 and common_l_ann_r_cre == 0 and
+        common_l_cre_r_ann == 0) {
+        return ((lhs.count() * rhs.count()) % 2) == 0;
+    }
+    return false;
+}
+
+class TruncatedNormalProductComputer {
+  public:
+    explicit TruncatedNormalProductComputer(int max_rank) : max_rank_(max_rank) {}
+
+    void product(const NormalOrderedString& lhs, const NormalOrderedString& rhs,
+                 sparse_scalar_t factor,
+                 const std::function<void(const NormalOrderedString&, sparse_scalar_t)>& func) {
+        ucon_rhs_cre_ = rhs.cre() - lhs.ann();
+        if (not lhs.cre().fast_a_and_b_eq_zero(ucon_rhs_cre_)) {
+            return;
+        }
+        con_rhs_cre_ = rhs.cre() - ucon_rhs_cre_;
+        ucon_rhs_ann_ = rhs.ann() - con_rhs_cre_;
+        if (not lhs.ann().fast_a_and_b_eq_zero(ucon_rhs_ann_)) {
+            return;
+        }
+
+        phase_ = factor;
+        rhs_cre_ = rhs.cre();
+        rhs_ann_ = rhs.ann();
+        lhs_cre_ = lhs.cre();
+        lhs_ann_ = lhs.ann();
+
+        if (const auto ucon_rhs_cre_count = ucon_rhs_cre_.count_all(); ucon_rhs_cre_count > 0) {
+            phase_ *= ((lhs_ann_.count_all() * ucon_rhs_cre_count) % 2) == 0 ? 1.0 : -1.0;
+            for (size_t i = ucon_rhs_cre_.fast_find_and_clear_first_one(0); i != ~0ULL;
+                 i = ucon_rhs_cre_.fast_find_and_clear_first_one(i)) {
+                rhs_cre_.set_bit(i, false);
+                phase_ *= rhs_cre_.slater_sign(i);
+                lhs_cre_.set_bit(i, true);
+                phase_ *= lhs_cre_.slater_sign_reverse(i);
+            }
+        }
+
+        if (const auto ucon_rhs_ann_count = ucon_rhs_ann_.count_all(); ucon_rhs_ann_count > 0) {
+            phase_ *= ((rhs_cre_.count_all() * ucon_rhs_ann_count) % 2) == 0 ? 1.0 : -1.0;
+            for (size_t i = ucon_rhs_ann_.fast_find_and_clear_first_one(0); i != ~0ULL;
+                 i = ucon_rhs_ann_.fast_find_and_clear_first_one(i)) {
+                rhs_ann_.set_bit(i, false);
+                phase_ *= rhs_ann_.slater_sign_reverse(i);
+                lhs_ann_.set_bit(i, true);
+                phase_ *= lhs_ann_.slater_sign(i);
+            }
+        }
+
+        auto rhs_comm_trivial = rhs_cre_ & rhs_ann_ & lhs_ann_;
+        if (rhs_comm_trivial.count_all() != 0) {
+            rhs_cre_ -= rhs_comm_trivial;
+            rhs_ann_ -= rhs_comm_trivial;
+            ucon_rhs_cre_ = rhs_cre_;
+            for (size_t i = rhs_comm_trivial.fast_find_and_clear_first_one(0); i != ~0ULL;
+                 i = rhs_comm_trivial.fast_find_and_clear_first_one(i)) {
+                phase_ *= rhs_cre_.slater_sign_reverse(i) * rhs_ann_.slater_sign_reverse(i);
+            }
+        }
+
+        auto lhs_comm_trivial = lhs_cre_ & lhs_ann_ & rhs_cre_;
+        if (lhs_comm_trivial.count_all() != 0) {
+            rhs_cre_ -= lhs_comm_trivial;
+            lhs_ann_ -= lhs_comm_trivial;
+            for (size_t i = lhs_comm_trivial.fast_find_and_clear_first_one(0); i != ~0ULL;
+                 i = lhs_comm_trivial.fast_find_and_clear_first_one(i)) {
+                phase_ *= lhs_ann_.slater_sign(i) * rhs_cre_.slater_sign(i);
+            }
+        }
+
+        const auto ncontr = rhs_cre_.count_all();
+        if (ncontr == 0) {
+            if (lhs_cre_.count_all() + lhs_ann_.count_all() <= 2 * max_rank_) {
+                func(NormalOrderedString(lhs_cre_, lhs_ann_), phase_);
+            }
+            return;
+        }
+        if (ncontr > max_contracted_ops_) {
+            throw std::runtime_error(
+                "TruncatedNormalProductComputer: too many simultaneous contractions");
+        }
+
+        ucon_rhs_cre_ = rhs_cre_;
+        for (size_t i = ucon_rhs_cre_.fast_find_and_clear_first_one(0); i != ~0ULL;
+             i = ucon_rhs_cre_.fast_find_and_clear_first_one(i)) {
+            phase_ *= lhs_ann_.slater_sign(i) * rhs_cre_.slater_sign(i);
+        }
+
+        size_t nbits = ncontr;
+        rhs_cre_.find_set_bits(set_bits_, nbits);
+        rhs_cre_ = lhs_ann_ - rhs_cre_;
+
+        for (size_t i = 0; i < ncontr; i++) {
+            sign_[i] = (rhs_cre_.slater_sign_reverse(set_bits_[i]) *
+                            lhs_cre_.slater_sign_reverse(set_bits_[i]) >
+                        0.0)
+                           ? 0
+                           : 1;
+        }
+
+        const int min_count =
+            static_cast<int>(lhs_cre_.count_all() + lhs_ann_.count_all() - ncontr);
+        const int max_swapped = (2 * max_rank_ - min_count) / 2;
+        if (max_swapped < 0) {
+            return;
+        }
+        if (ncontr >= std::numeric_limits<unsigned long long>::digits) {
+            throw std::runtime_error("TruncatedNormalProductComputer: contraction mask overflow");
+        }
+
+        const unsigned long long limit = 1ULL << ncontr;
+        for (unsigned long long mask = 0; mask < limit; ++mask) {
+            if (std::popcount(mask) > max_swapped) {
+                continue;
+            }
+            auto new_lhs_cre = lhs_cre_;
+            auto new_lhs_ann = lhs_ann_;
+            double contraction_phase = 1.0;
+            for (size_t j = 0; j < ncontr; j++) {
+                if ((mask >> j) & 1ULL) {
+                    if (sign_[j]) {
+                        contraction_phase *= -1.0;
+                    }
+                    new_lhs_cre.set_bit(set_bits_[j], true);
+                    new_lhs_ann.set_bit(set_bits_[j], true);
+                    contraction_phase *= -1.0;
+                } else {
+                    new_lhs_ann.set_bit(set_bits_[j], false);
+                }
+            }
+            func(NormalOrderedString(new_lhs_cre, new_lhs_ann), phase_ * contraction_phase);
+        }
+    }
+
+  private:
+    constexpr static size_t max_contracted_ops_ = 32;
+
+    int max_rank_;
+    Determinant lhs_cre_;
+    Determinant lhs_ann_;
+    Determinant rhs_cre_;
+    Determinant rhs_ann_;
+    Determinant ucon_rhs_cre_;
+    Determinant con_rhs_cre_;
+    Determinant ucon_rhs_ann_;
+    sparse_scalar_t phase_;
+    std::vector<size_t> set_bits_ = std::vector<size_t>(max_contracted_ops_, 0);
+    std::bitset<max_contracted_ops_> sign_;
+};
 
 } // namespace
 
@@ -74,19 +225,18 @@ NormalOrderedProductComputer::commutator(const NormalOrderedSparseOperator& lhs,
             "NormalOrderedProductComputer::commutator: references must match");
     }
 
-    SQOperatorProductComputer computer;
+    TruncatedNormalProductComputer computer(max_rank_);
     NormalOrderedSparseOperator result(lhs.reference());
     result.reserve(std::min(lhs.size() * rhs.size(), std::size_t{250000}));
 
-    const std::function<void(const SQOperatorString&, const sparse_scalar_t)> add_to_result =
-        [this, &result](const SQOperatorString& term, const sparse_scalar_t coefficient) {
-            if (term.count() <= 2 * max_rank_ and std::abs(coefficient) > screen_thresh_) {
-                result.add(as_normal_ordered_string(term), coefficient);
+    const std::function<void(const NormalOrderedString&, const sparse_scalar_t)> add_to_result =
+        [this, &result](const NormalOrderedString& term, const sparse_scalar_t coefficient) {
+            if (std::abs(coefficient) > screen_thresh_) {
+                result.add(term, coefficient);
             }
         };
 
     for (const auto& [lhs_term, lhs_coefficient] : lhs.elements()) {
-        const auto lhs_qp = as_quasiparticle_string(lhs_term);
         for (const auto& [rhs_term, rhs_coefficient] : rhs.elements()) {
             const sparse_scalar_t factor = lhs_coefficient * rhs_coefficient;
             if (std::abs(factor) < screen_thresh_) {
@@ -97,15 +247,14 @@ NormalOrderedProductComputer::commutator(const NormalOrderedSparseOperator& lhs,
             if (not lhs_rhs_contributes and not rhs_lhs_contributes) {
                 continue;
             }
-            const auto rhs_qp = as_quasiparticle_string(rhs_term);
-            if (do_ops_commute(lhs_qp, rhs_qp)) {
+            if (do_normal_ops_commute(lhs_term, rhs_term)) {
                 continue;
             }
             if (lhs_rhs_contributes) {
-                computer.product(lhs_qp, rhs_qp, factor, add_to_result);
+                computer.product(lhs_term, rhs_term, factor, add_to_result);
             }
             if (rhs_lhs_contributes) {
-                computer.product(rhs_qp, lhs_qp, -factor, add_to_result);
+                computer.product(rhs_term, lhs_term, -factor, add_to_result);
             }
         }
     }
