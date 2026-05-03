@@ -24,12 +24,17 @@ struct PairContribution {
     bool commute;
 };
 
+bool above_threshold(const sparse_scalar_t coefficient, double screen_thresh_squared) {
+    return std::norm(coefficient) > screen_thresh_squared;
+}
+
 std::vector<NormalTermData> collect_terms(const NormalOrderedSparseOperator& op,
                                           double screen_thresh) {
+    const double screen_thresh_squared = screen_thresh * screen_thresh;
     std::vector<NormalTermData> terms;
     terms.reserve(op.size());
     for (const auto& [term, coefficient] : op.elements()) {
-        if (std::abs(coefficient) > screen_thresh) {
+        if (above_threshold(coefficient, screen_thresh_squared)) {
             terms.push_back({&term, coefficient, term.count()});
         }
     }
@@ -38,11 +43,12 @@ std::vector<NormalTermData> collect_terms(const NormalOrderedSparseOperator& op,
 
 NormalOrderedSparseOperator clean_normal_ordered_operator(const NormalOrderedSparseOperator& op,
                                                           int max_rank, double screen_thresh) {
+    const double screen_thresh_squared = screen_thresh * screen_thresh;
     NormalOrderedSparseOperator cleaned(op.reference());
     cleaned.reserve(op.size());
     for (const auto& [term, coefficient] : op.elements()) {
         if ((max_rank < 0 or term.count() <= 2 * max_rank) and
-            std::abs(coefficient) > screen_thresh) {
+            above_threshold(coefficient, screen_thresh_squared)) {
             cleaned.add(term, coefficient);
         }
     }
@@ -271,14 +277,17 @@ NormalOrderedProductComputer::commutator(const NormalOrderedSparseOperator& lhs,
     }
 
     TruncatedNormalProductComputer computer(max_rank_);
+    const double screen_thresh_squared = screen_thresh_ * screen_thresh_;
     const auto lhs_terms = collect_terms(lhs, screen_thresh_);
     const auto rhs_terms = collect_terms(rhs, screen_thresh_);
     NormalOrderedSparseOperator result(lhs.reference());
     result.reserve(std::min(lhs_terms.size() * rhs_terms.size(), std::size_t{250000}));
 
     const std::function<void(const NormalOrderedString&, const sparse_scalar_t)> add_to_result =
-        [this, &result](const NormalOrderedString& term, const sparse_scalar_t coefficient) {
-            if (std::abs(coefficient) > screen_thresh_) {
+        [this, &result,
+         screen_thresh_squared](const NormalOrderedString& term,
+                                const sparse_scalar_t coefficient) {
+            if (above_threshold(coefficient, screen_thresh_squared)) {
                 result.add(term, coefficient);
             }
         };
@@ -286,7 +295,7 @@ NormalOrderedProductComputer::commutator(const NormalOrderedSparseOperator& lhs,
     for (const auto& lhs_term : lhs_terms) {
         for (const auto& rhs_term : rhs_terms) {
             const sparse_scalar_t factor = lhs_term.coefficient * rhs_term.coefficient;
-            if (std::abs(factor) < screen_thresh_) {
+            if (not above_threshold(factor, screen_thresh_squared)) {
                 continue;
             }
             const auto contribution = analyze_pair(lhs_term, rhs_term, max_rank_);
