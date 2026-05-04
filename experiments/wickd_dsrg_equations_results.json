@@ -1,0 +1,304 @@
+{
+  "cases": [
+    {
+      "fci_energy": -1.1372838346519676,
+      "fci_seconds": 0.0008491670014336705,
+      "n_amplitudes": 3,
+      "natoms": 2,
+      "rank": 2,
+      "spacing": 0.74,
+      "sparse_energy": -1.13783171025892,
+      "sparse_iterations": 7,
+      "sparse_solve_s": 0.0005688329983968288,
+      "status": "ok",
+      "wickd_energy": -1.1378317102589202,
+      "wickd_equations": {
+        "generation_s": {
+          "build": 0.00014595797983929515,
+          "compile": 0.0017108330212067813,
+          "contract": 0.0029762920166831464,
+          "to_manybody_equation": 0.0001687500043772161,
+          "total": 0.005001833022106439
+        },
+        "n_blocks": 14,
+        "n_equations": 82,
+        "n_expression_terms": 82
+      },
+      "wickd_iterations": 7,
+      "wickd_minus_fci": -0.0005478756069525748,
+      "wickd_minus_sparse": -2.220446049250313e-16,
+      "wickd_solve_s": 0.1072578750026878
+    },
+    {
+      "fci_energy": -1.1372838346519676,
+      "fci_seconds": 0.0009909170039463788,
+      "n_amplitudes": 3,
+      "natoms": 2,
+      "rank": 3,
+      "spacing": 0.74,
+      "sparse_energy": -1.137283834651968,
+      "sparse_iterations": 7,
+      "sparse_solve_s": 0.0006455419934354722,
+      "status": "ok",
+      "wickd_energy": -1.1372838346519678,
+      "wickd_equations": {
+        "generation_s": {
+          "build": 0.0002714580041356385,
+          "compile": 0.007267666980624199,
+          "contract": 0.01512104200082831,
+          "to_manybody_equation": 0.0009483750036451966,
+          "total": 0.023608541989233345
+        },
+        "n_blocks": 30,
+        "n_equations": 364,
+        "n_expression_terms": 364
+      },
+      "wickd_iterations": 7,
+      "wickd_minus_fci": -2.220446049250313e-16,
+      "wickd_minus_sparse": 2.220446049250313e-16,
+      "wickd_solve_s": 0.5612889589974657
+    },
+    {
+      "fci_energy": -1.1372838346519676,
+      "fci_seconds": 0.000923707993933931,
+      "n_amplitudes": 3,
+      "natoms": 2,
+      "rank": 4,
+      "spacing": 0.74,
+      "sparse_energy": -1.137283834651968,
+      "sparse_iterations": 7,
+      "sparse_solve_s": 0.0007329579966608435,
+      "status": "ok",
+      "wickd_energy": -1.1372838346519678,
+      "wickd_equations": {
+        "generation_s": {
+          "build": 0.0004882500215899199,
+          "compile": 0.023072000010870397,
+          "contract": 0.07596595797804184,
+          "to_manybody_equation": 0.0033558750001247972,
+          "total": 0.10288208301062696
+        },
+        "n_blocks": 55,
+        "n_equations": 1176,
+        "n_expression_terms": 1176
+      },
+      "wickd_iterations": 7,
+      "wickd_minus_fci": -2.220446049250313e-16,
+      "wickd_minus_sparse": 2.220446049250313e-16,
+      "wickd_solve_s": 2.1761524580069818
+    },
+    {
+      "fci_energy": -2.138889914923102,
+      "fci_seconds": 0.0012634170125238597,
+      "n_amplitudes": 26,
+      "natoms": 4,
+      "rank": 2,
+      "spacing": 0.74,
+      "sparse_energy": -2.1402643035958597,
+      "sparse_iterations": 10,
+      "sparse_solve_s": 0.016756333003286272,
+      "status": "ok",
+      "wickd_energy": -2.140264303595859,
+      "wickd_equations": {
+        "generation_s": {
+          "build": 0.00018641698989085853,
+          "compile": 0.0018191249982919544,
+          "contract": 0.003029542014701292,
+          "to_manybody_equation": 0.00017408400890417397,
+          "total": 0.005209168011788279
+        },
+        "n_blocks": 14,
+        "n_equations": 82,
+        "n_expression_terms": 82
+      },
+      "wickd_iterations": 10,
+      "wickd_minus_fci": -0.0013743886727568544,
+      "wickd_minus_sparse": 1.3322676295501878e-15,
+      "wickd_solve_s": 0.16872304101707414
+    },
+    {
+      "fci_energy": -2.138889914923102,
+      "fci_seconds": 0.001020291994791478,
+      "n_amplitudes": 34,
+      "natoms": 4,
+      "rank": 3,
+      "spacing": 0.74,
+      "sparse_energy": -2.1388951298588252,
+      "sparse_iterations": 9,
+      "sparse_solve_s": 0.11328995801159181,
+      "status": "ok",
+      "wickd_energy": -2.1388951298588093,
+      "wickd_equations": {
+        "generation_s": {
+          "build": 0.000260207976680249,
+          "compile": 0.006839791982201859,
+          "contract": 0.015159917005803436,
+          "to_manybody_equation": 0.0008839580113999546,
+          "total": 0.0231438749760855
+        },
+        "n_blocks": 30,
+        "n_equations": 364,
+        "n_expression_terms": 364
+      },
+      "wickd_iterations": 9,
+      "wickd_minus_fci": -5.214935707265056e-06,
+      "wickd_minus_sparse": 1.554312234475219e-14,
+      "wickd_solve_s": 1.1813639159954619
+    },
+    {
+      "fci_energy": -2.138889914923102,
+      "fci_seconds": 0.0009577090095262975,
+      "n_amplitudes": 35,
+      "natoms": 4,
+      "rank": 4,
+      "spacing": 0.74,
+      "sparse_energy": -2.1388898643322394,
+      "sparse_iterations": 8,
+      "sparse_solve_s": 0.2702197909820825,
+      "status": "ok",
+      "wickd_energy": -2.1388898643315337,
+      "wickd_equations": {
+        "generation_s": {
+          "build": 0.0005087500030640513,
+          "compile": 0.023619749990757555,
+          "contract": 0.07738145897747017,
+          "to_manybody_equation": 0.002740875002928078,
+          "total": 0.10425083397421986
+        },
+        "n_blocks": 55,
+        "n_equations": 1176,
+        "n_expression_terms": 1176
+      },
+      "wickd_iterations": 8,
+      "wickd_minus_fci": 5.059156826803246e-08,
+      "wickd_minus_sparse": 7.052136652418994e-13,
+      "wickd_solve_s": 46.02179545900435
+    },
+    {
+      "fci_energy": -3.142365503005144,
+      "fci_seconds": 0.009892750007566065,
+      "n_amplitudes": 117,
+      "natoms": 6,
+      "rank": 2,
+      "spacing": 0.74,
+      "sparse_energy": -3.144610080816127,
+      "sparse_iterations": 12,
+      "sparse_solve_s": 0.2914659579982981,
+      "status": "ok",
+      "wickd_energy": -3.1446100808161135,
+      "wickd_equations": {
+        "generation_s": {
+          "build": 0.00014091702178120613,
+          "compile": 0.0017657499993219972,
+          "contract": 0.0029306249925866723,
+          "to_manybody_equation": 0.00017399998614564538,
+          "total": 0.005011291999835521
+        },
+        "n_blocks": 14,
+        "n_equations": 82,
+        "n_expression_terms": 82
+      },
+      "wickd_iterations": 12,
+      "wickd_minus_fci": -0.002244577810969428,
+      "wickd_minus_sparse": 1.3322676295501878e-14,
+      "wickd_solve_s": 0.3005285830004141
+    },
+    {
+      "fci_energy": -3.142365503005144,
+      "fci_seconds": 0.006408332992577925,
+      "n_amplitudes": 281,
+      "natoms": 6,
+      "rank": 3,
+      "spacing": 0.74,
+      "sparse_energy": -3.1423862444441677,
+      "sparse_iterations": 12,
+      "sparse_solve_s": 7.2111920840106905,
+      "status": "ok",
+      "wickd_energy": -3.1423862444440354,
+      "wickd_equations": {
+        "generation_s": {
+          "build": 0.0002612919779494405,
+          "compile": 0.009067083010450006,
+          "contract": 0.015950333996443078,
+          "to_manybody_equation": 0.0009035829862114042,
+          "total": 0.026182291971053928
+        },
+        "n_blocks": 30,
+        "n_equations": 364,
+        "n_expression_terms": 364
+      },
+      "wickd_iterations": 12,
+      "wickd_minus_fci": -2.0741438891302977e-05,
+      "wickd_minus_sparse": 1.3278267374516872e-13,
+      "wickd_solve_s": 15.460894082993036
+    },
+    {
+      "elapsed_s": 300.0047493329912,
+      "fci_energy": -3.142365503005144,
+      "fci_seconds": 0.006304542010184377,
+      "n_amplitudes": 380,
+      "natoms": 6,
+      "rank": 4,
+      "spacing": 0.74,
+      "sparse_energy": -3.1423651078761177,
+      "sparse_iterations": 10,
+      "sparse_solve_s": 64.71206874999916,
+      "status": "timeout",
+      "timeout_s": 300.0,
+      "wickd_energy": null,
+      "wickd_iterations": null,
+      "wickd_minus_fci": null,
+      "wickd_minus_sparse": null,
+      "wickd_solve_s": null
+    }
+  ],
+  "equation_generation_by_rank": {
+    "2": {
+      "generation_s": {
+        "build": 0.00014091702178120613,
+        "compile": 0.0017657499993219972,
+        "contract": 0.0029306249925866723,
+        "to_manybody_equation": 0.00017399998614564538,
+        "total": 0.005011291999835521
+      },
+      "n_blocks": 14,
+      "n_equations": 82,
+      "n_expression_terms": 82
+    },
+    "3": {
+      "generation_s": {
+        "build": 0.0002612919779494405,
+        "compile": 0.009067083010450006,
+        "contract": 0.015950333996443078,
+        "to_manybody_equation": 0.0009035829862114042,
+        "total": 0.026182291971053928
+      },
+      "n_blocks": 30,
+      "n_equations": 364,
+      "n_expression_terms": 364
+    },
+    "4": {
+      "generation_s": {
+        "build": 0.0005087500030640513,
+        "compile": 0.023619749990757555,
+        "contract": 0.07738145897747017,
+        "to_manybody_equation": 0.002740875002928078,
+        "total": 0.10425083397421986
+      },
+      "n_blocks": 55,
+      "n_equations": 1176,
+      "n_expression_terms": 1176
+    }
+  },
+  "metadata": {
+    "basis": "sto-3g",
+    "created_at": "2026-05-03 15:13:52",
+    "e_tol": 1e-10,
+    "flow_param": 5.0,
+    "max_comm": 20,
+    "method": "Wick&d-generated spin-orbital single-commutator BCH DSRG(n)",
+    "r_tol": 1e-05,
+    "reference": "Sparse normal-ordered Forte2 prototype on branch normalorder",
+    "spacing": 0.74
+  }
+}

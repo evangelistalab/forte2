@@ -1,0 +1,931 @@
+{
+  "cases": [
+    {
+      "basis": "sto-3g",
+      "completed_at": "2026-05-04 11:56:46",
+      "e_tol": 1e-10,
+      "fci": {
+        "algorithm": "exact",
+        "converged": true,
+        "energy": -1.1372838346519676,
+        "ndet": 4,
+        "seconds": 0.0009916659910231829
+      },
+      "flow_param": 5.0,
+      "n_amplitudes": 3,
+      "na": 1,
+      "natoms": 2,
+      "nb": 1,
+      "nmo": 2,
+      "r_tol": 1e-05,
+      "rank": 2,
+      "reference": "|\u25cf\u25cb>",
+      "reference_sparse_energy": -1.13783171025892,
+      "rhf_energy": -1.1167593075063595,
+      "spacing": 0.74,
+      "sparse_reference": {
+        "energy": -1.13783171025892,
+        "iterations": null,
+        "solve_s": null
+      },
+      "spin_integrated_energy": -1.1378317102589202,
+      "spin_integrated_equations": {
+        "generation_s": {
+          "build": 0.0011283339990768582,
+          "commutator_build": 0.0005959580012131482,
+          "compile": 0.0033400000247638673,
+          "contract": 0.013379165990045294,
+          "mapped_equations": 258,
+          "to_manybody_equation": 0.0007308750064112246,
+          "total": 0.019174333021510392
+        },
+        "n_blocks": 30,
+        "n_equations": 362,
+        "n_expression_terms": 362,
+        "n_unique_equations": 254
+      },
+      "spin_integrated_history_tail": [
+        {
+          "delta_energy": -0.00037954014349383947,
+          "diis_status": "",
+          "energy": -1.1377657341990808,
+          "iter_s": 0.008898166008293629,
+          "iteration": 2,
+          "natoms": 2,
+          "ncomm": 10,
+          "rank": 2,
+          "rms_update": 0.004029372911830129,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -5.619990341299008e-05,
+          "diis_status": "S",
+          "energy": -1.1378219341024938,
+          "iter_s": 0.008563084003981203,
+          "iteration": 3,
+          "natoms": 2,
+          "ncomm": 10,
+          "rank": 2,
+          "rms_update": 0.0015510307472508394,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -8.327423801857137e-06,
+          "diis_status": "S",
+          "energy": -1.1378302615262956,
+          "iter_s": 0.008680416998686269,
+          "iteration": 4,
+          "natoms": 2,
+          "ncomm": 10,
+          "rank": 2,
+          "rms_update": 0.0005970755399574007,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -1.4487326238654674e-06,
+          "diis_status": "S/E",
+          "energy": -1.1378317102589195,
+          "iter_s": 0.008710499998414889,
+          "iteration": 5,
+          "natoms": 2,
+          "ncomm": 10,
+          "rank": 2,
+          "rms_update": 1.3509901086727895e-08,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -6.661338147750939e-16,
+          "diis_status": "S/E",
+          "energy": -1.1378317102589202,
+          "iter_s": 0.008510583982570097,
+          "iteration": 6,
+          "natoms": 2,
+          "ncomm": 10,
+          "rank": 2,
+          "rms_update": 2.0147780296229648e-13,
+          "spacing": 0.74
+        }
+      ],
+      "spin_integrated_iterations": 7,
+      "spin_integrated_minus_fci": -0.0005478756069525748,
+      "spin_integrated_minus_reference_sparse": -2.220446049250313e-16,
+      "spin_integrated_solve_s": 0.059944292006548494,
+      "status": "ok",
+      "wall_s": 0.3652173329901416
+    },
+    {
+      "basis": "sto-3g",
+      "completed_at": "2026-05-04 11:56:46",
+      "e_tol": 1e-10,
+      "fci": {
+        "algorithm": "exact",
+        "converged": true,
+        "energy": -1.1372838346519676,
+        "ndet": 4,
+        "seconds": 0.0008094999939203262
+      },
+      "flow_param": 5.0,
+      "n_amplitudes": 3,
+      "na": 1,
+      "natoms": 2,
+      "nb": 1,
+      "nmo": 2,
+      "r_tol": 1e-05,
+      "rank": 3,
+      "reference": "|\u25cf\u25cb>",
+      "reference_sparse_energy": -1.137283834651968,
+      "rhf_energy": -1.1167593075063595,
+      "spacing": 0.74,
+      "sparse_reference": {
+        "energy": -1.137283834651968,
+        "iterations": null,
+        "solve_s": null
+      },
+      "spin_integrated_energy": -1.137283834651968,
+      "spin_integrated_equations": {
+        "generation_s": {
+          "build": 0.01439037499949336,
+          "commutator_build": 0.0037772089999634773,
+          "compile": 0.021204874996328726,
+          "contract": 0.12694774998817593,
+          "mapped_equations": 1868,
+          "to_manybody_equation": 0.008161250007105991,
+          "total": 0.17448145899106748
+        },
+        "n_blocks": 82,
+        "n_equations": 3234,
+        "n_expression_terms": 3234,
+        "n_unique_equations": 1860
+      },
+      "spin_integrated_history_tail": [
+        {
+          "delta_energy": -0.0002860494935683633,
+          "diis_status": "",
+          "energy": -1.1372434397615865,
+          "iter_s": 0.06374916699132882,
+          "iteration": 2,
+          "natoms": 2,
+          "ncomm": 10,
+          "rank": 3,
+          "rms_update": 0.003236962207115626,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -3.539877057145979e-05,
+          "diis_status": "S",
+          "energy": -1.137278838532158,
+          "iter_s": 0.0627575000107754,
+          "iteration": 3,
+          "natoms": 2,
+          "ncomm": 10,
+          "rank": 3,
+          "rms_update": 0.0011384018106959937,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -4.3782269687486775e-06,
+          "diis_status": "S",
+          "energy": -1.1372832167591267,
+          "iter_s": 0.06268641698989086,
+          "iteration": 4,
+          "natoms": 2,
+          "ncomm": 10,
+          "rank": 3,
+          "rms_update": 0.00040034676547533177,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -6.178928406708195e-07,
+          "diis_status": "S/E",
+          "energy": -1.1372838346519674,
+          "iter_s": 0.06285979200038128,
+          "iteration": 5,
+          "natoms": 2,
+          "ncomm": 10,
+          "rank": 3,
+          "rms_update": 1.0152065840762782e-08,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -6.661338147750939e-16,
+          "diis_status": "S/E",
+          "energy": -1.137283834651968,
+          "iter_s": 0.062374915985856205,
+          "iteration": 6,
+          "natoms": 2,
+          "ncomm": 10,
+          "rank": 3,
+          "rms_update": 9.408168862716603e-13,
+          "spacing": 0.74
+        }
+      ],
+      "spin_integrated_iterations": 7,
+      "spin_integrated_minus_fci": -4.440892098500626e-16,
+      "spin_integrated_minus_reference_sparse": 0.0,
+      "spin_integrated_solve_s": 0.43439762500929646,
+      "status": "ok",
+      "wall_s": 0.7733389160130173
+    },
+    {
+      "basis": "sto-3g",
+      "completed_at": "2026-05-04 11:56:52",
+      "e_tol": 1e-10,
+      "fci": {
+        "algorithm": "exact",
+        "converged": true,
+        "energy": -1.1372838346519676,
+        "ndet": 4,
+        "seconds": 0.0008191669767256826
+      },
+      "flow_param": 5.0,
+      "n_amplitudes": 3,
+      "na": 1,
+      "natoms": 2,
+      "nb": 1,
+      "nmo": 2,
+      "r_tol": 1e-05,
+      "rank": 4,
+      "reference": "|\u25cf\u25cb>",
+      "reference_sparse_energy": -1.137283834651968,
+      "rhf_energy": -1.1167593075063595,
+      "spacing": 0.74,
+      "sparse_reference": {
+        "energy": -1.137283834651968,
+        "iterations": null,
+        "solve_s": null
+      },
+      "spin_integrated_energy": -1.137283834651968,
+      "spin_integrated_equations": {
+        "generation_s": {
+          "build": 0.23619366699131206,
+          "commutator_build": 0.017131999979028478,
+          "compile": 0.13877204098389484,
+          "contract": 1.0062566249980591,
+          "mapped_equations": 12576,
+          "to_manybody_equation": 0.050390749995131046,
+          "total": 1.4487450829474255
+        },
+        "n_blocks": 252,
+        "n_equations": 19806,
+        "n_expression_terms": 19806,
+        "n_unique_equations": 12564
+      },
+      "spin_integrated_history_tail": [
+        {
+          "delta_energy": -0.0002860494935683633,
+          "diis_status": "",
+          "energy": -1.1372434397615865,
+          "iter_s": 0.4590377080021426,
+          "iteration": 2,
+          "natoms": 2,
+          "ncomm": 10,
+          "rank": 4,
+          "rms_update": 0.003236962207115626,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -3.539877057145979e-05,
+          "diis_status": "S",
+          "energy": -1.137278838532158,
+          "iter_s": 0.4596100829949137,
+          "iteration": 3,
+          "natoms": 2,
+          "ncomm": 10,
+          "rank": 4,
+          "rms_update": 0.0011384018106959937,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -4.3782269687486775e-06,
+          "diis_status": "S",
+          "energy": -1.1372832167591267,
+          "iter_s": 0.4587335000105668,
+          "iteration": 4,
+          "natoms": 2,
+          "ncomm": 10,
+          "rank": 4,
+          "rms_update": 0.00040034676547533177,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -6.178928406708195e-07,
+          "diis_status": "S/E",
+          "energy": -1.1372838346519674,
+          "iter_s": 0.4591332910058554,
+          "iteration": 5,
+          "natoms": 2,
+          "ncomm": 10,
+          "rank": 4,
+          "rms_update": 1.0152065840762782e-08,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -6.661338147750939e-16,
+          "diis_status": "S/E",
+          "energy": -1.137283834651968,
+          "iter_s": 0.45906470899353735,
+          "iteration": 6,
+          "natoms": 2,
+          "ncomm": 10,
+          "rank": 4,
+          "rms_update": 9.408168862716603e-13,
+          "spacing": 0.74
+        }
+      ],
+      "spin_integrated_iterations": 7,
+      "spin_integrated_minus_fci": -4.440892098500626e-16,
+      "spin_integrated_minus_reference_sparse": 0.0,
+      "spin_integrated_solve_s": 3.16980583302211,
+      "status": "ok",
+      "wall_s": 5.1802099169872236
+    },
+    {
+      "basis": "sto-3g",
+      "completed_at": "2026-05-04 11:56:52",
+      "e_tol": 1e-10,
+      "fci": {
+        "algorithm": "exact",
+        "converged": true,
+        "energy": -2.138889914923102,
+        "ndet": 36,
+        "seconds": 0.0009152910206466913
+      },
+      "flow_param": 5.0,
+      "n_amplitudes": 26,
+      "na": 2,
+      "natoms": 4,
+      "nb": 2,
+      "nmo": 4,
+      "r_tol": 1e-05,
+      "rank": 2,
+      "reference": "|\u25cf\u25cf\u25cb\u25cb>",
+      "reference_sparse_energy": -2.14026430359586,
+      "rhf_energy": -2.0978996141249016,
+      "spacing": 0.74,
+      "sparse_reference": {
+        "energy": -2.14026430359586,
+        "iterations": null,
+        "solve_s": null
+      },
+      "spin_integrated_energy": -2.140264303595859,
+      "spin_integrated_equations": {
+        "generation_s": {
+          "build": 0.0010554999753367156,
+          "commutator_build": 0.0005542080034501851,
+          "compile": 0.003328999999212101,
+          "contract": 0.012930167024023831,
+          "mapped_equations": 258,
+          "to_manybody_equation": 0.000720667012501508,
+          "total": 0.01858954201452434
+        },
+        "n_blocks": 30,
+        "n_equations": 362,
+        "n_expression_terms": 362,
+        "n_unique_equations": 254
+      },
+      "spin_integrated_history_tail": [
+        {
+          "delta_energy": -1.9469147311657053e-05,
+          "diis_status": "S/E",
+          "energy": -2.1402643014482545,
+          "iter_s": 0.01045533298747614,
+          "iteration": 5,
+          "natoms": 4,
+          "ncomm": 11,
+          "rank": 2,
+          "rms_update": 1.2485058170878062e-05,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -1.8215642327845671e-09,
+          "diis_status": "S/E",
+          "energy": -2.1402643032698188,
+          "iter_s": 0.010379167011706159,
+          "iteration": 6,
+          "natoms": 4,
+          "ncomm": 11,
+          "rank": 2,
+          "rms_update": 6.388446696164337e-07,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -1.2090506373851895e-10,
+          "diis_status": "S/E",
+          "energy": -2.140264303390724,
+          "iter_s": 0.010393625008873641,
+          "iteration": 7,
+          "natoms": 4,
+          "ncomm": 11,
+          "rank": 2,
+          "rms_update": 7.945167467876503e-08,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -1.8690737846327465e-10,
+          "diis_status": "S/E",
+          "energy": -2.140264303577631,
+          "iter_s": 0.010457417025463656,
+          "iteration": 8,
+          "natoms": 4,
+          "ncomm": 11,
+          "rank": 2,
+          "rms_update": 8.457622939614643e-09,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -1.822764161829582e-11,
+          "diis_status": "S/E",
+          "energy": -2.140264303595859,
+          "iter_s": 0.010413917014375329,
+          "iteration": 9,
+          "natoms": 4,
+          "ncomm": 11,
+          "rank": 2,
+          "rms_update": 7.461229906548501e-10,
+          "spacing": 0.74
+        }
+      ],
+      "spin_integrated_iterations": 10,
+      "spin_integrated_minus_fci": -0.0013743886727568544,
+      "spin_integrated_minus_reference_sparse": 1.3322676295501878e-15,
+      "spin_integrated_solve_s": 0.09964083399972878,
+      "status": "ok",
+      "wall_s": 0.23525679198792204
+    },
+    {
+      "basis": "sto-3g",
+      "completed_at": "2026-05-04 11:56:53",
+      "e_tol": 1e-10,
+      "fci": {
+        "algorithm": "exact",
+        "converged": true,
+        "energy": -2.138889914923102,
+        "ndet": 36,
+        "seconds": 0.0009278749930672348
+      },
+      "flow_param": 5.0,
+      "n_amplitudes": 34,
+      "na": 2,
+      "natoms": 4,
+      "nb": 2,
+      "nmo": 4,
+      "r_tol": 1e-05,
+      "rank": 3,
+      "reference": "|\u25cf\u25cf\u25cb\u25cb>",
+      "reference_sparse_energy": -2.138895129858825,
+      "rhf_energy": -2.0978996141249016,
+      "spacing": 0.74,
+      "sparse_reference": {
+        "energy": -2.138895129858825,
+        "iterations": null,
+        "solve_s": null
+      },
+      "spin_integrated_energy": -2.1388951298588252,
+      "spin_integrated_equations": {
+        "generation_s": {
+          "build": 0.015335125004639849,
+          "commutator_build": 0.00380045801284723,
+          "compile": 0.02138391599874012,
+          "contract": 0.12797987498925067,
+          "mapped_equations": 1868,
+          "to_manybody_equation": 0.007884916994953528,
+          "total": 0.1763842910004314
+        },
+        "n_blocks": 82,
+        "n_equations": 3234,
+        "n_expression_terms": 3234,
+        "n_unique_equations": 1860
+      },
+      "spin_integrated_history_tail": [
+        {
+          "delta_energy": -2.299607678768467e-05,
+          "diis_status": "S",
+          "energy": -2.138887972151005,
+          "iter_s": 0.1245842500065919,
+          "iteration": 4,
+          "natoms": 4,
+          "ncomm": 11,
+          "rank": 3,
+          "rms_update": 0.0013393488753035419,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -7.1479856691425425e-06,
+          "diis_status": "S/E",
+          "energy": -2.138895120136674,
+          "iter_s": 0.12486941600218415,
+          "iteration": 5,
+          "natoms": 4,
+          "ncomm": 11,
+          "rank": 3,
+          "rms_update": 1.4986006707386952e-05,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -9.014840873788899e-09,
+          "diis_status": "S/E",
+          "energy": -2.138895129151515,
+          "iter_s": 0.12654637498781085,
+          "iteration": 6,
+          "natoms": 4,
+          "ncomm": 11,
+          "rank": 3,
+          "rms_update": 9.379174551188181e-07,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -6.689844234131215e-10,
+          "diis_status": "S/E",
+          "energy": -2.1388951298204995,
+          "iter_s": 0.12595670801238157,
+          "iteration": 7,
+          "natoms": 4,
+          "ncomm": 11,
+          "rank": 3,
+          "rms_update": 7.524414936842858e-08,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -3.8325786988480104e-11,
+          "diis_status": "S/E",
+          "energy": -2.1388951298588252,
+          "iter_s": 0.12613795799552463,
+          "iteration": 8,
+          "natoms": 4,
+          "ncomm": 11,
+          "rank": 3,
+          "rms_update": 6.398844514723481e-09,
+          "spacing": 0.74
+        }
+      ],
+      "spin_integrated_iterations": 9,
+      "spin_integrated_minus_fci": -5.2149357232522675e-06,
+      "spin_integrated_minus_reference_sparse": -4.440892098500626e-16,
+      "spin_integrated_solve_s": 1.1068027500004973,
+      "status": "ok",
+      "wall_s": 1.4509604169870727
+    },
+    {
+      "basis": "sto-3g",
+      "completed_at": "2026-05-04 11:57:16",
+      "e_tol": 1e-10,
+      "fci": {
+        "algorithm": "exact",
+        "converged": true,
+        "energy": -2.138889914923102,
+        "ndet": 36,
+        "seconds": 0.0009374580113217235
+      },
+      "flow_param": 5.0,
+      "n_amplitudes": 35,
+      "na": 2,
+      "natoms": 4,
+      "nb": 2,
+      "nmo": 4,
+      "r_tol": 1e-05,
+      "rank": 4,
+      "reference": "|\u25cf\u25cf\u25cb\u25cb>",
+      "reference_sparse_energy": -2.138889864332239,
+      "rhf_energy": -2.0978996141249016,
+      "spacing": 0.74,
+      "sparse_reference": {
+        "energy": -2.138889864332239,
+        "iterations": null,
+        "solve_s": null
+      },
+      "spin_integrated_energy": -2.1388898643322385,
+      "spin_integrated_equations": {
+        "generation_s": {
+          "build": 0.23622658400563523,
+          "commutator_build": 0.01615399998263456,
+          "compile": 0.13819049997255206,
+          "contract": 1.0263283750100527,
+          "mapped_equations": 12576,
+          "to_manybody_equation": 0.05057433299953118,
+          "total": 1.4674737919704057
+        },
+        "n_blocks": 252,
+        "n_equations": 19806,
+        "n_expression_terms": 19806,
+        "n_unique_equations": 12564
+      },
+      "spin_integrated_history_tail": [
+        {
+          "delta_energy": -0.00010974276803032978,
+          "diis_status": "S",
+          "energy": -2.138860499320116,
+          "iter_s": 2.695359166013077,
+          "iteration": 3,
+          "natoms": 4,
+          "ncomm": 11,
+          "rank": 4,
+          "rms_update": 0.002783659998084662,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -2.254105963839237e-05,
+          "diis_status": "S",
+          "energy": -2.1388830403797545,
+          "iter_s": 2.6474347920157015,
+          "iteration": 4,
+          "natoms": 4,
+          "ncomm": 11,
+          "rank": 4,
+          "rms_update": 0.0013306404058138076,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -6.822900265657239e-06,
+          "diis_status": "S/E",
+          "energy": -2.13888986328002,
+          "iter_s": 2.6461139589955565,
+          "iteration": 5,
+          "natoms": 4,
+          "ncomm": 11,
+          "rank": 4,
+          "rms_update": 1.4729889509533646e-05,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -1.0713256948235994e-09,
+          "diis_status": "S/E",
+          "energy": -2.138889864351346,
+          "iter_s": 2.646095708012581,
+          "iteration": 6,
+          "natoms": 4,
+          "ncomm": 11,
+          "rank": 4,
+          "rms_update": 8.929256327360539e-07,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": 1.9107382343008794e-11,
+          "diis_status": "S/E",
+          "energy": -2.1388898643322385,
+          "iter_s": 2.6497667499934323,
+          "iteration": 7,
+          "natoms": 4,
+          "ncomm": 11,
+          "rank": 4,
+          "rms_update": 8.138097030987044e-08,
+          "spacing": 0.74
+        }
+      ],
+      "spin_integrated_iterations": 8,
+      "spin_integrated_minus_fci": 5.059086349845643e-08,
+      "spin_integrated_minus_reference_sparse": 4.440892098500626e-16,
+      "spin_integrated_solve_s": 21.11920966699836,
+      "status": "ok",
+      "wall_s": 23.16375033298391
+    },
+    {
+      "basis": "sto-3g",
+      "completed_at": "2026-05-04 11:57:17",
+      "e_tol": 1e-10,
+      "fci": {
+        "algorithm": "exact",
+        "converged": true,
+        "energy": -3.142365503005144,
+        "ndet": 400,
+        "seconds": 0.007159959001000971
+      },
+      "flow_param": 5.0,
+      "n_amplitudes": 117,
+      "na": 3,
+      "natoms": 6,
+      "nb": 3,
+      "nmo": 6,
+      "r_tol": 1e-05,
+      "rank": 2,
+      "reference": "|\u25cf\u25cf\u25cf\u25cb\u25cb\u25cb>",
+      "reference_sparse_energy": -3.144610080816127,
+      "rhf_energy": -3.0799419452592796,
+      "spacing": 0.74,
+      "sparse_reference": {
+        "energy": -3.144610080816127,
+        "iterations": null,
+        "solve_s": null
+      },
+      "spin_integrated_energy": -3.1446100808161135,
+      "spin_integrated_equations": {
+        "generation_s": {
+          "build": 0.0019847920048050582,
+          "commutator_build": 0.0005585409817285836,
+          "compile": 0.0035173750075045973,
+          "contract": 0.013804459013044834,
+          "mapped_equations": 258,
+          "to_manybody_equation": 0.0007624169811606407,
+          "total": 0.020627583988243714
+        },
+        "n_blocks": 30,
+        "n_equations": 362,
+        "n_expression_terms": 362,
+        "n_unique_equations": 254
+      },
+      "spin_integrated_history_tail": [
+        {
+          "delta_energy": 8.494258629809792e-10,
+          "diis_status": "S/E",
+          "energy": -3.144610081631496,
+          "iter_s": 0.015888750000158325,
+          "iteration": 7,
+          "natoms": 6,
+          "ncomm": 11,
+          "rank": 2,
+          "rms_update": 4.747702488097116e-06,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": 4.956968169267384e-10,
+          "diis_status": "S/E",
+          "energy": -3.144610081135799,
+          "iter_s": 0.015820250002434477,
+          "iteration": 8,
+          "natoms": 6,
+          "ncomm": 11,
+          "rank": 2,
+          "rms_update": 2.487606742149885e-07,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": 1.5758327975845532e-10,
+          "diis_status": "S/E",
+          "energy": -3.144610080978216,
+          "iter_s": 0.018057125009363517,
+          "iteration": 9,
+          "natoms": 6,
+          "ncomm": 11,
+          "rank": 2,
+          "rms_update": 4.4616563797080785e-08,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": 1.432347573881998e-10,
+          "diis_status": "S/E",
+          "energy": -3.144610080834981,
+          "iter_s": 0.01609345799079165,
+          "iteration": 10,
+          "natoms": 6,
+          "ncomm": 11,
+          "rank": 2,
+          "rms_update": 7.845969128649657e-09,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": 1.886757416968976e-11,
+          "diis_status": "S/E",
+          "energy": -3.1446100808161135,
+          "iter_s": 0.016088083997601643,
+          "iteration": 11,
+          "natoms": 6,
+          "ncomm": 11,
+          "rank": 2,
+          "rms_update": 1.33098161151625e-09,
+          "spacing": 0.74
+        }
+      ],
+      "spin_integrated_iterations": 12,
+      "spin_integrated_minus_fci": -0.002244577810969428,
+      "spin_integrated_minus_reference_sparse": 1.3322676295501878e-14,
+      "spin_integrated_solve_s": 0.21125108399428427,
+      "status": "ok",
+      "wall_s": 0.3704262090031989
+    },
+    {
+      "basis": "sto-3g",
+      "completed_at": "2026-05-04 11:57:26",
+      "e_tol": 1e-10,
+      "fci": {
+        "algorithm": "exact",
+        "converged": true,
+        "energy": -3.142365503005144,
+        "ndet": 400,
+        "seconds": 0.006062792002921924
+      },
+      "flow_param": 5.0,
+      "n_amplitudes": 281,
+      "na": 3,
+      "natoms": 6,
+      "nb": 3,
+      "nmo": 6,
+      "r_tol": 1e-05,
+      "rank": 3,
+      "reference": "|\u25cf\u25cf\u25cf\u25cb\u25cb\u25cb>",
+      "reference_sparse_energy": -3.142386244444168,
+      "rhf_energy": -3.0799419452592796,
+      "spacing": 0.74,
+      "sparse_reference": {
+        "energy": -3.142386244444168,
+        "iterations": null,
+        "solve_s": null
+      },
+      "spin_integrated_energy": -3.142386244444155,
+      "spin_integrated_equations": {
+        "generation_s": {
+          "build": 0.015294540993636474,
+          "commutator_build": 0.0035454579920042306,
+          "compile": 0.021888375020353124,
+          "contract": 0.17033929101307876,
+          "mapped_equations": 1868,
+          "to_manybody_equation": 0.00821645898395218,
+          "total": 0.21928412400302477
+        },
+        "n_blocks": 82,
+        "n_equations": 3234,
+        "n_expression_terms": 3234,
+        "n_unique_equations": 1860
+      },
+      "spin_integrated_history_tail": [
+        {
+          "delta_energy": -2.8570481536149828e-08,
+          "diis_status": "S/E",
+          "energy": -3.142386243600407,
+          "iter_s": 0.7091466669808142,
+          "iteration": 7,
+          "natoms": 6,
+          "ncomm": 11,
+          "rank": 3,
+          "rms_update": 4.85047926074952e-06,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": -1.232906665649125e-09,
+          "diis_status": "S/E",
+          "energy": -3.1423862448333137,
+          "iter_s": 0.7118195419898257,
+          "iteration": 8,
+          "natoms": 6,
+          "ncomm": 11,
+          "rank": 3,
+          "rms_update": 7.414802179975592e-07,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": 2.599382931123273e-10,
+          "diis_status": "S/E",
+          "energy": -3.1423862445733755,
+          "iter_s": 0.7097740830213297,
+          "iteration": 9,
+          "natoms": 6,
+          "ncomm": 11,
+          "rank": 3,
+          "rms_update": 1.3486334845490018e-07,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": 1.2033174456860252e-10,
+          "diis_status": "S/E",
+          "energy": -3.1423862444530437,
+          "iter_s": 0.6988441249995958,
+          "iteration": 10,
+          "natoms": 6,
+          "ncomm": 11,
+          "rank": 3,
+          "rms_update": 1.7390513455904714e-08,
+          "spacing": 0.74
+        },
+        {
+          "delta_energy": 8.888889624358853e-12,
+          "diis_status": "S/E",
+          "energy": -3.142386244444155,
+          "iter_s": 0.7087523749796674,
+          "iteration": 11,
+          "natoms": 6,
+          "ncomm": 11,
+          "rank": 3,
+          "rms_update": 4.2636444006626926e-09,
+          "spacing": 0.74
+        }
+      ],
+      "spin_integrated_iterations": 12,
+      "spin_integrated_minus_fci": -2.0741439010762974e-05,
+      "spin_integrated_minus_reference_sparse": 1.3322676295501878e-14,
+      "spin_integrated_solve_s": 8.433982791990275,
+      "status": "ok",
+      "wall_s": 8.840028083010111
+    },
+    {
+      "basis": "sto-3g",
+      "completed_at": "2026-05-04 11:58:26",
+      "elapsed_s": 60.00237145801657,
+      "flow_param": 5.0,
+      "natoms": 6,
+      "rank": 4,
+      "spacing": 0.74,
+      "status": "timeout",
+      "timeout_s": 60.0
+    }
+  ],
+  "metadata": {
+    "basis": "sto-3g",
+    "created_at": "2026-05-04 11:56:45",
+    "e_tol": 1e-10,
+    "flow_param": 5.0,
+    "iteration_log": null,
+    "max_comm": 20,
+    "max_iter": 80,
+    "method": "Wick&d-generated spin-unique alpha/beta DSRG(n)",
+    "r_tol": 1e-05,
+    "screen": 1e-12
+  }
+}
