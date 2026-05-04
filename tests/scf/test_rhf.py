@@ -18,16 +18,6 @@ def test_rhf():
     scf = RHF(charge=0)(system)
     scf.run()
     assert scf.E == approx(erhf)
-    print(scf.result)
-    # scf.result.to_json("test.json")
-    scf.result.to_npz("test.npz")
-
-    import numpy as np
-    f = np.load("test.npz")
-    
-    new_result = SCFResult.from_npz("test.npz")
-    print(new_result)
-test_rhf()
 
 
 def test_rhf_zero_electron():
