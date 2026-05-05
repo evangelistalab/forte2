@@ -293,10 +293,10 @@ def mutual_correlation_plot(
 
 
 if __name__ == "__main__":
-    from forte2.systems import System
-    from forte2.solvers.hf import RHF
-    from forte2.solvers.ci import CI
-    from forte2.states import State
+    from forte2.system import System
+    from forte2.scf.rhf import RHF
+    from forte2.ci.ci import CI
+    from forte2.state import State
     from forte2.props.mutual_correlation import MutualCorrelationAnalysis
 
     xyz = f"""

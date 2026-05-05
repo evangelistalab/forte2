@@ -35,7 +35,8 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
             self.parent_method.run()
 
         SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
+        # UHF will only provide alpha MOs, others are unchanged by the only_alpha kwarg
+        MOsMixin.copy_from_upstream(self, self.parent_method, only_alpha=True)
         if self.system.two_component:
             self._make_mo_space(two_component=True)
         else:
@@ -43,12 +44,12 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
 
     def _make_mo_space(self, two_component):
         # Ways of providing the MO space:
-        # 1. Via the parent method (if it has MOSpaceMixin).
+        # 1. Via the parent method (if it has mo_space).
         # 2. Via the mo_space parameter.
         # 3. Via the *_orbitals parameters (core_orbitals, active_orbitals, frozen_core_orbitals, frozen_virtual_orbitals).
         # If any one of 2-3 is provided, then 1 is ignored.
         # If more than one of 2-3 is provided, then an error is raised.
-        provided_via_parent = isinstance(self.parent_method, MOSpaceMixin)
+        provided_via_parent = hasattr(self.parent_method, "mo_space")
         provided_via_mo_space = self.mo_space is not None
         provided_via_orbitals = any(
             [
@@ -106,7 +107,7 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
                 )
                 return
         elif provided_via_parent:
-            MOSpaceMixin.copy_from_upstream(self, self.parent_method)
+            self.mo_space = self.parent_method.mo_space
             logger.log_info1("ActiveSpaceSolver: mo_space copied from parent method.")
             return
 
