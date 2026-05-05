@@ -63,37 +63,60 @@ class Basis:
     def __len__(self) -> int: ...
 
     @property
-    def shell_first_and_size(self) -> list[tuple[int, int]]: ...
+    def shell_first_and_size(self) -> list[tuple[int, int]]:
+        """
+        Returns a vector of pairs of the first index and size of each shell in the basis set. The first index is the index of the first basis function in the shell, and the size is the number of basis functions in the shell.
+        """
 
     @property
-    def shell_offsets(self) -> list[int]: ...
+    def shell_offsets(self) -> list[int]:
+        """
+        Returns a vector of the indices of the first basis function in each shell. The last element is the total number of basis functions in the basis set.
+        """
 
     @property
-    def center_first_and_last(self) -> list[tuple[int, int]]: ...
+    def center_first_and_last(self) -> list[tuple[int, int]]:
+        """
+        Returns a vector of pairs of the first and last index of the basis functions on a given center in the basis set.
+        """
 
     @property
-    def center_first_and_last_shell(self) -> list[tuple[int, int]]: ...
+    def center_first_and_last_shell(self) -> list[tuple[int, int]]:
+        """
+        Returns a vector of pairs of the first and last index of the shells on a given center in the basis set.
+        """
 
     @property
-    def size(self) -> int: ...
+    def size(self) -> int:
+        """Returns the number of basis functions in the basis set"""
 
     @property
-    def max_l(self) -> int: ...
+    def max_l(self) -> int:
+        """Returns the maximum angular momentum of the shells in the basis set"""
 
     @property
-    def name(self) -> str: ...
+    def name(self) -> str:
+        """Returns the name of the basis set"""
 
     @property
-    def max_nprim(self) -> int: ...
+    def max_nprim(self) -> int:
+        """
+        Returns the maximum number of primitive Gaussians in shells of the basis set
+        """
 
     @property
-    def nprim(self) -> int: ...
+    def nprim(self) -> int:
+        """Returns the number of primitive Gaussians in shells of the basis set"""
 
     @property
-    def max_nbasis(self) -> int: ...
+    def max_nbasis(self) -> int:
+        """
+        Returns the maximum number of basis functions in shells of the basis set
+        """
 
     @property
-    def nshells(self) -> int: ...
+    def nshells(self) -> int:
+        """Returns the number of shells in the basis set"""
 
     def __repr__(self) -> str: ...
 
