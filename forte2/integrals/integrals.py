@@ -715,13 +715,13 @@ def _parse_basis_args_cint_3c2e(system, basis1, basis2, basis3, origin=None):
             system, system.basis, common_origin=origin
         )
         nsh_bas = system.basis.nshells
-        shell_slice = [0, nsh_bas, 0, nsh_bas, nsh_bas, nsh_bas + nsh_aux]
+        shell_slice = [nsh_bas, nsh_bas + nsh_aux, 0, nsh_bas, 0, nsh_bas]
     elif basis2 is not None and basis3 is None:
         bas_atm, bas_bas, bas_env = basis_to_cint_envs(
             system, basis2, common_origin=origin
         )
         nsh_bas = basis2.nshells
-        shell_slice = [0, nsh_bas, 0, nsh_bas, nsh_bas, nsh_bas + nsh_aux]
+        shell_slice = [nsh_bas, nsh_bas + nsh_aux, 0, nsh_bas, 0, nsh_bas]
     elif basis2 is not None and basis3 is not None and basis2 != basis3:
         raise ValueError(
             "libcint doesn't support (P|QR) with Q and R being different basis sets."
@@ -734,10 +734,10 @@ def _parse_basis_args_cint_3c2e(system, basis1, basis2, basis3, origin=None):
 
 
 def _f2c(arr):
-    if arr.shape[-1] == 1:
-        return np.ascontiguousarray(arr[..., 0])
+    if arr.shape[0] == 1:
+        return arr[0]
     else:
-        return np.ascontiguousarray(np.rollaxis(arr, -1, 0))
+        return arr
 
 
 def cint_overlap(system, basis1=None, basis2=None):
@@ -783,6 +783,7 @@ def cint_overlap_spinor(system, basis1=None, basis2=None):
     _require_libcint()
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
     res = ints.cint_int1e_ovlp_spinor(shell_slice, atm, bas, env)
+    np.conjugate(res, out=res)
     return _f2c(res)
 
 
@@ -857,7 +858,10 @@ def cint_opVop(system, basis1=None, basis2=None):
     _require_libcint()
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
     res = ints.cint_int1e_spnucsp_sph(shell_slice, atm, bas, env)
+    # the x/y/z components are antisymmetric due to the cross produce (swapping the two basis functions changes the sign)
+    # libcint returns the transposed version, hence the sign flip
     # C-layout, first index is the integral component (slowest changing)
+    res[:-1] *= -1
     return _f2c(res)
 
 
@@ -885,6 +889,7 @@ def cint_opVop_spinor(system, basis1=None, basis2=None):
     _require_libcint()
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
     res = ints.cint_int1e_spnucsp_spinor(shell_slice, atm, bas, env)
+    np.conj(res, out=res)
     return _f2c(res)
 
 
@@ -958,4 +963,48 @@ def cint_coulomb_3c(system, basis1=None, basis2=None, basis3=None):
         system, basis1, basis2, basis3
     )
     res = ints.cint_int3c2e_sph(shell_slice, atm, bas, env)
-    return res.transpose(2, 0, 1).copy()  # copy makes sure it's C-contiguous
+    return res
+
+
+class CInt3cBySlice:
+    def __init__(self, system):
+        _require_libcint()
+        self.system = system
+        self.atm, self.bas, self.env, _ = _parse_basis_args_cint_3c2e(
+            system, None, None, None
+        )
+        self.nauxsh = system.auxiliary_basis.nshells
+        self.nprimsh = system.basis.nshells
+        self.sh_offset_aux = system.auxiliary_basis.shell_offsets
+        self.sh_offset_prim = system.basis.shell_offsets
+
+    def _convert_shell_slices(self, shell_slices):
+        auxsh = (shell_slices[0][0] + self.nprimsh, shell_slices[0][1] + self.nprimsh)
+        prim1sh = shell_slices[1]
+        prim2sh = shell_slices[2]
+        return [*auxsh, *prim1sh, *prim2sh]
+
+    def _get_shape(self, shell_slices):
+        ib0 = self.sh_offset_aux[shell_slices[0][0]]
+        ib1 = self.sh_offset_aux[shell_slices[0][1]]
+        jb0 = self.sh_offset_prim[shell_slices[1][0]]
+        jb1 = self.sh_offset_prim[shell_slices[1][1]]
+        kb0 = self.sh_offset_prim[shell_slices[2][0]]
+        kb1 = self.sh_offset_prim[shell_slices[2][1]]
+
+        return (ib1 - ib0, jb1 - jb0, kb1 - kb0)
+
+    def compute(self, shell_slices, buf):
+        """
+        Compute the three-center two-electron Coulomb integrals for the given shell slices.
+
+        Parameters
+        ----------
+        shell_slices : list[tuple]
+            A list of tuples, where each tuple contains the shell slice indices for the auxiliary basis and the two primary bases in the format:
+            [(aux_start, aux_end), (prim1_start, prim1_end), (prim2_start, prim2_end)]
+        """
+        shape = self._get_shape(shell_slices)
+        buf1 = np.ndarray(shape, buffer=buf)
+        shls = self._convert_shell_slices(shell_slices)
+        return ints.cint_int3c2e_sph(shls, self.atm, self.bas, self.env, buf1)

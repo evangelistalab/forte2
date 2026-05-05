@@ -27,8 +27,6 @@ class RestrictedMOIntegrals:
         Subspace of the orbitals for which to compute the integrals.
     core_orbitals : list[int], optional
         Subspace of doubly occupied orbitals.
-    use_aux_corr : bool, optional, default=False
-        If True, use ``system.auxiliary_basis_corr``, else use ``system.auxiliary_basis``.
     antisymmetrize : bool, optional, default=False
         If True, antisymmetrize the two-electron integrals.
 
@@ -52,15 +50,11 @@ class RestrictedMOIntegrals:
     C: NDArray
     orbitals: list[int] | range
     core_orbitals: list[int] | range = field(default_factory=list)
-    use_aux_corr: bool = False
     antisymmetrize: bool = False
 
     def __post_init__(self):
         self.norb = len(self.orbitals)
-        if self.use_aux_corr:
-            jkbuilder = self.system.fock_builder_corr
-        else:
-            jkbuilder = self.system.fock_builder
+        jkbuilder = self.system.fock_builder
         C = np.ascontiguousarray(self.C[:, self.orbitals])
 
         # nuclear repulsion energy contribution to the energy
@@ -107,8 +101,6 @@ class SpinorbitalIntegrals:
         Subspace of the spinorbitals for which to compute the integrals.
     core_spinorbitals : list[int] | range, optional
         Subspace of doubly occupied spinorbitals.
-    use_aux_corr : bool, optional, default=False
-        If True, use ``system.auxiliary_basis_corr``, else use ``system.auxiliary_basis``.
     antisymmetrize : bool, optional, default=False
         If True, antisymmetrize the two-electron integrals.
 
@@ -126,7 +118,6 @@ class SpinorbitalIntegrals:
     C: NDArray
     spinorbitals: list[int] | range
     core_spinorbitals: list[int] | range = field(default_factory=list)
-    use_aux_corr: bool = False
     antisymmetrize: bool = False
 
     def __post_init__(self):
@@ -135,10 +126,7 @@ class SpinorbitalIntegrals:
             self.C.shape[0] == self.system.nbf * 2
         ), "C must be in the spinorbital basis."
         self.norb = len(self.spinorbitals)
-        if self.use_aux_corr:
-            jkbuilder = self.system.fock_builder_corr
-        else:
-            jkbuilder = self.system.fock_builder
+        jkbuilder = self.system.fock_builder
         C = np.ascontiguousarray(self.C[:, self.spinorbitals])
 
         # nuclear repulsion energy contribution to the energy

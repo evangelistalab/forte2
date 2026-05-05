@@ -65,7 +65,6 @@ def test_rel_gasci_rhf_3():
         xyz=xyz,
         basis_set="sto-6g",
         auxiliary_basis_set="def2-universal-jkfit",
-        auxiliary_basis_set_corr="def2-svp-rifit",
     )
 
     rhf = RHF(charge=0, e_tol=1e-12)(system)
@@ -77,7 +76,7 @@ def test_rel_gasci_rhf_3():
     ci.run()
 
     assert rhf.E == approx(-1.124751148359)
-    assert ci.E[0] == approx(-1.145766051194)
+    assert ci.E[0] == approx(-1.1457634621)
 
 
 def test_rel_gasci_rhf_4():

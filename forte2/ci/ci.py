@@ -1274,7 +1274,6 @@ class CISolver(CIBase):
             self.C[0],
             self.active_indices,
             self.core_indices,
-            use_aux_corr=True,
         )
 
         self.sub_solvers = []
@@ -1739,7 +1738,6 @@ class CI(CISolver):
                 self.C[0],
                 self.active_indices,
                 self.core_indices,
-                use_aux_corr=True,
             )
             self.set_ints(ints.E, ints.H, ints.V)
             self.reset_eigensolver()
@@ -1821,7 +1819,6 @@ class RelCISolver(RelCIBase):
             self.C[0],
             self.active_indices,
             self.core_indices,
-            use_aux_corr=True,
         )
 
         self.sub_solvers = []
@@ -1923,7 +1920,6 @@ class RelCI(RelCISolver):
                 self.C[0],
                 self.active_indices,
                 self.core_indices,
-                use_aux_corr=True,
             )
             self.set_ints(ints.E, ints.H, ints.V)
             self.reset_eigensolver()

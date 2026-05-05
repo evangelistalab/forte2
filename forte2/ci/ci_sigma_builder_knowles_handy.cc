@@ -6,6 +6,7 @@
 #include "helpers/blas.h"
 #include "helpers/logger.h"
 #include "helpers/memory.h"
+#include "helpers/parallel.h"
 
 #include "ci_sigma_builder.h"
 
@@ -217,25 +218,8 @@ void transpose_23(std::span<double> in, std::span<double> out, size_t dim1, size
     };
 
     assert(in.size() == out.size());
-    unsigned int nthreads = std::thread::hardware_concurrency() / 2;
-    if (nthreads == 0)
-        nthreads = 1;
-    size_t chunk = (dim1 + nthreads - 1) / nthreads;
 
-    std::vector<std::future<void>> futures;
-    futures.reserve(nthreads);
-
-    for (unsigned int t = 0; t < nthreads; ++t) {
-        size_t b_begin = t * chunk;
-        size_t b_end = std::min(b_begin + chunk, dim1);
-        if (b_begin >= b_end)
-            break;
-        futures.emplace_back(std::async(std::launch::async, kernel, b_begin, b_end));
-    }
-
-    for (auto& f : futures) {
-        f.get();
-    }
+    parallel_for_chunked(dim1, kernel);
 }
 
 void gather_alpha_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb, size_t Ka_start,

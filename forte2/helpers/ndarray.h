@@ -158,3 +158,33 @@ auto make_zeros(const std::array<size_t, N>& shape) {
 
     return array;
 }
+
+template <typename Type, typename T, int N>
+auto fortran_to_c(nb::ndarray<Type, T, nb::ndim<N>, nb::f_contig>& arr) {
+    std::array<std::size_t, N> C_shape;
+    std::array<std::int64_t, N> C_strides;
+    for (std::size_t i = 0; i < static_cast<std::size_t>(N); ++i) {
+        C_shape[i] = arr.shape(N - 1 - i);
+        C_strides[i] = arr.stride(N - 1 - i);
+    }
+    T* data = arr.data();
+
+    nb::object owner = arr.cast();
+
+    return nb::ndarray<Type, T, nb::ndim<N>, nb::c_contig>(data, static_cast<std::size_t>(N), C_shape.data(), owner, C_strides.data());
+}
+
+template <typename Type, typename T, int N>
+auto c_to_fortran(nb::ndarray<Type, T, nb::ndim<N>, nb::c_contig>& arr) {
+    std::array<std::size_t, N> F_shape;
+    std::array<std::int64_t, N> F_strides;
+    for (std::size_t i = 0; i < static_cast<std::size_t>(N); ++i) {
+        F_shape[i] = arr.shape(N - 1 - i);
+        F_strides[i] = arr.stride(N - 1 - i);
+    }
+    T* data = arr.data();
+
+    nb::object owner = arr.cast();
+
+    return nb::ndarray<Type, T, nb::ndim<N>, nb::f_contig>(data, static_cast<std::size_t>(N), F_shape.data(), owner, F_strides.data());
+}
