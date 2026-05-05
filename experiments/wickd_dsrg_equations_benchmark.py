@@ -12,9 +12,10 @@ from pathlib import Path
 import numpy as np
 import wickd as w
 
-from forte2 import CI, Determinant, RHF, State, System
+from forte2 import CI, RHF, State, System
 from forte2.base_classes import CIParams, DavidsonLiuParams
 from forte2.helpers import DIIS, logger
+from forte2.lib.det import Determinant
 
 SCREEN = 1.0e-12
 BASIS = "sto-3g"

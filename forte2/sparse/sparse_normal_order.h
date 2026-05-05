@@ -3,9 +3,10 @@
 #include <string>
 #include <vector>
 
-#include "ci/determinant.h"
+#include "determinant/determinant.h"
 #include "helpers/math_structures.h"
 #include "sparse/sparse.h"
+#include "sparse/sparse_state.h"
 #include "sparse/sq_operator_string.h"
 
 namespace forte2 {
@@ -115,5 +116,67 @@ class NormalOrderedSparseOperator
 /// @brief Normal order a SparseOperator with respect to a determinant vacuum.
 NormalOrderedSparseOperator normal_order(const SparseOperator& op, const Determinant& reference,
                                          double screen_thresh = 1.0e-12, int max_rank = -1);
+
+/// @brief A sparse operator in generalized normal-ordered form.
+///
+/// Terms are keyed by physical SQOperatorString objects. The vacuum is a sparse CI state, so
+/// contractions are evaluated directly as vacuum expectation values instead of from a determinant
+/// occupation pattern.
+class GeneralizedNormalOrderedSparseOperator
+    : public VectorSpace<GeneralizedNormalOrderedSparseOperator, SQOperatorString, sparse_scalar_t,
+                         SQOperatorString::Hash> {
+  public:
+    using base_t = VectorSpace<GeneralizedNormalOrderedSparseOperator, SQOperatorString,
+                               sparse_scalar_t, SQOperatorString::Hash>;
+    using old_container = base_t::old_container;
+    using base_t::base_t;
+
+    GeneralizedNormalOrderedSparseOperator();
+    GeneralizedNormalOrderedSparseOperator(const SparseState& vacuum, std::size_t norb,
+                                           int max_cumulant = -1);
+    GeneralizedNormalOrderedSparseOperator(const SparseState& vacuum, std::size_t norb,
+                                           int max_cumulant, const SQOperatorString& str,
+                                           sparse_scalar_t coefficient);
+
+    /// @return The sparse CI vacuum defining generalized contractions.
+    const SparseState& vacuum() const;
+
+    /// @return The number of spatial orbitals used for the vacuum contractions.
+    std::size_t norb() const;
+
+    /// @return Maximum contracted body rank, or -1 for unbounded contractions.
+    int max_cumulant() const;
+
+    /// @return The coefficient of a generalized normal-ordered term.
+    sparse_scalar_t coefficient(const SQOperatorString& str) const;
+
+    /// @return A string representation of this operator.
+    std::vector<std::string> str() const;
+
+    /// @return A LaTeX representation of this operator.
+    std::string latex() const;
+
+    /// @return A copy with terms above max_rank removed.
+    GeneralizedNormalOrderedSparseOperator truncate(int max_rank,
+                                                    double screen_thresh = 1.0e-12) const;
+
+    /// @return This generalized normal-ordered operator expanded as a SparseOperator.
+    SparseOperator to_sparse_operator(double screen_thresh = 1.0e-12) const;
+
+    /// @return The result of applying this generalized normal-ordered operator to a SparseState.
+    SparseState apply_to_state(const SparseState& state, double screen_thresh = 1.0e-12) const;
+
+    bool operator==(const GeneralizedNormalOrderedSparseOperator& other) const;
+
+  private:
+    SparseState vacuum_;
+    std::size_t norb_ = 0;
+    int max_cumulant_ = -1;
+};
+
+/// @brief Generalized normal order a SparseOperator with respect to a sparse CI vacuum.
+GeneralizedNormalOrderedSparseOperator
+generalized_normal_order(const SparseOperator& op, const SparseState& vacuum, std::size_t norb,
+                         int max_cumulant = -1, double screen_thresh = 1.0e-12, int max_rank = -1);
 
 } // namespace forte2

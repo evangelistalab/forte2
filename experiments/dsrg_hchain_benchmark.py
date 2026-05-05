@@ -11,12 +11,16 @@ from pathlib import Path
 
 import numpy as np
 
-import forte2
-from forte2 import CI, Determinant, RHF, State, System
-from forte2 import normal_order, sparse_operator, sparse_operator_hamiltonian
+from forte2 import CI, RHF, State, System
 from forte2.base_classes import CIParams, DavidsonLiuParams
 from forte2.helpers import DIIS, logger
-
+from forte2.lib.det import Determinant
+from forte2.lib.sparse_ops import (
+    NormalOrderedSparseOperator,
+    normal_order,
+    sparse_operator,
+    sparse_operator_hamiltonian,
+)
 
 SCREEN = 1.0e-12
 BASIS = "sto-3g"
@@ -116,8 +120,12 @@ def canonical_excitation_string(cre_modes, ann_modes):
 
     alpha_cre = sorted([m for m in cre_modes if m[1] == "a"], key=lambda x: x[0])
     beta_cre = sorted([m for m in cre_modes if m[1] == "b"], key=lambda x: x[0])
-    beta_ann = sorted([m for m in ann_modes if m[1] == "b"], key=lambda x: x[0], reverse=True)
-    alpha_ann = sorted([m for m in ann_modes if m[1] == "a"], key=lambda x: x[0], reverse=True)
+    beta_ann = sorted(
+        [m for m in ann_modes if m[1] == "b"], key=lambda x: x[0], reverse=True
+    )
+    alpha_ann = sorted(
+        [m for m in ann_modes if m[1] == "a"], key=lambda x: x[0], reverse=True
+    )
 
     tokens = [token(m, True) for m in alpha_cre]
     tokens += [token(m, True) for m in beta_cre]
@@ -126,7 +134,9 @@ def canonical_excitation_string(cre_modes, ann_modes):
     return "[" + " ".join(tokens) + "]"
 
 
-def enumerate_spin_conserving_excitations(nspatial, nocc, eps, ref, max_excitation_rank):
+def enumerate_spin_conserving_excitations(
+    nspatial, nocc, eps, ref, max_excitation_rank
+):
     occ = [(i, spin) for i in range(nocc) for spin in ("a", "b")]
     virt = [(a, spin) for a in range(nocc, nspatial) for spin in ("a", "b")]
     highest_rank = min(max_excitation_rank, len(occ), len(virt))
@@ -156,7 +166,7 @@ def enumerate_spin_conserving_excitations(nspatial, nocc, eps, ref, max_excitati
 
 
 def make_normal_ordered_cluster_operator(excitations, amplitudes, ref):
-    T_no = forte2.NormalOrderedSparseOperator(ref)
+    T_no = NormalOrderedSparseOperator(ref)
     for ex, amp in zip(excitations, amplitudes):
         if abs(amp) > SCREEN:
             T_no.add(ex["key"], complex(amp) * ex["phase"])
@@ -164,7 +174,9 @@ def make_normal_ordered_cluster_operator(excitations, amplitudes, ref):
 
 
 def truncate_sparse_operator(op, ref, truncation_rank):
-    return normal_order(op, ref, SCREEN, max_rank=truncation_rank).to_sparse_operator(SCREEN)
+    return normal_order(op, ref, SCREEN, max_rank=truncation_rank).to_sparse_operator(
+        SCREEN
+    )
 
 
 def sparse_operator_norm(op):
@@ -275,7 +287,11 @@ def solve_sparse_dsrg(
             }
         )
 
-        if previous_energy is not None and abs(delta_energy) < e_tol and rms_update < r_tol:
+        if (
+            previous_energy is not None
+            and abs(delta_energy) < e_tol
+            and rms_update < r_tol
+        ):
             return energy, amplitudes, history, time.perf_counter() - solve_t0, True
 
         amplitudes = next_amplitudes
@@ -358,7 +374,9 @@ def run_case(args):
             "converged": converged,
             "iterations": len(history),
             "last_ncomm": history[-1]["ncomm"],
-            "max_abs_amplitude": float(max(abs(amp) for amp in amplitudes)) if len(amplitudes) else 0.0,
+            "max_abs_amplitude": (
+                float(max(abs(amp) for amp in amplitudes)) if len(amplitudes) else 0.0
+            ),
             "solve_s": solve_s,
             "total_s": time.perf_counter() - t_case,
             "history_tail": history[-5:],
@@ -382,7 +400,9 @@ def run_case(args):
 def run_case_with_timeout(case_args, timeout_s):
     ctx = mp.get_context("fork")
     q = ctx.Queue()
-    p = ctx.Process(target=lambda queue, payload: queue.put(run_case(payload)), args=(q, case_args))
+    p = ctx.Process(
+        target=lambda queue, payload: queue.put(run_case(payload)), args=(q, case_args)
+    )
     t0 = time.perf_counter()
     p.start()
     p.join(timeout_s)
@@ -461,7 +481,14 @@ def main():
     save_results(output, data)
 
     completed_keys = {
-        (row.get("natoms"), row.get("spacing"), row.get("rank"), row.get("e_tol"), row.get("r_tol"), row.get("diis", {}).get("enabled"))
+        (
+            row.get("natoms"),
+            row.get("spacing"),
+            row.get("rank"),
+            row.get("e_tol"),
+            row.get("r_tol"),
+            row.get("diis", {}).get("enabled"),
+        )
         for row in data["cases"]
         if row.get("status") == "ok"
     }
@@ -471,7 +498,9 @@ def main():
             for rank in args.ranks:
                 key = (natoms, spacing, rank, args.e_tol, args.r_tol, not args.no_diis)
                 if key in completed_keys:
-                    print(f"SKIP completed H{natoms} R={spacing} DSRG({rank})", flush=True)
+                    print(
+                        f"SKIP completed H{natoms} R={spacing} DSRG({rank})", flush=True
+                    )
                     continue
                 print(
                     f"START {now_s()} H{natoms} R={spacing} DSRG({rank}) "

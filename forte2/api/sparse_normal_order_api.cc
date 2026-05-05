@@ -93,8 +93,8 @@ void export_sparse_normal_order_api(nb::module_& m) {
             "Add two normal-ordered operators")
         .def(
             "__iadd__",
-            [](NormalOrderedSparseOperator& lhs, const NormalOrderedSparseOperator& rhs)
-                -> NormalOrderedSparseOperator& {
+            [](NormalOrderedSparseOperator& lhs,
+               const NormalOrderedSparseOperator& rhs) -> NormalOrderedSparseOperator& {
                 lhs += rhs;
                 return lhs;
             },
@@ -107,23 +107,26 @@ void export_sparse_normal_order_api(nb::module_& m) {
             "Subtract two normal-ordered operators")
         .def(
             "__isub__",
-            [](NormalOrderedSparseOperator& lhs, const NormalOrderedSparseOperator& rhs)
-                -> NormalOrderedSparseOperator& {
+            [](NormalOrderedSparseOperator& lhs,
+               const NormalOrderedSparseOperator& rhs) -> NormalOrderedSparseOperator& {
                 lhs -= rhs;
                 return lhs;
             },
             "Subtract a normal-ordered operator in place")
         .def(
             "__mul__",
-            [](const NormalOrderedSparseOperator& op, sparse_scalar_t scalar) { return op * scalar; },
+            [](const NormalOrderedSparseOperator& op, sparse_scalar_t scalar) {
+                return op * scalar;
+            },
             "Multiply a normal-ordered operator by a scalar")
         .def(
             "__rmul__",
-            [](const NormalOrderedSparseOperator& op, sparse_scalar_t scalar) { return op * scalar; },
+            [](const NormalOrderedSparseOperator& op, sparse_scalar_t scalar) {
+                return op * scalar;
+            },
             "Multiply a scalar by a normal-ordered operator")
         .def(
-            "__neg__",
-            [](const NormalOrderedSparseOperator& op) { return -op; },
+            "__neg__", [](const NormalOrderedSparseOperator& op) { return -op; },
             "Negate the normal-ordered operator")
         .def(
             "norm", [](const NormalOrderedSparseOperator& op) { return op.norm(); },
@@ -158,6 +161,114 @@ void export_sparse_normal_order_api(nb::module_& m) {
 
     m.def("normal_order", &normal_order, "op"_a, "vacuum"_a, "screen_thresh"_a = 1.0e-12,
           "max_rank"_a = -1, "Normal order a SparseOperator with respect to a determinant vacuum");
+
+    nb::class_<GeneralizedNormalOrderedSparseOperator>(
+        m, "GeneralizedNormalOrderedSparseOperator",
+        "A sparse operator in generalized normal-ordered form for a sparse CI vacuum")
+        .def(nb::init<>(), "Default constructor")
+        .def(nb::init<const SparseState&, std::size_t, int>(), "vacuum"_a, "norb"_a,
+             "max_cumulant"_a = -1, "Create an empty generalized normal-ordered operator")
+        .def(nb::init<const SparseState&, std::size_t, int, const SQOperatorString&,
+                      sparse_scalar_t>(),
+             "vacuum"_a, "norb"_a, "max_cumulant"_a, "term"_a, "coefficient"_a = sparse_scalar_t(1),
+             "Create a generalized normal-ordered operator with a single term")
+        .def(
+            "add",
+            [](GeneralizedNormalOrderedSparseOperator& op, const SQOperatorString& term,
+               sparse_scalar_t coefficient) { op.add(term, coefficient); },
+            "term"_a, "coefficient"_a = sparse_scalar_t(1),
+            "Add a generalized normal-ordered term to the operator")
+        .def("coefficient", &GeneralizedNormalOrderedSparseOperator::coefficient, "term"_a,
+             "Get the coefficient of a generalized normal-ordered term")
+        .def("vacuum", &GeneralizedNormalOrderedSparseOperator::vacuum, "Get the sparse CI vacuum")
+        .def("norb", &GeneralizedNormalOrderedSparseOperator::norb,
+             "Get the number of spatial orbitals")
+        .def("max_cumulant", &GeneralizedNormalOrderedSparseOperator::max_cumulant,
+             "Get the maximum contracted body rank")
+        .def("__len__", &GeneralizedNormalOrderedSparseOperator::size,
+             "Get the number of generalized normal-ordered terms")
+        .def(
+            "__iter__",
+            [](const GeneralizedNormalOrderedSparseOperator& op) {
+                return nb::make_iterator(nb::type<GeneralizedNormalOrderedSparseOperator>(),
+                                         "item_iterator", op.elements().begin(),
+                                         op.elements().end());
+            },
+            nb::keep_alive<0, 1>())
+        .def("str", &GeneralizedNormalOrderedSparseOperator::str,
+             "Get a string representation of the generalized normal-ordered operator")
+        .def("latex", &GeneralizedNormalOrderedSparseOperator::latex,
+             "Get a LaTeX representation of the generalized normal-ordered operator")
+        .def("truncate", &GeneralizedNormalOrderedSparseOperator::truncate, "max_rank"_a,
+             "screen_thresh"_a = 1.0e-12, "Return a copy with terms above max_rank removed")
+        .def("__repr__",
+             [](const GeneralizedNormalOrderedSparseOperator& op) { return join(op.str(), "\n"); })
+        .def("__str__",
+             [](const GeneralizedNormalOrderedSparseOperator& op) { return join(op.str(), "\n"); })
+        .def(
+            "__add__",
+            [](const GeneralizedNormalOrderedSparseOperator& lhs,
+               const GeneralizedNormalOrderedSparseOperator& rhs) { return lhs + rhs; },
+            "Add two generalized normal-ordered operators")
+        .def(
+            "__iadd__",
+            [](GeneralizedNormalOrderedSparseOperator& lhs,
+               const GeneralizedNormalOrderedSparseOperator& rhs)
+                -> GeneralizedNormalOrderedSparseOperator& {
+                lhs += rhs;
+                return lhs;
+            },
+            "Add a generalized normal-ordered operator in place")
+        .def(
+            "__sub__",
+            [](const GeneralizedNormalOrderedSparseOperator& lhs,
+               const GeneralizedNormalOrderedSparseOperator& rhs) { return lhs - rhs; },
+            "Subtract two generalized normal-ordered operators")
+        .def(
+            "__isub__",
+            [](GeneralizedNormalOrderedSparseOperator& lhs,
+               const GeneralizedNormalOrderedSparseOperator& rhs)
+                -> GeneralizedNormalOrderedSparseOperator& {
+                lhs -= rhs;
+                return lhs;
+            },
+            "Subtract a generalized normal-ordered operator in place")
+        .def(
+            "__mul__",
+            [](const GeneralizedNormalOrderedSparseOperator& op, sparse_scalar_t scalar) {
+                return op * scalar;
+            },
+            "Multiply a generalized normal-ordered operator by a scalar")
+        .def(
+            "__rmul__",
+            [](const GeneralizedNormalOrderedSparseOperator& op, sparse_scalar_t scalar) {
+                return op * scalar;
+            },
+            "Multiply a scalar by a generalized normal-ordered operator")
+        .def(
+            "__neg__", [](const GeneralizedNormalOrderedSparseOperator& op) { return -op; },
+            "Negate the generalized normal-ordered operator")
+        .def(
+            "norm", [](const GeneralizedNormalOrderedSparseOperator& op) { return op.norm(); },
+            "Compute the norm of the generalized normal-ordered operator")
+        .def("to_sparse_operator", &GeneralizedNormalOrderedSparseOperator::to_sparse_operator,
+             "screen_thresh"_a = 1.0e-12,
+             "Convert this generalized normal-ordered operator back to a SparseOperator")
+        .def("apply_to_state", &GeneralizedNormalOrderedSparseOperator::apply_to_state, "state"_a,
+             "screen_thresh"_a = 1.0e-12,
+             "Apply this generalized normal-ordered operator to a SparseState")
+        .def(
+            "__matmul__",
+            [](const GeneralizedNormalOrderedSparseOperator& op, const SparseState& state) {
+                return op.apply_to_state(state);
+            },
+            "Apply this generalized normal-ordered operator to a SparseState")
+        .def("__eq__", &GeneralizedNormalOrderedSparseOperator::operator==,
+             "Check if two generalized normal-ordered operators are equal");
+
+    m.def("generalized_normal_order", &generalized_normal_order, "op"_a, "vacuum"_a, "norb"_a,
+          "max_cumulant"_a = -1, "screen_thresh"_a = 1.0e-12, "max_rank"_a = -1,
+          "Generalized normal order a SparseOperator with respect to a sparse CI vacuum");
 }
 
 } // namespace forte2

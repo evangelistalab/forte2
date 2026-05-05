@@ -6,10 +6,15 @@ import math
 import numpy as np
 import pytest
 
-import forte2
-from forte2 import Determinant, RHF, System
-from forte2 import normal_order, sparse_operator, sparse_operator_hamiltonian
+from forte2 import RHF, System
 from forte2.helpers import DIIS, logger
+from forte2.lib.det import Determinant
+from forte2.lib.sparse_ops import (
+    NormalOrderedSparseOperator,
+    normal_order,
+    sparse_operator,
+    sparse_operator_hamiltonian,
+)
 
 SCREEN = 1.0e-12
 FLOW_PARAM = 5.0
@@ -134,7 +139,7 @@ def enumerate_spin_conserving_excitations(
 
 
 def make_normal_ordered_cluster_operator(excitations, amplitudes, reference):
-    t_no = forte2.NormalOrderedSparseOperator(reference)
+    t_no = NormalOrderedSparseOperator(reference)
     for excitation, amplitude in zip(excitations, amplitudes):
         if abs(amplitude) > SCREEN:
             t_no.add(excitation["key"], complex(amplitude) * excitation["phase"])

@@ -1,10 +1,11 @@
 import pytest
 
-import forte2
+from forte2.lib import sparse_ops
+from forte2.lib.det import Determinant
 
 
 def det(s):
-    return forte2.Determinant(s)
+    return Determinant(s)
 
 
 def sparse_state_close(lhs, rhs, abs=1e-12):
@@ -18,13 +19,15 @@ def normal_order_dict(op):
 
 
 def test_normal_order_occupied_number_operator():
-    op = forte2.sparse_operator("[0a+ 0a-]", 1.0)
-    no_op = forte2.normal_order(op, det("2"))
+    op = sparse_ops.sparse_operator("[0a+ 0a-]", 1.0)
+    no_op = sparse_ops.normal_order(op, det("2"))
 
     terms = normal_order_dict(no_op)
     assert terms["{}"] == pytest.approx(1.0)
     assert terms["{0a- 0a+}"] == pytest.approx(-1.0)
-    hole_term = next(term for term, _ in no_op if term.str(no_op.reference()) == "{0a- 0a+}")
+    hole_term = next(
+        term for term, _ in no_op if term.str(no_op.reference()) == "{0a- 0a+}"
+    )
     assert hole_term.cre().na(0)
     assert hole_term.ann().na(0)
 
@@ -33,16 +36,16 @@ def test_normal_order_occupied_number_operator():
 
 
 def test_normal_order_virtual_number_operator():
-    op = forte2.sparse_operator("[1a+ 1a-]", 1.0)
-    no_op = forte2.normal_order(op, det("2"))
+    op = sparse_ops.sparse_operator("[1a+ 1a-]", 1.0)
+    no_op = sparse_ops.normal_order(op, det("2"))
 
     assert normal_order_dict(no_op) == {"{1a+ 1a-}": pytest.approx(1.0)}
     assert no_op.to_sparse_operator() == op
 
 
 def test_normal_order_beta_and_partially_occupied_reference():
-    op = forte2.sparse_operator("[2b+ 2b-]", 1.0)
-    no_op = forte2.normal_order(op, det("a0b"))
+    op = sparse_ops.sparse_operator("[2b+ 2b-]", 1.0)
+    no_op = sparse_ops.normal_order(op, det("a0b"))
 
     terms = normal_order_dict(no_op)
     assert terms["{}"] == pytest.approx(1.0)
@@ -51,10 +54,10 @@ def test_normal_order_beta_and_partially_occupied_reference():
 
 
 def test_normal_order_same_mode_anti_number_round_trip():
-    number = forte2.sparse_operator("[1a+ 1a-]", 1.0)
-    anti_number = forte2.sparse_operator("[]", 1.0) - number
+    number = sparse_ops.sparse_operator("[1a+ 1a-]", 1.0)
+    anti_number = sparse_ops.sparse_operator("[]", 1.0) - number
 
-    no_op = forte2.normal_order(anti_number, det("2"))
+    no_op = sparse_ops.normal_order(anti_number, det("2"))
     terms = normal_order_dict(no_op)
     assert terms["{}"] == pytest.approx(1.0)
     assert terms["{1a+ 1a-}"] == pytest.approx(-1.0)
@@ -62,7 +65,7 @@ def test_normal_order_same_mode_anti_number_round_trip():
 
 
 def test_normal_order_complex_multiterm_round_trip_and_apply():
-    op = forte2.sparse_operator(
+    op = sparse_ops.sparse_operator(
         [
             ("[]", 0.25 - 0.1j),
             ("[0a+ 0a-]", 1.5 + 0.2j),
@@ -71,11 +74,11 @@ def test_normal_order_complex_multiterm_round_trip_and_apply():
         ]
     )
     reference = det("2")
-    no_op = forte2.normal_order(op, reference)
+    no_op = sparse_ops.normal_order(op, reference)
 
     assert no_op.to_sparse_operator() == op
 
-    state = forte2.SparseState({det("20"): 0.5, det("02"): 0.25j, det("ab"): -0.4})
+    state = sparse_ops.SparseState({det("20"): 0.5, det("02"): 0.25j, det("ab"): -0.4})
     sparse_result = op.apply_to_state(state)
     normal_result = no_op.apply_to_state(state)
     matmul_result = no_op @ state
@@ -85,7 +88,7 @@ def test_normal_order_complex_multiterm_round_trip_and_apply():
 
 
 def test_normal_order_many_body_rank_truncation():
-    op = forte2.sparse_operator(
+    op = sparse_ops.sparse_operator(
         [
             ("[0a+ 0a-]", 1.0),
             ("[1a+ 1a-]", 2.0),
@@ -93,7 +96,7 @@ def test_normal_order_many_body_rank_truncation():
         ]
     )
     reference = det("2")
-    no_op = forte2.normal_order(op, reference)
+    no_op = sparse_ops.normal_order(op, reference)
 
     ranks = {term.str(reference): term.many_body_rank() for term, _ in no_op}
     assert ranks["{}"] == 0
@@ -108,20 +111,20 @@ def test_normal_order_many_body_rank_truncation():
     assert "{0a- 1a+ 0b- 1b+}" not in normal_order_dict(one_body)
     assert all(term.many_body_rank() <= 1 for term, _ in one_body)
 
-    inline_one_body = forte2.normal_order(op, reference, max_rank=1)
+    inline_one_body = sparse_ops.normal_order(op, reference, max_rank=1)
     assert inline_one_body == one_body
     assert no_op.truncate(2) == no_op
 
 
 def test_rank_screened_commutator_matches_truncated_commutator():
-    lhs = forte2.sparse_operator(
+    lhs = sparse_ops.sparse_operator(
         [
             ("[1a+ 0a-]", 0.2),
             ("[2a+ 2b+ 1b- 0a-]", -0.3),
             ("[1a+ 2a+ 1b+ 2b+ 0b- 0a-]", 0.4),
         ]
     )
-    rhs = forte2.sparse_operator(
+    rhs = sparse_ops.sparse_operator(
         [
             ("[0a+ 1a-]", 0.5),
             ("[1a+ 1b+ 0b- 0a-]", -0.7),
@@ -130,8 +133,10 @@ def test_rank_screened_commutator_matches_truncated_commutator():
     )
     reference = det("200")
 
-    generic = forte2.normal_order(lhs.commutator(rhs), reference, max_rank=2).to_sparse_operator()
-    screened = forte2.normal_order(
+    generic = sparse_ops.normal_order(
+        lhs.commutator(rhs), reference, max_rank=2
+    ).to_sparse_operator()
+    screened = sparse_ops.normal_order(
         lhs.rank_screened_commutator(rhs, max_rank=2), reference, max_rank=2
     ).to_sparse_operator()
 
@@ -139,14 +144,14 @@ def test_rank_screened_commutator_matches_truncated_commutator():
 
 
 def test_normal_ordered_commutator_matches_sparse_commutator():
-    lhs = forte2.sparse_operator(
+    lhs = sparse_ops.sparse_operator(
         [
             ("[0a+ 0a-]", 0.4),
             ("[1a+ 0a-]", -0.2),
             ("[1a+ 1b+ 0b- 0a-]", 0.3),
         ]
     )
-    rhs = forte2.sparse_operator(
+    rhs = sparse_ops.sparse_operator(
         [
             ("[0a+ 1a-]", 0.5),
             ("[1b+ 0b-]", -0.7),
@@ -155,17 +160,17 @@ def test_normal_ordered_commutator_matches_sparse_commutator():
     )
     reference = det("20")
 
-    lhs_no = forte2.normal_order(lhs, reference, max_rank=2)
-    rhs_no = forte2.normal_order(rhs, reference, max_rank=2)
+    lhs_no = sparse_ops.normal_order(lhs, reference, max_rank=2)
+    rhs_no = sparse_ops.normal_order(rhs, reference, max_rank=2)
     direct_no = lhs_no.commutator(rhs_no, max_rank=2)
-    sparse_no = forte2.normal_order(lhs.commutator(rhs), reference, max_rank=2)
+    sparse_no = sparse_ops.normal_order(lhs.commutator(rhs), reference, max_rank=2)
 
     assert direct_no == sparse_no
     assert direct_no.to_sparse_operator() == sparse_no.to_sparse_operator()
 
 
 def test_normal_ordered_adjoint_round_trip():
-    op = forte2.sparse_operator(
+    op = sparse_ops.sparse_operator(
         [
             ("[1a+ 0a-]", 0.2 + 0.3j),
             ("[1a+ 1b+ 0b- 0a-]", -0.5j),
@@ -173,6 +178,6 @@ def test_normal_ordered_adjoint_round_trip():
     )
     reference = det("20")
 
-    no_op = forte2.normal_order(op, reference, max_rank=2)
+    no_op = sparse_ops.normal_order(op, reference, max_rank=2)
     assert no_op.adjoint().adjoint() == no_op
     assert no_op.adjoint().to_sparse_operator() == op.adjoint()

@@ -13,7 +13,8 @@ RankScreenedProductComputer::RankScreenedProductComputer(int max_rank, double sc
         throw std::invalid_argument("RankScreenedProductComputer: max_rank must be non-negative");
     }
     if (screen_thresh < 0.0) {
-        throw std::invalid_argument("RankScreenedProductComputer: screen_thresh must be non-negative");
+        throw std::invalid_argument(
+            "RankScreenedProductComputer: screen_thresh must be non-negative");
     }
 }
 
@@ -26,7 +27,7 @@ bool RankScreenedProductComputer::could_contribute(const SQOperatorString& lhs,
 
     const auto cre_union = lhs.cre() | rhs.cre();
     const auto ann_union = lhs.ann() | rhs.ann();
-    const int max_same_mode_contractions = cre_union.fast_a_and_b_count(ann_union);
+    const int max_same_mode_contractions = cre_union.intersection_count(ann_union);
     const int lower_bound_count = total_count - 2 * max_same_mode_contractions;
     return lower_bound_count <= 2 * max_rank_;
 }

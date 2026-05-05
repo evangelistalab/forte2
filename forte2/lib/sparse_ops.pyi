@@ -274,6 +274,11 @@ class SparseOperator:
     def commutator(self, arg: SparseOperator, /) -> SparseOperator:
         """Compute the commutator of two SparseOperator objects"""
 
+    def rank_screened_commutator(self, rhs: SparseOperator, max_rank: int, screen_thresh: float = 1e-12) -> SparseOperator:
+        """
+        Compute a commutator while skipping term pairs that cannot contribute to max_rank
+        """
+
     def __itruediv__(self, arg: complex, /) -> SparseOperator:
         """Divide this SparseOperator by a scalar"""
 
@@ -499,3 +504,241 @@ class SparseFactExp:
         """
 
     def apply_antiherm_deriv(self, sqop: SQOperatorString, t: complex, state: SparseState) -> tuple[SparseState, SparseState]: ...
+
+class NormalOrderedString:
+    """
+    A normal-ordered string represented by compact creator and annihilator determinants
+    """
+
+    def __init__(self, cre: forte2.lib.det.Determinant, ann: forte2.lib.det.Determinant) -> None: ...
+
+    def cre(self) -> forte2.lib.det.Determinant:
+        """Get the normal creator string"""
+
+    def ann(self) -> forte2.lib.det.Determinant:
+        """Get the normal annihilator string"""
+
+    def sign_mask(self) -> forte2.lib.det.Determinant:
+        """Get the normal-order sign mask"""
+
+    def op_tuple(self, reference: forte2.lib.det.Determinant) -> list[tuple[bool, bool, int]]:
+        """Get the physical operator tuple for a determinant reference"""
+
+    def count(self) -> int:
+        """Get the number of operators"""
+
+    def many_body_rank(self) -> int:
+        """Get the many-body rank, defined as ceil(count / 2)"""
+
+    def is_identity(self) -> bool:
+        """Check if the normal-ordered string is the identity"""
+
+    @overload
+    def str(self) -> str:
+        """Get the string representation assuming the particle vacuum"""
+
+    @overload
+    def str(self, reference: forte2.lib.det.Determinant) -> str:
+        """Get the physical string representation for a determinant reference"""
+
+    @overload
+    def latex(self) -> str:
+        """Get the LaTeX representation assuming the particle vacuum"""
+
+    @overload
+    def latex(self, reference: forte2.lib.det.Determinant) -> str:
+        """Get the LaTeX representation for a determinant reference"""
+
+    def __str__(self) -> str:
+        """Get the string representation assuming the particle vacuum"""
+
+    def __repr__(self) -> str:
+        """Get the string representation assuming the particle vacuum"""
+
+    def __eq__(self, arg: NormalOrderedString, /) -> bool:
+        """Check if two normal-ordered strings are equal"""
+
+    def __lt__(self, arg: NormalOrderedString, /) -> bool:
+        """Check if a normal-ordered string is less than another"""
+
+    def __hash__(self) -> int: ...
+
+class NormalOrderedSparseOperator:
+    """A sparse operator in determinant-normal-ordered form"""
+
+    @overload
+    def __init__(self) -> None:
+        """Default constructor"""
+
+    @overload
+    def __init__(self, reference: forte2.lib.det.Determinant) -> None:
+        """Create an empty normal-ordered operator with a determinant reference"""
+
+    @overload
+    def __init__(self, reference: forte2.lib.det.Determinant, term: NormalOrderedString, coefficient: complex = ...) -> None:
+        """Create a normal-ordered operator with a single term"""
+
+    def add(self, term: NormalOrderedString, coefficient: complex = ...) -> None:
+        """Add a normal-ordered term to the operator"""
+
+    def coefficient(self, term: NormalOrderedString) -> complex:
+        """Get the coefficient of a normal-ordered term"""
+
+    def reference(self) -> forte2.lib.det.Determinant:
+        """Get the reference determinant"""
+
+    def __len__(self) -> int:
+        """Get the number of normal-ordered terms"""
+
+    def __iter__(self) -> Iterator[tuple[NormalOrderedString, complex]]: ...
+
+    def str(self) -> list[str]:
+        """Get a string representation of the normal-ordered operator"""
+
+    def latex(self) -> str:
+        """Get a LaTeX representation of the normal-ordered operator"""
+
+    def truncate(self, max_rank: int, screen_thresh: float = 1e-12) -> NormalOrderedSparseOperator:
+        """Return a copy with terms above max_rank removed"""
+
+    def __repr__(self) -> str: ...
+
+    def __str__(self) -> str: ...
+
+    def __add__(self, arg: NormalOrderedSparseOperator, /) -> NormalOrderedSparseOperator:
+        """Add two normal-ordered operators"""
+
+    def __iadd__(self, arg: NormalOrderedSparseOperator, /) -> NormalOrderedSparseOperator:
+        """Add a normal-ordered operator in place"""
+
+    def __sub__(self, arg: NormalOrderedSparseOperator, /) -> NormalOrderedSparseOperator:
+        """Subtract two normal-ordered operators"""
+
+    def __isub__(self, arg: NormalOrderedSparseOperator, /) -> NormalOrderedSparseOperator:
+        """Subtract a normal-ordered operator in place"""
+
+    def __mul__(self, arg: complex, /) -> NormalOrderedSparseOperator:
+        """Multiply a normal-ordered operator by a scalar"""
+
+    def __rmul__(self, arg: complex, /) -> NormalOrderedSparseOperator:
+        """Multiply a scalar by a normal-ordered operator"""
+
+    def __neg__(self) -> NormalOrderedSparseOperator:
+        """Negate the normal-ordered operator"""
+
+    def norm(self) -> float:
+        """Compute the norm of the normal-ordered operator"""
+
+    def adjoint(self, screen_thresh: float = 1e-12) -> NormalOrderedSparseOperator:
+        """Return the adjoint"""
+
+    def commutator(self, rhs: NormalOrderedSparseOperator, max_rank: int, screen_thresh: float = 1e-12) -> NormalOrderedSparseOperator:
+        """Compute a normal-ordered commutator truncated to max_rank"""
+
+    def to_sparse_operator(self, screen_thresh: float = 1e-12) -> SparseOperator:
+        """Convert this normal-ordered operator back to a SparseOperator"""
+
+    def apply_to_state(self, state: SparseState, screen_thresh: float = 1e-12) -> SparseState:
+        """Apply this normal-ordered operator to a SparseState"""
+
+    def __matmul__(self, arg: SparseState, /) -> SparseState:
+        """Apply this normal-ordered operator to a SparseState"""
+
+    def __eq__(self, arg: NormalOrderedSparseOperator, /) -> bool:
+        """Check if two normal-ordered operators are equal"""
+
+def normal_order(op: SparseOperator, vacuum: forte2.lib.det.Determinant, screen_thresh: float = 1e-12, max_rank: int = -1) -> NormalOrderedSparseOperator:
+    """Normal order a SparseOperator with respect to a determinant vacuum"""
+
+class GeneralizedNormalOrderedSparseOperator:
+    """
+    A sparse operator in generalized normal-ordered form for a sparse CI vacuum
+    """
+
+    @overload
+    def __init__(self) -> None:
+        """Default constructor"""
+
+    @overload
+    def __init__(self, vacuum: SparseState, norb: int, max_cumulant: int = -1) -> None:
+        """Create an empty generalized normal-ordered operator"""
+
+    @overload
+    def __init__(self, vacuum: SparseState, norb: int, max_cumulant: int, term: SQOperatorString, coefficient: complex = ...) -> None:
+        """Create a generalized normal-ordered operator with a single term"""
+
+    def add(self, term: SQOperatorString, coefficient: complex = ...) -> None:
+        """Add a generalized normal-ordered term to the operator"""
+
+    def coefficient(self, term: SQOperatorString) -> complex:
+        """Get the coefficient of a generalized normal-ordered term"""
+
+    def vacuum(self) -> SparseState:
+        """Get the sparse CI vacuum"""
+
+    def norb(self) -> int:
+        """Get the number of spatial orbitals"""
+
+    def max_cumulant(self) -> int:
+        """Get the maximum contracted body rank"""
+
+    def __len__(self) -> int:
+        """Get the number of generalized normal-ordered terms"""
+
+    def __iter__(self) -> Iterator[tuple[SQOperatorString, complex]]: ...
+
+    def str(self) -> list[str]:
+        """Get a string representation of the generalized normal-ordered operator"""
+
+    def latex(self) -> str:
+        """Get a LaTeX representation of the generalized normal-ordered operator"""
+
+    def truncate(self, max_rank: int, screen_thresh: float = 1e-12) -> GeneralizedNormalOrderedSparseOperator:
+        """Return a copy with terms above max_rank removed"""
+
+    def __repr__(self) -> str: ...
+
+    def __str__(self) -> str: ...
+
+    def __add__(self, arg: GeneralizedNormalOrderedSparseOperator, /) -> GeneralizedNormalOrderedSparseOperator:
+        """Add two generalized normal-ordered operators"""
+
+    def __iadd__(self, arg: GeneralizedNormalOrderedSparseOperator, /) -> GeneralizedNormalOrderedSparseOperator:
+        """Add a generalized normal-ordered operator in place"""
+
+    def __sub__(self, arg: GeneralizedNormalOrderedSparseOperator, /) -> GeneralizedNormalOrderedSparseOperator:
+        """Subtract two generalized normal-ordered operators"""
+
+    def __isub__(self, arg: GeneralizedNormalOrderedSparseOperator, /) -> GeneralizedNormalOrderedSparseOperator:
+        """Subtract a generalized normal-ordered operator in place"""
+
+    def __mul__(self, arg: complex, /) -> GeneralizedNormalOrderedSparseOperator:
+        """Multiply a generalized normal-ordered operator by a scalar"""
+
+    def __rmul__(self, arg: complex, /) -> GeneralizedNormalOrderedSparseOperator:
+        """Multiply a scalar by a generalized normal-ordered operator"""
+
+    def __neg__(self) -> GeneralizedNormalOrderedSparseOperator:
+        """Negate the generalized normal-ordered operator"""
+
+    def norm(self) -> float:
+        """Compute the norm of the generalized normal-ordered operator"""
+
+    def to_sparse_operator(self, screen_thresh: float = 1e-12) -> SparseOperator:
+        """
+        Convert this generalized normal-ordered operator back to a SparseOperator
+        """
+
+    def apply_to_state(self, state: SparseState, screen_thresh: float = 1e-12) -> SparseState:
+        """Apply this generalized normal-ordered operator to a SparseState"""
+
+    def __matmul__(self, arg: SparseState, /) -> SparseState:
+        """Apply this generalized normal-ordered operator to a SparseState"""
+
+    def __eq__(self, arg: GeneralizedNormalOrderedSparseOperator, /) -> bool:
+        """Check if two generalized normal-ordered operators are equal"""
+
+def generalized_normal_order(op: SparseOperator, vacuum: SparseState, norb: int, max_cumulant: int = -1, screen_thresh: float = 1e-12, max_rank: int = -1) -> GeneralizedNormalOrderedSparseOperator:
+    """
+    Generalized normal order a SparseOperator with respect to a sparse CI vacuum
+    """

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ci/determinant.h"
+#include "determinant/determinant.h"
 #include "sparse/sparse_operator.h"
 
 namespace forte2 {

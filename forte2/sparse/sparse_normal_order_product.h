@@ -31,7 +31,6 @@ NormalOrderedSparseOperator adjoint(const NormalOrderedSparseOperator& op,
 /// @return The normal-ordered commutator truncated to max_rank.
 NormalOrderedSparseOperator normal_ordered_commutator(const NormalOrderedSparseOperator& lhs,
                                                       const NormalOrderedSparseOperator& rhs,
-                                                      int max_rank,
-                                                      double screen_thresh = 1.0e-12);
+                                                      int max_rank, double screen_thresh = 1.0e-12);
 
 } // namespace forte2

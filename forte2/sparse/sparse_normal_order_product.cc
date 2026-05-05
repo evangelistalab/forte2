@@ -59,21 +59,18 @@ NormalOrderedSparseOperator clean_normal_ordered_operator(const NormalOrderedSpa
     return cleaned;
 }
 
-PairContribution analyze_pair(const NormalTermData& lhs, const NormalTermData& rhs,
-                              int max_rank) {
+PairContribution analyze_pair(const NormalTermData& lhs, const NormalTermData& rhs, int max_rank) {
     const int total_count = lhs.count + rhs.count;
     const int max_count = 2 * max_rank;
     if (total_count > max_count) {
         const int required_contractions = (total_count - max_count + 1) / 2;
         bool lhs_rhs = false;
         if (lhs.ann_count >= required_contractions and rhs.cre_count >= required_contractions) {
-            lhs_rhs = lhs.term->ann().fast_a_and_b_count(rhs.term->cre()) >=
-                      required_contractions;
+            lhs_rhs = lhs.term->ann().intersection_count(rhs.term->cre()) >= required_contractions;
         }
         bool rhs_lhs = false;
         if (rhs.ann_count >= required_contractions and lhs.cre_count >= required_contractions) {
-            rhs_lhs = rhs.term->ann().fast_a_and_b_count(lhs.term->cre()) >=
-                      required_contractions;
+            rhs_lhs = rhs.term->ann().intersection_count(lhs.term->cre()) >= required_contractions;
         }
         return {lhs_rhs, rhs_lhs, false};
     }
@@ -82,21 +79,16 @@ PairContribution analyze_pair(const NormalTermData& lhs, const NormalTermData& r
         return {true, true, false};
     }
 
-    const bool common_l_cre_r_cre =
-        lhs.cre_count > 0 and rhs.cre_count > 0 and
-        not lhs.term->cre().fast_a_and_b_eq_zero(rhs.term->cre());
-    const bool common_l_cre_r_ann =
-        lhs.cre_count > 0 and rhs.ann_count > 0 and
-        not lhs.term->cre().fast_a_and_b_eq_zero(rhs.term->ann());
-    const bool common_l_ann_r_ann =
-        lhs.ann_count > 0 and rhs.ann_count > 0 and
-        not lhs.term->ann().fast_a_and_b_eq_zero(rhs.term->ann());
-    const bool common_l_ann_r_cre =
-        lhs.ann_count > 0 and rhs.cre_count > 0 and
-        not lhs.term->ann().fast_a_and_b_eq_zero(rhs.term->cre());
-    const bool commute =
-        not common_l_cre_r_cre and not common_l_ann_r_ann and not common_l_ann_r_cre and
-        not common_l_cre_r_ann;
+    const bool common_l_cre_r_cre = lhs.cre_count > 0 and rhs.cre_count > 0 and
+                                    not lhs.term->cre().is_disjoint_from(rhs.term->cre());
+    const bool common_l_cre_r_ann = lhs.cre_count > 0 and rhs.ann_count > 0 and
+                                    not lhs.term->cre().is_disjoint_from(rhs.term->ann());
+    const bool common_l_ann_r_ann = lhs.ann_count > 0 and rhs.ann_count > 0 and
+                                    not lhs.term->ann().is_disjoint_from(rhs.term->ann());
+    const bool common_l_ann_r_cre = lhs.ann_count > 0 and rhs.cre_count > 0 and
+                                    not lhs.term->ann().is_disjoint_from(rhs.term->cre());
+    const bool commute = not common_l_cre_r_cre and not common_l_ann_r_ann and
+                         not common_l_ann_r_cre and not common_l_cre_r_ann;
     return {true, true, commute};
 }
 
@@ -108,12 +100,12 @@ class TruncatedNormalProductComputer {
                  sparse_scalar_t factor,
                  const std::function<void(const NormalOrderedString&, sparse_scalar_t)>& func) {
         ucon_rhs_cre_ = rhs.cre() - lhs.ann();
-        if (not lhs.cre().fast_a_and_b_eq_zero(ucon_rhs_cre_)) {
+        if (not lhs.cre().is_disjoint_from(ucon_rhs_cre_)) {
             return;
         }
         con_rhs_cre_ = rhs.cre() - ucon_rhs_cre_;
         ucon_rhs_ann_ = rhs.ann() - con_rhs_cre_;
-        if (not lhs.ann().fast_a_and_b_eq_zero(ucon_rhs_ann_)) {
+        if (not lhs.ann().is_disjoint_from(ucon_rhs_ann_)) {
             return;
         }
 
@@ -125,24 +117,22 @@ class TruncatedNormalProductComputer {
 
         if (const auto ucon_rhs_cre_count = ucon_rhs_cre_.count_all(); ucon_rhs_cre_count > 0) {
             phase_ *= ((lhs_ann_.count_all() * ucon_rhs_cre_count) % 2) == 0 ? 1.0 : -1.0;
-            for (size_t i = ucon_rhs_cre_.fast_find_and_clear_first_one(0); i != ~0ULL;
-                 i = ucon_rhs_cre_.fast_find_and_clear_first_one(i)) {
+            ucon_rhs_cre_.for_each_set_bit([&](size_t i) {
                 rhs_cre_.set_bit(i, false);
                 phase_ *= rhs_cre_.slater_sign(i);
                 lhs_cre_.set_bit(i, true);
                 phase_ *= lhs_cre_.slater_sign_reverse(i);
-            }
+            });
         }
 
         if (const auto ucon_rhs_ann_count = ucon_rhs_ann_.count_all(); ucon_rhs_ann_count > 0) {
             phase_ *= ((rhs_cre_.count_all() * ucon_rhs_ann_count) % 2) == 0 ? 1.0 : -1.0;
-            for (size_t i = ucon_rhs_ann_.fast_find_and_clear_first_one(0); i != ~0ULL;
-                 i = ucon_rhs_ann_.fast_find_and_clear_first_one(i)) {
+            ucon_rhs_ann_.for_each_set_bit([&](size_t i) {
                 rhs_ann_.set_bit(i, false);
                 phase_ *= rhs_ann_.slater_sign_reverse(i);
                 lhs_ann_.set_bit(i, true);
                 phase_ *= lhs_ann_.slater_sign(i);
-            }
+            });
         }
 
         auto rhs_comm_trivial = rhs_cre_ & rhs_ann_ & lhs_ann_;
@@ -150,20 +140,17 @@ class TruncatedNormalProductComputer {
             rhs_cre_ -= rhs_comm_trivial;
             rhs_ann_ -= rhs_comm_trivial;
             ucon_rhs_cre_ = rhs_cre_;
-            for (size_t i = rhs_comm_trivial.fast_find_and_clear_first_one(0); i != ~0ULL;
-                 i = rhs_comm_trivial.fast_find_and_clear_first_one(i)) {
+            rhs_comm_trivial.for_each_set_bit([&](size_t i) {
                 phase_ *= rhs_cre_.slater_sign_reverse(i) * rhs_ann_.slater_sign_reverse(i);
-            }
+            });
         }
 
         auto lhs_comm_trivial = lhs_cre_ & lhs_ann_ & rhs_cre_;
         if (lhs_comm_trivial.count_all() != 0) {
             rhs_cre_ -= lhs_comm_trivial;
             lhs_ann_ -= lhs_comm_trivial;
-            for (size_t i = lhs_comm_trivial.fast_find_and_clear_first_one(0); i != ~0ULL;
-                 i = lhs_comm_trivial.fast_find_and_clear_first_one(i)) {
-                phase_ *= lhs_ann_.slater_sign(i) * rhs_cre_.slater_sign(i);
-            }
+            lhs_comm_trivial.for_each_set_bit(
+                [&](size_t i) { phase_ *= lhs_ann_.slater_sign(i) * rhs_cre_.slater_sign(i); });
         }
 
         const auto ncontr = rhs_cre_.count_all();
@@ -179,10 +166,8 @@ class TruncatedNormalProductComputer {
         }
 
         ucon_rhs_cre_ = rhs_cre_;
-        for (size_t i = ucon_rhs_cre_.fast_find_and_clear_first_one(0); i != ~0ULL;
-             i = ucon_rhs_cre_.fast_find_and_clear_first_one(i)) {
-            phase_ *= lhs_ann_.slater_sign(i) * rhs_cre_.slater_sign(i);
-        }
+        ucon_rhs_cre_.for_each_set_bit(
+            [&](size_t i) { phase_ *= lhs_ann_.slater_sign(i) * rhs_cre_.slater_sign(i); });
 
         size_t nbits = ncontr;
         auto contracted_rhs_cre = rhs_cre_;
@@ -266,7 +251,8 @@ NormalOrderedProductComputer::NormalOrderedProductComputer(int max_rank, double 
         throw std::invalid_argument("NormalOrderedProductComputer: max_rank must be non-negative");
     }
     if (screen_thresh < 0.0) {
-        throw std::invalid_argument("NormalOrderedProductComputer: screen_thresh must be non-negative");
+        throw std::invalid_argument(
+            "NormalOrderedProductComputer: screen_thresh must be non-negative");
     }
 }
 
@@ -287,7 +273,7 @@ bool NormalOrderedProductComputer::could_product_contribute(const NormalOrderedS
         return true;
     }
 
-    const int max_contractions = lhs.ann().fast_a_and_b_count(rhs.cre());
+    const int max_contractions = lhs.ann().intersection_count(rhs.cre());
     const int lower_bound_count = total_count - 2 * max_contractions;
     return lower_bound_count <= 2 * max_rank_;
 }
@@ -308,9 +294,8 @@ NormalOrderedProductComputer::commutator(const NormalOrderedSparseOperator& lhs,
     result.reserve(std::min(lhs_terms.size() * rhs_terms.size(), std::size_t{250000}));
 
     const std::function<void(const NormalOrderedString&, const sparse_scalar_t)> add_to_result =
-        [this, &result,
-         screen_thresh_squared](const NormalOrderedString& term,
-                                const sparse_scalar_t coefficient) {
+        [this, &result, screen_thresh_squared](const NormalOrderedString& term,
+                                               const sparse_scalar_t coefficient) {
             if (above_threshold(coefficient, screen_thresh_squared)) {
                 result.add(term, coefficient);
             }
