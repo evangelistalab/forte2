@@ -585,14 +585,14 @@ class FockBuilderOTF:
         # total size = 8 * nb^2 p + nbytes * nbuf_vt * nb * na * i ~= (nbuf_vt * nbytes + 8) * nb * na * i
         # guess the number of occupied orbitals. This is useful to prevent cases where the iblksize is too large,
         # which can lead to the last dimensions of the buffers being sliced, leading to inefficient memory access
-        guess_nocc = self.system.Zsum if _cmplx else self.system.Zsum // 2
+        guess_nocc = max(1, self.system.Zsum if _cmplx else self.system.Zsum // 2)
         total_bytes_per_iblk = (nbuf_vt * nbytes + 8) * self.nbf * self.naux
         self.iblksize = min(
             guess_nocc,
             math.ceil(self.jk_mem_thres_mb * 1024**2 / total_bytes_per_iblk),
         )
         maxpblksize = math.floor(
-            (self.jk_mem_thres_mb * 1024**2 - nbuf_vt * nbytes * self.nbf * self.naux)
+            (self.jk_mem_thres_mb * 1024**2 - nbuf_vt * nbytes * self.nbf * self.naux * self.iblksize)
             / (8 * self.nbf**2)
         )
         self.pblksize = min(self.naux, maxpblksize)
