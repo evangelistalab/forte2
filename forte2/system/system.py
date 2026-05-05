@@ -268,7 +268,7 @@ class System:
                 f"Memory threshold of {self.memory_threshold_mb} MB is too low to store the B tensor and metric. Using on-the-fly Fock builder."
             )
             return FockBuilderOTF(self, memory_threshold_mb=self.memory_threshold_mb)
-        elif b_tensor_size_mb + 2 * metric_size_mb > self.memory_threshold_mb:
+        elif 2 * b_tensor_size_mb + metric_size_mb > self.memory_threshold_mb:
             logger.log_info1(
                 f"Memory threshold of {self.memory_threshold_mb} MB is too low to store the transposed B tensor. Using in-core Fock builder without storing transposed B tensor."
             )

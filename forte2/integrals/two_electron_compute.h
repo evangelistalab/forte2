@@ -256,7 +256,7 @@ template <libint2::Operator Op, typename Params = NoParams>
 template <libint2::Operator Op, typename Params = NoParams>
 void compute_two_electron_3c_by_shell(
     const Basis& basis1, const Basis& basis2, const Basis& basis3,
-    const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices, np_tensor3& buffer,
+    const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices, np_tensor3_c& buffer,
     Params const& params = Params{}) {
     const auto start = std::chrono::high_resolution_clock::now();
 
@@ -384,7 +384,7 @@ template <libint2::Operator Op, typename Params = NoParams>
 [[nodiscard]] auto compute_two_electron_3c_by_shell(
     const Basis& basis1, const Basis& basis2, const Basis& basis3,
     const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices,
-    Params const& params = Params{}) -> np_tensor3 {
+    Params const& params = Params{}) -> np_tensor3_c {
     if (shell_slices.size() != 3) {
         throw std::invalid_argument("shell_slices must have size 3");
     }
@@ -426,7 +426,7 @@ template <libint2::Operator Op, typename Params = NoParams>
     const std::size_t first2 = first_size2[jsh0].first;
     const std::size_t first3 = first_size3[ksh0].first;
 
-    auto buffer = make_zeros<nb::numpy, double, 3>({nb1, nb2, nb3});
+    auto buffer = make_zeros<nb::numpy, double, 3, nb::c_contig>({nb1, nb2, nb3});
     compute_two_electron_3c_by_shell<Op>(basis1, basis2, basis3, shell_slices, buffer, params);
     return buffer;
 }

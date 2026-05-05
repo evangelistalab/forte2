@@ -338,7 +338,7 @@ void export_two_electron_api(nb::module_& sub_m) {
         "coulomb_3c_by_shell",
         [](const Basis& basis1, const Basis& basis2, const Basis& basis3,
            const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices,
-           np_tensor3& buffer) {
+           np_tensor3_c& buffer) {
             coulomb_3c_by_shell(basis1, basis2, basis3, shell_slices, buffer);
         },
         "basis1"_a, "basis2"_a, "basis3"_a, "shell_slices"_a, "buffer"_a);

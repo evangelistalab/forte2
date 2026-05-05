@@ -11,15 +11,14 @@ np_tensor3 coulomb_3c(const Basis& b1, const Basis& b2, const Basis& b3) {
     return compute_two_electron_3c_multi<libint2::Operator::coulomb>(b1, b2, b3);
 }
 
-np_tensor3
-coulomb_3c_by_shell(const Basis& b1, const Basis& b2, const Basis& b3,
+np_tensor3_c coulomb_3c_by_shell(const Basis& b1, const Basis& b2, const Basis& b3,
                     const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices) {
     return compute_two_electron_3c_by_shell<libint2::Operator::coulomb>(b1, b2, b3, shell_slices);
 }
 
 void coulomb_3c_by_shell(const Basis& b1, const Basis& b2, const Basis& b3,
                          const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices,
-                         np_tensor3& buffer) {
+                         np_tensor3_c& buffer) {
     compute_two_electron_3c_by_shell<libint2::Operator::coulomb>(b1, b2, b3, shell_slices, buffer);
 }
 
