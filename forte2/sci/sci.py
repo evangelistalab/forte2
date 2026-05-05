@@ -1104,7 +1104,6 @@ class SelectedCISolver(CIBase):
             self.C[0],
             self.active_indices,
             self.core_indices,
-            use_aux_corr=True,
         )
 
         self.sub_solvers = []
@@ -1393,7 +1392,6 @@ class SelectedCI(SelectedCISolver):
                 self.C[0],
                 self.active_indices,
                 self.core_indices,
-                use_aux_corr=True,
             )
             self.set_ints(ints.E, ints.H, ints.V)
             super().run()

@@ -350,7 +350,6 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
                     C=self.C[0],
                     spinorbitals=self.mo_space.active_indices,
                     core_spinorbitals=self.mo_space.docc_indices,
-                    use_aux_corr=True,
                 )
             else:
                 ints = RestrictedMOIntegrals(
@@ -358,7 +357,6 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
                     C=self.C[0],
                     orbitals=self.mo_space.active_indices,
                     core_orbitals=self.mo_space.docc_indices,
-                    use_aux_corr=True,
                 )
             self.ci_solver.set_ints(ints.E, ints.H, ints.V)
             # Basis change, can't restart from previous CI vectors *reliably*

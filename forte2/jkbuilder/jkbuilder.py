@@ -26,8 +26,6 @@ class FockBuilder:
     system : System or ModelSystem
         The system for which to build the Fock matrix.
         If a ModelSystem is provided, it will decompose the 4D ERI tensor using Cholesky decomposition with complete pivoting.
-    use_aux_corr : bool, optional, default=False
-        If True, uses ``system.auxiliary_basis_corr`` instead of ``system.auxiliary_basis``.
     store_B_nPm : bool, optional, default=True
         If True, stores a (Nao, Naux, Nao)-shaped copy of the B tensor for faster K builds.
         This comes at the cost of doubling the memory footprint of the ``FockBuilder`` object.
@@ -42,9 +40,8 @@ class FockBuilder:
         The number of basis functions in the system.
     """
 
-    def __init__(self, system, use_aux_corr=False, store_B_nPm=True):
+    def __init__(self, system, store_B_nPm=True):
         self.system = system
-        self.use_aux_corr = use_aux_corr
         self.metric_ortho_rtol = self.system.df_ortho_rtol
         self.nbf = system.nbf
         self.store_B_nPm = store_B_nPm
@@ -56,14 +53,10 @@ class FockBuilder:
         else:
             if not self.system.cholesky_tei:
                 basis = self.system.basis
-                aux_basis = (
-                    self.system.auxiliary_basis_corr
-                    if self.use_aux_corr
-                    else self.system.auxiliary_basis
-                )
+                aux_basis = self.system.auxiliary_basis
                 if aux_basis is None:
                     raise ValueError(
-                        "Auxiliary basis is not defined. Define auxiliary_basis_set/auxiliary_basis_set_corr or set cholesky_tei to True."
+                        "Auxiliary basis is not defined. Define auxiliary_basis_set or set cholesky_tei to True."
                     )
                 res, naux = self._build_B_density_fitting(basis, aux_basis)
             else:
@@ -514,8 +507,6 @@ class FockBuilderOTF:
     ----------
     system : System
         The system for which to build the Fock matrix.
-    use_aux_corr : bool, optional, default=False
-        If True, uses ``system.auxiliary_basis_corr`` instead of ``system.auxiliary_basis``.
     memory_threshold_mb : float, optional, default=4000
         The memory threshold in MB for deciding how to compute the J and K matrices. If the estimated memory requirement for storing the B tensor exceeds this threshold, the J and K matrices will be computed in a more memory-efficient way that does not require storing the B tensor.
     backend : str, optional, default="auto"
@@ -525,7 +516,6 @@ class FockBuilderOTF:
     def __init__(
         self,
         system,
-        use_aux_corr=False,
         memory_threshold_mb=4000,
         backend="auto",
     ):
@@ -535,14 +525,9 @@ class FockBuilderOTF:
             )
         self.backend = backend.lower()
         self.system = system
-        self.use_aux_corr = use_aux_corr
         self.nbf = system.nbf
         self.memory_threshold_mb = memory_threshold_mb
-        self.auxbasis = (
-            self.system.auxiliary_basis_corr
-            if self.use_aux_corr
-            else self.system.auxiliary_basis
-        )
+        self.auxbasis = self.system.auxiliary_basis
         self.basis = self.system.basis
         self.nshb = self.basis.nshells
         self.naux = len(self.auxbasis)

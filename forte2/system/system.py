@@ -31,8 +31,6 @@ class System:
         assigning potentially different basis sets to each atom (e.g. {"H": "sto-3g", "O": "cc-pvdz"}).
     auxiliary_basis_set : str | dict, optional
         The auxiliary basis set, either as a string or a dictionary (see `basis`).
-    auxiliary_basis_set_corr : str | dict, optional
-        A separate auxiliary basis set for all correlated calculations, either as a string or a dictionary (see `basis`).
     minao_basis : str | dict, optional, default="cc-pvtz-minao"
         The minimal atomic orbital basis set, used in IAO calculations, either as a string or a dictionary (see `basis`).
     x2c_type : str | None, optional, default=None
@@ -88,8 +86,6 @@ class System:
         The basis set for the system, built from the provided `basis_set`.
     auxiliary_basis : ints.Basis
         The auxiliary basis set for the system, built from the provided `auxiliary_basis_set`.
-    auxiliary_basis_corr : ints.Basis
-        The auxiliary basis set for correlated calculations, built from the provided `auxiliary_basis_set_corr`.
     minao_basis : ints.Basis
         The minimal atomic orbital basis set, built from the provided `minao_basis_set`.
     Zsum : float
@@ -110,7 +106,6 @@ class System:
     basis_set: str | dict
     # These are the arguments that users can provide at initialization.
     auxiliary_basis_set: str | dict = None
-    auxiliary_basis_set_corr: str | dict = None
     minao_basis_set: str | dict = "cc-pvtz-minao"
     x2c_type: str | None = None
     snso_type: str | None = "row-dependent"
@@ -137,7 +132,6 @@ class System:
     two_component: bool = field(init=False, default=False)
     # Basis set objects build from arguments provided at initialization.
     auxiliary_basis: Basis = field(init=False, default=None)
-    auxiliary_basis_corr: Basis = field(init=False, default=None)
 
     def __post_init__(self):
         assert self.unit in [
@@ -155,13 +149,6 @@ class System:
         self.nmo = int(info["n_kept"])
         self.fock_builder = self._init_fock_builder()
         # The B tensors here are lazily evaluated, so no overhead if not used
-        if self.auxiliary_basis_set_corr is not None:
-            logger.log_warning(
-                "Building separate auxiliary basis for correlated calculations!"
-            )
-            self.fock_builder_corr = FockBuilder(self, use_aux_corr=True)
-        else:
-            self.fock_builder_corr = self.fock_builder
 
     def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
@@ -200,22 +187,8 @@ class System:
                 )
             else:
                 self.auxiliary_basis = None
-
-            if self.auxiliary_basis_set_corr is not None:
-                logger.log_warning(
-                    "Using a separate auxiliary basis is not recommended!"
-                )
-                self.auxiliary_basis_corr = build_basis(
-                    self.auxiliary_basis_set_corr,
-                    self.geom_helper,
-                )
-            else:
-                self.auxiliary_basis_corr = self.auxiliary_basis
         else:
-            if (
-                self.auxiliary_basis_set is not None
-                or self.auxiliary_basis_set_corr is not None
-            ):
+            if self.auxiliary_basis_set is not None:
                 logger.log_warning(
                     "Ignoring provided auxiliary basis sets since cholesky_tei=True!"
                 )
