@@ -248,13 +248,15 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         self.E_orb = self.E_avg
         self.E_orb_old = self.E_orb
 
+        skip_macro_iter = (self.orb_opt.nrot == 0)
+
         self.g_old = np.zeros(self.orb_opt.nrot, dtype=self.dtype)
 
         # This holds the *overall* orbital rotation, C_current = C_0 @ exp(R)
         # It's used as the initial guess at the start of each orbital optimization
         R = np.zeros(self.orb_opt.nrot, dtype=self.dtype)
 
-        while self.iter < self.maxiter:
+        while self.iter < self.maxiter and not skip_macro_iter:
             # 1. Optimize orbitals at fixed CI expansion
             self.E_orb = self.lbfgs_solver.minimize(self.orb_opt, R)
             self._C = self.orb_opt.C.copy()
@@ -292,7 +294,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             g2_act = self.make_average_2rdm()
             self.orb_opt.set_rdms(self.g1_act, g2_act)
             self.iter += 1
-        else:
+        if self.iter >= self.maxiter and not conv:
             logger.log_info1("=" * width)
             if self.die_if_not_converged:
                 raise RuntimeError(
