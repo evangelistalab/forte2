@@ -53,7 +53,7 @@ def test_restricted_mo_integrals_on_the_fly():
     C = np.random.rand(system.nbf, system.nbf)
     ints = RestrictedMOIntegrals(system, C, orbitals=list(range(C.shape[1])))
 
-    system.fock_builder = FockBuilderOTF(system, memory_threshold_mb=5.0)
+    system.fock_builder = FockBuilderOTF(system, jk_mem_thres_mb=5.0)
     ints_otf = RestrictedMOIntegrals(system, C, orbitals=list(range(C.shape[1])))
     B_mo_otf = system.fock_builder.B_tensor_gen_block(C, C)
     V_ref_otf = np.einsum("Bij,Bkl->ikjl", B_mo_otf, B_mo_otf, optimize=True)
@@ -115,7 +115,7 @@ def test_spinorbital_integrals_on_the_fly():
     C = np.random.rand(nbf, nbf) + 1j * np.random.rand(nbf, nbf)
     ints = SpinorbitalIntegrals(system, C, spinorbitals=list(range(C.shape[1])))
 
-    system.fock_builder = FockBuilderOTF(system, memory_threshold_mb=5.0)
+    system.fock_builder = FockBuilderOTF(system, jk_mem_thres_mb=5.0)
     ints_otf = SpinorbitalIntegrals(system, C, spinorbitals=list(range(C.shape[1])))
     B_spinorbital_otf = system.fock_builder.B_tensor_gen_block_spinor(C, C)
     V_ref_otf = np.einsum(

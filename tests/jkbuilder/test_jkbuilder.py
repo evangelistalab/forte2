@@ -167,7 +167,7 @@ def test_jkbuilder_on_the_fly():
     J_ref = fb.build_J(D)
     K_ref = fb.build_K([Cocc])
 
-    fb_otf = jkbuilder.FockBuilderOTF(system, memory_threshold_mb=4.5)
+    fb_otf = jkbuilder.FockBuilderOTF(system, jk_mem_thres_mb=4.5)
     J_otf = fb_otf.build_J(D)[0]
     K_otf = fb_otf.build_K([Cocc])[0]
 
@@ -206,7 +206,7 @@ def test_jkbuilder_on_the_fly_general():
     fb = system.fock_builder
     J_ref, K_ref = fb.build_JK_generalized(Cact, rdm1)
 
-    fb_otf = jkbuilder.FockBuilderOTF(system, memory_threshold_mb=4.5)
+    fb_otf = jkbuilder.FockBuilderOTF(system, jk_mem_thres_mb=4.5)
     J_otf, K_otf = fb_otf.build_JK_generalized(Cact, rdm1)
 
     assert np.allclose(J_otf, J_ref), np.linalg.norm(J_otf - J_ref)
@@ -241,7 +241,7 @@ def test_jkbuilder_on_the_fly_complex():
     Jaa_ref, Jbb_ref = fb.build_J(D)
     Kaa_ref, Kab_ref, Kba_ref, Kbb_ref = fb.build_K([Cocc])
 
-    fb_otf = jkbuilder.FockBuilderOTF(system, memory_threshold_mb=30)
+    fb_otf = jkbuilder.FockBuilderOTF(system, jk_mem_thres_mb=30)
     Jaa_otf, Jbb_otf = fb_otf.build_J(D)
     Kaa_otf, Kab_otf, Kba_otf, Kbb_otf = fb_otf.build_K([Cocc])
 
@@ -281,7 +281,7 @@ def test_jkbuilder_on_the_fly_large():
     J_ref = fb.build_J(D)
     K_ref = fb.build_K([Cocc])
 
-    fb_otf = jkbuilder.FockBuilderOTF(system, memory_threshold_mb=15)
+    fb_otf = jkbuilder.FockBuilderOTF(system, jk_mem_thres_mb=15)
     J_otf = fb_otf.build_J(D)[0]
     K_otf = fb_otf.build_K([Cocc])[0]
 

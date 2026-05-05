@@ -507,7 +507,7 @@ class FockBuilderOTF:
     ----------
     system : System
         The system for which to build the Fock matrix.
-    memory_threshold_mb : float, optional, default=4000
+    jk_mem_thres_mb : float, optional, default=4000
         The memory threshold in MB for deciding how to compute the J and K matrices. If the estimated memory requirement for storing the B tensor exceeds this threshold, the J and K matrices will be computed in a more memory-efficient way that does not require storing the B tensor.
     backend : str, optional, default="auto"
         The backend to use for computing the three-center two-electron integrals. Options are "auto", "libint2", and "libcint". If "auto", the backend will be chosen based on the maximum angular momentum of the auxiliary basis.
@@ -516,7 +516,7 @@ class FockBuilderOTF:
     def __init__(
         self,
         system,
-        memory_threshold_mb=4000,
+        jk_mem_thres_mb=4000,
         backend="auto",
     ):
         if backend.lower() not in ["auto", "libint2", "libcint"]:
@@ -526,7 +526,7 @@ class FockBuilderOTF:
         self.backend = backend.lower()
         self.system = system
         self.nbf = system.nbf
-        self.memory_threshold_mb = memory_threshold_mb
+        self.jk_mem_thres_mb = jk_mem_thres_mb
         self.auxbasis = self.system.auxiliary_basis
         self.basis = self.system.basis
         self.nshb = self.basis.nshells
@@ -589,13 +589,10 @@ class FockBuilderOTF:
         total_bytes_per_iblk = (nbuf_vt * nbytes + 8) * self.nbf * self.naux
         self.iblksize = min(
             guess_nocc,
-            math.ceil(self.memory_threshold_mb * 1024**2 / total_bytes_per_iblk),
+            math.ceil(self.jk_mem_thres_mb * 1024**2 / total_bytes_per_iblk),
         )
         maxpblksize = math.floor(
-            (
-                self.memory_threshold_mb * 1024**2
-                - nbuf_vt * nbytes * self.nbf * self.naux
-            )
+            (self.jk_mem_thres_mb * 1024**2 - nbuf_vt * nbytes * self.nbf * self.naux)
             / (8 * self.nbf**2)
         )
         self.pblksize = min(self.naux, maxpblksize)
@@ -606,7 +603,7 @@ class FockBuilderOTF:
                 (nbuf_vt * nbytes + 8) * max_nbasis_in_shell * self.naux**2 / 1024**2
             )
             raise ValueError(
-                f"[FockBuilderOTF]: Memory threshold {self.memory_threshold_mb} is too low to even hold the largest shell of the auxiliary basis (of size {max_nbasis_in_shell})). Please increase the memory threshold to {suggested_mem_mb} MB."
+                f"[FockBuilderOTF]: Memory threshold {self.jk_mem_thres_mb} is too low to even hold the largest shell of the auxiliary basis (of size {max_nbasis_in_shell})). Please increase the memory threshold to {suggested_mem_mb} MB."
             )
         # this buffer always holds a block of real (P|mn) integrals, even for two-component systems
         self._Pmn_buf = np.zeros((self.pblksize, self.nbf, self.nbf))
@@ -632,7 +629,7 @@ class FockBuilderOTF:
             f"[FockBuilderOTF]: Allocated buffers for X_Qm[i] and X_Pm[i] with shape {self._Qmi_buf.shape} and size {alloc_size_mb_Q*nbuf_vt:.2f} MB"
         )
         logger.log_info1(
-            f"[FockBuilderOTF]: Memory budget: {self.memory_threshold_mb:.2f} MB, total allocated buffer size: {alloc_size_mb_P + nbuf_vt*alloc_size_mb_Q:.2f} MB"
+            f"[FockBuilderOTF]: Memory budget: {self.jk_mem_thres_mb:.2f} MB, total allocated buffer size: {alloc_size_mb_P + nbuf_vt*alloc_size_mb_Q:.2f} MB"
         )
         self.cmplx = _cmplx
 

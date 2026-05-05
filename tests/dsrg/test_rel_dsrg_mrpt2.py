@@ -164,9 +164,7 @@ def test_mrpt2_se_rel_sa_gauss_nuc_jk_otf():
         snso_type="row-dependent",
         use_gaussian_charges=True,
     )
-    system.fock_builder = FockBuilderOTF(
-        system, memory_threshold_mb=20, backend="libcint"
-    )
+    system.fock_builder = FockBuilderOTF(system, jk_mem_thres_mb=20, backend="libcint")
 
     mf = GHF(
         charge=-1,

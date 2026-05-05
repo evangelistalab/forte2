@@ -58,7 +58,7 @@ class System:
         The tolerance for detecting symmetry.
     use_gaussian_charges : bool, optional, default=False
         Whether to use Gaussian nuclear charge distributions instead of point charges.
-    memory_threshold_mb : float | None, optional, default=None
+    jk_mem_thres_mb : float | None, optional, default=None
         If set, the Fock builder will have a memory footprint smaller than the threshold.
         If None, the the in-core Fock builder algorithm will be used with no special memory limit.
 
@@ -117,7 +117,7 @@ class System:
     symmetry: bool = False
     symmetry_tol: float = 1e-4
     use_gaussian_charges: bool = False
-    memory_threshold_mb: float | None = None
+    jk_mem_thres_mb: float | None = None
 
     ### Non-init attributes
     atoms: list[list[float, list[float, float, float]]] = field(
@@ -223,31 +223,31 @@ class System:
             self.two_component = True
 
     def _init_fock_builder(self):
-        if self.memory_threshold_mb is not None and self.cholesky_tei:
+        if self.jk_mem_thres_mb is not None and self.cholesky_tei:
             raise ValueError(
-                "If cholesky_tei is True, memory_threshold_mb must be None."
+                "If cholesky_tei is True, jk_mem_thres_mb must be None."
             )
-        if self.memory_threshold_mb is not None and self.auxiliary_basis is None:
+        if self.jk_mem_thres_mb is not None and self.auxiliary_basis is None:
             raise ValueError(
-                "If memory_threshold_mb is set, auxiliary_basis_set must be provided to determine the size of the B tensor."
+                "If jk_mem_thres_mb is set, auxiliary_basis_set must be provided to determine the size of the B tensor."
             )
-        if self.memory_threshold_mb is None:
+        if self.jk_mem_thres_mb is None:
             return FockBuilder(self)
         b_tensor_size_mb = 8 * self.naux * self.nbf**2 / (1024**2)
         metric_size_mb = 8 * self.naux**2 / (1024**2)
-        if b_tensor_size_mb + metric_size_mb > self.memory_threshold_mb:
+        if b_tensor_size_mb + metric_size_mb > self.jk_mem_thres_mb:
             logger.log_info1(
-                f"Memory threshold of {self.memory_threshold_mb} MB is too low to store the B tensor and metric. Using on-the-fly Fock builder."
+                f"Memory threshold of {self.jk_mem_thres_mb} MB is too low to store the B tensor and metric. Using on-the-fly Fock builder."
             )
-            return FockBuilderOTF(self, memory_threshold_mb=self.memory_threshold_mb)
-        elif 2 * b_tensor_size_mb + metric_size_mb > self.memory_threshold_mb:
+            return FockBuilderOTF(self, jk_mem_thres_mb=self.jk_mem_thres_mb)
+        elif 2 * b_tensor_size_mb + metric_size_mb > self.jk_mem_thres_mb:
             logger.log_info1(
-                f"Memory threshold of {self.memory_threshold_mb} MB is too low to store the transposed B tensor. Using in-core Fock builder without storing transposed B tensor."
+                f"Memory threshold of {self.jk_mem_thres_mb} MB is too low to store the transposed B tensor. Using in-core Fock builder without storing transposed B tensor."
             )
             return FockBuilder(self, store_B_nPm=False)
         else:
             logger.log_info1(
-                f"Memory threshold of {self.memory_threshold_mb} MB is sufficient to store the B tensor and metric. Using in-core Fock builder with stored B tensor."
+                f"Memory threshold of {self.jk_mem_thres_mb} MB is sufficient to store the B tensor and metric. Using in-core Fock builder with stored B tensor."
             )
             return FockBuilder(self, store_B_nPm=True)
 

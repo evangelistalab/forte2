@@ -109,10 +109,9 @@ def test_rhf_cl2_otf():
         auxiliary_basis_set="cc-pvqz-jkfit",
     )
     # force OTF libcint backend for this test
-    system.fock_builder = FockBuilderOTF(
-        system, memory_threshold_mb=40, backend="libcint"
-    )
+    system.fock_builder = FockBuilderOTF(system, jk_mem_thres_mb=40, backend="libcint")
     scf = RHF(charge=0)(system)
     scf.run()
 
     assert scf.E == approx(-918.943349338796)
+test_rhf_cl2_otf()
