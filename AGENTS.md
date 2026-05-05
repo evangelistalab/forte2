@@ -18,7 +18,7 @@ This file gives coding agents repo-specific guidance for working in `forte2`.
   - `pip install --no-build-isolation -ve .`
 - Build system details:
   - `scikit-build-core` + `CMake` + `nanobind`
-  - C++ standard is C++20
+  - C++ standard is C++23
   - `Libint2`, `Eigen3`, BLAS/LAPACK are required by CMake
 - `USE_LIBCINT` is enabled by default through `pyproject.toml`; override if needed:
   - `pip install . --config-settings=cmake.define.USE_LIBCINT=OFF`
