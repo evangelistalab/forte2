@@ -23,7 +23,6 @@ from forte2.helpers import logger
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.props import get_1e_property
 from forte2.orbitals import Semicanonicalizer
-from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
 from .ci_utils import (
     pretty_print_gas_info,
     pretty_print_ci_summary,
@@ -1280,7 +1279,7 @@ class CISolver(CIBase):
 
         self.sub_solvers = []
         active_orbsym = [
-            [self.irrep_indices[i] for i in active_space]
+            [self.irrep_indices[0][i] for i in active_space]
             for active_space in self.mo_space.active_orbitals
         ]
         for i, state in enumerate(self.sa_info.states):
@@ -1482,7 +1481,7 @@ class CISolver(CIBase):
 
     def compute_transition_properties(self, C=None):
         """
-        Compute the transition dipole moments and oscillator strengths from the spin-free 1-TDMs.
+        Compute the transition dipole moments, oscillator strengths, and vertical transition energies from the spin-free 1-TDMs.
         The results are stored in `self.transition_dipoles` and `self.oscillator_strengths`.
 
         Parameters
@@ -1498,6 +1497,9 @@ class CISolver(CIBase):
         oscillator_strengths : dict[tuple[int, int], float]
             A dictionary mapping pairs of CI roots (absolute_root_i, absolute_root_j) to their oscillator strengths.
             This is also saved in `self.oscillator_strengths`.
+        vertical_transition_energies : dict[tuple[int, int], float]
+            A dictionary mapping pairs of CI roots (absolute_root_i, absolute_root_j) to their vertical transition energies.
+            This is also saved in `self.vertical_transition_energies`.
         """
         if not self.executed:
             raise RuntimeError("CI solver has not been executed yet.")
@@ -1515,6 +1517,7 @@ class CISolver(CIBase):
         )
         self.transition_dipoles = OrderedDict()
         self.oscillator_strengths = OrderedDict()
+        self.vertical_transition_energies = OrderedDict()
         for ici in range(self.sa_info.nroots_sum):
             istate, iroot_in_state = self._get_state_root(ici)
             rdm = self.sub_solvers[istate].make_1rdm(iroot_in_state)
@@ -1526,8 +1529,9 @@ class CISolver(CIBase):
                 self.system, rdm, property_name="electric_dipole", unit="au"
             )
             self.transition_dipoles[(ici, ici)] = dip + core_dip
-            # No oscillator strength for i->i transitions
+            # No oscillator strength or vetical transition energy for i->i transitions
             self.oscillator_strengths[(ici, ici)] = 0.0
+            self.vertical_transition_energies[(ici, ici)] = 0.0
             for jci in range(ici + 1, self.sa_info.nroots_sum):
                 jstate, jroot_in_state = self._get_state_root(jci)
                 try:
@@ -1553,13 +1557,18 @@ class CISolver(CIBase):
                     self.oscillator_strengths[(_ici, _jci)] = (
                         (2 / 3) * vte * np.linalg.norm(tdip) ** 2
                     )
+                    self.vertical_transition_energies[(_ici, _jci)] = vte
                 except (ValueError, NotImplementedError):
                     # ValueError: for non-relativistic CI if the two states have different na and nb,
                     #   and thus cross-state RDMs are not supported.
                     # NotImplementedError: for two-component CI, cross-state RDMs are not implemented yet.
                     continue
 
-        return self.transition_dipoles, self.oscillator_strengths
+        return (
+            self.transition_dipoles,
+            self.oscillator_strengths,
+            self.vertical_transition_energies,
+        )
 
     def get_convergence_status(self):
         """
@@ -1760,7 +1769,18 @@ class CI(CISolver):
 @dataclass
 class RelCISolver(RelCIBase):
     """
-    Relativistic Configuration Interaction
+    A general two-component configuration interaction (2C-CI) solver class.
+
+    Parameters
+    ----------
+    davidson_liu_params : DavidsonLiuParams, optional
+        Parameters for the Davidson-Liu eigensolver. If not provided, default parameters are used.
+    ci_params : CIParams, optional
+        Parameters for the CI solver. If not provided, default parameters are used.
+    do_test_rdms : bool, optional, default=False
+        If True, compute and test the reduced density matrices (RDMs) after the CI calculation.
+    log_level : int, optional
+        The logging level for the CI solver. Defaults to the global logger's verbosity level.
     """
 
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
@@ -1788,9 +1808,6 @@ class RelCISolver(RelCIBase):
 
     def _startup(self):
         super()._startup()
-        if not self.system.two_component:
-            self.C = convert_coeff_spatial_to_spinor(self.C)
-            self.system.two_component = True
 
         self.norb = self.mo_space.nactv
         # no distinction between core and frozen core in the CI solver
@@ -1809,7 +1826,7 @@ class RelCISolver(RelCIBase):
 
         self.sub_solvers = []
         active_orbsym = [
-            [self.irrep_indices[i] for i in active_space]
+            [self.irrep_indices[0][i] for i in active_space]
             for active_space in self.mo_space.active_orbitals
         ]
 

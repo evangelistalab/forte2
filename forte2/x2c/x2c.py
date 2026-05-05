@@ -53,14 +53,14 @@ class X2CHelper:
             "sf",
             "so",
         ], f"Invalid x2c_type: {self.system.x2c_type}. Must be 'sf' or 'so'."
-        self.snso_type = system.snso_type.lower() if system.snso_type else None
-        if self.snso_type is not None:
-            assert self.snso_type in [
+        _snso_type = system.snso_type.lower() if system.snso_type else None
+        if _snso_type is not None:
+            assert _snso_type in [
                 "boettger",
                 "dc",
                 "dcb",
                 "row-dependent",
-            ], f"Invalid snso_type: {self.snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
+            ], f"Invalid snso_type: {_snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
 
         logger.log_info1(f"Number of contracted basis functions: {self.system.nbf}")
 
@@ -121,7 +121,7 @@ class X2CHelper:
         _, Xorthm1 = self._get_Xorth()
         h_fw = Xorthm1.conj().T @ h_fw @ Xorthm1
 
-        if self.system.x2c_type.lower() == "so" and self.snso_type is not None:
+        if self.system.x2c_type.lower() == "so" and self.system.snso_type is not None:
             nbf = len(self.xbasis)
             haa = h_fw[:nbf, :nbf]
             hab = h_fw[:nbf, nbf:]
@@ -235,13 +235,13 @@ class X2CHelper:
         basis = self.xbasis
         atoms = self.system.atoms
 
-        if self.snso_type is None:
+        if self.system.snso_type is None:
             return ints
         if basis.max_l > 7:
             raise RuntimeError(
                 "SNSO scaling is not implemented for basis sets with l > 7."
             )
-        match self.snso_type.lower():
+        match self.system.snso_type.lower():
             case "boettger":
                 Ql = np.array([0.0, 2.0, 10.0, 28.0, 60.0, 110.0, 182.0, 280.0])
             case "dc":
@@ -260,7 +260,7 @@ class X2CHelper:
                 }
             case _:
                 raise ValueError(
-                    f"Invalid SNSO type: {self.snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
+                    f"Invalid SNSO type: {self.system.snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
                 )
 
         center_first = np.array([_[0] for _ in basis.center_first_and_last])
