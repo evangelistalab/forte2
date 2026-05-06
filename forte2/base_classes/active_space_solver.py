@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from abc import ABC, abstractmethod
+from abc import ABC
 
 from .mixins import MOsMixin, SystemMixin, MOSpaceMixin
 from forte2.state import StateAverageInfo, State, MOSpace
@@ -16,8 +16,6 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
     core_orbitals: list[int] = None
     active_orbitals: list[int] | list[list[int]] = None
     frozen_virtual_orbitals: list[int] = None
-    final_orbital: str = "semicanonical"
-    ci_algorithm: str = "hz"
     die_if_not_converged: bool = False
 
     def __post_init__(self):
@@ -31,24 +29,14 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
         self.ncis = self.sa_info.ncis
         self.weights = self.sa_info.weights
         self.weights_flat = self.sa_info.weights_flat
-        assert self.final_orbital in [
-            "semicanonical",
-            "original",
-        ], "final_orbital must be either 'semicanonical' or 'original'."
-
-        assert self.ci_algorithm.lower() in [
-            "hz",
-            "kh",
-            "exact",
-            "sparse",
-        ], "ci_algorithm must be one of 'hz', 'kh', 'exact', or 'sparse'."
 
     def _startup(self, two_component=False):
         if not self.parent_method.executed:
             self.parent_method.run()
 
         SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
+        # UHF will only provide alpha MOs, others are unchanged by the only_alpha kwarg
+        MOsMixin.copy_from_upstream(self, self.parent_method, only_alpha=True)
         if self.system.two_component:
             self._make_mo_space(two_component=True)
         else:
@@ -56,12 +44,12 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
 
     def _make_mo_space(self, two_component):
         # Ways of providing the MO space:
-        # 1. Via the parent method (if it has MOSpaceMixin).
+        # 1. Via the parent method (if it has mo_space).
         # 2. Via the mo_space parameter.
         # 3. Via the *_orbitals parameters (core_orbitals, active_orbitals, frozen_core_orbitals, frozen_virtual_orbitals).
         # If any one of 2-3 is provided, then 1 is ignored.
         # If more than one of 2-3 is provided, then an error is raised.
-        provided_via_parent = isinstance(self.parent_method, MOSpaceMixin)
+        provided_via_parent = hasattr(self.parent_method, "mo_space")
         provided_via_mo_space = self.mo_space is not None
         provided_via_orbitals = any(
             [
@@ -114,10 +102,12 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
                         else []
                     ),
                 )
-                logger.log_info1("ActiveSpaceSolver: mo_space constructed from provided orbital lists.")
+                logger.log_info1(
+                    "ActiveSpaceSolver: mo_space constructed from provided orbital lists."
+                )
                 return
         elif provided_via_parent:
-            MOSpaceMixin.copy_from_upstream(self, self.parent_method)
+            self.mo_space = self.parent_method.mo_space
             logger.log_info1("ActiveSpaceSolver: mo_space copied from parent method.")
             return
 

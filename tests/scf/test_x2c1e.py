@@ -3,7 +3,7 @@ import pytest
 from forte2 import System
 from forte2.scf import RHF, GHF, UHF
 from forte2.helpers.comparisons import approx
-from forte2.scf.scf_utils import convert_coeff_spatial_to_spinor
+from forte2.orbitals import convert_coeff_spatial_to_spinor
 from forte2.system import BSE_AVAILABLE
 from forte2.data import EH_TO_WN, EH_TO_EV
 
@@ -67,10 +67,10 @@ def test_lindep_sfx2c1e():
         auxiliary_basis_set="cc-pVQZ-JKFIT",
         unit="bohr",
         x2c_type="sf",
-        ortho_thresh=2e-7,
+        overlap_ortho_rtol=2e-7,
     )
 
-    scf = RHF(charge=0, econv=1e-10, dconv=1e-8)(system)
+    scf = RHF(charge=0, e_tol=1e-10, d_tol=1e-8)(system)
     scf.run()
     assert scf.E == approx(erhf)
     assert scf.nbf == 90
@@ -144,7 +144,7 @@ def test_so_from_sf_water():
         snso_type=None,
     )
     scf_so = GHF(charge=1)(system)
-    scf_so.C = convert_coeff_spatial_to_spinor(system, scf.C)
+    scf_so.C = convert_coeff_spatial_to_spinor(scf.C)
     scf_so.run()
     assert scf_so.E == approx(eghf)
 
@@ -164,4 +164,3 @@ def test_sox2c1e_sc():
     scf.run()
     l23_splitting = EH_TO_EV * (scf.eps[0][6] - scf.eps[0][5])
     assert l23_splitting == pytest.approx(l23_ref, abs=1e-5)
-

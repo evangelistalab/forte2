@@ -196,7 +196,7 @@ SparseState apply_operator_impl_grouped_string(bool is_antihermitian, const Spar
     std::unordered_map<String, std::vector<std::pair<Determinant, sparse_scalar_t>>, String::Hash>
         state_groups;
     for (const auto& [det, c] : state) {
-        state_groups[det.get_alfa_bits()].emplace_back(det, c);
+        state_groups[det.a_string()].emplace_back(det, c);
     }
 
     // Group the operators by common alfa annihilation strings
@@ -205,8 +205,7 @@ SparseState apply_operator_impl_grouped_string(bool is_antihermitian, const Spar
         String::Hash>
         sop_groups;
     for (const auto& [sqop, t] : sop.elements()) {
-        sop_groups[sqop.ann().get_alfa_bits()].emplace_back(sqop.ann(), sqop.cre(),
-                                                            sqop.sign_mask(), t);
+        sop_groups[sqop.ann().a_string()].emplace_back(sqop.ann(), sqop.cre(), sqop.sign_mask(), t);
     }
 
     // Call the kernel to apply the operator (adding the result)
@@ -220,8 +219,7 @@ SparseState apply_operator_impl_grouped_string(bool is_antihermitian, const Spar
     // Here we swap the annihilation and creation operators for the antihermitian case
     sop_groups.clear();
     for (const auto& [sqop, t] : sop.elements()) {
-        sop_groups[sqop.cre().get_alfa_bits()].emplace_back(sqop.cre(), sqop.ann(),
-                                                            sqop.sign_mask(), t);
+        sop_groups[sqop.cre().a_string()].emplace_back(sqop.cre(), sqop.ann(), sqop.sign_mask(), t);
     }
 
     // Call the kernel to apply the operator (subtracting the result)

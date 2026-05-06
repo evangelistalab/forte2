@@ -467,8 +467,8 @@ def test_sparse_operator_hamiltonian():
     )
 
     scf = forte2.scf.RHF(charge=0)(system)
-    scf.econv = 1e-10
-    scf.dconv = 1e-8
+    scf.e_tol = 1e-10
+    scf.d_tol = 1e-8
     scf.run()
     assert np.isclose(
         scf.E, erhf, atol=1e-10

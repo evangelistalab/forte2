@@ -25,12 +25,21 @@ void export_ci_strings_api(nb::module_& m) {
     nb::bind_vector<std::vector<forte2::Determinant>>(m, "DeterminantVector");
 
     nb::class_<CIStrings>(m, "CIStrings")
-        .def(nb::init<size_t, size_t, int, std::vector<std::vector<int>>, std::vector<int>,
-                      std::vector<int>>(),
-             "na"_a, "nb"_a, "symmetry"_a, "orbital_symmetry"_a, "gas_min"_a, "gas_max"_a,
-             "Initialize the CIStrings with number of alpha and beta electrons, symmetry, "
-             "orbital symmetry, minimum and maximum number of electrons in each GAS space, and "
-             "logging level")
+        .def(
+            "__init__",
+            [](CIStrings* self, Py_ssize_t na, Py_ssize_t nb, int symmetry,
+               std::vector<std::vector<int>> orbital_symmetry, std::vector<int> gas_min,
+               std::vector<int> gas_max) {
+                if (na < 0)
+                    throw nb::value_error("Number of alpha electrons must be non-negative.");
+                if (nb < 0)
+                    throw nb::value_error("Number of beta electrons must be non-negative.");
+                new (self) CIStrings(static_cast<size_t>(na), static_cast<size_t>(nb), symmetry,
+                                     orbital_symmetry, gas_min, gas_max);
+            },
+            "na"_a, "nb"_a, "symmetry"_a, "orbital_symmetry"_a, "gas_min"_a, "gas_max"_a,
+            "Initialize the CIStrings with number of alpha and beta electrons, symmetry, "
+            "orbital symmetry, minimum and maximum number of electrons in each GAS space")
         .def_prop_ro("alfa_address", &CIStrings::alfa_address)
         .def_prop_ro("na", &CIStrings::na)
         .def_prop_ro("nb", &CIStrings::nb)
@@ -68,6 +77,8 @@ void export_ci_sigma_builder_api(nb::module_& m) {
         .def("slater_rules_csf", &CISigmaBuilder::slater_rules_csf, "dets"_a, "spin_adapter"_a,
              "I"_a, "J"_a)
         .def("Hamiltonian", &CISigmaBuilder::Hamiltonian, "basis"_a, "sigma"_a)
+        .def("make_sparse_state", &CISigmaBuilder::make_sparse_state, "C"_a, "threshold"_a = 1e-12,
+             "Convert a CI vector to a sparse state")
         // Spin-free RDMs and cumulants
         .def("sf_1rdm", &CISigmaBuilder::compute_sf_1rdm, "C_left"_a, "C_right"_a,
              "Compute the spin-free one-electron reduced density matrix")
@@ -98,6 +109,12 @@ void export_ci_sigma_builder_api(nb::module_& m) {
              "Compute the alpha-beta-beta three-electron reduced density matrix")
         .def("bbb_3rdm", &CISigmaBuilder::compute_bbb_3rdm, "C_left"_a, "C_right"_a,
              "Compute the beta-beta-beta three-electron reduced density matrix")
+        .def("a_1trdm", &CISigmaBuilder::compute_a_1trdm, "sigmabuilder_right"_a, "C_left"_a,
+             "C_right"_a, "Compute the alpha one-electron transition reduced density matrix")
+        .def("b_1trdm", &CISigmaBuilder::compute_b_1trdm, "sigmabuilder_right"_a, "C_left"_a,
+             "C_right"_a, "Compute the beta one-electron transition reduced density matrix")
+        .def("sf_1trdm", &CISigmaBuilder::compute_sf_1trdm, "sigmabuilder_right"_a, "C_left"_a,
+             "C_right"_a, "Compute the spin-free one-electron transition reduced density matrix")
         .def("avg_build_time", &CISigmaBuilder::avg_build_time)
         .def("set_log_level", &CISigmaBuilder::set_log_level, "level"_a,
              "Set the logging level for the class")

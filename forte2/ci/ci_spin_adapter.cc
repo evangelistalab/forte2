@@ -212,7 +212,7 @@ void CISpinAdapter::conf_to_csfs(const Configuration& conf, det_hash<size_t>& de
     size_t temp = ncoupling_;
     for (const auto& [i, j, o] : N_to_overlaps_[N]) {
         const auto& det_occ = determinant_occ[j];
-        det.set_str(docc, docc);
+        det.set_strings(docc, docc);
         // keep track of the sign of the singly occupied orbitals
         double sign = 1.0;
         for (int k = N - 1; k >= 0; k--) {
@@ -238,7 +238,7 @@ auto CISpinAdapter::make_spin_couplings(int N, int twoS) -> std::vector<String> 
         return std::vector<String>(1, String());
     std::vector<String> couplings;
     auto nup = (N + twoS) / 2;
-    String coupling;
+    auto coupling = String::zero();
     const auto coupling_second = std::next(coupling.begin(), 1); // to keep the first coupling as up
     const auto coupling_end = std::next(coupling.begin(), N);
     // up = false = 0, down = true = 1
@@ -269,15 +269,16 @@ auto CISpinAdapter::make_determinant_occupations(int N, int twoMs) -> std::vecto
     if (N == 0)
         return std::vector<String>(1, String());
     auto nup = (N + twoMs) / 2;
-    String det_occ;
-    const auto det_occ_begin = det_occ.begin();
-    const auto det_occ_end = std::next(det_occ_begin, N);
+    auto det_occ = String::zero();
     // true = 1 = up, false = 0 = down
     // The det_occ should always start with up
     for (int i = 0; i < nup; i++)
         det_occ[i] = false;
     for (int i = nup; i < N; i++)
         det_occ[i] = true;
+
+    const auto det_occ_begin = det_occ.begin();
+    const auto det_occ_end = std::next(det_occ.begin(), N);
     /// Generate all permutations of the path
     do {
         det_occs.push_back(det_occ);

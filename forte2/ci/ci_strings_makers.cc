@@ -35,8 +35,7 @@ StringList make_strings_with_occupation(size_t num_spaces, int nirrep,
             // generate all the strings for the n-th GAS space with gas_ne electrons in gas_norb
             // orbitals
             if ((gas_ne >= 0) and (gas_ne <= gas_norb)) {
-                String I;
-                I.clear();
+                auto I = String::zero();
                 for (int i = std::max(0, gas_norb - gas_ne); i < gas_norb; ++i)
                     I[i] = true; // Generate the string 000011111
 
@@ -44,8 +43,7 @@ StringList make_strings_with_occupation(size_t num_spaces, int nirrep,
                 const auto I_end = std::next(I.begin(), gas_norb);
 
                 do {
-                    String J;
-                    J.clear();
+                    auto J = String::zero();
                     for (int i = 0; i < gas_norb; ++i) {
                         if (I[i])
                             J[space_mos[n][i]] = true;
@@ -58,8 +56,7 @@ StringList make_strings_with_occupation(size_t num_spaces, int nirrep,
         auto product_strings = math::cartesian_product(gas_space_string);
 
         for (const auto& strings : product_strings) {
-            String I;
-            I.clear();
+            auto I = String::zero();
             for (const auto& J : strings) {
                 I |= J;
             }
@@ -223,7 +220,6 @@ H1List make_1h_list(const StringList& strings, std::shared_ptr<StringAddress> ad
     if ((k >= 0) and (k <= n)) { // check that (n > 0) makes sense.
         for (const auto& string_class : strings) {
             for (const auto& I : string_class) {
-                // std::cout << "String " < < < < std::endl;
                 const auto& [add_I, class_I] = addresser->address_and_class(I);
                 for (size_t p = 0; p < nmo; ++p) {
                     if (I[p]) {
@@ -325,10 +321,11 @@ H3List make_3h_list(const StringList& strings, std::shared_ptr<StringAddress> ad
 }
 
 std::map<std::pair<int, int>, std::vector<std::pair<int, int>>>
-find_string_map(const CIStrings& list_left, const CIStrings& list_right, bool alfa) {
+find_string_map(const CIStrings& list_left, const CIStrings& list_right, Spin spin) {
     std::map<std::pair<int, int>, std::vector<std::pair<int, int>>> m;
-    const auto& strings_right = alfa ? list_right.beta_strings() : list_right.alfa_strings();
-    const auto& address_left = alfa ? list_left.beta_address() : list_left.alfa_address();
+    const auto& strings_right =
+        is_alpha(spin) ? list_right.beta_strings() : list_right.alfa_strings();
+    const auto& address_left = is_alpha(spin) ? list_left.beta_address() : list_left.alfa_address();
     // loop over all the right string classes (I)
     for (int class_I{0}; const auto& string_class_right : strings_right) {
         // loop over all the right strings (I)
@@ -346,10 +343,11 @@ find_string_map(const CIStrings& list_left, const CIStrings& list_right, bool al
     return m;
 }
 
-VOListMap find_ov_string_map(const CIStrings& list_left, const CIStrings& list_right, bool alfa) {
-    const auto& strings_right = alfa ? list_right.alfa_strings() : list_right.beta_strings();
-    const auto& I_address = alfa ? list_right.alfa_address() : list_right.beta_address();
-    const auto& J_address = alfa ? list_left.alfa_address() : list_left.beta_address();
+VOListMap find_ov_string_map(const CIStrings& list_left, const CIStrings& list_right, Spin spin) {
+    const auto& strings_right =
+        is_alpha(spin) ? list_right.alfa_strings() : list_right.beta_strings();
+    const auto& I_address = is_alpha(spin) ? list_right.alfa_address() : list_right.beta_address();
+    const auto& J_address = is_alpha(spin) ? list_left.alfa_address() : list_left.beta_address();
     auto vo_list = make_vo_list(strings_right, I_address, J_address);
     return vo_list;
 }

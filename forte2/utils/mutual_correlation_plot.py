@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-from matplotlib.patches import Polygon
 from matplotlib import colormaps
 from matplotlib import offsetbox
 from matplotlib.path import Path
@@ -294,10 +293,10 @@ def mutual_correlation_plot(
 
 
 if __name__ == "__main__":
-    from forte2.systems import System
-    from forte2.solvers.hf import RHF
-    from forte2.solvers.ci import CI
-    from forte2.states import State
+    from forte2.system import System
+    from forte2.scf.rhf import RHF
+    from forte2.ci.ci import CI
+    from forte2.state import State
     from forte2.props.mutual_correlation import MutualCorrelationAnalysis
 
     xyz = f"""
@@ -307,7 +306,7 @@ if __name__ == "__main__":
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     ci = CI(
         State(system=system, multiplicity=1, ms=0.0), active_orbitals=list(range(10))
     )(rhf)

@@ -1,4 +1,3 @@
-from scipy.linalg import eigh
 import pytest
 
 import forte2

@@ -152,17 +152,33 @@ void export_basis_api(nb::module_& sub_m) {
         .def("set_name", &Basis::set_name, "name"_a)
         .def("__getitem__", &Basis::operator[], "i"_a)
         .def("__len__", &Basis::size)
-        .def_prop_ro("shell_first_and_size", &Basis::shell_first_and_size)
-        .def_prop_ro("center_first_and_last",
-                     [](const Basis& b) { return b.center_first_and_last(false); })
-        .def_prop_ro("center_first_and_last_shell",
-                     [](const Basis& b) { return b.center_first_and_last(true); })
-        .def_prop_ro("size", &Basis::size)
-        .def_prop_ro("max_l", &Basis::max_l)
-        .def_prop_ro("name", &Basis::name)
-        .def_prop_ro("max_nprim", &Basis::max_nprim)
-        .def_prop_ro("nprim", &Basis::max_nprim)
-        .def_prop_ro("nshells", &Basis::nshells)
+        .def_prop_ro("shell_first_and_size", &Basis::shell_first_and_size,
+                     "Returns a vector of pairs of the first index and size of each shell in the "
+                     "basis set. The first index is the index of the first basis function in the "
+                     "shell, and the size is the number of basis functions in the shell.")
+        .def_prop_ro("shell_offsets", &Basis::shell_offsets,
+                     "Returns a vector of the indices of the first basis function in each shell. "
+                     "The last element is the total number of basis functions in the basis set.")
+        .def_prop_ro(
+            "center_first_and_last", [](const Basis& b) { return b.center_first_and_last(false); },
+            "Returns a vector of pairs of the first and last index of the basis functions on a "
+            "given center in the basis set.")
+        .def_prop_ro(
+            "center_first_and_last_shell",
+            [](const Basis& b) { return b.center_first_and_last(true); },
+            "Returns a vector of pairs of the first and last index of the shells on a given center "
+            "in the basis set.")
+        .def_prop_ro("size", &Basis::size, "Returns the number of basis functions in the basis set")
+        .def_prop_ro("max_l", &Basis::max_l,
+                     "Returns the maximum angular momentum of the shells in the basis set")
+        .def_prop_ro("name", &Basis::name, "Returns the name of the basis set")
+        .def_prop_ro("max_nprim", &Basis::max_nprim,
+                     "Returns the maximum number of primitive Gaussians in shells of the basis set")
+        .def_prop_ro("nprim", &Basis::max_nprim,
+                     "Returns the number of primitive Gaussians in shells of the basis set")
+        .def_prop_ro("max_nbasis", &Basis::max_nbasis,
+                     "Returns the maximum number of basis functions in shells of the basis set")
+        .def_prop_ro("nshells", &Basis::nshells, "Returns the number of shells in the basis set")
         .def("__repr__", [](const Basis& b) {
             std::ostringstream oss;
             oss << "<Basis '" << b.name() << "' with " << b.size() << " basis functions>";
@@ -355,6 +371,23 @@ void export_two_electron_api(nb::module_& sub_m) {
         "basis1"_a, "basis2"_a, "basis3"_a);
 
     sub_m.def(
+        "coulomb_3c_by_shell",
+        [](const Basis& basis1, const Basis& basis2, const Basis& basis3,
+           const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices) {
+            return coulomb_3c_by_shell(basis1, basis2, basis3, shell_slices);
+        },
+        "basis1"_a, "basis2"_a, "basis3"_a, "shell_slices"_a);
+
+    sub_m.def(
+        "coulomb_3c_by_shell",
+        [](const Basis& basis1, const Basis& basis2, const Basis& basis3,
+           const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices,
+           np_tensor3_c& buffer) {
+            coulomb_3c_by_shell(basis1, basis2, basis3, shell_slices, buffer);
+        },
+        "basis1"_a, "basis2"_a, "basis3"_a, "shell_slices"_a, "buffer"_a);
+
+    sub_m.def(
         "coulomb_2c",
         [](const Basis& basis1, const Basis& basis2) { return coulomb_2c(basis1, basis2); },
         "basis1"_a, "basis2"_a);
@@ -418,9 +451,20 @@ void export_libcint_compute_api(nb::module_& sub_m) {
     sub_m.def("cint_int2c2e_sph", &cint_int2c2e_sph, "shell_slice"_a, "atm"_a, "bas"_a, "env"_a,
               "Compute the two-center two-electron integral matrix using libcint in spherical "
               "harmonics.");
-    sub_m.def("cint_int3c2e_sph", &cint_int3c2e_sph, "shell_slice"_a, "atm"_a, "bas"_a, "env"_a,
-              "Compute the three-center two-electron integral matrix using libcint in spherical "
-              "harmonics.");
+    sub_m.def(
+        "cint_int3c2e_sph",
+        [](const std::vector<int>& shell_slice, np_matrix_int atm, np_matrix_int bas,
+           np_vector env) { return cint_int3c2e_sph(shell_slice, atm, bas, env); },
+        "shell_slice"_a, "atm"_a, "bas"_a, "env"_a,
+        "Compute the three-center two-electron integral tensor using libcint in spherical "
+        "harmonics.");
+    sub_m.def(
+        "cint_int3c2e_sph",
+        [](const std::vector<int>& shell_slice, np_matrix_int atm, np_matrix_int bas, np_vector env,
+           np_tensor3_c& ints) { return cint_int3c2e_sph(shell_slice, atm, bas, env, ints); },
+        "shell_slice"_a, "atm"_a, "bas"_a, "env"_a, "ints"_a,
+        "Compute the three-center two-electron integral tensor using libcint in spherical "
+        "harmonics, with a user-provided buffer for the result.");
 }
 #else
 // When libcint is disabled, define a no-op exporter

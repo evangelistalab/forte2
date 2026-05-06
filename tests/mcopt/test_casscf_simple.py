@@ -1,4 +1,4 @@
-from forte2 import System, RHF, MCOptimizer, State
+from forte2 import System, RHF, MCOptimizer, State, CISolver
 from forte2.helpers.comparisons import approx
 
 
@@ -13,8 +13,9 @@ def test_casscf_h2():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
-    mc = MCOptimizer(State(nel=2, multiplicity=1, ms=0.0), active_orbitals=[0, 1])(rhf)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = CISolver(State(nel=2, multiplicity=1, ms=0.0), active_orbitals=[0, 1])
+    mc = MCOptimizer(ci_solver)(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)
@@ -31,12 +32,15 @@ def test_casscf_n2():
     """
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
-    rhf = RHF(charge=0, econv=1e-12)(system)
-    mc = MCOptimizer(
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = CISolver(
         State(nel=14, multiplicity=1, ms=0.0),
         active_orbitals=[4, 5, 6, 7, 8, 9],
         core_orbitals=[0, 1, 2, 3],
-        gconv=1e-7,
+    )
+    mc = MCOptimizer(
+        ci_solver,
+        g_tol=1e-7,
     )(rhf)
     mc.run()
     assert rhf.E == approx(erhf)
@@ -60,13 +64,16 @@ def test_casscf_water():
         unit="angstrom",
     )
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-12)(system)
-    mc = MCOptimizer(
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-12)(system)
+    ci_solver = CISolver(
         State(nel=10, multiplicity=1, ms=0.0),
         active_orbitals=[1, 2, 3, 4, 5, 6],
         core_orbitals=[0],
-        gconv=1e-6,
-        econv=1e-10,
+    )
+    mc = MCOptimizer(
+        ci_solver,
+        g_tol=1e-6,
+        e_tol=1e-10,
     )(rhf)
     mc.run()
 

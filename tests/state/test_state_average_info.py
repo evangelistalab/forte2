@@ -63,3 +63,11 @@ def test_state_average_info():
     weights_flat = np.array([1, 0.3, 4, 0.5, 10, 0.3])
     assert sa_info.weights_flat.sum() == approx(1.0)
     assert sa_info.weights_flat == approx(weights_flat / weights_flat.sum())
+    assert sa_info.absolute_root_map == [
+        (0, 0),
+        (0, 1),
+        (1, 0),
+        (2, 0),
+        (2, 1),
+        (2, 2),
+    ]

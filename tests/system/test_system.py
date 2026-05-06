@@ -159,6 +159,21 @@ def test_custom_basis_rhf():
     assert scf.E == pytest.approx(-112.484140615262, rel=1e-8, abs=1e-8)
 
 
+def test_missing_auxiliary_basis():
+    xyz = """
+    C 0 0 0
+    O 0 0 1.2
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+    )
+    scf = RHF(charge=0)(system)
+    # verify that an error is raised when the auxiliary basis is missing
+    with pytest.raises(ValueError, match="Auxiliary basis is not defined"):
+        scf.run()
+
+
 def test_zmatrix_0():
     # Test for Z-matrix input, with mixed line breaks, spacings and indentations
     zmat = """

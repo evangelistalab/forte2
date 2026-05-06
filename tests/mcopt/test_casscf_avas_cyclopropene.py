@@ -1,4 +1,4 @@
-from forte2 import System, RHF, MCOptimizer, AVAS, State
+from forte2 import System, RHF, MCOptimizer, AVAS, State, CISolver
 from forte2.helpers.comparisons import approx
 
 
@@ -24,14 +24,15 @@ def test_casscf_cyclopropene():
         auxiliary_basis_set="def2-universal-JKFIT",
     )
 
-    rhf = RHF(charge=0, econv=1e-6)(system)
+    rhf = RHF(charge=0, e_tol=1e-6)(system)
     avas = AVAS(
         subspace=["C(2p)"],
         subspace_pi_planes=[["C1-3"]],
         selection_method="total",
         num_active=3,
     )(rhf)
-    mc = MCOptimizer(State(nel=rhf.nel, multiplicity=1, ms=0.0))(avas)
+    ci_solver = CISolver(State(nel=rhf.nel, multiplicity=1, ms=0.0))
+    mc = MCOptimizer(ci_solver)(avas)
     mc.run()
 
     assert rhf.E == approx(erhf)

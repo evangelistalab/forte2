@@ -5,6 +5,9 @@
 #include "ci/ci_strings_defs.h"
 #include "ci/ci_string_address.h"
 #include "ci/ci_string_class.h"
+#include "ci/ci_strings.h"
+
+#include "helpers/spin.h"
 
 namespace forte2 {
 
@@ -69,5 +72,10 @@ H3List make_3h_list(const StringList& strings, std::shared_ptr<StringAddress> ad
 /// Make 1-hole lists (I -> a_p I = sgn J)
 H1List2 make_1h_list2(const StringList& strings, std::shared_ptr<StringAddress> address,
                       std::shared_ptr<StringAddress> address_1h);
+
+std::map<std::pair<int, int>, std::vector<std::pair<int, int>>>
+find_string_map(const CIStrings& list_left, const CIStrings& list_right, Spin spin);
+
+VOListMap find_ov_string_map(const CIStrings& list_left, const CIStrings& list_right, Spin spin);
 
 } // namespace forte2

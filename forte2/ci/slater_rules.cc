@@ -4,19 +4,43 @@ namespace forte2 {
 
 SlaterRules::SlaterRules(int norb, double scalar_energy, np_matrix one_electron_integrals,
                          np_tensor4 two_electron_integrals)
-    : norb_(norb), scalar_energy_(scalar_energy), one_electron_integrals_(one_electron_integrals),
-      two_electron_integrals_(two_electron_integrals) {}
+    : norb_(norb), norb2_(norb * norb), norb3_(norb * norb * norb), scalar_energy_(scalar_energy) {
+
+    // Precompute the one-electron, Coulomb and Exchange integrals
+    h_.resize(norb_ * norb_);
+    J_.resize(norb_ * norb_);
+    JK_.resize(norb_ * norb_);
+    f_J_.resize(norb_ * norb_ * norb_);
+    f_JK_.resize(norb_ * norb_ * norb_);
+    v_.resize(norb_ * norb_ * norb_ * norb_);
+    va_.resize(norb_ * norb_ * norb_ * norb_);
+    auto h_view = one_electron_integrals.view();
+    auto v_view = two_electron_integrals.view();
+
+    for (int p = 0; p < norb_; ++p) {
+        for (int q = 0; q < norb_; ++q) {
+            h_[p * norb_ + q] = h_view(p, q);                             // <p|h|q>
+            J_[p * norb_ + q] = v_view(p, q, p, q);                       // <pq|pq>
+            JK_[p * norb_ + q] = v_view(p, q, p, q) - v_view(p, q, q, p); // <pq|pq> - <pq|qp>
+            for (int r = 0; r < norb_; ++r) {
+                f_J_[p * norb2_ + q * norb_ + r] = v_view(p, r, q, r); // <pr|qr>
+                f_JK_[p * norb2_ + q * norb_ + r] =
+                    v_view(p, r, q, r) - v_view(p, r, r, q); // <pr|qr> - <pr|rq>
+                for (int s = 0; s < norb_; ++s) {
+                    v_[p * norb3_ + q * norb2_ + r * norb_ + s] = v_view(p, q, r, s); // <pq|rs>
+                    va_[p * norb3_ + q * norb2_ + r * norb_ + s] =
+                        v_view(p, q, r, s) - v_view(p, q, s, r); // <pq||rs> = <pq|rs> - <pq|sr>
+                }
+            }
+        }
+    }
+}
 
 double SlaterRules::energy(const Determinant& det) const {
     double energy = scalar_energy_;
-
-    auto h = one_electron_integrals_.view();
-    auto v = two_electron_integrals_.view();
-
-    String Ia = det.get_alfa_bits();
-    String Ib = det.get_beta_bits();
-    String Iac;
-    String Ibc;
+    String Ia = det.a_string();
+    String Ib = det.b_string();
+    String tempI;
 
     int naocc = Ia.count();
     int nbocc = Ib.count();
@@ -25,39 +49,45 @@ double SlaterRules::energy(const Determinant& det) const {
         int p = Ia.find_and_clear_first_one();
         energy += h(p, p);
 
-        Iac = Ia;
+        tempI = Ia;
         for (int AA = A + 1; AA < naocc; ++AA) {
-            int q = Iac.find_and_clear_first_one();
-            energy += v(p, q, p, q) - v(p, q, q, p); // <pq||pq> - <pq|qp>
+            int q = tempI.find_and_clear_first_one();
+            energy += JK(p, q); // <pq|pq> - <pq|qp>
         }
 
-        Ibc = Ib;
+        tempI = Ib;
         for (int B = 0; B < nbocc; ++B) {
-            int q = Ibc.find_and_clear_first_one();
-            energy += v(p, q, p, q); // <pq|pq>
+            int q = tempI.find_and_clear_first_one();
+            energy += J(p, q); // <pq|pq>
         }
     }
 
     for (int B = 0; B < nbocc; ++B) {
         int p = Ib.find_and_clear_first_one();
         energy += h(p, p);
-        Ibc = Ib;
+        tempI = Ib;
         for (int BB = B + 1; BB < nbocc; ++BB) {
-            int q = Ibc.find_and_clear_first_one();
-            energy += v(p, q, p, q) - v(p, q, q, p); // <pq||pq> - <pq|qp>
+            int q = tempI.find_and_clear_first_one();
+            energy += JK(p, q); // <pq|pq> - <pq|qp>
         }
     }
 
     return energy;
 }
 
+np_vector SlaterRules::energies(const std::vector<Determinant>& dets) const {
+    auto energies = make_zeros<nb::numpy, double, 1>({dets.size()});
+    auto energies_view = energies.view();
+    for (size_t i{0}; i < dets.size(); ++i) {
+        energies_view(i) = energy(dets[i]);
+    }
+    return energies;
+}
+
 double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs) const {
     // we first check that the two determinants have equal Ms
     if ((lhs.count_a() != rhs.count_a()) or (lhs.count_b() != rhs.count_b()))
         return 0.0;
-
-    auto h = one_electron_integrals_.view();
-    auto v = two_electron_integrals_.view();
 
     int nadiff = 0;
     int nbdiff = 0;
@@ -84,11 +114,11 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
                 matrix_element += h(p, p);
             for (size_t q = 0; q < norb_; ++q) {
                 if (lhs.na(p) and lhs.na(q))
-                    matrix_element += 0.5 * (v(p, q, p, q) - v(p, q, q, p)); // <pq||pq> - <pq|qp>
+                    matrix_element += 0.5 * JK(p, q); // <pq|pq> - <pq|qp>
                 if (lhs.nb(p) and lhs.nb(q))
-                    matrix_element += 0.5 * (v(p, q, p, q) - v(p, q, q, p)); // <pq||pq> - <pq|qp>
+                    matrix_element += 0.5 * JK(p, q); // <pq|pq> - <pq|qp>
                 if (lhs.na(p) and lhs.nb(q))
-                    matrix_element += v(p, q, p, q);
+                    matrix_element += J(p, q); // <pq|pq>
             }
         }
     }
@@ -109,7 +139,7 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
         matrix_element = sign * h(i, j);
         for (size_t p = 0; p < norb_; ++p) {
             if (lhs.na(p) and rhs.na(p)) {
-                matrix_element += sign * (v(i, p, j, p) - v(i, p, p, j)); // <ip|jp> - <ip|pj>
+                matrix_element += sign * va(i, p, j, p); // <ip|jp> - <ip|pj>
             }
             if (lhs.nb(p) and rhs.nb(p)) {
                 matrix_element += sign * v(i, p, j, p); // <ip|jp>
@@ -135,7 +165,7 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
                 matrix_element += sign * v(p, i, p, j); // <pi|pj>
             }
             if (lhs.nb(p) and rhs.nb(p)) {
-                matrix_element += sign * (v(i, p, j, p) - v(i, p, p, j)); // <ip|jp> - <ip|pj>
+                matrix_element += sign * va(i, p, j, p); // <ip|jp> - <ip|pj>
             }
         }
     }
@@ -164,7 +194,7 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
             }
         }
         double sign = lhs.slater_sign_aaaa(i, j, k, l);
-        matrix_element = sign * (v(i, j, k, l) - v(i, j, l, k)); // <ij||kl>
+        matrix_element = sign * va(i, j, k, l); // <ij||kl>
     }
 
     // Slater rule 3 PhiI = k_a^+ l_a^+ j_a i_a PhiJ
@@ -192,7 +222,7 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
             }
         }
         double sign = lhs.slater_sign_bbbb(i, j, k, l);
-        matrix_element = sign * (v(i, j, k, l) - v(i, j, l, k)); // <ij||kl>
+        matrix_element = sign * va(i, j, k, l); // <ij||kl>
     }
 
     // Slater rule 3 PhiI = j_a^+ i_a PhiJ
@@ -217,12 +247,26 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
     return (matrix_element);
 }
 
+double SlaterRules::singles_coupling_a(size_t i, size_t a, const Determinant& d) const noexcept {
+    double coupling = h(i, a);
+    d.for_all_a([&](size_t j) { coupling += f_JK(i, a, j); });
+    d.for_all_b([&](size_t j) { coupling += f_J(i, a, j); });
+    return coupling;
+}
+
+double SlaterRules::singles_coupling_b(size_t i, size_t a, const Determinant& d) const noexcept {
+    double coupling = h(i, a);
+    d.for_all_a([&](size_t j) { coupling += f_J(i, a, j); });
+    d.for_all_b([&](size_t j) { coupling += f_JK(i, a, j); });
+    return coupling;
+}
+
 RelSlaterRules::RelSlaterRules(int nspinor, double scalar_energy,
                                np_matrix_complex one_electron_integrals,
-                               np_tensor4_complex two_electron_integrals)
+                               np_tensor4_complex two_electron_integrals, bool tei_is_asym)
     : nspinor_(nspinor), scalar_energy_(scalar_energy),
       one_electron_integrals_(one_electron_integrals),
-      two_electron_integrals_(two_electron_integrals) {}
+      two_electron_integrals_(two_electron_integrals), tei_is_asym_(tei_is_asym) {}
 
 double RelSlaterRules::energy(const Determinant& det) const {
     std::complex<double> energy = scalar_energy_;
@@ -231,14 +275,32 @@ double RelSlaterRules::energy(const Determinant& det) const {
     auto v = two_electron_integrals_.view();
 
     auto occ = det.get_alfa_occ(nspinor_);
-    for (auto p : occ) {
-        energy += h(p, p); // <p|p>
-        for (auto q : occ) {
-            energy += 0.5 * (v(p, q, p, q) - v(p, q, q, p)); // <pq||pq>
+    if (tei_is_asym_) {
+        for (auto p : occ) {
+            energy += h(p, p); // <p|p>
+            for (auto q : occ) {
+                energy += 0.5 * v(p, q, p, q); // <pq||pq>
+            }
+        }
+    } else {
+        for (auto p : occ) {
+            energy += h(p, p); // <p|p>
+            for (auto q : occ) {
+                energy += 0.5 * (v(p, q, p, q) - v(p, q, q, p)); // <pq||pq>
+            }
         }
     }
 
     return energy.real();
+}
+
+np_vector RelSlaterRules::energies(const std::vector<Determinant>& dets) const {
+    auto energies = make_zeros<nb::numpy, double, 1>({dets.size()});
+    auto energies_view = energies.view();
+    for (size_t i{0}; i < dets.size(); ++i) {
+        energies_view(i) = energy(dets[i]);
+    }
+    return energies;
 }
 
 std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
@@ -275,10 +337,17 @@ std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
 
         auto occ = lhs.get_alfa_occ(nspinor_);
 
-        for (auto j : occ) {
-            matrix_element += v(i, j, a, j) - v(i, j, j, a); // \sum_j<ij||aj>
+        if (tei_is_asym_) {
+            for (auto j : occ) {
+                matrix_element += v(i, j, a, j); // \sum_j<ij||aj>
+            }
+            matrix_element *= sign;
+        } else {
+            for (auto j : occ) {
+                matrix_element += v(i, j, a, j) - v(i, j, j, a); // \sum_j<ij||aj>
+            }
+            matrix_element *= sign;
         }
-        matrix_element *= sign;
     }
 
     if (ndiff == 2) {
@@ -287,7 +356,8 @@ std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
         size_t a = excitation_connection[1][0];
         size_t b = excitation_connection[1][1];
         double sign = lhs.slater_sign_aaaa(i, j, a, b);
-        matrix_element += sign * (v(i, j, a, b) - v(i, j, b, a)); // <ij||ab>
+        auto v_el = tei_is_asym_ ? v(i, j, a, b) : v(i, j, a, b) - v(i, j, b, a); // <ij||ab>
+        matrix_element += sign * v_el;                                            // <ij||ab>
     }
 
     return matrix_element;

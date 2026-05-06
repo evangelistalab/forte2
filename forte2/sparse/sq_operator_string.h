@@ -158,7 +158,7 @@ class SQOperatorProductComputer {
     Determinant con_rhs_cre_;
     Determinant ucon_rhs_ann_;
     sparse_scalar_t phase_;
-    std::vector<short> set_bits_ = std::vector<short>(max_contracted_ops_, 0);
+    std::vector<size_t> set_bits_ = std::vector<size_t>(max_contracted_ops_, 0);
     std::bitset<max_contracted_ops_> sign_;
 };
 

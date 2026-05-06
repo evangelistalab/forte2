@@ -13,7 +13,7 @@ SparseState get_sparse_state(np_vector c, const CIStrings& lists) {
     auto c_span = vector::as_span<double>(c);
     SparseState state;
     auto dets = lists.make_determinants();
-    for (size_t i{0}, maxi{dets.size()}; i < maxi; ++i) {
+    for (std::size_t i{0}, maxi{dets.size()}; i < maxi; ++i) {
         state[dets[i]] = c_span[i];
     }
     return state;

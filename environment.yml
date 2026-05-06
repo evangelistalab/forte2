@@ -13,7 +13,7 @@ dependencies:
     - cmake=3.26
     - numpy
     - scipy
-    - eigen
+    - eigen=3.4.0
     - boost
     - scikit-build-core>=0.10
     - pytest
