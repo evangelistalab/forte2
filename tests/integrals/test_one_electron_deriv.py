@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 import forte2
 from forte2.helpers.comparisons import approx_abs
@@ -16,6 +17,17 @@ def _set_up_tests(xyz0, xyzp, xyzm, basis_set):
     dm = rng.standard_normal(size=(nbasis, nbasis))
     dm = dm @ dm.T
     return system0, systemp, systemm, dm
+
+
+def test_deriv_rejects_mismatched_charge_centers():
+    system = forte2.System(xyz="H 0.0 0.0 0.0 \n H 0.0 0.0 1.0", basis_set="sto-3g")
+    dm = np.eye(len(system.basis))
+
+    with pytest.raises(ValueError, match="basis1 has 2 centers, but charges has 1 centers"):
+        forte2.ints.overlap_deriv(system.basis, system.basis, dm, system.atoms[:1])
+
+    with pytest.raises(ValueError, match="basis1 center 0 does not match charges center 0"):
+        forte2.ints.overlap_deriv(system.basis, system.basis, dm, list(reversed(system.atoms)))
 
 
 def test_overlap_deriv_h2_minbas():
