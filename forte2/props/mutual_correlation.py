@@ -381,12 +381,14 @@ class UMP2MPQFast:
 
         self.M1 = None
         self.M2 = None
-        self.Γ1 = self.γa + self.γb
+        gamma_sf = self.γa + self.γb
+        gamma_sf_no = Ua.T @ gamma_sf @ Ua
+        self.Γ1 = gamma_sf_no
 
     @property
     def occs(self):
         # spin-summed occupations for plotting
-        return self.occs_a + self.occs_b
+        return np.diag(self.Γ1)
 
     def _build_block_no_rotation(self, Gamma1, nocc):
         nmo = Gamma1.shape[0]
@@ -407,7 +409,11 @@ class UMP2MPQFast:
         U[:nocc, :nocc] = Uo
         U[nocc:, nocc:] = Uv
 
-        return U, None
+        occs = np.zeros(nmo)
+        occs[:nocc] = occ_vals
+        occs[nocc:] = vir_vals
+
+        return U, occs
 
     def _rotate_t2(self, t2, Uo, Uv):
         return np.einsum(
