@@ -227,16 +227,16 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         )
         logger.log_info1("-" * width)
 
-        # E_ci: list[float], CI eigenvalues
-        # E_avg: float, ensemble average energy
-        # E_orb: float, energy after orbital optimization
+        # CI eigenvalues
         self.E_ci = np.array(self.ci_solver.E)
-        self.E_avg = self.ci_solver.compute_average_energy()
-        self.E = self.E_avg
         self.E_ci_old = self.E_ci.copy()
+        # Ensemble average energy
+        self.E_avg = self.ci_solver.compute_average_energy()
+        self.E_avg_old = self.E_avg        
+        self.E = self.E_avg
+        # Energy after orbital optimization
         self.E_orb = self.E_avg
         self.E_orb_old = self.E_orb
-        self.E_avg_old = self.E_avg
 
         self.g1_act = self.make_average_1rdm()
         g2_act = self.make_average_2rdm()
