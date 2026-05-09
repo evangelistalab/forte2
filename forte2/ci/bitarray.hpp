@@ -55,7 +55,8 @@ template <size_t N> class BitArray {
 
     using container_t = std::array<word_t, nwords_>;
 
-    /// @brief Default constructor. The bits are initialized to random values (performance)
+    /// @brief Default constructor. The bits are uninitialized/indeterminate for performance.
+    /// Use the static function BitArray::zero() if you need all bits cleared (set to 0).
     BitArray() = default;
 
     BitArray(const std::vector<bool>& v) {
@@ -808,7 +809,7 @@ template <size_t N> class BitArray {
 
     // ==> Protected Data <==
 
-    /// The bits stored as a vector of words (random initialization at construction)
+    /// The bits stored as a vector of words uninitialized/indeterminate for performance.
     container_t words_;
 };
 
