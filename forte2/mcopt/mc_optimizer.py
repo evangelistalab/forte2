@@ -227,14 +227,16 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         )
         logger.log_info1("-" * width)
 
-        # E_ci: list[float],CI eigenvalues,
-        # E_avg: float, ensemble average energy,
-        # E_orb: float, energy after orbital optimization
+        # CI eigenvalues
         self.E_ci = np.array(self.ci_solver.E)
         self.E_ci_old = self.E_ci.copy()
-        self.E_avg = self.E_orb = self.ci_solver.compute_average_energy()
-        self.E_orb_old = self.E_orb
+        # Ensemble average energy
+        self.E_avg = self.ci_solver.compute_average_energy()
         self.E_avg_old = self.E_avg
+        self.E = self.E_avg
+        # Energy after orbital optimization
+        self.E_orb = self.E_avg
+        self.E_orb_old = self.E_orb
 
         self.g1_act = self.make_average_1rdm()
         g2_act = self.make_average_2rdm()
@@ -254,54 +256,65 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         # It's used as the initial guess at the start of each orbital optimization
         R = np.zeros(self.orb_opt.nrot, dtype=self.dtype)
 
-        while self.iter < self.maxiter:
-            # 1. Optimize orbitals at fixed CI expansion
-            self.E_orb = self.lbfgs_solver.minimize(self.orb_opt, R)
-            self._C = self.orb_opt.C.copy()
-            # 2. Convergence checks
-            _dg = self.lbfgs_solver.g - self.g_old
-            self.dg_rms = np.sqrt(np.mean((_dg.conj() * _dg).real))
-            self.g_rms = np.sqrt(
-                np.mean((self.lbfgs_solver.g.conj() * self.lbfgs_solver.g).real)
+        if self.orb_opt.nrot == 0:
+            logger.log_info1(
+                "No nonredundant orbital rotations; skipping macroiterations."
             )
-            self.g_old = self.lbfgs_solver.g.copy()
-            conv, conv_str = self._check_convergence()
-            lbfgs_str = f"{self.lbfgs_solver.iter}/{'Y' if self.lbfgs_solver.converged else 'N'}"
-            iter_info = (
-                f"{self.iter:>10d} {self.E_avg.real:>20.10f} {self.E_orb.real:>20.10f} "
-            )
-            iter_info += f"{self.delta_ci_avg.real:>12.4e} {self.max_ci_de:>12.4e} {self.g_rms.real:>12.4e} {lbfgs_str:>8} {conv_str:>8}"
-            if conv:
-                logger.log_info1(iter_info)
-                self.converged = True
-                break
-
-            logger.log_info1(iter_info)
-
-            # 3. Optimize CI expansion at fixed orbitals
-            self.ci_solver.set_ints(
-                self.orb_opt.Ecore + self.system.nuclear_repulsion,
-                self.orb_opt.Fcore[self.actv, self.actv],
-                self.orb_opt.get_active_space_ints(),
-            )
-            self.ci_solver.run()
-            self.E_avg = self.ci_solver.compute_average_energy()
-            self.E_ci = np.array(self.ci_solver.E)
-            self.E = self.E_avg
-            self.g1_act = self.make_average_1rdm()
-            g2_act = self.make_average_2rdm()
-            self.orb_opt.set_rdms(self.g1_act, g2_act)
-            self.iter += 1
+            self.converged = True
         else:
-            logger.log_info1("=" * width)
-            if self.die_if_not_converged:
-                raise RuntimeError(
-                    f"Orbital optimization did not converge in {self.maxiter} iterations."
+            conv = False
+            while self.iter < self.maxiter:
+                # 1. Optimize orbitals at fixed CI expansion
+                self.E_orb = self.lbfgs_solver.minimize(self.orb_opt, R)
+                self._C = self.orb_opt.C.copy()
+                # 2. Convergence checks
+                _dg = self.lbfgs_solver.g - self.g_old
+                self.dg_rms = np.sqrt(np.mean((_dg.conj() * _dg).real))
+                self.g_rms = np.sqrt(
+                    np.mean((self.lbfgs_solver.g.conj() * self.lbfgs_solver.g).real)
                 )
-            else:
-                logger.log_warning(
-                    f"Orbital optimization did not converge in {self.maxiter} iterations."
+                self.g_old = self.lbfgs_solver.g.copy()
+                conv, conv_str = self._check_convergence()
+                lbfgs_str = (
+                    f"{self.lbfgs_solver.iter}/"
+                    f"{'Y' if self.lbfgs_solver.converged else 'N'}"
                 )
+                iter_info = (
+                    f"{self.iter:>10d} {self.E_avg.real:>20.10f} "
+                    f"{self.E_orb.real:>20.10f} "
+                )
+                iter_info += f"{self.delta_ci_avg.real:>12.4e} {self.max_ci_de:>12.4e} {self.g_rms.real:>12.4e} {lbfgs_str:>8} {conv_str:>8}"
+                if conv:
+                    logger.log_info1(iter_info)
+                    self.converged = True
+                    break
+
+                logger.log_info1(iter_info)
+
+                # 3. Optimize CI expansion at fixed orbitals
+                self.ci_solver.set_ints(
+                    self.orb_opt.Ecore + self.system.nuclear_repulsion,
+                    self.orb_opt.Fcore[self.actv, self.actv],
+                    self.orb_opt.get_active_space_ints(),
+                )
+                self.ci_solver.run()
+                self.E_ci = np.array(self.ci_solver.E)
+                self.E_avg = self.ci_solver.compute_average_energy()
+                self.E = self.E_avg
+                self.g1_act = self.make_average_1rdm()
+                g2_act = self.make_average_2rdm()
+                self.orb_opt.set_rdms(self.g1_act, g2_act)
+                self.iter += 1
+            if self.iter >= self.maxiter and not conv:
+                logger.log_info1("=" * width)
+                if self.die_if_not_converged:
+                    raise RuntimeError(
+                        f"Orbital optimization did not converge in {self.maxiter} iterations."
+                    )
+                else:
+                    logger.log_warning(
+                        f"Orbital optimization did not converge in {self.maxiter} iterations."
+                    )
         # self.ci_solver.set_maxiter(ci_maxiter_save)
         self.ci_solver.set_ints(
             self.orb_opt.Ecore + self.system.nuclear_repulsion,
@@ -312,6 +325,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         self.ci_solver.run()
         self.E_ci = np.array(self.ci_solver.E)
         self.E_avg = self.ci_solver.compute_average_energy()
+        self.E = self.E_avg
         logger.log_info1(
             f"{'Final CI':>10} {self.E_avg:>20.10f} {self.E_orb:>20.10f} {'-':>12} {'-':>12} {'-':>12} {'-':>8} {'':>8}"
         )

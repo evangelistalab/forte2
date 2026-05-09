@@ -79,3 +79,22 @@ def test_sf_mrpt2_o2_triplet():
     assert dsrg.relax_energies[1, 0] == approx(-149.96533377181)
     assert dsrg.relax_energies[1, 1] == approx(-149.965334494277)
     assert dsrg.relax_energies[1, 2] == approx(-149.70550603407)
+
+
+def test_mrpt2_all_active():
+    xyz = f"""
+    H 0.0 0.0 0.0
+    H 0.0 0.0 {0.529177210903 * 2}
+    """
+
+    system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = CISolver(State(nel=2, multiplicity=1, ms=0.0), active_orbitals=2)
+    mc = MCOptimizer(
+        ci_solver,
+        maxiter=5,
+    )(rhf)
+    pt = DSRG_MRPT2(flow_param=0.5)(mc)
+    pt.run()
+    assert pt.E_dsrg == approx(-1.096071975854)

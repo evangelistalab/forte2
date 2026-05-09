@@ -22,6 +22,57 @@ def test_casscf_h2():
     assert mc.E == approx(emcscf)
 
 
+def test_casscf_h2_all_active_orbitals_frozen():
+    xyz = f"""
+    H 0.0 0.0 0.0
+    H 0.0 0.0 {0.529177210903 * 2}
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = CISolver(State(nel=2, multiplicity=1, ms=0.0), active_orbitals=[0, 1])
+    mc = MCOptimizer(
+        ci_solver,
+        active_frozen_orbitals=[0, 1],
+        maxiter=0,
+        final_orbital="original",
+    )(rhf)
+    mc.run()
+
+    assert mc.orb_opt.nrot == 0
+    assert mc.iter == 0
+    assert mc.converged
+    assert mc.E == approx(mc.E_ci[0])
+
+
+def test_casscf_h2_all_orbitals_active_positive_maxiter():
+    xyz = f"""
+    H 0.0 0.0 0.0
+    H 0.0 0.0 {0.529177210903 * 2}
+    """
+
+    system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = CISolver(State(nel=2, multiplicity=1, ms=0.0), active_orbitals=2)
+    mc = MCOptimizer(
+        ci_solver,
+        maxiter=5,
+        final_orbital="original",
+    )(rhf)
+    mc.run()
+
+    assert mc.maxiter != 0
+    assert mc.mo_space.nactv == mc.mo_space.nmo
+    assert mc.mo_space.ncore == 0
+    assert mc.mo_space.nvirt == 0
+    assert mc.orb_opt.nrot == 0
+    assert mc.iter == 0
+    assert mc.converged
+    assert mc.E == approx(-1.096071975854)
+
+
 def test_casscf_n2():
     erhf = -108.761639873604
     ecasscf = -108.9800484156

@@ -320,3 +320,22 @@ def test_mrpt2_sh_with_slow():
     assert dsrg.relax_eigvals == approx(dsrg_slow.relax_eigvals)
     assert dsrg.relax_eigvals_history == approx(dsrg_slow.relax_eigvals_history)
     assert dsrg.E_dsrg == approx(dsrg_slow.E_dsrg)
+
+
+def test_rel_mrpt2_all_active():
+    xyz = f"""
+    H 0.0 0.0 0.0
+    H 0.0 0.0 {0.529177210903 * 2}
+    """
+
+    system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = GHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = RelCISolver(nel=2, active_orbitals=4)
+    mc = MCOptimizer(
+        ci_solver,
+        maxiter=5,
+    )(rhf)
+    pt = RelDSRG_MRPT2(flow_param=0.5)(mc)
+    pt.run()
+    assert pt.E_dsrg == approx(-1.096071975854)
