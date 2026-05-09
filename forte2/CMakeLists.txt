@@ -112,6 +112,7 @@ nanobind_add_module(
   integrals/basis.cc
   integrals/nuclear_repulsion.cc
   integrals/one_electron.cc
+  integrals/one_electron_deriv.cc
   integrals/two_electron.cc
   integrals/value_at_points.cc
   ci/ci_sigma_builder.cc

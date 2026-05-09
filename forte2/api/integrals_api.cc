@@ -15,6 +15,7 @@
 #include "integrals/basis.h"
 #include "integrals/nuclear_repulsion.h"
 #include "integrals/one_electron.h"
+#include "integrals/one_electron_deriv.h"
 #include "integrals/two_electron.h"
 #include "integrals/value_at_points.h"
 // Libcint-backed functions are optional
@@ -35,6 +36,7 @@ void export_shell_api(nb::module_& m);
 void export_basis_api(nb::module_& m);
 void export_scalar_api(nb::module_& m);
 void export_one_electron_api(nb::module_& m);
+void export_one_electron_deriv_api(nb::module_& m);
 void export_two_electron_api(nb::module_& m);
 void export_value_at_points_api(nb::module_& m);
 void export_libcint_compute_api(nb::module_& m);
@@ -49,6 +51,8 @@ void export_integrals_api(nb::module_& m) {
     export_scalar_api(sub_m);
 
     export_one_electron_api(sub_m);
+
+    export_one_electron_deriv_api(sub_m);
 
     export_two_electron_api(sub_m);
 
@@ -319,6 +323,32 @@ ndarray, shape = (nb1, nb2)
            std::tuple<double, std::vector<std::pair<double, std::array<double, 3>>>>
                omega_charges) { return erfc_nuclear(basis1, basis2, omega_charges); },
         "basis1"_a, "basis2"_a, "omega_charges"_a);
+}
+
+void export_one_electron_deriv_api(nb::module_& sub_m) {
+    sub_m.def(
+        "overlap_deriv",
+        [](const Basis& basis1, const Basis& basis2, const np_matrix& dm,
+           std::vector<std::pair<double, std::array<double, 3>>> charges) {
+            return overlap_deriv(basis1, basis2, dm, charges);
+        },
+        "basis1"_a, "basis2"_a, "dm"_a, "charges"_a);
+
+    sub_m.def(
+        "kinetic_deriv",
+        [](const Basis& basis1, const Basis& basis2, const np_matrix& dm,
+           std::vector<std::pair<double, std::array<double, 3>>> charges) {
+            return kinetic_deriv(basis1, basis2, dm, charges);
+        },
+        "basis1"_a, "basis2"_a, "dm"_a, "charges"_a);
+
+    sub_m.def(
+        "nuclear_deriv",
+        [](const Basis& basis1, const Basis& basis2, const np_matrix& dm,
+           std::vector<std::pair<double, std::array<double, 3>>> charges) {
+            return nuclear_deriv(basis1, basis2, dm, charges);
+        },
+        "basis1"_a, "basis2"_a, "dm"_a, "charges"_a);
 }
 
 void export_two_electron_api(nb::module_& sub_m) {
