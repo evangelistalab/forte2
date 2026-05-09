@@ -232,7 +232,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         self.E_ci_old = self.E_ci.copy()
         # Ensemble average energy
         self.E_avg = self.ci_solver.compute_average_energy()
-        self.E_avg_old = self.E_avg        
+        self.E_avg_old = self.E_avg
         self.E = self.E_avg
         # Energy after orbital optimization
         self.E_orb = self.E_avg

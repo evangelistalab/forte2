@@ -192,10 +192,12 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
                 )
             self.E = self.E_dsrg
         else:
-            logger.log_warning(
-                f"DSRG reference relaxation did not converge in {self.nrelax} iterations."
-            )
-        logger.log_info1("=" * width)
+            if self.nrelax > 0:
+                logger.log_warning(
+                    f"DSRG reference relaxation did not converge in {self.nrelax} iterations."
+                )
+        if self.nrelax > 0:
+            logger.log_info1("=" * width)
         logger.log_info1("\nFinal DSRG energies (a.u.):")
         logger.log_info1(f"  E0       : {self.ints['E'].real:.12f}")
         logger.log_info1(f"  Edsrg    : {self.E_dsrg.real:.12f}")
