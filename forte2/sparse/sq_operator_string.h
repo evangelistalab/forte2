@@ -4,7 +4,7 @@
 #include <vector>
 #include <bitset>
 
-#include "ci/determinant.h"
+#include "determinant/determinant.h"
 
 #include "sparse/sparse.h"
 

@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-#include "bitwise_operations.hpp"
+#include "determinant/bitwise_operations.hpp"
 
 namespace forte2 {
 

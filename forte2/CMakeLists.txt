@@ -123,18 +123,19 @@ nanobind_add_module(
   ci/ci_sigma_builder_test_rdms.cc
   ci/ci_sigma_builder_harrison_zarrabian.cc
   ci/ci_sigma_builder_knowles_handy.cc
-  ci/ci_spin_adapter.cc
+  determinant/ci_spin_adapter.cc
   ci/ci_strings.cc
   ci/ci_strings_makers.cc
   ci/ci_string_address.cc
   ci/ci_string_class.cc
   ci/ci_occupation.cc
-  ci/determinant_helpers.cc
+  determinant/determinant_helpers.cc
   ci/rel_ci_sigma_builder.cc
   ci/rel_ci_sigma_builder_rdm.cc
   ci/rel_ci_sigma_builder_rdm_debug.cc
   ci/rel_ci_sigma_builder_harrison_zarrabian.cc
-  ci/slater_rules.cc
+  determinant/slater_rules.cc
+  determinant/rel_slater_rules.cc
   dsrg/dsrg_utils.cc
   sci/sci_helper.cc
   sci/sci_helper_1rdm.cc

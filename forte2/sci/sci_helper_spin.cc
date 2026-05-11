@@ -8,7 +8,7 @@
 #include "helpers/sorting.hpp"
 #include "helpers/np_matrix_functions.h"
 
-#include "ci/determinant_helpers.h"
+#include "determinant/determinant_helpers.h"
 #include "sci_helper.h"
 
 namespace forte2 {

@@ -1,7 +1,7 @@
 #include <algorithm>
 #include <cassert>
 
-#include "determinant_helpers.h"
+#include "determinant/determinant_helpers.h"
 
 namespace forte2 {
 

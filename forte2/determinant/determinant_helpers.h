@@ -2,7 +2,7 @@
 
 #include <vector>
 
-#include "ci/determinant.h"
+#include "determinant/determinant.h"
 
 namespace psi {
 class Matrix;

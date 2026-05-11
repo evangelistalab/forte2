@@ -517,10 +517,11 @@ class Determinant:
     def count_b(self) -> int:
         """Count the number of beta electrons"""
 
-    def find_last_one(self, begin: int = 0, end: int = 2) -> int:
-        """
-        Find the last set bit in the word range [begin, end), or the not-found sentinel
-        """
+    def find_last_alpha_occ(self) -> int:
+        """Find the highest occupied alpha orbital, or the not-found sentinel"""
+
+    def find_last_beta_occ(self) -> int:
+        """Find the highest occupied beta orbital, or the not-found sentinel"""
 
     def count(self) -> int:
         """Count the total number of electrons"""
@@ -614,7 +615,7 @@ class Configuration:
         """Is orbital n singly occupied?"""
 
     def set_occ(self, n: int, value: int) -> None:
-        """Set the value of an alpha bit"""
+        """Set the occupation value of an orbital"""
 
     def count_docc(self) -> int:
         """Count the number of doubly occupied orbitals"""

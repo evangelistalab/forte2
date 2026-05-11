@@ -2,8 +2,8 @@
 
 #include "helpers/unordered_dense.h"
 
-#include "determinant.hpp"
-#include "configuration.hpp"
+#include "determinant/determinant.hpp"
+#include "determinant/configuration.hpp"
 
 namespace forte2 {
 

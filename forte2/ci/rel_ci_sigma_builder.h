@@ -10,7 +10,7 @@
 #include "helpers/memory.h"
 
 #include "ci/ci_strings.h"
-#include "ci/slater_rules.h"
+#include "determinant/rel_slater_rules.h"
 #include "ci/ci_sigma_builder.h"
 
 namespace forte2 {

@@ -6,22 +6,17 @@
 #include <type_traits>
 #include <vector>
 
-#include "bitarray.hpp"
-#include "bitwise_operations.hpp"
+#include "determinant/bitarray.hpp"
+#include "determinant/bitwise_operations.hpp"
 
 namespace forte2 {
 
-enum class DetSpinType { Alpha, Beta };
-
 /**
- * @brief A class to represent a Slater determinant with N spin orbitals
+ * @brief A class to represent a Slater determinant with N spin-orbital slots.
  *
- * Spin orbitals are divided into N/2 alpha and N/2 beta set.
- * For each set we pack groups of 64 spin orbitals into an array of
- * 64-bit unsigned integers. Each group of 64 bits is called a word.
- * Each set of N/2 bits is stored in K = ceil(N/2 / 64) words.
- * So the full determinant is stored as an array of words of the form
- * [word 1][word 2]...[word K][word K+1]...[word 2K]
+ * The determinant stores N/2 alpha occupations and N/2 beta occupations. The alpha
+ * occupations are stored first, followed by the beta occupations, so orbital index p refers to
+ * the same spatial orbital in both spin sectors.
  */
 template <size_t N> class DeterminantImpl : public BitArray<N> {
   protected:
@@ -54,25 +49,26 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     using BitArray<N>::find_set_bits;
     using Hash = typename BitArray<N>::Hash;
 
-    /// the number of bits divided by two
-    static constexpr size_t nbits_half = N / 2;
+    /// Maximum number of spatial orbitals represented in each spin sector.
+    static constexpr size_t norb_capacity = N / 2;
 
     static_assert(N % 128 == 0,
-                  "The number of bits in the Determinant class must be a multiple of 128");
+                  "Determinant storage must contain whole alpha/beta 64-orbital blocks");
 
-    /// half of the words used to store the bits
-    static constexpr size_t nwords_half = BitArray<N>::nwords_ / 2;
+    /// Number of packed storage words used by each spin sector.
+    static constexpr size_t storage_words_per_spin = BitArray<N>::nwords_ / 2;
 
-    /// the starting bit for beta orbitals
-    static constexpr size_t beta_bit_offset = nwords_half * BitArray<N>::bits_per_word;
+    /// Offset of the beta occupations in the packed storage inherited from BitArray.
+    static constexpr size_t beta_storage_offset =
+        storage_words_per_spin * BitArray<N>::bits_per_word;
 
-    /// returns the number of orbitals (half the number of bits)
-    static constexpr size_t norb() { return nbits_half; }
+    /// Return the maximum number of spatial orbitals represented by this determinant.
+    static constexpr size_t norb() { return norb_capacity; }
 
     /// Default constructor
     DeterminantImpl() : BitArray<N>() {}
 
-    /// Constructor from a bit array
+    /// Constructor from packed occupation storage.
     DeterminantImpl(const BitArray<N>& ba) : BitArray<N>(ba) {}
 
     static DeterminantImpl zero() {
@@ -94,12 +90,11 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
             set_nb(p, occupation_b[p]);
     }
 
-    /// Construct the determinant from two initializer lists that specify which orbitals are
-    /// occupied in the alpha and beta strings.  alfa_list = [Ia] and beta_list = [Ib]
-    explicit DeterminantImpl(std::initializer_list<size_t> alfa_list,
+    /// Construct the determinant from two initializer lists of occupied alpha and beta orbitals.
+    explicit DeterminantImpl(std::initializer_list<size_t> alpha_list,
                              std::initializer_list<size_t> beta_list) {
         clear();
-        for (auto i : alfa_list) {
+        for (auto i : alpha_list) {
             set_na(i, true);
         }
         for (auto i : beta_list) {
@@ -107,9 +102,9 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         }
     }
 
-    explicit DeterminantImpl(std::vector<size_t> alfa_list, std::vector<size_t> beta_list) {
+    explicit DeterminantImpl(std::vector<size_t> alpha_list, std::vector<size_t> beta_list) {
         clear();
-        for (auto i : alfa_list) {
+        for (auto i : alpha_list) {
             set_na(i, true);
         }
         for (auto i : beta_list) {
@@ -119,17 +114,17 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
 
     /// Construct the determinant from an occupation vector that
     /// specifies the alpha and beta strings.  occupation = [Ia,Ib]
-    explicit DeterminantImpl(const BitArray<nbits_half>& Ia, const BitArray<nbits_half>& Ib) {
+    explicit DeterminantImpl(const BitArray<norb_capacity>& Ia,
+                             const BitArray<norb_capacity>& Ib) {
         this->set_strings(Ia, Ib);
     }
 
-    /// String constructor. Convert a std::string to a determinant.
-    /// E.g. DeterminantImpl<64>("0011") gives the determinant|0011>
+    /// Construct from the compact occupation-string representation used by str().
     DeterminantImpl(const std::string& str) { set_str(*this, str); }
 
-    // Functions to access bits
+    // Occupation accessors
 
-    /// get the value of alfa bit pos
+    /// Return true if alpha orbital pos is occupied.
     bool na(size_t pos) const {
         if constexpr (nbits == 128) {
             return words_[0] & maskbit(pos);
@@ -138,46 +133,46 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         }
     }
 
-    /// get the value of beta bit pos
+    /// Return true if beta orbital pos is occupied.
     bool nb(size_t pos) const {
         if constexpr (nbits == 128) {
             return words_[1] & maskbit(pos);
         } else {
-            return get_bit(pos + beta_bit_offset);
+            return get_bit(pos + beta_storage_offset);
         }
     }
 
-    // Functions to set bits
+    // Occupation mutators
 
-    /// set alfa bit pos to val
+    /// Set the occupation of alpha orbital pos.
     void set_na(size_t pos, bool val) { set_bit(pos, val); }
 
-    /// set beta bit pos to val
-    void set_nb(size_t pos, bool val) { set_bit(pos + beta_bit_offset, val); }
+    /// Set the occupation of beta orbital pos.
+    void set_nb(size_t pos, bool val) { set_bit(pos + beta_storage_offset, val); }
 
-    /// set the alpha/beta strings
-    void set_strings(const BitArray<nbits_half>& sa, const BitArray<nbits_half>& sb) {
-        for (size_t n = 0; n < nwords_half; n++) {
+    /// Set the alpha and beta occupation strings.
+    void set_strings(const BitArray<norb_capacity>& sa, const BitArray<norb_capacity>& sb) {
+        for (size_t n = 0; n < storage_words_per_spin; n++) {
             words_[n] = sa.get_word(n);
-            words_[n + nwords_half] = sb.get_word(n);
+            words_[n + storage_words_per_spin] = sb.get_word(n);
         }
     }
 
-    void set_a_string(const BitArray<nbits_half>& sa) {
-        for (size_t n = 0; n < nwords_half; n++) {
+    void set_a_string(const BitArray<norb_capacity>& sa) {
+        for (size_t n = 0; n < storage_words_per_spin; n++) {
             words_[n] = sa.get_word(n);
         }
     }
 
-    void set_b_string(const BitArray<nbits_half>& sb) {
-        for (size_t n = 0; n < nwords_half; n++) {
-            words_[n + nwords_half] = sb.get_word(n);
+    void set_b_string(const BitArray<norb_capacity>& sb) {
+        for (size_t n = 0; n < storage_words_per_spin; n++) {
+            words_[n + storage_words_per_spin] = sb.get_word(n);
         }
     }
 
-    void set(std::initializer_list<size_t> alfa_list, std::initializer_list<size_t> beta_list) {
+    void set(std::initializer_list<size_t> alpha_list, std::initializer_list<size_t> beta_list) {
         clear();
-        for (auto i : alfa_list) {
+        for (auto i : alpha_list) {
             set_na(i, true);
         }
         for (auto i : beta_list) {
@@ -195,21 +190,21 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
             return (rhs.words_[0] < lhs.words_[0]) or
                    ((rhs.words_[0] == lhs.words_[0]) and (rhs.words_[1] < lhs.words_[1]));
         } else {
-            for (size_t n = nwords_half; n > 0;) {
+            for (size_t n = storage_words_per_spin; n > 0;) {
                 --n;
                 if (rhs.words_[n] > lhs.words_[n])
                     return false;
                 if (rhs.words_[n] < lhs.words_[n])
                     return true;
             }
-            for (size_t n = nwords_; n > nwords_half + 1;) {
+            for (size_t n = nwords_; n > storage_words_per_spin + 1;) {
                 --n;
                 if (rhs.words_[n] > lhs.words_[n])
                     return false;
                 if (rhs.words_[n] < lhs.words_[n])
                     return true;
             }
-            return rhs.words_[nwords_half] < lhs.words_[nwords_half];
+            return rhs.words_[storage_words_per_spin] < lhs.words_[storage_words_per_spin];
         }
     }
 
@@ -220,7 +215,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @param func a callable that accepts the alpha orbital index as a size_t
     /// @return true if all occupied alpha orbitals were visited, false if the callback stopped
     template <typename Func> bool for_each_a_occ(Func&& func) const {
-        return for_each_set_bit(func, 0, nwords_half);
+        return for_each_set_bit(func, 0, storage_words_per_spin);
     }
 
     /// Apply a callable to each occupied beta orbital, in ascending orbital order.
@@ -233,25 +228,25 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     template <typename Func> bool for_each_b_occ(Func&& func) const {
         return for_each_set_bit(
             [&](size_t pos) {
-                const size_t orb = pos - beta_bit_offset;
+                const size_t orb = pos - beta_storage_offset;
                 if constexpr (std::is_void_v<std::invoke_result_t<Func&, size_t>>) {
                     std::invoke(func, orb);
                 } else {
                     return std::invoke(func, orb);
                 }
             },
-            nwords_half, nwords_);
+            storage_words_per_spin, nwords_);
     }
 
     /// Return a vector of occupied alpha orbitals
     std::vector<int> get_alfa_occ(int norb) const {
         std::vector<int> occ;
-        if (static_cast<size_t>(norb) > nbits_half) {
+        if (static_cast<size_t>(norb) > norb_capacity) {
             throw std::range_error(
                 "Determinant::get_alfa_occ(int norb) was passed a value of norb (" +
                 std::to_string(norb) +
                 "), which is larger than the maximum number of alpha orbitals (" +
-                std::to_string(nbits_half) + ").");
+                std::to_string(norb_capacity) + ").");
         }
         const size_t limit = static_cast<size_t>(norb);
         for_each_a_occ([&](size_t p) {
@@ -267,12 +262,12 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// Return a vector of occupied beta orbitals
     std::vector<int> get_beta_occ(int norb) const {
         std::vector<int> occ;
-        if (static_cast<size_t>(norb) > nbits_half) {
+        if (static_cast<size_t>(norb) > norb_capacity) {
             throw std::range_error(
                 "Determinant::get_beta_occ(int norb) was passed a value of norb (" +
                 std::to_string(norb) +
                 "), which is larger than the maximum number of beta orbitals (" +
-                std::to_string(nbits_half) + ").");
+                std::to_string(norb_capacity) + ").");
         }
         const size_t limit = static_cast<size_t>(norb);
         for_each_b_occ([&](size_t p) {
@@ -288,12 +283,12 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// Return a vector of virtual alpha orbitals
     std::vector<int> get_alfa_vir(int norb) const {
         std::vector<int> vir;
-        if (static_cast<size_t>(norb) > nbits_half) {
+        if (static_cast<size_t>(norb) > norb_capacity) {
             throw std::range_error(
                 "Determinant::get_alfa_occ(int norb) was passed a value of norb (" +
                 std::to_string(norb) +
                 "), which is larger than the maximum number of alpha orbitals (" +
-                std::to_string(nbits_half) + ").");
+                std::to_string(norb_capacity) + ").");
         }
         for (int p = 0; p < norb; ++p) {
             if (not na(p)) {
@@ -306,12 +301,12 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// Return a vector of virtual beta orbitals
     std::vector<int> get_beta_vir(int norb) const {
         std::vector<int> vir;
-        if (static_cast<size_t>(norb) > nbits_half) {
+        if (static_cast<size_t>(norb) > norb_capacity) {
             throw std::range_error(
                 "Determinant::get_beta_occ(int norb) was passed a value of norb (" +
                 std::to_string(norb) +
                 "), which is larger than the maximum number of beta orbitals (" +
-                std::to_string(nbits_half) + ").");
+                std::to_string(norb_capacity) + ").");
         }
         for (int p = 0; p < norb; ++p) {
             if (not nb(p)) {
@@ -378,10 +373,10 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     }
 
     /// Return the sign for a single second quantized operator
-    /// This function ignores if bit n is set or not
+    /// This function ignores whether alpha orbital n is occupied.
     double slater_sign_a(size_t n) const {
         if constexpr (nbits == 128) {
-            // specialization for 64 + 64 bits
+            // specialization for one 64-orbital word per spin sector
             return ui64_sign(words_[0], n);
         } else {
             return slater_sign(n);
@@ -389,22 +384,22 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     }
 
     /// Return the sign for a single second quantized operator
-    /// This function ignores if bit n is set or not
+    /// This function ignores whether beta orbital n is occupied.
     double slater_sign_b(size_t n) const {
         if constexpr (nbits == 128) {
-            // specialization for 64 + 64 bits
+            // specialization for one 64-orbital word per spin sector
             return ui64_sign(words_[1], n) * ui64_bit_parity(words_[0]);
         } else {
-            return slater_sign(n + beta_bit_offset);
+            return slater_sign(n + beta_storage_offset);
         }
     }
 
     /// Return the sign for a pair of alpha second quantized operators
-    /// The sign depends only on the number of bits = 1 between n and m
+    /// The sign depends only on the parity of occupied alpha orbitals between n and m.
     /// n and m are not assumed to have any specific order
     double slater_sign_aa(size_t n, size_t m) const {
         if constexpr (nbits == 128) {
-            // specialization for 64 + 64 bits
+            // specialization for one 64-orbital word per spin sector
             return ui64_sign(words_[0], n, m);
         } else {
             return slater_sign(n, m);
@@ -412,14 +407,14 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     }
 
     /// Return the sign for a pair of beta second quantized operators
-    /// The sign depends only on the number of bits = 1 between n and m
+    /// The sign depends only on the parity of occupied beta orbitals between n and m.
     /// n and m are not assumed to have any specific order
     double slater_sign_bb(size_t n, size_t m) const {
         if constexpr (nbits == 128) {
-            // specialization for 64 + 64 bits
+            // specialization for one 64-orbital word per spin sector
             return ui64_sign(words_[1], n, m);
         } else {
-            return slater_sign(n + beta_bit_offset, m + beta_bit_offset);
+            return slater_sign(n + beta_storage_offset, m + beta_storage_offset);
         }
     }
 
@@ -463,7 +458,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         }
     }
 
-    /// Count the number of beta bits set to 1
+    /// Count the number of occupied alpha orbitals.
     int count_a() const {
         // with constexpr we compile only one of these cases
         if constexpr (N == 128) {
@@ -471,11 +466,11 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         } else if (N == 256) {
             return std::popcount(words_[0]) + std::popcount(words_[1]);
         } else {
-            return count(0, nwords_half);
+            return count(0, storage_words_per_spin);
         }
     }
 
-    /// Count the number of beta bits set to 1
+    /// Count the number of occupied beta orbitals.
     int count_b() const {
         // with constexpr we compile only one of these cases
         if constexpr (N == 128) {
@@ -483,55 +478,16 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         } else if (N == 256) {
             return std::popcount(words_[2]) + std::popcount(words_[3]);
         } else {
-            return count(nwords_half, nwords_);
+            return count(storage_words_per_spin, nwords_);
         }
     };
 
-    /// Compares a subset of the words of this determinant with the words of another determinant
-    bool equal(const size_t start, const size_t end, const DeterminantImpl<N>& d) const {
-        for (size_t n = start; n < end; n++) {
-            if (words_[n] != d.words_[n])
-                return false;
-        }
-        return true;
-    }
+    /// Find the highest occupied alpha orbital.
+    uint64_t find_last_alpha_occ() const { return find_last_one(0, storage_words_per_spin); }
 
-    /// Compares the alpha part of this determinant with the alpha part of another determinant
-    bool equal_alfa(const DeterminantImpl<N>& d) const {
-        if constexpr (N == 128) {
-            return words_[0] == d.words_[0];
-        } else if constexpr (N == 256) {
-            return words_[0] == d.words_[0] and words_[1] == d.words_[1];
-        } else {
-            return equal(0, nwords_half, d);
-        }
-    }
-
-    /// Compares the beta part of this determinant with the beta part of another determinant
-    bool equal_beta(const DeterminantImpl<N>& d) const {
-        if constexpr (N == 128) {
-            return words_[1] == d.words_[1];
-        } else if constexpr (N == 256) {
-            return words_[2] == d.words_[2] and words_[3] == d.words_[3];
-        } else {
-            return equal(nwords_half, nwords_, d);
-        }
-    }
-
-    /// Find the index of the first alpha bit set to 1
-    uint64_t find_first_one_alfa() const { return find_first_one(0, nwords_half); }
-
-    /// Find the index of the first beta bit set to 1 (spatial orbital index)
-    uint64_t find_first_one_beta() const {
-        if (auto res = find_first_one(nwords_half, nwords_); res != ui64_bit_not_found)
-            return res - norb();
-        return ui64_bit_not_found;
-    }
-
-    uint64_t find_last_one_alfa() const { return find_last_one(0, nwords_half); }
-
-    uint64_t find_last_one_beta() const {
-        if (auto res = find_last_one(nwords_half, nwords_); res != ui64_bit_not_found)
+    /// Find the highest occupied beta orbital.
+    uint64_t find_last_beta_occ() const {
+        if (auto res = find_last_one(storage_words_per_spin, nwords_); res != ui64_bit_not_found)
             return res - norb();
         return ui64_bit_not_found;
     }
@@ -539,8 +495,8 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// Return the number of alpha/beta pairs
     int npair() const {
         int count = 0;
-        for (size_t k = 0; k < nwords_half; ++k) {
-            count += std::popcount(words_[k] & words_[k + nwords_half]);
+        for (size_t k = 0; k < storage_words_per_spin; ++k) {
+            count += std::popcount(words_[k] & words_[k + storage_words_per_spin]);
         }
         return count;
     }
@@ -590,57 +546,28 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         return slater_sign_bbbb(i, j, a, b);
     }
 
-    BitArray<nbits_half> a_string() const {
-        BitArray<nbits_half> s;
-        for (size_t i = 0; i < nwords_half; i++) {
+    BitArray<norb_capacity> a_string() const {
+        BitArray<norb_capacity> s;
+        for (size_t i = 0; i < storage_words_per_spin; i++) {
             s.set_word(i, words_[i]);
         }
         return s;
     }
 
-    BitArray<nbits_half> b_string() const {
-        BitArray<nbits_half> s;
-        for (size_t i = 0; i < nwords_half; i++) {
-            s.set_word(i, words_[nwords_half + i]);
+    BitArray<norb_capacity> b_string() const {
+        BitArray<norb_capacity> s;
+        for (size_t i = 0; i < storage_words_per_spin; i++) {
+            s.set_word(i, words_[storage_words_per_spin + i]);
         }
         return s;
     }
 
-    void copy_beta_bits(BitArray<nbits_half>& ba) const {
-        if constexpr (N == 128) {
-            ba.set_word(0, words_[1]);
-        } else if constexpr (N == 256) {
-            ba.set_word(0, words_[2]);
-            ba.set_word(1, words_[3]);
-        } else {
-            for (size_t i = 0; i < nwords_half; i++) {
-                ba.set_word(i, words_[nwords_half + i]);
-            }
-        }
-    }
-
-    BitArray<nbits_half> get_bits(DetSpinType spin_type) const {
-        return (spin_type == DetSpinType::Alpha ? a_string() : b_string());
-    }
-
-    /// Zero the alpha part of a determinant
-    void zero_alfa() {
-        for (size_t n = 0; n < nwords_half; n++)
-            words_[n] = u_int64_t(0);
-    }
-
-    /// Zero the alpha part of a determinant
-    void zero_beta() {
-        for (size_t n = nwords_half; n < nwords_; n++)
-            words_[n] = u_int64_t(0);
-    }
-
-    /// Swap the alpha and beta bits of a determinant
+    /// Swap the alpha and beta occupations of a determinant
     DeterminantImpl<N> spin_flip() const noexcept {
         DeterminantImpl<N> d;
-        for (size_t n = 0; n < nwords_half; n++) {
-            d.words_[n] = words_[n + nwords_half];
-            d.words_[n + nwords_half] = words_[n];
+        for (size_t n = 0; n < storage_words_per_spin; n++) {
+            d.words_[n] = words_[n + storage_words_per_spin];
+            d.words_[n + storage_words_per_spin] = words_[n];
         }
         return d;
     }
@@ -650,11 +577,11 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// as the creation and annihilation operators that need to be applied
     /// to this determinant to obtain d.
     /// The excitation connection is a vector of 4 vectors:
-    /// [[alfa annihilation], [alfa creation],
+    /// [[alpha annihilation], [alpha creation],
     ///  [beta annihilation], [beta creation]]
     std::vector<std::vector<size_t>> excitation_connection(const DeterminantImpl<N>& d) const {
         std::vector<std::vector<size_t>> excitation(4);
-        for (size_t i = 0; i < nbits_half; i++) {
+        for (size_t i = 0; i < norb_capacity; i++) {
             if (na(i) and not d.na(i)) {
                 excitation[0].push_back(i);
             }
@@ -674,18 +601,8 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
 
 // Functions
 
-/// @brief return a string representation of this determinant
 template <size_t N>
-std::string str_bits(const DeterminantImpl<N>& d, int n = DeterminantImpl<N>::nbits) {
-    std::string s;
-    for (int p = 0; p < n; ++p) {
-        s += d.get_bit(p) ? '1' : '0';
-    }
-    return s;
-}
-
-template <size_t N>
-std::string str(const DeterminantImpl<N>& d, int n = DeterminantImpl<N>::nbits_half) {
+std::string str(const DeterminantImpl<N>& d, int n = DeterminantImpl<N>::norb_capacity) {
     std::string s;
     s += "|";
     for (int p = 0; p < n; ++p) {
@@ -709,7 +626,7 @@ template <size_t N> std::ostream& operator<<(std::ostream& os, const Determinant
 }
 
 template <size_t N> void set_str(DeterminantImpl<N>& d, const std::string& str) {
-    // zero all the bits and set the bits passed as a string
+    // Clear all occupations and set the packed occupation pattern passed as a string.
     d.clear();
     if (str.size() <= DeterminantImpl<N>::nbits) {
         size_t k = 0;
@@ -724,7 +641,7 @@ template <size_t N> void set_str(DeterminantImpl<N>& d, const std::string& str) 
     } else {
         throw std::range_error("template <size_t N> void set_str(DeterminantImpl<N>&, const "
                                "std::string&)\nmismatch "
-                               "between the number of bits in d and those passed in str\n");
+                               "between the determinant storage size and the input string\n");
     }
 }
 
@@ -844,13 +761,13 @@ double apply_operator_to_det(DeterminantImpl<N>& d, const DeterminantImpl<N>& cr
                              const DeterminantImpl<N>& ann) {
     // loop over the annihilation operators (in ascending order)
     double sign = 1.0;
-    // The bool return lets for_each_set_bit stop as soon as an operator cannot be applied.
+    // The bool return lets the operator scan stop as soon as an operator cannot be applied.
     const bool can_annihilate = ann.for_each_set_bit([&](size_t orb) {
-        // if this bit is set
+        // if this spin orbital is occupied
         if (d.get_bit(orb) == 1) {
             // compute the sign
             sign *= d.slater_sign(orb);
-            // set the bit to zero
+            // remove the electron
             d.set_bit(orb, false);
             return true;
         } else {
@@ -865,11 +782,11 @@ double apply_operator_to_det(DeterminantImpl<N>& d, const DeterminantImpl<N>& cr
     const size_t ncre = cre.count();
     // Stop immediately if a creation operator would target an already occupied orbital.
     const bool can_create = cre.for_each_set_bit([&](size_t orb) {
-        // if this bit is unset
+        // if this spin orbital is unoccupied
         if (d.get_bit(orb) == 0) {
             // compute the sign
             sign *= d.slater_sign(orb);
-            // set the bit to one
+            // create the electron
             d.set_bit(orb, true);
             return true;
         } else {
@@ -919,7 +836,7 @@ inline double faster_apply_operator_to_det(const DeterminantImpl<N>& d, Determin
                                            const DeterminantImpl<N>& sign) {
     size_t n = 0;
     if constexpr (N == 128) {
-        // specialization for 64 + 64 bits
+        // specialization for one 64-orbital word per spin sector
         const auto w0 = d.get_word(0) & (~ann.get_word(0));
         const auto w1 = d.get_word(1) & (~ann.get_word(1));
         n += std::popcount(w0 & sign.get_word(0));
@@ -940,7 +857,7 @@ inline double faster_apply_operator_to_det(const DeterminantImpl<N>& d, Determin
         new_d.set_word(2, w2 | cre.get_word(2));
         new_d.set_word(3, w3 | cre.get_word(3));
     } else {
-        // loop over the words
+        // loop over packed storage words
         for (size_t i = 0; i < DeterminantImpl<N>::nwords_; ++i) {
             // apply the annihilation operator
             const auto w = d.get_word(i) & (~ann.get_word(i));
@@ -954,7 +871,7 @@ inline double faster_apply_operator_to_det(const DeterminantImpl<N>& d, Determin
 }
 
 template <size_t N> double spin2(const DeterminantImpl<N>& lhs, const DeterminantImpl<N>& rhs) {
-    int nmo = DeterminantImpl<N>::nbits_half;
+    int nmo = DeterminantImpl<N>::norb_capacity;
     const DeterminantImpl<N>& I = lhs;
     const DeterminantImpl<N>& J = rhs;
 
@@ -988,7 +905,7 @@ template <size_t N> double spin2(const DeterminantImpl<N>& lhs, const Determinan
         // Find a pair of spin coupled electrons
         int i = -1;
         int j = -1;
-        // The logic here is a bit complex
+        // The logic here follows the spin-flip coupling between opposite-spin occupations.
         for (int p = 0; p < nmo; ++p) {
             if (J.na(p) and I.nb(p) and (not J.nb(p)) and (not I.na(p)))
                 i = p;

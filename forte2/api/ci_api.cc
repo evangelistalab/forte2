@@ -10,7 +10,7 @@
 #include "ci/ci_strings.h"
 #include "ci/ci_string_address.h"
 #include "ci/ci_sigma_builder.h"
-#include "ci/ci_spin_adapter.h"
+#include "determinant/ci_spin_adapter.h"
 #include "ci/rel_ci_sigma_builder.h"
 
 // Must be at global scope:

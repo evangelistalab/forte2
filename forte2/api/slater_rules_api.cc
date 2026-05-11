@@ -1,6 +1,7 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/complex.h>
-#include "ci/slater_rules.h"
+#include "determinant/rel_slater_rules.h"
+#include "determinant/slater_rules.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;

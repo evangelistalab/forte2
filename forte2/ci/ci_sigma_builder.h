@@ -9,8 +9,8 @@
 #include "helpers/spin.h"
 
 #include "ci/ci_strings.h"
-#include "ci/slater_rules.h"
-#include "ci/ci_spin_adapter.h"
+#include "determinant/slater_rules.h"
+#include "determinant/ci_spin_adapter.h"
 
 #include "sparse/sparse_state.h"
 

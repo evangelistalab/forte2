@@ -1,4 +1,4 @@
-#include "determinant.h"
+#include "determinant/determinant.h"
 #include "ci_string_class.h"
 
 namespace forte2 {

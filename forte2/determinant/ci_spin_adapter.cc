@@ -8,7 +8,7 @@
 #include "helpers/unordered_dense.h"
 #include "helpers/logger.h"
 
-#include "ci_spin_adapter.h"
+#include "determinant/ci_spin_adapter.h"
 
 namespace forte2 {
 

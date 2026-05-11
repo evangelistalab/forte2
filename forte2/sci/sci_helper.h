@@ -8,8 +8,8 @@
 #include "helpers/ndarray.h"
 #include "helpers/spin.h"
 
-#include "ci/determinant.h"
-#include "ci/slater_rules.h"
+#include "determinant/determinant.h"
+#include "determinant/slater_rules.h"
 #include "dsrg/dsrg_utils.h"
 #include "sci/sci_strings.h"
 

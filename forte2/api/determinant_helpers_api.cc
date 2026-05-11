@@ -1,7 +1,7 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/vector.h>
 
-#include "ci/determinant_helpers.h"
+#include "determinant/determinant_helpers.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;

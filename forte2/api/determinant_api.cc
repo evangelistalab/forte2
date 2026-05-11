@@ -2,8 +2,8 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 
-#include "ci/determinant.h"
-#include "ci/configuration.hpp"
+#include "determinant/determinant.h"
+#include "determinant/configuration.hpp"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -64,13 +64,10 @@ void export_determinant_api(nb::module_& m) {
         .def("nb", &Determinant::nb, "n"_a, "Is orbital n occupied by a beta electron?")
         .def("count_a", &Determinant::count_a, "Count the number of alpha electrons")
         .def("count_b", &Determinant::count_b, "Count the number of beta electrons")
-        .def(
-            "find_last_one",
-            [](const Determinant& d, size_t begin, size_t end) {
-                return d.find_last_one(begin, end);
-            },
-            "begin"_a = 0, "end"_a = Determinant::nwords_,
-            "Find the last set bit in the word range [begin, end), or the not-found sentinel")
+        .def("find_last_alpha_occ", &Determinant::find_last_alpha_occ,
+             "Find the highest occupied alpha orbital, or the not-found sentinel")
+        .def("find_last_beta_occ", &Determinant::find_last_beta_occ,
+             "Find the highest occupied beta orbital, or the not-found sentinel")
         .def(
             "count", [](Determinant& d) { return d.count_a() + d.count_b(); },
             "Count the total number of electrons")
@@ -136,7 +133,8 @@ void export_configuration_api(nb::module_& m) {
         .def("is_empt", &Configuration::is_empt, "n"_a, "Is orbital n empty?")
         .def("is_docc", &Configuration::is_docc, "n"_a, "Is orbital n doubly occupied?")
         .def("is_socc", &Configuration::is_socc, "n"_a, "Is orbital n singly occupied?")
-        .def("set_occ", &Configuration::set_occ, "n"_a, "value"_a, "Set the value of an alpha bit")
+        .def("set_occ", &Configuration::set_occ, "n"_a, "value"_a,
+             "Set the occupation value of an orbital")
         .def("count_docc", &Configuration::count_docc,
              "Count the number of doubly occupied orbitals")
         .def("count_socc", &Configuration::count_socc,
