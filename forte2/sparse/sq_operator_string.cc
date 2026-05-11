@@ -30,27 +30,26 @@ bool compare_ops(const std::tuple<bool, bool, int>& lhs, const std::tuple<bool, 
     return flip_spin(lhs) < flip_spin(rhs);
 }
 
-SQOperatorString::SQOperatorString() {}
+SQOperatorString::SQOperatorString()
+    : cre_(Determinant::zero()), ann_(Determinant::zero()), sign_mask_(Determinant::zero()) {}
 
 SQOperatorString::SQOperatorString(const Determinant& cre, const Determinant& ann)
-    : cre_(cre), ann_(ann) {
+    : cre_(cre), ann_(ann), sign_mask_(Determinant::zero()) {
     compute_sign_mask_fast(cre_, ann_, sign_mask_);
 }
 
 SQOperatorString::SQOperatorString(const std::vector<size_t>& acre, const std::vector<size_t>& bcre,
                                    const std::vector<size_t>& aann,
-                                   const std::vector<size_t>& bann) {
-    cre_ = Determinant(acre, bcre);
-    ann_ = Determinant(aann, bann);
+                                   const std::vector<size_t>& bann)
+    : cre_(acre, bcre), ann_(aann, bann), sign_mask_(Determinant::zero()) {
     compute_sign_mask_fast(cre_, ann_, sign_mask_);
 }
 
 SQOperatorString::SQOperatorString(const std::initializer_list<size_t> acre,
                                    const std::initializer_list<size_t> bcre,
                                    const std::initializer_list<size_t> aann,
-                                   const std::initializer_list<size_t> bann) {
-    cre_ = Determinant(acre, bcre);
-    ann_ = Determinant(aann, bann);
+                                   const std::initializer_list<size_t> bann)
+    : cre_(acre, bcre), ann_(aann, bann), sign_mask_(Determinant::zero()) {
     compute_sign_mask_fast(cre_, ann_, sign_mask_);
 }
 
@@ -699,18 +698,6 @@ void SQOperatorProductComputer::commutator(
     std::function<void(const SQOperatorString&, const sparse_scalar_t)> func) {
     product(lhs, rhs, factor, func);
     product(rhs, lhs, -factor, func);
-}
-
-void compute_sign_mask(const Determinant& cre, const Determinant& ann, Determinant& sign_mask,
-                       Determinant& idx) {
-    sign_mask.clear();
-    ann.for_each_set_bit([&](size_t i) {
-        sign_mask.xor_up_to(i);
-    });
-    cre.for_each_set_bit([&](size_t i) {
-        sign_mask.xor_up_to(i);
-    });
-    idx.clear();
 }
 
 void compute_sign_mask_fast(const Determinant& cre, const Determinant& ann,

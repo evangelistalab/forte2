@@ -200,24 +200,25 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
         return 0.0;
     }
 
-    // Encode the spin-resolved excitation rank in a small dispatch key. The preceding rank guard
-    // is required because the key is only unique for diagonal, singles, and doubles.
-    switch (nadiff * 4 + nbdiff) {
-    case 0:
+    if (nadiff == 0 and nbdiff == 0) {
         return energy(lhs);
-    case 4: {
+    }
+
+    if (nadiff == 1 and nbdiff == 0) {
         const auto i = connection.a_lhs_only[0];
         const auto j = connection.a_rhs_only[0];
         const double sign = lhs.slater_sign_aa(i, j);
         return sign * singles_coupling_a(i, j, rhs);
     }
-    case 1: {
+
+    if (nadiff == 0 and nbdiff == 1) {
         const auto i = connection.b_lhs_only[0];
         const auto j = connection.b_rhs_only[0];
         const double sign = lhs.slater_sign_bb(i, j);
         return sign * singles_coupling_b(i, j, rhs);
     }
-    case 8: {
+
+    if (nadiff == 2 and nbdiff == 0) {
         const auto i = connection.a_lhs_only[0];
         const auto j = connection.a_lhs_only[1];
         const auto k = connection.a_rhs_only[0];
@@ -225,7 +226,8 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
         const double sign = lhs.slater_sign_aaaa(i, j, k, l);
         return sign * va(i, j, k, l); // <ij||kl>
     }
-    case 2: {
+
+    if (nadiff == 0 and nbdiff == 2) {
         const auto i = connection.b_lhs_only[0];
         const auto j = connection.b_lhs_only[1];
         const auto k = connection.b_rhs_only[0];
@@ -233,7 +235,8 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
         const double sign = lhs.slater_sign_bbbb(i, j, k, l);
         return sign * va(i, j, k, l); // <ij||kl>
     }
-    case 5: {
+
+    if (nadiff == 1 and nbdiff == 1) {
         const auto i = connection.a_lhs_only[0];
         const auto j = connection.b_lhs_only[0];
         const auto k = connection.a_rhs_only[0];
@@ -241,7 +244,7 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
         const double sign = lhs.slater_sign_aa(i, k) * lhs.slater_sign_bb(j, l);
         return sign * v(i, j, k, l); // <ij|kl>
     }
-    }
+
     return 0.0;
 }
 

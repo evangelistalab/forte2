@@ -423,9 +423,9 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         }
     }
 
-    /// Return the sign for a quadruplet of alpha second quantized operators
-    /// a+(a) a+(b) a(j) a(i) applied to this determinant
-    /// Untested, needs documentation
+    /// Return the sign of a^+_a a^+_b a_j a_i applied to this determinant for a same-spin alpha
+    /// double excitation. The four orbital indices are assumed to be distinct. The case analysis
+    /// handles all relative orderings of i, j, a, and b and produces the fermionic sign.
     double slater_sign_aaaa(size_t i, size_t j, size_t a, size_t b) const {
         if ((((i < a) && (j < a) && (i < b) && (j < b)) == true) ||
             (((i < a) || (j < a) || (i < b) || (j < b)) == false)) {
@@ -443,9 +443,9 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         }
     }
 
-    /// Return the sign for a quadruplet of beta second quantized operators
-    /// a+(A) a+(B) a(J) a(I) applied to this determinant
-    /// Untested, needs documentation
+    /// Return the sign of a^+_a a^+_b a_j a_i applied to this determinant for a same-spin beta
+    /// double excitation. The four orbital indices are assumed to be distinct. The case analysis
+    /// handles all relative orderings of i, j, a, and b and produces the fermionic sign.
     double slater_sign_bbbb(size_t i, size_t j, size_t a, size_t b) const {
         if ((((i < a) && (j < a) && (i < b) && (j < b)) == true) ||
             (((i < a) || (j < a) || (i < b) || (j < b)) == false)) {
@@ -515,48 +515,6 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
             return words_[2] == d.words_[2] and words_[3] == d.words_[3];
         } else {
             return equal(nwords_half, nwords_, d);
-        }
-    }
-
-    /// @brief Apply a function to each occupied alpha orbital.
-    /// @tparam Func Callable of the form void(size_t)
-    void for_all_a(auto&& func) const noexcept {
-        for (size_t begin = 0; begin < nwords_half; ++begin) {
-            uint64_t x = words_[begin];
-            const size_t base = begin * bits_per_word;
-            while (x) {
-                const size_t pos = base + std::countr_zero(x);
-                func(pos);
-                x &= (x - 1); // clear the lowest set bit
-            }
-        }
-    }
-
-    /// @brief Apply a function to each occupied beta orbital.
-    /// @tparam Func Callable of the form void(size_t)
-    void for_all_b(auto&& func) const noexcept {
-        for (size_t begin = 0; begin < nwords_half; ++begin) {
-            uint64_t x = words_[begin + nwords_half];
-            const size_t base = begin * bits_per_word;
-            while (x) {
-                const size_t pos = base + std::countr_zero(x);
-                func(pos);
-                x &= (x - 1);
-            }
-        }
-    }
-
-    /// @brief Apply a function to each occupied spin orbital.
-    /// @tparam Func Callable of the form void(size_t)
-    void for_all(auto&& func) const noexcept {
-        for (size_t begin = 0; begin < nwords_; ++begin) {
-            uint64_t x = words_[begin];
-            const size_t base = begin * bits_per_word;
-            while (x) {
-                const size_t pos = base + std::countr_zero(x);
-                func(pos);
-                x &= (x - 1); // clear the lowest set bit
-            }
         }
     }
 
@@ -945,11 +903,11 @@ double apply_operator_to_det(DeterminantImpl<N>& d, const DeterminantImpl<N>& cr
 /// @note This function is faster than apply_operator_to_det
 /// Example:
 ///
-///   Determinant det, new_det, cre, ann, sign_mask, idx;
+///   Determinant det, new_det, cre, ann, sign_mask;
 ///   // test if the operator can be applied
 ///   if (det.faster_can_apply_operator(cre,ann)) {
 ///       // compute the sign mask
-///       compute_sign_mask(cre, ann, sign_mask, idx);
+///       compute_sign_mask_fast(cre, ann, sign_mask);
 ///       auto value = faster_apply_operator_to_det(det, new_det, cre, ann, sign_mask);
 ///       // do something with value and new_det
 ///   }

@@ -191,11 +191,8 @@ CommutatorType commutator_type(const SQOperatorString& lhs, const SQOperatorStri
 std::vector<std::pair<SQOperatorString, double>> commutator_fast(const SQOperatorString& lhs,
                                                                  const SQOperatorString& rhs);
 
-// Compute the sign mask associated with a set of creation and annihilation operators
-void compute_sign_mask(const Determinant& cre, const Determinant& ann, Determinant& sign_mask,
-                       Determinant& idx);
-
-// Compute the sign mask using a suffix parity scan of the operator mask
+// Compute the sign mask using a suffix parity scan of the operator mask.
+// Writes every word of `sign_mask`, overwriting prior contents; callers need not pre-clear.
 void compute_sign_mask_fast(const Determinant& cre, const Determinant& ann, Determinant& sign_mask);
 
 } // namespace forte2

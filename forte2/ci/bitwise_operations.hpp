@@ -26,9 +26,15 @@ inline std::size_t hash_combine(std::size_t a, std::size_t b) noexcept {
 /// @return parity = (-1)^(number of bits set to 1)
 inline double ui64_bit_parity(uint64_t x) noexcept { return 1.0 - 2.0 * (std::popcount(x) & 1); }
 
-/// @brief Compute the exclusive suffix XOR scan of a uint64_t word
+/// @brief Compute the exclusive suffix XOR scan of a uint64_t word.
+///
+/// After this function returns, bit n of the result equals the XOR of bits n + 1 through 63 of x.
+/// In particular, bit 63 of the result is always 0.
+///
+/// Implementation: Sklansky parallel-prefix scan. Each x ^= x >> k step XORs each bit with the
+/// bit k positions higher; doubling k from 1 to 32 covers all 63 higher bits in 6 gates. The final
+/// >> 1 converts inclusive-suffix to exclusive-suffix, so bit n excludes itself.
 /// @param x the uint64_t word
-/// @return bit n is the XOR of bits n + 1 through 63 of x
 inline uint64_t ui64_exclusive_suffix_xor(uint64_t x) noexcept {
     x ^= x >> 1;
     x ^= x >> 2;
