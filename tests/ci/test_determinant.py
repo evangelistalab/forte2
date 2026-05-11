@@ -91,6 +91,14 @@ def test_determinant_set_get():
         assert d2.nb(i) == (i in set_b)
 
 
+def test_determinant_find_last_one_zero_word_range_returns_sentinel():
+    sentinel = (1 << 64) - 1
+    d = Determinant.zero()
+
+    assert d.find_last_one() == sentinel
+    assert d.find_last_one(1, 2) == sentinel
+
+
 def test_det_equality():
     """Test the __eq__ operator"""
     d1 = Determinant("22")

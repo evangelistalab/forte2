@@ -1,8 +1,10 @@
 #pragma once
 
 #include <bit>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <utility>
 
 inline constexpr uint64_t ui64_bit_not_found = ~uint64_t(0);
 
@@ -80,7 +82,7 @@ inline uint64_t ui64_find_and_clear_lowest_one_bit(uint64_t& x) noexcept {
 /// @param x the uint64_t integer to test
 /// @param n the end position (not counted)
 /// @return the parity defined as parity = (-1)^(number of bits set to 1 between position 0 and n-1)
-inline double ui64_sign(uint64_t x, int n) noexcept {
+inline double ui64_sign(uint64_t x, std::size_t n) noexcept {
     if (n == 0)
         return 1.0;
     return 1.0 - 2.0 * (std::popcount(x << (64 - n)) & 1);
@@ -93,18 +95,16 @@ inline double ui64_sign(uint64_t x, int n) noexcept {
 /// @param n the end position (not counted)
 /// @return the parity defined as parity = (-1)^(number of bits set to 1 between position m+1 and
 /// n-1)
-inline double ui64_sign(uint64_t x, int m, int n) noexcept {
+inline double ui64_sign(uint64_t x, std::size_t m, std::size_t n) noexcept {
     if (n < m) {
-        const int tmp = m;
-        m = n;
-        n = tmp;
+        std::swap(m, n);
     }
 
-    const int width = n - m - 1;
-    if (width < 1) {
+    if (n - m <= 1) {
         return 1.0;
     }
 
+    const std::size_t width = n - m - 1;
     return 1.0 - 2.0 * (std::popcount((x >> (m + 1)) << (64 - width)) & 1);
 }
 
@@ -114,7 +114,7 @@ inline double ui64_sign(uint64_t x, int m, int n) noexcept {
 /// @param n the start position (not counted)
 /// @return the parity defined as parity = (-1)^(number of bits set to 1 between position n+1 and
 /// 63)
-inline double ui64_sign_reverse(uint64_t x, int n) noexcept {
+inline double ui64_sign_reverse(uint64_t x, std::size_t n) noexcept {
     if (n == 63)
         return 1.0;
     return 1.0 - 2.0 * (std::popcount(x >> (n + 1)) & 1);

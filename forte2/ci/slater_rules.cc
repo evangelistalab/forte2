@@ -66,6 +66,12 @@ SlaterConnection build_slater_connection(const forte2::Determinant& lhs,
         collect_connection_bits(a_rhs_only, base, result.a_rhs_only, result.na_rhs_only);
         collect_connection_bits(b_lhs_only, base, result.b_lhs_only, result.nb_lhs_only);
         collect_connection_bits(b_rhs_only, base, result.b_rhs_only, result.nb_rhs_only);
+
+        const int raw_diff_count = result.na_lhs_only + result.na_rhs_only +
+                                   result.nb_lhs_only + result.nb_rhs_only;
+        if (raw_diff_count > 4) {
+            return result;
+        }
     }
     return result;
 }
@@ -149,6 +155,10 @@ double SlaterRules::energy(const Determinant& det) const {
     return energy;
 }
 
+// The same-spin loop iterates over all alpha occupations of `d`, not just the lhs and rhs
+// intersection used in the textbook Slater rule. The extra particle-orbital term contributes
+// f_JK(i, a, a) = <ia||aa> = 0 by antisymmetry of the two-electron integrals, so the result is
+// unchanged. Do not copy this shortcut to RelSlaterRules when V is not antisymmetric.
 double SlaterRules::singles_coupling_a(size_t i, size_t a, const Determinant& d) const noexcept {
     double coupling = h(i, a);
     d.for_each_a_occ([&](size_t j) { coupling += f_JK(i, a, j); });
@@ -156,6 +166,10 @@ double SlaterRules::singles_coupling_a(size_t i, size_t a, const Determinant& d)
     return coupling;
 }
 
+// The same-spin loop iterates over all beta occupations of `d`, not just the lhs and rhs
+// intersection used in the textbook Slater rule. The extra particle-orbital term contributes
+// f_JK(i, a, a) = <ia||aa> = 0 by antisymmetry of the two-electron integrals, so the result is
+// unchanged. The cross-spin f_J loop does not rely on this cancellation.
 double SlaterRules::singles_coupling_b(size_t i, size_t a, const Determinant& d) const noexcept {
     double coupling = h(i, a);
     d.for_each_a_occ([&](size_t j) { coupling += f_J(i, a, j); });
@@ -194,13 +208,13 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
     case 4: {
         const auto i = connection.a_lhs_only[0];
         const auto j = connection.a_rhs_only[0];
-        const double sign = lhs.slater_sign_aa(static_cast<int>(i), static_cast<int>(j));
+        const double sign = lhs.slater_sign_aa(i, j);
         return sign * singles_coupling_a(i, j, rhs);
     }
     case 1: {
         const auto i = connection.b_lhs_only[0];
         const auto j = connection.b_rhs_only[0];
-        const double sign = lhs.slater_sign_bb(static_cast<int>(i), static_cast<int>(j));
+        const double sign = lhs.slater_sign_bb(i, j);
         return sign * singles_coupling_b(i, j, rhs);
     }
     case 8: {
@@ -208,8 +222,7 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
         const auto j = connection.a_lhs_only[1];
         const auto k = connection.a_rhs_only[0];
         const auto l = connection.a_rhs_only[1];
-        const double sign = lhs.slater_sign_aaaa(static_cast<int>(i), static_cast<int>(j),
-                                                 static_cast<int>(k), static_cast<int>(l));
+        const double sign = lhs.slater_sign_aaaa(i, j, k, l);
         return sign * va(i, j, k, l); // <ij||kl>
     }
     case 2: {
@@ -217,8 +230,7 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
         const auto j = connection.b_lhs_only[1];
         const auto k = connection.b_rhs_only[0];
         const auto l = connection.b_rhs_only[1];
-        const double sign = lhs.slater_sign_bbbb(static_cast<int>(i), static_cast<int>(j),
-                                                 static_cast<int>(k), static_cast<int>(l));
+        const double sign = lhs.slater_sign_bbbb(i, j, k, l);
         return sign * va(i, j, k, l); // <ij||kl>
     }
     case 5: {
@@ -226,8 +238,7 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
         const auto j = connection.b_lhs_only[0];
         const auto k = connection.a_rhs_only[0];
         const auto l = connection.b_rhs_only[0];
-        const double sign = lhs.slater_sign_aa(static_cast<int>(i), static_cast<int>(k)) *
-                            lhs.slater_sign_bb(static_cast<int>(j), static_cast<int>(l));
+        const double sign = lhs.slater_sign_aa(i, k) * lhs.slater_sign_bb(j, l);
         return sign * v(i, j, k, l); // <ij|kl>
     }
     }
@@ -323,21 +334,25 @@ double SlaterRules::slater_rules_reference(const Determinant& lhs, const Determi
     // Slater rule 3 PhiI = k_a^+ l_a^+ j_a i_a PhiJ
     if ((nadiff == 2) and (nbdiff == 0)) {
         // Diagonal contribution
-        int i = -1;
-        int j = 0;
-        int k = -1;
-        int l = 0;
+        size_t i = 0;
+        size_t j = 0;
+        size_t k = 0;
+        size_t l = 0;
+        bool found_i = false;
+        bool found_k = false;
         for (size_t p = 0; p < norb_; ++p) {
             if ((lhs.na(p) != rhs.na(p)) and lhs.na(p)) {
-                if (i == -1) {
+                if (not found_i) {
                     i = p;
+                    found_i = true;
                 } else {
                     j = p;
                 }
             }
             if ((lhs.na(p) != rhs.na(p)) and rhs.na(p)) {
-                if (k == -1) {
+                if (not found_k) {
                     k = p;
+                    found_k = true;
                 } else {
                     l = p;
                 }
@@ -350,22 +365,25 @@ double SlaterRules::slater_rules_reference(const Determinant& lhs, const Determi
     // Slater rule 3 PhiI = k_a^+ l_a^+ j_a i_a PhiJ
     if ((nadiff == 0) and (nbdiff == 2)) {
         // Diagonal contribution
-        int i, j, k, l;
-        i = -1;
-        j = -1;
-        k = -1;
-        l = -1;
+        size_t i = 0;
+        size_t j = 0;
+        size_t k = 0;
+        size_t l = 0;
+        bool found_i = false;
+        bool found_k = false;
         for (size_t p = 0; p < norb_; ++p) {
             if ((lhs.nb(p) != rhs.nb(p)) and lhs.nb(p)) {
-                if (i == -1) {
+                if (not found_i) {
                     i = p;
+                    found_i = true;
                 } else {
                     j = p;
                 }
             }
             if ((lhs.nb(p) != rhs.nb(p)) and rhs.nb(p)) {
-                if (k == -1) {
+                if (not found_k) {
                     k = p;
+                    found_k = true;
                 } else {
                     l = p;
                 }
@@ -378,8 +396,10 @@ double SlaterRules::slater_rules_reference(const Determinant& lhs, const Determi
     // Slater rule 3 PhiI = j_a^+ i_a PhiJ
     if ((nadiff == 1) and (nbdiff == 1)) {
         // Diagonal contribution
-        int i, j, k, l;
-        i = j = k = l = -1;
+        size_t i = 0;
+        size_t j = 0;
+        size_t k = 0;
+        size_t l = 0;
         for (size_t p = 0; p < norb_; ++p) {
             if ((lhs.na(p) != rhs.na(p)) and lhs.na(p))
                 i = p;

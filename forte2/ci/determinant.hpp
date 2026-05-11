@@ -379,7 +379,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
 
     /// Return the sign for a single second quantized operator
     /// This function ignores if bit n is set or not
-    double slater_sign_a(int n) const {
+    double slater_sign_a(size_t n) const {
         if constexpr (nbits == 128) {
             // specialization for 64 + 64 bits
             return ui64_sign(words_[0], n);
@@ -390,7 +390,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
 
     /// Return the sign for a single second quantized operator
     /// This function ignores if bit n is set or not
-    double slater_sign_b(int n) const {
+    double slater_sign_b(size_t n) const {
         if constexpr (nbits == 128) {
             // specialization for 64 + 64 bits
             return ui64_sign(words_[1], n) * ui64_bit_parity(words_[0]);
@@ -402,7 +402,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// Return the sign for a pair of alpha second quantized operators
     /// The sign depends only on the number of bits = 1 between n and m
     /// n and m are not assumed to have any specific order
-    double slater_sign_aa(int n, int m) const {
+    double slater_sign_aa(size_t n, size_t m) const {
         if constexpr (nbits == 128) {
             // specialization for 64 + 64 bits
             return ui64_sign(words_[0], n, m);
@@ -414,7 +414,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// Return the sign for a pair of beta second quantized operators
     /// The sign depends only on the number of bits = 1 between n and m
     /// n and m are not assumed to have any specific order
-    double slater_sign_bb(int n, int m) const {
+    double slater_sign_bb(size_t n, size_t m) const {
         if constexpr (nbits == 128) {
             // specialization for 64 + 64 bits
             return ui64_sign(words_[1], n, m);
@@ -426,7 +426,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// Return the sign for a quadruplet of alpha second quantized operators
     /// a+(a) a+(b) a(j) a(i) applied to this determinant
     /// Untested, needs documentation
-    double slater_sign_aaaa(int i, int j, int a, int b) const {
+    double slater_sign_aaaa(size_t i, size_t j, size_t a, size_t b) const {
         if ((((i < a) && (j < a) && (i < b) && (j < b)) == true) ||
             (((i < a) || (j < a) || (i < b) || (j < b)) == false)) {
             if ((i < j) ^ (a < b)) {
@@ -446,7 +446,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// Return the sign for a quadruplet of beta second quantized operators
     /// a+(A) a+(B) a(J) a(I) applied to this determinant
     /// Untested, needs documentation
-    double slater_sign_bbbb(int i, int j, int a, int b) const {
+    double slater_sign_bbbb(size_t i, size_t j, size_t a, size_t b) const {
         if ((((i < a) && (j < a) && (i < b) && (j < b)) == true) ||
             (((i < a) || (j < a) || (i < b) || (j < b)) == false)) {
             if ((i < j) ^ (a < b)) {

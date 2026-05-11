@@ -30,6 +30,21 @@ def _symmetric_integrals(norb):
     return h, v
 
 
+def _random_determinants(norb, nalpha, nbeta, ndets, seed=67890):
+    rng = np.random.default_rng(seed)
+    dets = []
+    seen = set()
+    while len(dets) < ndets:
+        alpha = tuple(sorted(rng.choice(norb, size=nalpha, replace=False)))
+        beta = tuple(sorted(rng.choice(norb, size=nbeta, replace=False)))
+        key = (alpha, beta)
+        if key in seen:
+            continue
+        seen.add(key)
+        dets.append(_determinant(alpha, beta))
+    return dets
+
+
 def _main_diagonal_energy(norb, scalar_energy, h, v, det):
     """Reference the main-branch diagonal Slater-rule loop structure."""
 
@@ -111,7 +126,8 @@ def test_slater_rules_fast_matches_reference_for_excitation_classes():
         _determinant([1, 4, 5], [1, 3, 6]),  # alpha-alpha double
         _determinant([0, 2, 5], [0, 4, 6]),  # beta-beta double
         _determinant([0, 4, 5], [1, 4, 6]),  # alpha-beta double
-        _determinant([1, 3, 4], [1, 3, 6]),  # higher-rank alpha excitation
+        _determinant([1, 3, 5], [1, 3, 6]),  # connected alpha-alpha double
+        _determinant([1, 3, 4], [1, 3, 6]),  # disconnected rank-3 alpha excitation
         _determinant([0, 2, 5, 7], [1, 3, 6]),  # unequal alpha electron count
     ]
 
@@ -120,6 +136,22 @@ def test_slater_rules_fast_matches_reference_for_excitation_classes():
             fast = slater_rules.slater_rules(left, right)
             reference = slater_rules.slater_rules_reference(left, right)
             assert fast == approx(reference)
+
+
+def test_slater_rules_fast_matches_reference_sparse_random_pairs():
+    norb = 16
+    h, v = _symmetric_integrals(norb)
+    slater_rules = forte2.SlaterRules(norb, 0.11, h, v)
+    dets = _random_determinants(norb, nalpha=3, nbeta=3, ndets=64)
+
+    H_fast = np.empty((len(dets), len(dets)))
+    H_reference = np.empty_like(H_fast)
+    for i, lhs in enumerate(dets):
+        for j, rhs in enumerate(dets):
+            H_fast[i, j] = slater_rules.slater_rules(lhs, rhs)
+            H_reference[i, j] = slater_rules.slater_rules_reference(lhs, rhs)
+
+    assert np.allclose(H_fast, H_reference, atol=1e-12)
 
 
 def test_slater_rules_fast_matches_reference_exhaustive_small_space():

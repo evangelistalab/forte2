@@ -65,6 +65,13 @@ void export_determinant_api(nb::module_& m) {
         .def("count_a", &Determinant::count_a, "Count the number of alpha electrons")
         .def("count_b", &Determinant::count_b, "Count the number of beta electrons")
         .def(
+            "find_last_one",
+            [](const Determinant& d, size_t begin, size_t end) {
+                return d.find_last_one(begin, end);
+            },
+            "begin"_a = 0, "end"_a = Determinant::nwords_,
+            "Find the last set bit in the word range [begin, end), or the not-found sentinel")
+        .def(
             "count", [](Determinant& d) { return d.count_a() + d.count_b(); },
             "Count the total number of electrons")
         .def("create_a", &Determinant::create_a, "n"_a,
@@ -86,11 +93,11 @@ void export_determinant_api(nb::module_& m) {
             "Get the sign of the Slater determinant")
         .def(
             "slater_sign_aa",
-            [](const Determinant& d, int n, int m) { return d.slater_sign_aa(n, m); },
+            [](const Determinant& d, size_t n, size_t m) { return d.slater_sign_aa(n, m); },
             "n"_a, "m"_a, "Get the alpha-alpha pair sign of the Slater determinant")
         .def(
             "slater_sign_bb",
-            [](const Determinant& d, int n, int m) { return d.slater_sign_bb(n, m); },
+            [](const Determinant& d, size_t n, size_t m) { return d.slater_sign_bb(n, m); },
             "n"_a, "m"_a, "Get the beta-beta pair sign of the Slater determinant")
         .def(
             "slater_sign_reverse",

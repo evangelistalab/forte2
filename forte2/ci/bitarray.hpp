@@ -636,13 +636,13 @@ template <size_t N> class BitArray {
 
     /// Return the sign of a_n applied to this determinant
     /// This function ignores if bit n is set or not
-    double slater_sign(int n) const {
+    double slater_sign(size_t n) const {
         if constexpr (N == 64) {
             return ui64_sign(words_[0], n);
         } else {
             size_t count = 0;
             // count all the preceeding bits only if we are looking past the first word
-            if (static_cast<size_t>(n) >= bits_per_word) {
+            if (n >= bits_per_word) {
                 size_t last_full_word = whichword(n);
                 for (size_t k = 0; k < last_full_word; ++k) {
                     count += std::popcount(words_[k]);
@@ -655,7 +655,7 @@ template <size_t N> class BitArray {
 
     /// Return the sign of a_n applied to this determinant in reverse order
     /// This function ignores if bit n is set or not
-    double slater_sign_reverse(int n) const {
+    double slater_sign_reverse(size_t n) const {
         if constexpr (N == 64) {
             return ui64_sign_reverse(words_[0], n);
         } else {
@@ -707,7 +707,7 @@ template <size_t N> class BitArray {
     /// Return the sign for a pair of second quantized operators
     /// The sign depends only on the number of bits = 1 between n and m
     /// There are no restrictions on n and m
-    double slater_sign(int n, int m) const {
+    double slater_sign(size_t n, size_t m) const {
         if constexpr (N == 64) {
             return ui64_sign(words_[0], n, m);
         } else if constexpr (N == 128) {

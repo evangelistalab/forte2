@@ -517,6 +517,11 @@ class Determinant:
     def count_b(self) -> int:
         """Count the number of beta electrons"""
 
+    def find_last_one(self, begin: int = 0, end: int = 2) -> int:
+        """
+        Find the last set bit in the word range [begin, end), or the not-found sentinel
+        """
+
     def count(self) -> int:
         """Count the total number of electrons"""
 
