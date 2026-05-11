@@ -3,6 +3,8 @@
 #include <array>
 #include <bit>
 #include <cstdint>
+#include <stdexcept>
+#include <string>
 
 namespace {
 
@@ -75,6 +77,10 @@ namespace forte2 {
 SlaterRules::SlaterRules(int norb, double scalar_energy, np_matrix one_electron_integrals,
                          np_tensor4 two_electron_integrals)
     : norb_(norb), norb2_(norb * norb), norb3_(norb * norb * norb), scalar_energy_(scalar_energy) {
+    if (norb < 0) {
+        throw std::invalid_argument("SlaterRules: norb must be non-negative, got " +
+                                    std::to_string(norb));
+    }
 
     // Precompute the one-electron, Coulomb and Exchange integrals
     h_.resize(norb_ * norb_);

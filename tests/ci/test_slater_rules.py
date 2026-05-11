@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 import forte2
 from forte2 import System, RHF
@@ -49,6 +50,14 @@ def _main_diagonal_energy(norb, scalar_energy, h, v, det):
             energy += v[p, q, p, q] - v[p, q, q, p]
 
     return energy
+
+
+def test_slater_rules_rejects_negative_norb():
+    h = np.zeros((0, 0))
+    v = np.zeros((0, 0, 0, 0))
+
+    with pytest.raises(ValueError, match="SlaterRules: norb must be non-negative, got -1"):
+        forte2.SlaterRules(-1, 0.0, h, v)
 
 
 def test_slater_rules_diagonal_edge_cases_match_main_formula():
