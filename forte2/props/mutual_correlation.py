@@ -1022,6 +1022,12 @@ class UMP2MPQOnTheFly:
         self._cache_bb = {}
         self._cache_ab = {}
 
+        # Optional canonical fixed-occupied-slab caches.
+        # These reduce repeated DF contractions in the on-the-fly path.
+        self._cache_fixed_aa = {}
+        self._cache_fixed_bb = {}
+        self._cache_fixed_ab_beta = {}
+
     @property
     def occs(self):
         return np.diag(self.Γ1)
@@ -1092,6 +1098,10 @@ class UMP2MPQOnTheFly:
         -------
         T : ndarray, shape (naocc, navir, navir)
         """
+
+        if j in self._cache_fixed_aa:
+            return self._cache_fixed_aa[j]
+
         Ba, _ = self.mp2.B_iaQ
 
         eps_i = self.mp2.eps_a[: self.naocc]
@@ -1104,7 +1114,10 @@ class UMP2MPQOnTheFly:
 
         denom = eps_i[:, None, None] + self.mp2.eps_a[j] - eps_vv[None, :, :]
 
-        return self.mp2._safe_divide(g_as, denom, label="UMP2 aa denom")
+        T = self.mp2._safe_divide(g_as, denom, label="UMP2 aa denom")
+
+        self._cache_fixed_aa[j] = T
+        return T
 
     def _t2_bb_fixed_j_canonical(self, j):
         """
@@ -1114,6 +1127,10 @@ class UMP2MPQOnTheFly:
         -------
         T : ndarray, shape (nbocc, nbvir, nbvir)
         """
+
+        if j in self._cache_fixed_bb:
+            return self._cache_fixed_bb[j]
+
         _, Bb = self.mp2.B_iaQ
 
         eps_i = self.mp2.eps_b[: self.nbocc]
@@ -1126,7 +1143,10 @@ class UMP2MPQOnTheFly:
 
         denom = eps_i[:, None, None] + self.mp2.eps_b[j] - eps_vv[None, :, :]
 
-        return self.mp2._safe_divide(g_as, denom, label="UMP2 bb denom")
+        T = self.mp2._safe_divide(g_as, denom, label="UMP2 bb denom")
+
+        self._cache_fixed_bb[j] = T
+        return T
 
     def _t2_ab_fixed_beta_j_canonical(self, j):
         """
@@ -1136,6 +1156,10 @@ class UMP2MPQOnTheFly:
         -------
         T : ndarray, shape (naocc, navir, nbvir)
         """
+
+        if j in self._cache_fixed_ab_beta:
+            return self._cache_fixed_ab_beta[j]
+
         Ba, Bb = self.mp2.B_iaQ
 
         eps_ai = self.mp2.eps_a[: self.naocc]
@@ -1148,7 +1172,10 @@ class UMP2MPQOnTheFly:
 
         denom = eps_ai[:, None, None] + self.mp2.eps_b[j] - eps_vv[None, :, :]
 
-        return self.mp2._safe_divide(g, denom, label="UMP2 ab denom")
+        T = self.mp2._safe_divide(g, denom, label="UMP2 ab denom")
+
+        self._cache_fixed_ab_beta[j] = T
+        return T
 
     # ============================================================
     # Rotated occupied-pair amplitude blocks in NO basis
@@ -1340,8 +1367,23 @@ class UMP2MPQOnTheFly:
     # ============================================================
     # Cumulant elements
     # ============================================================
-
     def lambda2_aa_elem(self, p, q, r, s):
+        """
+        Alpha-alpha cumulant element in the rotated NO basis.
+
+        Same-spin cumulants are antisymmetric with respect to exchange of the
+        first pair and the second pair:
+
+            lambda[p,q,r,s] = -lambda[q,p,r,s]
+            lambda[p,q,r,s] = -lambda[p,q,s,r]
+
+        Therefore, if p == q or r == s, the element is exactly zero.
+        This pruning is essential for fast M1 evaluation.
+        """
+
+        if p == q or r == s:
+            return 0.0
+
         val = 0.0
 
         # First-order doubles block: oo-vv.
@@ -1384,8 +1426,20 @@ class UMP2MPQOnTheFly:
         return val
 
     def lambda2_bb_elem(self, p, q, r, s):
+        """
+        Beta-beta cumulant element in the rotated NO basis.
+
+        Same-spin cumulants are antisymmetric with respect to exchange of the
+        first pair and the second pair. Therefore p == q or r == s gives an
+        exactly zero element.
+        """
+
+        if p == q or r == s:
+            return 0.0
+
         val = 0.0
 
+        # First-order doubles block: oo-vv.
         if self._ob(p) and self._ob(q) and self._vb(r) and self._vb(s):
             a = self._b_vir(r)
             b = self._b_vir(s)
@@ -1397,6 +1451,7 @@ class UMP2MPQOnTheFly:
                 + self._t2_bb_elem(q, p, b, a)
             )
 
+        # Hermitian partner: vv-oo.
         if self._vb(p) and self._vb(q) and self._ob(r) and self._ob(s):
             a = self._b_vir(p)
             b = self._b_vir(q)
@@ -1408,9 +1463,11 @@ class UMP2MPQOnTheFly:
                 + self._t2_bb_elem(s, r, b, a)
             )
 
+        # Second-order oooo.
         if self._ob(p) and self._ob(q) and self._ob(r) and self._ob(s):
             val += self._gamma_oooo_bb_elem(p, q, r, s)
 
+        # Second-order vvvv.
         if self._vb(p) and self._vb(q) and self._vb(r) and self._vb(s):
             a = self._b_vir(p)
             b = self._b_vir(q)
@@ -1500,16 +1557,31 @@ class UMP2MPQOnTheFly:
     # ============================================================
     # M1 / M2
     # ============================================================
+    def make_measures(self, indices=None):
+        """
+        Compute M1 and M2.
 
-    def make_measures(self):
+        Parameters
+        ----------
+        indices : iterable[int] or None
+            If None, compute M1/M2 over all orbitals.
+            If provided, compute M1 and M2 only for this orbital subset,
+            but return full-size arrays with zeros elsewhere.
+        """
+
+        if indices is None:
+            indices = list(range(self.nmo))
+        else:
+            indices = list(indices)
+
         M1 = np.zeros(self.nmo)
         M2 = np.zeros((self.nmo, self.nmo))
 
-        for p in range(self.nmo):
+        for p in indices:
             M1[p] = self.C_elem(p, p, p, p)
 
-        for p in range(self.nmo):
-            for q in range(p + 1, self.nmo):
+        for ii, p in enumerate(indices):
+            for q in indices[ii + 1 :]:
                 val = (
                     4.0 * self.C_elem(p, p, p, q)
                     + 2.0 * self.C_elem(p, p, q, q)
@@ -1523,19 +1595,63 @@ class UMP2MPQOnTheFly:
 
         return self.M1, self.M2
 
-    def make_M1(self):
-        if self.M1 is None:
-            self.make_measures()
+    def make_M1(self, indices=None):
+        """
+        Compute M1 only.
+
+        This is useful because M1 should not require full M2 construction.
+        """
+
+        if self.M1 is not None and indices is None:
+            return self.M1
+
+        if indices is None:
+            indices = list(range(self.nmo))
+        else:
+            indices = list(indices)
+
+        M1 = np.zeros(self.nmo)
+
+        for p in indices:
+            M1[p] = self.C_elem(p, p, p, p)
+
+        self.M1 = M1
         return self.M1
 
-    def make_M2(self):
-        if self.M2 is None:
-            self.make_measures()
+    def make_M2(self, indices=None):
+        """
+        Compute M2.
+
+        If M2 has already been computed over all orbitals and indices is None,
+        return the cached M2. Otherwise recompute for the requested subset.
+        """
+
+        if self.M2 is not None and indices is None:
+            return self.M2
+
+        self.make_measures(indices=indices)
         return self.M2
 
-    def MPQ_matrix_summary(self, print_threshold: float = 7.5e-4) -> str:
-        if self.M2 is None:
-            self.make_M2()
+    def MPQ_matrix_summary(self, print_threshold: float = 7.5e-4, indices=None) -> str:
+        """
+        Generates a summary of the mutual correlation matrix M2.
+
+        Parameters
+        ----------
+        print_threshold : float, optional, default=7.5e-4
+            Only values greater than this threshold are printed.
+
+        indices : iterable[int] or None
+            Optional orbital subset for M2 construction and printing.
+        """
+
+        if self.M2 is None or indices is not None:
+            self.make_M2(indices=indices)
+
+        if indices is None:
+            print_indices = list(range(self.nmo))
+        else:
+            print_indices = list(indices)
 
         s_lines = [
             f"Mutual Correlation Matrix M2 (only values > {print_threshold:.1e}):",
@@ -1545,8 +1661,8 @@ class UMP2MPQOnTheFly:
         ]
 
         M2_vals = []
-        for i in range(self.M2.shape[0]):
-            for j in range(i + 1, self.M2.shape[1]):
+        for ii, i in enumerate(print_indices):
+            for j in print_indices[ii + 1 :]:
                 M2_vals.append((self.M2[i, j], i, j))
 
         M2_vals.sort(reverse=True, key=lambda x: x[0])
