@@ -66,7 +66,7 @@ class UMP2(MP2Base):
 
         self.B_iaQ = self._build_df_iaQ()
 
-        (self.t2_a, self.t2_b, self.t2_ab, self.E_corr) = self._build_t2_all(self.B_iaQ)
+        self.t2_a, self.t2_b, self.t2_ab, self.E_corr = self._build_t2_all(self.B_iaQ)
 
         self.E_total = self.parent_method.E + self.E_corr
 
@@ -388,7 +388,7 @@ class UMP2(MP2Base):
             gamma1_a, gamma1_b = self.make_1rdm_sd()
         else:
             gamma1_a, gamma1_b = gamma1
-        return self._make_gamma1_ao(gamma1_a, gamma1_b)
+        return self._make_gamma1_ao_sf(gamma1_a, gamma1_b)
 
     make_1rdm_ao = gamma1_mo_to_ao
 
