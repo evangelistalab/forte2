@@ -518,10 +518,10 @@ class Determinant:
         """Count the number of beta electrons"""
 
     def find_last_alpha_occ(self) -> int:
-        """Find the highest occupied alpha orbital, or the not-found sentinel"""
+        """Find the highest occupied alpha orbital, or return the not-found ui64_bit_not_found value"""
 
     def find_last_beta_occ(self) -> int:
-        """Find the highest occupied beta orbital, or the not-found sentinel"""
+        """Find the highest occupied beta orbital, or return the not-found ui64_bit_not_found value"""
 
     def count(self) -> int:
         """Count the total number of electrons"""

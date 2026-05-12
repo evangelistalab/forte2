@@ -91,12 +91,12 @@ def test_determinant_set_get():
         assert d2.nb(i) == (i in set_b)
 
 
-def test_determinant_find_last_occupation_zero_sectors_return_sentinel():
-    sentinel = (1 << 64) - 1
+def test_determinant_find_last_occupation_zero_sectors_return_ui64_bit_not_found():
+    ui64_bit_not_found = (1 << 64) - 1
     d = Determinant.zero()
 
-    assert d.find_last_alpha_occ() == sentinel
-    assert d.find_last_beta_occ() == sentinel
+    assert d.find_last_alpha_occ() == ui64_bit_not_found
+    assert d.find_last_beta_occ() == ui64_bit_not_found
 
 
 def test_det_equality():

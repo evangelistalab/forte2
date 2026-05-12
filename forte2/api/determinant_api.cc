@@ -65,9 +65,9 @@ void export_determinant_api(nb::module_& m) {
         .def("count_a", &Determinant::count_a, "Count the number of alpha electrons")
         .def("count_b", &Determinant::count_b, "Count the number of beta electrons")
         .def("find_last_alpha_occ", &Determinant::find_last_alpha_occ,
-             "Find the highest occupied alpha orbital, or the not-found sentinel")
+             "Find the highest occupied alpha orbital, or the not-found ui64_bit_not_found value")
         .def("find_last_beta_occ", &Determinant::find_last_beta_occ,
-             "Find the highest occupied beta orbital, or the not-found sentinel")
+             "Find the highest occupied beta orbital, or the not-found ui64_bit_not_found value")
         .def(
             "count", [](Determinant& d) { return d.count_a() + d.count_b(); },
             "Count the total number of electrons")
@@ -90,12 +90,12 @@ void export_determinant_api(nb::module_& m) {
             "Get the sign of the Slater determinant")
         .def(
             "slater_sign_aa",
-            [](const Determinant& d, size_t n, size_t m) { return d.slater_sign_aa(n, m); },
-            "n"_a, "m"_a, "Get the alpha-alpha pair sign of the Slater determinant")
+            [](const Determinant& d, size_t n, size_t m) { return d.slater_sign_aa(n, m); }, "n"_a,
+            "m"_a, "Get the alpha-alpha pair sign of the Slater determinant")
         .def(
             "slater_sign_bb",
-            [](const Determinant& d, size_t n, size_t m) { return d.slater_sign_bb(n, m); },
-            "n"_a, "m"_a, "Get the beta-beta pair sign of the Slater determinant")
+            [](const Determinant& d, size_t n, size_t m) { return d.slater_sign_bb(n, m); }, "n"_a,
+            "m"_a, "Get the beta-beta pair sign of the Slater determinant")
         .def(
             "slater_sign_reverse",
             [](const Determinant& d, size_t n) { return d.slater_sign_reverse(n); },
@@ -117,8 +117,7 @@ void export_determinant_api(nb::module_& m) {
         "Compute the S^2 value between two determinants");
 
     m.def(
-        "ui64_find_highest_one_bit",
-        [](uint64_t x) { return ui64_find_highest_one_bit(x); }, "x"_a,
+        "ui64_find_highest_one_bit", [](uint64_t x) { return ui64_find_highest_one_bit(x); }, "x"_a,
         "Find the highest set bit in a 64-bit word");
 }
 
