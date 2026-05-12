@@ -53,7 +53,7 @@ std::vector<double> SelectedCIHelper::spin2_batch(size_t num_batches, size_t bat
 
         // find the occupied and empty orbitals for the current alpha string
         a_str.find_set_bits(aocc, noa);
-        compute_fast_virtual(aocc, avir, norb_);
+        collect_virtual_orbitals(aocc, avir, norb_);
 
         // single alpha creation of an electron (S+ = a^+(pα) a(pβ))
         for (const auto& a : avir) {

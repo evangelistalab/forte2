@@ -77,10 +77,6 @@ class SQOperatorString {
     const Determinant& ann() const;
     /// @return the sign mask associated with this operator
     const Determinant& sign_mask() const;
-    /// @return a Determinant object that represents the creation operators
-    Determinant& cre_mod();
-    /// @return a Determinant object that represents the annihilation operators
-    Determinant& ann_mod();
     /// @return a op_tuple_t that represents the operator
     op_tuple_t op_tuple() const;
     /// @return the number component of this operator. Returns a SQOperatorString object with the
@@ -131,11 +127,12 @@ class SQOperatorString {
         }
     };
 
+  private:
     /// a Determinant that represents the creation operators
     Determinant cre_;
     /// a Determinant that represents the annihilation operators
     Determinant ann_;
-    /// a Determinant that represents the adjoint of the creation operators
+    /// cached parity mask used when applying this operator string
     Determinant sign_mask_;
 };
 
@@ -179,11 +176,6 @@ std::pair<SQOperatorString, double> make_sq_operator_string(const std::string& s
 std::pair<SQOperatorString, double> make_sq_operator_string_from_list(const op_tuple_t& ops,
                                                                       bool allow_reordering);
 
-template <size_t N>
-double apply_operator_to_det(DeterminantImpl<N>& d, const SQOperatorString& sqop) {
-    return apply_operator_to_det(d, sqop.cre(), sqop.ann());
-}
-
 bool do_ops_commute(const SQOperatorString& lhs, const SQOperatorString& rhs);
 
 CommutatorType commutator_type(const SQOperatorString& lhs, const SQOperatorString& rhs);
@@ -191,8 +183,25 @@ CommutatorType commutator_type(const SQOperatorString& lhs, const SQOperatorStri
 std::vector<std::pair<SQOperatorString, double>> commutator_fast(const SQOperatorString& lhs,
                                                                  const SQOperatorString& rhs);
 
-// Compute the sign mask using a suffix parity scan of the operator mask.
-// Writes every word of `sign_mask`, overwriting prior contents; callers need not pre-clear.
-void compute_sign_mask_fast(const Determinant& cre, const Determinant& ann, Determinant& sign_mask);
+/// Compute the parity mask used to apply this operator string quickly.
+///
+/// Applying a product of fermionic creation/annihilation operators gives a minus sign whenever an
+/// operator is commuted past an occupied spin orbital. For a fixed spin-orbital position p in the
+/// determinant, the electron at p contributes a sign flip exactly when an odd number of active
+/// operators lie at positions higher than p. Therefore sign_mask[p] is the exclusive suffix parity
+/// of the operator pattern:
+///
+///     sign_mask[p] = parity(number of active operator positions q with q > p)
+///
+/// The active operator pattern is `cre ^ ann`, not `cre | ann`: if a creation and annihilation
+/// operator are both present at the same position, as in a number-operator component, their two
+/// contributions to this permutation parity cancel.
+///
+/// The implementation scans packed words from high to low. Within one word,
+/// `ui64_exclusive_suffix_xor` computes the suffix parity of the active operators in that word.
+/// `higher_word_parity` carries the parity of all active operators in higher words; if it is odd,
+/// every position in the current lower word sees one extra sign flip. The routine writes every
+/// word of `sign_mask`, overwriting prior contents, so callers do not need to clear it first.
+void compute_sign_mask(const Determinant& cre, const Determinant& ann, Determinant& sign_mask);
 
 } // namespace forte2

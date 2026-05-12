@@ -50,7 +50,7 @@ std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
     if (lhs.count_a() != rhs.count_a())
         return 0.0;
 
-    int ndiff = lhs.fast_a_xor_b_count(rhs) / 2;
+    int ndiff = lhs.symmetric_difference_count(rhs) / 2;
     if (ndiff > 2)
         return 0.0;
 

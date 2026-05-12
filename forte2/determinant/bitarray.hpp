@@ -514,12 +514,13 @@ template <size_t N> class BitArray {
         for_each_set_bit([&](size_t pos) { occ[n++] = pos; }, begin, end);
     }
 
-    /// @brief This templated function is used to generate fast tests for binary conditions
+  private:
+    /// @brief This templated function is used to generate tests for binary word conditions.
     /// @param b the second BitArray object
     /// @param condition a lambda function that takes two uint64_t integers and returns a boolean
     /// @return true if the condition is satisfied for all the words, false otherwise
     template <typename Condition>
-    bool fast_test_binary_condition(const BitArray<N>& b, Condition condition) const {
+    bool test_binary_condition(const BitArray<N>& b, Condition condition) const {
         if constexpr (N == 64) {
             return condition(words_[0], b.words_[0]);
         } else if constexpr (N == 128) {
@@ -539,14 +540,14 @@ template <size_t N> class BitArray {
         }
     }
 
-    /// @brief This templated function is used to generate fast tests for ternary conditions
+    /// @brief This templated function is used to generate tests for ternary word conditions.
     /// @param b the second BitArray object
     /// @param c the third BitArray object
     /// @param condition a lambda function that takes three uint64_t integers and returns a boolean
     /// @return true if the condition is satisfied for all the words, false otherwise
     template <typename Condition>
-    bool fast_test_ternary_condition(const BitArray<N>& b, const BitArray<N>& c,
-                                     Condition condition) const {
+    bool test_ternary_condition(const BitArray<N>& b, const BitArray<N>& c,
+                                Condition condition) const {
         if constexpr (N == 64) {
             return condition(words_[0], b.words_[0], c.words_[0]);
         } else if constexpr (N == 128) {
@@ -570,11 +571,12 @@ template <size_t N> class BitArray {
         }
     }
 
-    /// @brief This templated function is used to generate fast counting binary operations
+    /// @brief This templated function is used to generate counting binary word operations.
     /// @param b the second BitArray object
     /// @param operation a lambda function that takes two uint64_t integers and returns an integer
     /// @return the result of the operation for all the words
-    template <typename Operation> int fast_count(const BitArray<N>& b, Operation operation) const {
+    template <typename Operation>
+    int count_binary_operation(const BitArray<N>& b, Operation operation) const {
         if constexpr (N == 64) {
             return operation(words_[0], b.words_[0]);
         } else if constexpr (N == 128) {
@@ -594,26 +596,29 @@ template <size_t N> class BitArray {
         }
     }
 
+  public:
     /// @brief Test (a & b) == b
-    bool fast_a_and_b_equal_b(const BitArray<N>& b) const {
-        return fast_test_binary_condition(
-            b, [](uint64_t a, uint64_t b) -> bool { return (a & b) == b; });
+    bool is_superset_of(const BitArray<N>& b) const {
+        return test_binary_condition(b,
+                                     [](uint64_t a, uint64_t b) -> bool { return (a & b) == b; });
     }
 
     /// @brief Test a & b == 0
-    bool fast_a_and_b_eq_zero(const BitArray<N>& b) const {
-        return fast_test_binary_condition(
-            b, [](uint64_t a, uint64_t b) -> bool { return (a & b) == 0; });
+    bool is_disjoint_from(const BitArray<N>& b) const {
+        return test_binary_condition(b,
+                                     [](uint64_t a, uint64_t b) -> bool { return (a & b) == 0; });
     }
 
     /// @brief Implements count(a & b)
-    int fast_a_and_b_count(const BitArray<N>& b) const {
-        return fast_count(b, [](uint64_t a, uint64_t b) -> int { return std::popcount(a & b); });
+    int intersection_count(const BitArray<N>& b) const {
+        return count_binary_operation(
+            b, [](uint64_t a, uint64_t b) -> int { return std::popcount(a & b); });
     }
 
     /// @brief Implements count(a ^ b)
-    int fast_a_xor_b_count(const BitArray<N>& b) const {
-        return fast_count(b, [](uint64_t a, uint64_t b) -> int { return std::popcount(a ^ b); });
+    int symmetric_difference_count(const BitArray<N>& b) const {
+        return count_binary_operation(
+            b, [](uint64_t a, uint64_t b) -> int { return std::popcount(a ^ b); });
     }
 
     /// @brief Test (a & b & ~c) | (c & ~a) == 0 used to check if an operator can be applied to a
@@ -622,15 +627,18 @@ template <size_t N> class BitArray {
     ///        - b is the creation operator
     ///        - c is the annihilation operator
     /// @return true if the operator can be applied, false otherwise
-    inline bool faster_can_apply_operator(const BitArray<N>& b, const BitArray<N>& c) const {
-        return fast_test_ternary_condition(b, c, [](uint64_t a, uint64_t b, uint64_t c) -> bool {
+    inline bool can_apply_operator(const BitArray<N>& b, const BitArray<N>& c) const {
+        return test_ternary_condition(b, c, [](uint64_t a, uint64_t b, uint64_t c) -> bool {
             return ((a & b & (~c)) | (c & (~a))) == 0;
         });
     }
 
-    ///  @brief Test a & (b - c) == 0
-    bool fast_a_and_b_minus_c_eq_zero(const BitArray<N>& b, const BitArray<N>& c) const {
-        return fast_test_ternary_condition(
+    /// @brief Test a & (b - c) == 0.
+    ///
+    /// In grouped operator application this checks whether any creation target in `b`, excluding
+    /// orbitals also annihilated by `c`, is already occupied in this determinant.
+    bool disjoint_from_difference(const BitArray<N>& b, const BitArray<N>& c) const {
+        return test_ternary_condition(
             b, c, [](uint64_t a, uint64_t b, uint64_t c) -> bool { return (a & (b & (~c))) == 0; });
     }
 
@@ -673,12 +681,12 @@ template <size_t N> class BitArray {
         }
     }
 
-    double create_fast(int n) {
+    double create_unchecked(int n) {
         set_bit(n, true);
         return slater_sign(n);
     }
 
-    double destroy_fast(int n) {
+    double destroy_unchecked(int n) {
         set_bit(n, false);
         return slater_sign(n);
     }
@@ -686,13 +694,13 @@ template <size_t N> class BitArray {
     double create(int n) {
         if (get_bit(n))
             return 0.0;
-        return create_fast(n);
+        return create_unchecked(n);
     }
 
     double destroy(int n) {
         if (not get_bit(n))
             return 0.0;
-        return destroy_fast(n);
+        return destroy_unchecked(n);
     }
 
     /// @brief Find the irreducible representation of a product of spin orbitals

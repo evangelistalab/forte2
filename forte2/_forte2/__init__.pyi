@@ -1194,7 +1194,7 @@ def sqop(s: str, allow_reordering: bool = False) -> tuple[SQOperatorString, floa
     Create an operator string from a string representation (default: no not allow reordering)
     """
 
-def compute_sign_mask_fast(cre: Determinant, ann: Determinant) -> Determinant:
+def compute_sign_mask(cre: Determinant, ann: Determinant) -> Determinant:
     """
     Compute the sign mask associated with a set of creation and annihilation operators
     """

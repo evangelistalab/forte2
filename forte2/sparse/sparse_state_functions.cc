@@ -42,13 +42,11 @@ SparseState apply_operator_impl_naive(bool is_antihermitian, const SparseOperato
     }
     SparseState new_terms; // the new state
     Determinant new_det;   // a temporary determinant to store the result of the operator
-    Determinant sign_mask; // a temporary determinant to store the sign mask
-    Determinant idx;       // a temporary determinant to store the index of the determinant
     for (const auto& [sqop, t] : sop) {
         for (const auto& [det, c] : state) {
-            if (det.faster_can_apply_operator(sqop.cre(), sqop.ann())) {
-                auto value = faster_apply_operator_to_det(det, new_det, sqop.cre(), sqop.ann(),
-                                                          sqop.sign_mask());
+            if (det.can_apply_operator(sqop.cre(), sqop.ann())) {
+                auto value = apply_operator_to_det_unchecked(det, new_det, sqop.cre(), sqop.ann(),
+                                                             sqop.sign_mask());
                 new_terms[new_det] += value * t * c;
             }
         }
@@ -60,9 +58,9 @@ SparseState apply_operator_impl_naive(bool is_antihermitian, const SparseOperato
 
     for (const auto& [sqop, t] : sop) {
         for (const auto& [det, c] : state) {
-            if (det.faster_can_apply_operator(sqop.ann(), sqop.cre())) {
-                auto value = faster_apply_operator_to_det(det, new_det, sqop.ann(), sqop.cre(),
-                                                          sqop.sign_mask());
+            if (det.can_apply_operator(sqop.ann(), sqop.cre())) {
+                auto value = apply_operator_to_det_unchecked(det, new_det, sqop.ann(), sqop.cre(),
+                                                             sqop.sign_mask());
                 new_terms[new_det] -= value * t * c;
             }
         }
@@ -78,15 +76,14 @@ template <bool positive>
 void apply_operator_kernel(const auto& sop_groups, const auto& state_sorted,
                            const auto& screen_thresh, auto& new_terms) {
     Determinant new_det;
-    Determinant idx;
     for (const auto& [sqop_ann, sqop_group] : sop_groups) {
         for (const auto& [det, c] : state_sorted) {
-            if (det.fast_a_and_b_equal_b(sqop_ann)) {
+            if (det.is_superset_of(sqop_ann)) {
                 // loop over the creation operators in this group
                 for (const auto& [sqop_cre, sqop_sign_mask, t] : sqop_group) {
-                    if (det.fast_a_and_b_minus_c_eq_zero(sqop_cre, sqop_ann)) {
+                    if (det.disjoint_from_difference(sqop_cre, sqop_ann)) {
                         if (std::abs(c * t) > screen_thresh) {
-                            const auto value = faster_apply_operator_to_det(
+                            const auto value = apply_operator_to_det_unchecked(
                                 det, new_det, sqop_cre, sqop_ann, sqop_sign_mask);
                             if constexpr (positive) {
                                 new_terms[new_det] += value * t * c;
@@ -160,13 +157,13 @@ void apply_operator_kernel_string(const auto& sop_groups, const auto& state_grou
     for (const auto& [sqop_ann_a, sqop_group] : sop_groups) {
         for (const auto& [det_a, state_group] : state_groups) {
             // can we annihilate the alfa string?
-            if (det_a.fast_a_and_b_equal_b(sqop_ann_a)) {
+            if (det_a.is_superset_of(sqop_ann_a)) {
                 // loop over the creation operators in this group
                 for (const auto& [sqop_ann, sqop_cre, sign_mask, t] : sqop_group) {
                     for (const auto& [det, c] : state_group) {
-                        if (det.faster_can_apply_operator(sqop_cre, sqop_ann)) {
+                        if (det.can_apply_operator(sqop_cre, sqop_ann)) {
                             if (std::abs(c * t) > screen_thresh) {
-                                const auto value = faster_apply_operator_to_det(
+                                const auto value = apply_operator_to_det_unchecked(
                                     det, new_det, sqop_cre, sqop_ann, sign_mask);
                                 if constexpr (positive) {
                                     new_terms[new_det] += value * t * c;
@@ -239,9 +236,9 @@ std::vector<sparse_scalar_t> get_projection(const SparseOperatorList& sop, const
         sparse_scalar_t value = 0.0;
         // apply the operator op_n
         for (const auto& [det, c] : ref) {
-            d = det;
-            const auto sign = apply_operator_to_det(d, sqop);
-            if (sign != 0.0) {
+            if (det.can_apply_operator(sqop.cre(), sqop.ann())) {
+                const auto sign = apply_operator_to_det_unchecked(det, d, sqop.cre(), sqop.ann(),
+                                                                  sqop.sign_mask());
                 auto search = state.find(d);
                 if (search != state.end()) {
                     value += sign * c * search->second;

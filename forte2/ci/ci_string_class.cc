@@ -92,7 +92,7 @@ int StringClass::block_index(int class_Ia, int class_Ib) const {
 size_t StringClass::alfa_string_class(const String& s) const {
     std::array<int, 6> occupation;
     for (size_t n = 0; n < gas_masks_.size(); n++) {
-        occupation[n] = s.fast_a_and_b_count(gas_masks_[n]);
+        occupation[n] = s.intersection_count(gas_masks_[n]);
     }
     return alfa_occupation_group_.at(occupation) * nirrep_ + symmetry(s);
 }
@@ -100,7 +100,7 @@ size_t StringClass::alfa_string_class(const String& s) const {
 size_t StringClass::beta_string_class(const String& s) const {
     std::array<int, 6> occupation;
     for (size_t n = 0; n < gas_masks_.size(); n++) {
-        occupation[n] = s.fast_a_and_b_count(gas_masks_[n]);
+        occupation[n] = s.intersection_count(gas_masks_[n]);
     }
     return beta_occupation_group_.at(occupation) * nirrep_ + symmetry(s);
 }

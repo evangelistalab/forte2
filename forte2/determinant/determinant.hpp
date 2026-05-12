@@ -40,8 +40,8 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     using BitArray<N>::operator^;
     using BitArray<N>::operator&;
     using BitArray<N>::operator<;
-    using BitArray<N>::fast_a_xor_b_count;
-    using BitArray<N>::fast_a_and_b_eq_zero;
+    using BitArray<N>::symmetric_difference_count;
+    using BitArray<N>::is_disjoint_from;
     using BitArray<N>::find_first_one;
     using BitArray<N>::find_last_one;
     using BitArray<N>::clear;
@@ -114,8 +114,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
 
     /// Construct the determinant from an occupation vector that
     /// specifies the alpha and beta strings.  occupation = [Ia,Ib]
-    explicit DeterminantImpl(const BitArray<norb_capacity>& Ia,
-                             const BitArray<norb_capacity>& Ib) {
+    explicit DeterminantImpl(const BitArray<norb_capacity>& Ia, const BitArray<norb_capacity>& Ib) {
         this->set_strings(Ia, Ib);
     }
 
@@ -319,7 +318,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @brief Find the occupied alpha orbitals and store them in occ
     /// @param occ a vector to store the occupied orbitals
     /// @param n the number of occupied orbitals found
-    void get_fast_a_occ(std::vector<size_t>& occ, size_t& n) const {
+    void collect_alpha_occupied(std::vector<size_t>& occ, size_t& n) const {
         n = 0;
         for_each_a_occ([&](size_t p) { occ[n++] = p; });
     }
@@ -327,7 +326,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @brief Find the occupied beta orbitals and store them in occ
     /// @param occ a vector to store the occupied orbitals
     /// @param n the number of occupied orbitals found
-    void get_fast_b_occ(std::vector<size_t>& occ, size_t& n) const {
+    void collect_beta_occupied(std::vector<size_t>& occ, size_t& n) const {
         n = 0;
         for_each_b_occ([&](size_t p) { occ[n++] = p; });
     }
@@ -756,60 +755,12 @@ double gen_excitation(DeterminantImpl<N>& d, const std::vector<int>& aann,
     return sign;
 }
 
-template <size_t N>
-double apply_operator_to_det(DeterminantImpl<N>& d, const DeterminantImpl<N>& cre,
-                             const DeterminantImpl<N>& ann) {
-    // loop over the annihilation operators (in ascending order)
-    double sign = 1.0;
-    // The bool return lets the operator scan stop as soon as an operator cannot be applied.
-    const bool can_annihilate = ann.for_each_set_bit([&](size_t orb) {
-        // if this spin orbital is occupied
-        if (d.get_bit(orb) == 1) {
-            // compute the sign
-            sign *= d.slater_sign(orb);
-            // remove the electron
-            d.set_bit(orb, false);
-            return true;
-        } else {
-            return false;
-        }
-    });
-    if (not can_annihilate) {
-        return 0.0;
-    }
-
-    // loop over the creation operators (in ascending order)
-    const size_t ncre = cre.count();
-    // Stop immediately if a creation operator would target an already occupied orbital.
-    const bool can_create = cre.for_each_set_bit([&](size_t orb) {
-        // if this spin orbital is unoccupied
-        if (d.get_bit(orb) == 0) {
-            // compute the sign
-            sign *= d.slater_sign(orb);
-            // create the electron
-            d.set_bit(orb, true);
-            return true;
-        } else {
-            return false;
-        }
-    });
-    if (not can_create) {
-        return 0.0;
-    }
-
-    // the creation operators are applied in the opposite order of the way
-    // they are supposed to be applied (we should apply them in descending order).
-    // this factor keeps into account the permutation sign for
-    // reversing the order of the creation operators.
-    sign *= 1.0 - 2.0 * ((ncre / 2) % 2);
-    return sign;
-}
-
+/// @brief Apply a general operator to this determinant without checking applicability.
 ///
-/// So there are no checks in place
-/// @brief Apply a general operator to this determinant. This function assumes we can apply this
-/// operator to the determinant and should be used only after faster_can_apply_operator has been
-/// used to check if the operator can be applied to the determinant.
+/// This function assumes the caller has already verified that the operator can be applied, for
+/// example with can_apply_operator(cre, ann). Calling it on an inapplicable determinant may
+/// produce a determinant and sign for a different algebraic operation.
+///
 /// @param d the determinant
 /// @param new_d the new determinant
 /// @param cre the creation operator
@@ -817,23 +768,22 @@ double apply_operator_to_det(DeterminantImpl<N>& d, const DeterminantImpl<N>& cr
 /// @param sign the sign mask (precomputed by the user) of the operator
 /// @return the sign of the final determinant (+1, -1)
 ///
-/// @note This function is faster than apply_operator_to_det
 /// Example:
 ///
 ///   Determinant det, new_det, cre, ann, sign_mask;
 ///   // test if the operator can be applied
-///   if (det.faster_can_apply_operator(cre,ann)) {
+///   if (det.can_apply_operator(cre,ann)) {
 ///       // compute the sign mask
-///       compute_sign_mask_fast(cre, ann, sign_mask);
-///       auto value = faster_apply_operator_to_det(det, new_det, cre, ann, sign_mask);
+///       compute_sign_mask(cre, ann, sign_mask);
+///       auto value = apply_operator_to_det_unchecked(det, new_det, cre, ann, sign_mask);
 ///       // do something with value and new_det
 ///   }
 ///
 template <size_t N>
-inline double faster_apply_operator_to_det(const DeterminantImpl<N>& d, DeterminantImpl<N>& new_d,
-                                           const DeterminantImpl<N>& cre,
-                                           const DeterminantImpl<N>& ann,
-                                           const DeterminantImpl<N>& sign) {
+inline double
+apply_operator_to_det_unchecked(const DeterminantImpl<N>& d, DeterminantImpl<N>& new_d,
+                                const DeterminantImpl<N>& cre, const DeterminantImpl<N>& ann,
+                                const DeterminantImpl<N>& sign) {
     size_t n = 0;
     if constexpr (N == 128) {
         // specialization for one 64-orbital word per spin sector
@@ -867,7 +817,7 @@ inline double faster_apply_operator_to_det(const DeterminantImpl<N>& d, Determin
             new_d.set_word(i, w | cre.get_word(i));
         }
     }
-    return 1.0 - 2.0 * (n & 1);
+    return parity_to_sign(n);
 }
 
 template <size_t N> double spin2(const DeterminantImpl<N>& lhs, const DeterminantImpl<N>& rhs) {

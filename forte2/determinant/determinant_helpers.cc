@@ -22,20 +22,21 @@ std::pair<String, double> create_double_excitation(const String& str, size_t i, 
     return {new_str, sign};
 }
 
-std::pair<String, double> create_single_excitation_fast(const String& str, size_t i, size_t a) {
+std::pair<String, double> create_single_excitation_unchecked(const String& str, size_t i,
+                                                             size_t a) {
     String new_str = str;
-    double sign = new_str.destroy_fast(i);
-    sign *= new_str.create_fast(a);
+    double sign = new_str.destroy_unchecked(i);
+    sign *= new_str.create_unchecked(a);
     return {new_str, sign};
 }
 
-std::pair<String, double> create_double_excitation_fast(const String& str, size_t i, size_t j,
-                                                        size_t a, size_t b) {
+std::pair<String, double> create_double_excitation_unchecked(const String& str, size_t i, size_t j,
+                                                             size_t a, size_t b) {
     String new_str = str;
-    double sign = new_str.destroy_fast(i);
-    sign *= new_str.destroy_fast(j);
-    sign *= new_str.create_fast(b);
-    sign *= new_str.create_fast(a);
+    double sign = new_str.destroy_unchecked(i);
+    sign *= new_str.destroy_unchecked(j);
+    sign *= new_str.create_unchecked(b);
+    sign *= new_str.create_unchecked(a);
     return {new_str, sign};
 }
 
@@ -85,8 +86,8 @@ std::pair<Determinant, double> create_double_ab_excitation(const Determinant& de
     return {new_det, sign};
 }
 
-void compute_fast_virtual(const std::vector<size_t>& occ, std::vector<size_t>& vir,
-                          const size_t n) {
+void collect_virtual_orbitals(const std::vector<size_t>& occ, std::vector<size_t>& vir,
+                              const size_t n) {
     // Debug sanity checks
 #ifndef NDEBUG
     for (size_t j = 1; j < occ.size(); ++j)
@@ -216,7 +217,7 @@ std::vector<Determinant> make_hilbert_space(size_t nmo, size_t na, size_t nb, De
             det.set_a_string(Ia);
             for (const auto& Ib : strings_b[hb]) {
                 det.set_b_string(Ib);
-                if (det.fast_a_xor_b_count(ref) / 2 <= truncation) {
+                if (det.symmetric_difference_count(ref) / 2 <= truncation) {
                     dets.push_back(det);
                 }
             }

@@ -62,6 +62,36 @@ def test_sparse_vector_complex():
     assert forte2.overlap(psi4, psi3) == pytest.approx(1.0 + 3.0j, abs=1e-9)
 
 
+def test_get_projection_skips_invalid_annihilation():
+    op = forte2.SparseOperatorList()
+    op.add("[0a-]", 1.0)
+
+    ref = forte2.SparseState({det("0"): 1.0})
+    state = forte2.SparseState({det("0"): 2.0})
+
+    assert forte2.get_projection(op, ref, state)[0] == pytest.approx(0.0, abs=1e-12)
+
+
+def test_get_projection_skips_invalid_creation():
+    op = forte2.SparseOperatorList()
+    op.add("[0a+]", 1.0)
+
+    ref = forte2.SparseState({det("a"): 1.0})
+    state = forte2.SparseState({det("a"): 3.0})
+
+    assert forte2.get_projection(op, ref, state)[0] == pytest.approx(0.0, abs=1e-12)
+
+
+def test_get_projection_valid_annihilation():
+    op = forte2.SparseOperatorList()
+    op.add("[0a-]", 1.0)
+
+    ref = forte2.SparseState({det("a"): 2.0})
+    state = forte2.SparseState({det("0"): 3.0})
+
+    assert forte2.get_projection(op, ref, state)[0] == pytest.approx(6.0, abs=1e-12)
+
+
 def test_sparse_vector_addition():
     psi1 = forte2.SparseState({det("2"): 2.0 + 1j})
     psi2 = forte2.SparseState({det("2"): 1.0 - 0.5j, det("ab"): 0.5 + 0.5j})

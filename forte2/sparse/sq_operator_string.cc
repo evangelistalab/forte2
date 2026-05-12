@@ -7,6 +7,7 @@
 #include "helpers/combinatorial.h"
 #include "helpers/string_algorithms.h"
 
+#include "determinant/bitwise_operations.hpp"
 #include "sparse/sq_operator_string.h"
 
 namespace forte2 {
@@ -35,14 +36,13 @@ SQOperatorString::SQOperatorString()
 
 SQOperatorString::SQOperatorString(const Determinant& cre, const Determinant& ann)
     : cre_(cre), ann_(ann), sign_mask_(Determinant::zero()) {
-    compute_sign_mask_fast(cre_, ann_, sign_mask_);
+    compute_sign_mask(cre_, ann_, sign_mask_);
 }
 
 SQOperatorString::SQOperatorString(const std::vector<size_t>& acre, const std::vector<size_t>& bcre,
-                                   const std::vector<size_t>& aann,
-                                   const std::vector<size_t>& bann)
+                                   const std::vector<size_t>& aann, const std::vector<size_t>& bann)
     : cre_(acre, bcre), ann_(aann, bann), sign_mask_(Determinant::zero()) {
-    compute_sign_mask_fast(cre_, ann_, sign_mask_);
+    compute_sign_mask(cre_, ann_, sign_mask_);
 }
 
 SQOperatorString::SQOperatorString(const std::initializer_list<size_t> acre,
@@ -50,7 +50,7 @@ SQOperatorString::SQOperatorString(const std::initializer_list<size_t> acre,
                                    const std::initializer_list<size_t> aann,
                                    const std::initializer_list<size_t> bann)
     : cre_(acre, bcre), ann_(aann, bann), sign_mask_(Determinant::zero()) {
-    compute_sign_mask_fast(cre_, ann_, sign_mask_);
+    compute_sign_mask(cre_, ann_, sign_mask_);
 }
 
 const Determinant& SQOperatorString::cre() const { return cre_; }
@@ -58,10 +58,6 @@ const Determinant& SQOperatorString::cre() const { return cre_; }
 const Determinant& SQOperatorString::ann() const { return ann_; }
 
 const Determinant& SQOperatorString::sign_mask() const { return sign_mask_; }
-
-Determinant& SQOperatorString::cre_mod() { return cre_; }
-
-Determinant& SQOperatorString::ann_mod() { return ann_; }
 
 bool SQOperatorString::is_identity() const { return (cre().count() == 0) and (ann().count() == 0); }
 
@@ -269,7 +265,7 @@ std::pair<SQOperatorString, double> make_sq_operator_string_from_list(const op_t
         });
         auto parity = permutation_parity(idx);
         // set the coefficient including the parity of the permutation
-        coefficient *= 1.0 - 2.0 * parity;
+        coefficient *= parity_to_sign(parity);
     }
 
     auto cre = Determinant::zero();
@@ -420,10 +416,10 @@ std::vector<std::pair<SQOperatorString, double>> operator*(const SQOperatorStrin
 
 CommutatorType commutator_type(const SQOperatorString& lhs, const SQOperatorString& rhs) {
     // Find the number of operators in common between the two operator strings
-    const auto common_l_ann_r_cre = lhs.ann().fast_a_and_b_count(rhs.cre());
-    const auto common_l_cre_r_cre = lhs.cre().fast_a_and_b_count(rhs.cre());
-    const auto common_l_ann_r_ann = lhs.ann().fast_a_and_b_count(rhs.ann());
-    const auto common_l_cre_r_ann = lhs.cre().fast_a_and_b_count(rhs.ann());
+    const auto common_l_ann_r_cre = lhs.ann().intersection_count(rhs.cre());
+    const auto common_l_cre_r_cre = lhs.cre().intersection_count(rhs.cre());
+    const auto common_l_ann_r_ann = lhs.ann().intersection_count(rhs.ann());
+    const auto common_l_cre_r_ann = lhs.cre().intersection_count(rhs.ann());
     // if there are no indices in common
     if (common_l_cre_r_cre == 0 and common_l_ann_r_ann == 0 and common_l_ann_r_cre == 0 and
         common_l_cre_r_ann == 0) {
@@ -440,10 +436,10 @@ CommutatorType commutator_type(const SQOperatorString& lhs, const SQOperatorStri
 }
 
 bool do_ops_commute(const SQOperatorString& lhs, const SQOperatorString& rhs) {
-    const auto common_l_cre_r_cre = lhs.cre().fast_a_and_b_count(rhs.cre());
-    const auto common_l_cre_r_ann = lhs.cre().fast_a_and_b_count(rhs.ann());
-    const auto common_l_ann_r_ann = lhs.ann().fast_a_and_b_count(rhs.ann());
-    const auto common_l_ann_r_cre = lhs.ann().fast_a_and_b_count(rhs.cre());
+    const auto common_l_cre_r_cre = lhs.cre().intersection_count(rhs.cre());
+    const auto common_l_cre_r_ann = lhs.cre().intersection_count(rhs.ann());
+    const auto common_l_ann_r_ann = lhs.ann().intersection_count(rhs.ann());
+    const auto common_l_ann_r_cre = lhs.ann().intersection_count(rhs.cre());
     if (common_l_cre_r_cre == 0 and common_l_ann_r_ann == 0 and common_l_ann_r_cre == 0 and
         common_l_cre_r_ann == 0) {
         // if the number of operators is even, the commutator is zero
@@ -485,10 +481,10 @@ std::vector<std::pair<SQOperatorString, double>> commutator_fast(const SQOperato
 std::vector<std::pair<SQOperatorString, double>> commutator(const SQOperatorString& lhs,
                                                             const SQOperatorString& rhs) {
 
-    // const auto common_l_cre_r_cre = lhs.cre().fast_a_and_b_count(rhs.cre());
-    // const auto common_l_cre_r_ann = lhs.cre().fast_a_and_b_count(rhs.ann());
-    // const auto common_l_ann_r_ann = lhs.ann().fast_a_and_b_count(rhs.ann());
-    // const auto common_l_ann_r_cre = lhs.ann().fast_a_and_b_count(rhs.cre());
+    // const auto common_l_cre_r_cre = lhs.cre().intersection_count(rhs.cre());
+    // const auto common_l_cre_r_ann = lhs.cre().intersection_count(rhs.ann());
+    // const auto common_l_ann_r_ann = lhs.ann().intersection_count(rhs.ann());
+    // const auto common_l_ann_r_cre = lhs.ann().intersection_count(rhs.cre());
     // const auto nl = lhs.count();
     // const auto nr = rhs.count();
 
@@ -561,7 +557,7 @@ void SQOperatorProductComputer::product(
     // determine the right creation operators that can be moved to the left without contraction
     ucon_rhs_cre_ = rhs.cre() - lhs.ann();
     // if there are common lhs creation ops and uncontracted rhs creation ops then we get zero
-    if (not lhs.cre().fast_a_and_b_eq_zero(ucon_rhs_cre_)) {
+    if (not lhs.cre().is_disjoint_from(ucon_rhs_cre_)) {
         return;
     }
     // find the right creation ops that will need to be contracted with the left annihilation ops
@@ -571,7 +567,7 @@ void SQOperatorProductComputer::product(
     ucon_rhs_ann_ = rhs.ann() - con_rhs_cre_;
     // if there are common lhs annihilation ops and uncontracted rhs annihilation ops then we get
     // zero, so we return
-    if (not lhs.ann().fast_a_and_b_eq_zero(ucon_rhs_ann_)) {
+    if (not lhs.ann().is_disjoint_from(ucon_rhs_ann_)) {
         return;
     }
 
@@ -636,9 +632,8 @@ void SQOperatorProductComputer::product(
         rhs_cre_ -= lhs_comm_trivial_;
         lhs_ann_ -= lhs_comm_trivial_;
         // ops adjust the phase due to the trivial contractions
-        lhs_comm_trivial_.for_each_set_bit([&](size_t i) {
-            phase_ *= lhs_ann_.slater_sign(i) * rhs_cre_.slater_sign(i);
-        });
+        lhs_comm_trivial_.for_each_set_bit(
+            [&](size_t i) { phase_ *= lhs_ann_.slater_sign(i) * rhs_cre_.slater_sign(i); });
     }
 
     // At this point we have moved all the uncontracted rhs creation and annihilation operators
@@ -656,9 +651,8 @@ void SQOperatorProductComputer::product(
     // adjustment to move them to the left and form pairs with the left annihilation operators
     ucon_rhs_cre_ = rhs_cre_; // now this holds the operators that need to be contracted
     // NOTE: this was not checked yet
-    ucon_rhs_cre_.for_each_set_bit([&](size_t i) {
-        phase_ *= lhs_ann_.slater_sign(i) * rhs_cre_.slater_sign(i);
-    });
+    ucon_rhs_cre_.for_each_set_bit(
+        [&](size_t i) { phase_ *= lhs_ann_.slater_sign(i) * rhs_cre_.slater_sign(i); });
     // find the set bits of the operators that can be contracted and store it in set_bits_
     rhs_cre_.find_set_bits(set_bits_, ncontr);
     // now this holds the left annihilation ops not paired with creation ops
@@ -700,8 +694,7 @@ void SQOperatorProductComputer::commutator(
     product(rhs, lhs, -factor, func);
 }
 
-void compute_sign_mask_fast(const Determinant& cre, const Determinant& ann,
-                            Determinant& sign_mask) {
+void compute_sign_mask(const Determinant& cre, const Determinant& ann, Determinant& sign_mask) {
     bool higher_word_parity = false;
     for (size_t n = Determinant::nwords_; n-- > 0;) {
         const uint64_t ops = cre.get_word(n) ^ ann.get_word(n);

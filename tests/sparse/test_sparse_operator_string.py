@@ -20,16 +20,16 @@ def _reference_sign_mask(acre=(), bcre=(), aann=(), bann=()):
     return _det(alpha, beta)
 
 
-def _assert_sign_mask_fast_consistent(acre=(), bcre=(), aann=(), bann=()):
+def _assert_sign_mask_consistent(acre=(), bcre=(), aann=(), bann=()):
     cre = _det(acre, bcre)
     ann = _det(aann, bann)
     expected = _reference_sign_mask(acre, bcre, aann, bann)
     sqop = forte2.SQOperatorString(cre, ann)
-    assert forte2.compute_sign_mask_fast(cre, ann) == expected
+    assert forte2.compute_sign_mask(cre, ann) == expected
     assert sqop.sign_mask() == expected
 
 
-def test_compute_sign_mask_fast_matches_reference():
+def test_compute_sign_mask_matches_reference():
     norb = forte2.Determinant.maxnorb
     all_occ = tuple(range(norb))
     cases = [
@@ -49,7 +49,7 @@ def test_compute_sign_mask_fast_matches_reference():
         ((0, 5, 63), (1, 9, 63), (5, 8), (0, 9)),
     ]
     for acre, bcre, aann, bann in cases:
-        _assert_sign_mask_fast_consistent(acre, bcre, aann, bann)
+        _assert_sign_mask_consistent(acre, bcre, aann, bann)
 
     rng = random.Random(7)
     for _ in range(100):
@@ -57,7 +57,26 @@ def test_compute_sign_mask_fast_matches_reference():
         bcre = rng.sample(range(norb), rng.randrange(9))
         aann = rng.sample(range(norb), rng.randrange(9))
         bann = rng.sample(range(norb), rng.randrange(9))
-        _assert_sign_mask_fast_consistent(acre, bcre, aann, bann)
+        _assert_sign_mask_consistent(acre, bcre, aann, bann)
+
+
+def test_sparse_operator_string_accessors_return_copies():
+    cre = _det(alpha=(1,), beta=(2,))
+    ann = _det(alpha=(3,), beta=(4,))
+    sqop = forte2.SQOperatorString(cre, ann)
+    expected_sign_mask = sqop.sign_mask()
+
+    cre_copy = sqop.cre()
+    ann_copy = sqop.ann()
+    sign_mask_copy = sqop.sign_mask()
+
+    cre_copy.set_na(5, True)
+    ann_copy.set_nb(6, True)
+    sign_mask_copy.set_na(7, not sign_mask_copy.na(7))
+
+    assert sqop.cre() == cre
+    assert sqop.ann() == ann
+    assert sqop.sign_mask() == expected_sign_mask
 
 
 def test_sparse_operator_string_count():

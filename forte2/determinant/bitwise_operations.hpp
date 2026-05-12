@@ -21,10 +21,15 @@ inline std::size_t hash_combine(std::size_t a, std::size_t b) noexcept {
     return t;
 }
 
+/// @brief Convert an integer count/parity to a sign.
+/// @param n the count whose parity determines the sign
+/// @return +1.0 if n is even, -1.0 if n is odd
+inline constexpr double parity_to_sign(std::size_t n) noexcept { return (n & 1) ? -1.0 : 1.0; }
+
 /// @brief Compute the parity of a uint64_t integer (1 if odd number of bits set, -1 otherwise)
 /// @param x the uint64_t integer to test
 /// @return parity = (-1)^(number of bits set to 1)
-inline double ui64_bit_parity(uint64_t x) noexcept { return 1.0 - 2.0 * (std::popcount(x) & 1); }
+inline double ui64_bit_parity(uint64_t x) noexcept { return parity_to_sign(std::popcount(x)); }
 
 /// @brief Compute the exclusive suffix XOR scan of a uint64_t word.
 ///
@@ -91,7 +96,7 @@ inline uint64_t ui64_find_and_clear_lowest_one_bit(uint64_t& x) noexcept {
 inline double ui64_sign(uint64_t x, std::size_t n) noexcept {
     if (n == 0)
         return 1.0;
-    return 1.0 - 2.0 * (std::popcount(x << (64 - n)) & 1);
+    return ui64_bit_parity(x << (64 - n));
 }
 
 /// @brief Count the number of 1's from position m + 1 up to n - 1 and return the parity of this
@@ -111,7 +116,7 @@ inline double ui64_sign(uint64_t x, std::size_t m, std::size_t n) noexcept {
     }
 
     const std::size_t width = n - m - 1;
-    return 1.0 - 2.0 * (std::popcount((x >> (m + 1)) << (64 - width)) & 1);
+    return ui64_bit_parity((x >> (m + 1)) << (64 - width));
 }
 
 /// @brief Count the number of 1's from position n + 1 up to 63 and return the parity of this
@@ -123,5 +128,5 @@ inline double ui64_sign(uint64_t x, std::size_t m, std::size_t n) noexcept {
 inline double ui64_sign_reverse(uint64_t x, std::size_t n) noexcept {
     if (n == 63)
         return 1.0;
-    return 1.0 - 2.0 * (std::popcount(x >> (n + 1)) & 1);
+    return ui64_bit_parity(x >> (n + 1));
 }
