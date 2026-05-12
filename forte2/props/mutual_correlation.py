@@ -382,7 +382,7 @@ class UMP2MPQFast:
         self.M1 = None
         self.M2 = None
         gamma_sf = self.γa + self.γb
-        gamma_sf_no = Ua.T @ gamma_sf @ Ua
+        gamma_sf_no = self.Ua.T @ gamma_sf @ self.Ua
         self.Γ1 = gamma_sf_no
 
     @property
@@ -943,3 +943,619 @@ class RMP2MPQFast:
             if n < 1024:
                 return f"{n:.2f} {unit}"
             n /= 1024
+
+
+class UMP2MPQOnTheFly:
+    """
+    On-the-fly dyad mutual correlation M1/M2 for UMP2.
+
+    This class avoids storing full MP2 amplitudes and avoids building full
+    2-RDM / 2-cumulant tensors.
+
+    It computes the cumulant elements needed by C_elem(p,q,r,s) by generating
+    and rotating occupied-pair MP2 amplitude blocks on demand.
+
+    Notes
+    -----
+    - Spatial MO indices p,q,r,s are in [0, nmo).
+    - Same interface goal as UMP2MPQFast:
+          make_M1()
+          make_M2()
+          make_measures()
+          MPQ_matrix_summary()
+    - Designed to compare against UMP2MPQFast.
+    """
+
+    def __init__(self, mp2, Ua=None, Ub=None, cache_pair_blocks=True):
+        self.mp2 = mp2
+
+        self.nmo = mp2.nmo
+        self.naocc = mp2.naocc
+        self.nbocc = mp2.nbocc
+        self.navir = mp2.navir
+        self.nbvir = mp2.nbvir
+
+        self.cache_pair_blocks = cache_pair_blocks
+
+        # Require only DF integrals, not stored t2.
+        if getattr(mp2, "B_iaQ", None) is None:
+            raise ValueError("mp2.B_iaQ is missing. Run mp2.run() first.")
+
+        # ------------------------------------------------------------
+        # 1-RDMs
+        # ------------------------------------------------------------
+        # This should use your streamed make_1rdm_sd() implementation.
+        # If your current make_1rdm_sd() still calls _get_t2_all(), patch that first.
+        self.γa, self.γb = mp2.make_1rdm_sd()
+
+        # ------------------------------------------------------------
+        # Rotations
+        # ------------------------------------------------------------
+        if Ua is None:
+            self.Ua, self.occs_a = self._build_block_no_rotation(self.γa, self.naocc)
+        else:
+            self.Ua = Ua
+            self.occs_a = np.diag(Ua.T @ self.γa @ Ua)
+
+        if Ub is None:
+            self.Ub, self.occs_b = self._build_block_no_rotation(self.γb, self.nbocc)
+        else:
+            self.Ub = Ub
+            self.occs_b = np.diag(Ub.T @ self.γb @ Ub)
+
+        # Split rotations.
+        self.Uoa = self.Ua[: self.naocc, : self.naocc]
+        self.Uva = self.Ua[self.naocc :, self.naocc :]
+
+        self.Uob = self.Ub[: self.nbocc, : self.nbocc]
+        self.Uvb = self.Ub[self.nbocc :, self.nbocc :]
+
+        # For plotting compatibility with UMP2MPQFast.
+        gamma_sf = self.γa + self.γb
+        self.Γ1 = self.Ua.T @ gamma_sf @ self.Ua
+
+        self.M1 = None
+        self.M2 = None
+
+        # Optional pair-block caches.
+        self._cache_aa = {}
+        self._cache_bb = {}
+        self._cache_ab = {}
+
+    @property
+    def occs(self):
+        return np.diag(self.Γ1)
+
+    # ============================================================
+    # Rotation helper
+    # ============================================================
+
+    def _build_block_no_rotation(self, Gamma1, nocc):
+        nmo = Gamma1.shape[0]
+
+        Goo = Gamma1[:nocc, :nocc]
+        Gvv = Gamma1[nocc:, nocc:]
+
+        occ_vals, Uo = np.linalg.eigh(Goo)
+        vir_vals, Uv = np.linalg.eigh(Gvv)
+
+        occ_order = np.argsort(occ_vals)[::-1]
+        vir_order = np.argsort(vir_vals)[::-1]
+
+        occ_vals = occ_vals[occ_order]
+        vir_vals = vir_vals[vir_order]
+
+        Uo = Uo[:, occ_order]
+        Uv = Uv[:, vir_order]
+
+        U = np.eye(nmo)
+        U[:nocc, :nocc] = Uo
+        U[nocc:, nocc:] = Uv
+
+        occs = np.zeros(nmo)
+        occs[:nocc] = occ_vals
+        occs[nocc:] = vir_vals
+
+        return U, occs
+
+    # ============================================================
+    # Index helpers
+    # ============================================================
+
+    def _oa(self, p):
+        return 0 <= p < self.naocc
+
+    def _va(self, p):
+        return self.naocc <= p < self.nmo
+
+    def _ob(self, p):
+        return 0 <= p < self.nbocc
+
+    def _vb(self, p):
+        return self.nbocc <= p < self.nmo
+
+    def _a_vir(self, p):
+        return p - self.naocc
+
+    def _b_vir(self, p):
+        return p - self.nbocc
+
+    # ============================================================
+    # Canonical on-the-fly MP2 amplitude slabs
+    # ============================================================
+
+    def _t2_aa_fixed_j_canonical(self, j):
+        """
+        Canonical alpha-alpha amplitudes t2_a[i,j,a,b] for fixed j.
+
+        Returns
+        -------
+        T : ndarray, shape (naocc, navir, navir)
+        """
+        Ba, _ = self.mp2.B_iaQ
+
+        eps_i = self.mp2.eps_a[: self.naocc]
+        eps_a = self.mp2.eps_a[self.naocc :]
+
+        eps_vv = eps_a[:, None] + eps_a[None, :]
+
+        g = np.einsum("iaQ,bQ->iab", Ba, Ba[j], optimize=True)
+        g_as = g - g.transpose(0, 2, 1)
+
+        denom = eps_i[:, None, None] + self.mp2.eps_a[j] - eps_vv[None, :, :]
+
+        return self.mp2._safe_divide(g_as, denom, label="UMP2 aa denom")
+
+    def _t2_bb_fixed_j_canonical(self, j):
+        """
+        Canonical beta-beta amplitudes t2_b[i,j,a,b] for fixed j.
+
+        Returns
+        -------
+        T : ndarray, shape (nbocc, nbvir, nbvir)
+        """
+        _, Bb = self.mp2.B_iaQ
+
+        eps_i = self.mp2.eps_b[: self.nbocc]
+        eps_a = self.mp2.eps_b[self.nbocc :]
+
+        eps_vv = eps_a[:, None] + eps_a[None, :]
+
+        g = np.einsum("iaQ,bQ->iab", Bb, Bb[j], optimize=True)
+        g_as = g - g.transpose(0, 2, 1)
+
+        denom = eps_i[:, None, None] + self.mp2.eps_b[j] - eps_vv[None, :, :]
+
+        return self.mp2._safe_divide(g_as, denom, label="UMP2 bb denom")
+
+    def _t2_ab_fixed_beta_j_canonical(self, j):
+        """
+        Canonical alpha-beta amplitudes t2_ab[i,j,a,b] for fixed beta occupied j.
+
+        Returns
+        -------
+        T : ndarray, shape (naocc, navir, nbvir)
+        """
+        Ba, Bb = self.mp2.B_iaQ
+
+        eps_ai = self.mp2.eps_a[: self.naocc]
+        eps_av = self.mp2.eps_a[self.naocc :]
+        eps_bv = self.mp2.eps_b[self.nbocc :]
+
+        eps_vv = eps_av[:, None] + eps_bv[None, :]
+
+        g = np.einsum("iaQ,bQ->iab", Ba, Bb[j], optimize=True)
+
+        denom = eps_ai[:, None, None] + self.mp2.eps_b[j] - eps_vv[None, :, :]
+
+        return self.mp2._safe_divide(g, denom, label="UMP2 ab denom")
+
+    # ============================================================
+    # Rotated occupied-pair amplitude blocks in NO basis
+    # ============================================================
+
+    def _t2_aa_pair_no(self, i, j):
+        """
+        Rotated alpha-alpha amplitude block t2_a_NO[i,j,:,:].
+
+        Returns
+        -------
+        Tij : ndarray, shape (navir, navir)
+        """
+        key = (i, j)
+        if self.cache_pair_blocks and key in self._cache_aa:
+            return self._cache_aa[key]
+
+        T_ab = np.zeros((self.navir, self.navir))
+
+        # t_NO[i,j,A,B] =
+        # sum_IJab Uoa[I,i] Uoa[J,j] t_CAN[I,J,a,b] Uva[a,A] Uva[b,B]
+        for J in range(self.naocc):
+            T_fixed_J = self._t2_aa_fixed_j_canonical(J)  # I,a,b
+
+            # Contract occupied I into NO occupied i.
+            T_i_ab = np.einsum(
+                "I,Iab->ab",
+                self.Uoa[:, i],
+                T_fixed_J,
+                optimize=True,
+            )
+
+            T_ab += self.Uoa[J, j] * T_i_ab
+
+        # Rotate virtuals.
+        T_no = np.einsum(
+            "aA,ab,bB->AB",
+            self.Uva,
+            T_ab,
+            self.Uva,
+            optimize=True,
+        )
+
+        if self.cache_pair_blocks:
+            self._cache_aa[key] = T_no
+
+        return T_no
+
+    def _t2_bb_pair_no(self, i, j):
+        """
+        Rotated beta-beta amplitude block t2_b_NO[i,j,:,:].
+
+        Returns
+        -------
+        Tij : ndarray, shape (nbvir, nbvir)
+        """
+        key = (i, j)
+        if self.cache_pair_blocks and key in self._cache_bb:
+            return self._cache_bb[key]
+
+        T_ab = np.zeros((self.nbvir, self.nbvir))
+
+        for J in range(self.nbocc):
+            T_fixed_J = self._t2_bb_fixed_j_canonical(J)  # I,a,b
+
+            T_i_ab = np.einsum(
+                "I,Iab->ab",
+                self.Uob[:, i],
+                T_fixed_J,
+                optimize=True,
+            )
+
+            T_ab += self.Uob[J, j] * T_i_ab
+
+        T_no = np.einsum(
+            "aA,ab,bB->AB",
+            self.Uvb,
+            T_ab,
+            self.Uvb,
+            optimize=True,
+        )
+
+        if self.cache_pair_blocks:
+            self._cache_bb[key] = T_no
+
+        return T_no
+
+    def _t2_ab_pair_no(self, i, j):
+        """
+        Rotated alpha-beta amplitude block t2_ab_NO[i,j,:,:].
+
+        Here i is alpha occupied NO index and j is beta occupied NO index.
+
+        Returns
+        -------
+        Tij : ndarray, shape (navir, nbvir)
+        """
+        key = (i, j)
+        if self.cache_pair_blocks and key in self._cache_ab:
+            return self._cache_ab[key]
+
+        T_ab = np.zeros((self.navir, self.nbvir))
+
+        for J in range(self.nbocc):
+            T_fixed_J = self._t2_ab_fixed_beta_j_canonical(J)  # I,a,b
+
+            T_i_ab = np.einsum(
+                "I,Iab->ab",
+                self.Uoa[:, i],
+                T_fixed_J,
+                optimize=True,
+            )
+
+            T_ab += self.Uob[J, j] * T_i_ab
+
+        T_no = np.einsum(
+            "aA,ab,bB->AB",
+            self.Uva,
+            T_ab,
+            self.Uvb,
+            optimize=True,
+        )
+
+        if self.cache_pair_blocks:
+            self._cache_ab[key] = T_no
+
+        return T_no
+
+    # ============================================================
+    # Rotated t2 elements
+    # ============================================================
+
+    def _t2_aa_elem(self, i, j, a, b):
+        return self._t2_aa_pair_no(i, j)[a, b]
+
+    def _t2_bb_elem(self, i, j, a, b):
+        return self._t2_bb_pair_no(i, j)[a, b]
+
+    def _t2_ab_elem(self, i, j, a, b):
+        return self._t2_ab_pair_no(i, j)[a, b]
+
+    # ============================================================
+    # Second-order contractions, evaluated on demand
+    # ============================================================
+
+    def _gamma_oooo_aa_elem(self, i, j, k, l):
+        Tij = self._t2_aa_pair_no(i, j)
+        Tkl = self._t2_aa_pair_no(k, l)
+        return 0.5 * np.einsum("ab,ab->", Tij, Tkl, optimize=True)
+
+    def _gamma_oooo_bb_elem(self, i, j, k, l):
+        Tij = self._t2_bb_pair_no(i, j)
+        Tkl = self._t2_bb_pair_no(k, l)
+        return 0.5 * np.einsum("ab,ab->", Tij, Tkl, optimize=True)
+
+    def _gamma_vvvv_aa_elem(self, a, b, c, d):
+        val = 0.0
+        for i in range(self.naocc):
+            for j in range(self.naocc):
+                Tij = self._t2_aa_pair_no(i, j)
+                val += Tij[a, b] * Tij[c, d]
+        return 0.5 * val
+
+    def _gamma_vvvv_bb_elem(self, a, b, c, d):
+        val = 0.0
+        for i in range(self.nbocc):
+            for j in range(self.nbocc):
+                Tij = self._t2_bb_pair_no(i, j)
+                val += Tij[a, b] * Tij[c, d]
+        return 0.5 * val
+
+    def _gamma_ovov_ab_elem(self, i, a, j, b):
+        """
+        Opposite-spin second-order ovov-like contraction.
+
+        Matches the structure used in UMP2MPQFast:
+
+            gamma_ovov_ab[i,a,j,b] = sum_{m,c} t_ab[i,m,a,c] t_ab[j,m,b,c]
+
+        where a,b are alpha-virtual indices and c is beta-virtual.
+        """
+        val = 0.0
+        for m in range(self.nbocc):
+            Tim = self._t2_ab_pair_no(i, m)
+            Tjm = self._t2_ab_pair_no(j, m)
+            val += np.dot(Tim[a, :], Tjm[b, :])
+        return val
+
+    # ============================================================
+    # Cumulant elements
+    # ============================================================
+
+    def lambda2_aa_elem(self, p, q, r, s):
+        val = 0.0
+
+        # First-order doubles block: oo-vv.
+        if self._oa(p) and self._oa(q) and self._va(r) and self._va(s):
+            a = self._a_vir(r)
+            b = self._a_vir(s)
+
+            val += (
+                self._t2_aa_elem(p, q, a, b)
+                - self._t2_aa_elem(p, q, b, a)
+                - self._t2_aa_elem(q, p, a, b)
+                + self._t2_aa_elem(q, p, b, a)
+            )
+
+        # Hermitian partner: vv-oo.
+        if self._va(p) and self._va(q) and self._oa(r) and self._oa(s):
+            a = self._a_vir(p)
+            b = self._a_vir(q)
+
+            val += (
+                self._t2_aa_elem(r, s, a, b)
+                - self._t2_aa_elem(r, s, b, a)
+                - self._t2_aa_elem(s, r, a, b)
+                + self._t2_aa_elem(s, r, b, a)
+            )
+
+        # Second-order oooo.
+        if self._oa(p) and self._oa(q) and self._oa(r) and self._oa(s):
+            val += self._gamma_oooo_aa_elem(p, q, r, s)
+
+        # Second-order vvvv.
+        if self._va(p) and self._va(q) and self._va(r) and self._va(s):
+            a = self._a_vir(p)
+            b = self._a_vir(q)
+            c = self._a_vir(r)
+            d = self._a_vir(s)
+
+            val += self._gamma_vvvv_aa_elem(a, b, c, d)
+
+        return val
+
+    def lambda2_bb_elem(self, p, q, r, s):
+        val = 0.0
+
+        if self._ob(p) and self._ob(q) and self._vb(r) and self._vb(s):
+            a = self._b_vir(r)
+            b = self._b_vir(s)
+
+            val += (
+                self._t2_bb_elem(p, q, a, b)
+                - self._t2_bb_elem(p, q, b, a)
+                - self._t2_bb_elem(q, p, a, b)
+                + self._t2_bb_elem(q, p, b, a)
+            )
+
+        if self._vb(p) and self._vb(q) and self._ob(r) and self._ob(s):
+            a = self._b_vir(p)
+            b = self._b_vir(q)
+
+            val += (
+                self._t2_bb_elem(r, s, a, b)
+                - self._t2_bb_elem(r, s, b, a)
+                - self._t2_bb_elem(s, r, a, b)
+                + self._t2_bb_elem(s, r, b, a)
+            )
+
+        if self._ob(p) and self._ob(q) and self._ob(r) and self._ob(s):
+            val += self._gamma_oooo_bb_elem(p, q, r, s)
+
+        if self._vb(p) and self._vb(q) and self._vb(r) and self._vb(s):
+            a = self._b_vir(p)
+            b = self._b_vir(q)
+            c = self._b_vir(r)
+            d = self._b_vir(s)
+
+            val += self._gamma_vvvv_bb_elem(a, b, c, d)
+
+        return val
+
+    def lambda2_ab_elem(self, p, q, r, s):
+        """
+        Opposite-spin cumulant element.
+
+        This follows the same index logic as the existing UMP2MPQFast class:
+        first index / third index are alpha-space;
+        second index / fourth index are beta-space.
+        """
+        val = 0.0
+
+        # First-order oo-vv block.
+        if self._oa(p) and self._ob(q) and self._va(r) and self._vb(s):
+            val += self._t2_ab_elem(
+                p,
+                q,
+                self._a_vir(r),
+                self._b_vir(s),
+            )
+
+        # First-order vv-oo partner.
+        if self._va(p) and self._vb(q) and self._oa(r) and self._ob(s):
+            val += self._t2_ab_elem(
+                r,
+                s,
+                self._a_vir(p),
+                self._b_vir(q),
+            )
+
+        # ------------------------------------------------------------
+        # Second-order ovov-like block.
+        #
+        # This mirrors the contraction shape used in your UMP2MPQFast.
+        # Important: this assumes q and s map to alpha-virtual-like slots
+        # after the spin-free C_elem permutations. If this disagrees with
+        # the full cumulant test, this is the first place to inspect.
+        # ------------------------------------------------------------
+        if self._oa(p) and self._va(q) and self._oa(r) and self._va(s):
+            val += self._gamma_ovov_ab_elem(
+                p,
+                self._a_vir(q),
+                r,
+                self._a_vir(s),
+            )
+
+        if self._oa(r) and self._va(s) and self._oa(p) and self._va(q):
+            val += self._gamma_ovov_ab_elem(
+                r,
+                self._a_vir(s),
+                p,
+                self._a_vir(q),
+            )
+
+        return val
+
+    # ============================================================
+    # Mutual correlation element
+    # ============================================================
+
+    def C_elem(self, p, q, r, s):
+        aa = self.lambda2_aa_elem(p, q, r, s)
+        bb = self.lambda2_bb_elem(p, q, r, s)
+
+        ab1 = self.lambda2_ab_elem(p, q, r, s)
+        ab2 = self.lambda2_ab_elem(p, q, s, r)
+        ab3 = self.lambda2_ab_elem(q, p, r, s)
+        ab4 = self.lambda2_ab_elem(q, p, s, r)
+
+        return 0.25 * (
+            abs(aa) ** 2
+            + abs(bb) ** 2
+            + abs(ab1) ** 2
+            + abs(ab2) ** 2
+            + abs(ab3) ** 2
+            + abs(ab4) ** 2
+        )
+
+    # ============================================================
+    # M1 / M2
+    # ============================================================
+
+    def make_measures(self):
+        M1 = np.zeros(self.nmo)
+        M2 = np.zeros((self.nmo, self.nmo))
+
+        for p in range(self.nmo):
+            M1[p] = self.C_elem(p, p, p, p)
+
+        for p in range(self.nmo):
+            for q in range(p + 1, self.nmo):
+                val = (
+                    4.0 * self.C_elem(p, p, p, q)
+                    + 2.0 * self.C_elem(p, p, q, q)
+                    + 4.0 * self.C_elem(p, q, p, q)
+                    + 4.0 * self.C_elem(p, q, q, q)
+                )
+                M2[p, q] = M2[q, p] = val
+
+        self.M1 = M1
+        self.M2 = M2
+
+        return self.M1, self.M2
+
+    def make_M1(self):
+        if self.M1 is None:
+            self.make_measures()
+        return self.M1
+
+    def make_M2(self):
+        if self.M2 is None:
+            self.make_measures()
+        return self.M2
+
+    def MPQ_matrix_summary(self, print_threshold: float = 7.5e-4) -> str:
+        if self.M2 is None:
+            self.make_M2()
+
+        s_lines = [
+            f"Mutual Correlation Matrix M2 (only values > {print_threshold:.1e}):",
+            "=====================",
+            "    P     Q      M_PQ",
+            "---------------------",
+        ]
+
+        M2_vals = []
+        for i in range(self.M2.shape[0]):
+            for j in range(i + 1, self.M2.shape[1]):
+                M2_vals.append((self.M2[i, j], i, j))
+
+        M2_vals.sort(reverse=True, key=lambda x: x[0])
+
+        for val, i, j in M2_vals:
+            if val < print_threshold:
+                break
+            s_lines.append(f"{i:>5} {j:>5}  {val:8.6f}")
+
+        s_lines.append("=====================")
+
+        return "\n".join(s_lines)
