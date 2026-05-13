@@ -3,5 +3,6 @@ from .mutual_correlation import (
     MutualCorrelationAnalysis,
     UMP2MPQFast,
     RMP2MPQFast,
+    RMP2MPQOnTheFly,
     UMP2MPQOnTheFly,
 )
