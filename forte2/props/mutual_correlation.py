@@ -945,6 +945,370 @@ class RMP2MPQFast:
             n /= 1024
 
 
+class RMP2MPQOnTheFly:
+    """
+    On-the-fly dyad mutual correlation M1/M2 for RMP2.
+
+    This mirrors :class:`RMP2MPQFast` without requiring stored full MP2
+    amplitudes. It generates and rotates occupied-pair amplitude blocks from
+    the DF factors as needed.
+    """
+
+    def __init__(self, mp2, U=None, cache_pair_blocks=True):
+        self.mp2 = mp2
+        self.nmo = mp2.nocc + mp2.nvir
+        self.nocc = mp2.nocc
+        self.nvir = mp2.nvir
+        self.cache_pair_blocks = cache_pair_blocks
+
+        if getattr(mp2, "B_iaQ", None) is None:
+            raise ValueError("mp2.B_iaQ is missing. Run mp2.run() first.")
+
+        self.Γ1 = mp2.make_1rdm()
+
+        if U is not None:
+            self.U = U
+            self.occs = np.diag(U.T @ self.Γ1 @ U)
+        else:
+            self.U, self.occs = self._build_block_no_rotation(self.Γ1)
+
+        self.Uo = self.U[: self.nocc, : self.nocc]
+        self.Uv = self.U[self.nocc :, self.nocc :]
+
+        self.occ_mask = np.zeros(self.nmo, dtype=bool)
+        self.occ_mask[: self.nocc] = True
+        self.vir_mask = ~self.occ_mask
+
+        # CHANGE:
+        # For restricted MP2, mp2.C is usually a 2D MO coefficient matrix.
+        # For safety, keep compatibility if C is accidentally spin-indexed.
+        if isinstance(mp2.C, (tuple, list)):
+            self.C_no = mp2.C[0] @ self.U
+        elif getattr(mp2.C, "ndim", None) == 3:
+            self.C_no = mp2.C[0] @ self.U
+        else:
+            self.C_no = mp2.C @ self.U
+
+        self.M1 = None
+        self.M2 = None
+
+        self._cache_pair = {}
+        self._cache_pair_as = {}
+        self._cache_fixed = {}
+
+    def _o(self, p):
+        return self.occ_mask[p]
+
+    def _v(self, p):
+        return self.vir_mask[p]
+
+    def _build_block_no_rotation(self, Gamma1):
+        nocc = self.nocc
+
+        Goo = Gamma1[:nocc, :nocc]
+        Gvv = Gamma1[nocc:, nocc:]
+
+        occ_vals, Uo = np.linalg.eigh(Goo)
+        vir_vals, Uv = np.linalg.eigh(Gvv)
+
+        occ_order = np.argsort(occ_vals)[::-1]
+        vir_order = np.argsort(vir_vals)[::-1]
+
+        Uo = Uo[:, occ_order]
+        Uv = Uv[:, vir_order]
+
+        U = np.eye(self.nmo)
+        U[:nocc, :nocc] = Uo
+        U[nocc:, nocc:] = Uv
+
+        occs = np.diag(U.T @ Gamma1 @ U)
+        return U, occs
+
+    def _t2_fixed_j_canonical(self, j):
+        """
+        Canonical RMP2 amplitudes t2[i,j,a,b] for fixed occupied index j.
+
+        Returns
+        -------
+        T : ndarray, shape (nocc, nvir, nvir)
+        """
+        if j in self._cache_fixed:
+            return self._cache_fixed[j]
+
+        B = self.mp2.B_iaQ
+        eps_i = self.mp2.eps[: self.nocc]
+        eps_a = self.mp2.eps[self.nocc :]
+        eps_vv = eps_a[:, None] + eps_a[None, :]
+
+        g = np.einsum("iaQ,bQ->iab", B, B[j], optimize=True)
+        denom = eps_i[:, None, None] + self.mp2.eps[j] - eps_vv[None, :, :]
+
+        T = self.mp2._safe_divide(g, denom, label="RMP2 denom")
+        self._cache_fixed[j] = T
+        return T
+
+    def _t2_pair_no(self, i, j):
+        """
+        Rotated RMP2 amplitude block t2_NO[i,j,:,:].
+
+        Returns
+        -------
+        Tij : ndarray, shape (nvir, nvir)
+        """
+        key = (i, j)
+        if self.cache_pair_blocks and key in self._cache_pair:
+            return self._cache_pair[key]
+
+        T_ab = np.zeros((self.nvir, self.nvir))
+
+        for J in range(self.nocc):
+            T_fixed_J = self._t2_fixed_j_canonical(J)
+            T_i_ab = np.einsum("I,Iab->ab", self.Uo[:, i], T_fixed_J, optimize=True)
+            T_ab += self.Uo[J, j] * T_i_ab
+
+        T_no = np.einsum("aA,ab,bB->AB", self.Uv, T_ab, self.Uv, optimize=True)
+
+        if self.cache_pair_blocks:
+            self._cache_pair[key] = T_no
+
+        return T_no
+
+    def _t2_pair_no_as(self, i, j):
+        """
+        Antisymmetrized same-spin rotated RMP2 amplitude block:
+
+            t_as[i,j,a,b] = t[i,j,a,b] - t[i,j,b,a]
+
+        Since _t2_pair_no returns the non-antisymmetrized spatial Coulomb
+        amplitude, this helper should be used for same-spin aa/bb blocks.
+        """
+        key = (i, j)
+        if self.cache_pair_blocks and key in self._cache_pair_as:
+            return self._cache_pair_as[key]
+
+        Tij = self._t2_pair_no(i, j)
+        Tij_as = Tij - Tij.T
+
+        if self.cache_pair_blocks:
+            self._cache_pair_as[key] = Tij_as
+
+        return Tij_as
+
+    def _t2_elem(self, i, j, a, b):
+        return self._t2_pair_no(i, j)[a, b]
+
+    def _gamma_oooo_elem(self, i, j, k, l):
+        """
+        Same-spin second-order oooo block:
+
+            gamma_oooo[i,j,k,l] = 1/2 sum_ab t_as[i,j,a,b] t_as[k,l,a,b]
+
+        where t_as is the same-spin antisymmetrized amplitude.
+        """
+        Tij = self._t2_pair_no_as(i, j)
+        Tkl = self._t2_pair_no_as(k, l)
+        return 0.5 * np.einsum("ab,ab->", Tij, Tkl, optimize=True)
+
+    def _gamma_vvvv_elem(self, a, b, c, d):
+        """
+        Same-spin second-order vvvv block:
+
+            gamma_vvvv[a,b,c,d] = 1/2 sum_ij t_as[i,j,a,b] t_as[i,j,c,d]
+        """
+        val = 0.0
+        for i in range(self.nocc):
+            for j in range(self.nocc):
+                Tij = self._t2_pair_no_as(i, j)
+                val += Tij[a, b] * Tij[c, d]
+        return 0.5 * val
+
+    def _gamma_ovov_elem(self, i, a, j, b):
+        val = 0.0
+        for m in range(self.nocc):
+            Tim = self._t2_pair_no(i, m)
+            Tjm = self._t2_pair_no(j, m)
+            val += np.dot(Tim[a, :], Tjm[b, :])
+        return val
+
+    def lambda2_aa_elem(self, p, q, r, s):
+        if p == q or r == s:
+            return 0.0
+
+        val = 0.0
+
+        # First-order oo/vv block.
+        # CHANGE:
+        # _t2_pair_no is non-antisymmetrized spatial t_ij^ab.
+        # Same-spin needs only t_ij^ab - t_ij^ba, not the four-term expression.
+        if self._o(p) and self._o(q) and self._v(r) and self._v(s):
+            i, j = p, q
+            a, b = r - self.nocc, s - self.nocc
+            val += self._t2_elem(i, j, a, b) - self._t2_elem(i, j, b, a)
+
+        # Hermitian vv/oo partner.
+        if self._v(p) and self._v(q) and self._o(r) and self._o(s):
+            i, j = r, s
+            a, b = p - self.nocc, q - self.nocc
+            val += self._t2_elem(i, j, a, b) - self._t2_elem(i, j, b, a)
+
+        # Second-order oooo block.
+        if self._o(p) and self._o(q) and self._o(r) and self._o(s):
+            val += self._gamma_oooo_elem(p, q, r, s)
+
+        # Second-order vvvv block.
+        if self._v(p) and self._v(q) and self._v(r) and self._v(s):
+            a, b, c, d = p - self.nocc, q - self.nocc, r - self.nocc, s - self.nocc
+            val += self._gamma_vvvv_elem(a, b, c, d)
+
+        return val
+
+    def lambda2_bb_elem(self, p, q, r, s):
+        return self.lambda2_aa_elem(p, q, r, s)
+
+    def lambda2_ab_elem(self, p, q, r, s):
+        val = 0.0
+
+        # First-order oo/vv block: opposite-spin uses non-antisymmetrized amplitude.
+        if self._o(p) and self._o(q) and self._v(r) and self._v(s):
+            i, j = p, q
+            a, b = r - self.nocc, s - self.nocc
+            val += self._t2_elem(i, j, a, b)
+
+        # Hermitian vv/oo partner.
+        if self._v(p) and self._v(q) and self._o(r) and self._o(s):
+            i, j = r, s
+            a, b = p - self.nocc, q - self.nocc
+            val += self._t2_elem(i, j, a, b)
+
+        # Second-order o/v/o/v block.
+        if self._o(p) and self._v(q) and self._o(r) and self._v(s):
+            i, a = p, q - self.nocc
+            j, b = r, s - self.nocc
+            val += self._gamma_ovov_elem(i, a, j, b)
+
+        # Permuted partner.
+        if self._v(p) and self._o(q) and self._v(r) and self._o(s):
+            j, b = q, p - self.nocc
+            i, a = s, r - self.nocc
+            val += self._gamma_ovov_elem(i, a, j, b)
+
+        return val
+
+    def C_elem(self, p, q, r, s):
+        aa = self.lambda2_aa_elem(p, q, r, s)
+        bb = self.lambda2_bb_elem(p, q, r, s)
+
+        ab1 = self.lambda2_ab_elem(p, q, r, s)
+        ab2 = self.lambda2_ab_elem(p, q, s, r)
+        ab3 = self.lambda2_ab_elem(q, p, r, s)
+        ab4 = self.lambda2_ab_elem(q, p, s, r)
+
+        return 0.25 * (
+            abs(aa) ** 2
+            + abs(bb) ** 2
+            + abs(ab1) ** 2
+            + abs(ab2) ** 2
+            + abs(ab3) ** 2
+            + abs(ab4) ** 2
+        )
+
+    def make_measures(self, indices=None):
+        if indices is None:
+            indices = list(range(self.nmo))
+        else:
+            indices = list(indices)
+
+        M1 = np.zeros(self.nmo)
+        M2 = np.zeros((self.nmo, self.nmo))
+
+        for p in indices:
+            M1[p] = self.C_elem(p, p, p, p)
+
+        for ii, p in enumerate(indices):
+            for q in indices[ii + 1 :]:
+                val = (
+                    4.0 * self.C_elem(p, p, p, q)
+                    + 2.0 * self.C_elem(p, p, q, q)
+                    + 4.0 * self.C_elem(p, q, p, q)
+                    + 4.0 * self.C_elem(p, q, q, q)
+                )
+                M2[p, q] = M2[q, p] = val
+
+        self.M1 = M1
+        self.M2 = M2
+        return self.M1, self.M2
+
+    def make_M1(self, indices=None):
+        if self.M1 is not None and indices is None:
+            return self.M1
+
+        if indices is None:
+            indices = list(range(self.nmo))
+        else:
+            indices = list(indices)
+
+        M1 = np.zeros(self.nmo)
+        for p in indices:
+            M1[p] = self.C_elem(p, p, p, p)
+
+        self.M1 = M1
+        return self.M1
+
+    def make_M2(self, indices=None):
+        if self.M2 is not None and indices is None:
+            return self.M2
+
+        self.make_measures(indices=indices)
+        return self.M2
+
+    def MPQ_matrix_summary(self, print_threshold: float = 7.5e-4, indices=None) -> str:
+        if self.M2 is None or indices is not None:
+            self.make_M2(indices=indices)
+
+        if indices is None:
+            print_indices = list(range(self.nmo))
+        else:
+            print_indices = list(indices)
+
+        s_lines = [
+            f"Mutual Correlation Matrix M2 (only values > {print_threshold:.1e}):",
+            "=====================",
+            "    P     Q      M_PQ",
+            "---------------------",
+        ]
+
+        M2_vals = []
+        for ii, i in enumerate(print_indices):
+            for j in print_indices[ii + 1 :]:
+                M2_vals.append((self.M2[i, j], i, j))
+
+        M2_vals.sort(reverse=True, key=lambda x: x[0])
+
+        for val, i, j in M2_vals:
+            if val < print_threshold:
+                break
+            s_lines.append(f"{i:>5} {j:>5}  {val:8.6f}")
+
+        s_lines.append("=====================")
+        return "\n".join(s_lines)
+
+    @staticmethod
+    def mpq_memory_bytes(nmo, dtype_bytes=8):
+        return dtype_bytes * (nmo**2)
+
+    @staticmethod
+    def full_T_memory_bytes(nmo, dtype_bytes=8):
+        return dtype_bytes * (nmo**4)
+
+    @staticmethod
+    def format_bytes(n):
+        for unit in ["B", "KB", "MB", "GB", "TB"]:
+            if n < 1024:
+                return f"{n:.2f} {unit}"
+            n /= 1024
+        return f"{n:.2f} PB"
+
+
 class UMP2MPQOnTheFly:
     """
     On-the-fly dyad mutual correlation M1/M2 for UMP2.

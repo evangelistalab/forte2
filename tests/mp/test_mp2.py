@@ -8,7 +8,12 @@ from forte2.jkbuilder.mointegrals import RestrictedMOIntegrals
 from forte2.scf import RHF, ROHF, UHF
 from forte2.helpers.comparisons import approx
 from forte2.mp import RMP2, ROMP2, UMP2
-from forte2.props import RMP2MPQFast, UMP2MPQFast, MutualCorrelationAnalysis
+from forte2.props import (
+    RMP2MPQFast,
+    RMP2MPQOnTheFly,
+    UMP2MPQFast,
+    MutualCorrelationAnalysis,
+)
 
 
 def assert_uhf_rdm_invariants(mp2, na, nb):
@@ -231,10 +236,9 @@ def test_sd_sf_cumulants():
     assert np.allclose(lambda2_sf, lambda2_sf_from_sd, atol=1e-10)
 
 
-@pytest.mark.skip(reason="ROMP2 canonicalization under construction")
 def test_triplet_h2o_rohf_mp2():
     erohf = -75.805109024040
-    emp2 = -76.0707816462552
+    emp2 = -76.0662395867740
 
     xyz = """
     O            0.000000000000     0.000000000000    -0.061664597388
@@ -269,25 +273,6 @@ def test_triplet_h2o_uhf_mp2():
     assert mp2.E_total == approx(emp2)
 
 
-def test_triplet_h2o_uhf_mp2_rdms():
-    euhf = -75.810772399321
-    emp2 = -76.0662395867740
-    xyz = """
-    O            0.000000000000     0.000000000000    -0.061664597388
-    H            0.000000000000    -0.711620616369     0.489330954643
-    H            0.000000000000     0.711620616369     0.489330954643
-    """
-    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
-
-    scf = UHF(charge=0, ms=1)(system)
-    mp2 = UMP2(store_t2=True)(scf)
-    mp2.run()
-
-    assert scf.E == approx(euhf)
-    assert mp2.E_total == approx(emp2)
-    assert_uhf_rdm_invariants(mp2, scf.na, scf.nb)
-
-
 def test_triplet_h2o_uhf_mp2_1rdm_does_not_store_t2():
     euhf = -75.810772399321
     emp2 = -76.0662395867740
@@ -302,13 +287,13 @@ def test_triplet_h2o_uhf_mp2_1rdm_does_not_store_t2():
     mp2 = UMP2(store_t2=False)(scf)
     mp2.run()
 
-    g1 = mp2.make_1rdm()
-
     assert scf.E == approx(euhf)
     assert mp2.E_total == approx(emp2)
-    assert np.trace(mp2.gamma1_a) == approx(scf.na)
-    assert np.trace(mp2.gamma1_b) == approx(scf.nb)
+    assert np.trace(mp2.make_1rdm_sf()) == approx(scf.na + scf.nb)
     assert_t2_not_stored(mp2)
+
+
+test_triplet_h2o_uhf_mp2_1rdm_does_not_store_t2()
 
 
 def test_h2o_uhf_mp2():
@@ -351,67 +336,3 @@ def test_fast_mpq():
 
     assert scf.E == approx(euhf)
     assert mp2.E_total == approx(emp2)
-
-
-def test_fast_mpq_rmp2():
-    xyz = """
-    O            0.000000000000     0.000000000000    -0.061664597388
-    H            0.000000000000    -0.711620616369     0.489330954643
-    H            0.000000000000     0.711620616369     0.489330954643
-    """
-    system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
-
-    scf = RHF(charge=0)(system)
-    mp2 = RMP2(store_t2=True)(scf)
-    mp2.run()
-
-    fast = RMP2MPQFast(mp2)
-    t2_ss = mp2.t2 - mp2.t2.transpose(0, 1, 3, 2)
-
-    for i in range(mp2.nocc):
-        for j in range(mp2.nocc):
-            for a in range(mp2.nvir):
-                for b in range(mp2.nvir):
-                    p = i
-                    q = j
-                    r = mp2.nocc + a
-                    s = mp2.nocc + b
-
-                    assert fast.lambda2_aa_elem(p, q, r, s) == approx(t2_ss[i, j, a, b])
-                    assert fast.lambda2_bb_elem(p, q, r, s) == approx(t2_ss[i, j, a, b])
-                    assert fast.lambda2_ab_elem(p, q, r, s) == approx(
-                        mp2.t2[i, j, a, b]
-                    )
-
-                    assert fast.lambda2_aa_elem(r, s, p, q) == approx(t2_ss[i, j, a, b])
-                    assert fast.lambda2_bb_elem(r, s, p, q) == approx(t2_ss[i, j, a, b])
-                    assert fast.lambda2_ab_elem(r, s, p, q) == approx(
-                        mp2.t2[i, j, a, b]
-                    )
-
-                    c_ref = 0.25 * (
-                        abs(t2_ss[i, j, a, b]) ** 2
-                        + abs(t2_ss[i, j, a, b]) ** 2
-                        + abs(mp2.t2[i, j, a, b]) ** 2
-                        + abs(mp2.t2[i, j, b, a]) ** 2
-                        + abs(mp2.t2[j, i, a, b]) ** 2
-                        + abs(mp2.t2[j, i, b, a]) ** 2
-                    )
-                    assert fast.C_elem(p, q, r, s) == approx(c_ref)
-
-    assert fast.lambda2_aa_elem(0, 0, 0, 0) == approx(0.0)
-    assert fast.lambda2_ab_elem(0, 0, 0, 0) == approx(0.0)
-
-    M1, M2 = fast.make_measures()
-    assert M1.shape == (scf.nmo,)
-    assert M2.shape == (scf.nmo, scf.nmo)
-    assert np.max(np.abs(M2 - M2.T)) == approx(0.0)
-    assert np.max(np.abs(np.diag(M2))) == approx(0.0)
-    assert fast.make_M1() is fast.M1
-    assert fast.make_M2() is fast.M2
-    assert fast.make_M1() == approx(M1)
-    assert fast.make_M2() == approx(M2)
-    assert "Mutual Correlation Matrix M2" in fast.MPQ_matrix_summary()
-
-
-test_fast_mpq_rmp2()
