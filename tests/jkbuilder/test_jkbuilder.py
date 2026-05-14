@@ -292,3 +292,26 @@ def test_jkbuilder_on_the_fly_large():
     J_otf, K_otf = fb_otf.build_JK([Cocc])
     assert np.linalg.norm(J_otf[0] - J_ref[0]) < 1e-8
     assert np.linalg.norm(K_otf[0] - K_ref[0]) < 1e-8
+
+
+def test_jkbuilder_lindep_metric():
+    xyz = """
+    H 0.0 0.0 0.0
+    H 0.0 0.0 1.0
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        unit="bohr",
+    )
+    import forte2
+
+    fakeaux = forte2.ints.Basis()
+    # center 1: 1 + 3 = 4 basis functions, range (0, 4)
+    fakeaux.add(forte2.ints.Shell(0, [1.0], [1.0], [0.0, 0.0, 0.0]))
+    fakeaux.add(forte2.ints.Shell(0, [1.0], [1.0], [0.0, 0.0, 0.0]))
+    system.auxiliary_basis = fakeaux
+    with pytest.raises(ValueError, match="positive definite"):
+        system.fock_builder.B_Pmn
