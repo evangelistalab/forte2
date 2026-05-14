@@ -309,9 +309,14 @@ def test_jkbuilder_lindep_metric():
     import forte2
 
     fakeaux = forte2.ints.Basis()
-    # center 1: 1 + 3 = 4 basis functions, range (0, 4)
+    # two identical auxiliary functions, this forces the Coulomb metric to be linearly dependent
     fakeaux.add(forte2.ints.Shell(0, [1.0], [1.0], [0.0, 0.0, 0.0]))
     fakeaux.add(forte2.ints.Shell(0, [1.0], [1.0], [0.0, 0.0, 0.0]))
     system.auxiliary_basis = fakeaux
     with pytest.raises(ValueError, match="positive definite"):
         system.fock_builder.B_Pmn
+
+    with pytest.raises(ValueError, match="positive definite"):
+        system.fock_builder = jkbuilder.FockBuilderOTF(
+            system, jk_mem_thres_mb=10, backend="libcint"
+        )

@@ -139,10 +139,8 @@ class FockBuilder:
             try:
                 L = sp.linalg.cholesky(M, lower=True)
             except sp.linalg.LinAlgError:
-                cond = np.linalg.cond(M)
                 raise ValueError(
-                    f"Density fitting Coulomb metric (P|Q) is not positive definite.\n"
-                    f"Condition number of (P|Q): {cond}\n"
+                    "Density fitting Coulomb metric (P|Q) is not positive definite.\n"
                     "Please set df_ortho_rtol to a small positive value to orthogonalize the metric."
                 )
             # M^{-1/2} = L^{-T} L^{-1}, so L^{-1} can be considered as M^{-1/2}
@@ -669,7 +667,13 @@ class FockBuilderOTF:
             self.sevecs = sevecs[:, ndiscard:]
         else:
             # M = L L.T
-            self.L = sp.linalg.cholesky(M, lower=True)
+            try:
+                self.L = sp.linalg.cholesky(M, lower=True)
+            except sp.linalg.LinAlgError:
+                raise ValueError(
+                    "Density fitting Coulomb metric (P|Q) is not positive definite.\n"
+                    "Please set df_ortho_rtol to a small positive value to orthogonalize the metric."
+                )
             I = np.eye(M.shape[0])
             self.Mm12 = sp.linalg.solve_triangular(self.L, I, lower=True)
 
