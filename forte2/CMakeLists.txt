@@ -110,9 +110,9 @@ nanobind_add_module(
   helpers/combinatorial.cc
   helpers/string_algorithms.cc
   integrals/basis.cc
-  integrals/fock_builder.cc
   integrals/nuclear_repulsion.cc
   integrals/one_electron.cc
+  integrals/one_electron_deriv.cc
   integrals/two_electron.cc
   integrals/value_at_points.cc
   ci/ci_sigma_builder.cc
@@ -177,10 +177,9 @@ if (USE_LIBCINT)
   )
 endif()
 
-# Set rpath to use @loader_path so it finds the dylib in the same directory
+# Set rpath so the installed extension looks for companion libraries next to itself
 set_target_properties(_forte2 PROPERTIES
-    INSTALL_RPATH "$ENV{CONDA_PREFIX}/lib"
-    BUILD_WITH_INSTALL_RPATH TRUE
+  INSTALL_RPATH "$<$<PLATFORM_ID:Darwin>:@loader_path>$<$<NOT:$<PLATFORM_ID:Darwin>>:$ORIGIN>"
 )
 
 # Install directive for scikit-build-core
@@ -189,7 +188,7 @@ install(TARGETS _forte2 LIBRARY DESTINATION forte2)
 if (USE_LIBCINT)
   # Install "libcint_forte2.<version>.dylib/so" (and shortened symlinks)
   install(TARGETS cint 
-      LIBRARY DESTINATION "$ENV{CONDA_PREFIX}/lib"
+      LIBRARY DESTINATION forte2
   )
 endif()
 

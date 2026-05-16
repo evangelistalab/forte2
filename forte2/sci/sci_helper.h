@@ -6,6 +6,7 @@
 #include <span>
 
 #include "helpers/ndarray.h"
+#include "helpers/parallel.h"
 #include "helpers/spin.h"
 
 #include "determinant/determinant.h"

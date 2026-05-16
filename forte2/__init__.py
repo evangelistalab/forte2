@@ -1,4 +1,4 @@
-__version__ = "0.3.0"
+__version__ = "2026.5.1"
 __author__ = "Forte2 Developers"
 
 from ._forte2 import *

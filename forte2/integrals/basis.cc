@@ -21,7 +21,9 @@ void Basis::add(const libint2::Shell& shell) {
     shells_.push_back(shell);
     max_l_ = std::max(max_l_, shell.contr[0].l);
     max_nprim_ = std::max(max_nprim_, shell.nprim());
-    size_ += shell.contr[0].size();
+    auto nbasis_in_shell = shell.contr[0].size();
+    max_nbasis_ = std::max(max_nbasis_, nbasis_in_shell);
+    size_ += nbasis_in_shell;
 }
 
 std::size_t Basis::size() const { return size_; }
@@ -43,6 +45,8 @@ std::string Basis::name() const { return name_; }
 
 std::size_t Basis::max_nprim() const { return max_nprim_; }
 
+std::size_t Basis::max_nbasis() const { return max_nbasis_; }
+
 std::vector<std::pair<std::size_t, std::size_t>> Basis::shell_first_and_size() const {
     std::vector<std::pair<std::size_t, std::size_t>> result;
     result.reserve(shells_.size());
@@ -54,7 +58,19 @@ std::vector<std::pair<std::size_t, std::size_t>> Basis::shell_first_and_size() c
     return result;
 }
 
-std::vector<std::pair<std::size_t, std::size_t>> Basis::center_first_and_last(bool count_shell) const {
+std::vector<std::size_t> Basis::shell_offsets() const {
+    auto first_size = shell_first_and_size();
+    auto n_shells = nshells();
+    std::vector<std::size_t> offsets(n_shells + 1);
+    for (std::size_t i = 0; i < n_shells; ++i) {
+        offsets[i] = first_size[i].first;
+    }
+    offsets[n_shells] = size();
+    return offsets;
+}
+
+std::vector<std::pair<std::size_t, std::size_t>>
+Basis::center_first_and_last(bool count_shell) const {
     std::vector<std::pair<std::size_t, std::size_t>> result;
     if (shells_.empty()) {
         return result;

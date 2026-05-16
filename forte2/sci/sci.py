@@ -282,7 +282,7 @@ class _SelectedCISingleStateSolver:
             delta_energy = np.average(self.evals) - old_energy
             old_energy = np.average(self.evals)
 
-            if abs(delta_energy) < self.davidson_liu_params.e_tol:
+            if abs(delta_energy) < self.sci_params.e_tol:
                 logger.log(
                     f"Selected CI converged in {cycle + 1} cycles.", self.log_level
                 )
@@ -1056,7 +1056,9 @@ class SelectedCISolver(CIBase):
     sci_params: SelectedCIParams | list[SelectedCIParams] = field(
         default_factory=SelectedCIParams
     )
-    davidson_liu_params: DavidsonLiuParams | list[DavidsonLiuParams] = field(default_factory=DavidsonLiuParams)
+    davidson_liu_params: DavidsonLiuParams | list[DavidsonLiuParams] = field(
+        default_factory=DavidsonLiuParams
+    )
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level() + 1)
 
@@ -1098,7 +1100,6 @@ class SelectedCISolver(CIBase):
             self.C[0],
             self.active_indices,
             self.core_indices,
-            use_aux_corr=True,
         )
 
         self.sub_solvers = []
@@ -1387,7 +1388,6 @@ class SelectedCI(SelectedCISolver):
                 self.C[0],
                 self.active_indices,
                 self.core_indices,
-                use_aux_corr=True,
             )
             self.set_ints(ints.E, ints.H, ints.V)
             super().run()

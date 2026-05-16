@@ -147,12 +147,14 @@ def test_mrpt2_carbon_rel_sa():
 
 
 @pytest.mark.slow
-def test_mrpt2_se_rel_sa_gauss_nuc():
+def test_mrpt2_se_rel_sa_gauss_nuc_jk_otf():
     # Test the zero-field splitting of Se atom with Gaussian nuclear charges
     # Freezing all non-4s/4p orbitals (zero correlated core orbitals)
     xyz = """
     Se 0 0 0
     """
+
+    from forte2.jkbuilder import FockBuilderOTF
 
     system = System(
         xyz=xyz,
@@ -162,6 +164,8 @@ def test_mrpt2_se_rel_sa_gauss_nuc():
         snso_type="row-dependent",
         use_gaussian_charges=True,
     )
+    system.fock_builder = FockBuilderOTF(system, jk_mem_thres_mb=20, backend="libcint")
+
     mf = GHF(
         charge=-1,
         die_if_not_converged=False,
@@ -316,3 +320,22 @@ def test_mrpt2_sh_with_slow():
     assert dsrg.relax_eigvals == approx(dsrg_slow.relax_eigvals)
     assert dsrg.relax_eigvals_history == approx(dsrg_slow.relax_eigvals_history)
     assert dsrg.E_dsrg == approx(dsrg_slow.E_dsrg)
+
+
+def test_rel_mrpt2_all_active():
+    xyz = f"""
+    H 0.0 0.0 0.0
+    H 0.0 0.0 {0.529177210903 * 2}
+    """
+
+    system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = GHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = RelCISolver(nel=2, active_orbitals=4)
+    mc = MCOptimizer(
+        ci_solver,
+        maxiter=5,
+    )(rhf)
+    pt = RelDSRG_MRPT2(flow_param=0.5)(mc)
+    pt.run()
+    assert pt.E_dsrg == approx(-1.096071975854)
