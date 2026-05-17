@@ -215,7 +215,7 @@ template <size_t N> class BitArray {
     /// This fills the half-open bit range [0, n). For example, fill_up_to(70) sets global bits
     /// 0 through 69, leaving bit 70 unset. If n <= 0 all bits are cleared; if n >= nbits all bits
     /// are set.
-    void fill_up_to(int n) noexcept {
+    void fill_up_to(size_t n) noexcept {
         clear();
         if (n <= 0) {
             return;
@@ -474,8 +474,8 @@ template <size_t N> class BitArray {
 
     /// Apply a callable to each bit set to one, in ascending bit-index order.
     ///
-    /// The callback may return either void or a bool-like value. Void callbacks always continue.
-    /// Bool callbacks continue when they return true and stop early when they return false.
+    /// The callable may return either void or a bool-like value. Void callables always continue.
+    /// Bool callables continue when they return true and stop early when they return false.
     /// @param func a callable that accepts the bit index as a size_t
     /// @param begin the index of the first word to test
     /// @param end the index of the last word to test (not included)
@@ -488,12 +488,12 @@ template <size_t N> class BitArray {
             while (x) {
                 const size_t pos = base + std::countr_zero(x);
                 // if the callback returns void, we ignore the return value and always continue
-                if constexpr (std::is_void_v<std::invoke_result_t<Func&, size_t>>) {
-                    std::invoke(func, pos);
+                if constexpr (std::is_void_v<std::invoke_result_t<Func, size_t>>) {
+                    std::invoke(std::forward<Func>(func), pos);
                 }
                 // if the callback returns a bool-like value, we check it
                 else {
-                    if (!std::invoke(func, pos)) {
+                    if (!std::invoke(std::forward<Func>(func), pos)) {
                         return false;
                     }
                 }
@@ -520,20 +520,24 @@ template <size_t N> class BitArray {
     /// @param condition a lambda function that takes two uint64_t integers and returns a boolean
     /// @return true if the condition is satisfied for all the words, false otherwise
     template <typename Condition>
-    bool test_binary_condition(const BitArray<N>& b, Condition condition) const {
+    bool test_binary_condition(const BitArray<N>& b, Condition&& condition) const {
         if constexpr (N == 64) {
-            return condition(words_[0], b.words_[0]);
+            return std::invoke(std::forward<Condition>(condition), words_[0], b.words_[0]);
         } else if constexpr (N == 128) {
-            return condition(words_[0], b.words_[0]) && condition(words_[1], b.words_[1]);
+            return std::invoke(std::forward<Condition>(condition), words_[0], b.words_[0]) &&
+                   std::invoke(std::forward<Condition>(condition), words_[1], b.words_[1]);
         } else if constexpr (N == 192) {
-            return condition(words_[0], b.words_[0]) && condition(words_[1], b.words_[1]) &&
-                   condition(words_[2], b.words_[2]);
+            return std::invoke(std::forward<Condition>(condition), words_[0], b.words_[0]) &&
+                   std::invoke(std::forward<Condition>(condition), words_[1], b.words_[1]) &&
+                   std::invoke(std::forward<Condition>(condition), words_[2], b.words_[2]);
         } else if constexpr (N == 256) {
-            return condition(words_[0], b.words_[0]) && condition(words_[1], b.words_[1]) &&
-                   condition(words_[2], b.words_[2]) && condition(words_[3], b.words_[3]);
+            return std::invoke(std::forward<Condition>(condition), words_[0], b.words_[0]) &&
+                   std::invoke(std::forward<Condition>(condition), words_[1], b.words_[1]) &&
+                   std::invoke(std::forward<Condition>(condition), words_[2], b.words_[2]) &&
+                   std::invoke(std::forward<Condition>(condition), words_[3], b.words_[3]);
         } else {
             for (size_t n = 0; n < words_.size(); n++) {
-                if (!condition(words_[n], b.words_[n]))
+                if (!std::invoke(std::forward<Condition>(condition), words_[n], b.words_[n]))
                     return false;
             }
             return true;
@@ -547,24 +551,35 @@ template <size_t N> class BitArray {
     /// @return true if the condition is satisfied for all the words, false otherwise
     template <typename Condition>
     bool test_ternary_condition(const BitArray<N>& b, const BitArray<N>& c,
-                                Condition condition) const {
+                                Condition&& condition) const {
         if constexpr (N == 64) {
-            return condition(words_[0], b.words_[0], c.words_[0]);
+            return std::invoke(std::forward<Condition>(condition), words_[0], b.words_[0],
+                               c.words_[0]);
         } else if constexpr (N == 128) {
-            return condition(words_[0], b.words_[0], c.words_[0]) &&
-                   condition(words_[1], b.words_[1], c.words_[1]);
+            return std::invoke(std::forward<Condition>(condition), words_[0], b.words_[0],
+                               c.words_[0]) &&
+                   std::invoke(std::forward<Condition>(condition), words_[1], b.words_[1],
+                               c.words_[1]);
         } else if constexpr (N == 192) {
-            return condition(words_[0], b.words_[0], c.words_[0]) &&
-                   condition(words_[1], b.words_[1], c.words_[1]) &&
-                   condition(words_[2], b.words_[2], c.words_[2]);
+            return std::invoke(std::forward<Condition>(condition), words_[0], b.words_[0],
+                               c.words_[0]) &&
+                   std::invoke(std::forward<Condition>(condition), words_[1], b.words_[1],
+                               c.words_[1]) &&
+                   std::invoke(std::forward<Condition>(condition), words_[2], b.words_[2],
+                               c.words_[2]);
         } else if constexpr (N == 256) {
-            return condition(words_[0], b.words_[0], c.words_[0]) &&
-                   condition(words_[1], b.words_[1], c.words_[1]) &&
-                   condition(words_[2], b.words_[2], c.words_[2]) &&
-                   condition(words_[3], b.words_[3], c.words_[3]);
+            return std::invoke(std::forward<Condition>(condition), words_[0], b.words_[0],
+                               c.words_[0]) &&
+                   std::invoke(std::forward<Condition>(condition), words_[1], b.words_[1],
+                               c.words_[1]) &&
+                   std::invoke(std::forward<Condition>(condition), words_[2], b.words_[2],
+                               c.words_[2]) &&
+                   std::invoke(std::forward<Condition>(condition), words_[3], b.words_[3],
+                               c.words_[3]);
         } else {
             for (size_t n = 0; n < words_.size(); n++) {
-                if (!condition(words_[n], b.words_[n], c.words_[n]))
+                if (!std::invoke(std::forward<Condition>(condition), words_[n], b.words_[n],
+                                 c.words_[n]))
                     return false;
             }
             return true;
@@ -576,21 +591,25 @@ template <size_t N> class BitArray {
     /// @param operation a lambda function that takes two uint64_t integers and returns an integer
     /// @return the result of the operation for all the words
     template <typename Operation>
-    int count_binary_operation(const BitArray<N>& b, Operation operation) const {
+    int count_binary_operation(const BitArray<N>& b, Operation&& operation) const {
         if constexpr (N == 64) {
-            return operation(words_[0], b.words_[0]);
+            return std::invoke(std::forward<Operation>(operation), words_[0], b.words_[0]);
         } else if constexpr (N == 128) {
-            return operation(words_[0], b.words_[0]) + operation(words_[1], b.words_[1]);
+            return std::invoke(std::forward<Operation>(operation), words_[0], b.words_[0]) +
+                   std::invoke(std::forward<Operation>(operation), words_[1], b.words_[1]);
         } else if constexpr (N == 192) {
-            return operation(words_[0], b.words_[0]) + operation(words_[1], b.words_[1]) +
-                   operation(words_[2], b.words_[2]);
+            return std::invoke(std::forward<Operation>(operation), words_[0], b.words_[0]) +
+                   std::invoke(std::forward<Operation>(operation), words_[1], b.words_[1]) +
+                   std::invoke(std::forward<Operation>(operation), words_[2], b.words_[2]);
         } else if constexpr (N == 256) {
-            return operation(words_[0], b.words_[0]) + operation(words_[1], b.words_[1]) +
-                   operation(words_[2], b.words_[2]) + operation(words_[3], b.words_[3]);
+            return std::invoke(std::forward<Operation>(operation), words_[0], b.words_[0]) +
+                   std::invoke(std::forward<Operation>(operation), words_[1], b.words_[1]) +
+                   std::invoke(std::forward<Operation>(operation), words_[2], b.words_[2]) +
+                   std::invoke(std::forward<Operation>(operation), words_[3], b.words_[3]);
         } else {
             int c = 0;
             for (size_t n = 0; n < nwords_; n++) {
-                c += operation(words_[n], b.words_[n]);
+                c += std::invoke(std::forward<Operation>(operation), words_[n], b.words_[n]);
             }
             return c;
         }
@@ -642,136 +661,18 @@ template <size_t N> class BitArray {
             b, c, [](uint64_t a, uint64_t b, uint64_t c) -> bool { return (a & (b & (~c))) == 0; });
     }
 
-    /// Return the sign of a_n applied to this determinant
-    /// This function ignores if bit n is set or not
-    double slater_sign(size_t n) const {
-        if constexpr (N == 64) {
-            return ui64_sign(words_[0], n);
-        } else {
-            size_t count = 0;
-            // count all the preceeding bits only if we are looking past the first word
-            if (n >= bits_per_word) {
-                size_t last_full_word = whichword(n);
-                for (size_t k = 0; k < last_full_word; ++k) {
-                    count += std::popcount(words_[k]);
-                }
+    std::string str(size_t n = BitArray<N>::nbits) const {
+        std::string s;
+        s += "|";
+        for (size_t p = 0; p < n; ++p) {
+            if (get_bit(p)) {
+                s += "1";
+            } else {
+                s += "0";
             }
-            const double word_sign = ui64_sign(getword(n), whichbit(n));
-            return (count % 2 == 0) ? word_sign : -word_sign;
         }
-    }
-
-    /// Return the sign of a_n applied to this determinant in reverse order
-    /// This function ignores if bit n is set or not
-    double slater_sign_reverse(size_t n) const {
-        if constexpr (N == 64) {
-            return ui64_sign_reverse(words_[0], n);
-        } else {
-            size_t count = 0;
-            // count all the following bits only if we are not looking at the last word
-            size_t start_word =
-                whichword(n) + 1; // Start from the word following the one containing bit n
-            if (start_word < nwords_) {
-                for (size_t k = start_word; k < nwords_; ++k) {
-                    count += std::popcount(words_[k]);
-                }
-            }
-            const double word_sign = ui64_sign_reverse(getword(n), whichbit(n));
-            return (count % 2 == 0) ? word_sign : -word_sign;
-        }
-    }
-
-    double create_unchecked(int n) {
-        set_bit(n, true);
-        return slater_sign(n);
-    }
-
-    double destroy_unchecked(int n) {
-        set_bit(n, false);
-        return slater_sign(n);
-    }
-
-    double create(int n) {
-        if (get_bit(n))
-            return 0.0;
-        return create_unchecked(n);
-    }
-
-    double destroy(int n) {
-        if (not get_bit(n))
-            return 0.0;
-        return destroy_unchecked(n);
-    }
-
-    /// @brief Find the irreducible representation of a product of spin orbitals
-    /// @param irrep a vector of irrep values
-    /// @return the irrep
-    int symmetry(const std::vector<int>& irrep) const {
-        int sym = 0;
-        for_each_set_bit([&](size_t pos) { sym ^= irrep[pos]; });
-        return sym;
-    }
-
-    /// Return the sign for a pair of second quantized operators
-    /// The sign depends only on the number of bits = 1 between n and m
-    /// There are no restrictions on n and m
-    double slater_sign(size_t n, size_t m) const {
-        if constexpr (N == 64) {
-            return ui64_sign(words_[0], n, m);
-        } else if constexpr (N == 128) {
-            // XXXXXXXX YYYYYYYY
-            // XmXXXXnX YYYYYYYY (case 1)
-            //   cccc
-            // XmXXXXnX YYYYYYYY (case 1)
-            //   cccccc
-            // cccccc
-            // XmXXXXXX YYYYYnYY (case 2)
-            //   cccccc ccccc
-            // let's first order the numbers so that m <= n
-            if (n < m)
-                std::swap(m, n);
-            size_t word_m = whichword(m);
-            size_t word_n = whichword(n);
-            // if both bits are in the same word use an optimized version
-            if (word_n == word_m) {
-                return ui64_sign(words_[word_n], whichbit(n), whichbit(m));
-            }
-            // count the bits after m in word[m]
-            // count the bits before n in word[n]
-            return ui64_sign_reverse(words_[word_m], whichbit(m)) *
-                   ui64_sign(words_[word_n], whichbit(n));
-        } else {
-            // let's first order the numbers so that m <= n
-            if (n < m)
-                std::swap(m, n);
-            size_t word_m = whichword(m);
-            size_t word_n = whichword(n);
-            // if both bits are in the same word use an optimized version
-            if (word_n == word_m) {
-                return ui64_sign(words_[word_n], whichbit(n), whichbit(m));
-            }
-            size_t count = 0;
-            // count the number of bits in bitween the words of m and n
-            for (size_t k = word_m + 1; k < word_n; ++k) {
-                count += std::popcount(words_[k]);
-            }
-            // count the bits after m in word[m]
-            // count the bits before n in word[n]
-            double sign = ui64_sign_reverse(words_[word_m], whichbit(m)) *
-                          ui64_sign(words_[word_n], whichbit(n));
-            return (count % 2 == 0) ? sign : -sign;
-        }
-    }
-
-    /// Return the sign of a_n applied to this determinant
-    /// this version is inefficient and should be used only for testing/debugging
-    double slater_sign_safe(int n) const {
-        size_t count = 0;
-        for (int k = 0; k < n; ++k) {
-            if (get_bit(k))
-                count++;
-        }
-        return (count % 2 == 0) ? 1.0 : -1.0;
+        s += ">";
+        return s;
     }
 
     /// Returns a hash value for a BitArray object
@@ -820,20 +721,6 @@ template <size_t N> class BitArray {
     /// The bits stored as a vector of words uninitialized/indeterminate for performance.
     container_t words_;
 };
-
-template <size_t N> std::string str(const BitArray<N>& ba, int n = BitArray<N>::nbits) {
-    std::string s;
-    s += "|";
-    for (int p = 0; p < n; ++p) {
-        if (ba.get_bit(p)) {
-            s += "1";
-        } else {
-            s += "0";
-        }
-    }
-    s += ">";
-    return s;
-}
 
 /// print a BitArray object to an output stream
 template <size_t N> std::ostream& operator<<(std::ostream& os, const BitArray<N>& ba) {

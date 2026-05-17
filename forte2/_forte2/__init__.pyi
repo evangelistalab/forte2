@@ -574,9 +574,6 @@ class Determinant:
 def spin2(arg0: Determinant, arg1: Determinant, /) -> float:
     """Compute the S^2 value between two determinants"""
 
-def ui64_find_highest_one_bit(x: int) -> int:
-    """Find the highest set bit in a 64-bit word"""
-
 @overload
 def spin2(arg0: SparseState, arg1: SparseState, /) -> complex:
     """Calculate the <left_state|S^2|right_state> expectation value"""

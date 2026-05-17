@@ -109,16 +109,12 @@ void export_determinant_api(nb::module_& m) {
         .def("excitation_connection", &Determinant::excitation_connection,
              "Get the excitation connection between this and another determinant")
         .def(
-            "str", [](const Determinant& d, int n) { return str(d, n); },
+            "str", [](const Determinant& d, size_t n) { return str(d, n); },
             "n"_a = Determinant::norb(), "Get the string representation of the Slater determinant");
 
     m.def(
         "spin2", [](const Determinant& d1, const Determinant& d2) { return spin2(d1, d2); },
         "Compute the S^2 value between two determinants");
-
-    m.def(
-        "ui64_find_highest_one_bit", [](uint64_t x) { return ui64_find_highest_one_bit(x); }, "x"_a,
-        "Find the highest set bit in a 64-bit word");
 }
 
 void export_configuration_api(nb::module_& m) {
