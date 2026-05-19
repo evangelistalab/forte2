@@ -16,7 +16,7 @@ from forte2.data import EH_TO_WN
 
 def test_casscf_so():
     xyz = """
-    Br 0 0 0
+    F 0 0 0
     """
 
     system = System(
@@ -31,10 +31,10 @@ def test_casscf_so():
         selection_method="separate",
         num_active_docc=3,
         num_active_uocc=0,
-        subspace=["Br(4s)", "Br(4p)"],
+        subspace=["F(2s)", "F(2p)"],
     )(rhf)
     ci_solver = CISolver(
-        states=State(nel=35, multiplicity=2, ms=0.5),
+        states=State(nel=9, multiplicity=2, ms=0.5),
         nroots=3,
     )
     mc = MCOptimizer(ci_solver)(avas)
@@ -43,15 +43,15 @@ def test_casscf_so():
         snso_type_override="row-dependent",
     )(mc)
     ci = RelCI(
-        nel=35,
+        nel=9,
         nroots=6,
-        core_orbitals=28,
+        core_orbitals=2,
         active_orbitals=8,
     )(conv)
     ci.run()
 
     # corresponds to ~ 4.6e-8 Eh
-    assert (ci.E[4] - ci.E[3]) * EH_TO_WN == pytest.approx(3416.391762052979, abs=1e-2)
+    assert (ci.E[4] - ci.E[3]) * EH_TO_WN == pytest.approx(401.042412154626, abs=1e-2)
 
 
 def test_2c_casscf_with_rohf():
