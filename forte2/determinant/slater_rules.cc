@@ -70,8 +70,8 @@ SlaterConnection build_slater_connection(const forte2::Determinant& lhs,
         collect_connection_bits(b_lhs_only, base, result.b_lhs_only, result.nb_lhs_only);
         collect_connection_bits(b_rhs_only, base, result.b_rhs_only, result.nb_rhs_only);
 
-        const int raw_diff_count = result.na_lhs_only + result.na_rhs_only +
-                                   result.nb_lhs_only + result.nb_rhs_only;
+        const int raw_diff_count =
+            result.na_lhs_only + result.na_rhs_only + result.nb_lhs_only + result.nb_rhs_only;
         if (raw_diff_count > 4) {
             return result;
         }
@@ -253,7 +253,7 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
 
 double SlaterRules::slater_rules_reference(const Determinant& lhs, const Determinant& rhs) const {
     // we first check that the two determinants have equal Ms
-    if ((lhs.count_a() != rhs.count_a()) or (lhs.count_b() != rhs.count_b()))
+    if ((lhs.count_alpha() != rhs.count_alpha()) or (lhs.count_beta() != rhs.count_beta()))
         return 0.0;
 
     int nadiff = 0;

@@ -574,8 +574,8 @@ class _SelectedCISingleStateSolver:
 
     def _check_guess_dets(self, guess_dets):
         for d in guess_dets:
-            na = d.count_a()
-            nb = d.count_b()
+            na = d.count_alpha()
+            nb = d.count_beta()
             if na + self.ncore != self.state.na:
                 raise ValueError(
                     f"Guess determinant {d.str(self.norb)} has {na} alpha electrons, expected {self.state.na - self.ncore}."

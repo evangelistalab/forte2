@@ -44,7 +44,7 @@ def test_ci_strings_singlet():
     assert ci_strings.nb == 4
     assert ci_strings.ngas_spaces == 3
     assert ci_strings.gas_size == [1, 2, 3]
-    assert ci_strings.gas_alfa_occupations == [[0, 2, 2, 0, 0, 0], [1, 2, 1, 0, 0, 0]]
+    assert ci_strings.gas_alpha_occupations == [[0, 2, 2, 0, 0, 0], [1, 2, 1, 0, 0, 0]]
     assert ci_strings.gas_beta_occupations == [[1, 2, 1, 0, 0, 0], [0, 2, 2, 0, 0, 0]]
     assert ci_strings.gas_occupations == [(0, 0), (1, 1), (1, 0)]
 
@@ -75,7 +75,7 @@ def test_ci_strings_triplet():
     assert ci_strings.nb == 3
     assert ci_strings.ngas_spaces == 3
     assert ci_strings.gas_size == [1, 2, 3]
-    assert ci_strings.gas_alfa_occupations == [
+    assert ci_strings.gas_alpha_occupations == [
         [0, 2, 3, 0, 0, 0],
         [1, 1, 3, 0, 0, 0],
         [1, 2, 2, 0, 0, 0],

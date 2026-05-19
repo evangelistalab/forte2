@@ -27,7 +27,7 @@ np_matrix CISigmaBuilder::compute_s_1trdm(const CISigmaBuilder& sigmabuilder_rig
     }
 
     if (na_left != na_right or nb_left != nb_right) {
-        throw std::runtime_error("FCI transition RDMs: The number of alfa and beta electrons "
+        throw std::runtime_error("FCI transition RDMs: The number of alpha and beta electrons "
                                  "must be the same in the "
                                  "two wave functions.");
     }
@@ -37,9 +37,9 @@ np_matrix CISigmaBuilder::compute_s_1trdm(const CISigmaBuilder& sigmabuilder_rig
 
     auto rdm_view = rdm.view();
 
-    const auto& alfa_address_left = lists_left.alfa_address();
+    const auto& alpha_address_left = lists_left.alpha_address();
     const auto& beta_address_left = lists_left.beta_address();
-    const auto& alfa_address_right = lists_right.alfa_address();
+    const auto& alpha_address_right = lists_right.alpha_address();
     const auto& beta_address_right = lists_right.beta_address();
 
     // Compute the lists that map the strings of the right and left wave functions. We only need
@@ -84,14 +84,15 @@ np_matrix CISigmaBuilder::compute_s_1trdm(const CISigmaBuilder& sigmabuilder_rig
                                                 ? string_list[std::make_pair(class_Ib, class_Jb)]
                                                 : string_list[std::make_pair(class_Ia, class_Ja)];
 
-            const auto& pq_vo_list = is_alpha(spin) ? vo_list_map[std::make_pair(class_Ia, class_Ja)]
-                                                    : vo_list_map[std::make_pair(class_Ib, class_Jb)];
+            const auto& pq_vo_list = is_alpha(spin)
+                                         ? vo_list_map[std::make_pair(class_Ia, class_Ja)]
+                                         : vo_list_map[std::make_pair(class_Ib, class_Jb)];
 
             const size_t maxL_left = is_alpha(spin) ? beta_address_left->strpcls(class_Jb)
-                                                    : alfa_address_left->strpcls(class_Ja);
+                                                    : alpha_address_left->strpcls(class_Ja);
 
             const size_t maxL_right = is_alpha(spin) ? beta_address_right->strpcls(class_Ib)
-                                                     : alfa_address_right->strpcls(class_Ia);
+                                                     : alpha_address_right->strpcls(class_Ia);
 
             for (const auto& [pq, vo_list] : pq_vo_list) {
                 const auto& [p, q] = pq;
@@ -107,18 +108,18 @@ np_matrix CISigmaBuilder::compute_s_1trdm(const CISigmaBuilder& sigmabuilder_rig
     return rdm;
 }
 
-np_matrix CISigmaBuilder::compute_a_1trdm(const CISigmaBuilder& sigmabuilder_right, np_vector C_left,
-                                          np_vector C_right) const {
+np_matrix CISigmaBuilder::compute_a_1trdm(const CISigmaBuilder& sigmabuilder_right,
+                                          np_vector C_left, np_vector C_right) const {
     return compute_s_1trdm(sigmabuilder_right, C_left, C_right, Spin::Alpha);
 }
 
-np_matrix CISigmaBuilder::compute_b_1trdm(const CISigmaBuilder& sigmabuilder_right, np_vector C_left,
-                                          np_vector C_right) const {
+np_matrix CISigmaBuilder::compute_b_1trdm(const CISigmaBuilder& sigmabuilder_right,
+                                          np_vector C_left, np_vector C_right) const {
     return compute_s_1trdm(sigmabuilder_right, C_left, C_right, Spin::Beta);
 }
 
-np_matrix CISigmaBuilder::compute_sf_1trdm(const CISigmaBuilder& sigmabuilder_right, np_vector C_left,
-                                           np_vector C_right) const {
+np_matrix CISigmaBuilder::compute_sf_1trdm(const CISigmaBuilder& sigmabuilder_right,
+                                           np_vector C_left, np_vector C_right) const {
     auto sf_1trdm = make_zeros<nb::numpy, double, 2>({lists_.norb(), lists_.norb()});
     if (lists_.norb() > 0) {
         auto a_1trdm = compute_a_1trdm(sigmabuilder_right, C_left, C_right);

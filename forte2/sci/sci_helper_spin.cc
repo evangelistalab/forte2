@@ -64,7 +64,7 @@ std::vector<double> SelectedCIHelper::spin2_batch(size_t num_batches, size_t bat
             if (String::Hash()(new_a_str) % num_batches != batch_id) {
                 continue;
             }
-            new_det.set_a_string(new_a_str);
+            new_det.set_alpha_string(new_a_str);
 
             // find strings where we can annihilate the electron in orbital a
             for (const auto& [b_str_idx, det_index] : second_string_to_det_index) {
@@ -73,7 +73,7 @@ std::vector<double> SelectedCIHelper::spin2_batch(size_t num_batches, size_t bat
                 if (b_str.get_bit(a)) {
                     String new_b_str = b_str;
                     const double b_sign = new_b_str.destroy(a);
-                    new_det.set_b_string(new_b_str);
+                    new_det.set_beta_string(new_b_str);
                     const double sign = a_str_phase * a_sign * b_sign;
                     for (size_t r{0}; r < nroots_; ++r) {
                         s_plus_map[r][new_det] += sign * c_[det_index * nroots_ + r];

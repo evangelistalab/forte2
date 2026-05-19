@@ -34,6 +34,7 @@ template <size_t N> class BitArray {
     using word_t = uint64_t;
 
     /// the total number of bits (must be a multiple of 64)
+    static constexpr size_t size = N;
     static constexpr size_t nbits = N;
 
     /// the number of bits in one word (8 * 8 = 64)
@@ -430,7 +431,7 @@ template <size_t N> class BitArray {
         return c;
     }
 
-    constexpr size_t count_all() const noexcept {
+    constexpr size_t count_alphall() const noexcept {
         // with constexpr we compile only one of these cases
         if constexpr (N == 128) {
             return std::popcount(words_[0]) + std::popcount(words_[1]);
@@ -591,7 +592,7 @@ template <size_t N> class BitArray {
     /// @param operation a lambda function that takes two uint64_t integers and returns an integer
     /// @return the result of the operation for all the words
     template <typename Operation>
-    int count_binary_operation(const BitArray<N>& b, Operation&& operation) const {
+    int count_betainary_operation(const BitArray<N>& b, Operation&& operation) const {
         if constexpr (N == 64) {
             return std::invoke(std::forward<Operation>(operation), words_[0], b.words_[0]);
         } else if constexpr (N == 128) {
@@ -630,13 +631,13 @@ template <size_t N> class BitArray {
 
     /// @brief Implements count(a & b)
     int intersection_count(const BitArray<N>& b) const {
-        return count_binary_operation(
+        return count_betainary_operation(
             b, [](uint64_t a, uint64_t b) -> int { return std::popcount(a & b); });
     }
 
     /// @brief Implements count(a ^ b)
     int symmetric_difference_count(const BitArray<N>& b) const {
-        return count_binary_operation(
+        return count_betainary_operation(
             b, [](uint64_t a, uint64_t b) -> int { return std::popcount(a ^ b); });
     }
 
@@ -659,6 +660,112 @@ template <size_t N> class BitArray {
     bool disjoint_from_difference(const BitArray<N>& b, const BitArray<N>& c) const {
         return test_ternary_condition(
             b, c, [](uint64_t a, uint64_t b, uint64_t c) -> bool { return (a & (b & (~c))) == 0; });
+    }
+
+    /// @brief Return the fermionic sign corresponding to orbital n
+    /// This function ignores if bit n is set or not
+    /// @param n the orbital index
+    /// @return the fermionic sign
+    double slater_sign(size_t n) const {
+        if constexpr (N == 64) {
+            return ui64_sign(words_[0], n);
+        } else {
+            size_t count = 0;
+            // count all the preceeding bits only if we are looking past the first word
+            if (n >= bits_per_word) {
+                size_t last_full_word = whichword(n);
+                for (size_t k = 0; k < last_full_word; ++k) {
+                    count += std::popcount(words_[k]);
+                }
+            }
+            const double word_sign = ui64_sign(getword(n), whichbit(n));
+            return parity_to_sign(count) * word_sign;
+        }
+    }
+
+    /// @brief Return the fermionic sign corresponding to orbital n in reverse order
+    /// This function ignores if bit n is set or not
+    /// @param n the orbital index
+    /// @return the fermionic sign
+    double slater_sign_reverse(size_t n) const {
+        if constexpr (N == 64) {
+            return ui64_sign_reverse(words_[0], n);
+        } else {
+            size_t count = 0;
+            // count all the following bits only if we are not looking at the last word
+            size_t start_word =
+                whichword(n) + 1; // Start from the word following the one containing bit n
+            if (start_word < nwords_) {
+                for (size_t k = start_word; k < nwords_; ++k) {
+                    count += std::popcount(words_[k]);
+                }
+            }
+            const double word_sign = ui64_sign_reverse(getword(n), whichbit(n));
+            return parity_to_sign(count) * word_sign;
+        }
+    }
+
+    /// @brief Return the fermionic sign for the orbitals in between n and m
+    /// The sign depends only on the number of bits = 1 between n and m
+    /// There are no restrictions on n and m
+    /// @param n the first orbital index
+    /// @param m the second orbital index
+    /// @return the fermionic sign
+    double slater_sign(size_t n, size_t m) const {
+        if constexpr (N == 64) {
+            return ui64_sign(words_[0], n, m);
+        } else if constexpr (N == 128) {
+            // XXXXXXXX YYYYYYYY
+            // XmXXXXnX YYYYYYYY (case 1)
+            //   cccc
+            // XmXXXXnX YYYYYYYY (case 1)
+            //   cccccc
+            // cccccc
+            // XmXXXXXX YYYYYnYY (case 2)
+            //   cccccc ccccc
+            // let's first order the numbers so that m <= n
+            if (n < m)
+                std::swap(m, n);
+            size_t word_m = whichword(m);
+            size_t word_n = whichword(n);
+            // if both bits are in the same word use an optimized version
+            if (word_n == word_m) {
+                return ui64_sign(words_[word_n], whichbit(n), whichbit(m));
+            }
+            // count the bits after m in word[m]
+            // count the bits before n in word[n]
+            return ui64_sign_reverse(words_[word_m], whichbit(m)) *
+                   ui64_sign(words_[word_n], whichbit(n));
+        } else {
+            // let's first order the numbers so that m <= n
+            if (n < m)
+                std::swap(m, n);
+            size_t word_m = whichword(m);
+            size_t word_n = whichword(n);
+            // if both bits are in the same word use an optimized version
+            if (word_n == word_m) {
+                return ui64_sign(words_[word_n], whichbit(n), whichbit(m));
+            }
+            size_t count = 0;
+            // count the number of bits in bitween the words of m and n
+            for (size_t k = word_m + 1; k < word_n; ++k) {
+                count += std::popcount(words_[k]);
+            }
+            // count the bits after m in word[m]
+            // count the bits before n in word[n]
+            double sign = ui64_sign_reverse(words_[word_m], whichbit(m)) *
+                          ui64_sign(words_[word_n], whichbit(n));
+            return (count % 2 == 0) ? sign : -sign;
+        }
+    }
+
+    /// @brief Find the irreducible representation of a product of spin orbitals
+    /// @param irrep a vector of irrep values
+    /// @return the irrep
+    int symmetry(const std::vector<int>& irrep) const {
+        int sym = 0;
+        for_each_set_bit([&](size_t pos) { sym ^= irrep[pos]; });
+        return sym;
     }
 
     std::string str(size_t n = BitArray<N>::nbits) const {
@@ -727,7 +834,6 @@ template <size_t N> std::ostream& operator<<(std::ostream& os, const BitArray<N>
     os << str(ba);
     return os;
 }
-
 } // namespace forte2
 
 namespace std {

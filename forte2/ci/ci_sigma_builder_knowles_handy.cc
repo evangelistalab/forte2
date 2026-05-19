@@ -50,9 +50,9 @@ void CISigmaBuilder::H1_kh(std::span<double> basis, std::span<double> sigma, Spi
             std::fill_n(TL.begin(), lists_.block_size(nJ), 0.0);
 
             const size_t maxL = is_alpha(spin) ? lists_.beta_address()->strpcls(class_Ib)
-                                               : lists_.alfa_address()->strpcls(class_Ia);
+                                               : lists_.alpha_address()->strpcls(class_Ia);
 
-            const auto& pq_vo_list = is_alpha(spin) ? lists_.get_alfa_vo_list(class_Ia, class_Ja)
+            const auto& pq_vo_list = is_alpha(spin) ? lists_.get_alpha_vo_list(class_Ia, class_Ja)
                                                     : lists_.get_beta_vo_list(class_Ib, class_Jb);
 
             for (const auto& [pq, vo_list] : pq_vo_list) {
@@ -71,13 +71,13 @@ void CISigmaBuilder::H2_kh(std::span<double> basis, std::span<double> sigma) con
     size_t norb = lists_.norb();
     const auto npairs = norb * (norb + 1) / 2; // Number of pairs (p, r) with p >= r
 
-    const int num_class_Ka = lists_.alfa_address_1h1p()->nclasses();
+    const int num_class_Ka = lists_.alpha_address_1h1p()->nclasses();
     const int num_class_Kb = lists_.beta_address_1h1p()->nclasses();
 
     // Loop over the Ka and Kb string classes of the D([qs],[Ka Kb]) matrix
     for (size_t class_Ka = 0; class_Ka < num_class_Ka; ++class_Ka) {
         for (size_t class_Kb = 0; class_Kb < num_class_Kb; ++class_Kb) {
-            const auto maxKa = lists_.alfa_address_1h1p()->strpcls(class_Ka);
+            const auto maxKa = lists_.alpha_address_1h1p()->strpcls(class_Ka);
             const auto maxKb = lists_.beta_address_1h1p()->strpcls(class_Kb);
 
             // Set the size of the Kb range. Here we process all Kb values.
@@ -235,8 +235,8 @@ void gather_alpha_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb
             continue;
 
         // get all Ka/Ia pairs connected to the current class_Ka and class_Ia
-        const auto alfa_vo_list = lists.get_alfa_vo_list2(class_Ka, class_Ia);
-        if (alfa_vo_list.empty())
+        const auto alpha_vo_list = lists.get_alpha_vo_list2(class_Ka, class_Ia);
+        if (alpha_vo_list.empty())
             continue;
 
         size_t maxIb = lists.beta_address()->strpcls(class_Ib);
@@ -244,7 +244,7 @@ void gather_alpha_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb
 
         // add contributions to the Kblock
         for (size_t Ka = 0; Ka < Ka_size; ++Ka) {
-            const auto& vo_alist = alfa_vo_list[Ka + Ka_start];
+            const auto& vo_alist = alpha_vo_list[Ka + Ka_start];
             for (auto const& [sign_ij, ij, Ia] : vo_alist) {
                 size_t K_offset = ij * Kdim + Ka * maxKb;
                 size_t basis_Ia_offset = basis_offset + Ia * maxIb;
@@ -258,9 +258,9 @@ void gather_beta_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb,
                        size_t Ka_size, size_t Kdim, size_t maxKb, std::span<double> basis,
                        std::span<double> TR, std::span<double> Kblock2) {
 
-    const auto Ka_occ = lists.gas_alfa_1h1p_occupations()[class_Ka / lists.nirrep()];
+    const auto Ka_occ = lists.gas_alpha_1h1p_occupations()[class_Ka / lists.nirrep()];
     for (auto const& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
-        const auto Ia_occ = lists.gas_alfa_occupations()[class_Ia / lists.nirrep()];
+        const auto Ia_occ = lists.gas_alpha_occupations()[class_Ia / lists.nirrep()];
         if ((Ia_occ != Ka_occ) or (lists.block_size(nI) == 0))
             continue;
 
@@ -269,7 +269,7 @@ void gather_beta_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb,
         if (beta_vo_list.empty())
             continue;
 
-        size_t maxIa = lists.alfa_address()->strpcls(class_Ia);
+        size_t maxIa = lists.alpha_address()->strpcls(class_Ia);
 
         // transposes the basis vector into TR
         auto basis_tr = gather_block(basis, TR, Spin::Beta, lists, class_Ia, class_Ib);
@@ -289,9 +289,9 @@ void gather_beta_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb,
 void scatter_beta_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb, size_t Ka_start,
                         size_t Ka_size, size_t Kdim, size_t maxKb, std::span<const double> Kblock1,
                         std::span<double> TR, std::span<double> sigma) {
-    const auto Ka_occ = lists.gas_alfa_1h1p_occupations()[class_Ka / lists.nirrep()];
+    const auto Ka_occ = lists.gas_alpha_1h1p_occupations()[class_Ka / lists.nirrep()];
     for (const auto& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
-        const auto Ia_occ = lists.gas_alfa_occupations()[class_Ia / lists.nirrep()];
+        const auto Ia_occ = lists.gas_alpha_occupations()[class_Ia / lists.nirrep()];
         if ((Ia_occ != Ka_occ) or (lists.block_size(nI) == 0))
             continue;
 
@@ -300,7 +300,7 @@ void scatter_beta_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb
         if (beta_vo_list.empty())
             continue;
 
-        const auto maxIa = lists.alfa_address()->strpcls(class_Ia);
+        const auto maxIa = lists.alpha_address()->strpcls(class_Ia);
 
         // zero out the TR temporary vector for the scatter operation
         zero_block(TR, Spin::Beta, lists, class_Ia, class_Ib);
@@ -329,8 +329,8 @@ void scatter_alpha_block(const CIStrings& lists, size_t class_Ka, size_t class_K
         if ((Ib_occ != Kb_occ) or (lists.block_size(nI) == 0))
             continue;
         // get all Ia/Ka pairs connected to the current class_Ka and class_Ia
-        const auto alfa_vo_list = lists.get_alfa_vo_list2(class_Ka, class_Ia);
-        if (alfa_vo_list.empty())
+        const auto alpha_vo_list = lists.get_alpha_vo_list2(class_Ka, class_Ia);
+        if (alpha_vo_list.empty())
             continue;
 
         size_t maxIb = lists.beta_address()->strpcls(class_Ib);
@@ -338,7 +338,7 @@ void scatter_alpha_block(const CIStrings& lists, size_t class_Ka, size_t class_K
 
         // scatter contributions from the Kblock into the sigma vector
         for (size_t Ka = 0; Ka < Ka_size; ++Ka) {
-            const auto& vo_alist = alfa_vo_list[Ka + Ka_start];
+            const auto& vo_alist = alpha_vo_list[Ka + Ka_start];
             for (auto const& [sign_kl, kl, Ia] : vo_alist) {
                 size_t K_offset = kl * Kdim + Ka * maxKb;
                 size_t sigma_Ia_offset = sigma_offset + Ia * maxIb;

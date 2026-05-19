@@ -31,5 +31,12 @@ void export_determinant_helpers_api(nb::module_& m) {
         "If information about the symmetry of the MOs is not provided, it assumes that all MOs "
         "have symmetry 0."
         "A reference determinant must be provided to establish the excitation rank.");
+
+    m.def(
+        "spin2", [](const Determinant& d1, const Determinant& d2) { return spin2(d1, d2); },
+        "Compute the S^2 value between two determinants");
+
+    m.def("excitation_connection", &excitation_connection,
+          "Get the excitation connection between two determinants");
 }
 } // namespace forte2

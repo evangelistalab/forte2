@@ -90,7 +90,7 @@ class CIStrings:
         """
 
     @property
-    def alfa_address(self) -> "std::__1::shared_ptr<forte2::StringAddress>": ...
+    def alpha_address(self) -> "std::__1::shared_ptr<forte2::StringAddress>": ...
 
     @property
     def na(self) -> int: ...
@@ -117,7 +117,7 @@ class CIStrings:
     def gas_size(self) -> list[int]: ...
 
     @property
-    def gas_alfa_occupations(self) -> list[list[int]]: ...
+    def gas_alpha_occupations(self) -> list[list[int]]: ...
 
     @property
     def gas_beta_occupations(self) -> list[list[int]]: ...
@@ -217,9 +217,9 @@ class CISigmaBuilder:
     def set_log_level(self, level: int) -> None:
         """Set the logging level for the class"""
 
-    def a_1rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))], alfa: bool) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]: ...
+    def a_1rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))], alpha: bool) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]: ...
 
-    def aa_2rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))], alfa: bool) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    def aa_2rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))], alpha: bool) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """
         Compute the two-electron same-spin reduced density matrix for debugging purposes
         """
@@ -229,7 +229,7 @@ class CISigmaBuilder:
         Compute the two-electron mixed-spin reduced density matrix for debugging purposes
         """
 
-    def aaa_3rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))], alfa: bool) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    def aaa_3rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))], alpha: bool) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """
         Compute the three-electron same-spin reduced density matrix for debugging purposes
         """
@@ -244,7 +244,7 @@ class CISigmaBuilder:
         Compute the abb mixed-spin three-electron reduced density matrix for debugging purposes
         """
 
-    def aaaa_4rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))], alfa: bool) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    def aaaa_4rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))], alpha: bool) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """
         Compute the four-electron same-spin reduced density matrix for debugging purposes
         """
@@ -511,37 +511,31 @@ class Determinant:
     def nb(self, n: int) -> bool:
         """Is orbital n occupied by a beta electron?"""
 
-    def count_a(self) -> int:
+    def count_alpha(self) -> int:
         """Count the number of alpha electrons"""
 
-    def count_b(self) -> int:
+    def count_beta(self) -> int:
         """Count the number of beta electrons"""
-
-    def find_last_alpha_occ(self) -> int:
-        """Find the highest occupied alpha orbital, or return the not-found ui64_bit_not_found value"""
-
-    def find_last_beta_occ(self) -> int:
-        """Find the highest occupied beta orbital, or return the not-found ui64_bit_not_found value"""
 
     def count(self) -> int:
         """Count the total number of electrons"""
 
-    def create_a(self, n: int) -> float:
+    def create_alpha(self, n: int) -> float:
         """
         Apply an alpha creation operator to the determinant at the specified orbital index and return the sign
         """
 
-    def create_b(self, n: int) -> float:
+    def create_beta(self, n: int) -> float:
         """
         Apply a beta creation operator to the determinant at the specified orbital index and return the sign
         """
 
-    def destroy_a(self, n: int) -> float:
+    def destroy_alpha(self, n: int) -> float:
         """
         Apply an alpha destruction operator to the determinant at the specified orbital index and return the sign
         """
 
-    def destroy_b(self, n: int) -> float:
+    def destroy_beta(self, n: int) -> float:
         """
         Apply a beta destruction operator to the determinant at the specified orbital index and return the sign
         """

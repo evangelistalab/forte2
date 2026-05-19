@@ -37,7 +37,8 @@ class RelCISigmaBuilder {
     std::string get_algorithm() const;
 
     /// @brief Set the one and two-electron integrals for the Hamiltonian
-    void set_Hamiltonian(double E, np_matrix_complex H, np_tensor4_complex V, bool use_asym_ints = false);
+    void set_Hamiltonian(double E, np_matrix_complex H, np_tensor4_complex V,
+                         bool use_asym_ints = false);
 
     /// @brief Set the logging level for the class
     void set_log_level(int level) { log_level_ = level; }
@@ -161,13 +162,13 @@ class RelCISigmaBuilder {
     mutable std::vector<std::complex<double>> v_pr_qs;
 
     /// @brief  One-electron contribution to the sigma vector |sigma> = H |basis>
-    /// @param alfa If true, compute the alpha contribution, otherwise the beta
+    /// @param alpha If true, compute the alpha contribution, otherwise the beta
     /// @param h The one-electron integrals
     void H1_hz(std::span<std::complex<double>> basis, std::span<std::complex<double>> sigma,
                Spin spin, std::span<std::complex<double>> h) const;
 
     /// @brief  Two-electron same-spin contribution to the sigma vector |sigma> = H |basis>
-    /// @param alfa If true, compute the alpha contribution, otherwise the beta
+    /// @param alpha If true, compute the alpha contribution, otherwise the beta
     void H2_hz_same_spin(std::span<std::complex<double>> basis,
                          std::span<std::complex<double>> sigma, Spin spin) const;
 

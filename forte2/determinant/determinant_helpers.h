@@ -150,4 +150,60 @@ std::vector<Determinant> make_hilbert_space(size_t nmo, size_t na, size_t nb, De
 void collect_virtual_orbitals(const std::vector<size_t>& occ, std::vector<size_t>& vir,
                               const size_t n);
 
+/// @brief Apply a general operator to this determinant without checking applicability.
+///
+/// This function assumes the caller has already verified that the operator can be applied, for
+/// example with can_apply_operator(cre, ann). Calling it on an inapplicable determinant may
+/// produce a determinant and sign for a different algebraic operation.
+///
+/// @param d the determinant
+/// @param new_d the new determinant
+/// @param cre the creation operator
+/// @param ann the annihilation operator
+/// @param sign the sign mask (precomputed by the user) of the operator
+/// @return the sign of the final determinant (+1, -1)
+///
+/// Example:
+///
+///   Determinant det, new_det, cre, ann, sign_mask;
+///   // test if the operator can be applied
+///   if (det.can_apply_operator(cre,ann)) {
+///       // compute the sign mask
+///       compute_sign_mask(cre, ann, sign_mask);
+///       auto value = apply_operator_to_det_unchecked(det, new_det, cre, ann, sign_mask);
+///       // do something with value and new_det
+///   }
+///
+double apply_operator_to_det_unchecked(const Determinant& d, Determinant& new_d,
+                                       const Determinant& cre, const Determinant& ann,
+                                       const Determinant& sign);
+
+/// @brief Compute the matrix element of the S^2 operator between two determinants. The S^2 operator
+/// is defined as S^2 = S- S+ + Sz (Sz + 1), where S- and S+ are the spin lowering and raising
+/// operators, and Sz is the spin z-component operator. The matrix element is computed using the
+/// formula: S^2 = Sz (Sz + 1) + Nbeta + Npairs - sum_pq' a+(qa) a+(pb) a-(qb) a-(pa), where Nbeta
+/// is the number of beta electrons, Npairs is the number of alpha/beta pairs, and the sum is over
+/// pairs of orbitals p and q such that p is occupied in the beta string and unoccupied in the alpha
+/// string, and q is occupied in the alpha string and unoccupied in the beta string. The function
+/// assumes that the determinants are properly normalized and that the orbital indices are within
+/// bounds. The function returns 0 if the determinants have different spin multiplicities (i.e.
+/// different numbers of alpha and beta electrons), since in that case the S^2 matrix element is
+/// zero. The function does not check for other types of invalid input, such as determinants that
+/// differ by more than a double excitation, so the caller is responsible for ensuring that the
+/// input determinants are valid for the intended use case.
+/// @tparam N The number of spin-orbital slots in the determinants, which must be a multiple of 128
+/// @param lhs the left-hand side determinant
+/// @param rhs the right-hand side determinant
+/// @return the matrix element of the S^2 operator between the two determinants
+double spin2(const Determinant& lhs, const Determinant& rhs);
+
+/// @brief Describe the excitation connection of a determinant d, relative to this one. The
+/// excitation connection is defined as the creation and annihilation operators that need to be
+/// applied to this determinant to obtain d. The excitation connection is a vector of 4 vectors:
+/// [[alpha annihilation], [alpha creation], [beta annihilation], [beta creation]]
+/// @param d the determinant to compare to
+/// @return the excitation connection of d relative to this determinant
+std::vector<std::vector<size_t>> excitation_connection(const Determinant lhs,
+                                                       const Determinant rhs);
+
 } // namespace forte2

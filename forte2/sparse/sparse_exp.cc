@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include "sparse/sparse_exp.h"
+#include "determinant/determinant_helpers.h"
 
 namespace forte2 {
 

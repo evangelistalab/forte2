@@ -31,7 +31,7 @@ def convert_coeff_spatial_to_spinor(C, complex=True):
             raise ValueError(
                 f"C[1] has shape {C[1].shape}, but expected ({nbf}, {nmo})."
             )
-        # |a^0_{alfa AO} b^0_{alfa AO} ... |
+        # |a^0_{alpha AO} b^0_{alpha AO} ... |
         # |a^0_{beta AO} b^0_{beta AO} ... |
         C_2c[:nbf, ::2] = C[0]
         C_2c[nbf:, 1::2] = C[1]

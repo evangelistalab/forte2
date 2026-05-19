@@ -53,14 +53,14 @@ void RelCISigmaBuilder::H1_hz(std::span<std::complex<double>> basis,
     if ((is_alpha(spin) and (na < 1)) or (is_beta(spin) and (nb < 1)))
         return;
 
-    const auto& alfa_address = lists_.alfa_address();
+    const auto& alpha_address = lists_.alpha_address();
     const auto& beta_address = lists_.beta_address();
-    const int num_1h_classes = is_alpha(spin) ? lists_.alfa_address_1h()->nclasses()
+    const int num_1h_classes = is_alpha(spin) ? lists_.alpha_address_1h()->nclasses()
                                               : lists_.beta_address_1h()->nclasses();
 
     // |K>|L> = ± a_p |I>|L>
     for (int class_K = 0; class_K < num_1h_classes; ++class_K) {
-        const size_t maxK = is_alpha(spin) ? lists_.alfa_address_1h()->strpcls(class_K)
+        const size_t maxK = is_alpha(spin) ? lists_.alpha_address_1h()->strpcls(class_K)
                                            : lists_.beta_address_1h()->strpcls(class_K);
 
         if (maxK == 0)
@@ -74,7 +74,7 @@ void RelCISigmaBuilder::H1_hz(std::span<std::complex<double>> basis,
 
             // size of the strings with opposite spin to the one on which we act
             const size_t maxL =
-                is_alpha(spin) ? beta_address->strpcls(class_Ib) : alfa_address->strpcls(class_Ia);
+                is_alpha(spin) ? beta_address->strpcls(class_Ib) : alpha_address->strpcls(class_Ia);
 
             if (maxL > 0) {
                 // Grab the temporary buffers that will hold intermediates D(i,[K L])
@@ -101,7 +101,7 @@ void RelCISigmaBuilder::H1_hz(std::span<std::complex<double>> basis,
                     for (size_t K = 0; K < K_size; ++K) {
                         const auto& Klist =
                             is_alpha(spin)
-                                ? lists_.get_alfa_1h_list(class_K, K_start + K, class_Ia)
+                                ? lists_.get_alpha_1h_list(class_K, K_start + K, class_Ia)
                                 : lists_.get_beta_1h_list(class_K, K_start + K, class_Ib);
                         // D(q,[K L]) += <K|a_q|I> C(I,L)
                         for (const auto& [sign_K, q, I] : Klist) {
@@ -124,7 +124,7 @@ void RelCISigmaBuilder::H1_hz(std::span<std::complex<double>> basis,
                         for (size_t K = 0; K < K_size; ++K) {
                             const auto& Klist =
                                 is_alpha(spin)
-                                    ? lists_.get_alfa_1h_list(class_K, K_start + K, class_Ja)
+                                    ? lists_.get_alpha_1h_list(class_K, K_start + K, class_Ja)
                                     : lists_.get_beta_1h_list(class_K, K_start + K, class_Jb);
                             for (const auto& [sign_K, p, I] : Klist) {
                                 add(maxL, sign_K, &Kblock1_[p * dimKL + K * maxL], 1, &TL[I * maxL],
@@ -147,14 +147,14 @@ void RelCISigmaBuilder::H2_hz_same_spin(std::span<std::complex<double>> basis,
     const size_t norb = lists_.norb();
     const size_t npairs = norb * (norb - 1) / 2;
 
-    const auto& alfa_address = lists_.alfa_address();
+    const auto& alpha_address = lists_.alpha_address();
     const auto& beta_address = lists_.beta_address();
 
-    const int num_2h_classes = is_alpha(spin) ? lists_.alfa_address_2h()->nclasses()
+    const int num_2h_classes = is_alpha(spin) ? lists_.alpha_address_2h()->nclasses()
                                               : lists_.beta_address_2h()->nclasses();
 
     for (int class_K = 0; class_K < num_2h_classes; ++class_K) {
-        const size_t maxK = is_alpha(spin) ? lists_.alfa_address_2h()->strpcls(class_K)
+        const size_t maxK = is_alpha(spin) ? lists_.alpha_address_2h()->strpcls(class_K)
                                            : lists_.beta_address_2h()->strpcls(class_K);
 
         if (maxK == 0)
@@ -166,7 +166,7 @@ void RelCISigmaBuilder::H2_hz_same_spin(std::span<std::complex<double>> basis,
                 continue;
 
             const size_t maxL =
-                is_alpha(spin) ? beta_address->strpcls(class_Ib) : alfa_address->strpcls(class_Ia);
+                is_alpha(spin) ? beta_address->strpcls(class_Ib) : alpha_address->strpcls(class_Ia);
 
             if (maxL > 0) {
                 // grab temporary buffers and the maximum size of a chunk of K indices
@@ -189,7 +189,7 @@ void RelCISigmaBuilder::H2_hz_same_spin(std::span<std::complex<double>> basis,
                     for (size_t K = 0; K < K_size; ++K) {
                         const auto& Krlist =
                             is_alpha(spin)
-                                ? lists_.get_alfa_2h_list(class_K, K + K_start, class_Ia)
+                                ? lists_.get_alpha_2h_list(class_K, K + K_start, class_Ia)
                                 : lists_.get_beta_2h_list(class_K, K + K_start, class_Ib);
                         for (const auto& [sign_K, q, s, I] : Krlist) {
                             const size_t qs_index = pair_index_gt(q, s);
@@ -210,7 +210,7 @@ void RelCISigmaBuilder::H2_hz_same_spin(std::span<std::complex<double>> basis,
                         for (size_t K = 0; K < K_size; ++K) {
                             const auto& Klist =
                                 is_alpha(spin)
-                                    ? lists_.get_alfa_2h_list(class_K, K + K_start, class_Ja)
+                                    ? lists_.get_alpha_2h_list(class_K, K + K_start, class_Ja)
                                     : lists_.get_beta_2h_list(class_K, K + K_start, class_Jb);
                             for (const auto& [sign_K, p, r, I] : Klist) {
                                 const size_t pr_index = pair_index_gt(p, r);
@@ -234,13 +234,13 @@ void RelCISigmaBuilder::H2_hz_opposite_spin(std::span<std::complex<double>> basi
     size_t norb = lists_.norb();
     const auto norb2 = norb * norb;
 
-    const int num_1h_class_Ka = lists_.alfa_address_1h()->nclasses();
+    const int num_1h_class_Ka = lists_.alpha_address_1h()->nclasses();
     const int num_1h_class_Kb = lists_.beta_address_1h()->nclasses();
 
     // loop over blocks of N-2 space
     for (int class_Ka = 0; class_Ka < num_1h_class_Ka; ++class_Ka) {
         for (int class_Kb = 0; class_Kb < num_1h_class_Kb; ++class_Kb) {
-            const auto maxKa = lists_.alfa_address_1h()->strpcls(class_Ka);
+            const auto maxKa = lists_.alpha_address_1h()->strpcls(class_Ka);
             const auto maxKb = lists_.beta_address_1h()->strpcls(class_Kb);
 
             if ((maxKa == 0) or (maxKb == 0))
@@ -268,7 +268,7 @@ void RelCISigmaBuilder::H2_hz_opposite_spin(std::span<std::complex<double>> basi
                         continue;
                     const auto maxIb = lists_.beta_address()->strpcls(class_Ib);
                     const auto Cr_offset = lists_.block_offset(nI);
-                    const auto& Ka_right_list = lists_.get_alfa_1h_list2(class_Ka, class_Ia);
+                    const auto& Ka_right_list = lists_.get_alpha_1h_list2(class_Ka, class_Ia);
                     const auto& Kb_right_list = lists_.get_beta_1h_list2(class_Kb, class_Ib);
                     if (Ka_right_list.empty() || Kb_right_list.empty())
                         continue;
@@ -300,7 +300,7 @@ void RelCISigmaBuilder::H2_hz_opposite_spin(std::span<std::complex<double>> basi
                         continue;
                     const auto maxIb = lists_.beta_address()->strpcls(class_Ib);
                     const auto Cr_offset = lists_.block_offset(nI);
-                    const auto& Ka_right_list = lists_.get_alfa_1h_list2(class_Ka, class_Ia);
+                    const auto& Ka_right_list = lists_.get_alpha_1h_list2(class_Ka, class_Ia);
                     const auto& Kb_right_list = lists_.get_beta_1h_list2(class_Kb, class_Ib);
                     if (Ka_right_list.empty() || Kb_right_list.empty())
                         continue;

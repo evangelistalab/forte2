@@ -73,24 +73,25 @@ template <size_t N> class ConfigurationImpl : public BitArray<N> {
             set_bit(pos + socc_bit_offset, false);
         }
     }
-    /// is orbital pos empty?
-    bool is_empt(size_t pos) const { return (not is_docc(pos)) and (not is_socc(pos)); }
 
-    /// is orbital pos doubly occupied?
-    bool is_docc(size_t pos) const {
+    /// @return is orbital n empty?
+    bool is_empty(size_t n) const { return (not is_docc(n)) and (not is_socc(n)); }
+
+    /// @return is orbital n doubly occupied?
+    bool is_docc(size_t n) const {
         if constexpr (nbits == 128) {
-            return words_[0] & maskbit(pos);
+            return words_[0] & maskbit(n);
         } else {
-            return get_bit(pos);
+            return get_bit(n);
         }
     }
 
-    /// is orbital pos singly occupied?
-    bool is_socc(size_t pos) const {
+    /// @return is orbital n singly occupied?
+    bool is_socc(size_t n) const {
         if constexpr (nbits == 128) {
-            return words_[1] & maskbit(pos);
+            return words_[1] & maskbit(n);
         } else {
-            return get_bit(pos + socc_bit_offset);
+            return get_bit(n + socc_bit_offset);
         }
     }
 

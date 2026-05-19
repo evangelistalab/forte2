@@ -8,6 +8,7 @@
 
 #include "determinant/bitarray.hpp"
 #include "determinant/bitwise_operations.hpp"
+#include "determinant/string.hpp"
 
 namespace forte2 {
 
@@ -47,13 +48,14 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     using BitArray<N>::clear;
     using BitArray<N>::for_each_set_bit;
     using BitArray<N>::find_set_bits;
+    using BitArray<N>::slater_sign;
     using Hash = typename BitArray<N>::Hash;
-
-    /// Maximum number of spatial orbitals represented in each spin sector.
-    static constexpr size_t norb_capacity = N / 2;
 
     static_assert(N % 128 == 0,
                   "Determinant storage must contain whole alpha/beta 64-orbital blocks");
+
+    /// Maximum number of spatial orbitals represented in each spin sector.
+    static constexpr size_t norb_capacity = N / 2;
 
     /// Number of packed storage words used by each spin sector.
     static constexpr size_t storage_words_per_spin = BitArray<N>::nwords_ / 2;
@@ -62,16 +64,18 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     static constexpr size_t beta_storage_offset =
         storage_words_per_spin * BitArray<N>::bits_per_word;
 
-    /// Return the maximum number of spatial orbitals represented by this determinant.
+    /// @return the maximum number of spatial orbitals represented by this determinant.
     static constexpr size_t norb() { return norb_capacity; }
 
-    /// Default constructor
+    // ==> Constructors <==
+
+    /// @brief Default constructor
     DeterminantImpl() : BitArray<N>() {}
 
-    /// Constructor from packed occupation storage.
+    /// @brief Constructor from packed occupation storage.
     DeterminantImpl(const BitArray<N>& ba) : BitArray<N>(ba) {}
 
-    /// @brief Return a DeterminantImpl with all occupations set to zero (unoccupied).
+    /// @brief Return a determinant with all occupations set to zero (unoccupied).
     /// @return a DeterminantImpl with all occupations set to zero
     static DeterminantImpl zero() {
         DeterminantImpl d;
@@ -79,53 +83,31 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         return d;
     }
 
-    /// Construct the determinant from an occupation vector that
-    /// specifies the alpha and beta strings.  occupation = [Ia,Ib]
-    explicit DeterminantImpl(const std::vector<bool>& occupation_a,
-                             const std::vector<bool>& occupation_b) {
+    /// @brief Construct the determinant from two vectors of occupied alpha and beta orbitals.
+    /// @param alpha_list a vector of occupied alpha orbital indices
+    /// @param beta_list a vector of occupied beta orbital indices
+    explicit DeterminantImpl(const std::vector<size_t>& alpha_list,
+                             const std::vector<size_t>& beta_list) {
         clear();
-        int a_size = occupation_a.size();
-        for (int p = 0; p < a_size; ++p)
-            set_na(p, occupation_a[p]);
-        int b_size = occupation_b.size();
-        for (int p = 0; p < b_size; ++p)
-            set_nb(p, occupation_b[p]);
-    }
-
-    /// Construct the determinant from two initializer lists of occupied alpha and beta orbitals.
-    explicit DeterminantImpl(std::initializer_list<size_t> alpha_list,
-                             std::initializer_list<size_t> beta_list) {
-        clear();
-        for (auto i : alpha_list) {
+        for (auto i : alpha_list)
             set_na(i, true);
-        }
-        for (auto i : beta_list) {
+        for (auto i : beta_list)
             set_nb(i, true);
-        }
     }
 
-    explicit DeterminantImpl(std::vector<size_t> alpha_list, std::vector<size_t> beta_list) {
-        clear();
-        for (auto i : alpha_list) {
-            set_na(i, true);
-        }
-        for (auto i : beta_list) {
-            set_nb(i, true);
-        }
+    /// @brief Construct the determinant from two bit strings representing the alpha and beta
+    /// occupations.
+    /// @param sa a BitArray representing the alpha occupation string
+    /// @param sb a BitArray representing the beta occupation string
+    explicit DeterminantImpl(const BitArray<norb_capacity>& sa, const BitArray<norb_capacity>& sb) {
+        this->set_strings(sa, sb);
     }
 
-    /// Construct the determinant from an occupation vector that
-    /// specifies the alpha and beta strings.  occupation = [Ia,Ib]
-    explicit DeterminantImpl(const BitArray<norb_capacity>& Ia, const BitArray<norb_capacity>& Ib) {
-        this->set_strings(Ia, Ib);
-    }
+    // ==> Occupation accessors <==
 
-    /// Construct from the compact occupation-string representation used by str().
-    DeterminantImpl(const std::string& str) { set_str(*this, str); }
-
-    // Occupation accessors
-
-    /// Return true if alpha orbital n is occupied.
+    /// @brief Return the occupation of alpha orbital n.
+    /// @param n the orbital index
+    /// @return true if the orbital is occupied, false otherwise
     bool na(size_t n) const {
         if constexpr (nbits == 128) {
             return words_[0] & maskbit(n);
@@ -134,7 +116,9 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         }
     }
 
-    /// Return true if beta orbital n is occupied.
+    /// @brief Return the occupation of beta orbital n.
+    /// @param n the orbital index
+    /// @return true if the orbital is occupied, false otherwise
     bool nb(size_t n) const {
         if constexpr (nbits == 128) {
             return words_[1] & maskbit(n);
@@ -143,71 +127,76 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         }
     }
 
-    // Occupation mutators
+    // ==> Occupation mutators <==
 
-    /// Set the occupation of alpha orbital n.
+    /// @brief Set the occupation of alpha orbital n.
+    /// @param n the orbital index
+    /// @param val the occupation value to set (true for occupied, false for unoccupied)
     void set_na(size_t n, bool val) { set_bit(n, val); }
 
-    /// Set the occupation of beta orbital n.
+    /// @brief Set the occupation of beta orbital n.
+    /// @param n the orbital index
+    /// @param val the occupation value to set (true for occupied, false for unoccupied)
     void set_nb(size_t n, bool val) { set_bit(n + beta_storage_offset, val); }
 
-    /// Set the alpha and beta occupation strings.
-    void set_strings(const BitArray<norb_capacity>& sa, const BitArray<norb_capacity>& sb) {
+    /// @brief Set the alpha and beta occupation strings.
+    /// @param sa a BitArray representing the alpha occupation string
+    /// @param sb a BitArray representing the beta occupation string
+    void set_strings(const StringImpl<norb_capacity>& sa, const StringImpl<norb_capacity>& sb) {
+        set_alpha_string(sa);
+        set_beta_string(sb);
+    }
+
+    /// @brief Set the alpha occupation string.
+    /// @param sa a StringImpl representing the alpha occupation string
+    void set_alpha_string(const StringImpl<norb_capacity>& sa) {
         for (size_t n = 0; n < storage_words_per_spin; n++) {
             words_[n] = sa.get_word(n);
+        }
+    }
+
+    /// @brief Set the beta occupation string.
+    /// @param sb a StringImpl representing the beta occupation string
+    void set_beta_string(const StringImpl<norb_capacity>& sb) {
+        for (size_t n = 0; n < storage_words_per_spin; n++) {
             words_[n + storage_words_per_spin] = sb.get_word(n);
         }
     }
 
-    void set_a_string(const BitArray<norb_capacity>& sa) {
-        for (size_t n = 0; n < storage_words_per_spin; n++) {
-            words_[n] = sa.get_word(n);
-        }
+    // ==> Comparison <==
+
+    /// @brief Return rhs < lhs. This is the default ordering used for sorting determinants, which
+    /// is the same as the lexicographical ordering of the bit strings.
+    static bool less_than(const DeterminantImpl<N>& lhs, const DeterminantImpl<N>& rhs) {
+        return lhs < rhs;
     }
 
-    void set_b_string(const BitArray<norb_capacity>& sb) {
-        for (size_t n = 0; n < storage_words_per_spin; n++) {
-            words_[n + storage_words_per_spin] = sb.get_word(n);
-        }
-    }
-
-    void set(std::initializer_list<size_t> alpha_list, std::initializer_list<size_t> beta_list) {
-        clear();
-        for (auto i : alpha_list) {
-            set_na(i, true);
-        }
-        for (auto i : beta_list) {
-            set_nb(i, true);
-        }
-    }
-
-    // Comparison operators
-    static bool less_than(const DeterminantImpl<N>& rhs, const DeterminantImpl<N>& lhs) {
-        return rhs < lhs;
-    }
-
-    static bool reverse_less_than(const DeterminantImpl<N>& rhs, const DeterminantImpl<N>& lhs) {
+    /// @brief Return rhs < lhs in reverse order, which is the same as the lexicographical
+    /// ordering of the bit strings when read from the last storage word to the first.
+    static bool reverse_less_than(const DeterminantImpl<N>& lhs, const DeterminantImpl<N>& rhs) {
         if constexpr (nbits == 128) {
-            return (rhs.words_[0] < lhs.words_[0]) or
-                   ((rhs.words_[0] == lhs.words_[0]) and (rhs.words_[1] < lhs.words_[1]));
+            return (lhs.words_[0] < rhs.words_[0]) or
+                   ((lhs.words_[0] == rhs.words_[0]) and (lhs.words_[1] < rhs.words_[1]));
         } else {
             for (size_t n = storage_words_per_spin; n > 0;) {
                 --n;
-                if (rhs.words_[n] > lhs.words_[n])
+                if (lhs.words_[n] > rhs.words_[n])
                     return false;
-                if (rhs.words_[n] < lhs.words_[n])
+                if (lhs.words_[n] < rhs.words_[n])
                     return true;
             }
             for (size_t n = nwords_; n > storage_words_per_spin + 1;) {
                 --n;
-                if (rhs.words_[n] > lhs.words_[n])
+                if (lhs.words_[n] > rhs.words_[n])
                     return false;
-                if (rhs.words_[n] < lhs.words_[n])
+                if (lhs.words_[n] < rhs.words_[n])
                     return true;
             }
-            return rhs.words_[storage_words_per_spin] < lhs.words_[storage_words_per_spin];
+            return lhs.words_[storage_words_per_spin] < rhs.words_[storage_words_per_spin];
         }
     }
+
+    // ==> Iteration over occupied orbitals <==
 
     /// @brief Apply a callable to each occupied alpha orbital, in ascending orbital order.
     /// The callable may return either void or a bool-like value. Void callables always continue.
@@ -227,8 +216,8 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @return true if all occupied beta orbitals were visited, false if the callable stopped
     template <typename Func> bool for_each_b_occ(Func&& func) const {
         return for_each_set_bit(
-            [&](size_t pos) {
-                const size_t orb = pos - beta_storage_offset;
+            [&](size_t n) {
+                const size_t orb = n - beta_storage_offset;
                 if constexpr (std::is_void_v<std::invoke_result_t<Func, size_t>>) {
                     std::invoke(std::forward<Func>(func), orb);
                 } else {
@@ -238,83 +227,35 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
             storage_words_per_spin, nwords_);
     }
 
-    /// Return a vector of occupied alpha orbitals
-    std::vector<int> get_alfa_occ(size_t norb) const {
-        std::vector<int> occ;
-        if (static_cast<size_t>(norb) > norb_capacity) {
-            throw std::range_error(
-                "Determinant::get_alfa_occ(size_t norb) was passed a value of norb (" +
-                std::to_string(norb) +
-                "), which is larger than the maximum number of alpha orbitals (" +
-                std::to_string(norb_capacity) + ").");
-        }
-        for_each_a_occ([&](size_t p) {
-            if (p >= norb) {
-                return false;
-            }
-            occ.push_back(static_cast<int>(p));
-            return true;
-        });
+    /// @brief Apply a callable to each occupied orbital (alpha and beta), in ascending orbital
+    /// order. The callable may return either void or a bool-like value. Void callables always
+    /// continue. Bool callables continue when they return true and stop early when they return
+    /// false. The callable receives orbital indices in the spatial-orbital range [0, 2 * norb()).
+    /// @param func a callable that accepts the orbital index as a size_t.
+    /// @return true if all occupied orbitals were visited, false if the callback stopped
+    template <typename Func> bool for_each_occ(Func&& func) const { return for_each_set_bit(func); }
+
+    /// @brief Find all occupied alpha orbitals
+    /// @return a vector of occupied alpha orbital indices
+    std::vector<size_t> get_alpha_occ() const {
+        auto n = count_alpha();
+        std::vector<size_t> occ(n);
+        collect_alpha_occupied(occ, n);
         return occ;
     }
 
-    /// Return a vector of occupied beta orbitals
-    std::vector<int> get_beta_occ(size_t norb) const {
-        std::vector<int> occ;
-        if (static_cast<size_t>(norb) > norb_capacity) {
-            throw std::range_error(
-                "Determinant::get_beta_occ(size_t norb) was passed a value of norb (" +
-                std::to_string(norb) +
-                "), which is larger than the maximum number of beta orbitals (" +
-                std::to_string(norb_capacity) + ").");
-        }
-        for_each_b_occ([&](size_t p) {
-            if (p >= norb) {
-                return false;
-            }
-            occ.push_back(static_cast<int>(p));
-            return true;
-        });
+    /// @brief Find all occupied beta orbitals
+    /// @return a vector of occupied beta orbital indices
+    std::vector<size_t> get_beta_occ() const {
+        auto n = count_beta();
+        std::vector<size_t> occ(n);
+        collect_beta_occupied(occ, n);
         return occ;
-    }
-
-    /// Return a vector of virtual alpha orbitals
-    std::vector<int> get_alfa_vir(size_t norb) const {
-        std::vector<int> vir;
-        if (static_cast<size_t>(norb) > norb_capacity) {
-            throw std::range_error(
-                "Determinant::get_alfa_occ(size_t norb) was passed a value of norb (" +
-                std::to_string(norb) +
-                "), which is larger than the maximum number of alpha orbitals (" +
-                std::to_string(norb_capacity) + ").");
-        }
-        for (size_t p = 0; p < norb; ++p) {
-            if (not na(p)) {
-                vir.push_back(static_cast<int>(p));
-            }
-        }
-        return vir;
-    }
-
-    /// Return a vector of virtual beta orbitals
-    std::vector<int> get_beta_vir(size_t norb) const {
-        std::vector<int> vir;
-        if (static_cast<size_t>(norb) > norb_capacity) {
-            throw std::range_error(
-                "Determinant::get_beta_occ(size_t norb) was passed a value of norb (" +
-                std::to_string(norb) +
-                "), which is larger than the maximum number of beta orbitals (" +
-                std::to_string(norb_capacity) + ").");
-        }
-        for (size_t p = 0; p < norb; ++p) {
-            if (not nb(p)) {
-                vir.push_back(static_cast<int>(p));
-            }
-        }
-        return vir;
     }
 
     /// @brief Find the occupied alpha orbitals and store them in occ
+    /// This is a more efficient version of get_alpha_occ that avoids dynamic resizing of the output
+    /// vector.
     /// @param occ a vector to store the occupied orbitals
     /// @param n the number of occupied orbitals found
     void collect_alpha_occupied(std::vector<size_t>& occ, size_t& n) const {
@@ -323,6 +264,8 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     }
 
     /// @brief Find the occupied beta orbitals and store them in occ
+    /// This is a more efficient version of get_beta_occ that avoids dynamic resizing of the output
+    /// vector.
     /// @param occ a vector to store the occupied orbitals
     /// @param n the number of occupied orbitals found
     void collect_beta_occupied(std::vector<size_t>& occ, size_t& n) const {
@@ -330,158 +273,58 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         for_each_b_occ([&](size_t p) { occ[n++] = p; });
     }
 
-    /// Apply the alpha creation operator a^+_n to this determinant
+    /// @brief Apply the alpha creation operator a^+_n to this determinant
     /// If orbital n is unoccupied, create the electron and return the sign
     /// If orbital n is occupied, do not modify the determinant and return 0
-    double create_a(size_t n) {
-        if (na(n) or (n >= norb_capacity))
+    /// @param n the orbital index
+    /// @return the sign of the creation operator if the orbital was unoccupied, 0 otherwise
+    double create_alpha(size_t n) {
+        if (na(n))
             return 0.0;
         set_na(n, true);
         return slater_sign_a(n);
     }
 
-    /// Apply the beta creation operator a^+_n to this determinant
+    /// @brief Apply the beta creation operator a^+_n to this determinant
     /// If orbital n is unoccupied, create the electron and return the sign
     /// If orbital n is occupied, do not modify the determinant and return 0
-    double create_b(size_t n) {
-        if (nb(n) or (n >= norb_capacity))
+    /// @param n the orbital index
+    /// @return the sign of the creation operator if the orbital was unoccupied, 0 otherwise
+    double create_beta(size_t n) {
+        if (nb(n))
             return 0.0;
         set_nb(n, true);
         return slater_sign_b(n);
     }
 
-    /// Apply the alpha annihilation operator a^+_n to this determinant
+    /// @brief Apply the alpha annihilation operator a_n to this determinant
     /// If orbital n is occupied, annihilate the electron and return the sign
     /// If orbital n is unoccupied, do not modify the determinant and return 0
-    double destroy_a(size_t n) {
-        if (not na(n) or (n >= norb_capacity))
+    /// @param n the orbital index
+    /// @return the sign of the annihilation operator if the orbital was occupied, 0 otherwise
+    double destroy_alpha(size_t n) {
+        if (not na(n))
             return 0.0;
         set_na(n, false);
         return slater_sign_a(n);
     }
 
-    /// Apply the beta annihilation operator a^+_n to this determinant
+    /// @brief Apply the beta annihilation operator a_n to this determinant
     /// If orbital n is occupied, annihilate the electron and return the sign
     /// If orbital n is unoccupied, do not modify the determinant and return 0
-    double destroy_b(size_t n) {
-        if (not nb(n) or (n >= norb_capacity))
+    /// @param n the orbital index
+    /// @return the sign of the annihilation operator if the orbital was occupied, 0 otherwise
+    double destroy_beta(size_t n) {
+        if (not nb(n))
             return 0.0;
         set_nb(n, false);
         return slater_sign_b(n);
     }
 
-    /// Return the sign of a_n applied to this determinant
-    /// This function ignores if bit n is set or not
-    double slater_sign(size_t n) const {
-        if constexpr (N == 64) {
-            return ui64_sign(words_[0], n);
-        } else {
-            size_t count = 0;
-            // count all the preceeding bits only if we are looking past the first word
-            if (n >= bits_per_word) {
-                size_t last_full_word = whichword(n);
-                for (size_t k = 0; k < last_full_word; ++k) {
-                    count += std::popcount(words_[k]);
-                }
-            }
-            const double word_sign = ui64_sign(getword(n), whichbit(n));
-            return (count % 2 == 0) ? word_sign : -word_sign;
-        }
-    }
-
-    /// Return the sign of a_n applied to this determinant in reverse order
-    /// This function ignores if bit n is set or not
-    double slater_sign_reverse(size_t n) const {
-        if constexpr (N == 64) {
-            return ui64_sign_reverse(words_[0], n);
-        } else {
-            size_t count = 0;
-            // count all the following bits only if we are not looking at the last word
-            size_t start_word =
-                whichword(n) + 1; // Start from the word following the one containing bit n
-            if (start_word < nwords_) {
-                for (size_t k = start_word; k < nwords_; ++k) {
-                    count += std::popcount(words_[k]);
-                }
-            }
-            const double word_sign = ui64_sign_reverse(getword(n), whichbit(n));
-            return (count % 2 == 0) ? word_sign : -word_sign;
-        }
-    }
-
-    /// Return the sign for a pair of second quantized operators
-    /// The sign depends only on the number of bits = 1 between n and m
-    /// There are no restrictions on n and m
-    double slater_sign(size_t n, size_t m) const {
-        if constexpr (N == 64) {
-            return ui64_sign(words_[0], n, m);
-        } else if constexpr (N == 128) {
-            // XXXXXXXX YYYYYYYY
-            // XmXXXXnX YYYYYYYY (case 1)
-            //   cccc
-            // XmXXXXnX YYYYYYYY (case 1)
-            //   cccccc
-            // cccccc
-            // XmXXXXXX YYYYYnYY (case 2)
-            //   cccccc ccccc
-            // let's first order the numbers so that m <= n
-            if (n < m)
-                std::swap(m, n);
-            size_t word_m = whichword(m);
-            size_t word_n = whichword(n);
-            // if both bits are in the same word use an optimized version
-            if (word_n == word_m) {
-                return ui64_sign(words_[word_n], whichbit(n), whichbit(m));
-            }
-            // count the bits after m in word[m]
-            // count the bits before n in word[n]
-            return ui64_sign_reverse(words_[word_m], whichbit(m)) *
-                   ui64_sign(words_[word_n], whichbit(n));
-        } else {
-            // let's first order the numbers so that m <= n
-            if (n < m)
-                std::swap(m, n);
-            size_t word_m = whichword(m);
-            size_t word_n = whichword(n);
-            // if both bits are in the same word use an optimized version
-            if (word_n == word_m) {
-                return ui64_sign(words_[word_n], whichbit(n), whichbit(m));
-            }
-            size_t count = 0;
-            // count the number of bits in bitween the words of m and n
-            for (size_t k = word_m + 1; k < word_n; ++k) {
-                count += std::popcount(words_[k]);
-            }
-            // count the bits after m in word[m]
-            // count the bits before n in word[n]
-            double sign = ui64_sign_reverse(words_[word_m], whichbit(m)) *
-                          ui64_sign(words_[word_n], whichbit(n));
-            return (count % 2 == 0) ? sign : -sign;
-        }
-    }
-
-    /// Return the sign of a_n applied to this determinant
-    /// this version is inefficient and should be used only for testing/debugging
-    double slater_sign_safe(size_t n) const {
-        size_t count = 0;
-        for (size_t k = 0; k < n; ++k) {
-            if (get_bit(k))
-                count++;
-        }
-        return (count % 2 == 0) ? 1.0 : -1.0;
-    }
-
-    /// @brief Find the irreducible representation of a product of spin orbitals
-    /// @param irrep a vector of irrep values
-    /// @return the irrep
-    int symmetry(const std::vector<int>& irrep) const {
-        int sym = 0;
-        for_each_set_bit([&](size_t pos) { sym ^= irrep[pos]; });
-        return sym;
-    }
-
-    /// Return the sign for a single second quantized operator
+    /// @brief Return the fermionic sign for an alpha orbital
     /// This function ignores whether alpha orbital n is occupied.
+    /// @param n the orbital index
+    /// @return the fermionic sign
     double slater_sign_a(size_t n) const {
         if constexpr (nbits == 128) {
             // specialization for one 64-orbital word per spin sector
@@ -491,8 +334,10 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         }
     }
 
-    /// Return the sign for a single second quantized operator
+    /// @brief Return the fermionic sign for a beta orbital
     /// This function ignores whether beta orbital n is occupied.
+    /// @param n the orbital index
+    /// @return the fermionic sign
     double slater_sign_b(size_t n) const {
         if constexpr (nbits == 128) {
             // specialization for one 64-orbital word per spin sector
@@ -502,9 +347,12 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         }
     }
 
-    /// Return the sign for a pair of alpha second quantized operators
+    /// @brief Return the fermionic sign for a pair of alpha second quantized operators
     /// The sign depends only on the parity of occupied alpha orbitals between n and m.
     /// n and m are not assumed to have any specific order
+    /// @param n the first orbital index
+    /// @param m the second orbital index
+    /// @return the fermionic sign
     double slater_sign_aa(size_t n, size_t m) const {
         if constexpr (nbits == 128) {
             // specialization for one 64-orbital word per spin sector
@@ -514,9 +362,12 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         }
     }
 
-    /// Return the sign for a pair of beta second quantized operators
+    /// @brief Return the fermionic sign for a pair of beta second quantized operators
     /// The sign depends only on the parity of occupied beta orbitals between n and m.
     /// n and m are not assumed to have any specific order
+    /// @param n the first orbital index
+    /// @param m the second orbital index
+    /// @return the fermionic sign
     double slater_sign_bb(size_t n, size_t m) const {
         if constexpr (nbits == 128) {
             // specialization for one 64-orbital word per spin sector
@@ -526,9 +377,15 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         }
     }
 
-    /// Return the sign of a^+_a a^+_b a_j a_i applied to this determinant for a same-spin alpha
-    /// double excitation. The four orbital indices are assumed to be distinct. The case analysis
-    /// handles all relative orderings of i, j, a, and b and produces the fermionic sign.
+    /// @brief Return the fermionic sign of a^+_a a^+_b a_j a_i applied to this determinant for a
+    /// same-spin alpha double excitation. The four orbital indices are assumed to be distinct. The
+    /// case analysis handles all relative orderings of i, j, a, and b and produces the fermionic
+    /// sign.
+    /// @param i the first occupied orbital index
+    /// @param j the second occupied orbital index
+    /// @param a the first unoccupied orbital index
+    /// @param b the second unoccupied orbital index
+    /// @return the fermionic sign of the double excitation operator
     double slater_sign_aaaa(size_t i, size_t j, size_t a, size_t b) const {
         if ((((i < a) && (j < a) && (i < b) && (j < b)) == true) ||
             (((i < a) || (j < a) || (i < b) || (j < b)) == false)) {
@@ -546,9 +403,15 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         }
     }
 
-    /// Return the sign of a^+_a a^+_b a_j a_i applied to this determinant for a same-spin beta
-    /// double excitation. The four orbital indices are assumed to be distinct. The case analysis
-    /// handles all relative orderings of i, j, a, and b and produces the fermionic sign.
+    /// @brief Return the fermionic sign of a^+_a a^+_b a_j a_i applied to this determinant for a
+    /// same-spin beta double excitation. The four orbital indices are assumed to be distinct. The
+    /// case analysis handles all relative orderings of i, j, a, and b and produces the fermionic
+    /// sign.
+    /// @param i the first occupied orbital index
+    /// @param j the second occupied orbital index
+    /// @param a the first unoccupied orbital index
+    /// @param b the second unoccupied orbital index
+    /// @return the fermionic sign of the double excitation operator
     double slater_sign_bbbb(size_t i, size_t j, size_t a, size_t b) const {
         if ((((i < a) && (j < a) && (i < b) && (j < b)) == true) ||
             (((i < a) || (j < a) || (i < b) || (j < b)) == false)) {
@@ -566,8 +429,9 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         }
     }
 
-    /// Count the number of occupied alpha orbitals.
-    int count_a() const {
+    /// @brief Count the number of occupied alpha orbitals.
+    /// @return the number of occupied alpha orbitals
+    size_t count_alpha() const noexcept {
         // with constexpr we compile only one of these cases
         if constexpr (N == 128) {
             return std::popcount(words_[0]);
@@ -578,8 +442,9 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         }
     }
 
-    /// Count the number of occupied beta orbitals.
-    int count_b() const {
+    /// @brief Count the number of occupied beta orbitals.
+    /// @return the number of occupied beta orbitals
+    size_t count_beta() const noexcept {
         // with constexpr we compile only one of these cases
         if constexpr (N == 128) {
             return std::popcount(words_[1]);
@@ -590,18 +455,10 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         }
     };
 
-    /// Find the highest occupied alpha orbital.
-    uint64_t find_last_alpha_occ() const { return find_last_one(0, storage_words_per_spin); }
-
-    /// Find the highest occupied beta orbital.
-    uint64_t find_last_beta_occ() const {
-        if (auto res = find_last_one(storage_words_per_spin, nwords_); res != ui64_bit_not_found)
-            return res - norb();
-        return ui64_bit_not_found;
-    }
-
-    /// Return the number of alpha/beta pairs
-    int npair() const {
+    /// @brief Return the number of orbitals in which both alpha and beta are occupied (number of
+    /// alpha/beta pairs).
+    /// @return the number of alpha/beta pairs
+    int npair() const noexcept {
         int count = 0;
         for (size_t k = 0; k < storage_words_per_spin; ++k) {
             count += std::popcount(words_[k] & words_[k + storage_words_per_spin]);
@@ -609,68 +466,28 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         return count;
     }
 
-    /// Perform an alpha-alpha single excitation (i->a)
-    /// assuming that i is occupied and a is empty
-    double single_excitation_a(size_t i, size_t a) {
-        set_na(i, false);
-        set_na(a, true);
-        return slater_sign_aa(i, a);
-    }
-
-    /// Perform an beta-beta single excitation (I -> A)
-    /// assuming that i is occupied and a is empty
-    double single_excitation_b(size_t i, size_t a) {
-        set_nb(i, false);
-        set_nb(a, true);
-        return slater_sign_bb(i, a);
-    }
-
-    /// Perform an alpha-alpha double excitation (ij->ab)
-    /// assuming that ij are occupied and ab are empty
-    double double_excitation_aa(size_t i, size_t j, size_t a, size_t b) {
-        set_na(i, false);
-        set_na(j, false);
-        set_na(b, true);
-        set_na(a, true);
-        return slater_sign_aaaa(i, j, a, b);
-    }
-
-    /// Perform an alpha-beta double excitation (iJ -> aB)
-    /// /// assuming that ij are occupied and ab are empty
-    double double_excitation_ab(size_t i, size_t j, size_t a, size_t b) {
-        set_na(i, false);
-        set_nb(j, false);
-        set_nb(b, true);
-        set_na(a, true);
-        return slater_sign_aa(i, a) * slater_sign_bb(j, b);
-    }
-
-    /// Perform an beta-beta double excitation (IJ -> AB)
-    double double_excitation_bb(size_t i, size_t j, size_t a, size_t b) {
-        set_nb(i, false);
-        set_nb(j, false);
-        set_nb(b, true);
-        set_nb(a, true);
-        return slater_sign_bbbb(i, j, a, b);
-    }
-
-    BitArray<norb_capacity> a_string() const {
-        BitArray<norb_capacity> s;
+    /// @brief Return the alpha occupation string.
+    /// @return a StringImpl representing the alpha occupation string
+    StringImpl<norb_capacity> a_string() const {
+        StringImpl<norb_capacity> s;
         for (size_t i = 0; i < storage_words_per_spin; i++) {
             s.set_word(i, words_[i]);
         }
         return s;
     }
 
-    BitArray<norb_capacity> b_string() const {
-        BitArray<norb_capacity> s;
+    /// @brief Return the beta occupation string.
+    /// @return a StringImpl representing the beta occupation string
+    StringImpl<norb_capacity> b_string() const {
+        StringImpl<norb_capacity> s;
         for (size_t i = 0; i < storage_words_per_spin; i++) {
             s.set_word(i, words_[storage_words_per_spin + i]);
         }
         return s;
     }
 
-    /// Swap the alpha and beta occupations of a determinant
+    /// @brief Swap the alpha and beta occupations of a determinant
+    /// @return a new DeterminantImpl with swapped occupations
     DeterminantImpl<N> spin_flip() const noexcept {
         DeterminantImpl<N> d;
         for (size_t n = 0; n < storage_words_per_spin; n++) {
@@ -680,35 +497,31 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         return d;
     }
 
-    /// Describe the excitation connection of a determinant d,
-    /// relative to this one. The excitation connection is defined
-    /// as the creation and annihilation operators that need to be applied
-    /// to this determinant to obtain d.
-    /// The excitation connection is a vector of 4 vectors:
-    /// [[alpha annihilation], [alpha creation],
-    ///  [beta annihilation], [beta creation]]
-    std::vector<std::vector<size_t>> excitation_connection(const DeterminantImpl<N>& d) const {
-        std::vector<std::vector<size_t>> excitation(4);
-        for (size_t i = 0; i < norb_capacity; i++) {
-            if (na(i) and not d.na(i)) {
-                excitation[0].push_back(i);
-            }
-            if (not na(i) and d.na(i)) {
-                excitation[1].push_back(i);
-            }
-            if (nb(i) and not d.nb(i)) {
-                excitation[2].push_back(i);
-            }
-            if (not nb(i) and d.nb(i)) {
-                excitation[3].push_back(i);
-            }
+    /// @brief Check if an orbital index is within bounds for this determinant and throw an
+    /// exception if it is not.
+    /// @param n the orbital index to check
+    /// @param msg an additional message to include in the exception if the index is out of bounds
+    void check_index_bounds(size_t n, const std::string& msg) const {
+        if (n >= norb_capacity) {
+            throw std::out_of_range("Orbital index " + std::to_string(n) +
+                                    " is out of range for Determinant with capacity " +
+                                    std::to_string(norb_capacity) + ". " + msg);
         }
-        return excitation;
     }
 };
 
 // Functions
 
+/// @brief Convert a determinant to a string representation
+/// @tparam N The number of spin-orbital slots in the determinant, which must be a multiple of 128
+/// @param d The determinant to convert to a string
+/// @param n The number of spatial orbitals to include in the string representation. Must be less
+/// than or equal to the capacity of the determinant. Default is the full capacity of the
+/// determinant.
+/// @throws std::out_of_range if n is greater than the capacity of the determinant
+/// @return a string representation of the determinant, where occupied alpha orbitals are
+/// represented by 'a', occupied beta orbitals are represented by 'b', and unoccupied orbitals are
+/// represented by '0'. The string is enclosed in angle brackets, e.g. "|a0b0>".
 template <size_t N>
 std::string str(const DeterminantImpl<N>& d, size_t n = DeterminantImpl<N>::norb_capacity) {
     std::string s;
@@ -728,183 +541,12 @@ std::string str(const DeterminantImpl<N>& d, size_t n = DeterminantImpl<N>::norb
     return s;
 }
 
+/// @brief Output stream operator for DeterminantImpl. This allows you to print a DeterminantImpl
+/// object using std::cout or any other output stream. The output format is the same as the string
+/// representation produced by the str() function.
 template <size_t N> std::ostream& operator<<(std::ostream& os, const DeterminantImpl<N>& d) {
     os << str(d);
     return os;
-}
-
-template <size_t N> void set_str(DeterminantImpl<N>& d, const std::string& str) {
-    // Clear all occupations and set the packed occupation pattern passed as a string.
-    d.clear();
-    if (str.size() <= DeterminantImpl<N>::nbits) {
-        size_t k = 0;
-        for (auto c : str) {
-            if (c == '0') {
-                d.set_bit(k, 0);
-            } else {
-                d.set_bit(k, 1);
-            }
-            k++;
-        }
-    } else {
-        throw std::range_error("template <size_t N> void set_str(DeterminantImpl<N>&, const "
-                               "std::string&)\nmismatch "
-                               "between the determinant storage size and the input string\n");
-    }
-}
-
-/**
- * @brief Apply a general excitation operator to this determinant
- *        Details:
- *        (bc)_n ... (bc)_1 (ba)_n ... (ba)_1 (ac)_n ... (ac)_1 (aa)_n ... (aa)_1 |det>
- *        where aa = alpha annihilation operator
- *        where ac = alpha creation operator
- *        where ba = alpha annihilation operator
- *        where bc = alpha creation operator
- * @param aann list of alpha orbitals to annihilate
- * @param acre list of alpha orbitals to create
- * @param bann list of beta orbitals to annihilate
- * @param bcre list of beta orbitals to create
- * @return the sign of the final determinant (+1, -1, or 0)
- */
-template <size_t N>
-double gen_excitation(DeterminantImpl<N>& d, const std::vector<int>& aann,
-                      const std::vector<int>& acre, const std::vector<int>& bann,
-                      const std::vector<int>& bcre) {
-    double sign = 1.0;
-    for (auto i : aann) {
-        sign *= d.slater_sign_a(i) * d.na(i);
-        d.set_na(i, false);
-    }
-    for (auto i : acre) {
-        sign *= d.slater_sign_a(i) * (1 - d.na(i));
-        d.set_na(i, true);
-    }
-    for (auto i : bann) {
-        sign *= d.slater_sign_b(i) * d.nb(i);
-        d.set_nb(i, false);
-    }
-    for (auto i : bcre) {
-        sign *= d.slater_sign_b(i) * (1 - d.nb(i));
-        d.set_nb(i, true);
-    }
-    return sign;
-}
-
-/// @brief Apply a general operator to this determinant without checking applicability.
-///
-/// This function assumes the caller has already verified that the operator can be applied, for
-/// example with can_apply_operator(cre, ann). Calling it on an inapplicable determinant may
-/// produce a determinant and sign for a different algebraic operation.
-///
-/// @param d the determinant
-/// @param new_d the new determinant
-/// @param cre the creation operator
-/// @param ann the annihilation operator
-/// @param sign the sign mask (precomputed by the user) of the operator
-/// @return the sign of the final determinant (+1, -1)
-///
-/// Example:
-///
-///   Determinant det, new_det, cre, ann, sign_mask;
-///   // test if the operator can be applied
-///   if (det.can_apply_operator(cre,ann)) {
-///       // compute the sign mask
-///       compute_sign_mask(cre, ann, sign_mask);
-///       auto value = apply_operator_to_det_unchecked(det, new_det, cre, ann, sign_mask);
-///       // do something with value and new_det
-///   }
-///
-template <size_t N>
-inline double
-apply_operator_to_det_unchecked(const DeterminantImpl<N>& d, DeterminantImpl<N>& new_d,
-                                const DeterminantImpl<N>& cre, const DeterminantImpl<N>& ann,
-                                const DeterminantImpl<N>& sign) {
-    size_t n = 0;
-    if constexpr (N == 128) {
-        // specialization for one 64-orbital word per spin sector
-        const auto w0 = d.get_word(0) & (~ann.get_word(0));
-        const auto w1 = d.get_word(1) & (~ann.get_word(1));
-        n += std::popcount(w0 & sign.get_word(0));
-        n += std::popcount(w1 & sign.get_word(1));
-        new_d.set_word(0, w0 | cre.get_word(0));
-        new_d.set_word(1, w1 | cre.get_word(1));
-    } else if constexpr (N == 256) {
-        const auto w0 = d.get_word(0) & (~ann.get_word(0));
-        const auto w1 = d.get_word(1) & (~ann.get_word(1));
-        const auto w2 = d.get_word(2) & (~ann.get_word(2));
-        const auto w3 = d.get_word(3) & (~ann.get_word(3));
-        n += std::popcount(w0 & sign.get_word(0));
-        n += std::popcount(w1 & sign.get_word(1));
-        n += std::popcount(w2 & sign.get_word(2));
-        n += std::popcount(w3 & sign.get_word(3));
-        new_d.set_word(0, w0 | cre.get_word(0));
-        new_d.set_word(1, w1 | cre.get_word(1));
-        new_d.set_word(2, w2 | cre.get_word(2));
-        new_d.set_word(3, w3 | cre.get_word(3));
-    } else {
-        // loop over packed storage words
-        for (size_t i = 0; i < DeterminantImpl<N>::nwords_; ++i) {
-            // apply the annihilation operator
-            const auto w = d.get_word(i) & (~ann.get_word(i));
-            // compute the sign
-            n += std::popcount(w & sign.get_word(i));
-            // apply the creation operator
-            new_d.set_word(i, w | cre.get_word(i));
-        }
-    }
-    return parity_to_sign(n);
-}
-
-template <size_t N> double spin2(const DeterminantImpl<N>& lhs, const DeterminantImpl<N>& rhs) {
-    int nmo = DeterminantImpl<N>::norb_capacity;
-    const DeterminantImpl<N>& I = lhs;
-    const DeterminantImpl<N>& J = rhs;
-
-    // Compute the matrix elements of the operator S^2
-    // S^2 = S- S+ + Sz (Sz + 1)
-    //     = Sz (Sz + 1) + Nbeta + Npairs - sum_pq' a+(qa) a+(pb) a-(qb) a-(pa)
-    double matrix_element = 0.0;
-
-    // Make sure that Ms is the same otherwise the matrix element is automatically zero
-    if ((lhs.count_a() != rhs.count_a()) or (lhs.count_b() != rhs.count_b())) {
-        return 0.0;
-    }
-
-    DeterminantImpl<N> lr_diff = lhs ^ rhs;
-
-    int nadiff = lr_diff.count_a() / 2;
-    int nbdiff = lr_diff.count_b() / 2;
-    int na = lhs.count_a();
-    int nb = lhs.count_b();
-    int npair = lhs.npair();
-
-    double Ms = 0.5 * static_cast<double>(na - nb);
-
-    // PhiI = PhiJ -> S^2 = Sz (Sz + 1) + Nbeta - Npairs
-    if ((nadiff == 0) and (nbdiff == 0)) {
-        matrix_element += Ms * (Ms + 1.0) + double(nb) - double(npair);
-    }
-
-    // PhiI = a+(qa) a+(pb) a-(qb) a-(pa) PhiJ
-    if ((nadiff == 1) and (nbdiff == 1)) {
-        // Find a pair of spin coupled electrons
-        int i = -1;
-        int j = -1;
-        // The logic here follows the spin-flip coupling between opposite-spin occupations.
-        for (int p = 0; p < nmo; ++p) {
-            if (J.na(p) and I.nb(p) and (not J.nb(p)) and (not I.na(p)))
-                i = p;
-            if (J.nb(p) and I.na(p) and (not J.na(p)) and (not I.nb(p)))
-                j = p;
-        }
-        if (i != j and i >= 0 and j >= 0) {
-            double sign = rhs.slater_sign_a(i) * rhs.slater_sign_b(j) * lhs.slater_sign_a(j) *
-                          lhs.slater_sign_b(i);
-            matrix_element -= sign;
-        }
-    }
-    return (matrix_element);
 }
 
 } // namespace forte2

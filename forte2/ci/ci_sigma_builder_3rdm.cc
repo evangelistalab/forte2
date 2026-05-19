@@ -31,14 +31,14 @@ np_matrix CISigmaBuilder::compute_sss_3rdm(np_vector C_left, np_vector C_right, 
     auto Cr_span = vector::as_span<double>(C_right);
 
     auto rdm_data = rdm.data();
-    const auto& alfa_address = lists_.alfa_address();
+    const auto& alpha_address = lists_.alpha_address();
     const auto& beta_address = lists_.beta_address();
 
-    int num_3h_classes = is_alpha(spin) ? lists_.alfa_address_3h()->nclasses()
+    int num_3h_classes = is_alpha(spin) ? lists_.alpha_address_3h()->nclasses()
                                         : lists_.beta_address_3h()->nclasses();
 
     for (int class_K = 0; class_K < num_3h_classes; ++class_K) {
-        size_t maxK = is_alpha(spin) ? lists_.alfa_address_3h()->strpcls(class_K)
+        size_t maxK = is_alpha(spin) ? lists_.alpha_address_3h()->strpcls(class_K)
                                      : lists_.beta_address_3h()->strpcls(class_K);
 
         // loop over blocks of matrix C
@@ -57,7 +57,7 @@ np_matrix CISigmaBuilder::compute_sss_3rdm(np_vector C_left, np_vector C_right, 
                     continue;
 
                 const size_t maxL = is_alpha(spin) ? beta_address->strpcls(class_Ib)
-                                                   : alfa_address->strpcls(class_Ia);
+                                                   : alpha_address->strpcls(class_Ia);
 
                 if (maxL > 0) {
                     // Get a pointer to the correct block of matrix C
@@ -65,10 +65,10 @@ np_matrix CISigmaBuilder::compute_sss_3rdm(np_vector C_left, np_vector C_right, 
 
                     for (size_t K{0}; K < maxK; ++K) {
                         auto& Kllist = is_alpha(spin)
-                                           ? lists_.get_alfa_3h_list(class_K, K, class_Ia)
+                                           ? lists_.get_alpha_3h_list(class_K, K, class_Ia)
                                            : lists_.get_beta_3h_list(class_K, K, class_Ib);
                         auto& Krlist = is_alpha(spin)
-                                           ? lists_.get_alfa_3h_list(class_K, K, class_Ja)
+                                           ? lists_.get_alpha_3h_list(class_K, K, class_Ja)
                                            : lists_.get_beta_3h_list(class_K, K, class_Jb);
                         for (const auto& [sign_K, p, q, r, I] : Kllist) {
                             const size_t pqr_index = triplet_index_gt(p, q, r);
@@ -128,14 +128,14 @@ np_tensor4 CISigmaBuilder::compute_aab_3rdm(np_vector C_left, np_vector C_right)
     auto Cr_span = vector::as_span<double>(C_right);
 
     auto rdm_data = rdm.data();
-    const auto& alfa_address = lists_.alfa_address();
+    const auto& alpha_address = lists_.alpha_address();
     const auto& beta_address = lists_.beta_address();
 
-    int num_2h_class_Ka = lists_.alfa_address_2h()->nclasses();
+    int num_2h_class_Ka = lists_.alpha_address_2h()->nclasses();
     int num_1h_class_Kb = lists_.beta_address_1h()->nclasses();
 
     for (int class_Ka{0}; class_Ka < num_2h_class_Ka; ++class_Ka) {
-        size_t maxKa = lists_.alfa_address_2h()->strpcls(class_Ka);
+        size_t maxKa = lists_.alpha_address_2h()->strpcls(class_Ka);
 
         for (int class_Kb{0}; class_Kb < num_1h_class_Kb; ++class_Kb) {
             size_t maxKb = lists_.beta_address_1h()->strpcls(class_Kb);
@@ -156,8 +156,8 @@ np_tensor4 CISigmaBuilder::compute_aab_3rdm(np_vector C_left, np_vector C_right)
                     const auto Cl_offset = lists_.block_offset(nJ);
 
                     for (size_t Ka = 0; Ka < maxKa; ++Ka) {
-                        auto& Ka_right_list = lists_.get_alfa_2h_list(class_Ka, Ka, class_Ia);
-                        auto& Ka_left_list = lists_.get_alfa_2h_list(class_Ka, Ka, class_Ja);
+                        auto& Ka_right_list = lists_.get_alpha_2h_list(class_Ka, Ka, class_Ia);
+                        auto& Ka_left_list = lists_.get_alpha_2h_list(class_Ka, Ka, class_Ja);
                         for (size_t Kb = 0; Kb < maxKb; ++Kb) {
                             auto& Kb_right_list = lists_.get_beta_1h_list(class_Kb, Kb, class_Ib);
                             auto& Kb_left_list = lists_.get_beta_1h_list(class_Kb, Kb, class_Jb);
@@ -217,14 +217,14 @@ np_tensor4 CISigmaBuilder::compute_abb_3rdm(np_vector C_left, np_vector C_right)
     auto Cr_span = vector::as_span<double>(C_right);
 
     auto rdm_data = rdm.data();
-    const auto& alfa_address = lists_.alfa_address();
+    const auto& alpha_address = lists_.alpha_address();
     const auto& beta_address = lists_.beta_address();
 
-    int num_1h_class_Ka = lists_.alfa_address_1h()->nclasses();
+    int num_1h_class_Ka = lists_.alpha_address_1h()->nclasses();
     int num_2h_class_Kb = lists_.beta_address_2h()->nclasses();
 
     for (int class_Ka = 0; class_Ka < num_1h_class_Ka; ++class_Ka) {
-        size_t maxKa = lists_.alfa_address_1h()->strpcls(class_Ka);
+        size_t maxKa = lists_.alpha_address_1h()->strpcls(class_Ka);
 
         for (int class_Kb = 0; class_Kb < num_2h_class_Kb; ++class_Kb) {
             size_t maxKb = lists_.beta_address_2h()->strpcls(class_Kb);
@@ -245,8 +245,8 @@ np_tensor4 CISigmaBuilder::compute_abb_3rdm(np_vector C_left, np_vector C_right)
                     const auto Cl_offset = lists_.block_offset(nJ);
 
                     for (size_t Ka = 0; Ka < maxKa; ++Ka) {
-                        auto& Ka_right_list = lists_.get_alfa_1h_list(class_Ka, Ka, class_Ia);
-                        auto& Ka_left_list = lists_.get_alfa_1h_list(class_Ka, Ka, class_Ja);
+                        auto& Ka_right_list = lists_.get_alpha_1h_list(class_Ka, Ka, class_Ia);
+                        auto& Ka_left_list = lists_.get_alpha_1h_list(class_Ka, Ka, class_Ja);
                         for (size_t Kb = 0; Kb < maxKb; ++Kb) {
                             auto& Kb_right_list = lists_.get_beta_2h_list(class_Kb, Kb, class_Ib);
                             auto& Kb_left_list = lists_.get_beta_2h_list(class_Kb, Kb, class_Jb);

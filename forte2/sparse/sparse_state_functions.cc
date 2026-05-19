@@ -5,6 +5,7 @@
 #include "helpers/string_algorithms.h"
 
 #include "determinant/determinant.hpp"
+#include "determinant/determinant_helpers.h"
 
 #include "sparse/sparse_state.h"
 
@@ -18,7 +19,7 @@ SparseState apply_operator_impl_naive(bool is_antihermitian, const SparseOperato
 SparseState apply_operator_impl_grouped(bool is_antihermitian, const SparseOperator& sop,
                                         const SparseState& state, double screen_thresh);
 
-// The default implementation is the grouped implementation with grouping into alfa strings
+// The default implementation is the grouped implementation with grouping into alpha strings
 SparseState apply_operator_impl_grouped_string(bool is_antihermitian, const SparseOperator& sop,
                                                const SparseState& state, double screen_thresh);
 
@@ -156,7 +157,7 @@ void apply_operator_kernel_string(const auto& sop_groups, const auto& state_grou
     Determinant new_det;
     for (const auto& [sqop_ann_a, sqop_group] : sop_groups) {
         for (const auto& [det_a, state_group] : state_groups) {
-            // can we annihilate the alfa string?
+            // can we annihilate the alpha string?
             if (det_a.is_superset_of(sqop_ann_a)) {
                 // loop over the creation operators in this group
                 for (const auto& [sqop_ann, sqop_cre, sign_mask, t] : sqop_group) {
@@ -189,14 +190,14 @@ SparseState apply_operator_impl_grouped_string(bool is_antihermitian, const Spar
     }
     SparseState new_terms;
 
-    // Group the determinants by common alfa strings
+    // Group the determinants by common alpha strings
     std::unordered_map<String, std::vector<std::pair<Determinant, sparse_scalar_t>>, String::Hash>
         state_groups;
     for (const auto& [det, c] : state) {
         state_groups[det.a_string()].emplace_back(det, c);
     }
 
-    // Group the operators by common alfa annihilation strings
+    // Group the operators by common alpha annihilation strings
     std::unordered_map<
         String, std::vector<std::tuple<Determinant, Determinant, Determinant, sparse_scalar_t>>,
         String::Hash>
@@ -212,7 +213,7 @@ SparseState apply_operator_impl_grouped_string(bool is_antihermitian, const Spar
         return new_terms;
     }
 
-    // Group the operators by common alfa creation strings
+    // Group the operators by common alpha creation strings
     // Here we swap the annihilation and creation operators for the antihermitian case
     sop_groups.clear();
     for (const auto& [sqop, t] : sop.elements()) {
@@ -254,7 +255,7 @@ std::vector<sparse_scalar_t> get_projection(const SparseOperatorList& sop, const
 SparseState apply_number_projector(int na, int nb, const SparseState& state) {
     SparseState new_state;
     for (const auto& [det, c] : state) {
-        if ((det.count_a() == na) and (det.count_b() == nb) and (std::abs(c) > 1.0e-12)) {
+        if ((det.count_alpha() == na) and (det.count_beta() == nb) and (std::abs(c) > 1.0e-12)) {
             new_state[det] = c;
         }
     }

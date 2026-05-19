@@ -324,8 +324,9 @@ std::map<std::pair<int, int>, std::vector<std::pair<int, int>>>
 find_string_map(const CIStrings& list_left, const CIStrings& list_right, Spin spin) {
     std::map<std::pair<int, int>, std::vector<std::pair<int, int>>> m;
     const auto& strings_right =
-        is_alpha(spin) ? list_right.beta_strings() : list_right.alfa_strings();
-    const auto& address_left = is_alpha(spin) ? list_left.beta_address() : list_left.alfa_address();
+        is_alpha(spin) ? list_right.beta_strings() : list_right.alpha_strings();
+    const auto& address_left =
+        is_alpha(spin) ? list_left.beta_address() : list_left.alpha_address();
     // loop over all the right string classes (I)
     for (int class_I{0}; const auto& string_class_right : strings_right) {
         // loop over all the right strings (I)
@@ -345,9 +346,9 @@ find_string_map(const CIStrings& list_left, const CIStrings& list_right, Spin sp
 
 VOListMap find_ov_string_map(const CIStrings& list_left, const CIStrings& list_right, Spin spin) {
     const auto& strings_right =
-        is_alpha(spin) ? list_right.alfa_strings() : list_right.beta_strings();
-    const auto& I_address = is_alpha(spin) ? list_right.alfa_address() : list_right.beta_address();
-    const auto& J_address = is_alpha(spin) ? list_left.alfa_address() : list_left.beta_address();
+        is_alpha(spin) ? list_right.alpha_strings() : list_right.beta_strings();
+    const auto& I_address = is_alpha(spin) ? list_right.alpha_address() : list_right.beta_address();
+    const auto& J_address = is_alpha(spin) ? list_left.alpha_address() : list_left.beta_address();
     auto vo_list = make_vo_list(strings_right, I_address, J_address);
     return vo_list;
 }

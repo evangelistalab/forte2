@@ -43,46 +43,46 @@ std::pair<String, double> create_double_excitation_unchecked(const String& str, 
 std::pair<Determinant, double> create_single_a_excitation(const Determinant& det, size_t i,
                                                           size_t a) {
     Determinant new_det = det;
-    double sign = new_det.destroy_a(i);
-    sign *= new_det.create_a(a);
+    double sign = new_det.destroy_alpha(i);
+    sign *= new_det.create_alpha(a);
     return {new_det, sign};
 }
 
 std::pair<Determinant, double> create_single_b_excitation(const Determinant& det, size_t i,
                                                           size_t a) {
     Determinant new_det = det;
-    double sign = new_det.destroy_b(i);
-    sign *= new_det.create_b(a);
+    double sign = new_det.destroy_beta(i);
+    sign *= new_det.create_beta(a);
     return {new_det, sign};
 }
 
 std::pair<Determinant, double> create_double_aa_excitation(const Determinant& det, size_t i,
                                                            size_t j, size_t a, size_t b) {
     Determinant new_det = det;
-    double sign = new_det.destroy_a(i);
-    sign *= new_det.destroy_a(j);
-    sign *= new_det.create_a(b);
-    sign *= new_det.create_a(a);
+    double sign = new_det.destroy_alpha(i);
+    sign *= new_det.destroy_alpha(j);
+    sign *= new_det.create_alpha(b);
+    sign *= new_det.create_alpha(a);
     return {new_det, sign};
 }
 
 std::pair<Determinant, double> create_double_bb_excitation(const Determinant& det, size_t i,
                                                            size_t j, size_t a, size_t b) {
     Determinant new_det = det;
-    double sign = new_det.destroy_b(i);
-    sign *= new_det.destroy_b(j);
-    sign *= new_det.create_b(b);
-    sign *= new_det.create_b(a);
+    double sign = new_det.destroy_beta(i);
+    sign *= new_det.destroy_beta(j);
+    sign *= new_det.create_beta(b);
+    sign *= new_det.create_beta(a);
     return {new_det, sign};
 }
 
 std::pair<Determinant, double> create_double_ab_excitation(const Determinant& det, size_t i,
                                                            size_t j, size_t a, size_t b) {
     Determinant new_det = det;
-    double sign = new_det.destroy_a(i);
-    sign *= new_det.destroy_b(j);
-    sign *= new_det.create_b(b);
-    sign *= new_det.create_a(a);
+    double sign = new_det.destroy_alpha(i);
+    sign *= new_det.destroy_beta(j);
+    sign *= new_det.create_beta(b);
+    sign *= new_det.create_alpha(a);
     return {new_det, sign};
 }
 
@@ -110,6 +110,96 @@ void collect_virtual_orbitals(const std::vector<size_t>& occ, std::vector<size_t
     for (; k < n; ++k) {
         vir[i++] = k;
     }
+}
+
+double apply_operator_to_det_unchecked(const Determinant& d, Determinant& new_d,
+                                       const Determinant& cre, const Determinant& ann,
+                                       const Determinant& sign) {
+    size_t n = 0;
+    if constexpr (Determinant::nbits == 128) {
+        // specialization for one 64-orbital word per spin sector
+        const auto w0 = d.get_word(0) & (~ann.get_word(0));
+        const auto w1 = d.get_word(1) & (~ann.get_word(1));
+        n += std::popcount(w0 & sign.get_word(0));
+        n += std::popcount(w1 & sign.get_word(1));
+        new_d.set_word(0, w0 | cre.get_word(0));
+        new_d.set_word(1, w1 | cre.get_word(1));
+    } else if constexpr (Determinant::nbits == 256) {
+        const auto w0 = d.get_word(0) & (~ann.get_word(0));
+        const auto w1 = d.get_word(1) & (~ann.get_word(1));
+        const auto w2 = d.get_word(2) & (~ann.get_word(2));
+        const auto w3 = d.get_word(3) & (~ann.get_word(3));
+        n += std::popcount(w0 & sign.get_word(0));
+        n += std::popcount(w1 & sign.get_word(1));
+        n += std::popcount(w2 & sign.get_word(2));
+        n += std::popcount(w3 & sign.get_word(3));
+        new_d.set_word(0, w0 | cre.get_word(0));
+        new_d.set_word(1, w1 | cre.get_word(1));
+        new_d.set_word(2, w2 | cre.get_word(2));
+        new_d.set_word(3, w3 | cre.get_word(3));
+    } else {
+        // loop over packed storage words
+        for (size_t i = 0; i < Determinant::nwords_; ++i) {
+            // apply the annihilation operator
+            const auto w = d.get_word(i) & (~ann.get_word(i));
+            // compute the sign
+            n += std::popcount(w & sign.get_word(i));
+            // apply the creation operator
+            new_d.set_word(i, w | cre.get_word(i));
+        }
+    }
+    return parity_to_sign(n);
+}
+
+double spin2(const Determinant& lhs, const Determinant& rhs) {
+    int nmo = Determinant::norb_capacity;
+    const Determinant& I = lhs;
+    const Determinant& J = rhs;
+
+    // Compute the matrix elements of the operator S^2
+    // S^2 = S- S+ + Sz (Sz + 1)
+    //     = Sz (Sz + 1) + Nbeta + Npairs - sum_pq' a+(qa) a+(pb) a-(qb) a-(pa)
+    double matrix_element = 0.0;
+
+    // Make sure that Ms is the same otherwise the matrix element is automatically zero
+    if ((lhs.count_alpha() != rhs.count_alpha()) or (lhs.count_beta() != rhs.count_beta())) {
+        return 0.0;
+    }
+
+    Determinant lr_diff = lhs ^ rhs;
+
+    int nadiff = lr_diff.count_alpha() / 2;
+    int nbdiff = lr_diff.count_beta() / 2;
+    int na = lhs.count_alpha();
+    int nb = lhs.count_beta();
+    int npair = lhs.npair();
+
+    double Ms = 0.5 * static_cast<double>(na - nb);
+
+    // PhiI = PhiJ -> S^2 = Sz (Sz + 1) + Nbeta - Npairs
+    if ((nadiff == 0) and (nbdiff == 0)) {
+        matrix_element += Ms * (Ms + 1.0) + double(nb) - double(npair);
+    }
+
+    // PhiI = a+(qa) a+(pb) a-(qb) a-(pa) PhiJ
+    if ((nadiff == 1) and (nbdiff == 1)) {
+        // Find a pair of spin coupled electrons
+        int i = -1;
+        int j = -1;
+        // The logic here follows the spin-flip coupling between opposite-spin occupations.
+        for (int p = 0; p < nmo; ++p) {
+            if (J.na(p) and I.nb(p) and (not J.nb(p)) and (not I.na(p)))
+                i = p;
+            if (J.nb(p) and I.na(p) and (not J.na(p)) and (not I.nb(p)))
+                j = p;
+        }
+        if (i != j and i >= 0 and j >= 0) {
+            double sign = rhs.slater_sign_a(i) * rhs.slater_sign_b(j) * lhs.slater_sign_a(j) *
+                          lhs.slater_sign_b(i);
+            matrix_element -= sign;
+        }
+    }
+    return (matrix_element);
 }
 
 // std::shared_ptr<psi::Matrix> make_s2_matrix(const std::vector<Determinant>& dets) {
@@ -214,9 +304,9 @@ std::vector<Determinant> make_hilbert_space(size_t nmo, size_t na, size_t nb, De
         int hb = symmetry ^ ha;
         for (const auto& Ia : strings_a[ha]) {
             Determinant det;
-            det.set_a_string(Ia);
+            det.set_alpha_string(Ia);
             for (const auto& Ib : strings_b[hb]) {
-                det.set_b_string(Ib);
+                det.set_beta_string(Ib);
                 if (det.symmetric_difference_count(ref) / 2 <= truncation) {
                     dets.push_back(det);
                 }
@@ -263,6 +353,26 @@ std::vector<Determinant> make_hilbert_space(size_t nmo, size_t na, size_t nb, si
         }
     }
     return dets;
+}
+
+std::vector<std::vector<size_t>> excitation_connection(const Determinant lhs,
+                                                       const Determinant rhs) {
+    std::vector<std::vector<size_t>> excitation(4);
+    for (size_t i = 0; i < Determinant::norb_capacity; i++) {
+        if (lhs.na(i) and not rhs.na(i)) {
+            excitation[0].push_back(i);
+        }
+        if (not lhs.na(i) and rhs.na(i)) {
+            excitation[1].push_back(i);
+        }
+        if (lhs.nb(i) and not rhs.nb(i)) {
+            excitation[2].push_back(i);
+        }
+        if (not lhs.nb(i) and rhs.nb(i)) {
+            excitation[3].push_back(i);
+        }
+    }
+    return excitation;
 }
 
 } // namespace forte2

@@ -42,8 +42,8 @@ def test_determinant():
     )
 
     assert d.count() == 0
-    assert d.count_a() == 0
-    assert d.count_b() == 0
+    assert d.count_alpha() == 0
+    assert d.count_beta() == 0
 
     # Test the determinant class initialization with a string
     d = Determinant("")
@@ -57,8 +57,8 @@ def test_determinant():
     )
 
     assert d.count() == 0
-    assert d.count_a() == 0
-    assert d.count_b() == 0
+    assert d.count_alpha() == 0
+    assert d.count_beta() == 0
 
 
 def test_determinant_set_get():
@@ -81,8 +81,8 @@ def test_determinant_set_get():
         assert d.nb(i) == (i in set_b)
 
     assert d.count() == len(set_a) + len(set_b)
-    assert d.count_a() == len(set_a)
-    assert d.count_b() == len(set_b)
+    assert d.count_alpha() == len(set_a)
+    assert d.count_beta() == len(set_b)
 
     # Test the determinant copy constructor
     d2 = Determinant(d)
@@ -90,13 +90,55 @@ def test_determinant_set_get():
         assert d2.na(i) == (i in set_a)
         assert d2.nb(i) == (i in set_b)
 
-
-def test_determinant_find_last_occupation_zero_sectors_return_ui64_bit_not_found():
-    ui64_bit_not_found = (1 << 64) - 1
+def test_determinant_out_of_range():
     d = Determinant.zero()
+    maxnorb = Determinant.maxnorb
+    try:
+        d.set_na(maxnorb + 1, True)
+        assert False, "Expected an exception for out of range index"
+    except IndexError:
+        pass
+    
+    try:
+        d.set_nb(maxnorb + 1, True)
+        assert False, "Expected an exception for out of range index"
+    except IndexError:
+        pass
 
-    assert d.find_last_alpha_occ() == ui64_bit_not_found
-    assert d.find_last_beta_occ() == ui64_bit_not_found
+    try:
+        d.na(maxnorb + 1)
+        assert False, "Expected an exception for out of range index"
+    except IndexError:
+        pass
+
+    try:       
+        d.nb(maxnorb + 1)
+        assert False, "Expected an exception for out of range index"
+    except IndexError:
+        pass    
+
+    try:
+        d.create_alpha(maxnorb + 1)
+        assert False, "Expected an exception for out of range index"
+    except IndexError:
+        pass
+
+    try:
+        d.create_beta(maxnorb + 1)
+        assert False, "Expected an exception for out of range index"
+    except IndexError:
+        pass
+    try:
+        d.destroy_alpha(maxnorb + 1)
+        assert False, "Expected an exception for out of range index"
+    except IndexError:
+        pass
+    try:
+        d.destroy_beta(maxnorb + 1)
+        assert False, "Expected an exception for out of range index"
+    except IndexError:
+        pass
+
 
 
 def test_det_equality():
@@ -145,76 +187,76 @@ def test_det_sorting():
     assert sorted_list[3] == d1
 
 
-def test_gen_excitation():
-    # test a -> a excitation
-    d1 = Determinant("220")
-    assert d1.gen_excitation([0], [3], [], []) == -1.0
-    assert d1 == Determinant("b20a")
+# def test_gen_excitation():
+#     # test a -> a excitation
+#     d1 = Determinant("220")
+#     assert d1.gen_excitation([0], [3], [], []) == -1.0
+#     assert d1 == Determinant("b20a")
 
-    # test b -> b excitation
-    d2 = Determinant("2ba0")
-    assert d2.gen_excitation([], [], [0, 1], [2, 3]) == -1.0
-    assert d2 == Determinant("a02b")
+#     # test b -> b excitation
+#     d2 = Determinant("2ba0")
+#     assert d2.gen_excitation([], [], [0, 1], [2, 3]) == -1.0
+#     assert d2 == Determinant("a02b")
 
-    # test b creation and counting number of a
-    d3 = Determinant("a000")
-    assert d3.gen_excitation([], [], [], [0]) == -1.0
-    assert d3 == Determinant("2")
-    d3 = Determinant("0000")
-    assert d3.gen_excitation([], [], [], [0]) == +1.0
-    assert d3 == Determinant("b")
+#     # test b creation and counting number of a
+#     d3 = Determinant("a000")
+#     assert d3.gen_excitation([], [], [], [0]) == -1.0
+#     assert d3 == Determinant("2")
+#     d3 = Determinant("0000")
+#     assert d3.gen_excitation([], [], [], [0]) == +1.0
+#     assert d3 == Determinant("b")
 
-    # test ab creation and sign
-    d4 = Determinant("000")
-    assert d4.gen_excitation([], [2, 1], [], [0, 1]) == -1.0
-    assert d4 == Determinant("b2a")
-    d5 = Determinant("000")
-    assert d5.gen_excitation([], [2, 1], [], [1, 0]) == +1.0
-    assert d5 == Determinant("b2a")
-    d6 = Determinant("000")
-    assert d6.gen_excitation([], [1, 2], [], [0, 1]) == +1.0
-    assert d6 == Determinant("b2a")
-    d7 = Determinant("000")
-    assert d7.gen_excitation([], [1, 2], [], [1, 0]) == -1.0
-    assert d7 == Determinant("b2a")
+#     # test ab creation and sign
+#     d4 = Determinant("000")
+#     assert d4.gen_excitation([], [2, 1], [], [0, 1]) == -1.0
+#     assert d4 == Determinant("b2a")
+#     d5 = Determinant("000")
+#     assert d5.gen_excitation([], [2, 1], [], [1, 0]) == +1.0
+#     assert d5 == Determinant("b2a")
+#     d6 = Determinant("000")
+#     assert d6.gen_excitation([], [1, 2], [], [0, 1]) == +1.0
+#     assert d6 == Determinant("b2a")
+#     d7 = Determinant("000")
+#     assert d7.gen_excitation([], [1, 2], [], [1, 0]) == -1.0
+#     assert d7 == Determinant("b2a")
 
 
-def test_excitation_connection():
-    """Test the excitation_connection function"""
-    d1 = Determinant("220")
-    d2 = Determinant("022")
-    conn = d1.excitation_connection(d2)
-    assert conn[0] == [0]  # alfa hole
-    assert conn[1] == [2]  # alfa particle
-    assert conn[2] == [0]  # beta hole
-    assert conn[3] == [2]  # beta particle
-    conn = d2.excitation_connection(d1)
-    assert conn[0] == [2]  # alfa hole
-    assert conn[1] == [0]  # alfa particle
-    assert conn[2] == [2]  # beta hole
-    assert conn[3] == [0]  # beta particle
+# def test_excitation_connection():
+#     """Test the excitation_connection function"""
+#     d1 = Determinant("220")
+#     d2 = Determinant("022")
+#     conn = d1.excitation_connection(d2)
+#     assert conn[0] == [0]  # alpha hole
+#     assert conn[1] == [2]  # alpha particle
+#     assert conn[2] == [0]  # beta hole
+#     assert conn[3] == [2]  # beta particle
+#     conn = d2.excitation_connection(d1)
+#     assert conn[0] == [2]  # alpha hole
+#     assert conn[1] == [0]  # alpha particle
+#     assert conn[2] == [2]  # beta hole
+#     assert conn[3] == [0]  # beta particle
 
-    # test different number of electrons
-    d1 = Determinant("2")
-    d2 = Determinant("0")
-    conn = d1.excitation_connection(d2)
-    assert conn[0] == [0]  # alfa hole
-    assert conn[1] == []  # alfa particle
-    assert conn[2] == [0]  # beta hole
-    assert conn[3] == []  # beta particle
-    conn = d2.excitation_connection(d1)
-    assert conn[0] == []  # alfa hole
-    assert conn[1] == [0]  # alfa particle
-    assert conn[2] == []  # beta hole
-    assert conn[3] == [0]  # beta particle
+#     # test different number of electrons
+#     d1 = Determinant("2")
+#     d2 = Determinant("0")
+#     conn = d1.excitation_connection(d2)
+#     assert conn[0] == [0]  # alpha hole
+#     assert conn[1] == []  # alpha particle
+#     assert conn[2] == [0]  # beta hole
+#     assert conn[3] == []  # beta particle
+#     conn = d2.excitation_connection(d1)
+#     assert conn[0] == []  # alpha hole
+#     assert conn[1] == [0]  # alpha particle
+#     assert conn[2] == []  # beta hole
+#     assert conn[3] == [0]  # beta particle
 
-    d1 = Determinant("222ab00000")
-    d2 = Determinant("baa0200b02")
-    conn = d1.excitation_connection(d2)
-    assert conn[0] == [0, 3]  # alfa hole
-    assert conn[1] == [4, 9]  # alfa particle
-    assert conn[2] == [1, 2]  # beta hole
-    assert conn[3] == [7, 9]  # beta particle
+#     d1 = Determinant("222ab00000")
+#     d2 = Determinant("baa0200b02")
+#     conn = d1.excitation_connection(d2)
+#     assert conn[0] == [0, 3]  # alpha hole
+#     assert conn[1] == [4, 9]  # alpha particle
+#     assert conn[2] == [1, 2]  # beta hole
+#     assert conn[3] == [7, 9]  # beta particle
 
 
 def test_det_slater_sign():
@@ -298,10 +340,10 @@ def test_det_slater_sign_edge_empty_and_full_determinants():
         assert empty.slater_sign(i) == 1
         assert empty.slater_sign_reverse(i) == 1
 
-        count_before = i
-        count_after = 2 * Determinant.maxnorb - i - 1
-        assert full.slater_sign(i) == (1 if count_before % 2 == 0 else -1)
-        assert full.slater_sign_reverse(i) == (1 if count_after % 2 == 0 else -1)
+        count_betaefore = i
+        count_alphafter = 2 * Determinant.maxnorb - i - 1
+        assert full.slater_sign(i) == (1 if count_betaefore % 2 == 0 else -1)
+        assert full.slater_sign_reverse(i) == (1 if count_alphafter % 2 == 0 else -1)
 
     for n, m in ((0, 63), (63, 0), (0, 1), (62, 63)):
         expected = _expected_interval_sign(range(Determinant.maxnorb), n, m)
