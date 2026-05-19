@@ -197,13 +197,4 @@ double apply_operator_to_det_unchecked(const Determinant& d, Determinant& new_d,
 /// @return the matrix element of the S^2 operator between the two determinants
 double spin2(const Determinant& lhs, const Determinant& rhs);
 
-/// @brief Describe the excitation connection of a determinant d, relative to this one. The
-/// excitation connection is defined as the creation and annihilation operators that need to be
-/// applied to this determinant to obtain d. The excitation connection is a vector of 4 vectors:
-/// [[alpha annihilation], [alpha creation], [beta annihilation], [beta creation]]
-/// @param d the determinant to compare to
-/// @return the excitation connection of d relative to this determinant
-std::vector<std::vector<size_t>> excitation_connection(const Determinant lhs,
-                                                       const Determinant rhs);
-
 } // namespace forte2

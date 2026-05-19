@@ -35,8 +35,5 @@ void export_determinant_helpers_api(nb::module_& m) {
     m.def(
         "spin2", [](const Determinant& d1, const Determinant& d2) { return spin2(d1, d2); },
         "Compute the S^2 value between two determinants");
-
-    m.def("excitation_connection", &excitation_connection,
-          "Get the excitation connection between two determinants");
 }
 } // namespace forte2

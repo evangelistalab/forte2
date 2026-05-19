@@ -15,14 +15,14 @@ namespace {
 /// per spin/direction because Slater rules only need explicit orbital labels through doubles; the
 /// counters still record the full popcount so disconnected higher-rank pairs are detected.
 struct SlaterConnection {
-    std::array<std::size_t, 2> a_lhs_only{ui64_bit_not_found, ui64_bit_not_found};
-    std::array<std::size_t, 2> a_rhs_only{ui64_bit_not_found, ui64_bit_not_found};
-    std::array<std::size_t, 2> b_lhs_only{ui64_bit_not_found, ui64_bit_not_found};
-    std::array<std::size_t, 2> b_rhs_only{ui64_bit_not_found, ui64_bit_not_found};
-    int na_lhs_only = 0;
-    int na_rhs_only = 0;
-    int nb_lhs_only = 0;
-    int nb_rhs_only = 0;
+    std::array<std::uint16_t, 2> a_lhs_only;
+    std::array<std::uint16_t, 2> a_rhs_only;
+    std::array<std::uint16_t, 2> b_lhs_only;
+    std::array<std::uint16_t, 2> b_rhs_only;
+    std::uint16_t na_lhs_only = 0;
+    std::uint16_t na_rhs_only = 0;
+    std::uint16_t nb_lhs_only = 0;
+    std::uint16_t nb_rhs_only = 0;
 };
 
 /// Count set bits in one word and store the first two global bit indices seen.
@@ -31,11 +31,11 @@ struct SlaterConnection {
 /// orbital indices. The counter is incremented for every set bit, even after the fixed array is
 /// full, because the excitation rank check still needs the complete count.
 void collect_connection_bits(std::uint64_t bits, std::size_t base,
-                             std::array<std::size_t, 2>& indices, int& count) {
-    constexpr int max_stored_indices = 2;
+                             std::array<std::uint16_t, 2>& indices, std::uint16_t& count) {
+    constexpr std::uint16_t max_stored_indices = 2;
     while (bits) {
         if (count < max_stored_indices) {
-            indices[count] = base + std::countr_zero(bits);
+            indices[count] = static_cast<std::uint16_t>(base + std::countr_zero(bits));
         }
         ++count;
         bits &= bits - 1;
@@ -197,8 +197,8 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
         return 0.0;
     }
 
-    const int nadiff = connection.na_lhs_only;
-    const int nbdiff = connection.nb_lhs_only;
+    const std::uint16_t nadiff = connection.na_lhs_only;
+    const std::uint16_t nbdiff = connection.nb_lhs_only;
     if (nadiff + nbdiff > 2) {
         return 0.0;
     }
@@ -208,42 +208,42 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
     }
 
     if (nadiff == 1 and nbdiff == 0) {
-        const auto i = connection.a_lhs_only[0];
-        const auto j = connection.a_rhs_only[0];
+        const std::size_t i = connection.a_lhs_only[0];
+        const std::size_t j = connection.a_rhs_only[0];
         const double sign = lhs.slater_sign_aa(i, j);
         return sign * singles_coupling_a(i, j, rhs);
     }
 
     if (nadiff == 0 and nbdiff == 1) {
-        const auto i = connection.b_lhs_only[0];
-        const auto j = connection.b_rhs_only[0];
+        const std::size_t i = connection.b_lhs_only[0];
+        const std::size_t j = connection.b_rhs_only[0];
         const double sign = lhs.slater_sign_bb(i, j);
         return sign * singles_coupling_b(i, j, rhs);
     }
 
     if (nadiff == 2 and nbdiff == 0) {
-        const auto i = connection.a_lhs_only[0];
-        const auto j = connection.a_lhs_only[1];
-        const auto k = connection.a_rhs_only[0];
-        const auto l = connection.a_rhs_only[1];
+        const std::size_t i = connection.a_lhs_only[0];
+        const std::size_t j = connection.a_lhs_only[1];
+        const std::size_t k = connection.a_rhs_only[0];
+        const std::size_t l = connection.a_rhs_only[1];
         const double sign = lhs.slater_sign_aaaa(i, j, k, l);
         return sign * va(i, j, k, l); // <ij||kl>
     }
 
     if (nadiff == 0 and nbdiff == 2) {
-        const auto i = connection.b_lhs_only[0];
-        const auto j = connection.b_lhs_only[1];
-        const auto k = connection.b_rhs_only[0];
-        const auto l = connection.b_rhs_only[1];
+        const std::size_t i = connection.b_lhs_only[0];
+        const std::size_t j = connection.b_lhs_only[1];
+        const std::size_t k = connection.b_rhs_only[0];
+        const std::size_t l = connection.b_rhs_only[1];
         const double sign = lhs.slater_sign_bbbb(i, j, k, l);
         return sign * va(i, j, k, l); // <ij||kl>
     }
 
     if (nadiff == 1 and nbdiff == 1) {
-        const auto i = connection.a_lhs_only[0];
-        const auto j = connection.b_lhs_only[0];
-        const auto k = connection.a_rhs_only[0];
-        const auto l = connection.b_rhs_only[0];
+        const std::size_t i = connection.a_lhs_only[0];
+        const std::size_t j = connection.b_lhs_only[0];
+        const std::size_t k = connection.a_rhs_only[0];
+        const std::size_t l = connection.b_rhs_only[0];
         const double sign = lhs.slater_sign_aa(i, k) * lhs.slater_sign_bb(j, l);
         return sign * v(i, j, k, l); // <ij|kl>
     }

@@ -355,24 +355,4 @@ std::vector<Determinant> make_hilbert_space(size_t nmo, size_t na, size_t nb, si
     return dets;
 }
 
-std::vector<std::vector<size_t>> excitation_connection(const Determinant lhs,
-                                                       const Determinant rhs) {
-    std::vector<std::vector<size_t>> excitation(4);
-    for (size_t i = 0; i < Determinant::norb_capacity; i++) {
-        if (lhs.na(i) and not rhs.na(i)) {
-            excitation[0].push_back(i);
-        }
-        if (not lhs.na(i) and rhs.na(i)) {
-            excitation[1].push_back(i);
-        }
-        if (lhs.nb(i) and not rhs.nb(i)) {
-            excitation[2].push_back(i);
-        }
-        if (not lhs.nb(i) and rhs.nb(i)) {
-            excitation[3].push_back(i);
-        }
-    }
-    return excitation;
-}
-
 } // namespace forte2

@@ -5,15 +5,15 @@ namespace {
 
 /// Holds the connection between two determinants over the stored determinant words.
 ///
-/// The *_lhs_only arrays contain occupied orbitals in lhs that are unoccupied in rhs. The
-/// *_rhs_only arrays contain the matching occupied orbitals in rhs. At most two indices are stored
+/// The lhs_only arrays contain occupied orbitals in lhs that are unoccupied in rhs. The
+/// rhs_only arrays contain the matching occupied orbitals in rhs. At most two indices are stored
 /// per spin/direction because Slater rules only need explicit orbital labels through doubles; the
 /// counters still record the full popcount so disconnected higher-rank pairs are detected.
 struct RelSlaterConnection {
-    std::array<std::size_t, 2> lhs_only{ui64_bit_not_found, ui64_bit_not_found};
-    std::array<std::size_t, 2> rhs_only{ui64_bit_not_found, ui64_bit_not_found};
-    int n_lhs_only = 0;
-    int n_rhs_only = 0;
+    std::array<std::uint16_t, 2> lhs_only;
+    std::array<std::uint16_t, 2> rhs_only;
+    std::uint16_t n_lhs_only = 0;
+    std::uint16_t n_rhs_only = 0;
 };
 
 /// Count set bits in one word and store the first two global bit indices seen.
@@ -22,21 +22,21 @@ struct RelSlaterConnection {
 /// orbital indices. The counter is incremented for every set bit, even after the fixed array is
 /// full, because the excitation rank check still needs the complete count.
 void collect_connection_bits(std::uint64_t bits, std::size_t base,
-                             std::array<std::size_t, 2>& indices, int& count) {
-    constexpr int max_stored_indices = 2;
+                             std::array<std::uint16_t, 2>& indices, std::uint16_t& count) {
+    constexpr std::uint16_t max_stored_indices = 2;
     while (bits) {
         if (count < max_stored_indices) {
-            indices[count] = base + std::countr_zero(bits);
+            indices[count] = static_cast<std::uint16_t>(base + std::countr_zero(bits));
         }
         ++count;
         bits &= bits - 1;
     }
 }
 
-/// Build alpha/beta connection indices and popcounts for lhs and rhs.
+/// Build connection indices and popcounts for lhs and rhs.
 ///
 /// The result gives a compact classification of the connection between two determinants:
-/// equal determinants, alpha/beta singles, doubles, or disconnected pairs. It avoids storing full
+/// equal determinants, singles, doubles, or disconnected pairs. It avoids storing full
 /// temporary bit strings and records only the orbital labels Slater rules need.
 RelSlaterConnection build_rel_slater_connection(const forte2::Determinant& lhs,
                                                 const forte2::Determinant& rhs) {
@@ -115,7 +115,7 @@ std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
         return 0.0;
     }
 
-    const int ndiff = connection.n_lhs_only;
+    const std::uint16_t ndiff = connection.n_lhs_only;
     if (ndiff > 2) {
         return 0.0;
     }
@@ -129,8 +129,8 @@ std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
     auto v = two_electron_integrals_.view();
 
     if (ndiff == 1) {
-        const auto i = connection.lhs_only[0];
-        const auto a = connection.rhs_only[0];
+        const std::size_t i = connection.lhs_only[0];
+        const std::size_t a = connection.rhs_only[0];
         double sign = lhs.slater_sign_aa(i, a);
         matrix_element += h(i, a); // <i|a>
         if (tei_is_asym_) {
@@ -146,10 +146,10 @@ std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
     }
 
     if (ndiff == 2) {
-        const auto i = connection.lhs_only[0];
-        const auto j = connection.lhs_only[1];
-        const auto a = connection.rhs_only[0];
-        const auto b = connection.rhs_only[1];
+        const std::size_t i = connection.lhs_only[0];
+        const std::size_t j = connection.lhs_only[1];
+        const std::size_t a = connection.rhs_only[0];
+        const std::size_t b = connection.rhs_only[1];
         double sign = lhs.slater_sign_aaaa(i, j, a, b);
         auto v_el = tei_is_asym_ ? v(i, j, a, b) : v(i, j, a, b) - v(i, j, b, a); // <ij||ab>
         matrix_element += sign * v_el;                                            // <ij||ab>
@@ -157,91 +157,4 @@ std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
 
     return matrix_element;
 }
-
-// double RelSlaterRules::energy(const Determinant& det) const {
-//     std::complex<double> energy = scalar_energy_;
-
-//     auto h = one_electron_integrals_.view();
-//     auto v = two_electron_integrals_.view();
-
-//     auto occ = det.get_alpha_occ();
-//     if (tei_is_asym_) {
-//         for (auto p : occ) {
-//             energy += h(p, p); // <p|p>
-//             for (auto q : occ) {
-//                 energy += 0.5 * v(p, q, p, q); // <pq||pq>
-//             }
-//         }
-//     } else {
-//         for (auto p : occ) {
-//             energy += h(p, p); // <p|p>
-//             for (auto q : occ) {
-//                 energy += 0.5 * (v(p, q, p, q) - v(p, q, q, p)); // <pq||pq>
-//             }
-//         }
-//     }
-
-//     return energy.real();
-// }
-
-// std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
-//                                                   const Determinant& rhs) const {
-//     // make sure the two determinants have the same number of electrons
-//     if (lhs.count_alpha() != rhs.count_alpha())
-//         return 0.0;
-
-//     int ndiff = lhs.symmetric_difference_count(rhs) / 2;
-//     if (ndiff > 2)
-//         return 0.0;
-
-//     // Slater rule 1 PhiI = PhiJ
-//     if (ndiff == 0) {
-//         return energy(lhs);
-//     }
-
-//     // excitation_connection stores the creation and annihilation operators
-//     // that need to be applied to rhs to obtain lhs:
-//     // if <LHS|pa^+ qb^+ sa rb|RHS> = +- 1 then excitation_connection = [[s, p], [r, q]]
-//     // [[alpha annihilation], [alpha creation],
-//     //  [beta annihilation],  [beta creation]]
-//     auto connection = excitation_connection(lhs, rhs);
-
-//     std::complex<double> matrix_element = 0.0;
-//     auto h = one_electron_integrals_.view();
-//     auto v = two_electron_integrals_.view();
-
-//     if (ndiff == 1) {
-//         size_t i = connection[0][0];
-//         size_t a = connection[1][0];
-//         double sign = lhs.slater_sign_aa(i, a);
-//         matrix_element += h(i, a); // <i|a>
-
-//         auto occ = lhs.get_alpha_occ();
-
-//         if (tei_is_asym_) {
-//             for (auto j : occ) {
-//                 matrix_element += v(i, j, a, j); // \sum_j<ij||aj>
-//             }
-//             matrix_element *= sign;
-//         } else {
-//             for (auto j : occ) {
-//                 matrix_element += v(i, j, a, j) - v(i, j, j, a); // \sum_j<ij||aj>
-//             }
-//             matrix_element *= sign;
-//         }
-//     }
-
-//     if (ndiff == 2) {
-//         size_t i = connection[0][0];
-//         size_t j = connection[0][1];
-//         size_t a = connection[1][0];
-//         size_t b = connection[1][1];
-//         double sign = lhs.slater_sign_aaaa(i, j, a, b);
-//         auto v_el = tei_is_asym_ ? v(i, j, a, b) : v(i, j, a, b) - v(i, j, b, a); // <ij||ab>
-//         matrix_element += sign * v_el;                                            // <ij||ab>
-//     }
-
-//     return matrix_element;
-// }
-
 } // namespace forte2
