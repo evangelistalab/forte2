@@ -182,23 +182,6 @@ def test_sci5():
     system = System(xyz=xyz, basis_set="cc-pVDZ", cholesky_tei=True, cholesky_tol=1e-16)
 
     rhf = RHF(charge=0, e_tol=1e-10)(system)
-
-    sci0 = SelectedCI(
-        states=State(nel=10, multiplicity=1, ms=0.0),
-        active_orbitals=list(range(12)),
-        sci_params=SelectedCIParams(
-            selection_algorithm="hbci",
-            var_threshold=1e-5,
-            pt2_threshold=0.0,
-            do_spin_penalty=True,
-            num_threads=4,
-            num_batches_per_thread=16,
-        ),
-        nroots=1,
-    )(rhf)
-
-    sci0.run()
-
     sci = SelectedCI(
         states=State(nel=9, multiplicity=2, ms=0.5),
         active_orbitals=list(range(12)),
