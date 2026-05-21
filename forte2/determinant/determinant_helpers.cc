@@ -166,7 +166,8 @@ double spin2(const Determinant& lhs, const Determinant& rhs) {
         return 0.0;
     }
 
-    Determinant lr_diff = lhs ^ rhs;
+    // Compute the difference between the two determinants
+    Determinant lr_diff = lhs.symmetric_difference(rhs);
 
     int nadiff = lr_diff.count_alpha() / 2;
     int nbdiff = lr_diff.count_beta() / 2;

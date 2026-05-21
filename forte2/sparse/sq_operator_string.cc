@@ -77,7 +77,7 @@ SQOperatorString SQOperatorString::non_number_component() const {
     return SQOperatorString(this->cre() - this->ann(), this->ann() - this->cre());
 }
 
-int SQOperatorString::count() const { return cre().count_alphall() + ann().count_alphall(); }
+int SQOperatorString::count() const { return cre().count_all() + ann().count_all(); }
 
 bool SQOperatorString::operator==(const SQOperatorString& other) const {
     return (cre() == other.cre()) and (ann() == other.ann());
@@ -580,11 +580,10 @@ void SQOperatorProductComputer::product(
 
     // Step 1. Move the uncontracted rhs creation operators to the left
     // 1.a phase adjustment due to permutation of the operator with left annihilation ops
-    if (const auto ucon_rhs_cre_count = ucon_rhs_cre_.count_alphall(); ucon_rhs_cre_count > 0) {
-        phase_ *=
-            ((lhs_ann_.count_alphall() * ucon_rhs_cre_.count_alphall()) % 2) == 0 ? 1.0 : -1.0;
+    if (const auto ucon_rhs_cre_count = ucon_rhs_cre_.count_all(); ucon_rhs_cre_count > 0) {
+        phase_ *= ((lhs_ann_.count_all() * ucon_rhs_cre_.count_all()) % 2) == 0 ? 1.0 : -1.0;
         // 1.b move the uncontracted rhs creation operators to the left creation ops
-        // double cre_perm_phase = (lhs_cre_.count_alphall() % 2) == 0 ? 1.0 : -1.0;
+        // double cre_perm_phase = (lhs_cre_.count_all() % 2) == 0 ? 1.0 : -1.0;
         ucon_rhs_cre_.for_each_set_bit([&](size_t i) {
             // remove op i and find the sign for permuting it to the left of the right creation ops
             rhs_cre_.set_bit(i, false);
@@ -597,8 +596,8 @@ void SQOperatorProductComputer::product(
 
     // Step 2. Move the uncontracted rhs annihilation operators to the left
     // 2.a phase adjustment due to permutation of the operator with right creation ops
-    if (const auto ucon_rhs_ann_count = ucon_rhs_ann_.count_alphall(); ucon_rhs_ann_count > 0) {
-        phase_ *= ((rhs_cre_.count_alphall() * ucon_rhs_ann_count) % 2) == 0 ? 1.0 : -1.0;
+    if (const auto ucon_rhs_ann_count = ucon_rhs_ann_.count_all(); ucon_rhs_ann_count > 0) {
+        phase_ *= ((rhs_cre_.count_all() * ucon_rhs_ann_count) % 2) == 0 ? 1.0 : -1.0;
         ucon_rhs_ann_.for_each_set_bit([&](size_t i) {
             // remove op i and find the sign for permuting it with the right creation ops
             rhs_ann_.set_bit(i, false);
@@ -613,7 +612,7 @@ void SQOperatorProductComputer::product(
     // E.g.   ([1-]) ([1+ 1-]) = ([1-]) (1 - [1-1+]) = [1-] - [1-1-1+] = [1-]
     // find the operators in common that can be trivially contracted
     auto rhs_comm_trivial_ = rhs_cre_ & rhs_ann_ & lhs_ann_;
-    if (rhs_comm_trivial_.count_alphall() != 0) {
+    if (rhs_comm_trivial_.count_all() != 0) {
         // remove the trivially contracted operators from the right creation ops
         rhs_cre_ -= rhs_comm_trivial_;
         rhs_ann_ -= rhs_comm_trivial_; // remove the trivially contracted operators from the right
@@ -628,7 +627,7 @@ void SQOperatorProductComputer::product(
     // E.g.   ([1+ 1-]) ([1+]) = (1 - [1- 1+]) [1+] = [1+] - [1- 1+ 1+] = [1+]
     // find the operators in common that can be trivially contracted
     auto lhs_comm_trivial_ = lhs_cre_ & lhs_ann_ & rhs_cre_;
-    if (lhs_comm_trivial_.count_alphall() != 0) {
+    if (lhs_comm_trivial_.count_all() != 0) {
         // remove the trivially contracted operators from the right creation/left annihilation ops
         rhs_cre_ -= lhs_comm_trivial_;
         lhs_ann_ -= lhs_comm_trivial_;
@@ -642,7 +641,7 @@ void SQOperatorProductComputer::product(
     // These are the left annihilations-right creations
     // One thing we know is that each of these will give us 2^n terms where n is the number of
     // operators that can be contracted.
-    auto ncontr = rhs_cre_.count_alphall();
+    auto ncontr = rhs_cre_.count_all();
     if (ncontr == 0) {
         func(SQOperatorString(lhs_cre_, lhs_ann_), phase_);
         return;

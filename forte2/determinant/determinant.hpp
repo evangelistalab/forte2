@@ -37,10 +37,6 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     using BitArray<N>::count;
     using BitArray<N>::get_bit;
     using BitArray<N>::set_bit;
-    using BitArray<N>::operator|;
-    using BitArray<N>::operator^;
-    using BitArray<N>::operator&;
-    using BitArray<N>::operator<;
     using BitArray<N>::symmetric_difference_count;
     using BitArray<N>::is_disjoint_from;
     using BitArray<N>::find_first_one;
@@ -552,8 +548,12 @@ template <size_t N> std::ostream& operator<<(std::ostream& os, const Determinant
 } // namespace forte2
 
 namespace std {
-// specialization of std::hash for forte2::OccupationVector
+/// @brief Specialization of std::hash for forte2::DeterminantImpl
 template <size_t N> struct hash<forte2::DeterminantImpl<N>> {
+    /// @brief Compute a hash value for a DeterminantImpl object using the hash function defined in
+    /// the DeterminantImpl class.
+    /// @param d the DeterminantImpl object to hash
+    /// @return a hash value for the DeterminantImpl object
     std::size_t operator()(const forte2::DeterminantImpl<N>& d) const noexcept {
         using HashT = typename forte2::DeterminantImpl<N>::Hash;
         return HashT{}(d);

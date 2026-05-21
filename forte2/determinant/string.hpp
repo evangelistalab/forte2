@@ -25,10 +25,6 @@ template <size_t N> class StringImpl : public BitArray<N> {
     using BitArray<N>::count;
     using BitArray<N>::get_bit;
     using BitArray<N>::set_bit;
-    using BitArray<N>::operator|;
-    using BitArray<N>::operator^;
-    using BitArray<N>::operator&;
-    using BitArray<N>::operator<;
     using BitArray<N>::symmetric_difference_count;
     using BitArray<N>::is_disjoint_from;
     using BitArray<N>::find_first_one;
@@ -98,8 +94,12 @@ template <size_t N> class StringImpl : public BitArray<N> {
 } // namespace forte2
 
 namespace std {
-// specialization of std::hash for forte2::OccupationVector
+/// @brief Specialization of std::hash for forte2::StringImpl
 template <size_t N> struct hash<forte2::StringImpl<N>> {
+    /// @brief Compute a hash value for a StringImpl object using the hash function defined in the
+    /// StringImpl class.
+    /// @param d the StringImpl object to hash
+    /// @return a hash value for the StringImpl object
     std::size_t operator()(const forte2::StringImpl<N>& d) const noexcept {
         using HashT = typename forte2::StringImpl<N>::Hash;
         return HashT{}(d);

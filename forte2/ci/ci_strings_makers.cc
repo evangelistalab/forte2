@@ -57,8 +57,9 @@ StringList make_strings_with_occupation(size_t num_spaces, int nirrep,
 
         for (const auto& strings : product_strings) {
             auto I = String::zero();
+            // I is the union of all the strings in the product
             for (const auto& J : strings) {
-                I |= J;
+                I.union_with(J);
             }
             size_t sym_I = string_class->symmetry(I);
             full_strings[sym_I].push_back(I);

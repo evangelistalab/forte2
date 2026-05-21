@@ -79,7 +79,10 @@ double RelSlaterRules::energy(const Determinant& det) const {
         det.for_each_occ([&](size_t p) {
             energy += h(p, p);
             det.for_each_occ([&](size_t q) {
-                energy += 0.5 * v(p, q, p, q); // <pq|pq> - <pq|qp>
+                if (q >= p) {
+                    return false;
+                }
+                energy += v(p, q, p, q); // <pq|pq> - <pq|qp>
                 return true;
             });
             return true;
@@ -88,7 +91,10 @@ double RelSlaterRules::energy(const Determinant& det) const {
         det.for_each_occ([&](size_t p) {
             energy += h(p, p);
             det.for_each_occ([&](size_t q) {
-                energy += 0.5 * (v(p, q, p, q) - v(p, q, q, p)); // <pq|pq> - <pq|qp>
+                if (q >= p) {
+                    return false;
+                }
+                energy += v(p, q, p, q) - v(p, q, q, p); // <pq|pq> - <pq|qp>
                 return true;
             });
             return true;
