@@ -31,7 +31,6 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
   public:
     // Since the template parent (BitArray) of this template class is not instantiated during the
     // compilation pass, here we declare all the member variables and functions inherited and used
-    using BitArray<N>::nbits;
     using BitArray<N>::bits_per_word;
     using BitArray<N>::nwords_;
     using BitArray<N>::count;
@@ -105,7 +104,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @param n the orbital index
     /// @return true if the orbital is occupied, false otherwise
     bool na(size_t n) const {
-        if constexpr (nbits == 128) {
+        if constexpr (N == 128) {
             return words_[0] & maskbit(n);
         } else {
             return get_bit(n);
@@ -116,7 +115,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @param n the orbital index
     /// @return true if the orbital is occupied, false otherwise
     bool nb(size_t n) const {
-        if constexpr (nbits == 128) {
+        if constexpr (N == 128) {
             return words_[1] & maskbit(n);
         } else {
             return get_bit(n + beta_storage_offset);
@@ -170,7 +169,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @brief Return rhs < lhs in reverse order, which is the same as the lexicographical
     /// ordering of the bit strings when read from the last storage word to the first.
     static bool reverse_less_than(const DeterminantImpl<N>& lhs, const DeterminantImpl<N>& rhs) {
-        if constexpr (nbits == 128) {
+        if constexpr (N == 128) {
             return (lhs.words_[0] < rhs.words_[0]) or
                    ((lhs.words_[0] == rhs.words_[0]) and (lhs.words_[1] < rhs.words_[1]));
         } else {
@@ -275,7 +274,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @param n the orbital index
     /// @return the sign of the creation operator if the orbital was unoccupied, 0 otherwise
     double create_alpha(size_t n) {
-        if (na(n))
+        if ((n >= N) or na(n))
             return 0.0;
         set_na(n, true);
         return slater_sign_a(n);
@@ -287,7 +286,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @param n the orbital index
     /// @return the sign of the creation operator if the orbital was unoccupied, 0 otherwise
     double create_beta(size_t n) {
-        if (nb(n))
+        if ((n >= N) or nb(n))
             return 0.0;
         set_nb(n, true);
         return slater_sign_b(n);
@@ -299,7 +298,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @param n the orbital index
     /// @return the sign of the annihilation operator if the orbital was occupied, 0 otherwise
     double destroy_alpha(size_t n) {
-        if (not na(n))
+        if ((n >= N) or (not na(n)))
             return 0.0;
         set_na(n, false);
         return slater_sign_a(n);
@@ -311,7 +310,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @param n the orbital index
     /// @return the sign of the annihilation operator if the orbital was occupied, 0 otherwise
     double destroy_beta(size_t n) {
-        if (not nb(n))
+        if ((n >= N) or (not nb(n)))
             return 0.0;
         set_nb(n, false);
         return slater_sign_b(n);
@@ -322,7 +321,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @param n the orbital index
     /// @return the fermionic sign
     double slater_sign_a(size_t n) const {
-        if constexpr (nbits == 128) {
+        if constexpr (N == 128) {
             // specialization for one 64-orbital word per spin sector
             return ui64_sign(words_[0], n);
         } else {
@@ -335,7 +334,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @param n the orbital index
     /// @return the fermionic sign
     double slater_sign_b(size_t n) const {
-        if constexpr (nbits == 128) {
+        if constexpr (N == 128) {
             // specialization for one 64-orbital word per spin sector
             return ui64_sign(words_[1], n) * ui64_bit_parity(words_[0]);
         } else {
@@ -350,7 +349,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @param m the second orbital index
     /// @return the fermionic sign
     double slater_sign_aa(size_t n, size_t m) const {
-        if constexpr (nbits == 128) {
+        if constexpr (N == 128) {
             // specialization for one 64-orbital word per spin sector
             return ui64_sign(words_[0], n, m);
         } else {
@@ -365,7 +364,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @param m the second orbital index
     /// @return the fermionic sign
     double slater_sign_bb(size_t n, size_t m) const {
-        if constexpr (nbits == 128) {
+        if constexpr (N == 128) {
             // specialization for one 64-orbital word per spin sector
             return ui64_sign(words_[1], n, m);
         } else {

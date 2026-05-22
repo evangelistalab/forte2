@@ -20,7 +20,6 @@ template <size_t N> class ConfigurationImpl : public BitArray<N> {
   public:
     // Since the template parent (BitArray) of this template class is not instantiated during the
     // compilation pass, here we declare all the member variables and functions inherited and used
-    using BitArray<N>::nbits;
     using BitArray<N>::nwords_;
     using BitArray<N>::count;
     using BitArray<N>::get_bit;
@@ -79,7 +78,7 @@ template <size_t N> class ConfigurationImpl : public BitArray<N> {
 
     /// @return is orbital n doubly occupied?
     bool is_docc(size_t n) const {
-        if constexpr (nbits == 128) {
+        if constexpr (N == 128) {
             return words_[0] & maskbit(n);
         } else {
             return get_bit(n);
@@ -88,7 +87,7 @@ template <size_t N> class ConfigurationImpl : public BitArray<N> {
 
     /// @return is orbital n singly occupied?
     bool is_socc(size_t n) const {
-        if constexpr (nbits == 128) {
+        if constexpr (N == 128) {
             return words_[1] & maskbit(n);
         } else {
             return get_bit(n + socc_bit_offset);

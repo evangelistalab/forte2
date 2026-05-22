@@ -34,10 +34,6 @@ template <size_t N> class BitArray {
     /// alias for the type used to represent a word (a 64 bit unsigned integer)
     using word_t = uint64_t;
 
-    /// the total number of bits (must be a multiple of 64)
-    static constexpr size_t size = N;
-    static constexpr size_t nbits = N;
-
     /// the number of bits in one word (8 * 8 = 64)
     static constexpr size_t bits_per_word = 8 * sizeof(word_t);
 
@@ -53,24 +49,14 @@ template <size_t N> class BitArray {
     }
 
     /// the number of words used to store the bits
-    static constexpr size_t nwords_ = bits_to_words(nbits);
+    static constexpr size_t nwords_ = bits_to_words(N);
 
+    /// @brief Alias for the container type
     using container_t = std::array<word_t, nwords_>;
 
     /// @brief Default constructor. The bits are uninitialized/indeterminate for performance.
     /// Use the static function BitArray::zero() if you need all bits cleared (set to 0).
     BitArray() = default;
-
-    BitArray(const std::vector<bool>& v) {
-        if (v.size() > nbits) {
-            throw std::invalid_argument("BitArray input vector is larger than the bit array size.");
-        }
-        clear();
-        for (size_t i = 0; const auto b : v) {
-            set_bit(i, b);
-            ++i;
-        }
-    }
 
     /// @brief Static method to create a BitArray object with all bits set to zero.
     /// Users should use this method instead of the default constructor.
@@ -208,7 +194,7 @@ template <size_t N> class BitArray {
 
     /// @brief Return the number of bits
     /// @return The number of bits
-    constexpr size_t get_nbits() const noexcept { return nbits; }
+    static constexpr size_t size() noexcept { return N; }
 
     /// @brief Set all bits (including unused) to zero.
     constexpr void clear() noexcept {
@@ -233,7 +219,7 @@ template <size_t N> class BitArray {
             return;
         }
         // find the index of the last word to fill completely with 1's
-        const size_t end = std::min(static_cast<size_t>(n), nbits);
+        const size_t end = std::min(static_cast<size_t>(n), N);
         const size_t full_words = whichword(end);
         for (size_t k = 0; k < full_words; ++k) {
             words_[k] = ~word_t(0);
@@ -684,7 +670,7 @@ template <size_t N> class BitArray {
     /// are ordered from left to right in ascending order of their index.
     /// @param n the number of bits to display
     /// @return a string representation of the BitArray
-    std::string str(size_t n = BitArray<N>::nbits) const {
+    std::string str(size_t n = BitArray<N>::size()) const {
         std::string s;
         s += "|";
         for (size_t p = 0; p < n; ++p) {

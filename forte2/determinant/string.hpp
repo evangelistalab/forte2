@@ -19,7 +19,6 @@ template <size_t N> class StringImpl : public BitArray<N> {
   public:
     // Since the template parent (BitArray) of this template class is not instantiated during the
     // compilation pass, here we declare all the member variables and functions inherited and used
-    using BitArray<N>::nbits;
     using BitArray<N>::bits_per_word;
     using BitArray<N>::nwords_;
     using BitArray<N>::count;
@@ -55,8 +54,8 @@ template <size_t N> class StringImpl : public BitArray<N> {
     /// @param n the orbital index where the particle is created
     /// @return the sign of the resulting determinant, or 0 if the creation is not possible or if n
     /// is out of bounds
-    double create(int n) {
-        if ((n < 0) or (n >= static_cast<int>(N)) or get_bit(n))
+    double create(size_t n) {
+        if ((n >= N) or get_bit(n))
             return 0.0;
         return create_unchecked(n);
     }
@@ -66,8 +65,8 @@ template <size_t N> class StringImpl : public BitArray<N> {
     /// @param n the orbital index where the particle is destroyed
     /// @return the sign of the resulting determinant, or 0 if the destruction is not possible or if
     /// n is out of bounds
-    double destroy(int n) {
-        if ((n < 0) or (n >= static_cast<int>(N)) or (not get_bit(n)))
+    double destroy(size_t n) {
+        if ((n >= N) or (not get_bit(n)))
             return 0.0;
         return destroy_unchecked(n);
     }
@@ -76,7 +75,7 @@ template <size_t N> class StringImpl : public BitArray<N> {
     /// and return the sign of the resulting determinant.
     /// @param n the orbital index where the particle is created
     /// @return the sign of the resulting determinant
-    double create_unchecked(int n) {
+    double create_unchecked(size_t n) {
         set_bit(n, true);
         return slater_sign(n);
     }
@@ -85,7 +84,7 @@ template <size_t N> class StringImpl : public BitArray<N> {
     /// and return the sign of the resulting determinant.
     /// @param n the orbital index where the particle is destroyed
     /// @return the sign of the resulting determinant
-    double destroy_unchecked(int n) {
+    double destroy_unchecked(size_t n) {
         set_bit(n, false);
         return slater_sign(n);
     }

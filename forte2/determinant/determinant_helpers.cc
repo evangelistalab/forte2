@@ -116,7 +116,7 @@ double apply_operator_to_det_unchecked(const Determinant& d, Determinant& new_d,
                                        const Determinant& cre, const Determinant& ann,
                                        const Determinant& sign) {
     size_t n = 0;
-    if constexpr (Determinant::nbits == 128) {
+    if constexpr (Determinant::size() == 128) {
         // specialization for one 64-orbital word per spin sector
         const auto w0 = d.get_word(0) & (~ann.get_word(0));
         const auto w1 = d.get_word(1) & (~ann.get_word(1));
@@ -124,7 +124,7 @@ double apply_operator_to_det_unchecked(const Determinant& d, Determinant& new_d,
         n += std::popcount(w1 & sign.get_word(1));
         new_d.set_word(0, w0 | cre.get_word(0));
         new_d.set_word(1, w1 | cre.get_word(1));
-    } else if constexpr (Determinant::nbits == 256) {
+    } else if constexpr (Determinant::size() == 256) {
         const auto w0 = d.get_word(0) & (~ann.get_word(0));
         const auto w1 = d.get_word(1) & (~ann.get_word(1));
         const auto w2 = d.get_word(2) & (~ann.get_word(2));
