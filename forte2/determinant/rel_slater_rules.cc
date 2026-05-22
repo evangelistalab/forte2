@@ -106,10 +106,6 @@ std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
         return sign * matrix_element;
     }
 
-    if (ndiff == 0) {
-        return energy(lhs);
-    }
-
-    return 0.0;
+    return energy(lhs);
 }
 } // namespace forte2
