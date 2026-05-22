@@ -77,7 +77,7 @@ inline uint64_t ui64_find_lowest_one_bit_at_pos(uint64_t x, int pos) noexcept {
 /// @brief Clear the lowest bit set in a uint64_t word
 /// @param x the uint64_t word
 /// @return a modified version of x with the lowest bit set to 1 turned into a 0
-inline uint64_t ui64_clear_lowest_one_bit(uint64_t x) noexcept { return x & (x - 1); }
+inline uint64_t ui64_clear_lowest_one_bit(uint64_t& x) noexcept { return x &= (x - 1); }
 
 /// @brief Find the index of the lowest bit set in a uint64_t word and clear it. A modified version
 ///        of x with the lowest bit set to 1 turned into a 0 is stored in x
@@ -85,7 +85,7 @@ inline uint64_t ui64_clear_lowest_one_bit(uint64_t x) noexcept { return x & (x -
 /// @return the index of the least significant 1-bit of x, or if x is zero, returns ~0
 inline uint64_t ui64_find_and_clear_lowest_one_bit(uint64_t& x) noexcept {
     uint64_t result = ui64_find_lowest_one_bit(x);
-    x = ui64_clear_lowest_one_bit(x);
+    ui64_clear_lowest_one_bit(x);
     return result;
 }
 
