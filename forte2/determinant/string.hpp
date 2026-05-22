@@ -56,7 +56,7 @@ template <size_t N> class StringImpl : public BitArray<N> {
     /// @return the sign of the resulting determinant, or 0 if the creation is not possible or if n
     /// is out of bounds
     double create(int n) {
-        if (get_bit(n) or (n < 0) or (n >= static_cast<int>(N)))
+        if ((n < 0) or (n >= static_cast<int>(N)) or get_bit(n))
             return 0.0;
         return create_unchecked(n);
     }
@@ -67,7 +67,7 @@ template <size_t N> class StringImpl : public BitArray<N> {
     /// @return the sign of the resulting determinant, or 0 if the destruction is not possible or if
     /// n is out of bounds
     double destroy(int n) {
-        if (not get_bit(n) or (n < 0) or (n >= static_cast<int>(N)))
+        if ((n < 0) or (n >= static_cast<int>(N)) or (not get_bit(n)))
             return 0.0;
         return destroy_unchecked(n);
     }

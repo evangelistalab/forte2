@@ -177,8 +177,8 @@ def test_det_sorting():
     d2 = Determinant("2a")
     d3 = Determinant("bb")
     d4 = Determinant("22")
-    list = [d1, d2, d3, d4]
-    sorted_list = sorted(list)
+    unordered_list = [d1, d2, d3, d4]
+    sorted_list = sorted(unordered_list)
     assert sorted_list[0] == d2
     assert sorted_list[1] == d3
     assert sorted_list[2] == d1
@@ -187,99 +187,27 @@ def test_det_sorting():
     assert sorted_list[3] == d1
 
 
-# def test_gen_excitation():
-#     # test a -> a excitation
-#     d1 = Determinant("220")
-#     assert d1.gen_excitation([0], [3], [], []) == -1.0
-#     assert d1 == Determinant("b20a")
-
-#     # test b -> b excitation
-#     d2 = Determinant("2ba0")
-#     assert d2.gen_excitation([], [], [0, 1], [2, 3]) == -1.0
-#     assert d2 == Determinant("a02b")
-
-#     # test b creation and counting number of a
-#     d3 = Determinant("a000")
-#     assert d3.gen_excitation([], [], [], [0]) == -1.0
-#     assert d3 == Determinant("2")
-#     d3 = Determinant("0000")
-#     assert d3.gen_excitation([], [], [], [0]) == +1.0
-#     assert d3 == Determinant("b")
-
-#     # test ab creation and sign
-#     d4 = Determinant("000")
-#     assert d4.gen_excitation([], [2, 1], [], [0, 1]) == -1.0
-#     assert d4 == Determinant("b2a")
-#     d5 = Determinant("000")
-#     assert d5.gen_excitation([], [2, 1], [], [1, 0]) == +1.0
-#     assert d5 == Determinant("b2a")
-#     d6 = Determinant("000")
-#     assert d6.gen_excitation([], [1, 2], [], [0, 1]) == +1.0
-#     assert d6 == Determinant("b2a")
-#     d7 = Determinant("000")
-#     assert d7.gen_excitation([], [1, 2], [], [1, 0]) == -1.0
-#     assert d7 == Determinant("b2a")
-
-
-# def test_excitation_connection():
-#     """Test the excitation_connection function"""
-#     d1 = Determinant("220")
-#     d2 = Determinant("022")
-#     conn = d1.excitation_connection(d2)
-#     assert conn[0] == [0]  # alpha hole
-#     assert conn[1] == [2]  # alpha particle
-#     assert conn[2] == [0]  # beta hole
-#     assert conn[3] == [2]  # beta particle
-#     conn = d2.excitation_connection(d1)
-#     assert conn[0] == [2]  # alpha hole
-#     assert conn[1] == [0]  # alpha particle
-#     assert conn[2] == [2]  # beta hole
-#     assert conn[3] == [0]  # beta particle
-
-#     # test different number of electrons
-#     d1 = Determinant("2")
-#     d2 = Determinant("0")
-#     conn = d1.excitation_connection(d2)
-#     assert conn[0] == [0]  # alpha hole
-#     assert conn[1] == []  # alpha particle
-#     assert conn[2] == [0]  # beta hole
-#     assert conn[3] == []  # beta particle
-#     conn = d2.excitation_connection(d1)
-#     assert conn[0] == []  # alpha hole
-#     assert conn[1] == [0]  # alpha particle
-#     assert conn[2] == []  # beta hole
-#     assert conn[3] == [0]  # beta particle
-
-#     d1 = Determinant("222ab00000")
-#     d2 = Determinant("baa0200b02")
-#     conn = d1.excitation_connection(d2)
-#     assert conn[0] == [0, 3]  # alpha hole
-#     assert conn[1] == [4, 9]  # alpha particle
-#     assert conn[2] == [1, 2]  # beta hole
-#     assert conn[3] == [7, 9]  # beta particle
-
-
 def test_det_slater_sign():
     """Test Slater sign functions"""
 
     #        012345
     # parity 011001
     d = Determinant("a0a0aa")
-    assert d.slater_sign(0) == 1
-    assert d.slater_sign(1) == -1
-    assert d.slater_sign(2) == -1
-    assert d.slater_sign(3) == 1
-    assert d.slater_sign(4) == 1
-    assert d.slater_sign(5) == -1
-    assert d.slater_sign(6) == 1
-    assert d.slater_sign(7) == 1
-    assert d.slater_sign_reverse(0) == -1
-    assert d.slater_sign_reverse(1) == -1
-    assert d.slater_sign_reverse(2) == 1
-    assert d.slater_sign_reverse(3) == 1
-    assert d.slater_sign_reverse(4) == -1
-    assert d.slater_sign_reverse(5) == 1
-    assert d.slater_sign_reverse(6) == 1
+    assert d._slater_sign(0) == 1
+    assert d._slater_sign(1) == -1
+    assert d._slater_sign(2) == -1
+    assert d._slater_sign(3) == 1
+    assert d._slater_sign(4) == 1
+    assert d._slater_sign(5) == -1
+    assert d._slater_sign(6) == 1
+    assert d._slater_sign(7) == 1
+    assert d._slater_sign_reverse(0) == -1
+    assert d._slater_sign_reverse(1) == -1
+    assert d._slater_sign_reverse(2) == 1
+    assert d._slater_sign_reverse(3) == 1
+    assert d._slater_sign_reverse(4) == -1
+    assert d._slater_sign_reverse(5) == 1
+    assert d._slater_sign_reverse(6) == 1
 
 
 def test_det_slater_sign_matches_naive_parity():
@@ -290,7 +218,7 @@ def test_det_slater_sign_matches_naive_parity():
     for i in PARITY_TEST_INDICES:
         count = sum(_spin_occupation(d, j) for j in range(i))
         expected = 1 if count % 2 == 0 else -1
-        assert d.slater_sign(i) == expected
+        assert d._slater_sign(i) == expected
 
 
 def test_det_slater_sign_reverse_matches_naive_parity():
@@ -303,7 +231,7 @@ def test_det_slater_sign_reverse_matches_naive_parity():
             _spin_occupation(d, j) for j in range(i + 1, 2 * Determinant.maxnorb)
         )
         expected = 1 if count % 2 == 0 else -1
-        assert d.slater_sign_reverse(i) == expected
+        assert d._slater_sign_reverse(i) == expected
 
 
 def test_det_pair_slater_sign_matches_naive_interval_parity():
@@ -325,8 +253,8 @@ def test_det_pair_slater_sign_matches_naive_interval_parity():
     ]
 
     for n, m in pairs:
-        assert d.slater_sign_aa(n, m) == _expected_interval_sign(PAIR_ALPHA_OCC, n, m)
-        assert d.slater_sign_bb(n, m) == _expected_interval_sign(PAIR_BETA_OCC, n, m)
+        assert d._slater_sign_aa(n, m) == _expected_interval_sign(PAIR_ALPHA_OCC, n, m)
+        assert d._slater_sign_bb(n, m) == _expected_interval_sign(PAIR_BETA_OCC, n, m)
 
 
 def test_det_slater_sign_edge_empty_and_full_determinants():
@@ -337,20 +265,20 @@ def test_det_slater_sign_edge_empty_and_full_determinants():
     test_indices = (0, 1, 62, 63, 64, 65, 126, 127)
 
     for i in test_indices:
-        assert empty.slater_sign(i) == 1
-        assert empty.slater_sign_reverse(i) == 1
+        assert empty._slater_sign(i) == 1
+        assert empty._slater_sign_reverse(i) == 1
 
         count_betaefore = i
         count_alphafter = 2 * Determinant.maxnorb - i - 1
-        assert full.slater_sign(i) == (1 if count_betaefore % 2 == 0 else -1)
-        assert full.slater_sign_reverse(i) == (1 if count_alphafter % 2 == 0 else -1)
+        assert full._slater_sign(i) == (1 if count_betaefore % 2 == 0 else -1)
+        assert full._slater_sign_reverse(i) == (1 if count_alphafter % 2 == 0 else -1)
 
     for n, m in ((0, 63), (63, 0), (0, 1), (62, 63)):
         expected = _expected_interval_sign(range(Determinant.maxnorb), n, m)
-        assert empty.slater_sign_aa(n, m) == 1
-        assert empty.slater_sign_bb(n, m) == 1
-        assert full.slater_sign_aa(n, m) == expected
-        assert full.slater_sign_bb(n, m) == expected
+        assert empty._slater_sign_aa(n, m) == 1
+        assert empty._slater_sign_bb(n, m) == 1
+        assert full._slater_sign_aa(n, m) == expected
+        assert full._slater_sign_bb(n, m) == expected
 
 
 def test_spin_flip():

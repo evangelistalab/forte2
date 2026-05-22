@@ -128,14 +128,17 @@ void export_determinant_api(nb::module_& m) {
         .def("spin_flip", &Determinant::spin_flip,
              "Spin flip the determinant, i.e., swap alpha and beta orbitals")
         .def(
-            "slater_sign",
+            "str", [](const Determinant& d, size_t n) { return str(d, n); },
+            "n"_a = Determinant::norb(), "Get the string representation of the Slater determinant")
+        .def(
+            "_slater_sign",
             [](const Determinant& d, size_t n) {
                 d.check_index_bounds(n / 2, "(orbital index)");
                 return d.slater_sign(n);
             },
             "Get the sign of the Slater determinant")
         .def(
-            "slater_sign_aa",
+            "_slater_sign_aa",
             [](const Determinant& d, size_t n, size_t m) {
                 d.check_index_bounds(n, "(first alpha orbital index)");
                 d.check_index_bounds(m, "(second alpha orbital index)");
@@ -143,7 +146,7 @@ void export_determinant_api(nb::module_& m) {
             },
             "n"_a, "m"_a, "Get the alpha-alpha pair sign of the Slater determinant")
         .def(
-            "slater_sign_bb",
+            "_slater_sign_bb",
             [](const Determinant& d, size_t n, size_t m) {
                 d.check_index_bounds(n, "(first beta orbital index)");
                 d.check_index_bounds(m, "(second beta orbital index)");
@@ -151,15 +154,12 @@ void export_determinant_api(nb::module_& m) {
             },
             "n"_a, "m"_a, "Get the beta-beta pair sign of the Slater determinant")
         .def(
-            "slater_sign_reverse",
+            "_slater_sign_reverse",
             [](const Determinant& d, size_t n) {
                 d.check_index_bounds(n / 2, "(orbital index)");
                 return d.slater_sign_reverse(n);
             },
-            "Get the sign of the Slater determinant")
-        .def(
-            "str", [](const Determinant& d, size_t n) { return str(d, n); },
-            "n"_a = Determinant::norb(), "Get the string representation of the Slater determinant");
+            "Get the sign of the Slater determinant");
 }
 
 void export_configuration_api(nb::module_& m) {
