@@ -543,24 +543,6 @@ class Determinant:
     def spin_flip(self) -> Determinant:
         """Spin flip the determinant, i.e., swap alpha and beta orbitals"""
 
-    def slater_sign(self, arg: int, /) -> float:
-        """Get the sign of the Slater determinant"""
-
-    def slater_sign_aa(self, n: int, m: int) -> float:
-        """Get the alpha-alpha pair sign of the Slater determinant"""
-
-    def slater_sign_bb(self, n: int, m: int) -> float:
-        """Get the beta-beta pair sign of the Slater determinant"""
-
-    def slater_sign_reverse(self, arg: int, /) -> float:
-        """Get the sign of the Slater determinant"""
-
-    def gen_excitation(self, arg0: Sequence[int], arg1: Sequence[int], arg2: Sequence[int], arg3: Sequence[int], /) -> float:
-        """Apply a generic excitation"""
-
-    def excitation_connection(self, arg: Determinant, /) -> list[list[int]]:
-        """Get the excitation connection between this and another determinant"""
-
     def str(self, n: int = 64) -> str:
         """Get the string representation of the Slater determinant"""
 
