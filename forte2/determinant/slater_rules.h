@@ -7,7 +7,7 @@
 
 namespace forte2 {
 
-/// @brief Class to compute the energy and other properties of determinants using Slater rules.
+/// @brief Class to compute Hamiltonian matrix elements of determinants using Slater rules.
 /// This class assumes a restricted formalism, i.e., alpha and beta spin orbitals share the same
 /// spatial orbitals and are orthogonal.
 /// @details The class copies the one- and two-electron integrals to internal data structures
@@ -28,18 +28,39 @@ class SlaterRules {
 
     // ==> Class Interface <==
 
-    /// Compute the energy of a determinant
+    /// @brief Compute the energy of a determinant
+    /// @param det The determinant for which to compute the energy.
+    /// @return The energy of the determinant.
     double energy(const Determinant& det) const;
 
-    /// Compute the energies of a vector of determinants
+    /// @brief Compute the energies of a vector of determinants
+    /// @param dets The vector of determinants for which to compute the energies.
+    /// @return A vector containing the energies of the determinants.
     np_vector energies(const std::vector<Determinant>& dets) const;
 
-    /// Compute the matrix element of the Hamiltonian between two determinants
+    /// @brief Compute the matrix element of the Hamiltonian between two determinants
+    /// @param lhs The left-hand side determinant.
+    /// @param rhs The right-hand side determinant.
+    /// @return The matrix element of the Hamiltonian between the two determinants.
     double slater_rules(const Determinant& lhs, const Determinant& rhs) const;
 
-    /// Compute the matrix element using the original scan-based implementation
-    double slater_rules_reference(const Determinant& lhs, const Determinant& rhs) const;
+    /// @brief Compute the singles coupling for alpha spin <D(i->a)|H|D> where D(i->a) is the
+    /// determinant obtained by exciting an electron from occupied orbital i to virtual orbital a.
+    /// @param i The occupied orbital index.
+    /// @param a The virtual orbital index.
+    /// @param d The determinant for which to compute the coupling.
+    /// @return The singles coupling for alpha spin.
+    double singles_coupling_a(size_t i, size_t a, const Determinant& d) const noexcept;
 
+    /// @brief Compute the singles coupling for beta spin <D(i->a)|H|D> where D(i->a) is the
+    /// determinant obtained by exciting an electron from occupied orbital i to virtual orbital a.
+    /// @param i The occupied orbital index.
+    /// @param a The virtual orbital index.
+    /// @param d The determinant for which to compute the coupling.
+    /// @return The singles coupling for beta spin.
+    double singles_coupling_b(size_t i, size_t a, const Determinant& d) const noexcept;
+
+  private:
     // ==> Helper Functions <==
 
     /// @return The one-electron integral h[p,q] = <p|h|q>
@@ -71,36 +92,28 @@ class SlaterRules {
         return f_JK_[p * norb2_ + q * norb_ + r];
     }
 
-    /// @brief Compute the singles coupling for alpha spin
-    double singles_coupling_a(size_t i, size_t a, const Determinant& d) const noexcept;
-
-    /// @brief Compute the singles coupling for beta spin
-    double singles_coupling_b(size_t i, size_t a, const Determinant& d) const noexcept;
-
-  private:
     /// @brief Number of orbitals
     const std::size_t norb_;
     /// @brief Precomputed values to speed up access to two-electron integrals
     const std::size_t norb2_;
     /// @brief Precomputed values to speed up access to two-electron integrals
     const std::size_t norb3_;
-    /// Scalar energy term
-    double scalar_energy_;
-    /// Two-electron integrals (restricted) in the form V[p,q,r,s] = <pq|rs>
-    np_tensor4 two_electron_integrals_;
-    /// One-electron integrals h[p * norb_ + q] = <p|h|q>
+    /// @brief Scalar energy term
+    const double scalar_energy_;
+    /// @brief One-electron integrals h[p * norb_ + q] = <p|h|q>
     std::vector<double> h_;
-    /// Coulomb integrals J[p * norb_ + q] = <pq|pq>
+    /// @brief Coulomb integrals J[p * norb_ + q] = <pq|pq>
     std::vector<double> J_;
-    /// Exchange integrals JK[p * norb_ + q] = <pq|pq> - <pq|qp>
+    /// @brief Exchange integrals JK[p * norb_ + q] = <pq|pq> - <pq|qp>
     std::vector<double> JK_;
-    /// Fock-Coulomb integrals f_J[p * norb_ * norb_ + q * norb_ + r] = <pr|qr>
+    /// @brief Fock-Coulomb integrals f_J[p * norb_ * norb_ + q * norb_ + r] = <pr|qr>
     std::vector<double> f_J_;
-    /// Fock-Coulomb-Exchange integrals f_JK[p * norb_ * norb_ + q * norb_ + r] = <pr|qr> - <pr|rq>
+    /// @brief Fock-Coulomb-Exchange integrals f_JK[p * norb_ * norb_ + q * norb_ + r] = <pr|qr> -
+    /// <pr|rq>
     std::vector<double> f_JK_;
-    /// Two-electron integrals (restricted) in the form V[p,q,r,s] = <pq|rs>
+    /// @brief Two-electron integrals (restricted) in the form V[p,q,r,s] = <pq|rs>
     std::vector<double> v_;
-    /// Anti-symmetrized two-electron integrals <pq||rs> = <pq|rs> - <pq|sr>
+    /// @brief Anti-symmetrized two-electron integrals <pq||rs> = <pq|rs> - <pq|sr>
     std::vector<double> va_;
 };
 

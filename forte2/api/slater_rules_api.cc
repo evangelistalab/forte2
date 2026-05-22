@@ -15,9 +15,9 @@ void export_slater_rules_api(nb::module_& m) {
              "Initialize a SlaterRules object with the number of orbitals, scalar energy, "
              "one-electron integrals, and two-electron integrals in physicist's notation.")
         .def("energy", &SlaterRules::energy)
-        .def("energies", &SlaterRules::energies, "dets"_a, "Compute the energies of a vector of determinants")
-        .def("slater_rules", &SlaterRules::slater_rules, "lhs"_a, "rhs"_a)
-        .def("slater_rules_reference", &SlaterRules::slater_rules_reference, "lhs"_a, "rhs"_a);
+        .def("energies", &SlaterRules::energies, "dets"_a,
+             "Compute the energies of a vector of determinants")
+        .def("slater_rules", &SlaterRules::slater_rules, "lhs"_a, "rhs"_a);
 }
 
 void export_rel_slater_rules_api(nb::module_& m) {
@@ -31,7 +31,8 @@ void export_rel_slater_rules_api(nb::module_& m) {
              "indicating if the "
              "two-electron integrals are antisymmetric.")
         .def("energy", &RelSlaterRules::energy)
-        .def("energies", &RelSlaterRules::energies, "dets"_a, "Compute the energies of a vector of determinants")
+        .def("energies", &RelSlaterRules::energies, "dets"_a,
+             "Compute the energies of a vector of determinants")
         .def("slater_rules", &RelSlaterRules::slater_rules, "lhs"_a, "rhs"_a);
 }
 } // namespace forte2
