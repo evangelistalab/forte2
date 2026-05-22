@@ -2,86 +2,20 @@
 #include "determinant/determinant_helpers.h"
 
 namespace {
+std::optional<std::uint32_t> screen_slater_connection(const forte2::Determinant& lhs,
+                                                      const forte2::Determinant& rhs) {
 
-std::optional<int> screen_rel_slater_connection(const forte2::Determinant& lhs,
-                                                const forte2::Determinant& rhs) {
-    int diff_count{0}; // number of spinors that differ between the two determinants
-    for (std::size_t w = 0; w < forte2::Determinant::nwords_; ++w) {
-        diff_count += std::popcount(lhs.get_word(w) ^ rhs.get_word(w));
-        // early exit if more than 4 differences
-        if (diff_count > 4) {
-            return std::optional<int>();
-        }
-    }
-    int total_count{0}; //  number of lhs - rhs occupied spinors
-    for (std::size_t w = 0; w < forte2::Determinant::nwords_; ++w) {
-        total_count += std::popcount(lhs.get_word(w)) - std::popcount(rhs.get_word(w));
-    }
-    // early exit if the determinants have different numbers of electrons
-    if (total_count != 0) {
-        return std::optional<int>();
-    }
-    return diff_count;
+    return screen_slater_connection_impl<0, forte2::Determinant::nwords_>(lhs, rhs);
 }
 
-/// @brief Find the single connection between two determinants, which must differ by exactly one
-/// occupied and one unoccupied spinor.
-/// @param lhs the left determinant
-/// @param rhs the right determinant
-/// @return a tuple containing the indices of the connected spinors: (i, a) where i is the index of
-/// the occupied spinor in lhs and a is the index of the unoccupied spinor in rhs
 std::tuple<std::size_t, std::size_t> find_single_connection(const forte2::Determinant& lhs,
                                                             const forte2::Determinant& rhs) {
-    std::size_t i, a; // namespace
-    for (std::size_t w = 0; w < forte2::Determinant::nwords_; ++w) {
-        const std::uint64_t lhs_word = lhs.get_word(w);
-        const std::uint64_t rhs_word = rhs.get_word(w);
-        const std::uint64_t lhs_only = lhs_word & ~rhs_word;
-        const std::uint64_t rhs_only = rhs_word & ~lhs_word;
-        if (lhs_only) {
-            i = w * forte2::Determinant::bits_per_word + std::countr_zero(lhs_only);
-        }
-        if (rhs_only) {
-            a = w * forte2::Determinant::bits_per_word + std::countr_zero(rhs_only);
-        }
-    }
-    return {i, a};
+    return find_single_connection_impl<0, forte2::Determinant::nwords_>(lhs, rhs);
 }
 
-/// @brief Find the double connection between two determinants, which must differ by exactly two
-/// occupied and two unoccupied spinors.
-/// @param lhs the left determinant
-/// @param rhs the right determinant
-/// @return a tuple containing the indices of the connected spinors: (i, j, a, b) where i and j are
-/// the indices of the occupied spinors in lhs and a and b are the indices of the unoccupied spinors
-/// in rhs
 std::tuple<std::size_t, std::size_t, std::size_t, std::size_t>
 find_double_connection(const forte2::Determinant& lhs, const forte2::Determinant& rhs) {
-    constexpr std::size_t not_filled = std::numeric_limits<size_t>::max();
-    std::size_t i{not_filled}, j, a{not_filled}, b; // mark i and j as not filled
-    for (std::size_t w = 0; w < forte2::Determinant::nwords_; ++w) {
-        const std::uint64_t lhs_word = lhs.get_word(w);
-        const std::uint64_t rhs_word = rhs.get_word(w);
-        std::uint64_t lhs_only = lhs_word & ~rhs_word;
-        std::uint64_t rhs_only = rhs_word & ~lhs_word;
-        while (lhs_only) {
-            if (i == not_filled) {
-                i = w * forte2::Determinant::bits_per_word + std::countr_zero(lhs_only);
-            } else {
-                j = w * forte2::Determinant::bits_per_word + std::countr_zero(lhs_only);
-            }
-            ui64_clear_lowest_one_bit(lhs_only); // Clear the lowest set bit
-        }
-        while (rhs_only) {
-            if (a == not_filled) {
-                a = w * forte2::Determinant::bits_per_word + std::countr_zero(rhs_only);
-            } else {
-                b = w * forte2::Determinant::bits_per_word + std::countr_zero(rhs_only);
-            }
-            ui64_clear_lowest_one_bit(rhs_only); // Clear the lowest set bit
-        }
-    }
-    return {i, j, a, b};
+    return find_double_connection_impl<0, forte2::Determinant::nwords_>(lhs, rhs);
 }
 } // namespace
 
@@ -138,12 +72,13 @@ np_vector RelSlaterRules::energies(const std::vector<Determinant>& dets) const {
 
 std::complex<double> RelSlaterRules::slater_rules(const Determinant& lhs,
                                                   const Determinant& rhs) const {
-    // Early exit for disconnected pairs or if the determinants have different numbers of electrons
-    const auto count = screen_rel_slater_connection(lhs, rhs);
+    // Early exit for disconnected pairs or if the determinants have different numbers of
+    // electrons
+    const auto count = screen_slater_connection(lhs, rhs);
     if (!count.has_value()) {
         return 0.0;
     }
-    const int ndiff = count.value();
+    const auto ndiff = count.value();
 
     if (ndiff == 4) {
         auto v = two_electron_integrals_.view();

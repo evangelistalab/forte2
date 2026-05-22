@@ -7,6 +7,40 @@
 #include <string>
 
 namespace {
+// Specialized Slater connection functions for alpha and beta spins.
+
+std::optional<std::uint32_t> screen_slater_connection_alpha(const forte2::Determinant& lhs,
+                                                            const forte2::Determinant& rhs) {
+    return screen_slater_connection_impl<0, forte2::Determinant::storage_words_per_spin>(lhs, rhs);
+}
+
+std::optional<std::uint32_t> screen_slater_connection_beta(const forte2::Determinant& lhs,
+                                                           const forte2::Determinant& rhs) {
+    return screen_slater_connection_impl<forte2::Determinant::storage_words_per_spin,
+                                         forte2::Determinant::nwords_>(lhs, rhs);
+}
+
+std::tuple<std::size_t, std::size_t> find_single_connection_alpha(const forte2::Determinant& lhs,
+                                                                  const forte2::Determinant& rhs) {
+    return find_single_connection_impl<0, forte2::Determinant::storage_words_per_spin>(lhs, rhs);
+}
+
+std::tuple<std::size_t, std::size_t> find_single_connection_beta(const forte2::Determinant& lhs,
+                                                                 const forte2::Determinant& rhs) {
+    return find_single_connection_impl<forte2::Determinant::storage_words_per_spin,
+                                       forte2::Determinant::nwords_>(lhs, rhs);
+}
+
+std::tuple<std::size_t, std::size_t, std::size_t, std::size_t>
+find_double_connection_alpha(const forte2::Determinant& lhs, const forte2::Determinant& rhs) {
+    return find_double_connection_impl<0, forte2::Determinant::storage_words_per_spin>(lhs, rhs);
+}
+
+std::tuple<std::size_t, std::size_t, std::size_t, std::size_t>
+find_double_connection_beta(const forte2::Determinant& lhs, const forte2::Determinant& rhs) {
+    return find_double_connection_impl<forte2::Determinant::storage_words_per_spin,
+                                       forte2::Determinant::nwords_>(lhs, rhs);
+}
 
 /// Holds the connection between two determinants over the stored determinant words.
 ///
@@ -190,66 +224,131 @@ np_vector SlaterRules::energies(const std::vector<Determinant>& dets) const {
 }
 
 double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs) const {
-    const auto connection = build_slater_connection(lhs, rhs);
-
-    if ((connection.na_lhs_only != connection.na_rhs_only) or
-        (connection.nb_lhs_only != connection.nb_rhs_only)) {
+    const auto count_alpha = screen_slater_connection_alpha(lhs, rhs);
+    const auto count_beta = screen_slater_connection_beta(lhs, rhs);
+    if (!count_alpha.has_value() or !count_beta.has_value()) {
         return 0.0;
     }
 
-    const std::uint16_t nadiff = connection.na_lhs_only;
-    const std::uint16_t nbdiff = connection.nb_lhs_only;
-    if (nadiff + nbdiff > 2) {
-        return 0.0;
+    const auto ndiff_alpha = count_alpha.value();
+    const auto ndiff_beta = count_beta.value();
+
+    if (ndiff_alpha + ndiff_beta > 4) {
+        0.0;
     }
 
-    if (nadiff == 0 and nbdiff == 0) {
-        return energy(lhs);
+    if (ndiff_alpha == 2 and ndiff_beta == 2) {
+        const auto [i, a] = find_single_connection_alpha(lhs, rhs);
+        const auto [j, b] = find_single_connection_beta(lhs, rhs);
+        const double sign = lhs.slater_sign_aa(i, a) * lhs.slater_sign_bb(j, b);
+        return sign * v(i, j, a, b); // <ia|jb>
     }
 
-    if (nadiff == 1 and nbdiff == 0) {
-        const std::size_t i = connection.a_lhs_only[0];
-        const std::size_t j = connection.a_rhs_only[0];
-        const double sign = lhs.slater_sign_aa(i, j);
-        return sign * singles_coupling_a(i, j, rhs);
+    if (ndiff_alpha == 4 and ndiff_beta == 0) {
+        const auto [i, j, a, b] = find_double_connection_alpha(lhs, rhs);
+        const double sign = lhs.slater_sign_aaaa(i, j, a, b);
+        return sign * va(i, j, a, b); // <ij||ab>
     }
 
-    if (nadiff == 0 and nbdiff == 1) {
-        const std::size_t i = connection.b_lhs_only[0];
-        const std::size_t j = connection.b_rhs_only[0];
-        const double sign = lhs.slater_sign_bb(i, j);
-        return sign * singles_coupling_b(i, j, rhs);
+    if (ndiff_alpha == 0 and ndiff_beta == 4) {
+        const auto [i, j, a, b] = find_double_connection_beta(lhs, rhs);
+        const double sign = lhs.slater_sign_bbbb(i, j, a, b);
+        return sign * va(i, j, a, b); // <ij||ab>
     }
 
-    if (nadiff == 2 and nbdiff == 0) {
-        const std::size_t i = connection.a_lhs_only[0];
-        const std::size_t j = connection.a_lhs_only[1];
-        const std::size_t k = connection.a_rhs_only[0];
-        const std::size_t l = connection.a_rhs_only[1];
-        const double sign = lhs.slater_sign_aaaa(i, j, k, l);
-        return sign * va(i, j, k, l); // <ij||kl>
+    if (ndiff_alpha == 2 and ndiff_beta == 0) {
+        const auto [i, a] = find_single_connection_alpha(lhs, rhs);
+        const double sign = lhs.slater_sign_aa(i, a);
+        return sign * singles_coupling_a(i, a, rhs);
     }
 
-    if (nadiff == 0 and nbdiff == 2) {
-        const std::size_t i = connection.b_lhs_only[0];
-        const std::size_t j = connection.b_lhs_only[1];
-        const std::size_t k = connection.b_rhs_only[0];
-        const std::size_t l = connection.b_rhs_only[1];
-        const double sign = lhs.slater_sign_bbbb(i, j, k, l);
-        return sign * va(i, j, k, l); // <ij||kl>
+    if (ndiff_alpha == 0 and ndiff_beta == 2) {
+        const auto [i, a] = find_single_connection_beta(lhs, rhs);
+        const double sign = lhs.slater_sign_bb(i, a);
+        return sign * singles_coupling_b(i, a, rhs);
     }
 
-    if (nadiff == 1 and nbdiff == 1) {
-        const std::size_t i = connection.a_lhs_only[0];
-        const std::size_t j = connection.b_lhs_only[0];
-        const std::size_t k = connection.a_rhs_only[0];
-        const std::size_t l = connection.b_rhs_only[0];
-        const double sign = lhs.slater_sign_aa(i, k) * lhs.slater_sign_bb(j, l);
-        return sign * v(i, j, k, l); // <ij|kl>
-    }
-
-    return 0.0;
+    return energy(lhs);
 }
+
+// double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs) const {
+//     const auto count_alpha = screen_slater_connection_alpha(lhs, rhs);
+//     const auto count_beta = screen_slater_connection_beta(lhs, rhs);
+//     if (!count_alpha.has_value() or !count_beta.has_value()) {
+//         return 0.0;
+//     }
+
+//     const int ndiff_alpha = count_alpha.value();
+//     const int ndiff_beta = count_beta.value();
+
+//     const auto connection = build_slater_connection(lhs, rhs);
+
+//     if ((connection.na_lhs_only != connection.na_rhs_only) or
+//         (connection.nb_lhs_only != connection.nb_rhs_only)) {
+//         return 0.0;
+//     }
+
+//     const std::uint16_t nadiff = connection.na_lhs_only;
+//     const std::uint16_t nbdiff = connection.nb_lhs_only;
+//     if (nadiff + nbdiff > 2) {
+//         return 0.0;
+//     }
+
+//     if (ndiff_alpha == 0 and ndiff_beta == 0) {
+//         return energy(lhs);
+//     }
+
+//     if (ndiff_alpha == 2 and ndiff_beta == 0) {
+//         // const std::size_t i = connection.a_lhs_only[0];
+//         // const std::size_t j = connection.a_rhs_only[0];
+//         // const double sign = lhs.slater_sign_aa(i, j);
+//         // return sign * singles_coupling_a(i, j, rhs);
+//         const auto [i, a] = find_single_connection_alpha(lhs, rhs);
+//         const double sign = lhs.slater_sign_aa(i, a);
+//         return sign * singles_coupling_a(i, a, rhs);
+//     }
+
+//     if (ndiff_alpha == 0 and ndiff_beta == 2) {
+//         // const std::size_t i = connection.b_lhs_only[0];
+//         // const std::size_t j = connection.b_rhs_only[0];
+//         const auto [i, a] = find_single_connection_beta(lhs, rhs);
+//         const double sign = lhs.slater_sign_bb(i, a);
+//         return sign * singles_coupling_b(i, a, rhs);
+//     }
+
+//     if (nadiff == 2 and nbdiff == 0) {
+//         const std::size_t i = connection.a_lhs_only[0];
+//         const std::size_t j = connection.a_lhs_only[1];
+//         const std::size_t k = connection.a_rhs_only[0];
+//         const std::size_t l = connection.a_rhs_only[1];
+//         const double sign = lhs.slater_sign_aaaa(i, j, k, l);
+//         return sign * va(i, j, k, l); // <ij||kl>
+//     }
+
+//     if (nadiff == 0 and nbdiff == 2) {
+//         const std::size_t i = connection.b_lhs_only[0];
+//         const std::size_t j = connection.b_lhs_only[1];
+//         const std::size_t k = connection.b_rhs_only[0];
+//         const std::size_t l = connection.b_rhs_only[1];
+//         const double sign = lhs.slater_sign_bbbb(i, j, k, l);
+//         return sign * va(i, j, k, l); // <ij||kl>
+//     }
+//     if (nadiff == 1 and nbdiff == 1) {
+//         const std::size_t i = connection.a_lhs_only[0];
+//         const std::size_t j = connection.b_lhs_only[0];
+//         const std::size_t k = connection.a_rhs_only[0];
+//         const std::size_t l = connection.b_rhs_only[0];
+//         const double sign = lhs.slater_sign_aa(i, k) * lhs.slater_sign_bb(j, l);
+//         return sign * v(i, j, k, l); // <ij|kl>
+//     }
+//     // if (ndiff_alpha == 2 and ndiff_beta == 2) {
+//     //     const auto [i, a] = find_single_connection_alpha(lhs, rhs);
+//     //     const auto [j, b] = find_single_connection_beta(lhs, rhs);
+//     //     const double sign = lhs.slater_sign_aa(i, a) * lhs.slater_sign_bb(j, b);
+//     //     return sign * v(i, j, a, b); // <ia|jb>
+//     // }
+//     return 0.0;
+// }
 
 double SlaterRules::slater_rules_reference(const Determinant& lhs, const Determinant& rhs) const {
     // we first check that the two determinants have equal Ms

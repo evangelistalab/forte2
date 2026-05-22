@@ -836,4 +836,105 @@ template <size_t N> std::ostream& operator<<(std::ostream& os, const BitArray<N>
     os << str(ba);
     return os;
 }
+
+/// @brief Check if two bit arrays differ by at most 4 bits, and if they have the same number of
+/// bits set to 1. This is used to screen the Slater connections between two determinants, which can
+/// only be connected if they differ by at most 4 spinors and have the same number of electrons.
+/// @tparam start the index of the first word to compare
+/// @tparam end the index of the last word to compare (not included)
+/// @tparam N the number of bits in the BitArray
+/// @param lhs the left bit array
+/// @param rhs the right bit array
+/// @return an optional containing the number of differences if the two bit arrays differ by at most
+/// 4 bits and have the same number of bits set to 1, or an empty optional otherwise
+template <size_t start, size_t end, size_t N>
+std::optional<std::uint32_t> screen_slater_connection_impl(const forte2::BitArray<N>& lhs,
+                                                           const forte2::BitArray<N>& rhs) {
+    int diff_count{0}; // number of spinors that differ between the two determinants
+    for (std::size_t w = start; w < end; ++w) {
+        diff_count += std::popcount(lhs.get_word(w) ^ rhs.get_word(w));
+        // early exit if more than 4 differences
+        if (diff_count > 4) {
+            return std::optional<int>();
+        }
+    }
+    int total_count{0}; //  number of lhs - rhs occupied spinors
+    for (std::size_t w = start; w < end; ++w) {
+        total_count += std::popcount(lhs.get_word(w)) - std::popcount(rhs.get_word(w));
+    }
+    // early exit if the determinants have different numbers of electrons
+    if (total_count != 0) {
+        return std::optional<int>();
+    }
+    return diff_count;
+}
+
+/// @brief Find the single connection between two bit arrays, which must differ by exactly by one
+/// replacement.
+/// @tparam start the index of the first word to compare
+/// @tparam end the index of the last word to compare (not included)
+/// @tparam N the number of bits in the BitArray
+/// @param lhs the left determinant
+/// @param rhs the right determinant
+/// @return a tuple containing the indices of the connected spinors: (i, a) where i is the index of
+/// the occupied spinor in lhs and a is the index of the unoccupied spinor in rhs
+template <size_t start, size_t end, size_t N>
+std::tuple<std::size_t, std::size_t> find_single_connection_impl(const forte2::BitArray<N>& lhs,
+                                                                 const forte2::BitArray<N>& rhs) {
+    std::size_t i, a; // namespace
+    for (std::size_t w = start; w < end; ++w) {
+        const std::uint64_t lhs_word = lhs.get_word(w);
+        const std::uint64_t rhs_word = rhs.get_word(w);
+        const std::uint64_t lhs_only = lhs_word & ~rhs_word;
+        const std::uint64_t rhs_only = rhs_word & ~lhs_word;
+        if (lhs_only) {
+            i = (w - start) * forte2::BitArray<N>::bits_per_word + std::countr_zero(lhs_only);
+        }
+        if (rhs_only) {
+            a = (w - start) * forte2::BitArray<N>::bits_per_word + std::countr_zero(rhs_only);
+        }
+    }
+    return {i, a};
+}
+
+/// @brief Find the double connection between two bit arrays, which must differ by exactly two
+/// replacements.
+/// @tparam start the index of the first word to compare
+/// @tparam end the index of the last word to compare (not included)
+/// @tparam N the number of bits in the BitArray
+/// @param lhs the left determinant
+/// @param rhs the right determinant
+/// @return a tuple containing the indices of the connected spinors: (i, j, a, b) where i and j are
+/// the indices of the occupied spinors in lhs and a and b are the indices of the unoccupied spinors
+/// in rhs
+template <size_t start, size_t end, size_t N>
+std::tuple<std::size_t, std::size_t, std::size_t, std::size_t>
+find_double_connection_impl(const forte2::BitArray<N>& lhs, const forte2::BitArray<N>& rhs) {
+    constexpr std::size_t not_filled = std::numeric_limits<size_t>::max();
+    std::size_t i{not_filled}, j, a{not_filled}, b; // mark i and j as not filled
+    for (std::size_t w = start; w < end; ++w) {
+        const std::uint64_t lhs_word = lhs.get_word(w);
+        const std::uint64_t rhs_word = rhs.get_word(w);
+        std::uint64_t lhs_only = lhs_word & ~rhs_word;
+        std::uint64_t rhs_only = rhs_word & ~lhs_word;
+        while (lhs_only) {
+            if (i == not_filled) {
+                i = (w - start) * forte2::BitArray<N>::bits_per_word + std::countr_zero(lhs_only);
+            } else {
+                j = (w - start) * forte2::BitArray<N>::bits_per_word + std::countr_zero(lhs_only);
+            }
+            ui64_clear_lowest_one_bit(lhs_only); // Clear the lowest set bit
+        }
+        while (rhs_only) {
+            if (a == not_filled) {
+                a = (w - start) * forte2::BitArray<N>::bits_per_word + std::countr_zero(rhs_only);
+            } else {
+                b = (w - start) * forte2::BitArray<N>::bits_per_word + std::countr_zero(rhs_only);
+            }
+            ui64_clear_lowest_one_bit(rhs_only); // Clear the lowest set bit
+        }
+    }
+    return {i, j, a, b};
+}
+
 } // namespace forte2
