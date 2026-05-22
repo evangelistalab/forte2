@@ -234,7 +234,7 @@ double SlaterRules::slater_rules(const Determinant& lhs, const Determinant& rhs)
     const auto ndiff_beta = count_beta.value();
 
     if (ndiff_alpha + ndiff_beta > 4) {
-        0.0;
+        return 0.0;
     }
 
     if (ndiff_alpha == 2 and ndiff_beta == 2) {
