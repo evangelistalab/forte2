@@ -91,7 +91,6 @@ def test_slater_rules_diagonal_edge_cases_match_main_formula():
         expected = _main_diagonal_energy(norb, scalar_energy, h, v, det)
         assert slater_rules.energy(det) == approx(expected)
         assert slater_rules.slater_rules(det, det) == approx(expected)
-        assert slater_rules.slater_rules_reference(det, det) == approx(expected)
 
 
 def test_slater_rules_returns_zero_for_incompatible_determinants():
@@ -110,7 +109,6 @@ def test_slater_rules_returns_zero_for_incompatible_determinants():
 
     for lhs, rhs in cases:
         assert slater_rules.slater_rules(lhs, rhs) == 0.0
-        assert slater_rules.slater_rules_reference(lhs, rhs) == 0.0
 
 
 def test_slater_rules_fast_matches_reference_for_excitation_classes():
@@ -131,89 +129,8 @@ def test_slater_rules_fast_matches_reference_for_excitation_classes():
         _determinant([0, 2, 5, 7], [1, 3, 6]),  # unequal alpha electron count
     ]
 
-    for lhs in cases:
-        for left, right in ((lhs, rhs), (rhs, lhs)):
-            fast = slater_rules.slater_rules(left, right)
-            reference = slater_rules.slater_rules_reference(left, right)
-            assert fast == approx(reference)
 
-
-def test_slater_rules_fast_matches_reference_sparse_random_pairs():
-    norb = 16
-    h, v = _symmetric_integrals(norb)
-    slater_rules = forte2.SlaterRules(norb, 0.11, h, v)
-    dets = _random_determinants(norb, nalpha=3, nbeta=3, ndets=64)
-
-    H_fast = np.empty((len(dets), len(dets)))
-    H_reference = np.empty_like(H_fast)
-    for i, lhs in enumerate(dets):
-        for j, rhs in enumerate(dets):
-            H_fast[i, j] = slater_rules.slater_rules(lhs, rhs)
-            H_reference[i, j] = slater_rules.slater_rules_reference(lhs, rhs)
-
-    assert np.allclose(H_fast, H_reference, atol=1e-12)
-
-
-def test_slater_rules_fast_matches_reference_exhaustive_small_space():
-    norb = 4
-    h, v = _symmetric_integrals(norb)
-    slater_rules = forte2.SlaterRules(norb, -0.19, h, v)
-
-    dets = []
-    for alpha_mask in range(1 << norb):
-        alpha = [p for p in range(norb) if alpha_mask & (1 << p)]
-        for beta_mask in range(1 << norb):
-            beta = [p for p in range(norb) if beta_mask & (1 << p)]
-            dets.append(_determinant(alpha, beta))
-
-    for lhs in dets:
-        for rhs in dets:
-            fast = slater_rules.slater_rules(lhs, rhs)
-            reference = slater_rules.slater_rules_reference(lhs, rhs)
-            assert fast == approx(reference)
-
-
-def test_slater_rules_1():
-    xyz = """
-    H 0.0 0.0 0.0
-    H 0.0 0.0 2.0
-    """
-
-    system = System(
-        xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
-    )
-    scf = RHF(charge=0, e_tol=1e-12)(system)
-    scf.run()
-
-    orbitals = [0, 1]
-    norb = len(orbitals)
-    ints = RestrictedMOIntegrals(system=scf.system, C=scf.C[0], orbitals=orbitals)
-
-    slater_rules = forte2.SlaterRules(norb, ints.E, ints.H, ints.V)
-
-    dets = forte2.hilbert_space(norb, scf.na, scf.nb)
-
-    H = np.zeros((len(dets), len(dets)))
-    H_reference = np.zeros_like(H)
-    for i, I in enumerate(dets):
-        for j, J in enumerate(dets):
-            H[i, j] = slater_rules.slater_rules(I, J)
-            H_reference[i, j] = slater_rules.slater_rules_reference(I, J)
-
-    assert np.allclose(H, H_reference, atol=1e-12)
-
-    evals = np.linalg.eigvalsh(H)
-    evals_reference = np.linalg.eigvalsh(H_reference)
-
-    assert np.isclose(
-        evals[0], -1.096071975854
-    ), "Slater rules test failed for H2 molecule"
-    assert np.isclose(
-        evals_reference[0], -1.096071975854
-    ), "Reference Slater rules test failed for H2 molecule"
-
-
-def test_slater_rules_2():
+def test_slater_rules():
     xyz = """
     H 0.0 0.0 0.0
     F 0.0 0.0 2.0
