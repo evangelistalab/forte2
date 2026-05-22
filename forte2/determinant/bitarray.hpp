@@ -7,6 +7,7 @@
 #include <functional>
 #include <iterator>
 #include <ostream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -848,6 +849,8 @@ template <size_t N> std::ostream& operator<<(std::ostream& os, const BitArray<N>
 /// @return an optional containing the number of differences if the two bit arrays differ by at most
 /// 4 bits and have the same number of bits set to 1, or an empty optional otherwise
 template <size_t start, size_t end, size_t N>
+/// @details We use a 32 bit integer to store the number of differences so that the returned
+/// quantity fits in a register.
 std::optional<std::uint32_t> screen_slater_connection_impl(const forte2::BitArray<N>& lhs,
                                                            const forte2::BitArray<N>& rhs) {
     int diff_count{0}; // number of spinors that differ between the two determinants
@@ -855,16 +858,16 @@ std::optional<std::uint32_t> screen_slater_connection_impl(const forte2::BitArra
         diff_count += std::popcount(lhs.get_word(w) ^ rhs.get_word(w));
         // early exit if more than 4 differences
         if (diff_count > 4) {
-            return std::optional<int>();
+            return std::optional<std::uint32_t>();
         }
     }
-    int total_count{0}; //  number of lhs - rhs occupied spinors
+    int total_set_diff_count{0}; //  number of lhs - rhs set bits
     for (std::size_t w = start; w < end; ++w) {
-        total_count += std::popcount(lhs.get_word(w)) - std::popcount(rhs.get_word(w));
+        total_set_diff_count += std::popcount(lhs.get_word(w)) - std::popcount(rhs.get_word(w));
     }
-    // early exit if the determinants have different numbers of electrons
-    if (total_count != 0) {
-        return std::optional<int>();
+    // signal early exit if the number of set bits is different
+    if (total_set_diff_count != 0) {
+        return std::optional<std::uint32_t>();
     }
     return diff_count;
 }
@@ -876,8 +879,10 @@ std::optional<std::uint32_t> screen_slater_connection_impl(const forte2::BitArra
 /// @tparam N the number of bits in the BitArray
 /// @param lhs the left determinant
 /// @param rhs the right determinant
-/// @return a tuple containing the indices of the connected spinors: (i, a) where i is the index of
-/// the occupied spinor in lhs and a is the index of the unoccupied spinor in rhs
+/// @return a tuple containing the difference in bit positions: (i, a) where i is set in the lhs and
+/// not in the rhs, and a is set in the rhs and not in the lhs
+/// The indices are shifted by start * bits_per_word to account for the fact that we are only
+/// comparing a subset of the words of the BitArrays.
 template <size_t start, size_t end, size_t N>
 std::tuple<std::size_t, std::size_t> find_single_connection_impl(const forte2::BitArray<N>& lhs,
                                                                  const forte2::BitArray<N>& rhs) {
@@ -904,9 +909,10 @@ std::tuple<std::size_t, std::size_t> find_single_connection_impl(const forte2::B
 /// @tparam N the number of bits in the BitArray
 /// @param lhs the left determinant
 /// @param rhs the right determinant
-/// @return a tuple containing the indices of the connected spinors: (i, j, a, b) where i and j are
-/// the indices of the occupied spinors in lhs and a and b are the indices of the unoccupied spinors
-/// in rhs
+/// @return a tuple containing the indices of the differences in bit positions: (i, j, a, b) where i
+/// and j are set in the lhs and not in the rhs, and a and b are set in the rhs and not in the lhs.
+/// The indices are shifted by start * bits_per_word to account for the fact that we are only
+/// comparing a subset of the words of the BitArrays.
 template <size_t start, size_t end, size_t N>
 std::tuple<std::size_t, std::size_t, std::size_t, std::size_t>
 find_double_connection_impl(const forte2::BitArray<N>& lhs, const forte2::BitArray<N>& rhs) {
@@ -917,7 +923,7 @@ find_double_connection_impl(const forte2::BitArray<N>& lhs, const forte2::BitArr
         const std::uint64_t rhs_word = rhs.get_word(w);
         std::uint64_t lhs_only = lhs_word & ~rhs_word;
         std::uint64_t rhs_only = rhs_word & ~lhs_word;
-        while (lhs_only) {
+        while (lhs_only) { // loop over the bits set in lhs_only
             if (i == not_filled) {
                 i = (w - start) * forte2::BitArray<N>::bits_per_word + std::countr_zero(lhs_only);
             } else {
@@ -925,7 +931,7 @@ find_double_connection_impl(const forte2::BitArray<N>& lhs, const forte2::BitArr
             }
             ui64_clear_lowest_one_bit(lhs_only); // Clear the lowest set bit
         }
-        while (rhs_only) {
+        while (rhs_only) { // loop over the bits set in rhs_only
             if (a == not_filled) {
                 a = (w - start) * forte2::BitArray<N>::bits_per_word + std::countr_zero(rhs_only);
             } else {
