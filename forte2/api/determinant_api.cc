@@ -1,6 +1,7 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
+#include <nanobind/stl/tuple.h>
 
 #include "determinant/determinant.h"
 #include "determinant/configuration.hpp"
@@ -125,6 +126,13 @@ void export_determinant_api(nb::module_& m) {
             "n"_a,
             "Apply a beta destruction operator to the determinant at the specified orbital index "
             "and return the sign")
+        .def("excitation_connection", &Determinant::excitation_connection,
+             "Describe the excitation connection of a determinant d, relative to this one."
+             "The excitation connection is defined as the creation and annihilation operators that "
+             "need to be applied to this determinant to obtain d. The excitation connection is a "
+             "vector of 4 vectors:"
+             "[[alfa annihilation], [alfa creation],"
+             "[beta annihilation], [beta creation]]")
         .def("spin_flip", &Determinant::spin_flip,
              "Spin flip the determinant, i.e., swap alpha and beta orbitals")
         .def(

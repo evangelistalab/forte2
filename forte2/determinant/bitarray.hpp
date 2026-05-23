@@ -929,4 +929,38 @@ find_double_connection_impl(const forte2::BitArray<N>& lhs, const forte2::BitArr
     return {i, j, a, b};
 }
 
+/// @brief Given two bit arrays, find the bits that are set in the lhs and not in the rhs, and the
+/// bits that are set in the rhs and not in the lhs.
+/// @tparam start the index of the first word to compare
+/// @tparam end the index of the last word to compare (not included)
+/// @tparam N the number of bits in the BitArray
+/// @param lhs the left determinant
+/// @param rhs the right determinant
+/// @return a tuple containing the indices of the differences in bit positions: (i, j, a, b) where i
+/// and j are set in the lhs and not in the rhs, and a and b are set in the rhs and not in the lhs.
+/// The indices are shifted by start * bits_per_word to account for the fact that we are only
+/// comparing a subset of the words of the BitArrays.
+template <size_t start, size_t end, size_t N>
+std::tuple<std::vector<std::size_t>, std::vector<std::size_t>>
+find_general_connection_impl(const forte2::BitArray<N>& lhs, const forte2::BitArray<N>& rhs) {
+    std::vector<std::size_t> lhs_diffs, rhs_diffs;
+    for (std::size_t w = start; w < end; ++w) {
+        const std::uint64_t lhs_word = lhs.get_word(w);
+        const std::uint64_t rhs_word = rhs.get_word(w);
+        std::uint64_t lhs_only = lhs_word & ~rhs_word;
+        std::uint64_t rhs_only = rhs_word & ~lhs_word;
+        while (lhs_only) { // loop over the bits set in lhs_only
+            lhs_diffs.push_back((w - start) * forte2::BitArray<N>::bits_per_word +
+                                std::countr_zero(lhs_only));
+            ui64_clear_lowest_one_bit(lhs_only); // Clear the lowest set bit
+        }
+        while (rhs_only) { // loop over the bits set in rhs_only
+            rhs_diffs.push_back((w - start) * forte2::BitArray<N>::bits_per_word +
+                                std::countr_zero(rhs_only));
+            ui64_clear_lowest_one_bit(rhs_only); // Clear the lowest set bit
+        }
+    }
+    return {lhs_diffs, rhs_diffs};
+}
+
 } // namespace forte2

@@ -316,6 +316,23 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
         return slater_sign_b(n);
     }
 
+    std::tuple<std::vector<size_t>, std::vector<size_t>, std::vector<size_t>, std::vector<size_t>>
+    excitation_connection(const DeterminantImpl<N>& other) const {
+        // Compare the alpha and beta storage words separately to find the occupied orbitals that
+        // differ between this determinant and the other determinant. The first vector in the
+        // returned tuple contains the occupied alpha orbitals that are in this determinant but not
+        // in the other determinant, the second vector contains the occupied alpha orbitals that
+        // are in the other determinant but not in this determinant, the third vector contains the
+        // occupied beta orbitals that are in this determinant but not in the other determinant, and
+        // the fourth vector contains the occupied beta orbitals that are in the other determinant
+        // but not in this determinant.
+        auto [alpha_lhs, alpha_rhs] =
+            find_general_connection_impl<0, storage_words_per_spin>(*this, other);
+        auto [beta_lhs, beta_rhs] =
+            find_general_connection_impl<storage_words_per_spin, nwords_>(*this, other);
+        return {alpha_lhs, alpha_rhs, beta_lhs, beta_rhs};
+    }
+
     /// @brief Return the fermionic sign for an alpha orbital
     /// This function ignores whether alpha orbital n is occupied.
     /// @param n the orbital index
