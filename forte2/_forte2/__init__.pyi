@@ -540,6 +540,14 @@ class Determinant:
         Apply a beta destruction operator to the determinant at the specified orbital index and return the sign
         """
 
+    def excitation_connection(self, other: Determinant) -> tuple[int, list[int], list[int], list[int], list[int]]:
+        """
+        Determine the second quantized operators that connect this to the other determinant.
+
+        Returns a tuple containing the list of operators in the form
+            [[alfa annihilation], [alfa creation], [beta annihilation], [beta creation]]
+        """
+
     def spin_flip(self) -> Determinant:
         """Spin flip the determinant, i.e., swap alpha and beta orbitals"""
 
