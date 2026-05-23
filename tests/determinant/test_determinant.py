@@ -285,3 +285,41 @@ def test_spin_flip():
     """Test spin flip functions"""
     d = Determinant("2ba0ab0aabb")
     assert d.spin_flip() == Determinant("2ab0ba0bbaa")
+
+
+def test_excitation_connection():
+    """Test the excitation_connection function"""
+    d1 = Determinant("220")
+    d2 = Determinant("022")
+    conn = d1.excitation_connection(d2)
+    assert conn[0] == [0]  # alfa hole
+    assert conn[1] == [2]  # alfa particle
+    assert conn[2] == [0]  # beta hole
+    assert conn[3] == [2]  # beta particle
+    conn = d2.excitation_connection(d1)
+    assert conn[0] == [2]  # alfa hole
+    assert conn[1] == [0]  # alfa particle
+    assert conn[2] == [2]  # beta hole
+    assert conn[3] == [0]  # beta particle
+
+    # test different number of electrons
+    d1 = Determinant("2")
+    d2 = Determinant("0")
+    conn = d1.excitation_connection(d2)
+    assert conn[0] == [0]  # alfa hole
+    assert conn[1] == []  # alfa particle
+    assert conn[2] == [0]  # beta hole
+    assert conn[3] == []  # beta particle
+    conn = d2.excitation_connection(d1)
+    assert conn[0] == []  # alfa hole
+    assert conn[1] == [0]  # alfa particle
+    assert conn[2] == []  # beta hole
+    assert conn[3] == [0]  # beta particle
+
+    d1 = Determinant("222ab00000")
+    d2 = Determinant("baa0200b02")
+    conn = d1.excitation_connection(d2)
+    assert conn[0] == [0, 3]  # alfa hole
+    assert conn[1] == [4, 9]  # alfa particle
+    assert conn[2] == [1, 2]  # beta hole
+    assert conn[3] == [7, 9]  # beta particle
