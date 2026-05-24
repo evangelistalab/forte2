@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import pytest
 
@@ -107,13 +109,17 @@ def test_mrpt2_carbon_rel_sa():
     C 0 0 0
     """
 
-    system = System(
+    system_0 = System(
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
         x2c_type="so",
         snso_type="row-dependent",
     )
+    system_0.save("temp")
+    system = System.load("temp")
+    os.remove("temp.npz")
+    os.remove("temp.json")
     mf = GHF(charge=0, die_if_not_converged=False)(system)
     ci_solver = RelCISolver(
         nel=6,

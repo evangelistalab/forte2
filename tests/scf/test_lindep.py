@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import pytest
 
@@ -62,7 +64,7 @@ def test_lindep_x2c():
     H 0 0 0
     """
 
-    system = System(
+    system_0 = System(
         xyz=xyz,
         basis_set={"H": "aug-cc-pVTZ", "Tl": "x2c-tzvpall-2c"},
         auxiliary_basis_set={
@@ -75,6 +77,10 @@ def test_lindep_x2c():
         use_gaussian_charges=True,
         overlap_ortho_rtol=5e-10,
     )
+    system_0.save("temp")
+    system = System.load("temp")
+    os.remove("temp.npz")
+    os.remove("temp.json")
     scf = GHF(charge=0)(system)
     scf.run()
     assert scf.E == approx_loose(eref)
