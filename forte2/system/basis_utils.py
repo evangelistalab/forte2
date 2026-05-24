@@ -22,6 +22,31 @@ AM_LABELS = ["s", "p", "d", "f", "g", "h", "i", "j", "k", "l", "m", "n"]
 MAX_L = len(AM_LABELS) - 1
 
 
+def serialize(self):
+    """
+    Return a serialized representation of the basis set.
+
+    Returns
+    -------
+    list
+        A flat list, contains the properties of a shell in the basis set, including:
+        - l: int, the angular momentum quantum number of the shell.
+        - nprim: int, the number of primitive Gaussians in the shell (this determines how many exponents and coefficients to read).
+        - exponents: list[float], the list of exponents for the primitive Gaussians in the shell.
+        - coeff: list[float], the list of coefficients for the primitive Gaussians in the shell.
+        - center: list[float], the coordinates of the center of the shell.
+    """
+    res = []
+    for i in range(self.nshells):
+        s = self[i]
+        sinfo = [s.l, s.nprim, *s.exponents, *s.coeff, *s.center]
+        res += sinfo
+    return res
+
+
+Basis.serialize = serialize
+
+
 def ml_from_shell_index_cca(l, idx):
     """
     Map Libint Standard/CCA shell index (0..2*l) to signed magnetic quantum number (m_l) value.

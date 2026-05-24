@@ -105,15 +105,17 @@ void export_shell_api(nb::module_& sub_m) {
 #if __cplusplus >= 202002L
         // C++20 or later
         .def("__repr__",
-             [](const libint2::Shell& s) {
-                 std::string str;
-                 str = "l = " + std::to_string(s.contr[0].l) +
-                       " nprim = " + std::to_string(s.nprim());
-                 for (std::size_t i = 0; i < s.nprim(); ++i) {
-                     str += std::format("\n  {0:10.6f} {1:10.6f}", s.alpha[i], s.contr[0].coeff[i]);
-                 }
-                 return str;
-             })
+            [](const libint2::Shell& s) {
+                std::string str;
+                str = "l = " + std::to_string(s.contr[0].l) +
+                    " nprim = " + std::to_string(s.nprim()) + 
+                    " center = (" + std::to_string(s.O[0]) + ", " + std::to_string(s.O[1]) + ", " + std::to_string(s.O[2]) + ")";
+                str += std::format("\n  {:<10} {:<10}", "alpha", "coeff");
+                for (std::size_t i = 0; i < s.nprim(); ++i) {
+                    str += std::format("\n  {:<10.6f} {:<10.6f}", s.alpha[i], s.contr[0].coeff[i]);
+                }
+                return str;
+            })
 #endif
         .def_prop_ro(
             "size", [](libint2::Shell& s) { return s.size(); },

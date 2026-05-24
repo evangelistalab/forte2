@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from forte2 import System, RHF
@@ -22,14 +24,20 @@ def test_cadmium_imidazole_complex():
     H       -3.909370623    0.000000000    -5.152366230
     H       -2.481531661    0.000000000    -9.778799182
     """
-    mol = System(
+    system = System(
         xyz=xyz,
         basis_set="3-21g",
         auxiliary_basis_set="def2-universal-jkfit",
         minao_basis_set=None,
         unit="bohr",
     )
-    scf = RHF(charge=2)(mol)
+    system.save("temp")
+    system_load = System.load("temp")
+
+    os.remove("temp.npz")
+    os.remove("temp.json")
+
+    scf = RHF(charge=2)(system_load)
     scf.run()
     assert scf.E == approx(eref)
 

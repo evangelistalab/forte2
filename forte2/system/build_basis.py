@@ -17,6 +17,32 @@ except ImportError:
     BSE_AVAILABLE = False
 
 
+def build_basis_from_array(basis_array):
+    basis = Basis()
+    idx = 0
+    while idx < len(basis_array):
+        l = int(basis_array[idx])
+        idx += 1
+        nprim = int(basis_array[idx])
+        idx += 1
+        exponents = basis_array[idx : idx + nprim].astype(float)
+        idx += nprim
+        coeffiients = basis_array[idx : idx + nprim].astype(float)
+        idx += nprim
+        center = basis_array[idx : idx + 3].astype(float)
+        idx += 3
+        basis.add(
+            Shell(
+                l,
+                exponents,
+                coeffiients,
+                center,
+                embed_normalization_into_coefficients=False,  # assume the coefficients are already normalized if provided as an array
+            )
+        )
+    return basis
+
+
 def build_basis(
     basis_assignment: str | dict,
     geometry,
@@ -229,7 +255,9 @@ def _load_basis(basis_name, Z):
             f"[forte2] Generating AutoAux basis for element Z={Z} using Basis Set Exchange."
         )
         try:
-            bse_basis = bse.get_basis(basis_name.replace("-autoaux", ""), elements=Z, get_aux=1)
+            bse_basis = bse.get_basis(
+                basis_name.replace("-autoaux", ""), elements=Z, get_aux=1
+            )
         except KeyError:
             raise RuntimeError(
                 f"[forte2] Basis Set Exchange could not generate AutoAux basis for element Z={Z} with basis set {basis_name.replace('-autoaux', '')}!"
