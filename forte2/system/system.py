@@ -133,7 +133,8 @@ class System:
     two_component: bool = field(init=False, default=False)
     # Basis set objects build from arguments provided at initialization.
     auxiliary_basis: Basis = field(init=False, default=None)
-    # If the system object is initialized from an npz file, this attribute saves the filename
+    # If provided, this initialization-only value passes the npz filename to __post_init__;
+    # it is not stored as an instance attribute.
     load_from_file: InitVar[str] = field(default=None)
 
     def __post_init__(self, load_from_file):

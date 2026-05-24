@@ -20,6 +20,34 @@ def test_basis_info():
     assert basis_info.atom_to_aos[8][2] == list(range(40, 45))
 
 
+def test_basis_serialize():
+    xyz = """
+    C 0 0 0
+    O 0 0 1.2
+    N 0 0 2.4
+    O 2 1 0
+    """
+    system = System(
+        xyz=xyz,
+        basis_set={"C": "cc-pvtz", "O": "sto-6g", "default": "sto-3g"},
+    )
+    res = system.basis.serialize()
+    assert res[0] == system.basis.nshells
+    idx = 1
+    for i in range(system.basis.nshells):
+        sh = system.basis[i]
+        assert res[idx] == sh.nprim
+        idx += 1
+        assert res[idx] == sh.l
+        idx += 1
+        assert res[idx : idx + sh.nprim] == pytest.approx(sh.exponents, abs=1e-10)
+        idx += sh.nprim
+        assert res[idx : idx + sh.nprim] == pytest.approx(sh.coeff, abs=1e-10)
+        idx += sh.nprim
+        assert res[idx : idx + 3] == pytest.approx(sh.center, abs=1e-10)
+        idx += 3
+
+
 def test_get_shell_label():
     assert get_shell_label(0, 0) == "s"
     assert get_shell_label(1, 0) == "py"

@@ -1,5 +1,3 @@
-import os
-
 import numpy as np
 import pytest
 
@@ -55,7 +53,7 @@ def test_lindep_ghf():
 
 
 @pytest.mark.slow
-def test_lindep_x2c():
+def test_lindep_x2c(tmp_path):
     # This tests the handling of linear dependencies in the X2C transformation
     # The basis sets are decontracted during X2C, resulting in cond(S) ~ 8e9.
     eref = -20264.784349176811
@@ -77,10 +75,8 @@ def test_lindep_x2c():
         use_gaussian_charges=True,
         overlap_ortho_rtol=5e-10,
     )
-    system_0.save("temp")
-    system = System.load("temp")
-    os.remove("temp.npz")
-    os.remove("temp.json")
+    system_0.save(tmp_path / "test_lindep_x2c")
+    system = System.load(tmp_path / "test_lindep_x2c")
     scf = GHF(charge=0)(system)
     scf.run()
     assert scf.E == approx_loose(eref)

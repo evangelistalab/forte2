@@ -4,6 +4,8 @@ from importlib import resources
 import re
 import os
 
+import numpy as np
+
 from forte2 import Basis, Shell
 from forte2.data import ATOM_SYMBOL_TO_Z
 from forte2.helpers import logger
@@ -18,24 +20,50 @@ except ImportError:
 
 
 def build_basis_from_array(basis_array):
+    """
+    Build a Basis object from a flat array containing the basis set data.
+
+    The basis_array is expected to have the following format for each shell:
+    [nshells, nprim1, l1, exp11, exp12, ..., coeff11, coeff12, ..., center_x1, center_y1, center_z1,...]
+
+    Parameters
+    ----------
+    basis_array : NDArray
+        A flat array containing the basis set data for all shells.
+
+    Returns
+    -------
+    basis : forte2.ints.Basis
+        The constructed Basis object.
+    """
+    if not isinstance(basis_array, np.ndarray | list):
+        raise TypeError(
+            f"Expected basis_array to be a numpy array or list, but got {type(basis_array)}."
+        )
+    nshells = int(basis_array[0])
     basis = Basis()
-    idx = 0
-    while idx < len(basis_array):
-        l = int(basis_array[idx])
-        idx += 1
-        nprim = int(basis_array[idx])
-        idx += 1
-        exponents = basis_array[idx : idx + nprim].astype(float)
-        idx += nprim
-        coeffiients = basis_array[idx : idx + nprim].astype(float)
-        idx += nprim
-        center = basis_array[idx : idx + 3].astype(float)
-        idx += 3
+    idx = 1
+    for i in range(nshells):
+        try:
+            nprim = int(basis_array[idx])
+            l = int(basis_array[idx + 1])
+            idx += 2
+            exponents = basis_array[idx : idx + nprim].astype(float)
+            idx += nprim
+            coefficients = basis_array[idx : idx + nprim].astype(float)
+            idx += nprim
+            center = basis_array[idx : idx + 3].astype(float)
+            idx += 3
+        except Exception as e:
+            raise ValueError(
+                f"Error parsing basis_array at shell {i+1}. Check that the array is correctly formatted. Original error: {e}"
+            ) from e
+
         basis.add(
             Shell(
                 l,
                 exponents,
-                coeffiients,
+                coefficients,
                 center,
                 embed_normalization_into_coefficients=False,  # assume the coefficients are already normalized if provided as an array
             )

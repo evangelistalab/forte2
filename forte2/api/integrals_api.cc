@@ -105,17 +105,18 @@ void export_shell_api(nb::module_& sub_m) {
 #if __cplusplus >= 202002L
         // C++20 or later
         .def("__repr__",
-            [](const libint2::Shell& s) {
-                std::string str;
-                str = "l = " + std::to_string(s.contr[0].l) +
-                    " nprim = " + std::to_string(s.nprim()) + 
-                    " center = (" + std::to_string(s.O[0]) + ", " + std::to_string(s.O[1]) + ", " + std::to_string(s.O[2]) + ")";
-                str += std::format("\n  {:<10} {:<10}", "alpha", "coeff");
-                for (std::size_t i = 0; i < s.nprim(); ++i) {
-                    str += std::format("\n  {:<10.6f} {:<10.6f}", s.alpha[i], s.contr[0].coeff[i]);
-                }
-                return str;
-            })
+             [](const libint2::Shell& s) {
+                 std::string str;
+                 str = "l = " + std::to_string(s.contr[0].l) +
+                       " nprim = " + std::to_string(s.nprim()) + " center = (" +
+                       std::to_string(s.O[0]) + ", " + std::to_string(s.O[1]) + ", " +
+                       std::to_string(s.O[2]) + ")";
+                 str += std::format("\n  {:<10} {:<10}", "alpha", "coeff");
+                 for (std::size_t i = 0; i < s.nprim(); ++i) {
+                     str += std::format("\n  {:<10.6f} {:<10.6f}", s.alpha[i], s.contr[0].coeff[i]);
+                 }
+                 return str;
+             })
 #endif
         .def_prop_ro(
             "size", [](libint2::Shell& s) { return s.size(); },
@@ -154,6 +155,30 @@ void export_basis_api(nb::module_& sub_m) {
         .def("set_name", &Basis::set_name, "name"_a)
         .def("__getitem__", &Basis::operator[], "i"_a)
         .def("__len__", &Basis::size)
+        .def(
+            "serialize",
+            [](const Basis& basis) {
+                nb::list res;
+                res.append(basis.nshells());
+                for (std::size_t i = 0; i < basis.nshells(); ++i) {
+                    const auto& shell = basis[i];
+                    res.append(shell.nprim());
+                    res.append(shell.contr[0].l);
+                    for (double exponent : shell.alpha) {
+                        res.append(exponent);
+                    }
+                    for (double coeff : shell.contr[0].coeff) {
+                        res.append(coeff);
+                    }
+                    for (double coord : shell.O) {
+                        res.append(coord);
+                    }
+                }
+                return res;
+            },
+            "Serialize the basis set to a list of numbers. The format is as follows: [nshells, "
+            "nprim_1, l_1, exponents_1..., coeffs_1..., center_1..., nprim_2, l_2, exponents_2..., "
+            "coeffs_2..., center_2..., ...]")
         .def_prop_ro("shell_first_and_size", &Basis::shell_first_and_size,
                      "Returns a vector of pairs of the first index and size of each shell in the "
                      "basis set. The first index is the index of the first basis function in the "
