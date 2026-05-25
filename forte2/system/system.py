@@ -172,14 +172,15 @@ class System:
             res["aux_basis_data"] = self.auxiliary_basis.serialize()
         if self.minao_basis is not None:
             res["minao_basis_data"] = self.minao_basis.serialize()
-        with open(f"{filename}.json", "w") as f:
+        with open(f"{filename}.json", "w", encoding="utf-8") as f:
             json.dump(res, f)
 
     @classmethod
     def load(cls, filename):
-        d = json.load(open(f"{filename}.json"))
-        init_args = d["init_args"]
-        system = cls(**init_args, load_from_file=filename)
+        with open(f"{filename}.json", "r", encoding="utf-8") as f:
+            d = json.load(f)
+            init_args = d["init_args"]
+            system = cls(**init_args, load_from_file=filename)
         return system
 
     def _init_geometry(self):
