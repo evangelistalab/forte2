@@ -179,7 +179,6 @@ class System:
         d = {f.name: getattr(self, f.name) for f in fields(self) if f.init is True}
         res = {"init_args": d}
         res["basis_data"] = self.basis.serialize()
-        # Serialize the basis set information into a arrays that can be saved in the npz file
         if self.auxiliary_basis is not None:
             res["aux_basis_data"] = self.auxiliary_basis.serialize()
         if self.minao_basis is not None:

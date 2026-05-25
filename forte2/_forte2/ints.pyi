@@ -62,10 +62,8 @@ class Basis:
 
     def __len__(self) -> int: ...
 
-    def serialize(self) -> list:
-        """
-        Serialize the basis set to a list of numbers. The format is as follows: [nshells, nprim_1, l_1, exponents_1..., coeffs_1..., center_1..., nprim_2, l_2, exponents_2..., coeffs_2..., center_2..., ...]
-        """
+    def serialize(self) -> dict:
+        """Serialize the basis set to a dictionary."""
 
     @property
     def shell_first_and_size(self) -> list[tuple[int, int]]:
