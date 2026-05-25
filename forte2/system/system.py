@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field, fields, InitVar
+from dataclasses import dataclass, field, fields
 import numpy as np
 from numpy.typing import NDArray
 import json
@@ -133,18 +133,30 @@ class System:
     two_component: bool = field(init=False, default=False)
     # Basis set objects build from arguments provided at initialization.
     auxiliary_basis: Basis = field(init=False, default=None)
-    # If provided, this initialization-only value passes the npz filename to __post_init__;
-    # it is not stored as an instance attribute.
-    load_from_file: InitVar[str] = field(default=None)
 
-    def __post_init__(self, load_from_file):
-        assert self.unit in [
+    def __post_init__(self):
+        self._sanity_check()
+        self._common_init()
+
+    def _sanity_check(self):
+        if self.unit not in [
             "angstrom",
             "bohr",
-        ], f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'."
+        ]:
+            raise ValueError(f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'.")
+        if self.overlap_ortho_rtol < 0:
+            raise ValueError("overlap_ortho_rtol must be non-negative.")
+        if self.df_ortho_rtol is not None and self.df_ortho_rtol < 0:
+            raise ValueError("df_ortho_rtol must be non-negative.")
+        if self.cholesky_tol < 0:
+            raise ValueError("cholesky_tol must be non-negative.")
+        if self.symmetry_tol < 0:
+            raise ValueError("symmetry_tol must be non-negative.")
 
+    def _common_init(self, skip_basis_init=False):
         self._init_geometry()
-        self._init_basis(load_from_file)
+        if not skip_basis_init:
+            self._init_basis()
         self.nuclear_repulsion = integrals.nuclear_repulsion(self)
         self._init_x2c()
         _S = integrals.overlap(self)
@@ -180,7 +192,12 @@ class System:
         with open(f"{filename}.json", "r", encoding="utf-8") as f:
             d = json.load(f)
             init_args = d["init_args"]
-            system = cls(**init_args, load_from_file=filename)
+            system = cls.__new__(cls)
+            for k, v in init_args.items():
+                setattr(system, k, v)
+        system._sanity_check()
+        system.load_basis_from_file(filename)
+        system._common_init(skip_basis_init=True)
         return system
 
     def _init_geometry(self):
@@ -207,44 +224,29 @@ class System:
                 f"   {Z_TO_ATOM_SYMBOL[self.atoms[i][0]]}   {self.prin_atomic_positions[i, 0]:<.8f}   {self.prin_atomic_positions[i, 1]:<.8f}   {self.prin_atomic_positions[i, 2]:<.8f}"
             )
 
-    def _init_basis(self, load_from_file):
-        if load_from_file is None:
-            self.basis = build_basis(self.basis_set, self.geom_helper)
-            logger.log_info1(
-                f"Parsed {self.natoms} atoms with basis set of {self.basis.size} functions."
-            )
+    def _init_basis(self):
+        self.basis = build_basis(self.basis_set, self.geom_helper)
+        logger.log_info1(
+            f"Parsed {self.natoms} atoms with basis set of {self.basis.size} functions."
+        )
 
-            if not self.cholesky_tei:
-                if self.auxiliary_basis_set is not None:
-                    self.auxiliary_basis = build_basis(
-                        self.auxiliary_basis_set, self.geom_helper
-                    )
-                else:
-                    self.auxiliary_basis = None
+        if not self.cholesky_tei:
+            if self.auxiliary_basis_set is not None:
+                self.auxiliary_basis = build_basis(
+                    self.auxiliary_basis_set, self.geom_helper
+                )
             else:
-                if self.auxiliary_basis_set is not None:
-                    logger.log_warning(
-                        "Ignoring provided auxiliary basis sets since cholesky_tei=True!"
-                    )
-
-            if self.minao_basis_set is not None:
-                self.minao_basis = build_basis(self.minao_basis_set, self.geom_helper)
-            else:
-                self.minao_basis = None
+                self.auxiliary_basis = None
         else:
-            with open(f"{load_from_file}.json", "r") as f:
-                data = json.load(f)
-                self.basis = build_basis_from_array(data["basis_data"])
-                if "aux_basis_data" in data:
-                    self.auxiliary_basis = build_basis_from_array(
-                        data["aux_basis_data"]
-                    )
-                else:
-                    self.auxiliary_basis = None
-                if "minao_basis_data" in data:
-                    self.minao_basis = build_basis_from_array(data["minao_basis_data"])
-                else:
-                    self.minao_basis = None
+            if self.auxiliary_basis_set is not None:
+                logger.log_warning(
+                    "Ignoring provided auxiliary basis sets since cholesky_tei=True!"
+                )
+
+        if self.minao_basis_set is not None:
+            self.minao_basis = build_basis(self.minao_basis_set, self.geom_helper)
+        else:
+            self.minao_basis = None
 
         self.nbf = self.basis.size
         self.naux = self.auxiliary_basis.size if self.auxiliary_basis else None
@@ -257,6 +259,28 @@ class System:
                 self.geom_helper,
                 embed_normalization_into_coefficients=False,
             )
+
+    def load_basis_from_file(self, filename: str):
+        """
+        Initialize basis objects from a previously-saved JSON file produced by `save()`.
+        """
+        with open(f"{filename}.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if "basis_data" not in data:
+                raise ValueError(f"Basis data not found in {filename}.json.")
+            self.basis = build_basis_from_array(data["basis_data"])
+            if "aux_basis_data" in data:
+                self.auxiliary_basis = build_basis_from_array(data["aux_basis_data"])
+            else:
+                self.auxiliary_basis = None
+            if "minao_basis_data" in data:
+                self.minao_basis = build_basis_from_array(data["minao_basis_data"])
+            else:
+                self.minao_basis = None
+
+        self.nbf = self.basis.size
+        self.naux = self.auxiliary_basis.size if self.auxiliary_basis else None
+        self.nminao = self.minao_basis.size if self.minao_basis else None
 
     def _init_x2c(self):
         if self.x2c_type is not None:
