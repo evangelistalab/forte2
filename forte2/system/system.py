@@ -157,6 +157,7 @@ class System:
         self._init_geometry()
         if not skip_basis_init:
             self._init_basis()
+        self._init_gaussian_charges()
         self.nuclear_repulsion = integrals.nuclear_repulsion(self)
         self._init_x2c()
         _S = integrals.overlap(self)
@@ -168,7 +169,7 @@ class System:
 
     def save(self, filename):
         """
-        Save the System object a JSON file containing the initialization arguments and basis set data.
+        Save the System object to a JSON file containing the initialization arguments and basis set data.
 
         Parameters
         ----------
@@ -189,13 +190,33 @@ class System:
     @classmethod
     def load(cls, filename):
         with open(f"{filename}.json", "r", encoding="utf-8") as f:
-            d = json.load(f)
-            init_args = d["init_args"]
+            data = json.load(f)
+            init_args = data["init_args"]
             system = cls.__new__(cls)
             for k, v in init_args.items():
                 setattr(system, k, v)
-        system._sanity_check()
-        system.load_basis_from_file(filename)
+            system._sanity_check()
+
+            # Initialize basis sets from saved data
+            if "basis_data" not in data:
+                raise ValueError(f"Basis data not found")
+            system.basis = build_basis_from_array(data["basis_data"])
+            if "aux_basis_data" in data:
+                system.auxiliary_basis = build_basis_from_array(data["aux_basis_data"])
+            else:
+                system.auxiliary_basis = None
+            if "minao_basis_data" in data:
+                system.minao_basis = build_basis_from_array(data["minao_basis_data"])
+            else:
+                system.minao_basis = None
+
+            system.nbf = system.basis.size
+            system.naux = (
+                system.auxiliary_basis.size if system.auxiliary_basis else None
+            )
+            system.nminao = system.minao_basis.size if system.minao_basis else None
+
+        # Skip basis initialization
         system._common_init(skip_basis_init=True)
         return system
 
@@ -251,6 +272,7 @@ class System:
         self.naux = self.auxiliary_basis.size if self.auxiliary_basis else None
         self.nminao = self.minao_basis.size if self.minao_basis else None
 
+    def _init_gaussian_charges(self):
         self.gaussian_charge_basis = None
         if self.use_gaussian_charges:
             self.gaussian_charge_basis = build_basis(
@@ -259,23 +281,22 @@ class System:
                 embed_normalization_into_coefficients=False,
             )
 
-    def load_basis_from_file(self, filename: str):
+    def load_basis_from_file(self, file_handle):
         """
         Initialize basis objects from a previously-saved JSON file produced by `save()`.
         """
-        with open(f"{filename}.json", "r", encoding="utf-8") as f:
-            data = json.load(f)
-            if "basis_data" not in data:
-                raise ValueError(f"Basis data not found in {filename}.json.")
-            self.basis = build_basis_from_array(data["basis_data"])
-            if "aux_basis_data" in data:
-                self.auxiliary_basis = build_basis_from_array(data["aux_basis_data"])
-            else:
-                self.auxiliary_basis = None
-            if "minao_basis_data" in data:
-                self.minao_basis = build_basis_from_array(data["minao_basis_data"])
-            else:
-                self.minao_basis = None
+        data = json.load(file_handle)
+        if "basis_data" not in data:
+            raise ValueError(f"Basis data not found")
+        self.basis = build_basis_from_array(data["basis_data"])
+        if "aux_basis_data" in data:
+            self.auxiliary_basis = build_basis_from_array(data["aux_basis_data"])
+        else:
+            self.auxiliary_basis = None
+        if "minao_basis_data" in data:
+            self.minao_basis = build_basis_from_array(data["minao_basis_data"])
+        else:
+            self.minao_basis = None
 
         self.nbf = self.basis.size
         self.naux = self.auxiliary_basis.size if self.auxiliary_basis else None

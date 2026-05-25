@@ -45,15 +45,16 @@ def build_basis_from_array(basis_data):
     basis : forte2.ints.Basis
         The constructed Basis object.
     """
+    if not isinstance(basis_data, dict):
+        raise TypeError(
+            f"Expected basis_data to be a dictionary, but got {type(basis_data)}."
+        )
+
     if "schema_version" not in basis_data:
         raise ValueError("Basis data is missing 'schema_version' key.")
     if basis_data["schema_version"] != 1:
         raise ValueError(
             f"Unsupported basis data schema version: {basis_data['schema_version']}. Expected version 1."
-        )
-    if not isinstance(basis_data, dict):
-        raise TypeError(
-            f"Expected basis_data to be a dictionary, but got {type(basis_data)}."
         )
     nshells = int(basis_data["nshells"])
     basis = Basis()
