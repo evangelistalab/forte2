@@ -75,6 +75,18 @@ def test_exp_apply_antiherm_scale():
     assert wfn2[Determinant("b2a0")] == pytest.approx(0.0, abs=1e-9)
 
 
+@pytest.mark.parametrize("exp_cls", [forte2.SparseExp, forte2.SparseFactExp])
+def test_exp_apply_op_skips_invalid_creation(exp_cls):
+    op = forte2.SparseOperatorList()
+    op.add("[0a+]", 0.2)
+
+    state = forte2.SparseState({Determinant("a"): 1.0})
+    out = exp_cls().apply_op(op, state)
+
+    assert out[Determinant("a")] == pytest.approx(1.0, abs=1e-12)
+    assert len(out) == 1
+
+
 def test_fact_exp_apply_antiherm_1():
     op = forte2.SparseOperatorList()
     op.add("[2a+ 0a-]", 0.1)
@@ -326,6 +338,18 @@ def test_fact_exp_deriv_imagherm():
     deriv = factexp.apply_antiherm_deriv(*t(0), psi)
     assert deriv[1][Determinant("2")] == pytest.approx(-np.sin(theta), abs=1e-6)
     assert deriv[1][Determinant("ba")] == pytest.approx(1j * np.cos(theta), abs=1e-6)
+
+
+def test_fact_exp_deriv_skips_inapplicable_operator_and_adjoint():
+    factexp = forte2.SparseFactExp()
+    op = forte2.SparseOperatorList()
+    op.add("[1a+ 0a-]", 0.3)
+
+    state = forte2.SparseState({Determinant("aa"): 1.0})
+    dx, dy = factexp.apply_antiherm_deriv(*op(0), state)
+
+    assert len(dx) == 0
+    assert len(dy) == 0
 
 
 def test_fact_exp_deriv_zero_division():

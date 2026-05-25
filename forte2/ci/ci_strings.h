@@ -36,7 +36,7 @@ class CIStrings {
     size_t nb() const { return nb_; }
 
     /// @return the number of alpha strings
-    size_t nas() const { return nalfa_strings; }
+    size_t nas() const { return nalpha_strings; }
 
     /// @return the number of beta strings
     size_t nbs() const { return nbeta_strings; }
@@ -60,52 +60,52 @@ class CIStrings {
     size_t norb() const { return norb_; }
 
     /// @return the alpha string address object
-    const auto& alfa_address() const { return alfa_address_; }
+    const auto& alpha_address() const { return alpha_address_; }
     /// @return the beta string address object
     const auto& beta_address() const { return beta_address_; }
 
     /// @return the alpha string address object
-    const auto& alfa_address_1h1p() const { return alfa_address_1h1p_; }
+    const auto& alpha_address_1h1p() const { return alpha_address_1h1p_; }
     /// @return the beta string address object
     const auto& beta_address_1h1p() const { return beta_address_1h1p_; }
 
     /// @return the alpha string address object for N - 1 electrons
-    auto alfa_address_1h() const { return alfa_address_1h_; }
+    auto alpha_address_1h() const { return alpha_address_1h_; }
     /// @return the beta string address object for N - 1 electrons
     auto beta_address_1h() const { return beta_address_1h_; }
     /// @return the alpha string address object for N - 2 electrons
-    auto alfa_address_2h() const { return alfa_address_2h_; }
+    auto alpha_address_2h() const { return alpha_address_2h_; }
     /// @return the beta string address object for N - 2 electrons
     auto beta_address_2h() const { return beta_address_2h_; }
     /// @return the alpha string address object for N - 3 electrons
-    auto alfa_address_3h() const { return alfa_address_3h_; }
+    auto alpha_address_3h() const { return alpha_address_3h_; }
     /// @return the beta string address object for N - 3 electrons
     auto beta_address_3h() const { return beta_address_3h_; }
 
     /// @return the alpha string list
-    const auto& alfa_strings() const { return alfa_strings_; }
+    const auto& alpha_strings() const { return alpha_strings_; }
     /// @return the beta string list
     const auto& beta_strings() const { return beta_strings_; }
     /// @return the alpha string in irrep h and index I
-    String alfa_str(size_t h, size_t I) const { return alfa_strings_[h][I]; }
+    String alpha_str(size_t h, size_t I) const { return alpha_strings_[h][I]; }
     /// @return the beta string in irrep h and index I
     String beta_str(size_t h, size_t I) const { return beta_strings_[h][I]; }
 
     /// @return the string class object
     const auto& string_class() const { return string_class_; }
     /// @return the alpha string classes
-    const auto& alfa_string_classes() const { return string_class_->alfa_string_classes(); }
+    const auto& alpha_string_classes() const { return string_class_->alpha_string_classes(); }
     /// @return the beta string classes
     const auto& beta_string_classes() const { return string_class_->beta_string_classes(); }
     /// @return the alpha/beta string classes
     const auto& determinant_classes() const { return string_class_->determinant_classes(); }
 
     /// @return the alpha GAS occupations
-    const auto& gas_alfa_occupations() const { return gas_alfa_occupations_; }
+    const auto& gas_alpha_occupations() const { return gas_alpha_occupations_; }
     /// @return the beta GAS occupations
     const auto& gas_beta_occupations() const { return gas_beta_occupations_; }
     /// @return the alpha GAS 1h1p occupations
-    const auto& gas_alfa_1h1p_occupations() const { return gas_alfa_1h1p_occupations_; }
+    const auto& gas_alpha_1h1p_occupations() const { return gas_alpha_1h1p_occupations_; }
     /// @return the beta GAS 1h1p occupations
     const auto& gas_beta_1h1p_occupations() const { return gas_beta_1h1p_occupations_; }
 
@@ -129,29 +129,33 @@ class CIStrings {
     /// @return the list of determinants
     std::vector<Determinant> make_determinants() const;
 
-    const VOListElement& get_alfa_vo_list(int class_I, int class_J) const;
+    const VOListElement& get_alpha_vo_list(int class_I, int class_J) const;
     const VOListElement& get_beta_vo_list(int class_I, int class_J) const;
 
-    const VOListElement2& get_alfa_vo_list2(int class_I, int class_J) const;
+    const VOListElement2& get_alpha_vo_list2(int class_I, int class_J) const;
     const VOListElement2& get_beta_vo_list2(int class_I, int class_J) const;
 
-    const std::vector<H1StringSubstitution>& get_alfa_1h_list(int h_I, size_t add_I, int h_J) const;
+    const std::vector<H1StringSubstitution>& get_alpha_1h_list(int h_I, size_t add_I,
+                                                               int h_J) const;
     const std::vector<H1StringSubstitution>& get_beta_1h_list(int h_I, size_t add_I, int h_J) const;
 
-    const std::vector<std::vector<H1StringSubstitution>>& get_alfa_1h_list2(int h_I, int h_J) const;
+    const std::vector<std::vector<H1StringSubstitution>>& get_alpha_1h_list2(int h_I,
+                                                                             int h_J) const;
     const std::vector<std::vector<H1StringSubstitution>>& get_beta_1h_list2(int h_I, int h_J) const;
 
-    const std::vector<H2StringSubstitution>& get_alfa_2h_list(int h_I, size_t add_I, int h_J) const;
+    const std::vector<H2StringSubstitution>& get_alpha_2h_list(int h_I, size_t add_I,
+                                                               int h_J) const;
     const std::vector<H2StringSubstitution>& get_beta_2h_list(int h_I, size_t add_I, int h_J) const;
 
-    const std::vector<H3StringSubstitution>& get_alfa_3h_list(int h_I, size_t add_I, int h_J) const;
+    const std::vector<H3StringSubstitution>& get_alpha_3h_list(int h_I, size_t add_I,
+                                                               int h_J) const;
     const std::vector<H3StringSubstitution>& get_beta_3h_list(int h_I, size_t add_I, int h_J) const;
 
     template <typename Func> void for_each_element(Func&& func) const {
         std::size_t idx = 0;
 
         for (auto const& [block, class_Ia, class_Ib] : determinant_classes()) {
-            auto const nIa = alfa_address()->strpcls(class_Ia);
+            auto const nIa = alpha_address()->strpcls(class_Ia);
             auto const nIb = beta_address()->strpcls(class_Ib);
 
             if (nIa == 0 or nIb == 0)
@@ -186,7 +190,7 @@ class CIStrings {
     std::vector<size_t> cmopi_offset_;
 
     /// The number of alpha strings
-    size_t nalfa_strings;
+    size_t nalpha_strings;
     /// The number of beta strings
     size_t nbeta_strings;
     /// The number of determinants
@@ -197,9 +201,9 @@ class CIStrings {
     std::vector<int> pair_offset_;
 
     // Occupation patterns of α/β GAS spaces
-    std::vector<std::array<int, 6>> gas_alfa_occupations_;
+    std::vector<std::array<int, 6>> gas_alpha_occupations_;
     std::vector<std::array<int, 6>> gas_beta_occupations_;
-    std::vector<std::array<int, 6>> gas_alfa_1h1p_occupations_;
+    std::vector<std::array<int, 6>> gas_alpha_1h1p_occupations_;
     std::vector<std::array<int, 6>> gas_beta_1h1p_occupations_;
 
     std::vector<std::pair<size_t, size_t>> gas_occupations_;
@@ -225,26 +229,26 @@ class CIStrings {
 
     // Strings
     /// The alpha strings stored by class and address
-    StringList alfa_strings_;
+    StringList alpha_strings_;
     /// The beta strings stored by class and address
     StringList beta_strings_;
 
     // VO lists
-    VOListMap alfa_vo_list;
+    VOListMap alpha_vo_list;
     VOListMap beta_vo_list;
-    VOListMap2 alfa_vo_list2;
+    VOListMap2 alpha_vo_list2;
     VOListMap2 beta_vo_list2;
     /// The 1-hole lists
-    H1List alfa_1h_list;
+    H1List alpha_1h_list;
     H1List beta_1h_list;
     /// The 1-hole lists
-    H1List2 alfa_1h_list2;
+    H1List2 alpha_1h_list2;
     H1List2 beta_1h_list2;
     /// The 2-hole lists
-    H2List alfa_2h_list;
+    H2List alpha_2h_list;
     H2List beta_2h_list;
     /// The 3-hole lists
-    H3List alfa_3h_list;
+    H3List alpha_3h_list;
     H3List beta_3h_list;
 
     // Empty lists
@@ -257,24 +261,24 @@ class CIStrings {
 
     /// Addressers
     /// The alpha string address
-    std::shared_ptr<StringAddress> alfa_address_;
+    std::shared_ptr<StringAddress> alpha_address_;
     /// The beta string address
     std::shared_ptr<StringAddress> beta_address_;
     /// The alpha string address for 1h1p substitutions
-    std::shared_ptr<StringAddress> alfa_address_1h1p_;
+    std::shared_ptr<StringAddress> alpha_address_1h1p_;
     /// The beta string address for 1h1p substitutions
     std::shared_ptr<StringAddress> beta_address_1h1p_;
 
     /// The alpha string address for N - 1 electrons
-    std::shared_ptr<StringAddress> alfa_address_1h_;
+    std::shared_ptr<StringAddress> alpha_address_1h_;
     /// The beta string address for N - 1 electrons
     std::shared_ptr<StringAddress> beta_address_1h_;
     /// The alpha string address for N - 2 electrons
-    std::shared_ptr<StringAddress> alfa_address_2h_;
+    std::shared_ptr<StringAddress> alpha_address_2h_;
     /// The beta string address for N - 2 electrons
     std::shared_ptr<StringAddress> beta_address_2h_;
     /// The alpha string address for N - 3 electrons
-    std::shared_ptr<StringAddress> alfa_address_3h_;
+    std::shared_ptr<StringAddress> alpha_address_3h_;
     /// The beta string address for N - 3 electrons
     std::shared_ptr<StringAddress> beta_address_3h_;
 

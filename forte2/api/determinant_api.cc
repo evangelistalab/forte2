@@ -1,9 +1,10 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
+#include <nanobind/stl/tuple.h>
 
-#include "ci/determinant.h"
-#include "ci/configuration.hpp"
+#include "determinant/determinant.h"
+#include "determinant/configuration.hpp"
 
 namespace nb = nanobind;
 using namespace nb::literals;
@@ -56,53 +57,117 @@ void export_determinant_api(nb::module_& m) {
         .def(
             "__repr__", [](Determinant& d) { return str(d); },
             "String representation of the determinant")
-        .def("set_na", &Determinant::set_na, "n"_a, "value"_a,
-             "Set the occupation of an alpha orbital")
-        .def("set_nb", &Determinant::set_nb, "n"_a, "value"_a,
-             "Set the occupation of a beta orbital")
-        .def("na", &Determinant::na, "n"_a, "Is orbital n occupied by an alpha electron?")
-        .def("nb", &Determinant::nb, "n"_a, "Is orbital n occupied by a beta electron?")
-        .def("count_a", &Determinant::count_a, "Count the number of alpha electrons")
-        .def("count_b", &Determinant::count_b, "Count the number of beta electrons")
         .def(
-            "count", [](Determinant& d) { return d.count_a() + d.count_b(); },
+            "set_na",
+            [](Determinant& d, size_t n, bool value) {
+                d.check_index_bounds(n, "(alpha orbital)");
+                d.set_na(n, value);
+            },
+            "n"_a, "value"_a, "Set the occupation of an alpha orbital")
+        .def(
+            "set_nb",
+            [](Determinant& d, size_t n, bool value) {
+                d.check_index_bounds(n, "(beta orbital)");
+                d.set_nb(n, value);
+            },
+            "n"_a, "value"_a, "Set the occupation of a beta orbital")
+        .def(
+            "na",
+            [](const Determinant& d, size_t n) {
+                d.check_index_bounds(n, "(alpha orbital)");
+                return d.na(n);
+            },
+            "n"_a, "Is orbital n occupied by an alpha electron?")
+        .def(
+            "nb",
+            [](const Determinant& d, size_t n) {
+                d.check_index_bounds(n, "(beta orbital)");
+                return d.nb(n);
+            },
+            "n"_a, "Is orbital n occupied by a beta electron?")
+        .def("count_alpha", &Determinant::count_alpha, "Count the number of alpha electrons")
+        .def("count_beta", &Determinant::count_beta, "Count the number of beta electrons")
+        .def(
+            "count", [](Determinant& d) { return d.count_alpha() + d.count_beta(); },
             "Count the total number of electrons")
-        .def("create_a", &Determinant::create_a, "n"_a,
-             "Apply an alpha creation operator to the determinant at the specified orbital index "
-             "and return the sign")
-        .def("create_b", &Determinant::create_b, "n"_a,
-             "Apply a beta creation operator to the determinant at the specified orbital index and "
-             "return the sign")
-        .def("destroy_a", &Determinant::destroy_a, "n"_a,
-             "Apply an alpha destruction operator to the determinant at the specified orbital "
-             "index and return the sign")
-        .def("destroy_b", &Determinant::destroy_b, "n"_a,
-             "Apply a beta destruction operator to the determinant at the specified orbital index "
-             "and return the sign")
+        .def(
+            "create_alpha",
+            [](Determinant& d, size_t n) {
+                d.check_index_bounds(n, "(alpha orbital)");
+                return d.create_alpha(n);
+            },
+            "n"_a,
+            "Apply an alpha creation operator to the determinant at the specified orbital index "
+            "and return the sign")
+        .def(
+            "create_beta",
+            [](Determinant& d, size_t n) {
+                d.check_index_bounds(n, "(beta orbital)");
+                return d.create_beta(n);
+            },
+            "n"_a,
+            "Apply a beta creation operator to the determinant at the specified orbital index and "
+            "return the sign")
+        .def(
+            "destroy_alpha",
+            [](Determinant& d, size_t n) {
+                d.check_index_bounds(n, "(alpha orbital)");
+                return d.destroy_alpha(n);
+            },
+            "n"_a,
+            "Apply an alpha destruction operator to the determinant at the specified orbital "
+            "index and return the sign")
+        .def(
+            "destroy_beta",
+            [](Determinant& d, size_t n) {
+                d.check_index_bounds(n, "(beta orbital)");
+                return d.destroy_beta(n);
+            },
+            "n"_a,
+            "Apply a beta destruction operator to the determinant at the specified orbital index "
+            "and return the sign")
+        .def("excitation_connection", &Determinant::excitation_connection,
+             "Describe the excitation connection of a determinant d, relative to this one."
+             "The excitation connection is defined as the creation and annihilation operators that "
+             "need to be applied to this determinant to obtain d. The excitation connection is a "
+             "vector of 4 vectors:"
+             "[[alfa annihilation], [alfa creation],"
+             "[beta annihilation], [beta creation]]")
         .def("spin_flip", &Determinant::spin_flip,
              "Spin flip the determinant, i.e., swap alpha and beta orbitals")
         .def(
-            "slater_sign", [](const Determinant& d, size_t n) { return d.slater_sign(n); },
+            "str", [](const Determinant& d, size_t n) { return str(d, n); },
+            "n"_a = Determinant::norb(), "Get the string representation of the Slater determinant")
+        .def(
+            "_slater_sign",
+            [](const Determinant& d, size_t n) {
+                d.check_index_bounds(n / 2, "(orbital index)");
+                return d.slater_sign(n);
+            },
             "Get the sign of the Slater determinant")
         .def(
-            "slater_sign_reverse",
-            [](const Determinant& d, size_t n) { return d.slater_sign_reverse(n); },
-            "Get the sign of the Slater determinant")
+            "_slater_sign_aa",
+            [](const Determinant& d, size_t n, size_t m) {
+                d.check_index_bounds(n, "(first alpha orbital index)");
+                d.check_index_bounds(m, "(second alpha orbital index)");
+                return d.slater_sign_aa(n, m);
+            },
+            "n"_a, "m"_a, "Get the alpha-alpha pair sign of the Slater determinant")
         .def(
-            "gen_excitation",
-            [](Determinant& d, const std::vector<int>& aann, const std::vector<int>& acre,
-               const std::vector<int>& bann,
-               const std::vector<int>& bcre) { return gen_excitation(d, aann, acre, bann, bcre); },
-            "Apply a generic excitation")
-        .def("excitation_connection", &Determinant::excitation_connection,
-             "Get the excitation connection between this and another determinant")
+            "_slater_sign_bb",
+            [](const Determinant& d, size_t n, size_t m) {
+                d.check_index_bounds(n, "(first beta orbital index)");
+                d.check_index_bounds(m, "(second beta orbital index)");
+                return d.slater_sign_bb(n, m);
+            },
+            "n"_a, "m"_a, "Get the beta-beta pair sign of the Slater determinant")
         .def(
-            "str", [](const Determinant& d, int n) { return str(d, n); },
-            "n"_a = Determinant::norb(), "Get the string representation of the Slater determinant");
-
-    m.def(
-        "spin2", [](const Determinant& d1, const Determinant& d2) { return spin2(d1, d2); },
-        "Compute the S^2 value between two determinants");
+            "_slater_sign_reverse",
+            [](const Determinant& d, size_t n) {
+                d.check_index_bounds(n / 2, "(orbital index)");
+                return d.slater_sign_reverse(n);
+            },
+            "Get the sign of the Slater determinant");
 }
 
 void export_configuration_api(nb::module_& m) {
@@ -113,10 +178,11 @@ void export_configuration_api(nb::module_& m) {
             "str", [](const Configuration& a, int n) { return str(a, n); },
             "n"_a = Configuration::norb(),
             "Get the string representation of the Slater determinant")
-        .def("is_empt", &Configuration::is_empt, "n"_a, "Is orbital n empty?")
+        .def("is_empty", &Configuration::is_empty, "n"_a, "Is orbital n empty?")
         .def("is_docc", &Configuration::is_docc, "n"_a, "Is orbital n doubly occupied?")
         .def("is_socc", &Configuration::is_socc, "n"_a, "Is orbital n singly occupied?")
-        .def("set_occ", &Configuration::set_occ, "n"_a, "value"_a, "Set the value of an alpha bit")
+        .def("set_occ", &Configuration::set_occ, "n"_a, "value"_a,
+             "Set the occupation value of an orbital")
         .def("count_docc", &Configuration::count_docc,
              "Count the number of doubly occupied orbitals")
         .def("count_socc", &Configuration::count_socc,

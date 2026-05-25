@@ -22,11 +22,11 @@ SelectedCIHelper::SelectedCIHelper(size_t norb, const std::vector<Determinant>& 
     ept2_var_.resize(nroots_, 0.0);
     ept2_pt_.resize(nroots_, 0.0);
 
-    na_ = dets_[0].count_a();
-    nb_ = dets_[0].count_b();
+    na_ = dets_[0].count_alpha();
+    nb_ = dets_[0].count_beta();
 
     for (const auto& det : dets_) {
-        if (det.count_a() != na_ || det.count_b() != nb_) {
+        if (det.count_alpha() != na_ || det.count_beta() != nb_) {
             throw std::runtime_error("All determinants must have the same number of electrons.");
         }
     }
@@ -143,7 +143,8 @@ void SelectedCIHelper::update_hbci_ints() {
             std::vector<std::tuple<double, double, u_int32_t, u_int32_t>> v_list;
             v_list.reserve(norb_ * norb_);
             for (size_t r{0}; r < norb_; ++r) {
-                // we screen out integrals where the annihilation orbital is frozen since they will never contribute
+                // we screen out integrals where the annihilation orbital is frozen since they will
+                // never contribute
                 if (!creation_allowed(r))
                     continue;
                 for (size_t s{0}; s < norb_; ++s) {
@@ -170,7 +171,8 @@ void SelectedCIHelper::update_hbci_ints() {
             std::vector<std::tuple<double, double, u_int32_t, u_int32_t>> v_list;
             v_list.reserve(norb_ * norb_);
             for (size_t q{0}; q < norb_; ++q) {
-                // we screen out integrals where the annihilation orbital is frozen since they will never contribute
+                // we screen out integrals where the annihilation orbital is frozen since they will
+                // never contribute
                 if (!annihilation_allowed(q))
                     continue;
                 for (size_t s{0}; s < norb_; ++s) {

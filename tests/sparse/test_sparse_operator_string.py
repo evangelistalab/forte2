@@ -1,4 +1,82 @@
+import random
+
 import forte2
+
+
+def _det(alpha=(), beta=()):
+    d = forte2.Determinant.zero()
+    for i in alpha:
+        d.set_na(i, True)
+    for i in beta:
+        d.set_nb(i, True)
+    return d
+
+
+def _reference_sign_mask(acre=(), bcre=(), aann=(), bann=()):
+    norb = forte2.Determinant.maxnorb
+    ops = [*acre, *aann, *(norb + i for i in bcre), *(norb + i for i in bann)]
+    alpha = [i for i in range(norb) if sum(op > i for op in ops) % 2 == 1]
+    beta = [i for i in range(norb) if sum(op > norb + i for op in ops) % 2 == 1]
+    return _det(alpha, beta)
+
+
+def _assert_sign_mask_consistent(acre=(), bcre=(), aann=(), bann=()):
+    cre = _det(acre, bcre)
+    ann = _det(aann, bann)
+    expected = _reference_sign_mask(acre, bcre, aann, bann)
+    sqop = forte2.SQOperatorString(cre, ann)
+    assert forte2.compute_sign_mask(cre, ann) == expected
+    assert sqop.sign_mask() == expected
+
+
+def test_compute_sign_mask_matches_reference():
+    norb = forte2.Determinant.maxnorb
+    all_occ = tuple(range(norb))
+    cases = [
+        ((), (), (), ()),
+        ((0,), (), (), ()),
+        ((63,), (), (), ()),
+        ((), (0,), (), ()),
+        ((), (63,), (), ()),
+        (all_occ, (), (), ()),
+        ((), all_occ, (), ()),
+        ((), (), all_occ, ()),
+        ((), (), (), all_occ),
+        (all_occ, all_occ, all_occ, all_occ),
+        ((0, 2, 63), (), (1, 2, 62), ()),
+        ((), (0, 2, 63), (), (1, 2, 62)),
+        ((0, 63), (0, 63), (0, 63), (0, 63)),
+        ((0, 5, 63), (1, 9, 63), (5, 8), (0, 9)),
+    ]
+    for acre, bcre, aann, bann in cases:
+        _assert_sign_mask_consistent(acre, bcre, aann, bann)
+
+    rng = random.Random(7)
+    for _ in range(100):
+        acre = rng.sample(range(norb), rng.randrange(9))
+        bcre = rng.sample(range(norb), rng.randrange(9))
+        aann = rng.sample(range(norb), rng.randrange(9))
+        bann = rng.sample(range(norb), rng.randrange(9))
+        _assert_sign_mask_consistent(acre, bcre, aann, bann)
+
+
+def test_sparse_operator_string_accessors_return_copies():
+    cre = _det(alpha=(1,), beta=(2,))
+    ann = _det(alpha=(3,), beta=(4,))
+    sqop = forte2.SQOperatorString(cre, ann)
+    expected_sign_mask = sqop.sign_mask()
+
+    cre_copy = sqop.cre()
+    ann_copy = sqop.ann()
+    sign_mask_copy = sqop.sign_mask()
+
+    cre_copy.set_na(5, True)
+    ann_copy.set_nb(6, True)
+    sign_mask_copy.set_na(7, not sign_mask_copy.na(7))
+
+    assert sqop.cre() == cre
+    assert sqop.ann() == ann
+    assert sqop.sign_mask() == expected_sign_mask
 
 
 def test_sparse_operator_string_count():

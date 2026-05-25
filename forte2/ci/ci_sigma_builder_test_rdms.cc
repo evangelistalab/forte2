@@ -20,7 +20,7 @@ SparseState get_sparse_state(np_vector c, const CIStrings& lists) {
 }
 
 np_matrix CISigmaBuilder::compute_a_1rdm_debug(np_vector C_left, np_vector C_right,
-                                               bool alfa) const {
+                                               bool alpha) const {
     const size_t norb = lists_.norb();
     auto g1_ref = make_zeros<nb::numpy, double, 2>({norb, norb});
 
@@ -35,12 +35,12 @@ np_matrix CISigmaBuilder::compute_a_1rdm_debug(np_vector C_left, np_vector C_rig
             for (const auto& [I, c_I] : state_vector_r) {
                 J = I;
                 double sign = 1.0;
-                if (alfa) {
-                    sign *= J.destroy_a(q);
-                    sign *= J.create_a(p);
+                if (alpha) {
+                    sign *= J.destroy_alpha(q);
+                    sign *= J.create_alpha(p);
                 } else {
-                    sign *= J.destroy_b(q);
-                    sign *= J.create_b(p);
+                    sign *= J.destroy_beta(q);
+                    sign *= J.create_beta(p);
                 }
                 if (sign != 0) {
                     if (state_vector_l.count(J) != 0) {
@@ -55,7 +55,7 @@ np_matrix CISigmaBuilder::compute_a_1rdm_debug(np_vector C_left, np_vector C_rig
 }
 
 np_matrix CISigmaBuilder::compute_aa_2rdm_debug(np_vector C_left, np_vector C_right,
-                                                bool alfa) const {
+                                                bool alpha) const {
     const size_t norb = lists_.norb();
     const size_t npairs = (norb * (norb - 1)) / 2;
     auto g2_ref = make_zeros<nb::numpy, double, 2>({npairs, npairs});
@@ -73,16 +73,16 @@ np_matrix CISigmaBuilder::compute_aa_2rdm_debug(np_vector C_left, np_vector C_ri
                     for (const auto& [I, c_I] : state_vector_r) {
                         J = I;
                         double sign = 1.0;
-                        if (alfa) {
-                            sign *= J.destroy_a(r);
-                            sign *= J.destroy_a(s);
-                            sign *= J.create_a(q);
-                            sign *= J.create_a(p);
+                        if (alpha) {
+                            sign *= J.destroy_alpha(r);
+                            sign *= J.destroy_alpha(s);
+                            sign *= J.create_alpha(q);
+                            sign *= J.create_alpha(p);
                         } else {
-                            sign *= J.destroy_b(r);
-                            sign *= J.destroy_b(s);
-                            sign *= J.create_b(q);
-                            sign *= J.create_b(p);
+                            sign *= J.destroy_beta(r);
+                            sign *= J.destroy_beta(s);
+                            sign *= J.create_beta(q);
+                            sign *= J.create_beta(p);
                         }
                         if (sign != 0) {
                             if (state_vector_l.count(J) != 0) {
@@ -115,10 +115,10 @@ np_tensor4 CISigmaBuilder::compute_ab_2rdm_debug(np_vector C_left, np_vector C_r
                     for (const auto& [I, c_I] : state_vector_r) {
                         J = I;
                         double sign = 1.0;
-                        sign *= J.destroy_a(r);
-                        sign *= J.destroy_b(s);
-                        sign *= J.create_b(q);
-                        sign *= J.create_a(p);
+                        sign *= J.destroy_alpha(r);
+                        sign *= J.destroy_beta(s);
+                        sign *= J.create_beta(q);
+                        sign *= J.create_alpha(p);
                         if (sign != 0) {
                             if (state_vector_l.count(J) != 0) {
                                 rdm += sign * to_double(state_vector_l[J] * c_I);
@@ -134,7 +134,7 @@ np_tensor4 CISigmaBuilder::compute_ab_2rdm_debug(np_vector C_left, np_vector C_r
 }
 
 np_matrix CISigmaBuilder::compute_aaa_3rdm_debug(np_vector C_left, np_vector C_right,
-                                                 bool alfa) const {
+                                                 bool alpha) const {
     const size_t norb = lists_.norb();
     const size_t ntriplets = (norb * (norb - 1) * (norb - 2)) / 6;
     auto g3_ref = make_zeros<nb::numpy, double, 2>({ntriplets, ntriplets});
@@ -154,20 +154,20 @@ np_matrix CISigmaBuilder::compute_aaa_3rdm_debug(np_vector C_left, np_vector C_r
                             for (const auto& [I, c_I] : state_vector_r) {
                                 J = I;
                                 double sign = 1.0;
-                                if (alfa) {
-                                    sign *= J.destroy_a(s);
-                                    sign *= J.destroy_a(t);
-                                    sign *= J.destroy_a(u);
-                                    sign *= J.create_a(r);
-                                    sign *= J.create_a(q);
-                                    sign *= J.create_a(p);
+                                if (alpha) {
+                                    sign *= J.destroy_alpha(s);
+                                    sign *= J.destroy_alpha(t);
+                                    sign *= J.destroy_alpha(u);
+                                    sign *= J.create_alpha(r);
+                                    sign *= J.create_alpha(q);
+                                    sign *= J.create_alpha(p);
                                 } else {
-                                    sign *= J.destroy_b(s);
-                                    sign *= J.destroy_b(t);
-                                    sign *= J.destroy_b(u);
-                                    sign *= J.create_b(r);
-                                    sign *= J.create_b(q);
-                                    sign *= J.create_b(p);
+                                    sign *= J.destroy_beta(s);
+                                    sign *= J.destroy_beta(t);
+                                    sign *= J.destroy_beta(u);
+                                    sign *= J.create_beta(r);
+                                    sign *= J.create_beta(q);
+                                    sign *= J.create_beta(p);
                                 }
                                 if (sign != 0) {
                                     if (state_vector_l.count(J) != 0) {
@@ -207,12 +207,12 @@ np_tensor4 CISigmaBuilder::compute_aab_3rdm_debug(np_vector C_left, np_vector C_
                             for (const auto& [I, c_I] : state_vector_r) {
                                 J = I;
                                 double sign = 1.0;
-                                sign *= J.destroy_a(s);
-                                sign *= J.destroy_a(t);
-                                sign *= J.destroy_b(u);
-                                sign *= J.create_b(r);
-                                sign *= J.create_a(q);
-                                sign *= J.create_a(p);
+                                sign *= J.destroy_alpha(s);
+                                sign *= J.destroy_alpha(t);
+                                sign *= J.destroy_beta(u);
+                                sign *= J.create_beta(r);
+                                sign *= J.create_alpha(q);
+                                sign *= J.create_alpha(p);
                                 if (sign != 0) {
                                     if (state_vector_l.count(J) != 0) {
                                         rdm += sign * to_double(state_vector_l[J] * c_I);
@@ -251,12 +251,12 @@ np_tensor4 CISigmaBuilder::compute_abb_3rdm_debug(np_vector C_left, np_vector C_
                             for (const auto& [I, c_I] : state_vector_r) {
                                 J = I;
                                 double sign = 1.0;
-                                sign *= J.destroy_a(s);
-                                sign *= J.destroy_b(t);
-                                sign *= J.destroy_b(u);
-                                sign *= J.create_b(r);
-                                sign *= J.create_b(q);
-                                sign *= J.create_a(p);
+                                sign *= J.destroy_alpha(s);
+                                sign *= J.destroy_beta(t);
+                                sign *= J.destroy_beta(u);
+                                sign *= J.create_beta(r);
+                                sign *= J.create_beta(q);
+                                sign *= J.create_alpha(p);
                                 if (sign != 0) {
                                     if (state_vector_l.count(J) != 0) {
                                         rdm += sign * to_double(state_vector_l[J] * c_I);
@@ -274,7 +274,7 @@ np_tensor4 CISigmaBuilder::compute_abb_3rdm_debug(np_vector C_left, np_vector C_
 }
 
 np_matrix CISigmaBuilder::compute_aaaa_4rdm_debug(np_vector C_left, np_vector C_right,
-                                                  bool alfa) const {
+                                                  bool alpha) const {
     const size_t norb = lists_.norb();
     const size_t quadruplets = (norb * (norb - 1) * (norb - 2) * (norb - 3)) / 24;
     auto g4_ref = make_zeros<nb::numpy, double, 2>({quadruplets, quadruplets});
@@ -296,24 +296,24 @@ np_matrix CISigmaBuilder::compute_aaaa_4rdm_debug(np_vector C_left, np_vector C_
                                     for (const auto& [I, c_I] : state_vector_r) {
                                         J = I;
                                         double sign = 1.0;
-                                        if (alfa) {
-                                            sign *= J.destroy_a(t);
-                                            sign *= J.destroy_a(u);
-                                            sign *= J.destroy_a(v);
-                                            sign *= J.destroy_a(w);
-                                            sign *= J.create_a(s);
-                                            sign *= J.create_a(r);
-                                            sign *= J.create_a(q);
-                                            sign *= J.create_a(p);
+                                        if (alpha) {
+                                            sign *= J.destroy_alpha(t);
+                                            sign *= J.destroy_alpha(u);
+                                            sign *= J.destroy_alpha(v);
+                                            sign *= J.destroy_alpha(w);
+                                            sign *= J.create_alpha(s);
+                                            sign *= J.create_alpha(r);
+                                            sign *= J.create_alpha(q);
+                                            sign *= J.create_alpha(p);
                                         } else {
-                                            sign *= J.destroy_b(t);
-                                            sign *= J.destroy_b(u);
-                                            sign *= J.destroy_b(v);
-                                            sign *= J.destroy_b(w);
-                                            sign *= J.create_b(s);
-                                            sign *= J.create_b(r);
-                                            sign *= J.create_b(q);
-                                            sign *= J.create_b(p);
+                                            sign *= J.destroy_beta(t);
+                                            sign *= J.destroy_beta(u);
+                                            sign *= J.destroy_beta(v);
+                                            sign *= J.destroy_beta(w);
+                                            sign *= J.create_beta(s);
+                                            sign *= J.create_beta(r);
+                                            sign *= J.create_beta(q);
+                                            sign *= J.create_beta(p);
                                         }
                                         if (sign != 0) {
                                             if (state_vector_l.count(J) != 0) {
@@ -356,14 +356,14 @@ np_tensor4 CISigmaBuilder::compute_aaab_4rdm_debug(np_vector C_left, np_vector C
                                     for (const auto& [I, c_I] : state_vector_r) {
                                         J = I;
                                         double sign = 1.0;
-                                        sign *= J.destroy_a(t);
-                                        sign *= J.destroy_a(u);
-                                        sign *= J.destroy_a(v);
-                                        sign *= J.destroy_b(w);
-                                        sign *= J.create_b(s);
-                                        sign *= J.create_a(r);
-                                        sign *= J.create_a(q);
-                                        sign *= J.create_a(p);
+                                        sign *= J.destroy_alpha(t);
+                                        sign *= J.destroy_alpha(u);
+                                        sign *= J.destroy_alpha(v);
+                                        sign *= J.destroy_beta(w);
+                                        sign *= J.create_beta(s);
+                                        sign *= J.create_alpha(r);
+                                        sign *= J.create_alpha(q);
+                                        sign *= J.create_alpha(p);
                                         if (sign != 0) {
                                             if (state_vector_l.count(J) != 0) {
                                                 rdm += sign * to_double(state_vector_l[J] * c_I);
@@ -405,14 +405,14 @@ np_tensor4 CISigmaBuilder::compute_aabb_4rdm_debug(np_vector C_left, np_vector C
                                     for (const auto& [I, c_I] : state_vector_r) {
                                         J = I;
                                         double sign = 1.0;
-                                        sign *= J.destroy_a(t);
-                                        sign *= J.destroy_a(u);
-                                        sign *= J.destroy_b(v);
-                                        sign *= J.destroy_b(w);
-                                        sign *= J.create_b(s);
-                                        sign *= J.create_b(r);
-                                        sign *= J.create_a(q);
-                                        sign *= J.create_a(p);
+                                        sign *= J.destroy_alpha(t);
+                                        sign *= J.destroy_alpha(u);
+                                        sign *= J.destroy_beta(v);
+                                        sign *= J.destroy_beta(w);
+                                        sign *= J.create_beta(s);
+                                        sign *= J.create_beta(r);
+                                        sign *= J.create_alpha(q);
+                                        sign *= J.create_alpha(p);
                                         if (sign != 0) {
                                             if (state_vector_l.count(J) != 0) {
                                                 rdm += sign * to_double(state_vector_l[J] * c_I);
@@ -454,14 +454,14 @@ np_tensor4 CISigmaBuilder::compute_abbb_4rdm_debug(np_vector C_left, np_vector C
                                     for (const auto& [I, c_I] : state_vector_r) {
                                         J = I;
                                         double sign = 1.0;
-                                        sign *= J.destroy_a(t);
-                                        sign *= J.destroy_b(u);
-                                        sign *= J.destroy_b(v);
-                                        sign *= J.destroy_b(w);
-                                        sign *= J.create_b(s);
-                                        sign *= J.create_b(r);
-                                        sign *= J.create_b(q);
-                                        sign *= J.create_a(p);
+                                        sign *= J.destroy_alpha(t);
+                                        sign *= J.destroy_beta(u);
+                                        sign *= J.destroy_beta(v);
+                                        sign *= J.destroy_beta(w);
+                                        sign *= J.create_beta(s);
+                                        sign *= J.create_beta(r);
+                                        sign *= J.create_beta(q);
+                                        sign *= J.create_alpha(p);
                                         if (sign != 0) {
                                             if (state_vector_l.count(J) != 0) {
                                                 rdm += sign * to_double(state_vector_l[J] * c_I);

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "helpers/memory.h"
-#include "ci/determinant.h"
+#include "determinant/determinant.h"
 
 #include "sparse/sparse_state.h"
 #include "sparse/sparse_operator.h"

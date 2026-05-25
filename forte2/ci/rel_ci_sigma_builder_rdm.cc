@@ -21,7 +21,7 @@ np_matrix_complex RelCISigmaBuilder::compute_1rdm(np_vector_complex C_left,
     if (na < 1 || norb < 1)
         return rdm;
 
-    const auto& alfa_address = lists_.alfa_address();
+    const auto& alpha_address = lists_.alpha_address();
     const auto& beta_address = lists_.beta_address();
     auto rdm_view = rdm.view();
     auto Cl_span = vector::as_span<std::complex<double>>(C_left);
@@ -49,9 +49,9 @@ np_matrix_complex RelCISigmaBuilder::compute_1rdm(np_vector_complex C_left,
             auto tl = gather_block(Cl_span, TL, spin, lists_, class_Ja, class_Jb);
 
             const size_t maxL =
-                is_alpha(spin) ? beta_address->strpcls(class_Ib) : alfa_address->strpcls(class_Ia);
+                is_alpha(spin) ? beta_address->strpcls(class_Ib) : alpha_address->strpcls(class_Ia);
 
-            const auto& pq_vo_list = is_alpha(spin) ? lists_.get_alfa_vo_list(class_Ia, class_Ja)
+            const auto& pq_vo_list = is_alpha(spin) ? lists_.get_alpha_vo_list(class_Ia, class_Ja)
                                                     : lists_.get_beta_vo_list(class_Ib, class_Jb);
 
             for (const auto& [pq, vo_list] : pq_vo_list) {
@@ -91,14 +91,14 @@ np_tensor4_complex RelCISigmaBuilder::compute_2rdm(np_vector_complex C_left,
 
     auto rdm_data = rdm.data();
 
-    const auto& alfa_address = lists_.alfa_address();
+    const auto& alpha_address = lists_.alpha_address();
     const auto& beta_address = lists_.beta_address();
 
-    int num_2h_classes = is_alpha(spin) ? lists_.alfa_address_2h()->nclasses()
+    int num_2h_classes = is_alpha(spin) ? lists_.alpha_address_2h()->nclasses()
                                         : lists_.beta_address_2h()->nclasses();
 
     for (int class_K = 0; class_K < num_2h_classes; ++class_K) {
-        size_t maxK = is_alpha(spin) ? lists_.alfa_address_2h()->strpcls(class_K)
+        size_t maxK = is_alpha(spin) ? lists_.alpha_address_2h()->strpcls(class_K)
                                      : lists_.beta_address_2h()->strpcls(class_K);
 
         // loop over blocks of matrix C
@@ -118,16 +118,16 @@ np_tensor4_complex RelCISigmaBuilder::compute_2rdm(np_vector_complex C_left,
                     continue;
 
                 const size_t maxL = is_alpha(spin) ? beta_address->strpcls(class_Ib)
-                                                   : alfa_address->strpcls(class_Ia);
+                                                   : alpha_address->strpcls(class_Ia);
                 if (maxL > 0) {
                     // Get a pointer to the correct block of matrix C
                     auto tr = gather_block(Cr_span, TR, spin, lists_, class_Ja, class_Jb);
                     for (size_t K{0}; K < maxK; ++K) {
                         auto& Kllist = is_alpha(spin)
-                                           ? lists_.get_alfa_2h_list(class_K, K, class_Ia)
+                                           ? lists_.get_alpha_2h_list(class_K, K, class_Ia)
                                            : lists_.get_beta_2h_list(class_K, K, class_Ib);
                         auto& Krlist = is_alpha(spin)
-                                           ? lists_.get_alfa_2h_list(class_K, K, class_Ja)
+                                           ? lists_.get_alpha_2h_list(class_K, K, class_Ja)
                                            : lists_.get_beta_2h_list(class_K, K, class_Jb);
                         for (const auto& [sign_K, p, q, I] : Kllist) {
                             const size_t pq_index = pair_index_gt(p, q);
@@ -192,14 +192,14 @@ np_tensor6_complex RelCISigmaBuilder::compute_3rdm(np_vector_complex C_left,
     auto Cr_span = vector::as_span<std::complex<double>>(C_right);
 
     auto rdm_data = rdm.data();
-    const auto& alfa_address = lists_.alfa_address();
+    const auto& alpha_address = lists_.alpha_address();
     const auto& beta_address = lists_.beta_address();
 
-    int num_3h_classes = is_alpha(spin) ? lists_.alfa_address_3h()->nclasses()
+    int num_3h_classes = is_alpha(spin) ? lists_.alpha_address_3h()->nclasses()
                                         : lists_.beta_address_3h()->nclasses();
 
     for (int class_K = 0; class_K < num_3h_classes; ++class_K) {
-        size_t maxK = is_alpha(spin) ? lists_.alfa_address_3h()->strpcls(class_K)
+        size_t maxK = is_alpha(spin) ? lists_.alpha_address_3h()->strpcls(class_K)
                                      : lists_.beta_address_3h()->strpcls(class_K);
 
         // loop over blocks of matrix C
@@ -218,7 +218,7 @@ np_tensor6_complex RelCISigmaBuilder::compute_3rdm(np_vector_complex C_left,
                     continue;
 
                 const size_t maxL = is_alpha(spin) ? beta_address->strpcls(class_Ib)
-                                                   : alfa_address->strpcls(class_Ia);
+                                                   : alpha_address->strpcls(class_Ia);
 
                 if (maxL > 0) {
                     // Get a pointer to the correct block of matrix C
@@ -226,10 +226,10 @@ np_tensor6_complex RelCISigmaBuilder::compute_3rdm(np_vector_complex C_left,
 
                     for (size_t K{0}; K < maxK; ++K) {
                         auto& Kllist = is_alpha(spin)
-                                           ? lists_.get_alfa_3h_list(class_K, K, class_Ia)
+                                           ? lists_.get_alpha_3h_list(class_K, K, class_Ia)
                                            : lists_.get_beta_3h_list(class_K, K, class_Ib);
                         auto& Krlist = is_alpha(spin)
-                                           ? lists_.get_alfa_3h_list(class_K, K, class_Ja)
+                                           ? lists_.get_alpha_3h_list(class_K, K, class_Ja)
                                            : lists_.get_beta_3h_list(class_K, K, class_Jb);
                         for (const auto& [sign_K, p, q, r, I] : Kllist) {
                             const size_t pqr_index = triplet_index_gt(p, q, r);

@@ -1,9 +1,9 @@
-#include "determinant.h"
+#include "determinant/determinant.h"
 #include "ci_string_class.h"
 
 namespace forte2 {
 StringClass::StringClass(size_t symmetry, const std::vector<std::vector<int>>& orbital_symmetry,
-                         const std::vector<std::array<int, 6>>& alfa_occupation,
+                         const std::vector<std::array<int, 6>>& alpha_occupation,
                          const std::vector<std::array<int, 6>>& beta_occupation,
                          const std::vector<std::pair<size_t, size_t>>& occupations) {
     nirrep_ = 1;
@@ -13,8 +13,8 @@ StringClass::StringClass(size_t symmetry, const std::vector<std::vector<int>>& o
             nirrep_ = std::max(nirrep_, static_cast<size_t>(std::abs(s + 1)));
         }
     }
-    for (size_t i = 0; i < alfa_occupation.size(); i++) {
-        alfa_occupation_group_[alfa_occupation[i]] = i;
+    for (size_t i = 0; i < alpha_occupation.size(); i++) {
+        alpha_occupation_group_[alpha_occupation[i]] = i;
     }
     for (size_t i = 0; i < beta_occupation.size(); i++) {
         beta_occupation_group_[beta_occupation[i]] = i;
@@ -32,10 +32,10 @@ StringClass::StringClass(size_t symmetry, const std::vector<std::vector<int>>& o
 
     // Build the alpha string classes as the cartesian product of the alpha occupation groups and
     // the irreps. For each alpha occupation group, we have all the irreps next to each other.
-    for (size_t n = 0, j = 0; n < alfa_occupation.size(); n++) {
+    for (size_t n = 0, j = 0; n < alpha_occupation.size(); n++) {
         for (size_t h = 0; h < nirrep_; h++) {
-            alfa_string_classes_.emplace_back(n, h);
-            alfa_string_classes_map_[std::make_pair(n, h)] = j;
+            alpha_string_classes_.emplace_back(n, h);
+            alpha_string_classes_map_[std::make_pair(n, h)] = j;
             j++;
         }
     }
@@ -53,7 +53,7 @@ StringClass::StringClass(size_t symmetry, const std::vector<std::vector<int>>& o
     for (const auto& [aocc_idx, bocc_idx] : occupations) {
         for (size_t h_Ia = 0; h_Ia < nirrep_; h_Ia++) {
             auto h_Ib = h_Ia ^ symmetry;
-            auto aocc_h_Ia = alfa_string_classes_map_.at(std::make_pair(aocc_idx, h_Ia));
+            auto aocc_h_Ia = alpha_string_classes_map_.at(std::make_pair(aocc_idx, h_Ia));
             auto bocc_h_Ib = beta_string_classes_map_.at(std::make_pair(bocc_idx, h_Ib));
             block_index_[std::make_pair(aocc_h_Ia, bocc_h_Ib)] = determinant_classes_.size();
             determinant_classes_.emplace_back(determinant_classes_.size(), aocc_h_Ia, bocc_h_Ib);
@@ -61,7 +61,7 @@ StringClass::StringClass(size_t symmetry, const std::vector<std::vector<int>>& o
     }
 }
 
-size_t StringClass::num_alfa_classes() const { return nirrep_ * alfa_occupation_group_.size(); }
+size_t StringClass::num_alpha_classes() const { return nirrep_ * alpha_occupation_group_.size(); }
 
 size_t StringClass::num_beta_classes() const { return nirrep_ * beta_occupation_group_.size(); }
 
@@ -69,8 +69,8 @@ const std::vector<int>& StringClass::mo_sym() const { return mo_sym_; }
 
 size_t StringClass::symmetry(const String& s) const { return s.symmetry(mo_sym_); }
 
-const std::vector<std::pair<size_t, size_t>>& StringClass::alfa_string_classes() const {
-    return alfa_string_classes_;
+const std::vector<std::pair<size_t, size_t>>& StringClass::alpha_string_classes() const {
+    return alpha_string_classes_;
 }
 
 const std::vector<std::pair<size_t, size_t>>& StringClass::beta_string_classes() const {
@@ -89,18 +89,18 @@ int StringClass::block_index(int class_Ia, int class_Ib) const {
     return block_index_.at(std::make_pair(class_Ia, class_Ib));
 }
 
-size_t StringClass::alfa_string_class(const String& s) const {
+size_t StringClass::alpha_string_class(const String& s) const {
     std::array<int, 6> occupation;
     for (size_t n = 0; n < gas_masks_.size(); n++) {
-        occupation[n] = s.fast_a_and_b_count(gas_masks_[n]);
+        occupation[n] = s.intersection_count(gas_masks_[n]);
     }
-    return alfa_occupation_group_.at(occupation) * nirrep_ + symmetry(s);
+    return alpha_occupation_group_.at(occupation) * nirrep_ + symmetry(s);
 }
 
 size_t StringClass::beta_string_class(const String& s) const {
     std::array<int, 6> occupation;
     for (size_t n = 0; n < gas_masks_.size(); n++) {
-        occupation[n] = s.fast_a_and_b_count(gas_masks_[n]);
+        occupation[n] = s.intersection_count(gas_masks_[n]);
     }
     return beta_occupation_group_.at(occupation) * nirrep_ + symmetry(s);
 }

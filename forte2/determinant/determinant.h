@@ -2,15 +2,16 @@
 
 #include "helpers/unordered_dense.h"
 
-#include "determinant.hpp"
-#include "configuration.hpp"
+#include "determinant/string.hpp"
+#include "determinant/determinant.hpp"
+#include "determinant/configuration.hpp"
 
 namespace forte2 {
 
 size_t constexpr Norb = 64;
 size_t constexpr Norb2 = 2 * Norb;
 
-using String = BitArray<Norb>;
+using String = StringImpl<Norb>;
 using Determinant = DeterminantImpl<Norb2>;
 using Configuration = ConfigurationImpl<Norb2>;
 

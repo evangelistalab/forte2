@@ -44,7 +44,7 @@ def test_ci_strings_singlet():
     assert ci_strings.nb == 4
     assert ci_strings.ngas_spaces == 3
     assert ci_strings.gas_size == [1, 2, 3]
-    assert ci_strings.gas_alfa_occupations == [[0, 2, 2, 0, 0, 0], [1, 2, 1, 0, 0, 0]]
+    assert ci_strings.gas_alpha_occupations == [[0, 2, 2, 0, 0, 0], [1, 2, 1, 0, 0, 0]]
     assert ci_strings.gas_beta_occupations == [[1, 2, 1, 0, 0, 0], [0, 2, 2, 0, 0, 0]]
     assert ci_strings.gas_occupations == [(0, 0), (1, 1), (1, 0)]
 
@@ -75,7 +75,7 @@ def test_ci_strings_triplet():
     assert ci_strings.nb == 3
     assert ci_strings.ngas_spaces == 3
     assert ci_strings.gas_size == [1, 2, 3]
-    assert ci_strings.gas_alfa_occupations == [
+    assert ci_strings.gas_alpha_occupations == [
         [0, 2, 3, 0, 0, 0],
         [1, 1, 3, 0, 0, 0],
         [1, 2, 2, 0, 0, 0],
@@ -98,3 +98,33 @@ def test_ci_strings_triplet():
         (2, 2),
         (2, 3),
     ]
+
+
+def test_ci_strings_symmetry_uses_all_set_bits():
+    orbital_symmetry = [[i % 4 for i in range(59)], [1], [2], [3], [1], [2]]
+    target_symmetry = 3
+    ci_strings = CIStrings(
+        3,
+        3,
+        target_symmetry,
+        orbital_symmetry,
+        [1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1],
+    )
+
+    mo_symmetry = [sym for gas_symmetry in orbital_symmetry for sym in gas_symmetry]
+
+    def direct_symmetry(det):
+        sym = 0
+        for p, irrep in enumerate(mo_symmetry):
+            if det.na(p):
+                sym ^= irrep
+            if det.nb(p):
+                sym ^= irrep
+        return sym
+
+    dets = ci_strings.make_determinants()
+
+    assert dets
+    assert all(det.na(63) != det.nb(63) for det in dets)
+    assert all(direct_symmetry(det) == target_symmetry for det in dets)
