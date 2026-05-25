@@ -19,44 +19,66 @@ except ImportError:
     BSE_AVAILABLE = False
 
 
-def build_basis_from_array(basis_array):
+def build_basis_from_array(basis_data):
     """
-    Build a Basis object from a flat array containing the basis set data.
+    Build a Basis object from a dictionary containing the basis set data.
 
-    The basis_array is expected to have the following format for each shell:
-    [nshells, nprim1, l1, exp11, exp12, ..., coeff11, coeff12, ..., center_x1, center_y1, center_z1,...]
+    The basis_data is expected to have the following format for each shell:
+    {"schema_version": 1,
+     "nshells": int,
+     "shells": [
+        {"nprim": int,
+         "l": int,
+         "exponents": list[float],
+         "coefficients": list[float],
+         "center": list[float]},
+        ...
+     ]}
 
     Parameters
     ----------
-    basis_array : NDArray
-        A flat array containing the basis set data for all shells.
+    basis_data : dict
+        A dictionary containing the basis set data for all shells.
 
     Returns
     -------
     basis : forte2.ints.Basis
         The constructed Basis object.
     """
-    if not isinstance(basis_array, np.ndarray | list):
-        raise TypeError(
-            f"Expected basis_array to be a numpy array or list, but got {type(basis_array)}."
+    if basis_data["schema_version"] != 1:
+        raise ValueError(
+            f"Unsupported basis data schema version: {basis_data['schema_version']}. Expected version 1."
         )
-    nshells = int(basis_array[0])
+    if not isinstance(basis_data, dict):
+        raise TypeError(
+            f"Expected basis_data to be a dictionary, but got {type(basis_data)}."
+        )
+    nshells = int(basis_data["nshells"])
     basis = Basis()
-    idx = 1
     for i in range(nshells):
         try:
-            nprim = int(basis_array[idx])
-            l = int(basis_array[idx + 1])
-            idx += 2
-            exponents = basis_array[idx : idx + nprim].astype(float)
-            idx += nprim
-            coefficients = basis_array[idx : idx + nprim].astype(float)
-            idx += nprim
-            center = basis_array[idx : idx + 3].astype(float)
-            idx += 3
-        except Exception as e:
+            nprim = int(basis_data["shells"][i]["nprim"])
+            l = int(basis_data["shells"][i]["l"])
+            exponents = np.array(basis_data["shells"][i]["exponents"], dtype=float)
+            if len(exponents) != nprim:
+                raise ValueError(
+                    f"Number of exponents does not match nprim for shell {i+1}. Expected {nprim}, got {len(exponents)}."
+                )
+            coefficients = np.array(
+                basis_data["shells"][i]["coefficients"], dtype=float
+            )
+            if len(coefficients) != nprim:
+                raise ValueError(
+                    f"Number of coefficients does not match nprim for shell {i+1}. Expected {nprim}, got {len(coefficients)}."
+                )
+            center = np.array(basis_data["shells"][i]["center"], dtype=float)
+            if len(center) != 3:
+                raise ValueError(
+                    f"Center coordinates must be a list of 3 floats for shell {i+1}. Got {len(center)} coordinates."
+                )
+        except KeyError as e:
             raise ValueError(
-                f"Error parsing basis_array at shell {i+1}. Check that the array is correctly formatted. Original error: {e}"
+                f"Error parsing basis_data at shell {i+1}. Check that the dictionary is correctly formatted. Original error: {e}"
             ) from e
 
         basis.add(

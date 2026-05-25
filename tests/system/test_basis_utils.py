@@ -32,20 +32,19 @@ def test_basis_serialize():
         basis_set={"C": "cc-pvtz", "O": "sto-6g", "default": "sto-3g"},
     )
     res = system.basis.serialize()
-    assert res[0] == system.basis.nshells
-    idx = 1
+
+    # this test needs to be updated when the schema version is updated
+    assert res["schema_version"] == 1
+    assert res["nshells"] == 19
+    shells = res["shells"]
     for i in range(system.basis.nshells):
         sh = system.basis[i]
-        assert res[idx] == sh.nprim
-        idx += 1
-        assert res[idx] == sh.l
-        idx += 1
-        assert res[idx : idx + sh.nprim] == pytest.approx(sh.exponents, abs=1e-10)
-        idx += sh.nprim
-        assert res[idx : idx + sh.nprim] == pytest.approx(sh.coeff, abs=1e-10)
-        idx += sh.nprim
-        assert res[idx : idx + 3] == pytest.approx(sh.center, abs=1e-10)
-        idx += 3
+        sh_json = shells[i]
+        assert sh_json["nprim"] == sh.nprim
+        assert sh_json["l"] == sh.l
+        assert sh_json["exponents"] == pytest.approx(sh.exponents, abs=1e-10)
+        assert sh_json["coefficients"] == pytest.approx(sh.coeff, abs=1e-10)
+        assert sh_json["center"] == pytest.approx(sh.center, abs=1e-10)
 
 
 def test_get_shell_label():

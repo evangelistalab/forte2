@@ -156,29 +156,30 @@ class System:
 
     def save(self, filename):
         """
-        Save the System object to two files: a JSON file containing the initialization arguments and a NPZ file containing the basis set information.
+        Save the System object a JSON file containing the initialization arguments and basis set data.
 
         Parameters
         ----------
         filename : str
-            The base filename to save the System object. The JSON file will be saved as {filename}.json and the NPZ file will be saved as {filename}.npz.
+            The base filename to save the System object. The JSON file will be saved as {filename}.json.
         """
         # Collect all user-provided initialization arguments
         d = {f.name: getattr(self, f.name) for f in fields(self) if f.init is True}
-        with open(f"{filename}.json", "w") as f:
-            json.dump(d, f)
+        res = {"init_args": d}
+        res["basis_data"] = self.basis.serialize()
         # Serialize the basis set information into a arrays that can be saved in the npz file
-        bd = {"basis_data": self.basis.serialize()}
         if self.auxiliary_basis is not None:
-            bd["aux_basis_data"] = self.auxiliary_basis.serialize()
+            res["aux_basis_data"] = self.auxiliary_basis.serialize()
         if self.minao_basis is not None:
-            bd["minao_basis_data"] = self.minao_basis.serialize()
-        np.savez(f"{filename}.npz", **bd)
+            res["minao_basis_data"] = self.minao_basis.serialize()
+        with open(f"{filename}.json", "w") as f:
+            json.dump(res, f)
 
     @classmethod
     def load(cls, filename):
         d = json.load(open(f"{filename}.json"))
-        system = cls(**d, load_from_file=filename)
+        init_args = d["init_args"]
+        system = cls(**init_args, load_from_file=filename)
         return system
 
     def _init_geometry(self):
@@ -230,7 +231,8 @@ class System:
             else:
                 self.minao_basis = None
         else:
-            with np.load(f"{load_from_file}.npz", allow_pickle=True) as data:
+            with open(f"{load_from_file}.json", "r") as f:
+                data = json.load(f)
                 self.basis = build_basis_from_array(data["basis_data"])
                 if "aux_basis_data" in data:
                     self.auxiliary_basis = build_basis_from_array(

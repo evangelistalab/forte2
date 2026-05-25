@@ -158,27 +158,36 @@ void export_basis_api(nb::module_& sub_m) {
         .def(
             "serialize",
             [](const Basis& basis) {
-                nb::list res;
-                res.append(basis.nshells());
+                nb::dict res;
+                res["schema_version"] = 1;
+                res["nshells"] = basis.nshells();
+                nb::list shells;
                 for (std::size_t i = 0; i < basis.nshells(); ++i) {
                     const auto& shell = basis[i];
-                    res.append(shell.nprim());
-                    res.append(shell.contr[0].l);
+                    nb::dict shell_dict;
+                    shell_dict["nprim"] = shell.nprim();
+                    shell_dict["l"] = shell.contr[0].l;
+                    nb::list exponents;
                     for (double exponent : shell.alpha) {
-                        res.append(exponent);
+                        exponents.append(exponent);
                     }
+                    shell_dict["exponents"] = exponents;
+                    nb::list coeffs;
                     for (double coeff : shell.contr[0].coeff) {
-                        res.append(coeff);
+                        coeffs.append(coeff);
                     }
+                    shell_dict["coefficients"] = coeffs;
+                    nb::list center;
                     for (double coord : shell.O) {
-                        res.append(coord);
+                        center.append(coord);
                     }
+                    shell_dict["center"] = center;
+                    shells.append(shell_dict);
                 }
+                res["shells"] = shells;
                 return res;
             },
-            "Serialize the basis set to a list of numbers. The format is as follows: [nshells, "
-            "nprim_1, l_1, exponents_1..., coeffs_1..., center_1..., nprim_2, l_2, exponents_2..., "
-            "coeffs_2..., center_2..., ...]")
+            "Serialize the basis set to a dictionary.")
         .def_prop_ro("shell_first_and_size", &Basis::shell_first_and_size,
                      "Returns a vector of pairs of the first index and size of each shell in the "
                      "basis set. The first index is the index of the first basis function in the "
