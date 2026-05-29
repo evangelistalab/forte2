@@ -183,6 +183,7 @@ void export_basis_api(nb::module_& sub_m) {
                     }
                     shell_dict["center"] = center;
                     shells.append(shell_dict);
+                    shell_dict["is_pure"] = shell.contr[0].pure;
                 }
                 res["shells"] = shells;
                 return res;

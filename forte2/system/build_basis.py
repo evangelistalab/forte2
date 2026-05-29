@@ -10,7 +10,6 @@ from forte2 import Basis, Shell
 from forte2.data import ATOM_SYMBOL_TO_Z
 from forte2.helpers import logger
 
-
 try:
     import basis_set_exchange as bse
 
@@ -19,7 +18,7 @@ except ImportError:
     BSE_AVAILABLE = False
 
 
-def build_basis_from_array(basis_data):
+def build_basis_from_dict(basis_data):
     """
     Build a Basis object from a dictionary containing the basis set data.
 
@@ -32,6 +31,7 @@ def build_basis_from_array(basis_data):
          "exponents": list[float],
          "coefficients": list[float],
          "center": list[float]},
+         "is_pure": bool
         ...
      ]}
 
@@ -57,24 +57,28 @@ def build_basis_from_array(basis_data):
             f"Unsupported basis data schema version: {basis_data['schema_version']}. Expected version 1."
         )
     nshells = int(basis_data["nshells"])
+    if len(basis_data["shells"]) != nshells:
+        raise ValueError(
+            f"The number of shells ({len(basis_data['shells'])}) does not match nshells ({nshells})"
+        )
     basis = Basis()
     for i in range(nshells):
         try:
-            nprim = int(basis_data["shells"][i]["nprim"])
-            l = int(basis_data["shells"][i]["l"])
-            exponents = np.array(basis_data["shells"][i]["exponents"], dtype=float)
+            idata = basis_data["shells"][i]
+            is_pure = bool(idata["is_pure"])
+            nprim = int(idata["nprim"])
+            l = int(idata["l"])
+            exponents = np.array(idata["exponents"], dtype=float)
             if len(exponents) != nprim:
                 raise ValueError(
                     f"Number of exponents does not match nprim for shell {i+1}. Expected {nprim}, got {len(exponents)}."
                 )
-            coefficients = np.array(
-                basis_data["shells"][i]["coefficients"], dtype=float
-            )
+            coefficients = np.array(idata["coefficients"], dtype=float)
             if len(coefficients) != nprim:
                 raise ValueError(
                     f"Number of coefficients does not match nprim for shell {i+1}. Expected {nprim}, got {len(coefficients)}."
                 )
-            center = np.array(basis_data["shells"][i]["center"], dtype=float)
+            center = np.array(idata["center"], dtype=float)
             if len(center) != 3:
                 raise ValueError(
                     f"Center coordinates must be a list of 3 floats for shell {i+1}. Got {len(center)} coordinates."
@@ -90,6 +94,7 @@ def build_basis_from_array(basis_data):
                 exponents,
                 coefficients,
                 center,
+                is_pure=is_pure,
                 embed_normalization_into_coefficients=False,  # assume the coefficients are already normalized if provided as an array
             )
         )

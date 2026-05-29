@@ -14,7 +14,7 @@ from forte2.helpers import (
 )
 from forte2.x2c import X2CHelper
 from forte2.jkbuilder import FockBuilder, FockBuilderOTF
-from .build_basis import build_basis, build_basis_from_array
+from .build_basis import build_basis, build_basis_from_dict
 from .geom_utils import GeometryHelper, parse_geometry
 
 
@@ -200,13 +200,13 @@ class System:
             # Initialize basis sets from saved data
             if "basis_data" not in data:
                 raise ValueError(f"Basis data not found")
-            system.basis = build_basis_from_array(data["basis_data"])
+            system.basis = build_basis_from_dict(data["basis_data"])
             if "aux_basis_data" in data:
-                system.auxiliary_basis = build_basis_from_array(data["aux_basis_data"])
+                system.auxiliary_basis = build_basis_from_dict(data["aux_basis_data"])
             else:
                 system.auxiliary_basis = None
             if "minao_basis_data" in data:
-                system.minao_basis = build_basis_from_array(data["minao_basis_data"])
+                system.minao_basis = build_basis_from_dict(data["minao_basis_data"])
             else:
                 system.minao_basis = None
 
@@ -288,13 +288,13 @@ class System:
         data = json.load(file_handle)
         if "basis_data" not in data:
             raise ValueError(f"Basis data not found")
-        self.basis = build_basis_from_array(data["basis_data"])
+        self.basis = build_basis_from_dict(data["basis_data"])
         if "aux_basis_data" in data:
-            self.auxiliary_basis = build_basis_from_array(data["aux_basis_data"])
+            self.auxiliary_basis = build_basis_from_dict(data["aux_basis_data"])
         else:
             self.auxiliary_basis = None
         if "minao_basis_data" in data:
-            self.minao_basis = build_basis_from_array(data["minao_basis_data"])
+            self.minao_basis = build_basis_from_dict(data["minao_basis_data"])
         else:
             self.minao_basis = None
 
