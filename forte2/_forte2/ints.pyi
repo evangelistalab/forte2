@@ -62,6 +62,9 @@ class Basis:
 
     def __len__(self) -> int: ...
 
+    def serialize(self) -> dict:
+        """Serialize the basis set to a dictionary."""
+
     @property
     def shell_first_and_size(self) -> list[tuple[int, int]]:
         """

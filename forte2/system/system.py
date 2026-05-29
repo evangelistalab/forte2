@@ -1,6 +1,7 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 import numpy as np
 from numpy.typing import NDArray
+import json
 
 from forte2 import integrals, Basis
 from forte2.data import DEBYE_TO_AU, DEBYE_ANGSTROM_TO_AU, Z_TO_ATOM_SYMBOL
@@ -13,7 +14,7 @@ from forte2.helpers import (
 )
 from forte2.x2c import X2CHelper
 from forte2.jkbuilder import FockBuilder, FockBuilderOTF
-from .build_basis import build_basis
+from .build_basis import build_basis, build_basis_from_dict
 from .geom_utils import GeometryHelper, parse_geometry
 
 
@@ -134,13 +135,29 @@ class System:
     auxiliary_basis: Basis = field(init=False, default=None)
 
     def __post_init__(self):
-        assert self.unit in [
+        self._sanity_check()
+        self._common_init()
+
+    def _sanity_check(self):
+        if self.unit not in [
             "angstrom",
             "bohr",
-        ], f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'."
+        ]:
+            raise ValueError(f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'.")
+        if self.overlap_ortho_rtol < 0:
+            raise ValueError("overlap_ortho_rtol must be non-negative.")
+        if self.df_ortho_rtol is not None and self.df_ortho_rtol < 0:
+            raise ValueError("df_ortho_rtol must be non-negative.")
+        if self.cholesky_tol < 0:
+            raise ValueError("cholesky_tol must be non-negative.")
+        if self.symmetry_tol < 0:
+            raise ValueError("symmetry_tol must be non-negative.")
 
+    def _common_init(self, skip_basis_init=False):
         self._init_geometry()
-        self._init_basis()
+        if not skip_basis_init:
+            self._init_basis()
+        self._init_gaussian_charges()
         self.nuclear_repulsion = integrals.nuclear_repulsion(self)
         self._init_x2c()
         _S = integrals.overlap(self)
@@ -149,6 +166,59 @@ class System:
         self.nmo = int(info["n_kept"])
         self.fock_builder = self._init_fock_builder()
         # The B tensors here are lazily evaluated, so no overhead if not used
+
+    def save(self, filename):
+        """
+        Save the System object to a JSON file containing the initialization arguments and basis set data.
+
+        Parameters
+        ----------
+        filename : str
+            The base filename to save the System object. The JSON file will be saved as {filename}.json.
+        """
+        # Collect all user-provided initialization arguments
+        d = {f.name: getattr(self, f.name) for f in fields(self) if f.init is True}
+        res = {"init_args": d}
+        res["basis_data"] = self.basis.serialize()
+        if self.auxiliary_basis is not None:
+            res["aux_basis_data"] = self.auxiliary_basis.serialize()
+        if self.minao_basis is not None:
+            res["minao_basis_data"] = self.minao_basis.serialize()
+        with open(f"{filename}.json", "w", encoding="utf-8") as f:
+            json.dump(res, f)
+
+    @classmethod
+    def load(cls, filename):
+        with open(f"{filename}.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+            init_args = data["init_args"]
+            system = cls.__new__(cls)
+            for k, v in init_args.items():
+                setattr(system, k, v)
+            system._sanity_check()
+
+            # Initialize basis sets from saved data
+            if "basis_data" not in data:
+                raise ValueError(f"Basis data not found")
+            system.basis = build_basis_from_dict(data["basis_data"])
+            if "aux_basis_data" in data:
+                system.auxiliary_basis = build_basis_from_dict(data["aux_basis_data"])
+            else:
+                system.auxiliary_basis = None
+            if "minao_basis_data" in data:
+                system.minao_basis = build_basis_from_dict(data["minao_basis_data"])
+            else:
+                system.minao_basis = None
+
+            system.nbf = system.basis.size
+            system.naux = (
+                system.auxiliary_basis.size if system.auxiliary_basis else None
+            )
+            system.nminao = system.minao_basis.size if system.minao_basis else None
+
+        # Skip basis initialization
+        system._common_init(skip_basis_init=True)
+        return system
 
     def _init_geometry(self):
         self.atoms = parse_geometry(self.xyz, self.unit)
@@ -202,6 +272,7 @@ class System:
         self.naux = self.auxiliary_basis.size if self.auxiliary_basis else None
         self.nminao = self.minao_basis.size if self.minao_basis else None
 
+    def _init_gaussian_charges(self):
         self.gaussian_charge_basis = None
         if self.use_gaussian_charges:
             self.gaussian_charge_basis = build_basis(
@@ -209,6 +280,27 @@ class System:
                 self.geom_helper,
                 embed_normalization_into_coefficients=False,
             )
+
+    def load_basis_from_file(self, file_handle):
+        """
+        Initialize basis objects from a previously-saved JSON file produced by `save()`.
+        """
+        data = json.load(file_handle)
+        if "basis_data" not in data:
+            raise ValueError(f"Basis data not found")
+        self.basis = build_basis_from_dict(data["basis_data"])
+        if "aux_basis_data" in data:
+            self.auxiliary_basis = build_basis_from_dict(data["aux_basis_data"])
+        else:
+            self.auxiliary_basis = None
+        if "minao_basis_data" in data:
+            self.minao_basis = build_basis_from_dict(data["minao_basis_data"])
+        else:
+            self.minao_basis = None
+
+        self.nbf = self.basis.size
+        self.naux = self.auxiliary_basis.size if self.auxiliary_basis else None
+        self.nminao = self.minao_basis.size if self.minao_basis else None
 
     def _init_x2c(self):
         if self.x2c_type is not None:
@@ -224,9 +316,7 @@ class System:
 
     def _init_fock_builder(self):
         if self.jk_mem_thres_mb is not None and self.cholesky_tei:
-            raise ValueError(
-                "If cholesky_tei is True, jk_mem_thres_mb must be None."
-            )
+            raise ValueError("If cholesky_tei is True, jk_mem_thres_mb must be None.")
         if self.jk_mem_thres_mb is not None and self.auxiliary_basis is None:
             raise ValueError(
                 "If jk_mem_thres_mb is set, auxiliary_basis_set must be provided to determine the size of the B tensor."

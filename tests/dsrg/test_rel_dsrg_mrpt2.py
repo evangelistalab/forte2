@@ -102,18 +102,21 @@ def test_mrpt2_n2_sa_nonrel():
     )
 
 
-def test_mrpt2_carbon_rel_sa():
+def test_mrpt2_carbon_rel_sa(tmp_path):
     xyz = """
     C 0 0 0
     """
 
-    system = System(
+    system_0 = System(
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
         x2c_type="so",
         snso_type="row-dependent",
     )
+
+    system_0.save(tmp_path / "carbon_rel_sa")
+    system = System.load(tmp_path / "carbon_rel_sa")
     mf = GHF(charge=0, die_if_not_converged=False)(system)
     ci_solver = RelCISolver(
         nel=6,
