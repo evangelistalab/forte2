@@ -108,9 +108,12 @@ void export_shell_api(nb::module_& sub_m) {
              [](const libint2::Shell& s) {
                  std::string str;
                  str = "l = " + std::to_string(s.contr[0].l) +
-                       " nprim = " + std::to_string(s.nprim());
+                       " nprim = " + std::to_string(s.nprim()) + " center = (" +
+                       std::to_string(s.O[0]) + ", " + std::to_string(s.O[1]) + ", " +
+                       std::to_string(s.O[2]) + ")";
+                 str += std::format("\n  {:<10} {:<10}", "alpha", "coeff");
                  for (std::size_t i = 0; i < s.nprim(); ++i) {
-                     str += std::format("\n  {0:10.6f} {1:10.6f}", s.alpha[i], s.contr[0].coeff[i]);
+                     str += std::format("\n  {:<10.6f} {:<10.6f}", s.alpha[i], s.contr[0].coeff[i]);
                  }
                  return str;
              })
@@ -152,6 +155,40 @@ void export_basis_api(nb::module_& sub_m) {
         .def("set_name", &Basis::set_name, "name"_a)
         .def("__getitem__", &Basis::operator[], "i"_a)
         .def("__len__", &Basis::size)
+        .def(
+            "serialize",
+            [](const Basis& basis) {
+                nb::dict res;
+                res["schema_version"] = 1;
+                res["nshells"] = basis.nshells();
+                nb::list shells;
+                for (std::size_t i = 0; i < basis.nshells(); ++i) {
+                    const auto& shell = basis[i];
+                    nb::dict shell_dict;
+                    shell_dict["nprim"] = shell.nprim();
+                    shell_dict["l"] = shell.contr[0].l;
+                    nb::list exponents;
+                    for (double exponent : shell.alpha) {
+                        exponents.append(exponent);
+                    }
+                    shell_dict["exponents"] = exponents;
+                    nb::list coeffs;
+                    for (double coeff : shell.contr[0].coeff) {
+                        coeffs.append(coeff);
+                    }
+                    shell_dict["coefficients"] = coeffs;
+                    nb::list center;
+                    for (double coord : shell.O) {
+                        center.append(coord);
+                    }
+                    shell_dict["center"] = center;
+                    shells.append(shell_dict);
+                    shell_dict["is_pure"] = shell.contr[0].pure;
+                }
+                res["shells"] = shells;
+                return res;
+            },
+            "Serialize the basis set to a dictionary.")
         .def_prop_ro("shell_first_and_size", &Basis::shell_first_and_size,
                      "Returns a vector of pairs of the first index and size of each shell in the "
                      "basis set. The first index is the index of the first basis function in the "

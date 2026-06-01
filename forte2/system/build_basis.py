@@ -4,10 +4,11 @@ from importlib import resources
 import re
 import os
 
+import numpy as np
+
 from forte2 import Basis, Shell
 from forte2.data import ATOM_SYMBOL_TO_Z
 from forte2.helpers import logger
-
 
 try:
     import basis_set_exchange as bse
@@ -15,6 +16,89 @@ try:
     BSE_AVAILABLE = True
 except ImportError:
     BSE_AVAILABLE = False
+
+
+def build_basis_from_dict(basis_data):
+    """
+    Build a Basis object from a dictionary containing the basis set data.
+
+    The basis_data is expected to have the following format for each shell:
+    {"schema_version": 1,
+     "nshells": int,
+     "shells": [
+        {"nprim": int,
+         "l": int,
+         "exponents": list[float],
+         "coefficients": list[float],
+         "center": list[float]},
+         "is_pure": bool
+        ...
+     ]}
+
+    Parameters
+    ----------
+    basis_data : dict
+        A dictionary containing the basis set data for all shells.
+
+    Returns
+    -------
+    basis : forte2.ints.Basis
+        The constructed Basis object.
+    """
+    if not isinstance(basis_data, dict):
+        raise TypeError(
+            f"Expected basis_data to be a dictionary, but got {type(basis_data)}."
+        )
+
+    if "schema_version" not in basis_data:
+        raise ValueError("Basis data is missing 'schema_version' key.")
+    if basis_data["schema_version"] != 1:
+        raise ValueError(
+            f"Unsupported basis data schema version: {basis_data['schema_version']}. Expected version 1."
+        )
+    nshells = int(basis_data["nshells"])
+    if len(basis_data["shells"]) != nshells:
+        raise ValueError(
+            f"The number of shells ({len(basis_data['shells'])}) does not match nshells ({nshells})"
+        )
+    basis = Basis()
+    for i in range(nshells):
+        try:
+            idata = basis_data["shells"][i]
+            is_pure = bool(idata["is_pure"])
+            nprim = int(idata["nprim"])
+            l = int(idata["l"])
+            exponents = np.array(idata["exponents"], dtype=float)
+            if len(exponents) != nprim:
+                raise ValueError(
+                    f"Number of exponents does not match nprim for shell {i+1}. Expected {nprim}, got {len(exponents)}."
+                )
+            coefficients = np.array(idata["coefficients"], dtype=float)
+            if len(coefficients) != nprim:
+                raise ValueError(
+                    f"Number of coefficients does not match nprim for shell {i+1}. Expected {nprim}, got {len(coefficients)}."
+                )
+            center = np.array(idata["center"], dtype=float)
+            if len(center) != 3:
+                raise ValueError(
+                    f"Center coordinates must be a list of 3 floats for shell {i+1}. Got {len(center)} coordinates."
+                )
+        except KeyError as e:
+            raise ValueError(
+                f"Error parsing basis_data at shell {i+1}. Check that the dictionary is correctly formatted. Original error: {e}"
+            ) from e
+
+        basis.add(
+            Shell(
+                l,
+                exponents,
+                coefficients,
+                center,
+                is_pure=is_pure,
+                embed_normalization_into_coefficients=False,  # assume the coefficients are already normalized if provided as an array
+            )
+        )
+    return basis
 
 
 def build_basis(
@@ -229,7 +313,9 @@ def _load_basis(basis_name, Z):
             f"[forte2] Generating AutoAux basis for element Z={Z} using Basis Set Exchange."
         )
         try:
-            bse_basis = bse.get_basis(basis_name.replace("-autoaux", ""), elements=Z, get_aux=1)
+            bse_basis = bse.get_basis(
+                basis_name.replace("-autoaux", ""), elements=Z, get_aux=1
+            )
         except KeyError:
             raise RuntimeError(
                 f"[forte2] Basis Set Exchange could not generate AutoAux basis for element Z={Z} with basis set {basis_name.replace('-autoaux', '')}!"

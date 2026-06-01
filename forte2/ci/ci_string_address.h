@@ -4,7 +4,7 @@
 #include <unordered_map>
 #include <map>
 
-#include "determinant.h"
+#include "determinant/determinant.h"
 
 namespace forte2 {
 /**

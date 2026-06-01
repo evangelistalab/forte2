@@ -8,7 +8,7 @@
 #include "helpers/unordered_dense.h"
 #include "helpers/logger.h"
 
-#include "ci_spin_adapter.h"
+#include "determinant/ci_spin_adapter.h"
 
 namespace forte2 {
 
@@ -217,9 +217,9 @@ void CISpinAdapter::conf_to_csfs(const Configuration& conf, det_hash<size_t>& de
         double sign = 1.0;
         for (int k = N - 1; k >= 0; k--) {
             if (det_occ.get_bit(k)) {
-                sign *= det.create_b(socc_vec[k]);
+                sign *= det.create_beta(socc_vec[k]);
             } else {
-                sign *= det.create_a(socc_vec[k]);
+                sign *= det.create_alpha(socc_vec[k]);
             }
         }
         csf_to_det_coeff_[ncoupling_].first = det_hash[det];

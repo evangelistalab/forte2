@@ -407,6 +407,32 @@ def test_sparse_operator():
     assert sopd.str() == ref.str()
 
 
+@pytest.mark.parametrize(
+    ("op", "initial"),
+    [
+        ("[0a-]", "0"),
+        ("[0a+]", "a"),
+        ("[1a+ 0a-]", "aa"),
+    ],
+)
+def test_apply_op_skips_inapplicable_terms(op, initial):
+    sop = forte2.sparse_operator(op, 1.0)
+    state = forte2.SparseState({det(initial): 1.0})
+
+    out = forte2.apply_op(sop, state)
+
+    assert len(out) == 0
+
+
+def test_apply_antiherm_skips_when_operator_and_adjoint_are_inapplicable():
+    sop = forte2.sparse_operator("[1a+ 0a-]", 1.0)
+    state = forte2.SparseState({det("aa"): 1.0})
+
+    out = forte2.apply_antiherm(sop, state)
+
+    assert len(out) == 0
+
+
 def test_sparse_operator_product():
     sop1 = forte2.SparseOperator()
     sop1.add("[1a+ 1a-]", 1.0)

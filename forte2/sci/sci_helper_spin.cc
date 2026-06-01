@@ -8,7 +8,7 @@
 #include "helpers/sorting.hpp"
 #include "helpers/np_matrix_functions.h"
 
-#include "ci/determinant_helpers.h"
+#include "determinant/determinant_helpers.h"
 #include "sci_helper.h"
 
 namespace forte2 {
@@ -53,7 +53,7 @@ std::vector<double> SelectedCIHelper::spin2_batch(size_t num_batches, size_t bat
 
         // find the occupied and empty orbitals for the current alpha string
         a_str.find_set_bits(aocc, noa);
-        compute_fast_virtual(aocc, avir, norb_);
+        collect_virtual_orbitals(aocc, avir, norb_);
 
         // single alpha creation of an electron (S+ = a^+(pα) a(pβ))
         for (const auto& a : avir) {
@@ -64,7 +64,7 @@ std::vector<double> SelectedCIHelper::spin2_batch(size_t num_batches, size_t bat
             if (String::Hash()(new_a_str) % num_batches != batch_id) {
                 continue;
             }
-            new_det.set_a_string(new_a_str);
+            new_det.set_alpha_string(new_a_str);
 
             // find strings where we can annihilate the electron in orbital a
             for (const auto& [b_str_idx, det_index] : second_string_to_det_index) {
@@ -73,7 +73,7 @@ std::vector<double> SelectedCIHelper::spin2_batch(size_t num_batches, size_t bat
                 if (b_str.get_bit(a)) {
                     String new_b_str = b_str;
                     const double b_sign = new_b_str.destroy(a);
-                    new_det.set_b_string(new_b_str);
+                    new_det.set_beta_string(new_b_str);
                     const double sign = a_str_phase * a_sign * b_sign;
                     for (size_t r{0}; r < nroots_; ++r) {
                         s_plus_map[r][new_det] += sign * c_[det_index * nroots_ + r];

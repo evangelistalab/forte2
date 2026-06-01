@@ -8,7 +8,7 @@
 #include "helpers/sorting.hpp"
 #include "helpers/np_matrix_functions.h"
 
-#include "ci/determinant_helpers.h"
+#include "determinant/determinant_helpers.h"
 #include "sci_helper.h"
 
 namespace forte2 {
@@ -74,10 +74,10 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
             max_abs_c = std::max(max_abs_c, std::fabs(c_det[r]));
         }
 
-        det.get_fast_a_occ(aocc, noa);
-        det.get_fast_b_occ(bocc, nob);
-        compute_fast_virtual(aocc, avir, norb_);
-        compute_fast_virtual(bocc, bvir, norb_);
+        det.collect_alpha_occupied(aocc, noa);
+        det.collect_beta_occupied(bocc, nob);
+        collect_virtual_orbitals(aocc, avir, norb_);
+        collect_virtual_orbitals(bocc, bvir, norb_);
         size_t nva = norb_ - noa;
         size_t nvb = norb_ - nob;
 
@@ -393,10 +393,10 @@ void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
         }
 
         LOG(log_level_) << "Thread " << t << " processed " << total_batches << " batches, found "
-                  << total_dets << " new determinants in " << total_time << " seconds (avg "
-                  << total_time / total_batches << " s/batch, "
-                  << (total_time > 0.0 ? std::to_string(total_dets / total_time) : "N/A")
-                  << " dets/s)";
+                        << total_dets << " new determinants in " << total_time << " seconds (avg "
+                        << total_time / total_batches << " s/batch, "
+                        << (total_time > 0.0 ? std::to_string(total_dets / total_time) : "N/A")
+                        << " dets/s)";
     }
 
     // count the new determinants
@@ -439,7 +439,7 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
 
     auto accumulate = [&](DetRootMap& map, std::vector<double>& coeffs, const Determinant& det,
                           double prefactor, const std::span<double>& c) {
-        // try_emplace returns an iterator to the existing element 
+        // try_emplace returns an iterator to the existing element
         // if the determinant is already in the map
         size_t loc = coeffs.size();
         auto [it, emplaced] = map.try_emplace(det, loc);
@@ -523,16 +523,16 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
             for (const auto& a : avir_span) {
                 // *_fast avoids checking if i and a are already occupied/unoccupied
                 // since we already know they are
-                auto [new_a_str, sign] = create_single_excitation_fast(a_str, i, a);
+                auto [new_a_str, sign] = create_single_excitation_unchecked(a_str, i, a);
                 // determine if this determinant belongs to the current batch
                 if (hash(new_a_str) % num_batches != batch_id) {
                     continue;
                 }
-                new_det.set_a_string(new_a_str);
+                new_det.set_alpha_string(new_a_str);
                 // add the occupied orbital contribution
                 for (size_t k{0}; const auto& [b_str_idx, det_index] : second_string_to_det_index) {
                     const String& b_str = ab_list_.sorted_second_string(b_str_idx);
-                    new_det.set_b_string(b_str);
+                    new_det.set_beta_string(b_str);
                     // singles_coupling_a can be expensive to compute
                     // a possible replacement here is h(i, a)
                     const double integral = slater_rules_.singles_coupling_a(i, a, new_det);
@@ -567,7 +567,7 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
                     if ((a >= b) or a_str.get_bit(a) or a_str.get_bit(b))
                         continue;
 
-                    auto [new_a_str, sign] = create_double_excitation_fast(a_str, i, j, a, b);
+                    auto [new_a_str, sign] = create_double_excitation_unchecked(a_str, i, j, a, b);
 
                     if (hash(new_a_str) % num_batches != batch_id) {
                         continue;
@@ -577,8 +577,8 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
                          const auto& [b_str_idx, det_index] : second_string_to_det_index) {
                         const double criterion = std::fabs(coupling * abs_c_max[k]);
                         if (criterion > pt2_threshold) {
-                            new_det.set_a_string(new_a_str);
-                            new_det.set_b_string(ab_list_.sorted_second_string(b_str_idx));
+                            new_det.set_alpha_string(new_a_str);
+                            new_det.set_beta_string(ab_list_.sorted_second_string(b_str_idx));
                             // if the determinant is already in the variational space, skip it
                             if (!existing_dets.count(new_det)) {
                                 auto coeffs =
@@ -600,14 +600,14 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
         for (const auto& i : aocc_span) {
             for (const auto& a : avir_span) {
                 // find the new alpha string after excitation and the sign and store it
-                auto [new_a_str, a_sign] = create_single_excitation_fast(a_str, i, a);
+                auto [new_a_str, a_sign] = create_single_excitation_unchecked(a_str, i, a);
 
                 if (hash(new_a_str) % num_batches != batch_id) {
                     continue;
                 }
 
                 const auto& v_list = vab_sorted_[i * norb_ + a];
-                new_det.set_a_string(new_a_str);
+                new_det.set_alpha_string(new_a_str);
 
                 for (const auto& [coupling, integral, j, b] : v_list) {
                     // break early if the integrals are too small
@@ -625,8 +625,9 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
 
                         const double criterion = std::fabs(coupling * abs_c_max[k]);
                         if (criterion > pt2_threshold) {
-                            auto [new_b_str, b_sign] = create_single_excitation_fast(b_str, j, b);
-                            new_det.set_b_string(new_b_str);
+                            auto [new_b_str, b_sign] =
+                                create_single_excitation_unchecked(b_str, j, b);
+                            new_det.set_beta_string(new_b_str);
                             if (!existing_dets.count(new_det)) {
                                 auto coeffs =
                                     std::span<double>(c_block.data() + k * nroots_, nroots_);
@@ -649,7 +650,7 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
         if (hash(a_str) % num_batches != batch_id)
             continue;
 
-        new_det.set_a_string(a_str);
+        new_det.set_alpha_string(a_str);
         for (size_t k{0}; const auto& [b_str_idx, det_index] : second_string_to_det_index) {
             const String& b_str = ab_list_.sorted_second_string(b_str_idx);
             auto b_str_annihilation_masked = b_str & ~frozen_annihilation_mask_;
@@ -662,12 +663,13 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
             // single beta excitations
             for (const auto& i : bocc_span) {
                 for (const auto& a : bvir_span) {
-                    new_det.set_b_string(b_str); // push the current beta string to compute coupling
+                    new_det.set_beta_string(
+                        b_str); // push the current beta string to compute coupling
                     const double integral = slater_rules_.singles_coupling_b(i, a, new_det);
                     const double criterion = std::fabs(integral * abs_c_max[k]);
                     if (criterion > pt2_threshold) {
-                        auto [new_b_str, sign] = create_single_excitation_fast(b_str, i, a);
-                        new_det.set_b_string(new_b_str); // push the new beta string
+                        auto [new_b_str, sign] = create_single_excitation_unchecked(b_str, i, a);
+                        new_det.set_beta_string(new_b_str); // push the new beta string
                         if (!existing_dets.count(new_det)) {
                             auto coeffs = std::span<double>(c_block.data() + k * nroots_, nroots_);
                             if (criterion > var_threshold) {
@@ -694,9 +696,10 @@ void SelectedCIHelper::select_hbci_batch(DetRootMap& V_map, DetRootMap& PT_map,
                         if ((a >= b) or b_str.get_bit(a) or b_str.get_bit(b))
                             continue;
 
-                        auto [new_b_str, sign] = create_double_excitation_fast(b_str, i, j, a, b);
-                        new_det.set_a_string(a_str);
-                        new_det.set_b_string(new_b_str);
+                        auto [new_b_str, sign] =
+                            create_double_excitation_unchecked(b_str, i, j, a, b);
+                        new_det.set_alpha_string(a_str);
+                        new_det.set_beta_string(new_b_str);
                         if (!existing_dets.count(new_det)) {
                             auto coeffs = std::span<double>(c_block.data() + k * nroots_, nroots_);
                             if (criterion > var_threshold) {

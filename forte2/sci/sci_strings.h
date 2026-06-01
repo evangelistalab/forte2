@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "helpers/unordered_dense.h"
-#include "ci/determinant.h"
+#include "determinant/determinant.h"
 
 namespace forte2 {
 

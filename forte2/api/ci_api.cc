@@ -10,7 +10,7 @@
 #include "ci/ci_strings.h"
 #include "ci/ci_string_address.h"
 #include "ci/ci_sigma_builder.h"
-#include "ci/ci_spin_adapter.h"
+#include "determinant/ci_spin_adapter.h"
 #include "ci/rel_ci_sigma_builder.h"
 
 // Must be at global scope:
@@ -40,7 +40,7 @@ void export_ci_strings_api(nb::module_& m) {
             "na"_a, "nb"_a, "symmetry"_a, "orbital_symmetry"_a, "gas_min"_a, "gas_max"_a,
             "Initialize the CIStrings with number of alpha and beta electrons, symmetry, "
             "orbital symmetry, minimum and maximum number of electrons in each GAS space")
-        .def_prop_ro("alfa_address", &CIStrings::alfa_address)
+        .def_prop_ro("alpha_address", &CIStrings::alpha_address)
         .def_prop_ro("na", &CIStrings::na)
         .def_prop_ro("nb", &CIStrings::nb)
         .def_prop_ro("symmetry", &CIStrings::symmetry)
@@ -49,7 +49,7 @@ void export_ci_strings_api(nb::module_& m) {
         .def_prop_ro("ndet", &CIStrings::ndet)
         .def_prop_ro("ngas_spaces", &CIStrings::ngas_spaces)
         .def_prop_ro("gas_size", &CIStrings::gas_size)
-        .def_prop_ro("gas_alfa_occupations", &CIStrings::gas_alfa_occupations)
+        .def_prop_ro("gas_alpha_occupations", &CIStrings::gas_alpha_occupations)
         .def_prop_ro("gas_beta_occupations", &CIStrings::gas_beta_occupations)
         .def_prop_ro("gas_occupations", &CIStrings::gas_occupations)
         .def("determinant", &CIStrings::determinant, "address"_a)
@@ -120,14 +120,14 @@ void export_ci_sigma_builder_api(nb::module_& m) {
              "Set the logging level for the class")
         // RDMs debugging methods
         .def("a_1rdm_debug", &CISigmaBuilder::compute_a_1rdm_debug, "C_left"_a, "C_right"_a,
-             "alfa"_a)
+             "alpha"_a)
         .def("aa_2rdm_debug", &CISigmaBuilder::compute_aa_2rdm_debug, "C_left"_a, "C_right"_a,
-             "alfa"_a,
+             "alpha"_a,
              "Compute the two-electron same-spin reduced density matrix for debugging purposes")
         .def("ab_2rdm_debug", &CISigmaBuilder::compute_ab_2rdm_debug, "C_left"_a, "C_right"_a,
              "Compute the two-electron mixed-spin reduced density matrix for debugging purposes")
         .def("aaa_3rdm_debug", &CISigmaBuilder::compute_aaa_3rdm_debug, "C_left"_a, "C_right"_a,
-             "alfa"_a,
+             "alpha"_a,
              "Compute the three-electron same-spin reduced density matrix for debugging purposes")
         .def("aab_3rdm_debug", &CISigmaBuilder::compute_aab_3rdm_debug, "C_left"_a, "C_right"_a,
              "Compute the aab mixed-spin three-electron reduced density matrix for debugging "
@@ -136,7 +136,7 @@ void export_ci_sigma_builder_api(nb::module_& m) {
              "Compute the abb mixed-spin three-electron reduced density matrix for debugging "
              "purposes")
         .def("aaaa_4rdm_debug", &CISigmaBuilder::compute_aaaa_4rdm_debug, "C_left"_a, "C_right"_a,
-             "alfa"_a,
+             "alpha"_a,
              "Compute the four-electron same-spin reduced density matrix for debugging purposes")
         .def("aaab_4rdm_debug", &CISigmaBuilder::compute_aaab_4rdm_debug, "C_left"_a, "C_right"_a,
              "Compute the aaab mixed-spin four-electron reduced density matrix for debugging "

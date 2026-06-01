@@ -167,7 +167,7 @@ std::span<std::complex<double>> gather_block(std::span<std::complex<double>> sou
                                              const CIStrings& lists, int class_Ia, int class_Ib) {
     const auto block_index = lists.string_class()->block_index(class_Ia, class_Ib);
     const auto offset = lists.block_offset(block_index);
-    const auto maxIa = lists.alfa_address()->strpcls(class_Ia);
+    const auto maxIa = lists.alpha_address()->strpcls(class_Ia);
     const auto maxIb = lists.beta_address()->strpcls(class_Ib);
 
     if (is_alpha(spin)) {
@@ -182,7 +182,7 @@ std::span<std::complex<double>> gather_block(std::span<std::complex<double>> sou
 
 void zero_block(std::span<std::complex<double>> dest, Spin spin, const CIStrings& lists,
                 int class_Ia, int class_Ib) {
-    const auto maxIa = lists.alfa_address()->strpcls(class_Ia);
+    const auto maxIa = lists.alpha_address()->strpcls(class_Ia);
     const auto maxIb = lists.beta_address()->strpcls(class_Ib);
 
     if (is_alpha(spin)) {
@@ -198,7 +198,7 @@ void zero_block(std::span<std::complex<double>> dest, Spin spin, const CIStrings
 
 void scatter_block(std::span<std::complex<double>> source, std::span<std::complex<double>> dest,
                    Spin spin, const CIStrings& lists, int class_Ia, int class_Ib) {
-    size_t maxIa = lists.alfa_address()->strpcls(class_Ia);
+    size_t maxIa = lists.alpha_address()->strpcls(class_Ia);
     size_t maxIb = lists.beta_address()->strpcls(class_Ib);
 
     auto block_index = lists.string_class()->block_index(class_Ia, class_Ib);

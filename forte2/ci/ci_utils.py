@@ -11,7 +11,7 @@ from forte2.data import EH_TO_EV
 def pretty_print_gas_info(ci_strings: CIStrings):
     num_spaces = ci_strings.ngas_spaces
     gas_sizes = ci_strings.gas_size
-    alfa_occupation = ci_strings.gas_alfa_occupations
+    alpha_occupation = ci_strings.gas_alpha_occupations
     beta_occupation = ci_strings.gas_beta_occupations
     occupation_pairs = ci_strings.gas_occupations
 
@@ -24,7 +24,7 @@ def pretty_print_gas_info(ci_strings: CIStrings):
     for i in range(num_spaces):
         row = []
         for aocc_idx, bocc_idx in occupation_pairs:
-            aocc = alfa_occupation[aocc_idx]
+            aocc = alpha_occupation[aocc_idx]
             bocc = beta_occupation[bocc_idx]
             row.append((aocc[i], bocc[i]))
         table.append(row)

@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "helpers/ndarray.h"
-#include "determinant.h"
+#include "determinant/determinant.h"
 
 namespace forte2 {
 

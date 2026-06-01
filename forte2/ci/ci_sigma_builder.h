@@ -9,8 +9,8 @@
 #include "helpers/spin.h"
 
 #include "ci/ci_strings.h"
-#include "ci/slater_rules.h"
-#include "ci/ci_spin_adapter.h"
+#include "determinant/slater_rules.h"
+#include "determinant/ci_spin_adapter.h"
 
 #include "sparse/sparse_state.h"
 
@@ -248,16 +248,16 @@ class CISigmaBuilder {
     // == Debugging Functions ==
     // The following are debugging functions that compute reduced density matrices that parallel
     // the definition of the functions above.
-    np_matrix compute_a_1rdm_debug(np_vector C_left, np_vector C_right, bool alfa) const;
+    np_matrix compute_a_1rdm_debug(np_vector C_left, np_vector C_right, bool alpha) const;
 
-    np_matrix compute_aa_2rdm_debug(np_vector C_left, np_vector C_right, bool alfa) const;
+    np_matrix compute_aa_2rdm_debug(np_vector C_left, np_vector C_right, bool alpha) const;
     np_tensor4 compute_ab_2rdm_debug(np_vector C_left, np_vector C_right) const;
 
-    np_matrix compute_aaa_3rdm_debug(np_vector C_left, np_vector C_right, bool alfa) const;
+    np_matrix compute_aaa_3rdm_debug(np_vector C_left, np_vector C_right, bool alpha) const;
     np_tensor4 compute_aab_3rdm_debug(np_vector C_left, np_vector C_right) const;
     np_tensor4 compute_abb_3rdm_debug(np_vector C_left, np_vector C_right) const;
 
-    np_matrix compute_aaaa_4rdm_debug(np_vector C_left, np_vector C_right, bool alfa) const;
+    np_matrix compute_aaaa_4rdm_debug(np_vector C_left, np_vector C_right, bool alpha) const;
     np_tensor4 compute_aaab_4rdm_debug(np_vector C_left, np_vector C_right) const;
     np_tensor4 compute_aabb_4rdm_debug(np_vector C_left, np_vector C_right) const;
     np_tensor4 compute_abbb_4rdm_debug(np_vector C_left, np_vector C_right) const;
@@ -337,13 +337,13 @@ class CISigmaBuilder {
     mutable std::vector<double> v_pr_qs_a;
 
     /// @brief  One-electron contribution to the sigma vector |sigma> = H |basis>
-    /// @param alfa If true, compute the alpha contribution, otherwise the beta
+    /// @param alpha If true, compute the alpha contribution, otherwise the beta
     /// @param h The one-electron integrals
     void H1_hz(std::span<double> basis, std::span<double> sigma, Spin spin,
                std::span<double> h) const;
 
     /// @brief  Two-electron same-spin contribution to the sigma vector |sigma> = H |basis>
-    /// @param alfa If true, compute the alpha contribution, otherwise the beta
+    /// @param alpha If true, compute the alpha contribution, otherwise the beta
     void H2_hz_same_spin(std::span<double> basis, std::span<double> sigma, Spin spin) const;
 
     /// @brief  Two-electron mixed-spin contribution to the sigma vector |sigma> = H |basis>
