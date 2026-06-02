@@ -31,8 +31,6 @@ def test_cadmium_imidazole_complex(tmp_path):
     )
     system.save(tmp_path / "test_cadmium_imidazole_complex")
     system_load = System.load(tmp_path / "test_cadmium_imidazole_complex")
-    # explicitly test that basis_set is not needed if system is loaded
-    system.basis_set = None
 
     scf = RHF(charge=2)(system_load)
     scf.run()

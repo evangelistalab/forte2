@@ -117,8 +117,6 @@ def test_mrpt2_carbon_rel_sa(tmp_path):
 
     system_0.save(tmp_path / "carbon_rel_sa")
     system = System.load(tmp_path / "carbon_rel_sa")
-    # explicitly test that basis_set is not needed if system is loaded
-    system.basis_set = None
     mf = GHF(charge=0, die_if_not_converged=False)(system)
     ci_solver = RelCISolver(
         nel=6,

@@ -77,8 +77,6 @@ def test_lindep_x2c(tmp_path):
     )
     system_0.save(tmp_path / "test_lindep_x2c")
     system = System.load(tmp_path / "test_lindep_x2c")
-    # explicitly test that basis_set is not needed if system is loaded
-    system.basis_set = None
     scf = GHF(charge=0)(system)
     scf.run()
     assert scf.E == approx_loose(eref)

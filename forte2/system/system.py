@@ -178,6 +178,9 @@ class System:
         """
         # Collect all user-provided initialization arguments
         d = {f.name: getattr(self, f.name) for f in fields(self) if f.init is True}
+        d["basis_set"] = None
+        d["auxiliary_basis_set"] = None
+        d["minao_basis_set"] = None
         res = {"init_args": d}
         res["basis_data"] = self.basis.serialize()
         if self.auxiliary_basis is not None:
