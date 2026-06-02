@@ -1,7 +1,10 @@
 import pytest
+import numpy as np
 
 from forte2 import System
 from forte2.system.basis_utils import BasisInfo, get_shell_label, shell_label_to_lm
+from forte2.system.build_basis import decontract_basis, build_basis, BSE_AVAILABLE
+from forte2.integrals import overlap
 
 
 def test_basis_info():
@@ -120,3 +123,29 @@ def test_basis_info_spinor():
     assert basis_info.basis_labels_spinor[22] == BasisInfo._SpinorAOLabel(
         22, 0, 6, 1, 3, 2, 5, -5
     )
+
+
+@pytest.mark.skipif(not BSE_AVAILABLE, reason="Basis set exchange is not available")
+def test_decontract():
+    xyz = """
+    C 0 0 0
+    O 0 0 1
+    H 0 0 2
+    O 1 0 1
+    """
+    basis_set = {
+        "C": "cc-pvdz",
+        "O1": "sto-6g",
+        "O2": "def2-svp",
+        "default": "cc-pvtz",
+    }
+    system = System(xyz=xyz, basis_set=basis_set)
+    basis_decon1 = build_basis(basis_set, system.geom_helper, decontract=True)
+    basis_decon2 = decontract_basis(system.basis)
+    assert len(basis_decon1) == len(basis_decon2)
+    ovlp1 = overlap(system, basis_decon1)
+    ovlp_cross = overlap(system, basis_decon1, basis_decon2)
+    ovlp2 = overlap(system, basis_decon2)
+    # S22 = S21 @ S11^{-1} @ S12
+    ovlp2_recon = ovlp_cross.T @ np.linalg.solve(ovlp1, ovlp_cross)
+    assert np.linalg.norm(ovlp2 - ovlp2_recon) <= 1e-11
