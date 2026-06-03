@@ -212,6 +212,53 @@ def build_basis(
     return basis
 
 
+def decontract_basis(basis: Basis, embed_normalization_into_coefficients: bool = True):
+    """
+    Decontract a Basis object and return a new Basis object.
+
+    For generally contracted basis sets where multiple shells share the same
+    primitives (same l, center, and exponents), this function avoids duplicates
+    so that each unique primitive appears only once.
+
+    Parameters
+    ----------
+    basis : forte2.ints.Basis
+        The Basis object to be decontracted.
+    embed_normalization_into_coefficients : bool, optional, default=True
+        Whether to embed normalization factors into the contraction coefficients.
+
+    Returns
+    -------
+    basis_decon : forte2.ints.Basis
+        The decontracted Basis object.
+    """
+    nsh = basis.nshells
+    basis_decon = Basis()
+    seen = set()
+    for i in range(nsh):
+        sh = basis[i]
+        l = sh.l
+        center = np.asarray(sh.center, dtype=np.float64)
+        is_pure = sh.is_pure
+        for alpha in sh.exponents:
+            # lists/ndarrays cannot be hashed but raw bytes can
+            key = (l, center.tobytes(), alpha)
+            if key in seen:
+                continue
+            seen.add(key)
+            basis_decon.add(
+                Shell(
+                    l,
+                    [alpha],
+                    [1.0],
+                    center.tolist(),
+                    is_pure,
+                    embed_normalization_into_coefficients,
+                )
+            )
+    return basis_decon
+
+
 def _parse_custom_basis_assignment(geometry, basis_assignment):
     # explicit_basis contains all entries except "default"
     explicit_basis = basis_assignment.copy()

@@ -10,7 +10,7 @@ from forte2.helpers import (
     invsqrt_matrix,
     print_metric_info,
 )
-from forte2.system.build_basis import build_basis
+from forte2.system.build_basis import decontract_basis
 
 LIGHT_SPEED = 137.035999177
 ROW_Z_START = np.array([1, 3, 11, 19, 37, 55, 87])
@@ -64,11 +64,7 @@ class X2CHelper:
 
         logger.log_info1(f"Number of contracted basis functions: {self.system.nbf}")
 
-        self.xbasis = build_basis(
-            system.basis_set,
-            system.geom_helper,
-            decontract=True,
-        )
+        self.xbasis = decontract_basis(system.basis)
 
         self.proj = scipy.linalg.solve(
             integrals.overlap(self.system, self.xbasis),
