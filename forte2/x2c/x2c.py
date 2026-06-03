@@ -10,7 +10,7 @@ from forte2.helpers import (
     invsqrt_matrix,
     print_metric_info,
 )
-from forte2.system.build_basis import decontract_basis, build_basis
+from forte2.system.build_basis import decontract_basis
 
 LIGHT_SPEED = 137.035999177
 ROW_Z_START = np.array([1, 3, 11, 19, 37, 55, 87])

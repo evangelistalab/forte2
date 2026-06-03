@@ -214,10 +214,10 @@ def build_basis(
 
 def decontract_basis(basis: Basis, embed_normalization_into_coefficients: bool = True):
     """
-    Decontract a Basis object.
+    Decontract a Basis object and return a new Basis object.
 
     For generally contracted basis sets where multiple shells share the same
-    primitives (same l, center, and exponents), this function deduplicates
+    primitives (same l, center, and exponents), this function avoids duplicates
     so that each unique primitive appears only once.
 
     Parameters
