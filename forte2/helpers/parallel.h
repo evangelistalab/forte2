@@ -18,6 +18,10 @@
 #define SERIAL_THRESHOLD 3
 
 namespace forte2 {
+/// @brief Get the number of threads to use for parallel execution
+/// This function returns the number of hardware threads available, but ensures that at least 1
+/// thread is returned.
+/// @return The number of threads to use for parallel execution.
 static std::size_t get_num_threads() {
     return static_cast<std::size_t>(std::max(1u, std::thread::hardware_concurrency()));
 }

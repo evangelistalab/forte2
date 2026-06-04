@@ -107,9 +107,8 @@ template <libint2::Operator Op, typename Params = NoParams>
 
 template <libint2::Operator Op, typename Params = NoParams>
 [[nodiscard]] auto compute_two_electron_3c_multi(const Basis& basis1, const Basis& basis2,
-                                                       const Basis& basis3,
-                                                       Params const& params = Params{})
-    -> np_tensor3 {
+                                                 const Basis& basis3,
+                                                 Params const& params = Params{}) -> np_tensor3 {
     const auto start = std::chrono::high_resolution_clock::now();
 
     // Initialize libint2
@@ -273,12 +272,9 @@ void compute_two_electron_3c_by_shell(
             "shell_slices indices must be within the number of shells in each basis");
     }
 
-    const std::size_t ish0 = shell_slices[0].first;
-    const std::size_t ish1 = shell_slices[0].second;
-    const std::size_t jsh0 = shell_slices[1].first;
-    const std::size_t jsh1 = shell_slices[1].second;
-    const std::size_t ksh0 = shell_slices[2].first;
-    const std::size_t ksh1 = shell_slices[2].second;
+    const auto [ish0, ish1] = shell_slices[0];
+    const auto [jsh0, jsh1] = shell_slices[1];
+    const auto [ksh0, ksh1] = shell_slices[2];
 
     const auto first_size1 = basis1.shell_first_and_size();
     const auto first_size2 = basis2.shell_first_and_size();
