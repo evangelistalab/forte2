@@ -66,6 +66,19 @@ class RHF(SCFBase):
     def _spin(self, S):
         return self.ms * (self.ms + 1)
 
+    def gradient(self):
+        """
+        Compute the RHF analytic nuclear gradient.
+
+        Returns
+        -------
+        ndarray
+            Gradient with shape ``(natoms, 3)`` in Hartree/Bohr.
+        """
+        from forte2.gradients import rhf_gradient
+
+        return rhf_gradient(self)
+
     def _diis_update(self, diis, F, AO_grad):
         return [diis.update(F[0], AO_grad)]
 
@@ -101,7 +114,9 @@ class RHF(SCFBase):
             idx = ndocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx:<4d} ({self.irrep_labels[0][idx]}) {self.eps[0][idx]:<12.6f} "
+            string += (
+                f"{idx:<4d} ({self.irrep_labels[0][idx]}) {self.eps[0][idx]:<12.6f} "
+            )
         logger.log_info1(string)
 
     def _post_process(self):
