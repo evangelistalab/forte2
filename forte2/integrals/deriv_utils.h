@@ -90,6 +90,52 @@ validate_deriv_weight_shape(const Array& weights, const std::array<std::size_t, 
     }
 }
 
+/// @brief Validates that the shell slices for derivative computations are valid.
+/// @param shell_slices The array of (start, end) indices for each basis's shells.
+/// @param nshells The array of the number of shells in each basis.
+/// @param caller_name The name of the function calling this validation.
+/// @throws std::invalid_argument if any of the shell slices are not in the form of
+inline void
+validate_deriv_shell_slices(const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices,
+                            const std::array<std::size_t, 3>& nshells,
+                            const std::string& caller_name) {
+    for (std::size_t i = 0; i < 3; ++i) {
+        if (shell_slices[i].first >= shell_slices[i].second) {
+            throw std::invalid_argument(caller_name +
+                                        ": shell_slices indices must be in the form of "
+                                        "(start, end) with start < end");
+        }
+        if (shell_slices[i].second > nshells[i]) {
+            throw std::invalid_argument(caller_name +
+                                        ": shell_slices indices must be within the number "
+                                        "of shells in each basis");
+        }
+    }
+}
+
+/// @brief Validates the shell slices for derivative computations.
+/// @param shell_slices The array of (start, end) indices for each basis's shells.
+/// @param nshells The array of the number of shells in each basis.
+/// @param caller_name The name of the function calling this validation.
+/// @throws std::invalid_argument if any of the shell slices are not in the form of
+inline void
+validate_deriv_shell_slices(const std::array<std::pair<std::size_t, std::size_t>, 2>& shell_slices,
+                            const std::array<std::size_t, 2>& nshells,
+                            const std::string& caller_name) {
+    for (std::size_t i = 0; i < 2; ++i) {
+        if (shell_slices[i].first >= shell_slices[i].second) {
+            throw std::invalid_argument(caller_name +
+                                        ": shell_slices indices must be in the form of "
+                                        "(start, end) with start < end");
+        }
+        if (shell_slices[i].second > nshells[i]) {
+            throw std::invalid_argument(caller_name +
+                                        ": shell_slices indices must be within the number "
+                                        "of shells in each basis");
+        }
+    }
+}
+
 /// @brief Returns the real part of a derivative weight.
 /// @tparam T The type of the weight.
 /// @param value The weight value.

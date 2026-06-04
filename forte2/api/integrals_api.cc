@@ -433,7 +433,7 @@ void export_two_electron_api(nb::module_& sub_m) {
 
     sub_m.def(
         "coulomb_3c_deriv",
-        [](const Basis& basis1, const Basis& basis2, const Basis& basis3, const np_tensor3& W3,
+        [](const Basis& basis1, const Basis& basis2, const Basis& basis3, const np_tensor3_c& W3,
            std::vector<std::pair<double, std::array<double, 3>>> charges) {
             return coulomb_3c_deriv(basis1, basis2, basis3, W3, charges);
         },
@@ -442,7 +442,7 @@ void export_two_electron_api(nb::module_& sub_m) {
     sub_m.def(
         "coulomb_3c_deriv",
         [](const Basis& basis1, const Basis& basis2, const Basis& basis3,
-           const np_tensor3_complex& W3,
+           const np_tensor3_complex_c& W3,
            std::vector<std::pair<double, std::array<double, 3>>> charges) {
             return coulomb_3c_deriv(basis1, basis2, basis3, W3, charges);
         },
@@ -450,7 +450,7 @@ void export_two_electron_api(nb::module_& sub_m) {
 
     sub_m.def(
         "coulomb_2c_deriv",
-        [](const Basis& basis1, const Basis& basis2, const np_matrix& W2,
+        [](const Basis& basis1, const Basis& basis2, const np_matrix_c& W2,
            std::vector<std::pair<double, std::array<double, 3>>> charges) {
             return coulomb_2c_deriv(basis1, basis2, W2, charges);
         },
@@ -458,7 +458,7 @@ void export_two_electron_api(nb::module_& sub_m) {
 
     sub_m.def(
         "coulomb_2c_deriv",
-        [](const Basis& basis1, const Basis& basis2, const np_matrix_complex& W2,
+        [](const Basis& basis1, const Basis& basis2, const np_matrix_complex_c& W2,
            std::vector<std::pair<double, std::array<double, 3>>> charges) {
             return coulomb_2c_deriv(basis1, basis2, W2, charges);
         },

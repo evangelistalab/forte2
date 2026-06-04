@@ -27,7 +27,7 @@ class Basis;
 ///        entry in this vector.
 /// @return Real gradient vector of length `3 * charges.size()` in atom-major Cartesian order.
 np_vector coulomb_3c_deriv(const Basis& basis1, const Basis& basis2, const Basis& basis3,
-                           const np_tensor3& W3,
+                           const np_tensor3_c& W3,
                            const std::vector<std::pair<double, std::array<double, 3>>>& charges);
 
 /// @brief Contract first derivatives of three-center Coulomb integrals with complex weights.
@@ -41,7 +41,7 @@ np_vector coulomb_3c_deriv(const Basis& basis1, const Basis& basis2, const Basis
 ///        entry in this vector.
 /// @return Real gradient vector of length `3 * charges.size()` in atom-major Cartesian order.
 np_vector coulomb_3c_deriv(const Basis& basis1, const Basis& basis2, const Basis& basis3,
-                           const np_tensor3_complex& W3,
+                           const np_tensor3_complex_c& W3,
                            const std::vector<std::pair<double, std::array<double, 3>>>& charges);
 
 /// @brief Contract first derivatives of two-center Coulomb metric integrals with real weights.
@@ -60,7 +60,7 @@ np_vector coulomb_3c_deriv(const Basis& basis1, const Basis& basis2, const Basis
 /// @param charges Nuclear charges and Cartesian centers.  Every basis center must match one
 ///        entry in this vector.
 /// @return Real gradient vector of length `3 * charges.size()` in atom-major Cartesian order.
-np_vector coulomb_2c_deriv(const Basis& basis1, const Basis& basis2, const np_matrix& W2,
+np_vector coulomb_2c_deriv(const Basis& basis1, const Basis& basis2, const np_matrix_c& W2,
                            const std::vector<std::pair<double, std::array<double, 3>>>& charges);
 
 /// @brief Contract first derivatives of two-center Coulomb metric integrals with complex weights.
@@ -72,7 +72,7 @@ np_vector coulomb_2c_deriv(const Basis& basis1, const Basis& basis2, const np_ma
 /// @param charges Nuclear charges and Cartesian centers.  Every basis center must match one
 ///        entry in this vector.
 /// @return Real gradient vector of length `3 * charges.size()` in atom-major Cartesian order.
-np_vector coulomb_2c_deriv(const Basis& basis1, const Basis& basis2, const np_matrix_complex& W2,
+np_vector coulomb_2c_deriv(const Basis& basis1, const Basis& basis2, const np_matrix_complex_c& W2,
                            const std::vector<std::pair<double, std::array<double, 3>>>& charges);
 
 } // namespace forte2

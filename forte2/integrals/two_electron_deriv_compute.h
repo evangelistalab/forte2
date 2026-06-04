@@ -16,42 +16,6 @@
 
 namespace forte2 {
 
-inline void
-validate_deriv_shell_slices(const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices,
-                            const std::array<std::size_t, 3>& nshells,
-                            const std::string& caller_name) {
-    for (std::size_t i = 0; i < 3; ++i) {
-        if (shell_slices[i].first >= shell_slices[i].second) {
-            throw std::invalid_argument(caller_name +
-                                        ": shell_slices indices must be in the form of "
-                                        "(start, end) with start < end");
-        }
-        if (shell_slices[i].second > nshells[i]) {
-            throw std::invalid_argument(caller_name +
-                                        ": shell_slices indices must be within the number "
-                                        "of shells in each basis");
-        }
-    }
-}
-
-inline void
-validate_deriv_shell_slices(const std::array<std::pair<std::size_t, std::size_t>, 2>& shell_slices,
-                            const std::array<std::size_t, 2>& nshells,
-                            const std::string& caller_name) {
-    for (std::size_t i = 0; i < 2; ++i) {
-        if (shell_slices[i].first >= shell_slices[i].second) {
-            throw std::invalid_argument(caller_name +
-                                        ": shell_slices indices must be in the form of "
-                                        "(start, end) with start < end");
-        }
-        if (shell_slices[i].second > nshells[i]) {
-            throw std::invalid_argument(caller_name +
-                                        ": shell_slices indices must be within the number "
-                                        "of shells in each basis");
-        }
-    }
-}
-
 inline auto shell_to_center_index(const Basis& basis) -> std::vector<std::size_t> {
     const auto center_to_shell = basis.center_first_and_last(true);
     std::vector<std::size_t> shell_to_center(basis.nshells());
@@ -108,8 +72,8 @@ template <libint2::Operator Op, typename Weights>
 
     const std::size_t natoms = charges.size();
     auto grad = make_zeros<nb::numpy, double, 1>({3 * natoms});
-    auto grad_view = grad.view();
-    const auto weight_view = weights.view();
+    auto grad_data = grad.data();
+    const auto weight_data = weights.data();
     // Find the number of threads to use (no more than the number of first basis slices)
     const std::size_t max_chunks = std::min(get_num_threads(), s1_end - s1_begin);
     std::vector<std::vector<double>> local_grads(max_chunks, std::vector<double>(3 * natoms, 0.0));
@@ -154,8 +118,10 @@ template <libint2::Operator Op, typename Weights>
                         for (std::size_t i = 0, ijk = 0; i != n1; ++i) {
                             for (std::size_t j = 0; j != n2; ++j) {
                                 for (std::size_t k = 0; k != n3; ++k, ++ijk) {
-                                    const double w = real_deriv_weight(weight_view(
-                                        f1 - first1 + i, f2 - first2 + j, f3 - first3 + k));
+                                    const std::size_t w_idx =
+                                        (f1 - first1 + i) * nb2_slice * nb3_slice +
+                                        (f2 - first2 + j) * nb3_slice + (f3 - first3 + k);
+                                    const double w = real_deriv_weight(weight_data[w_idx]);
                                     local_grad[atom_idx * 3 + cart_idx] +=
                                         static_cast<double>(buf[ijk]) * w;
                                 }
@@ -171,7 +137,7 @@ template <libint2::Operator Op, typename Weights>
 
     for (const auto& local_grad : local_grads) {
         for (std::size_t i{0}, maxi{local_grad.size()}; i < maxi; ++i) {
-            grad_view(i) += local_grad[i];
+            grad_data[i] += local_grad[i];
         }
     }
 
@@ -229,8 +195,8 @@ template <libint2::Operator Op, typename Weights>
 
     const std::size_t natoms = charges.size();
     auto grad = make_zeros<nb::numpy, double, 1>({3 * natoms});
-    auto grad_view = grad.view();
-    const auto weight_view = weights.view();
+    auto grad_data = grad.data();
+    const auto weight_data = weights.data();
     // Find the number of threads to use (no more than the number of first basis slices)
     const std::size_t max_chunks = std::min(get_num_threads(), s1_end - s1_begin);
     // Each thread will have its own local gradient to avoid race conditions
@@ -268,8 +234,9 @@ template <libint2::Operator Op, typename Weights>
 
                     for (std::size_t i = 0, ij = 0; i != n1; ++i) {
                         for (std::size_t j = 0; j != n2; ++j, ++ij) {
-                            const double w =
-                                real_deriv_weight(weight_view(f1 - first1 + i, f2 - first2 + j));
+                            const std::size_t w_idx =
+                                (f1 - first1 + i) * nb2_slice + (f2 - first2 + j);
+                            const double w = real_deriv_weight(weight_data[w_idx]);
                             local_grad[atom_idx * 3 + cart_idx] += static_cast<double>(buf[ij]) * w;
                         }
                     }
@@ -282,7 +249,7 @@ template <libint2::Operator Op, typename Weights>
 
     for (const auto& local_grad : local_grads) {
         for (std::size_t i{0}, maxi{local_grad.size()}; i < maxi; ++i) {
-            grad_view(i) += local_grad[i];
+            grad_data[i] += local_grad[i];
         }
     }
 
