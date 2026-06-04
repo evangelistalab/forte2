@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15...3.26)
 
 project(forte2
-        VERSION 2026.5.1
+        VERSION 2026.6.4
         LANGUAGES CXX)
         
 set(CMAKE_CXX_STANDARD 20)
