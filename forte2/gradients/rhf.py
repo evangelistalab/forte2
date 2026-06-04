@@ -4,10 +4,9 @@ import scipy as sp
 import forte2.integrals as integrals
 from forte2._forte2 import ints
 from forte2.helpers.matrix_functions import _eigh_metric_kernel
-from forte2.system import ModelSystem
+from forte2.system import ModelSystem, system
 
-from .utils import flat_to_atom_gradient, nuclear_repulsion_deriv
-
+from .utils import flat_to_atom_gradient, nuclear_repulsion_deriv, compute_gradient
 
 def rhf_gradient(rhf):
     """
@@ -29,32 +28,18 @@ def rhf_gradient(rhf):
         rhf.run()
 
     system = rhf.system
-    natoms = system.natoms
     Cocc = rhf.C[0][:, : rhf.na]
     P = 2.0 * rhf.D[0]
 
-    gradient = nuclear_repulsion_deriv(system.atoms)
-    gradient += flat_to_atom_gradient(
-        ints.kinetic_deriv(system.basis, system.basis, P, system.atoms), natoms
-    )
-    gradient += flat_to_atom_gradient(
-        ints.nuclear_deriv(system.basis, system.basis, P, system.atoms), natoms
-    )
     # Evaluate the energy-weighted density matrix
     # W_mn = 2 * sum_i C_mi * eps_i * C_ni (i in occ)
-    W_energy = 2.0 * np.einsum(
+    W1 = 2.0 * np.einsum(
         "mi,i,ni->mn", Cocc, rhf.eps[0][: rhf.na], Cocc, optimize=True
     )
-    # And its contribution to the gradient
-    # - sum_mn W_mn * (d/dR)S_mn
-    gradient -= flat_to_atom_gradient(
-        ints.overlap_deriv(system.basis, system.basis, W_energy, system.atoms), natoms
-    )
-
     # Build the two-electron derivative weights and contract with the integrals.
     W3, W2 = build_rhf_df_deriv_weights(system, Cocc, P)
-    gradient += flat_to_atom_gradient(integrals.coulomb_3c_deriv(system, W3), natoms)
-    gradient += flat_to_atom_gradient(integrals.coulomb_2c_deriv(system, W2), natoms)
+
+    gradient = compute_gradient(system, P, W1, W2, W3)
 
     return gradient
 

@@ -1,5 +1,8 @@
 import numpy as np
 
+import forte2.integrals as integrals
+from forte2._forte2 import ints
+
 
 def flat_to_atom_gradient(gradient, natoms):
     """
@@ -66,3 +69,40 @@ def nuclear_repulsion_deriv(atoms):
             gradient[b] += contribution
 
     return gradient
+
+
+def compute_gradient(system, D1, W1, W2, W3):
+    r"""
+    Compute the total gradient from the one-electron density matrix and two-electron derivative weights.
+    
+    The returned gradient is in Hartree/Bohr for coordinates in Bohr.
+
+    Parameters
+    ----------
+    system : System
+        The system for which to compute the gradient.
+    D1 : ndarray
+        The one-electron density matrix with shape ``(nbasis, nbasis)``.
+    W1 : ndarray
+        The energy-weighted density matrix with shape ``(nbasis, nbasis)``.
+    W2 : ndarray
+        The two-electron derivative weight for the metric with shape ``(nbasis, nbasis)``.
+    W3 : ndarray
+        The two-electron derivative weight for the three-center integrals with shape ``(naux, nbasis, nbasis)``.
+    """
+    natoms = system.natoms
+    gradient = nuclear_repulsion_deriv(system.atoms)
+    gradient += flat_to_atom_gradient(
+        ints.kinetic_deriv(system.basis, system.basis, D1, system.atoms), natoms
+    )
+    gradient += flat_to_atom_gradient(
+        ints.nuclear_deriv(system.basis, system.basis, D1, system.atoms), natoms
+    )
+    gradient -= flat_to_atom_gradient(
+        ints.overlap_deriv(system.basis, system.basis, W1, system.atoms), natoms
+    )
+    # Build the two-electron derivative weights and contract with the integrals.
+    gradient += flat_to_atom_gradient(integrals.coulomb_3c_deriv(system, W3), natoms)
+    gradient += flat_to_atom_gradient(integrals.coulomb_2c_deriv(system, W2), natoms)
+    return gradient    
+
