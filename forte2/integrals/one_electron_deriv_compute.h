@@ -1,48 +1,16 @@
 #pragma once
 
-#include <cmath>
 #include <stdexcept>
 #include <string>
 
 #include <libint2.hpp>
 
 #include "integrals/basis.h"
+#include "integrals/deriv_utils.h"
 
 #include "helpers/ndarray.h"
 
 namespace forte2 {
-
-inline void validate_deriv_centers(
-    const Basis& basis, const std::vector<std::pair<double, std::array<double, 3>>>& charges,
-    const std::string& basis_name) {
-    const auto shell_to_atom = basis.center_first_and_last(true);
-    if (shell_to_atom.size() != charges.size()) {
-        throw std::invalid_argument("compute_one_electron_deriv: " + basis_name + " has " +
-                                    std::to_string(shell_to_atom.size()) +
-                                    " centers, but charges has " +
-                                    std::to_string(charges.size()) + " centers");
-    }
-
-    constexpr double center_tol = 1.0e-8;
-    for (std::size_t atom = 0; atom < shell_to_atom.size(); ++atom) {
-        const auto [first_shell, last_shell] = shell_to_atom[atom];
-        if (first_shell == last_shell) {
-            continue;
-        }
-
-        const auto& shell_center = basis[first_shell].O;
-        const auto& charge_center = charges[atom].second;
-        const double center_dist =
-            std::hypot(shell_center[0] - charge_center[0], shell_center[1] - charge_center[1],
-                       shell_center[2] - charge_center[2]);
-        if (center_dist > center_tol) {
-            throw std::invalid_argument("compute_one_electron_deriv: " + basis_name +
-                                        " center " + std::to_string(atom) +
-                                        " does not match charges center " +
-                                        std::to_string(atom));
-        }
-    }
-}
 
 template <libint2::Operator Op, std::size_t M>
 [[nodiscard]] auto
@@ -59,8 +27,8 @@ compute_one_electron_deriv(const Basis& basis1, const Basis& basis2, const np_ma
             "compute_one_electron_deriv: density matrix has incorrect shape");
     }
 
-    validate_deriv_centers(basis1, charges, "basis1");
-    validate_deriv_centers(basis2, charges, "basis2");
+    validate_deriv_centers(basis1, charges, "basis1", "compute_one_electron_deriv");
+    validate_deriv_centers(basis2, charges, "basis2", "compute_one_electron_deriv");
 
     // Initialize libint2
     libint2::initialize();
