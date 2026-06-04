@@ -1,6 +1,7 @@
 import numpy as np
 import scipy as sp
 
+import forte2.integrals as integrals
 from forte2._forte2 import ints
 from forte2.helpers.matrix_functions import _eigh_metric_kernel
 from forte2.system import ModelSystem, system
