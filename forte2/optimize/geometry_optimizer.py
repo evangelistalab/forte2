@@ -99,7 +99,7 @@ class GeometryOptimizer:
         self.system = objective.system
         self.method = objective.method
         self.E = objective.E
-        self.gradient = objective.g.reshape(-1).copy()
+        self.gradient = objective.g.reshape(-1, 3).copy()
         self.history = objective.history.copy()
         self.coordinates = x.reshape(-1, 3).copy()
 

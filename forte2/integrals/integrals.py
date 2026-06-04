@@ -544,7 +544,7 @@ def coulomb_3c_deriv(system, W3, basis1=None, basis2=None, basis3=None):
     system : System
         The molecular system containing the basis sets and atomic centers.
     W3 : ndarray
-        Three-center derivative weights with shape ``(naux, nbasis1, nbasis2)``.
+        Three-center derivative weights with shape ``(basis1.size, basis2.size, basis3.size)``.
     basis1 : BasisSet, optional
         The auxiliary basis. If None, defaults to ``system.auxiliary_basis``.
     basis2 : BasisSet, optional

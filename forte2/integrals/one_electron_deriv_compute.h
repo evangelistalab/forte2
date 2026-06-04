@@ -15,7 +15,7 @@ namespace forte2 {
 template <libint2::Operator Op, std::size_t M>
 [[nodiscard]] auto
 compute_one_electron_deriv(const Basis& basis1, const Basis& basis2, const np_matrix& dm,
-                           std::vector<std::pair<double, std::array<double, 3>>>& charges)
+                           const std::vector<std::pair<double, std::array<double, 3>>>& charges)
     -> np_vector {
     // Get the number of basis functions in each basis
     const std::size_t nb1 = basis1.size();

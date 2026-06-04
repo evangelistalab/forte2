@@ -28,7 +28,7 @@ class Basis;
 ///        entry in this vector.
 /// @return Real gradient vector of length `3 * charges.size()` in atom-major Cartesian order.
 np_vector overlap_deriv(const Basis& basis1, const Basis& basis2, const np_matrix& dm,
-                        std::vector<std::pair<double, std::array<double, 3>>>& charges);
+                        const std::vector<std::pair<double, std::array<double, 3>>>& charges);
 
 /// @brief Contract first derivatives of kinetic-energy integrals with a density-like matrix.
 /// @details Computes the gradient contribution
@@ -48,7 +48,7 @@ np_vector overlap_deriv(const Basis& basis1, const Basis& basis2, const np_matri
 ///        entry in this vector.
 /// @return Real gradient vector of length `3 * charges.size()` in atom-major Cartesian order.
 np_vector kinetic_deriv(const Basis& basis1, const Basis& basis2, const np_matrix& dm,
-                        std::vector<std::pair<double, std::array<double, 3>>>& charges);
+                        const std::vector<std::pair<double, std::array<double, 3>>>& charges);
 
 /// @brief Contract first derivatives of nuclear-attraction integrals with a density-like matrix.
 /// @details Computes the gradient contribution
@@ -68,6 +68,6 @@ np_vector kinetic_deriv(const Basis& basis1, const Basis& basis2, const np_matri
 ///        entry in this vector.
 /// @return Real gradient vector of length `3 * charges.size()` in atom-major Cartesian order.
 np_vector nuclear_deriv(const Basis& basis1, const Basis& basis2, const np_matrix& dm,
-                        std::vector<std::pair<double, std::array<double, 3>>>& charges);
+                        const std::vector<std::pair<double, std::array<double, 3>>>& charges);
 
 } // namespace forte2

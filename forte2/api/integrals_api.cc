@@ -367,7 +367,7 @@ void export_one_electron_deriv_api(nb::module_& sub_m) {
     sub_m.def(
         "overlap_deriv",
         [](const Basis& basis1, const Basis& basis2, const np_matrix& dm,
-           std::vector<std::pair<double, std::array<double, 3>>> charges) {
+           const std::vector<std::pair<double, std::array<double, 3>>> charges) {
             return overlap_deriv(basis1, basis2, dm, charges);
         },
         "basis1"_a, "basis2"_a, "dm"_a, "charges"_a);
@@ -375,7 +375,7 @@ void export_one_electron_deriv_api(nb::module_& sub_m) {
     sub_m.def(
         "kinetic_deriv",
         [](const Basis& basis1, const Basis& basis2, const np_matrix& dm,
-           std::vector<std::pair<double, std::array<double, 3>>> charges) {
+           const std::vector<std::pair<double, std::array<double, 3>>> charges) {
             return kinetic_deriv(basis1, basis2, dm, charges);
         },
         "basis1"_a, "basis2"_a, "dm"_a, "charges"_a);
@@ -383,7 +383,7 @@ void export_one_electron_deriv_api(nb::module_& sub_m) {
     sub_m.def(
         "nuclear_deriv",
         [](const Basis& basis1, const Basis& basis2, const np_matrix& dm,
-           std::vector<std::pair<double, std::array<double, 3>>> charges) {
+           const std::vector<std::pair<double, std::array<double, 3>>> charges) {
             return nuclear_deriv(basis1, basis2, dm, charges);
         },
         "basis1"_a, "basis2"_a, "dm"_a, "charges"_a);
