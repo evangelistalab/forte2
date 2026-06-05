@@ -57,6 +57,14 @@ docs/sphinx/_*
 **_build
 **notebooks
 local**
+# The localizer source package and its tests are real, tracked source code and
+# must not be caught by the broad local** rule above.
+!forte2/localizer/
+!forte2/localizer/**
+!tests/localizer/
+!tests/localizer/**
+forte2/localizer/__pycache__/
+tests/localizer/__pycache__/
 
 forte.egg-info/*
 
