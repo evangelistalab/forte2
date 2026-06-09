@@ -1,4 +1,5 @@
 import numpy as np
+import scipy as sp
 
 import forte2.integrals as integrals
 from forte2._forte2 import ints
@@ -106,3 +107,25 @@ def compute_gradient(system, D1, W1, W2, W3):
     gradient += flat_to_atom_gradient(integrals.coulomb_2c_deriv(system, W2), natoms)
     return gradient    
 
+
+def _apply_inverse_metric(system, M, J):
+    """Apply the density fitting metric inverse to a three-center tensor."""
+    rhs = J.reshape(J.shape[0], -1)
+
+    if system.df_ortho_rtol is None:
+        try:
+            L = sp.linalg.cholesky(M, lower=True)
+        except sp.linalg.LinAlgError as exc:
+            raise ValueError(
+                "Density fitting Coulomb metric (P|Q) is not positive definite.\n"
+                "Please set df_ortho_rtol to a small positive value to orthogonalize the metric."
+            ) from exc
+        result = sp.linalg.cho_solve((L, True), rhs)
+    else:
+        evals, evecs, info = _eigh_metric_kernel(M, rtol=system.df_ortho_rtol)
+        ndiscard = info["n_discarded"]
+        evals = evals[ndiscard:]
+        evecs = evecs[:, ndiscard:]
+        result = evecs @ ((evecs.T @ rhs) / evals[:, None])
+
+    return result.reshape(J.shape)
