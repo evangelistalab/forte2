@@ -116,7 +116,7 @@ def fragment_correlation_energy_enumerated(
         if len({local_to_fragment[p],local_to_fragment[q],local_to_fragment[r],local_to_fragment[s]}) == body_order:
             gp, gq, gr, gs = local_to_global[[p, q, r, s]]
             #aa2, ab2, bb2 are the 2-cumulants, NOT the 2RDMs 
-            spin_block_sum = (aa2[gp, gq, gr, gs] + 2.0 * ab2[gp, gq, gr, gs] + bb2[gp, gq, gr, gs]) 
+            spin_block_sum = (aa2[gp, gq, gr, gs] + ab2[gp, gq, gr, gs] + ab2[gq, gp, gs, gr]+ bb2[gp, gq, gr, gs]) 
             e2 += 0.5 * V[p, q, r, s] * spin_block_sum #V is a spin-free quantity
 
     return e1 + e2

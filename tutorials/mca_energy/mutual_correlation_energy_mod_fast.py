@@ -72,7 +72,12 @@ def _spin_dependent_2cumulants(ci, root=0):
         + np.einsum("ps,qr->pqrs", b1, b1)
     )
     # still setting 1-rdms to zero, after 2-cumulant is built
-    spin_summed_cumulant = aa2_cumulant + 2.0 * ab2_cumulant + bb2_cumulant
+    spin_summed_cumulant = (
+        aa2_cumulant
+        + ab2_cumulant
+        + ab2_cumulant.transpose(1, 0, 3, 2)
+        + bb2_cumulant
+    )
     cumulants = (aa2_cumulant, ab2_cumulant, bb2_cumulant, spin_summed_cumulant)
     _CUMULANT_CACHE[cache_key] = cumulants
     return cumulants
