@@ -60,7 +60,7 @@ def plot_smooth_connection(
     val,
     vmin,
     vmax,
-    cmap="magma_r",
+    cmap="seismic",
     signed=False,
     signed_linthresh=None,
 ):
@@ -222,7 +222,7 @@ def mutual_correlation_plot(
     output_file=None,
     vmin=1e-3,
     vmax=1,
-    cmap_name="magma_r",
+    cmap_name="seismic",
     show_colorbar=True,
     projection_axis=0,
     orbital_render_options=None,
@@ -254,8 +254,8 @@ def mutual_correlation_plot(
     if signed_correlation is None:
         signed_correlation = True
 
-    if signed_correlation and cmap_name == "magma_r":
-        cmap_name = "coolwarm"
+    #if signed_correlation and cmap_name == "magma_r":
+    #    cmap_name = "coolwarm"
 
     cmap = colormaps[cmap_name]
 
