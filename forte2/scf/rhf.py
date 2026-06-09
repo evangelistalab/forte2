@@ -131,17 +131,18 @@ class RHF(SCFBase):
 
         system = self.system
         Cocc = self.C[0][:, : self.na]
-        P = 2.0 * self.D[0]
-
-        # Evaluate the energy-weighted density matrix
-        # W1_mn = 2 * sum_i C_mi * eps_i * C_ni (i in occ)
+        
+        # Density matrix
+        D1 = 2.0 * self.D[0]
+        # Energy-weighted density matrix W1_mn = 2 * sum_i C_mi * eps_i * C_ni (i in occ)
         W1 = 2.0 * np.einsum(
             "mi,i,ni->mn", Cocc, self.eps[0][: self.na], Cocc, optimize=True
         )
-        # Build the two-electron derivative weights and contract with the integrals.
-        W2, W3 = self._build_df_deriv_weights(system, Cocc, P)
+        # Two-electron derivative weights for density fitting
+        W2, W3 = self._build_df_deriv_weights(system, Cocc, D1)
 
-        gradient = compute_gradient(system, P, W1, W2, W3)
+        # Gradient computation
+        gradient = compute_gradient(system, D1, W1, W2, W3)
 
         return gradient
 
