@@ -54,7 +54,6 @@ def test_3c2e():
         minao_basis_set=None,
         auxiliary_basis_set="def2-universal-jkfit",
     )
-    forte2.set_verbosity_level(5)
     ref = forte2.integrals.coulomb_3c(system)
     assert np.linalg.norm(ref) == approx(116.39332464579758)
 

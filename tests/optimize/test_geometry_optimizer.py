@@ -7,8 +7,6 @@ from forte2.optimize.geometry_optimizer import _project_previous_occupied_orbita
 from forte2.scf import RHF
 from forte2.system import BSE_AVAILABLE
 
-forte2.set_verbosity_level(0)
-
 
 def test_geometry_optimizer_relaxes_stretched_h2():
     system = System(
@@ -32,6 +30,7 @@ def test_geometry_optimizer_relaxes_stretched_h2():
     assert rhf.executed
     assert optimizer.converged
     assert optimizer.E < initial
+    assert optimizer.E == pytest.approx(-1.117530189001, abs=1.0e-8)
     assert bond_length == pytest.approx(1.34590756, abs=1.0e-6)
     assert np.linalg.norm(optimizer.gradient) < 5.0e-7
     assert optimizer.system is not None

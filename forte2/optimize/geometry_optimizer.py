@@ -22,13 +22,13 @@ class GeometryOptimizer:
         Callable taking a ``System`` and returning a method object that provides
         ``run()``, ``E``, and ``gradient()``. This is retained as a valid alternative.
         The preferred API call is ``GeometryOptimizer(...)(method).run()``.
-    maxiter : int, optional
+    maxiter : int, optional, default=50
         Maximum L-BFGS iterations.
-    g_tol : float, optional
+    g_tol : float, optional, default=1.0e-4
         L-BFGS gradient convergence threshold.
-    max_step : float, optional
+    max_step : float, optional, default=1.0
         Maximum line-search step length.
-    project_orbitals : bool, optional
+    project_orbitals : bool, optional, default=True
         If True, project the occupied orbitals from the previous evaluated
         geometry into the AO basis of the next geometry and use them as the SCF
         initial guess.
@@ -83,6 +83,10 @@ class GeometryOptimizer:
         objective, x = self._build_objective(system)
         self._print_start(objective)
 
+        # Suppress the printing from the objective function
+        current_verbosity = logger.get_verbosity_level()
+        logger.set_verbosity_level(min(current_verbosity - 1, 0))
+
         optimizer = LBFGS(
             epsilon=self.g_tol,
             maxiter=self.maxiter,
@@ -102,6 +106,8 @@ class GeometryOptimizer:
         self.gradient = objective.g.reshape(-1, 3).copy()
         self.history = objective.history.copy()
         self.coordinates = x.reshape(-1, 3).copy()
+
+        logger.set_verbosity_level(current_verbosity)
 
         self._print_finish()
 
@@ -166,15 +172,13 @@ class GeometryOptimizer:
         )
 
     def _print_finish(self):
-        width = 86
         gradient_norm = np.linalg.norm(self.gradient)
         gradient_max = np.max(np.abs(self.gradient)) if self.gradient.size else 0.0
         status = "converged" if self.converged else "not converged"
 
         self._print_history_table()
-        logger.log_info1("=" * width)
         logger.log_info1(
-            f"Geometry optimization {status} in {self.iter} L-BFGS iterations."
+            f"\nGeometry optimization {status} in {self.iter} L-BFGS iterations."
         )
         logger.log_info1(f"Final energy: {self.E:20.12f} Eh")
         logger.log_info1(f"Final gradient norm: {gradient_norm:12.6e} Eh/Bohr")

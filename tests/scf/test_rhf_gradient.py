@@ -6,8 +6,6 @@ from forte2 import System
 from forte2.gradients import nuclear_repulsion_deriv
 from forte2.scf import RHF
 
-forte2.set_verbosity_level(0)
-
 
 def _xyz(symbols, coordinates):
     return "\n".join(
@@ -136,6 +134,7 @@ def test_rhf_gradient_rejects_cholesky_tei():
 
     with pytest.raises(NotImplementedError, match="density fitting"):
         rhf.gradient()
+
 
 def test_rhf_gradient_with_df_ortho_rtol():
     # this test asserts that the df_ortho_rtol codepath runs
