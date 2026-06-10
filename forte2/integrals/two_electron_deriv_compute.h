@@ -55,7 +55,7 @@ template <libint2::Operator Op, typename Weights>
     validate_deriv_centers(basis1, charges, "basis1", "compute_two_electron_3c_deriv_by_shell");
     validate_deriv_centers(basis2, charges, "basis2", "compute_two_electron_3c_deriv_by_shell");
     validate_deriv_centers(basis3, charges, "basis3", "compute_two_electron_3c_deriv_by_shell");
-    validate_deriv_shell_slices(
+    validate_deriv_shell_slices<3>(
         shell_slices,
         std::array<std::size_t, 3>{basis1.nshells(), basis2.nshells(), basis3.nshells()},
         "compute_two_electron_3c_deriv_by_shell");
@@ -206,7 +206,7 @@ template <libint2::Operator Op, typename Weights>
     const std::vector<std::pair<double, std::array<double, 3>>>& charges) -> np_vector {
     validate_deriv_centers(basis1, charges, "basis1", "compute_two_electron_2c_deriv_by_shell");
     validate_deriv_centers(basis2, charges, "basis2", "compute_two_electron_2c_deriv_by_shell");
-    validate_deriv_shell_slices(shell_slices,
+    validate_deriv_shell_slices<2>(shell_slices,
                                 std::array<std::size_t, 2>{basis1.nshells(), basis2.nshells()},
                                 "compute_two_electron_2c_deriv_by_shell");
 

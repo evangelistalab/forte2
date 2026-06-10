@@ -9,7 +9,8 @@ from .scf_base import SCFBase
 from .scf_utils import minao_initial_guess, core_initial_guess
 from forte2._forte2 import ints
 import forte2.integrals as integrals
-from forte2.gradients.utils import _apply_inverse_metric, compute_gradient, nuclear_repulsion_deriv
+from forte2.gradients import compute_gradient, apply_inverse_metric
+
 
 @dataclass
 class RHF(SCFBase):
@@ -91,17 +92,19 @@ class RHF(SCFBase):
         and so the algorithm should be applicable to systems with 500-750 basis functions
         and 1000-1500 auxiliary functions. To scale this up, a direct approach is needed.
         """
-        J = integrals.coulomb_3c(system, system.auxiliary_basis, system.basis, system.basis)
+        J = integrals.coulomb_3c(
+            system, system.auxiliary_basis, system.basis, system.basis
+        )
         M = integrals.coulomb_2c(system, system.auxiliary_basis, system.auxiliary_basis)
         # compute Z[P,m,n] = M^{-1}_{PQ}(Q|mn)
-        Z = _apply_inverse_metric(system, M, J)
+        Z = apply_inverse_metric(system, M, J)
 
-        # compute rho[P] = P_mn (P|mn) 
+        # compute rho[P] = P_mn (P|mn)
         rho = np.einsum("mn,Pmn->P", P, Z, optimize=True)
         # compute Z_oo[P,i,j] = C_mi Z[P,m,n] C_nj
         Z_oo = np.einsum("mi,Pmn,nj->Pij", Cocc, Z, Cocc, optimize=True)
 
-        # compute the two-electron derivative weights for the metric and three-center derivatives 
+        # compute the two-electron derivative weights for the metric and three-center derivatives
         W2 = -0.5 * np.einsum("P,Q->PQ", rho, rho, optimize=True)
         W2 += np.einsum("Pij,Qji->PQ", Z_oo, Z_oo, optimize=True)
 
@@ -113,11 +116,6 @@ class RHF(SCFBase):
     def gradient(self):
         """
         Compute the RHF analytic nuclear gradient with density fitting.
-
-        Parameters
-        ----------
-        rhf : RHF
-            Restricted Hartree-Fock object. If it has not been run, ``run()`` is called.
 
         Returns
         -------
@@ -131,7 +129,7 @@ class RHF(SCFBase):
 
         system = self.system
         Cocc = self.C[0][:, : self.na]
-        
+
         # Density matrix
         D1 = 2.0 * self.D[0]
         # Energy-weighted density matrix W1_mn = 2 * sum_i C_mi * eps_i * C_ni (i in occ)
@@ -146,13 +144,14 @@ class RHF(SCFBase):
 
         return gradient
 
-
-    def _validate_rhf_gradient_supported(rhf):
+    def _validate_rhf_gradient_supported(self):
         """Reject RHF gradient cases outside the first DF implementation scope."""
-        system = rhf.system
+        system = self.system
 
         if isinstance(system, ModelSystem):
-            raise NotImplementedError("RHF gradients are not implemented for ModelSystem.")
+            raise NotImplementedError(
+                "RHF gradients are not implemented for ModelSystem."
+            )
         if system.cholesky_tei:
             raise NotImplementedError(
                 "RHF gradients are implemented only for density fitting, not cholesky_tei."
@@ -174,7 +173,6 @@ class RHF(SCFBase):
                 "RHF gradients require derivative integrals supported by Libint2 "
                 f"(max_l = {max_l}, Libint2 max_l = {ints.libint2_max_am})."
             )
-
 
     def _diis_update(self, diis, F, AO_grad):
         return [diis.update(F[0], AO_grad)]

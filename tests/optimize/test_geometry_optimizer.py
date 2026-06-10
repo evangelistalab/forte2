@@ -6,8 +6,6 @@ from forte2 import GeometryOptimizer, System
 from forte2.optimize.geometry_optimizer import _project_previous_occupied_orbitals
 from forte2.scf import RHF
 from forte2.system import BSE_AVAILABLE
-from forte2.helpers.comparisons import approx
-
 
 forte2.set_verbosity_level(0)
 
@@ -71,10 +69,11 @@ def test_geometry_optimizer_water_cc_pvdz():
 
     assert optimizer.converged
     assert np.linalg.norm(optimizer.gradient) < 5.0e-7
-    assert r_oh1 ==  pytest.approx(1.7882104, abs=1.0e-6)
+    assert r_oh1 == pytest.approx(1.7882104, abs=1.0e-6)
     assert r_oh2 == pytest.approx(1.7882104, abs=1.0e-6)
     assert angle == pytest.approx(104.61747, abs=1.0e-5)
     assert optimizer.E == pytest.approx(-76.027021264399, abs=1.0e-8)
+
 
 def test_project_previous_occupied_orbitals_to_new_geometry():
     old_system = System(

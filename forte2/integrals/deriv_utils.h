@@ -91,38 +91,18 @@ validate_deriv_weight_shape(const Array& weights, const std::array<std::size_t, 
 }
 
 /// @brief Validates that the shell slices for derivative computations are valid.
+/// @tparam N The dimensionality of the underlying integrals, e.g., 2 for two-center, 3 for
+/// three-center
 /// @param shell_slices The array of (start, end) indices for each basis's shells.
 /// @param nshells The array of the number of shells in each basis.
 /// @param caller_name The name of the function calling this validation.
 /// @throws std::invalid_argument if any of the shell slices are not in the form of
+template <std::size_t N>
 inline void
-validate_deriv_shell_slices(const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices,
-                            const std::array<std::size_t, 3>& nshells,
+validate_deriv_shell_slices(const std::array<std::pair<std::size_t, std::size_t>, N>& shell_slices,
+                            const std::array<std::size_t, N>& nshells,
                             const std::string& caller_name) {
-    for (std::size_t i = 0; i < 3; ++i) {
-        if (shell_slices[i].first >= shell_slices[i].second) {
-            throw std::invalid_argument(caller_name +
-                                        ": shell_slices indices must be in the form of "
-                                        "(start, end) with start < end");
-        }
-        if (shell_slices[i].second > nshells[i]) {
-            throw std::invalid_argument(caller_name +
-                                        ": shell_slices indices must be within the number "
-                                        "of shells in each basis");
-        }
-    }
-}
-
-/// @brief Validates the shell slices for derivative computations.
-/// @param shell_slices The array of (start, end) indices for each basis's shells.
-/// @param nshells The array of the number of shells in each basis.
-/// @param caller_name The name of the function calling this validation.
-/// @throws std::invalid_argument if any of the shell slices are not in the form of
-inline void
-validate_deriv_shell_slices(const std::array<std::pair<std::size_t, std::size_t>, 2>& shell_slices,
-                            const std::array<std::size_t, 2>& nshells,
-                            const std::string& caller_name) {
-    for (std::size_t i = 0; i < 2; ++i) {
+    for (std::size_t i = 0; i < N; ++i) {
         if (shell_slices[i].first >= shell_slices[i].second) {
             throw std::invalid_argument(caller_name +
                                         ": shell_slices indices must be in the form of "

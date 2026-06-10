@@ -136,3 +136,18 @@ def test_rhf_gradient_rejects_cholesky_tei():
 
     with pytest.raises(NotImplementedError, match="density fitting"):
         rhf.gradient()
+
+def test_rhf_gradient_with_df_ortho_rtol():
+    # this test asserts that the df_ortho_rtol codepath runs
+    system = System(
+        xyz="""
+        H 0 0 0
+        H 0 0 1.7
+        """,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+        df_ortho_rtol=1e-8,
+    )
+    rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
+    _ = rhf.gradient()
