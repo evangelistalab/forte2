@@ -49,7 +49,6 @@ def test_geometry_optimizer_water_cc_pvdz():
         auxiliary_basis_set="def2-universal-JKFIT",
         unit="bohr",
     )
-    initial = RHF(charge=0, e_tol=1.0e-10, d_tol=1.0e-6, maxiter=100)(system).run().E
     rhf = RHF(charge=0, e_tol=1.0e-10, d_tol=1.0e-6, maxiter=100)(system)
 
     optimizer = GeometryOptimizer(

@@ -61,32 +61,36 @@ def test_nuclear_repulsion_deriv_finite_difference():
         ]
     )
     delta = 1.0e-5
-    atom = 2
-    cart = 0
 
-    system0 = _system(symbols, coordinates)
-    analytical = nuclear_repulsion_deriv(system0.atoms)
+    for atom in range(3):
+        for cart in range(3):
+            system0 = _system(symbols, coordinates)
+            analytical = nuclear_repulsion_deriv(system0.atoms)
 
-    coords_plus = coordinates.copy()
-    coords_minus = coordinates.copy()
-    coords_plus[atom, cart] += delta
-    coords_minus[atom, cart] -= delta
-    numerical = (
-        forte2.integrals.nuclear_repulsion(_system(symbols, coords_plus))
-        - forte2.integrals.nuclear_repulsion(_system(symbols, coords_minus))
-    ) / (2.0 * delta)
+            coords_plus = coordinates.copy()
+            coords_minus = coordinates.copy()
+            coords_plus[atom, cart] += delta
+            coords_minus[atom, cart] -= delta
+            numerical = (
+                forte2.integrals.nuclear_repulsion(_system(symbols, coords_plus))
+                - forte2.integrals.nuclear_repulsion(_system(symbols, coords_minus))
+            ) / (2.0 * delta)
 
-    np.testing.assert_allclose(analytical[atom, cart], numerical, atol=1.0e-9)
+            assert analytical[atom, cart] == pytest.approx(numerical, abs=1.0e-9)
 
 
 def test_rhf_gradient_h2_finite_difference():
     symbols = ["H", "H"]
     coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]])
 
-    gradient = _rhf_gradient(symbols, coordinates)
-    numerical = _finite_difference_gradient_component(symbols, coordinates, 1, 2)
+    for atom in range(2):
+        for cart in range(3):
+            gradient = _rhf_gradient(symbols, coordinates)
+            numerical = _finite_difference_gradient_component(
+                symbols, coordinates, atom, cart
+            )
 
-    np.testing.assert_allclose(gradient[1, 2], numerical, atol=1.0e-7)
+            assert gradient[atom, cart] == pytest.approx(numerical, abs=1.0e-7)
 
 
 def test_rhf_gradient_h2o_finite_difference_and_translation():
@@ -99,11 +103,15 @@ def test_rhf_gradient_h2o_finite_difference_and_translation():
         ]
     )
 
-    gradient = _rhf_gradient(symbols, coordinates)
-    numerical = _finite_difference_gradient_component(symbols, coordinates, 2, 0)
+    for atom in range(3):
+        for cart in range(3):
+            gradient = _rhf_gradient(symbols, coordinates)
+            numerical = _finite_difference_gradient_component(
+                symbols, coordinates, atom, cart
+            )
 
-    np.testing.assert_allclose(gradient[2, 0], numerical, atol=1.0e-7)
-    np.testing.assert_allclose(gradient.sum(axis=0), np.zeros(3), atol=1.0e-10)
+            assert gradient[atom, cart] == pytest.approx(numerical, abs=1.0e-7)
+            assert gradient.sum(axis=0) == pytest.approx(np.zeros(3), abs=1.0e-10)
 
 
 def test_rhf_gradient_auto_runs_and_reuses_executed_object():
@@ -118,7 +126,7 @@ def test_rhf_gradient_auto_runs_and_reuses_executed_object():
     gradient2 = rhf.gradient()
 
     assert rhf.E == pytest.approx(energy1)
-    np.testing.assert_allclose(gradient1, gradient2, atol=1.0e-12)
+    assert gradient1 == pytest.approx(gradient2, abs=1.0e-12)
     assert gradient1.shape == (system.natoms, 3)
 
 
