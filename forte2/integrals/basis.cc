@@ -71,6 +71,7 @@ std::vector<std::size_t> Basis::shell_offsets() const {
 
 std::vector<std::pair<std::size_t, std::size_t>>
 Basis::center_first_and_last(bool count_shell) const {
+    constexpr double center_tol = 1e-8;
     std::vector<std::pair<std::size_t, std::size_t>> result;
     if (shells_.empty()) {
         return result;
@@ -81,7 +82,7 @@ Basis::center_first_and_last(bool count_shell) const {
     auto [x0, y0, z0] = shells_[0].O;
     for (const auto& shell : shells_) {
         auto [x, y, z] = shell.O;
-        if (double shell_dist = std::hypot(x - x0, y - y0, z - z0); shell_dist > 1e-8) {
+        if (double shell_dist = std::hypot(x - x0, y - y0, z - z0); shell_dist > center_tol) {
             // if the center is different from the previous one, add the previous shell
             result.emplace_back(first, last);
             // update the center and the first index

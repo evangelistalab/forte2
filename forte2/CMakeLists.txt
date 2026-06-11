@@ -114,6 +114,7 @@ nanobind_add_module(
   integrals/one_electron.cc
   integrals/one_electron_deriv.cc
   integrals/two_electron.cc
+  integrals/two_electron_deriv.cc
   integrals/value_at_points.cc
   ci/ci_sigma_builder.cc
   ci/ci_sigma_builder_1rdm.cc

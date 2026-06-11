@@ -12,6 +12,8 @@ from forte2.helpers.matrix_functions import (
     invsqrt_matrix,
     print_metric_info,
     _eigh_metric_kernel,
+    _compute_Am1y_cholesky,
+    _compute_Am1y_eigh,
 )
 
 
@@ -680,10 +682,9 @@ class FockBuilderOTF:
     def _apply_Mm1(self, y):
         """Compute x = (P|Q)^{-1} y without forming (P|Q)^{-1}"""
         if self.metric_ortho_rtol is not None:
-            # x = U s^{-1} U^T y
-            return self.sevecs @ ((self.sevecs.T @ y) / self.sevals)
+            return _compute_Am1y_eigh(self.sevecs, self.sevals, y)
         else:
-            return sp.linalg.cho_solve((self.L, True), y)
+            return _compute_Am1y_cholesky(self.L, y)
 
     def _find_aux_shell_block(self, pshell0):
         # find the block of auxiliary shells that fit in the buffer, starting from pshell0

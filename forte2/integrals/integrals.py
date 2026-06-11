@@ -27,6 +27,15 @@ def _choose_backend(max_l):
         )
 
 
+def _require_libint2_deriv_backend(max_l, integral_name):
+    max_l_libint = ints.libint2_max_am
+    if max_l > max_l_libint:
+        raise NotImplementedError(
+            f"{integral_name} derivative integrals are only implemented with Libint2 "
+            f"(max_l = {max_l}, Libint2 max_l = {max_l_libint})."
+        )
+
+
 def _parse_basis_args_1e(system, basis1, basis2):
     # 2 possible cases:
     # 1. both basis sets are None -> set both to system.basis
@@ -519,6 +528,74 @@ def coulomb_2c(system, basis1=None, basis2=None):
         res = cint_coulomb_2c(system, basis1, basis2)
 
     return res
+
+
+def coulomb_3c_deriv(system, W3, basis1=None, basis2=None, basis3=None):
+    r"""
+    Contract first derivatives of three-center Coulomb integrals with weights.
+
+    .. math::
+        G_{A\alpha} =
+        W^P_{\mu\nu}
+        \frac{\partial (P|\mu\nu)}{\partial R_{A\alpha}}
+
+    Parameters
+    ----------
+    system : System
+        The molecular system containing the basis sets and atomic centers.
+    W3 : ndarray
+        Three-center derivative weights with shape ``(basis1.size, basis2.size, basis3.size)``.
+    basis1 : BasisSet, optional
+        The auxiliary basis. If None, defaults to ``system.auxiliary_basis``.
+    basis2 : BasisSet, optional
+        The first orbital basis. If None, defaults to ``system.basis``.
+    basis3 : BasisSet, optional
+        The second orbital basis. If None, defaults to ``system.basis``, or
+        ``basis2`` if ``basis2`` is provided.
+
+    Returns
+    -------
+    gradient : ndarray
+        A real vector of length ``3 * natoms`` in atom-major Cartesian order.
+    """
+    _basis1, _basis2, _basis3 = _parse_basis_args_3c2e(system, basis1, basis2, basis3)
+    max_l = max(_basis1.max_l, _basis2.max_l, _basis3.max_l)
+    _require_libint2_deriv_backend(max_l, "Three-center Coulomb")
+    return ints.coulomb_3c_deriv(
+        _basis1, _basis2, _basis3, np.asarray(W3), system.atoms
+    )
+
+
+def coulomb_2c_deriv(system, W2, basis1=None, basis2=None):
+    r"""
+    Contract first derivatives of two-center Coulomb metric integrals with weights.
+
+    .. math::
+        G_{A\alpha} =
+        W^M_{PQ}
+        \frac{\partial (P|Q)}{\partial R_{A\alpha}}
+
+    Parameters
+    ----------
+    system : System
+        The molecular system containing the basis sets and atomic centers.
+    W2 : ndarray
+        Two-center metric derivative weights with shape ``(naux1, naux2)``.
+    basis1 : BasisSet, optional
+        The first auxiliary basis. If None, defaults to ``system.auxiliary_basis``.
+    basis2 : BasisSet, optional
+        The second auxiliary basis. If None, defaults to ``system.auxiliary_basis``,
+        or ``basis1`` if ``basis1`` is provided.
+
+    Returns
+    -------
+    gradient : ndarray
+        A real vector of length ``3 * natoms`` in atom-major Cartesian order.
+    """
+    _basis1, _basis2 = _parse_basis_args_2c2e(system, basis1, basis2)
+    max_l = max(_basis1.max_l, _basis2.max_l)
+    _require_libint2_deriv_backend(max_l, "Two-center Coulomb")
+    return ints.coulomb_2c_deriv(_basis1, _basis2, np.asarray(W2), system.atoms)
 
 
 def erf_coulomb_3c(system, omega, basis1=None, basis2=None, basis3=None):

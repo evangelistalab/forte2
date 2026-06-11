@@ -17,6 +17,7 @@
 #include "integrals/one_electron.h"
 #include "integrals/one_electron_deriv.h"
 #include "integrals/two_electron.h"
+#include "integrals/two_electron_deriv.h"
 #include "integrals/value_at_points.h"
 // Libcint-backed functions are optional
 #if FORTE2_USE_LIBCINT
@@ -366,7 +367,7 @@ void export_one_electron_deriv_api(nb::module_& sub_m) {
     sub_m.def(
         "overlap_deriv",
         [](const Basis& basis1, const Basis& basis2, const np_matrix& dm,
-           std::vector<std::pair<double, std::array<double, 3>>> charges) {
+           const std::vector<std::pair<double, std::array<double, 3>>> charges) {
             return overlap_deriv(basis1, basis2, dm, charges);
         },
         "basis1"_a, "basis2"_a, "dm"_a, "charges"_a);
@@ -374,7 +375,7 @@ void export_one_electron_deriv_api(nb::module_& sub_m) {
     sub_m.def(
         "kinetic_deriv",
         [](const Basis& basis1, const Basis& basis2, const np_matrix& dm,
-           std::vector<std::pair<double, std::array<double, 3>>> charges) {
+           const std::vector<std::pair<double, std::array<double, 3>>> charges) {
             return kinetic_deriv(basis1, basis2, dm, charges);
         },
         "basis1"_a, "basis2"_a, "dm"_a, "charges"_a);
@@ -382,7 +383,7 @@ void export_one_electron_deriv_api(nb::module_& sub_m) {
     sub_m.def(
         "nuclear_deriv",
         [](const Basis& basis1, const Basis& basis2, const np_matrix& dm,
-           std::vector<std::pair<double, std::array<double, 3>>> charges) {
+           const std::vector<std::pair<double, std::array<double, 3>>> charges) {
             return nuclear_deriv(basis1, basis2, dm, charges);
         },
         "basis1"_a, "basis2"_a, "dm"_a, "charges"_a);
@@ -429,6 +430,39 @@ void export_two_electron_api(nb::module_& sub_m) {
         [](const Basis& basis1, const Basis& basis2) { return coulomb_2c(basis1, basis2); },
         "basis1"_a, "basis2"_a);
     sub_m.def("coulomb_2c", [](const Basis& basis) { return coulomb_2c(basis, basis); }, "basis"_a);
+
+    sub_m.def(
+        "coulomb_3c_deriv",
+        [](const Basis& basis1, const Basis& basis2, const Basis& basis3, const np_tensor3_c& W3,
+           std::vector<std::pair<double, std::array<double, 3>>> charges) {
+            return coulomb_3c_deriv(basis1, basis2, basis3, W3, charges);
+        },
+        "basis1"_a, "basis2"_a, "basis3"_a, "W3"_a, "charges"_a);
+
+    sub_m.def(
+        "coulomb_3c_deriv",
+        [](const Basis& basis1, const Basis& basis2, const Basis& basis3,
+           const np_tensor3_complex_c& W3,
+           std::vector<std::pair<double, std::array<double, 3>>> charges) {
+            return coulomb_3c_deriv(basis1, basis2, basis3, W3, charges);
+        },
+        "basis1"_a, "basis2"_a, "basis3"_a, "W3"_a, "charges"_a);
+
+    sub_m.def(
+        "coulomb_2c_deriv",
+        [](const Basis& basis1, const Basis& basis2, const np_matrix_c& W2,
+           std::vector<std::pair<double, std::array<double, 3>>> charges) {
+            return coulomb_2c_deriv(basis1, basis2, W2, charges);
+        },
+        "basis1"_a, "basis2"_a, "W2"_a, "charges"_a);
+
+    sub_m.def(
+        "coulomb_2c_deriv",
+        [](const Basis& basis1, const Basis& basis2, const np_matrix_complex_c& W2,
+           std::vector<std::pair<double, std::array<double, 3>>> charges) {
+            return coulomb_2c_deriv(basis1, basis2, W2, charges);
+        },
+        "basis1"_a, "basis2"_a, "W2"_a, "charges"_a);
 
     sub_m.def(
         "erf_coulomb_3c",

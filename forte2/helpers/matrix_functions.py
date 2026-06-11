@@ -359,13 +359,13 @@ def i_sigma_dot(scalar, x, y, z):
 
     Parameters
     ----------
-    scalar : ndarray
+    scalar : NDArray
         The scalar component.
-    x : ndarray
+    x : NDArray
         The x component.
-    y : ndarray
+    y : NDArray
         The y component.
-    z : ndarray
+    z : NDArray
         The z component.
 
     Returns
@@ -374,3 +374,96 @@ def i_sigma_dot(scalar, x, y, z):
         The resulting matrix, with double the dimensions of the input arrays.
     """
     return np.block([[scalar + z * 1j, x * 1j + y], [x * 1j - y, scalar - z * 1j]])
+
+
+def _compute_Am1y_eigh(evecs, evals, y):
+    """
+    Compute x = A^{-1} y from a (possibly truncated) eigendecomposition of A
+
+    Parameters
+    ----------
+    evecs : NDArray
+        The (possibly truncated) eigenvectors of A
+    evals : NDArray
+        The (possibly truncated) eigenvalues of A
+    y : NDArray
+        The vector that A^{-1} is to be applied onto
+
+    Returns
+    -------
+    NDArray
+        The result vector of A^{-1} y
+    """
+    # x = U s^{-1} U^T y
+    if evecs.shape[1] != evals.shape[0]:
+        raise RuntimeError(
+            f"Inconsistent shapes: evecs has shape {evecs.shape} and evals has shape {evals.shape}"
+        )
+    if evecs.shape[0] != y.shape[0]:
+        raise RuntimeError(
+            f"Inconsistent shapes: evecs has shape {evecs.shape} and y has shape {y.shape}"
+        )
+    coeff = evecs.T @ y
+    coeff = (coeff.T / evals).T  # broadcasts correctly for 1D and 2D y
+    return evecs @ coeff
+
+
+def _compute_Am1y_cholesky(L, y):
+    """
+    Compute x = A^{-1} y from a complete Cholesky decomposition of A
+
+    Parameters
+    ----------
+    L : NDArray
+        The lower triangular Cholesky factor of A (A = LL^T)
+    y : NDArray
+        The vector that A^{-1} is to be applied onto
+
+    Returns
+    -------
+    NDArray
+        The result vector of A^{-1} y
+    """
+    # This scipy function performs two triangular solves with L on the problem vector y:
+    # first solve L@z = y for z and then solve L^T@y = z for y.
+    if L.shape[0] != y.shape[0]:
+        raise RuntimeError(
+            f"Inconsistent shapes: evecs has shape {L.shape} and y has shape {y.shape}"
+        )
+    return sp.linalg.cho_solve((L, True), y)
+
+
+def compute_Am1y(A, y, ortho_rtol=None):
+    """
+    Compute x = A^{-1} y without explicitly forming A^{-1}.
+
+    Parameters
+    ----------
+    A : NDArray
+        The matrix whose inverse action is required.
+    y : NDArray
+        The vector that A^{-1} is to be applied onto
+    ortho_rtol : None | float, optional
+        The relative tolerance for orthogonalizing A. 
+        If supplied, a truncated eigendecomposition of A is used to compute the action of A^{-1},
+        otherwise, a complete Cholesky decomposition is used.
+    Returns
+    -------
+    NDArray
+        The result vector of A^{-1} y
+    """
+    if ortho_rtol is None:
+        try:
+            L = sp.linalg.cholesky(A, lower=True)
+        except sp.linalg.LinAlgError as exc:
+            raise ValueError(
+                "Input matrix A is not positive definite.\n"
+                "Please set ortho_rtol to a small positive value to orthogonalize it."
+            ) from exc
+        return _compute_Am1y_cholesky(L, y)
+    else:
+        evals, evecs, info = _eigh_metric_kernel(A, rtol=ortho_rtol)
+        ndiscard = info["n_discarded"]
+        evals = evals[ndiscard:]
+        evecs = evecs[:, ndiscard:]
+        return _compute_Am1y_eigh(evecs, evals, y)
