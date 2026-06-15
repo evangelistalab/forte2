@@ -27,7 +27,7 @@ def _casscf(
     *,
     active_orbitals,
     core_orbitals=None,
-    final_orbital="original",
+    final_orbitals="original",
     maxiter=30,
 ):
     system = _system(symbols, coordinates)
@@ -42,7 +42,7 @@ def _casscf(
         e_tol=1.0e-12,
         g_tol=1.0e-9,
         maxiter=maxiter,
-        final_orbital=final_orbital,
+        final_orbitals=final_orbitals,
     )(rhf)
     mc.run()
     return mc
@@ -54,6 +54,68 @@ def _casscf_energy(symbols, coordinates, **kwargs):
 
 def _casscf_gradient(symbols, coordinates, **kwargs):
     return _casscf(symbols, coordinates, **kwargs).gradient()
+
+
+def _gasscf_h2(symbols, coordinates, *, freeze_inter_gas_rots=False):
+    system = _system(symbols, coordinates)
+    rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
+    ci_solver = CISolver(
+        State(
+            system=system,
+            multiplicity=1,
+            ms=0.0,
+            gas_min=[1],
+            gas_max=[1],
+        ),
+        active_orbitals=[[0], [1]],
+    )
+    mc = MCOptimizer(
+        ci_solver,
+        e_tol=1.0e-12,
+        g_tol=1.0e-9,
+        maxiter=30,
+        freeze_inter_gas_rots=freeze_inter_gas_rots,
+        final_orbitals="original",
+    )(rhf)
+    mc.run()
+    return mc
+
+
+def _gasscf_h2_energy(symbols, coordinates):
+    return _gasscf_h2(symbols, coordinates).E
+
+
+def _gasscf_h2_gradient(symbols, coordinates):
+    return _gasscf_h2(symbols, coordinates).gradient()
+
+
+def _gasscf_n2_three_gas(symbols, coordinates):
+    system = _system(symbols, coordinates)
+    rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
+    ci_solver = CISolver(
+        State(
+            system=system,
+            multiplicity=1,
+            ms=0.0,
+            gas_min=[2, 2, 0],
+            gas_max=[4, 4, 2],
+        ),
+        core_orbitals=[0, 1, 2, 3],
+        active_orbitals=[[4, 9], [5, 6], [7, 8]],
+    )
+    mc = MCOptimizer(
+        ci_solver,
+        e_tol=1.0e-10,
+        g_tol=1.0e-8,
+        maxiter=80,
+        final_orbitals="original",
+    )(rhf)
+    mc.run()
+    return mc
+
+
+def _gasscf_n2_three_gas_energy(symbols, coordinates):
+    return _gasscf_n2_three_gas(symbols, coordinates).E
 
 
 def _four_point_central_difference_component(
@@ -107,6 +169,59 @@ def test_casscf_gradient_lih_core_active_selected_finite_difference():
     assert gradient.sum(axis=0) == pytest.approx(np.zeros(3), abs=1.0e-10)
 
 
+def test_gasscf_gradient_h2_two_gas_finite_difference_and_translation():
+    """Validate a state-specific GASSCF gradient with an explicit two-GAS space.
+
+    The active space is split as ``[[0], [1]]`` and the state requires exactly
+    one electron in GAS1.  This exercises the GASSCF RDM path while keeping all
+    inter-GAS orbital rotations optimized, which is the stationarity condition
+    assumed by the current analytic gradient implementation.
+    """
+    symbols = ["H", "H"]
+    coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]])
+
+    gradient = _gasscf_h2_gradient(symbols, coordinates)
+
+    for atom in range(2):
+        for cart in range(3):
+            numerical = _four_point_central_difference_component(
+                _gasscf_h2_energy, symbols, coordinates, atom, cart
+            )
+            assert gradient[atom, cart] == pytest.approx(numerical, abs=1.0e-7)
+
+    assert gradient.sum(axis=0) == pytest.approx(np.zeros(3), abs=1.0e-10)
+
+
+def test_gasscf_gradient_n2_three_gas_selected_finite_difference():
+    """Validate a three-GAS N2 gradient with nontrivial occupation restrictions.
+
+    This test uses 6 active electrons in 6 active orbitals split into three
+    two-orbital GAS spaces: ``[4, 9]`` for sigma orbitals, ``[5, 6]`` for pi
+    orbitals, and ``[7, 8]`` for pi* orbitals.  The restrictions
+    ``gas_min=[2, 2, 0]`` and ``gas_max=[4, 4, 2]`` allow multiple occupation
+    configurations while constraining the electron distribution across all
+    three GAS spaces.
+    """
+    symbols = ["N", "N"]
+    coordinates = np.array([[0.0, 0.0, -1.0], [0.0, 0.0, 1.0]])
+
+    mc = _gasscf_n2_three_gas(symbols, coordinates)
+    gradient = mc.gradient()
+
+    assert mc.mo_space.ngas == 3
+    assert mc.mo_space.active_orbitals == [[4, 9], [5, 6], [7, 8]]
+    assert mc.ci_solver.sub_solvers[0].state.gas_min == [2, 2, 0]
+    assert mc.ci_solver.sub_solvers[0].state.gas_max == [4, 4, 2]
+    assert len(mc.ci_solver.sub_solvers[0].ci_strings.gas_occupations) > 1
+
+    numerical = _four_point_central_difference_component(
+        _gasscf_n2_three_gas_energy, symbols, coordinates, 1, 2
+    )
+
+    assert gradient[1, 2] == pytest.approx(numerical, abs=1.0e-6)
+    assert gradient.sum(axis=0) == pytest.approx(np.zeros(3), abs=1.0e-10)
+
+
 def test_casscf_gradient_auto_runs_and_reuses_executed_object():
     """Ensure MCOptimizer.gradient() runs CASSCF on demand and is repeatable."""
     symbols = ["H", "H"]
@@ -145,9 +260,33 @@ def test_casscf_gradient_rejects_state_average():
         active_orbitals=2,
         nroots=2,
     )
-    mc = MCOptimizer(ci_solver, final_orbital="original")(rhf)
+    mc = MCOptimizer(ci_solver, final_orbitals="original")(rhf)
 
     with pytest.raises(NotImplementedError, match="state-specific"):
+        mc.gradient()
+
+
+def test_gasscf_gradient_rejects_frozen_inter_gas_rotations():
+    """Reject GASSCF gradients when inter-GAS rotations were not optimized."""
+    system = _system(["H", "H"], np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]]))
+    rhf = RHF(charge=0)(system)
+    ci_solver = CISolver(
+        State(
+            system=system,
+            multiplicity=1,
+            ms=0.0,
+            gas_min=[1],
+            gas_max=[1],
+        ),
+        active_orbitals=[[0], [1]],
+    )
+    mc = MCOptimizer(
+        ci_solver,
+        freeze_inter_gas_rots=True,
+        final_orbitals="original",
+    )(rhf)
+
+    with pytest.raises(NotImplementedError, match="frozen inter-GAS rotations"):
         mc.gradient()
 
 
@@ -160,7 +299,7 @@ def test_casscf_gradient_rejects_frozen_core_orbitals():
         frozen_core_orbitals=[0],
         active_orbitals=[1, 2],
     )
-    mc = MCOptimizer(ci_solver, final_orbital="original")(rhf)
+    mc = MCOptimizer(ci_solver, final_orbitals="original")(rhf)
 
     with pytest.raises(NotImplementedError, match="frozen core"):
         mc.gradient()
@@ -176,7 +315,7 @@ def test_casscf_gradient_rejects_frozen_virtual_orbitals():
         active_orbitals=[1, 2],
         frozen_virtual_orbitals=[5],
     )
-    mc = MCOptimizer(ci_solver, final_orbital="original")(rhf)
+    mc = MCOptimizer(ci_solver, final_orbitals="original")(rhf)
 
     with pytest.raises(NotImplementedError, match="frozen virtual"):
         mc.gradient()
@@ -195,7 +334,7 @@ def test_casscf_gradient_rejects_cholesky_tei():
         State(system=system, multiplicity=1, ms=0.0),
         active_orbitals=2,
     )
-    mc = MCOptimizer(ci_solver, final_orbital="original")(rhf)
+    mc = MCOptimizer(ci_solver, final_orbitals="original")(rhf)
 
     with pytest.raises(NotImplementedError, match="density fitting"):
         mc.gradient()
@@ -213,7 +352,7 @@ def test_casscf_gradient_rejects_gaussian_nuclear_charges():
         State(system=system, multiplicity=1, ms=0.0),
         active_orbitals=2,
     )
-    mc = MCOptimizer(ci_solver, final_orbital="original")(rhf)
+    mc = MCOptimizer(ci_solver, final_orbitals="original")(rhf)
 
     with pytest.raises(NotImplementedError, match="Gaussian nuclear charges"):
         mc.gradient()
@@ -231,7 +370,7 @@ def test_casscf_gradient_rejects_x2c():
         State(system=system, multiplicity=1, ms=0.0),
         active_orbitals=2,
     )
-    mc = MCOptimizer(ci_solver, final_orbital="original")(rhf)
+    mc = MCOptimizer(ci_solver, final_orbitals="original")(rhf)
 
     with pytest.raises(NotImplementedError, match="X2C"):
         mc.gradient()
