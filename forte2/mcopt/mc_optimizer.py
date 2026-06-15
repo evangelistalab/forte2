@@ -541,13 +541,14 @@ class MCOptimizer(MCOptimizerBase):
 
     def gradient(self):
         r"""
-        Compute a state-specific CASSCF analytic nuclear gradient.
+        Compute a state-specific CASSCF/GASSCF analytic nuclear gradient.
 
         This first implementation is intentionally narrow.  It supports only
-        real, nonrelativistic, density-fitted, state-specific CASSCF wave
-        functions.  State-averaged gradients, frozen-core response, frozen
-        virtual response, active-frozen rotations, X2C, Gaussian nuclear
-        charges, and Cholesky-ERI gradients are rejected explicitly.
+        real, nonrelativistic, density-fitted, state-specific CASSCF/GASSCF
+        wave functions.  State-averaged gradients, frozen-core response,
+        frozen virtual response, active-frozen rotations, frozen inter-GAS
+        rotations, X2C, Gaussian nuclear charges, and Cholesky-ERI gradients
+        are rejected explicitly.
 
         The gradient is assembled in the same integral-layer form as the RHF
         and UHF gradients:
@@ -562,7 +563,7 @@ class MCOptimizer(MCOptimizerBase):
 
         Here :math:`\Gamma_{\mu\nu}` is the full spin-free one-particle
         density, :math:`W^S_{\mu\nu}` is the AO representation of the
-        symmetric CASSCF orbital Lagrangian, and :math:`W^P_{\mu\nu}` and
+        symmetric CASSCF/GASSCF orbital Lagrangian, and :math:`W^P_{\mu\nu}` and
         :math:`W_{PQ}` are the density-fitted two-electron derivative weights
         defined in ``docs/technical_notes/df_gradients.tex``.
 
@@ -596,9 +597,10 @@ class MCOptimizer(MCOptimizerBase):
         r"""
         Build the AO spin-free one-particle density without full MO padding.
 
-        For the first CASSCF gradient implementation, frozen core orbitals are
-        rejected and the inactive core is a closed-shell doubly occupied block.
-        The spin-free AO density is therefore assembled directly as
+        For the first CASSCF/GASSCF gradient implementation, frozen core
+        orbitals are rejected and the inactive core is a closed-shell doubly
+        occupied block.  The spin-free AO density is therefore assembled
+        directly as
 
         .. math::
             \Gamma_{\mu\nu}
@@ -639,7 +641,7 @@ class MCOptimizer(MCOptimizerBase):
         r"""
         Build the active-space spin-free two-particle cumulant.
 
-        The CASSCF pair density is written in the notation of
+        The CASSCF/GASSCF pair density is written in the notation of
         ``docs/technical_notes/df_gradients.tex`` as
 
         .. math::
@@ -696,7 +698,7 @@ class MCOptimizer(MCOptimizerBase):
 
     def _build_casscf_df_deriv_weights(self, Ccore, Cact, gamma1_act, gamma2_act):
         r"""
-        Build CASSCF DF derivative weights from core and active blocks only.
+        Build CASSCF/GASSCF DF derivative weights from core and active blocks only.
 
         This implements the molecular-orbital DF derivative equations from
         ``docs/technical_notes/df_gradients.tex`` without constructing a full
@@ -807,13 +809,13 @@ class MCOptimizer(MCOptimizerBase):
 
     def _build_casscf_overlap_weight(self, C, gamma1_act, gamma2_act):
         r"""
-        Build the AO energy-weighted density for the CASSCF overlap term.
+        Build the AO energy-weighted density for the CASSCF/GASSCF overlap term.
 
         The existing orbital optimizer constructs the matrix :math:`A_{pq}`
-        used in the CASSCF orbital gradient
+        used in the CASSCF/GASSCF orbital gradient
         :math:`g_{pq}=2(A_{pq}-A_{qp})`.  For a fully optimized
-        state-specific CASSCF wave function, the symmetric part of this matrix
-        is the orbital Lagrange multiplier that contracts the overlap
+        state-specific CASSCF/GASSCF wave function, the symmetric part of this
+        matrix is the orbital Lagrange multiplier that contracts the overlap
         derivative.  This helper recomputes :math:`A` in the current final MO
         basis and transforms
 
@@ -854,46 +856,56 @@ class MCOptimizer(MCOptimizerBase):
         return np.einsum("mp,pq,nq->mn", C, lagrangian_mo, C, optimize=True)
 
     def _validate_casscf_gradient_supported(self, pre_run=False):
-        """Reject CASSCF gradient cases outside the first implementation scope."""
+        """Reject CASSCF/GASSCF gradient cases outside the first implementation scope."""
         if isinstance(self.ci_solver, RelCIBase):
             raise NotImplementedError(
-                "CASSCF gradients are implemented only for nonrelativistic CASSCF."
+                "CASSCF/GASSCF gradients are implemented only for nonrelativistic "
+                "CASSCF/GASSCF."
             )
 
         if self.ci_solver.sa_info.ncis != 1 or self.ci_solver.sa_info.nroots_sum != 1:
             raise NotImplementedError(
-                "CASSCF gradients are implemented only for state-specific CASSCF."
+                "CASSCF/GASSCF gradients are implemented only for state-specific "
+                "CASSCF/GASSCF."
             )
 
         if self.active_frozen_orbitals:
             raise NotImplementedError(
-                "CASSCF gradients with active frozen orbitals are not implemented."
+                "CASSCF/GASSCF gradients with active frozen orbitals are not implemented."
+            )
+        if self.freeze_inter_gas_rots and self._ci_solver_requests_multiple_gas():
+            raise NotImplementedError(
+                "GASSCF gradients with frozen inter-GAS rotations are not implemented."
             )
 
         system = self.system if hasattr(self, "system") else self.parent_method.system
         if isinstance(system, ModelSystem):
             raise NotImplementedError(
-                "CASSCF gradients are not implemented for ModelSystem."
+                "CASSCF/GASSCF gradients are not implemented for ModelSystem."
             )
         if system.cholesky_tei:
             raise NotImplementedError(
-                "CASSCF gradients are implemented only for density fitting, not cholesky_tei."
+                "CASSCF/GASSCF gradients are implemented only for density fitting, "
+                "not cholesky_tei."
             )
         if system.use_gaussian_charges:
             raise NotImplementedError(
-                "CASSCF gradients with Gaussian nuclear charges are not implemented."
+                "CASSCF/GASSCF gradients with Gaussian nuclear charges are not implemented."
             )
         if system.x2c_type is not None or system.two_component:
-            raise NotImplementedError("CASSCF gradients with X2C are not implemented.")
+            raise NotImplementedError(
+                "CASSCF/GASSCF gradients with X2C are not implemented."
+            )
         if system.auxiliary_basis is None:
             raise NotImplementedError(
-                "CASSCF gradients require an auxiliary basis set for density fitting."
+                "CASSCF/GASSCF gradients require an auxiliary basis set for density "
+                "fitting."
             )
 
         max_l = max(system.basis.max_l, system.auxiliary_basis.max_l)
         if max_l > ints.libint2_max_am:
             raise NotImplementedError(
-                "CASSCF gradients require derivative integrals supported by Libint2 "
+                "CASSCF/GASSCF gradients require derivative integrals supported by Libint2 "
                 f"(max_l = {max_l}, Libint2 max_l = {ints.libint2_max_am})."
             )
 
@@ -901,11 +913,11 @@ class MCOptimizer(MCOptimizerBase):
         frozen_virt = getattr(self.ci_solver, "frozen_virtual_orbitals", None)
         if frozen_core:
             raise NotImplementedError(
-                "CASSCF gradients with frozen core orbitals are not implemented."
+                "CASSCF/GASSCF gradients with frozen core orbitals are not implemented."
             )
         if frozen_virt:
             raise NotImplementedError(
-                "CASSCF gradients with frozen virtual orbitals are not implemented."
+                "CASSCF/GASSCF gradients with frozen virtual orbitals are not implemented."
             )
 
         if pre_run:
@@ -913,17 +925,30 @@ class MCOptimizer(MCOptimizerBase):
 
         if self.mo_space.nfrozen_core > 0:
             raise NotImplementedError(
-                "CASSCF gradients with frozen core orbitals are not implemented."
+                "CASSCF/GASSCF gradients with frozen core orbitals are not implemented."
             )
         if self.mo_space.nfrozen_virtual > 0:
             raise NotImplementedError(
-                "CASSCF gradients with frozen virtual orbitals are not implemented."
+                "CASSCF/GASSCF gradients with frozen virtual orbitals are not implemented."
             )
-        if self.mo_space.ngas != 1:
+        if self.mo_space.ngas > 1 and self.freeze_inter_gas_rots:
             raise NotImplementedError(
-                "CASSCF gradients are implemented only for a single active space."
+                "GASSCF gradients with frozen inter-GAS rotations are not implemented."
             )
         if np.iscomplexobj(self.C[0]):
             raise NotImplementedError(
-                "CASSCF gradients with complex orbitals are not implemented."
+                "CASSCF/GASSCF gradients with complex orbitals are not implemented."
             )
+
+    def _ci_solver_requests_multiple_gas(self):
+        """Return whether the attached CI solver was configured with multiple GASes."""
+        active_orbitals = getattr(self.ci_solver, "active_orbitals", None)
+        if isinstance(active_orbitals, tuple):
+            return len(active_orbitals) > 1
+        if isinstance(active_orbitals, list):
+            return (
+                any(isinstance(space, list) for space in active_orbitals)
+                and len(active_orbitals) > 1
+            )
+        mo_space = getattr(self.ci_solver, "mo_space", None)
+        return mo_space is not None and mo_space.ngas > 1
