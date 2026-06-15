@@ -1018,25 +1018,25 @@ class SparseExp:
     @overload
     def apply_op(self, sop: SparseOperator, state: SparseState, scaling_factor: float = 1.0) -> SparseState:
         """
-        Apply the exponential of a SparseOperator to a state: exp(scaling_factor * sop) |state>
+        Apply the exponential of a SparseOperator to a state: ``exp(scaling_factor * sop) |state>``
         """
 
     @overload
     def apply_op(self, sop: SparseOperatorList, state: SparseState, scaling_factor: float = 1.0) -> SparseState:
         """
-        Apply the exponential of a SparseOperatorList to a state: exp(scaling_factor * sop) |state>
+        Apply the exponential of a SparseOperatorList to a state: ``exp(scaling_factor * sop) |state>``
         """
 
     @overload
     def apply_antiherm(self, sop: SparseOperator, state: SparseState, scaling_factor: float = 1.0) -> SparseState:
         """
-        Apply the antihermitian exponential of a SparseOperator to a state: exp(scaling_factor * (sop - sop^dagger)) |state>
+        Apply the antihermitian exponential of a SparseOperator to a state: ``exp(scaling_factor * (sop - sop^dagger)) |state>``
         """
 
     @overload
     def apply_antiherm(self, sop: SparseOperatorList, state: SparseState, scaling_factor: float = 1.0) -> SparseState:
         """
-        Apply the antihermitian exponential of a SparseOperatorList to a state: exp(scaling_factor * (sop - sop^dagger)) |state
+        Apply the antihermitian exponential of a SparseOperatorList to a state: ``exp(scaling_factor * (sop - sop^dagger)) |state>``
         """
 
 class SparseFactExp:
@@ -1048,12 +1048,12 @@ class SparseFactExp:
 
     def apply_op(self, sop: SparseOperatorList, state: SparseState, inverse: bool = False, reverse: bool = False) -> SparseState:
         """
-        Apply the factorized exponential of a SparseOperator to a state: ... exp(op2) exp(op1) |state>. inverse=True computes the inverse, and reverse=Trueapplies the operators in reverse order
+        Apply the factorized exponential of a SparseOperator to a state: ``... exp(op2) exp(op1) |state>``. inverse=True computes the inverse, and reverse=True applies the operators in reverse order
         """
 
     def apply_antiherm(self, sop: SparseOperatorList, state: SparseState, inverse: bool = False, reverse: bool = False) -> SparseState:
         """
-        Apply the factorized antihermitian exponential of a SparseOperator to a state: ... exp(op2 - op2^dagger) exp(op1 - op1^dagger) |state>. inverse=True computes the inverse, and reverse=True applies the operators in reverse order
+        Apply the factorized antihermitian exponential of a SparseOperator to a state: ``... exp(op2 - op2^dagger) exp(op1 - op1^dagger) |state>``. inverse=True computes the inverse, and reverse=True applies the operators in reverse order
         """
 
     def apply_antiherm_deriv(self, sqop: SQOperatorString, t: complex, state: SparseState) -> tuple[SparseState, SparseState]: ...

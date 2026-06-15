@@ -33,19 +33,21 @@ def write_orbital_cubes(
         The directory to save the cube files in.
     format : Tuple[str, ...] or str, optional, default=("cube",)
         Output formats to generate. Supported values:
-          - "cube": standard CUBE files. For two-component systems, writes
-            separate alpha and beta magnitude files ("_a.cube" and "_b.cube").
-          - "2ccube": two-component cube files (".2ccube"). For two-component
-            systems only, writes four datasets consecutively per orbital in the
-            order: alpha real, alpha imag, beta real, beta imag.
+
+        - "cube": standard CUBE files. For two-component systems, writes
+          separate alpha and beta magnitude files ("_a.cube" and "_b.cube").
+        - "2ccube": two-component cube files (".2ccube"). For two-component
+          systems only, writes four datasets consecutively per orbital in the
+          order: alpha real, alpha imag, beta real, beta imag.
+
         Multiple formats can be requested at once, e.g., formats=("cube","2ccube").
     spacing : float, optional, default=0.2
         The spacing between grid points in the cube file (in bohr).
     padding : float, optional, default=4.0
         The extra space (in bohr) added in all directions around the atoms when generating the grid.
 
-    Usage
-    -----
+    Examples
+    --------
     >>> write_orbital_cubes(system, C, indices=[0,1,2], prefix="orbital", filepath="cubes/", format=("cube","2ccube"))
     """
     # if format is a single string, convert it to a tuple
@@ -120,12 +122,10 @@ class CubeGenerator:
     padding : float, optional, default=4.0
         The extra space (in bohr) added in all directions around the atoms when generating the grid.
 
-    Usage
-    -----
-    ```
-    cube = CubeGenerator()
-    cube.run(system, C)
-    ```
+    Examples
+    --------
+    >>> cube = CubeGenerator()
+    >>> cube.run(system, C)
 
     """
 
@@ -147,11 +147,11 @@ class CubeGenerator:
 
         This method generates cube files for the specified molecular orbitals
         represented by the coefficient matrix `C`. The cube files are saved in the
-        specified directory with the given prefix. The files are named as:
+        specified directory with the given prefix. The files are named as::
 
             {prefix}_{index:0{number_of_digits}d}.cube
 
-        where `index` is the zero-based index of the orbital and `number_of_digits` is
+        where ``index`` is the zero-based index of the orbital and ``number_of_digits`` is
         determined by the maximum index to ensure proper zero-padding.
 
         Parameters
@@ -169,11 +169,13 @@ class CubeGenerator:
             The directory to save the cube files in.
         formats : Tuple[str, ...], optional, default=("cube",)
             Output formats to generate. Supported values:
-              - "cube": standard CUBE files. For two-component systems, writes
-                separate alpha and beta magnitude files ("_a.cube" and "_b.cube").
-              - "2ccube": two-component cube files (".2ccube"). For two-component
-                systems only, writes four datasets consecutively per orbital in the
-                order: alpha real, alpha imag, beta real, beta imag.
+
+            - "cube": standard CUBE files. For two-component systems, writes
+              separate alpha and beta magnitude files ("_a.cube" and "_b.cube").
+            - "2ccube": two-component cube files (".2ccube"). For two-component
+              systems only, writes four datasets consecutively per orbital in the
+              order: alpha real, alpha imag, beta real, beta imag.
+
             Multiple formats can be requested at once, e.g., formats=("cube","2ccube").
         """
 
