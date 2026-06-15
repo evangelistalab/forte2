@@ -1,4 +1,5 @@
 import numpy as np
+from numpy.typing import NDArray
 import scipy as sp
 
 import forte2.integrals as integrals
@@ -19,7 +20,7 @@ def flat_to_atom_gradient(gradient, natoms):
 
     Returns
     -------
-    ndarray
+    NDArray
         Gradient array with shape ``(natoms, 3)``.
     """
     gradient = np.asarray(gradient, dtype=float)
@@ -50,7 +51,7 @@ def nuclear_repulsion_deriv(atoms):
 
     Returns
     -------
-    ndarray
+    NDArray
         Nuclear repulsion derivative with shape ``(natoms, 3)``.
     """
     natoms = len(atoms)
@@ -83,14 +84,19 @@ def compute_gradient(system, D1, W1, W2, W3):
     ----------
     system : System
         The system for which to compute the gradient.
-    D1 : ndarray
+    D1 : NDArray
         The one-electron density matrix with shape ``(nbasis, nbasis)``.
-    W1 : ndarray
+    W1 : NDArray
         The energy-weighted density matrix with shape ``(nbasis, nbasis)``.
-    W2 : ndarray
+    W2 : NDArray
         The two-electron derivative weight for the metric with shape ``(nbasis, nbasis)``.
-    W3 : ndarray
+    W3 : NDArray
         The two-electron derivative weight for the three-center integrals with shape ``(naux, nbasis, nbasis)``.
+
+    Returns
+    -------
+    NDArray
+        Total gradient with shape ``(natoms, 3)``.
     """
     natoms = system.natoms
     gradient = nuclear_repulsion_deriv(system.atoms)
@@ -109,14 +115,14 @@ def compute_gradient(system, D1, W1, W2, W3):
     return gradient
 
 def build_metric_inverted_three_center(system):
-    r"""Computes the three-center integrals with the density fitting metric inverse applied.
+    r"""Computes the three-center integrals with the Coulomb metric inverse applied.
     
-    Comupute the quantity :math:`Z^{P}_{\mu\nu}` defined as:
+    Compute the quantity :math:`Z^{P}_{\mu\nu}` defined as:
     
     .. math::
         Z^{P}_{\mu\nu}
         =
-        \sum_{Q} M^{-1}_{PQ} (P|\mu\nu).
+        \sum_{Q} M^{-1}_{PQ} (Q|\mu\nu).
 
     Parameters
     ----------
@@ -125,7 +131,8 @@ def build_metric_inverted_three_center(system):
     
     Returns
     -------
-    ndarray        The metric-inverted three-center integrals with shape ``(naux, nbasis, nb
+    NDArray
+        Metric-inverted three-center integrals with shape ``(naux, nbasis, nbasis)``.
     """
     J = integrals.coulomb_3c(system, system.auxiliary_basis, system.basis, system.basis)
     M = integrals.coulomb_2c(system, system.auxiliary_basis, system.auxiliary_basis)
