@@ -73,6 +73,36 @@ class OrbOptimizer:
         h0 = self._mat_to_vec(hess)
         return h0
 
+    def compute_orbital_lagrangian(self):
+        r"""
+        Return the symmetric CASSCF orbital Lagrangian matrix.
+
+        The orbital optimizer forms the matrix :math:`A_{pq}` whose
+        antisymmetric part is the orbital gradient,
+
+        .. math::
+            g_{pq} = 2(A_{pq} - A_{qp}).
+
+        At a fully optimized state-specific CASSCF solution, the nonredundant
+        antisymmetric part vanishes.  The symmetric part of :math:`A` is the
+        molecular-orbital energy-weighted density used in the Pulay overlap
+        derivative contribution,
+
+        .. math::
+            W^{S}_{\mu\nu}
+            =
+            C_{\mu p}
+            \frac{1}{2}(A_{pq}+A_{qp})
+            C_{\nu q}.
+
+        Returns
+        -------
+        np.ndarray
+            Symmetric orbital Lagrangian in the current MO basis.
+        """
+        self._compute_orbgrad()
+        return 0.5 * (self.A_pq + self.A_pq.T.conj())
+
     def _update_orbitals(self, R):
         dR = R - self.R
         if np.max(np.abs(dR)) < 1e-12:
