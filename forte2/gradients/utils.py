@@ -89,7 +89,7 @@ def compute_gradient(system, D1, W1, W2, W3):
     W1 : NDArray
         The energy-weighted density matrix with shape ``(nbasis, nbasis)``.
     W2 : NDArray
-        The two-electron derivative weight for the metric with shape ``(nbasis, nbasis)``.
+        The two-electron derivative weight for the metric with shape ``(naux, naux)``.
     W3 : NDArray
         The two-electron derivative weight for the three-center integrals with shape ``(naux, nbasis, nbasis)``.
 

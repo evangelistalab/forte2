@@ -3,7 +3,7 @@ import pytest
 
 from forte2 import System
 from forte2.scf import RHF, UHF
-from gradient_test_utils import (
+from tests.scf.gradient_test_utils import (
     _system,
     four_point_central_difference_gradient_component,
     six_point_central_difference_gradient_component,
