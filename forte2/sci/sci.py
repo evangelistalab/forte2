@@ -903,6 +903,11 @@ class _SelectedCISingleStateSolver:
             right_root = left_root
         return self.sci_helper.sf_2rdm(left_root, right_root)
 
+    # The state-averaged RDM machinery in CIBase calls make_{1,2,3}rdm on the
+    # sub-solvers; sCI only supports spin-free 1- and 2-RDMs.
+    make_1rdm = make_sf_1rdm
+    make_2rdm = make_sf_2rdm
+
     def compute_natural_occupation_numbers(self):
         """
         Compute the natural occupation numbers from the spin-free 1-RDMs.
@@ -1156,17 +1161,6 @@ class SelectedCISolver(CIBase):
         self.executed = True
         return self
 
-    def compute_average_energy(self):
-        """
-        Compute the average energy from the CI roots using the weights.
-
-        Returns
-        -------
-        float
-            Average energy of the CI roots.
-        """
-        return np.dot(self.weights_flat, self.evar_flat)
-
     def make_sd_1rdm(self, left_root: int, right_root: int | None = None):
         """
         Make the spin-dependent one-particle RDM for two absolute CI roots.
@@ -1207,41 +1201,32 @@ class SelectedCISolver(CIBase):
             right_solver.sci_helper, left_root_in_state, right_root_in_state
         )
 
+    def make_sf_2rdm(self, left_root: int, right_root: int | None = None):
+        """
+        Make the spin-free two-particle RDM for two absolute CI roots.
+        """
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+        if left_state == right_state:
+            return self.sub_solvers[left_state].make_sf_2rdm(
+                left_root_in_state, right_root_in_state
+            )
+        raise ValueError(
+            f"Cross-state 2-RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
+        )
+
     def make_1rdm(self, left_root: int, right_root: int | None = None):
         """
         Make the spin-free one-particle RDM for two absolute CI roots.
         """
         return self.make_sf_1rdm(left_root, right_root)
 
-    def make_average_1rdm(self):
+    def make_2rdm(self, left_root: int, right_root: int | None = None):
         """
-        Make the average spin-free one-particle RDM from the CI vectors.
-
-        Returns
-        -------
-        NDArray
-            Average spin-free one-particle RDM.
+        Make the spin-free two-particle RDM for two absolute CI roots.
         """
-        rdm1 = np.zeros((self.norb,) * 2)
-        for i, ci_solver in enumerate(self.sub_solvers):
-            for j in range(ci_solver.nroot):
-                rdm1 += ci_solver.make_sf_1rdm(j) * self.weights[i][j]
-        return rdm1
-
-    def make_average_2rdm(self):
-        """
-        Make the average spin-free two-particle RDM from the CI vectors.
-
-        Returns
-        -------
-        NDArray
-            Average spin-free two-particle RDM.
-        """
-        rdm2 = np.zeros((self.norb,) * 4)
-        for i, ci_solver in enumerate(self.sub_solvers):
-            for j in range(ci_solver.nroot):
-                rdm2 += ci_solver.make_sf_2rdm(j) * self.weights[i][j]
-        return rdm2
+        return self.make_sf_2rdm(left_root, right_root)
 
     def set_ints(self, scalar, oei, tei):
         """

@@ -29,10 +29,6 @@ from .ci_utils import (
     pretty_print_ci_nat_occ_numbers,
     pretty_print_ci_dets,
     pretty_print_ci_transition_props,
-    make_2cumulant_sf,
-    make_2cumulant_so,
-    make_3cumulant_sf,
-    make_3cumulant_so,
 )
 
 
@@ -1314,17 +1310,6 @@ class CISolver(CIBase):
         self.executed = True
         return self
 
-    def compute_average_energy(self):
-        """
-        Compute the average energy from the CI roots using the weights.
-
-        Returns
-        -------
-        float
-            Average energy of the CI roots.
-        """
-        return np.dot(self.weights_flat, self.evals_flat)
-
     def reset_eigensolver(self):
         """
         Reset the eigensolver for each sub-solver.
@@ -1334,82 +1319,6 @@ class CISolver(CIBase):
         """
         for ci_solver in self.sub_solvers:
             ci_solver.reset_eigensolver()
-
-    def make_average_1rdm(self):
-        """
-        Make the average spin-free one-particle RDM from the CI vectors.
-
-        Returns
-        -------
-        NDArray
-            Average spin-free one-particle RDM.
-        """
-        rdm1 = np.zeros((self.norb,) * 2, dtype=self.dtype)
-        for i, ci_solver in enumerate(self.sub_solvers):
-            for j in range(ci_solver.nroot):
-                rdm1 += ci_solver.make_1rdm(j) * self.weights[i][j]
-        return rdm1
-
-    def make_average_2rdm(self):
-        """
-        Make the average spin-free two-particle RDM from the CI vectors.
-
-        Returns
-        -------
-        NDArray
-            Average spin-free two-particle RDM.
-        """
-        rdm2 = np.zeros((self.norb,) * 4, dtype=self.dtype)
-        for i, ci_solver in enumerate(self.sub_solvers):
-            for j in range(ci_solver.nroot):
-                rdm2 += ci_solver.make_2rdm(j) * self.weights[i][j]
-
-        return rdm2
-
-    def make_average_3rdm(self):
-        """
-        Make the average spin-free three-particle RDM from the CI vectors.
-
-        Returns
-        -------
-        NDArray
-            Average spin-free three-particle RDM.
-        """
-        rdm3 = np.zeros((self.norb,) * 6, dtype=self.dtype)
-        for i, ci_solver in enumerate(self.sub_solvers):
-            for j in range(ci_solver.nroot):
-                rdm3 += ci_solver.make_3rdm(j) * self.weights[i][j]
-
-        return rdm3
-
-    def make_average_2cumulant(self):
-        dm1 = self.make_average_1rdm()
-        dm2 = self.make_average_2rdm()
-        if self.two_component:
-            return make_2cumulant_so(dm1, dm2)
-        else:
-            return make_2cumulant_sf(dm1, dm2)
-
-    def make_average_3cumulant(self):
-        dm1 = self.make_average_1rdm()
-        dm2 = self.make_average_2rdm()
-        dm3 = self.make_average_3rdm()
-        if self.two_component:
-            return make_3cumulant_so(dm1, dm2, dm3)
-        else:
-            return make_3cumulant_sf(dm1, dm2, dm3)
-
-    def make_average_cumulants(self):
-        dm1 = self.make_average_1rdm()
-        dm2 = self.make_average_2rdm()
-        dm3 = self.make_average_3rdm()
-        if self.two_component:
-            lambda2 = make_2cumulant_so(dm1, dm2)
-            lambda3 = make_3cumulant_so(dm1, dm2, dm3)
-        else:
-            lambda2 = make_2cumulant_sf(dm1, dm2)
-            lambda3 = make_3cumulant_sf(dm1, dm2, dm3)
-        return dm1, dm2, lambda2, lambda3
 
     def set_ints(self, scalar, oei, tei):
         """
@@ -1787,13 +1696,10 @@ class RelCISolver(RelCIBase):
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level() + 1)
 
-    compute_average_energy = CISolver.compute_average_energy
-    make_average_1rdm = CISolver.make_average_1rdm
-    make_average_2rdm = CISolver.make_average_2rdm
-    make_average_3rdm = CISolver.make_average_3rdm
-    make_average_2cumulant = CISolver.make_average_2cumulant
-    make_average_3cumulant = CISolver.make_average_3cumulant
-    make_average_cumulants = CISolver.make_average_cumulants
+    # State-averaging orchestration (compute_average_energy, make_average_*,
+    # cumulants) and root bookkeeping (_get_state_root, _validate_rdm_inputs)
+    # are inherited from RelCIBase/CIBase. The bindings below are the methods
+    # that live on CISolver itself.
     compute_natural_occupation_numbers = CISolver.compute_natural_occupation_numbers
     get_top_determinants = CISolver.get_top_determinants
     set_ints = CISolver.set_ints
@@ -1801,8 +1707,6 @@ class RelCISolver(RelCIBase):
     reset_eigensolver = CISolver.reset_eigensolver
     set_maxiter = CISolver.set_maxiter
     get_convergence_status = CISolver.get_convergence_status
-    _get_state_root = CISolver._get_state_root
-    _validate_rdm_inputs = CISolver._validate_rdm_inputs
 
     def _startup(self):
         super()._startup()
