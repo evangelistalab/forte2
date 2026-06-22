@@ -3,9 +3,202 @@ import numpy as np
 from itertools import combinations, product
 from subspaces import subspaces
 
+class MutualCorrelationEnergyAnalysis:
+    """
+    Container for fragment correlation energy analysis.
+
+    Examples
+    --------
+    mca = MutualCorrelationEnergyAnalysis(ci)
+
+    mca.M1[(0,)]
+    mca.M2[(0,1)]
+    mca.total_correlation
+    """
+
+    def __init__(self, ci, fragments=None, root=0):
+
+        self.ci = ci
+        self.root = root
+
+        if fragments is None:
+            self.fragments = [[orb] for orb in ci.active_indices]
+        else:
+            self.fragments = [list(f) for f in fragments]
+
+        self.nfragments = len(self.fragments)
+
+        self.gamma1 = _spin_summed_1rdm(ci, root)
+
+        self.M1 = {}
+        self.M2 = {}
+        self.M3 = {}
+        self.M4 = {}
+
+        self._build_terms()
+
+    def _build_terms(self):
+
+        n = self.nfragments
+
+        for i in range(n):
+            self.M1[(i,)] = onefrag_correlation_energy_enumerated(
+                self.ci,
+                self.fragments[i],
+                root=self.root,
+            )
+
+        for i, j in combinations(range(n), 2):
+            self.M2[(i, j)] = twofrag_correlation_energy_enumerated(
+                self.ci,
+                self.fragments[i],
+                self.fragments[j],
+                root=self.root,
+            )
+
+        for i, j, k in combinations(range(n), 3):
+            self.M3[(i, j, k)] = threefrag_correlation_energy_enumerated(
+                self.ci,
+                self.fragments[i],
+                self.fragments[j],
+                self.fragments[k],
+                root=self.root,
+            )
+
+        for i, j, k, l in combinations(range(n), 4):
+            self.M4[(i, j, k, l)] = fourfrag_correlation_energy_enumerated(
+                self.ci,
+                self.fragments[i],
+                self.fragments[j],
+                self.fragments[k],
+                self.fragments[l],
+                root=self.root,
+            )
+
+        self.total_correlation = (
+            sum(self.M1.values())
+            + sum(self.M2.values())
+            + sum(self.M3.values())
+            + sum(self.M4.values())
+        )
+
+    @property
+    def fragment_labels(self):
+        return [
+            frag[0] if len(frag) == 1 else tuple(frag)
+            for frag in self.fragments
+        ]
+
+    def get_M2_matrix(self):
+        """
+        Return a symmetric NxN M2 matrix.
+        """
+        n = self.nfragments
+        M2 = np.zeros((n, n))
+
+        for (i, j), value in self.M2.items():
+            M2[i, j] = value
+            M2[j, i] = value
+
+        return M2
+
+    def get_M3_tensor(self):
+        """
+        Return full symmetric M3 tensor.
+        """
+        n = self.nfragments
+        M3 = np.zeros((n, n, n))
+
+        from itertools import permutations
+
+        for inds, value in self.M3.items():
+            for perm in set(permutations(inds)):
+                M3[perm] = value
+
+        return M3
+
+    def get_M4_tensor(self):
+        """
+        Return full symmetric M4 tensor.
+        """
+        n = self.nfragments
+        M4 = np.zeros((n, n, n, n))
+
+        from itertools import permutations
+
+        for inds, value in self.M4.items():
+            for perm in set(permutations(inds)):
+                M4[perm] = value
+
+        return M4
+
+    def mutual_correlation_matrix_summary(
+        self,
+        print_threshold=7.5e-4,
+    ):
+
+        lines = [
+            f"Total Correlation Energy (Sum of the 2-Cumulant Terms): {self.total_correlation:16.10f}",
+            "",
+            f"M2 Terms (|value| > {print_threshold:.1e})",
+            "------------------------------------------",
+        ]
+
+        entries = [
+            (abs(v), v, i, j)
+            for (i, j), v in self.M2.items()
+        ]
+        entries.sort(reverse=True)
+        labels = self.fragment_labels
+
+        for _, value, i, j in entries:
+            if abs(value) < print_threshold:
+                break
+
+            lines.append(
+                f"{str(labels[i]):>8} "
+                f"{str(labels[j]):>8} "
+                f"{value:16.10f}"
+            )
+
+        return "\n".join(lines)
+
+    def __repr__(self):
+        return (
+            f"MutualCorrelationEnergyAnalysis("
+            f"nfragments={self.nfragments}, "
+            f"total_correlation={self.total_correlation:.8f})"
+        )
+
+
+def _spin_summed_1rdm(self, root=0):
+    ci = self.ci
+    ci_solver = ci.sub_solvers[0]
+    a1, b1 = ci_solver.make_sd_1rdm(root)
+    return a1 + b1
+
+
+#def _fragment_1rdm(self, root=0):
+#    ci = self.ci
+#    fragments = self.fragments
+#    gamma1 = _spin_summed_1rdm(ci, root=root)
+#    _, global_subs, _ = subspaces(
+#        *fragments,
+#        rdm_orbitals=ci.mo_space.active_indices,
+#    )
+#    fragment_gamma1 = np.zeros((len(fragments), len(fragments)))
+#    for i, p_subspace in enumerate(global_subs):
+#        for j, q_subspace in enumerate(global_subs):
+#            fragment_gamma1[i, j] = np.sum(gamma1[np.ix_(p_subspace, q_subspace)])
+#    return fragment_gamma1
+
+
+#def _fragment_labels(self):
+#    fragments = self.fragments
+#    return [fragment[0] if len(fragment) == 1 else tuple(fragment) for fragment in fragments]
+
 #generate index maps for the 1, 2RDM and 2-electron integral V, which use different indexing conventions
 def _fragment_index_maps(ci, orbital_fragments):
-
     frag_orbs, global_subs, local_subs = subspaces(
         *orbital_fragments,
         rdm_orbitals=ci.mo_space.active_indices,
@@ -24,7 +217,6 @@ def _fragment_index_maps(ci, orbital_fragments):
 
 #Build 1-RDMs and 2-cumulants with forte2
 def _spin_dependent_rdms(ci, root=0):
-    
     ci_solver = ci.sub_solvers[0]
 
     a1, b1 = ci_solver.make_sd_1rdm(root)
@@ -39,6 +231,7 @@ def _spin_dependent_rdms(ci, root=0):
         + np.einsum("ps,qr->pqrs", a1, a1)
     )
     ab2_cumulant = ab2 - np.einsum("pr,qs->pqrs", a1, b1)
+
     bb2_cumulant = (
         bb2
         - np.einsum("pr,qs->pqrs", b1, b1)
@@ -59,6 +252,9 @@ def fragment_correlation_energy_enumerated(
     core_orbitals=(),
     root=0,
 ):
+
+    body_order = len(orbital_fragments)
+    core_orbitals = ci.core_indices
     #Compute an n-fragment energy contribution by explicit index enumeration.
 
     #One-electron terms contribute only to body_order 1 or 2. Two-electron terms
@@ -199,10 +395,8 @@ def fragment_decomposition_energy_enumerated(
             order_total += value
         total += order_total
 
-    return {
-        "Ecore": ints.E,
-        "terms": terms,
-        "decomposition_energy": total,
-        "ci_energy": ci.E,
-        "residual": ci.E - total,
-    }
+    return MutualCorrelationEnergyAnalysis(
+    ci,
+    fragments,
+    root=root,
+)
