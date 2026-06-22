@@ -20,7 +20,7 @@ except Exception:
     pass
 
 
-def get_color_and_alpha_smooth(value, vmax, cmap):
+def get_color_and_alpha_smooth(value, vmin, vmax, cmap, signed=False, signed_linthresh=None):
     """
     Map a value in [vmin, vmax] to a color using a continuous colormap
     and an alpha using logarithmic scaling.
@@ -43,21 +43,52 @@ def get_color_and_alpha_smooth(value, vmax, cmap):
     alpha : float
         Transparency in [0, 1], scaled logarithmically.
     """
-    vmin = -vmax
-    # clamp value to [vmin, vmax]
+    value = float(value)
+    if signed:
+        max_abs = max(abs(float(vmin)), abs(float(vmax)))
+        if max_abs == 0.0:
+            return cmap(0.5), 0.0
+
+        linthresh = (
+            max_abs * 1.0e-3 if signed_linthresh is None else float(signed_linthresh)
+        )
+        linthresh = min(max(linthresh, np.finfo(float).tiny), max_abs)
+
+        color_norm = mcolors.SymLogNorm(
+            linthresh=linthresh,
+            vmin=-max_abs,
+            vmax=max_abs,
+            base=10,
+        )
+        clipped_value = float(np.clip(value, -max_abs, max_abs))
+        color = cmap(color_norm(clipped_value))
+
+        magnitude = abs(clipped_value)
+        if magnitude == 0.0:
+            alpha = 0.0
+        else:
+            alpha_norm = mcolors.LogNorm(vmin=linthresh, vmax=max_abs)
+            alpha = float(alpha_norm(np.clip(magnitude, linthresh, max_abs)))
+        return color, alpha
+
     value = float(np.clip(value, vmin, vmax))
-
-    # Logarithmic normalization
     norm = mcolors.LogNorm(vmin=vmin, vmax=vmax)
-
-    color = cmap(norm(value))  # RGBA
-    alpha = float(norm(value))  # in [0, 1]
-
+    color = cmap(norm(value))
+    alpha = float(norm(value))
     return color, alpha
 
-
 def plot_smooth_connection(
-    ax, x_coords, y_coords, i, j, val, vmax, cmap="seismic"
+    ax, 
+    x_coords, 
+    y_coords, 
+    i, 
+    j, 
+    val, 
+    vmin,
+    vmax, 
+    cmap="seismic",
+    signed=False,
+    signed_linthresh=None,
 ):
     """
     Plots a smooth Bezier curve between two points (i and j) on the mutual
@@ -85,7 +116,12 @@ def plot_smooth_connection(
         Name of the matplotlib colormap to use.
     """
     
-    color, alpha = get_color_and_alpha_smooth(val, vmax, cmap)
+    color, alpha = get_color_and_alpha_smooth(val, 
+                                              vmin,
+                                              vmax, 
+                                              cmap,
+                                              signed=signed,
+                                              signed_linthresh=signed_linthresh)
 
     # Define the three points
     p0 = [x_coords[i], y_coords[i]]
@@ -96,10 +132,7 @@ def plot_smooth_connection(
     p2 = [x_coords[j], y_coords[j]]
 
     # Create a Path for a quadratic Bezier curve
-    verts = [p0, p1, p2]
-    codes = [Path.MOVETO, Path.CURVE3, Path.CURVE3]
-
-    path = Path(verts, codes)
+    path = Path([p0, p1, p2], [Path.MOVETO, Path.CURVE3, Path.CURVE3])
     patch = PathPatch(
         path, facecolor="none", edgecolor=color, lw=1 + 3 * alpha, alpha=alpha
     )
@@ -118,10 +151,11 @@ def mutual_correlation_plot(
     fontsize=10,
     figsize=(6, 6),
     output_file=None,
-    #vmin=0.00075,
-    vmax=10e1,
+    vmin=1e-3,
+    vmax=1,
     cmap_name="seismic",
     show_colorbar=True,
+    title=None,
     vmd_parameters=None,
 ):
     """
@@ -233,15 +267,15 @@ def mutual_correlation_plot(
             # If the file doesn't exist, just skip
             print(f"Warning: Could not find file {tga_file}")
 
-    if mca.M1.shape[0] != num_orbitals:
+    if correlation_values.shape[0] != num_orbitals:
         raise ValueError(
-            "The number of orbitals used in the MutualCorrelationAnalysis object does not match the number of orbitals provided."
+            "The number of orbitals used in the mutual correlation data "
+            "does not match the number of orbitals provided."
         )
 
     # Label each orbital with the occupation number and index
     for i in range(num_orbitals):
         val = mca.gamma1[i, i]
-        color, alpha = get_color_and_alpha_smooth(val, 0.01, 2, cmap)
         ax.text(
             x_coords[i] * 1.5,
             y_coords[i] * 1.5,
@@ -263,7 +297,7 @@ def mutual_correlation_plot(
     for i in range(num_orbitals):
         for j in range(i + 1, num_orbitals):
             val = mca.M2[i, j]
-            plot_smooth_connection(ax, x_coords, y_coords, i, j, val, vmax, cmap)
+            plot_smooth_connection(ax, x_coords, y_coords, i, j, val, vmin, vmax, cmap)
 
     # Formatting
     ax.set_xlim(-3, 3)
@@ -272,15 +306,17 @@ def mutual_correlation_plot(
     ax.set_yticks([])
 
     ax.axis("off")
+    if title:
+        ax.set_title(title)
 
     import matplotlib.colors as mcolors
 
-    norm = mcolors.LogNorm(vmin=-vmax, vmax=vmax)
+    norm = mcolors.LogNorm(vmin=vmin, vmax=vmax)
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
     if show_colorbar:
         cbar = fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04, orientation="vertical")
-        cbar.set_label("Mutual Correlation", rotation=270, labelpad=15)
+        cbar.set_label("Mutual Correlation Energy", rotation=270, labelpad=15)
 
     # Save the plot if a filename is provided
     if output_file:
