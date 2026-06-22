@@ -186,7 +186,9 @@ def _render_orbital_images_from_cubes(
     return image_files
 
 def _correlation_matrix(mca):
-    return np.asarray(mca.M2 if hasattr(mca, "M2") else mca)
+    if hasattr(mca, "get_M2_matrix"):
+        return mca.get_M2_matrix()
+    return np.asarray(mca)
 
 def _occupation_labels(mca, indices, num_orbitals, occupation_numbers=None):
     if occupation_numbers is not None:
@@ -201,7 +203,7 @@ def _occupation_labels(mca, indices, num_orbitals, occupation_numbers=None):
             for i in range(num_orbitals)
         ]
 
-    gamma1 = getattr(mca, "\u03931", None)
+    gamma1 = getattr(mca, "gamma1", None)
     if gamma1 is not None:
         gamma1 = np.asarray(gamma1)
         return [f"{gamma1[i, i]:.2f} ({indices[i]})" for i in range(num_orbitals)]
@@ -247,6 +249,10 @@ def mutual_correlation_plot(
     mpl.rcParams["ps.fonttype"] = 42
     mpl.rcParams["svg.fonttype"] = "none"
 
+    if mca.nfragments != len(indices):
+        raise ValueError(
+            "Plotting currently requires one orbital per fragment."
+        )
     num_orbitals = len(indices)
 
     correlation_values = _correlation_matrix(mca)
