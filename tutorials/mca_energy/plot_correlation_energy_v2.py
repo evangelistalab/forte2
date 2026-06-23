@@ -29,12 +29,16 @@ def get_color_and_alpha_smooth(value, vmin, vmax, cmap, signed=False, signed_lin
     ----------
     value : float
         The value to be mapped.
-    vmin = -vmax
+    vmin : float
         Minimum value for normalization.
     vmax : float
         Maximum value for normalization.
     cmap : matplotlib.colors.Colormap
         The colormap to use.
+    signed : Bool
+        Creates a diverging scale centered at zero instead of using magnitudes. 
+    signed_linthresh : float
+        Near-zero threshold value for the signed scale.
 
     Returns
     -------
@@ -138,6 +142,10 @@ def plot_smooth_connection(
     )
     ax.add_patch(patch)
 
+def _correlation_matrix(mca):
+    if hasattr(mca, "get_M2_matrix"):
+        return mca.get_M2_matrix()
+    return np.asarray(mca)
 
 def mutual_correlation_plot(
     system,
@@ -156,6 +164,8 @@ def mutual_correlation_plot(
     cmap_name="seismic",
     show_colorbar=True,
     title=None,
+    signed_correlation=None,
+    signed_linthresh=None,
     vmd_parameters=None,
 ):
     """
@@ -174,7 +184,7 @@ def mutual_correlation_plot(
         The MutualCorrelationAnalysis object containing the cumulant data.
     orbitals_filepath : str, optional, default="mca_orbitals"
         Directory to save orbital cube files.
-    radius : float, optional, default=1.0
+    radius : float, optional, default=1.5
         Radius of the circle on which orbitals are placed.
     offset : float, optional, default=1.5
         Offset for placing orbital images.
@@ -192,6 +202,12 @@ def mutual_correlation_plot(
         Name of the matplotlib colormap to use.
     show_colorbar : bool, optional, default=True
         Whether to display the colorbar.
+    title : str
+        Writes a title on the plot
+    signed_correlation : int, optional
+    ..
+    signed_linthresh : int, optional
+    ..
     vmd_parameters : dict, optional
         Parameters to pass to VMDCube for orbital visualization.
     """
@@ -221,6 +237,18 @@ def mutual_correlation_plot(
     cmap = colormaps[cmap_name]
 
     num_orbitals = len(indices)
+
+    correlation_values = _correlation_matrix(mca)
+
+    if signed_correlation is None:
+        signed_correlation = True
+
+    if correlation_values.shape[0] != num_orbitals:
+        raise ValueError(
+            "The number of orbitals used in the mutual correlation data "
+            "does not match the number of orbitals provided."
+        )
+
 
     # 1) Place orbitals on a circle
     angles = np.linspace(0, 2 * np.pi, num_orbitals, endpoint=False)
@@ -267,11 +295,6 @@ def mutual_correlation_plot(
             # If the file doesn't exist, just skip
             print(f"Warning: Could not find file {tga_file}")
 
-    if correlation_values.shape[0] != num_orbitals:
-        raise ValueError(
-            "The number of orbitals used in the mutual correlation data "
-            "does not match the number of orbitals provided."
-        )
 
     # Label each orbital with the occupation number and index
     for i in range(num_orbitals):
@@ -296,8 +319,19 @@ def mutual_correlation_plot(
     # Plot mutual correlation connections
     for i in range(num_orbitals):
         for j in range(i + 1, num_orbitals):
-            val = mca.M2[i, j]
-            plot_smooth_connection(ax, x_coords, y_coords, i, j, val, vmin, vmax, cmap)
+            val = correlation_values[i, j]
+            plot_smooth_connection(ax, 
+                                   x_coords, 
+                                   y_coords, 
+                                   i, 
+                                   j, 
+                                   val, 
+                                   vmin, 
+                                   vmax, 
+                                   cmap,
+                                   signed=signed_correlation,
+                                   signed_linthresh=signed_linthresh,
+                                   )
 
     # Formatting
     ax.set_xlim(-3, 3)
@@ -311,13 +345,27 @@ def mutual_correlation_plot(
 
     import matplotlib.colors as mcolors
 
-    norm = mcolors.LogNorm(vmin=vmin, vmax=vmax)
+    if signed_correlation:
+        max_abs = max(abs(float(vmin)), abs(float(vmax)))
+        if max_abs == 0.0:
+            max_abs = 1.0
+        linthresh = (
+            max_abs * 1.0e-3 if signed_linthresh is None else float(signed_linthresh)
+        )
+        linthresh = min(max(linthresh, np.finfo(float).tiny), max_abs)
+        norm = mcolors.SymLogNorm(
+            linthresh=linthresh,
+            vmin=-max_abs,
+            vmax=max_abs,
+            base=10,
+        )
+    else:
+        norm = mcolors.LogNorm(vmin=vmin, vmax=vmax)
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
     if show_colorbar:
         cbar = fig.colorbar(sm, ax=ax, fraction=0.046, pad=0.04, orientation="vertical")
         cbar.set_label("Mutual Correlation Energy", rotation=270, labelpad=15)
-
     # Save the plot if a filename is provided
     if output_file:
         # suppress font warnings
