@@ -8,7 +8,6 @@ from forte2.system import ModelSystem
 from forte2.helpers import logger
 from forte2.symmetry import MOSymmetryDetector
 from .scf_base import SCFBase
-from .rhf import RHF
 from .scf_utils import guess_mix
 from forte2.gradients import compute_gradient, build_metric_inverted_three_center
 
@@ -74,6 +73,7 @@ class UHF(SCFBase):
         return D_a + D_b
 
     def _initial_guess(self, H, guess_type="minao"):
+        from .rhf import RHF
         C = RHF._initial_guess(self, H, guess_type=guess_type)[0]
 
         if self.twicems == 0 and self.guess_mix:
