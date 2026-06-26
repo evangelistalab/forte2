@@ -25,6 +25,7 @@ Forte2 uses ``Black Formatter`` for Python code and ``Clang-Format`` for C++ cod
 
 Docstrings should follow the `Numpy style guide <https://numpydoc.readthedocs.io/en/latest/format.html>`_.
 For example::
+
     class MagicFCI:
     r"""
     A class that runs the full configuration interaction in constant time.
