@@ -8,8 +8,7 @@ from forte2.symmetry import MOSymmetryDetector
 from .scf_base import SCFBase
 from .scf_utils import minao_initial_guess, core_initial_guess
 from forte2._forte2 import ints
-import forte2.integrals as integrals
-from forte2.gradients import compute_gradient, apply_inverse_metric
+from forte2.gradients import compute_gradient, build_metric_inverted_three_center
 
 
 @dataclass
@@ -92,14 +91,10 @@ class RHF(SCFBase):
         and so the algorithm should be applicable to systems with 500-750 basis functions
         and 1000-1500 auxiliary functions. To scale this up, a direct approach is needed.
         """
-        J = integrals.coulomb_3c(
-            system, system.auxiliary_basis, system.basis, system.basis
-        )
-        M = integrals.coulomb_2c(system, system.auxiliary_basis, system.auxiliary_basis)
         # compute Z[P,m,n] = M^{-1}_{PQ}(Q|mn)
-        Z = apply_inverse_metric(system, M, J)
+        Z = build_metric_inverted_three_center(system)
 
-        # compute rho[P] = P_mn (P|mn)
+        # compute rho[P] = P_mn Z[P,m,n]
         rho = np.einsum("mn,Pmn->P", P, Z, optimize=True)
         # compute Z_oo[P,i,j] = C_mi Z[P,m,n] C_nj
         Z_oo = np.einsum("mi,Pmn,nj->Pij", Cocc, Z, Cocc, optimize=True)
