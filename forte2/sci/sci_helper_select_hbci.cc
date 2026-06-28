@@ -291,8 +291,14 @@ void SelectedCIHelper::select_hbci_ref(double var_threshold, double pt2_threshol
 void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
     local_timer selection_timer;
 
-    update_orbital_energies();
-    update_hbci_ints();
+    // The sorted integral lists only changes over iterations if the eHBCI criterion
+    // is used, since the epsilon denomiators enter into the (dressed) integral, and those
+    // are computed from the Fock matrix of the previous iteration. The plain HBCI
+    // just stores |V|, which doesn't change at all.
+    if (screening_criterion_ == ScreeningCriterion::eHBCI) {
+        update_orbital_energies();
+        update_hbci_ints();
+    }
 
     const size_t num_batches = num_batches_per_thread_ * num_threads_; // total number of batches
 
