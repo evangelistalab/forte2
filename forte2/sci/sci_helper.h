@@ -358,9 +358,6 @@ class SelectedCIHelper {
     /// @brief Two-electron integrals: V[p][q][r][s] = <pq||rs> = (pr|qs) - (ps|qr)
     std::vector<double> v_a_;
 
-    /// @brief Sorted two-electron integrals for fast HBCI selection (two hole indices)
-    std::vector<std::vector<std::tuple<double, double, u_int32_t, u_int32_t>>> v_sorted_;
-
     /// @brief Sorted antisymmetrized two-electron integrals for fast HBCI selection (two hole
     /// indices)
     std::vector<std::vector<std::tuple<double, double, u_int32_t, u_int32_t>>> va_sorted_;
