@@ -286,7 +286,7 @@ class CISigmaBuilder:
         """Compute the spin-free three-electron cumulant for debugging purposes"""
 
 class SelectedCIHelper:
-    def __init__(self, norb: int, dets: Sequence[Determinant], c: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))], log_level: int = 3) -> None:
+    def __init__(self, norb: int, dets: Sequence[Determinant], c: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))], log_level: int = 3, screening_criterion: str = 'hbci', frozen_creation: Sequence[int] = [], frozen_annihilation: Sequence[int] = []) -> None:
         """
         Initialize the SelectedCIHelper with the number of orbitals, initial determinants, energy, Hamiltonian, and integrals
         """

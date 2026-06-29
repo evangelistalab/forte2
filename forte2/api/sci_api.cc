@@ -16,8 +16,11 @@ namespace forte2 {
 void export_sci_helper_api(nb::module_& m) {
     nb::class_<SelectedCIHelper>(m, "SelectedCIHelper")
         .def(nb::init<size_t, const std::vector<Determinant>&, np_matrix&, double, np_matrix&,
-                      np_tensor4&, int>(),
+                      np_tensor4&, int, const std::string&, const std::vector<size_t>&,
+                      const std::vector<size_t>&>(),
              "norb"_a, "dets"_a, "c"_a, "E"_a, "H"_a, "V"_a, "log_level"_a = 3,
+             "screening_criterion"_a = "hbci", "frozen_creation"_a = std::vector<size_t>{},
+             "frozen_annihilation"_a = std::vector<size_t>{},
              "Initialize the SelectedCIHelper with the number of orbitals, initial determinants, "
              "energy, Hamiltonian, and integrals")
         .def("set_Hamiltonian", &SelectedCIHelper::set_Hamiltonian, "E"_a, "H"_a, "V"_a,
