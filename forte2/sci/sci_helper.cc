@@ -9,13 +9,19 @@
 namespace forte2 {
 
 SelectedCIHelper::SelectedCIHelper(size_t norb, const std::vector<Determinant>& dets, np_matrix& c,
-                                   double E, np_matrix& H, np_tensor4& V, int log_level)
+                                   double E, np_matrix& H, np_tensor4& V, int log_level,
+                                   const std::string& screening_criterion,
+                                   const std::vector<size_t>& frozen_creation,
+                                   const std::vector<size_t>& frozen_annihilation)
     : norb_(norb), norb2_(norb * norb), norb3_(norb * norb * norb), dets_(dets), c_guess_(c),
       log_level_(log_level), slater_rules_(norb, E, H, V) {
     if (dets.empty()) {
         throw std::runtime_error("The list of determinants cannot be empty.");
     }
 
+    set_screening_criterion(screening_criterion);
+    set_frozen_creation(frozen_creation);
+    set_frozen_annihilation(frozen_annihilation);
     set_Hamiltonian(E, H, V);
     set_c(c);
     root_energies_.resize(nroots_, 0.0);

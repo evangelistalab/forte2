@@ -45,8 +45,14 @@ class SelectedCIHelper {
     /// @param H One-electron integrals (shape: (n_orb, n_orb))
     /// @param V Two-electron integrals in physicist notation (shape: (n_orb, n_orb, n_orb, n_orb))
     /// @param log_level Logging level
+    /// @param screening_criterion "hbci" or "ehbci" for heat-bath or energy heat-bath
+    /// @param frozen_creation List of orbitals that cannot be created into
+    /// @param frozen_annihilation List of orbitals that cannot be annihilated from
     SelectedCIHelper(size_t norb, const std::vector<Determinant>& dets, np_matrix& c, double E,
-                     np_matrix& H, np_tensor4& V, int log_level = 3);
+                     np_matrix& H, np_tensor4& V, int log_level = 3,
+                     const std::string& screening_criterion = "hbci",
+                     const std::vector<size_t>& frozen_creation = {},
+                     const std::vector<size_t>& frozen_annihilation = {});
 
     // == Class Public Methods ==
 
