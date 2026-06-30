@@ -215,7 +215,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             dtype=self.dtype,
         )
 
-        width = 115
+        width = 130
 
         logger.log_info1(self.mo_space)
         logger.log_info1(f"# of nonredundant rotations: {self.nrr.sum()}\n")
@@ -230,7 +230,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
         logger.log_info1("=" * width)
         logger.log_info1(
-            f'{"Iteration":>10} {"E_avg":>20} {"E_orb":>20} {"ΔE_avg":>12} {"max(ΔE_ci)":>12} {"RMS(grad)":>12} {"#micro":>8} {"Conv":>8}'
+            f'{"Iteration":>10} {"E_avg":>20} {"E_orb":>20} {"ΔE_avg":>12} {"max(ΔE_ci)":>12} {"RMS(grad)":>12} {"Δactive":>12} {"#micro":>8} {"Conv":>8}'
         )
         logger.log_info1("-" * width)
 
@@ -274,6 +274,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
                 # 1. Optimize orbitals at fixed CI expansion
                 self.E_orb = self.lbfgs_solver.minimize(self.orb_opt, R)
                 self._C = self.orb_opt.C.copy()
+                self.delta_act = self.orb_opt.active_space_deviation()
                 # 2. Convergence checks
                 _dg = self.lbfgs_solver.g - self.g_old
                 self.dg_rms = np.sqrt(np.mean((_dg.conj() * _dg).real))
@@ -290,7 +291,13 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
                     f"{self.iter:>10d} {self.E_avg.real:>20.10f} "
                     f"{self.E_orb.real:>20.10f} "
                 )
-                iter_info += f"{self.delta_ci_avg.real:>12.4e} {self.max_ci_de:>12.4e} {self.g_rms.real:>12.4e} {lbfgs_str:>8} {conv_str:>8}"
+                iter_info += (
+                    f"{self.delta_ci_avg.real:>12.4e} "
+                    f"{self.max_ci_de:>12.4e} "
+                    f"{self.g_rms.real:>12.4e} "
+                    f"{self.delta_act:>12.4e} "
+                    f"{lbfgs_str:>8} {conv_str:>8}"
+                )
                 if conv:
                     logger.log_info1(iter_info)
                     self.converged = True
@@ -333,8 +340,9 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         self.E_ci = np.array(self.ci_solver.E)
         self.E_avg = self.ci_solver.compute_average_energy()
         self.E = self.E_avg
+        self.delta_act = self.orb_opt.active_space_deviation()
         logger.log_info1(
-            f"{'Final CI':>10} {self.E_avg:>20.10f} {self.E_orb:>20.10f} {'-':>12} {'-':>12} {'-':>12} {'-':>8} {'':>8}"
+            f"{'Final CI':>10} {self.E_avg:>20.10f} {self.E_orb:>20.10f} {'-':>12} {'-':>12} {'-':>12} {self.delta_act:>12.4e} {'-':>8} {'':>8}"
         )
 
         logger.log_info1("=" * width)
