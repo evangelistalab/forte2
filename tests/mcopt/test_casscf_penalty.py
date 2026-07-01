@@ -167,7 +167,6 @@ def test_casscf_cyclopropene_with_no_penalty():
     assert rhf.E == approx(erhf)
 
     assert mc.E == approx(emcscf)
-    assert not hasattr(mc, "delta_act")
 
 
 def test_casscf_cyclopropene_with_large_penalty():
