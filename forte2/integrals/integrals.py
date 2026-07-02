@@ -250,8 +250,9 @@ def emultipole1(system, basis1=None, basis2=None, origin=None):
     Returns
     -------
     emultipole1 : list[ndarray]
-        The electric multipole moment integrals up to first order, in the order:
-        [overlap, mu_x, mu_y, mu_z]
+        The electric multipole moment integrals up to first order, in the order::
+
+            [overlap, mu_x, mu_y, mu_z]
     """
     basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
     if origin is None:
@@ -284,8 +285,9 @@ def emultipole2(system, basis1=None, basis2=None, origin=None):
     Returns
     -------
     emultipole2 : list[ndarray]
-        The electric multipole moment integrals up to second order, in the order:
-        [overlap, mu_x, mu_y, mu_z, Q_xx, Q_xy, Q_xz, Q_yy, Q_yz, Q_zz]
+        The electric multipole moment integrals up to second order, in the order::
+
+            [overlap, mu_x, mu_y, mu_z, Q_xx, Q_xy, Q_xz, Q_yy, Q_yz, Q_zz]
     """
     basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
     if origin is None:
@@ -319,9 +321,10 @@ def emultipole3(system, basis1=None, basis2=None, origin=None):
     Returns
     -------
     emultipole3 : list[ndarray]
-        The electric multipole moment integrals up to third order, in the order:
-        [overlap, mu_x, mu_y, mu_z, Q_xx, Q_xy, Q_xz, Q_yy, Q_yz, Q_zz,
-         O_xxx, O_xxy, O_xxz, O_xyy, O_xyz, O_xzz, O_yyy, O_yyz, O_yzz, O_zzz]
+        The electric multipole moment integrals up to third order, in the order::
+
+            [overlap, mu_x, mu_y, mu_z, Q_xx, Q_xy, Q_xz, Q_yy, Q_yz, Q_zz,
+             O_xxx, O_xxy, O_xxz, O_xyy, O_xyz, O_xzz, O_yyy, O_yyz, O_yzz, O_zzz]
     """
     basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
     if origin is None:
@@ -351,8 +354,9 @@ def opVop(system, basis1=None, basis2=None):
     Returns
     -------
     opVop : list[ndarray]
-        The small component nuclear potential integrals, in the order:
-        [p dot Vp, (p cross Vp)_z, (p cross Vp)_x, (p cross Vp)_y]
+        The small component nuclear potential integrals, in the order::
+
+            [p dot Vp, (p cross Vp)_z, (p cross Vp)_x, (p cross Vp)_y]
     """
     # libint2 does not support 1e-opVop with Gaussian charges
     if system.use_gaussian_charges:

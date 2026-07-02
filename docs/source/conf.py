@@ -38,6 +38,12 @@ autoapi_options = [
 
 autoapi_ignore = ["*/fetch_basis.py", "*/fetch_ccrepo.py", "*/utils/*"]
 
+# NOTE: The build emits ~26 "autoapi.python_import_resolution" warnings (cyclic
+# imports through the forte2 package, plus the compiled forte2._forte2 extension
+# which a static analyzer cannot introspect). These are informational only and are
+# left visible on purpose; they cannot be resolved without relocating the same
+# warnings, and we prefer not to mask future genuine import errors of this class.
+
 numpydoc_show_class_members = False
 
 
