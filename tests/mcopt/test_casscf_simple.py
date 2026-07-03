@@ -1,5 +1,5 @@
 from forte2 import System, RHF, MCOptimizer, State, CISolver
-from forte2.helpers.comparisons import approx
+from forte2.helpers.comparisons import approx, is_diagonal_matrix
 
 
 def test_casscf_h2():
@@ -130,3 +130,41 @@ def test_casscf_water():
 
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
+
+
+def test_casscf_water_nos():
+    erhf = -76.0214620954787819
+    emcscf = -76.07856407969193
+
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.069592187400
+    H            0.000000000000    -0.783151105291     0.552239257834
+    H            0.000000000000     0.783151105291     0.552239257834
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="def2-universal-jkfit",
+        unit="angstrom",
+    )
+
+    rhf = RHF(charge=0, e_tol=1e-10, d_tol=1e-5)(system)
+    ci_solver = CISolver(
+        State(nel=10, multiplicity=1, ms=0.0),
+        active_orbitals=[1, 2, 3, 4, 5, 6],
+        core_orbitals=[0],
+    )
+    mc = MCOptimizer(
+        ci_solver,
+        g_tol=1e-12,
+        e_tol=1e-11,
+        final_orbital="natural",
+    )(rhf)
+    mc.run()
+    assert rhf.E == approx(erhf)
+    assert mc.E == approx(emcscf)
+
+    # Check that the 1-RDM is block diagonal in the active space
+    g1 = mc.make_average_1rdm()
+    assert is_diagonal_matrix(g1)
