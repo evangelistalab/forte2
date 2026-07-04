@@ -103,7 +103,7 @@ class Semicanonicalizer:
 
         slice_list = self._generate_elementary_spaces()
 
-        # This loop handles both diagonalization of blocks of the Fock and 1-RDM matrics
+        # This loop handles both diagonalization of blocks of the Fock and 1-RDM matrices
         active_offset = None  # used if natural_active is True to shift the slice for the active space
         for sl, label in slice_list:
             # avoid calling eigh on empty arrays
@@ -162,13 +162,7 @@ class Semicanonicalizer:
             slice_list.append((self.mo_space.B_core, "B_core"))
             slice_list.append((self.mo_space.A_core, "A_core"))
             if self.do_active:
-                if self.mix_active:
-                    slice_list.append((self.mo_space.actv, "actv"))
-                else:
-                    # list GAS subspaces individually
-                    slice_list.extend(
-                        [(gas, f"gas{n+1}") for n, gas in enumerate(self.mo_space.gas)]
-                    )
+                slice_list.append((self.mo_space.actv, "actv"))
             slice_list.append((self.mo_space.A_virt, "A_virt"))
             slice_list.append((self.mo_space.B_virt, "B_virt"))
             if self.do_frozen:
