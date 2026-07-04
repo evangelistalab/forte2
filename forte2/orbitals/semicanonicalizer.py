@@ -2,6 +2,7 @@ import numpy as np
 
 from forte2.system import System
 from forte2.state import MOSpace, EmbeddingMOSpace
+from forte2.state.mo_space import blocks_by_labels, slice_indices
 
 
 class Semicanonicalizer:
@@ -16,6 +17,9 @@ class Semicanonicalizer:
         The molecular orbital space defining the subspaces.
     system : System
         The system object containing the basis set and other properties.
+    irrep_indices : np.ndarray or list[int], optional
+        Orbital irrep labels in the same contiguous order as ``C_contig``. If provided,
+        semicanonicalization is performed separately within each irrep.
     mix_inactive : bool, optional, default=False
         If True, frozen_core and core orbitals will be diagonalized together,
         virtual and frozen_virt also will be diagonalized together.
@@ -63,6 +67,7 @@ class Semicanonicalizer:
         self,
         system: System,
         mo_space: MOSpace | EmbeddingMOSpace = None,
+        irrep_indices: np.ndarray | list[int] = None,
         mix_inactive: bool = False,
         mix_active: bool = False,
         natural_active: bool = False,
@@ -78,6 +83,17 @@ class Semicanonicalizer:
         self.two_component = system.two_component
         self.system = system
         self.fock_builder = system.fock_builder
+        self.irrep_indices = (
+            None if irrep_indices is None else np.asarray(irrep_indices, dtype=int)
+        )
+        if (
+            self.irrep_indices is not None
+            and self.mo_space is not None
+            and self.irrep_indices.shape != (self.mo_space.nmo,)
+        ):
+            raise ValueError(
+                "Semicanonicalizer: irrep_indices must have one entry per MO."
+            )
         # these two are only used for MOSpace
         self.mix_inactive = mix_inactive
         self.mix_active = mix_active
@@ -103,35 +119,37 @@ class Semicanonicalizer:
         # U_init = I so that skipped blocks are not modified
         U = np.eye(self.mo_space.nmo, dtype=self.fock.dtype)
 
-        def _eigh(sl, mat):
-            return np.linalg.eigh(mat[sl, sl])
+        def _eigh(idx, mat):
+            return np.linalg.eigh(mat[np.ix_(idx, idx)])
 
         slice_list = self._generate_elementary_spaces()
 
         # This loop handles both diagonalization of blocks of the Fock and 1-RDM matrices
         active_offset = None  # used if natural_active is True to shift the slice for the active space
         for sl, label in slice_list:
-            # avoid calling eigh on empty arrays
-            if sl.stop - sl.start > 0:
+            for orb_idx in self._blocks_for_diagonalization(sl):
+                # avoid calling eigh on empty arrays
+                if orb_idx.size == 0:
+                    continue
                 if self.natural_active and ("actv" in label or "gas" in label):
                     # natural orbital path
                     # set the offset on the first active slice
                     active_offset = (
                         active_offset if active_offset is not None else sl.start
                     )
-                    # shift the slice to get the active part
-                    actv_sl = slice(sl.start - active_offset, sl.stop - active_offset)
-                    occ, c = _eigh(actv_sl, g1)
+                    # shift the indices to get the active part
+                    actv_idx = orb_idx - active_offset
+                    occ, c = _eigh(actv_idx, g1)
                     # sort the eigenvalues and eigenvectors in descending order
-                    idx = np.argsort(occ)[::-1]
-                    c = c[:, idx]
+                    sort_idx = np.argsort(occ)[::-1]
+                    c = c[:, sort_idx]
                     # compute the orbital energies in the natural orbital basis
-                    e = np.diag(c.T.conj() @ self.fock[sl, sl] @ c)
+                    e = np.diag(c.T.conj() @ self.fock[np.ix_(orb_idx, orb_idx)] @ c)
                 else:
                     # fock matrix path
-                    e, c = _eigh(sl, self.fock)
-                eps[sl] = e
-                U[sl, sl] = c
+                    e, c = _eigh(orb_idx, self.fock)
+                eps[orb_idx] = e
+                U[np.ix_(orb_idx, orb_idx)] = c
 
         self.U = U
         self.Uactv = U[self.mo_space.actv, self.mo_space.actv]
@@ -175,6 +193,17 @@ class Semicanonicalizer:
                 slice_list.append((self.mo_space.frozen_virt, "frozen_virt"))
 
         return slice_list
+
+    def _blocks_for_diagonalization(self, sl):
+        idx = slice_indices(sl)
+        if (
+            self.irrep_indices is None
+            or self.system.point_group.upper() == "C1"
+            or idx.size == 0
+        ):
+            return [idx]
+
+        return blocks_by_labels(sl, self.irrep_indices, self.mo_space.nmo)
 
     def _build_fock(self, g1, C_contig):
         # core contribution to the generalized Fock matrix

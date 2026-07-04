@@ -379,6 +379,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         semi = Semicanonicalizer(
             mo_space=self.mo_space,
             system=self.system,
+            irrep_indices=np.array(self.irrep_indices[0])[self.mo_space.orig_to_contig],
             mix_inactive=False,
             mix_active=False,
             natural_active=(self.final_orbital == "natural"),
@@ -409,6 +410,27 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         # Basis change, can't restart from previous CI vectors *reliably*
         self.ci_solver.reset_eigensolver()
         self.ci_solver.run()
+
+        # Sanity check that the new energies are consistent with the previous ones
+        new_E_ci = np.array(self.ci_solver.E)
+        new_E_avg = self.ci_solver.compute_average_energy()
+        max_ci_de = np.max(np.abs(self.E_ci - new_E_ci))
+        avg_de = np.abs(self.E_avg - new_E_avg)
+        de = np.abs(self.E - new_E_avg)
+        max_de = max(max_ci_de, avg_de, de)
+        if max_de > self.e_tol:
+            logger.log_warning(
+                f"CI solver did not converge after semicanonicalization or converged on a different solution: "
+                f"Final energies: E_CI = {new_E_ci}, E_avg = {new_E_avg:.10f}, E = {self.E:.10f}. "
+                f"max(abs(E_CI_i - E_CI_new_i)) = {max_ci_de:.4e}, "
+                f"abs(E_avg - E_avg_new) = {avg_de:.4e}, "
+                f"abs(E - E_avg_new) = {de:.4e}"
+            )
+            logger.log_warning("Consider increasing ci_maxiter.")
+
+        self.E_ci = new_E_ci
+        self.E_avg = new_E_avg
+        self.E = self.E_avg
 
     def _print_ao_composition(self):
         basis_info = BasisInfo(self.system, self.system.basis)

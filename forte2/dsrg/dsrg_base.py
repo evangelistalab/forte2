@@ -127,6 +127,7 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
         self.semicanonicalizer = Semicanonicalizer(
             system=self.system,
             mo_space=self.mo_space,
+            irrep_indices=np.array(self.irrep_indices[0])[self.mo_space.orig_to_contig],
             mix_active=False,
             # do not mix correlated core and frozen core orbitals after MCSCF
             mix_inactive=False,

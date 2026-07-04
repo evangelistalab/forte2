@@ -14,6 +14,7 @@ from forte2 import (
 from forte2.helpers.comparisons import approx
 from forte2.orbitals import Semicanonicalizer
 from forte2.base_classes import DavidsonLiuParams
+from forte2.state.mo_space import blocks_by_labels
 
 
 def test_semican_rhf():
@@ -147,6 +148,37 @@ def test_semican_fock_offdiag():
     assert np.allclose(fock_cc, np.diag(np.diag(fock_cc)), rtol=0, atol=5e-8)
     assert np.allclose(fock_aa, np.diag(np.diag(fock_aa)), rtol=0, atol=5e-8)
     assert np.allclose(fock_vv, np.diag(np.diag(fock_vv)), rtol=0, atol=5e-8)
+
+
+def test_semican_preserves_irrep_blocks():
+    class DummySystem:
+        two_component = False
+        point_group = "D2H"
+        fock_builder = None
+
+    mo_space = MOSpace(nmo=4, active_orbitals=[0, 1, 2, 3])
+    blocks = blocks_by_labels(mo_space.actv, [0, 2, 0, 2], mo_space.nmo)
+    assert [block.tolist() for block in blocks] == [[0, 2], [], [1, 3]]
+
+    semi = Semicanonicalizer(
+        system=DummySystem(),
+        mo_space=mo_space,
+        irrep_indices=[0, 2, 0, 2],
+    )
+    semi._build_fock = lambda g1, C_contig: np.array(
+        [
+            [1.0, 0.4, 0.2, 0.1],
+            [0.4, 2.0, 0.3, 0.5],
+            [0.2, 0.3, 3.0, 0.6],
+            [0.1, 0.5, 0.6, 4.0],
+        ]
+    )
+
+    semi.semi_canonicalize(g1=np.eye(4), C_contig=np.eye(4))
+
+    irreps = np.array([0, 2, 0, 2])
+    cross_irrep = irreps[:, None] != irreps[None, :]
+    assert np.allclose(semi.U[cross_irrep], 0.0)
 
 
 def test_semican_orbitals():
