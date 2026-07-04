@@ -55,9 +55,10 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         Whether to compute and report transition dipole moments at the end of the optimization.
     final_orbital : str, optional, default="semicanonical"
         Specify the type of final orbitals. Allowed values are:
-        - "semicanonical": The average Fock matrix is block diagonal in all orbital spaces.
+        - "semicanonical": The average Fock matrix is diagonal within each orbital subspace.
         - "natural": Same as semicanonical, but the active orbitals are natural orbitals
-                     and diagonalize the average 1-RDM in the CAS/GAS spaces.
+                     and diagonalize the spin- and state-averaged 1-RDM within the CAS
+                     subspace or within each of the GAS subspaces.
         - "original": The orbitals are left in the original basis after the optimization.
                       This option should generally be avoided as the active orbitals will not be
                       uniquely defined and may not be suitable for subsequent calculations.

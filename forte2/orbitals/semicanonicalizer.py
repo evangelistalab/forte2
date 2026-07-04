@@ -69,6 +69,11 @@ class Semicanonicalizer:
         do_frozen: bool = True,
         do_active: bool = True,
     ):
+        if mix_inactive and not do_frozen:
+            raise ValueError(
+                "Semicanonicalizer: mix_inactive=True is incompatible with do_frozen=False."
+            )
+
         self.mo_space = mo_space
         self.two_component = system.two_component
         self.system = system
@@ -116,11 +121,12 @@ class Semicanonicalizer:
                     )
                     # shift the slice to get the active part
                     actv_sl = slice(sl.start - active_offset, sl.stop - active_offset)
-                    e, c = _eigh(actv_sl, g1)
+                    occ, c = _eigh(actv_sl, g1)
                     # sort the eigenvalues and eigenvectors in descending order
-                    idx = np.argsort(e)[::-1]
-                    e = e[idx]
+                    idx = np.argsort(occ)[::-1]
                     c = c[:, idx]
+                    # compute the orbital energies in the natural orbital basis
+                    e = np.diag(c.T.conj() @ self.fock[sl, sl] @ c)
                 else:
                     # fock matrix path
                     e, c = _eigh(sl, self.fock)
