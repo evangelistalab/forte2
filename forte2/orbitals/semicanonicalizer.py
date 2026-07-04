@@ -94,7 +94,7 @@ class Semicanonicalizer:
             raise ValueError(
                 "Semicanonicalizer: irrep_indices must have one entry per MO."
             )
-        # these two are only used for MOSpace
+        # these are used for MOSpace and the embedding MOSpace.
         self.mix_inactive = mix_inactive
         self.mix_active = mix_active
         self.natural_active = natural_active
@@ -188,7 +188,12 @@ class Semicanonicalizer:
             slice_list.append((self.mo_space.B_core, "B_core"))
             slice_list.append((self.mo_space.A_core, "A_core"))
             if self.do_active:
-                slice_list.append((self.mo_space.actv, "actv"))
+                if self.mix_active:
+                    slice_list.append((self.mo_space.actv, "actv"))
+                else:
+                    slice_list.extend(
+                        [(gas, f"gas{n+1}") for n, gas in enumerate(self.mo_space.gas)]
+                    )
             slice_list.append((self.mo_space.A_virt, "A_virt"))
             slice_list.append((self.mo_space.B_virt, "B_virt"))
             if self.do_frozen:

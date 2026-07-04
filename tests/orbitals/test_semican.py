@@ -13,6 +13,7 @@ from forte2 import (
 )
 from forte2.helpers.comparisons import approx
 from forte2.orbitals import Semicanonicalizer
+from forte2.state import EmbeddingMOSpace
 from forte2.base_classes import DavidsonLiuParams
 from forte2.state.mo_space import blocks_by_labels
 
@@ -179,6 +180,31 @@ def test_semican_preserves_irrep_blocks():
     irreps = np.array([0, 2, 0, 2])
     cross_irrep = irreps[:, None] != irreps[None, :]
     assert np.allclose(semi.U[cross_irrep], 0.0)
+
+
+def test_semican_embedding_gas_blocks():
+    mo_space = EmbeddingMOSpace(
+        nmo=10,
+        frozen_core_orbitals=[0],
+        B_core_orbitals=[1, 3],
+        A_core_orbitals=[2],
+        active_orbitals=[[4], [6, 7]],
+        A_virtual_orbitals=[5],
+        B_virtual_orbitals=[8],
+        frozen_virtual_orbitals=[9],
+    )
+
+    semi = Semicanonicalizer.__new__(Semicanonicalizer)
+    semi.mo_space = mo_space
+    semi.do_frozen = True
+    semi.do_active = True
+    semi.mix_active = False
+
+    slice_list = semi._generate_elementary_spaces()
+
+    assert (mo_space.gas[0], "gas1") in slice_list
+    assert (mo_space.gas[1], "gas2") in slice_list
+    assert (mo_space.actv, "actv") not in slice_list
 
 
 def test_semican_orbitals():

@@ -462,16 +462,19 @@ class EmbeddingMOSpace:
     frozen_core_orbitals: list[int]
     B_core_orbitals: list[int]
     A_core_orbitals: list[int]
-    active_orbitals: list[int]
+    active_orbitals: list[int] | list[list[int]]
     A_virtual_orbitals: list[int]
     B_virtual_orbitals: list[int]
     frozen_virtual_orbitals: list[int]
 
     def __post_init__(self):
+        if all(isinstance(x, int) for x in self.active_orbitals):
+            self.active_orbitals = [self.active_orbitals]
+
         _mo_space = _MOSpaceBase(
             frozen_core_orbitals=self.frozen_core_orbitals,
             core_orbitals=[self.B_core_orbitals, self.A_core_orbitals],
-            active_orbitals=[self.active_orbitals],
+            active_orbitals=self.active_orbitals,
             virtual_orbitals=[self.A_virtual_orbitals, self.B_virtual_orbitals],
             frozen_virtual_orbitals=self.frozen_virtual_orbitals,
         )
@@ -479,8 +482,9 @@ class EmbeddingMOSpace:
         self.frozen_core = _mo_space.frozen_core
         self.B_core = _mo_space.core[0]
         self.A_core = _mo_space.core[1]
-        self.core = self.docc = slice(0, self.A_core.stop)
-        self.actv = _mo_space.actv[0]
+        self.docc = slice(0, self.A_core.stop)
+        self.actv = slice(_mo_space.actv[0].start, _mo_space.actv[-1].stop)
+        self.gas = _mo_space.actv
         self.A_virt = _mo_space.virt[0]
         self.B_virt = _mo_space.virt[1]
         self.frozen_virt = _mo_space.frozen_virt

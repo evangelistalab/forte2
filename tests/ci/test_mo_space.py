@@ -1,6 +1,7 @@
 import pytest
 
 from forte2 import MOSpace
+from forte2.state import EmbeddingMOSpace
 
 
 def test_mo_space_invalid():
@@ -184,3 +185,24 @@ def test_mo_space_interlaced_gas_3():
     assert mospace.gas[1] == slice(4, 6)
     assert mospace.virt == slice(6, 8)
     assert mospace.frozen_virt == slice(8, 10)
+
+
+def test_embedding_mo_space_gas():
+    mospace = EmbeddingMOSpace(
+        nmo=10,
+        frozen_core_orbitals=[0],
+        B_core_orbitals=[1, 3],
+        A_core_orbitals=[2],
+        active_orbitals=[[4], [6, 7]],
+        A_virtual_orbitals=[5],
+        B_virtual_orbitals=[8],
+        frozen_virtual_orbitals=[9],
+    )
+
+    assert mospace.active_orbitals == [[4], [6, 7]]
+    assert mospace.actv == slice(4, 7)
+    assert len(mospace.gas) == 2
+    assert mospace.gas[0] == slice(4, 5)
+    assert mospace.gas[1] == slice(5, 7)
+    assert list(mospace.orig_to_contig) == [0, 1, 3, 2, 4, 6, 7, 5, 8, 9]
+    assert list(mospace.contig_to_orig) == [0, 1, 3, 2, 4, 7, 5, 6, 8, 9]
