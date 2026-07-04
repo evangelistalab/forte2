@@ -143,8 +143,10 @@ class Semicanonicalizer:
                     # sort the eigenvalues and eigenvectors in descending order
                     sort_idx = np.argsort(occ)[::-1]
                     c = c[:, sort_idx]
-                    # compute the orbital energies in the natural orbital basis
-                    e = np.diag(c.T.conj() @ self.fock[np.ix_(orb_idx, orb_idx)] @ c)
+                    # compute the orbital energies in the natural orbital basis (take the real part)
+                    e = np.real_if_close(
+                        np.diag(c.T.conj() @ self.fock[np.ix_(orb_idx, orb_idx)] @ c)
+                    )
                 else:
                     # fock matrix path
                     e, c = _eigh(orb_idx, self.fock)
