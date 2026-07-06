@@ -1,11 +1,138 @@
+import pytest
 import numpy as np
 from pathlib import Path
 
 from forte2 import System, RHF, MCOptimizer, ASET, CI, State, CISolver
-from forte2.helpers.comparisons import approx
+from forte2.dsrg import DSRG_MRPT2
+from forte2.helpers.comparisons import approx, approx_abs
 
 # Directory containing *this* file
 THIS_DIR = Path(__file__).resolve().parent
+
+
+def test_aset_1_forte_v1_embedding_1():
+    """
+    Match the Forte v1 embedding-1 reference input with Cholesky integrals.
+
+    This test uses the propene molecule and defines the fragment as the
+    vinyl group -CH=CH2 and the environment as the methyl group -CH3.
+    """
+    emcscf = -115.698779193811518
+    edsrgpt2 = -115.778915313387614
+
+    xyz = """
+    C       -2.2314881720      2.3523969887      0.1565319638
+    C       -1.1287322054      1.6651786288     -0.1651010551
+    H       -3.2159664855      1.9109197306      0.0351701750
+    H       -2.1807424354      3.3645292222      0.5457999612
+    H       -1.2085033449      0.7043108616     -0.5330598833
+    C        0.2601218384      2.1970946692     -0.0290628762
+    H        0.7545456004      2.2023392001     -1.0052240245
+    H        0.8387453665      1.5599644558      0.6466877402
+    H        0.2749376338      3.2174213526      0.3670138598
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="sto-3g",
+        cholesky_tei=True,
+        cholesky_tol=1e-10,
+    )
+
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = CISolver(
+        State(nel=24, multiplicity=1, ms=0.0),
+        core_orbitals=11,
+        active_orbitals=2,
+    )
+    mc = MCOptimizer(
+        ci_solver,
+        e_tol=1e-10,
+        g_tol=1e-10,
+    )(rhf)
+    aset = ASET(
+        fragment=["C1-2", "H1-3"],
+        cutoff_method="threshold",
+        cutoff=0.1,
+    )(mc)
+    ci = CI(
+        State(system=system, multiplicity=1, ms=0.0),
+        final_orbital="semicanonical",
+    )(aset)
+    dsrg = DSRG_MRPT2(flow_param=0.5)(ci)
+    dsrg.run()
+
+    assert mc.E == approx(emcscf)
+    assert ci.E == approx(emcscf)
+    assert dsrg.E_dsrg == approx(edsrgpt2)
+
+    assert aset.mo_space.frozen_core_indices == [0, 1, 2, 3]
+    assert aset.mo_space.core_indices == [4, 5, 6, 7, 8, 9, 10]
+    assert aset.mo_space.active_indices == [11, 12]
+    assert aset.mo_space.virtual_indices == [13, 14, 15, 16, 17]
+    assert aset.mo_space.frozen_virtual_indices == [18, 19, 20]
+
+
+def test_aset_4_forte_v1_embedding_4():
+    """
+    Match the Forte v1 embedding-4 reference input with Cholesky integrals.
+
+    This test uses the fluorodiazene (HNNF) molecule and defines the fragment
+    as the -NNH group and the environment as the F atom.
+    """
+    emcscf = -206.083844698525638
+    edsrgpt2 = -206.105821145367486
+
+    xyz = """
+    N       -1.1226987119      2.0137160725     -0.0992218410
+    N       -0.1519067161      1.2402226172     -0.0345618482
+    H        0.7253474870      1.7181546089     -0.2678695726
+    F       -2.2714806355      1.3880717623      0.2062454513
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="sto-3g",
+        cholesky_tei=True,
+        cholesky_tol=1e-10,
+    )
+
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = CISolver(
+        State(nel=24, multiplicity=1, ms=0.0),
+        frozen_core_orbitals=3,
+        core_orbitals=7,
+        active_orbitals=4,
+    )
+    mc = MCOptimizer(
+        ci_solver,
+        e_tol=1e-10,
+        g_tol=1e-10,
+        maxiter=300,
+        max_rotation=0.15,
+    )(rhf)
+    aset = ASET(
+        fragment=["N", "H"],
+        cutoff_method="num_of_orbitals",
+        num_A_occ=5,
+        num_A_vir=1,
+    )(mc)
+    ci = CI(
+        State(system=system, multiplicity=1, ms=0.0),
+        final_orbital="semicanonical",
+    )(aset)
+    dsrg = DSRG_MRPT2(flow_param=0.5)(ci)
+    dsrg.run()
+
+    assert mc.E == approx_abs(emcscf, 2e-7)
+    assert ci.E == approx_abs(emcscf, 2e-7)
+    assert dsrg.E_dsrg == approx_abs(edsrgpt2, 2e-7)
+
+    assert aset.mo_space.frozen_core_indices == [0, 1, 2, 3, 4]
+    assert aset.mo_space.core_indices == [5, 6, 7, 8, 9]
+    assert aset.mo_space.active_indices == [10, 11, 12, 13]
+    assert aset.mo_space.virtual_indices == [14]
+    assert aset.mo_space.frozen_virtual_indices == [15]
 
 
 def compare_orbital_coefficients(system, aset, filename):
@@ -22,8 +149,6 @@ def compare_orbital_coefficients(system, aset, filename):
 
 
 # Ref Energies come from forte1
-
-
 def test_aset_1():
     """
     test cutoff_method = threshold with a non-default cutoff value.
