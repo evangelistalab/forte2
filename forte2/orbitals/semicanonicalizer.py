@@ -1,8 +1,9 @@
 import numpy as np
+from numpy.typing import ArrayLike, NDArray
 
 from forte2.system import System
 from forte2.state import MOSpace, EmbeddingMOSpace
-from forte2.state.mo_space import blocks_by_labels, slice_indices
+from .orbital_blocks import OrbitalBlockBuilder
 
 
 class Semicanonicalizer:
@@ -13,7 +14,7 @@ class Semicanonicalizer:
 
     Parameters
     ----------
-    mo_space : MOSpace
+    mo_space : MOSpace or EmbeddingMOSpace
         The molecular orbital space defining the subspaces.
     system : System
         The system object containing the basis set and other properties.
@@ -25,9 +26,6 @@ class Semicanonicalizer:
         virtual and frozen_virt also will be diagonalized together.
     mix_active : bool, optional, default=False
         If True, all GAS active orbitals will be mixed, breaking the GAS subspace structure.
-    natural_active : bool, optional, default=False
-        If True, the active orbitals will be in the natural orbital basis while all other
-        orbitals will be in the semi-canonical basis.
     do_frozen : bool, optional, default=True
         If True, the frozen core and frozen virtual orbitals will be semi-canonicalized.
         If False, they will be left in the original basis.
@@ -66,42 +64,36 @@ class Semicanonicalizer:
     def __init__(
         self,
         system: System,
-        mo_space: MOSpace | EmbeddingMOSpace = None,
-        irrep_indices: np.ndarray | list[int] = None,
+        mo_space: MOSpace | EmbeddingMOSpace,
+        irrep_indices: ArrayLike | None = None,
         mix_inactive: bool = False,
         mix_active: bool = False,
-        natural_active: bool = False,
         do_frozen: bool = True,
         do_active: bool = True,
-    ):
+    ) -> None:
         if mix_inactive and not do_frozen:
             raise ValueError(
                 "Semicanonicalizer: mix_inactive=True is incompatible with do_frozen=False."
+            )
+        if not isinstance(mo_space, (MOSpace, EmbeddingMOSpace)):
+            raise ValueError(
+                "Semicanonicalizer: mo_space must be a MOSpace or EmbeddingMOSpace."
             )
 
         self.mo_space = mo_space
         self.two_component = system.two_component
         self.system = system
         self.fock_builder = system.fock_builder
-        self.irrep_indices = (
-            None if irrep_indices is None else np.asarray(irrep_indices, dtype=int)
-        )
-        if (
-            self.irrep_indices is not None
-            and self.mo_space is not None
-            and self.irrep_indices.shape != (self.mo_space.nmo,)
-        ):
-            raise ValueError(
-                "Semicanonicalizer: irrep_indices must have one entry per MO."
-            )
-        # these two are only used for MOSpace
+        # These options define the semicanonicalization subspaces.
         self.mix_inactive = mix_inactive
         self.mix_active = mix_active
-        self.natural_active = natural_active
         self.do_frozen = do_frozen
         self.do_active = do_active
+        self.orbital_blocks = OrbitalBlockBuilder(
+            system, mo_space, irrep_indices, spaces=self._semicanonical_spaces()
+        )
 
-    def semi_canonicalize(self, g1, C_contig):
+    def semi_canonicalize(self, g1: ArrayLike, C_contig: ArrayLike) -> None:
         """
         Perform the semi-canonicalization.
 
@@ -114,44 +106,23 @@ class Semicanonicalizer:
             The molecular orbital coefficients, in the "contiguous" order of the orbitals.
             Note that all other quantities are also defined in this order.
         """
+        g1, C_contig = self._validate_inputs(g1, C_contig)
         self.fock = self._build_fock(g1, C_contig)
         eps = np.zeros(self.mo_space.nmo)
         # U_init = I so that skipped blocks are not modified
         U = np.eye(self.mo_space.nmo, dtype=self.fock.dtype)
 
-        def _eigh(idx, mat):
-            return np.linalg.eigh(mat[np.ix_(idx, idx)])
+        def _eigh(idx):
+            return np.linalg.eigh(self.fock[np.ix_(idx, idx)])
 
-        slice_list = self._generate_elementary_spaces()
-
-        # This loop handles both diagonalization of blocks of the Fock and 1-RDM matrices
-        active_offset = None  # used if natural_active is True to shift the slice for the active space
-        for sl, label in slice_list:
-            for orb_idx in self._blocks_for_diagonalization(sl):
-                # avoid calling eigh on empty arrays
-                if orb_idx.size == 0:
-                    continue
-                if self.natural_active and ("actv" in label or "gas" in label):
-                    # natural orbital path
-                    # set the offset on the first active slice
-                    active_offset = (
-                        active_offset if active_offset is not None else sl.start
-                    )
-                    # shift the indices to get the active part
-                    actv_idx = orb_idx - active_offset
-                    occ, c = _eigh(actv_idx, g1)
-                    # sort the eigenvalues and eigenvectors in descending order
-                    sort_idx = np.argsort(occ)[::-1]
-                    c = c[:, sort_idx]
-                    # compute the orbital energies in the natural orbital basis (take the real part)
-                    e = np.real_if_close(
-                        np.diag(c.T.conj() @ self.fock[np.ix_(orb_idx, orb_idx)] @ c)
-                    )
-                else:
-                    # fock matrix path
-                    e, c = _eigh(orb_idx, self.fock)
-                eps[orb_idx] = e
-                U[np.ix_(orb_idx, orb_idx)] = c
+        # This loop diagonalizes Fock blocks in the requested orbital subspaces.
+        for orb_idx in self.orbital_blocks.blocks_for_spaces():
+            # avoid calling eigh on empty arrays
+            if orb_idx.size == 0:
+                continue
+            e, c = _eigh(orb_idx)
+            eps[orb_idx] = e
+            U[np.ix_(orb_idx, orb_idx)] = c
 
         self.U = U
         self.Uactv = U[self.mo_space.actv, self.mo_space.actv]
@@ -159,53 +130,55 @@ class Semicanonicalizer:
         self.eps_semican = eps
         self.fock_semican = U.T.conj() @ self.fock @ U
 
-    def _generate_elementary_spaces(self):
-        slice_list = []
+    def _semicanonical_spaces(self) -> list[str]:
+        spaces = []
         if isinstance(self.mo_space, MOSpace):
             if self.mix_inactive:
-                slice_list.append((self.mo_space.docc, "docc"))
+                spaces.append("docc")
             else:
                 if self.do_frozen:
-                    slice_list.append((self.mo_space.frozen_core, "frozen_core"))
-                slice_list.append((self.mo_space.core, "core"))
+                    spaces.append("frozen_core")
+                spaces.append("core")
             if self.do_active:
                 if self.mix_active:
-                    slice_list.append((self.mo_space.actv, "actv"))
+                    spaces.append("actv")
                 else:
-                    # list GAS subspaces individually
-                    slice_list.extend(
-                        [(gas, f"gas{n+1}") for n, gas in enumerate(self.mo_space.gas)]
-                    )
+                    spaces.append("gas")
             if self.mix_inactive:
-                slice_list.append((self.mo_space.uocc, "uocc"))
+                spaces.append("uocc")
             else:
-                slice_list.append((self.mo_space.virt, "virt"))
+                spaces.append("virt")
                 if self.do_frozen:
-                    slice_list.append((self.mo_space.frozen_virt, "frozen_virt"))
+                    spaces.append("frozen_virt")
         elif isinstance(self.mo_space, EmbeddingMOSpace):
             if self.do_frozen:
-                slice_list.append((self.mo_space.frozen_core, "frozen_core"))
-            slice_list.append((self.mo_space.B_core, "B_core"))
-            slice_list.append((self.mo_space.A_core, "A_core"))
+                spaces.append("frozen_core")
+            spaces.append("B_core")
+            spaces.append("A_core")
             if self.do_active:
-                slice_list.append((self.mo_space.actv, "actv"))
-            slice_list.append((self.mo_space.A_virt, "A_virt"))
-            slice_list.append((self.mo_space.B_virt, "B_virt"))
+                spaces.append("actv")
+            spaces.append("A_virt")
+            spaces.append("B_virt")
             if self.do_frozen:
-                slice_list.append((self.mo_space.frozen_virt, "frozen_virt"))
+                spaces.append("frozen_virt")
 
-        return slice_list
+        return spaces
 
-    def _blocks_for_diagonalization(self, sl):
-        idx = slice_indices(sl)
-        if (
-            self.irrep_indices is None
-            or self.system.point_group.upper() == "C1"
-            or idx.size == 0
-        ):
-            return [idx]
+    def _validate_inputs(
+        self, g1: ArrayLike, C_contig: ArrayLike
+    ) -> tuple[NDArray, NDArray]:
+        C_contig = np.asarray(C_contig)
+        g1 = np.asarray(g1)
+        if C_contig.ndim != 2:
+            raise ValueError("C_contig must be a two-dimensional array.")
+        if C_contig.shape[1] != self.mo_space.nmo:
+            raise ValueError("C_contig must have one column per MO.")
 
-        return blocks_by_labels(sl, self.irrep_indices, self.mo_space.nmo)
+        nactv = self.mo_space.actv.stop - self.mo_space.actv.start
+        if g1.shape != (nactv, nactv):
+            raise ValueError("g1 must have shape (nactv, nactv).")
+
+        return g1, C_contig
 
     def _build_fock(self, g1, C_contig):
         # core contribution to the generalized Fock matrix

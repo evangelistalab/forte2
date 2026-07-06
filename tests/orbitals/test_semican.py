@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from forte2 import (
     System,
@@ -12,9 +13,12 @@ from forte2 import (
     CISolver,
 )
 from forte2.helpers.comparisons import approx
-from forte2.orbitals import Semicanonicalizer
+from forte2.orbitals import (
+    NaturalOrbital,
+    OrbitalBlockBuilder,
+    Semicanonicalizer,
+)
 from forte2.base_classes import DavidsonLiuParams
-from forte2.state.mo_space import blocks_by_labels
 
 
 def test_semican_rhf():
@@ -157,7 +161,15 @@ def test_semican_preserves_irrep_blocks():
         fock_builder = None
 
     mo_space = MOSpace(nmo=4, active_orbitals=[0, 1, 2, 3])
-    blocks = blocks_by_labels(mo_space.actv, [0, 2, 0, 2], mo_space.nmo)
+    orbital_blocks = OrbitalBlockBuilder(DummySystem(), mo_space, [0, 2, 0, 2])
+    blocks = orbital_blocks.blocks_for_slice(mo_space.actv)
+    assert [block.tolist() for block in blocks] == [[0, 2], [], [1, 3]]
+    blocks = orbital_blocks.blocks_for_spaces(["gas"])
+    assert [block.tolist() for block in blocks] == [[0, 2], [], [1, 3]]
+    orbital_blocks = OrbitalBlockBuilder(
+        DummySystem(), mo_space, [0, 2, 0, 2], spaces=["gas"]
+    )
+    blocks = orbital_blocks.blocks_for_spaces()
     assert [block.tolist() for block in blocks] == [[0, 2], [], [1, 3]]
 
     semi = Semicanonicalizer(
@@ -179,6 +191,76 @@ def test_semican_preserves_irrep_blocks():
     irreps = np.array([0, 2, 0, 2])
     cross_irrep = irreps[:, None] != irreps[None, :]
     assert np.allclose(semi.U[cross_irrep], 0.0)
+
+
+def test_orbital_block_builder_rejects_unknown_space():
+    class DummySystem:
+        point_group = "C1"
+
+    mo_space = MOSpace(nmo=2, active_orbitals=[0])
+    orbital_blocks = OrbitalBlockBuilder(DummySystem(), mo_space)
+
+    with pytest.raises(ValueError, match="Unknown orbital space"):
+        orbital_blocks.blocks_for_spaces(["active"])
+
+
+def test_semican_validates_input_shapes():
+    class DummySystem:
+        two_component = False
+        point_group = "C1"
+        fock_builder = None
+
+    mo_space = MOSpace(nmo=3, core_orbitals=[0], active_orbitals=[1])
+    semi = Semicanonicalizer(system=DummySystem(), mo_space=mo_space)
+
+    with pytest.raises(ValueError, match="g1 must have shape"):
+        semi.semi_canonicalize(g1=np.eye(2), C_contig=np.eye(3))
+
+
+def test_natural_orbital_preserves_blocks():
+    C_contig = np.eye(4)
+    g1_act = np.array(
+        [
+            [1.0, 0.0, 0.3, 0.0],
+            [0.0, 1.8, 0.0, 0.2],
+            [0.3, 0.0, 1.2, 0.0],
+            [0.0, 0.2, 0.0, 1.6],
+        ]
+    )
+
+    class DummySystem:
+        point_group = "D2H"
+
+    mo_space = MOSpace(nmo=4, active_orbitals=[0, 1, 2, 3])
+    natural_orbital = NaturalOrbital(DummySystem(), mo_space, [0, 2, 0, 2])
+    natural_orbital.make_natural_orbitals(g1_act=g1_act, C_contig=C_contig)
+
+    U_nat = natural_orbital.Uactv
+
+    irreps = np.array([0, 2, 0, 2])
+    cross_irrep = irreps[:, None] != irreps[None, :]
+    assert np.allclose(U_nat[cross_irrep], 0.0)
+    g1_nat = U_nat.T @ g1_act @ U_nat
+    assert np.allclose(
+        g1_nat[np.ix_([0, 2], [0, 2])],
+        np.diag(np.diag(g1_nat[np.ix_([0, 2], [0, 2])])),
+    )
+    assert np.allclose(
+        g1_nat[np.ix_([1, 3], [1, 3])],
+        np.diag(np.diag(g1_nat[np.ix_([1, 3], [1, 3])])),
+    )
+
+
+def test_natural_orbital_requires_complete_active_blocks():
+    class DummySystem:
+        point_group = "C1"
+
+    mo_space = MOSpace(nmo=3, active_orbitals=[0, 1])
+    natural_orbital = NaturalOrbital(DummySystem(), mo_space)
+    natural_orbital.orbital_blocks.active_blocks = lambda relative=True: [np.array([0])]
+
+    with pytest.raises(ValueError, match="cover the full active space"):
+        natural_orbital.make_natural_orbitals(g1_act=np.eye(2), C_contig=np.eye(3))
 
 
 def test_semican_orbitals():
