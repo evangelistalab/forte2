@@ -17,6 +17,33 @@ except Exception:
 
 def get_color_and_alpha_smooth(
     value, vmin, vmax, cmap, signed=False, signed_linthresh=None):
+    """
+    Map a value in [vmin, vmax] to a color using a continuous colormap
+    and an alpha using logarithmic scaling.
+
+    Parameters
+    ----------
+    value : float
+        The value to be mapped.
+    vmin : float
+        Minimum value for normalization.
+    vmax : float
+        Maximum value for normalization.
+    cmap : matplotlib.colors.Colormap
+        The colormap to use.
+    signed : Bool
+        Creates a diverging scale centered at zero instead of using magnitudes. 
+    signed_linthresh : float
+        Near-zero threshold value for the signed scale.
+
+    Returns
+    -------
+    color : tuple
+        RGBA tuple from the colormap.
+    alpha : float
+        Transparency in [0, 1], scaled logarithmically.
+    """
+    
     value = float(value)
     if signed:
         max_abs = max(abs(float(vmin)), abs(float(vmax)))
@@ -64,6 +91,32 @@ def plot_smooth_connection(
     signed=False,
     signed_linthresh=None,
 ):
+
+    """
+    Plots a smooth Bezier curve between two points (i and j) on the mutual
+    correlation plot with a given color and transparency.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        The axes to plot on.
+    x_coords : list of float
+        x-coordinates of the points.
+    y_coords : list of float
+        y-coordinates of the points.
+    i : int
+        Index of the first point.
+    j : int
+        Index of the second point.
+    val : float
+        Value used to determine color and transparency.
+    vmin : float
+        Minimum value for normalization.
+    vmax : float
+        Maximum value for normalization.
+    cmap : str
+        Name of the matplotlib colormap to use.
+    """
     color, alpha = get_color_and_alpha_smooth(
         val,
         vmin,
@@ -72,14 +125,15 @@ def plot_smooth_connection(
         signed=signed,
         signed_linthresh=signed_linthresh,
     )
-
+    # Define the three points
     p0 = [x_coords[i], y_coords[i]]
     p1 = [
         0.1 * (x_coords[i] + x_coords[j]),
         0.1 * (y_coords[i] + y_coords[j]),
     ]
     p2 = [x_coords[j], y_coords[j]]
-
+    
+    # Create a Path for a quadratic Bezier curve
     path = Path([p0, p1, p2], [Path.MOVETO, Path.CURVE3, Path.CURVE3])
     patch = PathPatch(
         path, facecolor="none", edgecolor=color, lw=1 + 3 * alpha, alpha=alpha
@@ -185,28 +239,73 @@ def _render_orbital_images_from_cubes(
 
     return image_files
 
+#updated compatibility with mutual_correlation_mod and mod_fast, which have M2 dict objects
 def _correlation_matrix(mca):
     if hasattr(mca, "get_M2_matrix"):
         return mca.get_M2_matrix()
     return np.asarray(mca)
 
+#use user supplied coefficients first; if none, use nat orbs if available (mca nat_orbs=True)
+def _plot_coefficients(C, mca):
+    if C is not None:
+        return C
+
+    if getattr(mca, "nat_orbs", False) and getattr(mca, "C", None) is not None:
+        return mca.C
+
+    raise ValueError("No orbital coefficients available.")
+
+#a smoke check that codex wrote-- necessary?
+def _selected_occupation_numbers(occupation_numbers, indices, num_orbitals):
+    occupation_numbers = np.asarray(occupation_numbers, dtype=float).reshape(-1)
+    if occupation_numbers.shape[0] == num_orbitals:
+        return occupation_numbers
+    if occupation_numbers.shape[0] > max(indices):
+        return occupation_numbers[np.asarray(indices, dtype=int)]
+    raise ValueError(
+        "occupation_numbers must either match the number of plotted orbitals "
+        "or be indexable by the provided orbital indices."
+    )
+
+def _mca_occupation_numbers(mca):
+    #uses natural orbital occupations if available; else, fall back to gamma1
+    #if occupation_numbers is specified (eg. = ci.nat_occs) then this function is not called
+    no_occupations = getattr(mca, "no_occupations", None)
+    if no_occupations is not None:
+        return np.asarray(no_occupations, dtype=float).reshape(-1)
+
+    gamma1 = getattr(mca, "gamma1", None)
+    if gamma1 is not None:
+        gamma1 = np.asarray(gamma1)
+        return np.diag(gamma1)
+
+    return None
+
 def _occupation_labels(mca, indices, num_orbitals, occupation_numbers=None):
+    if getattr(mca, "nat_orbs", False):
+        mca_occupations = _mca_occupation_numbers(mca)
+        if mca_occupations is not None:
+            return [
+                f"{mca_occupations[i]:.3f} ({indices[i]})"
+                for i in range(num_orbitals)
+            ]
+
     if occupation_numbers is not None:
-        occupation_numbers = np.asarray(occupation_numbers, dtype=float).reshape(-1)
-        #if occupation_numbers.shape[0] != num_orbitals:
-        #    raise ValueError(
-        #        "The number of occupation numbers does not match the number of "
-        #        "orbitals provided."
-        #    )
+        occupation_numbers = _selected_occupation_numbers(
+            occupation_numbers, indices, num_orbitals
+        )
         return [
             f"{occupation_numbers[i]:.3f} ({indices[i]})"
             for i in range(num_orbitals)
         ]
 
-    gamma1 = getattr(mca, "gamma1", None)
-    if gamma1 is not None:
-        gamma1 = np.asarray(gamma1)
-        return [f"{gamma1[i, i]:.2f} ({indices[i]})" for i in range(num_orbitals)]
+    mca_occupations = _mca_occupation_numbers(mca)
+    if mca_occupations is not None:
+        return [
+            f"{mca_occupations[i]:.3f} ({indices[i]})"
+            for i in range(num_orbitals)
+        ]
+
     return [f"{indices[i]}" for i in range(num_orbitals)]
 
 def mutual_correlation_plot(
@@ -233,6 +332,7 @@ def mutual_correlation_plot(
     occupation_numbers=None,
 ):
    
+    C = _plot_coefficients(C, mca)
     write_orbital_cubes(
         system, C, indices=indices, filepath=orbitals_filepath, prefix="orbital"
     )
@@ -249,10 +349,10 @@ def mutual_correlation_plot(
     mpl.rcParams["ps.fonttype"] = 42
     mpl.rcParams["svg.fonttype"] = "none"
 
-    if mca.nfragments != len(indices):
-        raise ValueError(
-            "Plotting currently requires one orbital per fragment."
-        )
+    # if mca.nfragments != len(indices):
+    #     raise ValueError(
+    #         "Plotting currently requires one orbital per fragment."
+    #     )
     num_orbitals = len(indices)
 
     correlation_values = _correlation_matrix(mca)

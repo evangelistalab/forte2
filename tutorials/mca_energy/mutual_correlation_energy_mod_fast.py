@@ -19,19 +19,44 @@ class MutualCorrelationEnergyAnalysis:
     mca.total_correlation
     """
 
-    def __init__(self, ci, fragments=None, root=0):
+    def __init__(
+        self,
+        ci,
+        fragments=None,
+        root=0,
+        max_body_order=4,
+        core_orbitals=(),
+        nat_orbs=False,
+        nocc=None,
+    ):
 
         self.ci = ci
         self.root = root
+        self.max_body_order = max_body_order
+        self.core_orbitals = core_orbitals
+        self.nat_orbs = nat_orbs
+        self.nocc = nocc
 
         if fragments is None:
-            self.fragments = [[orb] for orb in ci.active_indices]
+            self.fragments = [[orb] for orb in ci.mo_space.active_indices]
         else:
             self.fragments = [list(f) for f in fragments]
 
         self.nfragments = len(self.fragments)
 
-        self.gamma1 = _spin_summed_1rdm(ci, root)
+        basis = _analysis_basis(
+                                ci,
+                                root=root,
+                                nat_orbs=nat_orbs,
+                                nocc=nocc,
+                                )
+
+        self.C = basis["C"]
+        self.gamma1 = basis["gamma1"]
+        self.no_occupations = basis["occupations"]
+        self.orbital_rotation = basis["orbital_rotation"]
+        # self.Gamma1 = self.gamma1
+        # setattr(self, "\u03931", self.gamma1)
 
         self.M1 = {}
         self.M2 = {}
@@ -44,39 +69,56 @@ class MutualCorrelationEnergyAnalysis:
 
         n = self.nfragments
 
-        for i in range(n):
-            self.M1[(i,)] = onefrag_correlation_energy_enumerated(
-                self.ci,
-                self.fragments[i],
-                root=self.root,
-            )
+        max_order = min(self.max_body_order, n, 4)
+        if max_order >= 1:
+            for i in range(n):
+                self.M1[(i,)] = onefrag_correlation_energy_enumerated(
+                    self.ci,
+                    self.fragments[i],
+                    core_orbitals=self.core_orbitals,
+                    root=self.root,
+                    C=self.C,
+                    orbital_rotation=self.orbital_rotation,
+                )
 
-        for i, j in combinations(range(n), 2):
-            self.M2[(i, j)] = twofrag_correlation_energy_enumerated(
-                self.ci,
-                self.fragments[i],
-                self.fragments[j],
-                root=self.root,
-            )
+        if max_order >= 2:
+            for i, j in combinations(range(n), 2):
+                self.M2[(i, j)] = twofrag_correlation_energy_enumerated(
+                    self.ci,
+                    self.fragments[i],
+                    self.fragments[j],
+                    core_orbitals=self.core_orbitals,
+                    root=self.root,
+                    C=self.C,
+                    orbital_rotation=self.orbital_rotation,
+                )
 
-        for i, j, k in combinations(range(n), 3):
-            self.M3[(i, j, k)] = threefrag_correlation_energy_enumerated(
-                self.ci,
-                self.fragments[i],
-                self.fragments[j],
-                self.fragments[k],
-                root=self.root,
-            )
+        if max_order >= 3:
+            for i, j, k in combinations(range(n), 3):
+                self.M3[(i, j, k)] = threefrag_correlation_energy_enumerated(
+                    self.ci,
+                    self.fragments[i],
+                    self.fragments[j],
+                    self.fragments[k],
+                    core_orbitals=self.core_orbitals,
+                    root=self.root,
+                    C=self.C,
+                    orbital_rotation=self.orbital_rotation,
+                )
 
-        for i, j, k, l in combinations(range(n), 4):
-            self.M4[(i, j, k, l)] = fourfrag_correlation_energy_enumerated(
-                self.ci,
-                self.fragments[i],
-                self.fragments[j],
-                self.fragments[k],
-                self.fragments[l],
-                root=self.root,
-            )
+        if max_order >= 4:
+            for i, j, k, l in combinations(range(n), 4):
+                self.M4[(i, j, k, l)] = fourfrag_correlation_energy_enumerated(
+                    self.ci,
+                    self.fragments[i],
+                    self.fragments[j],
+                    self.fragments[k],
+                    self.fragments[l],
+                    core_orbitals=self.core_orbitals,
+                    root=self.root,
+                    C=self.C,
+                    orbital_rotation=self.orbital_rotation,
+                )
 
         self.total_correlation = (
             sum(self.M1.values())
@@ -173,27 +215,143 @@ class MutualCorrelationEnergyAnalysis:
             f"total_correlation={self.total_correlation:.8f})"
         )
 
+def natural_orbitals_from_gamma1(C_mo, gamma1_mo, nocc):
+    """
+    Construct block natural orbitals from the spin-summed one-particle RDM.
+
+    The occupied-occupied and virtual-virtual blocks of the 1-RDM are
+    diagonalized independently so that occupied and virtual orbital spaces
+    remain separate. The resulting orbital rotation therefore differs from
+    the global natural orbital transformation obtained by diagonalizing the
+    full 1-RDM.
+
+    Parameters
+    ----------
+    C_mo : ndarray
+        Molecular orbital coefficient matrix for the active space.
+    gamma1_mo : ndarray
+        Spin-summed active-space one-particle RDM in the molecular orbital
+        basis.
+    nocc : int
+        Number of occupied active orbitals.
+
+    Returns
+    -------
+    C_no : ndarray
+        Active-space molecular orbital coefficients rotated into the block
+        natural orbital basis.
+    occupations : ndarray
+        Occupation numbers obtained from the occupied and virtual blocks.
+    orbital_rotation : ndarray
+        Orbital rotation matrix acting within the active space.
+    """
+
+    if nocc is None:
+        raise ValueError("nocc must be provided when nat_orbs=True.")
+
+    gamma1 = 0.5 * (gamma1_mo + gamma1_mo.T)
+    nocc = int(nocc)
+
+    if not (0 <= nocc <= gamma1.shape[0]):
+        raise ValueError(
+            f"nocc must be between 0 and {gamma1.shape[0]}; got {nocc}."
+        )
+
+    gamma_occ = gamma1[:nocc, :nocc]
+    gamma_vir = gamma1[nocc:, nocc:]
+
+    occ_occ, U_occ = np.linalg.eigh(gamma_occ)
+    occ_vir, U_vir = np.linalg.eigh(gamma_vir)
+
+    occ_order = np.argsort(occ_occ)[::-1]
+    vir_order = np.argsort(occ_vir)[::-1]
+
+    occ_occ = occ_occ[occ_order]
+    occ_vir = occ_vir[vir_order]
+
+    U_occ = U_occ[:, occ_order]
+    U_vir = U_vir[:, vir_order]
+
+    orbital_rotation = np.zeros_like(gamma1)
+    orbital_rotation[:nocc, :nocc] = U_occ
+    orbital_rotation[nocc:, nocc:] = U_vir
+
+    C_no = C_mo @ orbital_rotation
+    occupations = np.concatenate((occ_occ, occ_vir))
+
+    return C_no, occupations, orbital_rotation
+
+
+def _analysis_basis(ci, root=0, nat_orbs=False, nocc=None):
+    """
+    Build the orbital basis used throughout the correlation analysis.
+    When ``nat_orbs`` is False, the molecular orbital basis is returned
+    unchanged.
+    When ``nat_orbs`` is True, the active-space orbitals are rotated into
+    the block natural orbital basis while inactive orbitals remain fixed.
+
+    Returns
+    -------
+    dict: Dictionary containing
+        C: Orbital coefficient matrix.
+        gamma1: Spin-summed one-particle RDM expressed in the analysis basis.
+        occupations: Block natural orbital occupations, or None if molecular
+            orbitals are used.
+        orbital_rotation: Active-space orbital rotation matrix, or None.
+            (previously denoted as 'U')
+    """
+    
+    gamma1 = _spin_summed_1rdm(ci, root=root)
+    if not nat_orbs:
+        return {
+            "C": ci.C[0],
+            "gamma1": gamma1,
+            "occupations": None,
+            "orbital_rotation": None,
+        }
+
+    C = np.array(ci.C[0], copy=True)
+    active_indices = list(ci.mo_space.active_indices)
+    C_no, occupations, orbital_rotation = natural_orbitals_from_gamma1(
+        C[:, active_indices],
+        gamma1,
+        nocc,
+    )
+    C[:, active_indices] = C_no
+    gamma1 = _transform_1rdm(gamma1, orbital_rotation)
+
+    return {"C": C, 
+            "gamma1": gamma1, 
+            "occupations": occupations, 
+            "orbital_rotation": orbital_rotation}
+
+def _transform_1rdm(gamma1, orbital_rotation):
+    """
+    Rotate a one-particle RDM into a new orbital basis.
+    """
+    return orbital_rotation.T @ gamma1 @ orbital_rotation if orbital_rotation is not None else gamma1
+
+def _transform_2tensor(tensor, orbital_rotation):
+    """
+    Rotate a four-index tensor into a new orbital basis.
+    """
+    if orbital_rotation is None:
+        return tensor
+
+    return np.einsum(
+        "pqrs,pi,qj,rk,sl->ijkl",
+        tensor,
+        orbital_rotation,
+        orbital_rotation,
+        orbital_rotation,
+        orbital_rotation,
+        optimize=True,
+    )
+
 def _spin_summed_1rdm(ci, root=0):
     ci_solver = ci.sub_solvers[0]
     a1, b1 = ci_solver.make_sd_1rdm(root)
     return a1 + b1
-
-
-def _fragment_1rdm(ci, fragments, root=0):
-    gamma1 = _spin_summed_1rdm(ci, root=root)
-    _, global_subs, _ = subspaces(
-        *fragments,
-        rdm_orbitals=ci.mo_space.active_indices,
-    )
-    fragment_gamma1 = np.zeros((len(fragments), len(fragments)))
-    for i, p_subspace in enumerate(global_subs):
-        for j, q_subspace in enumerate(global_subs):
-            fragment_gamma1[i, j] = np.sum(gamma1[np.ix_(p_subspace, q_subspace)])
-    return fragment_gamma1
-
-
-def _fragment_labels(fragments):
-    return [fragment[0] if len(fragment) == 1 else tuple(fragment) for fragment in fragments]
 
 def _hashable_value(value):
     if isinstance(value, np.ndarray):
@@ -237,7 +395,31 @@ def _cumulant_cache_key(ci, root):
 #Build spin-dependent 2-cumulants with forte2.
 #the cached method avoids rebuilding the spin-summed cumulants inside each iteration of orbitals pq..
 
-def _spin_dependent_2cumulants(ci, root=0):
+def _spin_dependent_2cumulants(ci, root=0, orbital_rotation=None):
+    """
+    Returns
+    -------
+    aa2_cumulant
+    ab2_cumulant
+    bb2_cumulant
+    spin_summed_cumulant:
+        aa2_cumulant + ab2_cumulant + transpose(ab2_cumulant) + bb2_cumulant
+    """
+    if orbital_rotation is not None:
+        aa2, ab2, bb2, _ = _spin_dependent_2cumulants(
+            ci, root=root, orbital_rotation=None
+        )
+        aa2 = _transform_2tensor(aa2, orbital_rotation)
+        ab2 = _transform_2tensor(ab2, orbital_rotation)
+        bb2 = _transform_2tensor(bb2, orbital_rotation)
+        spin_summed_cumulant = (
+            aa2
+            + ab2
+            + ab2.transpose(1, 0, 3, 2)
+            + bb2
+        )
+        return aa2, ab2, bb2, spin_summed_cumulant
+
     cache_key = _cumulant_cache_key(ci, root)
     if cache_key in _CUMULANT_CACHE:
         return _CUMULANT_CACHE[cache_key]
@@ -273,8 +455,10 @@ def _spin_dependent_2cumulants(ci, root=0):
     return cumulants
 
 #Build spin-summed 2-cumulant with forte2
-def _spin_summed_2cumulant(ci, root=0):
-    return _spin_dependent_2cumulants(ci, root=root)[3]
+def _spin_summed_2cumulant(ci, root=0, orbital_rotation=None):
+    return _spin_dependent_2cumulants(
+        ci, root=root, orbital_rotation=orbital_rotation
+    )[3]
 
 #an accelerated way to count fragments and determine body order
 def _unique_fragment_count_mask(local_to_fragment, body_order):
@@ -303,39 +487,47 @@ def _fragment_combo_mask(local_to_fragment, combo):
         & allowed[None, None, None, :]
     )
 
-def _local_spin_summed_cumulant(ci, local_to_global, root=0):
+def _local_spin_summed_cumulant(
+    ci, local_to_global, root=0, orbital_rotation=None
+):
     local_to_global = np.asarray(local_to_global)
-    return _spin_summed_2cumulant(ci, root=root)[
+    return _spin_summed_2cumulant(
+        ci, root=root, orbital_rotation=orbital_rotation
+    )[
         np.ix_(local_to_global, local_to_global, local_to_global, local_to_global)
     ]
-
-#Build 1-RDMs and 2-cumulants with forte2
-#This function is defunct but preserved in case needed later on
-def _spin_dependent_rdms(ci, root=0):
-    n = len(ci.mo_space.active_indices)
-    zeros = np.zeros((n, n))
-    aa2_cumulant, ab2_cumulant, bb2_cumulant, _ = _spin_dependent_2cumulants(
-        ci, root=root
-    )
-
-    return zeros, zeros, aa2_cumulant, ab2_cumulant, bb2_cumulant
 
 #Combine 1, 2, 3, and 4-body mutual correlation energy into one function
 def fragment_correlation_energy_enumerated(
     ci,
     *orbital_fragments,
     body_order=None,
-    core_orbitals=(),
+    core_orbitals=None,
     root=0,
+    C=None,
+    orbital_rotation=None,
 ):
-    #Compute an n-fragment energy contribution by explicit index enumeration.
 
-    #One-electron terms contribute only to body_order 1 or 2. Two-electron terms
-    #can contribute to body_order 1, 2, 3, or 4.
-    
     if body_order is None:
         body_order = len(orbital_fragments) 
-
+    
+    if core_orbitals is None:
+        core_orbitals = tuple(ci.core_indices)
+    else:
+        core_orbitals = tuple(core_orbitals)
+        #check that user-supplied core orbs match ci calc
+        if core_orbitals != tuple(ci.core_indices):
+            raise ValueError(
+                "The supplied core_orbitals do not match ci.core_indices.\n"
+                f"core_orbitals = {core_orbitals}\n"
+                f"ci.core_indices = {tuple(ci.core_indices)}"
+            )
+        
+    if C is None:
+        C = ci.C[0]    
+    
+    #One-electron terms contribute only to body_order 1 or 2. Two-electron terms
+    #can contribute to body_order 1, 2, 3, or 4.
     if body_order < 1 or body_order > 4:
         raise ValueError(f"body_order must be between 1 and 4; got {body_order}")
     if body_order > len(orbital_fragments):
@@ -360,7 +552,7 @@ def fragment_correlation_energy_enumerated(
     frag_orbs, local_to_global, local_to_fragment = _fragment_index_maps(ci, fragments)
     ints = forte2.jkbuilder.RestrictedMOIntegrals(
         system=ci.system,
-        C=ci.C[0],
+        C=C,
         orbitals=frag_orbs,
         core_orbitals=list(core_orbitals),
     )
@@ -371,21 +563,31 @@ def fragment_correlation_energy_enumerated(
 
     #two-electron terms
     mask = _unique_fragment_count_mask(local_to_fragment, body_order)
-    spin_block_sum = _local_spin_summed_cumulant(ci, local_to_global, root=root)
+    spin_block_sum = _local_spin_summed_cumulant(
+        ci,
+        local_to_global,
+        root=root,
+        orbital_rotation=orbital_rotation,
+    )
     e2 = 0.5 * np.sum(V[mask] * spin_block_sum[mask])
 
     return e1 + e2
 
-def onefrag_correlation_energy_enumerated(ci, A_orbs, core_orbitals=(), root=0):
+def onefrag_correlation_energy_enumerated(
+    ci, A_orbs, core_orbitals=None, root=0, **kwargs
+):
     return fragment_correlation_energy_enumerated(
         ci,
         A_orbs,
         body_order=1,
         core_orbitals=core_orbitals,
         root=root,
+        **kwargs,
     )
 
-def twofrag_correlation_energy_enumerated(ci, A_orbs, B_orbs, core_orbitals=(), root=0):
+def twofrag_correlation_energy_enumerated(
+    ci, A_orbs, B_orbs, core_orbitals=None, root=0, **kwargs
+):
     return fragment_correlation_energy_enumerated(
         ci,
         A_orbs,
@@ -393,9 +595,12 @@ def twofrag_correlation_energy_enumerated(ci, A_orbs, B_orbs, core_orbitals=(), 
         body_order=2,
         core_orbitals=core_orbitals,
         root=root,
+        **kwargs,
     )
 
-def threefrag_correlation_energy_enumerated(ci, A_orbs, B_orbs, C_orbs, core_orbitals=(), root=0):
+def threefrag_correlation_energy_enumerated(
+    ci, A_orbs, B_orbs, C_orbs, core_orbitals=None, root=0, **kwargs
+):
     return fragment_correlation_energy_enumerated(
         ci,
         A_orbs,
@@ -404,9 +609,12 @@ def threefrag_correlation_energy_enumerated(ci, A_orbs, B_orbs, C_orbs, core_orb
         body_order=3,
         core_orbitals=core_orbitals,
         root=root,
+        **kwargs,
     )
 
-def fourfrag_correlation_energy_enumerated(ci, A_orbs, B_orbs, C_orbs, D_orbs, core_orbitals=(), root=0):
+def fourfrag_correlation_energy_enumerated(
+    ci, A_orbs, B_orbs, C_orbs, D_orbs, core_orbitals=None, root=0, **kwargs
+):
     return fragment_correlation_energy_enumerated(
         ci,
         A_orbs,
@@ -416,6 +624,7 @@ def fourfrag_correlation_energy_enumerated(ci, A_orbs, B_orbs, C_orbs, D_orbs, c
         body_order=4,
         core_orbitals=core_orbitals,
         root=root,
+        **kwargs,
     )
 
 
@@ -423,8 +632,10 @@ def fragment_decomposition_energy_enumerated(
     ci,
     fragments,
     max_body_order=4,
-    core_orbitals=(),
+    core_orbitals=None,
     root=0,
+    nat_orbs=False,
+    nocc=None,
 ):
       
     #Return Ecore plus all enumerated fragment terms through max_body_order.
@@ -432,14 +643,32 @@ def fragment_decomposition_energy_enumerated(
     all_fragment_orbs, local_to_global, local_to_fragment = _fragment_index_maps(
         ci, fragments
     )
+    basis = _analysis_basis(ci, root=root, nat_orbs=nat_orbs, nocc=nocc)
+
+    if core_orbitals is None:
+        core_orbitals = tuple(ci.core_indices)
+    else:
+        core_orbitals = tuple(core_orbitals)
+        #check that user-supplied core orbs match ci calc
+        if core_orbitals != tuple(ci.core_indices):
+            raise ValueError(
+                "The supplied core_orbitals do not match ci.core_indices.\n"
+                f"core_orbitals = {core_orbitals}\n"
+                f"ci.core_indices = {tuple(ci.core_indices)}"
+            )
 
     ints = forte2.jkbuilder.RestrictedMOIntegrals(
         system=ci.system,
-        C=ci.C[0],
+        C=basis["C"],
         orbitals=all_fragment_orbs,
-        core_orbitals=list(core_orbitals),
+        core_orbitals=core_orbitals,
     )
-    spin_block_sum = _local_spin_summed_cumulant(ci, local_to_global, root=root)
+    spin_block_sum = _local_spin_summed_cumulant(
+        ci,
+        local_to_global,
+        root=root,
+        orbital_rotation=basis["orbital_rotation"],
+    )
 
     terms = {}
     total = ints.E
@@ -453,13 +682,11 @@ def fragment_decomposition_energy_enumerated(
         total += order_total
 
     return MutualCorrelationEnergyAnalysis(
-        Ecore=ints.E,
-        terms=terms,
-        decomposition_energy=total,
-        ci_energy=ci.E,
-        residual=ci.E - total,
-        gamma1=_fragment_1rdm(ci, fragments, root=root),
-        active_mo_indices=_fragment_labels(fragments),
-        fragments=fragments,
+        ci,
+        fragments,
+        root=root,
         max_body_order=max_body_order,
+        core_orbitals=core_orbitals,
+        nat_orbs=nat_orbs,
+        nocc=nocc,
     )
