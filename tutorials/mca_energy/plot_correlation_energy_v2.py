@@ -147,6 +147,65 @@ def _correlation_matrix(mca):
         return mca.get_M2_matrix()
     return np.asarray(mca)
 
+def _plot_coefficients(C, mca):
+    if C is not None:
+        return C
+    if getattr(mca, "nat_orbs", False) and getattr(mca, "C", None) is not None:
+        return mca.C
+    raise ValueError("No orbital coefficients available.")
+
+def _selected_occupation_numbers(occupation_numbers, indices, num_orbitals):
+    occupation_numbers = np.asarray(occupation_numbers, dtype=float).reshape(-1)
+    if occupation_numbers.shape[0] == num_orbitals:
+        return occupation_numbers
+    if occupation_numbers.shape[0] > max(indices):
+        return occupation_numbers[np.asarray(indices, dtype=int)]
+    raise ValueError(
+        "occupation_numbers must either match the number of plotted orbitals "
+        "or be indexable by the provided orbital indices."
+    )
+
+def _mca_occupation_numbers(mca):
+    #uses natural orbital occupations if available; else, fall back to gamma1
+    #if occupation_numbers is specified (eg. = ci.nat_occs) then this function is not called
+    occupations = getattr(mca, "no_occupations", None)
+    if occupations is not None:
+        return np.asarray(occupations).ravel()
+
+    gamma1 = getattr(mca, "gamma1", None)
+    if gamma1 is not None:
+        gamma1 = np.asarray(gamma1)
+        return np.diag(gamma1)
+
+    return None
+
+def _occupation_labels(mca, indices, num_orbitals, occupation_numbers=None):
+    if getattr(mca, "nat_orbs", False):
+        mca_occupations = _mca_occupation_numbers(mca)
+        if mca_occupations is not None:
+            return [
+                f"{mca_occupations[i]:.3f} ({indices[i]})"
+                for i in range(num_orbitals)
+            ]
+
+    if occupation_numbers is not None:
+        occupation_numbers = _selected_occupation_numbers(
+            occupation_numbers, indices, num_orbitals
+        )
+        return [
+            f"{occupation_numbers[i]:.3f} ({indices[i]})"
+            for i in range(num_orbitals)
+        ]
+
+    mca_occupations = _mca_occupation_numbers(mca)
+    if mca_occupations is not None:
+        return [
+            f"{mca_occupations[i]:.3f} ({indices[i]})"
+            for i in range(num_orbitals)
+        ]
+
+    return [f"{indices[i]}" for i in range(num_orbitals)]
+
 def mutual_correlation_plot(
     system,
     C,
@@ -167,6 +226,7 @@ def mutual_correlation_plot(
     signed_correlation=None,
     signed_linthresh=None,
     vmd_parameters=None,
+    occupation_numbers=None,
 ):
     """
     Plots a set of orbitals arranged in a circle, and visualizes diagonal, semi-diagonal,
@@ -176,8 +236,10 @@ def mutual_correlation_plot(
     ----------
     system : System
         The Forte2 System object.
-    C : NDArray
-        The molecular orbital coefficients.
+    C : ndarray or None
+        Molecular orbital coefficients. If None and the MCA object was
+        constructed with nat_orbs=True, the stored orbital coefficients
+        are used automatically.
     indices : List[int]
         List of orbital indices to plot.
     mca : MutualCorrelationAnalysis
@@ -210,9 +272,14 @@ def mutual_correlation_plot(
     ..
     vmd_parameters : dict, optional
         Parameters to pass to VMDCube for orbital visualization.
+    occupation_numbers : array-like, optional
+        Occupation numbers to display. If omitted, the function first uses
+        block-natural-orbital occupations stored in the MCA object, then
+        falls back to the diagonal of the stored one-particle RDM.
     """
 
     # generate cube files for the orbitals
+    C = _plot_coefficients(C, mca)
     write_orbital_cubes(
         system, C, indices=indices, filepath=orbitals_filepath, prefix="orbital"
     )
@@ -297,12 +364,17 @@ def mutual_correlation_plot(
 
 
     # Label each orbital with the occupation number and index
+    labels = _occupation_labels(
+        mca,
+        indices,
+        num_orbitals,
+        occupation_numbers=occupation_numbers,
+    )
     for i in range(num_orbitals):
-        val = mca.gamma1[i, i]
         ax.text(
-            x_coords[i] * 1.5,
-            y_coords[i] * 1.5,
-            f"{val:.2f} ({indices[i]})",
+            x_coords[i] * 1.6,
+            y_coords[i] * 1.6,
+            labels[i],
             ha="center",
             va="center",
             fontsize=fontsize,
@@ -374,35 +446,3 @@ def mutual_correlation_plot(
         logging.getLogger("fontTools").setLevel(logging.WARNING)
         plt.savefig(f"{output_file}.pdf", bbox_inches="tight")
     plt.show()
-
-
-# if __name__ == "__main__":
-#     from forte2.systems import System
-#     from forte2.solvers.hf import RHF
-#     from forte2.solvers.ci import CI
-#     from forte2.states import State
-#     from forte2.props.mutual_correlation import MutualCorrelationAnalysis
-
-#     xyz = f"""
-#     N 0.0 0.0 0.0
-#     N 0.0 0.0 1.1
-#     """
-
-#     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
-
-#     rhf = RHF(charge=0, econv=1e-12)(system)
-#     ci = CI(
-#         State(system=system, multiplicity=1, ms=0.0), active_orbitals=list(range(10))
-#     )(rhf)
-#     ci.run()
-
-#     mca = MutualCorrelationAnalysis(ci)
-
-#     mutual_correlation_plot(
-#         system,
-#         ci.C[0],
-#         indices=ci.mo_space.active_indices,
-#         mca=mca,
-#         output_file="mutual_correlation_N2",
-#     )
-
