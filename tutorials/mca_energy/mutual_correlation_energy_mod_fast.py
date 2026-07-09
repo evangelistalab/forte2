@@ -25,7 +25,7 @@ class MutualCorrelationEnergyAnalysis:
         fragments=None,
         root=0,
         max_body_order=4,
-        core_orbitals=(),
+        core_orbitals=None,
         nat_orbs=False,
         nocc=None,
     ):
