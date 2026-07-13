@@ -95,7 +95,7 @@ class SpinorbitalIntegrals:
     ----------
     system : System
         The system for which to compute the integrals.
-    C : NDArray, shape (2*nbf, *)
+    C : NDArray, shape ``(2*nbf, *)``
         The coefficient matrix for the spinorbitals.
     spinorbitals : list[int] | range
         Subspace of the spinorbitals for which to compute the integrals.
