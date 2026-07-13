@@ -27,7 +27,6 @@ class MutualCorrelationEnergyAnalysis:
         max_body_order=4,
         core_orbitals=None,
         nat_orbs=False,
-        nocc=None,
     ):
 
         self.ci = ci
@@ -35,7 +34,6 @@ class MutualCorrelationEnergyAnalysis:
         self.max_body_order = max_body_order
         self.core_orbitals = core_orbitals
         self.nat_orbs = nat_orbs
-        self.nocc = nocc
 
         if fragments is None:
             self.fragments = [[orb] for orb in ci.mo_space.active_indices]
@@ -48,7 +46,6 @@ class MutualCorrelationEnergyAnalysis:
                                 ci,
                                 root=root,
                                 nat_orbs=nat_orbs,
-                                nocc=nocc,
                                 )
 
         self.C = basis["C"]
@@ -215,88 +212,61 @@ class MutualCorrelationEnergyAnalysis:
             f"total_correlation={self.total_correlation:.8f})"
         )
 
-def natural_orbitals_from_gamma1(C_mo, gamma1_mo, nocc):
+def natural_orbitals_from_gamma1(C_act, gamma1_act):
     """
-    Construct block natural orbitals from the spin-summed one-particle RDM.
+    Construct active-space natural orbitals from the spin-summed active-space
+    one-particle RDM.
 
-    The occupied-occupied and virtual-virtual blocks of the 1-RDM are
-    diagonalized independently so that occupied and virtual orbital spaces
-    remain separate. The resulting orbital rotation therefore differs from
-    the global natural orbital transformation obtained by diagonalizing the
-    full 1-RDM.
+    Only the active orbitals are rotated. Core and external virtual orbitals
+    remain unchanged.
 
     Parameters
     ----------
-    C_mo : ndarray
-        Molecular orbital coefficient matrix for the active space.
-    gamma1_mo : ndarray
-        Spin-summed active-space one-particle RDM in the molecular orbital
-        basis.
-    nocc : int
-        Number of occupied active orbitals.
+    C_act : ndarray
+        Active-space molecular orbital coefficient matrix.
+    gamma1_act : ndarray
+        Spin-summed active-space 1-RDM.
 
     Returns
     -------
     C_no : ndarray
-        Active-space molecular orbital coefficients rotated into the block
-        natural orbital basis.
+        Active-space orbital coefficients in the natural orbital basis.
     occupations : ndarray
-        Occupation numbers obtained from the occupied and virtual blocks.
+        Natural orbital occupation numbers.
     orbital_rotation : ndarray
-        Orbital rotation matrix acting within the active space.
+        Active-space orbital rotation matrix.
     """
 
-    if nocc is None:
-        raise ValueError("nocc must be provided when nat_orbs=True.")
+    gamma1_act = 0.5 * (gamma1_act + gamma1_act.T)
 
-    gamma1 = 0.5 * (gamma1_mo + gamma1_mo.T)
-    nocc = int(nocc)
+    occupations, orbital_rotation = np.linalg.eigh(gamma1_act)
 
-    if not (0 <= nocc <= gamma1.shape[0]):
-        raise ValueError(
-            f"nocc must be between 0 and {gamma1.shape[0]}; got {nocc}."
-        )
+    order = np.argsort(occupations)[::-1]
 
-    gamma_occ = gamma1[:nocc, :nocc]
-    gamma_vir = gamma1[nocc:, nocc:]
+    occupations = occupations[order]
+    orbital_rotation = orbital_rotation[:, order]
 
-    occ_occ, U_occ = np.linalg.eigh(gamma_occ)
-    occ_vir, U_vir = np.linalg.eigh(gamma_vir)
-
-    occ_order = np.argsort(occ_occ)[::-1]
-    vir_order = np.argsort(occ_vir)[::-1]
-
-    occ_occ = occ_occ[occ_order]
-    occ_vir = occ_vir[vir_order]
-
-    U_occ = U_occ[:, occ_order]
-    U_vir = U_vir[:, vir_order]
-
-    orbital_rotation = np.zeros_like(gamma1)
-    orbital_rotation[:nocc, :nocc] = U_occ
-    orbital_rotation[nocc:, nocc:] = U_vir
-
-    C_no = C_mo @ orbital_rotation
-    occupations = np.concatenate((occ_occ, occ_vir))
+    C_no = C_act @ orbital_rotation
 
     return C_no, occupations, orbital_rotation
 
 
-def _analysis_basis(ci, root=0, nat_orbs=False, nocc=None):
+def _analysis_basis(ci, root=0, nat_orbs=False):
     """
     Build the orbital basis used throughout the correlation analysis.
     When ``nat_orbs`` is False, the molecular orbital basis is returned
     unchanged.
     When ``nat_orbs`` is True, the active-space orbitals are rotated into
-    the block natural orbital basis while inactive orbitals remain fixed.
-
+    the natural orbital basis obtained by diagonalizing the active-space
+    spin-summed 1-RDM. Inactive orbitals remain in the input orbital basis.
+    
     Returns
     -------
     dict: Dictionary containing
-        C: Orbital coefficient matrix.
+        C: Orbital coefficient matrix (assumed to be semi-canonical, user-supplied).
         gamma1: Spin-summed one-particle RDM expressed in the analysis basis.
-        occupations: Block natural orbital occupations, or None if molecular
-            orbitals are used.
+        occupations: Natural orbital occupation numbers in the transformed active basis, 
+            or None if molecular orbitals are used.
         orbital_rotation: Active-space orbital rotation matrix, or None.
             (previously denoted as 'U')
     """
@@ -311,12 +281,14 @@ def _analysis_basis(ci, root=0, nat_orbs=False, nocc=None):
         }
 
     C = np.array(ci.C[0], copy=True)
+
     active_indices = list(ci.mo_space.active_indices)
+
     C_no, occupations, orbital_rotation = natural_orbitals_from_gamma1(
         C[:, active_indices],
         gamma1,
-        nocc,
     )
+
     C[:, active_indices] = C_no
     gamma1 = _transform_1rdm(gamma1, orbital_rotation)
 
@@ -395,7 +367,7 @@ def _cumulant_cache_key(ci, root):
 #Build spin-dependent 2-cumulants with forte2.
 #the cached method avoids rebuilding the spin-summed cumulants inside each iteration of orbitals pq..
 
-def _spin_dependent_2cumulants(ci, root=0, orbital_rotation=None):
+def _spin_dependent_cumulants(ci, root=0, orbital_rotation=None):
     """
     Returns
     -------
@@ -406,7 +378,7 @@ def _spin_dependent_2cumulants(ci, root=0, orbital_rotation=None):
         aa2_cumulant + ab2_cumulant + transpose(ab2_cumulant) + bb2_cumulant
     """
     if orbital_rotation is not None:
-        aa2, ab2, bb2, _ = _spin_dependent_2cumulants(
+        aa2, ab2, bb2, _ = _spin_dependent_cumulants(
             ci, root=root, orbital_rotation=None
         )
         aa2 = _transform_2tensor(aa2, orbital_rotation)
@@ -456,7 +428,7 @@ def _spin_dependent_2cumulants(ci, root=0, orbital_rotation=None):
 
 #Build spin-summed 2-cumulant with forte2
 def _spin_summed_2cumulant(ci, root=0, orbital_rotation=None):
-    return _spin_dependent_2cumulants(
+    return _spin_dependent_cumulants(
         ci, root=root, orbital_rotation=orbital_rotation
     )[3]
 
@@ -507,6 +479,18 @@ def fragment_correlation_energy_enumerated(
     C=None,
     orbital_rotation=None,
 ):
+    
+    """
+    Compute an n-fragment correlation contribution by explicit
+    enumeration of orbital indices.
+
+    One-electron contributions are included only for one- and two-body
+    terms, while two-electron cumulant contributions are included for
+    body orders one through four.
+
+    If ``orbital_rotation`` is supplied, the cumulants are rotated into
+    the corresponding orbital basis before the energy is evaluated.
+    """
 
     if body_order is None:
         body_order = len(orbital_fragments) 
@@ -635,7 +619,6 @@ def fragment_decomposition_energy_enumerated(
     core_orbitals=None,
     root=0,
     nat_orbs=False,
-    nocc=None,
 ):
       
     #Return Ecore plus all enumerated fragment terms through max_body_order.
@@ -643,7 +626,7 @@ def fragment_decomposition_energy_enumerated(
     all_fragment_orbs, local_to_global, local_to_fragment = _fragment_index_maps(
         ci, fragments
     )
-    basis = _analysis_basis(ci, root=root, nat_orbs=nat_orbs, nocc=nocc)
+    basis = _analysis_basis(ci, root=root, nat_orbs=nat_orbs)
 
     if core_orbitals is None:
         core_orbitals = tuple(ci.core_indices)
@@ -688,5 +671,4 @@ def fragment_decomposition_energy_enumerated(
         max_body_order=max_body_order,
         core_orbitals=core_orbitals,
         nat_orbs=nat_orbs,
-        nocc=nocc,
     )
