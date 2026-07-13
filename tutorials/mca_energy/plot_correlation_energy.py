@@ -326,20 +326,66 @@ def mutual_correlation_plot(
     cmap_name="seismic",
     show_colorbar=True,
     projection_axis=0,
-    orbital_render_options=None,
     signed_correlation=None,
     signed_linthresh=None,
     occupation_numbers=None,
 ):
-   
+    """
+    Plots a set of orbitals arranged in a circle, and visualizes diagonal, semi-diagonal,
+    and off-diagonal terms of the 2-body reduced density cumulant.
+
+    Parameters
+    ----------
+    system : System
+        The Forte2 System object.
+    C : ndarray or None
+        Molecular orbital coefficients. If None and the MCA object was
+        constructed with nat_orbs=True, the stored orbital coefficients
+        are used automatically.
+    indices : List[int]
+        List of orbital indices to plot.
+    mca : MutualCorrelationAnalysis
+        The MutualCorrelationAnalysis object containing the cumulant data.
+    title : str
+        Writes a title on the plot
+    orbitals_filepath : str, optional, default="mca_orbitals"
+        Directory to save orbital cube files.
+    radius : float, optional, default=1.5
+        Radius of the circle on which orbitals are placed.
+    offset : float, optional, default=1.5
+        Offset for placing orbital images.
+    zoom : float, optional, default=0.2
+        Zoom factor for orbital images.
+    fontsize : int, optional, default=10
+        Font size for labels.
+    figsize : Tuple[float, float], optional, default=(6, 6)
+        Size of the figure.
+    output_file : str, optional
+        If provided, saves the plot to a file with this name (PDF format).
+    vmin, vmax : float, optional, default=10
+        Minimum, maximum value for color mapping.
+    cmap_name : str, optional, default="magma_r"
+        Name of the matplotlib colormap to use.
+    show_colorbar : bool, optional, default=True
+        Whether to display the colorbar.
+    projection_axis : int; 0 -> x, 1 -> y, 2 -> z.
+        The axis on which to splice cube files for 2-D rendering.
+    signed_correlation : int, optional
+    ..
+    signed_linthresh : int, optional
+    ..
+    occupation_numbers : array-like, optional
+        Occupation numbers to display. If omitted, the function first uses
+        natural orbital occupations stored in the MCA object, then
+        falls back to the diagonal of the stored one-particle RDM.
+    """
+
     C = _plot_coefficients(C, mca)
     write_orbital_cubes(
         system, C, indices=indices, filepath=orbitals_filepath, prefix="orbital"
     )
 
-    orbital_render_options = (
-        {} if orbital_render_options is None else orbital_render_options
-    )
+    orbital_render_options = {} 
     orbital_render_options.setdefault("projection_axis", projection_axis)
     image_files_dict = _render_orbital_images_from_cubes(
         orbitals_filepath, **orbital_render_options

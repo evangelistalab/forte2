@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-from matplotlib.patches import Polygon
 from matplotlib import colormaps
 from matplotlib import offsetbox
 from matplotlib.path import Path
@@ -274,7 +273,7 @@ def mutual_correlation_plot(
         Parameters to pass to VMDCube for orbital visualization.
     occupation_numbers : array-like, optional
         Occupation numbers to display. If omitted, the function first uses
-        block-natural-orbital occupations stored in the MCA object, then
+        natural orbital occupations stored in the MCA object, then
         falls back to the diagonal of the stored one-particle RDM.
     """
 
