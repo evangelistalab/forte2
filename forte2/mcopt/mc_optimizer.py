@@ -54,7 +54,14 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
     do_transition_dipole : bool, optional, default=False
         Whether to compute and report transition dipole moments at the end of the optimization.
     final_orbital : str, optional, default="semicanonical"
-        Whether to return the final orbitals in the semicanonical basis or the original basis.
+        Specify the type of final orbitals. Allowed values are:
+        - "semicanonical": The average Fock matrix is diagonal within each orbital subspace.
+        - "natural": Same as semicanonical, but the active orbitals are natural orbitals
+                     and diagonalize the spin- and state-averaged 1-RDM within the CAS
+                     subspace or within each of the GAS subspaces.
+        - "original": The orbitals are left in the original basis after the optimization.
+                      This option should generally be avoided as the active orbitals will not be
+                      uniquely defined and may not be suitable for subsequent calculations.
 
     Notes
     -----
@@ -93,10 +100,11 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
         if self.final_orbital not in [
             "semicanonical",
+            "natural",
             "original",
         ]:
             raise ValueError(
-                "final_orbital must be either 'semicanonical' or 'original'."
+                "final_orbital must be either 'semicanonical', 'natural', or 'original'."
             )
 
     def __call__(self, method):
@@ -184,19 +192,6 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             compute_active_hessian=self.mo_space.ngas > 1
             and not self.freeze_inter_gas_rots,
         )
-
-        # _CISolver = RelCISolver if self.two_component else CISolver
-        # self.ci_solver = _CISolver(
-        #     states=self.states,
-        #     core_orbitals=self.mo_space.docc_orbitals,
-        #     active_orbitals=self.mo_space.active_orbitals,
-        #     nroots=self.sa_info.nroots,
-        #     weights=self.sa_info.weights,
-        #     log_level=self.ci_solver_verbosity,
-        #     die_if_not_converged=False,
-        #     ci_params=self.ci_params,
-        #     davidson_liu_params=self.davidson_liu_params,
-        # )(self.parent_method)
 
         # Initialize the LBFGS solver that finds the optimal orbital
         # at fixed CI expansion using the gradient and diagonal Hessian
@@ -343,39 +338,8 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
         self._post_process()
 
-        if self.final_orbital == "semicanonical":
-            semi = Semicanonicalizer(
-                mo_space=self.mo_space,
-                system=self.system,
-                mix_inactive=False,
-                mix_active=False,
-            )
-            C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
-            semi.semi_canonicalize(
-                g1=self.make_average_1rdm(),
-                C_contig=C_contig,
-            )
-            self.C[0] = semi.C_semican[:, self.mo_space.contig_to_orig].copy()
-
-            # recompute the CI vectors in the semicanonical basis
-            if self.system.two_component:
-                ints = SpinorbitalIntegrals(
-                    system=self.system,
-                    C=self.C[0],
-                    spinorbitals=self.mo_space.active_indices,
-                    core_spinorbitals=self.mo_space.docc_indices,
-                )
-            else:
-                ints = RestrictedMOIntegrals(
-                    system=self.system,
-                    C=self.C[0],
-                    orbitals=self.mo_space.active_indices,
-                    core_orbitals=self.mo_space.docc_indices,
-                )
-            self.ci_solver.set_ints(ints.E, ints.H, ints.V)
-            # Basis change, can't restart from previous CI vectors *reliably*
-            self.ci_solver.reset_eigensolver()
-            self.ci_solver.run()
+        # optionally, rotate the final orbitals to semicanonical or natural orbitals
+        self._semicanonicalize_orbitals()
 
         convergence_status = self.ci_solver.get_convergence_status()
         if convergence_status and not all(convergence_status):
@@ -406,6 +370,67 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
                 self.ci_solver.oscillator_strengths,
                 self.ci_solver.evals_per_solver,
             )
+
+    def _semicanonicalize_orbitals(self):
+        if self.final_orbital not in ["semicanonical", "natural"]:
+            return  # no semicanonicalization requested
+
+        # First prepare the final orbitals. Semicanonicalizer will handle natural orbitals
+        semi = Semicanonicalizer(
+            mo_space=self.mo_space,
+            system=self.system,
+            irrep_indices=np.array(self.irrep_indices[0])[self.mo_space.orig_to_contig],
+            mix_inactive=False,
+            mix_active=False,
+            natural_active=(self.final_orbital == "natural"),
+        )
+        C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
+        semi.semi_canonicalize(
+            g1=self.make_average_1rdm(),
+            C_contig=C_contig,
+        )
+        self.C[0] = semi.C_semican[:, self.mo_space.contig_to_orig].copy()
+
+        # recompute the CI vectors in the transformed basis
+        if self.system.two_component:
+            ints = SpinorbitalIntegrals(
+                system=self.system,
+                C=self.C[0],
+                spinorbitals=self.mo_space.active_indices,
+                core_spinorbitals=self.mo_space.docc_indices,
+            )
+        else:
+            ints = RestrictedMOIntegrals(
+                system=self.system,
+                C=self.C[0],
+                orbitals=self.mo_space.active_indices,
+                core_orbitals=self.mo_space.docc_indices,
+            )
+        self.ci_solver.set_ints(ints.E, ints.H, ints.V)
+        # Basis change, can't restart from previous CI vectors *reliably*
+        self.ci_solver.reset_eigensolver()
+        self.ci_solver.run()
+
+        # Sanity check that the new energies are consistent with the previous ones
+        new_E_ci = np.array(self.ci_solver.E)
+        new_E_avg = self.ci_solver.compute_average_energy()
+        max_ci_de = np.max(np.abs(self.E_ci - new_E_ci))
+        avg_de = np.abs(self.E_avg - new_E_avg)
+        de = np.abs(self.E - new_E_avg)
+        max_de = max(max_ci_de, avg_de, de)
+        if max_de > self.e_tol:
+            logger.log_warning(
+                f"CI solver did not converge after semicanonicalization or converged on a different solution: "
+                f"Final energies: E_CI = {new_E_ci}, E_avg = {new_E_avg:.10f}, E = {self.E:.10f}. "
+                f"max(abs(E_CI_i - E_CI_new_i)) = {max_ci_de:.4e}, "
+                f"abs(E_avg - E_avg_new) = {avg_de:.4e}, "
+                f"abs(E - E_avg_new) = {de:.4e}"
+            )
+            logger.log_warning("Consider increasing ci_maxiter.")
+
+        self.E_ci = new_E_ci
+        self.E_avg = new_E_avg
+        self.E = self.E_avg
 
     def _print_ao_composition(self):
         basis_info = BasisInfo(self.system, self.system.basis)

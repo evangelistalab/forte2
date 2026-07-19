@@ -462,16 +462,19 @@ class EmbeddingMOSpace:
     frozen_core_orbitals: list[int]
     B_core_orbitals: list[int]
     A_core_orbitals: list[int]
-    active_orbitals: list[int]
+    active_orbitals: list[int] | list[list[int]]
     A_virtual_orbitals: list[int]
     B_virtual_orbitals: list[int]
     frozen_virtual_orbitals: list[int]
 
     def __post_init__(self):
+        if all(isinstance(x, int) for x in self.active_orbitals):
+            self.active_orbitals = [self.active_orbitals]
+
         _mo_space = _MOSpaceBase(
             frozen_core_orbitals=self.frozen_core_orbitals,
             core_orbitals=[self.B_core_orbitals, self.A_core_orbitals],
-            active_orbitals=[self.active_orbitals],
+            active_orbitals=self.active_orbitals,
             virtual_orbitals=[self.A_virtual_orbitals, self.B_virtual_orbitals],
             frozen_virtual_orbitals=self.frozen_virtual_orbitals,
         )
@@ -479,10 +482,65 @@ class EmbeddingMOSpace:
         self.frozen_core = _mo_space.frozen_core
         self.B_core = _mo_space.core[0]
         self.A_core = _mo_space.core[1]
-        self.core = self.docc = slice(0, self.A_core.stop)
-        self.actv = _mo_space.actv[0]
+        self.docc = slice(0, self.A_core.stop)
+        self.actv = slice(_mo_space.actv[0].start, _mo_space.actv[-1].stop)
+        self.gas = _mo_space.actv
         self.A_virt = _mo_space.virt[0]
         self.B_virt = _mo_space.virt[1]
         self.frozen_virt = _mo_space.frozen_virt
         self.contig_to_orig = _mo_space.contig_to_orig
         self.orig_to_contig = _mo_space.orig_to_contig
+
+
+def slice_indices(sl):
+    """
+    Converts a slice in the contiguous orbital ordering to a list of integer
+    indices for the orbitals covered by that slice.
+    """
+    return np.arange(sl.start, sl.stop)
+
+
+def blocks_by_labels(sl, labels, nmo):
+    """
+    Split a contiguous MO-space slice into label-homogeneous index blocks.
+
+    For non-negative integer labels, the returned list is indexed by the label
+    value: entry ``i`` contains all indices in ``sl`` whose label is ``i``.
+    Missing labels are represented by empty arrays. This is useful for point
+    group irreps, where labels are small integers and we want a predictable
+    block order.
+
+    Parameters
+    ----------
+    sl : slice
+        Slice in contiguous MO ordering.
+    labels : array_like
+        One label per MO in the same contiguous ordering as ``sl``. The labels
+        are typically non-negative integers, for example point group irrep ids.
+    nmo : int
+        Total number of MOs. Used to validate that ``labels`` covers the full
+        MO space, not just the requested slice.
+
+    Returns
+    -------
+    list[np.ndarray]
+        Contiguous-order index arrays grouped by label. For integer labels, the
+        list contains one block for every label from 0 through ``max(labels)``.
+        For non-integer labels, only labels present in ``sl`` are returned, in
+        sorted unique-label order.
+    """
+    labels = np.asarray(labels)
+    if labels.shape != (nmo,):
+        raise ValueError("labels must have one entry per MO.")
+
+    idx = slice_indices(sl)
+    block_labels = labels[idx]
+    if idx.size == 0:
+        return []
+
+    if np.issubdtype(labels.dtype, np.integer):
+        if np.any(labels < 0):
+            raise ValueError("integer labels must be non-negative.")
+        return [idx[block_labels == label] for label in range(int(labels.max()) + 1)]
+
+    return [idx[block_labels == label] for label in np.unique(block_labels)]

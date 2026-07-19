@@ -357,3 +357,51 @@ def test_aset_5():
     compare_orbital_coefficients(system, aset, "test_aset_5_orbitals.npy")
 
     assert ci.E == approx(eci)
+
+
+def test_aset_gas():
+    xyz = """
+    O   0.0000000000  -0.0000000000  -0.0662628033
+    H   0.0000000000  -0.7540256101   0.5259060578
+    H  -0.0000000000   0.7530256101   0.5260060578
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+    )
+
+    state = State(
+        nel=10,
+        multiplicity=1,
+        ms=0.0,
+        gas_min=[0, 0],
+        gas_max=[4, 4],
+    )
+    rhf = RHF(charge=0, e_tol=1e-10)(system)
+    ci_solver = CISolver(
+        state,
+        core_orbitals=2,
+        active_orbitals=(2, 2),
+    )
+    mc = MCOptimizer(
+        ci_solver,
+        freeze_inter_gas_rots=True,
+        maxiter=1,
+        die_if_not_converged=False,
+        final_orbital="original",
+    )(rhf)
+    aset = ASET(fragment=["O"], cutoff_method="threshold")(mc)
+    aset.run()
+
+    assert aset.partition["active_orbitals"] == mc.mo_space.active_orbitals
+    assert aset.mo_space.ngas == mc.mo_space.ngas
+    assert aset.mo_space.active_orbitals == mc.mo_space.active_orbitals
+
+    ci = CI(state)(aset)
+    ci.run()
+    assert ci.mo_space.ngas == 2
+
+    # Check that the CASCI energy is preserved
+    assert ci.E == approx(mc.E)

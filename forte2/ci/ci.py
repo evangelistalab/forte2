@@ -1636,6 +1636,9 @@ class CI(CISolver):
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
                 system=self.system,
+                irrep_indices=np.array(self.irrep_indices[0])[
+                    self.mo_space.orig_to_contig
+                ],
             )
             C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
             semi.semi_canonicalize(g1=self.make_average_1rdm(), C_contig=C_contig)
@@ -1813,6 +1816,9 @@ class RelCI(RelCISolver):
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
                 system=self.system,
+                irrep_indices=np.array(self.irrep_indices[0])[
+                    self.mo_space.orig_to_contig
+                ],
             )
             C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
             semi.semi_canonicalize(g1=self.make_average_1rdm(), C_contig=C_contig)

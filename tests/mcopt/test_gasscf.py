@@ -1,7 +1,7 @@
 import pytest
 
 from forte2 import System, RHF, MCOptimizer, State, CISolver
-from forte2.helpers.comparisons import approx
+from forte2.helpers.comparisons import approx, approx_loose, is_diagonal_matrix
 
 
 def test_gasscf_1():
@@ -173,6 +173,41 @@ def test_gasscf_5():
 
     assert rhf.E == approx(erhf)
     assert mc.E == approx(emcscf)
+
+
+def test_gasscf_nos():
+    erhf = -76.05702512779526
+    emcscf = -76.1085655759
+
+    xyz = """
+    O   0.0000000000  -0.0000000000  -0.0662628033
+    H   0.0000000000  -0.7540256101   0.5259060578
+    H  -0.0000000000   0.7530256101   0.5260060578
+    """
+
+    system = System(
+        xyz=xyz, basis_set="cc-pVTZ", auxiliary_basis_set="def2-universal-jkfit"
+    )
+
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-12)(system)
+
+    ci_solver = CISolver(
+        State(nel=10, multiplicity=1, ms=0.0, gas_min=[4], gas_max=[6]),
+        core_orbitals=[0, 1],
+        active_orbitals=[[2, 3, 4], [5, 6]],
+    )
+    mc = MCOptimizer(
+        ci_solver, e_tol=1e-7, g_tol=1e-6, maxiter=100, final_orbital="natural"
+    )(rhf)
+    mc.run()
+
+    assert rhf.E == approx(erhf)
+    assert mc.E == approx_loose(emcscf)
+
+    # Check that the 1-RDM is diagonal within each GAS subspace (natural orbitals)
+    g1 = mc.make_average_1rdm()
+    assert is_diagonal_matrix(g1[:3, :3])
+    assert is_diagonal_matrix(g1[3:, 3:])
 
 
 def test_gasscf_transition_dipole():
