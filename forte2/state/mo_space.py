@@ -486,3 +486,57 @@ class EmbeddingMOSpace:
         self.frozen_virt = _mo_space.frozen_virt
         self.contig_to_orig = _mo_space.contig_to_orig
         self.orig_to_contig = _mo_space.orig_to_contig
+
+
+def slice_indices(sl):
+    """
+    Converts a slice in the contiguous orbital ordering to a list of integer
+    indices for the orbitals covered by that slice.
+    """
+    return np.arange(sl.start, sl.stop)
+
+
+def blocks_by_labels(sl, labels, nmo):
+    """
+    Split a contiguous MO-space slice into label-homogeneous index blocks.
+
+    For non-negative integer labels, the returned list is indexed by the label
+    value: entry ``i`` contains all indices in ``sl`` whose label is ``i``.
+    Missing labels are represented by empty arrays. This is useful for point
+    group irreps, where labels are small integers and we want a predictable
+    block order.
+
+    Parameters
+    ----------
+    sl : slice
+        Slice in contiguous MO ordering.
+    labels : array_like
+        One label per MO in the same contiguous ordering as ``sl``. The labels
+        are typically non-negative integers, for example point group irrep ids.
+    nmo : int
+        Total number of MOs. Used to validate that ``labels`` covers the full
+        MO space, not just the requested slice.
+
+    Returns
+    -------
+    list[np.ndarray]
+        Contiguous-order index arrays grouped by label. For integer labels, the
+        list contains one block for every label from 0 through ``max(labels)``.
+        For non-integer labels, only labels present in ``sl`` are returned, in
+        sorted unique-label order.
+    """
+    labels = np.asarray(labels)
+    if labels.shape != (nmo,):
+        raise ValueError("labels must have one entry per MO.")
+
+    idx = slice_indices(sl)
+    block_labels = labels[idx]
+    if idx.size == 0:
+        return []
+
+    if np.issubdtype(labels.dtype, np.integer):
+        if np.any(labels < 0):
+            raise ValueError("integer labels must be non-negative.")
+        return [idx[block_labels == label] for label in range(int(labels.max()) + 1)]
+
+    return [idx[block_labels == label] for label in np.unique(block_labels)]
