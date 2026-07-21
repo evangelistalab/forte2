@@ -259,6 +259,210 @@ class UMP2(MP2Base):
         gamma1_ao = 0.5 * (gamma1_ao + gamma1_ao.T)
         return gamma1_ao
 
+    def _lowdin_basis(self, S):
+        s, U = np.linalg.eigh(0.5 * (S + S.T))
+        cutoff = self.system.overlap_ortho_rtol * np.max(s)
+        keep = s > cutoff
+        if np.count_nonzero(keep) < self.nmo:
+            raise ValueError(
+                "The overlap matrix rank is smaller than the number of UMP2 orbitals."
+            )
+
+        return s[keep], U[:, keep]
+
+    def _make_natural_orbital_transform(self, gamma1=None):
+        if gamma1 is None:
+            gamma1_a, gamma1_b = self.make_1rdm_sd()
+        else:
+            gamma1_a, gamma1_b = gamma1
+
+        S = self.system.ints_overlap()
+        s, S_evecs = self._lowdin_basis(S)
+        S_sqrt = S_evecs * np.sqrt(s)
+        S_inv_sqrt = S_evecs / np.sqrt(s)
+        gamma1_ao = self._make_gamma1_ao_sf(gamma1_a, gamma1_b)
+        gamma1_lowdin = S_sqrt.T @ gamma1_ao @ S_sqrt
+        gamma1_lowdin = 0.5 * (gamma1_lowdin + gamma1_lowdin.T)
+
+        occupations, C_lowdin = np.linalg.eigh(gamma1_lowdin)
+        order = np.argsort(occupations)[::-1][: self.nmo]
+        occupations = occupations[order]
+        C_lowdin = C_lowdin[:, order]
+
+        C_no = S_inv_sqrt @ C_lowdin
+        Ua = self.Ca.T @ S @ C_no
+        Ub = self.Cb.T @ S @ C_no
+
+        self.C_no = C_no
+        self.no_occs = occupations
+        self.Ua_no = Ua
+        self.Ub_no = Ub
+
+        return C_no, occupations, Ua, Ub
+
+    def make_natural_orbital_transform(self, gamma1=None):
+        """
+        Build the common spin-free UMP2 natural-orbital transformation.
+
+        The spin-free AO density is Lowdin-orthogonalized, diagonalized, and
+        transformed back to the AO basis. The returned spin transformations map
+        alpha/beta canonical MOs to this common natural-orbital basis.
+
+        Returns
+        -------
+        C_no : ndarray
+            Natural-orbital coefficients in the AO basis.
+        occupations : ndarray
+            Spin-free natural occupation numbers.
+        Ua, Ub : ndarray
+            Canonical alpha/beta MO -> common NO transformation matrices.
+        """
+        return self._make_natural_orbital_transform(gamma1)
+
+    def make_natural_orbitals(self, gamma1=None):
+        """
+        Return common spin-free UMP2 natural orbitals and occupations.
+        """
+        C_no, occupations, _, _ = self._make_natural_orbital_transform(gamma1)
+        return C_no, occupations
+
+    def _get_no_transform(self, gamma1=None, no_transform=None):
+        if no_transform is None:
+            return self._make_natural_orbital_transform(gamma1)
+        return no_transform
+
+    def _rotate_1rdm_to_no(self, gamma1, U):
+        gamma1_no = U.T @ gamma1 @ U
+        return 0.5 * (gamma1_no + gamma1_no.T)
+
+    def _rotate_2rdm_to_no(self, gamma2, U1, U2, U3, U4):
+        return np.einsum(
+            "pi,qj,rk,sl,pqrs->ijkl",
+            U1,
+            U2,
+            U3,
+            U4,
+            gamma2,
+            optimize=True,
+        )
+
+    def make_1rdm_no_sd(self, gamma1=None, no_transform=None):
+        """
+        Spin-resolved UMP2 1-RDMs in the common spin-free NO basis.
+        """
+        if gamma1 is None:
+            gamma1_a, gamma1_b = self.make_1rdm_sd()
+        else:
+            gamma1_a, gamma1_b = gamma1
+        _, _, Ua, Ub = self._get_no_transform(
+            (gamma1_a, gamma1_b), no_transform
+        )
+        return (
+            self._rotate_1rdm_to_no(gamma1_a, Ua),
+            self._rotate_1rdm_to_no(gamma1_b, Ub),
+        )
+
+    def make_1rdm_no_sf(self, gamma1=None, no_transform=None):
+        """
+        Spin-free UMP2 1-RDM in the common spin-free NO basis.
+        """
+        gamma1_a_no, gamma1_b_no = self.make_1rdm_no_sd(gamma1, no_transform)
+        gamma1_no = gamma1_a_no + gamma1_b_no
+        return 0.5 * (gamma1_no + gamma1_no.T)
+
+    def make_2rdm_no_sd(self, gamma1=None, gamma2=None, no_transform=None):
+        """
+        Spin-resolved UMP2 2-RDMs in the common spin-free NO basis.
+        """
+        if gamma1 is None:
+            gamma1_a, gamma1_b = self.make_1rdm_sd()
+        else:
+            gamma1_a, gamma1_b = gamma1
+
+        if gamma2 is None:
+            gamma2_aa, gamma2_ab, gamma2_bb = self._make_mp2_2rdm(
+                gamma1_a, gamma1_b
+            )
+        else:
+            gamma2_aa, gamma2_ab, gamma2_bb = gamma2
+
+        _, _, Ua, Ub = self._get_no_transform(
+            (gamma1_a, gamma1_b), no_transform
+        )
+        gamma2_aa_no = self._rotate_2rdm_to_no(gamma2_aa, Ua, Ua, Ua, Ua)
+        gamma2_ab_no = self._rotate_2rdm_to_no(gamma2_ab, Ua, Ub, Ua, Ub)
+        gamma2_bb_no = self._rotate_2rdm_to_no(gamma2_bb, Ub, Ub, Ub, Ub)
+        return gamma2_aa_no, gamma2_ab_no, gamma2_bb_no
+
+    def make_2rdm_no_sf(self, gamma1=None, gamma2=None, no_transform=None):
+        """
+        Spin-free UMP2 2-RDM in the common spin-free NO basis.
+        """
+        gamma2_aa_no, gamma2_ab_no, gamma2_bb_no = self.make_2rdm_no_sd(
+            gamma1, gamma2, no_transform
+        )
+        return self._make_mp2_sf_2rdm(gamma2_aa_no, gamma2_ab_no, gamma2_bb_no)
+
+    def make_2cumulant_no_sd(
+        self, gamma1=None, gamma2=None, lambda2=None, no_transform=None
+    ):
+        """
+        Spin-resolved UMP2 2-cumulants in the common spin-free NO basis.
+        """
+        if gamma1 is None:
+            gamma1_a, gamma1_b = self.make_1rdm_sd()
+        else:
+            gamma1_a, gamma1_b = gamma1
+
+        if gamma2 is None:
+            gamma2_aa, gamma2_ab, gamma2_bb = self._make_mp2_2rdm(
+                gamma1_a, gamma1_b
+            )
+        else:
+            gamma2_aa, gamma2_ab, gamma2_bb = gamma2
+
+        if lambda2 is None:
+            lambda2_aa, lambda2_ab, lambda2_bb = self.make_2cumulant_sd(
+                (gamma1_a, gamma1_b), (gamma2_aa, gamma2_ab, gamma2_bb)
+            )
+        else:
+            lambda2_aa, lambda2_ab, lambda2_bb = lambda2
+
+        _, _, Ua, Ub = self._get_no_transform(
+            (gamma1_a, gamma1_b), no_transform
+        )
+        lambda2_aa_no = self._rotate_2rdm_to_no(lambda2_aa, Ua, Ua, Ua, Ua)
+        lambda2_ab_no = self._rotate_2rdm_to_no(lambda2_ab, Ua, Ub, Ua, Ub)
+        lambda2_bb_no = self._rotate_2rdm_to_no(lambda2_bb, Ub, Ub, Ub, Ub)
+        return lambda2_aa_no, lambda2_ab_no, lambda2_bb_no
+
+    def make_cumulants_no_sd(self):
+        """
+        Spin-resolved UMP2 1-RDMs, 2-RDMs, and 2-cumulants in the common NO basis.
+        """
+        gamma1 = self.make_1rdm_sd()
+        no_transform = self._make_natural_orbital_transform(gamma1)
+        gamma2 = self.make_2rdm_sd(gamma1)
+        lambda2 = self.make_2cumulant_sd(gamma1, gamma2)
+        gamma1_no = self.make_1rdm_no_sd(gamma1, no_transform)
+        gamma2_no = self.make_2rdm_no_sd(gamma1, gamma2, no_transform)
+        lambda2_no = self.make_2cumulant_no_sd(
+            gamma1, gamma2, lambda2, no_transform
+        )
+        return gamma1_no, gamma2_no, lambda2_no
+
+    def make_cumulants_no(self):
+        """
+        Spin-free UMP2 1-RDM, 2-RDM, and 2-cumulant in the common NO basis.
+        """
+        gamma1 = self.make_1rdm_sd()
+        no_transform = self._make_natural_orbital_transform(gamma1)
+        gamma2 = self.make_2rdm_sd(gamma1)
+        gamma1_no = self.make_1rdm_no_sf(gamma1, no_transform)
+        gamma2_no = self.make_2rdm_no_sf(gamma1, gamma2, no_transform)
+        lambda2_no = self._make_mp2_sf_2cumulants(gamma1_no, gamma2_no)
+        return gamma1_no, gamma2_no, lambda2_no
+
     def _get_t2_all(self):
         if all(
             getattr(self, attr, None) is not None for attr in ("t2_a", "t2_b", "t2_ab")
