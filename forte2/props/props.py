@@ -153,3 +153,66 @@ def iao_partial_charge(system, g1_iao):
     charges = system.atomic_charges
     pop = np.array([g1diag[_[0] : _[1]].sum() for _ in center_first_and_last])
     return (g1diag, charges - pop)
+
+
+def ump2_mpq_onthefly_no(
+    mp2,
+    cache_pair_blocks=True,
+    compute=False,
+    indices=None,
+):
+    """
+    Build an on-the-fly UMP2 mutual-correlation analyzer in the common NO basis.
+
+    This convenience wrapper constructs the common spin-free UMP2 natural
+    orbitals, passes the corresponding alpha/beta MO -> NO transformations to
+    :class:`UMP2MPQOnTheFly`, and stores the NO metadata on the returned object.
+
+    Parameters
+    ----------
+    mp2
+        Executed :class:`forte2.mp.ump2.UMP2` instance.
+    cache_pair_blocks : bool, optional, default=True
+        Whether the on-the-fly analyzer should cache rotated pair blocks.
+    compute : bool, optional, default=False
+        If True, compute ``M1`` and ``M2`` before returning.
+    indices : iterable[int], optional
+        Optional orbital subset forwarded to ``make_measures`` when
+        ``compute=True``.
+
+    Returns
+    -------
+    UMP2MPQOnTheFly
+        Analyzer initialized with common spin-free UMP2 natural-orbital data.
+        Additional attributes are attached for convenience:
+        ``C_no``, ``no_occs``, ``no_transform``, ``gamma1_no_a``,
+        ``gamma1_no_b``, and ``Gamma1_no``.
+    """
+    from .mutual_correlation import UMP2MPQOnTheFly
+
+    gamma1 = mp2.make_1rdm_sd()
+    no_transform = mp2.make_natural_orbital_transform(gamma1)
+    C_no, occupations, Ua, Ub = no_transform
+
+    analyzer = UMP2MPQOnTheFly(
+        mp2,
+        Ua=Ua,
+        Ub=Ub,
+        cache_pair_blocks=cache_pair_blocks,
+    )
+
+    gamma1_no_a, gamma1_no_b = mp2.make_1rdm_no_sd(gamma1, no_transform)
+    gamma1_no = gamma1_no_a + gamma1_no_b
+
+    analyzer.C_no = C_no
+    analyzer.no_occs = occupations
+    analyzer.no_transform = no_transform
+    analyzer.gamma1_no_a = gamma1_no_a
+    analyzer.gamma1_no_b = gamma1_no_b
+    analyzer.Gamma1_no = gamma1_no
+    analyzer.Γ1 = gamma1_no
+
+    if compute:
+        analyzer.make_measures(indices=indices)
+
+    return analyzer

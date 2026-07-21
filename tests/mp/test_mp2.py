@@ -12,7 +12,9 @@ from forte2.props import (
     RMP2MPQFast,
     RMP2MPQOnTheFly,
     UMP2MPQFast,
+    UMP2MPQOnTheFly,
     MutualCorrelationAnalysis,
+    ump2_mpq_onthefly_no,
 )
 
 
@@ -336,3 +338,60 @@ def test_fast_mpq():
 
     assert scf.E == approx(euhf)
     assert mp2.E_total == approx(emp2)
+
+
+def test_ump2_common_natural_orbitals_and_mpq_wrapper():
+    # Reference energies kept for now, but not asserted in this construction test.
+    # euhf = -1.131269839709
+    # emp2 = -1.153966321003
+    xyz = """
+    H 0.0 0.0 0.0
+    H 0.0 0.0 1.4
+    """
+    system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    scf = UHF(charge=0, ms=0)(system)
+    mp2 = UMP2(store_t2=True)(scf)
+    mp2.run()
+
+    gamma1 = mp2.make_1rdm_sd()
+    no_transform = mp2.make_natural_orbital_transform(gamma1)
+    C_no, occupations, Ua, Ub = no_transform
+
+    S = system.ints_overlap()
+    gamma1_no_a, gamma1_no_b = mp2.make_1rdm_no_sd(gamma1, no_transform)
+    gamma1_no = mp2.make_1rdm_no_sf(gamma1, no_transform)
+
+    # assert scf.E == approx(euhf)
+    # assert mp2.E_total == approx(emp2)
+    assert C_no.T @ S @ C_no == approx(np.eye(mp2.nmo))
+    assert gamma1_no == approx(np.diag(occupations))
+    assert gamma1_no == approx(gamma1_no_a + gamma1_no_b)
+
+    gamma1_no_bundle, gamma2_no_bundle, lambda2_no_bundle = mp2.make_cumulants_no_sd()
+    gamma2_no_sf = mp2._make_mp2_sf_2rdm(*gamma2_no_bundle)
+    lambda2_no_sf = mp2._make_mp2_sf_2cumulants(
+        gamma1_no_bundle[0] + gamma1_no_bundle[1], gamma2_no_sf
+    )
+    lambda2_no_sf_from_sd = (
+        lambda2_no_bundle[0]
+        + lambda2_no_bundle[2]
+        + lambda2_no_bundle[1]
+        + lambda2_no_bundle[1].transpose(1, 0, 3, 2)
+    )
+
+    assert gamma1_no_bundle[0] + gamma1_no_bundle[1] == approx(gamma1_no)
+    assert lambda2_no_sf == approx(lambda2_no_sf_from_sd)
+
+    mpq = ump2_mpq_onthefly_no(mp2)
+    assert isinstance(mpq, UMP2MPQOnTheFly)
+    assert mpq.C_no == approx(C_no)
+    assert mpq.no_occs == approx(occupations)
+    assert mpq.Ua == approx(Ua)
+    assert mpq.Ub == approx(Ub)
+    assert mpq.Gamma1_no == approx(gamma1_no)
+    assert mpq.occs == approx(occupations)
+
+    M1 = mpq.make_M1(indices=[0, 1])
+    assert M1.shape == (mp2.nmo,)
+    assert np.all(M1 >= -1e-12)
