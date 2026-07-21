@@ -1348,8 +1348,6 @@ class UMP2MPQOnTheFly:
         # ------------------------------------------------------------
         # 1-RDMs
         # ------------------------------------------------------------
-        # This should use your streamed make_1rdm_sd() implementation.
-        # If your current make_1rdm_sd() still calls _get_t2_all(), patch that first.
         self.γa, self.γb = mp2.make_1rdm_sd()
 
         # ------------------------------------------------------------
