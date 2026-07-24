@@ -93,7 +93,7 @@ class Semicanonicalizer:
             system, mo_space, irrep_indices, spaces=self._semicanonical_spaces()
         )
 
-    def semi_canonicalize(self, g1: ArrayLike, C_contig: ArrayLike) -> None:
+    def semi_canonicalize(self, g1: NDArray, C_contig: NDArray) -> None:
         """
         Perform the semi-canonicalization.
 
@@ -165,7 +165,7 @@ class Semicanonicalizer:
         return spaces
 
     def _validate_inputs(
-        self, g1: ArrayLike, C_contig: ArrayLike
+        self, g1: NDArray, C_contig: NDArray
     ) -> tuple[NDArray, NDArray]:
         C_contig = np.asarray(C_contig)
         g1 = np.asarray(g1)

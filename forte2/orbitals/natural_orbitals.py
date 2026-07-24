@@ -11,6 +11,25 @@ def _validate_natural_orbital_blocks(
     nactv: int,
     require_complete: bool = False,
 ) -> list[NDArray]:
+    """
+    Helper function to validate a list of natural-orbital blocks and convert them
+    to one-dimensional integer arrays, optionally checking for completeness.
+
+    Parameters
+    ----------
+    blocks : Iterable[ArrayLike]
+        Iterable of one-dimensional arrays of active-space relative orbital indices.
+    nactv : int
+        Total number of active orbitals.
+    require_complete : bool, optional
+        If True, require that the blocks cover the full active space. Default is False.
+
+    Returns
+    -------
+    list[NDArray]
+        A list of validated and normalized natural-orbital blocks.
+    """
+
     normalized_blocks = []
     seen = np.zeros(nactv, dtype=bool)
 
@@ -39,8 +58,8 @@ def _validate_natural_orbital_blocks(
 
 
 def make_natural_orbitals(
-    C_act: ArrayLike,
-    g1_act: ArrayLike,
+    C_act: NDArray,
+    g1_act: NDArray,
     blocks: Iterable[ArrayLike] | None = None,
 ) -> tuple[NDArray, NDArray, NDArray]:
     """
@@ -91,6 +110,7 @@ def make_natural_orbitals(
         if idx.size == 0:
             continue
 
+        # diagonalize the active-space 1-RDM in the current block and sort by descending occupation
         occ, c = np.linalg.eigh(g1_act[np.ix_(idx, idx)])
         order = np.argsort(occ)[::-1]
         occ = occ[order]
@@ -139,7 +159,7 @@ class NaturalOrbitals:
         self.mo_space = mo_space
         self.orbital_blocks = OrbitalBlockBuilder(system, mo_space, irrep_indices)
 
-    def make_natural_orbitals(self, g1_act: ArrayLike, C_contig: ArrayLike) -> None:
+    def make_natural_orbitals(self, g1_act: NDArray, C_contig: NDArray) -> None:
         """
         Construct natural orbitals from a full contiguous MO coefficient matrix.
 
@@ -167,10 +187,15 @@ class NaturalOrbitals:
             blocks=active_blocks,
         )
 
+        # update the active block(s) of the full MO coefficient matrix
         self.C_natural = C_contig.copy()
         self.C_natural[:, self.mo_space.actv] = C_act_nat
+
+        # update the full-space orbital rotation matrix
         self.U = np.eye(self.mo_space.nmo, dtype=U_act.dtype)
         actv_idx = np.arange(self.mo_space.actv.start, self.mo_space.actv.stop)
         self.U[np.ix_(actv_idx, actv_idx)] = U_act
         self.Uactv = U_act
+
+        # set the natural occupation numbers
         self.nat_occs = nat_occs

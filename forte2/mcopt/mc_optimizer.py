@@ -340,10 +340,11 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         perm = self.mo_space.contig_to_orig
         self.C[0] = self._C[:, perm].copy()
 
-        self._post_process()
-
         # optionally, rotate the final orbitals to semicanonical or natural orbitals
-        self._make_final_orbitals()
+        self._rotate_final_orbitals()
+
+        # print information
+        self._post_process()
 
         convergence_status = self.ci_solver.get_convergence_status()
         if convergence_status and not all(convergence_status):
@@ -375,7 +376,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
                 self.ci_solver.evals_per_solver,
             )
 
-    def _make_final_orbitals(self) -> None:
+    def _rotate_final_orbitals(self) -> None:
         if self.final_orbitals not in ["semicanonical", "natural"]:
             return  # no final orbital transformation requested
 
