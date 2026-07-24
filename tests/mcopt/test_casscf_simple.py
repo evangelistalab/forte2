@@ -36,7 +36,7 @@ def test_casscf_h2_all_active_orbitals_frozen():
         ci_solver,
         active_frozen_orbitals=[0, 1],
         maxiter=0,
-        final_orbital="original",
+        final_orbitals="original",
     )(rhf)
     mc.run()
 
@@ -59,7 +59,7 @@ def test_casscf_h2_all_orbitals_active_positive_maxiter():
     mc = MCOptimizer(
         ci_solver,
         maxiter=5,
-        final_orbital="original",
+        final_orbitals="original",
     )(rhf)
     mc.run()
 
@@ -159,7 +159,7 @@ def test_casscf_water_nos():
         ci_solver,
         g_tol=1e-12,
         e_tol=1e-11,
-        final_orbital="natural",
+        final_orbitals="natural",
     )(rhf)
     mc.run()
     assert rhf.E == approx(erhf)

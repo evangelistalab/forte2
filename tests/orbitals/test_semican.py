@@ -14,7 +14,7 @@ from forte2 import (
 )
 from forte2.helpers.comparisons import approx
 from forte2.orbitals import (
-    NaturalOrbital,
+    NaturalOrbitals,
     OrbitalBlockBuilder,
     Semicanonicalizer,
 )
@@ -58,7 +58,7 @@ def test_semican_ci():
         State(nel=rhf.nel, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1, 2, 3],
         active_orbitals=[4, 5, 6, 7, 8, 9],
-        final_orbital="semicanonical",
+        final_orbitals="semicanonical",
     )(rhf)
     ci.run()
     eci_orig = ci.evals_flat[0]
@@ -232,7 +232,7 @@ def test_natural_orbital_preserves_blocks():
         point_group = "D2H"
 
     mo_space = MOSpace(nmo=4, active_orbitals=[0, 1, 2, 3])
-    natural_orbital = NaturalOrbital(DummySystem(), mo_space, [0, 2, 0, 2])
+    natural_orbital = NaturalOrbitals(DummySystem(), mo_space, [0, 2, 0, 2])
     natural_orbital.make_natural_orbitals(g1_act=g1_act, C_contig=C_contig)
 
     U_nat = natural_orbital.Uactv
@@ -256,7 +256,7 @@ def test_natural_orbital_requires_complete_active_blocks():
         point_group = "C1"
 
     mo_space = MOSpace(nmo=3, active_orbitals=[0, 1])
-    natural_orbital = NaturalOrbital(DummySystem(), mo_space)
+    natural_orbital = NaturalOrbitals(DummySystem(), mo_space)
     natural_orbital.orbital_blocks.active_blocks = lambda relative=True: [np.array([0])]
 
     with pytest.raises(ValueError, match="cover the full active space"):

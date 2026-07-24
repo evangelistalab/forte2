@@ -197,7 +197,7 @@ def test_gasscf_nos():
         active_orbitals=[[2, 3, 4], [5, 6]],
     )
     mc = MCOptimizer(
-        ci_solver, e_tol=1e-7, g_tol=1e-6, maxiter=100, final_orbital="natural"
+        ci_solver, e_tol=1e-7, g_tol=1e-6, maxiter=100, final_orbitals="natural"
     )(rhf)
     mc.run()
 

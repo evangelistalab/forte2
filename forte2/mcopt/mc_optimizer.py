@@ -13,7 +13,7 @@ from forte2.base_classes import (
     MOSpaceMixin,
 )
 from forte2.orbitals import (
-    NaturalOrbital,
+    NaturalOrbitals,
     Semicanonicalizer,
 )
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
@@ -56,7 +56,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         Maximum orbital rotation size for L-BFGS.
     do_transition_dipole : bool, optional, default=False
         Whether to compute and report transition dipole moments at the end of the optimization.
-    final_orbital : str, optional, default="semicanonical"
+    final_orbitals : str, optional, default="semicanonical"
         Specify the type of final orbitals. Allowed values are:
         - "semicanonical": The average Fock matrix is diagonal within each orbital subspace.
         - "natural": Same as semicanonical, but the active orbitals are natural orbitals
@@ -91,7 +91,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
     ### Post-iteration
     do_transition_dipole: bool = False
-    final_orbital: str = "semicanonical"
+    final_orbitals: str = "semicanonical"
 
     ### Non-init attributes
     converged: bool = field(default=False, init=False)
@@ -101,13 +101,13 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         if not isinstance(self.ci_solver, (CIBase, RelCIBase)):
             raise ValueError("ci_solver must be an instance of CIBase or RelCIBase.")
 
-        if self.final_orbital not in [
+        if self.final_orbitals not in [
             "semicanonical",
             "natural",
             "original",
         ]:
             raise ValueError(
-                "final_orbital must be either 'semicanonical', 'natural', or 'original'."
+                "final_orbitals must be either 'semicanonical', 'natural', or 'original'."
             )
 
     def __call__(self, method):
@@ -375,7 +375,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             )
 
     def _make_final_orbitals(self) -> None:
-        if self.final_orbital not in ["semicanonical", "natural"]:
+        if self.final_orbitals not in ["semicanonical", "natural"]:
             return  # no semicanonicalization requested
 
         C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
@@ -407,7 +407,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             irrep_indices=irrep_indices,
             mix_inactive=False,
             mix_active=False,
-            do_active=(self.final_orbital == "semicanonical"),
+            do_active=(self.final_orbitals == "semicanonical"),
         )
         semi.semi_canonicalize(
             g1=g1_act,
@@ -417,7 +417,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
         # If natural orbitals are requested, diagonalize the spin- and state-averaged
         # 1-RDM within each separate GAS subspace.
-        if self.final_orbital == "natural":
+        if self.final_orbitals == "natural":
             C_final = self._make_natural_orbitals_contig(g1_act, C_final, irrep_indices)
 
         return C_final
@@ -425,7 +425,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
     def _make_natural_orbitals_contig(
         self, g1_act: NDArray, C_contig: NDArray, irrep_indices: NDArray
     ) -> NDArray:
-        natural_orbital = NaturalOrbital(
+        natural_orbital = NaturalOrbitals(
             self.system,
             self.mo_space,
             irrep_indices=irrep_indices,

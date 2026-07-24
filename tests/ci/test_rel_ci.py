@@ -69,7 +69,7 @@ def test_rel_ci_hf_ghf():
         core_orbitals=2,
         active_orbitals=12,
         do_test_rdms=True,
-        final_orbital="semicanonical",
+        final_orbitals="semicanonical",
     )(scf)
     ci.run()
     assert ci.E[0] == approx(eref)

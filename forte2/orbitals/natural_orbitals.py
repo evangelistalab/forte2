@@ -50,7 +50,7 @@ def make_natural_orbitals(
     preserve GAS partitions, point-group irreps, or both, by passing active-space
     relative index blocks.
 
-    This function is intended to be used by the NaturalOrbital class, which handles
+    This function is intended to be used by the NaturalOrbitals class, which handles
     the bookkeeping of the full MO coefficient matrix and the orbital rotation matrix.
 
     Parameters
@@ -102,7 +102,7 @@ def make_natural_orbitals(
     return C_act @ U_nat, U_nat, occupations
 
 
-class NaturalOrbital:
+class NaturalOrbitals:
     """
     A helper class to build active-space natural orbitals while preserving
     GAS and symmetry blocks using information from the System and MO space objects.
