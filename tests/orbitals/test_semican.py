@@ -93,7 +93,7 @@ def test_semican_casscf():
     )
     mc = MCOptimizer(
         ci_solver,
-        final_orbital="semicanonical",
+        final_orbitals="semicanonical",
     )(rhf)
     mc.run()
     eci_orig = mc.ci_solver.evals_flat[0]
@@ -126,7 +126,7 @@ def test_semican_fock_offdiag():
         State(nel=rhf.nel, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1, 2, 3],
         active_orbitals=[4, 5, 6, 7, 8, 9],
-        final_orbital="original",
+        final_orbitals="original",
     )(rhf)
     ci.run()
     assert ci.evals_flat[0] == approx(-109.01444624968038)
@@ -289,7 +289,7 @@ def test_semican_orbitals():
     )
     mc = MCOptimizer(
         ci_solver,
-        final_orbital="semicanonical",
+        final_orbitals="semicanonical",
     )(rhf)
     mc.run()
     c_mc = mc.C[0].copy()
