@@ -391,8 +391,14 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
         # rerun the CI solver in the final orbital basis to get the final energies
         new_E_ci, new_E_avg = self._rerun_ci_in_current_basis()
-        self._check_final_orbital_energy_invariance(new_E_ci, new_E_avg)
 
+        if self.ci_solver.orbital_rotation_invariant:
+            self._check_final_orbital_energy_invariance(new_E_ci, new_E_avg)
+        else:
+            self._report_final_orbital_energy_change(
+                self.E_ci,
+                new_E_ci,
+            )
         # update energies
         self.E_ci = new_E_ci
         self.E_avg = new_E_avg
@@ -486,6 +492,19 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
             raise RuntimeError(
                 "After producing the final orbitals, the CI solver converged to different roots."
+            )
+
+    def _report_final_orbital_energy_change(
+        self,
+        old_E_ci,
+        new_E_ci,
+    ):
+        max_de = np.max(np.abs(old_E_ci - new_E_ci))
+
+        if max_de > self.e_tol:
+            logger.log_warning(
+                "The active-space solver is not invariant to final orbital "
+                f"rotations; the final-basis CI energies changed by up to {max_de:.4e}."
             )
 
     def _print_ao_composition(self):

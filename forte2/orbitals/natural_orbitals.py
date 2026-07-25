@@ -35,13 +35,17 @@ def _validate_natural_orbital_blocks(
 
     for block in blocks:
         idx = np.asarray(block, dtype=int)
+        if idx.ndim != 1:
+            raise ValueError("Each natural-orbital block must be one-dimensional.")
         if idx.size == 0:
             normalized_blocks.append(idx)
             continue
-        if idx.ndim != 1:
-            raise ValueError("Each natural-orbital block must be one-dimensional.")
         if np.any(idx < 0) or np.any(idx >= nactv):
             raise ValueError("Natural-orbital block indices are out of bounds.")
+        if np.unique(idx).size != idx.size:
+            raise ValueError(
+                "Natural-orbital blocks must not contain duplicate indices."
+            )
         if np.any(seen[idx]):
             raise ValueError("Natural-orbital blocks must not overlap.")
         seen[idx] = True

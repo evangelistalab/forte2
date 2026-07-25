@@ -6,6 +6,19 @@ from forte2.helpers.comparisons import approx
 from forte2.ci import RelCI
 
 
+def test_rel_ci_orbital_invariance_is_true():
+    # test that the orbital rotation invariance flag is set to True for RelCI
+    xyz = """H 0.0 0.0 0.0"""
+
+    system = System(
+        xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
+    )
+    scf = GHF(charge=0, e_tol=1e-12)(system)
+    conv = SpinorUpcaster(apply_random_phase=True)(scf)
+    ci = RelCI(nel=1, active_orbitals=2, do_test_rdms=True)(conv)
+    assert ci.orbital_rotation_invariant
+
+
 def test_rel_ci_h2():
     # equivalent to test_slater_rules::test_slater_rules_1_complex
     xyz = """
@@ -20,6 +33,7 @@ def test_rel_ci_h2():
     conv = SpinorUpcaster(apply_random_phase=True)(scf)
 
     ci = RelCI(nel=2, active_orbitals=4, do_test_rdms=True)(conv)
+
     ci.run()
     assert ci.E[0] == approx(-1.096071975854)
 

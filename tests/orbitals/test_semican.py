@@ -17,6 +17,7 @@ from forte2.orbitals import (
     NaturalOrbitals,
     OrbitalBlockBuilder,
     Semicanonicalizer,
+    make_natural_orbitals,
 )
 from forte2.base_classes import DavidsonLiuParams
 
@@ -261,6 +262,24 @@ def test_natural_orbital_requires_complete_active_blocks():
 
     with pytest.raises(ValueError, match="cover the full active space"):
         natural_orbital.make_natural_orbitals(g1_act=np.eye(2), C_contig=np.eye(3))
+
+
+def test_natural_orbital_rejects_duplicate_block_indices():
+    with pytest.raises(ValueError, match="must not contain duplicate indices"):
+        make_natural_orbitals(
+            C_act=np.eye(2),
+            g1_act=np.eye(2),
+            blocks=[[0, 0], [1]],
+        )
+
+
+def test_natural_orbital_rejects_multidimensional_empty_block():
+    with pytest.raises(ValueError, match="must be one-dimensional"):
+        make_natural_orbitals(
+            C_act=np.eye(2),
+            g1_act=np.eye(2),
+            blocks=[np.empty((1, 0), dtype=int)],
+        )
 
 
 def test_semican_orbitals():

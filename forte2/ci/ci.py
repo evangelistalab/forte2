@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from collections import OrderedDict
+from typing import ClassVar
 
 import numpy as np
 from numpy.typing import NDArray
@@ -1250,6 +1251,8 @@ class CISolver(CIBase):
         The average energy computed from the state-averaged CI roots.
     """
 
+    orbital_rotation_invariant: ClassVar[bool] = True
+
     ci_params: CIParams = field(default_factory=CIParams)
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
     do_test_rdms: bool = False
@@ -1692,6 +1695,8 @@ class RelCISolver(RelCIBase):
     log_level : int, optional
         The logging level for the CI solver. Defaults to the global logger's verbosity level.
     """
+
+    orbital_rotation_invariant: ClassVar[bool] = True
 
     davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
     ci_params: CIParams = field(default_factory=CIParams)
