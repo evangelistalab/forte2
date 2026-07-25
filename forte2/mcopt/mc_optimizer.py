@@ -437,7 +437,6 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         # 1-RDM within each separate GAS subspace.
         if self.final_orbitals == "natural":
             natural_orbital = NaturalOrbitals(
-                self.system,
                 self.mo_space,
                 irrep_indices=irrep_indices,
             )

@@ -1,22 +1,22 @@
 from collections.abc import Iterable
-from typing import TypeAlias
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
-from forte2.state.mo_space import blocks_by_labels, slice_indices
 
-OrbitalSpace: TypeAlias = str | slice
+def _slice_indices(sl: slice) -> NDArray:
+    """Return the orbital indices covered by a contiguous MO space slice."""
+    return np.arange(sl.start, sl.stop)
 
 
-def _normalize_spaces(
-    spaces: OrbitalSpace | Iterable[OrbitalSpace] | None,
-) -> list[OrbitalSpace] | None:
-    if spaces is None:
-        return None
-    if isinstance(spaces, (str, slice)):
-        return [spaces]
-    return list(spaces)
+def _blocks_by_labels(sl: slice, labels: NDArray) -> list[NDArray]:
+    """Split a contiguous MO space slice into blocks with indices having the same labels."""
+    idx = _slice_indices(sl)
+    if idx.size == 0:
+        return [idx]
+
+    block_labels = labels[idx]
+    return [idx[block_labels == label] for label in range(int(labels.max()) + 1)]
 
 
 class OrbitalBlockBuilder:
@@ -24,41 +24,29 @@ class OrbitalBlockBuilder:
     Build orbital index blocks that preserve requested orbital structure.
 
     The returned indices are in contiguous MO ordering unless noted otherwise.
-    If irrep labels are provided for a non-C1 system, each requested slice is
-    split into irrep-homogeneous blocks. GAS structure is preserved by applying
-    this splitting separately to each GAS slice.
+    If irrep labels are provided, each requested slice is split into irrep
+    subblocks. The GAS structure is preserved by applying this splitting
+    separately to each GAS slice.
 
     Parameters
     ----------
-    system : forte2.System
-        System object used to determine whether point-group symmetry is active.
     mo_space : forte2.MOSpace | forte2.EmbeddingMOSpace
         MO-space partition. Named spaces are resolved as attributes of this object.
     irrep_indices : np.ndarray or list[int], optional
         Orbital irrep labels in contiguous MO ordering.
-    spaces : list[str | slice], optional
-        Default orbital spaces to use when ``blocks_for_spaces`` is called without
-        an explicit list. Strings name ``mo_space`` attributes, for example
-        ``"core"``, ``"gas"``, ``"actv"``, or ``"virt"``. A name that resolves to
-        a list of slices, such as ``"gas"``, is expanded while preserving the list
-        order.
     """
 
     def __init__(
         self,
-        system,
         mo_space,
         irrep_indices: ArrayLike | None = None,
-        spaces: OrbitalSpace | Iterable[OrbitalSpace] | None = None,
     ) -> None:
         if mo_space is None:
             raise ValueError("mo_space is required.")
         if not hasattr(mo_space, "nmo"):
             raise ValueError("mo_space must define nmo.")
 
-        self.system = system
         self.mo_space = mo_space
-        self.spaces = _normalize_spaces(spaces)
         self.irrep_indices = (
             None if irrep_indices is None else np.asarray(irrep_indices, dtype=int)
         )
@@ -66,43 +54,12 @@ class OrbitalBlockBuilder:
             self.mo_space.nmo,
         ):
             raise ValueError("irrep_indices must have one entry per MO.")
-
-    def slices_for_space(self, space: OrbitalSpace) -> list[slice]:
-        """
-        Resolve a named orbital space to one or more contiguous MO slices.
-
-        Parameters
-        ----------
-        space : str or slice
-            A string naming an attribute on ``mo_space`` or a slice in contiguous
-            MO ordering. Names that resolve to lists of slices, such as ``"gas"``,
-            are expanded.
-
-        Returns
-        -------
-        list[slice]
-            Contiguous MO-space slices.
-        """
-        if isinstance(space, slice):
-            return [space]
-
-        if not isinstance(space, str):
-            raise TypeError("Orbital spaces must be specified as strings or slices.")
-
-        if not hasattr(self.mo_space, space):
-            raise ValueError(f"Unknown orbital space: {space!r}.")
-
-        value = getattr(self.mo_space, space)
-        if isinstance(value, slice):
-            return [value]
-        if isinstance(value, list) and all(isinstance(sl, slice) for sl in value):
-            return value
-
-        raise TypeError(f"Orbital space {space!r} does not resolve to slice objects.")
+        if self.irrep_indices is not None and np.any(self.irrep_indices < 0):
+            raise ValueError("irrep_indices must be non-negative.")
 
     def blocks_for_slice(self, sl: slice) -> list[NDArray]:
         """
-        Return independent rotation blocks for a contiguous MO-space slice.
+        Return independent rotation blocks for a contiguous MO space slice.
 
         Parameters
         ----------
@@ -120,61 +77,63 @@ class OrbitalBlockBuilder:
                 "Orbital slices must have explicit start/stop and unit step."
             )
 
-        idx = slice_indices(sl)
-        if (
-            self.irrep_indices is None
-            or getattr(self.system, "point_group", "C1").upper() == "C1"
-            or idx.size == 0
-        ):
+        if not 0 <= sl.start <= sl.stop <= self.mo_space.nmo:
+            raise ValueError("Orbital slice is outside the MO space.")
+
+        idx = _slice_indices(sl)
+        if self.irrep_indices is None or idx.size == 0:
             return [idx]
 
-        return blocks_by_labels(sl, self.irrep_indices, self.mo_space.nmo)
+        return _blocks_by_labels(sl, self.irrep_indices)
 
-    def blocks_for_spaces(
-        self,
-        spaces: OrbitalSpace | Iterable[OrbitalSpace] | None = None,
-        relative_to: OrbitalSpace | None = None,
-    ) -> list[NDArray]:
+    def blocks_for_space(self, label: str) -> list[NDArray]:
+        """
+        Return independent rotation blocks for an orbital space.
+
+        Parameters
+        ----------
+        name : str
+            Name of an attribute on ``mo_space`` that resolves to a slice or a
+            list of slices.
+
+        Returns
+        -------
+        list[np.ndarray]
+            Contiguous-order orbital index blocks.
+        """
+        if not isinstance(label, str):
+            raise TypeError("Orbital space names must be strings.")
+        if not hasattr(self.mo_space, label):
+            raise ValueError(f"Unknown orbital space: {label!r}.")
+
+        value = getattr(self.mo_space, label)
+        slices = value if isinstance(value, list) else [value]
+        if not all(isinstance(sl, slice) for sl in slices):
+            raise TypeError(
+                f"Orbital space {label!r} does not resolve to slice objects."
+            )
+
+        return [block for sl in slices for block in self.blocks_for_slice(sl)]
+
+    def blocks_for_spaces(self, labels: Iterable[str]) -> list[NDArray]:
         """
         Return independent rotation blocks for named orbital spaces.
 
         Parameters
         ----------
-        spaces : list[str | slice] or str or slice, optional
-            Orbital spaces to split into blocks. If omitted, the default spaces
-            passed to ``__init__`` are used. Strings name ``mo_space`` attributes.
-        relative_to : str or slice, optional
-            If provided, subtract the start of this space from every returned
-            block. This is useful when full-space blocks are needed in a local
-            subspace coordinate system, for example active-space relative indices.
+        names : iterable[str]
+            Names of ``mo_space`` attributes that resolve to slices.
 
         Returns
         -------
         list[np.ndarray]
-            Contiguous-order index arrays, optionally shifted by ``relative_to``.
+            Contiguous-order orbital index blocks.
         """
-        if spaces is None:
-            if self.spaces is None:
-                raise ValueError("Orbital spaces must be provided.")
-            spaces = self.spaces
-        else:
-            spaces = _normalize_spaces(spaces)
+        if isinstance(labels, str):
+            raise TypeError("Use blocks_for_space() for a single orbital space.")
+        return [block for label in labels for block in self.blocks_for_space(label)]
 
-        offset = 0
-        if relative_to is not None:
-            reference_slices = self.slices_for_space(relative_to)
-            if len(reference_slices) != 1:
-                raise ValueError("relative_to must resolve to exactly one slice.")
-            offset = reference_slices[0].start
-
-        blocks = []
-        for space in spaces:
-            for sl in self.slices_for_space(space):
-                for block in self.blocks_for_slice(sl):
-                    blocks.append(block - offset)
-        return blocks
-
-    def active_blocks(self, relative: bool = True) -> list[NDArray]:
+    def active_blocks(self, relative_index: bool = True) -> list[NDArray]:
         """
         Return active-space blocks preserving GAS and symmetry structure.
 
@@ -190,6 +149,9 @@ class OrbitalBlockBuilder:
             Active orbital index blocks. GAS slices are kept separate, and each
             GAS is split further by irrep when irrep labels are available.
         """
-        spaces = ["gas"] if hasattr(self.mo_space, "gas") else ["actv"]
-        relative_to = "actv" if relative else None
-        return self.blocks_for_spaces(spaces, relative_to=relative_to)
+        name = "gas" if hasattr(self.mo_space, "gas") else "actv"
+        blocks = self.blocks_for_space(name)
+        if relative_index:
+            offset = self.mo_space.actv.start
+            blocks = [block - offset for block in blocks]
+        return blocks

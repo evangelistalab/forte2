@@ -129,19 +129,17 @@ def make_natural_orbitals(
 class NaturalOrbitals:
     """
     A helper class to build active-space natural orbitals while preserving
-    GAS and symmetry blocks using information from the System and MO space objects.
+    GAS and symmetry blocks defined by the MO space and optional irrep labels.
 
     Parameters
     ----------
-    system: forte2.System
-        System object used to determine whether point-group symmetry is active.
-    mo_space: forte2.MOSpace | forte2.EmbeddingMOSpace
+    mo_space : forte2.MOSpace | forte2.EmbeddingMOSpace
         MO-space partition. The active-space slice and GAS slices are taken from
         this object.
     irrep_indices : np.ndarray or list[int], optional
         Orbital irrep labels in the same contiguous ordering as ``C_contig``.
-        If provided for a non-C1 system, natural orbitals are formed separately
-        inside each active-space irrep block and GAS partition.
+        If provided, natural orbitals are formed separately inside each
+        active-space irrep block and GAS partition.
 
     Attributes
     ----------
@@ -156,12 +154,9 @@ class NaturalOrbitals:
         Natural occupation numbers in the returned active orbital order.
     """
 
-    def __init__(
-        self, system, mo_space, irrep_indices: ArrayLike | None = None
-    ) -> None:
-        self.system = system
+    def __init__(self, mo_space, irrep_indices: ArrayLike | None = None) -> None:
         self.mo_space = mo_space
-        self.orbital_blocks = OrbitalBlockBuilder(system, mo_space, irrep_indices)
+        self.orbital_blocks = OrbitalBlockBuilder(mo_space, irrep_indices)
 
     def make_natural_orbitals(self, g1_act: NDArray, C_contig: NDArray) -> None:
         """
@@ -181,7 +176,7 @@ class NaturalOrbitals:
             raise ValueError("C_contig must have one column per MO.")
 
         nactv = self.mo_space.actv.stop - self.mo_space.actv.start
-        active_blocks = self.orbital_blocks.active_blocks(relative=True)
+        active_blocks = self.orbital_blocks.active_blocks(relative_index=True)
         active_blocks = _validate_natural_orbital_blocks(
             active_blocks, nactv, require_complete=True
         )

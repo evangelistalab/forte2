@@ -89,9 +89,7 @@ class Semicanonicalizer:
         self.mix_active = mix_active
         self.do_frozen = do_frozen
         self.do_active = do_active
-        self.orbital_blocks = OrbitalBlockBuilder(
-            system, mo_space, irrep_indices, spaces=self._semicanonical_spaces()
-        )
+        self.orbital_blocks = OrbitalBlockBuilder(mo_space, irrep_indices)
 
     def semi_canonicalize(self, g1: NDArray, C_contig: NDArray) -> None:
         """
@@ -116,7 +114,9 @@ class Semicanonicalizer:
             return np.linalg.eigh(self.fock[np.ix_(idx, idx)])
 
         # This loop diagonalizes Fock blocks in the requested orbital subspaces.
-        for orb_idx in self.orbital_blocks.blocks_for_spaces():
+        for orb_idx in self.orbital_blocks.blocks_for_spaces(
+            self._semicanonical_spaces()
+        ):
             # avoid calling eigh on empty arrays
             if orb_idx.size == 0:
                 continue

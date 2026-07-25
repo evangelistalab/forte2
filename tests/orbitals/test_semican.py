@@ -162,15 +162,12 @@ def test_semican_preserves_irrep_blocks():
         fock_builder = None
 
     mo_space = MOSpace(nmo=4, active_orbitals=[0, 1, 2, 3])
-    orbital_blocks = OrbitalBlockBuilder(DummySystem(), mo_space, [0, 2, 0, 2])
+    orbital_blocks = OrbitalBlockBuilder(mo_space, [0, 2, 0, 2])
     blocks = orbital_blocks.blocks_for_slice(mo_space.actv)
     assert [block.tolist() for block in blocks] == [[0, 2], [], [1, 3]]
     blocks = orbital_blocks.blocks_for_spaces(["gas"])
     assert [block.tolist() for block in blocks] == [[0, 2], [], [1, 3]]
-    orbital_blocks = OrbitalBlockBuilder(
-        DummySystem(), mo_space, [0, 2, 0, 2], spaces=["gas"]
-    )
-    blocks = orbital_blocks.blocks_for_spaces()
+    blocks = orbital_blocks.blocks_for_space("gas")
     assert [block.tolist() for block in blocks] == [[0, 2], [], [1, 3]]
 
     semi = Semicanonicalizer(
@@ -195,14 +192,14 @@ def test_semican_preserves_irrep_blocks():
 
 
 def test_orbital_block_builder_rejects_unknown_space():
-    class DummySystem:
-        point_group = "C1"
-
     mo_space = MOSpace(nmo=2, active_orbitals=[0])
-    orbital_blocks = OrbitalBlockBuilder(DummySystem(), mo_space)
+    orbital_blocks = OrbitalBlockBuilder(mo_space)
 
     with pytest.raises(ValueError, match="Unknown orbital space"):
         orbital_blocks.blocks_for_spaces(["active"])
+
+    with pytest.raises(TypeError, match="blocks_for_space"):
+        orbital_blocks.blocks_for_spaces("gas")
 
 
 def test_semican_validates_input_shapes():
@@ -229,11 +226,8 @@ def test_natural_orbital_preserves_blocks():
         ]
     )
 
-    class DummySystem:
-        point_group = "D2H"
-
     mo_space = MOSpace(nmo=4, active_orbitals=[0, 1, 2, 3])
-    natural_orbital = NaturalOrbitals(DummySystem(), mo_space, [0, 2, 0, 2])
+    natural_orbital = NaturalOrbitals(mo_space, [0, 2, 0, 2])
     natural_orbital.make_natural_orbitals(g1_act=g1_act, C_contig=C_contig)
 
     U_nat = natural_orbital.Uactv
@@ -253,12 +247,11 @@ def test_natural_orbital_preserves_blocks():
 
 
 def test_natural_orbital_requires_complete_active_blocks():
-    class DummySystem:
-        point_group = "C1"
-
     mo_space = MOSpace(nmo=3, active_orbitals=[0, 1])
-    natural_orbital = NaturalOrbitals(DummySystem(), mo_space)
-    natural_orbital.orbital_blocks.active_blocks = lambda relative=True: [np.array([0])]
+    natural_orbital = NaturalOrbitals(mo_space)
+    natural_orbital.orbital_blocks.active_blocks = lambda relative_index=True: [
+        np.array([0])
+    ]
 
     with pytest.raises(ValueError, match="cover the full active space"):
         natural_orbital.make_natural_orbitals(g1_act=np.eye(2), C_contig=np.eye(3))
