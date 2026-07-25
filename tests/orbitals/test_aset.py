@@ -57,7 +57,7 @@ def test_aset_1_forte_v1_embedding_1():
     )(mc)
     ci = CI(
         State(system=system, multiplicity=1, ms=0.0),
-        final_orbital="semicanonical",
+        final_orbitals="semicanonical",
     )(aset)
     dsrg = DSRG_MRPT2(flow_param=0.5)(ci)
     dsrg.run()
@@ -119,7 +119,7 @@ def test_aset_4_forte_v1_embedding_4():
     )(mc)
     ci = CI(
         State(system=system, multiplicity=1, ms=0.0),
-        final_orbital="semicanonical",
+        final_orbitals="semicanonical",
     )(aset)
     dsrg = DSRG_MRPT2(flow_param=0.5)(ci)
     dsrg.run()
