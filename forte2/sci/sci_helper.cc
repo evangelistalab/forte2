@@ -9,13 +9,19 @@
 namespace forte2 {
 
 SelectedCIHelper::SelectedCIHelper(size_t norb, const std::vector<Determinant>& dets, np_matrix& c,
-                                   double E, np_matrix& H, np_tensor4& V, int log_level)
+                                   double E, np_matrix& H, np_tensor4& V, int log_level,
+                                   const std::string& screening_criterion,
+                                   const std::vector<size_t>& frozen_creation,
+                                   const std::vector<size_t>& frozen_annihilation)
     : norb_(norb), norb2_(norb * norb), norb3_(norb * norb * norb), dets_(dets), c_guess_(c),
       log_level_(log_level), slater_rules_(norb, E, H, V) {
     if (dets.empty()) {
         throw std::runtime_error("The list of determinants cannot be empty.");
     }
 
+    set_screening_criterion(screening_criterion);
+    set_frozen_creation(frozen_creation);
+    set_frozen_annihilation(frozen_annihilation);
     set_Hamiltonian(E, H, V);
     set_c(c);
     root_energies_.resize(nroots_, 0.0);
@@ -113,28 +119,6 @@ double evaluate_criterion(double delta, double v, ScreeningCriterion criterion) 
 }
 
 void SelectedCIHelper::update_hbci_ints() {
-    // Precompute sorted lists of two-electron integrals for each (p, q) pair
-    // (p,q) -> [|<pq|rs>^2/(ep+eq-er-es)|, r, s), ...] sorted in descending order
-    v_sorted_.resize(norb_ * norb_);
-    for (size_t p{0}; p < norb_; ++p) {
-        for (size_t q{0}; q < norb_; ++q) {
-            std::vector<std::tuple<double, double, u_int32_t, u_int32_t>> v_list;
-            v_list.reserve(norb_ * norb_);
-            for (size_t r{0}; r < norb_; ++r) {
-                for (size_t s{0}; s < norb_; ++s) {
-                    const double delta = epsilon_[p] + epsilon_[q] - epsilon_[r] - epsilon_[s];
-                    const double v = V(p, q, r, s);
-                    const double val = evaluate_criterion(delta, v, screening_criterion_);
-                    if (std::fabs(val) > integral_threshold)
-                        v_list.emplace_back(val, v, r, s);
-                }
-            }
-            // sort in descending order by absolute value of the integral
-            std::sort(v_list.rbegin(), v_list.rend());
-            v_sorted_[p * norb_ + q] = std::move(v_list);
-        }
-    }
-
     // Precompute sorted lists of two-electron integrals for each (p, q) pair
     // (p,q) -> [|<pq||rs>^2/(ep+eq-er-es)|, r, s), ...] sorted in descending order
     va_sorted_.resize(norb_ * norb_);
