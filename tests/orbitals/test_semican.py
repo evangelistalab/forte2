@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from forte2 import (
     System,
@@ -12,10 +13,14 @@ from forte2 import (
     CISolver,
 )
 from forte2.helpers.comparisons import approx
-from forte2.orbitals import Semicanonicalizer
-from forte2.state import EmbeddingMOSpace
+from forte2.orbitals import (
+    NaturalOrbitals,
+    OrbitalBlockBuilder,
+    Semicanonicalizer,
+    make_natural_orbitals,
+)
 from forte2.base_classes import DavidsonLiuParams
-from forte2.state.mo_space import blocks_by_labels
+from forte2.state import EmbeddingMOSpace
 
 
 def test_semican_rhf():
@@ -55,7 +60,7 @@ def test_semican_ci():
         State(nel=rhf.nel, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1, 2, 3],
         active_orbitals=[4, 5, 6, 7, 8, 9],
-        final_orbital="semicanonical",
+        final_orbitals="semicanonical",
     )(rhf)
     ci.run()
     eci_orig = ci.evals_flat[0]
@@ -90,7 +95,7 @@ def test_semican_casscf():
     )
     mc = MCOptimizer(
         ci_solver,
-        final_orbital="semicanonical",
+        final_orbitals="semicanonical",
     )(rhf)
     mc.run()
     eci_orig = mc.ci_solver.evals_flat[0]
@@ -123,7 +128,7 @@ def test_semican_fock_offdiag():
         State(nel=rhf.nel, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1, 2, 3],
         active_orbitals=[4, 5, 6, 7, 8, 9],
-        final_orbital="original",
+        final_orbitals="original",
     )(rhf)
     ci.run()
     assert ci.evals_flat[0] == approx(-109.01444624968038)
@@ -158,7 +163,12 @@ def test_semican_preserves_irrep_blocks():
         fock_builder = None
 
     mo_space = MOSpace(nmo=4, active_orbitals=[0, 1, 2, 3])
-    blocks = blocks_by_labels(mo_space.actv, [0, 2, 0, 2], mo_space.nmo)
+    orbital_blocks = OrbitalBlockBuilder(mo_space, [0, 2, 0, 2])
+    blocks = orbital_blocks.blocks_for_slice(mo_space.actv)
+    assert [block.tolist() for block in blocks] == [[0, 2], [], [1, 3]]
+    blocks = orbital_blocks.blocks_for_spaces(["gas"])
+    assert [block.tolist() for block in blocks] == [[0, 2], [], [1, 3]]
+    blocks = orbital_blocks.blocks_for_space("gas")
     assert [block.tolist() for block in blocks] == [[0, 2], [], [1, 3]]
 
     semi = Semicanonicalizer(
@@ -183,6 +193,10 @@ def test_semican_preserves_irrep_blocks():
 
 
 def test_semican_embedding_gas_blocks():
+    class DummySystem:
+        two_component = False
+        fock_builder = None
+
     mo_space = EmbeddingMOSpace(
         nmo=10,
         frozen_core_orbitals=[0],
@@ -194,17 +208,101 @@ def test_semican_embedding_gas_blocks():
         frozen_virtual_orbitals=[9],
     )
 
-    semi = Semicanonicalizer.__new__(Semicanonicalizer)
-    semi.mo_space = mo_space
-    semi.do_frozen = True
-    semi.do_active = True
-    semi.mix_active = False
+    semi = Semicanonicalizer(system=DummySystem(), mo_space=mo_space)
+    spaces = semi._semicanonical_spaces()
+    assert "gas" in spaces
+    assert "actv" not in spaces
 
-    slice_list = semi._generate_elementary_spaces()
+    mixed = Semicanonicalizer(
+        system=DummySystem(), mo_space=mo_space, mix_active=True
+    )
+    spaces = mixed._semicanonical_spaces()
+    assert "actv" in spaces
+    assert "gas" not in spaces
 
-    assert (mo_space.gas[0], "gas1") in slice_list
-    assert (mo_space.gas[1], "gas2") in slice_list
-    assert (mo_space.actv, "actv") not in slice_list
+
+def test_orbital_block_builder_rejects_unknown_space():
+    mo_space = MOSpace(nmo=2, active_orbitals=[0])
+    orbital_blocks = OrbitalBlockBuilder(mo_space)
+
+    with pytest.raises(ValueError, match="Unknown orbital space"):
+        orbital_blocks.blocks_for_spaces(["active"])
+
+    with pytest.raises(TypeError, match="blocks_for_space"):
+        orbital_blocks.blocks_for_spaces("gas")
+
+
+def test_semican_validates_input_shapes():
+    class DummySystem:
+        two_component = False
+        point_group = "C1"
+        fock_builder = None
+
+    mo_space = MOSpace(nmo=3, core_orbitals=[0], active_orbitals=[1])
+    semi = Semicanonicalizer(system=DummySystem(), mo_space=mo_space)
+
+    with pytest.raises(ValueError, match="g1 must have shape"):
+        semi.semi_canonicalize(g1=np.eye(2), C_contig=np.eye(3))
+
+
+def test_natural_orbital_preserves_blocks():
+    C_contig = np.eye(4)
+    g1_act = np.array(
+        [
+            [1.0, 0.0, 0.3, 0.0],
+            [0.0, 1.8, 0.0, 0.2],
+            [0.3, 0.0, 1.2, 0.0],
+            [0.0, 0.2, 0.0, 1.6],
+        ]
+    )
+
+    mo_space = MOSpace(nmo=4, active_orbitals=[0, 1, 2, 3])
+    natural_orbital = NaturalOrbitals(mo_space, [0, 2, 0, 2])
+    natural_orbital.make_natural_orbitals(g1_act=g1_act, C_contig=C_contig)
+
+    U_nat = natural_orbital.Uactv
+
+    irreps = np.array([0, 2, 0, 2])
+    cross_irrep = irreps[:, None] != irreps[None, :]
+    assert np.allclose(U_nat[cross_irrep], 0.0)
+    g1_nat = U_nat.T @ g1_act @ U_nat
+    assert np.allclose(
+        g1_nat[np.ix_([0, 2], [0, 2])],
+        np.diag(np.diag(g1_nat[np.ix_([0, 2], [0, 2])])),
+    )
+    assert np.allclose(
+        g1_nat[np.ix_([1, 3], [1, 3])],
+        np.diag(np.diag(g1_nat[np.ix_([1, 3], [1, 3])])),
+    )
+
+
+def test_natural_orbital_requires_complete_active_blocks():
+    mo_space = MOSpace(nmo=3, active_orbitals=[0, 1])
+    natural_orbital = NaturalOrbitals(mo_space)
+    natural_orbital.orbital_blocks.active_blocks = lambda relative_index=True: [
+        np.array([0])
+    ]
+
+    with pytest.raises(ValueError, match="cover the full active space"):
+        natural_orbital.make_natural_orbitals(g1_act=np.eye(2), C_contig=np.eye(3))
+
+
+def test_natural_orbital_rejects_duplicate_block_indices():
+    with pytest.raises(ValueError, match="must not contain duplicate indices"):
+        make_natural_orbitals(
+            C_act=np.eye(2),
+            g1_act=np.eye(2),
+            blocks=[[0, 0], [1]],
+        )
+
+
+def test_natural_orbital_rejects_multidimensional_empty_block():
+    with pytest.raises(ValueError, match="must be one-dimensional"):
+        make_natural_orbitals(
+            C_act=np.eye(2),
+            g1_act=np.eye(2),
+            blocks=[np.empty((1, 0), dtype=int)],
+        )
 
 
 def test_semican_orbitals():
@@ -233,7 +331,7 @@ def test_semican_orbitals():
     )
     mc = MCOptimizer(
         ci_solver,
-        final_orbital="semicanonical",
+        final_orbitals="semicanonical",
     )(rhf)
     mc.run()
     c_mc = mc.C[0].copy()

@@ -150,24 +150,21 @@ class _SelectedCISingleStateSolver:
             self.ints.H,
             self.ints.V,
             self.log_level,
+            self.sci_params.screening_criterion,
+            self.sci_params.frozen_creation,
+            self.sci_params.frozen_annihilation,
         )
 
-        self.sci_helper.set_c(self.guess_c)
         self.sci_helper.set_energies(self.guess_energies)
         self.sci_helper.set_num_threads(self.sci_params.num_threads)
         self.sci_helper.set_num_batches_per_thread(
             self.sci_params.num_batches_per_thread
         )
-        self.sci_helper.set_screening_criterion(self.sci_params.screening_criterion)
         self.sci_helper.set_energy_correction(self.sci_params.energy_correction)
         self.sci_helper.set_pt2_regularizer(
             self.sci_params.pt2_regularizer.lower(),
             self.sci_params.pt2_regularizer_strength,
         )
-        if self.sci_params.frozen_creation:
-            self.sci_helper.set_frozen_creation(self.sci_params.frozen_creation)
-        if self.sci_params.frozen_annihilation:
-            self.sci_helper.set_frozen_annihilation(self.sci_params.frozen_annihilation)
 
         old_energy = 0.0
         for cycle in range(self.sci_params.maxcycle):
@@ -1352,14 +1349,14 @@ class SelectedCI(SelectedCISolver):
     """
 
     die_if_not_converged: bool = True
-    final_orbital: str = "original"
+    final_orbitals: str = "original"
     do_transition_dipole: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
 
     def run(self):
         super().run()
         self._post_process()
-        if self.final_orbital == "semicanonical":
+        if self.final_orbitals == "semicanonical":
             semi = Semicanonicalizer(
                 system=self.system,
                 mo_space=self.mo_space,

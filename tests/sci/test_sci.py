@@ -559,7 +559,7 @@ def test_sci_semicanonical_final_orbital():
             var_threshold=1e-12,
             pt2_threshold=0.0,
         ),
-        final_orbital="semicanonical",
+        final_orbitals="semicanonical",
     )(rhf)
     sci.run()
 
