@@ -4,6 +4,18 @@ from forte2 import System, RHF, CI, State, AVAS, ROHF
 from forte2.helpers.comparisons import approx
 
 
+def test_ci_orbital_invariance_is_true():
+    # test that the orbital rotation invariance flag is set to True for CI
+    xyz = """H 0.0 0.0 0.0"""
+
+    system = System(
+        xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
+    )
+    rhf = RHF(charge=-1, e_tol=1e-12)(system)
+    ci = CI(State(system=system, multiplicity=2, ms=0.5), active_orbitals=[0, 1])(rhf)
+    assert ci.orbital_rotation_invariant
+
+
 def test_ci_1():
     xyz = f"""
     H 0.0 0.0 0.0

@@ -68,7 +68,11 @@ def test_mcoptimizer_rdm_accessors_multi_solver():
         nroots=[2, 1],
         core_orbitals=[0],
         active_orbitals=[1, 2, 3, 4, 5, 6, 7],
-        davidson_liu_params=DavidsonLiuParams(e_tol=1e-8, r_tol=1e-4),
+        davidson_liu_params=DavidsonLiuParams(
+            e_tol=1e-8,
+            r_tol=1e-4,
+            ndets_per_guess=50,  # needed to avoid issues with final orbital rotations
+        ),
     )
     mc = MCOptimizer(ci_solver)(rhf)
     mc.run()
