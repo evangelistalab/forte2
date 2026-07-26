@@ -288,6 +288,98 @@ class FockBuilder:
         J, K = self.build_JK([Cp])
         return J[0], K[0]
 
+    def build_core_fock(self, C_core, hcore=None):
+        r"""
+        Build the core contribution to a multireference generalized Fock matrix.
+
+        The core Fock matrix is defined as
+
+        .. math::
+            F_{\mu\nu}^{core} = h_{\mu\nu} + \chi_J J_{\mu\nu} - K_{\mu\nu}
+
+        where :math:`\chi_J` is 2 (1) for the non-relativistic (two-component) case.
+
+        Parameters
+        ----------
+        C_core : NDArray
+            Coefficients of the doubly occupied orbitals.
+        hcore : NDArray, optional
+            One-electron Hamiltonian in the AO basis. If omitted, it is obtained
+            from the system.
+
+        Returns
+        -------
+        NDArray
+            Core Fock matrix in the AO basis.
+        """
+        if hcore is None:
+            hcore = self.system.ints_hcore()
+
+        Jcore, Kcore = self.build_JK([C_core])
+        if self.system.two_component:
+            return hcore + Jcore[0] - Kcore[0]
+        return hcore + 2.0 * Jcore[0] - Kcore[0]
+
+    def build_active_fock(self, C_act, g1):
+        r"""
+        Build the active-density contribution to a generalized Fock matrix.
+
+        The active Fock matrix is defined as
+
+        .. math::
+            F_{\mu\nu}^{active} = J_{\mu\nu} - \chi_K K_{\mu\nu}
+
+        where :math:`\chi_K` is 0.5 (1) for the non-relativistic (two-component) case.
+
+        Parameters
+        ----------
+        C_act : NDArray
+            Active-orbital coefficients.
+        g1 : NDArray
+            Active-space one-particle density matrix.
+
+        Returns
+        -------
+        NDArray
+            Active contribution to the generalized Fock matrix in the AO basis.
+        """
+        Jact, Kact = self.build_JK_generalized(C_act, g1)
+        if self.system.two_component:
+            return Jact - Kact
+        return Jact - 0.5 * Kact
+
+    def build_generalized_fock(self, C_core, C_act, g1, hcore=None):
+        r"""
+        Build a multireference generalized Fock matrix in the AO basis.
+
+        The generalized Fock matrix is defined as
+
+        .. math::
+            F_{\mu\nu} = h_{\mu\nu} + \chi_J J_{\mu\nu}^{core} + J_{\mu\nu}^{active} - K_{\mu\nu}^{core} - \chi_K K_{\mu\nu}^{active}
+
+        where :math:`\chi_J` is 2 (1) and :math:`\chi_K` is 0.5 (1) for the non-relativistic (two-component) case.
+
+        Parameters
+        ----------
+        C_core : NDArray
+            Coefficients of the doubly occupied orbitals.
+        C_act : NDArray
+            Active-orbital coefficients.
+        g1 : NDArray
+            Active-space one-particle density matrix.
+        hcore : NDArray, optional
+            One-electron Hamiltonian in the AO basis. If omitted, it is obtained
+            from the system.
+
+        Returns
+        -------
+        NDArray
+            Generalized Fock matrix in the AO basis.
+        """
+        return self.build_core_fock(C_core, hcore=hcore) + self.build_active_fock(
+            C_act, g1
+        )
+
     def two_electron_integrals_gen_block(self, C1, C2, C3, C4):
         r"""
         Compute the two-electron integrals for a given set of orbitals. This method is
@@ -548,6 +640,9 @@ class FockBuilderOTF:
         self._init_integral_engine()
 
     build_JK_generalized = FockBuilder.build_JK_generalized
+    build_core_fock = FockBuilder.build_core_fock
+    build_active_fock = FockBuilder.build_active_fock
+    build_generalized_fock = FockBuilder.build_generalized_fock
 
     def _init_integral_engine(self):
         def libint2_compute(pshell0, pshell1):

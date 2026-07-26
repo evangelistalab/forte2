@@ -26,9 +26,6 @@ class Semicanonicalizer:
         virtual and frozen_virt also will be diagonalized together.
     mix_active : bool, optional, default=False
         If True, all GAS active orbitals will be mixed, breaking the GAS subspace structure.
-    do_frozen : bool, optional, default=True
-        If True, the frozen core and frozen virtual orbitals will be semi-canonicalized.
-        If False, they will be left in the original basis.
     do_active : bool, optional, default=True
         If True, the active orbitals will be semi-canonicalized.
         If False, they will be left in the original basis.
@@ -68,26 +65,18 @@ class Semicanonicalizer:
         irrep_indices: ArrayLike | None = None,
         mix_inactive: bool = False,
         mix_active: bool = False,
-        do_frozen: bool = True,
         do_active: bool = True,
     ) -> None:
-        if mix_inactive and not do_frozen:
-            raise ValueError(
-                "Semicanonicalizer: mix_inactive=True is incompatible with do_frozen=False."
-            )
         if not isinstance(mo_space, (MOSpace, EmbeddingMOSpace)):
             raise ValueError(
                 "Semicanonicalizer: mo_space must be a MOSpace or EmbeddingMOSpace."
             )
 
         self.mo_space = mo_space
-        self.two_component = system.two_component
         self.system = system
-        self.fock_builder = system.fock_builder
         # These options define the semicanonicalization subspaces.
         self.mix_inactive = mix_inactive
         self.mix_active = mix_active
-        self.do_frozen = do_frozen
         self.do_active = do_active
         self.orbital_blocks = OrbitalBlockBuilder(mo_space, irrep_indices)
 
@@ -133,34 +122,15 @@ class Semicanonicalizer:
     def _semicanonical_spaces(self) -> list[str]:
         spaces = []
         if isinstance(self.mo_space, MOSpace):
-            if self.mix_inactive:
-                spaces.append("docc")
-            else:
-                if self.do_frozen:
-                    spaces.append("frozen_core")
-                spaces.append("core")
-            if self.do_active:
-                if self.mix_active:
-                    spaces.append("actv")
-                else:
-                    spaces.append("gas")
-            if self.mix_inactive:
-                spaces.append("uocc")
-            else:
-                spaces.append("virt")
-                if self.do_frozen:
-                    spaces.append("frozen_virt")
-        elif isinstance(self.mo_space, EmbeddingMOSpace):
-            if self.do_frozen:
-                spaces.append("frozen_core")
-            spaces.append("B_core")
-            spaces.append("A_core")
+            spaces.extend(["docc"] if self.mix_inactive else ["frozen_core", "core"])
             if self.do_active:
                 spaces.append("actv" if self.mix_active else "gas")
-            spaces.append("A_virt")
-            spaces.append("B_virt")
-            if self.do_frozen:
-                spaces.append("frozen_virt")
+            spaces.extend(["uocc"] if self.mix_inactive else ["virt", "frozen_virt"])
+        elif isinstance(self.mo_space, EmbeddingMOSpace):
+            spaces.extend(["frozen_core", "B_core", "A_core"])
+            if self.do_active:
+                spaces.append("actv" if self.mix_active else "gas")
+            spaces.extend(["A_virt", "B_virt", "frozen_virt"])
 
         return spaces
 
@@ -181,19 +151,12 @@ class Semicanonicalizer:
         return g1, C_contig
 
     def _build_fock(self, g1, C_contig):
-        # core contribution to the generalized Fock matrix
-        hcore = self.system.ints_hcore()
         # 'docc' slice includes frozen core in Fock build
-        docc = self.mo_space.docc
-        C_docc = C_contig[:, docc]
-        J, K = self.fock_builder.build_JK([C_docc])
-        Jfactor = 1 if self.two_component else 2
-        gfactor = 1 if self.two_component else 0.5
-        fock = hcore + Jfactor * J[0] - K[0]
-
-        # active contribution to the generalized Fock matrix
+        C_docc = C_contig[:, self.mo_space.docc]
         C_act = C_contig[:, self.mo_space.actv]
-        J, K = self.fock_builder.build_JK_generalized(C_act, g1 * gfactor)
-        fock += Jfactor * J - K
-        fock = C_contig.conj().T @ fock @ C_contig
-        return fock
+        fock_ao = self.system.fock_builder.build_generalized_fock(
+            C_core=C_docc,
+            C_act=C_act,
+            g1=g1,
+        )
+        return C_contig.conj().T @ fock_ao @ C_contig

@@ -230,52 +230,6 @@ def test_aset_2():
     assert ci.E == approx(eci)
 
 
-def test_aset_3():
-    """
-    test no semicanonicalization.
-    """
-    eci = -115.699156030288
-
-    xyz = """
-    C       -2.2314881720      2.3523969887      0.1565319638
-    C       -1.1287322054      1.6651786288     -0.1651010551
-    H       -3.2159664855      1.9109197306      0.0351701750
-    H       -2.1807424354      3.3645292222      0.5457999612
-    H       -1.2085033449      0.7043108616     -0.5330598833
-    C        0.2601218384      2.1970946692     -0.0290628762
-    H        0.7545456004      2.2023392001     -1.0052240245
-    H        0.8387453665      1.5599644558      0.6466877402
-    H        0.2749376338      3.2174213526      0.3670138598
-    """
-
-    system = System(
-        xyz=xyz,
-        basis_set="sto-3g",
-        auxiliary_basis_set="def2-universal-JKFIT",
-    )
-
-    rhf = RHF(charge=0, e_tol=1e-12)(system)
-    ci_solver = CISolver(
-        State(nel=24, multiplicity=1, ms=0.0),
-        core_orbitals=11,
-        active_orbitals=2,
-    )
-    mc = MCOptimizer(ci_solver)(rhf)
-    aset = ASET(
-        fragment=["C1-2", "H1-3"],
-        frozen_core_orbitals=3,
-        cutoff_method="threshold",
-        semicanonicalize_active=False,
-        semicanonicalize_frozen=False,
-    )(mc)
-    ci = CI(State(system=system, multiplicity=1, ms=0.0))(aset)
-    ci.run()
-
-    compare_orbital_coefficients(system, aset, "test_aset_3_orbitals.npy")
-
-    assert ci.E == approx(eci)
-
-
 def test_aset_4():
     """
     Test cutoff_method = number of orbitals.

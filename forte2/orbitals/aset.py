@@ -33,10 +33,6 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         Number of occupied orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
     num_A_vir : int, optional, default=0
         Number of virtual orbitals fixed to this value in fragment A when cutoff method is "num_of_orbitals".
-    semicanonicalize_active : bool, optional, default=True
-        Whether to semicanonicalize the active space orbitals.
-    semicanonicalize_frozen : bool, optional, default=True
-        Whether to semicanonicalize the frozen orbitals.
 
     Notes
     -----
@@ -58,8 +54,6 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
     cutoff: float = 0.5
     num_A_occ: int = 0
     num_A_vir: int = 0
-    semicanonicalize_active: bool = True
-    semicanonicalize_frozen: bool = True
 
     executed: bool = field(default=False, init=False)
 
@@ -255,8 +249,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         """
         Perform Orbital Partitioning for ASET.
         """
-        # Work in the original MO-label order for storage, and use contiguous order
-        # only for block operations defined by MOSpace slices.
+        # Copy the input orbitals and sort them into blocks of frozen core, core, active, ...
         C = self.parent_method.C[0].copy()
         C_contig = C[:, self.mo_space.orig_to_contig]
 
@@ -268,7 +261,6 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         core = self.mo_space.core
         core_inds = self.mo_space.core_indices
         active_orbitals = [list(active) for active in self.mo_space.active_orbitals]
-        actv_inds = self.mo_space.active_indices
         virt = self.mo_space.virt
         virt_inds = self.mo_space.virtual_indices
 
@@ -324,15 +316,6 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         index_B_vir.sort()
 
         # Semi-canonicalize the blocks
-        if not self.semicanonicalize_active:
-            logger.log_info1(
-                "\nSkipping semicanonicalization of active space orbitals."
-            )
-        if not self.semicanonicalize_frozen:
-            logger.log_info1(
-                "\nSkipping semicanonicalization of frozen core and frozen virtual orbitals."
-            )
-
         frozen_core_inds = self.mo_space.frozen_core_indices
         frozen_virt_inds = self.mo_space.frozen_virtual_indices
         g1 = self.parent_method.ci_solver.make_average_1rdm()
@@ -347,19 +330,13 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
             frozen_virtual_orbitals=frozen_virt_inds,
         )
 
-        semican = Semicanonicalizer(
-            system=self.system,
-            mo_space=emb_space,
-            do_frozen=self.semicanonicalize_frozen,
-            do_active=self.semicanonicalize_active,
-        )
+        semican = Semicanonicalizer(system=self.system, mo_space=emb_space)
         C_emb = C[:, emb_space.orig_to_contig].copy()
         semican.semi_canonicalize(g1=g1, C_contig=C_emb)
         self.C[0] = semican.C_semican[:, emb_space.contig_to_orig].copy()
 
         return {
             "index_A_occ": index_A_occ,
-            "index_actv": actv_inds,
             "active_orbitals": active_orbitals,
             "index_A_vir": index_A_vir,
             "index_B_occ": index_B_occ,
@@ -373,10 +350,10 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         Print the sizes and MO lists for fragment embedding
         """
         index_A_occ = info["index_A_occ"]
-        index_actv = info["index_actv"]
         index_A_vir = info["index_A_vir"]
         index_B_occ = info["index_B_occ"]
         index_B_vir = info["index_B_vir"]
+        active_orbitals = info["active_orbitals"]
         lo_vals: np.ndarray = info["lo_vals"]
         lv_vals: np.ndarray = info["lv_vals"]
 
@@ -388,7 +365,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         num_Bo = len(index_B_occ)
         num_Bv = len(index_B_vir)
         num_Fv = len(self.mo_space.frozen_virtual_indices)
-        num_actv = len(index_actv)
+        num_actv = sum(len(gas) for gas in active_orbitals)
 
         # Fragment A
         logger.log_info1("\n    ASET Fragment MOs:")
@@ -400,8 +377,13 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
             val = lo_vals[local]
             logger.log_info1(f"      {i:4d}  occupied  {val: 8.6f}")
 
-        for i in index_actv:
-            logger.log_info1(f"      {i:4d}  active         --")
+        if len(active_orbitals) == 1:
+            for i in active_orbitals[0]:
+                logger.log_info1(f"      {i:4d}  active         --")
+        else:
+            for gasn, gas in enumerate(active_orbitals):
+                for i in gas:
+                    logger.log_info1(f"      {i:4d}  GAS{gasn+1}           --")
         for i in index_A_vir:
             local = virt_inds.index(i)
             val = lv_vals[local]
