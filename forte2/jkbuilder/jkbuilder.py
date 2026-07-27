@@ -290,7 +290,7 @@ class FockBuilder:
 
     def build_core_fock(self, C_core, hcore=None):
         r"""
-        Build the core contribution to a multireference generalized Fock matrix.
+        Build the core contribution to a generalized Fock matrix.
 
         The core Fock matrix is defined as
 
@@ -302,10 +302,9 @@ class FockBuilder:
         Parameters
         ----------
         C_core : NDArray
-            Coefficients of the doubly occupied orbitals.
+            Coefficients of the core orbitals.
         hcore : NDArray, optional
-            One-electron Hamiltonian in the AO basis. If omitted, it is obtained
-            from the system.
+            One-electron Hamiltonian in the AO basis. If omitted, obtained from system.
 
         Returns
         -------
@@ -322,7 +321,7 @@ class FockBuilder:
 
     def build_active_fock(self, C_act, g1):
         r"""
-        Build the active-density contribution to a generalized Fock matrix.
+        Build the active density contribution to a generalized Fock matrix.
 
         The active Fock matrix is defined as
 
@@ -334,9 +333,9 @@ class FockBuilder:
         Parameters
         ----------
         C_act : NDArray
-            Active-orbital coefficients.
+            Coefficients of the active orbitals.
         g1 : NDArray
-            Active-space one-particle density matrix.
+            Active-space one-particle density matrix (spin-free for the non-relativistic case).
 
         Returns
         -------
@@ -362,14 +361,13 @@ class FockBuilder:
         Parameters
         ----------
         C_core : NDArray
-            Coefficients of the doubly occupied orbitals.
+            Coefficients of the core orbitals.
         C_act : NDArray
-            Active-orbital coefficients.
+            Coefficients of the active orbitals.
         g1 : NDArray
-            Active-space one-particle density matrix.
+            Active-space one-particle density matrix (spin-free for the non-relativistic case).
         hcore : NDArray, optional
-            One-electron Hamiltonian in the AO basis. If omitted, it is obtained
-            from the system.
+            One-electron Hamiltonian in the AO basis. If omitted, obtained from system.
 
         Returns
         -------
