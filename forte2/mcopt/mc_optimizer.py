@@ -25,7 +25,6 @@ from forte2.ci.ci_utils import (
     pretty_print_ci_dets,
     pretty_print_ci_transition_props,
 )
-from .mc_optimizer_grad import _compute_casscf_gradient
 from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
 
 
@@ -638,16 +637,11 @@ class MCOptimizer(MCOptimizerBase):
         Compute a state-specific CASSCF/GASSCF analytic nuclear gradient.
 
         This implementation supports only real, nonrelativistic,
-        state-specific CASSCF/GASSCF wave functions. Missing features include:
-
-        - State-averaged gradients
-        - Frozen-core response and frozen-virtual response
-        - Active-frozen rotations
-        - Frozen inter-GAS rotations
-        - X2C
-        - Gaussian nuclear charges
-
-        Requesting any of these features raises ``NotImplementedError``.
+        state-specific CASSCF/GASSCF wave functions. State-averaged gradients,
+        frozen-core and frozen-virtual response, active-frozen rotations,
+        frozen inter-GAS rotations, X2C, and Gaussian nuclear charges are not
+        supported. Requesting any unsupported feature raises
+        ``NotImplementedError``.
 
         The gradient is assembled in the same integral-layer form as the RHF
         and UHF gradients:
@@ -672,4 +666,6 @@ class MCOptimizer(MCOptimizerBase):
         NDArray
             Gradient with shape ``(natoms, 3)`` in Hartree/Bohr.
         """
+        from .mc_optimizer_grad import _compute_casscf_gradient
+
         return _compute_casscf_gradient(self)

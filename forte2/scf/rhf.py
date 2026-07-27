@@ -7,7 +7,6 @@ from forte2.system import ModelSystem
 from forte2.helpers import logger
 from forte2.symmetry import MOSymmetryDetector
 from .scf_base import SCFBase
-from .rhf_grad import _compute_rhf_gradient
 from .scf_utils import minao_initial_guess, core_initial_guess
 
 
@@ -77,6 +76,8 @@ class RHF(SCFBase):
         NDArray
             Gradient with shape ``(natoms, 3)`` in Hartree/Bohr.
         """
+        from .rhf_grad import _compute_rhf_gradient
+
         return _compute_rhf_gradient(self)
 
     def _diis_update(self, diis, F, AO_grad):

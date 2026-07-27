@@ -9,7 +9,6 @@ from forte2.helpers import logger
 from forte2.symmetry import MOSymmetryDetector
 from .scf_base import SCFBase
 from .scf_utils import guess_mix
-from .uhf_grad import _compute_uhf_gradient
 
 
 @dataclass
@@ -130,6 +129,8 @@ class UHF(SCFBase):
         NDArray
             Gradient with shape ``(natoms, 3)`` in Hartree/Bohr.
         """
+        from .uhf_grad import _compute_uhf_gradient
+
         return _compute_uhf_gradient(self)
 
     def _diis_update(self, diis, F, AO_grad):
