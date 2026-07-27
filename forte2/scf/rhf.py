@@ -1,17 +1,18 @@
 from dataclasses import dataclass
 import numpy as np
+from numpy.typing import NDArray
 
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
 from forte2.helpers import logger
 from forte2.symmetry import MOSymmetryDetector
 from .scf_base import SCFBase
-from .rhf_grad import RHFGradientMixin
+from .rhf_grad import _compute_rhf_gradient
 from .scf_utils import minao_initial_guess, core_initial_guess
 
 
 @dataclass
-class RHF(RHFGradientMixin, SCFBase):
+class RHF(SCFBase):
     """
     A class that runs restricted Hartree-Fock calculations.
     """
@@ -66,6 +67,17 @@ class RHF(RHFGradientMixin, SCFBase):
 
     def _spin(self, S):
         return self.ms * (self.ms + 1)
+
+    def gradient(self) -> NDArray:
+        """
+        Compute the RHF analytic nuclear gradient with density fitting.
+
+        Returns
+        -------
+        NDArray
+            Gradient with shape ``(natoms, 3)`` in Hartree/Bohr.
+        """
+        return _compute_rhf_gradient(self)
 
     def _diis_update(self, diis, F, AO_grad):
         return [diis.update(F[0], AO_grad)]

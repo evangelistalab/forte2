@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 import numpy as np
+from numpy.typing import NDArray
 
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
@@ -8,11 +9,11 @@ from forte2.helpers import logger
 from forte2.symmetry import MOSymmetryDetector
 from .scf_base import SCFBase
 from .scf_utils import guess_mix
-from .uhf_grad import UHFGradientMixin
+from .uhf_grad import _compute_uhf_gradient
 
 
 @dataclass
-class UHF(UHFGradientMixin, SCFBase):
+class UHF(SCFBase):
     """
     A class that runs unrestricted Hartree-Fock calculations.
 
@@ -119,6 +120,17 @@ class UHF(UHFGradientMixin, SCFBase):
             + np.einsum("vu,uv->", self.D[1], F[1])
         )
         return energy
+
+    def gradient(self) -> NDArray:
+        """
+        Compute the UHF analytic nuclear gradient with density fitting.
+
+        Returns
+        -------
+        NDArray
+            Gradient with shape ``(natoms, 3)`` in Hartree/Bohr.
+        """
+        return _compute_uhf_gradient(self)
 
     def _diis_update(self, diis, F, AO_grad):
         F_flat = diis.update(np.hstack([f.flatten() for f in F]), AO_grad)
