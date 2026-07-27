@@ -249,8 +249,9 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         """
         Perform Orbital Partitioning for ASET.
         """
-        # Copy the input orbitals and sort them into blocks of frozen core, core, active, ...
+        # Copy the input orbitals
         C = self.parent_method.C[0].copy()
+        # Sort the orbitals into contiguous core, active, virtual blocks
         C_contig = C[:, self.mo_space.orig_to_contig]
 
         # Build the fragment projector
@@ -269,12 +270,16 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         P_frag_vv = P_frag[virt, virt]
         lo_vals, Uo = np.linalg.eigh(P_frag_oo)
         lv_vals, Uv = np.linalg.eigh(P_frag_vv)
+
         # resort the virtual eigenvalue/eigenvector pairs
         lv_vals = lv_vals[::-1]
         Uv = Uv[:, ::-1]
+
+        # Sort the eigenvalue/eigenvector pairs by eigenvalue in descending order
         occ_pairs = sorted(zip(core_inds, lo_vals), key=lambda x: x[1], reverse=True)
         vir_pairs = sorted(zip(virt_inds, lv_vals), key=lambda x: x[1], reverse=True)
 
+        # Apply the unitary transformations to the occupied and virtual blocks of C
         C[:, core_inds] = C[:, core_inds] @ Uo
         C[:, virt_inds] = C[:, virt_inds] @ Uv
 
@@ -330,9 +335,14 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
             frozen_virtual_orbitals=frozen_virt_inds,
         )
 
-        semican = Semicanonicalizer(system=self.system, mo_space=emb_space)
+        # Copy the orbitals into embedding contiguous order
         C_emb = C[:, emb_space.orig_to_contig].copy()
+
+        # Semi-canonicalize according to the embedding space
+        semican = Semicanonicalizer(system=self.system, mo_space=emb_space)
         semican.semi_canonicalize(g1=g1, C_contig=C_emb)
+
+        # Replace the original orbitals with the semi-canonicalized ones in the original order
         self.C[0] = semican.C_semican[:, emb_space.contig_to_orig].copy()
 
         return {

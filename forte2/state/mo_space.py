@@ -104,8 +104,8 @@ class _MOSpaceBase:
 
         # permutation array that makes spaces contiguous:
         # [frozen_core, core, gas1, gas2, ..., virt, frozen_virtual]
-        # such that C_contig = C[:, self.contig_to_orig]
-        # and C_orig = C_contig[:, self.orig_to_contig]
+        # such that C_contig = C_orig[:, self.orig_to_contig]
+        # and C_orig = C_contig[:, self.contig_to_orig]
         self.contig_to_orig = np.argsort(
             self.frozen_core_indices
             + self.core_indices
