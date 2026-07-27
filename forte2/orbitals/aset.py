@@ -355,7 +355,9 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
             "lv_vals": lv_vals,
         }
 
-    def _print_embedding_info(self, **info: dict[str, np.ndarray | list[int]]) -> None:
+    def _print_embedding_info(
+        self, **info: dict[str, np.ndarray | list[int] | list[list[int]]]
+    ) -> None:
         """
         Print the sizes and MO lists for fragment embedding
         """
