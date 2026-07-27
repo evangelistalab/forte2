@@ -642,12 +642,16 @@ class MCOptimizer(MCOptimizerBase):
         r"""
         Compute a state-specific CASSCF/GASSCF analytic nuclear gradient.
 
-        This first implementation is intentionally narrow.  It supports only
-        real, nonrelativistic, density-fitted, state-specific CASSCF/GASSCF
-        wave functions.  State-averaged gradients, frozen-core response,
-        frozen virtual response, active-frozen rotations, frozen inter-GAS
-        rotations, X2C, Gaussian nuclear charges, and Cholesky-ERI gradients
-        are rejected explicitly.
+        This implementation is supports only real, nonrelativistic,
+        state-specific CASSCF/GASSCF wave functions.
+        Missing features include:
+            - State-averaged gradients
+            - Frozen-core response (and potentially frozen virtual response)
+            - Active-frozen rotations
+            - Frozen inter-GAS rotations
+            - X2C
+            - Gaussian nuclear charges
+        Requesting any of these features will result in an error being raised.
 
         The gradient is assembled in the same integral-layer form as the RHF
         and UHF gradients:
