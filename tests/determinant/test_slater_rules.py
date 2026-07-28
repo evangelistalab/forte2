@@ -7,7 +7,6 @@ from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers.comparisons import approx
 from forte2.ci.ci import _CISingleStateSolver
 from forte2.state import MOSpace, State
-from forte2.orbitals import convert_coeff_spatial_to_spinor
 from forte2.base_classes import DavidsonLiuParams
 
 
@@ -271,7 +270,10 @@ def test_slater_rules_1():
     orbitals = [1, 2, 3, 4, 5, 6]  # Active orbitals
     norb = len(orbitals)
     ints = RestrictedMOIntegrals(
-        system=scf.system, C=scf.C[0], orbitals=orbitals, core_orbitals=core_orbitals
+        system=scf.system,
+        C=scf.mo_coeff.C[0],
+        orbitals=orbitals,
+        core_orbitals=core_orbitals,
     )
 
     slater_rules = forte2.SlaterRules(norb, ints.E, ints.H, ints.V)
@@ -306,11 +308,13 @@ def test_slater_rules_1_complex():
     scf = RHF(charge=0, e_tol=1e-12)(system)
     scf.run()
 
-    C = convert_coeff_spatial_to_spinor(scf.C)
+    mo_coeff_2c = scf.mo_coeff.to_spinorbital_basis()
     orbitals = [0, 1, 2, 3]
     norb = len(orbitals)
     system.two_component = True
-    ints = SpinorbitalIntegrals(system=system, C=C[0], spinorbitals=orbitals)
+    ints = SpinorbitalIntegrals(
+        system=system, C=mo_coeff_2c.C[0], spinorbitals=orbitals
+    )
 
     random_phase = np.diag(np.exp(1j * np.random.uniform(-np.pi, np.pi, size=norb)))
     ints.H = random_phase.T.conj() @ ints.H @ random_phase
@@ -358,7 +362,7 @@ def test_slater_rules_2_complex():
     scf = RHF(charge=0, e_tol=1e-10)(system)
     scf.run()
 
-    C = convert_coeff_spatial_to_spinor(scf.C)
+    mo_coeff_2c = scf.mo_coeff.to_spinorbital_basis()
     system.two_component = True
 
     core_orbitals = [0, 1]
@@ -366,7 +370,7 @@ def test_slater_rules_2_complex():
     norb = len(orbitals)
     ints = SpinorbitalIntegrals(
         system=scf.system,
-        C=C[0],
+        C=mo_coeff_2c.C[0],
         spinorbitals=orbitals,
         core_spinorbitals=core_orbitals,
     )

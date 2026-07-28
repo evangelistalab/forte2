@@ -1,15 +1,15 @@
 from dataclasses import dataclass, field
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 import time
 
 import numpy as np
 from forte2.system import System, ModelSystem, BasisInfo
-from forte2.base_classes.mixins import MOsMixin, SystemMixin
+from forte2.base_classes import Method, MO
 from forte2.helpers import logger, DIIS
 
 
 @dataclass
-class SCFBase(ABC, SystemMixin, MOsMixin):
+class SCFBase(Method):
     """
     Abstract base class for SCF calculations.
 
@@ -74,6 +74,9 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
 
     executed: bool = field(default=False, init=False)
     converged: bool = field(default=False, init=False)
+
+    def __post_init__(self):
+        self.provides = {"system", "mo_coeff", "eps"}
 
     def __call__(self, system):
         assert isinstance(
@@ -233,6 +236,9 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         logger.log_info1(f"{self.method} time: {end - start:.2f} seconds")
 
         self._post_process()
+        self.mo_coeff = MO(
+            self.C, self.two_component, self.irrep_labels, self.irrep_indices
+        )
 
         self.executed = True
         return self

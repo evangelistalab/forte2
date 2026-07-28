@@ -7,13 +7,13 @@ from forte2 import ints
 from forte2.state import MOSpace, EmbeddingMOSpace
 from forte2.system.basis_utils import BasisInfo
 from forte2.helpers import logger
-from forte2.base_classes.mixins import MOsMixin, SystemMixin, MOSpaceMixin
+from forte2.base_classes import Method
 from forte2.data import ATOM_SYMBOL_TO_Z
 from forte2.orbitals.semicanonicalizer import Semicanonicalizer
 
 
 @dataclass
-class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
+class ASET(Method):
     """
     Active Space Embedding Theory (ASET) method for paritioning and projecting molecules.
 
@@ -66,20 +66,22 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
     def __post_init__(self):
         self._regex = r"^([A-Z][a-z]?)(\d+)?(?:-(\d+))?$"
         self._check_parameters()
+        self.requires = {"system", "mo_coeff", "mo_space"}
+        self.provides = {"system", "mo_coeff", "mo_space"}
 
     def __call__(self, parent_method):
         assert isinstance(
             parent_method, forte2.mcopt.MCOptimizer
         ), f"Parent method must be MCSCF, got {type(parent_method)}"
-        self.parent_method = parent_method
+        self._register_parent_method(parent_method)
         return self
 
     def run(self):
         if not self.parent_method.executed:
             self.parent_method.run()
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
-        MOSpaceMixin.copy_from_upstream(self, self.parent_method)
+        self.system = self.parent_method.system
+        self.mo_coeff = self.parent_method.mo_coeff.copy()
+        self.mo_space = self.parent_method.mo_space
         self.mo_space = self.mo_space.update_frozen_orbitals(
             self.frozen_core_orbitals, self.frozen_virtual_orbitals
         )
@@ -256,7 +258,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         Perform Orbital Partitioning for ASET.
         """
         # Copy the input orbitals and sort them into blocks of frozen core, core, active, ...
-        C = self.parent_method.C[0][:, self.mo_space.orig_to_contig]
+        C = self.parent_method.mo_coeff.C[0][:, self.mo_space.orig_to_contig]
 
         # Build the fragment projector
         P_ao_frag = self.P_ao_frag
@@ -351,7 +353,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
             do_active=self.semicanonicalize_active,
         )
         semican.semi_canonicalize(g1=g1, C_contig=C)
-        self.C[0] = semican.C_semican.copy()
+        self.mo_coeff.C[0] = semican.C_semican.copy()
 
         return {
             "index_A_occ": index_A_occ,

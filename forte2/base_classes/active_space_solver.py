@@ -1,13 +1,12 @@
 from dataclasses import dataclass
-from abc import ABC
 
-from .mixins import MOsMixin, SystemMixin, MOSpaceMixin
+from .method import Method
 from forte2.state import StateAverageInfo, State, MOSpace
 from forte2.helpers import logger
 
 
 @dataclass
-class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
+class ActiveSpaceSolver(Method):
     states: State | list[State]
     nroots: int | list[int] = 1
     weights: list[float] | list[list[float]] = None
@@ -20,7 +19,6 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
 
     def __post_init__(self):
         self.dtype = float
-        self.two_component = False
         self.sa_info = StateAverageInfo(
             states=self.states,
             nroots=self.nroots,
@@ -29,27 +27,28 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
         self.ncis = self.sa_info.ncis
         self.weights = self.sa_info.weights
         self.weights_flat = self.sa_info.weights_flat
+        self.requires = {"system", "mo_coeff"}
+        self.requires_flags["two_component"] = False
+        self.provides = {"system", "mo_coeff", "mo_space"}
 
     def _startup(self, two_component=False):
         if not self.parent_method.executed:
             self.parent_method.run()
 
-        SystemMixin.copy_from_upstream(self, self.parent_method)
+        self.system = self.parent_method.system
         # UHF will only provide alpha MOs, others are unchanged by the only_alpha kwarg
-        MOsMixin.copy_from_upstream(self, self.parent_method, only_alpha=True)
-        if self.system.two_component:
-            self._make_mo_space(two_component=True)
-        else:
-            self._make_mo_space(two_component=two_component)
+        self.mo_coeff = self.parent_method.mo_coeff.copy()
+        self._make_mo_space()
 
-    def _make_mo_space(self, two_component):
+    def _make_mo_space(self):
+        two_component = self.two_component
         # Ways of providing the MO space:
         # 1. Via the parent method (if it has mo_space).
         # 2. Via the mo_space parameter.
         # 3. Via the *_orbitals parameters (core_orbitals, active_orbitals, frozen_core_orbitals, frozen_virtual_orbitals).
         # If any one of 2-3 is provided, then 1 is ignored.
         # If more than one of 2-3 is provided, then an error is raised.
-        provided_via_parent = hasattr(self.parent_method, "mo_space")
+        provided_via_parent = "mo_space" in self.parent_method.provides
         provided_via_mo_space = self.mo_space is not None
         provided_via_orbitals = any(
             [
@@ -127,5 +126,5 @@ class RelActiveSpaceSolver(ActiveSpaceSolver):
             ms = 0.0 if mult == 1 else 0.5
             self.states = State(nel=self.nel, multiplicity=mult, ms=ms)
         super().__post_init__()
+        self.requires_flags["two_component"] = True
         self.dtype = complex
-        self.two_component = True
