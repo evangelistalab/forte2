@@ -20,6 +20,7 @@ class RHF(SCFBase):
     def __post_init__(self):
         super().__post_init__()
         self.two_component = False
+        self.provides.add("gradient")
 
     def __call__(self, system):
         system.two_component = False

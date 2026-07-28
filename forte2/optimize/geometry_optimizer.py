@@ -1,10 +1,11 @@
-from dataclasses import dataclass, field, fields, is_dataclass
+from dataclasses import dataclass, field, fields
 from typing import Callable
 
 import numpy as np
 import scipy as sp
 
 import forte2.integrals as integrals
+from forte2.base_classes import Method
 from forte2.data import Z_TO_ATOM_SYMBOL
 from forte2.helpers import LBFGS, logger
 from forte2.helpers.table import AsciiTable
@@ -12,7 +13,7 @@ from forte2.system import ModelSystem, System
 
 
 @dataclass
-class GeometryOptimizer:
+class GeometryOptimizer(Method):
     """
     Cartesian geometry optimizer using L-BFGS and method analytic gradients.
 
@@ -43,7 +44,6 @@ class GeometryOptimizer:
     project_orbitals: bool = True
     lbfgs_kwargs: dict = field(default_factory=dict)
 
-    executed: bool = field(default=False, init=False)
     converged: bool = field(default=False, init=False)
     iter: int = field(default=0, init=False)
     E: float | None = field(default=None, init=False)
@@ -52,7 +52,9 @@ class GeometryOptimizer:
     coordinates: np.ndarray | None = field(default=None, init=False)
     system: System | None = field(default=None, init=False)
     method: object | None = field(default=None, init=False)
-    parent_method: object | None = field(default=None, init=False)
+
+    def __post_init__(self):
+        self.requires = {"system", "mo_coeff", "gradient"}
 
     def __call__(self, method):
         """
@@ -61,8 +63,7 @@ class GeometryOptimizer:
         The upstream method supplies both the initial ``System`` and the method
         configuration used to rebuild a fresh method object at each geometry.
         """
-        _validate_method(method)
-        self.parent_method = method
+        self._register_parent_method(method)
         return self
 
     def run(self, system=None):
@@ -328,7 +329,7 @@ class _GeometryObjective:
 
 
 def _method_builder_from_template(method):
-    if not is_dataclass(method):
+    if not isinstance(method, Method):
         raise TypeError(
             "GeometryOptimizer upstream methods must be dataclass instances so "
             "their initialization options can be replayed at new geometries."
@@ -360,11 +361,13 @@ def _project_previous_occupied_orbitals(previous_method, method):
         return None
 
     occupied_counts = _occupied_counts(method)
-    if occupied_counts is None or len(occupied_counts) != len(previous_method.C):
+    if occupied_counts is None or len(occupied_counts) != len(
+        previous_method.mo_coeff.C
+    ):
         return None
 
     projected = []
-    for C_old, nocc in zip(previous_method.C, occupied_counts):
+    for C_old, nocc in zip(previous_method.mo_coeff.C, occupied_counts):
         C_new = _project_mo_coefficients(
             previous_method.system, method.system, C_old, nocc
         )
@@ -376,7 +379,7 @@ def _project_previous_occupied_orbitals(previous_method, method):
 
 
 def _can_project_orbitals(previous_method, method):
-    if not hasattr(previous_method, "C") or previous_method.C is None:
+    if getattr(previous_method, "mo_coeff", None) is None:
         return False
     if getattr(previous_method.system, "two_component", False):
         return False
@@ -384,7 +387,7 @@ def _can_project_orbitals(previous_method, method):
         return False
     if previous_method.system.basis_set != method.system.basis_set:
         return False
-    if len(previous_method.C) not in [1, 2]:
+    if len(previous_method.mo_coeff.C) not in [1, 2]:
         return False
     return True
 
@@ -448,15 +451,6 @@ def _coords_to_xyz(atomic_numbers, coordinates):
         symbol = Z_TO_ATOM_SYMBOL[int(atomic_number)]
         lines.append(f"{symbol} {xyz[0]:.16f} {xyz[1]:.16f} {xyz[2]:.16f}")
     return "\n".join(lines)
-
-
-def _validate_method(method):
-    if not hasattr(method, "system"):
-        raise TypeError(
-            "method must be bound to a System before geometry optimization."
-        )
-    if not hasattr(method, "run") or not hasattr(method, "gradient"):
-        raise TypeError("method must provide run() and gradient() methods.")
 
 
 def _validate_system_for_optimization(system):
