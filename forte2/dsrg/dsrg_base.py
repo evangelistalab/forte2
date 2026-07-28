@@ -29,10 +29,6 @@ class DSRGBase(Method):
     # Non-init attributes
     converged: bool = field(init=False, default=False)
 
-    def __post_init__(self):
-        self.requires = {"system", "mo_coeff", "mo_space"}
-        self.provides = {"system", "mo_coeff", "mo_space"}
-
     def __call__(self, parent_method):
         self._register_parent_method(parent_method)
         assert isinstance(
@@ -47,6 +43,9 @@ class DSRGBase(Method):
         return self
 
     def __post_init__(self):
+        self.requires = {"system", "mo_coeff", "mo_space"}
+        self.provides = {"system", "mo_coeff", "mo_space"}
+
         # parse reference relaxation options
         if isinstance(self.relax_reference, bool):
             self.nrelax = self.relax_maxiter if self.relax_reference else 0
