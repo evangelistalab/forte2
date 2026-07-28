@@ -4,7 +4,7 @@ import time
 
 import numpy as np
 from forte2.system import System, ModelSystem, BasisInfo
-from forte2.base_classes import Method, MO
+from forte2.base_classes import Method, MO, SCFResult
 from forte2.helpers import logger, DIIS
 
 
@@ -238,6 +238,12 @@ class SCFBase(Method):
         self._post_process()
         self.mos = MO(
             self.C, self.two_component, self.irrep_labels, self.irrep_indices
+        )
+        self.result = SCFResult(
+            energy=self.E,
+            orbital_energies=self.eps,
+            mo_coeff=self.mos,
+            ao_fock_matrix=F,
         )
 
         self.executed = True

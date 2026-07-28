@@ -4,6 +4,7 @@ from forte2 import System, ints
 from forte2.scf import RHF
 from forte2.helpers.comparisons import approx
 from forte2.system import BSE_AVAILABLE
+from forte2.base_classes import SCFResult
 
 LIBCINT_AVAILABLE = getattr(ints, "HAS_LIBCINT", False)
 
