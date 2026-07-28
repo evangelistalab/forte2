@@ -14,7 +14,6 @@ from forte2.ci.ci_utils import pretty_print_ci_summary
 class DSRGBase(Method):
     """Base class for DSRG methods."""
 
-    # ci_solver: CISolver
     flow_param: float = 0.5
 
     # Reference relaxation options
@@ -113,13 +112,9 @@ class DSRGBase(Method):
         perm = self.mo_space.orig_to_contig
         self._C = self.mo_coeff.C[0][:, perm].copy()
 
-        # TODO: this interface should be homogenized
-        if hasattr(self.parent_method, "ci_solver"):
-            # parent method is RelMCOptimizer
-            self.ci_solver = self.parent_method.ci_solver
-        else:
-            # parent method is RelCISolver
-            self.ci_solver = self.parent_method
+        # parent_method is either a bare CIBase/RelCIBase (its own ci_solver) or an
+        # MCOptimizerBase (which wraps one) - both expose .ci_solver uniformly.
+        self.ci_solver = self.parent_method.ci_solver
 
         self.E_core_orig = self.ci_solver.sub_solvers[0].ints.E
         self.H_orig = self.ci_solver.sub_solvers[0].ints.H.copy()

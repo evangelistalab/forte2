@@ -37,6 +37,14 @@ class CIBase(ActiveSpaceSolver):
         self._register_parent_method(parent_method)
         return self
 
+    @property
+    def ci_solver(self):
+        """
+        A bare CI solver is itself the ci_solver, matching MCOptimizerBase.ci_solver
+        so that downstream methods (e.g. DSRG) can treat both parent kinds uniformly.
+        """
+        return self
+
     def _collect_child_kwargs(self, target_cls):
         """Collect keyword arguments for child solvers."""
         # Defer import to avoid polluting top-level namespace
@@ -201,6 +209,7 @@ class RelCIBase(RelActiveSpaceSolver):
     executed: bool = field(default=False, init=False)
 
     __call__ = CIBase.__call__
+    ci_solver = CIBase.ci_solver
     _collect_child_kwargs = CIBase._collect_child_kwargs
     _get_state_root = CIBase._get_state_root
     _validate_rdm_inputs = CIBase._validate_rdm_inputs
