@@ -545,7 +545,11 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
         # zero out rotations between orbitals of different irreps
         if self.system.point_group.upper() != "C1":
-            _irrid = np.array(self.irrep_indices[0])
+            # nrr is built in the contiguous [core, gas1, ..., virt] ordering,
+            # but self.irrep_indices is in the original MO ordering, so it must
+            # be permuted to match; otherwise the wrong (i, j) rotations are
+            # frozen for non-contiguous active spaces.
+            _irrid = np.array(self.irrep_indices[0])[self.mo_space.orig_to_contig]
             # equivalent to:
             # for i, j in range(nmo):
             #   if i^j != 0:
