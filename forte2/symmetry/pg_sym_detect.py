@@ -231,8 +231,13 @@ class PGSymmetryDetector:
             c2_axes = []
             c2_axes += self.find_c2_axes_through_atom()
             c2_axes += self.find_c2_axes_through_midpoint()
+            # Seed with z_axis (the unique/principal axis, not itself a
+            # perpendicular C2) so any C2 colinear with z is filtered out, then
+            # scan the *full* c2_axes list. Iterating c2_axes[1:] would drop the
+            # first detected perpendicular C2 axis (the seed is not from
+            # c2_axes), collapsing to the no-C2 branch when only one exists.
             unique_c2_axes = [z_axis]
-            for ax in c2_axes[1:]:
+            for ax in c2_axes:
                 is_unique = True
                 for uax in unique_c2_axes:
                     if _is_colinear(ax, uax, tol=self.tol):
@@ -248,6 +253,11 @@ class PGSymmetryDetector:
                 # any x/y axis will lie in the horizontal mirror plane.
                 # For Cnv, we know the sigma_v plane must pass through
                 # symmetry equivalent atoms, so pick one and we're done.
+                # Find an atom not colinear with the unique axis to define x/y.
+                # Do NOT break out of the search until one is found: the first
+                # equivalent set may consist only of on-axis atoms, in which
+                # case x_axis/y_axis would be left unbound.
+                x_axis = None
                 for equiv_set in self.equivalent_sets:
                     for i in equiv_set:
                         vec = self.com_atomic_positions[i]
@@ -257,7 +267,18 @@ class PGSymmetryDetector:
                         x_axis /= np.linalg.norm(x_axis)
                         y_axis = np.cross(z_axis, x_axis)
                         break
-                    break
+                    if x_axis is not None:
+                        break
+                if x_axis is None:
+                    # Every atom lies on the unique axis; any perpendicular
+                    # frame is valid (e.g. a linear-like arrangement).
+                    z = z_axis / np.linalg.norm(z_axis)
+                    trial = np.array([1.0, 0.0, 0.0])
+                    if abs(np.dot(trial, z)) > 1.0 - self.tol:
+                        trial = np.array([0.0, 1.0, 0.0])
+                    x_axis = trial - np.dot(trial, z) * z
+                    x_axis /= np.linalg.norm(x_axis)
+                    y_axis = np.cross(z, x_axis)
             else:
                 # found at least one C2 axis orthogonal to the unique axis
                 # use the first one to define the x-axis
