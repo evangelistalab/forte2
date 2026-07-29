@@ -54,6 +54,16 @@ def test_mo_space_invalid():
         # note it's acceptable to have [3, 4] in GAS1 and [1] in GAS2, as long as they are individually sorted
         mospace = MOSpace(nmo=nmo, core_orbitals=[0, 2], active_orbitals=[[4, 3], [1]])
 
+    with pytest.raises(Exception):
+        # Regression: orbital indices out of range [0, nmo) were silently
+        # dropped (dead `if len(virtual_indices) < 0` check).
+        mospace = MOSpace(nmo=4, active_orbitals=[10, 11])
+
+    with pytest.raises(Exception):
+        # Regression: over-subscription (more specified orbitals than nmo) was
+        # silently accepted for explicit index lists.
+        mospace = MOSpace(nmo=4, active_orbitals=[0, 1, 2, 3, 4, 5])
+
 
 def test_mo_space_simple_cas():
     mospace = MOSpace(nmo=10, core_orbitals=[0, 1, 2], active_orbitals=[3, 4])
