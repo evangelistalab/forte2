@@ -103,6 +103,53 @@ def test_avas_subspace():
     )(rhf)
 
 
+def test_avas_bare_element_subspace():
+    # Regression: bare-element subspace specs (no AO subset) used to crash with
+    # IndexError. The regex's AO-subset group matches "" (not None) when absent,
+    # so `if mgroups[3] is None` was False and `int(mgroups[3][0])` indexed "".
+    xyz = """
+    N 0.0 0.0 0.0
+    N 0.0 0.0 1.2
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        minao_basis_set="sto-3g",
+    )
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+
+    for spec in ["N", "N1", "N1-2"]:
+        avas = AVAS(
+            selection_method="total",
+            num_active=4,
+            subspace=[spec],
+        )(rhf)
+        # A bare element selects at least one AO into the subspace.
+        assert len(avas.minao_subspace) > 0
+
+
+def test_avas_rohf_half_integer_ms_somo_count():
+    # Regression: the 'separate' validation used int(ms)*2 as the SOMO count,
+    # which truncates for half-integer ms (ms=0.5 -> 0 instead of 1). A doublet
+    # ROHF reference with num_active_docc=num_active_uocc=0 (relying on the SOMO)
+    # was therefore rejected with a spurious AssertionError.
+    system = System(
+        xyz="N 0 0 0",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        minao_basis_set="sto-3g",
+    )
+    rohf = ROHF(charge=0, ms=0.5)(system)
+    # Should not raise: the single SOMO provides an active orbital.
+    avas = AVAS(
+        selection_method="separate",
+        subspace=["N(2p)"],
+        num_active_docc=0,
+        num_active_uocc=0,
+    )(rohf)
+
+
 def test_avas_separate_n2():
     eref_casci = -109.00462206150347
     eref_casci_avas = -109.005019207444

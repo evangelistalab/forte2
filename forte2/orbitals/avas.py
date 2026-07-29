@@ -152,8 +152,11 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
                 self.num_active_uocc >= 0
             ), "Number of active unoccupied orbitals cannot be negative."
             if isinstance(self.parent_method, ROHF):
+                # Number of singly occupied orbitals is round(2*ms), i.e. twice_ms.
+                # int(ms)*2 truncates for half-integer ms (e.g. ms=0.5 -> 0
+                # instead of 1), spuriously rejecting valid inputs.
                 nactv = (
-                    int(self.parent_method.ms) * 2
+                    round(2 * self.parent_method.ms)
                     + self.num_active_docc
                     + self.num_active_uocc
                 )
@@ -204,7 +207,9 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             end = start + 1 if mgroups[2] is None else int(mgroups[2]) + 1
 
         # mgroups[3] contains the subset of AOs e.g. "2p", "2pz", "3dz2" etc.
-        if mgroups[3] is None:
+        # The regex group uses `*`, so an absent subset matches the empty
+        # string "" (not None); treat both as "no subset specified".
+        if not mgroups[3]:
             # no subset specified (e.g. "C")
             # select all AOs of the element, subject to subspace_planes
             for A in range(start, end):
