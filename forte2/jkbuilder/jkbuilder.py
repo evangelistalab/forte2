@@ -419,9 +419,6 @@ class FockBuilder:
         ----------
         C : NDArray
             Coefficient matrix for the set of spin-orbitals.
-        antisymmetrize : bool, optional, default=False
-            Whether to antisymmetrize the integrals. If True, the integrals are antisymmetrized as:
-            V[p,q,r,s] = :math:`\langle pq || rs \rangle = \langle pq | rs \rangle - \langle pq | sr \rangle`
 
         Returns
         -------

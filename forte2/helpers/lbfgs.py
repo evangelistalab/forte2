@@ -115,10 +115,11 @@ class LBFGS:
         Parameters
         ----------
         obj : object
-            Target function to minimize, it should should be encapsulated in a class that has the following methods:
-            ``fx, g = obj.evaluate(x, g, do_g=True)`` where gradient ``g`` is modified by the function,
-            ``fx`` is the function return value, and ``g`` is computed when ``do_g==True``.
-            If diagonal Hessian is specified, ``h0 = obj.hess_diag(x)`` should be available.
+            Target function to minimize, encapsulated in a class exposing:
+            ``fx = obj.evaluate(x)`` returning the function value, and
+            ``g = obj.gradient(x)`` returning the gradient at ``x``.
+            A diagonal Hessian preconditioner ``h0 = obj.hess_diag(x)`` should
+            also be available.
         x : NDArray
             The initial value of ``x`` as input, the final value of ``x`` as output.
 
