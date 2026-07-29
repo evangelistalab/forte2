@@ -213,6 +213,62 @@ def test_jkbuilder_on_the_fly_general():
     assert np.allclose(K_otf, K_ref), np.linalg.norm(K_otf - K_ref)
 
 
+def test_otf_gen_block_matches_incore():
+    # Regression: FockBuilderOTF.two_electron_integrals_gen_block paired the
+    # wrong orbitals (C1 with C2, C3 with C4) and used the einsum output
+    # "ikjl", so for distinct index sets it produced a tensor with a different
+    # shape/values than the in-core FockBuilder and violated the documented
+    # V[p,q,r,s] = <pq|rs> convention.
+    system = System(
+        xyz="N 0.0 0.0 0.0\nN 0.0 0.0 2.0",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="bohr",
+    )
+    nmo = system.nbf
+    rng = np.random.default_rng(2024)
+    C1 = rng.standard_normal((nmo, 2))
+    C2 = rng.standard_normal((nmo, 3))
+    C3 = rng.standard_normal((nmo, 4))
+    C4 = rng.standard_normal((nmo, 5))
+
+    fb = jkbuilder.FockBuilder(system)
+    fb_otf = jkbuilder.FockBuilderOTF(system, jk_mem_thres_mb=4.5)
+
+    V_ref = fb.two_electron_integrals_gen_block(C1, C2, C3, C4)
+    V_otf = fb_otf.two_electron_integrals_gen_block(C1, C2, C3, C4)
+    assert V_otf.shape == V_ref.shape
+    assert np.allclose(V_otf, V_ref), np.max(np.abs(V_otf - V_ref))
+
+
+def test_otf_gen_block_spinor_matches_incore():
+    # Same regression for the spinor (two-component) OTF path.
+    system = System(
+        xyz="N 0.0 0.0 0.0\nN 0.0 0.0 2.0",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="bohr",
+    )
+    nso = 2 * system.nbf
+    rng = np.random.default_rng(99)
+
+    def cmplx(shape):
+        return rng.standard_normal(shape) + 1j * rng.standard_normal(shape)
+
+    C1 = cmplx((nso, 2))
+    C2 = cmplx((nso, 3))
+    C3 = cmplx((nso, 4))
+    C4 = cmplx((nso, 5))
+
+    fb = jkbuilder.FockBuilder(system)
+    fb_otf = jkbuilder.FockBuilderOTF(system, jk_mem_thres_mb=4.5)
+
+    V_ref = fb.two_electron_integrals_gen_block_spinor(C1, C2, C3, C4)
+    V_otf = fb_otf.two_electron_integrals_gen_block_spinor(C1, C2, C3, C4)
+    assert V_otf.shape == V_ref.shape
+    assert np.allclose(V_otf, V_ref), np.max(np.abs(V_otf - V_ref))
+
+
 def test_jkbuilder_on_the_fly_complex():
     xyz = """
     N 0.0 0.0 0.0
