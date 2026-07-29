@@ -267,20 +267,34 @@ class MOSpace:
 
         _active_flat = [orb for sublist in self.active_orbitals for orb in sublist]
 
-        all_indices = list(range(self.nmo))
-        virtual_indices = sorted(
-            list(
-                set(all_indices)
-                - set(self.core_orbitals)
-                - set(self.frozen_core_orbitals)
-                - set(_active_flat)
-                - set(self.frozen_virtual_orbitals),
-            )
+        specified = (
+            list(self.frozen_core_orbitals)
+            + list(self.core_orbitals)
+            + list(_active_flat)
+            + list(self.frozen_virtual_orbitals)
         )
-        if len(virtual_indices) < 0:
+
+        # All specified indices must lie within [0, nmo).
+        out_of_range = [i for i in specified if i < 0 or i >= self.nmo]
+        if out_of_range:
             raise ValueError(
-                f"The sum of frozen_core, core, active, and frozen_virtual dimensions ({len(self.frozen_core_orbitals) + len(self.core_orbitals) + len(_active_flat) + len(self.frozen_virtual_orbitals)}) exceeds the total number of orbitals ({self.nmo})."
+                f"Orbital indices {sorted(set(out_of_range))} are out of range "
+                f"for a space of {self.nmo} orbitals."
             )
+
+        # The frozen_core, core, active, and frozen_virtual spaces must be
+        # disjoint; a repeated index means the spaces overlap (and would also
+        # make the sum of their dimensions exceed nmo).
+        if len(specified) != len(set(specified)):
+            raise ValueError(
+                "The frozen_core, core, active, and frozen_virtual orbital "
+                "spaces must be disjoint, but some indices are repeated. "
+                f"Specified {len(specified)} indices, "
+                f"{len(set(specified))} of which are unique."
+            )
+
+        all_indices = list(range(self.nmo))
+        virtual_indices = sorted(set(all_indices) - set(specified))
         return virtual_indices
 
     def _parse_lists(self):
