@@ -54,6 +54,33 @@ def test_sci1():
     assert sci.E[0] == approx(efci)
 
 
+def test_sci_pinned_only_guess():
+    """Regression: a pinned-only guess (empty guess_dets, non-empty
+    pinned_guess_dets) used to raise UnboundLocalError because guess_hdiag /
+    nguess_dets were only assigned inside `if len(guess_dets) > 0`."""
+
+    efci = -2.180967812920
+
+    rhf = _h4_rhf()
+
+    sci = SelectedCI(
+        states=State(nel=4, multiplicity=1, ms=0.0),
+        active_orbitals=list(range(4)),
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-12,
+            pt2_threshold=0.0,
+            guess_dets=[],
+            pinned_guess_dets=[Determinant("22")],
+            num_threads=4,
+            num_batches_per_thread=16,
+        ),
+    )(rhf)
+    sci.run()
+
+    assert sci.E[0] == approx(efci)
+
+
 def test_sci2():
     """Test SelectedCI with a single determinant guess."""
 

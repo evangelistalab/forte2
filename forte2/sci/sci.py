@@ -389,6 +389,11 @@ class _SelectedCISingleStateSolver:
                 self.davidson_liu_params.ndets_per_guess * num_guess_states,
                 nguess_dets,
             )
+        else:
+            # No energy-ranked guess dets (e.g. a pinned-only guess). There is
+            # nothing to sort; the pinned determinants are appended below.
+            guess_hdiag = np.empty(0)
+            nguess_dets = 0
 
         # find the indices of the elements of Hdiag with the lowest values
         # subject to an optional energy shift, which can be used to target specific states (e.g. excited states)
