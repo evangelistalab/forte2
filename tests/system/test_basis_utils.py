@@ -2,7 +2,12 @@ import pytest
 import numpy as np
 
 from forte2 import System
-from forte2.system.basis_utils import BasisInfo, get_shell_label, shell_label_to_lm
+from forte2.system.basis_utils import (
+    AM_LABELS,
+    BasisInfo,
+    get_shell_label,
+    shell_label_to_lm,
+)
 from forte2.system.build_basis import decontract_basis, build_basis, BSE_AVAILABLE
 from forte2.integrals import overlap
 
@@ -81,6 +86,13 @@ def test_get_shell_label():
         get_shell_label(5, 11)
     with pytest.raises(Exception):
         get_shell_label(12, 2)
+
+    # Regression: l == len(AM_LABELS) must raise a *ValueError* ("exceeds
+    # defined labels"), not an IndexError from AM_LABELS[l]. The guard used
+    # `l > len(AM_LABELS)` instead of `>=`, letting l == len(AM_LABELS) fall
+    # through to an out-of-bounds index.
+    with pytest.raises(ValueError):
+        get_shell_label(len(AM_LABELS), 0)
 
 
 def test_shell_label_to_lm():
