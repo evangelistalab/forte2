@@ -3,7 +3,7 @@ name: build
 on: 
   push:
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   schedule:
     - cron: '30 15 * * *'
   merge_group:
@@ -51,7 +51,7 @@ jobs:
       run: |
         conda activate forte
         cd $HOME/work/forte2/forte2/tests
-        if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "merge_group" || ( "${{ github.event_name }}" == "pull_request" && "${{ contains(github.event.pull_request.labels.*.name, 'ready') }}" == "true" ) ]]; then
+        if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "merge_group" || ( "${{ github.event_name }}" == "pull_request" && "${{ github.event.pull_request.draft }}" == "false" ) ]]; then
           pytest -v --cov --cov-branch --cov-report=xml
         else
           pytest -v -m "not slow" --cov --cov-branch --cov-report=xml
