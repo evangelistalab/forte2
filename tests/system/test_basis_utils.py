@@ -2,7 +2,12 @@ import pytest
 import numpy as np
 
 from forte2 import System
-from forte2.system.basis_utils import BasisInfo, get_shell_label, shell_label_to_lm
+from forte2.system.basis_utils import (
+    AM_LABELS,
+    BasisInfo,
+    get_shell_label,
+    shell_label_to_lm,
+)
 from forte2.system.build_basis import decontract_basis, build_basis, BSE_AVAILABLE
 from forte2.integrals import overlap
 
@@ -71,16 +76,18 @@ def test_get_shell_label():
     assert get_shell_label(4, 0) == "g(0)"
     assert get_shell_label(11, 22) == "n(22)"
 
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         get_shell_label(-1, 0)
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         get_shell_label(0, -3)
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         get_shell_label(0, 4)
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         get_shell_label(5, 11)
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         get_shell_label(12, 2)
+    with pytest.raises(ValueError):
+        get_shell_label(len(AM_LABELS), 0)
 
 
 def test_shell_label_to_lm():
