@@ -1099,14 +1099,14 @@ class SelectedCISolver(CIBase):
 
         ints = RestrictedMOIntegrals(
             self.system,
-            self.C[0],
+            self.mos.C[0],
             self.active_indices,
             self.core_indices,
         )
 
         self.sub_solvers = []
         active_orbsym = [
-            [self.irrep_indices[0][i] for i in active_space]
+            [self.mos.irrep_indices[0][i] for i in active_space]
             for active_space in self.mo_space.active_orbitals
         ]
         for i, state in enumerate(self.sa_info.states):
@@ -1283,7 +1283,7 @@ class SelectedCISolver(CIBase):
             raise RuntimeError("CI solver has not been executed yet.")
 
         if C is None:
-            C = self.C[0]
+            C = self.mos.C[0]
 
         Cact = C[:, self.active_indices]
         Ccore = C[:, self.core_indices]
@@ -1361,13 +1361,15 @@ class SelectedCI(SelectedCISolver):
                 system=self.system,
                 mo_space=self.mo_space,
             )
-            semi.semi_canonicalize(g1=self.make_average_1rdm(), C_contig=self.C[0])
-            self.C[0] = semi.C_semican.copy()
+            semi.semi_canonicalize(
+                g1=self.make_average_1rdm(), C_contig=self.mos.C[0]
+            )
+            self.mos.C[0] = semi.C_semican.copy()
 
             # recompute the CI vectors in the semicanonical basis
             ints = RestrictedMOIntegrals(
                 self.system,
-                self.C[0],
+                self.mos.C[0],
                 self.active_indices,
                 self.core_indices,
             )

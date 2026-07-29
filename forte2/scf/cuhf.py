@@ -39,6 +39,10 @@ class CUHF(SCFBase):
     _print_ao_composition = UHF._print_ao_composition
     _apply_level_shift = UHF._apply_level_shift
 
+    def __post_init__(self):
+        super().__post_init__()
+        self.two_component = False
+
     def __call__(self, system):
         system.two_component = False
         self = super().__call__(system)
