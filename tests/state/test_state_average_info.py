@@ -37,6 +37,18 @@ def test_wrong_args():
             states=[state1, state2], nroots=[1, 2], weights=[[-1.0], [2.0, 3]]
         )
 
+    with pytest.raises(Exception):
+        # Regression: all-negative weights were flipped positive because the
+        # non-negativity check ran *after* normalization by the (negative) sum.
+        StateAverageInfo(
+            states=[state1], nroots=[2], weights=[[-1.0, -1.0]]
+        )
+
+    with pytest.raises(Exception):
+        # Regression: a weights list with fewer sublists than there are states
+        # was silently accepted via zip() truncation.
+        StateAverageInfo(states=[state1, state2], nroots=[1, 1], weights=[[1.0]])
+
 
 def test_state_average_info():
     state1 = State(nel=2, multiplicity=1, ms=0.0)

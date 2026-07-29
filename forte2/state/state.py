@@ -23,8 +23,6 @@ class State:
         The system to which this state belongs. If not provided, `nel` must be specified.
     charge : int, optional, default=0
         Charge of the state. Used to calculate the number of electrons if `system` is provided. Ignored if `nel` is provided.
-    irrep : int, optional
-        Irreducible representation of the state in Cotton ordering.
     gas_min : list[int], optional, default=[]
         Minimum number of electrons in each GAS.
         If not provided, no occupation restrictions will be applied.
@@ -138,14 +136,14 @@ class State:
     def str_short(self) -> str:
         """Return a short string representation of the state."""
         multi = f"m{self.multiplicity}.z{self.twice_ms}"
-        sym = f".h{self.irrep}"
+        sym = f".h{self.symmetry}"
         gmin = ".g" + "".join(f"_{i}" for i in self.gas_min) if self.gas_min else ""
         gmax = ".g" + "".join(f"_{i}" for i in self.gas_max) if self.gas_max else ""
         return multi + sym + gmin + gmax
 
     def __hash__(self) -> int:
         repr_str = (
-            f"{self.na}_{self.nb}_{self.multiplicity}_{self.twice_ms}_{self.irrep}"
+            f"{self.na}_{self.nb}_{self.multiplicity}_{self.twice_ms}_{self.symmetry}"
         )
         repr_str += "".join(f"_{i}" for i in self.gas_min)
         repr_str += "".join(f"_{i}" for i in self.gas_max)
@@ -253,16 +251,22 @@ class StateAverageInfo:
             ):
                 # If only one state and weights are a single list, convert to list of lists
                 self.weights = [self.weights]
+            assert len(self.weights) == self.ncis, (
+                "weights must provide one sublist per state "
+                f"(got {len(self.weights)} sublists for {self.ncis} states)."
+            )
             assert all(
                 len(w) == n for w, n in zip(self.weights, self.nroots)
             ), "Weights must have the same length as nroots for each state."
             self.weights_flat = np.array(
                 [w for sublist in self.weights for w in sublist], dtype=float
             )
+            # Check non-negativity *before* normalizing: otherwise an all-negative
+            # weight vector would be divided by its negative sum and flipped positive.
+            assert np.all(self.weights_flat >= 0), "Weights must be non-negative"
             n = self.weights_flat.sum()
             self.weights = [[w / n for w in sublist] for sublist in self.weights]
             self.weights_flat /= n
-            assert np.all(self.weights_flat >= 0), "Weights must be non-negative"
 
         # 4. Create absolute root map
         self.absolute_root_map = []
