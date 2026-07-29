@@ -46,6 +46,23 @@ def test_two_electron_integrals():
 
 
 @pytest.mark.skipif(not BSE_AVAILABLE, reason="BSE module is not available")
+def test_4c2e_partial_basis_specification_raises():
+    # Regression: providing basis1 and basis2 but leaving basis3/basis4 as None
+    # fell through both defaulting branches, passing None to ints.coulomb_4c and
+    # raising a confusing TypeError instead of a clear ValueError.
+    system = forte2.System(xyz="O 0 0 0", basis_set="sto-3g")
+    b = system.basis
+    with pytest.raises(ValueError):
+        forte2.integrals.coulomb_4c(system, b, b, None, None)
+
+    # The supported forms must still work: only basis1, or all four.
+    v_all_default = forte2.integrals.coulomb_4c(system)
+    v_basis1_only = forte2.integrals.coulomb_4c(system, b)
+    v_all_four = forte2.integrals.coulomb_4c(system, b, b, b, b)
+    assert np.allclose(v_all_default, v_basis1_only)
+    assert np.allclose(v_all_default, v_all_four)
+
+
 def test_3c2e():
     xyz = "Al 0 0 0"
     system = forte2.System(

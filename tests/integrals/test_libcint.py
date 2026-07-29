@@ -207,6 +207,24 @@ def test_libcint_coulomb_3c():
 
 
 @pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_libcint_coulomb_3c_same_basis2_basis3():
+    # Regression: passing the same Basis object for basis2 and basis3 (a valid
+    # (P|QQ) request) fell through to the wrong else branch and raised
+    # "If basis3 is provided, basis2 must also be provided."
+    xyz = """
+    O
+    H 1 1.1
+    H 1 1.1 2 104.5
+    """
+    system = System(xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pvtz-jkfit")
+    ref = integrals.cint_coulomb_3c(system)
+    same = integrals.cint_coulomb_3c(
+        system, system.auxiliary_basis, system.basis, system.basis
+    )
+    assert np.allclose(same, ref)
+
+
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
 def test_libcint_coulomb_3c_prealloc():
     xyz = """
     O
