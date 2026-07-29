@@ -129,6 +129,22 @@ def test_avas_bare_element_subspace():
         assert len(avas.minao_subspace) > 0
 
 
+def test_avas_total_num_active_too_large():
+    # Regression: the 'total' selection method looped over range(num_active)
+    # without checking it against the number of available orbitals (nsig),
+    # raising an opaque IndexError. It should raise a clear ValueError.
+    system = System(
+        xyz="N 0.0 0.0 0.0\nN 0.0 0.0 1.2",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        minao_basis_set="sto-3g",
+    )
+    rhf = RHF(charge=0, e_tol=1e-11)(system)
+    rhf.run()
+    with pytest.raises(ValueError):
+        AVAS(selection_method="total", num_active=999, subspace=["N(2p)"])(rhf).run()
+
+
 def test_avas_rohf_half_integer_ms_somo_count():
     # Regression: the 'separate' validation used int(ms)*2 as the SOMO count,
     # which truncates for half-integer ms (ms=0.5 -> 0 instead of 1). A doublet

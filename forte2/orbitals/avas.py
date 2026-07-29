@@ -451,6 +451,11 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
                     else:
                         inact_uocc.append(indices[imo])
         elif self.selection_method == "total":
+            if self.num_active > nsig:
+                raise ValueError(
+                    f"num_active ({self.num_active}) exceeds the number of "
+                    f"available AVAS orbitals ({nsig})."
+                )
             for imo in range(self.num_active):
                 if occupations[imo] == 1:
                     act_docc.append(indices[imo])
