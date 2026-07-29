@@ -193,7 +193,7 @@ def eigh_gen(A, B, rtol=1e-7, mode="canonical"):
     elif mode == "symmetric":
         X, *_ = invsqrt_matrix(B, rtol=rtol, precomp=(Bevals, Bevecs, info))
 
-    A = X.T @ A @ X
+    A = X.conj().T @ A @ X
     e, c = np.linalg.eigh(A)
     return e, X @ c, info
 
@@ -403,7 +403,7 @@ def _compute_Am1y_eigh(evecs, evals, y):
         raise RuntimeError(
             f"Inconsistent shapes: evecs has shape {evecs.shape} and y has shape {y.shape}"
         )
-    coeff = evecs.T @ y
+    coeff = evecs.conj().T @ y
     coeff = (coeff.T / evals).T  # broadcasts correctly for 1D and 2D y
     return evecs @ coeff
 
