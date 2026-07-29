@@ -359,3 +359,159 @@ def test_aset_gas():
 
     # Check that the CASCI energy is preserved
     assert ci.E == approx(mc.E)
+
+
+def test_aset_gas_semicanonical_noncontiguous_mo_space():
+    xyz = """
+    O   0.0000000000  -0.0000000000  -0.0662628033
+    H   0.0000000000  -0.7540256101   0.5259060578
+    H  -0.0000000000   0.7530256101   0.5260060578
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+    )
+    state = State(
+        nel=10,
+        multiplicity=1,
+        ms=0.0,
+        gas_min=[0, 0],
+        gas_max=[4, 4],
+    )
+    rhf = RHF(charge=0, e_tol=1e-10)(system)
+    ci_solver = CISolver(
+        state,
+        core_orbitals=3,
+        active_orbitals=(2, 2),
+    )
+    mc = MCOptimizer(
+        ci_solver,
+        freeze_inter_gas_rots=True,
+        maxiter=1,
+        die_if_not_converged=False,
+        final_orbitals="original",
+    )(rhf)
+    aset = ASET(
+        fragment=["O", "H"],
+        frozen_core_orbitals=[2],
+        cutoff_method="threshold",
+    )(mc)
+    aset.run()
+
+    np.testing.assert_array_equal(
+        aset.mo_space.orig_to_contig,
+        [2, 0, 1, 3, 4, 5, 6],
+    )
+    np.testing.assert_array_equal(
+        aset.mo_space.contig_to_orig,
+        [1, 2, 0, 3, 4, 5, 6],
+    )
+
+    ci = CI(state, final_orbitals="semicanonical")(aset)
+    ci.run()
+
+    assert ci.E == approx(mc.E)
+    np.testing.assert_allclose(
+        ci.C[0].conj().T @ system.ints_overlap() @ ci.C[0],
+        np.eye(system.nmo),
+        atol=1e-10,
+    )
+
+
+def test_aset_gas_semicanonical_noninteracting_fragments():
+    xyz = """
+    F  0.0 0.0    0.0
+    H  0.0 0.0    1.7
+    He 0.0 0.0 1000.0
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+    )
+    state = State(
+        nel=12,
+        multiplicity=1,
+        ms=0.0,
+        gas_min=[0, 0, 0],
+        gas_max=[2, 2, 2],
+    )
+    rhf = RHF(charge=0, e_tol=1e-10)(system)
+    # Order the GASes so that converting between MO layouts requires a three-cycle.
+    ci_solver = CISolver(
+        state,
+        core_orbitals=[0, 1, 2, 3],
+        active_orbitals=[[6], [4], [5]],
+    )
+    mc = MCOptimizer(
+        ci_solver,
+        freeze_inter_gas_rots=True,
+        maxiter=1,
+        die_if_not_converged=False,
+        final_orbitals="original",
+    )(rhf)
+    aset = ASET(fragment=["F", "H"], cutoff_method="threshold")(mc)
+    aset.run()
+
+    assert aset.partition["index_A_occ"] == [1, 2, 3]
+    assert aset.partition["index_B_occ"] == [0]
+    assert aset.mo_space.active_orbitals == [[6], [4], [5]]
+    np.testing.assert_array_equal(
+        aset.mo_space.orig_to_contig,
+        [0, 1, 2, 3, 6, 4, 5],
+    )
+    np.testing.assert_array_equal(
+        aset.mo_space.contig_to_orig,
+        [0, 1, 2, 3, 5, 6, 4],
+    )
+
+    hf_system = System(
+        xyz="F 0.0 0.0 0.0\nH 0.0 0.0 1.7",
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+    )
+    hf_state = State(
+        nel=10,
+        multiplicity=1,
+        ms=0.0,
+        gas_min=[0, 0, 0],
+        gas_max=[2, 2, 2],
+    )
+    hf_mc = MCOptimizer(
+        CISolver(
+            hf_state,
+            core_orbitals=[0, 1, 2],
+            active_orbitals=[[5], [3], [4]],
+        ),
+        freeze_inter_gas_rots=True,
+        maxiter=1,
+        die_if_not_converged=False,
+        final_orbitals="original",
+    )(RHF(charge=0, e_tol=1e-10)(hf_system))
+    hf_mc.run()
+
+    he_system = System(
+        xyz="He 0.0 0.0 0.0",
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+    )
+    he_rhf = RHF(charge=0, e_tol=1e-10)(he_system)
+    he_rhf.run()
+
+    assert mc.E == approx(hf_mc.E + he_rhf.E)
+
+    ci = CI(state, final_orbitals="semicanonical")(aset)
+    ci.run()
+
+    assert ci.E == approx(mc.E)
+    np.testing.assert_allclose(
+        ci.C[0].conj().T @ system.ints_overlap() @ ci.C[0],
+        np.eye(system.nmo),
+        atol=1e-10,
+    )
