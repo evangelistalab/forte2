@@ -371,3 +371,45 @@ def test_ci_rdms_sa():
     e_from_cumulants -= 0.25 * np.einsum("pqrs,ps,qr->", ci_ints.V, g1, g1)
 
     assert e_avg == approx(e_from_cumulants)
+
+
+def test_ci_nat_occ_single_state_multi_root_average_column():
+    # Regression: CISolver.compute_natural_occupation_numbers appended the
+    # average-1-RDM column only for ncis > 1 (multiple States), but the printer
+    # shows an 'Avg' row for nroots_sum > 1. For a single State with several
+    # roots the last root's column was therefore mislabeled as the average.
+    system = System(
+        xyz="Li 0 0 0\nH 0 0 1.6",
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+    )
+    rhf = RHF(charge=0, e_tol=1e-11)(system)
+    rhf.run()
+
+    ci = CI(
+        State(nel=4, multiplicity=1, ms=0.0),
+        active_orbitals=[1, 2, 3, 4, 5],
+        core_orbitals=[0],
+        nroots=3,
+    )(rhf)
+    ci.run()
+    ci.compute_natural_occupation_numbers()
+
+    norb = ci.mo_space.nactv
+    # nroots_sum (3) root columns + 1 average column.
+    assert ci.nat_occs.shape == (norb, 4)
+
+    g1_avg = ci.make_average_1rdm()
+    avg_ref = np.linalg.eigvalsh(g1_avg)[::-1]
+    assert ci.nat_occs[:, -1] == approx(avg_ref)
+
+    # Single-root case must not append an average column.
+    ci1 = CI(
+        State(nel=4, multiplicity=1, ms=0.0),
+        active_orbitals=[1, 2, 3, 4, 5],
+        core_orbitals=[0],
+        nroots=1,
+    )(rhf)
+    ci1.run()
+    ci1.compute_natural_occupation_numbers()
+    assert ci1.nat_occs.shape == (norb, 1)
