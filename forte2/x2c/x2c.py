@@ -259,7 +259,7 @@ class X2CHelper:
                     f"Invalid SNSO type: {self.system.snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
                 )
 
-        center_first = np.array([_[0] for _ in basis.center_first_and_last])
+        center_first = np.array([_[0] for _ in basis.center_first_and_last_shell])
         center_given_shell = (
             lambda ishell: np.searchsorted(center_first, ishell, side="right") - 1
         )

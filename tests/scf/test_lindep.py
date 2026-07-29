@@ -56,7 +56,7 @@ def test_lindep_ghf():
 def test_lindep_x2c(tmp_path):
     # This tests the handling of linear dependencies in the X2C transformation
     # The basis sets are decontracted during X2C, resulting in cond(S) ~ 8e9.
-    eref = -20264.784349176811
+    eref = -20264.784348686535
     xyz = """
     Tl 0 0 1.4
     H 0 0 0
@@ -83,7 +83,7 @@ def test_lindep_x2c(tmp_path):
 
 
 def test_lindep_x2c_quick():
-    erhf = -4.071160097112
+    erhf = -4.0711600970578345
     xyz = "\n".join([f"H 0 0 {i}" for i in range(10)])
 
     system = System(
