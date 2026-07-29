@@ -102,12 +102,18 @@ def _parse_basis_args_4c2e(system, basis1, basis2, basis3, basis4):
         raise ValueError(
             "If any of basis2, basis3, or basis4 is provided, basis1 must also be provided."
         )
+    others = [basis2, basis3, basis4]
     if basis1 is None:
         basis1 = basis2 = basis3 = basis4 = system.basis
-    elif basis1 is not None and all(
-        basis is None for basis in [basis2, basis3, basis4]
-    ):
+    elif all(basis is None for basis in others):
         basis2 = basis3 = basis4 = basis1
+    elif any(basis is None for basis in others):
+        # Partial specification would silently pass None to coulomb_4c and
+        # crash there; require either only basis1 or all four basis sets.
+        raise ValueError(
+            "Provide either only basis1 (used for all four indices) or all of "
+            "basis1, basis2, basis3, and basis4."
+        )
     return basis1, basis2, basis3, basis4
 
 
@@ -793,18 +799,19 @@ def _parse_basis_args_cint_3c2e(system, basis1, basis2, basis3, origin=None):
         )
         nsh_bas = system.basis.nshells
         shell_slice = [nsh_bas, nsh_bas + nsh_aux, 0, nsh_bas, 0, nsh_bas]
-    elif basis2 is not None and basis3 is None:
-        bas_atm, bas_bas, bas_env = basis_to_cint_envs(
-            system, basis2, common_origin=origin
-        )
-        nsh_bas = basis2.nshells
-        shell_slice = [nsh_bas, nsh_bas + nsh_aux, 0, nsh_bas, 0, nsh_bas]
+    elif basis2 is None and basis3 is not None:
+        raise ValueError("If basis3 is provided, basis2 must also be provided.")
     elif basis2 is not None and basis3 is not None and basis2 != basis3:
         raise ValueError(
             "libcint doesn't support (P|QR) with Q and R being different basis sets."
         )
     else:
-        raise ValueError("If basis3 is provided, basis2 must also be provided.")
+        # basis2 provided and (basis3 is None or basis3 == basis2): (P|QQ)
+        bas_atm, bas_bas, bas_env = basis_to_cint_envs(
+            system, basis2, common_origin=origin
+        )
+        nsh_bas = basis2.nshells
+        shell_slice = [nsh_bas, nsh_bas + nsh_aux, 0, nsh_bas, 0, nsh_bas]
 
     atm, bas, env = conc_env(bas_atm, bas_bas, bas_env, aux_atm, aux_bas, aux_env)
     return atm, bas, env, shell_slice
