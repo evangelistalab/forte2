@@ -141,9 +141,11 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             ), f"Sigma must be in [0, 1], got {self.sigma}"
         elif self.selection_method == "cutoff":
             assert self.cutoff > 0.0, f"Cutoff must be positive, got {self.cutoff}"
-            assert (
-                1.0 - self.cutoff > self.evals_threshold
-            ), f"Cutoff {self.cutoff} is smaller than 1-evals_threshold, {1-self.evals_threshold}, no orbitals will be selected."
+            assert 1.0 - self.cutoff > self.evals_threshold, (
+                f"Cutoff {self.cutoff} is too large: it must be smaller than "
+                f"1 - evals_threshold = {1 - self.evals_threshold}, otherwise no "
+                "orbitals will be selected."
+            )
         elif self.selection_method == "separate":
             assert (
                 self.num_active_docc >= 0

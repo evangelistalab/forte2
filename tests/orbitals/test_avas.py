@@ -54,6 +54,16 @@ def test_avas_inputs():
             subspace=["N(2p)"],
         )(rhf)
 
+    # Regression: the failure message used to claim the cutoff was "smaller
+    # than 1-evals_threshold" when in fact it fails because it is too large.
+    with pytest.raises(AssertionError, match="too large"):
+        AVAS(
+            selection_method="cutoff",
+            evals_threshold=0.1,
+            cutoff=0.95,
+            subspace=["N(2p)"],
+        )(rhf)
+
     # raise if sigma < 0 or sigma > 1
     with pytest.raises(Exception):
         avas = AVAS(
