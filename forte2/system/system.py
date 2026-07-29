@@ -404,7 +404,8 @@ class System:
         Args
         ----
         origin : tuple[float, float, float], optional
-            The origin point for the dipole calculation. If None, the center of mass of the system is used.
+            The origin point for the dipole calculation. If None, the Cartesian
+            coordinate origin (0, 0, 0) is used.
         unit : str, optional, default="debye"
             The unit for the dipole moment. Can be "debye" or "au".
 
@@ -418,7 +419,8 @@ class System:
         positions = self.atomic_positions
         if origin is not None:
             assert len(origin) == 3, "Origin must be a 3-element vector."
-            positions -= np.array(origin)[np.newaxis, :]
+            # Do not mutate self.atomic_positions in place.
+            positions = positions - np.array(origin)[np.newaxis, :]
         conversion_factor = 1.0 / DEBYE_TO_AU if unit == "debye" else 1.0
         return np.einsum("a,ax->x", charges, positions) * conversion_factor
 
@@ -429,7 +431,8 @@ class System:
         Args
         ----
         origin : tuple[float, float, float], optional
-            The origin point for the quadrupole calculation. If None, the center of mass of the system is used.
+            The origin point for the quadrupole calculation. If None, the
+            Cartesian coordinate origin (0, 0, 0) is used.
         unit : str, optional, default="debye"
             The unit for the quadrupole moment. Can be "debye" or "au".
 
@@ -443,7 +446,8 @@ class System:
         positions = self.atomic_positions
         if origin is not None:
             assert len(origin) == 3, "Origin must be a 3-element vector."
-            positions -= np.array(origin)[np.newaxis, :]
+            # Do not mutate self.atomic_positions in place.
+            positions = positions - np.array(origin)[np.newaxis, :]
         nuc_quad = np.einsum("a,ax,ay->xy", charges, positions, positions)
         nuc_quad = 0.5 * (3 * nuc_quad - np.eye(3) * nuc_quad.trace())
         conversion_factor = 1.0 / DEBYE_ANGSTROM_TO_AU if unit == "debye" else 1.0
