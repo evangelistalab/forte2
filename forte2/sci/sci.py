@@ -1243,12 +1243,13 @@ class SelectedCISolver(CIBase):
 
     def compute_natural_occupation_numbers(self):
         """
-        Compute the natural occupation numbers for the CI states.
+        Compute the natural occupation numbers for the CI states and store them
+        in ``self.nat_occs`` (this method returns None).
 
-        Returns
-        -------
-        (norb, nroot) NDArray
-            The natural occupation numbers for each root.
+        The first ``nroots_sum`` columns of ``self.nat_occs`` hold the natural
+        occupation numbers for each root. If more than one root is present
+        (``nroots_sum > 1``), a final column holds the natural occupation
+        numbers from the state-averaged 1-RDM.
         """
         nos = []
         for ci_solver in self.sub_solvers:
