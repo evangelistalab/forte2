@@ -2,7 +2,40 @@ import numpy as np
 import scipy as sp
 
 from forte2.helpers import invsqrt_matrix, eigh_gen, canonical_orth, random_unitary
+from forte2.helpers.matrix_functions import compute_Am1y
 from forte2.helpers.comparisons import approx
+
+
+def test_eigh_gen_complex_hermitian():
+    # Regression: eigh_gen transformed A with X.T instead of X.conj().T, giving
+    # wrong eigenpairs for complex Hermitian generalized eigenproblems.
+    rng = np.random.default_rng(0)
+    n = 6
+    M = rng.standard_normal((n, n)) + 1j * rng.standard_normal((n, n))
+    A = M + M.conj().T
+    N = rng.standard_normal((n, n)) + 1j * rng.standard_normal((n, n))
+    B = N @ N.conj().T + n * np.eye(n)  # complex Hermitian positive-definite
+
+    e_sp, _ = sp.linalg.eigh(A, B)
+    e_ft, c_ft, _ = eigh_gen(A, B)
+
+    assert np.allclose(np.sort(e_sp), np.sort(e_ft.real), atol=1e-8)
+    # Each returned pair must satisfy A c = e B c.
+    residual = np.linalg.norm(A @ c_ft - (B @ c_ft) * e_ft)
+    assert residual < 1e-8
+
+
+def test_compute_Am1y_complex_hermitian():
+    # Regression: _compute_Am1y_eigh used evecs.T instead of evecs.conj().T,
+    # giving a wrong A^{-1} y for complex Hermitian A.
+    rng = np.random.default_rng(1)
+    n = 5
+    M = rng.standard_normal((n, n)) + 1j * rng.standard_normal((n, n))
+    A = M @ M.conj().T + n * np.eye(n)  # complex Hermitian positive-definite
+    y = rng.standard_normal(n) + 1j * rng.standard_normal(n)
+
+    x = compute_Am1y(A, y, ortho_rtol=1e-12)
+    assert np.linalg.norm(A @ x - y) < 1e-8
 
 
 def test_invsqrt_matrix():
