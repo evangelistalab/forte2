@@ -259,7 +259,11 @@ class X2CHelper:
                     f"Invalid SNSO type: {self.system.snso_type}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
                 )
 
-        center_first = np.array([_[0] for _ in basis.center_first_and_last])
+        # Map a *shell* index to its atom center. center_first_and_last counts
+        # basis functions, so it must be indexed by a basis-function offset;
+        # this loop iterates over shell indices, so use the shell-counted
+        # variant, otherwise shells on all but the first atom get the wrong Z.
+        center_first = np.array([_[0] for _ in basis.center_first_and_last_shell])
         center_given_shell = (
             lambda ishell: np.searchsorted(center_first, ishell, side="right") - 1
         )

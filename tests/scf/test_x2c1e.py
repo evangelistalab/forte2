@@ -97,6 +97,59 @@ def test_sox2c1e_water():
     assert scf.E == approx(eghf)
 
 
+def test_snso_shell_to_atom_mapping():
+    # Regression: _apply_snso_scaling mapped shells to atoms using
+    # center_first_and_last (basis-function offsets) indexed by a *shell* index,
+    # instead of center_first_and_last_shell (shell offsets). For heteronuclear
+    # systems with more than one basis function per shell this assigns the wrong
+    # nuclear charge Z to shells on all but the first atom, corrupting the SNSO
+    # spin-orbit scaling. The error only surfaces once the misassignment window
+    # covers l > 0 shells (e.g. cc-pVTZ on Ne-Ar).
+    import numpy as np
+    from forte2.x2c.x2c import X2CHelper
+
+    system = System(
+        xyz="Ne 0 0 0; Ar 0 0 3.0",
+        basis_set="cc-pVTZ",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        x2c_type="so",
+        snso_type="dcb",
+    )
+    helper = X2CHelper(system)
+    nbf = len(helper.xbasis)
+    scaled = helper._apply_snso_scaling(np.ones((nbf, nbf)))
+
+    # Independent reference using the correct shell-index -> atom mapping.
+    b = helper.xbasis
+    shell_first = np.array([x[0] for x in b.center_first_and_last_shell])
+    atoms = [a[0] for a in system.atoms]
+    center = lambda ish: int(np.searchsorted(shell_first, ish, side="right") - 1)
+    Ql = np.array([0.0, 2.97, 11.93, 29.84, 64.0, 115.0, 188.0, 287.0])
+    ref = np.ones((nbf, nbf))
+    iptr = 0
+    for ish in range(b.nshells):
+        isz = b[ish].size
+        li = int(b[ish].l)
+        if li == 0:
+            iptr += isz
+            continue
+        Zi = atoms[center(ish)]
+        jptr = 0
+        for jsh in range(b.nshells):
+            jsz = b[jsh].size
+            lj = int(b[jsh].l)
+            if lj == 0:
+                jptr += jsz
+                continue
+            Zj = atoms[center(jsh)]
+            factor = 1 - np.sqrt(Ql[li] * Ql[lj] / (Zi * Zj))
+            ref[iptr : iptr + isz, jptr : jptr + jsz] *= factor
+            jptr += jsz
+        iptr += isz
+
+    assert np.allclose(scaled, ref)
+
+
 def test_boettger_hbr():
     xyz = """
     H 0 0 0
