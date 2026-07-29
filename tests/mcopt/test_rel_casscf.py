@@ -100,8 +100,11 @@ def test_rel_casscf_frozen_co_equivalent_to_nonrel():
 
 
 def test_rel_casscf_frozen_co_x2c():
-    # this energy was obtained without AVAS
-    emcscf = -112.9273233729
+    # Reference updated after fixing the SNSO shell-to-atom mapping in
+    # X2CHelper._apply_snso_scaling (it previously indexed basis-function
+    # offsets with a shell index, assigning C's nuclear charge to O's shells).
+    # The corrected 'row-dependent' SNSO scaling lowers the energy by ~5e-7 Eh.
+    emcscf = -112.9273238763
 
     xyz = """
     C 0.0 0.0 0.0

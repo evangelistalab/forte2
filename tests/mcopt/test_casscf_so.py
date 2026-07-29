@@ -121,7 +121,10 @@ def test_2c_casscf_with_uhf():
     )
     mc = MCOptimizer(ci_solver)(conv)
     mc.run()
-    # corresponds to ~ 4.6e-8 Eh
+    # Reference updated after fixing the SNSO shell-to-atom mapping in
+    # X2CHelper._apply_snso_scaling (it previously assigned O's nuclear charge
+    # to H's shells and vice versa). The corrected 'row-dependent' SNSO scaling
+    # shifts this state splitting from ~135.46 to ~134.78 cm^-1.
     assert (ci_solver.E[2] - ci_solver.E[1]) * EH_TO_WN == pytest.approx(
-        135.46252372483025, abs=1e-2
+        134.7777144594, abs=1e-2
     )
