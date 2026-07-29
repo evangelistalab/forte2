@@ -728,7 +728,7 @@ class _SelectedCISingleStateSolver:
                     f"CI energy from RDMs: {rdms_energy:.12f} Eh", self.log_level
                 )
 
-                assert self.E[root] == approx(rdms_energy)
+                assert self.e_var[root] == approx(rdms_energy)
 
                 logger.log(
                     f"RDMs for root {root} validated successfully.\n", self.log_level
@@ -774,7 +774,7 @@ class _SelectedCISingleStateSolver:
             )
             assert np.isclose(
                 self.e_var[root], rdms_energy
-            ), f"CI energy {self.E[root]} Eh does not match RDMs energy {rdms_energy} Eh"
+            ), f"CI energy {self.e_var[root]} Eh does not match RDMs energy {rdms_energy} Eh"
 
             rdms_energy = (
                 self.ints.E

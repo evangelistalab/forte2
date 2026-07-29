@@ -54,6 +54,32 @@ def test_sci1():
     assert sci.E[0] == approx(efci)
 
 
+def test_sci_test_rdms_mismatch_raises_assertion():
+    # Regression: on an RDM/CI energy mismatch, _test_rdms built its failure
+    # message from self.E, which the single-state solver never sets (it uses
+    # self.e_var). A genuine mismatch therefore raised AttributeError, masking
+    # the intended AssertionError and its diagnostic.
+    rhf = _h4_rhf()
+    sci = SelectedCI(
+        states=State(nel=4, multiplicity=1, ms=0.0),
+        active_orbitals=list(range(4)),
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-12,
+            pt2_threshold=0.0,
+            num_threads=1,
+            num_batches_per_thread=1,
+        ),
+    )(rhf)
+    sci.run()
+
+    solver = sci.sub_solvers[0]
+    solver.e_var = solver.e_var.copy()
+    solver.e_var[0] += 1.0  # force the RDM-energy check to fail
+    with pytest.raises(AssertionError):
+        solver._test_rdms()
+
+
 def test_sci_pinned_only_guess():
     """Regression: a pinned-only guess (empty guess_dets, non-empty
     pinned_guess_dets) used to raise UnboundLocalError because guess_hdiag /
