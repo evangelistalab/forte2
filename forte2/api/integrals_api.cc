@@ -213,7 +213,8 @@ void export_basis_api(nb::module_& sub_m) {
         .def_prop_ro("max_nprim", &Basis::max_nprim,
                      "Returns the maximum number of primitive Gaussians in shells of the basis set")
         .def_prop_ro("nprim", &Basis::max_nprim,
-                     "Returns the number of primitive Gaussians in shells of the basis set")
+                     "Returns the maximum number of primitive Gaussians in any shell of the "
+                     "basis set (alias of max_nprim)")
         .def_prop_ro("max_nbasis", &Basis::max_nbasis,
                      "Returns the maximum number of basis functions in shells of the basis set")
         .def_prop_ro("nshells", &Basis::nshells, "Returns the number of shells in the basis set")
