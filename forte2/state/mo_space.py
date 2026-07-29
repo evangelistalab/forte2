@@ -102,6 +102,18 @@ class _MOSpaceBase:
             == self.nactv + self.ncore + self.nfrozen_core + self.nfrozen_virtual
         ), "All orbital indices must be unique across active, core, frozen core, and frozen virtual spaces."
 
+        all_indices = (
+            self.frozen_core_indices
+            + self.core_indices
+            + self.active_indices
+            + self.virtual_indices
+            + self.frozen_virtual_indices
+        )
+        if sorted(all_indices) != list(range(self.nmo)):
+            raise ValueError(
+                "Orbital spaces must contain each index from 0 to nmo - 1 exactly once."
+            )
+
         # permutation array that makes spaces contiguous:
         # [frozen_core, core, gas1, gas2, ..., virt, frozen_virtual]
         # such that C_contig = C_orig[:, self.orig_to_contig]
@@ -277,10 +289,6 @@ class MOSpace:
                 - set(self.frozen_virtual_orbitals),
             )
         )
-        if len(virtual_indices) < 0:
-            raise ValueError(
-                f"The sum of frozen_core, core, active, and frozen_virtual dimensions ({len(self.frozen_core_orbitals) + len(self.core_orbitals) + len(_active_flat) + len(self.frozen_virtual_orbitals)}) exceeds the total number of orbitals ({self.nmo})."
-            )
         return virtual_indices
 
     def _parse_lists(self):
@@ -296,6 +304,11 @@ class MOSpace:
             virtual_orbitals=[self.virtual_indices],
             frozen_virtual_orbitals=self.frozen_virtual_orbitals,
         )
+
+        if _mo_space.nmo != self.nmo:
+            raise ValueError(
+                "Orbital spaces must contain each index from 0 to nmo - 1 exactly once."
+            )
 
         self.ngas = _mo_space.ngas
 
@@ -381,10 +394,24 @@ class MOSpace:
 
         # convert integers to lists
         if isinstance(frozen_core_orbitals, int):
-            frozen_core_orbitals = list(range(frozen_core_orbitals))
+            core_orbitals = sorted(self.core_orbitals + self.frozen_core_orbitals)
+            if not 0 <= frozen_core_orbitals <= len(core_orbitals):
+                raise ValueError(
+                    "The number of frozen core orbitals exceeds the number of core orbitals."
+                )
+            frozen_core_orbitals = core_orbitals[:frozen_core_orbitals]
         if isinstance(frozen_virtual_orbitals, int):
-            frozen_virtual_orbitals = list(
-                range(self.nmo - frozen_virtual_orbitals, self.nmo)
+            virtual_orbitals = sorted(
+                self.virtual_indices + self.frozen_virtual_orbitals
+            )
+            if not 0 <= frozen_virtual_orbitals <= len(virtual_orbitals):
+                raise ValueError(
+                    "The number of frozen virtual orbitals exceeds the number of virtual orbitals."
+                )
+            frozen_virtual_orbitals = (
+                virtual_orbitals[-frozen_virtual_orbitals:]
+                if frozen_virtual_orbitals
+                else []
             )
 
         assert len(frozen_core_orbitals) == len(
@@ -478,6 +505,11 @@ class EmbeddingMOSpace:
             virtual_orbitals=[self.A_virtual_orbitals, self.B_virtual_orbitals],
             frozen_virtual_orbitals=self.frozen_virtual_orbitals,
         )
+
+        if _mo_space.nmo != self.nmo:
+            raise ValueError(
+                "Orbital spaces must contain each index from 0 to nmo - 1 exactly once."
+            )
 
         self.frozen_core = _mo_space.frozen_core
         self.B_core = _mo_space.core[0]

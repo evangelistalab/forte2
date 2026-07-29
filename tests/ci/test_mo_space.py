@@ -56,6 +56,56 @@ def test_mo_space_invalid():
         mospace = MOSpace(nmo=nmo, core_orbitals=[0, 2], active_orbitals=[[4, 3], [1]])
 
 
+def test_mo_space_rejects_invalid_index_domains():
+    with pytest.raises(ValueError, match="exactly"):
+        MOSpace(nmo=3, core_orbitals=[0], active_orbitals=[3])
+
+    with pytest.raises(ValueError, match="exactly"):
+        MOSpace(nmo=3, core_orbitals=[0], active_orbitals=[-1])
+
+    with pytest.raises(ValueError, match="exactly"):
+        EmbeddingMOSpace(
+            nmo=5,
+            frozen_core_orbitals=[],
+            B_core_orbitals=[0],
+            A_core_orbitals=[1],
+            active_orbitals=[2],
+            A_virtual_orbitals=[],
+            B_virtual_orbitals=[],
+            frozen_virtual_orbitals=[],
+        )
+
+    with pytest.raises(ValueError, match="exactly"):
+        EmbeddingMOSpace(
+            nmo=4,
+            frozen_core_orbitals=[],
+            B_core_orbitals=[0],
+            A_core_orbitals=[],
+            active_orbitals=[1],
+            A_virtual_orbitals=[1],
+            B_virtual_orbitals=[2],
+            frozen_virtual_orbitals=[],
+        )
+
+
+def test_update_frozen_orbital_counts_with_noncontiguous_spaces():
+    core_space = MOSpace(
+        nmo=5,
+        core_orbitals=[1, 2],
+        active_orbitals=[0],
+    )
+    core_space = core_space.update_frozen_orbitals(frozen_core_orbitals=1)
+    assert core_space.frozen_core_indices == [1]
+
+    virtual_space = MOSpace(
+        nmo=5,
+        core_orbitals=[4],
+        active_orbitals=[3],
+    )
+    virtual_space = virtual_space.update_frozen_orbitals(frozen_virtual_orbitals=1)
+    assert virtual_space.frozen_virtual_indices == [2]
+
+
 def test_mo_space_simple_cas():
     mospace = MOSpace(nmo=10, core_orbitals=[0, 1, 2], active_orbitals=[3, 4])
     assert mospace.ngas == 1
