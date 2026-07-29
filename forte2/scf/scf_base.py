@@ -92,14 +92,29 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         self.C = None
         self.Xorth = self.system.get_Xorth()
         if self.level_shift is not None:
-            if isinstance(self.level_shift, (int, float)) and self.level_shift < 0.0:
-                raise ValueError("level_shift must be non-negative.")
-            if isinstance(self.level_shift, tuple) and self.method != "UHF":
-                raise ValueError("Tuple level_shift is only valid for UHF.")
-            if isinstance(self.level_shift, float) and self.method == "UHF":
-                self.level_shift = (self.level_shift, self.level_shift)
-            if isinstance(self.level_shift, tuple) and len(self.level_shift) != 2:
-                raise ValueError("Tuple level_shift must have length 2 for UHF.")
+            # Methods that shift alpha/beta Fock matrices separately expect a
+            # 2-tuple level_shift (UHF, and CUHF which reuses UHF machinery).
+            tuple_shift_methods = ("UHF", "CUHF")
+            if isinstance(self.level_shift, (int, float)):
+                if self.level_shift < 0.0:
+                    raise ValueError("level_shift must be non-negative.")
+                if self.method in tuple_shift_methods:
+                    # Promote a scalar (int or float) to a per-spin 2-tuple.
+                    self.level_shift = (
+                        float(self.level_shift),
+                        float(self.level_shift),
+                    )
+            elif isinstance(self.level_shift, tuple):
+                if self.method not in tuple_shift_methods:
+                    raise ValueError(
+                        "Tuple level_shift is only valid for UHF/CUHF."
+                    )
+                if len(self.level_shift) != 2:
+                    raise ValueError(
+                        "Tuple level_shift must have length 2 for UHF/CUHF."
+                    )
+                if any(ls < 0.0 for ls in self.level_shift):
+                    raise ValueError("level_shift must be non-negative.")
         return self
 
     def _eigh(self, F):
