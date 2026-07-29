@@ -404,7 +404,8 @@ class System:
         Args
         ----
         origin : tuple[float, float, float], optional
-            The origin point for the dipole calculation. If None, the center of mass of the system is used.
+            The origin point for the dipole calculation. If None, the Cartesian
+            coordinate origin (0, 0, 0) is used.
         unit : str, optional, default="debye"
             The unit for the dipole moment. Can be "debye" or "au".
 
@@ -415,7 +416,7 @@ class System:
         """
         assert unit in ["debye", "au"], f"Invalid unit: {unit}. Use 'debye' or 'au'."
         charges = self.atomic_charges
-        positions = self.atomic_positions
+        positions = self.atomic_positions.copy()
         if origin is not None:
             assert len(origin) == 3, "Origin must be a 3-element vector."
             positions -= np.array(origin)[np.newaxis, :]
@@ -429,7 +430,8 @@ class System:
         Args
         ----
         origin : tuple[float, float, float], optional
-            The origin point for the quadrupole calculation. If None, the center of mass of the system is used.
+            The origin point for the quadrupole calculation. If None, the
+            Cartesian coordinate origin (0, 0, 0) is used.
         unit : str, optional, default="debye"
             The unit for the quadrupole moment. Can be "debye" or "au".
 
@@ -440,7 +442,7 @@ class System:
         """
         assert unit in ["debye", "au"], f"Invalid unit: {unit}. Use 'debye' or 'au'."
         charges = self.atomic_charges
-        positions = self.atomic_positions
+        positions = self.atomic_positions.copy()
         if origin is not None:
             assert len(origin) == 3, "Origin must be a 3-element vector."
             positions -= np.array(origin)[np.newaxis, :]
