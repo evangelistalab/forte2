@@ -1366,7 +1366,11 @@ class CISolver(CIBase):
         nos = []
         for ci_solver in self.sub_solvers:
             nos.append(ci_solver.compute_natural_occupation_numbers())
-        if self.ncis > 1:
+        # Append the average-1-RDM occupations whenever more than one root is
+        # present (matching the printer, which shows an 'Avg' row for
+        # nroots_sum > 1). Keying on ncis > 1 missed the single-state,
+        # multi-root case and mislabeled the last root's column as the average.
+        if self.sa_info.nroots_sum > 1:
             g1_avg = self.make_average_1rdm()
             nos.append(np.linalg.eigvalsh(g1_avg)[::-1][:, np.newaxis])
         self.nat_occs = np.concatenate(nos, axis=1)

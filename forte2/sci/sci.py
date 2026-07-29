@@ -1253,6 +1253,13 @@ class SelectedCISolver(CIBase):
         nos = []
         for ci_solver in self.sub_solvers:
             nos.append(ci_solver.compute_natural_occupation_numbers())
+        # Append the average-1-RDM occupations whenever more than one root is
+        # present, matching the printer (which shows an 'Avg' row for
+        # nroots_sum > 1). Without this the printed 'Avg' row showed the last
+        # root's occupations instead of the true average-1-RDM occupations.
+        if self.sa_info.nroots_sum > 1:
+            g1_avg = self.make_average_1rdm()
+            nos.append(np.linalg.eigvalsh(g1_avg)[::-1][:, np.newaxis])
         self.nat_occs = np.concatenate(nos, axis=1)
 
     def get_top_determinants(self, n=5):
