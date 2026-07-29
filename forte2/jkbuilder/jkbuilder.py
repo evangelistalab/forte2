@@ -1154,19 +1154,19 @@ class FockBuilderOTF:
         return Btemp
 
     def two_electron_integrals_gen_block(self, C1, C2, C3, C4):
-        B12 = self.B_tensor_gen_block(C1, C2)
-        B34 = self.B_tensor_gen_block(C3, C4)
-        return np.einsum("Pij,Pkl->ikjl", B12, B34, optimize=True)
+        B13 = self.B_tensor_gen_block(C1, C3)
+        B24 = self.B_tensor_gen_block(C2, C4)
+        return np.einsum("Pik,Pjl->ijkl", B13, B24, optimize=True)
 
     def two_electron_integrals_block(self, C):
         B = self.B_tensor_gen_block(C, C)
-        return np.einsum("Pij,Pkl->ikjl", B, B, optimize=True)
+        return np.einsum("Pik,Pjl->ijkl", B, B, optimize=True)
 
     def two_electron_integrals_gen_block_spinor(self, C1, C2, C3, C4):
-        B12 = self.B_tensor_gen_block_spinor(C1, C2)
-        B34 = self.B_tensor_gen_block_spinor(C3, C4)
-        return np.einsum("Pij,Pkl->ikjl", B12, B34, optimize=True)
+        B13 = self.B_tensor_gen_block_spinor(C1, C3)
+        B24 = self.B_tensor_gen_block_spinor(C2, C4)
+        return np.einsum("Pik,Pjl->ijkl", B13, B24, optimize=True)
 
     def two_electron_integrals_block_spinor(self, C):
         B = self.B_tensor_gen_block_spinor(C, C)
-        return np.einsum("Pij,Pkl->ikjl", B, B, optimize=True)
+        return np.einsum("Pik,Pjl->ijkl", B, B, optimize=True)
