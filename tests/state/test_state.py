@@ -28,6 +28,19 @@ def test_wrong_args():
         forte2.State(nel=-2, multiplicity=1, ms=0.0)
 
 
+def test_state_str_short_and_hash():
+    # Regression: str_short() and __hash__() previously referenced a
+    # nonexistent `irrep` attribute (the field is named `symmetry`),
+    # raising AttributeError instead of returning the string/hash.
+    state = forte2.State(nel=2, multiplicity=1, ms=0.0, symmetry=2)
+    s = state.str_short()
+    assert isinstance(s, str)
+    assert "h2" in s  # symmetry index appears in the short label
+    # __hash__ must not raise and must be usable in a set/dict
+    assert isinstance(hash(state), int)
+    assert len({state, state}) == 1
+
+
 def test_state():
     state = forte2.State(nel=2, multiplicity=1, ms=0.0)
     assert state.nel == 2
