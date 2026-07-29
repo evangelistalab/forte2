@@ -389,6 +389,10 @@ class _SelectedCISingleStateSolver:
                 self.davidson_liu_params.ndets_per_guess * num_guess_states,
                 nguess_dets,
             )
+        else:
+            # no guess dets and only pinned guess dets
+            guess_hdiag = np.empty(0)
+            nguess_dets = 0
 
         # find the indices of the elements of Hdiag with the lowest values
         # subject to an optional energy shift, which can be used to target specific states (e.g. excited states)
@@ -711,24 +715,6 @@ class _SelectedCISingleStateSolver:
         # Compute the RDMs from the CI vectors
         # and verify the energy from the RDMs matches the CI energy
         logger.log("\nComputing RDMs from CI vectors.\n", self.log_level)
-        if self.two_component:
-            for root in range(self.nroot):
-                rdm1 = self.make_1rdm(root)
-                rdm2 = self.make_2rdm(root)
-
-                rdms_energy = self.ints.E
-                rdms_energy += np.einsum("ij,ij", rdm1, self.ints.H)
-                rdms_energy += 0.5 * np.einsum("ijkl,ijkl", rdm2, self.ints.V)
-                logger.log(
-                    f"CI energy from RDMs: {rdms_energy:.12f} Eh", self.log_level
-                )
-
-                assert self.E[root] == approx(rdms_energy)
-
-                logger.log(
-                    f"RDMs for root {root} validated successfully.\n", self.log_level
-                )
-                return
 
         for root in range(self.nroot):
             root_rdms = {}
@@ -769,7 +755,7 @@ class _SelectedCISingleStateSolver:
             )
             assert np.isclose(
                 self.e_var[root], rdms_energy
-            ), f"CI energy {self.E[root]} Eh does not match RDMs energy {rdms_energy} Eh"
+            ), f"CI energy {self.e_var[root]} Eh does not match RDMs energy {rdms_energy} Eh"
 
             rdms_energy = (
                 self.ints.E
