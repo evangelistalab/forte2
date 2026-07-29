@@ -188,7 +188,10 @@ class CubeGenerator:
         # determine the indices of the orbitals to generate
         indices = indices if indices is not None else range(C.shape[1])
         max_index = max(indices)
-        number_of_digits = int(math.log10(max_index + 1)) + 1
+        # Number of digits needed to render max_index. int(log10(max_index + 1))
+        # + 1 over-pads by one whenever max_index + 1 is an exact power of 10
+        # (max_index = 9, 99, 999, ...); len(str(...)) is exact.
+        number_of_digits = len(str(max_index))
 
         # determine the grid points for the cube file
         grid_origin, npoints, scaled_axes = simple_grid(

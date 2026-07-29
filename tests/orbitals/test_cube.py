@@ -7,6 +7,32 @@ from forte2.orbitals import write_orbital_cubes
 from forte2.helpers.comparisons import approx
 
 
+def test_cube_zero_padding_power_of_ten_boundary(tmp_path):
+    # Regression: number_of_digits = int(log10(max_index + 1)) + 1 over-pads by
+    # one digit when max_index + 1 is an exact power of 10 (max_index = 9). For
+    # orbitals 0..9 the highest index is 9, which needs a single digit.
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.061664597388
+    H            0.000000000000    -0.711620616369     0.489330954643
+    H            0.000000000000     0.711620616369     0.489330954643
+    """
+    system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
+    scf = RHF(charge=0)(system)
+    scf.run()
+
+    outdir = tmp_path / "cubes"
+    write_orbital_cubes(
+        system, scf.C[0], indices=list(range(10)), filepath=str(outdir) + "/"
+    )
+
+    files = sorted(os.path.basename(f) for f in glob.glob(str(outdir / "*.cube")))
+    assert len(files) == 10
+    # Single-digit padding: orbital_0.cube ... orbital_9.cube (not orbital_00).
+    assert "orbital_0.cube" in files
+    assert "orbital_9.cube" in files
+    assert "orbital_00.cube" not in files
+
+
 def test_cube():
     """
     Test cube generation for RHF orbitals.
