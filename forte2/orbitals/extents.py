@@ -4,12 +4,19 @@ import numpy as np
 
 
 def orbital_extents(basis, C, indices=None):
-    """Compute the average position of the basis functions and their spread."""
+    """Compute the average position of the basis functions and their spread.
+
+    If ``indices`` is provided, only those MO columns of ``C`` are analyzed;
+    otherwise all orbitals are used.
+    """
+
+    # restrict to the requested subset of orbitals, if any
+    if indices is not None:
+        C = C[:, indices]
 
     # evaluate the multipole moments in the AO basis
     AO_ints = forte2.ints.emultipole2(basis)
 
-    print(f"C.shape = {C.shape}")
     # transform the multipole moments to the MO basis
     MO_ints = [C.T @ M @ C for M in AO_ints]
 
