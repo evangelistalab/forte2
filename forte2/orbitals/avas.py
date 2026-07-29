@@ -85,8 +85,8 @@ class AVAS(Method):
         # Group 4: \(?((?:\/?[1-9]{1}[spdfgh]{1}[a-zA-Z0-9-]*)*)\)? - optionally match a parenthesis containing the subset of AOs
         #   Example: "C(2p)", "C(1s)", "C(2s)", "Ce(4fzx2-zy2)", etc. The subset can be empty, which means all AOs of the specified atoms.
         self._regex = "^([a-zA-Z]{1,2})([0-9]+)?-?([0-9]+)?\\(?((?:\\/?[1-9]{1}[spdfgh]{1}[a-zA-Z0-9-]*)*)\\)?$"
-        self.requires = {"system", "mo_coeff"}
-        self.provides = {"system", "mo_coeff", "mo_space"}
+        self.requires = {"system", "mos"}
+        self.provides = {"system", "mos", "mo_space"}
 
     def __call__(self, parent_method):
         assert isinstance(
@@ -117,8 +117,8 @@ class AVAS(Method):
     def run(self):
         if not self.parent_method.executed:
             self.parent_method.run()
-        self.mo_coeff = self.parent_method.mo_coeff.copy()
-        self.nmo = self.mo_coeff.nmo
+        self.mos = self.parent_method.mos.copy()
+        self.nmo = self.mos.nmo
         self.dtype = float if not self.two_component else complex
 
         logger.log_info1("\nAVAS: building the AVAS projector...")
@@ -333,7 +333,7 @@ class AVAS(Method):
         nsocc = getattr(self.parent_method, "nsocc", 0)
         nuocc = self.parent_method.nuocc
 
-        CpsC = self.mo_coeff.C[0].T.conj() @ self.ao_projector @ self.mo_coeff.C[0]
+        CpsC = self.mos.C[0].T.conj() @ self.ao_projector @ self.mos.C[0]
 
         logger.log_info1(
             "\nMOs with significant overlap with the subspace (> 1.00e-3):"
@@ -355,7 +355,7 @@ class AVAS(Method):
         logger.log_info1("=" * 18)
         logger.log_info1("AO Composition of MOs with significant overlap:")
         self.basis_info.print_ao_composition(
-            self.mo_coeff.C[0],
+            self.mos.C[0],
             print_mos,
             nprint=5,
             thres=1.0e-3,
@@ -529,7 +529,7 @@ class AVAS(Method):
 
         logger.log_info1("\nAVAS: canonicalizing the AVAS orbitals")
         # reminder that C_tilde will have zero SOCC coefficients, if ROHF
-        C_tilde = self.mo_coeff.C[0] @ U
+        C_tilde = self.mos.C[0] @ U
         fock = self.parent_method.F[0]
         # separately canonicalize the Fock matrix blocks
         C_inact_docc = self._canonicalize_block(fock, C_tilde, inact_docc)
@@ -549,16 +549,16 @@ class AVAS(Method):
         au_sl = slice(ad_sl.stop + nsocc, ad_sl.stop + nsocc + n_act_uocc)
         iu_sl = slice(au_sl.stop, self.nmo)
 
-        self.mo_coeff.C[0][:, id_sl] = C_inact_docc
-        self.mo_coeff.C[0][:, ad_sl] = C_act_docc
-        self.mo_coeff.C[0][:, au_sl] = C_act_uocc
-        self.mo_coeff.C[0][:, iu_sl] = C_inact_uocc
+        self.mos.C[0][:, id_sl] = C_inact_docc
+        self.mos.C[0][:, ad_sl] = C_act_docc
+        self.mos.C[0][:, au_sl] = C_act_uocc
+        self.mos.C[0][:, iu_sl] = C_inact_uocc
 
         logger.log_info1(
             "\nAO composition of final canonicalized active MOs prepared by AVAS:"
         )
         self.basis_info.print_ao_composition(
-            self.mo_coeff.C[0],
+            self.mos.C[0],
             list(range(ad_sl.start, au_sl.stop)),
             spinorbital=True,
         )

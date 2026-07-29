@@ -143,8 +143,8 @@ def test_so_from_sf_water():
         snso_type=None,
     )
     scf_so = GHF(charge=1)(system)
-    mo_coeff_2c = scf.mo_coeff.to_spinorbital_basis()
-    scf_so.C = mo_coeff_2c.C
+    mos_2c = scf.mos.to_spinorbital_basis()
+    scf_so.C = mos_2c.C
     scf_so.run()
     assert scf_so.E == approx(eghf)
 

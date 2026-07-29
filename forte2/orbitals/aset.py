@@ -66,8 +66,8 @@ class ASET(Method):
     def __post_init__(self):
         self._regex = r"^([A-Z][a-z]?)(\d+)?(?:-(\d+))?$"
         self._check_parameters()
-        self.requires = {"system", "mo_coeff", "mo_space"}
-        self.provides = {"system", "mo_coeff", "mo_space"}
+        self.requires = {"system", "mos", "mo_space"}
+        self.provides = {"system", "mos", "mo_space"}
 
     def __call__(self, parent_method):
         assert isinstance(
@@ -80,7 +80,7 @@ class ASET(Method):
         if not self.parent_method.executed:
             self.parent_method.run()
         self.system = self.parent_method.system
-        self.mo_coeff = self.parent_method.mo_coeff.copy()
+        self.mos = self.parent_method.mos.copy()
         self.mo_space = self.parent_method.mo_space
         self.mo_space = self.mo_space.update_frozen_orbitals(
             self.frozen_core_orbitals, self.frozen_virtual_orbitals
@@ -258,7 +258,7 @@ class ASET(Method):
         Perform Orbital Partitioning for ASET.
         """
         # Copy the input orbitals and sort them into blocks of frozen core, core, active, ...
-        C = self.parent_method.mo_coeff.C[0][:, self.mo_space.orig_to_contig]
+        C = self.parent_method.mos.C[0][:, self.mo_space.orig_to_contig]
 
         # Build the fragment projector
         P_ao_frag = self.P_ao_frag
@@ -353,7 +353,7 @@ class ASET(Method):
             do_active=self.semicanonicalize_active,
         )
         semican.semi_canonicalize(g1=g1, C_contig=C)
-        self.mo_coeff.C[0] = semican.C_semican.copy()
+        self.mos.C[0] = semican.C_semican.copy()
 
         return {
             "index_A_occ": index_A_occ,

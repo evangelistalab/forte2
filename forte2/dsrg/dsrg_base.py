@@ -42,8 +42,8 @@ class DSRGBase(Method):
         return self
 
     def __post_init__(self):
-        self.requires = {"system", "mo_coeff", "mo_space"}
-        self.provides = {"system", "mo_coeff", "mo_space"}
+        self.requires = {"system", "mos", "mo_space"}
+        self.provides = {"system", "mos", "mo_space"}
 
         # parse reference relaxation options
         if isinstance(self.relax_reference, bool):
@@ -77,7 +77,7 @@ class DSRGBase(Method):
             self.parent_method.run()
 
         self.system = self.parent_method.system
-        self.mo_coeff = self.parent_method.mo_coeff.copy()
+        self.mos = self.parent_method.mos.copy()
         self.mo_space = self.parent_method.mo_space
 
         # update the MOSpace object if frozen orbitals are specified
@@ -108,9 +108,9 @@ class DSRGBase(Method):
         self.hc = self.core
         self.pv = slice(self.nact, self.nact + self.nvirt)
 
-        self.mo_coeff = self.parent_method.mo_coeff.copy()
+        self.mos = self.parent_method.mos.copy()
         perm = self.mo_space.orig_to_contig
-        self._C = self.mo_coeff.C[0][:, perm].copy()
+        self._C = self.mos.C[0][:, perm].copy()
 
         # parent_method is either a bare CIBase/RelCIBase (its own ci_solver) or an
         # MCOptimizerBase (which wraps one) - both expose .ci_solver uniformly.
@@ -123,7 +123,7 @@ class DSRGBase(Method):
         self.semicanonicalizer = Semicanonicalizer(
             system=self.system,
             mo_space=self.mo_space,
-            irrep_indices=np.array(self.mo_coeff.irrep_indices[0])[
+            irrep_indices=np.array(self.mos.irrep_indices[0])[
                 self.mo_space.orig_to_contig
             ],
             mix_active=False,

@@ -54,7 +54,7 @@ class GeometryOptimizer(Method):
     method: object | None = field(default=None, init=False)
 
     def __post_init__(self):
-        self.requires = {"system", "mo_coeff", "gradient"}
+        self.requires = {"system", "mos", "gradient"}
 
     def __call__(self, method):
         """
@@ -362,12 +362,12 @@ def _project_previous_occupied_orbitals(previous_method, method):
 
     occupied_counts = _occupied_counts(method)
     if occupied_counts is None or len(occupied_counts) != len(
-        previous_method.mo_coeff.C
+        previous_method.mos.C
     ):
         return None
 
     projected = []
-    for C_old, nocc in zip(previous_method.mo_coeff.C, occupied_counts):
+    for C_old, nocc in zip(previous_method.mos.C, occupied_counts):
         C_new = _project_mo_coefficients(
             previous_method.system, method.system, C_old, nocc
         )
@@ -379,7 +379,7 @@ def _project_previous_occupied_orbitals(previous_method, method):
 
 
 def _can_project_orbitals(previous_method, method):
-    if getattr(previous_method, "mo_coeff", None) is None:
+    if getattr(previous_method, "mos", None) is None:
         return False
     if getattr(previous_method.system, "two_component", False):
         return False
@@ -387,7 +387,7 @@ def _can_project_orbitals(previous_method, method):
         return False
     if previous_method.system.basis_set != method.system.basis_set:
         return False
-    if len(previous_method.mo_coeff.C) not in [1, 2]:
+    if len(previous_method.mos.C) not in [1, 2]:
         return False
     return True
 

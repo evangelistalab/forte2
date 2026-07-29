@@ -65,8 +65,8 @@ class SpinorUpcaster(Method):
         if isinstance(self.rng, int):
             self.rng = np.random.default_rng(self.rng)
 
-        self.requires = {"system", "mo_coeff"}
-        self.provides = {"system", "mo_coeff"}
+        self.requires = {"system", "mos"}
+        self.provides = {"system", "mos"}
 
     def __call__(self, parent_method):
         self._register_parent_method(parent_method)
@@ -80,21 +80,21 @@ class SpinorUpcaster(Method):
             self.parent_method.run()
 
         self.system = self.parent_method.system
-        self.mo_coeff = self.parent_method.mo_coeff.copy()
+        self.mos = self.parent_method.mos.copy()
 
         if "mo_space" in self.parent_method.provides:
             self.mo_space = self.parent_method.mo_space
 
         if not self.system.two_component:
-            self.mo_coeff = self.mo_coeff.to_spinorbital_basis()
+            self.mos = self.mos.to_spinorbital_basis()
             if "mo_space" in self.parent_method.provides:
                 self.mo_space = self.mo_space.to_spinorbital_basis()
             self.system.two_component = True
         if self.apply_random_phase:
             random_phase = np.diag(
-                np.exp(1j * self.rng.uniform(-np.pi, np.pi, size=self.mo_coeff.nmo))
+                np.exp(1j * self.rng.uniform(-np.pi, np.pi, size=self.mos.nmo))
             )
-            self.mo_coeff.C[0] = self.mo_coeff.C[0] @ random_phase
+            self.mos.C[0] = self.mos.C[0] @ random_phase
         if self.x2c_type_override is not None:
             self.system.x2c_type = self.x2c_type_override
         if self.snso_type_override is not None:

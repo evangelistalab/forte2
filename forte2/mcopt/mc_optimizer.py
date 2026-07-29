@@ -109,8 +109,8 @@ class MCOptimizerBase(Method):
                 "final_orbitals must be either 'semicanonical', 'natural', or 'original'."
             )
         
-        self.requires = {"system", "mo_coeff"}
-        self.provides = {"system", "mo_coeff", "mo_space"}
+        self.requires = {"system", "mos"}
+        self.provides = {"system", "mos", "mo_space"}
 
     def __call__(self, method):
         self._register_parent_method(method)
@@ -128,7 +128,7 @@ class MCOptimizerBase(Method):
             self.parent_method.run()
 
         self.system = self.parent_method.system
-        self.mo_coeff = self.parent_method.mo_coeff.copy()
+        self.mos = self.parent_method.mos.copy()
         # make sure to register parent_method
         self.ci_solver = self.ci_solver(self.parent_method)
         # iteration 0: one step of CI optimization to bootstrap the orbital optimization
@@ -141,7 +141,7 @@ class MCOptimizerBase(Method):
         # i.e., [core, gas1, gas2, ..., virt]
         perm = self.mo_space.orig_to_contig
         # this is the contiguous coefficient matrix
-        self._C = self.mo_coeff.C[0][:, perm].copy()
+        self._C = self.mos.C[0][:, perm].copy()
         # core slice does not include frozen orbitals!
         self.core = self.mo_space.docc
         # self.actv will be a list if multiple GASes are defined
@@ -339,7 +339,7 @@ class MCOptimizerBase(Method):
 
         # undo _make_spaces_contiguous
         perm = self.mo_space.contig_to_orig
-        self.mo_coeff.C[0] = self._C[:, perm].copy()
+        self.mos.C[0] = self._C[:, perm].copy()
 
         # optionally, rotate the final orbitals to semicanonical or natural orbitals
         self._rotate_final_orbitals()
@@ -369,7 +369,7 @@ class MCOptimizerBase(Method):
             # TODO: enable AO composition for 2c
             self._print_ao_composition()
         if self.do_transition_dipole:
-            self.ci_solver.compute_transition_properties(self.mo_coeff.C[0])
+            self.ci_solver.compute_transition_properties(self.mos.C[0])
             pretty_print_ci_transition_props(
                 self.ci_solver.sa_info,
                 self.ci_solver.transition_dipoles,
@@ -381,14 +381,14 @@ class MCOptimizerBase(Method):
         if self.final_orbitals not in ["semicanonical", "natural"]:
             return  # no final orbital transformation requested
 
-        C_contig = self.mo_coeff.C[0][:, self.mo_space.orig_to_contig].copy()
+        C_contig = self.mos.C[0][:, self.mo_space.orig_to_contig].copy()
         g1_act = self.make_average_1rdm()
 
         # get the final orbitals in contiguous ordering
         C_final = self._make_final_orbitals_contig(g1_act, C_contig)
 
         # undo contiguous ordering
-        self.mo_coeff.C[0] = C_final[:, self.mo_space.contig_to_orig].copy()
+        self.mos.C[0] = C_final[:, self.mo_space.contig_to_orig].copy()
 
         # rerun the CI solver in the final orbital basis to get the final energies
         new_E_ci, new_E_avg = self._rerun_ci_in_current_basis()
@@ -408,7 +408,7 @@ class MCOptimizerBase(Method):
     def _final_orbital_irrep_indices(self) -> NDArray:
         """Return the irrep indices of the final orbitals in contiguous ordering."""
 
-        return np.asarray(self.mo_coeff.irrep_indices[0], dtype=int)[
+        return np.asarray(self.mos.irrep_indices[0], dtype=int)[
             self.mo_space.orig_to_contig
         ]
 
@@ -454,14 +454,14 @@ class MCOptimizerBase(Method):
         if self.system.two_component:
             ints = SpinorbitalIntegrals(
                 system=self.system,
-                C=self.mo_coeff.C[0],
+                C=self.mos.C[0],
                 spinorbitals=self.mo_space.active_indices,
                 core_spinorbitals=self.mo_space.docc_indices,
             )
         else:
             ints = RestrictedMOIntegrals(
                 system=self.system,
-                C=self.mo_coeff.C[0],
+                C=self.mos.C[0],
                 orbitals=self.mo_space.active_indices,
                 core_orbitals=self.mo_space.docc_indices,
             )
@@ -511,11 +511,11 @@ class MCOptimizerBase(Method):
         basis_info = BasisInfo(self.system, self.system.basis)
         logger.log_info1("\nAO Composition of core MOs:")
         basis_info.print_ao_composition(
-            self.mo_coeff.C[0], list(range(self.core.start, self.core.stop))
+            self.mos.C[0], list(range(self.core.start, self.core.stop))
         )
         logger.log_info1("\nAO Composition of active MOs:")
         basis_info.print_ao_composition(
-            self.mo_coeff.C[0], list(range(self.actv.start, self.actv.stop))
+            self.mos.C[0], list(range(self.actv.start, self.actv.stop))
         )
 
     def _get_nonredundant_rotations(self):
@@ -546,7 +546,7 @@ class MCOptimizerBase(Method):
 
         # zero out rotations between orbitals of different irreps
         if self.system.point_group.upper() != "C1":
-            _irrid = np.array(self.mo_coeff.irrep_indices[0])
+            _irrid = np.array(self.mos.irrep_indices[0])
             # equivalent to:
             # for i, j in range(nmo):
             #   if i^j != 0:

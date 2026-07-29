@@ -27,9 +27,9 @@ class ActiveSpaceSolver(Method):
         self.ncis = self.sa_info.ncis
         self.weights = self.sa_info.weights
         self.weights_flat = self.sa_info.weights_flat
-        self.requires = {"system", "mo_coeff"}
+        self.requires = {"system", "mos"}
         self.requires_flags["two_component"] = False
-        self.provides = {"system", "mo_coeff", "mo_space"}
+        self.provides = {"system", "mos", "mo_space"}
 
     def _startup(self, two_component=False):
         if not self.parent_method.executed:
@@ -37,7 +37,7 @@ class ActiveSpaceSolver(Method):
 
         self.system = self.parent_method.system
         # UHF will only provide alpha MOs, others are unchanged by the only_alpha kwarg
-        self.mo_coeff = self.parent_method.mo_coeff.copy()
+        self.mos = self.parent_method.mos.copy()
         self._make_mo_space()
 
     def _make_mo_space(self):

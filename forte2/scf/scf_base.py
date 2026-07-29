@@ -76,7 +76,7 @@ class SCFBase(Method):
     converged: bool = field(default=False, init=False)
 
     def __post_init__(self):
-        self.provides = {"system", "mo_coeff", "eps"}
+        self.provides = {"system", "mos", "eps"}
 
     def __call__(self, system):
         assert isinstance(
@@ -236,7 +236,7 @@ class SCFBase(Method):
         logger.log_info1(f"{self.method} time: {end - start:.2f} seconds")
 
         self._post_process()
-        self.mo_coeff = MO(
+        self.mos = MO(
             self.C, self.two_component, self.irrep_labels, self.irrep_indices
         )
 

@@ -39,7 +39,7 @@ def test_semican_rhf():
     )
 
     semi = orbitals.Semicanonicalizer(mo_space=mo_space, system=system)
-    semi.semi_canonicalize(g1=np.diag([2, 2, 2, 0, 0, 0]), C_contig=rhf.mo_coeff.C[0])
+    semi.semi_canonicalize(g1=np.diag([2, 2, 2, 0, 0, 0]), C_contig=rhf.mos.C[0])
     assert rhf.eps[0] == approx(semi.eps_semican)
 
 
@@ -65,7 +65,7 @@ def test_semican_ci():
     eci_orig = ci.evals_flat[0]
     assert eci_orig == approx(-109.01444624968038)
 
-    rhf.mo_coeff = ci.mo_coeff.copy()
+    rhf.mos = ci.mos.copy()
     ci = CI(
         State(nel=rhf.nel, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1, 2, 3],
@@ -100,7 +100,7 @@ def test_semican_casscf():
     eci_orig = mc.ci_solver.evals_flat[0]
     assert eci_orig == approx(-109.0811491968)
 
-    rhf.mo_coeff = mc.mo_coeff.copy()
+    rhf.mos = mc.mos.copy()
     ci_solver = CISolver(
         State(nel=rhf.nel, multiplicity=1, ms=0.0),
         core_orbitals=[0, 1, 2, 3],
@@ -134,7 +134,7 @@ def test_semican_fock_offdiag():
 
     mo_space = ci.mo_space
     semi = orbitals.Semicanonicalizer(mo_space=mo_space, system=system)
-    semi.semi_canonicalize(g1=ci.make_average_1rdm(), C_contig=ci.mo_coeff.C[0])
+    semi.semi_canonicalize(g1=ci.make_average_1rdm(), C_contig=ci.mos.C[0])
 
     fock = semi.fock
     fock_cc = fock[mo_space.core, mo_space.core]
@@ -304,11 +304,11 @@ def test_semican_orbitals():
         final_orbitals="semicanonical",
     )(rhf)
     mc.run()
-    c_mc = mc.mo_coeff.C[0].copy()
+    c_mc = mc.mos.C[0].copy()
     assert mc.E == approx(eci)
 
     semi = Semicanonicalizer(mo_space=mc.mo_space, system=system)
-    semi.semi_canonicalize(g1=mc.ci_solver.make_average_1rdm(), C_contig=mc.mo_coeff.C[0])
+    semi.semi_canonicalize(g1=mc.ci_solver.make_average_1rdm(), C_contig=mc.mos.C[0])
     c_semi = semi.C_semican.copy()
     ovlp = integrals.overlap(system)
 

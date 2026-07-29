@@ -271,7 +271,7 @@ def test_slater_rules_1():
     norb = len(orbitals)
     ints = RestrictedMOIntegrals(
         system=scf.system,
-        C=scf.mo_coeff.C[0],
+        C=scf.mos.C[0],
         orbitals=orbitals,
         core_orbitals=core_orbitals,
     )
@@ -308,12 +308,12 @@ def test_slater_rules_1_complex():
     scf = RHF(charge=0, e_tol=1e-12)(system)
     scf.run()
 
-    mo_coeff_2c = scf.mo_coeff.to_spinorbital_basis()
+    mos_2c = scf.mos.to_spinorbital_basis()
     orbitals = [0, 1, 2, 3]
     norb = len(orbitals)
     system.two_component = True
     ints = SpinorbitalIntegrals(
-        system=system, C=mo_coeff_2c.C[0], spinorbitals=orbitals
+        system=system, C=mos_2c.C[0], spinorbitals=orbitals
     )
 
     random_phase = np.diag(np.exp(1j * np.random.uniform(-np.pi, np.pi, size=norb)))
@@ -362,7 +362,7 @@ def test_slater_rules_2_complex():
     scf = RHF(charge=0, e_tol=1e-10)(system)
     scf.run()
 
-    mo_coeff_2c = scf.mo_coeff.to_spinorbital_basis()
+    mos_2c = scf.mos.to_spinorbital_basis()
     system.two_component = True
 
     core_orbitals = [0, 1]
@@ -370,7 +370,7 @@ def test_slater_rules_2_complex():
     norb = len(orbitals)
     ints = SpinorbitalIntegrals(
         system=scf.system,
-        C=mo_coeff_2c.C[0],
+        C=mos_2c.C[0],
         spinorbitals=orbitals,
         core_spinorbitals=core_orbitals,
     )
