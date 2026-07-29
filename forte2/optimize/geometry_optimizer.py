@@ -83,9 +83,12 @@ class GeometryOptimizer:
         objective, x = self._build_objective(system)
         self._print_start(objective)
 
-        # Suppress the printing from the objective function
+        # Lower the verbosity by one level to suppress the per-iteration
+        # printing from the objective function (but keep warnings). Use max(...)
+        # so a normal verbosity isn't clamped to 0 (fully quiet) and verbosity 0
+        # doesn't underflow to an invalid -1.
         current_verbosity = logger.get_verbosity_level()
-        logger.set_verbosity_level(min(current_verbosity - 1, 0))
+        logger.set_verbosity_level(max(current_verbosity - 1, 0))
 
         optimizer = LBFGS(
             epsilon=self.g_tol,

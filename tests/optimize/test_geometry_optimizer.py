@@ -8,6 +8,36 @@ from forte2.scf import RHF
 from forte2.system import BSE_AVAILABLE
 
 
+def test_geometry_optimizer_lowers_verbosity_by_one(monkeypatch):
+    # Regression: run() used min(current_verbosity - 1, 0), which forces the
+    # level to 0 (fully quiet) for any normal verbosity and underflows to an
+    # invalid -1 at verbosity 0. It should lower the level by one via max(...).
+    from forte2.helpers import logger
+
+    logger.set_verbosity_level(3)
+    recorded = []
+    real_set = logger.set_verbosity_level
+
+    def spy(level):
+        recorded.append(level)
+        return real_set(level)
+
+    monkeypatch.setattr(logger, "set_verbosity_level", spy)
+
+    system = System(
+        xyz="H 0 0 0\nH 0 0 2.4",
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+    )
+    rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
+    GeometryOptimizer(maxiter=5, g_tol=1.0e-7, max_step=0.5)(rhf).run()
+
+    # The first set_verbosity_level call during run() lowers 3 -> 2 (not 0).
+    assert recorded[0] == 2
+    logger.set_verbosity_level(3)
+
+
 def test_geometry_optimizer_relaxes_stretched_h2():
     system = System(
         xyz="H 0 0 0\nH 0 0 2.4",
