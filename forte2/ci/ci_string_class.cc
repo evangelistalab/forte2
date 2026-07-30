@@ -22,7 +22,7 @@ StringClass::StringClass(size_t symmetry, const std::vector<std::vector<int>>& o
         beta_occupation_group_[beta_occupation[i]] = i;
     }
     int k = 0;
-    for (size_t n = 0; const auto& sym : orbital_symmetry) {
+    for (size_t n{0}; const auto& sym : orbital_symmetry) {
         assert(n < gas_masks_.size());
         gas_masks_[n].clear();
         for (int j = 0, maxj = sym.size(); j < maxj; j++) {
