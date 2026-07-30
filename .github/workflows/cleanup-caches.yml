@@ -1,0 +1,31 @@
+name: cleanup-pr-caches
+
+# When a PR closes (merged or not), its refs/pull/<N>/merge caches can never be
+# read again, so delete them all to reclaim the repo's 10 GB cache budget.
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write      # needed to delete caches
+      contents: read
+    steps:
+      - name: Delete all caches for the closed PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_REF: refs/pull/${{ github.event.pull_request.number }}/merge
+        run: |
+          ids=$(gh cache list --ref "$PR_REF" --limit 100 \
+                  --json id --jq '.[].id' \
+                  --repo "$GITHUB_REPOSITORY") || ids=""
+          if [ -z "$ids" ]; then
+            echo "No caches found for $PR_REF"
+            exit 0
+          fi
+          for id in $ids; do
+            echo "Deleting cache $id"
+            gh cache delete "$id" --repo "$GITHUB_REPOSITORY" || true
+          done
