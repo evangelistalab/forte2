@@ -274,7 +274,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @param n the orbital index
     /// @return the sign of the creation operator if the orbital was unoccupied, 0 otherwise
     double create_alpha(size_t n) {
-        if ((n >= N) or na(n))
+        if ((n >= norb_capacity) or na(n))
             return 0.0;
         set_na(n, true);
         return slater_sign_a(n);
@@ -286,7 +286,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @param n the orbital index
     /// @return the sign of the creation operator if the orbital was unoccupied, 0 otherwise
     double create_beta(size_t n) {
-        if ((n >= N) or nb(n))
+        if ((n >= norb_capacity) or nb(n))
             return 0.0;
         set_nb(n, true);
         return slater_sign_b(n);
@@ -298,7 +298,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @param n the orbital index
     /// @return the sign of the annihilation operator if the orbital was occupied, 0 otherwise
     double destroy_alpha(size_t n) {
-        if ((n >= N) or (not na(n)))
+        if ((n >= norb_capacity) or (not na(n)))
             return 0.0;
         set_na(n, false);
         return slater_sign_a(n);
@@ -310,7 +310,7 @@ template <size_t N> class DeterminantImpl : public BitArray<N> {
     /// @param n the orbital index
     /// @return the sign of the annihilation operator if the orbital was occupied, 0 otherwise
     double destroy_beta(size_t n) {
-        if ((n >= N) or (not nb(n)))
+        if ((n >= norb_capacity) or (not nb(n)))
             return 0.0;
         set_nb(n, false);
         return slater_sign_b(n);
