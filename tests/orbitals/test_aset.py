@@ -5,6 +5,7 @@ from pathlib import Path
 from forte2 import System, RHF, MCOptimizer, ASET, CI, State, CISolver
 from forte2.dsrg import DSRG_MRPT2
 from forte2.helpers.comparisons import approx, approx_abs
+from forte2.state import EmbeddingMOSpace
 
 # Directory containing *this* file
 THIS_DIR = Path(__file__).resolve().parent
@@ -515,3 +516,110 @@ def test_aset_gas_semicanonical_noninteracting_fragments():
         np.eye(system.nmo),
         atol=1e-10,
     )
+
+
+def spans_same_space(S, C1, C2):
+    """
+    Check whether the column sets C1 and C2 span the same space.
+
+    Both column sets are assumed orthonormal with respect to the metric S, as
+    MO coefficients always are. The singular values of C1^T S C2 are then the
+    cosines of the principal angles between the two subspaces, and they are all
+    equal to one if and only if the spans coincide.
+    """
+    assert C1.shape == C2.shape
+    sv = np.linalg.svd(C1.conj().T @ S @ C2, compute_uv=False)
+    return np.allclose(sv, 1.0, atol=1e-8, rtol=0.0)
+
+
+def test_aset_noncontiguous_frozen_core_orbital_ordering():
+    """
+    Check that ASET places the embedding orbitals in the correct MO slots.
+
+    ASET converts between the original and contiguous MO layouts three times:
+    when building the fragment projector, when handing the orbitals to the
+    semicanonicalizer, and when writing the result back. Choosing frozen core
+    orbitals that are not contiguous makes the permutation differ from both the
+    identity and its own inverse, so applying the wrong member of the
+    orig_to_contig/contig_to_orig pair scrambles the orbitals.
+
+    That scrambling only mixes orbitals within the occupied block, which leaves
+    the CASCI energy and the orthonormality of C invariant. The assertions here
+    are therefore based on which orbital ends up in which labeled slot: the
+    subspaces the user pinned by index must be preserved, and the orbitals
+    assigned to fragment A must be the ones localized on the fragment.
+    """
+    xyz = """
+    C       -2.2314881720      2.3523969887      0.1565319638
+    C       -1.1287322054      1.6651786288     -0.1651010551
+    H       -3.2159664855      1.9109197306      0.0351701750
+    H       -2.1807424354      3.3645292222      0.5457999612
+    H       -1.2085033449      0.7043108616     -0.5330598833
+    C        0.2601218384      2.1970946692     -0.0290628762
+    H        0.7545456004      2.2023392001     -1.0052240245
+    H        0.8387453665      1.5599644558      0.6466877402
+    H        0.2749376338      3.2174213526      0.3670138598
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+    )
+
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = CISolver(
+        State(nel=24, multiplicity=1, ms=0.0),
+        core_orbitals=11,
+        active_orbitals=2,
+    )
+    mc = MCOptimizer(ci_solver, die_if_not_converged=False)(rhf)
+
+    # Leaving a gap in the frozen core makes the embedding permutation a
+    # non-involution, which is what distinguishes the two permutation directions.
+    frozen_core = [0, 1, 5]
+    aset = ASET(
+        fragment=["C1-2", "H1-3"],
+        frozen_core_orbitals=frozen_core,
+        cutoff_method="threshold",
+    )(mc)
+    aset.run()
+
+    partition = aset.partition
+    index_A_occ = partition["index_A_occ"]
+    index_B_occ = partition["index_B_occ"]
+    index_A_vir = partition["index_A_vir"]
+    index_B_vir = partition["index_B_vir"]
+
+    # Rebuild the space ASET used internally to confirm the premise of the test.
+    emb_space = EmbeddingMOSpace(
+        nmo=system.nmo,
+        frozen_core_orbitals=frozen_core,
+        B_core_orbitals=index_B_occ,
+        A_core_orbitals=index_A_occ,
+        active_orbitals=partition["active_orbitals"],
+        A_virtual_orbitals=index_A_vir,
+        B_virtual_orbitals=index_B_vir,
+        frozen_virtual_orbitals=[],
+    )
+    orig_to_contig = np.asarray(emb_space.orig_to_contig)
+    contig_to_orig = np.asarray(emb_space.contig_to_orig)
+    assert not np.array_equal(orig_to_contig, np.arange(system.nmo))
+    assert not np.array_equal(orig_to_contig, contig_to_orig)
+
+    S = system.ints_overlap()
+    C = aset.C[0]
+    np.testing.assert_allclose(C.conj().T @ S @ C, np.eye(system.nmo), atol=1e-10)
+
+    # The orbitals the user pinned by index must still span the same space as
+    # in the parent MCSCF, i.e. they must not have been permuted away.
+    for indices in (frozen_core, mc.mo_space.active_indices):
+        assert len(indices) > 0
+        assert spans_same_space(S, mc.C[0][:, indices], C[:, indices])
+
+    # Every orbital assigned to fragment A must be more localized on the
+    # fragment than any orbital assigned to environment B.
+    diag_P = np.einsum("mi,mn,ni->i", C.conj(), aset.P_ao_frag, C, optimize=True)
+    for index_A, index_B in ((index_A_occ, index_B_occ), (index_A_vir, index_B_vir)):
+        assert len(index_A) > 0 and len(index_B) > 0
+        assert diag_P[index_A].min() > diag_P[index_B].max()
