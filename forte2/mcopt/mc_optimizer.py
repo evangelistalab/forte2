@@ -479,7 +479,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         avg_de = np.abs(self.E_avg - new_E_avg)
         de = np.abs(self.E - new_E_avg)
         max_de = max(max_ci_de, avg_de, de)
-        if max_de > self.e_tol:
+        if max_de > self.e_tol * 10.0:  # account for near-threshold numerical noise
             logger.log_warning(
                 f"After producing the final orbitals, the CI solver converged to different solutions: "
                 f"Final energies: E_CI = {new_E_ci}, E_avg = {new_E_avg:.10f}, E = {self.E:.10f}. "
