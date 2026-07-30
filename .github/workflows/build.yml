@@ -24,13 +24,14 @@ jobs:
       actions: write      # needed to delete stale caches
       contents: read
     env:
-      # Content-addressed compiler cache — immune to the mtime resets that
-      # defeat Make's incremental logic after a git checkout.
+      # Cache .o files
       CCACHE_DIR: ${{ github.workspace }}/.ccache
       CCACHE_MAXSIZE: "1G"
-      # Hash the compiler's contents, not its mtime — survives conda reinstalls
-      # that rewrite the binary's timestamp without changing it.
       CCACHE_COMPILERCHECK: content
+      # Rewrite absolute paths under the workspace to relative before hashing,
+      # so cache entries aren't tied to the checkout's absolute location.
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_SLOPPINESS: include_file_ctime,include_file_mtime,time_macros,locale,pch_defines
     defaults:
       run:
         shell: bash -el {0}
