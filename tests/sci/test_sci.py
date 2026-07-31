@@ -184,7 +184,7 @@ def test_sci5():
     rhf = RHF(charge=0, e_tol=1e-10)(system)
     sci = SelectedCI(
         states=State(nel=9, multiplicity=2, ms=0.5),
-        active_orbitals=list(range(12)),
+        active_orbitals=list(range(14)),
         sci_params=SelectedCIParams(
             selection_algorithm="hbci",
             var_threshold=1e-5,
@@ -198,9 +198,7 @@ def test_sci5():
     )(rhf)
 
     sci.run()
-
-    # This value is sensitive to the selected space growth details; keep a practical tolerance.
-    assert sci.E[0] == pytest.approx(-96.5578779686, abs=5e-3)
+    assert sci.E[0] == pytest.approx(-96.6017082329, abs=1e-7)
 
 
 @pytest.mark.skip(reason="Could not reproduce with FCI with energy_shift")
