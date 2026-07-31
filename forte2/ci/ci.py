@@ -192,17 +192,7 @@ class _CISingleStateSolver:
             self.b_det = np.zeros((self.ndet))
             self.sigma_det = np.zeros((self.ndet))
 
-    def run(self, use_asym_ints=False):
-        if use_asym_ints:
-            assert (
-                self.two_component
-            ), "Antisymmetric integrals only supported for two-component CI."
-            assert self.ci_params.ci_algorithm.lower() in [
-                "hz",
-                "harrison-zarrabian",
-                "exact",
-            ], "Antisymmetric integrals only supported for 'hz'/'harrison-zarrabian' and 'exact' algorithms."
-
+    def run(self):
         if not self.executed:
             self._ci_solver_startup()
 
@@ -216,7 +206,6 @@ class _CISingleStateSolver:
                 self.ints.H,
                 self.ints.V,
                 self.log_level,
-                use_asym_ints,
             )
         else:
             self.ci_sigma_builder = CISigmaBuilder(
@@ -237,7 +226,7 @@ class _CISingleStateSolver:
             logger.log(f"Final CI Energy Root {i}: {e:20.12f} [Eh]", self.log_level)
 
         if self.do_test_rdms:
-            self._test_rdms(use_asym_ints)
+            self._test_rdms()
 
         self.executed = True
 
@@ -384,7 +373,7 @@ class _CISingleStateSolver:
         self.evals = self.evals_full[: self.nroot]
         self.evecs = self.evecs_full[:, : self.nroot]
 
-    def _test_rdms(self, use_asym_ints=False):
+    def _test_rdms(self):
         # Compute the RDMs from the CI vectors
         # and verify the energy from the RDMs matches the CI energy
         logger.log("\nComputing RDMs from CI vectors.\n", self.log_level)
@@ -395,8 +384,7 @@ class _CISingleStateSolver:
 
                 rdms_energy = self.ints.E
                 rdms_energy += np.einsum("ij,ij", rdm1, self.ints.H)
-                factor = 0.25 if use_asym_ints else 0.5
-                rdms_energy += factor * np.einsum("ijkl,ijkl", rdm2, self.ints.V)
+                rdms_energy += 0.5 * np.einsum("ijkl,ijkl", rdm2, self.ints.V)
                 logger.log(
                     f"CI energy from RDMs: {rdms_energy:.12f} Eh", self.log_level
                 )
@@ -407,10 +395,6 @@ class _CISingleStateSolver:
                     f"RDMs for root {root} validated successfully.\n", self.log_level
                 )
             return
-        if use_asym_ints:
-            raise NotImplementedError(
-                "The 'use_asym_ints' option is not implemented for non-relativistic CI."
-            )
         for root in range(self.nroot):
             root_rdms = {}
             root_rdms["rdm1"] = self.make_sf_1rdm(root)
@@ -1755,14 +1739,14 @@ class RelCISolver(RelCIBase):
             )
             self.sub_solvers.append(_CISingleStateSolver(**kwargs))
 
-    def run(self, use_asym_ints=False):
+    def run(self):
         if self.first_run:
             self._startup()
             self.first_run = False
 
         self.evals_per_solver = []
         for ci_solver in self.sub_solvers:
-            ci_solver.run(use_asym_ints=use_asym_ints)
+            ci_solver.run()
             self.evals_per_solver.append(ci_solver.evals)
 
         self.evals_flat = np.concatenate(self.evals_per_solver)
