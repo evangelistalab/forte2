@@ -124,14 +124,10 @@ np_tensor4 CISigmaBuilder::compute_aab_3rdm(np_vector C_left, np_vector C_right)
     int num_2h_class_Ka = lists_.alpha_address_2h()->nclasses();
     int num_1h_class_Kb = lists_.beta_address_1h()->nclasses();
 
-    // GEMM reformulation, identical in spirit to compute_ab_2rdm: the contraction
-    // gamma[(uv,w),(xy,z)] = sum_{Ka,Kb} (sign_uv sign_w Cl) (sign_xy sign_z Cr) is a matrix
+    // the contraction gamma[(uv,w),(xy,z)] = sum_{Ka,Kb} (sign_uv sign_w Cl) (sign_xy sign_z Cr) is a matrix
     // product over the composite hole index K = (Ka, Kb) (Ka: 2-hole alpha, Kb: 1-hole beta).
     // Gather signed left/right coefficients into B_L[(uv*norb+w), K] and B_R[(xy*norb+z), K], then
-    // gamma[row,col] += B_L * B_R^T with one dgemm per Ka-chunk. Row = uv*norb+w, col = xy*norb+z,
-    // both of dimension M = npair*norb, which matches the row-major layout of rdm[uv,w,xy,z], so no
-    // repack is needed. The alpha 2-hole side has no all-K list accessor, so it uses the per-K
-    // accessor (fetched once per hole index, fewer calls than the old cross-block loop).
+    // gamma[row,col] += B_L * B_R^T with one dgemm per Ka-chunk.
     const size_t M = npair * norb;
     for (int class_Ka{0}; class_Ka < num_2h_class_Ka; ++class_Ka) {
         const size_t maxKa = lists_.alpha_address_2h()->strpcls(class_Ka);
@@ -251,9 +247,7 @@ np_tensor4 CISigmaBuilder::compute_abb_3rdm(np_vector C_left, np_vector C_right)
     // GEMM reformulation, mirroring compute_aab_3rdm with the spins swapped: the composite hole
     // index is K = (Ka, Kb) (Ka: 1-hole alpha, Kb: 2-hole beta). Gather signed left/right
     // coefficients into B_L[(u*npair+vw), K] and B_R[(x*npair+yz), K], then gamma[row,col] +=
-    // B_L * B_R^T with one dgemm per Ka-chunk. Row = u*npair+vw, col = x*npair+yz, both of
-    // dimension M = norb*npair, matching the row-major layout of rdm[u,vw,x,yz], so no repack. The
-    // beta 2-hole side has no all-K list accessor, so it uses the per-K accessor.
+    // B_L * B_R^T with one dgemm per Ka-chunk.
     const size_t M = norb * npair;
     for (int class_Ka = 0; class_Ka < num_1h_class_Ka; ++class_Ka) {
         const size_t maxKa = lists_.alpha_address_1h()->strpcls(class_Ka);
@@ -362,11 +356,7 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) 
     const size_t npair = (norb * (norb - 1)) / 2;
     auto* sf = rdm_sf.data();
 
-    // The aab contribution (2 orbitals or more).
-    // The 12 antisymmetric permutations all share the innermost index u. We hoist every
-    // u-invariant base offset out of the u loop and group the writes by u's stride in rdm_sf
-    // (1, n, or n2) so the stride-1 group vectorizes. This replaces nanobind's view() operator,
-    // which recomputes a 6-stride dot product per element and is not vectorized at this -O level.
+    // The aab contribution
     {
         auto rdm_aab = compute_aab_3rdm(C_left, C_right);
         const auto* aab = rdm_aab.data();
@@ -376,7 +366,7 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) 
                 for (size_t r{0}; r < norb; ++r) {
                     for (size_t s{1}, st{0}; s < norb; ++s) {
                         for (size_t t{0}; t < s; ++t, ++st) {
-                            const size_t el_base = ((pq * n + r) * npair + st) * n;
+                            const size_t offset = ((pq * n + r) * npair + st) * n;
                             // u has stride 1 in these targets
                             const size_t g1a = p * n5 + q * n4 + r * n3 + s * n2 + t * n;
                             const size_t g1b = p * n5 + q * n4 + r * n3 + t * n2 + s * n;
@@ -393,7 +383,7 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) 
                             const size_t g3c = r * n5 + q * n4 + p * n3 + s * n + t;
                             const size_t g3d = r * n5 + q * n4 + p * n3 + t * n + s;
                             for (size_t u{0}; u < norb; ++u) {
-                                const auto el = aab[el_base + u];
+                                const auto el = aab[offset + u];
                                 // G3("pqrstu") += g3aab_("pqrstu");
                                 sf[g1a + u] += el;
                                 sf[g1b + u] -= el;
@@ -419,10 +409,7 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) 
         }
     }
 
-    // The abb contribution (2 orbitals or more). Same hoisting strategy as aab: the innermost
-    // packed index is u (with u < t). Every target base (u=0) is hoisted out of the u loop; the
-    // comment on each line is the exact rdm_sf(a,b,c,d,e,f) tuple it writes, and u's stride is n2,
-    // n, or 1 depending on whether u sits in the 4th, 5th, or 6th slot.
+    // The abb contribution 
     {
         auto rdm_abb = compute_abb_3rdm(C_left, C_right);
         const auto* abb = rdm_abb.data();
@@ -430,7 +417,7 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) 
             for (size_t q{1}, qr{0}; q < norb; ++q) {
                 for (size_t r{0}; r < q; ++r, ++qr) {
                     for (size_t s{0}; s < norb; ++s) {
-                        const size_t el_base = ((p * npair + qr) * n + s) * npair;
+                        const size_t offset = ((p * npair + qr) * n + s) * npair;
                         for (size_t t{1}, tu{0}; t < norb; ++t) {
                             // bases with u at stride 1 (u in 6th slot)
                             const size_t b1 = p * n5 + q * n4 + r * n3 + s * n2 + t * n;  //(pqrstu)+
@@ -448,7 +435,7 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) 
                             const size_t b10 = q * n5 + r * n4 + p * n3 + t * n + s;  //(qrputs)-
                             const size_t b12 = r * n5 + q * n4 + p * n3 + t * n + s;  //(rqputs)+
                             for (size_t u{0}; u < t; ++u, ++tu) {
-                                const auto el = abb[el_base + tu];
+                                const auto el = abb[offset + tu];
                                 const size_t un = u * n;
                                 const size_t un2 = u * n2;
                                 sf[b1 + u] += el;
@@ -475,15 +462,10 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) 
         return rdm_sf; // No same-spin contributions to the 3-RDM for less than 3 orbitals
     }
 
-    // The aaa/bbb (same-spin) contributions. For a fixed bra triplet (p>q>r) the whole (d,e,f)
+    // The aaa/bbb (same-spin) contributions. For a fixed bra triplet (p>q>r) the whole (s,t,u)
     // ket sub-block is identical up to the bra-permutation sign, so we assemble that norb^3 block
-    // once in a small L2-resident buffer with the antisymmetric ket signs, then add each of the 6
-    // bra permutations as a contiguous, streaming signed accumulation onto rdm_sf (which already
-    // holds the aab+abb data). This replaces 36 strided writes through the 6-D view operator with
-    // sequential block updates, making the same-spin expansion memory-bandwidth bound. This is the
-    // approach validated in the relativistic 3-RDM; here it accumulates (+=/-=) instead of
-    // assigning, and runs once per spin. Non-distinct (d,e,f) positions stay zero in ketrow and so
-    // contribute nothing (they retain their aab/abb values).
+    // once in a buffer with the ket signs, then add each of the 6
+    // bra permutations as a contiguous block onto rdm_sf
     const size_t ntriplets = (norb * (norb - 1) * (norb - 2)) / 6;
     const size_t N3 = n3;
     std::vector<double> ketrow(N3, 0.0);
@@ -507,7 +489,7 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) 
             for (size_t q{1}; q < p; ++q) {
                 for (size_t r{0}; r < q; ++r, ++pqr) {
                     const auto* row = sss_data + pqr * ntriplets;
-                    // Scatter the ket triplets into the (d,e,f) block with antisymmetric signs.
+                    // Scatter the ket triplets into the (s,t,u) block with antisymmetric signs.
                     for (size_t s{2}, stu{0}; s < norb; ++s) {
                         for (size_t t{1}; t < s; ++t) {
                             for (size_t u{0}; u < t; ++u, ++stu) {
@@ -521,7 +503,7 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) 
                             }
                         }
                     }
-                    // Add the 6 bra permutations as contiguous streaming signed accumulations.
+                    // Add the 6 bra permutations as contiguous signed accumulations.
                     add_block(true, p, q, r);
                     add_block(false, p, r, q);
                     add_block(true, r, p, q);

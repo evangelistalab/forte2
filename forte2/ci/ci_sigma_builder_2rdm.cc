@@ -122,13 +122,10 @@ np_tensor4 CISigmaBuilder::compute_ab_2rdm(np_vector C_left, np_vector C_right) 
     const int num_1h_class_Kb = lists_.beta_address_1h()->nclasses();
 
     // The contraction gamma[uv,xy] = sum_{Ka,Kb} (sign_u sign_v Cl[Ja,Jb]) (sign_x sign_y Cr[Ia,Ib])
-    // is a matrix product over the composite one-hole index K = (Ka, Kb): for a fixed K the creation
-    // maps (u,v) -> (Ja,Jb) and (x,y) -> (Ia,Ib) are bijections, so we gather the (signed) left
-    // coefficients into B_L[(u*norb+v), K] and the (signed) right coefficients into
-    // B_R[(x*norb+y), K], then accumulate gamma[(uv),(xy)] += B_L * B_R^T with one zgemm per
-    // Ka-chunk. This mirrors the already-GEMM'd opposite-spin sigma build (H2_hz_opposite_spin) and
-    // replaces the latency-bound 4-deep rank-1 scatter with a single BLAS-3 call. The (uv)/(xy)
-    // ordering matches the row-major layout of rdm[u,v,x,y], so no repacking is needed.
+    // is a matrix product over the composite one-hole index K = (Ka, Kb)
+    // we can gather the (signed) left coefficients into B_L[(u*norb+v), K] and 
+    // the (signed) right coefficients into B_R[(x*norb+y), K], then accumulate gamma[(uv),(xy)] += B_L * B_R^T 
+    // with one zgemm per Ka-chunk
     for (int class_Ka = 0; class_Ka < num_1h_class_Ka; ++class_Ka) {
         const auto maxKa = lists_.alpha_address_1h()->strpcls(class_Ka);
         for (int class_Kb = 0; class_Kb < num_1h_class_Kb; ++class_Kb) {
