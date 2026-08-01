@@ -105,7 +105,13 @@ void RelCISigmaBuilder::H1_hz(std::span<std::complex<double>> basis,
                                 : lists_.get_beta_1h_list(class_K, K_start + K, class_Ib);
                         // D(q,[K L]) += <K|a_q|I> C(I,L)
                         for (const auto& [sign_K, q, I] : Klist) {
-                            add(maxL, sign_K, &tr[I * maxL], 1, &Kblock2_[q * dimKL + K * maxL], 1);
+                            // Inline the length-maxL axpy (maxL == 1 for two-component CI) to
+                            // avoid a BLAS dispatch per substitution.
+                            const double s = static_cast<double>(sign_K);
+                            const auto* src = &tr[I * maxL];
+                            auto* dst = &Kblock2_[q * dimKL + K * maxL];
+                            for (size_t idx{0}; idx < maxL; ++idx)
+                                dst[idx] += s * src[idx];
                         }
                     }
 
@@ -127,8 +133,11 @@ void RelCISigmaBuilder::H1_hz(std::span<std::complex<double>> basis,
                                     ? lists_.get_alpha_1h_list(class_K, K_start + K, class_Ja)
                                     : lists_.get_beta_1h_list(class_K, K_start + K, class_Jb);
                             for (const auto& [sign_K, p, I] : Klist) {
-                                add(maxL, sign_K, &Kblock1_[p * dimKL + K * maxL], 1, &TL[I * maxL],
-                                    1);
+                                const double s = static_cast<double>(sign_K);
+                                const auto* src = &Kblock1_[p * dimKL + K * maxL];
+                                auto* dst = &TL[I * maxL];
+                                for (size_t idx{0}; idx < maxL; ++idx)
+                                    dst[idx] += s * src[idx];
                             }
                         }
                         scatter_block(TL, sigma, spin, lists_, class_Ja, class_Jb);
@@ -193,8 +202,11 @@ void RelCISigmaBuilder::H2_hz_same_spin(std::span<std::complex<double>> basis,
                                 : lists_.get_beta_2h_list(class_K, K + K_start, class_Ib);
                         for (const auto& [sign_K, q, s, I] : Krlist) {
                             const size_t qs_index = pair_index_gt(q, s);
-                            add(maxL, sign_K, &tr[I * maxL], 1,
-                                &Kblock2_[qs_index * dimKL + K * maxL], 1);
+                            const double sgn = static_cast<double>(sign_K);
+                            const auto* src = &tr[I * maxL];
+                            auto* dst = &Kblock2_[qs_index * dimKL + K * maxL];
+                            for (size_t idx{0}; idx < maxL; ++idx)
+                                dst[idx] += sgn * src[idx];
                         }
                     }
 
@@ -214,8 +226,11 @@ void RelCISigmaBuilder::H2_hz_same_spin(std::span<std::complex<double>> basis,
                                     : lists_.get_beta_2h_list(class_K, K + K_start, class_Jb);
                             for (const auto& [sign_K, p, r, I] : Klist) {
                                 const size_t pr_index = pair_index_gt(p, r);
-                                add(maxL, sign_K, &Kblock1_[pr_index * dimKL + K * maxL], 1,
-                                    &TL[I * maxL], 1);
+                                const double sgn = static_cast<double>(sign_K);
+                                const auto* src = &Kblock1_[pr_index * dimKL + K * maxL];
+                                auto* dst = &TL[I * maxL];
+                                for (size_t idx{0}; idx < maxL; ++idx)
+                                    dst[idx] += sgn * src[idx];
                             }
                         }
                         scatter_block(TL, sigma, spin, lists_, class_Ja, class_Jb);
