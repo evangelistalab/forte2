@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 
 from forte2 import System
-from forte2.system.basis_utils import BasisInfo, get_shell_label, shell_label_to_lm
+from forte2.system.basis_utils import AM_LABELS, BasisInfo, get_shell_label, shell_label_to_lm, get_spinor_label
 from forte2.system.build_basis import decontract_basis, build_basis, BSE_AVAILABLE
 from forte2.integrals import overlap
 
@@ -71,17 +71,53 @@ def test_get_shell_label():
     assert get_shell_label(4, 0) == "g(0)"
     assert get_shell_label(11, 22) == "n(22)"
 
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         get_shell_label(-1, 0)
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         get_shell_label(0, -3)
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         get_shell_label(0, 4)
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         get_shell_label(5, 11)
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):
         get_shell_label(12, 2)
+    with pytest.raises(ValueError):
+        get_shell_label(len(AM_LABELS), 0)
 
+def test_get_spinor_label():
+    # s shell: only j = 1/2 (jdouble = 1), mj = -1/2, +1/2
+    assert get_spinor_label(0, 1, -1) == "s1/2, -1/2"
+    assert get_spinor_label(0, 1, 1) == "s1/2, +1/2"
+
+    # p shell: j = 1/2 (jdouble = 1) and j = 3/2 (jdouble = 3)
+    assert get_spinor_label(1, 1, -1) == "p1/2, -1/2"
+    assert get_spinor_label(1, 1, 1) == "p1/2, +1/2"
+    assert get_spinor_label(1, 3, -3) == "p3/2, -3/2"
+    assert get_spinor_label(1, 3, -1) == "p3/2, -1/2"
+    assert get_spinor_label(1, 3, 1) == "p3/2, +1/2"
+    assert get_spinor_label(1, 3, 3) == "p3/2, +3/2"
+
+    # d shell: j = 3/2 (jdouble = 3) and j = 5/2 (jdouble = 5)
+    assert get_spinor_label(2, 3, -3) == "d3/2, -3/2"
+    assert get_spinor_label(2, 5, 5) == "d5/2, +5/2"
+
+    # f shell: j = 5/2 (jdouble = 5) and j = 7/2 (jdouble = 7)
+    assert get_spinor_label(3, 5, -5) == "f5/2, -5/2"
+    assert get_spinor_label(3, 7, 7) == "f7/2, +7/2"
+
+    # higher angular momenta use the plain AM label as well
+    assert get_spinor_label(4, 7, -1) == "g7/2, -1/2"
+    assert get_spinor_label(11, 23, 23) == "n23/2, +23/2"
+
+    # negative angular momentum quantum number
+    with pytest.raises(Exception):
+        get_spinor_label(-1, 1, -1)
+    # negative total angular momentum
+    with pytest.raises(Exception):
+        get_spinor_label(0, -1, -1)
+    # angular momentum beyond the defined labels
+    with pytest.raises(Exception):
+        get_spinor_label(12, 1, -1)
 
 def test_shell_label_to_lm():
     assert shell_label_to_lm("s") == [(0, 0)]

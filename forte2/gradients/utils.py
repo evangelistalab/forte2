@@ -114,11 +114,12 @@ def compute_gradient(system, D1, W1, W2, W3):
     gradient += flat_to_atom_gradient(integrals.coulomb_2c_deriv(system, W2), natoms)
     return gradient
 
+
 def build_metric_inverted_three_center(system):
     r"""Computes the three-center integrals with the Coulomb metric inverse applied.
-    
+
     Compute the quantity :math:`Z^{P}_{\mu\nu}` defined as:
-    
+
     .. math::
         Z^{P}_{\mu\nu}
         =
@@ -128,7 +129,7 @@ def build_metric_inverted_three_center(system):
     ----------
     system : System
         The system for which to compute the metric-inverted three-center integrals.
-    
+
     Returns
     -------
     NDArray

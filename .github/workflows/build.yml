@@ -1,20 +1,40 @@
 name: build
 
-on: 
+on:
   push:
+    branches: [main]
+    tags: ['**']
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   schedule:
     - cron: '30 15 * * *'
   merge_group:
     types: [checks_requested]
 
+# Cancel in-progress runs when a newer commit is pushed to the same PR/branch.
+# Never cancel on main or in merge queue, where every run must complete.
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+    permissions:
+      actions: write      # needed to delete stale caches
+      contents: read
+    env:
+      # Cache .o files
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: "1G"
+      CCACHE_COMPILERCHECK: content
+      # Rewrite absolute paths under the workspace to relative before hashing,
+      # so cache entries aren't tied to the checkout's absolute location.
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_SLOPPINESS: include_file_ctime,include_file_mtime,time_macros,locale,pch_defines
     defaults:
       run:
-        shell: bash -el {0}   
+        shell: bash -el {0}
 
     strategy:
       fail-fast: false
@@ -38,20 +58,72 @@ jobs:
         auto-activate-base: false
         add-pip-as-python-dependency: true
 
+    - name: Restore C++ build tree
+      id: cache-restore
+      uses: actions/cache/restore@v4
+      with:
+        path: build
+        key: cxxbuild-${{ matrix.os }}-${{ hashFiles('environment.yml', '**/CMakeLists.txt', 'pyproject.toml') }}-${{ github.run_id }}
+        restore-keys: |
+          cxxbuild-${{ matrix.os }}-${{ hashFiles('environment.yml', '**/CMakeLists.txt', 'pyproject.toml') }}-
+          cxxbuild-${{ matrix.os }}-
+
+    - name: Restore ccache
+      id: ccache-restore
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ccache-${{ matrix.os }}-${{ github.run_id }}
+        restore-keys: |
+          ccache-${{ matrix.os }}-
+
     - name: Compile Forte2
       id: compile-forte2
       run: |
         conda activate forte
         export CMAKE_GENERATOR="Unix Makefiles"
-        pip install --no-build-isolation -ve .
+        ccache --zero-stats
+        pip install --no-build-isolation -ve . \
+          --config-settings=cmake.define.CMAKE_C_COMPILER_LAUNCHER=ccache \
+          --config-settings=cmake.define.CMAKE_CXX_COMPILER_LAUNCHER=ccache
+        ccache --show-stats
         pip list
+
+    - name: Trim stale build caches for this ref
+      if: ${{ steps.compile-forte2.outcome == 'success' && !cancelled() }}
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        prefix="cxxbuild-${{ matrix.os }}-"
+        # Newest first; keep index 0 (the fallback we just restored), delete the rest.
+        ids=$(gh cache list --ref "$GITHUB_REF" --key "$prefix" \
+                --sort created_at --order desc --limit 100 \
+                --json id --jq '.[1:][].id' \
+                --repo "$GITHUB_REPOSITORY" 2>/dev/null) || ids=""
+        for id in $ids; do
+          gh cache delete "$id" --repo "$GITHUB_REPOSITORY" || true
+        done
+
+    - name: Save C++ build tree
+      if: ${{ steps.compile-forte2.outcome == 'success' && !cancelled() }}
+      uses: actions/cache/save@v4
+      with:
+        path: build
+        key: cxxbuild-${{ matrix.os }}-${{ hashFiles('environment.yml', '**/CMakeLists.txt', 'pyproject.toml') }}-${{ github.run_id }}
+
+    - name: Save ccache
+      if: ${{ steps.compile-forte2.outcome == 'success' && !cancelled() }}
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ccache-${{ matrix.os }}-${{ github.run_id }}
 
     - name: Run Forte2 pytest tests
       if: ${{ steps.compile-forte2.outcome == 'success' && !cancelled() }}
       run: |
         conda activate forte
         cd $HOME/work/forte2/forte2/tests
-        if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "merge_group" || ( "${{ github.event_name }}" == "pull_request" && "${{ contains(github.event.pull_request.labels.*.name, 'ready') }}" == "true" ) ]]; then
+        if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "merge_group" || ( "${{ github.event_name }}" == "pull_request" && "${{ github.event.pull_request.draft }}" == "false" ) ]]; then
           pytest -v --cov --cov-branch --cov-report=xml
         else
           pytest -v -m "not slow" --cov --cov-branch --cov-report=xml

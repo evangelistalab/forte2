@@ -73,7 +73,7 @@ This plan is backward-compatible: existing names remain usable during a deprecat
 
 | Current | Proposed canonical | Notes |
 |---|---|---|
-| `final_orbital` | `final_orbital_basis` | Values: `original`, `semicanonical`. |
+| `final_orbitals` | `final_orbital_basis` | Values: `original`, `semicanonical`. |
 | `ci_algorithm` values `hz`, `kh` | `ci_solver` values `harrison_zarrabian`, `knowles_handy`, `exact`, `sparse` | Keep short aliases accepted. |
 | `active_frozen_orbitals` | `frozen_active_orbitals` | Make naming parallel with core/virtual variants. |
 | `do_transition_dipole` | `compute_transition_dipole` | Prefer verb that implies action. |

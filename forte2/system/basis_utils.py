@@ -70,7 +70,7 @@ def get_shell_label(l, idx):
             f"Index {idx} exceeds maximum allowed for angular momentum {l}: {2*l}"
         )
 
-    if l > len(AM_LABELS):
+    if l >= len(AM_LABELS):
         raise ValueError(f"Angular momentum {l} exceeds defined labels.")
 
     if l < len(SPH_LABELS) and idx < len(SPH_LABELS[l]):

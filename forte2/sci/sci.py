@@ -1349,14 +1349,14 @@ class SelectedCI(SelectedCISolver):
     """
 
     die_if_not_converged: bool = True
-    final_orbital: str = "original"
+    final_orbitals: str = "original"
     do_transition_dipole: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
 
     def run(self):
         super().run()
         self._post_process()
-        if self.final_orbital == "semicanonical":
+        if self.final_orbitals == "semicanonical":
             semi = Semicanonicalizer(
                 system=self.system,
                 mo_space=self.mo_space,

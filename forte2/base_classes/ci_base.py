@@ -1,5 +1,6 @@
 from abc import abstractmethod
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 import numpy as np
 
@@ -27,6 +28,10 @@ class CIBase(ActiveSpaceSolver):
     ### Non-init attributes
     first_run: bool = field(default=True, init=False)
     executed: bool = field(default=False, init=False)
+
+    # By default, assume the solver is not invariant to orbital rotations.
+    # Subclasses can override this.
+    orbital_rotation_invariant: ClassVar[bool] = False
 
     def __call__(self, parent_method):
         self.parent_method = parent_method
@@ -61,7 +66,8 @@ class CIBase(ActiveSpaceSolver):
 
         if left_state != right_state:
             if (
-                self.sa_info.states[left_state].na != self.sa_info.states[right_state].na
+                self.sa_info.states[left_state].na
+                != self.sa_info.states[right_state].na
                 or self.sa_info.states[left_state].nb
                 != self.sa_info.states[right_state].nb
             ):

@@ -39,8 +39,8 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
         # the basis is changed to semicanonical orbitals.
         # We could handle it here, but it's cleaner to enforce it at the parent method level.
         assert (
-            self.parent_method.final_orbital.lower() == "semicanonical"
-        ), "The final_orbital of the parent method must be 'semicanonical' for DSRG methods."
+            self.parent_method.final_orbitals.lower() == "semicanonical"
+        ), "The final_orbitals of the parent method must be 'semicanonical' for DSRG methods."
         return self
 
     def __post_init__(self):
@@ -127,6 +127,7 @@ class DSRGBase(SystemMixin, MOsMixin, MOSpaceMixin, ABC):
         self.semicanonicalizer = Semicanonicalizer(
             system=self.system,
             mo_space=self.mo_space,
+            irrep_indices=np.array(self.irrep_indices[0])[self.mo_space.orig_to_contig],
             mix_active=False,
             # do not mix correlated core and frozen core orbitals after MCSCF
             mix_inactive=False,
