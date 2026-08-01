@@ -16,6 +16,13 @@ RelCISigmaBuilder::RelCISigmaBuilder(const CIStrings& lists, double E, np_matrix
                                      np_tensor4_complex& V, int log_level)
     : lists_(lists), E_(E), H_(H), V_(V), rel_slater_rules_(lists.norb(), E, H, V),
       log_level_(log_level) {
+    // Two-component (relativistic) CI treats every electron as an alpha spinor, so the beta space
+    // is the single vacuum string (nb == 0). The sigma/RDM builders rely on this: the opposite-spin
+    // spectator string count is always 1.
+    if (lists.nb() != 0)
+        throw std::runtime_error("RelCISigmaBuilder requires nb == 0 (two-component CI treats all "
+                                 "electrons as alpha spinors).");
+
     // Find the size of the largest symmetry block
     size_t max_size = 0;
     for (auto const& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
@@ -138,8 +145,8 @@ void RelCISigmaBuilder::Hamiltonian(np_vector_complex basis, np_vector_complex s
     H0(b_span, s_span);
     if (algorithm_ == CIAlgorithm::Knowles_Handy) {
     } else {
-        H1_hz(b_span, s_span, Spin::Alpha, h_hz);
-        H2_hz_same_spin(b_span, s_span, Spin::Alpha);
+        H1_hz(b_span, s_span, h_hz);
+        H2_hz_same_spin(b_span, s_span);
     }
 }
 
