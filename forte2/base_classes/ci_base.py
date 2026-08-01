@@ -97,6 +97,38 @@ class CIBase(ActiveSpaceSolver):
                 rdm1 += ci_solver.make_1rdm(j) * self.weights[i][j]
         return rdm1
 
+    def make_NO_cumulant(self):
+        from forte2.ci.ci_utils import make_2cumulant_sf, make_2cumulant_so
+        rdm1 = self.make_average_1rdm()
+        rdm2 = self.make_average_2rdm()
+
+        occs, evecs = np.linalg.eigh(rdm1)
+        occs = occs[::-1]
+        evecs = evecs[:, ::-1]
+        rdm1_no = np.einsum(
+            "pP,pq,qQ->PQ",
+            evecs.conj(),
+            rdm1,
+            evecs,
+            optimize=True,
+        )
+        rdm2_no = np.einsum(
+                "pP,qQ,pqrs,rR,sS->PQRS",
+                evecs.conj(),
+                evecs.conj(),
+                rdm2,
+                evecs,
+                evecs,
+                optimize=True,
+            )
+
+        if self.two_component:
+            cumulant2_no = make_2cumulant_so(rdm1_no, rdm2_no)
+        else:
+            cumulant2_no = make_2cumulant_sf(rdm1_no, rdm2_no)
+        return cumulant2_no
+        
+
     def make_average_2rdm(self):
         """
         Make the average spin-free two-particle RDM from the CI vectors.
@@ -199,6 +231,7 @@ class RelCIBase(RelActiveSpaceSolver):
     _get_state_root = CIBase._get_state_root
     _validate_rdm_inputs = CIBase._validate_rdm_inputs
     compute_average_energy = CIBase.compute_average_energy
+    make_NO_cumulant = CIBase.make_NO_cumulant
     make_average_1rdm = CIBase.make_average_1rdm
     make_average_2rdm = CIBase.make_average_2rdm
     make_average_3rdm = CIBase.make_average_3rdm
