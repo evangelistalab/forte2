@@ -91,6 +91,11 @@ nanobind_add_module(
   # reusing a shared libnanobind across libraries
   NB_STATIC
 
+  # By default nanobind_add_module appends "-Os" (optimize for size)
+  # This can override earlier -O flags. Passing this option stops
+  # nanobind from appending -Os
+  NOMINSIZE
+
   # Source code goes here
   api/forte2_api.cc
   api/ci_api.cc
