@@ -413,7 +413,7 @@ class SelectedCIHelper:
         """Return the total selection time"""
 
 class RelCISigmaBuilder:
-    def __init__(self, lists: CIStrings, E: float, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], log_level: int = 3, use_asym_ints: bool = False) -> None:
+    def __init__(self, lists: CIStrings, E: float, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], log_level: int = 3) -> None:
         """
         Initialize the CISigmaBuilder with CIStrings, energy, Hamiltonian, and integrals
         """
@@ -644,9 +644,9 @@ class SlaterRules:
     def slater_rules(self, lhs: Determinant, rhs: Determinant) -> float: ...
 
 class RelSlaterRules:
-    def __init__(self, nspinor: int, scalar_energy: float, one_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], two_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))], tei_is_asym: bool = False) -> None:
+    def __init__(self, nspinor: int, scalar_energy: float, one_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], two_electron_integrals: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))]) -> None:
         """
-        Initialize a RelSlaterRules object with the number of spinor(orbitals), scalar energy, one-electron integrals, two-electron integrals in physicist's notation, and a flag indicating if the two-electron integrals are antisymmetric.
+        Initialize a RelSlaterRules object with the number of spinor(orbitals), scalar energy, one-electron integrals, and two-electron integrals in physicist's notation.
         """
 
     def energy(self, arg: Determinant, /) -> float: ...

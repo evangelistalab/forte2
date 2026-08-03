@@ -183,8 +183,10 @@ class RelDSRG_MRPT2_Slow(DSRGBase):
             optimize=True,
         )
 
-        self.ci_solver.set_ints(_e_scalar, _hbar1_canon, _hbar2_canon)
-        self.ci_solver.run(use_asym_ints=True)
+        # _hbar2_canon is already antisymmetric (<pq||rs>), 
+        # the CI solver antisymmetrizes it again, doubling it, hence the 0.5
+        self.ci_solver.set_ints(_e_scalar, _hbar1_canon, 0.5 * _hbar2_canon)
+        self.ci_solver.run()
         e_relaxed = self.ci_solver.compute_average_energy()
         self.relax_eigvals = self.ci_solver.evals_flat.copy()
         return e_relaxed

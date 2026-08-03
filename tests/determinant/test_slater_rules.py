@@ -492,7 +492,9 @@ def test_slater_rules_4_complex_antisym():
     h2 = h2 + h2.transpose(3, 2, 1, 0).conj()
     h2 -= h2.swapaxes(2, 3)
 
-    slater_rules = forte2.RelSlaterRules(norb, 0.0, h1, h2, tei_is_asym=True)
+    # h2 is already antisymmetric (<pq||rs>). RelSlaterRules and the CI solver
+    # antisymmetrize it, doubling it, hence the factor of 0.5
+    slater_rules = forte2.RelSlaterRules(norb, 0.0, h1, 0.5 * h2)
     dets = forte2.hilbert_space(norb, 8, 0)
     H = np.zeros((len(dets), len(dets)), dtype=complex)
     for i in range(len(dets)):
@@ -505,7 +507,7 @@ def test_slater_rules_4_complex_antisym():
     fakeints = SpinorbitalIntegrals.__new__(SpinorbitalIntegrals)
     fakeints.E = 0.0
     fakeints.H = h1
-    fakeints.V = h2
+    fakeints.V = 0.5 * h2
     mo_space = MOSpace(nmo=norb, active_orbitals=list(range(norb)))
     state = State(nel=8, multiplicity=1, ms=0.0)
     ci = _CISingleStateSolver(
@@ -518,7 +520,7 @@ def test_slater_rules_4_complex_antisym():
         do_test_rdms=True,
         two_component=True,
     )
-    ci.run(use_asym_ints=True)
+    ci.run()
 
     assert E == approx(eref)
     assert E == approx(ci.E[0])

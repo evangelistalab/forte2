@@ -20,14 +20,10 @@ class RelSlaterRules {
     /// @param nspinor Number of spinorbitals.
     /// @param scalar_energy Scalar energy term.
     /// @param one_electron_integrals One-electron integrals h[p,q] = <p|h|q>
-    /// @param two_electron_integrals Two-electron integrals V[p,q,r,s]
-    /// @param tei_is_asym Flag indicating if the two-electron integrals are antisymmetric.
-    /// If true, the two-electron integrals are assumed to be antisymmetric:
-    ///     V[p,q,r,s] = <pq|rs> - <pq|sr>.
-    /// If false, the two-electron integrals are assumed to be symmetric:
-    ///     V[p,q,r,s] = <pq|rs>.
+    /// @param two_electron_integrals Two-electron integrals in physicist's notation
+    ///     V[p,q,r,s] = <pq|rs>. They are antisymmetrized on the fly.
     RelSlaterRules(int nspinor, double scalar_energy, np_matrix_complex one_electron_integrals,
-                   np_tensor4_complex two_electron_integrals, bool tei_is_asym = false);
+                   np_tensor4_complex two_electron_integrals);
 
     // ==> Class Interface <==
 
@@ -56,10 +52,6 @@ class RelSlaterRules {
     const np_matrix_complex one_electron_integrals_;
     /// @brief Two-electron integrals (restricted) in the form V[p,q,r,s] = <pq|rs>
     const np_tensor4_complex two_electron_integrals_;
-    /// @brief Flag indicating if the two-electron integrals are antisymmetric (i.e. V[p,q,r,s] =
-    /// <pq|rs>
-    /// - <pq|sr>)
-    const bool tei_is_asym_;
 };
 
 } // namespace forte2
