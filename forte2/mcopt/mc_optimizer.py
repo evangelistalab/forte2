@@ -509,13 +509,9 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
     def _print_ao_composition(self):
         basis_info = BasisInfo(self.system, self.system.basis)
         logger.log_info1("\nAO Composition of core MOs:")
-        basis_info.print_ao_composition(
-            self.C[0], list(range(self.core.start, self.core.stop))
-        )
+        basis_info.print_ao_composition(self.C[0], self.mo_space.docc_indices)
         logger.log_info1("\nAO Composition of active MOs:")
-        basis_info.print_ao_composition(
-            self.C[0], list(range(self.actv.start, self.actv.stop))
-        )
+        basis_info.print_ao_composition(self.C[0], self.mo_space.active_indices)
 
     def _get_nonredundant_rotations(self):
         """Lower triangular matrix of nonredundant rotations"""
@@ -545,7 +541,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
         # zero out rotations between orbitals of different irreps
         if self.system.point_group.upper() != "C1":
-            _irrid = np.array(self.irrep_indices[0])
+            _irrid = self._final_orbital_irrep_indices()
             # equivalent to:
             # for i, j in range(nmo):
             #   if i^j != 0:

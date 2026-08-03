@@ -5,6 +5,53 @@ from forte2 import System, jkbuilder
 from forte2.jkbuilder.mointegrals import RestrictedMOIntegrals, SpinorbitalIntegrals
 
 
+@pytest.mark.parametrize(
+    "builder_cls", [jkbuilder.FockBuilder, jkbuilder.FockBuilderOTF]
+)
+@pytest.mark.parametrize("two_component", [False, True])
+def test_generalized_fock_assembly(builder_cls, two_component):
+    hcore = np.array([[1.0, 0.1], [0.1, 0.8]])
+    Jcore = np.array([[0.4, 0.2], [0.2, 0.3]])
+    Kcore = np.array([[0.1, 0.05], [0.05, 0.2]])
+    Jact = np.array([[0.3, 0.04], [0.04, 0.2]])
+    Kact = np.array([[0.08, 0.03], [0.03, 0.06]])
+
+    class DummySystem:
+        def __init__(self):
+            self.two_component = two_component
+
+        def ints_hcore(self):
+            return hcore
+
+    fock_builder = builder_cls.__new__(builder_cls)
+    fock_builder.system = DummySystem()
+    fock_builder.build_JK = lambda C: ([Jcore], [Kcore])
+    fock_builder.build_JK_generalized = lambda C, g1: (Jact, Kact)
+
+    C_core = np.eye(2)
+    C_act = np.eye(2)
+    g1 = np.eye(2)
+
+    if two_component:
+        core_ref = hcore + Jcore - Kcore
+        active_ref = Jact - Kact
+    else:
+        core_ref = hcore + 2.0 * Jcore - Kcore
+        active_ref = Jact - 0.5 * Kact
+
+    core_fock = fock_builder.build_core_fock(C_core)
+    active_fock = fock_builder.build_active_fock(C_act, g1)
+    generalized_fock = fock_builder.build_generalized_fock(C_core, C_act, g1)
+
+    assert np.allclose(core_fock, core_ref)
+    assert np.allclose(active_fock, active_ref)
+    assert np.allclose(generalized_fock, core_ref + active_ref)
+
+    shifted_hcore = hcore + np.eye(2)
+    shifted_core_fock = fock_builder.build_core_fock(C_core, hcore=shifted_hcore)
+    assert np.allclose(shifted_core_fock, core_ref + np.eye(2))
+
+
 def test_jkbuilder():
     xyz = """
     H 0.0 0.0 0.0

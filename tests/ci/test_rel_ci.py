@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, RHF, GHF, SpinorUpcaster
+from forte2 import System, RHF, GHF, SpinorUpcaster, MOSpace
 from forte2.helpers.comparisons import approx
 from forte2.ci import RelCI
 
@@ -87,6 +87,51 @@ def test_rel_ci_hf_ghf():
     )(scf)
     ci.run()
     assert ci.E[0] == approx(eref)
+
+
+def test_rel_ci_semicanonical_noncontiguous_mo_space():
+    xyz = """
+    Li 0.0 0.0 0.0
+    H  0.0 0.0 3.0
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+    )
+    scf = GHF(charge=0, e_tol=1e-12)(system)
+    mo_space = MOSpace(
+        nmo=system.nmo * 2,
+        core_orbitals=[0, 1],
+        active_orbitals=[2, 3, 4, 5],
+        frozen_virtual_orbitals=[6, 7],
+    )
+
+    ci_original = RelCI(nel=4, mo_space=mo_space)(scf)
+    ci_original.run()
+    ci_semicanonical = RelCI(
+        nel=4,
+        mo_space=mo_space,
+        final_orbitals="semicanonical",
+    )(scf)
+    ci_semicanonical.run()
+
+    np.testing.assert_array_equal(
+        mo_space.orig_to_contig,
+        [0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 6, 7],
+    )
+    np.testing.assert_array_equal(
+        mo_space.contig_to_orig,
+        [0, 1, 2, 3, 4, 5, 10, 11, 6, 7, 8, 9],
+    )
+    assert ci_semicanonical.E[0] == approx(ci_original.E[0])
+    np.testing.assert_allclose(
+        ci_semicanonical.C[0].conj().T @ system.ints_overlap() @ ci_semicanonical.C[0],
+        np.eye(mo_space.nmo),
+        atol=1e-10,
+    )
 
 
 def test_rel_ci_hf_transition_dipole_equivalence_to_rhf():
