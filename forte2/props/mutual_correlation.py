@@ -35,33 +35,35 @@ class MutualCorrelationAnalysis:
         Orthogonal transformation matrix to form the maximally correlated orbitals.
 
     Notes
-    ----------------------
+    -----
     This analysis expects an active space solver with the following API
-    on the selected sub-solver `solver.sub_solvers[sub_solver_index]`:
+    on the selected sub-solver ``solver.sub_solvers[sub_solver_index]``:
 
     - make_sd_1rdm(root) -> tuple[NDArray, NDArray]
-            Returns (γa, γb) spin-dependent 1-RDMs with shape (norb, norb) each.
+      Returns (γa, γb) spin-dependent 1-RDMs with shape (norb, norb) each.
     - make_sd_2rdm(root) -> tuple[NDArray, NDArray, NDArray]
-            Returns (γaa, γab, γbb) spin-dependent 2-RDMs.
-            γaa and γbb are packed (lower-triangular pair indices) and are
-            converted to full (norb, norb, norb, norb) tensors via
-            `cpp_helpers.packed_tensor4_to_tensor4`. γab is already full with shape
-            (norb, norb, norb, norb).
+      Returns (γaa, γab, γbb) spin-dependent 2-RDMs.
+      γaa and γbb are packed (lower-triangular pair indices) and are
+      converted to full (norb, norb, norb, norb) tensors via
+      ``cpp_helpers.packed_tensor4_to_tensor4``. γab is already full with shape
+      (norb, norb, norb, norb).
 
     Derived tensors and outputs:
+
     - Γ1 = γa + γb with shape (norb, norb).
     - Cumulants λaa, λab, λbb with shape (norb, norb, norb, norb) each.
     - total_correlation: scalar.
     - M1: shape (norb,), orbital correlation.
     - M2: shape (norb, norb), dyad mutual correlations (diagonal zeroed).
     - M3: shape (norb, norb, norb), triad mutual correlations (entries with
-        any repeated indices are zeroed).
+      any repeated indices are zeroed).
     - M4: shape (norb, norb, norb, norb), tetrad mutual correlations (entries
-        with any repeated pair of indices are zeroed).
+      with any repeated pair of indices are zeroed).
     - Q: shape (norb, norb), real orthogonal matrix from expm of a real
-        antisymmetric generator. Stored after `optimize_orbitals`.
+      antisymmetric generator. Stored after ``optimize_orbitals``.
 
     Notes:
+
     - This implementation targets the non-relativistic case.
     """
 

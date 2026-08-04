@@ -78,14 +78,17 @@ class CIParams(ParamsBase):
     ci_algorithm: str, optional, default="hz"
         The algorithm used for the CI sigma builder.
         Non-relativistic options are:
-            - "hz" / "Harrison-Zarrabian"
-            - "kh" / "Knowles-Handy"
-            - "exact": Exact diagonalization
+
+        - "hz" / "Harrison-Zarrabian"
+        - "kh" / "Knowles-Handy"
+        - "exact": Exact diagonalization
+
         Two-component (relativistic) options are:
-            - "hz" / "Harrison-Zarrabian"
-            - "exact": Exact diagonalization
-            - "sparse": Sigma builder using sparse representation of the Hamiltonian and states.
-                Recommended for debug use only.
+
+        - "hz" / "Harrison-Zarrabian"
+        - "exact": Exact diagonalization
+        - "sparse": Sigma builder using sparse representation of the Hamiltonian and states.
+          Recommended for debug use only.
 
     ci_builder_memory: int, optional, default=1024
         The maximum memory (in MB) to use for the CI sigma builder. This is used only if ci_algorithm is "hz" or "kh".
@@ -162,13 +165,17 @@ class SelectedCIParams(ParamsBase):
     pt2_regularizer: str, optional, default="none"
         The method used to regularize the PT2 energy correction.
         Options are:
-            - "none": No regularization.
-            - "shift": Apply a small shift to the denominators in the PT2 expression to avoid divergences:
-                1 / denom -> 1 / (denom + pt2_regularizer_strength)
-                Ept2 -> 0 as pt2_regularizer_strength -> inf
-            - "dsrg": Use a DSRG-inspired regularization of the PT2 correction:
-                1 / denom -> (1 / denom) * (1 - exp(-denom^2 * pt2_regularizer_strength))
-                Ept2 -> 0 as pt2_regularizer_strength -> 0, Ept2 -> unregularized PT2 as pt2_regularizer_strength -> inf
+
+        - "none": No regularization.
+        - "shift": Apply a small shift to the denominators in the PT2 expression to avoid divergences::
+
+            1 / denom -> 1 / (denom + pt2_regularizer_strength)
+            Ept2 -> 0 as pt2_regularizer_strength -> inf
+
+        - "dsrg": Use a DSRG-inspired regularization of the PT2 correction::
+
+            1 / denom -> (1 / denom) * (1 - exp(-denom^2 * pt2_regularizer_strength))
+            Ept2 -> 0 as pt2_regularizer_strength -> 0, Ept2 -> unregularized PT2 as pt2_regularizer_strength -> inf
     pt2_regularizer_strength: float, optional, default=0.0
         The strength of the PT2 regularization.
         Note that the interpretation of this parameter depends on the choice of pt2_regularizer (see above).

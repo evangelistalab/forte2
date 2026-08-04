@@ -22,18 +22,19 @@ def build_basis_from_dict(basis_data):
     """
     Build a Basis object from a dictionary containing the basis set data.
 
-    The basis_data is expected to have the following format for each shell:
-    {"schema_version": 1,
-     "nshells": int,
-     "shells": [
-        {"nprim": int,
-         "l": int,
-         "exponents": list[float],
-         "coefficients": list[float],
-         "center": list[float]},
-         "is_pure": bool
-        ...
-     ]}
+    The basis_data is expected to have the following format for each shell::
+
+        {"schema_version": 1,
+         "nshells": int,
+         "shells": [
+            {"nprim": int,
+             "l": int,
+             "exponents": list[float],
+             "coefficients": list[float],
+             "center": list[float]},
+             "is_pure": bool
+            ...
+         ]}
 
     Parameters
     ----------
@@ -117,9 +118,10 @@ def build_basis(
         It is possible to assign different basis sets to specific atomic indices (e.g. "O2" for the second oxygen atom).
         It is also possible to assign basis set for a different element than the atom itself using the syntax "basis::element", e.g. "O": "sto-6g::N" to assign nitrogen sto-6g basis functions to oxygen.
         There are three sources for basis set data:
-            1. If the basis set name ends with ``.json``, it is treated as a local JSON file path.
-            2. If a JSON file with the basis set name exists in the ``forte2/data/basis`` directory, it is used.
-            3. If neither of the above is found, Basis Set Exchange is used (if available).
+
+        1. If the basis set name ends with ``.json``, it is treated as a local JSON file path.
+        2. If a JSON file with the basis set name exists in the ``forte2/data/basis`` directory, it is used.
+        3. If neither of the above is found, Basis Set Exchange is used (if available).
 
         For example, a basis set assignment dictionary can look like::
 

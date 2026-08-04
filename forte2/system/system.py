@@ -401,8 +401,8 @@ class System:
         """
         Calculate the nuclear dipole moment of the system.
 
-        Args
-        ----
+        Parameters
+        ----------
         origin : tuple[float, float, float], optional
             The origin point for the dipole calculation. If None, the center of mass of the system is used.
         unit : str, optional, default="debye"
@@ -426,8 +426,8 @@ class System:
         """
         Calculate the nuclear quadrupole moment of the system.
 
-        Args
-        ----
+        Parameters
+        ----------
         origin : tuple[float, float, float], optional
             The origin point for the quadrupole calculation. If None, the center of mass of the system is used.
         unit : str, optional, default="debye"

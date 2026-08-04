@@ -24,29 +24,29 @@ void export_sparse_exp_api(nb::module_& m) {
              nb::overload_cast<const SparseOperator&, const SparseState&, double>(
                  &SparseExp::apply_op),
              "sop"_a, "state"_a, "scaling_factor"_a = 1.0,
-             "Apply the exponential of a SparseOperator to a state: exp(scaling_factor * sop) "
-             "|state>")
+             "Apply the exponential of a SparseOperator to a state: ``exp(scaling_factor * sop) "
+             "|state>``")
         .def("apply_op",
              nb::overload_cast<const SparseOperatorList&, const SparseState&, double>(
                  &SparseExp::apply_op),
              "sop"_a, "state"_a, "scaling_factor"_a = 1.0,
-             "Apply the exponential of a SparseOperatorList to a state: exp(scaling_factor * sop) "
-             "|state>")
+             "Apply the exponential of a SparseOperatorList to a state: ``exp(scaling_factor * sop) "
+             "|state>``")
         .def("apply_antiherm",
              nb::overload_cast<const SparseOperator&, const SparseState&, double>(
                  &SparseExp::apply_antiherm),
              "sop"_a, "state"_a, "scaling_factor"_a = 1.0,
              "Apply the antihermitian "
-             "exponential of a SparseOperator to a state: exp(scaling_factor * (sop - sop^dagger)) "
-             "|state>")
+             "exponential of a SparseOperator to a state: ``exp(scaling_factor * (sop - sop^dagger)) "
+             "|state>``")
         .def("apply_antiherm",
              nb::overload_cast<const SparseOperatorList&, const SparseState&, double>(
                  &SparseExp::apply_antiherm),
              "sop"_a, "state"_a, "scaling_factor"_a = 1.0,
              "Apply the antihermitian "
-             "exponential of a SparseOperatorList to a state: exp(scaling_factor * (sop - "
+             "exponential of a SparseOperatorList to a state: ``exp(scaling_factor * (sop - "
              "sop^dagger)) "
-             "|state");
+             "|state>``");
 }
 
 void export_sparse_fact_exp_api(nb::module_& m) {
@@ -57,13 +57,13 @@ void export_sparse_fact_exp_api(nb::module_& m) {
         .def("apply_op", &SparseFactExp::apply_op, "sop"_a, "state"_a, "inverse"_a = false,
              "reverse"_a = false,
              "Apply the factorized exponential of a SparseOperator to a state: "
-             "... exp(op2) exp(op1) |state>. inverse=True computes the inverse, and reverse=True"
+             "``... exp(op2) exp(op1) |state>``. inverse=True computes the inverse, and reverse=True "
              "applies the operators in reverse order")
         .def("apply_antiherm", &SparseFactExp::apply_antiherm, "sop"_a, "state"_a,
              "inverse"_a = false, "reverse"_a = false,
              "Apply the factorized antihermitian "
              "exponential of a SparseOperator to a state: "
-             "... exp(op2 - op2^dagger) exp(op1 - op1^dagger) |state>. inverse=True computes the "
+             "``... exp(op2 - op2^dagger) exp(op1 - op1^dagger) |state>``. inverse=True computes the "
              "inverse, and reverse=True applies the operators in reverse order")
         .def("apply_antiherm_deriv", &SparseFactExp::apply_antiherm_deriv, "sqop"_a, "t"_a,
              "state"_a);

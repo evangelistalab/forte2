@@ -59,7 +59,7 @@ def sph_complex_to_real(l):
 def clebsh_gordan_spin_half(l, msdouble, jdouble, mjdouble):
     r"""
     Clebsch Gordon coefficient specialized for coupling orbital angular momentum l
-    with spin 1/2 to form total angular momentum j = l + 1/2, |l - 1/2|
+    with spin 1/2 to form total angular momentum ``j = l + 1/2, |l - 1/2|``
 
     .. math::
         C^{j,m_j}_{l,m_l;1/2,m_s} = \langle l,m_l;\frac{1}{2},m_s|j,m_j\rangle

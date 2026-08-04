@@ -17,7 +17,7 @@ class LBFGS:
     m : int, optional, default=6
         The number of vectors to keep in memory for the L-BFGS update.
     epsilon : float, optional, default=1.0e-5
-        Convergence threshold to terminate the minimization: |g| < ε * max(1, |x|).
+        Convergence threshold to terminate the minimization: ``|g| < ε * max(1, |x|)``.
     maxiter : int, optional, default=20
         Maximum number of iterations for the optimization.
     maxiter_linesearch : int, optional, default=5

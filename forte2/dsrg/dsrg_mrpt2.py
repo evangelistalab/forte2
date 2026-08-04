@@ -26,9 +26,11 @@ class DSRG_MRPT2(DSRGBase):
         Relax the CI reference in response to dynamical correlation.
         If an integer is given, it specifies the maximum number of relaxation iterations.
         If a string is given, it must be one of 'once', 'twice', or 'iterate':
-            'once' : diagonalize the CI Hamiltonian once after computing the DSRG energy
-            'twice': after the first diagonalization, recompute the DSRG energy
-            'iterate': keep relaxing until convergence or reaching relax_maxiter.
+
+        - 'once': diagonalize the CI Hamiltonian once after computing the DSRG energy
+        - 'twice': after the first diagonalization, recompute the DSRG energy
+        - 'iterate': keep relaxing until convergence or reaching relax_maxiter.
+
         If a boolean is given, True is equivalent to relax_maxiter and False means no relaxation.
     relax_maxiter : int, optional, default=10
         The maximum number of reference relaxation iterations.
