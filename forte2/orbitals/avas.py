@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import re
 
-from forte2 import ints
+from forte2.lib import ints
 from forte2.scf import RHF, ROHF, GHF
 from forte2.state import MOSpace
 from forte2.helpers import logger, invsqrt_matrix, block_diag_2x2

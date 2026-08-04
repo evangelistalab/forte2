@@ -33,6 +33,7 @@ using namespace nb::literals;
 ///        integrals and evaluate basis functions at points.
 namespace forte2 {
 
+namespace {
 void export_shell_api(nb::module_& m);
 void export_basis_api(nb::module_& m);
 void export_scalar_api(nb::module_& m);
@@ -41,9 +42,10 @@ void export_one_electron_deriv_api(nb::module_& m);
 void export_two_electron_api(nb::module_& m);
 void export_value_at_points_api(nb::module_& m);
 void export_libcint_compute_api(nb::module_& m);
+} // namespace
 
-void export_integrals_api(nb::module_& m) {
-    nb::module_ sub_m = m.def_submodule("ints", "Integrals submodule");
+void export_ints_api(nb::module_& m) {
+    nb::module_ sub_m = m.def_submodule("ints", "Integral primitives");
 
     export_shell_api(sub_m);
 
@@ -71,6 +73,7 @@ void export_integrals_api(nb::module_& m) {
     sub_m.attr("libint2_max_am") = nb::int_(LIBINT2_MAX_AM);
 }
 
+namespace {
 void export_shell_api(nb::module_& sub_m) {
     /// @brief Shell class bindings
     /// @details The Shell class is a wrapper around libint2::Shell and provides
@@ -545,4 +548,5 @@ void export_libcint_compute_api(nb::module_& sub_m) {
     (void)sub_m;
 }
 #endif
+} // namespace
 } // namespace forte2

@@ -2,7 +2,7 @@ from collections import OrderedDict
 
 import numpy as np
 
-from forte2 import CIStrings
+from forte2.lib.ci_helpers import CIStrings
 from forte2.state import MOSpace, StateAverageInfo
 from forte2.helpers import logger
 from forte2.data import EH_TO_EV

@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from abc import ABC
 
-from forte2 import Determinant
+from forte2.lib.det import Determinant
 
 
 @dataclass

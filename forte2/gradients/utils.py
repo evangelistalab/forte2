@@ -4,7 +4,7 @@ import scipy as sp
 
 import forte2.integrals as integrals
 from forte2.helpers.matrix_functions import compute_Am1y
-from forte2._forte2 import ints
+from forte2.lib import ints
 
 
 def flat_to_atom_gradient(gradient, natoms):

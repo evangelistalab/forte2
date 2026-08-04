@@ -5,18 +5,10 @@ from itertools import combinations
 
 import numpy as np
 
-from forte2 import (
-    cpp_helpers,
-    apply_op,
-    sparse_operator_hamiltonian,
-    spin2,
-    Determinant,
-    Configuration,
-    SparseState,
-    SlaterRules,
-    SelectedCIHelper,
-    CIStrings,
-)
+from forte2.lib import sparse_ops, det, cpp_helpers
+from forte2.lib.sparse_ops import SparseState
+from forte2.lib.det import Determinant, Configuration, SlaterRules
+from forte2.lib.ci_helpers import SelectedCIHelper, CIStrings
 from forte2.helpers.table import AsciiTable
 from forte2.state import State, MOSpace
 from forte2.helpers.comparisons import approx
@@ -420,7 +412,7 @@ class _SelectedCISingleStateSolver:
                     self.sci_params.guess_dets[i], self.sci_params.guess_dets[j]
                 )
                 Hguess[j, i] = np.conj(Hguess[i, j])
-                S2guess[i, j] = spin2(
+                S2guess[i, j] = det.spin2(
                     self.sci_params.guess_dets[i], self.sci_params.guess_dets[j]
                 )
                 S2guess[j, i] = np.conj(S2guess[i, j])
@@ -627,7 +619,7 @@ class _SelectedCISingleStateSolver:
 
         if self.two_component:
             if self.ci_algorithm.lower() == "sparse":
-                ham = sparse_operator_hamiltonian(
+                ham = sparse_ops.sparse_operator_hamiltonian(
                     self.ints.E.real,
                     self.ints.H,
                     self.ints.V,
@@ -640,7 +632,7 @@ class _SelectedCISingleStateSolver:
                         psi = SparseState(
                             {d: c for d, c in zip(self.dets, basis_block[:, istate])}
                         )
-                        Hpsi = apply_op(ham, psi, screen_thresh=1e-100)
+                        Hpsi = sparse_ops.apply_op(ham, psi, screen_thresh=1e-100)
                         for idet in range(self.ndet):
                             sigma_block[idet, istate] = Hpsi[self.dets[idet]]
 

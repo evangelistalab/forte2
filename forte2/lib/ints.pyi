@@ -1,3 +1,5 @@
+"""Integral primitives"""
+
 from collections.abc import Sequence
 from typing import Annotated, overload
 
@@ -109,7 +111,9 @@ class Basis:
 
     @property
     def nprim(self) -> int:
-        """Returns the number of primitive Gaussians in shells of the basis set"""
+        """
+        Returns the maximum number of primitive Gaussians in any shell of the basis set (alias of max_nprim)
+        """
 
     @property
     def max_nbasis(self) -> int:

@@ -6,6 +6,7 @@ import math
 
 import forte2
 from forte2 import integrals
+from forte2.lib import ints
 from forte2.helpers import logger
 from forte2.helpers.matrix_functions import (
     cholesky_wrapper,
@@ -644,7 +645,7 @@ class FockBuilderOTF:
 
     def _init_integral_engine(self):
         def libint2_compute(pshell0, pshell1):
-            forte2.ints.coulomb_3c_by_shell(
+            ints.coulomb_3c_by_shell(
                 self.auxbasis,
                 self.basis,
                 self.basis,

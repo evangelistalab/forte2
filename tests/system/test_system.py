@@ -2,7 +2,8 @@ import numpy as np
 from scipy.linalg import eigh
 import pytest
 
-from forte2 import System, ints, RHF
+from forte2 import System, RHF
+from forte2.lib import ints
 
 
 def test_system():

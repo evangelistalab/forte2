@@ -5,15 +5,13 @@ from typing import ClassVar
 import numpy as np
 from numpy.typing import NDArray
 
-from forte2 import (
+from forte2.lib import sparse_ops, cpp_helpers
+from forte2.lib.sparse_ops import SparseState
+from forte2.lib.ci_helpers import (
     CIStrings,
     CISigmaBuilder,
     CISpinAdapter,
-    cpp_helpers,
     RelCISigmaBuilder,
-    SparseState,
-    apply_op,
-    sparse_operator_hamiltonian,
 )
 from forte2.state import State, MOSpace
 from forte2.helpers.comparisons import approx
@@ -290,7 +288,7 @@ class _CISingleStateSolver:
 
         if self.two_component:
             if self.ci_params.ci_algorithm.lower() == "sparse":
-                ham = sparse_operator_hamiltonian(
+                ham = sparse_ops.sparse_operator_hamiltonian(
                     self.ints.E.real,
                     self.ints.H,
                     self.ints.V,
@@ -303,7 +301,7 @@ class _CISingleStateSolver:
                         psi = SparseState(
                             {d: c for d, c in zip(self.dets, basis_block[:, istate])}
                         )
-                        Hpsi = apply_op(ham, psi, screen_thresh=1e-100)
+                        Hpsi = sparse_ops.apply_op(ham, psi, screen_thresh=1e-100)
                         for idet in range(self.ndet):
                             sigma_block[idet, istate] = Hpsi[self.dets[idet]]
 

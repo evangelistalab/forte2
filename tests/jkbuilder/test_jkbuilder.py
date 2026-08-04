@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from forte2 import System, jkbuilder
+from forte2.lib.ints import Basis, Shell
 from forte2.jkbuilder.mointegrals import RestrictedMOIntegrals, SpinorbitalIntegrals
 
 
@@ -403,12 +404,10 @@ def test_jkbuilder_lindep_metric():
         auxiliary_basis_set="cc-pvtz-jkfit",
         unit="bohr",
     )
-    import forte2
-
-    fakeaux = forte2.ints.Basis()
+    fakeaux = Basis()
     # two identical auxiliary functions, this forces the Coulomb metric to be linearly dependent
-    fakeaux.add(forte2.ints.Shell(0, [1.0], [1.0], [0.0, 0.0, 0.0]))
-    fakeaux.add(forte2.ints.Shell(0, [1.0], [1.0], [0.0, 0.0, 0.0]))
+    fakeaux.add(Shell(0, [1.0], [1.0], [0.0, 0.0, 0.0]))
+    fakeaux.add(Shell(0, [1.0], [1.0], [0.0, 0.0, 0.0]))
     system.auxiliary_basis = fakeaux
     with pytest.raises(ValueError, match="positive definite"):
         system.fock_builder.B_Pmn

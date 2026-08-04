@@ -1,6 +1,6 @@
 import numpy as np
 
-from forte2 import ints
+from forte2.lib import ints
 from forte2.integrals.libcint_utils import conc_env, basis_to_cint_envs
 
 LIBCINT_AVAILABLE = getattr(ints, "HAS_LIBCINT", False)

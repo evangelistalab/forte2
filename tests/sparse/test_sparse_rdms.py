@@ -1,17 +1,7 @@
 import numpy as np
 
-from forte2 import (
-    System,
-    RHF,
-    CI,
-    State,
-    compute_a_1rdm,
-    compute_b_1rdm,
-    compute_aa_2rdm,
-    compute_ab_2rdm,
-    compute_bb_2rdm,
-    cpp_helpers,
-)
+from forte2 import System, RHF, CI, State
+from forte2.lib import rdms, cpp_helpers
 from forte2.base_classes import DavidsonLiuParams
 from forte2.helpers.comparisons import approx
 
@@ -47,16 +37,16 @@ def test_ci_tdm_same_solver():
             )
             state_right = ci.sub_solvers[0].ci_sigma_builder.make_sparse_state(c_r)
 
-            tdm1_a_ref = compute_a_1rdm(state_left, state_right, 6)
-            tdm1_b_ref = compute_b_1rdm(state_left, state_right, 6)
+            tdm1_a_ref = rdms.compute_a_1rdm(state_left, state_right, 6)
+            tdm1_b_ref = rdms.compute_b_1rdm(state_left, state_right, 6)
 
             tdm1_a, tdm1_b = ci.sub_solvers[0].make_sd_1rdm(root_left, root_right)
             assert np.allclose(tdm1_a, tdm1_a_ref)
             assert np.allclose(tdm1_b, tdm1_b_ref)
 
-            tdm2_aa_ref = compute_aa_2rdm(state_left, state_right, 6)
-            tdm2_ab_ref = compute_ab_2rdm(state_left, state_right, 6)
-            tdm2_bb_ref = compute_bb_2rdm(state_left, state_right, 6)
+            tdm2_aa_ref = rdms.compute_aa_2rdm(state_left, state_right, 6)
+            tdm2_ab_ref = rdms.compute_ab_2rdm(state_left, state_right, 6)
+            tdm2_bb_ref = rdms.compute_bb_2rdm(state_left, state_right, 6)
 
             tdm2_aa, tdm2_ab, tdm2_bb = ci.sub_solvers[0].make_sd_2rdm(
                 root_left, root_right
@@ -105,8 +95,8 @@ def test_gasci_tdm_different_solvers():
 
     a_1trdm, b_1trdm = ci.make_sd_1rdm(0, 1)
     sf_1trdm = ci.make_1rdm(0, 1)
-    a_1trdm_ref = compute_a_1rdm(state_left, state_right, 6)
-    b_1trdm_ref = compute_b_1rdm(state_left, state_right, 6)
+    a_1trdm_ref = rdms.compute_a_1rdm(state_left, state_right, 6)
+    b_1trdm_ref = rdms.compute_b_1rdm(state_left, state_right, 6)
     assert np.allclose(a_1trdm, a_1trdm_ref)
     assert np.allclose(b_1trdm, b_1trdm_ref)
     assert np.allclose(sf_1trdm, a_1trdm_ref + b_1trdm_ref)
@@ -114,8 +104,8 @@ def test_gasci_tdm_different_solvers():
     a_1trdm, b_1trdm = ci.make_sd_1rdm(1, 0)
     # make_sf_1rdm and make_1rdm are synonymous
     sf_1trdm = ci.make_sf_1rdm(1, 0)
-    a_1trdm_ref = compute_a_1rdm(state_right, state_left, 6)
-    b_1trdm_ref = compute_b_1rdm(state_right, state_left, 6)
+    a_1trdm_ref = rdms.compute_a_1rdm(state_right, state_left, 6)
+    b_1trdm_ref = rdms.compute_b_1rdm(state_right, state_left, 6)
     assert np.allclose(a_1trdm, a_1trdm_ref)
     assert np.allclose(b_1trdm, b_1trdm_ref)
     assert np.allclose(sf_1trdm, a_1trdm_ref + b_1trdm_ref)

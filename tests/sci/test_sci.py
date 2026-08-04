@@ -1,17 +1,11 @@
 import numpy as np
 import pytest
 
-from forte2 import (
-    System,
-    State,
-    MOSpace,
-    Determinant,
-    CIStrings,
-    SelectedCIHelper,
-    SparseState,
-    compute_a_1rdm,
-    compute_b_1rdm,
-)
+from forte2 import System, State, MOSpace
+from forte2.lib import rdms
+from forte2.lib.sparse_ops import SparseState
+from forte2.lib.det import Determinant
+from forte2.lib.ci_helpers import CIStrings, SelectedCIHelper
 from forte2.ci import CI
 from forte2.scf import RHF
 from forte2.sci import SelectedCI
@@ -342,8 +336,8 @@ def test_sci_1trdm_matches_second_strings_between_different_spaces():
 
     left_state = SparseState(dict(zip(left_dets, left_c[:, 0])))
     right_state = SparseState(dict(zip(right_dets, right_c[:, 0])))
-    expected_a = compute_a_1rdm(left_state, right_state, norb)
-    expected_b = compute_b_1rdm(left_state, right_state, norb)
+    expected_a = rdms.compute_a_1rdm(left_state, right_state, norb)
+    expected_b = rdms.compute_b_1rdm(left_state, right_state, norb)
     assert np.count_nonzero(np.abs(expected_a) > 1e-12) > 4
     assert np.count_nonzero(np.abs(expected_b) > 1e-12) > 4
 

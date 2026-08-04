@@ -1,7 +1,7 @@
 import numpy as np
 from numpy.typing import NDArray
 
-from forte2._forte2 import ints
+from forte2.lib import ints
 from forte2.base_classes import RelCIBase
 from forte2.gradients import (
     build_metric_inverted_three_center,

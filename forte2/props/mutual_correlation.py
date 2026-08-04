@@ -3,7 +3,7 @@ from typing import Any
 from numpy.typing import NDArray
 import scipy as sp
 
-from forte2 import cpp_helpers
+from forte2.lib import cpp_helpers
 
 
 class MutualCorrelationAnalysis:
