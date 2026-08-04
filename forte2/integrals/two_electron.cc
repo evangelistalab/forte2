@@ -11,6 +11,16 @@ np_tensor3 coulomb_3c(const Basis& b1, const Basis& b2, const Basis& b3) {
     return compute_two_electron_3c_multi<libint2::Operator::coulomb>(b1, b2, b3);
 }
 
+np_vector coulomb_4c_diagonal(const Basis& basis) {
+    return compute_two_electron_4c_diagonal<libint2::Operator::coulomb>(basis);
+}
+
+np_matrix coulomb_4c_pair_block(const Basis& basis, const np_matrix_int& bra_pairs,
+                                const np_matrix_int& ket_pairs) {
+    return compute_two_electron_4c_pair_block<libint2::Operator::coulomb>(basis, bra_pairs,
+                                                                          ket_pairs);
+}
+
 np_tensor3_c coulomb_3c_by_shell(const Basis& b1, const Basis& b2, const Basis& b3,
                     const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices) {
     return compute_two_electron_3c_by_shell<libint2::Operator::coulomb>(b1, b2, b3, shell_slices);

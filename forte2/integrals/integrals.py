@@ -496,6 +496,71 @@ def coulomb_3c(system, basis1=None, basis2=None, basis3=None):
     return res
 
 
+def coulomb_4c_diagonal(system, basis=None):
+    r"""
+    Compute the diagonal :math:`(\mu\nu|\mu\nu)` of the four-center two-electron Coulomb integral
+    matrix.
+
+    The result is laid out row-major over the AO-pair index :math:`p = \mu \, n_{bf} + \nu`
+    (length :math:`n_{bf}^2`). This is the pivot-selection input for an on-the-fly Cholesky
+    decomposition of the ERIs, and avoids ever forming the full four-index tensor.
+
+    Parameters
+    ----------
+    system : System
+        The molecular system containing the basis set.
+    basis : BasisSet, optional
+        The basis set. If None, defaults to ``system.basis``.
+
+    Returns
+    -------
+    ndarray
+        The diagonal as a 1D array of length ``basis.size ** 2``.
+    """
+    if basis is None:
+        basis = system.basis
+    _backend = _choose_backend(basis.max_l)
+    if _backend == "libint2":
+        return ints.coulomb_4c_diagonal(basis)
+    return cint_coulomb_4c_diagonal(system, basis)
+
+
+def coulomb_4c_pair_block(system, bra_pairs, ket_pairs, basis=None):
+    r"""
+    Compute a dense block :math:`(AB|CD)` of the four-center two-electron Coulomb integral matrix
+    for a list of bra shell-pairs (rows) and ket shell-pairs (columns).
+
+    The output has shape ``(n_bra_ao_pairs, n_ket_ao_pairs)``, row-major. Within a shell-pair the
+    AO-pair order is ``iA * nB + iB``, and blocks are concatenated in the given shell-pair order.
+    This single primitive supplies the pivot columns, product-function metric, and ``(mn|K)``
+    integrals used by an on-the-fly Cholesky decomposition of the ERIs.
+
+    Parameters
+    ----------
+    system : System
+        The molecular system containing the basis set.
+    bra_pairs : array_like
+        An ``(n_bra, 2)`` integer array of ``(shellA, shellB)`` indices defining the rows.
+    ket_pairs : array_like
+        An ``(n_ket, 2)`` integer array of ``(shellC, shellD)`` indices defining the columns.
+    basis : BasisSet, optional
+        The basis set. If None, defaults to ``system.basis``.
+
+    Returns
+    -------
+    ndarray
+        The requested block as a 2D array.
+    """
+    if basis is None:
+        basis = system.basis
+    bra_pairs = np.ascontiguousarray(bra_pairs, dtype=np.int32)
+    ket_pairs = np.ascontiguousarray(ket_pairs, dtype=np.int32)
+    _backend = _choose_backend(basis.max_l)
+    if _backend == "libint2":
+        return ints.coulomb_4c_pair_block(basis, bra_pairs, ket_pairs)
+    return cint_coulomb_4c_pair_block(system, bra_pairs, ket_pairs, basis)
+
+
 def coulomb_2c(system, basis1=None, basis2=None):
     r"""
     Compute the two-center two-electron Coulomb integral between two basis sets.
@@ -1041,6 +1106,32 @@ def cint_coulomb_3c(system, basis1=None, basis2=None, basis3=None):
     )
     res = ints.cint_int3c2e_sph(shell_slice, atm, bas, env)
     return res
+
+
+def cint_coulomb_4c_diagonal(system, basis=None):
+    r"""
+    Compute the diagonal :math:`(\mu\nu|\mu\nu)` of the four-center two-electron Coulomb integral
+    matrix using the Libcint library. See :func:`coulomb_4c_diagonal` for the layout.
+    """
+    _require_libcint()
+    if basis is None:
+        basis = system.basis
+    atm, bas, env = basis_to_cint_envs(system, basis)
+    return ints.cint_int2e_diagonal_sph(atm, bas, env)
+
+
+def cint_coulomb_4c_pair_block(system, bra_pairs, ket_pairs, basis=None):
+    r"""
+    Compute a dense block :math:`(AB|CD)` of the four-center two-electron Coulomb integral matrix
+    using the Libcint library. See :func:`coulomb_4c_pair_block` for the layout.
+    """
+    _require_libcint()
+    if basis is None:
+        basis = system.basis
+    atm, bas, env = basis_to_cint_envs(system, basis)
+    bra_pairs = np.ascontiguousarray(bra_pairs, dtype=np.int32)
+    ket_pairs = np.ascontiguousarray(ket_pairs, dtype=np.int32)
+    return ints.cint_int2e_pair_block_sph(atm, bas, env, bra_pairs, ket_pairs)
 
 
 class CInt3cBySlice:
