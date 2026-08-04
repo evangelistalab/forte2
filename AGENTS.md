@@ -6,7 +6,7 @@ This file gives coding agents repo-specific guidance for working in `forte2`.
 ## Project At A Glance
 - `forte2` is a hybrid Python/C++ quantum chemistry codebase.
 - Python package code lives in `forte2/`.
-- Performance-critical C++ is exposed via nanobind as `forte2._forte2`.
+- Performance-critical C++ is exposed via nanobind as `forte2.lib`.
 - Tests are organized by subsystem in `tests/` (for example: `tests/scf`, `tests/ci`, `tests/integrals`).
 - Docs source is in `docs/source/` and built with Sphinx.
 
@@ -47,11 +47,11 @@ Relativistic (two-component) variants are subclasses that set `dtype = complex` 
 `two_component = True` (e.g. `RelActiveSpaceSolver`, `RelCISolver`); non-rel uses `float`.
 
 ### C++ / Python boundary
-- `forte2._forte2` is the compiled nanobind module. C++ sources live **inline inside the package**
+- `forte2.lib` is the compiled nanobind module. C++ sources live **inline inside the package**
   (e.g. `forte2/integrals/*.cc`, `forte2/ci/*.cc`, `forte2/sci/*.cc`, `forte2/sparse/*.cc`), not in a
-  separate `src/` tree. `forte2/CMakeLists.txt` lists every `.cc` compiled into `_forte2`.
+  separate `src/` tree. `forte2/CMakeLists.txt` lists every `.cc` compiled into `lib`.
 - `forte2/api/*_api.cc` are the nanobind binding layers (one per subsystem); `api/forte2_api.cc` is the
-  `NB_MODULE` root that calls each `export_*`. Stubs live in `forte2/_forte2/*.pyi`.
+  `NB_MODULE` root that calls each `export_*`. Stubs live in `forte2/lib/*.pyi`.
 - **C++** holds performance kernels: integral evaluation, CI string/sigma builds and RDMs, selected-CI
   (HCI), determinant/Slater-rules machinery, sparse operators/states. **Python** holds all orchestration:
   SCF loop, MCSCF optimizer, DSRG, AVAS, gradients, geometry optimization, properties, J/K building.
@@ -132,8 +132,8 @@ When adding or changing bound C++ functionality:
 2. Add/update nanobind exposure in `forte2/api/*_api.cc`.
 3. Update `forte2/CMakeLists.txt` if adding new source files.
 4. Regenerate Python stubs:
-   - `python -m nanobind.stubgen -m forte2._forte2 -O forte2 -r`
-5. Commit updated `.pyi` files in `forte2/_forte2/` with the code changes.
+   - `python -m nanobind.stubgen -m forte2.lib -O forte2 -r`
+5. Commit updated `.pyi` files in `forte2/lib/` with the code changes.
 
 ## Test Expectations For Changes
 - Add or update tests in the matching subsystem folder under `tests/`.

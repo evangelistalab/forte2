@@ -10,8 +10,8 @@ using namespace nb::literals;
 
 namespace forte2 {
 
-void export_dsrg_api(nb::module_& m) {
-    nb::module_ sub_m = m.def_submodule("dsrg_utils", "DSRG utilities submodule");
+void export_dsrg_utils_api(nb::module_& m) {
+    nb::module_ sub_m = m.def_submodule("dsrg_utils", "DSRG utilities");
 
     sub_m.def(
         "compute_T1_block",

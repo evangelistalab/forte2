@@ -6,7 +6,7 @@ import os
 
 import numpy as np
 
-from forte2 import Basis, Shell
+from forte2.lib.ints import Basis, Shell
 from forte2.data import ATOM_SYMBOL_TO_Z
 from forte2.helpers import logger
 

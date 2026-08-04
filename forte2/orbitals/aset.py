@@ -3,7 +3,7 @@ import numpy as np
 import re
 
 import forte2
-from forte2 import ints
+from forte2.lib import ints
 from forte2.state import MOSpace, EmbeddingMOSpace
 from forte2.system.basis_utils import BasisInfo
 from forte2.helpers import logger

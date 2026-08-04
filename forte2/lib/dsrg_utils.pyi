@@ -1,3 +1,5 @@
+"""DSRG utilities"""
+
 from typing import Annotated, overload
 
 import numpy

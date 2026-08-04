@@ -2,17 +2,44 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/tuple.h>
+#include <nanobind/stl/complex.h>
 
 #include "determinant/determinant.h"
+#include "determinant/determinant_helpers.h"
 #include "determinant/configuration.hpp"
+#include "determinant/slater_rules.h"
+#include "determinant/rel_slater_rules.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;
 
 namespace forte2 {
 
-void export_determinant_api(nb::module_& m) {
-    nb::class_<Determinant>(m, "Determinant")
+namespace {
+void export_determinant_api(nb::module_& m);
+void export_configuration_api(nb::module_& m);
+void export_determinant_helpers_api(nb::module_& m);
+void export_slater_rules_api(nb::module_& m);
+void export_rel_slater_rules_api(nb::module_& m);
+} // namespace
+
+void export_det_api(nb::module_& m) {
+    nb::module_ sub_m = m.def_submodule("det", "Determinants and their operations");
+
+    export_determinant_api(sub_m);
+
+    export_configuration_api(sub_m);
+
+    export_determinant_helpers_api(sub_m);
+
+    export_slater_rules_api(sub_m);
+
+    export_rel_slater_rules_api(sub_m);
+}
+
+namespace {
+void export_determinant_api(nb::module_& sub_m) {
+    nb::class_<Determinant>(sub_m, "Determinant")
         .def(nb::init<const Determinant&>())
         .def(
             "__init__",
@@ -170,8 +197,8 @@ void export_determinant_api(nb::module_& m) {
             "Get the sign of the Slater determinant");
 }
 
-void export_configuration_api(nb::module_& m) {
-    nb::class_<Configuration>(m, "Configuration")
+void export_configuration_api(nb::module_& sub_m) {
+    nb::class_<Configuration>(sub_m, "Configuration")
         .def(nb::init<>(), "Build an empty configuration")
         .def(nb::init<const Determinant&>(), "Build a configuration from a determinant")
         .def(
@@ -221,4 +248,58 @@ void export_configuration_api(nb::module_& m) {
             "__hash__", [](const Configuration& a) { return Configuration::Hash()(a); },
             "Get the hash of the configuration");
 }
+
+void export_determinant_helpers_api(nb::module_& sub_m) {
+    sub_m.def(
+        "hilbert_space",
+        [](size_t nmo, size_t na, size_t nb, size_t nirrep, std::vector<int> mo_symmetry,
+           int symmetry) { return make_hilbert_space(nmo, na, nb, nirrep, mo_symmetry, symmetry); },
+        "nmo"_a, "na"_a, "nb"_a, "nirrep"_a = 1, "mo_symmetry"_a = std::vector<int>(),
+        "symmetry"_a = 0,
+        "Generate the Hilbert space for a given number of electrons and orbitals."
+        "If information about the symmetry of the MOs is not provided, it assumes that all MOs "
+        "have symmetry 0.");
+    sub_m.def(
+        "hilbert_space",
+        [](size_t nmo, size_t na, size_t nb, Determinant ref, int truncation, size_t nirrep,
+           std::vector<int> mo_symmetry, int symmetry) {
+            return make_hilbert_space(nmo, na, nb, ref, truncation, nirrep, mo_symmetry, symmetry);
+        },
+        "nmo"_a, "na"_a, "nb"_a, "ref"_a, "truncation"_a, "nirrep"_a = 1,
+        "mo_symmetry"_a = std::vector<int>(), "symmetry"_a = 0,
+        "Generate the Hilbert space for a given number of electrons, orbitals, and the truncation "
+        "level."
+        "If information about the symmetry of the MOs is not provided, it assumes that all MOs "
+        "have symmetry 0."
+        "A reference determinant must be provided to establish the excitation rank.");
+
+    sub_m.def(
+        "spin2", [](const Determinant& d1, const Determinant& d2) { return spin2(d1, d2); },
+        "Compute the S^2 value between two determinants");
+}
+
+void export_slater_rules_api(nb::module_& sub_m) {
+    nb::class_<SlaterRules>(sub_m, "SlaterRules")
+        .def(nb::init<int, double, np_matrix, np_tensor4>(), "norb"_a, "scalar_energy"_a,
+             "one_electron_integrals"_a, "two_electron_integrals"_a,
+             "Initialize a SlaterRules object with the number of orbitals, scalar energy, "
+             "one-electron integrals, and two-electron integrals in physicist's notation.")
+        .def("energy", &SlaterRules::energy)
+        .def("energies", &SlaterRules::energies, "dets"_a,
+             "Compute the energies of a vector of determinants")
+        .def("slater_rules", &SlaterRules::slater_rules, "lhs"_a, "rhs"_a);
+}
+
+void export_rel_slater_rules_api(nb::module_& sub_m) {
+    nb::class_<RelSlaterRules>(sub_m, "RelSlaterRules")
+        .def(nb::init<int, double, np_matrix_complex, np_tensor4_complex>(), "nspinor"_a,
+             "scalar_energy"_a, "one_electron_integrals"_a, "two_electron_integrals"_a,
+             "Initialize a RelSlaterRules object with the number of spinor(orbitals), scalar "
+             "energy, one-electron integrals, and two-electron integrals in physicist's notation.")
+        .def("energy", &RelSlaterRules::energy)
+        .def("energies", &RelSlaterRules::energies, "dets"_a,
+             "Compute the energies of a vector of determinants")
+        .def("slater_rules", &RelSlaterRules::slater_rules, "lhs"_a, "rhs"_a);
+}
+} // namespace
 } // namespace forte2

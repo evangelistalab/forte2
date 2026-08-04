@@ -3,7 +3,8 @@ import numpy as np
 from numpy.typing import NDArray
 import json
 
-from forte2 import integrals, Basis
+from forte2 import integrals
+from forte2.lib.ints import Basis
 from forte2.data import DEBYE_TO_AU, DEBYE_ANGSTROM_TO_AU, Z_TO_ATOM_SYMBOL
 from forte2.helpers import (
     logger,

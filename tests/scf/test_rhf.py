@@ -1,6 +1,7 @@
 import pytest
 
-from forte2 import System, ints
+from forte2 import System
+from forte2.lib import ints
 from forte2.scf import RHF
 from forte2.helpers.comparisons import approx
 from forte2.system import BSE_AVAILABLE
