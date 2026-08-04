@@ -27,6 +27,22 @@ np_tensor4 coulomb_4c(const Basis& basis1, const Basis& basis2, const Basis& bas
 ///         basisi
 np_tensor3 coulomb_3c(const Basis& basis1, const Basis& basis2, const Basis& basis3);
 
+/// @brief Compute the diagonal (mn|mn) of the four-center two-electron Coulomb integral matrix.
+/// @param basis The orbital basis set.
+/// @return A 1D ndarray of length (n * n) laid out row-major over the AO-pair index p = m * n + n',
+///         where n is the number of basis functions in basis.
+np_vector coulomb_4c_diagonal(const Basis& basis);
+
+/// @brief Compute a dense block (AB|CD) of the four-center two-electron Coulomb integral matrix for
+///        a list of bra shell-pairs (rows) and ket shell-pairs (columns).
+/// @param basis The orbital basis set.
+/// @param bra_pairs An (n_bra, 2) integer array of (shellA, shellB) indices defining the rows.
+/// @param ket_pairs An (n_ket, 2) integer array of (shellC, shellD) indices defining the columns.
+/// @return A 2D ndarray of shape (n_bra_ao_pairs, n_ket_ao_pairs), row-major. Within a shell-pair
+///         the AO-pair order is iA * nB + iB; blocks are concatenated in the given shell-pair order.
+np_matrix coulomb_4c_pair_block(const Basis& basis, const np_matrix_int& bra_pairs,
+                                const np_matrix_int& ket_pairs);
+
 /// @brief Compute the coulomb integrals (b1 | 1  / r_12 | b2), by shells.
 /// @param basis1 The basis set in the bra for electron 1 center 1.
 /// @param basis2 The basis set in the ket for electron 2 center 2.
