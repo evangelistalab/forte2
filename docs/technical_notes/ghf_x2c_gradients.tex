@@ -3,6 +3,7 @@
 \usepackage[utf8]{inputenc}
 \usepackage{amsmath}
 \usepackage{amssymb}
+\usepackage{array}
 \usepackage{braket}
 \usepackage{booktabs}
 \usepackage[capitalize]{cleveref}
@@ -32,16 +33,22 @@ The X2C response theory follows Cheng and Gauss,\cite{ChengGauss2011} adapted
 to Forte2's decontracted basis, canonical overlap truncation, Pauli-component
 ordering, and density-fitting implementation.
 
-The implementation covers the following combinations:
+The implementation covers the following combinations (SS denotes a
+state-specific multiconfigurational wave function):
 \begin{center}
-\begin{tabular}{lll}
+\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.27\linewidth}
+                    >{\raggedright\arraybackslash}p{0.49\linewidth}
+                    >{\raggedright\arraybackslash}p{0.16\linewidth}@{}}
 \toprule
-SCF reference & One-electron Hamiltonian & Nuclear model \\
+Wave function & One-electron Hamiltonian & Nuclear model \\
 \midrule
-RHF, UHF, GHF & nonrelativistic & point or Gaussian \\
-RHF, UHF, GHF & spin-free X2C-1e & point or Gaussian \\
-GHF & spin-orbit X2C-1e & point or Gaussian \\
-GHF & spin-orbit X2C-1e with SNSO & point or Gaussian \\
+RHF, UHF, GHF & nonrelativistic & point, Gaussian \\
+RHF, UHF, GHF & spin-free X2C-1e & point, Gaussian \\
+GHF & spin-orbit X2C-1e & point, Gaussian \\
+GHF & spin-orbit X2C-1e with SNSO & point, Gaussian \\
+SS-CASSCF/GASSCF & nonrelativistic or spin-free X2C-1e & point \\
+2c SS-CASSCF/GASSCF & nonrelativistic, SF-X2C-1e, or SO-X2C-1e & point \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -405,7 +412,7 @@ derivative spin-dependent components, reassembles the spinor matrix, and only
 then applies $P$ and $P^\xcoord$.  There is therefore no separate derivative of
 the SNSO factors.
 
-\section{SCF gradient assembly with X2C}
+\section{Variational gradient assembly with X2C}
 
 X2C-1e transforms only the one-electron Hamiltonian.  The AO overlap and
 two-electron integrals remain untransformed.  Accordingly the X2C SCF gradient
@@ -420,6 +427,44 @@ For RHF, UHF, and SF-X2C GHF, $D_\mathrm{hcore}$ is the spatial spin trace.
 For SO-X2C GHF it is the full complex spinor density.  The overlap Pulay term
 still uses the spatial spin trace of the energy-weighted density, and the DF
 two-electron terms still use \cref{eq:ghf_w2,eq:ghf_w3}.
+
+The same replacement applies to a fully variational, single-state CASSCF or
+GASSCF energy.  For a two-component calculation, collect the inactive core
+and active spinors into $C_h=[C_i\ C_u]$ and define
+\begin{equation}
+ \gamma^h =
+ \begin{pmatrix}I_{\mathrm{core}}&0\\0&\gamma^{\mathrm{act}}\end{pmatrix},
+ \qquad
+ D_{\mathrm{spinor}}=C_h(\gamma^h)^T C_h^\dagger.
+ \label{eq:rel_casscf_density}
+\end{equation}
+The transpose in \cref{eq:rel_casscf_density} is required by the Forte2
+relativistic RDM convention: MO integrals and RDMs contract element by element,
+rather than through an implicit matrix transpose.  The spatial density used by
+scalar operators is $D^{\alpha\alpha}+D^{\beta\beta}$.
+
+The active spin-orbital cumulant is
+\begin{equation}
+ \lambda_{uv,wx}
+ =\Gamma_{uv,wx}-\gamma_{uw}\gamma_{vx}
+  +\gamma_{ux}\gamma_{vw}.
+\end{equation}
+With $Z^P_{xy}=\sum_\omega
+(C_h^\omega)^\dagger Z^P C_h^\omega$, the compact CASSCF DF weights have the
+same form as the spin-free weights, except that the exchange coefficient is
+one instead of one half.  Complex three-center adjoints are returned to the
+spatial AO basis as
+\begin{equation}
+ W^P_{\mu\nu}=\sum_{xy\omega}
+ C^{\omega *}_{\mu x}W^P_{xy}C^\omega_{\nu y}.
+ \label{eq:rel_casscf_w3_backtransform}
+\end{equation}
+Using $C W C^\dagger$ in
+\cref{eq:rel_casscf_w3_backtransform} is valid only for real orbitals and
+breaks arbitrary spinor-phase invariance.  The Pulay term is obtained from the
+Hermitian part of the converged relativistic orbital Lagrangian and then spin
+traced in the AO basis.  No CASSCF Z-vector is needed for the optimized
+single-state objective when every nonredundant orbital rotation is variational.
 
 Gaussian nuclei change three pieces consistently: $V^\xcoord$,
 $W^\xcoord$, and $E_\mathrm{NN}^\xcoord$.  The last is evaluated by contracting
@@ -436,6 +481,8 @@ File or function & Responsibility \\
 \midrule
 \texttt{forte2/scf/ghf\_grad.py} & GHF densities, energy-weighted density, and final driver.\\
 \texttt{forte2/scf/hf\_grad.py} & Shared RHF/UHF DF weights and complex GHF DF weights.\\
+\texttt{mcopt/mc\_optimizer\_grad.py} & Spin-free and spinor CASSCF densities, DF weights, and final driver.\\
+\texttt{mcopt/orbital\_optimizer.py} & Real and two-component orbital Lagrangians for the Pulay term.\\
 \texttt{forte2/gradients/utils.py} & Common one-electron, overlap, DF, and nuclear-repulsion assembly.\\
 \texttt{one\_electron\_deriv*} & Libint2 matrix-valued $S^\xcoord$, $T^\xcoord$, and point-$V^\xcoord$.\\
 \texttt{integrals.py} & Gaussian-$V^\xcoord$, full $W^\xcoord$, component normalization, and backend selection.\\
@@ -462,6 +509,11 @@ case with a discarded overlap eigenvector.
 and with the collinear UHF limit.
 \item Full SF-X2C UHF and SO-X2C GHF gradients are compared with finite
 differences of converged SCF energies and checked for translational invariance.
+\item Two-component CASSCF/GASSCF gradients are checked against the
+nonrelativistic upcast limit with arbitrary spinor phases and against SF- and
+SO-X2C energy finite differences.  The tests include a correlated triatomic
+SNSO CASSCF calculation and an SNSO GASSCF calculation with optimized inter-GAS
+rotations.
 \end{enumerate}
 
 Useful diagnostics are Hermiticity of $h_\mathrm{X2C}^\xcoord$, zero total
@@ -479,6 +531,11 @@ Libint2 remain subject to the angular-momentum limit of the installed Libint2
 library.  A geometry at which the number of retained overlap eigenvectors
 changes is non-differentiable under hard canonical truncation and must be
 handled by changing the threshold or basis.
+
+CASSCF/GASSCF gradients are currently limited to a single optimized state,
+point nuclei, and orbital spaces without frozen core, frozen virtual, active
+frozen, or frozen inter-GAS rotations.  Those cases require response terms
+outside the stationary single-state Lagrangian used here.
 
 The implemented Hamiltonian is X2C-1e: two-electron picture-change corrections
 are not included in either the energy or gradient.  This is the same

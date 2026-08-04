@@ -3,13 +3,14 @@ from numpy.typing import NDArray
 
 from forte2.lib import ints
 from forte2.base_classes import RelCIBase
+from forte2.ci.ci_utils import make_2cumulant_so
 from forte2.gradients import (
     build_metric_inverted_three_center,
     compute_gradient,
 )
 from forte2.system import ModelSystem
 
-from .orbital_optimizer import OrbOptimizer
+from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
 
 
 def _compute_casscf_gradient(mc) -> NDArray:
@@ -22,6 +23,13 @@ def _compute_casscf_gradient(mc) -> NDArray:
     _validate_casscf_gradient_supported(mc, pre_run=False)
 
     C = mc.C[0][:, mc.mo_space.orig_to_contig].copy()
+    if isinstance(mc.ci_solver, RelCIBase):
+        return _compute_rel_casscf_gradient(mc, C)
+    return _compute_nonrel_casscf_gradient(mc, C)
+
+
+def _compute_nonrel_casscf_gradient(mc, C: NDArray) -> NDArray:
+    """Compute a state-specific nonrelativistic CASSCF/GASSCF gradient."""
     gamma1_act = mc.make_sf_1rdm(0)
     gamma2_act = mc.make_sf_2rdm(0)
     Ccore = C[:, mc.mo_space.core]
@@ -33,7 +41,83 @@ def _compute_casscf_gradient(mc) -> NDArray:
         mc.system, Ccore, Cact, gamma1_act, gamma2_act
     )
 
-    return compute_gradient(mc.system, D1.real, W1.real, W2, W3)
+    hcore_deriv = (
+        mc.system.x2c_helper.hcore_deriv() if mc.system.x2c_type is not None else None
+    )
+    return compute_gradient(
+        mc.system,
+        D1.real,
+        W1.real,
+        W2,
+        W3,
+        hcore_deriv=hcore_deriv,
+    )
+
+
+def _compute_rel_casscf_gradient(mc, C: NDArray) -> NDArray:
+    """Compute a state-specific two-component CASSCF/GASSCF gradient."""
+    gamma1_act = mc.ci_solver.make_1rdm(0)
+    gamma2_act = mc.ci_solver.make_2rdm(0)
+    Ccore = C[:, mc.mo_space.core]
+    Cact = C[:, mc.mo_space.actv]
+
+    D_spinor = _build_rel_casscf_one_body_density(Ccore, Cact, gamma1_act)
+    D1 = _spatial_spin_trace(D_spinor, mc.system.nbf)
+    W_spinor = _build_casscf_overlap_weight(mc, C, gamma1_act, gamma2_act)
+    W1 = _spatial_spin_trace(W_spinor, mc.system.nbf)
+    W2, W3 = _build_rel_casscf_df_deriv_weights(
+        mc.system, Ccore, Cact, gamma1_act, gamma2_act
+    )
+
+    hcore_deriv = None
+    hcore_density = None
+    if mc.system.x2c_type is not None:
+        hcore_deriv = mc.system.x2c_helper.hcore_deriv()
+        hcore_density = D_spinor if mc.system.x2c_type == "so" else D1
+
+    return compute_gradient(
+        mc.system,
+        D1.real,
+        W1.real,
+        W2,
+        W3,
+        hcore_deriv=hcore_deriv,
+        hcore_density=hcore_density,
+    )
+
+
+def _spatial_spin_trace(matrix: NDArray, nbf: int) -> NDArray:
+    """Trace a spinor AO matrix over its alpha and beta diagonal blocks."""
+    matrix = np.asarray(matrix)
+    if matrix.shape != (2 * nbf, 2 * nbf):
+        raise ValueError(
+            f"Expected a spinor AO matrix with shape {(2 * nbf, 2 * nbf)}, "
+            f"got {matrix.shape}."
+        )
+    return matrix[:nbf, :nbf] + matrix[nbf:, nbf:]
+
+
+def _build_rel_casscf_one_body_density(
+    Ccore: NDArray,
+    Cact: NDArray,
+    gamma1_act: NDArray,
+) -> NDArray:
+    r"""Build the full spinor AO one-particle density.
+
+    Each inactive core spinor has unit occupation. Correlated active-space
+    occupations are supplied by the spin-orbital 1-RDM. The active RDM is
+    transposed because Forte2 contracts relativistic MO integrals and RDMs
+    element by element.
+    """
+    nact = Cact.shape[1]
+    if gamma1_act.shape != (nact, nact):
+        raise ValueError(
+            f"Expected active 1-RDM shape {(nact, nact)}, got {gamma1_act.shape}."
+        )
+
+    D1 = np.einsum("mi,ni->mn", Ccore, Ccore.conj(), optimize=True)
+    D1 += np.einsum("mu,vu,nv->mn", Cact, gamma1_act, Cact.conj(), optimize=True)
+    return D1
 
 
 def _build_casscf_one_body_density(
@@ -264,6 +348,75 @@ def _build_casscf_df_deriv_weights(
     return W2.real, W3.real
 
 
+def _build_rel_casscf_df_deriv_weights(
+    system,
+    Ccore: NDArray,
+    Cact: NDArray,
+    gamma1_act: NDArray,
+    gamma2_act: NDArray,
+) -> tuple[NDArray, NDArray]:
+    r"""Build two-component CASSCF DF derivative weights.
+
+    The hole space contains unit-occupied inactive core spinors and the
+    correlated active spinors. The spin-orbital pair density is decomposed as
+
+    .. math::
+        \Gamma_{xy,zw}
+        = \gamma_{xz}\gamma_{yw}
+        - \gamma_{xw}\gamma_{yz}
+        + \lambda_{xy,zw}.
+
+    Spatial three-center integrals are transformed with the sum over equal
+    alpha and beta spin blocks. This retains spin mixing and complex phases in
+    the compact hole-space intermediates while returning real spatial weights
+    for the scalar Coulomb-integral derivatives.
+    """
+    ncore = Ccore.shape[1]
+    nact = Cact.shape[1]
+    if gamma1_act.shape != (nact, nact):
+        raise ValueError(
+            f"Expected active 1-RDM shape {(nact, nact)}, got {gamma1_act.shape}."
+        )
+    if gamma2_act.shape != (nact, nact, nact, nact):
+        raise ValueError(
+            "Expected active 2-RDM shape "
+            f"{(nact, nact, nact, nact)}, got {gamma2_act.shape}."
+        )
+
+    Ch = np.hstack((Ccore, Cact))
+    nhole = Ch.shape[1]
+    gamma_h = np.zeros((nhole, nhole), dtype=np.complex128)
+    gamma_h[:ncore, :ncore] = np.eye(ncore)
+    gamma_h[ncore:, ncore:] = gamma1_act
+    lambda2_act = make_2cumulant_so(gamma1_act, gamma2_act)
+
+    nbf = system.nbf
+    Ch_a = Ch[:nbf]
+    Ch_b = Ch[nbf:]
+    Z_ao = build_metric_inverted_three_center(system)
+    Z_h = np.einsum("mx,Pmn,ny->Pxy", Ch_a.conj(), Z_ao, Ch_a, optimize=True)
+    Z_h += np.einsum("mx,Pmn,ny->Pxy", Ch_b.conj(), Z_ao, Ch_b, optimize=True)
+
+    R = np.einsum("xy,Pxy->P", gamma_h, Z_h, optimize=True)
+    W3_h = np.einsum("xy,P->Pxy", gamma_h, R, optimize=True)
+    W3_h -= np.einsum("xz,Pwz,wy->Pxy", gamma_h, Z_h, gamma_h, optimize=True)
+
+    Z_act = Z_h[:, ncore:, ncore:]
+    W3_h[:, ncore:, ncore:] += np.einsum(
+        "uvwx,Pvx->Puw", lambda2_act, Z_act, optimize=True
+    )
+
+    W2 = -0.5 * np.einsum("P,Q->PQ", R, R, optimize=True)
+    W2 += 0.5 * np.einsum(
+        "Pxy,xz,Qwz,wy->PQ", Z_h, gamma_h, Z_h, gamma_h, optimize=True
+    )
+    W2 -= 0.5 * np.einsum("uvwx,Puw,Qvx->PQ", lambda2_act, Z_act, Z_act, optimize=True)
+
+    W3 = np.einsum("mx,Pxy,ny->Pmn", Ch_a.conj(), W3_h, Ch_a, optimize=True)
+    W3 += np.einsum("mx,Pxy,ny->Pmn", Ch_b.conj(), W3_h, Ch_b, optimize=True)
+    return W2.real, W3.real
+
+
 def _build_casscf_overlap_weight(
     mc,
     C: NDArray,
@@ -276,17 +429,17 @@ def _build_casscf_overlap_weight(
     The existing orbital optimizer constructs the matrix :math:`A_{pq}`
     used in the CASSCF/GASSCF orbital gradient
     :math:`g_{pq}=2(A_{pq}-A_{qp})`.  For a fully optimized
-    state-specific CASSCF/GASSCF wave function, the symmetric part of this
+    state-specific CASSCF/GASSCF wave function, the Hermitian part of this
     matrix is the orbital Lagrange multiplier that contracts the overlap
-    derivative.  This helper recomputes :math:`A` in the current final MO
-    basis and transforms
+    derivative. This helper recomputes it in the current final MO basis and
+    transforms
 
     .. math::
         W^S_{\mu\nu}
         =
         C_{\mu p}
-        \frac{1}{2}(A_{pq}+A_{qp})
-        C_{\nu q}.
+        \frac{1}{2}(A_{pq}+A^*_{qp})
+        C^*_{\nu q}.
 
     Parameters
     ----------
@@ -304,7 +457,10 @@ def _build_casscf_overlap_weight(
     NDArray
         AO energy-weighted density with shape ``(nbasis, nbasis)``.
     """
-    orb_opt = OrbOptimizer(
+    optimizer_type = (
+        RelOrbOptimizer if isinstance(mc.ci_solver, RelCIBase) else OrbOptimizer
+    )
+    orb_opt = optimizer_type(
         C,
         (mc.mo_space.core, mc.mo_space.actv, mc.mo_space.virt),
         mc.system.fock_builder,
@@ -317,16 +473,12 @@ def _build_casscf_overlap_weight(
     orb_opt._compute_Fcore()
     orb_opt.get_eri_gaaa()
     lagrangian_mo = orb_opt.compute_orbital_lagrangian()
-    return np.einsum("mp,pq,nq->mn", C, lagrangian_mo, C, optimize=True)
+    return np.einsum("mp,pq,nq->mn", C, lagrangian_mo, C.conj(), optimize=True)
 
 
 def _validate_casscf_gradient_supported(mc, pre_run: bool = False) -> None:
-    """Reject CASSCF/GASSCF gradient cases outside the first implementation scope."""
-    if isinstance(mc.ci_solver, RelCIBase):
-        raise NotImplementedError(
-            "CASSCF/GASSCF gradients are implemented only for nonrelativistic "
-            "CASSCF/GASSCF."
-        )
+    """Reject CASSCF/GASSCF gradient cases outside the implemented scope."""
+    is_relativistic = isinstance(mc.ci_solver, RelCIBase)
 
     if mc.ci_solver.sa_info.ncis != 1 or mc.ci_solver.sa_info.nroots_sum != 1:
         raise NotImplementedError(
@@ -343,7 +495,7 @@ def _validate_casscf_gradient_supported(mc, pre_run: bool = False) -> None:
             "GASSCF gradients with frozen inter-GAS rotations are not implemented."
         )
 
-    system = mc.system if hasattr(mc, "system") else mc.parent_method.system
+    system = _find_upstream_system(mc)
     if isinstance(system, ModelSystem):
         raise NotImplementedError(
             "CASSCF/GASSCF gradients are not implemented for ModelSystem."
@@ -357,9 +509,9 @@ def _validate_casscf_gradient_supported(mc, pre_run: bool = False) -> None:
         raise NotImplementedError(
             "CASSCF/GASSCF gradients with Gaussian nuclear charges are not implemented."
         )
-    if system.x2c_type is not None or system.two_component:
+    if system.two_component and not is_relativistic:
         raise NotImplementedError(
-            "CASSCF/GASSCF gradients with X2C are not implemented."
+            "Two-component CASSCF/GASSCF gradients require a relativistic CI solver."
         )
     if system.auxiliary_basis is None:
         raise NotImplementedError(
@@ -400,9 +552,15 @@ def _validate_casscf_gradient_supported(mc, pre_run: bool = False) -> None:
         raise NotImplementedError(
             "GASSCF gradients with frozen inter-GAS rotations are not implemented."
         )
-    if np.iscomplexobj(mc.C[0]):
+    if np.iscomplexobj(mc.C[0]) and not is_relativistic:
         raise NotImplementedError(
-            "CASSCF/GASSCF gradients with complex orbitals are not implemented."
+            "Nonrelativistic CASSCF/GASSCF gradients with complex orbitals are not "
+            "implemented."
+        )
+    if is_relativistic and mc.C[0].shape[0] != 2 * system.nbf:
+        raise ValueError(
+            "Relativistic CASSCF/GASSCF gradients require spinor AO coefficients "
+            "with 2 * system.nbf rows."
         )
 
 
@@ -418,3 +576,13 @@ def _ci_solver_requests_multiple_gas(ci_solver) -> bool:
         )
     mo_space = getattr(ci_solver, "mo_space", None)
     return mo_space is not None and mo_space.ngas > 1
+
+
+def _find_upstream_system(method):
+    """Return the System before an unexecuted composition chain is materialized."""
+    current = method
+    while current is not None:
+        if hasattr(current, "system"):
+            return current.system
+        current = getattr(current, "parent_method", None)
+    raise ValueError("Could not find a System in the CASSCF parent-method chain.")

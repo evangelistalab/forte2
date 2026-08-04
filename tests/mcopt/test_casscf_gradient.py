@@ -358,19 +358,38 @@ def test_casscf_gradient_rejects_gaussian_nuclear_charges():
         mc.gradient()
 
 
-def test_casscf_gradient_rejects_x2c():
-    """Reject X2C CASSCF gradients until relativistic derivative terms are added."""
-    system = _system(
-        ["H", "H"],
-        np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]]),
-        x2c_type="sf",
-    )
-    rhf = RHF(charge=0)(system)
-    ci_solver = CISolver(
-        State(system=system, multiplicity=1, ms=0.0),
-        active_orbitals=2,
-    )
-    mc = MCOptimizer(ci_solver, final_orbitals="original")(rhf)
+def test_sf_x2c_casscf_gradient_finite_difference():
+    """Validate scalar-X2C CASSCF through the shared X2C hcore derivative."""
+    symbols = ["H", "H"]
+    coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]])
 
-    with pytest.raises(NotImplementedError, match="X2C"):
-        mc.gradient()
+    def casscf(distance, gradient=False):
+        system = _system(
+            symbols,
+            np.array([[0.0, 0.0, 0.0], [0.0, 0.0, distance]]),
+            x2c_type="sf",
+            minao_basis_set=None,
+        )
+        rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10)(system)
+        ci_solver = CISolver(
+            State(system=system, multiplicity=1, ms=0.0),
+            active_orbitals=2,
+        )
+        mc = MCOptimizer(
+            ci_solver,
+            e_tol=1.0e-12,
+            g_tol=1.0e-9,
+            final_orbitals="original",
+        )(rhf)
+        return mc.gradient()[1, 2] if gradient else mc.run().E
+
+    analytical = casscf(coordinates[1, 2], gradient=True)
+    step = 1.0e-3
+    energies = [
+        casscf(coordinates[1, 2] + scale * step) for scale in (-2.0, -1.0, 1.0, 2.0)
+    ]
+    numerical = (energies[0] - 8.0 * energies[1] + 8.0 * energies[2] - energies[3]) / (
+        12.0 * step
+    )
+
+    assert analytical == pytest.approx(numerical, abs=1.0e-8)
