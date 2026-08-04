@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 
 from forte2 import System
@@ -6,6 +7,97 @@ from forte2.helpers.comparisons import approx
 from forte2.orbitals import convert_coeff_spatial_to_spinor
 from forte2.system import BSE_AVAILABLE
 from forte2.data import EH_TO_WN, EH_TO_EV
+
+
+def _four_point_hcore_deriv(system_factory, coordinate, step=1.0e-4):
+    values = [
+        system_factory(coordinate + scale * step).ints_hcore()
+        for scale in (-2.0, -1.0, 1.0, 2.0)
+    ]
+    return (values[0] - 8.0 * values[1] + 8.0 * values[2] - values[3]) / (12.0 * step)
+
+
+@pytest.mark.parametrize("x2c_type", ["sf", "so"])
+@pytest.mark.parametrize("use_gaussian_charges", [False, True])
+def test_x2c_hcore_deriv_finite_difference(x2c_type, use_gaussian_charges):
+    def make_system(z):
+        return System(
+            xyz=f"O 0 0 0\nH 0 0 {z:.12f}\nH 0 1.4 0",
+            basis_set="sto-3g",
+            unit="bohr",
+            x2c_type=x2c_type,
+            use_gaussian_charges=use_gaussian_charges,
+            minao_basis_set=None,
+        )
+
+    system = make_system(1.5)
+    analytical = system.x2c_helper.hcore_deriv()[5]
+    numerical = _four_point_hcore_deriv(make_system, 1.5)
+
+    assert analytical == pytest.approx(numerical, abs=3.0e-8)
+    assert analytical == pytest.approx(analytical.conj().T, abs=1.0e-12)
+
+
+@pytest.mark.parametrize("snso_type", ["boettger", "dc", "dcb", "row-dependent"])
+def test_snso_x2c_hcore_deriv_finite_difference(snso_type):
+    def make_system(z):
+        return System(
+            xyz=f"S 0 0 0\nH 0 0 {z:.12f}\nH 0 1.4 0",
+            basis_set="sto-3g",
+            unit="bohr",
+            x2c_type="so",
+            snso_type=snso_type,
+            minao_basis_set=None,
+        )
+
+    system = make_system(1.5)
+    analytical = system.x2c_helper.hcore_deriv()[5]
+    numerical = _four_point_hcore_deriv(make_system, 1.5)
+
+    assert analytical == pytest.approx(numerical, abs=3.0e-8)
+
+
+def test_x2c_hcore_deriv_with_truncated_overlap_space():
+    def make_system(z):
+        return System(
+            xyz=f"O 0 0 0\nH 0 0 {z:.12f}\nH 0 1.4 0",
+            basis_set="sto-3g",
+            unit="bohr",
+            x2c_type="sf",
+            overlap_ortho_rtol=1.0e-3,
+            minao_basis_set=None,
+        )
+
+    system = make_system(1.5)
+    assert system.x2c_helper.orth_info["n_discarded"] == 1
+    analytical = system.x2c_helper.hcore_deriv()[5]
+    numerical = _four_point_hcore_deriv(make_system, 1.5)
+
+    assert analytical == pytest.approx(numerical, abs=3.0e-8)
+
+
+def test_x2c_helper_tracks_spinor_upcaster_override():
+    def make_system(x2c_type, snso_type=None):
+        return System(
+            xyz="S 0 0 0\nH 0 0 1.5",
+            basis_set="sto-3g",
+            unit="bohr",
+            x2c_type=x2c_type,
+            snso_type=snso_type,
+            minao_basis_set=None,
+        )
+
+    overridden = make_system("sf")
+    overridden.x2c_type = "so"
+    overridden.snso_type = "row-dependent"
+    reference = make_system("so", "row-dependent")
+
+    assert overridden.x2c_helper.hcore_x2c() == pytest.approx(
+        reference.x2c_helper.hcore_x2c(), abs=1.0e-12
+    )
+    assert overridden.x2c_helper.hcore_deriv() == pytest.approx(
+        reference.x2c_helper.hcore_deriv(), abs=1.0e-11
+    )
 
 
 def test_sfx2c1e():

@@ -70,4 +70,22 @@ np_vector kinetic_deriv(const Basis& basis1, const Basis& basis2, const np_matri
 np_vector nuclear_deriv(const Basis& basis1, const Basis& basis2, const np_matrix& dm,
                         const std::vector<std::pair<double, std::array<double, 3>>>& charges);
 
+/// @brief Return first derivatives of overlap integrals for every nuclear coordinate.
+/// @return Array with shape `(3 * natoms, basis1.size(), basis2.size())`.
+np_tensor3
+overlap_deriv_matrices(const Basis& basis1, const Basis& basis2,
+                       const std::vector<std::pair<double, std::array<double, 3>>>& charges);
+
+/// @brief Return first derivatives of kinetic-energy integrals for every nuclear coordinate.
+/// @return Array with shape `(3 * natoms, basis1.size(), basis2.size())`.
+np_tensor3
+kinetic_deriv_matrices(const Basis& basis1, const Basis& basis2,
+                       const std::vector<std::pair<double, std::array<double, 3>>>& charges);
+
+/// @brief Return first derivatives of nuclear-attraction integrals for every nuclear coordinate.
+/// @return Array with shape `(3 * natoms, basis1.size(), basis2.size())`.
+np_tensor3
+nuclear_deriv_matrices(const Basis& basis1, const Basis& basis2,
+                       const std::vector<std::pair<double, std::array<double, 3>>>& charges);
+
 } // namespace forte2

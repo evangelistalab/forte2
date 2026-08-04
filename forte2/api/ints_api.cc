@@ -391,6 +391,13 @@ void export_one_electron_deriv_api(nb::module_& sub_m) {
             return nuclear_deriv(basis1, basis2, dm, charges);
         },
         "basis1"_a, "basis2"_a, "dm"_a, "charges"_a);
+
+    sub_m.def("overlap_deriv_matrices", &overlap_deriv_matrices, "basis1"_a, "basis2"_a,
+              "charges"_a);
+    sub_m.def("kinetic_deriv_matrices", &kinetic_deriv_matrices, "basis1"_a, "basis2"_a,
+              "charges"_a);
+    sub_m.def("nuclear_deriv_matrices", &nuclear_deriv_matrices, "basis1"_a, "basis2"_a,
+              "charges"_a);
 }
 
 void export_two_electron_api(nb::module_& sub_m) {
@@ -510,6 +517,18 @@ void export_libcint_compute_api(nb::module_& sub_m) {
     sub_m.def(
         "cint_int1e_nuc_sph", &cint_int1e_nuc_sph, "shell_slice"_a, "atm"_a, "bas"_a, "env"_a,
         "Compute the nuclear attraction integral matrix using libcint in spherical harmonics.");
+    sub_m.def("cint_int1e_ipnuc_sph", &cint_int1e_ipnuc_sph, "shell_slice"_a, "atm"_a, "bas"_a,
+              "env"_a);
+    sub_m.def("cint_int1e_iprinv_sph", &cint_int1e_iprinv_sph, "shell_slice"_a, "atm"_a, "bas"_a,
+              "env"_a);
+    sub_m.def("cint_int1e_pnucp_sph", &cint_int1e_pnucp_sph, "shell_slice"_a, "atm"_a, "bas"_a,
+              "env"_a);
+    sub_m.def("cint_int1e_prinvp_sph", &cint_int1e_prinvp_sph, "shell_slice"_a, "atm"_a, "bas"_a,
+              "env"_a);
+    sub_m.def("cint_int1e_ippnucp_sph", &cint_int1e_ippnucp_sph, "shell_slice"_a, "atm"_a, "bas"_a,
+              "env"_a);
+    sub_m.def("cint_int1e_ipprinvp_sph", &cint_int1e_ipprinvp_sph, "shell_slice"_a, "atm"_a,
+              "bas"_a, "env"_a);
     sub_m.def("cint_int1e_nuc_spinor", &cint_int1e_nuc_spinor, "shell_slice"_a, "atm"_a, "bas"_a,
               "env"_a,
               "Compute the nuclear attraction integral matrix using libcint in spinor basis.");
@@ -517,6 +536,10 @@ void export_libcint_compute_api(nb::module_& sub_m) {
               "env"_a,
               "Compute the small component of the nuclear attraction integral matrix using libcint "
               "in spherical harmonics.");
+    sub_m.def("cint_int1e_ipspnucsp_sph", &cint_int1e_ipspnucsp_sph, "shell_slice"_a, "atm"_a,
+              "bas"_a, "env"_a);
+    sub_m.def("cint_int1e_ipsprinvsp_sph", &cint_int1e_ipsprinvsp_sph, "shell_slice"_a, "atm"_a,
+              "bas"_a, "env"_a);
     sub_m.def("cint_int1e_spnucsp_spinor", &cint_int1e_spnucsp_spinor, "shell_slice"_a, "atm"_a,
               "bas"_a, "env"_a,
               "Compute the small component of the nuclear attraction integral matrix using libcint "

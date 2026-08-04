@@ -32,7 +32,7 @@ def flat_to_atom_gradient(gradient, natoms):
     return gradient.reshape(natoms, 3).copy()
 
 
-def nuclear_repulsion_deriv(atoms):
+def nuclear_repulsion_deriv(system_or_atoms):
     r"""
     Compute point-charge nuclear repulsion derivatives.
 
@@ -46,14 +46,32 @@ def nuclear_repulsion_deriv(atoms):
 
     Parameters
     ----------
-    atoms : list[tuple[float, Sequence[float]]]
-        Nuclear charges and Cartesian centers.
+    system_or_atoms : System or list[tuple[float, Sequence[float]]]
+        A molecular system or its nuclear charges and Cartesian centers. A
+        system is required for Gaussian nuclear charge distributions.
 
     Returns
     -------
     NDArray
         Nuclear repulsion derivative with shape ``(natoms, 3)``.
     """
+    if getattr(system_or_atoms, "use_gaussian_charges", False):
+        system = system_or_atoms
+        weights = 0.5 * np.outer(system.atomic_charges, system.atomic_charges)
+        np.fill_diagonal(weights, 0.0)
+        return flat_to_atom_gradient(
+            ints.coulomb_2c_deriv(
+                system.gaussian_charge_basis,
+                system.gaussian_charge_basis,
+                weights,
+                system.atoms,
+            ),
+            system.natoms,
+        )
+
+    atoms = (
+        system_or_atoms.atoms if hasattr(system_or_atoms, "atoms") else system_or_atoms
+    )
     natoms = len(atoms)
     charges = np.asarray([atom[0] for atom in atoms], dtype=float)
     positions = np.asarray([atom[1] for atom in atoms], dtype=float)
@@ -74,7 +92,7 @@ def nuclear_repulsion_deriv(atoms):
     return gradient
 
 
-def compute_gradient(system, D1, W1, W2, W3):
+def compute_gradient(system, D1, W1, W2, W3, hcore_deriv=None, hcore_density=None):
     r"""
     Compute the total gradient from the one-electron density matrix and two-electron derivative weights.
 
@@ -92,6 +110,14 @@ def compute_gradient(system, D1, W1, W2, W3):
         The two-electron derivative weight for the metric with shape ``(naux, naux)``.
     W3 : NDArray
         The two-electron derivative weight for the three-center integrals with shape ``(naux, nbasis, nbasis)``.
+    hcore_deriv : NDArray, optional
+        Derivative of a preassembled one-electron Hamiltonian. Its shape is
+        ``(3 * natoms, n, n)``. When provided, this replaces the separate
+        kinetic- and nuclear-attraction derivative contractions.
+    hcore_density : NDArray, optional
+        Density matrix to contract with ``hcore_deriv``. This is the spatial
+        density for scalar X2C and the full spinor density for spin-orbit X2C.
+        Defaults to ``D1``.
 
     Returns
     -------
@@ -99,13 +125,32 @@ def compute_gradient(system, D1, W1, W2, W3):
         Total gradient with shape ``(natoms, 3)``.
     """
     natoms = system.natoms
-    gradient = nuclear_repulsion_deriv(system.atoms)
-    gradient += flat_to_atom_gradient(
-        ints.kinetic_deriv(system.basis, system.basis, D1, system.atoms), natoms
-    )
-    gradient += flat_to_atom_gradient(
-        ints.nuclear_deriv(system.basis, system.basis, D1, system.atoms), natoms
-    )
+    gradient = nuclear_repulsion_deriv(system)
+    if hcore_deriv is None:
+        gradient += flat_to_atom_gradient(
+            ints.kinetic_deriv(system.basis, system.basis, D1, system.atoms),
+            natoms,
+        )
+        if system.use_gaussian_charges:
+            V_deriv = integrals.nuclear_deriv_matrices(system)
+            gradient += np.einsum("xmn,nm->x", V_deriv, D1).real.reshape(natoms, 3)
+        else:
+            gradient += flat_to_atom_gradient(
+                ints.nuclear_deriv(system.basis, system.basis, D1, system.atoms),
+                natoms,
+            )
+    else:
+        if hcore_density is None:
+            hcore_density = D1
+        hcore_deriv = np.asarray(hcore_deriv)
+        expected_shape = (3 * natoms,) + np.asarray(hcore_density).shape
+        if hcore_deriv.shape != expected_shape:
+            raise ValueError(
+                f"Expected hcore_deriv shape {expected_shape}, got {hcore_deriv.shape}."
+            )
+        gradient += np.einsum(
+            "xmn,nm->x", hcore_deriv, hcore_density, optimize=True
+        ).real.reshape(natoms, 3)
     gradient -= flat_to_atom_gradient(
         ints.overlap_deriv(system.basis, system.basis, W1, system.atoms), natoms
     )

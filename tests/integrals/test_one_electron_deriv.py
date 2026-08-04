@@ -91,6 +91,28 @@ def test_nuclear_deriv_h2_minbas():
     assert s_deriv_analytical[5] == approx_abs(s_deriv_num, atol=1e-7)
 
 
+@pytest.mark.parametrize(
+    ("matrix_function", "contracted_function"),
+    [
+        (forte2.integrals.overlap_deriv_matrices, ints.overlap_deriv),
+        (forte2.integrals.kinetic_deriv_matrices, ints.kinetic_deriv),
+        (forte2.integrals.nuclear_deriv_matrices, ints.nuclear_deriv),
+    ],
+)
+def test_one_electron_deriv_matrices_match_contracted_api(
+    matrix_function, contracted_function
+):
+    system = forte2.System(xyz="H 0 0 0\nH 0 0 1.4", basis_set="sto-3g", unit="bohr")
+    dm = rng.standard_normal((system.nbf, system.nbf))
+    matrices = matrix_function(system)
+    contracted = contracted_function(system.basis, system.basis, dm, system.atoms)
+
+    assert matrices.shape == (3 * system.natoms, system.nbf, system.nbf)
+    assert np.einsum("xmn,mn->x", matrices, dm) == pytest.approx(
+        contracted, abs=1.0e-12
+    )
+
+
 def test_overlap_deriv_h2o_dz():
     delta = 1e-5
 

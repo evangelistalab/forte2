@@ -1,7 +1,14 @@
 import numpy as np
 
 from forte2.lib import ints
-from forte2.integrals.libcint_utils import conc_env, basis_to_cint_envs
+from forte2.integrals.libcint_utils import (
+    CHARGE_OF,
+    PTR_RINV_ORIG,
+    PTR_RINV_ZETA,
+    PTR_ZETA,
+    conc_env,
+    basis_to_cint_envs,
+)
 
 LIBCINT_AVAILABLE = getattr(ints, "HAS_LIBCINT", False)
 
@@ -352,7 +359,7 @@ def opVop(system, basis1=None, basis2=None):
     -------
     opVop : list[ndarray]
         The small component nuclear potential integrals, in the order:
-        [p dot Vp, (p cross Vp)_z, (p cross Vp)_x, (p cross Vp)_y]
+        [p dot Vp, (p cross Vp)_x, (p cross Vp)_y, (p cross Vp)_z]
     """
     # libint2 does not support 1e-opVop with Gaussian charges
     if system.use_gaussian_charges:
@@ -364,6 +371,149 @@ def opVop(system, basis1=None, basis2=None):
     else:
         basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
         return ints.opVop(basis1, basis2, system.atoms)
+
+
+def overlap_deriv_matrices(system, basis1=None, basis2=None):
+    """Return overlap derivatives with shape ``(3 * natoms, nbasis1, nbasis2)``."""
+    basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
+    _require_libint2_deriv_backend(max(basis1.max_l, basis2.max_l), "overlap")
+    return ints.overlap_deriv_matrices(basis1, basis2, system.atoms)
+
+
+def kinetic_deriv_matrices(system, basis1=None, basis2=None):
+    """Return kinetic derivatives with shape ``(3 * natoms, nbasis1, nbasis2)``."""
+    basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
+    _require_libint2_deriv_backend(max(basis1.max_l, basis2.max_l), "kinetic")
+    return ints.kinetic_deriv_matrices(basis1, basis2, system.atoms)
+
+
+def nuclear_deriv_matrices(system, basis1=None, basis2=None):
+    """Return nuclear-attraction derivatives for point or Gaussian nuclei."""
+    basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
+    if not system.use_gaussian_charges:
+        _require_libint2_deriv_backend(max(basis1.max_l, basis2.max_l), "nuclear")
+        return ints.nuclear_deriv_matrices(basis1, basis2, system.atoms)
+
+    _require_libcint()
+    if basis1 is not basis2:
+        raise NotImplementedError(
+            "Gaussian nuclear-attraction derivative matrices currently require "
+            "the same basis on the bra and ket."
+        )
+
+    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
+    all_nuc_ip = ints.cint_int1e_ipnuc_sph(shell_slice, atm, bas, env).transpose(
+        0, 2, 1
+    )
+    deriv = np.zeros((3 * system.natoms, basis1.size, basis1.size))
+
+    for atom, (charge, center) in enumerate(system.atoms):
+        env_atom = env.copy()
+        env_atom[PTR_RINV_ORIG : PTR_RINV_ORIG + 3] = center
+        env_atom[PTR_RINV_ZETA] = env[atm[atom, PTR_ZETA]]
+        explicit = -charge * ints.cint_int1e_iprinv_sph(
+            shell_slice, atm, bas, env_atom
+        ).transpose(0, 2, 1)
+
+        first, last = basis1.center_first_and_last[atom]
+        total = explicit.copy()
+        total[:, first:last, :] -= all_nuc_ip[:, first:last, :]
+        deriv[3 * atom : 3 * atom + 3] = total + total.transpose(0, 2, 1)
+
+    return deriv
+
+
+def opVop_deriv_matrices(system, basis1=None, basis2=None):
+    r"""Return derivatives of all four components of the :math:`pVp` operator.
+
+    Components use the same public order as :func:`opVop`:
+    ``[p dot Vp, (p cross Vp)_x, (p cross Vp)_y, (p cross Vp)_z]``.
+    The result has shape ``(4, 3 * natoms, nbasis1, nbasis2)``.
+
+    Libcint provides analytic derivatives for the same-basis case, including
+    Gaussian nuclear models. A fourth-order central difference is retained as
+    a general cross-basis fallback.
+    """
+    basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
+
+    def format_cint_ip(raw):
+        raw = raw.transpose(0, 2, 1).reshape(3, 4, basis1.size, basis1.size)
+        # Libcint stores the three antisymmetric cross-product components in
+        # transposed convention relative to Forte2.
+        raw[:, :3] *= -1.0
+        return raw
+
+    def public_order(components):
+        return components[[3, 0, 1, 2]]
+
+    if LIBCINT_AVAILABLE and basis1 is basis2:
+        atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
+        all_nuc_ip = format_cint_ip(
+            ints.cint_int1e_ipspnucsp_sph(shell_slice, atm, bas, env)
+        )
+        deriv = np.zeros((4, 3 * system.natoms, basis1.size, basis1.size))
+
+        component_prefactor = np.array([-1.0, -1.0, -1.0, 1.0])
+        transpose_sign = np.array([-1.0, -1.0, -1.0, 1.0])
+
+        for atom, (charge, center) in enumerate(system.atoms):
+            env_atom = env.copy()
+            env_atom[PTR_RINV_ORIG : PTR_RINV_ORIG + 3] = center
+            env_atom[PTR_RINV_ZETA] = env[atm[atom, PTR_ZETA]]
+            explicit = -charge * format_cint_ip(
+                ints.cint_int1e_ipsprinvsp_sph(shell_slice, atm, bas, env_atom)
+            )
+
+            first, last = basis1.center_first_and_last[atom]
+            total = explicit.copy()
+            total[:, :, first:last, :] -= all_nuc_ip[:, :, first:last, :]
+            block = component_prefactor[None, :, None, None] * (
+                total
+                + transpose_sign[None, :, None, None] * total.transpose(0, 1, 3, 2)
+            )
+            deriv[:, 3 * atom : 3 * atom + 3] = block.transpose(1, 0, 2, 3)
+
+        return public_order(deriv)
+
+    from forte2.system.build_basis import build_basis_from_dict
+
+    def shifted_basis(basis, atom, cart, displacement):
+        data = basis.serialize()
+        first_shell, last_shell = basis.center_first_and_last_shell[atom]
+        for shell in data["shells"][first_shell:last_shell]:
+            shell["center"][cart] += displacement
+        shifted = build_basis_from_dict(data)
+        shifted.set_name(basis.name)
+        return shifted
+
+    class ShiftedSystem:
+        pass
+
+    step = 1.0e-4
+    deriv = np.zeros((4, 3 * system.natoms, basis1.size, basis2.size))
+    for atom in range(system.natoms):
+        for cart in range(3):
+            values = []
+            for scale in (-2.0, -1.0, 1.0, 2.0):
+                displacement = scale * step
+                shifted_system = ShiftedSystem()
+                shifted_system.atoms = [
+                    (charge, list(center)) for charge, center in system.atoms
+                ]
+                shifted_system.atoms[atom][1][cart] += displacement
+                shifted_system.use_gaussian_charges = system.use_gaussian_charges
+                shifted1 = shifted_basis(basis1, atom, cart, displacement)
+                shifted2 = (
+                    shifted1
+                    if basis2 is basis1
+                    else shifted_basis(basis2, atom, cart, displacement)
+                )
+                values.append(np.asarray(opVop(shifted_system, shifted1, shifted2)))
+            deriv[:, 3 * atom + cart] = (
+                values[0] - 8.0 * values[1] + 8.0 * values[2] - values[3]
+            ) / (12.0 * step)
+
+    return deriv
 
 
 def erf_nuclear(system, omega, basis1=None, basis2=None):
@@ -729,7 +879,7 @@ def _parse_basis_args_cint_1e(system, basis1, basis2, origin=None):
     if basis1 is None and basis2 is None:
         atm, bas, env = basis_to_cint_envs(system, system.basis, common_origin=origin)
         shell_slice = [0, system.basis.nshells, 0, system.basis.nshells]
-    elif basis1 is not None and basis2 is None:
+    elif basis1 is not None and (basis2 is None or basis2 is basis1):
         atm, bas, env = basis_to_cint_envs(system, basis1, common_origin=origin)
         shell_slice = [0, basis1.nshells, 0, basis1.nshells]
     elif basis1 is None and basis2 is not None:
@@ -738,6 +888,10 @@ def _parse_basis_args_cint_1e(system, basis1, basis2, origin=None):
         atm1, bas1, env1 = basis_to_cint_envs(system, basis1, common_origin=origin)
         atm2, bas2, env2 = basis_to_cint_envs(system, basis2, common_origin=origin)
         atm, bas, env = conc_env(atm1, bas1, env1, atm2, bas2, env2)
+        # Cross-basis environments duplicate the atom table so each shell can
+        # retain its own atom index. Only the first copy may contribute to
+        # nuclear-potential operators.
+        atm[len(atm1) :, CHARGE_OF] = 0
         ns1 = basis1.nshells
         ns2 = basis2.nshells
         shell_slice = [0, ns1, ns1, ns1 + ns2]

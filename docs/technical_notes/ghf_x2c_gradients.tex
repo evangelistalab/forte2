@@ -1,0 +1,496 @@
+\documentclass[aip,jcp,preprint]{revtex4-1}
+
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{braket}
+\usepackage{booktabs}
+\usepackage[capitalize]{cleveref}
+
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\Tr}{\operatorname{Tr}}
+\newcommand{\RePart}{\operatorname{Re}}
+\newcommand{\ii}{\mathrm{i}}
+\newcommand{\xcoord}{[x]}
+\newcommand{\sfX}{\mathrm{SF\mbox{-}X2C}}
+\newcommand{\soX}{\mathrm{SO\mbox{-}X2C}}
+
+\begin{document}
+
+\title{Technical Notes: GHF and X2C-1e Analytic Nuclear Gradients in Forte2}
+\author{Forte2 Developers}
+\noaffiliation
+\date{\today}
+\maketitle
+
+\section{Purpose and implementation status}
+
+This note describes the equations and array conventions used to implement
+density-fitted generalized Hartree--Fock (GHF) nuclear gradients and
+one-electron exact-two-component (X2C-1e) Hamiltonian derivatives in Forte2.
+The X2C response theory follows Cheng and Gauss,\cite{ChengGauss2011} adapted
+to Forte2's decontracted basis, canonical overlap truncation, Pauli-component
+ordering, and density-fitting implementation.
+
+The implementation covers the following combinations:
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+SCF reference & One-electron Hamiltonian & Nuclear model \\
+\midrule
+RHF, UHF, GHF & nonrelativistic & point or Gaussian \\
+RHF, UHF, GHF & spin-free X2C-1e & point or Gaussian \\
+GHF & spin-orbit X2C-1e & point or Gaussian \\
+GHF & spin-orbit X2C-1e with SNSO & point or Gaussian \\
+\bottomrule
+\end{tabular}
+\end{center}
+All SNSO choices currently recognized by Forte2 (Boettger, DC, DCB, and
+row-dependent) are differentiated.  The X2C derivative also follows a fixed
+retained overlap eigenspace when canonical orthogonalization removes linear
+dependencies.  The number of retained functions must remain unchanged in a
+neighborhood of the reference geometry, as is required for any differentiable
+truncated-space calculation.
+
+The term ``analytic gradient'' below means that the SCF energy derivative and
+the X2C matrix response are evaluated analytically.  The same-basis $W$
+integrals used by X2C are analytic libcint derivatives.  A fourth-order finite
+difference remains only as a public cross-basis fallback for
+\texttt{opVop\_deriv\_matrices}; the X2C driver does not use that fallback.
+
+\section{Indices, density orientation, and derivative convention}
+
+Greek indices $\mu,\nu,\rho,\sigma$ denote real spatial AO functions, $P,Q$
+denote auxiliary functions, $i,j$ denote occupied spinors, and
+$\omega,\tau\in\{\alpha,\beta\}$ denote spin components.  A superscript
+$\xcoord$ denotes differentiation with respect to one atom-major Cartesian
+coordinate $x=R_{Aq}$:
+\begin{equation}
+ A^\xcoord = \frac{\partial A}{\partial R_{Aq}}.
+\end{equation}
+Forte2 stores occupied GHF spinors as
+\begin{equation}
+ C_{\mathrm{occ}} =
+ \begin{pmatrix} C^\alpha_{\mathrm{occ}} \\ C^\beta_{\mathrm{occ}}\end{pmatrix},
+ \qquad
+ C_{\mathrm{occ}}^\dagger
+ \begin{pmatrix}S&0\\0&S\end{pmatrix}
+ C_{\mathrm{occ}}=1.
+\end{equation}
+Its density arrays use the orientation
+\begin{equation}
+ D^{\omega\tau}_{\mu\nu}
+ = \sum_i C^\omega_{\mu i} C^{\tau *}_{\nu i}.
+ \label{eq:ghf_density_blocks}
+\end{equation}
+Consequently an AO operator is contracted as
+$D_{\nu\mu}h_{\mu\nu}=\Tr(Dh)$.  This orientation matters for complex GHF:
+moving the conjugation to the other AO index produces the right real-orbital
+limit but the wrong complex gradient.
+
+The spin-traced spatial density is
+\begin{equation}
+ D_{\mu\nu}=D^{\alpha\alpha}_{\mu\nu}
+             +D^{\beta\beta}_{\mu\nu}.
+ \label{eq:charge_density}
+\end{equation}
+It is the only density entering a scalar one-electron operator and the Coulomb
+energy.  Off-diagonal spin blocks enter exchange even though they do not enter
+\cref{eq:charge_density}.
+
+\section{Density-fitted complex GHF gradient}
+
+\subsection{Metric-inverted three-center tensor}
+
+Let
+\begin{align}
+ J^P_{\mu\nu} &= (P|\mu\nu), & M_{PQ}&=(P|Q),\\
+ Z^P_{\mu\nu} &= (M^{-1})_{PQ}J^Q_{\mu\nu}.
+\end{align}
+The fitted charge and occupied spinor transition density are
+\begin{align}
+ \rho^P
+ &=D_{\nu\mu}Z^P_{\mu\nu},
+ \label{eq:rho}\\
+ Q^P_{ij}
+ &=\sum_{\omega}\sum_{\mu\nu}
+ C^{\omega *}_{\mu i}Z^P_{\mu\nu}C^\omega_{\nu j}.
+ \label{eq:q_transition}
+\end{align}
+The spin sum is inside $Q^P_{ij}$.  This is the GHF distinction from UHF,
+where alpha and beta occupied orbitals belong to orthogonal spin sectors and
+are treated as two separate occupied lists.
+
+\subsection{Derivative weights}
+
+Differentiating the Coulomb metric and the three-center integrals gives the
+weights used by Forte2:
+\begin{align}
+ W^M_{PQ}
+ &=-\frac{1}{2}\rho^P\rho^Q
+   +\frac{1}{2}\sum_{ij}Q^P_{ij}Q^Q_{ji},
+ \label{eq:ghf_w2}\\
+ W^{J,P}_{\mu\nu}
+ &=D_{\nu\mu}\rho^P
+   -\sum_{\omega ij}
+    C^{\omega *}_{\mu i}C^\omega_{\nu j}Q^P_{ji}.
+ \label{eq:ghf_w3}
+\end{align}
+The explicit two-electron derivative is therefore
+\begin{equation}
+ E^{\xcoord}_{2e}
+ =\RePart\left[
+ W^{J,P}_{\mu\nu}J^{P,\xcoord}_{\mu\nu}
+ +W^M_{PQ}M^{\xcoord}_{PQ}
+ \right].
+ \label{eq:ghf_df_gradient}
+\end{equation}
+The derivative integrals are real in the real spherical AO basis, but the
+weights may be complex.  Forte2 carries out the complex algebra through
+\cref{eq:ghf_w2,eq:ghf_w3} and takes the real part only in the final derivative
+contraction.
+
+For canonical occupied spinors, the energy-weighted spinor density is
+\begin{equation}
+ W_{\mu\nu}^{\omega\tau}
+ =\sum_i C^\omega_{\mu i}\epsilon_i C^{\tau *}_{\nu i}.
+\end{equation}
+Because the AO overlap is spin diagonal, its gradient uses the spin trace
+$W^{\alpha\alpha}+W^{\beta\beta}$.  The complete nonrelativistic GHF gradient
+is
+\begin{align}
+ E^\xcoord
+ &=E_\mathrm{NN}^\xcoord
+ +\RePart\left[D_{\nu\mu}h^\xcoord_{\mu\nu}
+ -W_{\nu\mu}S^\xcoord_{\mu\nu}\right]
+ +E^{\xcoord}_{2e}.
+ \label{eq:ghf_total_gradient}
+\end{align}
+
+\section{X2C-1e Hamiltonian used by Forte2}
+
+\subsection{Primitive matrices and Pauli ordering}
+
+X2C is built in a decontracted spatial basis.  The four primitive matrices are
+\begin{align}
+ S_{\mu\nu}&=\braket{\chi_\mu|\chi_\nu}, &
+ T_{\mu\nu}&=\braket{\chi_\mu|\hat p^2/2|\chi_\nu},\\
+ V_{\mu\nu}&=\braket{\chi_\mu|\hat V|\chi_\nu}, &
+ W_{\mu\nu}&=\braket{\chi_\mu|(\boldsymbol\sigma\cdot\hat{p})
+ \hat V(\boldsymbol\sigma\cdot\hat{p})|\chi_\nu}.
+\end{align}
+The public \texttt{opVop} and \texttt{opVop\_deriv\_matrices} order is
+\begin{equation}
+ [W_0,W_x,W_y,W_z]
+ =[hat p\cdot V\hat p,
+   (\hat p\times V\hat p)_x,
+   (\hat p\times V\hat p)_y,
+   (\hat p\times V\hat p)_z].
+ \label{eq:opvop_order}
+\end{equation}
+For SO-X2C these real spatial components are assembled into
+\begin{equation}
+ W_\mathrm{spinor}=
+ \begin{pmatrix}
+ W_0+\ii W_z & \ii W_x+W_y\\
+ \ii W_x-W_y & W_0-\ii W_z
+ \end{pmatrix}.
+ \label{eq:pauli_w}
+\end{equation}
+For SF-X2C only $W_0$ is retained.
+
+\subsection{Orthogonalized Dirac problem}
+
+Let $O$ be the possibly rectangular canonical orthogonalizer of the
+decontracted overlap,
+\begin{equation}
+ O^\dagger S O=1,
+\end{equation}
+and transform $T,V,W$ to this orthonormal basis.  In a restricted kinetically
+balanced basis the generalized one-electron Dirac problem is
+\begin{equation}
+ \mathcal D C=\mathcal M C\epsilon,
+ \label{eq:dirac_problem}
+\end{equation}
+with
+\begin{align}
+ \mathcal D&=
+ \begin{pmatrix}
+ V&T\\T&\dfrac{1}{4c^2}W-T
+ \end{pmatrix}, &
+ \mathcal M&=
+ \begin{pmatrix}
+ 1&0\\0&\dfrac{1}{2c^2}T
+ \end{pmatrix}.
+ \label{eq:dirac_matrices}
+\end{align}
+Partition the positive-energy eigenvectors into large and small rows,
+$C_+=(C_L,C_S)^T$.  The decoupling matrix and renormalization metric are
+\begin{align}
+ X&=C_SC_L^+,\\
+ A&=1+\frac{1}{2c^2}X^\dagger T X,
+ &R&=A^{-1/2},
+ \label{eq:x_and_r}
+\end{align}
+where $+$ denotes the Moore--Penrose inverse.  The NESC matrix and electronic
+Foldy--Wouthuysen Hamiltonian are
+\begin{align}
+ L&=TX+X^\dagger T-X^\dagger TX+V
+   +\frac{1}{4c^2}X^\dagger W X,
+ \label{eq:nesc}\\
+ h_\mathrm{FW}&=R^\dagger L R.
+ \label{eq:hfw}
+\end{align}
+These are the orthonormal-basis forms of Eqs.~(14)--(17) of
+Ref.~\onlinecite{ChengGauss2011}.
+
+\subsection{Back transformation and recontraction}
+
+Forte2 maps \cref{eq:hfw} to the decontracted AO basis with the dual
+orthogonalizer $O^{-1}=O^\dagger S$.  It then projects to the original
+contracted basis with
+\begin{equation}
+ P=S_{dd}^{-1}S_{dc},
+ \label{eq:projection}
+\end{equation}
+where $d$ and $c$ label decontracted and contracted bases.  Thus
+\begin{equation}
+ h_\mathrm{X2C}=P^\dagger (O^{-1})^\dagger
+ h_\mathrm{FW}O^{-1}P.
+ \label{eq:contracted_hx2c}
+\end{equation}
+For SO-X2C, $O$, $O^{-1}$, and $P$ are duplicated on the two spin blocks.
+
+\section{Analytic derivative of the X2C Hamiltonian}
+
+\subsection{Derivative integral matrices}
+
+Every nuclear coordinate requires
+\begin{equation}
+ S^\xcoord,\quad T^\xcoord,\quad V^\xcoord,\quad
+ [W_0^\xcoord,W_x^\xcoord,W_y^\xcoord,W_z^\xcoord].
+ \label{eq:x2c_required_derivatives}
+\end{equation}
+Libint2 supplies matrix-valued first derivatives of $S$, $T$, and point-nucleus
+$V$.  Gaussian-nucleus $V^\xcoord$ and all four $W^\xcoord$ components use
+libcint.  The relevant libcint kernels are
+\texttt{int1e\_ipnuc}, \texttt{int1e\_iprinv},
+\texttt{int1e\_ipspnucsp}, and \texttt{int1e\_ipsprinvsp}.
+
+The \texttt{ip} kernels differentiate one AO center.  For atom $A$, Forte2
+adds the explicit derivative of the potential centered on $A$, assigns AO
+center derivatives to basis functions on $A$, and obtains the second AO-center
+term by Hermitian transpose.  The scalar component is symmetric while the
+three cross-product components are antisymmetric:
+\begin{align}
+ (W_0^\xcoord)^T&=W_0^\xcoord, &
+ (W_k^\xcoord)^T&=-W_k^\xcoord\quad(k=x,y,z).
+\end{align}
+The libcint component and transpose conventions are normalized once inside
+\texttt{opVop\_deriv}\allowbreak\texttt{\_matrices}; downstream X2C code sees only the public order
+in \cref{eq:opvop_order}.
+
+\subsection{Orthogonalizer response}
+
+Inside the retained overlap space Forte2 uses a parallel-transport gauge,
+\begin{equation}
+ O^\xcoord_\parallel
+ =-\frac{1}{2}O(O^\dagger S^\xcoord O).
+ \label{eq:orth_deriv_parallel}
+\end{equation}
+This exactly enforces $(O^\dagger S O)^\xcoord=0$ without singular derivatives
+inside degenerate retained eigenspaces.  If overlap eigenvectors $U_d$ have
+been discarded and $U_k$ retained, the changing retained subspace adds
+\begin{equation}
+ O^\xcoord_\perp
+ =\sum_{dk}U_d
+ \frac{(U_d^\dagger S^\xcoord U_k)}{s_k-s_d}
+ s_k^{-1/2}.
+ \label{eq:orth_deriv_discarded}
+\end{equation}
+The derivative of the dual is evaluated from its defining expression,
+\begin{equation}
+ (O^{-1})^\xcoord=(O^\xcoord)^\dagger S+O^\dagger S^\xcoord.
+ \label{eq:dual_deriv}
+\end{equation}
+For any primitive matrix $B$, its orthonormal-basis derivative is
+\begin{equation}
+ \bar B^\xcoord=(O^\xcoord)^\dagger BO
+ +O^\dagger B^\xcoord O+O^\dagger BO^\xcoord.
+ \label{eq:transformed_integral_deriv}
+\end{equation}
+
+\subsection{Decoupling response}
+
+From \cref{eq:dirac_matrices}, build $\mathcal D^\xcoord$ and
+$\mathcal M^\xcoord$ using $\bar T^\xcoord$, $\bar V^\xcoord$, and
+$\bar W^\xcoord$.  Only negative--positive eigenvector coupling is needed for
+$X^\xcoord$.  Define
+\begin{equation}
+ U_{-+}^\xcoord=
+ \frac{C_-^\dagger
+ (\mathcal D^\xcoord-\mathcal M^\xcoord\epsilon_+)C_+}
+ {\epsilon_+-\epsilon_-},
+ \label{eq:dirac_response}
+\end{equation}
+where the division is elementwise over negative and positive states.  Choose
+\begin{equation}
+ C_+^\xcoord=C_-U_{-+}^\xcoord.
+\end{equation}
+Positive--positive rotations and normalization changes multiply $C_L$ and
+$C_S$ by the same right-hand matrix and therefore cancel from $X=C_SC_L^+$.
+With $C_+^\xcoord=(C_L^\xcoord,C_S^\xcoord)^T$,
+\begin{equation}
+ X^\xcoord=(C_S^\xcoord-XC_L^\xcoord)C_L^+.
+ \label{eq:x_deriv}
+\end{equation}
+Equation \eqref{eq:dirac_response} is the generalized-eigenproblem form of
+Eqs.~(31)--(33) of Ref.~\onlinecite{ChengGauss2011}.  It is an uncoupled
+one-electron response, not an iterative CPHF equation.
+
+\subsection{Renormalization and Foldy--Wouthuysen response}
+
+Differentiate the metric in \cref{eq:x_and_r}:
+\begin{equation}
+ A^\xcoord=\frac{1}{2c^2}\left[
+ (X^\xcoord)^\dagger TX+X^\dagger T^\xcoord X
+ +X^\dagger T X^\xcoord\right].
+\end{equation}
+For $A=U\,\mathrm{diag}(a)U^\dagger$, the inverse-square-root Frechet
+derivative used in Forte2 is
+\begin{align}
+ R^\xcoord
+ &=U\left[F\circ(U^\dagger A^\xcoord U)\right]U^\dagger,\\
+ F_{ij}
+ &=\begin{cases}
+ \dfrac{a_i^{-1/2}-a_j^{-1/2}}{a_i-a_j},&a_i\ne a_j,\\[6pt]
+ -\dfrac{1}{2}a_i^{-3/2},&a_i=a_j.
+ \end{cases}
+ \label{eq:r_frechet}
+\end{align}
+The equal-eigenvalue branch makes the expression stable for degeneracies.
+
+Direct differentiation of \cref{eq:nesc} gives
+\begin{align}
+ L^\xcoord={}&T^\xcoord X+TX^\xcoord
+ +(X^\xcoord)^\dagger T+X^\dagger T^\xcoord
+ -(X^\xcoord)^\dagger TX-X^\dagger T^\xcoord X-X^\dagger TX^\xcoord
+ +V^\xcoord \nonumber\\
+ &+\frac{1}{4c^2}\left[(X^\xcoord)^\dagger WX
+ +X^\dagger W^\xcoord X+X^\dagger WX^\xcoord\right],
+ \label{eq:l_deriv}\\
+ h_\mathrm{FW}^\xcoord={}&
+ (R^\xcoord)^\dagger LR+R^\dagger L^\xcoord R+R^\dagger LR^\xcoord.
+ \label{eq:hfw_deriv}
+\end{align}
+Omitting $X^\xcoord$ or $R^\xcoord$ drops picture-change response and does not
+give the derivative of the many-electron X2C-1e energy.\cite{ChengGauss2011}
+
+\subsection{Projection and SNSO derivatives}
+
+The decontracted-to-contracted projection response follows from
+\cref{eq:projection}:
+\begin{equation}
+ P^\xcoord=S_{dd}^{-1}
+ \left(S_{dc}^\xcoord-S_{dd}^\xcoord P\right).
+ \label{eq:projection_deriv}
+\end{equation}
+Applying \cref{eq:dual_deriv,eq:projection_deriv} to
+\cref{eq:contracted_hx2c} completes $h_\mathrm{X2C}^\xcoord$.
+
+SNSO factors in Forte2 depend on atomic number and shell angular momentum, not
+on geometry.  The code decomposes the primitive SO Hamiltonian into Pauli
+components, applies the same elementwise SNSO map to the reference and
+derivative spin-dependent components, reassembles the spinor matrix, and only
+then applies $P$ and $P^\xcoord$.  There is therefore no separate derivative of
+the SNSO factors.
+
+\section{SCF gradient assembly with X2C}
+
+X2C-1e transforms only the one-electron Hamiltonian.  The AO overlap and
+two-electron integrals remain untransformed.  Accordingly the X2C SCF gradient
+is obtained from \cref{eq:ghf_total_gradient} by replacing the nonrelativistic
+$T^\xcoord+V^\xcoord$ contraction with
+\begin{equation}
+ E_{1e,\mathrm{X2C}}^\xcoord
+ =\RePart\Tr(D_\mathrm{hcore}h_\mathrm{X2C}^\xcoord).
+ \label{eq:x2c_hcore_contraction}
+\end{equation}
+For RHF, UHF, and SF-X2C GHF, $D_\mathrm{hcore}$ is the spatial spin trace.
+For SO-X2C GHF it is the full complex spinor density.  The overlap Pulay term
+still uses the spatial spin trace of the energy-weighted density, and the DF
+two-electron terms still use \cref{eq:ghf_w2,eq:ghf_w3}.
+
+Gaussian nuclei change three pieces consistently: $V^\xcoord$,
+$W^\xcoord$, and $E_\mathrm{NN}^\xcoord$.  The last is evaluated by contracting
+the derivative of the Coulomb interaction between normalized Gaussian nuclear
+charge functions, with diagonal self-interactions removed exactly as in the
+energy.
+
+\section{Code map}
+
+\begin{center}
+\begin{tabular}{p{0.35\linewidth}p{0.57\linewidth}}
+\toprule
+File or function & Responsibility \\
+\midrule
+\texttt{forte2/scf/ghf\_grad.py} & GHF densities, energy-weighted density, and final driver.\\
+\texttt{forte2/scf/hf\_grad.py} & Shared RHF/UHF DF weights and complex GHF DF weights.\\
+\texttt{forte2/gradients/utils.py} & Common one-electron, overlap, DF, and nuclear-repulsion assembly.\\
+\texttt{one\_electron\_deriv*} & Libint2 matrix-valued $S^\xcoord$, $T^\xcoord$, and point-$V^\xcoord$.\\
+\texttt{integrals.py} & Gaussian-$V^\xcoord$, full $W^\xcoord$, component normalization, and backend selection.\\
+\texttt{libcint\_two\_center.h} & Bound libcint derivative kernels.\\
+\texttt{forte2/x2c/x2c.py} & $O$, $X$, $R$, $h_\mathrm{FW}$, projection, SNSO, and all corresponding response terms.\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Verification strategy}
+
+The implementation is tested in layers so that a failure identifies the
+responsible algebra:
+\begin{enumerate}
+\item Matrix-valued $S^\xcoord$, $T^\xcoord$, and $V^\xcoord$ are contracted
+against random weights and compared with the established contracted C++ APIs.
+\item All four $W^\xcoord$ components are compared with fourth-order finite
+differences for point and Gaussian nuclei.  Scalar symmetry and cross-component
+antisymmetry are checked explicitly.
+\item $h_\mathrm{X2C}^\xcoord$ is compared directly with fourth-order finite
+differences for SF-X2C, SO-X2C, both nuclear models, all SNSO variants, and a
+case with a discarded overlap eigenvector.
+\item Nonrelativistic complex GHF is compared with energy finite differences
+and with the collinear UHF limit.
+\item Full SF-X2C UHF and SO-X2C GHF gradients are compared with finite
+differences of converged SCF energies and checked for translational invariance.
+\end{enumerate}
+
+Useful diagnostics are Hermiticity of $h_\mathrm{X2C}^\xcoord$, zero total
+translation of an isolated molecule, and agreement of the complex GHF
+collinear limit with UHF.  A small imaginary part before the final real
+projection diagnoses loss of Hermiticity or a conjugation error; it should not
+be discarded early to conceal such an error.
+
+\section{Known boundaries}
+
+The current gradient implementation assumes density fitting, not Cholesky
+two-electron integrals.  X2C $W^\xcoord$ is fully analytic when libcint is
+available, which is the default Forte2 build.  Derivative integrals using
+Libint2 remain subject to the angular-momentum limit of the installed Libint2
+library.  A geometry at which the number of retained overlap eigenvectors
+changes is non-differentiable under hard canonical truncation and must be
+handled by changing the threshold or basis.
+
+The implemented Hamiltonian is X2C-1e: two-electron picture-change corrections
+are not included in either the energy or gradient.  This is the same
+approximation as the existing Forte2 X2C energy and is distinct from X2C-2e or
+a four-component Dirac--Coulomb gradient.
+
+\begin{thebibliography}{9}
+\bibitem{ChengGauss2011}
+L. Cheng and J. Gauss,
+``Analytic energy gradients for the spin-free exact two-component theory using
+an exact block diagonalization for the one-electron Dirac Hamiltonian,''
+J. Chem. Phys. \textbf{135}, 084114 (2011).
+\end{thebibliography}
+
+\end{document}

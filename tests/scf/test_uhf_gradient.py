@@ -159,19 +159,33 @@ def test_uhf_gradient_closed_shell_matches_rhf_gradient():
     assert uhf_gradient == pytest.approx(rhf_gradient, abs=1.0e-10)
 
 
-def test_uhf_gradient_rejects_gaussian_nuclear_charges():
-    """Reject Gaussian nuclear charges until their derivative terms are added."""
-    system = _h2_system(use_gaussian_charges=True)
-    uhf = UHF(charge=1, ms=0.5, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
+@pytest.mark.parametrize(
+    "system_options",
+    [
+        {"use_gaussian_charges": True},
+        {"x2c_type": "sf"},
+        {"x2c_type": "sf", "use_gaussian_charges": True},
+    ],
+)
+def test_uhf_gradient_nuclear_model_and_x2c_finite_difference(system_options):
+    def energy(distance):
+        system = System(
+            xyz=f"H 0 0 0\nH 0 0 {distance:.12f}",
+            basis_set="sto-3g",
+            auxiliary_basis_set="def2-universal-JKFIT",
+            unit="bohr",
+            **system_options,
+        )
+        return UHF(charge=1, ms=0.5, e_tol=1.0e-12, d_tol=1.0e-10)(system).run().E
 
-    with pytest.raises(NotImplementedError, match="Gaussian nuclear charges"):
-        uhf.gradient()
+    system = _h2_system(**system_options)
+    gradient = UHF(charge=1, ms=0.5, e_tol=1.0e-12, d_tol=1.0e-10)(system).gradient()
+    step = 1.0e-3
+    numerical = (
+        -energy(1.7 + 2.0 * step)
+        + 8.0 * energy(1.7 + step)
+        - 8.0 * energy(1.7 - step)
+        + energy(1.7 - 2.0 * step)
+    ) / (12.0 * step)
 
-
-def test_uhf_gradient_rejects_x2c():
-    """Reject X2C UHF gradients until relativistic derivative terms are added."""
-    system = _h2_system(x2c_type="sf")
-    uhf = UHF(charge=1, ms=0.5, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
-
-    with pytest.raises(NotImplementedError, match="X2C"):
-        uhf.gradient()
+    assert gradient[1, 2] == pytest.approx(numerical, abs=1.0e-8)
