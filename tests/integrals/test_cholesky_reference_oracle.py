@@ -119,7 +119,11 @@ def test_pivoted_matches_reference(xyz, basis_set, tol):
     system = System(xyz=xyz, basis_set=basis_set)
     nbf = system.nbf
 
-    B_prod, naux_prod = cholesky_pivoted(system, tol)
+    # Compare the algorithm apples-to-apples: the frozen reference takes one qualified batch per
+    # round (no max_qual cap), so disable the production default cap here. The batched default path
+    # -- which trades a slightly larger basis for bounded memory -- is validated separately in
+    # test_cholesky_folkestad_hardening.py.
+    B_prod, naux_prod = cholesky_pivoted(system, tol, max_qual=0)
     B_ref, naux_ref = cholesky_pivoted_reference(system, tol)
 
     assert abs(naux_prod - naux_ref) <= _rank_margin(naux_ref)
@@ -134,7 +138,8 @@ def test_step1_pivots_match_reference(xyz, basis_set, tol):
     system = System(xyz=xyz, basis_set=basis_set)
     layout = _build_shell_pair_layout(system.basis)
 
-    piv_prod = cholesky_pivots(system, tol, layout=layout)
+    # No cap, to match the reference's single-batch-per-round behaviour (see note above).
+    piv_prod = cholesky_pivots(system, tol, max_qual=0, layout=layout)
     piv_ref = cholesky_pivots_reference(system, tol, layout=layout)
 
     assert abs(len(piv_prod) - len(piv_ref)) <= _rank_margin(len(piv_ref))
