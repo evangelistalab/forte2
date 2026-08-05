@@ -168,9 +168,17 @@ def test_so_x2c_rel_casscf_gradient_finite_difference_and_translation():
         snso_type="row-dependent",
     )
 
-    gradient = _rel_casscf(symbols, coordinates, **options).gradient()
+    mc = _rel_casscf(symbols, coordinates, **options)
+    gradient = mc.gradient()
+
+    def branch_following_energy(symbols, coordinates, **kwargs):
+        displaced = _rel_casscf(symbols, coordinates, **kwargs)
+        # Follow the reference member of the open-shell Kramers pair.
+        displaced.parent_method.C = [mc.parent_method.C[0].copy()]
+        return displaced.run().E.real
+
     numerical = four_point_central_difference_gradient_component(
-        _rel_casscf_energy,
+        branch_following_energy,
         symbols,
         coordinates,
         1,
