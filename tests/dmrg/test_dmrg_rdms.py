@@ -56,6 +56,59 @@ def _build_ci_n2(system):
     return ci
 
 
+# H2O near equilibrium: the three lowest singlets are non-degenerate, so their
+# transition RDMs are well-defined (up to an overall phase) and can be matched
+# against FCI. (Degenerate manifolds, e.g. the N2 pi states, would leave the
+# transition RDM basis-dependent within the manifold.)
+H2O_XYZ = "O 0 0 0.117\nH 0 0.757 -0.469\nH 0 -0.757 -0.469"
+
+
+# CAS(6,6) has only 6 sites, so a bond dimension of a few hundred is effectively
+# exact; the transition RDMs between state-averaged excited roots nonetheless
+# need a longer, noise-free tail to converge the individual (split) root MPS to
+# the eigenstates. This dedicated schedule drives them to ~machine precision so
+# the FCI comparison is not truncation-limited.
+CONVERGED_DMRG_PARAMS = lambda scratch=None: DMRGParams(
+    bond_dims=[200] * 4 + [400] * 12,
+    noises=[1e-4] * 4 + [1e-6] * 4 + [0.0] * 8,
+    thrds=[1e-14] * 16,
+    n_sweeps=16,
+    n_threads=1,
+    iprint=0,
+    scratch=scratch,
+)
+
+
+def _build_dmrg_h2o(system, scratch, nroots, dmrg_params=None):
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    dmrg = DMRG(
+        states=State(nel=10, multiplicity=1, ms=0.0),
+        core_orbitals=[0, 1],
+        active_orbitals=[2, 3, 4, 5, 6, 7],
+        nroots=nroots,
+        dmrg_params=dmrg_params or TIGHT_DMRG_PARAMS(scratch),
+    )(rhf)
+    dmrg.run()
+    return dmrg
+
+
+def _build_ci_h2o(system, nroots):
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    ci = CI(
+        states=State(nel=10, multiplicity=1, ms=0.0),
+        core_orbitals=[0, 1],
+        active_orbitals=[2, 3, 4, 5, 6, 7],
+        nroots=nroots,
+    )(rhf)
+    ci.run()
+    return ci
+
+
+def _match_up_to_sign(a, b):
+    """Smallest of ||a - b|| and ||a + b|| (transition RDMs carry a phase)."""
+    return min(np.linalg.norm(a - b), np.linalg.norm(a + b))
+
+
 @requires_block2
 def test_dmrg_1rdm_trace(tmp_path):
     """Trace of the spin-free 1-RDM equals the number of active electrons."""
@@ -150,3 +203,97 @@ def test_dmrg_average_rdms_roundtrip(tmp_path):
 
     # equal-weight average over the two roots
     assert e == approx(dmrg.compute_average_energy())
+
+
+@requires_block2
+def test_dmrg_3rdm_matches_fci(tmp_path):
+    """DMRG spin-free 3-RDM matches the FCI 3-RDM on the same active space."""
+    system = System(
+        xyz="N 0.0 0.0 0.0\nN 0.0 0.0 1.2",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+    )
+    dmrg = _build_dmrg_n2(system, str(tmp_path))
+    ci = _build_ci_n2(system)
+
+    g3_dmrg = dmrg.make_sf_3rdm(0)
+    g3_ci = ci.sub_solvers[0].make_sf_3rdm(0)
+    assert g3_dmrg.shape == (6, 6, 6, 6, 6, 6)
+    # The 3-RDM is limited by the DMRG truncation error at this bond dimension.
+    assert np.linalg.norm(g3_dmrg - g3_ci) < 1e-4
+
+
+@requires_block2
+def test_dmrg_3rdm_partial_trace(tmp_path):
+    """
+    Partial trace of the spin-free 3-RDM gives the 2-RDM:
+    sum_r gamma3[p,q,r,s,t,r] = (N_act - 2) * gamma2[p,q,s,t].
+    """
+    system = System(
+        xyz="N 0.0 0.0 0.0\nN 0.0 0.0 1.2",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+    )
+    dmrg = _build_dmrg_n2(system, str(tmp_path))
+
+    g2 = dmrg.make_sf_2rdm(0)
+    g3 = dmrg.make_sf_3rdm(0)
+    # CAS(6,6): 6 active electrons.
+    g2_from_g3 = np.einsum("pqrstr->pqst", g3) / (6 - 2)
+    assert np.linalg.norm(g2_from_g3 - g2) < 1e-4
+
+
+@requires_block2
+def test_dmrg_transition_rdms_match_fci(tmp_path):
+    """
+    DMRG spin-free 1-, 2-, and 3-transition RDMs match the FCI transition RDMs
+    (up to an overall phase) between non-degenerate roots.
+    """
+    system = System(
+        xyz=H2O_XYZ,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+    )
+    dmrg = _build_dmrg_h2o(
+        system, str(tmp_path), nroots=3, dmrg_params=CONVERGED_DMRG_PARAMS(str(tmp_path))
+    )
+    ci = _build_ci_h2o(system, nroots=3)
+
+    # sanity: the roots are the ones we expect (and non-degenerate)
+    for r in range(3):
+        assert dmrg.E[r] == approx(ci.E[r])
+    assert abs(ci.E[1] - ci.E[0]) > 1e-2
+    assert abs(ci.E[2] - ci.E[1]) > 1e-2
+
+    ci_solver = ci.sub_solvers[0]
+    for left, right in [(0, 1), (0, 2), (1, 2)]:
+        t1_dmrg = dmrg.make_sf_1rdm(left, right)
+        t1_ci = ci_solver.make_sf_1rdm(left, right)
+        assert _match_up_to_sign(t1_dmrg, t1_ci) < 1e-5
+
+        t2_dmrg = dmrg.make_sf_2rdm(left, right)
+        t2_ci = ci_solver.make_sf_2rdm(left, right)
+        assert _match_up_to_sign(t2_dmrg, t2_ci) < 1e-5
+
+        t3_dmrg = dmrg.make_sf_3rdm(left, right)
+        t3_ci = ci_solver.make_sf_3rdm(left, right)
+        assert _match_up_to_sign(t3_dmrg, t3_ci) < 1e-5
+
+
+@requires_block2
+def test_dmrg_diagonal_rdm_via_transition_api(tmp_path):
+    """
+    Passing right_root == left_root returns the ordinary (diagonal) RDM,
+    identical to passing right_root=None.
+    """
+    system = System(
+        xyz=H2O_XYZ,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+    )
+    dmrg = _build_dmrg_h2o(system, str(tmp_path), nroots=2)
+
+    for maker in (dmrg.make_sf_1rdm, dmrg.make_sf_2rdm, dmrg.make_sf_3rdm):
+        diag = maker(1)
+        diag_explicit = maker(1, 1)
+        assert np.linalg.norm(diag - diag_explicit) < 1e-10

@@ -16,7 +16,11 @@ from forte2.ci.ci_utils import (
     pretty_print_ci_summary,
     pretty_print_ci_nat_occ_numbers,
 )
-from .dmrg_utils import physicist_to_chemist_g2e, block2_2pdm_to_sf_2rdm
+from .dmrg_utils import (
+    physicist_to_chemist_g2e,
+    block2_2pdm_to_sf_2rdm,
+    block2_3pdm_to_sf_3rdm,
+)
 
 
 @dataclass
@@ -279,75 +283,139 @@ class _DMRGSingleStateSolver:
         self._driver = self._make_driver()
         return self._driver.load_mps(self._root_tags[root], nroots=1)
 
+    def _load_root_kets(self, left_root, right_root):
+        """
+        Reactivate this worker's driver and reload the single-root MPS for both
+        the bra (``left_root``) and ket (``right_root``) roots from its private
+        scratch, for computing (transition) RDMs. A single driver/frame is
+        (re)activated for both MPS.
+        """
+        self._driver = self._make_driver()
+        bra = self._driver.load_mps(self._root_tags[left_root], nroots=1)
+        ket = self._driver.load_mps(self._root_tags[right_root], nroots=1)
+        return bra, ket
+
     # ------------------------------------------------------------------
     # RDMs (spin-free, forte2 convention)
     # ------------------------------------------------------------------
-    def make_sf_1rdm(self, left_root, right_root=None):
+    def _load_root_kets_for_rdm(self, left_root, right_root):
         """
-        Make the spin-free one-particle RDM for a DMRG root.
+        Resolve the (bra, ket) MPS pair for an RDM request.
+
+        Returns ``(ket, None)`` for a diagonal RDM (``right_root is None`` or
+        equal to ``left_root``) and ``(ket, bra)`` for a cross-root transition
+        RDM, where ``bra`` corresponds to ``left_root`` and ``ket`` to
+        ``right_root``.
+        """
+        if right_root is None or right_root == left_root:
+            return self._load_root_ket(left_root), None
+        bra, ket = self._load_root_kets(left_root, right_root)
+        return ket, bra
+
+    def make_sf_1rdm(self, left_root, right_root=None):
+        r"""
+        Make the spin-free one-particle (transition) RDM for DMRG roots.
 
         Parameters
         ----------
         left_root : int
-            The root index.
+            The bra root index.
         right_root : int | None, optional
-            Cross-root (transition) RDMs are not yet supported; must equal
-            ``left_root`` or be ``None``.
+            The ket root index. Defaults to ``left_root`` (diagonal RDM). When
+            different, a transition 1-RDM ``<left_root| E_pq |right_root>`` is
+            returned.
 
         Returns
         -------
         NDArray
-            Spin-free one-particle RDM.
+            Spin-free one-particle (transition) RDM.
+
+        Notes
+        -----
+        Transition RDMs carry an overall phase (sign) uncertainty inherent to
+        block2's MPS and are only physically meaningful between non-degenerate
+        roots (within a degenerate manifold the RDM depends on the arbitrary
+        basis chosen inside the manifold).
         """
-        if right_root is not None and right_root != left_root:
-            raise NotImplementedError(
-                "Cross-root (transition) 1-RDMs are not yet supported for DMRG."
-            )
         if self.norb == 0:
             return np.zeros((0, 0), dtype=self.dtype)
-        ket = self._load_root_ket(left_root)
-        pdm1 = self._get_1pdm(ket)
+        ket, bra = self._load_root_kets_for_rdm(left_root, right_root)
+        pdm1 = self._get_1pdm(ket, bra=bra)
         return np.ascontiguousarray(pdm1)
 
     def make_sf_2rdm(self, left_root, right_root=None):
-        """
-        Make the spin-free two-particle RDM for a DMRG root.
+        r"""
+        Make the spin-free two-particle (transition) RDM for DMRG roots.
 
         Parameters
         ----------
         left_root : int
-            The root index.
+            The bra root index.
         right_root : int | None, optional
-            Cross-root (transition) RDMs are not yet supported; must equal
-            ``left_root`` or be ``None``.
+            The ket root index. Defaults to ``left_root`` (diagonal RDM). When
+            different, a transition 2-RDM is returned.
 
         Returns
         -------
         NDArray
-            Spin-free two-particle RDM in forte2's convention.
+            Spin-free two-particle (transition) RDM in forte2's convention.
+
+        Notes
+        -----
+        See :meth:`make_sf_1rdm` for the phase/degeneracy caveats that apply to
+        transition RDMs.
         """
-        if right_root is not None and right_root != left_root:
-            raise NotImplementedError(
-                "Cross-root (transition) 2-RDMs are not yet supported for DMRG."
-            )
         if self.norb == 0:
             return np.zeros((0, 0, 0, 0), dtype=self.dtype)
-        ket = self._load_root_ket(left_root)
-        pdm2 = self._get_2pdm(ket)
+        ket, bra = self._load_root_kets_for_rdm(left_root, right_root)
+        pdm2 = self._get_2pdm(ket, bra=bra)
         return block2_2pdm_to_sf_2rdm(pdm2)
 
-    def _get_1pdm(self, ket):
+    def make_sf_3rdm(self, left_root, right_root=None):
+        r"""
+        Make the spin-free three-particle (transition) RDM for DMRG roots.
+
+        Parameters
+        ----------
+        left_root : int
+            The bra root index.
+        right_root : int | None, optional
+            The ket root index. Defaults to ``left_root`` (diagonal RDM). When
+            different, a transition 3-RDM is returned.
+
+        Returns
+        -------
+        NDArray
+            Spin-free three-particle (transition) RDM in forte2's convention.
+
+        Notes
+        -----
+        See :meth:`make_sf_1rdm` for the phase/degeneracy caveats that apply to
+        transition RDMs.
+        """
+        if self.norb == 0:
+            return np.zeros((0,) * 6, dtype=self.dtype)
+        ket, bra = self._load_root_kets_for_rdm(left_root, right_root)
+        pdm3 = self._get_3pdm(ket, bra=bra)
+        return block2_3pdm_to_sf_3rdm(pdm3)
+
+    def _get_1pdm(self, ket, bra=None):
         """Extract the block2 1-particle density matrix (SU2, spin-summed)."""
-        return self._driver.get_1pdm(ket)
+        return self._driver.get_npdm(ket, pdm_type=1, bra=bra)
 
-    def _get_2pdm(self, ket):
+    def _get_2pdm(self, ket, bra=None):
         """Extract the block2 2-particle density matrix (SU2, chemist order)."""
-        return self._driver.get_2pdm(ket)
+        return self._driver.get_npdm(ket, pdm_type=2, bra=bra)
 
-    # DMRG only supports spin-free 1- and 2-RDMs; the state-averaged RDM
-    # machinery in CIBase calls make_{1,2}rdm on the sub-solvers.
+    def _get_3pdm(self, ket, bra=None):
+        """Extract the block2 3-particle density matrix (SU2, chemist order)."""
+        return self._driver.get_npdm(ket, pdm_type=3, bra=bra)
+
+    # DMRG supports spin-free 1-, 2-, and 3-RDMs; the state-averaged RDM
+    # machinery in CIBase calls make_{1,2,3}rdm on the sub-solvers.
     make_1rdm = make_sf_1rdm
     make_2rdm = make_sf_2rdm
+    make_3rdm = make_sf_3rdm
 
     def compute_natural_occupation_numbers(self):
         """Compute natural occupation numbers from the spin-free 1-RDMs."""
@@ -591,8 +659,25 @@ class DMRGSolver(CIBase):
             left_root_in_state, right_root_in_state
         )
 
+    def make_sf_3rdm(
+        self,
+        left_root: int,
+        right_root: int | None = None,
+    ) -> NDArray:
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+        if left_state != right_state:
+            raise NotImplementedError(
+                "Cross-state RDMs are not supported for DMRG."
+            )
+        return self.sub_solvers[left_state].make_sf_3rdm(
+            left_root_in_state, right_root_in_state
+        )
+
     make_1rdm = make_sf_1rdm
     make_2rdm = make_sf_2rdm
+    make_3rdm = make_sf_3rdm
 
 
 @dataclass
@@ -684,14 +769,17 @@ class _RelDMRGSingleStateSolver(_DMRGSingleStateSolver):
         # MPO builder wants a complex scalar.
         return complex(self.ints.E)
 
-    def _get_1pdm(self, ket):
+    def _get_1pdm(self, ket, bra=None):
         # site_type=2 keeps the 2-dot MPS form; the default (site_type=0) splits
         # to 1-dot and triggers a zero-dimension zgemm crash in the complex
         # general-spin PDM path of the block2 wheels.
-        return self._driver.get_npdm(ket, pdm_type=1, site_type=2)
+        return self._driver.get_npdm(ket, pdm_type=1, bra=bra, site_type=2)
 
-    def _get_2pdm(self, ket):
-        return self._driver.get_npdm(ket, pdm_type=2, site_type=2)
+    def _get_2pdm(self, ket, bra=None):
+        return self._driver.get_npdm(ket, pdm_type=2, bra=bra, site_type=2)
+
+    def _get_3pdm(self, ket, bra=None):
+        return self._driver.get_npdm(ket, pdm_type=3, bra=bra, site_type=2)
 
     def compute_natural_occupation_numbers(self):
         """Natural occupation numbers from the (complex Hermitian) 1-RDMs."""
@@ -708,6 +796,7 @@ class _RelDMRGSingleStateSolver(_DMRGSingleStateSolver):
     # RelCISolver.
     make_1rdm = _DMRGSingleStateSolver.make_sf_1rdm
     make_2rdm = _DMRGSingleStateSolver.make_sf_2rdm
+    make_3rdm = _DMRGSingleStateSolver.make_sf_3rdm
 
 
 @dataclass
@@ -824,6 +913,18 @@ class RelDMRGSolver(RelCIBase):
                 "Cross-state RDMs are not supported for RelDMRG."
             )
         return self.sub_solvers[left_state].make_2rdm(
+            left_root_in_state, right_root_in_state
+        )
+
+    def make_3rdm(self, left_root: int, right_root: int | None = None) -> NDArray:
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+        if left_state != right_state:
+            raise NotImplementedError(
+                "Cross-state RDMs are not supported for RelDMRG."
+            )
+        return self.sub_solvers[left_state].make_3rdm(
             left_root_in_state, right_root_in_state
         )
 

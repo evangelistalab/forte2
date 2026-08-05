@@ -12,7 +12,7 @@ import pytest
 
 from forte2 import System, GHF, MCOptimizer, RelCISolver
 from forte2.dmrg import RelDMRGSolver
-from forte2.base_classes.params import DMRGParams
+from forte2.base_classes.params import DMRGParams, X2CParams
 from forte2.helpers.comparisons import approx
 
 from conftest import requires_block2_complex
@@ -53,8 +53,7 @@ def test_reldmrg_casscf_hf_small_cas(tmp_path):
         basis_set="cc-pvdz",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         unit="bohr",
-        x2c_type="so",
-        snso_type=None,
+        x2c=X2CParams(x2c_type="so"),
     )
     scf = GHF(charge=0)(system)
 
@@ -81,8 +80,7 @@ def test_reldmrg_casscf_hf_ghf(tmp_path):
         basis_set="cc-pvdz",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         unit="bohr",
-        x2c_type="so",
-        snso_type=None,
+        x2c=X2CParams(x2c_type="so"),
     )
     scf = GHF(charge=0)(system)
 

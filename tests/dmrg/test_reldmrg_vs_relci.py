@@ -14,7 +14,7 @@ import pytest
 from forte2 import System, RHF, GHF, SpinorUpcaster
 from forte2.ci import RelCI
 from forte2.dmrg import RelDMRG, RelDMRGSolver
-from forte2.base_classes.params import DMRGParams
+from forte2.base_classes.params import DMRGParams, X2CParams
 from forte2.base_classes import RelCIBase
 from forte2.helpers.comparisons import approx
 
@@ -88,8 +88,7 @@ def test_reldmrg_vs_relci_hf_x2c(tmp_path):
         basis_set="cc-pvdz",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         unit="bohr",
-        x2c_type="so",
-        snso_type=None,
+        x2c=X2CParams(x2c_type="so"),
     )
     scf = GHF(charge=0)(system)
 

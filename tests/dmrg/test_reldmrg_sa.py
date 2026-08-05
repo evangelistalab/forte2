@@ -11,7 +11,7 @@ import numpy as np
 from forte2 import System, GHF
 from forte2.ci import RelCI
 from forte2.dmrg import RelDMRG
-from forte2.base_classes.params import DMRGParams
+from forte2.base_classes.params import DMRGParams, X2CParams
 from forte2.helpers.comparisons import approx
 
 from conftest import requires_block2_complex
@@ -35,8 +35,7 @@ def _na_system():
         basis_set="cc-pvdz",
         auxiliary_basis_set="def2-universal-jkfit",
         unit="bohr",
-        x2c_type="so",
-        snso_type=None,
+        x2c=X2CParams(x2c_type="so"),
     )
 
 
