@@ -98,14 +98,6 @@ def test_cholesky_tei_routing_energies_agree():
     assert energies["True"] == pytest.approx(energies["naive"], abs=1e-9)
 
 
-def test_cholesky_tei_pivoted_not_implemented():
-    """The reserved 'pivoted' (Folkestad) algorithm raises until implemented."""
-    system = System(xyz=WATER, basis_set="sto-3g", cholesky_tei="pivoted")
-    scf = RHF(charge=0)(system)
-    with pytest.raises(NotImplementedError):
-        scf.run()
-
-
 def test_cholesky_tei_invalid_value():
     """An unknown cholesky_tei string is rejected at construction."""
     with pytest.raises(ValueError):

@@ -7,7 +7,7 @@ import math
 import forte2
 from forte2 import integrals
 from forte2.lib import ints
-from forte2.integrals.cholesky import cholesky_otf
+from forte2.integrals.cholesky import cholesky_otf, cholesky_pivoted
 from forte2.helpers import logger
 from forte2.helpers.matrix_functions import (
     cholesky_wrapper,
@@ -65,16 +65,15 @@ class FockBuilder:
                 res, naux = self._build_B_density_fitting(basis, aux_basis)
             else:
                 # cholesky_tei is truthy: either True/"otf" (on-the-fly CD, the default), "naive"
-                # (dense reference oracle), or "pivoted" (Folkestad two-step, not yet implemented).
+                # (dense reference oracle), or "pivoted" (Folkestad two-step decomposition).
                 algo = self.system.cholesky_tei
                 if algo == "naive":
                     res, naux = self._build_B_cholesky_dense(
                         self.system.basis, self.system.cholesky_tol
                     )
                 elif algo == "pivoted":
-                    raise NotImplementedError(
-                        "cholesky_tei='pivoted' (Folkestad two-step CD) is not implemented yet; "
-                        "use True/'otf' (on-the-fly) or 'naive' (dense reference)."
+                    res, naux = self._build_B_cholesky_pivoted(
+                        self.system.basis, self.system.cholesky_tol
                     )
                 else:  # True or "otf"
                     res, naux = self._build_B_cholesky_otf(
@@ -104,6 +103,19 @@ class FockBuilder:
     def _build_B_cholesky_otf(self, basis, cholesky_tol):
         """Build B via on-the-fly pivoted Cholesky of the ERIs (never forms the N^4 tensor)."""
         B, naux = cholesky_otf(self.system, cholesky_tol, basis)
+        memory_gb = 8 * (naux * basis.size**2) / (1024**3)
+        if self.store_B_nPm:
+            memory_gb *= 2
+            logger.log_info1(
+                f"Memory requirements: {memory_gb:.2f} GB (doubled due to storing B_nPm)"
+            )
+        else:
+            logger.log_info1(f"Memory requirements: {memory_gb:.2f} GB")
+        return B, naux
+
+    def _build_B_cholesky_pivoted(self, basis, cholesky_tol):
+        """Build B via the two-step (Folkestad) pivoted CD of the ERIs (never forms the N^4 tensor)."""
+        B, naux = cholesky_pivoted(self.system, cholesky_tol, basis)
         memory_gb = 8 * (naux * basis.size**2) / (1024**3)
         if self.store_B_nPm:
             memory_gb *= 2
