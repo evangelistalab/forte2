@@ -132,6 +132,27 @@ def cholesky_otf(system, tol, basis=None):
         ``sum_J B[J] outer B[J] approx (mn|rs)``.
     naux : int
         The number of Cholesky vectors retained.
+
+    Notes
+    -----
+    This is the production one-step driver. Relative to the frozen reference
+    (:func:`forte2.integrals.cholesky_reference.cholesky_otf_reference`) it applies three of Koch's
+    accelerations, each of which leaves the ``(mn|rs) ≈ Σ_J B[J] B[J]`` contract accurate to ``tol``
+    but changes the *path* to it (so the two agree only entrywise to ``O(tol)``, not bit-for-bit):
+
+    * **Significant-set restriction.** Columns whose diagonal ``M_pp`` is already below Koch's
+      prescreen ``tol^2 / X_max`` can never contribute above ``tol`` to any matrix element (by
+      Cauchy-Schwarz ``|M_pq| <= sqrt(M_pp X_max) < tol``), so they are dropped from all vectors and
+      GEMMs up front. Because the Schur diagonal only decreases, this static set is a safe superset
+      of every future significant set. On large sparse systems this shrinks the work from ``O(M N^2)``
+      to ``O(M |D|)``; on small compact systems ``|D| = N^2`` and nothing is dropped.
+    * **Schwarz-screened column builds.** Each ``(**|AB)`` block is computed via
+      :func:`~forte2.integrals.integrals.coulomb_4c_pair_block_screened`, which skips bra shell pairs
+      whose ``Q_AB Q_CD < tol`` before libint2 evaluates them.
+    * **Proactive shell-pair draining.** Whenever a block ``AB`` is loaded for a pivot, *all* of its
+      columns with Schur diagonal ``> X_max/1000`` are decomposed before returning to the global
+      argmax (Koch, ALGORITHMS), so a shell pair is typically evaluated once rather than once per
+      pivot. This replaces the reference's reactive single-block cache.
     """
     if basis is None:
         basis = system.basis
@@ -143,122 +164,151 @@ def cholesky_otf(system, tol, basis=None):
     # Koch step 1: "Initially we calculate the diagonal elements M_pp = (ab|ab)." Here p = (m, n)
     # is a compound AO index, so diag[p] = (mn|mn). We hold it in packed shell-pair order (the
     # coulomb_4c_diagonal primitive returns global order, hence the [perm] gather) so it aligns
-    # row-for-row with the pair-block columns pulled later.
-    diag = np.asarray(integrals.coulomb_4c_diagonal(system, basis))[perm].copy()
+    # row-for-row with the pair-block columns pulled later. This diagonal is always exact (unscreened)
+    # -- it drives both pivot selection and the significant-set screen.
+    diag_full = np.asarray(integrals.coulomb_4c_diagonal(system, basis))[perm]
 
     # Dmax0 is Koch's X_max, the maximum diagonal element used both to set the screening scale and
     # (below) to bound the Schur complement via Cauchy-Schwarz. stop_tol is the accuracy D at which
     # "further improvements of the accuracy beyond D are not possible": we stop pivoting once the
-    # largest remaining diagonal falls to or below it. (Koch additionally prescreens the initial
-    # diagonal, zeroing M_pp < D^2 / X_max; here that is subsumed into the running argmax/stop test,
-    # which never selects such a column because its diagonal is already below D.)
-    Dmax0 = float(diag.max()) if n else 0.0
+    # largest remaining diagonal falls to or below it.
+    Dmax0 = float(diag_full.max()) if n else 0.0
     eps = np.finfo(float).eps
     stop_tol = tol if (tol is not None and tol > 0.0) else n * eps * Dmax0
 
-    # L holds the Cholesky vectors L^J row-wise in packed order (row Q == vector J of Eq. (1)/(3)).
-    # Koch's central result is that the vector count M stays small -- "the number of elements needed
-    # to be stored scale as N^2 much less than the potential N^4 number of raw two-electron
-    # integrals" -- so we size for O(M * nbf^2) and grow by doubling rather than ever allocating the
-    # N^4 matrix. The initial guess 4*nbf reflects the observed M ~ (a few)*N (Koch's Tables I/III
-    # report M/N ratios of roughly 9-13).
-    cap = max(1, min(n, 4 * nbf))
-    L = np.zeros((cap, n))
-    pivots = []
+    # Significant set D (Koch's initial-diagonal prescreen "M_pp < D^2 / X_max"): a column whose
+    # diagonal is below screen has |M_pq| <= sqrt(M_pp * X_max) < D for every q, so it contributes
+    # nothing above the accuracy D and is excluded from all vectors, GEMMs, and pivot searches. Since
+    # the Schur diagonal only decreases (Eq. (3), diagonal case), a column below screen initially
+    # stays below it, so this static set safely bounds every future significant set. `sig` maps a
+    # packed AO-pair index to its position within the significant set (-1 if screened out).
+    screen = (stop_tol * stop_tol / Dmax0) if Dmax0 > 0.0 else 0.0
+    keep = diag_full >= screen
+    K = np.where(keep)[0]  # packed indices of the significant columns, ascending
+    nK = K.size
+    sig = np.full(n, -1, dtype=np.int64)
+    sig[K] = np.arange(nK)
+    diag = diag_full[K].astype(
+        float, copy=True
+    )  # Schur diagonal over the significant set
+
+    # Shell-pair Schwarz factors Q_AB for Cauchy-Schwarz screening of the column builds. None on the
+    # libcint (high angular momentum) backend, in which case the screened primitive falls back to the
+    # exact block -- draining and the significant set still apply, only the per-block FLOP saving is
+    # forgone.
+    schwarz = integrals.coulomb_4c_schwarz_factors(system, basis)
+
+    # L holds the Cholesky vectors L^J row-wise, restricted to the significant set (row Q == vector J
+    # of Eq. (1)/(3), column i == significant AO pair K[i]). Koch's central result is that the vector
+    # count M stays small -- "the number of elements needed to be stored scale as N^2 much less than
+    # the potential N^4 number of raw two-electron integrals" -- so we size for O(M * |D|) and grow by
+    # doubling rather than ever allocating the N^4 matrix. The initial guess 4*nbf reflects the
+    # observed M ~ (a few)*N (Koch's Tables I/III report M/N ratios of roughly 9-13).
+    cap = max(1, min(nK, 4 * nbf))
+    L = np.zeros((cap, nK))
+    pivot_pos = (
+        []
+    )  # significant-set positions of selected pivots (for the triangular zeroing)
     Q = 0
 
-    # Single-entry cache of the most recent (**|AB) integral distribution. Koch notes that pure full
-    # pivoting would discard all but one column of each computed shell pair and force "a prohibitively
-    # large number of integral recalculations"; his remedy is to proactively "decompose the remaining
-    # integrals in the shell pair" (all diagonals > X_max/1000) while AB is loaded. We take a simpler
-    # reactive variant: keep the standard global argmax pivot, but cache the block so consecutive
-    # pivots landing in the same ket shell pair reuse it. A block is thus recomputed once per
-    # *contiguous* run of pivots in AB -- cheaper than per-pivot, but (unlike Koch's proactive
-    # draining) a shell pair can still be recomputed if pivots interleave across shell pairs.
-    cached_kp = -1
-    cached_block = None
-
-    while Q < n:
-        # Koch: "we find the largest diagonal element" -- this is the pivot J of Eq. (3), with
-        # Dmax = M_JJ (the current Schur-complement diagonal at the pivot). This complete-pivoting
-        # choice is what keeps the semidefinite decomposition stable.
-        piv = int(np.argmax(diag))
-        Dmax = float(diag[piv])
-        # Stop when the largest remaining diagonal is below the accuracy D. By Cauchy-Schwarz,
-        # Eq. (7), |M_pq| <= sqrt(M_pp * M_qq) <= sqrt(M_pp * X_max), so once the max diagonal is
-        # below D no remaining matrix element can exceed the target accuracy.
+    # Outer loop: pick the global-argmax pivot, load its (**|AB) block once, and drain that block.
+    while True:
+        # Koch: "we find the largest diagonal element" -- the pivot J of Eq. (3), with Dmax = M_JJ
+        # the current Schur-complement diagonal. Complete pivoting keeps the semidefinite
+        # decomposition stable. Stop when the largest remaining diagonal is below the accuracy D:
+        # by Cauchy-Schwarz, Eq. (7), no remaining matrix element can then exceed D.
+        jK = int(np.argmax(diag)) if nK else 0
+        Dmax = float(diag[jK]) if nK else 0.0
         if Dmax <= stop_tol:
             break
 
-        # Locate the ket shell-pair holding the pivot and its column within that block. Because the
-        # bra list equals the ket list in the same canonical order, the pivot's bra-row offset also
-        # equals its ket-column offset within shell-pair `kp`.
-        kp = int(np.searchsorted(row_off, piv, side="right") - 1)
-        local = piv - int(row_off[kp])
-        if kp != cached_kp:
-            # Compute Koch's (**|AB) distribution: every bra AO pair against the single ket shell
-            # pair AB = all_pairs[kp]. cached_block[:, c] is the raw ERI column M[:, q] for the AO
-            # pair q sitting at column c of AB.
-            cached_block = np.asarray(
-                integrals.coulomb_4c_pair_block(
-                    system, all_pairs, all_pairs[kp : kp + 1], basis
-                )
+        # Locate the ket shell-pair holding the pivot. Because the bra list equals the ket list in the
+        # same canonical order, the pivot's bra-row offset also equals its ket-column offset within kp.
+        piv_packed = int(K[jK])
+        kp = int(np.searchsorted(row_off, piv_packed, side="right") - 1)
+
+        # Compute Koch's (**|AB) distribution once, Schwarz-screened: every bra AO pair against the
+        # single ket shell pair AB = all_pairs[kp]. block[:, c] is the (screened) raw ERI column
+        # M[:, q] for the AO pair q at column c of AB; restrict its rows to the significant set.
+        block = np.asarray(
+            integrals.coulomb_4c_pair_block_screened(
+                system, all_pairs, all_pairs[kp : kp + 1], schwarz, stop_tol, basis
             )
-            cached_kp = kp
-        # The pivot's raw column M_pJ (the first factor of Eq. (3) before the Schur subtraction).
-        # Copied because it is updated in place below while cached_block must stay pristine for the
-        # other pivots in this shell pair.
-        col = cached_block[:, local].astype(float, copy=True)  # raw M[:, piv]
+        )
+        blockK = block[K, :]
 
-        # Form the current Schur complement column M~_pJ = M_pJ - sum_{K<J} L^K_p L^K_J, i.e. the
-        # subtracted term of Eq. (3) accumulated over all previously computed vectors. L[:Q, piv]
-        # is the piv-th entry of each earlier vector (the L^K_J factors); L[:Q].T @ ... contracts
-        # them against the full earlier vectors L^K_p.
-        if Q > 0:
-            col -= L[:Q].T @ L[:Q, piv]
+        # Significant columns of this ket shell pair and their positions in the significant set.
+        kp_lo, kp_hi = int(row_off[kp]), int(row_off[kp + 1])
+        posK_of_col = sig[
+            kp_lo:kp_hi
+        ]  # significant-set position per block column (-1 if screened)
+        col_valid = posK_of_col >= 0
+        valid_cols = np.nonzero(col_valid)[
+            0
+        ]  # block-local column indices that are significant
+        valid_posK = posK_of_col[col_valid]  # their significant-set positions
 
-        # Define the new Cholesky vector by dividing the updated column by sqrt(M_JJ): this is
-        # exactly Eq. (3)'s L^J_p = M~_pJ / M_JJ^{1/2}, the implicitly defined vector. Dmax is the
-        # pivot's Schur-complement diagonal M_JJ (equal to M~_JJ at this step).
-        Lqq = np.sqrt(Dmax)
-        col /= Lqq
-        # Enforce exact triangular structure that Eq. (3) implies but finite-precision arithmetic
-        # only approximates: previously selected pivots q have M~_qJ == 0 (their diagonals were
-        # driven to zero), and the current pivot's own entry is L^J_J = sqrt(M_JJ) = Lqq.
-        if pivots:
-            col[pivots] = 0.0
-        col[piv] = Lqq
+        # Proactive draining (Koch, ALGORITHMS): decompose every column of the loaded block whose
+        # Schur diagonal exceeds X_max/1000 before recomputing the global argmax, so AB is evaluated
+        # once instead of once per pivot. drain_floor never drops below the stop accuracy D.
+        drain_floor = max(stop_tol, Dmax / 1000.0)
+        while valid_cols.size:
+            dcols = diag[valid_posK]
+            m = int(np.argmax(dcols))
+            Dq = float(dcols[m])
+            if Dq <= drain_floor:
+                break
+            c = int(valid_cols[m])
+            jKq = int(valid_posK[m])
 
-        if Q == cap:
-            new_cap = min(cap * 2, n)
-            new_L = np.zeros((new_cap, n))
-            new_L[:cap] = L
-            L = new_L
-            cap = new_cap
-        L[Q] = col
+            # The pivot's raw column M_pJ (first factor of Eq. (3) before the Schur subtraction);
+            # copied because it is updated in place while blockK must stay pristine for other pivots.
+            col = blockK[:, c].astype(float, copy=True)
+            # Current Schur complement column M~_pJ = M_pJ - sum_{K<J} L^K_p L^K_J (Eq. (3)):
+            # L[:Q, jKq] are the L^K_J factors, contracted against the full earlier vectors L^K_p.
+            if Q > 0:
+                col -= L[:Q].T @ L[:Q, jKq]
 
-        # Update the Schur-complement diagonal by the diagonal case p == q of Eq. (3):
-        # M~_pp = M_pp - (L^J_p)^2. This is what lets the next iteration's argmax pick the largest
-        # *remaining* diagonal (Koch's running X~_max in Eq. (7)) without touching off-diagonals.
-        # The pivot's own diagonal is set to exactly zero (Eq. (3) gives M~_JJ = M_JJ - L^J_J^2 = 0)
-        # so it is never reselected.
-        diag -= col * col
-        diag[piv] = 0.0
+            # New Cholesky vector L^J_p = M~_pJ / M_JJ^{1/2} (Eq. (3)); Dq is the pivot's Schur
+            # diagonal M_JJ (= M~_JJ at this step).
+            Lqq = np.sqrt(Dq)
+            col /= Lqq
+            # Enforce the exact triangular structure Eq. (3) implies but finite precision only
+            # approximates: prior pivots have M~_qJ == 0, and this pivot's own entry is L^J_J = Lqq.
+            if pivot_pos:
+                col[pivot_pos] = 0.0
+            col[jKq] = Lqq
 
-        pivots.append(piv)
-        Q += 1
+            if Q == cap:
+                new_cap = min(cap * 2, nK)
+                new_L = np.zeros((new_cap, nK))
+                new_L[:cap] = L
+                L = new_L
+                cap = new_cap
+            L[Q] = col
+
+            # Diagonal update, diagonal case of Eq. (3): M~_pp = M_pp - (L^J_p)^2, so the next argmax
+            # picks the largest remaining diagonal (Koch's X~_max, Eq. (7)). The pivot's own diagonal
+            # goes to exactly zero (M~_JJ = M_JJ - L^J_J^2 = 0), so it is never reselected and drops
+            # out of the drain candidates on the next iteration.
+            diag -= col * col
+            diag[jKq] = 0.0
+
+            pivot_pos.append(jKq)
+            Q += 1
 
     if Q == 0:
         raise RuntimeError(
             "On-the-fly Cholesky produced no vectors; check the basis and cholesky_tol."
         )
 
-    # Scatter each vector's packed columns back to global AO order and reshape to (naux, nbf, nbf).
-    # The Q rows are Koch's M vectors L^J; after this the tensor satisfies Eq. (1),
-    # (mn|rs) = sum_J B[J, m, n] B[J, r, s], to accuracy D. Reordering AO pairs is a symmetric
+    # Scatter each vector's significant columns back to global AO order and reshape to
+    # (naux, nbf, nbf). The Q rows are Koch's M vectors L^J; after this the tensor satisfies Eq. (1),
+    # (mn|rs) = sum_J B[J, m, n] B[J, r, s], to accuracy D. Columns outside the significant set stay
+    # zero -- their true integrals are below D by construction. Reordering AO pairs is a symmetric
     # permutation of M, which leaves the Cholesky reconstruction valid.
     B = np.zeros((Q, n))
-    B[:, perm] = L[:Q]
+    B[:, perm[K]] = L[:Q]
     B = B.reshape(Q, nbf, nbf)
 
     memory_gb = 8 * (Q * nbf**2) / (1024**3)

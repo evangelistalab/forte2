@@ -66,6 +66,26 @@ def _gram(B, naux, nbf):
     return Bmat.T @ Bmat
 
 
+def _max_abs(A):
+    """Elementwise max-abs norm (the norm in which the CD accuracy bound is cleanest)."""
+    return float(np.max(np.abs(A))) if A.size else 0.0
+
+
+def _recon_bound(tol):
+    """Max-abs reconstruction/agreement bound at threshold ``tol``.
+
+    Koch's stopping criterion leaves the residual ``R = M - B^T B`` positive semidefinite with every
+    diagonal entry ``<= tol``, so ``|R_pq| <= sqrt(R_pp R_qq) <= tol`` elementwise. Production adds
+    Schwarz screening (which drops only integrals provably ``<= tol``) and proactive draining (a
+    different but equally valid pivot path); the two-step path reconstructs via an RI fit of
+    comparable accuracy. A modest constant absorbs the accumulation of these ``O(tol)`` effects and
+    round-off; the ``1e-9`` floor covers the machine-precision (``tol <= 0``) regime and the
+    unavoidable dense-integral round-off. This is deliberately a *reconstruction* bound: it does not
+    assume production and reference took the same path, only that both reproduce the true ERI.
+    """
+    return max(1e-9, 32.0 * tol)
+
+
 def _rank_margin(rank):
     """Allowed pivot-count spread between production and oracle (see cholesky.py Notes)."""
     return max(5, int(np.ceil(0.03 * rank)))
@@ -82,13 +102,13 @@ def test_otf_matches_reference(xyz, basis_set, tol):
     B_prod, naux_prod = cholesky_otf(system, tol)
     B_ref, naux_ref = cholesky_otf_reference(system, tol)
 
-    # Same vector count up to the documented margin (identical today; margin protects 3.2 draining).
+    # Same vector count up to the documented margin (draining/screening may shift it slightly).
     assert abs(naux_prod - naux_ref) <= _rank_margin(naux_ref)
-    # Gram matrices agree: production reconstructs the same operator as the oracle.
-    assert (
-        np.linalg.norm(_gram(B_prod, naux_prod, nbf) - _gram(B_ref, naux_ref, nbf))
-        < 1e-8
-    )
+    # Gram matrices agree: production reconstructs the same operator as the oracle, to the CD
+    # accuracy (max-abs bound; screening + draining make production diverge only at O(tol)).
+    assert _max_abs(
+        _gram(B_prod, naux_prod, nbf) - _gram(B_ref, naux_ref, nbf)
+    ) <= _recon_bound(tol)
 
 
 # ---------------------------------------------------------------------------
@@ -103,10 +123,9 @@ def test_pivoted_matches_reference(xyz, basis_set, tol):
     B_ref, naux_ref = cholesky_pivoted_reference(system, tol)
 
     assert abs(naux_prod - naux_ref) <= _rank_margin(naux_ref)
-    assert (
-        np.linalg.norm(_gram(B_prod, naux_prod, nbf) - _gram(B_ref, naux_ref, nbf))
-        < 1e-8
-    )
+    assert _max_abs(
+        _gram(B_prod, naux_prod, nbf) - _gram(B_ref, naux_ref, nbf)
+    ) <= _recon_bound(tol)
 
 
 @pytest.mark.parametrize("xyz, basis_set, tol", _params(algos=("pivoted",)))
@@ -139,10 +158,9 @@ def test_step2_vectors_match_reference(xyz, basis_set, tol):
     )
 
     assert naux_prod == naux_ref == len(pivots)
-    assert (
-        np.linalg.norm(_gram(B_prod, naux_prod, nbf) - _gram(B_ref, naux_ref, nbf))
-        < 1e-8
-    )
+    assert _max_abs(
+        _gram(B_prod, naux_prod, nbf) - _gram(B_ref, naux_ref, nbf)
+    ) <= _recon_bound(tol)
 
 
 # ---------------------------------------------------------------------------
@@ -153,10 +171,11 @@ def test_production_reconstructs_dense_eri(xyz, basis_set, tol):
     system = System(xyz=xyz, basis_set=basis_set)
     nbf = system.nbf
     M = integrals.coulomb_4c(system).reshape((nbf * nbf,) * 2)
-    recon_tol = max(1e-8, tol * nbf**2)
+    # Elementwise: the CD accuracy bound is stated per matrix element, |M_pq - (B^T B)_pq| <= tol.
+    recon_bound = _recon_bound(tol)
 
     B_otf, naux_otf = cholesky_otf(system, tol)
-    assert np.linalg.norm(_gram(B_otf, naux_otf, nbf) - M) < recon_tol
+    assert _max_abs(_gram(B_otf, naux_otf, nbf) - M) <= recon_bound
 
     B_piv, naux_piv = cholesky_pivoted(system, tol)
-    assert np.linalg.norm(_gram(B_piv, naux_piv, nbf) - M) < recon_tol
+    assert _max_abs(_gram(B_piv, naux_piv, nbf) - M) <= recon_bound
