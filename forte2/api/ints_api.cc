@@ -521,14 +521,6 @@ void export_libcint_compute_api(nb::module_& sub_m) {
               "env"_a);
     sub_m.def("cint_int1e_iprinv_sph", &cint_int1e_iprinv_sph, "shell_slice"_a, "atm"_a, "bas"_a,
               "env"_a);
-    sub_m.def("cint_int1e_pnucp_sph", &cint_int1e_pnucp_sph, "shell_slice"_a, "atm"_a, "bas"_a,
-              "env"_a);
-    sub_m.def("cint_int1e_prinvp_sph", &cint_int1e_prinvp_sph, "shell_slice"_a, "atm"_a, "bas"_a,
-              "env"_a);
-    sub_m.def("cint_int1e_ippnucp_sph", &cint_int1e_ippnucp_sph, "shell_slice"_a, "atm"_a, "bas"_a,
-              "env"_a);
-    sub_m.def("cint_int1e_ipprinvp_sph", &cint_int1e_ipprinvp_sph, "shell_slice"_a, "atm"_a,
-              "bas"_a, "env"_a);
     sub_m.def("cint_int1e_nuc_spinor", &cint_int1e_nuc_spinor, "shell_slice"_a, "atm"_a, "bas"_a,
               "env"_a,
               "Compute the nuclear attraction integral matrix using libcint in spinor basis.");
