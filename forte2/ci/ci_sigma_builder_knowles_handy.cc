@@ -1,11 +1,10 @@
 #include <algorithm>
-#include <future>
-#include <iostream>
+#include <limits>
+#include <stdexcept>
 
 #include "helpers/timer.hpp"
 #include "helpers/blas.h"
 #include "helpers/logger.h"
-#include "helpers/memory.h"
 #include "helpers/parallel.h"
 
 #include "ci_sigma_builder.h"
@@ -13,6 +12,25 @@
 namespace forte2 {
 
 namespace {
+size_t Kblock_column_capacity(size_t nrows, size_t ncols, size_t memory_size) {
+    if ((nrows == 0) or (ncols == 0)) {
+        throw std::invalid_argument("K-block dimensions must be nonzero.");
+    }
+
+    // The memory setting covers both equally sized K-block buffers.
+    const size_t max_elements_per_buffer = memory_size / (2 * sizeof(double));
+    if (max_elements_per_buffer < nrows) {
+        throw std::runtime_error("The CI builder memory limit (" + std::to_string(memory_size) +
+                                 " bytes) is too small for one K-block column of " +
+                                 std::to_string(nrows) + " elements per buffer.");
+    }
+
+    // BLAS dimensions are 32-bit integers, so a single contraction must not exceed INT_MAX
+    // columns even when the configured memory limit is larger.
+    return std::min({max_elements_per_buffer / nrows, ncols,
+                     static_cast<size_t>(std::numeric_limits<int>::max())});
+}
+
 void transpose_23(std::span<double> in, std::span<double> out, size_t dim1, size_t dim2,
                   size_t dim3);
 void gather_alpha_block(const CIStrings& lists, size_t class_Ka, size_t class_Kb, size_t Ka_start,
@@ -154,39 +172,56 @@ void CISigmaBuilder::H2_kh(std::span<double> basis, std::span<double> sigma) con
 
 std::tuple<std::span<double>, std::span<double>, size_t>
 CISigmaBuilder::get_Kblock_spans(size_t nrows, size_t ncols) const {
-    // Find the maximum size of the temporary block to allocate. This is either set by the full
-    // size of the block (nrows * ncols) or by the available memory size, whichever is smaller
-    std::size_t block_size = std::min(nrows * ncols, memory_size_ / (2 * sizeof(double)));
+    const size_t cols_chunk_size = Kblock_column_capacity(nrows, ncols, memory_size_);
+    const size_t block_size = nrows * cols_chunk_size;
+    const size_t max_elements_per_buffer = memory_size_ / (2 * sizeof(double));
 
-    // Find the corresponding chunk size for K
-    size_t cols_chunk_size = std::min(block_size / nrows, ncols);
-
-    // If the chunk size is too small to store one row, resize it
-    bool need_resize = false;
-    if (cols_chunk_size < 1) {
-        // resize to a reasonable minimum and update block_size
-        cols_chunk_size = std::min(static_cast<size_t>(64), ncols);
-        block_size = nrows * cols_chunk_size;
-        need_resize = true;
-    }
-
-    // If the temporary buffers are too small, resize them
-    if (Kblock1_.size() < block_size) {
+    const bool can_reuse = Kblock1_.capacity() >= block_size && Kblock2_.capacity() >= block_size &&
+                           Kblock1_.capacity() <= max_elements_per_buffer &&
+                           Kblock2_.capacity() <= max_elements_per_buffer;
+    if (can_reuse) {
         Kblock1_.resize(block_size);
         Kblock2_.resize(block_size);
-        if (need_resize) {
-            auto block_size_MB = to_mb<double>(2 * block_size);
-            LOG(log_level_) << "Available memory is too small to hold a row of the CI buffers.\n"
-                               "Block size has been adjusted to 2 x "
-                            << block_size << " (" << block_size_MB << " MB) to hold "
-                            << cols_chunk_size
-                            << " columns.\n"
-                               "For best performance, increase the memory limit.";
-        }
+    } else {
+        // Drop both allocations before growing either one. This prevents geometric vector growth
+        // from exceeding the pair budget and leaves a failed partial allocation safe to retry.
+        std::vector<double>{}.swap(Kblock1_);
+        std::vector<double>{}.swap(Kblock2_);
+        Kblock1_ = std::vector<double>(block_size);
+        Kblock2_ = std::vector<double>(block_size);
     }
 
     return {std::span<double>{Kblock1_.data(), block_size},
             std::span<double>{Kblock2_.data(), block_size}, cols_chunk_size};
+}
+
+size_t CISigmaBuilder::acquire_local_Kblock_buffers(std::vector<double>& Kblock1,
+                                                    std::vector<double>& Kblock2, size_t nrows,
+                                                    size_t ncols) const {
+    // Transfer ownership so sigma-build cache and RDM-local scratch never coexist. The local
+    // vectors release the storage when the RDM call returns, avoiding permanent cache inflation.
+    Kblock1.swap(Kblock1_);
+    Kblock2.swap(Kblock2_);
+
+    const size_t cols_chunk_size = Kblock_column_capacity(nrows, ncols, memory_size_);
+    const size_t block_size = nrows * cols_chunk_size;
+    const size_t max_elements_per_buffer = memory_size_ / (2 * sizeof(double));
+
+    const bool can_reuse = Kblock1.capacity() >= block_size && Kblock2.capacity() >= block_size &&
+                           Kblock1.capacity() <= max_elements_per_buffer &&
+                           Kblock2.capacity() <= max_elements_per_buffer;
+    if (can_reuse) {
+        Kblock1.resize(block_size);
+        Kblock2.resize(block_size);
+    } else {
+        // Release both old allocations before growing either one, keeping peak scratch within the
+        // configured pair budget even when the limit was lowered after a sigma build.
+        std::vector<double>{}.swap(Kblock1);
+        std::vector<double>{}.swap(Kblock2);
+        Kblock1 = std::vector<double>(block_size);
+        Kblock2 = std::vector<double>(block_size);
+    }
+    return cols_chunk_size;
 }
 
 // The following functions are used to gather and scatter blocks of data and

@@ -1,15 +1,21 @@
 #pragma once
 
-#include <cstddef>
-#include <thread>
-#include <version>
-#include <execution>
 #include <algorithm>
 #include <atomic>
-#include <ranges>
+#include <cstddef>
+#include <cstdlib>
+#include <execution>
 #include <future>
+#include <limits>
+#include <ranges>
+#include <thread>
 #include <utility>
 #include <vector>
+#include <version>
+
+#ifdef __linux__
+#include <sched.h>
+#endif
 
 #ifdef __APPLE__
 #include <dispatch/dispatch.h>
@@ -18,12 +24,105 @@
 #define SERIAL_THRESHOLD 3
 
 namespace forte2 {
+
+namespace detail {
+
+constexpr std::size_t no_thread_limit = std::numeric_limits<std::size_t>::max();
+
+constexpr bool is_space(const char c) noexcept {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
+}
+
+/// @brief Parse a positive thread count from an environment variable.
+/// @param value Environment variable value, or nullptr when it is unset.
+/// @param allow_list Whether to accept the comma-separated list syntax used by OMP_NUM_THREADS.
+/// @return The parsed limit, or no_thread_limit when the value is unset or invalid.
+inline std::size_t parse_thread_limit(const char* value, const bool allow_list = false) noexcept {
+    if (value == nullptr)
+        return no_thread_limit;
+
+    while (is_space(*value))
+        ++value;
+    if (*value < '0' || *value > '9')
+        return no_thread_limit;
+
+    std::size_t limit = 0;
+    bool overflow = false;
+    while (*value >= '0' && *value <= '9') {
+        const auto digit = static_cast<std::size_t>(*value - '0');
+        if (limit > (no_thread_limit - digit) / 10) {
+            overflow = true;
+        } else if (!overflow) {
+            limit = limit * 10 + digit;
+        }
+        ++value;
+    }
+
+    while (is_space(*value))
+        ++value;
+    if (*value != '\0' && !(allow_list && *value == ','))
+        return no_thread_limit;
+    if (limit == 0 && !overflow)
+        return no_thread_limit;
+    return overflow ? no_thread_limit : limit;
+}
+
+/// @brief Return the number of CPUs in the process affinity mask when available.
+inline std::size_t get_affinity_thread_limit() noexcept {
+#ifdef __linux__
+    cpu_set_t affinity;
+    CPU_ZERO(&affinity);
+    if (sched_getaffinity(0, sizeof(affinity), &affinity) == 0) {
+        std::size_t count = 0;
+        for (int cpu = 0; cpu < CPU_SETSIZE; ++cpu) {
+            if (CPU_ISSET(cpu, &affinity))
+                ++count;
+        }
+        if (count > 0)
+            return count;
+    }
+#endif
+    return no_thread_limit;
+}
+
+/// @brief Join every joinable thread in a worker container when leaving scope.
+///
+/// This guard must be declared immediately after the worker vector. If creating a later worker
+/// throws, the guard joins the workers that were already created before their destructors run.
+class ThreadJoiner {
+  public:
+    explicit ThreadJoiner(std::vector<std::thread>& threads) noexcept : threads_(threads) {}
+
+    ThreadJoiner(const ThreadJoiner&) = delete;
+    ThreadJoiner& operator=(const ThreadJoiner&) = delete;
+
+    ~ThreadJoiner() {
+        for (auto& thread : threads_) {
+            if (thread.joinable())
+                thread.join();
+        }
+    }
+
+  private:
+    std::vector<std::thread>& threads_;
+};
+
+} // namespace detail
+
 /// @brief Get the number of threads to use for parallel execution
-/// This function returns the number of hardware threads available, but ensures that at least 1
-/// thread is returned.
+/// This function bounds the hardware thread count by the process affinity mask, OpenMP limits, and
+/// the per-task CPU count reported by Slurm. It always returns at least one thread.
 /// @return The number of threads to use for parallel execution.
 static std::size_t get_num_threads() {
-    return static_cast<std::size_t>(std::max(1u, std::thread::hardware_concurrency()));
+    auto num_threads = static_cast<std::size_t>(std::max(1u, std::thread::hardware_concurrency()));
+    num_threads = std::min(num_threads, detail::get_affinity_thread_limit());
+    num_threads =
+        std::min(num_threads, detail::parse_thread_limit(std::getenv("OMP_NUM_THREADS"), true));
+    num_threads =
+        std::min(num_threads, detail::parse_thread_limit(std::getenv("OMP_THREAD_LIMIT")));
+    num_threads =
+        std::min(num_threads, detail::parse_thread_limit(std::getenv("SLURM_CPUS_PER_TASK")));
+    return std::max<std::size_t>(1, num_threads);
 }
 
 template <typename F> void serial_for(const std::size_t begin, const std::size_t end, F&& func) {
@@ -42,6 +141,8 @@ void parallel_for_chunked_thread(const std::size_t begin, const std::size_t end,
         return;
     }
     std::vector<std::thread> threads;
+    threads.reserve(num_threads);
+    detail::ThreadJoiner thread_joiner(threads);
     const std::size_t block_size = (count + num_threads - 1) / num_threads;
 
     for (std::size_t t = 0; t < num_threads; ++t) {
@@ -124,6 +225,7 @@ void parallel_for_interleaved_thread(const std::size_t begin, const std::size_t 
 
     std::vector<std::thread> workers;
     workers.reserve(num_threads);
+    detail::ThreadJoiner thread_joiner(workers);
     for (std::size_t t{0}; t < num_threads; ++t) {
         workers.emplace_back([count, num_threads, t, begin, &func]() {
             for (std::size_t i{t}; i < count; i += num_threads)
@@ -172,6 +274,8 @@ void parallel_for_dynamic_thread(const std::size_t begin, const std::size_t end,
     }
     std::atomic<std::size_t> next_index(begin);
     std::vector<std::thread> threads;
+    threads.reserve(num_threads);
+    detail::ThreadJoiner thread_joiner(threads);
     for (std::size_t t = 0; t < num_threads; ++t) {
         threads.emplace_back([begin, end, &func, &next_index]() {
             while (true) {

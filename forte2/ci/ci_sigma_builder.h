@@ -1,9 +1,10 @@
 #pragma once
 
 #include <functional>
-#include <vector>
 #include <cmath>
 #include <span>
+#include <tuple>
+#include <vector>
 
 #include "helpers/ndarray.h"
 #include "helpers/spin.h"
@@ -366,8 +367,13 @@ class CISigmaBuilder {
     /// algorithm.
     void H2_kh(std::span<double> basis, std::span<double> sigma) const;
 
-    std::tuple<std::span<double>, std::span<double>, size_t> get_Kblock_spans(size_t dim,
-                                                                              size_t maxKa) const;
+    std::tuple<std::span<double>, std::span<double>, size_t> get_Kblock_spans(size_t nrows,
+                                                                              size_t ncols) const;
+
+    /// @brief Acquire call-local K-block buffers subject to the CI builder memory limit.
+    /// @return The number of columns that fit in each buffer.
+    size_t acquire_local_Kblock_buffers(std::vector<double>& Kblock1, std::vector<double>& Kblock2,
+                                        size_t nrows, size_t ncols) const;
 };
 
 [[nodiscard]] std::span<double> gather_block(std::span<double> source, std::span<double> dest,
