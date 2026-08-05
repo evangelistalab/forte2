@@ -21,6 +21,17 @@ np_matrix coulomb_4c_pair_block(const Basis& basis, const np_matrix_int& bra_pai
                                                                           ket_pairs);
 }
 
+np_vector coulomb_4c_schwarz_factors(const Basis& basis) {
+    return compute_two_electron_4c_schwarz_factors<libint2::Operator::coulomb>(basis);
+}
+
+np_matrix coulomb_4c_pair_block_screened(const Basis& basis, const np_matrix_int& bra_pairs,
+                                         const np_matrix_int& ket_pairs, const np_vector& schwarz,
+                                         double tau) {
+    return compute_two_electron_4c_pair_block_screened<libint2::Operator::coulomb>(
+        basis, bra_pairs, ket_pairs, schwarz, tau);
+}
+
 np_tensor3_c coulomb_3c_by_shell(const Basis& b1, const Basis& b2, const Basis& b3,
                     const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices) {
     return compute_two_electron_3c_by_shell<libint2::Operator::coulomb>(b1, b2, b3, shell_slices);

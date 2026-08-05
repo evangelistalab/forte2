@@ -222,6 +222,16 @@ def coulomb_4c_pair_block(basis: Basis, bra_pairs: Annotated[NDArray[numpy.int32
     Compute a dense block (AB|CD) of the four-center two-electron integral matrix for the given bra and ket shell-pair lists.
     """
 
+def coulomb_4c_schwarz_factors(basis: Basis) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]:
+    """
+    Compute the shell-pair Schwarz factors Q_AB = sqrt(max_{a,b} (ab|ab)) for Cauchy-Schwarz screening of four-center integrals (length nshells * nshells, row-major over A * nshells + B).
+    """
+
+def coulomb_4c_pair_block_screened(basis: Basis, bra_pairs: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], ket_pairs: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], schwarz: Annotated[NDArray[numpy.float64], dict(shape=(None,))], tau: float) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    """
+    Schwarz-screened coulomb_4c_pair_block: skip shell-quartets with Q_AB * Q_CD < tau (their block stays zero). Result equals the unscreened block to within tau.
+    """
+
 @overload
 def coulomb_3c_by_shell(basis1: Basis, basis2: Basis, basis3: Basis, shell_slices: Sequence[tuple[int, int]]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='C')]: ...
 
