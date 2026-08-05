@@ -2,10 +2,13 @@ import numpy as np
 
 from forte2 import integrals
 from forte2.data import DEBYE_TO_AU, ANGSTROM_TO_BOHR
+from forte2.helpers import logger
 from forte2.helpers.matrix_functions import block_diag_2x2
 
 
-def get_1e_property(system, g1, property_name, origin=None, unit="debye"):
+def get_1e_property(
+    system, g1, property_name, origin=None, unit="debye", skip_picture_change=False
+):
     """
     Calculate a one-electron property using AO-basis quantities.
 
@@ -23,6 +26,8 @@ def get_1e_property(system, g1, property_name, origin=None, unit="debye"):
     unit: str, optional, default="debye"
         The unit for the property value, either "debye" or "au". Default is "debye".
         Only used for multipole moments. For quadrupole moments, "debye" stands for debye * angstrom, etc.
+    skip_picture_change : bool, optional, default=False
+        If True, skip picture change corrections, only relevant for X2C calculations.
 
     Returns
     -------
@@ -38,6 +43,11 @@ def get_1e_property(system, g1, property_name, origin=None, unit="debye"):
         assert (
             g1.shape[0] == system.nbf
         ), f"g1 shape {g1.shape[0]} does not match the number of basis functions, {system.nbf} in the system."
+
+    if system.x2c_type in ["sf", "so"] and not skip_picture_change:
+        do_picture_change = True
+    else:
+        do_picture_change = False
 
     def _origin_check(origin):
         if origin is None:
@@ -58,6 +68,13 @@ def get_1e_property(system, g1, property_name, origin=None, unit="debye"):
     ), f"Property '{property_name}' is not supported, must be one of {spin_independent_properties}."
     factor = 1.0
 
+    properties_with_picture_change = ["dipole", "electric_dipole"]
+    if do_picture_change and property_name not in properties_with_picture_change:
+        logger.log_warning(
+            f"get_1e_property: X2C is enabled but property '{property_name}' does not support picture change corrections. Results may be inaccurate."
+        )
+        do_picture_change = False
+
     match property_name:
         case "kinetic_energy":
             oei = integrals.kinetic(system)
@@ -65,11 +82,19 @@ def get_1e_property(system, g1, property_name, origin=None, unit="debye"):
             oei = integrals.nuclear(system)
         case "electric_dipole":
             origin = _origin_check(origin)
-            _, *oei = integrals.emultipole1(system, origin=origin)
+            if do_picture_change:
+                oei = system.x2c_helper.electric_dipole_moment(origin=origin)
+            else:
+                _, *oei = integrals.emultipole1(system, origin=origin)
             factor = -1.0 / DEBYE_TO_AU if unit == "debye" else -1.0
         case "dipole":
             e_dip = get_1e_property(
-                system, g1, "electric_dipole", origin=origin, unit=unit
+                system,
+                g1,
+                "electric_dipole",
+                origin=origin,
+                unit=unit,
+                skip_picture_change=skip_picture_change,
             )
             nuc_dip = system.nuclear_dipole(origin=origin, unit=unit)
             return e_dip + nuc_dip
@@ -91,7 +116,8 @@ def get_1e_property(system, g1, property_name, origin=None, unit="debye"):
         case _:
             raise ValueError(f"Property '{property_name}' is not supported.")
 
-    if system.two_component:
+    # picture change doubles up the integral size, so no need to block-diagonalize here
+    if system.two_component and not do_picture_change:
         if isinstance(oei, list):
             oei = [(block_diag_2x2(_)) for _ in oei]
         else:

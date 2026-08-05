@@ -268,7 +268,7 @@ def cholesky_wrapper(M, tol):
     return B
 
 
-def block_diag_2x2(M, complex=True):
+def block_diag_2x2(M, force_complex=True):
     """
     Return a block-diagonal matrix with two copies of `M` on the diagonal.
     Note this is **not** a function to block-diagonalize a matrix.
@@ -277,7 +277,7 @@ def block_diag_2x2(M, complex=True):
     ----------
     M : NDArray
         The matrix to convert, shape (n, n).
-    complex : bool, optional, default=True
+    force_complex : bool, optional, default=True
         If True, the output will be explicitly converted to complex type.
 
     Returns
@@ -286,7 +286,7 @@ def block_diag_2x2(M, complex=True):
         The block-diagonal matrix, shape (2n, 2n).
     """
     A = sp.linalg.block_diag(M, M)
-    if complex:
+    if force_complex and not np.iscomplexobj(A):
         return A.astype(np.complex128)
     else:
         return A
