@@ -136,3 +136,68 @@ def test_reldmrg_average_rdm_roundtrip(tmp_path):
     e += 0.5 * np.einsum("pqrs,pqrs->", ints.V, g2)
 
     assert e.real == approx(dmrg.compute_average_energy())
+
+
+@requires_block2_complex
+def test_reldmrg_3rdm_matches_relci(tmp_path):
+    """RelDMRG complex 3-RDM matches the 2C-FCI 3-RDM on the same active space."""
+    system = _hf_x2c_system()
+    dmrg = _build_reldmrg(system, str(tmp_path))
+
+    scf = GHF(charge=0)(system)
+    ci = RelCI(nel=NEL, core_orbitals=NCORE, active_orbitals=NACT_SPINORS)(scf)
+    ci.run()
+
+    g3_dmrg = dmrg.make_3rdm(0)
+    g3_ci = ci.sub_solvers[0].make_3rdm(0)
+    assert g3_dmrg.shape == (NACT_SPINORS,) * 6
+    assert np.iscomplexobj(g3_dmrg)
+    # RDMs are limited by DMRG truncation error, looser than the energy.
+    assert np.linalg.norm(g3_dmrg - g3_ci) < 1e-4
+
+
+@requires_block2_complex
+def test_reldmrg_3rdm_partial_trace(tmp_path):
+    """
+    Partial trace of the spin-orbital 3-RDM gives the 2-RDM:
+    sum_r gamma3[p,q,r,s,t,r] = (N_act - 2) * gamma2[p,q,s,t].
+    """
+    dmrg = _build_reldmrg(_hf_x2c_system(), str(tmp_path))
+
+    g2 = dmrg.make_2rdm(0)
+    g3 = dmrg.make_3rdm(0)
+    g2_from_g3 = np.einsum("pqrstr->pqst", g3) / (NACTEL - 2)
+    assert np.linalg.norm(g2_from_g3 - g2) < 1e-4
+
+
+@requires_block2_complex
+def test_reldmrg_transition_rdms_hermiticity(tmp_path):
+    """
+    RelDMRG cross-root transition RDMs obey the Hermitian-conjugate relations
+
+        gamma1(1,0)[p,q]         = conj(gamma1(0,1)[q,p])
+        gamma2(1,0)[p,q,r,s]     = conj(gamma2(0,1)[r,s,p,q])
+        gamma3(1,0)[p,q,r,s,t,u] = conj(gamma3(0,1)[s,t,u,p,q,r]).
+
+    These follow from gamma(m,n) = <m| E... |n> = <n| E... |m>^* and are
+    independent of the (basis-arbitrary) phase and of any degeneracy, so they
+    validate the bra/ket transition-RDM machinery directly. The transform from
+    block2's layout to forte2's is separately pinned to ground truth by
+    test_reldmrg_3rdm_matches_relci (diagonal, complex/SGF) and by the
+    non-relativistic transition-RDM test (cross-root).
+    """
+    dmrg = _build_reldmrg(_hf_x2c_system(), str(tmp_path), nroots=2)
+
+    t1_01 = dmrg.make_1rdm(0, 1)
+    t1_10 = dmrg.make_1rdm(1, 0)
+    assert np.linalg.norm(t1_10 - t1_01.conj().transpose(1, 0)) < 1e-6
+
+    t2_01 = dmrg.make_2rdm(0, 1)
+    t2_10 = dmrg.make_2rdm(1, 0)
+    assert np.linalg.norm(t2_10 - t2_01.conj().transpose(2, 3, 0, 1)) < 1e-6
+
+    t3_01 = dmrg.make_3rdm(0, 1)
+    t3_10 = dmrg.make_3rdm(1, 0)
+    assert (
+        np.linalg.norm(t3_10 - t3_01.conj().transpose(3, 4, 5, 0, 1, 2)) < 1e-6
+    )

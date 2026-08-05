@@ -10,7 +10,10 @@ integrals as
 block2 works in chemist's notation, ``g2e[p, q, r, s] = (pq|rs)``, and returns
 its two-particle density matrix in that same chemist layout. The transforms
 below map between the two. They were validated numerically against the exact CI
-solver (energies to ~1e-13, RDMs to ~1e-6).
+solver (energies to ~1e-13, RDMs to ~1e-6). The 3-RDM follows the same pattern:
+block2 returns the NPDM with the creation indices in order and the annihilation
+indices reversed, so the forte2 RDM is recovered by reversing the trailing
+(annihilation) axes.
 """
 
 import numpy as np
@@ -31,3 +34,24 @@ def block2_2pdm_to_sf_2rdm(pdm2):
     spin-free 2-RDM convention: ``gamma2[p, q, r, s] = pdm2[p, q, s, r]``.
     """
     return np.ascontiguousarray(np.transpose(pdm2, (0, 1, 3, 2)))
+
+
+def block2_3pdm_to_sf_3rdm(pdm3):
+    r"""
+    Convert a block2 3-particle density matrix into forte2's spin-free 3-RDM
+    convention.
+
+    block2 returns the (spin-traced) NPDM with the creation indices in order and
+    the annihilation indices reversed,
+
+        pdm3[i, j, k, c, b, a] = <a^+_i a^+_j a^+_k a_c a_b a_a>,
+
+    whereas forte2 stores
+
+        gamma3[p, q, r, s, t, u] = <a^+_p a^+_q a^+_r a_u a_t a_s>.
+
+    The two are related by reversing the last three (annihilation) axes,
+    ``gamma3[p, q, r, s, t, u] = pdm3[p, q, r, u, t, s]``. This is the
+    three-particle analogue of the ``(0, 1, 3, 2)`` swap used for the 2-RDM.
+    """
+    return np.ascontiguousarray(np.transpose(pdm3, (0, 1, 2, 5, 4, 3)))
