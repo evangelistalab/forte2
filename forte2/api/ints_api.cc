@@ -428,6 +428,23 @@ void export_two_electron_api(nb::module_& sub_m) {
         "given bra and ket shell-pair lists.");
 
     sub_m.def(
+        "coulomb_4c_schwarz_factors",
+        [](const Basis& basis) { return coulomb_4c_schwarz_factors(basis); }, "basis"_a,
+        "Compute the shell-pair Schwarz factors Q_AB = sqrt(max_{a,b} (ab|ab)) for Cauchy-Schwarz "
+        "screening of four-center integrals (length nshells * nshells, row-major over "
+        "A * nshells + B).");
+
+    sub_m.def(
+        "coulomb_4c_pair_block_screened",
+        [](const Basis& basis, const np_matrix_int& bra_pairs, const np_matrix_int& ket_pairs,
+           const np_vector& schwarz, double tau) {
+            return coulomb_4c_pair_block_screened(basis, bra_pairs, ket_pairs, schwarz, tau);
+        },
+        "basis"_a, "bra_pairs"_a, "ket_pairs"_a, "schwarz"_a, "tau"_a,
+        "Schwarz-screened coulomb_4c_pair_block: skip shell-quartets with Q_AB * Q_CD < tau "
+        "(their block stays zero). Result equals the unscreened block to within tau.");
+
+    sub_m.def(
         "coulomb_3c_by_shell",
         [](const Basis& basis1, const Basis& basis2, const Basis& basis3,
            const std::array<std::pair<std::size_t, std::size_t>, 3>& shell_slices) {

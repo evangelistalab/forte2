@@ -43,6 +43,26 @@ np_vector coulomb_4c_diagonal(const Basis& basis);
 np_matrix coulomb_4c_pair_block(const Basis& basis, const np_matrix_int& bra_pairs,
                                 const np_matrix_int& ket_pairs);
 
+/// @brief Compute the shell-pair Schwarz factors Q_AB = sqrt(max_{a,b} (ab|ab)) for Cauchy-Schwarz
+///        screening of four-center integrals.
+/// @param basis The orbital basis set.
+/// @return A 1D ndarray of length (nshells * nshells), row-major over the shell-pair index
+///         A * nshells + B.
+np_vector coulomb_4c_schwarz_factors(const Basis& basis);
+
+/// @brief Schwarz-screened variant of coulomb_4c_pair_block: a shell-quartet (AB|CD) with
+///        Q_AB * Q_CD < tau is skipped and its block left zero. Output layout matches
+///        coulomb_4c_pair_block; the result equals the unscreened block to within tau.
+/// @param basis The orbital basis set.
+/// @param bra_pairs An (n_bra, 2) integer array of (shellA, shellB) indices defining the rows.
+/// @param ket_pairs An (n_ket, 2) integer array of (shellC, shellD) indices defining the columns.
+/// @param schwarz The (nshells * nshells) Schwarz factors from coulomb_4c_schwarz_factors.
+/// @param tau The screening threshold (the Cholesky decomposition threshold).
+/// @return A 2D ndarray of shape (n_bra_ao_pairs, n_ket_ao_pairs), row-major.
+np_matrix coulomb_4c_pair_block_screened(const Basis& basis, const np_matrix_int& bra_pairs,
+                                         const np_matrix_int& ket_pairs, const np_vector& schwarz,
+                                         double tau);
+
 /// @brief Compute the coulomb integrals (b1 | 1  / r_12 | b2), by shells.
 /// @param basis1 The basis set in the bra for electron 1 center 1.
 /// @param basis2 The basis set in the ket for electron 2 center 2.
