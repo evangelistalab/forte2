@@ -100,10 +100,13 @@ def test_x2c_ghf_gradient_finite_difference(x2c_type):
 
     gradient = ghf.gradient()
     step = 5.0e-4
-    energies = [
-        GHF(**options)(make_system(1.5 + scale * step)).run().E
-        for scale in (-2.0, -1.0, 1.0, 2.0)
-    ]
+    energies = []
+    displaced_options = {**options, "ms_guess": None}
+    for scale in (-2.0, -1.0, 1.0, 2.0):
+        displaced = GHF(**displaced_options)(make_system(1.5 + scale * step))
+        # Follow the reference member of the open-shell Kramers pair.
+        displaced.C = [ghf.C[0].copy()]
+        energies.append(displaced.run().E)
     numerical = (energies[0] - 8.0 * energies[1] + 8.0 * energies[2] - energies[3]) / (
         12.0 * step
     )
