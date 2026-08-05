@@ -51,19 +51,28 @@ class System:
         If None, a complete Cholesky decomposition of the Coulomb metric is performed without truncation.
     cholesky_tei : bool or str, optional, default=False
         If truthy, auxiliary basis sets (if any) will be disregarded, and the B tensor will be built
-        using a Cholesky decomposition of the ERIs instead of density fitting. The value selects the
-        algorithm:
+        using a Cholesky decomposition (CD) of the ERIs instead of density fitting. All modes
+        reconstruct the same exact operator to ``cholesky_tol``; they differ only in how the
+        Cholesky vectors are built. The value selects the algorithm:
 
-        - ``True`` or ``"otf"``: on-the-fly pivoted Cholesky (Koch 2003); never forms the full
-          4-index tensor. This is the default when ``cholesky_tei`` is enabled.
+        - ``True`` or ``"otf"``: on-the-fly one-step pivoted Cholesky (Koch 2003); never forms the
+          full 4-index tensor and uses Schwarz screening plus proactive shell-pair draining. This is
+          the recommended (and default) mode when ``cholesky_tei`` is enabled.
+        - ``"pivoted"``: on-the-fly two-step CD (Folkestad 2019). Step I selects only the pivot AO
+          pairs; Step II builds the vectors by an RI fit onto that Cholesky basis. Also never forms
+          the full 4-index tensor. Useful when the pivot selection and vector build are best kept
+          separate; typically selects a few extra vectors than ``"otf"``.
         - ``"naive"``: dense reference path that forms the full 4-index ERI, then decomposes it
-          (O(N^4) memory). Kept as a numerical oracle.
-        - ``"pivoted"``: reserved for the Folkestad 2019 two-step CD (not yet implemented).
+          (O(N^4) memory). Kept as a numerical oracle; do not use for production-size systems.
 
-        ``False`` (the default) disables Cholesky and uses density fitting.
+        ``False`` (the default) disables Cholesky and uses density fitting, which is a *different*
+        approximation controlled by ``auxiliary_basis_set`` (not by ``cholesky_tol``). Analytic
+        gradients are implemented only for the density-fitting path and reject every Cholesky mode.
     cholesky_tol : float, optional, default=1e-6
-        The pivot tolerance for the Cholesky decomposition of the ERIs. Only used if `cholesky_tei`
-        is truthy.
+        The pivot/decomposition tolerance for the Cholesky decomposition of the ERIs. Only used if
+        ``cholesky_tei`` is truthy. The reconstruction error of the resulting B tensor is bounded
+        elementwise by roughly this value, so ``1e-6`` is adequate for energies while ``1e-8`` to
+        ``1e-10`` gives near-exact ERIs. Smaller values select more Cholesky vectors.
     symmetry : bool, optional, default=False
         Whether to automatically detect the largest Abelian point group symmetry of the molecule.
         This will center the molecule at its center of mass and reorient it along its principal axes of inertia.
