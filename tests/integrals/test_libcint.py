@@ -1,3 +1,4 @@
+import importlib
 import numpy as np
 import pytest
 from pathlib import Path
@@ -8,6 +9,8 @@ THIS_DIR = Path(__file__).parent
 from forte2 import System, integrals
 from forte2.system.build_basis import build_basis
 from forte2.integrals import LIBCINT_AVAILABLE
+
+integrals_impl = importlib.import_module("forte2.integrals.integrals")
 
 
 @pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
@@ -70,10 +73,10 @@ def test_libcint_spnucsp_sph():
     system = System(xyz, basis_set="sto-3g", minao_basis_set=None)
     s_cint = integrals.cint_opVop(system)
     c_int2 = integrals.opVop(system)
-    assert np.linalg.norm(s_cint[3] - c_int2[0]) < 1e-6  # sigma_x
-    assert np.linalg.norm(s_cint[0] - c_int2[1]) < 1e-6  # sigma_y
-    assert np.linalg.norm(s_cint[1] - c_int2[2]) < 1e-6  # sigma_z
-    assert np.linalg.norm(s_cint[2] - c_int2[3]) < 1e-6  # I2
+    assert np.linalg.norm(s_cint[3] - c_int2[0]) < 1e-6  # scalar
+    assert np.linalg.norm(s_cint[0] - c_int2[1]) < 1e-6  # sigma_x
+    assert np.linalg.norm(s_cint[1] - c_int2[2]) < 1e-6  # sigma_y
+    assert np.linalg.norm(s_cint[2] - c_int2[3]) < 1e-6  # sigma_z
     assert np.linalg.norm(s_cint) == pytest.approx(5982385.234519612, rel=1e-6)
 
 
@@ -86,6 +89,90 @@ def test_libcint_spnucsp_spinor():
     system = System(xyz, basis_set="sto-3g")
     s = integrals.cint_opVop_spinor(system)
     assert np.linalg.norm(s) == pytest.approx(116.46738183606718, rel=1e-6)
+
+
+@pytest.mark.parametrize(
+    "use_gaussian_charges,force_fallback",
+    [
+        pytest.param(False, False, id="point-default"),
+        pytest.param(
+            False,
+            True,
+            marks=pytest.mark.skipif(
+                not LIBCINT_AVAILABLE,
+                reason="The default backend already uses the fallback",
+            ),
+            id="point-forced-fallback",
+        ),
+        pytest.param(
+            True,
+            False,
+            marks=pytest.mark.skipif(
+                not LIBCINT_AVAILABLE, reason="Libcint is not available"
+            ),
+            id="gaussian",
+        ),
+    ],
+)
+def test_opvop_deriv_finite_difference(
+    use_gaussian_charges, force_fallback, monkeypatch
+):
+    def make_system(z):
+        return System(
+            f"O 0 0 0\nH 0 0 {z:.12f}\nH 0 1.4 0",
+            basis_set="sto-3g",
+            unit="bohr",
+            minao_basis_set=None,
+            use_gaussian_charges=use_gaussian_charges,
+        )
+
+    system = make_system(1.5)
+    rng = np.random.default_rng(8675309)
+    weights = rng.standard_normal((4, system.nbf, system.nbf))
+    weights /= np.linalg.norm(weights)
+    if force_fallback:
+        monkeypatch.setattr(integrals_impl, "LIBCINT_AVAILABLE", False)
+    analytical = integrals.opVop_deriv(system, weights)[5]
+
+    step = 1.0e-4
+    values = [
+        np.einsum(
+            "cmn,cmn->",
+            np.asarray(integrals.opVop(make_system(1.5 + scale * step))),
+            weights,
+        )
+        for scale in (-2.0, -1.0, 1.0, 2.0)
+    ]
+    numerical = (values[0] - 8.0 * values[1] + 8.0 * values[2] - values[3]) / (
+        12.0 * step
+    )
+
+    assert analytical == pytest.approx(numerical, abs=2.0e-7)
+
+
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_gaussian_nuclear_deriv_finite_difference():
+    def make_system(z):
+        return System(
+            f"O 0 0 0\nH 0 0 {z:.12f}",
+            basis_set="sto-3g",
+            unit="bohr",
+            minao_basis_set=None,
+            use_gaussian_charges=True,
+        )
+
+    system = make_system(1.5)
+    rng = np.random.default_rng(8675309)
+    weights = rng.standard_normal((system.nbf, system.nbf))
+    weights /= np.linalg.norm(weights)
+    analytical = integrals.nuclear_deriv(system, weights)[5]
+    step = 1.0e-5
+    numerical = (
+        np.einsum("mn,mn->", integrals.nuclear(make_system(1.5 + step)), weights)
+        - np.einsum("mn,mn->", integrals.nuclear(make_system(1.5 - step)), weights)
+    ) / (2.0 * step)
+
+    assert analytical == pytest.approx(numerical, abs=2.0e-8)
 
 
 @pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")

@@ -1,11 +1,135 @@
+import numpy as np
 import pytest
 
 from forte2 import System
+from forte2.integrals import LIBCINT_AVAILABLE
 from forte2.scf import RHF, GHF, UHF
 from forte2.helpers.comparisons import approx
 from forte2.orbitals import convert_coeff_spatial_to_spinor
 from forte2.system import BSE_AVAILABLE
 from forte2.data import EH_TO_WN, EH_TO_EV
+
+
+def _random_hcore_density(size, complex_values=False):
+    rng = np.random.default_rng(8675309)
+    density = rng.standard_normal((size, size))
+    if complex_values:
+        density = density + 1j * rng.standard_normal((size, size))
+    density = 0.5 * (density + density.conj().T)
+    return density / np.linalg.norm(density)
+
+
+def _four_point_hcore_gradient_component(
+    system_factory, coordinate, density, step=1.0e-4
+):
+    values = [
+        np.einsum(
+            "mn,nm->",
+            system_factory(coordinate + scale * step).ints_hcore(),
+            density,
+        ).real
+        for scale in (-2.0, -1.0, 1.0, 2.0)
+    ]
+    return (values[0] - 8.0 * values[1] + 8.0 * values[2] - values[3]) / (12.0 * step)
+
+
+@pytest.mark.parametrize("x2c_type", ["sf", "so"])
+@pytest.mark.parametrize(
+    "use_gaussian_charges",
+    [
+        pytest.param(False, id="point"),
+        pytest.param(
+            True,
+            marks=pytest.mark.skipif(
+                not LIBCINT_AVAILABLE, reason="Libcint is not available"
+            ),
+            id="gaussian",
+        ),
+    ],
+)
+def test_x2c_hcore_gradient_finite_difference(x2c_type, use_gaussian_charges):
+    def make_system(z):
+        return System(
+            xyz=f"O 0 0 0\nH 0 0 {z:.12f}\nH 0 1.4 0",
+            basis_set="sto-3g",
+            unit="bohr",
+            x2c_type=x2c_type,
+            use_gaussian_charges=use_gaussian_charges,
+            minao_basis_set=None,
+        )
+
+    system = make_system(1.5)
+    size = system.nbf if x2c_type == "sf" else 2 * system.nbf
+    density = _random_hcore_density(size, complex_values=x2c_type == "so")
+    analytical = system.x2c_helper.hcore_gradient(density)[1, 2]
+    numerical = _four_point_hcore_gradient_component(make_system, 1.5, density)
+
+    assert analytical == pytest.approx(numerical, abs=3.0e-8)
+
+
+@pytest.mark.parametrize("snso_type", ["boettger", "dc", "dcb", "row-dependent"])
+def test_snso_x2c_hcore_gradient_finite_difference(snso_type):
+    def make_system(z):
+        return System(
+            xyz=f"S 0 0 0\nH 0 0 {z:.12f}\nH 0 1.4 0",
+            basis_set="sto-3g",
+            unit="bohr",
+            x2c_type="so",
+            snso_type=snso_type,
+            minao_basis_set=None,
+        )
+
+    system = make_system(1.5)
+    density = _random_hcore_density(2 * system.nbf, complex_values=True)
+    analytical = system.x2c_helper.hcore_gradient(density)[1, 2]
+    numerical = _four_point_hcore_gradient_component(make_system, 1.5, density)
+
+    assert analytical == pytest.approx(numerical, abs=3.0e-8)
+
+
+def test_x2c_hcore_gradient_with_truncated_overlap_space():
+    def make_system(z):
+        return System(
+            xyz=f"O 0 0 0\nH 0 0 {z:.12f}\nH 0 1.4 0",
+            basis_set="sto-3g",
+            unit="bohr",
+            x2c_type="sf",
+            overlap_ortho_rtol=1.0e-3,
+            minao_basis_set=None,
+        )
+
+    system = make_system(1.5)
+    assert system.x2c_helper.orth_info["n_discarded"] == 1
+    density = _random_hcore_density(system.nbf)
+    analytical = system.x2c_helper.hcore_gradient(density)[1, 2]
+    numerical = _four_point_hcore_gradient_component(make_system, 1.5, density)
+
+    assert analytical == pytest.approx(numerical, abs=3.0e-8)
+
+
+def test_x2c_helper_tracks_spinor_upcaster_override():
+    def make_system(x2c_type, snso_type=None):
+        return System(
+            xyz="S 0 0 0\nH 0 0 1.5",
+            basis_set="sto-3g",
+            unit="bohr",
+            x2c_type=x2c_type,
+            snso_type=snso_type,
+            minao_basis_set=None,
+        )
+
+    overridden = make_system("sf")
+    overridden.x2c_type = "so"
+    overridden.snso_type = "row-dependent"
+    reference = make_system("so", "row-dependent")
+
+    assert overridden.x2c_helper.hcore_x2c() == pytest.approx(
+        reference.x2c_helper.hcore_x2c(), abs=1.0e-12
+    )
+    density = _random_hcore_density(2 * overridden.nbf, complex_values=True)
+    assert overridden.x2c_helper.hcore_gradient(density) == pytest.approx(
+        reference.x2c_helper.hcore_gradient(density), abs=1.0e-11
+    )
 
 
 def test_sfx2c1e():
@@ -24,6 +148,7 @@ def test_sfx2c1e():
     assert scf.E == approx(escf)
 
 
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
 def test_sfx2c1e_with_gaussian_charges():
     escf = -5192.003129895058
     xyz = """
