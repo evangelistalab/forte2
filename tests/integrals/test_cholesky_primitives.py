@@ -10,7 +10,8 @@ Each primitive is validated on both integral backends:
 import numpy as np
 import pytest
 
-from forte2 import System, ints, integrals
+from forte2 import System, integrals
+from forte2.lib import ints
 from forte2.integrals import LIBCINT_AVAILABLE
 
 
@@ -96,14 +97,20 @@ def test_coulomb_4c_pair_block_libint2():
 
     # full block
     block = integrals.coulomb_4c_pair_block(system, pairs, pairs)
-    assert np.allclose(block, _pair_block_ref(V, system.basis, pairs, pairs), atol=1e-10, rtol=0)
+    assert np.allclose(
+        block, _pair_block_ref(V, system.basis, pairs, pairs), atol=1e-10, rtol=0
+    )
 
     # single ket pair (the Cholesky "pivot column" use-case) and single bra pair
     one = [pairs[-1]]
     col = integrals.coulomb_4c_pair_block(system, pairs, one)
-    assert np.allclose(col, _pair_block_ref(V, system.basis, pairs, one), atol=1e-10, rtol=0)
+    assert np.allclose(
+        col, _pair_block_ref(V, system.basis, pairs, one), atol=1e-10, rtol=0
+    )
     row = integrals.coulomb_4c_pair_block(system, one, pairs)
-    assert np.allclose(row, _pair_block_ref(V, system.basis, one, pairs), atol=1e-10, rtol=0)
+    assert np.allclose(
+        row, _pair_block_ref(V, system.basis, one, pairs), atol=1e-10, rtol=0
+    )
 
 
 def test_coulomb_4c_pair_block_matches_diagonal_libint2():
