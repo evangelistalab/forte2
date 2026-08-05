@@ -230,6 +230,24 @@ def test_casscf_gradient_auto_runs_and_reuses_executed_object():
     assert gradient1.shape == (system.natoms, 3)
 
 
+def test_casscf_gradient_rejects_unconverged_wavefunction(monkeypatch):
+    """Require both orbital and CI stationarity before using the gradient."""
+    mc = _casscf(
+        ["H", "H"],
+        np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]]),
+        active_orbitals=2,
+    )
+
+    mc.converged = False
+    with pytest.raises(RuntimeError, match="converged orbital optimization"):
+        mc.gradient()
+
+    mc.converged = True
+    monkeypatch.setattr(mc.ci_solver, "get_convergence_status", lambda: [False])
+    with pytest.raises(RuntimeError, match="converged CI roots"):
+        mc.gradient()
+
+
 def test_casscf_gradient_reuses_orbital_optimizer_intermediates(monkeypatch):
     """Avoid rebuilding orbital intermediates when the final MO basis is unchanged."""
     mc = _casscf(

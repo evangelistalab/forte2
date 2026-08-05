@@ -1,3 +1,4 @@
+import importlib
 import numpy as np
 import pytest
 from pathlib import Path
@@ -8,6 +9,8 @@ THIS_DIR = Path(__file__).parent
 from forte2 import System, integrals
 from forte2.system.build_basis import build_basis
 from forte2.integrals import LIBCINT_AVAILABLE
+
+integrals_impl = importlib.import_module("forte2.integrals.integrals")
 
 
 @pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
@@ -88,9 +91,32 @@ def test_libcint_spnucsp_spinor():
     assert np.linalg.norm(s) == pytest.approx(116.46738183606718, rel=1e-6)
 
 
-@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
-@pytest.mark.parametrize("use_gaussian_charges", [False, True])
-def test_opvop_deriv_finite_difference(use_gaussian_charges):
+@pytest.mark.parametrize(
+    "use_gaussian_charges,force_fallback",
+    [
+        pytest.param(False, False, id="point-default"),
+        pytest.param(
+            False,
+            True,
+            marks=pytest.mark.skipif(
+                not LIBCINT_AVAILABLE,
+                reason="The default backend already uses the fallback",
+            ),
+            id="point-forced-fallback",
+        ),
+        pytest.param(
+            True,
+            False,
+            marks=pytest.mark.skipif(
+                not LIBCINT_AVAILABLE, reason="Libcint is not available"
+            ),
+            id="gaussian",
+        ),
+    ],
+)
+def test_opvop_deriv_finite_difference(
+    use_gaussian_charges, force_fallback, monkeypatch
+):
     def make_system(z):
         return System(
             f"O 0 0 0\nH 0 0 {z:.12f}\nH 0 1.4 0",
@@ -104,6 +130,8 @@ def test_opvop_deriv_finite_difference(use_gaussian_charges):
     rng = np.random.default_rng(8675309)
     weights = rng.standard_normal((4, system.nbf, system.nbf))
     weights /= np.linalg.norm(weights)
+    if force_fallback:
+        monkeypatch.setattr(integrals_impl, "LIBCINT_AVAILABLE", False)
     analytical = integrals.opVop_deriv(system, weights)[5]
 
     step = 1.0e-4

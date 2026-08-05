@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from forte2 import System
+from forte2.integrals import LIBCINT_AVAILABLE
 from forte2.scf import RHF, GHF, UHF
 from forte2.helpers.comparisons import approx
 from forte2.orbitals import convert_coeff_spatial_to_spinor
@@ -33,7 +34,19 @@ def _four_point_hcore_gradient_component(
 
 
 @pytest.mark.parametrize("x2c_type", ["sf", "so"])
-@pytest.mark.parametrize("use_gaussian_charges", [False, True])
+@pytest.mark.parametrize(
+    "use_gaussian_charges",
+    [
+        pytest.param(False, id="point"),
+        pytest.param(
+            True,
+            marks=pytest.mark.skipif(
+                not LIBCINT_AVAILABLE, reason="Libcint is not available"
+            ),
+            id="gaussian",
+        ),
+    ],
+)
 def test_x2c_hcore_gradient_finite_difference(x2c_type, use_gaussian_charges):
     def make_system(z):
         return System(
@@ -135,6 +148,7 @@ def test_sfx2c1e():
     assert scf.E == approx(escf)
 
 
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
 def test_sfx2c1e_with_gaussian_charges():
     escf = -5192.003129895058
     xyz = """

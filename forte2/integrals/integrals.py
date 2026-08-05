@@ -344,7 +344,8 @@ def opVop(system, basis1=None, basis2=None):
         W^{12}_{\mu\nu} = -\iint (\sigma\cdot\hat{p}) \chi^{1}_\mu(\mathbf{r}) \left(\sum_{A} \frac{Z_A \rho_A(|\mathbf{r}_A-\mathbf{R}_A|)}{|\mathbf{r} - \mathbf{R}_A|}\right) (\sigma\cdot\hat{p}) \chi^{2}_\nu(\mathbf{r}) d\mathbf{r} d\mathbf{r}_A
 
     where :math:`Z_A` is the nuclear charge of atom A, and :math:`\rho_A` is its charge distribution.
-    Currently, only point charges are supported for this integral.
+    Point and Gaussian nuclear charge distributions are supported; Gaussian
+    charges require libcint.
 
     Parameters
     ----------

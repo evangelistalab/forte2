@@ -49,7 +49,7 @@ RHF, UHF, GHF & spin-free X2C-1e & point, Gaussian \\
 GHF & spin-orbit X2C-1e & point, Gaussian \\
 GHF & spin-orbit X2C-1e with SNSO & point, Gaussian \\
 SS-CASSCF/GASSCF & nonrelativistic or spin-free X2C-1e & point \\
-2c SS-CASSCF/GASSCF & nonrelativistic, SF-X2C-1e, or SO-X2C-1e & point \\
+2c SS-CASSCF/GASSCF & spinor-upcast nonrelativistic, SF-X2C-1e, or SO-X2C-1e & point \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -460,10 +460,11 @@ divided-difference kernel.  The
 negative--positive energy denominators in \cref{eq:dirac_response} likewise
 appear once in the reverse decoupling response.
 
-The primitive adjoints are contracted directly by the integral backends.
-Gaussian-nucleus $V^\xcoord$ and analytic libcint $W^\xcoord$ are generated
-one atom at a time.  Consequently the production path does not allocate any
-array of shape $(3N_\mathrm{atom},n,n)$ or
+Libint2 contracts primitive adjoints directly in its compiled derivative
+kernels.  For Gaussian-nucleus $V^\xcoord$ and analytic libcint
+$W^\xcoord$, one-atom derivative blocks are returned and immediately contracted
+in Python.  Consequently the production path does not allocate any array of
+shape $(3N_\mathrm{atom},n,n)$ or
 $(4,3N_\mathrm{atom},n,n)$.  Its dense X2C matrix algebra is
 $O(n^3)$ rather than repeating $O(n^3)$ response work for every nuclear
 coordinate; the unavoidable derivative-integral contractions remain.
@@ -527,11 +528,12 @@ density-fitting tensors $Z^P_{\mu\nu}$, $W^M_{PQ}$, and
 $W^{J,P}_{\mu\nu}$ remain materialized by the existing SCF and
 multiconfigurational gradient code.
 
-Gaussian nuclei change three pieces consistently: $V^\xcoord$,
-$W^\xcoord$, and $E_\mathrm{NN}^\xcoord$.  The last is evaluated by contracting
-the derivative of the Coulomb interaction between normalized Gaussian nuclear
-charge functions, with diagonal self-interactions removed exactly as in the
-energy.
+For the supported SCF gradients, Gaussian nuclei change three pieces
+consistently: $V^\xcoord$, $W^\xcoord$, and $E_\mathrm{NN}^\xcoord$.  The last is
+evaluated by contracting the derivative of the Coulomb interaction between
+normalized Gaussian nuclear charge functions, with diagonal self-interactions
+removed exactly as in the energy.  CASSCF/GASSCF gradients currently require
+point nuclei, as summarized above.
 
 \section{Code map}
 
@@ -599,8 +601,10 @@ changing the threshold or basis.
 
 CASSCF/GASSCF gradients are currently limited to a single optimized state,
 point nuclei, and orbital spaces without frozen core, frozen virtual, active
-frozen, or frozen inter-GAS rotations.  Those cases require response terms
-outside the stationary single-state Lagrangian used here.
+frozen, or frozen inter-GAS rotations.  Both the orbital optimization and CI
+roots must be converged before a gradient is evaluated.  The excluded cases
+require response terms outside the stationary single-state Lagrangian used
+here.
 
 The implemented Hamiltonian is X2C-1e: two-electron picture-change corrections
 are not included in either the energy or gradient.  This is the same

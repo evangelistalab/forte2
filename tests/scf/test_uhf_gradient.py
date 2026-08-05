@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from forte2 import System
+from forte2.integrals import LIBCINT_AVAILABLE
 from forte2.scf import RHF, UHF
 from tests.gradient_test_utils import (
     four_point_central_difference_gradient_component,
@@ -162,9 +163,19 @@ def test_uhf_gradient_closed_shell_matches_rhf_gradient():
 @pytest.mark.parametrize(
     "system_options",
     [
-        {"use_gaussian_charges": True},
+        pytest.param(
+            {"use_gaussian_charges": True},
+            marks=pytest.mark.skipif(
+                not LIBCINT_AVAILABLE, reason="Libcint is not available"
+            ),
+        ),
         {"x2c_type": "sf"},
-        {"x2c_type": "sf", "use_gaussian_charges": True},
+        pytest.param(
+            {"x2c_type": "sf", "use_gaussian_charges": True},
+            marks=pytest.mark.skipif(
+                not LIBCINT_AVAILABLE, reason="Libcint is not available"
+            ),
+        ),
     ],
 )
 def test_uhf_gradient_nuclear_model_and_x2c_finite_difference(system_options):

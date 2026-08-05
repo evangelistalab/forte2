@@ -638,6 +638,9 @@ class MCOptimizer(MCOptimizerBase):
         and frozen-virtual response, active-frozen rotations, frozen inter-GAS
         rotations, and Gaussian nuclear charges are not supported. Requesting
         any unsupported feature raises ``NotImplementedError``.
+        Both the orbital optimization and all CI roots must be converged; an
+        unconverged wave function raises ``RuntimeError`` because the
+        stationary-gradient expression does not apply.
 
         The gradient is assembled in the same integral-layer form as the RHF
         and UHF gradients:

@@ -32,7 +32,7 @@ def flat_to_atom_gradient(gradient, natoms):
     return gradient.reshape(natoms, 3).copy()
 
 
-def nuclear_repulsion_deriv(system_or_atoms):
+def nuclear_repulsion_deriv(atoms):
     r"""
     Compute point-charge nuclear repulsion derivatives.
 
@@ -46,32 +46,14 @@ def nuclear_repulsion_deriv(system_or_atoms):
 
     Parameters
     ----------
-    system_or_atoms : System or list[tuple[float, Sequence[float]]]
-        A molecular system or its nuclear charges and Cartesian centers. A
-        system is required for Gaussian nuclear charge distributions.
+    atoms : list[tuple[float, Sequence[float]]]
+        Nuclear charges and Cartesian centers.
 
     Returns
     -------
     NDArray
         Nuclear repulsion derivative with shape ``(natoms, 3)``.
     """
-    if getattr(system_or_atoms, "use_gaussian_charges", False):
-        system = system_or_atoms
-        weights = 0.5 * np.outer(system.atomic_charges, system.atomic_charges)
-        np.fill_diagonal(weights, 0.0)
-        return flat_to_atom_gradient(
-            ints.coulomb_2c_deriv(
-                system.gaussian_charge_basis,
-                system.gaussian_charge_basis,
-                weights,
-                system.atoms,
-            ),
-            system.natoms,
-        )
-
-    atoms = (
-        system_or_atoms.atoms if hasattr(system_or_atoms, "atoms") else system_or_atoms
-    )
     natoms = len(atoms)
     charges = np.asarray([atom[0] for atom in atoms], dtype=float)
     positions = np.asarray([atom[1] for atom in atoms], dtype=float)
@@ -90,6 +72,24 @@ def nuclear_repulsion_deriv(system_or_atoms):
             gradient[b] += contribution
 
     return gradient
+
+
+def _system_nuclear_repulsion_deriv(system):
+    """Compute nuclear repulsion derivatives for the system's nuclear model."""
+    if not system.use_gaussian_charges:
+        return nuclear_repulsion_deriv(system.atoms)
+
+    weights = 0.5 * np.outer(system.atomic_charges, system.atomic_charges)
+    np.fill_diagonal(weights, 0.0)
+    return flat_to_atom_gradient(
+        ints.coulomb_2c_deriv(
+            system.gaussian_charge_basis,
+            system.gaussian_charge_basis,
+            weights,
+            system.atoms,
+        ),
+        system.natoms,
+    )
 
 
 def compute_gradient(
@@ -128,7 +128,7 @@ def compute_gradient(
         Total gradient with shape ``(natoms, 3)``.
     """
     natoms = system.natoms
-    gradient = nuclear_repulsion_deriv(system)
+    gradient = _system_nuclear_repulsion_deriv(system)
     if hcore_gradient is not None:
         hcore_gradient = np.asarray(hcore_gradient, dtype=float)
         if hcore_gradient.shape != (natoms, 3):

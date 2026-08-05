@@ -549,6 +549,18 @@ def _validate_casscf_gradient_request(mc) -> None:
 
 def _validate_converged_casscf_gradient(mc) -> None:
     """Validate restrictions that require a materialized CASSCF wave function."""
+    if not mc.converged:
+        raise RuntimeError(
+            "CASSCF/GASSCF gradients require a converged orbital optimization."
+        )
+
+    convergence_status = mc.ci_solver.get_convergence_status()
+    if convergence_status is not None and not all(convergence_status):
+        raise RuntimeError(
+            "CASSCF/GASSCF gradients require converged CI roots; "
+            f"convergence status: {convergence_status}."
+        )
+
     is_relativistic = isinstance(mc.ci_solver, RelCIBase)
     if mc.mo_space.nfrozen_core > 0:
         raise NotImplementedError(
