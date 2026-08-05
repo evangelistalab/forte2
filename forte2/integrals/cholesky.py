@@ -345,6 +345,13 @@ def _resolve_stop_tol(tol, diag):
     return stop_tol, Dmax0
 
 
+# Default per-batch qualified-column budget, as a multiple of nbf (used when max_qual is None).
+# A few * nbf keeps each qualified block (|D| x n_qual) modest without splitting so finely that
+# batching overhead dominates; the final pivot set is threshold-exact regardless of the batch split,
+# so this only trades batch size against the number of block evaluations.
+_DEFAULT_MAX_QUAL_FACTOR = 10
+
+
 def cholesky_pivots(
     system, tol, basis=None, *, span_factor=1e-2, max_qual=None, layout=None
 ):
@@ -375,8 +382,11 @@ def cholesky_pivots(
     max_qual : int, optional
         Upper bound on the number of qualified AO-pair columns computed per batch (Folkestad Eq. 8:
         "such that the number of elements in Q does not exceed a user-specified maximum"). ``None``
-        imposes no cap -- every qualified shell pair is taken in one batch, which is fine for the
-        reference-scale systems this path targets.
+        (the default) uses ``_DEFAULT_MAX_QUAL_FACTOR * nbf``, so a large system is decomposed in
+        bounded-size batches rather than assembling one enormous qualified block. The pivot set is
+        threshold-exact regardless of the batch split, so this only trades batch size against the
+        number of block evaluations. Pass a positive integer to override, or ``0``/negative for no
+        cap (one batch per qualification round).
     layout : tuple, optional
         A precomputed ``_build_shell_pair_layout(basis)`` triple, to avoid recomputation when this
         is called from :func:`cholesky_pivoted`.
@@ -399,14 +409,19 @@ def cholesky_pivots(
     Folkestad's observation that the two-step procedure trades a slightly larger basis for the much
     stronger row+column screening it enables.
 
-    Deviations from Folkestad, all benign for a small-system reference decomposition:
+    This production driver restricts the transient vectors and working diagonal to the significant
+    set ``D = {p : D_p >= τ}`` (Folkestad Fig. 1). Because Step I *discards* the vectors -- a column
+    ``p`` with ``D_p < τ`` is never a pivot (the inner loop stops at ``D_q <= τ``) and its diagonal
+    is never read again -- the vectors need only span ``|D|`` columns, not ``n``. This is precisely
+    the stronger row+column screening the two-step algorithm licenses (Folkestad: "a diagonal
+    ``D_p = M_pp`` below ``τ`` will never be selected as a pivot"), and closes the ``O(rank * n)``
+    scratch of the frozen reference to ``O(rank * |D|)``. The block builds are additionally
+    Cauchy-Schwarz screened (Folkestad Eq. 6) via
+    :func:`~forte2.integrals.integrals.coulomb_4c_pair_block_screened`.
 
-    * We keep the transient vectors as full-length ``(n,)`` rows rather than restricting them to the
-      significant set ``D`` (Folkestad Fig. 1 and the "memory ... drops to zero" remark). This costs
-      ``O(rank * n)`` scratch instead of the paper's shrinking footprint.
-    * Qualification is done purely at shell-pair granularity (Folkestad Sec. II: "we modify the
-      screening and qualification steps such that shell pairs are treated instead of AO pairs"),
-      ordering shell pairs by their maximal diagonal ``D^{AB}_max`` (Folkestad Eq. 16).
+    Qualification is done purely at shell-pair granularity (Folkestad Sec. II: "we modify the
+    screening and qualification steps such that shell pairs are treated instead of AO pairs"),
+    ordering shell pairs by their maximal diagonal ``D^{AB}_max`` (Folkestad Eq. 16).
     """
     if basis is None:
         basis = system.basis
@@ -417,26 +432,64 @@ def cholesky_pivots(
     nbf = basis.size
     n = nbf * nbf
 
+    # Resolve the per-batch qualified-column budget (Folkestad Eq. 8's user maximum). None -> a few
+    # times nbf so a large system is decomposed in bounded batches; <= 0 disables the cap.
+    if max_qual is None:
+        max_qual = _DEFAULT_MAX_QUAL_FACTOR * nbf
+    batch_cap = max_qual if max_qual and max_qual > 0 else None
+
     # Initial diagonal D_p = (mn|mn), in packed order (Folkestad step 1's D0; identical to Koch's
-    # M_pp). We mutate a working copy in place as vectors are subtracted (Folkestad Eq. 12).
-    diag0 = np.asarray(integrals.coulomb_4c_diagonal(system, basis))[perm].copy()
-    stop_tol, _ = _resolve_stop_tol(tol, diag0)
-    diag = diag0.copy()
+    # M_pp). This is always exact (unscreened) -- it drives both qualification and the significant set.
+    diag_full = np.asarray(integrals.coulomb_4c_diagonal(system, basis))[perm]
+    stop_tol, _ = _resolve_stop_tol(tol, diag_full)
 
-    # Start of each shell pair's packed AO-pair range, for the per-shell-pair max reduction.
-    sp_starts = row_off[:-1].astype(np.intp)
+    # Significant set D = {p : D_p >= τ} (Folkestad step 3 / Eq. 17). Unlike Koch's one-step driver,
+    # Step I *discards* the vectors, so a column with D_p < τ is never a pivot (the inner loop stops
+    # at D_q <= τ) and its diagonal is never read again. The vectors therefore need span only these
+    # |D| columns, and the diagonal itself only decreases, so this static set is a safe superset of
+    # every future significant set. `sig` maps a packed AO-pair index to its position in D (-1 if
+    # excluded). This closes the reference's O(rank * n) scratch to O(rank * |D|).
+    keep = diag_full >= stop_tol
+    K = np.where(keep)[0]  # packed indices of the significant columns, ascending
+    nK = K.size
+    if nK == 0:
+        raise RuntimeError(
+            "Two-step Cholesky (step I) produced no pivots; check the basis and cholesky_tol."
+        )
+    sig = np.full(n, -1, dtype=np.int64)
+    sig[K] = np.arange(nK)
+    diag = diag_full[K].astype(
+        float, copy=True
+    )  # working diagonal over the significant set
 
-    # Transient Cholesky vectors, kept only to update D and subtract prior contributions; grown by
-    # doubling exactly like cholesky_otf. Discarded before returning (only ``pivots`` survives).
-    cap = max(1, min(n, 4 * nbf))
-    L = np.zeros((cap, n))
-    pivots = []
+    # Shell-pair Schwarz factors for Cauchy-Schwarz screening of the qualified block builds (Folkestad
+    # Eq. 6). None on the libcint backend, where the screened primitive falls back to the exact block.
+    schwarz = integrals.coulomb_4c_schwarz_factors(system, basis)
+
+    # Map each significant column to its ket shell pair and, from the ascending K order, the K-space
+    # segment starts of the shell pairs that contain at least one significant column. These segments
+    # let the per-shell-pair max reduction (Folkestad Eq. 16) run over the significant diagonal alone.
+    Ksp = (
+        np.searchsorted(row_off, K, side="right") - 1
+    )  # shell-pair id per significant column
+    seg_sp, seg_start = np.unique(
+        Ksp, return_index=True
+    )  # shell pairs present in D; K-space starts
+    seg_start = seg_start.astype(np.intp)
+
+    # Transient Cholesky vectors, restricted to the significant set (row Q == vector Q, column i ==
+    # significant AO pair K[i]); kept only to update D and subtract prior contributions, discarded on
+    # return. Grown by doubling exactly like cholesky_otf.
+    cap = max(1, min(nK, 4 * nbf))
+    L = np.zeros((cap, nK))
+    pivots = []  # selected pivots as packed AO-pair indices (the deliverable)
+    pivot_pos = []  # their significant-set positions (for the triangular zeroing)
     Q = 0
 
     def _grow(Q, cap, L):
         if Q == cap:
-            new_cap = min(cap * 2, n)
-            new_L = np.zeros((new_cap, n))
+            new_cap = min(cap * 2, nK)
+            new_L = np.zeros((new_cap, nK))
             new_L[:cap] = L
             return new_cap, new_L
         return cap, L
@@ -444,79 +497,82 @@ def cholesky_pivots(
     # Outer loop == Folkestad steps 3-7: qualify a batch, decompose it, append its pivots to B,
     # repeat until no significant diagonal remains.
     while True:
-        Dmax = float(diag.max()) if n else 0.0
-        # Folkestad step 3 / Eq. 17: the standard significance criterion D = {p : D_p >= τ}. Once
-        # the largest remaining diagonal is below τ, by Cauchy-Schwarz (Folkestad Eq. 6) every
-        # remaining matrix element is below τ and the basis B is complete.
+        Dmax = float(diag.max()) if nK else 0.0
+        # Folkestad step 3 / Eq. 17: once the largest remaining diagonal is below τ, by Cauchy-Schwarz
+        # (Folkestad Eq. 6) every remaining matrix element is below τ and the basis B is complete.
         if Dmax <= stop_tol:
             break
 
-        # Folkestad step 4 / Eq. 16: order shell pairs by their maximal diagonal D^{AB}_max and, per
-        # Eq. 8, qualify those reaching σ * Dmax. Qualifying whole shell pairs (not individual AO
-        # pairs) matches Libint's shell-quartet evaluation -- the same reason Folkestad "treat[s]
-        # shell pairs instead of AO pairs".
-        sp_max = np.maximum.reduceat(diag, sp_starts)
-        sp_max[row_off[1:] == row_off[:-1]] = (
-            -np.inf
-        )  # guard against any empty shell pair
+        # Folkestad step 4 / Eq. 16: order shell pairs by their maximal diagonal D^{AB}_max (reduced
+        # over the significant diagonal) and, per Eq. 8, qualify those reaching σ * Dmax. Qualifying
+        # whole shell pairs (not individual AO pairs) matches Libint's shell-quartet evaluation.
+        sp_max = np.maximum.reduceat(diag, seg_start)  # aligned with seg_sp
         qual_thresh = span_factor * Dmax
-        qualified = np.where(sp_max >= qual_thresh)[0]
+        qmask = sp_max >= qual_thresh
+        qualified = seg_sp[qmask]
         # Take qualified shell pairs largest-D^{AB}_max first (Folkestad: "qualified from the AB with
         # the largest diagonal before the next shell pair ... is considered").
-        qualified = qualified[np.argsort(sp_max[qualified])[::-1]]
+        qualified = qualified[np.argsort(sp_max[qmask])[::-1]]
 
-        # Assemble the qualified ket shell pairs subject to the optional column budget max_qual.
+        # Assemble the qualified ket shell pairs subject to the column budget batch_cap.
         ket_kps = []
         ncol = 0
         for kp in qualified:
             size_kp = int(row_off[kp + 1] - row_off[kp])
-            if max_qual is not None and ket_kps and ncol + size_kp > max_qual:
+            if batch_cap is not None and ket_kps and ncol + size_kp > batch_cap:
                 break
             ket_kps.append(int(kp))
             ncol += size_kp
         ket_kps = np.asarray(ket_kps, dtype=np.int64)
 
-        # Packed indices of every qualified column, aligned 1:1 with the columns of the block below
-        # (the block concatenates each ket shell pair's contiguous packed range in ket_kps order).
+        # Packed indices of every qualified column, in block-column order (the block concatenates each
+        # ket shell pair's contiguous packed range in ket_kps order). Only the significant ones can be
+        # pivots, so restrict to those: valid_bc are their block columns, valid_sig their D positions.
         qcols = np.concatenate(
             [np.arange(row_off[kp], row_off[kp + 1]) for kp in ket_kps]
         ).astype(np.int64)
+        qcols_sig = sig[qcols]
+        valid_bc = np.nonzero(qcols_sig >= 0)[0]
+        valid_sig = qcols_sig[valid_bc]
+        valid_packed = qcols[valid_bc]
 
-        # Folkestad step 5 / Eq. 9: compute M_pq for all rows p and qualified columns q, then
-        # subtract the contributions of the pivots already in B. colmat holds ~M_pq (only the
-        # already-selected batches subtracted); the within-batch subtraction is Eq. 10 below.
-        colmat = np.asarray(
-            integrals.coulomb_4c_pair_block(
-                system, all_pairs, all_pairs[ket_kps], basis
+        # Folkestad step 5 / Eqs. 6, 9: compute the (Schwarz-screened) block M_pq for all rows p and
+        # qualified columns q, keep only significant rows/columns, then subtract the pivots already in
+        # B. colmat holds ~M_pq over D (only prior batches subtracted here; the within-batch
+        # subtraction is Eq. 10 below).
+        block = np.asarray(
+            integrals.coulomb_4c_pair_block_screened(
+                system, all_pairs, all_pairs[ket_kps], schwarz, stop_tol, basis
             )
-        ).astype(float, copy=True)
+        )
+        colmat = block[np.ix_(K, valid_bc)].astype(float, copy=True)  # (nK, n_valid)
         if Q > 0:
-            colmat -= L[:Q].T @ L[:Q][:, qcols]
+            colmat -= L[:Q].T @ L[:Q][:, valid_sig]
 
-        # Folkestad step 6 / Eqs. 10-12: greedily decompose the qualified block. C is the set of
-        # pivots built in this batch; batch_start marks where they begin in L so Eq. 10's Σ_{J∈C}
-        # subtraction uses exactly the this-batch vectors.
+        # Folkestad step 6 / Eqs. 10-12: greedily decompose the qualified block. batch_start marks
+        # where this batch's pivots begin in L so Eq. 10's Σ_{J∈C} subtraction uses exactly them.
         batch_start = Q
         while True:
-            # "select q ∈ Q such that D_q = max_{p∈Q} D_p" (Folkestad step 6). The global argmax
-            # pivot always lives in a qualified shell pair, so progress is guaranteed each batch.
-            jpos = int(np.argmax(diag[qcols]))
-            q = int(qcols[jpos])
-            Dq = float(diag[q])
+            # "select q ∈ Q such that D_q = max_{p∈Q} D_p" (Folkestad step 6). The global argmax pivot
+            # always lives in a qualified shell pair, so progress is guaranteed each batch.
+            dvals = diag[valid_sig]
+            m = int(np.argmax(dvals))
+            Dq = float(dvals[m])
             if Dq <= stop_tol:  # no significant diagonal left in Q -> back to step 3
                 break
+            jKq = int(valid_sig[m])  # significant-set position of the pivot
 
             # Folkestad Eq. 10: L^q_p = (~M_pq - Σ_{J∈C} L^J_p L^J_q) / sqrt(~M_qq).
-            newvec = colmat[:, jpos].copy()
+            newvec = colmat[:, m].copy()
             if Q > batch_start:
-                newvec -= L[batch_start:Q].T @ L[batch_start:Q, q]
+                newvec -= L[batch_start:Q].T @ L[batch_start:Q, jKq]
             Lqq = np.sqrt(Dq)
             newvec /= Lqq
-            # Exact triangular structure (finite precision only approximates it): earlier pivots
-            # have a zero entry, and this pivot's own entry is L^q_q = sqrt(~M_qq).
-            if pivots:
-                newvec[pivots] = 0.0
-            newvec[q] = Lqq
+            # Exact triangular structure (finite precision only approximates it): earlier pivots have
+            # a zero entry, and this pivot's own entry is L^q_q = sqrt(~M_qq).
+            if pivot_pos:
+                newvec[pivot_pos] = 0.0
+            newvec[jKq] = Lqq
 
             cap, L = _grow(Q, cap, L)
             L[Q] = newvec
@@ -524,9 +580,10 @@ def cholesky_pivots(
             # Folkestad Eq. 12: D_p ← D_p - (L^q_p)^2. Setting D_q = 0 removes q from Q (Eq. 11) and
             # from all future qualification, so it is never reselected.
             diag -= newvec * newvec
-            diag[q] = 0.0
+            diag[jKq] = 0.0
 
-            pivots.append(q)
+            pivots.append(int(valid_packed[m]))
+            pivot_pos.append(jKq)
             Q += 1
 
         # Folkestad step 7 / Eq. 13: B ← B ∪ C, then return to step 3.
@@ -604,26 +661,32 @@ def cholesky_vectors_ri(system, pivots, basis=None, *, tol=None, layout=None):
     np.cumsum(kp_sizes, out=col_off[1:])
     pivcol = col_off[inv] + (pivots - row_off[unique_kps[inv]])
 
-    # A_{αβ,K} = (αβ|K): rows = all packed AO pairs αβ, columns = the pivot product functions K.
+    # Folkestad Eq. 15: Cauchy-Schwarz screening of the (αβ|K) build. |(αβ|K)| <= Q_αβ Q_K, so a bra
+    # shell pair whose Q_αβ Q_K < screen for a pivot's ket shell pair contributes below screen to that
+    # vector and can be skipped before libint2 evaluates it. Using the screened primitive makes this
+    # skip *actual* rather than the cosmetic zero-after-compute of the reference. Threshold is
+    # min(τ, 1e-8) (the accuracy of the RI fit); None -> no screening.
+    #
+    # The pivot rows are provably never screened, so the metric S below is exact: each pivot's ket
+    # shell pair has Q_K >= sqrt((γδ|γδ)) > sqrt(τ) (its diagonal exceeded τ when selected), and
+    # likewise Q_αβ > sqrt(τ) for a pivot bra row, so Q_αβ Q_K > τ >= screen -- above the threshold.
+    screen = min(tol, 1e-8) if tol is not None else None
+    schwarz = (
+        integrals.coulomb_4c_schwarz_factors(system, basis)
+        if screen is not None
+        else None
+    )
     G = np.asarray(
-        integrals.coulomb_4c_pair_block(system, all_pairs, all_pairs[unique_kps], basis)
+        integrals.coulomb_4c_pair_block_screened(
+            system, all_pairs, all_pairs[unique_kps], schwarz, screen, basis
+        )
     )
     A = np.ascontiguousarray(G[:, pivcol].astype(float, copy=False))  # (n, npiv)
 
-    # S_{JK} = (ρ_J | ρ_K): the pivot rows of A (Folkestad Eq. 3 metric). Symmetric PSD by
-    # construction, so its Cholesky factor Q with S = Q Q^T exists.
+    # S_{JK} = (ρ_J | ρ_K): the pivot rows of A (Folkestad Eq. 3 metric). Exact (never screened, see
+    # above) and symmetric PSD by construction, so its Cholesky factor Q with S = Q Q^T exists.
     S = A[pivots, :]
     S = 0.5 * (S + S.T)  # symmetrize away round-off before factorizing
-
-    # Folkestad Eq. 15: Cauchy-Schwarz screening (αβ|K)^2 <= (αβ|αβ) · max_γδ D_γδ <=
-    # (min(τ, 1e-8))^2. Rows αβ failing this contribute nothing to any vector, so we zero them.
-    if tol is not None:
-        diag0 = np.asarray(integrals.coulomb_4c_diagonal(system, basis))[perm]
-        Dmax0 = float(diag0.max()) if n else 0.0
-        screen = min(tol, 1e-8)
-        if Dmax0 > 0.0 and screen > 0.0:
-            keep = diag0 * Dmax0 > screen * screen
-            A[~keep, :] = 0.0
 
     # Folkestad Eq. 14: L^J_αβ = Σ_K (αβ|K) Q^{-T}_{KJ}. With S = Q Q^T (lower Q), this is
     # L = Q^{-1} A^T (shape (npiv, n)); the reconstruction L^T L = A (Q^T Q)^{-1}... = A S^{-1} A^T
