@@ -28,7 +28,8 @@
 
 This note describes the equations and array conventions used to implement
 density-fitted generalized Hartree--Fock (GHF) nuclear gradients and
-one-electron exact-two-component (X2C-1e) Hamiltonian derivatives in Forte2.
+the density-contracted one-electron exact-two-component (X2C-1e) gradient
+contribution in Forte2.
 The X2C response theory follows Cheng and Gauss,\cite{ChengGauss2011} adapted
 to Forte2's decontracted basis, canonical overlap truncation, Pauli-component
 ordering, and density-fitting implementation.
@@ -59,11 +60,12 @@ dependencies.  The number of retained functions must remain unchanged in a
 neighborhood of the reference geometry, as is required for any differentiable
 truncated-space calculation.
 
-The term ``analytic gradient'' below means that the SCF energy derivative and
-the X2C matrix response are evaluated analytically.  The same-basis $W$
-integrals used by X2C are analytic libcint derivatives.  A fourth-order finite
-difference remains only as a public cross-basis fallback for
-\texttt{opVop\_deriv\_matrices}; the X2C driver does not use that fallback.
+The term ``analytic gradient'' below means that the wave-function derivative
+is evaluated from the stationary Lagrangian and the X2C response is propagated
+analytically in reverse mode.  With libcint, which is enabled in the default
+build, the same-basis $W$ derivative contractions used by X2C are analytic.
+Without libcint, \texttt{opVop\_deriv} falls back to a fourth-order finite
+difference, so that configuration is not a fully analytic X2C gradient.
 
 \section{Indices, density orientation, and derivative convention}
 
@@ -186,10 +188,11 @@ X2C is built in a decontracted spatial basis.  The four primitive matrices are
  W_{\mu\nu}&=\braket{\chi_\mu|(\boldsymbol\sigma\cdot\hat{p})
  \hat V(\boldsymbol\sigma\cdot\hat{p})|\chi_\nu}.
 \end{align}
-The public \texttt{opVop} and \texttt{opVop\_deriv\_matrices} order is
+The component order used by the public \texttt{opVop} matrices and by the
+weights passed to \texttt{opVop\_deriv} is
 \begin{equation}
  [W_0,W_x,W_y,W_z]
- =[hat p\cdot V\hat p,
+ =[\hat p\cdot V\hat p,
    (\hat p\times V\hat p)_x,
    (\hat p\times V\hat p)_y,
    (\hat p\times V\hat p)_z].
@@ -268,19 +271,21 @@ where $d$ and $c$ label decontracted and contracted bases.  Thus
 \end{equation}
 For SO-X2C, $O$, $O^{-1}$, and $P$ are duplicated on the two spin blocks.
 
-\section{Analytic derivative of the X2C Hamiltonian}
+\section{Analytic density-contracted X2C derivative}
 
-\subsection{Derivative integral matrices}
+\subsection{Primitive derivative contractions}
 
-Every nuclear coordinate requires
+The differential of the X2C energy can be expressed in terms of
 \begin{equation}
  S^\xcoord,\quad T^\xcoord,\quad V^\xcoord,\quad
  [W_0^\xcoord,W_x^\xcoord,W_y^\xcoord,W_z^\xcoord].
  \label{eq:x2c_required_derivatives}
 \end{equation}
-Libint2 supplies matrix-valued first derivatives of $S$, $T$, and point-nucleus
-$V$.  Gaussian-nucleus $V^\xcoord$ and all four $W^\xcoord$ components use
-libcint.  The relevant libcint kernels are
+The implementation never materializes these matrices for every coordinate.
+Libint2 contracts derivative integrals for $S$, $T$, and point-nucleus $V$
+directly against adjoint weights.  Gaussian-nucleus $V^\xcoord$ and all four
+$W^\xcoord$ components use libcint blocks that are generated and contracted
+one atom at a time.  The relevant libcint kernels are
 \texttt{int1e\_ipnuc}, \texttt{int1e\_iprinv},
 \texttt{int1e\_ipspnucsp}, and \texttt{int1e\_ipsprinvsp}.
 
@@ -293,13 +298,19 @@ three cross-product components are antisymmetric:
  (W_0^\xcoord)^T&=W_0^\xcoord, &
  (W_k^\xcoord)^T&=-W_k^\xcoord\quad(k=x,y,z).
 \end{align}
-The libcint component and transpose conventions are normalized once inside
-\texttt{opVop\_deriv}\allowbreak\texttt{\_matrices}; downstream X2C code sees only the public order
-in \cref{eq:opvop_order}.
+The libcint component and transpose conventions are normalized once in the
+block generator used by \texttt{opVop\_deriv}; the X2C adjoint supplies weights
+only in the public order in \cref{eq:opvop_order}.
 
 \subsection{Orthogonalizer response}
 
-Inside the retained overlap space Forte2 uses a parallel-transport gauge,
+The coordinate-forward differentials in this and the next three subsections
+define the linearization whose transpose is applied by the implemented
+adjoint.  They are derivational equations; Forte2 does not evaluate or store a
+coordinate-forward X2C Hamiltonian derivative.
+
+Inside the retained overlap space the forward differential may be written in
+a parallel-transport gauge,
 \begin{equation}
  O^\xcoord_\parallel
  =-\frac{1}{2}O(O^\dagger S^\xcoord O).
@@ -326,6 +337,9 @@ For any primitive matrix $B$, its orthonormal-basis derivative is
  +O^\dagger B^\xcoord O+O^\dagger BO^\xcoord.
  \label{eq:transformed_integral_deriv}
 \end{equation}
+The method \texttt{\_canonical\_orth\_adjoint} applies the transpose of
+\cref{eq:orth_deriv_parallel,eq:orth_deriv_discarded} directly to the overlap
+weight.
 
 \subsection{Decoupling response}
 
@@ -353,7 +367,9 @@ With $C_+^\xcoord=(C_L^\xcoord,C_S^\xcoord)^T$,
 \end{equation}
 Equation \eqref{eq:dirac_response} is the generalized-eigenproblem form of
 Eqs.~(31)--(33) of Ref.~\onlinecite{ChengGauss2011}.  It is an uncoupled
-one-electron response, not an iterative CPHF equation.
+one-electron response, not an iterative CPHF equation.  In the implementation,
+the negative--positive denominators are applied in reverse to accumulate
+adjoints of $\mathcal D$ and $\mathcal M$.
 
 \subsection{Renormalization and Foldy--Wouthuysen response}
 
@@ -364,7 +380,7 @@ Differentiate the metric in \cref{eq:x_and_r}:
  +X^\dagger T X^\xcoord\right].
 \end{equation}
 For $A=U\,\mathrm{diag}(a)U^\dagger$, the inverse-square-root Frechet
-derivative used in Forte2 is
+derivative defining the linearization is
 \begin{align}
  R^\xcoord
  &=U\left[F\circ(U^\dagger A^\xcoord U)\right]U^\dagger,\\
@@ -376,6 +392,8 @@ derivative used in Forte2 is
  \label{eq:r_frechet}
 \end{align}
 The equal-eigenvalue branch makes the expression stable for degeneracies.
+This Frechet map is self-adjoint on Hermitian matrices, so the reverse response
+uses the same divided-difference kernel.
 
 Direct differentiation of \cref{eq:nesc} gives
 \begin{align}
@@ -403,24 +421,23 @@ The decontracted-to-contracted projection response follows from
  \label{eq:projection_deriv}
 \end{equation}
 Applying \cref{eq:dual_deriv,eq:projection_deriv} to
-\cref{eq:contracted_hx2c} completes $h_\mathrm{X2C}^\xcoord$.
+\cref{eq:contracted_hx2c} defines the corresponding forward differential.  The
+code instead propagates the contracted density backward through these maps to
+obtain weights for $S_{dd}^\xcoord$ and $S_{dc}^\xcoord$.
 
 SNSO factors in Forte2 depend on atomic number and shell angular momentum, not
 on geometry.  The code decomposes the primitive SO Hamiltonian into Pauli
-components, applies the same elementwise SNSO map to the reference and
-derivative spin-dependent components, reassembles the spinor matrix, and only
-then applies $P$ and $P^\xcoord$.  There is therefore no separate derivative of
-the SNSO factors.
+components and applies the same self-adjoint elementwise SNSO map to the primal
+Hamiltonian and its adjoint.  There is therefore no response of the SNSO factors
+themselves.
 
 \subsection{Density-contracted adjoint used in production}
 
-The matrix-valued forward response described above is retained as
-\texttt{hcore\_deriv} for verification and for callers that require
-$h_\mathrm{X2C}^\xcoord$ itself.  Energy gradients require only the scalar
-contraction in \cref{eq:x2c_hcore_contraction}.  The production path therefore
-propagates the AO density backward through the projection, SNSO map, dual
-orthogonalizer, Foldy--Wouthuysen transformation, inverse square root, NESC
-matrix, decoupling response, Dirac eigensystem, and canonical orthogonalizer.
+Forte2 exposes only the density-contracted X2C gradient contribution; there is
+no matrix-valued $h_\mathrm{X2C}^\xcoord$ API.  The code propagates the AO
+density backward through the projection, SNSO map, dual orthogonalizer,
+Foldy--Wouthuysen transformation, inverse square root, NESC matrix, decoupling
+response, Dirac eigensystem, and canonical orthogonalizer.
 It produces five primitive adjoints,
 \begin{equation}
  \overline S,\quad \overline T,\quad \overline V,\quad
@@ -438,8 +455,8 @@ such that
 \end{equation}
 Here $A:B$ denotes the elementwise contraction in Forte2's stored matrix
 orientation.  The inverse-square-root Frechet map in
-\cref{eq:r_frechet} is self-adjoint for Hermitian perturbations, so the same
-divided-difference kernel propagates the renormalization adjoint.  The
+\cref{eq:r_frechet} propagates the renormalization adjoint with the same
+divided-difference kernel.  The
 negative--positive energy denominators in \cref{eq:dirac_response} likewise
 appear once in the reverse decoupling response.
 
@@ -528,11 +545,11 @@ File or function & Responsibility \\
 \texttt{mcopt/mc\_optimizer\_grad.py} & Spin-free and spinor CASSCF densities, DF weights, and final driver.\\
 \texttt{mcopt/orbital\_optimizer.py} & Real and two-component orbital Lagrangians for the Pulay term.\\
 \texttt{forte2/gradients/utils.py} & Common one-electron, overlap, DF, and nuclear-repulsion assembly.\\
-\texttt{one\_electron\_deriv*} & Libint2 matrix-valued $S^\xcoord$, $T^\xcoord$, and point-$V^\xcoord$.\\
-\texttt{integrals.py} & Gaussian-$V^\xcoord$, full $W^\xcoord$, component normalization, and backend selection.\\
+\texttt{one\_electron\_deriv*} & Libint2 contractions of $S^\xcoord$, $T^\xcoord$, and point-$V^\xcoord$ with adjoint weights.\\
+\texttt{integrals.py} & Contracted Gaussian-$V^\xcoord$ and full $W^\xcoord$, component normalization, and backend selection.\\
 \texttt{libcint\_two\_center.h} & Bound libcint derivative kernels.\\
-\texttt{forte2/x2c/x2c.py} & X2C Hamiltonian and the matrix-valued and contracted derivative API entry points.\\
-\texttt{forte2/x2c/x2c\_grad.py} & Matrix-valued forward reference, density-contracted reverse response, and direct primitive derivative contractions.\\
+\texttt{forte2/x2c/x2c.py} & X2C Hamiltonian and density-contracted gradient entry point.\\
+\texttt{forte2/x2c/x2c\_grad.py} & Density-contracted reverse response and direct primitive derivative contractions.\\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -542,17 +559,14 @@ File or function & Responsibility \\
 The implementation is tested in layers so that a failure identifies the
 responsible algebra:
 \begin{enumerate}
-\item Matrix-valued $S^\xcoord$, $T^\xcoord$, and $V^\xcoord$ are contracted
-against random weights and compared with the established contracted C++ APIs.
-\item All four $W^\xcoord$ components are compared with fourth-order finite
-differences for point and Gaussian nuclei.  Scalar symmetry and cross-component
-antisymmetry are checked explicitly.
-\item $h_\mathrm{X2C}^\xcoord$ is compared directly with fourth-order finite
-differences for SF-X2C, SO-X2C, both nuclear models, all SNSO variants, and a
-case with a discarded overlap eigenvector.
-\item The density-contracted X2C adjoint is compared with an explicit
-contraction of \texttt{hcore\_deriv} against random Hermitian real and complex
-densities for SF-X2C, SO-X2C, SNSO, and truncated-overlap cases.
+\item Contracted Libint2 $S^\xcoord$, $T^\xcoord$, and point-$V^\xcoord$
+contributions are compared directly with finite differences.
+\item Contracted Gaussian-nucleus $V^\xcoord$ and all four $W^\xcoord$
+components are compared with finite differences using fixed random weights.
+\item The X2C adjoint is compared with fourth-order finite differences of
+$\RePart\Tr(Dh_\mathrm{X2C})$ for fixed Hermitian real and complex densities.
+The cases cover SF-X2C, SO-X2C, both nuclear models, all SNSO variants, and a
+discarded overlap eigenvector.
 \item Nonrelativistic complex GHF is compared with energy finite differences
 and with the collinear UHF limit.
 \item Full SF-X2C UHF and SO-X2C GHF gradients are compared with finite
@@ -564,21 +578,24 @@ SNSO CASSCF calculation and an SNSO GASSCF calculation with optimized inter-GAS
 rotations.
 \end{enumerate}
 
-Useful diagnostics are Hermiticity of $h_\mathrm{X2C}^\xcoord$, zero total
-translation of an isolated molecule, and agreement of the complex GHF
-collinear limit with UHF.  A small imaginary part before the final real
-projection diagnoses loss of Hermiticity or a conjugation error; it should not
-be discarded early to conceal such an error.
+Useful diagnostics are agreement of the fixed-density X2C contraction with
+finite differences, zero total translation of an isolated molecule, arbitrary
+spinor-phase invariance, and agreement of the complex GHF collinear limit with
+UHF.  A significant imaginary part before the final real projection diagnoses
+loss of Hermiticity or a conjugation error; it should not be discarded early to
+conceal such an error.
 
 \section{Known boundaries}
 
 The current gradient implementation assumes density fitting, not Cholesky
 two-electron integrals.  X2C $W^\xcoord$ is fully analytic when libcint is
-available, which is the default Forte2 build.  Derivative integrals using
-Libint2 remain subject to the angular-momentum limit of the installed Libint2
-library.  A geometry at which the number of retained overlap eigenvectors
-changes is non-differentiable under hard canonical truncation and must be
-handled by changing the threshold or basis.
+available, which is the default Forte2 build.  Without libcint, point-nucleus
+$W^\xcoord$ contractions use the fourth-order fallback and Gaussian nuclear
+models are unavailable.  Derivative integrals using Libint2 remain subject to
+the angular-momentum limit of the installed Libint2 library.  A geometry at
+which the number of retained overlap eigenvectors changes is
+non-differentiable under hard canonical truncation and must be handled by
+changing the threshold or basis.
 
 CASSCF/GASSCF gradients are currently limited to a single optimized state,
 point nuclei, and orbital spaces without frozen core, frozen virtual, active

@@ -129,19 +129,6 @@ class X2CHelper:
 
         return h_fw
 
-    def hcore_deriv(self):
-        r"""Return analytic nuclear derivatives of the contracted X2C Hamiltonian.
-
-        The derivative includes the response of the decoupling and
-        renormalization matrices, the decontracted-to-contracted projection,
-        and SNSO scaling. The result is ordered atom-major Cartesian and has
-        shape ``(3 * natoms, nbf, nbf)`` for SF-X2C or
-        ``(3 * natoms, 2 * nbf, 2 * nbf)`` for SO-X2C.
-        """
-        from .x2c_grad import compute_hcore_deriv
-
-        return compute_hcore_deriv(self)
-
     def hcore_gradient(self, density):
         r"""Contract the analytic X2C Hamiltonian derivative with ``density``."""
         from .x2c_grad import compute_hcore_gradient

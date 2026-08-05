@@ -90,7 +90,7 @@ def test_libcint_spnucsp_spinor():
 
 @pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
 @pytest.mark.parametrize("use_gaussian_charges", [False, True])
-def test_opvop_deriv_matrices_finite_difference(use_gaussian_charges):
+def test_opvop_deriv_finite_difference(use_gaussian_charges):
     def make_system(z):
         return System(
             f"O 0 0 0\nH 0 0 {z:.12f}\nH 0 1.4 0",
@@ -101,28 +101,29 @@ def test_opvop_deriv_matrices_finite_difference(use_gaussian_charges):
         )
 
     system = make_system(1.5)
-    analytical = integrals.opVop_deriv_matrices(system)
+    rng = np.random.default_rng(8675309)
+    weights = rng.standard_normal((4, system.nbf, system.nbf))
+    weights /= np.linalg.norm(weights)
+    analytical = integrals.opVop_deriv(system, weights)[5]
 
     step = 1.0e-4
     values = [
-        np.asarray(integrals.opVop(make_system(1.5 + scale * step)))
+        np.einsum(
+            "cmn,cmn->",
+            np.asarray(integrals.opVop(make_system(1.5 + scale * step))),
+            weights,
+        )
         for scale in (-2.0, -1.0, 1.0, 2.0)
     ]
     numerical = (values[0] - 8.0 * values[1] + 8.0 * values[2] - values[3]) / (
         12.0 * step
     )
 
-    assert analytical.shape == (4, 9, system.nbf, system.nbf)
-    assert analytical[:, 5] == pytest.approx(numerical, abs=2.0e-7)
-    assert analytical[0] == pytest.approx(analytical[0].transpose(0, 2, 1), abs=1.0e-12)
-    for component in range(1, 4):
-        assert analytical[component] == pytest.approx(
-            -analytical[component].transpose(0, 2, 1), abs=1.0e-12
-        )
+    assert analytical == pytest.approx(numerical, abs=2.0e-7)
 
 
 @pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
-def test_gaussian_nuclear_deriv_matrices_finite_difference():
+def test_gaussian_nuclear_deriv_finite_difference():
     def make_system(z):
         return System(
             f"O 0 0 0\nH 0 0 {z:.12f}",
@@ -133,11 +134,14 @@ def test_gaussian_nuclear_deriv_matrices_finite_difference():
         )
 
     system = make_system(1.5)
-    analytical = integrals.nuclear_deriv_matrices(system)[5]
+    rng = np.random.default_rng(8675309)
+    weights = rng.standard_normal((system.nbf, system.nbf))
+    weights /= np.linalg.norm(weights)
+    analytical = integrals.nuclear_deriv(system, weights)[5]
     step = 1.0e-5
     numerical = (
-        integrals.nuclear(make_system(1.5 + step))
-        - integrals.nuclear(make_system(1.5 - step))
+        np.einsum("mn,mn->", integrals.nuclear(make_system(1.5 + step)), weights)
+        - np.einsum("mn,mn->", integrals.nuclear(make_system(1.5 - step)), weights)
     ) / (2.0 * step)
 
     assert analytical == pytest.approx(numerical, abs=2.0e-8)

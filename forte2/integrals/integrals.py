@@ -373,40 +373,6 @@ def opVop(system, basis1=None, basis2=None):
         return ints.opVop(basis1, basis2, system.atoms)
 
 
-def overlap_deriv_matrices(system, basis1=None, basis2=None):
-    """Return overlap derivatives with shape ``(3 * natoms, nbasis1, nbasis2)``."""
-    basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
-    _require_libint2_deriv_backend(max(basis1.max_l, basis2.max_l), "overlap")
-    return ints.overlap_deriv_matrices(basis1, basis2, system.atoms)
-
-
-def kinetic_deriv_matrices(system, basis1=None, basis2=None):
-    """Return kinetic derivatives with shape ``(3 * natoms, nbasis1, nbasis2)``."""
-    basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
-    _require_libint2_deriv_backend(max(basis1.max_l, basis2.max_l), "kinetic")
-    return ints.kinetic_deriv_matrices(basis1, basis2, system.atoms)
-
-
-def nuclear_deriv_matrices(system, basis1=None, basis2=None):
-    """Return nuclear-attraction derivatives for point or Gaussian nuclei."""
-    basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
-    if not system.use_gaussian_charges:
-        _require_libint2_deriv_backend(max(basis1.max_l, basis2.max_l), "nuclear")
-        return ints.nuclear_deriv_matrices(basis1, basis2, system.atoms)
-
-    _require_libcint()
-    if basis1 is not basis2:
-        raise NotImplementedError(
-            "Gaussian nuclear-attraction derivative matrices currently require "
-            "the same basis on the bra and ket."
-        )
-
-    deriv = np.zeros((3 * system.natoms, basis1.size, basis1.size))
-    for atom, block in _gaussian_nuclear_deriv_blocks(system, basis1):
-        deriv[3 * atom : 3 * atom + 3] = block
-    return deriv
-
-
 def _gaussian_nuclear_deriv_blocks(system, basis):
     """Yield Gaussian nuclear-attraction derivatives one atom at a time."""
     atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis, basis)
@@ -542,26 +508,6 @@ def _opvop_deriv_blocks(system, basis1, basis2):
     if LIBCINT_AVAILABLE and basis1 is basis2:
         return _opvop_cint_deriv_blocks(system, basis1)
     return _opvop_finite_difference_blocks(system, basis1, basis2)
-
-
-def opVop_deriv_matrices(system, basis1=None, basis2=None):
-    r"""Return derivatives of all four components of the :math:`pVp` operator.
-
-    Components use the same public order as :func:`opVop`:
-    ``[p dot Vp, (p cross Vp)_x, (p cross Vp)_y, (p cross Vp)_z]``.
-    The result has shape ``(4, 3 * natoms, nbasis1, nbasis2)``.
-
-    Libcint provides analytic derivatives for the same-basis case, including
-    Gaussian nuclear models. A fourth-order central difference is retained as
-    a general cross-basis fallback.
-    """
-    basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
-
-    deriv = np.zeros((4, 3 * system.natoms, basis1.size, basis2.size))
-    for coordinate, block in _opvop_deriv_blocks(system, basis1, basis2):
-        deriv[:, coordinate : coordinate + block.shape[1]] = block
-
-    return deriv
 
 
 def opVop_deriv(system, weights, basis1=None, basis2=None):

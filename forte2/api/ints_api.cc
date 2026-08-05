@@ -391,13 +391,6 @@ void export_one_electron_deriv_api(nb::module_& sub_m) {
             return nuclear_deriv(basis1, basis2, dm, charges);
         },
         "basis1"_a, "basis2"_a, "dm"_a, "charges"_a);
-
-    sub_m.def("overlap_deriv_matrices", &overlap_deriv_matrices, "basis1"_a, "basis2"_a,
-              "charges"_a);
-    sub_m.def("kinetic_deriv_matrices", &kinetic_deriv_matrices, "basis1"_a, "basis2"_a,
-              "charges"_a);
-    sub_m.def("nuclear_deriv_matrices", &nuclear_deriv_matrices, "basis1"_a, "basis2"_a,
-              "charges"_a);
 }
 
 void export_two_electron_api(nb::module_& sub_m) {
