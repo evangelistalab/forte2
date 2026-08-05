@@ -109,9 +109,6 @@ def compute_hcore_deriv(helper):
     used to validate the density-contracted adjoint employed by production
     energy gradients.
     """
-    # Refresh the primal state through the same path used by SCF.
-    helper.hcore_x2c()
-
     system = helper.system
     S_deriv = integrals.overlap_deriv_matrices(system, helper.xbasis)
     T_deriv = integrals.kinetic_deriv_matrices(system, helper.xbasis)
@@ -135,16 +132,15 @@ def compute_hcore_deriv(helper):
     S, T, V, W = helper._get_integrals()
     eigenvalues, c_dirac = helper._solve_dirac_eq(S, T, V, W)
     X = helper._get_decoupling_matrix(c_dirac)
-    R = helper._get_transformation_matrix(S, T)
-    L = helper._build_nesc_matrix(T, V, W, X)
-    h_orth = R.conj().T @ L @ R
 
     dtype = np.float64 if helper.x2c_type == "sf" else np.complex128
     renorm_metric = np.eye(X.shape[0], dtype=dtype)
     renorm_metric += (0.5 / LIGHT_SPEED**2) * X.conj().T @ T @ X
-    _, renorm_eigenvectors, renorm_divided_difference = _inverse_sqrt_kernel(
+    R, renorm_eigenvectors, renorm_divided_difference = _inverse_sqrt_kernel(
         renorm_metric
     )
+    L = helper._build_nesc_matrix(T, V, W, X)
+    h_orth = R.conj().T @ L @ R
 
     if helper.x2c_type == "sf":
         Xorth = Xorth_l
