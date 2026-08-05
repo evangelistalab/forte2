@@ -190,7 +190,7 @@ class RelCISigmaBuilder {
     void H2_kh(std::span<std::complex<double>> basis, std::span<std::complex<double>> sigma) const;
 
     std::tuple<std::span<std::complex<double>>, std::span<std::complex<double>>, size_t>
-    get_Kblock_spans(size_t dim, size_t maxKa) const;
+    get_Kblock_spans(size_t nrows, size_t ncols) const;
 };
 
 [[nodiscard]] std::span<std::complex<double>> gather_block(std::span<std::complex<double>> source,
