@@ -104,11 +104,13 @@ def test_rhf_gradient_auto_runs_and_reuses_executed_object():
     assert gradient1.shape == (system.natoms, 3)
 
 
-def test_rhf_gradient_rejects_cholesky_tei():
+@pytest.mark.parametrize("cholesky_tei", [True, "otf", "pivoted", "naive"])
+def test_rhf_gradient_rejects_cholesky_tei(cholesky_tei):
+    # The DF-based gradient path rejects every Cholesky mode, not just the bool form.
     system = System(
         xyz="H 0 0 0\nH 0 0 1.7",
         basis_set="sto-3g",
-        cholesky_tei=True,
+        cholesky_tei=cholesky_tei,
         unit="bohr",
     )
     rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
