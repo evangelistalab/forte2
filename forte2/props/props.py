@@ -3,6 +3,7 @@ import numpy as np
 from forte2 import integrals
 from forte2.data import DEBYE_TO_AU, ANGSTROM_TO_BOHR
 from forte2.helpers.matrix_functions import block_diag_2x2
+from props.mutual_correlation import UMP2MPQOnTheFly
 
 
 def get_1e_property(system, g1, property_name, origin=None, unit="debye"):
@@ -160,6 +161,9 @@ def ump2_mpq_onthefly_no(
     cache_pair_blocks=True,
     compute=False,
     indices=None,
+    exact_common_no=True,
+    exact_common_no_max_nmo=200,
+    allow_approximate_block_rotation=False,
 ):
     """
     Build an on-the-fly UMP2 mutual-correlation analyzer in the common NO basis.
@@ -199,6 +203,9 @@ def ump2_mpq_onthefly_no(
         Ua=Ua,
         Ub=Ub,
         cache_pair_blocks=cache_pair_blocks,
+        exact_common_no=exact_common_no,
+        exact_common_no_max_nmo=exact_common_no_max_nmo,
+        allow_approximate_block_rotation=allow_approximate_block_rotation,
     )
 
     gamma1_no_a, gamma1_no_b = mp2.make_1rdm_no_sd(gamma1, no_transform)

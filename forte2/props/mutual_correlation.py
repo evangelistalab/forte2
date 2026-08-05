@@ -1121,78 +1121,178 @@ class RMP2MPQOnTheFly:
                 Tij = self._t2_pair_no_as(i, j)
                 val += Tij[a, b] * Tij[c, d]
         return 0.5 * val
+    
+    def _t2_spin_elem(self, i, si, j, sj, a, sa, b, sb):
+        """Return an antisymmetric spin-orbital RMP2 amplitude.
 
-    def _gamma_ovov_elem(self, i, a, j, b):
-        val = 0.0
-        for m in range(self.nocc):
-            Tim = self._t2_pair_no(i, m)
-            Tjm = self._t2_pair_no(j, m)
-            val += np.dot(Tim[a, :], Tjm[b, :])
-        return val
-
-    def lambda2_aa_elem(self, p, q, r, s):
-        if p == q or r == s:
+        ``_t2_pair_no`` stores the direct restricted spatial amplitude
+        ``T_ij^ab``.  Same-spin blocks therefore require one virtual exchange;
+        opposite-spin permutations are generated with their fermionic signs.
+        """
+        if not (self._o(i) and self._o(j) and self._v(a) and self._v(b)):
             return 0.0
 
-        val = 0.0
+        ai = a - self.nocc
+        bi = b - self.nocc
 
-        # First-order oo/vv block.
-        # CHANGE:
-        # _t2_pair_no is non-antisymmetrized spatial t_ij^ab.
-        # Same-spin needs only t_ij^ab - t_ij^ba, not the four-term expression.
-        if self._o(p) and self._o(q) and self._v(r) and self._v(s):
-            i, j = p, q
-            a, b = r - self.nocc, s - self.nocc
-            val += self._t2_elem(i, j, a, b) - self._t2_elem(i, j, b, a)
+        if si == sj:
+            if sa != si or sb != si:
+                return 0.0
+            return self._t2_elem(i, j, ai, bi) - self._t2_elem(i, j, bi, ai)
 
-        # Hermitian vv/oo partner.
-        if self._v(p) and self._v(q) and self._o(r) and self._o(s):
-            i, j = r, s
-            a, b = p - self.nocc, q - self.nocc
-            val += self._t2_elem(i, j, a, b) - self._t2_elem(i, j, b, a)
+        sign = 1.0
+        if (si, sj) == ("b", "a"):
+            i, j, si, sj = j, i, sj, si
+            sign = -sign
+        if (sa, sb) == ("b", "a"):
+            a, b, sa, sb = b, a, sb, sa
+            ai = a - self.nocc
+            bi = b - self.nocc
+            sign = -sign
 
-        # Second-order oooo block.
-        if self._o(p) and self._o(q) and self._o(r) and self._o(s):
-            val += self._gamma_oooo_elem(p, q, r, s)
+        if (si, sj) != ("a", "b") or (sa, sb) != ("a", "b"):
+            return 0.0
+        return sign * self._t2_elem(i, j, ai, bi)
 
-        # Second-order vvvv block.
-        if self._v(p) and self._v(q) and self._v(r) and self._v(s):
-            a, b, c, d = p - self.nocc, q - self.nocc, r - self.nocc, s - self.nocc
-            val += self._gamma_vvvv_elem(a, b, c, d)
+    def _lambda2_spin_elem(self, p, sp, q, sq, r, sr, s, ss):
+        """Evaluate the doubles-only cumulant through quadratic order."""
+        op, oq, or_, os = self._o(p), self._o(q), self._o(r), self._o(s)
+        vp, vq, vr, vs = self._v(p), self._v(q), self._v(r), self._v(s)
 
-        return val
+        # lambda_ij^ab,[1] and its Hermitian partner.
+        if op and oq and vr and vs:
+            return self._t2_spin_elem(p, sp, q, sq, r, sr, s, ss)
+        if vp and vq and or_ and os:
+            return self._t2_spin_elem(r, sr, s, ss, p, sp, q, sq)
+
+        # lambda_kl^ij,[2] = 1/2 sum_ab t_ij^ab t_kl^ab.
+        if op and oq and or_ and os:
+            val = 0.0
+            for sa in ("a", "b"):
+                for sb in ("a", "b"):
+                    for a in range(self.nocc, self.nmo):
+                        for b in range(self.nocc, self.nmo):
+                            val += self._t2_spin_elem(
+                                p, sp, q, sq, a, sa, b, sb
+                            ) * self._t2_spin_elem(r, sr, s, ss, a, sa, b, sb)
+            return 0.5 * val
+
+        # lambda_cd^ab,[2] = 1/2 sum_ij t_ij^ab t_ij^cd.
+        if vp and vq and vr and vs:
+            val = 0.0
+            for si in ("a", "b"):
+                for sj in ("a", "b"):
+                    for i in range(self.nocc):
+                        for j in range(self.nocc):
+                            val += self._t2_spin_elem(
+                                i, si, j, sj, p, sp, q, sq
+                            ) * self._t2_spin_elem(i, si, j, sj, r, sr, s, ss)
+            return 0.5 * val
+
+        # lambda_jb^ia,[2] = -sum_mc t_im^bc t_jm^ac, including all
+        # antisymmetry-related particle-hole orderings.
+        if (op != oq) and (or_ != os):
+            sign = 1.0
+            if vp and oq:
+                p, q, sp, sq = q, p, sq, sp
+                sign = -sign
+            if vr and os:
+                r, s, sr, ss = s, r, ss, sr
+                sign = -sign
+
+            val = 0.0
+            for sm in ("a", "b"):
+                for sc in ("a", "b"):
+                    for m in range(self.nocc):
+                        for c in range(self.nocc, self.nmo):
+                            val += self._t2_spin_elem(
+                                p, sp, m, sm, s, ss, c, sc
+                            ) * self._t2_spin_elem(r, sr, m, sm, q, sq, c, sc)
+            return -sign * val
+
+        return 0.0
+
+    def lambda2_aa_elem(self, p, q, r, s):
+        return self._lambda2_spin_elem(p, "a", q, "a", r, "a", s, "a")
 
     def lambda2_bb_elem(self, p, q, r, s):
-        return self.lambda2_aa_elem(p, q, r, s)
+        return self._lambda2_spin_elem(p, "b", q, "b", r, "b", s, "b")
 
     def lambda2_ab_elem(self, p, q, r, s):
-        val = 0.0
+        return self._lambda2_spin_elem(p, "a", q, "b", r, "a", s, "b")
+    
 
-        # First-order oo/vv block: opposite-spin uses non-antisymmetrized amplitude.
-        if self._o(p) and self._o(q) and self._v(r) and self._v(s):
-            i, j = p, q
-            a, b = r - self.nocc, s - self.nocc
-            val += self._t2_elem(i, j, a, b)
+    # def _gamma_ovov_elem(self, i, a, j, b):
+    #     val = 0.0
+    #     for m in range(self.nocc):
+    #         Tim = self._t2_pair_no(i, m)
+    #         Tjm = self._t2_pair_no(j, m)
+    #         val += np.dot(Tim[a, :], Tjm[b, :])
+    #     return val
 
-        # Hermitian vv/oo partner.
-        if self._v(p) and self._v(q) and self._o(r) and self._o(s):
-            i, j = r, s
-            a, b = p - self.nocc, q - self.nocc
-            val += self._t2_elem(i, j, a, b)
+    # def lambda2_aa_elem(self, p, q, r, s):
+    #     if p == q or r == s:
+    #         return 0.0
 
-        # Second-order o/v/o/v block.
-        if self._o(p) and self._v(q) and self._o(r) and self._v(s):
-            i, a = p, q - self.nocc
-            j, b = r, s - self.nocc
-            val += self._gamma_ovov_elem(i, a, j, b)
+    #     val = 0.0
 
-        # Permuted partner.
-        if self._v(p) and self._o(q) and self._v(r) and self._o(s):
-            j, b = q, p - self.nocc
-            i, a = s, r - self.nocc
-            val += self._gamma_ovov_elem(i, a, j, b)
+    #     # First-order oo/vv block.
+    #     # CHANGE:
+    #     # _t2_pair_no is non-antisymmetrized spatial t_ij^ab.
+    #     # Same-spin needs only t_ij^ab - t_ij^ba, not the four-term expression.
+    #     if self._o(p) and self._o(q) and self._v(r) and self._v(s):
+    #         i, j = p, q
+    #         a, b = r - self.nocc, s - self.nocc
+    #         val += self._t2_elem(i, j, a, b) - self._t2_elem(i, j, b, a)
 
-        return val
+    #     # Hermitian vv/oo partner.
+    #     if self._v(p) and self._v(q) and self._o(r) and self._o(s):
+    #         i, j = r, s
+    #         a, b = p - self.nocc, q - self.nocc
+    #         val += self._t2_elem(i, j, a, b) - self._t2_elem(i, j, b, a)
+
+    #     # Second-order oooo block.
+    #     if self._o(p) and self._o(q) and self._o(r) and self._o(s):
+    #         val += self._gamma_oooo_elem(p, q, r, s)
+
+    #     # Second-order vvvv block.
+    #     if self._v(p) and self._v(q) and self._v(r) and self._v(s):
+    #         a, b, c, d = p - self.nocc, q - self.nocc, r - self.nocc, s - self.nocc
+    #         val += self._gamma_vvvv_elem(a, b, c, d)
+
+    #     return val
+
+    # def lambda2_bb_elem(self, p, q, r, s):
+    #     return self.lambda2_aa_elem(p, q, r, s)
+
+    # def lambda2_ab_elem(self, p, q, r, s):
+    #     val = 0.0
+
+    #     # First-order oo/vv block: opposite-spin uses non-antisymmetrized amplitude.
+    #     if self._o(p) and self._o(q) and self._v(r) and self._v(s):
+    #         i, j = p, q
+    #         a, b = r - self.nocc, s - self.nocc
+    #         val += self._t2_elem(i, j, a, b)
+
+    #     # Hermitian vv/oo partner.
+    #     if self._v(p) and self._v(q) and self._o(r) and self._o(s):
+    #         i, j = r, s
+    #         a, b = p - self.nocc, q - self.nocc
+    #         val += self._t2_elem(i, j, a, b)
+
+    #     # Second-order o/v/o/v block.
+    #     if self._o(p) and self._v(q) and self._o(r) and self._v(s):
+    #         i, a = p, q - self.nocc
+    #         j, b = r, s - self.nocc
+    #         val += self._gamma_ovov_elem(i, a, j, b)
+
+    #     # Permuted partner.
+    #     if self._v(p) and self._o(q) and self._v(r) and self._o(s):
+    #         j, b = q, p - self.nocc
+    #         i, a = s, r - self.nocc
+    #         val += self._gamma_ovov_elem(i, a, j, b)
+
+    #     return val
 
     def C_elem(self, p, q, r, s):
         aa = self.lambda2_aa_elem(p, q, r, s)
@@ -1330,7 +1430,77 @@ class UMP2MPQOnTheFly:
     - Designed to compare against UMP2MPQFast.
     """
 
-    def __init__(self, mp2, Ua=None, Ub=None, cache_pair_blocks=True):
+    # def __init__(self, mp2, Ua=None, Ub=None, cache_pair_blocks=True):
+    #     self.mp2 = mp2
+
+    #     self.nmo = mp2.nmo
+    #     self.naocc = mp2.naocc
+    #     self.nbocc = mp2.nbocc
+    #     self.navir = mp2.navir
+    #     self.nbvir = mp2.nbvir
+
+    #     self.cache_pair_blocks = cache_pair_blocks
+
+    #     # Require only DF integrals, not stored t2.
+    #     if getattr(mp2, "B_iaQ", None) is None:
+    #         raise ValueError("mp2.B_iaQ is missing. Run mp2.run() first.")
+
+    #     # ------------------------------------------------------------
+    #     # 1-RDMs
+    #     # ------------------------------------------------------------
+    #     self.γa, self.γb = mp2.make_1rdm_sd()
+
+    #     # ------------------------------------------------------------
+    #     # Rotations
+    #     # ------------------------------------------------------------
+    #     if Ua is None:
+    #         self.Ua, self.occs_a = self._build_block_no_rotation(self.γa, self.naocc)
+    #     else:
+    #         self.Ua = Ua
+    #         self.occs_a = np.diag(Ua.T @ self.γa @ Ua)
+
+    #     if Ub is None:
+    #         self.Ub, self.occs_b = self._build_block_no_rotation(self.γb, self.nbocc)
+    #     else:
+    #         self.Ub = Ub
+    #         self.occs_b = np.diag(Ub.T @ self.γb @ Ub)
+
+    #     # Split rotations.
+    #     self.Uoa = self.Ua[: self.naocc, : self.naocc]
+    #     self.Uva = self.Ua[self.naocc :, self.naocc :]
+
+    #     self.Uob = self.Ub[: self.nbocc, : self.nbocc]
+    #     self.Uvb = self.Ub[self.nbocc :, self.nbocc :]
+
+    #     # For plotting compatibility with UMP2MPQFast.
+    #     gamma_sf = self.γa + self.γb
+    #     self.Γ1 = self.Ua.T @ gamma_sf @ self.Ua
+
+    #     self.M1 = None
+    #     self.M2 = None
+
+    #     # Optional pair-block caches.
+    #     self._cache_aa = {}
+    #     self._cache_bb = {}
+    #     self._cache_ab = {}
+
+    #     # Optional canonical fixed-occupied-slab caches.
+    #     # These reduce repeated DF contractions in the on-the-fly path.
+    #     self._cache_fixed_aa = {}
+    #     self._cache_fixed_bb = {}
+    #     self._cache_fixed_ab_beta = {}
+
+    def __init__(
+        self,
+        mp2,
+        Ua=None,
+        Ub=None,
+        cache_pair_blocks=True,
+        exact_common_no=False,
+        exact_common_no_max_nmo=200,
+        allow_approximate_block_rotation=False,
+        common_no_mixing_tolerance=1.0e-10,
+    ):
         self.mp2 = mp2
 
         self.nmo = mp2.nmo
@@ -1340,6 +1510,10 @@ class UMP2MPQOnTheFly:
         self.nbvir = mp2.nbvir
 
         self.cache_pair_blocks = cache_pair_blocks
+        self.exact_common_no = exact_common_no
+        self.exact_common_no_max_nmo = exact_common_no_max_nmo
+        self.allow_approximate_block_rotation = allow_approximate_block_rotation
+        self.common_no_mixing_tolerance = common_no_mixing_tolerance
 
         # Require only DF integrals, not stored t2.
         if getattr(mp2, "B_iaQ", None) is None:
@@ -1365,6 +1539,31 @@ class UMP2MPQOnTheFly:
             self.Ub = Ub
             self.occs_b = np.diag(Ub.T @ self.γb @ Ub)
 
+        # A common spin-free UHF NO transformation generally mixes canonical
+        # occupied and virtual orbitals.  Keeping only Uoo and Uvv does not
+        # implement the full four-index transformation.
+        mix_a = np.sqrt(
+            np.linalg.norm(self.Ua[: self.naocc, self.naocc :]) ** 2
+            + np.linalg.norm(self.Ua[self.naocc :, : self.naocc]) ** 2
+        )
+        mix_b = np.sqrt(
+            np.linalg.norm(self.Ub[: self.nbocc, self.nbocc :]) ** 2
+            + np.linalg.norm(self.Ub[self.nbocc :, : self.nbocc]) ** 2
+        )
+        self.common_no_ov_mixing = max(mix_a, mix_b)
+        if (
+            self.common_no_ov_mixing > self.common_no_mixing_tolerance
+            and not self.exact_common_no
+            and not self.allow_approximate_block_rotation
+        ):
+            raise ValueError(
+                "Ua/Ub mix occupied and virtual canonical orbitals "
+                f"(max ov/vo norm={self.common_no_ov_mixing:.3e}). "
+                "Set exact_common_no=True for the complete common-NO "
+                "transformation. Set allow_approximate_block_rotation=True "
+                "only to reproduce the block-only approximation."
+            )
+
         # Split rotations.
         self.Uoa = self.Ua[: self.naocc, : self.naocc]
         self.Uva = self.Ua[self.naocc :, self.naocc :]
@@ -1372,9 +1571,9 @@ class UMP2MPQOnTheFly:
         self.Uob = self.Ub[: self.nbocc, : self.nbocc]
         self.Uvb = self.Ub[self.nbocc :, self.nbocc :]
 
-        # For plotting compatibility with UMP2MPQFast.
-        gamma_sf = self.γa + self.γb
-        self.Γ1 = self.Ua.T @ gamma_sf @ self.Ua
+        # The alpha and beta 1-RDMs live in different canonical MO bases and
+        # must be transformed separately before they are added.
+        self.Γ1 = self.Ua.T @ self.γa @ self.Ua + self.Ub.T @ self.γb @ self.Ub
 
         self.M1 = None
         self.M2 = None
@@ -1389,6 +1588,7 @@ class UMP2MPQOnTheFly:
         self._cache_fixed_aa = {}
         self._cache_fixed_bb = {}
         self._cache_fixed_ab_beta = {}
+        self._lambda2_full_no = None
 
     @property
     def occs(self):
@@ -1708,191 +1908,426 @@ class UMP2MPQOnTheFly:
                 Tij = self._t2_bb_pair_no(i, j)
                 val += Tij[a, b] * Tij[c, d]
         return 0.5 * val
-
-    def _gamma_ovov_ab_elem(self, i, a, j, b):
-        """
-        Opposite-spin second-order ovov-like contraction.
-
-        Matches the structure used in UMP2MPQFast:
-
-            gamma_ovov_ab[i,a,j,b] = sum_{m,c} t_ab[i,m,a,c] t_ab[j,m,b,c]
-
-        where a,b are alpha-virtual indices and c is beta-virtual.
-        """
-        val = 0.0
-        for m in range(self.nbocc):
-            Tim = self._t2_ab_pair_no(i, m)
-            Tjm = self._t2_ab_pair_no(j, m)
-            val += np.dot(Tim[a, :], Tjm[b, :])
-        return val
-
+    
+        # ============================================================
+    # Complete spin-orbital cumulant through quadratic order
     # ============================================================
-    # Cumulant elements
-    # ============================================================
-    def lambda2_aa_elem(self, p, q, r, s):
-        """
-        Alpha-alpha cumulant element in the rotated NO basis.
+    def _spin_occ(self, p, spin):
+        return self._oa(p) if spin == "a" else self._ob(p)
 
-        Same-spin cumulants are antisymmetric with respect to exchange of the
-        first pair and the second pair:
+    def _spin_vir(self, p, spin):
+        return self._va(p) if spin == "a" else self._vb(p)
 
-            lambda[p,q,r,s] = -lambda[q,p,r,s]
-            lambda[p,q,r,s] = -lambda[p,q,s,r]
+    def _spin_occ_range(self, spin):
+        return range(self.naocc if spin == "a" else self.nbocc)
 
-        Therefore, if p == q or r == s, the element is exactly zero.
-        This pruning is essential for fast M1 evaluation.
-        """
+    def _spin_vir_range(self, spin):
+        nocc = self.naocc if spin == "a" else self.nbocc
+        return range(nocc, self.nmo)
 
-        if p == q or r == s:
+    def _t2_spin_elem(self, i, si, j, sj, a, sa, b, sb):
+        """Return an antisymmetric UMP2 spin-orbital amplitude."""
+        if not (
+            self._spin_occ(i, si)
+            and self._spin_occ(j, sj)
+            and self._spin_vir(a, sa)
+            and self._spin_vir(b, sb)
+        ):
             return 0.0
 
-        val = 0.0
+        # The stored same-spin UMP2 blocks are already antisymmetric.
+        if si == sj:
+            if sa != si or sb != si:
+                return 0.0
+            if si == "a":
+                return self._t2_aa_elem(i, j, self._a_vir(a), self._a_vir(b))
+            return self._t2_bb_elem(i, j, self._b_vir(a), self._b_vir(b))
 
-        # First-order doubles block: oo-vv.
-        if self._oa(p) and self._oa(q) and self._va(r) and self._va(s):
-            a = self._a_vir(r)
-            b = self._a_vir(s)
+        sign = 1.0
+        if (si, sj) == ("b", "a"):
+            i, j, si, sj = j, i, sj, si
+            sign = -sign
+        if (sa, sb) == ("b", "a"):
+            a, b, sa, sb = b, a, sb, sa
+            sign = -sign
 
-            val += (
-                self._t2_aa_elem(p, q, a, b)
-                - self._t2_aa_elem(p, q, b, a)
-                - self._t2_aa_elem(q, p, a, b)
-                + self._t2_aa_elem(q, p, b, a)
+        if (si, sj) != ("a", "b") or (sa, sb) != ("a", "b"):
+            return 0.0
+        return sign * self._t2_ab_elem(i, j, self._a_vir(a), self._b_vir(b))
+
+    @staticmethod
+    def _so_index(p, spin):
+        return 2 * p + (spin == "b")
+
+    def _build_exact_common_no_cumulant(self):
+        """Build and fully transform the doubles-only cumulant for validation.
+
+        This path retains every occupied--virtual block of ``Ua`` and ``Ub``.
+        Storage scales as ``(2*nmo)**4``, so it is guarded and intended for
+        small calculations.  A chunked/target-element implementation is
+        required for large production systems.
+        """
+        if self._lambda2_full_no is not None:
+            return self._lambda2_full_no
+        if self.nmo > self.exact_common_no_max_nmo:
+            raise MemoryError(
+                "Exact common-NO cumulant transformation requested for "
+                f"nmo={self.nmo}, above exact_common_no_max_nmo="
+                f"{self.exact_common_no_max_nmo}. Increase the guard only "
+                "after checking the (2*nmo)^4 memory requirement."
             )
 
-        # Hermitian partner: vv-oo.
-        if self._va(p) and self._va(q) and self._oa(r) and self._oa(s):
-            a = self._a_vir(p)
-            b = self._a_vir(q)
+        nso = 2 * self.nmo
+        t = np.zeros((nso, nso, nso, nso))
 
-            val += (
-                self._t2_aa_elem(r, s, a, b)
-                - self._t2_aa_elem(r, s, b, a)
-                - self._t2_aa_elem(s, r, a, b)
-                + self._t2_aa_elem(s, r, b, a)
-            )
+        for j in range(self.naocc):
+            fixed = self._t2_aa_fixed_j_canonical(j)
+            for i in range(self.naocc):
+                for a in range(self.navir):
+                    for b in range(self.navir):
+                        t[
+                            self._so_index(i, "a"),
+                            self._so_index(j, "a"),
+                            self._so_index(a + self.naocc, "a"),
+                            self._so_index(b + self.naocc, "a"),
+                        ] = fixed[i, a, b]
 
-        # Second-order oooo.
-        if self._oa(p) and self._oa(q) and self._oa(r) and self._oa(s):
-            val += self._gamma_oooo_aa_elem(p, q, r, s)
+        for j in range(self.nbocc):
+            fixed = self._t2_bb_fixed_j_canonical(j)
+            for i in range(self.nbocc):
+                for a in range(self.nbvir):
+                    for b in range(self.nbvir):
+                        t[
+                            self._so_index(i, "b"),
+                            self._so_index(j, "b"),
+                            self._so_index(a + self.nbocc, "b"),
+                            self._so_index(b + self.nbocc, "b"),
+                        ] = fixed[i, a, b]
 
-        # Second-order vvvv.
-        if self._va(p) and self._va(q) and self._va(r) and self._va(s):
-            a = self._a_vir(p)
-            b = self._a_vir(q)
-            c = self._a_vir(r)
-            d = self._a_vir(s)
+        for j in range(self.nbocc):
+            fixed = self._t2_ab_fixed_beta_j_canonical(j)
+            for i in range(self.naocc):
+                for a in range(self.navir):
+                    for b in range(self.nbvir):
+                        ia = self._so_index(i, "a")
+                        jb = self._so_index(j, "b")
+                        aa = self._so_index(a + self.naocc, "a")
+                        bb = self._so_index(b + self.nbocc, "b")
+                        value = fixed[i, a, b]
+                        t[ia, jb, aa, bb] = value
+                        t[jb, ia, aa, bb] = -value
+                        t[ia, jb, bb, aa] = -value
+                        t[jb, ia, bb, aa] = value
 
-            val += self._gamma_vvvv_aa_elem(a, b, c, d)
+        occupied = [self._so_index(i, "a") for i in range(self.naocc)]
+        occupied += [self._so_index(i, "b") for i in range(self.nbocc)]
+        virtual = [self._so_index(a, "a") for a in range(self.naocc, self.nmo)]
+        virtual += [self._so_index(a, "b") for a in range(self.nbocc, self.nmo)]
 
-        return val
+        T = t[np.ix_(occupied, occupied, virtual, virtual)]
+        cumulant = np.zeros_like(t)
+        cumulant[np.ix_(occupied, occupied, virtual, virtual)] = T
+        cumulant[np.ix_(virtual, virtual, occupied, occupied)] = T.transpose(
+            2, 3, 0, 1
+        )
+        cumulant[np.ix_(occupied, occupied, occupied, occupied)] = 0.5 * np.einsum(
+            "ijab,klab->ijkl", T, T, optimize=True
+        )
+        cumulant[np.ix_(virtual, virtual, virtual, virtual)] = 0.5 * np.einsum(
+            "ijab,ijcd->abcd", T, T, optimize=True
+        )
+
+        particle_hole = -np.einsum("imbc,jmac->iajb", T, T, optimize=True)
+        cumulant[np.ix_(occupied, virtual, occupied, virtual)] = particle_hole
+        cumulant[np.ix_(virtual, occupied, occupied, virtual)] = -particle_hole.transpose(
+            1, 0, 2, 3
+        )
+        cumulant[np.ix_(occupied, virtual, virtual, occupied)] = -particle_hole.transpose(
+            0, 1, 3, 2
+        )
+        cumulant[np.ix_(virtual, occupied, virtual, occupied)] = particle_hole.transpose(
+            1, 0, 3, 2
+        )
+
+        # Spin-preserving canonical-MO -> common-NO transformation.
+        X = np.zeros((nso, nso))
+        for P in range(self.nmo):
+            for p in range(self.nmo):
+                X[self._so_index(P, "a"), self._so_index(p, "a")] = self.Ua[P, p]
+                X[self._so_index(P, "b"), self._so_index(p, "b")] = self.Ub[P, p]
+
+        transformed = np.einsum("Pp,PQRS->pQRS", X, cumulant, optimize=True)
+        transformed = np.einsum("Qq,pQRS->pqRS", X, transformed, optimize=True)
+        transformed = np.einsum("Rr,pqRS->pqrS", X, transformed, optimize=True)
+        transformed = np.einsum("Ss,pqrS->pqrs", X, transformed, optimize=True)
+        self._lambda2_full_no = transformed
+        return transformed
+
+    def _lambda2_exact_common_no_elem(self, p, sp, q, sq, r, sr, s, ss):
+        cumulant = self._build_exact_common_no_cumulant()
+        return cumulant[
+            self._so_index(p, sp),
+            self._so_index(q, sq),
+            self._so_index(r, sr),
+            self._so_index(s, ss),
+        ]
+
+    def _lambda2_spin_elem(self, p, sp, q, sq, r, sr, s, ss):
+        """Evaluate the doubles-only cumulant through quadratic order."""
+        if getattr(self, "exact_common_no", False):
+            return self._lambda2_exact_common_no_elem(p, sp, q, sq, r, sr, s, ss)
+
+        op = self._spin_occ(p, sp)
+        oq = self._spin_occ(q, sq)
+        or_ = self._spin_occ(r, sr)
+        os = self._spin_occ(s, ss)
+        vp = self._spin_vir(p, sp)
+        vq = self._spin_vir(q, sq)
+        vr = self._spin_vir(r, sr)
+        vs = self._spin_vir(s, ss)
+
+        if op and oq and vr and vs:
+            return self._t2_spin_elem(p, sp, q, sq, r, sr, s, ss)
+        if vp and vq and or_ and os:
+            return self._t2_spin_elem(r, sr, s, ss, p, sp, q, sq)
+
+        if op and oq and or_ and os:
+            val = 0.0
+            for sa in ("a", "b"):
+                for sb in ("a", "b"):
+                    for a in self._spin_vir_range(sa):
+                        for b in self._spin_vir_range(sb):
+                            val += self._t2_spin_elem(
+                                p, sp, q, sq, a, sa, b, sb
+                            ) * self._t2_spin_elem(r, sr, s, ss, a, sa, b, sb)
+            return 0.5 * val
+
+        if vp and vq and vr and vs:
+            val = 0.0
+            for si in ("a", "b"):
+                for sj in ("a", "b"):
+                    for i in self._spin_occ_range(si):
+                        for j in self._spin_occ_range(sj):
+                            val += self._t2_spin_elem(
+                                i, si, j, sj, p, sp, q, sq
+                            ) * self._t2_spin_elem(i, si, j, sj, r, sr, s, ss)
+            return 0.5 * val
+
+        if (op != oq) and (or_ != os):
+            sign = 1.0
+            if vp and oq:
+                p, q, sp, sq = q, p, sq, sp
+                sign = -sign
+            if vr and os:
+                r, s, sr, ss = s, r, ss, sr
+                sign = -sign
+
+            val = 0.0
+            for sm in ("a", "b"):
+                for sc in ("a", "b"):
+                    for m in self._spin_occ_range(sm):
+                        for c in self._spin_vir_range(sc):
+                            val += self._t2_spin_elem(
+                                p, sp, m, sm, s, ss, c, sc
+                            ) * self._t2_spin_elem(r, sr, m, sm, q, sq, c, sc)
+            return -sign * val
+
+        return 0.0
+
+    def lambda2_aa_elem(self, p, q, r, s):
+        return self._lambda2_spin_elem(p, "a", q, "a", r, "a", s, "a")
 
     def lambda2_bb_elem(self, p, q, r, s):
-        """
-        Beta-beta cumulant element in the rotated NO basis.
-
-        Same-spin cumulants are antisymmetric with respect to exchange of the
-        first pair and the second pair. Therefore p == q or r == s gives an
-        exactly zero element.
-        """
-
-        if p == q or r == s:
-            return 0.0
-
-        val = 0.0
-
-        # First-order doubles block: oo-vv.
-        if self._ob(p) and self._ob(q) and self._vb(r) and self._vb(s):
-            a = self._b_vir(r)
-            b = self._b_vir(s)
-
-            val += (
-                self._t2_bb_elem(p, q, a, b)
-                - self._t2_bb_elem(p, q, b, a)
-                - self._t2_bb_elem(q, p, a, b)
-                + self._t2_bb_elem(q, p, b, a)
-            )
-
-        # Hermitian partner: vv-oo.
-        if self._vb(p) and self._vb(q) and self._ob(r) and self._ob(s):
-            a = self._b_vir(p)
-            b = self._b_vir(q)
-
-            val += (
-                self._t2_bb_elem(r, s, a, b)
-                - self._t2_bb_elem(r, s, b, a)
-                - self._t2_bb_elem(s, r, a, b)
-                + self._t2_bb_elem(s, r, b, a)
-            )
-
-        # Second-order oooo.
-        if self._ob(p) and self._ob(q) and self._ob(r) and self._ob(s):
-            val += self._gamma_oooo_bb_elem(p, q, r, s)
-
-        # Second-order vvvv.
-        if self._vb(p) and self._vb(q) and self._vb(r) and self._vb(s):
-            a = self._b_vir(p)
-            b = self._b_vir(q)
-            c = self._b_vir(r)
-            d = self._b_vir(s)
-
-            val += self._gamma_vvvv_bb_elem(a, b, c, d)
-
-        return val
+        return self._lambda2_spin_elem(p, "b", q, "b", r, "b", s, "b")
 
     def lambda2_ab_elem(self, p, q, r, s):
-        """
-        Opposite-spin cumulant element.
+        return self._lambda2_spin_elem(p, "a", q, "b", r, "a", s, "b")
 
-        This follows the same index logic as the existing UMP2MPQFast class:
-        first index / third index are alpha-space;
-        second index / fourth index are beta-space.
-        """
-        val = 0.0
 
-        # First-order oo-vv block.
-        if self._oa(p) and self._ob(q) and self._va(r) and self._vb(s):
-            val += self._t2_ab_elem(
-                p,
-                q,
-                self._a_vir(r),
-                self._b_vir(s),
-            )
+    # def _gamma_ovov_ab_elem(self, i, a, j, b):
+    #     """
+    #     Opposite-spin second-order ovov-like contraction.
 
-        # First-order vv-oo partner.
-        if self._va(p) and self._vb(q) and self._oa(r) and self._ob(s):
-            val += self._t2_ab_elem(
-                r,
-                s,
-                self._a_vir(p),
-                self._b_vir(q),
-            )
+    #     Matches the structure used in UMP2MPQFast:
 
-        # ------------------------------------------------------------
-        # Second-order ovov-like block.
-        #
-        # This mirrors the contraction shape used in your UMP2MPQFast.
-        # Important: this assumes q and s map to alpha-virtual-like slots
-        # after the spin-free C_elem permutations. If this disagrees with
-        # the full cumulant test, this is the first place to inspect.
-        # ------------------------------------------------------------
-        if self._oa(p) and self._va(q) and self._oa(r) and self._va(s):
-            val += self._gamma_ovov_ab_elem(
-                p,
-                self._a_vir(q),
-                r,
-                self._a_vir(s),
-            )
+    #         gamma_ovov_ab[i,a,j,b] = sum_{m,c} t_ab[i,m,a,c] t_ab[j,m,b,c]
 
-        if self._oa(r) and self._va(s) and self._oa(p) and self._va(q):
-            val += self._gamma_ovov_ab_elem(
-                r,
-                self._a_vir(s),
-                p,
-                self._a_vir(q),
-            )
+    #     where a,b are alpha-virtual indices and c is beta-virtual.
+    #     """
+    #     val = 0.0
+    #     for m in range(self.nbocc):
+    #         Tim = self._t2_ab_pair_no(i, m)
+    #         Tjm = self._t2_ab_pair_no(j, m)
+    #         val += np.dot(Tim[a, :], Tjm[b, :])
+    #     return val
 
-        return val
+    # # ============================================================
+    # # Cumulant elements
+    # # ============================================================
+    # def lambda2_aa_elem(self, p, q, r, s):
+    #     """
+    #     Alpha-alpha cumulant element in the rotated NO basis.
+
+    #     Same-spin cumulants are antisymmetric with respect to exchange of the
+    #     first pair and the second pair:
+
+    #         lambda[p,q,r,s] = -lambda[q,p,r,s]
+    #         lambda[p,q,r,s] = -lambda[p,q,s,r]
+
+    #     Therefore, if p == q or r == s, the element is exactly zero.
+    #     This pruning is essential for fast M1 evaluation.
+    #     """
+
+    #     if p == q or r == s:
+    #         return 0.0
+
+    #     val = 0.0
+
+    #     # First-order doubles block: oo-vv.
+    #     if self._oa(p) and self._oa(q) and self._va(r) and self._va(s):
+    #         a = self._a_vir(r)
+    #         b = self._a_vir(s)
+
+    #         val += (
+    #             self._t2_aa_elem(p, q, a, b)
+    #             - self._t2_aa_elem(p, q, b, a)
+    #             - self._t2_aa_elem(q, p, a, b)
+    #             + self._t2_aa_elem(q, p, b, a)
+    #         )
+
+    #     # Hermitian partner: vv-oo.
+    #     if self._va(p) and self._va(q) and self._oa(r) and self._oa(s):
+    #         a = self._a_vir(p)
+    #         b = self._a_vir(q)
+
+    #         val += (
+    #             self._t2_aa_elem(r, s, a, b)
+    #             - self._t2_aa_elem(r, s, b, a)
+    #             - self._t2_aa_elem(s, r, a, b)
+    #             + self._t2_aa_elem(s, r, b, a)
+    #         )
+
+    #     # Second-order oooo.
+    #     if self._oa(p) and self._oa(q) and self._oa(r) and self._oa(s):
+    #         val += self._gamma_oooo_aa_elem(p, q, r, s)
+
+    #     # Second-order vvvv.
+    #     if self._va(p) and self._va(q) and self._va(r) and self._va(s):
+    #         a = self._a_vir(p)
+    #         b = self._a_vir(q)
+    #         c = self._a_vir(r)
+    #         d = self._a_vir(s)
+
+    #         val += self._gamma_vvvv_aa_elem(a, b, c, d)
+
+    #     return val
+
+    # def lambda2_bb_elem(self, p, q, r, s):
+    #     """
+    #     Beta-beta cumulant element in the rotated NO basis.
+
+    #     Same-spin cumulants are antisymmetric with respect to exchange of the
+    #     first pair and the second pair. Therefore p == q or r == s gives an
+    #     exactly zero element.
+    #     """
+
+    #     if p == q or r == s:
+    #         return 0.0
+
+    #     val = 0.0
+
+    #     # First-order doubles block: oo-vv.
+    #     if self._ob(p) and self._ob(q) and self._vb(r) and self._vb(s):
+    #         a = self._b_vir(r)
+    #         b = self._b_vir(s)
+
+    #         val += (
+    #             self._t2_bb_elem(p, q, a, b)
+    #             - self._t2_bb_elem(p, q, b, a)
+    #             - self._t2_bb_elem(q, p, a, b)
+    #             + self._t2_bb_elem(q, p, b, a)
+    #         )
+
+    #     # Hermitian partner: vv-oo.
+    #     if self._vb(p) and self._vb(q) and self._ob(r) and self._ob(s):
+    #         a = self._b_vir(p)
+    #         b = self._b_vir(q)
+
+    #         val += (
+    #             self._t2_bb_elem(r, s, a, b)
+    #             - self._t2_bb_elem(r, s, b, a)
+    #             - self._t2_bb_elem(s, r, a, b)
+    #             + self._t2_bb_elem(s, r, b, a)
+    #         )
+
+    #     # Second-order oooo.
+    #     if self._ob(p) and self._ob(q) and self._ob(r) and self._ob(s):
+    #         val += self._gamma_oooo_bb_elem(p, q, r, s)
+
+    #     # Second-order vvvv.
+    #     if self._vb(p) and self._vb(q) and self._vb(r) and self._vb(s):
+    #         a = self._b_vir(p)
+    #         b = self._b_vir(q)
+    #         c = self._b_vir(r)
+    #         d = self._b_vir(s)
+
+    #         val += self._gamma_vvvv_bb_elem(a, b, c, d)
+
+    #     return val
+
+    # def lambda2_ab_elem(self, p, q, r, s):
+    #     """
+    #     Opposite-spin cumulant element.
+
+    #     This follows the same index logic as the existing UMP2MPQFast class:
+    #     first index / third index are alpha-space;
+    #     second index / fourth index are beta-space.
+    #     """
+    #     val = 0.0
+
+    #     # First-order oo-vv block.
+    #     if self._oa(p) and self._ob(q) and self._va(r) and self._vb(s):
+    #         val += self._t2_ab_elem(
+    #             p,
+    #             q,
+    #             self._a_vir(r),
+    #             self._b_vir(s),
+    #         )
+
+    #     # First-order vv-oo partner.
+    #     if self._va(p) and self._vb(q) and self._oa(r) and self._ob(s):
+    #         val += self._t2_ab_elem(
+    #             r,
+    #             s,
+    #             self._a_vir(p),
+    #             self._b_vir(q),
+    #         )
+
+    #     # ------------------------------------------------------------
+    #     # Second-order ovov-like block.
+    #     #
+    #     # This mirrors the contraction shape used in your UMP2MPQFast.
+    #     # Important: this assumes q and s map to alpha-virtual-like slots
+    #     # after the spin-free C_elem permutations. If this disagrees with
+    #     # the full cumulant test, this is the first place to inspect.
+    #     # ------------------------------------------------------------
+    #     if self._oa(p) and self._va(q) and self._oa(r) and self._va(s):
+    #         val += self._gamma_ovov_ab_elem(
+    #             p,
+    #             self._a_vir(q),
+    #             r,
+    #             self._a_vir(s),
+    #         )
+
+    #     if self._oa(r) and self._va(s) and self._oa(p) and self._va(q):
+    #         val += self._gamma_ovov_ab_elem(
+    #             r,
+    #             self._a_vir(s),
+    #             p,
+    #             self._a_vir(q),
+    #         )
+
+    #     return val
 
     # ============================================================
     # Mutual correlation element
