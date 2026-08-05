@@ -2,18 +2,16 @@ import numpy as np
 import pytest
 
 from forte2 import System, RHF, MCOptimizer, State, CISolver
-
-
-def _xyz(symbols, coordinates):
-    return "\n".join(
-        f"{symbol} {xyz[0]:.16f} {xyz[1]:.16f} {xyz[2]:.16f}"
-        for symbol, xyz in zip(symbols, coordinates)
-    )
+from forte2.integrals import LIBCINT_AVAILABLE
+from tests.gradient_test_utils import (
+    four_point_central_difference_gradient_component,
+    xyz_string,
+)
 
 
 def _system(symbols, coordinates, **kwargs):
     return System(
-        xyz=_xyz(symbols, coordinates),
+        xyz=xyz_string(symbols, coordinates),
         basis_set=kwargs.pop("basis_set", "sto-3g"),
         auxiliary_basis_set=kwargs.pop("auxiliary_basis_set", "def2-universal-JKFIT"),
         unit="bohr",
@@ -118,24 +116,6 @@ def _gasscf_n2_three_gas_energy(symbols, coordinates):
     return _gasscf_n2_three_gas(symbols, coordinates).E
 
 
-def _four_point_central_difference_component(
-    energy_fn, symbols, coordinates, atom, cart, *args, step=1.0e-3, **kwargs
-):
-    coordinates = np.asarray(coordinates, dtype=float)
-
-    def shifted_energy(scale):
-        shifted_coordinates = coordinates.copy()
-        shifted_coordinates[atom, cart] += scale * step
-        return energy_fn(symbols, shifted_coordinates, *args, **kwargs)
-
-    return (
-        -shifted_energy(2.0)
-        + 8.0 * shifted_energy(1.0)
-        - 8.0 * shifted_energy(-1.0)
-        + shifted_energy(-2.0)
-    ) / (12.0 * step)
-
-
 def test_casscf_gradient_h2_full_active_finite_difference_and_translation():
     """Validate the all-active state-specific CASSCF gradient by finite differences."""
     symbols = ["H", "H"]
@@ -146,7 +126,7 @@ def test_casscf_gradient_h2_full_active_finite_difference_and_translation():
 
     for atom in range(2):
         for cart in range(3):
-            numerical = _four_point_central_difference_component(
+            numerical = four_point_central_difference_gradient_component(
                 _casscf_energy, symbols, coordinates, atom, cart, **kwargs
             )
             assert gradient[atom, cart] == pytest.approx(numerical, abs=1.0e-7)
@@ -161,7 +141,7 @@ def test_casscf_gradient_lih_core_active_selected_finite_difference():
     kwargs = {"core_orbitals": [0], "active_orbitals": [1, 2]}
 
     gradient = _casscf_gradient(symbols, coordinates, **kwargs)
-    numerical = _four_point_central_difference_component(
+    numerical = four_point_central_difference_gradient_component(
         _casscf_energy, symbols, coordinates, 1, 2, **kwargs
     )
 
@@ -184,7 +164,7 @@ def test_gasscf_gradient_h2_two_gas_finite_difference_and_translation():
 
     for atom in range(2):
         for cart in range(3):
-            numerical = _four_point_central_difference_component(
+            numerical = four_point_central_difference_gradient_component(
                 _gasscf_h2_energy, symbols, coordinates, atom, cart
             )
             assert gradient[atom, cart] == pytest.approx(numerical, abs=1.0e-7)
@@ -214,7 +194,7 @@ def test_gasscf_gradient_n2_three_gas_selected_finite_difference():
     assert mc.ci_solver.sub_solvers[0].state.gas_max == [4, 4, 2]
     assert len(mc.ci_solver.sub_solvers[0].ci_strings.gas_occupations) > 1
 
-    numerical = _four_point_central_difference_component(
+    numerical = four_point_central_difference_gradient_component(
         _gasscf_n2_three_gas_energy, symbols, coordinates, 1, 2
     )
 
@@ -249,6 +229,44 @@ def test_casscf_gradient_auto_runs_and_reuses_executed_object():
     assert mc.E == pytest.approx(energy1)
     assert gradient1 == pytest.approx(gradient2, abs=1.0e-12)
     assert gradient1.shape == (system.natoms, 3)
+
+
+def test_casscf_gradient_rejects_unconverged_wavefunction(monkeypatch):
+    """Require both orbital and CI stationarity before using the gradient."""
+    mc = _casscf(
+        ["H", "H"],
+        np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]]),
+        active_orbitals=2,
+    )
+
+    mc.converged = False
+    with pytest.raises(RuntimeError, match="converged orbital optimization"):
+        mc.gradient()
+
+    mc.converged = True
+    monkeypatch.setattr(mc.ci_solver, "get_convergence_status", lambda: [False])
+    with pytest.raises(RuntimeError, match="converged CI roots"):
+        mc.gradient()
+
+
+def test_casscf_gradient_reuses_orbital_optimizer_intermediates(monkeypatch):
+    """Avoid rebuilding orbital intermediates when the final MO basis is unchanged."""
+    mc = _casscf(
+        ["H", "H"],
+        np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]]),
+        active_orbitals=2,
+        final_orbitals="original",
+    )
+
+    def fail(*args, **kwargs):
+        raise AssertionError("CASSCF gradient rebuilt converged orbital intermediates")
+
+    monkeypatch.setattr(type(mc.orb_opt), "__init__", fail)
+    monkeypatch.setattr(mc.orb_opt, "_compute_Fcore", fail)
+    monkeypatch.setattr(mc.orb_opt, "get_eri_gaaa", fail)
+
+    gradient = mc.gradient()
+    assert gradient.shape == (mc.system.natoms, 3)
 
 
 def test_casscf_gradient_rejects_state_average():
@@ -340,37 +358,79 @@ def test_casscf_gradient_rejects_cholesky_tei():
         mc.gradient()
 
 
-def test_casscf_gradient_rejects_gaussian_nuclear_charges():
-    """Reject Gaussian nuclear charges until their derivative terms are added."""
-    system = _system(
-        ["H", "H"],
-        np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]]),
-        use_gaussian_charges=True,
-    )
-    rhf = RHF(charge=0)(system)
-    ci_solver = CISolver(
-        State(system=system, multiplicity=1, ms=0.0),
-        active_orbitals=2,
-    )
-    mc = MCOptimizer(ci_solver, final_orbitals="original")(rhf)
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_casscf_gradient_gaussian_nuclear_charges_finite_difference():
+    """Validate the Gaussian nuclear model in the CASSCF gradient."""
+    symbols = ["H", "H"]
+    coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]])
 
-    with pytest.raises(NotImplementedError, match="Gaussian nuclear charges"):
-        mc.gradient()
+    def casscf(distance, gradient=False):
+        system = _system(
+            symbols,
+            np.array([[0.0, 0.0, 0.0], [0.0, 0.0, distance]]),
+            use_gaussian_charges=True,
+        )
+        rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10)(system)
+        ci_solver = CISolver(
+            State(system=system, multiplicity=1, ms=0.0),
+            active_orbitals=2,
+        )
+        mc = MCOptimizer(
+            ci_solver,
+            e_tol=1.0e-12,
+            g_tol=1.0e-9,
+            final_orbitals="original",
+        )(rhf)
+        return mc.gradient() if gradient else mc.run().E
 
+    def energy(_symbols, displaced):
+        return casscf(displaced[1, 2])
 
-def test_casscf_gradient_rejects_x2c():
-    """Reject X2C CASSCF gradients until relativistic derivative terms are added."""
-    system = _system(
-        ["H", "H"],
-        np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]]),
-        x2c_type="sf",
+    gradient = casscf(coordinates[1, 2], gradient=True)
+    numerical = four_point_central_difference_gradient_component(
+        energy,
+        symbols,
+        coordinates,
+        1,
+        2,
     )
-    rhf = RHF(charge=0)(system)
-    ci_solver = CISolver(
-        State(system=system, multiplicity=1, ms=0.0),
-        active_orbitals=2,
-    )
-    mc = MCOptimizer(ci_solver, final_orbitals="original")(rhf)
 
-    with pytest.raises(NotImplementedError, match="X2C"):
-        mc.gradient()
+    assert gradient[1, 2] == pytest.approx(numerical, abs=1.0e-8)
+    assert gradient.sum(axis=0) == pytest.approx(np.zeros(3), abs=1.0e-10)
+
+
+def test_sf_x2c_casscf_gradient_finite_difference():
+    """Validate scalar-X2C CASSCF through the shared X2C hcore derivative."""
+    symbols = ["H", "H"]
+    coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]])
+
+    def casscf(distance, gradient=False):
+        system = _system(
+            symbols,
+            np.array([[0.0, 0.0, 0.0], [0.0, 0.0, distance]]),
+            x2c_type="sf",
+            minao_basis_set=None,
+        )
+        rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10)(system)
+        ci_solver = CISolver(
+            State(system=system, multiplicity=1, ms=0.0),
+            active_orbitals=2,
+        )
+        mc = MCOptimizer(
+            ci_solver,
+            e_tol=1.0e-12,
+            g_tol=1.0e-9,
+            final_orbitals="original",
+        )(rhf)
+        return mc.gradient()[1, 2] if gradient else mc.run().E
+
+    analytical = casscf(coordinates[1, 2], gradient=True)
+    step = 1.0e-3
+    energies = [
+        casscf(coordinates[1, 2] + scale * step) for scale in (-2.0, -1.0, 1.0, 2.0)
+    ]
+    numerical = (energies[0] - 8.0 * energies[1] + 8.0 * energies[2] - energies[3]) / (
+        12.0 * step
+    )
+
+    assert analytical == pytest.approx(numerical, abs=1.0e-8)
