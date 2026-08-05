@@ -1,26 +1,25 @@
 import numpy as np
 from numpy.typing import NDArray
 
-from forte2.lib import ints
 from forte2.base_classes import RelCIBase
 from forte2.ci.ci_utils import make_2cumulant_so
 from forte2.gradients import (
     build_metric_inverted_three_center,
     compute_gradient,
 )
-from forte2.system import ModelSystem
+from forte2.gradients.validation import validate_df_gradient_system
 
 from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
 
 
 def _compute_casscf_gradient(mc) -> NDArray:
     """Compute a state-specific density-fitted CASSCF/GASSCF gradient."""
-    _validate_casscf_gradient_supported(mc, pre_run=True)
+    _validate_casscf_gradient_request(mc)
 
     if not mc.executed:
         mc.run()
 
-    _validate_casscf_gradient_supported(mc, pre_run=False)
+    _validate_converged_casscf_gradient(mc)
 
     C = mc.C[0][:, mc.mo_space.orig_to_contig].copy()
     if isinstance(mc.ci_solver, RelCIBase):
@@ -230,6 +229,39 @@ def _build_casscf_active_cumulant(
     return lambda2_act
 
 
+def _build_mc_df_hole_weights(
+    gamma_h: NDArray,
+    lambda2_act: NDArray,
+    Z_h: NDArray,
+    ncore: int,
+    exchange_factor: float,
+) -> tuple[NDArray, NDArray]:
+    r"""Build metric and three-center weights in the compact hole space.
+
+    The spin-free and spin-orbital CASSCF expressions differ only in the
+    exchange prefactor.  Forming the exchange and active-cumulant responses
+    once also lets the metric weight reuse the intermediates required by the
+    three-center weight.
+    """
+    R = np.einsum("xy,Pxy->P", gamma_h, Z_h, optimize=True)
+    exchange_h = np.einsum("xz,Pwz,wy->Pxy", gamma_h, Z_h, gamma_h, optimize=True)
+
+    active = slice(ncore, None)
+    Z_act = Z_h[:, active, active]
+    cumulant_h = np.einsum("uvwx,Pvx->Puw", lambda2_act, Z_act, optimize=True)
+
+    W3_h = np.einsum("xy,P->Pxy", gamma_h, R, optimize=True)
+    W3_h -= exchange_factor * exchange_h
+    W3_h[:, active, active] += cumulant_h
+
+    W2 = -0.5 * np.einsum("P,Q->PQ", R, R, optimize=True)
+    W2 += (
+        0.5 * exchange_factor * np.einsum("Pxy,Qxy->PQ", Z_h, exchange_h, optimize=True)
+    )
+    W2 -= 0.5 * np.einsum("Puw,Quw->PQ", Z_act, cumulant_h, optimize=True)
+    return W2, W3_h
+
+
 def _build_casscf_df_deriv_weights(
     system,
     Ccore: NDArray,
@@ -329,20 +361,13 @@ def _build_casscf_df_deriv_weights(
     Z_ao = build_metric_inverted_three_center(system)
     Z_h = np.einsum("mx,Pmn,ny->Pxy", Ch.conj(), Z_ao, Ch, optimize=True)
 
-    R = np.einsum("xy,Pxy->P", gamma_h, Z_h, optimize=True)
-    W3_h = np.einsum("xy,P->Pxy", gamma_h, R, optimize=True)
-    W3_h -= 0.5 * np.einsum("xz,Pwz,wy->Pxy", gamma_h, Z_h, gamma_h, optimize=True)
-
-    Z_act = Z_h[:, ncore:, ncore:]
-    W3_h[:, ncore:, ncore:] += np.einsum(
-        "uvwx,Pvx->Puw", lambda2_act, Z_act, optimize=True
+    W2, W3_h = _build_mc_df_hole_weights(
+        gamma_h,
+        lambda2_act,
+        Z_h,
+        ncore,
+        exchange_factor=0.5,
     )
-
-    W2 = -0.5 * np.einsum("P,Q->PQ", R, R, optimize=True)
-    W2 += 0.25 * np.einsum(
-        "Pxy,xz,Qwz,wy->PQ", Z_h, gamma_h, Z_h, gamma_h, optimize=True
-    )
-    W2 -= 0.5 * np.einsum("uvwx,Puw,Qvx->PQ", lambda2_act, Z_act, Z_act, optimize=True)
 
     W3 = np.einsum("mx,Pxy,ny->Pmn", Ch, W3_h, Ch.conj(), optimize=True)
     return W2.real, W3.real
@@ -397,20 +422,13 @@ def _build_rel_casscf_df_deriv_weights(
     Z_h = np.einsum("mx,Pmn,ny->Pxy", Ch_a.conj(), Z_ao, Ch_a, optimize=True)
     Z_h += np.einsum("mx,Pmn,ny->Pxy", Ch_b.conj(), Z_ao, Ch_b, optimize=True)
 
-    R = np.einsum("xy,Pxy->P", gamma_h, Z_h, optimize=True)
-    W3_h = np.einsum("xy,P->Pxy", gamma_h, R, optimize=True)
-    W3_h -= np.einsum("xz,Pwz,wy->Pxy", gamma_h, Z_h, gamma_h, optimize=True)
-
-    Z_act = Z_h[:, ncore:, ncore:]
-    W3_h[:, ncore:, ncore:] += np.einsum(
-        "uvwx,Pvx->Puw", lambda2_act, Z_act, optimize=True
+    W2, W3_h = _build_mc_df_hole_weights(
+        gamma_h,
+        lambda2_act,
+        Z_h,
+        ncore,
+        exchange_factor=1.0,
     )
-
-    W2 = -0.5 * np.einsum("P,Q->PQ", R, R, optimize=True)
-    W2 += 0.5 * np.einsum(
-        "Pxy,xz,Qwz,wy->PQ", Z_h, gamma_h, Z_h, gamma_h, optimize=True
-    )
-    W2 -= 0.5 * np.einsum("uvwx,Puw,Qvx->PQ", lambda2_act, Z_act, Z_act, optimize=True)
 
     W3 = np.einsum("mx,Pxy,ny->Pmn", Ch_a.conj(), W3_h, Ch_a, optimize=True)
     W3 += np.einsum("mx,Pxy,ny->Pmn", Ch_b.conj(), W3_h, Ch_b, optimize=True)
@@ -460,24 +478,34 @@ def _build_casscf_overlap_weight(
     optimizer_type = (
         RelOrbOptimizer if isinstance(mc.ci_solver, RelCIBase) else OrbOptimizer
     )
-    orb_opt = optimizer_type(
-        C,
-        (mc.mo_space.core, mc.mo_space.actv, mc.mo_space.virt),
-        mc.system.fock_builder,
-        mc.system.ints_hcore(),
-        mc.system.nuclear_repulsion,
-        mc.nrr,
-        compute_active_hessian=False,
+    orb_opt = getattr(mc, "orb_opt", None)
+    can_reuse = (
+        isinstance(orb_opt, optimizer_type)
+        and hasattr(orb_opt, "Fcore")
+        and hasattr(orb_opt, "eri_gaaa")
+        and orb_opt.C.shape == C.shape
+        and np.allclose(orb_opt.C, C, rtol=0.0, atol=1.0e-12)
     )
+    if not can_reuse:
+        orb_opt = optimizer_type(
+            C,
+            (mc.mo_space.core, mc.mo_space.actv, mc.mo_space.virt),
+            mc.system.fock_builder,
+            mc.system.ints_hcore(),
+            mc.system.nuclear_repulsion,
+            mc.nrr,
+            compute_active_hessian=False,
+        )
+        orb_opt._compute_Fcore()
+        orb_opt.get_eri_gaaa()
+
     orb_opt.set_rdms(gamma1_act, gamma2_act)
-    orb_opt._compute_Fcore()
-    orb_opt.get_eri_gaaa()
     lagrangian_mo = orb_opt.compute_orbital_lagrangian()
     return np.einsum("mp,pq,nq->mn", C, lagrangian_mo, C.conj(), optimize=True)
 
 
-def _validate_casscf_gradient_supported(mc, pre_run: bool = False) -> None:
-    """Reject CASSCF/GASSCF gradient cases outside the implemented scope."""
+def _validate_casscf_gradient_request(mc) -> None:
+    """Reject unsupported CASSCF/GASSCF options before running the method."""
     is_relativistic = isinstance(mc.ci_solver, RelCIBase)
 
     if mc.ci_solver.sa_info.ncis != 1 or mc.ci_solver.sa_info.nroots_sum != 1:
@@ -496,15 +524,8 @@ def _validate_casscf_gradient_supported(mc, pre_run: bool = False) -> None:
         )
 
     system = _find_upstream_system(mc)
-    if isinstance(system, ModelSystem):
-        raise NotImplementedError(
-            "CASSCF/GASSCF gradients are not implemented for ModelSystem."
-        )
-    if system.cholesky_tei:
-        raise NotImplementedError(
-            "CASSCF/GASSCF gradients are implemented only for density fitting, "
-            "not cholesky_tei."
-        )
+    validate_df_gradient_system(system, "CASSCF/GASSCF")
+
     if system.use_gaussian_charges:
         raise NotImplementedError(
             "CASSCF/GASSCF gradients with Gaussian nuclear charges are not implemented."
@@ -512,18 +533,6 @@ def _validate_casscf_gradient_supported(mc, pre_run: bool = False) -> None:
     if system.two_component and not is_relativistic:
         raise NotImplementedError(
             "Two-component CASSCF/GASSCF gradients require a relativistic CI solver."
-        )
-    if system.auxiliary_basis is None:
-        raise NotImplementedError(
-            "CASSCF/GASSCF gradients require an auxiliary basis set for density "
-            "fitting."
-        )
-
-    max_l = max(system.basis.max_l, system.auxiliary_basis.max_l)
-    if max_l > ints.libint2_max_am:
-        raise NotImplementedError(
-            "CASSCF/GASSCF gradients require derivative integrals supported by Libint2 "
-            f"(max_l = {max_l}, Libint2 max_l = {ints.libint2_max_am})."
         )
 
     frozen_core = getattr(mc.ci_solver, "frozen_core_orbitals", None)
@@ -537,9 +546,10 @@ def _validate_casscf_gradient_supported(mc, pre_run: bool = False) -> None:
             "CASSCF/GASSCF gradients with frozen virtual orbitals are not implemented."
         )
 
-    if pre_run:
-        return
 
+def _validate_converged_casscf_gradient(mc) -> None:
+    """Validate restrictions that require a materialized CASSCF wave function."""
+    is_relativistic = isinstance(mc.ci_solver, RelCIBase)
     if mc.mo_space.nfrozen_core > 0:
         raise NotImplementedError(
             "CASSCF/GASSCF gradients with frozen core orbitals are not implemented."
@@ -557,7 +567,7 @@ def _validate_casscf_gradient_supported(mc, pre_run: bool = False) -> None:
             "Nonrelativistic CASSCF/GASSCF gradients with complex orbitals are not "
             "implemented."
         )
-    if is_relativistic and mc.C[0].shape[0] != 2 * system.nbf:
+    if is_relativistic and mc.C[0].shape[0] != 2 * mc.system.nbf:
         raise ValueError(
             "Relativistic CASSCF/GASSCF gradients require spinor AO coefficients "
             "with 2 * system.nbf rows."

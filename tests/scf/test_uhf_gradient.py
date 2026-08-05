@@ -3,16 +3,16 @@ import pytest
 
 from forte2 import System
 from forte2.scf import RHF, UHF
-from tests.scf.gradient_test_utils import (
-    _system,
+from tests.gradient_test_utils import (
     four_point_central_difference_gradient_component,
+    make_test_system,
     six_point_central_difference_gradient_component,
 )
 
 
 def _uhf(symbols, coordinates, charge, ms):
     uhf = UHF(charge=charge, ms=ms, e_tol=1.0e-12, d_tol=1.0e-8, maxiter=100)(
-        _system(symbols, coordinates)
+        make_test_system(symbols, coordinates)
     )
     uhf.run()
     return uhf
@@ -147,7 +147,7 @@ def test_uhf_gradient_closed_shell_matches_rhf_gradient():
     """Verify the spin-paired UHF gradient reduces to the RHF gradient."""
     symbols = ["H", "H"]
     coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]])
-    system = _system(symbols, coordinates)
+    system = make_test_system(symbols, coordinates)
 
     rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
     uhf = UHF(charge=0, ms=0.0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)

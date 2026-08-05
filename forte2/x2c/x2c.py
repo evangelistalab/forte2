@@ -20,33 +20,6 @@ def _row_given_Z(Z):
     return np.searchsorted(ROW_Z_START, Z, side="right")
 
 
-def _inverse_sqrt_deriv(matrix, matrix_deriv):
-    """Frechet derivative of the inverse square root of a positive matrix."""
-    eigenvalues, eigenvectors = np.linalg.eigh(matrix)
-    if np.min(eigenvalues) <= 0.0:
-        raise ValueError("The X2C renormalization metric is not positive definite.")
-
-    function_values = eigenvalues**-0.5
-    delta = eigenvalues[:, None] - eigenvalues[None, :]
-    scale = max(float(np.max(eigenvalues)), 1.0)
-    close = np.abs(delta) < 1.0e-12 * scale
-    divided_difference = np.empty_like(delta)
-    np.divide(
-        function_values[:, None] - function_values[None, :],
-        delta,
-        out=divided_difference,
-        where=~close,
-    )
-    average = 0.5 * (eigenvalues[:, None] + eigenvalues[None, :])
-    divided_difference[close] = -0.5 * average[close] ** -1.5
-
-    transformed_deriv = eigenvectors.conj().T @ matrix_deriv @ eigenvectors
-    result = (
-        eigenvectors @ (divided_difference * transformed_deriv) @ eigenvectors.conj().T
-    )
-    return 0.5 * (result + result.conj().T)
-
-
 class X2CHelper:
     """
     Helper class to compute the X2C one-electron Hamiltonian for a given system.
@@ -165,188 +138,15 @@ class X2CHelper:
         shape ``(3 * natoms, nbf, nbf)`` for SF-X2C or
         ``(3 * natoms, 2 * nbf, 2 * nbf)`` for SO-X2C.
         """
-        # Refresh X, R, and the reference Hamiltonian from exactly the same
-        # path used by the SCF calculation.
-        self.hcore_x2c()
+        from .x2c_grad import compute_hcore_deriv
 
-        S_deriv = integrals.overlap_deriv_matrices(self.system, self.xbasis)
-        T_deriv = integrals.kinetic_deriv_matrices(self.system, self.xbasis)
-        V_deriv = integrals.nuclear_deriv_matrices(self.system, self.xbasis)
-        W_deriv = integrals.opVop_deriv_matrices(self.system, self.xbasis)
-        S_cross_deriv = integrals.overlap_deriv_matrices(
-            self.system, self.xbasis, self.system.basis
-        )
-
-        S_xbasis = self.S
-        projection = self.proj
-        Xorth_l = self.Xorth_l
-        Xorthm1_l = self.Xorthm1_l
-        overlap_eigenvalues, overlap_eigenvectors = np.linalg.eigh(S_xbasis)
-        ndiscard = self.orth_info["n_discarded"]
-        discarded_vectors = overlap_eigenvectors[:, :ndiscard]
-        discarded_values = overlap_eigenvalues[:ndiscard]
-        kept_vectors = overlap_eigenvectors[:, ndiscard:]
-        kept_values = overlap_eigenvalues[ndiscard:]
-
-        S, T, V, W = self._get_integrals()
-        eigenvalues, c_dirac = self._solve_dirac_eq(S, T, V, W)
-        X = self._get_decoupling_matrix(c_dirac)
-        R = self._get_transformation_matrix(S, T)
-        L = self._build_nesc_matrix(T, V, W, X)
-        h_orth = R.conj().T @ L @ R
-
-        ncoord = 3 * self.system.natoms
-        nbf_decontracted = len(self.xbasis)
-        nbf_output = self.system.nbf if self.x2c_type == "sf" else 2 * self.system.nbf
-        dtype = np.float64 if self.x2c_type == "sf" else np.complex128
-        result = np.zeros((ncoord, nbf_output, nbf_output), dtype=dtype)
-
-        for coord in range(ncoord):
-            S_orth_deriv = Xorth_l.conj().T @ S_deriv[coord] @ Xorth_l
-            # Parallel-transport gauge. It satisfies d(X^+ S X)/dR = 0 and
-            # avoids singular eigenvector derivatives inside degenerate overlap
-            # eigenspaces.
-            Xorth_l_deriv = -0.5 * Xorth_l @ S_orth_deriv
-            if ndiscard:
-                denominator = kept_values[None, :] - discarded_values[:, None]
-                if np.min(np.abs(denominator)) < 1.0e-14:
-                    raise RuntimeError(
-                        "The retained and discarded X2C overlap spaces are degenerate."
-                    )
-                coupling = (
-                    discarded_vectors.conj().T @ S_deriv[coord] @ kept_vectors
-                ) / denominator
-                Xorth_l_deriv += (
-                    discarded_vectors @ coupling / np.sqrt(kept_values)[None, :]
-                )
-            Xorthm1_l_deriv = (
-                Xorth_l_deriv.conj().T @ S_xbasis + Xorth_l.conj().T @ S_deriv[coord]
-            )
-
-            if self.x2c_type == "sf":
-                Xorth = Xorth_l
-                Xorth_deriv = Xorth_l_deriv
-                Xorthm1 = Xorthm1_l
-                Xorthm1_deriv = Xorthm1_l_deriv
-                T_ao = self.T
-                T_ao_deriv = T_deriv[coord]
-                V_ao = self.V
-                V_ao_deriv = V_deriv[coord]
-                W_ao = self.W[0]
-                W_ao_deriv = W_deriv[0, coord]
-            else:
-                Xorth = block_diag_2x2(Xorth_l)
-                Xorth_deriv = block_diag_2x2(Xorth_l_deriv)
-                Xorthm1 = block_diag_2x2(Xorthm1_l)
-                Xorthm1_deriv = block_diag_2x2(Xorthm1_l_deriv)
-                T_ao = block_diag_2x2(self.T)
-                T_ao_deriv = block_diag_2x2(T_deriv[coord])
-                V_ao = block_diag_2x2(self.V)
-                V_ao_deriv = block_diag_2x2(V_deriv[coord])
-                W_ao = i_sigma_dot(*self.W)
-                W_ao_deriv = i_sigma_dot(*W_deriv[:, coord])
-
-            T_prime = self._orthogonal_basis_deriv(Xorth, Xorth_deriv, T_ao, T_ao_deriv)
-            V_prime = self._orthogonal_basis_deriv(Xorth, Xorth_deriv, V_ao, V_ao_deriv)
-            W_prime = self._orthogonal_basis_deriv(Xorth, Xorth_deriv, W_ao, W_ao_deriv)
-
-            D_prime, M_prime = self._dirac_matrix_deriv(T_prime, V_prime, W_prime)
-            X_prime = self._decoupling_matrix_deriv(
-                eigenvalues, c_dirac, D_prime, M_prime, X
-            )
-
-            renorm_metric = np.eye(X.shape[0], dtype=dtype)
-            renorm_metric += (0.5 / LIGHT_SPEED**2) * X.conj().T @ T @ X
-            renorm_metric_prime = (0.5 / LIGHT_SPEED**2) * (
-                X_prime.conj().T @ T @ X
-                + X.conj().T @ T_prime @ X
-                + X.conj().T @ T @ X_prime
-            )
-            R_prime = _inverse_sqrt_deriv(renorm_metric, renorm_metric_prime)
-
-            L_prime = self._build_nesc_matrix_deriv(
-                T, T_prime, V_prime, W, W_prime, X, X_prime
-            )
-            h_orth_prime = (
-                R_prime.conj().T @ L @ R
-                + R.conj().T @ L_prime @ R
-                + R.conj().T @ L @ R_prime
-            )
-            h_xbasis_prime = (
-                Xorthm1_deriv.conj().T @ h_orth @ Xorthm1
-                + Xorthm1.conj().T @ h_orth_prime @ Xorthm1
-                + Xorthm1.conj().T @ h_orth @ Xorthm1_deriv
-            )
-            h_xbasis = Xorthm1.conj().T @ h_orth @ Xorthm1
-            h_xbasis = self._apply_snso_to_hcore(h_xbasis)
-            h_xbasis_prime = self._apply_snso_to_hcore(h_xbasis_prime)
-
-            projection_prime = scipy.linalg.solve(
-                S_xbasis,
-                S_cross_deriv[coord] - S_deriv[coord] @ projection,
-                assume_a="pos",
-            )
-            if self.x2c_type == "so":
-                projection_full = block_diag_2x2(projection)
-                projection_prime = block_diag_2x2(projection_prime)
-            else:
-                projection_full = projection
-
-            contracted_prime = (
-                projection_prime.conj().T @ h_xbasis @ projection_full
-                + projection_full.conj().T @ h_xbasis_prime @ projection_full
-                + projection_full.conj().T @ h_xbasis @ projection_prime
-            )
-            result[coord] = 0.5 * (contracted_prime + contracted_prime.conj().T)
-
-        return result
+        return compute_hcore_deriv(self)
 
     def hcore_gradient(self, density):
         r"""Contract the analytic X2C Hamiltonian derivative with ``density``."""
         from .x2c_grad import compute_hcore_gradient
 
         return compute_hcore_gradient(self, density)
-
-    @staticmethod
-    def _orthogonal_basis_deriv(Xorth, Xorth_deriv, matrix, matrix_deriv):
-        return (
-            Xorth_deriv.conj().T @ matrix @ Xorth
-            + Xorth.conj().T @ matrix_deriv @ Xorth
-            + Xorth.conj().T @ matrix @ Xorth_deriv
-        )
-
-    def _dirac_matrix_deriv(self, T_deriv, V_deriv, W_deriv):
-        north = self._get_northo()
-        dtype = np.float64 if self.x2c_type == "sf" else np.complex128
-        D_deriv = np.zeros((2 * north, 2 * north), dtype=dtype)
-        M_deriv = np.zeros_like(D_deriv)
-        D_deriv[:north, :north] = V_deriv
-        D_deriv[:north, north:] = T_deriv
-        D_deriv[north:, :north] = T_deriv
-        D_deriv[north:, north:] = (0.25 / LIGHT_SPEED**2) * W_deriv - T_deriv
-        M_deriv[north:, north:] = (0.5 / LIGHT_SPEED**2) * T_deriv
-        return D_deriv, M_deriv
-
-    def _decoupling_matrix_deriv(self, eigenvalues, eigenvectors, D_deriv, M_deriv, X):
-        north = self._get_northo()
-        negative = eigenvectors[:, :north]
-        positive = eigenvectors[:, north:]
-        eps_negative = eigenvalues[:north]
-        eps_positive = eigenvalues[north:]
-
-        residual_deriv = (
-            D_deriv @ positive - (M_deriv @ positive) * eps_positive[None, :]
-        )
-        coupling = negative.conj().T @ residual_deriv
-        denominator = eps_positive[None, :] - eps_negative[:, None]
-        if np.min(np.abs(denominator)) < 1.0e-10:
-            raise RuntimeError("The X2C electronic-positronic energy gap is singular.")
-        positive_deriv = negative @ (coupling / denominator)
-
-        large = positive[:north]
-        large_deriv = positive_deriv[:north]
-        small_deriv = positive_deriv[north:]
-        return (small_deriv - X @ large_deriv) @ scipy.linalg.pinv(large)
 
     @staticmethod
     def _build_nesc_matrix(T, V, W, X):
@@ -356,25 +156,6 @@ class X2CHelper:
             - X.conj().T @ T @ X
             + V
             + (0.25 / LIGHT_SPEED**2) * X.conj().T @ W @ X
-        )
-
-    @staticmethod
-    def _build_nesc_matrix_deriv(T, T_deriv, V_deriv, W, W_deriv, X, X_deriv):
-        return (
-            T_deriv @ X
-            + T @ X_deriv
-            + X_deriv.conj().T @ T
-            + X.conj().T @ T_deriv
-            - X_deriv.conj().T @ T @ X
-            - X.conj().T @ T_deriv @ X
-            - X.conj().T @ T @ X_deriv
-            + V_deriv
-            + (0.25 / LIGHT_SPEED**2)
-            * (
-                X_deriv.conj().T @ W @ X
-                + X.conj().T @ W_deriv @ X
-                + X.conj().T @ W @ X_deriv
-            )
         )
 
     def _get_projection_matrix(self):

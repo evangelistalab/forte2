@@ -2,16 +2,14 @@ import numpy as np
 from numpy.typing import NDArray
 
 from forte2.gradients import compute_gradient
+from forte2.gradients.validation import validate_df_gradient_system
 
-from .hf_grad import (
-    _build_ghf_df_deriv_weights,
-    _validate_hf_gradient_supported,
-)
+from .hf_grad import _build_ghf_df_deriv_weights
 
 
 def _compute_ghf_gradient(ghf) -> NDArray:
     """Compute the density-fitted complex GHF analytic nuclear gradient."""
-    _validate_hf_gradient_supported(ghf.system, "GHF")
+    validate_df_gradient_system(ghf.system, "GHF")
 
     if not ghf.executed:
         ghf.run()

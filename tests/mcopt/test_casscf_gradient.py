@@ -2,18 +2,15 @@ import numpy as np
 import pytest
 
 from forte2 import System, RHF, MCOptimizer, State, CISolver
-
-
-def _xyz(symbols, coordinates):
-    return "\n".join(
-        f"{symbol} {xyz[0]:.16f} {xyz[1]:.16f} {xyz[2]:.16f}"
-        for symbol, xyz in zip(symbols, coordinates)
-    )
+from tests.gradient_test_utils import (
+    four_point_central_difference_gradient_component,
+    xyz_string,
+)
 
 
 def _system(symbols, coordinates, **kwargs):
     return System(
-        xyz=_xyz(symbols, coordinates),
+        xyz=xyz_string(symbols, coordinates),
         basis_set=kwargs.pop("basis_set", "sto-3g"),
         auxiliary_basis_set=kwargs.pop("auxiliary_basis_set", "def2-universal-JKFIT"),
         unit="bohr",
@@ -118,24 +115,6 @@ def _gasscf_n2_three_gas_energy(symbols, coordinates):
     return _gasscf_n2_three_gas(symbols, coordinates).E
 
 
-def _four_point_central_difference_component(
-    energy_fn, symbols, coordinates, atom, cart, *args, step=1.0e-3, **kwargs
-):
-    coordinates = np.asarray(coordinates, dtype=float)
-
-    def shifted_energy(scale):
-        shifted_coordinates = coordinates.copy()
-        shifted_coordinates[atom, cart] += scale * step
-        return energy_fn(symbols, shifted_coordinates, *args, **kwargs)
-
-    return (
-        -shifted_energy(2.0)
-        + 8.0 * shifted_energy(1.0)
-        - 8.0 * shifted_energy(-1.0)
-        + shifted_energy(-2.0)
-    ) / (12.0 * step)
-
-
 def test_casscf_gradient_h2_full_active_finite_difference_and_translation():
     """Validate the all-active state-specific CASSCF gradient by finite differences."""
     symbols = ["H", "H"]
@@ -146,7 +125,7 @@ def test_casscf_gradient_h2_full_active_finite_difference_and_translation():
 
     for atom in range(2):
         for cart in range(3):
-            numerical = _four_point_central_difference_component(
+            numerical = four_point_central_difference_gradient_component(
                 _casscf_energy, symbols, coordinates, atom, cart, **kwargs
             )
             assert gradient[atom, cart] == pytest.approx(numerical, abs=1.0e-7)
@@ -161,7 +140,7 @@ def test_casscf_gradient_lih_core_active_selected_finite_difference():
     kwargs = {"core_orbitals": [0], "active_orbitals": [1, 2]}
 
     gradient = _casscf_gradient(symbols, coordinates, **kwargs)
-    numerical = _four_point_central_difference_component(
+    numerical = four_point_central_difference_gradient_component(
         _casscf_energy, symbols, coordinates, 1, 2, **kwargs
     )
 
@@ -184,7 +163,7 @@ def test_gasscf_gradient_h2_two_gas_finite_difference_and_translation():
 
     for atom in range(2):
         for cart in range(3):
-            numerical = _four_point_central_difference_component(
+            numerical = four_point_central_difference_gradient_component(
                 _gasscf_h2_energy, symbols, coordinates, atom, cart
             )
             assert gradient[atom, cart] == pytest.approx(numerical, abs=1.0e-7)
@@ -214,7 +193,7 @@ def test_gasscf_gradient_n2_three_gas_selected_finite_difference():
     assert mc.ci_solver.sub_solvers[0].state.gas_max == [4, 4, 2]
     assert len(mc.ci_solver.sub_solvers[0].ci_strings.gas_occupations) > 1
 
-    numerical = _four_point_central_difference_component(
+    numerical = four_point_central_difference_gradient_component(
         _gasscf_n2_three_gas_energy, symbols, coordinates, 1, 2
     )
 
@@ -249,6 +228,26 @@ def test_casscf_gradient_auto_runs_and_reuses_executed_object():
     assert mc.E == pytest.approx(energy1)
     assert gradient1 == pytest.approx(gradient2, abs=1.0e-12)
     assert gradient1.shape == (system.natoms, 3)
+
+
+def test_casscf_gradient_reuses_orbital_optimizer_intermediates(monkeypatch):
+    """Avoid rebuilding orbital intermediates when the final MO basis is unchanged."""
+    mc = _casscf(
+        ["H", "H"],
+        np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]]),
+        active_orbitals=2,
+        final_orbitals="original",
+    )
+
+    def fail(*args, **kwargs):
+        raise AssertionError("CASSCF gradient rebuilt converged orbital intermediates")
+
+    monkeypatch.setattr(type(mc.orb_opt), "__init__", fail)
+    monkeypatch.setattr(mc.orb_opt, "_compute_Fcore", fail)
+    monkeypatch.setattr(mc.orb_opt, "get_eri_gaaa", fail)
+
+    gradient = mc.gradient()
+    assert gradient.shape == (mc.system.natoms, 3)
 
 
 def test_casscf_gradient_rejects_state_average():

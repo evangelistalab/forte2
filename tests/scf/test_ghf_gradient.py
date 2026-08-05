@@ -2,15 +2,15 @@ import numpy as np
 import pytest
 
 from forte2 import GHF, System, UHF
-from tests.scf.gradient_test_utils import (
-    _xyz,
+from tests.gradient_test_utils import (
     four_point_central_difference_gradient_component,
+    xyz_string,
 )
 
 
 def _ghf(symbols, coordinates, charge=1, **kwargs):
     system = System(
-        xyz=_xyz(symbols, coordinates),
+        xyz=xyz_string(symbols, coordinates),
         basis_set="cc-pVDZ",
         auxiliary_basis_set="def2-universal-JKFIT",
         unit="bohr",
@@ -53,13 +53,13 @@ def test_ghf_gradient_collinear_limit_matches_uhf():
     symbols = ["O", "H", "H"]
     coordinates = np.array([[0.0, 0.0, -0.1], [0.0, -1.4, 0.9], [0.0, 1.4, 0.9]])
     system_ghf = System(
-        xyz=_xyz(symbols, coordinates),
+        xyz=xyz_string(symbols, coordinates),
         basis_set="cc-pVDZ",
         auxiliary_basis_set="def2-universal-JKFIT",
         unit="bohr",
     )
     system_uhf = System(
-        xyz=_xyz(symbols, coordinates),
+        xyz=xyz_string(symbols, coordinates),
         basis_set="cc-pVDZ",
         auxiliary_basis_set="def2-universal-JKFIT",
         unit="bohr",

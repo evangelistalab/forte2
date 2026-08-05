@@ -12,15 +12,15 @@ from forte2 import (
     State,
     System,
 )
-from tests.scf.gradient_test_utils import (
-    _xyz,
+from tests.gradient_test_utils import (
     four_point_central_difference_gradient_component,
+    xyz_string,
 )
 
 
 def _system(symbols, coordinates, x2c_type=None, snso_type=None):
     return System(
-        xyz=_xyz(symbols, coordinates),
+        xyz=xyz_string(symbols, coordinates),
         basis_set="sto-3g",
         auxiliary_basis_set="def2-universal-JKFIT",
         unit="bohr",
