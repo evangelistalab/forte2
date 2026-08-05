@@ -1,3 +1,6 @@
+#include <limits>
+#include <stdexcept>
+
 #include "helpers/timer.hpp"
 #include "helpers/np_matrix_functions.h"
 #include "helpers/np_vector_functions.h"
@@ -104,7 +107,6 @@ np_tensor4 CISigmaBuilder::compute_ab_2rdm(np_vector C_left, np_vector C_right) 
     const auto nb = lists_.nb();
     const auto norb = lists_.norb();
     const auto norb2 = norb * norb;
-    const auto norb3 = norb2 * norb;
 
     auto rdm = make_zeros<nb::numpy, double, 4>({norb, norb, norb, norb});
 
@@ -121,11 +123,33 @@ np_tensor4 CISigmaBuilder::compute_ab_2rdm(np_vector C_left, np_vector C_right) 
     const int num_1h_class_Ka = lists_.alpha_address_1h()->nclasses();
     const int num_1h_class_Kb = lists_.beta_address_1h()->nclasses();
 
-    // The contraction gamma[uv,xy] = sum_{Ka,Kb} (sign_u sign_v Cl[Ja,Jb]) (sign_x sign_y Cr[Ia,Ib])
-    // is a matrix product over the composite one-hole index K = (Ka, Kb)
-    // we can gather the (signed) left coefficients into B_L[(u*norb+v), K] and 
-    // the (signed) right coefficients into B_R[(x*norb+y), K], then accumulate gamma[(uv),(xy)] += B_L * B_R^T 
-    // with one zgemm per Ka-chunk
+    size_t max_composite_K = 0;
+    for (int class_Ka = 0; class_Ka < num_1h_class_Ka; ++class_Ka) {
+        const size_t maxKa = lists_.alpha_address_1h()->strpcls(class_Ka);
+        for (int class_Kb = 0; class_Kb < num_1h_class_Kb; ++class_Kb) {
+            const size_t maxKb = lists_.beta_address_1h()->strpcls(class_Kb);
+            if ((maxKa == 0) or (maxKb == 0))
+                continue;
+            if (maxKa > std::numeric_limits<size_t>::max() / maxKb) {
+                throw std::overflow_error("The composite 2-RDM hole dimension is too large.");
+            }
+            max_composite_K = std::max(max_composite_K, maxKa * maxKb);
+        }
+    }
+    if (max_composite_K == 0) {
+        rdm2_ab_timer_ += timer.elapsed_seconds();
+        return rdm;
+    }
+
+    std::vector<double> Kblock1;
+    std::vector<double> Kblock2;
+    const size_t Kblock_size =
+        acquire_local_Kblock_buffers(Kblock1, Kblock2, norb2, max_composite_K);
+
+    // The contraction gamma[uv,xy] = sum_{Ka,Kb} (sign_u sign_v Cl[Ja,Jb])
+    // (sign_x sign_y Cr[Ia,Ib]) is a matrix product over the composite one-hole index
+    // K = (Ka, Kb). Gather the signed coefficients into B_L[(uv),K] and B_R[(xy),K],
+    // then accumulate gamma += B_L * B_R^T one bounded composite-K chunk at a time.
     for (int class_Ka = 0; class_Ka < num_1h_class_Ka; ++class_Ka) {
         const auto maxKa = lists_.alpha_address_1h()->strpcls(class_Ka);
         for (int class_Kb = 0; class_Kb < num_1h_class_Kb; ++class_Kb) {
@@ -133,14 +157,10 @@ np_tensor4 CISigmaBuilder::compute_ab_2rdm(np_vector C_left, np_vector C_right) 
             if ((maxKa == 0) or (maxKb == 0))
                 continue;
 
-            // B_L and B_R are each norb^2 x Kdim; both fit in a Kblock buffer.
-            auto [Kblock1, Kblock2, Ka_block_size] = get_Kblock_spans(norb2 * maxKb, maxKa);
+            const size_t maxK = maxKa * maxKb;
 
-            for (size_t Ka_block_start = 0; Ka_block_start < maxKa;
-                 Ka_block_start += Ka_block_size) {
-                const size_t Ka_block_end = std::min(Ka_block_start + Ka_block_size, maxKa);
-                const size_t Ka_size = Ka_block_end - Ka_block_start;
-                const size_t Kdim = Ka_size * maxKb;
+            for (size_t Kblock_start = 0; Kblock_start < maxK;) {
+                const size_t Kdim = std::min(Kblock_size, maxK - Kblock_start);
                 const auto temp_dim = norb2 * Kdim;
 
                 // B_L[uv, K] in Kblock1, B_R[xy, K] in Kblock2
@@ -157,18 +177,18 @@ np_tensor4 CISigmaBuilder::compute_ab_2rdm(np_vector C_left, np_vector C_right) 
                     const auto& Kb_right_list = lists_.get_beta_1h_list2(class_Kb, class_Ib);
                     if (Ka_right_list.empty() || Kb_right_list.empty())
                         continue;
-                    for (size_t Ka = 0; Ka < Ka_size; ++Ka) {
-                        const auto& KaR = Ka_right_list[Ka_block_start + Ka];
-                        for (size_t Kb = 0; Kb < maxKb; ++Kb) {
-                            const auto& KbR = Kb_right_list[Kb];
-                            const auto Kidx = Ka * maxKb + Kb;
-                            for (const auto& [sign_x, x, Ia] : KaR) {
-                                const size_t xnorb = x * norb;
-                                const auto Cr_Ia_offset = Cr_offset + Ia * maxIb;
-                                for (const auto& [sign_y, y, Ib] : KbR) {
-                                    Kblock2[(xnorb + y) * Kdim + Kidx] =
-                                        sign_x * sign_y * Cr_span[Cr_Ia_offset + Ib];
-                                }
+                    for (size_t Kidx = 0; Kidx < Kdim; ++Kidx) {
+                        const size_t K = Kblock_start + Kidx;
+                        const size_t Ka = K / maxKb;
+                        const size_t Kb = K % maxKb;
+                        const auto& KaR = Ka_right_list[Ka];
+                        const auto& KbR = Kb_right_list[Kb];
+                        for (const auto& [sign_x, x, Ia] : KaR) {
+                            const size_t xnorb = x * norb;
+                            const auto Cr_Ia_offset = Cr_offset + Ia * maxIb;
+                            for (const auto& [sign_y, y, Ib] : KbR) {
+                                Kblock2[(xnorb + y) * Kdim + Kidx] =
+                                    sign_x * sign_y * Cr_span[Cr_Ia_offset + Ib];
                             }
                         }
                     }
@@ -184,18 +204,18 @@ np_tensor4 CISigmaBuilder::compute_ab_2rdm(np_vector C_left, np_vector C_right) 
                     const auto& Kb_left_list = lists_.get_beta_1h_list2(class_Kb, class_Jb);
                     if (Ka_left_list.empty() || Kb_left_list.empty())
                         continue;
-                    for (size_t Ka = 0; Ka < Ka_size; ++Ka) {
-                        const auto& KaL = Ka_left_list[Ka_block_start + Ka];
-                        for (size_t Kb = 0; Kb < maxKb; ++Kb) {
-                            const auto& KbL = Kb_left_list[Kb];
-                            const auto Kidx = Ka * maxKb + Kb;
-                            for (const auto& [sign_u, u, Ja] : KaL) {
-                                const size_t unorb = u * norb;
-                                const auto Cl_Ja_offset = Cl_offset + Ja * maxJb;
-                                for (const auto& [sign_v, v, Jb] : KbL) {
-                                    Kblock1[(unorb + v) * Kdim + Kidx] =
-                                        sign_u * sign_v * Cl_span[Cl_Ja_offset + Jb];
-                                }
+                    for (size_t Kidx = 0; Kidx < Kdim; ++Kidx) {
+                        const size_t K = Kblock_start + Kidx;
+                        const size_t Ka = K / maxKb;
+                        const size_t Kb = K % maxKb;
+                        const auto& KaL = Ka_left_list[Ka];
+                        const auto& KbL = Kb_left_list[Kb];
+                        for (const auto& [sign_u, u, Ja] : KaL) {
+                            const size_t unorb = u * norb;
+                            const auto Cl_Ja_offset = Cl_offset + Ja * maxJb;
+                            for (const auto& [sign_v, v, Jb] : KbL) {
+                                Kblock1[(unorb + v) * Kdim + Kidx] =
+                                    sign_u * sign_v * Cl_span[Cl_Ja_offset + Jb];
                             }
                         }
                     }
@@ -204,6 +224,7 @@ np_tensor4 CISigmaBuilder::compute_ab_2rdm(np_vector C_left, np_vector C_right) 
                 // gamma[uv,xy] += sum_K B_L[uv,K] B_R[xy,K]
                 matrix_product('N', 'T', norb2, norb2, Kdim, 1.0, Kblock1.data(), Kdim,
                                Kblock2.data(), Kdim, 1.0, rdm_data, norb2);
+                Kblock_start += Kdim;
             }
         }
     }

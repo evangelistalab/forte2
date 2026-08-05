@@ -65,7 +65,12 @@ std::string CISigmaBuilder::get_algorithm() const {
 }
 
 void CISigmaBuilder::set_memory(int mb) {
-    memory_size_ = mb * 1024 * 1024; // Convert MB to bytes
+    if (mb < 0) {
+        throw std::invalid_argument("CI builder memory must be non-negative.");
+    }
+    memory_size_ = static_cast<size_t>(mb) * 1024 * 1024; // Convert MB to bytes
+    std::vector<double>{}.swap(Kblock1_);
+    std::vector<double>{}.swap(Kblock2_);
 }
 
 void CISigmaBuilder::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
