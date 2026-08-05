@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from forte2 import System, RHF, MCOptimizer, State, CISolver
+from forte2.integrals import LIBCINT_AVAILABLE
 from tests.gradient_test_utils import (
     four_point_central_difference_gradient_component,
     xyz_string,
@@ -357,22 +358,45 @@ def test_casscf_gradient_rejects_cholesky_tei():
         mc.gradient()
 
 
-def test_casscf_gradient_rejects_gaussian_nuclear_charges():
-    """Reject Gaussian nuclear charges until their derivative terms are added."""
-    system = _system(
-        ["H", "H"],
-        np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]]),
-        use_gaussian_charges=True,
-    )
-    rhf = RHF(charge=0)(system)
-    ci_solver = CISolver(
-        State(system=system, multiplicity=1, ms=0.0),
-        active_orbitals=2,
-    )
-    mc = MCOptimizer(ci_solver, final_orbitals="original")(rhf)
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_casscf_gradient_gaussian_nuclear_charges_finite_difference():
+    """Validate the Gaussian nuclear model in the CASSCF gradient."""
+    symbols = ["H", "H"]
+    coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]])
 
-    with pytest.raises(NotImplementedError, match="Gaussian nuclear charges"):
-        mc.gradient()
+    def casscf(distance, gradient=False):
+        system = _system(
+            symbols,
+            np.array([[0.0, 0.0, 0.0], [0.0, 0.0, distance]]),
+            use_gaussian_charges=True,
+        )
+        rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10)(system)
+        ci_solver = CISolver(
+            State(system=system, multiplicity=1, ms=0.0),
+            active_orbitals=2,
+        )
+        mc = MCOptimizer(
+            ci_solver,
+            e_tol=1.0e-12,
+            g_tol=1.0e-9,
+            final_orbitals="original",
+        )(rhf)
+        return mc.gradient() if gradient else mc.run().E
+
+    def energy(_symbols, displaced):
+        return casscf(displaced[1, 2])
+
+    gradient = casscf(coordinates[1, 2], gradient=True)
+    numerical = four_point_central_difference_gradient_component(
+        energy,
+        symbols,
+        coordinates,
+        1,
+        2,
+    )
+
+    assert gradient[1, 2] == pytest.approx(numerical, abs=1.0e-8)
+    assert gradient.sum(axis=0) == pytest.approx(np.zeros(3), abs=1.0e-10)
 
 
 def test_sf_x2c_casscf_gradient_finite_difference():

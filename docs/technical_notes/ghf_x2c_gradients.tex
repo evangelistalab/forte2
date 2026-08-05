@@ -48,8 +48,8 @@ RHF, UHF, GHF & nonrelativistic & point, Gaussian \\
 RHF, UHF, GHF & spin-free X2C-1e & point, Gaussian \\
 GHF & spin-orbit X2C-1e & point, Gaussian \\
 GHF & spin-orbit X2C-1e with SNSO & point, Gaussian \\
-SS-CASSCF/GASSCF & nonrelativistic or spin-free X2C-1e & point \\
-2c SS-CASSCF/GASSCF & spinor-upcast nonrelativistic, SF-X2C-1e, or SO-X2C-1e & point \\
+SS-CASSCF/GASSCF & nonrelativistic or spin-free X2C-1e & point, Gaussian \\
+2c SS-CASSCF/GASSCF & spinor-upcast nonrelativistic, SF-X2C-1e, or SO-X2C-1e & point, Gaussian \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -528,12 +528,12 @@ density-fitting tensors $Z^P_{\mu\nu}$, $W^M_{PQ}$, and
 $W^{J,P}_{\mu\nu}$ remain materialized by the existing SCF and
 multiconfigurational gradient code.
 
-For the supported SCF gradients, Gaussian nuclei change three pieces
-consistently: $V^\xcoord$, $W^\xcoord$, and $E_\mathrm{NN}^\xcoord$.  The last is
+For all supported SCF and multiconfigurational gradients, Gaussian nuclei
+change three pieces consistently: $V^\xcoord$, $W^\xcoord$, and
+$E_\mathrm{NN}^\xcoord$.  The last is
 evaluated by contracting the derivative of the Coulomb interaction between
 normalized Gaussian nuclear charge functions, with diagonal self-interactions
-removed exactly as in the energy.  CASSCF/GASSCF gradients currently require
-point nuclei, as summarized above.
+removed exactly as in the energy.
 
 \section{Code map}
 
@@ -577,7 +577,8 @@ differences of converged SCF energies and checked for translational invariance.
 nonrelativistic upcast limit with arbitrary spinor phases and against SF- and
 SO-X2C energy finite differences.  The tests include a correlated triatomic
 SNSO CASSCF calculation and an SNSO GASSCF calculation with optimized inter-GAS
-rotations.
+rotations.  Gaussian nuclei are checked for nonrelativistic CASSCF and
+SO-X2C/SNSO GASSCF.
 \end{enumerate}
 
 Useful diagnostics are agreement of the fixed-density X2C contraction with
@@ -599,12 +600,11 @@ which the number of retained overlap eigenvectors changes is
 non-differentiable under hard canonical truncation and must be handled by
 changing the threshold or basis.
 
-CASSCF/GASSCF gradients are currently limited to a single optimized state,
-point nuclei, and orbital spaces without frozen core, frozen virtual, active
-frozen, or frozen inter-GAS rotations.  Both the orbital optimization and CI
-roots must be converged before a gradient is evaluated.  The excluded cases
-require response terms outside the stationary single-state Lagrangian used
-here.
+CASSCF/GASSCF gradients are currently limited to a single optimized state and
+orbital spaces without frozen core, frozen virtual, active-frozen, or frozen
+inter-GAS rotations.  Both the orbital optimization and CI roots must be
+converged before a gradient is evaluated.  The excluded cases require response
+terms outside the stationary single-state Lagrangian used here.
 
 The implemented Hamiltonian is X2C-1e: two-electron picture-change corrections
 are not included in either the energy or gradient.  This is the same

@@ -526,10 +526,6 @@ def _validate_casscf_gradient_request(mc) -> None:
     system = _find_upstream_system(mc)
     validate_df_gradient_system(system, "CASSCF/GASSCF")
 
-    if system.use_gaussian_charges:
-        raise NotImplementedError(
-            "CASSCF/GASSCF gradients with Gaussian nuclear charges are not implemented."
-        )
     if system.two_component and not is_relativistic:
         raise NotImplementedError(
             "Two-component CASSCF/GASSCF gradients require a relativistic CI solver."

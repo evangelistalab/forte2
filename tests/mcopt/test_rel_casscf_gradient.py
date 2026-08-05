@@ -12,13 +12,20 @@ from forte2 import (
     State,
     System,
 )
+from forte2.integrals import LIBCINT_AVAILABLE
 from tests.gradient_test_utils import (
     four_point_central_difference_gradient_component,
     xyz_string,
 )
 
 
-def _system(symbols, coordinates, x2c_type=None, snso_type=None):
+def _system(
+    symbols,
+    coordinates,
+    x2c_type=None,
+    snso_type=None,
+    use_gaussian_charges=False,
+):
     return System(
         xyz=xyz_string(symbols, coordinates),
         basis_set="sto-3g",
@@ -26,6 +33,7 @@ def _system(symbols, coordinates, x2c_type=None, snso_type=None):
         unit="bohr",
         x2c_type=x2c_type,
         snso_type=snso_type,
+        use_gaussian_charges=use_gaussian_charges,
         minao_basis_set=None,
     )
 
@@ -39,6 +47,7 @@ def _rel_casscf(
     core_orbitals=None,
     x2c_type=None,
     snso_type=None,
+    use_gaussian_charges=False,
     apply_random_phase=False,
     gas_min=None,
     gas_max=None,
@@ -48,6 +57,7 @@ def _rel_casscf(
         coordinates,
         x2c_type=x2c_type,
         snso_type=snso_type,
+        use_gaussian_charges=use_gaussian_charges,
     )
     if x2c_type == "so":
         parent = GHF(charge=0, e_tol=1.0e-10, d_tol=1.0e-6)(system)
@@ -207,7 +217,20 @@ def test_snso_x2c_rel_casscf_gradient_triatomic_finite_difference():
     assert gradient.sum(axis=0) == pytest.approx(np.zeros(3), abs=1.0e-8)
 
 
-def test_snso_x2c_rel_gasscf_gradient_finite_difference():
+@pytest.mark.parametrize(
+    "use_gaussian_charges",
+    [
+        pytest.param(False, id="point"),
+        pytest.param(
+            True,
+            marks=pytest.mark.skipif(
+                not LIBCINT_AVAILABLE, reason="Libcint is not available"
+            ),
+            id="gaussian",
+        ),
+    ],
+)
+def test_snso_x2c_rel_gasscf_gradient_finite_difference(use_gaussian_charges):
     """Validate two-component GASSCF with optimized inter-GAS rotations."""
     symbols = ["Li", "H"]
     coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 3.0]])
@@ -219,6 +242,7 @@ def test_snso_x2c_rel_gasscf_gradient_finite_difference():
         gas_max=[2],
         x2c_type="so",
         snso_type="row-dependent",
+        use_gaussian_charges=use_gaussian_charges,
     )
 
     mc = _rel_casscf(symbols, coordinates, **options)
