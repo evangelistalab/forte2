@@ -83,7 +83,7 @@ def test_ghf_gradient_auto_runs_and_is_repeatable():
 
 
 @pytest.mark.parametrize("x2c_type", ["sf", "so"])
-def test_x2c_ghf_gradient_finite_difference(x2c_type):
+def test_x2c_ghf_gradient_finite_difference(x2c_type, monkeypatch):
     def make_system(z):
         return System(
             xyz=f"O 0 0 0\nH 0 0 {z:.12f}\nH 0 1.4 0",
@@ -95,7 +95,16 @@ def test_x2c_ghf_gradient_finite_difference(x2c_type):
         )
 
     options = dict(charge=1, ms_guess=0.5, e_tol=1.0e-10, d_tol=1.0e-6)
-    gradient = GHF(**options)(make_system(1.5)).gradient()
+    ghf = GHF(**options)(make_system(1.5))
+    ghf.run()
+
+    def reject_full_hcore_derivative():
+        raise AssertionError("The production gradient requested full X2C matrices.")
+
+    monkeypatch.setattr(
+        ghf.system.x2c_helper, "hcore_deriv", reject_full_hcore_derivative
+    )
+    gradient = ghf.gradient()
     step = 5.0e-4
     energies = [
         GHF(**options)(make_system(1.5 + scale * step)).run().E
