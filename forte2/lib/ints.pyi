@@ -230,6 +230,8 @@ def coulomb_3c_deriv(basis1: Basis, basis2: Basis, basis3: Basis, W3: Annotated[
 @overload
 def coulomb_3c_deriv(basis1: Basis, basis2: Basis, basis3: Basis, W3: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None), order='C')], charges: Sequence[tuple[float, Sequence[float]]]) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]: ...
 
+def coulomb_3c_opVop(basis1: Basis, basis2: Basis, basis3: Basis) -> list[Annotated[NDArray[numpy.float64], dict(shape=(None, None))]]: ...
+
 @overload
 def coulomb_2c_deriv(basis1: Basis, basis2: Basis, W2: Annotated[NDArray[numpy.float64], dict(shape=(None, None), order='C')], charges: Sequence[tuple[float, Sequence[float]]]) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]: ...
 
@@ -311,6 +313,11 @@ def cint_int3c2e_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.in
 def cint_int3c2e_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))], ints: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='C')]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='C')]:
     """
     Compute the three-center two-electron integral tensor using libcint in spherical harmonics, with a user-provided buffer for the result.
+    """
+
+def cint_int3c2e_spsp1_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None), order='C')]:
+    """
+    Compute momentum-dressed three-center integrals using libcint in spherical harmonics.
     """
 
 HAS_LIBCINT: bool = True

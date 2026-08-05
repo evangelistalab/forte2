@@ -38,9 +38,14 @@ class System:
     x2c_type : str | None, optional, default=None
         The type of X2C transformation to be used. Options are "sf" for scalar
         relativistic effects or "so" for spin-orbit coupling. If None, no X2C transformation is applied.
+    x2c_model : str, optional, default="1e"
+        The potential model used to construct the X2C decoupling transformation. Options are
+        "1e" for the conventional one-electron X2C Hamiltonian and "sap" for SAP-X2C with
+        the ``sap_grasp_large`` atomic potentials.
     snso_type : str | None, optional, default="row-dependent"
         The type of screened nuclear spin-orbit coupling scaling scheme to use.
-        Only relevant if `x2c_type` is "so".
+        Only relevant if `x2c_type` is "so" and `x2c_model` is "1e". SAP-X2C already
+        includes a model of two-electron picture-change effects, so SNSO scaling is not applied.
         Options are None, "boettger", "dc", "dcb", or "row-dependent".
     unit : str, optional, default="angstrom"
         The unit for the atomic coordinates. Can be "angstrom" or "bohr".
@@ -110,6 +115,7 @@ class System:
     auxiliary_basis_set: str | dict = None
     minao_basis_set: str | dict = "cc-pvtz-minao"
     x2c_type: str | None = None
+    x2c_model: str = "1e"
     snso_type: str | None = "row-dependent"
     unit: str = "angstrom"
     overlap_ortho_rtol: float = 1e-8
@@ -153,6 +159,10 @@ class System:
             raise ValueError("cholesky_tol must be non-negative.")
         if self.symmetry_tol < 0:
             raise ValueError("symmetry_tol must be non-negative.")
+        if self.x2c_model not in ["1e", "sap"]:
+            raise ValueError(
+                f"Invalid x2c_model: {self.x2c_model}. Use '1e' or 'sap'."
+            )
 
     def _common_init(self, skip_basis_init=False):
         self._init_geometry()

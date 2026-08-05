@@ -181,6 +181,126 @@ compute_two_electron_3c_deriv(const Basis& basis1, const Basis& basis2, const Ba
         weights, charges);
 }
 
+/// @brief Contract mixed second derivatives of three-center integrals over the first basis.
+/// @details For I(P, mu, nu) = (P|mu nu), evaluates the scalar and three Cartesian
+/// Pauli components of the momentum-dressed integral, using derivatives with respect
+/// to the centers of mu and nu.
+/// The returned order is scalar, x, y, z, matching one-electron `opVop`.
+/// @param basis1 Potential-density basis whose functions are summed over.
+/// @param basis2 Orbital basis for mu.
+/// @param basis3 Orbital basis for nu.
+/// @return Four matrices with shape `(basis2.size(), basis3.size())`.
+template <libint2::Operator Op>
+[[nodiscard]] auto compute_two_electron_3c_opVop(const Basis& basis1, const Basis& basis2,
+                                                 const Basis& basis3) -> std::array<np_matrix, 4> {
+#if !defined(LIBINT2_DERIV_ERI3_ORDER) || LIBINT2_DERIV_ERI3_ORDER < 2
+    throw std::runtime_error(
+        "Three-center second derivatives are not available in this Libint2 build.");
+#else
+    libint2::initialize();
+
+    const auto max_nprim = std::max({basis1.max_nprim(), basis2.max_nprim(), basis3.max_nprim()});
+    const auto max_l = std::max({basis1.max_l(), basis2.max_l(), basis3.max_l()});
+
+    const std::size_t nb2 = basis2.size();
+    const std::size_t nb3 = basis3.size();
+    const std::size_t nshells1 = basis1.nshells();
+    const std::size_t nshells2 = basis2.nshells();
+    const std::size_t nshells3 = basis3.nshells();
+
+    const auto first_size1 = basis1.shell_first_and_size();
+    const auto first_size2 = basis2.shell_first_and_size();
+    const auto first_size3 = basis3.shell_first_and_size();
+
+    std::array<np_matrix, 4> ints;
+    for (auto& component : ints) {
+        component = make_zeros<nb::numpy, double, 2>({nb2, nb3});
+    }
+
+    if (nshells1 == 0 || nshells2 == 0 || nshells3 == 0) {
+        libint2::finalize();
+        return ints;
+    }
+
+    // Libint orders second geometrical derivatives as the flattened upper triangle of
+    // the nine shell-center coordinates: P(xyz), mu(xyz), nu(xyz).
+    constexpr auto deriv_index = [](std::size_t first, std::size_t second) {
+        constexpr std::size_t ncoords = 9;
+        return first * ncoords - first * (first + 1) / 2 + second;
+    };
+    constexpr std::array<std::size_t, 9> deriv_indices{
+        deriv_index(3, 6), // mu_x, nu_x
+        deriv_index(4, 7), // mu_y, nu_y
+        deriv_index(5, 8), // mu_z, nu_z
+        deriv_index(4, 8), // mu_y, nu_z
+        deriv_index(5, 7), // mu_z, nu_y
+        deriv_index(5, 6), // mu_z, nu_x
+        deriv_index(3, 8), // mu_x, nu_z
+        deriv_index(3, 7), // mu_x, nu_y
+        deriv_index(4, 6), // mu_y, nu_x
+    };
+
+    std::array<double*, 4> output{};
+    for (std::size_t component = 0; component < ints.size(); ++component) {
+        output[component] = ints[component].data();
+    }
+
+    // Parallelize over rows of the retained orbital matrix. Each thread writes to a
+    // disjoint set of rows, avoiding both synchronization and per-thread matrix copies.
+    auto kernel = [&](std::size_t s2_begin, std::size_t s2_end) {
+        libint2::Engine engine(Op, max_nprim, max_l, 2);
+        engine.set(libint2::BraKet::xs_xx);
+        const auto& results = engine.results();
+
+        for (std::size_t s2 = s2_begin; s2 < s2_end; ++s2) {
+            const auto& shell2 = basis2[s2];
+            const auto [f2, n2] = first_size2[s2];
+
+            for (std::size_t s3 = 0; s3 < nshells3; ++s3) {
+                const auto& shell3 = basis3[s3];
+                const auto [f3, n3] = first_size3[s3];
+
+                for (std::size_t s1 = 0; s1 < nshells1; ++s1) {
+                    const auto& shell1 = basis1[s1];
+                    const auto n1 = first_size1[s1].second;
+
+                    engine.compute(shell1, shell2, shell3);
+
+                    std::array<const double*, 9> buffers{};
+                    for (std::size_t d = 0; d < deriv_indices.size(); ++d) {
+                        buffers[d] = results[deriv_indices[d]];
+                    }
+
+                    for (std::size_t i = 0, ijk = 0; i < n1; ++i) {
+                        for (std::size_t j = 0; j < n2; ++j) {
+                            for (std::size_t k = 0; k < n3; ++k, ++ijk) {
+                                std::array<double, 9> d{};
+                                for (std::size_t component = 0; component < d.size(); ++component) {
+                                    if (buffers[component]) {
+                                        d[component] = static_cast<double>(buffers[component][ijk]);
+                                    }
+                                }
+
+                                const std::size_t offset = (f2 + j) * nb3 + f3 + k;
+                                output[0][offset] += d[0] + d[1] + d[2];
+                                output[1][offset] += d[3] - d[4];
+                                output[2][offset] += d[5] - d[6];
+                                output[3][offset] += d[7] - d[8];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    parallel_for_chunked(0, nshells2, kernel);
+
+    libint2::finalize();
+    return ints;
+#endif
+}
+
 /// @brief Contracts a given set of weights with the derivative of the two-center
 /// two-electron integrals (P|Q) with repect to nuclear coordinates, where P and Q are basis
 /// functions from basis1 and basis2 respectively.
