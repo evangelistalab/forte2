@@ -48,7 +48,6 @@ class X2CHelper:
     def __init__(self, system):
         self.system = system
         self.overlap_ortho_rtol = system.overlap_ortho_rtol
-        self.x2c_type = system.x2c_type.lower()
         assert self.system.x2c_type in [
             "sf",
             "so",
@@ -90,6 +89,11 @@ class X2CHelper:
             f"Number of orthogonalized decontracted basis functions: {self.orth_info['n_kept']}"
         )
 
+    @property
+    def x2c_type(self):
+        """Current X2C mode, including a SpinorUpcaster override."""
+        return self.system.x2c_type.lower()
+
     def hcore_x2c(self):
         """
         Return the one-electron X2C core Hamiltonian matrix for the given system.
@@ -117,30 +121,29 @@ class X2CHelper:
         _, Xorthm1 = self._get_Xorth()
         h_fw = Xorthm1.conj().T @ h_fw @ Xorthm1
 
-        if self.system.x2c_type.lower() == "so" and self.system.snso_type is not None:
-            nbf = len(self.xbasis)
-            haa = h_fw[:nbf, :nbf]
-            hab = h_fw[:nbf, nbf:]
-            hba = h_fw[nbf:, :nbf]
-            hbb = h_fw[nbf:, nbf:]
-            # the pauli representation of a spin-dependent operator.
-            # h0 is spin-free, h1-3 are spin-dependent
-            # SNSO is applied to the spin-dependent parts only.
-            # see for example eq 4-6 of 10.1002/wcms.1436
-            h0 = (haa + hbb) / 2
-            h1 = (hab + hba) / 2
-            h2 = (hab - hba) / (-2j)
-            h3 = (haa - hbb) / 2
-            h1 = self._apply_snso_scaling(h1)
-            h2 = self._apply_snso_scaling(h2)
-            h3 = self._apply_snso_scaling(h3)
-            h_fw = np.block([[h0 + h3, h1 - 1j * h2], [h1 + 1j * h2, h0 - h3]])
+        h_fw = self._apply_snso_to_hcore(h_fw)
 
         # project back to the contracted basis
         proj = self._get_projection_matrix()
         h_fw = proj.conj().T @ h_fw @ proj
 
         return h_fw
+
+    def hcore_gradient(self, density):
+        r"""Contract the analytic X2C Hamiltonian derivative with ``density``."""
+        from .x2c_grad import compute_hcore_gradient
+
+        return compute_hcore_gradient(self, density)
+
+    @staticmethod
+    def _build_nesc_matrix(T, V, W, X):
+        return (
+            T @ X
+            + X.conj().T @ T
+            - X.conj().T @ T @ X
+            + V
+            + (0.25 / LIGHT_SPEED**2) * X.conj().T @ W @ X
+        )
 
     def _get_projection_matrix(self):
         return self.proj if self.system.x2c_type == "sf" else block_diag_2x2(self.proj)
@@ -212,14 +215,23 @@ class X2CHelper:
         # return S12 @ SSS12 @ Ssqrt
 
     def _build_foldy_wouthuysen_hamiltonian(self, T, V, W):
-        L = (
-            T @ self.X
-            + self.X.conj().T @ T
-            - self.X.conj().T @ T @ self.X
-            + V
-            + (0.25 / LIGHT_SPEED**2) * self.X.conj().T @ W @ self.X
-        )
+        L = self._build_nesc_matrix(T, V, W, self.X)
         return self.R.conj().T @ L @ self.R
+
+    def _apply_snso_to_hcore(self, hcore):
+        if self.x2c_type != "so" or self.system.snso_type is None:
+            return hcore
+
+        nbf = len(self.xbasis)
+        haa = hcore[:nbf, :nbf]
+        hab = hcore[:nbf, nbf:]
+        hba = hcore[nbf:, :nbf]
+        hbb = hcore[nbf:, nbf:]
+        h0 = (haa + hbb) / 2
+        h1 = self._apply_snso_scaling((hab + hba) / 2)
+        h2 = self._apply_snso_scaling((hab - hba) / (-2j))
+        h3 = self._apply_snso_scaling((haa - hbb) / 2)
+        return np.block([[h0 + h3, h1 - 1j * h2], [h1 + 1j * h2, h0 - h3]])
 
     def _apply_snso_scaling(self, ints):
         """
