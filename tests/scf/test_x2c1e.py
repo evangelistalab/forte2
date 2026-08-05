@@ -76,6 +76,45 @@ def test_x2c_hcore_deriv_with_truncated_overlap_space():
     assert analytical == pytest.approx(numerical, abs=3.0e-8)
 
 
+@pytest.mark.parametrize(
+    ("x2c_type", "snso_type", "overlap_ortho_rtol"),
+    [
+        ("sf", None, 1.0e-7),
+        ("so", None, 1.0e-7),
+        ("so", "row-dependent", 1.0e-7),
+        ("sf", None, 1.0e-3),
+    ],
+)
+def test_x2c_hcore_gradient_matches_matrix_derivative(
+    x2c_type, snso_type, overlap_ortho_rtol
+):
+    system = System(
+        xyz="O 0 0 0\nH 0 0 1.5\nH 0 1.4 0",
+        basis_set="sto-3g",
+        unit="bohr",
+        x2c_type=x2c_type,
+        snso_type=snso_type,
+        overlap_ortho_rtol=overlap_ortho_rtol,
+        minao_basis_set=None,
+    )
+    size = system.nbf if x2c_type == "sf" else 2 * system.nbf
+    rng = np.random.default_rng(8675309)
+    density = rng.standard_normal((size, size))
+    if x2c_type == "so":
+        density = density + 1j * rng.standard_normal((size, size))
+    density = 0.5 * (density + density.conj().T)
+
+    expected = np.einsum(
+        "xmn,nm->x",
+        system.x2c_helper.hcore_deriv(),
+        density,
+        optimize=True,
+    ).real.reshape(system.natoms, 3)
+    actual = system.x2c_helper.hcore_gradient(density)
+
+    assert actual == pytest.approx(expected, abs=1.0e-10)
+
+
 def test_x2c_helper_tracks_spinor_upcaster_override():
     def make_system(x2c_type, snso_type=None):
         return System(

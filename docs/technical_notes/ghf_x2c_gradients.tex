@@ -412,6 +412,45 @@ derivative spin-dependent components, reassembles the spinor matrix, and only
 then applies $P$ and $P^\xcoord$.  There is therefore no separate derivative of
 the SNSO factors.
 
+\subsection{Density-contracted adjoint used in production}
+
+The matrix-valued forward response described above is retained as
+\texttt{hcore\_deriv} for verification and for callers that require
+$h_\mathrm{X2C}^\xcoord$ itself.  Energy gradients require only the scalar
+contraction in \cref{eq:x2c_hcore_contraction}.  The production path therefore
+propagates the AO density backward through the projection, SNSO map, dual
+orthogonalizer, Foldy--Wouthuysen transformation, inverse square root, NESC
+matrix, decoupling response, Dirac eigensystem, and canonical orthogonalizer.
+It produces five primitive adjoints,
+\begin{equation}
+ \overline S,\quad \overline T,\quad \overline V,\quad
+ [\overline W_0,\overline W_x,\overline W_y,\overline W_z],\quad
+ \overline S_{dc},
+\end{equation}
+such that
+\begin{equation}
+ E_{1e,\mathrm{X2C}}^\xcoord
+ =\RePart\left[
+ \overline S:S^\xcoord+\overline T:T^\xcoord
+ +\overline V:V^\xcoord+\sum_k\overline W_k:W_k^\xcoord
+ +\overline S_{dc}:S_{dc}^\xcoord\right].
+ \label{eq:x2c_adjoint_contraction}
+\end{equation}
+Here $A:B$ denotes the elementwise contraction in Forte2's stored matrix
+orientation.  The inverse-square-root Frechet map in
+\cref{eq:r_frechet} is self-adjoint for Hermitian perturbations, so the same
+divided-difference kernel propagates the renormalization adjoint.  The
+negative--positive energy denominators in \cref{eq:dirac_response} likewise
+appear once in the reverse decoupling response.
+
+The primitive adjoints are contracted directly by the integral backends.
+Gaussian-nucleus $V^\xcoord$ and analytic libcint $W^\xcoord$ are generated
+one atom at a time.  Consequently the production path does not allocate any
+array of shape $(3N_\mathrm{atom},n,n)$ or
+$(4,3N_\mathrm{atom},n,n)$.  Its dense X2C matrix algebra is
+$O(n^3)$ rather than repeating $O(n^3)$ response work for every nuclear
+coordinate; the unavoidable derivative-integral contractions remain.
+
 \section{Variational gradient assembly with X2C}
 
 X2C-1e transforms only the one-electron Hamiltonian.  The AO overlap and
@@ -466,6 +505,11 @@ Hermitian part of the converged relativistic orbital Lagrangian and then spin
 traced in the AO basis.  No CASSCF Z-vector is needed for the optimized
 single-state objective when every nonredundant orbital rotation is variational.
 
+This implementation change concerns only the X2C one-electron term.  The
+density-fitting tensors $Z^P_{\mu\nu}$, $W^M_{PQ}$, and
+$W^{J,P}_{\mu\nu}$ remain materialized by the existing SCF and
+multiconfigurational gradient code.
+
 Gaussian nuclei change three pieces consistently: $V^\xcoord$,
 $W^\xcoord$, and $E_\mathrm{NN}^\xcoord$.  The last is evaluated by contracting
 the derivative of the Coulomb interaction between normalized Gaussian nuclear
@@ -487,7 +531,8 @@ File or function & Responsibility \\
 \texttt{one\_electron\_deriv*} & Libint2 matrix-valued $S^\xcoord$, $T^\xcoord$, and point-$V^\xcoord$.\\
 \texttt{integrals.py} & Gaussian-$V^\xcoord$, full $W^\xcoord$, component normalization, and backend selection.\\
 \texttt{libcint\_two\_center.h} & Bound libcint derivative kernels.\\
-\texttt{forte2/x2c/x2c.py} & $O$, $X$, $R$, $h_\mathrm{FW}$, projection, SNSO, and all corresponding response terms.\\
+\texttt{forte2/x2c/x2c.py} & X2C Hamiltonian and matrix-valued forward response used as the reference API.\\
+\texttt{forte2/x2c/x2c\_grad.py} & Density-contracted reverse X2C response and direct primitive derivative contractions.\\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -505,6 +550,9 @@ antisymmetry are checked explicitly.
 \item $h_\mathrm{X2C}^\xcoord$ is compared directly with fourth-order finite
 differences for SF-X2C, SO-X2C, both nuclear models, all SNSO variants, and a
 case with a discarded overlap eigenvector.
+\item The density-contracted X2C adjoint is compared with an explicit
+contraction of \texttt{hcore\_deriv} against random Hermitian real and complex
+densities for SF-X2C, SO-X2C, SNSO, and truncated-overlap cases.
 \item Nonrelativistic complex GHF is compared with energy finite differences
 and with the collinear UHF limit.
 \item Full SF-X2C UHF and SO-X2C GHF gradients are compared with finite

@@ -21,7 +21,16 @@ def _compute_rhf_gradient(rhf) -> NDArray:
     W1 = 2.0 * np.einsum("mi,i,ni->mn", Cocc, rhf.eps[0][: rhf.na], Cocc, optimize=True)
     W2, W3 = _build_hf_df_deriv_weights(rhf.system, (Cocc, Cocc), D1)
 
-    hcore_deriv = (
-        rhf.system.x2c_helper.hcore_deriv() if rhf.system.x2c_type is not None else None
+    hcore_gradient = (
+        rhf.system.x2c_helper.hcore_gradient(D1)
+        if rhf.system.x2c_type is not None
+        else None
     )
-    return compute_gradient(rhf.system, D1, W1, W2, W3, hcore_deriv=hcore_deriv)
+    return compute_gradient(
+        rhf.system,
+        D1,
+        W1,
+        W2,
+        W3,
+        hcore_gradient=hcore_gradient,
+    )

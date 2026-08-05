@@ -34,11 +34,11 @@ def _compute_ghf_gradient(ghf) -> NDArray:
         # contraction depends only on the real parts of the spin traces.
         return compute_gradient(ghf.system, D1.real, W1.real, W2, W3)
 
-    hcore_deriv = ghf.system.x2c_helper.hcore_deriv()
     if ghf.system.x2c_type == "sf":
-        hcore_density = D1
+        x2c_density = D1
     else:
-        hcore_density = Cocc @ Cocc.conj().T
+        x2c_density = Cocc @ Cocc.conj().T
+    hcore_gradient = ghf.system.x2c_helper.hcore_gradient(x2c_density)
 
     return compute_gradient(
         ghf.system,
@@ -46,6 +46,5 @@ def _compute_ghf_gradient(ghf) -> NDArray:
         W1.real,
         W2,
         W3,
-        hcore_deriv=hcore_deriv,
-        hcore_density=hcore_density,
+        hcore_gradient=hcore_gradient,
     )

@@ -23,7 +23,16 @@ def _compute_uhf_gradient(uhf) -> NDArray:
     W1 += np.einsum("mi,i,ni->mn", Cocc_b, uhf.eps[1][: uhf.nb], Cocc_b, optimize=True)
     W2, W3 = _build_hf_df_deriv_weights(uhf.system, (Cocc_a, Cocc_b), D1)
 
-    hcore_deriv = (
-        uhf.system.x2c_helper.hcore_deriv() if uhf.system.x2c_type is not None else None
+    hcore_gradient = (
+        uhf.system.x2c_helper.hcore_gradient(D1)
+        if uhf.system.x2c_type is not None
+        else None
     )
-    return compute_gradient(uhf.system, D1, W1, W2, W3, hcore_deriv=hcore_deriv)
+    return compute_gradient(
+        uhf.system,
+        D1,
+        W1,
+        W2,
+        W3,
+        hcore_gradient=hcore_gradient,
+    )

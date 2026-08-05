@@ -113,6 +113,53 @@ def test_one_electron_deriv_matrices_match_contracted_api(
     )
 
 
+@pytest.mark.parametrize("use_gaussian_charges", [False, True])
+def test_nuclear_deriv_wrapper_matches_matrix_contraction(use_gaussian_charges):
+    if use_gaussian_charges and not forte2.integrals.LIBCINT_AVAILABLE:
+        pytest.skip("Gaussian nuclear derivatives require libcint.")
+
+    system = forte2.System(
+        xyz="O 0 0 0\nH 0 0 1.4",
+        basis_set="sto-3g",
+        unit="bohr",
+        use_gaussian_charges=use_gaussian_charges,
+    )
+    weights = rng.standard_normal((system.nbf, system.nbf))
+    expected = np.einsum(
+        "xmn,mn->x",
+        forte2.integrals.nuclear_deriv_matrices(system),
+        weights,
+        optimize=True,
+    )
+
+    actual = forte2.integrals.nuclear_deriv(system, weights)
+
+    assert actual == pytest.approx(expected, abs=1.0e-12)
+
+
+@pytest.mark.skipif(
+    not forte2.integrals.LIBCINT_AVAILABLE,
+    reason="Analytic opVop derivative test requires libcint.",
+)
+def test_opvop_deriv_wrapper_matches_matrix_contraction():
+    system = forte2.System(
+        xyz="S 0 0 0\nH 0 0 1.4\nH 0 1.3 0",
+        basis_set="sto-3g",
+        unit="bohr",
+    )
+    weights = rng.standard_normal((4, system.nbf, system.nbf))
+    expected = np.einsum(
+        "cxmn,cmn->x",
+        forte2.integrals.opVop_deriv_matrices(system),
+        weights,
+        optimize=True,
+    )
+
+    actual = forte2.integrals.opVop_deriv(system, weights)
+
+    assert actual == pytest.approx(expected, abs=1.0e-12)
+
+
 def test_overlap_deriv_h2o_dz():
     delta = 1e-5
 

@@ -401,11 +401,18 @@ def nuclear_deriv_matrices(system, basis1=None, basis2=None):
             "the same basis on the bra and ket."
         )
 
-    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
+    deriv = np.zeros((3 * system.natoms, basis1.size, basis1.size))
+    for atom, block in _gaussian_nuclear_deriv_blocks(system, basis1):
+        deriv[3 * atom : 3 * atom + 3] = block
+    return deriv
+
+
+def _gaussian_nuclear_deriv_blocks(system, basis):
+    """Yield Gaussian nuclear-attraction derivatives one atom at a time."""
+    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis, basis)
     all_nuc_ip = ints.cint_int1e_ipnuc_sph(shell_slice, atm, bas, env).transpose(
         0, 2, 1
     )
-    deriv = np.zeros((3 * system.natoms, basis1.size, basis1.size))
 
     for atom, (charge, center) in enumerate(system.atoms):
         env_atom = env.copy()
@@ -415,66 +422,82 @@ def nuclear_deriv_matrices(system, basis1=None, basis2=None):
             shell_slice, atm, bas, env_atom
         ).transpose(0, 2, 1)
 
-        first, last = basis1.center_first_and_last[atom]
+        first, last = basis.center_first_and_last[atom]
         total = explicit.copy()
         total[:, first:last, :] -= all_nuc_ip[:, first:last, :]
-        deriv[3 * atom : 3 * atom + 3] = total + total.transpose(0, 2, 1)
-
-    return deriv
+        yield atom, total + total.transpose(0, 2, 1)
 
 
-def opVop_deriv_matrices(system, basis1=None, basis2=None):
-    r"""Return derivatives of all four components of the :math:`pVp` operator.
-
-    Components use the same public order as :func:`opVop`:
-    ``[p dot Vp, (p cross Vp)_x, (p cross Vp)_y, (p cross Vp)_z]``.
-    The result has shape ``(4, 3 * natoms, nbasis1, nbasis2)``.
-
-    Libcint provides analytic derivatives for the same-basis case, including
-    Gaussian nuclear models. A fourth-order central difference is retained as
-    a general cross-basis fallback.
-    """
+def nuclear_deriv(system, weights, basis1=None, basis2=None):
+    """Contract nuclear-attraction derivatives without storing all matrices."""
     basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
+    weights = np.asarray(weights)
+    expected = (basis1.size, basis2.size)
+    if weights.shape != expected:
+        raise ValueError(
+            f"Expected nuclear derivative weights shape {expected}, got {weights.shape}."
+        )
+
+    if not system.use_gaussian_charges:
+        _require_libint2_deriv_backend(max(basis1.max_l, basis2.max_l), "nuclear")
+        return ints.nuclear_deriv(
+            basis1,
+            basis2,
+            np.ascontiguousarray(weights.real),
+            system.atoms,
+        )
+
+    _require_libcint()
+    if basis1 is not basis2:
+        raise NotImplementedError(
+            "Gaussian nuclear-attraction derivative contractions currently require "
+            "the same basis on the bra and ket."
+        )
+
+    gradient = np.zeros(3 * system.natoms)
+    for atom, block in _gaussian_nuclear_deriv_blocks(system, basis1):
+        gradient[3 * atom : 3 * atom + 3] = np.einsum(
+            "xmn,mn->x", block, weights, optimize=True
+        ).real
+    return gradient
+
+
+def _opvop_cint_deriv_blocks(system, basis):
+    """Yield analytic libcint opVop derivatives one atom at a time."""
+    atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis, basis)
 
     def format_cint_ip(raw):
-        raw = raw.transpose(0, 2, 1).reshape(3, 4, basis1.size, basis1.size)
-        # Libcint stores the three antisymmetric cross-product components in
-        # transposed convention relative to Forte2.
+        raw = raw.transpose(0, 2, 1).reshape(3, 4, basis.size, basis.size)
+        # Libcint's cross-product components use the transpose convention.
         raw[:, :3] *= -1.0
         return raw
 
-    def public_order(components):
-        return components[[3, 0, 1, 2]]
+    all_nuc_ip = format_cint_ip(
+        ints.cint_int1e_ipspnucsp_sph(shell_slice, atm, bas, env)
+    )
+    component_prefactor = np.array([-1.0, -1.0, -1.0, 1.0])
+    transpose_sign = np.array([-1.0, -1.0, -1.0, 1.0])
 
-    if LIBCINT_AVAILABLE and basis1 is basis2:
-        atm, bas, env, shell_slice = _parse_basis_args_cint_1e(system, basis1, basis2)
-        all_nuc_ip = format_cint_ip(
-            ints.cint_int1e_ipspnucsp_sph(shell_slice, atm, bas, env)
+    for atom, (charge, center) in enumerate(system.atoms):
+        env_atom = env.copy()
+        env_atom[PTR_RINV_ORIG : PTR_RINV_ORIG + 3] = center
+        env_atom[PTR_RINV_ZETA] = env[atm[atom, PTR_ZETA]]
+        explicit = -charge * format_cint_ip(
+            ints.cint_int1e_ipsprinvsp_sph(shell_slice, atm, bas, env_atom)
         )
-        deriv = np.zeros((4, 3 * system.natoms, basis1.size, basis1.size))
 
-        component_prefactor = np.array([-1.0, -1.0, -1.0, 1.0])
-        transpose_sign = np.array([-1.0, -1.0, -1.0, 1.0])
+        first, last = basis.center_first_and_last[atom]
+        total = explicit.copy()
+        total[:, :, first:last, :] -= all_nuc_ip[:, :, first:last, :]
+        block = component_prefactor[None, :, None, None] * (
+            total + transpose_sign[None, :, None, None] * total.transpose(0, 1, 3, 2)
+        )
+        # Libcint order is [x, y, z, scalar]; Forte2 uses [scalar, x, y, z].
+        yield 3 * atom, block.transpose(1, 0, 2, 3)[[3, 0, 1, 2]]
 
-        for atom, (charge, center) in enumerate(system.atoms):
-            env_atom = env.copy()
-            env_atom[PTR_RINV_ORIG : PTR_RINV_ORIG + 3] = center
-            env_atom[PTR_RINV_ZETA] = env[atm[atom, PTR_ZETA]]
-            explicit = -charge * format_cint_ip(
-                ints.cint_int1e_ipsprinvsp_sph(shell_slice, atm, bas, env_atom)
-            )
 
-            first, last = basis1.center_first_and_last[atom]
-            total = explicit.copy()
-            total[:, :, first:last, :] -= all_nuc_ip[:, :, first:last, :]
-            block = component_prefactor[None, :, None, None] * (
-                total
-                + transpose_sign[None, :, None, None] * total.transpose(0, 1, 3, 2)
-            )
-            deriv[:, 3 * atom : 3 * atom + 3] = block.transpose(1, 0, 2, 3)
-
-        return public_order(deriv)
-
+def _opvop_finite_difference_blocks(system, basis1, basis2):
+    """Yield fourth-order opVop derivatives one coordinate at a time."""
     from forte2.system.build_basis import build_basis_from_dict
 
     def shifted_basis(basis, atom, cart, displacement):
@@ -490,7 +513,6 @@ def opVop_deriv_matrices(system, basis1=None, basis2=None):
         pass
 
     step = 1.0e-4
-    deriv = np.zeros((4, 3 * system.natoms, basis1.size, basis2.size))
     for atom in range(system.natoms):
         for cart in range(3):
             values = []
@@ -509,11 +531,55 @@ def opVop_deriv_matrices(system, basis1=None, basis2=None):
                     else shifted_basis(basis2, atom, cart, displacement)
                 )
                 values.append(np.asarray(opVop(shifted_system, shifted1, shifted2)))
-            deriv[:, 3 * atom + cart] = (
-                values[0] - 8.0 * values[1] + 8.0 * values[2] - values[3]
-            ) / (12.0 * step)
+            derivative = (values[0] - 8.0 * values[1] + 8.0 * values[2] - values[3]) / (
+                12.0 * step
+            )
+            yield 3 * atom + cart, derivative[:, None]
+
+
+def _opvop_deriv_blocks(system, basis1, basis2):
+    """Select the analytic same-basis or finite-difference derivative blocks."""
+    if LIBCINT_AVAILABLE and basis1 is basis2:
+        return _opvop_cint_deriv_blocks(system, basis1)
+    return _opvop_finite_difference_blocks(system, basis1, basis2)
+
+
+def opVop_deriv_matrices(system, basis1=None, basis2=None):
+    r"""Return derivatives of all four components of the :math:`pVp` operator.
+
+    Components use the same public order as :func:`opVop`:
+    ``[p dot Vp, (p cross Vp)_x, (p cross Vp)_y, (p cross Vp)_z]``.
+    The result has shape ``(4, 3 * natoms, nbasis1, nbasis2)``.
+
+    Libcint provides analytic derivatives for the same-basis case, including
+    Gaussian nuclear models. A fourth-order central difference is retained as
+    a general cross-basis fallback.
+    """
+    basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
+
+    deriv = np.zeros((4, 3 * system.natoms, basis1.size, basis2.size))
+    for coordinate, block in _opvop_deriv_blocks(system, basis1, basis2):
+        deriv[:, coordinate : coordinate + block.shape[1]] = block
 
     return deriv
+
+
+def opVop_deriv(system, weights, basis1=None, basis2=None):
+    """Contract all four opVop component derivatives with AO weights."""
+    basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
+    weights = np.asarray(weights)
+    expected = (4, basis1.size, basis2.size)
+    if weights.shape != expected:
+        raise ValueError(
+            f"Expected opVop derivative weights shape {expected}, got {weights.shape}."
+        )
+
+    gradient = np.zeros(3 * system.natoms)
+    for coordinate, block in _opvop_deriv_blocks(system, basis1, basis2):
+        gradient[coordinate : coordinate + block.shape[1]] = np.einsum(
+            "cxmn,cmn->x", block, weights, optimize=True
+        ).real
+    return gradient
 
 
 def erf_nuclear(system, omega, basis1=None, basis2=None):

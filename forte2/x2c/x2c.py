@@ -301,6 +301,12 @@ class X2CHelper:
 
         return result
 
+    def hcore_gradient(self, density):
+        r"""Contract the analytic X2C Hamiltonian derivative with ``density``."""
+        from .x2c_grad import compute_hcore_gradient
+
+        return compute_hcore_gradient(self, density)
+
     @staticmethod
     def _orthogonal_basis_deriv(Xorth, Xorth_deriv, matrix, matrix_deriv):
         return (
