@@ -2,7 +2,7 @@ import numpy as np
 import scipy
 
 from forte2 import integrals
-from forte2._forte2 import ints
+from forte2.lib import ints
 from forte2.helpers import block_diag_2x2, i_sigma_dot
 
 from .x2c import LIGHT_SPEED
