@@ -87,6 +87,8 @@ class ROHF(SCFBase):
         self.ndocc = min(self.na, self.nb)
         self.nsocc = abs(self.na - self.nb)
         self.nuocc = self.nmo - self.ndocc - self.nsocc
+        self.auocc = self.nmo - self.na
+        self.buocc = self.nmo - self.nb
 
     def _print_orbital_energies(self):
         ndocc = min(self.na, self.nb)
