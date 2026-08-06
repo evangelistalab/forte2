@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System
+from forte2 import System, X2CParams
 from forte2.scf import RHF, GHF
 from forte2.helpers.comparisons import approx, approx_loose
 
@@ -70,7 +70,7 @@ def test_lindep_x2c(tmp_path):
             "Tl": "x2c-tzvpall-2c-autoaux",
         },
         minao_basis_set="ano-r0",
-        x2c="so-snso-row-dependent",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
         use_gaussian_charges=True,
         overlap_ortho_rtol=5e-10,
     )
@@ -91,7 +91,7 @@ def test_lindep_x2c_quick():
         auxiliary_basis_set="cc-pVQZ-JKFIT",
         unit="bohr",
         overlap_ortho_rtol=2e-7,
-        x2c="so-snso-row-dependent",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
     )
 
     ovlp = system.ints_overlap()

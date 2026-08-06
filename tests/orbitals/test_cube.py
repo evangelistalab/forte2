@@ -1,7 +1,7 @@
 import os
 import glob
 
-from forte2 import System
+from forte2 import System, X2CParams
 from forte2.scf import RHF, GHF
 from forte2.orbitals import write_orbital_cubes
 from forte2.helpers.comparisons import approx
@@ -54,7 +54,7 @@ def test_cube_ghf():
         xyz=xyz,
         basis_set="decon-cc-pVDZ",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
-        x2c="so-1e",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
 
     scf = GHF(charge=0, j_adapt=True)(system)
@@ -82,7 +82,7 @@ def test_2ccube_ghf():
         xyz=xyz,
         basis_set="cc-pVDZ",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
-        x2c="so-1e",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
 
     scf = GHF(charge=0, j_adapt=True)(system)

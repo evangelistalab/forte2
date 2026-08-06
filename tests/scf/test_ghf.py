@@ -1,4 +1,4 @@
-from forte2 import System, GHF, UHF
+from forte2 import System, GHF, UHF, X2CParams
 from forte2.helpers.comparisons import approx
 
 
@@ -68,7 +68,7 @@ def test_j_adapted_ghf():
         xyz=xyz,
         basis_set="decon-cc-pVDZ",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
-        x2c="so-1e",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
     scf = GHF(charge=1, j_adapt=False)(system)
     scf.run()
@@ -79,7 +79,7 @@ def test_j_adapted_ghf():
         xyz=xyz,
         basis_set="decon-cc-pVDZ",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
-        x2c="so-1e",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
     scf = GHF(charge=1, j_adapt=True)(system)
     scf.run()

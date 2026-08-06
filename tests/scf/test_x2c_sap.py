@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System
+from forte2 import System, X2CParams
 from forte2.helpers.comparisons import approx
 from forte2.scf import GHF, RHF
 
@@ -15,12 +15,12 @@ def _sap_system(x2c_type):
         basis_set="sto-3g",
         auxiliary_basis_set="def2-universal-jkfit",
         minao_basis_set=None,
-        x2c=f"{x2c_type}-sap",
+        x2c=X2CParams(x2c_type=x2c_type, x2c_model="sap"),
     )
 
 
 def test_invalid_x2c_option():
-    with pytest.raises(ValueError, match="Invalid x2c option"):
+    with pytest.raises(ValueError, match="x2c must be an X2CParams instance"):
         System(xyz="H 0 0 0", basis_set="sto-3g", x2c="invalid")
 
 

@@ -10,6 +10,7 @@ from forte2 import (
     RelCI,
     RelCISolver,
     SpinorUpcaster,
+    X2CParams,
 )
 from forte2.data import EH_TO_WN
 
@@ -23,7 +24,7 @@ def test_casscf_so():
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c="sf-1e",
+        x2c=X2CParams(x2c_type="sf", x2c_model="1e"),
     )
 
     rhf = ROHF(charge=0, ms=0.5)(system)
@@ -39,7 +40,7 @@ def test_casscf_so():
     )
     mc = MCOptimizer(ci_solver)(avas)
     conv = SpinorUpcaster(
-        x2c_override="so-snso-row-dependent",
+        x2c_override=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
     )(mc)
     ci = RelCI(
         nel=9,
@@ -75,7 +76,7 @@ def test_2c_casscf_with_rohf():
         subspace=["F(2s)", "F(2p)"],
     )(rhf)
     conv = SpinorUpcaster(
-        x2c_override="so-snso-row-dependent",
+        x2c_override=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
     )(avas)
     ci_solver = RelCISolver(
         nel=9,
@@ -101,12 +102,12 @@ def test_2c_casscf_with_uhf():
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c="sf-1e",
+        x2c=X2CParams(x2c_type="sf", x2c_model="1e"),
     )
 
     uhf = UHF(charge=0, ms=0.5)(system)
     conv = SpinorUpcaster(
-        x2c_override="so-snso-row-dependent",
+        x2c_override=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
     )(uhf)
     ci_solver = RelCISolver(
         nel=9,

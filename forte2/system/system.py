@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, asdict
 import numpy as np
 from numpy.typing import NDArray
 import json
@@ -14,33 +14,10 @@ from forte2.helpers import (
     print_metric_info,
 )
 from forte2.x2c import X2CHelper
+from forte2.base_classes.params import X2CParams
 from forte2.jkbuilder import FockBuilder, FockBuilderOTF
 from .build_basis import build_basis, build_basis_from_dict
 from .geom_utils import GeometryHelper, parse_geometry
-
-
-X2C_OPTIONS = {
-    None: (None, None, None),
-    "sf-1e": ("sf", "1e", None),
-    "so-1e": ("so", "1e", None),
-    "so-snso-boettger": ("so", "1e", "boettger"),
-    "so-snso-dc": ("so", "1e", "dc"),
-    "so-snso-dcb": ("so", "1e", "dcb"),
-    "so-snso-row-dependent": ("so", "1e", "row-dependent"),
-    "sf-sap": ("sf", "sap", None),
-    "so-sap": ("so", "sap", None),
-}
-
-
-def parse_x2c_option(x2c):
-    """Normalize and decompose a public X2C Hamiltonian option."""
-    if x2c is not None and not isinstance(x2c, str):
-        raise ValueError(f"x2c must be a string or None, but got {type(x2c)}.")
-    normalized = x2c.lower() if isinstance(x2c, str) else None
-    if normalized not in X2C_OPTIONS:
-        choices = ", ".join(f"'{option}'" for option in X2C_OPTIONS if option)
-        raise ValueError(f"Invalid x2c option: {x2c}. Use None or one of {choices}.")
-    return normalized, *X2C_OPTIONS[normalized]
 
 
 @dataclass
@@ -59,11 +36,10 @@ class System:
         The auxiliary basis set, either as a string or a dictionary (see `basis`).
     minao_basis : str | dict, optional, default="cc-pvtz-minao"
         The minimal atomic orbital basis set, used in IAO calculations, either as a string or a dictionary (see `basis`).
-    x2c : str | None, optional, default=None
-        The X2C Hamiltonian to use. Options are ``"sf-1e"``, ``"so-1e"``,
-        ``"so-snso-boettger"``, ``"so-snso-dc"``, ``"so-snso-dcb"``,
-        ``"so-snso-row-dependent"``, ``"sf-sap"``, and ``"so-sap"``.
-        If None, no X2C transformation is applied.
+    x2c : X2CParams | None, optional, default=None
+        The X2C Hamiltonian to use, specified as an :class:`X2CParams` instance
+        (see its documentation for the available ``x2c_type``, ``x2c_model``, and
+        ``snso_type`` options). If None, no X2C transformation is applied.
     unit : str, optional, default="angstrom"
         The unit for the atomic coordinates. Can be "angstrom" or "bohr".
     overlap_ortho_rtol : float, optional, default=1e-8
@@ -131,7 +107,7 @@ class System:
     # These are the arguments that users can provide at initialization.
     auxiliary_basis_set: str | dict = None
     minao_basis_set: str | dict = "cc-pvtz-minao"
-    x2c: str | None = None
+    x2c: X2CParams | None = None
     unit: str = "angstrom"
     overlap_ortho_rtol: float = 1e-8
     df_ortho_rtol: float | None = None
@@ -153,9 +129,6 @@ class System:
     nminao: int = field(init=False, default=None)
     Xorth: NDArray = field(init=False, default=None)
     two_component: bool = field(init=False, default=False)
-    _x2c_type: str | None = field(init=False, default=None)
-    _x2c_model: str | None = field(init=False, default=None)
-    _snso_type: str | None = field(init=False, default=None)
     # Basis set objects build from arguments provided at initialization.
     auxiliary_basis: Basis = field(init=False, default=None)
 
@@ -177,27 +150,25 @@ class System:
             raise ValueError("cholesky_tol must be non-negative.")
         if self.symmetry_tol < 0:
             raise ValueError("symmetry_tol must be non-negative.")
-        self._set_x2c_option(self.x2c)
-
-    def _set_x2c_option(self, x2c):
-        self.x2c, self._x2c_type, self._x2c_model, self._snso_type = (
-            parse_x2c_option(x2c)
-        )
+        if self.x2c is not None and not isinstance(self.x2c, X2CParams):
+            raise ValueError(
+                f"x2c must be an X2CParams instance or None, but got {type(self.x2c)}."
+            )
 
     @property
     def x2c_type(self):
-        """Spin structure parsed from :attr:`x2c` (``"sf"``, ``"so"``, or None)."""
-        return self._x2c_type
+        """Spin structure from :attr:`x2c` (``"sf"``, ``"so"``, or None)."""
+        return self.x2c.x2c_type if self.x2c is not None else None
 
     @property
     def x2c_model(self):
-        """Decoupling model parsed from :attr:`x2c` (``"1e"``, ``"sap"``, or None)."""
-        return self._x2c_model
+        """Decoupling model from :attr:`x2c` (``"1e"``, ``"sap"``, or None)."""
+        return self.x2c.x2c_model if self.x2c is not None else None
 
     @property
     def snso_type(self):
-        """SNSO scaling parsed from :attr:`x2c`, or None when not requested."""
-        return self._snso_type
+        """SNSO scaling from :attr:`x2c`, or None when not requested."""
+        return self.x2c.snso_type if self.x2c is not None else None
 
     def _common_init(self, skip_basis_init=False):
         self._init_geometry()
@@ -229,6 +200,9 @@ class System:
         d["basis_set"] = None
         d["auxiliary_basis_set"] = None
         d["minao_basis_set"] = None
+        # json.dump can't serialize an X2CParams instance; store its fields as a dict.
+        if self.x2c is not None:
+            d["x2c"] = asdict(self.x2c)
 
         res = {"init_args": d}
         res["basis_data"] = self.basis.serialize()
@@ -244,18 +218,8 @@ class System:
         with open(f"{filename}.json", "r", encoding="utf-8") as f:
             data = json.load(f)
             init_args = data["init_args"]
-            if "x2c" not in init_args:
-                x2c_type = init_args.pop("x2c_type", None)
-                x2c_model = init_args.pop("x2c_model", "1e")
-                snso_type = init_args.pop("snso_type", "row-dependent")
-                if x2c_type is None:
-                    init_args["x2c"] = None
-                elif x2c_model == "sap":
-                    init_args["x2c"] = f"{x2c_type}-sap"
-                elif x2c_type == "sf" or snso_type is None:
-                    init_args["x2c"] = f"{x2c_type}-1e"
-                else:
-                    init_args["x2c"] = f"so-snso-{snso_type}"
+            if isinstance(init_args.get("x2c"), dict):
+                init_args["x2c"] = X2CParams(**init_args["x2c"])
             system = cls.__new__(cls)
             for k, v in init_args.items():
                 setattr(system, k, v)

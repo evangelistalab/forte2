@@ -44,7 +44,7 @@ class X2CHelper:
     Implementation follows the general algorithm of J. Chem. Phys. 135, 084114 (2011),
     but adopts some numerical tricks from J. Chem. Phys. 131, 031104 (2009), especially
     for the spin-orbit case. See also PySCF's x2c module for reference. When
-    ``system.x2c == "sf-sap"`` or ``system.x2c == "so-sap"``, the decoupling
+    ``system.x2c_model == "sap"``, the decoupling
     transformation follows the SAP-X2C
     Hamiltonian of Surjuse and Valeev, J. Chem. Theory Comput. 22, 3443--3452 (2026),
     https://doi.org/10.1021/acs.jctc.6c00032.

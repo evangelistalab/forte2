@@ -1,6 +1,6 @@
 import pytest
 
-from forte2 import System, GHF, RelState, MCOptimizer, RelCISolver
+from forte2 import System, GHF, RelState, MCOptimizer, RelCISolver, X2CParams
 from forte2.helpers.comparisons import approx
 
 
@@ -51,7 +51,7 @@ def test_rel_gasscf_h2o_core():
         xyz=xyz,
         basis_set="cc-pVTZ",
         auxiliary_basis_set="def2-universal-jkfit",
-        x2c="so-1e",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
 
     scf = GHF(charge=0)(system)
