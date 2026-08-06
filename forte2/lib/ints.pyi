@@ -212,6 +212,26 @@ def coulomb_4c(basis: Basis) -> Annotated[NDArray[numpy.float64], dict(shape=(No
 
 def coulomb_3c(basis1: Basis, basis2: Basis, basis3: Basis) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None))]: ...
 
+def coulomb_4c_diagonal(basis: Basis) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]:
+    """
+    Compute the diagonal (mn|mn) of the four-center two-electron integral matrix, row-major over the AO-pair index (length nbf * nbf).
+    """
+
+def coulomb_4c_pair_block(basis: Basis, bra_pairs: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], ket_pairs: Annotated[NDArray[numpy.int32], dict(shape=(None, None))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    """
+    Compute a dense block (AB|CD) of the four-center two-electron integral matrix for the given bra and ket shell-pair lists.
+    """
+
+def coulomb_4c_schwarz_factors(basis: Basis) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]:
+    """
+    Compute the shell-pair Schwarz factors Q_AB = sqrt(max_{a,b} (ab|ab)) for Cauchy-Schwarz screening of four-center integrals (length nshells * nshells, row-major over A * nshells + B).
+    """
+
+def coulomb_4c_pair_block_screened(basis: Basis, bra_pairs: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], ket_pairs: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], schwarz: Annotated[NDArray[numpy.float64], dict(shape=(None,))], tau: float) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    """
+    Schwarz-screened coulomb_4c_pair_block: skip shell-quartets with Q_AB * Q_CD < tau (their block stays zero). Result equals the unscreened block to within tau.
+    """
+
 @overload
 def coulomb_3c_by_shell(basis1: Basis, basis2: Basis, basis3: Basis, shell_slices: Sequence[tuple[int, int]]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='C')]: ...
 
@@ -311,6 +331,16 @@ def cint_int3c2e_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.in
 def cint_int3c2e_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))], ints: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='C')]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='C')]:
     """
     Compute the three-center two-electron integral tensor using libcint in spherical harmonics, with a user-provided buffer for the result.
+    """
+
+def cint_int2e_diagonal_sph(atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None,))]:
+    """
+    Compute the diagonal (mn|mn) of the four-center two-electron integral matrix using libcint in spherical harmonics, row-major over the AO-pair index.
+    """
+
+def cint_int2e_pair_block_sph(atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))], bra_pairs: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], ket_pairs: Annotated[NDArray[numpy.int32], dict(shape=(None, None))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
+    """
+    Compute a dense block (AB|CD) of the four-center two-electron integral matrix using libcint in spherical harmonics for the given bra and ket shell-pair lists.
     """
 
 HAS_LIBCINT: bool = True

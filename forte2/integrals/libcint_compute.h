@@ -293,4 +293,153 @@ np_tensor3_c cint_int3c(CIntorFunc intor, const std::vector<int>& shell_slice, n
     return cint_int3c(intor, shell_slice, atm, bas, env, ints);
 }
 
+// Compute the diagonal (mn|mn) of the four-center two-electron integral matrix over all shells in
+// `bas`, laid out row-major over the AO-pair index p = m * nbf + n (length nbf * nbf). This is the
+// libcint analogue of compute_two_electron_4c_diagonal; the result matches it element-wise because
+// forte2 hands both libraries the same spherical-AO ordering.
+inline np_vector cint_int2e_diagonal(CIntorFunc intor, np_matrix_int atm, np_matrix_int bas,
+                                     np_vector env) {
+    const int natm = atm.shape(0);
+    const int nbas = bas.shape(0);
+    auto* atm_data = atm.data();
+    auto* bas_data = bas.data();
+    auto* env_data = env.data();
+
+    // Per-shell AO counts and offsets (spherical harmonics).
+    std::vector<int> ao_size(nbas), ao_offset(nbas + 1, 0);
+    int max_size = 0;
+    for (int s = 0; s < nbas; ++s) {
+        ao_size[s] = CINTcgto_spheric(s, bas_data);
+        ao_offset[s + 1] = ao_offset[s] + ao_size[s];
+        max_size = std::max(max_size, ao_size[s]);
+    }
+    const std::size_t nbf = static_cast<std::size_t>(ao_offset[nbas]);
+
+    auto diag = make_zeros<nb::numpy, double, 1>({nbf * nbf});
+    double* data = diag.data();
+
+    // Parallelize over the first shell; each chunk owns a scratch quartet buffer and writes
+    // disjoint rows of the diagonal.
+    auto kernel = [&](std::size_t s1_begin, std::size_t s1_end) {
+        std::vector<double> buf(static_cast<std::size_t>(max_size) * max_size * max_size * max_size);
+        for (std::size_t s1 = s1_begin; s1 < s1_end; ++s1) {
+            const int n1 = ao_size[s1];
+            const int f1 = ao_offset[s1];
+            for (int s2 = 0; s2 < nbas; ++s2) {
+                const int n2 = ao_size[s2];
+                const int f2 = ao_offset[s2];
+                int shells[4] = {static_cast<int>(s1), s2, static_cast<int>(s1), s2};
+                int dims[4] = {n1, n2, n1, n2};
+                intor(buf.data(), dims, shells, atm_data, natm, bas_data, nbas, env_data, NULL,
+                      NULL);
+                // libcint buffer is Fortran-order: idx(a,b,c,d) = a + b*n1 + c*n1*n2 + d*n1*n2*n1.
+                // Diagonal (a,b,a,b) reduces to (1 + n1*n2) * (a + b*n1).
+                const std::size_t stride = static_cast<std::size_t>(1) + n1 * n2;
+                for (int a = 0; a < n1; ++a) {
+                    for (int b = 0; b < n2; ++b) {
+                        data[(f1 + a) * nbf + (f2 + b)] = buf[stride * (a + b * n1)];
+                    }
+                }
+            }
+        }
+    };
+
+    parallel_for_chunked(static_cast<std::size_t>(nbas), kernel);
+
+    return diag;
+}
+
+// Compute a dense block (AB|CD) of the four-center two-electron integral matrix for a list of bra
+// shell-pairs (rows) and ket shell-pairs (columns). Output shape is (n_bra_ao_pairs,
+// n_ket_ao_pairs), row-major, matching compute_two_electron_4c_pair_block. Within a shell-pair the
+// AO-pair order is iA * nB + iB; blocks are concatenated in the given shell-pair order.
+inline np_matrix cint_int2e_pair_block(CIntorFunc intor, np_matrix_int atm, np_matrix_int bas,
+                                       np_vector env, np_matrix_int bra_pairs,
+                                       np_matrix_int ket_pairs) {
+    if (bra_pairs.shape(1) != 2 || ket_pairs.shape(1) != 2) {
+        throw std::invalid_argument("bra_pairs and ket_pairs must have shape (n, 2)");
+    }
+
+    const int natm = atm.shape(0);
+    const int nbas = bas.shape(0);
+    auto* atm_data = atm.data();
+    auto* bas_data = bas.data();
+    auto* env_data = env.data();
+
+    std::vector<int> ao_size(nbas);
+    int max_size = 0;
+    for (int s = 0; s < nbas; ++s) {
+        ao_size[s] = CINTcgto_spheric(s, bas_data);
+        max_size = std::max(max_size, ao_size[s]);
+    }
+
+    const std::size_t n_bra = bra_pairs.shape(0);
+    const std::size_t n_ket = ket_pairs.shape(0);
+    auto bra_view = bra_pairs.view();
+    auto ket_view = ket_pairs.view();
+
+    // Shell indices per pair and row/column offset of each block.
+    std::vector<std::array<int, 2>> bra_sh(n_bra), ket_sh(n_ket);
+    std::vector<std::size_t> row_off(n_bra + 1, 0), col_off(n_ket + 1, 0);
+    for (std::size_t pb = 0; pb < n_bra; ++pb) {
+        const int A = bra_view(pb, 0), B = bra_view(pb, 1);
+        if (A < 0 || B < 0 || A >= nbas || B >= nbas)
+            throw std::invalid_argument("bra_pairs shell index out of range");
+        bra_sh[pb] = {A, B};
+        row_off[pb + 1] = row_off[pb] + static_cast<std::size_t>(ao_size[A]) * ao_size[B];
+    }
+    for (std::size_t pk = 0; pk < n_ket; ++pk) {
+        const int C = ket_view(pk, 0), D = ket_view(pk, 1);
+        if (C < 0 || D < 0 || C >= nbas || D >= nbas)
+            throw std::invalid_argument("ket_pairs shell index out of range");
+        ket_sh[pk] = {C, D};
+        col_off[pk + 1] = col_off[pk] + static_cast<std::size_t>(ao_size[C]) * ao_size[D];
+    }
+
+    const std::size_t nrow = row_off[n_bra];
+    const std::size_t ncol = col_off[n_ket];
+
+    auto out = make_zeros<nb::numpy, double, 2>({nrow, ncol});
+    double* data = out.data();
+
+    // Parallelize over bra pairs; each chunk owns a scratch quartet buffer and writes disjoint rows.
+    auto kernel = [&](std::size_t pb_begin, std::size_t pb_end) {
+        std::vector<double> buf(static_cast<std::size_t>(max_size) * max_size * max_size * max_size);
+        for (std::size_t pb = pb_begin; pb < pb_end; ++pb) {
+            const int A = bra_sh[pb][0], B = bra_sh[pb][1];
+            const int nA = ao_size[A], nB = ao_size[B];
+            const std::size_t r0 = row_off[pb];
+            for (std::size_t pk = 0; pk < n_ket; ++pk) {
+                const int C = ket_sh[pk][0], D = ket_sh[pk][1];
+                const int nC = ao_size[C], nD = ao_size[D];
+                const std::size_t c0 = col_off[pk];
+                int shells[4] = {A, B, C, D};
+                int dims[4] = {nA, nB, nC, nD};
+                intor(buf.data(), dims, shells, atm_data, natm, bas_data, nbas, env_data, NULL,
+                      NULL);
+                // libcint Fortran-order: idx(iA,iB,iC,iD) = iA + iB*nA + iC*nA*nB + iD*nA*nB*nC.
+                for (int iA = 0; iA < nA; ++iA) {
+                    for (int iB = 0; iB < nB; ++iB) {
+                        const std::size_t r = r0 + static_cast<std::size_t>(iA) * nB + iB;
+                        for (int iC = 0; iC < nC; ++iC) {
+                            for (int iD = 0; iD < nD; ++iD) {
+                                const std::size_t idx =
+                                    iA + static_cast<std::size_t>(iB) * nA +
+                                    static_cast<std::size_t>(iC) * nA * nB +
+                                    static_cast<std::size_t>(iD) * nA * nB * nC;
+                                data[r * ncol + c0 + static_cast<std::size_t>(iC) * nD + iD] =
+                                    buf[idx];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    parallel_for_chunked(n_bra, kernel);
+
+    return out;
+}
+
 } // namespace forte2

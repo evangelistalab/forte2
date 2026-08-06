@@ -23,6 +23,7 @@
 #if FORTE2_USE_LIBCINT
 #include "integrals/libcint_two_center.h"
 #include "integrals/libcint_three_center.h"
+#include "integrals/libcint_four_center.h"
 #endif
 
 namespace nb = nanobind;
@@ -412,6 +413,37 @@ void export_two_electron_api(nb::module_& sub_m) {
         },
         "basis1"_a, "basis2"_a, "basis3"_a);
 
+    sub_m.def("coulomb_4c_diagonal", [](const Basis& basis) { return coulomb_4c_diagonal(basis); },
+              "basis"_a,
+              "Compute the diagonal (mn|mn) of the four-center two-electron integral matrix, "
+              "row-major over the AO-pair index (length nbf * nbf).");
+
+    sub_m.def(
+        "coulomb_4c_pair_block",
+        [](const Basis& basis, const np_matrix_int& bra_pairs, const np_matrix_int& ket_pairs) {
+            return coulomb_4c_pair_block(basis, bra_pairs, ket_pairs);
+        },
+        "basis"_a, "bra_pairs"_a, "ket_pairs"_a,
+        "Compute a dense block (AB|CD) of the four-center two-electron integral matrix for the "
+        "given bra and ket shell-pair lists.");
+
+    sub_m.def(
+        "coulomb_4c_schwarz_factors",
+        [](const Basis& basis) { return coulomb_4c_schwarz_factors(basis); }, "basis"_a,
+        "Compute the shell-pair Schwarz factors Q_AB = sqrt(max_{a,b} (ab|ab)) for Cauchy-Schwarz "
+        "screening of four-center integrals (length nshells * nshells, row-major over "
+        "A * nshells + B).");
+
+    sub_m.def(
+        "coulomb_4c_pair_block_screened",
+        [](const Basis& basis, const np_matrix_int& bra_pairs, const np_matrix_int& ket_pairs,
+           const np_vector& schwarz, double tau) {
+            return coulomb_4c_pair_block_screened(basis, bra_pairs, ket_pairs, schwarz, tau);
+        },
+        "basis"_a, "bra_pairs"_a, "ket_pairs"_a, "schwarz"_a, "tau"_a,
+        "Schwarz-screened coulomb_4c_pair_block: skip shell-quartets with Q_AB * Q_CD < tau "
+        "(their block stays zero). Result equals the unscreened block to within tau.");
+
     sub_m.def(
         "coulomb_3c_by_shell",
         [](const Basis& basis1, const Basis& basis2, const Basis& basis3,
@@ -540,6 +572,13 @@ void export_libcint_compute_api(nb::module_& sub_m) {
         "shell_slice"_a, "atm"_a, "bas"_a, "env"_a, "ints"_a,
         "Compute the three-center two-electron integral tensor using libcint in spherical "
         "harmonics, with a user-provided buffer for the result.");
+    sub_m.def("cint_int2e_diagonal_sph", &cint_int2e_diagonal_sph, "atm"_a, "bas"_a, "env"_a,
+              "Compute the diagonal (mn|mn) of the four-center two-electron integral matrix using "
+              "libcint in spherical harmonics, row-major over the AO-pair index.");
+    sub_m.def("cint_int2e_pair_block_sph", &cint_int2e_pair_block_sph, "atm"_a, "bas"_a, "env"_a,
+              "bra_pairs"_a, "ket_pairs"_a,
+              "Compute a dense block (AB|CD) of the four-center two-electron integral matrix using "
+              "libcint in spherical harmonics for the given bra and ket shell-pair lists.");
 }
 #else
 // When libcint is disabled, define a no-op exporter
