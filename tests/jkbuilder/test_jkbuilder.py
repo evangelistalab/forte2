@@ -131,8 +131,7 @@ def test_jkbuilder_complex():
         basis_set="cc-pvdz",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         unit="bohr",
-        x2c_type="so",
-        snso_type=None,
+        x2c="so-1e",
     )
 
     nmo = system.nbf * 2
@@ -165,8 +164,7 @@ def test_jkbuilder_general_complex():
         basis_set="cc-pvdz",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         unit="bohr",
-        x2c_type="so",
-        snso_type=None,
+        x2c="so-1e",
     )
     nmo = system.nbf * 2
     C = np.random.rand(nmo, nmo) + 1j * np.random.rand(nmo, nmo)
@@ -322,8 +320,7 @@ def test_jkbuilder_on_the_fly_complex():
         basis_set="cc-pvqz",
         auxiliary_basis_set="cc-pvqz-jkfit",
         unit="bohr",
-        x2c_type="so",
-        snso_type=None,
+        x2c="so-1e",
     )
 
     nmo = system.nbf * 2

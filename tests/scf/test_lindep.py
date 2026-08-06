@@ -70,8 +70,7 @@ def test_lindep_x2c(tmp_path):
             "Tl": "x2c-tzvpall-2c-autoaux",
         },
         minao_basis_set="ano-r0",
-        x2c_type="so",
-        snso_type="row-dependent",
+        x2c="so-snso-row-dependent",
         use_gaussian_charges=True,
         overlap_ortho_rtol=5e-10,
     )
@@ -92,8 +91,7 @@ def test_lindep_x2c_quick():
         auxiliary_basis_set="cc-pVQZ-JKFIT",
         unit="bohr",
         overlap_ortho_rtol=2e-7,
-        x2c_type="so",
-        snso_type="row-dependent",
+        x2c="so-snso-row-dependent",
     )
 
     ovlp = system.ints_overlap()

@@ -1,9 +1,79 @@
+import inspect
+import json
+
 import numpy as np
 from scipy.linalg import eigh
 import pytest
 
 from forte2 import System, RHF
 from forte2.lib import ints
+from forte2.system.system import parse_x2c_option
+
+
+@pytest.mark.parametrize(
+    "option, parsed",
+    [
+        (None, (None, None, None, None)),
+        ("sf-1e", ("sf-1e", "sf", "1e", None)),
+        ("so-1e", ("so-1e", "so", "1e", None)),
+        (
+            "so-snso-boettger",
+            ("so-snso-boettger", "so", "1e", "boettger"),
+        ),
+        ("so-snso-dc", ("so-snso-dc", "so", "1e", "dc")),
+        ("so-snso-dcb", ("so-snso-dcb", "so", "1e", "dcb")),
+        (
+            "so-snso-row-dependent",
+            ("so-snso-row-dependent", "so", "1e", "row-dependent"),
+        ),
+        ("sf-sap", ("sf-sap", "sf", "sap", None)),
+        ("so-sap", ("so-sap", "so", "sap", None)),
+    ],
+)
+def test_x2c_option_parsing(option, parsed):
+    assert parse_x2c_option(option) == parsed
+
+
+def test_x2c_option_is_case_insensitive():
+    assert parse_x2c_option("SO-SAP") == ("so-sap", "so", "sap", None)
+
+
+def test_x2c_is_the_only_public_relativistic_option():
+    parameters = inspect.signature(System).parameters
+    assert "x2c" in parameters
+    assert "x2c_type" not in parameters
+    assert "x2c_model" not in parameters
+    assert "snso_type" not in parameters
+
+
+@pytest.mark.parametrize("option", ["invalid", "sf-sap-extra", 1])
+def test_invalid_x2c_option(option):
+    with pytest.raises(ValueError, match="x2c"):
+        parse_x2c_option(option)
+
+
+def test_load_migrates_legacy_x2c_options(tmp_path):
+    filename = tmp_path / "legacy_x2c_system"
+    system = System(
+        xyz="H 0 0 0",
+        basis_set="sto-3g",
+        minao_basis_set=None,
+        x2c="so-snso-dcb",
+    )
+    system.save(filename)
+
+    json_file = filename.with_suffix(".json")
+    data = json.loads(json_file.read_text(encoding="utf-8"))
+    init_args = data["init_args"]
+    init_args.pop("x2c")
+    init_args.update(x2c_type="so", x2c_model="1e", snso_type="dcb")
+    json_file.write_text(json.dumps(data), encoding="utf-8")
+
+    loaded = System.load(filename)
+    assert loaded.x2c == "so-snso-dcb"
+    assert loaded.x2c_type == "so"
+    assert loaded.x2c_model == "1e"
+    assert loaded.snso_type == "dcb"
 
 
 def test_system():

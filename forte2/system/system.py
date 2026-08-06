@@ -19,6 +19,30 @@ from .build_basis import build_basis, build_basis_from_dict
 from .geom_utils import GeometryHelper, parse_geometry
 
 
+X2C_OPTIONS = {
+    None: (None, None, None),
+    "sf-1e": ("sf", "1e", None),
+    "so-1e": ("so", "1e", None),
+    "so-snso-boettger": ("so", "1e", "boettger"),
+    "so-snso-dc": ("so", "1e", "dc"),
+    "so-snso-dcb": ("so", "1e", "dcb"),
+    "so-snso-row-dependent": ("so", "1e", "row-dependent"),
+    "sf-sap": ("sf", "sap", None),
+    "so-sap": ("so", "sap", None),
+}
+
+
+def parse_x2c_option(x2c):
+    """Normalize and decompose a public X2C Hamiltonian option."""
+    if x2c is not None and not isinstance(x2c, str):
+        raise ValueError(f"x2c must be a string or None, but got {type(x2c)}.")
+    normalized = x2c.lower() if isinstance(x2c, str) else None
+    if normalized not in X2C_OPTIONS:
+        choices = ", ".join(f"'{option}'" for option in X2C_OPTIONS if option)
+        raise ValueError(f"Invalid x2c option: {x2c}. Use None or one of {choices}.")
+    return normalized, *X2C_OPTIONS[normalized]
+
+
 @dataclass
 class System:
     """
@@ -35,18 +59,11 @@ class System:
         The auxiliary basis set, either as a string or a dictionary (see `basis`).
     minao_basis : str | dict, optional, default="cc-pvtz-minao"
         The minimal atomic orbital basis set, used in IAO calculations, either as a string or a dictionary (see `basis`).
-    x2c_type : str | None, optional, default=None
-        The type of X2C transformation to be used. Options are "sf" for scalar
-        relativistic effects or "so" for spin-orbit coupling. If None, no X2C transformation is applied.
-    x2c_model : str, optional, default="1e"
-        The potential model used to construct the X2C decoupling transformation. Options are
-        "1e" for the conventional one-electron X2C Hamiltonian and "sap" for SAP-X2C with
-        the ``sap_grasp_large`` atomic potentials.
-    snso_type : str | None, optional, default="row-dependent"
-        The type of screened nuclear spin-orbit coupling scaling scheme to use.
-        Only relevant if `x2c_type` is "so" and `x2c_model` is "1e". SAP-X2C already
-        includes a model of two-electron picture-change effects, so SNSO scaling is not applied.
-        Options are None, "boettger", "dc", "dcb", or "row-dependent".
+    x2c : str | None, optional, default=None
+        The X2C Hamiltonian to use. Options are ``"sf-1e"``, ``"so-1e"``,
+        ``"so-snso-boettger"``, ``"so-snso-dc"``, ``"so-snso-dcb"``,
+        ``"so-snso-row-dependent"``, ``"sf-sap"``, and ``"so-sap"``.
+        If None, no X2C transformation is applied.
     unit : str, optional, default="angstrom"
         The unit for the atomic coordinates. Can be "angstrom" or "bohr".
     overlap_ortho_rtol : float, optional, default=1e-8
@@ -114,9 +131,7 @@ class System:
     # These are the arguments that users can provide at initialization.
     auxiliary_basis_set: str | dict = None
     minao_basis_set: str | dict = "cc-pvtz-minao"
-    x2c_type: str | None = None
-    x2c_model: str = "1e"
-    snso_type: str | None = "row-dependent"
+    x2c: str | None = None
     unit: str = "angstrom"
     overlap_ortho_rtol: float = 1e-8
     df_ortho_rtol: float | None = None
@@ -138,6 +153,9 @@ class System:
     nminao: int = field(init=False, default=None)
     Xorth: NDArray = field(init=False, default=None)
     two_component: bool = field(init=False, default=False)
+    _x2c_type: str | None = field(init=False, default=None)
+    _x2c_model: str | None = field(init=False, default=None)
+    _snso_type: str | None = field(init=False, default=None)
     # Basis set objects build from arguments provided at initialization.
     auxiliary_basis: Basis = field(init=False, default=None)
 
@@ -159,10 +177,27 @@ class System:
             raise ValueError("cholesky_tol must be non-negative.")
         if self.symmetry_tol < 0:
             raise ValueError("symmetry_tol must be non-negative.")
-        if self.x2c_model not in ["1e", "sap"]:
-            raise ValueError(
-                f"Invalid x2c_model: {self.x2c_model}. Use '1e' or 'sap'."
-            )
+        self._set_x2c_option(self.x2c)
+
+    def _set_x2c_option(self, x2c):
+        self.x2c, self._x2c_type, self._x2c_model, self._snso_type = (
+            parse_x2c_option(x2c)
+        )
+
+    @property
+    def x2c_type(self):
+        """Spin structure parsed from :attr:`x2c` (``"sf"``, ``"so"``, or None)."""
+        return self._x2c_type
+
+    @property
+    def x2c_model(self):
+        """Decoupling model parsed from :attr:`x2c` (``"1e"``, ``"sap"``, or None)."""
+        return self._x2c_model
+
+    @property
+    def snso_type(self):
+        """SNSO scaling parsed from :attr:`x2c`, or None when not requested."""
+        return self._snso_type
 
     def _common_init(self, skip_basis_init=False):
         self._init_geometry()
@@ -209,6 +244,18 @@ class System:
         with open(f"{filename}.json", "r", encoding="utf-8") as f:
             data = json.load(f)
             init_args = data["init_args"]
+            if "x2c" not in init_args:
+                x2c_type = init_args.pop("x2c_type", None)
+                x2c_model = init_args.pop("x2c_model", "1e")
+                snso_type = init_args.pop("snso_type", "row-dependent")
+                if x2c_type is None:
+                    init_args["x2c"] = None
+                elif x2c_model == "sap":
+                    init_args["x2c"] = f"{x2c_type}-sap"
+                elif x2c_type == "sf" or snso_type is None:
+                    init_args["x2c"] = f"{x2c_type}-1e"
+                else:
+                    init_args["x2c"] = f"so-snso-{snso_type}"
             system = cls.__new__(cls)
             for k, v in init_args.items():
                 setattr(system, k, v)

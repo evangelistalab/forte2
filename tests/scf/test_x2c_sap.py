@@ -15,14 +15,13 @@ def _sap_system(x2c_type):
         basis_set="sto-3g",
         auxiliary_basis_set="def2-universal-jkfit",
         minao_basis_set=None,
-        x2c_type=x2c_type,
-        x2c_model="sap",
+        x2c=f"{x2c_type}-sap",
     )
 
 
-def test_invalid_x2c_model():
-    with pytest.raises(ValueError, match="Invalid x2c_model"):
-        System(xyz="H 0 0 0", basis_set="sto-3g", x2c_model="invalid")
+def test_invalid_x2c_option():
+    with pytest.raises(ValueError, match="Invalid x2c option"):
+        System(xyz="H 0 0 0", basis_set="sto-3g", x2c="invalid")
 
 
 def test_sfx2c_sap_hbr():

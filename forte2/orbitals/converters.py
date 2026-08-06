@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from forte2.base_classes.mixins import MOsMixin, SystemMixin
+from forte2.system.system import parse_x2c_option
 
 
 def convert_coeff_spatial_to_spinor(C, complex=True):
@@ -81,53 +82,25 @@ class SpinorUpcaster(MOsMixin, SystemMixin):
 
     Parameters
     ----------
-    x2c_type_override : str | None, optional
-        The type of X2C Hamiltonian to use. Must be either 'so' (spin-orbit) or 'sf' (spin-free).
-        If provided, `System.x2c_type` will be overwritten by this value.
-        If None, the X2C type will be determined by the `System` object.
-    snso_type_override : str | None, optional
-        The type of SNSO correction to use. Must be one of 'boettger', 'dc', 'dcb', or 'row-dependent'.
-        If provided, `System.snso_type` will be overwritten by this value.
-        If None, the SNSO type will be determined by the `System` object.
+    x2c_override : str | None, optional
+        The X2C Hamiltonian to use. If provided, :attr:`System.x2c` is replaced
+        by this value and the X2C helper is rebuilt. If None, the System option
+        is retained.
     apply_random_phase : bool, optional, default=False
         Whether to apply a random phase to the MO coefficients after conversion. This can be useful for testing the robustness of downstream methods to the choice of MO phases.
     rng : np.random.Generator or int, optional, default=np.random.default_rng()
         The random number generator to use for generating the random phase. Can be an instance of `np.random.Generator` or an integer seed.
     """
 
-    x2c_type_override: str | None = None
-    snso_type_override: str | None = None
+    x2c_override: str | None = None
     apply_random_phase: bool = False
     rng: np.random.Generator | int = field(default_factory=np.random.default_rng)
 
     executed: bool = field(init=False, default=False)
 
     def __post_init__(self):
-        if not isinstance(self.x2c_type_override, (str, type(None))):
-            raise ValueError(
-                f"x2c_type_override must be a string or None, but got {type(self.x2c_type_override)}."
-            )
-        if not isinstance(self.snso_type_override, (str, type(None))):
-            raise ValueError(
-                f"snso_type_override must be a string or None, but got {type(self.snso_type_override)}."
-            )
-        if self.x2c_type_override is not None:
-            self.x2c_type_override = self.x2c_type_override.lower()
-            if self.x2c_type_override not in ["so", "sf"]:
-                raise ValueError(
-                    f"Invalid x2c_type_override: {self.x2c_type_override}. Must be 'so' or 'sf'."
-                )
-        if self.snso_type_override is not None:
-            self.snso_type_override = self.snso_type_override.lower()
-            if self.snso_type_override not in [
-                "boettger",
-                "dc",
-                "dcb",
-                "row-dependent",
-            ]:
-                raise ValueError(
-                    f"Invalid snso_type_override: {self.snso_type_override}. Must be 'boettger', 'dc', 'dcb', or 'row-dependent'."
-                )
+        if self.x2c_override is not None:
+            self.x2c_override, *_ = parse_x2c_option(self.x2c_override)
 
         if self.apply_random_phase:
             if not isinstance(self.rng, np.random.Generator | int):
@@ -162,13 +135,8 @@ class SpinorUpcaster(MOsMixin, SystemMixin):
                 np.exp(1j * self.rng.uniform(-np.pi, np.pi, size=nmo))
             )
             self.C[0] = self.C[0] @ random_phase
-        if self.x2c_type_override is not None:
-            self.system.x2c_type = self.x2c_type_override
-        if self.snso_type_override is not None:
-            self.system.snso_type = self.snso_type_override
-        # if system.x2c_type was None at system init, the x2c_helper object
-        # was never built. This if clause will catch that and build the x2c_helper object with the correct x2c_type and snso_type.
-        if self.system.x2c_helper is None:
+        if self.x2c_override is not None:
+            self.system._set_x2c_option(self.x2c_override)
             self.system._init_x2c()
 
         self.executed = True
