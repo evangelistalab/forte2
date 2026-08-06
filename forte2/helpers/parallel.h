@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 #include <version>
+#include <charconv>
 
 #ifdef __linux__
 #include <sched.h>
@@ -27,7 +28,7 @@ namespace forte2 {
 
 namespace detail {
 
-constexpr std::size_t no_thread_limit = std::numeric_limits<std::size_t>::max();
+constexpr std::size_t max_threads = std::numeric_limits<std::size_t>::max();
 
 constexpr bool is_space(const char c) noexcept {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
@@ -35,36 +36,31 @@ constexpr bool is_space(const char c) noexcept {
 
 /// @brief Parse a positive thread count from an environment variable.
 /// @param value Environment variable value, or nullptr when it is unset.
-/// @param allow_list Whether to accept the comma-separated list syntax used by OMP_NUM_THREADS.
-/// @return The parsed limit, or no_thread_limit when the value is unset or invalid.
+/// @param allow_list Whether to allow commas. Only the first value is used if true.
+/// @return The parsed limit, or max_threads when the value is unset or invalid.
 inline std::size_t parse_thread_limit(const char* value, const bool allow_list = false) noexcept {
     if (value == nullptr)
-        return no_thread_limit;
+        return max_threads;
 
     while (is_space(*value))
         ++value;
-    if (*value < '0' || *value > '9')
-        return no_thread_limit;
+
+    const char* end = value;
+    while (*end != '\0')
+        ++end;
 
     std::size_t limit = 0;
-    bool overflow = false;
-    while (*value >= '0' && *value <= '9') {
-        const auto digit = static_cast<std::size_t>(*value - '0');
-        if (limit > (no_thread_limit - digit) / 10) {
-            overflow = true;
-        } else if (!overflow) {
-            limit = limit * 10 + digit;
-        }
-        ++value;
-    }
+    auto [ptr, ec] = std::from_chars(value, end, limit);
+    if (ec != std::errc{}) // bail on any error
+        return max_threads;
 
-    while (is_space(*value))
-        ++value;
-    if (*value != '\0' && !(allow_list && *value == ','))
-        return no_thread_limit;
-    if (limit == 0 && !overflow)
-        return no_thread_limit;
-    return overflow ? no_thread_limit : limit;
+    while (is_space(*ptr))
+        ++ptr;
+    if (*ptr != '\0' && !(allow_list && *ptr == ','))
+        return max_threads;
+    if (limit == 0)
+        return max_threads;
+    return limit;
 }
 
 /// @brief Return the number of CPUs in the process affinity mask when available.
@@ -82,11 +78,11 @@ inline std::size_t get_affinity_thread_limit() noexcept {
             return count;
     }
 #endif
-    return no_thread_limit;
+    return max_threads;
 }
 
 /// @brief Join every joinable thread in a worker container when leaving scope.
-///
+/// Allows exceptions to propagate if a thread fails.
 /// This guard must be declared immediately after the worker vector. If creating a later worker
 /// throws, the guard joins the workers that were already created before their destructors run.
 class ThreadJoiner {
@@ -110,11 +106,24 @@ class ThreadJoiner {
 } // namespace detail
 
 /// @brief Get the number of threads to use for parallel execution
-/// This function bounds the hardware thread count by the process affinity mask, OpenMP limits, and
-/// the per-task CPU count reported by Slurm. It always returns at least one thread.
+/// FORTE_NUM_THREADS_OVERRIDE is used if set/valid.
+/// Otherwise, the smallest set value among 
+/// {   physical cores, 
+///     # of CPUs in affinity mask,
+///     OMP_NUM_THREADS, 
+///     OMP_THREAD_LIMIT, 
+///     SLURM_CPUS_PER_TASK,
+/// } is used.
+/// It always returns at least one thread.
 /// @return The number of threads to use for parallel execution.
-static std::size_t get_num_threads() {
-    auto num_threads = static_cast<std::size_t>(std::max(1u, std::thread::hardware_concurrency()));
+inline std::size_t get_num_threads() {
+    auto num_threads = detail::parse_thread_limit(std::getenv("FORTE_NUM_THREADS_OVERRIDE"));
+    
+    if (num_threads != detail::max_threads) {
+        return std::max<std::size_t>(1, num_threads);
+    }
+
+    num_threads = static_cast<std::size_t>(std::max(1u, std::thread::hardware_concurrency()));
     num_threads = std::min(num_threads, detail::get_affinity_thread_limit());
     num_threads =
         std::min(num_threads, detail::parse_thread_limit(std::getenv("OMP_NUM_THREADS"), true));
