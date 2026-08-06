@@ -113,11 +113,6 @@ np_tensor4 CISigmaBuilder::compute_ab_2rdm(np_vector C_left, np_vector C_right) 
         return rdm;
     }
 
-    // Create a lambda to compute the index in the 4D tensor
-    auto index = [norb, norb2, norb3](size_t p, size_t q, size_t r, size_t s) {
-        return p * norb3 + q * norb2 + r * norb + s;
-    };
-
     auto rdm_data = rdm.data();
 
     auto Cl_span = vector::as_span<double>(C_left);
@@ -126,47 +121,89 @@ np_tensor4 CISigmaBuilder::compute_ab_2rdm(np_vector C_left, np_vector C_right) 
     const int num_1h_class_Ka = lists_.alpha_address_1h()->nclasses();
     const int num_1h_class_Kb = lists_.beta_address_1h()->nclasses();
 
+    // The contraction gamma[uv,xy] = sum_{Ka,Kb} (sign_u sign_v Cl[Ja,Jb]) (sign_x sign_y Cr[Ia,Ib])
+    // is a matrix product over the composite one-hole index K = (Ka, Kb)
+    // we can gather the (signed) left coefficients into B_L[(u*norb+v), K] and 
+    // the (signed) right coefficients into B_R[(x*norb+y), K], then accumulate gamma[(uv),(xy)] += B_L * B_R^T 
+    // with one zgemm per Ka-chunk
     for (int class_Ka = 0; class_Ka < num_1h_class_Ka; ++class_Ka) {
         const auto maxKa = lists_.alpha_address_1h()->strpcls(class_Ka);
         for (int class_Kb = 0; class_Kb < num_1h_class_Kb; ++class_Kb) {
             const auto maxKb = lists_.beta_address_1h()->strpcls(class_Kb);
-            // loop over blocks of matrix C
-            for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-                if (lists_.block_size(nI) == 0)
-                    continue;
+            if ((maxKa == 0) or (maxKb == 0))
+                continue;
 
-                const auto maxIb = lists_.beta_address()->strpcls(class_Ib);
-                const auto Cr_offset = lists_.block_offset(nI);
+            // B_L and B_R are each norb^2 x Kdim; both fit in a Kblock buffer.
+            auto [Kblock1, Kblock2, Ka_block_size] = get_Kblock_spans(norb2 * maxKb, maxKa);
 
-                for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
-                    if (lists_.block_size(nJ) == 0)
+            for (size_t Ka_block_start = 0; Ka_block_start < maxKa;
+                 Ka_block_start += Ka_block_size) {
+                const size_t Ka_block_end = std::min(Ka_block_start + Ka_block_size, maxKa);
+                const size_t Ka_size = Ka_block_end - Ka_block_start;
+                const size_t Kdim = Ka_size * maxKb;
+                const auto temp_dim = norb2 * Kdim;
+
+                // B_L[uv, K] in Kblock1, B_R[xy, K] in Kblock2
+                std::fill_n(Kblock1.begin(), temp_dim, 0.0);
+                std::fill_n(Kblock2.begin(), temp_dim, 0.0);
+
+                // Gather the (signed) right coefficients into B_R[(x*norb+y), K]
+                for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
+                    if (lists_.block_size(nI) == 0)
                         continue;
-
-                    const auto maxJb = lists_.beta_address()->strpcls(class_Jb);
-                    const auto Cl_offset = lists_.block_offset(nJ);
-
-                    for (size_t Ka = 0; Ka < maxKa; ++Ka) {
-                        auto& Ka_right_list = lists_.get_alpha_1h_list(class_Ka, Ka, class_Ia);
-                        auto& Ka_left_list = lists_.get_alpha_1h_list(class_Ka, Ka, class_Ja);
+                    const auto maxIb = lists_.beta_address()->strpcls(class_Ib);
+                    const auto Cr_offset = lists_.block_offset(nI);
+                    const auto& Ka_right_list = lists_.get_alpha_1h_list2(class_Ka, class_Ia);
+                    const auto& Kb_right_list = lists_.get_beta_1h_list2(class_Kb, class_Ib);
+                    if (Ka_right_list.empty() || Kb_right_list.empty())
+                        continue;
+                    for (size_t Ka = 0; Ka < Ka_size; ++Ka) {
+                        const auto& KaR = Ka_right_list[Ka_block_start + Ka];
                         for (size_t Kb = 0; Kb < maxKb; ++Kb) {
-                            auto& Kb_right_list = lists_.get_beta_1h_list(class_Kb, Kb, class_Ib);
-                            auto& Kb_left_list = lists_.get_beta_1h_list(class_Kb, Kb, class_Jb);
-                            for (const auto& [sign_u, u, Ja] : Ka_left_list) {
-                                for (const auto& [sign_v, v, Jb] : Kb_left_list) {
-                                    const auto ClJ =
-                                        sign_u * sign_v * Cl_span[Cl_offset + Ja * maxJb + Jb];
-                                    for (const auto& [sign_x, x, Ia] : Ka_right_list) {
-                                        const auto Cr_Ia_offset = Cr_offset + Ia * maxIb;
-                                        for (const auto& [sign_y, y, Ib] : Kb_right_list) {
-                                            rdm_data[index(u, v, x, y)] +=
-                                                sign_x * sign_y * ClJ * Cr_span[Cr_Ia_offset + Ib];
-                                        }
-                                    }
+                            const auto& KbR = Kb_right_list[Kb];
+                            const auto Kidx = Ka * maxKb + Kb;
+                            for (const auto& [sign_x, x, Ia] : KaR) {
+                                const size_t xnorb = x * norb;
+                                const auto Cr_Ia_offset = Cr_offset + Ia * maxIb;
+                                for (const auto& [sign_y, y, Ib] : KbR) {
+                                    Kblock2[(xnorb + y) * Kdim + Kidx] =
+                                        sign_x * sign_y * Cr_span[Cr_Ia_offset + Ib];
                                 }
                             }
                         }
                     }
                 }
+
+                // Gather the (signed) left coefficients into B_L[(u*norb+v), K]
+                for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
+                    if (lists_.block_size(nJ) == 0)
+                        continue;
+                    const auto maxJb = lists_.beta_address()->strpcls(class_Jb);
+                    const auto Cl_offset = lists_.block_offset(nJ);
+                    const auto& Ka_left_list = lists_.get_alpha_1h_list2(class_Ka, class_Ja);
+                    const auto& Kb_left_list = lists_.get_beta_1h_list2(class_Kb, class_Jb);
+                    if (Ka_left_list.empty() || Kb_left_list.empty())
+                        continue;
+                    for (size_t Ka = 0; Ka < Ka_size; ++Ka) {
+                        const auto& KaL = Ka_left_list[Ka_block_start + Ka];
+                        for (size_t Kb = 0; Kb < maxKb; ++Kb) {
+                            const auto& KbL = Kb_left_list[Kb];
+                            const auto Kidx = Ka * maxKb + Kb;
+                            for (const auto& [sign_u, u, Ja] : KaL) {
+                                const size_t unorb = u * norb;
+                                const auto Cl_Ja_offset = Cl_offset + Ja * maxJb;
+                                for (const auto& [sign_v, v, Jb] : KbL) {
+                                    Kblock1[(unorb + v) * Kdim + Kidx] =
+                                        sign_u * sign_v * Cl_span[Cl_Ja_offset + Jb];
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // gamma[uv,xy] += sum_K B_L[uv,K] B_R[xy,K]
+                matrix_product('N', 'T', norb2, norb2, Kdim, 1.0, Kblock1.data(), Kdim,
+                               Kblock2.data(), Kdim, 1.0, rdm_data, norb2);
             }
         }
     }
