@@ -353,54 +353,31 @@ def _fragment_index_maps(ci, orbital_fragments):
     return frag_orbs, local_to_global, local_to_fragment
 
 #Build 1-RDMs and 2-cumulants with forte2
-def _spin_dependent_cumulants(ci, root=0, orbital_rotation=None):
+def _spin_summed_2cumulant(ci, root=0, orbital_rotation=None):
     """
     Returns
     -------
-    a1, b1
-        Zero matrices. One-particle contributions are intentionally
-        removed after constructing the cumulants.
-
-    aa2_cumulant
-    ab2_cumulant
-    bb2_cumulant
-        Spin-resolved two-particle cumulants.
+    gamma_1
+    gamma_2
+    spin_summed_cumulant
     """
     
     ci_solver = ci.sub_solvers[0]
 
-    a1, b1 = ci_solver.make_sd_1rdm(root)
-    aa_pair, ab2, bb_pair = ci_solver.make_sd_2rdm(root)
+    gamma1 = ci_solver.make_sf_1rdm(root)
+    gamma2 = ci_solver.make_sf_2rdm(root)
 
-    aa2 = forte2.cpp_helpers.packed_tensor4_to_tensor4(aa_pair)
-    bb2 = forte2.cpp_helpers.packed_tensor4_to_tensor4(bb_pair)
-
-    aa2_cumulant = (
-        aa2
-        - np.einsum("pr,qs->pqrs", a1, a1)
-        + np.einsum("ps,qr->pqrs", a1, a1)
-    )
-    ab2_cumulant = ab2 - np.einsum("pr,qs->pqrs", a1, b1)
-
-    bb2_cumulant = (
-        bb2
-        - np.einsum("pr,qs->pqrs", b1, b1)
-        + np.einsum("ps,qr->pqrs", b1, b1)
-    )
     if orbital_rotation is not None:
-        a1 = _transform_1rdm(a1, orbital_rotation)
-        b1 = _transform_1rdm(b1, orbital_rotation)
-        aa2_cumulant = _transform_2tensor(aa2_cumulant, orbital_rotation)
-        ab2_cumulant = _transform_2tensor(ab2_cumulant, orbital_rotation)
-        bb2_cumulant = _transform_2tensor(bb2_cumulant, orbital_rotation)
+        gamma1 = _transform_1rdm(gamma1, orbital_rotation)
+        gamma2 = _transform_2tensor(gamma2, orbital_rotation)
 
-    # still setting 1-rdms to zero, after 2-cumulant is built
-    n = a1.shape[0]
-    a1 = np.zeros((n, n))
-    b1 = np.zeros((n, n))
+    spin_summed_2cumulant = gamma2 -np.einsum("pr,qs->pqrs",gamma1, gamma1) + 0.5*np.einsum("ps,qr->pqrs", gamma1, gamma1)
 
-    return a1, b1, aa2_cumulant, ab2_cumulant, bb2_cumulant
+    # still setting 1-rdm to zero, after 2-cumulant is built
+    n = gamma1.shape[0]
+    gamma1 = np.zeros((n, n))
 
+    return gamma1, gamma2, spin_summed_2cumulant
 #Combine 1, 2, 3, and 4-body mutual correlation energy into one function
 def fragment_correlation_energy_enumerated(
     ci,
@@ -470,7 +447,7 @@ def fragment_correlation_energy_enumerated(
         )
     #build index maps, rdms using helper functions
     frag_orbs, local_to_global, local_to_fragment = _fragment_index_maps(ci, fragments)
-    a1, b1, aa2, ab2, bb2 = _spin_dependent_cumulants(
+    gamma1, gamma2, spin_summed_cumulant = _spin_summed_2cumulant(
         ci, root=root, orbital_rotation=orbital_rotation
     )
 
@@ -492,15 +469,13 @@ def fragment_correlation_energy_enumerated(
         for p, q in product(local_range, repeat=2):
             if len({local_to_fragment[p], local_to_fragment[q]}) == body_order:
                 gp, gq = local_to_global[[p, q]]
-                e1 += H[p, q] * (a1[gp, gq] + b1[gp, gq])
+                e1 += H[p, q] * gamma1[p, q]
     #two-electron terms
     e2 = 0.0
     for p, q, r, s in product(local_range, repeat=4): #iterates over all indices instead of exploiting symmetry
         if len({local_to_fragment[p],local_to_fragment[q],local_to_fragment[r],local_to_fragment[s]}) == body_order:
             gp, gq, gr, gs = local_to_global[[p, q, r, s]]
-            #aa2, ab2, bb2 are the 2-cumulants, NOT the 2RDMs 
-            spin_summed_cumulant = (aa2[gp, gq, gr, gs] + ab2[gp, gq, gr, gs] + ab2[gq, gp, gs, gr]+ bb2[gp, gq, gr, gs]) 
-            e2 += 0.5 * V[p, q, r, s] * spin_summed_cumulant #V is a spin-free quantity
+            e2 += 0.5 * V[p, q, r, s] * spin_summed_cumulant[gp, gq, gr, gs] #V is a spin-free quantity
 
     return e1 + e2
 
