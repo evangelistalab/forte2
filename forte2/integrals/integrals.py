@@ -622,7 +622,13 @@ def coulomb_4c(system, basis1=None, basis2=None, basis3=None, basis4=None):
     return ints.coulomb_4c(basis1, basis2, basis3, basis4)
 
 
-def coulomb_3c(system, basis1=None, basis2=None, basis3=None):
+def coulomb_3c(
+    system,
+    basis1=None,
+    basis2=None,
+    basis3=None,
+    preserve_density_norm=False,
+):
     r"""
     Compute the three-center two-electron Coulomb integral between three basis sets.
 
@@ -640,6 +646,11 @@ def coulomb_3c(system, basis1=None, basis2=None, basis3=None):
         The second basis set. If None, defaults to system.basis.
     basis3 : BasisSet, optional
         The third basis set. If None, defaults to system.basis, or basis2 if basis2 is provided.
+    preserve_density_norm : bool, optional, default=False
+        Preserve the physical contraction norms of an intentionally unnormalized
+        s-type density basis when the Libcint backend is selected. Libcint
+        normalizes contractions internally, so this is required for SAP
+        potential densities.
 
     Returns
     -------
@@ -654,7 +665,13 @@ def coulomb_3c(system, basis1=None, basis2=None, basis3=None):
     if _backend == "libint2":
         res = ints.coulomb_3c(_basis1, _basis2, _basis3)
     else:
-        res = cint_coulomb_3c(system, basis1, basis2, basis3)
+        res = cint_coulomb_3c(
+            system,
+            basis1,
+            basis2,
+            basis3,
+            preserve_density_norm=preserve_density_norm,
+        )
 
     return res
 
@@ -1236,12 +1253,51 @@ def cint_coulomb_2c(system, basis1=None, basis2=None):
     return _f2c(res)
 
 
-def cint_coulomb_3c(system, basis1=None, basis2=None, basis3=None):
+def _s_density_contraction_norms(basis):
+    """Return physical norms of unnormalized s-type density contractions."""
+    scales = []
+    for shell in basis:
+        if shell.l != 0:
+            raise ValueError(
+                "Preserving density norms with Libcint requires an s-type first basis."
+            )
+        exponents = np.asarray(shell.exponents, dtype=float)
+        coefficients = np.asarray(shell.coeff, dtype=float)
+        primitive_overlap = (
+            np.pi / (exponents[:, None] + exponents[None, :])
+        ) ** 1.5
+        scales.append(
+            np.sqrt(
+                np.einsum(
+                    "p,pq,q->", coefficients, primitive_overlap, coefficients
+                )
+            )
+        )
+    return np.asarray(scales)
+
+
+def cint_coulomb_3c(
+    system,
+    basis1=None,
+    basis2=None,
+    basis3=None,
+    preserve_density_norm=False,
+):
+    """Compute three-center Coulomb integrals with Libcint.
+
+    When ``preserve_density_norm`` is True, restore the physical norms of an
+    intentionally unnormalized s-type first basis after Libcint normalizes its
+    contractions.
+    """
     _require_libcint()
     atm, bas, env, shell_slice = _parse_basis_args_cint_3c2e(
         system, basis1, basis2, basis3
     )
     res = ints.cint_int3c2e_sph(shell_slice, atm, bas, env)
+    if preserve_density_norm:
+        _basis1, _, _ = _parse_basis_args_3c2e(system, basis1, basis2, basis3)
+        scales = _s_density_contraction_norms(_basis1)
+        res = np.einsum("P,Pmn->Pmn", scales, res, optimize=True)
     return res
 
 
@@ -1258,22 +1314,7 @@ def cint_coulomb_3c_opVop(system, basis1=None, basis2=None, basis3=None):
 
     # The general Libcint converter normalizes every contraction. Restore the
     # physical norm of each unnormalized SAP s function after integral evaluation.
-    scales = []
-    for shell in _basis1:
-        if shell.l != 0:
-            raise ValueError("Libcint SAP opVop integrals require an s-type first basis.")
-        exponents = np.asarray(shell.exponents, dtype=float)
-        coefficients = np.asarray(shell.coeff, dtype=float)
-        primitive_overlap = (
-            np.pi / (exponents[:, None] + exponents[None, :])
-        ) ** 1.5
-        scales.append(
-            np.sqrt(
-                np.einsum(
-                    "p,pq,q->", coefficients, primitive_overlap, coefficients
-                )
-            )
-        )
+    scales = _s_density_contraction_norms(_basis1)
 
     atm, bas, env, shell_slice = _parse_basis_args_cint_3c2e(
         system, _basis1, _basis2, None
@@ -1282,7 +1323,7 @@ def cint_coulomb_3c_opVop(system, basis1=None, basis2=None, basis3=None):
     # use the opposite orbital-center order from Forte2, so change their signs
     # while reordering to the scalar, x, y, z one-electron opVop convention.
     raw = ints.cint_int3c2e_spsp1_sph(shell_slice, atm, bas, env)
-    contracted = np.einsum("P,cPmn->cmn", np.asarray(scales), raw, optimize=True)
+    contracted = np.einsum("P,cPmn->cmn", scales, raw, optimize=True)
     return [contracted[3], -contracted[0], -contracted[1], -contracted[2]]
 
 

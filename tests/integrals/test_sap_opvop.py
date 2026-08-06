@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from forte2 import System, integrals
+from forte2.lib import ints
 from forte2.system.build_basis import build_sap_potential_basis
 
 
@@ -52,6 +53,17 @@ def test_sap_density_normalization_and_opvop_reference():
     assert W_ref_order[3][3, 2] == pytest.approx(-7.639347452209898, abs=2.0e-7)
 
     if integrals.LIBCINT_AVAILABLE:
+        V = integrals.coulomb_3c(
+            system, sap_basis, system.basis, system.basis
+        )
+        V_cint = integrals.cint_coulomb_3c(
+            system,
+            sap_basis,
+            system.basis,
+            preserve_density_norm=True,
+        )
+        assert np.allclose(V_cint, V, atol=2.0e-10)
+
         W_cint = integrals.cint_coulomb_3c_opVop(
             system, sap_basis, system.basis
         )
@@ -75,3 +87,54 @@ def test_sap_opvop_high_l():
     assert all(component.shape == (60, 60) for component in W)
     assert all(np.isfinite(component).all() for component in W)
     assert np.linalg.norm(W[0]) == pytest.approx(6398.564518450337, rel=1.0e-12)
+
+
+@pytest.mark.skipif(not integrals.LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_sap_x2c_high_l_preserves_density_norm(monkeypatch):
+    """SAP-X2C preserves its unnormalized density on the Libcint fallback."""
+    original_cint_coulomb_3c = integrals.cint_coulomb_3c
+    preserve_density_norm_calls = []
+
+    def traced_cint_coulomb_3c(*args, **kwargs):
+        preserve_density_norm_calls.append(kwargs.get("preserve_density_norm"))
+        return original_cint_coulomb_3c(*args, **kwargs)
+
+    monkeypatch.setattr(integrals, "cint_coulomb_3c", traced_cint_coulomb_3c)
+
+    system = System(
+        xyz="H 0 0 0",
+        basis_set=str(THIS_DIR / "high_l_x2c.json"),
+        minao_basis_set=None,
+        x2c="sf-sap",
+    )
+
+    assert system.x2c_helper.xbasis.max_l > ints.libint2_max_am
+    assert preserve_density_norm_calls == [True]
+
+    hcore = system.ints_hcore()
+    assert np.isfinite(hcore).all()
+    assert np.allclose(hcore, hcore.T, atol=1.0e-12)
+
+    # The first AO is s-type, so its SAP potential can also be evaluated through
+    # Libint2 and used as an independent physical-density reference.
+    s_basis = ints.Basis()
+    s_basis.add(system.x2c_helper.xbasis[0])
+    sap_basis = build_sap_potential_basis(
+        "sap_grasp_large", system.geom_helper
+    )
+    V_ss = np.einsum(
+        "Pmn->mn",
+        integrals.coulomb_3c(system, sap_basis, s_basis),
+        optimize=True,
+    )
+    assert system.x2c_helper.V_e[0, 0] == pytest.approx(V_ss[0, 0], abs=1.0e-12)
+
+    W_ss = integrals.coulomb_3c_opVop(system, sap_basis, s_basis)
+    for W_component, W_ss_component in zip(system.x2c_helper.W_e, W_ss):
+        assert W_component[0, 0] == pytest.approx(
+            W_ss_component[0, 0], abs=1.0e-12
+        )
+    assert np.linalg.norm(system.x2c_helper.V_e) == pytest.approx(
+        1.3836703929853422, rel=1.0e-12
+    )
+    assert np.linalg.norm(hcore) == pytest.approx(63.02923783426823, rel=1.0e-10)
