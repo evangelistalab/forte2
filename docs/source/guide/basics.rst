@@ -27,17 +27,20 @@ You can then attach a Hartree-Fock calculation on the system:
 
 >>> rhf = forte2.scf.RHF(charge=-1)(system)
 
-SAP-X2C can be selected independently for either scalar-relativistic (``"sf"``) or
-spin-orbit (``"so"``) calculations. For example:
+The relativistic Hamiltonian is selected with the single ``x2c`` option. SAP-X2C
+is available for both scalar-relativistic and spin-orbit calculations. For example:
 
 >>> system = forte2.System(
     xyz="H 0 0 0; Br 0 0 1.4",
     basis_set="cc-pvdz",
     auxiliary_basis_set="cc-pvtz-jkfit",
-    x2c_type="so",
-    x2c_model="sap",
+    x2c="so-sap",
     )
 >>> ghf = forte2.scf.GHF(charge=0)(system)
+
+Conventional one-electron X2C uses ``"sf-1e"`` or ``"so-1e"``. Screened
+nuclear spin-orbit variants use ``"so-snso-boettger"``, ``"so-snso-dc"``,
+``"so-snso-dcb"``, or ``"so-snso-row-dependent"``.
 
 or for a restricted open-shell Hartree-Fock calculation:
 

@@ -169,9 +169,9 @@ def test_uhf_gradient_closed_shell_matches_rhf_gradient():
                 not LIBCINT_AVAILABLE, reason="Libcint is not available"
             ),
         ),
-        {"x2c_type": "sf"},
+        {"x2c": "sf-1e"},
         pytest.param(
-            {"x2c_type": "sf", "use_gaussian_charges": True},
+            {"x2c": "sf-1e", "use_gaussian_charges": True},
             marks=pytest.mark.skipif(
                 not LIBCINT_AVAILABLE, reason="Libcint is not available"
             ),

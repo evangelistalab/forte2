@@ -23,7 +23,7 @@ def test_casscf_so():
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c_type="sf",
+        x2c="sf-1e",
     )
 
     rhf = ROHF(charge=0, ms=0.5)(system)
@@ -39,8 +39,7 @@ def test_casscf_so():
     )
     mc = MCOptimizer(ci_solver)(avas)
     conv = SpinorUpcaster(
-        x2c_type_override="so",
-        snso_type_override="row-dependent",
+        x2c_override="so-snso-row-dependent",
     )(mc)
     ci = RelCI(
         nel=9,
@@ -65,8 +64,7 @@ def test_2c_casscf_with_rohf():
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c_type=None,
-        snso_type=None,
+        x2c=None,
     )
 
     rhf = ROHF(charge=0, ms=0.5)(system)
@@ -77,8 +75,7 @@ def test_2c_casscf_with_rohf():
         subspace=["F(2s)", "F(2p)"],
     )(rhf)
     conv = SpinorUpcaster(
-        x2c_type_override="so",
-        snso_type_override="row-dependent",
+        x2c_override="so-snso-row-dependent",
     )(avas)
     ci_solver = RelCISolver(
         nel=9,
@@ -104,14 +101,12 @@ def test_2c_casscf_with_uhf():
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c_type="sf",
-        snso_type=None,
+        x2c="sf-1e",
     )
 
     uhf = UHF(charge=0, ms=0.5)(system)
     conv = SpinorUpcaster(
-        x2c_type_override="so",
-        snso_type_override="row-dependent",
+        x2c_override="so-snso-row-dependent",
     )(uhf)
     ci_solver = RelCISolver(
         nel=9,

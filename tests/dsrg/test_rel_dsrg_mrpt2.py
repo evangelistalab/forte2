@@ -111,8 +111,7 @@ def test_mrpt2_carbon_rel_sa(tmp_path):
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c_type="so",
-        snso_type="row-dependent",
+        x2c="so-snso-row-dependent",
     )
 
     system_0.save(tmp_path / "carbon_rel_sa")
@@ -163,8 +162,7 @@ def test_mrpt2_se_rel_sa_gauss_nuc_jk_otf():
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c_type="so",
-        snso_type="row-dependent",
+        x2c="so-snso-row-dependent",
         use_gaussian_charges=True,
     )
     system.fock_builder = FockBuilderOTF(system, jk_mem_thres_mb=20, backend="libcint")
@@ -201,8 +199,7 @@ def test_mrpt2_s_rel_sa_gauss_nuc():
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c_type="so",
-        snso_type="row-dependent",
+        x2c="so-snso-row-dependent",
         use_gaussian_charges=True,
     )
     mf = GHF(
@@ -239,8 +236,7 @@ def test_mrpt2_sh_with_slow():
         xyz=xyz,
         basis_set="cc-pvtz",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
-        x2c_type="so",
-        snso_type="row-dependent",
+        x2c="so-snso-row-dependent",
         use_gaussian_charges=True,
     )
     mf = GHF(

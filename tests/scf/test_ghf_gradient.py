@@ -90,7 +90,7 @@ def test_x2c_ghf_gradient_finite_difference(x2c_type):
             basis_set="sto-3g",
             auxiliary_basis_set="def2-universal-JKFIT",
             unit="bohr",
-            x2c_type=x2c_type,
+            x2c=f"{x2c_type}-1e",
             minao_basis_set=None,
         )
 
