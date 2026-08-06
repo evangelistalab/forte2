@@ -86,7 +86,12 @@ class X2CHelper:
             )
             self.V_e = np.einsum(
                 "Pmn->mn",
-                integrals.coulomb_3c(self.system, sap_basis, self.xbasis),
+                integrals.coulomb_3c(
+                    self.system,
+                    sap_basis,
+                    self.xbasis,
+                    preserve_density_norm=True,
+                ),
                 optimize=True,
             )
             if integrals.LIBCINT_AVAILABLE:
