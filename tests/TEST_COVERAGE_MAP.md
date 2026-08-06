@@ -137,14 +137,14 @@ This section is an implementation-oriented queue for expanding coverage.
 | QW-SCF-01 | `tests/scf/test_scf_base_validation.py` | Negative `level_shift` for RHF/UHF | `ValueError` from `SCFBase.__call__` |
 | QW-SCF-02 | `tests/scf/test_scf_base_validation.py` | Tuple `level_shift` on RHF/ROHF/GHF | `ValueError` ("Tuple level_shift is only valid for UHF.") |
 | QW-SCF-03 | `tests/scf/test_scf_base_validation.py` | Bad tuple length for UHF level shift | `ValueError` ("length 2") |
-| QW-SCF-04 | `tests/scf/test_scf_base_validation.py` | `x2c="so-1e"` with RHF/UHF/ROHF/CUHF | `ValueError` ("SO-X2C is only available for GHF") |
+| QW-SCF-04 | `tests/scf/test_scf_base_validation.py` | `x2c=X2CParams(x2c_type="so", x2c_model="1e")` with RHF/UHF/ROHF/CUHF | `ValueError` ("SO-X2C is only available for GHF") |
 | QW-SCF-05 | `tests/scf/test_guess_validation.py` | Invalid SCF `guess_type` (e.g., `"foobar"`) | `RuntimeError` from `_initial_guess` |
 | QW-SCF-06 | `tests/scf/test_level_shift_non_rhf.py` | UHF/GHF/CUHF level-shift usage | Energy converges and differs from no-shift early iterations |
 | QW-MC-01 | `tests/mcopt/test_mcopt_validation.py` | `active_frozen_orbitals` unsorted | `AssertionError` ("must be sorted") |
 | QW-MC-02 | `tests/mcopt/test_mcopt_validation.py` | `active_frozen_orbitals` outside active space | `ValueError` with missing indices |
 | QW-MC-03 | `tests/mcopt/test_active_space_solver_validation.py` | Conflicting `mo_space` and orbital-list args | `ValueError` from `_make_mo_space` |
 | QW-MC-04 | `tests/mcopt/test_active_space_solver_validation.py` | Missing MO-space source from parent method | `ValueError` about MO space provisioning |
-| QW-X2C-01 | `tests/scf/test_x2c1e_snso_modes.py` | Deterministic energy coverage of `x2c="so-snso-boettger"` and `x2c="so-snso-dc"` | Finite converged energies and expected ordering/tolerance checks |
+| QW-X2C-01 | `tests/scf/test_x2c1e_snso_modes.py` | Deterministic energy coverage of `snso_type="boettger"` and `snso_type="dc"` (via `X2CParams`) | Finite converged energies and expected ordering/tolerance checks |
 | QW-X2C-02 | `tests/system/test_system.py` | Invalid unified X2C option | `ValueError` |
 
 ### 6.2 Medium Tasks (branch coverage and robustness)

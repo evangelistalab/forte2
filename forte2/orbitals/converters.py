@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from forte2.base_classes.mixins import MOsMixin, SystemMixin
-from forte2.system.system import parse_x2c_option
+from forte2.base_classes.params import X2CParams
 
 
 def convert_coeff_spatial_to_spinor(C, complex=True):
@@ -82,25 +82,29 @@ class SpinorUpcaster(MOsMixin, SystemMixin):
 
     Parameters
     ----------
-    x2c_override : str | None, optional
-        The X2C Hamiltonian to use. If provided, :attr:`System.x2c` is replaced
-        by this value and the X2C helper is rebuilt. If None, the System option
-        is retained.
+    x2c_override : X2CParams | None, optional
+        The X2C Hamiltonian to use, as an :class:`X2CParams` instance. If provided,
+        :attr:`System.x2c` is replaced by this value and the X2C helper is rebuilt.
+        If None, the System option is retained.
     apply_random_phase : bool, optional, default=False
         Whether to apply a random phase to the MO coefficients after conversion. This can be useful for testing the robustness of downstream methods to the choice of MO phases.
     rng : np.random.Generator or int, optional, default=np.random.default_rng()
         The random number generator to use for generating the random phase. Can be an instance of `np.random.Generator` or an integer seed.
     """
 
-    x2c_override: str | None = None
+    x2c_override: X2CParams | None = None
     apply_random_phase: bool = False
     rng: np.random.Generator | int = field(default_factory=np.random.default_rng)
 
     executed: bool = field(init=False, default=False)
 
     def __post_init__(self):
-        if self.x2c_override is not None:
-            self.x2c_override, *_ = parse_x2c_option(self.x2c_override)
+        if self.x2c_override is not None and not isinstance(
+            self.x2c_override, X2CParams
+        ):
+            raise ValueError(
+                f"x2c_override must be an X2CParams instance or None, but got {type(self.x2c_override)}."
+            )
 
         if self.apply_random_phase:
             if not isinstance(self.rng, np.random.Generator | int):
@@ -136,7 +140,7 @@ class SpinorUpcaster(MOsMixin, SystemMixin):
             )
             self.C[0] = self.C[0] @ random_phase
         if self.x2c_override is not None:
-            self.system._set_x2c_option(self.x2c_override)
+            self.system.x2c = self.x2c_override
             self.system._init_x2c()
 
         self.executed = True

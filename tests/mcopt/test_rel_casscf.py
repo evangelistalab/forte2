@@ -1,6 +1,6 @@
 import numpy as np
 
-from forte2 import System, GHF, RHF, RelCISolver, MCOptimizer, SpinorUpcaster
+from forte2 import System, GHF, RHF, RelCISolver, MCOptimizer, SpinorUpcaster, X2CParams
 from forte2.helpers.comparisons import approx
 from forte2.orbitals import AVAS
 
@@ -42,7 +42,7 @@ def test_rel_casscf_hf_ghf():
         basis_set="cc-pvdz",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         unit="bohr",
-        x2c="so-1e",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
     scf = GHF(charge=0)(system)
     ci_solver = RelCISolver(
@@ -110,7 +110,7 @@ def test_rel_casscf_frozen_co_x2c():
         xyz=xyz,
         basis_set="cc-pvdz",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
-        x2c="so-snso-row-dependent",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
     )
 
     mf = GHF(charge=0, e_tol=1e-12)(system)
@@ -142,7 +142,7 @@ def test_rel_casscf_na_ghf():
         basis_set="cc-pvdz",
         auxiliary_basis_set="def2-universal-jkfit",
         unit="bohr",
-        x2c="so-1e",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
     scf = GHF(charge=0)(system)
     ci_solver = RelCISolver(
@@ -166,7 +166,7 @@ def test_rel_casscf_br():
         xyz=xyz,
         basis_set="cc-pvtz",
         auxiliary_basis_set="cc-pvtz-jkfit",
-        x2c="so-snso-row-dependent",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
     )
     scf = GHF(charge=-1)(system)
     ci_solver = RelCISolver(

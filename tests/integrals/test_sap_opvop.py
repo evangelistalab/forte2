@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from forte2 import System, integrals
+from forte2 import System, integrals, X2CParams
 from forte2.lib import ints
 from forte2.system.build_basis import build_sap_potential_basis
 
@@ -105,7 +105,7 @@ def test_sap_x2c_high_l_preserves_density_norm(monkeypatch):
         xyz="H 0 0 0",
         basis_set=str(THIS_DIR / "high_l_x2c.json"),
         minao_basis_set=None,
-        x2c="sf-sap",
+        x2c=X2CParams(x2c_type="sf", x2c_model="sap"),
     )
 
     assert system.x2c_helper.xbasis.max_l > ints.libint2_max_am

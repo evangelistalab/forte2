@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, GHF, MCOptimizer, RelCISolver, AVAS
+from forte2 import System, GHF, MCOptimizer, RelCISolver, AVAS, X2CParams
 from forte2.dsrg import RelDSRG_MRPT2, RelDSRG_MRPT2_Slow
 from forte2.helpers.comparisons import approx
 from forte2.data.atom_data import EH_TO_WN
@@ -111,7 +111,7 @@ def test_mrpt2_carbon_rel_sa(tmp_path):
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c="so-snso-row-dependent",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
     )
 
     system_0.save(tmp_path / "carbon_rel_sa")
@@ -162,7 +162,7 @@ def test_mrpt2_se_rel_sa_gauss_nuc_jk_otf():
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c="so-snso-row-dependent",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
         use_gaussian_charges=True,
     )
     system.fock_builder = FockBuilderOTF(system, jk_mem_thres_mb=20, backend="libcint")
@@ -199,7 +199,7 @@ def test_mrpt2_s_rel_sa_gauss_nuc():
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c="so-snso-row-dependent",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
         use_gaussian_charges=True,
     )
     mf = GHF(
@@ -236,7 +236,7 @@ def test_mrpt2_sh_with_slow():
         xyz=xyz,
         basis_set="cc-pvtz",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
-        x2c="so-snso-row-dependent",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
         use_gaussian_charges=True,
     )
     mf = GHF(
