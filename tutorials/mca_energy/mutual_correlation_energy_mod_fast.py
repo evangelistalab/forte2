@@ -367,70 +367,88 @@ def _cumulant_cache_key(ci, root):
 #Build spin-dependent 2-cumulants with forte2.
 #the cached method avoids rebuilding the spin-summed cumulants inside each iteration of orbitals pq..
 
-def _spin_dependent_cumulants(ci, root=0, orbital_rotation=None):
-    """
-    Returns
-    -------
-    aa2_cumulant
-    ab2_cumulant
-    bb2_cumulant
-    spin_summed_cumulant:
-        aa2_cumulant + ab2_cumulant + transpose(ab2_cumulant) + bb2_cumulant
-    """
+# def _spin_dependent_cumulants(ci, root=0, orbital_rotation=None):
+#     """
+#     Returns
+#     -------
+#     aa2_cumulant
+#     ab2_cumulant
+#     bb2_cumulant
+#     spin_summed_cumulant:
+#         aa2_cumulant + ab2_cumulant + transpose(ab2_cumulant) + bb2_cumulant
+#     """
+#     if orbital_rotation is not None:
+#         aa2, ab2, bb2, _ = _spin_dependent_cumulants(
+#             ci, root=root, orbital_rotation=None
+#         )
+#         aa2 = _transform_2tensor(aa2, orbital_rotation)
+#         ab2 = _transform_2tensor(ab2, orbital_rotation)
+#         bb2 = _transform_2tensor(bb2, orbital_rotation)
+#         spin_summed_cumulant = (
+#             aa2
+#             + ab2
+#             + ab2.transpose(1, 0, 3, 2)
+#             + bb2
+#         )
+#         return aa2, ab2, bb2, spin_summed_cumulant
+
+#     cache_key = _cumulant_cache_key(ci, root)
+#     if cache_key in _CUMULANT_CACHE:
+#         return _CUMULANT_CACHE[cache_key]
+
+#     ci_solver = ci.sub_solvers[0]
+
+#     a1, b1 = ci_solver.make_sd_1rdm(root)
+#     aa_pair, ab2, bb_pair = ci_solver.make_sd_2rdm(root)
+
+#     aa2 = forte2.cpp_helpers.packed_tensor4_to_tensor4(aa_pair)
+#     bb2 = forte2.cpp_helpers.packed_tensor4_to_tensor4(bb_pair)
+
+#     aa2_cumulant = (
+#         aa2
+#         - np.einsum("pr,qs->pqrs", a1, a1)
+#         + np.einsum("ps,qr->pqrs", a1, a1)
+#     )
+#     ab2_cumulant = ab2 - np.einsum("pr,qs->pqrs", a1, b1)
+#     bb2_cumulant = (
+#         bb2
+#         - np.einsum("pr,qs->pqrs", b1, b1)
+#         + np.einsum("ps,qr->pqrs", b1, b1)
+#     )
+#     # still setting 1-rdms to zero, after 2-cumulant is built
+#     # spin_summed_cumulant = (
+#     #     aa2_cumulant
+#     #     + ab2_cumulant
+#     #     + ab2_cumulant.transpose(1, 0, 3, 2)
+#     #     + bb2_cumulant
+#     # )
+#     cumulants = (aa2_cumulant, ab2_cumulant, bb2_cumulant, 
+#                  #spin_summed_cumulant
+#                  )
+#     _CUMULANT_CACHE[cache_key] = cumulants
+#     return cumulants
+
+#Build spin-summed 2-cumulant with forte2
+def _spin_summed_2cumulant(ci, root=0, orbital_rotation=None):
+    ci_solver = ci.sub_solvers[0]
+
     if orbital_rotation is not None:
-        aa2, ab2, bb2, _ = _spin_dependent_cumulants(
-            ci, root=root, orbital_rotation=None
-        )
-        aa2 = _transform_2tensor(aa2, orbital_rotation)
-        ab2 = _transform_2tensor(ab2, orbital_rotation)
-        bb2 = _transform_2tensor(bb2, orbital_rotation)
-        spin_summed_cumulant = (
-            aa2
-            + ab2
-            + ab2.transpose(1, 0, 3, 2)
-            + bb2
-        )
-        return aa2, ab2, bb2, spin_summed_cumulant
+            gamma1 = _transform_1rdm(ci_solver.make_sf_1rdm(root), orbital_rotation)
+            gamma2 = _transform_2tensor(ci_solver.make_sf_2rdm(root), orbital_rotation)
+            spin_summed_cumulant = gamma2-np.einsum("pr,qs->pqrs", gamma1, gamma1) +0.5*np.einsum("ps,qr->pqrs", gamma1,gamma1)
+            return spin_summed_cumulant
 
     cache_key = _cumulant_cache_key(ci, root)
     if cache_key in _CUMULANT_CACHE:
         return _CUMULANT_CACHE[cache_key]
 
-    ci_solver = ci.sub_solvers[0]
+    gamma1 = ci_solver.make_sf_1rdm(root)
+    gamma2 = ci_solver.make_sf_2rdm(root)
 
-    a1, b1 = ci_solver.make_sd_1rdm(root)
-    aa_pair, ab2, bb_pair = ci_solver.make_sd_2rdm(root)
-
-    aa2 = forte2.cpp_helpers.packed_tensor4_to_tensor4(aa_pair)
-    bb2 = forte2.cpp_helpers.packed_tensor4_to_tensor4(bb_pair)
-
-    aa2_cumulant = (
-        aa2
-        - np.einsum("pr,qs->pqrs", a1, a1)
-        + np.einsum("ps,qr->pqrs", a1, a1)
-    )
-    ab2_cumulant = ab2 - np.einsum("pr,qs->pqrs", a1, b1)
-    bb2_cumulant = (
-        bb2
-        - np.einsum("pr,qs->pqrs", b1, b1)
-        + np.einsum("ps,qr->pqrs", b1, b1)
-    )
-    # still setting 1-rdms to zero, after 2-cumulant is built
-    spin_summed_cumulant = (
-        aa2_cumulant
-        + ab2_cumulant
-        + ab2_cumulant.transpose(1, 0, 3, 2)
-        + bb2_cumulant
-    )
-    cumulants = (aa2_cumulant, ab2_cumulant, bb2_cumulant, spin_summed_cumulant)
-    _CUMULANT_CACHE[cache_key] = cumulants
-    return cumulants
-
-#Build spin-summed 2-cumulant with forte2
-def _spin_summed_2cumulant(ci, root=0, orbital_rotation=None):
-    return _spin_dependent_cumulants(
-        ci, root=root, orbital_rotation=orbital_rotation
-    )[3]
+    spin_summed_cumulant = gamma2 -np.einsum("pr,qs->pqrs", gamma1, gamma1) +0.5*np.einsum("ps,qr->pqrs", gamma1,gamma1)
+    _CUMULANT_CACHE[cache_key] = spin_summed_cumulant
+    return spin_summed_cumulant
+    #return _spin_dependent_cumulants(ci, root=root, orbital_rotation=orbital_rotation)[3]
 
 #an accelerated way to count fragments and determine body order
 def _unique_fragment_count_mask(local_to_fragment, body_order):
