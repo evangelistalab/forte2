@@ -41,13 +41,12 @@ RelCISigmaBuilder::get_Kblock_spans(size_t nrows, size_t ncols) const {
                                              static_cast<size_t>(std::numeric_limits<int>::max())});
     const size_t block_size = nrows * cols_chunk_size;
 
-    const bool can_reuse = Kblock1_.capacity() >= block_size && Kblock2_.capacity() >= block_size &&
+    // Keep a larger live size: shrinking here makes a later larger kernel value-initialize the
+    // same scratch storage again. The returned spans still expose only block_size elements.
+    const bool can_reuse = Kblock1_.size() >= block_size && Kblock2_.size() >= block_size &&
                            Kblock1_.capacity() <= max_elements_per_buffer &&
                            Kblock2_.capacity() <= max_elements_per_buffer;
-    if (can_reuse) {
-        Kblock1_.resize(block_size);
-        Kblock2_.resize(block_size);
-    } else {
+    if (!can_reuse) {
         // Drop both allocations before growing either one. This prevents geometric vector growth
         // from exceeding the pair budget and leaves a failed partial allocation safe to retry.
         std::vector<std::complex<double>>{}.swap(Kblock1_);
