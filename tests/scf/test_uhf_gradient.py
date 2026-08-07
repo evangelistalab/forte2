@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System
+from forte2 import System, X2CParams
 from forte2.scf import RHF, UHF
 from tests.scf.gradient_test_utils import (
     _system,
@@ -170,7 +170,7 @@ def test_uhf_gradient_rejects_gaussian_nuclear_charges():
 
 def test_uhf_gradient_rejects_x2c():
     """Reject X2C UHF gradients until relativistic derivative terms are added."""
-    system = _h2_system(x2c_type="sf")
+    system = _h2_system(x2c=X2CParams(x2c_type="sf", x2c_model="1e"))
     uhf = UHF(charge=1, ms=0.5, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
 
     with pytest.raises(NotImplementedError, match="X2C"):

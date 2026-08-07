@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, RHF, GHF, SpinorUpcaster, MOSpace
+from forte2 import System, RHF, GHF, SpinorUpcaster, MOSpace, X2CParams
 from forte2.helpers.comparisons import approx
 from forte2.ci import RelCI
 
@@ -74,8 +74,7 @@ def test_rel_ci_hf_ghf():
         basis_set="cc-pvdz",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         unit="bohr",
-        x2c_type="so",
-        snso_type=None,
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
     scf = GHF(charge=0)(system)
     ci = RelCI(
@@ -174,8 +173,7 @@ def test_rel_ci_hf_transition_dipole_ghf():
         basis_set="cc-pvdz",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         unit="bohr",
-        x2c_type="so",
-        snso_type=None,
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
     scf = GHF(charge=0)(system)
     ci = RelCI(

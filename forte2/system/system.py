@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, asdict
 import numpy as np
 from numpy.typing import NDArray
 import json
@@ -14,6 +14,7 @@ from forte2.helpers import (
     print_metric_info,
 )
 from forte2.x2c import X2CHelper
+from forte2.base_classes.params import X2CParams
 from forte2.jkbuilder import FockBuilder, FockBuilderOTF
 from .build_basis import build_basis, build_basis_from_dict
 from .geom_utils import GeometryHelper, parse_geometry
@@ -35,13 +36,10 @@ class System:
         The auxiliary basis set, either as a string or a dictionary (see `basis`).
     minao_basis : str | dict, optional, default="cc-pvtz-minao"
         The minimal atomic orbital basis set, used in IAO calculations, either as a string or a dictionary (see `basis`).
-    x2c_type : str | None, optional, default=None
-        The type of X2C transformation to be used. Options are "sf" for scalar
-        relativistic effects or "so" for spin-orbit coupling. If None, no X2C transformation is applied.
-    snso_type : str | None, optional, default="row-dependent"
-        The type of screened nuclear spin-orbit coupling scaling scheme to use.
-        Only relevant if `x2c_type` is "so".
-        Options are None, "boettger", "dc", "dcb", or "row-dependent".
+    x2c : X2CParams | None, optional, default=None
+        The X2C Hamiltonian to use, specified as an :class:`X2CParams` instance
+        (see its documentation for the available ``x2c_type``, ``x2c_model``, and
+        ``snso_type`` options). If None, no X2C transformation is applied.
     unit : str, optional, default="angstrom"
         The unit for the atomic coordinates. Can be "angstrom" or "bohr".
     overlap_ortho_rtol : float, optional, default=1e-8
@@ -109,8 +107,7 @@ class System:
     # These are the arguments that users can provide at initialization.
     auxiliary_basis_set: str | dict = None
     minao_basis_set: str | dict = "cc-pvtz-minao"
-    x2c_type: str | None = None
-    snso_type: str | None = "row-dependent"
+    x2c: X2CParams | None = None
     unit: str = "angstrom"
     overlap_ortho_rtol: float = 1e-8
     df_ortho_rtol: float | None = None
@@ -153,6 +150,25 @@ class System:
             raise ValueError("cholesky_tol must be non-negative.")
         if self.symmetry_tol < 0:
             raise ValueError("symmetry_tol must be non-negative.")
+        if self.x2c is not None and not isinstance(self.x2c, X2CParams):
+            raise ValueError(
+                f"x2c must be an X2CParams instance or None, but got {type(self.x2c)}."
+            )
+
+    @property
+    def x2c_type(self):
+        """Spin structure from :attr:`x2c` (``"sf"``, ``"so"``, or None)."""
+        return self.x2c.x2c_type if self.x2c is not None else None
+
+    @property
+    def x2c_model(self):
+        """Decoupling model from :attr:`x2c` (``"1e"``, ``"sap"``, or None)."""
+        return self.x2c.x2c_model if self.x2c is not None else None
+
+    @property
+    def snso_type(self):
+        """SNSO scaling from :attr:`x2c`, or None when not requested."""
+        return self.x2c.snso_type if self.x2c is not None else None
 
     def _common_init(self, skip_basis_init=False):
         self._init_geometry()
@@ -184,6 +200,9 @@ class System:
         d["basis_set"] = None
         d["auxiliary_basis_set"] = None
         d["minao_basis_set"] = None
+        # json.dump can't serialize an X2CParams instance; store its fields as a dict.
+        if self.x2c is not None:
+            d["x2c"] = asdict(self.x2c)
 
         res = {"init_args": d}
         res["basis_data"] = self.basis.serialize()
@@ -199,6 +218,8 @@ class System:
         with open(f"{filename}.json", "r", encoding="utf-8") as f:
             data = json.load(f)
             init_args = data["init_args"]
+            if isinstance(init_args.get("x2c"), dict):
+                init_args["x2c"] = X2CParams(**init_args["x2c"])
             system = cls.__new__(cls)
             for k, v in init_args.items():
                 setattr(system, k, v)

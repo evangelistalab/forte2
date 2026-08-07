@@ -1,5 +1,7 @@
+import itertools
 from dataclasses import dataclass, field
 from abc import ABC
+from typing import Literal, get_args
 
 from forte2.lib.det import Determinant
 
@@ -25,6 +27,80 @@ class ParamsBase(ABC):
         new_instance = type(self)(**fields)
         return new_instance
 
+    @classmethod
+    def is_valid_input(cls, *args, **kwargs):
+        try:
+            cls(*args, **kwargs)
+        except Exception:
+            return False
+        return True
+
+
+@dataclass
+class X2CParams(ParamsBase):
+    """
+    Parameters for the exact two-component (X2C) relativistic Hamiltonian.
+
+    Parameters
+    ----------
+    x2c_type : str | None, optional, default=None
+        The spin structure of the X2C transformation. Options are:
+            - None
+            - "sf": Spin-free (scalar) X2C.
+            - "so": Spin-orbit (two-component) X2C.
+    x2c_model : str, optional, default="1e"
+        The decoupling model used to build the X2C Hamiltonian. Options are:
+            - None
+            - "1e": One-electron X2C (bare-nucleus decoupling).
+            - "sap": Superposition of atomic potentials X2C.
+    snso_type : str | None, optional, default=None
+        The screened-nuclear-spin-orbit (SNSO) scaling applied to the spin-orbit
+        coupling. Only valid when ``x2c_type == "so"`` and ``x2c_model == "1e"``.
+        Options are:
+            - None
+            - "boettger": Boettger scaling.
+            - "dc": Dirac-Coulomb scaling.
+            - "dcb": Dirac-Coulomb-Breit scaling.
+            - "row-dependent": Row-dependent scaling.
+    """
+
+    x2c_type: Literal[None, "sf", "so"] = None
+    x2c_model: Literal[None, "1e", "sap"] = "1e"
+    snso_type: Literal[None, "boettger", "dc", "dcb", "row-dependent"] = None
+
+    def __post_init__(self):
+        valid_types = get_args(self.__annotations__["x2c_type"])
+        valid_models = get_args(self.__annotations__["x2c_model"])
+        valid_snso = get_args(self.__annotations__["snso_type"])
+
+        if self.x2c_type not in valid_types:
+            raise ValueError(
+                f"x2c_type must be one of {valid_types}, but got {self.x2c_type!r}."
+            )
+        if self.x2c_model not in valid_models:
+            raise ValueError(
+                f"x2c_model must be one of {valid_models}, but got {self.x2c_model!r}."
+            )
+        if self.snso_type not in valid_snso:
+            raise ValueError(
+                f"snso_type must be one of {valid_snso}, but got {self.snso_type!r}."
+            )
+
+        if self.x2c_type == None and (self.x2c_model or self.snso_type):
+            raise ValueError("x2c_model and snso_type must be None if x2c_type is None")
+
+        if self.x2c_type is not None and self.x2c_model == None:
+            raise ValueError("x2c_model must be set if x2c_type isn't None")
+
+
+        # SNSO scaling only makes sense for so, 1e.
+        if self.snso_type is not None and not (
+            self.x2c_type == "so" and self.x2c_model == "1e"
+        ):
+            raise ValueError(
+                "snso_type is only valid when x2c_type == 'so' and x2c_model == '1e', "
+                f"but got x2c_type={self.x2c_type!r}, x2c_model={self.x2c_model!r}."
+            )
 
 @dataclass
 class DavidsonLiuParams(ParamsBase):

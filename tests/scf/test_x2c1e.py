@@ -1,6 +1,6 @@
 import pytest
 
-from forte2 import System
+from forte2 import System, X2CParams
 from forte2.scf import RHF, GHF, UHF
 from forte2.helpers.comparisons import approx
 from forte2.orbitals import convert_coeff_spatial_to_spinor
@@ -16,7 +16,7 @@ def test_sfx2c1e():
     """
 
     system = System(
-        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT", x2c_type="sf"
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT", x2c=X2CParams(x2c_type="sf", x2c_model="1e")
     )
 
     scf = RHF(charge=0)(system)
@@ -35,7 +35,7 @@ def test_sfx2c1e_with_gaussian_charges():
         xyz=xyz,
         basis_set="cc-pVQZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c_type="sf",
+        x2c=X2CParams(x2c_type="sf", x2c_model="1e"),
         use_gaussian_charges=True,
     )
 
@@ -66,7 +66,7 @@ def test_lindep_sfx2c1e():
         basis_set="aug-cc-pvdz",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
         unit="bohr",
-        x2c_type="sf",
+        x2c=X2CParams(x2c_type="sf", x2c_model="1e"),
         overlap_ortho_rtol=2e-7,
     )
 
@@ -89,8 +89,7 @@ def test_sox2c1e_water():
         xyz=xyz,
         basis_set="decon-cc-pvdz",
         auxiliary_basis_set="cc-pvtz-jkfit",
-        x2c_type="so",
-        snso_type=None,
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
     scf = GHF(charge=0)(system)
     scf.run()
@@ -153,8 +152,7 @@ def test_boettger_hbr():
         xyz=xyz,
         basis_set={"Br": "decon-aug-cc-pvdz", "default": "cc-pvtz"},
         auxiliary_basis_set="cc-pvtz-jkfit",
-        x2c_type="so",
-        snso_type="dcb",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="dcb"),
     )
     scf = GHF(charge=0)(system)
     scf.run()
@@ -176,7 +174,7 @@ def test_so_from_sf_water():
         xyz=xyz,
         basis_set="cc-pvqz",
         auxiliary_basis_set="cc-pvtz-jkfit",
-        x2c_type="sf",
+        x2c=X2CParams(x2c_type="sf", x2c_model="1e"),
     )
     scf = UHF(charge=1, ms=0.5)(system)
     scf.run()
@@ -186,8 +184,7 @@ def test_so_from_sf_water():
         xyz=xyz,
         basis_set="cc-pvqz",
         auxiliary_basis_set="cc-pvtz-jkfit",
-        x2c_type="so",
-        snso_type=None,
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
     scf_so = GHF(charge=1)(system)
     scf_so.C = convert_coeff_spatial_to_spinor(scf.C)
@@ -203,8 +200,7 @@ def test_sox2c1e_sc():
         xyz=xyz,
         basis_set="sapporo-dkh3-dzp-2012-diffuse",
         auxiliary_basis_set="def2-universal-jkfit",
-        x2c_type="so",
-        snso_type="row-dependent",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
     )
     scf = GHF(charge=3)(system)
     scf.run()

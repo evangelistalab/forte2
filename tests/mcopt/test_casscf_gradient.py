@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, RHF, MCOptimizer, State, CISolver
+from forte2 import System, RHF, MCOptimizer, State, CISolver, X2CParams
 
 
 def _xyz(symbols, coordinates):
@@ -363,7 +363,7 @@ def test_casscf_gradient_rejects_x2c():
     system = _system(
         ["H", "H"],
         np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]]),
-        x2c_type="sf",
+        x2c=X2CParams(x2c_type="sf", x2c_model="1e"),
     )
     rhf = RHF(charge=0)(system)
     ci_solver = CISolver(

@@ -444,6 +444,13 @@ void export_two_electron_api(nb::module_& sub_m) {
         "basis1"_a, "basis2"_a, "basis3"_a, "W3"_a, "charges"_a);
 
     sub_m.def(
+        "coulomb_3c_opVop",
+        [](const Basis& basis1, const Basis& basis2, const Basis& basis3) {
+            return coulomb_3c_opVop(basis1, basis2, basis3);
+        },
+        "basis1"_a, "basis2"_a, "basis3"_a);
+
+    sub_m.def(
         "coulomb_3c_deriv",
         [](const Basis& basis1, const Basis& basis2, const Basis& basis3,
            const np_tensor3_complex_c& W3,
@@ -540,6 +547,10 @@ void export_libcint_compute_api(nb::module_& sub_m) {
         "shell_slice"_a, "atm"_a, "bas"_a, "env"_a, "ints"_a,
         "Compute the three-center two-electron integral tensor using libcint in spherical "
         "harmonics, with a user-provided buffer for the result.");
+    sub_m.def("cint_int3c2e_spsp1_sph", &cint_int3c2e_spsp1_sph, "shell_slice"_a, "atm"_a, "bas"_a,
+              "env"_a,
+              "Compute momentum-dressed three-center integrals using libcint in spherical "
+              "harmonics.");
 }
 #else
 // When libcint is disabled, define a no-op exporter

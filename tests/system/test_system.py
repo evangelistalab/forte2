@@ -1,9 +1,42 @@
+import inspect
+
 import numpy as np
 from scipy.linalg import eigh
 import pytest
 
-from forte2 import System, RHF
+from forte2 import System, RHF, X2CParams
 from forte2.lib import ints
+
+
+def test_x2c_is_the_only_public_relativistic_option():
+    parameters = inspect.signature(System).parameters
+    assert "x2c" in parameters
+    assert "x2c_type" not in parameters
+    assert "x2c_model" not in parameters
+    assert "snso_type" not in parameters
+
+
+@pytest.mark.parametrize("option", ["so-1e", "invalid", 1])
+def test_invalid_x2c_option(option):
+    with pytest.raises(ValueError, match="x2c must be an X2CParams instance"):
+        System(xyz="H 0 0 0", basis_set="sto-3g", minao_basis_set=None, x2c=option)
+
+
+def test_save_load_roundtrips_x2c_params(tmp_path):
+    filename = tmp_path / "x2c_system"
+    system = System(
+        xyz="H 0 0 0",
+        basis_set="sto-3g",
+        minao_basis_set=None,
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="dcb"),
+    )
+    system.save(filename)
+
+    loaded = System.load(filename)
+    assert isinstance(loaded.x2c, X2CParams)
+    assert loaded.x2c_type == "so"
+    assert loaded.x2c_model == "1e"
+    assert loaded.snso_type == "dcb"
 
 
 def test_system():
