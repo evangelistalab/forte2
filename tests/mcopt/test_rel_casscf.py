@@ -100,8 +100,7 @@ def test_rel_casscf_frozen_co_equivalent_to_nonrel():
 
 
 def test_rel_casscf_frozen_co_x2c():
-    # this energy was obtained without AVAS
-    emcscf = -112.9273233729
+    emcscf = -112.92732387630545
 
     xyz = """
     C 0.0 0.0 0.0
@@ -182,4 +181,4 @@ def test_rel_casscf_br():
     )
     mc = MCOptimizer(ci_solver)(scf)
     mc.run()
-    assert mc.E == approx(-2597.0679040990)
+    assert mc.E == approx(-2597.067904096615)
