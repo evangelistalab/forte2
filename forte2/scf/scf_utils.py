@@ -19,9 +19,7 @@ def minao_initial_guess(system, H):
     system : forte2.System
         The system object containing the atoms and basis set.
     H : NDArray
-        The Fock matrix.
-    S : NDArray
-        The overlap matrix.
+        The core Hamiltonian matrix.
 
     Returns
     -------
@@ -108,8 +106,6 @@ def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4):
         The index of the highest occupied molecular orbital (HOMO).
     mixing_parameter : float, optional
         The mixing parameter for the Givens rotation.
-    twocomp : bool, optional
-        Whether the system is two-component.
 
     Returns
     -------
