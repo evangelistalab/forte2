@@ -1,5 +1,7 @@
 #include <iostream>
 #include <iomanip>
+#include <limits>
+#include <string>
 
 #include "helpers/timer.hpp"
 #include "helpers/np_vector_functions.h"
@@ -7,6 +9,7 @@
 #include "helpers/indexing.hpp"
 #include "helpers/blas.h"
 #include "helpers/logger.h"
+#include "helpers/memory.h"
 #include "helpers/unordered_dense.h"
 
 #include "ci_sigma_builder.h"
@@ -69,8 +72,31 @@ void CISigmaBuilder::set_memory(int mb) {
         throw std::invalid_argument("CI builder memory must be non-negative.");
     }
     memory_size_ = static_cast<size_t>(mb) * 1024 * 1024; // Convert MB to bytes
-    std::vector<double>{}.swap(Kblock1_);
-    std::vector<double>{}.swap(Kblock2_);
+    // release the Kblock1_ and Kblock2_ buffers to free up memory
+    free_std_vector_memory(Kblock1_);
+    free_std_vector_memory(Kblock2_);
+}
+
+size_t CISigmaBuilder::max_composite_hole_dimension(const StringAddress& alpha_address,
+                                                    const StringAddress& beta_address,
+                                                    std::string_view rdm_name) {
+    size_t max_alpha = 0;
+    for (int class_Ka = 0; class_Ka < alpha_address.nclasses(); ++class_Ka) {
+        max_alpha = std::max(max_alpha, alpha_address.strpcls(class_Ka));
+    }
+
+    size_t max_beta = 0;
+    for (int class_Kb = 0; class_Kb < beta_address.nclasses(); ++class_Kb) {
+        max_beta = std::max(max_beta, beta_address.strpcls(class_Kb));
+    }
+
+    if ((max_alpha == 0) or (max_beta == 0))
+        return 0;
+    if (max_alpha > std::numeric_limits<size_t>::max() / max_beta) {
+        throw std::overflow_error("The composite " + std::string(rdm_name) +
+                                  " hole dimension is too large.");
+    }
+    return max_alpha * max_beta;
 }
 
 void CISigmaBuilder::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {

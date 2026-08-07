@@ -1,6 +1,3 @@
-#include <limits>
-#include <stdexcept>
-
 #include "helpers/timer.hpp"
 #include "helpers/np_matrix_functions.h"
 #include "helpers/np_vector_functions.h"
@@ -10,6 +7,79 @@
 #include "ci_sigma_builder.h"
 
 namespace forte2 {
+
+namespace {
+
+/// Gather signed two-alpha-hole/one-beta-hole coefficients into an AAB 3-RDM K-block.
+void gather_aab_3rdm_block(const CIStrings& lists, int class_Ka, int class_Kb, size_t maxKb,
+                           size_t Kblock_start, size_t Kdim, size_t norb,
+                           std::span<const double> coefficients, std::span<double> Kblock) {
+    for (const auto& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
+        if (lists.block_size(nI) == 0)
+            continue;
+
+        const auto maxIb = lists.beta_address()->strpcls(class_Ib);
+        const auto coefficient_offset = lists.block_offset(nI);
+        const auto& Kb_list = lists.get_beta_1h_list2(class_Kb, class_Ib);
+        if (Kb_list.empty())
+            continue;
+
+        for (size_t Kidx = 0; Kidx < Kdim; ++Kidx) {
+            const size_t K = Kblock_start + Kidx;
+            const size_t Ka = K / maxKb;
+            const size_t Kb = K % maxKb;
+            const auto& Ka_list = lists.get_alpha_2h_list(class_Ka, Ka, class_Ia);
+            if (Ka_list.empty())
+                continue;
+
+            for (const auto& [sign_pq, p, q, Ia] : Ka_list) {
+                const size_t row = pair_index_gt<size_t>(p, q) * norb;
+                const auto coefficient_Ia_offset = coefficient_offset + Ia * maxIb;
+                for (const auto& [sign_r, r, Ib] : Kb_list[Kb]) {
+                    Kblock[(row + r) * Kdim + Kidx] =
+                        sign_pq * sign_r * coefficients[coefficient_Ia_offset + Ib];
+                }
+            }
+        }
+    }
+}
+
+/// Gather signed one-alpha-hole/two-beta-hole coefficients into an ABB 3-RDM K-block.
+void gather_abb_3rdm_block(const CIStrings& lists, int class_Ka, int class_Kb, size_t maxKb,
+                           size_t Kblock_start, size_t Kdim, size_t npair,
+                           std::span<const double> coefficients, std::span<double> Kblock) {
+    for (const auto& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
+        if (lists.block_size(nI) == 0)
+            continue;
+
+        const auto maxIb = lists.beta_address()->strpcls(class_Ib);
+        const auto coefficient_offset = lists.block_offset(nI);
+        const auto& Ka_list = lists.get_alpha_1h_list2(class_Ka, class_Ia);
+        if (Ka_list.empty())
+            continue;
+
+        for (size_t Kidx = 0; Kidx < Kdim; ++Kidx) {
+            const size_t K = Kblock_start + Kidx;
+            const size_t Ka = K / maxKb;
+            const size_t Kb = K % maxKb;
+            const auto& Kb_list = lists.get_beta_2h_list(class_Kb, Kb, class_Ib);
+            if (Kb_list.empty())
+                continue;
+
+            for (const auto& [sign_p, p, Ia] : Ka_list[Ka]) {
+                const size_t row = p * npair;
+                const auto coefficient_Ia_offset = coefficient_offset + Ia * maxIb;
+                for (const auto& [sign_qr, q, r, Ib] : Kb_list) {
+                    const size_t qr_index = pair_index_gt<size_t>(q, r);
+                    Kblock[(row + qr_index) * Kdim + Kidx] =
+                        sign_p * sign_qr * coefficients[coefficient_Ia_offset + Ib];
+                }
+            }
+        }
+    }
+}
+
+} // namespace
 
 np_matrix CISigmaBuilder::compute_sss_3rdm(np_vector C_left, np_vector C_right, Spin spin) const {
     local_timer timer;
@@ -127,19 +197,8 @@ np_tensor4 CISigmaBuilder::compute_aab_3rdm(np_vector C_left, np_vector C_right)
     int num_2h_class_Ka = lists_.alpha_address_2h()->nclasses();
     int num_1h_class_Kb = lists_.beta_address_1h()->nclasses();
 
-    size_t max_composite_K = 0;
-    for (int class_Ka = 0; class_Ka < num_2h_class_Ka; ++class_Ka) {
-        const size_t maxKa = lists_.alpha_address_2h()->strpcls(class_Ka);
-        for (int class_Kb = 0; class_Kb < num_1h_class_Kb; ++class_Kb) {
-            const size_t maxKb = lists_.beta_address_1h()->strpcls(class_Kb);
-            if ((maxKa == 0) or (maxKb == 0))
-                continue;
-            if (maxKa > std::numeric_limits<size_t>::max() / maxKb) {
-                throw std::overflow_error("The composite AAB 3-RDM hole dimension is too large.");
-            }
-            max_composite_K = std::max(max_composite_K, maxKa * maxKb);
-        }
-    }
+    const size_t max_composite_K = max_composite_hole_dimension(
+        *lists_.alpha_address_2h(), *lists_.beta_address_1h(), "AAB 3-RDM");
     if (max_composite_K == 0)
         return rdm;
 
@@ -168,64 +227,12 @@ np_tensor4 CISigmaBuilder::compute_aab_3rdm(np_vector C_left, np_vector C_right)
                 std::fill_n(Kblock1.begin(), temp_dim, 0.0);
                 std::fill_n(Kblock2.begin(), temp_dim, 0.0);
 
-                // Gather the (signed) right coefficients into B_R[(xy*norb+z), K]
-                for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-                    if (lists_.block_size(nI) == 0)
-                        continue;
-                    const auto maxIb = lists_.beta_address()->strpcls(class_Ib);
-                    const auto Cr_offset = lists_.block_offset(nI);
-                    const auto& Kb_right_list = lists_.get_beta_1h_list2(class_Kb, class_Ib);
-                    if (Kb_right_list.empty())
-                        continue;
-                    for (size_t Kidx = 0; Kidx < Kdim; ++Kidx) {
-                        const size_t K = Kblock_start + Kidx;
-                        const size_t Ka = K / maxKb;
-                        const size_t Kb = K % maxKb;
-                        const auto& Ka_right_list =
-                            lists_.get_alpha_2h_list(class_Ka, Ka, class_Ia);
-                        if (Ka_right_list.empty())
-                            continue;
-                        const auto& KbR = Kb_right_list[Kb];
-                        for (const auto& [sign_xy, x, y, Ia] : Ka_right_list) {
-                            const auto xy_index = pair_index_gt<size_t>(x, y);
-                            const size_t row_xy = xy_index * norb;
-                            const auto Cr_Ia_offset = Cr_offset + Ia * maxIb;
-                            for (const auto& [sign_z, z, Ib] : KbR) {
-                                Kblock2[(row_xy + z) * Kdim + Kidx] =
-                                    sign_xy * sign_z * Cr_span[Cr_Ia_offset + Ib];
-                            }
-                        }
-                    }
-                }
-
-                // Gather the (signed) left coefficients into B_L[(uv*norb+w), K]
-                for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
-                    if (lists_.block_size(nJ) == 0)
-                        continue;
-                    const auto maxJb = lists_.beta_address()->strpcls(class_Jb);
-                    const auto Cl_offset = lists_.block_offset(nJ);
-                    const auto& Kb_left_list = lists_.get_beta_1h_list2(class_Kb, class_Jb);
-                    if (Kb_left_list.empty())
-                        continue;
-                    for (size_t Kidx = 0; Kidx < Kdim; ++Kidx) {
-                        const size_t K = Kblock_start + Kidx;
-                        const size_t Ka = K / maxKb;
-                        const size_t Kb = K % maxKb;
-                        const auto& Ka_left_list = lists_.get_alpha_2h_list(class_Ka, Ka, class_Ja);
-                        if (Ka_left_list.empty())
-                            continue;
-                        const auto& KbL = Kb_left_list[Kb];
-                        for (const auto& [sign_uv, u, v, Ja] : Ka_left_list) {
-                            const auto uv_index = pair_index_gt<size_t>(u, v);
-                            const size_t row_uv = uv_index * norb;
-                            const auto Cl_Ja_offset = Cl_offset + Ja * maxJb;
-                            for (const auto& [sign_w, w, Jb] : KbL) {
-                                Kblock1[(row_uv + w) * Kdim + Kidx] =
-                                    sign_uv * sign_w * Cl_span[Cl_Ja_offset + Jb];
-                            }
-                        }
-                    }
-                }
+                // Gather the signed right and left coefficients into B_R[(xy,z),K] and
+                // B_L[(uv,w),K].
+                gather_aab_3rdm_block(lists_, class_Ka, class_Kb, maxKb, Kblock_start, Kdim, norb,
+                                      Cr_span, Kblock2);
+                gather_aab_3rdm_block(lists_, class_Ka, class_Kb, maxKb, Kblock_start, Kdim, norb,
+                                      Cl_span, Kblock1);
 
                 matrix_product('N', 'T', M, M, Kdim, 1.0, Kblock1.data(), Kdim, Kblock2.data(),
                                Kdim, 1.0, rdm_data, M);
@@ -264,19 +271,8 @@ np_tensor4 CISigmaBuilder::compute_abb_3rdm(np_vector C_left, np_vector C_right)
     int num_1h_class_Ka = lists_.alpha_address_1h()->nclasses();
     int num_2h_class_Kb = lists_.beta_address_2h()->nclasses();
 
-    size_t max_composite_K = 0;
-    for (int class_Ka = 0; class_Ka < num_1h_class_Ka; ++class_Ka) {
-        const size_t maxKa = lists_.alpha_address_1h()->strpcls(class_Ka);
-        for (int class_Kb = 0; class_Kb < num_2h_class_Kb; ++class_Kb) {
-            const size_t maxKb = lists_.beta_address_2h()->strpcls(class_Kb);
-            if ((maxKa == 0) or (maxKb == 0))
-                continue;
-            if (maxKa > std::numeric_limits<size_t>::max() / maxKb) {
-                throw std::overflow_error("The composite ABB 3-RDM hole dimension is too large.");
-            }
-            max_composite_K = std::max(max_composite_K, maxKa * maxKb);
-        }
-    }
+    const size_t max_composite_K = max_composite_hole_dimension(
+        *lists_.alpha_address_1h(), *lists_.beta_address_2h(), "ABB 3-RDM");
     if (max_composite_K == 0)
         return rdm;
 
@@ -305,63 +301,12 @@ np_tensor4 CISigmaBuilder::compute_abb_3rdm(np_vector C_left, np_vector C_right)
                 std::fill_n(Kblock1.begin(), temp_dim, 0.0);
                 std::fill_n(Kblock2.begin(), temp_dim, 0.0);
 
-                // Gather the (signed) right coefficients into B_R[(x*npair+yz), K]
-                for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-                    if (lists_.block_size(nI) == 0)
-                        continue;
-                    const auto maxIb = lists_.beta_address()->strpcls(class_Ib);
-                    const auto Cr_offset = lists_.block_offset(nI);
-                    const auto& Ka_right_list = lists_.get_alpha_1h_list2(class_Ka, class_Ia);
-                    if (Ka_right_list.empty())
-                        continue;
-                    for (size_t Kidx = 0; Kidx < Kdim; ++Kidx) {
-                        const size_t K = Kblock_start + Kidx;
-                        const size_t Ka = K / maxKb;
-                        const size_t Kb = K % maxKb;
-                        const auto& Kb_right_list = lists_.get_beta_2h_list(class_Kb, Kb, class_Ib);
-                        if (Kb_right_list.empty())
-                            continue;
-                        const auto& KaR = Ka_right_list[Ka];
-                        for (const auto& [sign_x, x, Ia] : KaR) {
-                            const size_t row_x = x * npair;
-                            const auto Cr_Ia_offset = Cr_offset + Ia * maxIb;
-                            for (const auto& [sign_yz, y, z, Ib] : Kb_right_list) {
-                                const auto yz_index = pair_index_gt<size_t>(y, z);
-                                Kblock2[(row_x + yz_index) * Kdim + Kidx] =
-                                    sign_x * sign_yz * Cr_span[Cr_Ia_offset + Ib];
-                            }
-                        }
-                    }
-                }
-
-                // Gather the (signed) left coefficients into B_L[(u*npair+vw), K]
-                for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
-                    if (lists_.block_size(nJ) == 0)
-                        continue;
-                    const auto maxJb = lists_.beta_address()->strpcls(class_Jb);
-                    const auto Cl_offset = lists_.block_offset(nJ);
-                    const auto& Ka_left_list = lists_.get_alpha_1h_list2(class_Ka, class_Ja);
-                    if (Ka_left_list.empty())
-                        continue;
-                    for (size_t Kidx = 0; Kidx < Kdim; ++Kidx) {
-                        const size_t K = Kblock_start + Kidx;
-                        const size_t Ka = K / maxKb;
-                        const size_t Kb = K % maxKb;
-                        const auto& Kb_left_list = lists_.get_beta_2h_list(class_Kb, Kb, class_Jb);
-                        if (Kb_left_list.empty())
-                            continue;
-                        const auto& KaL = Ka_left_list[Ka];
-                        for (const auto& [sign_u, u, Ja] : KaL) {
-                            const size_t row_u = u * npair;
-                            const auto Cl_Ja_offset = Cl_offset + Ja * maxJb;
-                            for (const auto& [sign_vw, v, w, Jb] : Kb_left_list) {
-                                const auto vw_index = pair_index_gt<size_t>(v, w);
-                                Kblock1[(row_u + vw_index) * Kdim + Kidx] =
-                                    sign_u * sign_vw * Cl_span[Cl_Ja_offset + Jb];
-                            }
-                        }
-                    }
-                }
+                // Gather the signed right and left coefficients into B_R[(x,yz),K] and
+                // B_L[(u,vw),K].
+                gather_abb_3rdm_block(lists_, class_Ka, class_Kb, maxKb, Kblock_start, Kdim, npair,
+                                      Cr_span, Kblock2);
+                gather_abb_3rdm_block(lists_, class_Ka, class_Kb, maxKb, Kblock_start, Kdim, npair,
+                                      Cl_span, Kblock1);
 
                 matrix_product('N', 'T', M, M, Kdim, 1.0, Kblock1.data(), Kdim, Kblock2.data(),
                                Kdim, 1.0, rdm_data, M);
