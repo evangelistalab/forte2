@@ -182,10 +182,7 @@ CISigmaBuilder::get_Kblock_spans(size_t nrows, size_t ncols) const {
                            Kblock1_.capacity() <= max_elements_per_buffer &&
                            Kblock2_.capacity() <= max_elements_per_buffer;
     if (!can_reuse) {
-        // Drop both allocations before growing either one. This prevents geometric vector growth
-        // from exceeding the pair budget and leaves a failed partial allocation safe to retry.
-        std::vector<double>{}.swap(Kblock1_);
-        std::vector<double>{}.swap(Kblock2_);
+        // Drop both allocations before growing either one.
         Kblock1_ = std::vector<double>(block_size);
         Kblock2_ = std::vector<double>(block_size);
     }

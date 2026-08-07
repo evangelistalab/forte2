@@ -3,6 +3,7 @@
 #include <functional>
 #include <cmath>
 #include <span>
+#include <string_view>
 #include <tuple>
 #include <vector>
 
@@ -367,6 +368,11 @@ class CISigmaBuilder {
     /// algorithm.
     void H2_kh(std::span<double> basis, std::span<double> sigma) const;
 
+    /// @brief Get the spans of the Kblock buffers for a given number of rows and columns
+    /// @param nrows The number of rows in the block
+    /// @param ncols The number of columns in the block
+    /// @return A tuple containing the spans of the Kblock buffers and the number of columns
+    ///         that fit in each buffer
     std::tuple<std::span<double>, std::span<double>, size_t> get_Kblock_spans(size_t nrows,
                                                                               size_t ncols) const;
 
@@ -374,6 +380,14 @@ class CISigmaBuilder {
     /// @return The number of columns that fit in each buffer.
     size_t acquire_local_Kblock_buffers(std::vector<double>& Kblock1, std::vector<double>& Kblock2,
                                         size_t nrows, size_t ncols) const;
+
+    /// @brief Find the largest product of class sizes in two hole-string address spaces.
+    /// @param alpha_address Alpha hole-string address space.
+    /// @param beta_address Beta hole-string address space.
+    /// @param rdm_name RDM name used to identify an overflowing dimension.
+    static size_t max_composite_hole_dimension(const StringAddress& alpha_address,
+                                               const StringAddress& beta_address,
+                                               std::string_view rdm_name);
 };
 
 [[nodiscard]] std::span<double> gather_block(std::span<double> source, std::span<double> dest,
