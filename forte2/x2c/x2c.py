@@ -142,6 +142,101 @@ class X2CHelper:
 
         return h_fw
 
+    def electric_dipole_moment(self, origin=None):
+        """
+        Compute the electric dipole moment integrals with picture change correction.
+
+        Parameters
+        ----------
+        origin : array-like, optional
+            The origin for the dipole operator. If None, defaults to [0, 0, 0].
+
+        Returns
+        -------
+        list[NDArray]
+            The picture-change-corrected electric dipole moment integrals along
+            the x, y, z directions, in the contracted basis.
+        """
+        # the large-large (mu_ll) and small-small (mu_ss) dipole integrals are
+        # built in the decontracted basis, matching the basis in which X and R
+        # were constructed by hcore_x2c().
+        if self.x2c_type == "sf":
+            _, *mu_ll = integrals.emultipole1(self.system, self.xbasis, origin=origin)
+            # only the spin-free (identity) part of the small-component dipole
+            # is needed for the spin-free case: components [x, I2], [y, I2], [z, I2]
+            mu_ss = integrals.cint_sprsp(self.system, self.xbasis, origin=origin)[
+                [3, 7, 11]
+            ]
+            mu_ss = mu_ss * (0.25 / LIGHT_SPEED**2)
+            mu_ss = list(mu_ss)
+        else:  # so
+            _, *mu_ll = integrals.emultipole1(self.system, self.xbasis, origin=origin)
+            mu_ll = [block_diag_2x2(mu) for mu in mu_ll]
+            mu_ss_so = integrals.cint_sprsp(self.system, self.xbasis, origin=origin)
+            mu_ss_so = mu_ss_so * (0.25 / LIGHT_SPEED**2)
+            # [x, y, z, I2] spin components for each Cartesian dipole direction
+            mu_ss = [
+                i_sigma_dot(mu_ss_so[3], *mu_ss_so[:3]),
+                i_sigma_dot(mu_ss_so[7], *mu_ss_so[4:7]),
+                i_sigma_dot(mu_ss_so[11], *mu_ss_so[8:11]),
+            ]
+
+        mu_pc = self.picture_change_even_operator(mu_ll, mu_ss)
+
+        # project back to the contracted basis
+        proj = self._get_projection_matrix()
+        return [proj.conj().T @ mu_pc_i @ proj for mu_pc_i in mu_pc]
+
+    def picture_change_even_operator(self, ints_LL, ints_SS):
+        """
+        Apply the picture change correction to integrals of an even operator, i.e.,
+        one of the form [[M^LL, 0], [0, M^SS]]. Most "non-relativistic" property
+        operators are even operators.
+
+        Parameters
+        ----------
+        ints_LL : list[NDArray]
+            The integrals corresponding to the large-large matrix block, in the
+            (block-diagonalized, for the spin-orbit case) decontracted basis.
+        ints_SS : list[NDArray]
+            The integrals corresponding to the small-small matrix block, in the
+            same basis as ``ints_LL``.
+
+        Returns
+        -------
+        list[NDArray]
+            The picture-change-corrected integrals in the (non-orthogonal)
+            decontracted basis.
+
+        Notes
+        -----
+        This operation is identical to the decoupling transformation of the 1e
+        Dirac Hamiltonian: we compute R^+ M_NESC R, where M_NESC = M^LL + X^+ M^SS X.
+        Because X and R are built in the orthonormal basis (see hcore_x2c), the
+        input integrals are first transformed into that basis with Xorth and the
+        result is transformed back with Xorthm1, mirroring how the core
+        Hamiltonian is handled.
+        """
+        assert hasattr(self, "X") and hasattr(self, "R"), (
+            "The X2C transformation has not been executed yet; "
+            "call hcore_x2c() before requesting picture-change-corrected properties."
+        )
+        assert len(ints_LL) == len(
+            ints_SS
+        ), "ints_LL and ints_SS must have the same length."
+
+        # X and R live in the orthonormal basis, so bring the operator integrals
+        # into that basis, apply the decoupling, then return to the AO basis.
+        Xorth, Xorthm1 = self._get_Xorth()
+        res = []
+        for M_LL, M_SS in zip(ints_LL, ints_SS):
+            M_LL_o = Xorth.conj().T @ M_LL @ Xorth
+            M_SS_o = Xorth.conj().T @ M_SS @ Xorth
+            M_NESC = M_LL_o + self.X.conj().T @ M_SS_o @ self.X
+            M_pc = self.R.conj().T @ M_NESC @ self.R
+            res.append(Xorthm1.conj().T @ M_pc @ Xorthm1)
+        return res
+
     def _get_projection_matrix(self):
         return self.proj if self.system.x2c_type == "sf" else block_diag_2x2(self.proj)
 

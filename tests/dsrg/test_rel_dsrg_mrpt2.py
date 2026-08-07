@@ -270,6 +270,11 @@ def test_mrpt2_sh_with_slow():
     dsrg_slow.run()
     assert np.abs(dsrg_slow.E_dsrg.imag) < 1e-12
 
+    # References updated after the SNSO shell-to-atom mapping fix on the base
+    # branch (bugfix/x2c-snso-mapping). That fix changes the row-dependent SNSO
+    # scaling for this heteronuclear SH system, uniformly shifting every DSRG-MRPT2
+    # energy by ~8e-7 Eh. The prior references predate the fix (last updated in
+    # PR #170, before the mapping bug was corrected). Values are deterministic.
     ref_relax_energies = np.array(
         [
             [-399.255354806219, -399.255873658049, -399.075511243649],
