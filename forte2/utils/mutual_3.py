@@ -174,4 +174,11 @@ def make_NO_cumulant(rdm1,rdm2):
     
     cumulant2_no = rdm2_no - np.einsum("ik,jl->ijkl", rdm1_no, rdm1_no, optimize=True) + np.einsum("il,jk->ijkl", rdm1_no, rdm1_no, optimize=True)
     return cumulant2_no
+
+def C_to_NO(C,rdm1):
+    occs, evecs = np.linalg.eigh(rdm1)
+    occs = occs[::-1]
+    evecs = evecs[:, ::-1]
+    C_no = C @ evecs
+    return C_no, occs
     

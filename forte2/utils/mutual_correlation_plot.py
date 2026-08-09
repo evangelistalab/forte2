@@ -393,7 +393,9 @@ def mutual_correlation_plot_from_values(
     write_orbital_cubes(
         system, C, indices=indices, filepath=orbitals_filepath, prefix="orbital"
     )
-
+    from forte2.orbitals.cube_generator import combine_all_spinor_cubes
+    combine_all_spinor_cubes(orbitals_filepath, output_subdir="combined_cubes")
+    orbitals_filepath = f"{orbitals_filepath}/combined_cubes"
     # run VMDCube
     try:
         from vmdcube import VMDCube
@@ -421,11 +423,13 @@ def mutual_correlation_plot_from_values(
     fig, ax = plt.subplots(figsize=figsize)
     ax.set_aspect("equal", "box")
 
-    # find all the files with the pattern orbital_*.tga
+    # find all the files with the pattern h2_ghf_orbs_*_total_density.tga
     orbitals_filepath = pathlib.Path(orbitals_filepath)
 
     # form a dictionary mapping orbital index (int) to tga file path
-    tga_files = glob.glob(str(orbitals_filepath / pathlib.Path("orbital_*.tga")))
+    tga_files = glob.glob(
+        str(orbitals_filepath / pathlib.Path("orbital_*_total_density.tga"))
+    )
     tga_files_dict = {}
     for file in tga_files:
         name = pathlib.Path(file).stem
@@ -433,21 +437,21 @@ def mutual_correlation_plot_from_values(
             print(name, "is zero, skipping image.")
             continue
         import re
-        match = re.match(r"orbital_(\d+)(?:_([ab]))?$", name)
+        match = re.fullmatch(r"orbital_(\d+)_total_density", name)
 
         if match:
             orbital_index = int(match.group(1))
-            spin_component = match.group(2)  # 'a', 'b', or None
-            # print(file,orbital_index,spin_component)
             tga_files_dict[orbital_index] = file
-
+    # print("indice_dict",tga_files_dict.keys()
     for i, (x, y) in enumerate(zip(x_coords, y_coords)):
+        # print("indices", indices[i])
         orbital_index = indices[i]
-
+        
         x_img = (radius + offset) * x / radius
         y_img = (radius + offset) * y / radius
 
         filename = tga_files_dict[orbital_index]
+
         tga_file = filename
         try:
             # Load the image

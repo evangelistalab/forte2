@@ -6,6 +6,201 @@ from forte2.helpers import logger
 from forte2 import ints
 
 
+def read_cube(filename):
+    filename = Path(filename)
+    lines = filename.read_text().splitlines()
+
+    # read the number of atoms from the third line
+    natoms = abs(int(lines[2].split()[0]))
+
+    # standard cube header:
+    # 2 comment lines + 1 line for origin + 3 lines for grid + natoms lines for atoms
+    data_start = 6 + natoms
+
+    header = lines[:data_start]
+
+    values = np.fromstring(
+        " ".join(lines[data_start:]),
+        sep=" ",
+    )
+
+    # read the number of grids
+    nx = abs(int(lines[3].split()[0]))
+    ny = abs(int(lines[4].split()[0]))
+    nz = abs(int(lines[5].split()[0]))
+
+    expected_size = nx * ny * nz
+
+    if values.size != expected_size:
+        raise ValueError(
+            f"{filename.name}: found {values.size} values, "
+            f"but expected {expected_size}."
+        )
+
+    return {
+        "filename": filename,
+        "header": header,
+        "values": values,
+        "shape": (nx, ny, nz),
+        "geometry_header": lines[2:data_start],
+    }
+
+
+def write_cube(filename, header, values):
+    filename = Path(filename)
+
+    with filename.open("w") as handle:
+        handle.write(
+            "GHF spinor orbital total density\n"
+        )
+        handle.write(
+            "|psi_a|^2 + |psi_b|^2\n"
+        )
+
+        for line in header[2:]:
+            handle.write(line + "\n")
+
+        # Gaussian cube files have 6 values per line
+        for start in range(0, values.size, 6):
+            block = values[start:start + 6]
+
+            handle.write(
+                " ".join(
+                    f"{value:13.6E}"
+                    for value in block
+                )
+                + "\n"
+            )
+
+
+def combine_spinor_density(
+    alpha_cube,
+    beta_cube,
+    output_cube,
+):
+    cube_a = read_cube(alpha_cube)
+    cube_b = read_cube(beta_cube)
+
+    # check net grid
+    if cube_a["shape"] != cube_b["shape"]:
+        raise ValueError(
+            "Alpha and beta cubes have different grid sizes: "
+            f"{cube_a['shape']} versus {cube_b['shape']}."
+        )
+
+    # check geometry header
+    if cube_a["geometry_header"] != cube_b["geometry_header"]:
+        raise ValueError(
+            "Alpha and beta cube headers are not compatible."
+        )
+
+    psi_a_abs = cube_a["values"]
+    psi_b_abs = cube_b["values"]
+
+    density = (
+        psi_a_abs**2
+        + psi_b_abs**2
+    )
+
+    write_cube(
+        output_cube,
+        cube_a["header"],
+        density,
+    )
+
+    print("Grid:", cube_a["shape"])
+    print("Density minimum:", density.min())
+    print("Density maximum:", density.max())
+    print("Output:", output_cube)
+
+from pathlib import Path
+import re
+
+
+def combine_all_spinor_cubes(
+    directory,
+    output_subdir="total_density",
+):
+    """
+
+    Parameters
+    ----------
+    directory: the directory containing the cube files to combine. 
+    The function will look for pairs of files with the pattern {base}_{spin}.cube, 
+    where {spin} is either 'a' or 'b'. 
+    For each pair, it will generate a combined total-density cube file named {base}_total_density.cube.
+    output_subdir: subdirectory created under directory to store combined cube files.
+    ----------
+    """
+    directory = Path(directory)
+    output_directory = directory / output_subdir
+    output_directory.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    # match files with the pattern: {base}_{spin}.cube
+    # where {spin} is either 'a' or 'b'
+    pattern = re.compile(
+        r"^(?P<base>.+)_(?P<spin>[ab])\.cube$"
+    )
+
+    pairs = {}
+
+    for cube_path in directory.glob("*.cube"):
+        match = pattern.fullmatch(cube_path.name)
+
+        if match is None:
+            continue
+
+        base = match.group("base")
+        spin = match.group("spin")
+
+        if base not in pairs:
+            pairs[base] = {}
+
+        pairs[base][spin] = cube_path
+
+    combined_count = 0
+
+    for base, components in sorted(pairs.items()):
+        alpha_path = components.get("a")
+        beta_path = components.get("b")
+
+        # check if both components exist
+        if alpha_path is None:
+            print(f"Skip {base}: missing _a.cube")
+            continue
+
+        if beta_path is None:
+            print(f"Skip {base}: missing _b.cube")
+            continue
+
+        output_path = (
+            output_directory
+            / f"{base}_total_density.cube"
+        )
+
+        print(f"Combining orbital: {base}")
+        print(f"  alpha : {alpha_path.name}")
+        print(f"  beta  : {beta_path.name}")
+        print(f"  output: {output_path.name}")
+
+        combine_spinor_density(
+            alpha_cube=alpha_path,
+            beta_cube=beta_path,
+            output_cube=output_path,
+        )
+
+        combined_count += 1
+
+    print(
+        f"\nFinished: generated "
+        f"{combined_count} total-density cube files."
+    )
+
+
+
 def write_orbital_cubes(
     system,
     C,
