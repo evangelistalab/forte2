@@ -1,5 +1,6 @@
 import pytest
-from forte2 import CIStrings, State, MOSpace
+from forte2 import State, MOSpace
+from forte2.lib.ci_helpers import CIStrings
 
 
 def test_ci_strings_input():

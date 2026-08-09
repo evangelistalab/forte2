@@ -13,16 +13,17 @@ class DIIS:
 
     Parameters
     ----------
-    diis_start : int, optional, default=3
+    diis_start : int, optional, default=4
         Start saving DIIS vectors after this many iterations.
-        A value less than 0 means no DIIS
+        A value less than 0 means no DIIS.
     diis_nvec : int, optional, default=8
         The number of vectors to keep in the DIIS.
     diis_min : int, optional, default=3
         The minimum number of vectors to perform extrapolation.
     do_diis : bool, optional
         If True, DIIS is performed. If False, DIIS is not performed.
-        If None, DIIS is performed unless `diis_start` or `diis_nvec` is less than 1.
+        If None, DIIS is performed unless `diis_start` is less than 0 or
+        `diis_nvec` is less than 1.
 
     Attributes
     ----------
@@ -50,7 +51,7 @@ class DIIS:
         turn_off = (self.diis_start < 0) or (self.diis_nvec < 1)
         if self.do_diis is True and turn_off:
             logger.log_warning(
-                "DIIS is turned off due to diis_start < 1 or diis_nvec < 1."
+                "DIIS is turned off due to diis_start < 0 or diis_nvec < 1."
             )
             self.do_diis = False
         if self.do_diis is None:

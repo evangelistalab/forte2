@@ -19,7 +19,7 @@ class RelCISigmaBuilder {
   public:
     // == Class Constructor ==
     RelCISigmaBuilder(const CIStrings& lists, double E, np_matrix_complex& H, np_tensor4_complex& V,
-                      int log_level = 3, bool use_asym_ints = false);
+                      int log_level = 3);
 
     // == Class Public Functions ==
 
@@ -37,8 +37,7 @@ class RelCISigmaBuilder {
     std::string get_algorithm() const;
 
     /// @brief Set the one and two-electron integrals for the Hamiltonian
-    void set_Hamiltonian(double E, np_matrix_complex H, np_tensor4_complex V,
-                         bool use_asym_ints = false);
+    void set_Hamiltonian(double E, np_matrix_complex H, np_tensor4_complex V);
 
     /// @brief Set the logging level for the class
     void set_log_level(int level) { log_level_ = level; }
@@ -126,8 +125,6 @@ class RelCISigmaBuilder {
     np_matrix_complex H_;
     /// @brief Two-electron integrals in the form of a tensor V[p][q][r][s] = <pq|rs> = (pr|qs)
     np_tensor4_complex V_;
-    /// @brief Whether to use antisymmetrized integrals for the Hamiltonian construction
-    bool use_asym_ints_ = false;
     /// @brief Object for computing the energy and Slater determinants
     RelSlaterRules rel_slater_rules_;
     /// @brief Memory size for temporary buffers in bytes (default 1 GB)
@@ -162,21 +159,20 @@ class RelCISigmaBuilder {
     mutable std::vector<std::complex<double>> v_pr_qs;
 
     /// @brief  One-electron contribution to the sigma vector |sigma> = H |basis>
-    /// @param alpha If true, compute the alpha contribution, otherwise the beta
-    /// @param h The one-electron integrals
-    void H1_hz(std::span<std::complex<double>> basis, std::span<std::complex<double>> sigma,
-               Spin spin, std::span<std::complex<double>> h) const;
-
-    /// @brief  Two-electron same-spin contribution to the sigma vector |sigma> = H |basis>
-    /// @param alpha If true, compute the alpha contribution, otherwise the beta
-    void H2_hz_same_spin(std::span<std::complex<double>> basis,
-                         std::span<std::complex<double>> sigma, Spin spin) const;
-
-    /// @brief  Two-electron mixed-spin contribution to the sigma vector |sigma> = H |basis>
     /// @param basis The basis vector
     /// @param sigma The resulting sigma vector
-    void H2_hz_opposite_spin(std::span<std::complex<double>> basis,
-                             std::span<std::complex<double>> sigma) const;
+    /// @param h The one-electron integrals
+    /// @note Two-component CI acts only on alpha spinors (nb == 0), so this is the alpha
+    ///       contribution and the opposite-spin spectator string count is always 1.
+    void H1_hz(std::span<std::complex<double>> basis, std::span<std::complex<double>> sigma,
+               std::span<std::complex<double>> h) const;
+
+    /// @brief  Two-electron same-spin contribution to the sigma vector |sigma> = H |basis>
+    /// @param basis The basis vector
+    /// @param sigma The resulting sigma vector
+    /// @note Two-component CI acts only on alpha spinors (nb == 0); see H1_hz.
+    void H2_hz_same_spin(std::span<std::complex<double>> basis,
+                         std::span<std::complex<double>> sigma) const;
 
     // -- Knowles-Handy Algorithm Functions/Data --
 

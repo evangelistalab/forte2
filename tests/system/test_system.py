@@ -2,7 +2,8 @@ import numpy as np
 from scipy.linalg import eigh
 import pytest
 
-from forte2 import System, ints, RHF
+from forte2 import System, RHF
+from forte2.lib import ints
 
 
 def test_system():
@@ -115,6 +116,28 @@ def test_nuclear_quadrupole():
     nucquad = system.nuclear_quadrupole(unit="au")
     assert np.trace(nucquad) == pytest.approx(0.0)
     assert np.diag(nucquad) == pytest.approx([11.5, -6.5, -5.0])
+
+
+def test_nuclear_moments_do_not_mutate_geometry():
+    xyz = """
+    O 0.0 0.0 0.0
+    H 0.0 0.0 1.0
+    Li 2.0 0.0 0.0
+    """
+    system = System(xyz=xyz, basis_set="cc-pvdz", unit="bohr")
+    positions_before = np.array(system.atomic_positions, copy=True)
+
+    origin = (0.5, -1.0, 2.0)
+    system.nuclear_dipole(origin=origin, unit="au")
+    assert np.allclose(system.atomic_positions, positions_before)
+
+    system.nuclear_quadrupole(origin=origin, unit="au")
+    assert np.allclose(system.atomic_positions, positions_before)
+
+    # And the origin shift must still be applied to the *returned* result:
+    dip_shifted = system.nuclear_dipole(origin=origin, unit="au")
+    dip_ref = system.nuclear_dipole(unit="au") - np.array(origin) * system.Zsum
+    assert dip_shifted == pytest.approx(dip_ref)
 
 
 def test_center_of_mass():

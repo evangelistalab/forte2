@@ -1,6 +1,7 @@
 import pytest
 
 from forte2 import MOSpace
+from forte2.state import EmbeddingMOSpace
 
 
 def test_mo_space_invalid():
@@ -53,6 +54,56 @@ def test_mo_space_invalid():
         # unsorted active indices in one of the GASes
         # note it's acceptable to have [3, 4] in GAS1 and [1] in GAS2, as long as they are individually sorted
         mospace = MOSpace(nmo=nmo, core_orbitals=[0, 2], active_orbitals=[[4, 3], [1]])
+
+
+def test_mo_space_rejects_invalid_index_domains():
+    with pytest.raises(ValueError, match="exactly"):
+        MOSpace(nmo=3, core_orbitals=[0], active_orbitals=[3])
+
+    with pytest.raises(ValueError, match="exactly"):
+        MOSpace(nmo=3, core_orbitals=[0], active_orbitals=[-1])
+
+    with pytest.raises(ValueError, match="exactly"):
+        EmbeddingMOSpace(
+            nmo=5,
+            frozen_core_orbitals=[],
+            B_core_orbitals=[0],
+            A_core_orbitals=[1],
+            active_orbitals=[2],
+            A_virtual_orbitals=[],
+            B_virtual_orbitals=[],
+            frozen_virtual_orbitals=[],
+        )
+
+    with pytest.raises(ValueError, match="exactly"):
+        EmbeddingMOSpace(
+            nmo=4,
+            frozen_core_orbitals=[],
+            B_core_orbitals=[0],
+            A_core_orbitals=[],
+            active_orbitals=[1],
+            A_virtual_orbitals=[1],
+            B_virtual_orbitals=[2],
+            frozen_virtual_orbitals=[],
+        )
+
+
+def test_update_frozen_orbital_counts_with_noncontiguous_spaces():
+    core_space = MOSpace(
+        nmo=5,
+        core_orbitals=[1, 2],
+        active_orbitals=[0],
+    )
+    core_space = core_space.update_frozen_orbitals(frozen_core_orbitals=1)
+    assert core_space.frozen_core_indices == [1]
+
+    virtual_space = MOSpace(
+        nmo=5,
+        core_orbitals=[4],
+        active_orbitals=[3],
+    )
+    virtual_space = virtual_space.update_frozen_orbitals(frozen_virtual_orbitals=1)
+    assert virtual_space.frozen_virtual_indices == [2]
 
 
 def test_mo_space_simple_cas():
@@ -184,3 +235,24 @@ def test_mo_space_interlaced_gas_3():
     assert mospace.gas[1] == slice(4, 6)
     assert mospace.virt == slice(6, 8)
     assert mospace.frozen_virt == slice(8, 10)
+
+
+def test_embedding_mo_space_gas():
+    mospace = EmbeddingMOSpace(
+        nmo=10,
+        frozen_core_orbitals=[0],
+        B_core_orbitals=[1, 3],
+        A_core_orbitals=[2],
+        active_orbitals=[[4], [6, 7]],
+        A_virtual_orbitals=[5],
+        B_virtual_orbitals=[8],
+        frozen_virtual_orbitals=[9],
+    )
+
+    assert mospace.active_orbitals == [[4], [6, 7]]
+    assert mospace.actv == slice(4, 7)
+    assert len(mospace.gas) == 2
+    assert mospace.gas[0] == slice(4, 5)
+    assert mospace.gas[1] == slice(5, 7)
+    assert list(mospace.orig_to_contig) == [0, 1, 3, 2, 4, 6, 7, 5, 8, 9]
+    assert list(mospace.contig_to_orig) == [0, 1, 3, 2, 4, 7, 5, 6, 8, 9]

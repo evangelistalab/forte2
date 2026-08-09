@@ -20,6 +20,7 @@ dependencies:
     - scikit-build-core>=0.10
     - pytest
     - pytest-cov
+    - nbmake
     - conda-forge::libint
     - conda-forge::regex
     - conda-forge::basis_set_exchange

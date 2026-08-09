@@ -81,7 +81,7 @@ ci_solver = forte2.CISolver(
     states=[forte2.State(nel=14, multiplicity=1, ms=0.0),
             forte2.State(nel=14, multiplicity=3, ms=0.0)],
 )
-mcscf = forte2.MCSCF(ci_solver=ci_solver)(avas)
+mcscf = forte2.MCOptimizer(ci_solver=ci_solver)(avas)
 
 pt = forte2.DSRG_MRPT2(s=0.5)(mcscf)
 

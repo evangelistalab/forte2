@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from abc import ABC
 
-from forte2 import Determinant
+from forte2.lib.det import Determinant
 
 
 @dataclass
@@ -43,9 +43,9 @@ class DavidsonLiuParams(ParamsBase):
         The maximum number of basis vectors per root.
     maxiter : int, optional, default=100
         The maximum number of iterations for the Davidson-Liu solver.
-    e_tol : float, optional, default=1e-10
+    e_tol : float, optional, default=1e-12
         The energy convergence threshold for the solver.
-    r_tol : float, optional, default=1e-5
+    r_tol : float, optional, default=1e-6
         The residual convergence threshold for the solver.
     """
 

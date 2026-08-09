@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-import forte2
 from forte2 import System, RHF
+from forte2.lib.det import Determinant, SlaterRules, RelSlaterRules, hilbert_space
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers.comparisons import approx
 from forte2.ci.ci import _CISingleStateSolver
@@ -13,7 +13,7 @@ from forte2.base_classes import DavidsonLiuParams
 
 def _determinant(alpha_occ, beta_occ):
     """Helper function to construct a Determinant from lists of occupied alpha and beta orbitals."""
-    det = forte2.Determinant.zero()
+    det = Determinant.zero()
     for p in alpha_occ:
         det.set_na(p, True)
     for p in beta_occ:
@@ -35,9 +35,15 @@ def _symmetric_integrals(norb, seed=12345):
     v = 0.5 * (v + v.transpose(2, 3, 0, 1))
     # verify symmetries before returning
     assert np.allclose(h, h.T), "One-electron integrals are not symmetric"
-    assert np.allclose(v, v.transpose(1, 0, 3, 2)), "Two-electron integrals do not have p<->q, r<->s symmetry"
-    assert np.allclose(v, v.transpose(2, 3, 0, 1)), "Two-electron integrals do not have (pq)<->(rs) symmetry"
-    assert np.allclose(v, v.transpose(3, 2, 1, 0)), "Two-electron integrals do not have p<->s, q<->r symmetry"    
+    assert np.allclose(
+        v, v.transpose(1, 0, 3, 2)
+    ), "Two-electron integrals do not have p<->q, r<->s symmetry"
+    assert np.allclose(
+        v, v.transpose(2, 3, 0, 1)
+    ), "Two-electron integrals do not have (pq)<->(rs) symmetry"
+    assert np.allclose(
+        v, v.transpose(3, 2, 1, 0)
+    ), "Two-electron integrals do not have p<->s, q<->r symmetry"
     return h, v
 
 
@@ -78,6 +84,7 @@ def _reference_determinant_energy(norb, scalar_energy, h, v, det):
 
     return energy
 
+
 def _reference_slater_rule(norb, scalar_energy, h, v, det_i, det_j):
     """Reference implementation of the Slater rules between two determinants."""
 
@@ -106,7 +113,7 @@ def _reference_slater_rule(norb, scalar_energy, h, v, det_i, det_j):
     elif n_diff_alpha == 2 and n_diff_beta == 0:
         p = i_alpha_diff[0]
         q = j_alpha_diff[0]
-        new_det = forte2.Determinant(det_j)
+        new_det = Determinant(det_j)
         sign = new_det.destroy_alpha(q)
         sign *= new_det.create_alpha(p)
         energy = h[p, q]
@@ -118,7 +125,7 @@ def _reference_slater_rule(norb, scalar_energy, h, v, det_i, det_j):
     elif n_diff_alpha == 0 and n_diff_beta == 2:
         p = i_beta_diff[0]
         q = j_beta_diff[0]
-        new_det = forte2.Determinant(det_j)
+        new_det = Determinant(det_j)
         sign = new_det.destroy_beta(q)
         sign *= new_det.create_beta(p)
         energy = h[p, q]
@@ -130,7 +137,7 @@ def _reference_slater_rule(norb, scalar_energy, h, v, det_i, det_j):
     elif n_diff_alpha == 4 and n_diff_beta == 0:
         p, q = i_alpha_diff
         r, s = j_alpha_diff
-        new_det = forte2.Determinant(det_j)
+        new_det = Determinant(det_j)
         sign = new_det.destroy_alpha(r)
         sign *= new_det.destroy_alpha(s)
         sign *= new_det.create_alpha(q)
@@ -139,7 +146,7 @@ def _reference_slater_rule(norb, scalar_energy, h, v, det_i, det_j):
     elif n_diff_alpha == 0 and n_diff_beta == 4:
         p, q = i_beta_diff
         r, s = j_beta_diff
-        new_det = forte2.Determinant(det_j)
+        new_det = Determinant(det_j)
         sign = new_det.destroy_beta(r)
         sign *= new_det.destroy_beta(s)
         sign *= new_det.create_beta(q)
@@ -150,7 +157,7 @@ def _reference_slater_rule(norb, scalar_energy, h, v, det_i, det_j):
         q = i_beta_diff[0]
         r = j_alpha_diff[0]
         s = j_beta_diff[0]
-        new_det = forte2.Determinant(det_j)
+        new_det = Determinant(det_j)
         sign = new_det.destroy_alpha(r)
         sign *= new_det.destroy_beta(s)
         sign *= new_det.create_beta(q)
@@ -165,8 +172,10 @@ def test_slater_rules_rejects_negative_norb():
     h = np.zeros((0, 0))
     v = np.zeros((0, 0, 0, 0))
 
-    with pytest.raises(ValueError, match="SlaterRules: norb must be non-negative, got -1"):
-        forte2.SlaterRules(-1, 0.0, h, v)
+    with pytest.raises(
+        ValueError, match="SlaterRules: norb must be non-negative, got -1"
+    ):
+        SlaterRules(-1, 0.0, h, v)
 
 
 def test_slater_rules_diagonal_edge_cases_match_main_formula():
@@ -174,7 +183,7 @@ def test_slater_rules_diagonal_edge_cases_match_main_formula():
     norb = 4
     scalar_energy = 0.37
     h, v = _symmetric_integrals(norb)
-    slater_rules = forte2.SlaterRules(norb, scalar_energy, h, v)
+    slater_rules = SlaterRules(norb, scalar_energy, h, v)
 
     dets = [
         _determinant([], []),  # no electrons
@@ -192,7 +201,7 @@ def test_slater_rules_returns_zero_for_incompatible_determinants():
     """Test that SlaterRules returns zero for determinants that differ by more than 2 spin orbitals and different number of electrons."""
     norb = 4
     h, v = _symmetric_integrals(norb)
-    slater_rules = forte2.SlaterRules(norb, 0.0, h, v)
+    slater_rules = SlaterRules(norb, 0.0, h, v)
 
     cases = [
         (_determinant([0], []), _determinant([], [])),  # different electron count
@@ -211,7 +220,7 @@ def test_slater_rules_matches_reference_for_excitation_classes():
     """Test that SlaterRules matches the reference implementation for specific pairs of determinants representing different excitation classes."""
     norb = 8
     h, v = _symmetric_integrals(norb)
-    slater_rules = forte2.SlaterRules(norb, 0.37, h, v)
+    slater_rules = SlaterRules(norb, 0.37, h, v)
 
     rhs = _determinant([0, 2, 5], [1, 3, 6])
     cases = [
@@ -239,12 +248,12 @@ def test_slater_rules_matches_reference_for_fock_space():
     """Test that SlaterRules matches the reference implementation for all pairs of determinants in the Fock space."""
     norb = 4
     h, v = _symmetric_integrals(norb)
-    slater_rules = forte2.SlaterRules(norb, 0.37, h, v)
+    slater_rules = SlaterRules(norb, 0.37, h, v)
 
     fock_space_dets = []
     for nalpha in range(norb + 1):
         for nbeta in range(norb + 1):
-            dets = forte2.hilbert_space(norb, nalpha, nbeta)
+            dets = hilbert_space(norb, nalpha, nbeta)
             fock_space_dets.extend(dets)
 
     for lhs in fock_space_dets:
@@ -274,12 +283,12 @@ def test_slater_rules_1():
         system=scf.system, C=scf.C[0], orbitals=orbitals, core_orbitals=core_orbitals
     )
 
-    slater_rules = forte2.SlaterRules(norb, ints.E, ints.H, ints.V)
+    slater_rules = SlaterRules(norb, ints.E, ints.H, ints.V)
 
     nca = scf.na - len(core_orbitals)
     ncb = scf.nb - len(core_orbitals)
 
-    dets = forte2.hilbert_space(norb, nca, ncb)
+    dets = hilbert_space(norb, nca, ncb)
 
     H = np.zeros((len(dets), len(dets)))
     for i, I in enumerate(dets):
@@ -324,11 +333,11 @@ def test_slater_rules_1_complex():
         optimize=True,
     )
 
-    slater_rules = forte2.RelSlaterRules(
+    slater_rules = RelSlaterRules(
         norb * 2, ints.E, ints.H.astype(complex), ints.V.astype(complex)
     )
 
-    dets = forte2.hilbert_space(norb, scf.na + scf.nb, 0)
+    dets = hilbert_space(norb, scf.na + scf.nb, 0)
 
     H = np.zeros((len(dets), len(dets)), dtype=complex)
     for i in range(len(dets)):
@@ -383,14 +392,14 @@ def test_slater_rules_2_complex():
         optimize=True,
     )
 
-    slater_rules = forte2.RelSlaterRules(
+    slater_rules = RelSlaterRules(
         norb, ints.E.real, ints.H.astype(complex), ints.V.astype(complex)
     )
 
     nca = scf.na - len(core_orbitals) // 2
     ncb = scf.nb - len(core_orbitals) // 2
 
-    dets = forte2.hilbert_space(norb, nca + ncb, 0)
+    dets = hilbert_space(norb, nca + ncb, 0)
 
     H = np.zeros((len(dets), len(dets)), dtype=complex)
     for i in range(len(dets)):
@@ -440,8 +449,8 @@ def test_slater_rules_3_complex():
     h2 = h2 + h2.transpose(1, 0, 3, 2)
     h2 = h2 + h2.transpose(3, 2, 1, 0).conj()
 
-    slater_rules = forte2.RelSlaterRules(norb, 0.0, h1, h2)
-    dets = forte2.hilbert_space(norb, 8, 0)
+    slater_rules = RelSlaterRules(norb, 0.0, h1, h2)
+    dets = hilbert_space(norb, 8, 0)
     H = np.zeros((len(dets), len(dets)), dtype=complex)
     for i in range(len(dets)):
         # no triangular loop: explicitly construct both i,j and j,i to check Hermiticity
@@ -492,8 +501,10 @@ def test_slater_rules_4_complex_antisym():
     h2 = h2 + h2.transpose(3, 2, 1, 0).conj()
     h2 -= h2.swapaxes(2, 3)
 
-    slater_rules = forte2.RelSlaterRules(norb, 0.0, h1, h2, tei_is_asym=True)
-    dets = forte2.hilbert_space(norb, 8, 0)
+    # h2 is already antisymmetric (<pq||rs>). RelSlaterRules and the CI solver
+    # antisymmetrize it, doubling it, hence the factor of 0.5
+    slater_rules = RelSlaterRules(norb, 0.0, h1, 0.5 * h2)
+    dets = hilbert_space(norb, 8, 0)
     H = np.zeros((len(dets), len(dets)), dtype=complex)
     for i in range(len(dets)):
         # no triangular loop: explicitly construct both i,j and j,i to check Hermiticity
@@ -505,7 +516,7 @@ def test_slater_rules_4_complex_antisym():
     fakeints = SpinorbitalIntegrals.__new__(SpinorbitalIntegrals)
     fakeints.E = 0.0
     fakeints.H = h1
-    fakeints.V = h2
+    fakeints.V = 0.5 * h2
     mo_space = MOSpace(nmo=norb, active_orbitals=list(range(norb)))
     state = State(nel=8, multiplicity=1, ms=0.0)
     ci = _CISingleStateSolver(
@@ -518,7 +529,7 @@ def test_slater_rules_4_complex_antisym():
         do_test_rdms=True,
         two_component=True,
     )
-    ci.run(use_asym_ints=True)
+    ci.run()
 
     assert E == approx(eref)
     assert E == approx(ci.E[0])

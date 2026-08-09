@@ -13,14 +13,44 @@
 #include "sparse/sparse_operator.h"
 #include "sparse/sparse_state.h"
 #include "sparse/sparse_operator_hamiltonian.h"
+#include "sparse/sparse_exp.h"
+#include "sparse/sq_operator_string.h"
 
 namespace nb = nanobind;
 using namespace nb::literals;
 
 namespace forte2 {
 
-void export_sparse_operator_api(nb::module_& m) {
-    nb::class_<SparseOperator>(m, "SparseOperator", "A class to represent a sparse operator")
+namespace {
+void export_sq_operator_string_api(nb::module_& m);
+void export_sparse_state_api(nb::module_& m);
+void export_sparse_operator_api(nb::module_& m);
+void export_sparse_operator_list_api(nb::module_& m);
+void export_sparse_exp_api(nb::module_& m);
+void export_sparse_fact_exp_api(nb::module_& m);
+} // namespace
+
+void export_sparse_ops_api(nb::module_& m) {
+    nb::module_ sub_m =
+        m.def_submodule("sparse_ops", "Sparse operators, states, and their operations");
+
+    export_sq_operator_string_api(sub_m);
+
+    export_sparse_state_api(sub_m);
+
+    export_sparse_operator_api(sub_m);
+
+    export_sparse_operator_list_api(sub_m);
+
+    export_sparse_exp_api(sub_m);
+
+    export_sparse_fact_exp_api(sub_m);
+}
+
+namespace {
+void export_sparse_operator_api(nb::module_& sub_m) {
+
+    nb::class_<SparseOperator>(sub_m, "SparseOperator", "A class to represent a sparse operator")
         // Constructors
         .def(nb::init<>(), "Default constructor")
         .def(nb::init<SparseOperator>(), "Copy constructor")
@@ -262,7 +292,8 @@ void export_sparse_operator_api(nb::module_& m) {
             },
             "dets"_a, "screen_thresh"_a = 1.0e-12,
             "Compute the matrix elements of the operator between a list of determinants");
-    m.def(
+
+    sub_m.def(
         "sparse_operator",
         [](const std::string& s, sparse_scalar_t coefficient, bool allow_reordering) {
             SparseOperator sop;
@@ -272,7 +303,7 @@ void export_sparse_operator_api(nb::module_& m) {
         "s"_a, "coefficient"_a = sparse_scalar_t(1), "allow_reordering"_a = false,
         "Create a SparseOperator object from a string and a complex");
 
-    m.def(
+    sub_m.def(
         "sparse_operator",
         [](const std::vector<std::pair<std::string, sparse_scalar_t>>& list,
            bool allow_reordering) {
@@ -285,7 +316,7 @@ void export_sparse_operator_api(nb::module_& m) {
         "list"_a, "allow_reordering"_a = false,
         "Create a SparseOperator object from a list of Tuple[str, complex]");
 
-    m.def(
+    sub_m.def(
         "sparse_operator",
         [](const SQOperatorString& sqop, sparse_scalar_t coefficient) {
             SparseOperator sop;
@@ -295,7 +326,7 @@ void export_sparse_operator_api(nb::module_& m) {
         "s"_a, "coefficient"_a = sparse_scalar_t(1),
         "Create a SparseOperator object from a SQOperatorString and a complex");
 
-    m.def(
+    sub_m.def(
         "sparse_operator",
         [](const std::vector<std::pair<SQOperatorString, sparse_scalar_t>>& list) {
             SparseOperator sop;
@@ -306,7 +337,7 @@ void export_sparse_operator_api(nb::module_& m) {
         },
         "list"_a, "Create a SparseOperator object from a list of Tuple[SQOperatorString, complex]");
 
-    m.def("new_product", [](const SparseOperator A, const SparseOperator B) {
+    sub_m.def("new_product", [](const SparseOperator A, const SparseOperator B) {
         SparseOperator C;
         SQOperatorProductComputer computer;
         for (const auto& [op, coeff] : A.elements()) {
@@ -320,7 +351,7 @@ void export_sparse_operator_api(nb::module_& m) {
         return C;
     });
 
-    // m.def("new_product2", [](const SparseOperator A, const SparseOperator B) {
+    // sub_m.def("new_product2", [](const SparseOperator A, const SparseOperator B) {
     //     SparseOperator C;
     //     for (const auto& [op, coeff] : A.elements()) {
     //         for (const auto& [op2, coeff2] : B.elements()) {
@@ -330,7 +361,7 @@ void export_sparse_operator_api(nb::module_& m) {
     //     return C;
     // });
     // overloaded: real Hamiltonian
-    m.def(
+    sub_m.def(
         "sparse_operator_hamiltonian",
         [](double scalar_energy, np_matrix one_electron_integrals,
            np_tensor4 two_electron_integrals, double screen_thresh) {
@@ -341,7 +372,7 @@ void export_sparse_operator_api(nb::module_& m) {
         "screen_thresh"_a = 1e-12,
         "Create a SparseOperator object representing the second quantized Hamiltonian.");
     // overloaded: complex Hamiltonian
-    m.def(
+    sub_m.def(
         "sparse_operator_hamiltonian",
         [](double scalar_energy, np_matrix_complex one_electron_integrals,
            np_tensor4_complex two_electron_integrals, double screen_thresh) {
@@ -353,8 +384,8 @@ void export_sparse_operator_api(nb::module_& m) {
         "Create a SparseOperator object representing the second quantized Hamiltonian.");
 }
 
-void export_sparse_operator_list_api(nb::module_& m) {
-    nb::class_<SparseOperatorList>(m, "SparseOperatorList",
+void export_sparse_operator_list_api(nb::module_& sub_m) {
+    nb::class_<SparseOperatorList>(sub_m, "SparseOperatorList",
                                    "A class to represent a list of sparse operators")
         .def(nb::init<>())
         .def(nb::init<SparseOperatorList>())
@@ -477,7 +508,7 @@ void export_sparse_operator_list_api(nb::module_& m) {
             },
             "state"_a, "screen_thresh"_a = 1.0e-12, "Apply the operator to a state");
 
-    m.def(
+    sub_m.def(
         "operator_list",
         [](const std::string& s, sparse_scalar_t coefficient, bool allow_reordering) {
             SparseOperatorList sop;
@@ -487,7 +518,7 @@ void export_sparse_operator_list_api(nb::module_& m) {
         "s"_a, "coefficient"_a = sparse_scalar_t(1), "allow_reordering"_a = false,
         "Create a SparseOperatorList object from a string and a complex");
 
-    m.def(
+    sub_m.def(
         "operator_list",
         [](const std::vector<std::pair<std::string, sparse_scalar_t>>& list,
            bool allow_reordering) {
@@ -500,7 +531,7 @@ void export_sparse_operator_list_api(nb::module_& m) {
         "list"_a, "allow_reordering"_a = false,
         "Create a SparseOperatorList object from a list of Tuple[str, complex]");
 
-    m.def(
+    sub_m.def(
         "operator_list",
         [](const SQOperatorString& sqop, sparse_scalar_t coefficient) {
             SparseOperatorList sop;
@@ -510,7 +541,7 @@ void export_sparse_operator_list_api(nb::module_& m) {
         "s"_a, "coefficient"_a = sparse_scalar_t(1),
         "Create a SparseOperatorList object from a SQOperatorString and a complex");
 
-    m.def(
+    sub_m.def(
         "operator_list",
         [](const std::vector<std::pair<SQOperatorString, sparse_scalar_t>>& list) {
             SparseOperatorList sop;
@@ -522,5 +553,224 @@ void export_sparse_operator_list_api(nb::module_& m) {
         "list"_a,
         "Create a SparseOperatorList object from a list of Tuple[SQOperatorString, complex]");
 }
+
+void export_sq_operator_string_api(nb::module_& sub_m) {
+    nb::class_<SQOperatorString>(sub_m, "SQOperatorString",
+                                 "A class to represent a string of creation/annihilation operators")
+        .def(nb::init<const Determinant&, const Determinant&>())
+        .def(
+            "cre", [](const SQOperatorString& sqop) { return sqop.cre(); },
+            "Get the creation operator string")
+        .def(
+            "ann", [](const SQOperatorString& sqop) { return sqop.ann(); },
+            "Get the annihilation operator string")
+        .def(
+            "sign_mask", [](const SQOperatorString& sqop) { return sqop.sign_mask(); },
+            "Get the precomputed sign mask")
+        .def("str", &SQOperatorString::str, "Get the string representation of the operator string")
+        .def("count", &SQOperatorString::count, "Get the number of operators")
+        .def("adjoint", &SQOperatorString::adjoint, "Get the adjoint operator string")
+        .def("spin_flip", &SQOperatorString::spin_flip, "Get the spin-flipped operator string")
+        .def("number_component", &SQOperatorString::number_component,
+             "Get the number component of the operator string")
+        .def("non_number_component", &SQOperatorString::non_number_component,
+             "Get the non-number component of the operator string")
+        .def("__str__", &SQOperatorString::str,
+             "Get the string representation of the operator string")
+        .def("__repr__", &SQOperatorString::str,
+             "Get the string representation of the operator string")
+        .def("latex", &SQOperatorString::latex,
+             "Get the LaTeX representation of the operator string")
+        .def("latex_compact", &SQOperatorString::latex_compact,
+             "Get the compact LaTeX representation of the operator string")
+        .def("is_identity", &SQOperatorString::is_identity,
+             "Check if the operator string is the identity operator")
+        .def("is_nilpotent", &SQOperatorString::is_nilpotent,
+             "Check if the operator string is nilpotent")
+        .def("op_tuple", &SQOperatorString::op_tuple, "Get the operator tuple")
+        .def("__eq__", &SQOperatorString::operator==, "Check if two operator strings are equal")
+        .def("__lt__", &SQOperatorString::operator<,
+             "Check if an operator string is less than another")
+        .def(
+            "__mul__",
+            [](const SQOperatorString& sqop, const sparse_scalar_t& scalar) {
+                SparseOperator sop;
+                sop.add(sqop, scalar);
+                return sop;
+            },
+            nb::is_operator(), "Multiply an operator string by a scalar")
+        .def(
+            "__rmul__",
+            [](const SQOperatorString& sqop, const sparse_scalar_t& scalar) {
+                SparseOperator sop;
+                sop.add(sqop, scalar);
+                return sop;
+            },
+            nb::is_operator(), "Multiply an operator string by a scalar");
+
+    nb::enum_<CommutatorType>(sub_m, "CommutatorType")
+        .value("commute", CommutatorType::Commute)
+        .value("anticommute", CommutatorType::AntiCommute)
+        .value("may_not_commute", CommutatorType::MayNotCommute);
+
+    sub_m.def(
+        "sqop",
+        [](const std::string& s, bool allow_reordering) {
+            return make_sq_operator_string(s, allow_reordering);
+        },
+        "s"_a, "allow_reordering"_a = false,
+        "Create an operator string from a string representation (default: no not allow "
+        "reordering)");
+
+    sub_m.def(
+        "compute_sign_mask",
+        [](const Determinant& cre, const Determinant& ann) {
+            Determinant sign_mask = Determinant::zero();
+            compute_sign_mask(cre, ann, sign_mask);
+            return sign_mask;
+        },
+        "cre"_a, "ann"_a,
+        "Compute the sign mask associated with a set of creation and annihilation operators");
+
+    sub_m.def("commutator_type", &commutator_type, "lhs"_a, "rhs"_a,
+              "Get the commutator type of two operator strings");
+}
+
+void export_sparse_state_api(nb::module_& sub_m) {
+    nb::class_<SparseState>(sub_m, "SparseState", "A class to represent a vector of determinants")
+        .def(nb::init<>(), "Default constructor")
+        .def(nb::init<const SparseState&>(), "Copy constructor")
+        .def(nb::init<const SparseState::old_container&>(),
+             "Create a SparseState from a container of Determinants")
+        .def(nb::init<const Determinant&, sparse_scalar_t>(), "det"_a, "val"_a = 1,
+             "Create a SparseState with a single determinant")
+        .def(
+            "items",
+            [](const SparseState& v) {
+                return nb::make_iterator(nb::type<SparseState>(), "item_iterator", v.begin(),
+                                         v.end());
+            },
+            nb::keep_alive<0, 1>()) // Essential: keep object alive while iterator exists
+        .def("str", &SparseState::str)
+        .def("size", &SparseState::size)
+        .def("norm", &SparseState::norm, "p"_a = 2,
+             "Calculate the p-norm of the SparseState (default p = 2, p = -1 for infinity norm)")
+        .def("add", &SparseState::add)
+        .def("__add__", &SparseState::operator+, "Add two SparseStates")
+        .def(
+            "__sub__", [](const SparseState& a, const SparseState& b) { return a - b; },
+            "Subtract two SparseStates")
+        .def("__mul__", &SparseState::operator*, "Multiply this SparseState by a scalar")
+        .def("__rmul__", &SparseState::operator*, "Multiply a scalar by this SparseState")
+        .def("__iadd__", &SparseState::operator+=, "Add a SparseState to this SparseState")
+        .def("__isub__", &SparseState::operator-=, "Subtract a SparseState from this SparseState")
+        .def("__imul__", &SparseState::operator*=, "Multiply this SparseState by a scalar")
+        .def("__len__", &SparseState::size)
+        .def("__eq__", &SparseState::operator==)
+        .def("__repr__", [](const SparseState& v) { return v.str(); })
+        .def("__str__", [](const SparseState& v) { return v.str(); })
+        .def("map", [](const SparseState& v) { return v.elements(); })
+        .def("elements", [](const SparseState& v) { return v.elements(); })
+        .def("__getitem__", [](SparseState& v, const Determinant& d) { return v[d]; })
+        .def("__setitem__",
+             [](SparseState& v, const Determinant& d, const sparse_scalar_t val) { v[d] = val; })
+        .def("__contains__", [](SparseState& v, const Determinant& d) { return v.count(d); })
+        .def(
+            "apply",
+            [](const SparseState& v, const SparseOperator& op) {
+                return apply_operator_lin(op, v);
+            },
+            "Apply an operator to this SparseState and return a new SparseState")
+        .def(
+            "apply_antiherm",
+            [](const SparseState& v, const SparseOperator& op) {
+                return apply_operator_antiherm(op, v);
+            },
+            "Apply the antihermitian combination of the operator (op - op^dagger) to this "
+            "SparseState and return a new SparseState")
+        .def("number_project",
+             [](const SparseState& v, int na, int nb) { return apply_number_projector(na, nb, v); })
+        .def(
+            "spin2", [](const SparseState& v) { return spin2(v, v); },
+            "Calculate the expectation value of S^2 for this SparseState")
+        .def(
+            "overlap",
+            [](const SparseState& v, const SparseState& other) { return overlap(v, other); },
+            "Calculate the overlap between this SparseState and another SparseState");
+
+    sub_m.def("apply_op", &apply_operator_lin, "sop"_a, "state0"_a, "screen_thresh"_a = 1.0e-12);
+
+    sub_m.def("apply_antiherm", &apply_operator_antiherm, "sop"_a, "state0"_a,
+              "screen_thresh"_a = 1.0e-12);
+
+    sub_m.def("apply_number_projector", &apply_number_projector);
+
+    sub_m.def("get_projection", &get_projection);
+
+    sub_m.def(
+        "spin2",
+        [](const SparseState& left_state, const SparseState& right_state) {
+            return spin2(left_state, right_state);
+        },
+        "Calculate the <left_state|S^2|right_state> expectation value");
+
+    sub_m.def("overlap", &overlap);
+
+    sub_m.def("normalize", &normalize, "Returns a normalized version of the input SparseState");
+}
+
+void export_sparse_exp_api(nb::module_& sub_m) {
+    nb::class_<SparseExp>(sub_m, "SparseExp",
+                          "A class to compute the exponential of a sparse operator")
+        .def(nb::init<int, double>(), "maxk"_a = 19, "screen_thresh"_a = 1.0e-12)
+        .def("apply_op",
+             nb::overload_cast<const SparseOperator&, const SparseState&, double>(
+                 &SparseExp::apply_op),
+             "sop"_a, "state"_a, "scaling_factor"_a = 1.0,
+             "Apply the exponential of a SparseOperator to a state: exp(scaling_factor * sop) "
+             "|state>")
+        .def("apply_op",
+             nb::overload_cast<const SparseOperatorList&, const SparseState&, double>(
+                 &SparseExp::apply_op),
+             "sop"_a, "state"_a, "scaling_factor"_a = 1.0,
+             "Apply the exponential of a SparseOperatorList to a state: exp(scaling_factor * sop) "
+             "|state>")
+        .def("apply_antiherm",
+             nb::overload_cast<const SparseOperator&, const SparseState&, double>(
+                 &SparseExp::apply_antiherm),
+             "sop"_a, "state"_a, "scaling_factor"_a = 1.0,
+             "Apply the antihermitian "
+             "exponential of a SparseOperator to a state: exp(scaling_factor * (sop - sop^dagger)) "
+             "|state>")
+        .def("apply_antiherm",
+             nb::overload_cast<const SparseOperatorList&, const SparseState&, double>(
+                 &SparseExp::apply_antiherm),
+             "sop"_a, "state"_a, "scaling_factor"_a = 1.0,
+             "Apply the antihermitian "
+             "exponential of a SparseOperatorList to a state: exp(scaling_factor * (sop - "
+             "sop^dagger)) "
+             "|state");
+}
+
+void export_sparse_fact_exp_api(nb::module_& sub_m) {
+    nb::class_<SparseFactExp>(
+        sub_m, "SparseFactExp",
+        "A class to compute the product exponential of a sparse operator using factorization")
+        .def(nb::init<double>(), "screen_thresh"_a = 1.0e-12)
+        .def("apply_op", &SparseFactExp::apply_op, "sop"_a, "state"_a, "inverse"_a = false,
+             "reverse"_a = false,
+             "Apply the factorized exponential of a SparseOperator to a state: "
+             "... exp(op2) exp(op1) |state>. inverse=True computes the inverse, and reverse=True"
+             "applies the operators in reverse order")
+        .def("apply_antiherm", &SparseFactExp::apply_antiherm, "sop"_a, "state"_a,
+             "inverse"_a = false, "reverse"_a = false,
+             "Apply the factorized antihermitian "
+             "exponential of a SparseOperator to a state: "
+             "... exp(op2 - op2^dagger) exp(op1 - op1^dagger) |state>. inverse=True computes the "
+             "inverse, and reverse=True applies the operators in reverse order")
+        .def("apply_antiherm_deriv", &SparseFactExp::apply_antiherm_deriv, "sqop"_a, "t"_a,
+             "state"_a);
+}
+} // namespace
 
 } // namespace forte2

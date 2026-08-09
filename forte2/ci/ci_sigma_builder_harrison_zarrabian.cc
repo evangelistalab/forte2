@@ -5,6 +5,7 @@
 #include "helpers/np_vector_functions.h"
 #include "helpers/indexing.hpp"
 #include "helpers/blas.h"
+#include "helpers/parallel.h"
 
 #include "ci_sigma_builder.h"
 
@@ -238,53 +239,68 @@ void CISigmaBuilder::H2_hz_opposite_spin(std::span<double> basis, std::span<doub
                     const auto& Kb_right_list = lists_.get_beta_1h_list2(class_Kb, class_Ib);
                     if (Ka_right_list.empty() || Kb_right_list.empty())
                         continue;
-                    for (size_t Ka = 0; Ka < Ka_block_size; ++Ka) {
-                        const auto& KaL = Ka_right_list[Ka_block_start + Ka];
-                        for (size_t Kb = 0; Kb < Kb_block_size; ++Kb) {
-                            const auto& KbL = Kb_right_list[Kb_block_start + Kb];
-                            const auto Kidx = Ka * Kb_block_size + Kb;
-                            for (const auto& [sign_q, q, Ia] : KaL) {
-                                const size_t qnorb = q * norb;
-                                const size_t b_offset = Cr_offset + Ia * maxIb;
-                                for (const auto& [sign_s, s, Ib] : KbL) {
-                                    const size_t qs_index = qnorb + s;
-                                    Kblock1[qs_index * Kdim + Kidx] =
-                                        sign_q * sign_s * basis[b_offset + Ib];
+                    // Parallelize over Ka: each Ka writes a disjoint block of columns
+                    // (Kidx = Ka * Kb_block_size + Kb) of Kblock1, so there is no write race.
+                    parallel_for_chunked(Ka_block_size, [&](size_t Ka_begin, size_t Ka_end) {
+                        for (size_t Ka = Ka_begin; Ka < Ka_end; ++Ka) {
+                            const auto& KaL = Ka_right_list[Ka_block_start + Ka];
+                            for (size_t Kb = 0; Kb < Kb_block_size; ++Kb) {
+                                const auto& KbL = Kb_right_list[Kb_block_start + Kb];
+                                const auto Kidx = Ka * Kb_block_size + Kb;
+                                for (const auto& [sign_q, q, Ia] : KaL) {
+                                    const size_t qnorb = q * norb;
+                                    const size_t b_offset = Cr_offset + Ia * maxIb;
+                                    for (const auto& [sign_s, s, Ib] : KbL) {
+                                        const size_t qs_index = qnorb + s;
+                                        Kblock1[qs_index * Kdim + Kidx] =
+                                            sign_q * sign_s * basis[b_offset + Ib];
+                                    }
                                 }
                             }
                         }
-                    }
+                    });
                 }
 
                 matrix_product('N', 'N', norb2, Kdim, norb2, 1.0, v_pr_qs.data(), norb2,
                                Kblock1.data(), Kdim, 0.0, Kblock2.data(), Kdim);
 
-                // D([qs],[Ka Kb]) = \sum_{Ia,Ib} B^{Ka,Kb,Ia,Ib}_{pq} C_{Ia,Ib}
+                // sigma(Ia,Ib) += \sum_{p,r,Ka,Kb} sign_p sign_r E([pr],[Ka Kb])
                 for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
                     if (lists_.block_size(nI) == 0)
                         continue;
+                    const auto maxIa = lists_.alpha_address()->strpcls(class_Ia);
                     const auto maxIb = lists_.beta_address()->strpcls(class_Ib);
                     const auto Cr_offset = lists_.block_offset(nI);
                     const auto& Ka_right_list = lists_.get_alpha_1h_list2(class_Ka, class_Ia);
                     const auto& Kb_right_list = lists_.get_beta_1h_list2(class_Kb, class_Ib);
                     if (Ka_right_list.empty() || Kb_right_list.empty())
                         continue;
-                    for (size_t Ka = 0; Ka < Ka_block_size; ++Ka) {
-                        const auto& KaL = Ka_right_list[Ka_block_start + Ka];
-                        for (size_t Kb = 0; Kb < Kb_block_size; ++Kb) {
-                            const auto& KbL = Kb_right_list[Kb_block_start + Kb];
-                            const auto Kidx = Ka * Kb_block_size + Kb;
+                    // The scatter accumulates into sigma(Ia,Ib), so parallelizing over Ka would
+                    // race (many Ka map to the same output Ia). Instead we parallelize over the
+                    // output alpha string Ia: each thread owns a disjoint stripe
+                    // of Ia values, iterates all Ka/Kb, but only writes rows it owns. 
+                    parallel_for_chunked(maxIa, [&](size_t Ia_begin, size_t Ia_end) {
+                        for (size_t Ka = 0; Ka < Ka_block_size; ++Ka) {
+                            const auto& KaL = Ka_right_list[Ka_block_start + Ka];
+                            const size_t Ka_col = Ka * Kb_block_size;
                             for (const auto& [sign_p, p, Ia] : KaL) {
+                                // skip if this thread does not own this row
+                                if (Ia < Ia_begin || Ia >= Ia_end)
+                                    continue;
                                 const size_t pnorb = p * norb;
                                 const size_t s_offset = Cr_offset + Ia * maxIb;
-                                for (const auto& [sign_r, r, Ib] : KbL) {
-                                    const size_t pr_index = pnorb + r;
-                                    sigma[s_offset + Ib] +=
-                                        sign_p * sign_r * Kblock2[pr_index * Kdim + Kidx];
+                                for (size_t Kb = 0; Kb < Kb_block_size; ++Kb) {
+                                    const auto& KbL = Kb_right_list[Kb_block_start + Kb];
+                                    const auto Kidx = Ka_col + Kb;
+                                    for (const auto& [sign_r, r, Ib] : KbL) {
+                                        const size_t pr_index = pnorb + r;
+                                        sigma[s_offset + Ib] +=
+                                            sign_p * sign_r * Kblock2[pr_index * Kdim + Kidx];
+                                    }
                                 }
                             }
                         }
-                    }
+                    });
                 }
             }
         }

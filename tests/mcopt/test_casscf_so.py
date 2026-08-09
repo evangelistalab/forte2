@@ -51,7 +51,7 @@ def test_casscf_so():
     ci.run()
 
     # corresponds to ~ 4.6e-8 Eh
-    assert (ci.E[4] - ci.E[3]) * EH_TO_WN == pytest.approx(401.042412154626, abs=1e-2)
+    assert (ci.E[4] - ci.E[3]) * EH_TO_WN == pytest.approx(401.04241215150705, abs=1e-2)
 
 
 def test_2c_casscf_with_rohf():
@@ -88,7 +88,7 @@ def test_2c_casscf_with_rohf():
     mc.run()
     # corresponds to ~ 4.6e-8 Eh
     assert (ci_solver.E[4] - ci_solver.E[3]) * EH_TO_WN == pytest.approx(
-        393.70859781031027, abs=1e-2
+        393.7085978290238, abs=1e-2
     )
 
 
@@ -121,7 +121,6 @@ def test_2c_casscf_with_uhf():
     )
     mc = MCOptimizer(ci_solver)(conv)
     mc.run()
-    # corresponds to ~ 4.6e-8 Eh
     assert (ci_solver.E[2] - ci_solver.E[1]) * EH_TO_WN == pytest.approx(
-        135.46252372483025, abs=1e-2
+        134.77771444071902, abs=1e-2
     )

@@ -2,7 +2,7 @@ from collections import OrderedDict
 
 import numpy as np
 
-from forte2 import CIStrings
+from forte2.lib.ci_helpers import CIStrings
 from forte2.state import MOSpace, StateAverageInfo
 from forte2.helpers import logger
 from forte2.data import EH_TO_EV
@@ -310,8 +310,8 @@ def make_3cumulant_so(gamma1, gamma2, gamma3):
     ----------
     gamma1 : np.ndarray
         The one-particle reduced density matrix (1-RDM).
-    lambda2 : np.ndarray
-        The two-particle reduced density cumulant.
+    gamma2 : np.ndarray
+        The two-particle reduced density matrix (2-RDM).
     gamma3 : np.ndarray
         The three-particle reduced density matrix (3-RDM).
 

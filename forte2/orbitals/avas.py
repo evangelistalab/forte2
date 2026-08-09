@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import re
 
-from forte2 import ints
+from forte2.lib import ints
 from forte2.scf import RHF, ROHF, GHF
 from forte2.state import MOSpace
 from forte2.helpers import logger, invsqrt_matrix, block_diag_2x2
@@ -153,7 +153,7 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             ), "Number of active unoccupied orbitals cannot be negative."
             if isinstance(self.parent_method, ROHF):
                 nactv = (
-                    int(self.parent_method.ms) * 2
+                    round(2 * self.parent_method.ms)
                     + self.num_active_docc
                     + self.num_active_uocc
                 )
@@ -204,7 +204,8 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
             end = start + 1 if mgroups[2] is None else int(mgroups[2]) + 1
 
         # mgroups[3] contains the subset of AOs e.g. "2p", "2pz", "3dz2" etc.
-        if mgroups[3] is None:
+        # if empty, then treat as "all"
+        if not mgroups[3]:
             # no subset specified (e.g. "C")
             # select all AOs of the element, subject to subspace_planes
             for A in range(start, end):
@@ -446,6 +447,11 @@ class AVAS(MOsMixin, SystemMixin, MOSpaceMixin):
                     else:
                         inact_uocc.append(indices[imo])
         elif self.selection_method == "total":
+            if self.num_active > nsig:
+                raise ValueError(
+                    f"num_active ({self.num_active}) exceeds the number of "
+                    f"available AVAS orbitals ({nsig})."
+                )
             for imo in range(self.num_active):
                 if occupations[imo] == 1:
                     act_docc.append(indices[imo])

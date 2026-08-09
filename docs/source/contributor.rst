@@ -15,7 +15,7 @@ This means that most methods should be a class with a ``__call__`` method that t
 If you create new C++ functions or classes that are exposed through nanobind, make sure to document them in the binding code (`forte2/api`), 
 and run the `nanobind stubgen <https://nanobind.readthedocs.io/en/latest/typing.html#command-line-interface>`_ in the root directory::
 
-    python -m nanobind.stubgen -m forte2._forte2 -O forte2 -r
+    python -m nanobind.stubgen -m forte2.lib -O forte2 -r
 
 This provides "stub files" for (1) the RTD documentation, (2) autocomplete, argument hints, etc in IDEs like VSCode. Make sure to commit the stub files along with your other changes.
 

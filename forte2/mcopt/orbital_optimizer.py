@@ -137,34 +137,33 @@ class OrbOptimizer:
         energy += 0.5 * np.einsum("tvuw,tuvw->", self.get_active_space_ints(), self.g2)
         return energy
 
-    def _compute_Fcore(self):
-        # Compute the core Fock matrix [eq (3)], also return the core energy
-        Jcore, Kcore = self.fock_builder.build_JK([self.Ccore])
-        self.Fcore = np.einsum(
+    @staticmethod
+    def _transform_ao_operator(operator, C):
+        return np.einsum(
             "mp,mn,nq->pq",
-            self.Cgen.conj(),
-            self.hcore + 2 * Jcore[0] - Kcore[0],
-            self.Cgen,
+            C.conj(),
+            operator,
+            C,
             optimize=True,
         )
-        self.Ecore = np.einsum(
-            "pi,qi,pq->",
-            self.Ccore.conj(),
-            self.Ccore,
-            2 * self.hcore + 2 * Jcore[0] - Kcore[0],
+
+    def _compute_Fcore(self):
+        # Compute the core Fock matrix [eq (3)], also return the core energy
+        Fcore_ao = self.fock_builder.build_core_fock(self.Ccore, hcore=self.hcore)
+        self.Fcore = self._transform_ao_operator(Fcore_ao, self.Cgen)
+
+        core_factor = 0.5 if self.fock_builder.system.two_component else 1.0
+        self.Ecore = core_factor * np.trace(
+            self._transform_ao_operator(
+                self.hcore + Fcore_ao,
+                self.Ccore,
+            )
         )
 
     def _compute_Fact(self):
-        Jact, Kact = self.fock_builder.build_JK_generalized(self.Cact, self.g1)
-
         # [eq (13)]
-        self.Fact = np.einsum(
-            "mp,mn,nq->pq",
-            self.Cgen.conj(),
-            Jact - 0.5 * Kact,
-            self.Cgen,
-            optimize=True,
-        )
+        Fact_ao = self.fock_builder.build_active_fock(self.Cact, self.g1)
+        self.Fact = self._transform_ao_operator(Fact_ao, self.Cgen)
 
     def _compute_orbgrad(self):
         self._compute_Fact()
@@ -281,35 +280,6 @@ class RelOrbOptimizer(OrbOptimizer):
         energy += np.einsum("uv,uv->", self.Fcore[self.actv, self.actv], self.g1)
         energy += 0.5 * np.einsum("tvuw,tuvw->", self.get_active_space_ints(), self.g2)
         return energy
-
-    def _compute_Fcore(self):
-        # Compute the core Fock matrix [eq (3)], also return the core energy
-        Jcore, Kcore = self.fock_builder.build_JK([self.Ccore])
-        self.Fcore = np.einsum(
-            "mp,nq,mn->pq",
-            self.Cgen.conj(),
-            self.Cgen,
-            self.hcore + Jcore[0] - Kcore[0],
-            optimize=True,
-        )
-        self.Ecore = np.einsum(
-            "pi,qi,pq->",
-            self.Ccore.conj(),
-            self.Ccore,
-            self.hcore + 0.5 * (Jcore[0] - Kcore[0]),
-        )
-
-    def _compute_Fact(self):
-        Jact, Kact = self.fock_builder.build_JK_generalized(self.Cact, self.g1)
-
-        # [eq (13)]
-        self.Fact = np.einsum(
-            "mp,nq,mn->pq",
-            self.Cgen.conj(),
-            self.Cgen,
-            Jact - Kact,
-            optimize=True,
-        )
 
     def _compute_orbgrad(self):
         self._compute_Fact()

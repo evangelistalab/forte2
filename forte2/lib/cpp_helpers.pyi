@@ -1,3 +1,5 @@
+"""C++ utilities"""
+
 from typing import Annotated, overload
 
 import numpy
@@ -22,3 +24,11 @@ def packed_tensor4_to_tensor4(m: Annotated[NDArray[numpy.float64], dict(shape=(N
 
 @overload
 def packed_tensor4_to_tensor4(m: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))]: ...
+
+def set_log_level(arg: int, /) -> None:
+    """
+    Set the logging verbosity level (0=NONE, 1=ERROR, 2=WARNING, 3=INFO, 4=DEBUG)
+    """
+
+def get_log_level() -> int:
+    """Get the current logging verbosity level"""

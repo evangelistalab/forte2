@@ -66,7 +66,6 @@ jobs:
         key: cxxbuild-${{ matrix.os }}-${{ hashFiles('environment.yml', '**/CMakeLists.txt', 'pyproject.toml') }}-${{ github.run_id }}
         restore-keys: |
           cxxbuild-${{ matrix.os }}-${{ hashFiles('environment.yml', '**/CMakeLists.txt', 'pyproject.toml') }}-
-          cxxbuild-${{ matrix.os }}-
 
     - name: Restore ccache
       id: ccache-restore
@@ -89,21 +88,6 @@ jobs:
         ccache --show-stats
         pip list
 
-    - name: Trim stale build caches for this ref
-      if: ${{ steps.compile-forte2.outcome == 'success' && !cancelled() }}
-      env:
-        GH_TOKEN: ${{ github.token }}
-      run: |
-        prefix="cxxbuild-${{ matrix.os }}-"
-        # Newest first; keep index 0 (the fallback we just restored), delete the rest.
-        ids=$(gh cache list --ref "$GITHUB_REF" --key "$prefix" \
-                --sort created_at --order desc --limit 100 \
-                --json id --jq '.[1:][].id' \
-                --repo "$GITHUB_REPOSITORY" 2>/dev/null) || ids=""
-        for id in $ids; do
-          gh cache delete "$id" --repo "$GITHUB_REPOSITORY" || true
-        done
-
     - name: Save C++ build tree
       if: ${{ steps.compile-forte2.outcome == 'success' && !cancelled() }}
       uses: actions/cache/save@v4
@@ -118,6 +102,29 @@ jobs:
         path: ${{ env.CCACHE_DIR }}
         key: ccache-${{ matrix.os }}-${{ github.run_id }}
 
+    # Keep only the most recent generation of this job's caches for this ref
+    - name: Prune stale caches for this ref
+      if: ${{ steps.compile-forte2.outcome == 'success' && !cancelled() }}
+      env:
+        GH_TOKEN: ${{ github.token }}
+        OS: ${{ matrix.os }}
+      run: |
+        # The caches are named
+        # "ccache-<os>-<runid>" and "cxxbuild-<os>-<64hexhash>-<runid>"
+        for pat in \
+          "^ccache-${OS}-[0-9]+\$" \
+          "^cxxbuild-${OS}-[0-9a-f]+-[0-9]+\$"; do
+          # Newest first; keep index 0 (the generation we just saved), delete the rest.
+          ids=$(gh cache list --ref "$GITHUB_REF" \
+                  --sort created_at --order desc --limit 100 \
+                  --json id,key --repo "$GITHUB_REPOSITORY" \
+                  --jq "[.[] | select(.key | test(\"$pat\"))][1:][].id" 2>/dev/null) || ids=""
+          for id in $ids; do
+            echo "Deleting stale cache $id"
+            gh cache delete "$id" --repo "$GITHUB_REPOSITORY" || true
+          done
+        done
+
     - name: Run Forte2 pytest tests
       if: ${{ steps.compile-forte2.outcome == 'success' && !cancelled() }}
       run: |
@@ -128,6 +135,13 @@ jobs:
         else
           pytest -v -m "not slow" --cov --cov-branch --cov-report=xml
         fi
+
+    - name: Run Forte2 notebook tests
+      if: ${{ steps.compile-forte2.outcome == 'success' && !cancelled() }}
+      run: |
+        conda activate forte
+        cd $HOME/work/forte2/forte2/tutorials
+        pytest -v --nbmake *.ipynb
 
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v5

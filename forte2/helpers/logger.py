@@ -1,7 +1,7 @@
 import logging
 import sys
 
-from forte2 import set_log_level
+from forte2.lib import cpp_helpers
 
 LOGGING_LEVEL = {
     0: logging.CRITICAL + 1,  # Quiet
@@ -56,7 +56,7 @@ class LoggerConfig:
 # Global convenience functions
 def set_verbosity_level(level):
     LoggerConfig.set_log_level(level)
-    set_log_level(level)  # Ensure the C++ side also uses the same level
+    cpp_helpers.set_log_level(level)  # Ensure the C++ side also uses the same level
 
 
 def get_verbosity_level():
