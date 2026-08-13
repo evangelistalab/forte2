@@ -276,6 +276,10 @@ def cint_int1e_nuc_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.
     Compute the nuclear attraction integral matrix using libcint in spherical harmonics.
     """
 
+def cint_int1e_ipnuc_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='C')]: ...
+
+def cint_int1e_iprinv_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='C')]: ...
+
 def cint_int1e_nuc_spinor(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None), order='C')]:
     """
     Compute the nuclear attraction integral matrix using libcint in spinor basis.
@@ -285,6 +289,10 @@ def cint_int1e_spnucsp_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[nu
     """
     Compute the small component of the nuclear attraction integral matrix using libcint in spherical harmonics.
     """
+
+def cint_int1e_ipspnucsp_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='C')]: ...
+
+def cint_int1e_ipsprinvsp_sph(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None), order='C')]: ...
 
 def cint_int1e_spnucsp_spinor(shell_slice: Sequence[int], atm: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], bas: Annotated[NDArray[numpy.int32], dict(shape=(None, None))], env: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None), order='C')]:
     """

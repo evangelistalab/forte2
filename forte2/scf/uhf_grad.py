@@ -2,16 +2,14 @@ import numpy as np
 from numpy.typing import NDArray
 
 from forte2.gradients import compute_gradient
+from forte2.gradients.validation import validate_df_gradient_system
 
-from .hf_grad import (
-    _build_hf_df_deriv_weights,
-    _validate_hf_gradient_supported,
-)
+from .hf_grad import _build_hf_df_deriv_weights
 
 
 def _compute_uhf_gradient(uhf) -> NDArray:
     """Compute the density-fitted UHF analytic nuclear gradient."""
-    _validate_hf_gradient_supported(uhf.system, "UHF")
+    validate_df_gradient_system(uhf.system, "UHF")
 
     if not uhf.executed:
         uhf.run()
@@ -23,4 +21,16 @@ def _compute_uhf_gradient(uhf) -> NDArray:
     W1 += np.einsum("mi,i,ni->mn", Cocc_b, uhf.eps[1][: uhf.nb], Cocc_b, optimize=True)
     W2, W3 = _build_hf_df_deriv_weights(uhf.system, (Cocc_a, Cocc_b), D1)
 
-    return compute_gradient(uhf.system, D1, W1, W2, W3)
+    hcore_gradient = (
+        uhf.system.x2c_helper.hcore_gradient(D1)
+        if uhf.system.x2c_type is not None
+        else None
+    )
+    return compute_gradient(
+        uhf.system,
+        D1,
+        W1,
+        W2,
+        W3,
+        hcore_gradient=hcore_gradient,
+    )
