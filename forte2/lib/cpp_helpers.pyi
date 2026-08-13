@@ -32,3 +32,5 @@ def set_log_level(arg: int, /) -> None:
 
 def get_log_level() -> int:
     """Get the current logging verbosity level"""
+
+def get_num_threads() -> int: ...
