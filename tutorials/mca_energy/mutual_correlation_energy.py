@@ -30,8 +30,8 @@ def _spin_dependent_rdms(ci, root=0):
     a1, b1 = ci_solver.make_sd_1rdm(root)
     aa_pair, ab2, bb_pair = ci_solver.make_sd_2rdm(root)
 
-    aa2 = forte2.cpp_helpers.packed_tensor4_to_tensor4(aa_pair)
-    bb2 = forte2.cpp_helpers.packed_tensor4_to_tensor4(bb_pair)
+    aa2 = forte2.lib.cpp_helpers.packed_tensor4_to_tensor4(aa_pair)
+    bb2 = forte2.lib.cpp_helpers.packed_tensor4_to_tensor4(bb_pair)
 
     return a1, b1, aa2, ab2, bb2
 
