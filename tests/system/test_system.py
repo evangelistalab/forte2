@@ -82,6 +82,17 @@ def test_system():
     print("opVop", opVop)
 
 
+@pytest.mark.parametrize("atom", ["Na", "NA", "na", "nA"])
+def test_xyz_with_caps(atom):
+    # Test an XYZ string with capitalized atom names
+    xyz = f"""
+    {atom} 0.0 0.0 0.0
+    {atom} 0.0 0.0 2.5
+    """
+    system = System(xyz=xyz, basis_set="cc-pvdz")
+    assert len(system.atoms) == 2
+
+
 def test_xyz_comment():
     # Test an XYZ string with commented lines
     xyz = """
@@ -89,8 +100,6 @@ def test_xyz_comment():
     @U 0.0 0.0 0.0
     H 0.0 0.0 0.0
     """
-
-    # expect an exception to be raised
     system = System(xyz=xyz, basis_set="cc-pvdz")
 
     assert len(system.atoms) == 1
@@ -278,6 +287,17 @@ H 1    1.079    2 121.4    3    180.0
     E_ref = z_to_cart_0()
 
     assert scf.E == pytest.approx(E_ref, rel=1e-8, abs=1e-8)
+
+
+@pytest.mark.parametrize("atom", ["Na", "NA", "na", "nA"])
+def test_zmatrix_with_caps(atom):
+    # Test an zmatrix string with capitalized atom names
+    xyz = f"""
+    {atom}
+    {atom} 1 1.2
+    """
+    system = System(xyz=xyz, basis_set="cc-pvdz")
+    assert len(system.atoms) == 2
 
 
 def test_ghost_atom():
