@@ -73,7 +73,7 @@ def parse_xyz(lines, unit):
         # look for lines of the form "Li 0.0 0.0 0.0" or "N -10 0 0" and capture the element symbol and coordinates
         # Use regex to match the expected format
         m = re.match(
-            r"^\s*([A-Z][a-z]?)\s+([-+]?\d*\.\d+|[-+]?\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)\s*$",
+            r"^\s*([a-zA-Z][a-zA-Z]?)\s+([-+]?\d*\.\d+|[-+]?\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)\s+([-+]?\d*\.\d+|[-+]?\d+)\s*$",
             line,
         )
         # Skip lines that do not match the expected format
@@ -81,7 +81,7 @@ def parse_xyz(lines, unit):
             # Test if one or two coordinates are missing, e.g., "Li 0.0 0.0" or "Li 0.0"
             # This regex captures the element symbol and up to three coordinates
             check_missing_coordinate = re.match(
-                r"^\s*([A-Z][a-z]?)\s+([-+]?\d*\.\d+|[-+]?\d+)(?:\s+([-+]?\d*\.\d+|[-+]?\d+))?(?:\s+([-+]?\d*\.\d+|[-+]?\d+))?\s*$",
+                r"^\s*([a-zA-Z][a-zA-Z]?)\s+([-+]?\d*\.\d+|[-+]?\d+)(?:\s+([-+]?\d*\.\d+|[-+]?\d+))?(?:\s+([-+]?\d*\.\d+|[-+]?\d+))?\s*$",
                 line,
             )
             if check_missing_coordinate:
@@ -272,4 +272,6 @@ class GeometryHelper:
             self.prinrot = np.eye(3)
             self.prin_atomic_positions = self.atomic_positions.copy()
             self.point_group = "C1"
-            logger.log_info1("Point group symmetry detection not performed. Running in C1 symmetry.")
+            logger.log_info1(
+                "Point group symmetry detection not performed. Running in C1 symmetry."
+            )
