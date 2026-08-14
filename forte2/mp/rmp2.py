@@ -202,6 +202,73 @@ class RMP2(MP2Base):
     def make_1rdm(self):
         return self._make_mp2_sf_1rdm_intermediates(self.B_iaQ)
 
+    def _make_natural_orbital_transform(self, gamma1=None):
+        """Build the occupied/virtual block RMP2 natural-orbital transform."""
+        if gamma1 is None:
+            gamma1 = self.make_1rdm()
+
+        gamma1 = np.asarray(gamma1)
+        nmo = self.nocc + self.nvir
+        if gamma1.shape != (nmo, nmo):
+            raise ValueError(
+                f"gamma1 has shape {gamma1.shape}; expected ({nmo}, {nmo})."
+            )
+        gamma1 = 0.5 * (gamma1 + gamma1.T.conj())
+
+        gamma1_oo = gamma1[: self.nocc, : self.nocc]
+        gamma1_vv = gamma1[self.nocc :, self.nocc :]
+        occs_o, Uo = np.linalg.eigh(gamma1_oo)
+        occs_v, Uv = np.linalg.eigh(gamma1_vv)
+
+        occ_order = np.argsort(occs_o)[::-1]
+        vir_order = np.argsort(occs_v)[::-1]
+        Uo = Uo[:, occ_order]
+        Uv = Uv[:, vir_order]
+
+        U = np.eye(nmo, dtype=gamma1.dtype)
+        U[: self.nocc, : self.nocc] = Uo
+        U[self.nocc :, self.nocc :] = Uv
+        occupations = np.diag(U.T.conj() @ gamma1 @ U).real
+
+        # RMP2 normally stores one 2D coefficient matrix. Accept the legacy
+        # spin-indexed representation as well.
+        if isinstance(self.C, (tuple, list)):
+            C_mo = self.C[0]
+        elif getattr(self.C, "ndim", None) == 3:
+            C_mo = self.C[0]
+        else:
+            C_mo = self.C
+
+        C_no = C_mo @ U
+        self.C_no = C_no
+        self.no_occs = occupations
+        self.U_no = U
+        return C_no, occupations, U
+
+    def make_natural_orbital_transform(self, gamma1=None):
+        """Build and store the occupied/virtual block RMP2 NO transform.
+
+        Separate diagonalizations of the occupied--occupied and
+        virtual--virtual 1-RDM blocks preserve the occupied-pair structure
+        used by the low-cost mutual-correlation contractions.
+
+        Returns
+        -------
+        C_no : ndarray
+            Natural-orbital coefficients in the AO basis.
+        occupations : ndarray
+            Natural occupation numbers, ordered separately within the
+            occupied and virtual spaces.
+        U : ndarray
+            Canonical restricted MO -> block-NO transformation matrix.
+        """
+        return self._make_natural_orbital_transform(gamma1)
+
+    def make_natural_orbitals(self, gamma1=None):
+        """Return restricted block natural orbitals and their occupations."""
+        C_no, occupations, _ = self._make_natural_orbital_transform(gamma1)
+        return C_no, occupations
+
     def make_2rdm(self, gamma1=None):
         if not self.store_t2:
             raise ValueError("t2 amplitudes were not stored. Cannot compute 2-RDM.")
