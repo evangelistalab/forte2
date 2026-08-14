@@ -140,7 +140,10 @@ def test_sfx2c1e():
     """
 
     system = System(
-        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT", x2c=X2CParams(x2c_type="sf", x2c_model="1e")
+        xyz=xyz,
+        basis_set="cc-pVQZ",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
+        x2c=X2CParams(x2c_type="sf", x2c_model="1e"),
     )
 
     scf = RHF(charge=0)(system)

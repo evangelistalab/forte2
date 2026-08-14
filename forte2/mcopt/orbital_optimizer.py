@@ -275,6 +275,13 @@ class RelOrbOptimizer(OrbOptimizer):
         # '2RDM' defined as in [eq (6)]
         self.g2 = g2.swapaxes(1, 2)
 
+    def compute_orbital_lagrangian(self):
+        """Return the Hermitian two-component CASSCF orbital Lagrangian."""
+        self._compute_orbgrad()
+        # RelOrbOptimizer stores its generalized Fock matrix with the
+        # Lagrangian indices transposed relative to the AO transformation.
+        return 0.5 * (self.Fock + self.Fock.T.conj()).T
+
     def _compute_reference_energy(self):
         energy = self.Ecore + self.e_nuc
         energy += np.einsum("uv,uv->", self.Fcore[self.actv, self.actv], self.g1)
