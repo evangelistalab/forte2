@@ -1,6 +1,10 @@
 __version__ = "2026.6.4"
 __author__ = "Forte2 Developers"
 
+from .helpers.echo_script import echo_invoking_script
+# print the invoking python script to stdout
+echo_invoking_script()
+
 from .integrals import integrals
 from .base_classes import X2CParams
 from .system import System, ModelSystem, HubbardModel
