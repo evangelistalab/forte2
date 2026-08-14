@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System
+from forte2 import System, X2CParams
 from forte2.integrals import LIBCINT_AVAILABLE
 from forte2.scf import RHF, GHF, UHF
 from forte2.helpers.comparisons import approx
@@ -53,7 +53,7 @@ def test_x2c_hcore_gradient_finite_difference(x2c_type, use_gaussian_charges):
             xyz=f"O 0 0 0\nH 0 0 {z:.12f}\nH 0 1.4 0",
             basis_set="sto-3g",
             unit="bohr",
-            x2c_type=x2c_type,
+            x2c=X2CParams(x2c_type=x2c_type, x2c_model="1e"),
             use_gaussian_charges=use_gaussian_charges,
             minao_basis_set=None,
         )
@@ -74,8 +74,7 @@ def test_snso_x2c_hcore_gradient_finite_difference(snso_type):
             xyz=f"S 0 0 0\nH 0 0 {z:.12f}\nH 0 1.4 0",
             basis_set="sto-3g",
             unit="bohr",
-            x2c_type="so",
-            snso_type=snso_type,
+            x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type=snso_type),
             minao_basis_set=None,
         )
 
@@ -93,7 +92,7 @@ def test_x2c_hcore_gradient_with_truncated_overlap_space():
             xyz=f"O 0 0 0\nH 0 0 {z:.12f}\nH 0 1.4 0",
             basis_set="sto-3g",
             unit="bohr",
-            x2c_type="sf",
+            x2c=X2CParams(x2c_type="sf", x2c_model="1e"),
             overlap_ortho_rtol=1.0e-3,
             minao_basis_set=None,
         )
@@ -108,20 +107,21 @@ def test_x2c_hcore_gradient_with_truncated_overlap_space():
 
 
 def test_x2c_helper_tracks_spinor_upcaster_override():
-    def make_system(x2c_type, snso_type=None):
+    def make_system(x2c):
         return System(
             xyz="S 0 0 0\nH 0 0 1.5",
             basis_set="sto-3g",
             unit="bohr",
-            x2c_type=x2c_type,
-            snso_type=snso_type,
+            x2c=x2c,
             minao_basis_set=None,
         )
 
-    overridden = make_system("sf")
-    overridden.x2c_type = "so"
-    overridden.snso_type = "row-dependent"
-    reference = make_system("so", "row-dependent")
+    overridden = make_system(X2CParams(x2c_type="sf", x2c_model="1e"))
+    overridden.x2c = X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent")
+    overridden._init_x2c()
+    reference = make_system(
+        X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent")
+    )
 
     assert overridden.x2c_helper.hcore_x2c() == pytest.approx(
         reference.x2c_helper.hcore_x2c(), abs=1.0e-12
@@ -140,7 +140,7 @@ def test_sfx2c1e():
     """
 
     system = System(
-        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT", x2c_type="sf"
+        xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT", x2c=X2CParams(x2c_type="sf", x2c_model="1e")
     )
 
     scf = RHF(charge=0)(system)
@@ -160,7 +160,7 @@ def test_sfx2c1e_with_gaussian_charges():
         xyz=xyz,
         basis_set="cc-pVQZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c_type="sf",
+        x2c=X2CParams(x2c_type="sf", x2c_model="1e"),
         use_gaussian_charges=True,
     )
 
@@ -191,7 +191,7 @@ def test_lindep_sfx2c1e():
         basis_set="aug-cc-pvdz",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
         unit="bohr",
-        x2c_type="sf",
+        x2c=X2CParams(x2c_type="sf", x2c_model="1e"),
         overlap_ortho_rtol=2e-7,
     )
 
@@ -214,8 +214,7 @@ def test_sox2c1e_water():
         xyz=xyz,
         basis_set="decon-cc-pvdz",
         auxiliary_basis_set="cc-pvtz-jkfit",
-        x2c_type="so",
-        snso_type=None,
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
     scf = GHF(charge=0)(system)
     scf.run()
@@ -230,8 +229,7 @@ def test_snso_shell_to_atom_mapping():
         xyz="Ne 0 0 0; Ar 0 0 3.0",
         basis_set="cc-pVTZ",
         auxiliary_basis_set="def2-universal-JKFIT",
-        x2c_type="so",
-        snso_type="dcb",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="dcb"),
     )
     helper = X2CHelper(system)
     nbf = len(helper.xbasis)
@@ -278,8 +276,7 @@ def test_boettger_hbr():
         xyz=xyz,
         basis_set={"Br": "decon-aug-cc-pvdz", "default": "cc-pvtz"},
         auxiliary_basis_set="cc-pvtz-jkfit",
-        x2c_type="so",
-        snso_type="dcb",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="dcb"),
     )
     scf = GHF(charge=0)(system)
     scf.run()
@@ -301,7 +298,7 @@ def test_so_from_sf_water():
         xyz=xyz,
         basis_set="cc-pvqz",
         auxiliary_basis_set="cc-pvtz-jkfit",
-        x2c_type="sf",
+        x2c=X2CParams(x2c_type="sf", x2c_model="1e"),
     )
     scf = UHF(charge=1, ms=0.5)(system)
     scf.run()
@@ -311,8 +308,7 @@ def test_so_from_sf_water():
         xyz=xyz,
         basis_set="cc-pvqz",
         auxiliary_basis_set="cc-pvtz-jkfit",
-        x2c_type="so",
-        snso_type=None,
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
     scf_so = GHF(charge=1)(system)
     scf_so.C = convert_coeff_spatial_to_spinor(scf.C)
@@ -328,8 +324,7 @@ def test_sox2c1e_sc():
         xyz=xyz,
         basis_set="sapporo-dkh3-dzp-2012-diffuse",
         auxiliary_basis_set="def2-universal-jkfit",
-        x2c_type="so",
-        snso_type="row-dependent",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
     )
     scf = GHF(charge=3)(system)
     scf.run()

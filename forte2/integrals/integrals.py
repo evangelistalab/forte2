@@ -20,17 +20,52 @@ def _require_libcint():
         )
 
 
-def _choose_backend(max_l):
+def _choose_backend(max_l, backend="auto"):
+    """
+    Pick the integral backend for a given maximum angular momentum.
+
+    Parameters
+    ----------
+    max_l : int
+        The maximum angular momentum appearing in the basis sets involved.
+    backend : str, optional, default="auto"
+        The requested backend. One of "auto", "libint2", or "libcint". If
+        "auto", Libint2 is preferred whenever it can handle ``max_l``, falling
+        back to Libcint otherwise. If "libint2" or "libcint" is requested
+        explicitly, that backend is used, raising if it cannot handle
+        ``max_l`` (or is unavailable).
+    """
     max_l_libint = ints.libint2_max_am
     max_l_libcint = 14
-    if max_l <= max_l_libint:
+    if backend == "auto":
+        if max_l <= max_l_libint:
+            return "libint2"
+        elif max_l <= max_l_libcint:
+            _require_libcint()
+            return "libcint"
+        else:
+            raise ValueError(
+                f"Integrals with angular momentum > {max_l_libcint} are not supported (max_l = {max_l})"
+            )
+    elif backend == "libint2":
+        if max_l > max_l_libint:
+            raise ValueError(
+                f"The libint2 backend cannot handle angular momentum {max_l} "
+                f"(max supported: {max_l_libint}). Use backend='auto' or "
+                f"'libcint' instead."
+            )
         return "libint2"
-    elif max_l <= max_l_libcint:
+    elif backend == "libcint":
         _require_libcint()
+        if max_l > max_l_libcint:
+            raise ValueError(
+                f"The libcint backend cannot handle angular momentum {max_l} "
+                f"(max supported: {max_l_libcint})."
+            )
         return "libcint"
     else:
         raise ValueError(
-            f"Integrals with angular momentum > {max_l_libcint} are not supported (max_l = {max_l})"
+            f"Invalid backend: {backend}. Must be one of 'auto', 'libint2', or 'libcint'."
         )
 
 
@@ -178,7 +213,12 @@ def overlap(system, basis1=None, basis2=None):
         The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
     """
     basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
-    return ints.overlap(basis1, basis2)
+    max_l = max(basis1.max_l, basis2.max_l)
+    backend = _choose_backend(max_l, system.integral_backend)
+    if backend == "libint2":
+        return ints.overlap(basis1, basis2)
+    else:
+        return cint_overlap(system, basis1, basis2)
 
 
 def kinetic(system, basis1=None, basis2=None):
@@ -199,7 +239,12 @@ def kinetic(system, basis1=None, basis2=None):
         The second basis set. If None, defaults to system.basis or basis1 if basis1 is provided.
     """
     basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
-    return ints.kinetic(basis1, basis2)
+    max_l = max(basis1.max_l, basis2.max_l)
+    backend = _choose_backend(max_l, system.integral_backend)
+    if backend == "libint2":
+        return ints.kinetic(basis1, basis2)
+    else:
+        return cint_kinetic(system, basis1, basis2)
 
 
 def nuclear(system, basis1=None, basis2=None):
@@ -225,11 +270,22 @@ def nuclear(system, basis1=None, basis2=None):
     """
     basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
     if system.use_gaussian_charges:
-        int3c = ints.coulomb_3c(system.gaussian_charge_basis, basis1, basis2)
+        int3c = coulomb_3c(
+            system,
+            system.gaussian_charge_basis,
+            basis1,
+            basis2,
+            preserve_density_norm=True,
+        )
         V = -np.einsum("Zpq,Z->pq", int3c, system.atomic_charges)
         return V
     else:
-        return ints.nuclear(basis1, basis2, system.atoms)
+        max_l = max(basis1.max_l, basis2.max_l)
+        backend = _choose_backend(max_l, system.integral_backend)
+        if backend == "libint2":
+            return ints.nuclear(basis1, basis2, system.atoms)
+        else:
+            return cint_nuclear(system, basis1, basis2)
 
 
 def emultipole1(system, basis1=None, basis2=None, origin=None):
@@ -263,7 +319,16 @@ def emultipole1(system, basis1=None, basis2=None, origin=None):
     basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
     if origin is None:
         origin = [0.0, 0.0, 0.0]
-    return ints.emultipole1(basis1, basis2, origin)
+    max_l = max(basis1.max_l, basis2.max_l)
+    backend = _choose_backend(max_l, system.integral_backend)
+    if backend == "libint2":
+        return ints.emultipole1(basis1, basis2, origin)
+    else:
+        # cint_emultipole1 only returns the dipole [x, y, z]; prepend the overlap
+        # to match libint2's [overlap, x, y, z] convention.
+        overlap_mat = cint_overlap(system, basis1, basis2)
+        dipole = cint_emultipole1(system, basis1, basis2, origin)
+        return [overlap_mat, dipole[0], dipole[1], dipole[2]]
 
 
 def emultipole2(system, basis1=None, basis2=None, origin=None):
@@ -371,7 +436,13 @@ def opVop(system, basis1=None, basis2=None):
         return [res[3], res[0], res[1], res[2]]
     else:
         basis1, basis2 = _parse_basis_args_1e(system, basis1, basis2)
-        return ints.opVop(basis1, basis2, system.atoms)
+        max_l = max(basis1.max_l, basis2.max_l)
+        backend = _choose_backend(max_l, system.integral_backend)
+        if backend == "libint2":
+            return ints.opVop(basis1, basis2, system.atoms)
+        else:
+            res = cint_opVop(system, basis1, basis2)
+            return [res[3], res[0], res[1], res[2]]
 
 
 def _gaussian_nuclear_deriv_blocks(system, basis):
@@ -491,6 +562,7 @@ def _opvop_finite_difference_blocks(system, basis1, basis2):
                 ]
                 shifted_system.atoms[atom][1][cart] += displacement
                 shifted_system.use_gaussian_charges = system.use_gaussian_charges
+                shifted_system.integral_backend = system.integral_backend
                 shifted1 = shifted_basis(basis1, atom, cart, displacement)
                 shifted2 = (
                     shifted1
@@ -622,7 +694,13 @@ def coulomb_4c(system, basis1=None, basis2=None, basis3=None, basis4=None):
     return ints.coulomb_4c(basis1, basis2, basis3, basis4)
 
 
-def coulomb_3c(system, basis1=None, basis2=None, basis3=None):
+def coulomb_3c(
+    system,
+    basis1=None,
+    basis2=None,
+    basis3=None,
+    preserve_density_norm=False,
+):
     r"""
     Compute the three-center two-electron Coulomb integral between three basis sets.
 
@@ -640,6 +718,11 @@ def coulomb_3c(system, basis1=None, basis2=None, basis3=None):
         The second basis set. If None, defaults to system.basis.
     basis3 : BasisSet, optional
         The third basis set. If None, defaults to system.basis, or basis2 if basis2 is provided.
+    preserve_density_norm : bool, optional, default=False
+        Preserve the physical contraction norms of an intentionally unnormalized
+        s-type density basis when the Libcint backend is selected. Libcint
+        normalizes contractions internally, so this is required for SAP
+        potential densities.
 
     Returns
     -------
@@ -649,14 +732,58 @@ def coulomb_3c(system, basis1=None, basis2=None, basis3=None):
     _basis1, _basis2, _basis3 = _parse_basis_args_3c2e(system, basis1, basis2, basis3)
 
     max_l = max(_basis1.max_l, _basis2.max_l, _basis3.max_l)
-    _backend = _choose_backend(max_l)
+    _backend = _choose_backend(max_l, system.integral_backend)
 
     if _backend == "libint2":
         res = ints.coulomb_3c(_basis1, _basis2, _basis3)
     else:
-        res = cint_coulomb_3c(system, basis1, basis2, basis3)
+        res = cint_coulomb_3c(
+            system,
+            basis1,
+            basis2,
+            basis3,
+            preserve_density_norm=preserve_density_norm,
+        )
 
     return res
+
+
+def coulomb_3c_opVop(system, basis1=None, basis2=None, basis3=None):
+    r"""
+    Compute the small-component potential generated by a three-center density basis.
+
+    The first basis is contracted out of the mixed second derivatives of
+    :math:`(P|\mu\nu)` to form
+
+    .. math::
+        \sum_P (P|[(\boldsymbol{\sigma}\cdot\mathbf{p})\phi_\mu]
+        [(\boldsymbol{\sigma}\cdot\mathbf{p})\phi_\nu]).
+
+    Parameters
+    ----------
+    system : System
+        The molecular system containing the basis sets.
+    basis1 : BasisSet, optional
+        The potential-density basis. If None, defaults to ``system.auxiliary_basis``.
+    basis2 : BasisSet, optional
+        The first orbital basis. If None, defaults to ``system.basis``.
+    basis3 : BasisSet, optional
+        The second orbital basis. If None, defaults to ``system.basis``, or
+        ``basis2`` if ``basis2`` is provided.
+
+    Returns
+    -------
+    list[ndarray]
+        Four matrices in scalar, x, y, z Pauli-component order, matching
+        :func:`opVop`.
+    """
+    _basis1, _basis2, _basis3 = _parse_basis_args_3c2e(system, basis1, basis2, basis3)
+    max_l = max(_basis1.max_l, _basis2.max_l, _basis3.max_l)
+    backend = _choose_backend(max_l, system.integral_backend)
+    if backend == "libint2":
+        return ints.coulomb_3c_opVop(_basis1, _basis2, _basis3)
+    else:
+        return cint_coulomb_3c_opVop(system, basis1, basis2, basis3)
 
 
 def coulomb_2c(system, basis1=None, basis2=None):
@@ -684,7 +811,7 @@ def coulomb_2c(system, basis1=None, basis2=None):
     _basis1, _basis2 = _parse_basis_args_2c2e(system, basis1, basis2)
 
     max_l = max(_basis1.max_l, _basis2.max_l)
-    _backend = _choose_backend(max_l)
+    _backend = _choose_backend(max_l, system.integral_backend)
     if _backend == "libint2":
         res = ints.coulomb_2c(_basis1, _basis2)
     else:
@@ -960,13 +1087,13 @@ def _parse_basis_args_cint_3c2e(system, basis1, basis2, basis3, origin=None):
         )
         nsh_bas = system.basis.nshells
         shell_slice = [nsh_bas, nsh_bas + nsh_aux, 0, nsh_bas, 0, nsh_bas]
-    elif basis2 is not None and basis3 is None:
+    elif basis2 is not None and (basis3 is None or basis3 == basis2):
         bas_atm, bas_bas, bas_env = basis_to_cint_envs(
             system, basis2, common_origin=origin
         )
         nsh_bas = basis2.nshells
         shell_slice = [nsh_bas, nsh_bas + nsh_aux, 0, nsh_bas, 0, nsh_bas]
-    elif basis2 is not None and basis3 is not None and basis2 != basis3:
+    elif basis2 is not None and basis3 is not None:
         raise ValueError(
             "libcint doesn't support (P|QR) with Q and R being different basis sets."
         )
@@ -1201,13 +1328,72 @@ def cint_coulomb_2c(system, basis1=None, basis2=None):
     return _f2c(res)
 
 
-def cint_coulomb_3c(system, basis1=None, basis2=None, basis3=None):
+def _s_density_contraction_norms(basis):
+    """Return physical norms of unnormalized s-type density contractions."""
+    scales = []
+    for shell in basis:
+        if shell.l != 0:
+            raise ValueError(
+                "Preserving density norms with Libcint requires an s-type first basis."
+            )
+        exponents = np.asarray(shell.exponents, dtype=float)
+        coefficients = np.asarray(shell.coeff, dtype=float)
+        primitive_overlap = (np.pi / (exponents[:, None] + exponents[None, :])) ** 1.5
+        scales.append(
+            np.sqrt(
+                np.einsum("p,pq,q->", coefficients, primitive_overlap, coefficients)
+            )
+        )
+    return np.asarray(scales)
+
+
+def cint_coulomb_3c(
+    system,
+    basis1=None,
+    basis2=None,
+    basis3=None,
+    preserve_density_norm=False,
+):
+    """Compute three-center Coulomb integrals with Libcint.
+
+    When ``preserve_density_norm`` is True, restore the physical norms of an
+    intentionally unnormalized s-type first basis after Libcint normalizes its
+    contractions.
+    """
     _require_libcint()
     atm, bas, env, shell_slice = _parse_basis_args_cint_3c2e(
         system, basis1, basis2, basis3
     )
     res = ints.cint_int3c2e_sph(shell_slice, atm, bas, env)
+    if preserve_density_norm:
+        _basis1, _, _ = _parse_basis_args_3c2e(system, basis1, basis2, basis3)
+        scales = _s_density_contraction_norms(_basis1)
+        res = np.einsum("P,Pmn->Pmn", scales, res, optimize=True)
     return res
+
+
+def cint_coulomb_3c_opVop(system, basis1=None, basis2=None, basis3=None):
+    """Compute an SAP small-component potential with Libcint's dedicated kernel."""
+    _require_libcint()
+    _basis1, _basis2, _basis3 = _parse_basis_args_3c2e(system, basis1, basis2, basis3)
+    if _basis2 is not _basis3:
+        raise ValueError(
+            "Libcint requires identical orbital bases for three-center opVop integrals."
+        )
+
+    # The general Libcint converter normalizes every contraction. Restore the
+    # physical norm of each unnormalized SAP s function after integral evaluation.
+    scales = _s_density_contraction_norms(_basis1)
+
+    atm, bas, env, shell_slice = _parse_basis_args_cint_3c2e(
+        system, _basis1, _basis2, None
+    )
+    # Libcint returns x, y, z, scalar components. Its cross-product components
+    # use the opposite orbital-center order from Forte2, so change their signs
+    # while reordering to the scalar, x, y, z one-electron opVop convention.
+    raw = ints.cint_int3c2e_spsp1_sph(shell_slice, atm, bas, env)
+    contracted = np.einsum("P,cPmn->cmn", scales, raw, optimize=True)
+    return [contracted[3], -contracted[0], -contracted[1], -contracted[2]]
 
 
 class CInt3cBySlice:

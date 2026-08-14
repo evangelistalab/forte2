@@ -1,4 +1,5 @@
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, asdict
+from typing import Literal, get_args
 import numpy as np
 from numpy.typing import NDArray
 import json
@@ -14,6 +15,7 @@ from forte2.helpers import (
     print_metric_info,
 )
 from forte2.x2c import X2CHelper
+from forte2.base_classes.params import X2CParams
 from forte2.jkbuilder import FockBuilder, FockBuilderOTF
 from .build_basis import build_basis, build_basis_from_dict
 from .geom_utils import GeometryHelper, parse_geometry
@@ -35,13 +37,10 @@ class System:
         The auxiliary basis set, either as a string or a dictionary (see `basis`).
     minao_basis : str | dict, optional, default="cc-pvtz-minao"
         The minimal atomic orbital basis set, used in IAO calculations, either as a string or a dictionary (see `basis`).
-    x2c_type : str | None, optional, default=None
-        The type of X2C transformation to be used. Options are "sf" for scalar
-        relativistic effects or "so" for spin-orbit coupling. If None, no X2C transformation is applied.
-    snso_type : str | None, optional, default="row-dependent"
-        The type of screened nuclear spin-orbit coupling scaling scheme to use.
-        Only relevant if `x2c_type` is "so".
-        Options are None, "boettger", "dc", "dcb", or "row-dependent".
+    x2c : X2CParams | None, optional, default=None
+        The X2C Hamiltonian to use, specified as an :class:`X2CParams` instance
+        (see its documentation for the available ``x2c_type``, ``x2c_model``, and
+        ``snso_type`` options). If None, no X2C transformation is applied.
     unit : str, optional, default="angstrom"
         The unit for the atomic coordinates. Can be "angstrom" or "bohr".
     overlap_ortho_rtol : float, optional, default=1e-8
@@ -63,6 +62,8 @@ class System:
     jk_mem_thres_mb : float | None, optional, default=None
         If set, the Fock builder will have a memory footprint smaller than the threshold.
         If None, the the in-core Fock builder algorithm will be used with no special memory limit.
+    integral_backend : str, optional, default="auto"
+        The integral backend to use. Options are "auto", "libint2", and "libcint".
 
     Attributes
     ----------
@@ -109,9 +110,8 @@ class System:
     # These are the arguments that users can provide at initialization.
     auxiliary_basis_set: str | dict = None
     minao_basis_set: str | dict = "cc-pvtz-minao"
-    x2c_type: str | None = None
-    snso_type: str | None = "row-dependent"
-    unit: str = "angstrom"
+    x2c: X2CParams | None = None
+    unit: Literal["angstrom", "bohr"] = "angstrom"
     overlap_ortho_rtol: float = 1e-8
     df_ortho_rtol: float | None = None
     cholesky_tei: bool = False
@@ -120,6 +120,7 @@ class System:
     symmetry_tol: float = 1e-4
     use_gaussian_charges: bool = False
     jk_mem_thres_mb: float | None = None
+    integral_backend: Literal["auto", "libint2", "libcint"] = "auto"
 
     ### Non-init attributes
     atoms: list[list[float, list[float, float, float]]] = field(
@@ -140,11 +141,11 @@ class System:
         self._common_init()
 
     def _sanity_check(self):
-        if self.unit not in [
-            "angstrom",
-            "bohr",
-        ]:
-            raise ValueError(f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'.")
+        _valid_units = get_args(self.__annotations__["unit"])
+        if self.unit not in _valid_units:
+            raise ValueError(
+                f"System.unit must be one of {_valid_units}, but got {self.unit}"
+            )
         if self.overlap_ortho_rtol < 0:
             raise ValueError("overlap_ortho_rtol must be non-negative.")
         if self.df_ortho_rtol is not None and self.df_ortho_rtol < 0:
@@ -153,6 +154,30 @@ class System:
             raise ValueError("cholesky_tol must be non-negative.")
         if self.symmetry_tol < 0:
             raise ValueError("symmetry_tol must be non-negative.")
+        if self.x2c is not None and not isinstance(self.x2c, X2CParams):
+            raise ValueError(
+                f"x2c must be an X2CParams instance or None, but got {type(self.x2c)}."
+            )
+        _valid_backends = get_args(self.__annotations__["integral_backend"])
+        if self.integral_backend not in _valid_backends:
+            raise ValueError(
+                f"Invalid integral_backend: {self.integral_backend}. Must be one of {_valid_backends}."
+            )
+
+    @property
+    def x2c_type(self):
+        """Spin structure from :attr:`x2c` (``"sf"``, ``"so"``, or None)."""
+        return self.x2c.x2c_type if self.x2c is not None else None
+
+    @property
+    def x2c_model(self):
+        """Decoupling model from :attr:`x2c` (``"1e"``, ``"sap"``, or None)."""
+        return self.x2c.x2c_model if self.x2c is not None else None
+
+    @property
+    def snso_type(self):
+        """SNSO scaling from :attr:`x2c`, or None when not requested."""
+        return self.x2c.snso_type if self.x2c is not None else None
 
     def _common_init(self, skip_basis_init=False):
         self._init_geometry()
@@ -184,6 +209,9 @@ class System:
         d["basis_set"] = None
         d["auxiliary_basis_set"] = None
         d["minao_basis_set"] = None
+        # json.dump can't serialize an X2CParams instance; store its fields as a dict.
+        if self.x2c is not None:
+            d["x2c"] = asdict(self.x2c)
 
         res = {"init_args": d}
         res["basis_data"] = self.basis.serialize()
@@ -199,6 +227,8 @@ class System:
         with open(f"{filename}.json", "r", encoding="utf-8") as f:
             data = json.load(f)
             init_args = data["init_args"]
+            if isinstance(init_args.get("x2c"), dict):
+                init_args["x2c"] = X2CParams(**init_args["x2c"])
             system = cls.__new__(cls)
             for k, v in init_args.items():
                 setattr(system, k, v)
@@ -336,7 +366,11 @@ class System:
             logger.log_info1(
                 f"Memory threshold of {self.jk_mem_thres_mb} MB is too low to store the B tensor and metric. Using on-the-fly Fock builder."
             )
-            return FockBuilderOTF(self, jk_mem_thres_mb=self.jk_mem_thres_mb)
+            return FockBuilderOTF(
+                self,
+                jk_mem_thres_mb=self.jk_mem_thres_mb,
+                backend=self.integral_backend,
+            )
         elif 2 * b_tensor_size_mb + metric_size_mb > self.jk_mem_thres_mb:
             logger.log_info1(
                 f"Memory threshold of {self.jk_mem_thres_mb} MB is too low to store the transposed B tensor. Using in-core Fock builder without storing transposed B tensor."
