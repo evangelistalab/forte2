@@ -279,7 +279,11 @@ def rmp2_mpq_onthefly_no(
     The RMP2 block natural orbitals provide a restricted orbital basis that is
     compatible with AVAS.  When ``avas`` is supplied, its active subspace is
     mapped into that basis by AO-overlap projection.  The other selectors have
-    the same meanings as in :func:`ump2_mpq_onthefly_no`.
+    the same meanings as in :func:`ump2_mpq_onthefly_no`.  Constructing the
+    analyzer stores the block-NO coefficients, occupations, and canonical-MO
+    transformation as ``mp2.C_no``, ``mp2.no_occs``, and ``mp2.U_no``; the
+    returned analyzer exposes the same data as ``C_no``, ``no_occs``, and
+    ``U``.
 
     Parameters
     ----------
