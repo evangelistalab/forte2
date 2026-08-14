@@ -3,7 +3,7 @@ import numpy as np
 from forte2 import integrals
 from forte2.data import DEBYE_TO_AU, ANGSTROM_TO_BOHR
 from forte2.helpers.matrix_functions import block_diag_2x2
-from props.mutual_correlation import UMP2MPQOnTheFly
+from .mutual_correlation import RMP2MPQOnTheFly, UMP2MPQOnTheFly
 
 
 def get_1e_property(system, g1, property_name, origin=None, unit="debye"):
@@ -156,56 +156,268 @@ def iao_partial_charge(system, g1_iao):
     return (g1diag, charges - pop)
 
 
-def ump2_mpq_onthefly_no(
+def _resolve_rdm_info_indices(
+    mp2,
+    C_no,
+    occupations,
+    *,
+    indices=None,
+    mo_range=None,
+    avas=None,
+    occupation_window=None,
+):
+    """Resolve one user-facing orbital selection into analysis-basis indices."""
+    selectors = {
+        "indices": indices,
+        "mo_range": mo_range,
+        "avas": avas,
+        "occupation_window": occupation_window,
+    }
+    selected_names = [
+        name for name, value in selectors.items() if value is not None
+    ]
+    if len(selected_names) > 1:
+        raise ValueError(
+            "Choose only one RDM-info orbital selector: indices, mo_range, "
+            "avas, or occupation_window."
+        )
+
+    nmo = C_no.shape[1]
+    details = {}
+    if indices is not None:
+        selected = tuple(dict.fromkeys(int(p) for p in indices))
+        selection = "indices"
+    elif mo_range is not None:
+        if len(mo_range) != 2:
+            raise ValueError("mo_range must contain exactly (start, stop).")
+        start, stop = (int(value) for value in mo_range)
+        if start < 0 or stop > nmo or start >= stop:
+            raise ValueError(
+                f"mo_range must satisfy 0 <= start < stop <= {nmo}; "
+                f"got ({start}, {stop})."
+            )
+        selected = tuple(range(start, stop))
+        selection = "mo_range"
+        details["mo_range"] = (start, stop)
+    elif occupation_window is not None:
+        if len(occupation_window) != 2:
+            raise ValueError(
+                "occupation_window must contain exactly (minimum, maximum)."
+            )
+        minimum, maximum = (float(value) for value in occupation_window)
+        if minimum > maximum:
+            raise ValueError(
+                "occupation_window minimum must not exceed its maximum."
+            )
+        selected = tuple(
+            np.flatnonzero(
+                (occupations >= minimum) & (occupations <= maximum)
+            ).tolist()
+        )
+        selection = "natural_occupation"
+        details["occupation_window"] = (minimum, maximum)
+    elif avas is not None:
+        if not getattr(avas, "executed", False):
+            avas.run()
+        if avas.system is not mp2.system:
+            raise ValueError(
+                "The AVAS and UMP2 calculations must use the same System object."
+            )
+        if getattr(avas.system, "two_component", False):
+            raise TypeError(
+                "AVAS-based RDM-info selection requires restricted spatial orbitals."
+            )
+        if not hasattr(avas, "mo_space") or not hasattr(avas, "C"):
+            raise TypeError("avas must be an executed AVAS calculation.")
+        if len(avas.C) != 1:
+            raise TypeError(
+                "AVAS-based RDM-info selection requires one restricted MO matrix."
+            )
+
+        active_indices = tuple(avas.mo_space.active_indices)
+        if not active_indices:
+            raise ValueError("The AVAS calculation did not select any active orbitals.")
+        C_avas_active = np.asarray(avas.C[0])[:, active_indices]
+        if C_avas_active.shape[0] != C_no.shape[0]:
+            raise ValueError(
+                "The AVAS and UMP2 orbitals use incompatible AO dimensions."
+            )
+
+        overlap = mp2.system.ints_overlap()
+        projection = C_avas_active.conj().T @ overlap @ C_no
+        weights = np.sum(np.abs(projection) ** 2, axis=0).real
+        # AVAS rotates and reorders its orbitals.  Select common natural
+        # orbitals by subspace projection instead of reusing AVAS indices.
+        best = np.argsort(-weights, kind="stable")[: len(active_indices)]
+        selected = tuple(sorted(int(p) for p in best))
+        selection = "avas"
+        details["avas_projection_weights"] = weights
+    else:
+        selected = tuple(range(nmo))
+        selection = "all"
+
+    if any(p < 0 or p >= nmo for p in selected):
+        raise IndexError(f"Every selected orbital index must be in [0, {nmo}).")
+    if not selected:
+        raise ValueError("The RDM-info orbital selection is empty.")
+    return selected, selection, details
+
+
+def rmp2_mpq_onthefly_no(
     mp2,
     cache_pair_blocks=True,
+    cache_fixed_slabs=False,
     compute=False,
     indices=None,
-    exact_common_no=True,
-    exact_common_no_max_nmo=200,
-    allow_approximate_block_rotation=False,
+    mo_range=None,
+    avas=None,
+    occupation_window=None,
+    include_quadratic=True,
 ):
-    """
-    Build an on-the-fly UMP2 mutual-correlation analyzer in the common NO basis.
+    """Construct a low-cost RMP2 RDM-information analyzer.
 
-    This convenience wrapper constructs the common spin-free UMP2 natural
-    orbitals, passes the corresponding alpha/beta MO -> NO transformations to
-    :class:`UMP2MPQOnTheFly`, and stores the NO metadata on the returned object.
+    The RMP2 block natural orbitals provide a restricted orbital basis that is
+    compatible with AVAS.  When ``avas`` is supplied, its active subspace is
+    mapped into that basis by AO-overlap projection.  The other selectors have
+    the same meanings as in :func:`ump2_mpq_onthefly_no`.
 
     Parameters
     ----------
-    mp2
-        Executed :class:`forte2.mp.ump2.UMP2` instance.
-    cache_pair_blocks : bool, optional, default=True
-        Whether the on-the-fly analyzer should cache rotated pair blocks.
-    compute : bool, optional, default=False
-        If True, compute ``M1`` and ``M2`` before returning.
+    mp2 : RMP2
+        Executed restricted MP2 calculation.
+    cache_pair_blocks, cache_fixed_slabs : bool, optional
+        Control rotated-pair and canonical-slab amplitude caching.
+    compute : bool, optional
+        Compute M1 and M2 before returning the analyzer.
     indices : iterable[int], optional
-        Optional orbital subset forwarded to ``make_measures`` when
-        ``compute=True``.
+        Explicit block-NO indices.
+    mo_range : tuple[int, int], optional
+        Half-open block-NO range ``(start, stop)``.
+    avas : AVAS, optional
+        Restricted AVAS calculation on the same system.
+    occupation_window : tuple[float, float], optional
+        Inclusive block-natural-occupation window.
+    include_quadratic : bool, optional
+        Include retained cumulant terms quadratic in the MP2 amplitudes.
+
+    Returns
+    -------
+    RMP2MPQOnTheFly
+        Analyzer configured with the selected RDM-info orbital space.
+    """
+    analyzer = RMP2MPQOnTheFly(
+        mp2,
+        cache_pair_blocks=cache_pair_blocks,
+        cache_fixed_slabs=cache_fixed_slabs,
+        include_quadratic=include_quadratic,
+    )
+    selected, selection, selection_details = _resolve_rdm_info_indices(
+        mp2,
+        analyzer.C_no,
+        analyzer.occs,
+        indices=indices,
+        mo_range=mo_range,
+        avas=avas,
+        occupation_window=occupation_window,
+    )
+    analyzer.rdm_info_indices = selected
+    analyzer.rdm_info_selection = selection
+    analyzer.rdm_info_selection_details = selection_details
+
+    if compute:
+        analyzer.make_measures()
+
+    return analyzer
+
+
+def ump2_mpq_onthefly_no(
+    mp2,
+    cache_pair_blocks=True,
+    cache_fixed_slabs=False,
+    compute=False,
+    indices=None,
+    mo_range=None,
+    avas=None,
+    occupation_window=None,
+    include_quadratic=True,
+    common_no_mixing_tolerance=1.0e-10,
+):
+    """Construct a low-cost UMP2 RDM-information analyzer.
+
+    The analysis is performed in the common spin-free UMP2 natural-orbital
+    basis.  Its cost can be restricted with exactly one of ``indices``,
+    ``mo_range``, or ``occupation_window``.  ``mo_range`` follows Python's
+    half-open convention, so ``(0, 50)`` selects orbitals 0 through 49.
+    Passing ``occupation_window=(0.02, 1.98)`` selects partially occupied
+    common natural orbitals.  AVAS is restricted-only and is therefore handled
+    by :func:`rmp2_mpq_onthefly_no` instead.
+
+    Set ``include_quadratic=False`` to retain only cumulant terms linear in the
+    MP2 doubles amplitudes.  Returned M1/M2 arrays keep their full-space shapes
+    and contain zeros outside the selected RDM-info space.
+
+    Parameters
+    ----------
+    mp2 : UMP2
+        Executed UMP2 calculation.  Its density-fitting factors are used to
+        generate amplitude blocks on demand.
+    cache_pair_blocks : bool, optional
+        Retain rotated occupied-pair amplitude blocks for reuse.
+    cache_fixed_slabs : bool, optional
+        Retain canonical fixed-occupied amplitude slabs.  This is faster but
+        can grow to full-amplitude memory, so it is disabled by default.
+    compute : bool, optional
+        Compute M1 and M2 before returning the analyzer.
+    indices : iterable[int], optional
+        Explicit common-NO indices.  Mutually exclusive with the other orbital
+        selectors.
+    mo_range : tuple[int, int], optional
+        Half-open common-NO range ``(start, stop)``.
+    avas : AVAS, optional
+        Unsupported for UMP2.  Passing it raises an error directing the caller
+        to :func:`rmp2_mpq_onthefly_no`.
+    occupation_window : tuple[float, float], optional
+        Inclusive natural-occupation window.  Use ``(0.02, 1.98)`` for the
+        conventional partially occupied space.
+    include_quadratic : bool, optional
+        Include the retained cumulant terms quadratic in the MP2 amplitudes.
+    common_no_mixing_tolerance : float, optional
+        Warning threshold for discarded occupied-virtual mixing in the
+        low-cost block-projected common-NO transformation.
 
     Returns
     -------
     UMP2MPQOnTheFly
-        Analyzer initialized with common spin-free UMP2 natural-orbital data.
-        Additional attributes are attached for convenience:
-        ``C_no``, ``no_occs``, ``no_transform``, ``gamma1_no_a``,
-        ``gamma1_no_b``, and ``Gamma1_no``.
+        Analyzer configured with the selected RDM-info orbital space.
     """
-    from .mutual_correlation import UMP2MPQOnTheFly
+    if avas is not None:
+        raise TypeError(
+            "AVAS selection requires restricted orbitals; use "
+            "rmp2_mpq_onthefly_no with an RMP2 calculation."
+        )
 
     gamma1 = mp2.make_1rdm_sd()
     no_transform = mp2.make_natural_orbital_transform(gamma1)
     C_no, occupations, Ua, Ub = no_transform
+    selected, selection, selection_details = _resolve_rdm_info_indices(
+        mp2,
+        C_no,
+        occupations,
+        indices=indices,
+        mo_range=mo_range,
+        occupation_window=occupation_window,
+    )
 
     analyzer = UMP2MPQOnTheFly(
         mp2,
         Ua=Ua,
         Ub=Ub,
+        gamma1=gamma1,
+        orbital_indices=selected,
+        include_quadratic=include_quadratic,
         cache_pair_blocks=cache_pair_blocks,
-        exact_common_no=exact_common_no,
-        exact_common_no_max_nmo=exact_common_no_max_nmo,
-        allow_approximate_block_rotation=allow_approximate_block_rotation,
+        cache_fixed_slabs=cache_fixed_slabs,
+        common_no_mixing_tolerance=common_no_mixing_tolerance,
     )
 
     gamma1_no_a, gamma1_no_b = mp2.make_1rdm_no_sd(gamma1, no_transform)
@@ -216,10 +428,17 @@ def ump2_mpq_onthefly_no(
     analyzer.no_transform = no_transform
     analyzer.gamma1_no_a = gamma1_no_a
     analyzer.gamma1_no_b = gamma1_no_b
+    analyzer.gamma1_a = gamma1_no_a
+    analyzer.gamma1_b = gamma1_no_b
+    analyzer.γa = gamma1_no_a
+    analyzer.γb = gamma1_no_b
     analyzer.Gamma1_no = gamma1_no
+    analyzer.Gamma1 = gamma1_no
     analyzer.Γ1 = gamma1_no
+    analyzer.rdm_info_selection = selection
+    analyzer.rdm_info_selection_details = selection_details
 
     if compute:
-        analyzer.make_measures(indices=indices)
+        analyzer.make_measures()
 
     return analyzer
