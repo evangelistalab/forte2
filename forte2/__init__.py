@@ -2,6 +2,7 @@ __version__ = "2026.6.4"
 __author__ = "Forte2 Developers"
 
 from .integrals import integrals
+from .base_classes import X2CParams
 from .system import System, ModelSystem, HubbardModel
 from .state import State, RelState, MOSpace
 from .scf import RHF, ROHF, UHF, CUHF, GHF

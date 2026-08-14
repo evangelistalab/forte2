@@ -9,6 +9,17 @@
 namespace forte2 {
 class Basis;
 
+/// @brief Contract mixed second derivatives of three-center Coulomb integrals into `opVop`.
+/// @details Computes scalar and Cartesian Pauli components of the momentum-dressed
+/// three-center integral. The first basis is summed over, while the two orbital-basis
+/// indices are retained.
+/// @param basis1 Potential-density basis.
+/// @param basis2 First orbital basis.
+/// @param basis3 Second orbital basis.
+/// @return Four real matrices in scalar, x, y, z order.
+std::array<np_matrix, 4> coulomb_3c_opVop(const Basis& basis1, const Basis& basis2,
+                                          const Basis& basis3);
+
 /// @brief Contract first derivatives of three-center Coulomb integrals with real weights.
 /// @details Computes the gradient contribution
 /// \f[

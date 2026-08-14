@@ -159,21 +159,20 @@ class RelCISigmaBuilder {
     mutable std::vector<std::complex<double>> v_pr_qs;
 
     /// @brief  One-electron contribution to the sigma vector |sigma> = H |basis>
-    /// @param alpha If true, compute the alpha contribution, otherwise the beta
-    /// @param h The one-electron integrals
-    void H1_hz(std::span<std::complex<double>> basis, std::span<std::complex<double>> sigma,
-               Spin spin, std::span<std::complex<double>> h) const;
-
-    /// @brief  Two-electron same-spin contribution to the sigma vector |sigma> = H |basis>
-    /// @param alpha If true, compute the alpha contribution, otherwise the beta
-    void H2_hz_same_spin(std::span<std::complex<double>> basis,
-                         std::span<std::complex<double>> sigma, Spin spin) const;
-
-    /// @brief  Two-electron mixed-spin contribution to the sigma vector |sigma> = H |basis>
     /// @param basis The basis vector
     /// @param sigma The resulting sigma vector
-    void H2_hz_opposite_spin(std::span<std::complex<double>> basis,
-                             std::span<std::complex<double>> sigma) const;
+    /// @param h The one-electron integrals
+    /// @note Two-component CI acts only on alpha spinors (nb == 0), so this is the alpha
+    ///       contribution and the opposite-spin spectator string count is always 1.
+    void H1_hz(std::span<std::complex<double>> basis, std::span<std::complex<double>> sigma,
+               std::span<std::complex<double>> h) const;
+
+    /// @brief  Two-electron same-spin contribution to the sigma vector |sigma> = H |basis>
+    /// @param basis The basis vector
+    /// @param sigma The resulting sigma vector
+    /// @note Two-component CI acts only on alpha spinors (nb == 0); see H1_hz.
+    void H2_hz_same_spin(std::span<std::complex<double>> basis,
+                         std::span<std::complex<double>> sigma) const;
 
     // -- Knowles-Handy Algorithm Functions/Data --
 
@@ -191,7 +190,7 @@ class RelCISigmaBuilder {
     void H2_kh(std::span<std::complex<double>> basis, std::span<std::complex<double>> sigma) const;
 
     std::tuple<std::span<std::complex<double>>, std::span<std::complex<double>>, size_t>
-    get_Kblock_spans(size_t dim, size_t maxKa) const;
+    get_Kblock_spans(size_t nrows, size_t ncols) const;
 };
 
 [[nodiscard]] std::span<std::complex<double>> gather_block(std::span<std::complex<double>> source,

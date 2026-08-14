@@ -352,3 +352,166 @@ def test_libcint_coulomb_3c_high_l():
     )
     s_cint = integrals.coulomb_3c(system)
     assert np.linalg.norm(s_cint) == pytest.approx(15.857035710505492, rel=1e-6)
+
+
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_overlap_kinetic_high_l_fallback():
+    """overlap()/kinetic() transparently fall back to Libcint above Libint2's angmom ceiling."""
+    xyz = "H 0 0 0\nH 0 0 1.0"
+    system = System(
+        xyz,
+        basis_set=str(THIS_DIR / "high_l.json"),
+        minao_basis_set=None,
+    )
+    assert system.basis.max_l > integrals_impl.ints.libint2_max_am
+
+    S = integrals.overlap(system)
+    assert np.allclose(S, integrals.cint_overlap(system), atol=1e-10)
+
+    T = integrals.kinetic(system)
+    assert np.allclose(T, integrals.cint_kinetic(system), atol=1e-10)
+
+
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_nuclear_point_charges_high_l_fallback():
+    xyz = "H 0 0 0\nH 0 0 1.0"
+    system = System(
+        xyz,
+        basis_set=str(THIS_DIR / "high_l.json"),
+        minao_basis_set=None,
+    )
+    assert system.basis.max_l > integrals_impl.ints.libint2_max_am
+
+    V = integrals.nuclear(system)
+    assert np.allclose(V, integrals.cint_nuclear(system), atol=1e-10)
+
+
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_nuclear_gaussian_charges_high_l_fallback():
+    """The Gaussian-charge branch of nuclear() also routes through the coulomb_3c
+    dispatcher, so it must fall back for high angular momentum too."""
+    xyz = "H 0 0 0\nH 0 0 1.0"
+    system = System(
+        xyz,
+        basis_set=str(THIS_DIR / "high_l.json"),
+        minao_basis_set=None,
+        use_gaussian_charges=True,
+    )
+    assert system.basis.max_l > integrals_impl.ints.libint2_max_am
+
+    V = integrals.nuclear(system)
+    ref = -np.einsum(
+        "Zpq,Z->pq",
+        integrals.cint_coulomb_3c(
+            system,
+            system.gaussian_charge_basis,
+            system.basis,
+            preserve_density_norm=True,
+        ),
+        system.atomic_charges,
+    )
+    assert np.allclose(V, ref, atol=1e-10)
+
+
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_opvop_point_charges_high_l_fallback():
+    xyz = "H 0 0 0\nH 0 0 1.0"
+    system = System(
+        xyz,
+        basis_set=str(THIS_DIR / "high_l.json"),
+        minao_basis_set=None,
+    )
+    assert system.basis.max_l > integrals_impl.ints.libint2_max_am
+
+    W = integrals.opVop(system)
+    W_cint = integrals.cint_opVop(system)
+    # opVop returns [scalar, x, y, z]; cint_opVop returns [x, y, z, scalar]
+    assert np.allclose(W[0], W_cint[3], atol=1e-10)
+    assert np.allclose(W[1], W_cint[0], atol=1e-10)
+    assert np.allclose(W[2], W_cint[1], atol=1e-10)
+    assert np.allclose(W[3], W_cint[2], atol=1e-10)
+
+
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_emultipole1_high_l_fallback():
+    xyz = "H 0 0 0\nH 0 0 1.0"
+    system = System(
+        xyz,
+        basis_set=str(THIS_DIR / "high_l.json"),
+        minao_basis_set=None,
+    )
+    assert system.basis.max_l > integrals_impl.ints.libint2_max_am
+
+    M1 = integrals.emultipole1(system)
+    assert np.allclose(M1[0], integrals.cint_overlap(system), atol=1e-10)
+    dipole_cint = integrals.cint_emultipole1(system)
+    for i in range(3):
+        assert np.allclose(M1[i + 1], dipole_cint[i], atol=1e-10)
+
+
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_coulomb_3c_opvop_high_l_fallback():
+    """coulomb_3c_opVop dispatches to Libcint above Libint2's derivative angmom
+    ceiling instead of raising NotImplementedError."""
+    xyz = "H 0 0 0\nH 0 0 1.0"
+    system = System(
+        xyz,
+        basis_set="sap_helfem_large",
+        auxiliary_basis_set=str(THIS_DIR / "high_l.json"),
+        minao_basis_set=None,
+    )
+    W = integrals.coulomb_3c_opVop(system, system.basis, system.auxiliary_basis)
+    assert all(component.shape == (60, 60) for component in W)
+    assert all(np.isfinite(component).all() for component in W)
+    assert np.linalg.norm(W[0]) == pytest.approx(6398.564518450337, rel=1.0e-12)
+
+
+def test_coulomb_3c_opvop_explicit_libint2_rejects_high_l():
+    """Requesting the libint2 backend explicitly still raises a clear error
+    for angular momentum it cannot handle, rather than silently falling back."""
+    xyz = "H 0 0 0\nH 0 0 1.0"
+    system = System(
+        xyz,
+        basis_set="sap_helfem_large",
+        auxiliary_basis_set=str(THIS_DIR / "high_l.json"),
+        minao_basis_set=None,
+        integral_backend="libint2",
+    )
+    with pytest.raises(ValueError, match="libint2 backend cannot handle"):
+        integrals.coulomb_3c_opVop(system, system.basis, system.auxiliary_basis)
+
+
+def test_choose_backend_auto():
+    max_l_libint = integrals_impl.ints.libint2_max_am
+    assert integrals_impl._choose_backend(0) == "libint2"
+    assert integrals_impl._choose_backend(max_l_libint) == "libint2"
+    if LIBCINT_AVAILABLE:
+        assert integrals_impl._choose_backend(max_l_libint + 1) == "libcint"
+    else:
+        with pytest.raises(RuntimeError, match="libcint integrals are unavailable"):
+            integrals_impl._choose_backend(max_l_libint + 1)
+
+
+def test_choose_backend_explicit_libint2_rejects_high_l():
+    max_l_libint = integrals_impl.ints.libint2_max_am
+    with pytest.raises(ValueError, match="libint2 backend cannot handle"):
+        integrals_impl._choose_backend(max_l_libint + 1, backend="libint2")
+
+
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_choose_backend_explicit_libcint_rejects_too_high_l():
+    with pytest.raises(ValueError, match="libcint backend cannot handle"):
+        integrals_impl._choose_backend(15, backend="libcint")
+
+
+def test_choose_backend_invalid_value():
+    with pytest.raises(ValueError, match="Invalid backend"):
+        integrals_impl._choose_backend(0, backend="not-a-backend")
+
+
+def test_choose_backend_explicit_libcint_used_for_low_l():
+    if not LIBCINT_AVAILABLE:
+        with pytest.raises(RuntimeError, match="libcint integrals are unavailable"):
+            integrals_impl._choose_backend(0, backend="libcint")
+    else:
+        assert integrals_impl._choose_backend(0, backend="libcint") == "libcint"

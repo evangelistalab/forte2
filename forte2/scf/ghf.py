@@ -32,6 +32,11 @@ class GHF(SCFBase):
 
     Parameters
     ----------
+    ms_guess : float, optional, default=None
+        Target spin projection (Ms) used only to build the initial guess
+        occupation (na_guess/nb_guess). Must be a multiple of 0.5 and
+        compatible with the electron count. If None, a default occupation is
+        used. Also gates whether ``guess_mix`` is applied.
     guess_mix : bool, optional, default=False
         If True, will mix the HOMO and LUMO orbitals to try to break alpha-beta degeneracy if nel is even.
     alpha_beta_mix : bool, optional, default=False

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import GHF, System, UHF
+from forte2 import GHF, System, UHF, X2CParams
 from tests.gradient_test_utils import (
     four_point_central_difference_gradient_component,
     xyz_string,
@@ -90,7 +90,7 @@ def test_x2c_ghf_gradient_finite_difference(x2c_type):
             basis_set="sto-3g",
             auxiliary_basis_set="def2-universal-JKFIT",
             unit="bohr",
-            x2c_type=x2c_type,
+            x2c=X2CParams(x2c_type=x2c_type, x2c_model="1e"),
             minao_basis_set=None,
         )
 

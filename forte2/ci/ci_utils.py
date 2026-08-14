@@ -310,8 +310,8 @@ def make_3cumulant_so(gamma1, gamma2, gamma3):
     ----------
     gamma1 : np.ndarray
         The one-particle reduced density matrix (1-RDM).
-    lambda2 : np.ndarray
-        The two-particle reduced density cumulant.
+    gamma2 : np.ndarray
+        The two-particle reduced density matrix (2-RDM).
     gamma3 : np.ndarray
         The three-particle reduced density matrix (3-RDM).
 

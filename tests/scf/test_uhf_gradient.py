@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System
+from forte2 import System, X2CParams
 from forte2.integrals import LIBCINT_AVAILABLE
 from forte2.scf import RHF, UHF
 from tests.gradient_test_utils import (
@@ -169,9 +169,9 @@ def test_uhf_gradient_closed_shell_matches_rhf_gradient():
                 not LIBCINT_AVAILABLE, reason="Libcint is not available"
             ),
         ),
-        {"x2c_type": "sf"},
+        {"x2c": X2CParams(x2c_type="sf")},
         pytest.param(
-            {"x2c_type": "sf", "use_gaussian_charges": True},
+            {"x2c": X2CParams(x2c_type="sf"), "use_gaussian_charges": True},
             marks=pytest.mark.skipif(
                 not LIBCINT_AVAILABLE, reason="Libcint is not available"
             ),

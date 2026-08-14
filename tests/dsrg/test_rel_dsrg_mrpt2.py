@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, GHF, MCOptimizer, RelCISolver, AVAS
+from forte2 import System, GHF, MCOptimizer, RelCISolver, AVAS, X2CParams
 from forte2.dsrg import RelDSRG_MRPT2, RelDSRG_MRPT2_Slow
 from forte2.helpers.comparisons import approx
 from forte2.data.atom_data import EH_TO_WN
@@ -111,8 +111,7 @@ def test_mrpt2_carbon_rel_sa(tmp_path):
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c_type="so",
-        snso_type="row-dependent",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
     )
 
     system_0.save(tmp_path / "carbon_rel_sa")
@@ -131,20 +130,20 @@ def test_mrpt2_carbon_rel_sa(tmp_path):
     )(mf)
     dsrg = RelDSRG_MRPT2(flow_param=0.24, relax_reference="once")(mc)
     dsrg.run()
-    assert dsrg.relax_energies[0, 2] == approx(-37.718966923805)
-    assert dsrg.relax_energies[0, 0] == approx(-37.822217257747)
-    assert dsrg.relax_energies[0, 1] == approx(-37.822259180404)
+    assert dsrg.relax_energies[0, 2] == approx(-37.718966923804714)
+    assert dsrg.relax_energies[0, 0] == approx(-37.822217257745514)
+    assert dsrg.relax_energies[0, 1] == approx(-37.82225918040399)
     assert dsrg.relax_eigvals.real == approx(
         [
-            -37.82240582,
-            -37.82233221,
-            -37.82233221,
-            -37.82233221,
-            -37.82218603,
-            -37.82218603,
-            -37.82218603,
-            -37.82218603,
-            -37.82218603,
+            -37.822405824369625,
+            -37.822332213565495,
+            -37.822332213565424,
+            -37.82233221356541,
+            -37.82218603171408,
+            -37.82218603171406,
+            -37.822186031713976,
+            -37.82218603171396,
+            -37.822186031713905,
         ]
     )
 
@@ -163,8 +162,7 @@ def test_mrpt2_se_rel_sa_gauss_nuc_jk_otf():
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c_type="so",
-        snso_type="row-dependent",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
         use_gaussian_charges=True,
     )
     system.fock_builder = FockBuilderOTF(system, jk_mem_thres_mb=20, backend="libcint")
@@ -188,7 +186,7 @@ def test_mrpt2_se_rel_sa_gauss_nuc_jk_otf():
     )(mc)
     dsrg.run()
     assert (dsrg.relax_eigvals[5] - dsrg.relax_eigvals[4]) * EH_TO_WN == pytest.approx(
-        1916.780243598663, rel=1e-4
+        1916.780369353602, rel=1e-4
     )
 
 
@@ -201,8 +199,7 @@ def test_mrpt2_s_rel_sa_gauss_nuc():
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c_type="so",
-        snso_type="row-dependent",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
         use_gaussian_charges=True,
     )
     mf = GHF(
@@ -224,7 +221,7 @@ def test_mrpt2_s_rel_sa_gauss_nuc():
     dsrg = RelDSRG_MRPT2(flow_param=0.24, relax_reference="once")(mc)
     dsrg.run()
     assert (dsrg.relax_eigvals[5] - dsrg.relax_eigvals[4]) * EH_TO_WN == pytest.approx(
-        387.5234521376601, rel=1e-4
+        387.5233440732472, rel=1e-4
     )
 
 
@@ -239,8 +236,7 @@ def test_mrpt2_sh_with_slow():
         xyz=xyz,
         basis_set="cc-pvtz",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
-        x2c_type="so",
-        snso_type="row-dependent",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
         use_gaussian_charges=True,
     )
     mf = GHF(
@@ -272,42 +268,42 @@ def test_mrpt2_sh_with_slow():
 
     ref_relax_energies = np.array(
         [
-            [-399.255354002208, -399.25587285397, -399.075510442869],
-            [-399.255767074381, -399.255767109027, -399.074948640803],
-            [-399.255766234638, -399.255766234645, -399.074947874659],
+            [-399.255354806219, -399.255873658049, -399.075511243649],
+            [-399.255767878431, -399.255767913076, -399.074949441528],
+            [-399.255767038688, -399.255767038695, -399.074948675386],
         ]
     )
     ref_relax_eigvals = np.array(
         [
-            -399.256582458238 + 0.0j,
-            -399.256582458085 + 0.0j,
-            -399.254950011206 + 0.0j,
-            -399.254950011051 + 0.0j,
+            -399.256583004776 + 0.0j,
+            -399.256583004623 + 0.0j,
+            -399.254951072768 + 0.0j,
+            -399.254951072612 + 0.0j,
         ]
     )
     ref_relax_eigvals_history = np.array(
         [
             [
-                -399.256688903703,
-                -399.256688903582,
-                -399.255056804358,
-                -399.255056804235,
+                -399.25668945232,
+                -399.256689452199,
+                -399.255057863899,
+                -399.255057863776,
             ],
             [
-                -399.2565833348,
-                -399.256583334644,
-                -399.25495088341,
-                -399.254950883254,
+                -399.25658388134,
+                -399.256583881185,
+                -399.254951944968,
+                -399.254951944811,
             ],
             [
-                -399.256582458238,
-                -399.256582458085,
-                -399.254950011206,
-                -399.254950011051,
+                -399.256583004776,
+                -399.256583004623,
+                -399.254951072768,
+                -399.254951072612,
             ],
         ]
     )
-    ref_E = -399.25576623463775
+    ref_E = -399.2557670386876
 
     assert dsrg.relax_energies[:3, :] == approx(ref_relax_energies)
     assert dsrg.relax_eigvals == approx(ref_relax_eigvals)

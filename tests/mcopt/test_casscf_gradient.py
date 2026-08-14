@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, RHF, MCOptimizer, State, CISolver
+from forte2 import System, RHF, MCOptimizer, State, CISolver, X2CParams
 from forte2.integrals import LIBCINT_AVAILABLE
 from tests.gradient_test_utils import (
     four_point_central_difference_gradient_component,
@@ -408,7 +408,7 @@ def test_sf_x2c_casscf_gradient_finite_difference():
         system = _system(
             symbols,
             np.array([[0.0, 0.0, 0.0], [0.0, 0.0, distance]]),
-            x2c_type="sf",
+            x2c=X2CParams(x2c_type="sf", x2c_model="1e"),
             minao_basis_set=None,
         )
         rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10)(system)

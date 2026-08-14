@@ -11,6 +11,7 @@ from forte2 import (
     SpinorUpcaster,
     State,
     System,
+    X2CParams,
 )
 from forte2.integrals import LIBCINT_AVAILABLE
 from tests.gradient_test_utils import (
@@ -26,13 +27,17 @@ def _system(
     snso_type=None,
     use_gaussian_charges=False,
 ):
+    x2c = (
+        X2CParams(x2c_type=x2c_type, x2c_model="1e", snso_type=snso_type)
+        if x2c_type is not None
+        else None
+    )
     return System(
         xyz=xyz_string(symbols, coordinates),
         basis_set="sto-3g",
         auxiliary_basis_set="def2-universal-JKFIT",
         unit="bohr",
-        x2c_type=x2c_type,
-        snso_type=snso_type,
+        x2c=x2c,
         use_gaussian_charges=use_gaussian_charges,
         minao_basis_set=None,
     )

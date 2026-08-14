@@ -1,9 +1,47 @@
+import importlib
+import inspect
+from pathlib import Path
+
 import numpy as np
 from scipy.linalg import eigh
 import pytest
 
-from forte2 import System, RHF
+from forte2 import System, RHF, X2CParams
 from forte2.lib import ints
+from forte2.integrals import LIBCINT_AVAILABLE
+
+INTEGRALS_TEST_DIR = Path(__file__).parent.parent / "integrals"
+
+
+def test_x2c_is_the_only_public_relativistic_option():
+    parameters = inspect.signature(System).parameters
+    assert "x2c" in parameters
+    assert "x2c_type" not in parameters
+    assert "x2c_model" not in parameters
+    assert "snso_type" not in parameters
+
+
+@pytest.mark.parametrize("option", ["so-1e", "invalid", 1])
+def test_invalid_x2c_option(option):
+    with pytest.raises(ValueError, match="x2c must be an X2CParams instance"):
+        System(xyz="H 0 0 0", basis_set="sto-3g", minao_basis_set=None, x2c=option)
+
+
+def test_save_load_roundtrips_x2c_params(tmp_path):
+    filename = tmp_path / "x2c_system"
+    system = System(
+        xyz="H 0 0 0",
+        basis_set="sto-3g",
+        minao_basis_set=None,
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="dcb"),
+    )
+    system.save(filename)
+
+    loaded = System.load(filename)
+    assert isinstance(loaded.x2c, X2CParams)
+    assert loaded.x2c_type == "so"
+    assert loaded.x2c_model == "1e"
+    assert loaded.snso_type == "dcb"
 
 
 def test_system():
@@ -116,6 +154,28 @@ def test_nuclear_quadrupole():
     nucquad = system.nuclear_quadrupole(unit="au")
     assert np.trace(nucquad) == pytest.approx(0.0)
     assert np.diag(nucquad) == pytest.approx([11.5, -6.5, -5.0])
+
+
+def test_nuclear_moments_do_not_mutate_geometry():
+    xyz = """
+    O 0.0 0.0 0.0
+    H 0.0 0.0 1.0
+    Li 2.0 0.0 0.0
+    """
+    system = System(xyz=xyz, basis_set="cc-pvdz", unit="bohr")
+    positions_before = np.array(system.atomic_positions, copy=True)
+
+    origin = (0.5, -1.0, 2.0)
+    system.nuclear_dipole(origin=origin, unit="au")
+    assert np.allclose(system.atomic_positions, positions_before)
+
+    system.nuclear_quadrupole(origin=origin, unit="au")
+    assert np.allclose(system.atomic_positions, positions_before)
+
+    # And the origin shift must still be applied to the *returned* result:
+    dip_shifted = system.nuclear_dipole(origin=origin, unit="au")
+    dip_ref = system.nuclear_dipole(unit="au") - np.array(origin) * system.Zsum
+    assert dip_shifted == pytest.approx(dip_ref)
 
 
 def test_center_of_mass():
@@ -236,3 +296,68 @@ def test_ghost_atom():
     scf = RHF(charge=0, guess_type="hcore")(system)
     scf.run()
     assert scf.E == pytest.approx(-1.096696530945, rel=1e-8, abs=1e-8)
+
+
+def test_backend_option_default_is_auto():
+    system = System(xyz="H 0 0 0", basis_set="sto-3g", minao_basis_set=None)
+    assert system.integral_backend == "auto"
+
+
+def test_invalid_backend_option():
+    with pytest.raises(ValueError, match="Invalid integral_backend"):
+        System(
+            xyz="H 0 0 0",
+            basis_set="sto-3g",
+            minao_basis_set=None,
+            integral_backend="not-a-backend",
+        )
+
+
+def test_backend_libint2_rejects_high_l_basis():
+    """Forcing the libint2 backend on a basis it cannot handle raises immediately,
+    during System construction (the overlap matrix is built in __post_init__)."""
+    with pytest.raises(ValueError, match="libint2 backend cannot handle"):
+        System(
+            xyz="H 0 0 0\nH 0 0 1.0",
+            basis_set=str(INTEGRALS_TEST_DIR / "high_l.json"),
+            minao_basis_set=None,
+            integral_backend="libint2",
+        )
+
+
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_backend_libcint_used_even_for_low_l_basis(monkeypatch):
+    """Explicitly requesting the libcint backend must route even ordinary
+    low-angular-momentum integrals through Libcint, not just the high-l fallback."""
+    integrals_impl = importlib.import_module("forte2.integrals.integrals")
+    calls = []
+    original_cint_overlap = integrals_impl.cint_overlap
+
+    def traced_cint_overlap(*args, **kwargs):
+        calls.append(1)
+        return original_cint_overlap(*args, **kwargs)
+
+    monkeypatch.setattr(integrals_impl, "cint_overlap", traced_cint_overlap)
+
+    system = System(
+        xyz="H 0 0 0\nH 0 0 1.0",
+        basis_set="sto-3g",
+        minao_basis_set=None,
+        integral_backend="libcint",
+    )
+    assert len(calls) >= 1
+    assert system.basis.max_l == 0  # sto-3g on H is well within libint2's range
+
+
+def test_backend_option_save_load_roundtrip(tmp_path):
+    filename = tmp_path / "backend_system"
+    system = System(
+        xyz="H 0 0 0",
+        basis_set="sto-3g",
+        minao_basis_set=None,
+        integral_backend="libint2",
+    )
+    system.save(filename)
+
+    loaded = System.load(filename)
+    assert loaded.integral_backend == "libint2"
