@@ -718,6 +718,7 @@ def _opvop_finite_difference_blocks(system, basis1, basis2):
                 ]
                 shifted_system.atoms[atom][1][cart] += displacement
                 shifted_system.use_gaussian_charges = system.use_gaussian_charges
+                shifted_system.integral_backend = system.integral_backend
                 shifted1 = shifted_basis(basis1, atom, cart, displacement)
                 shifted2 = (
                     shifted1
