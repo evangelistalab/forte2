@@ -1,4 +1,6 @@
+import importlib
 import inspect
+from pathlib import Path
 
 import numpy as np
 from scipy.linalg import eigh
@@ -6,6 +8,9 @@ import pytest
 
 from forte2 import System, RHF, X2CParams
 from forte2.lib import ints
+from forte2.integrals import LIBCINT_AVAILABLE
+
+INTEGRALS_TEST_DIR = Path(__file__).parent.parent / "integrals"
 
 
 def test_x2c_is_the_only_public_relativistic_option():
@@ -291,3 +296,68 @@ def test_ghost_atom():
     scf = RHF(charge=0, guess_type="hcore")(system)
     scf.run()
     assert scf.E == pytest.approx(-1.096696530945, rel=1e-8, abs=1e-8)
+
+
+def test_backend_option_default_is_auto():
+    system = System(xyz="H 0 0 0", basis_set="sto-3g", minao_basis_set=None)
+    assert system.integral_backend == "auto"
+
+
+def test_invalid_backend_option():
+    with pytest.raises(ValueError, match="Invalid integral_backend"):
+        System(
+            xyz="H 0 0 0",
+            basis_set="sto-3g",
+            minao_basis_set=None,
+            integral_backend="not-a-backend",
+        )
+
+
+def test_backend_libint2_rejects_high_l_basis():
+    """Forcing the libint2 backend on a basis it cannot handle raises immediately,
+    during System construction (the overlap matrix is built in __post_init__)."""
+    with pytest.raises(ValueError, match="libint2 backend cannot handle"):
+        System(
+            xyz="H 0 0 0\nH 0 0 1.0",
+            basis_set=str(INTEGRALS_TEST_DIR / "high_l.json"),
+            minao_basis_set=None,
+            integral_backend="libint2",
+        )
+
+
+@pytest.mark.skipif(not LIBCINT_AVAILABLE, reason="Libcint is not available")
+def test_backend_libcint_used_even_for_low_l_basis(monkeypatch):
+    """Explicitly requesting the libcint backend must route even ordinary
+    low-angular-momentum integrals through Libcint, not just the high-l fallback."""
+    integrals_impl = importlib.import_module("forte2.integrals.integrals")
+    calls = []
+    original_cint_overlap = integrals_impl.cint_overlap
+
+    def traced_cint_overlap(*args, **kwargs):
+        calls.append(1)
+        return original_cint_overlap(*args, **kwargs)
+
+    monkeypatch.setattr(integrals_impl, "cint_overlap", traced_cint_overlap)
+
+    system = System(
+        xyz="H 0 0 0\nH 0 0 1.0",
+        basis_set="sto-3g",
+        minao_basis_set=None,
+        integral_backend="libcint",
+    )
+    assert len(calls) >= 1
+    assert system.basis.max_l == 0  # sto-3g on H is well within libint2's range
+
+
+def test_backend_option_save_load_roundtrip(tmp_path):
+    filename = tmp_path / "backend_system"
+    system = System(
+        xyz="H 0 0 0",
+        basis_set="sto-3g",
+        minao_basis_set=None,
+        integral_backend="libint2",
+    )
+    system.save(filename)
+
+    loaded = System.load(filename)
+    assert loaded.integral_backend == "libint2"

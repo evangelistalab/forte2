@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field, fields, asdict
+from typing import Literal, get_args
 import numpy as np
 from numpy.typing import NDArray
 import json
@@ -61,6 +62,8 @@ class System:
     jk_mem_thres_mb : float | None, optional, default=None
         If set, the Fock builder will have a memory footprint smaller than the threshold.
         If None, the the in-core Fock builder algorithm will be used with no special memory limit.
+    integral_backend : str, optional, default="auto"
+        The integral backend to use. Options are "auto", "libint2", and "libcint".
 
     Attributes
     ----------
@@ -108,7 +111,7 @@ class System:
     auxiliary_basis_set: str | dict = None
     minao_basis_set: str | dict = "cc-pvtz-minao"
     x2c: X2CParams | None = None
-    unit: str = "angstrom"
+    unit: Literal["angstrom", "bohr"] = "angstrom"
     overlap_ortho_rtol: float = 1e-8
     df_ortho_rtol: float | None = None
     cholesky_tei: bool = False
@@ -117,6 +120,7 @@ class System:
     symmetry_tol: float = 1e-4
     use_gaussian_charges: bool = False
     jk_mem_thres_mb: float | None = None
+    integral_backend: Literal["auto", "libint2", "libcint"] = "auto"
 
     ### Non-init attributes
     atoms: list[list[float, list[float, float, float]]] = field(
@@ -137,11 +141,11 @@ class System:
         self._common_init()
 
     def _sanity_check(self):
-        if self.unit not in [
-            "angstrom",
-            "bohr",
-        ]:
-            raise ValueError(f"Invalid unit: {self.unit}. Use 'angstrom' or 'bohr'.")
+        _valid_units = get_args(self.__annotations__["unit"])
+        if self.unit not in _valid_units:
+            raise ValueError(
+                f"System.unit must be one of {_valid_units}, but got {self.unit}"
+            )
         if self.overlap_ortho_rtol < 0:
             raise ValueError("overlap_ortho_rtol must be non-negative.")
         if self.df_ortho_rtol is not None and self.df_ortho_rtol < 0:
@@ -153,6 +157,11 @@ class System:
         if self.x2c is not None and not isinstance(self.x2c, X2CParams):
             raise ValueError(
                 f"x2c must be an X2CParams instance or None, but got {type(self.x2c)}."
+            )
+        _valid_backends = get_args(self.__annotations__["integral_backend"])
+        if self.integral_backend not in _valid_backends:
+            raise ValueError(
+                f"Invalid integral_backend: {self.integral_backend}. Must be one of {_valid_backends}."
             )
 
     @property
@@ -357,7 +366,11 @@ class System:
             logger.log_info1(
                 f"Memory threshold of {self.jk_mem_thres_mb} MB is too low to store the B tensor and metric. Using on-the-fly Fock builder."
             )
-            return FockBuilderOTF(self, jk_mem_thres_mb=self.jk_mem_thres_mb)
+            return FockBuilderOTF(
+                self,
+                jk_mem_thres_mb=self.jk_mem_thres_mb,
+                backend=self.integral_backend,
+            )
         elif 2 * b_tensor_size_mb + metric_size_mb > self.jk_mem_thres_mb:
             logger.log_info1(
                 f"Memory threshold of {self.jk_mem_thres_mb} MB is too low to store the transposed B tensor. Using in-core Fock builder without storing transposed B tensor."
