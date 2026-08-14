@@ -141,6 +141,16 @@ def test_rhf_mp2():
 
     g1 = mp2.make_1rdm()
     g2 = mp2.make_2rdm(g1)
+    C_no, no_occs, U_no = mp2.make_natural_orbital_transform(g1)
+
+    S = system.ints_overlap()
+    assert C_no.T @ S @ C_no == approx(np.eye(mp2.nocc + mp2.nvir))
+    assert U_no[: mp2.nocc, mp2.nocc :] == approx(0.0)
+    assert U_no[mp2.nocc :, : mp2.nocc] == approx(0.0)
+    assert U_no.T @ g1 @ U_no == approx(np.diag(no_occs))
+    assert mp2.C_no == approx(C_no)
+    assert mp2.no_occs == approx(no_occs)
+    assert mp2.U_no == approx(U_no)
 
     moints = RestrictedMOIntegrals(system, scf.C[0], list(range(scf.nmo)))
     Ecore = moints.E
@@ -180,6 +190,9 @@ def test_rhf_mp2():
     assert avas_mpq.Gamma1 == approx(expected_gamma1_no)
     assert avas_mpq.Γ1 == approx(expected_gamma1_no)
     assert avas_mpq.occs == approx(np.diag(expected_gamma1_no))
+    assert avas_mpq.C_no == approx(mp2.C_no)
+    assert avas_mpq.no_occs == approx(mp2.no_occs)
+    assert avas_mpq.U == approx(mp2.U_no)
 
     assert scf.E == approx(erhf)
     assert mp2.E_total == approx(emp2)
@@ -324,10 +337,6 @@ def test_triplet_h2o_uhf_mp2_1rdm_does_not_store_t2():
     assert mp2.E_total == approx(emp2)
     assert np.trace(mp2.make_1rdm_sf()) == approx(scf.na + scf.nb)
     assert_t2_not_stored(mp2)
-
-
-test_triplet_h2o_uhf_mp2_1rdm_does_not_store_t2()
-
 
 def test_h2o_uhf_mp2():
     euhf = -76.061466407177

@@ -348,7 +348,7 @@ class RMP2MPQOnTheFly:
                     f"({self.nmo}, {self.nmo})."
                 )
         else:
-            self.U, _ = self._build_block_no_rotation(self.Gamma1_mo)
+            _, _, self.U = mp2.make_natural_orbital_transform(self.Gamma1_mo)
 
         self.Gamma1_no = self.U.T.conj() @ self.Gamma1_mo @ self.U
         self.Gamma1_no = 0.5 * (self.Gamma1_no + self.Gamma1_no.T.conj())
@@ -371,6 +371,8 @@ class RMP2MPQOnTheFly:
             self.C_no = mp2.C[0] @ self.U
         else:
             self.C_no = mp2.C @ self.U
+        self.no_occs = self.occs
+        self.no_transform = (self.C_no, self.no_occs, self.U)
 
         self.M1 = None
         self.M2 = None
@@ -403,29 +405,6 @@ class RMP2MPQOnTheFly:
         if indices is None:
             return self.rdm_info_indices
         return self._normalize_indices(indices)
-
-    def _build_block_no_rotation(self, Gamma1):
-        nocc = self.nocc
-        Gamma1 = 0.5 * (Gamma1 + Gamma1.T.conj())
-
-        Goo = Gamma1[:nocc, :nocc]
-        Gvv = Gamma1[nocc:, nocc:]
-
-        occ_vals, Uo = np.linalg.eigh(Goo)
-        vir_vals, Uv = np.linalg.eigh(Gvv)
-
-        occ_order = np.argsort(occ_vals)[::-1]
-        vir_order = np.argsort(vir_vals)[::-1]
-
-        Uo = Uo[:, occ_order]
-        Uv = Uv[:, vir_order]
-
-        U = np.eye(self.nmo)
-        U[:nocc, :nocc] = Uo
-        U[nocc:, nocc:] = Uv
-
-        occs = np.diag(U.T @ Gamma1 @ U)
-        return U, occs
 
     def _t2_fixed_j_canonical(self, j):
         """
