@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field, fields, is_dataclass
+from dataclasses import dataclass, field, fields
 from typing import Callable
 
 import numpy as np
@@ -58,8 +58,8 @@ class GeometryOptimizer:
         """
         Attach the optimizer to an upstream method.
 
-        The upstream method supplies both the initial ``System`` and the method
-        configuration used to rebuild a fresh method object at each geometry.
+        The upstream method supplies the initial ``System``. The same method
+        chain is rebound and recomputed at each geometry.
         """
         _validate_method(method)
         self.parent_method = method
@@ -87,27 +87,28 @@ class GeometryOptimizer:
         current_verbosity = logger.get_verbosity_level()
         logger.set_verbosity_level(min(current_verbosity - 1, 0))
 
-        optimizer = LBFGS(
-            epsilon=self.g_tol,
-            maxiter=self.maxiter,
-            max_step=self.max_step,
-            warn_if_not_converged=True,
-            **self.lbfgs_kwargs,
-        )
-        self.E = optimizer.minimize(objective, x)
-        objective.ensure(x, need_gradient=True)
+        try:
+            optimizer = LBFGS(
+                epsilon=self.g_tol,
+                maxiter=self.maxiter,
+                max_step=self.max_step,
+                warn_if_not_converged=True,
+                **self.lbfgs_kwargs,
+            )
+            self.E = optimizer.minimize(objective, x)
+            objective.ensure(x, need_gradient=True)
 
-        self.executed = True
-        self.converged = optimizer.converged
-        self.iter = optimizer.iter
-        self.system = objective.system
-        self.method = objective.method
-        self.E = objective.E
-        self.gradient = objective.g.reshape(-1, 3).copy()
-        self.history = objective.history.copy()
-        self.coordinates = x.reshape(-1, 3).copy()
-
-        logger.set_verbosity_level(current_verbosity)
+            self.executed = True
+            self.converged = optimizer.converged
+            self.iter = optimizer.iter
+            self.system = objective.system
+            self.method = objective.method
+            self.E = objective.E
+            self.gradient = objective.g.reshape(-1, 3).copy()
+            self.history = objective.history.copy()
+            self.coordinates = x.reshape(-1, 3).copy()
+        finally:
+            logger.set_verbosity_level(current_verbosity)
 
         self._print_finish()
 
@@ -115,20 +116,21 @@ class GeometryOptimizer:
 
     def _build_objective(self, system):
         if self.parent_method is not None:
-            if system is not None and system is not self.parent_method.system:
+            parent_system = _method_system(self.parent_method)
+            if system is not None and system is not parent_system:
                 raise ValueError(
                     "Do not pass a separate system when GeometryOptimizer is already "
                     "attached to an upstream method."
                 )
+
             if not self.parent_method.executed:
                 self.parent_method.run()
 
-            system = self.parent_method.system
+            system = _method_system(self.parent_method)
             _validate_system_for_optimization(system)
-            method_builder = _method_builder_from_template(self.parent_method)
             objective = _GeometryObjective(
                 system,
-                method_builder,
+                self.parent_method.rebind,
                 project_orbitals=self.project_orbitals,
                 seed_method=self.parent_method,
             )
@@ -274,15 +276,23 @@ class _GeometryObjective:
                 self._record_progress()
             return
 
+        projection_data = None
+        if self.project_orbitals and self.previous_method is not None:
+            projection_source = _system_bound_method(self.previous_method)
+            if getattr(projection_source, "C", None) is not None:
+                projection_data = (
+                    projection_source.system,
+                    [C.copy() for C in projection_source.C],
+                )
+
         self.x = np.asarray(x, dtype=float).copy()
         self.system = self._build_system(self.x)
         self.method = self.method_builder(self.system)
-        if self.project_orbitals and self.previous_method is not None:
-            projected = _project_previous_occupied_orbitals(
-                self.previous_method, self.method
-            )
+        if projection_data is not None:
+            projection_target = _system_bound_method(self.method)
+            projected = _project_occupied_orbitals(*projection_data, projection_target)
             if projected is not None:
-                self.method.C = projected
+                projection_target.C = projected
         if not self.method.executed:
             self.method.run()
         self.E = float(self.method.E)
@@ -327,21 +337,29 @@ class _GeometryObjective:
         self.logged_E = self.E
 
 
-def _method_builder_from_template(method):
-    if not is_dataclass(method):
-        raise TypeError(
-            "GeometryOptimizer upstream methods must be dataclass instances so "
-            "their initialization options can be replayed at new geometries."
-        )
-    method_type = type(method)
-    method_kwargs = {
-        item.name: getattr(method, item.name) for item in fields(method) if item.init
-    }
+def _method_system(method):
+    """Return the System associated with any layer of a method chain."""
+    current = method
+    visited = set()
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        system = getattr(current, "system", None)
+        if system is not None:
+            return system
+        current = getattr(current, "parent_method", None)
+    raise TypeError("method must be bound to a System before geometry optimization.")
 
-    def build(new_system):
-        return method_type(**method_kwargs)(new_system)
 
-    return build
+def _system_bound_method(method):
+    """Return the innermost method in a composition chain bound to a System."""
+    current = method
+    visited = set()
+    while getattr(current, "parent_method", None) is not None:
+        if id(current) in visited:
+            raise ValueError("Cycle detected in the method composition chain.")
+        visited.add(id(current))
+        current = current.parent_method
+    return current
 
 
 def _project_previous_occupied_orbitals(previous_method, method):
@@ -356,18 +374,22 @@ def _project_previous_occupied_orbitals(previous_method, method):
     projected occupied subspace is orthonormalized, then completed with an
     orthonormal virtual complement so the SCF object receives a full MO guess.
     """
-    if not _can_project_orbitals(previous_method, method):
+    if not hasattr(previous_method, "C") or previous_method.C is None:
+        return None
+    return _project_occupied_orbitals(previous_method.system, previous_method.C, method)
+
+
+def _project_occupied_orbitals(previous_system, previous_C, method):
+    if not _can_project_orbitals(previous_system, previous_C, method):
         return None
 
     occupied_counts = _occupied_counts(method)
-    if occupied_counts is None or len(occupied_counts) != len(previous_method.C):
+    if occupied_counts is None or len(occupied_counts) != len(previous_C):
         return None
 
     projected = []
-    for C_old, nocc in zip(previous_method.C, occupied_counts):
-        C_new = _project_mo_coefficients(
-            previous_method.system, method.system, C_old, nocc
-        )
+    for C_old, nocc in zip(previous_C, occupied_counts):
+        C_new = _project_mo_coefficients(previous_system, method.system, C_old, nocc)
         if C_new is None:
             return None
         projected.append(C_new)
@@ -375,16 +397,14 @@ def _project_previous_occupied_orbitals(previous_method, method):
     return projected
 
 
-def _can_project_orbitals(previous_method, method):
-    if not hasattr(previous_method, "C") or previous_method.C is None:
-        return False
-    if getattr(previous_method.system, "two_component", False):
+def _can_project_orbitals(previous_system, previous_C, method):
+    if getattr(previous_system, "two_component", False):
         return False
     if getattr(method.system, "two_component", False):
         return False
-    if previous_method.system.basis_set != method.system.basis_set:
+    if previous_system.basis_set != method.system.basis_set:
         return False
-    if len(previous_method.C) not in [1, 2]:
+    if len(previous_C) not in [1, 2]:
         return False
     return True
 
@@ -451,12 +471,11 @@ def _coords_to_xyz(atomic_numbers, coordinates):
 
 
 def _validate_method(method):
-    if not hasattr(method, "system"):
-        raise TypeError(
-            "method must be bound to a System before geometry optimization."
-        )
     if not hasattr(method, "run") or not hasattr(method, "gradient"):
         raise TypeError("method must provide run() and gradient() methods.")
+    if not hasattr(method, "rebind"):
+        raise TypeError("method must support rebind(system) for geometry optimization.")
+    _method_system(method)
 
 
 def _validate_system_for_optimization(system):

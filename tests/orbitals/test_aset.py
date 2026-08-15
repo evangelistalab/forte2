@@ -72,6 +72,7 @@ def test_aset_1_forte_v1_embedding_1():
     assert aset.mo_space.active_indices == [11, 12]
     assert aset.mo_space.virtual_indices == [13, 14, 15, 16, 17]
     assert aset.mo_space.frozen_virtual_indices == [18, 19, 20]
+    assert aset.fragment == ["C1-2", "H1-3"]
 
 
 def test_aset_4_forte_v1_embedding_4():

@@ -99,8 +99,8 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         logger.log_info1(
             f"Cutoff method: {self.cutoff_method} \nCutoff value: {self.cutoff}"
         )
-        self.fragment = self._parse_fragment(self.fragment)
-        self.P_ao_frag = self._make_fragment_projector()
+        fragment_atoms = self._parse_fragment(self.fragment)
+        self.P_ao_frag = self._make_fragment_projector(fragment_atoms)
         self.executed = True
         self.partition = self._make_embedding()
         self._print_embedding_info(**self.partition)
@@ -191,7 +191,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
 
         return sorted(set(atom_indices))
 
-    def _make_fragment_projector(self):
+    def _make_fragment_projector(self, fragment_atoms):
         """
         Build an AO-space fragment projector P = S^T (S_A) S in the AO basis:
         1. Compute AO overlap S_ff
@@ -210,7 +210,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
 
         # 2. Collect ao indices in fragment
         frag_ao_indices = []
-        for atom_idx in self.fragment:
+        for atom_idx in fragment_atoms:
             # atomic number for this atom
             Z_i = int(self.system.atoms[atom_idx][0])
 

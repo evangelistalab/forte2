@@ -19,6 +19,10 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
     die_if_not_converged: bool = False
 
     def __post_init__(self):
+        # Preserve whether the orbital space was supplied by the user. The public
+        # mo_space attribute is populated during startup even when it is derived
+        # from orbital-list options or inherited from the parent method.
+        self._input_mo_space = self.mo_space
         self.dtype = float
         self.two_component = False
         self.sa_info = StateAverageInfo(
@@ -29,6 +33,14 @@ class ActiveSpaceSolver(ABC, MOsMixin, SystemMixin, MOSpaceMixin):
         self.ncis = self.sa_info.ncis
         self.weights = self.sa_info.weights
         self.weights_flat = self.sa_info.weights_flat
+
+    def reset(self):
+        """Invalidate active-space intermediates after rebinding."""
+        SystemMixin.reset(self)
+        if hasattr(self, "first_run"):
+            self.first_run = True
+        self.mo_space = self._input_mo_space
+        return self
 
     def _startup(self, two_component=False):
         if not self.parent_method.executed:

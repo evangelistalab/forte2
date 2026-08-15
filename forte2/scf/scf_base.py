@@ -91,16 +91,25 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
 
         self.C = None
         self.Xorth = self.system.get_Xorth()
-        if self.level_shift is not None:
-            if isinstance(self.level_shift, (int, float)) and self.level_shift < 0.0:
-                raise ValueError("level_shift must be non-negative.")
-            if isinstance(self.level_shift, tuple) and self.method != "UHF":
-                raise ValueError("Tuple level_shift is only valid for UHF.")
-            if isinstance(self.level_shift, float) and self.method == "UHF":
-                self.level_shift = (self.level_shift, self.level_shift)
-            if isinstance(self.level_shift, tuple) and len(self.level_shift) != 2:
-                raise ValueError("Tuple level_shift must have length 2 for UHF.")
+        self._validate_level_shift()
         return self
+
+    def _validate_level_shift(self):
+        """Validate the configured level shift."""
+        level_shift = self.level_shift
+        if level_shift is not None:
+            if isinstance(level_shift, (int, float)) and level_shift < 0.0:
+                raise ValueError("level_shift must be non-negative.")
+            if isinstance(level_shift, tuple) and self.method != "UHF":
+                raise ValueError("Tuple level_shift is only valid for UHF.")
+            if isinstance(level_shift, tuple) and len(level_shift) != 2:
+                raise ValueError("Tuple level_shift must have length 2 for UHF.")
+
+    def _level_shift_for_run(self):
+        """Return the per-spin level shift used by one SCF run."""
+        if isinstance(self.level_shift, (int, float)) and self.method == "UHF":
+            return (self.level_shift, self.level_shift)
+        return self.level_shift
 
     def _eigh(self, F):
         Ftilde = self.Xorth.T @ F @ self.Xorth
@@ -119,6 +128,10 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
             self : SCFBase
                 The SCF object.
         """
+        self.executed = False
+        self.converged = False
+        self._validate_level_shift()
+        self._current_level_shift = self._level_shift_for_run()
         start = time.monotonic()
 
         diis = DIIS(
@@ -191,7 +204,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
             # check convergence parameters
             deltaE = self.E - Eold
             if np.abs(deltaE) < self.level_shift_thresh:
-                self.level_shift = None
+                self._current_level_shift = None
             deltaD = sum([np.linalg.norm(d - dold) for d, dold in zip(self.D, Dold)])
             self.S2 = self._spin(S)
 

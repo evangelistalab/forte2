@@ -41,6 +41,46 @@ class SystemMixin:
     Contains a reference to the system object.
     """
 
+    def reset(self):
+        """Invalidate this node's results while preserving its configuration."""
+        if hasattr(self, "executed"):
+            self.executed = False
+        if hasattr(self, "converged"):
+            self.converged = False
+        return self
+
+    def reset_graph(self):
+        """Invalidate this method and every upstream method exactly once."""
+        chain = []
+        current = self
+        visited = set()
+        while current is not None:
+            if id(current) in visited:
+                raise ValueError("Cycle detected in the method composition chain.")
+            visited.add(id(current))
+            chain.append(current)
+            current = getattr(current, "parent_method", None)
+
+        for method in reversed(chain):
+            method.reset()
+        return self
+
+    def rebind(self, system):
+        """Reattach this method chain to ``system`` without replacing its objects."""
+        self.reset_graph()
+        return self._rebind(system)
+
+    def _rebind(self, system):
+        """Reattach an already-invalidated method chain to ``system``."""
+        parent_method = getattr(self, "parent_method", None)
+        if parent_method is None:
+            self(system)
+        else:
+            parent_method._rebind(system)
+            self(parent_method)
+            self.system = parent_method.system
+        return self
+
     @classmethod
     def copy_from_upstream(cls, new, upstream) -> None:
         assert isinstance(new, SystemMixin), "new must be an instance of SystemMixin"

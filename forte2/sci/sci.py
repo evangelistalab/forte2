@@ -28,6 +28,39 @@ from forte2.ci.ci_utils import (
 )
 
 
+def _selected_ci_runtime_params(sci_params, davidson_liu_params, nstates):
+    """Return independent per-state runtime parameters without mutating inputs."""
+
+    def expand(params, name):
+        if isinstance(params, list):
+            if len(params) != nstates:
+                raise ValueError(
+                    f"Number of {name} provided ({len(params)}) does not match "
+                    f"the number of states ({nstates})."
+                )
+            return params
+        if nstates > 1:
+            logger.log_warning(
+                f"Multiple states specified but only one set of {name} provided. "
+                "Using the same parameters for all states."
+            )
+        return [params] * nstates
+
+    runtime_sci = [
+        params.copy(
+            guess_dets=list(params.guess_dets),
+            pinned_guess_dets=list(params.pinned_guess_dets),
+            frozen_creation=list(params.frozen_creation),
+            frozen_annihilation=list(params.frozen_annihilation),
+        )
+        for params in expand(sci_params, "SelectedCIParams")
+    ]
+    runtime_davidson = [
+        params.copy() for params in expand(davidson_liu_params, "DavidsonLiuParams")
+    ]
+    return runtime_sci, runtime_davidson
+
+
 @dataclass
 class _SelectedCISingleStateSolver:
     """
@@ -979,9 +1012,7 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
         # Complex Slater rules over spinor determinants. The scalar energy is real; the
         # one- and two-electron integrals are complex Hermitian. Integrals are stored in
         # physicist notation <pq|rs> (not antisymmetrized), matching SpinorbitalIntegrals.
-        return det.RelSlaterRules(
-            self.norb, self.ints.E.real, self.ints.H, self.ints.V
-        )
+        return det.RelSlaterRules(self.norb, self.ints.E.real, self.ints.H, self.ints.V)
 
     def _make_sci_helper(self):
         # Two-component (complex) selected CI helper. The scalar energy is real; the one- and
@@ -1307,30 +1338,9 @@ class SelectedCISolver(CIBase):
 
     def _startup(self):
         super()._startup()
-        if self.sa_info.ncis > 1:
-            if not isinstance(self.sci_params, list):
-                logger.log_warning(
-                    f"Multiple states specified but only one set of SelectedCIParams provided. Using the same parameters for all states."
-                )
-                self.sci_params = [self.sci_params] * self.sa_info.ncis
-            if len(self.sci_params) != self.sa_info.ncis:
-                raise ValueError(
-                    f"Number of SelectedCIParams provided ({len(self.sci_params)}) does not match the number of states ({self.sa_info.ncis})."
-                )
-            if not isinstance(self.davidson_liu_params, list):
-                logger.log_warning(
-                    f"Multiple states specified but only one set of DavidsonLiuParams provided. Using the same parameters for all states."
-                )
-                self.davidson_liu_params = [
-                    self.davidson_liu_params
-                ] * self.sa_info.ncis
-            if len(self.davidson_liu_params) != self.sa_info.ncis:
-                raise ValueError(
-                    f"Number of DavidsonLiuParams provided ({len(self.davidson_liu_params)}) does not match the number of states ({self.sa_info.ncis})."
-                )
-        else:
-            self.sci_params = [self.sci_params]
-            self.davidson_liu_params = [self.davidson_liu_params]
+        sci_params, davidson_liu_params = _selected_ci_runtime_params(
+            self.sci_params, self.davidson_liu_params, self.sa_info.ncis
+        )
         self.norb = self.mo_space.nactv
         # no distinction between core and frozen core in the CI solver
         self.core_indices = (
@@ -1357,8 +1367,8 @@ class SelectedCISolver(CIBase):
             # these are needed by _SelectedCISingleStateSolver but not present as attributes of SelectedCISolver
             kwargs.update(
                 {
-                    "sci_params": self.sci_params[i],
-                    "davidson_liu_params": self.davidson_liu_params[i],
+                    "sci_params": sci_params[i],
+                    "davidson_liu_params": davidson_liu_params[i],
                     "ints": ints,
                     "state": state,
                     "nroot": self.sa_info.nroots[i],
@@ -1692,35 +1702,9 @@ class RelSelectedCISolver(RelCIBase):
 
     def _startup(self):
         super()._startup()
-        if self.sa_info.ncis > 1:
-            if not isinstance(self.sci_params, list):
-                logger.log_warning(
-                    "Multiple states specified but only one set of SelectedCIParams "
-                    "provided. Using the same parameters for all states."
-                )
-                self.sci_params = [self.sci_params] * self.sa_info.ncis
-            if len(self.sci_params) != self.sa_info.ncis:
-                raise ValueError(
-                    f"Number of SelectedCIParams provided ({len(self.sci_params)}) does "
-                    f"not match the number of states ({self.sa_info.ncis})."
-                )
-            if not isinstance(self.davidson_liu_params, list):
-                logger.log_warning(
-                    "Multiple states specified but only one set of DavidsonLiuParams "
-                    "provided. Using the same parameters for all states."
-                )
-                self.davidson_liu_params = [
-                    self.davidson_liu_params
-                ] * self.sa_info.ncis
-            if len(self.davidson_liu_params) != self.sa_info.ncis:
-                raise ValueError(
-                    f"Number of DavidsonLiuParams provided "
-                    f"({len(self.davidson_liu_params)}) does not match the number of "
-                    f"states ({self.sa_info.ncis})."
-                )
-        else:
-            self.sci_params = [self.sci_params]
-            self.davidson_liu_params = [self.davidson_liu_params]
+        sci_params, davidson_liu_params = _selected_ci_runtime_params(
+            self.sci_params, self.davidson_liu_params, self.sa_info.ncis
+        )
 
         self.norb = self.mo_space.nactv
         # no distinction between core and frozen core in the CI solver
@@ -1745,8 +1729,8 @@ class RelSelectedCISolver(RelCIBase):
             kwargs = self._collect_child_kwargs(_RelSelectedCISingleStateSolver)
             kwargs.update(
                 {
-                    "sci_params": self.sci_params[i],
-                    "davidson_liu_params": self.davidson_liu_params[i],
+                    "sci_params": sci_params[i],
+                    "davidson_liu_params": davidson_liu_params[i],
                     "ints": ints,
                     "state": state,
                     "nroot": self.sa_info.nroots[i],

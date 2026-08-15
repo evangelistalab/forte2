@@ -2,7 +2,8 @@ import numpy as np
 import pytest
 
 import forte2
-from forte2 import GeometryOptimizer, System
+from forte2 import CISolver, GeometryOptimizer, MCOptimizer, State, System
+from forte2.helpers import logger
 from forte2.optimize.geometry_optimizer import _project_previous_occupied_orbitals
 from forte2.scf import RHF
 from forte2.system import BSE_AVAILABLE
@@ -35,6 +36,84 @@ def test_geometry_optimizer_relaxes_stretched_h2():
     assert np.linalg.norm(optimizer.gradient) < 5.0e-7
     assert optimizer.system is not None
     assert optimizer.method is not None
+
+
+def test_geometry_optimizer_restores_logger_after_failure(monkeypatch):
+    system = System(
+        xyz="H 0 0 0\nH 0 0 1.4",
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        symmetry=False,
+    )
+    initial_verbosity = logger.get_verbosity_level()
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("expected optimizer failure")
+
+    monkeypatch.setattr("forte2.optimize.geometry_optimizer.LBFGS.minimize", fail)
+    optimizer = GeometryOptimizer(method_factory=lambda _: None)
+
+    with pytest.raises(RuntimeError, match="expected optimizer failure"):
+        optimizer.run(system)
+
+    assert logger.get_verbosity_level() == initial_verbosity
+
+
+@pytest.mark.parametrize(
+    ("preexecute", "project_orbitals"),
+    [(False, False), (True, False), (False, True)],
+)
+def test_geometry_optimizer_reuses_casscf_method_chain(preexecute, project_orbitals):
+    system = System(
+        xyz="H 0 0 0\nH 0 0 2.4",
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+        symmetry=False,
+    )
+    rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
+    ci_solver = CISolver(
+        State(nel=2, multiplicity=1, ms=0.0),
+        core_orbitals=0,
+        active_orbitals=2,
+    )
+    casscf = MCOptimizer(
+        ci_solver,
+        e_tol=1.0e-10,
+        g_tol=1.0e-8,
+        maxiter=30,
+        final_orbitals="original",
+    )(rhf)
+    if preexecute:
+        casscf.run()
+        # Attaching an existing parent is wiring, not an implicit reset.
+        assert casscf(rhf) is casscf
+        assert casscf.executed
+        assert ci_solver.executed
+
+    optimizer = GeometryOptimizer(
+        maxiter=25,
+        g_tol=1.0e-7,
+        max_step=0.5,
+        project_orbitals=project_orbitals,
+    )(casscf).run()
+
+    bond_length = np.linalg.norm(optimizer.coordinates[1] - optimizer.coordinates[0])
+
+    assert optimizer.converged
+    assert optimizer.E == pytest.approx(-1.137332707937, abs=1.0e-8)
+    assert bond_length == pytest.approx(1.38862862, abs=1.0e-6)
+    assert np.linalg.norm(optimizer.gradient) < 5.0e-7
+
+    # Geometry changes invalidate and recompute the existing method chain in place.
+    assert optimizer.method is casscf
+    assert optimizer.method.parent_method is rhf
+    assert optimizer.method.ci_solver is ci_solver
+    assert casscf.system is optimizer.system
+    assert rhf.system is optimizer.system
+    assert ci_solver.system is optimizer.system
+    assert isinstance(optimizer.method, MCOptimizer)
+    assert isinstance(optimizer.method.parent_method, RHF)
 
 
 @pytest.mark.skipif(not BSE_AVAILABLE, reason="basis_set_exchange not installed")

@@ -77,6 +77,13 @@ def test_rhf_level_shift():
     mf = RHF(charge=0, level_shift=0.5, do_diis=False)(system)
     mf.run()
     assert mf.E == approx(eref)
+    assert mf.level_shift == 0.5
+    assert mf._current_level_shift is None
+
+    mf.reset()
+    mf.run()
+    assert mf.E == approx(eref)
+    assert mf.level_shift == 0.5
 
 
 @pytest.mark.skipif(not BSE_AVAILABLE, reason="basis_set_exchange not installed")

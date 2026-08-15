@@ -122,6 +122,12 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             self.ci_solver_verbosity = current_verbosity + 1
         return self
 
+    def reset(self):
+        """Invalidate MCSCF and CI intermediates before a new calculation."""
+        super().reset()
+        self.ci_solver.reset()
+        return self
+
     def _startup(self):
         if not self.parent_method.executed:
             self.parent_method.run()
@@ -173,6 +179,8 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         self : MCOptimizer
             The instance of the optimizer with the results stored in its attributes.
         """
+        self.executed = False
+        self.converged = False
         self._startup()
         self.Hcore = self.system.ints_hcore()  # hcore in AO basis
         fock_builder = self.system.fock_builder

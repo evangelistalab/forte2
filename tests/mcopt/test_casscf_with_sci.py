@@ -17,6 +17,42 @@ from forte2.base_classes.params import SelectedCIParams, DavidsonLiuParams
 #    and the energies are not correct.
 
 
+def test_sciscf_can_reset_and_run_twice_with_same_solver():
+    system = System(
+        xyz="H 0 0 0\nH 0 0 1.4",
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+        symmetry=False,
+    )
+    rhf = RHF(charge=0)(system)
+    sci_params = SelectedCIParams(
+        ci_algorithm="exact",
+        guess_occ_window=1,
+        guess_vir_window=1,
+        var_threshold=1.0e-8,
+        pt2_threshold=0.0,
+    )
+    ci_solver = SelectedCISolver(
+        states=State(nel=2, multiplicity=1, ms=0.0),
+        core_orbitals=0,
+        active_orbitals=2,
+        sci_params=sci_params,
+    )
+    mc = MCOptimizer(ci_solver, final_orbitals="original")(rhf)
+
+    mc.run()
+    first_energy = mc.E
+    mc.reset()
+    mc.run()
+
+    assert mc.E == approx(first_energy)
+    assert mc.E == approx(-1.137302245703818)
+    assert mc.ci_solver is ci_solver
+    assert ci_solver.sci_params is sci_params
+    assert sci_params.guess_dets == []
+
+
 @pytest.mark.parametrize(
     ("var_threshold", "expected_energies", "expect_rotation_warning"),
     [

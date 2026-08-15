@@ -140,13 +140,13 @@ class GHF(SCFBase):
         return np.block([[Daa, Dab], [Dba, Dbb]])
 
     def _apply_level_shift(self, F, S):
-        if self.level_shift is None or self.level_shift < 1e-4:
+        if self._current_level_shift is None or self._current_level_shift < 1e-4:
             return F
         Daa, Dab, Dba, Dbb = self.D
         D_spinor = np.block([[Daa, Dab], [Dba, Dbb]])
         D_vir = S - S @ D_spinor @ S
 
-        return [F[0] + self.level_shift * D_vir]
+        return [F[0] + self._current_level_shift * D_vir]
 
     def _initial_guess(self, H, guess_type="minao"):
         C = RHF._initial_guess(self, H, guess_type)[0]
