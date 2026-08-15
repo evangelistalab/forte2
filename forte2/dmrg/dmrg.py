@@ -11,7 +11,7 @@ from forte2.helpers import logger
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.base_classes import CIBase, RelCIBase
 from forte2.base_classes.params import DMRGParams
-from forte2.orbitals import Semicanonicalizer
+from forte2.orbitals import Semicanonicalizer, NaturalOrbitals
 from forte2.ci.ci import CISolver
 from forte2.ci.ci_utils import (
     pretty_print_ci_summary,
@@ -700,28 +700,45 @@ class DMRG(DMRGSolver):
 
     def __post_init__(self):
         super().__post_init__()
-        if self.final_orbitals not in ["original", "semicanonical"]:
+        if self.final_orbitals not in ["original", "semicanonical", "natural"]:
             raise ValueError(
                 f"Invalid value for final_orbitals: {self.final_orbitals}. "
-                "Must be 'original' or 'semicanonical'."
+                "Must be 'original', 'semicanonical', or 'natural'."
             )
 
     def run(self):
         super().run()
         self._post_process()
-        if self.final_orbitals == "semicanonical":
+        if self.final_orbitals in ("semicanonical", "natural"):
+            irrep_indices = np.array(self.irrep_indices[0])[
+                self.mo_space.orig_to_contig
+            ]
+            C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
+            g1_act = self.make_average_1rdm()
+
+            # Semicanonicalize the orbital subspaces (except the active space,
+            # for natural orbitals).
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
                 system=self.system,
-                irrep_indices=np.array(self.irrep_indices[0])[
-                    self.mo_space.orig_to_contig
-                ],
+                irrep_indices=irrep_indices,
+                do_active=(self.final_orbitals == "semicanonical"),
             )
-            C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
-            semi.semi_canonicalize(g1=self.make_average_1rdm(), C_contig=C_contig)
-            self.C[0] = semi.C_semican[self.mo_space.contig_to_orig].copy()
+            semi.semi_canonicalize(g1=g1_act, C_contig=C_contig)
+            C_final = semi.C_semican
 
-            # recompute the wavefunction in the semicanonical basis
+            if self.final_orbitals == "natural":
+                natural_orbital = NaturalOrbitals(
+                    self.mo_space, irrep_indices=irrep_indices
+                )
+                natural_orbital.make_natural_orbitals(
+                    g1_act=g1_act, C_contig=C_final
+                )
+                C_final = natural_orbital.C_natural
+
+            self.C[0] = C_final[:, self.mo_space.contig_to_orig].copy()
+
+            # recompute the wavefunction in the final orbital basis
             ints = RestrictedMOIntegrals(
                 self.system,
                 self.C[0],
@@ -964,26 +981,41 @@ class RelDMRG(RelDMRGSolver):
 
     def __post_init__(self):
         super().__post_init__()
-        if self.final_orbitals not in ["original", "semicanonical"]:
+        if self.final_orbitals not in ["original", "semicanonical", "natural"]:
             raise ValueError(
                 f"Invalid value for final_orbitals: {self.final_orbitals}. "
-                "Must be 'original' or 'semicanonical'."
+                "Must be 'original', 'semicanonical', or 'natural'."
             )
 
     def run(self, use_asym_ints=False):
         super().run(use_asym_ints=use_asym_ints)
         self._post_process()
-        if self.final_orbitals == "semicanonical":
+        if self.final_orbitals in ("semicanonical", "natural"):
+            irrep_indices = np.array(self.irrep_indices[0])[
+                self.mo_space.orig_to_contig
+            ]
+            C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
+            g1_act = self.make_average_1rdm()
+
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
                 system=self.system,
-                irrep_indices=np.array(self.irrep_indices[0])[
-                    self.mo_space.orig_to_contig
-                ],
+                irrep_indices=irrep_indices,
+                do_active=(self.final_orbitals == "semicanonical"),
             )
-            C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
-            semi.semi_canonicalize(g1=self.make_average_1rdm(), C_contig=C_contig)
-            self.C[0] = semi.C_semican[self.mo_space.contig_to_orig].copy()
+            semi.semi_canonicalize(g1=g1_act, C_contig=C_contig)
+            C_final = semi.C_semican
+
+            if self.final_orbitals == "natural":
+                natural_orbital = NaturalOrbitals(
+                    self.mo_space, irrep_indices=irrep_indices
+                )
+                natural_orbital.make_natural_orbitals(
+                    g1_act=g1_act, C_contig=C_final
+                )
+                C_final = natural_orbital.C_natural
+
+            self.C[0] = C_final[:, self.mo_space.contig_to_orig].copy()
 
             ints = SpinorbitalIntegrals(
                 self.system,
