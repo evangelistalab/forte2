@@ -27,7 +27,6 @@ _PARALLEL_FOR_VARIANTS = (
     "parallel_for_interleaved_async",
     "parallel_for_dynamic_thread",
     "parallel_for_dynamic_async",
-    "parallel_for_each",
 )
 
 # Counts spanning the interesting regimes: empty, single, below SERIAL_THRESHOLD*threads (serial
@@ -133,8 +132,7 @@ def test_get_num_threads_with_affinity_mask(parallel_test_driver):
 @pytest.mark.parametrize("count", _COVERAGE_COUNTS)
 def test_parallel_for_variants(parallel_test_driver, variant, count):
     # The driver runs the variant and asserts every index in [0, count) is visited exactly once,
-    # failing (non-zero exit) otherwise. A returncode of 77 (skip) is handled inside _run_driver,
-    # e.g. for parallel_for_each where the C++17 parallel algorithms are unavailable (Apple Clang).
+    # failing (non-zero exit) otherwise. A returncode of 77 (skip) is handled inside _run_driver.
     _run_driver(
         parallel_test_driver, "--test-parallel-for-variant", variant, str(count)
     )

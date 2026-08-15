@@ -4,14 +4,11 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdlib>
-#include <execution>
 #include <future>
 #include <limits>
-#include <ranges>
 #include <thread>
 #include <utility>
 #include <vector>
-#include <version>
 #include <charconv>
 
 #ifdef __linux__
@@ -308,20 +305,6 @@ void parallel_for_chunked(const std::size_t begin, const std::size_t end, F&& fu
 template <typename F> void parallel_for_chunked(const std::size_t count, F&& func) {
     return parallel_for_chunked(0, count, std::forward<F>(func));
 }
-
-// These are only defined if the compiler supports C++17 parallel algorithms (Apple Clang does not
-// support this)
-#if defined(__cpp_lib_execution)
-template <typename F>
-void parallel_for_each(const std::size_t begin, const std::size_t end, F&& func) {
-    std::ranges::iota_view indices(begin, end);
-    std::for_each(std::execution::par_unseq, indices.begin(), indices.end(), func);
-}
-
-template <typename F> void parallel_for_each(const std::size_t count, F&& func) {
-    return parallel_for_each(0, count, std::forward<F>(func));
-}
-#endif
 
 // if Apple, then use dispatch_apply for parallelism
 // finally, fall back to std::thread
