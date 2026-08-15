@@ -1,1 +1,6 @@
-from .sci import SelectedCI, SelectedCISolver
+from .sci import (
+    SelectedCI,
+    SelectedCISolver,
+    RelSelectedCI,
+    RelSelectedCISolver,
+)
