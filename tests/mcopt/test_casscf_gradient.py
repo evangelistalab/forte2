@@ -339,12 +339,13 @@ def test_casscf_gradient_rejects_frozen_virtual_orbitals():
         mc.gradient()
 
 
-def test_casscf_gradient_rejects_cholesky_tei():
-    """Reject Cholesky ERIs because this gradient path is DF-integral based."""
+@pytest.mark.parametrize("cholesky_tei", [True, "otf", "pivoted", "naive"])
+def test_casscf_gradient_rejects_cholesky_tei(cholesky_tei):
+    """Reject Cholesky ERIs (every mode) because this gradient path is DF-integral based."""
     system = System(
         xyz="H 0 0 0\nH 0 0 1.7",
         basis_set="sto-3g",
-        cholesky_tei=True,
+        cholesky_tei=cholesky_tei,
         unit="bohr",
     )
     rhf = RHF(charge=0)(system)

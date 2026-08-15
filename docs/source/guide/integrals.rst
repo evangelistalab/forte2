@@ -72,3 +72,57 @@ Equivalently, getting integrals through ``forte2.integrals`` can be achieved as 
     B = forte2.integrals.coulomb_3c(system)
 
 As shown above, the ``forte2.integrals`` module automatically supplies sensibly default basis sets and geometry information from the ``system`` object, making it more convenient to use in many cases.
+
+Two-electron integral factorization
+------------------------------------
+
+Forte2 never stores the full four-index ERI tensor for production calculations. Instead the
+two-electron integrals are represented by a three-index ``B`` tensor, :math:`(mn|rs) \approx \sum_Q
+B^Q_{mn} B^Q_{rs}`, built in one of two ways selected on the ``System``:
+
+* **Density fitting (DF)** -- the default. Requires an ``auxiliary_basis_set``; the fitting error is
+  controlled by the choice of auxiliary basis (for example ``cc-pvtz-jkfit``).
+* **Cholesky decomposition (CD)** -- enabled with ``cholesky_tei``. No auxiliary basis is needed;
+  the accuracy is controlled directly by ``cholesky_tol``, and CD reconstructs the *exact* ERI to
+  that tolerance rather than fitting onto a fixed auxiliary basis.
+
+To use Cholesky-decomposed integrals, set ``cholesky_tei`` when constructing the system::
+
+    system = forte2.System(
+        xyz="N 0 0 0; N 0 0 1.1",
+        basis_set="cc-pvdz",
+        cholesky_tei="otf",   # or True
+        cholesky_tol=1e-8,
+    )
+
+``cholesky_tei`` accepts:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - Value
+     - Meaning
+   * - ``False`` (default)
+     - Cholesky disabled; use density fitting with the ``auxiliary_basis_set``.
+   * - ``True`` or ``"otf"``
+     - On-the-fly one-step pivoted Cholesky (Koch 2003). Never forms the full four-index tensor;
+       Schwarz-screened and proactively drained. Recommended when CD is wanted.
+   * - ``"pivoted"``
+     - On-the-fly two-step Cholesky (Folkestad 2019): Step I selects the pivot AO pairs, Step II
+       builds the vectors by an RI fit onto that Cholesky basis. Also never forms the full tensor;
+       typically keeps a few more vectors than ``"otf"``.
+   * - ``"naive"``
+     - Dense reference path: forms the full four-index ERI and decomposes it (:math:`O(N^4)`
+       memory). A numerical oracle only -- not for production-size systems.
+
+``cholesky_tol`` (default ``1e-6``) sets the decomposition threshold: the reconstruction error of
+``B`` is bounded roughly elementwise by this value, so ``1e-6`` is adequate for energies while
+``1e-8`` to ``1e-10`` gives near-exact ERIs at the cost of more Cholesky vectors. All three CD modes
+reconstruct the same operator to ``cholesky_tol`` and therefore give the same energies (SCF, MCSCF,
+DSRG-MRPT2, ...) to that accuracy; they differ only in how the vectors are built.
+
+.. note::
+
+   Analytic gradients are implemented only for the density-fitting path. Requesting a gradient with
+   any ``cholesky_tei`` mode raises ``NotImplementedError``.
