@@ -150,15 +150,6 @@ int test_parallel_for_variant(const std::string_view name, const std::size_t cou
     if (name == "parallel_for_dynamic_async")
         return run_index_fn(
             count, [count](auto&& f) { forte2::parallel_for_dynamic_async(0, count, f); });
-    if (name == "parallel_for_each") {
-#if defined(__cpp_lib_execution)
-        return run_index_fn(count,
-                            [count](auto&& f) { forte2::parallel_for_each(0, count, f); });
-#else
-        // C++17 parallel algorithms are unavailable (e.g. Apple Clang): signal a skip.
-        return 77;
-#endif
-    }
 
     std::cerr << "unknown parallel_for variant: " << name << '\n';
     return 2;
