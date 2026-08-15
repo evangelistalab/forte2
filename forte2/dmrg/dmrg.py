@@ -12,9 +12,11 @@ from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.base_classes import CIBase, RelCIBase
 from forte2.base_classes.params import DMRGParams
 from forte2.orbitals import Semicanonicalizer
+from forte2.ci.ci import CISolver
 from forte2.ci.ci_utils import (
     pretty_print_ci_summary,
     pretty_print_ci_nat_occ_numbers,
+    pretty_print_ci_transition_props,
 )
 from .dmrg_utils import (
     physicist_to_chemist_g2e,
@@ -679,6 +681,10 @@ class DMRGSolver(CIBase):
     make_2rdm = make_sf_2rdm
     make_3rdm = make_sf_3rdm
 
+    # RDM-consuming orchestration (state/root bookkeeping, dipole integrals) is
+    # representation-agnostic; only make_1rdm above differs between DMRG and CI.
+    compute_transition_properties = CISolver.compute_transition_properties
+
 
 @dataclass
 class DMRG(DMRGSolver):
@@ -689,6 +695,7 @@ class DMRG(DMRGSolver):
 
     die_if_not_converged: bool = True
     final_orbitals: str = "original"
+    do_transition_dipole: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
 
     def __post_init__(self):
@@ -731,6 +738,15 @@ class DMRG(DMRGSolver):
         pretty_print_ci_summary(self.sa_info, self.evals_per_solver)
         self.compute_natural_occupation_numbers()
         pretty_print_ci_nat_occ_numbers(self.sa_info, self.mo_space, self.nat_occs)
+
+        if self.do_transition_dipole:
+            self.compute_transition_properties()
+            pretty_print_ci_transition_props(
+                self.sa_info,
+                self.transition_dipoles,
+                self.oscillator_strengths,
+                self.evals_per_solver,
+            )
 
 
 @dataclass
@@ -928,6 +944,11 @@ class RelDMRGSolver(RelCIBase):
             left_root_in_state, right_root_in_state
         )
 
+    # Same rationale as DMRGSolver: only the RDM primitives above are
+    # representation-specific, so this is reused verbatim from CISolver (mirrors
+    # RelCISolver.compute_transition_properties = CISolver.compute_transition_properties).
+    compute_transition_properties = CISolver.compute_transition_properties
+
 
 @dataclass
 class RelDMRG(RelDMRGSolver):
@@ -938,6 +959,7 @@ class RelDMRG(RelDMRGSolver):
 
     die_if_not_converged: bool = True
     final_orbitals: str = "original"
+    do_transition_dipole: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
 
     def __post_init__(self):
