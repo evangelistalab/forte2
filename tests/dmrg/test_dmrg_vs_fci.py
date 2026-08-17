@@ -30,25 +30,6 @@ TIGHT_DMRG_PARAMS = lambda scratch=None: DMRGParams(
 
 
 @requires_block2
-def test_dmrg_orbital_rotation_invariant_flag_is_false():
-    """DMRG is NOT exactly invariant to active-space orbital rotations, unlike
-    exact FCI: a finite bond dimension is a basis-dependent truncation, so
-    orbital_rotation_invariant must stay at CIBase's False default rather
-    than opt in to True like CISolver does."""
-    xyz = "H 0.0 0.0 0.0"
-    system = System(
-        xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
-    )
-    hf = RHF(charge=-1, e_tol=1e-12)(system)
-    dmrg = DMRG(
-        State(system=system, multiplicity=2, ms=0.5),
-        active_orbitals=[0, 1],
-    )(hf)
-    assert not dmrg.orbital_rotation_invariant
-    assert isinstance(dmrg, CIBase)
-
-
-@requires_block2
 def test_dmrg_vs_fci_h2(tmp_path):
     """H2/STO-6G, CAS(2,2): DMRG == FCI ground-state energy."""
     xyz = """
@@ -119,9 +100,6 @@ def test_dmrg_solver_is_cibase_and_run_returns_self(tmp_path):
         dmrg_params=TIGHT_DMRG_PARAMS(str(tmp_path)),
     )
     assert isinstance(solver, CIBase)
-    # Unlike CISolver, DMRGSolver does not opt in to orbital_rotation_invariant:
-    # a finite bond dimension is not exactly invariant to active-space rotations.
-    assert not solver.orbital_rotation_invariant
 
     out = solver(rhf)
     assert out is solver

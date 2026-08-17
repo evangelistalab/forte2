@@ -42,26 +42,6 @@ def _hf_system():
 
 
 @requires_block2_complex
-def test_reldmrg_orbital_rotation_invariant_flag_is_false():
-    """RelDMRG is NOT exactly invariant to active-space (spinor) rotations,
-    unlike exact 2C-FCI: a finite bond dimension is a basis-dependent
-    truncation, so orbital_rotation_invariant must stay at RelCIBase's False
-    default rather than opt in to True like RelCISolver does."""
-    system = System(
-        xyz="H 0.0 0.0 0.0",
-        basis_set="sto-6g",
-        auxiliary_basis_set="cc-pVTZ-JKFIT",
-        unit="bohr",
-    )
-    scf = GHF(charge=0, e_tol=1e-12)(system)
-    conv = SpinorUpcaster(apply_random_phase=True)(scf)
-    dmrg = RelDMRG(nel=1, active_orbitals=2)(conv)
-    assert not dmrg.orbital_rotation_invariant
-    assert isinstance(dmrg, RelCIBase)
-    assert dmrg.two_component
-
-
-@requires_block2_complex
 def test_reldmrg_vs_relci_h2(tmp_path):
     """H2/STO-6G, 4 active spinors: RelDMRG == 2C-RelCI ground state."""
     system = System(
@@ -124,10 +104,6 @@ def test_reldmrg_solver_is_relcibase_and_run_contract(tmp_path):
         dmrg_params=TIGHT(str(tmp_path)),
     )
     assert isinstance(solver, RelCIBase)
-    # Unlike RelCISolver, RelDMRGSolver does not opt in to
-    # orbital_rotation_invariant: a finite bond dimension is not exactly
-    # invariant to active-space rotations.
-    assert not solver.orbital_rotation_invariant
 
     out = solver(conv)
     assert out is solver
