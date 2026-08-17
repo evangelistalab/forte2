@@ -690,48 +690,6 @@ def _opvop_cint_deriv_blocks(system, basis):
         yield 3 * atom, block.transpose(1, 0, 2, 3)[[3, 0, 1, 2]]
 
 
-def _opvop_finite_difference_blocks(system, basis1, basis2):
-    """Yield fourth-order opVop derivatives one coordinate at a time."""
-    from forte2.system.build_basis import build_basis_from_dict
-
-    def shifted_basis(basis, atom, cart, displacement):
-        data = basis.serialize()
-        first_shell, last_shell = basis.center_first_and_last_shell[atom]
-        for shell in data["shells"][first_shell:last_shell]:
-            shell["center"][cart] += displacement
-        shifted = build_basis_from_dict(data)
-        shifted.set_name(basis.name)
-        return shifted
-
-    class ShiftedSystem:
-        pass
-
-    step = 1.0e-4
-    for atom in range(system.natoms):
-        for cart in range(3):
-            values = []
-            for scale in (-2.0, -1.0, 1.0, 2.0):
-                displacement = scale * step
-                shifted_system = ShiftedSystem()
-                shifted_system.atoms = [
-                    (charge, list(center)) for charge, center in system.atoms
-                ]
-                shifted_system.atoms[atom][1][cart] += displacement
-                shifted_system.use_gaussian_charges = system.use_gaussian_charges
-                shifted_system.integral_backend = system.integral_backend
-                shifted1 = shifted_basis(basis1, atom, cart, displacement)
-                shifted2 = (
-                    shifted1
-                    if basis2 is basis1
-                    else shifted_basis(basis2, atom, cart, displacement)
-                )
-                values.append(np.asarray(opVop(shifted_system, shifted1, shifted2)))
-            derivative = (values[0] - 8.0 * values[1] + 8.0 * values[2] - values[3]) / (
-                12.0 * step
-            )
-            yield 3 * atom + cart, derivative[:, None]
-
-
 def _opvop_deriv_blocks(system, basis1, basis2):
     """Select the analytic same-basis or finite-difference derivative blocks."""
     if LIBCINT_AVAILABLE and basis1 is basis2:
