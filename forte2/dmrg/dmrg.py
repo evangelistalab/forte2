@@ -504,14 +504,14 @@ class DMRGSolver(CIBase):
 
         ints = RestrictedMOIntegrals(
             self.system,
-            self.C[0],
+            self.mos.C[0],
             self.active_indices,
             self.core_indices,
         )
 
         self.sub_solvers = []
         active_orbsym = [
-            [self.irrep_indices[0][i] for i in active_space]
+            [self.mos.irrep_indices[0][i] for i in active_space]
             for active_space in self.mo_space.active_orbitals
         ]
         for i, state in enumerate(self.sa_info.states):
@@ -710,10 +710,10 @@ class DMRG(DMRGSolver):
         super().run()
         self._post_process()
         if self.final_orbitals in ("semicanonical", "natural"):
-            irrep_indices = np.array(self.irrep_indices[0])[
+            irrep_indices = np.array(self.mos.irrep_indices[0])[
                 self.mo_space.orig_to_contig
             ]
-            C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
+            C_contig = self.mos.C[0][:, self.mo_space.orig_to_contig].copy()
             g1_act = self.make_average_1rdm()
 
             # Semicanonicalize the orbital subspaces (except the active space,
@@ -736,12 +736,12 @@ class DMRG(DMRGSolver):
                 )
                 C_final = natural_orbital.C_natural
 
-            self.C[0] = C_final[:, self.mo_space.contig_to_orig].copy()
+            self.mos.C[0] = C_final[:, self.mo_space.contig_to_orig].copy()
 
             # recompute the wavefunction in the final orbital basis
             ints = RestrictedMOIntegrals(
                 self.system,
-                self.C[0],
+                self.mos.C[0],
                 self.active_indices,
                 self.core_indices,
             )
@@ -882,14 +882,14 @@ class RelDMRGSolver(RelCIBase):
 
         ints = SpinorbitalIntegrals(
             self.system,
-            self.C[0],
+            self.mos.C[0],
             self.active_indices,
             self.core_indices,
         )
 
         self.sub_solvers = []
         active_orbsym = [
-            [self.irrep_indices[0][i] for i in active_space]
+            [self.mos.irrep_indices[0][i] for i in active_space]
             for active_space in self.mo_space.active_orbitals
         ]
         for i, state in enumerate(self.sa_info.states):
@@ -991,10 +991,10 @@ class RelDMRG(RelDMRGSolver):
         super().run(use_asym_ints=use_asym_ints)
         self._post_process()
         if self.final_orbitals in ("semicanonical", "natural"):
-            irrep_indices = np.array(self.irrep_indices[0])[
+            irrep_indices = np.array(self.mos.irrep_indices[0])[
                 self.mo_space.orig_to_contig
             ]
-            C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
+            C_contig = self.mos.C[0][:, self.mo_space.orig_to_contig].copy()
             g1_act = self.make_average_1rdm()
 
             semi = Semicanonicalizer(
@@ -1015,11 +1015,11 @@ class RelDMRG(RelDMRGSolver):
                 )
                 C_final = natural_orbital.C_natural
 
-            self.C[0] = C_final[:, self.mo_space.contig_to_orig].copy()
+            self.mos.C[0] = C_final[:, self.mo_space.contig_to_orig].copy()
 
             ints = SpinorbitalIntegrals(
                 self.system,
-                self.C[0],
+                self.mos.C[0],
                 self.active_indices,
                 self.core_indices,
             )
