@@ -1,5 +1,7 @@
 #include <iostream>
 #include <iomanip>
+#include <limits>
+#include <string>
 
 #include "helpers/timer.hpp"
 #include "helpers/np_vector_functions.h"
@@ -7,6 +9,7 @@
 #include "helpers/indexing.hpp"
 #include "helpers/blas.h"
 #include "helpers/logger.h"
+#include "helpers/memory.h"
 #include "helpers/unordered_dense.h"
 
 #include "ci_sigma_builder.h"
@@ -65,7 +68,35 @@ std::string CISigmaBuilder::get_algorithm() const {
 }
 
 void CISigmaBuilder::set_memory(int mb) {
-    memory_size_ = mb * 1024 * 1024; // Convert MB to bytes
+    if (mb < 0) {
+        throw std::invalid_argument("CI builder memory must be non-negative.");
+    }
+    memory_size_ = static_cast<size_t>(mb) * 1024 * 1024; // Convert MB to bytes
+    // release the Kblock1_ and Kblock2_ buffers to free up memory
+    free_std_vector_memory(Kblock1_);
+    free_std_vector_memory(Kblock2_);
+}
+
+size_t CISigmaBuilder::max_composite_hole_dimension(const StringAddress& alpha_address,
+                                                    const StringAddress& beta_address,
+                                                    std::string_view rdm_name) {
+    size_t max_alpha = 0;
+    for (int class_Ka = 0; class_Ka < alpha_address.nclasses(); ++class_Ka) {
+        max_alpha = std::max(max_alpha, alpha_address.strpcls(class_Ka));
+    }
+
+    size_t max_beta = 0;
+    for (int class_Kb = 0; class_Kb < beta_address.nclasses(); ++class_Kb) {
+        max_beta = std::max(max_beta, beta_address.strpcls(class_Kb));
+    }
+
+    if ((max_alpha == 0) or (max_beta == 0))
+        return 0;
+    if (max_alpha > std::numeric_limits<size_t>::max() / max_beta) {
+        throw std::overflow_error("The composite " + std::string(rdm_name) +
+                                  " hole dimension is too large.");
+    }
+    return max_alpha * max_beta;
 }
 
 void CISigmaBuilder::set_Hamiltonian(double E, np_matrix H, np_tensor4 V) {
@@ -194,7 +225,7 @@ std::span<double> gather_block(std::span<double> source, std::span<double> dest,
                                const CIStrings& lists, int class_Ia, int class_Ib) {
     const auto block_index = lists.string_class()->block_index(class_Ia, class_Ib);
     const auto offset = lists.block_offset(block_index);
-    const auto maxIa = lists.alfa_address()->strpcls(class_Ia);
+    const auto maxIa = lists.alpha_address()->strpcls(class_Ia);
     const auto maxIb = lists.beta_address()->strpcls(class_Ib);
 
     if (is_alpha(spin)) {
@@ -209,7 +240,7 @@ std::span<double> gather_block(std::span<double> source, std::span<double> dest,
 
 void zero_block(std::span<double> dest, Spin spin, const CIStrings& lists, int class_Ia,
                 int class_Ib) {
-    const auto maxIa = lists.alfa_address()->strpcls(class_Ia);
+    const auto maxIa = lists.alpha_address()->strpcls(class_Ia);
     const auto maxIb = lists.beta_address()->strpcls(class_Ib);
 
     if (is_alpha(spin)) {
@@ -225,7 +256,7 @@ void zero_block(std::span<double> dest, Spin spin, const CIStrings& lists, int c
 
 void scatter_block(std::span<double> source, std::span<double> dest, Spin spin,
                    const CIStrings& lists, int class_Ia, int class_Ib) {
-    size_t maxIa = lists.alfa_address()->strpcls(class_Ia);
+    size_t maxIa = lists.alpha_address()->strpcls(class_Ia);
     size_t maxIb = lists.beta_address()->strpcls(class_Ib);
 
     auto block_index = lists.string_class()->block_index(class_Ia, class_Ib);
@@ -358,6 +389,21 @@ np_matrix CISigmaBuilder::form_H_csf(const std::vector<Determinant>& dets,
         }
     }
     return H;
+}
+
+SparseState CISigmaBuilder::make_sparse_state(const np_vector& C, double threshold) const {
+    SparseState state;
+    auto C_span = vector::as_span<double>(C);
+    if (C_span.size() != lists_.ndet()) {
+        throw std::runtime_error("Size of CI vector does not match the number of determinants.");
+    }
+    auto dets = lists_.make_determinants();
+    for (size_t i{0}, maxi{dets.size()}; i < maxi; ++i) {
+        if (std::fabs(C_span[i]) > threshold) {
+            state[dets[i]] = C_span[i];
+        }
+    }
+    return state;
 }
 
 } // namespace forte2

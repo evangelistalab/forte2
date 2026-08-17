@@ -1,6 +1,6 @@
 import numpy as np
 
-from forte2 import System, State, MCOptimizer
+from forte2 import CISolver, MCOptimizer, State, System
 from forte2.orbitals.semicanonicalizer import Semicanonicalizer
 from forte2.scf import RHF, ROHF, UHF
 from forte2.orbitals import write_molden
@@ -66,19 +66,21 @@ def _parse_mo_blocks(text):
 
 def _expected_mcopt_energies(mc):
     orig_to_contig = np.asarray(mc.mo_space.orig_to_contig, dtype=int)
+    contig_to_orig = np.asarray(mc.mo_space.contig_to_orig, dtype=int)
 
-    if mc.final_orbital == "original":
-        return np.diag(mc.orb_opt.Fock)[orig_to_contig]
+    if mc.final_orbitals == "original":
+        return np.diag(mc.orb_opt.Fock)[contig_to_orig]
 
     semi = Semicanonicalizer(
         mo_space=mc.mo_space,
         system=mc.system,
+        irrep_indices=np.asarray(mc.mos.irrep_indices[0], dtype=int)[orig_to_contig],
         mix_inactive=False,
         mix_active=False,
     )
-    C_contig = mc.C[0][:, orig_to_contig].copy()
+    C_contig = mc.mos.C[0][:, orig_to_contig].copy()
     semi.semi_canonicalize(g1=mc.make_average_1rdm(), C_contig=C_contig)
-    return semi.eps_semican[orig_to_contig]
+    return semi.eps_semican[contig_to_orig]
 
 
 def test_molden_writer_rhf(tmp_path):
@@ -109,11 +111,11 @@ def test_molden_writer_rhf(tmp_path):
 
     occ_block = blocks[0]
     vir_block = blocks[rhf.ndocc]
-    assert occ_block["sym"] == rhf.irrep_labels[0]
+    assert occ_block["sym"] == rhf.irrep_labels[0][0]
     assert occ_block["ene"] == approx(rhf.eps[0][0])
     assert occ_block["spin"] == "Alpha"
     assert occ_block["occup"] == approx(2.0)
-    assert vir_block["sym"] == rhf.irrep_labels[rhf.ndocc]
+    assert vir_block["sym"] == rhf.irrep_labels[0][rhf.ndocc]
     assert vir_block["ene"] == approx(rhf.eps[0][rhf.ndocc])
     assert vir_block["spin"] == "Alpha"
     assert vir_block["occup"] == approx(0.0)
@@ -135,7 +137,9 @@ def test_molden_writer_rhf(tmp_path):
     expected_perm = _molden_basis_permutation(system.basis)
     expected_coeff = rhf.C[0][expected_perm, imo]
     parsed_indices = np.asarray([idx for idx, _ in blocks[imo]["coeffs"]], dtype=int)
-    parsed_coeff = np.asarray([coeff for _, coeff in blocks[imo]["coeffs"]], dtype=float)
+    parsed_coeff = np.asarray(
+        [coeff for _, coeff in blocks[imo]["coeffs"]], dtype=float
+    )
 
     assert np.array_equal(parsed_indices, np.arange(1, system.nbf + 1))
     assert parsed_coeff == approx(expected_coeff)
@@ -203,8 +207,9 @@ def test_molden_writer_mcopt(tmp_path):
     """
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
-    rhf = RHF(charge=0, econv=1e-12)(system)
-    mc = MCOptimizer(State(nel=2, multiplicity=1, ms=0.0), active_orbitals=[0, 1])(rhf)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = CISolver(State(nel=2, multiplicity=1, ms=0.0), active_orbitals=[0, 1])
+    mc = MCOptimizer(ci_solver)(rhf)
     mc.run()
 
     path = tmp_path / "h2_mcopt.molden"
@@ -232,12 +237,12 @@ def test_molden_writer_mcopt_original_orbitals(tmp_path):
     """
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
-    rhf = RHF(charge=0, econv=1e-12)(system)
-    mc = MCOptimizer(
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = CISolver(
         State(nel=2, multiplicity=1, ms=0.0),
         active_orbitals=[0, 1],
-        final_orbital="original",
-    )(rhf)
+    )
+    mc = MCOptimizer(ci_solver, final_orbitals="original")(rhf)
     mc.run()
 
     path = tmp_path / "h2_mcopt_original.molden"

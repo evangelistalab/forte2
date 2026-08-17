@@ -1,17 +1,30 @@
-__version__ = "0.2.2"
+__version__ = "2026.6.4"
 __author__ = "Forte2 Developers"
 
-from ._forte2 import *
-from ._forte2 import ints
-from ._forte2.ints import Basis, Shell
+from .helpers.echo_script import echo_invoking_script
+
+# print the invoking python script to stdout
+echo_invoking_script()
+
 from .integrals import integrals
+from .base_classes import X2CParams
 from .system import System, ModelSystem, HubbardModel
 from .state import State, RelState, MOSpace
 from .scf import RHF, ROHF, UHF, CUHF, GHF
-from .ci import CI, RelCI
+from .ci import CI, RelCI, CISolver, RelCISolver
+from .sci import SelectedCI, SelectedCISolver, RelSelectedCI, RelSelectedCISolver
 from .x2c import x2c
-from .orbitals import AVAS, CubeGenerator, Cube, ASET, write_orbital_cubes, write_molden
-from .mcopt import MCOptimizer, RelMCOptimizer
+from .orbitals import (
+    AVAS,
+    CubeGenerator,
+    Cube,
+    ASET,
+    write_orbital_cubes,
+    write_molden,
+    SpinorUpcaster,
+)
+from .mcopt import MCOptimizer
+from .optimize import GeometryOptimizer
 from .props import get_1e_property, mulliken_population
 from .helpers import logger, set_verbosity_level, comparisons
 from .dsrg import DSRG_MRPT2, RelDSRG_MRPT2

@@ -208,11 +208,16 @@ class StateAverageInfo:
         The total number of roots across all states.
     weights_flat : NDArray
         A flattened array of weights for all roots across all states.
+    absolute_root_map : list[tuple[int, int]]
+        A list of tuples mapping the absolute root index to the corresponding state index and root index within that state.
     """
 
     states: list[State] | State
     nroots: list[int] | int = 1
     weights: list[list[float]] = None
+
+    # Non-init attributes
+    absolute_root_map: list[tuple[int, int]] = field(init=False)
 
     def __post_init__(self):
         # 1. Validate states
@@ -258,6 +263,12 @@ class StateAverageInfo:
             self.weights = [[w / n for w in sublist] for sublist in self.weights]
             self.weights_flat /= n
             assert np.all(self.weights_flat >= 0), "Weights must be non-negative"
+
+        # 4. Create absolute root map
+        self.absolute_root_map = []
+        for state_index, n in enumerate(self.nroots):
+            for root_index in range(n):
+                self.absolute_root_map.append((state_index, root_index))
 
     def pretty_print_sa_info(self):
         """

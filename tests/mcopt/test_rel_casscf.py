@@ -1,6 +1,7 @@
-from forte2 import System, GHF
+import numpy as np
+
+from forte2 import System, GHF, RHF, RelCISolver, MCOptimizer, SpinorUpcaster, X2CParams
 from forte2.helpers.comparisons import approx
-from forte2.mcopt import RelMCOptimizer
 from forte2.orbitals import AVAS
 
 
@@ -15,14 +16,14 @@ def test_rel_casscf_hf_equivalence_to_nonrel():
     system = System(
         xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT", unit="bohr"
     )
-    scf = GHF(charge=0, econv=1e-10)(system)
-    mc = RelMCOptimizer(
+    scf = RHF(charge=0, e_tol=1e-10)(system)
+    conv = SpinorUpcaster(apply_random_phase=True)(scf)
+    ci_solver = RelCISolver(
         nel=10,
         core_orbitals=2,
         active_orbitals=12,
-        do_diis=False,
-        maxiter=200,
-    )(scf)
+    )
+    mc = MCOptimizer(ci_solver)(conv)
     mc.run()
     assert scf.E == approx(erhf)
     assert mc.E == approx(emcscf)
@@ -41,18 +42,16 @@ def test_rel_casscf_hf_ghf():
         basis_set="cc-pvdz",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         unit="bohr",
-        x2c_type="so",
-        snso_type=None,
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
     scf = GHF(charge=0)(system)
-    mc = RelMCOptimizer(
+    ci_solver = RelCISolver(
         nel=10,
         nroots=1,
         core_orbitals=2,
         active_orbitals=12,
-        do_diis=False,
-        maxiter=200,
-    )(scf)
+    )
+    mc = MCOptimizer(ci_solver)(scf)
     mc.run()
 
     assert scf.E == approx(escf)
@@ -70,7 +69,7 @@ def test_rel_casscf_frozen_co_equivalent_to_nonrel():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = GHF(charge=0, econv=1e-12)(system)
+    rhf = GHF(charge=0, e_tol=1e-12)(system)
     avas = AVAS(
         subspace=["C(2p)", "O(2p)"],
         selection_method="separate",
@@ -78,28 +77,29 @@ def test_rel_casscf_frozen_co_equivalent_to_nonrel():
         num_active_uocc=6,
     )(rhf)
 
-    mc = RelMCOptimizer(
+    ci_solver = RelCISolver(
         nel=14,
         core_orbitals=8,
         active_orbitals=12,
-    )(avas)
+    )
+    mc = MCOptimizer(ci_solver)(avas)
     mc.run()
     assert mc.E == approx(emcscf)
 
-    mc = RelMCOptimizer(
+    ci_solver = RelCISolver(
         nel=14,
         frozen_core_orbitals=2,
         core_orbitals=6,
         active_orbitals=12,
         frozen_virtual_orbitals=6,
     )(avas)
+    mc = MCOptimizer(ci_solver)(avas)
     mc.run()
     assert mc.E == approx(emcscf_frz)
 
 
 def test_rel_casscf_frozen_co_x2c():
-    # this energy was obtained without AVAS
-    emcscf = -112.9273233729
+    emcscf = -112.92732387630545
 
     xyz = """
     C 0.0 0.0 0.0
@@ -110,11 +110,10 @@ def test_rel_casscf_frozen_co_x2c():
         xyz=xyz,
         basis_set="cc-pvdz",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
-        x2c_type="so",
-        snso_type="row-dependent",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
     )
 
-    mf = GHF(charge=0, econv=1e-12)(system)
+    mf = GHF(charge=0, e_tol=1e-12)(system)
     avas = AVAS(
         subspace=["C(2p)", "O(2p)"],
         selection_method="separate",
@@ -122,11 +121,12 @@ def test_rel_casscf_frozen_co_x2c():
         num_active_uocc=6,
     )(mf)
 
-    mc = RelMCOptimizer(
+    ci_solver = RelCISolver(
         nel=14,
         core_orbitals=8,
         active_orbitals=12,
-    )(avas)
+    )
+    mc = MCOptimizer(ci_solver)(avas)
     mc.run()
     assert mc.E == approx(emcscf)
 
@@ -142,24 +142,22 @@ def test_rel_casscf_na_ghf():
         basis_set="cc-pvdz",
         auxiliary_basis_set="def2-universal-jkfit",
         unit="bohr",
-        x2c_type="so",
-        snso_type=None,
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
     scf = GHF(charge=0)(system)
-    mc = RelMCOptimizer(
+    ci_solver = RelCISolver(
         nel=11,
         nroots=8,
         core_orbitals=10,
         active_orbitals=8,
-        do_diis=False,
-        maxiter=500,
-    )(scf)
+    )
+    mc = MCOptimizer(ci_solver)(scf)
     mc.run()
 
     assert mc.E == approx(emcscf)
 
 
-def test_rel_ci_br():
+def test_rel_casscf_br():
     xyz = """
     Br 0 0 0
     """
@@ -168,15 +166,15 @@ def test_rel_ci_br():
         xyz=xyz,
         basis_set="cc-pvtz",
         auxiliary_basis_set="cc-pvtz-jkfit",
-        x2c_type="so",
-        snso_type="row-dependent",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
     )
     scf = GHF(charge=-1)(system)
-    mc = RelMCOptimizer(
+    ci_solver = RelCISolver(
         nel=35,
         nroots=6,
         active_orbitals=8,
         core_orbitals=28,
-    )(scf)
+    )
+    mc = MCOptimizer(ci_solver)(scf)
     mc.run()
-    assert mc.E == approx(-2597.0679040990)
+    assert mc.E == approx(-2597.067904096615)

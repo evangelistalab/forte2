@@ -1,6 +1,6 @@
 import pytest
 
-from forte2 import System, AVAS, CI, RHF, ROHF, State, MCOptimizer, GHF, RelCI
+from forte2 import System, AVAS, CI, RHF, ROHF, State, MCOptimizer, GHF, RelCI, CISolver
 from forte2.helpers.comparisons import approx
 
 
@@ -12,7 +12,7 @@ def test_avas_inputs():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
 
     # raise if num_active_docc/vir <= 0
     with pytest.raises(Exception):
@@ -76,7 +76,7 @@ def test_avas_subspace():
         minao_basis_set="sto-3g",
     )
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
 
     # sto-3g does not have 3p orbitals
     with pytest.raises(Exception):
@@ -103,6 +103,61 @@ def test_avas_subspace():
     )(rhf)
 
 
+def test_avas_bare_element_subspace():
+    xyz = """
+    N 0.0 0.0 0.0
+    N 0.0 0.0 1.2
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        minao_basis_set="sto-3g",
+    )
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+
+    expected_minaos = [10, 5, 10]
+    for i, spec in enumerate(["N", "N1", "N1-2"]):
+        avas = AVAS(
+            selection_method="total",
+            num_active=4,
+            subspace=[spec],
+        )(rhf)
+        # A bare element selects at least one AO into the subspace.
+        assert len(avas.minao_subspace) == expected_minaos[i]
+
+
+def test_avas_total_num_active_too_large():
+    system = System(
+        xyz="N 0.0 0.0 0.0\nN 0.0 0.0 1.2",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        minao_basis_set="sto-3g",
+    )
+    rhf = RHF(charge=0, e_tol=1e-11)(system)
+    rhf.run()
+    with pytest.raises(ValueError, match="exceeds the number"):
+        AVAS(selection_method="total", num_active=999, subspace=["N(2p)"])(rhf).run()
+
+
+def test_avas_rohf_half_integer_ms_somo_count():
+    system = System(
+        xyz="N 0 0 0",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        minao_basis_set="sto-3g",
+    )
+    rohf = ROHF(charge=0, ms=0.5)(system)
+    # AVAS doesn't do anything here since the only
+    # active orbital is the SOMO, but it is a valid input
+    _ = AVAS(
+        selection_method="separate",
+        subspace=["N(2p)"],
+        num_active_docc=0,
+        num_active_uocc=0,
+    )(rohf)
+
+
 def test_avas_separate_n2():
     eref_casci = -109.00462206150347
     eref_casci_avas = -109.005019207444
@@ -115,7 +170,7 @@ def test_avas_separate_n2():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     casci = CI(
         active_orbitals=[4, 5, 6, 7, 8, 9],
         core_orbitals=[0, 1, 2, 3],
@@ -158,7 +213,7 @@ def test_avas_separate_n2_ghf_equivalent_to_rhf():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    mf = GHF(charge=0, econv=1e-12)(system)
+    mf = GHF(charge=0, e_tol=1e-12)(system)
     casci = RelCI(
         nel=14,
         active_orbitals=12,
@@ -200,7 +255,7 @@ def test_avas_rohf_n2plus():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = ROHF(charge=1, ms=0.5, econv=1e-12)(system)
+    rhf = ROHF(charge=1, ms=0.5, e_tol=1e-12)(system)
     avas = AVAS(
         selection_method="separate",
         subspace=["N(2p)"],
@@ -223,7 +278,7 @@ def test_avas_rohf_n2minus():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = ROHF(charge=-1, ms=0.5, econv=1e-12)(system)
+    rhf = ROHF(charge=-1, ms=0.5, e_tol=1e-12)(system)
     avas = AVAS(
         selection_method="separate",
         subspace=["N(2p)"],
@@ -248,7 +303,7 @@ def test_avas_cumulative_h2co_all():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-10)(system)
     avas = AVAS(
         selection_method="cumulative",
         subspace=["C1(2px)", "O(2px)"],
@@ -273,7 +328,7 @@ def test_avas_cumulative_h2co_98pc():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-10)(system)
     avas = AVAS(
         selection_method="cumulative",
         subspace=["C(2px)", "O1(2px)"],
@@ -297,7 +352,7 @@ def test_avas_total_h2co():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-10)(system)
     avas = AVAS(
         selection_method="total",
         subspace=["C(2px)", "O1(2px)"],
@@ -321,7 +376,7 @@ def test_avas_total_h2co_ghf_equivalent_to_rhf():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = GHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    rhf = GHF(charge=0, e_tol=1e-12, d_tol=1e-10)(system)
     avas = AVAS(
         selection_method="total",
         subspace=["C(2px)", "O1(2px)"],
@@ -346,7 +401,7 @@ def test_avas_separate_h2co():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-10)(system)
     avas = AVAS(
         selection_method="separate",
         subspace=["C(2px)", "O(2px)"],
@@ -373,7 +428,7 @@ def test_avas_subspace_planes_h2co():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-10)(system)
     avas = AVAS(
         selection_method="cumulative",
         subspace=["C(2p)", "O(2p)"],
@@ -398,7 +453,7 @@ def test_avas_subspace_planes_h2co_casscf():
     """
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
-    rhf = RHF(charge=0, econv=1e-12, dconv=1e-10)(system)
+    rhf = RHF(charge=0, e_tol=1e-12, d_tol=1e-10)(system)
     avas = AVAS(
         selection_method="cumulative",
         subspace=["C(2p)", "O(2p)"],
@@ -406,7 +461,8 @@ def test_avas_subspace_planes_h2co_casscf():
         sigma=1.0,
         diagonalize=True,
     )(rhf)
-    mc = MCOptimizer(states=State(nel=rhf.nel, multiplicity=1, ms=0.0))(avas)
+    ci_solver = CISolver(states=State(nel=rhf.nel, multiplicity=1, ms=0.0))
+    mc = MCOptimizer(ci_solver)(avas)
     mc.run()
     assert mc.E_ci[0] == approx(eref_avas)
 
@@ -424,7 +480,8 @@ def test_avas_zero_uocc():
         num_active_docc=3,
         num_active_uocc=0,
     )(mf)
-    mc = MCOptimizer(states=State(nel=35, multiplicity=2, ms=0.5), nroots=3)(avas)
+    ci_solver = CISolver(states=State(nel=35, multiplicity=2, ms=0.5), nroots=3)
+    mc = MCOptimizer(ci_solver)(avas)
     mc.run()
     assert mc.E_avg == approx(-2572.3646258078)
 
@@ -442,6 +499,7 @@ def test_avas_zero_uocc2():
         num_active_docc=0,
         num_active_uocc=0,
     )(mf)
-    mc = MCOptimizer(states=State(nel=6, multiplicity=5, ms=2.0), nroots=1)(avas)
+    ci_solver = CISolver(states=State(nel=6, multiplicity=5, ms=2.0), nroots=1)
+    mc = MCOptimizer(ci_solver)(avas)
     mc.run()
     assert mc.E_avg == approx(-37.5906751187)

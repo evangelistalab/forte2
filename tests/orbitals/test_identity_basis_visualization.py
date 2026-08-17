@@ -56,5 +56,3 @@ def test_write_water_ccpvdz_identity_basis_artifacts():
     assert (OUTPUT_DIR / "basis_function_00.cube").is_file()
     assert (OUTPUT_DIR / f"basis_function_{system.nbf - 1:02d}.cube").is_file()
     assert (OUTPUT_DIR / "water_ccpvdz_identity_basis.molden").is_file()
-
-test_write_water_ccpvdz_identity_basis_artifacts()

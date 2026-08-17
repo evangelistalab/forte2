@@ -1,6 +1,8 @@
+from collections import OrderedDict
+
 import numpy as np
 
-from forte2 import CIStrings
+from forte2.lib.ci_helpers import CIStrings
 from forte2.state import MOSpace, StateAverageInfo
 from forte2.helpers import logger
 from forte2.data import EH_TO_EV
@@ -9,7 +11,7 @@ from forte2.data import EH_TO_EV
 def pretty_print_gas_info(ci_strings: CIStrings):
     num_spaces = ci_strings.ngas_spaces
     gas_sizes = ci_strings.gas_size
-    alfa_occupation = ci_strings.gas_alfa_occupations
+    alpha_occupation = ci_strings.gas_alpha_occupations
     beta_occupation = ci_strings.gas_beta_occupations
     occupation_pairs = ci_strings.gas_occupations
 
@@ -22,7 +24,7 @@ def pretty_print_gas_info(ci_strings: CIStrings):
     for i in range(num_spaces):
         row = []
         for aocc_idx, bocc_idx in occupation_pairs:
-            aocc = alfa_occupation[aocc_idx]
+            aocc = alpha_occupation[aocc_idx]
             bocc = beta_occupation[bocc_idx]
             row.append((aocc[i], bocc[i]))
         table.append(row)
@@ -54,7 +56,9 @@ def pretty_print_gas_info(ci_strings: CIStrings):
 
 
 def pretty_print_ci_summary(
-    sa_info: StateAverageInfo, eigvals_per_solver: list[list[float]]
+    sa_info: StateAverageInfo,
+    eigvals_per_solver: list[list[float]],
+    header="\nCI energy summary",
 ):
     """
     Pretty print the CI energy summary for the given CI states and eigenvalues.
@@ -65,6 +69,8 @@ def pretty_print_ci_summary(
         An instance of `StateAverageInfo` that holds information about the states and their properties.
     eigvals_per_solver : list[list[float]]
         A list of lists containing the eigenvalues (energies) for each CI solver.
+    header : str, optional, default="CI energy summary"
+        A header string to display at the top of the summary.
     """
     ncis = sa_info.ncis
     mult = [state.multiplicity for state in sa_info.states]
@@ -73,7 +79,7 @@ def pretty_print_ci_summary(
     weights = sa_info.weights
     nroots = sa_info.nroots
 
-    logger.log_info1("CI energy summary:")
+    logger.log_info1(f"{header}:")
     width = 64
     logger.log_info1("=" * width)
     logger.log_info1(
@@ -129,6 +135,13 @@ def pretty_print_ci_nat_occ_numbers(
         line = f"Root {j:<3d}"
         line += "".join([f"{nat_occs[i, j]:<11.6f}" for i in range(norb)])
         logger.log_info1(line)
+    # if state-averaging, also print the average natural occupation numbers from the average 1-RDM
+    if nroots > 1:
+        logger.log_info1("-" * width)
+        avg_line = "Avg     " + "".join(
+            [f"{nat_occs[i, -1]:<11.6f}" for i in range(norb)]
+        )
+        logger.log_info1(avg_line)
 
     logger.log_info1("=" * width)
     logger.log_info1(
@@ -192,9 +205,9 @@ def pretty_print_ci_dets(
 
 def pretty_print_ci_transition_props(
     sa_info: StateAverageInfo,
-    tdm_per_solver,
-    fosc_per_solver,
-    eigvals_per_solver,
+    transition_dipoles: OrderedDict,
+    oscillator_strengths: OrderedDict,
+    eigvals_per_solver: list[list[float]],
     thres=1e-4,
 ):
     """
@@ -205,9 +218,12 @@ def pretty_print_ci_transition_props(
     ----------
     sa_info : StateAverageInfo
         An instance of `StateAverageInfo` that holds information about the states and their properties.
-    tdm_per_solver : OrderedDict
+    transition_dipoles : OrderedDict
         A dictionary with keys as tuples (i, j) representing the initial and final states,
         and values as the transition dipole moments for each component (x, y, z).
+    oscillator_strengths : OrderedDict
+        A dictionary with keys as tuples (i, j) representing the initial and final states,
+        and values as the oscillator strengths for each transition.
     eigvals_per_solver : list[list[float]]
         A list of lists containing the eigenvalues (energies) for each CI solver.
     """
@@ -217,11 +233,10 @@ def pretty_print_ci_transition_props(
     logger.log_info1("=" * width)
     logger.log_info1(f"{'State':<12} {'Dipole moment':<30}")
     logger.log_info1("-" * width)
-    for ici in range(sa_info.ncis):
-        for iroot in range(sa_info.nroots[ici]):
-            dip = tdm_per_solver[ici][(iroot, iroot)]
-            dip_str = "[" + ", ".join(f"{d:>7.4f}" for d in dip) + "]"
-            logger.log_info1(f"{f'{iroot}':<12} {dip_str:<30}")
+    for iroot in range(sa_info.nroots_sum):
+        dip = transition_dipoles[(iroot, iroot)]
+        dip_str = "[" + ", ".join(f"{d:>7.4f}" for d in dip) + "]"
+        logger.log_info1(f"{f'{iroot}':<12} {dip_str:<30}")
     logger.log_info1("=" * width)
 
     logger.log_info1(f"\nBright transitions (oscillator strength > {thres:5.2e}):")
@@ -233,20 +248,23 @@ def pretty_print_ci_transition_props(
     )
     logger.log_info1("-" * width)
     nbright = 0
-    for ici in range(sa_info.ncis):
-        for k, v in tdm_per_solver[ici].items():
-            i, j = k
-            dip = v
-            vte = (eigvals_per_solver[ici][j] - eigvals_per_solver[ici][i]) * EH_TO_EV
-            osc = fosc_per_solver[ici][k]
-            if osc > thres:
-                nbright += 1
-                info = f"{f'{iroot+i}->{iroot+j}':<12} "
-                info += f"{osc:<10.6f} {vte:<10.6f} "
-                dip = "[" + ", ".join(f"{d:>7.4f}" for d in dip) + "]"
-                info += f"{dip:<30}"
-                logger.log_info1(info)
-        iroot += sa_info.nroots[ici]
+    for k, v in transition_dipoles.items():
+        i, j = k
+        dip = v
+        isolver, iroot_in_solver = sa_info.absolute_root_map[i]
+        jsolver, jroot_in_solver = sa_info.absolute_root_map[j]
+        vte = (
+            eigvals_per_solver[jsolver][jroot_in_solver]
+            - eigvals_per_solver[isolver][iroot_in_solver]
+        ) * EH_TO_EV
+        osc = oscillator_strengths[k]
+        if osc > thres:
+            nbright += 1
+            info = f"{f'{i}->{j}':<12} "
+            info += f"{osc:<10.6f} {vte:<10.6f} "
+            dip = "[" + ", ".join(f"{d:>7.4f}" for d in dip) + "]"
+            info += f"{dip:<30}"
+            logger.log_info1(info)
     if nbright == 0:
         logger.log_info1("No bright transitions found.")
     logger.log_info1("=" * width)
@@ -292,8 +310,8 @@ def make_3cumulant_so(gamma1, gamma2, gamma3):
     ----------
     gamma1 : np.ndarray
         The one-particle reduced density matrix (1-RDM).
-    lambda2 : np.ndarray
-        The two-particle reduced density cumulant.
+    gamma2 : np.ndarray
+        The two-particle reduced density matrix (2-RDM).
     gamma3 : np.ndarray
         The three-particle reduced density matrix (3-RDM).
 

@@ -31,8 +31,9 @@ def write_molden(obj, path="orbitals.molden") -> None:
     ----------
     obj
         An object with Forte2-like orbital attributes. The writer requires
-        ``system`` and ``C`` attributes, supports real-valued one- and
-        two-spin-block references, and can also serialize final MCOpt orbitals.
+        ``system`` and orbital coefficients (either ``mos.C`` or ``C``),
+        supports real-valued one- and two-spin-block references, and can also
+        serialize final MCOpt orbitals.
     path : str or pathlib.Path, optional, default="orbitals.molden"
         Destination path for the Molden file.
 
@@ -84,14 +85,14 @@ def _extract_molden_blocks(obj):
 
 
 def _validate_molden_object(obj):
-    for attr in ("system", "C"):
-        if not hasattr(obj, attr):
-            raise TypeError(
-                "write_molden() requires an object with 'system' and 'C' attributes."
-            )
+    if not hasattr(obj, "system"):
+        raise TypeError("write_molden() requires an object with a 'system' attribute.")
 
     system = obj.system
-    coeff_blocks = obj.C
+    mos = getattr(obj, "mos", None)
+    coeff_blocks = getattr(mos, "C", None)
+    if coeff_blocks is None:
+        coeff_blocks = getattr(obj, "C", None)
 
     if system is None or coeff_blocks is None:
         raise RuntimeError("Orbital data is not available. Run the SCF method first.")
@@ -100,9 +101,7 @@ def _validate_molden_object(obj):
         raise NotImplementedError("Two-component Molden output is not supported.")
 
     if len(coeff_blocks) not in (1, 2):
-        raise NotImplementedError(
-            "Only RHF/ROHF/UHF/MCOpt Molden output is supported."
-        )
+        raise NotImplementedError("Only RHF/ROHF/UHF/MCOpt Molden output is supported.")
 
     coeff_arrays = []
     for coeff_block in coeff_blocks:
@@ -116,9 +115,7 @@ def _validate_molden_object(obj):
                 "The MO coefficient matrix must be expressed in the AO basis."
             )
         if coeff.shape[1] != system.nmo:
-            raise RuntimeError(
-                "The MO coefficient matrix must span the full MO space."
-            )
+            raise RuntimeError("The MO coefficient matrix must span the full MO space.")
         if np.iscomplexobj(coeff):
             raise NotImplementedError("Complex-valued Molden output is not supported.")
         coeff_arrays.append(coeff)
@@ -200,7 +197,7 @@ def _extract_mcopt_mo_block(obj, coeff: np.ndarray) -> _MoldenBlock:
         obj,
         coeff,
         occupations,
-        energies=_get_mcopt_energies(obj, g1_act, norb),
+        energies=_get_mcopt_energies(obj, coeff, g1_act, norb),
     )
 
 
@@ -213,50 +210,62 @@ def _get_mcopt_active_density(obj) -> np.ndarray:
     return g1_act
 
 
-def _get_mcopt_energies(obj, g1_act: np.ndarray, norb: int) -> np.ndarray:
+def _get_mcopt_energies(
+    obj, coeff: np.ndarray, g1_act: np.ndarray, norb: int
+) -> np.ndarray:
     orig_to_contig = np.asarray(obj.mo_space.orig_to_contig, dtype=int)
-    final_orbital = getattr(obj, "final_orbital", "semicanonical")
+    contig_to_orig = np.asarray(obj.mo_space.contig_to_orig, dtype=int)
+    final_orbitals = getattr(obj, "final_orbitals", "semicanonical")
 
-    if final_orbital == "original":
+    if final_orbitals == "original":
         if not hasattr(obj, "orb_opt") or not hasattr(obj.orb_opt, "Fock"):
             raise RuntimeError(
                 "MCOpt generalized Fock matrix is unavailable after optimization."
             )
-        if not np.allclose(obj.C[0][:, orig_to_contig], obj.orb_opt.C):
+        if not np.allclose(coeff[:, orig_to_contig], obj.orb_opt.C):
             raise RuntimeError(
                 "MCOpt generalized Fock matrix does not match the final orbital basis."
             )
-        energies_contig = np.real_if_close(np.diag(np.asarray(obj.orb_opt.Fock))).astype(
-            float
-        )
-    elif final_orbital == "semicanonical":
+        energies_contig = np.real_if_close(
+            np.diag(np.asarray(obj.orb_opt.Fock))
+        ).astype(float)
+    elif final_orbitals == "semicanonical":
+        irrep_indices = np.asarray(obj.mos.irrep_indices[0], dtype=int)[orig_to_contig]
         semi = Semicanonicalizer(
             mo_space=obj.mo_space,
             system=obj.system,
+            irrep_indices=irrep_indices,
             mix_inactive=False,
             mix_active=False,
         )
-        C_contig = obj.C[0][:, orig_to_contig].copy()
+        C_contig = coeff[:, orig_to_contig].copy()
         semi.semi_canonicalize(g1=g1_act, C_contig=C_contig)
         energies_contig = np.asarray(semi.eps_semican, dtype=float)
     else:
         raise NotImplementedError(
-            f"Unsupported MCOpt final_orbital setting: {final_orbital!r}"
+            f"Unsupported MCOpt final_orbitals setting: {final_orbitals!r}"
         )
 
     if energies_contig.shape != (norb,):
         raise RuntimeError("MCOpt generalized Fock diagonal has an invalid shape.")
 
-    return energies_contig[orig_to_contig]
+    return energies_contig[contig_to_orig]
 
 
 def _get_energy_blocks(
-    obj, expected_blocks: int, norb: int, allow_missing: bool = False, default_value: float = 0.0
+    obj,
+    expected_blocks: int,
+    norb: int,
+    allow_missing: bool = False,
+    default_value: float = 0.0,
 ) -> list[np.ndarray]:
     eps = getattr(obj, "eps", None)
     if eps is None:
         if allow_missing:
-            return [np.full(norb, default_value, dtype=float) for _ in range(expected_blocks)]
+            return [
+                np.full(norb, default_value, dtype=float)
+                for _ in range(expected_blocks)
+            ]
         raise RuntimeError("Orbital energies are unavailable. Run the method first.")
 
     if len(eps) != expected_blocks:
@@ -276,7 +285,11 @@ def _get_energy_blocks(
 
 
 def _get_energy_block(
-    obj, block_index: int, norb: int, allow_missing: bool = False, default_value: float = 0.0
+    obj,
+    block_index: int,
+    norb: int,
+    allow_missing: bool = False,
+    default_value: float = 0.0,
 ) -> np.ndarray:
     return _get_energy_blocks(
         obj,
@@ -309,7 +322,10 @@ def _build_molden_block(
 
 
 def _get_irrep_labels(obj, block_index: int, norb: int) -> list[str]:
-    irrep_labels = getattr(obj, "irrep_labels", None)
+    mos = getattr(obj, "mos", None)
+    irrep_labels = getattr(mos, "irrep_labels", None)
+    if irrep_labels is None:
+        irrep_labels = getattr(obj, "irrep_labels", None)
     if irrep_labels is None:
         return ["a"] * norb
 
@@ -399,8 +415,7 @@ def _format_atoms(system) -> list[str]:
         symbol = Z_TO_ATOM_SYMBOL[int(Z)]
         x, y, z = coords
         lines.append(
-            f"{symbol:<2s} {iatom:4d} {int(Z):4d} "
-            f"{x: .14f} {y: .14f} {z: .14f}"
+            f"{symbol:<2s} {iatom:4d} {int(Z):4d} " f"{x: .14f} {y: .14f} {z: .14f}"
         )
     lines.append("")
     return lines

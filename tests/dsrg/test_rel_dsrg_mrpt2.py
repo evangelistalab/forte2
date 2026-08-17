@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from forte2 import System, GHF, RelMCOptimizer, AVAS
-from forte2.dsrg import RelDSRG_MRPT2
+from forte2 import System, GHF, MCOptimizer, RelCISolver, AVAS, X2CParams
+from forte2.dsrg import RelDSRG_MRPT2, RelDSRG_MRPT2_Slow
 from forte2.helpers.comparisons import approx
 from forte2.data.atom_data import EH_TO_WN
 
@@ -28,11 +28,12 @@ def test_mrpt2_n2_nonrel():
     random_phase = np.diag(np.exp(1j * rng.uniform(-np.pi, np.pi, size=rhf.nmo * 2)))
     rhf.C[0] = rhf.C[0] @ random_phase
 
-    mc = RelMCOptimizer(
+    ci_solver = RelCISolver(
         nel=14,
         core_orbitals=8,
         active_orbitals=12,
-    )(rhf)
+    )
+    mc = MCOptimizer(ci_solver)(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)
@@ -79,11 +80,12 @@ def test_mrpt2_n2_sa_nonrel():
         subspace=["N(2p)"],
         diagonalize=True,
     )(rhf)
-    mc = RelMCOptimizer(
+    ci_solver = RelCISolver(
         nel=14,
         nroots=4,
         weights=[3, 1, 1, 1],
-    )(avas)
+    )
+    mc = MCOptimizer(ci_solver)(avas)
 
     dsrg = RelDSRG_MRPT2(flow_param=0.5, relax_reference="once")(mc)
     dsrg.run()
@@ -100,75 +102,83 @@ def test_mrpt2_n2_sa_nonrel():
     )
 
 
-def test_mrpt2_carbon_rel_sa():
+def test_mrpt2_carbon_rel_sa(tmp_path):
     xyz = """
     C 0 0 0
     """
 
-    system = System(
+    system_0 = System(
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c_type="so",
-        snso_type="row-dependent",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
     )
+
+    system_0.save(tmp_path / "carbon_rel_sa")
+    system = System.load(tmp_path / "carbon_rel_sa")
     mf = GHF(charge=0, die_if_not_converged=False)(system)
-    mc = RelMCOptimizer(
+    ci_solver = RelCISolver(
         nel=6,
         nroots=9,
         active_orbitals=8,
         core_orbitals=2,
-        econv=1e-8,
-        gconv=1e-6,
-        do_diis=False,
+    )
+    mc = MCOptimizer(
+        ci_solver,
+        e_tol=1e-8,
+        g_tol=1e-6,
     )(mf)
     dsrg = RelDSRG_MRPT2(flow_param=0.24, relax_reference="once")(mc)
     dsrg.run()
-    assert dsrg.relax_energies[0, 2] == approx(-37.718966923805)
-    assert dsrg.relax_energies[0, 0] == approx(-37.822217257747)
-    assert dsrg.relax_energies[0, 1] == approx(-37.822259180404)
+    assert dsrg.relax_energies[0, 2] == approx(-37.718966923804714)
+    assert dsrg.relax_energies[0, 0] == approx(-37.822217257745514)
+    assert dsrg.relax_energies[0, 1] == approx(-37.82225918040399)
     assert dsrg.relax_eigvals.real == approx(
         [
-            -37.82240582,
-            -37.82233221,
-            -37.82233221,
-            -37.82233221,
-            -37.82218603,
-            -37.82218603,
-            -37.82218603,
-            -37.82218603,
-            -37.82218603,
+            -37.822405824369625,
+            -37.822332213565495,
+            -37.822332213565424,
+            -37.82233221356541,
+            -37.82218603171408,
+            -37.82218603171406,
+            -37.822186031713976,
+            -37.82218603171396,
+            -37.822186031713905,
         ]
     )
 
 
-def test_mrpt2_se_rel_sa_gauss_nuc():
+@pytest.mark.slow
+def test_mrpt2_se_rel_sa_gauss_nuc_jk_otf():
     # Test the zero-field splitting of Se atom with Gaussian nuclear charges
     # Freezing all non-4s/4p orbitals (zero correlated core orbitals)
     xyz = """
     Se 0 0 0
     """
 
+    from forte2.jkbuilder import FockBuilderOTF
+
     system = System(
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c_type="so",
-        snso_type="row-dependent",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
         use_gaussian_charges=True,
     )
+    system.fock_builder = FockBuilderOTF(system, jk_mem_thres_mb=20, backend="libcint")
+
     mf = GHF(
         charge=-1,
         die_if_not_converged=False,
         maxiter=50,
     )(system)
-    mc = RelMCOptimizer(
+    ci_solver = RelCISolver(
         nel=34,
         nroots=9,
-        do_diis=False,
         core_orbitals=28,
         active_orbitals=8,
-    )(mf)
+    )
+    mc = MCOptimizer(ci_solver)(mf)
     dsrg = RelDSRG_MRPT2(
         flow_param=0.24,
         relax_reference="once",
@@ -176,7 +186,7 @@ def test_mrpt2_se_rel_sa_gauss_nuc():
     )(mc)
     dsrg.run()
     assert (dsrg.relax_eigvals[5] - dsrg.relax_eigvals[4]) * EH_TO_WN == pytest.approx(
-        1916.780124730304, rel=1e-4
+        1916.780369353602, rel=1e-4
     )
 
 
@@ -189,8 +199,7 @@ def test_mrpt2_s_rel_sa_gauss_nuc():
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c_type="so",
-        snso_type="row-dependent",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
         use_gaussian_charges=True,
     )
     mf = GHF(
@@ -198,17 +207,134 @@ def test_mrpt2_s_rel_sa_gauss_nuc():
         die_if_not_converged=False,
         maxiter=50,
     )(system)
-    mc = RelMCOptimizer(
+    ci_solver = RelCISolver(
         nel=16,
         nroots=9,
-        do_diis=False,
-        econv=1e-11,
-        gconv=1e-10,
         core_orbitals=10,
         active_orbitals=8,
+    )
+    mc = MCOptimizer(
+        ci_solver,
+        e_tol=1e-11,
+        g_tol=1e-10,
     )(mf)
     dsrg = RelDSRG_MRPT2(flow_param=0.24, relax_reference="once")(mc)
     dsrg.run()
     assert (dsrg.relax_eigvals[5] - dsrg.relax_eigvals[4]) * EH_TO_WN == pytest.approx(
-        387.52343852668406, rel=1e-4
+        387.5233440732472, rel=1e-4
     )
+
+
+@pytest.mark.slow
+def test_mrpt2_sh_with_slow():
+    xyz = """
+    S 0 0 0
+    H 0 0 1.4
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvtz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
+        use_gaussian_charges=True,
+    )
+    mf = GHF(
+        charge=0,
+        die_if_not_converged=False,
+        maxiter=50,
+    )(system)
+    ci_solver = RelCISolver(
+        nel=17,
+        nroots=4,
+        core_orbitals=10,
+        active_orbitals=10,
+    )
+    mc = MCOptimizer(ci_solver)(mf)
+    dsrg = RelDSRG_MRPT2(flow_param=0.5, relax_reference="iterate")(mc)
+    dsrg.run()
+    assert np.abs(dsrg.E_dsrg.imag) < 1e-12
+
+    ci_solver = RelCISolver(
+        nel=17,
+        nroots=4,
+        core_orbitals=10,
+        active_orbitals=10,
+    )
+    mc = MCOptimizer(ci_solver)(mf)
+    dsrg_slow = RelDSRG_MRPT2_Slow(flow_param=0.5, relax_reference="iterate")(mc)
+    dsrg_slow.run()
+    assert np.abs(dsrg_slow.E_dsrg.imag) < 1e-12
+
+    ref_relax_energies = np.array(
+        [
+            [-399.255354806219, -399.255873658049, -399.075511243649],
+            [-399.255767878431, -399.255767913076, -399.074949441528],
+            [-399.255767038688, -399.255767038695, -399.074948675386],
+        ]
+    )
+    ref_relax_eigvals = np.array(
+        [
+            -399.256583004776 + 0.0j,
+            -399.256583004623 + 0.0j,
+            -399.254951072768 + 0.0j,
+            -399.254951072612 + 0.0j,
+        ]
+    )
+    ref_relax_eigvals_history = np.array(
+        [
+            [
+                -399.25668945232,
+                -399.256689452199,
+                -399.255057863899,
+                -399.255057863776,
+            ],
+            [
+                -399.25658388134,
+                -399.256583881185,
+                -399.254951944968,
+                -399.254951944811,
+            ],
+            [
+                -399.256583004776,
+                -399.256583004623,
+                -399.254951072768,
+                -399.254951072612,
+            ],
+        ]
+    )
+    ref_E = -399.2557670386876
+
+    assert dsrg.relax_energies[:3, :] == approx(ref_relax_energies)
+    assert dsrg.relax_eigvals == approx(ref_relax_eigvals)
+    assert dsrg.relax_eigvals_history == approx(ref_relax_eigvals_history)
+    assert dsrg.E_dsrg == approx(ref_E)
+
+    assert dsrg_slow.relax_energies[:3, :] == approx(ref_relax_energies)
+    assert dsrg_slow.relax_eigvals == approx(ref_relax_eigvals)
+    assert dsrg_slow.relax_eigvals_history == approx(ref_relax_eigvals_history)
+    assert dsrg_slow.E_dsrg == approx(ref_E)
+
+    assert dsrg.relax_energies == approx(dsrg_slow.relax_energies)
+    assert dsrg.relax_eigvals == approx(dsrg_slow.relax_eigvals)
+    assert dsrg.relax_eigvals_history == approx(dsrg_slow.relax_eigvals_history)
+    assert dsrg.E_dsrg == approx(dsrg_slow.E_dsrg)
+
+
+def test_rel_mrpt2_all_active():
+    xyz = f"""
+    H 0.0 0.0 0.0
+    H 0.0 0.0 {0.529177210903 * 2}
+    """
+
+    system = System(xyz=xyz, basis_set="sto-6g", auxiliary_basis_set="cc-pVTZ-JKFIT")
+
+    rhf = GHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = RelCISolver(nel=2, active_orbitals=4)
+    mc = MCOptimizer(
+        ci_solver,
+        maxiter=5,
+    )(rhf)
+    pt = RelDSRG_MRPT2(flow_param=0.5)(mc)
+    pt.run()
+    assert pt.E_dsrg == approx(-1.096071975854)

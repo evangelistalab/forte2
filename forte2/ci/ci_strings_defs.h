@@ -4,7 +4,7 @@
 #include <vector>
 #include <utility>
 
-#include "determinant.h"
+#include "determinant/determinant.h"
 
 namespace forte2 {
 

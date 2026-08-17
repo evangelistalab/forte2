@@ -1,6 +1,7 @@
 import numpy as np
+import pytest
 
-from forte2 import System
+from forte2 import System, X2CParams
 from forte2.scf import RHF, GHF
 from forte2.helpers.comparisons import approx, approx_loose
 
@@ -14,14 +15,14 @@ def test_lindep_rhf():
         basis_set="aug-cc-pvdz",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
         unit="bohr",
-        ortho_thresh=2e-7,
+        overlap_ortho_rtol=2e-7,
     )
 
     ovlp = system.ints_overlap()
     assert np.linalg.cond(ovlp) > 1e14
 
     # test diis with linear dependency as well with tight convergence
-    scf = RHF(charge=0, econv=1e-10, dconv=1e-8)(system)
+    scf = RHF(charge=0, e_tol=1e-10, d_tol=1e-8)(system)
     scf.run()
     assert scf.nbf == 90
     assert scf.nmo == 79
@@ -37,7 +38,7 @@ def test_lindep_ghf():
         basis_set="aug-cc-pvdz",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
         unit="bohr",
-        ortho_thresh=2e-7,
+        overlap_ortho_rtol=2e-7,
     )
 
     ovlp = system.ints_overlap()
@@ -51,16 +52,17 @@ def test_lindep_ghf():
     assert scf.E == approx(erhf)
 
 
-def test_lindep_x2c():
+@pytest.mark.slow
+def test_lindep_x2c(tmp_path):
     # This tests the handling of linear dependencies in the X2C transformation
     # The basis sets are decontracted during X2C, resulting in cond(S) ~ 8e9.
-    eref = -20264.784349176811
+    eref = -20264.784348686535
     xyz = """
     Tl 0 0 1.4
     H 0 0 0
     """
 
-    system = System(
+    system_0 = System(
         xyz=xyz,
         basis_set={"H": "aug-cc-pVTZ", "Tl": "x2c-tzvpall-2c"},
         auxiliary_basis_set={
@@ -68,11 +70,36 @@ def test_lindep_x2c():
             "Tl": "x2c-tzvpall-2c-autoaux",
         },
         minao_basis_set="ano-r0",
-        x2c_type="so",
-        snso_type="row-dependent",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
         use_gaussian_charges=True,
-        ortho_thresh=5e-10,
+        overlap_ortho_rtol=5e-10,
     )
+    system_0.save(tmp_path / "test_lindep_x2c")
+    system = System.load(tmp_path / "test_lindep_x2c")
     scf = GHF(charge=0)(system)
     scf.run()
     assert scf.E == approx_loose(eref)
+
+
+def test_lindep_x2c_quick():
+    erhf = -4.0711600970578345
+    xyz = "\n".join([f"H 0 0 {i}" for i in range(10)])
+
+    system = System(
+        xyz=xyz,
+        basis_set="aug-cc-pvdz",
+        auxiliary_basis_set="cc-pVQZ-JKFIT",
+        unit="bohr",
+        overlap_ortho_rtol=2e-7,
+        x2c=X2CParams(x2c_type="so", x2c_model="1e", snso_type="row-dependent"),
+    )
+
+    ovlp = system.ints_overlap()
+    assert np.linalg.cond(ovlp) > 1e14
+
+    # test diis with linear dependency as well with tight convergence
+    scf = GHF(charge=0, e_tol=1e-10, d_tol=1e-8)(system)
+    scf.run()
+    assert scf.nbf == 90
+    assert scf.nmo == 79
+    assert scf.E == approx(erhf)

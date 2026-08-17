@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import numpy as np
+from numpy.typing import NDArray
 
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
@@ -14,6 +15,11 @@ class RHF(SCFBase):
     """
     A class that runs restricted Hartree-Fock calculations.
     """
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.two_component = False
+        self.provides.add("gradient")
 
     def __call__(self, system):
         system.two_component = False
@@ -66,6 +72,19 @@ class RHF(SCFBase):
     def _spin(self, S):
         return self.ms * (self.ms + 1)
 
+    def gradient(self) -> NDArray:
+        """
+        Compute the RHF analytic nuclear gradient with density fitting.
+
+        Returns
+        -------
+        NDArray
+            Gradient with shape ``(natoms, 3)`` in Hartree/Bohr.
+        """
+        from .rhf_grad import _compute_rhf_gradient
+
+        return _compute_rhf_gradient(self)
+
     def _diis_update(self, diis, F, AO_grad):
         return [diis.update(F[0], AO_grad)]
 
@@ -92,7 +111,7 @@ class RHF(SCFBase):
         for i in range(ndocc):
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{i:<4d} ({self.irrep_labels[i]}) {self.eps[0][i]:<12.6f} "
+            string += f"{i:<4d} ({self.irrep_labels[0][i]}) {self.eps[0][i]:<12.6f} "
         logger.log_info1(string)
 
         logger.log_info1("\nVirtual:")
@@ -101,7 +120,9 @@ class RHF(SCFBase):
             idx = ndocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx:<4d} ({self.irrep_labels[idx]}) {self.eps[0][idx]:<12.6f} "
+            string += (
+                f"{idx:<4d} ({self.irrep_labels[0][idx]}) {self.eps[0][idx]:<12.6f} "
+            )
         logger.log_info1(string)
 
     def _post_process(self):
@@ -132,5 +153,5 @@ class RHF(SCFBase):
             self.eps[0],
         )
         mosym.run()
-        self.irrep_labels = mosym.labels
-        self.irrep_indices = mosym.irrep_indices
+        self.irrep_labels = [mosym.labels]
+        self.irrep_indices = [mosym.irrep_indices]

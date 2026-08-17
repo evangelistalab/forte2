@@ -39,8 +39,8 @@ np_matrix_complex RelCISigmaBuilder::compute_1rdm_debug(np_vector_complex C_left
             for (const auto& [I, c_I] : state_vector_r) {
                 J = I;
                 double sign = 1.0;
-                sign *= J.destroy_a(q);
-                sign *= J.create_a(p);
+                sign *= J.destroy_alpha(q);
+                sign *= J.create_alpha(p);
                 if (sign != 0) {
                     if (state_vector_l.count(J) != 0) {
                         element += static_cast<std::complex<double>>(sign) *
@@ -74,10 +74,10 @@ np_tensor4_complex RelCISigmaBuilder::compute_2rdm_debug(np_vector_complex C_lef
                     for (const auto& [I, c_I] : state_vector_r) {
                         J = I;
                         double sign = 1.0;
-                        sign *= J.destroy_a(r);
-                        sign *= J.destroy_a(s);
-                        sign *= J.create_a(q);
-                        sign *= J.create_a(p);
+                        sign *= J.destroy_alpha(r);
+                        sign *= J.destroy_alpha(s);
+                        sign *= J.create_alpha(q);
+                        sign *= J.create_alpha(p);
                         if (sign != 0) {
                             if (state_vector_l.count(J) != 0) {
                                 element += static_cast<std::complex<double>>(sign) *
@@ -116,12 +116,12 @@ np_tensor6_complex RelCISigmaBuilder::compute_3rdm_debug(np_vector_complex C_lef
                             for (const auto& [I, c_I] : state_vector_r) {
                                 J = I;
                                 double sign = 1.0;
-                                sign *= J.destroy_a(s);
-                                sign *= J.destroy_a(t);
-                                sign *= J.destroy_a(u);
-                                sign *= J.create_a(r);
-                                sign *= J.create_a(q);
-                                sign *= J.create_a(p);
+                                sign *= J.destroy_alpha(s);
+                                sign *= J.destroy_alpha(t);
+                                sign *= J.destroy_alpha(u);
+                                sign *= J.create_alpha(r);
+                                sign *= J.create_alpha(q);
+                                sign *= J.create_alpha(p);
                                 if (sign != 0) {
                                     if (state_vector_l.count(J) != 0) {
                                         element += static_cast<std::complex<double>>(sign) *

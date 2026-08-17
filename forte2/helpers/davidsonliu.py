@@ -1,8 +1,15 @@
-from forte2.helpers import logger
+from dataclasses import dataclass, field
+import time
+
 import numpy as np
 from numpy.linalg import eigh, qr, norm
 
+from forte2.helpers import logger
+from forte2.helpers.table import AsciiTable
+from forte2.base_classes.params import DavidsonLiuParams
 
+
+@dataclass
 class DavidsonLiuSolver:
     """
     Davidson-Liu solver for iterative diagonalization of Hermitian matrices.
@@ -13,17 +20,9 @@ class DavidsonLiuSolver:
         Dimension of the matrix / number of basis vectors.
     nroot : int
         Number of roots to find.
-    basis_per_root : int, optional, default=4
-        Number of basis vectors to keep per root.
-    collapse_per_root : int, optional, default=2
-        Number of vectors to collapse to per root.
-    maxiter : int, optional, default=100
-        Maximum number of iterations to perform.
-    e_tol : float, optional, default=1e-12
-        Convergence tolerance for eigenvalues.
-    r_tol : float, optional, default=1e-6
-        Convergence tolerance for residuals.
-    eta : float, optional
+    davidson_liu_params : DavidsonLiuParams, optional
+        Parameters for the Davidson-Liu solver.
+    energy_shift : float, optional
         Target eigenvalue shift for sorting eigenpairs.
         If None, no shift is applied.
     log_level : int, optional, default=logger.get_verbosity_level()
@@ -39,71 +38,50 @@ class DavidsonLiuSolver:
         Whether the solver has converged.
     """
 
-    def __init__(
-        self,
-        size: int,
-        nroot: int,
-        basis_per_root: int = 4,
-        collapse_per_root: int = 2,
-        maxiter: int = 100,
-        e_tol: float = 1e-12,
-        r_tol: float = 1e-6,
-        eta: float | None = None,
-        log_level: int = logger.get_verbosity_level(),
-        dtype: type = np.float64,
-    ):
-        # size of the space
-        self.size = size
-        # number of roots to find
-        self.nroot = nroot
-        # number of vectors to collapse per root
-        self.collapse_per_root = collapse_per_root
-        # basis size per root
-        self.basis_per_root = basis_per_root
-        # maximum number of iterations
-        self.maxiter = maxiter
-        # convergence tolerance for eigenvalues
-        self.e_tol = e_tol
-        # convergence tolerance for residuals
-        self.r_tol = r_tol
-        # eigenvalue target shift
-        self.eta = eta
-        # logging level
-        self.log_level = log_level
-        # data type
-        self.dtype = dtype
+    size: int
+    nroot: int
+    davidson_liu_params: DavidsonLiuParams = field(default_factory=DavidsonLiuParams)
+    energy_shift: float = field(default=None)
+    log_level: int = field(default=logger.get_verbosity_level())
+    dtype: type = field(default=np.float64)
 
+    def __post_init__(self):
+        self.collapse_per_root = self.davidson_liu_params.collapse_per_root
+        # basis size per root
+        self.basis_per_root = self.davidson_liu_params.basis_per_root
+        # maximum number of iterations
+        self.maxiter = self.davidson_liu_params.maxiter
+        # convergence tolerance for eigenvalues
+        self.e_tol = self.davidson_liu_params.e_tol
+        # convergence tolerance for residuals
+        self.r_tol = self.davidson_liu_params.r_tol
         # sanity checks
-        if size <= 0:
+        if self.size <= 0:
             raise ValueError(
                 "Davidson-Liu solver called with space of dimension smaller than 1."
             )
-        if nroot <= 0:
+        if self.nroot <= 0:
             raise ValueError("Davidson-Liu solver called with zero roots.")
-        if collapse_per_root < 1:
-            raise ValueError(
-                f"Davidson-Liu solver: collapse_per_root ({collapse_per_root}) must be greater than or equal to 1."
-            )
-        if basis_per_root < collapse_per_root + 1:
-            raise ValueError(
-                f"Davidson-Liu solver: basis_per_root ({basis_per_root}) must be greater than or equal to collapse_per_root + 1 ({collapse_per_root + 1})."
-            )
 
         assert np.issubdtype(self.dtype, np.floating) or np.issubdtype(
             self.dtype, np.complexfloating
         ), "dtype must be a float or complex type"
 
         # fixed subspace and collapse dims
-        self.collapse_size = min(collapse_per_root * nroot, size)
-        self.max_subspace_size = min(basis_per_root * nroot, size)
+        self.collapse_size = min(self.collapse_per_root * self.nroot, self.size)
+        self.max_subspace_size = min(self.basis_per_root * self.nroot, self.size)
 
         # allocate all arrays as (size, subspace_size) so each column is a vector
-        self.b = np.zeros((size, self.max_subspace_size), dtype=self.dtype)  # basis
+        self.b = np.zeros(
+            (self.size, self.max_subspace_size), dtype=self.dtype
+        )  # basis
         self.sigma = np.zeros(
-            (size, self.max_subspace_size), dtype=self.dtype
+            (self.size, self.max_subspace_size), dtype=self.dtype
         )  # H·basis
-        self.r = np.zeros((size, self.max_subspace_size), dtype=self.dtype)  # residuals
-        self.h_diag = None  # matrix diagonal, shape (size,)
+        self.r = np.zeros(
+            (self.size, self.max_subspace_size), dtype=self.dtype
+        )  # residuals
+        self.h_diag = None  # matrix diagonal, shape (self.size,)
 
         ## subspace Hamiltonian and eigenpairs
         self.G = np.zeros(
@@ -116,9 +94,11 @@ class DavidsonLiuSolver:
 
         ## configuration parameters
         # The threshold used to discard correction vectors
-        self.schmidt_discard_threshold = 1e-7
+        self.schmidt_discard_threshold = 1e-8
         # The threshold used to guarantee orthogonality among the roots
         self.schmidt_orthogonality_threshold = 1e-12
+        # The threshold used in the Davidson preconditioner denominator to avoid division by small numbers
+        self.preconditioner_denom_threshold = 1e-8
 
         ## bookkeeping
         # size of the basis block
@@ -169,9 +149,37 @@ class DavidsonLiuSolver:
 
     def add_project_out(self, project_out):
         """
-        project_out: list of arrays each shape (size,)
+        Add vectors to project out during the solve.
+
+        Parameters
+        ----------
+        project_out: list of arrays
+            Each array should have the same dtype and shape, but can have lengths less than or equal to `size`.
+            The vectors will be orthogonalized and stored as rows for projection during the solve.
+            If the lengths are less than `size`, they will be considered to be zero-padded to `size` during projection.
         """
-        self._proj_out = [np.asarray(v, self.dtype) for v in project_out]
+        if len(project_out) == 0:
+            return
+        for v in project_out:
+            if len(v) > self.size:
+                raise ValueError(
+                    f"Each project_out vector must have length at most {self.size}, but got {len(v)}"
+                )
+        # orthogonalize and store the project_out vectors as rows for easier projection later
+        A = np.stack(project_out, axis=1)  # shape (size, n_proj)
+        # orthogonalize via QR
+        Q, _ = qr(A, mode="reduced")
+        self._proj_out = np.ascontiguousarray(Q.T)  # shape (n_proj, size)
+
+    def do_project_out(self, A):
+        if not hasattr(self, "_proj_out"):
+            return
+        proj_size = self._proj_out.shape[1]
+        for u in self._proj_out:
+            # u shape (size,)
+            # A -> (1 - u u.H) A
+            v = u.conj() @ A[:proj_size]
+            A[:proj_size] -= u[:, np.newaxis] * v
 
     def solve(self):
 
@@ -200,11 +208,7 @@ class DavidsonLiuSolver:
             else:
                 G = self._guesses
 
-            if hasattr(self, "_proj_out"):
-                for v in self._proj_out:
-                    # v shape (size,)
-                    coeffs = v @ G  # shape (nroot,)
-                    G -= np.outer(v, coeffs.conj())
+            self.do_project_out(G)
 
             # orthonormalize via QR
             Q, _ = qr(G, mode="reduced")
@@ -219,14 +223,23 @@ class DavidsonLiuSolver:
         self.iter = 0
         self.converged = False
 
-        logger.log(
-            ("=" * 64)
-            + "\nIter                 ⟨E⟩             max(ΔE)        max(r) basis\n"
-            + ("-" * 64),
-            self.log_level,
+        table = AsciiTable(
+            columns=["Iter", "⟨E⟩", "max(ΔE)", "max(r)", "basis", "time (s)", "note"],
+            formats=[
+                "{:>4}",
+                "{:>20.12f}",
+                "{:>+12.4e}",
+                "{:>+12.4e}",
+                "{:>4}",
+                "{:>10.4f}",
+                "{:>20}",
+            ],
         )
 
+        logger.log(table.header(), self.log_level)
+
         for self.iter in range(self.maxiter):
+            t0 = time.perf_counter()
             # 2. compute new sigma block if needed
             m_new = self.basis_size - self.sigma_size
             if m_new > 0:
@@ -239,13 +252,15 @@ class DavidsonLiuSolver:
             # 3. form and diagonalize subspace Hamiltonian
             Bblk = self.b[:, : self.basis_size]
             Sblk = self.sigma[:, : self.basis_size]
+            # 3b. project out undesirable directions in the sigma vectors, if provided
+            self.do_project_out(Sblk)
             Gm = Bblk.T.conj() @ Sblk
             Gm = 0.5 * (Gm + Gm.T.conj())  # Hermitize
             lam, alpha = eigh(Gm)
 
             # sort eigenpair around user-specified shift
-            if self.eta is not None:
-                idx = np.argsort(np.abs(lam - self.eta))
+            if self.energy_shift is not None:
+                idx = np.argsort(np.abs(lam - self.energy_shift))
                 lam = lam[idx]
                 alpha = alpha[:, idx]
 
@@ -260,12 +275,18 @@ class DavidsonLiuSolver:
             Balpha = Bblk @ ar  # (size, nroot)
             Salpha = Sblk @ ar  # (size, nroot)
             R = Salpha - Balpha * lamr[np.newaxis, :]
-
             rnorms = norm(R, axis=0)
+            if hasattr(self, "_proj_out"):
+                rproj = R.copy()
+                self.do_project_out(rproj)
+                rproj_norms = norm(rproj, axis=0)
+                r_delta = np.abs(rnorms - rproj_norms)
+            else:
+                r_delta = None
 
             # precondition
             denom = lamr[np.newaxis, :] - self.h_diag[:, np.newaxis]
-            mask = np.abs(denom) > 1e-6
+            mask = np.abs(denom) > self.preconditioner_denom_threshold
             # vectorize division only where denom is not too small, setting others to 0
             R[~mask] = 0.0
             np.divide(R, denom, out=R, where=mask)
@@ -296,11 +317,7 @@ class DavidsonLiuSolver:
             R0 -= Bblk @ (Bblk.T.conj() @ R0)
 
             # 6b. project out undesirable vectors if provided
-            if hasattr(self, "_proj_out"):
-                for v in self._proj_out:
-                    # v shape (size,)
-                    coeffs = v @ R0  # shape (nroot,)
-                    R0 -= np.outer(v, coeffs.conj())
+            self.do_project_out(R0)
 
             # write back the cleaned residuals
             self.r[:, : self.nroot] = R0
@@ -315,11 +332,14 @@ class DavidsonLiuSolver:
                 self.b[:, : self.basis_size],
                 R0[:, :to_add],
                 self.b[:, self.basis_size :],
-                # self.b, self.basis_size, R0, to_add
             )
             self.basis_size += added
             # if we couldn't add enough, fill with random orthogonal vectors
             msg = ""
+            if r_delta is not None:
+                if r_delta.max() > 1e-9:
+                    msg += f"r leakage {r_delta.max():.2e}"
+
             if added < to_add:
                 missing = to_add - added
                 # 'float' and 'np.float64' are not subdtypes of np.complexfloating
@@ -332,11 +352,8 @@ class DavidsonLiuSolver:
                     )
                 else:
                     temp = self._rng.uniform(-1.0, 1.0, size=(self.size, missing))
-                if hasattr(self, "_proj_out"):
-                    for v in self._proj_out:
-                        # v shape (size,)
-                        coeffs = v @ temp  # shape (nroot,)
-                        temp -= np.outer(v, coeffs.conj())
+
+                self.do_project_out(temp)
 
                 added2 = self.add_rows_and_orthonormalize(
                     self.b[:, : self.basis_size],
@@ -345,16 +362,17 @@ class DavidsonLiuSolver:
                     # self.b, self.basis_size, temp, missing
                 )
                 self.basis_size += added2
-                msg = f" <- +{added2} random"
+                sep = ", " if msg else ""
+                msg += f"{sep}+{added2} rand"
+            
+            t1 = time.perf_counter()
+
             logger.log(
-                f"{self.iter:4d}  {avg_e:18.12f}  {max_de:18.12f}  {max_r:12.9f}  {self.basis_size:4d} {msg}",
+                table.row(self.iter, avg_e, max_de, max_r, self.basis_size, t1 - t0, msg),
                 self.log_level,
             )
 
-        logger.log(
-            ("=" * 64),
-            self.log_level,
-        )
+        logger.log(table.footer(), self.log_level)
 
         # compute final eigenpairs
         lamr = self.lam[: self.nroot]
@@ -391,57 +409,6 @@ class DavidsonLiuSolver:
             newB,
             f"\nAfter collapse: Checking orthonormality of newB with size {newB.shape[1]}",
         )
-
-    # def add_rows_and_orthonormalize(
-    #     self, A_existing: np.ndarray, B_candidates: np.ndarray, A_slots: np.ndarray
-    # ) -> int:
-    #     """
-    #     Add candidate vectors from B_candidates into A_slots, orthonormalizing each against
-    #     the existing basis in A_existing and previously added vectors. Returns the number
-    #     of vectors actually added.
-    #     """
-    #     added = 0
-    #     n_existing = A_existing.shape[1]
-
-    #     # Loop over candidate vectors in B_candidates
-    #     for j in range(B_candidates.shape[1]):
-    #         # Make a working copy of the j-th column of B_candidates
-    #         v = B_candidates[:, j].copy()
-
-    #         # 1) Orthogonalize v against the existing basis A_existing
-    #         for i in range(n_existing):
-    #             ai = A_existing[:, i]
-    #             v -= np.dot(ai, v) * ai
-
-    #         # 2) Orthogonalize against any vectors already added into A_slots
-    #         for i in range(added):
-    #             si = A_slots[:, i]
-    #             v -= np.dot(si, v) * si
-
-    #         # 3) Discard if v projected is too small (below discard threshold)
-    #         normv = norm(v)
-    #         if normv < self.schmidt_discard_threshold:
-    #             continue
-
-    #         # 4) Normalize v
-    #         v /= normv
-
-    #         # 5) Check orthogonality to both sets
-    #         max_overlap = 0.0
-    #         if n_existing > 0:
-    #             overlaps_existing = np.abs(A_existing.T @ v)
-    #             max_overlap = overlaps_existing.max()
-    #         if added > 0:
-    #             overlaps_new = np.abs(A_slots[:, :added].T @ v)
-    #             max_overlap = max(max_overlap, overlaps_new.max())
-    #         if max_overlap > self.schmidt_orthogonality_threshold:
-    #             continue
-
-    #         # 6) Accept: store into the next free column of A_slots
-    #         A_slots[:, added] = v
-    #         added += 1
-
-    #     return added
 
     def add_rows_and_orthonormalize(
         self, A_existing: np.ndarray, B_candidates: np.ndarray, A_slots: np.ndarray
@@ -541,6 +508,8 @@ class DavidsonLiuSolver:
         logger.log(f"  Size of collapsed space:  {self.collapse_size}", self.log_level)
         logger.log(f"  Energy convergence:       {self.e_tol}", self.log_level)
         logger.log(f"  Residual convergence:     {self.r_tol}", self.log_level)
-        if self.eta is not None:
-            logger.log(f"  Target eigenval shift:    {self.eta}", self.log_level)
+        if self.energy_shift is not None:
+            logger.log(
+                f"  Target eigenval shift:    {self.energy_shift}", self.log_level
+            )
         logger.log(f"  Maximum iterations:       {self.maxiter}\n", self.log_level)

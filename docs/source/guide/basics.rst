@@ -17,15 +17,32 @@ This allows you to chain methods together in a very flexible way, with argument 
 
 Setting up a molecular system is as simple as:
 
->>> system = forte2.system(
+>>> system = forte2.System(
     xyz="C 0 0 0; N 0 0 1.4", 
     basis_set="cc-pvdz", 
-    auxiliary_basis_set="cc-pvdz-jkfit",
+    auxiliary_basis_set="cc-pvtz-jkfit",
     )
 
 You can then attach a Hartree-Fock calculation on the system:
 
 >>> rhf = forte2.scf.RHF(charge=-1)(system)
+
+The relativistic Hamiltonian is selected by passing a :class:`forte2.X2CParams`
+instance to the ``x2c`` option. SAP-X2C is available for both scalar-relativistic
+and spin-orbit calculations. For example:
+
+>>> system = forte2.System(
+    xyz="H 0 0 0; Br 0 0 1.4",
+    basis_set="cc-pvdz",
+    auxiliary_basis_set="cc-pvtz-jkfit",
+    x2c=forte2.X2CParams(x2c_type="so", x2c_model="sap"),
+    )
+>>> ghf = forte2.scf.GHF(charge=0)(system)
+
+Conventional one-electron X2C uses ``x2c_model="1e"`` with ``x2c_type="sf"`` or
+``"so"``. Screened nuclear spin-orbit variants set ``snso_type`` to
+``"boettger"``, ``"dc"``, ``"dcb"``, or ``"row-dependent"`` (only valid with
+``x2c_type="so"`` and ``x2c_model="1e"``).
 
 or for a restricted open-shell Hartree-Fock calculation:
 
@@ -68,4 +85,6 @@ Forte2 writes Molden files in atomic units and automatically reorders pure
 spherical functions from Forte2's internal Libint/CCA ordering to the Molden
 convention. For grid-based visualization, you can also write cube files:
 
->>> forte2.write_orbital_cubes(rhf, [0, 1, 2], directory="cubes")
+>>> forte2.write_orbital_cubes(
+...     rhf.system, rhf.mos.C[0], indices=[0, 1, 2], filepath="cubes"
+... )

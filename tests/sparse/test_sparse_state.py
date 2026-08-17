@@ -1,70 +1,103 @@
 import pytest
 
-import forte2
+from forte2.lib import sparse_ops
+from forte2.lib.sparse_ops import SparseState, SparseOperatorList
+from forte2.lib.det import Determinant
+from forte2.lib.sparse_ops import overlap, apply_number_projector, get_projection
 
 
-def det(s: str) -> forte2.Determinant:
-    return forte2.Determinant(s)
+def det(s: str) -> Determinant:
+    return Determinant(s)
 
 
 def test_sparse_vector_overlap():
-    ref = forte2.SparseState(
+    ref = SparseState(
         {det(""): 1.0, det("a"): 1.0, det("b"): 1.0, det("2"): 1.0, det("02"): 1.0}
     )
-    ref2 = forte2.SparseState({det("02"): 0.3})
-    ref3 = forte2.SparseState({det("002"): 0.5})
-    assert forte2.overlap(ref, ref) == pytest.approx(5.0, abs=1e-9)
-    assert forte2.overlap(ref, ref2) == pytest.approx(0.3, abs=1e-9)
-    assert forte2.overlap(ref2, ref) == pytest.approx(0.3, abs=1e-9)
-    assert forte2.overlap(ref, ref3) == pytest.approx(0.0, abs=1e-9)
+    ref2 = SparseState({det("02"): 0.3})
+    ref3 = SparseState({det("002"): 0.5})
+    assert overlap(ref, ref) == pytest.approx(5.0, abs=1e-9)
+    assert overlap(ref, ref2) == pytest.approx(0.3, abs=1e-9)
+    assert overlap(ref2, ref) == pytest.approx(0.3, abs=1e-9)
+    assert overlap(ref, ref3) == pytest.approx(0.0, abs=1e-9)
 
 
 def test_sparse_vector_number_projector():
-    ref = forte2.SparseState(
+    ref = SparseState(
         {det(""): 1.0, det("a"): 1.0, det("b"): 1.0, det("2"): 1.0, det("02"): 1.0}
     )
 
-    proj1 = forte2.SparseState({det("2"): 1.0, det("02"): 1.0})
-    test_proj1 = forte2.apply_number_projector(1, 1, ref)
+    proj1 = SparseState({det("2"): 1.0, det("02"): 1.0})
+    test_proj1 = apply_number_projector(1, 1, ref)
     assert proj1 == test_proj1
 
-    proj2 = forte2.SparseState({det(""): 1.0})
-    test_proj2 = forte2.apply_number_projector(0, 0, ref)
+    proj2 = SparseState({det(""): 1.0})
+    test_proj2 = apply_number_projector(0, 0, ref)
     assert proj2 == test_proj2
 
-    proj3 = forte2.SparseState({det("a"): 1.0})
-    test_proj3 = forte2.apply_number_projector(1, 0, ref)
+    proj3 = SparseState({det("a"): 1.0})
+    test_proj3 = apply_number_projector(1, 0, ref)
     assert proj3 == test_proj3
 
-    proj4 = forte2.SparseState({det("b"): 1.0})
-    test_proj4 = forte2.apply_number_projector(0, 1, ref)
+    proj4 = SparseState({det("b"): 1.0})
+    test_proj4 = apply_number_projector(0, 1, ref)
     assert proj4 == test_proj4
 
-    ref4 = forte2.SparseState({det("a"): 1, det("b"): 1})
-    ref4 = forte2.normalize(ref4)
+    ref4 = SparseState({det("a"): 1, det("b"): 1})
+    ref4 = sparse_ops.normalize(ref4)
     assert ref4.norm() == pytest.approx(1.0, abs=1e-9)
-    assert forte2.spin2(ref4, ref4) == pytest.approx(0.75, abs=1e-9)
+    assert sparse_ops.spin2(ref4, ref4) == pytest.approx(0.75, abs=1e-9)
 
-    ref5 = forte2.SparseState({det("2"): 1})
-    assert forte2.spin2(ref5, ref5) == pytest.approx(0, abs=1e-9)
+    ref5 = SparseState({det("2"): 1})
+    assert sparse_ops.spin2(ref5, ref5) == pytest.approx(0, abs=1e-9)
 
 
 def test_sparse_vector_complex():
-    psi1 = forte2.SparseState({det("2"): 2.0 + 1j})
-    psi2 = forte2.SparseState({det("2"): 1.0 - 1j})
-    assert forte2.overlap(psi1, psi2) == pytest.approx(1.0 - 3.0j, abs=1e-9)
-    assert forte2.overlap(psi2, psi1) == pytest.approx(1.0 + 3.0j, abs=1e-9)
+    psi1 = SparseState({det("2"): 2.0 + 1j})
+    psi2 = SparseState({det("2"): 1.0 - 1j})
+    assert overlap(psi1, psi2) == pytest.approx(1.0 - 3.0j, abs=1e-9)
+    assert overlap(psi2, psi1) == pytest.approx(1.0 + 3.0j, abs=1e-9)
 
     # different lengths
-    psi3 = forte2.SparseState({det("2"): 2.0 + 1j, det("ab"): 1.0 - 1j})
-    psi4 = forte2.SparseState({det("2"): 1.0 - 1j})
-    assert forte2.overlap(psi3, psi4) == pytest.approx(1.0 - 3.0j, abs=1e-9)
-    assert forte2.overlap(psi4, psi3) == pytest.approx(1.0 + 3.0j, abs=1e-9)
+    psi3 = SparseState({det("2"): 2.0 + 1j, det("ab"): 1.0 - 1j})
+    psi4 = SparseState({det("2"): 1.0 - 1j})
+    assert overlap(psi3, psi4) == pytest.approx(1.0 - 3.0j, abs=1e-9)
+    assert overlap(psi4, psi3) == pytest.approx(1.0 + 3.0j, abs=1e-9)
+
+
+def test_get_projection_skips_invalid_annihilation():
+    op = SparseOperatorList()
+    op.add("[0a-]", 1.0)
+
+    ref = SparseState({det("0"): 1.0})
+    state = SparseState({det("0"): 2.0})
+
+    assert get_projection(op, ref, state)[0] == pytest.approx(0.0, abs=1e-12)
+
+
+def test_get_projection_skips_invalid_creation():
+    op = SparseOperatorList()
+    op.add("[0a+]", 1.0)
+
+    ref = SparseState({det("a"): 1.0})
+    state = SparseState({det("a"): 3.0})
+
+    assert get_projection(op, ref, state)[0] == pytest.approx(0.0, abs=1e-12)
+
+
+def test_get_projection_valid_annihilation():
+    op = SparseOperatorList()
+    op.add("[0a-]", 1.0)
+
+    ref = SparseState({det("a"): 2.0})
+    state = SparseState({det("0"): 3.0})
+
+    assert get_projection(op, ref, state)[0] == pytest.approx(6.0, abs=1e-12)
 
 
 def test_sparse_vector_addition():
-    psi1 = forte2.SparseState({det("2"): 2.0 + 1j})
-    psi2 = forte2.SparseState({det("2"): 1.0 - 0.5j, det("ab"): 0.5 + 0.5j})
+    psi1 = SparseState({det("2"): 2.0 + 1j})
+    psi2 = SparseState({det("2"): 1.0 - 0.5j, det("ab"): 0.5 + 0.5j})
     psi3 = psi1 + psi2
     assert psi3[det("2")] == pytest.approx(3.0 + 0.5j, abs=1e-9)
     assert psi3[det("ab")] == pytest.approx(0.5 + 0.5j, abs=1e-9)
@@ -75,8 +108,8 @@ def test_sparse_vector_addition():
 
 
 def test_sparse_vector_subtraction():
-    psi1 = forte2.SparseState({det("2"): 2.0 + 1j})
-    psi2 = forte2.SparseState({det("2"): 1.0 - 0.5j, det("ab"): 0.5 + 0.5j})
+    psi1 = SparseState({det("2"): 2.0 + 1j})
+    psi2 = SparseState({det("2"): 1.0 - 0.5j, det("ab"): 0.5 + 0.5j})
     psi3 = psi1 - psi2
     assert psi3[det("2")] == pytest.approx(1.0 + 1.5j, abs=1e-9)
     assert psi3[det("ab")] == pytest.approx(-0.5 - 0.5j, abs=1e-9)
@@ -87,7 +120,7 @@ def test_sparse_vector_subtraction():
 
 
 def test_sparse_vector_scalar_multiplication():
-    psi1 = forte2.SparseState({det("2"): 2.0 + 1j, det("ab"): 1.0 + 2.0j})
+    psi1 = SparseState({det("2"): 2.0 + 1j, det("ab"): 1.0 + 2.0j})
     scalar = 2.0 + 3.0j
 
     # this calls the __rmul__ of SparseState
@@ -108,7 +141,7 @@ def test_sparse_vector_scalar_multiplication():
 def test_sparse_vector_norm():
     import math
 
-    psi = forte2.SparseState({det("2"): 2.0 + 1j, det("ab"): 1.0 - 3.0j})
+    psi = SparseState({det("2"): 2.0 + 1j, det("ab"): 1.0 - 3.0j})
     # default norm is 2-norm
     assert psi.norm() == pytest.approx(math.sqrt(15.0), abs=1e-9)
     # -1 is infinity norm

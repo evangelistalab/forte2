@@ -1,4 +1,4 @@
-from forte2 import System, GHF, UHF
+from forte2 import System, GHF, UHF, X2CParams
 from forte2.helpers.comparisons import approx
 
 
@@ -59,8 +59,8 @@ def test_ghf_complex_perturbation():
 
 def test_j_adapted_ghf():
     # The two bases should yield the same result
-    eref = -399.12328000812687
-    s2ref = 0.7547419587209125
+    eref = -398.723752737950
+    s2ref = 1.0001601212478493
     xyz = """
     S 0 0 0
     H 0 0 1.1"""
@@ -68,10 +68,9 @@ def test_j_adapted_ghf():
         xyz=xyz,
         basis_set="decon-cc-pVDZ",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
-        x2c_type="so",
-        snso_type=None,
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
-    scf = GHF(charge=0, j_adapt=False)(system)
+    scf = GHF(charge=1, j_adapt=False)(system)
     scf.run()
     assert scf.E == approx(eref)
     assert scf.S2 == approx(s2ref)
@@ -80,10 +79,9 @@ def test_j_adapted_ghf():
         xyz=xyz,
         basis_set="decon-cc-pVDZ",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
-        x2c_type="so",
-        snso_type=None,
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
-    scf = GHF(charge=0, j_adapt=True)(system)
+    scf = GHF(charge=1, j_adapt=True)(system)
     scf.run()
     assert scf.E == approx(eref)
     assert scf.S2 == approx(s2ref)

@@ -1,9 +1,9 @@
 import numpy as np
 import scipy as sp
 
-from forte2 import Basis, Shell, integrals
+from forte2 import integrals
 from forte2.system import System
-from forte2.system.build_basis import build_basis
+from forte2.system.build_basis import build_sap_potential_basis
 from forte2.helpers.matrix_functions import givens_rotation
 
 
@@ -18,9 +18,7 @@ def minao_initial_guess(system, H):
     system : forte2.System
         The system object containing the atoms and basis set.
     H : NDArray
-        The Fock matrix.
-    S : NDArray
-        The overlap matrix.
+        The core Hamiltonian matrix.
 
     Returns
     -------
@@ -28,30 +26,11 @@ def minao_initial_guess(system, H):
         The initial MO guess for the SCF procedure.
     """
 
-    # generate the SAP basis from the initial guess file. Skip normalization
-    sap_basis = build_basis(
+    # Convert the SAP potential coefficients to a normalized charge-density basis.
+    scaled_sap_basis = build_sap_potential_basis(
         "sap_helfem_large",
         system.geom_helper,
-        embed_normalization_into_coefficients=False,
     )
-
-    # create a new basis that will be used to store the scaled coefficients
-    scaled_sap_basis = Basis()
-
-    for shell in sap_basis:
-        # scales the coefficients by -(exponent / pi)^(3/2)
-        scaled_coeff = np.array(
-            [-c * ((e / np.pi) ** 1.5) for c, e in zip(shell.coeff, shell.exponents)]
-        )
-        scaled_shell = Shell(
-            shell.l,
-            shell.exponents,
-            scaled_coeff,
-            shell.center,
-            shell.is_pure,
-            embed_normalization_into_coefficients=False,  # do not normalize
-        )
-        scaled_sap_basis.add(scaled_shell)
 
     # generate the SAP integrals (P|mn)
     SAP_ints = integrals.coulomb_3c(system, scaled_sap_basis)
@@ -107,8 +86,6 @@ def guess_mix(C, homo_idx, mixing_parameter=np.pi / 4):
         The index of the highest occupied molecular orbital (HOMO).
     mixing_parameter : float, optional
         The mixing parameter for the Givens rotation.
-    twocomp : bool, optional
-        Whether the system is two-component.
 
     Returns
     -------
@@ -214,42 +191,3 @@ def break_complex_conjugation_symmetry(C, pert_strength=0.1):
     U = np.diag(np.exp(1.0j * phi))
     C = U @ C
     return C
-
-
-def convert_coeff_spatial_to_spinor(system, C, complex=True):
-    """
-    Convert spatial orbital MO coefficients to spinor(bital) MO coefficients
-
-    Parameters
-    ----------
-    system : forte2.System
-        The system object containing the atoms and basis set.
-    C : list of NDArray
-        The MO coefficients in spatial orbital basis.
-    complex : bool, optional, default=True
-        Whether to cast to complex dtype.
-
-    Returns
-    -------
-    list of NDArray
-        The MO coefficients in spinor(bital) basis.
-    """
-    dtype = np.complex128 if complex else np.float64
-    nbf = system.nbf
-    C_2c = np.zeros((nbf * 2,) * 2, dtype=dtype)
-    assert isinstance(C, list)
-    if len(C) == 2:
-        # UHF
-        assert C[0].shape[0] == nbf
-        assert C[1].shape[0] == nbf
-        # |a^0_{alfa AO} b^0_{alfa AO} ... |
-        # |a^0_{beta AO} b^0_{beta AO} ... |
-        C_2c[:nbf, ::2] = C[0]
-        C_2c[nbf:, 1::2] = C[1]
-    elif len(C) == 1:
-        # RHF/ROHF
-        C_2c[:nbf, ::2] = C[0]
-        C_2c[nbf:, 1::2] = C[0]
-    else:
-        raise RuntimeError(f"Coefficient of length {len(C)} not recognized!")
-    return [C_2c]

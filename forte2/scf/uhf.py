@@ -1,13 +1,13 @@
 from dataclasses import dataclass
 
 import numpy as np
+from numpy.typing import NDArray
 
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
 from forte2.helpers import logger
 from forte2.symmetry import MOSymmetryDetector
 from .scf_base import SCFBase
-from .rhf import RHF
 from .scf_utils import guess_mix
 
 
@@ -26,6 +26,11 @@ class UHF(SCFBase):
 
     ms: float = None
     guess_mix: bool = False  # only used if ms == 0
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.two_component = False
+        self.provides.add("gradient")
 
     def __call__(self, system):
         system.two_component = False
@@ -72,6 +77,8 @@ class UHF(SCFBase):
         return D_a + D_b
 
     def _initial_guess(self, H, guess_type="minao"):
+        from .rhf import RHF
+
         C = RHF._initial_guess(self, H, guess_type=guess_type)[0]
 
         if self.twicems == 0 and self.guess_mix:
@@ -117,6 +124,19 @@ class UHF(SCFBase):
             + np.einsum("vu,uv->", self.D[1], F[1])
         )
         return energy
+
+    def gradient(self) -> NDArray:
+        """
+        Compute the UHF analytic nuclear gradient with density fitting.
+
+        Returns
+        -------
+        NDArray
+            Gradient with shape ``(natoms, 3)`` in Hartree/Bohr.
+        """
+        from .uhf_grad import _compute_uhf_gradient
+
+        return _compute_uhf_gradient(self)
 
     def _diis_update(self, diis, F, AO_grad):
         F_flat = diis.update(np.hstack([f.flatten() for f in F]), AO_grad)

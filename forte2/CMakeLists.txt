@@ -76,7 +76,7 @@ find_package(LAPACK REQUIRED)
 # We are now ready to compile the actual extension module
 nanobind_add_module(
   # Name of the extension
-  _forte2
+  lib
 
   # Target the stable ABI for Python 3.12+, which reduces
   # the number of binary wheels that must be built. This
@@ -91,47 +91,63 @@ nanobind_add_module(
   # reusing a shared libnanobind across libraries
   NB_STATIC
 
+  # By default nanobind_add_module appends "-Os" (optimize for size)
+  # This can override earlier -O flags. Passing this option stops
+  # nanobind from appending -Os
+  NOMINSIZE
+
   # Source code goes here
   api/forte2_api.cc
-  api/ci_api.cc
-  api/determinant_api.cc
-  api/determinant_helpers_api.cc
-  api/dsrg_api.cc
-  api/helpers_api.cc
-  api/integrals_api.cc
-  api/logging_api.cc
-  api/slater_rules_api.cc
-  api/sparse_exp_api.cc
-  api/sparse_operator_api.cc
-  api/sparse_state_api.cc
-  api/sq_operator_string_api.cc
+  api/cpp_helpers_api.cc
+  api/ints_api.cc
+  api/ci_helpers_api.cc
+  api/det_api.cc
+  api/dsrg_utils_api.cc
+  api/sparse_ops_api.cc
+  api/rdms_api.cc
   helpers/combinatorial.cc
   helpers/string_algorithms.cc
   integrals/basis.cc
-  integrals/fock_builder.cc
   integrals/nuclear_repulsion.cc
   integrals/one_electron.cc
+  integrals/one_electron_deriv.cc
   integrals/two_electron.cc
+  integrals/two_electron_deriv.cc
   integrals/value_at_points.cc
   ci/ci_sigma_builder.cc
   ci/ci_sigma_builder_1rdm.cc
+  ci/ci_sigma_builder_1trdm.cc
   ci/ci_sigma_builder_2rdm.cc
   ci/ci_sigma_builder_3rdm.cc
   ci/ci_sigma_builder_test_rdms.cc
   ci/ci_sigma_builder_harrison_zarrabian.cc
   ci/ci_sigma_builder_knowles_handy.cc
-  ci/ci_spin_adapter.cc
+  determinant/ci_spin_adapter.cc
   ci/ci_strings.cc
   ci/ci_strings_makers.cc
   ci/ci_string_address.cc
   ci/ci_string_class.cc
   ci/ci_occupation.cc
-  ci/determinant_helpers.cc
+  determinant/determinant_helpers.cc
   ci/rel_ci_sigma_builder.cc
   ci/rel_ci_sigma_builder_rdm.cc
   ci/rel_ci_sigma_builder_rdm_debug.cc
   ci/rel_ci_sigma_builder_harrison_zarrabian.cc
-  ci/slater_rules.cc
+  determinant/slater_rules.cc
+  determinant/rel_slater_rules.cc
+  dsrg/dsrg_utils.cc
+  sci/sci_helper.cc
+  sci/sci_helper_1rdm.cc
+  sci/sci_helper_1trdm.cc
+  sci/sci_helper_2rdm.cc
+  sci/sci_helper_select_hbci.cc
+  sci/sci_helper_sigma_build.cc
+  sci/sci_helper_spin.cc
+  sci/rel_sci_helper.cc
+  sci/rel_sci_helper_rdm.cc
+  sci/rel_sci_helper_select_hbci.cc
+  sci/rel_sci_helper_sigma_build.cc
+  sci/sci_strings.cc
   sparse/sparse_exp.cc
   sparse/sparse_operator.cc
   sparse/sparse_operator_hamiltonian.cc
@@ -140,19 +156,19 @@ nanobind_add_module(
   sparse/sq_operator_string.cc
 )
 
-target_link_libraries(_forte2 PRIVATE Libint2::int2)
-target_link_libraries(_forte2 PRIVATE Eigen3::Eigen)
-target_link_libraries(_forte2 PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
+target_link_libraries(lib PRIVATE Libint2::int2)
+target_link_libraries(lib PRIVATE Eigen3::Eigen)
+target_link_libraries(lib PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
 
 # Conditionally link libcint and expose macro to C++
 if (USE_LIBCINT)
-  target_link_libraries(_forte2 PRIVATE cint)
-  target_compile_definitions(_forte2 PRIVATE FORTE2_USE_LIBCINT=1)
+  target_link_libraries(lib PRIVATE cint)
+  target_compile_definitions(lib PRIVATE FORTE2_USE_LIBCINT=1)
 else()
-  target_compile_definitions(_forte2 PRIVATE FORTE2_USE_LIBCINT=0)
+  target_compile_definitions(lib PRIVATE FORTE2_USE_LIBCINT=0)
 endif()
 
-target_include_directories(_forte2
+target_include_directories(lib
   PUBLIC
     .
 )
@@ -164,19 +180,18 @@ if (USE_LIBCINT)
   )
 endif()
 
-# Set rpath to use @loader_path so it finds the dylib in the same directory
-set_target_properties(_forte2 PROPERTIES
-    INSTALL_RPATH "$ENV{CONDA_PREFIX}/lib"
-    BUILD_WITH_INSTALL_RPATH TRUE
+# Set rpath so the installed extension looks for companion libraries next to itself
+set_target_properties(lib PROPERTIES
+  INSTALL_RPATH "$<$<PLATFORM_ID:Darwin>:@loader_path>$<$<NOT:$<PLATFORM_ID:Darwin>>:$ORIGIN>"
 )
 
 # Install directive for scikit-build-core
-install(TARGETS _forte2 LIBRARY DESTINATION forte2)
+install(TARGETS lib LIBRARY DESTINATION forte2)
 
 if (USE_LIBCINT)
   # Install "libcint_forte2.<version>.dylib/so" (and shortened symlinks)
   install(TARGETS cint 
-      LIBRARY DESTINATION "$ENV{CONDA_PREFIX}/lib"
+      LIBRARY DESTINATION forte2
   )
 endif()
 

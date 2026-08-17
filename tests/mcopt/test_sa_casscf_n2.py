@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 
-from forte2 import System, RHF, MCOptimizer, AVAS, State
+from forte2 import System, RHF, MCOptimizer, AVAS, State, CISolver
 from forte2.helpers.comparisons import approx
 
 
@@ -15,13 +15,16 @@ def test_sa_casscf_same_mult():
     """
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
-    rhf = RHF(charge=0, econv=1e-12)(system)
-    mc = MCOptimizer(
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = CISolver(
         State(nel=14, multiplicity=1, ms=0.0),
         active_orbitals=[4, 5, 6, 7, 8, 9],
         core_orbitals=[0, 1, 2, 3],
         nroots=2,
-        gconv=1e-7,
+    )
+    mc = MCOptimizer(
+        ci_solver,
+        g_tol=1e-7,
     )(rhf)
     mc.run()
     assert rhf.E == approx(erhf)
@@ -37,7 +40,7 @@ def test_sa_mcscf_diff_mult_with_avas():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     avas = AVAS(
         selection_method="separate",
         num_active_docc=3,
@@ -47,9 +50,10 @@ def test_sa_mcscf_diff_mult_with_avas():
     )(rhf)
     singlet = State(nel=rhf.nel, multiplicity=1, ms=0.0)
     triplet = State(nel=rhf.nel, multiplicity=3, ms=0.0)
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         [singlet, triplet], weights=[[0.25], [0.75 * 0.85, 0.75 * 0.15]], nroots=[1, 2]
-    )(avas)
+    )
+    mc = MCOptimizer(ci_solver)(avas)
     mc.run()
 
     eref_singlet = -109.0664322107
@@ -65,12 +69,12 @@ def test_sa_mcscf_diff_mult_with_avas():
 
     nat_occ_ref = np.array(
         [
-            [1.97531263, 1.97618291, 1.9797172],
-            [1.91200525, 1.45253886, 1.46608634],
-            [1.91200525, 1.45253876, 1.46608622],
-            [0.08779585, 0.54735532, 0.53380309],
-            [0.08779585, 0.54735522, 0.53380298],
-            [0.02508518, 0.02402893, 0.02050418],
+            [1.97531261, 1.9761829, 1.9797172, 1.97636293],
+            [1.91200523, 1.4525388, 1.46608628, 1.5689295],
+            [1.91200523, 1.45253877, 1.46608627, 1.56892948],
+            [0.08779586, 0.54735532, 0.53380304, 0.43094082],
+            [0.08779586, 0.54735529, 0.53380303, 0.4309408],
+            [0.0250852, 0.02402894, 0.02050418, 0.02389647],
         ]
     )
     assert mc.ci_solver.nat_occs == pytest.approx(nat_occ_ref, abs=5e-7)
@@ -84,16 +88,17 @@ def test_sa_casscf_diff_mult():
 
     system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    rhf = RHF(charge=0, econv=1e-12)(system)
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
     singlet = State(nel=rhf.nel, multiplicity=1, ms=0.0)
     triplet = State(nel=rhf.nel, multiplicity=3, ms=0.0)
-    mc = MCOptimizer(
+    ci_solver = CISolver(
         [singlet, triplet],
         active_orbitals=[4, 5, 6, 7, 8, 9],
         core_orbitals=[0, 1, 2, 3],
         weights=[[0.25], [0.75 * 0.85, 0.75 * 0.15]],
         nroots=[1, 2],
-    )(rhf)
+    )
+    mc = MCOptimizer(ci_solver)(rhf)
     mc.run()
 
     eref_singlet = -109.0664322107

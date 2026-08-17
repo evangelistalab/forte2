@@ -1,10 +1,13 @@
 #include <algorithm>
+#include <bit>
+#include <cstdint>
 #include <numeric>
 #include <regex>
 
 #include "helpers/combinatorial.h"
 #include "helpers/string_algorithms.h"
 
+#include "determinant/bitwise_operations.hpp"
 #include "sparse/sq_operator_string.h"
 
 namespace forte2 {
@@ -28,31 +31,26 @@ bool compare_ops(const std::tuple<bool, bool, int>& lhs, const std::tuple<bool, 
     return flip_spin(lhs) < flip_spin(rhs);
 }
 
-SQOperatorString::SQOperatorString() {}
+SQOperatorString::SQOperatorString()
+    : cre_(Determinant::zero()), ann_(Determinant::zero()), sign_mask_(Determinant::zero()) {}
 
 SQOperatorString::SQOperatorString(const Determinant& cre, const Determinant& ann)
-    : cre_(cre), ann_(ann) {
-    Determinant temp = Determinant::zero();
-    compute_sign_mask(cre_, ann_, sign_mask_, temp);
+    : cre_(cre), ann_(ann), sign_mask_(Determinant::zero()) {
+    compute_sign_mask(cre_, ann_, sign_mask_);
 }
 
 SQOperatorString::SQOperatorString(const std::vector<size_t>& acre, const std::vector<size_t>& bcre,
-                                   const std::vector<size_t>& aann,
-                                   const std::vector<size_t>& bann) {
-    cre_ = Determinant(acre, bcre);
-    ann_ = Determinant(aann, bann);
-    Determinant temp = Determinant::zero();
-    compute_sign_mask(cre_, ann_, sign_mask_, temp);
+                                   const std::vector<size_t>& aann, const std::vector<size_t>& bann)
+    : cre_(acre, bcre), ann_(aann, bann), sign_mask_(Determinant::zero()) {
+    compute_sign_mask(cre_, ann_, sign_mask_);
 }
 
 SQOperatorString::SQOperatorString(const std::initializer_list<size_t> acre,
                                    const std::initializer_list<size_t> bcre,
                                    const std::initializer_list<size_t> aann,
-                                   const std::initializer_list<size_t> bann) {
-    cre_ = Determinant(acre, bcre);
-    ann_ = Determinant(aann, bann);
-    Determinant temp = Determinant::zero();
-    compute_sign_mask(cre_, ann_, sign_mask_, temp);
+                                   const std::initializer_list<size_t> bann)
+    : cre_(acre, bcre), ann_(aann, bann), sign_mask_(Determinant::zero()) {
+    compute_sign_mask(cre_, ann_, sign_mask_);
 }
 
 const Determinant& SQOperatorString::cre() const { return cre_; }
@@ -60,10 +58,6 @@ const Determinant& SQOperatorString::cre() const { return cre_; }
 const Determinant& SQOperatorString::ann() const { return ann_; }
 
 const Determinant& SQOperatorString::sign_mask() const { return sign_mask_; }
-
-Determinant& SQOperatorString::cre_mod() { return cre_; }
-
-Determinant& SQOperatorString::ann_mod() { return ann_; }
 
 bool SQOperatorString::is_identity() const { return (cre().count() == 0) and (ann().count() == 0); }
 
@@ -103,10 +97,10 @@ SQOperatorString SQOperatorString::spin_flip() const {
 }
 
 std::string SQOperatorString::str() const {
-    auto acre = cre().get_alfa_occ(cre().norb());
-    auto bcre = cre().get_beta_occ(cre().norb());
-    auto aann = ann().get_alfa_occ(ann().norb());
-    auto bann = ann().get_beta_occ(ann().norb());
+    auto acre = cre().get_alpha_occ();
+    auto bcre = cre().get_beta_occ();
+    auto aann = ann().get_alpha_occ();
+    auto bann = ann().get_beta_occ();
     std::reverse(aann.begin(), aann.end());
     std::reverse(bann.begin(), bann.end());
     std::vector<std::string> terms;
@@ -127,10 +121,10 @@ std::string SQOperatorString::str() const {
 }
 
 op_tuple_t SQOperatorString::op_tuple() const {
-    auto acre = cre().get_alfa_occ(cre().norb());
-    auto bcre = cre().get_beta_occ(cre().norb());
-    auto aann = ann().get_alfa_occ(ann().norb());
-    auto bann = ann().get_beta_occ(ann().norb());
+    auto acre = cre().get_alpha_occ();
+    auto bcre = cre().get_beta_occ();
+    auto aann = ann().get_alpha_occ();
+    auto bann = ann().get_beta_occ();
     std::reverse(aann.begin(), aann.end());
     std::reverse(bann.begin(), bann.end());
     op_tuple_t terms;
@@ -156,10 +150,10 @@ std::ostream& operator<<(std::ostream& os, const SQOperatorString& sqop) {
 }
 
 std::string SQOperatorString::latex() const {
-    auto acre = cre().get_alfa_occ(cre().norb());
-    auto bcre = cre().get_beta_occ(cre().norb());
-    auto aann = ann().get_alfa_occ(ann().norb());
-    auto bann = ann().get_beta_occ(ann().norb());
+    auto acre = cre().get_alpha_occ();
+    auto bcre = cre().get_beta_occ();
+    auto aann = ann().get_alpha_occ();
+    auto bann = ann().get_beta_occ();
     std::reverse(aann.begin(), aann.end());
     std::reverse(bann.begin(), bann.end());
 
@@ -181,10 +175,10 @@ std::string SQOperatorString::latex() const {
 }
 
 std::string SQOperatorString::latex_compact() const {
-    auto acre = cre().get_alfa_occ(cre().norb());
-    auto bcre = cre().get_beta_occ(cre().norb());
-    auto aann = ann().get_alfa_occ(ann().norb());
-    auto bann = ann().get_beta_occ(ann().norb());
+    auto acre = cre().get_alpha_occ();
+    auto bcre = cre().get_beta_occ();
+    auto aann = ann().get_alpha_occ();
+    auto bann = ann().get_beta_occ();
     std::string s;
     s += "\\hat{a}^{";
     std::vector<std::string> terms;
@@ -271,7 +265,7 @@ std::pair<SQOperatorString, double> make_sq_operator_string_from_list(const op_t
         });
         auto parity = permutation_parity(idx);
         // set the coefficient including the parity of the permutation
-        coefficient *= 1.0 - 2.0 * parity;
+        coefficient *= parity_to_sign(parity);
     }
 
     auto cre = Determinant::zero();
@@ -330,6 +324,9 @@ void process_cre(const SQOperatorString& lhs, const SQOperatorString& rhs,
 
     // find the first right alpha creation operator to move
     auto i = rhs.cre().find_first_one();
+    if (i == ui64_bit_not_found) {
+        return;
+    }
     // remove the operator from the right
     // if a corresponding left annihilation operator exists, permute the operators and
     // introduce a contraction
@@ -376,6 +373,9 @@ void process_ann(const SQOperatorString& lhs, const SQOperatorString& rhs,
 
     // find the last right annihilation operator to move
     auto i = rhs.ann().find_last_one();
+    if (i == ui64_bit_not_found) {
+        return;
+    }
     // if the left annihilation operator does not exist, move the operator in place
     // otherwise we get a collision and the operator is removed
     if (lhs.ann().get_bit(i) == false) {
@@ -416,10 +416,10 @@ std::vector<std::pair<SQOperatorString, double>> operator*(const SQOperatorStrin
 
 CommutatorType commutator_type(const SQOperatorString& lhs, const SQOperatorString& rhs) {
     // Find the number of operators in common between the two operator strings
-    const auto common_l_ann_r_cre = lhs.ann().fast_a_and_b_count(rhs.cre());
-    const auto common_l_cre_r_cre = lhs.cre().fast_a_and_b_count(rhs.cre());
-    const auto common_l_ann_r_ann = lhs.ann().fast_a_and_b_count(rhs.ann());
-    const auto common_l_cre_r_ann = lhs.cre().fast_a_and_b_count(rhs.ann());
+    const auto common_l_ann_r_cre = lhs.ann().intersection_count(rhs.cre());
+    const auto common_l_cre_r_cre = lhs.cre().intersection_count(rhs.cre());
+    const auto common_l_ann_r_ann = lhs.ann().intersection_count(rhs.ann());
+    const auto common_l_cre_r_ann = lhs.cre().intersection_count(rhs.ann());
     // if there are no indices in common
     if (common_l_cre_r_cre == 0 and common_l_ann_r_ann == 0 and common_l_ann_r_cre == 0 and
         common_l_cre_r_ann == 0) {
@@ -436,10 +436,10 @@ CommutatorType commutator_type(const SQOperatorString& lhs, const SQOperatorStri
 }
 
 bool do_ops_commute(const SQOperatorString& lhs, const SQOperatorString& rhs) {
-    const auto common_l_cre_r_cre = lhs.cre().fast_a_and_b_count(rhs.cre());
-    const auto common_l_cre_r_ann = lhs.cre().fast_a_and_b_count(rhs.ann());
-    const auto common_l_ann_r_ann = lhs.ann().fast_a_and_b_count(rhs.ann());
-    const auto common_l_ann_r_cre = lhs.ann().fast_a_and_b_count(rhs.cre());
+    const auto common_l_cre_r_cre = lhs.cre().intersection_count(rhs.cre());
+    const auto common_l_cre_r_ann = lhs.cre().intersection_count(rhs.ann());
+    const auto common_l_ann_r_ann = lhs.ann().intersection_count(rhs.ann());
+    const auto common_l_ann_r_cre = lhs.ann().intersection_count(rhs.cre());
     if (common_l_cre_r_cre == 0 and common_l_ann_r_ann == 0 and common_l_ann_r_cre == 0 and
         common_l_cre_r_ann == 0) {
         // if the number of operators is even, the commutator is zero
@@ -481,10 +481,10 @@ std::vector<std::pair<SQOperatorString, double>> commutator_fast(const SQOperato
 std::vector<std::pair<SQOperatorString, double>> commutator(const SQOperatorString& lhs,
                                                             const SQOperatorString& rhs) {
 
-    // const auto common_l_cre_r_cre = lhs.cre().fast_a_and_b_count(rhs.cre());
-    // const auto common_l_cre_r_ann = lhs.cre().fast_a_and_b_count(rhs.ann());
-    // const auto common_l_ann_r_ann = lhs.ann().fast_a_and_b_count(rhs.ann());
-    // const auto common_l_ann_r_cre = lhs.ann().fast_a_and_b_count(rhs.cre());
+    // const auto common_l_cre_r_cre = lhs.cre().intersection_count(rhs.cre());
+    // const auto common_l_cre_r_ann = lhs.cre().intersection_count(rhs.ann());
+    // const auto common_l_ann_r_ann = lhs.ann().intersection_count(rhs.ann());
+    // const auto common_l_ann_r_cre = lhs.ann().intersection_count(rhs.cre());
     // const auto nl = lhs.count();
     // const auto nr = rhs.count();
 
@@ -557,7 +557,7 @@ void SQOperatorProductComputer::product(
     // determine the right creation operators that can be moved to the left without contraction
     ucon_rhs_cre_ = rhs.cre() - lhs.ann();
     // if there are common lhs creation ops and uncontracted rhs creation ops then we get zero
-    if (not lhs.cre().fast_a_and_b_eq_zero(ucon_rhs_cre_)) {
+    if (not lhs.cre().is_disjoint_from(ucon_rhs_cre_)) {
         return;
     }
     // find the right creation ops that will need to be contracted with the left annihilation ops
@@ -567,7 +567,7 @@ void SQOperatorProductComputer::product(
     ucon_rhs_ann_ = rhs.ann() - con_rhs_cre_;
     // if there are common lhs annihilation ops and uncontracted rhs annihilation ops then we get
     // zero, so we return
-    if (not lhs.ann().fast_a_and_b_eq_zero(ucon_rhs_ann_)) {
+    if (not lhs.ann().is_disjoint_from(ucon_rhs_ann_)) {
         return;
     }
 
@@ -584,30 +584,28 @@ void SQOperatorProductComputer::product(
         phase_ *= ((lhs_ann_.count_all() * ucon_rhs_cre_.count_all()) % 2) == 0 ? 1.0 : -1.0;
         // 1.b move the uncontracted rhs creation operators to the left creation ops
         // double cre_perm_phase = (lhs_cre_.count_all() % 2) == 0 ? 1.0 : -1.0;
-        for (size_t i = ucon_rhs_cre_.fast_find_and_clear_first_one(0); i != ~0ULL;
-             i = ucon_rhs_cre_.fast_find_and_clear_first_one(i)) {
+        ucon_rhs_cre_.for_each_set_bit([&](size_t i) {
             // remove op i and find the sign for permuting it to the left of the right creation ops
             rhs_cre_.set_bit(i, false);
             phase_ *= rhs_cre_.slater_sign(i);
             // add the op to the left and find the computing the phase
             lhs_cre_.set_bit(i, true);
             phase_ *= lhs_cre_.slater_sign_reverse(i); // * cre_perm_phase;
-        }
+        });
     }
 
     // Step 2. Move the uncontracted rhs annihilation operators to the left
     // 2.a phase adjustment due to permutation of the operator with right creation ops
     if (const auto ucon_rhs_ann_count = ucon_rhs_ann_.count_all(); ucon_rhs_ann_count > 0) {
         phase_ *= ((rhs_cre_.count_all() * ucon_rhs_ann_count) % 2) == 0 ? 1.0 : -1.0;
-        for (size_t i = ucon_rhs_ann_.fast_find_and_clear_first_one(0); i != ~0ULL;
-             i = ucon_rhs_ann_.fast_find_and_clear_first_one(i)) {
+        ucon_rhs_ann_.for_each_set_bit([&](size_t i) {
             // remove op i and find the sign for permuting it with the right creation ops
             rhs_ann_.set_bit(i, false);
             phase_ *= rhs_ann_.slater_sign_reverse(i);
             // add the op to the left computing the phase
             lhs_ann_.set_bit(i, true);
             phase_ *= lhs_ann_.slater_sign(i);
-        }
+        });
     }
 
     // Step 3. Find the number component operators on the right that can be treated trivially
@@ -620,10 +618,9 @@ void SQOperatorProductComputer::product(
         rhs_ann_ -= rhs_comm_trivial_; // remove the trivially contracted operators from the right
         ucon_rhs_cre_ = rhs_cre_;      // now this holds the operators that need to be contracted
         // adjust the phase due to the trivial contractions
-        for (size_t i = rhs_comm_trivial_.fast_find_and_clear_first_one(0); i != ~0ULL;
-             i = rhs_comm_trivial_.fast_find_and_clear_first_one(i)) {
+        rhs_comm_trivial_.for_each_set_bit([&](size_t i) {
             phase_ *= rhs_cre_.slater_sign_reverse(i) * rhs_ann_.slater_sign_reverse(i);
-        }
+        });
     }
 
     // Step 4. Find the anti-number component operators on the right that can be treated trivially
@@ -635,10 +632,8 @@ void SQOperatorProductComputer::product(
         rhs_cre_ -= lhs_comm_trivial_;
         lhs_ann_ -= lhs_comm_trivial_;
         // ops adjust the phase due to the trivial contractions
-        for (size_t i = lhs_comm_trivial_.fast_find_and_clear_first_one(0); i != ~0ULL;
-             i = lhs_comm_trivial_.fast_find_and_clear_first_one(i)) {
-            phase_ *= lhs_ann_.slater_sign(i) * rhs_cre_.slater_sign(i);
-        }
+        lhs_comm_trivial_.for_each_set_bit(
+            [&](size_t i) { phase_ *= lhs_ann_.slater_sign(i) * rhs_cre_.slater_sign(i); });
     }
 
     // At this point we have moved all the uncontracted rhs creation and annihilation operators
@@ -656,10 +651,8 @@ void SQOperatorProductComputer::product(
     // adjustment to move them to the left and form pairs with the left annihilation operators
     ucon_rhs_cre_ = rhs_cre_; // now this holds the operators that need to be contracted
     // NOTE: this was not checked yet
-    for (size_t i = ucon_rhs_cre_.fast_find_and_clear_first_one(0); i != ~0ULL;
-         i = ucon_rhs_cre_.fast_find_and_clear_first_one(i)) {
-        phase_ *= lhs_ann_.slater_sign(i) * rhs_cre_.slater_sign(i);
-    }
+    ucon_rhs_cre_.for_each_set_bit(
+        [&](size_t i) { phase_ *= lhs_ann_.slater_sign(i) * rhs_cre_.slater_sign(i); });
     // find the set bits of the operators that can be contracted and store it in set_bits_
     rhs_cre_.find_set_bits(set_bits_, ncontr);
     // now this holds the left annihilation ops not paired with creation ops
@@ -701,18 +694,16 @@ void SQOperatorProductComputer::commutator(
     product(rhs, lhs, -factor, func);
 }
 
-void compute_sign_mask(const Determinant& cre, const Determinant& ann, Determinant& sign_mask,
-                       Determinant& idx) {
-    sign_mask.clear();
-    idx = ann; // temp is for looping over the operators
-    for (size_t i = idx.fast_find_and_clear_first_one(0); i != ~0ULL;
-         i = idx.fast_find_and_clear_first_one(i)) {
-        sign_mask.xor_up_to(i);
-    }
-    idx = cre;
-    for (size_t i = idx.fast_find_and_clear_first_one(0); i != ~0ULL;
-         i = idx.fast_find_and_clear_first_one(i)) {
-        sign_mask.xor_up_to(i);
+void compute_sign_mask(const Determinant& cre, const Determinant& ann, Determinant& sign_mask) {
+    bool higher_word_parity = false;
+    for (size_t n = Determinant::nwords_; n-- > 0;) {
+        const uint64_t ops = cre.get_word(n) ^ ann.get_word(n);
+        uint64_t mask = ui64_exclusive_suffix_xor(ops);
+        if (higher_word_parity) {
+            mask = ~mask;
+        }
+        sign_mask.set_word(n, mask);
+        higher_word_parity ^= static_cast<bool>(std::popcount(ops) & 1);
     }
 }
 

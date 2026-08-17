@@ -4,7 +4,9 @@
 
 Standardize user-facing option names to reduce ambiguity, improve discoverability, and keep behavior explicit across SCF, CI/MCSCF, DSRG, system setup, and orbital tooling.
 
-This plan is backward-compatible: existing names remain usable during a deprecation window.
+Most renames in this plan are backward-compatible during a deprecation window. The X2C
+configuration is intentionally consolidated into one explicit option; legacy saved-System JSON
+is migrated when loaded, but the former constructor keywords are removed.
 
 ## Scope
 
@@ -49,8 +51,7 @@ This plan is backward-compatible: existing names remain usable during a deprecat
 | `linear_dep_trigger` | `lindep_rtol` | Trigger for deciding lindep behavior from overlap spectrum. |
 | `ortho_thresh` | `orth_rtol` | Relative orthogonalization threshold. |
 | `cholesky_tei` | `use_cholesky_tei` | Boolean naming consistency. |
-| `x2c_type` values `sf`, `so` | `x2c_mode` values `scalar`, `spin_orbit` | Keep `sf`/`so` accepted as aliases. |
-| `snso_type` | `snso_mode` | Enum-like mode naming consistency. |
+| `x2c_type`, `x2c_model`, `snso_type` | `x2c` | One complete Hamiltonian choice: `sf-1e`, `so-1e`, `so-snso-*`, `sf-sap`, or `so-sap`. |
 
 ## SCFBase and SCF methods
 
@@ -73,7 +74,7 @@ This plan is backward-compatible: existing names remain usable during a deprecat
 
 | Current | Proposed canonical | Notes |
 |---|---|---|
-| `final_orbital` | `final_orbital_basis` | Values: `original`, `semicanonical`. |
+| `final_orbitals` | `final_orbital_basis` | Values: `original`, `semicanonical`. |
 | `ci_algorithm` values `hz`, `kh` | `ci_solver` values `harrison_zarrabian`, `knowles_handy`, `exact`, `sparse` | Keep short aliases accepted. |
 | `active_frozen_orbitals` | `frozen_active_orbitals` | Make naming parallel with core/virtual variants. |
 | `do_transition_dipole` | `compute_transition_dipole` | Prefer verb that implies action. |

@@ -1,16 +1,20 @@
 #pragma once
 
 #include <functional>
-#include <vector>
 #include <cmath>
 #include <span>
+#include <string_view>
+#include <tuple>
+#include <vector>
 
 #include "helpers/ndarray.h"
 #include "helpers/spin.h"
 
 #include "ci/ci_strings.h"
-#include "ci/slater_rules.h"
-#include "ci/ci_spin_adapter.h"
+#include "determinant/slater_rules.h"
+#include "determinant/ci_spin_adapter.h"
+
+#include "sparse/sparse_state.h"
 
 namespace forte2 {
 
@@ -96,6 +100,12 @@ class CISigmaBuilder {
                     hbbbb_timer_ / static_cast<double>(build_count_)};
         }
     }
+
+    /// @brief Convert a CI vector to a sparse state
+    /// @param C The CI vector to convert
+    /// @param threshold The threshold for including determinants in the sparse state
+    /// @return The corresponding sparse state
+    SparseState make_sparse_state(const np_vector& C, double threshold = 1e-12) const;
 
     /// @brief Compute the spin-dependent one-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -240,16 +250,16 @@ class CISigmaBuilder {
     // == Debugging Functions ==
     // The following are debugging functions that compute reduced density matrices that parallel
     // the definition of the functions above.
-    np_matrix compute_a_1rdm_debug(np_vector C_left, np_vector C_right, bool alfa) const;
+    np_matrix compute_a_1rdm_debug(np_vector C_left, np_vector C_right, bool alpha) const;
 
-    np_matrix compute_aa_2rdm_debug(np_vector C_left, np_vector C_right, bool alfa) const;
+    np_matrix compute_aa_2rdm_debug(np_vector C_left, np_vector C_right, bool alpha) const;
     np_tensor4 compute_ab_2rdm_debug(np_vector C_left, np_vector C_right) const;
 
-    np_matrix compute_aaa_3rdm_debug(np_vector C_left, np_vector C_right, bool alfa) const;
+    np_matrix compute_aaa_3rdm_debug(np_vector C_left, np_vector C_right, bool alpha) const;
     np_tensor4 compute_aab_3rdm_debug(np_vector C_left, np_vector C_right) const;
     np_tensor4 compute_abb_3rdm_debug(np_vector C_left, np_vector C_right) const;
 
-    np_matrix compute_aaaa_4rdm_debug(np_vector C_left, np_vector C_right, bool alfa) const;
+    np_matrix compute_aaaa_4rdm_debug(np_vector C_left, np_vector C_right, bool alpha) const;
     np_tensor4 compute_aaab_4rdm_debug(np_vector C_left, np_vector C_right) const;
     np_tensor4 compute_aabb_4rdm_debug(np_vector C_left, np_vector C_right) const;
     np_tensor4 compute_abbb_4rdm_debug(np_vector C_left, np_vector C_right) const;
@@ -260,6 +270,16 @@ class CISigmaBuilder {
 
     np_tensor4 compute_sf_2cumulant_debug(np_vector C_left, np_vector C_right) const;
     np_tensor6 compute_sf_3cumulant_debug(np_vector C_left, np_vector C_right) const;
+
+    np_matrix compute_s_1trdm(const CISigmaBuilder& sigmabuilder_right, np_vector C_left,
+                              np_vector C_right, Spin spin) const;
+
+    np_matrix compute_a_1trdm(const CISigmaBuilder& sigmabuilder_right, np_vector C_left,
+                              np_vector C_right) const;
+    np_matrix compute_b_1trdm(const CISigmaBuilder& sigmabuilder_right, np_vector C_left,
+                              np_vector C_right) const;
+    np_matrix compute_sf_1trdm(const CISigmaBuilder& sigmabuilder_right, np_vector C_left,
+                               np_vector C_right) const;
 
   private:
     // == Class Private Variables ==
@@ -319,13 +339,13 @@ class CISigmaBuilder {
     mutable std::vector<double> v_pr_qs_a;
 
     /// @brief  One-electron contribution to the sigma vector |sigma> = H |basis>
-    /// @param alfa If true, compute the alpha contribution, otherwise the beta
+    /// @param alpha If true, compute the alpha contribution, otherwise the beta
     /// @param h The one-electron integrals
     void H1_hz(std::span<double> basis, std::span<double> sigma, Spin spin,
                std::span<double> h) const;
 
     /// @brief  Two-electron same-spin contribution to the sigma vector |sigma> = H |basis>
-    /// @param alfa If true, compute the alpha contribution, otherwise the beta
+    /// @param alpha If true, compute the alpha contribution, otherwise the beta
     void H2_hz_same_spin(std::span<double> basis, std::span<double> sigma, Spin spin) const;
 
     /// @brief  Two-electron mixed-spin contribution to the sigma vector |sigma> = H |basis>
@@ -348,8 +368,26 @@ class CISigmaBuilder {
     /// algorithm.
     void H2_kh(std::span<double> basis, std::span<double> sigma) const;
 
-    std::tuple<std::span<double>, std::span<double>, size_t> get_Kblock_spans(size_t dim,
-                                                                              size_t maxKa) const;
+    /// @brief Get the spans of the Kblock buffers for a given number of rows and columns
+    /// @param nrows The number of rows in the block
+    /// @param ncols The number of columns in the block
+    /// @return A tuple containing the spans of the Kblock buffers and the number of columns
+    ///         that fit in each buffer
+    std::tuple<std::span<double>, std::span<double>, size_t> get_Kblock_spans(size_t nrows,
+                                                                              size_t ncols) const;
+
+    /// @brief Acquire call-local K-block buffers subject to the CI builder memory limit.
+    /// @return The number of columns that fit in each buffer.
+    size_t acquire_local_Kblock_buffers(std::vector<double>& Kblock1, std::vector<double>& Kblock2,
+                                        size_t nrows, size_t ncols) const;
+
+    /// @brief Find the largest product of class sizes in two hole-string address spaces.
+    /// @param alpha_address Alpha hole-string address space.
+    /// @param beta_address Beta hole-string address space.
+    /// @param rdm_name RDM name used to identify an overflowing dimension.
+    static size_t max_composite_hole_dimension(const StringAddress& alpha_address,
+                                               const StringAddress& beta_address,
+                                               std::string_view rdm_name);
 };
 
 [[nodiscard]] std::span<double> gather_block(std::span<double> source, std::span<double> dest,

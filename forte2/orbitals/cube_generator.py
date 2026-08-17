@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 
 from forte2.helpers import logger
-from forte2 import ints
+from forte2.lib import ints
 
 
 def write_orbital_cubes(

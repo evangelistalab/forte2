@@ -1,5 +1,5 @@
 import numpy as np
-from forte2 import dsrg_utils
+from forte2.lib import dsrg_utils
 
 compute_t1_block = dsrg_utils.compute_T1_block
 compute_t2_block = dsrg_utils.compute_T2_block
