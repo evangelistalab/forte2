@@ -1,5 +1,6 @@
 import shutil
 import tempfile
+import weakref
 from dataclasses import dataclass, field
 from typing import ClassVar
 
@@ -140,6 +141,14 @@ class _DMRGSingleStateSolver:
                 )
             else:
                 self._scratch = tempfile.mkdtemp(prefix="forte2_dmrg_")
+            # Safety net: cleanup() is the primary way to remove this
+            # directory, but nothing calls it automatically (the same worker
+            # may be re-run many times across MCSCF macroiterations, so this
+            # can't just happen at the end of run()). Fall back to removing
+            # it when this worker is garbage-collected, so an un-cleaned-up
+            # DMRG solver doesn't leak scratch directories indefinitely. Binds
+            # the path (not self) so the finalizer doesn't keep self alive.
+            weakref.finalize(self, shutil.rmtree, self._scratch, ignore_errors=True)
 
         driver = DMRGDriver(
             scratch=self._scratch,
@@ -258,6 +267,15 @@ class _DMRGSingleStateSolver:
         try:
             energies = self._driver._dmrg.energies
         except AttributeError:
+            # self._driver._dmrg is a private block2 attribute with no
+            # documented stability guarantee; if it's ever renamed/removed,
+            # fail loud rather than silently reporting convergence.
+            logger.log_warning(
+                "Could not read block2's internal sweep-energy history "
+                "(self._driver._dmrg.energies is unavailable); assuming "
+                "converged without verifying. This likely indicates a block2 "
+                "version incompatibility."
+            )
             return True
         if len(energies) < 2:
             return True

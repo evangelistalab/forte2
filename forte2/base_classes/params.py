@@ -244,20 +244,29 @@ class DMRGParams(ParamsBase):
     def __post_init__(self):
         if not self.bond_dims:
             self.bond_dims = [250] * 4 + [500] * 4
-        self._validate_list(self.bond_dims, self._is_nonneg_integer)
+        if not self._validate_list(self.bond_dims, self._is_nonneg_integer):
+            raise ValueError(
+                f"bond_dims must be a list of non-negative integers, got {self.bond_dims}."
+            )
         if not self.noises:
             self.noises = [1e-4] * 4 + [1e-5] * 4 + [0.0]
-        self._validate_list(self.noises, self._is_nonneg_float)
+        if not self._validate_list(self.noises, self._is_nonneg_float):
+            raise ValueError(
+                f"noises must be a list of non-negative floats, got {self.noises}."
+            )
         if not self.thrds:
             self.thrds = [1e-10] * 8
-        self._validate_list(self.thrds, self._is_nonneg_float)
+        if not self._validate_list(self.thrds, self._is_nonneg_float):
+            raise ValueError(
+                f"thrds must be a list of non-negative floats, got {self.thrds}."
+            )
         if self.symm_type.upper() != "SU2":
             raise ValueError(
                 f"Only 'SU2' symm_type is currently supported, got '{self.symm_type}'."
             )
         if self.n_sweeps < 1:
             raise ValueError(f"n_sweeps needs to be >= 1, got {self.n_sweeps}.")
-        if self.tol < 0:
+        if self.tol <= 0:
             raise ValueError(f"tol needs to be > 0, got {self.tol}.")
         if self.n_threads < 1:
             raise ValueError(f"n_threads needs to be >= 1, got {self.n_threads}.")
