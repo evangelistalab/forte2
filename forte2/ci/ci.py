@@ -5,15 +5,13 @@ from typing import ClassVar
 import numpy as np
 from numpy.typing import NDArray
 
-from forte2 import (
+from forte2.lib import sparse_ops, cpp_helpers
+from forte2.lib.sparse_ops import SparseState
+from forte2.lib.ci_helpers import (
     CIStrings,
     CISigmaBuilder,
     CISpinAdapter,
-    cpp_helpers,
     RelCISigmaBuilder,
-    SparseState,
-    apply_op,
-    sparse_operator_hamiltonian,
 )
 from forte2.state import State, MOSpace
 from forte2.helpers.comparisons import approx
@@ -192,17 +190,7 @@ class _CISingleStateSolver:
             self.b_det = np.zeros((self.ndet))
             self.sigma_det = np.zeros((self.ndet))
 
-    def run(self, use_asym_ints=False):
-        if use_asym_ints:
-            assert (
-                self.two_component
-            ), "Antisymmetric integrals only supported for two-component CI."
-            assert self.ci_params.ci_algorithm.lower() in [
-                "hz",
-                "harrison-zarrabian",
-                "exact",
-            ], "Antisymmetric integrals only supported for 'hz'/'harrison-zarrabian' and 'exact' algorithms."
-
+    def run(self):
         if not self.executed:
             self._ci_solver_startup()
 
@@ -216,7 +204,6 @@ class _CISingleStateSolver:
                 self.ints.H,
                 self.ints.V,
                 self.log_level,
-                use_asym_ints,
             )
         else:
             self.ci_sigma_builder = CISigmaBuilder(
@@ -237,7 +224,7 @@ class _CISingleStateSolver:
             logger.log(f"Final CI Energy Root {i}: {e:20.12f} [Eh]", self.log_level)
 
         if self.do_test_rdms:
-            self._test_rdms(use_asym_ints)
+            self._test_rdms()
 
         self.executed = True
 
@@ -301,7 +288,7 @@ class _CISingleStateSolver:
 
         if self.two_component:
             if self.ci_params.ci_algorithm.lower() == "sparse":
-                ham = sparse_operator_hamiltonian(
+                ham = sparse_ops.sparse_operator_hamiltonian(
                     self.ints.E.real,
                     self.ints.H,
                     self.ints.V,
@@ -314,7 +301,7 @@ class _CISingleStateSolver:
                         psi = SparseState(
                             {d: c for d, c in zip(self.dets, basis_block[:, istate])}
                         )
-                        Hpsi = apply_op(ham, psi, screen_thresh=1e-100)
+                        Hpsi = sparse_ops.apply_op(ham, psi, screen_thresh=1e-100)
                         for idet in range(self.ndet):
                             sigma_block[idet, istate] = Hpsi[self.dets[idet]]
 
@@ -384,7 +371,7 @@ class _CISingleStateSolver:
         self.evals = self.evals_full[: self.nroot]
         self.evecs = self.evecs_full[:, : self.nroot]
 
-    def _test_rdms(self, use_asym_ints=False):
+    def _test_rdms(self):
         # Compute the RDMs from the CI vectors
         # and verify the energy from the RDMs matches the CI energy
         logger.log("\nComputing RDMs from CI vectors.\n", self.log_level)
@@ -395,8 +382,7 @@ class _CISingleStateSolver:
 
                 rdms_energy = self.ints.E
                 rdms_energy += np.einsum("ij,ij", rdm1, self.ints.H)
-                factor = 0.25 if use_asym_ints else 0.5
-                rdms_energy += factor * np.einsum("ijkl,ijkl", rdm2, self.ints.V)
+                rdms_energy += 0.5 * np.einsum("ijkl,ijkl", rdm2, self.ints.V)
                 logger.log(
                     f"CI energy from RDMs: {rdms_energy:.12f} Eh", self.log_level
                 )
@@ -407,10 +393,6 @@ class _CISingleStateSolver:
                     f"RDMs for root {root} validated successfully.\n", self.log_level
                 )
             return
-        if use_asym_ints:
-            raise NotImplementedError(
-                "The 'use_asym_ints' option is not implemented for non-relativistic CI."
-            )
         for root in range(self.nroot):
             root_rdms = {}
             root_rdms["rdm1"] = self.make_sf_1rdm(root)
@@ -1354,14 +1336,13 @@ class CISolver(CIBase):
 
     def compute_natural_occupation_numbers(self):
         """
-        Compute the natural occupation numbers for the CI states.
-        The first `nroots` columns of the resulting array correspond to the natural occupation numbers for each root,
-        while the last column corresponds to the natural occupation numbers from the average 1-RDM.
+        Compute the natural occupation numbers for the CI states and store them
+        in ``self.nat_occs`` (this method returns None).
 
-        Returns
-        -------
-        (norb, nroot) NDArray
-            The natural occupation numbers for each root.
+        The first ``nroots_sum`` columns of ``self.nat_occs`` hold the natural
+        occupation numbers for each root. If more than one root is present
+        (``nroots_sum > 1``), a final column holds the natural occupation
+        numbers from the state-averaged 1-RDM.
         """
         nos = []
         for ci_solver in self.sub_solvers:
@@ -1645,7 +1626,7 @@ class CI(CISolver):
             )
             C_contig = self.mos.C[0][:, self.mo_space.orig_to_contig].copy()
             semi.semi_canonicalize(g1=self.make_average_1rdm(), C_contig=C_contig)
-            self.mos.C[0] = semi.C_semican[self.mo_space.contig_to_orig].copy()
+            self.mos.C[0] = semi.C_semican[:, self.mo_space.contig_to_orig].copy()
 
             # recompute the CI vectors in the semicanonical basis
             ints = RestrictedMOIntegrals(
@@ -1755,14 +1736,14 @@ class RelCISolver(RelCIBase):
             )
             self.sub_solvers.append(_CISingleStateSolver(**kwargs))
 
-    def run(self, use_asym_ints=False):
+    def run(self):
         if self.first_run:
             self._startup()
             self.first_run = False
 
         self.evals_per_solver = []
         for ci_solver in self.sub_solvers:
-            ci_solver.run(use_asym_ints=use_asym_ints)
+            ci_solver.run()
             self.evals_per_solver.append(ci_solver.evals)
 
         self.evals_flat = np.concatenate(self.evals_per_solver)
@@ -1827,7 +1808,7 @@ class RelCI(RelCISolver):
             )
             C_contig = self.mos.C[0][:, self.mo_space.orig_to_contig].copy()
             semi.semi_canonicalize(g1=self.make_average_1rdm(), C_contig=C_contig)
-            self.mos.C[0] = semi.C_semican[self.mo_space.contig_to_orig].copy()
+            self.mos.C[0] = semi.C_semican[:, self.mo_space.contig_to_orig].copy()
 
             # recompute the CI vectors in the semicanonical basis
             ints = SpinorbitalIntegrals(

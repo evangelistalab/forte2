@@ -4,7 +4,7 @@ import scipy as sp
 
 import forte2.integrals as integrals
 from forte2.helpers.matrix_functions import compute_Am1y
-from forte2._forte2 import ints
+from forte2.lib import ints
 
 
 def flat_to_atom_gradient(gradient, natoms):
@@ -74,7 +74,32 @@ def nuclear_repulsion_deriv(atoms):
     return gradient
 
 
-def compute_gradient(system, D1, W1, W2, W3):
+def _system_nuclear_repulsion_deriv(system):
+    """Compute nuclear repulsion derivatives for the system's nuclear model."""
+    if not system.use_gaussian_charges:
+        return nuclear_repulsion_deriv(system.atoms)
+
+    weights = 0.5 * np.outer(system.atomic_charges, system.atomic_charges)
+    np.fill_diagonal(weights, 0.0)
+    return flat_to_atom_gradient(
+        ints.coulomb_2c_deriv(
+            system.gaussian_charge_basis,
+            system.gaussian_charge_basis,
+            weights,
+            system.atoms,
+        ),
+        system.natoms,
+    )
+
+
+def compute_gradient(
+    system,
+    D1,
+    W1,
+    W2,
+    W3,
+    hcore_gradient=None,
+):
     r"""
     Compute the total gradient from the one-electron density matrix and two-electron derivative weights.
 
@@ -92,6 +117,10 @@ def compute_gradient(system, D1, W1, W2, W3):
         The two-electron derivative weight for the metric with shape ``(naux, naux)``.
     W3 : NDArray
         The two-electron derivative weight for the three-center integrals with shape ``(naux, nbasis, nbasis)``.
+    hcore_gradient : NDArray, optional
+        Precontracted one-electron Hamiltonian contribution with shape
+        ``(natoms, 3)``. When provided, this replaces the separate kinetic-
+        and nuclear-attraction derivative contractions.
 
     Returns
     -------
@@ -99,13 +128,21 @@ def compute_gradient(system, D1, W1, W2, W3):
         Total gradient with shape ``(natoms, 3)``.
     """
     natoms = system.natoms
-    gradient = nuclear_repulsion_deriv(system.atoms)
-    gradient += flat_to_atom_gradient(
-        ints.kinetic_deriv(system.basis, system.basis, D1, system.atoms), natoms
-    )
-    gradient += flat_to_atom_gradient(
-        ints.nuclear_deriv(system.basis, system.basis, D1, system.atoms), natoms
-    )
+    gradient = _system_nuclear_repulsion_deriv(system)
+    if hcore_gradient is not None:
+        hcore_gradient = np.asarray(hcore_gradient, dtype=float)
+        if hcore_gradient.shape != (natoms, 3):
+            raise ValueError(
+                f"Expected hcore_gradient shape {(natoms, 3)}, "
+                f"got {hcore_gradient.shape}."
+            )
+        gradient += hcore_gradient
+    else:
+        gradient += flat_to_atom_gradient(
+            ints.kinetic_deriv(system.basis, system.basis, D1, system.atoms),
+            natoms,
+        )
+        gradient += flat_to_atom_gradient(integrals.nuclear_deriv(system, D1), natoms)
     gradient -= flat_to_atom_gradient(
         ints.overlap_deriv(system.basis, system.basis, W1, system.atoms), natoms
     )
@@ -114,11 +151,12 @@ def compute_gradient(system, D1, W1, W2, W3):
     gradient += flat_to_atom_gradient(integrals.coulomb_2c_deriv(system, W2), natoms)
     return gradient
 
+
 def build_metric_inverted_three_center(system):
     r"""Computes the three-center integrals with the Coulomb metric inverse applied.
-    
+
     Compute the quantity :math:`Z^{P}_{\mu\nu}` defined as:
-    
+
     .. math::
         Z^{P}_{\mu\nu}
         =
@@ -128,7 +166,7 @@ def build_metric_inverted_three_center(system):
     ----------
     system : System
         The system for which to compute the metric-inverted three-center integrals.
-    
+
     Returns
     -------
     NDArray

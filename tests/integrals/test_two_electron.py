@@ -1,3 +1,4 @@
+from forte2.lib import ints
 import numpy as np
 import pytest
 
@@ -15,7 +16,7 @@ def test_two_electron_integrals():
 
     system = forte2.System(xyz=xyz, basis_set="sto-3g")
 
-    V = forte2.ints.coulomb_4c(system.basis)
+    V = ints.coulomb_4c(system.basis)
 
     # Test random integrals against the reference values
     assert V[4, 5, 0, 4] == approx(0.011203183573992602)
@@ -96,7 +97,7 @@ def test_3c2e_by_slice():
         kb1 = first_size_b[ksh1 - 1][0] + first_size_b[ksh1 - 1][1]
 
         shell_slices = [(ish0, ish1), (jsh0, jsh1), (ksh0, ksh1)]
-        slice_ref = forte2.ints.coulomb_3c_by_shell(
+        slice_ref = ints.coulomb_3c_by_shell(
             system.auxiliary_basis, system.basis, system.basis, shell_slices
         )
         assert np.linalg.norm(slice_ref - ref[ib0:ib1, jb0:jb1, kb0:kb1]) < 1e-8
@@ -146,7 +147,7 @@ def test_3c2e_by_slice_with_prealloc_buffer():
 
         shell_slices = [(ish0, ish1), (jsh0, jsh1), (ksh0, ksh1)]
         buf1 = np.ndarray(shape, buffer=buf)
-        forte2.ints.coulomb_3c_by_shell(
+        ints.coulomb_3c_by_shell(
             system.auxiliary_basis, system.basis, system.basis, shell_slices, buf1
         )
         assert np.linalg.norm(buf1 - ref[ib0:ib1, jb0:jb1, kb0:kb1]) < 1e-8

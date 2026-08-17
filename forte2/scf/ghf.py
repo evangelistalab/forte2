@@ -32,6 +32,11 @@ class GHF(SCFBase):
 
     Parameters
     ----------
+    ms_guess : float, optional, default=None
+        Target spin projection (Ms) used only to build the initial guess
+        occupation (na_guess/nb_guess). Must be a multiple of 0.5 and
+        compatible with the electron count. If None, a default occupation is
+        used. Also gates whether ``guess_mix`` is applied.
     guess_mix : bool, optional, default=False
         If True, will mix the HOMO and LUMO orbitals to try to break alpha-beta degeneracy if nel is even.
     alpha_beta_mix : bool, optional, default=False
@@ -63,7 +68,9 @@ class GHF(SCFBase):
             self.Usph2j = np.vstack((ua, ub))
             S = system.ints_overlap()
             S_spinor = self.Usph2j.conj().T @ S @ self.Usph2j
-            self.Xorth_spinor, _, info = canonical_orth(S_spinor, system.overlap_ortho_rtol)
+            self.Xorth_spinor, _, info = canonical_orth(
+                S_spinor, system.overlap_ortho_rtol
+            )
             self.nmo_spinor = info["n_kept"]
         self = super().__call__(system)
         self._parse_state()
@@ -219,6 +226,16 @@ class GHF(SCFBase):
         )
         return energy.real
 
+    def gradient(self) -> np.ndarray:
+        """Compute the density-fitted GHF analytic nuclear gradient.
+
+        The SCF calculation is run automatically if needed. The returned
+        gradient has shape ``(natoms, 3)`` and is expressed in Hartree/Bohr.
+        """
+        from .ghf_grad import _compute_ghf_gradient
+
+        return _compute_ghf_gradient(self)
+
     def _get_occupation(self):
         self.nocc = self.nel
         self.nuocc = self.nmo * 2 - self.nocc
@@ -244,7 +261,9 @@ class GHF(SCFBase):
             idx = nocc + i
             if i % orb_per_row == 0:
                 string += "\n"
-            string += f"{idx:<4d} ({self.irrep_labels[0][idx]}) {self.eps[0][idx]:<12.6f} "
+            string += (
+                f"{idx:<4d} ({self.irrep_labels[0][idx]}) {self.eps[0][idx]:<12.6f} "
+            )
         logger.log_info1(string)
 
     def _guess_ms(self, C):

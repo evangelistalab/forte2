@@ -33,6 +33,7 @@ using namespace nb::literals;
 ///        integrals and evaluate basis functions at points.
 namespace forte2 {
 
+namespace {
 void export_shell_api(nb::module_& m);
 void export_basis_api(nb::module_& m);
 void export_scalar_api(nb::module_& m);
@@ -41,9 +42,10 @@ void export_one_electron_deriv_api(nb::module_& m);
 void export_two_electron_api(nb::module_& m);
 void export_value_at_points_api(nb::module_& m);
 void export_libcint_compute_api(nb::module_& m);
+} // namespace
 
-void export_integrals_api(nb::module_& m) {
-    nb::module_ sub_m = m.def_submodule("ints", "Integrals submodule");
+void export_ints_api(nb::module_& m) {
+    nb::module_ sub_m = m.def_submodule("ints", "Integral primitives");
 
     export_shell_api(sub_m);
 
@@ -71,6 +73,7 @@ void export_integrals_api(nb::module_& m) {
     sub_m.attr("libint2_max_am") = nb::int_(LIBINT2_MAX_AM);
 }
 
+namespace {
 void export_shell_api(nb::module_& sub_m) {
     /// @brief Shell class bindings
     /// @details The Shell class is a wrapper around libint2::Shell and provides
@@ -213,7 +216,8 @@ void export_basis_api(nb::module_& sub_m) {
         .def_prop_ro("max_nprim", &Basis::max_nprim,
                      "Returns the maximum number of primitive Gaussians in shells of the basis set")
         .def_prop_ro("nprim", &Basis::max_nprim,
-                     "Returns the number of primitive Gaussians in shells of the basis set")
+                     "Returns the maximum number of primitive Gaussians in any shell of the "
+                     "basis set (alias of max_nprim)")
         .def_prop_ro("max_nbasis", &Basis::max_nbasis,
                      "Returns the maximum number of basis functions in shells of the basis set")
         .def_prop_ro("nshells", &Basis::nshells, "Returns the number of shells in the basis set")
@@ -440,6 +444,13 @@ void export_two_electron_api(nb::module_& sub_m) {
         "basis1"_a, "basis2"_a, "basis3"_a, "W3"_a, "charges"_a);
 
     sub_m.def(
+        "coulomb_3c_opVop",
+        [](const Basis& basis1, const Basis& basis2, const Basis& basis3) {
+            return coulomb_3c_opVop(basis1, basis2, basis3);
+        },
+        "basis1"_a, "basis2"_a, "basis3"_a);
+
+    sub_m.def(
         "coulomb_3c_deriv",
         [](const Basis& basis1, const Basis& basis2, const Basis& basis3,
            const np_tensor3_complex_c& W3,
@@ -506,6 +517,10 @@ void export_libcint_compute_api(nb::module_& sub_m) {
     sub_m.def(
         "cint_int1e_nuc_sph", &cint_int1e_nuc_sph, "shell_slice"_a, "atm"_a, "bas"_a, "env"_a,
         "Compute the nuclear attraction integral matrix using libcint in spherical harmonics.");
+    sub_m.def("cint_int1e_ipnuc_sph", &cint_int1e_ipnuc_sph, "shell_slice"_a, "atm"_a, "bas"_a,
+              "env"_a);
+    sub_m.def("cint_int1e_iprinv_sph", &cint_int1e_iprinv_sph, "shell_slice"_a, "atm"_a, "bas"_a,
+              "env"_a);
     sub_m.def("cint_int1e_nuc_spinor", &cint_int1e_nuc_spinor, "shell_slice"_a, "atm"_a, "bas"_a,
               "env"_a,
               "Compute the nuclear attraction integral matrix using libcint in spinor basis.");
@@ -513,6 +528,10 @@ void export_libcint_compute_api(nb::module_& sub_m) {
               "env"_a,
               "Compute the small component of the nuclear attraction integral matrix using libcint "
               "in spherical harmonics.");
+    sub_m.def("cint_int1e_ipspnucsp_sph", &cint_int1e_ipspnucsp_sph, "shell_slice"_a, "atm"_a,
+              "bas"_a, "env"_a);
+    sub_m.def("cint_int1e_ipsprinvsp_sph", &cint_int1e_ipsprinvsp_sph, "shell_slice"_a, "atm"_a,
+              "bas"_a, "env"_a);
     sub_m.def("cint_int1e_spnucsp_spinor", &cint_int1e_spnucsp_spinor, "shell_slice"_a, "atm"_a,
               "bas"_a, "env"_a,
               "Compute the small component of the nuclear attraction integral matrix using libcint "
@@ -536,6 +555,10 @@ void export_libcint_compute_api(nb::module_& sub_m) {
         "shell_slice"_a, "atm"_a, "bas"_a, "env"_a, "ints"_a,
         "Compute the three-center two-electron integral tensor using libcint in spherical "
         "harmonics, with a user-provided buffer for the result.");
+    sub_m.def("cint_int3c2e_spsp1_sph", &cint_int3c2e_spsp1_sph, "shell_slice"_a, "atm"_a, "bas"_a,
+              "env"_a,
+              "Compute momentum-dressed three-center integrals using libcint in spherical "
+              "harmonics.");
 }
 #else
 // When libcint is disabled, define a no-op exporter
@@ -544,4 +567,5 @@ void export_libcint_compute_api(nb::module_& sub_m) {
     (void)sub_m;
 }
 #endif
+} // namespace
 } // namespace forte2

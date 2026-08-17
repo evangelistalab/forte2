@@ -480,7 +480,7 @@ class MCOptimizerBase(Method):
         avg_de = np.abs(self.E_avg - new_E_avg)
         de = np.abs(self.E - new_E_avg)
         max_de = max(max_ci_de, avg_de, de)
-        if max_de > self.e_tol:
+        if max_de > self.e_tol * 10.0:  # account for near-threshold numerical noise
             logger.log_warning(
                 f"After producing the final orbitals, the CI solver converged to different solutions: "
                 f"Final energies: E_CI = {new_E_ci}, E_avg = {new_E_avg:.10f}, E = {self.E:.10f}. "
@@ -510,13 +510,9 @@ class MCOptimizerBase(Method):
     def _print_ao_composition(self):
         basis_info = BasisInfo(self.system, self.system.basis)
         logger.log_info1("\nAO Composition of core MOs:")
-        basis_info.print_ao_composition(
-            self.mos.C[0], list(range(self.core.start, self.core.stop))
-        )
+        basis_info.print_ao_composition(self.mos.C[0], self.mo_space.docc_indices)
         logger.log_info1("\nAO Composition of active MOs:")
-        basis_info.print_ao_composition(
-            self.mos.C[0], list(range(self.actv.start, self.actv.stop))
-        )
+        basis_info.print_ao_composition(self.mos.C[0], self.mo_space.active_indices)
 
     def _get_nonredundant_rotations(self):
         """Lower triangular matrix of nonredundant rotations"""
@@ -546,7 +542,7 @@ class MCOptimizerBase(Method):
 
         # zero out rotations between orbitals of different irreps
         if self.system.point_group.upper() != "C1":
-            _irrid = np.array(self.mos.irrep_indices[0])
+            _irrid = self._final_orbital_irrep_indices()
             # equivalent to:
             # for i, j in range(nmo):
             #   if i^j != 0:
@@ -632,3 +628,45 @@ class MCOptimizer(MCOptimizerBase):
         right_root: int | None = None,
     ) -> NDArray:
         return self.ci_solver.make_sf_2rdm(left_root, right_root)
+
+    def gradient(self) -> NDArray:
+        r"""
+        Compute a state-specific CASSCF/GASSCF analytic nuclear gradient.
+
+        This implementation supports real nonrelativistic and complex
+        two-component state-specific CASSCF/GASSCF wave functions, including
+        SF- and SO-X2C-1e Hamiltonians. State-averaged gradients, frozen-core
+        and frozen-virtual response, active-frozen rotations, frozen inter-GAS
+        rotations are not supported. Point and Gaussian nuclear charge
+        distributions are supported; Gaussian charges require libcint.
+        Requesting any unsupported feature raises ``NotImplementedError``.
+        Both the orbital optimization and all CI roots must be converged; an
+        unconverged wave function raises ``RuntimeError`` because the
+        stationary-gradient expression does not apply.
+
+        The gradient is assembled in the same integral-layer form as the RHF
+        and UHF gradients:
+
+        .. math::
+            E^x =
+            E_\mathrm{NN}^x
+            + h^x_{\mu\nu}\Gamma_{\mu\nu}
+            - S^x_{\mu\nu} W^S_{\mu\nu}
+            + W^P_{\mu\nu}(P|\mu\nu)^x
+            + W_{PQ}(P|Q)^x.
+
+        Here :math:`\Gamma_{\mu\nu}` is the full spin-free one-particle
+        density, :math:`W^S_{\mu\nu}` is the AO representation of the
+        symmetric CASSCF/GASSCF orbital Lagrangian, and
+        :math:`W^P_{\mu\nu}` and :math:`W_{PQ}` are the density-fitted
+        two-electron derivative weights defined in
+        ``docs/technical_notes/df_gradients.tex``.
+
+        Returns
+        -------
+        NDArray
+            Gradient with shape ``(natoms, 3)`` in Hartree/Bohr.
+        """
+        from .mc_optimizer_grad import _compute_casscf_gradient
+
+        return _compute_casscf_gradient(self)

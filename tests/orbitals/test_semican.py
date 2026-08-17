@@ -20,6 +20,7 @@ from forte2.orbitals import (
     make_natural_orbitals,
 )
 from forte2.base_classes import DavidsonLiuParams
+from forte2.state import EmbeddingMOSpace
 
 
 def test_semican_rhf():
@@ -189,6 +190,35 @@ def test_semican_preserves_irrep_blocks():
     irreps = np.array([0, 2, 0, 2])
     cross_irrep = irreps[:, None] != irreps[None, :]
     assert np.allclose(semi.U[cross_irrep], 0.0)
+
+
+def test_semican_embedding_gas_blocks():
+    class DummySystem:
+        two_component = False
+        fock_builder = None
+
+    mo_space = EmbeddingMOSpace(
+        nmo=10,
+        frozen_core_orbitals=[0],
+        B_core_orbitals=[1, 3],
+        A_core_orbitals=[2],
+        active_orbitals=[[4], [6, 7]],
+        A_virtual_orbitals=[5],
+        B_virtual_orbitals=[8],
+        frozen_virtual_orbitals=[9],
+    )
+
+    semi = Semicanonicalizer(system=DummySystem(), mo_space=mo_space)
+    spaces = semi._semicanonical_spaces()
+    assert "gas" in spaces
+    assert "actv" not in spaces
+
+    mixed = Semicanonicalizer(
+        system=DummySystem(), mo_space=mo_space, mix_active=True
+    )
+    spaces = mixed._semicanonical_spaces()
+    assert "actv" in spaces
+    assert "gas" not in spaces
 
 
 def test_orbital_block_builder_rejects_unknown_space():

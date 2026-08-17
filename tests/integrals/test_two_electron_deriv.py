@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 import forte2
+from forte2.lib import ints
 import forte2.integrals
 from forte2.data.atom_data import ANGSTROM_TO_BOHR
 from forte2.helpers.comparisons import approx_abs
@@ -54,7 +55,7 @@ def test_coulomb_3c_deriv_rejects_bad_shape_and_centers():
     )
 
     with pytest.raises(ValueError, match="W3 has incorrect shape"):
-        forte2.ints.coulomb_3c_deriv(
+        ints.coulomb_3c_deriv(
             system.auxiliary_basis,
             system.basis,
             system.basis,
@@ -66,7 +67,7 @@ def test_coulomb_3c_deriv_rejects_bad_shape_and_centers():
     with pytest.raises(
         ValueError, match="basis1 center 0 does not match charges center 0"
     ):
-        forte2.ints.coulomb_3c_deriv(
+        ints.coulomb_3c_deriv(
             system.auxiliary_basis,
             system.basis,
             system.basis,
@@ -80,7 +81,7 @@ def test_coulomb_2c_deriv_rejects_bad_shape_and_centers():
     bad_shape = np.zeros((system.auxiliary_basis.size + 1, system.auxiliary_basis.size))
 
     with pytest.raises(ValueError, match="W2 has incorrect shape"):
-        forte2.ints.coulomb_2c_deriv(
+        ints.coulomb_2c_deriv(
             system.auxiliary_basis,
             system.auxiliary_basis,
             bad_shape,
@@ -91,7 +92,7 @@ def test_coulomb_2c_deriv_rejects_bad_shape_and_centers():
     with pytest.raises(
         ValueError, match="basis1 center 0 does not match charges center 0"
     ):
-        forte2.ints.coulomb_2c_deriv(
+        ints.coulomb_2c_deriv(
             system.auxiliary_basis,
             system.auxiliary_basis,
             W2,
@@ -104,7 +105,7 @@ def test_coulomb_3c_deriv_finite_difference_real_weights(systems):
     system0, systemp, systemm, component, delta = systems()
     W3 = _random_w3(system0)
 
-    analytical = forte2.ints.coulomb_3c_deriv(
+    analytical = ints.coulomb_3c_deriv(
         system0.auxiliary_basis, system0.basis, system0.basis, W3, system0.atoms
     )
     wrapper = forte2.integrals.coulomb_3c_deriv(system0, W3)
@@ -122,7 +123,7 @@ def test_coulomb_2c_deriv_finite_difference_real_weights(systems):
     system0, systemp, systemm, component, delta = systems()
     W2 = _random_w2(system0)
 
-    analytical = forte2.ints.coulomb_2c_deriv(
+    analytical = ints.coulomb_2c_deriv(
         system0.auxiliary_basis, system0.auxiliary_basis, W2, system0.atoms
     )
     wrapper = forte2.integrals.coulomb_2c_deriv(system0, W2)
@@ -139,7 +140,7 @@ def test_coulomb_derivs_accept_complex_weights_and_use_real_part():
     system0, systemp, systemm, component, delta = _h2_systems()
 
     W3 = _random_w3(system0, complex_weights=True)
-    grad3 = forte2.ints.coulomb_3c_deriv(
+    grad3 = ints.coulomb_3c_deriv(
         system0.auxiliary_basis, system0.basis, system0.basis, W3, system0.atoms
     )
     int3p = forte2.integrals.coulomb_3c(systemp)
@@ -151,7 +152,7 @@ def test_coulomb_derivs_accept_complex_weights_and_use_real_part():
     assert grad3[component] == approx_abs(num3, atol=1.0e-6)
 
     W2 = _random_w2(system0, complex_weights=True)
-    grad2 = forte2.ints.coulomb_2c_deriv(
+    grad2 = ints.coulomb_2c_deriv(
         system0.auxiliary_basis, system0.auxiliary_basis, W2, system0.atoms
     )
     int2p = forte2.integrals.coulomb_2c(systemp)

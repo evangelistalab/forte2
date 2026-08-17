@@ -1,8 +1,56 @@
 import numpy as np
 import pytest
 
-from forte2 import System, jkbuilder
+from forte2 import System, jkbuilder, X2CParams
+from forte2.lib.ints import Basis, Shell
 from forte2.jkbuilder.mointegrals import RestrictedMOIntegrals, SpinorbitalIntegrals
+
+
+@pytest.mark.parametrize(
+    "builder_cls", [jkbuilder.FockBuilder, jkbuilder.FockBuilderOTF]
+)
+@pytest.mark.parametrize("two_component", [False, True])
+def test_generalized_fock_assembly(builder_cls, two_component):
+    hcore = np.array([[1.0, 0.1], [0.1, 0.8]])
+    Jcore = np.array([[0.4, 0.2], [0.2, 0.3]])
+    Kcore = np.array([[0.1, 0.05], [0.05, 0.2]])
+    Jact = np.array([[0.3, 0.04], [0.04, 0.2]])
+    Kact = np.array([[0.08, 0.03], [0.03, 0.06]])
+
+    class DummySystem:
+        def __init__(self):
+            self.two_component = two_component
+
+        def ints_hcore(self):
+            return hcore
+
+    fock_builder = builder_cls.__new__(builder_cls)
+    fock_builder.system = DummySystem()
+    fock_builder.build_JK = lambda C: ([Jcore], [Kcore])
+    fock_builder.build_JK_generalized = lambda C, g1: (Jact, Kact)
+
+    C_core = np.eye(2)
+    C_act = np.eye(2)
+    g1 = np.eye(2)
+
+    if two_component:
+        core_ref = hcore + Jcore - Kcore
+        active_ref = Jact - Kact
+    else:
+        core_ref = hcore + 2.0 * Jcore - Kcore
+        active_ref = Jact - 0.5 * Kact
+
+    core_fock = fock_builder.build_core_fock(C_core)
+    active_fock = fock_builder.build_active_fock(C_act, g1)
+    generalized_fock = fock_builder.build_generalized_fock(C_core, C_act, g1)
+
+    assert np.allclose(core_fock, core_ref)
+    assert np.allclose(active_fock, active_ref)
+    assert np.allclose(generalized_fock, core_ref + active_ref)
+
+    shifted_hcore = hcore + np.eye(2)
+    shifted_core_fock = fock_builder.build_core_fock(C_core, hcore=shifted_hcore)
+    assert np.allclose(shifted_core_fock, core_ref + np.eye(2))
 
 
 def test_jkbuilder():
@@ -83,8 +131,7 @@ def test_jkbuilder_complex():
         basis_set="cc-pvdz",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         unit="bohr",
-        x2c_type="so",
-        snso_type=None,
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
 
     nmo = system.nbf * 2
@@ -117,8 +164,7 @@ def test_jkbuilder_general_complex():
         basis_set="cc-pvdz",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         unit="bohr",
-        x2c_type="so",
-        snso_type=None,
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
     nmo = system.nbf * 2
     C = np.random.rand(nmo, nmo) + 1j * np.random.rand(nmo, nmo)
@@ -213,6 +259,56 @@ def test_jkbuilder_on_the_fly_general():
     assert np.allclose(K_otf, K_ref), np.linalg.norm(K_otf - K_ref)
 
 
+def test_otf_gen_block_matches_incore():
+    system = System(
+        xyz="N 0.0 0.0 0.0\nN 0.0 0.0 2.0",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="bohr",
+    )
+    nmo = system.nbf
+    rng = np.random.default_rng(2024)
+    C1 = rng.standard_normal((nmo, 2))
+    C2 = rng.standard_normal((nmo, 3))
+    C3 = rng.standard_normal((nmo, 4))
+    C4 = rng.standard_normal((nmo, 5))
+
+    fb = jkbuilder.FockBuilder(system)
+    fb_otf = jkbuilder.FockBuilderOTF(system, jk_mem_thres_mb=4.5)
+
+    V_ref = fb.two_electron_integrals_gen_block(C1, C2, C3, C4)
+    V_otf = fb_otf.two_electron_integrals_gen_block(C1, C2, C3, C4)
+    assert V_otf.shape == V_ref.shape
+    assert np.allclose(V_otf, V_ref), np.max(np.abs(V_otf - V_ref))
+
+
+def test_otf_gen_block_spinor_matches_incore():
+    system = System(
+        xyz="N 0.0 0.0 0.0\nN 0.0 0.0 2.0",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="bohr",
+    )
+    nso = 2 * system.nbf
+    rng = np.random.default_rng(99)
+
+    def cmplx(shape):
+        return rng.standard_normal(shape) + 1j * rng.standard_normal(shape)
+
+    C1 = cmplx((nso, 2))
+    C2 = cmplx((nso, 3))
+    C3 = cmplx((nso, 4))
+    C4 = cmplx((nso, 5))
+
+    fb = jkbuilder.FockBuilder(system)
+    fb_otf = jkbuilder.FockBuilderOTF(system, jk_mem_thres_mb=4.5)
+
+    V_ref = fb.two_electron_integrals_gen_block_spinor(C1, C2, C3, C4)
+    V_otf = fb_otf.two_electron_integrals_gen_block_spinor(C1, C2, C3, C4)
+    assert V_otf.shape == V_ref.shape
+    assert np.allclose(V_otf, V_ref), np.max(np.abs(V_otf - V_ref))
+
+
 def test_jkbuilder_on_the_fly_complex():
     xyz = """
     N 0.0 0.0 0.0
@@ -224,8 +320,7 @@ def test_jkbuilder_on_the_fly_complex():
         basis_set="cc-pvqz",
         auxiliary_basis_set="cc-pvqz-jkfit",
         unit="bohr",
-        x2c_type="so",
-        snso_type=None,
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
 
     nmo = system.nbf * 2
@@ -306,12 +401,10 @@ def test_jkbuilder_lindep_metric():
         auxiliary_basis_set="cc-pvtz-jkfit",
         unit="bohr",
     )
-    import forte2
-
-    fakeaux = forte2.ints.Basis()
+    fakeaux = Basis()
     # two identical auxiliary functions, this forces the Coulomb metric to be linearly dependent
-    fakeaux.add(forte2.ints.Shell(0, [1.0], [1.0], [0.0, 0.0, 0.0]))
-    fakeaux.add(forte2.ints.Shell(0, [1.0], [1.0], [0.0, 0.0, 0.0]))
+    fakeaux.add(Shell(0, [1.0], [1.0], [0.0, 0.0, 0.0]))
+    fakeaux.add(Shell(0, [1.0], [1.0], [0.0, 0.0, 0.0]))
     system.auxiliary_basis = fakeaux
     with pytest.raises(ValueError, match="positive definite"):
         system.fock_builder.B_Pmn

@@ -6,7 +6,7 @@ import os
 
 import numpy as np
 
-from forte2 import Basis, Shell
+from forte2.lib.ints import Basis, Shell
 from forte2.data import ATOM_SYMBOL_TO_Z
 from forte2.helpers import logger
 
@@ -257,6 +257,67 @@ def decontract_basis(basis: Basis, embed_normalization_into_coefficients: bool =
                 )
             )
     return basis_decon
+
+
+def build_sap_potential_basis(basis_name: str, geometry) -> Basis:
+    r"""Build a Gaussian charge-density representation of an SAP potential.
+
+    SAP basis coefficients use the convention of Lehtola, where each primitive
+    coefficient multiplies a unit-charge Gaussian potential. Three-center
+    Coulomb integrals instead expect a charge density. For an unnormalized
+    s-type primitive, the conversion is
+
+    .. math::
+        c_k e^{-\alpha_k r^2}
+        \longrightarrow
+        -c_k \left(\frac{\alpha_k}{\pi}\right)^{3/2}
+        e^{-\alpha_k r^2}.
+
+    The minus sign converts the electronic-potential coefficient convention to
+    a positive screening charge density.
+
+    Parameters
+    ----------
+    basis_name : str
+        Name of an SAP basis available locally or from Basis Set Exchange.
+    geometry : GeometryHelper
+        Molecular geometry on which to center the SAP functions.
+
+    Returns
+    -------
+    Basis
+        Unnormalized, contracted s-type density basis suitable for
+        three-center Coulomb integrals.
+    """
+    sap_basis = build_basis(
+        basis_name,
+        geometry,
+        embed_normalization_into_coefficients=False,
+    )
+
+    density_basis = Basis()
+    density_basis.set_name(f"{basis_name}-density")
+    for shell in sap_basis:
+        if shell.l != 0:
+            raise ValueError(
+                f"SAP basis '{basis_name}' contains a shell with l={shell.l}; "
+                "only s-type SAP functions are supported."
+            )
+        exponents = np.asarray(shell.exponents, dtype=float)
+        coefficients = np.asarray(shell.coeff, dtype=float)
+        density_coefficients = -coefficients * (exponents / np.pi) ** 1.5
+        density_basis.add(
+            Shell(
+                shell.l,
+                exponents,
+                density_coefficients,
+                shell.center,
+                shell.is_pure,
+                embed_normalization_into_coefficients=False,
+            )
+        )
+
+    return density_basis
 
 
 def _parse_custom_basis_assignment(geometry, basis_assignment):

@@ -64,12 +64,16 @@ class ActiveSpaceSolver(Method):
         if (not provided_via_parent) and (provided_via_args == 0):
             raise ValueError(
                 "Parent_method cannot provide MOSpace. "
-                "Either mo_space, *_orbitals, or nel_active and norb_active must be provided."
+                "Either mo_space or the *_orbitals arguments "
+                "(core_orbitals, active_orbitals, frozen_core_orbitals, "
+                "frozen_virtual_orbitals) must be provided."
             )
 
         if provided_via_args > 1:
             raise ValueError(
-                "Only one of mo_space, *_orbitals, or nel_active and norb_active can be provided."
+                "Only one of mo_space or the *_orbitals arguments "
+                "(core_orbitals, active_orbitals, frozen_core_orbitals, "
+                "frozen_virtual_orbitals) can be provided."
             )
 
         # override parent_method if any arguments are provided

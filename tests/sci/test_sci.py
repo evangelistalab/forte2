@@ -1,17 +1,11 @@
 import numpy as np
 import pytest
 
-from forte2 import (
-    System,
-    State,
-    MOSpace,
-    Determinant,
-    CIStrings,
-    SelectedCIHelper,
-    SparseState,
-    compute_a_1rdm,
-    compute_b_1rdm,
-)
+from forte2 import System, State, MOSpace
+from forte2.lib import rdms
+from forte2.lib.sparse_ops import SparseState
+from forte2.lib.det import Determinant
+from forte2.lib.ci_helpers import CIStrings, SelectedCIHelper
 from forte2.ci import CI
 from forte2.scf import RHF
 from forte2.sci import SelectedCI
@@ -45,6 +39,29 @@ def test_sci1():
             selection_algorithm="hbci",
             var_threshold=1e-12,
             pt2_threshold=0.0,
+            num_threads=4,
+            num_batches_per_thread=16,
+        ),
+    )(rhf)
+    sci.run()
+
+    assert sci.E[0] == approx(efci)
+
+
+def test_sci_pinned_only_guess():
+    efci = -2.180967812920
+
+    rhf = _h4_rhf()
+
+    sci = SelectedCI(
+        states=State(nel=4, multiplicity=1, ms=0.0),
+        active_orbitals=list(range(4)),
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-12,
+            pt2_threshold=0.0,
+            guess_dets=[],
+            pinned_guess_dets=[Determinant("22")],
             num_threads=4,
             num_batches_per_thread=16,
         ),
@@ -184,7 +201,7 @@ def test_sci5():
     rhf = RHF(charge=0, e_tol=1e-10)(system)
     sci = SelectedCI(
         states=State(nel=9, multiplicity=2, ms=0.5),
-        active_orbitals=list(range(12)),
+        active_orbitals=list(range(14)),
         sci_params=SelectedCIParams(
             selection_algorithm="hbci",
             var_threshold=1e-5,
@@ -198,9 +215,7 @@ def test_sci5():
     )(rhf)
 
     sci.run()
-
-    # This value is sensitive to the selected space growth details; keep a practical tolerance.
-    assert sci.E[0] == pytest.approx(-96.5578779686, abs=5e-3)
+    assert sci.E[0] == pytest.approx(-96.6017082329, abs=1e-7)
 
 
 @pytest.mark.skip(reason="Could not reproduce with FCI with energy_shift")
@@ -344,8 +359,8 @@ def test_sci_1trdm_matches_second_strings_between_different_spaces():
 
     left_state = SparseState(dict(zip(left_dets, left_c[:, 0])))
     right_state = SparseState(dict(zip(right_dets, right_c[:, 0])))
-    expected_a = compute_a_1rdm(left_state, right_state, norb)
-    expected_b = compute_b_1rdm(left_state, right_state, norb)
+    expected_a = rdms.compute_a_1rdm(left_state, right_state, norb)
+    expected_b = rdms.compute_b_1rdm(left_state, right_state, norb)
     assert np.count_nonzero(np.abs(expected_a) > 1e-12) > 4
     assert np.count_nonzero(np.abs(expected_b) > 1e-12) > 4
 

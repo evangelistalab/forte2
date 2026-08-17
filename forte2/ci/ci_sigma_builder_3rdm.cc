@@ -8,6 +8,79 @@
 
 namespace forte2 {
 
+namespace {
+
+/// Gather signed two-alpha-hole/one-beta-hole coefficients into an AAB 3-RDM K-block.
+void gather_aab_3rdm_block(const CIStrings& lists, int class_Ka, int class_Kb, size_t maxKb,
+                           size_t Kblock_start, size_t Kdim, size_t norb,
+                           std::span<const double> coefficients, std::span<double> Kblock) {
+    for (const auto& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
+        if (lists.block_size(nI) == 0)
+            continue;
+
+        const auto maxIb = lists.beta_address()->strpcls(class_Ib);
+        const auto coefficient_offset = lists.block_offset(nI);
+        const auto& Kb_list = lists.get_beta_1h_list2(class_Kb, class_Ib);
+        if (Kb_list.empty())
+            continue;
+
+        for (size_t Kidx = 0; Kidx < Kdim; ++Kidx) {
+            const size_t K = Kblock_start + Kidx;
+            const size_t Ka = K / maxKb;
+            const size_t Kb = K % maxKb;
+            const auto& Ka_list = lists.get_alpha_2h_list(class_Ka, Ka, class_Ia);
+            if (Ka_list.empty())
+                continue;
+
+            for (const auto& [sign_pq, p, q, Ia] : Ka_list) {
+                const size_t row = pair_index_gt<size_t>(p, q) * norb;
+                const auto coefficient_Ia_offset = coefficient_offset + Ia * maxIb;
+                for (const auto& [sign_r, r, Ib] : Kb_list[Kb]) {
+                    Kblock[(row + r) * Kdim + Kidx] =
+                        sign_pq * sign_r * coefficients[coefficient_Ia_offset + Ib];
+                }
+            }
+        }
+    }
+}
+
+/// Gather signed one-alpha-hole/two-beta-hole coefficients into an ABB 3-RDM K-block.
+void gather_abb_3rdm_block(const CIStrings& lists, int class_Ka, int class_Kb, size_t maxKb,
+                           size_t Kblock_start, size_t Kdim, size_t npair,
+                           std::span<const double> coefficients, std::span<double> Kblock) {
+    for (const auto& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
+        if (lists.block_size(nI) == 0)
+            continue;
+
+        const auto maxIb = lists.beta_address()->strpcls(class_Ib);
+        const auto coefficient_offset = lists.block_offset(nI);
+        const auto& Ka_list = lists.get_alpha_1h_list2(class_Ka, class_Ia);
+        if (Ka_list.empty())
+            continue;
+
+        for (size_t Kidx = 0; Kidx < Kdim; ++Kidx) {
+            const size_t K = Kblock_start + Kidx;
+            const size_t Ka = K / maxKb;
+            const size_t Kb = K % maxKb;
+            const auto& Kb_list = lists.get_beta_2h_list(class_Kb, Kb, class_Ib);
+            if (Kb_list.empty())
+                continue;
+
+            for (const auto& [sign_p, p, Ia] : Ka_list[Ka]) {
+                const size_t row = p * npair;
+                const auto coefficient_Ia_offset = coefficient_offset + Ia * maxIb;
+                for (const auto& [sign_qr, q, r, Ib] : Kb_list) {
+                    const size_t qr_index = pair_index_gt<size_t>(q, r);
+                    Kblock[(row + qr_index) * Kdim + Kidx] =
+                        sign_p * sign_qr * coefficients[coefficient_Ia_offset + Ib];
+                }
+            }
+        }
+    }
+}
+
+} // namespace
+
 np_matrix CISigmaBuilder::compute_sss_3rdm(np_vector C_left, np_vector C_right, Spin spin) const {
     local_timer timer;
 
@@ -112,14 +185,6 @@ np_tensor4 CISigmaBuilder::compute_aab_3rdm(np_vector C_left, np_vector C_right)
 
     auto rdm = make_zeros<nb::numpy, double, 4>({npair, norb, npair, norb});
 
-    auto stride1 = norb;
-    auto stride2 = stride1 * npair;
-    auto stride3 = stride2 * norb;
-
-    auto index = [stride1, stride2, stride3](size_t pq, size_t r, size_t st, size_t u) {
-        return pq * stride3 + r * stride2 + st * stride1 + u;
-    };
-
     // skip building the RDM if there are not enough electrons
     if ((na < 2) or (nb < 1))
         return rdm;
@@ -128,57 +193,50 @@ np_tensor4 CISigmaBuilder::compute_aab_3rdm(np_vector C_left, np_vector C_right)
     auto Cr_span = vector::as_span<double>(C_right);
 
     auto rdm_data = rdm.data();
-    const auto& alpha_address = lists_.alpha_address();
-    const auto& beta_address = lists_.beta_address();
 
     int num_2h_class_Ka = lists_.alpha_address_2h()->nclasses();
     int num_1h_class_Kb = lists_.beta_address_1h()->nclasses();
 
+    const size_t max_composite_K = max_composite_hole_dimension(
+        *lists_.alpha_address_2h(), *lists_.beta_address_1h(), "AAB 3-RDM");
+    if (max_composite_K == 0)
+        return rdm;
+
+    std::vector<double> Kblock1;
+    std::vector<double> Kblock2;
+
+    // The contraction gamma[(uv,w),(xy,z)] is a matrix product over the composite hole
+    // index K = (Ka, Kb) (Ka: 2-hole alpha, Kb: 1-hole beta). Gather signed left/right
+    // coefficients into B_L[(uv*norb+w),K] and B_R[(xy*norb+z),K], then accumulate
+    // gamma += B_L * B_R^T one bounded composite-K chunk at a time.
+    const size_t M = npair * norb;
+    const size_t Kblock_size = acquire_local_Kblock_buffers(Kblock1, Kblock2, M, max_composite_K);
     for (int class_Ka{0}; class_Ka < num_2h_class_Ka; ++class_Ka) {
-        size_t maxKa = lists_.alpha_address_2h()->strpcls(class_Ka);
-
+        const size_t maxKa = lists_.alpha_address_2h()->strpcls(class_Ka);
         for (int class_Kb{0}; class_Kb < num_1h_class_Kb; ++class_Kb) {
-            size_t maxKb = lists_.beta_address_1h()->strpcls(class_Kb);
+            const size_t maxKb = lists_.beta_address_1h()->strpcls(class_Kb);
+            if ((maxKa == 0) or (maxKb == 0))
+                continue;
 
-            // loop over blocks of matrix C
-            for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-                if (lists_.block_size(nI) == 0)
-                    continue;
+            const size_t maxK = maxKa * maxKb;
 
-                const auto maxIb = lists_.beta_address()->strpcls(class_Ib);
-                const auto Cr_offset = lists_.block_offset(nI);
+            for (size_t Kblock_start = 0; Kblock_start < maxK;) {
+                const size_t Kdim = std::min(Kblock_size, maxK - Kblock_start);
+                const auto temp_dim = M * Kdim;
 
-                for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
-                    if (lists_.block_size(nJ) == 0)
-                        continue;
+                std::fill_n(Kblock1.begin(), temp_dim, 0.0);
+                std::fill_n(Kblock2.begin(), temp_dim, 0.0);
 
-                    const auto maxJb = lists_.beta_address()->strpcls(class_Jb);
-                    const auto Cl_offset = lists_.block_offset(nJ);
+                // Gather the signed right and left coefficients into B_R[(xy,z),K] and
+                // B_L[(uv,w),K].
+                gather_aab_3rdm_block(lists_, class_Ka, class_Kb, maxKb, Kblock_start, Kdim, norb,
+                                      Cr_span, Kblock2);
+                gather_aab_3rdm_block(lists_, class_Ka, class_Kb, maxKb, Kblock_start, Kdim, norb,
+                                      Cl_span, Kblock1);
 
-                    for (size_t Ka = 0; Ka < maxKa; ++Ka) {
-                        auto& Ka_right_list = lists_.get_alpha_2h_list(class_Ka, Ka, class_Ia);
-                        auto& Ka_left_list = lists_.get_alpha_2h_list(class_Ka, Ka, class_Ja);
-                        for (size_t Kb = 0; Kb < maxKb; ++Kb) {
-                            auto& Kb_right_list = lists_.get_beta_1h_list(class_Kb, Kb, class_Ib);
-                            auto& Kb_left_list = lists_.get_beta_1h_list(class_Kb, Kb, class_Jb);
-                            for (const auto& [sign_uv, u, v, Ja] : Ka_left_list) {
-                                const auto uv_index = pair_index_gt(u, v);
-                                for (const auto& [sign_w, w, Jb] : Kb_left_list) {
-                                    const auto ClJ =
-                                        sign_uv * sign_w * Cl_span[Cl_offset + Ja * maxJb + Jb];
-                                    for (const auto& [sign_xy, x, y, Ia] : Ka_right_list) {
-                                        const auto xy_index = pair_index_gt(x, y);
-                                        const auto Cr_Ia_offset = Cr_offset + Ia * maxIb;
-                                        for (const auto& [sign_z, z, Ib] : Kb_right_list) {
-                                            rdm_data[index(uv_index, w, xy_index, z)] +=
-                                                sign_xy * sign_z * ClJ * Cr_span[Cr_Ia_offset + Ib];
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                matrix_product('N', 'T', M, M, Kdim, 1.0, Kblock1.data(), Kdim, Kblock2.data(),
+                               Kdim, 1.0, rdm_data, M);
+                Kblock_start += Kdim;
             }
         }
     }
@@ -201,14 +259,6 @@ np_tensor4 CISigmaBuilder::compute_abb_3rdm(np_vector C_left, np_vector C_right)
 
     auto rdm = make_zeros<nb::numpy, double, 4>({norb, npair, norb, npair});
 
-    auto stride1 = npair;
-    auto stride2 = stride1 * norb;
-    auto stride3 = stride2 * npair;
-
-    auto index = [stride1, stride2, stride3](size_t p, size_t qr, size_t s, size_t tu) {
-        return p * stride3 + qr * stride2 + s * stride1 + tu;
-    };
-
     // skip building the RDM if there are not enough electrons
     if ((na < 1) or (nb < 2))
         return rdm;
@@ -217,57 +267,50 @@ np_tensor4 CISigmaBuilder::compute_abb_3rdm(np_vector C_left, np_vector C_right)
     auto Cr_span = vector::as_span<double>(C_right);
 
     auto rdm_data = rdm.data();
-    const auto& alpha_address = lists_.alpha_address();
-    const auto& beta_address = lists_.beta_address();
 
     int num_1h_class_Ka = lists_.alpha_address_1h()->nclasses();
     int num_2h_class_Kb = lists_.beta_address_2h()->nclasses();
 
+    const size_t max_composite_K = max_composite_hole_dimension(
+        *lists_.alpha_address_1h(), *lists_.beta_address_2h(), "ABB 3-RDM");
+    if (max_composite_K == 0)
+        return rdm;
+
+    std::vector<double> Kblock1;
+    std::vector<double> Kblock2;
+
+    // GEMM reformulation, mirroring compute_aab_3rdm with the spins swapped: the composite
+    // hole index is K = (Ka, Kb) (Ka: 1-hole alpha, Kb: 2-hole beta). Gather signed
+    // coefficients into B_L[(u*npair+vw),K] and B_R[(x*npair+yz),K], then accumulate
+    // gamma += B_L * B_R^T one bounded composite-K chunk at a time.
+    const size_t M = norb * npair;
+    const size_t Kblock_size = acquire_local_Kblock_buffers(Kblock1, Kblock2, M, max_composite_K);
     for (int class_Ka = 0; class_Ka < num_1h_class_Ka; ++class_Ka) {
-        size_t maxKa = lists_.alpha_address_1h()->strpcls(class_Ka);
-
+        const size_t maxKa = lists_.alpha_address_1h()->strpcls(class_Ka);
         for (int class_Kb = 0; class_Kb < num_2h_class_Kb; ++class_Kb) {
-            size_t maxKb = lists_.beta_address_2h()->strpcls(class_Kb);
+            const size_t maxKb = lists_.beta_address_2h()->strpcls(class_Kb);
+            if ((maxKa == 0) or (maxKb == 0))
+                continue;
 
-            // loop over blocks of matrix C
-            for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-                if (lists_.block_size(nI) == 0)
-                    continue;
+            const size_t maxK = maxKa * maxKb;
 
-                const auto maxIb = lists_.beta_address()->strpcls(class_Ib);
-                const auto Cr_offset = lists_.block_offset(nI);
+            for (size_t Kblock_start = 0; Kblock_start < maxK;) {
+                const size_t Kdim = std::min(Kblock_size, maxK - Kblock_start);
+                const auto temp_dim = M * Kdim;
 
-                for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
-                    if (lists_.block_size(nJ) == 0)
-                        continue;
+                std::fill_n(Kblock1.begin(), temp_dim, 0.0);
+                std::fill_n(Kblock2.begin(), temp_dim, 0.0);
 
-                    const auto maxJb = lists_.beta_address()->strpcls(class_Jb);
-                    const auto Cl_offset = lists_.block_offset(nJ);
+                // Gather the signed right and left coefficients into B_R[(x,yz),K] and
+                // B_L[(u,vw),K].
+                gather_abb_3rdm_block(lists_, class_Ka, class_Kb, maxKb, Kblock_start, Kdim, npair,
+                                      Cr_span, Kblock2);
+                gather_abb_3rdm_block(lists_, class_Ka, class_Kb, maxKb, Kblock_start, Kdim, npair,
+                                      Cl_span, Kblock1);
 
-                    for (size_t Ka = 0; Ka < maxKa; ++Ka) {
-                        auto& Ka_right_list = lists_.get_alpha_1h_list(class_Ka, Ka, class_Ia);
-                        auto& Ka_left_list = lists_.get_alpha_1h_list(class_Ka, Ka, class_Ja);
-                        for (size_t Kb = 0; Kb < maxKb; ++Kb) {
-                            auto& Kb_right_list = lists_.get_beta_2h_list(class_Kb, Kb, class_Ib);
-                            auto& Kb_left_list = lists_.get_beta_2h_list(class_Kb, Kb, class_Jb);
-                            for (const auto& [sign_u, u, Ja] : Ka_left_list) {
-                                for (const auto& [sign_vw, v, w, Jb] : Kb_left_list) {
-                                    const auto vw_index = pair_index_gt(v, w);
-                                    const auto ClJ =
-                                        sign_u * sign_vw * Cl_span[Cl_offset + Ja * maxJb + Jb];
-                                    for (const auto& [sign_x, x, Ia] : Ka_right_list) {
-                                        const auto Cr_Ia_offset = Cr_offset + Ia * maxIb;
-                                        for (const auto& [sign_yz, y, z, Ib] : Kb_right_list) {
-                                            const auto yz_index = pair_index_gt(y, z);
-                                            rdm_data[index(u, vw_index, x, yz_index)] +=
-                                                sign_x * sign_yz * ClJ * Cr_span[Cr_Ia_offset + Ib];
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                matrix_product('N', 'T', M, M, Kdim, 1.0, Kblock1.data(), Kdim, Kblock2.data(),
+                               Kdim, 1.0, rdm_data, M);
+                Kblock_start += Kdim;
             }
         }
     }
@@ -282,36 +325,60 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) 
         return rdm_sf; // No 3-RDM for less than 2 orbitals
     }
 
-    auto rdm_sf_v = rdm_sf.view();
-    // The aab contribution (2 orbitals or more)
+    // Strides of the dense row-major spin-free 6-index tensor rdm_sf[p,q,r,s,t,u].
+    const size_t n = norb;
+    const size_t n2 = n * n;
+    const size_t n3 = n2 * n;
+    const size_t n4 = n3 * n;
+    const size_t n5 = n4 * n;
+    const size_t npair = (norb * (norb - 1)) / 2;
+    auto* sf = rdm_sf.data();
+
+    // The aab contribution
     {
         auto rdm_aab = compute_aab_3rdm(C_left, C_right);
-        auto rdm_aab_v = rdm_aab.view();
+        const auto* aab = rdm_aab.data();
 
         for (size_t p{1}, pq{0}; p < norb; ++p) {
             for (size_t q{0}; q < p; ++q, ++pq) {
                 for (size_t r{0}; r < norb; ++r) {
                     for (size_t s{1}, st{0}; s < norb; ++s) {
                         for (size_t t{0}; t < s; ++t, ++st) {
+                            const size_t offset = ((pq * n + r) * npair + st) * n;
+                            // u has stride 1 in these targets
+                            const size_t g1a = p * n5 + q * n4 + r * n3 + s * n2 + t * n;
+                            const size_t g1b = p * n5 + q * n4 + r * n3 + t * n2 + s * n;
+                            const size_t g1c = q * n5 + p * n4 + r * n3 + s * n2 + t * n;
+                            const size_t g1d = q * n5 + p * n4 + r * n3 + t * n2 + s * n;
+                            // u has stride n in these targets
+                            const size_t g2a = p * n5 + r * n4 + q * n3 + s * n2 + t;
+                            const size_t g2b = p * n5 + r * n4 + q * n3 + t * n2 + s;
+                            const size_t g2c = q * n5 + r * n4 + p * n3 + s * n2 + t;
+                            const size_t g2d = q * n5 + r * n4 + p * n3 + t * n2 + s;
+                            // u has stride n2 in these targets
+                            const size_t g3a = r * n5 + p * n4 + q * n3 + s * n + t;
+                            const size_t g3b = r * n5 + p * n4 + q * n3 + t * n + s;
+                            const size_t g3c = r * n5 + q * n4 + p * n3 + s * n + t;
+                            const size_t g3d = r * n5 + q * n4 + p * n3 + t * n + s;
                             for (size_t u{0}; u < norb; ++u) {
-                                const auto el = rdm_aab_v(pq, r, st, u);
+                                const auto el = aab[offset + u];
                                 // G3("pqrstu") += g3aab_("pqrstu");
-                                rdm_sf_v(p, q, r, s, t, u) += el;
-                                rdm_sf_v(p, q, r, t, s, u) -= el;
-                                rdm_sf_v(q, p, r, s, t, u) -= el;
-                                rdm_sf_v(q, p, r, t, s, u) += el;
-
+                                sf[g1a + u] += el;
+                                sf[g1b + u] -= el;
+                                sf[g1c + u] -= el;
+                                sf[g1d + u] += el;
                                 // G3("prqsut") += g3aab_("pqrstu");
-                                rdm_sf_v(p, r, q, s, u, t) += el;
-                                rdm_sf_v(p, r, q, t, u, s) -= el;
-                                rdm_sf_v(q, r, p, s, u, t) -= el;
-                                rdm_sf_v(q, r, p, t, u, s) += el;
-
+                                const size_t un = u * n;
+                                sf[g2a + un] += el;
+                                sf[g2b + un] -= el;
+                                sf[g2c + un] -= el;
+                                sf[g2d + un] += el;
                                 // G3("rpqust") += g3aab_("pqrstu");
-                                rdm_sf_v(r, p, q, u, s, t) += el;
-                                rdm_sf_v(r, p, q, u, t, s) -= el;
-                                rdm_sf_v(r, q, p, u, s, t) -= el;
-                                rdm_sf_v(r, q, p, u, t, s) += el;
+                                const size_t un2 = u * n2;
+                                sf[g3a + un2] += el;
+                                sf[g3b + un2] -= el;
+                                sf[g3c + un2] -= el;
+                                sf[g3d + un2] += el;
                             }
                         }
                     }
@@ -320,34 +387,47 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) 
         }
     }
 
-    // The abb contribution (2 orbitals or more)
+    // The abb contribution
     {
         auto rdm_abb = compute_abb_3rdm(C_left, C_right);
-        auto rdm_abb_v = rdm_abb.view();
+        const auto* abb = rdm_abb.data();
         for (size_t p{0}; p < norb; ++p) {
             for (size_t q{1}, qr{0}; q < norb; ++q) {
                 for (size_t r{0}; r < q; ++r, ++qr) {
                     for (size_t s{0}; s < norb; ++s) {
+                        const size_t offset = ((p * npair + qr) * n + s) * npair;
                         for (size_t t{1}, tu{0}; t < norb; ++t) {
+                            // bases with u at stride 1 (u in 6th slot)
+                            const size_t b1 = p * n5 + q * n4 + r * n3 + s * n2 + t * n; //(pqrstu)+
+                            const size_t b4 = p * n5 + r * n4 + q * n3 + s * n2 + t * n; //(prqstu)-
+                            const size_t b5 = q * n5 + p * n4 + r * n3 + t * n2 + s * n; //(qprtsu)+
+                            const size_t b7 = r * n5 + p * n4 + q * n3 + t * n2 + s * n; //(rpqtsu)-
+                            // bases with u at stride n (u in 5th slot)
+                            const size_t b2 = p * n5 + q * n4 + r * n3 + s * n2 + t;  //(pqrsut)-
+                            const size_t b3 = p * n5 + r * n4 + q * n3 + s * n2 + t;  //(prqsut)+
+                            const size_t b9 = q * n5 + r * n4 + p * n3 + t * n2 + s;  //(qrptus)+
+                            const size_t b11 = r * n5 + q * n4 + p * n3 + t * n2 + s; //(rqptus)-
+                            // bases with u at stride n2 (u in 4th slot)
+                            const size_t b6 = q * n5 + p * n4 + r * n3 + s * n + t;  //(qprust)-
+                            const size_t b8 = r * n5 + p * n4 + q * n3 + s * n + t;  //(rpqust)+
+                            const size_t b10 = q * n5 + r * n4 + p * n3 + t * n + s; //(qrputs)-
+                            const size_t b12 = r * n5 + q * n4 + p * n3 + t * n + s; //(rqputs)+
                             for (size_t u{0}; u < t; ++u, ++tu) {
-                                const auto el = rdm_abb_v(p, qr, s, tu);
-                                // G3("pqrstu") += g3abb_("pqrstu");
-                                rdm_sf_v(p, q, r, s, t, u) += el;
-                                rdm_sf_v(p, q, r, s, u, t) -= el;
-                                rdm_sf_v(p, r, q, s, u, t) += el;
-                                rdm_sf_v(p, r, q, s, t, u) -= el;
-
-                                // G3("qprtsu") += g3abb_("pqrstu");
-                                rdm_sf_v(q, p, r, t, s, u) += el;
-                                rdm_sf_v(q, p, r, u, s, t) -= el;
-                                rdm_sf_v(r, p, q, t, s, u) -= el;
-                                rdm_sf_v(r, p, q, u, s, t) += el;
-
-                                // G3("qrptus") += g3abb_("pqrstu");
-                                rdm_sf_v(q, r, p, t, u, s) += el;
-                                rdm_sf_v(q, r, p, u, t, s) -= el;
-                                rdm_sf_v(r, q, p, t, u, s) -= el;
-                                rdm_sf_v(r, q, p, u, t, s) += el;
+                                const auto el = abb[offset + tu];
+                                const size_t un = u * n;
+                                const size_t un2 = u * n2;
+                                sf[b1 + u] += el;
+                                sf[b4 + u] -= el;
+                                sf[b5 + u] += el;
+                                sf[b7 + u] -= el;
+                                sf[b2 + un] -= el;
+                                sf[b3 + un] += el;
+                                sf[b9 + un] += el;
+                                sf[b11 + un] -= el;
+                                sf[b6 + un2] -= el;
+                                sf[b8 + un2] += el;
+                                sf[b10 + un2] -= el;
+                                sf[b12 + un2] += el;
                             }
                         }
                     }
@@ -360,67 +440,54 @@ np_tensor6 CISigmaBuilder::compute_sf_3rdm(np_vector C_left, np_vector C_right) 
         return rdm_sf; // No same-spin contributions to the 3-RDM for less than 3 orbitals
     }
 
-    // To reduce the  memory footprint, we compute the aaa and bbb contributions in a packed
-    // format and one at a time.
+    // The aaa/bbb (same-spin) contributions. For a fixed bra triplet (p>q>r) the whole (s,t,u)
+    // ket sub-block is identical up to the bra-permutation sign, so we assemble that norb^3 block
+    // once in a buffer with the ket signs, then add each of the 6
+    // bra permutations as a contiguous block onto rdm_sf
+    const size_t ntriplets = (norb * (norb - 1) * (norb - 2)) / 6;
+    const size_t N3 = n3;
+    std::vector<double> ketrow(N3, 0.0);
+
+    auto add_block = [&](bool positive, size_t a, size_t b, size_t c) {
+        auto* dst = sf + ((a * n + b) * n + c) * N3;
+        if (positive) {
+            for (size_t i = 0; i < N3; ++i)
+                dst[i] += ketrow[i];
+        } else {
+            for (size_t i = 0; i < N3; ++i)
+                dst[i] -= ketrow[i];
+        }
+    };
+
     for (auto spin : {Spin::Alpha, Spin::Beta}) {
         auto rdm_sss = compute_sss_3rdm(C_left, C_right, spin);
-        auto rdm_sss_v = rdm_sss.view();
+        const auto* sss_data = rdm_sss.data();
 
         for (size_t p{2}, pqr{0}; p < norb; ++p) {
             for (size_t q{1}; q < p; ++q) {
                 for (size_t r{0}; r < q; ++r, ++pqr) {
+                    const auto* row = sss_data + pqr * ntriplets;
+                    // Scatter the ket triplets into the (s,t,u) block with antisymmetric signs.
                     for (size_t s{2}, stu{0}; s < norb; ++s) {
                         for (size_t t{1}; t < s; ++t) {
                             for (size_t u{0}; u < t; ++u, ++stu) {
-                                // grab the unique element of the 3-RDM
-                                const auto el = rdm_sss_v(pqr, stu);
-
-                                // Place the element in all valid 36 antisymmetric index
-                                // permutations
-                                rdm_sf_v(p, q, r, s, t, u) += el;
-                                rdm_sf_v(p, q, r, s, u, t) -= el;
-                                rdm_sf_v(p, q, r, u, s, t) += el;
-                                rdm_sf_v(p, q, r, u, t, s) -= el;
-                                rdm_sf_v(p, q, r, t, u, s) += el;
-                                rdm_sf_v(p, q, r, t, s, u) -= el;
-
-                                rdm_sf_v(p, r, q, s, t, u) -= el;
-                                rdm_sf_v(p, r, q, s, u, t) += el;
-                                rdm_sf_v(p, r, q, u, s, t) -= el;
-                                rdm_sf_v(p, r, q, u, t, s) += el;
-                                rdm_sf_v(p, r, q, t, u, s) -= el;
-                                rdm_sf_v(p, r, q, t, s, u) += el;
-
-                                rdm_sf_v(r, p, q, s, t, u) += el;
-                                rdm_sf_v(r, p, q, s, u, t) -= el;
-                                rdm_sf_v(r, p, q, u, s, t) += el;
-                                rdm_sf_v(r, p, q, u, t, s) -= el;
-                                rdm_sf_v(r, p, q, t, u, s) += el;
-                                rdm_sf_v(r, p, q, t, s, u) -= el;
-
-                                rdm_sf_v(r, q, p, s, t, u) -= el;
-                                rdm_sf_v(r, q, p, s, u, t) += el;
-                                rdm_sf_v(r, q, p, u, s, t) -= el;
-                                rdm_sf_v(r, q, p, u, t, s) += el;
-                                rdm_sf_v(r, q, p, t, u, s) -= el;
-                                rdm_sf_v(r, q, p, t, s, u) += el;
-
-                                rdm_sf_v(q, r, p, s, t, u) += el;
-                                rdm_sf_v(q, r, p, s, u, t) -= el;
-                                rdm_sf_v(q, r, p, u, s, t) += el;
-                                rdm_sf_v(q, r, p, u, t, s) -= el;
-                                rdm_sf_v(q, r, p, t, u, s) += el;
-                                rdm_sf_v(q, r, p, t, s, u) -= el;
-
-                                rdm_sf_v(q, p, r, s, t, u) -= el;
-                                rdm_sf_v(q, p, r, s, u, t) += el;
-                                rdm_sf_v(q, p, r, u, s, t) -= el;
-                                rdm_sf_v(q, p, r, u, t, s) += el;
-                                rdm_sf_v(q, p, r, t, u, s) -= el;
-                                rdm_sf_v(q, p, r, t, s, u) += el;
+                                const auto el = row[stu];
+                                ketrow[(s * n + t) * n + u] = +el;
+                                ketrow[(s * n + u) * n + t] = -el;
+                                ketrow[(u * n + s) * n + t] = +el;
+                                ketrow[(u * n + t) * n + s] = -el;
+                                ketrow[(t * n + u) * n + s] = +el;
+                                ketrow[(t * n + s) * n + u] = -el;
                             }
                         }
                     }
+                    // Add the 6 bra permutations as contiguous signed accumulations.
+                    add_block(true, p, q, r);
+                    add_block(false, p, r, q);
+                    add_block(true, r, p, q);
+                    add_block(false, r, q, p);
+                    add_block(true, q, r, p);
+                    add_block(false, q, p, r);
                 }
             }
         }

@@ -6,6 +6,7 @@ import math
 
 import forte2
 from forte2 import integrals
+from forte2.lib import ints
 from forte2.helpers import logger
 from forte2.helpers.matrix_functions import (
     cholesky_wrapper,
@@ -288,6 +289,96 @@ class FockBuilder:
         J, K = self.build_JK([Cp])
         return J[0], K[0]
 
+    def build_core_fock(self, C_core, hcore=None):
+        r"""
+        Build the core contribution to a generalized Fock matrix.
+
+        The core Fock matrix is defined as
+
+        .. math::
+            F_{\mu\nu}^{core} = h_{\mu\nu} + \chi_J J_{\mu\nu} - K_{\mu\nu}
+
+        where :math:`\chi_J` is 2 (1) for the non-relativistic (two-component) case.
+
+        Parameters
+        ----------
+        C_core : NDArray
+            Coefficients of the core orbitals.
+        hcore : NDArray, optional
+            One-electron Hamiltonian in the AO basis. If omitted, obtained from system.
+
+        Returns
+        -------
+        NDArray
+            Core Fock matrix in the AO basis.
+        """
+        if hcore is None:
+            hcore = self.system.ints_hcore()
+
+        Jcore, Kcore = self.build_JK([C_core])
+        if self.system.two_component:
+            return hcore + Jcore[0] - Kcore[0]
+        return hcore + 2.0 * Jcore[0] - Kcore[0]
+
+    def build_active_fock(self, C_act, g1):
+        r"""
+        Build the active density contribution to a generalized Fock matrix.
+
+        The active Fock matrix is defined as
+
+        .. math::
+            F_{\mu\nu}^{active} = J_{\mu\nu} - \chi_K K_{\mu\nu}
+
+        where :math:`\chi_K` is 0.5 (1) for the non-relativistic (two-component) case.
+
+        Parameters
+        ----------
+        C_act : NDArray
+            Coefficients of the active orbitals.
+        g1 : NDArray
+            Active-space one-particle density matrix (spin-free for the non-relativistic case).
+
+        Returns
+        -------
+        NDArray
+            Active contribution to the generalized Fock matrix in the AO basis.
+        """
+        Jact, Kact = self.build_JK_generalized(C_act, g1)
+        if self.system.two_component:
+            return Jact - Kact
+        return Jact - 0.5 * Kact
+
+    def build_generalized_fock(self, C_core, C_act, g1, hcore=None):
+        r"""
+        Build a multireference generalized Fock matrix in the AO basis.
+
+        The generalized Fock matrix is defined as
+
+        .. math::
+            F_{\mu\nu} = h_{\mu\nu} + \chi_J J_{\mu\nu}^{core} + J_{\mu\nu}^{active} - K_{\mu\nu}^{core} - \chi_K K_{\mu\nu}^{active}
+
+        where :math:`\chi_J` is 2 (1) and :math:`\chi_K` is 0.5 (1) for the non-relativistic (two-component) case.
+
+        Parameters
+        ----------
+        C_core : NDArray
+            Coefficients of the core orbitals.
+        C_act : NDArray
+            Coefficients of the active orbitals.
+        g1 : NDArray
+            Active-space one-particle density matrix (spin-free for the non-relativistic case).
+        hcore : NDArray, optional
+            One-electron Hamiltonian in the AO basis. If omitted, obtained from system.
+
+        Returns
+        -------
+        NDArray
+            Generalized Fock matrix in the AO basis.
+        """
+        return self.build_core_fock(C_core, hcore=hcore) + self.build_active_fock(
+            C_act, g1
+        )
+
     def two_electron_integrals_gen_block(self, C1, C2, C3, C4):
         r"""
         Compute the two-electron integrals for a given set of orbitals. This method is
@@ -419,9 +510,6 @@ class FockBuilder:
         ----------
         C : NDArray
             Coefficient matrix for the set of spin-orbitals.
-        antisymmetrize : bool, optional, default=False
-            Whether to antisymmetrize the integrals. If True, the integrals are antisymmetrized as:
-            V[p,q,r,s] = :math:`\langle pq || rs \rangle = \langle pq | rs \rangle - \langle pq | sr \rangle`
 
         Returns
         -------
@@ -548,10 +636,13 @@ class FockBuilderOTF:
         self._init_integral_engine()
 
     build_JK_generalized = FockBuilder.build_JK_generalized
+    build_core_fock = FockBuilder.build_core_fock
+    build_active_fock = FockBuilder.build_active_fock
+    build_generalized_fock = FockBuilder.build_generalized_fock
 
     def _init_integral_engine(self):
         def libint2_compute(pshell0, pshell1):
-            forte2.ints.coulomb_3c_by_shell(
+            ints.coulomb_3c_by_shell(
                 self.auxbasis,
                 self.basis,
                 self.basis,
@@ -1154,19 +1245,19 @@ class FockBuilderOTF:
         return Btemp
 
     def two_electron_integrals_gen_block(self, C1, C2, C3, C4):
-        B12 = self.B_tensor_gen_block(C1, C2)
-        B34 = self.B_tensor_gen_block(C3, C4)
-        return np.einsum("Pij,Pkl->ikjl", B12, B34, optimize=True)
+        B13 = self.B_tensor_gen_block(C1, C3)
+        B24 = self.B_tensor_gen_block(C2, C4)
+        return np.einsum("Pik,Pjl->ijkl", B13, B24, optimize=True)
 
     def two_electron_integrals_block(self, C):
         B = self.B_tensor_gen_block(C, C)
-        return np.einsum("Pij,Pkl->ikjl", B, B, optimize=True)
+        return np.einsum("Pik,Pjl->ijkl", B, B, optimize=True)
 
     def two_electron_integrals_gen_block_spinor(self, C1, C2, C3, C4):
-        B12 = self.B_tensor_gen_block_spinor(C1, C2)
-        B34 = self.B_tensor_gen_block_spinor(C3, C4)
-        return np.einsum("Pij,Pkl->ikjl", B12, B34, optimize=True)
+        B13 = self.B_tensor_gen_block_spinor(C1, C3)
+        B24 = self.B_tensor_gen_block_spinor(C2, C4)
+        return np.einsum("Pik,Pjl->ijkl", B13, B24, optimize=True)
 
     def two_electron_integrals_block_spinor(self, C):
         B = self.B_tensor_gen_block_spinor(C, C)
-        return np.einsum("Pij,Pkl->ikjl", B, B, optimize=True)
+        return np.einsum("Pik,Pjl->ijkl", B, B, optimize=True)

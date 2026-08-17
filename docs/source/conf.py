@@ -36,7 +36,13 @@ autoapi_options = [
     # "imported-members",
 ]
 
-autoapi_ignore = ["*/fetch_basis.py", "*/fetch_ccrepo.py", "*/utils/*"]
+autoapi_ignore = [
+    "*/fetch_basis.py",
+    "*/fetch_ccrepo.py",
+    "*/utils/*",
+    "*/mcopt/mc_optimizer_grad.py",
+    "*/scf/*_grad.py",
+]
 
 numpydoc_show_class_members = False
 
@@ -45,7 +51,7 @@ def skip_private_with_exceptions(app, what, name, obj, skip, options):
     """Skip all private members except those in the exceptions list."""
     short_name = name.split(".")[-1]
     is_private = short_name.startswith("_") and not short_name.endswith("__")
-    exceptions = ["_forte2"]
+    exceptions = []
     if (is_private) and (short_name not in exceptions):
         skip = True
     return skip

@@ -1,14 +1,17 @@
 __version__ = "2026.6.4"
 __author__ = "Forte2 Developers"
 
-from ._forte2 import *
-from ._forte2 import ints
-from ._forte2.ints import Basis, Shell
+from .helpers.echo_script import echo_invoking_script
+# print the invoking python script to stdout
+echo_invoking_script()
+
 from .integrals import integrals
+from .base_classes import X2CParams
 from .system import System, ModelSystem, HubbardModel
 from .state import State, RelState, MOSpace
 from .scf import RHF, ROHF, UHF, CUHF, GHF
 from .ci import CI, RelCI, CISolver, RelCISolver
+from .sci import SelectedCI, SelectedCISolver, RelSelectedCI, RelSelectedCISolver
 from .x2c import x2c
 from .orbitals import (
     AVAS,

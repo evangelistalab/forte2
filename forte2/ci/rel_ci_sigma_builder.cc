@@ -13,9 +13,16 @@
 namespace forte2 {
 
 RelCISigmaBuilder::RelCISigmaBuilder(const CIStrings& lists, double E, np_matrix_complex& H,
-                                     np_tensor4_complex& V, int log_level, bool use_asym_ints)
-    : lists_(lists), E_(E), H_(H), V_(V), rel_slater_rules_(lists.norb(), E, H, V, use_asym_ints),
-      log_level_(log_level), use_asym_ints_(use_asym_ints) {
+                                     np_tensor4_complex& V, int log_level)
+    : lists_(lists), E_(E), H_(H), V_(V), rel_slater_rules_(lists.norb(), E, H, V),
+      log_level_(log_level) {
+    // Two-component (relativistic) CI treats every electron as an alpha spinor, so the beta space
+    // is the single vacuum string (nb == 0). The sigma/RDM builders rely on this: the opposite-spin
+    // spectator string count is always 1.
+    if (lists.nb() != 0)
+        throw std::runtime_error("RelCISigmaBuilder requires nb == 0 (two-component CI treats all "
+                                 "electrons as alpha spinors).");
+
     // Find the size of the largest symmetry block
     size_t max_size = 0;
     for (auto const& [nI, class_Ia, class_Ib] : lists.determinant_classes()) {
@@ -29,7 +36,7 @@ RelCISigmaBuilder::RelCISigmaBuilder(const CIStrings& lists, double E, np_matrix
     TR.resize(max_size);
     TL.resize(max_size);
 
-    set_Hamiltonian(E, H, V, use_asym_ints);
+    set_Hamiltonian(E, H, V);
 }
 
 void RelCISigmaBuilder::set_algorithm(const std::string& algorithm) {
@@ -54,11 +61,15 @@ std::string RelCISigmaBuilder::get_algorithm() const {
 }
 
 void RelCISigmaBuilder::set_memory(int mb) {
-    memory_size_ = mb * 1024 * 1024; // Convert MB to bytes
+    if (mb < 0) {
+        throw std::invalid_argument("CI builder memory must be non-negative.");
+    }
+    memory_size_ = static_cast<size_t>(mb) * 1024 * 1024; // Convert MB to bytes
+    std::vector<std::complex<double>>{}.swap(Kblock1_);
+    std::vector<std::complex<double>>{}.swap(Kblock2_);
 }
 
-void RelCISigmaBuilder::set_Hamiltonian(double E, np_matrix_complex H, np_tensor4_complex V,
-                                        bool use_asym_ints) {
+void RelCISigmaBuilder::set_Hamiltonian(double E, np_matrix_complex H, np_tensor4_complex V) {
     E_ = E;
 
     if (H.ndim() != 2) {
@@ -102,28 +113,15 @@ void RelCISigmaBuilder::set_Hamiltonian(double E, np_matrix_complex H, np_tensor
     v_pr_qs.resize(npairs * npairs);
     // v_ijkl_hk.resize(ngeqpairs * ngeqpairs);
 
-    // Loop over all pairs (p, r) and (q, s) to fill v_pr_qs_a with p > r and q > s
-    if (use_asym_ints) {
-        for (int p = 1; p < norb; ++p) {
-            for (int r = 0; r < p; ++r) {
-                const auto pr_index = (p * (p - 1)) / 2 + r;
-                for (int q = 1; q < norb; ++q) {
-                    for (int s = 0; s < q; ++s) {
-                        const auto qs_index = pair_index_gt(q, s);
-                        v_pr_qs[pr_index * npairs + qs_index] = v(p, r, q, s);
-                    }
-                }
-            }
-        }
-    } else {
-        for (int p = 1; p < norb; ++p) {
-            for (int r = 0; r < p; ++r) {
-                const auto pr_index = (p * (p - 1)) / 2 + r;
-                for (int q = 1; q < norb; ++q) {
-                    for (int s = 0; s < q; ++s) {
-                        const auto qs_index = pair_index_gt(q, s);
-                        v_pr_qs[pr_index * npairs + qs_index] = v(p, r, q, s) - v(p, r, s, q);
-                    }
+    // Loop over all pairs (p, r) and (q, s) to fill v_pr_qs with p > r and q > s.
+    // V is given in physicist's notation <pq|rs> and antisymmetrized here on the fly.
+    for (int p = 1; p < norb; ++p) {
+        for (int r = 0; r < p; ++r) {
+            const auto pr_index = (p * (p - 1)) / 2 + r;
+            for (int q = 1; q < norb; ++q) {
+                for (int s = 0; s < q; ++s) {
+                    const auto qs_index = pair_index_gt(q, s);
+                    v_pr_qs[pr_index * npairs + qs_index] = v(p, r, q, s) - v(p, r, s, q);
                 }
             }
         }
@@ -152,8 +150,8 @@ void RelCISigmaBuilder::Hamiltonian(np_vector_complex basis, np_vector_complex s
     H0(b_span, s_span);
     if (algorithm_ == CIAlgorithm::Knowles_Handy) {
     } else {
-        H1_hz(b_span, s_span, Spin::Alpha, h_hz);
-        H2_hz_same_spin(b_span, s_span, Spin::Alpha);
+        H1_hz(b_span, s_span, h_hz);
+        H2_hz_same_spin(b_span, s_span);
     }
 }
 

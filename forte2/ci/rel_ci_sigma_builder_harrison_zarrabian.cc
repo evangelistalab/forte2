@@ -1,41 +1,58 @@
 #include <algorithm>
+#include <limits>
+#include <stdexcept>
 #include <vector>
 
 #include "helpers/timer.hpp"
 #include "helpers/np_vector_functions.h"
 #include "helpers/indexing.hpp"
 #include "helpers/blas.h"
+#include "helpers/parallel.h"
 
 #include "rel_ci_sigma_builder.h"
 
 namespace forte2 {
 
+namespace {
+// Threading the gather/scatter loops helps only once there is enough work to amortize the overhead
+constexpr size_t kRelHzParallelThreshold = 16384;
+
+template <typename F> inline void gated_parallel_for_chunked(size_t count, F&& func) {
+    if (count < kRelHzParallelThreshold)
+        func(size_t{0}, count);
+    else
+        parallel_for_chunked(count, std::forward<F>(func));
+}
+} // namespace
+
 std::tuple<std::span<std::complex<double>>, std::span<std::complex<double>>, size_t>
 RelCISigmaBuilder::get_Kblock_spans(size_t nrows, size_t ncols) const {
-    // Find the maximum size of the temporary block to allocate. This is either set by the full
-    // size of the block (nrows * ncols) or by the available memory size, whichever is smaller
-    std::size_t block_size =
-        std::min(nrows * ncols, memory_size_ / (2 * sizeof(std::complex<double>)));
-
-    // Find the corresponding chunk size for K
-    size_t cols_chunk_size = std::min(block_size / nrows, ncols);
-
-    // If the chunk size is too small to store one row, resize it
-    bool need_resize = false;
-    if (cols_chunk_size < 1) {
-        // resize to a reasonable minimum and update block_size
-        cols_chunk_size = std::min(static_cast<size_t>(64), ncols);
-        block_size = nrows * cols_chunk_size;
-        need_resize = true;
+    if ((nrows == 0) or (ncols == 0)) {
+        throw std::invalid_argument("K-block dimensions must be nonzero.");
     }
 
-    // If the temporary buffers are too small, resize them
-    if (Kblock1_.size() < block_size) {
-        Kblock1_.resize(block_size);
-        Kblock2_.resize(block_size);
-        if (need_resize) {
-            auto block_size_MB = to_mb<std::complex<double>>(2 * block_size);
-        }
+    const size_t max_elements_per_buffer = memory_size_ / (2 * sizeof(std::complex<double>));
+    if (max_elements_per_buffer < nrows) {
+        throw std::runtime_error("The CI builder memory limit (" + std::to_string(memory_size_) +
+                                 " bytes) is too small for one complex K-block column of " +
+                                 std::to_string(nrows) + " elements per buffer.");
+    }
+    const size_t cols_chunk_size = std::min({max_elements_per_buffer / nrows, ncols,
+                                             static_cast<size_t>(std::numeric_limits<int>::max())});
+    const size_t block_size = nrows * cols_chunk_size;
+
+    // Keep a larger live size: shrinking here makes a later larger kernel value-initialize the
+    // same scratch storage again. The returned spans still expose only block_size elements.
+    const bool can_reuse = Kblock1_.size() >= block_size && Kblock2_.size() >= block_size &&
+                           Kblock1_.capacity() <= max_elements_per_buffer &&
+                           Kblock2_.capacity() <= max_elements_per_buffer;
+    if (!can_reuse) {
+        // Drop both allocations before growing either one. This prevents geometric vector growth
+        // from exceeding the pair budget and leaves a failed partial allocation safe to retry.
+        std::vector<std::complex<double>>{}.swap(Kblock1_);
+        std::vector<std::complex<double>>{}.swap(Kblock2_);
+        Kblock1_ = std::vector<std::complex<double>>(block_size);
+        Kblock2_ = std::vector<std::complex<double>>(block_size);
     }
 
     return {std::span<std::complex<double>>{Kblock1_.data(), block_size},
@@ -43,25 +60,20 @@ RelCISigmaBuilder::get_Kblock_spans(size_t nrows, size_t ncols) const {
 }
 
 void RelCISigmaBuilder::H1_hz(std::span<std::complex<double>> basis,
-                              std::span<std::complex<double>> sigma, Spin spin,
+                              std::span<std::complex<double>> sigma,
                               std::span<std::complex<double>> h) const {
+    // Two-component CI acts only on alpha spinors (nb == 0), so the beta space is the single
+    // vacuum string and the opposite-spin spectator count maxL == 1. The [K, L] composite index
+    // therefore collapses to just K
     const size_t norb = lists_.norb();
-    const auto na = lists_.na();
-    const auto nb = lists_.nb();
-
-    // skip this block if there is no electron with equal spin to that on which this operator acts
-    if ((is_alpha(spin) and (na < 1)) or (is_beta(spin) and (nb < 1)))
+    if (lists_.na() < 1)
         return;
 
-    const auto& alpha_address = lists_.alpha_address();
-    const auto& beta_address = lists_.beta_address();
-    const int num_1h_classes = is_alpha(spin) ? lists_.alpha_address_1h()->nclasses()
-                                              : lists_.beta_address_1h()->nclasses();
+    const int num_1h_classes = lists_.alpha_address_1h()->nclasses();
 
-    // |K>|L> = ± a_p |I>|L>
+    // |K> = ± a_q |I>
     for (int class_K = 0; class_K < num_1h_classes; ++class_K) {
-        const size_t maxK = is_alpha(spin) ? lists_.alpha_address_1h()->strpcls(class_K)
-                                           : lists_.beta_address_1h()->strpcls(class_K);
+        const size_t maxK = lists_.alpha_address_1h()->strpcls(class_K);
 
         if (maxK == 0)
             continue;
@@ -72,67 +84,59 @@ void RelCISigmaBuilder::H1_hz(std::span<std::complex<double>> basis,
             if (lists_.block_size(nI) == 0)
                 continue;
 
-            // size of the strings with opposite spin to the one on which we act
-            const size_t maxL =
-                is_alpha(spin) ? beta_address->strpcls(class_Ib) : alpha_address->strpcls(class_Ia);
+            // Grab the temporary buffers that will hold intermediates D(i, K)
+            // and return the maximum size of a chunk of K indices
+            auto [Kblock1, Kblock2, K_chunk_size] = get_Kblock_spans(norb, maxK);
 
-            if (maxL > 0) {
-                // Grab the temporary buffers that will hold intermediates D(i,[K L])
-                // and return the maximum size of a chunk of K indices
-                auto [Kblock1, Kblock2, K_chunk_size] = get_Kblock_spans(norb * maxL, maxK);
+            // Grab a span with the C coefficients
+            auto tr = gather_block(basis, TR, Spin::Alpha, lists_, class_Ia, class_Ib);
 
-                // number of elements in the temporary buffer
-                const auto temp_dim = norb * K_chunk_size * maxL;
+            // Loop over ranges of K indices in chunks of size K_chunk_size
+            for (size_t K_start = 0; K_start < maxK; K_start += K_chunk_size) {
+                const size_t K_end = std::min(K_start + K_chunk_size, maxK);
+                // size of the K range, which may be smaller than K_chunk_size
+                const size_t K_size = K_end - K_start;
 
-                // Grab a span with the C coefficients
-                auto tr = gather_block(basis, TR, spin, lists_, class_Ia, class_Ib);
+                std::fill_n(Kblock2.begin(), norb * K_size, 0.0);
 
-                // Loop over ranges of K indices in chuncks of size K_chunk_size
-                for (size_t K_start = 0; K_start < maxK; K_start += K_chunk_size) {
-                    const size_t K_end = std::min(K_start + K_chunk_size, maxK);
-                    // size of the K range, which may be smaller than K_chunk_size
-                    const size_t K_size = K_end - K_start;
-                    // number of columns in the chunk we are processing
-                    const size_t dimKL = K_size * maxL;
-
-                    std::fill_n(Kblock2.begin(), temp_dim, 0.0);
-
-                    // Loop over the K indices in the chunk
-                    for (size_t K = 0; K < K_size; ++K) {
-                        const auto& Klist =
-                            is_alpha(spin)
-                                ? lists_.get_alpha_1h_list(class_K, K_start + K, class_Ia)
-                                : lists_.get_beta_1h_list(class_K, K_start + K, class_Ib);
-                        // D(q,[K L]) += <K|a_q|I> C(I,L)
-                        for (const auto& [sign_K, q, I] : Klist) {
-                            add(maxL, sign_K, &tr[I * maxL], 1, &Kblock2_[q * dimKL + K * maxL], 1);
-                        }
+                // D(q, K) = <K|a_q|I> C(I)
+                // Parallelize over K: each K writes its own column of Kblock2, so no write race.
+                gated_parallel_for_chunked(K_size, [&](size_t kb, size_t ke) {
+                    for (size_t K = kb; K < ke; ++K) {
+                        const auto& Klist = lists_.get_alpha_1h_list(class_K, K_start + K, class_Ia);
+                        for (const auto& [sign_K, q, I] : Klist)
+                            Kblock2[q * K_size + K] += static_cast<double>(sign_K) * tr[I];
                     }
+                });
 
-                    // E(p,[K L]) = sum_q h(p,q) D(q,[K L])
-                    matrix_product('N', 'N', norb, dimKL, norb, 1.0, h.data(), norb,
-                                   Kblock2_.data(), dimKL, 0.0, Kblock1_.data(), dimKL);
+                // E(p, K) = sum_q h(p,q) D(q, K)
+                matrix_product('N', 'N', norb, K_size, norb, 1.0, h.data(), norb, Kblock2.data(),
+                               K_size, 0.0, Kblock1.data(), K_size);
 
-                    // sigma(J L) += <J|a^+_p|K> E(p,[K L])
-                    for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
-                        if ((is_alpha(spin) and (class_Ib != class_Jb)) or
-                            (is_beta(spin) and (class_Ia != class_Ja)))
-                            continue;
+                // sigma(J) += <J|a^+_p|K> E(p, K)
+                for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
+                    if (class_Ib != class_Jb)
+                        continue;
 
-                        // zero the temporary buffer that will hold the result
-                        std::fill_n(TL.begin(), TL.size(), 0.0);
+                    const size_t maxJ = lists_.alpha_address()->strpcls(class_Ja);
+                    // zero the temporary buffer that will hold the result
+                    std::fill_n(TL.begin(), TL.size(), 0.0);
+                    // The scatter accumulates into TL(J) (a reduction over K), so parallelize over
+                    // the output string J, each thread owns a stripe of J and
+                    // scans all K, accumulating only into rows it owns.
+                    gated_parallel_for_chunked(maxJ, [&](size_t J_begin, size_t J_end) {
                         for (size_t K = 0; K < K_size; ++K) {
                             const auto& Klist =
-                                is_alpha(spin)
-                                    ? lists_.get_alpha_1h_list(class_K, K_start + K, class_Ja)
-                                    : lists_.get_beta_1h_list(class_K, K_start + K, class_Jb);
-                            for (const auto& [sign_K, p, I] : Klist) {
-                                add(maxL, sign_K, &Kblock1_[p * dimKL + K * maxL], 1, &TL[I * maxL],
-                                    1);
+                                lists_.get_alpha_1h_list(class_K, K_start + K, class_Ja);
+                            for (const auto& [sign_K, p, J] : Klist) {
+                                // this thread does not own this J
+                                if (J < J_begin || J >= J_end)
+                                    continue;
+                                TL[J] += static_cast<double>(sign_K) * Kblock1[p * K_size + K];
                             }
                         }
-                        scatter_block(TL, sigma, spin, lists_, class_Ja, class_Jb);
-                    }
+                    });
+                    scatter_block(TL, sigma, Spin::Alpha, lists_, class_Ja, class_Jb);
                 }
             }
         }
@@ -140,22 +144,17 @@ void RelCISigmaBuilder::H1_hz(std::span<std::complex<double>> basis,
 }
 
 void RelCISigmaBuilder::H2_hz_same_spin(std::span<std::complex<double>> basis,
-                                        std::span<std::complex<double>> sigma, Spin spin) const {
-    if ((is_alpha(spin) and (lists_.na() < 2)) or (is_beta(spin) and (lists_.nb() < 2)))
+                                        std::span<std::complex<double>> sigma) const {
+    if (lists_.na() < 2)
         return;
 
     const size_t norb = lists_.norb();
     const size_t npairs = norb * (norb - 1) / 2;
 
-    const auto& alpha_address = lists_.alpha_address();
-    const auto& beta_address = lists_.beta_address();
-
-    const int num_2h_classes = is_alpha(spin) ? lists_.alpha_address_2h()->nclasses()
-                                              : lists_.beta_address_2h()->nclasses();
+    const int num_2h_classes = lists_.alpha_address_2h()->nclasses();
 
     for (int class_K = 0; class_K < num_2h_classes; ++class_K) {
-        const size_t maxK = is_alpha(spin) ? lists_.alpha_address_2h()->strpcls(class_K)
-                                           : lists_.beta_address_2h()->strpcls(class_K);
+        const size_t maxK = lists_.alpha_address_2h()->strpcls(class_K);
 
         if (maxK == 0)
             continue;
@@ -165,162 +164,60 @@ void RelCISigmaBuilder::H2_hz_same_spin(std::span<std::complex<double>> basis,
             if (lists_.block_size(nI) == 0)
                 continue;
 
-            const size_t maxL =
-                is_alpha(spin) ? beta_address->strpcls(class_Ib) : alpha_address->strpcls(class_Ia);
+            // grab temporary buffers and the maximum size of a chunk of K indices
+            auto [Kblock1, Kblock2, K_chunk_size] = get_Kblock_spans(npairs, maxK);
 
-            if (maxL > 0) {
-                // grab temporary buffers and the maximum size of a chunk of K indices
-                auto [Kblock1, Kblock2, K_chunk_size] = get_Kblock_spans(npairs * maxL, maxK);
+            auto tr = gather_block(basis, TR, Spin::Alpha, lists_, class_Ia, class_Ib);
 
-                // number of elements in the temporary blocks
-                const auto temp_dim = npairs * K_chunk_size * maxL;
+            // Loop over ranges of K indices in chunks of size K_chunk_size
+            for (size_t K_start = 0; K_start < maxK; K_start += K_chunk_size) {
+                const size_t K_end = std::min(K_start + K_chunk_size, maxK);
+                // size of the K range, which may be smaller than K_chunk_size
+                const size_t K_size = K_end - K_start;
 
-                auto tr = gather_block(basis, TR, spin, lists_, class_Ia, class_Ib);
+                std::fill_n(Kblock2.begin(), npairs * K_size, 0.0);
 
-                // Loop over ranges of K indices in chuncks of size K_chunk_size
-                for (size_t K_start = 0; K_start < maxK; K_start += K_chunk_size) {
-                    const size_t K_end = std::min(K_start + K_chunk_size, maxK);
-                    // size of the K range, which may be smaller than K_chunk_size
-                    const size_t K_size = K_end - K_start;
-                    const size_t dimKL = K_size * maxL;
-
-                    std::fill_n(Kblock2.begin(), temp_dim, 0.0);
-
-                    for (size_t K = 0; K < K_size; ++K) {
-                        const auto& Krlist =
-                            is_alpha(spin)
-                                ? lists_.get_alpha_2h_list(class_K, K + K_start, class_Ia)
-                                : lists_.get_beta_2h_list(class_K, K + K_start, class_Ib);
+                // D([qs], K) = <K|a_q a_s|I> C(I)
+                // Parallelize over K: each K writes its own column of Kblock2, so no write race.
+                gated_parallel_for_chunked(K_size, [&](size_t kb, size_t ke) {
+                    for (size_t K = kb; K < ke; ++K) {
+                        const auto& Krlist = lists_.get_alpha_2h_list(class_K, K + K_start, class_Ia);
                         for (const auto& [sign_K, q, s, I] : Krlist) {
                             const size_t qs_index = pair_index_gt(q, s);
-                            add(maxL, sign_K, &tr[I * maxL], 1,
-                                &Kblock2_[qs_index * dimKL + K * maxL], 1);
+                            Kblock2[qs_index * K_size + K] +=
+                                static_cast<double>(sign_K) * tr[I];
                         }
                     }
+                });
 
-                    matrix_product('N', 'N', npairs, dimKL, npairs, 1.0, v_pr_qs.data(), npairs,
-                                   Kblock2_.data(), dimKL, 0.0, Kblock1_.data(), dimKL);
+                // E([pr], K) = sum_{qs} v([pr],[qs]) D([qs], K)
+                matrix_product('N', 'N', npairs, K_size, npairs, 1.0, v_pr_qs.data(), npairs,
+                               Kblock2.data(), K_size, 0.0, Kblock1.data(), K_size);
 
-                    for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
-                        if (((is_alpha(spin) and (class_Ib != class_Jb)) or
-                             (is_beta(spin) and (class_Ia != class_Ja))))
-                            continue;
+                for (const auto& [nJ, class_Ja, class_Jb] : lists_.determinant_classes()) {
+                    if (class_Ib != class_Jb)
+                        continue;
 
-                        std::fill_n(TL.begin(), TL.size(), 0.0);
+                    const size_t maxJ = lists_.alpha_address()->strpcls(class_Ja);
+                    std::fill_n(TL.begin(), TL.size(), 0.0);
+                    // sigma(J) += <J|a^+_p a^+_r|K> E([pr], K). The scatter accumulates into TL(J)
+                    // (a reduction over K), so parallelize over the output string J
+                    // (owner-computes): each thread owns a stripe of J and scans all K, writing
+                    // only rows it owns.
+                    gated_parallel_for_chunked(maxJ, [&](size_t J_begin, size_t J_end) {
                         for (size_t K = 0; K < K_size; ++K) {
                             const auto& Klist =
-                                is_alpha(spin)
-                                    ? lists_.get_alpha_2h_list(class_K, K + K_start, class_Ja)
-                                    : lists_.get_beta_2h_list(class_K, K + K_start, class_Jb);
-                            for (const auto& [sign_K, p, r, I] : Klist) {
+                                lists_.get_alpha_2h_list(class_K, K + K_start, class_Ja);
+                            for (const auto& [sign_K, p, r, J] : Klist) {
+                                // this thread does now own this J
+                                if (J < J_begin || J >= J_end)
+                                    continue;
                                 const size_t pr_index = pair_index_gt(p, r);
-                                add(maxL, sign_K, &Kblock1_[pr_index * dimKL + K * maxL], 1,
-                                    &TL[I * maxL], 1);
+                                TL[J] += static_cast<double>(sign_K) * Kblock1[pr_index * K_size + K];
                             }
                         }
-                        scatter_block(TL, sigma, spin, lists_, class_Ja, class_Jb);
-                    }
-                }
-            }
-        }
-    }
-}
-
-void RelCISigmaBuilder::H2_hz_opposite_spin(std::span<std::complex<double>> basis,
-                                            std::span<std::complex<double>> sigma) const {
-    if ((lists_.na() < 1) or (lists_.nb() < 1))
-        return;
-
-    size_t norb = lists_.norb();
-    const auto norb2 = norb * norb;
-
-    const int num_1h_class_Ka = lists_.alpha_address_1h()->nclasses();
-    const int num_1h_class_Kb = lists_.beta_address_1h()->nclasses();
-
-    // loop over blocks of N-2 space
-    for (int class_Ka = 0; class_Ka < num_1h_class_Ka; ++class_Ka) {
-        for (int class_Kb = 0; class_Kb < num_1h_class_Kb; ++class_Kb) {
-            const auto maxKa = lists_.alpha_address_1h()->strpcls(class_Ka);
-            const auto maxKb = lists_.beta_address_1h()->strpcls(class_Kb);
-
-            if ((maxKa == 0) or (maxKb == 0))
-                continue;
-
-            // We gather the block of C into TR
-            const size_t Kb_block_start = 0;
-            const size_t Kb_block_end = maxKb;
-            const size_t Kb_block_size = maxKb;
-
-            auto [Kblock1, Kblock2, Ka_block_size] = get_Kblock_spans(norb2 * maxKb, maxKa);
-
-            for (size_t Ka_block_start = 0; Ka_block_start < maxKa;
-                 Ka_block_start += Ka_block_size) {
-                size_t Ka_block_end = std::min(Ka_block_start + Ka_block_size, maxKa);
-                size_t Ka_block_size = Ka_block_end - Ka_block_start;
-                const auto Kdim = Ka_block_size * Kb_block_size;
-                const auto temp_dim = norb2 * Kdim;
-
-                std::fill_n(Kblock1.begin(), temp_dim, 0.0);
-
-                // D([qs],[Ka Kb]) = \sum_{Ia,Ib} B^{Ka,Kb,Ia,Ib}_{pq} C_{Ia,Ib}
-                for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-                    if (lists_.block_size(nI) == 0)
-                        continue;
-                    const auto maxIb = lists_.beta_address()->strpcls(class_Ib);
-                    const auto Cr_offset = lists_.block_offset(nI);
-                    const auto& Ka_right_list = lists_.get_alpha_1h_list2(class_Ka, class_Ia);
-                    const auto& Kb_right_list = lists_.get_beta_1h_list2(class_Kb, class_Ib);
-                    if (Ka_right_list.empty() || Kb_right_list.empty())
-                        continue;
-                    for (size_t Ka = 0; Ka < Ka_block_size; ++Ka) {
-                        const auto& KaL = Ka_right_list[Ka_block_start + Ka];
-                        for (size_t Kb = 0; Kb < Kb_block_size; ++Kb) {
-                            const auto& KbL = Kb_right_list[Kb_block_start + Kb];
-                            const auto Kidx = Ka * Kb_block_size + Kb;
-                            for (const auto& [sign_q, q, Ia] : KaL) {
-                                const size_t qnorb = q * norb;
-                                const size_t b_offset = Cr_offset + Ia * maxIb;
-                                for (const auto& [sign_s, s, Ib] : KbL) {
-                                    const size_t qs_index = qnorb + s;
-                                    Kblock1[qs_index * Kdim + Kidx] =
-                                        static_cast<std::complex<double>>(sign_q * sign_s) *
-                                        basis[b_offset + Ib];
-                                }
-                            }
-                        }
-                    }
-                }
-
-                matrix_product('N', 'N', norb2, Kdim, norb2, 1.0, v_pr_qs.data(), norb2,
-                               Kblock1.data(), Kdim, 0.0, Kblock2.data(), Kdim);
-
-                // D([qs],[Ka Kb]) = \sum_{Ia,Ib} B^{Ka,Kb,Ia,Ib}_{pq} C_{Ia,Ib}
-                for (const auto& [nI, class_Ia, class_Ib] : lists_.determinant_classes()) {
-                    if (lists_.block_size(nI) == 0)
-                        continue;
-                    const auto maxIb = lists_.beta_address()->strpcls(class_Ib);
-                    const auto Cr_offset = lists_.block_offset(nI);
-                    const auto& Ka_right_list = lists_.get_alpha_1h_list2(class_Ka, class_Ia);
-                    const auto& Kb_right_list = lists_.get_beta_1h_list2(class_Kb, class_Ib);
-                    if (Ka_right_list.empty() || Kb_right_list.empty())
-                        continue;
-                    for (size_t Ka = 0; Ka < Ka_block_size; ++Ka) {
-                        const auto& KaL = Ka_right_list[Ka_block_start + Ka];
-                        for (size_t Kb = 0; Kb < Kb_block_size; ++Kb) {
-                            const auto& KbL = Kb_right_list[Kb_block_start + Kb];
-                            const auto Kidx = Ka * Kb_block_size + Kb;
-                            for (const auto& [sign_p, p, Ia] : KaL) {
-                                const size_t pnorb = p * norb;
-                                const size_t s_offset = Cr_offset + Ia * maxIb;
-                                for (const auto& [sign_r, r, Ib] : KbL) {
-                                    const size_t pr_index = pnorb + r;
-                                    sigma[s_offset + Ib] +=
-                                        static_cast<std::complex<double>>(sign_p * sign_r) *
-                                        Kblock2[pr_index * Kdim + Kidx];
-                                }
-                            }
-                        }
-                    }
+                    });
+                    scatter_block(TL, sigma, Spin::Alpha, lists_, class_Ja, class_Jb);
                 }
             }
         }
