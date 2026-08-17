@@ -155,8 +155,8 @@ np_tensor4 CISigmaBuilder::compute_ab_2rdm(np_vector C_left, np_vector C_right) 
     const int num_1h_class_Ka = lists_.alpha_address_1h()->nclasses();
     const int num_1h_class_Kb = lists_.beta_address_1h()->nclasses();
 
-    const size_t max_composite_K = max_composite_hole_dimension(
-        *lists_.alpha_address_1h(), *lists_.beta_address_1h(), "2-RDM");
+    const size_t max_composite_K = max_composite_hole_dimension(*lists_.alpha_address_1h(),
+                                                                *lists_.beta_address_1h(), "2-RDM");
     if (max_composite_K == 0) {
         rdm2_ab_timer_ += timer.elapsed_seconds();
         return rdm;

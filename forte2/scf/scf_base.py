@@ -1,15 +1,15 @@
 from dataclasses import dataclass, field
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 import time
 
 import numpy as np
 from forte2.system import System, ModelSystem, BasisInfo
-from forte2.base_classes.mixins import MOsMixin, SystemMixin
+from forte2.base_classes import Method, MO
 from forte2.helpers import logger, DIIS
 
 
 @dataclass
-class SCFBase(ABC, SystemMixin, MOsMixin):
+class SCFBase(Method):
     """
     Abstract base class for SCF calculations.
 
@@ -75,6 +75,9 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
     executed: bool = field(default=False, init=False)
     converged: bool = field(default=False, init=False)
 
+    def __post_init__(self):
+        self.provides = {"system", "mos", "eps"}
+
     def __call__(self, system):
         assert isinstance(
             system, (System, ModelSystem)
@@ -100,6 +103,7 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
                 self.level_shift = (self.level_shift, self.level_shift)
             if isinstance(self.level_shift, tuple) and len(self.level_shift) != 2:
                 raise ValueError("Tuple level_shift must have length 2 for UHF.")
+        self.called = True
         return self
 
     def _eigh(self, F):
@@ -233,6 +237,9 @@ class SCFBase(ABC, SystemMixin, MOsMixin):
         logger.log_info1(f"{self.method} time: {end - start:.2f} seconds")
 
         self._post_process()
+        self.mos = MO(
+            self.C, self.two_component, self.irrep_labels, self.irrep_indices
+        )
 
         self.executed = True
         return self

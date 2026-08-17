@@ -104,18 +104,18 @@ class ThreadJoiner {
 
 /// @brief Get the number of threads to use for parallel execution
 /// FORTE_NUM_THREADS_OVERRIDE is used if set/valid.
-/// Otherwise, the smallest set value among 
-/// {   physical cores, 
+/// Otherwise, the smallest set value among
+/// {   physical cores,
 ///     # of CPUs in affinity mask,
-///     OMP_NUM_THREADS, 
-///     OMP_THREAD_LIMIT, 
+///     OMP_NUM_THREADS,
+///     OMP_THREAD_LIMIT,
 ///     SLURM_CPUS_PER_TASK,
 /// } is used.
 /// It always returns at least one thread.
 /// @return The number of threads to use for parallel execution.
 inline std::size_t get_num_threads() {
     auto num_threads = detail::parse_thread_limit(std::getenv("FORTE_NUM_THREADS_OVERRIDE"));
-    
+
     if (num_threads != detail::max_threads) {
         return std::max<std::size_t>(1, num_threads);
     }

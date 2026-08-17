@@ -5,7 +5,6 @@ from forte2 import System, X2CParams
 from forte2.integrals import LIBCINT_AVAILABLE
 from forte2.scf import RHF, GHF, UHF
 from forte2.helpers.comparisons import approx
-from forte2.orbitals import convert_coeff_spatial_to_spinor
 from forte2.system import BSE_AVAILABLE
 from forte2.data import EH_TO_WN, EH_TO_EV
 
@@ -314,7 +313,8 @@ def test_so_from_sf_water():
         x2c=X2CParams(x2c_type="so", x2c_model="1e"),
     )
     scf_so = GHF(charge=1)(system)
-    scf_so.C = convert_coeff_spatial_to_spinor(scf.C)
+    mos_2c = scf.mos.to_spinorbital_basis()
+    scf_so.C = mos_2c.C
     scf_so.run()
     assert scf_so.E == approx(eghf)
 

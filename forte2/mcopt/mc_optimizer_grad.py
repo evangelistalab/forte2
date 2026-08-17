@@ -21,7 +21,7 @@ def _compute_casscf_gradient(mc) -> NDArray:
 
     _validate_converged_casscf_gradient(mc)
 
-    C = mc.C[0][:, mc.mo_space.orig_to_contig].copy()
+    C = mc.mos.C[0][:, mc.mo_space.orig_to_contig].copy()
     if isinstance(mc.ci_solver, RelCIBase):
         return _compute_rel_casscf_gradient(mc, C)
     return _compute_nonrel_casscf_gradient(mc, C)
@@ -570,12 +570,12 @@ def _validate_converged_casscf_gradient(mc) -> None:
         raise NotImplementedError(
             "GASSCF gradients with frozen inter-GAS rotations are not implemented."
         )
-    if np.iscomplexobj(mc.C[0]) and not is_relativistic:
+    if np.iscomplexobj(mc.mos.C[0]) and not is_relativistic:
         raise NotImplementedError(
             "Nonrelativistic CASSCF/GASSCF gradients with complex orbitals are not "
             "implemented."
         )
-    if is_relativistic and mc.C[0].shape[0] != 2 * mc.system.nbf:
+    if is_relativistic and mc.mos.C[0].shape[0] != 2 * mc.system.nbf:
         raise ValueError(
             "Relativistic CASSCF/GASSCF gradients require spinor AO coefficients "
             "with 2 * system.nbf rows."

@@ -7,13 +7,13 @@ from forte2.lib import ints
 from forte2.state import MOSpace, EmbeddingMOSpace
 from forte2.system.basis_utils import BasisInfo
 from forte2.helpers import logger
-from forte2.base_classes.mixins import MOsMixin, SystemMixin, MOSpaceMixin
+from forte2.base_classes import Method
 from forte2.data import ATOM_SYMBOL_TO_Z
 from forte2.orbitals.semicanonicalizer import Semicanonicalizer
 
 
 @dataclass
-class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
+class ASET(Method):
     """
     Active Space Embedding Theory (ASET) method for paritioning and projecting molecules.
 
@@ -60,20 +60,22 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
     def __post_init__(self):
         self._regex = r"^([A-Z][a-z]?)(\d+)?(?:-(\d+))?$"
         self._check_parameters()
+        self.requires = {"system", "mos", "mo_space"}
+        self.provides = {"system", "mos", "mo_space"}
 
     def __call__(self, parent_method):
         assert isinstance(
             parent_method, forte2.mcopt.MCOptimizer
         ), f"Parent method must be MCSCF, got {type(parent_method)}"
-        self.parent_method = parent_method
+        self._register_parent_method(parent_method)
         return self
 
     def run(self):
         if not self.parent_method.executed:
             self.parent_method.run()
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
-        MOSpaceMixin.copy_from_upstream(self, self.parent_method)
+        self.system = self.parent_method.system
+        self.mos = self.parent_method.mos.copy()
+        self.mo_space = self.parent_method.mo_space
         self.mo_space = self.mo_space.update_frozen_orbitals(
             self.frozen_core_orbitals, self.frozen_virtual_orbitals
         )
@@ -250,7 +252,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         Perform Orbital Partitioning for ASET.
         """
         # Copy the input orbitals
-        C = self.parent_method.C[0].copy()
+        C = self.parent_method.mos.C[0].copy()
         # Sort the orbitals into contiguous core, active, virtual blocks
         C_contig = C[:, self.mo_space.orig_to_contig]
 
@@ -343,7 +345,7 @@ class ASET(MOsMixin, SystemMixin, MOSpaceMixin):
         semican.semi_canonicalize(g1=g1, C_contig=C_emb)
 
         # Replace the original orbitals with the semi-canonicalized ones in the original order
-        self.C[0] = semican.C_semican[:, emb_space.contig_to_orig].copy()
+        self.mos.C[0] = semican.C_semican[:, emb_space.contig_to_orig].copy()
 
         return {
             "index_A_occ": index_A_occ,

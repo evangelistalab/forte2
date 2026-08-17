@@ -13,8 +13,7 @@ RelSelectedCIHelper::RelSelectedCIHelper(size_t norb, const std::vector<Determin
                                          const std::vector<size_t>& frozen_creation,
                                          const std::vector<size_t>& frozen_annihilation)
     : norb_(norb), norb2_(norb * norb), norb3_(norb * norb * norb), E_(E),
-      slater_rules_(static_cast<int>(norb), E, H, V), c_guess_(c),
-      dets_(dets) {
+      slater_rules_(static_cast<int>(norb), E, H, V), c_guess_(c), dets_(dets) {
     log_level_ = log_level;
     if (dets.empty()) {
         throw std::runtime_error("The list of determinants cannot be empty.");
@@ -139,8 +138,9 @@ void RelSelectedCIHelper::update_hbci_ints() {
                 }
             }
             // sort in descending order by the (real) criterion key
-            std::sort(v_list.rbegin(), v_list.rend(),
-                      [](const auto& lhs, const auto& rhs) { return std::get<0>(lhs) < std::get<0>(rhs); });
+            std::sort(v_list.rbegin(), v_list.rend(), [](const auto& lhs, const auto& rhs) {
+                return std::get<0>(lhs) < std::get<0>(rhs);
+            });
             va_sorted_[p * norb_ + q] = std::move(v_list);
         }
     }

@@ -8,9 +8,7 @@ from numpy.typing import NDArray
 from forte2.base_classes import (
     CIBase,
     RelCIBase,
-    SystemMixin,
-    MOsMixin,
-    MOSpaceMixin,
+    Method,
 )
 from forte2.orbitals import (
     NaturalOrbitals,
@@ -29,7 +27,7 @@ from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
 
 
 @dataclass
-class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
+class MCOptimizerBase(Method):
     """
     Two-step optimizer for multi-configurational wavefunctions.
 
@@ -110,9 +108,12 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             raise ValueError(
                 "final_orbitals must be either 'semicanonical', 'natural', or 'original'."
             )
+        
+        self.requires = {"system", "mos"}
+        self.provides = {"system", "mos", "mo_space"}
 
     def __call__(self, method):
-        self.parent_method = method
+        self._register_parent_method(method)
         # make sure we don't print the CI output at INFO1 level
         current_verbosity = logger.get_verbosity_level()
         # only log subproblem if the verbosity is higher than INFO1
@@ -126,8 +127,8 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         if not self.parent_method.executed:
             self.parent_method.run()
 
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
+        self.system = self.parent_method.system
+        self.mos = self.parent_method.mos.copy()
         # make sure to register parent_method
         self.ci_solver = self.ci_solver(self.parent_method)
         # iteration 0: one step of CI optimization to bootstrap the orbital optimization
@@ -140,7 +141,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         # i.e., [core, gas1, gas2, ..., virt]
         perm = self.mo_space.orig_to_contig
         # this is the contiguous coefficient matrix
-        self._C = self.C[0][:, perm].copy()
+        self._C = self.mos.C[0][:, perm].copy()
         # core slice does not include frozen orbitals!
         self.core = self.mo_space.docc
         # self.actv will be a list if multiple GASes are defined
@@ -338,7 +339,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
 
         # undo _make_spaces_contiguous
         perm = self.mo_space.contig_to_orig
-        self.C[0] = self._C[:, perm].copy()
+        self.mos.C[0] = self._C[:, perm].copy()
 
         # optionally, rotate the final orbitals to semicanonical or natural orbitals
         self._rotate_final_orbitals()
@@ -368,7 +369,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
             # TODO: enable AO composition for 2c
             self._print_ao_composition()
         if self.do_transition_dipole:
-            self.ci_solver.compute_transition_properties(self.C[0])
+            self.ci_solver.compute_transition_properties(self.mos.C[0])
             pretty_print_ci_transition_props(
                 self.ci_solver.sa_info,
                 self.ci_solver.transition_dipoles,
@@ -380,14 +381,14 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         if self.final_orbitals not in ["semicanonical", "natural"]:
             return  # no final orbital transformation requested
 
-        C_contig = self.C[0][:, self.mo_space.orig_to_contig].copy()
+        C_contig = self.mos.C[0][:, self.mo_space.orig_to_contig].copy()
         g1_act = self.make_average_1rdm()
 
         # get the final orbitals in contiguous ordering
         C_final = self._make_final_orbitals_contig(g1_act, C_contig)
 
         # undo contiguous ordering
-        self.C[0] = C_final[:, self.mo_space.contig_to_orig].copy()
+        self.mos.C[0] = C_final[:, self.mo_space.contig_to_orig].copy()
 
         # rerun the CI solver in the final orbital basis to get the final energies
         new_E_ci, new_E_avg = self._rerun_ci_in_current_basis()
@@ -407,7 +408,7 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
     def _final_orbital_irrep_indices(self) -> NDArray:
         """Return the irrep indices of the final orbitals in contiguous ordering."""
 
-        return np.asarray(self.irrep_indices[0], dtype=int)[
+        return np.asarray(self.mos.irrep_indices[0], dtype=int)[
             self.mo_space.orig_to_contig
         ]
 
@@ -453,14 +454,14 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
         if self.system.two_component:
             ints = SpinorbitalIntegrals(
                 system=self.system,
-                C=self.C[0],
+                C=self.mos.C[0],
                 spinorbitals=self.mo_space.active_indices,
                 core_spinorbitals=self.mo_space.docc_indices,
             )
         else:
             ints = RestrictedMOIntegrals(
                 system=self.system,
-                C=self.C[0],
+                C=self.mos.C[0],
                 orbitals=self.mo_space.active_indices,
                 core_orbitals=self.mo_space.docc_indices,
             )
@@ -509,9 +510,9 @@ class MCOptimizerBase(ABC, SystemMixin, MOsMixin, MOSpaceMixin):
     def _print_ao_composition(self):
         basis_info = BasisInfo(self.system, self.system.basis)
         logger.log_info1("\nAO Composition of core MOs:")
-        basis_info.print_ao_composition(self.C[0], self.mo_space.docc_indices)
+        basis_info.print_ao_composition(self.mos.C[0], self.mo_space.docc_indices)
         logger.log_info1("\nAO Composition of active MOs:")
-        basis_info.print_ao_composition(self.C[0], self.mo_space.active_indices)
+        basis_info.print_ao_composition(self.mos.C[0], self.mo_space.active_indices)
 
     def _get_nonredundant_rotations(self):
         """Lower triangular matrix of nonredundant rotations"""

@@ -145,7 +145,7 @@ def compare_orbital_coefficients(system, aset, filename):
     """
     C_test = np.load(THIS_DIR / f"reference_aset_orbitals/{filename}")
     S = system.ints_overlap()
-    overlap = np.abs(aset.C[0].T @ S @ C_test)
+    overlap = np.abs(aset.mos.C[0].T @ S @ C_test)
     assert np.allclose(overlap, np.eye(overlap.shape[0]), atol=1e-8, rtol=0.0)
 
 
@@ -415,7 +415,7 @@ def test_aset_gas_semicanonical_noncontiguous_mo_space():
 
     assert ci.E == approx(mc.E)
     np.testing.assert_allclose(
-        ci.C[0].conj().T @ system.ints_overlap() @ ci.C[0],
+        ci.mos.C[0].conj().T @ system.ints_overlap() @ ci.mos.C[0],
         np.eye(system.nmo),
         atol=1e-10,
     )
@@ -512,7 +512,7 @@ def test_aset_gas_semicanonical_noninteracting_fragments():
 
     assert ci.E == approx(mc.E)
     np.testing.assert_allclose(
-        ci.C[0].conj().T @ system.ints_overlap() @ ci.C[0],
+        ci.mos.C[0].conj().T @ system.ints_overlap() @ ci.mos.C[0],
         np.eye(system.nmo),
         atol=1e-10,
     )
@@ -608,14 +608,14 @@ def test_aset_noncontiguous_frozen_core_orbital_ordering():
     assert not np.array_equal(orig_to_contig, contig_to_orig)
 
     S = system.ints_overlap()
-    C = aset.C[0]
+    C = aset.mos.C[0]
     np.testing.assert_allclose(C.conj().T @ S @ C, np.eye(system.nmo), atol=1e-10)
 
     # The orbitals the user pinned by index must still span the same space as
     # in the parent MCSCF, i.e. they must not have been permuted away.
     for indices in (frozen_core, mc.mo_space.active_indices):
         assert len(indices) > 0
-        assert spans_same_space(S, mc.C[0][:, indices], C[:, indices])
+        assert spans_same_space(S, mc.mos.C[0][:, indices], C[:, indices])
 
     # Every orbital assigned to fragment A must be more localized on the
     # fragment than any orbital assigned to environment B.

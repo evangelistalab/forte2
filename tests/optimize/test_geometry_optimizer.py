@@ -107,3 +107,8 @@ def test_project_previous_occupied_orbitals_to_new_geometry():
         projected[0][:, : new_rhf.na].T @ S_cross @ old_rhf.C[0][:, : old_rhf.na]
     )
     assert abs(occupied_overlap[0, 0]) > 0.99
+
+
+def test_geometry_optimizer_rejects_an_unbound_method():
+    with pytest.raises(RuntimeError, match="has not been bound"):
+        GeometryOptimizer()(RHF(charge=0))

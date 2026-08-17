@@ -327,8 +327,8 @@ template <libint2::Operator Op, typename Weights>
     validate_deriv_centers(basis1, charges, "basis1", "compute_two_electron_2c_deriv_by_shell");
     validate_deriv_centers(basis2, charges, "basis2", "compute_two_electron_2c_deriv_by_shell");
     validate_deriv_shell_slices<2>(shell_slices,
-                                std::array<std::size_t, 2>{basis1.nshells(), basis2.nshells()},
-                                "compute_two_electron_2c_deriv_by_shell");
+                                   std::array<std::size_t, 2>{basis1.nshells(), basis2.nshells()},
+                                   "compute_two_electron_2c_deriv_by_shell");
 
     const auto [s1_begin, s1_end] = shell_slices[0];
     const auto [s2_begin, s2_end] = shell_slices[1];
