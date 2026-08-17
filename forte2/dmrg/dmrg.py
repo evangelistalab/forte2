@@ -487,7 +487,7 @@ class DMRGSolver(CIBase):
         The state-averaged energy.
     """
 
-    orbital_rotation_invariant: ClassVar[bool] = True
+    orbital_rotation_invariant: ClassVar[bool] = False
 
     dmrg_params: DMRGParams = field(default_factory=DMRGParams)
     # If used as a solver, log at warning level
@@ -857,7 +857,7 @@ class RelDMRGSolver(RelCIBase):
         As in ``DMRGSolver``.
     """
 
-    orbital_rotation_invariant: ClassVar[bool] = True
+    orbital_rotation_invariant: ClassVar[bool] = False
 
     dmrg_params: DMRGParams = field(default_factory=DMRGParams)
     log_level: int = field(default=logger.get_verbosity_level() + 1)
