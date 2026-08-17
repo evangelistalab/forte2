@@ -101,6 +101,11 @@ interface: **libint2** (always) and **libcint** (`USE_LIBCINT=ON` by default). `
   - `pytest -m "not slow"`
 - Full run:
   - `pytest -v --cov --cov-branch --cov-report=xml`
+- Parallel run (`pytest-xdist`):
+  - `pytest -m "not slow" -n auto` spreads tests across all available CPU cores.
+  - On a shared dev box (e.g. multiple agent worktrees/conda envs active at once), prefer a
+    bounded worker count like `-n 4` instead of `-n auto` — `auto` will happily spawn one
+    worker per core and can starve other concurrent sessions.
 - Subsystem-focused run examples:
   - `pytest tests/scf -q`
   - `pytest tests/ci -q`

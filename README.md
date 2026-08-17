@@ -54,6 +54,8 @@ or run the full test suite with:
 pytest
 ```
 
+Tests can be run in parallel across CPU cores with [pytest-xdist](https://pytest-xdist.readthedocs.io/) by adding `-n auto` (or `-n <N>` for a specific number of workers), e.g. `pytest -m "not slow" -n auto`.
+
 ## Quickstart
 
 Forte2 adheres to a functional composition workflow, where users build a final object by applying a sequence of methods to a `System` object. For example, a typical workflow might look like:

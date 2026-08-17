@@ -131,9 +131,9 @@ jobs:
         conda activate forte
         cd $HOME/work/forte2/forte2/tests
         if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event_name }}" == "merge_group" || ( "${{ github.event_name }}" == "pull_request" && "${{ github.event.pull_request.draft }}" == "false" ) ]]; then
-          pytest -v --cov --cov-branch --cov-report=xml
+          pytest -v -n auto --cov --cov-branch --cov-report=xml
         else
-          pytest -v -m "not slow" --cov --cov-branch --cov-report=xml
+          pytest -v -n auto -m "not slow" --cov --cov-branch --cov-report=xml
         fi
 
     - name: Run Forte2 notebook tests
@@ -141,7 +141,7 @@ jobs:
       run: |
         conda activate forte
         cd $HOME/work/forte2/forte2/tutorials
-        pytest -v --nbmake *.ipynb
+        pytest -v -n auto --nbmake *.ipynb
 
     - name: Upload coverage reports to Codecov
       uses: codecov/codecov-action@v5

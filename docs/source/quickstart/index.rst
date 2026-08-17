@@ -32,3 +32,8 @@ or if you want to develop Forte2, follow these steps to compile Forte2 from sour
 4. Run the quick tests::
 
     $ pytest -m "not slow"
+
+   Add ``-n auto`` (via `pytest-xdist <https://pytest-xdist.readthedocs.io/>`_) to run tests in
+   parallel across all available CPU cores::
+
+    $ pytest -m "not slow" -n auto
