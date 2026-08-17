@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, GHF, RelMCOptimizer
+from forte2 import System, GHF, MCOptimizer, RelCISolver, X2CParams
 from forte2.dsrg import RelDSRG_MRPT3
 from forte2.helpers.comparisons import approx
 from forte2.data.atom_data import EH_TO_WN
@@ -28,11 +28,12 @@ def test_mrpt3_n2_nonrel():
     random_phase = np.diag(np.exp(1j * rng.uniform(-np.pi, np.pi, size=rhf.nmo * 2)))
     rhf.C[0] = rhf.C[0] @ random_phase
 
-    mc = RelMCOptimizer(
+    ci_solver = RelCISolver(
         nel=14,
         core_orbitals=8,
         active_orbitals=12,
-    )(rhf)
+    )
+    mc = MCOptimizer(ci_solver)(rhf)
     mc.run()
 
     assert rhf.E == approx(erhf)
@@ -65,18 +66,20 @@ def test_mrpt3_f_atom_rel_sa():
         xyz=xyz,
         basis_set="decon-cc-pVTZ",
         auxiliary_basis_set="cc-pVQZ-JKFIT",
-        x2c_type="so",
-        snso_type="row-dependent",
+        x2c=X2CParams(x2c_type="so", snso_type="row-dependent"),
         use_gaussian_charges=True,
     )
     mf = GHF(charge=-1, die_if_not_converged=False)(system)
-    mc = RelMCOptimizer(
+    ci_solver = RelCISolver(
         nel=9,
         nroots=6,
         active_orbitals=8,
         core_orbitals=2,
-        econv=1e-8,
-        gconv=1e-6,
+    )
+    mc = MCOptimizer(
+        ci_solver,
+        e_tol=1e-8,
+        g_tol=1e-6,
     )(mf)
     dsrg = RelDSRG_MRPT3(flow_param=0.35, relax_reference="once")(mc)
     dsrg.run()
