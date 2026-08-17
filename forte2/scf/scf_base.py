@@ -103,6 +103,7 @@ class SCFBase(Method):
                 self.level_shift = (self.level_shift, self.level_shift)
             if isinstance(self.level_shift, tuple) and len(self.level_shift) != 2:
                 raise ValueError("Tuple level_shift must have length 2 for UHF.")
+        self.called = True
         return self
 
     def _eigh(self, F):

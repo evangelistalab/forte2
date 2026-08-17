@@ -16,7 +16,10 @@ class Method(ABC):
     provides: set[str] = field(default_factory=set, init=False)
     # Flags that all methods need to have
     two_component: bool | None = field(default=None, init=False)
+    # Whether run() has been called and returned successfully
     executed: bool = field(default=False, init=False)
+    # Whether this method has been bound to its upstream
+    called: bool = field(default=False, init=False)
 
     @abstractmethod
     def __call__(self, upstream): ...
@@ -33,6 +36,14 @@ class Method(ABC):
             raise ValueError(
                 f"Parent method must be an instance of Method, but got {type(parent_method)}."
             )
+
+        if not parent_method.called:
+            raise RuntimeError(
+                f"Parent method {parent_method.__class__.__name__} has not been bound "
+                f"to a System or an upstream method, so {self.__class__.__name__} "
+                "cannot be attached to it."
+            )
+
         for req in self.requires:
             if req not in parent_method.provides:
                 raise RuntimeError(
@@ -64,3 +75,4 @@ class Method(ABC):
             )
         self.parent_method = parent_method
         self.two_component = parent_method.two_component
+        self.called = True
