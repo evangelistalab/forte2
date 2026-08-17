@@ -47,9 +47,10 @@ def echo_invoking_script():
         return
 
     try:
-        with open(script_path) as f:
+        with open(script_path, encoding="utf-8", errors="replace") as f:
             content = f.read()
-    except OSError:
+    except Exception as e:
+        print(f"Could not echo the invoking script {script_path}: {e}")
         return
 
     banner = f"Content of {script_path}"
