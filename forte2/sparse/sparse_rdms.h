@@ -322,8 +322,7 @@ auto compute_bbbb_4rdm(const SparseState& state_left, const SparseState& state_r
 /// @brief Compute the complex alpha 1-RDM between two SparseStates
 /// @return gamma1[p][q] = <L| a^+_p a_q |R> as a complex (norb, norb) matrix
 inline np_matrix_complex compute_a_1rdm_complex(const SparseState& state_left,
-                                                const SparseState& state_right,
-                                                std::size_t norb) {
+                                                const SparseState& state_right, std::size_t norb) {
     auto g1 = make_zeros<nb::numpy, sparse_scalar_t, 2>({norb, norb});
     auto g1_v = g1.view();
 

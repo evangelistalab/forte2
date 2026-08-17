@@ -13,8 +13,7 @@ using namespace nb::literals;
 namespace forte2 {
 
 void export_rdms_api(nb::module_& m) {
-    nb::module_ sub_m = m.def_submodule(
-        "rdms", "Reduced density matrices between SparseStates");
+    nb::module_ sub_m = m.def_submodule("rdms", "Reduced density matrices between SparseStates");
 
     sub_m.def("compute_a_1rdm", &compute_a_1rdm, "state_left"_a, "state_right"_a, "norb"_a,
               "Compute the alpha 1-RDM between two SparseStates");
@@ -45,12 +44,12 @@ void export_rdms_api(nb::module_& m) {
     sub_m.def("compute_bbbb_4rdm", &compute_bbbb_4rdm, "state_left"_a, "state_right"_a, "norb"_a,
               "Compute the beta-beta-beta-beta 4-RDM between two SparseStates");
     sub_m.def("compute_a_1rdm_complex", &compute_a_1rdm_complex, "state_left"_a, "state_right"_a,
-          "norb"_a,
-          "Compute the complex alpha 1-RDM between two SparseStates (conjugates the bra)");
-    sub_m.def("compute_aa_2rdm_complex", &compute_aa_2rdm_complex, "state_left"_a, "state_right"_a,
-          "norb"_a,
-          "Compute the complex alpha-alpha 2-RDM between two SparseStates (conjugates the bra)");
-
+              "norb"_a,
+              "Compute the complex alpha 1-RDM between two SparseStates (conjugates the bra)");
+    sub_m.def(
+        "compute_aa_2rdm_complex", &compute_aa_2rdm_complex, "state_left"_a, "state_right"_a,
+        "norb"_a,
+        "Compute the complex alpha-alpha 2-RDM between two SparseStates (conjugates the bra)");
 }
 
 } // namespace forte2

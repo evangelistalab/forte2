@@ -114,8 +114,8 @@ np_tensor4_complex RelCISigmaBuilder::compute_2rdm(np_vector_complex C_left,
             if (lists_.block_size(nI) == 0)
                 continue;
 
-            const size_t maxL = is_alpha(spin) ? beta_address->strpcls(class_Ib)
-                                               : alpha_address->strpcls(class_Ia);
+            const size_t maxL =
+                is_alpha(spin) ? beta_address->strpcls(class_Ib) : alpha_address->strpcls(class_Ia);
             if (maxL == 0)
                 continue;
 
@@ -146,11 +146,13 @@ np_tensor4_complex RelCISigmaBuilder::compute_2rdm(np_vector_complex C_left,
 
                     for (size_t K = 0; K < K_size; ++K) {
                         const auto& Kllist =
-                            is_alpha(spin) ? lists_.get_alpha_2h_list(class_K, K_start + K, class_Ia)
-                                           : lists_.get_beta_2h_list(class_K, K_start + K, class_Ib);
+                            is_alpha(spin)
+                                ? lists_.get_alpha_2h_list(class_K, K_start + K, class_Ia)
+                                : lists_.get_beta_2h_list(class_K, K_start + K, class_Ib);
                         const auto& Krlist =
-                            is_alpha(spin) ? lists_.get_alpha_2h_list(class_K, K_start + K, class_Ja)
-                                           : lists_.get_beta_2h_list(class_K, K_start + K, class_Jb);
+                            is_alpha(spin)
+                                ? lists_.get_alpha_2h_list(class_K, K_start + K, class_Ja)
+                                : lists_.get_beta_2h_list(class_K, K_start + K, class_Jb);
                         for (const auto& [sign_K, p, q, I] : Kllist) {
                             const size_t pq_index = pair_index_gt(p, q);
                             const double sgn = static_cast<double>(sign_K);
@@ -242,8 +244,8 @@ np_tensor6_complex RelCISigmaBuilder::compute_3rdm(np_vector_complex C_left,
             if (lists_.block_size(nI) == 0)
                 continue;
 
-            const size_t maxL = is_alpha(spin) ? beta_address->strpcls(class_Ib)
-                                               : alpha_address->strpcls(class_Ia);
+            const size_t maxL =
+                is_alpha(spin) ? beta_address->strpcls(class_Ib) : alpha_address->strpcls(class_Ia);
             if (maxL == 0)
                 continue;
 
@@ -272,11 +274,13 @@ np_tensor6_complex RelCISigmaBuilder::compute_3rdm(np_vector_complex C_left,
 
                     for (size_t K = 0; K < K_size; ++K) {
                         const auto& Kllist =
-                            is_alpha(spin) ? lists_.get_alpha_3h_list(class_K, K_start + K, class_Ia)
-                                           : lists_.get_beta_3h_list(class_K, K_start + K, class_Ib);
+                            is_alpha(spin)
+                                ? lists_.get_alpha_3h_list(class_K, K_start + K, class_Ia)
+                                : lists_.get_beta_3h_list(class_K, K_start + K, class_Ib);
                         const auto& Krlist =
-                            is_alpha(spin) ? lists_.get_alpha_3h_list(class_K, K_start + K, class_Ja)
-                                           : lists_.get_beta_3h_list(class_K, K_start + K, class_Jb);
+                            is_alpha(spin)
+                                ? lists_.get_alpha_3h_list(class_K, K_start + K, class_Ja)
+                                : lists_.get_beta_3h_list(class_K, K_start + K, class_Jb);
                         for (const auto& [sign_K, p, q, r, I] : Kllist) {
                             const size_t pqr_index = triplet_index_gt(p, q, r);
                             const double sgn = static_cast<double>(sign_K);

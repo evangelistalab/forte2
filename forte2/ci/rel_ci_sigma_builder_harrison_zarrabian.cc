@@ -103,7 +103,8 @@ void RelCISigmaBuilder::H1_hz(std::span<std::complex<double>> basis,
                 // Parallelize over K: each K writes its own column of Kblock2, so no write race.
                 gated_parallel_for_chunked(K_size, [&](size_t kb, size_t ke) {
                     for (size_t K = kb; K < ke; ++K) {
-                        const auto& Klist = lists_.get_alpha_1h_list(class_K, K_start + K, class_Ia);
+                        const auto& Klist =
+                            lists_.get_alpha_1h_list(class_K, K_start + K, class_Ia);
                         for (const auto& [sign_K, q, I] : Klist)
                             Kblock2[q * K_size + K] += static_cast<double>(sign_K) * tr[I];
                     }
@@ -181,11 +182,11 @@ void RelCISigmaBuilder::H2_hz_same_spin(std::span<std::complex<double>> basis,
                 // Parallelize over K: each K writes its own column of Kblock2, so no write race.
                 gated_parallel_for_chunked(K_size, [&](size_t kb, size_t ke) {
                     for (size_t K = kb; K < ke; ++K) {
-                        const auto& Krlist = lists_.get_alpha_2h_list(class_K, K + K_start, class_Ia);
+                        const auto& Krlist =
+                            lists_.get_alpha_2h_list(class_K, K + K_start, class_Ia);
                         for (const auto& [sign_K, q, s, I] : Krlist) {
                             const size_t qs_index = pair_index_gt(q, s);
-                            Kblock2[qs_index * K_size + K] +=
-                                static_cast<double>(sign_K) * tr[I];
+                            Kblock2[qs_index * K_size + K] += static_cast<double>(sign_K) * tr[I];
                         }
                     }
                 });
@@ -213,7 +214,8 @@ void RelCISigmaBuilder::H2_hz_same_spin(std::span<std::complex<double>> basis,
                                 if (J < J_begin || J >= J_end)
                                     continue;
                                 const size_t pr_index = pair_index_gt(p, r);
-                                TL[J] += static_cast<double>(sign_K) * Kblock1[pr_index * K_size + K];
+                                TL[J] +=
+                                    static_cast<double>(sign_K) * Kblock1[pr_index * K_size + K];
                             }
                         }
                     });

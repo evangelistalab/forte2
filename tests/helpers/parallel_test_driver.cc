@@ -106,14 +106,16 @@ int report_coverage(const std::vector<std::atomic<unsigned>>& visits, const std:
     return 0;
 }
 
-/// @brief Drive an index-callback variant of parallel_for_*, e.g. func(i), and check exact-once coverage.
+/// @brief Drive an index-callback variant of parallel_for_*, e.g. func(i), and check exact-once
+/// coverage.
 template <typename Invoker> int run_index_fn(const std::size_t count, Invoker invoke) {
     std::vector<std::atomic<unsigned>> visits(count);
     invoke([&visits](const std::size_t i) { visits[i].fetch_add(1, std::memory_order_relaxed); });
     return report_coverage(visits, count);
 }
 
-/// @brief Drive a range-callback variant of parallel_for_*, e.g. func(begin, end), and check exact-once coverage.
+/// @brief Drive a range-callback variant of parallel_for_*, e.g. func(begin, end), and check
+/// exact-once coverage.
 template <typename Invoker> int run_range_fn(const std::size_t count, Invoker invoke) {
     std::vector<std::atomic<unsigned>> visits(count);
     invoke([&visits](const std::size_t begin, const std::size_t end) {
@@ -132,8 +134,8 @@ int test_parallel_for_variant(const std::string_view name, const std::size_t cou
         return run_range_fn(
             count, [count](auto&& f) { forte2::parallel_for_chunked_thread(0, count, f); });
     if (name == "parallel_for_chunked_async")
-        return run_range_fn(
-            count, [count](auto&& f) { forte2::parallel_for_chunked_async(0, count, f); });
+        return run_range_fn(count,
+                            [count](auto&& f) { forte2::parallel_for_chunked_async(0, count, f); });
 
     // Index-callback variants: func(i).
     if (name == "parallel_for")
@@ -148,8 +150,8 @@ int test_parallel_for_variant(const std::string_view name, const std::size_t cou
         return run_index_fn(
             count, [count](auto&& f) { forte2::parallel_for_dynamic_thread(0, count, f); });
     if (name == "parallel_for_dynamic_async")
-        return run_index_fn(
-            count, [count](auto&& f) { forte2::parallel_for_dynamic_async(0, count, f); });
+        return run_index_fn(count,
+                            [count](auto&& f) { forte2::parallel_for_dynamic_async(0, count, f); });
 
     std::cerr << "unknown parallel_for variant: " << name << '\n';
     return 2;
