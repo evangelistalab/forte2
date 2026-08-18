@@ -135,6 +135,70 @@ def test_rel_ci_semicanonical_noncontiguous_mo_space():
     )
 
 
+def test_rel_ci_natural_noncontiguous_mo_space():
+    """RelCI final_orbitals='natural' reproduces the energy and natural
+    occupation number spectrum after a genuinely non-trivial contig/orig
+    permutation (see test_rel_ci_semicanonical_noncontiguous_mo_space).
+
+    Unlike the semicanonical case, this checks the natural occupation number
+    *spectrum* (sorted eigenvalues of the active 1-RDM) rather than the RDM's
+    raw matrix diagonality. In a time-reversal-symmetric two-component
+    calculation, every natural occupation number is exactly Kramers-doubly-
+    degenerate (a single-particle consequence of Kramers' theorem, which
+    holds regardless of whether the many-body state itself is degenerate).
+    "The" natural spinors are therefore only defined up to an arbitrary
+    unitary rotation within each degenerate Kramers pair: the rotation matrix
+    that ``NaturalOrbitals`` builds from the pre-rotation 1-RDM diagonalizes
+    it to machine precision, but re-diagonalizing RelCI from scratch in that
+    rotated basis converges to a different (energy-degenerate, equally valid)
+    gauge choice within each pair, leaving the *matrix* far from diagonal
+    even though the total energy and the occupation-number spectrum agree
+    with the pre-rotation reference to Davidson-Liu convergence precision.
+    This was confirmed by direct probing and is not specific to RelCI (the
+    same effect appears for the approximate RelDMRG solver).
+    """
+    xyz = """
+    Li 0.0 0.0 0.0
+    H  0.0 0.0 3.0
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+    )
+    scf = GHF(charge=0, e_tol=1e-12)(system)
+    mo_space = MOSpace(
+        nmo=system.nmo * 2,
+        core_orbitals=[0, 1],
+        active_orbitals=[2, 3, 4, 5],
+        frozen_virtual_orbitals=[6, 7],
+    )
+
+    ci_original = RelCI(nel=4, mo_space=mo_space)(scf)
+    ci_original.run()
+    ci_natural = RelCI(
+        nel=4,
+        mo_space=mo_space,
+        final_orbitals="natural",
+    )(scf)
+    ci_natural.run()
+
+    assert ci_natural.E[0] == approx(ci_original.E[0])
+    np.testing.assert_allclose(
+        ci_natural.mos.C[0].conj().T
+        @ system.ints_overlap()
+        @ ci_natural.mos.C[0],
+        np.eye(mo_space.nmo),
+        atol=1e-10,
+    )
+
+    original_occs = np.sort(np.linalg.eigvalsh(ci_original.make_average_1rdm()))[::-1]
+    natural_occs = np.sort(np.linalg.eigvalsh(ci_natural.make_average_1rdm()))[::-1]
+    assert natural_occs == approx(original_occs)
+
+
 def test_rel_ci_hf_transition_dipole_equivalence_to_rhf():
     xyz = """
     H 0.0 0.0 0.0

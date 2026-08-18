@@ -1,5 +1,6 @@
 from abc import ABC
 from dataclasses import dataclass, field
+from typing import Literal, get_args
 
 import numpy as np
 from numpy.typing import NDArray
@@ -90,7 +91,7 @@ class MCOptimizerBase(Method):
 
     ### Post-iteration
     do_transition_dipole: bool = False
-    final_orbitals: str = "semicanonical"
+    final_orbitals: Literal["semicanonical", "natural", "original"] = "semicanonical"
 
     ### Non-init attributes
     converged: bool = field(default=False, init=False)
@@ -100,13 +101,11 @@ class MCOptimizerBase(Method):
         if not isinstance(self.ci_solver, (CIBase, RelCIBase)):
             raise ValueError("ci_solver must be an instance of CIBase or RelCIBase.")
 
-        if self.final_orbitals not in [
-            "semicanonical",
-            "natural",
-            "original",
-        ]:
+        valid_final_orbitals = get_args(self.__annotations__["final_orbitals"])
+        if self.final_orbitals not in valid_final_orbitals:
             raise ValueError(
-                "final_orbitals must be either 'semicanonical', 'natural', or 'original'."
+                f"final_orbitals must be one of {valid_final_orbitals}, "
+                f"but got {self.final_orbitals!r}."
             )
         
         self.requires = {"system", "mos"}

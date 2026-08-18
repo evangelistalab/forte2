@@ -581,6 +581,82 @@ def test_sci_semicanonical_final_orbital():
     assert sci.E[0] == approx(-2.180967812920)
 
 
+def _lih_noncontiguous_mo_space(system):
+    return MOSpace(
+        nmo=system.nmo,
+        active_orbitals=[0, 1, 2, 3],
+        frozen_virtual_orbitals=[4],
+    )
+
+
+def _lih_rhf():
+    xyz = "Li 0.0 0.0 0.0\nH  0.0 0.0 3.0"
+    system = System(
+        xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="def2-universal-JKFIT", unit="bohr"
+    )
+    return RHF(charge=0, e_tol=1e-12)(system)
+
+
+def test_sci_semicanonical_noncontiguous_mo_space():
+    """final_orbitals='semicanonical' with a non-contiguous active space.
+
+    active_orbitals=[0, 1, 2, 3] is followed by a frozen virtual at original
+    index 4, which sits *before* the regular virtual in the original
+    ordering but *after* it in the contiguous [active, virt, frozen_virt]
+    ordering used internally, so mo_space.contig_to_orig is a genuine,
+    non-trivial permutation.
+    """
+    rhf = _lih_rhf()
+    mo_space = _lih_noncontiguous_mo_space(rhf.system)
+    sci_params = SelectedCIParams(var_threshold=1e-10, pt2_threshold=1e-12)
+
+    sci_original = SelectedCI(
+        states=State(nel=4, multiplicity=1, ms=0.0),
+        mo_space=mo_space,
+        sci_params=sci_params,
+    )(rhf)
+    sci_original.run()
+    sci_semicanonical = SelectedCI(
+        states=State(nel=4, multiplicity=1, ms=0.0),
+        mo_space=mo_space,
+        sci_params=sci_params,
+        final_orbitals="semicanonical",
+    )(rhf)
+    sci_semicanonical.run()
+
+    np.testing.assert_array_equal(mo_space.orig_to_contig, [0, 1, 2, 3, 5, 4])
+    np.testing.assert_array_equal(mo_space.contig_to_orig, [0, 1, 2, 3, 5, 4])
+    assert sci_semicanonical.E[0] == approx(sci_original.E[0])
+
+
+def test_sci_natural_noncontiguous_mo_space():
+    """final_orbitals='natural' with the same non-contiguous active space as
+    test_sci_semicanonical_noncontiguous_mo_space."""
+    rhf = _lih_rhf()
+    mo_space = _lih_noncontiguous_mo_space(rhf.system)
+    sci_params = SelectedCIParams(var_threshold=1e-10, pt2_threshold=1e-12)
+
+    sci_original = SelectedCI(
+        states=State(nel=4, multiplicity=1, ms=0.0),
+        mo_space=mo_space,
+        sci_params=sci_params,
+    )(rhf)
+    sci_original.run()
+    sci_natural = SelectedCI(
+        states=State(nel=4, multiplicity=1, ms=0.0),
+        mo_space=mo_space,
+        sci_params=sci_params,
+        final_orbitals="natural",
+    )(rhf)
+    sci_natural.run()
+
+    assert sci_natural.E[0] == approx(sci_original.E[0])
+
+    g1_act = sci_natural.make_average_1rdm()
+    off_diag = g1_act - np.diag(np.diag(g1_act))
+    assert np.max(np.abs(off_diag)) < 1e-6
+
+
 @pytest.mark.slow
 def test_sci_water_core_excited():
     """Test SelectedCI on a water core-excited state."""

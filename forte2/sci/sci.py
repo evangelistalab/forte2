@@ -2,7 +2,7 @@ import time
 from dataclasses import dataclass, field
 from collections import OrderedDict
 from itertools import combinations
-from typing import ClassVar
+from typing import ClassVar, Literal, get_args
 
 import numpy as np
 
@@ -19,7 +19,7 @@ from forte2.base_classes.params import SelectedCIParams, DavidsonLiuParams
 from forte2.helpers import logger
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.props import get_1e_property
-from forte2.orbitals import Semicanonicalizer
+from forte2.orbitals import Semicanonicalizer, NaturalOrbitals
 from forte2.ci.ci_utils import (
     pretty_print_ci_summary,
     pretty_print_ci_dets,
@@ -1591,24 +1591,50 @@ class SelectedCI(SelectedCISolver):
     """
 
     die_if_not_converged: bool = True
-    final_orbitals: str = "original"
+    final_orbitals: Literal["original", "semicanonical", "natural"] = "original"
     do_transition_dipole: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
+
+    def __post_init__(self):
+        super().__post_init__()
+        valid_final_orbitals = get_args(self.__annotations__["final_orbitals"])
+        if self.final_orbitals not in valid_final_orbitals:
+            raise ValueError(
+                f"final_orbitals must be one of {valid_final_orbitals}, "
+                f"but got {self.final_orbitals!r}."
+            )
 
     def run(self):
         super().run()
         self._post_process()
-        if self.final_orbitals == "semicanonical":
-            semi = Semicanonicalizer(
-                system=self.system,
-                mo_space=self.mo_space,
-            )
-            semi.semi_canonicalize(
-                g1=self.make_average_1rdm(), C_contig=self.mos.C[0]
-            )
-            self.mos.C[0] = semi.C_semican.copy()
+        if self.final_orbitals in ("semicanonical", "natural"):
+            irrep_indices = np.array(self.mos.irrep_indices[0])[
+                self.mo_space.orig_to_contig
+            ]
+            C_contig = self.mos.C[0][:, self.mo_space.orig_to_contig].copy()
+            g1_act = self.make_average_1rdm()
 
-            # recompute the CI vectors in the semicanonical basis
+            semi = Semicanonicalizer(
+                mo_space=self.mo_space,
+                system=self.system,
+                irrep_indices=irrep_indices,
+                do_active=(self.final_orbitals == "semicanonical"),
+            )
+            semi.semi_canonicalize(g1=g1_act, C_contig=C_contig)
+            C_final = semi.C_semican
+
+            if self.final_orbitals == "natural":
+                natural_orbital = NaturalOrbitals(
+                    self.mo_space, irrep_indices=irrep_indices
+                )
+                natural_orbital.make_natural_orbitals(
+                    g1_act=g1_act, C_contig=C_final
+                )
+                C_final = natural_orbital.C_natural
+
+            self.mos.C[0] = C_final[:, self.mo_space.contig_to_orig].copy()
+
+            # recompute the CI vectors in the final orbital basis
             ints = RestrictedMOIntegrals(
                 self.system,
                 self.mos.C[0],
@@ -1825,36 +1851,50 @@ class RelSelectedCI(RelSelectedCISolver):
     """
 
     die_if_not_converged: bool = True
-    final_orbitals: str = "original"
+    final_orbitals: Literal["original", "semicanonical", "natural"] = "original"
     do_transition_dipole: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
 
     def __post_init__(self):
         super().__post_init__()
-        if self.final_orbitals not in ["original", "semicanonical"]:
+        valid_final_orbitals = get_args(self.__annotations__["final_orbitals"])
+        if self.final_orbitals not in valid_final_orbitals:
             raise ValueError(
-                f"Invalid value for final_orbitals: {self.final_orbitals}. "
-                "Must be 'original' or 'semicanonical'."
+                f"final_orbitals must be one of {valid_final_orbitals}, "
+                f"but got {self.final_orbitals!r}."
             )
 
     def run(self):
         super().run()
         self._post_process()
-        if self.final_orbitals == "semicanonical":
+        if self.final_orbitals in ("semicanonical", "natural"):
+            irrep_indices = np.array(self.mos.irrep_indices[0])[
+                self.mo_space.orig_to_contig
+            ]
+            C_contig = self.mos.C[0][:, self.mo_space.orig_to_contig].copy()
+            g1_act = self.make_average_1rdm()
+
             semi = Semicanonicalizer(
                 mo_space=self.mo_space,
                 system=self.system,
-                irrep_indices=np.array(self.mos.irrep_indices[0])[
-                    self.mo_space.orig_to_contig
-                ],
+                irrep_indices=irrep_indices,
+                do_active=(self.final_orbitals == "semicanonical"),
             )
-            C_contig = self.mos.C[0][:, self.mo_space.orig_to_contig].copy()
-            semi.semi_canonicalize(g1=self.make_average_1rdm(), C_contig=C_contig)
-            self.mos.C[0] = semi.C_semican[
-                :, self.mo_space.contig_to_orig
-            ].copy()
+            semi.semi_canonicalize(g1=g1_act, C_contig=C_contig)
+            C_final = semi.C_semican
 
-            # recompute the CI vectors in the semicanonical basis
+            if self.final_orbitals == "natural":
+                natural_orbital = NaturalOrbitals(
+                    self.mo_space, irrep_indices=irrep_indices
+                )
+                natural_orbital.make_natural_orbitals(
+                    g1_act=g1_act, C_contig=C_final
+                )
+                C_final = natural_orbital.C_natural
+
+            self.mos.C[0] = C_final[:, self.mo_space.contig_to_orig].copy()
+
+            # recompute the CI vectors in the final orbital basis
             ints = SpinorbitalIntegrals(
                 self.system,
                 self.mos.C[0],
@@ -1862,7 +1902,6 @@ class RelSelectedCI(RelSelectedCISolver):
                 self.core_indices,
             )
             self.set_ints(ints.E, ints.H, ints.V)
-            self.first_run = True
             super().run()
 
         return self

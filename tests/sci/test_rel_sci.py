@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, GHF, SpinorUpcaster, MCOptimizer, X2CParams
+from forte2 import System, GHF, SpinorUpcaster, MCOptimizer, MOSpace, X2CParams
 from forte2.ci import RelCI
 from forte2.sci import RelSelectedCI, RelSelectedCISolver
 from forte2.helpers.comparisons import approx
@@ -177,6 +177,75 @@ def test_rel_sci_hf_ghf_transition_rdms():
         # gamma2(l,r)[p,q,r,s] = <l|a+_p a+_q a_s a_r|r> => gamma2(l,r) = conj(gamma2(r,l)^T_(2,3,0,1))
         g2_swapped = sci.make_2rdm(right, left).conj().transpose(2, 3, 0, 1)
         assert np.allclose(g2, g2_swapped, atol=1e-10)
+
+
+def test_rel_sci_natural_noncontiguous_mo_space():
+    """RelSelectedCI final_orbitals='natural' reproduces the energy and
+    natural occupation number spectrum after a genuinely non-trivial
+    contig/orig permutation (same MOSpace as
+    test_rel_ci_natural_noncontiguous_mo_space in tests/ci/test_rel_ci.py).
+
+    As with RelCI, this checks the natural occupation number *spectrum*
+    (sorted eigenvalues of the active 1-RDM) rather than the RDM's raw
+    matrix diagonality. In a time-reversal-symmetric two-component
+    calculation, every natural occupation number is exactly Kramers-doubly-
+    degenerate, so "the" natural spinors are only defined up to an arbitrary
+    unitary rotation within each degenerate pair: re-running RelSelectedCI
+    from scratch in the rotated basis converges to a different (energy-
+    degenerate, equally valid) gauge choice within each pair, leaving the
+    RDM *matrix* far from diagonal even though the total energy and the
+    occupation-number spectrum agree with the pre-rotation reference to
+    convergence precision.
+    """
+    xyz = """
+    Li 0.0 0.0 0.0
+    H  0.0 0.0 3.0
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+    )
+    scf = GHF(charge=0, e_tol=1e-12)(system)
+    mo_space = MOSpace(
+        nmo=system.nmo * 2,
+        core_orbitals=[0, 1],
+        active_orbitals=[2, 3, 4, 5],
+        frozen_virtual_orbitals=[6, 7],
+    )
+    sci_params = SelectedCIParams(
+        selection_algorithm="hbci",
+        var_threshold=1e-12,
+        pt2_threshold=0.0,
+    )
+
+    sci_original = RelSelectedCI(nel=4, mo_space=mo_space, sci_params=sci_params)(
+        scf
+    )
+    sci_original.run()
+    sci_natural = RelSelectedCI(
+        nel=4,
+        mo_space=mo_space,
+        sci_params=sci_params,
+        final_orbitals="natural",
+    )(scf)
+    sci_natural.run()
+
+    assert sci_natural.E[0] == approx(sci_original.E[0])
+    np.testing.assert_allclose(
+        sci_natural.mos.C[0].conj().T
+        @ system.ints_overlap()
+        @ sci_natural.mos.C[0],
+        np.eye(mo_space.nmo),
+        atol=1e-10,
+    )
+
+    original_occs = np.sort(np.linalg.eigvalsh(sci_original.make_average_1rdm()))[
+        ::-1
+    ]
+    natural_occs = np.sort(np.linalg.eigvalsh(sci_natural.make_average_1rdm()))[::-1]
+    assert natural_occs == approx(original_occs)
 
 
 @pytest.mark.slow
