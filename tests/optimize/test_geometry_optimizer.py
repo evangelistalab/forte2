@@ -183,6 +183,11 @@ def test_project_previous_occupied_orbitals_to_new_geometry():
     # Check that the projected occupied orbital has a large overlap with the old one
     S_cross = forte2.integrals.overlap(new_system, new_system.basis, old_system.basis)
     occupied_overlap = (
-        projected[0][:, : new_rhf.na].T @ S_cross @ old_rhf.C[0][:, : old_rhf.na]
+        projected[0][:, : new_rhf.na].T @ S_cross @ old_rhf.mos.C[0][:, : old_rhf.na]
     )
     assert abs(occupied_overlap[0, 0]) > 0.99
+
+
+def test_geometry_optimizer_rejects_an_unbound_method():
+    with pytest.raises(RuntimeError, match="has not been bound"):
+        GeometryOptimizer()(RHF(charge=0))

@@ -225,8 +225,8 @@ void RelSelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold
             for (const auto& [det, idx] : PT_map) {
                 const double energy = slater_rules_.energy(det);
                 for (size_t r{0}; r < nroots_; ++r) {
-                    local_ept2_pt[thread_id][r] +=
-                        compute_delta_ept2(root_energies_[r] - energy, std::abs(PT_coeffs[idx + r]));
+                    local_ept2_pt[thread_id][r] += compute_delta_ept2(root_energies_[r] - energy,
+                                                                      std::abs(PT_coeffs[idx + r]));
                 }
             }
 

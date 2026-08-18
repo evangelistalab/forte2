@@ -58,8 +58,6 @@ void export_logging_api(nb::module_& sub_m) {
         "Get the current logging verbosity level");
 }
 
-void export_parallel_api(nb::module_& sub_m) {
-    sub_m.def("get_num_threads", &get_num_threads);
-}
+void export_parallel_api(nb::module_& sub_m) { sub_m.def("get_num_threads", &get_num_threads); }
 } // namespace
 } // namespace forte2

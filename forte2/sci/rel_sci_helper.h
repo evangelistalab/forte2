@@ -12,14 +12,15 @@
 #include "determinant/determinant.h"
 #include "determinant/rel_slater_rules.h"
 #include "dsrg/dsrg_utils.h"
-#include "sci/sci_helper.h"    // for ScreeningCriterion, EnergyCorrection, PT2Regularizer
+#include "sci/sci_helper.h" // for ScreeningCriterion, EnergyCorrection, PT2Regularizer
 #include "sci/sci_strings.h"
 
 namespace forte2 {
 
 /// @brief A hash map from determinants to complex accumulated couplings (used by the
 /// reference selection path, the complex analogue of the real helper's DetMap)
-using RelDetMap = ankerl::unordered_dense::map<Determinant, std::complex<double>, Determinant::Hash>;
+using RelDetMap =
+    ankerl::unordered_dense::map<Determinant, std::complex<double>, Determinant::Hash>;
 /// @brief A hash map from determinants to their index in a (complex) coefficient vector
 using RelDetRootMap = ankerl::unordered_dense::map<Determinant, size_t, Determinant::Hash>;
 /// @brief A set of determinants (shared with the real helper via <sci/sci_helper.h>)

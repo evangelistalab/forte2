@@ -127,7 +127,9 @@ def test_rel_ci_semicanonical_noncontiguous_mo_space():
     )
     assert ci_semicanonical.E[0] == approx(ci_original.E[0])
     np.testing.assert_allclose(
-        ci_semicanonical.C[0].conj().T @ system.ints_overlap() @ ci_semicanonical.C[0],
+        ci_semicanonical.mos.C[0].conj().T
+        @ system.ints_overlap()
+        @ ci_semicanonical.mos.C[0],
         np.eye(mo_space.nmo),
         atol=1e-10,
     )
