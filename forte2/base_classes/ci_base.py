@@ -1,10 +1,12 @@
 from abc import abstractmethod
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import ClassVar
 
 import numpy as np
 
 from .active_space_solver import ActiveSpaceSolver, RelActiveSpaceSolver
+from forte2.helpers import logger
 
 
 @dataclass
@@ -53,9 +55,6 @@ class CIBase(ActiveSpaceSolver):
         # Take all init fields of the target dataclass and copy values from `self` if present
         names = {f.name for f in _dc_fields(target_cls) if f.init}
         return {n: getattr(self, n) for n in names if hasattr(self, n)}
-
-    def _startup(self):
-        super()._startup()
 
     def _get_state_root(self, absolute_root) -> tuple[int, int]:
         if absolute_root < 0 or absolute_root >= self.sa_info.nroots_sum:
@@ -186,14 +185,309 @@ class CIBase(ActiveSpaceSolver):
             lambda3 = make_3cumulant_sf(dm1, dm2, dm3)
         return dm1, dm2, lambda2, lambda3
 
-    @abstractmethod
-    def run(self): ...
+    def _make_active_space_ints(self):
+        """Build the active-space integrals for the current ``self.mos``."""
+        return self._integrals_cls(
+            self.system,
+            self.mos.C[0],
+            self.active_indices,
+            self.core_indices,
+        )
 
-    @abstractmethod
-    def reset_eigensolver(self): ...
+    def _extra_worker_kwargs(self, index, state):
+        """Hook for per-state worker kwargs beyond the shared ones."""
+        return {}
 
-    @abstractmethod
-    def get_convergence_status(self): ...
+    def _startup(self):
+        super()._startup()
+
+        self.norb = self.mo_space.nactv
+        # no distinction between core and frozen core in the CI solver
+        self.core_indices = (
+            self.mo_space.frozen_core_indices + self.mo_space.core_indices
+        )
+        self.active_indices = self.mo_space.active_indices
+
+        ints = self._make_active_space_ints()
+
+        active_orbsym = [
+            [self.mos.irrep_indices[0][i] for i in active_space]
+            for active_space in self.mo_space.active_orbitals
+        ]
+
+        self.sub_solvers = []
+        for i, state in enumerate(self.sa_info.states):
+            # one worker per state / GAS restriction
+            kwargs = self._collect_child_kwargs(self._ss_solver_cls)
+            # needed by the worker but not present as attributes of the solver
+            kwargs.update(
+                {
+                    "ints": ints,
+                    "state": state,
+                    "nroot": self.sa_info.nroots[i],
+                    "active_orbsym": active_orbsym,
+                }
+            )
+            kwargs.update(self._extra_worker_kwargs(i, state))
+            self.sub_solvers.append(self._ss_solver_cls(**kwargs))
+
+    def _collect_root_results(self):
+        """Hook for subclasses to gather extra per-solver results during ``run``."""
+
+    def _solve(self):
+        """
+        Solve the state-averaged CI problem in the *current* orbital basis.
+        This method can be called repeatedly.
+        """
+        if self.first_run:
+            self._startup()
+            self.first_run = False
+
+        self.evals_per_solver = []
+        for ci_solver in self.sub_solvers:
+            ci_solver.run()
+            self.evals_per_solver.append(ci_solver.evals)
+
+        self.evals_flat = np.concatenate(self.evals_per_solver)
+        self.E_avg = self.compute_average_energy()
+        self.E = self.evals_flat
+
+        self._collect_root_results()
+
+        self.executed = True
+        return self
+
+    def run(self):
+        """Solve in the current basis. Single-shot solvers extend this."""
+        return self._solve()
+
+    def _rotate_final_orbitals(self):
+        """
+        Apply the requested ``final_orbitals`` transformation and re-solve.
+        No-op unless "semicanonical" or "natural" is requested.
+        """
+        from forte2.orbitals import make_final_orbitals
+
+        if self.final_orbitals not in ("semicanonical", "natural"):
+            return
+
+        irrep_indices = np.asarray(self.mos.irrep_indices[0], dtype=int)[
+            self.mo_space.orig_to_contig
+        ]
+        C_contig = self.mos.C[0][:, self.mo_space.orig_to_contig].copy()
+        C_final = make_final_orbitals(
+            self.final_orbitals,
+            system=self.system,
+            mo_space=self.mo_space,
+            irrep_indices=irrep_indices,
+            C_contig=C_contig,
+            g1_act=self.make_average_1rdm(),
+        )
+        # undo the contiguous ordering
+        self.mos.C[0] = C_final[:, self.mo_space.contig_to_orig].copy()
+
+        # re-solve in the final orbital basis
+        ints = self._make_active_space_ints()
+        self.set_ints(ints.E, ints.H, ints.V)
+        # reset_eigensolver() drops the DavidsonLiuSolver, so the rerun rebuilds it
+        # from davidson_liu_params (including its maxiter).
+        self.reset_eigensolver()
+        self._solve()
+
+    def set_ints(self, scalar, oei, tei):
+        """
+        Set the active-space integrals for every sub-solver.
+
+        Parameters
+        ----------
+        scalar : float
+            The scalar energy term.
+        oei : NDArray
+            One-electron active-space integrals in the MO basis.
+        tei : NDArray
+            Two-electron active-space integrals in the MO basis.
+        """
+        for ci_solver in self.sub_solvers:
+            ci_solver.set_ints(scalar, oei, tei)
+
+    def set_maxiter(self, maxiter):
+        """
+        Set the maximum number of iterations for every sub-solver.
+
+        Parameters
+        ----------
+        maxiter : int
+            The maximum number of iterations to set.
+        """
+        self.maxiter = maxiter
+        for ci_solver in self.sub_solvers:
+            ci_solver.set_maxiter(maxiter)
+
+    def reset_eigensolver(self):
+        """
+        Reset the eigensolver for each sub-solver.
+
+        This forces a re-initialization of the eigensolver in the next run, and
+        also forces re-computation of the guess vectors. Useful whenever the
+        integrals have changed (e.g. after semi-canonicalization).
+        """
+        for ci_solver in self.sub_solvers:
+            ci_solver.reset_eigensolver()
+
+    def get_convergence_status(self):
+        """
+        Get the convergence status of each sub-solver.
+
+        Returns
+        -------
+        list[bool]
+            A list of booleans indicating whether each sub-solver has converged.
+        """
+        status = []
+        for ci_solver in self.sub_solvers:
+            if ci_solver.eigensolver is None:
+                # Exact diagonalization
+                status.append(True)
+            else:
+                status.append(ci_solver.eigensolver.converged)
+        return status
+
+    def get_top_determinants(self, n=5):
+        """
+        Get the top `n` determinants for each root based on their coefficients
+        in the CI vector.
+
+        Parameters
+        ----------
+        n : int, optional, default=5
+            The number of top determinants to return.
+
+        Returns
+        -------
+        top_dets : list[list[tuple[Determinant, float]]]
+            ``top_dets[i]`` contains a list of (Determinant, coefficient) tuples
+            for the `i`-th root.
+        """
+        top_dets = []
+        for ci_solver in self.sub_solvers:
+            top_dets += ci_solver.get_top_determinants(n)
+        return top_dets
+
+    def compute_natural_occupation_numbers(self):
+        """
+        Compute the natural occupation numbers for the CI states and store them
+        in ``self.nat_occs`` (this method returns None).
+
+        The first ``nroots_sum`` columns of ``self.nat_occs`` hold the natural
+        occupation numbers for each root. If more than one root is present
+        (``nroots_sum > 1``), a final column holds the natural occupation
+        numbers from the state-averaged 1-RDM.
+        """
+        nos = []
+        for ci_solver in self.sub_solvers:
+            nos.append(ci_solver.compute_natural_occupation_numbers())
+        if self.sa_info.nroots_sum > 1:
+            g1_avg = self.make_average_1rdm()
+            nos.append(np.linalg.eigvalsh(g1_avg)[::-1][:, np.newaxis])
+        self.nat_occs = np.concatenate(nos, axis=1)
+
+    def compute_transition_properties(self, C=None):
+        """
+        Compute the transition dipole moments, oscillator strengths, and vertical
+        transition energies from the 1-TDMs.
+
+        Parameters
+        ----------
+        C : NDArray, optional
+            The MO coefficients. If not provided, ``self.mos.C[0]`` is used.
+
+        Returns
+        -------
+        transition_dipoles : dict[tuple[int, int], NDArray]
+            Maps pairs of CI roots (absolute_root_i, absolute_root_j) to their
+            transition dipole moments. Also saved in ``self.transition_dipoles``.
+        oscillator_strengths : dict[tuple[int, int], float]
+            Maps pairs of CI roots to their oscillator strengths. Also saved in
+            ``self.oscillator_strengths``.
+        vertical_transition_energies : dict[tuple[int, int], float]
+            Maps pairs of CI roots to their vertical transition energies. Also
+            saved in ``self.vertical_transition_energies``.
+        """
+        from forte2.props import get_1e_property
+
+        if not self.executed:
+            raise RuntimeError("CI solver has not been executed yet.")
+
+        if C is None:
+            C = self.mos.C[0]
+
+        Cact = C[:, self.active_indices]
+        Ccore = C[:, self.core_indices]
+        # spin-summed 1-RDM for the spatial-orbital case; spinors are singly occupied
+        factor = 1.0 if self.two_component else 2.0
+        rdm_core = factor * np.einsum("pi,qi->pq", Ccore, Ccore.conj(), optimize=True)
+        # this includes nuclear dipole contribution
+        core_dip = get_1e_property(
+            self.system, rdm_core, property_name="dipole", unit="au"
+        )
+        self.transition_dipoles = OrderedDict()
+        self.oscillator_strengths = OrderedDict()
+        self.vertical_transition_energies = OrderedDict()
+        for ici in range(self.sa_info.nroots_sum):
+            istate, iroot_in_state = self._get_state_root(ici)
+            rdm = self.sub_solvers[istate].make_1rdm(iroot_in_state)
+            # Different (back-)transformation rules for RDMs:
+            # O_{mu}^{nu} = C_{mu}^p <phi_p|O|phi^q> C^q_{nu} = C^H O[mo] C
+            # rdm^{mu}_{nu} = C^{mu}_p <a^p a_q> C^q_{nu} = C^* rdm[mo] C^T
+            rdm = np.einsum("ij,pi,qj->pq", rdm, Cact.conj(), Cact, optimize=True)
+            dip = get_1e_property(
+                self.system, rdm, property_name="electric_dipole", unit="au"
+            )
+            self.transition_dipoles[(ici, ici)] = dip + core_dip
+            # No oscillator strength or vertical transition energy for i->i transitions
+            self.oscillator_strengths[(ici, ici)] = 0.0
+            self.vertical_transition_energies[(ici, ici)] = 0.0
+            for jci in range(ici + 1, self.sa_info.nroots_sum):
+                jstate, jroot_in_state = self._get_state_root(jci)
+                try:
+                    vte = (
+                        self.evals_per_solver[jstate][jroot_in_state]
+                        - self.evals_per_solver[istate][iroot_in_state]
+                    )
+                    # Reverse the order of states for negative VTE to ensure the
+                    # transition dipole is always computed from lower to higher state.
+                    if vte < 0:
+                        _ici, _jci = jci, ici
+                        vte = -vte
+                    else:
+                        _ici, _jci = ici, jci
+                    tdm = self.make_1rdm(_ici, _jci)
+                    tdm = np.einsum(
+                        "ij,pi,qj->pq", tdm, Cact.conj(), Cact, optimize=True
+                    )
+                    tdip = get_1e_property(
+                        self.system, tdm, property_name="electric_dipole", unit="au"
+                    )
+                    self.transition_dipoles[(_ici, _jci)] = tdip
+                    self.oscillator_strengths[(_ici, _jci)] = (
+                        (2 / 3) * vte * np.linalg.norm(tdip) ** 2
+                    )
+                    self.vertical_transition_energies[(_ici, _jci)] = vte
+                except Exception as e:
+                    # ValueError: non-relativistic CI where the two states have
+                    #   different na/nb, so cross-state RDMs are unsupported.
+                    # NotImplementedError: two-component CI, cross-state RDMs are
+                    #   not implemented yet.
+                    logger.log_warning(
+                        f"Transition properties between CI states {_ici} and {_jci} cannot be computed. Original exception: {e}"
+                    )
+                    continue
+
+        return (
+            self.transition_dipoles,
+            self.oscillator_strengths,
+            self.vertical_transition_energies,
+        )
 
     @abstractmethod
     def make_1rdm(self, left_root: int, right_root: int | None = None): ...
@@ -203,42 +497,14 @@ class CIBase(ActiveSpaceSolver):
 
 
 @dataclass
-class RelCIBase(RelActiveSpaceSolver):
-    ### Non-init attributes
-    first_run: bool = field(default=True, init=False)
-    executed: bool = field(default=False, init=False)
-
-    __call__ = CIBase.__call__
-    ci_solver = CIBase.ci_solver
-    _collect_child_kwargs = CIBase._collect_child_kwargs
-    _get_state_root = CIBase._get_state_root
-    _validate_rdm_inputs = CIBase._validate_rdm_inputs
-    compute_average_energy = CIBase.compute_average_energy
-    make_average_1rdm = CIBase.make_average_1rdm
-    make_average_2rdm = CIBase.make_average_2rdm
-    make_average_3rdm = CIBase.make_average_3rdm
-    make_average_2cumulant = CIBase.make_average_2cumulant
-    make_average_3cumulant = CIBase.make_average_3cumulant
-    make_average_cumulants = CIBase.make_average_cumulants
+class RelCIBase(RelActiveSpaceSolver, CIBase):
+    """
+    Two-component counterpart of :class:`CIBase`.
+    """
 
     def _startup(self):
-        super()._startup(two_component=True)
+        super()._startup()
         if not self.system.two_component:
             raise ValueError(
                 "RelCISolver requires a two-component system. Please use a parent method that can provide a two-component wavefunction."
             )
-
-    @abstractmethod
-    def run(self): ...
-
-    @abstractmethod
-    def reset_eigensolver(self): ...
-
-    @abstractmethod
-    def get_convergence_status(self): ...
-
-    @abstractmethod
-    def make_1rdm(self, left_root: int, right_root: int | None = None): ...
-
-    @abstractmethod
-    def make_2rdm(self, left_root: int, right_root: int | None = None): ...

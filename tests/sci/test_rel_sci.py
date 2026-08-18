@@ -220,9 +220,7 @@ def test_rel_sci_natural_noncontiguous_mo_space():
         pt2_threshold=0.0,
     )
 
-    sci_original = RelSelectedCI(nel=4, mo_space=mo_space, sci_params=sci_params)(
-        scf
-    )
+    sci_original = RelSelectedCI(nel=4, mo_space=mo_space, sci_params=sci_params)(scf)
     sci_original.run()
     sci_natural = RelSelectedCI(
         nel=4,
@@ -234,16 +232,12 @@ def test_rel_sci_natural_noncontiguous_mo_space():
 
     assert sci_natural.E[0] == approx(sci_original.E[0])
     np.testing.assert_allclose(
-        sci_natural.mos.C[0].conj().T
-        @ system.ints_overlap()
-        @ sci_natural.mos.C[0],
+        sci_natural.mos.C[0].conj().T @ system.ints_overlap() @ sci_natural.mos.C[0],
         np.eye(mo_space.nmo),
         atol=1e-10,
     )
 
-    original_occs = np.sort(np.linalg.eigvalsh(sci_original.make_average_1rdm()))[
-        ::-1
-    ]
+    original_occs = np.sort(np.linalg.eigvalsh(sci_original.make_average_1rdm()))[::-1]
     natural_occs = np.sort(np.linalg.eigvalsh(sci_natural.make_average_1rdm()))[::-1]
     assert natural_occs == approx(original_occs)
 

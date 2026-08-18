@@ -187,9 +187,7 @@ def test_rel_ci_natural_noncontiguous_mo_space():
 
     assert ci_natural.E[0] == approx(ci_original.E[0])
     np.testing.assert_allclose(
-        ci_natural.mos.C[0].conj().T
-        @ system.ints_overlap()
-        @ ci_natural.mos.C[0],
+        ci_natural.mos.C[0].conj().T @ system.ints_overlap() @ ci_natural.mos.C[0],
         np.eye(mo_space.nmo),
         atol=1e-10,
     )
@@ -267,3 +265,27 @@ def test_rel_ci_hf_transition_dipole_ghf():
     assert np.abs(ci.oscillator_strengths[(0, 3)]) == pytest.approx(
         1.711178808962322e-05, abs=1e-4
     )
+
+
+@pytest.mark.parametrize("algorithm", ["hz", "sparse", "exact"])
+def test_rel_ci_algorithms_agree(algorithm):
+    """All three two-component CI algorithms must give the same energy."""
+    from forte2.base_classes.params import CIParams
+
+    system = System(
+        xyz="H 0.0 0.0 0.0\nH 0.0 0.0 2.0",
+        basis_set="sto-6g",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="bohr",
+    )
+    scf = GHF(charge=0, e_tol=1e-12)(system)
+    conv = SpinorUpcaster(apply_random_phase=True)(scf)
+
+    ci = RelCI(
+        nel=2,
+        active_orbitals=4,
+        ci_params=CIParams(ci_algorithm=algorithm),
+    )(conv)
+    ci.run()
+
+    assert ci.E[0] == approx(-1.096071975854)

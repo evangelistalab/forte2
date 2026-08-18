@@ -12,8 +12,9 @@ from forte2.base_classes import (
     Method,
 )
 from forte2.orbitals import (
-    NaturalOrbitals,
-    Semicanonicalizer,
+    FinalOrbitals,
+    make_final_orbitals,
+    validate_final_orbitals,
 )
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers import logger, LBFGS
@@ -91,7 +92,7 @@ class MCOptimizerBase(Method):
 
     ### Post-iteration
     do_transition_dipole: bool = False
-    final_orbitals: Literal["semicanonical", "natural", "original"] = "semicanonical"
+    final_orbitals: FinalOrbitals = "semicanonical"
 
     ### Non-init attributes
     converged: bool = field(default=False, init=False)
@@ -101,12 +102,7 @@ class MCOptimizerBase(Method):
         if not isinstance(self.ci_solver, (CIBase, RelCIBase)):
             raise ValueError("ci_solver must be an instance of CIBase or RelCIBase.")
 
-        valid_final_orbitals = get_args(self.__annotations__["final_orbitals"])
-        if self.final_orbitals not in valid_final_orbitals:
-            raise ValueError(
-                f"final_orbitals must be one of {valid_final_orbitals}, "
-                f"but got {self.final_orbitals!r}."
-            )
+        validate_final_orbitals(self.final_orbitals)
         
         self.requires = {"system", "mos"}
         self.provides = {"system", "mos", "mo_space"}
@@ -416,37 +412,14 @@ class MCOptimizerBase(Method):
     ) -> NDArray:
         """Make the final orbitals and return them in contiguous ordering."""
 
-        irrep_indices = self._final_orbital_irrep_indices()
-
-        # Semicanonicalize the orbital subspaces (except the CAS/GAS in the case of natural orbitals)
-        semi = Semicanonicalizer(
-            mo_space=self.mo_space,
+        return make_final_orbitals(
+            self.final_orbitals,
             system=self.system,
-            irrep_indices=irrep_indices,
-            mix_inactive=False,
-            mix_active=False,
-            do_active=(self.final_orbitals == "semicanonical"),
-        )
-        semi.semi_canonicalize(
-            g1=g1_act,
+            mo_space=self.mo_space,
+            irrep_indices=self._final_orbital_irrep_indices(),
             C_contig=C_contig,
+            g1_act=g1_act,
         )
-        C_final = semi.C_semican.copy()
-
-        # If natural orbitals are requested, diagonalize the spin- and state-averaged
-        # 1-RDM within each separate GAS subspace.
-        if self.final_orbitals == "natural":
-            natural_orbital = NaturalOrbitals(
-                self.mo_space,
-                irrep_indices=irrep_indices,
-            )
-            natural_orbital.make_natural_orbitals(
-                g1_act=g1_act,
-                C_contig=C_final,
-            )
-            C_final = natural_orbital.C_natural.copy()
-
-        return C_final
 
     def _rerun_ci_in_current_basis(self) -> tuple[NDArray, float]:
         """Rerun the CI solver in the current orbital basis and return the new CI eigenvalues and average energy."""
