@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from forte2 import CISolver, MCOptimizer, State, System
 from forte2.orbitals.semicanonicalizer import Semicanonicalizer
@@ -6,6 +7,19 @@ from forte2.scf import RHF, ROHF, UHF
 from forte2.orbitals import write_molden
 from forte2.system.basis_utils import ml_from_shell_index_cca
 from forte2.helpers.comparisons import approx
+
+
+def test_molden_writer_requires_method(tmp_path):
+    with pytest.raises(TypeError, match="Method"):
+        write_molden(object(), tmp_path / "invalid.molden")
+
+
+def test_molden_writer_requires_system_and_mos(tmp_path):
+    method = RHF(charge=0)
+    method.provides.remove("mos")
+
+    with pytest.raises(RuntimeError, match="does not provide required data: mos"):
+        write_molden(method, tmp_path / "missing_mos.molden")
 
 
 def _molden_shell_permutation(l):
@@ -47,7 +61,7 @@ def _parse_mo_blocks(text):
         if line.startswith("Sym="):
             if current is not None:
                 blocks.append(current)
-            current = {"sym": line.split("=", maxsplit=1)[1].strip(), "coeffs": []}
+            current = {"sym": line.split("=", maxsplit=1)[1].strip(), "C": []}
         elif line.startswith("Ene="):
             current["ene"] = float(line.split("=", maxsplit=1)[1])
         elif line.startswith("Spin="):
@@ -55,8 +69,8 @@ def _parse_mo_blocks(text):
         elif line.startswith("Occup="):
             current["occup"] = float(line.split("=", maxsplit=1)[1])
         else:
-            idx_str, coeff_str = line.split()
-            current["coeffs"].append((int(idx_str), float(coeff_str)))
+            idx_str, C_str = line.split()
+            current["C"].append((int(idx_str), float(C_str)))
 
     if current is not None:
         blocks.append(current)
@@ -77,9 +91,12 @@ def _expected_mcopt_energies(mc):
         irrep_indices=np.asarray(mc.mos.irrep_indices[0], dtype=int)[orig_to_contig],
         mix_inactive=False,
         mix_active=False,
+        do_active=(mc.final_orbitals == "semicanonical"),
     )
     C_contig = mc.mos.C[0][:, orig_to_contig].copy()
     semi.semi_canonicalize(g1=mc.make_average_1rdm(), C_contig=C_contig)
+    if mc.final_orbitals == "natural":
+        return np.diag(semi.fock)[contig_to_orig]
     return semi.eps_semican[contig_to_orig]
 
 
@@ -135,14 +152,12 @@ def test_molden_writer_rhf(tmp_path):
     imo = int(np.argmax(np.linalg.norm(rhf.C[0][d_slice, :], axis=0)))
 
     expected_perm = _molden_basis_permutation(system.basis)
-    expected_coeff = rhf.C[0][expected_perm, imo]
-    parsed_indices = np.asarray([idx for idx, _ in blocks[imo]["coeffs"]], dtype=int)
-    parsed_coeff = np.asarray(
-        [coeff for _, coeff in blocks[imo]["coeffs"]], dtype=float
-    )
+    expected_C = rhf.C[0][expected_perm, imo]
+    parsed_indices = np.asarray([idx for idx, _ in blocks[imo]["C"]], dtype=int)
+    C_parsed = np.asarray([C for _, C in blocks[imo]["C"]], dtype=float)
 
     assert np.array_equal(parsed_indices, np.arange(1, system.nbf + 1))
-    assert parsed_coeff == approx(expected_coeff)
+    assert C_parsed == approx(expected_C)
 
 
 def test_molden_writer_rohf(tmp_path):
@@ -252,3 +267,40 @@ def test_molden_writer_mcopt_original_orbitals(tmp_path):
     assert len(blocks) == system.nmo
     parsed_energies = np.asarray([block["ene"] for block in blocks], dtype=float)
     assert parsed_energies == approx(_expected_mcopt_energies(mc))
+
+
+def test_molden_writer_mcopt_natural_orbitals(tmp_path):
+    xyz = f"""
+    H 0.0 0.0 0.0
+    H 0.0 0.0 {0.529177210903 * 2}
+    """
+
+    system = System(xyz=xyz, basis_set="cc-pvdz", auxiliary_basis_set="cc-pVTZ-JKFIT")
+    rhf = RHF(charge=0, e_tol=1e-12)(system)
+    ci_solver = CISolver(
+        State(nel=2, multiplicity=1, ms=0.0),
+        active_orbitals=[0, 1],
+    )
+    mc = MCOptimizer(ci_solver, final_orbitals="natural")(rhf)
+    mc.run()
+
+    path = tmp_path / "h2_mcopt_natural.molden"
+    write_molden(mc, path)
+
+    blocks = _parse_mo_blocks(path.read_text())
+    assert len(blocks) == system.nmo
+
+    parsed_energies = np.asarray([block["ene"] for block in blocks], dtype=float)
+    assert parsed_energies == approx(_expected_mcopt_energies(mc))
+
+    expected_occupations = np.zeros(system.nmo, dtype=float)
+    expected_occupations[np.asarray(mc.mo_space.docc_indices, dtype=int)] = 2.0
+    expected_occupations[np.asarray(mc.mo_space.active_indices, dtype=int)] = np.diag(
+        mc.make_average_1rdm()
+    )
+    parsed_occupations = np.asarray([block["occup"] for block in blocks], dtype=float)
+    assert parsed_occupations == approx(expected_occupations)
+
+    ao_permutation = _molden_basis_permutation(system.basis)
+    C_parsed = np.asarray([[C for _, C in block["C"]] for block in blocks]).T
+    assert C_parsed == approx(mc.mos.C[0][ao_permutation, :])

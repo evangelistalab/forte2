@@ -1,11 +1,11 @@
 import shutil
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-from forte2 import System
+from forte2 import RHF, System
+from forte2.base_classes import MO
 from forte2.orbitals import write_molden, write_orbital_cubes
 
 THIS_DIR = Path(__file__).resolve().parent
@@ -30,26 +30,28 @@ def test_write_water_ccpvdz_identity_basis_artifacts():
 
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
-    coeff = np.eye(system.nbf)
-    molden_obj = SimpleNamespace(
-        system=system,
-        C=[coeff],
-        eps=[np.arange(system.nbf, dtype=float)],
-        ndocc=0,
-        irrep_labels=[f"ao_{i}" for i in range(system.nbf)],
+    C = np.eye(system.nbf)
+    molden_method = RHF(charge=0)(system)
+    molden_method.mos = MO(
+        C=[C],
+        spinorbital=False,
+        irrep_labels=[[f"ao_{i}" for i in range(system.nbf)]],
+        irrep_indices=[np.zeros(system.nbf, dtype=int)],
     )
+    molden_method.eps = [np.arange(system.nbf, dtype=float)]
+    molden_method.ndocc = 0
 
     shutil.rmtree(OUTPUT_DIR, ignore_errors=True)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     write_orbital_cubes(
         system,
-        coeff,
+        C,
         filepath=OUTPUT_DIR,
         prefix="basis_function",
         indices=list(range(system.nbf)),
     )
-    write_molden(molden_obj, OUTPUT_DIR / "water_ccpvdz_identity_basis.molden")
+    write_molden(molden_method, OUTPUT_DIR / "water_ccpvdz_identity_basis.molden")
 
     cube_files = sorted(OUTPUT_DIR.glob("basis_function_*.cube"))
     assert len(cube_files) == system.nbf
