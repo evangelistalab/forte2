@@ -136,26 +136,10 @@ def test_rel_ci_semicanonical_noncontiguous_mo_space():
 
 
 def test_rel_ci_natural_noncontiguous_mo_space():
-    """RelCI final_orbitals='natural' reproduces the energy and natural
-    occupation number spectrum after a genuinely non-trivial contig/orig
-    permutation (see test_rel_ci_semicanonical_noncontiguous_mo_space).
-
-    Unlike the semicanonical case, this checks the natural occupation number
-    *spectrum* (sorted eigenvalues of the active 1-RDM) rather than the RDM's
-    raw matrix diagonality. In a time-reversal-symmetric two-component
-    calculation, every natural occupation number is exactly Kramers-doubly-
-    degenerate (a single-particle consequence of Kramers' theorem, which
-    holds regardless of whether the many-body state itself is degenerate).
-    "The" natural spinors are therefore only defined up to an arbitrary
-    unitary rotation within each degenerate Kramers pair: the rotation matrix
-    that ``NaturalOrbitals`` builds from the pre-rotation 1-RDM diagonalizes
-    it to machine precision, but re-diagonalizing RelCI from scratch in that
-    rotated basis converges to a different (energy-degenerate, equally valid)
-    gauge choice within each pair, leaving the *matrix* far from diagonal
-    even though the total energy and the occupation-number spectrum agree
-    with the pre-rotation reference to Davidson-Liu convergence precision.
-    This was confirmed by direct probing and is not specific to RelCI (the
-    same effect appears for the approximate RelDMRG solver).
+    """
+    RelCI final_orbitals='natural' reproduces the energy and natural
+    occupation number spectrum after a non-trivial contig/orig
+    permutation
     """
     xyz = """
     Li 0.0 0.0 0.0
@@ -187,9 +171,7 @@ def test_rel_ci_natural_noncontiguous_mo_space():
 
     assert ci_natural.E[0] == approx(ci_original.E[0])
     np.testing.assert_allclose(
-        ci_natural.mos.C[0].conj().T
-        @ system.ints_overlap()
-        @ ci_natural.mos.C[0],
+        ci_natural.mos.C[0].conj().T @ system.ints_overlap() @ ci_natural.mos.C[0],
         np.eye(mo_space.nmo),
         atol=1e-10,
     )
@@ -267,3 +249,54 @@ def test_rel_ci_hf_transition_dipole_ghf():
     assert np.abs(ci.oscillator_strengths[(0, 3)]) == pytest.approx(
         1.711178808962322e-05, abs=1e-4
     )
+
+
+@pytest.mark.parametrize("algorithm", ["hz", "sparse", "exact"])
+def test_rel_ci_algorithms_agree(algorithm):
+    """All three two-component CI algorithms must give the same energy."""
+    from forte2.base_classes.params import CIParams
+
+    system = System(
+        xyz="H 0.0 0.0 0.0\nH 0.0 0.0 2.0",
+        basis_set="sto-6g",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="bohr",
+    )
+    scf = GHF(charge=0, e_tol=1e-12)(system)
+    conv = SpinorUpcaster(apply_random_phase=True)(scf)
+
+    ci = RelCI(
+        nel=2,
+        active_orbitals=4,
+        ci_params=CIParams(ci_algorithm=algorithm),
+    )(conv)
+    ci.run()
+
+    assert ci.E[0] == approx(-1.096071975854)
+
+
+@pytest.mark.parametrize("final_orbitals", ["original", "semicanonical", "natural"])
+def test_rel_ci_final_orbital(final_orbitals):
+    eref = -100.10065023157668
+    xyz = """
+    H 0.0 0.0 0.0
+    F 0.0 0.0 2.0
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="bohr",
+        x2c=X2CParams(x2c_type="so", x2c_model="1e"),
+    )
+    scf = GHF(charge=0)(system)
+    ci = RelCI(
+        nel=10,
+        core_orbitals=2,
+        active_orbitals=12,
+        do_test_rdms=True,
+        final_orbitals=final_orbitals,
+    )(scf)
+    ci.run()
+    assert ci.E[0] == approx(eref)

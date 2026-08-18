@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import ClassVar
 
 from .method import Method
 from forte2.state import StateAverageInfo, State, MOSpace
@@ -17,6 +18,10 @@ class ActiveSpaceSolver(Method):
     frozen_virtual_orbitals: list[int] = None
     die_if_not_converged: bool = False
 
+    # Sanity-check tolerance for comparing energies before/after a final-orbital
+    # rotation
+    _final_orbital_energy_tol: ClassVar[float] = 1e-8
+
     def __post_init__(self):
         self.dtype = float
         self.sa_info = StateAverageInfo(
@@ -28,10 +33,10 @@ class ActiveSpaceSolver(Method):
         self.weights = self.sa_info.weights
         self.weights_flat = self.sa_info.weights_flat
         self.requires = {"system", "mos"}
-        self.requires_attrs = {("two_component", False)}
+        self.requires_attrs |= {"two_component": False}
         self.provides = {"system", "mos", "mo_space"}
 
-    def _startup(self, two_component=False):
+    def _startup(self):
         if not self.parent_method.executed:
             self.parent_method.run()
 
@@ -130,5 +135,5 @@ class RelActiveSpaceSolver(ActiveSpaceSolver):
             ms = 0.0 if mult == 1 else 0.5
             self.states = State(nel=self.nel, multiplicity=mult, ms=ms)
         super().__post_init__()
-        self.requires_attrs = {("two_component", True)}
+        self.requires_attrs |= {"two_component": True}
         self.dtype = complex

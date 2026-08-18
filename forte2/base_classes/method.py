@@ -8,10 +8,12 @@ class Method(ABC):
     # these should not be class attributes and are instantiated at runtime
     # these are therefore only checked against "provides"
     requires: set[str] = field(default_factory=set, init=False)
-    # set of attributes that this method requires the parent method to have
-    # they can either be a str (in which case only existence is checked)
-    # or a tuple of (attr_name, attr_value), in which both existence and value are checked
-    requires_attrs: set[str | tuple] = field(default_factory=set, init=False)
+    # attributes this method requires the parent method to have, keyed by name.
+    # A value of None checks existence only, 
+    # any other value additionally checks for equality.
+    requires_attrs: dict[str, object | None] = field(
+        default_factory=dict, init=False
+    )
     # set of attributes that this method provides to downstream methods
     provides: set[str] = field(default_factory=set, init=False)
     # Flags that all methods need to have
@@ -50,16 +52,7 @@ class Method(ABC):
                     f"Parent method {parent_method.__class__.__name__} does not provide required data '{req}' for {self.__class__.__name__}."
                 )
 
-        for attr in self.requires_attrs:
-            if isinstance(attr, str):
-                iattr, vattr = attr, None
-            elif isinstance(attr, tuple):
-                iattr, vattr = attr
-            else:
-                raise RuntimeError(
-                    f"Got unexpected requires_attrs entry {attr} of {type(attr)}, needs to be either str or tuple!"
-                )
-
+        for iattr, vattr in self.requires_attrs.items():
             if not hasattr(parent_method, iattr):
                 raise RuntimeError(
                     f"Parent method {parent_method.__class__.__name__} does not have required attr '{iattr}' for {self.__class__.__name__}."
