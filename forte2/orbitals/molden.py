@@ -359,8 +359,10 @@ def _get_scf_occupation(method) -> int:
         raise RuntimeError(
             "Electron number data is unavailable. Run the SCF method first."
         )
-    ndocc = min(int(na), int(nb))
-    nsocc = abs(int(na) - int(nb))
+    na = int(na)
+    nb = int(nb)
+    ndocc = min(na, nb)
+    nsocc = abs(na - nb)
     return ndocc, nsocc, na, nb
 
 
