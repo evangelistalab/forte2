@@ -2,6 +2,7 @@ __version__ = "2026.6.4"
 __author__ = "Forte2 Developers"
 
 from .helpers.echo_script import echo_invoking_script
+
 # print the invoking python script to stdout
 echo_invoking_script()
 
@@ -19,6 +20,7 @@ from .orbitals import (
     Cube,
     ASET,
     write_orbital_cubes,
+    write_molden,
     SpinorUpcaster,
 )
 from .mcopt import MCOptimizer

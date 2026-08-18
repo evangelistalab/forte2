@@ -67,3 +67,24 @@ If you execute the code now, the methods will click together under the hood, doi
 You can then run the whole chain with a single call:
 
 >>> casscf.run()
+
+
+Exporting orbitals
+------------------
+
+Once an orbital-based method has been run, you can export the resulting orbitals
+for visualization. Forte2 provides Molden output for RHF, ROHF, UHF, and
+``MCOptimizer`` objects:
+
+>>> rhf.run()
+>>> forte2.write_molden(rhf, "orbitals.molden")
+>>> casscf.run()
+>>> forte2.write_molden(casscf, "casscf.molden")
+
+Forte2 writes Molden files in atomic units and automatically reorders pure
+spherical functions from Forte2's internal Libint/CCA ordering to the Molden
+convention. For grid-based visualization, you can also write cube files:
+
+>>> forte2.write_orbital_cubes(
+...     rhf.system, rhf.mos.C[0], indices=[0, 1, 2], filepath="cubes"
+... )

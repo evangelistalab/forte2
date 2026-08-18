@@ -9,14 +9,14 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
 * Support for utilizing molecular symmetry (largest Abelian subgroup) at the post-Hartree-Fock level
 * Support for the finite (Gaussian-distributed) nuclear charge model [1]_
 * Scalar and vector relativistic Hamiltonians
-  
+
   * Spin-free 1-electron exact two-component (sf-1eX2C) [2]_
   * Spin-orbit 1-electron exact two-component (so-1eX2C) [2]_
   * Spin-free and spin-orbit SAP-X2C with model two-electron picture-change effects [9]_
   * Various empirical scaling schemes to approximate two-electron spin-orbit couplings ("Boettger factors") [3]_
 
 * Flavors of Hartree-Fock theory
-  
+
   * Restricted Hartree-Fock (RHF)
   * Restricted Open-Shell Hartree-Fock (ROHF)
   * Unrestricted Hartree-Fock (UHF)
@@ -24,30 +24,30 @@ Here is a (non-exhaustive) list of the current capabilities of Forte2:
   * Generalized Hartree-Fock (GHF)
 
 * A flexible configuration interaction (CI) module
-  
+
   * Spin-adapted CI (CSF basis) for non-relativistic Hamiltonians
   * Support for generalized active spaces (GAS) / occupation-restricted multiple active spaces (ORMAS)
   * Two-component CI for relativistic Hamiltonians
   * Heat-bath configuration interaction (HBCI) with support for excited states and occupation restrictions [7]_
-  
+
 * Multi-configuration self-consistent field (MCSCF) methods
-  
+
   * Support for CAS-SCF and GAS-SCF/ORMAS-SCF, with state-averaging
   * Two-component CAS/GAS/ORMAS-SCF
   * Atomic valence active space (AVAS) active space selection (support for both one- and two-component Hartree-Fock) [4]_
 
 * Multi-reference driven similarity renormalization group (MR-DSRG) methods
-  
+
   * Non-relativistic DSRG-MRPT2 with reference relaxation and state-averaging [7]_
   * Two-component relativistic DSRG-MRPT2 with reference relaxation and state-averaging [8]_
-  
+
 * Various orbital manipulation routines
-  
+
   * Zeroth order active space embedding theory (ASET(0)) [5]_
   * Intrinsic atomic orbitals (IAO) [6]_
   * Intrinsic bond orbitals (IBO) [6]_
-  * A cube file generator for visualizing molecular orbitals
-  
+  * Cube and Molden file generators for visualizing molecular orbitals
+
 
 References
 ----------
