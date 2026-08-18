@@ -207,8 +207,11 @@ class SelectedCIParams(ParamsBase):
         The number of virtual orbitals to consider when generating guess determinants.
     num_threads: int, optional, default=4
         The number of threads to use for parallel selection and diagonalization.
-    ci_algorithm: str, optional, default="sparse"
-        The algorithm used for the CI diagonalization. Options are "exact" and "sparse".
+    ci_algorithm: str, optional, default="iterative"
+        The algorithm used for the CI diagonalization. Options are "exact" and "iterative".
+        "iterative" runs a Davidson-Liu solve whose sigma build is the C++
+        `SelectedCIHelper`/`RelSelectedCIHelper`; despite the historical name, it has no
+        relation to the `SparseState` machinery.
     num_batches_per_thread: int, optional, default=4
         The number of batches of determinants to process per thread during selection and diagonalization.
     do_spin_penalty: bool, optional, default=True
@@ -258,7 +261,7 @@ class SelectedCIParams(ParamsBase):
     guess_occ_window: int = 2
     guess_vir_window: int = 2
     num_threads: int = 4
-    ci_algorithm: str = "sparse"
+    ci_algorithm: str = "iterative"
     num_batches_per_thread: int = 4
     do_spin_penalty: bool = True
     guess_dets: list[Determinant] = field(default_factory=list)
@@ -272,8 +275,15 @@ class SelectedCIParams(ParamsBase):
     pt2_regularizer_strength: float = 0.0
 
     def __post_init__(self):
-        if self.ci_algorithm.lower() not in ["exact", "sparse"]:
-            raise ValueError("ci_algorithm must be 'exact' or 'sparse'")
+        if self.ci_algorithm.lower() == "sparse":
+            # Renamed: this path never used the SparseState machinery the old name
+            # implied -- the sigma build is the C++ SelectedCIHelper, not SparseState.
+            raise ValueError(
+                "ci_algorithm='sparse' was renamed to 'iterative' for SelectedCIParams. "
+                "Note that CIParams.ci_algorithm='sparse' is unrelated and still valid."
+            )
+        if self.ci_algorithm.lower() not in ["exact", "iterative"]:
+            raise ValueError("ci_algorithm must be 'exact' or 'iterative'")
         if self.selection_algorithm.lower() not in ["hbci", "hbci_ref"]:
             raise ValueError("selection_algorithm must be 'hbci' or 'hbci_ref'")
         if self.screening_criterion.lower() not in ["hbci", "ehbci"]:

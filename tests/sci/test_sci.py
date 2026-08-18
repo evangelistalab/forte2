@@ -936,3 +936,66 @@ def test_sci_1tdm_water_core_excited_and_gs():
     assert sci.E[0] == pytest.approx(-56.36320838, abs=1e-8)
     assert sci.E[1] == pytest.approx(-76.12086372, abs=1e-8)
     assert sci.oscillator_strengths[(1, 0)] == pytest.approx(0.020634, abs=1e-4)
+
+
+def _lih_rhf_tight():
+    """Small LiH reference (tight SCF) shared by the regression tests below."""
+    system = System(
+        xyz="Li 0.0 0.0 0.0\nH  0.0 0.0 3.0",
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+    )
+    return system, RHF(charge=0, e_tol=1e-10)(system)
+
+
+def test_sci_per_state_params_are_not_shared():
+    """A single SelectedCIParams shared by several states must be copied per state.
+
+    ``_initial_guess`` rebinds ``sci_params.guess_dets``; when one object was
+    aliased across states, state 1 inherited state 0's guess determinants and
+    validated them against its own electron count. With states of differing
+    alpha/beta counts that raised
+    "Guess determinant ... has 1 alpha electrons, expected 2".
+    """
+    _, rhf = _lih_rhf_tight()
+    sci = SelectedCI(
+        states=[
+            State(nel=4, multiplicity=1, ms=0.0),  # active (na, nb) = (1, 1)
+            State(nel=4, multiplicity=3, ms=1.0),  # active (na, nb) = (2, 0)
+        ],
+        nroots=[1, 1],
+        core_orbitals=[0],
+        active_orbitals=[1, 2, 3, 4, 5],
+        sci_params=SelectedCIParams(guess_occ_window=1),
+    )(rhf)
+    sci.run()
+
+    # each sub-solver must own its params, and its own guess determinants
+    assert sci.sub_solvers[0].sci_params is not sci.sub_solvers[1].sci_params
+    assert sci.sub_solvers[0].davidson_liu_params is not (
+        sci.sub_solvers[1].davidson_liu_params
+    )
+    for solver, (na, nb) in zip(sci.sub_solvers, [(1, 1), (2, 0)]):
+        for d in solver.sci_params.guess_dets:
+            assert (d.count_alpha(), d.count_beta()) == (na, nb)
+
+
+def test_sci_set_ints_resets_slater_rules():
+    """set_ints must rebuild the cached SlaterRules object."""
+    _, rhf = _lih_rhf_tight()
+    sci = SelectedCI(
+        states=State(nel=4, multiplicity=1, ms=0.0),
+        core_orbitals=[0],
+        active_orbitals=[1, 2, 3, 4, 5],
+        sci_params=SelectedCIParams(guess_occ_window=1),
+    )(rhf)
+    sci.run()
+
+    worker = sci.sub_solvers[0]
+    det = worker.dets[0]
+    before = worker.slater_rules.slater_rules(det, det)
+    # shifting only the scalar term must shift every diagonal element by the same amount
+    worker.set_ints(worker.ints.E + 1.0, worker.ints.H, worker.ints.V)
+    after = worker.slater_rules.slater_rules(det, det)
+    assert after - before == approx(1.0)

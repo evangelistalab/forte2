@@ -96,9 +96,9 @@ class _SelectedCISingleStateSolver:
         self.dtype = float
 
         assert self.sci_params.ci_algorithm.lower() in [
-            "sparse",
+            "iterative",
             "exact",
-        ], f"CI algorithm must be 'sparse' or 'exact'. Got '{self.sci_params.ci_algorithm}'."
+        ], f"CI algorithm must be 'iterative' or 'exact'. Got '{self.sci_params.ci_algorithm}'."
 
     def _make_slater_rules(self):
         """Build the Slater rules object used for guesses, diagonals, and exact diag."""
@@ -258,11 +258,11 @@ class _SelectedCISingleStateSolver:
 
             if self.sci_params.ci_algorithm.lower() == "exact":
                 self._do_exact_diagonalization()
-            elif self.sci_params.ci_algorithm.lower() == "sparse":
+            elif self.sci_params.ci_algorithm.lower() == "iterative":
                 self._do_iterative_ci()
             else:
                 raise ValueError(
-                    f"Unknown CI algorithm: {self.sci_params.ci_algorithm}. Must be 'exact' or 'sparse'."
+                    f"Unknown CI algorithm: {self.sci_params.ci_algorithm}. Must be 'exact' or 'iterative'."
                 )
 
             self.sci_helper.set_c(self.evecs)
@@ -890,6 +890,10 @@ class _SelectedCISingleStateSolver:
         self.ints.E = scalar
         self.ints.H = oei
         self.ints.V = tei
+        # rebuild so `ci_algorithm="exact"` and guess energies don't diagonalize with
+        # stale integrals on the next call (e.g. an MCSCF macroiteration or a
+        # final_orbitals rerun)
+        self.slater_rules = self._make_slater_rules()
 
     def set_maxiter(self, maxiter):
         """
@@ -972,8 +976,10 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
         super().__post_init__()
         self.dtype = complex
         # Spin is not a good quantum number in the two-component (spinor) basis, so the
-        # S^2-based guess projection / penalty machinery does not apply.
-        self.sci_params.do_spin_penalty = False
+        # S^2-based guess projection / penalty machinery does not apply. This worker
+        # overrides _initial_guess wholesale and never reads do_spin_penalty, so there is
+        # nothing to disable -- writing it back into sci_params only mutated the caller's
+        # object.
 
     def _make_slater_rules(self):
         # Complex Slater rules over spinor determinants. The scalar energy is real; the
@@ -1312,7 +1318,12 @@ class SelectedCISolver(CIBase):
                 logger.log_warning(
                     f"Multiple states specified but only one set of SelectedCIParams provided. Using the same parameters for all states."
                 )
-                self.sci_params = [self.sci_params] * self.sa_info.ncis
+                # each state must own its params: _initial_guess rebinds
+                # sci_params.guess_dets, so sharing one object across states would let
+                # state N see state 0's guess determinants.
+                self.sci_params = [
+                    self.sci_params.copy() for _ in range(self.sa_info.ncis)
+                ]
             if len(self.sci_params) != self.sa_info.ncis:
                 raise ValueError(
                     f"Number of SelectedCIParams provided ({len(self.sci_params)}) does not match the number of states ({self.sa_info.ncis})."
@@ -1322,15 +1333,17 @@ class SelectedCISolver(CIBase):
                     f"Multiple states specified but only one set of DavidsonLiuParams provided. Using the same parameters for all states."
                 )
                 self.davidson_liu_params = [
-                    self.davidson_liu_params
-                ] * self.sa_info.ncis
+                    self.davidson_liu_params.copy() for _ in range(self.sa_info.ncis)
+                ]
             if len(self.davidson_liu_params) != self.sa_info.ncis:
                 raise ValueError(
                     f"Number of DavidsonLiuParams provided ({len(self.davidson_liu_params)}) does not match the number of states ({self.sa_info.ncis})."
                 )
         else:
-            self.sci_params = [self.sci_params]
-            self.davidson_liu_params = [self.davidson_liu_params]
+            # copy here too: _initial_guess rebinds sci_params.guess_dets, so sharing
+            # the caller's object would hand back a mutated set of guess determinants
+            self.sci_params = [self.sci_params.copy()]
+            self.davidson_liu_params = [self.davidson_liu_params.copy()]
         self.norb = self.mo_space.nactv
         # no distinction between core and frozen core in the CI solver
         self.core_indices = (
@@ -1518,8 +1531,10 @@ class SelectedCISolver(CIBase):
 
     def compute_transition_properties(self, C=None):
         """
-        Compute the transition dipole moments and oscillator strengths from the spin-free 1-TDMs.
-        The results are stored in `self.transition_dipoles` and `self.oscillator_strengths`.
+        Compute the transition dipole moments, oscillator strengths, and vertical
+        transition energies from the spin-free (or, in the two-component case,
+        spin-orbital) 1-TDMs. The results are stored in `self.transition_dipoles`,
+        `self.oscillator_strengths`, and `self.vertical_transition_energies`.
         """
         if not self.executed:
             raise RuntimeError("CI solver has not been executed yet.")
@@ -1529,24 +1544,28 @@ class SelectedCISolver(CIBase):
 
         Cact = C[:, self.active_indices]
         Ccore = C[:, self.core_indices]
-        # factor of 2 for spin-summed 1-RDM
-        rdm_core = 2 * np.einsum("pi,qi->pq", Ccore, Ccore.conj(), optimize=True)
+        # factor of 2 for the spin-summed 1-RDM; the two-component 1-RDM is already
+        # spin-orbital resolved, so no extra factor is needed there
+        factor = 1.0 if self.two_component else 2.0
+        rdm_core = factor * np.einsum("pi,qi->pq", Ccore, Ccore.conj(), optimize=True)
         # this includes nuclear dipole contribution
         core_dip = get_1e_property(
             self.system, rdm_core, property_name="dipole", unit="au"
         )
         self.transition_dipoles = OrderedDict()
         self.oscillator_strengths = OrderedDict()
+        self.vertical_transition_energies = OrderedDict()
 
         for ici in range(self.sa_info.nroots_sum):
             istate, iroot_in_state = self._get_state_root(ici)
-            rdm = self.sub_solvers[istate].make_sf_1rdm(iroot_in_state)
+            rdm = self.sub_solvers[istate].make_1rdm(iroot_in_state)
             rdm = np.einsum("ij,pi,qj->pq", rdm, Cact.conj(), Cact, optimize=True)
             dip = get_1e_property(
                 self.system, rdm, property_name="electric_dipole", unit="au"
             )
             self.transition_dipoles[(ici, ici)] = dip + core_dip
             self.oscillator_strengths[(ici, ici)] = 0.0
+            self.vertical_transition_energies[(ici, ici)] = 0.0
             for jci in range(ici + 1, self.sa_info.nroots_sum):
                 jstate, jroot_in_state = self._get_state_root(jci)
                 try:
@@ -1570,10 +1589,15 @@ class SelectedCISolver(CIBase):
                     self.oscillator_strengths[(_ici, _jci)] = (
                         (2 / 3) * vte * np.linalg.norm(tdip) ** 2
                     )
+                    self.vertical_transition_energies[(_ici, _jci)] = vte
                 except (ValueError, NotImplementedError):
                     continue
 
-        return self.transition_dipoles, self.oscillator_strengths
+        return (
+            self.transition_dipoles,
+            self.oscillator_strengths,
+            self.vertical_transition_energies,
+        )
 
     def reset_eigensolver(self):
         # sCI eigensolver gets reset every iteration anyway
@@ -1717,6 +1741,11 @@ class RelSelectedCISolver(RelCIBase):
     compute_natural_occupation_numbers = (
         SelectedCISolver.compute_natural_occupation_numbers
     )
+    # was missing entirely, so RelSelectedCI(do_transition_dipole=True) raised
+    # AttributeError in _post_process; self.make_1rdm dispatches correctly for both
+    # the same-state (via the worker's make_so_1rdm) and cross-state (NotImplementedError,
+    # caught and skipped) cases.
+    compute_transition_properties = SelectedCISolver.compute_transition_properties
 
     def _startup(self):
         super()._startup()
@@ -1726,7 +1755,12 @@ class RelSelectedCISolver(RelCIBase):
                     "Multiple states specified but only one set of SelectedCIParams "
                     "provided. Using the same parameters for all states."
                 )
-                self.sci_params = [self.sci_params] * self.sa_info.ncis
+                # each state must own its params: _initial_guess rebinds
+                # sci_params.guess_dets, so sharing one object across states would let
+                # state N see state 0's guess determinants.
+                self.sci_params = [
+                    self.sci_params.copy() for _ in range(self.sa_info.ncis)
+                ]
             if len(self.sci_params) != self.sa_info.ncis:
                 raise ValueError(
                     f"Number of SelectedCIParams provided ({len(self.sci_params)}) does "
@@ -1738,8 +1772,8 @@ class RelSelectedCISolver(RelCIBase):
                     "provided. Using the same parameters for all states."
                 )
                 self.davidson_liu_params = [
-                    self.davidson_liu_params
-                ] * self.sa_info.ncis
+                    self.davidson_liu_params.copy() for _ in range(self.sa_info.ncis)
+                ]
             if len(self.davidson_liu_params) != self.sa_info.ncis:
                 raise ValueError(
                     f"Number of DavidsonLiuParams provided "
@@ -1747,8 +1781,10 @@ class RelSelectedCISolver(RelCIBase):
                     f"states ({self.sa_info.ncis})."
                 )
         else:
-            self.sci_params = [self.sci_params]
-            self.davidson_liu_params = [self.davidson_liu_params]
+            # copy here too: _initial_guess rebinds sci_params.guess_dets, so sharing
+            # the caller's object would hand back a mutated set of guess determinants
+            self.sci_params = [self.sci_params.copy()]
+            self.davidson_liu_params = [self.davidson_liu_params.copy()]
 
         self.norb = self.mo_space.nactv
         # no distinction between core and frozen core in the CI solver

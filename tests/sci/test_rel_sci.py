@@ -285,3 +285,26 @@ def test_rel_sci_casscf_hf_ghf():
     mc.run()
 
     assert mc.E == approx(-100.1361832608)
+
+
+def test_rel_sci_transition_dipole():
+    conv = _h2_ghf_upcast()
+
+    sci = RelSelectedCI(
+        nel=2,
+        active_orbitals=4,
+        nroots=2,
+        do_transition_dipole=True,
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-12,
+            pt2_threshold=0.0,
+        ),
+    )(conv)
+    sci.run()
+
+    # no bright transitions, just an existence check
+    assert sci.transition_dipoles[(0, 0)].shape == (3,)
+    assert sci.oscillator_strengths[(0, 0)] == 0.0
+    assert sci.vertical_transition_energies[(0, 0)] == 0.0
+    assert sci.vertical_transition_energies[(0, 1)] == approx(sci.E[1] - sci.E[0])
