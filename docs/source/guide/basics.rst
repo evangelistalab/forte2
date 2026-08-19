@@ -67,3 +67,21 @@ If you execute the code now, the methods will click together under the hood, doi
 You can then run the whole chain with a single call:
 
 >>> casscf.run()
+
+Parallelism
+-----------
+
+Forte2 automatically determines how many threads to use for its parallel sections; there is no
+per-method thread-count argument to set. The effective count is printed once, when you first
+``import forte2``:
+
+>>> import forte2
+forte2: using 8 threads for parallel sections
+
+The count used is ``FORTE_NUM_THREADS_OVERRIDE`` if that environment variable is set, otherwise
+the smallest of the logical CPU count, the process's CPU affinity mask, and any of
+``OMP_NUM_THREADS``, ``OMP_THREAD_LIMIT``, or ``SLURM_CPUS_PER_TASK`` that are set in the
+environment. Note that the detected logical CPU count includes hyperthreads/SMT threads; on
+hardware where that is larger than the physical core count, set ``FORTE_NUM_THREADS_OVERRIDE``
+(or ``OMP_NUM_THREADS``) explicitly to the physical core count for best performance in
+compute-bound kernels.

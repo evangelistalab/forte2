@@ -199,8 +199,6 @@ class SelectedCIParams(ParamsBase):
         The number of occupied orbitals to consider when generating guess determinants.
     guess_vir_window: int, optional, default=2
         The number of virtual orbitals to consider when generating guess determinants.
-    num_threads: int, optional, default=4
-        The number of threads to use for parallel selection and diagonalization.
     ci_algorithm: str, optional, default="iterative"
         The algorithm used for the CI diagonalization. Options are "exact" and "iterative".
         "iterative" runs a Davidson-Liu solve whose sigma build is the C++
@@ -208,6 +206,9 @@ class SelectedCIParams(ParamsBase):
         dense Hamiltonian via `SlaterRules`.
     num_batches_per_thread: int, optional, default=4
         The number of batches of determinants to process per thread during selection and diagonalization.
+        The number of threads is determined automatically from the environment (affinity mask,
+        `OMP_NUM_THREADS`, `OMP_THREAD_LIMIT`, `SLURM_CPUS_PER_TASK`); set `FORTE_NUM_THREADS_OVERRIDE`
+        to override it.
     do_spin_penalty: bool, optional, default=True
         Whether to apply a spin penalty to the Hamiltonian to enforce correct spin symmetry.
     guess_dets: list[Determinant], optional
@@ -254,7 +255,6 @@ class SelectedCIParams(ParamsBase):
     selection_algorithm: Literal["hbci", "hbci_ref"] = "hbci"
     guess_occ_window: int = 2
     guess_vir_window: int = 2
-    num_threads: int = 4
     ci_algorithm: Literal["iterative", "exact"] = "iterative"
     num_batches_per_thread: int = 4
     do_spin_penalty: bool = True

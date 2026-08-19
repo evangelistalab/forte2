@@ -39,7 +39,6 @@ def test_sci1():
             selection_algorithm="hbci",
             var_threshold=1e-12,
             pt2_threshold=0.0,
-            num_threads=4,
             num_batches_per_thread=16,
         ),
     )(rhf)
@@ -62,7 +61,6 @@ def test_sci_pinned_only_guess():
             pt2_threshold=0.0,
             guess_dets=[],
             pinned_guess_dets=[Determinant("22")],
-            num_threads=4,
             num_batches_per_thread=16,
         ),
     )(rhf)
@@ -98,7 +96,6 @@ def test_sci2():
             guess_vir_window=0,
             pt2_regularizer="dsrg",
             pt2_regularizer_strength=0.2,
-            num_threads=4,
             num_batches_per_thread=16,
         ),
         nroots=1,
@@ -138,7 +135,6 @@ def test_sci3():
             guess_occ_window=2,
             guess_vir_window=2,
             do_spin_penalty=False,
-            num_threads=4,
             num_batches_per_thread=16,
         ),
         nroots=4,
@@ -178,7 +174,6 @@ def test_sci4():
             guess_occ_window=2,
             guess_vir_window=2,
             do_spin_penalty=True,
-            num_threads=4,
             num_batches_per_thread=16,
         ),
     )(rhf)
@@ -208,7 +203,6 @@ def test_sci5():
             pt2_threshold=0.0,
             do_spin_penalty=True,
             guess_dets=[Determinant("a2222")],
-            num_threads=4,
             num_batches_per_thread=16,
         ),
         nroots=1,
@@ -239,7 +233,6 @@ def test_sci6():
             guess_dets=[Determinant("a2222b"), Determinant("b2222a")],
             do_spin_penalty=True,
             screening_criterion="hbci",
-            num_threads=4,
             num_batches_per_thread=16,
         ),
         nroots=1,
@@ -698,7 +691,6 @@ def test_sci_water_core_excited():
             # do not allow the core orbital occupation to change from the guess determinants
             frozen_annihilation=[0],
             frozen_creation=[0],
-            num_threads=4,
             num_batches_per_thread=16,
         ),
         davidson_liu_params=DavidsonLiuParams(
@@ -784,7 +776,6 @@ def test_sci_water_core_excited_with_gasscf_orbs():
             # do not allow the core orbital occupation to change from the guess determinants
             frozen_annihilation=[0],
             frozen_creation=[0],
-            num_threads=4,
             num_batches_per_thread=16,
         ),
         davidson_liu_params=DavidsonLiuParams(
@@ -817,7 +808,6 @@ def test_sci_n2_multiple_roots():
             screening_criterion="hbci",
             guess_occ_window=3,
             guess_vir_window=3,
-            num_threads=4,
             num_batches_per_thread=16,
         ),
         die_if_not_converged=False,
@@ -856,7 +846,6 @@ def test_sci_water_valence_excitation():
             screening_criterion="hbci",
             guess_occ_window=3,
             guess_vir_window=1,
-            num_threads=4,
             num_batches_per_thread=16,
         ),
         die_if_not_converged=False,
@@ -888,7 +877,6 @@ def test_sci_1tdm_water_core_excited_and_gs():
         pt2_threshold=1e-8,
         guess_occ_window=3,
         guess_vir_window=1,
-        num_threads=4,
         num_batches_per_thread=16,
     )
     gs_ci_params = DavidsonLiuParams(e_tol=1e-10, r_tol=1e-5)
