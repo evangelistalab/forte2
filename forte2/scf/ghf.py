@@ -96,21 +96,16 @@ class GHF(SCFBase):
             ), f"{self._scf_type} requires non-negative number of alpha and beta electrons."
 
     def _build_fock(self, H, fock_builder, S):
-        Jaa, Jbb = fock_builder.build_J([self.D[0], self.D[3]])
-        nbf = Jaa.shape[0]
         if self.iter == 0 and self.ms_guess is not None:
             # Apply na/nb_guess
             mo_a, mo_b = self._guess_ms(self.C[0])
             occ = list(mo_a[: self.na_guess]) + list(mo_b[: self.nb_guess])
             occ = sorted(occ)
-            Kaa, Kab, Kba, Kbb = fock_builder.build_K([self.C[0][:, occ]])
+            Cocc = self.C[0][:, occ]
         else:
-            Kaa, Kab, Kba, Kbb = fock_builder.build_K([self.C[0][:, : self.nel]])
-        F = H.copy()
-        F[:nbf, :nbf] += Jaa + Jbb - Kaa
-        F[:nbf, nbf:] += -Kab
-        F[nbf:, :nbf] += -Kba
-        F[nbf:, nbf:] += Jaa + Jbb - Kbb
+            Cocc = self.C[0][:, : self.nel]
+        J, K = fock_builder.build_JK([Cocc])
+        F = H + J[0] - K[0]
 
         F_canon = F
 

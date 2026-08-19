@@ -660,9 +660,13 @@ class FockBuilderOTF:
 
         if self.backend == "auto":
             max_l = max(self.auxbasis.max_l, self.basis.max_l)
-            _backend = integrals._choose_backend(max_l)
+            if integrals.LIBCINT_AVAILABLE:
+                _backend = integrals._choose_backend(max_l, backend="libcint")
+            else:
+                _backend = integrals._choose_backend(max_l)
         else:
             _backend = self.backend
+
         if _backend == "libint2":
             self.compute_int3c2e_slice = libint2_compute
         else:  # libcint
@@ -791,6 +795,21 @@ class FockBuilderOTF:
     def _fill_Pmn_buffer(self, pshell0, pshell1):
         return self.compute_int3c2e_slice(pshell0, pshell1)
 
+    def _transpose_mPi(self, Pmi, n, scratch):
+        # reinterpretation of buffer, no new allocation
+        mPi = scratch.reshape(-1)[: self.nbf * self.naux * n].reshape(
+            self.nbf, self.naux, n
+        )
+        np.einsum("Pmi->mPi", Pmi, optimize=True, out=mPi)
+        return mPi
+
+    def _conjugate_mPi(self, mPi, n, scratch):
+        mPi_conj = scratch.reshape(-1)[: self.nbf * self.naux * n].reshape(
+            self.nbf, self.naux, n
+        )
+        np.conjugate(mPi, out=mPi_conj)
+        return mPi_conj
+
     def _J_kernel(self, D):
         # 1. Batch over the (raw) P index of (P|mn) integrals
         pshell0, pshell1 = 0, 0
@@ -848,12 +867,10 @@ class FockBuilderOTF:
                 optimize=True,
                 out=self._Pmi_buf[:, :, : i1 - i0],
             )
-            K += np.einsum(
-                "Pmi,Pni->mn",
-                self._Pmi_buf[:, :, : i1 - i0],
-                self._Pmi_buf[:, :, : i1 - i0].conj(),
-                optimize=True,
+            mPi = self._transpose_mPi(
+                self._Pmi_buf[:, :, : i1 - i0], i1 - i0, self._Qmi_buf
             )
+            K += np.einsum("mPi,nPi->mn", mPi, mPi, optimize=True)
             i0 = i1
         return K
 
@@ -907,27 +924,21 @@ class FockBuilderOTF:
                 optimize=True,
                 out=self._Qmi_buf[:, :, : i1 - i0],
             )
+
+            mPi_a = self._transpose_mPi(
+                self._Pmi_buf[:, :, : i1 - i0], i1 - i0, self._Qmi_buf2
+            )
+            mPi_b = self._transpose_mPi(
+                self._Qmi_buf[:, :, : i1 - i0], i1 - i0, self._Pmi_buf
+            )
+            mPi_a_conj = self._conjugate_mPi(mPi_a, i1 - i0, self._Qmi_buf)
             # aa contribution
-            K[0] += np.einsum(
-                "Pmi,Pni->mn",
-                self._Pmi_buf[:, :, : i1 - i0],
-                self._Pmi_buf[:, :, : i1 - i0].conj(),
-                optimize=True,
-            )
+            K[0] += np.einsum("mPi,nPi->mn", mPi_a, mPi_a_conj, optimize=True)
+            mPi_b_conj = self._conjugate_mPi(mPi_b, i1 - i0, self._Qmi_buf)
             # ab contribution
-            K[1] += np.einsum(
-                "Pmi,Pni->mn",
-                self._Pmi_buf[:, :, : i1 - i0],
-                self._Qmi_buf[:, :, : i1 - i0].conj(),
-                optimize=True,
-            )
+            K[1] += np.einsum("mPi,nPi->mn", mPi_a, mPi_b_conj, optimize=True)
             # bb contribution
-            K[2] += np.einsum(
-                "Pmi,Pni->mn",
-                self._Qmi_buf[:, :, : i1 - i0],
-                self._Qmi_buf[:, :, : i1 - i0].conj(),
-                optimize=True,
-            )
+            K[2] += np.einsum("mPi,nPi->mn", mPi_b, mPi_b_conj, optimize=True)
             i0 = i1
         return K
 
@@ -983,12 +994,10 @@ class FockBuilderOTF:
                 optimize=True,
                 out=self._Pmi_buf[:, :, : i1 - i0],
             )
-            K += np.einsum(
-                "Pmi,Pni->mn",
-                self._Pmi_buf[:, :, : i1 - i0],
-                self._Pmi_buf[:, :, : i1 - i0].conj(),
-                optimize=True,
+            mPi = self._transpose_mPi(
+                self._Pmi_buf[:, :, : i1 - i0], i1 - i0, self._Qmi_buf
             )
+            K += np.einsum("mPi,nPi->mn", mPi, mPi, optimize=True)
             if J_pass == 0:
                 bP = self._apply_Mm1(bP)
             J_pass += 1
@@ -1098,27 +1107,20 @@ class FockBuilderOTF:
                 optimize=True,
                 out=self._Qmi_buf[:, :, : i1 - i0],
             )
-            # Kaa contribution
-            K[0] += np.einsum(
-                "Pmi,Pni->mn",
-                self._Pmi_buf[:, :, : i1 - i0],
-                self._Pmi_buf[:, :, : i1 - i0].conj(),
-                optimize=True,
+            mPi_a = self._transpose_mPi(
+                self._Pmi_buf[:, :, : i1 - i0], i1 - i0, self._Qmi_buf2
             )
-            # Kab contribution
-            K[1] += np.einsum(
-                "Pmi,Pni->mn",
-                self._Pmi_buf[:, :, : i1 - i0],
-                self._Qmi_buf[:, :, : i1 - i0].conj(),
-                optimize=True,
+            mPi_b = self._transpose_mPi(
+                self._Qmi_buf[:, :, : i1 - i0], i1 - i0, self._Pmi_buf
             )
-            # Kbb contribution
-            K[2] += np.einsum(
-                "Pmi,Pni->mn",
-                self._Qmi_buf[:, :, : i1 - i0],
-                self._Qmi_buf[:, :, : i1 - i0].conj(),
-                optimize=True,
-            )
+            mPi_a_conj = self._conjugate_mPi(mPi_a, i1 - i0, self._Qmi_buf)
+            # aa contribution
+            K[0] += np.einsum("mPi,nPi->mn", mPi_a, mPi_a_conj, optimize=True)
+            mPi_b_conj = self._conjugate_mPi(mPi_b, i1 - i0, self._Qmi_buf)
+            # ab contribution
+            K[1] += np.einsum("mPi,nPi->mn", mPi_a, mPi_b_conj, optimize=True)
+            # bb contribution
+            K[2] += np.einsum("mPi,nPi->mn", mPi_b, mPi_b_conj, optimize=True)
             if J_pass == 0:
                 bPa = self._apply_Mm1(bPa)
                 bPb = self._apply_Mm1(bPb)

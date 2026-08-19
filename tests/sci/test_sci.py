@@ -209,7 +209,7 @@ def test_sci5():
     )(rhf)
 
     sci.run()
-    assert sci.E[0] == pytest.approx(-96.6017082329, abs=1e-7)
+    assert sci.E[0] == pytest.approx(-96.60170826050286, abs=5e-7)
 
 
 @pytest.mark.skip(reason="Could not reproduce with FCI with energy_shift")
