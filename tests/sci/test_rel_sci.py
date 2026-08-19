@@ -180,22 +180,10 @@ def test_rel_sci_hf_ghf_transition_rdms():
 
 
 def test_rel_sci_natural_noncontiguous_mo_space():
-    """RelSelectedCI final_orbitals='natural' reproduces the energy and
-    natural occupation number spectrum after a genuinely non-trivial
-    contig/orig permutation (same MOSpace as
-    test_rel_ci_natural_noncontiguous_mo_space in tests/ci/test_rel_ci.py).
-
-    As with RelCI, this checks the natural occupation number *spectrum*
-    (sorted eigenvalues of the active 1-RDM) rather than the RDM's raw
-    matrix diagonality. In a time-reversal-symmetric two-component
-    calculation, every natural occupation number is exactly Kramers-doubly-
-    degenerate, so "the" natural spinors are only defined up to an arbitrary
-    unitary rotation within each degenerate pair: re-running RelSelectedCI
-    from scratch in the rotated basis converges to a different (energy-
-    degenerate, equally valid) gauge choice within each pair, leaving the
-    RDM *matrix* far from diagonal even though the total energy and the
-    occupation-number spectrum agree with the pre-rotation reference to
-    convergence precision.
+    """
+    RelSelectedCI final_orbitals='natural' reproduces the energy and
+    natural occupation number spectrum after a non-trivial
+    contig/orig permutation
     """
     xyz = """
     Li 0.0 0.0 0.0
@@ -244,13 +232,7 @@ def test_rel_sci_natural_noncontiguous_mo_space():
 
 @pytest.mark.slow
 def test_rel_sci_casscf_hf_ghf():
-    """RelSelectedCISolver drops into relativistic CASSCF (test_rel_casscf_hf_ghf).
-
-    MCOptimizer already selects the relativistic orbital optimizer for a
-    two-component system and calls make_average_1rdm/2rdm on the CI solver, so a
-    RelSelectedCISolver at tight thresholds must reproduce the RelCISolver CASSCF
-    energy.
-    """
+    """RelSelectedCISolver drops into relativistic CASSCF"""
     xyz = """
     H 0.0 0.0 0.0
     F 0.0 0.0 2.0
@@ -302,3 +284,35 @@ def test_rel_sci_transition_dipole():
     assert sci.oscillator_strengths[(0, 0)] == 0.0
     assert sci.vertical_transition_energies[(0, 0)] == 0.0
     assert sci.vertical_transition_energies[(0, 1)] == approx(sci.E[1] - sci.E[0])
+
+
+@pytest.mark.parametrize("final_orbitals", ["original", "semicanonical", "natural"])
+def test_rel_sci_final_orbitals(final_orbitals):
+    xyz = """
+    H 0.0 0.0 0.0
+    F 0.0 0.0 2.0
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="bohr",
+        x2c=X2CParams(x2c_type="so"),
+    )
+    scf = GHF(charge=0)(system)
+
+    sci = RelSelectedCI(
+        nel=10,
+        core_orbitals=2,
+        active_orbitals=12,
+        do_test_rdms=True,
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-12,
+            pt2_threshold=0.0,
+        ),
+        final_orbitals=final_orbitals,
+    )(scf)
+    sci.run()
+
+    assert sci.E[0] == approx(-100.10065023157668)

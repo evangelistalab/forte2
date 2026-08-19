@@ -276,7 +276,7 @@ def test_rel_ci_algorithms_agree(algorithm):
 
 
 @pytest.mark.parametrize("final_orbitals", ["original", "semicanonical", "natural"])
-def test_rel_ci_final_orbital(final_orbitals):
+def test_rel_ci_final_orbitals(final_orbitals):
     eref = -100.10065023157668
     xyz = """
     H 0.0 0.0 0.0

@@ -555,25 +555,6 @@ def test_sci_make_rdms():
     assert np.allclose(sf_2rdm, sf_2rdm_ci, atol=1e-8)
 
 
-def test_sci_semicanonical_final_orbital():
-    """Semicanonical final orbital path should execute without runtime errors."""
-    rhf = _h4_rhf()
-
-    sci = SelectedCI(
-        states=State(nel=4, multiplicity=1, ms=0.0),
-        active_orbitals=list(range(4)),
-        sci_params=SelectedCIParams(
-            selection_algorithm="hbci",
-            var_threshold=1e-12,
-            pt2_threshold=0.0,
-        ),
-        final_orbitals="semicanonical",
-    )(rhf)
-    sci.run()
-
-    assert sci.E[0] == approx(-2.180967812920)
-
-
 def _lih_noncontiguous_mo_space(system):
     return MOSpace(
         nmo=system.nmo,
@@ -585,7 +566,10 @@ def _lih_noncontiguous_mo_space(system):
 def _lih_rhf():
     xyz = "Li 0.0 0.0 0.0\nH  0.0 0.0 3.0"
     system = System(
-        xyz=xyz, basis_set="sto-3g", auxiliary_basis_set="def2-universal-JKFIT", unit="bohr"
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
     )
     return RHF(charge=0, e_tol=1e-12)(system)
 
@@ -987,3 +971,22 @@ def test_sci_set_ints_resets_slater_rules():
     worker.set_ints(worker.ints.E + 1.0, worker.ints.H, worker.ints.V)
     after = worker.slater_rules.slater_rules(det, det)
     assert after - before == approx(1.0)
+
+
+@pytest.mark.parametrize("final_orbitals", ["original", "semicanonical", "natural"])
+def test_sci_final_orbitals(final_orbitals):
+    rhf = _h4_rhf()
+
+    sci = SelectedCI(
+        states=State(nel=4, multiplicity=1, ms=0.0),
+        active_orbitals=list(range(4)),
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-12,
+            pt2_threshold=0.0,
+        ),
+        final_orbitals=final_orbitals,
+    )(rhf)
+    sci.run()
+
+    assert sci.E[0] == approx(-2.180967812920)
