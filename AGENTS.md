@@ -79,6 +79,15 @@ not a mixin, since the field's default legitimately differs per class.
   (HCI), determinant/Slater-rules machinery, sparse operators/states. **Python** holds all orchestration:
   SCF loop, MCSCF optimizer, DSRG, AVAS, gradients, geometry optimization, properties, J/K building.
 
+### Threading model
+All parallel C++ code determines its thread count through `forte2/helpers/parallel.h::get_num_threads()`
+— never accept a thread-count constructor/setter argument on a class or function; call
+`get_num_threads()` directly, or use the `parallel_for*` helpers in the same header, which already do.
+Precedence: `FORTE_NUM_THREADS_OVERRIDE` if set, otherwise the smallest of
+`std::thread::hardware_concurrency()` (logical CPUs, including SMT/hyperthreads — *not* physical
+cores), the process's CPU affinity mask, `OMP_NUM_THREADS`, `OMP_THREAD_LIMIT`, and
+`SLURM_CPUS_PER_TASK` (whichever are set). The effective count is printed once at `import forte2`
+
 ### Integrals
 All two-electron integrals are **density-fitted or Cholesky-decomposed** — there is no conventional
 4-index path, which is why a `System` requires an `auxiliary_basis_set`. Two backends sit behind one

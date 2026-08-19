@@ -361,9 +361,6 @@ class SelectedCIHelper:
     def set_c(self, c: Annotated[NDArray[numpy.float64], dict(shape=(None, None))]) -> None:
         """Set the CI coefficients"""
 
-    def set_num_threads(self, n: int) -> None:
-        """Set the number of threads to use in parallel sections"""
-
     def set_num_batches_per_thread(self, n: int) -> None:
         """
         Set the number of batches each thread will process in parallel sections
@@ -489,9 +486,6 @@ class RelSelectedCIHelper:
 
     def set_c(self, c: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))]) -> None:
         """Set the (complex) CI coefficients"""
-
-    def set_num_threads(self, n: int) -> None:
-        """Set the number of threads to use in parallel sections"""
 
     def set_num_batches_per_thread(self, n: int) -> None:
         """

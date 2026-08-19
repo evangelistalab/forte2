@@ -72,9 +72,6 @@ class SelectedCIHelper {
     /// @brief Set the energy of the roots (as computed externally by the Davidson solver)
     void set_energies(np_vector e);
 
-    /// @brief Set the number of threads to use for parallelization
-    void set_num_threads(size_t n) { num_threads_ = n; }
-
     /// @brief Set the number of batches per thread for parallelization
     void set_num_batches_per_thread(size_t n) { num_batches_per_thread_ = n; }
 
@@ -319,9 +316,6 @@ class SelectedCIHelper {
 
     /// @brief logging level for the class
     int log_level_ = 3;
-
-    /// @brief Number of threads to use for parallelization
-    size_t num_threads_ = 1;
 
     /// @brief Number of batches per thread for parallelization
     size_t num_batches_per_thread_ = 1;

@@ -150,7 +150,6 @@ class _SelectedCISingleStateSolver:
         self.sci_helper = self._make_sci_helper()
 
         self.sci_helper.set_energies(self.guess_energies)
-        self.sci_helper.set_num_threads(self.sci_params.num_threads)
         self.sci_helper.set_num_batches_per_thread(
             self.sci_params.num_batches_per_thread
         )

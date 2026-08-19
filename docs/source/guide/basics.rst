@@ -67,3 +67,13 @@ If you execute the code now, the methods will click together under the hood, doi
 You can then run the whole chain with a single call:
 
 >>> casscf.run()
+
+Parallelism
+-----------
+
+Forte2 automatically detects the number of threads to use for some parallel sections that are not already parallelized by e.g. BLAS.
+The effective count is printed at ``import forte2``.
+
+The envioronment variable ``FORTE_NUM_THREADS_OVERRIDE`` will be used if set. 
+Otherwise, the smallest among the number of logical CPU counts, ``OMP_NUM_THREADS``,``OMP_THREAD_LIMIT``, and ``SLURM_CPUS_PER_TASK`` will be used if set.
+Note that the logical CPU count includes e.g., hyperthreads.
