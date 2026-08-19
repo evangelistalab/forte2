@@ -63,7 +63,7 @@ class DSRG_MRPT2(DSRGBase):
 
     def __post_init__(self):
         super().__post_init__()
-        self.requires_attrs |= {"two_component": False}
+        self.requires_attrs.update({"two_component": False})
 
     def get_integrals(self):
         g1, g2, l2, l3 = self.ci_solver.make_average_cumulants()

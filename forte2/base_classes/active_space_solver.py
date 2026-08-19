@@ -33,7 +33,7 @@ class ActiveSpaceSolver(Method):
         self.weights = self.sa_info.weights
         self.weights_flat = self.sa_info.weights_flat
         self.requires = {"system", "mos"}
-        self.requires_attrs |= {"two_component": False}
+        self.requires_attrs.update({"two_component": False})
         self.provides = {"system", "mos", "mo_space"}
 
     def _startup(self):
@@ -135,5 +135,5 @@ class RelActiveSpaceSolver(ActiveSpaceSolver):
             ms = 0.0 if mult == 1 else 0.5
             self.states = State(nel=self.nel, multiplicity=mult, ms=ms)
         super().__post_init__()
-        self.requires_attrs |= {"two_component": True}
+        self.requires_attrs.update({"two_component": True})
         self.dtype = complex

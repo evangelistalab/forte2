@@ -364,7 +364,10 @@ class MCOptimizerBase(Method):
         pretty_print_ci_summary(self.ci_solver.sa_info, self.ci_solver.evals_per_solver)
         self.ci_solver.compute_natural_occupation_numbers()
         pretty_print_ci_nat_occ_numbers(
-            self.ci_solver.sa_info, self.mo_space, self.ci_solver.nat_occs
+            self.ci_solver.sa_info,
+            self.mo_space,
+            self.ci_solver.nat_occs,
+            getattr(self.ci_solver, "nat_occs_avg", None),
         )
         top_dets = self.ci_solver.get_top_determinants()
         pretty_print_ci_dets(self.ci_solver.sa_info, self.mo_space, top_dets)

@@ -53,7 +53,7 @@ Two chain-specific behaviors to watch:
 - **MCSCF re-binds its `ci_solver`.** `MCOptimizer(ci_solver)(parent)` re-invokes the solver against
   `parent` in `_startup`, then alternates orbital optimization (L-BFGS) with `ci_solver.run()`.
 - **DSRG requires semicanonical orbitals.** `DSRGBase` declares
-  `requires_attrs |= {"final_orbitals": "semicanonical"}` and consumes the active-space integral triple
+  `requires_attrs.update({"final_orbitals": "semicanonical"})` and consumes the active-space integral triple
   `E` (frozen-core energy), `H` (one-electron), `V` (antisymmetrized two-electron) plus cumulants from
   the upstream solver. Use `forte2/orbitals/semicanonicalizer.py` if a reference isn't already
   semicanonical.

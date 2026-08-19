@@ -38,7 +38,7 @@ class DSRGBase(Method):
     def __post_init__(self):
         self.requires = {"system", "mos", "mo_space"}
         self.provides = {"system", "mos", "mo_space"}
-        self.requires_attrs |= {"final_orbitals": "semicanonical"}
+        self.requires_attrs.update({"final_orbitals": "semicanonical"})
 
         # parse reference relaxation options
         if isinstance(self.relax_reference, bool):

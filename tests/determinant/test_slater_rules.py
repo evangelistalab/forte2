@@ -5,7 +5,7 @@ from forte2 import System, RHF
 from forte2.lib.det import Determinant, SlaterRules, RelSlaterRules, hilbert_space
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers.comparisons import approx
-from forte2.ci.ci import _RelCISingleStateSolver
+from forte2.ci.rel_ci import _RelCISingleStateSolver
 from forte2.state import MOSpace, State
 from forte2.base_classes import DavidsonLiuParams
 

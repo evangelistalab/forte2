@@ -266,7 +266,10 @@ class CIBase(ActiveSpaceSolver):
         Apply the requested ``final_orbitals`` transformation and re-solve.
         No-op unless "semicanonical" or "natural" is requested.
         """
-        from forte2.orbitals import check_final_orbital_energy_invariance, make_final_orbitals
+        from forte2.orbitals import (
+            check_final_orbital_energy_invariance,
+            make_final_orbitals,
+        )
 
         if self.final_orbitals not in ("semicanonical", "natural"):
             return
@@ -390,19 +393,18 @@ class CIBase(ActiveSpaceSolver):
         """
         Compute the natural occupation numbers for the CI states and store them
         in ``self.nat_occs`` (this method returns None).
+        If more than one CI roots are requested, then self.nat_occs_avg stores
+        the state-averaged natural occupation numbers.
 
-        The first ``nroots_sum`` columns of ``self.nat_occs`` hold the natural
-        occupation numbers for each root. If more than one root is present
-        (``nroots_sum > 1``), a final column holds the natural occupation
-        numbers from the state-averaged 1-RDM.
         """
         nos = []
         for ci_solver in self.sub_solvers:
             nos.append(ci_solver.compute_natural_occupation_numbers())
+        self.nat_occs = np.concatenate(nos, axis=1)
+        self.nat_occs_avg = None
         if self.sa_info.nroots_sum > 1:
             g1_avg = self.make_average_1rdm()
-            nos.append(np.linalg.eigvalsh(g1_avg)[::-1][:, np.newaxis])
-        self.nat_occs = np.concatenate(nos, axis=1)
+            self.nat_occs_avg = np.linalg.eigvalsh(g1_avg)[::-1]
 
     def compute_transition_properties(self, C=None):
         """
