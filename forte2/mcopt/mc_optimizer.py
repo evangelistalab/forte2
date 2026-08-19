@@ -94,6 +94,11 @@ class MCOptimizerBase(Method):
     # ActiveSpaceSolver's single source of truth rather than duplicating the literal.
     _final_orbital_energy_tol: ClassVar[float] = ActiveSpaceSolver._final_orbital_energy_tol
 
+    # Below this active-space subspace overlap between consecutive macroiterations,
+    # a step is treated as a discontinuous jump to a different orbital/CI solution
+    # (see _check_active_space_continuity) rather than a normal optimization step.
+    _active_space_continuity_tol: ClassVar[float] = 0.7
+
     ### L-BFGS solver (microiteration) parameters
     micro_maxiter: int = 6
     max_rotation: float = 0.2
@@ -105,6 +110,11 @@ class MCOptimizerBase(Method):
     ### Non-init attributes
     converged: bool = field(default=False, init=False)
     executed: bool = field(default=False, init=False)
+    # Macroiteration indices (if any) at which _check_active_space_continuity
+    # detected a discontinuous jump between CASSCF solutions.
+    discontinuous_macro_iterations: list[int] = field(
+        default_factory=list, init=False
+    )
 
     def __post_init__(self):
         if not isinstance(self.ci_solver, (CIBase, RelCIBase)):
@@ -266,10 +276,13 @@ class MCOptimizerBase(Method):
             self.converged = True
         else:
             conv = False
+            S = self.system.ints_overlap()
             while self.iter < self.maxiter:
                 # 1. Optimize orbitals at fixed CI expansion
+                C_before_step = self._C
                 self.E_orb = self.lbfgs_solver.minimize(self.orb_opt, R)
                 self._C = self.orb_opt.C.copy()
+                self._check_active_space_continuity(C_before_step, self._C, S)
                 # 2. Convergence checks
                 _dg = self.lbfgs_solver.g - self.g_old
                 self.dg_rms = np.sqrt(np.mean((_dg.conj() * _dg).real))
@@ -545,6 +558,53 @@ class MCOptimizerBase(Method):
         self.E_avg_old = self.E_avg
         self.E_orb_old = self.E_orb
         return conv, conv_str
+
+    def _active_indices(self):
+        """Column indices of the active space in the contiguous orbital ordering."""
+        actv = self.actv
+        if isinstance(actv, slice):
+            return np.arange(actv.start, actv.stop)
+        return np.concatenate([np.arange(s.start, s.stop) for s in actv])
+
+    def _check_active_space_continuity(self, C_old, C_new, S):
+        """
+        Warn if the active-space orbitals changed discontinuously in one
+        macroiteration, instead of smoothly rotating.
+
+        Gradient-based orbital optimization can jump to a different,
+        unrelated CASSCF solution within a single macroiteration when the
+        starting orbitals happen to sit close to a separatrix between two
+        competing solutions -- most commonly when the run is seeded with
+        orbitals projected from a nearby but different geometry (e.g. by
+        GeometryOptimizer/FiniteDifferenceGradient) rather than the default
+        guess. A low subspace overlap with the previous iteration does not by
+        itself mean the new solution is *wrong*, only that it is not a
+        continuous evolution of the previous one, which matters when the
+        energy is meant to vary smoothly with geometry (finite differences,
+        PES scans).
+
+        Returns
+        -------
+        float
+            The active-space subspace overlap with the previous iteration,
+            in [0, 1]; 1 means the subspace is unchanged.
+        """
+        idx = self._active_indices()
+        Q = C_old[:, idx].conj().T @ S @ C_new[:, idx]
+        overlap = float(np.abs(np.linalg.det(Q)))
+        if overlap < self._active_space_continuity_tol:
+            self.discontinuous_macro_iterations.append(self.iter)
+            logger.log_warning(
+                f"Active-space orbitals changed discontinuously at "
+                f"macroiteration {self.iter} (subspace overlap {overlap:.3f} "
+                "with the previous iteration's active space). The optimizer "
+                "may have jumped to a different CASSCF solution rather than "
+                "continuing the previous one; if this run was seeded from "
+                "another geometry's orbitals (e.g. a finite-difference "
+                "displacement), treat this energy as potentially "
+                "discontinuous with neighboring geometries."
+            )
+        return overlap
 
     def make_average_1rdm(self):
         return self.ci_solver.make_average_1rdm()
