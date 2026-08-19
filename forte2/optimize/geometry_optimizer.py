@@ -55,7 +55,7 @@ class GeometryOptimizer(Method):
 
     def __post_init__(self):
         self.requires = {"system", "mos"}
-        self.requires_attrs = {"gradient"}
+        self.requires_attrs.update({"gradient": None})
 
     def __call__(self, method):
         """

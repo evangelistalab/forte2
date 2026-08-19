@@ -300,15 +300,16 @@ void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
         update_hbci_ints();
     }
 
-    const size_t num_batches = num_batches_per_thread_ * num_threads_; // total number of batches
+    const auto num_threads = get_num_threads();
+    const size_t num_batches = num_batches_per_thread_ * num_threads; // total number of batches
 
     std::atomic<size_t> next_batch(0);
 
-    std::vector<std::vector<Determinant>> thread_new_dets(num_threads_);
-    std::vector<std::vector<double>> local_ept2_var(num_threads_,
+    std::vector<std::vector<Determinant>> thread_new_dets(num_threads);
+    std::vector<std::vector<double>> local_ept2_var(num_threads,
                                                     std::vector<double>(nroots_, 0.0));
-    std::vector<std::vector<double>> local_ept2_pt(num_threads_, std::vector<double>(nroots_, 0.0));
-    std::vector<std::vector<std::tuple<size_t, size_t, double>>> thread_log_data(num_threads_);
+    std::vector<std::vector<double>> local_ept2_pt(num_threads, std::vector<double>(nroots_, 0.0));
+    std::vector<std::vector<std::tuple<size_t, size_t, double>>> thread_log_data(num_threads);
 
     DetSet existing_dets(dets_.begin(), dets_.end());
 
@@ -372,7 +373,7 @@ void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
 
     // launch threads
     std::vector<std::future<void>> workers;
-    for (size_t t{0}; t < num_threads_; ++t)
+    for (size_t t{0}; t < num_threads; ++t)
         workers.push_back(std::async(std::launch::async, worker, t));
 
     for (auto& w : workers)
@@ -382,14 +383,14 @@ void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
     for (size_t r{0}; r < nroots_; ++r) {
         ept2_var_[r] = 0.0;
         ept2_pt_[r] = 0.0;
-        for (size_t t = 0; t < num_threads_; ++t) {
+        for (size_t t = 0; t < num_threads; ++t) {
             ept2_var_[r] += local_ept2_var[t][r];
             ept2_pt_[r] += local_ept2_pt[t][r];
         }
     }
 
     // print a summary of each thread's work
-    for (size_t t{0}; t < num_threads_; ++t) {
+    for (size_t t{0}; t < num_threads; ++t) {
         size_t total_batches = thread_log_data[t].size();
         size_t total_dets = 0;
         double total_time = 0.0;
@@ -425,7 +426,7 @@ void SelectedCIHelper::select_hbci(double var_threshold, double pt2_threshold) {
 
     // print a summary of the selection
     num_new_dets_pt2_ = 0;
-    for (size_t t{0}; t < num_threads_; ++t) {
+    for (size_t t{0}; t < num_threads; ++t) {
         for (const auto& [batch_id, num_pt_dets, time] : thread_log_data[t]) {
             num_new_dets_pt2_ += num_pt_dets;
         }

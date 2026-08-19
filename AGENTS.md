@@ -30,21 +30,44 @@ pt.run()                                       # lazily runs the whole chain
   parent_method.executed`, then does the work. Calling `run()` on the last object executes the entire
   pipeline; the `executed` flag prevents recomputation.
 
-State flows down the chain via mixins in `forte2/base_classes/mixins.py`, each with a
-`copy_from_upstream` classmethod: `SystemMixin` (`system`), `MOsMixin` (MO coefficients `C`, irrep
-info), `MOSpaceMixin` (`mo_space` = core/active/virtual partition). `base_classes/active_space_solver.py`
-and `ci_base.py` are the bases for CI-type solvers (active-space resolution, state-averaged RDMs/cumulants).
+Every method derives from `Method` (`forte2/base_classes/method.py`), which declares the data-flow
+contract between links in the chain as three attributes set in `__post_init__`:
+- `requires` — names this method needs the parent to supply (checked against the parent's `provides`).
+- `provides` — names this method supplies downstream (e.g. `{"system", "mos", "mo_space"}`).
+- `requires_attrs` — a **dict** of parent attributes, `{name: required_value}`, with `None` meaning
+  "must exist" (e.g. `{"two_component": True}`). Because it is keyed by name, subclasses compose with
+  `|=` and override an inherited requirement by re-stating its key. Never assign it with `=`: that
+  silently drops requirements set by a base class.
+
+`_register_parent_method` enforces all three at bind time (`__call__`), so incompatible pipelines fail
+at construction rather than mid-run. MO coefficients travel as an `MO` value object (`base_classes/mo.py`),
+reached as `self.mos.C[0]` / `self.mos.irrep_indices[0]`.
+
+`base_classes/active_space_solver.py` and `ci_base.py` are the bases for CI-type solvers.
+`CIBase` owns everything representation-agnostic: the `_startup`/`run` skeletons, sub-solver fan-out,
+state-averaged RDMs and cumulants, transition properties, and the `final_orbitals` rotation. Concrete
+solvers supply two class-level hooks — `_integrals_cls` (`RestrictedMOIntegrals` vs
+`SpinorbitalIntegrals`) and `_ss_solver_cls` (the per-state single-state solver).
 
 Two chain-specific behaviors to watch:
 - **MCSCF re-binds its `ci_solver`.** `MCOptimizer(ci_solver)(parent)` re-invokes the solver against
   `parent` in `_startup`, then alternates orbital optimization (L-BFGS) with `ci_solver.run()`.
-- **DSRG requires semicanonical orbitals.** `DSRG_MRPT2.__call__` asserts
-  `parent.final_orbitals == "semicanonical"` and consumes the active-space integral triple `E` (frozen-core
-  energy), `H` (one-electron), `V` (antisymmetrized two-electron) plus cumulants from the upstream solver.
-  Use `forte2/orbitals/semicanonicalizer.py` if a reference isn't already semicanonical.
+- **DSRG requires semicanonical orbitals.** `DSRGBase` declares
+  `requires_attrs.update({"final_orbitals": "semicanonical"})` and consumes the active-space integral triple
+  `E` (frozen-core energy), `H` (one-electron), `V` (antisymmetrized two-electron) plus cumulants from
+  the upstream solver. Use `forte2/orbitals/semicanonicalizer.py` if a reference isn't already
+  semicanonical.
 
 Relativistic (two-component) variants are subclasses that set `dtype = complex` and
 `two_component = True` (e.g. `RelActiveSpaceSolver`, `RelCISolver`); non-rel uses `float`.
+`RelCIBase(RelActiveSpaceSolver, CIBase)` inherits the shared orchestration rather than re-binding
+methods by hand. **Base order matters**: `dataclasses` collects fields in reverse-MRO order and
+`CIBase` still carries an undefaulted `states` from `ActiveSpaceSolver`, so listing `CIBase` first
+would clobber the `states = None` default that `nel`-based construction relies on.
+
+The `final_orbitals` option (`"original"` / `"semicanonical"` / `"natural"`) is shared by the four CI
+solvers and `MCOptimizer` via `forte2/orbitals/final_orbitals.py` — a free function plus a validator,
+not a mixin, since the field's default legitimately differs per class.
 
 ### C++ / Python boundary
 - `forte2.lib` is the compiled nanobind module. C++ sources live **inline inside the package**
@@ -55,6 +78,15 @@ Relativistic (two-component) variants are subclasses that set `dtype = complex` 
 - **C++** holds performance kernels: integral evaluation, CI string/sigma builds and RDMs, selected-CI
   (HCI), determinant/Slater-rules machinery, sparse operators/states. **Python** holds all orchestration:
   SCF loop, MCSCF optimizer, DSRG, AVAS, gradients, geometry optimization, properties, J/K building.
+
+### Threading model
+All parallel C++ code determines its thread count through `forte2/helpers/parallel.h::get_num_threads()`
+— never accept a thread-count constructor/setter argument on a class or function; call
+`get_num_threads()` directly, or use the `parallel_for*` helpers in the same header, which already do.
+Precedence: `FORTE_NUM_THREADS_OVERRIDE` if set, otherwise the smallest of
+`std::thread::hardware_concurrency()` (logical CPUs, including SMT/hyperthreads — *not* physical
+cores), the process's CPU affinity mask, `OMP_NUM_THREADS`, `OMP_THREAD_LIMIT`, and
+`SLURM_CPUS_PER_TASK` (whichever are set). The effective count is printed once at `import forte2`
 
 ### Integrals
 All two-electron integrals are **density-fitted or Cholesky-decomposed** — there is no conventional

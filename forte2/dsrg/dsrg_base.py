@@ -33,17 +33,12 @@ class DSRGBase(Method):
         assert isinstance(
             self.parent_method, (CIBase, RelCIBase, MCOptimizerBase)
         ), "Parent method must be an instance of CIBase, RelCIBase, or MCOptimizerBase."
-        # This is to ensure that the CI vectors are converged after
-        # the basis is changed to semicanonical orbitals.
-        # We could handle it here, but it's cleaner to enforce it at the parent method level.
-        assert (
-            self.parent_method.final_orbitals.lower() == "semicanonical"
-        ), "The final_orbitals of the parent method must be 'semicanonical' for DSRG methods."
         return self
 
     def __post_init__(self):
         self.requires = {"system", "mos", "mo_space"}
         self.provides = {"system", "mos", "mo_space"}
+        self.requires_attrs.update({"final_orbitals": "semicanonical"})
 
         # parse reference relaxation options
         if isinstance(self.relax_reference, bool):

@@ -2,8 +2,18 @@ __version__ = "2026.6.4"
 __author__ = "Forte2 Developers"
 
 from .helpers.echo_script import echo_invoking_script
+
 # print the invoking python script to stdout
 echo_invoking_script()
+
+try:
+    from forte2.lib import cpp_helpers
+
+    n = cpp_helpers.get_num_threads()
+    print(f"forte2: using {n} thread{'s' if n != 1 else ''} for parallel sections")
+except Exception as e:
+    print(f"forte2: could not determine thread count ({e})")
+
 
 from .integrals import integrals
 from .base_classes import X2CParams

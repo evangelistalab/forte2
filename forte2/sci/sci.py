@@ -1,25 +1,22 @@
 import time
 from dataclasses import dataclass, field
-from collections import OrderedDict
 from itertools import combinations
 from typing import ClassVar
 
 import numpy as np
 
-from forte2.lib import sparse_ops, det, cpp_helpers, ci_helpers, rdms
-from forte2.lib.sparse_ops import SparseState
+from forte2.lib import det, cpp_helpers
 from forte2.lib.det import Determinant, Configuration, SlaterRules
 from forte2.lib.ci_helpers import SelectedCIHelper, CIStrings
 from forte2.helpers.table import AsciiTable
-from forte2.state import State, RelState, MOSpace
+from forte2.state import State, MOSpace
 from forte2.helpers.comparisons import approx
 from forte2.helpers.davidsonliu import DavidsonLiuSolver
-from forte2.base_classes import CIBase, RelCIBase
+from forte2.base_classes import CIBase
 from forte2.base_classes.params import SelectedCIParams, DavidsonLiuParams
 from forte2.helpers import logger
-from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
-from forte2.props import get_1e_property
-from forte2.orbitals import Semicanonicalizer
+from forte2.jkbuilder import RestrictedMOIntegrals
+from forte2.orbitals import FinalOrbitals, validate_final_orbitals
 from forte2.ci.ci_utils import (
     pretty_print_ci_summary,
     pretty_print_ci_dets,
@@ -85,6 +82,11 @@ class _SelectedCISingleStateSolver:
     first_run: bool = field(default=True, init=False)
     executed: bool = field(default=False, init=False)
 
+    ### Representation hooks, overridden by _RelSelectedCISingleStateSolver
+    two_component: ClassVar[bool] = False
+    dtype: ClassVar[type] = float
+    _allowed_algorithms: ClassVar[tuple] = ("iterative", "exact")
+
     def __post_init__(self):
         self.norb = self.mo_space.nactv
         self.ncore = self.mo_space.ncore + self.mo_space.nfrozen_core
@@ -93,12 +95,10 @@ class _SelectedCISingleStateSolver:
         self.gas_max = self.state.gas_max
         self.eigensolver = None
 
-        self.dtype = float
-
-        assert self.sci_params.ci_algorithm.lower() in [
-            "sparse",
-            "exact",
-        ], f"CI algorithm must be 'sparse' or 'exact'. Got '{self.sci_params.ci_algorithm}'."
+        assert self.sci_params.ci_algorithm.lower() in self._allowed_algorithms, (
+            f"{type(self).__name__} supports CI algorithms "
+            f"{self._allowed_algorithms}. Got '{self.sci_params.ci_algorithm}'."
+        )
 
     def _make_slater_rules(self):
         """Build the Slater rules object used for guesses, diagonals, and exact diag."""
@@ -148,7 +148,6 @@ class _SelectedCISingleStateSolver:
         self.sci_helper = self._make_sci_helper()
 
         self.sci_helper.set_energies(self.guess_energies)
-        self.sci_helper.set_num_threads(self.sci_params.num_threads)
         self.sci_helper.set_num_batches_per_thread(
             self.sci_params.num_batches_per_thread
         )
@@ -258,11 +257,11 @@ class _SelectedCISingleStateSolver:
 
             if self.sci_params.ci_algorithm.lower() == "exact":
                 self._do_exact_diagonalization()
-            elif self.sci_params.ci_algorithm.lower() == "sparse":
+            elif self.sci_params.ci_algorithm.lower() == "iterative":
                 self._do_iterative_ci()
             else:
                 raise ValueError(
-                    f"Unknown CI algorithm: {self.sci_params.ci_algorithm}. Must be 'exact' or 'sparse'."
+                    f"Unknown CI algorithm: {self.sci_params.ci_algorithm}. Must be 'exact' or 'iterative'."
                 )
 
             self.sci_helper.set_c(self.evecs)
@@ -601,10 +600,6 @@ class _SelectedCISingleStateSolver:
     def _do_iterative_ci(self):
         """
         Solve CI with an iterative Davidson-Liu solver.
-
-        The diagonal and sigma build are supplied by `_compute_hdiag` /
-        `_make_sigma_builder`, which the relativistic subclass overrides to use the
-        complex sparse machinery instead of the real C++ `SelectedCIHelper`.
         """
         Hdiag = self._compute_hdiag()
 
@@ -890,6 +885,11 @@ class _SelectedCISingleStateSolver:
         self.ints.E = scalar
         self.ints.H = oei
         self.ints.V = tei
+        # SlaterRules is not reinitialized when rerun.
+        # It must be rebuilt here if needed,
+        # otherwise the previous integrals would be used.
+        if self.slater_rules is not None:
+            self.slater_rules = self._make_slater_rules()
 
     def set_maxiter(self, maxiter):
         """
@@ -947,316 +947,9 @@ class _SelectedCISingleStateSolver:
 
 
 @dataclass
-class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
-    """
-    Two-component (relativistic) selected CI solver for a single `State`.
-
-    This is the spinor-basis counterpart of `_SelectedCISingleStateSolver`. The CI
-    coefficients, integrals, Slater rules, and RDMs are complex, spin is not a good
-    quantum number (no S^2 projection, spin penalty, or spin-complement pairing), and all
-    active electrons occupy the "alpha" string with the beta string empty (the same
-    spinor-occupation convention as the full two-component CI).
-
-    Selection and the sigma-vector build are delegated to the complex C++
-    `RelSelectedCIHelper`, the spinor-basis counterpart of `SelectedCIHelper`. It runs the
-    same Heat-Bath CI (HBCI) selection and Hamiltonian application on complex Hermitian
-    integrals, so this worker inherits the base `run` loop unchanged and only overrides the
-    helper / Slater-rule factories, the RDMs, and the (spin-free) guess construction.
-
-    Reduced density matrices are computed on the Python side from the complex CI vectors via
-    the tested SparseState helpers (`compute_a_1rdm_complex` / `compute_aa_2rdm_complex`),
-    since the C++ helper does not build RDMs.
-    """
-
-    def __post_init__(self):
-        super().__post_init__()
-        self.dtype = complex
-        # Spin is not a good quantum number in the two-component (spinor) basis, so the
-        # S^2-based guess projection / penalty machinery does not apply.
-        self.sci_params.do_spin_penalty = False
-
-    def _make_slater_rules(self):
-        # Complex Slater rules over spinor determinants. The scalar energy is real; the
-        # one- and two-electron integrals are complex Hermitian. Integrals are stored in
-        # physicist notation <pq|rs> (not antisymmetrized), matching SpinorbitalIntegrals.
-        return det.RelSlaterRules(
-            self.norb, self.ints.E.real, self.ints.H, self.ints.V
-        )
-
-    def _make_sci_helper(self):
-        # Two-component (complex) selected CI helper. The scalar energy is real; the one- and
-        # two-electron integrals are complex Hermitian in physicist notation <pq|rs>.
-        return ci_helpers.RelSelectedCIHelper(
-            self.norb,
-            self.guess_determinants,
-            self.guess_c,
-            self.ints.E.real,
-            self.ints.H,
-            self.ints.V,
-            self.log_level,
-            self.sci_params.screening_criterion,
-            self.sci_params.frozen_creation,
-            self.sci_params.frozen_annihilation,
-        )
-
-    def _compute_spin2(self):
-        # Spin is not a good quantum number in the two-component (spinor) basis, and the
-        # complex helper does not expose compute_spin2.
-        return np.zeros(self.nroot)
-
-    def _initial_guess(self):
-        """
-        Build the initial guess for the two-component (spinor) selected CI.
-
-        Spin is not a good quantum number, so there is no S^2 projection, no spin penalty,
-        and no spin-complement pairing. All active electrons occupy the "alpha" string with
-        the beta string empty. Guess coefficients come from diagonalizing the complex
-        Hermitian Hamiltonian in the guess space.
-        """
-        window_occ = self.sci_params.guess_occ_window
-        window_vir = self.sci_params.guess_vir_window
-        if (
-            len(self.sci_params.guess_dets) + len(self.sci_params.pinned_guess_dets)
-            == 0
-        ):
-            self.sci_params.guess_dets = self._generate_initial_guess_dets(
-                window_occ, window_vir
-            )
-        else:
-            self._check_guess_dets(self.sci_params.guess_dets)
-            self._check_guess_dets(self.sci_params.pinned_guess_dets)
-
-        # refine the guess determinants by determinantal energy if there are more than needed
-        if len(self.sci_params.guess_dets) > 0:
-            guess_hdiag = self.slater_rules.energies(self.sci_params.guess_dets)
-            nguess_dets = len(self.sci_params.guess_dets)
-            num_guess_states = min(
-                self.davidson_liu_params.guess_per_root * self.nroot, nguess_dets
-            )
-            nguess_dets = min(
-                self.davidson_liu_params.ndets_per_guess * num_guess_states,
-                nguess_dets,
-            )
-
-        if self.sci_params.energy_shift is not None:
-            indices = np.argsort(np.abs(guess_hdiag - self.sci_params.energy_shift))[
-                :nguess_dets
-            ]
-        else:
-            indices = np.argsort(guess_hdiag)[:nguess_dets]
-
-        self.sci_params.guess_dets = [self.sci_params.guess_dets[i] for i in indices]
-        self.sci_params.guess_dets += self.sci_params.pinned_guess_dets
-        # deduplicate while preserving order (pinned dets may repeat generated ones)
-        self.sci_params.guess_dets = list(
-            OrderedDict.fromkeys(self.sci_params.guess_dets)
-        )
-        logger.log(
-            f"Number of guess determinants: {len(self.sci_params.guess_dets)}",
-            self.log_level,
-        )
-
-        ndet = len(self.sci_params.guess_dets)
-        Hguess = np.zeros((ndet, ndet), dtype=self.dtype)
-        for i in range(ndet):
-            for j in range(i + 1):
-                Hguess[i, j] = self.slater_rules.slater_rules(
-                    self.sci_params.guess_dets[i], self.sci_params.guess_dets[j]
-                )
-                Hguess[j, i] = np.conj(Hguess[i, j])
-
-        evals, evecs = np.linalg.eigh(Hguess)
-        if self.sci_params.energy_shift is not None:
-            argsort = np.argsort(np.abs(evals - self.sci_params.energy_shift))
-            evals = evals[argsort]
-            evecs = evecs[:, argsort]
-
-        c = evecs[:, : self.nroot].copy()
-        energies = evals[: self.nroot].copy()
-        logger.log(f"Initial guess energies: {energies}", self.log_level)
-        # no states to project out (no spin penalty in the two-component case)
-        return self.sci_params.guess_dets, c, energies, []
-
-    def _generate_initial_guess_dets(self, window_occ, window_vir):
-        """Generate spinor-occupation guess determinants for two-component selected CI."""
-        logger.log(
-            "Generating initial determinant guess (two-component)", self.log_level
-        )
-
-        nel_active = self.state.nel - self.ncore
-
-        if window_occ < 0:
-            raise ValueError(
-                f"guess_occ_window must be non-negative, got {window_occ}."
-            )
-        if window_vir < 0:
-            raise ValueError(
-                f"guess_vir_window must be non-negative, got {window_vir}."
-            )
-
-        if window_occ + window_vir == 0:
-            logger.log_warning(
-                "No guess determinants provided and guess occupation windows set to 0. "
-                "Using the aufbau determinant as the only guess."
-            )
-            d0 = Determinant.zero()
-            for i in range(nel_active):
-                d0.set_na(i, True)
-            return [d0]
-
-        # spinors are singly occupied, so the occupation window is measured in spinors
-        nocc = nel_active - window_occ
-        if nocc < 0:
-            raise ValueError(
-                f"guess_occ_window={window_occ} is larger than the number of active "
-                f"occupied spinors ({nel_active}). Reduce guess_occ_window "
-                "to generate valid guess determinants."
-            )
-        nactv = window_occ + window_vir
-
-        if nocc + nactv > self.norb:
-            raise ValueError(
-                "Not enough orbitals to generate guess determinants with the specified "
-                "occupation windows.\n"
-                f"Number of spinors needed: {nocc + nactv}, number of active spinors "
-                f"available: {self.norb}.\n"
-                "Reduce guess_occ_window and/or guess_vir_window to generate valid guess "
-                "determinants."
-            )
-
-        # all electrons in the alpha string (nb=0); GAS constraints come from the State
-        if nocc == 0:
-            ci_strings = CIStrings(nel_active, 0, 0, [[0] * nactv], [], [])
-        else:
-            ci_strings = CIStrings(
-                nel_active, 0, 0, [[0] * nocc, [0] * nactv], [nocc], [nocc]
-            )
-        return ci_strings.make_determinants()
-
-    def _check_guess_dets(self, guess_dets):
-        for d in guess_dets:
-            na = d.count_alpha()
-            nb = d.count_beta()
-            if nb != 0:
-                raise ValueError(
-                    f"Two-component guess determinant {d.str(self.norb)} must place all "
-                    f"electrons in the alpha (spinor) string, but has {nb} beta electrons."
-                )
-            if na + self.ncore != self.state.nel:
-                raise ValueError(
-                    f"Guess determinant {d.str(self.norb)} has {na} electrons, expected "
-                    f"{self.state.nel - self.ncore}."
-                )
-
-    def _test_rdms(self):
-        # Compute the RDMs from the CI vectors and verify the energy from the RDMs matches
-        # the CI energy.
-        logger.log("\nComputing RDMs from CI vectors.\n", self.log_level)
-        for root in range(self.nroot):
-            rdm1 = self.make_1rdm(root)
-            rdm2 = self.make_2rdm(root)
-
-            rdms_energy = self.ints.E
-            rdms_energy += np.einsum("ij,ij", rdm1, self.ints.H)
-            rdms_energy += 0.5 * np.einsum("ijkl,ijkl", rdm2, self.ints.V)
-            # the energy is real; the imaginary part should be numerical noise
-            rdms_energy = rdms_energy.real
-            logger.log(f"CI energy from RDMs: {rdms_energy:.12f} Eh", self.log_level)
-
-            assert self.e_var[root] == approx(rdms_energy)
-
-            logger.log(
-                f"RDMs for root {root} validated successfully.\n", self.log_level
-            )
-
-    def make_so_1rdm(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-orbital (spinor) one-particle RDM for two CI roots.
-
-        Returns the complex 1-RDM gamma[p][q] = <L| a^+_p a_q |R> over active spinors.
-        With left_root != right_root this is the transition 1-RDM. Computed by the C++
-        ``RelSelectedCIHelper`` (which conjugates the bra); see ``_make_so_1rdm_ref`` for the
-        SparseState reference implementation.
-        """
-        if right_root is None:
-            right_root = left_root
-        return self.sci_helper.a_1rdm(left_root, right_root)
-
-    def make_so_2rdm(self, left_root: int, right_root: int | None = None):
-        """
-        Make the spin-orbital (spinor) two-particle RDM for two CI roots.
-
-        Returns the complex 2-RDM gamma[p][q][r][s] = <L| a^+_p a^+_q a_s a_r |R> over
-        active spinors (full antisymmetric tensor), matching RelCISigmaBuilder.compute_2rdm.
-        With left_root != right_root this is the transition 2-RDM. Computed by the C++
-        ``RelSelectedCIHelper``; see ``_make_so_2rdm_ref`` for the SparseState reference.
-        """
-        if right_root is None:
-            right_root = left_root
-        return self.sci_helper.aa_2rdm(left_root, right_root)
-
-    # Reference SparseState-based implementations kept for validation. These build a dense
-    # SparseState per root and contract via the tested complex sparse RDM helpers. The
-    # production make_so_{1,2}rdm above call the equivalent C++ RelSelectedCIHelper methods.
-    def _make_so_1rdm_ref(self, left_root: int, right_root: int | None = None):
-        """Reference spin-orbital 1-RDM via the complex SparseState helper."""
-        if right_root is None:
-            right_root = left_root
-        left = SparseState({d: c for d, c in zip(self.dets, self.evecs[:, left_root])})
-        right = SparseState(
-            {d: c for d, c in zip(self.dets, self.evecs[:, right_root])}
-        )
-        return rdms.compute_a_1rdm_complex(left, right, self.norb)
-
-    def _make_so_2rdm_ref(self, left_root: int, right_root: int | None = None):
-        """Reference spin-orbital 2-RDM via the complex SparseState helper."""
-        if right_root is None:
-            right_root = left_root
-        left = SparseState({d: c for d, c in zip(self.dets, self.evecs[:, left_root])})
-        right = SparseState(
-            {d: c for d, c in zip(self.dets, self.evecs[:, right_root])}
-        )
-        return rdms.compute_aa_2rdm_complex(left, right, self.norb)
-
-    # The state-averaged RDM machinery in CIBase calls make_{1,2}rdm on the sub-solvers.
-    # Two-component sCI returns spin-orbital (spinor) RDMs, matching the RelCI convention.
-    def make_1rdm(self, left_root: int, right_root: int | None = None):
-        return self.make_so_1rdm(left_root, right_root)
-
-    def make_2rdm(self, left_root: int, right_root: int | None = None):
-        return self.make_so_2rdm(left_root, right_root)
-
-    # The spin-dependent / spin-free RDMs of the base worker rely on the real C++ helper and
-    # have no meaning in the spinor basis.
-    def make_sd_1rdm(self, *args, **kwargs):
-        raise NotImplementedError(
-            "Spin-dependent RDMs are not defined for two-component selected CI; "
-            "use make_so_1rdm."
-        )
-
-    def make_sd_2rdm(self, *args, **kwargs):
-        raise NotImplementedError(
-            "Spin-dependent RDMs are not defined for two-component selected CI; "
-            "use make_so_2rdm."
-        )
-
-    def make_sf_1rdm(self, *args, **kwargs):
-        raise NotImplementedError(
-            "Spin-free RDMs are not defined for two-component selected CI; "
-            "use make_so_1rdm."
-        )
-
-    def make_sf_2rdm(self, *args, **kwargs):
-        raise NotImplementedError(
-            "Spin-free RDMs are not defined for two-component selected CI; "
-            "use make_so_2rdm."
-        )
-
-
-@dataclass
 class SelectedCISolver(CIBase):
     """
-    A general configuration interaction (CI) solver class.
+    A selected configuration interaction (sCI) solver class.
     This solver is can be called iteratively, e.g., in a MCSCF loop or a DSRG reference relaxation loop.
 
     Parameters
@@ -1305,99 +998,69 @@ class SelectedCISolver(CIBase):
     do_test_rdms: bool = False
     log_level: int = field(default=logger.get_verbosity_level() + 1)
 
-    def _startup(self):
-        super()._startup()
+    # Active-space integral class
+    _integrals_cls: ClassVar[type] = RestrictedMOIntegrals
+    # Per-state worker class
+    _ss_solver_cls: ClassVar[type] = _SelectedCISingleStateSolver
+
+    def _validate_params(self):
+        """Broadcast/validate sci_params and davidson_liu_params to one per state."""
         if self.sa_info.ncis > 1:
             if not isinstance(self.sci_params, list):
                 logger.log_warning(
-                    f"Multiple states specified but only one set of SelectedCIParams provided. Using the same parameters for all states."
+                    "Multiple states specified but only one set of SelectedCIParams "
+                    "provided. Using the same parameters for all states."
                 )
-                self.sci_params = [self.sci_params] * self.sa_info.ncis
+                self.sci_params = [
+                    self.sci_params.copy() for _ in range(self.sa_info.ncis)
+                ]
             if len(self.sci_params) != self.sa_info.ncis:
                 raise ValueError(
-                    f"Number of SelectedCIParams provided ({len(self.sci_params)}) does not match the number of states ({self.sa_info.ncis})."
+                    f"Number of SelectedCIParams provided ({len(self.sci_params)}) does "
+                    f"not match the number of states ({self.sa_info.ncis})."
                 )
             if not isinstance(self.davidson_liu_params, list):
                 logger.log_warning(
-                    f"Multiple states specified but only one set of DavidsonLiuParams provided. Using the same parameters for all states."
+                    "Multiple states specified but only one set of DavidsonLiuParams "
+                    "provided. Using the same parameters for all states."
                 )
                 self.davidson_liu_params = [
-                    self.davidson_liu_params
-                ] * self.sa_info.ncis
+                    self.davidson_liu_params.copy() for _ in range(self.sa_info.ncis)
+                ]
             if len(self.davidson_liu_params) != self.sa_info.ncis:
                 raise ValueError(
-                    f"Number of DavidsonLiuParams provided ({len(self.davidson_liu_params)}) does not match the number of states ({self.sa_info.ncis})."
+                    f"Number of DavidsonLiuParams provided "
+                    f"({len(self.davidson_liu_params)}) does not match the number of "
+                    f"states ({self.sa_info.ncis})."
                 )
         else:
-            self.sci_params = [self.sci_params]
-            self.davidson_liu_params = [self.davidson_liu_params]
-        self.norb = self.mo_space.nactv
-        # no distinction between core and frozen core in the CI solver
-        self.core_indices = (
-            self.mo_space.frozen_core_indices + self.mo_space.core_indices
-        )
-        self.active_indices = self.mo_space.active_indices
+            self.sci_params = [self.sci_params.copy()]
+            self.davidson_liu_params = [self.davidson_liu_params.copy()]
 
-        ints = RestrictedMOIntegrals(
-            self.system,
-            self.mos.C[0],
-            self.active_indices,
-            self.core_indices,
-        )
+    def _startup(self):
+        self._validate_params()
+        super()._startup()
 
-        self.sub_solvers = []
-        active_orbsym = [
-            [self.mos.irrep_indices[0][i] for i in active_space]
-            for active_space in self.mo_space.active_orbitals
-        ]
-        for i, state in enumerate(self.sa_info.states):
-            # Create a CI solver for each state and MOSpace
+    def _extra_worker_kwargs(self, index, state):
+        return {
+            "sci_params": self.sci_params[index],
+            "davidson_liu_params": self.davidson_liu_params[index],
+        }
 
-            kwargs = self._collect_child_kwargs(_SelectedCISingleStateSolver)
-            # these are needed by _SelectedCISingleStateSolver but not present as attributes of SelectedCISolver
-            kwargs.update(
-                {
-                    "sci_params": self.sci_params[i],
-                    "davidson_liu_params": self.davidson_liu_params[i],
-                    "ints": ints,
-                    "state": state,
-                    "nroot": self.sa_info.nroots[i],
-                    "active_orbsym": active_orbsym,
-                }
-            )
-            self.sub_solvers.append(_SelectedCISingleStateSolver(**kwargs))
+    def _collect_root_results(self):
+        """Gather the selected-CI-specific PT2 bookkeeping after the state loop."""
+        self.evar_per_solver = self.evals_per_solver
+        self.ept2_var_per_solver = [s.ept2_var for s in self.sub_solvers]
+        self.ept2_pt_per_solver = [s.ept2_pt for s in self.sub_solvers]
+        self.etot_per_solver = [s.e_tot for s in self.sub_solvers]
 
-    def run(self):
-        # override the run method in the base class
-        if self.first_run:
-            self._startup()
-            self.first_run = False
-
-        self.evar_per_solver = []
-        self.ept2_var_per_solver = []
-        self.ept2_pt_per_solver = []
-        self.etot_per_solver = []
-        for ci_solver in self.sub_solvers:
-            ci_solver.run()
-            self.evar_per_solver.append(ci_solver.evals)
-            self.ept2_var_per_solver.append(ci_solver.ept2_var)
-            self.ept2_pt_per_solver.append(ci_solver.ept2_pt)
-            self.etot_per_solver.append(ci_solver.e_tot)
-        self.evals_per_solver = self.evar_per_solver
-
-        self.evar_flat = np.concatenate(self.evar_per_solver)
-        self.evals_flat = self.evar_flat
+        self.evar_flat = self.evals_flat
         self.ept2_var_flat = np.concatenate(self.ept2_var_per_solver)
         self.ept2_pt_flat = np.concatenate(self.ept2_pt_per_solver)
         self.etot_flat = np.concatenate(self.etot_per_solver)
-        self.E_avg = self.compute_average_energy()
 
-        self.E = self.evar_flat
         self.E_pt2 = self.ept2_var_flat + self.ept2_pt_flat
         self.E_tot = self.etot_flat
-
-        self.executed = True
-        return self
 
     def make_sd_1rdm(self, left_root: int, right_root: int | None = None):
         """
@@ -1466,115 +1129,6 @@ class SelectedCISolver(CIBase):
         """
         return self.make_sf_2rdm(left_root, right_root)
 
-    def set_ints(self, scalar, oei, tei):
-        """
-        Set the active-space integrals for the CI solver.
-
-        Parameters
-        ----------
-        scalar : float
-            The scalar energy term.
-        oei : NDArray
-            One-electron active-space integrals in the MO basis.
-        tei : NDArray
-            Two-electron active-space integrals in the MO basis.
-        """
-        for ci_solver in self.sub_solvers:
-            ci_solver.set_ints(scalar, oei, tei)
-
-    def compute_natural_occupation_numbers(self):
-        """
-        Compute the natural occupation numbers for the CI states and store them
-        in ``self.nat_occs`` (this method returns None).
-
-        The first ``nroots_sum`` columns of ``self.nat_occs`` hold the natural
-        occupation numbers for each root. If more than one root is present
-        (``nroots_sum > 1``), a final column holds the natural occupation
-        numbers from the state-averaged 1-RDM.
-        """
-        nos = []
-        for ci_solver in self.sub_solvers:
-            nos.append(ci_solver.compute_natural_occupation_numbers())
-        self.nat_occs = np.concatenate(nos, axis=1)
-
-    def get_top_determinants(self, n=5):
-        """
-        Get the top `n` determinants for each root based on their coefficients in the CI vector.
-
-        Parameters
-        ----------
-        n : int, optional, default=5
-            The number of top determinants to return.
-
-        Returns
-        -------
-        top_dets : list[list[tuple[Determinant, float]]]]
-            top_dets[i] contains a list of tuples (Determinant, coefficient) for the `i`-th root.
-        """
-        top_dets = []
-        for ci_solver in self.sub_solvers:
-            top_dets += ci_solver.get_top_determinants(n)
-        return top_dets
-
-    def compute_transition_properties(self, C=None):
-        """
-        Compute the transition dipole moments and oscillator strengths from the spin-free 1-TDMs.
-        The results are stored in `self.transition_dipoles` and `self.oscillator_strengths`.
-        """
-        if not self.executed:
-            raise RuntimeError("CI solver has not been executed yet.")
-
-        if C is None:
-            C = self.mos.C[0]
-
-        Cact = C[:, self.active_indices]
-        Ccore = C[:, self.core_indices]
-        # factor of 2 for spin-summed 1-RDM
-        rdm_core = 2 * np.einsum("pi,qi->pq", Ccore, Ccore.conj(), optimize=True)
-        # this includes nuclear dipole contribution
-        core_dip = get_1e_property(
-            self.system, rdm_core, property_name="dipole", unit="au"
-        )
-        self.transition_dipoles = OrderedDict()
-        self.oscillator_strengths = OrderedDict()
-
-        for ici in range(self.sa_info.nroots_sum):
-            istate, iroot_in_state = self._get_state_root(ici)
-            rdm = self.sub_solvers[istate].make_sf_1rdm(iroot_in_state)
-            rdm = np.einsum("ij,pi,qj->pq", rdm, Cact.conj(), Cact, optimize=True)
-            dip = get_1e_property(
-                self.system, rdm, property_name="electric_dipole", unit="au"
-            )
-            self.transition_dipoles[(ici, ici)] = dip + core_dip
-            self.oscillator_strengths[(ici, ici)] = 0.0
-            for jci in range(ici + 1, self.sa_info.nroots_sum):
-                jstate, jroot_in_state = self._get_state_root(jci)
-                try:
-                    vte = (
-                        self.evar_per_solver[jstate][jroot_in_state]
-                        - self.evar_per_solver[istate][iroot_in_state]
-                    )
-                    if vte < 0:
-                        _ici, _jci = jci, ici
-                        vte = -vte
-                    else:
-                        _ici, _jci = ici, jci
-                    tdm = self.make_1rdm(_ici, _jci)
-                    tdm = np.einsum(
-                        "ij,pi,qj->pq", tdm, Cact.conj(), Cact, optimize=True
-                    )
-                    tdip = get_1e_property(
-                        self.system, tdm, property_name="electric_dipole", unit="au"
-                    )
-                    self.transition_dipoles[(_ici, _jci)] = tdip
-                    self.oscillator_strengths[(_ici, _jci)] = (
-                        (2 / 3) * vte * np.linalg.norm(tdip) ** 2
-                    )
-                except (ValueError, NotImplementedError):
-                    continue
-
-        return self.transition_dipoles, self.oscillator_strengths
-
     def reset_eigensolver(self):
         # sCI eigensolver gets reset every iteration anyway
         pass
@@ -1591,33 +1145,18 @@ class SelectedCI(SelectedCISolver):
     """
 
     die_if_not_converged: bool = True
-    final_orbitals: str = "original"
+    final_orbitals: FinalOrbitals = "original"
     do_transition_dipole: bool = False
     log_level: int = field(default=logger.get_verbosity_level())
 
+    def __post_init__(self):
+        super().__post_init__()
+        validate_final_orbitals(self.final_orbitals)
+
     def run(self):
-        super().run()
+        self._solve()
+        self._rotate_final_orbitals()
         self._post_process()
-        if self.final_orbitals == "semicanonical":
-            semi = Semicanonicalizer(
-                system=self.system,
-                mo_space=self.mo_space,
-            )
-            semi.semi_canonicalize(
-                g1=self.make_average_1rdm(), C_contig=self.mos.C[0]
-            )
-            self.mos.C[0] = semi.C_semican.copy()
-
-            # recompute the CI vectors in the semicanonical basis
-            ints = RestrictedMOIntegrals(
-                self.system,
-                self.mos.C[0],
-                self.active_indices,
-                self.core_indices,
-            )
-            self.set_ints(ints.E, ints.H, ints.V)
-            super().run()
-
         return self
 
     def _post_process(self):
@@ -1631,252 +1170,12 @@ class SelectedCI(SelectedCISolver):
             self.etot_per_solver,
             header="\nSelected CI energy (variational + PT2)",
         )
-        top_dets = self.get_top_determinants()
-        pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)
-
-        if self.do_transition_dipole:
-            self.compute_transition_properties()
-            pretty_print_ci_transition_props(
-                self.sa_info,
-                self.transition_dipoles,
-                self.oscillator_strengths,
-                self.evar_per_solver,
-            )
-
-
-@dataclass
-class RelSelectedCISolver(RelCIBase):
-    """
-    A two-component (relativistic) selected configuration interaction (2C selected CI) solver.
-
-    This mirrors `SelectedCISolver` but operates in the molecular spinor basis produced by a
-    two-component method (e.g. GHF, optionally with spin-orbit X2C, or a non-relativistic SCF
-    promoted with `SpinorUpcaster`). The CI coefficients, integrals, and RDMs are complex, and
-    spin is not a good quantum number, so there is no spin adaptation or spin penalty.
-
-    Like `RelCISolver`, it can be used as the inner CI solver of a relativistic MCSCF/CASSCF
-    calculation (`MCOptimizer`) or a relativistic DSRG reference.
-
-    Parameters
-    ----------
-    sci_params : SelectedCIParams or list[SelectedCIParams], optional
-        Parameters specific to the selected CI algorithm. One entry per state, or a single
-        set shared by all states.
-    davidson_liu_params : DavidsonLiuParams or list[DavidsonLiuParams], optional
-        Parameters for the Davidson-Liu iterative eigensolver.
-    do_test_rdms : bool, optional, default=False
-        If True, compute and validate the RDMs against the CI energy after the calculation.
-    log_level : int, optional
-        The logging level for the CI solver.
-    """
-
-    orbital_rotation_invariant: ClassVar[bool] = True
-
-    sci_params: SelectedCIParams | list[SelectedCIParams] = field(
-        default_factory=SelectedCIParams
-    )
-    davidson_liu_params: DavidsonLiuParams | list[DavidsonLiuParams] = field(
-        default_factory=DavidsonLiuParams
-    )
-    do_test_rdms: bool = False
-    log_level: int = field(default=logger.get_verbosity_level() + 1)
-
-    # State-averaging orchestration and root bookkeeping are inherited from RelCIBase/CIBase.
-    # These dtype-agnostic methods are borrowed from SelectedCISolver unchanged.
-    set_ints = SelectedCISolver.set_ints
-    reset_eigensolver = SelectedCISolver.reset_eigensolver
-    get_convergence_status = SelectedCISolver.get_convergence_status
-    get_top_determinants = SelectedCISolver.get_top_determinants
-    # aggregates the sub-solvers' (2C-aware) natural occupation numbers
-    compute_natural_occupation_numbers = (
-        SelectedCISolver.compute_natural_occupation_numbers
-    )
-
-    def _startup(self):
-        super()._startup()
-        if self.sa_info.ncis > 1:
-            if not isinstance(self.sci_params, list):
-                logger.log_warning(
-                    "Multiple states specified but only one set of SelectedCIParams "
-                    "provided. Using the same parameters for all states."
-                )
-                self.sci_params = [self.sci_params] * self.sa_info.ncis
-            if len(self.sci_params) != self.sa_info.ncis:
-                raise ValueError(
-                    f"Number of SelectedCIParams provided ({len(self.sci_params)}) does "
-                    f"not match the number of states ({self.sa_info.ncis})."
-                )
-            if not isinstance(self.davidson_liu_params, list):
-                logger.log_warning(
-                    "Multiple states specified but only one set of DavidsonLiuParams "
-                    "provided. Using the same parameters for all states."
-                )
-                self.davidson_liu_params = [
-                    self.davidson_liu_params
-                ] * self.sa_info.ncis
-            if len(self.davidson_liu_params) != self.sa_info.ncis:
-                raise ValueError(
-                    f"Number of DavidsonLiuParams provided "
-                    f"({len(self.davidson_liu_params)}) does not match the number of "
-                    f"states ({self.sa_info.ncis})."
-                )
-        else:
-            self.sci_params = [self.sci_params]
-            self.davidson_liu_params = [self.davidson_liu_params]
-
-        self.norb = self.mo_space.nactv
-        # no distinction between core and frozen core in the CI solver
-        self.core_indices = (
-            self.mo_space.frozen_core_indices + self.mo_space.core_indices
-        )
-        self.active_indices = self.mo_space.active_indices
-
-        ints = SpinorbitalIntegrals(
-            self.system,
-            self.mos.C[0],
-            self.active_indices,
-            self.core_indices,
-        )
-
-        self.sub_solvers = []
-        active_orbsym = [
-            [self.mos.irrep_indices[0][i] for i in active_space]
-            for active_space in self.mo_space.active_orbitals
-        ]
-        for i, state in enumerate(self.sa_info.states):
-            kwargs = self._collect_child_kwargs(_RelSelectedCISingleStateSolver)
-            kwargs.update(
-                {
-                    "sci_params": self.sci_params[i],
-                    "davidson_liu_params": self.davidson_liu_params[i],
-                    "ints": ints,
-                    "state": state,
-                    "nroot": self.sa_info.nroots[i],
-                    "active_orbsym": active_orbsym,
-                }
-            )
-            self.sub_solvers.append(_RelSelectedCISingleStateSolver(**kwargs))
-
-    def run(self):
-        if self.first_run:
-            self._startup()
-            self.first_run = False
-
-        self.evar_per_solver = []
-        self.ept2_var_per_solver = []
-        self.ept2_pt_per_solver = []
-        self.etot_per_solver = []
-        for ci_solver in self.sub_solvers:
-            ci_solver.run()
-            self.evar_per_solver.append(ci_solver.evals)
-            self.ept2_var_per_solver.append(ci_solver.ept2_var)
-            self.ept2_pt_per_solver.append(ci_solver.ept2_pt)
-            self.etot_per_solver.append(ci_solver.e_tot)
-        self.evals_per_solver = self.evar_per_solver
-
-        self.evar_flat = np.concatenate(self.evar_per_solver)
-        self.evals_flat = self.evar_flat
-        self.ept2_var_flat = np.concatenate(self.ept2_var_per_solver)
-        self.ept2_pt_flat = np.concatenate(self.ept2_pt_per_solver)
-        self.etot_flat = np.concatenate(self.etot_per_solver)
-        self.E_avg = self.compute_average_energy()
-
-        self.E = self.evar_flat
-        self.E_pt2 = self.ept2_var_flat + self.ept2_pt_flat
-        self.E_tot = self.etot_flat
-
-        self.executed = True
-        return self
-
-    def make_1rdm(self, left_root: int, right_root: int | None = None):
-        """Complex spin-orbital 1-RDM for two absolute CI roots (same state only)."""
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-        if left_state == right_state:
-            return self.sub_solvers[left_state].make_so_1rdm(
-                left_root_in_state, right_root_in_state
-            )
-        raise NotImplementedError(
-            f"Cross-state 1-RDMs are not supported for RelSelectedCI. Got left_root in "
-            f"state {left_state} and right_root in state {right_state}."
-        )
-
-    def make_2rdm(self, left_root: int, right_root: int | None = None):
-        """Complex spin-orbital 2-RDM for two absolute CI roots (same state only)."""
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-        if left_state == right_state:
-            return self.sub_solvers[left_state].make_so_2rdm(
-                left_root_in_state, right_root_in_state
-            )
-        raise NotImplementedError(
-            f"Cross-state 2-RDMs are not supported for RelSelectedCI. Got left_root in "
-            f"state {left_state} and right_root in state {right_state}."
-        )
-
-
-@dataclass
-class RelSelectedCI(RelSelectedCISolver):
-    """
-    Two-component selected CI specialized for a single calculation (i.e., not used in a loop).
-    See `RelSelectedCISolver` for all parameters and attributes.
-    """
-
-    die_if_not_converged: bool = True
-    final_orbitals: str = "original"
-    do_transition_dipole: bool = False
-    log_level: int = field(default=logger.get_verbosity_level())
-
-    def __post_init__(self):
-        super().__post_init__()
-        if self.final_orbitals not in ["original", "semicanonical"]:
-            raise ValueError(
-                f"Invalid value for final_orbitals: {self.final_orbitals}. "
-                "Must be 'original' or 'semicanonical'."
-            )
-
-    def run(self):
-        super().run()
-        self._post_process()
-        if self.final_orbitals == "semicanonical":
-            semi = Semicanonicalizer(
-                mo_space=self.mo_space,
-                system=self.system,
-                irrep_indices=np.array(self.mos.irrep_indices[0])[
-                    self.mo_space.orig_to_contig
-                ],
-            )
-            C_contig = self.mos.C[0][:, self.mo_space.orig_to_contig].copy()
-            semi.semi_canonicalize(g1=self.make_average_1rdm(), C_contig=C_contig)
-            self.mos.C[0] = semi.C_semican[
-                :, self.mo_space.contig_to_orig
-            ].copy()
-
-            # recompute the CI vectors in the semicanonical basis
-            ints = SpinorbitalIntegrals(
-                self.system,
-                self.mos.C[0],
-                self.active_indices,
-                self.core_indices,
-            )
-            self.set_ints(ints.E, ints.H, ints.V)
-            self.first_run = True
-            super().run()
-
-        return self
-
-    def _post_process(self):
-        pretty_print_ci_summary(
+        self.compute_natural_occupation_numbers()
+        pretty_print_ci_nat_occ_numbers(
             self.sa_info,
-            self.evar_per_solver,
-            header="\nRelativistic selected CI energy (variational)",
-        )
-        pretty_print_ci_summary(
-            self.sa_info,
-            self.etot_per_solver,
-            header="\nRelativistic selected CI energy (variational + PT2)",
+            self.mo_space,
+            self.nat_occs,
+            getattr(self, "nat_occs_avg", None),
         )
         top_dets = self.get_top_determinants()
         pretty_print_ci_dets(self.sa_info, self.mo_space, top_dets)

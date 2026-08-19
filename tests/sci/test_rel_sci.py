@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import System, GHF, SpinorUpcaster, MCOptimizer, X2CParams
+from forte2 import System, GHF, SpinorUpcaster, MCOptimizer, MOSpace, X2CParams
 from forte2.ci import RelCI
 from forte2.sci import RelSelectedCI, RelSelectedCISolver
 from forte2.helpers.comparisons import approx
@@ -179,15 +179,60 @@ def test_rel_sci_hf_ghf_transition_rdms():
         assert np.allclose(g2, g2_swapped, atol=1e-10)
 
 
+def test_rel_sci_natural_noncontiguous_mo_space():
+    """
+    RelSelectedCI final_orbitals='natural' reproduces the energy and
+    natural occupation number spectrum after a non-trivial
+    contig/orig permutation
+    """
+    xyz = """
+    Li 0.0 0.0 0.0
+    H  0.0 0.0 3.0
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+    )
+    scf = GHF(charge=0, e_tol=1e-12)(system)
+    mo_space = MOSpace(
+        nmo=system.nmo * 2,
+        core_orbitals=[0, 1],
+        active_orbitals=[2, 3, 4, 5],
+        frozen_virtual_orbitals=[6, 7],
+    )
+    sci_params = SelectedCIParams(
+        selection_algorithm="hbci",
+        var_threshold=1e-12,
+        pt2_threshold=0.0,
+    )
+
+    sci_original = RelSelectedCI(nel=4, mo_space=mo_space, sci_params=sci_params)(scf)
+    sci_original.run()
+    sci_natural = RelSelectedCI(
+        nel=4,
+        mo_space=mo_space,
+        sci_params=sci_params,
+        final_orbitals="natural",
+    )(scf)
+    sci_natural.run()
+
+    assert sci_natural.E[0] == approx(sci_original.E[0])
+    np.testing.assert_allclose(
+        sci_natural.mos.C[0].conj().T @ system.ints_overlap() @ sci_natural.mos.C[0],
+        np.eye(mo_space.nmo),
+        atol=1e-10,
+    )
+
+    original_occs = np.sort(np.linalg.eigvalsh(sci_original.make_average_1rdm()))[::-1]
+    natural_occs = np.sort(np.linalg.eigvalsh(sci_natural.make_average_1rdm()))[::-1]
+    assert natural_occs == approx(original_occs)
+
+
 @pytest.mark.slow
 def test_rel_sci_casscf_hf_ghf():
-    """RelSelectedCISolver drops into relativistic CASSCF (test_rel_casscf_hf_ghf).
-
-    MCOptimizer already selects the relativistic orbital optimizer for a
-    two-component system and calls make_average_1rdm/2rdm on the CI solver, so a
-    RelSelectedCISolver at tight thresholds must reproduce the RelCISolver CASSCF
-    energy.
-    """
+    """RelSelectedCISolver drops into relativistic CASSCF"""
     xyz = """
     H 0.0 0.0 0.0
     F 0.0 0.0 2.0
@@ -216,3 +261,58 @@ def test_rel_sci_casscf_hf_ghf():
     mc.run()
 
     assert mc.E == approx(-100.1361832608)
+
+
+def test_rel_sci_transition_dipole():
+    conv = _h2_ghf_upcast()
+
+    sci = RelSelectedCI(
+        nel=2,
+        active_orbitals=4,
+        nroots=2,
+        do_transition_dipole=True,
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-12,
+            pt2_threshold=0.0,
+        ),
+    )(conv)
+    sci.run()
+
+    # no bright transitions, just an existence check
+    assert sci.transition_dipoles[(0, 0)].shape == (3,)
+    assert sci.oscillator_strengths[(0, 0)] == 0.0
+    assert sci.vertical_transition_energies[(0, 0)] == 0.0
+    assert sci.vertical_transition_energies[(0, 1)] == approx(sci.E[1] - sci.E[0])
+
+
+@pytest.mark.parametrize("final_orbitals", ["original", "semicanonical", "natural"])
+def test_rel_sci_final_orbitals(final_orbitals):
+    xyz = """
+    H 0.0 0.0 0.0
+    F 0.0 0.0 2.0
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="bohr",
+        x2c=X2CParams(x2c_type="so"),
+    )
+    scf = GHF(charge=0)(system)
+
+    sci = RelSelectedCI(
+        nel=10,
+        core_orbitals=2,
+        active_orbitals=12,
+        do_test_rdms=True,
+        sci_params=SelectedCIParams(
+            selection_algorithm="hbci",
+            var_threshold=1e-12,
+            pt2_threshold=0.0,
+        ),
+        final_orbitals=final_orbitals,
+    )(scf)
+    sci.run()
+
+    assert sci.E[0] == approx(-100.10065023157668)

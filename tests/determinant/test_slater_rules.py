@@ -5,7 +5,7 @@ from forte2 import System, RHF
 from forte2.lib.det import Determinant, SlaterRules, RelSlaterRules, hilbert_space
 from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
 from forte2.helpers.comparisons import approx
-from forte2.ci.ci import _CISingleStateSolver
+from forte2.ci.rel_ci import _RelCISingleStateSolver
 from forte2.state import MOSpace, State
 from forte2.base_classes import DavidsonLiuParams
 
@@ -469,14 +469,13 @@ def test_slater_rules_3_complex():
     fakeints.V = h2
     mo_space = MOSpace(nmo=norb, active_orbitals=list(range(norb)))
     state = State(nel=8, multiplicity=1, ms=0.0)
-    ci = _CISingleStateSolver(
+    ci = _RelCISingleStateSolver(
         mo_space=mo_space,
         state=state,
         ints=fakeints,
         nroot=1,
         active_orbsym=[[0] * norb],
         do_test_rdms=True,
-        two_component=True,
         davidson_liu_params=DavidsonLiuParams(maxiter=200),
     )
     ci.run()
@@ -523,7 +522,7 @@ def test_slater_rules_4_complex_antisym():
     fakeints.V = 0.5 * h2
     mo_space = MOSpace(nmo=norb, active_orbitals=list(range(norb)))
     state = State(nel=8, multiplicity=1, ms=0.0)
-    ci = _CISingleStateSolver(
+    ci = _RelCISingleStateSolver(
         mo_space=mo_space,
         state=state,
         ints=fakeints,
@@ -531,7 +530,6 @@ def test_slater_rules_4_complex_antisym():
         active_orbsym=[[0] * norb],
         davidson_liu_params=DavidsonLiuParams(maxiter=200),
         do_test_rdms=True,
-        two_component=True,
     )
     ci.run()
 
