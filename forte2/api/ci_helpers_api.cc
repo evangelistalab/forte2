@@ -245,8 +245,6 @@ void export_sci_helper_api(nb::module_& sub_m) {
              "Apply the Hamiltonian to the basis and store the result in sigma")
         .def("Hdiag", &SelectedCIHelper::Hdiag, "Return the diagonal of the Hamiltonian matrix")
         .def("set_c", &SelectedCIHelper::set_c, "c"_a, "Set the CI coefficients")
-        .def("set_num_threads", &SelectedCIHelper::set_num_threads, "n"_a,
-             "Set the number of threads to use in parallel sections")
         .def("set_num_batches_per_thread", &SelectedCIHelper::set_num_batches_per_thread, "n"_a,
              "Set the number of batches each thread will process in parallel sections")
         .def("set_energies", &SelectedCIHelper::set_energies, "e"_a,
@@ -328,8 +326,6 @@ void export_rel_sci_helper_api(nb::module_& sub_m) {
         .def("Hdiag", &RelSelectedCIHelper::Hdiag,
              "Return the (real) diagonal of the Hamiltonian matrix")
         .def("set_c", &RelSelectedCIHelper::set_c, "c"_a, "Set the (complex) CI coefficients")
-        .def("set_num_threads", &RelSelectedCIHelper::set_num_threads, "n"_a,
-             "Set the number of threads to use in parallel sections")
         .def("set_num_batches_per_thread", &RelSelectedCIHelper::set_num_batches_per_thread, "n"_a,
              "Set the number of batches each thread will process in parallel sections")
         .def("set_energies", &RelSelectedCIHelper::set_energies, "e"_a,

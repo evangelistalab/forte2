@@ -1,7 +1,7 @@
 """Determinants and their operations"""
 
 from collections.abc import Sequence
-from typing import Annotated, overload
+from typing import Annotated, Final, overload
 
 import numpy
 from numpy.typing import NDArray
@@ -19,7 +19,7 @@ class Determinant:
     def zero() -> Determinant:
         """Create a zero determinant with no electrons"""
 
-    maxnorb: int = ...
+    maxnorb: Final[int] = ...
     """The maximum number of orbitals supported by the Determinant class"""
 
     def __eq__(self, arg: Determinant, /) -> bool:
