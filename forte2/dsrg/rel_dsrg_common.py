@@ -227,18 +227,16 @@ class _RelDSRGHelper:
         C1["vc"] += scale * -0.500 * einsum('iuvw,jixa,vwux->aj', T2['caaa'], V['ccav'], l2)
         C1["vc"] += scale * +0.500 * einsum('uvwa,ixba,wxuv->bi', T2['aaav'], V['cavv'], l2)
         C1["cv"] += scale * -0.500 * einsum('iuvw,xayz,xu,wz,vy->ia', T2['caaa'], V['avaa'], e1, g1, g1)
-        C1["cv"] += scale * -0.250 * einsum('iuvw,xayz,xu,vwyz->ia', T2['caaa'], V['avaa'], e1, l2)
         C1["cv"] += scale * -0.500 * einsum('iuvw,xayz,wz,vy,xu->ia', T2['caaa'], V['avaa'], e1, e1, g1)
-        C1["cv"] += scale * -1.000 * einsum('iuvw,xayz,wz,vxuy->ia', T2['caaa'], V['avaa'], e1, l2)
-        C1["cv"] += scale * -0.250 * einsum('iuvw,xayz,xu,vwyz->ia', T2['caaa'], V['avaa'], g1, l2)
-        C1["cv"] += scale * -1.000 * einsum('iuvw,xayz,wz,vxuy->ia', T2['caaa'], V['avaa'], g1, l2)
+        # e1+g1=I merges the (e1,l2) and (g1,l2) terms below into one
+        C1["cv"] += scale * -0.250 * einsum('ixvw,xayz,vwyz->ia', T2['caaa'], V['avaa'], l2)
+        C1["cv"] += scale * -1.000 * einsum('iuvw,xayw,vxuy->ia', T2['caaa'], V['avaa'], l2)
         C1["cv"] += scale * +0.500 * einsum('ijua,jvwx,uvwx->ia', T2['ccav'], V['caaa'], l2)
         C1["cv"] += scale * +0.500 * einsum('uvwa,xyiz,yv,xu,wz->ia', T2['aaav'], V['aaca'], e1, e1, g1)
-        C1["cv"] += scale * +1.000 * einsum('uvwa,xyiz,yv,wxuz->ia', T2['aaav'], V['aaca'], e1, l2)
         C1["cv"] += scale * +0.500 * einsum('uvwa,xyiz,wz,yv,xu->ia', T2['aaav'], V['aaca'], e1, g1, g1)
-        C1["cv"] += scale * +0.250 * einsum('uvwa,xyiz,wz,xyuv->ia', T2['aaav'], V['aaca'], e1, l2)
-        C1["cv"] += scale * +1.000 * einsum('uvwa,xyiz,yv,wxuz->ia', T2['aaav'], V['aaca'], g1, l2)
-        C1["cv"] += scale * +0.250 * einsum('uvwa,xyiz,wz,xyuv->ia', T2['aaav'], V['aaca'], g1, l2)
+        # e1+g1=I merges the (e1,l2) and (g1,l2) terms below into one
+        C1["cv"] += scale * +1.000 * einsum('uywa,xyiz,wxuz->ia', T2['aaav'], V['aaca'], l2)
+        C1["cv"] += scale * +0.250 * einsum('uvwa,xyiw,xyuv->ia', T2['aaav'], V['aaca'], l2)
         C1["cv"] += scale * -0.500 * einsum('iuab,vwxb,vwux->ia', T2['cavv'], V['aaav'], l2)
         C1["ca"] += scale * -0.500 * einsum('ijuv,jwxy,vwxy->iu', T2['ccaa'], V['caaa'], l2)
         C1["ca"] += scale * -0.500 * einsum('iuva,wxya,wxuy->iv', T2['caav'], V['aaav'], l2)
@@ -419,14 +417,14 @@ class _RelDSRGHelper:
         l2 = cumulants['lambda2']
         l3 = cumulants['lambda3']
 
-        C1["av"] += scale * -1.000 * einsum('uv,wa,uw->va', F['aa'], T1['av'], e1)
-        C1["av"] += scale * -1.000 * einsum('uv,wa,uw->va', F['aa'], T1['av'], g1)
+        # e1+g1=I merges the (e1) and (g1) terms below into one
+        C1["av"] += scale * -1.000 * einsum('uv,ua->va', F['aa'], T1['av'])
         C1["av"] += scale * +1.000 * einsum('ab,ub->ua', F['vv'], T1['av'])
         C1["cv"] += scale * -1.000 * einsum('ij,ia->ja', F['cc'], T1['cv'])
         C1["cv"] += scale * +1.000 * einsum('ab,ib->ia', F['vv'], T1['cv'])
         C1["ca"] += scale * -1.000 * einsum('ij,iu->ju', F['cc'], T1['ca'])
-        C1["ca"] += scale * +1.000 * einsum('uv,iw,wv->iu', F['aa'], T1['ca'], e1)
-        C1["ca"] += scale * +1.000 * einsum('uv,iw,wv->iu', F['aa'], T1['ca'], g1)
+        # e1+g1=I merges the (e1) and (g1) terms below into one
+        C1["ca"] += scale * +1.000 * einsum('uw,iw->iu', F['aa'], T1['ca'])
     
     @staticmethod
     def H2_T1_C1_non_od(C1, V, T1, cumulants, scale=1.0):
@@ -459,16 +457,16 @@ class _RelDSRGHelper:
         C1["av"] += scale * +0.500 * einsum('iuvw,iaxy,wy,vx->ua', T2['caaa'], V['cvaa'], e1, e1)
         C1["av"] += scale * +0.250 * einsum('iuvw,iaxy,vwxy->ua', T2['caaa'], V['cvaa'], l2)
         C1["av"] += scale * -0.500 * einsum('iuvw,iaxy,vwuy->xa', T2['caaa'], V['cvaa'], l2)
-        C1["av"] += scale * -0.500 * einsum('uvwa,xyzr,yv,wxzr->ua', T2['aaav'], V['aaaa'], e1, l2)
+        # e1+g1=I merges the (e1,l2) and (g1,l2) terms below into one
+        C1["av"] += scale * -0.500 * einsum('uywa,xyzr,wxzr->ua', T2['aaav'], V['aaaa'], l2)
         C1["av"] += scale * +0.500 * einsum('uvwa,xyzr,wr,xyvz->ua', T2['aaav'], V['aaaa'], e1, l2)
-        C1["av"] += scale * -0.500 * einsum('uvwa,xyzr,yv,wxzr->ua', T2['aaav'], V['aaaa'], g1, l2)
         C1["av"] += scale * -0.500 * einsum('uvwa,xyzr,wz,xyvr->ua', T2['aaav'], V['aaaa'], g1, l2)
         C1["av"] += scale * +0.500 * einsum('uvwa,xyzr,yv,xu,wr->za', T2['aaav'], V['aaaa'], e1, e1, g1)
-        C1["av"] += scale * +1.000 * einsum('uvwa,xyzr,yv,wxur->za', T2['aaav'], V['aaaa'], e1, l2)
+        # e1+g1=I merges the (e1,l2) and (g1,l2) terms below into one
+        C1["av"] += scale * +1.000 * einsum('uywa,xyzr,wxur->za', T2['aaav'], V['aaaa'], l2)
         C1["av"] += scale * +0.500 * einsum('uvwa,xyzr,wr,yv,xu->za', T2['aaav'], V['aaaa'], e1, g1, g1)
-        C1["av"] += scale * +0.250 * einsum('uvwa,xyzr,wr,xyuv->za', T2['aaav'], V['aaaa'], e1, l2)
-        C1["av"] += scale * +1.000 * einsum('uvwa,xyzr,yv,wxur->za', T2['aaav'], V['aaaa'], g1, l2)
-        C1["av"] += scale * +0.250 * einsum('uvwa,xyzr,wr,xyuv->za', T2['aaav'], V['aaaa'], g1, l2)
+        # e1+g1=I merges the (e1,l2) and (g1,l2) terms below into one
+        C1["av"] += scale * +0.250 * einsum('uvwa,xyzw,xyuv->za', T2['aaav'], V['aaaa'], l2)
         C1["av"] += scale * +1.000 * einsum('iuva,ibwa,vw->ub', T2['caav'], V['cvav'], e1)
         C1["av"] += scale * -1.000 * einsum('uvwa,xbya,wy,xv->ub', T2['aaav'], V['avav'], e1, g1)
         C1["av"] += scale * -1.000 * einsum('uvwa,xbya,wxvy->ub', T2['aaav'], V['avav'], l2)
@@ -476,9 +474,9 @@ class _RelDSRGHelper:
         C1["cv"] += scale * -0.500 * einsum('ijuv,jawx,vx,uw->ia', T2['ccaa'], V['cvaa'], e1, e1)
         C1["cv"] += scale * -0.250 * einsum('ijuv,jawx,uvwx->ia', T2['ccaa'], V['cvaa'], l2)
         C1["cv"] += scale * -0.500 * einsum('iuvw,iajx,vwux->ja', T2['caaa'], V['cvca'], l2)
-        C1["cv"] += scale * -0.500 * einsum('iuva,wxyz,xu,vwyz->ia', T2['caav'], V['aaaa'], e1, l2)
+        # e1+g1=I merges the (e1,l2) and (g1,l2) terms below into one
+        C1["cv"] += scale * -0.500 * einsum('ixva,wxyz,vwyz->ia', T2['caav'], V['aaaa'], l2)
         C1["cv"] += scale * +0.500 * einsum('iuva,wxyz,vz,wxuy->ia', T2['caav'], V['aaaa'], e1, l2)
-        C1["cv"] += scale * -0.500 * einsum('iuva,wxyz,xu,vwyz->ia', T2['caav'], V['aaaa'], g1, l2)
         C1["cv"] += scale * -0.500 * einsum('iuva,wxyz,vy,wxuz->ia', T2['caav'], V['aaaa'], g1, l2)
         C1["cv"] += scale * +0.500 * einsum('ijua,ijkv,uv->ka', T2['ccav'], V['ccca'], e1)
         C1["cv"] += scale * +1.000 * einsum('iuva,iwjx,vx,wu->ja', T2['caav'], V['caca'], e1, g1)
@@ -491,9 +489,9 @@ class _RelDSRGHelper:
         C1["cv"] += scale * -1.000 * einsum('iuab,ivjb,vu->ja', T2['cavv'], V['cacv'], g1)
         C1["cv"] += scale * -0.500 * einsum('uvab,wxib,xv,wu->ia', T2['aavv'], V['aacv'], g1, g1)
         C1["cv"] += scale * -0.250 * einsum('uvab,wxib,wxuv->ia', T2['aavv'], V['aacv'], l2)
-        C1["ca"] += scale * +0.500 * einsum('iuvw,xyzr,yu,wxzr->iv', T2['caaa'], V['aaaa'], e1, l2)
+        # e1+g1=I merges the (e1,l2) and (g1,l2) terms below into one
+        C1["ca"] += scale * +0.500 * einsum('iyvw,xyzr,wxzr->iv', T2['caaa'], V['aaaa'], l2)
         C1["ca"] += scale * -0.500 * einsum('iuvw,xyzr,wr,xyuz->iv', T2['caaa'], V['aaaa'], e1, l2)
-        C1["ca"] += scale * +0.500 * einsum('iuvw,xyzr,yu,wxzr->iv', T2['caaa'], V['aaaa'], g1, l2)
         C1["ca"] += scale * +0.500 * einsum('iuvw,xyzr,wz,xyur->iv', T2['caaa'], V['aaaa'], g1, l2)
         C1["ca"] += scale * -0.500 * einsum('ijuv,ijkw,vw->ku', T2['ccaa'], V['ccca'], e1)
         C1["ca"] += scale * -1.000 * einsum('iuvw,ixjy,wy,xu->jv', T2['caaa'], V['caca'], e1, g1)
@@ -503,17 +501,21 @@ class _RelDSRGHelper:
         C1["ca"] += scale * -0.500 * einsum('uvwa,xyia,yv,xu->iw', T2['aaav'], V['aacv'], g1, g1)
         C1["ca"] += scale * -0.250 * einsum('uvwa,xyia,xyuv->iw', T2['aaav'], V['aacv'], l2)
         C1["ca"] += scale * +0.500 * einsum('iuvw,xyzr,yu,wr,vz->ix', T2['caaa'], V['aaaa'], e1, g1, g1)
-        C1["ca"] += scale * +0.250 * einsum('iuvw,xyzr,yu,vwzr->ix', T2['caaa'], V['aaaa'], e1, l2)
+        # e1+g1=I merges the (e1,l2) and (g1,l2) terms below into one
+        C1["ca"] += scale * +0.250 * einsum('iyvw,xyzr,vwzr->ix', T2['caaa'], V['aaaa'], l2)
         C1["ca"] += scale * +0.500 * einsum('iuvw,xyzr,wr,vz,yu->ix', T2['caaa'], V['aaaa'], e1, e1, g1)
-        C1["ca"] += scale * +1.000 * einsum('iuvw,xyzr,wr,vyuz->ix', T2['caaa'], V['aaaa'], e1, l2)
-        C1["ca"] += scale * +0.250 * einsum('iuvw,xyzr,yu,vwzr->ix', T2['caaa'], V['aaaa'], g1, l2)
-        C1["ca"] += scale * +1.000 * einsum('iuvw,xyzr,wr,vyuz->ix', T2['caaa'], V['aaaa'], g1, l2)
+        # e1+g1=I merges the (e1,l2) and (g1,l2) terms below into one
+        C1["ca"] += scale * +1.000 * einsum('iuvw,xyzw,vyuz->ix', T2['caaa'], V['aaaa'], l2)
         C1["ca"] += scale * -0.500 * einsum('iuvw,ixjy,vwuy->jx', T2['caaa'], V['caca'], l2)
         C1["ca"] += scale * +0.500 * einsum('uvwa,xyia,wyuv->ix', T2['aaav'], V['aacv'], l2)
     
     def H2_T2_C1_non_od_large(self, C1, B, T2, cumulants, scale=1.0):
         g1 = cumulants['gamma1']
         temp = np.zeros((max(self.nact, self.ncore), self.nvirt, self.nvirt), dtype=complex)
+
+        # B['av'] and g1 never depend on the loop indices below, so fuse
+        # them once instead of recontracting on every iteration.
+        Bav_g1 = einsum('Pma,mk->Pak', B['av'], g1)
 
         # C1["av"] += scale * +0.500 * einsum('iuab,icab->uc', T2['cavv'], V['cvvv'])
         for u in range(self.nact):
@@ -527,7 +529,7 @@ class _RelDSRGHelper:
             tmp = temp[:self.nact]
             Tu = T2['aavv'][u]
             np.subtract(Tu, Tu.swapaxes(1, 2), out=tmp)
-            Cu += scale * -0.500 * einsum('vab,Pwa,Pcb,wv->c', tmp, B['av'], B['vv'], g1)
+            Cu += scale * -0.500 * einsum('vab,Pav,Pcb->c', tmp, Bav_g1, B['vv'])
 
         # C1["cv"] += scale * -0.500 * einsum('ijab,jcab->ic', T2['ccvv'], V['cvvv'])
         for i in range(self.ncore):
@@ -541,7 +543,7 @@ class _RelDSRGHelper:
             tmp = temp[:self.nact]
             Ti = T2['cavv'][i]
             np.subtract(Ti, Ti.swapaxes(1, 2), out=tmp)
-            Ci += scale * -0.500 * einsum('uab,Pva,Pcb,vu->c', tmp, B['av'], B['vv'], g1)
+            Ci += scale * -0.500 * einsum('uab,Pau,Pcb->c', tmp, Bav_g1, B['vv'])
 
     @staticmethod
     def H1_T2_C2_non_od(C2, F, T2, cumulants, scale=1.0):
@@ -720,99 +722,101 @@ class _RelDSRGHelper:
     def H2_T2_C2_non_od_large(self, C2, B, T2, cumulants, scale=1.0):
         e1 = cumulants['eta1']
         temp = np.zeros((self.nvirt, self.nvirt), dtype=complex)
+
+        # B['va'] and e1 never depend on the loop indices below, so fuse
+        # them once instead of recontracting on every iteration.
+        Bva_e1 = einsum('Pbm,km->Pbk', B['va'], e1)
+
+        # T2['ccvv'][i,j] = -T2['ccvv'][j,i] (both indices are core), so the
+        # i>j half is exactly minus the swap of the i<j half, and i==j is
+        # exactly zero. Only the strict upper triangle needs an einsum call.
         # C2["ccvv"] += scale * +0.125 * einsum('ijab,cdab->ijcd', T2['ccvv'], V['vvvv'])
-        for i in range(self.ncore):
-            Ci = C2["ccvv"][i]
-            Ti = T2['ccvv'][i]
-            for j in range(self.ncore):   
-                Cij = Ci[j] 
-                Tij = Ti[j]
-                np.subtract(Tij, Tij.T, out=temp)
-                Cij += scale * +0.125 * einsum('ab,Pca,Pdb->cd', temp, B['vv'], B['vv'])
-        # C2["cavv"] += scale * +0.250 * einsum('iuab,cdab->iucd', T2['cavv'], V['vvvv'])
-        for i in range(self.ncore):
-            Ci = C2["cavv"][i]
-            Ti = T2['cavv'][i]
-            for u in range(self.nact):
-                Ciu = Ci[u]
-                Tiu = Ti[u]
-                np.subtract(Tiu, Tiu.T, out=temp)
-                Ciu += scale * +0.250 * einsum('ab,Pca,Pdb->cd', temp, B['vv'], B['vv'])
-        # C2["aavv"] += scale * +0.125 * einsum('uvab,cdab->uvcd', T2['aavv'], V['vvvv'])
-        for u in range(self.nact):
-            Cu = C2["aavv"][u]
-            Tu = T2['aavv'][u]
-            for v in range(self.nact):
-                Cuv = Cu[v]
-                Tuv = Tu[v]
-                np.subtract(Tuv, Tuv.T, out=temp)
-                Cuv += scale * +0.125 * einsum('ab,Pca,Pdb->cd', temp, B['vv'], B['vv'])
-
-        # C2["caav"] += scale * +0.500 * einsum('iuab,vcab->iuvc', T2['cavv'], V['avvv'])
-        for i in range(self.ncore):
-            Ci = C2["caav"][i]
-            Ti = T2['cavv'][i]
-            for u in range(self.nact):
-                Ciu = Ci[u]
-                Tiu = Ti[u]
-                np.subtract(Tiu, Tiu.T, out=temp)
-                Ciu += scale * +0.500 * einsum('ab,Pva,Pcb->vc', temp, B["av"], B["vv"])        
-
-        # C2["aaav"] += scale * +0.250 * einsum('uvab,wcab->uvwc', T2['aavv'], V['avvv'])
-        for u in range(self.nact):
-            Cu = C2["aaav"][u]
-            Tu = T2['aavv'][u]
-            for v in range(self.nact):
-                Cuv = Cu[v]
-                Tuv = Tu[v]
-                np.subtract(Tuv, Tuv.T, out=temp)
-                Cuv += scale * +0.250 * einsum('ab,Pwa,Pcb->wc', temp, B['av'], B['vv'])
-
-
         # C2["ccav"] += scale * +0.250 * einsum('ijab,ucab->ijuc', T2['ccvv'], V['avvv'])
         for i in range(self.ncore):
-            Ci = C2["ccav"][i]
             Ti = T2['ccvv'][i]
-            for j in range(self.ncore):
-                Cij = Ci[j]
+            Ci_vv = C2["ccvv"][i]
+            Ci_av = C2["ccav"][i]
+            for j in range(i + 1, self.ncore):
                 Tij = Ti[j]
-                temp = np.subtract(Tij, Tij.T, out=temp)
-                Cij += scale * +0.250 * einsum('ab,Pua,Pcb->uc', temp, B['av'], B['vv'])
+                np.subtract(Tij, Tij.T, out=temp)
 
+                contrib_vv = scale * 0.125 * einsum('ab,Pca,Pdb->cd', temp, B['vv'], B['vv'])
+                Ci_vv[j] += contrib_vv
+                C2["ccvv"][j, i] -= contrib_vv
+
+                contrib_av = scale * 0.250 * einsum('ab,Pua,Pcb->uc', temp, B['av'], B['vv'])
+                Ci_av[j] += contrib_av
+                C2["ccav"][j, i] -= contrib_av
+
+        # T2['cavv'][i,u] mixes core and active indices (different spaces),
+        # so there is no exchange symmetry to exploit here, but both terms
+        # below share the same antisymmetrized `temp`.
+        # C2["cavv"] += scale * +0.250 * einsum('iuab,cdab->iucd', T2['cavv'], V['vvvv'])
+        # C2["caav"] += scale * +0.500 * einsum('iuab,vcab->iuvc', T2['cavv'], V['avvv'])
+        for i in range(self.ncore):
+            Ti = T2['cavv'][i]
+            Ci_vv = C2["cavv"][i]
+            Ci_av = C2["caav"][i]
+            for u in range(self.nact):
+                Tiu = Ti[u]
+                np.subtract(Tiu, Tiu.T, out=temp)
+                Ci_vv[u] += scale * 0.250 * einsum('ab,Pca,Pdb->cd', temp, B['vv'], B['vv'])
+                Ci_av[u] += scale * 0.500 * einsum('ab,Pva,Pcb->vc', temp, B["av"], B["vv"])
+
+        # T2['aavv'][u,v] = -T2['aavv'][v,u] (both indices are active): same
+        # triangular-plus-mirror trick as the ccvv/ccav pair above.
+        # C2["aavv"] += scale * +0.125 * einsum('uvab,cdab->uvcd', T2['aavv'], V['vvvv'])
+        # C2["aaav"] += scale * +0.250 * einsum('uvab,wcab->uvwc', T2['aavv'], V['avvv'])
+        for u in range(self.nact):
+            Tu = T2['aavv'][u]
+            Cu_vv = C2["aavv"][u]
+            Cu_av = C2["aaav"][u]
+            for v in range(u + 1, self.nact):
+                Tuv = Tu[v]
+                np.subtract(Tuv, Tuv.T, out=temp)
+
+                contrib_vv = scale * 0.125 * einsum('ab,Pca,Pdb->cd', temp, B['vv'], B['vv'])
+                Cu_vv[v] += contrib_vv
+                C2["aavv"][v, u] -= contrib_vv
+
+                contrib_av = scale * 0.250 * einsum('ab,Pwa,Pcb->wc', temp, B['av'], B['vv'])
+                Cu_av[v] += contrib_av
+                C2["aaav"][v, u] -= contrib_av
+
+        # T2['caav'][i,u] mixes core and active indices: no exchange symmetry.
         # C2["cavv"] += scale * +0.500 * einsum('iuva,bcwa,vw->iubc', T2['caav'], V['vvav'], e1)
         for i in range(self.ncore):
-            Ci = C2["cavv"][i]
             Ti = T2['caav'][i]
+            Ci = C2["cavv"][i]
             for u in range(self.nact):
-                Ciu = Ci[u]
                 Tiu = Ti[u]
-                einsum('va,Pbw,Pca,vw->bc', Tiu, B['va'], B['vv'], e1, out=temp)
+                einsum('va,Pbv,Pca->bc', Tiu, Bva_e1, B['vv'], out=temp)
                 temp *= scale * +0.500
-                Ciu += temp
-                Ciu -= temp.T
+                Ci[u] += temp
+                Ci[u] -= temp.T
 
+        # T2['aaav'][u,v] = -T2['aaav'][v,u] (both indices are active).
         # C2["aavv"] += scale * +0.250 * einsum('uvwa,bcxa,wx->uvbc', T2['aaav'], V['vvav'], e1)
         for u in range(self.nact):
-            Cu = C2["aavv"][u]
             Tu = T2['aaav'][u]
-            for v in range(self.nact):
-                Cuv = Cu[v]
+            for v in range(u + 1, self.nact):
                 Tuv = Tu[v]
-                einsum('wa,Pbx,Pca,wx->bc', Tuv, B['va'], B['vv'], e1, out=temp)
+                einsum('wa,Pbw,Pca->bc', Tuv, Bva_e1, B['vv'], out=temp)
                 temp *= scale * +0.250
-                Cuv += temp
-                Cuv -= temp.T
+                contrib = temp - temp.T
+                C2["aavv"][u, v] += contrib
+                C2["aavv"][v, u] -= contrib
 
+        # T2['ccav'][i,j] = -T2['ccav'][j,i] (both indices are core).
         # C2["ccvv"] += scale * +0.250 * einsum('ijua,bcva,uv->ijbc', T2['ccav'], V['vvav'], e1)
         for i in range(self.ncore):
-            Ci = C2["ccvv"][i]
             Ti = T2['ccav'][i]
-            for j in range(self.ncore):
-                Cij = Ci[j]
+            for j in range(i + 1, self.ncore):
                 Tij = Ti[j]
-                einsum('ua,Pbv,Pca,uv->bc', Tij, B['va'], B['vv'], e1, out=temp)
+                einsum('ua,Pbu,Pca->bc', Tij, Bva_e1, B['vv'], out=temp)
                 temp *= scale * +0.250
-                Cij += temp
-                Cij -= temp.T
+                contrib = temp - temp.T
+                C2["ccvv"][i, j] += contrib
+                C2["ccvv"][j, i] -= contrib
 
     # fmt: on
