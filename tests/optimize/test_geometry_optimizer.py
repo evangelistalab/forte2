@@ -4,7 +4,7 @@ import pytest
 import forte2
 from forte2 import CISolver, GeometryOptimizer, MCOptimizer, State, System
 from forte2.base_classes.params import SelectedCIParams
-from forte2.base_classes.rebuild import project_occupied_orbitals
+from forte2.orbitals import project_occupied_orbitals
 from forte2.scf import RHF
 from forte2.sci import SelectedCISolver
 from forte2.system import BSE_AVAILABLE
