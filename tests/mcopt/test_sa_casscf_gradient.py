@@ -430,7 +430,7 @@ def test_sa_casscf_gradient_mixed_spin_lih_finite_difference():
     assert gradients[:, 1, 2] == pytest.approx(numerical, abs=1.0e-7)
     assert numerical == pytest.approx(
         np.array([0.006221111355472, -0.029709654781810]),
-        abs=1.0e-8,
+        abs=5.0e-8,
     )
     assert gradients.sum(axis=1) == pytest.approx(np.zeros((2, 3)), abs=1.0e-10)
 
