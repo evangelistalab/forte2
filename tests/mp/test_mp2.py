@@ -1,20 +1,12 @@
 import time
 
-import pytest
 import numpy as np
 
-from forte2 import AVAS, System
+from forte2 import System
 from forte2.jkbuilder.mointegrals import RestrictedMOIntegrals
 from forte2.scf import RHF, ROHF, UHF
 from forte2.helpers.comparisons import approx
 from forte2.mp import RMP2, ROMP2, UMP2
-from forte2.props import (
-    RMP2MPQOnTheFly,
-    UMP2MPQOnTheFly,
-    MutualCorrelationAnalysis,
-    rmp2_mpq_onthefly_no,
-    ump2_mpq_onthefly_no,
-)
 
 
 def assert_uhf_rdm_invariants(mp2, na, nb):
@@ -158,41 +150,6 @@ def test_rhf_mp2():
     V = moints.V
 
     mp2_rdm_E = mp2.energy_given_rdms(Ecore, H, V, g1, g2)
-
-    linear_mpq = RMP2MPQOnTheFly(
-        mp2, U=np.eye(mp2.nocc + mp2.nvir), include_quadratic=False
-    )
-    i, j, a, b = 0, 1, 0, 1
-    assert linear_mpq.lambda2_ab_linear_elem(
-        i, j, mp2.nocc + a, mp2.nocc + b
-    ) == approx(mp2.t2[i, j, a, b])
-    assert linear_mpq.lambda2_aa_linear_elem(
-        i, j, mp2.nocc + a, mp2.nocc + b
-    ) == approx(mp2.t2[i, j, a, b] - mp2.t2[i, j, b, a])
-
-    avas = AVAS(
-        subspace=["O(2p)"], selection_method="total", num_active=3
-    )(scf)
-    avas_mpq = rmp2_mpq_onthefly_no(mp2, avas=avas)
-    assert avas.executed
-    assert avas_mpq.rdm_info_selection == "avas"
-    assert len(avas_mpq.rdm_info_indices) == avas.nactv
-    weights = avas_mpq.rdm_info_selection_details[
-        "avas_projection_weights"
-    ]
-    expected = tuple(
-        sorted(np.argsort(-weights, kind="stable")[: avas.nactv].tolist())
-    )
-    assert avas_mpq.rdm_info_indices == expected
-    expected_gamma1_no = avas_mpq.U.T @ g1 @ avas_mpq.U
-    assert avas_mpq.Gamma1_mo == approx(g1)
-    assert avas_mpq.Gamma1_no == approx(expected_gamma1_no)
-    assert avas_mpq.Gamma1 == approx(expected_gamma1_no)
-    assert avas_mpq.Γ1 == approx(expected_gamma1_no)
-    assert avas_mpq.occs == approx(np.diag(expected_gamma1_no))
-    assert avas_mpq.C_no == approx(mp2.C_no)
-    assert avas_mpq.no_occs == approx(mp2.no_occs)
-    assert avas_mpq.U == approx(mp2.U_no)
 
     assert scf.E == approx(erhf)
     assert mp2.E_total == approx(emp2)
@@ -338,6 +295,7 @@ def test_triplet_h2o_uhf_mp2_1rdm_does_not_store_t2():
     assert np.trace(mp2.make_1rdm_sf()) == approx(scf.na + scf.nb)
     assert_t2_not_stored(mp2)
 
+
 def test_h2o_uhf_mp2():
     euhf = -76.061466407177
     emp2 = -76.3710978831473
@@ -356,50 +314,7 @@ def test_h2o_uhf_mp2():
     assert mp2.E_total == approx(emp2)
 
 
-def test_ump2_mpq_linear_and_quadratic_terms():
-    euhf = -76.0217659883263
-    emp2 = -76.221819034
-    xyz = """
-    O            0.000000000000     0.000000000000    -0.061664597388
-    H            0.000000000000    -0.711620616369     0.489330954643
-    H            0.000000000000     0.711620616369     0.489330954643
-    """
-    system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
-
-    scf = UHF(charge=0, ms=0)(system)
-    mp2 = UMP2(store_t2=True)(scf)
-    mp2.run()
-
-    identity = np.eye(mp2.nmo)
-    linear = UMP2MPQOnTheFly(
-        mp2, Ua=identity, Ub=identity, include_quadratic=False
-    )
-    full = UMP2MPQOnTheFly(
-        mp2, Ua=identity, Ub=identity, include_quadratic=True
-    )
-
-    a = mp2.naocc
-    b = mp2.nbocc
-    assert linear.lambda2_aa_linear_elem(0, 1, a, a + 1) == approx(
-        mp2.t2_a[0, 1, 0, 1]
-    )
-    assert linear.lambda2_bb_linear_elem(0, 1, b, b + 1) == approx(
-        mp2.t2_b[0, 1, 0, 1]
-    )
-    assert linear.lambda2_ab_elem(0, 0, a, b) == approx(
-        mp2.t2_ab[0, 0, 0, 0]
-    )
-    assert full.lambda2_ab_elem(0, b, 0, b) == approx(
-        full.lambda2_ab_linear_elem(0, b, 0, b)
-        + full.lambda2_ab_quadratic_elem(0, b, 0, b)
-    )
-    assert abs(full.lambda2_ab_quadratic_elem(0, b, 0, b)) > 0.0
-
-    assert scf.E == approx(euhf)
-    assert mp2.E_total == approx(emp2)
-
-
-def test_ump2_common_natural_orbitals_and_mpq_wrapper():
+def test_ump2_common_natural_orbitals():
     # Reference energies kept for now, but not asserted in this construction test.
     # euhf = -1.131269839709
     # emp2 = -1.153966321003
@@ -441,49 +356,3 @@ def test_ump2_common_natural_orbitals_and_mpq_wrapper():
 
     assert gamma1_no_bundle[0] + gamma1_no_bundle[1] == approx(gamma1_no)
     assert lambda2_no_sf == approx(lambda2_no_sf_from_sd)
-
-    mpq = ump2_mpq_onthefly_no(mp2, mo_range=(0, 2))
-    assert isinstance(mpq, UMP2MPQOnTheFly)
-    assert mpq.C_no == approx(C_no)
-    assert mpq.no_occs == approx(occupations)
-    assert mpq.Ua == approx(Ua)
-    assert mpq.Ub == approx(Ub)
-    assert mpq.gamma1_mo_a == approx(gamma1[0])
-    assert mpq.gamma1_mo_b == approx(gamma1[1])
-    assert mpq.gamma1_a == approx(gamma1_no_a)
-    assert mpq.gamma1_b == approx(gamma1_no_b)
-    assert mpq.γa == approx(gamma1_no_a)
-    assert mpq.γb == approx(gamma1_no_b)
-    assert mpq.Gamma1_no == approx(gamma1_no)
-    assert mpq.Gamma1 == approx(gamma1_no)
-    assert mpq.Γ1 == approx(gamma1_no)
-    assert mpq.occs == approx(occupations)
-    assert mpq.rdm_info_indices == (0, 1)
-    assert mpq.rdm_info_selection == "mo_range"
-
-    M1 = mpq.make_M1()
-    M2 = mpq.make_M2()
-    assert M1.shape == (mp2.nmo,)
-    assert M2.shape == (mp2.nmo, mp2.nmo)
-    assert np.all(M1 >= -1e-12)
-    assert np.count_nonzero(M1[2:]) == 0
-    assert np.count_nonzero(M2[2:, :]) == 0
-    assert np.count_nonzero(M2[:, 2:]) == 0
-
-    occupation_mpq = ump2_mpq_onthefly_no(
-        mp2, occupation_window=(0.02, 1.98)
-    )
-    expected = tuple(
-        np.flatnonzero((occupations >= 0.02) & (occupations <= 1.98)).tolist()
-    )
-    assert occupation_mpq.rdm_info_indices == expected
-    assert occupation_mpq.rdm_info_selection == "natural_occupation"
-
-    avas = AVAS(subspace=["H(1s)"])(RHF(charge=0)(system))
-    with pytest.raises(TypeError, match="requires restricted orbitals"):
-        ump2_mpq_onthefly_no(mp2, avas=avas)
-
-    with pytest.raises(ValueError, match="Choose only one"):
-        ump2_mpq_onthefly_no(
-            mp2, mo_range=(0, 2), occupation_window=(0.02, 1.98)
-        )
