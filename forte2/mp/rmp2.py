@@ -48,7 +48,7 @@ class RMP2(MP2Base):
 
         return B_Qia.transpose(1, 2, 0).copy()
 
-    def _build_t2_all(self, B):
+    def _build_t2_all(self, B, store_t2=None):
         """
         Build all MP2 amplitudes t_{ij}^{ab} and antisymmetrized t̃_{ij}^{ab}.
 
@@ -65,10 +65,13 @@ class RMP2(MP2Base):
         eps_i = self.eps[: self.nocc]
         eps_a = self.eps[self.nocc :]
 
+        if store_t2 is None:
+            store_t2 = self.store_t2
+
         nocc, nvir = self.nocc, self.nvir
-        t2 = np.empty((nocc, nocc, nvir, nvir)) if self.store_t2 else None
+        t2 = np.empty((nocc, nocc, nvir, nvir)) if store_t2 else None
         # antisym only in (a,b): t̃ = 2t - t^{ba}
-        t2_as = np.empty_like(t2) if self.store_t2 else None
+        t2_as = np.empty_like(t2) if store_t2 else None
 
         E_corr = 0.0
         gijab = np.empty((nvir, nvir))
@@ -83,7 +86,7 @@ class RMP2(MP2Base):
                 np.dot(Bi, Bj.T, out=gijab)
                 denom = eps_i[i] + eps_i[j] - eps_vir
                 self._safe_divide(gijab, denom, out=tijab)
-                if self.store_t2:
+                if store_t2:
                     t2[i, j] = tijab
                     t2_as[i, j] = 2.0 * tijab - tijab.T
 
@@ -202,18 +205,19 @@ class RMP2(MP2Base):
     def make_1rdm(self):
         return self._make_mp2_sf_1rdm_intermediates(self.B_iaQ)
 
+    def _get_t2_for_rdms(self):
+        if self.t2 is not None:
+            return self.t2
+
+        # Rebuild amplitudes locally without retaining them on the MP2 object.
+        return self._build_t2_all(self.B_iaQ, store_t2=True)[0]
+
     def make_2rdm(self, gamma1=None):
-        if not self.store_t2:
-            raise ValueError("t2 amplitudes were not stored. Cannot compute 2-RDM.")
         if gamma1 is None:
             gamma1 = self.make_1rdm()
-        return self._make_mp2_sf_2rdm(self.t2, gamma1)
+        return self._make_mp2_sf_2rdm(self._get_t2_for_rdms(), gamma1)
 
     def make_2cumulant(self, gamma1=None, gamma2=None):
-        if not self.store_t2:
-            raise ValueError(
-                "t2 amplitudes were not stored. Cannot compute 2-cumulant."
-            )
         if gamma1 is None:
             gamma1 = self.make_1rdm()
         if gamma2 is None:
