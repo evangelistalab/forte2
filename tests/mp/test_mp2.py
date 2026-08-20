@@ -134,6 +134,34 @@ def test_rhf_mp2_1rdm_does_not_store_t2():
     assert_t2_not_stored(mp2)
 
 
+def test_rhf_mp2_rdms_do_not_require_stored_t2():
+    xyz = """
+    H  0.0  0.0  0.0
+    H  0.0  0.0  0.74
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+    )
+    scf = RHF(charge=0)(system)
+
+    stored = RMP2(store_t2=True)(scf)
+    stored.run()
+    local = RMP2(store_t2=False)(scf)
+    local.run()
+
+    gamma1_stored = stored.make_1rdm()
+    gamma1_local = local.make_1rdm()
+    gamma2_stored = stored.make_2rdm(gamma1_stored)
+    gamma2_local = local.make_2rdm(gamma1_local)
+
+    assert local.E_total == approx(stored.E_total)
+    assert np.allclose(gamma1_local, gamma1_stored, atol=1e-12)
+    assert np.allclose(gamma2_local, gamma2_stored, atol=1e-12)
+    assert_t2_not_stored(local)
+
+
 def test_h4_rhf_mp2():
     erhf = -1.998839903161
     emp2 = -2.0915387810627
