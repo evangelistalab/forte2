@@ -613,6 +613,19 @@ class MCOptimizer(MCOptimizerBase):
                 )
 
     def _get_ci_response_layout(self):
+        r"""Construct the root-major coefficient layout and its dimension.
+
+        If root :math:`\alpha` contains :math:`n_\alpha` CSF coefficients,
+        the flattened response vector represented by the returned slices is
+
+        .. math::
+
+            \mathbf x
+            =\mathbf x_0\oplus\mathbf x_1\oplus\cdots
+             \oplus\mathbf x_{d-1},
+            \qquad
+            n_{\mathrm{CI}}=\sum_{\alpha=0}^{d-1}n_\alpha.
+        """
         layout = []
         start = 0
         for absolute_root, (state_index, root_in_state) in enumerate(
@@ -632,7 +645,18 @@ class MCOptimizer(MCOptimizerBase):
         return tuple(layout), start
 
     def get_ci_response_layout(self):
-        """Return the root-major layout of the flattened CI response vector.
+        r"""Return the root-major layout of the flattened CI response vector.
+
+        The coefficient ordering :math:`\mathbb L=((\alpha,M))_J` is defined
+        by
+
+        .. math::
+
+            \mathbf x
+            =\bigoplus_{\alpha=0}^{d-1}\mathbf x_\alpha,
+            \qquad
+            x_J=(x_\alpha)_M
+            \quad\text{for }J\leftrightarrow(\alpha,M)\in\mathbb L.
 
         Returns
         -------
@@ -670,7 +694,19 @@ class MCOptimizer(MCOptimizerBase):
         return ci_vector.astype(float, copy=False), layout
 
     def _project_ci_response_vector(self, ci_vector, layout):
-        """Project each root block out of its solved-state CI subspace."""
+        r"""Project each root block out of its solved-state CI subspace.
+
+        For every state solver :math:`s`, this applies
+
+        .. math::
+
+            \mathbf Q_s\mathbf x_\alpha
+            =\left(\mathbf I_s-
+              \sum_{\gamma\in\mathcal R_s}
+              \mathbf c_\gamma\mathbf c_\gamma^{\mathsf T}\right)
+              \mathbf x_\alpha,
+            \qquad \alpha\in\mathcal R_s.
+        """
         projected = np.empty_like(ci_vector)
         for _, state_index, _, coefficient_slice in layout:
             sub_solver = self.ci_solver.sub_solvers[state_index]
@@ -691,7 +727,7 @@ class MCOptimizer(MCOptimizerBase):
 
             \mathbf Q_s
             =\mathbf I_s-\sum_{\gamma\in\mathcal R_s}
-             \mathbf c_\gamma\mathbf c_\gamma^T,
+             \mathbf c_\gamma\mathbf c_\gamma^{\mathsf T},
 
         where ``R_s`` contains all solved roots represented in the same CSF
         space.  The projection removes CI normalization directions and
@@ -712,6 +748,28 @@ class MCOptimizer(MCOptimizerBase):
         return self._project_ci_response_vector(ci_vector, layout)
 
     def _compute_ci_response_rdms(self, ci_vector, layout):
+        r"""Form root-summed overlap and transition-RDM responses.
+
+        For the root-major vector :math:`\mathbf x`, this returns
+
+        .. math::
+
+            s[\mathbf x]
+            &=\sum_{\alpha=0}^{d-1}\left(
+              S^{\mathbf x_\alpha,\mathbf c_\alpha}
+             +S^{\mathbf c_\alpha,\mathbf x_\alpha}\right),\\
+            \gamma^{u}_{v}[\mathbf x]
+            &=\sum_{\alpha=0}^{d-1}\left[
+              (\gamma^{u}_{v})^{\mathbf x_\alpha,\mathbf c_\alpha}
+             +(\gamma^{u}_{v})^{\mathbf c_\alpha,\mathbf x_\alpha}\right],\\
+            \gamma^{uv}_{wx}[\mathbf x]
+            &=\sum_{\alpha=0}^{d-1}\left[
+              (\gamma^{uv}_{wx})^{\mathbf x_\alpha,\mathbf c_\alpha}
+             +(\gamma^{uv}_{wx})^{\mathbf c_\alpha,\mathbf x_\alpha}\right].
+
+        The implementation evaluates both bra and ket transition densities
+        explicitly in the determinant basis.
+        """
         nact = self.mo_space.nactv
         overlap_response = 0.0
         g1_response = np.zeros((nact,) * 2, dtype=float)
@@ -750,8 +808,10 @@ class MCOptimizer(MCOptimizerBase):
 
             [\mathcal A^{\mathrm{oc}}\mathbf x]_I
             =
-            2\left(A^{\mathrm{oc}}_{p_Iq_I}[\mathbf x]
-                   -A^{\mathrm{oc}}_{q_Ip_I}[\mathbf x]\right).
+            2\left[
+              (A^{\mathrm{oc}}[\mathbf x])^{q_I}_{p_I}
+             -(A^{\mathrm{oc}}[\mathbf x])^{p_I}_{q_I}
+            \right].
 
         No state-average weights multiply x_alpha in this block because it is
         the orbital derivative of the unweighted CI residual Lagrangian. For a
@@ -781,7 +841,15 @@ class MCOptimizer(MCOptimizerBase):
 
         Column J is the orbital response obtained by applying
         compute_orbital_ci_hessian_vector_product to CI unit vector J. Columns
-        use the root-major layout returned by get_ci_response_layout.
+        use the root-major layout returned by get_ci_response_layout:
+
+        .. math::
+
+            (\mathcal A^{\mathrm{oc}})_{IJ}
+            =\left[\mathcal A^{\mathrm{oc}}\mathbf e_J\right]_I,
+            \qquad
+            \mathcal A^{\mathrm{oc}}\in
+            \mathbb R^{n_{\mathrm{rot}}\times n_{\mathrm{CI}}}.
 
         Returns
         -------
@@ -865,7 +933,17 @@ class MCOptimizer(MCOptimizerBase):
 
     @staticmethod
     def _apply_ci_hamiltonian_to_csf(sub_solver, sigma_builder, vector):
-        """Apply a determinant-basis sigma builder to a real CSF vector."""
+        r"""Apply a determinant-basis Hamiltonian to a real CSF vector.
+
+        If :math:`T` maps CSF coefficients to determinant coefficients, this
+        helper returns the CSF representation of the sigma vector
+
+        .. math::
+
+            \boldsymbol\sigma_{\mathrm{CSF}}
+            =T^{\mathsf T}\mathbf H_{\mathrm{det}}T\mathbf c_{\mathrm{CSF}}
+            \equiv\mathbf H_{\mathrm{CSF}}\mathbf c_{\mathrm{CSF}}.
+        """
         vector_det = sub_solver.csf_C_to_det_C(vector)
         sigma_det = np.empty(sub_solver.ndet, dtype=float)
         sigma_builder.Hamiltonian(vector_det, sigma_det)
@@ -921,7 +999,7 @@ class MCOptimizer(MCOptimizerBase):
         .. math::
 
             \mathcal A^{\mathrm{co}}
-            =W_{\mathrm C}(\mathcal A^{\mathrm{oc}})^T.
+            =W_{\mathrm C}(\mathcal A^{\mathrm{oc}})^{\mathsf T}.
 
         Returns
         -------
@@ -1012,8 +1090,16 @@ class MCOptimizer(MCOptimizerBase):
 
         Column ``J`` is obtained by applying
         :meth:`compute_ci_ci_hessian_vector_product` to coefficient-space unit
-        vector ``J``.  Equivalently, the result is block diagonal with root
-        blocks ``2 * (H_alpha - E_alpha * I_alpha)``.
+        vector ``J``.  Equivalently,
+
+        .. math::
+
+            (\mathcal A^{\mathrm{cc}})_{JK}
+            =\left[\mathcal A^{\mathrm{cc}}\mathbf e_K\right]_J,
+            \qquad
+            \mathcal A^{\mathrm{cc}}
+            =\bigoplus_{\alpha=0}^{d-1}
+             2(\mathbf H_\alpha-E_\alpha\mathbf I_\alpha).
 
         Returns
         -------
@@ -1055,10 +1141,14 @@ class MCOptimizer(MCOptimizerBase):
         np.ndarray
             Combined root-major CI response with shape ``(nci,)``.
         """
-        orbital_response = self.compute_ci_orbital_hessian_vector_product(
-            orbital_vector
+        self._validate_orbital_ci_response_request()
+        orbital_vector = self.orb_opt._validate_orbital_response_vector(orbital_vector)
+        ci_vector, layout = self._validate_ci_response_vector(ci_vector)
+        intermediates = self.orb_opt._build_orbital_ci_response_intermediates()
+        orbital_response = self._compute_ci_orbital_hessian_vector_product(
+            orbital_vector, layout, intermediates
         )
-        ci_response = self.compute_ci_ci_hessian_vector_product(ci_vector)
+        ci_response = self._compute_ci_ci_hessian_vector_product(ci_vector, layout)
         return orbital_response + ci_response
 
     def compute_orbital_response_b_vector(self, root):
@@ -1072,7 +1162,9 @@ class MCOptimizer(MCOptimizerBase):
 
             (\mathbf b^{\mathrm o}_\alpha)_I
             =(g^\alpha_{\mathrm{F2}})_I
-            =2\left(A^\alpha_{p_Iq_I}-A^\alpha_{q_Ip_I}\right).
+            =2\left[
+              (A^\alpha)^{q_I}_{p_I}-(A^\alpha)^{p_I}_{q_I}
+            \right].
 
         The root-specific spin-free 1- and 2-RDMs are used without an SA
         weight.  The result is the ``b`` vector itself, not the signed linear
@@ -1105,7 +1197,17 @@ class MCOptimizer(MCOptimizerBase):
         )
 
     def _compute_raw_ci_response_b_vector(self, root, layout):
-        """Build the unprojected real target-energy CI gradient."""
+        r"""Build the unprojected real target-energy CI gradient.
+
+        For target absolute root :math:`\alpha`, this returns
+
+        .. math::
+
+            (\widetilde{\mathbf b}^{\mathrm c}_\alpha)_\beta
+            =2\delta_{\alpha\beta}\mathbf H_\beta\mathbf c_\beta.
+
+        The coefficient-space projector is deliberately not applied here.
+        """
         _, state_index, root_in_state, coefficient_slice = layout[root]
         sub_solver = self.ci_solver.sub_solvers[state_index]
         reference = sub_solver.evecs[:, root_in_state]
@@ -1187,17 +1289,147 @@ class MCOptimizer(MCOptimizerBase):
         self._validate_orbital_ci_response_request()
         orbital_vector = self.orb_opt._validate_orbital_response_vector(orbital_vector)
         ci_vector, layout = self._validate_ci_response_vector(ci_vector)
+        intermediates = self.orb_opt._build_coupled_response_intermediates()
+        return self._compute_projected_response_vector_product(
+            orbital_vector, ci_vector, layout, intermediates
+        )
+
+    def _compute_projected_response_vector_product(
+        self, orbital_vector, ci_vector, layout, intermediates
+    ):
+        r"""Apply the projected response operator using a shared workspace.
+
+        With :math:`\mathcal P_{\mathrm C}=\mathbf I_{\mathrm C}-
+        \mathcal Q_{\mathrm C}`, the returned pair is
+
+        .. math::
+
+            \begin{pmatrix}\mathbf y^{\mathrm o}\\\mathbf y^{\mathrm c}\end{pmatrix}
+            =
+            \begin{pmatrix}
+             \mathcal A^{\mathrm{oo}}
+             &\mathcal A^{\mathrm{oc}}\mathcal Q_{\mathrm C}\\
+             \mathcal Q_{\mathrm C}\mathcal A^{\mathrm{co}}
+             &\mathcal Q_{\mathrm C}\mathcal A^{\mathrm{cc}}
+              \mathcal Q_{\mathrm C}+\mathcal P_{\mathrm C}
+            \end{pmatrix}
+            \begin{pmatrix}\mathbf z\\\mathbf x\end{pmatrix}.
+        """
         projected_ci = self._project_ci_response_vector(ci_vector, layout)
 
-        orbital_product = self.compute_orbital_response_vector_product(
-            orbital_vector, projected_ci
+        orbital_intermediates, density_intermediates, hamiltonian_intermediates = (
+            intermediates
         )
-        raw_ci_product = self.compute_ci_response_vector_product(
-            orbital_vector, projected_ci
+        orbital_product = self.orb_opt._compute_orbital_hessian_vector_product(
+            orbital_vector, orbital_intermediates
+        )
+        density_response = self._compute_ci_response_rdms(projected_ci, layout)
+        orbital_product += self.orb_opt._compute_ci_orbital_response_from_rdms(
+            *density_response, density_intermediates
+        )
+
+        raw_ci_product = self._compute_ci_orbital_hessian_vector_product(
+            orbital_vector, layout, hamiltonian_intermediates
+        )
+        raw_ci_product += self._compute_ci_ci_hessian_vector_product(
+            projected_ci, layout
         )
         ci_product = self._project_ci_response_vector(raw_ci_product, layout)
         ci_product += ci_vector - projected_ci
         return orbital_product, ci_product
+
+    @staticmethod
+    def _invert_response_diagonal(diagonal):
+        r"""Return a sign-preserving, safely regularized inverse diagonal.
+
+        For :math:`s=\max(1,\lVert\mathbf d\rVert_\infty)` and
+        :math:`\epsilon=10^{-6}`, the returned entries are
+
+        .. math::
+
+            m_i&=\widetilde d_i^{-1},\\
+            \widetilde d_i&=
+            \begin{cases}
+              d_i,&|d_i|\ge\epsilon s,\\
+              \operatorname{sgn}_{+}(d_i)\epsilon s,&|d_i|<\epsilon s,
+            \end{cases}
+
+        where :math:`\operatorname{sgn}_{+}(0)=1`.
+        """
+        diagonal = np.asarray(diagonal, dtype=float)
+        scale = max(1.0, float(np.max(np.abs(diagonal), initial=0.0)))
+        floor = 1.0e-6 * scale
+        signs = np.where(diagonal < 0.0, -1.0, 1.0)
+        regularized = np.where(np.abs(diagonal) < floor, signs * floor, diagonal)
+        return 1.0 / regularized
+
+    def _build_response_preconditioner(self, layout, nrot, nci):
+        r"""Build a matrix-free block-Jacobi inverse for coupled GMRES.
+
+        Let :math:`\mathbf d^{\mathrm o}` be the orbital optimizer's diagonal
+        Hessian model and let
+
+        .. math::
+
+            (d^{\mathrm c}_\alpha)_M
+            =2\left[(H_\alpha)_{MM}-E_\alpha\right].
+
+        After applying the regularized inverse defined by
+        :meth:`_invert_response_diagonal`, this routine represents
+
+        .. math::
+
+            \mathcal M^{-1}
+            \begin{pmatrix}\mathbf v^{\mathrm o}\\\mathbf v^{\mathrm c}\end{pmatrix}
+            =
+            \begin{pmatrix}
+              (\widetilde D^{\mathrm o})^{-1}\mathbf v^{\mathrm o}\\
+              \mathcal Q_{\mathrm C}(\widetilde D^{\mathrm c})^{-1}
+              \mathcal Q_{\mathrm C}\mathbf v^{\mathrm c}
+              +\mathcal P_{\mathrm C}\mathbf v^{\mathrm c}
+            \end{pmatrix}.
+
+        It stores only the two inverse diagonals and applies the CI projectors
+        matrix-free.
+        """
+        orbital_diagonal = self.orb_opt._mat_to_vec(self.orb_opt._compute_orbhess())
+        orbital_inverse = self._invert_response_diagonal(orbital_diagonal)
+
+        ci_inverse = np.empty(nci, dtype=float)
+        state_diagonals = {}
+        for absolute_root, state_index, _, coefficient_slice in layout:
+            sub_solver = self.ci_solver.sub_solvers[state_index]
+            if state_index not in state_diagonals:
+                state_diagonals[state_index] = (
+                    sub_solver.ci_sigma_builder.form_Hdiag_csf(
+                        sub_solver.dets,
+                        sub_solver.spin_adapter,
+                        False,
+                    )
+                )
+            diagonal = 2.0 * (state_diagonals[state_index] - self.E_ci[absolute_root])
+            ci_inverse[coefficient_slice] = self._invert_response_diagonal(diagonal)
+
+        dimension = nrot + nci
+
+        def matvec(vector):
+            r"""Apply the block-Jacobi inverse to one coupled vector.
+
+            .. math::
+
+                \mathbf y=\mathcal M^{-1}\mathbf v.
+            """
+            product = np.empty(dimension, dtype=float)
+            product[:nrot] = orbital_inverse * vector[:nrot]
+            ci_vector = vector[nrot:]
+            projected_ci = self._project_ci_response_vector(ci_vector, layout)
+            product[nrot:] = self._project_ci_response_vector(
+                ci_inverse * projected_ci, layout
+            )
+            product[nrot:] += ci_vector - projected_ci
+            return product
+
+        return spla.LinearOperator((dimension, dimension), matvec=matvec, dtype=float)
 
     def solve_state_specific_response(
         self,
@@ -1208,7 +1440,7 @@ class MCOptimizer(MCOptimizerBase):
     ):
         r"""Solve the projected coupled response equations for one target root.
 
-        GMRES is applied to the matrix-free gauge-fixed system
+        Preconditioned GMRES is applied to the matrix-free gauge-fixed system
 
         .. math::
 
@@ -1224,8 +1456,11 @@ class MCOptimizer(MCOptimizerBase):
              \mathbf b^{\mathrm c}_\alpha
             \end{pmatrix},
 
-        with ``P = I - Q``.  The CI solution is projected once more before it
-        is returned to remove roundoff in the gauge components.
+        with ``P = I - Q``.  A matrix-free block-Jacobi preconditioner uses the
+        orbital optimizer's diagonal Hessian and the diagonal CI Hamiltonian;
+        neither a dense response block nor a CI-to-RDM Jacobian is built.  The
+        CI solution is projected once more before it is returned to remove
+        roundoff in the gauge components.
 
         Parameters
         ----------
@@ -1263,21 +1498,42 @@ class MCOptimizer(MCOptimizerBase):
         layout, nci = self._get_ci_response_layout()
         nrot = self.orb_opt.nrot
         dimension = nrot + nci
-        orbital_b = self.compute_orbital_response_b_vector(root)
-        ci_b = self.compute_ci_response_b_vector(root)
+        intermediates = self.orb_opt._build_coupled_response_intermediates()
+        _, density_intermediates, _ = intermediates
+        orbital_b = self.orb_opt._compute_ci_orbital_response_from_rdms(
+            1.0,
+            self.make_sf_1rdm(root),
+            self.make_sf_2rdm(root),
+            density_intermediates,
+        )
+        raw_ci_b = self._compute_raw_ci_response_b_vector(root, layout)
+        ci_b = self._project_ci_response_vector(raw_ci_b, layout)
         rhs = -np.concatenate((orbital_b, ci_b))
 
         def matvec(vector):
+            r"""Apply the gauge-fixed coupled operator :math:`\mathscr A`.
+
+            .. math::
+
+                \mathbf y=\mathscr A\mathbf v,
+
+            where :math:`\mathscr A` is the block matrix displayed in this
+            method's response equation.
+            """
             orbital_product, ci_product = (
-                self.compute_projected_response_vector_product(
-                    vector[:nrot], vector[nrot:]
+                self._compute_projected_response_vector_product(
+                    vector[:nrot], vector[nrot:], layout, intermediates
                 )
             )
-            return np.concatenate((orbital_product, ci_product))
+            product = np.empty(dimension, dtype=float)
+            product[:nrot] = orbital_product
+            product[nrot:] = ci_product
+            return product
 
         operator = spla.LinearOperator(
             (dimension, dimension), matvec=matvec, dtype=float
         )
+        preconditioner = self._build_response_preconditioner(layout, nrot, nci)
         restart = min(dimension, 50)
         solution, info = spla.gmres(
             operator,
@@ -1286,6 +1542,7 @@ class MCOptimizer(MCOptimizerBase):
             atol=0.0,
             restart=restart,
             maxiter=maxiter,
+            M=preconditioner,
         )
         if info != 0:
             if info > 0:
@@ -1299,7 +1556,21 @@ class MCOptimizer(MCOptimizerBase):
         return orbital_response, ci_response
 
     def solve_orbital_response_vector(self, root, *, r_tol=1.0e-10, maxiter=None):
-        """Solve and return only the target-root orbital response vector."""
+        r"""Solve and return only the target-root orbital response vector.
+
+        If :math:`\mathscr A` denotes the gauge-fixed block matrix in
+        :meth:`solve_state_specific_response`, this method returns
+
+        .. math::
+
+            \mathbf z_\alpha
+            =\begin{pmatrix}\mathbf I_{\mathrm o}&\mathbf 0\end{pmatrix}
+             \mathscr A^{-1}
+             \left[-\begin{pmatrix}
+              \mathbf b^{\mathrm o}_\alpha\\
+              \mathbf b^{\mathrm c}_\alpha
+             \end{pmatrix}\right].
+        """
         orbital_response, _ = self.solve_state_specific_response(
             root, r_tol=r_tol, maxiter=maxiter
         )
@@ -1332,7 +1603,8 @@ class MCOptimizer(MCOptimizerBase):
             + Z_\alpha\bar A-\bar A Z_\alpha,
 
             \omega_\alpha
-            = \frac{1}{2}(\Omega_\alpha+\Omega_\alpha^T).
+            = \frac{1}{2}
+              (\Omega_\alpha+\Omega_\alpha^{\mathsf T}).
 
         The commutator is required because the orbital-pair generators form a
         moving frame: differentiating ``z.T @ g`` with respect to the full MO
@@ -1386,7 +1658,11 @@ class MCOptimizer(MCOptimizerBase):
             ci_response = self._project_ci_response_vector(ci_response, layout)
 
         layout, _ = self._get_ci_response_layout()
-        density_intermediates = self.orb_opt._build_ci_orbital_response_intermediates()
+        (
+            orbital_intermediates,
+            density_intermediates,
+            _,
+        ) = self.orb_opt._build_coupled_response_intermediates()
 
         target_A = self.orb_opt._build_orbital_lagrangian_from_rdms(
             1.0,
@@ -1405,7 +1681,6 @@ class MCOptimizer(MCOptimizerBase):
             density_intermediates,
         )
 
-        orbital_intermediates = self.orb_opt._build_orbital_response_intermediates()
         orbital_A = self.orb_opt._compute_orbital_lagrangian_response(
             orbital_response, orbital_intermediates
         )
@@ -1438,9 +1713,18 @@ class MCOptimizer(MCOptimizerBase):
         np.ndarray
             Combined orbital response with shape (nrot,).
         """
-        ci_response = self.compute_orbital_ci_hessian_vector_product(ci_vector)
-        orbital_response = self.orb_opt.compute_orbital_hessian_vector_product(
-            orbital_vector
+        self._validate_orbital_ci_response_request()
+        orbital_vector = self.orb_opt._validate_orbital_response_vector(orbital_vector)
+        ci_vector, layout = self._validate_ci_response_vector(ci_vector)
+        orbital_intermediates, density_intermediates, _ = (
+            self.orb_opt._build_coupled_response_intermediates()
+        )
+        density_response = self._compute_ci_response_rdms(ci_vector, layout)
+        ci_response = self.orb_opt._compute_ci_orbital_response_from_rdms(
+            *density_response, density_intermediates
+        )
+        orbital_response = self.orb_opt._compute_orbital_hessian_vector_product(
+            orbital_vector, orbital_intermediates
         )
         return orbital_response + ci_response
 
@@ -1502,18 +1786,20 @@ class MCOptimizer(MCOptimizerBase):
         and UHF gradients:
 
         .. math::
-            E^x =
-            E_\mathrm{NN}^x
-            + h^x_{\mu\nu}\Gamma_{\mu\nu}
-            - S^x_{\mu\nu} W^S_{\mu\nu}
-            + W^P_{\mu\nu}(P|\mu\nu)^x
-            + W_{PQ}(P|Q)^x.
 
-        Here :math:`\Gamma_{\mu\nu}` is the full spin-free one-particle
-        density, :math:`W^S_{\mu\nu}` is the AO representation of the
-        symmetric CASSCF/GASSCF orbital Lagrangian, and
-        :math:`W^P_{\mu\nu}` and :math:`W_{PQ}` are the density-fitted
-        two-electron derivative weights defined in
+            E_\alpha^x
+            =V_\mathrm{NN}^x
+             +\sum_{\mu\nu}D^{\mathrm{rel},\alpha}_{\mu\nu}h^x_{\mu\nu}
+             -\sum_{\mu\nu}W^{S,\alpha}_{\mu\nu}S^x_{\mu\nu}
+             +\sum_{P\mu\nu}W^{P,\alpha}_{\mu\nu}(P|\mu\nu)^x
+             +\sum_{PQ}W^\alpha_{PQ}(P|Q)^x.
+
+        Here :math:`D^{\mathrm{rel},\alpha}` is the full spin-free
+        one-particle density; for a state-specific calculation it reduces to
+        the stationary density.  :math:`W^{S,\alpha}=C\omega_\alpha
+        C^{\mathsf T}` is the AO energy-weighted density, and
+        :math:`W^{P,\alpha}_{\mu\nu}` and :math:`W^\alpha_{PQ}` are the
+        density-fitted two-electron derivative weights defined in
         ``docs/technical_notes/df_gradients.tex``.
 
         Parameters

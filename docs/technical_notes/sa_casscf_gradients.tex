@@ -1,0 +1,958 @@
+\documentclass[aip,preprint]{revtex4-1}
+
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{braket}
+\usepackage{xspace}
+\usepackage[capitalize]{cleveref}
+
+\newcommand{\forte}{\textsc{Forte2}\xspace}
+\newcommand{\sa}{\mathrm{SA}}
+\newcommand{\df}{\mathrm{DF}}
+\newcommand{\core}{\mathrm{C}}
+\newcommand{\act}{\mathrm{A}}
+\newcommand{\virt}{\mathrm{V}}
+\newcommand{\Tr}{\operatorname{Tr}}
+
+\begin{document}
+
+\title{Technical Notes: Single-State Nonrelativistic SA-CASSCF Gradients}
+
+\author{Forte2 Developers}
+
+\date{\today}
+
+\maketitle
+
+\section{Scope and assumptions}
+
+This note records the equations implemented in \forte for analytic gradients
+of one state evaluated at a state-averaged complete-active-space
+self-consistent-field (SA-CASSCF) reference.  The same response equations
+apply to SA-GASSCF when the nonredundant orbital-pair list contains the
+appropriate inter-GAS rotations and the active-space solver imposes the GAS
+occupation restrictions.
+
+Only the nonrelativistic implementation is considered.  Its assumptions are
+real restricted spatial orbitals, real spin-adapted CI vectors, fixed normalized
+state weights, a converged SA-CASSCF or SA-GASSCF reference, and
+density-fitted two-electron integrals.  The derivation does not cover complex
+orbitals or derivative couplings.
+
+\section{Notation}
+
+The real molecular-orbital coefficient matrix satisfies
+\begin{equation}
+ C^{\mathsf T} S C=I,
+\end{equation}
+where $S$ is the AO overlap matrix.  The orbitals are partitioned into
+inactive core, active, and virtual spaces.  The index conventions are
+\begin{center}
+\begin{tabular}{llll}
+\hline\hline
+Space & Symbol & Indices & Dimension \\
+\hline
+Inactive core & $\mathbb C$ & $m,n,o$ & $N_{\mathrm C}$ \\
+Active & $\mathbb A$ & $u,v,w,t$ & $N_{\mathrm A}$ \\
+Virtual & $\mathbb V$ & $e,f$ & $N_{\mathrm V}$ \\
+Hole, $\mathbb C\cup\mathbb A$ & $\mathbb H$ & $i,j,k,l$ & $N_{\mathrm H}$ \\
+General MO & $\mathbb G$ & $p,q,r,s$ & $N_{\mathrm{MO}}$ \\
+AO & & $\mu,\nu,\rho,\sigma$ & $N_{\mathrm{AO}}$ \\
+Auxiliary AO & & $P,Q,R$ & $N_{\mathrm{aux}}$ \\
+\hline\hline
+\end{tabular}
+\end{center}
+
+For a real CI state $\ket{\Psi_\alpha}=\sum_M c_{M\alpha}\ket{\Phi_M}$,
+the active-space spin-free one- and two-particle RDMs are
+\begin{align}
+ (\gamma^u_v)^\alpha
+ &=\sum_\sigma\braket{\Psi_\alpha|
+   \hat a^\dagger_{u\sigma}\hat a_{v\sigma}|\Psi_\alpha},
+ \\
+ (\Gamma^{uv}_{wt})^\alpha
+ &=\sum_{\sigma\tau}\braket{\Psi_\alpha|
+   \hat a^\dagger_{u\sigma}\hat a^\dagger_{v\tau}
+   \hat a_{t\tau}\hat a_{w\sigma}|\Psi_\alpha}.
+\end{align}
+For normalized weights $w_\alpha$, define
+\begin{equation}
+ \bar\gamma=\sum_\alpha w_\alpha\gamma^\alpha,
+ \qquad
+ \bar\Gamma=\sum_\alpha w_\alpha\Gamma^\alpha.
+ \label{eq:nr-average-rdms}
+\end{equation}
+The orbital optimizer permutes the two-particle RDM to the working array
+\begin{equation}
+ \bar D_{tu,vw}
+ =\frac{1}{2}\left(\bar\Gamma^{tv}_{uw}+\bar\Gamma^{uv}_{tw}\right).
+ \label{eq:nr-working-rdm}
+\end{equation}
+
+The non-antisymmetrized two-electron integrals are in physicists' notation,
+\begin{equation}
+ \langle pq|rs\rangle
+ =\iint\phi_p(1)\phi_q(2)r_{12}^{-1}\phi_r(1)\phi_s(2)
+ \,d1\,d2.
+ \label{eq:nr-physicists-eri}
+\end{equation}
+Let the raw three-center integrals and Coulomb metric be
+\begin{equation}
+ J^P_{\mu\nu}=(P|\mu\nu),
+ \qquad M_{PQ}=(P|Q),
+ \qquad N=M^{-1}.
+ \label{eq:nr-raw-df}
+\end{equation}
+If small metric eigenvalues are removed, $N$ denotes the pseudoinverse on the
+retained auxiliary subspace.  The Fock and response code uses a factor
+$\mathsf X$ satisfying
+\begin{equation}
+ \mathsf X^{\mathsf T}\mathsf X=N,
+ \qquad
+ B^P_{\mu\nu}=\sum_Q\mathsf X_{PQ}J^Q_{\mu\nu},
+ \label{eq:nr-orthonormal-df}
+\end{equation}
+so that
+\begin{equation}
+ \sum_P B^P_{\mu\nu}B^P_{\rho\sigma}
+ =\sum_{PQ}J^P_{\mu\nu}N_{PQ}J^Q_{\rho\sigma}.
+ \label{eq:nr-df-identity}
+\end{equation}
+With metric truncation, $\mathsf X$ is a symmetric inverse square root on the
+retained subspace.  Without truncation, it may instead be an inverse Cholesky
+factor.  Response contractions at fixed nuclei use $B$; nuclear derivatives
+are evaluated from the raw $J$ and $M$ tensors in \cref{sec:nr-gradient}.
+
+\section{Stationary SA-CASSCF reference}
+
+The CI vectors obey
+\begin{equation}
+ H_\alpha\mathbf c_\alpha=E_\alpha\mathbf c_\alpha,
+ \qquad
+ \mathbf c_\alpha^{\mathsf T}\mathbf c_\beta=\delta_{\alpha\beta}
+\end{equation}
+within each state solver.  The inactive-core and active generalized Fock
+contributions are
+\begin{align}
+ (F_{\core})^q_p
+ &=h^q_p+\sum_{m\in\mathbb C}
+ \left(2\langle pm|qm\rangle-\langle pm|mq\rangle\right),
+ \label{eq:nr-fock-core}
+ \\
+ (\bar F_{\act})^q_p
+ &=\sum_{uv\in\mathbb A}\bar\gamma^u_v
+ \left(\langle pu|qv\rangle-\frac12\langle pu|vq\rangle\right),
+ \label{eq:nr-fock-active}
+ \\
+ \bar F^q_p&=(F_{\core})^q_p+(\bar F_{\act})^q_p.
+\end{align}
+The inactive-core energy is
+\begin{equation}
+ E_{\core}=\sum_{m\in\mathbb C}
+ \left[h^m_m+(F_{\core})^m_m\right].
+\end{equation}
+The orbital-dependent state-average energy evaluated by the optimizer is
+\begin{equation}
+ \bar E_{\mathrm{orb}}
+ =E_{\core}+V_{\mathrm{NN}}
+ +\sum_{uv\in\mathbb A}(F_{\core})^v_u\bar\gamma^u_v
+ +\frac12\sum_{tuvw\in\mathbb A}
+ \langle tv|uw\rangle\bar D_{tu,vw}.
+\end{equation}
+
+\subsection{Orbital Lagrangian and gradient}
+
+The implementation constructs the real orbital Lagrangian matrix $\bar A$
+one column space at a time:
+\begin{align}
+ \bar A^m_p&=2\bar F^m_p,
+ &&m\in\mathbb C,
+ \label{eq:nr-orbital-lagrangian-core}
+ \\
+ \bar A^u_p
+ &=\sum_{v\in\mathbb A}(F_{\core})^v_p\bar\gamma^v_u
+ +\sum_{tvw\in\mathbb A}\langle pv|tw\rangle\bar D_{tu,vw},
+ &&u\in\mathbb A,
+ \label{eq:nr-orbital-lagrangian-active}
+ \\
+ \bar A^e_p&=0,
+ &&e\in\mathbb V.
+\end{align}
+Let
+\begin{equation}
+ \mathbb K=\big((p_I,q_I)\big)_{I=0}^{n_{\mathrm{rot}}-1}
+ \label{eq:nr-pair-order}
+\end{equation}
+be the ordered list selected by the Boolean nonredundant-rotation mask.  The
+mask contains exactly one orientation of every retained unordered pair and
+is traversed using NumPy C-order Boolean indexing.  The same ordering is used
+for every orbital response input and output.  For each pair,
+\begin{equation}
+ (\bar g)_I
+ =2\left(\bar A^{q_I}_{p_I}-\bar A^{p_I}_{q_I}\right).
+ \label{eq:nr-orbital-gradient}
+\end{equation}
+The factor of two is the real restricted spin-free convention used by
+\forte.  At convergence, $\bar{\mathbf g}=0$.
+
+For target state $\alpha$, $A^\alpha$ is obtained from
+\cref{eq:nr-orbital-lagrangian-core,eq:nr-orbital-lagrangian-active} using
+the state-specific RDMs.  Its positive orbital right-hand side is
+\begin{equation}
+ \boxed{
+ (b^\mathrm{o}_\alpha)_I
+ =2\left[(A^\alpha)^{q_I}_{p_I}-(A^\alpha)^{p_I}_{q_I}\right]
+ }.
+ \label{eq:nr-orbital-b}
+\end{equation}
+No state weight multiplies this target-state quantity, and
+\begin{equation}
+ \sum_\alpha w_\alpha\mathbf b^\mathrm{o}_\alpha
+ =\bar{\mathbf g}=0.
+\end{equation}
+
+\subsection{Single-state Lagrangian}
+
+For a target root $\alpha$, the real Lagrangian may be organized as
+\begin{align}
+ \mathcal L_\alpha
+ &=E_\alpha
+ -\Tr\!\left[\omega_\alpha(C^{\mathsf T}SC-I)\right]
+ +2\sum_\beta\mathbf x_\beta^{\mathsf T}
+  (H_\beta-E_\beta I)\mathbf c_\beta
+ \nonumber\\
+ &\quad+\mathbf z_\alpha^{\mathsf T}\bar{\mathbf g}
+ +\text{CI orthonormality constraints}.
+ \label{eq:nr-lagrangian}
+\end{align}
+The orbital multiplier $\mathbf z_\alpha$ and concatenated CI multiplier
+$\mathbf x_\alpha$ make this Lagrangian stationary with respect to the
+state-averaged orbital and CI parameters.  The CI normalization and
+root-rotation constraints are imposed below by projection rather than by
+explicitly solving for their multipliers.
+
+\section{Coupled orbital and CI response}
+
+For the ordered pair vector $\mathbf z$, define the antisymmetric embedding
+\begin{equation}
+ Z_{pq}(\mathbf z)=\sum_Iz_I
+ \left(\delta_{p p_I}\delta_{q q_I}
+      -\delta_{p q_I}\delta_{q p_I}\right).
+ \label{eq:nr-vector-embedding}
+\end{equation}
+The corresponding orbital path and tangent are
+\begin{equation}
+ C(\epsilon)=C\exp(\epsilon Z),
+ \qquad
+ \dot C=\left.\frac{dC(\epsilon)}{d\epsilon}\right|_0=CZ.
+ \label{eq:nr-orbital-direction}
+\end{equation}
+
+\subsection{Orbital--orbital block}
+
+The orbital--orbital Hessian action is the directional derivative of the
+state-averaged orbital gradient at fixed SA RDMs and fixed AO integrals:
+\begin{equation}
+ \boxed{
+ [\mathcal A^{\mathrm{oo}}\mathbf z]_I
+ =\left.\frac{d}{d\epsilon}\bar g_I(Ce^{\epsilon Z})\right|_0
+ =2\left[(\dot{\bar A})^{q_I}_{p_I}
+         -(\dot{\bar A})^{p_I}_{q_I}\right]
+ }.
+ \label{eq:nr-oo-action}
+\end{equation}
+The active RDMs do not change in this partial derivative.  With
+$P_{\core}=C_{\core}C_{\core}^{\mathsf T}$ and
+$\bar P_{\act}=C_{\act}\bar\gamma C_{\act}^{\mathsf T}$,
+\begin{align}
+ \dot P_{\core}
+ &=\dot C_{\core}C_{\core}^{\mathsf T}
+  +C_{\core}\dot C_{\core}^{\mathsf T},
+ \\
+ \dot{\bar P}_{\act}
+ &=\dot C_{\act}\bar\gamma C_{\act}^{\mathsf T}
+  +C_{\act}\bar\gamma\dot C_{\act}^{\mathsf T}.
+ \label{eq:nr-density-response}
+\end{align}
+Introduce the linear DF Coulomb and exchange maps
+\begin{align}
+ J[D]_{\mu\nu}
+ &=\sum_{P\rho\sigma}
+ B^P_{\mu\nu}B^P_{\rho\sigma}D_{\sigma\rho},
+ \\
+ K[D]_{\mu\nu}
+ &=\sum_{P\rho\sigma}
+ B^P_{\mu\sigma}D_{\sigma\rho}B^P_{\nu\rho}.
+\end{align}
+The AO Fock responses are
+\begin{align}
+ \dot F_{\core}^{\mathrm{AO}}
+ &=2J[\dot P_{\core}]-K[\dot P_{\core}],
+ \\
+ \dot{\bar F}_{\act}^{\mathrm{AO}}
+ &=J[\dot{\bar P}_{\act}]
+  -\frac12K[\dot{\bar P}_{\act}].
+ \label{eq:nr-fock-response}
+\end{align}
+For $X\in\{\core,\act\}$, transformation to the moving MO frame gives
+\begin{equation}
+ \dot F_X=Z^{\mathsf T}F_X+F_XZ
+ +C^{\mathsf T}\dot F_X^{\mathrm{AO}}C.
+ \label{eq:nr-mo-fock-response}
+\end{equation}
+
+The implementation evaluates exchange responses from low-rank factors.  For
+the generic symmetric response density
+\begin{equation}
+ D=C_LG_sC_R^{\mathsf T}+C_RG_sC_L^{\mathsf T},
+ \qquad G_s=\frac12(G+G^{\mathsf T}),
+ \label{eq:nr-low-rank-density}
+\end{equation}
+use the signed eigendecomposition
+\begin{align}
+ G_s&=U\Xi U^{\mathsf T},
+ &L&=C_LU|\Xi|^{1/2},
+ &R&=C_RU\operatorname{sgn}(\Xi)|\Xi|^{1/2}.
+ \label{eq:nr-signed-factorization}
+\end{align}
+Then $D=LR^{\mathsf T}+RL^{\mathsf T}$.  With half transforms
+\begin{equation}
+ Y^{P,L}_{\mu a}=\sum_\nu B^P_{\mu\nu}L_{\nu a},
+ \qquad
+ Y^{P,R}_{\mu a}=\sum_\nu B^P_{\mu\nu}R_{\nu a},
+\end{equation}
+the exact exchange response is
+\begin{equation}
+ K[D]_{\mu\nu}=\sum_{Pa}
+ \left(Y^{P,L}_{\mu a}Y^{P,R}_{\nu a}
+      +Y^{P,R}_{\mu a}Y^{P,L}_{\nu a}\right).
+ \label{eq:nr-low-rank-exchange}
+\end{equation}
+The core and active tuples $(C_L,C_R,G;c_J,c_K)$ are, respectively,
+\begin{equation}
+ (\dot C_{\core},C_{\core},I;2,1),
+ \qquad
+ (\dot C_{\act},C_{\act},\bar\gamma;1,1/2),
+\end{equation}
+where the returned Fock response is $c_JJ[D]-c_KK[D]$.  The directional
+exchange workspace is
+$O(N_{\mathrm{aux}}N_{\mathrm{AO}}r)$ for factor rank $r$.
+
+Only the general--active transformed DF block is persistent:
+\begin{equation}
+ B^P_{pu}=\sum_{\mu\nu}C_{\mu p}B^P_{\mu\nu}C_{\nu u},
+ \qquad p\in\mathbb G,\quad u\in\mathbb A.
+ \label{eq:nr-general-active-df}
+\end{equation}
+Its response is evaluated without a general--general DF tensor,
+\begin{equation}
+ \dot B^P_{pu}
+ =\sum_rZ_{rp}B^P_{ru}
+ +\sum_{\mu\nu}C_{\mu p}B^P_{\mu\nu}\dot C_{\nu u}.
+ \label{eq:nr-general-active-df-response}
+\end{equation}
+The active two-particle contraction is
+\begin{align}
+ T^P_{tu}&=\sum_{vw\in\mathbb A}B^P_{vw}\bar D_{tu,vw},
+ &\dot T^P_{tu}&=\sum_{vw\in\mathbb A}\dot B^P_{vw}\bar D_{tu,vw},
+ \label{eq:nr-df-working-rdm}
+ \\
+ \left.\dot{\bar A}^{u}_{p}\right|_{2e}
+ &=\sum_{Pt}\left(\dot B^P_{pt}T^P_{tu}
+                  +B^P_{pt}\dot T^P_{tu}\right).
+ \label{eq:nr-df-lagrangian-response}
+\end{align}
+Together with the one-electron/Fock terms, the complete Lagrangian response is
+\begin{align}
+ \dot{\bar A}^{m}_{p}
+ &=2(\dot F_{\core}+\dot{\bar F}_{\act})^{m}_{p},
+ &&m\in\mathbb C,
+ \\
+ \dot{\bar A}^{u}_{p}
+ &=\sum_{v\in\mathbb A}(\dot F_{\core})^{v}_{p}\bar\gamma^{v}_{u}
+  +\left.\dot{\bar A}^{u}_{p}\right|_{2e},
+ &&u\in\mathbb A,
+ \label{eq:nr-lagrangian-response}
+ \\
+ \dot{\bar A}^{e}_{p}&=0,
+ &&e\in\mathbb V.
+\end{align}
+The dense block uses exactly the matrix-free action,
+\begin{equation}
+ (\mathcal A^{\mathrm{oo}})_{IJ}
+ =[\mathcal A^{\mathrm{oo}}\mathbf e_J]_I.
+ \label{eq:nr-oo-dense}
+\end{equation}
+No four-index integral with general orbital indices is formed, and the
+persistent transformed response workspace is
+$O(N_{\mathrm{aux}}N_{\mathrm{MO}}N_{\mathrm A})$.
+
+\subsection{Orbital--CI block}
+
+Let the concatenated CI multiplier contain one block for every absolute root,
+\begin{equation}
+ \mathbf x=(\mathbf x_0^{\mathsf T},\mathbf x_1^{\mathsf T},\ldots,
+ \mathbf x_{d-1}^{\mathsf T})^{\mathsf T}.
+ \label{eq:nr-ci-layout}
+\end{equation}
+Blocks occur in absolute-root order and use the CSF ordering of the associated
+state solver.  They need not all have the same dimension.
+
+For arbitrary real vectors $\mathbf a$ and $\mathbf b$ in the same CSF space,
+define
+\begin{align}
+ S^{\mathbf a,\mathbf b}&=\mathbf a^{\mathsf T}\mathbf b,
+ \\
+ (\gamma^u_v)^{\mathbf a,\mathbf b}
+ &=\sum_{MN}a_M\braket{\Phi_M|\hat E^u_v|\Phi_N}b_N,
+ \\
+ (\Gamma^{uv}_{wt})^{\mathbf a,\mathbf b}
+ &=\sum_{MN}a_M\braket{\Phi_M|\hat E^{uv}_{wt}|\Phi_N}b_N,
+\end{align}
+where
+\begin{equation}
+ \hat E^u_v=\sum_\sigma\hat a^\dagger_{u\sigma}\hat a_{v\sigma},
+ \qquad
+ \hat E^{uv}_{wt}=\sum_{\sigma\tau}
+ \hat a^\dagger_{u\sigma}\hat a^\dagger_{v\tau}
+ \hat a_{t\tau}\hat a_{w\sigma}.
+\end{equation}
+The real bra-plus-ket CI response quantities are
+\begin{align}
+ s[\mathbf x]
+ &=\sum_\beta\left(
+ S^{\mathbf x_\beta,\mathbf c_\beta}
+ +S^{\mathbf c_\beta,\mathbf x_\beta}\right),
+ \label{eq:nr-ci-overlap-response}
+ \\
+ \gamma^u_v[\mathbf x]
+ &=\sum_\beta\left[
+ (\gamma^u_v)^{\mathbf x_\beta,\mathbf c_\beta}
+ +(\gamma^u_v)^{\mathbf c_\beta,\mathbf x_\beta}\right],
+ \\
+ \Gamma^{uv}_{wt}[\mathbf x]
+ &=\sum_\beta\left[
+ (\Gamma^{uv}_{wt})^{\mathbf x_\beta,\mathbf c_\beta}
+ +(\Gamma^{uv}_{wt})^{\mathbf c_\beta,\mathbf x_\beta}\right].
+ \label{eq:nr-ci-rdm-response}
+\end{align}
+The working response $D_{tu,vw}[\mathbf x]$ follows from
+\cref{eq:nr-working-rdm} with $\bar\Gamma$ replaced by
+$\Gamma[\mathbf x]$.  Similarly, $F_{\act}[\mathbf x]$ follows from
+\cref{eq:nr-fock-active} with $\bar\gamma$ replaced by
+$\gamma[\mathbf x]$.
+
+The CI contribution to the orbital Lagrangian is
+\begin{align}
+ A^{\mathrm{oc},m}_{p}[\mathbf x]
+ &=2\left[s[\mathbf x](F_{\core})^m_p
+         +(F_{\act}[\mathbf x])^m_p\right],
+ &&m\in\mathbb C,
+ \label{eq:nr-oc-lagrangian-core}
+ \\
+ A^{\mathrm{oc},u}_{p}[\mathbf x]
+ &=\sum_{v\in\mathbb A}(F_{\core})^v_p\gamma^v_u[\mathbf x]
+ +\sum_{tvw\in\mathbb A}\langle pv|tw\rangle
+   D_{tu,vw}[\mathbf x],
+ &&u\in\mathbb A,
+ \label{eq:nr-oc-lagrangian-active}
+ \\
+ A^{\mathrm{oc},e}_{p}[\mathbf x]&=0,
+ &&e\in\mathbb V.
+\end{align}
+In the DF implementation, $F_{\act}[\mathbf x]$ uses the low-rank build in
+\cref{eq:nr-low-rank-density,eq:nr-low-rank-exchange} with
+\begin{equation}
+ (C_L,C_R,G;c_J,c_K)
+ =(C_{\act},C_{\act},\gamma[\mathbf x]/2;1,1/2).
+\end{equation}
+The factor $1/2$ in $G$ compensates the two identical terms in
+\cref{eq:nr-low-rank-density}.  The two-particle term is contracted as
+\begin{equation}
+ T^P_{tu}[\mathbf x]
+ =\sum_{vw\in\mathbb A}B^P_{vw}D_{tu,vw}[\mathbf x],
+ \qquad
+ \left.A^{\mathrm{oc},u}_{p}[\mathbf x]\right|_{2e}
+ =\sum_{Pt}B^P_{pt}T^P_{tu}[\mathbf x].
+ \label{eq:nr-df-oc}
+\end{equation}
+Thus neither a CI-to-RDM Jacobian nor a general four-index tensor is formed.
+
+The rectangular block action and its dense definition are
+\begin{align}
+ \boxed{
+ [\mathcal A^{\mathrm{oc}}\mathbf x]_I
+ =2\left(A^{\mathrm{oc},q_I}_{p_I}[\mathbf x]
+         -A^{\mathrm{oc},p_I}_{q_I}[\mathbf x]\right)
+ },
+ \label{eq:nr-oc-action}
+ \\
+ (\mathcal A^{\mathrm{oc}})_{IJ}
+ &=[\mathcal A^{\mathrm{oc}}\mathbf e_J]_I.
+\end{align}
+Here $J$ traverses the root-major coefficient layout.  State weights do not
+appear in this block because it differentiates the unweighted CI residual in
+\cref{eq:nr-lagrangian}.  After projection, $s[\mathbf x]=0$.
+
+\subsection{CI--orbital block}
+
+The transpose mixed block is expressed through the orbital derivative of the
+active-space Hamiltonian.  The inactive-core scalar response is
+\begin{align}
+ \dot E_{\core}[\mathbf z]
+ &=\Tr\!\left[\dot C_{\core}^{\mathsf T}
+ (h+F_{\core}^{\mathrm{AO}})C_{\core}\right]
+ +\Tr\!\left[C_{\core}^{\mathsf T}
+ (h+F_{\core}^{\mathrm{AO}})\dot C_{\core}\right]
+ \nonumber\\
+ &\quad+\Tr\!\left[C_{\core}^{\mathsf T}
+ \dot F_{\core}^{\mathrm{AO}}C_{\core}\right].
+ \label{eq:nr-core-energy-response}
+\end{align}
+The nuclear-repulsion energy is fixed in this partial derivative.  Define
+\begin{equation}
+ \hat H[\mathbf z]
+ =\dot E_{\core}[\mathbf z]
+ +\sum_{uv\in\mathbb A}(\dot F_{\core})^u_v[\mathbf z]\hat E^u_v
+ +\frac12\sum_{uvtw\in\mathbb A}
+ \dot{\langle uv|tw\rangle}[\mathbf z]\hat E^{uv}_{tw}.
+ \label{eq:nr-response-hamiltonian}
+\end{equation}
+Only active four-index response integrals are formed:
+\begin{align}
+ \dot B^P_{uv}
+ &=\sum_{p\in\mathbb G}
+ \left(Z_{pu}B^P_{pv}+B^P_{up}Z_{pv}\right),
+ \\
+ \dot{\langle uv|tw\rangle}
+ &=\sum_P\left(\dot B^P_{ut}B^P_{vw}
+               +B^P_{ut}\dot B^P_{vw}\right).
+ \label{eq:nr-active-df-h-response}
+\end{align}
+The existing CI sigma operation applies $\hat H[\mathbf z]$ to each reference
+vector.  For root $\beta$,
+\begin{equation}
+ \boxed{
+ [\mathcal A^{\mathrm{co}}\mathbf z]_\beta
+ =2w_\beta\hat H[\mathbf z]\mathbf c_\beta
+ }.
+ \label{eq:nr-co-action}
+\end{equation}
+This is the raw CSF-space action, before removing normalization and
+root-rotation components.  If $W_{\mathrm C}$ repeats $w_\beta$ for every
+coefficient in root block $\beta$, equality of mixed derivatives gives
+\begin{equation}
+ \mathcal A^{\mathrm{co}}
+ =W_{\mathrm C}(\mathcal A^{\mathrm{oc}})^{\mathsf T}.
+ \label{eq:nr-mixed-transpose}
+\end{equation}
+
+\subsection{CI--CI block and CI projection}
+
+Holding the orbitals and CI energy multipliers fixed, the real CI residual and
+its directional derivative are
+\begin{align}
+ \mathbf r^\mathrm{c}_\beta
+ &=2(H_\beta-E_\beta I_\beta)\mathbf c_\beta,
+ \\
+ \boxed{
+ [\mathcal A^{\mathrm{cc}}\mathbf x]_\beta
+ =2(H_\beta-E_\beta I_\beta)\mathbf x_\beta
+ }.
+ \label{eq:nr-cc-action}
+\end{align}
+The factor of two is the derivative with respect to real CI coordinates.
+The dense block is the direct sum
+\begin{equation}
+ \mathcal A^{\mathrm{cc}}
+ =\bigoplus_\beta2(H_\beta-E_\beta I_\beta).
+\end{equation}
+It is unweighted and singular along every optimized reference vector.
+
+Let $s(\beta)$ identify the state solver containing absolute root $\beta$ and
+let $\mathcal R_s$ be its optimized-root set.  The projector in that solver is
+\begin{equation}
+ Q_s=I_s-\sum_{\gamma\in\mathcal R_s}
+ \mathbf c_\gamma\mathbf c_\gamma^{\mathsf T}.
+ \label{eq:nr-ci-projector}
+\end{equation}
+The block-diagonal projector $\mathcal Q_{\mathrm C}$ applies $Q_{s(\beta)}$
+to every absolute-root block, and
+$\mathcal P_{\mathrm C}=I-\mathcal Q_{\mathrm C}$.
+
+For target root $\alpha$, the raw and projected positive CI right-hand sides
+are
+\begin{align}
+ (\widetilde{\mathbf b}^{\mathrm c}_\alpha)_\beta
+ &=2\delta_{\alpha\beta}H_\beta\mathbf c_\beta
+ =2\delta_{\alpha\beta}E_\alpha\mathbf c_\alpha,
+ \\
+ \boxed{
+ (\mathbf b^{\mathrm c}_\alpha)_\beta
+ =Q_{s(\beta)}(\widetilde{\mathbf b}^{\mathrm c}_\alpha)_\beta=0
+ }.
+ \label{eq:nr-ci-b}
+\end{align}
+The code evaluates the raw vector with a sigma operation and explicitly
+projects it.  Although the projected CI right-hand side is zero, the coupled
+orbital response generally produces a nonzero CI multiplier.
+
+\subsection{Projected coupled solution}
+
+The implemented response equations are
+\begin{equation}
+ \boxed{
+ \begin{pmatrix}
+ \mathcal A^{\mathrm{oo}}
+ &\mathcal A^{\mathrm{oc}}\mathcal Q_{\mathrm C}\\
+ \mathcal Q_{\mathrm C}\mathcal A^{\mathrm{co}}
+ &\mathcal Q_{\mathrm C}\mathcal A^{\mathrm{cc}}
+  \mathcal Q_{\mathrm C}+\mathcal P_{\mathrm C}
+ \end{pmatrix}
+ \begin{pmatrix}\mathbf z_\alpha\\\mathbf x_\alpha\end{pmatrix}
+ =-
+ \begin{pmatrix}\mathbf b^\mathrm{o}_\alpha\\
+                 \mathbf b^\mathrm{c}_\alpha\end{pmatrix}
+ }.
+ \label{eq:nr-response-system}
+\end{equation}
+The $\mathcal P_{\mathrm C}$ term assigns unit eigenvalues to excluded gauge
+directions and enforces
+$\mathcal P_{\mathrm C}\mathbf x_\alpha=0$.  Because
+\cref{eq:nr-mixed-transpose} contains the coefficient-space weights, the
+matrix is generally nonsymmetric in this convention.  \forte applies all four
+blocks without forming them and solves \cref{eq:nr-response-system} with
+GMRES.  A block-Jacobi preconditioner uses the diagonal orbital Hessian and
+diagonal shifted CI Hamiltonians; its storage is linear in the response
+dimension.
+
+\subsection{Orbital orthogonality multiplier}
+
+The orbital--orbital contribution to the energy-weighted density is not just
+$\dot{\bar A}[\mathbf z_\alpha]$, because that derivative is evaluated in a
+moving MO frame.  For a general variation $\dot C=CX$,
+\begin{equation}
+ D_X\left(\mathbf z_\alpha^{\mathsf T}\bar{\mathbf g}\right)
+ =2\sum_{pq}X_{pq}
+ \left[\dot{\bar A}[\mathbf z_\alpha]
+ +Z_\alpha\bar A-\bar A Z_\alpha\right]_{pq}.
+ \label{eq:nr-full-coefficient-derivative}
+\end{equation}
+The commutator is required even though its antisymmetric contribution drops
+out of the nonredundant response equation at convergence.  Define
+\begin{equation}
+ \boxed{
+ \Omega_\alpha=A^\alpha
+ +A^{\mathrm{oc}}[\mathbf x_\alpha]
+ +\dot{\bar A}[\mathbf z_\alpha]
+ +Z_\alpha\bar A-\bar A Z_\alpha
+ }.
+ \label{eq:nr-relaxed-lagrangian}
+\end{equation}
+The solved response implies
+\begin{equation}
+ 2\left[(\Omega_\alpha)^{q_I}_{p_I}
+       -(\Omega_\alpha)^{p_I}_{q_I}\right]=0
+ \qquad\text{for every }(p_I,q_I)\in\mathbb K.
+\end{equation}
+Hermiticity of the orbital orthogonality constraint selects
+\begin{equation}
+ \boxed{
+ \omega_\alpha=\frac12
+ (\Omega_\alpha+\Omega_\alpha^{\mathsf T})
+ },
+ \qquad
+ W^{S,\alpha}=C\omega_\alpha C^{\mathsf T}.
+ \label{eq:nr-omega}
+\end{equation}
+Its gradient contribution is
+$-\sum_{\mu\nu}W^{S,\alpha}_{\mu\nu}S^x_{\mu\nu}$.
+
+\section{Relaxed densities and DF gradient assembly}
+\label{sec:nr-gradient}
+
+Let $x$ denote a Cartesian nuclear displacement and let a superscript $x$
+denote a skeleton AO-integral derivative.  The target-root gradient requires
+the target densities, the CI-multiplier transition densities, and the orbital
+response of the state-average densities.
+
+For fixed full-MO RDMs, define the orbital-frame response generated by
+$Z_\alpha$ as
+\begin{align}
+ \mathcal R_{Z_\alpha}(\bar\gamma)_{pq}
+ &=\sum_t\left[(Z_\alpha)_{pt}\bar\gamma_{tq}
+              +(Z_\alpha)_{qt}\bar\gamma_{pt}\right],
+ \\
+ \mathcal R_{Z_\alpha}(\bar\Gamma)_{pqrs}
+ &=\sum_t\left[(Z_\alpha)_{pt}\bar\Gamma_{tqrs}
+              +(Z_\alpha)_{qt}\bar\Gamma_{ptrs}
+ \right.\nonumber\\
+ &\hspace{5.5em}\left.
+              +(Z_\alpha)_{rt}\bar\Gamma_{pqts}
+              +(Z_\alpha)_{st}\bar\Gamma_{pqrt}\right].
+ \label{eq:nr-orbital-rdm-response}
+\end{align}
+The conceptual relaxed full-MO RDMs are
+\begin{align}
+ \gamma^{\mathrm{rel},\alpha}
+ &=\gamma^\alpha+\gamma[\mathbf x_\alpha]
+  +\mathcal R_{Z_\alpha}(\bar\gamma),
+ \\
+ \Gamma^{\mathrm{rel},\alpha}
+ &=\Gamma^\alpha+\Gamma[\mathbf x_\alpha]
+  +\mathcal R_{Z_\alpha}(\bar\Gamma).
+ \label{eq:nr-relaxed-rdms}
+\end{align}
+The target and CI-transition terms are unweighted.  SA weights enter only
+through the barred RDMs in the orbital-response contribution.  The
+implementation does not form the full relaxed two-particle RDM in
+\cref{eq:nr-relaxed-rdms}; it uses the compact contractions below.
+
+\subsection{Compact hole-space DF weights}
+
+The nuclear-gradient layer differentiates the raw three-center integrals and
+metric, avoiding derivatives of the factor $\mathsf X$ in
+\cref{eq:nr-orthonormal-df}.  Define the metric-applied three-center tensor
+\begin{equation}
+ Z^P_{\mu\nu}=\sum_QN_{PQ}J^Q_{\mu\nu}.
+ \label{eq:nr-metric-applied-df}
+\end{equation}
+The auxiliary-indexed tensor $Z^P$ is distinct from the orbital generator
+$Z_\alpha$.  Let
+\begin{equation}
+ C_h=\begin{pmatrix}C_{\core}&C_{\act}\end{pmatrix},
+ \qquad
+ Z^P_{ij}=\sum_{\mu\nu}(C_h)_{\mu i}
+ Z^P_{\mu\nu}(C_h)_{\nu j},
+ \quad i,j\in\mathbb H.
+ \label{eq:nr-hole-df}
+\end{equation}
+
+For any active RDM pair $(\gamma^{\act},\Gamma^{\act})$, define the
+spin-free active cumulant
+\begin{equation}
+ \Lambda^{\act}_{uv,wt}
+ =\Gamma^{\act}_{uv,wt}
+ -\gamma^{\act}_{uw}\gamma^{\act}_{vt}
+ +\frac12\gamma^{\act}_{ut}\gamma^{\act}_{vw}
+ \label{eq:nr-active-cumulant}
+\end{equation}
+and the hole-space one-particle density
+\begin{equation}
+ \gamma^h=
+ \begin{pmatrix}2I_{\core}&0\\0&\gamma^{\act}\end{pmatrix}.
+ \label{eq:nr-hole-1rdm}
+\end{equation}
+The corresponding hole pair density could be written
+\begin{equation}
+ \Gamma^h_{ij,kl}
+ =\gamma^h_{ik}\gamma^h_{jl}
+ -\frac12\gamma^h_{il}\gamma^h_{jk}
+ +\sum_{uvwt\in\mathbb A}
+ \delta_{iu}\delta_{jv}\delta_{kw}\delta_{lt}
+ \Lambda^{\act}_{uv,wt},
+ \label{eq:nr-hole-2rdm}
+\end{equation}
+but it is never stored.
+
+The implementation instead builds
+\begin{align}
+ R^P&=\sum_{ij\in\mathbb H}\gamma^h_{ij}Z^P_{ij},
+ \\
+ X^P_{ij}
+ &=\sum_{kl\in\mathbb H}\gamma^h_{ik}Z^P_{lk}\gamma^h_{lj},
+ \\
+ L^P_{uw}
+ &=\sum_{vt\in\mathbb A}\Lambda^{\act}_{uv,wt}Z^P_{vt}.
+ \label{eq:nr-rxl}
+\end{align}
+The compact three-center and auxiliary-metric derivative weights are
+\begin{align}
+ \boxed{
+ W^{P,h}_{ij}
+ =\gamma^h_{ij}R^P-\frac12X^P_{ij}
+ +\sum_{uw\in\mathbb A}\delta_{iu}\delta_{jw}L^P_{uw}
+ },
+ \label{eq:nr-hole-w3}
+ \\
+ \boxed{
+ W_{PQ}
+ =-\frac12R^PR^Q
+ +\frac14\sum_{ij\in\mathbb H}Z^P_{ij}X^Q_{ij}
+ -\frac12\sum_{uw\in\mathbb A}Z^P_{uw}L^Q_{uw}
+ }.
+ \label{eq:nr-hole-w2}
+\end{align}
+The $1/2$ and $1/4$ factors are the nonrelativistic spin-free exchange
+factors.  These expressions are the factorized evaluation of
+\begin{equation}
+ W^{P,h}_{ij}=\sum_{kl\in\mathbb H}\Gamma^h_{ik,jl}Z^P_{kl},
+ \qquad
+ W_{PQ}=-\frac12\sum_{ijkl\in\mathbb H}
+ \Gamma^h_{ik,jl}Z^P_{ij}Z^Q_{kl}.
+ \label{eq:nr-unfactorized-weights}
+\end{equation}
+The AO three-center weight is back-transformed only after the hole-space
+contractions,
+\begin{equation}
+ W^P_{\mu\nu}=\sum_{ij\in\mathbb H}
+ (C_h)_{\mu i}W^{P,h}_{ij}(C_h)_{\nu j}.
+ \label{eq:nr-w3-backtransform}
+\end{equation}
+
+\subsection{Target and CI-multiplier contribution}
+
+Define the active base RDMs
+\begin{equation}
+ \gamma^{\mathrm b}=\gamma^\alpha+\gamma[\mathbf x_\alpha],
+ \qquad
+ \Gamma^{\mathrm b}=\Gamma^\alpha+\Gamma[\mathbf x_\alpha].
+ \label{eq:nr-base-rdms}
+\end{equation}
+Because the projected CI multiplier satisfies $s[\mathbf x_\alpha]=0$, the
+closed-core transition contribution vanishes.  The base hole 1-RDM therefore
+retains the $2I_{\core}$ block in \cref{eq:nr-hole-1rdm}, with only its active
+block replaced by $\gamma^{\mathrm b}$.  Applying
+\cref{eq:nr-active-cumulant,eq:nr-rxl,eq:nr-hole-w3,eq:nr-hole-w2} to the base
+RDMs defines
+\begin{equation}
+ R^{P,\mathrm b},\quad X^{P,\mathrm b},\quad L^{P,\mathrm b},
+ \quad W^{P,h,\mathrm b},\quad W^{\mathrm b}_{PQ}.
+\end{equation}
+
+\subsection{Orbital-multiplier contribution}
+
+Apply the same compact equations to $(\bar\gamma,\bar\Gamma)$ to obtain
+$\bar R$, $\bar X$, $\bar L$, $\bar W^{P,h}$, and $\bar W_{PQ}$.  With
+$\dot C=CZ_\alpha$ and $\dot C_h$ its core and active columns, the transformed
+DF response at fixed AO $Z^P_{\mu\nu}$ is
+\begin{equation}
+ \dot Z^P_{ij}
+ =\sum_{\mu\nu}\left[
+ (\dot C_h)_{\mu i}Z^P_{\mu\nu}(C_h)_{\nu j}
+ +(C_h)_{\mu i}Z^P_{\mu\nu}(\dot C_h)_{\nu j}
+ \right].
+ \label{eq:nr-hole-df-response}
+\end{equation}
+Holding the barred RDMs fixed gives
+\begin{align}
+ \dot{\bar R}^{P}
+ &=\sum_{ij}\bar\gamma^h_{ij}\dot Z^P_{ij},
+ \\
+ \dot{\bar X}^{P}_{ij}
+ &=\sum_{kl}\bar\gamma^h_{ik}\dot Z^P_{lk}\bar\gamma^h_{lj},
+ \\
+ \dot{\bar L}^{P}_{uw}
+ &=\sum_{vt}\bar\Lambda^{\act}_{uv,wt}\dot Z^P_{vt},
+ \\
+ \dot{\bar W}^{P,h}_{ij}
+ &=\bar\gamma^h_{ij}\dot{\bar R}^{P}
+ -\frac12\dot{\bar X}^{P}_{ij}
+ +\sum_{uw\in\mathbb A}\delta_{iu}\delta_{jw}
+  \dot{\bar L}^{P}_{uw}.
+ \label{eq:nr-directional-w3}
+\end{align}
+Differentiating the metric weight gives
+\begin{align}
+ \dot{\bar W}_{PQ}
+ &=-\frac12\left(\dot{\bar R}^{P}\bar R^Q
+                  +\bar R^P\dot{\bar R}^{Q}\right)
+ \nonumber\\
+ &\quad+\frac14\sum_{ij}\left(
+ \dot Z^P_{ij}\bar X^Q_{ij}+Z^P_{ij}\dot{\bar X}^Q_{ij}\right)
+ \nonumber\\
+ &\quad-\frac12\sum_{uw}\left(
+ \dot Z^P_{uw}\bar L^Q_{uw}+Z^P_{uw}\dot{\bar L}^Q_{uw}\right).
+ \label{eq:nr-directional-w2}
+\end{align}
+
+\subsection{Arrays passed to the AO derivative driver}
+
+The relaxed AO one-particle density is
+\begin{align}
+ D^{\mathrm{rel},\alpha}_{\mu\nu}
+ &=2\sum_{m\in\mathbb C}C_{\mu m}C_{\nu m}
+ +\sum_{uv\in\mathbb A}C_{\mu u}\gamma^{\mathrm b}_{uv}C_{\nu v}
+ \nonumber\\
+ &\quad+2\sum_{m\in\mathbb C}\left(
+ \dot C_{\mu m}C_{\nu m}+C_{\mu m}\dot C_{\nu m}\right)
+ \nonumber\\
+ &\quad+\sum_{uv\in\mathbb A}\left(
+ \dot C_{\mu u}\bar\gamma_{uv}C_{\nu v}
+ +C_{\mu u}\bar\gamma_{uv}\dot C_{\nu v}\right).
+ \label{eq:nr-relaxed-ao-1rdm}
+\end{align}
+The relaxed three-center weight, called \texttt{W3} in the implementation, is
+\begin{align}
+ W^{P,\alpha}_{\mu\nu}
+ &=\sum_{ij}(C_h)_{\mu i}W^{P,h,\mathrm b}_{ij}(C_h)_{\nu j}
+ \nonumber\\
+ &\quad+\sum_{ij}\left[
+ (\dot C_h)_{\mu i}\bar W^{P,h}_{ij}(C_h)_{\nu j}
+ +(C_h)_{\mu i}\bar W^{P,h}_{ij}(\dot C_h)_{\nu j}
+ \right]
+ \nonumber\\
+ &\quad+\sum_{ij}(C_h)_{\mu i}
+ \dot{\bar W}^{P,h}_{ij}(C_h)_{\nu j}.
+ \label{eq:nr-relaxed-w3}
+\end{align}
+The relaxed metric weight, called \texttt{W2}, is
+\begin{equation}
+ W^\alpha_{PQ}=W^{\mathrm b}_{PQ}+\dot{\bar W}_{PQ}.
+ \label{eq:nr-relaxed-w2}
+\end{equation}
+The response of both outer $C_h$ factors and of the internally transformed
+$Z^P_{ij}$ is therefore included exactly once.
+
+The common AO derivative-integral layer evaluates the two-electron part as
+\begin{equation}
+ E^x_{2,\alpha}
+ =\sum_{P\mu\nu}W^{P,\alpha}_{\mu\nu}(J^P_{\mu\nu})^x
+ +\sum_{PQ}W^\alpha_{PQ}(M_{PQ})^x.
+ \label{eq:nr-df-gradient-driver}
+\end{equation}
+Combining this with the one-electron, overlap, and nuclear-repulsion terms
+gives the implemented gradient:
+\begin{equation}
+ \boxed{
+ E_\alpha^x
+ =V_{\mathrm{NN}}^x
+ +\sum_{\mu\nu}D^{\mathrm{rel},\alpha}_{\mu\nu}h^x_{\mu\nu}
+ -\sum_{\mu\nu}W^{S,\alpha}_{\mu\nu}S^x_{\mu\nu}
+ +\sum_{P\mu\nu}W^{P,\alpha}_{\mu\nu}(J^P_{\mu\nu})^x
+ +\sum_{PQ}W^\alpha_{PQ}(M_{PQ})^x
+ }.
+ \label{eq:nr-final-gradient}
+\end{equation}
+
+\section{Implementation summary and scaling}
+
+The response solver is matrix free.  Dense orbital--orbital,
+orbital--CI, CI--orbital, and CI--CI blocks are available for tests and are
+defined by applying the same production matrix--vector routines to unit
+vectors.  Consequently, the dense and matrix-free paths cannot drift to
+different algebraic definitions.
+
+The minimum-storage DF choices used by the implementation are:
+\begin{itemize}
+ \item keep only $B^P_{pu}$ rather than a general--general transformed
+       three-index tensor;
+ \item evaluate transition exchange through signed low-rank density factors;
+ \item contract active two-particle RDMs directly with general--active DF
+       blocks;
+ \item form only the $O(N_{\mathrm A}^4)$ active integral response needed by
+       the existing CI sigma builder;
+ \item apply the coupled response matrix with GMRES rather than storing the
+       orbital/CI Hessian; and
+ \item assemble nuclear derivative weights through the hole-space $R$, $X$,
+       and $L$ contractions without storing an $O(N_{\mathrm H}^4)$ pair
+       density.
+\end{itemize}
+The persistent transformed response workspace is
+$O(N_{\mathrm{aux}}N_{\mathrm{MO}}N_{\mathrm A})$.  Gradient assembly needs
+$O(N_{\mathrm{aux}}N_{\mathrm H}^2)$ compact work storage in addition to the
+AO three-center and auxiliary-metric derivative weights required by the
+common DF gradient driver.
+
+\end{document}

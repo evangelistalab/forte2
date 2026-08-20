@@ -632,6 +632,18 @@ def test_sa_casscf_solve_orbital_response_lih():
     nrot = mc.orb_opt.nrot
     nci = layout[-1][-1].stop
 
+    orbital_work, density_work, hamiltonian_work = (
+        mc.orb_opt._build_coupled_response_intermediates()
+    )
+    B_ga = orbital_work[2]
+    assert B_ga is density_work[1]
+    assert B_ga is hamiltonian_work[2]
+    assert B_ga.shape == (
+        mc.system.naux,
+        mc.mo_space.nmo,
+        mc.mo_space.nactv,
+    )
+
     ci_projector = np.zeros((nci, nci))
     for _, state_index, _, coefficient_slice in layout:
         solved_roots = mc.ci_solver.sub_solvers[state_index].evecs

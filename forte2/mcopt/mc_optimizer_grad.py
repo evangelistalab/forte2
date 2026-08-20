@@ -13,7 +13,20 @@ from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
 
 
 def _compute_casscf_gradient(mc, root=None) -> NDArray:
-    """Compute a target-root density-fitted CASSCF/GASSCF gradient."""
+    r"""Dispatch the target-root density-fitted CASSCF/GASSCF gradient.
+
+    For the resolved absolute root :math:`\alpha`, this returns the Cartesian
+    derivative array
+
+    .. math::
+
+        (\mathbf g_\alpha)_{Ax}
+        =\frac{dE_\alpha}{dR_{Ax}},
+        \qquad A=1,\ldots,N_{\mathrm{atom}},\quad x\in\{X,Y,Z\}.
+
+    The nonrelativistic and two-component kernels use the density and
+    orthogonality-multiplier conventions of the technical note.
+    """
     _validate_casscf_gradient_request(mc)
     root = _resolve_casscf_gradient_root(mc, root)
 
@@ -29,7 +42,22 @@ def _compute_casscf_gradient(mc, root=None) -> NDArray:
 
 
 def _compute_nonrel_casscf_gradient(mc, C: NDArray, root: int) -> NDArray:
-    """Compute a target-root nonrelativistic CASSCF/GASSCF gradient."""
+    r"""Compute a target-root nonrelativistic CASSCF/GASSCF gradient.
+
+    The returned component for nuclear displacement :math:`x` is
+
+    .. math::
+
+        E_\alpha^x
+        =V_{\mathrm{NN}}^x
+         +\sum_{\mu\nu}D^\alpha_{\mu\nu}h^x_{\mu\nu}
+         -\sum_{\mu\nu}W^{S,\alpha}_{\mu\nu}S^x_{\mu\nu}
+         +\sum_{P\mu\nu}W^{P,\alpha}_{\mu\nu}(P|\mu\nu)^x
+         +\sum_{PQ}W^\alpha_{PQ}(P|Q)^x.
+
+    For a single-root reference the stationary state-specific densities are
+    used directly; a state average is delegated to the relaxed kernel below.
+    """
     if mc.ci_solver.sa_info.nroots_sum > 1:
         return _compute_nonrel_sa_casscf_gradient(mc, C, root)
 
@@ -60,7 +88,24 @@ def _compute_nonrel_casscf_gradient(mc, C: NDArray, root: int) -> NDArray:
 
 
 def _compute_nonrel_sa_casscf_gradient(mc, C: NDArray, root: int) -> NDArray:
-    """Compute a relaxed gradient for one root of a nonrelativistic SA-CASSCF."""
+    r"""Compute a relaxed gradient for one root of nonrelativistic SA-CASSCF.
+
+    After solving for :math:`(\mathbf z_\alpha,\mathbf x_\alpha)`, this
+    routine assembles
+
+    .. math::
+
+        E_\alpha^x
+        =V_{\mathrm{NN}}^x
+         +\sum_{\mu\nu}D^{\mathrm{rel},\alpha}_{\mu\nu}h^x_{\mu\nu}
+         -\sum_{\mu\nu}(C\omega_\alpha C^{\mathsf T})_{\mu\nu}
+          S^x_{\mu\nu}
+         +\sum_{P\mu\nu}W^{P,\alpha}_{\mu\nu}(P|\mu\nu)^x
+         +\sum_{PQ}W^\alpha_{PQ}(P|Q)^x.
+
+    Here :math:`\omega_\alpha` is the symmetric relaxed orbital multiplier
+    returned by :meth:`MCOptimizer.compute_omega`.
+    """
     orbital_response, ci_response = mc.solve_state_specific_response(root)
     omega = mc.compute_omega(root, orbital_response, ci_response)
     D1, W2, W3 = _build_sa_casscf_relaxed_density_weights(
@@ -92,11 +137,50 @@ def _build_sa_casscf_relaxed_density_weights(
 ) -> tuple[NDArray, NDArray, NDArray]:
     r"""Build relaxed AO density and DF weights for a target SA-CASSCF root.
 
-    Target and CI-transition RDMs are accumulated in the compact inactive-core
-    plus active space.  The orbital term differentiates both occurrences of
-    the compact orbital coefficients and the transformed metric-inverted
-    three-center tensor along ``C Z``.  This is algebraically equivalent to a
-    full-MO relaxed 2-RDM but avoids an ``nmo**4`` intermediate.
+    Target and projected CI-transition RDMs are contracted as a hole-space
+    product density plus an active-space cumulant.  The orbital term
+    differentiates both occurrences of the compact orbital coefficients and
+    the transformed metric-inverted three-center tensor along ``C Z``.  This
+    is algebraically equivalent to a full-MO relaxed 2-RDM while avoiding both
+    ``nmo**4`` and ``(ncore + nact)**4`` intermediates.
+
+    In the notation of the technical note, the AO one-particle density is
+
+    .. math::
+
+        D^{\mathrm{rel},\alpha}
+        =C\left[
+          \gamma^\alpha+\gamma[\mathbf x_\alpha]
+          +\mathscr R_{Z_\alpha}(\bar\gamma)
+        \right]C^{\mathsf T}.
+
+    Let :math:`\mathscr W_k[\gamma,\Gamma;C_h,Z_h]`, for
+    :math:`k\in\{2,3\}`, denote the compact DF weight functional defined by
+    :func:`_build_mc_df_hole_weights`.  The other two returned arrays are
+
+    .. math::
+
+        W_k^{\mathrm{rel},\alpha}
+        &=\mathscr W_k[
+          \gamma^\alpha+\gamma[\mathbf x_\alpha],
+          \Gamma^\alpha+\Gamma[\mathbf x_\alpha];C_h,Z_h]
+        \\
+        &\quad+
+          D_{Z_\alpha}\mathscr W_k[
+          \bar\gamma,\bar\Gamma;C_h,Z_h],
+          \qquad k\in\{2,3\},
+
+    where :math:`D_{Z_\alpha}` differentiates both outer coefficient factors
+    :math:`C_h` and
+
+    .. math::
+
+        Z^P_{xy}=\sum_{\mu\nu}C_{\mu x}Z^P_{\mu\nu}C_{\nu y},
+        \qquad \dot C=CZ_\alpha.
+
+    Thus the function returns exactly
+    :math:`(D^{\mathrm{rel},\alpha},W_2^{\mathrm{rel},\alpha},
+    W_3^{\mathrm{rel},\alpha})` without forming a four-index relaxed RDM.
     """
     nmo = mc.mo_space.nmo
     layout, _ = mc._get_ci_response_layout()
@@ -105,119 +189,71 @@ def _build_sa_casscf_relaxed_density_weights(
     hole_indices = np.concatenate((core_indices, active_indices))
     ncore = core_indices.size
 
-    target = _build_nonrel_casscf_internal_rdms(
-        ncore,
-        1.0,
-        mc.make_sf_1rdm(root),
-        mc.make_sf_2rdm(root),
-    )
-    ci = _build_nonrel_casscf_internal_rdms(
-        ncore,
-        *mc._compute_ci_response_rdms(ci_response, layout),
-    )
-    average = _build_nonrel_casscf_internal_rdms(
-        ncore,
-        1.0,
-        mc.make_average_1rdm(),
-        mc.make_average_2rdm(),
-    )
+    target_g1 = mc.make_sf_1rdm(root)
+    target_g2 = mc.make_sf_2rdm(root)
+    _, ci_g1, ci_g2 = mc._compute_ci_response_rdms(ci_response, layout)
+    average_g1 = mc.make_average_1rdm()
+    average_g2 = mc.make_average_2rdm()
+    base_g1 = target_g1 + ci_g1
+    base_g2 = target_g2 + ci_g2
 
     C = mc.mos.C[0][:, mc.mo_space.orig_to_contig]
+    Ccore = C[:, core_indices]
+    Cact = C[:, active_indices]
     Ch = C[:, hole_indices]
     Z = mc.orb_opt._vec_to_mat(orbital_response)
-    Ch_response = (C @ Z)[:, hole_indices]
+    C_response = C @ Z
+    Ccore_response = C_response[:, core_indices]
+    Cact_response = C_response[:, active_indices]
+    Ch_response = C_response[:, hole_indices]
 
-    gamma1_base = target[0] + ci[0]
-    D1 = np.einsum("mx,xy,ny->mn", Ch, gamma1_base, Ch, optimize=True)
-    D1 += np.einsum("mx,xy,ny->mn", Ch_response, average[0], Ch, optimize=True)
-    D1 += np.einsum("mx,xy,ny->mn", Ch, average[0], Ch_response, optimize=True)
+    # The projected CI multiplier is orthogonal to every solved root, so its
+    # transition overlap and hence its closed-core response are exactly zero.
+    D1 = 2.0 * (Ccore @ Ccore.T)
+    D1 += Cact @ base_g1 @ Cact.T
+    D1 += 2.0 * (Ccore_response @ Ccore.T + Ccore @ Ccore_response.T)
+    D1 += Cact_response @ average_g1 @ Cact.T
+    D1 += Cact @ average_g1 @ Cact_response.T
 
     Z_ao = build_metric_inverted_three_center(mc.system)
     Z_h = np.einsum("mx,Pmn,ny->Pxy", Ch, Z_ao, Ch, optimize=True)
     Z_h_response = np.einsum("mx,Pmn,ny->Pxy", Ch_response, Z_ao, Ch, optimize=True)
     Z_h_response += np.einsum("mx,Pmn,ny->Pxy", Ch, Z_ao, Ch_response, optimize=True)
 
-    pair_base = _make_pair_symmetric_density(target[1] + ci[1])
-    pair_average = _make_pair_symmetric_density(average[1])
-    W3_h = np.einsum("xyzw,Pzw->Pxy", pair_base, Z_h, optimize=True)
-    W2 = -0.5 * np.einsum("xyzw,Pxy,Qzw->PQ", pair_base, Z_h, Z_h, optimize=True)
+    nhole = ncore + base_g1.shape[0]
+    gamma_h_base = np.zeros((nhole, nhole), dtype=float)
+    gamma_h_base[:ncore, :ncore] = 2.0 * np.eye(ncore)
+    gamma_h_base[ncore:, ncore:] = base_g1
+    lambda2_base = _build_casscf_active_cumulant(base_g1, base_g2)
+    W2, W3_h = _build_mc_df_hole_weights(
+        gamma_h_base,
+        lambda2_base,
+        Z_h,
+        ncore,
+        exchange_factor=0.5,
+    )
+
     W3 = np.einsum("mx,Pxy,ny->Pmn", Ch, W3_h, Ch, optimize=True)
 
-    W3_average = np.einsum("xyzw,Pzw->Pxy", pair_average, Z_h, optimize=True)
-    W3_average_response = np.einsum(
-        "xyzw,Pzw->Pxy", pair_average, Z_h_response, optimize=True
+    gamma_h_average = np.zeros((nhole, nhole), dtype=float)
+    gamma_h_average[:ncore, :ncore] = 2.0 * np.eye(ncore)
+    gamma_h_average[ncore:, ncore:] = average_g1
+    lambda2_average = _build_casscf_active_cumulant(average_g1, average_g2)
+    W2_response, W3_average, W3_average_response = (
+        _build_mc_df_hole_directional_weights(
+            gamma_h_average,
+            lambda2_average,
+            Z_h,
+            Z_h_response,
+            ncore,
+            exchange_factor=0.5,
+        )
     )
     W3 += np.einsum("mx,Pxy,ny->Pmn", Ch_response, W3_average, Ch, optimize=True)
     W3 += np.einsum("mx,Pxy,ny->Pmn", Ch, W3_average, Ch_response, optimize=True)
     W3 += np.einsum("mx,Pxy,ny->Pmn", Ch, W3_average_response, Ch, optimize=True)
-    W2 -= 0.5 * np.einsum(
-        "xyzw,Pxy,Qzw->PQ",
-        pair_average,
-        Z_h_response,
-        Z_h,
-        optimize=True,
-    )
-    W2 -= 0.5 * np.einsum(
-        "xyzw,Pxy,Qzw->PQ",
-        pair_average,
-        Z_h,
-        Z_h_response,
-        optimize=True,
-    )
+    W2 += W2_response
     return D1.real, W2.real, W3.real
-
-
-def _build_nonrel_casscf_internal_rdms(
-    ncore: int,
-    overlap: float,
-    gamma1_act: NDArray,
-    gamma2_act: NDArray,
-) -> tuple[NDArray, NDArray]:
-    r"""Embed active RDMs and a closed core into the compact internal space.
-
-    ``overlap`` is one for a normalized state and is the bra-plus-ket overlap
-    for a CI-transition density.  Core--active blocks are linear in the active
-    transition 1-RDM, while the core--core 2-RDM scales with ``overlap``.
-    """
-    nact = gamma1_act.shape[0]
-    if gamma1_act.shape != (nact, nact):
-        raise ValueError("Active 1-RDM must be a square matrix.")
-    if gamma2_act.shape != (nact, nact, nact, nact):
-        raise ValueError(
-            "Expected active 2-RDM shape "
-            f"{(nact, nact, nact, nact)}, got {gamma2_act.shape}."
-        )
-
-    dtype = np.result_type(overlap, gamma1_act, gamma2_act)
-    ninternal = ncore + nact
-    core = slice(0, ncore)
-    active = slice(ncore, ninternal)
-    core_density = np.zeros((ninternal, ninternal), dtype=dtype)
-    core_density[core, core] = 2.0 * np.eye(ncore)
-    active_density = np.zeros((ninternal, ninternal), dtype=dtype)
-    active_density[active, active] = gamma1_act
-    gamma1 = overlap * core_density + active_density
-
-    gamma2 = overlap * (
-        np.einsum("pr,qs->pqrs", core_density, core_density, optimize=True)
-        - 0.5 * np.einsum("ps,qr->pqrs", core_density, core_density, optimize=True)
-    )
-    gamma2 += np.einsum("pr,qs->pqrs", core_density, active_density, optimize=True)
-    gamma2 += np.einsum("pr,qs->pqrs", active_density, core_density, optimize=True)
-    gamma2 -= 0.5 * np.einsum(
-        "ps,qr->pqrs", core_density, active_density, optimize=True
-    )
-    gamma2 -= 0.5 * np.einsum(
-        "ps,qr->pqrs", active_density, core_density, optimize=True
-    )
-    gamma2[active, active, active, active] = gamma2_act
-    return gamma1, gamma2
-
-
-def _make_pair_symmetric_density(gamma2: NDArray) -> NDArray:
-    """Convert a spin-free 2-RDM to its pair-symmetric DF contraction form."""
-    pair_density = gamma2.transpose(0, 2, 1, 3)
-    return 0.5 * (pair_density + pair_density.transpose(2, 3, 0, 1))
 
 
 def _compute_rel_casscf_gradient(mc, C: NDArray) -> NDArray:
@@ -404,27 +440,142 @@ def _build_mc_df_hole_weights(
     r"""Build metric and three-center weights in the compact hole space.
 
     The spin-free and spin-orbital CASSCF expressions differ only in the
-    exchange prefactor.  Forming the exchange and active-cumulant responses
-    once also lets the metric weight reuse the intermediates required by the
-    three-center weight.
+    exchange prefactor :math:`c_K`.  Using the contractions returned by
+    :func:`_build_mc_df_hole_components`, this function returns
+
+    .. math::
+
+        W^P_{xy}
+        &=\gamma^h_{xy}R^P-c_KX^P_{xy}
+          +\delta_{xu}\delta_{yw}L^P_{uw},\\
+        W_{PQ}
+        &=-\frac12R^PR^Q
+          +\frac{c_K}{2}\sum_{xy}Z^P_{xy}X^Q_{xy}
+          -\frac12\sum_{uw}Z^P_{uw}L^Q_{uw}.
+
+    Here :math:`c_K=1/2` for spin-free spatial densities and :math:`c_K=1`
+    for spin-orbital densities.  Forming the contractions once lets the metric
+    weight reuse the intermediates required by the three-center weight.
     """
-    R = np.einsum("xy,Pxy->P", gamma_h, Z_h, optimize=True)
-    exchange_h = np.einsum("xz,Pwz,wy->Pxy", gamma_h, Z_h, gamma_h, optimize=True)
+    R, exchange_h, cumulant_h, W3_h = _build_mc_df_hole_components(
+        gamma_h, lambda2_act, Z_h, ncore, exchange_factor
+    )
 
     active = slice(ncore, None)
     Z_act = Z_h[:, active, active]
-    cumulant_h = np.einsum("uvwx,Pvx->Puw", lambda2_act, Z_act, optimize=True)
-
-    W3_h = np.einsum("xy,P->Pxy", gamma_h, R, optimize=True)
-    W3_h -= exchange_factor * exchange_h
-    W3_h[:, active, active] += cumulant_h
-
     W2 = -0.5 * np.einsum("P,Q->PQ", R, R, optimize=True)
     W2 += (
         0.5 * exchange_factor * np.einsum("Pxy,Qxy->PQ", Z_h, exchange_h, optimize=True)
     )
     W2 -= 0.5 * np.einsum("Puw,Quw->PQ", Z_act, cumulant_h, optimize=True)
     return W2, W3_h
+
+
+def _build_mc_df_hole_components(
+    gamma_h: NDArray,
+    lambda2_act: NDArray,
+    Z_h: NDArray,
+    ncore: int,
+    exchange_factor: float,
+):
+    r"""Build contractions linear in one compact transformed DF tensor.
+
+    With hole indices :math:`x,y,z,w`, active indices :math:`u,v`, and
+    exchange prefactor :math:`c_K`, this returns
+
+    .. math::
+
+        R^P&=\sum_{xy}\gamma^h_{xy}Z^P_{xy},\\
+        X^P_{xy}&=\sum_{zw}\gamma^h_{xz}Z^P_{wz}\gamma^h_{wy},\\
+        L^P_{uw}&=\sum_{vx}\Lambda_{uv,wx}Z^P_{vx},\\
+        W^P_{xy}&=\gamma^h_{xy}R^P-c_KX^P_{xy}
+          +\delta_{xu}\delta_{yw}L^P_{uw}.
+
+    The returned tuple is :math:`(R^P,X^P,L^P,W^P)` in that order.
+    """
+    R = np.einsum("xy,Pxy->P", gamma_h, Z_h, optimize=True)
+    exchange_h = np.einsum("xz,Pwz,wy->Pxy", gamma_h, Z_h, gamma_h, optimize=True)
+    active = slice(ncore, None)
+    cumulant_h = np.einsum(
+        "uvwx,Pvx->Puw",
+        lambda2_act,
+        Z_h[:, active, active],
+        optimize=True,
+    )
+    W3_h = np.einsum("xy,P->Pxy", gamma_h, R, optimize=True)
+    W3_h -= exchange_factor * exchange_h
+    W3_h[:, active, active] += cumulant_h
+    return R, exchange_h, cumulant_h, W3_h
+
+
+def _build_mc_df_hole_directional_weights(
+    gamma_h: NDArray,
+    lambda2_act: NDArray,
+    Z_h: NDArray,
+    Z_h_response: NDArray,
+    ncore: int,
+    exchange_factor: float,
+):
+    r"""Differentiate compact DF weights along a transformed-DF direction.
+
+    Write :math:`\dot Z^P_{xy}` for ``Z_h_response`` and define
+    :math:`\dot R`, :math:`\dot X`, :math:`\dot L`, and :math:`\dot W^P`
+    by the equations in :func:`_build_mc_df_hole_components` with
+    :math:`Z` replaced by :math:`\dot Z`.  The metric-weight response returned
+    here is
+
+    .. math::
+
+        \dot W_{PQ}
+        &=-\frac12(\dot R^PR^Q+R^P\dot R^Q)\\
+        &\quad+\frac{c_K}{2}\sum_{xy}
+          (\dot Z^P_{xy}X^Q_{xy}+Z^P_{xy}\dot X^Q_{xy})\\
+        &\quad-\frac12\sum_{uw}
+          (\dot Z^P_{uw}L^Q_{uw}+Z^P_{uw}\dot L^Q_{uw}).
+
+    The complete returned tuple is
+    :math:`(\dot W_{PQ},W^P_{xy},\dot W^P_{xy})`.
+    """
+    R, exchange_h, cumulant_h, W3_h = _build_mc_df_hole_components(
+        gamma_h, lambda2_act, Z_h, ncore, exchange_factor
+    )
+    R_response, exchange_response, cumulant_response, W3_response = (
+        _build_mc_df_hole_components(
+            gamma_h,
+            lambda2_act,
+            Z_h_response,
+            ncore,
+            exchange_factor,
+        )
+    )
+
+    W2_response = -0.5 * np.einsum("P,Q->PQ", R_response, R, optimize=True)
+    W2_response -= 0.5 * np.einsum("P,Q->PQ", R, R_response, optimize=True)
+    W2_response += (
+        0.5
+        * exchange_factor
+        * np.einsum("Pxy,Qxy->PQ", Z_h_response, exchange_h, optimize=True)
+    )
+    W2_response += (
+        0.5
+        * exchange_factor
+        * np.einsum("Pxy,Qxy->PQ", Z_h, exchange_response, optimize=True)
+    )
+
+    active = slice(ncore, None)
+    W2_response -= 0.5 * np.einsum(
+        "Puw,Quw->PQ",
+        Z_h_response[:, active, active],
+        cumulant_h,
+        optimize=True,
+    )
+    W2_response -= 0.5 * np.einsum(
+        "Puw,Quw->PQ",
+        Z_h[:, active, active],
+        cumulant_response,
+        optimize=True,
+    )
+    return W2_response, W3_h, W3_response
 
 
 def _build_casscf_df_deriv_weights(

@@ -4,11 +4,14 @@
 The benchmark uses the pi spaces of ethene (CAS(2,2)) and trans-butadiene
 (CAS(4,4)) in STO-3G.  It reports the complete RHF+CASSCF setup time and the
 median time for one analytic ground-root gradient.  SA-CASSCF uses two
-equal-weight singlet roots.
+equal-weight singlet roots.  The memory columns compare the actual shared
+response workspace with the full transformed DF tensor that the matrix-free
+implementation deliberately avoids.
 
 Run from the repository root, for example::
 
-    python benchmarks/sa_casscf_gradient_timings.py --repeats 3
+    env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 \
+        python benchmarks/sa_casscf_gradient_timings.py --repeats 7
 """
 
 from argparse import ArgumentParser
@@ -104,7 +107,23 @@ def time_reference(polyene: Polyene, state_averaged: bool, repeats: int):
         mc.gradient(root=0 if state_averaged else None)
         gradient_seconds.append(perf_counter() - start)
 
-    return wavefunction_seconds, median(gradient_seconds)
+    response_mib = 0.0
+    full_df_mib = 0.0
+    if state_averaged:
+        intermediates = mc.orb_opt._build_coupled_response_intermediates()
+        unique_arrays = {}
+        for block in intermediates:
+            for array in block:
+                unique_arrays[id(array)] = array
+        response_mib = sum(array.nbytes for array in unique_arrays.values()) / 2**20
+        full_df_mib = 8.0 * mc.system.naux * mc.mo_space.nmo**2 / 2**20
+
+    return (
+        wavefunction_seconds,
+        median(gradient_seconds),
+        response_mib,
+        full_df_mib,
+    )
 
 
 def main():
@@ -131,7 +150,7 @@ def main():
     for system_name in systems:
         polyene = POLYENES[system_name]
         for state_averaged in (False, True):
-            wavefunction, gradient = time_reference(
+            wavefunction, gradient, response_mib, full_df_mib = time_reference(
                 polyene, state_averaged, args.repeats
             )
             results.append(
@@ -141,6 +160,8 @@ def main():
                     polyene.active_space,
                     wavefunction,
                     gradient,
+                    response_mib,
+                    full_df_mib,
                 )
             )
 
@@ -148,20 +169,34 @@ def main():
     print(f"gradient time: median of {args.repeats} call(s)")
     print(
         f"{'system':<12} {'method':<11} {'space':<9} "
-        f"{'wave function / s':>17} {'gradient / s':>14}"
+        f"{'wave function / s':>17} {'gradient / s':>14} "
+        f"{'workspace / MiB':>16} {'full B / MiB':>13}"
     )
-    print("-" * 68)
-    for system_name, method, active_space, wavefunction, gradient in results:
+    print("-" * 100)
+    for (
+        system_name,
+        method,
+        active_space,
+        wavefunction,
+        gradient,
+        response_mib,
+        full_df_mib,
+    ) in results:
+        memory = (
+            f"{response_mib:16.3f} {full_df_mib:13.3f}"
+            if method == "SA-CASSCF"
+            else f"{'-':>16} {'-':>13}"
+        )
         print(
             f"{system_name:<12} {method:<11} {active_space:<9} "
-            f"{wavefunction:17.3f} {gradient:14.3f}"
+            f"{wavefunction:17.3f} {gradient:14.3f} {memory}"
         )
 
     print("\nSA-CASSCF/CASSCF gradient-time ratio")
     for system_name in systems:
         system_results = [row for row in results if row[0] == system_name]
-        casscf_gradient = system_results[0][-1]
-        sa_casscf_gradient = system_results[1][-1]
+        casscf_gradient = system_results[0][4]
+        sa_casscf_gradient = system_results[1][4]
         print(f"{system_name:<12} {sa_casscf_gradient / casscf_gradient:8.2f}x")
 
 

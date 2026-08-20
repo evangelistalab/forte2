@@ -48,7 +48,20 @@ class OrbOptimizer:
 
     @staticmethod
     def _make_working_2rdm(g2):
-        """Convert a spin-free 2-RDM to the orbital optimizer convention."""
+        r"""Convert a spin-free 2-RDM to the orbital-optimizer convention.
+
+        In the notation of the technical note, the returned tensor is
+
+        .. math::
+
+            \bar D_{tu,vw}
+            =\frac{1}{2}\left(
+              \bar\gamma^{tv}_{uw}+\bar\gamma^{uv}_{tw}
+            \right).
+
+        The same linear permutation is used for state-specific and transition
+        2-RDMs, with the bars replaced by the corresponding density label.
+        """
         # '2RDM' defined as in [eq (6)]
         return 0.5 * (np.einsum("prqs->pqrs", g2) + np.einsum("qrps->pqrs", g2))
 
@@ -101,13 +114,14 @@ class OrbOptimizer:
             y_I
             = \sum_J (\mathcal A^{\mathrm{oo}})_{IJ}z_J
             = \left.\frac{d}{d\epsilon}
-              \bar g_{p_I q_I}
+              (\bar g_{\mathrm{F2}})^{q_I}_{p_I}
               \left(Ce^{\epsilon Z(\mathbf z)};
                     \bar\gamma,\bar D\right)
               \right|_{\epsilon=0},
 
-        where :math:`\bar g_{pq}=2(\bar A_{pq}-\bar A_{qp})` is Forte2's
-        nonrelativistic orbital gradient.  Equivalently,
+        where :math:`(\bar g_{\mathrm{F2}})^q_p=
+        2(\bar A^q_p-\bar A^p_q)` is Forte2's nonrelativistic orbital
+        gradient.  Equivalently,
         :math:`(\mathcal A^{\mathrm{oo}})_{IJ}` is the derivative obtained by
         setting :math:`\mathbf z=\mathbf e_J` in the equation above.
 
@@ -143,7 +157,17 @@ class OrbOptimizer:
 
         Column :math:`j` is obtained by applying the same matrix-free response
         kernel used by :meth:`compute_orbital_hessian_vector_product` to unit
-        vector :math:`j`.  The active RDMs are held fixed.
+        vector :math:`j`.  Explicitly,
+
+        .. math::
+
+            (\mathcal A^{\mathrm{oo}})_{IJ}
+            =\left[\mathcal A^{\mathrm{oo}}\mathbf e_J\right]_I,
+            \qquad
+            \mathcal A^{\mathrm{oo}}\in
+            \mathbb R^{n_{\mathrm{rot}}\times n_{\mathrm{rot}}}.
+
+        The active RDMs are held fixed.
 
         Returns
         -------
@@ -246,19 +270,21 @@ class OrbOptimizer:
 
         .. math::
 
-            P_{\mathrm{C}}=C_{\mathrm{C}}C_{\mathrm{C}}^{T},\qquad
-            P_{\mathrm{A}}=C_{\mathrm{A}}\bar\gamma C_{\mathrm{A}}^{T}.
+            P_{\mathrm{C}}=C_{\mathrm{C}}C_{\mathrm{C}}^{\mathsf T},\qquad
+            \bar P_{\mathrm{A}}
+            =C_{\mathrm{A}}\bar\gamma C_{\mathrm{A}}^{\mathsf T}.
 
         This method returns the three tensors
 
         .. math::
 
             F_{\mathrm{C}}
-            &=C^T\left(h+2J[P_{\mathrm{C}}]-K[P_{\mathrm{C}}]\right)C,\\
+            &=C^{\mathsf T}\left(h+2J[P_{\mathrm{C}}]-K[P_{\mathrm{C}}]\right)C,\\
             \bar F_{\mathrm{A}}
-            &=C^T\left(J[P_{\mathrm{A}}]-\tfrac12K[P_{\mathrm{A}}]\right)C,\\
-            B^P_{pq}
-            &=\sum_{\mu\nu}C_{\mu p}B^P_{\mu\nu}C_{\nu q}.
+            &=C^{\mathsf T}\left(J[\bar P_{\mathrm{A}}]
+              -\tfrac12K[\bar P_{\mathrm{A}}]\right)C,\\
+            B^P_{pu}
+            &=\sum_{\mu\nu}C_{\mu p}B^P_{\mu\nu}C_{\nu u}.
 
         Here ``g1`` is :math:`\bar\gamma`, :math:`B^P_{\mu\nu}` is the
         orthonormalized DF three-index tensor, and the AO maps are defined by
@@ -271,7 +297,9 @@ class OrbOptimizer:
             &=\sum_{P\rho\sigma}B^P_{\mu\sigma}D_{\sigma\rho}B^P_{\nu\rho}.
 
         The first two returned arrays are in the full current MO basis; the
-        third has all three-index factors transformed to that basis.
+        third retains only one general and one active MO index.  This is the
+        largest transformed DF block required by the matrix-free Hessian
+        action; a full ``(naux, nmo, nmo)`` tensor is never formed.
 
         These tensors contain no response themselves.  They are fixed base-
         point quantities that may be reused for multiple directions or all
@@ -282,8 +310,8 @@ class OrbOptimizer:
         Returns
         -------
         tuple[np.ndarray, np.ndarray, np.ndarray]
-            ``(Fcore_mo, Fact_mo, B_mo)`` with shapes ``(nmo, nmo)``,
-            ``(nmo, nmo)``, and ``(naux, nmo, nmo)``, respectively.
+            ``(Fcore_mo, Fact_mo, B_ga)`` with shapes ``(nmo, nmo)``,
+            ``(nmo, nmo)``, and ``(naux, nmo, nact)``, respectively.
 
         Raises
         ------
@@ -295,22 +323,141 @@ class OrbOptimizer:
         Fact_ao = self.fock_builder.build_active_fock(self.Cact, self.g1)
         Fcore_mo = self._transform_ao_operator(Fcore_ao, self.C)
         Fact_mo = self._transform_ao_operator(Fact_ao, self.C)
-        B_mo = np.einsum(
+        B_ga = self._transform_df_block(self.C, self.Cact)
+        return Fcore_mo, Fact_mo, B_ga
+
+    def _build_coupled_response_intermediates(self):
+        r"""Build one shared, active-index DF workspace for a response solve.
+
+        Returns the orbital--orbital, orbital--CI, and CI--orbital tuples used
+        by their respective private matrix-vector kernels.  Arrays common to
+        several blocks are shared by reference.  In particular, only
+        ``B[P,p,u]`` and its active-active view are retained, so the workspace
+        contains no full transformed ``B[P,p,q]`` tensor and no generalized
+        four-index integral block.
+
+        In the notation of the technical note, the returned object is
+
+        .. math::
+
+            \mathcal I_{\mathrm{coupled}}
+            =\left(
+              (F_{\mathrm C},\bar F_{\mathrm A},B^P_{pu}),
+              (F_{\mathrm C},B^P_{pu}),
+              (F_{\mathrm C}^{\mathrm{AO}},F_{\mathrm C},B^P_{pu})
+             \right),
+
+        where
+
+        .. math::
+
+            B^P_{pu}=\sum_{\mu\nu}
+            C_{\mu p}B^P_{\mu\nu}C_{\nu u}.
+
+        The three entries are respectively the intermediates for
+        :math:`\mathcal A^{\mathrm{oo}}`, :math:`\mathcal A^{\mathrm{oc}}`,
+        and :math:`\mathcal A^{\mathrm{co}}`.
+        """
+        self._validate_nonrelativistic_orbital_response()
+        Fcore_ao = self.fock_builder.build_core_fock(self.Ccore, hcore=self.hcore)
+        Fact_ao = self.fock_builder.build_active_fock(self.Cact, self.g1)
+        Fcore_mo = self._transform_ao_operator(Fcore_ao, self.C)
+        Fact_mo = self._transform_ao_operator(Fact_ao, self.C)
+        B_ga = self._transform_df_block(self.C, self.Cact)
+        return (
+            (Fcore_mo, Fact_mo, B_ga),
+            (Fcore_mo, B_ga),
+            (Fcore_ao, Fcore_mo, B_ga),
+        )
+
+    def _transform_df_block(self, left, right):
+        r"""Transform the AO DF tensor with two rectangular factors.
+
+        For input coefficient matrices :math:`L` and :math:`R`, this returns
+
+        .. math::
+
+            B^P_{ab}[L,R]
+            =\sum_{\mu\nu}L_{\mu a}B^P_{\mu\nu}R_{\nu b}.
+        """
+        return np.einsum(
             "Pmn,mp,nq->Ppq",
             self.fock_builder.B_Pmn,
-            self.C,
-            self.C,
+            left,
+            right,
             optimize=True,
         )
-        return Fcore_mo, Fact_mo, B_mo
 
-    def _build_density_fock_response(
-        self, density_response, coulomb_factor, exchange_factor
+    def _build_transition_fock_response(
+        self,
+        response_orbitals,
+        reference_orbitals,
+        metric=None,
+        *,
+        coulomb_factor,
+        exchange_factor,
     ):
-        """Apply ``coulomb_factor * J[D] - exchange_factor * K[D]``."""
-        B = self.fock_builder.B_Pmn
+        r"""Build a Fock response from a symmetric low-rank transition density.
+
+        Let :math:`C_L` and :math:`C_R` denote ``response_orbitals`` and
+        ``reference_orbitals``.  If a real symmetric ``metric`` :math:`G` is
+        supplied, the symmetrized metric
+        :math:`G_s=(G+G^{\mathsf T})/2` and its signed eigendecomposition
+        define
+
+        .. math::
+
+            G_s&=U\Lambda U^{\mathsf T},\\
+            L&=C_LU|\Lambda|^{1/2},\\
+            R&=C_RU\operatorname{sgn}(\Lambda)|\Lambda|^{1/2}.
+
+        With no metric, :math:`L=C_L` and :math:`R=C_R`.  The density and
+        returned AO Fock response are
+
+        .. math::
+
+            D&=LR^{\mathsf T}+RL^{\mathsf T},\\
+            \dot F^{\mathrm{AO}}[D]
+             &=c_JJ[D]-c_KK[D].
+
+        The exchange contraction is evaluated from the half transforms
+
+        .. math::
+
+            Y^{P,L}_{\mu a}&=\sum_\nu B^P_{\mu\nu}L_{\nu a},\\
+            Y^{P,R}_{\mu a}&=\sum_\nu B^P_{\mu\nu}R_{\nu a},\\
+            K[D]_{\mu\nu}
+             &=\sum_{Pa}\left(
+               Y^{P,L}_{\mu a}Y^{P,R}_{\nu a}
+              +Y^{P,R}_{\mu a}Y^{P,L}_{\nu a}\right),
+
+        so no three-general-index response tensor is formed.  The signed
+        factorization permits indefinite CI transition densities.
+        """
+        if metric is None:
+            left = response_orbitals
+            right = reference_orbitals
+        else:
+            eigenvalues, eigenvectors = np.linalg.eigh(0.5 * (metric + metric.T))
+            roots = np.sqrt(np.abs(eigenvalues))
+            left = response_orbitals @ (eigenvectors * roots[None, :])
+            right = reference_orbitals @ (
+                eigenvectors * (np.sign(eigenvalues) * roots)[None, :]
+            )
+
+        density_response = left @ right.T + right @ left.T
         J_response = self.fock_builder.build_J([density_response])[0]
-        K_response = np.einsum("Pms,sr,Pnr->mn", B, density_response, B, optimize=True)
+
+        if self.fock_builder.store_B_nPm:
+            left_half = self.fock_builder.B_nPm @ left
+            right_half = self.fock_builder.B_nPm @ right
+            K_lr = np.tensordot(left_half, right_half, axes=([1, 2], [1, 2]))
+        else:
+            B = self.fock_builder.B_Pmn
+            left_half = np.einsum("Pms,si->Pmi", B, left, optimize=True)
+            right_half = np.einsum("Pms,si->Pmi", B, right, optimize=True)
+            K_lr = np.einsum("Pmi,Pni->mn", left_half, right_half, optimize=True)
+        K_response = K_lr + K_lr.T
         return coulomb_factor * J_response - exchange_factor * K_response
 
     def _compute_orbital_hessian_vector_product(self, vector, intermediates):
@@ -323,15 +470,16 @@ class OrbOptimizer:
         .. math::
 
             \dot P_{\mathrm{C}}
-            &=\dot C_{\mathrm{C}}C_{\mathrm{C}}^{T}
-              +C_{\mathrm{C}}\dot C_{\mathrm{C}}^{T},\\
-            \dot P_{\mathrm{A}}
-            &=\dot C_{\mathrm{A}}\bar\gamma C_{\mathrm{A}}^{T}
-              +C_{\mathrm{A}}\bar\gamma\dot C_{\mathrm{A}}^{T},\\
+            &=\dot C_{\mathrm{C}}C_{\mathrm{C}}^{\mathsf T}
+              +C_{\mathrm{C}}\dot C_{\mathrm{C}}^{\mathsf T},\\
+            \dot{\bar P}_{\mathrm{A}}
+            &=\dot C_{\mathrm{A}}\bar\gamma C_{\mathrm{A}}^{\mathsf T}
+              +C_{\mathrm{A}}\bar\gamma\dot C_{\mathrm{A}}^{\mathsf T},\\
             \dot F_{\mathrm{C}}^{\mathrm{AO}}
             &=2J[\dot P_{\mathrm{C}}]-K[\dot P_{\mathrm{C}}],\\
             \dot{\bar F}_{\mathrm{A}}^{\mathrm{AO}}
-            &=J[\dot P_{\mathrm{A}}]-\tfrac12K[\dot P_{\mathrm{A}}].
+            &=J[\dot{\bar P}_{\mathrm{A}}]
+              -\tfrac12K[\dot{\bar P}_{\mathrm{A}}].
 
         For :math:`X\in\{\mathrm C,\mathrm A\}`, the corresponding MO-basis
         response and the transformed DF-factor response are
@@ -339,31 +487,33 @@ class OrbOptimizer:
         .. math::
 
             \dot F_X
-            &=Z^T F_X+F_XZ+C^T\dot F_X^{\mathrm{AO}}C,\\
+            &=Z^{\mathsf T} F_X+F_XZ
+              +C^{\mathsf T}\dot F_X^{\mathrm{AO}}C,\\
             \dot B^P_{pq}
             &=\sum_s\left(Z_{sp}B^P_{sq}+B^P_{ps}Z_{sq}\right).
 
-        With :math:`V_{rvtw}=\sum_P B^P_{rt}B^P_{vw}`, the integral response is
+        With :math:`\langle pv|tw\rangle=\sum_PB^P_{pt}B^P_{vw}`, the
+        integral response is
 
         .. math::
 
-            \dot V_{rvtw}
-            =\sum_P\left(\dot B^P_{rt}B^P_{vw}
-                         +B^P_{rt}\dot B^P_{vw}\right).
+            \dot{\langle pv|tw\rangle}
+            =\sum_P\left(\dot B^P_{pt}B^P_{vw}
+                         +B^P_{pt}\dot B^P_{vw}\right).
 
         Holding ``g1`` (:math:`\bar\gamma`) and the internal working 2-RDM
         ``g2`` (:math:`\bar D`) fixed, the orbital-Lagrangian response is
 
         .. math::
 
-            \dot{\bar A}_{ri}
-            &=2(\dot F_{\mathrm{C}}+\dot{\bar F}_{\mathrm{A}})_{ri},
-              &&i\in\mathbb C,\\
-            \dot{\bar A}_{ru}
-            &=\sum_v(\dot F_{\mathrm{C}})_{rv}\bar\gamma_{vu}
-              +\sum_{vtw}\dot V_{rvtw}\bar D_{tuvw},
+            (\dot{\bar A})^{m}_{p}
+            &=2(\dot F_{\mathrm{C}}+\dot{\bar F}_{\mathrm{A}})^{m}_{p},
+              &&m\in\mathbb C,\\
+            (\dot{\bar A})^{u}_{p}
+            &=\sum_v(\dot F_{\mathrm{C}})^{v}_{p}\bar\gamma^{v}_{u}
+              +\sum_{tvw}\dot{\langle pv|tw\rangle}\bar D_{tu,vw},
               &&u\in\mathbb A,\\
-            \dot{\bar A}_{re}&=0,
+            (\dot{\bar A})^{e}_{p}&=0,
               &&e\in\mathbb V.
 
         The returned component for pair :math:`(p_I,q_I)` is therefore
@@ -371,8 +521,8 @@ class OrbOptimizer:
         .. math::
 
             [\mathcal A^{\mathrm{oo}}\mathbf z]_I
-            =2\left(\dot{\bar A}_{p_Iq_I}
-                    -\dot{\bar A}_{q_Ip_I}\right).
+            =2\left[(\dot{\bar A})^{q_I}_{p_I}
+                    -(\dot{\bar A})^{p_I}_{q_I}\right].
 
         This private kernel assumes that ``vector`` is real with shape
         ``(nrot,)`` and that ``intermediates`` was built at the current orbitals
@@ -386,7 +536,7 @@ class OrbOptimizer:
         vector : np.ndarray
             Real orbital-rotation direction in ``nrr`` C-order.
         intermediates : tuple[np.ndarray, np.ndarray, np.ndarray]
-            ``(Fcore_mo, Fact_mo, B_mo)`` returned by
+            ``(Fcore_mo, Fact_mo, B_ga)`` returned by
             :meth:`_build_orbital_response_intermediates` at the same base point.
 
         Returns
@@ -402,12 +552,34 @@ class OrbOptimizer:
     def _compute_orbital_lagrangian_response(self, vector, intermediates):
         r"""Return the full MO Lagrangian response for an orbital direction.
 
-        This evaluates :math:`\dot{\bar A}[\mathbf z]` using exactly the
-        fixed-state-averaged-RDM contractions documented by
-        :meth:`_compute_orbital_hessian_vector_product`.  Its antisymmetric
-        part generates the orbital--orbital Hessian action.  The contribution
-        to the relaxed orbital orthogonality multiplier additionally contains
-        the moving-frame commutator ``Z @ A - A @ Z``; it is assembled by
+        This evaluates :math:`\dot{\bar A}[\mathbf z]` with the
+        state-averaged RDMs held fixed:
+
+        .. math::
+
+            \dot{\bar A}^{m}_{p}
+            &=2(\dot F_{\mathrm C}+\dot{\bar F}_{\mathrm A})^{m}_{p},
+              &&m\in\mathbb C,\\
+            \dot{\bar A}^{u}_{p}
+            &=\sum_v(\dot F_{\mathrm C})^{v}_{p}\bar\gamma^{v}_{u}
+              +\sum_{tvw}\dot{\langle pv|tw\rangle}\bar D_{tu,vw},
+              &&u\in\mathbb A,\\
+            \dot{\bar A}^{e}_{p}&=0,
+              &&e\in\mathbb V.
+
+        The Fock and integral responses are those documented by
+        :meth:`_compute_orbital_hessian_vector_product`.  The antisymmetric
+        part generates the orbital--orbital Hessian action,
+
+        .. math::
+
+            [\mathcal A^{\mathrm{oo}}\mathbf z]_I
+            =2\left[(\dot{\bar A})^{q_I}_{p_I}
+                    -(\dot{\bar A})^{p_I}_{q_I}\right].
+
+        The contribution to the relaxed orbital orthogonality multiplier
+        additionally contains the moving-frame commutator
+        :math:`Z\bar A-\bar A Z`; it is assembled by
         :meth:`MCOptimizer.compute_omega`.
 
         Parameters
@@ -423,30 +595,33 @@ class OrbOptimizer:
         np.ndarray
             Full MO Lagrangian response matrix with shape ``(nmo, nmo)``.
         """
-        Fcore_mo, Fact_mo, B_mo = intermediates
+        Fcore_mo, Fact_mo, B_ga = intermediates
         Z = self._vec_to_mat(vector)
         C_response = self.C @ Z
         Ccore_response = C_response[:, self.core]
         Cact_response = C_response[:, self.actv]
 
-        core_density_response = (
-            Ccore_response @ self.Ccore.T + self.Ccore @ Ccore_response.T
+        Fcore_ao_response = self._build_transition_fock_response(
+            Ccore_response,
+            self.Ccore,
+            coulomb_factor=2.0,
+            exchange_factor=1.0,
         )
-        active_density_response = (
-            Cact_response @ self.g1 @ self.Cact.T
-            + self.Cact @ self.g1 @ Cact_response.T
-        )
-
-        Fcore_ao_response = self._build_density_fock_response(
-            core_density_response, coulomb_factor=2.0, exchange_factor=1.0
-        )
-        Fact_ao_response = self._build_density_fock_response(
-            active_density_response,
+        Fact_ao_response = self._build_transition_fock_response(
+            Cact_response,
+            self.Cact,
+            self.g1,
             coulomb_factor=1.0,
             exchange_factor=0.5,
         )
 
         def transform_response(operator_mo, operator_ao_response):
+            r"""Transform an AO response while differentiating both MO legs.
+
+            .. math::
+
+                \dot F=Z^{\mathsf T}F+FZ+C^{\mathsf T}\dot F^{\mathrm{AO}}C.
+            """
             return (
                 Z.T @ operator_mo
                 + operator_mo @ Z
@@ -456,41 +631,37 @@ class OrbOptimizer:
         Fcore_response = transform_response(Fcore_mo, Fcore_ao_response)
         Fact_response = transform_response(Fact_mo, Fact_ao_response)
 
-        B_response = np.einsum("rp,Prq->Ppq", Z, B_mo, optimize=True)
-        B_response += np.einsum("Ppr,rq->Ppq", B_mo, Z, optimize=True)
-        eri_response = np.einsum(
-            "Prt,Pvw->rvtw",
-            B_response[:, :, self.actv],
-            B_mo[:, self.actv, self.actv],
-            optimize=True,
-        )
-        eri_response += np.einsum(
-            "Prt,Pvw->rvtw",
-            B_mo[:, :, self.actv],
-            B_response[:, self.actv, self.actv],
-            optimize=True,
-        )
+        B_response_ga = np.einsum("rp,Pru->Ppu", Z, B_ga, optimize=True)
+        B_response_ga += self._transform_df_block(self.C, Cact_response)
+        B_aa = B_ga[:, self.actv, :]
+        B_response_aa = B_response_ga[:, self.actv, :]
 
         A_response = np.zeros_like(Fcore_response)
         A_response[:, self.core] = 2.0 * (Fcore_response + Fact_response)[:, self.core]
         A_response[:, self.actv] = np.einsum(
             "rv,vu->ru", Fcore_response[:, self.actv], self.g1, optimize=True
         )
+        contracted_base = np.einsum("Pvw,tuvw->Ptu", B_aa, self.g2, optimize=True)
+        contracted_response = np.einsum(
+            "Pvw,tuvw->Ptu", B_response_aa, self.g2, optimize=True
+        )
         A_response[:, self.actv] += np.einsum(
-            "rvtw,tuvw->ru", eri_response, self.g2, optimize=True
+            "Prt,Ptu->ru", B_response_ga, contracted_base, optimize=True
+        )
+        A_response[:, self.actv] += np.einsum(
+            "Prt,Ptu->ru", B_ga, contracted_response, optimize=True
         )
         return A_response
 
     def _build_ci_orbital_response_intermediates(self):
         r"""Build fixed tensors for the orbital--CI response block.
 
-        Returns the current inactive-core Fock matrix and transformed integral
-        block
+        Returns the current inactive-core Fock matrix and transformed DF block
 
         .. math::
 
-            F_{\mathrm C}=C^TF_{\mathrm C}^{\mathrm{AO}}C,\qquad
-            V_{rvtw}=\langle rv|tw\rangle .
+            F_{\mathrm C}=C^{\mathsf T}F_{\mathrm C}^{\mathrm{AO}}C,\qquad
+            B^P_{ru}=\sum_{\mu\nu}C_{\mu r}B^P_{\mu\nu}C_{\nu u}.
 
         Both are independent of a CI multiplier direction and can be reused
         for every column of the orbital--CI block.
@@ -498,16 +669,14 @@ class OrbOptimizer:
         Returns
         -------
         tuple[np.ndarray, np.ndarray]
-            The pair (Fcore_mo, eri_gaaa), with shapes (nmo, nmo) and
-            (nmo, nact, nact, nact), respectively.
+            The pair (Fcore_mo, B_ga), with shapes (nmo, nmo) and
+            (naux, nmo, nact), respectively.
         """
         self._validate_nonrelativistic_orbital_response()
         Fcore_ao = self.fock_builder.build_core_fock(self.Ccore, hcore=self.hcore)
         Fcore_mo = self._transform_ao_operator(Fcore_ao, self.C)
-        eri_gaaa = self.fock_builder.two_electron_integrals_gen_block(
-            self.C, *(self.Cact,) * 3
-        )
-        return Fcore_mo, eri_gaaa
+        B_ga = self._transform_df_block(self.C, self.Cact)
+        return Fcore_mo, B_ga
 
     def _build_orbital_ci_response_intermediates(self):
         r"""Build fixed tensors for the orbital contribution to the CI row.
@@ -518,8 +687,8 @@ class OrbOptimizer:
 
             F_{\mathrm C}^{\mathrm{AO}}
             &=h+2J[P_{\mathrm C}]-K[P_{\mathrm C}],\\
-            F_{\mathrm C}&=C^T F_{\mathrm C}^{\mathrm{AO}}C,\\
-            B^P_{pq}&=\sum_{\mu\nu}C_{\mu p}B^P_{\mu\nu}C_{\nu q}.
+            F_{\mathrm C}&=C^{\mathsf T}F_{\mathrm C}^{\mathrm{AO}}C,\\
+            B^P_{pu}&=\sum_{\mu\nu}C_{\mu p}B^P_{\mu\nu}C_{\nu u}.
 
         They are the base-point tensors needed to differentiate the scalar,
         one-electron, and two-electron parts of the active-space Hamiltonian
@@ -530,20 +699,14 @@ class OrbOptimizer:
         Returns
         -------
         tuple[np.ndarray, np.ndarray, np.ndarray]
-            ``(Fcore_ao, Fcore_mo, B_mo)`` with shapes ``(nao, nao)``,
-            ``(nmo, nmo)``, and ``(naux, nmo, nmo)``, respectively.
+            ``(Fcore_ao, Fcore_mo, B_ga)`` with shapes ``(nao, nao)``,
+            ``(nmo, nmo)``, and ``(naux, nmo, nact)``, respectively.
         """
         self._validate_nonrelativistic_orbital_response()
         Fcore_ao = self.fock_builder.build_core_fock(self.Ccore, hcore=self.hcore)
         Fcore_mo = self._transform_ao_operator(Fcore_ao, self.C)
-        B_mo = np.einsum(
-            "Pmn,mp,nq->Ppq",
-            self.fock_builder.B_Pmn,
-            self.C,
-            self.C,
-            optimize=True,
-        )
-        return Fcore_ao, Fcore_mo, B_mo
+        B_ga = self._transform_df_block(self.C, self.Cact)
+        return Fcore_ao, Fcore_mo, B_ga
 
     def _compute_active_space_hamiltonian_response(self, vector, intermediates):
         r"""Differentiate the active-space Hamiltonian along an orbital vector.
@@ -556,8 +719,9 @@ class OrbOptimizer:
 
             \hat H[\mathbf z]
             =\dot E_{\mathrm C}
-             +\sum_{uv}(\dot F_{\mathrm C})_{uv}\hat E_{uv}
-             +\frac12\sum_{uvtw}\dot V_{uvtw}\hat E_{uvtw}.
+             +\sum_{uv}(\dot F_{\mathrm C})^{u}_{v}\hat E^{u}_{v}
+             +\frac12\sum_{uvtw}
+              \dot{\langle uv|tw\rangle}\hat E^{uv}_{tw}.
 
         Here
 
@@ -566,13 +730,15 @@ class OrbOptimizer:
             \dot F_{\mathrm C}^{\mathrm{AO}}
             &=2J[\dot P_{\mathrm C}]-K[\dot P_{\mathrm C}],\\
             \dot F_{\mathrm C}
-            &=Z^T F_{\mathrm C}+F_{\mathrm C}Z
-              +C^T\dot F_{\mathrm C}^{\mathrm{AO}}C,
+            &=Z^{\mathsf T}F_{\mathrm C}+F_{\mathrm C}Z
+              +C^{\mathsf T}\dot F_{\mathrm C}^{\mathrm{AO}}C,
 
         and :math:`\dot E_{\mathrm C}` is the derivative of
-        :math:`\mathrm{Tr}[C_{\mathrm C}^T(h+F_{\mathrm C}^{\mathrm{AO}})
+        :math:`\mathrm{Tr}[C_{\mathrm C}^{\mathsf T}
+        (h+F_{\mathrm C}^{\mathrm{AO}})
         C_{\mathrm C}]`.  The two-electron response differentiates all four
-        active indices of :math:`V_{uvtw}=\sum_P B^P_{ut}B^P_{vw}`.
+        active indices of
+        :math:`\langle uv|tw\rangle=\sum_P B^P_{ut}B^P_{vw}`.
 
         This private kernel assumes a validated real vector with shape
         ``(nrot,)`` and intermediates from
@@ -586,16 +752,16 @@ class OrbOptimizer:
             active two-electron response in the CI solver's physicists'
             convention.
         """
-        Fcore_ao, Fcore_mo, B_mo = intermediates
+        Fcore_ao, Fcore_mo, B_ga = intermediates
         Z = self._vec_to_mat(vector)
         C_response = self.C @ Z
         Ccore_response = C_response[:, self.core]
 
-        core_density_response = (
-            Ccore_response @ self.Ccore.T + self.Ccore @ Ccore_response.T
-        )
-        Fcore_ao_response = self._build_density_fock_response(
-            core_density_response, coulomb_factor=2.0, exchange_factor=1.0
+        Fcore_ao_response = self._build_transition_fock_response(
+            Ccore_response,
+            self.Ccore,
+            coulomb_factor=2.0,
+            exchange_factor=1.0,
         )
         Fcore_response = (
             Z.T @ Fcore_mo
@@ -610,10 +776,9 @@ class OrbOptimizer:
             + self.Ccore.T @ Fcore_ao_response @ self.Ccore
         )
 
-        B_response = np.einsum("rp,Prq->Ppq", Z, B_mo, optimize=True)
-        B_response += np.einsum("Ppr,rq->Ppq", B_mo, Z, optimize=True)
-        B_active = B_mo[:, self.actv, self.actv]
-        B_active_response = B_response[:, self.actv, self.actv]
+        B_active = B_ga[:, self.actv, :]
+        B_left_response = np.einsum("ru,Prv->Puv", Z[:, self.actv], B_ga, optimize=True)
+        B_active_response = B_left_response + B_left_response.transpose(0, 2, 1)
         eri_response = np.einsum(
             "Put,Pvw->uvtw", B_active_response, B_active, optimize=True
         )
@@ -637,21 +802,39 @@ class OrbOptimizer:
     ):
         r"""Build a full MO Lagrangian matrix from overlap and active RDMs.
 
-        ``overlap_response`` supplies the scalar inactive-core coefficient,
-        while ``g1_response`` and ``g2_response`` supply the active one- and
-        two-particle contractions.  For a normalized target state these are
-        ``(1, gamma1, gamma2)``.  For a CI multiplier they are the root-summed
-        bra-plus-ket transition quantities.
+        ``overlap_response`` supplies the scalar :math:`s`, while
+        ``g1_response`` and ``g2_response`` supply :math:`\gamma` and the
+        spin-free two-particle density used to form :math:`D`.  The returned
+        unsymmetrized matrix is
+
+        .. math::
+
+            A^{m}_{p}[s,\gamma,D]
+            &=2\left[s(F_{\mathrm C})^{m}_{p}
+                     +(F_{\mathrm A}[\gamma])^{m}_{p}\right],
+              &&m\in\mathbb C,\\
+            A^{u}_{p}[s,\gamma,D]
+            &=\sum_v(F_{\mathrm C})^{v}_{p}\gamma^{v}_{u}
+              +\sum_{tvw}\langle pv|tw\rangle D_{tu,vw},
+              &&u\in\mathbb A,\\
+            A^{e}_{p}[s,\gamma,D]&=0,
+              &&e\in\mathbb V.
+
+        For a normalized target state the inputs are
+        :math:`(1,\gamma^\alpha,\Gamma^\alpha)`.  For a CI multiplier they
+        are the root-summed bra-plus-ket transition quantities
+        :math:`(s[\mathbf x],\gamma[\mathbf x],\Gamma[\mathbf x])`.
 
         Returns
         -------
         np.ndarray
             Full unsymmetrized MO Lagrangian matrix with shape ``(nmo, nmo)``.
         """
-        Fcore_mo, eri_gaaa = intermediates
-        active_density_response = self.Cact @ g1_response @ self.Cact.T
-        Fact_ao_response = self._build_density_fock_response(
-            active_density_response,
+        Fcore_mo, B_ga = intermediates
+        Fact_ao_response = self._build_transition_fock_response(
+            self.Cact,
+            self.Cact,
+            0.5 * g1_response,
             coulomb_factor=1.0,
             exchange_factor=0.5,
         )
@@ -665,11 +848,12 @@ class OrbOptimizer:
         A_response[:, self.actv] = np.einsum(
             "rv,vu->ru", Fcore_mo[:, self.actv], g1_response, optimize=True
         )
+        B_aa = B_ga[:, self.actv, :]
+        contracted_density = np.einsum(
+            "Pvw,tuvw->Ptu", B_aa, g2_working_response, optimize=True
+        )
         A_response[:, self.actv] += np.einsum(
-            "rvtw,tuvw->ru",
-            eri_gaaa,
-            g2_working_response,
-            optimize=True,
+            "Prt,Ptu->ru", B_ga, contracted_density, optimize=True
         )
         return A_response
 
@@ -688,15 +872,15 @@ class OrbOptimizer:
 
         .. math::
 
-            A^{\mathrm{oc}}_{ri}
-            &=2\left(s[\mathbf x](F_{\mathrm C})_{ri}
-                    +(F_{\mathrm A}[\gamma[\mathbf x]])_{ri}\right),\\
-            A^{\mathrm{oc}}_{ru}
-            &=\sum_v(F_{\mathrm C})_{rv}\gamma_{vu}[\mathbf x]
-              +\sum_{vtw}V_{rvtw}D_{tuvw}[\mathbf x],\\
+            (A^{\mathrm{oc}}[\mathbf x])^{m}_{p}
+            &=2\left[s[\mathbf x](F_{\mathrm C})^{m}_{p}
+                    +(F_{\mathrm A}[\gamma[\mathbf x]])^{m}_{p}\right],\\
+            (A^{\mathrm{oc}}[\mathbf x])^{u}_{p}
+            &=\sum_v(F_{\mathrm C})^{v}_{p}\gamma^{v}_{u}[\mathbf x]
+              +\sum_{tvw}\langle pv|tw\rangle D_{tu,vw}[\mathbf x],\\
             [\mathcal A^{\mathrm{oc}}\mathbf x]_I
-            &=2\left(A^{\mathrm{oc}}_{p_Iq_I}
-                    -A^{\mathrm{oc}}_{q_Ip_I}\right).
+            &=2\left[(A^{\mathrm{oc}})^{q_I}_{p_I}
+                    -(A^{\mathrm{oc}})^{p_I}_{q_I}\right].
 
         The first equation applies to a core column i, the second to an active
         column u, and virtual columns are zero.  The working density D[x] is
@@ -713,7 +897,7 @@ class OrbOptimizer:
             Root-summed spin-free transition 2-RDM, shape
             (nact, nact, nact, nact).
         intermediates : tuple[np.ndarray, np.ndarray]
-            The pair (Fcore_mo, eri_gaaa) returned by
+            The pair (Fcore_mo, B_ga) returned by
             _build_ci_orbital_response_intermediates at the same base point.
 
         Returns
