@@ -1,12 +1,7 @@
 from dataclasses import dataclass
-import time
 
-import numpy as np
-
-from .mp2_base import MP2Base
 from .ump2 import UMP2
-from forte2.helpers import logger
-from forte2.scf import ROHF, UHF, rohf_to_uhf
+from forte2.scf import ROHF, rohf_to_uhf
 
 
 @dataclass
@@ -24,9 +19,9 @@ class ROMP2(UMP2):
     """
 
     def __call__(self, parent_method):
-        self.parent_method = parent_method
         if not isinstance(parent_method, ROHF):
             raise TypeError("ROMP2 requires an ROHF reference.")
+        self._register_parent_method(parent_method)
         return self
 
     def _reference_label(self) -> str:
@@ -36,10 +31,5 @@ class ROMP2(UMP2):
         if not self.parent_method.executed:
             self.parent_method.run()
 
-        self.parent_method = rohf_to_uhf(self.parent_method)
-        super()._startup()
-
-    # def _log_rohf_remap(self):
-    #     logger.log_info1(
-    #         "ROHF reference detected. Mapping ROHF orbitals to a UHF representation and performing UHF-MP2."
-    #     )
+        self._working_reference = rohf_to_uhf(self.parent_method)
+        super()._startup(self._working_reference)

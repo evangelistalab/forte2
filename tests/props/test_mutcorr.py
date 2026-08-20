@@ -202,9 +202,8 @@ def test_rmp2_mpq_first_order_and_avas():
     assert avas_mpq.Gamma1 == approx(expected_gamma1_no)
     assert avas_mpq.Γ1 == approx(expected_gamma1_no)
     assert avas_mpq.occs == approx(np.diag(expected_gamma1_no))
-    assert avas_mpq.C_no == approx(mp2.C_no)
-    assert avas_mpq.no_occs == approx(mp2.no_occs)
-    assert avas_mpq.U == approx(mp2.U_no)
+    assert avas_mpq.C_no == approx(mp2.C[0] @ avas_mpq.U)
+    assert avas_mpq.no_occs == approx(np.diag(expected_gamma1_no))
 
 
 def test_ump2_mpq_first_order_and_optional_quadratic_terms():
@@ -262,16 +261,16 @@ def test_ump2_mpq_wrapper():
     system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
 
     uhf = UHF(charge=0, ms=0)(system)
-    mp2 = UMP2(store_t2=True)(uhf)
+    mp2 = UMP2(store_t2=False)(uhf)
     mp2.run()
 
     gamma1 = mp2.make_1rdm_sd()
-    no_transform = mp2.make_natural_orbital_transform(gamma1)
-    C_no, occupations, Ua, Ub = no_transform
-    gamma1_no_a, gamma1_no_b = mp2.make_1rdm_no_sd(gamma1, no_transform)
-    gamma1_no = mp2.make_1rdm_no_sf(gamma1, no_transform)
-
     mpq = ump2_mpq_onthefly_no(mp2, mo_range=(0, 2))
+    C_no, occupations, Ua, Ub = mpq.no_transform
+    gamma1_no_a = Ua.T @ gamma1[0] @ Ua
+    gamma1_no_b = Ub.T @ gamma1[1] @ Ub
+    gamma1_no = gamma1_no_a + gamma1_no_b
+
     assert isinstance(mpq, UMP2MPQOnTheFly)
     assert not mpq.include_quadratic
     assert mpq.C_no == approx(C_no)
@@ -288,8 +287,12 @@ def test_ump2_mpq_wrapper():
     assert mpq.Gamma1 == approx(gamma1_no)
     assert mpq.Γ1 == approx(gamma1_no)
     assert mpq.occs == approx(occupations)
+    assert C_no.T @ system.ints_overlap() @ C_no == approx(np.eye(mp2.nmo))
     assert mpq.rdm_info_indices == (0, 1)
     assert mpq.rdm_info_selection == "mo_range"
+    assert mp2.t2_a is None
+    assert mp2.t2_b is None
+    assert mp2.t2_ab is None
 
     M1 = mpq.make_M1()
     M2 = mpq.make_M2()

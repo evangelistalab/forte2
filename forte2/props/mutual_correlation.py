@@ -7,6 +7,26 @@ import scipy as sp
 from forte2.lib import cpp_helpers
 
 
+def _block_natural_orbital_rotation(gamma1, nocc):
+    """Diagonalize occupied and virtual 1-RDM blocks independently."""
+    gamma1 = np.asarray(gamma1)
+    gamma1 = 0.5 * (gamma1 + gamma1.T.conj())
+    nmo = gamma1.shape[0]
+
+    occ_vals, Uo = np.linalg.eigh(gamma1[:nocc, :nocc])
+    vir_vals, Uv = np.linalg.eigh(gamma1[nocc:, nocc:])
+    occ_order = np.argsort(occ_vals)[::-1]
+    vir_order = np.argsort(vir_vals)[::-1]
+
+    U = np.eye(nmo, dtype=gamma1.dtype)
+    U[:nocc, :nocc] = Uo[:, occ_order]
+    U[nocc:, nocc:] = Uv[:, vir_order]
+    occupations = np.concatenate(
+        (occ_vals[occ_order].real, vir_vals[vir_order].real)
+    )
+    return U, occupations
+
+
 class MutualCorrelationAnalysis:
     """
     Performs a mutual correlation analysis.
@@ -349,7 +369,9 @@ class RMP2MPQOnTheFly:
                     f"({self.nmo}, {self.nmo})."
                 )
         else:
-            _, _, self.U = mp2.make_natural_orbital_transform(self.Gamma1_mo)
+            self.U, _ = _block_natural_orbital_rotation(
+                self.Gamma1_mo, self.nocc
+            )
 
         self.Gamma1_no = self.U.T.conj() @ self.Gamma1_mo @ self.U
         self.Gamma1_no = 0.5 * (self.Gamma1_no + self.Gamma1_no.T.conj())
@@ -861,24 +883,7 @@ class UMP2MPQOnTheFly:
             )
 
     def _build_block_no_rotation(self, gamma1, nocc):
-        gamma1 = 0.5 * (gamma1 + gamma1.T.conj())
-        Goo = gamma1[:nocc, :nocc]
-        Gvv = gamma1[nocc:, nocc:]
-
-        occ_vals, Uo = np.linalg.eigh(Goo)
-        vir_vals, Uv = np.linalg.eigh(Gvv)
-
-        occ_order = np.argsort(occ_vals)[::-1]
-        vir_order = np.argsort(vir_vals)[::-1]
-
-        U = np.eye(self.nmo)
-        U[:nocc, :nocc] = Uo[:, occ_order]
-        U[nocc:, nocc:] = Uv[:, vir_order]
-
-        occs = np.empty(self.nmo)
-        occs[:nocc] = occ_vals[occ_order]
-        occs[nocc:] = vir_vals[vir_order]
-        return U, occs
+        return _block_natural_orbital_rotation(gamma1, nocc)
 
     # ------------------------------------------------------------------
     # Spin-space index helpers
