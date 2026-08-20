@@ -272,7 +272,7 @@ def rmp2_mpq_onthefly_no(
     mo_range=None,
     avas=None,
     occupation_window=None,
-    include_quadratic=True,
+    include_quadratic=False,
 ):
     """Construct a low-cost RMP2 RDM-information analyzer.
 
@@ -302,7 +302,10 @@ def rmp2_mpq_onthefly_no(
     occupation_window : tuple[float, float], optional
         Inclusive block-natural-occupation window.
     include_quadratic : bool, optional
-        Include retained cumulant terms quadratic in the MP2 amplitudes.
+        Include additional cumulant contractions quadratic in the first-order
+        MP2 doubles amplitudes. Disabled by default; the mutual-correlation
+        construction used in the paper retains only the first-order
+        ``oovv``/``vvoo`` cumulant contribution.
 
     Returns
     -------
@@ -343,7 +346,7 @@ def ump2_mpq_onthefly_no(
     mo_range=None,
     avas=None,
     occupation_window=None,
-    include_quadratic=True,
+    include_quadratic=False,
     common_no_mixing_tolerance=1.0e-10,
 ):
     """Construct a low-cost UMP2 RDM-information analyzer.
@@ -356,8 +359,8 @@ def ump2_mpq_onthefly_no(
     common natural orbitals.  AVAS is restricted-only and is therefore handled
     by :func:`rmp2_mpq_onthefly_no` instead.
 
-    Set ``include_quadratic=False`` to retain only cumulant terms linear in the
-    MP2 doubles amplitudes.  Returned M1/M2 arrays keep their full-space shapes
+    By default, the analyzer retains the first-order MP2 ``oovv``/``vvoo``
+    cumulant contribution. Returned M1/M2 arrays keep their full-space shapes
     and contain zeros outside the selected RDM-info space.
 
     Parameters
@@ -384,7 +387,9 @@ def ump2_mpq_onthefly_no(
         Inclusive natural-occupation window.  Use ``(0.02, 1.98)`` for the
         conventional partially occupied space.
     include_quadratic : bool, optional
-        Include the retained cumulant terms quadratic in the MP2 amplitudes.
+        Include additional cumulant contractions quadratic in the first-order
+        MP2 doubles amplitudes. This diagnostic option is disabled by default
+        and is not part of the paper's production definition.
     common_no_mixing_tolerance : float, optional
         Warning threshold for discarded occupied-virtual mixing in the
         low-cost block-projected common-NO transformation.

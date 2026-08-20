@@ -309,8 +309,9 @@ class RMP2MPQOnTheFly:
     front.  Pair-block caching scales with the requested orbital subset;
     canonical fixed-occupied slab caching is opt-in because it can grow to the
     size of the complete amplitude tensor.
-    Set ``include_quadratic=False`` to retain only cumulant terms linear in the
-    MP2 doubles amplitudes.
+    By default, only the first-order MP2 ``oovv``/``vvoo`` cumulant
+    contribution is used. Additional quadratic contractions are available as
+    an explicit diagnostic option.
 
     ``Gamma1`` and ``Γ1`` are stored in the block natural-orbital basis;
     the original canonical-MO density is retained as ``Gamma1_mo``.
@@ -322,7 +323,7 @@ class RMP2MPQOnTheFly:
         U=None,
         cache_pair_blocks=True,
         cache_fixed_slabs=False,
-        include_quadratic=True,
+        include_quadratic=False,
         orbital_indices=None,
     ):
         self.mp2 = mp2
@@ -506,8 +507,8 @@ class RMP2MPQOnTheFly:
 
         return val
 
-    def lambda2_aa_linear_elem(self, p, q, r, s):
-        """Return the same-spin cumulant contribution linear in ``t2``."""
+    def lambda2_aa_first_order_elem(self, p, q, r, s):
+        """Return the first-order same-spin MP2 cumulant contribution."""
         if p == q or r == s:
             return 0.0
 
@@ -522,6 +523,10 @@ class RMP2MPQOnTheFly:
             return self._t2_elem(i, j, a, b) - self._t2_elem(i, j, b, a)
 
         return 0.0
+
+    def lambda2_aa_linear_elem(self, p, q, r, s):
+        """Compatibility alias for :meth:`lambda2_aa_first_order_elem`."""
+        return self.lambda2_aa_first_order_elem(p, q, r, s)
 
     def lambda2_aa_quadratic_elem(self, p, q, r, s):
         """Return the same-spin cumulant contribution quadratic in ``t2``."""
@@ -538,7 +543,7 @@ class RMP2MPQOnTheFly:
         return 0.0
 
     def lambda2_aa_elem(self, p, q, r, s):
-        value = self.lambda2_aa_linear_elem(p, q, r, s)
+        value = self.lambda2_aa_first_order_elem(p, q, r, s)
         if self.include_quadratic:
             value += self.lambda2_aa_quadratic_elem(p, q, r, s)
         return value
@@ -546,8 +551,8 @@ class RMP2MPQOnTheFly:
     def lambda2_bb_elem(self, p, q, r, s):
         return self.lambda2_aa_elem(p, q, r, s)
 
-    def lambda2_ab_linear_elem(self, p, q, r, s):
-        """Return the opposite-spin cumulant contribution linear in ``t2``."""
+    def lambda2_ab_first_order_elem(self, p, q, r, s):
+        """Return the first-order opposite-spin MP2 cumulant contribution."""
         if self._o(p) and self._o(q) and self._v(r) and self._v(s):
             i, j = p, q
             a, b = r - self.nocc, s - self.nocc
@@ -559,6 +564,10 @@ class RMP2MPQOnTheFly:
             return self._t2_elem(i, j, a, b)
 
         return 0.0
+
+    def lambda2_ab_linear_elem(self, p, q, r, s):
+        """Compatibility alias for :meth:`lambda2_ab_first_order_elem`."""
+        return self.lambda2_ab_first_order_elem(p, q, r, s)
 
     def lambda2_ab_quadratic_elem(self, p, q, r, s):
         """Return the opposite-spin cumulant contribution quadratic in ``t2``."""
@@ -575,7 +584,7 @@ class RMP2MPQOnTheFly:
         return 0.0
 
     def lambda2_ab_elem(self, p, q, r, s):
-        value = self.lambda2_ab_linear_elem(p, q, r, s)
+        value = self.lambda2_ab_first_order_elem(p, q, r, s)
         if self.include_quadratic:
             value += self.lambda2_ab_quadratic_elem(p, q, r, s)
         return value
@@ -599,7 +608,7 @@ class RMP2MPQOnTheFly:
         )
 
     def make_M1(self, indices=None):
-        """Compute the retained-tensor one-orbital correlation measure."""
+        """Compute the configured one-orbital correlation measure."""
         requested = self._requested_indices(indices)
         if self.M1 is not None and requested == self._M1_indices:
             return self.M1
@@ -673,16 +682,11 @@ class RMP2MPQOnTheFly:
 class UMP2MPQOnTheFly:
     """Evaluate a low-cost, block-rotated UMP2 dyad correlation matrix.
 
-    The retained approximate cumulant blocks are
-
-    * first-order ``oovv`` and ``vvoo`` blocks for alpha-alpha, beta-beta,
-      and alpha-beta amplitudes;
-    * quadratic same-spin ``oooo`` and ``vvvv`` blocks, when enabled; and
-    * the two pure opposite-spin particle-hole orientations, when enabled.
-
-    Other quadratic particle-hole and opposite-spin ``oooo``/``vvvv``
-    contributions are not included.  Consequently, ``M2`` is a screening
-    diagnostic and must not be described as the complete MP2 cumulant norm.
+    The production definition retains the first-order ``oovv`` and ``vvoo``
+    MP2 cumulant blocks for alpha-alpha, beta-beta, and alpha-beta amplitudes.
+    Optional quadratic same-spin ``oooo``/``vvvv`` and opposite-spin
+    particle-hole contractions are retained only as an opt-in diagnostic and
+    are not part of the paper's definition.
 
     When ``Ua`` and ``Ub`` contain occupied-virtual mixing, only their
     occupied-occupied and virtual-virtual blocks are applied.  This is the
@@ -715,9 +719,8 @@ class UMP2MPQOnTheFly:
         ``make_measures``.  Full-space arrays are returned with zeros outside
         this RDM-info subset.
     include_quadratic : bool, optional
-        Include retained cumulant contractions quadratic in the MP2 doubles
-        amplitudes.  If false, only the linear ``oovv`` and ``vvoo`` terms are
-        used.
+        Include the optional diagnostic contractions quadratic in the
+        first-order MP2 doubles amplitudes. Disabled by default.
     common_no_mixing_tolerance : float, optional
         Threshold above which occupied-virtual mixing produces a warning.
     """
@@ -729,7 +732,7 @@ class UMP2MPQOnTheFly:
         Ub=None,
         gamma1=None,
         orbital_indices=None,
-        include_quadratic=True,
+        include_quadratic=False,
         cache_pair_blocks=True,
         cache_fixed_slabs=False,
         common_no_mixing_tolerance=1.0e-10,
@@ -1047,7 +1050,7 @@ class UMP2MPQOnTheFly:
         return self._t2_ab_pair_no(i, j)[a, b]
 
     # ------------------------------------------------------------------
-    # Retained quadratic contractions
+    # Optional diagnostic quadratic contractions
     # ------------------------------------------------------------------
 
     def _gamma_oooo_aa_elem(self, i, j, k, l):
@@ -1097,11 +1100,11 @@ class UMP2MPQOnTheFly:
         return value
 
     # ------------------------------------------------------------------
-    # Retained cumulant elements, separated by amplitude degree
+    # Cumulant elements, separated by perturbative/amplitude degree
     # ------------------------------------------------------------------
 
-    def lambda2_aa_linear_elem(self, p, q, r, s):
-        """Return the alpha-alpha cumulant contribution linear in ``t2``."""
+    def lambda2_aa_first_order_elem(self, p, q, r, s):
+        """Return the first-order alpha-alpha MP2 cumulant contribution."""
         if p == q or r == s:
             return 0.0
 
@@ -1117,8 +1120,12 @@ class UMP2MPQOnTheFly:
 
         return 0.0
 
+    def lambda2_aa_linear_elem(self, p, q, r, s):
+        """Compatibility alias for :meth:`lambda2_aa_first_order_elem`."""
+        return self.lambda2_aa_first_order_elem(p, q, r, s)
+
     def lambda2_aa_quadratic_elem(self, p, q, r, s):
-        """Return the retained alpha-alpha contribution quadratic in ``t2``."""
+        """Return the optional alpha-alpha contribution quadratic in ``t2``."""
         if p == q or r == s:
             return 0.0
 
@@ -1136,13 +1143,13 @@ class UMP2MPQOnTheFly:
         return 0.0
 
     def lambda2_aa_elem(self, p, q, r, s):
-        value = self.lambda2_aa_linear_elem(p, q, r, s)
+        value = self.lambda2_aa_first_order_elem(p, q, r, s)
         if self.include_quadratic:
             value += self.lambda2_aa_quadratic_elem(p, q, r, s)
         return value
 
-    def lambda2_bb_linear_elem(self, p, q, r, s):
-        """Return the beta-beta cumulant contribution linear in ``t2``."""
+    def lambda2_bb_first_order_elem(self, p, q, r, s):
+        """Return the first-order beta-beta MP2 cumulant contribution."""
         if p == q or r == s:
             return 0.0
 
@@ -1158,8 +1165,12 @@ class UMP2MPQOnTheFly:
 
         return 0.0
 
+    def lambda2_bb_linear_elem(self, p, q, r, s):
+        """Compatibility alias for :meth:`lambda2_bb_first_order_elem`."""
+        return self.lambda2_bb_first_order_elem(p, q, r, s)
+
     def lambda2_bb_quadratic_elem(self, p, q, r, s):
-        """Return the retained beta-beta contribution quadratic in ``t2``."""
+        """Return the optional beta-beta contribution quadratic in ``t2``."""
         if p == q or r == s:
             return 0.0
 
@@ -1177,13 +1188,13 @@ class UMP2MPQOnTheFly:
         return 0.0
 
     def lambda2_bb_elem(self, p, q, r, s):
-        value = self.lambda2_bb_linear_elem(p, q, r, s)
+        value = self.lambda2_bb_first_order_elem(p, q, r, s)
         if self.include_quadratic:
             value += self.lambda2_bb_quadratic_elem(p, q, r, s)
         return value
 
-    def lambda2_ab_linear_elem(self, p, q, r, s):
-        """Return the alpha-beta cumulant contribution linear in ``t2``."""
+    def lambda2_ab_first_order_elem(self, p, q, r, s):
+        """Return the first-order alpha-beta MP2 cumulant contribution."""
         if self._oa(p) and self._ob(q) and self._va(r) and self._vb(s):
             return self._t2_ab_elem(
                 p, q, self._a_vir(r), self._b_vir(s)
@@ -1196,8 +1207,12 @@ class UMP2MPQOnTheFly:
 
         return 0.0
 
+    def lambda2_ab_linear_elem(self, p, q, r, s):
+        """Compatibility alias for :meth:`lambda2_ab_first_order_elem`."""
+        return self.lambda2_ab_first_order_elem(p, q, r, s)
+
     def lambda2_ab_quadratic_elem(self, p, q, r, s):
-        """Return the retained alpha-beta contribution quadratic in ``t2``."""
+        """Return the optional alpha-beta contribution quadratic in ``t2``."""
         if self._oa(p) and self._vb(q) and self._oa(r) and self._vb(s):
             return self._gamma_ovov_ab_elem(
                 p, self._b_vir(q), r, self._b_vir(s)
@@ -1211,7 +1226,7 @@ class UMP2MPQOnTheFly:
         return 0.0
 
     def lambda2_ab_elem(self, p, q, r, s):
-        value = self.lambda2_ab_linear_elem(p, q, r, s)
+        value = self.lambda2_ab_first_order_elem(p, q, r, s)
         if self.include_quadratic:
             value += self.lambda2_ab_quadratic_elem(p, q, r, s)
         return value
@@ -1239,7 +1254,7 @@ class UMP2MPQOnTheFly:
     # ------------------------------------------------------------------
 
     def make_M1(self, indices=None):
-        """Compute the retained-tensor one-orbital correlation measure.
+        """Compute the configured one-orbital correlation measure.
 
         If ``indices`` is supplied, only those entries are evaluated; the
         returned array retains its full ``(nmo,)`` shape and is zero elsewhere.
