@@ -73,6 +73,90 @@ class OrbOptimizer:
         h0 = self._mat_to_vec(hess)
         return h0
 
+    def compute_orbital_hessian_vector_product(self, vector):
+        r"""Apply the nonrelativistic orbital--orbital response matrix.
+
+        Let :math:`\mathbb K=((p_I,q_I))_{I=0}^{n_\mathrm{rot}-1}` be the
+        ordered orbital pairs for which ``nrr[p_I, q_I]`` is true.  Their order
+        is exactly NumPy's C-order boolean-indexing order.  The input vector is
+        embedded in an antisymmetric generator
+
+        .. math::
+
+            Z_{pq}(\mathbf z)
+            = \sum_I z_I\left(
+                \delta_{p p_I}\delta_{q q_I}
+                - \delta_{p q_I}\delta_{q p_I}
+              \right),
+
+        and the method returns
+
+        .. math::
+
+            y_I
+            = \sum_J (\mathcal A^{\mathrm{oo}})_{IJ}z_J
+            = \left.\frac{d}{d\epsilon}
+              \bar g_{p_I q_I}
+              \left(Ce^{\epsilon Z(\mathbf z)};
+                    \bar\gamma,\bar D\right)
+              \right|_{\epsilon=0},
+
+        where :math:`\bar g_{pq}=2(\bar A_{pq}-\bar A_{qp})` is Forte2's
+        nonrelativistic orbital gradient.  Equivalently,
+        :math:`(\mathcal A^{\mathrm{oo}})_{IJ}` is the derivative obtained by
+        setting :math:`\mathbf z=\mathbf e_J` in the equation above.
+
+        This definition assumes real, orthonormal restricted spatial orbitals
+        and a mask containing exactly one orientation of every retained
+        unordered pair.  It is a local derivative at the current ``C``.  The
+        stored active 1-RDM ``g1`` and working 2-RDM ``g2`` (normally the
+        state-averaged RDMs), AO Hamiltonian, DF integrals, and nuclear geometry
+        are held fixed; only the orbital-dependent densities, Fock matrices,
+        and MO integral transformations respond.  Thus this is the
+        orbital--orbital partial Hessian, with neither CI nor nuclear response
+        included.  The derivative is of the unscreened analytic gradient
+        expression; the numerical ``1e-12`` screening in :meth:`gradient` is
+        not differentiated.
+
+        Parameters
+        ----------
+        vector : np.ndarray
+            Real nonredundant orbital-rotation vector with shape ``(nrot,)``.
+
+        Returns
+        -------
+        np.ndarray
+            Orbital Hessian applied to ``vector``, in the same ordered-pair
+            basis and with shape ``(nrot,)``.
+        """
+        vector = self._validate_orbital_response_vector(vector)
+        intermediates = self._build_orbital_response_intermediates()
+        return self._compute_orbital_hessian_vector_product(vector, intermediates)
+
+    def compute_orbital_hessian(self):
+        r"""Build the nonrelativistic orbital--orbital response matrix.
+
+        Column :math:`j` is obtained by applying the same matrix-free response
+        kernel used by :meth:`compute_orbital_hessian_vector_product` to unit
+        vector :math:`j`.  The active RDMs are held fixed.
+
+        Returns
+        -------
+        np.ndarray
+            Dense orbital Hessian in the nonredundant rotation basis.
+        """
+        self._validate_nonrelativistic_orbital_response()
+        intermediates = self._build_orbital_response_intermediates()
+        hessian = np.empty((self.nrot, self.nrot), dtype=float)
+        unit = np.zeros(self.nrot, dtype=float)
+        for column in range(self.nrot):
+            unit[column] = 1.0
+            hessian[:, column] = self._compute_orbital_hessian_vector_product(
+                unit, intermediates
+            )
+            unit[column] = 0.0
+        return hessian
+
     def compute_orbital_lagrangian(self):
         r"""
         Return the symmetric CASSCF orbital Lagrangian matrix.
@@ -130,6 +214,241 @@ class OrbOptimizer:
 
     def _mat_to_vec(self, R):
         return R[self.nrr]
+
+    def _validate_nonrelativistic_orbital_response(self):
+        if self.fock_builder.system.two_component or np.iscomplexobj(self.C):
+            raise NotImplementedError(
+                "The orbital--orbital response is currently implemented only "
+                "for nonrelativistic real orbitals."
+            )
+
+    def _validate_orbital_response_vector(self, vector):
+        self._validate_nonrelativistic_orbital_response()
+        vector = np.asarray(vector)
+        if vector.shape != (self.nrot,):
+            raise ValueError(
+                f"Expected an orbital-response vector with shape ({self.nrot},), "
+                f"got {vector.shape}."
+            )
+        if np.iscomplexobj(vector):
+            raise TypeError("The nonrelativistic orbital-response vector must be real.")
+        return vector.astype(float, copy=False)
+
+    def _build_orbital_response_intermediates(self):
+        r"""Build the current-orbital tensors shared by response applications.
+
+        For real restricted orbitals, define the AO core and active densities
+
+        .. math::
+
+            P_{\mathrm{C}}=C_{\mathrm{C}}C_{\mathrm{C}}^{T},\qquad
+            P_{\mathrm{A}}=C_{\mathrm{A}}\bar\gamma C_{\mathrm{A}}^{T}.
+
+        This method returns the three tensors
+
+        .. math::
+
+            F_{\mathrm{C}}
+            &=C^T\left(h+2J[P_{\mathrm{C}}]-K[P_{\mathrm{C}}]\right)C,\\
+            \bar F_{\mathrm{A}}
+            &=C^T\left(J[P_{\mathrm{A}}]-\tfrac12K[P_{\mathrm{A}}]\right)C,\\
+            B^P_{pq}
+            &=\sum_{\mu\nu}C_{\mu p}B^P_{\mu\nu}C_{\nu q}.
+
+        Here ``g1`` is :math:`\bar\gamma`, :math:`B^P_{\mu\nu}` is the
+        orthonormalized DF three-index tensor, and the AO maps are defined by
+
+        .. math::
+
+            J[D]_{\mu\nu}
+            &=\sum_{P\rho\sigma}B^P_{\mu\nu}B^P_{\rho\sigma}D_{\sigma\rho},\\
+            K[D]_{\mu\nu}
+            &=\sum_{P\rho\sigma}B^P_{\mu\sigma}D_{\sigma\rho}B^P_{\nu\rho}.
+
+        The first two returned arrays are in the full current MO basis; the
+        third has all three-index factors transformed to that basis.
+
+        These tensors contain no response themselves.  They are fixed base-
+        point quantities that may be reused for multiple directions or all
+        columns of the dense Hessian.  They are valid only while ``C``,
+        ``Ccore``, ``Cact``, ``g1``, ``hcore``, and the DF tensor remain
+        unchanged.  The working 2-RDM ``g2`` is not needed at this stage.
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray, np.ndarray]
+            ``(Fcore_mo, Fact_mo, B_mo)`` with shapes ``(nmo, nmo)``,
+            ``(nmo, nmo)``, and ``(naux, nmo, nmo)``, respectively.
+
+        Raises
+        ------
+        NotImplementedError
+            If the orbitals belong to a two-component or complex calculation.
+        """
+        self._validate_nonrelativistic_orbital_response()
+        Fcore_ao = self.fock_builder.build_core_fock(self.Ccore, hcore=self.hcore)
+        Fact_ao = self.fock_builder.build_active_fock(self.Cact, self.g1)
+        Fcore_mo = self._transform_ao_operator(Fcore_ao, self.C)
+        Fact_mo = self._transform_ao_operator(Fact_ao, self.C)
+        B_mo = np.einsum(
+            "Pmn,mp,nq->Ppq",
+            self.fock_builder.B_Pmn,
+            self.C,
+            self.C,
+            optimize=True,
+        )
+        return Fcore_mo, Fact_mo, B_mo
+
+    def _build_density_fock_response(
+        self, density_response, coulomb_factor, exchange_factor
+    ):
+        """Apply ``coulomb_factor * J[D] - exchange_factor * K[D]``."""
+        B = self.fock_builder.B_Pmn
+        J_response = self.fock_builder.build_J([density_response])[0]
+        K_response = np.einsum("Pms,sr,Pnr->mn", B, density_response, B, optimize=True)
+        return coulomb_factor * J_response - exchange_factor * K_response
+
+    def _compute_orbital_hessian_vector_product(self, vector, intermediates):
+        r"""Evaluate one fixed-RDM orbital Hessian--vector product.
+
+        Pair ordering and the embedding :math:`\mathbf z\mapsto Z(\mathbf z)`
+        are defined by :meth:`compute_orbital_hessian_vector_product`.  Starting
+        from :math:`\dot C=CZ`, this kernel evaluates
+
+        .. math::
+
+            \dot P_{\mathrm{C}}
+            &=\dot C_{\mathrm{C}}C_{\mathrm{C}}^{T}
+              +C_{\mathrm{C}}\dot C_{\mathrm{C}}^{T},\\
+            \dot P_{\mathrm{A}}
+            &=\dot C_{\mathrm{A}}\bar\gamma C_{\mathrm{A}}^{T}
+              +C_{\mathrm{A}}\bar\gamma\dot C_{\mathrm{A}}^{T},\\
+            \dot F_{\mathrm{C}}^{\mathrm{AO}}
+            &=2J[\dot P_{\mathrm{C}}]-K[\dot P_{\mathrm{C}}],\\
+            \dot{\bar F}_{\mathrm{A}}^{\mathrm{AO}}
+            &=J[\dot P_{\mathrm{A}}]-\tfrac12K[\dot P_{\mathrm{A}}].
+
+        For :math:`X\in\{\mathrm C,\mathrm A\}`, the corresponding MO-basis
+        response and the transformed DF-factor response are
+
+        .. math::
+
+            \dot F_X
+            &=Z^T F_X+F_XZ+C^T\dot F_X^{\mathrm{AO}}C,\\
+            \dot B^P_{pq}
+            &=\sum_s\left(Z_{sp}B^P_{sq}+B^P_{ps}Z_{sq}\right).
+
+        With :math:`V_{rvtw}=\sum_P B^P_{rt}B^P_{vw}`, the integral response is
+
+        .. math::
+
+            \dot V_{rvtw}
+            =\sum_P\left(\dot B^P_{rt}B^P_{vw}
+                         +B^P_{rt}\dot B^P_{vw}\right).
+
+        Holding ``g1`` (:math:`\bar\gamma`) and the internal working 2-RDM
+        ``g2`` (:math:`\bar D`) fixed, the orbital-Lagrangian response is
+
+        .. math::
+
+            \dot{\bar A}_{ri}
+            &=2(\dot F_{\mathrm{C}}+\dot{\bar F}_{\mathrm{A}})_{ri},
+              &&i\in\mathbb C,\\
+            \dot{\bar A}_{ru}
+            &=\sum_v(\dot F_{\mathrm{C}})_{rv}\bar\gamma_{vu}
+              +\sum_{vtw}\dot V_{rvtw}\bar D_{tuvw},
+              &&u\in\mathbb A,\\
+            \dot{\bar A}_{re}&=0,
+              &&e\in\mathbb V.
+
+        The returned component for pair :math:`(p_I,q_I)` is therefore
+
+        .. math::
+
+            [\mathcal A^{\mathrm{oo}}\mathbf z]_I
+            =2\left(\dot{\bar A}_{p_Iq_I}
+                    -\dot{\bar A}_{q_Ip_I}\right).
+
+        This private kernel assumes that ``vector`` is real with shape
+        ``(nrot,)`` and that ``intermediates`` was built at the current orbitals
+        and stored ``g1``.  It performs no validation.  The AO Hamiltonian, DF
+        tensor, geometry, and both active RDMs are fixed; CI and nuclear response
+        are excluded.  The analytic, unscreened gradient expression is
+        differentiated.
+
+        Parameters
+        ----------
+        vector : np.ndarray
+            Real orbital-rotation direction in ``nrr`` C-order.
+        intermediates : tuple[np.ndarray, np.ndarray, np.ndarray]
+            ``(Fcore_mo, Fact_mo, B_mo)`` returned by
+            :meth:`_build_orbital_response_intermediates` at the same base point.
+
+        Returns
+        -------
+        np.ndarray
+            Fixed-RDM orbital Hessian applied to ``vector``, with shape
+            ``(nrot,)`` and the same pair ordering.
+        """
+        Fcore_mo, Fact_mo, B_mo = intermediates
+        Z = self._vec_to_mat(vector)
+        C_response = self.C @ Z
+        Ccore_response = C_response[:, self.core]
+        Cact_response = C_response[:, self.actv]
+
+        core_density_response = (
+            Ccore_response @ self.Ccore.T + self.Ccore @ Ccore_response.T
+        )
+        active_density_response = (
+            Cact_response @ self.g1 @ self.Cact.T
+            + self.Cact @ self.g1 @ Cact_response.T
+        )
+
+        Fcore_ao_response = self._build_density_fock_response(
+            core_density_response, coulomb_factor=2.0, exchange_factor=1.0
+        )
+        Fact_ao_response = self._build_density_fock_response(
+            active_density_response,
+            coulomb_factor=1.0,
+            exchange_factor=0.5,
+        )
+
+        def transform_response(operator_mo, operator_ao_response):
+            return (
+                Z.T @ operator_mo
+                + operator_mo @ Z
+                + self._transform_ao_operator(operator_ao_response, self.C)
+            )
+
+        Fcore_response = transform_response(Fcore_mo, Fcore_ao_response)
+        Fact_response = transform_response(Fact_mo, Fact_ao_response)
+
+        B_response = np.einsum("rp,Prq->Ppq", Z, B_mo, optimize=True)
+        B_response += np.einsum("Ppr,rq->Ppq", B_mo, Z, optimize=True)
+        eri_response = np.einsum(
+            "Prt,Pvw->rvtw",
+            B_response[:, :, self.actv],
+            B_mo[:, self.actv, self.actv],
+            optimize=True,
+        )
+        eri_response += np.einsum(
+            "Prt,Pvw->rvtw",
+            B_mo[:, :, self.actv],
+            B_response[:, self.actv, self.actv],
+            optimize=True,
+        )
+
+        A_response = np.zeros_like(Fcore_response)
+        A_response[:, self.core] = 2.0 * (Fcore_response + Fact_response)[:, self.core]
+        A_response[:, self.actv] = np.einsum(
+            "rv,vu->ru", Fcore_response[:, self.actv], self.g1, optimize=True
+        )
+        A_response[:, self.actv] += np.einsum(
+            "rvtw,tuvw->ru", eri_response, self.g2, optimize=True
+        )
+
+        gradient_response = 2.0 * (A_response - A_response.T)
+        return self._mat_to_vec(gradient_response)
 
     def _compute_reference_energy(self):
         energy = self.Ecore + self.e_nuc
