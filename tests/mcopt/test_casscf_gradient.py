@@ -225,9 +225,11 @@ def test_casscf_gradient_auto_runs_and_reuses_executed_object():
 
     assert mc.executed
     gradient2 = mc.gradient()
+    gradient3 = mc.gradient(root=0)
 
     assert mc.E == pytest.approx(energy1)
     assert gradient1 == pytest.approx(gradient2, abs=1.0e-12)
+    assert gradient1 == pytest.approx(gradient3, abs=1.0e-12)
     assert gradient1.shape == (system.natoms, 3)
 
 
@@ -269,8 +271,8 @@ def test_casscf_gradient_reuses_orbital_optimizer_intermediates(monkeypatch):
     assert gradient.shape == (mc.system.natoms, 3)
 
 
-def test_casscf_gradient_rejects_state_average():
-    """Reject SA-CASSCF because V1 implements only state-specific gradients."""
+def test_casscf_gradient_requires_root_for_state_average():
+    """Require an explicit absolute root for an SA-CASSCF gradient."""
     system = _system(["H", "H"], np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]]))
     rhf = RHF(charge=0)(system)
     ci_solver = CISolver(
@@ -280,7 +282,7 @@ def test_casscf_gradient_rejects_state_average():
     )
     mc = MCOptimizer(ci_solver, final_orbitals="original")(rhf)
 
-    with pytest.raises(NotImplementedError, match="state-specific"):
+    with pytest.raises(ValueError, match="root must be specified"):
         mc.gradient()
 
 

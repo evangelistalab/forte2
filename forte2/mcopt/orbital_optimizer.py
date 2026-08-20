@@ -395,6 +395,34 @@ class OrbOptimizer:
             Fixed-RDM orbital Hessian applied to ``vector``, with shape
             ``(nrot,)`` and the same pair ordering.
         """
+        A_response = self._compute_orbital_lagrangian_response(vector, intermediates)
+        gradient_response = 2.0 * (A_response - A_response.T)
+        return self._mat_to_vec(gradient_response)
+
+    def _compute_orbital_lagrangian_response(self, vector, intermediates):
+        r"""Return the full MO Lagrangian response for an orbital direction.
+
+        This evaluates :math:`\dot{\bar A}[\mathbf z]` using exactly the
+        fixed-state-averaged-RDM contractions documented by
+        :meth:`_compute_orbital_hessian_vector_product`.  Its antisymmetric
+        part generates the orbital--orbital Hessian action.  The contribution
+        to the relaxed orbital orthogonality multiplier additionally contains
+        the moving-frame commutator ``Z @ A - A @ Z``; it is assembled by
+        :meth:`MCOptimizer.compute_omega`.
+
+        Parameters
+        ----------
+        vector : np.ndarray
+            Validated real orbital direction with shape ``(nrot,)``.
+        intermediates : tuple[np.ndarray, np.ndarray, np.ndarray]
+            Base-point tensors from
+            :meth:`_build_orbital_response_intermediates`.
+
+        Returns
+        -------
+        np.ndarray
+            Full MO Lagrangian response matrix with shape ``(nmo, nmo)``.
+        """
         Fcore_mo, Fact_mo, B_mo = intermediates
         Z = self._vec_to_mat(vector)
         C_response = self.C @ Z
@@ -451,9 +479,7 @@ class OrbOptimizer:
         A_response[:, self.actv] += np.einsum(
             "rvtw,tuvw->ru", eri_response, self.g2, optimize=True
         )
-
-        gradient_response = 2.0 * (A_response - A_response.T)
-        return self._mat_to_vec(gradient_response)
+        return A_response
 
     def _build_ci_orbital_response_intermediates(self):
         r"""Build fixed tensors for the orbital--CI response block.
@@ -482,6 +508,170 @@ class OrbOptimizer:
             self.C, *(self.Cact,) * 3
         )
         return Fcore_mo, eri_gaaa
+
+    def _build_orbital_ci_response_intermediates(self):
+        r"""Build fixed tensors for the orbital contribution to the CI row.
+
+        For the current real restricted orbitals, this routine returns
+
+        .. math::
+
+            F_{\mathrm C}^{\mathrm{AO}}
+            &=h+2J[P_{\mathrm C}]-K[P_{\mathrm C}],\\
+            F_{\mathrm C}&=C^T F_{\mathrm C}^{\mathrm{AO}}C,\\
+            B^P_{pq}&=\sum_{\mu\nu}C_{\mu p}B^P_{\mu\nu}C_{\nu q}.
+
+        They are the base-point tensors needed to differentiate the scalar,
+        one-electron, and two-electron parts of the active-space Hamiltonian
+        along any orbital direction.  The returned tensors contain no
+        response themselves and remain valid only while the orbitals, AO
+        Hamiltonian, and DF factors are unchanged.
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray, np.ndarray]
+            ``(Fcore_ao, Fcore_mo, B_mo)`` with shapes ``(nao, nao)``,
+            ``(nmo, nmo)``, and ``(naux, nmo, nmo)``, respectively.
+        """
+        self._validate_nonrelativistic_orbital_response()
+        Fcore_ao = self.fock_builder.build_core_fock(self.Ccore, hcore=self.hcore)
+        Fcore_mo = self._transform_ao_operator(Fcore_ao, self.C)
+        B_mo = np.einsum(
+            "Pmn,mp,nq->Ppq",
+            self.fock_builder.B_Pmn,
+            self.C,
+            self.C,
+            optimize=True,
+        )
+        return Fcore_ao, Fcore_mo, B_mo
+
+    def _compute_active_space_hamiltonian_response(self, vector, intermediates):
+        r"""Differentiate the active-space Hamiltonian along an orbital vector.
+
+        With ``vector`` embedded in the antisymmetric generator :math:`Z` by
+        :meth:`_vec_to_mat`, let :math:`\dot C=CZ`.  This kernel returns the
+        integral triple defining the response Hamiltonian
+
+        .. math::
+
+            \hat H[\mathbf z]
+            =\dot E_{\mathrm C}
+             +\sum_{uv}(\dot F_{\mathrm C})_{uv}\hat E_{uv}
+             +\frac12\sum_{uvtw}\dot V_{uvtw}\hat E_{uvtw}.
+
+        Here
+
+        .. math::
+
+            \dot F_{\mathrm C}^{\mathrm{AO}}
+            &=2J[\dot P_{\mathrm C}]-K[\dot P_{\mathrm C}],\\
+            \dot F_{\mathrm C}
+            &=Z^T F_{\mathrm C}+F_{\mathrm C}Z
+              +C^T\dot F_{\mathrm C}^{\mathrm{AO}}C,
+
+        and :math:`\dot E_{\mathrm C}` is the derivative of
+        :math:`\mathrm{Tr}[C_{\mathrm C}^T(h+F_{\mathrm C}^{\mathrm{AO}})
+        C_{\mathrm C}]`.  The two-electron response differentiates all four
+        active indices of :math:`V_{uvtw}=\sum_P B^P_{ut}B^P_{vw}`.
+
+        This private kernel assumes a validated real vector with shape
+        ``(nrot,)`` and intermediates from
+        :meth:`_build_orbital_ci_response_intermediates` at the same base
+        point.  The AO integrals and nuclear geometry are fixed.
+
+        Returns
+        -------
+        tuple[float, np.ndarray, np.ndarray]
+            Scalar core-energy response, active one-electron response, and
+            active two-electron response in the CI solver's physicists'
+            convention.
+        """
+        Fcore_ao, Fcore_mo, B_mo = intermediates
+        Z = self._vec_to_mat(vector)
+        C_response = self.C @ Z
+        Ccore_response = C_response[:, self.core]
+
+        core_density_response = (
+            Ccore_response @ self.Ccore.T + self.Ccore @ Ccore_response.T
+        )
+        Fcore_ao_response = self._build_density_fock_response(
+            core_density_response, coulomb_factor=2.0, exchange_factor=1.0
+        )
+        Fcore_response = (
+            Z.T @ Fcore_mo
+            + Fcore_mo @ Z
+            + self._transform_ao_operator(Fcore_ao_response, self.C)
+        )
+
+        h_plus_fcore = self.hcore + Fcore_ao
+        scalar_response = np.trace(
+            Ccore_response.T @ h_plus_fcore @ self.Ccore
+            + self.Ccore.T @ h_plus_fcore @ Ccore_response
+            + self.Ccore.T @ Fcore_ao_response @ self.Ccore
+        )
+
+        B_response = np.einsum("rp,Prq->Ppq", Z, B_mo, optimize=True)
+        B_response += np.einsum("Ppr,rq->Ppq", B_mo, Z, optimize=True)
+        B_active = B_mo[:, self.actv, self.actv]
+        B_active_response = B_response[:, self.actv, self.actv]
+        eri_response = np.einsum(
+            "Put,Pvw->uvtw", B_active_response, B_active, optimize=True
+        )
+        eri_response += np.einsum(
+            "Put,Pvw->uvtw", B_active, B_active_response, optimize=True
+        )
+
+        one_body_response = Fcore_response[self.actv, self.actv]
+        return (
+            float(scalar_response),
+            np.ascontiguousarray(one_body_response),
+            np.ascontiguousarray(eri_response),
+        )
+
+    def _build_orbital_lagrangian_from_rdms(
+        self,
+        overlap_response,
+        g1_response,
+        g2_response,
+        intermediates,
+    ):
+        r"""Build a full MO Lagrangian matrix from overlap and active RDMs.
+
+        ``overlap_response`` supplies the scalar inactive-core coefficient,
+        while ``g1_response`` and ``g2_response`` supply the active one- and
+        two-particle contractions.  For a normalized target state these are
+        ``(1, gamma1, gamma2)``.  For a CI multiplier they are the root-summed
+        bra-plus-ket transition quantities.
+
+        Returns
+        -------
+        np.ndarray
+            Full unsymmetrized MO Lagrangian matrix with shape ``(nmo, nmo)``.
+        """
+        Fcore_mo, eri_gaaa = intermediates
+        active_density_response = self.Cact @ g1_response @ self.Cact.T
+        Fact_ao_response = self._build_density_fock_response(
+            active_density_response,
+            coulomb_factor=1.0,
+            exchange_factor=0.5,
+        )
+        Fact_response = self._transform_ao_operator(Fact_ao_response, self.C)
+        g2_working_response = self._make_working_2rdm(g2_response)
+
+        A_response = np.zeros_like(Fcore_mo)
+        A_response[:, self.core] = (
+            2.0 * (overlap_response * Fcore_mo + Fact_response)[:, self.core]
+        )
+        A_response[:, self.actv] = np.einsum(
+            "rv,vu->ru", Fcore_mo[:, self.actv], g1_response, optimize=True
+        )
+        A_response[:, self.actv] += np.einsum(
+            "rvtw,tuvw->ru",
+            eri_gaaa,
+            g2_working_response,
+            optimize=True,
+        )
+        return A_response
 
     def _compute_ci_orbital_response_from_rdms(
         self,
@@ -532,30 +722,12 @@ class OrbOptimizer:
             Orbital part of the orbital--CI action, with shape (nrot,) and
             nrr C-order.
         """
-        Fcore_mo, eri_gaaa = intermediates
-        active_density_response = self.Cact @ g1_response @ self.Cact.T
-        Fact_ao_response = self._build_density_fock_response(
-            active_density_response,
-            coulomb_factor=1.0,
-            exchange_factor=0.5,
+        A_response = self._build_orbital_lagrangian_from_rdms(
+            overlap_response,
+            g1_response,
+            g2_response,
+            intermediates,
         )
-        Fact_response = self._transform_ao_operator(Fact_ao_response, self.C)
-        g2_working_response = self._make_working_2rdm(g2_response)
-
-        A_response = np.zeros_like(Fcore_mo)
-        A_response[:, self.core] = (
-            2.0 * (overlap_response * Fcore_mo + Fact_response)[:, self.core]
-        )
-        A_response[:, self.actv] = np.einsum(
-            "rv,vu->ru", Fcore_mo[:, self.actv], g1_response, optimize=True
-        )
-        A_response[:, self.actv] += np.einsum(
-            "rvtw,tuvw->ru",
-            eri_gaaa,
-            g2_working_response,
-            optimize=True,
-        )
-
         gradient_response = 2.0 * (A_response - A_response.T)
         return self._mat_to_vec(gradient_response)
 

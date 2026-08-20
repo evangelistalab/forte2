@@ -12,9 +12,10 @@ from forte2.gradients.validation import validate_df_gradient_system
 from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
 
 
-def _compute_casscf_gradient(mc) -> NDArray:
-    """Compute a state-specific density-fitted CASSCF/GASSCF gradient."""
+def _compute_casscf_gradient(mc, root=None) -> NDArray:
+    """Compute a target-root density-fitted CASSCF/GASSCF gradient."""
     _validate_casscf_gradient_request(mc)
+    root = _resolve_casscf_gradient_root(mc, root)
 
     if not mc.executed:
         mc.run()
@@ -24,13 +25,16 @@ def _compute_casscf_gradient(mc) -> NDArray:
     C = mc.mos.C[0][:, mc.mo_space.orig_to_contig].copy()
     if isinstance(mc.ci_solver, RelCIBase):
         return _compute_rel_casscf_gradient(mc, C)
-    return _compute_nonrel_casscf_gradient(mc, C)
+    return _compute_nonrel_casscf_gradient(mc, C, root)
 
 
-def _compute_nonrel_casscf_gradient(mc, C: NDArray) -> NDArray:
-    """Compute a state-specific nonrelativistic CASSCF/GASSCF gradient."""
-    gamma1_act = mc.make_sf_1rdm(0)
-    gamma2_act = mc.make_sf_2rdm(0)
+def _compute_nonrel_casscf_gradient(mc, C: NDArray, root: int) -> NDArray:
+    """Compute a target-root nonrelativistic CASSCF/GASSCF gradient."""
+    if mc.ci_solver.sa_info.nroots_sum > 1:
+        return _compute_nonrel_sa_casscf_gradient(mc, C, root)
+
+    gamma1_act = mc.make_sf_1rdm(root)
+    gamma2_act = mc.make_sf_2rdm(root)
     Ccore = C[:, mc.mo_space.core]
     Cact = C[:, mc.mo_space.actv]
 
@@ -53,6 +57,167 @@ def _compute_nonrel_casscf_gradient(mc, C: NDArray) -> NDArray:
         W3,
         hcore_gradient=hcore_gradient,
     )
+
+
+def _compute_nonrel_sa_casscf_gradient(mc, C: NDArray, root: int) -> NDArray:
+    """Compute a relaxed gradient for one root of a nonrelativistic SA-CASSCF."""
+    orbital_response, ci_response = mc.solve_state_specific_response(root)
+    omega = mc.compute_omega(root, orbital_response, ci_response)
+    D1, W2, W3 = _build_sa_casscf_relaxed_density_weights(
+        mc, root, orbital_response, ci_response
+    )
+
+    W1 = np.einsum("mp,pq,nq->mn", C, omega, C, optimize=True)
+
+    hcore_gradient = (
+        mc.system.x2c_helper.hcore_gradient(D1)
+        if mc.system.x2c_type is not None
+        else None
+    )
+    return compute_gradient(
+        mc.system,
+        D1.real,
+        W1.real,
+        W2,
+        W3,
+        hcore_gradient=hcore_gradient,
+    )
+
+
+def _build_sa_casscf_relaxed_density_weights(
+    mc,
+    root: int,
+    orbital_response: NDArray,
+    ci_response: NDArray,
+) -> tuple[NDArray, NDArray, NDArray]:
+    r"""Build relaxed AO density and DF weights for a target SA-CASSCF root.
+
+    Target and CI-transition RDMs are accumulated in the compact inactive-core
+    plus active space.  The orbital term differentiates both occurrences of
+    the compact orbital coefficients and the transformed metric-inverted
+    three-center tensor along ``C Z``.  This is algebraically equivalent to a
+    full-MO relaxed 2-RDM but avoids an ``nmo**4`` intermediate.
+    """
+    nmo = mc.mo_space.nmo
+    layout, _ = mc._get_ci_response_layout()
+    core_indices = np.arange(nmo)[mc.mo_space.core]
+    active_indices = np.arange(nmo)[mc.mo_space.actv]
+    hole_indices = np.concatenate((core_indices, active_indices))
+    ncore = core_indices.size
+
+    target = _build_nonrel_casscf_internal_rdms(
+        ncore,
+        1.0,
+        mc.make_sf_1rdm(root),
+        mc.make_sf_2rdm(root),
+    )
+    ci = _build_nonrel_casscf_internal_rdms(
+        ncore,
+        *mc._compute_ci_response_rdms(ci_response, layout),
+    )
+    average = _build_nonrel_casscf_internal_rdms(
+        ncore,
+        1.0,
+        mc.make_average_1rdm(),
+        mc.make_average_2rdm(),
+    )
+
+    C = mc.mos.C[0][:, mc.mo_space.orig_to_contig]
+    Ch = C[:, hole_indices]
+    Z = mc.orb_opt._vec_to_mat(orbital_response)
+    Ch_response = (C @ Z)[:, hole_indices]
+
+    gamma1_base = target[0] + ci[0]
+    D1 = np.einsum("mx,xy,ny->mn", Ch, gamma1_base, Ch, optimize=True)
+    D1 += np.einsum("mx,xy,ny->mn", Ch_response, average[0], Ch, optimize=True)
+    D1 += np.einsum("mx,xy,ny->mn", Ch, average[0], Ch_response, optimize=True)
+
+    Z_ao = build_metric_inverted_three_center(mc.system)
+    Z_h = np.einsum("mx,Pmn,ny->Pxy", Ch, Z_ao, Ch, optimize=True)
+    Z_h_response = np.einsum("mx,Pmn,ny->Pxy", Ch_response, Z_ao, Ch, optimize=True)
+    Z_h_response += np.einsum("mx,Pmn,ny->Pxy", Ch, Z_ao, Ch_response, optimize=True)
+
+    pair_base = _make_pair_symmetric_density(target[1] + ci[1])
+    pair_average = _make_pair_symmetric_density(average[1])
+    W3_h = np.einsum("xyzw,Pzw->Pxy", pair_base, Z_h, optimize=True)
+    W2 = -0.5 * np.einsum("xyzw,Pxy,Qzw->PQ", pair_base, Z_h, Z_h, optimize=True)
+    W3 = np.einsum("mx,Pxy,ny->Pmn", Ch, W3_h, Ch, optimize=True)
+
+    W3_average = np.einsum("xyzw,Pzw->Pxy", pair_average, Z_h, optimize=True)
+    W3_average_response = np.einsum(
+        "xyzw,Pzw->Pxy", pair_average, Z_h_response, optimize=True
+    )
+    W3 += np.einsum("mx,Pxy,ny->Pmn", Ch_response, W3_average, Ch, optimize=True)
+    W3 += np.einsum("mx,Pxy,ny->Pmn", Ch, W3_average, Ch_response, optimize=True)
+    W3 += np.einsum("mx,Pxy,ny->Pmn", Ch, W3_average_response, Ch, optimize=True)
+    W2 -= 0.5 * np.einsum(
+        "xyzw,Pxy,Qzw->PQ",
+        pair_average,
+        Z_h_response,
+        Z_h,
+        optimize=True,
+    )
+    W2 -= 0.5 * np.einsum(
+        "xyzw,Pxy,Qzw->PQ",
+        pair_average,
+        Z_h,
+        Z_h_response,
+        optimize=True,
+    )
+    return D1.real, W2.real, W3.real
+
+
+def _build_nonrel_casscf_internal_rdms(
+    ncore: int,
+    overlap: float,
+    gamma1_act: NDArray,
+    gamma2_act: NDArray,
+) -> tuple[NDArray, NDArray]:
+    r"""Embed active RDMs and a closed core into the compact internal space.
+
+    ``overlap`` is one for a normalized state and is the bra-plus-ket overlap
+    for a CI-transition density.  Core--active blocks are linear in the active
+    transition 1-RDM, while the core--core 2-RDM scales with ``overlap``.
+    """
+    nact = gamma1_act.shape[0]
+    if gamma1_act.shape != (nact, nact):
+        raise ValueError("Active 1-RDM must be a square matrix.")
+    if gamma2_act.shape != (nact, nact, nact, nact):
+        raise ValueError(
+            "Expected active 2-RDM shape "
+            f"{(nact, nact, nact, nact)}, got {gamma2_act.shape}."
+        )
+
+    dtype = np.result_type(overlap, gamma1_act, gamma2_act)
+    ninternal = ncore + nact
+    core = slice(0, ncore)
+    active = slice(ncore, ninternal)
+    core_density = np.zeros((ninternal, ninternal), dtype=dtype)
+    core_density[core, core] = 2.0 * np.eye(ncore)
+    active_density = np.zeros((ninternal, ninternal), dtype=dtype)
+    active_density[active, active] = gamma1_act
+    gamma1 = overlap * core_density + active_density
+
+    gamma2 = overlap * (
+        np.einsum("pr,qs->pqrs", core_density, core_density, optimize=True)
+        - 0.5 * np.einsum("ps,qr->pqrs", core_density, core_density, optimize=True)
+    )
+    gamma2 += np.einsum("pr,qs->pqrs", core_density, active_density, optimize=True)
+    gamma2 += np.einsum("pr,qs->pqrs", active_density, core_density, optimize=True)
+    gamma2 -= 0.5 * np.einsum(
+        "ps,qr->pqrs", core_density, active_density, optimize=True
+    )
+    gamma2 -= 0.5 * np.einsum(
+        "ps,qr->pqrs", active_density, core_density, optimize=True
+    )
+    gamma2[active, active, active, active] = gamma2_act
+    return gamma1, gamma2
+
+
+def _make_pair_symmetric_density(gamma2: NDArray) -> NDArray:
+    """Convert a spin-free 2-RDM to its pair-symmetric DF contraction form."""
+    pair_density = gamma2.transpose(0, 2, 1, 3)
+    return 0.5 * (pair_density + pair_density.transpose(2, 3, 0, 1))
 
 
 def _compute_rel_casscf_gradient(mc, C: NDArray) -> NDArray:
@@ -507,11 +672,23 @@ def _build_casscf_overlap_weight(
 def _validate_casscf_gradient_request(mc) -> None:
     """Reject unsupported CASSCF/GASSCF options before running the method."""
     is_relativistic = isinstance(mc.ci_solver, RelCIBase)
+    is_state_average = mc.ci_solver.sa_info.nroots_sum > 1
 
-    if mc.ci_solver.sa_info.ncis != 1 or mc.ci_solver.sa_info.nroots_sum != 1:
+    if is_state_average and is_relativistic:
         raise NotImplementedError(
-            "CASSCF/GASSCF gradients are implemented only for state-specific "
-            "CASSCF/GASSCF."
+            "Relativistic CASSCF gradients are currently implemented only for "
+            "state-specific wave functions; individual-root SA-CASSCF gradients "
+            "require a nonrelativistic real wave function."
+        )
+    if is_state_average and mc.ci_solver.sa_info.ncis != 1:
+        raise NotImplementedError(
+            "Individual-root SA-CASSCF gradients currently require all roots "
+            "to belong to one CI state solver."
+        )
+    if is_state_average and mc.final_orbitals != "original":
+        raise NotImplementedError(
+            "Individual-root SA-CASSCF gradients currently require "
+            "final_orbitals='original'."
         )
 
     if mc.active_frozen_orbitals:
@@ -580,6 +757,25 @@ def _validate_converged_casscf_gradient(mc) -> None:
             "Relativistic CASSCF/GASSCF gradients require spinor AO coefficients "
             "with 2 * system.nbf rows."
         )
+
+
+def _resolve_casscf_gradient_root(mc, root) -> int:
+    """Validate and resolve the absolute root requested for a gradient."""
+    nroots = mc.ci_solver.sa_info.nroots_sum
+    if root is None:
+        if nroots != 1:
+            raise ValueError(
+                "An absolute root must be specified for an individual-root "
+                "SA-CASSCF gradient."
+            )
+        return 0
+    if isinstance(root, bool) or not isinstance(root, (int, np.integer)):
+        raise TypeError("The target gradient root must be an integer.")
+    if root < 0 or root >= nroots:
+        raise ValueError(
+            f"Expected a target gradient root in [0, {nroots}), got {root}."
+        )
+    return int(root)
 
 
 def _ci_solver_requests_multiple_gas(ci_solver) -> bool:
