@@ -329,6 +329,12 @@ class MCOptimizerBase(Method):
         self.E_ci = np.array(self.ci_solver.E)
         self.E_avg = self.ci_solver.compute_average_energy()
         self.E = self.E_avg
+        # Keep the orbital response base point synchronized with the final CI
+        # vectors. The last CI diagonalization may slightly change the RDMs
+        # after the final orbital microiteration.
+        self.g1_act = self.make_average_1rdm()
+        g2_act = self.make_average_2rdm()
+        self.orb_opt.set_rdms(self.g1_act, g2_act)
         logger.log_info1(
             f"{'Final CI':>10} {self.E_avg:>20.10f} {self.E_orb:>20.10f} {'-':>12} {'-':>12} {'-':>12} {'-':>8} {'':>8}"
         )
@@ -566,6 +572,202 @@ class MCOptimizerBase(Method):
 
 
 class MCOptimizer(MCOptimizerBase):
+    def _validate_orbital_ci_response_request(self):
+        if not self.executed:
+            raise RuntimeError(
+                "The MCSCF calculation must be run before building response blocks."
+            )
+        if self.system.two_component or np.iscomplexobj(self.orb_opt.C):
+            raise NotImplementedError(
+                "The orbital--CI response is currently implemented only for "
+                "nonrelativistic real wave functions."
+            )
+        if self.final_orbitals != "original":
+            raise NotImplementedError(
+                "The orbital--CI response currently requires "
+                "final_orbitals='original' so that the orbital optimizer and "
+                "final CI vectors use the same active-orbital basis."
+            )
+        if not hasattr(self.ci_solver, "sub_solvers"):
+            raise NotImplementedError(
+                "The orbital--CI response currently requires a CISolver with "
+                "explicit per-state CI vectors."
+            )
+        for sub_solver in self.ci_solver.sub_solvers:
+            required = ("basis_size", "evecs", "csf_C_to_det_C", "ci_sigma_builder")
+            if not all(hasattr(sub_solver, name) for name in required):
+                raise NotImplementedError(
+                    "The orbital--CI response currently requires spin-adapted "
+                    "CISolver sub-solvers."
+                )
+
+    def _get_ci_response_layout(self):
+        layout = []
+        start = 0
+        for absolute_root, (state_index, root_in_state) in enumerate(
+            self.ci_solver.sa_info.absolute_root_map
+        ):
+            sub_solver = self.ci_solver.sub_solvers[state_index]
+            stop = start + sub_solver.basis_size
+            layout.append(
+                (
+                    absolute_root,
+                    state_index,
+                    root_in_state,
+                    slice(start, stop),
+                )
+            )
+            start = stop
+        return tuple(layout), start
+
+    def get_ci_response_layout(self):
+        """Return the root-major layout of the flattened CI response vector.
+
+        Returns
+        -------
+        tuple[tuple[int, int, int, slice], ...]
+            One entry per absolute root. Each entry contains
+            (absolute_root, state_index, root_in_state, coefficient_slice).
+            Coefficients inside each slice use that sub-solver's CSF ordering.
+        """
+        self._validate_orbital_ci_response_request()
+        layout, _ = self._get_ci_response_layout()
+        return layout
+
+    def _validate_ci_response_vector(self, ci_vector):
+        layout, nci = self._get_ci_response_layout()
+        ci_vector = np.asarray(ci_vector)
+        if ci_vector.shape != (nci,):
+            raise ValueError(
+                f"Expected a CI response vector with shape ({nci},), "
+                f"got {ci_vector.shape}."
+            )
+        if np.iscomplexobj(ci_vector):
+            raise TypeError(
+                "The nonrelativistic orbital--CI response vector must be real."
+            )
+        return ci_vector.astype(float, copy=False), layout
+
+    def _compute_ci_response_rdms(self, ci_vector, layout):
+        nact = self.mo_space.nactv
+        overlap_response = 0.0
+        g1_response = np.zeros((nact,) * 2, dtype=float)
+        g2_response = np.zeros((nact,) * 4, dtype=float)
+
+        for _, state_index, root_in_state, coefficient_slice in layout:
+            response = ci_vector[coefficient_slice]
+            if not np.any(response):
+                continue
+
+            sub_solver = self.ci_solver.sub_solvers[state_index]
+            reference = sub_solver.evecs[:, root_in_state]
+            overlap_response += np.dot(response, reference)
+            overlap_response += np.dot(reference, response)
+
+            response_det = sub_solver.csf_C_to_det_C(response)
+            reference_det = sub_solver.csf_C_to_det_C(reference)
+            sigma_builder = sub_solver.ci_sigma_builder
+            g1_response += sigma_builder.sf_1rdm(response_det, reference_det)
+            g1_response += sigma_builder.sf_1rdm(reference_det, response_det)
+            g2_response += sigma_builder.sf_2rdm(response_det, reference_det)
+            g2_response += sigma_builder.sf_2rdm(reference_det, response_det)
+
+        return overlap_response, g1_response, g2_response
+
+    def compute_orbital_ci_hessian_vector_product(self, ci_vector):
+        r"""Apply the CI contribution to the orbital response equation.
+
+        The input is the concatenation of one real CSF vector for each absolute
+        root, in the layout returned by get_ci_response_layout. For root
+        alpha, its segment x_alpha is contracted with the reference CI vector
+        c_alpha to form the bra-plus-ket transition overlap and RDMs. The
+        returned vector is
+
+        .. math::
+
+            [\mathcal A^{\mathrm{oc}}\mathbf x]_I
+            =
+            2\left(A^{\mathrm{oc}}_{p_Iq_I}[\mathbf x]
+                   -A^{\mathrm{oc}}_{q_Ip_I}[\mathbf x]\right).
+
+        No state-average weights multiply x_alpha in this block because it is
+        the orbital derivative of the unweighted CI residual Lagrangian. For a
+        direct derivative of the state-averaged orbital gradient, the
+        equivalent physical CI displacement is x_alpha / w_alpha.
+
+        Parameters
+        ----------
+        ci_vector : np.ndarray
+            Root-major flattened real CI multiplier vector.
+
+        Returns
+        -------
+        np.ndarray
+            Orbital response vector with shape (nrot,) and nrr C-order.
+        """
+        self._validate_orbital_ci_response_request()
+        ci_vector, layout = self._validate_ci_response_vector(ci_vector)
+        responses = self._compute_ci_response_rdms(ci_vector, layout)
+        intermediates = self.orb_opt._build_ci_orbital_response_intermediates()
+        return self.orb_opt._compute_ci_orbital_response_from_rdms(
+            *responses, intermediates
+        )
+
+    def compute_orbital_ci_hessian(self):
+        r"""Build the full rectangular orbital--CI response block.
+
+        Column J is the orbital response obtained by applying
+        compute_orbital_ci_hessian_vector_product to CI unit vector J. Columns
+        use the root-major layout returned by get_ci_response_layout.
+
+        Returns
+        -------
+        np.ndarray
+            The orbital--CI block with shape (nrot, nci).
+        """
+        self._validate_orbital_ci_response_request()
+        layout, nci = self._get_ci_response_layout()
+        intermediates = self.orb_opt._build_ci_orbital_response_intermediates()
+        hessian = np.empty((self.orb_opt.nrot, nci), dtype=float)
+        unit = np.zeros(nci, dtype=float)
+        for column in range(nci):
+            unit[column] = 1.0
+            responses = self._compute_ci_response_rdms(unit, layout)
+            hessian[:, column] = self.orb_opt._compute_ci_orbital_response_from_rdms(
+                *responses, intermediates
+            )
+            unit[column] = 0.0
+        return hessian
+
+    def compute_orbital_response_vector_product(self, orbital_vector, ci_vector):
+        r"""Apply the orbital row of the coupled CASSCF response matrix.
+
+        .. math::
+
+            \mathbf y^{\mathrm o}
+            =
+            \mathcal A^{\mathrm{oo}}\mathbf z
+            +
+            \mathcal A^{\mathrm{oc}}\mathbf x.
+
+        Parameters
+        ----------
+        orbital_vector : np.ndarray
+            Real nonredundant orbital direction with shape (nrot,).
+        ci_vector : np.ndarray
+            Root-major flattened real CI multiplier vector.
+
+        Returns
+        -------
+        np.ndarray
+            Combined orbital response with shape (nrot,).
+        """
+        ci_response = self.compute_orbital_ci_hessian_vector_product(ci_vector)
+        orbital_response = self.orb_opt.compute_orbital_hessian_vector_product(
+            orbital_vector
+        )
+        return orbital_response + ci_response
+
     def make_sd_1rdm(
         self,
         left_root: int,

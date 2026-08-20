@@ -44,8 +44,13 @@ class OrbOptimizer:
 
     def set_rdms(self, g1, g2):
         self.g1 = g1
+        self.g2 = self._make_working_2rdm(g2)
+
+    @staticmethod
+    def _make_working_2rdm(g2):
+        """Convert a spin-free 2-RDM to the orbital optimizer convention."""
         # '2RDM' defined as in [eq (6)]
-        self.g2 = 0.5 * (np.einsum("prqs->pqrs", g2) + np.einsum("qrps->pqrs", g2))
+        return 0.5 * (np.einsum("prqs->pqrs", g2) + np.einsum("qrps->pqrs", g2))
 
     def get_active_space_ints(self):
         """
@@ -445,6 +450,110 @@ class OrbOptimizer:
         )
         A_response[:, self.actv] += np.einsum(
             "rvtw,tuvw->ru", eri_response, self.g2, optimize=True
+        )
+
+        gradient_response = 2.0 * (A_response - A_response.T)
+        return self._mat_to_vec(gradient_response)
+
+    def _build_ci_orbital_response_intermediates(self):
+        r"""Build fixed tensors for the orbital--CI response block.
+
+        Returns the current inactive-core Fock matrix and transformed integral
+        block
+
+        .. math::
+
+            F_{\mathrm C}=C^TF_{\mathrm C}^{\mathrm{AO}}C,\qquad
+            V_{rvtw}=\langle rv|tw\rangle .
+
+        Both are independent of a CI multiplier direction and can be reused
+        for every column of the orbital--CI block.
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray]
+            The pair (Fcore_mo, eri_gaaa), with shapes (nmo, nmo) and
+            (nmo, nact, nact, nact), respectively.
+        """
+        self._validate_nonrelativistic_orbital_response()
+        Fcore_ao = self.fock_builder.build_core_fock(self.Ccore, hcore=self.hcore)
+        Fcore_mo = self._transform_ao_operator(Fcore_ao, self.C)
+        eri_gaaa = self.fock_builder.two_electron_integrals_gen_block(
+            self.C, *(self.Cact,) * 3
+        )
+        return Fcore_mo, eri_gaaa
+
+    def _compute_ci_orbital_response_from_rdms(
+        self,
+        overlap_response,
+        g1_response,
+        g2_response,
+        intermediates,
+    ):
+        r"""Map symmetrized transition RDMs to the orbital equation.
+
+        For a root-summed CI multiplier direction, overlap_response is s[x],
+        while g1_response and g2_response are the raw spin-free, bra-plus-ket
+        transition RDMs.  This routine evaluates
+
+        .. math::
+
+            A^{\mathrm{oc}}_{ri}
+            &=2\left(s[\mathbf x](F_{\mathrm C})_{ri}
+                    +(F_{\mathrm A}[\gamma[\mathbf x]])_{ri}\right),\\
+            A^{\mathrm{oc}}_{ru}
+            &=\sum_v(F_{\mathrm C})_{rv}\gamma_{vu}[\mathbf x]
+              +\sum_{vtw}V_{rvtw}D_{tuvw}[\mathbf x],\\
+            [\mathcal A^{\mathrm{oc}}\mathbf x]_I
+            &=2\left(A^{\mathrm{oc}}_{p_Iq_I}
+                    -A^{\mathrm{oc}}_{q_Ip_I}\right).
+
+        The first equation applies to a core column i, the second to an active
+        column u, and virtual columns are zero.  The working density D[x] is
+        formed from g2_response using the same permutation and symmetrization
+        as set_rdms.
+
+        Parameters
+        ----------
+        overlap_response : float
+            Root-summed bra-plus-ket transition overlap.
+        g1_response : np.ndarray
+            Root-summed spin-free transition 1-RDM, shape (nact, nact).
+        g2_response : np.ndarray
+            Root-summed spin-free transition 2-RDM, shape
+            (nact, nact, nact, nact).
+        intermediates : tuple[np.ndarray, np.ndarray]
+            The pair (Fcore_mo, eri_gaaa) returned by
+            _build_ci_orbital_response_intermediates at the same base point.
+
+        Returns
+        -------
+        np.ndarray
+            Orbital part of the orbital--CI action, with shape (nrot,) and
+            nrr C-order.
+        """
+        Fcore_mo, eri_gaaa = intermediates
+        active_density_response = self.Cact @ g1_response @ self.Cact.T
+        Fact_ao_response = self._build_density_fock_response(
+            active_density_response,
+            coulomb_factor=1.0,
+            exchange_factor=0.5,
+        )
+        Fact_response = self._transform_ao_operator(Fact_ao_response, self.C)
+        g2_working_response = self._make_working_2rdm(g2_response)
+
+        A_response = np.zeros_like(Fcore_mo)
+        A_response[:, self.core] = (
+            2.0 * (overlap_response * Fcore_mo + Fact_response)[:, self.core]
+        )
+        A_response[:, self.actv] = np.einsum(
+            "rv,vu->ru", Fcore_mo[:, self.actv], g1_response, optimize=True
+        )
+        A_response[:, self.actv] += np.einsum(
+            "rvtw,tuvw->ru",
+            eri_gaaa,
+            g2_working_response,
+            optimize=True,
         )
 
         gradient_response = 2.0 * (A_response - A_response.T)
