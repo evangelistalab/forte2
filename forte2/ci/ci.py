@@ -801,30 +801,6 @@ class _CISingleStateSolver:
         self.ints.H = oei
         self.ints.V = tei
 
-    def set_maxiter(self, maxiter):
-        """
-        Set the maximum number of iterations for the CI solver.
-
-        Parameters
-        ----------
-        maxiter : int
-            The maximum number of iterations to set.
-        """
-        self.maxiter = maxiter
-        if self.eigensolver is not None:
-            self.eigensolver.maxiter = maxiter
-
-    def get_maxiter(self):
-        """
-        Get the maximum number of iterations for the CI solver.
-
-        Returns
-        -------
-        int
-            The maximum number of iterations.
-        """
-        return self.maxiter
-
     def get_top_determinants(self, n=5):
         """
         Get the top `n` determinants for each root based on their coefficients in the CI vector.
@@ -1033,7 +1009,7 @@ class CI(CISolver):
 
     def run(self):
         self._solve()
-        self._rotate_final_orbitals()
+        self._rotate_final_orbitals(self.final_orbitals)
         self._post_process()
         return self
 

@@ -20,6 +20,7 @@ from forte2.base_classes.rebuild import (
     seed_chain_orbitals,
     snapshot_orbitals,
 )
+from forte2.orbitals import mo_overlap
 
 _DISPLACED = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.5]])
 
@@ -158,9 +159,10 @@ def test_seed_chain_orbitals_installs_the_guess_on_the_chain_root():
     assert getattr(rebuilt, "C", None) is None
 
     new_system = root.system
-    S = new_system.ints_overlap()
     np.testing.assert_allclose(
-        root.C[0].T @ S @ root.C[0], np.eye(new_system.nmo), atol=1.0e-10
+        mo_overlap(root.C[0], new_system, root.C[0]),
+        np.eye(new_system.nmo),
+        atol=1.0e-10,
     )
 
 

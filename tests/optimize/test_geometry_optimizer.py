@@ -1,10 +1,9 @@
 import numpy as np
 import pytest
 
-import forte2
 from forte2 import CISolver, GeometryOptimizer, MCOptimizer, State, System
 from forte2.base_classes.params import SelectedCIParams
-from forte2.orbitals import project_occupied_orbitals
+from forte2.orbitals import mo_overlap, project_occupied_orbitals
 from forte2.scf import RHF
 from forte2.sci import SelectedCISolver
 from forte2.system import BSE_AVAILABLE
@@ -124,15 +123,18 @@ def test_project_previous_occupied_orbitals_to_new_geometry():
     assert len(projected) == 1
     assert projected[0].shape == (new_system.nbf, new_system.nmo)
 
-    S = new_system.ints_overlap()
     # Check that the projected orbitals are orthonormal in the new basis
     np.testing.assert_allclose(
-        projected[0].T @ S @ projected[0], np.eye(new_system.nmo), atol=1.0e-10
+        mo_overlap(projected[0], new_system, projected[0]),
+        np.eye(new_system.nmo),
+        atol=1.0e-10,
     )
     # Check that the projected occupied orbital has a large overlap with the old one
-    S_cross = forte2.integrals.overlap(new_system, new_system.basis, old_system.basis)
-    occupied_overlap = (
-        projected[0][:, : new_rhf.na].T @ S_cross @ old_rhf.C[0][:, : old_rhf.na]
+    occupied_overlap = mo_overlap(
+        projected[0][:, : new_rhf.na],
+        new_system,
+        old_rhf.C[0][:, : old_rhf.na],
+        old_system,
     )
     assert abs(occupied_overlap[0, 0]) > 0.99
 
