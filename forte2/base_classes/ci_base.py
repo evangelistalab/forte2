@@ -39,6 +39,12 @@ class CIBase(ActiveSpaceSolver):
         self._register_parent_method(parent_method)
         return self
 
+    def reset(self):
+        """Invalidate this solver, forcing _solve() to rebuild sub_solvers on
+        the next run() instead of resolving in the (stale) current basis."""
+        self.first_run = True
+        return super().reset()
+
     @property
     def ci_solver(self):
         """

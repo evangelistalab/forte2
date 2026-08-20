@@ -148,11 +148,15 @@ class UHF(SCFBase):
         return F
 
     def _apply_level_shift(self, F, S):
-        if self.level_shift is None or all(ls < 1e-4 for ls in self.level_shift):
+        if self._current_level_shift is None or all(
+            ls < 1e-4 for ls in self._current_level_shift
+        ):
             return F
         D_vir = [S - S @ d @ S for d in self.D]
 
-        return [f + ls * d for ls, f, d in zip(self.level_shift, F, D_vir)]
+        return [
+            f + ls * d for ls, f, d in zip(self._current_level_shift, F, D_vir)
+        ]
 
     def _get_occupation(self):
         self.aocc = self.na

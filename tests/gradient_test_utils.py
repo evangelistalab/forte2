@@ -1,24 +1,22 @@
+"""Shared helpers for the analytic-gradient tests.
+
+The finite differences themselves come from ``forte2.gradients.finite_difference``;
+these wrappers only adapt it to the ``energy_fn(symbols, coordinates, ...)``
+signature the gradient tests are written against.
+"""
+
 import numpy as np
 
 from forte2 import System
-
-_FOUR_POINT_STENCIL = ((-2.0, 1.0), (-1.0, -8.0), (1.0, 8.0), (2.0, -1.0))
-_SIX_POINT_STENCIL = (
-    (-3.0, -1.0),
-    (-2.0, 9.0),
-    (-1.0, -45.0),
-    (1.0, 45.0),
-    (2.0, -9.0),
-    (3.0, 1.0),
-)
+from forte2.data import ATOM_SYMBOL_TO_Z
+from forte2.gradients import finite_difference
+from forte2.system import coords_to_xyz
 
 
 def xyz_string(symbols, coordinates):
     """Format symbols and Cartesian coordinates as an XYZ geometry string."""
-    return "\n".join(
-        f"{symbol} {xyz[0]:.16f} {xyz[1]:.16f} {xyz[2]:.16f}"
-        for symbol, xyz in zip(symbols, coordinates)
-    )
+    charges = [ATOM_SYMBOL_TO_Z[symbol.upper()] for symbol in symbols]
+    return coords_to_xyz(charges, coordinates)
 
 
 def make_test_system(symbols, coordinates):
@@ -32,27 +30,21 @@ def make_test_system(symbols, coordinates):
 
 
 def _central_difference_gradient_component(
-    energy_fn,
-    symbols,
-    coordinates,
-    atom,
-    cart,
-    stencil,
-    denominator,
-    *args,
-    step,
-    **kwargs,
+    energy_fn, symbols, coordinates, atom, cart, npoints, *args, step, **kwargs
 ):
     coordinates = np.asarray(coordinates, dtype=float)
 
-    def shifted_energy(scale):
-        shifted_coordinates = coordinates.copy()
-        shifted_coordinates[atom, cart] += scale * step
-        return energy_fn(symbols, shifted_coordinates, *args, **kwargs)
+    def energy(displaced):
+        return energy_fn(symbols, displaced, *args, **kwargs)
 
-    return sum(weight * shifted_energy(scale) for scale, weight in stencil) / (
-        denominator * step
+    derivative = finite_difference(
+        energy,
+        coordinates,
+        step=step,
+        npoints=npoints,
+        components=[(atom, cart)],
     )
+    return float(derivative[0])
 
 
 def four_point_central_difference_gradient_component(
@@ -60,16 +52,7 @@ def four_point_central_difference_gradient_component(
 ):
     """Compute one Cartesian gradient component with a four-point stencil."""
     return _central_difference_gradient_component(
-        energy_fn,
-        symbols,
-        coordinates,
-        atom,
-        cart,
-        _FOUR_POINT_STENCIL,
-        12.0,
-        *args,
-        step=step,
-        **kwargs,
+        energy_fn, symbols, coordinates, atom, cart, 4, *args, step=step, **kwargs
     )
 
 
@@ -78,14 +61,5 @@ def six_point_central_difference_gradient_component(
 ):
     """Compute one Cartesian gradient component with a six-point stencil."""
     return _central_difference_gradient_component(
-        energy_fn,
-        symbols,
-        coordinates,
-        atom,
-        cart,
-        _SIX_POINT_STENCIL,
-        60.0,
-        *args,
-        step=step,
-        **kwargs,
+        energy_fn, symbols, coordinates, atom, cart, 6, *args, step=step, **kwargs
     )
