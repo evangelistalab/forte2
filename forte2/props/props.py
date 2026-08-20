@@ -221,15 +221,15 @@ def _resolve_rdm_info_indices(
             avas.run()
         if avas.system is not mp2.system:
             raise ValueError(
-                "The AVAS and UMP2 calculations must use the same System object."
+                "The AVAS and RMP2 calculations must use the same System object."
             )
         if getattr(avas.system, "two_component", False):
             raise TypeError(
                 "AVAS-based RDM-info selection requires restricted spatial orbitals."
             )
-        if not hasattr(avas, "mo_space") or not hasattr(avas, "C"):
+        if not hasattr(avas, "mo_space") or not hasattr(avas, "mos"):
             raise TypeError("avas must be an executed AVAS calculation.")
-        if len(avas.C) != 1:
+        if len(avas.mos.C) != 1:
             raise TypeError(
                 "AVAS-based RDM-info selection requires one restricted MO matrix."
             )
@@ -237,10 +237,10 @@ def _resolve_rdm_info_indices(
         active_indices = tuple(avas.mo_space.active_indices)
         if not active_indices:
             raise ValueError("The AVAS calculation did not select any active orbitals.")
-        C_avas_active = np.asarray(avas.C[0])[:, active_indices]
+        C_avas_active = np.asarray(avas.mos.C[0])[:, active_indices]
         if C_avas_active.shape[0] != C_no.shape[0]:
             raise ValueError(
-                "The AVAS and UMP2 orbitals use incompatible AO dimensions."
+                "The AVAS and RMP2 orbitals use incompatible AO dimensions."
             )
 
         overlap = mp2.system.ints_overlap()
@@ -263,6 +263,50 @@ def _resolve_rdm_info_indices(
     return selected, selection, details
 
 
+def _ump2_common_natural_orbitals(mp2, gamma1):
+    """Build common spin-free UMP2 natural orbitals in the AO metric."""
+    gamma1_a, gamma1_b = gamma1
+    Ca, Cb = mp2.C
+    overlap = mp2.system.ints_overlap()
+
+    gamma1_ao = (
+        Ca @ gamma1_a @ Ca.T.conj()
+        + Cb @ gamma1_b @ Cb.T.conj()
+    )
+    gamma1_ao = 0.5 * (gamma1_ao + gamma1_ao.T.conj())
+
+    overlap_evals, overlap_evecs = np.linalg.eigh(
+        0.5 * (overlap + overlap.T.conj())
+    )
+    cutoff = mp2.system.overlap_ortho_rtol * np.max(overlap_evals)
+    keep = overlap_evals > cutoff
+    if np.count_nonzero(keep) < mp2.nmo:
+        raise ValueError(
+            "The overlap matrix rank is smaller than the number of UMP2 "
+            "orbitals."
+        )
+
+    values = overlap_evals[keep]
+    vectors = overlap_evecs[:, keep]
+    overlap_sqrt = vectors * np.sqrt(values)
+    overlap_inv_sqrt = vectors / np.sqrt(values)
+    gamma1_orth = overlap_sqrt.T.conj() @ gamma1_ao @ overlap_sqrt
+    gamma1_orth = 0.5 * (gamma1_orth + gamma1_orth.T.conj())
+
+    occupations, C_orth = np.linalg.eigh(gamma1_orth)
+    order = np.argsort(occupations)[::-1][: mp2.nmo]
+    occupations = occupations[order].real
+    C_no = overlap_inv_sqrt @ C_orth[:, order]
+    Ua = Ca.T.conj() @ overlap @ C_no
+    Ub = Cb.T.conj() @ overlap @ C_no
+    return C_no, occupations, Ua, Ub
+
+
+def _rotate_1rdm(gamma1, U):
+    rotated = U.T.conj() @ gamma1 @ U
+    return 0.5 * (rotated + rotated.T.conj())
+
+
 def rmp2_mpq_onthefly_no(
     mp2,
     cache_pair_blocks=True,
@@ -280,10 +324,8 @@ def rmp2_mpq_onthefly_no(
     compatible with AVAS.  When ``avas`` is supplied, its active subspace is
     mapped into that basis by AO-overlap projection.  The other selectors have
     the same meanings as in :func:`ump2_mpq_onthefly_no`.  Constructing the
-    analyzer stores the block-NO coefficients, occupations, and canonical-MO
-    transformation as ``mp2.C_no``, ``mp2.no_occs``, and ``mp2.U_no``; the
-    returned analyzer exposes the same data as ``C_no``, ``no_occs``, and
-    ``U``.
+    returned analyzer exposes the block-NO coefficients, occupations, and
+    canonical-MO transformation as ``C_no``, ``no_occs``, and ``U``.
 
     Parameters
     ----------
@@ -406,7 +448,7 @@ def ump2_mpq_onthefly_no(
         )
 
     gamma1 = mp2.make_1rdm_sd()
-    no_transform = mp2.make_natural_orbital_transform(gamma1)
+    no_transform = _ump2_common_natural_orbitals(mp2, gamma1)
     C_no, occupations, Ua, Ub = no_transform
     selected, selection, selection_details = _resolve_rdm_info_indices(
         mp2,
@@ -429,7 +471,8 @@ def ump2_mpq_onthefly_no(
         common_no_mixing_tolerance=common_no_mixing_tolerance,
     )
 
-    gamma1_no_a, gamma1_no_b = mp2.make_1rdm_no_sd(gamma1, no_transform)
+    gamma1_no_a = _rotate_1rdm(gamma1[0], Ua)
+    gamma1_no_b = _rotate_1rdm(gamma1[1], Ub)
     gamma1_no = gamma1_no_a + gamma1_no_b
 
     analyzer.C_no = C_no
