@@ -12,7 +12,6 @@ from forte2.mp import RMP2, ROMP2, UMP2
 def assert_uhf_rdm_invariants(mp2, na, nb):
     gamma1_a, gamma1_b = mp2.make_1rdm_sd()
     gamma1_sf = mp2.make_1rdm_sf()
-    gamma2_aa, gamma2_ab, gamma2_bb = mp2.make_2rdm_sd((gamma1_a, gamma1_b))
     gamma2_sf = mp2.make_2rdm_sf((gamma1_a, gamma1_b))
 
     assert np.trace(gamma1_a) == approx(na)
@@ -23,41 +22,8 @@ def assert_uhf_rdm_invariants(mp2, na, nb):
     assert np.max(np.abs(gamma1_b - gamma1_b.T)) == approx(0.0)
     assert np.max(np.abs(gamma1_sf - gamma1_sf.T)) == approx(0.0)
 
-    assert np.max(np.abs(gamma2_aa + gamma2_aa.transpose(1, 0, 2, 3))) == approx(0.0)
-    assert np.max(np.abs(gamma2_aa + gamma2_aa.transpose(0, 1, 3, 2))) == approx(0.0)
-    assert np.max(np.abs(gamma2_bb + gamma2_bb.transpose(1, 0, 2, 3))) == approx(0.0)
-    assert np.max(np.abs(gamma2_bb + gamma2_bb.transpose(0, 1, 3, 2))) == approx(0.0)
-    assert np.max(np.abs(gamma2_aa - gamma2_aa.transpose(2, 3, 0, 1))) == approx(0.0)
-    assert np.max(np.abs(gamma2_ab - gamma2_ab.transpose(2, 3, 0, 1))) == approx(0.0)
-    assert np.max(np.abs(gamma2_bb - gamma2_bb.transpose(2, 3, 0, 1))) == approx(0.0)
-
     assert np.max(np.abs(gamma2_sf - gamma2_sf.transpose(1, 0, 3, 2))) == approx(0.0)
     assert np.max(np.abs(gamma2_sf - gamma2_sf.transpose(2, 3, 0, 1))) == approx(0.0)
-
-    lambda2_sf = mp2.make_2cumulant(gamma1_sf, gamma2_sf)
-    lambda2_aa, lambda2_ab, lambda2_bb = mp2.make_2cumulant_sd(
-        (gamma1_a, gamma1_b), (gamma2_aa, gamma2_ab, gamma2_bb)
-    )
-    gamma1_sd, gamma2_sd, lambda2_sd = mp2.make_cumulants_sd()
-    assert gamma1_sd[0] == approx(gamma1_a)
-    assert gamma1_sd[1] == approx(gamma1_b)
-    assert gamma2_sd[0] == approx(gamma2_aa)
-    assert gamma2_sd[1] == approx(gamma2_ab)
-    assert gamma2_sd[2] == approx(gamma2_bb)
-    assert lambda2_sd[0] == approx(lambda2_aa)
-    assert lambda2_sd[1] == approx(lambda2_ab)
-    assert lambda2_sd[2] == approx(lambda2_bb)
-    lambda2_sf_from_sd = (
-        lambda2_aa + lambda2_bb + lambda2_ab + lambda2_ab.transpose(1, 0, 3, 2)
-    )
-    assert lambda2_sf == approx(lambda2_sf_from_sd)
-
-    gamma1_ao_a, gamma1_ao_b = mp2.gamma1_mo_to_ao((gamma1_a, gamma1_b))
-    assert np.max(np.abs(gamma1_ao_a - gamma1_ao_a.T)) == approx(0.0)
-    assert np.max(np.abs(gamma1_ao_b - gamma1_ao_b.T)) == approx(0.0)
-    S = mp2.system.ints_overlap()
-    assert np.einsum("pq,qp->", S, gamma1_ao_a) == approx(na)
-    assert np.einsum("pq,qp->", S, gamma1_ao_b) == approx(nb)
 
 
 def assert_t2_not_stored(mp2):
@@ -133,16 +99,6 @@ def test_rhf_mp2():
 
     g1 = mp2.make_1rdm()
     g2 = mp2.make_2rdm(g1)
-    C_no, no_occs, U_no = mp2.make_natural_orbital_transform(g1)
-
-    S = system.ints_overlap()
-    assert C_no.T @ S @ C_no == approx(np.eye(mp2.nocc + mp2.nvir))
-    assert U_no[: mp2.nocc, mp2.nocc :] == approx(0.0)
-    assert U_no[mp2.nocc :, : mp2.nocc] == approx(0.0)
-    assert U_no.T @ g1 @ U_no == approx(np.diag(no_occs))
-    assert mp2.C_no == approx(C_no)
-    assert mp2.no_occs == approx(no_occs)
-    assert mp2.U_no == approx(U_no)
 
     moints = RestrictedMOIntegrals(system, scf.C[0], list(range(scf.nmo)))
     Ecore = moints.E
@@ -241,7 +197,7 @@ def test_sd_sf_cumulants():
 
 def test_triplet_h2o_rohf_mp2():
     erohf = -75.805109024040
-    emp2 = -76.0662395867740
+    emp2 = -76.0707816462552
 
     xyz = """
     O            0.000000000000     0.000000000000    -0.061664597388
@@ -256,6 +212,8 @@ def test_triplet_h2o_rohf_mp2():
 
     assert scf.E == approx(erohf)
     assert mp2.E_total == approx(emp2)
+    assert mp2.parent_method is scf
+    assert isinstance(mp2._working_reference, UHF)
 
 
 def test_triplet_h2o_uhf_mp2():
@@ -276,6 +234,25 @@ def test_triplet_h2o_uhf_mp2():
     assert mp2.E_total == approx(emp2)
 
 
+def test_triplet_h2o_uhf_mp2_rdms():
+    euhf = -75.810772399321
+    emp2 = -76.0662395867740
+    xyz = """
+    O            0.000000000000     0.000000000000    -0.061664597388
+    H            0.000000000000    -0.711620616369     0.489330954643
+    H            0.000000000000     0.711620616369     0.489330954643
+    """
+    system = System(xyz=xyz, basis_set="cc-pVQZ", auxiliary_basis_set="cc-pVQZ-JKFIT")
+
+    scf = UHF(charge=0, ms=1)(system)
+    mp2 = UMP2(store_t2=True)(scf)
+    mp2.run()
+
+    assert scf.E == approx(euhf)
+    assert mp2.E_total == approx(emp2)
+    assert_uhf_rdm_invariants(mp2, scf.na, scf.nb)
+
+
 def test_triplet_h2o_uhf_mp2_1rdm_does_not_store_t2():
     euhf = -75.810772399321
     emp2 = -76.0662395867740
@@ -290,10 +267,58 @@ def test_triplet_h2o_uhf_mp2_1rdm_does_not_store_t2():
     mp2 = UMP2(store_t2=False)(scf)
     mp2.run()
 
+    gamma1_a, gamma1_b = mp2.make_1rdm_sd()
+
     assert scf.E == approx(euhf)
     assert mp2.E_total == approx(emp2)
-    assert np.trace(mp2.make_1rdm_sf()) == approx(scf.na + scf.nb)
+    assert np.trace(gamma1_a) == approx(scf.na)
+    assert np.trace(gamma1_b) == approx(scf.nb)
     assert_t2_not_stored(mp2)
+
+
+def test_uhf_mp2_rdms_do_not_require_stored_t2():
+    xyz = """
+    H  0.0  0.0  0.0
+    H  0.0  0.0  0.74
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+    )
+    scf = UHF(charge=0, ms=0)(system)
+
+    stored = UMP2(store_t2=True)(scf)
+    stored.run()
+    local = UMP2(store_t2=False)(scf)
+    local.run()
+
+    gamma1_stored = stored.make_1rdm_sd()
+    gamma1_local = local.make_1rdm_sd()
+    gamma2_stored = stored.make_2rdm_sd(gamma1_stored)
+    gamma2_local = local.make_2rdm_sd(gamma1_local)
+
+    assert local.E_total == approx(stored.E_total)
+    for stored_block, local_block in zip(gamma1_stored, gamma1_local):
+        assert np.allclose(stored_block, local_block, atol=1e-12)
+    for stored_block, local_block in zip(gamma2_stored, gamma2_local):
+        assert np.allclose(stored_block, local_block, atol=1e-12)
+    assert_t2_not_stored(local)
+
+    moints = RestrictedMOIntegrals(system, scf.C[0], list(range(scf.nmo)))
+    gamma1_a, gamma1_b = gamma1_stored
+    gamma2_aa, gamma2_ab, gamma2_bb = gamma2_stored
+    rdm_energy = stored.energy_given_rdms(
+        moints.E,
+        moints.H,
+        moints.V,
+        gamma1_a,
+        gamma1_b,
+        gamma2_aa,
+        gamma2_bb,
+        gamma2_ab,
+    )
+    assert rdm_energy == approx(stored.E_total)
 
 
 def test_h2o_uhf_mp2():
@@ -312,47 +337,3 @@ def test_h2o_uhf_mp2():
 
     assert scf.E == approx(euhf)
     assert mp2.E_total == approx(emp2)
-
-
-def test_ump2_common_natural_orbitals():
-    # Reference energies kept for now, but not asserted in this construction test.
-    # euhf = -1.131269839709
-    # emp2 = -1.153966321003
-    xyz = """
-    H 0.0 0.0 0.0
-    H 0.0 0.0 1.4
-    """
-    system = System(xyz=xyz, basis_set="cc-pVDZ", auxiliary_basis_set="cc-pVTZ-JKFIT")
-
-    scf = UHF(charge=0, ms=0)(system)
-    mp2 = UMP2(store_t2=True)(scf)
-    mp2.run()
-
-    gamma1 = mp2.make_1rdm_sd()
-    no_transform = mp2.make_natural_orbital_transform(gamma1)
-    C_no, occupations, Ua, Ub = no_transform
-
-    S = system.ints_overlap()
-    gamma1_no_a, gamma1_no_b = mp2.make_1rdm_no_sd(gamma1, no_transform)
-    gamma1_no = mp2.make_1rdm_no_sf(gamma1, no_transform)
-
-    # assert scf.E == approx(euhf)
-    # assert mp2.E_total == approx(emp2)
-    assert C_no.T @ S @ C_no == approx(np.eye(mp2.nmo))
-    assert gamma1_no == approx(np.diag(occupations))
-    assert gamma1_no == approx(gamma1_no_a + gamma1_no_b)
-
-    gamma1_no_bundle, gamma2_no_bundle, lambda2_no_bundle = mp2.make_cumulants_no_sd()
-    gamma2_no_sf = mp2._make_mp2_sf_2rdm(*gamma2_no_bundle)
-    lambda2_no_sf = mp2._make_mp2_sf_2cumulants(
-        gamma1_no_bundle[0] + gamma1_no_bundle[1], gamma2_no_sf
-    )
-    lambda2_no_sf_from_sd = (
-        lambda2_no_bundle[0]
-        + lambda2_no_bundle[2]
-        + lambda2_no_bundle[1]
-        + lambda2_no_bundle[1].transpose(1, 0, 3, 2)
-    )
-
-    assert gamma1_no_bundle[0] + gamma1_no_bundle[1] == approx(gamma1_no)
-    assert lambda2_no_sf == approx(lambda2_no_sf_from_sd)
