@@ -1,6 +1,5 @@
 import time
 
-import pytest
 import numpy as np
 
 from forte2 import System
@@ -196,10 +195,6 @@ def test_sd_sf_cumulants():
     assert np.allclose(lambda2_sf, lambda2_sf_from_sd, atol=1e-10)
 
 
-test_sd_sf_cumulants()
-
-
-@pytest.mark.skip(reason="ROMP2 canonicalization under construction")
 def test_triplet_h2o_rohf_mp2():
     erohf = -75.805109024040
     emp2 = -76.0707816462552
@@ -217,6 +212,8 @@ def test_triplet_h2o_rohf_mp2():
 
     assert scf.E == approx(erohf)
     assert mp2.E_total == approx(emp2)
+    assert mp2.parent_method is scf
+    assert isinstance(mp2._working_reference, UHF)
 
 
 def test_triplet_h2o_uhf_mp2():
@@ -256,7 +253,6 @@ def test_triplet_h2o_uhf_mp2_rdms():
     assert_uhf_rdm_invariants(mp2, scf.na, scf.nb)
 
 
-@pytest.mark.skip(reason="Currently make_1rdm requires t2 amplitudes to be stored")
 def test_triplet_h2o_uhf_mp2_1rdm_does_not_store_t2():
     euhf = -75.810772399321
     emp2 = -76.0662395867740
@@ -271,13 +267,58 @@ def test_triplet_h2o_uhf_mp2_1rdm_does_not_store_t2():
     mp2 = UMP2(store_t2=False)(scf)
     mp2.run()
 
-    g1 = mp2.make_1rdm()
+    gamma1_a, gamma1_b = mp2.make_1rdm_sd()
 
     assert scf.E == approx(euhf)
     assert mp2.E_total == approx(emp2)
-    assert np.trace(mp2.gamma1_a) == approx(scf.na)
-    assert np.trace(mp2.gamma1_b) == approx(scf.nb)
+    assert np.trace(gamma1_a) == approx(scf.na)
+    assert np.trace(gamma1_b) == approx(scf.nb)
     assert_t2_not_stored(mp2)
+
+
+def test_uhf_mp2_rdms_do_not_require_stored_t2():
+    xyz = """
+    H  0.0  0.0  0.0
+    H  0.0  0.0  0.74
+    """
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+    )
+    scf = UHF(charge=0, ms=0)(system)
+
+    stored = UMP2(store_t2=True)(scf)
+    stored.run()
+    local = UMP2(store_t2=False)(scf)
+    local.run()
+
+    gamma1_stored = stored.make_1rdm_sd()
+    gamma1_local = local.make_1rdm_sd()
+    gamma2_stored = stored.make_2rdm_sd(gamma1_stored)
+    gamma2_local = local.make_2rdm_sd(gamma1_local)
+
+    assert local.E_total == approx(stored.E_total)
+    for stored_block, local_block in zip(gamma1_stored, gamma1_local):
+        assert np.allclose(stored_block, local_block, atol=1e-12)
+    for stored_block, local_block in zip(gamma2_stored, gamma2_local):
+        assert np.allclose(stored_block, local_block, atol=1e-12)
+    assert_t2_not_stored(local)
+
+    moints = RestrictedMOIntegrals(system, scf.C[0], list(range(scf.nmo)))
+    gamma1_a, gamma1_b = gamma1_stored
+    gamma2_aa, gamma2_ab, gamma2_bb = gamma2_stored
+    rdm_energy = stored.energy_given_rdms(
+        moints.E,
+        moints.H,
+        moints.V,
+        gamma1_a,
+        gamma1_b,
+        gamma2_aa,
+        gamma2_bb,
+        gamma2_ab,
+    )
+    assert rdm_energy == approx(stored.E_total)
 
 
 def test_h2o_uhf_mp2():

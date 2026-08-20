@@ -7,13 +7,12 @@ import resource
 
 import numpy as np
 
-from forte2.base_classes import SystemMixin, MOsMixin
-from forte2.scf import UHF
+from forte2.base_classes import Method
 from forte2.helpers import logger
 
 
 @dataclass
-class MP2Base(SystemMixin, MOsMixin, ABC):
+class MP2Base(Method, ABC):
     """Base class for density-fitted MP2 methods. Not meant to be used directly.
 
     Attributes
@@ -57,6 +56,11 @@ class MP2Base(SystemMixin, MOsMixin, ABC):
     store_t2: bool = False
 
     executed: bool = field(default=False, init=False)
+
+    def __post_init__(self):
+        self.requires = {"system", "mos", "eps"}
+        self.requires_attrs.update({"two_component": False})
+        self.provides = {"system", "mos", "eps"}
 
     @abstractmethod
     def __call__(self, parent_method): ...
@@ -161,13 +165,15 @@ class MP2Base(SystemMixin, MOsMixin, ABC):
     def _build_df_iaQ(self): ...
 
     @abstractmethod
-    def _startup(self):
-        if not self.parent_method.executed:
-            self.parent_method.run()
+    def _startup(self, reference=None):
+        if reference is None:
+            reference = self.parent_method
+        if not reference.executed:
+            reference.run()
 
-        SystemMixin.copy_from_upstream(self, self.parent_method)
-        MOsMixin.copy_from_upstream(self, self.parent_method)
-
+        self.system = reference.system
+        self.mos = reference.mos.copy()
+        self.C = self.mos.C
         self.fock_builder = self.system.fock_builder
 
     @abstractmethod

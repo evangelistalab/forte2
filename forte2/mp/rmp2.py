@@ -21,9 +21,9 @@ class RMP2(MP2Base):
     """
 
     def __call__(self, parent_method):
-        self.parent_method = parent_method
         if not isinstance(parent_method, RHF):
             raise TypeError("RMP2 requires an RHF reference.")
+        self._register_parent_method(parent_method)
         return self
 
     def _reference_label(self) -> str:
