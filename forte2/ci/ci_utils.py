@@ -173,6 +173,11 @@ def pretty_print_ci_dets(
         A list of lists containing the top determinants and their coefficients for each root.
         This should be obtained from CISolver.get_top_determinants.
     """
+    # Some active-space solvers (e.g. DMRG) do not have a determinant expansion
+    # and return empty lists; nothing to print in that case.
+    if not top_dets or all(len(root_dets) == 0 for root_dets in top_dets):
+        return
+
     width_per_det = 1 + max(12, mo_space.nactv + 2)  # '|2222000>'
     ndets_per_root = len(top_dets[0])
     width = 10 + width_per_det * ndets_per_root

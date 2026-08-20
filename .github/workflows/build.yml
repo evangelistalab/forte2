@@ -32,6 +32,8 @@ jobs:
       # so cache entries aren't tied to the checkout's absolute location.
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_SLOPPINESS: include_file_ctime,include_file_mtime,time_macros,locale,pch_defines
+      # make block2 work
+      KMP_DUPLICATE_LIB_OK: "TRUE"
     defaults:
       run:
         shell: bash -el {0}
@@ -124,6 +126,12 @@ jobs:
             gh cache delete "$id" --repo "$GITHUB_REPOSITORY" || true
           done
         done
+
+    - name: Install block2
+      if: ${{ !contains(matrix.os, 'arm') && steps.compile-forte2.outcome == 'success' && !cancelled() }}
+      run: |
+        conda activate forte
+        pip install block2==0.5.3
 
     - name: Run Forte2 pytest tests
       if: ${{ steps.compile-forte2.outcome == 'success' && !cancelled() }}

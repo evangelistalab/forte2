@@ -5,6 +5,12 @@ from .helpers.echo_script import echo_invoking_script
 
 # print the invoking python script to stdout
 echo_invoking_script()
+import os
+import sys
+
+# guard for block2 MKL FATAL ERRORs
+if hasattr(sys, "setdlopenflags") and hasattr(os, "RTLD_GLOBAL"):
+     sys.setdlopenflags(sys.getdlopenflags() | os.RTLD_GLOBAL)
 
 try:
     from forte2.lib import cpp_helpers
@@ -22,6 +28,7 @@ from .state import State, RelState, MOSpace
 from .scf import RHF, ROHF, UHF, CUHF, GHF
 from .ci import CI, RelCI, CISolver, RelCISolver
 from .sci import SelectedCI, SelectedCISolver, RelSelectedCI, RelSelectedCISolver
+from .dmrg import DMRG, DMRGSolver, RelDMRG, RelDMRGSolver
 from .x2c import x2c
 from .orbitals import (
     AVAS,
