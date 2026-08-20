@@ -23,6 +23,11 @@ class GeometryOptimizer(Method):
         Callable taking a ``System`` and returning a method object that provides
         ``run()``, ``E``, and ``gradient()``. This is retained as a valid alternative.
         The preferred API call is ``GeometryOptimizer(...)(method).run()``.
+    root : int or None, optional
+        Absolute electronic root to optimize.  When specified, the objective
+        energy is ``method.E_ci[root]`` and the gradient is obtained from
+        ``method.gradient(root=root)``.  When omitted, the optimizer uses
+        ``method.E`` and ``method.gradient()`` as before.
     maxiter : int, optional, default=50
         Maximum L-BFGS iterations.
     g_tol : float, optional, default=1.0e-4
@@ -38,6 +43,7 @@ class GeometryOptimizer(Method):
     """
 
     method_factory: Callable | None = None
+    root: int | None = None
     maxiter: int = 50
     g_tol: float = 1.0e-4
     max_step: float = 1.0
@@ -52,8 +58,17 @@ class GeometryOptimizer(Method):
     coordinates: np.ndarray | None = field(default=None, init=False)
     system: System | None = field(default=None, init=False)
     method: object | None = field(default=None, init=False)
+    parent_method: Method | None = field(default=None, init=False)
 
     def __post_init__(self):
+        if self.root is not None:
+            if isinstance(self.root, bool) or not isinstance(
+                self.root, (int, np.integer)
+            ):
+                raise TypeError("GeometryOptimizer root must be an integer or None.")
+            if self.root < 0:
+                raise ValueError("GeometryOptimizer root must be nonnegative.")
+            self.root = int(self.root)
         self.requires = {"system", "mos"}
         self.requires_attrs.update({"gradient": None})
 
@@ -133,6 +148,7 @@ class GeometryOptimizer(Method):
                 method_builder,
                 project_orbitals=self.project_orbitals,
                 seed_method=self.parent_method,
+                root=self.root,
             )
         else:
             if self.method_factory is None:
@@ -151,6 +167,7 @@ class GeometryOptimizer(Method):
                 system,
                 self.method_factory,
                 project_orbitals=self.project_orbitals,
+                root=self.root,
             )
 
         x = np.asarray(system.atomic_positions, dtype=float).reshape(-1).copy()
@@ -169,6 +186,8 @@ class GeometryOptimizer(Method):
         logger.log_info1("Optimizer: L-BFGS")
         logger.log_info1(f"Max iterations: {self.maxiter}")
         logger.log_info1(f"Gradient threshold: {self.g_tol:.3e}")
+        if self.root is not None:
+            logger.log_info1(f"Target absolute root: {self.root}")
         logger.log_info1(
             f"Previous-geometry orbital projection: {'on' if self.project_orbitals else 'off'}"
         )
@@ -228,10 +247,12 @@ class _GeometryObjective:
         method_builder,
         project_orbitals=True,
         seed_method=None,
+        root=None,
     ):
         self.method_builder = method_builder
         self.project_orbitals = project_orbitals
         self.previous_method = seed_method
+        self.root = root
         self.atomic_numbers = np.asarray(template_system.atomic_charges, dtype=int)
         self.init_kwargs = {
             item.name: getattr(template_system, item.name)
@@ -256,7 +277,7 @@ class _GeometryObjective:
             ).reshape(-1)
             self.system = seed_method.system
             self.method = seed_method
-            self.E = float(seed_method.E)
+            self.E = _method_energy(seed_method, self.root)
 
     def evaluate(self, x):
         self.ensure(x, need_gradient=False)
@@ -272,7 +293,9 @@ class _GeometryObjective:
     def ensure(self, x, need_gradient=False):
         if self._cache_matches(x):
             if need_gradient and self.g is None:
-                self.g = np.asarray(self.method.gradient(), dtype=float).reshape(-1)
+                self.g = np.asarray(
+                    _method_gradient(self.method, self.root), dtype=float
+                ).reshape(-1)
                 self._record_progress()
             return
 
@@ -287,12 +310,14 @@ class _GeometryObjective:
                 self.method.C = projected
         if not self.method.executed:
             self.method.run()
-        self.E = float(self.method.E)
+        self.E = _method_energy(self.method, self.root)
         self.g = None
         self.previous_method = self.method
 
         if need_gradient:
-            self.g = np.asarray(self.method.gradient(), dtype=float).reshape(-1)
+            self.g = np.asarray(
+                _method_gradient(self.method, self.root), dtype=float
+            ).reshape(-1)
             self._record_progress()
 
     def _cache_matches(self, x):
@@ -436,6 +461,54 @@ def _method_name(method):
     if method is None:
         return None
     return method._scf_type() if hasattr(method, "_scf_type") else type(method).__name__
+
+
+def _method_energy(method, root):
+    r"""Return the energy selected for geometry optimization.
+
+    For an optional absolute root :math:`\alpha`, this returns
+
+    .. math::
+
+        E_{\mathrm{opt}}=
+        \begin{cases}
+        E, & \alpha\text{ is omitted},\\
+        E_\alpha, & \alpha\text{ is specified}.
+        \end{cases}
+    """
+    if root is None:
+        return float(method.E)
+    if not hasattr(method, "E_ci"):
+        raise TypeError(
+            "A root-resolved geometry optimization requires the method to provide "
+            "E_ci."
+        )
+    energies = np.asarray(method.E_ci)
+    if energies.ndim != 1 or root >= energies.size:
+        raise ValueError(
+            f"Expected a geometry-optimization root in [0, {energies.size}), "
+            f"got {root}."
+        )
+    return float(energies[root])
+
+
+def _method_gradient(method, root):
+    r"""Return the gradient matching the selected optimization energy.
+
+    For nuclear coordinate :math:`x` and optional absolute root
+    :math:`\alpha`, the returned quantity is
+
+    .. math::
+
+        g^x_{\mathrm{opt}}=
+        \begin{cases}
+        dE/dx, & \alpha\text{ is omitted},\\
+        dE_\alpha/dx, & \alpha\text{ is specified}.
+        \end{cases}
+    """
+    if root is None:
+        return method.gradient()
+    return method.gradient(root=root)
 
 
 def _format_float(value):
