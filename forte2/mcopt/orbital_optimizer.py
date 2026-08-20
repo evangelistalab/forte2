@@ -152,6 +152,51 @@ class OrbOptimizer:
         intermediates = self._build_orbital_response_intermediates()
         return self._compute_orbital_hessian_vector_product(vector, intermediates)
 
+    def compute_orbital_hessian_transpose_vector_product(self, vector):
+        r"""Apply the transpose fixed-RDM orbital response matrix.
+
+        Let
+
+        .. math::
+
+            H_{IJ}=D_J\bar g_I
+
+        be the forward response defined by
+        :meth:`compute_orbital_hessian_vector_product`.  For the
+        antisymmetric generator :math:`Z(\mathbf z)` and the unsymmetrized
+        state-averaged orbital Lagrangian :math:`\bar A`, this method returns
+
+        .. math::
+
+            [H^{\mathsf T}\mathbf z]_I
+            =2\left(B^{q_I}_{p_I}-B^{p_I}_{q_I}\right),
+            \qquad
+            B=\dot{\bar A}[\mathbf z]+Z\bar A-\bar A Z.
+
+        The commutator is the moving-frame correction.  It has no
+        antisymmetric contribution when all nonredundant state-average
+        orbital gradients vanish, in which case :math:`H^{\mathsf T}=H`.
+        It must be retained for a constrained optimization with frozen
+        orbital rotations because the omitted gradient components may be
+        nonzero.  The CASSCF adjoint equations use this transpose action.
+
+        Parameters
+        ----------
+        vector : np.ndarray
+            Real nonredundant orbital multiplier with shape ``(nrot,)``.
+
+        Returns
+        -------
+        np.ndarray
+            :math:`H^{\mathsf T}\mathbf z` in the ordered-pair basis.
+        """
+        vector = self._validate_orbital_response_vector(vector)
+        intermediates = self._build_orbital_response_intermediates()
+        A_h = self._build_orbital_lagrangian_from_response_intermediates(*intermediates)
+        return self._compute_orbital_hessian_transpose_vector_product(
+            vector, (*intermediates, A_h)
+        )
+
     def compute_orbital_hessian(self):
         r"""Build the nonrelativistic orbital--orbital response matrix.
 
@@ -263,6 +308,49 @@ class OrbOptimizer:
             raise TypeError("The nonrelativistic orbital-response vector must be real.")
         return vector.astype(float, copy=False)
 
+    def _build_orbital_lagrangian_from_response_intermediates(
+        self, Fcore_mo, Fact_mo, B_ga
+    ):
+        r"""Build the unsymmetrized base-point orbital Lagrangian.
+
+        From the fixed-RDM response intermediates, this evaluates
+
+        .. math::
+
+            \bar A^m_p
+            &=2(F_{\mathrm C}+\bar F_{\mathrm A})^m_p,
+            &&m\in\mathbb C,\\
+            \bar A^u_p
+            &=\sum_v(F_{\mathrm C})^v_p\bar\gamma^v_u
+              +\sum_{Ptvw}B^P_{pt}B^P_{vw}\bar D_{tu,vw},
+            &&u\in\mathbb A,\\
+            \bar A^e_p&=0,
+            &&e\in\mathbb V.
+
+        Here ``g1`` is :math:`\bar\gamma`, ``g2`` is the working density
+        :math:`\bar D`, and ``B_ga`` is :math:`B^P_{pu}`.  The matrix is kept
+        unsymmetrized because its omitted frozen-rotation gradient components
+        enter the transpose orbital response through
+        :math:`Z\bar A-\bar A Z`.
+
+        Returns
+        -------
+        np.ndarray
+            The nonzero hole columns :math:`\bar A^h_p`, with
+            :math:`h\in\mathbb C\cup\mathbb A`, and shape ``(nmo, nhole)``.
+        """
+        A_h = np.empty((self.C.shape[1], self.ncore + self.nact), dtype=float)
+        A_h[:, : self.ncore] = 2.0 * (Fcore_mo + Fact_mo)[:, self.core]
+        A_h[:, self.ncore :] = np.einsum(
+            "rv,vu->ru", Fcore_mo[:, self.actv], self.g1, optimize=True
+        )
+        B_aa = B_ga[:, self.actv, :]
+        contracted_density = np.einsum("Pvw,tuvw->Ptu", B_aa, self.g2, optimize=True)
+        A_h[:, self.ncore :] += np.einsum(
+            "Prt,Ptu->ru", B_ga, contracted_density, optimize=True
+        )
+        return A_h
+
     def _build_orbital_response_intermediates(self):
         r"""Build the current-orbital tensors shared by response applications.
 
@@ -311,7 +399,7 @@ class OrbOptimizer:
         -------
         tuple[np.ndarray, np.ndarray, np.ndarray]
             ``(Fcore_mo, Fact_mo, B_ga)`` with shapes ``(nmo, nmo)``,
-            ``(nmo, nmo)``, and ``(naux, nmo, nact)``, respectively.
+            ``(nmo, nmo)``, and ``(naux, nmo, nact)``.
 
         Raises
         ------
@@ -342,7 +430,7 @@ class OrbOptimizer:
 
             \mathcal I_{\mathrm{coupled}}
             =\left(
-              (F_{\mathrm C},\bar F_{\mathrm A},B^P_{pu}),
+              (F_{\mathrm C},\bar F_{\mathrm A},B^P_{pu},\bar A^h_p),
               (F_{\mathrm C},B^P_{pu}),
               (F_{\mathrm C}^{\mathrm{AO}},F_{\mathrm C},B^P_{pu})
              \right),
@@ -364,8 +452,11 @@ class OrbOptimizer:
         Fcore_mo = self._transform_ao_operator(Fcore_ao, self.C)
         Fact_mo = self._transform_ao_operator(Fact_ao, self.C)
         B_ga = self._transform_df_block(self.C, self.Cact)
+        A_h = self._build_orbital_lagrangian_from_response_intermediates(
+            Fcore_mo, Fact_mo, B_ga
+        )
         return (
-            (Fcore_mo, Fact_mo, B_ga),
+            (Fcore_mo, Fact_mo, B_ga, A_h),
             (Fcore_mo, B_ga),
             (Fcore_ao, Fcore_mo, B_ga),
         )
@@ -549,6 +640,42 @@ class OrbOptimizer:
         gradient_response = 2.0 * (A_response - A_response.T)
         return self._mat_to_vec(gradient_response)
 
+    def _compute_orbital_hessian_transpose_vector_product(self, vector, intermediates):
+        r"""Evaluate the transpose fixed-RDM orbital Hessian action.
+
+        If :math:`H_{IJ}=D_J\bar g_I`, the derivative of the scalar
+        :math:`\mathbf z^{\mathsf T}\bar{\mathbf g}` with respect to pair
+        :math:`I` is
+
+        .. math::
+
+            [H^{\mathsf T}\mathbf z]_I
+            =2\left(B^{q_I}_{p_I}-B^{p_I}_{q_I}\right),
+            \qquad
+            B=\dot{\bar A}[\mathbf z]+Z\bar A-\bar A Z.
+
+        ``intermediates[3]`` contains the nonzero core and active columns of
+        the unsymmetrized base matrix :math:`\bar A`; its virtual columns are
+        zero and are not stored.  The commutator makes this application the exact
+        transpose of :meth:`_compute_orbital_hessian_vector_product`, even
+        when frozen rotations leave nonzero components of the full orbital
+        gradient.  No dense Hessian is formed.
+
+        Returns
+        -------
+        np.ndarray
+            :math:`H^{\mathsf T}\mathbf z` with shape ``(nrot,)``.
+        """
+        A_response = self._compute_orbital_lagrangian_response(vector, intermediates)
+        A_h = intermediates[3]
+        Z = self._vec_to_mat(vector)
+        holes = slice(self.core.start, self.actv.stop)
+        adjoint_A = A_response
+        adjoint_A[:, holes] += Z @ A_h
+        adjoint_A -= A_h @ Z[holes, :]
+        gradient_response = 2.0 * (adjoint_A - adjoint_A.T)
+        return self._mat_to_vec(gradient_response)
+
     def _compute_orbital_lagrangian_response(self, vector, intermediates):
         r"""Return the full MO Lagrangian response for an orbital direction.
 
@@ -586,7 +713,7 @@ class OrbOptimizer:
         ----------
         vector : np.ndarray
             Validated real orbital direction with shape ``(nrot,)``.
-        intermediates : tuple[np.ndarray, np.ndarray, np.ndarray]
+        intermediates : tuple[np.ndarray, ...]
             Base-point tensors from
             :meth:`_build_orbital_response_intermediates`.
 
@@ -595,7 +722,7 @@ class OrbOptimizer:
         np.ndarray
             Full MO Lagrangian response matrix with shape ``(nmo, nmo)``.
         """
-        Fcore_mo, Fact_mo, B_ga = intermediates
+        Fcore_mo, Fact_mo, B_ga = intermediates[:3]
         Z = self._vec_to_mat(vector)
         C_response = self.C @ Z
         Ccore_response = C_response[:, self.core]

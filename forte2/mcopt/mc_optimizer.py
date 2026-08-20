@@ -1172,7 +1172,7 @@ class MCOptimizer(MCOptimizerBase):
 
         .. math::
 
-            \mathcal A^{\mathrm{oo}}\mathbf z
+            (\mathcal A^{\mathrm{oo}})^{\mathsf T}\mathbf z
             +\mathcal A^{\mathrm{oc}}\mathbf x
             =-\mathbf b^{\mathrm o}_\alpha.
 
@@ -1265,7 +1265,7 @@ class MCOptimizer(MCOptimizerBase):
         .. math::
 
             \begin{pmatrix}
-             \mathcal A^{\mathrm{oo}}\mathbf z
+             (\mathcal A^{\mathrm{oo}})^{\mathsf T}\mathbf z
              +\mathcal A^{\mathrm{oc}}Q\mathbf x\\
              Q\left(\mathcal A^{\mathrm{co}}\mathbf z
              +\mathcal A^{\mathrm{cc}}Q\mathbf x\right)+P\mathbf x
@@ -1307,7 +1307,7 @@ class MCOptimizer(MCOptimizerBase):
             \begin{pmatrix}\mathbf y^{\mathrm o}\\\mathbf y^{\mathrm c}\end{pmatrix}
             =
             \begin{pmatrix}
-             \mathcal A^{\mathrm{oo}}
+             (\mathcal A^{\mathrm{oo}})^{\mathsf T}
              &\mathcal A^{\mathrm{oc}}\mathcal Q_{\mathrm C}\\
              \mathcal Q_{\mathrm C}\mathcal A^{\mathrm{co}}
              &\mathcal Q_{\mathrm C}\mathcal A^{\mathrm{cc}}
@@ -1320,8 +1320,10 @@ class MCOptimizer(MCOptimizerBase):
         orbital_intermediates, density_intermediates, hamiltonian_intermediates = (
             intermediates
         )
-        orbital_product = self.orb_opt._compute_orbital_hessian_vector_product(
-            orbital_vector, orbital_intermediates
+        orbital_product = (
+            self.orb_opt._compute_orbital_hessian_transpose_vector_product(
+                orbital_vector, orbital_intermediates
+            )
         )
         density_response = self._compute_ci_response_rdms(projected_ci, layout)
         orbital_product += self.orb_opt._compute_ci_orbital_response_from_rdms(
@@ -1445,7 +1447,8 @@ class MCOptimizer(MCOptimizerBase):
         .. math::
 
             \begin{pmatrix}
-             \mathcal A^{\mathrm{oo}} & \mathcal A^{\mathrm{oc}}Q\\
+             (\mathcal A^{\mathrm{oo}})^{\mathsf T}
+             & \mathcal A^{\mathrm{oc}}Q\\
              Q\mathcal A^{\mathrm{co}} &
              Q\mathcal A^{\mathrm{cc}}Q+P
             \end{pmatrix}
@@ -1697,7 +1700,7 @@ class MCOptimizer(MCOptimizerBase):
 
             \mathbf y^{\mathrm o}
             =
-            \mathcal A^{\mathrm{oo}}\mathbf z
+            (\mathcal A^{\mathrm{oo}})^{\mathsf T}\mathbf z
             +
             \mathcal A^{\mathrm{oc}}\mathbf x.
 
@@ -1723,8 +1726,10 @@ class MCOptimizer(MCOptimizerBase):
         ci_response = self.orb_opt._compute_ci_orbital_response_from_rdms(
             *density_response, density_intermediates
         )
-        orbital_response = self.orb_opt._compute_orbital_hessian_vector_product(
-            orbital_vector, orbital_intermediates
+        orbital_response = (
+            self.orb_opt._compute_orbital_hessian_transpose_vector_product(
+                orbital_vector, orbital_intermediates
+            )
         )
         return orbital_response + ci_response
 
@@ -1770,12 +1775,13 @@ class MCOptimizer(MCOptimizerBase):
         This implementation supports real nonrelativistic and complex
         two-component state-specific CASSCF/GASSCF wave functions, including
         SF- and SO-X2C-1e Hamiltonians.  It also supports an individual root of
-        a real nonrelativistic SA-CASSCF wave function when all roots belong to
-        one CI state solver and ``final_orbitals='original'``.  ``root`` must be
-        specified for a state average; it defaults to zero only for a
-        single-root calculation.  Frozen-core and frozen-virtual response,
-        active-frozen rotations, and frozen inter-GAS rotations are not
-        supported. Point and Gaussian nuclear charge distributions are
+        a real nonrelativistic SA-CASSCF/GASSCF wave function, including roots
+        from different spin-adapted CI state solvers and constrained
+        optimizations with frozen inter-GAS rotations, when
+        ``final_orbitals='original'``.  ``root`` must be specified for a state
+        average; it defaults to zero only for a single-root calculation.
+        Frozen-core and frozen-virtual response and active-frozen rotations
+        are not supported. Point and Gaussian nuclear charge distributions are
         supported; Gaussian charges require libcint. Requesting any unsupported
         feature raises ``NotImplementedError``.
         Both the orbital optimization and all CI roots must be converged; an

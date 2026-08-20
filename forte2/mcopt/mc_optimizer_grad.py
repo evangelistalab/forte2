@@ -831,11 +831,6 @@ def _validate_casscf_gradient_request(mc) -> None:
             "state-specific wave functions; individual-root SA-CASSCF gradients "
             "require a nonrelativistic real wave function."
         )
-    if is_state_average and mc.ci_solver.sa_info.ncis != 1:
-        raise NotImplementedError(
-            "Individual-root SA-CASSCF gradients currently require all roots "
-            "to belong to one CI state solver."
-        )
     if is_state_average and mc.final_orbitals != "original":
         raise NotImplementedError(
             "Individual-root SA-CASSCF gradients currently require "
@@ -846,11 +841,6 @@ def _validate_casscf_gradient_request(mc) -> None:
         raise NotImplementedError(
             "CASSCF/GASSCF gradients with active frozen orbitals are not implemented."
         )
-    if mc.freeze_inter_gas_rots and _ci_solver_requests_multiple_gas(mc.ci_solver):
-        raise NotImplementedError(
-            "GASSCF gradients with frozen inter-GAS rotations are not implemented."
-        )
-
     system = _find_upstream_system(mc)
     validate_df_gradient_system(system, "CASSCF/GASSCF")
 
@@ -894,10 +884,6 @@ def _validate_converged_casscf_gradient(mc) -> None:
         raise NotImplementedError(
             "CASSCF/GASSCF gradients with frozen virtual orbitals are not implemented."
         )
-    if mc.mo_space.ngas > 1 and mc.freeze_inter_gas_rots:
-        raise NotImplementedError(
-            "GASSCF gradients with frozen inter-GAS rotations are not implemented."
-        )
     if np.iscomplexobj(mc.mos.C[0]) and not is_relativistic:
         raise NotImplementedError(
             "Nonrelativistic CASSCF/GASSCF gradients with complex orbitals are not "
@@ -927,20 +913,6 @@ def _resolve_casscf_gradient_root(mc, root) -> int:
             f"Expected a target gradient root in [0, {nroots}), got {root}."
         )
     return int(root)
-
-
-def _ci_solver_requests_multiple_gas(ci_solver) -> bool:
-    """Return whether the attached CI solver was configured with multiple GASes."""
-    active_orbitals = getattr(ci_solver, "active_orbitals", None)
-    if isinstance(active_orbitals, tuple):
-        return len(active_orbitals) > 1
-    if isinstance(active_orbitals, list):
-        return (
-            any(isinstance(space, list) for space in active_orbitals)
-            and len(active_orbitals) > 1
-        )
-    mo_space = getattr(ci_solver, "mo_space", None)
-    return mo_space is not None and mo_space.ngas > 1
 
 
 def _find_upstream_system(method):

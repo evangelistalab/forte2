@@ -286,30 +286,6 @@ def test_casscf_gradient_requires_root_for_state_average():
         mc.gradient()
 
 
-def test_gasscf_gradient_rejects_frozen_inter_gas_rotations():
-    """Reject GASSCF gradients when inter-GAS rotations were not optimized."""
-    system = _system(["H", "H"], np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]]))
-    rhf = RHF(charge=0)(system)
-    ci_solver = CISolver(
-        State(
-            system=system,
-            multiplicity=1,
-            ms=0.0,
-            gas_min=[1],
-            gas_max=[1],
-        ),
-        active_orbitals=[[0], [1]],
-    )
-    mc = MCOptimizer(
-        ci_solver,
-        freeze_inter_gas_rots=True,
-        final_orbitals="original",
-    )(rhf)
-
-    with pytest.raises(NotImplementedError, match="frozen inter-GAS rotations"):
-        mc.gradient()
-
-
 def test_casscf_gradient_rejects_frozen_core_orbitals():
     """Reject frozen core orbitals until the CASSCF Z-vector path is added."""
     system = _system(["Li", "H"], np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 3.0]]))
