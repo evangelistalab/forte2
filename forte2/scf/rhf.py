@@ -33,9 +33,8 @@ class RHF(SCFBase):
         self.na = self.nb = self.nel // 2
 
     def _build_fock(self, H, fock_builder, S):
-        J = fock_builder.build_J(self.D)[0]
-        K = fock_builder.build_K([self.C[0][:, : self.na]])[0]
-        F = H + 2.0 * J - K
+        J, K = fock_builder.build_JK([self.C[0][:, : self.na]])
+        F = H + 2.0 * J[0] - K[0]
         return [F], [F]
 
     def _build_density_matrix(self):

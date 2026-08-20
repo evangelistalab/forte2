@@ -362,9 +362,7 @@ def _project_previous_occupied_orbitals(previous_method, method):
         return None
 
     occupied_counts = _occupied_counts(method)
-    if occupied_counts is None or len(occupied_counts) != len(
-        previous_method.mos.C
-    ):
+    if occupied_counts is None or len(occupied_counts) != len(previous_method.mos.C):
         return None
 
     projected = []
