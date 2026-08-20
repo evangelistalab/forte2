@@ -33,6 +33,7 @@ from .orbitals import (
 )
 from .mcopt import MCOptimizer
 from .optimize import GeometryOptimizer
+from .gradients import FDGradient
 from .props import get_1e_property, mulliken_population
 from .helpers import logger, set_verbosity_level, comparisons
 from .dsrg import DSRG_MRPT2, RelDSRG_MRPT2

@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from forte2 import System, X2CParams
+from forte2.gradients import finite_difference
 from forte2.integrals import LIBCINT_AVAILABLE
 from forte2.scf import RHF, GHF, UHF
 from forte2.helpers.comparisons import approx
@@ -21,15 +22,16 @@ def _random_hcore_density(size, complex_values=False):
 def _four_point_hcore_gradient_component(
     system_factory, coordinate, density, step=1.0e-4
 ):
-    values = [
-        np.einsum(
-            "mn,nm->",
-            system_factory(coordinate + scale * step).ints_hcore(),
-            density,
+    """Differentiate Tr(hcore D) with respect to a single internal coordinate."""
+
+    def contracted_hcore(value):
+        return np.einsum(
+            "mn,nm->", system_factory(value).ints_hcore(), density
         ).real
-        for scale in (-2.0, -1.0, 1.0, 2.0)
-    ]
-    return (values[0] - 8.0 * values[1] + 8.0 * values[2] - values[3]) / (12.0 * step)
+
+    return float(
+        finite_difference(contracted_hcore, coordinate, step=step, npoints=4)
+    )
 
 
 @pytest.mark.parametrize("x2c_type", ["sf", "so"])

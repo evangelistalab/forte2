@@ -8,6 +8,7 @@ THIS_DIR = Path(__file__).parent
 
 from forte2 import System, integrals
 from forte2.system.build_basis import build_basis
+from forte2.gradients import finite_difference
 from forte2.integrals import LIBCINT_AVAILABLE
 
 integrals_impl = importlib.import_module("forte2.integrals.integrals")
@@ -134,18 +135,12 @@ def test_opvop_deriv_finite_difference(
         monkeypatch.setattr(integrals_impl, "LIBCINT_AVAILABLE", False)
     analytical = integrals.opVop_deriv(system, weights)[5]
 
-    step = 1.0e-4
-    values = [
-        np.einsum(
-            "cmn,cmn->",
-            np.asarray(integrals.opVop(make_system(1.5 + scale * step))),
-            weights,
+    def contracted(z):
+        return np.einsum(
+            "cmn,cmn->", np.asarray(integrals.opVop(make_system(z))), weights
         )
-        for scale in (-2.0, -1.0, 1.0, 2.0)
-    ]
-    numerical = (values[0] - 8.0 * values[1] + 8.0 * values[2] - values[3]) / (
-        12.0 * step
-    )
+
+    numerical = float(finite_difference(contracted, 1.5, step=1.0e-4, npoints=4))
 
     assert analytical == pytest.approx(numerical, abs=2.0e-7)
 
@@ -166,11 +161,10 @@ def test_gaussian_nuclear_deriv_finite_difference():
     weights = rng.standard_normal((system.nbf, system.nbf))
     weights /= np.linalg.norm(weights)
     analytical = integrals.nuclear_deriv(system, weights)[5]
-    step = 1.0e-5
-    numerical = (
-        np.einsum("mn,mn->", integrals.nuclear(make_system(1.5 + step)), weights)
-        - np.einsum("mn,mn->", integrals.nuclear(make_system(1.5 - step)), weights)
-    ) / (2.0 * step)
+    def contracted(z):
+        return np.einsum("mn,mn->", integrals.nuclear(make_system(z)), weights)
+
+    numerical = float(finite_difference(contracted, 1.5, step=1.0e-5, npoints=2))
 
     assert analytical == pytest.approx(numerical, abs=2.0e-8)
 

@@ -126,6 +126,11 @@ class MCOptimizerBase(Method):
             self.ci_solver_verbosity = current_verbosity + 1
         return self
 
+    def reset(self):
+        """Invalidate this optimizer and its ci_solver before a new run()."""
+        self.ci_solver.reset()
+        return super().reset()
+
     def _startup(self):
         if not self.parent_method.executed:
             self.parent_method.run()

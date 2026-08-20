@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import ClassVar
 
 from .method import Method
@@ -23,6 +23,12 @@ class ActiveSpaceSolver(Method):
     _final_orbital_energy_tol: ClassVar[float] = 1e-8
 
     def __post_init__(self):
+        # Snapshot the fields that are later overwritten with derived values, so
+        # that the solver can be reconstructed from what the user actually asked
+        # for (see _rebuild_kwargs).
+        self._user_mo_space = self.mo_space
+        self._user_weights = self.weights
+
         self.dtype = float
         self.sa_info = StateAverageInfo(
             states=self.states,
@@ -35,6 +41,36 @@ class ActiveSpaceSolver(Method):
         self.requires = {"system", "mos"}
         self.requires_attrs.update({"two_component": False})
         self.provides = {"system", "mos", "mo_space"}
+
+    def reset(self):
+        """Invalidate this solver, restoring mo_space to what the user actually
+        supplied (see _rebuild_kwargs) so _make_mo_space rebuilds it cleanly."""
+        self.mo_space = self._user_mo_space
+        return super().reset()
+
+    def _rebuild_kwargs(self):
+        """
+        Return the initialization options needed to reconstruct this solver.
+
+        ``mo_space`` and ``weights`` are initialization fields that are
+        overwritten with derived values during ``__post_init__`` and
+        ``_make_mo_space``: ``mo_space`` gets built from the ``*_orbitals``
+        lists or copied from the parent method, and ``weights`` gets replaced by
+        the normalized weights. Replaying those derived values alongside the
+        arguments they were derived from is rejected as ambiguous, so the
+        snapshots taken at construction are handed back instead.
+
+        Returns
+        -------
+        dict
+            Keyword arguments for reconstructing an equivalent solver.
+        """
+        kwargs = {
+            item.name: getattr(self, item.name) for item in fields(self) if item.init
+        }
+        kwargs["mo_space"] = self._user_mo_space
+        kwargs["weights"] = self._user_weights
+        return kwargs
 
     def _startup(self):
         if not self.parent_method.executed:
@@ -130,6 +166,9 @@ class RelActiveSpaceSolver(ActiveSpaceSolver):
             raise ValueError("Either nel or states must be provided.")
         if self.nel is not None and self.states is not None:
             raise ValueError("Only one of nel or states can be provided.")
+        # See ActiveSpaceSolver._rebuild_kwargs: states is derived from nel below,
+        # and passing both back to __init__ is rejected.
+        self._user_states = self.states
         if self.nel is not None:
             mult = 1 if self.nel % 2 == 0 else 2
             ms = 0.0 if mult == 1 else 0.5
@@ -137,3 +176,8 @@ class RelActiveSpaceSolver(ActiveSpaceSolver):
         super().__post_init__()
         self.requires_attrs.update({"two_component": True})
         self.dtype = complex
+
+    def _rebuild_kwargs(self):
+        kwargs = super()._rebuild_kwargs()
+        kwargs["states"] = self._user_states
+        return kwargs
