@@ -511,40 +511,10 @@ class DMRGSolver(CIBase):
     # If used as a solver, log at warning level
     log_level: int = field(default=logger.get_verbosity_level() + 1)
 
-    def _startup(self):
-        super()._startup()
-        self.norb = self.mo_space.nactv
-        # no distinction between core and frozen core in the DMRG solver
-        self.core_indices = (
-            self.mo_space.frozen_core_indices + self.mo_space.core_indices
-        )
-        self.active_indices = self.mo_space.active_indices
-
-        ints = RestrictedMOIntegrals(
-            self.system,
-            self.mos.C[0],
-            self.active_indices,
-            self.core_indices,
-        )
-
-        self.sub_solvers = []
-        active_orbsym = [
-            [self.mos.irrep_indices[0][i] for i in active_space]
-            for active_space in self.mo_space.active_orbitals
-        ]
-        for i, state in enumerate(self.sa_info.states):
-            kwargs = self._collect_child_kwargs(_DMRGSingleStateSolver)
-            # these are needed by _DMRGSingleStateSolver but not present as
-            # attributes of DMRGSolver
-            kwargs.update(
-                {
-                    "ints": ints,
-                    "state": state,
-                    "nroot": self.sa_info.nroots[i],
-                    "active_orbsym": active_orbsym,
-                }
-            )
-            self.sub_solvers.append(_DMRGSingleStateSolver(**kwargs))
+    # Active-space integral class
+    _integrals_cls: ClassVar[type] = RestrictedMOIntegrals
+    # Single state solver class
+    _ss_solver_cls: ClassVar[type] = _DMRGSingleStateSolver
 
     def run(self):
         if self.first_run:
@@ -890,37 +860,10 @@ class RelDMRGSolver(RelCIBase):
     cleanup = DMRGSolver.cleanup
     get_top_determinants = DMRGSolver.get_top_determinants
 
-    def _startup(self):
-        super()._startup()
-        self.norb = self.mo_space.nactv
-        self.core_indices = (
-            self.mo_space.frozen_core_indices + self.mo_space.core_indices
-        )
-        self.active_indices = self.mo_space.active_indices
-
-        ints = SpinorbitalIntegrals(
-            self.system,
-            self.mos.C[0],
-            self.active_indices,
-            self.core_indices,
-        )
-
-        self.sub_solvers = []
-        active_orbsym = [
-            [self.mos.irrep_indices[0][i] for i in active_space]
-            for active_space in self.mo_space.active_orbitals
-        ]
-        for i, state in enumerate(self.sa_info.states):
-            kwargs = self._collect_child_kwargs(_RelDMRGSingleStateSolver)
-            kwargs.update(
-                {
-                    "ints": ints,
-                    "state": state,
-                    "nroot": self.sa_info.nroots[i],
-                    "active_orbsym": active_orbsym,
-                }
-            )
-            self.sub_solvers.append(_RelDMRGSingleStateSolver(**kwargs))
+    # Active-space integral class
+    _integrals_cls: ClassVar[type] = SpinorbitalIntegrals
+    # Single state solver class
+    _ss_solver_cls: ClassVar[type] = _RelDMRGSingleStateSolver
 
     def run(self, use_asym_ints=False):
         if use_asym_ints:
