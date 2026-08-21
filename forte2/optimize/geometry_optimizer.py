@@ -7,7 +7,7 @@ from forte2.base_classes import Method
 from forte2.base_classes.rebuild import (
     rebind_method_chain,
     rebuild_method_chain,
-    seed_chain_orbitals,
+    project_scf_guess,
     snapshot_orbitals,
 )
 from forte2.data import Z_TO_ATOM_SYMBOL
@@ -291,7 +291,7 @@ class _GeometryObjective:
         self.system = self.template_system.with_geometry(self.x.reshape(-1, 3))
         self.method = self.method_builder(self.system)
         if projection_source is not None:
-            seed_chain_orbitals(projection_source, self.method)
+            project_scf_guess(projection_source, self.method)
         if not self.method.executed:
             self.method.run()
         self.E = float(self.method.E)

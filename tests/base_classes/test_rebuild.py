@@ -17,7 +17,7 @@ from forte2.base_classes.rebuild import (
     rebind_method_chain,
     rebuild_method_chain,
     reset_method_chain,
-    seed_chain_orbitals,
+    project_scf_guess,
     snapshot_orbitals,
 )
 from forte2.orbitals import mo_overlap
@@ -150,15 +150,13 @@ def test_rebuild_preserves_a_user_provided_mo_space_override():
     assert rebuilt.mo_space_override is mc.mo_space
 
 
-def test_seed_chain_orbitals_installs_the_guess_on_the_chain_root():
-    # Downstream stages take their starting orbitals from their parent, so the
-    # guess has to land on the SCF root to have any effect.
+def test_project_scf_guess():
     system = _h2()
     method = _casscf(system)
     method.run()
 
     rebuilt = rebuild_method_chain(method, system.with_geometry(_DISPLACED))
-    applied = seed_chain_orbitals(method, rebuilt)
+    applied = project_scf_guess(method, rebuilt)
 
     root = list_method_chain(rebuilt)[0]
     assert applied
@@ -180,7 +178,7 @@ def test_seeded_chain_converges_to_the_same_energy_as_an_unseeded_one():
     displaced_system = system.with_geometry(_DISPLACED)
 
     seeded = rebuild_method_chain(method, displaced_system)
-    seed_chain_orbitals(method, seeded)
+    project_scf_guess(method, seeded)
     seeded.run()
 
     unseeded = rebuild_method_chain(method, displaced_system)
@@ -189,7 +187,7 @@ def test_seeded_chain_converges_to_the_same_energy_as_an_unseeded_one():
     assert seeded.E == pytest.approx(unseeded.E, abs=1.0e-10)
 
 
-def test_seed_chain_orbitals_declines_for_a_relativistic_chain():
+def test_project_scf_guess_declines_for_a_relativistic_chain():
     # SpinorUpcaster marks the shared System two-component in place, so once a
     # relativistic chain has run, its root reports two_component and the real
     # orbital projection no longer applies. The rebuild still succeeds; it just
@@ -201,12 +199,12 @@ def test_seed_chain_orbitals_declines_for_a_relativistic_chain():
 
     rebuilt = rebuild_method_chain(method, system.with_geometry(_DISPLACED))
 
-    assert not seed_chain_orbitals(method, rebuilt)
+    assert not project_scf_guess(method, rebuilt)
     rebuilt.run()
     assert rebuilt.executed
 
 
-def test_seed_chain_orbitals_declines_when_projection_does_not_apply():
+def test_project_scf_guess_declines_when_projection_does_not_apply():
     system = _h2()
     source = _rhf(system)
     source.run()
@@ -217,7 +215,7 @@ def test_seed_chain_orbitals_declines_when_projection_does_not_apply():
         GHF(charge=0)(system), system.with_geometry(_DISPLACED)
     )
 
-    assert not seed_chain_orbitals(source, target)
+    assert not project_scf_guess(source, target)
     assert getattr(target, "C", None) is None
 
 

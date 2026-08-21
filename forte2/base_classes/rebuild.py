@@ -124,7 +124,7 @@ def snapshot_orbitals(method):
     -------
     object | None
         A snapshot usable anywhere a source method is expected (it exposes
-        `.system` and `.mos.C`, matching `seed_chain_orbitals`/
+        `.system` and `.mos.C`, matching `project_scf_guess`/
         `project_occupied_orbitals`), or None if `method` has no orbitals yet.
     """
     mos = getattr(method, "mos", None)
@@ -149,15 +149,10 @@ def _fresh_value(value):
     return value
 
 
-def seed_chain_orbitals(source_method, method):
+def project_scf_guess(source_method, method):
     """
     Seed a rebuilt chain with orbitals projected from an already-converged one.
-
-    The guess is installed on the SCF root of the chain, which is where it is
-    consumed: downstream stages take their starting orbitals from their parent,
-    so seeding the last stage would have no effect. It is written to the root's
-    raw ``C`` list, which is what the SCF loop reads as its initial guess; the
-    ``mos`` wrapper is built from it once the root has run.
+    The guess is installed on the SCF method of the chain.
 
     Parameters
     ----------

@@ -12,7 +12,7 @@ from forte2.base_classes.rebuild import (
     list_method_chain,
     rebind_method_chain,
     rebuild_method_chain,
-    seed_chain_orbitals,
+    project_scf_guess,
 )
 from forte2.helpers import logger
 from .fd_gradient_helper import central_stencil, finite_difference
@@ -212,7 +212,7 @@ class FDGradient(Method):
         if self.project_orbitals:
             # Always from the reference geometry, never from the previous
             # displacement: see the class docstring.
-            seed_chain_orbitals(self.parent_method, self._scratch_chain)
+            project_scf_guess(self.parent_method, self._scratch_chain)
         self._scratch_chain.run()
         energy = self._get_energy(self._scratch_chain)
         self._displaced_energies.append(energy)
