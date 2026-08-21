@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from forte2 import CISolver, MCOptimizer, RHF, State, System
+from forte2 import CISolver, MCOptimizer, RHF, State, System, X2CParams
 from forte2.lib.ci_helpers import CISigmaBuilder
 from forte2.mcopt.mc_optimizer_response import (
     _build_ci_orbital_response_intermediates,
@@ -17,7 +17,6 @@ from forte2.mcopt.mc_optimizer_response import (
     compute_ci_response_b_vector,
     compute_omega,
     compute_orbital_ci_hessian_vector_product,
-    compute_orbital_hessian_transpose_vector_product,
     compute_orbital_hessian_vector_product,
     compute_orbital_response_b_vector,
     compute_projected_response_vector_product,
@@ -95,71 +94,6 @@ def _sa_casscf_mixed_spin_root_energies(symbols, coordinates):
     return _sa_casscf_mixed_spin(symbols, coordinates).E_ci
 
 
-def _symmetric_overlap_transport(reference_orbitals, overlap):
-    r"""Transport an MO frame with zero antisymmetric orbital response.
-
-    For :math:`M=C_0^{\mathsf T}S C_0`, return
-
-    .. math::
-
-        C(S)=C_0M^{-1/2},
-
-    so that :math:`C(S)^{\mathsf T}S C(S)=I`.  At the reference geometry this
-    is the symmetric-overlap connection used by the constrained
-    frozen-rotation analytic gradient.
-    """
-    metric = reference_orbitals.T @ overlap @ reference_orbitals
-    eigenvalues, eigenvectors = np.linalg.eigh(metric)
-    inverse_sqrt = (eigenvectors * eigenvalues**-0.5) @ eigenvectors.T
-    return reference_orbitals @ inverse_sqrt
-
-
-def _sa_gasscf_co_core_excited(symbols, coordinates, reference_orbitals=None):
-    """Run a two-root O(1s)-to-valence CO SA-GASSCF calculation."""
-    system = System(
-        xyz=xyz_string(symbols, coordinates),
-        basis_set="sto-3g",
-        auxiliary_basis_set="def2-universal-JKFIT",
-        unit="bohr",
-    )
-    rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
-    rhf.run()
-    if reference_orbitals is not None:
-        transported = _symmetric_overlap_transport(
-            reference_orbitals, system.ints_overlap()
-        )
-        rhf.C[0] = transported
-        rhf.mos.C[0] = transported
-
-    ci_solver = CISolver(
-        State(
-            system=system,
-            multiplicity=1,
-            ms=0.0,
-            gas_min=[1],
-            gas_max=[1],
-        ),
-        core_orbitals=[1, 2, 3, 4, 5],
-        active_orbitals=[[0], [6, 7]],
-        nroots=2,
-        weights=[0.5, 0.5],
-    )
-    mc = MCOptimizer(
-        ci_solver,
-        e_tol=1.0e-11,
-        g_tol=1.0e-8,
-        maxiter=60,
-        final_orbitals="original",
-        freeze_inter_gas_rots=True,
-    )(rhf)
-    mc.run()
-    return mc
-
-
-def _sa_gasscf_co_core_excited_root_energies(symbols, coordinates, reference_orbitals):
-    return _sa_gasscf_co_core_excited(symbols, coordinates, reference_orbitals).E_ci
-
-
 def _sa_casscf_c2_ccpvdz(symbols, coordinates):
     """Run a compact two-root C2 SA-CASSCF calculation in cc-pVDZ."""
     system = System(
@@ -191,13 +125,20 @@ def _sa_casscf_c2_ccpvdz_root_energies(symbols, coordinates):
     return _sa_casscf_c2_ccpvdz(symbols, coordinates).E_ci
 
 
-def _sa_gasscf_h2_ccpvdz(symbols, coordinates):
+def _sa_gasscf_h2_ccpvdz(symbols, coordinates, spin_free_x2c=False):
     """Run a two-root H2 SA-GASSCF calculation with two GAS spaces."""
+    system_options = {}
+    if spin_free_x2c:
+        system_options = {
+            "x2c": X2CParams(x2c_type="sf", x2c_model="1e"),
+            "minao_basis_set": None,
+        }
     system = System(
         xyz=xyz_string(symbols, coordinates),
         basis_set="cc-pVDZ",
         auxiliary_basis_set="cc-pVTZ-JKFIT",
         unit="bohr",
+        **system_options,
     )
     rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
     ci_solver = CISolver(
@@ -223,8 +164,8 @@ def _sa_gasscf_h2_ccpvdz(symbols, coordinates):
     return mc
 
 
-def _sa_gasscf_h2_ccpvdz_root_energies(symbols, coordinates):
-    return _sa_gasscf_h2_ccpvdz(symbols, coordinates).E_ci
+def _sa_gasscf_h2_ccpvdz_root_energies(symbols, coordinates, spin_free_x2c=False):
+    return _sa_gasscf_h2_ccpvdz(symbols, coordinates, spin_free_x2c).E_ci
 
 
 def _orbital_gradient_at_displacement(orbital_optimizer, displacement):
@@ -502,60 +443,26 @@ def test_sa_gasscf_gradient_h2_ccpvdz_finite_difference():
     assert gradients.sum(axis=1) == pytest.approx(np.zeros((2, 3)), abs=1.0e-10)
 
 
-def test_sa_gasscf_gradient_co_core_excited_frozen_intergas():
-    """Validate constrained O(1s)-core-excited gradients with frozen GAS rotations."""
-    symbols = ["C", "O"]
-    coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 2.132]])
+def test_sf_x2c_sa_gasscf_gradient_h2_ccpvdz_finite_difference():
+    """Validate a target-root spin-free X2C SA-GASSCF gradient."""
+    symbols = ["H", "H"]
+    coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]])
 
-    mc = _sa_gasscf_co_core_excited(symbols, coordinates)
-    reference_orbitals = mc.mos.C[0].copy()
-    gradients = np.array([mc.gradient(root=root) for root in range(2)])
-
-    # Frozen inter-GAS directions define a constrained derivative.  Transport
-    # the converged reference orbitals with the symmetric-overlap connection,
-    # which sets their antisymmetric response to zero, before reoptimizing the
-    # allowed rotations at each displaced geometry.
+    mc = _sa_gasscf_h2_ccpvdz(symbols, coordinates, spin_free_x2c=True)
+    gradient = mc.gradient(root=1)
     numerical = four_point_central_difference_gradient_component(
-        _sa_gasscf_co_core_excited_root_energies,
+        _sa_gasscf_h2_ccpvdz_root_energies,
         symbols,
         coordinates,
         1,
         2,
-        reference_orbitals,
-    )
+        spin_free_x2c=True,
+    )[1]
 
-    assert mc.freeze_inter_gas_rots
+    assert mc.system.x2c_type == "sf"
     assert mc.mo_space.ngas == 2
-    gas0 = np.arange(mc.mo_space.gas[0].start, mc.mo_space.gas[0].stop)
-    gas1 = np.arange(mc.mo_space.gas[1].start, mc.mo_space.gas[1].stop)
-    assert not np.any(mc.orb_opt.nrr[np.ix_(gas0, gas1)])
-
-    # At a constrained stationary point the forward Hessian need not be
-    # symmetric.  Check the adjoint action through its bilinear identity.
-    direction = np.arange(1, mc.orb_opt.nrot + 1, dtype=float)
-    direction /= np.linalg.norm(direction)
-    probe = np.arange(mc.orb_opt.nrot, 0, -1, dtype=float)
-    probe /= np.linalg.norm(probe)
-    transpose_product = compute_orbital_hessian_transpose_vector_product(
-        mc.orb_opt, direction
-    )
-    forward_product = compute_orbital_hessian_vector_product(mc.orb_opt, direction)
-    probe_product = compute_orbital_hessian_vector_product(mc.orb_opt, probe)
-    assert np.dot(direction, probe_product) == pytest.approx(
-        np.dot(transpose_product, probe), abs=1.0e-10
-    )
-    assert np.linalg.norm(transpose_product - forward_product) > 1.0e-3
-
-    assert gradients[:, 1, 2] == pytest.approx(numerical, abs=2.0e-7)
-    # Different BLAS eigensolvers may select different frames in CO's
-    # degenerate pi subspace.  The tight check above validates the analytic
-    # constrained derivative against finite differences in the selected
-    # frame; this reference is only a platform-independent sanity check.
-    assert numerical == pytest.approx(
-        np.array([-0.575232072690094, -0.630049118523601]),
-        abs=1.0e-5,
-    )
-    assert gradients.sum(axis=1) == pytest.approx(np.zeros((2, 3)), abs=1.0e-9)
+    assert gradient[1, 2] == pytest.approx(numerical, abs=1.0e-7)
+    assert gradient.sum(axis=0) == pytest.approx(np.zeros(3), abs=1.0e-10)
 
 
 def test_sa_casscf_orbital_orbital_response_lih():
@@ -626,9 +533,7 @@ def test_sa_casscf_orbital_ci_response_lih():
     orbital_direction = np.arange(1, orbital_optimizer.nrot + 1, dtype=float)
     orbital_direction /= np.linalg.norm(orbital_direction)
     combined = (
-        compute_orbital_hessian_transpose_vector_product(
-            orbital_optimizer, orbital_direction
-        )
+        compute_orbital_hessian_vector_product(orbital_optimizer, orbital_direction)
         + ci_product
     )
     gradient_plus = _orbital_gradient_at_wavefunction_displacement(
@@ -859,7 +764,7 @@ def test_sa_casscf_solve_orbital_response_lih():
         mc, trial[:nrot], trial[nrot:]
     )
     projected_ci = _project_ci_response_vector(mc, trial[nrot:], layout)
-    expected_orbital = compute_orbital_hessian_transpose_vector_product(
+    expected_orbital = compute_orbital_hessian_vector_product(
         mc.orb_opt, trial[:nrot]
     ) + compute_orbital_ci_hessian_vector_product(mc, projected_ci)
     expected_ci = _project_ci_response_vector(

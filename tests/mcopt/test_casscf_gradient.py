@@ -54,7 +54,7 @@ def _casscf_gradient(symbols, coordinates, **kwargs):
     return _casscf(symbols, coordinates, **kwargs).gradient()
 
 
-def _gasscf_h2(symbols, coordinates, *, freeze_inter_gas_rots=False):
+def _gasscf_h2(symbols, coordinates):
     system = _system(symbols, coordinates)
     rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
     ci_solver = CISolver(
@@ -72,7 +72,6 @@ def _gasscf_h2(symbols, coordinates, *, freeze_inter_gas_rots=False):
         e_tol=1.0e-12,
         g_tol=1.0e-9,
         maxiter=30,
-        freeze_inter_gas_rots=freeze_inter_gas_rots,
         final_orbitals="original",
     )(rhf)
     mc.run()
@@ -284,6 +283,34 @@ def test_casscf_gradient_requires_root_for_state_average():
 
     with pytest.raises(ValueError, match="root must be specified"):
         mc.gradient()
+
+
+def test_sa_gasscf_gradient_rejects_frozen_inter_gas_rotations():
+    """Reject SA gradients when inter-GAS rotations were not optimized."""
+    system = _system(["H", "H"], np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]]))
+    rhf = RHF(charge=0)(system)
+    ci_solver = CISolver(
+        State(
+            system=system,
+            multiplicity=1,
+            ms=0.0,
+            gas_min=[1],
+            gas_max=[1],
+        ),
+        active_orbitals=[[0], [1]],
+        nroots=2,
+        weights=[0.5, 0.5],
+    )
+    mc = MCOptimizer(
+        ci_solver,
+        freeze_inter_gas_rots=True,
+        final_orbitals="original",
+    )(rhf)
+
+    with pytest.raises(NotImplementedError, match="frozen inter-GAS rotations"):
+        mc.gradient(root=0)
+
+    assert not mc.executed
 
 
 def test_casscf_gradient_rejects_frozen_core_orbitals():

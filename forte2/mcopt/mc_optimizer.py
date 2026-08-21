@@ -610,10 +610,12 @@ class MCOptimizer(MCOptimizerBase):
         two-component state-specific CASSCF/GASSCF wave functions, including
         SF- and SO-X2C-1e Hamiltonians. It also supports individual roots of
         real nonrelativistic SA-CASSCF/GASSCF wave functions when
-        ``final_orbitals='original'``. Frozen-core and frozen-virtual response
-        and active-frozen rotations are not supported. Point and Gaussian
-        nuclear charge distributions are supported; Gaussian charges require
-        libcint. Requesting any unsupported feature raises ``NotImplementedError``.
+        ``final_orbitals='original'``. Frozen-core, frozen-virtual,
+        active-frozen orbital, and frozen inter-GAS orbital response are not
+        supported.
+        Point and Gaussian nuclear charge distributions are supported; Gaussian
+        charges require libcint. Requesting any unsupported feature raises
+        ``NotImplementedError``.
         Both the orbital optimization and all CI roots must be converged; an
         unconverged wave function raises ``RuntimeError`` because the
         stationary-gradient expression does not apply.

@@ -19,10 +19,8 @@ from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
 
 
 def _compute_casscf_gradient(mc, root=None) -> NDArray:
-    r"""Dispatch the target-root density-fitted CASSCF/GASSCF gradient.
-
-    For the resolved absolute root :math:`\alpha`, this returns the Cartesian
-    derivative array
+    r"""Single-root density-fitted CASSCF/GASSCF gradient for the absolute
+    root :math:`\alpha` in Cartesian coordinates:
 
     .. math::
 
@@ -48,18 +46,7 @@ def _compute_casscf_gradient(mc, root=None) -> NDArray:
 
 
 def _compute_nonrel_casscf_gradient(mc, C: NDArray, root: int) -> NDArray:
-    r"""Compute a target-root nonrelativistic CASSCF/GASSCF gradient.
-
-    The returned component for nuclear displacement :math:`x` is
-
-    .. math::
-
-        E_\alpha^x
-        =V_{\mathrm{NN}}^x
-         +\sum_{\mu\nu}D^\alpha_{\mu\nu}h^x_{\mu\nu}
-         -\sum_{\mu\nu}W^{S,\alpha}_{\mu\nu}S^x_{\mu\nu}
-         +\sum_{P\mu\nu}W^{P,\alpha}_{\mu\nu}(P|\mu\nu)^x
-         +\sum_{PQ}W^\alpha_{PQ}(P|Q)^x.
+    r"""Compute a single-root nonrelativistic CASSCF/GASSCF gradient.
 
     For a single-root reference the stationary state-specific densities are
     used directly; a state average is delegated to the relaxed kernel below.
@@ -846,6 +833,11 @@ def _validate_casscf_gradient_request(mc) -> None:
     if mc.active_frozen_orbitals:
         raise NotImplementedError(
             "CASSCF/GASSCF gradients with active frozen orbitals are not implemented."
+        )
+    if mc.freeze_inter_gas_rots:
+        raise NotImplementedError(
+            "CASSCF/GASSCF gradients with frozen inter-GAS rotations are not "
+            "implemented because they require the response of the parent orbitals."
         )
     system = _find_upstream_system(mc)
     validate_df_gradient_system(system, "CASSCF/GASSCF")

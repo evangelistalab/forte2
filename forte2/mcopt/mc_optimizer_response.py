@@ -70,39 +70,6 @@ def compute_orbital_hessian_vector_product(orb_opt, vector):
     return _compute_orbital_hessian_vector_product(orb_opt, vector, intermediates)
 
 
-def compute_orbital_hessian_transpose_vector_product(orb_opt, vector):
-    r"""Apply the transpose fixed-RDM orbital response matrix.
-
-    .. math::
-
-        H_{IJ}&=D_J\bar g_I,\\
-        [H^{\mathsf T}\mathbf z]_I
-        &=2(B^{q_I}_{p_I}-B^{p_I}_{q_I}),\qquad
-        B=\dot{\bar A}[\mathbf z]+Z\bar A-\bar A Z.
-
-    The moving-frame commutator is essential when frozen rotations leave
-    omitted gradient components nonzero.
-
-    Parameters
-    ----------
-    vector : np.ndarray
-        Real nonredundant orbital multiplier with shape ``(nrot,)``.
-
-    Returns
-    -------
-    np.ndarray
-        :math:`H^{\mathsf T}\mathbf z` in the ordered-pair basis.
-    """
-    vector = _validate_orbital_response_vector(orb_opt, vector)
-    intermediates = _build_orbital_response_intermediates(
-        orb_opt,
-    )
-    A_h = _build_orbital_lagrangian_from_response_intermediates(orb_opt, *intermediates)
-    return _compute_orbital_hessian_transpose_vector_product(
-        orb_opt, vector, (*intermediates, A_h)
-    )
-
-
 def _validate_orbital_response_vector(orb_opt, vector):
     vector = np.asarray(vector)
     if vector.shape != (orb_opt.nrot,):
@@ -113,50 +80,6 @@ def _validate_orbital_response_vector(orb_opt, vector):
     if np.iscomplexobj(vector):
         raise TypeError("The nonrelativistic orbital-response vector must be real.")
     return vector.astype(float, copy=False)
-
-
-def _build_orbital_lagrangian_from_response_intermediates(
-    orb_opt, Fcore_mo, Fact_mo, B_ga
-):
-    r"""Build the unsymmetrized base-point orbital Lagrangian.
-
-    From the fixed-RDM response intermediates, this evaluates
-
-    .. math::
-
-        \bar A^m_p
-        &=2(F_{\mathrm C}+\bar F_{\mathrm A})^m_p,
-        &&m\in\mathbb C,\\
-        \bar A^u_p
-        &=\sum_v(F_{\mathrm C})^v_p\bar\gamma^v_u
-          +\sum_{Ptvw}B^P_{pt}B^P_{vw}\bar D_{tu,vw},
-        &&u\in\mathbb A,\\
-        \bar A^e_p&=0,
-        &&e\in\mathbb V.
-
-    Here ``g1`` is :math:`\bar\gamma`, ``g2`` is the working density
-    :math:`\bar D`, and ``B_ga`` is :math:`B^P_{pu}`.  The matrix is kept
-    unsymmetrized because its omitted frozen-rotation gradient components
-    enter the transpose orbital response through
-    :math:`Z\bar A-\bar A Z`.
-
-    Returns
-    -------
-    np.ndarray
-        The nonzero hole columns :math:`\bar A^h_p`, with
-        :math:`h\in\mathbb C\cup\mathbb A`, and shape ``(nmo, nhole)``.
-    """
-    A_h = np.empty((orb_opt.C.shape[1], orb_opt.ncore + orb_opt.nact), dtype=float)
-    A_h[:, : orb_opt.ncore] = 2.0 * (Fcore_mo + Fact_mo)[:, orb_opt.core]
-    A_h[:, orb_opt.ncore :] = np.einsum(
-        "rv,vu->ru", Fcore_mo[:, orb_opt.actv], orb_opt.g1, optimize=True
-    )
-    B_aa = B_ga[:, orb_opt.actv, :]
-    contracted_density = np.einsum("Pvw,tuvw->Ptu", B_aa, orb_opt.g2, optimize=True)
-    A_h[:, orb_opt.ncore :] += np.einsum(
-        "Prt,Ptu->ru", B_ga, contracted_density, optimize=True
-    )
-    return A_h
 
 
 def _build_orbital_response_intermediates(orb_opt):
@@ -197,7 +120,7 @@ def _build_coupled_response_intermediates(orb_opt):
 
         \mathcal I_{\mathrm{coupled}}
         =\left(
-          (F_{\mathrm C},\bar F_{\mathrm A},B^P_{pu},\bar A^h_p),
+          (F_{\mathrm C},\bar F_{\mathrm A},B^P_{pu}),
           (F_{\mathrm C},B^P_{pu}),
           (F_{\mathrm C}^{\mathrm{AO}},F_{\mathrm C},B^P_{pu})
          \right),
@@ -211,11 +134,8 @@ def _build_coupled_response_intermediates(orb_opt):
     Fcore_mo = orb_opt._transform_ao_operator(Fcore_ao, orb_opt.C)
     Fact_mo = orb_opt._transform_ao_operator(Fact_ao, orb_opt.C)
     B_ga = _transform_df_block(orb_opt, orb_opt.C, orb_opt.Cact)
-    A_h = _build_orbital_lagrangian_from_response_intermediates(
-        orb_opt, Fcore_mo, Fact_mo, B_ga
-    )
     return (
-        (Fcore_mo, Fact_mo, B_ga, A_h),
+        (Fcore_mo, Fact_mo, B_ga),
         (Fcore_mo, B_ga),
         (Fcore_ao, Fcore_mo, B_ga),
     )
@@ -344,43 +264,6 @@ def _compute_orbital_hessian_vector_product(orb_opt, vector, intermediates):
     return orb_opt._mat_to_vec(gradient_response)
 
 
-def _compute_orbital_hessian_transpose_vector_product(orb_opt, vector, intermediates):
-    r"""Evaluate the transpose fixed-RDM orbital Hessian action.
-
-    If :math:`H_{IJ}=D_J\bar g_I`, the derivative of the scalar
-    :math:`\mathbf z^{\mathsf T}\bar{\mathbf g}` with respect to pair
-    :math:`I` is
-
-    .. math::
-
-        [H^{\mathsf T}\mathbf z]_I
-        =2\left(B^{q_I}_{p_I}-B^{p_I}_{q_I}\right),
-        \qquad
-        B=\dot{\bar A}[\mathbf z]+Z\bar A-\bar A Z.
-
-    ``intermediates[3]`` contains the nonzero core and active columns of
-    the unsymmetrized base matrix :math:`\bar A`; its virtual columns are
-    zero and are not stored.  The commutator makes this application the exact
-    transpose of :func:`_compute_orbital_hessian_vector_product`, even
-    when frozen rotations leave nonzero components of the full orbital
-    gradient.  No dense Hessian is formed.
-
-    Returns
-    -------
-    np.ndarray
-        :math:`H^{\mathsf T}\mathbf z` with shape ``(nrot,)``.
-    """
-    A_response = _compute_orbital_lagrangian_response(orb_opt, vector, intermediates)
-    A_h = intermediates[3]
-    Z = orb_opt._vec_to_mat(vector)
-    holes = slice(orb_opt.core.start, orb_opt.actv.stop)
-    adjoint_A = A_response
-    adjoint_A[:, holes] += Z @ A_h
-    adjoint_A -= A_h @ Z[holes, :]
-    gradient_response = 2.0 * (adjoint_A - adjoint_A.T)
-    return orb_opt._mat_to_vec(gradient_response)
-
-
 def _compute_orbital_lagrangian_response(orb_opt, vector, intermediates):
     r"""Return the full MO Lagrangian response for an orbital direction.
 
@@ -396,15 +279,14 @@ def _compute_orbital_lagrangian_response(orb_opt, vector, intermediates):
         \dot{\bar A}^{e}_{p}&=0,
           &&e\in\mathbb V.
 
-    The state-averaged RDMs are fixed.  Hessian products use the
-    antisymmetric part; the gradient response also adds the moving-frame
-    commutator :math:`Z\bar A-\bar A Z`.
+    The state-averaged RDMs are fixed. Hessian products use the
+    antisymmetric part.
 
     Parameters
     ----------
     vector : np.ndarray
         Validated real orbital direction with shape ``(nrot,)``.
-    intermediates : tuple[np.ndarray, ...]
+    intermediates : tuple[np.ndarray, np.ndarray, np.ndarray]
         Base-point tensors from
         :func:`_build_orbital_response_intermediates`.
 
@@ -413,7 +295,7 @@ def _compute_orbital_lagrangian_response(orb_opt, vector, intermediates):
     np.ndarray
         Full MO Lagrangian response matrix with shape ``(nmo, nmo)``.
     """
-    Fcore_mo, Fact_mo, B_ga = intermediates[:3]
+    Fcore_mo, Fact_mo, B_ga = intermediates
     Z = orb_opt._vec_to_mat(vector)
     C_response = orb_opt.C @ Z
     Ccore_response = C_response[:, orb_opt.core]
@@ -1121,7 +1003,7 @@ def compute_projected_response_vector_product(mc, orbital_vector, ci_vector):
 
         \binom{\mathbf y^{\mathrm o}}{\mathbf y^{\mathrm c}}
         =\begin{pmatrix}
-         (\mathcal A^{\mathrm{oo}})^{\mathsf T}&\mathcal A^{\mathrm{oc}}Q\\
+         \mathcal A^{\mathrm{oo}}&\mathcal A^{\mathrm{oc}}Q\\
          Q\mathcal A^{\mathrm{co}}&Q\mathcal A^{\mathrm{cc}}Q+P
          \end{pmatrix}\binom{\mathbf z}{\mathbf x},\qquad P=I-Q.
 
@@ -1154,7 +1036,7 @@ def _compute_projected_response_vector_product(
 
     .. math::
 
-        \mathbf y^{\mathrm o}=A_{oo}^{T}\mathbf z+A_{oc}Q\mathbf x,
+        \mathbf y^{\mathrm o}=A_{oo}\mathbf z+A_{oc}Q\mathbf x,
         \quad
         \mathbf y^{\mathrm c}=Q(A_{co}\mathbf z+A_{cc}Q\mathbf x)+P\mathbf x.
     """
@@ -1163,7 +1045,7 @@ def _compute_projected_response_vector_product(
     orbital_intermediates, density_intermediates, hamiltonian_intermediates = (
         intermediates
     )
-    orbital_product = _compute_orbital_hessian_transpose_vector_product(
+    orbital_product = _compute_orbital_hessian_vector_product(
         mc.orb_opt, orbital_vector, orbital_intermediates
     )
     density_response = _compute_ci_response_rdms(mc, projected_ci, layout)
@@ -1269,8 +1151,7 @@ def solve_state_specific_response(
     .. math::
 
         \begin{pmatrix}
-         (\mathcal A^{\mathrm{oo}})^{\mathsf T}
-         & \mathcal A^{\mathrm{oc}}Q\\
+         \mathcal A^{\mathrm{oo}} & \mathcal A^{\mathrm{oc}}Q\\
          Q\mathcal A^{\mathrm{co}} &
          Q\mathcal A^{\mathrm{cc}}Q+P
         \end{pmatrix}

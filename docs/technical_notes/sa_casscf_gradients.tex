@@ -31,9 +31,7 @@ This note records the equations implemented in \forte for analytic gradients
 of one state evaluated at a state-averaged complete-active-space
 self-consistent-field (SA-CASSCF) reference.  The same response equations
 apply to SA-GASSCF when the active-space solver imposes the GAS occupation
-restrictions.  The nonredundant orbital-pair list defines the orbital model:
-it may contain the inter-GAS rotations or omit them to define a constrained
-optimization with frozen inter-GAS rotations.
+restrictions and all inter-GAS rotations are optimized.
 
 Only the nonrelativistic implementation is considered.  Its assumptions are
 real restricted spatial orbitals, real spin-adapted CI vectors, fixed normalized
@@ -42,7 +40,9 @@ density-fitted two-electron integrals.  The derivation does not cover complex
 orbitals or derivative couplings.  Roots may belong to different spin
 multiplicities and therefore to different spin-adapted CI spaces.  Frozen
 inactive-core, frozen virtual, and active-frozen orbital response are outside
-the current implementation.
+the current implementation.  Gradients with frozen inter-GAS rotations are
+also excluded because defining the displaced frozen orbital frame requires
+the response of the orbitals supplied by the parent HF calculation.
 
 \section{Notation}
 
@@ -384,38 +384,12 @@ Together with the one-electron/Fock terms, the complete Lagrangian response is
  \dot{\bar A}^{e}_{p}&=0,
  &&e\in\mathbb V.
 \end{align}
-The dense forward block uses exactly the matrix-free action,
+The matrix elements are defined by the matrix-free action,
 \begin{equation}
  (\mathcal A^{\mathrm{oo}})_{IJ}
  =[\mathcal A^{\mathrm{oo}}\mathbf e_J]_I.
  \label{eq:nr-oo-dense}
 \end{equation}
-The orbital row of the Lagrange equations differentiates the scalar
-$\mathbf z^{\mathsf T}\bar{\mathbf g}$ and therefore requires the adjoint
-action.  Because the ordered-pair basis moves with the orbitals, define
-\begin{equation}
- B[\mathbf z]
- =\dot{\bar A}[\mathbf z]+Z\bar A-\bar A Z.
- \label{eq:nr-adjoint-orbital-lagrangian}
-\end{equation}
-The implemented transpose Hessian--vector product is
-\begin{equation}
- \boxed{
- [({\mathcal A}^{\mathrm{oo}})^{\mathsf T}\mathbf z]_I
- =2\left[B[\mathbf z]^{q_I}_{p_I}
-         -B[\mathbf z]^{p_I}_{q_I}\right]
- }.
- \label{eq:nr-oo-transpose-action}
-\end{equation}
-The commutator is the right-trivialized moving-frame correction.  At a fully
-stationary orbital solution it has no antisymmetric contribution in the
-retained pair space, and the forward Hessian is symmetric.  If some rotations
-are frozen, omitted components of $\bar{\mathbf g}$ may be nonzero, the
-retained forward block may be nonsymmetric, and the commutator is essential.
-The production response solver evaluates
-\cref{eq:nr-oo-transpose-action} directly without forming
-$\mathcal A^{\mathrm{oo}}$.
-
 No four-index integral with general orbital indices is formed, and the
 persistent transformed response workspace is
 $O(N_{\mathrm{aux}}N_{\mathrm{MO}}N_{\mathrm A})$.
@@ -639,7 +613,7 @@ The implemented response equations are
 \begin{equation}
  \boxed{
  \begin{pmatrix}
- (\mathcal A^{\mathrm{oo}})^{\mathsf T}
+ \mathcal A^{\mathrm{oo}}
  &\mathcal A^{\mathrm{oc}}\mathcal Q_{\mathrm C}\\
  \mathcal Q_{\mathrm C}\mathcal A^{\mathrm{co}}
  &\mathcal Q_{\mathrm C}\mathcal A^{\mathrm{cc}}
@@ -663,24 +637,7 @@ diagonal shifted CI Hamiltonians; its storage is linear in the response
 dimension.
 
 The pair set $\mathbb K$ is exactly the set optimized in the reference
-SA-CASSCF/GASSCF calculation.  With frozen inter-GAS rotations, the response
-equations impose
-\begin{equation}
- \kappa_f=0,
- \qquad f\notin\mathbb K,
- \label{eq:nr-frozen-orbital-constraint}
-\end{equation}
-and return the gradient of that constrained orbital model.  Its nuclear
-connection is defined by zero antisymmetric response in the omitted
-directions.  A finite-difference realization transports the reference MOs as
-\begin{equation}
- C(S)=C_0\left(C_0^{\mathsf T}SC_0\right)^{-1/2}
- \label{eq:nr-symmetric-overlap-transport}
-\end{equation}
-before reoptimizing the retained rotations.  Restarting each displacement
-from independently canonicalized parent orbitals follows a different orbital
-connection and would require the corresponding parent-orbital response (for
-example, CPHF); it is not the constrained derivative defined here.
+SA-CASSCF/GASSCF calculation and includes all inter-GAS rotations.
 
 \subsection{Orbital orthogonality multiplier}
 
@@ -694,10 +651,8 @@ moving MO frame.  For a general variation $\dot C=CX$,
  +Z_\alpha\bar A-\bar A Z_\alpha\right]_{pq}.
  \label{eq:nr-full-coefficient-derivative}
 \end{equation}
-The same commutator appears in the transpose response
-\cref{eq:nr-oo-transpose-action}.  Its antisymmetric contribution drops out
-only at a fully stationary orbital solution and must be retained for a
-constrained solution with frozen rotations.  Define
+The commutator is required even though its antisymmetric contribution drops
+out of the nonredundant response equation at convergence.  Define
 \begin{equation}
  \boxed{
  \Omega_\alpha=A^\alpha
@@ -985,20 +940,13 @@ gives the implemented gradient:
 
 \section{Implementation summary and scaling}
 
-The response solver is matrix free.  Dense orbital--orbital,
-orbital--CI, CI--orbital, and CI--CI blocks are available for tests and are
-defined by applying the same production matrix--vector routines to unit
-vectors.  Consequently, the dense and matrix-free paths cannot drift to
-different algebraic definitions.  The dense orbital--orbital matrix is the
-forward derivative in \cref{eq:nr-oo-dense}; production adjoint solves apply
-its transpose directly through \cref{eq:nr-oo-transpose-action}.
+The response solver is matrix free and applies all four orbital/CI blocks
+without storing any dense response matrix.
 
 The minimum-storage DF choices used by the implementation are:
 \begin{itemize}
  \item keep only $B^P_{pu}$ rather than a general--general transformed
        three-index tensor;
- \item retain only the core and active columns $\bar A^h_p$ needed by the
-       moving-frame commutator rather than a full base-point Lagrangian;
  \item evaluate transition exchange through signed low-rank density factors;
  \item contract active two-particle RDMs directly with general--active DF
        blocks;
