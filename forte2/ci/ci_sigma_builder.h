@@ -19,8 +19,13 @@
 namespace forte2 {
 
 enum class CIAlgorithm {
-    Knowles_Handy,     // Knowles-Handy algorithm
-    Harrison_Zarrabian // Harrison-Zarrabian algorithm
+    // Knowles-Handy algorithm. Its compound-index (p>=q) compression assumes V has the full
+    // 8-fold real-integral permutational symmetry (V[p,q,r,s] invariant under p<->r and q<->s
+    // individually, not just the combined (p,q,r,s)->(q,p,s,r) swap). Genuine MO integrals always
+    // have this; V that only satisfies the weaker combined swap will silently produce a wrong
+    // sigma vector with this algorithm.
+    Knowles_Handy,
+    Harrison_Zarrabian // Harrison-Zarrabian algorithm; does not require the stronger V symmetry.
 };
 
 class CISigmaBuilder {
@@ -88,6 +93,18 @@ class CISigmaBuilder {
     /// @param basis The basis vector
     /// @param sigma The resulting sigma vector |sigma> = H |basis>
     void Hamiltonian(np_vector basis, np_vector sigma) const;
+
+    /// @brief Apply the scalar and one-electron part of the Hamiltonian to the wave function
+    /// @param basis The basis vector
+    /// @param sigma The resulting sigma vector |sigma> = (E + sum_pq H_pq E_pq) |basis>
+    /// @note Hamiltonian(basis, sigma) == sigma_one_electron(basis, s1) +
+    /// sigma_two_electron(basis, s2) for s1 + s2. H is not required to be symmetric.
+    void sigma_one_electron(np_vector basis, np_vector sigma) const;
+
+    /// @brief Apply the two-electron part of the Hamiltonian to the wave function
+    /// @param basis The basis vector
+    /// @param sigma The resulting sigma vector, the two-electron part of H |basis>
+    void sigma_two_electron(np_vector basis, np_vector sigma) const;
 
     /// @brief Return the average build time for the Hamiltonian components
     std::vector<double> avg_build_time() const {

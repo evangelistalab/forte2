@@ -40,10 +40,11 @@ RelCISigmaBuilder::RelCISigmaBuilder(const CIStrings& lists, double E, np_matrix
 }
 
 void RelCISigmaBuilder::set_algorithm(const std::string& algorithm) {
-    if (algorithm == "kh" or algorithm == "knowles-handy") {
-        algorithm_ = CIAlgorithm::Knowles_Handy;
-    } else if (algorithm == "hz" or algorithm == "harrison-zarrabian") {
+    if (algorithm == "hz" or algorithm == "harrison-zarrabian") {
         algorithm_ = CIAlgorithm::Harrison_Zarrabian;
+    } else if (algorithm == "kh" or algorithm == "knowles-handy") {
+        throw std::runtime_error("Knowles-Handy algorithm is not implemented for "
+                                 "RelCISigmaBuilder; use 'hz' (Harrison-Zarrabian).");
     } else {
         throw std::runtime_error("CI algorithm " + algorithm + " not valid.");
     }
@@ -51,8 +52,6 @@ void RelCISigmaBuilder::set_algorithm(const std::string& algorithm) {
 
 std::string RelCISigmaBuilder::get_algorithm() const {
     switch (algorithm_) {
-    case CIAlgorithm::Knowles_Handy:
-        return "Knowles-Handy";
     case CIAlgorithm::Harrison_Zarrabian:
         return "Harrison-Zarrabian";
     default:
@@ -80,20 +79,15 @@ void RelCISigmaBuilder::set_Hamiltonian(double E, np_matrix_complex H, np_tensor
     }
     H_ = H;
 
-    // Initialize the one-electron integrals h_hz and h_kh
+    // Initialize the one-electron integrals h_hz
 
     const size_t norb = lists_.norb();
-    h_kh.resize(norb * norb);
     h_hz.resize(norb * norb);
     auto h = H.view();
     auto v = V.view();
     for (size_t p = 0; p < norb; ++p) {
         for (size_t q = 0; q < norb; ++q) {
             h_hz[p * norb + q] = h(p, q);
-            h_kh[p * norb + q] = h(p, q);
-            for (size_t r = 0; r < norb; ++r) {
-                h_kh[p * norb + q] -= 0.5 * v(p, q, r, r);
-            }
         }
     }
 
@@ -107,11 +101,8 @@ void RelCISigmaBuilder::set_Hamiltonian(double E, np_matrix_complex H, np_tensor
     }
     V_ = V;
 
-    const size_t norb2 = norb * norb;
-    const size_t npairs = (norb * (norb - 1)) / 2;    // Number of pairs (p, r) with p > r
-    const size_t ngeqpairs = (norb * (norb + 1)) / 2; // Number of pairs (p, r) with p >= r
+    const size_t npairs = (norb * (norb - 1)) / 2; // Number of pairs (p, r) with p > r
     v_pr_qs.resize(npairs * npairs);
-    // v_ijkl_hk.resize(ngeqpairs * ngeqpairs);
 
     // Loop over all pairs (p, r) and (q, s) to fill v_pr_qs with p > r and q > s.
     // V is given in physicist's notation <pq|rs> and antisymmetrized here on the fly.
@@ -126,20 +117,6 @@ void RelCISigmaBuilder::set_Hamiltonian(double E, np_matrix_complex H, np_tensor
             }
         }
     }
-    // Loop over all pairs (i, j) and (k, l) to fill v_ijkl_hk with i >= j and k >= l
-    // for (size_t i = 0; i < norb; ++i) {
-    //     for (size_t j = 0; j <= i; ++j) {
-    //         const auto ij_index = pair_index_geq(i, j);
-    //         for (size_t k = 0; k < norb; ++k) {
-    //             for (size_t l = 0; l <= k; ++l) {
-    //                 const auto kl_index = pair_index_geq(k, l);
-    //                 double dij = (i == j ? 2 : 1);
-    //                 double dkl = (k == l ? 2 : 1);
-    //                 v_ijkl_hk[ij_index * ngeqpairs + kl_index] = v(i, k, j, l) / (dij * dkl);
-    //             }
-    //         }
-    //     }
-    // }
 }
 
 void RelCISigmaBuilder::Hamiltonian(np_vector_complex basis, np_vector_complex sigma) const {
@@ -148,11 +125,25 @@ void RelCISigmaBuilder::Hamiltonian(np_vector_complex basis, np_vector_complex s
     auto s_span = vector::as_span<std::complex<double>>(sigma);
 
     H0(b_span, s_span);
-    if (algorithm_ == CIAlgorithm::Knowles_Handy) {
-    } else {
-        H1_hz(b_span, s_span, h_hz);
-        H2_hz_same_spin(b_span, s_span);
-    }
+    H1_hz(b_span, s_span, h_hz);
+    H2_hz_same_spin(b_span, s_span);
+}
+
+void RelCISigmaBuilder::sigma_one_electron(np_vector_complex basis, np_vector_complex sigma) const {
+    vector::zero<std::complex<double>>(sigma);
+    auto b_span = vector::as_span<std::complex<double>>(basis);
+    auto s_span = vector::as_span<std::complex<double>>(sigma);
+
+    H0(b_span, s_span);
+    H1_hz(b_span, s_span, h_hz);
+}
+
+void RelCISigmaBuilder::sigma_two_electron(np_vector_complex basis, np_vector_complex sigma) const {
+    vector::zero<std::complex<double>>(sigma);
+    auto b_span = vector::as_span<std::complex<double>>(basis);
+    auto s_span = vector::as_span<std::complex<double>>(sigma);
+
+    H2_hz_same_spin(b_span, s_span);
 }
 
 void RelCISigmaBuilder::H0(std::span<std::complex<double>> basis,
