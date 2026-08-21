@@ -219,7 +219,6 @@ class OrbOptimizer:
         np.ndarray
             Dense orbital Hessian in the nonredundant rotation basis.
         """
-        self._validate_nonrelativistic_orbital_response()
         intermediates = self._build_orbital_response_intermediates()
         hessian = np.empty((self.nrot, self.nrot), dtype=float)
         unit = np.zeros(self.nrot, dtype=float)
@@ -289,15 +288,7 @@ class OrbOptimizer:
     def _mat_to_vec(self, R):
         return R[self.nrr]
 
-    def _validate_nonrelativistic_orbital_response(self):
-        if self.fock_builder.system.two_component or np.iscomplexobj(self.C):
-            raise NotImplementedError(
-                "The orbital--orbital response is currently implemented only "
-                "for nonrelativistic real orbitals."
-            )
-
     def _validate_orbital_response_vector(self, vector):
-        self._validate_nonrelativistic_orbital_response()
         vector = np.asarray(vector)
         if vector.shape != (self.nrot,):
             raise ValueError(
@@ -401,12 +392,7 @@ class OrbOptimizer:
             ``(Fcore_mo, Fact_mo, B_ga)`` with shapes ``(nmo, nmo)``,
             ``(nmo, nmo)``, and ``(naux, nmo, nact)``.
 
-        Raises
-        ------
-        NotImplementedError
-            If the orbitals belong to a two-component or complex calculation.
         """
-        self._validate_nonrelativistic_orbital_response()
         Fcore_ao = self.fock_builder.build_core_fock(self.Ccore, hcore=self.hcore)
         Fact_ao = self.fock_builder.build_active_fock(self.Cact, self.g1)
         Fcore_mo = self._transform_ao_operator(Fcore_ao, self.C)
@@ -446,7 +432,6 @@ class OrbOptimizer:
         :math:`\mathcal A^{\mathrm{oo}}`, :math:`\mathcal A^{\mathrm{oc}}`,
         and :math:`\mathcal A^{\mathrm{co}}`.
         """
-        self._validate_nonrelativistic_orbital_response()
         Fcore_ao = self.fock_builder.build_core_fock(self.Ccore, hcore=self.hcore)
         Fact_ao = self.fock_builder.build_active_fock(self.Cact, self.g1)
         Fcore_mo = self._transform_ao_operator(Fcore_ao, self.C)
@@ -799,7 +784,6 @@ class OrbOptimizer:
             The pair (Fcore_mo, B_ga), with shapes (nmo, nmo) and
             (naux, nmo, nact), respectively.
         """
-        self._validate_nonrelativistic_orbital_response()
         Fcore_ao = self.fock_builder.build_core_fock(self.Ccore, hcore=self.hcore)
         Fcore_mo = self._transform_ao_operator(Fcore_ao, self.C)
         B_ga = self._transform_df_block(self.C, self.Cact)
@@ -829,7 +813,6 @@ class OrbOptimizer:
             ``(Fcore_ao, Fcore_mo, B_ga)`` with shapes ``(nao, nao)``,
             ``(nmo, nmo)``, and ``(naux, nmo, nact)``, respectively.
         """
-        self._validate_nonrelativistic_orbital_response()
         Fcore_ao = self.fock_builder.build_core_fock(self.Ccore, hcore=self.hcore)
         Fcore_mo = self._transform_ao_operator(Fcore_ao, self.C)
         B_ga = self._transform_df_block(self.C, self.Cact)

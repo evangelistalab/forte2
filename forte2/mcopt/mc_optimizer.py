@@ -574,44 +574,6 @@ class MCOptimizerBase(Method):
 
 
 class MCOptimizer(MCOptimizerBase):
-    def _validate_orbital_ci_response_request(self):
-        if not self.executed:
-            raise RuntimeError(
-                "The MCSCF calculation must be run before building response blocks."
-            )
-        if self.system.two_component or np.iscomplexobj(self.orb_opt.C):
-            raise NotImplementedError(
-                "The orbital--CI response is currently implemented only for "
-                "nonrelativistic real wave functions."
-            )
-        if self.final_orbitals != "original":
-            raise NotImplementedError(
-                "The orbital--CI response currently requires "
-                "final_orbitals='original' so that the orbital optimizer and "
-                "final CI vectors use the same active-orbital basis."
-            )
-        if not hasattr(self.ci_solver, "sub_solvers"):
-            raise NotImplementedError(
-                "The orbital--CI response currently requires a CISolver with "
-                "explicit per-state CI vectors."
-            )
-        for sub_solver in self.ci_solver.sub_solvers:
-            required = (
-                "basis_size",
-                "evecs",
-                "csf_C_to_det_C",
-                "ci_sigma_builder",
-                "ci_strings",
-                "spin_adapter",
-                "ndet",
-                "ci_params",
-            )
-            if not all(hasattr(sub_solver, name) for name in required):
-                raise NotImplementedError(
-                    "The orbital--CI response currently requires spin-adapted "
-                    "CISolver sub-solvers."
-                )
-
     def _get_ci_response_layout(self):
         r"""Construct the root-major coefficient layout and its dimension.
 
@@ -665,7 +627,6 @@ class MCOptimizer(MCOptimizerBase):
             (absolute_root, state_index, root_in_state, coefficient_slice).
             Coefficients inside each slice use that sub-solver's CSF ordering.
         """
-        self._validate_orbital_ci_response_request()
         layout, _ = self._get_ci_response_layout()
         return layout
 
@@ -743,7 +704,6 @@ class MCOptimizer(MCOptimizerBase):
         np.ndarray
             Projected root-major vector with shape ``(nci,)``.
         """
-        self._validate_orbital_ci_response_request()
         ci_vector, layout = self._validate_ci_response_vector(ci_vector)
         return self._project_ci_response_vector(ci_vector, layout)
 
@@ -828,7 +788,6 @@ class MCOptimizer(MCOptimizerBase):
         np.ndarray
             Orbital response vector with shape (nrot,) and nrr C-order.
         """
-        self._validate_orbital_ci_response_request()
         ci_vector, layout = self._validate_ci_response_vector(ci_vector)
         responses = self._compute_ci_response_rdms(ci_vector, layout)
         intermediates = self.orb_opt._build_ci_orbital_response_intermediates()
@@ -856,7 +815,6 @@ class MCOptimizer(MCOptimizerBase):
         np.ndarray
             The orbital--CI block with shape (nrot, nci).
         """
-        self._validate_orbital_ci_response_request()
         layout, nci = self._get_ci_response_layout()
         intermediates = self.orb_opt._build_ci_orbital_response_intermediates()
         hessian = np.empty((self.orb_opt.nrot, nci), dtype=float)
@@ -979,7 +937,6 @@ class MCOptimizer(MCOptimizerBase):
         np.ndarray
             Root-major flattened CSF response vector with shape ``(nci,)``.
         """
-        self._validate_orbital_ci_response_request()
         orbital_vector = self.orb_opt._validate_orbital_response_vector(orbital_vector)
         layout, _ = self._get_ci_response_layout()
         intermediates = self.orb_opt._build_orbital_ci_response_intermediates()
@@ -1006,7 +963,6 @@ class MCOptimizer(MCOptimizerBase):
         np.ndarray
             The CI--orbital block with shape ``(nci, nrot)``.
         """
-        self._validate_orbital_ci_response_request()
         layout, nci = self._get_ci_response_layout()
         intermediates = self.orb_opt._build_orbital_ci_response_intermediates()
         hessian = np.empty((nci, self.orb_opt.nrot), dtype=float)
@@ -1081,7 +1037,6 @@ class MCOptimizer(MCOptimizerBase):
         np.ndarray
             Root-major flattened CI response with shape ``(nci,)``.
         """
-        self._validate_orbital_ci_response_request()
         ci_vector, layout = self._validate_ci_response_vector(ci_vector)
         return self._compute_ci_ci_hessian_vector_product(ci_vector, layout)
 
@@ -1106,7 +1061,6 @@ class MCOptimizer(MCOptimizerBase):
         np.ndarray
             Dense raw CI--CI response matrix with shape ``(nci, nci)``.
         """
-        self._validate_orbital_ci_response_request()
         layout, nci = self._get_ci_response_layout()
         hessian = np.empty((nci, nci), dtype=float)
         unit = np.zeros(nci, dtype=float)
@@ -1141,7 +1095,6 @@ class MCOptimizer(MCOptimizerBase):
         np.ndarray
             Combined root-major CI response with shape ``(nci,)``.
         """
-        self._validate_orbital_ci_response_request()
         orbital_vector = self.orb_opt._validate_orbital_response_vector(orbital_vector)
         ci_vector, layout = self._validate_ci_response_vector(ci_vector)
         intermediates = self.orb_opt._build_orbital_ci_response_intermediates()
@@ -1187,7 +1140,6 @@ class MCOptimizer(MCOptimizerBase):
             Real target-state orbital gradient with shape ``(nrot,)`` and the
             orbital optimizer's nonredundant-pair ordering.
         """
-        self._validate_orbital_ci_response_request()
         root = self._validate_response_root(root)
         g1 = self.make_sf_1rdm(root)
         g2 = self.make_sf_2rdm(root)
@@ -1250,7 +1202,6 @@ class MCOptimizer(MCOptimizerBase):
         np.ndarray
             Projected root-major CI ``b`` vector with shape ``(nci,)``.
         """
-        self._validate_orbital_ci_response_request()
         root = self._validate_response_root(root)
         layout, _ = self._get_ci_response_layout()
         raw_b = self._compute_raw_ci_response_b_vector(root, layout)
@@ -1286,7 +1237,6 @@ class MCOptimizer(MCOptimizerBase):
         tuple[np.ndarray, np.ndarray]
             Orbital and gauge-fixed projected CI products.
         """
-        self._validate_orbital_ci_response_request()
         orbital_vector = self.orb_opt._validate_orbital_response_vector(orbital_vector)
         ci_vector, layout = self._validate_ci_response_vector(ci_vector)
         intermediates = self.orb_opt._build_coupled_response_intermediates()
@@ -1487,7 +1437,6 @@ class MCOptimizer(MCOptimizerBase):
         RuntimeError
             If GMRES does not converge.
         """
-        self._validate_orbital_ci_response_request()
         root = self._validate_response_root(root)
         if not np.isscalar(r_tol) or r_tol <= 0.0:
             raise ValueError(f"r_tol must be positive, got {r_tol}.")
@@ -1639,7 +1588,6 @@ class MCOptimizer(MCOptimizerBase):
             Real symmetric ``omega_alpha`` with shape ``(nmo, nmo)`` in the
             current MO basis.
         """
-        self._validate_orbital_ci_response_request()
         root = self._validate_response_root(root)
         supplied_orbital = orbital_response is not None
         supplied_ci = ci_response is not None
@@ -1716,7 +1664,6 @@ class MCOptimizer(MCOptimizerBase):
         np.ndarray
             Combined orbital response with shape (nrot,).
         """
-        self._validate_orbital_ci_response_request()
         orbital_vector = self.orb_opt._validate_orbital_response_vector(orbital_vector)
         ci_vector, layout = self._validate_ci_response_vector(ci_vector)
         orbital_intermediates, density_intermediates, _ = (
