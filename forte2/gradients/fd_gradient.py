@@ -2,6 +2,7 @@
 
 import time
 from dataclasses import dataclass, field
+from typing import Callable
 
 import numpy as np
 from numpy.typing import NDArray
@@ -57,6 +58,10 @@ class FDGradient(Method):
     residual_tol : float, optional, default=1.0e-6
         Warn when the residual net force or net torque exceeds this value, in
         Eh/Bohr.
+    energy_accessor : callable, optional
+        Custom extractor for the energy to differentiate
+        Overrides the default of reading ``method.E`` (indexed by `root` when it reports multiple energies).
+        Use this when the energy to differentiate is not `method.E` itself.
 
     Attributes
     ----------
@@ -77,6 +82,7 @@ class FDGradient(Method):
     root: int | None = None
     project_orbitals: bool = True
     residual_tol: float = 1.0e-6
+    energy_accessor: Callable | None = None
 
     E: float | None = field(default=None, init=False)
     net_force: NDArray | None = field(default=None, init=False)
@@ -95,6 +101,10 @@ class FDGradient(Method):
         if not np.isscalar(self.residual_tol) or self.residual_tol <= 0.0:
             raise ValueError(
                 f"residual_tol must be a positive number, but got {self.residual_tol}."
+            )
+        if self.energy_accessor is not None and not callable(self.energy_accessor):
+            raise ValueError(
+                f"energy_accessor must be callable, but got {self.energy_accessor}."
             )
         self._gradient = None
         self._displaced_energies = []
@@ -134,7 +144,7 @@ class FDGradient(Method):
 
         self.system = self.parent_method.system
         self.mos = self.parent_method.mos
-        self.E = self._scalar_energy(self.parent_method)
+        self.E = self._get_energy(self.parent_method)
         self.executed = True
         return self
 
@@ -204,27 +214,35 @@ class FDGradient(Method):
             # displacement: see the class docstring.
             seed_chain_orbitals(self.parent_method, self._scratch_chain)
         self._scratch_chain.run()
-        energy = self._scalar_energy(self._scratch_chain)
+        energy = self._get_energy(self._scratch_chain)
         self._displaced_energies.append(energy)
         return energy
 
-    def _scalar_energy(self, method):
+    def _get_energy(self, method):
         """Extract the single energy to differentiate from `method`."""
-        energies = np.asarray(method.E).reshape(-1)
-        if self.root is None:
-            if energies.size != 1:
+        if self.energy_accessor is not None:
+            value = self.energy_accessor(method)
+            if not np.isscalar(value):
                 raise ValueError(
-                    f"{type(method).__name__} reports {energies.size} energies; set "
-                    "root to choose which one to differentiate."
+                    f"energy_accessor on {type(method).__name__} returned a "
+                    "non-scalar energy type"
                 )
-            value = energies[0]
         else:
-            if self.root >= energies.size:
-                raise ValueError(
-                    f"root={self.root} is out of range: {type(method).__name__} "
-                    f"reports {energies.size} energies."
-                )
-            value = energies[self.root]
+            energies = np.asarray(method.E).reshape(-1)
+            if self.root is None:
+                if energies.size != 1:
+                    raise ValueError(
+                        f"{type(method).__name__} reports {energies.size} energies; set "
+                        "root to choose which one to differentiate."
+                    )
+                value = energies[0]
+            else:
+                if self.root >= energies.size:
+                    raise ValueError(
+                        f"root={self.root} is out of range: {type(method).__name__} "
+                        f"reports {energies.size} energies."
+                    )
+                value = energies[self.root]
 
         if np.iscomplexobj(value):
             if abs(value.imag) > 1.0e-10:
