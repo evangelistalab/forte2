@@ -156,6 +156,19 @@ class CISigmaBuilder:
 
     def Hamiltonian(self, basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None: ...
 
+    def sigma_one_electron(self, basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None:
+        """
+        Apply the scalar and one-electron part of the Hamiltonian to the wave function
+        """
+
+    def sigma_two_electron(self, basis: Annotated[NDArray[numpy.float64], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> None:
+        """Apply the two-electron part of the Hamiltonian to the wave function"""
+
+    def set_Hamiltonian(self, E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]) -> None:
+        """
+        Swap in a new Hamiltonian with the same number of orbitals, without reallocating scratch buffers
+        """
+
     def make_sparse_state(self, C: Annotated[NDArray[numpy.float64], dict(shape=(None,))], threshold: float = 1e-12) -> forte2.lib.sparse_ops.SparseState:
         """Convert a CI vector to a sparse state"""
 
@@ -321,6 +334,19 @@ class RelCISigmaBuilder:
     def slater_rules(self, dets: DeterminantVector, I: int, J: int) -> complex: ...
 
     def Hamiltonian(self, basis: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> None: ...
+
+    def sigma_one_electron(self, basis: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> None:
+        """
+        Apply the scalar and one-electron part of the Hamiltonian to the wave function
+        """
+
+    def sigma_two_electron(self, basis: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], sigma: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> None:
+        """Apply the two-electron part of the Hamiltonian to the wave function"""
+
+    def set_Hamiltonian(self, E: float, H: Annotated[NDArray[numpy.complex128], dict(shape=(None, None))], V: Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))]) -> None:
+        """
+        Swap in a new Hamiltonian with the same number of orbitals, without reallocating scratch buffers
+        """
 
     def so_1rdm(self, C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None))]:
         """Compute the spin-orbital one-electron reduced density matrix"""

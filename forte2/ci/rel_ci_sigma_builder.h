@@ -28,8 +28,10 @@ class RelCISigmaBuilder {
     void set_memory(int mb);
 
     /// @brief Set the CI algorithm to use for building the Hamiltonian
-    /// @param algorithm The CI algorithm to use (default is "knowles-handy")
-    /// Supported algorithms: "kh", "hz", "knowles-handy", "harrison-zarrabian"
+    /// @param algorithm The CI algorithm to use (default and only supported value is
+    ///        "harrison-zarrabian")
+    /// @note Knowles-Handy is unported from the non-relativistic CISigmaBuilder; "kh"/
+    /// "knowles-handy" raises here rather than being accepted and silently doing nothing.
     void set_algorithm(const std::string& algorithm);
 
     /// @brief Get the name of the current sigma build algorithm
@@ -62,6 +64,18 @@ class RelCISigmaBuilder {
     /// @param basis The basis vector
     /// @param sigma The resulting sigma vector |sigma> = H |basis>
     void Hamiltonian(np_vector_complex basis, np_vector_complex sigma) const;
+
+    /// @brief Apply the scalar and one-electron part of the Hamiltonian to the wave function
+    /// @param basis The basis vector
+    /// @param sigma The resulting sigma vector |sigma> = (E + sum_pq H_pq E_pq) |basis>
+    /// @note Hamiltonian(basis, sigma) == sigma_one_electron(basis, s1) +
+    /// sigma_two_electron(basis, s2) for s1 + s2. H is not required to be Hermitian.
+    void sigma_one_electron(np_vector_complex basis, np_vector_complex sigma) const;
+
+    /// @brief Apply the two-electron part of the Hamiltonian to the wave function
+    /// @param basis The basis vector
+    /// @param sigma The resulting sigma vector, the two-electron part of H |basis>
+    void sigma_two_electron(np_vector_complex basis, np_vector_complex sigma) const;
 
     /// @brief Compute the spin-dependent one-electron reduced density matrix
     /// @param C_left The left-hand side coefficients
@@ -116,7 +130,9 @@ class RelCISigmaBuilder {
     // == Class Private Variables ==
 
     /// @brief The CI algorithm to use for building the Hamiltonian
-    CIAlgorithm algorithm_ = CIAlgorithm::Knowles_Handy; // Default to Knowles-Handy algorithm
+    // Default to Harrison-Zarrabian: Knowles-Handy is unimplemented for this class (see
+    // set_algorithm).
+    CIAlgorithm algorithm_ = CIAlgorithm::Harrison_Zarrabian;
     /// @brief The CIStrings object containing the determinant classes and their properties
     const CIStrings& lists_;
     /// @brief The scalar energy
@@ -173,21 +189,6 @@ class RelCISigmaBuilder {
     /// @note Two-component CI acts only on alpha spinors (nb == 0); see H1_hz.
     void H2_hz_same_spin(std::span<std::complex<double>> basis,
                          std::span<std::complex<double>> sigma) const;
-
-    // -- Knowles-Handy Algorithm Functions/Data --
-
-    // Modified one-electron integrals used in the Knowles-Handy algorithm
-    mutable std::vector<std::complex<double>> h_kh;
-    // Modified two-electron integrals used in the Knowles-Handy algorithm
-    // mutable std::vector<std::complex<double>> v_ijkl_hk;
-
-    /// @brief Builds the one-electron contribution to the sigma vector using the Knowles-Handy
-    /// algorithm.
-    void H1_kh(std::span<std::complex<double>> basis, std::span<std::complex<double>> sigma) const;
-
-    /// @brief Builds the two-electron contribution to the sigma vector using the Knowles-Handy
-    /// algorithm.
-    void H2_kh(std::span<std::complex<double>> basis, std::span<std::complex<double>> sigma) const;
 
     std::tuple<std::span<std::complex<double>>, std::span<std::complex<double>>, size_t>
     get_Kblock_spans(size_t nrows, size_t ncols) const;
