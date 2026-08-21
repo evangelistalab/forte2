@@ -33,7 +33,7 @@ using RelDetRootMap = ankerl::unordered_dense::map<Determinant, size_t, Determin
 /// integrals. Because every active electron occupies the "alpha" string with an empty
 /// beta string (`nb == 0`), only the single-alpha and double-alpha-alpha excitation
 /// classes ever contribute, so the beta / alpha-beta / spin machinery of the real helper
-/// is absent here. The reduced density matrices (`compute_a_1rdm` / `compute_aa_2rdm`)
+/// is absent here. The reduced density matrices (`compute_so_1rdm` / `compute_so_2rdm`)
 /// likewise only need the alpha string; they conjugate the bra so the diagonal RDMs are
 /// Hermitian and the two-root case yields the transition RDM.
 class RelSelectedCIHelper {
@@ -122,21 +122,21 @@ class RelSelectedCIHelper {
     /// @brief Apply the Hamiltonian to a given basis and sigma vectors (complex)
     void Hamiltonian(np_vector_complex basis, np_vector_complex sigma) const;
 
-    /// @brief Compute the (complex) alpha 1-RDM between two roots of the stored CI vectors.
+    /// @brief Compute the (complex) spin-orbital 1-RDM between two roots of the stored CI vectors.
     /// @param left_root The root supplying the (conjugated) bra coefficients
     /// @param right_root The root supplying the ket coefficients
     /// @return gamma1[p][q] = <left_root| a^+_p a_q |right_root> as a complex (norb, norb) matrix.
     ///         With left_root == right_root this is the ordinary 1-RDM; with left_root !=
     ///         right_root it is the transition 1-RDM. Only the alpha string contributes (nb == 0).
-    np_matrix_complex compute_a_1rdm(size_t left_root, size_t right_root) const;
+    np_matrix_complex compute_so_1rdm(size_t left_root, size_t right_root) const;
 
-    /// @brief Compute the (complex) alpha-alpha 2-RDM between two roots of the stored CI vectors.
+    /// @brief Compute the (complex) spin-orbital 2-RDM between two roots of the stored CI vectors.
     /// @param left_root The root supplying the (conjugated) bra coefficients
     /// @param right_root The root supplying the ket coefficients
     /// @return gamma2[p][q][r][s] = <left_root| a^+_p a^+_q a_s a_r |right_root> as a complex
     ///         (norb, norb, norb, norb) tensor (full, antisymmetric in p<->q and r<->s). The
-    ///         diagonal / transition distinction is the same as for compute_a_1rdm.
-    np_tensor4_complex compute_aa_2rdm(size_t left_root, size_t right_root) const;
+    ///         diagonal / transition distinction is the same as for compute_so_1rdm.
+    np_tensor4_complex compute_so_2rdm(size_t left_root, size_t right_root) const;
 
   private:
     // == Class Private Methods ==

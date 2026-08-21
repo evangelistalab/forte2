@@ -214,13 +214,13 @@ void export_rel_ci_sigma_builder_api(nb::module_& sub_m) {
         .def("form_Hdiag", &RelCISigmaBuilder::form_Hdiag, "dets"_a)
         .def("slater_rules", &RelCISigmaBuilder::slater_rules, "dets"_a, "I"_a, "J"_a)
         .def("Hamiltonian", &RelCISigmaBuilder::Hamiltonian, "basis"_a, "sigma"_a)
-        .def("so_1rdm", &RelCISigmaBuilder::compute_1rdm, "C_left"_a, "C_right"_a,
+        .def("so_1rdm", &RelCISigmaBuilder::compute_so_1rdm, "C_left"_a, "C_right"_a,
              "Compute the spin-orbital one-electron reduced density matrix")
-        .def("so_2rdm", &RelCISigmaBuilder::compute_2rdm, "C_left"_a, "C_right"_a,
+        .def("so_2rdm", &RelCISigmaBuilder::compute_so_2rdm, "C_left"_a, "C_right"_a,
              "Compute the spin-orbital two-electron reduced density matrix")
         .def("so_2cumulant", &RelCISigmaBuilder::compute_2cumulant, "C_left"_a, "C_right"_a,
              "Compute the spin-orbital two-electron cumulant")
-        .def("so_3rdm", &RelCISigmaBuilder::compute_3rdm, "C_left"_a, "C_right"_a,
+        .def("so_3rdm", &RelCISigmaBuilder::compute_so_3rdm, "C_left"_a, "C_right"_a,
              "Compute the spin-orbital three-electron reduced density matrix")
         .def("so_3cumulant", &RelCISigmaBuilder::compute_3cumulant, "C_left"_a, "C_right"_a,
              "Compute the spin-orbital three-electron cumulant")
@@ -345,10 +345,10 @@ void export_rel_sci_helper_api(nb::module_& sub_m) {
              "pt2_threshold"_a, "Perform HBCI selection with the reference implementation")
         .def("select_hbci", &RelSelectedCIHelper::select_hbci, "var_threshold"_a, "pt2_threshold"_a,
              "Perform HBCI selection with the batched implementation")
-        .def("a_1rdm", &RelSelectedCIHelper::compute_a_1rdm, "left_root"_a, "right_root"_a,
-             "Compute the complex alpha 1-RDM (or transition 1-RDM) between two roots")
-        .def("aa_2rdm", &RelSelectedCIHelper::compute_aa_2rdm, "left_root"_a, "right_root"_a,
-             "Compute the complex alpha-alpha 2-RDM (or transition 2-RDM) between two roots")
+        .def("so_1rdm", &RelSelectedCIHelper::compute_so_1rdm, "left_root"_a, "right_root"_a,
+             "Compute the complex spin-orbital 1-RDM (or transition 1-RDM) between two roots")
+        .def("so_2rdm", &RelSelectedCIHelper::compute_so_2rdm, "left_root"_a, "right_root"_a,
+             "Compute the complex spin-orbital 2-RDM (or transition 2-RDM) between two roots")
         .def("dets", &RelSelectedCIHelper::variational_dets,
              "Return the determinants in the variational space")
         .def("ndets", &RelSelectedCIHelper::num_dets_var,

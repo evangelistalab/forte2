@@ -88,7 +88,7 @@ class CIStrings:
         """
 
     @property
-    def alpha_address(self) -> "std::__1::shared_ptr<forte2::StringAddress>": ...
+    def alpha_address(self) -> "std::shared_ptr<forte2::StringAddress>": ...
 
     @property
     def na(self) -> int: ...
@@ -520,14 +520,14 @@ class RelSelectedCIHelper:
     def select_hbci(self, var_threshold: float, pt2_threshold: float) -> None:
         """Perform HBCI selection with the batched implementation"""
 
-    def a_1rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None))]:
+    def so_1rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None))]:
         """
-        Compute the complex alpha 1-RDM (or transition 1-RDM) between two roots
+        Compute the complex spin-orbital 1-RDM (or transition 1-RDM) between two roots
         """
 
-    def aa_2rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))]:
+    def so_2rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))]:
         """
-        Compute the complex alpha-alpha 2-RDM (or transition 2-RDM) between two roots
+        Compute the complex spin-orbital 2-RDM (or transition 2-RDM) between two roots
         """
 
     def dets(self) -> DeterminantVector:

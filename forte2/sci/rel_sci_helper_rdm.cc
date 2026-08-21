@@ -21,12 +21,13 @@ namespace forte2 {
 // Unlike the sigma build, the RDMs DO conjugate the bra: the coefficient of the left_root state is
 // wrapped in std::conj so that the diagonal density matrix is Hermitian and the off-diagonal
 // (transition) case, left_root != right_root, is the proper <L| ... |R> element. This matches
-// RelCISigmaBuilder::compute_1rdm / compute_2rdm and the complex SparseState reference helpers
+// RelCISigmaBuilder::compute_so_1rdm / compute_so_2rdm and the complex SparseState reference
+// helpers
 // compute_a_1rdm_complex / compute_aa_2rdm_complex (see sparse/sparse_rdms.h):
 //     gamma1[p][q]       = <L| a^+_p a_q |R>
 //     gamma2[p][q][r][s] = <L| a^+_p a^+_q a_s a_r |R>.
 
-np_matrix_complex RelSelectedCIHelper::compute_a_1rdm(size_t left_root, size_t right_root) const {
+np_matrix_complex RelSelectedCIHelper::compute_so_1rdm(size_t left_root, size_t right_root) const {
     auto rdm = make_zeros<nb::numpy, std::complex<double>, 2>({norb_, norb_});
 
     // No 1-RDM if there are no electrons or no orbitals
@@ -55,13 +56,13 @@ np_matrix_complex RelSelectedCIHelper::compute_a_1rdm(size_t left_root, size_t r
     return rdm;
 }
 
-np_tensor4_complex RelSelectedCIHelper::compute_aa_2rdm(size_t left_root, size_t right_root) const {
+np_tensor4_complex RelSelectedCIHelper::compute_so_2rdm(size_t left_root, size_t right_root) const {
     // No 2-RDM with fewer than two electrons or two orbitals
     if (norb_ < 2 || na_ < 2)
         return make_zeros<nb::numpy, std::complex<double>, 4>({norb_, norb_, norb_, norb_});
 
     // Accumulate in the packed (p > q, r > s) representation, then expand to the full
-    // antisymmetric tensor (matching RelCISigmaBuilder::compute_2rdm).
+    // antisymmetric tensor (matching RelCISigmaBuilder::compute_so_2rdm).
     const size_t npairs = (norb_ * (norb_ - 1)) / 2;
     auto rdm = make_zeros<nb::numpy, std::complex<double>, 2>({npairs, npairs});
     std::complex<double>* rdm_data = rdm.data();

@@ -231,20 +231,20 @@ class _RelSelectedCISingleStateSolver(_SelectedCISingleStateSolver):
         """
         if right_root is None:
             right_root = left_root
-        return self.sci_helper.a_1rdm(left_root, right_root)
+        return self.sci_helper.so_1rdm(left_root, right_root)
 
     def make_so_2rdm(self, left_root: int, right_root: int | None = None):
         """
         Make the spin-orbital (spinor) two-particle RDM for two CI roots.
 
         Returns the complex 2-RDM gamma[p][q][r][s] = <L| a^+_p a^+_q a_s a_r |R> over
-        active spinors (full antisymmetric tensor), matching RelCISigmaBuilder.compute_2rdm.
+        active spinors (full antisymmetric tensor), matching RelCISigmaBuilder.compute_so_2rdm.
         With left_root != right_root this is the transition 2-RDM. Computed by the C++
         ``RelSelectedCIHelper``; see ``_make_so_2rdm_ref`` for the SparseState reference.
         """
         if right_root is None:
             right_root = left_root
-        return self.sci_helper.aa_2rdm(left_root, right_root)
+        return self.sci_helper.so_2rdm(left_root, right_root)
 
     # Reference SparseState-based implementations kept for validation. These build a dense
     # SparseState per root and contract via the tested complex sparse RDM helpers. The

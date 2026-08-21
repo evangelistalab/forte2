@@ -316,7 +316,7 @@ auto compute_bbbb_4rdm(const SparseState& state_left, const SparseState& state_r
 // needed. Unlike the real versions above (which drop the imaginary part via to_double and do
 // NOT conjugate the bra), these overloads accumulate the full complex value and conjugate the
 // left (bra) coefficient so the resulting RDMs are Hermitian. This matches the convention of
-// RelCISigmaBuilder::compute_1rdm / compute_2rdm (see rel_ci_sigma_builder_rdm.cc), so that
+// RelCISigmaBuilder::compute_so_1rdm / compute_so_2rdm (see rel_ci_sigma_builder_rdm.cc), so that
 // gamma1[p,q] = <L| a^+_p a_q |R> and gamma2[p,q,r,s] = <L| a^+_p a^+_q a_s a_r |R>.
 
 /// @brief Compute the complex alpha 1-RDM between two SparseStates
