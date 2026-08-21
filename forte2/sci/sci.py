@@ -891,30 +891,6 @@ class _SelectedCISingleStateSolver:
         if self.slater_rules is not None:
             self.slater_rules = self._make_slater_rules()
 
-    def set_maxiter(self, maxiter):
-        """
-        Set the maximum number of iterations for the CI solver.
-
-        Parameters
-        ----------
-        maxiter : int
-            The maximum number of iterations to set.
-        """
-        self.maxiter = maxiter
-        if self.eigensolver is not None:
-            self.eigensolver.maxiter = maxiter
-
-    def get_maxiter(self):
-        """
-        Get the maximum number of iterations for the CI solver.
-
-        Returns
-        -------
-        int
-            The maximum number of iterations.
-        """
-        return self.maxiter
-
     def get_top_determinants(self, n=5):
         """
         Get the top `n` determinants for each root based on their coefficients in the CI vector.
@@ -1004,38 +980,46 @@ class SelectedCISolver(CIBase):
     _ss_solver_cls: ClassVar[type] = _SelectedCISingleStateSolver
 
     def _validate_params(self):
-        """Broadcast/validate sci_params and davidson_liu_params to one per state."""
+        """
+        Broadcast sci_params and davidson_liu_params to one (fresh copy) per
+        state, without mutating self.sci_params/self.davidson_liu_params: those
+        stay exactly what the user configured, so every _startup() call (e.g.
+        after reset()) rebroadcasts from that untouched source instead of
+        reusing per-state copies already mutated by a previous run.
+        """
+        sci_params = self.sci_params
+        davidson_liu_params = self.davidson_liu_params
+
         if self.sa_info.ncis > 1:
-            if not isinstance(self.sci_params, list):
+            if not isinstance(sci_params, list):
                 logger.log_warning(
                     "Multiple states specified but only one set of SelectedCIParams "
                     "provided. Using the same parameters for all states."
                 )
-                self.sci_params = [
-                    self.sci_params.copy() for _ in range(self.sa_info.ncis)
-                ]
-            if len(self.sci_params) != self.sa_info.ncis:
+                sci_params = [sci_params] * self.sa_info.ncis
+            if len(sci_params) != self.sa_info.ncis:
                 raise ValueError(
-                    f"Number of SelectedCIParams provided ({len(self.sci_params)}) does "
+                    f"Number of SelectedCIParams provided ({len(sci_params)}) does "
                     f"not match the number of states ({self.sa_info.ncis})."
                 )
-            if not isinstance(self.davidson_liu_params, list):
+            if not isinstance(davidson_liu_params, list):
                 logger.log_warning(
                     "Multiple states specified but only one set of DavidsonLiuParams "
                     "provided. Using the same parameters for all states."
                 )
-                self.davidson_liu_params = [
-                    self.davidson_liu_params.copy() for _ in range(self.sa_info.ncis)
-                ]
-            if len(self.davidson_liu_params) != self.sa_info.ncis:
+                davidson_liu_params = [davidson_liu_params] * self.sa_info.ncis
+            if len(davidson_liu_params) != self.sa_info.ncis:
                 raise ValueError(
                     f"Number of DavidsonLiuParams provided "
-                    f"({len(self.davidson_liu_params)}) does not match the number of "
+                    f"({len(davidson_liu_params)}) does not match the number of "
                     f"states ({self.sa_info.ncis})."
                 )
         else:
-            self.sci_params = [self.sci_params.copy()]
-            self.davidson_liu_params = [self.davidson_liu_params.copy()]
+            sci_params = [sci_params]
+            davidson_liu_params = [davidson_liu_params]
+
+        self._runtime_sci_params = [p.copy() for p in sci_params]
+        self._runtime_davidson_liu_params = [p.copy() for p in davidson_liu_params]
 
     def _startup(self):
         self._validate_params()
@@ -1043,8 +1027,8 @@ class SelectedCISolver(CIBase):
 
     def _extra_worker_kwargs(self, index, state):
         return {
-            "sci_params": self.sci_params[index],
-            "davidson_liu_params": self.davidson_liu_params[index],
+            "sci_params": self._runtime_sci_params[index],
+            "davidson_liu_params": self._runtime_davidson_liu_params[index],
         }
 
     def _collect_root_results(self):
@@ -1155,7 +1139,7 @@ class SelectedCI(SelectedCISolver):
 
     def run(self):
         self._solve()
-        self._rotate_final_orbitals()
+        self._rotate_final_orbitals(self.final_orbitals)
         self._post_process()
         return self
 

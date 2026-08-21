@@ -39,6 +39,12 @@ class CIBase(ActiveSpaceSolver):
         self._register_parent_method(parent_method)
         return self
 
+    def reset(self):
+        """Invalidate this solver, forcing _solve() to rebuild sub_solvers on
+        the next run() instead of resolving in the (stale) current basis."""
+        self.first_run = True
+        return super().reset()
+
     @property
     def ci_solver(self):
         """
@@ -107,7 +113,7 @@ class CIBase(ActiveSpaceSolver):
         rdm1 = np.zeros((self.norb,) * 2, dtype=self.dtype)
         for i, ci_solver in enumerate(self.sub_solvers):
             for j in range(ci_solver.nroot):
-                rdm1 += ci_solver.make_1rdm(j) * self.weights[i][j]
+                rdm1 += ci_solver.make_1rdm(j) * self.sa_info.weights[i][j]
         return rdm1
 
     def make_average_2rdm(self):
@@ -122,7 +128,7 @@ class CIBase(ActiveSpaceSolver):
         rdm2 = np.zeros((self.norb,) * 4, dtype=self.dtype)
         for i, ci_solver in enumerate(self.sub_solvers):
             for j in range(ci_solver.nroot):
-                rdm2 += ci_solver.make_2rdm(j) * self.weights[i][j]
+                rdm2 += ci_solver.make_2rdm(j) * self.sa_info.weights[i][j]
 
         return rdm2
 
@@ -138,7 +144,7 @@ class CIBase(ActiveSpaceSolver):
         rdm3 = np.zeros((self.norb,) * 6, dtype=self.dtype)
         for i, ci_solver in enumerate(self.sub_solvers):
             for j in range(ci_solver.nroot):
-                rdm3 += ci_solver.make_3rdm(j) * self.weights[i][j]
+                rdm3 += ci_solver.make_3rdm(j) * self.sa_info.weights[i][j]
 
         return rdm3
 
@@ -261,17 +267,22 @@ class CIBase(ActiveSpaceSolver):
         """Solve in the current basis. Single-shot solvers extend this."""
         return self._solve()
 
-    def _rotate_final_orbitals(self):
+    def _rotate_final_orbitals(self, final_orbitals):
         """
         Apply the requested ``final_orbitals`` transformation and re-solve.
         No-op unless "semicanonical" or "natural" is requested.
+
+        Parameters
+        ----------
+        final_orbitals : str
+            Type of final_orbitals. Validated by caller.
         """
         from forte2.orbitals import (
             check_final_orbital_energy_invariance,
             make_final_orbitals,
         )
 
-        if self.final_orbitals not in ("semicanonical", "natural"):
+        if final_orbitals not in ("semicanonical", "natural"):
             return
 
         irrep_indices = np.asarray(self.mos.irrep_indices[0], dtype=int)[
@@ -279,7 +290,7 @@ class CIBase(ActiveSpaceSolver):
         ]
         C_contig = self.mos.C[0][:, self.mo_space.orig_to_contig].copy()
         C_final = make_final_orbitals(
-            self.final_orbitals,
+            final_orbitals,
             system=self.system,
             mo_space=self.mo_space,
             irrep_indices=irrep_indices,
@@ -325,19 +336,6 @@ class CIBase(ActiveSpaceSolver):
         """
         for ci_solver in self.sub_solvers:
             ci_solver.set_ints(scalar, oei, tei)
-
-    def set_maxiter(self, maxiter):
-        """
-        Set the maximum number of iterations for every sub-solver.
-
-        Parameters
-        ----------
-        maxiter : int
-            The maximum number of iterations to set.
-        """
-        self.maxiter = maxiter
-        for ci_solver in self.sub_solvers:
-            ci_solver.set_maxiter(maxiter)
 
     def reset_eigensolver(self):
         """

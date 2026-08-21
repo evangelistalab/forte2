@@ -9,6 +9,7 @@ import pytest
 from forte2 import System, RHF, X2CParams
 from forte2.lib import ints
 from forte2.integrals import LIBCINT_AVAILABLE
+from forte2.system import coords_to_atoms, coords_to_xyz
 
 INTEGRALS_TEST_DIR = Path(__file__).parent.parent / "integrals"
 
@@ -381,3 +382,83 @@ def test_backend_option_save_load_roundtrip(tmp_path):
 
     loaded = System.load(filename)
     assert loaded.integral_backend == "libint2"
+
+
+### begin test setup for with_geometry
+_H2O_CHARGES = [8, 1, 1]
+_H2O_COORDINATES = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.8], [1.6, 0.0, 0.0]])
+
+
+def _h2o(coordinates=None, **kwargs):
+    kwargs.setdefault("basis_set", "sto-3g")
+    kwargs.setdefault("auxiliary_basis_set", "def2-universal-JKFIT")
+    kwargs.setdefault("unit", "bohr")
+    if coordinates is None:
+        coordinates = _H2O_COORDINATES
+    return System(xyz=coords_to_xyz(_H2O_CHARGES, coordinates), **kwargs)
+
+
+def _displaced(system, atom=1, cart=2, step=1.0e-3):
+    coordinates = system.atomic_positions.copy()
+    coordinates[atom, cart] += step
+    return coordinates
+
+
+### end test setup for with_geometry
+
+
+def test_coords_to_xyz_round_trips_through_parse():
+    charges = [8, 1, 1]
+    coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.8], [1.6, 0.0, 0.0]])
+    system = System(
+        xyz=coords_to_xyz(charges, coordinates),
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+    )
+    assert np.allclose(system.atomic_positions, coordinates)
+    assert np.array_equal(system.atomic_charges, charges)
+
+
+def test_coords_to_atoms_converts_angstrom_and_matches_parse():
+    charges = [1, 1]
+    coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 0.74]])
+
+    atoms = coords_to_atoms(charges, coordinates, unit="angstrom")
+    reference = System(
+        xyz=coords_to_xyz(charges, coordinates),
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="angstrom",
+    ).atoms
+
+    assert [atom[0] for atom in atoms] == [atom[0] for atom in reference]
+    assert np.allclose(
+        [atom[1] for atom in atoms], [atom[1] for atom in reference], atol=1.0e-14
+    )
+
+
+def test_with_geometry():
+    system = _h2o()
+    coordinates = _displaced(system)
+
+    moved = system.with_geometry(coordinates)
+
+    assert np.array_equal(system.atomic_positions, _H2O_COORDINATES)
+    assert np.array_equal(moved.atomic_positions, coordinates)
+    assert np.array_equal(moved.atomic_charges, system.atomic_charges)
+
+
+def test_with_geometry_is_chainable():
+    system = _h2o()
+    step = np.zeros_like(system.atomic_positions)
+    step[2, 0] = 0.01
+
+    once = system.with_geometry(system.atomic_positions + step)
+    twice = once.with_geometry(once.atomic_positions + step)
+    direct = system.with_geometry(system.atomic_positions + 2 * step)
+
+    assert np.allclose(twice.atomic_positions, direct.atomic_positions, atol=1.0e-14)
+    assert twice.nuclear_repulsion == pytest.approx(
+        direct.nuclear_repulsion, abs=1.0e-14
+    )

@@ -50,7 +50,7 @@ class LoggerConfig:
         else:
             raise ValueError(f"Invalid log level: {level}")
 
-        cls.verbosity_level = level
+        cls._verbosity_level = level
 
 
 # Global convenience functions

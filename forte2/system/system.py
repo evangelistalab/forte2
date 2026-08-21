@@ -1,3 +1,4 @@
+import copy
 from dataclasses import dataclass, field, fields, asdict
 from typing import Literal, get_args
 import numpy as np
@@ -18,7 +19,12 @@ from forte2.x2c import X2CHelper
 from forte2.base_classes.params import X2CParams
 from forte2.jkbuilder import FockBuilder, FockBuilderOTF
 from .build_basis import build_basis, build_basis_from_dict
-from .geom_utils import GeometryHelper, parse_geometry
+from .geom_utils import (
+    GeometryHelper,
+    parse_geometry,
+    coords_to_atoms,
+    coords_to_xyz,
+)
 
 
 @dataclass
@@ -179,8 +185,8 @@ class System:
         """SNSO scaling from :attr:`x2c`, or None when not requested."""
         return self.x2c.snso_type if self.x2c is not None else None
 
-    def _common_init(self, skip_basis_init=False):
-        self._init_geometry()
+    def _common_init(self, skip_basis_init=False, atoms=None):
+        self._init_geometry(atoms=atoms)
         if not skip_basis_init:
             self._init_basis()
         self._init_gaussian_charges()
@@ -192,6 +198,51 @@ class System:
         self.nmo = int(info["n_kept"])
         self.fock_builder = self._init_fock_builder()
         # The B tensors here are lazily evaluated, so no overhead if not used
+
+    def with_geometry(self, coordinates, unit="bohr"):
+        """
+        Return a copy of this system with the atoms moved to new positions.
+        The original System object is not modified.
+
+        Parameters
+        ----------
+        coordinates : array_like
+            New Cartesian coordinates, shape ``(natoms, 3)``. The atom ordering
+            must match :attr:`atomic_charges`.
+        unit : str, optional, default="bohr"
+            The unit of `coordinates`, either "bohr" or "angstrom".
+
+        Returns
+        -------
+        System
+            A new system at the requested geometry.
+
+        Raises
+        ------
+        NotImplementedError
+            If ``symmetry=True``. Symmetry detection recenters the molecule on
+            its center of mass and reorients it along its principal axes, so the
+            returned system would not sit at the requested coordinates.
+        ValueError
+            If `coordinates` does not have shape ``(natoms, 3)``, or if `unit`
+            is not "bohr" or "angstrom".
+        """
+        if self.symmetry:
+            raise NotImplementedError(
+                "with_geometry requires symmetry=False: symmetry detection reorients "
+                "the molecule, so the new system would not be at the requested "
+                "coordinates."
+            )
+
+        atoms = coords_to_atoms(self.atomic_charges, coordinates, unit=unit)
+
+        # shallow copy of attributes only, the heavy attributes are
+        # rebuilt with _common_init
+        new = copy.copy(self)
+        new.xyz = coords_to_xyz(self.atomic_charges, [atom[1] for atom in atoms])
+        new.unit = "bohr"
+        new._common_init(atoms=atoms)
+        return new
 
     def save(self, filename):
         """
@@ -257,8 +308,8 @@ class System:
         system._common_init(skip_basis_init=True)
         return system
 
-    def _init_geometry(self):
-        self.atoms = parse_geometry(self.xyz, self.unit)
+    def _init_geometry(self, atoms=None):
+        self.atoms = parse_geometry(self.xyz, self.unit) if atoms is None else atoms
         self.geom_helper = GeometryHelper(
             self.atoms, symmetry=self.symmetry, tol=self.symmetry_tol
         )

@@ -11,13 +11,7 @@ from forte2.base_classes import (
     RelCIBase,
     Method,
 )
-from forte2.orbitals import (
-    FinalOrbitals,
-    check_final_orbital_energy_invariance,
-    make_final_orbitals,
-    validate_final_orbitals,
-)
-from forte2.jkbuilder import RestrictedMOIntegrals, SpinorbitalIntegrals
+from forte2.orbitals import FinalOrbitals, validate_final_orbitals
 from forte2.helpers import logger, LBFGS
 from forte2.system.basis_utils import BasisInfo
 from forte2.system import ModelSystem
@@ -92,7 +86,9 @@ class MCOptimizerBase(Method):
     # Same sanity-check tolerance CIBase uses for its own final-orbital invariance
     # check; not a dataclass field of MCOptimizerBase's own, so it stays in sync with
     # ActiveSpaceSolver's single source of truth rather than duplicating the literal.
-    _final_orbital_energy_tol: ClassVar[float] = ActiveSpaceSolver._final_orbital_energy_tol
+    _final_orbital_energy_tol: ClassVar[float] = (
+        ActiveSpaceSolver._final_orbital_energy_tol
+    )
 
     ### L-BFGS solver (microiteration) parameters
     micro_maxiter: int = 6
@@ -111,7 +107,7 @@ class MCOptimizerBase(Method):
             raise ValueError("ci_solver must be an instance of CIBase or RelCIBase.")
 
         validate_final_orbitals(self.final_orbitals)
-        
+
         self.requires = {"system", "mos"}
         self.provides = {"system", "mos", "mo_space"}
 
@@ -125,6 +121,11 @@ class MCOptimizerBase(Method):
         else:
             self.ci_solver_verbosity = current_verbosity + 1
         return self
+
+    def reset(self):
+        """Invalidate this optimizer and its ci_solver before a new run()."""
+        self.ci_solver.reset()
+        return super().reset()
 
     def _startup(self):
         if not self.parent_method.executed:
@@ -243,8 +244,6 @@ class MCOptimizerBase(Method):
 
         self.g1_act = self.make_average_1rdm()
         g2_act = self.make_average_2rdm()
-        # ci_maxiter_save = self.ci_solver.get_maxiter()
-        # self.ci_solver.set_maxiter(self.ci_maxiter)
 
         # Prepare the orbital optimizer
         self.orb_opt.set_rdms(self.g1_act, g2_act)
@@ -318,7 +317,6 @@ class MCOptimizerBase(Method):
                     logger.log_warning(
                         f"Orbital optimization did not converge in {self.maxiter} iterations."
                     )
-        # self.ci_solver.set_maxiter(ci_maxiter_save)
         self.ci_solver.set_ints(
             self.orb_opt.Ecore + self.system.nuclear_repulsion,
             self.orb_opt.Fcore[self.actv, self.actv],
@@ -355,7 +353,7 @@ class MCOptimizerBase(Method):
             logger.log_warning(
                 f"CI solver did not converge for all roots: {convergence_status}"
             )
-            logger.log_warning("Consider increasing ci_maxiter.")
+            logger.log_warning("Consider increasing davidson_liu_params.maxiter.")
 
         self.executed = True
         return self
@@ -382,33 +380,12 @@ class MCOptimizerBase(Method):
             )
 
     def _rotate_final_orbitals(self) -> None:
-        if self.final_orbitals not in ["semicanonical", "natural"]:
-            return  # no final orbital transformation requested
+        # point ci_solver's mos to self.mos
+        self.ci_solver.mos = self.mos
+        self.ci_solver._rotate_final_orbitals(self.final_orbitals)
 
-        C_contig = self.mos.C[0][:, self.mo_space.orig_to_contig].copy()
-        g1_act = self.make_average_1rdm()
-
-        # get the final orbitals in contiguous ordering
-        C_final = self._make_final_orbitals_contig(g1_act, C_contig)
-
-        # undo contiguous ordering
-        self.mos.C[0] = C_final[:, self.mo_space.contig_to_orig].copy()
-
-        # rerun the CI solver in the final orbital basis to get the final energies
-        new_E_ci, new_E_avg = self._rerun_ci_in_current_basis()
-
-        check_final_orbital_energy_invariance(
-            hard_fail=self.ci_solver.orbital_rotation_invariant,
-            tol=self._final_orbital_energy_tol,
-            old_E=self.E_ci,
-            new_E=new_E_ci,
-            old_E_avg=self.E_avg,
-            new_E_avg=new_E_avg,
-            hard_fail_hint="Consider increasing ci_maxiter.",
-        )
-        # update energies
-        self.E_ci = new_E_ci
-        self.E_avg = new_E_avg
+        self.E_ci = np.array(self.ci_solver.E)
+        self.E_avg = self.ci_solver.E_avg
         self.E = self.E_avg
 
     def _final_orbital_irrep_indices(self) -> NDArray:
@@ -417,43 +394,6 @@ class MCOptimizerBase(Method):
         return np.asarray(self.mos.irrep_indices[0], dtype=int)[
             self.mo_space.orig_to_contig
         ]
-
-    def _make_final_orbitals_contig(
-        self, g1_act: NDArray, C_contig: NDArray
-    ) -> NDArray:
-        """Make the final orbitals and return them in contiguous ordering."""
-
-        return make_final_orbitals(
-            self.final_orbitals,
-            system=self.system,
-            mo_space=self.mo_space,
-            irrep_indices=self._final_orbital_irrep_indices(),
-            C_contig=C_contig,
-            g1_act=g1_act,
-        )
-
-    def _rerun_ci_in_current_basis(self) -> tuple[NDArray, float]:
-        """Rerun the CI solver in the current orbital basis and return the new CI eigenvalues and average energy."""
-        if self.system.two_component:
-            ints = SpinorbitalIntegrals(
-                system=self.system,
-                C=self.mos.C[0],
-                spinorbitals=self.mo_space.active_indices,
-                core_spinorbitals=self.mo_space.docc_indices,
-            )
-        else:
-            ints = RestrictedMOIntegrals(
-                system=self.system,
-                C=self.mos.C[0],
-                orbitals=self.mo_space.active_indices,
-                core_orbitals=self.mo_space.docc_indices,
-            )
-        self.ci_solver.set_ints(ints.E, ints.H, ints.V)
-
-        # due to the basis change, we can't restart from previous CI vectors
-        self.ci_solver.reset_eigensolver()
-        self.ci_solver.run()
-        return np.array(self.ci_solver.E), self.ci_solver.compute_average_energy()
 
     def _print_ao_composition(self):
         if isinstance(self.system, ModelSystem):
@@ -482,9 +422,7 @@ class MCOptimizerBase(Method):
             logger.log_info1("\nAO Composition of core MOs:")
             basis_info.print_ao_composition(self.mos.C[0], self.mo_space.docc_indices)
             logger.log_info1("\nAO Composition of active MOs:")
-            basis_info.print_ao_composition(
-                self.mos.C[0], self.mo_space.active_indices
-            )
+            basis_info.print_ao_composition(self.mos.C[0], self.mo_space.active_indices)
 
     def _get_nonredundant_rotations(self):
         """Lower triangular matrix of nonredundant rotations"""
