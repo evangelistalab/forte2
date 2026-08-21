@@ -14,6 +14,12 @@ from .aset import ASET
 from .iao import IAO, IBO
 from .converters import SpinorUpcaster
 from .orbital_overlap import mo_overlap, project_orbitals, project_occupied_orbitals
+from .wavefunction_overlap import (
+    biorthogonalize_casscf_orbitals,
+    transform_ci_vector_direct,
+    transform_ci_vector_sparse_ops,
+    casscf_wavefunction_overlap,
+)
 
 # Backward compatibility: keep the old public name available
 Cube = CubeGenerator
