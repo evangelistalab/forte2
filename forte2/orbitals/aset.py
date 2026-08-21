@@ -202,7 +202,7 @@ class ASET(Method):
         4. Form P_ao_frag = S_ff @ S_A_nn @ S_ff
 
         Returns
-        ------
+        -------
         P_ao_frag : ndarray
             The fragment projector matrix S_ff @ S_A_mm @ S_ff.
         """
