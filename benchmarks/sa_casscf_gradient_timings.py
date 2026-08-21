@@ -21,6 +21,7 @@ from time import perf_counter
 from typing import Tuple
 
 from forte2 import CISolver, MCOptimizer, RHF, State, System, set_verbosity_level
+from forte2.mcopt.mc_optimizer_response import _build_coupled_response_intermediates
 
 
 @dataclass(frozen=True)
@@ -110,7 +111,7 @@ def time_reference(polyene: Polyene, state_averaged: bool, repeats: int):
     response_mib = 0.0
     full_df_mib = 0.0
     if state_averaged:
-        intermediates = mc.orb_opt._build_coupled_response_intermediates()
+        intermediates = _build_coupled_response_intermediates(mc.orb_opt)
         unique_arrays = {}
         for block in intermediates:
             for array in block:

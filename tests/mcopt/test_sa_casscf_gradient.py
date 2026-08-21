@@ -3,6 +3,27 @@ import pytest
 
 from forte2 import CISolver, MCOptimizer, RHF, State, System
 from forte2.lib.ci_helpers import CISigmaBuilder
+from forte2.mcopt.mc_optimizer_response import (
+    _build_ci_orbital_response_intermediates,
+    _build_coupled_response_intermediates,
+    _build_orbital_lagrangian_from_rdms,
+    _build_orbital_response_intermediates,
+    _compute_orbital_lagrangian_response,
+    _compute_ci_response_rdms,
+    _compute_raw_ci_response_b_vector,
+    _project_ci_response_vector,
+    compute_ci_ci_hessian_vector_product,
+    compute_ci_orbital_hessian_vector_product,
+    compute_ci_response_b_vector,
+    compute_omega,
+    compute_orbital_ci_hessian_vector_product,
+    compute_orbital_hessian_transpose_vector_product,
+    compute_orbital_hessian_vector_product,
+    compute_orbital_response_b_vector,
+    compute_projected_response_vector_product,
+    get_ci_response_layout,
+    solve_state_specific_response,
+)
 from forte2.mcopt.orbital_optimizer import OrbOptimizer
 from tests.gradient_test_utils import (
     four_point_central_difference_gradient_component,
@@ -231,7 +252,7 @@ def _orbital_gradient_at_wavefunction_displacement(
     state_averaged,
 ):
     """Evaluate an orbital gradient from explicitly displaced C and CI vectors."""
-    layout = mc.get_ci_response_layout()
+    layout = get_ci_response_layout(mc)
     nact = mc.mo_space.nactv
     g1 = np.zeros((nact,) * 2)
     g2 = np.zeros((nact,) * 4)
@@ -297,7 +318,7 @@ def _ci_gradient_at_orbital_displacement(mc, orbital_displacement):
     scalar = trial.Ecore + trial.e_nuc
     one_body = np.ascontiguousarray(trial.Fcore[trial.actv, trial.actv])
     two_body = np.ascontiguousarray(trial.get_active_space_ints())
-    layout = mc.get_ci_response_layout()
+    layout = get_ci_response_layout(mc)
     gradient = np.empty(layout[-1][-1].stop)
     builders = {}
 
@@ -343,7 +364,7 @@ def _root_energy_at_orbital_displacement(mc, root, orbital_displacement):
     trial._compute_Fcore()
     trial.get_eri_gaaa()
 
-    absolute_root, state_index, root_in_state, _ = mc.get_ci_response_layout()[root]
+    absolute_root, state_index, root_in_state, _ = get_ci_response_layout(mc)[root]
     assert absolute_root == root
     sub_solver = mc.ci_solver.sub_solvers[state_index]
     scalar = trial.Ecore + trial.e_nuc
@@ -403,7 +424,7 @@ def test_sa_casscf_gradient_mixed_spin_lih_finite_difference():
     coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 3.0]])
 
     mc = _sa_casscf_mixed_spin(symbols, coordinates)
-    layout = mc.get_ci_response_layout()
+    layout = get_ci_response_layout(mc)
     block_sizes = [
         coefficient_slice.stop - coefficient_slice.start
         for *_, coefficient_slice in layout
@@ -415,7 +436,7 @@ def test_sa_casscf_gradient_mixed_spin_lih_finite_difference():
     # dispatch each block to a Hamiltonian with the corresponding spin-adapted
     # CSF dimension.
     ci_direction = np.arange(1, sum(block_sizes) + 1, dtype=float)
-    ci_product = mc.compute_ci_ci_hessian_vector_product(ci_direction)
+    ci_product = compute_ci_ci_hessian_vector_product(mc, ci_direction)
     assert ci_product.shape == ci_direction.shape
 
     gradients = np.array([mc.gradient(root=root) for root in range(2)])
@@ -510,16 +531,19 @@ def test_sa_gasscf_gradient_co_core_excited_frozen_intergas():
     assert not np.any(mc.orb_opt.nrr[np.ix_(gas0, gas1)])
 
     # At a constrained stationary point the forward Hessian need not be
-    # symmetric.  The orbital adjoint equation must apply its transpose.
-    hessian = mc.orb_opt.compute_orbital_hessian()
-    assert np.max(np.abs(hessian - hessian.T)) > 1.0e-3
+    # symmetric.  Check the adjoint action through its bilinear identity.
     direction = np.arange(1, mc.orb_opt.nrot + 1, dtype=float)
     direction /= np.linalg.norm(direction)
-    transpose_product = mc.orb_opt.compute_orbital_hessian_transpose_vector_product(
-        direction
+    probe = np.arange(mc.orb_opt.nrot, 0, -1, dtype=float)
+    probe /= np.linalg.norm(probe)
+    transpose_product = compute_orbital_hessian_transpose_vector_product(
+        mc.orb_opt, direction
     )
-    forward_product = mc.orb_opt.compute_orbital_hessian_vector_product(direction)
-    assert transpose_product == pytest.approx(hessian.T @ direction, abs=1.0e-10)
+    forward_product = compute_orbital_hessian_vector_product(mc.orb_opt, direction)
+    probe_product = compute_orbital_hessian_vector_product(mc.orb_opt, probe)
+    assert np.dot(direction, probe_product) == pytest.approx(
+        np.dot(transpose_product, probe), abs=1.0e-10
+    )
     assert np.linalg.norm(transpose_product - forward_product) > 1.0e-3
 
     assert gradients[:, 1, 2] == pytest.approx(numerical, abs=2.0e-7)
@@ -535,14 +559,14 @@ def test_sa_gasscf_gradient_co_core_excited_frozen_intergas():
 
 
 def test_sa_casscf_orbital_orbital_response_lih():
-    """Check the dense and matrix-free fixed-RDM orbital response."""
+    """Check the matrix-free fixed-RDM orbital response."""
     symbols = ["Li", "H"]
     coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 3.0]])
     orbital_optimizer = _sa_casscf(symbols, coordinates).orb_opt
 
     direction = np.arange(1, orbital_optimizer.nrot + 1, dtype=float)
     direction /= np.linalg.norm(direction)
-    product = orbital_optimizer.compute_orbital_hessian_vector_product(direction)
+    product = compute_orbital_hessian_vector_product(orbital_optimizer, direction)
 
     step = 1.0e-4
     gradient_plus = _orbital_gradient_at_displacement(
@@ -555,18 +579,21 @@ def test_sa_casscf_orbital_orbital_response_lih():
 
     assert product == pytest.approx(finite_difference, abs=1.0e-7)
 
-    hessian = orbital_optimizer.compute_orbital_hessian()
-    assert hessian @ direction == pytest.approx(product, abs=1.0e-11)
-    assert hessian == pytest.approx(hessian.T, abs=1.0e-8)
+    probe = np.arange(orbital_optimizer.nrot, 0, -1, dtype=float)
+    probe /= np.linalg.norm(probe)
+    probe_product = compute_orbital_hessian_vector_product(orbital_optimizer, probe)
+    assert np.dot(probe, product) == pytest.approx(
+        np.dot(direction, probe_product), abs=1.0e-8
+    )
 
 
 def test_sa_casscf_orbital_ci_response_lih():
-    """Check the CI action, dense block, and combined orbital response."""
+    """Check the CI action and combined orbital response."""
     symbols = ["Li", "H"]
     coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 3.0]])
     mc = _sa_casscf(symbols, coordinates)
     orbital_optimizer = mc.orb_opt
-    layout = mc.get_ci_response_layout()
+    layout = get_ci_response_layout(mc)
     nci = layout[-1][-1].stop
 
     ci_direction = np.arange(1, nci + 1, dtype=float)
@@ -577,7 +604,7 @@ def test_sa_casscf_orbital_ci_response_lih():
         overlap_response += 2.0 * np.dot(ci_direction[coefficient_slice], reference)
     assert abs(overlap_response) > 1.0e-3
 
-    ci_product = mc.compute_orbital_ci_hessian_vector_product(ci_direction)
+    ci_product = compute_orbital_ci_hessian_vector_product(mc, ci_direction)
 
     step = 1.0e-5
     zero_orbital = np.zeros(orbital_optimizer.nrot)
@@ -596,14 +623,13 @@ def test_sa_casscf_orbital_ci_response_lih():
     finite_difference = (gradient_plus - gradient_minus) / (2.0 * step)
     assert ci_product == pytest.approx(finite_difference, abs=1.0e-8)
 
-    orbital_ci_hessian = mc.compute_orbital_ci_hessian()
-    assert orbital_ci_hessian.shape == (orbital_optimizer.nrot, nci)
-    assert orbital_ci_hessian @ ci_direction == pytest.approx(ci_product, abs=1.0e-11)
-
     orbital_direction = np.arange(1, orbital_optimizer.nrot + 1, dtype=float)
     orbital_direction /= np.linalg.norm(orbital_direction)
-    combined = mc.compute_orbital_response_vector_product(
-        orbital_direction, ci_direction
+    combined = (
+        compute_orbital_hessian_transpose_vector_product(
+            orbital_optimizer, orbital_direction
+        )
+        + ci_product
     )
     gradient_plus = _orbital_gradient_at_wavefunction_displacement(
         mc,
@@ -627,12 +653,12 @@ def test_sa_casscf_ci_orbital_response_lih():
     coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 3.0]])
     mc = _sa_casscf(symbols, coordinates)
     orbital_optimizer = mc.orb_opt
-    layout = mc.get_ci_response_layout()
+    layout = get_ci_response_layout(mc)
     nci = layout[-1][-1].stop
 
     orbital_direction = np.arange(1, orbital_optimizer.nrot + 1, dtype=float)
     orbital_direction /= np.linalg.norm(orbital_direction)
-    ci_product = mc.compute_ci_orbital_hessian_vector_product(orbital_direction)
+    ci_product = compute_ci_orbital_hessian_vector_product(mc, orbital_direction)
 
     step = 1.0e-5
     gradient_plus = _ci_gradient_at_orbital_displacement(mc, step * orbital_direction)
@@ -640,35 +666,32 @@ def test_sa_casscf_ci_orbital_response_lih():
     finite_difference = (gradient_plus - gradient_minus) / (2.0 * step)
     assert ci_product == pytest.approx(finite_difference, abs=1.0e-8)
 
-    ci_orbital_hessian = mc.compute_ci_orbital_hessian()
-    assert ci_orbital_hessian.shape == (nci, orbital_optimizer.nrot)
-    assert ci_orbital_hessian @ orbital_direction == pytest.approx(
-        ci_product, abs=1.0e-11
-    )
-
+    ci_direction = np.arange(1, nci + 1, dtype=float)
+    ci_direction /= np.linalg.norm(ci_direction)
     coefficient_weights = np.empty(nci)
     for absolute_root, _, _, coefficient_slice in layout:
         coefficient_weights[coefficient_slice] = mc.ci_solver.weights_flat[
             absolute_root
         ]
-    orbital_ci_hessian = mc.compute_orbital_ci_hessian()
-    assert ci_orbital_hessian == pytest.approx(
-        coefficient_weights[:, None] * orbital_ci_hessian.T,
-        abs=1.0e-9,
+    orbital_product = compute_orbital_ci_hessian_vector_product(
+        mc, coefficient_weights * ci_direction
+    )
+    assert np.dot(ci_direction, ci_product) == pytest.approx(
+        np.dot(orbital_direction, orbital_product), abs=1.0e-9
     )
 
 
 def test_sa_casscf_ci_ci_response_lih():
-    """Check the matrix-free and dense raw CI--CI response block."""
+    """Check the matrix-free raw CI--CI response block."""
     symbols = ["Li", "H"]
     coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 3.0]])
     mc = _sa_casscf(symbols, coordinates)
-    layout = mc.get_ci_response_layout()
+    layout = get_ci_response_layout(mc)
     nci = layout[-1][-1].stop
 
     ci_direction = np.arange(1, nci + 1, dtype=float)
     ci_direction /= np.linalg.norm(ci_direction)
-    product = mc.compute_ci_ci_hessian_vector_product(ci_direction)
+    product = compute_ci_ci_hessian_vector_product(mc, ci_direction)
 
     expected = np.empty(nci)
     hamiltonians = {}
@@ -687,31 +710,28 @@ def test_sa_casscf_ci_ci_response_lih():
         )
     assert product == pytest.approx(expected, abs=1.0e-11)
 
-    ci_ci_hessian = mc.compute_ci_ci_hessian()
-    assert ci_ci_hessian.shape == (nci, nci)
-    assert ci_ci_hessian @ ci_direction == pytest.approx(product, abs=1.0e-11)
-    assert ci_ci_hessian == pytest.approx(ci_ci_hessian.T, abs=1.0e-11)
+    probe = np.arange(nci, 0, -1, dtype=float)
+    probe /= np.linalg.norm(probe)
+    probe_product = compute_ci_ci_hessian_vector_product(mc, probe)
+    assert np.dot(probe, product) == pytest.approx(
+        np.dot(ci_direction, probe_product), abs=1.0e-11
+    )
 
-    for root, (_, _, _, row_slice) in enumerate(layout):
-        for other_root, (_, _, _, column_slice) in enumerate(layout):
+    for root, (_, _, _, root_slice) in enumerate(layout):
+        isolated = np.zeros(nci)
+        isolated[root_slice] = ci_direction[root_slice]
+        isolated_product = compute_ci_ci_hessian_vector_product(mc, isolated)
+        for other_root, (_, _, _, other_slice) in enumerate(layout):
             if root != other_root:
-                assert ci_ci_hessian[row_slice, column_slice] == pytest.approx(0.0)
+                assert isolated_product[other_slice] == pytest.approx(0.0)
 
     references = np.empty(nci)
     for _, state_index, root_in_state, coefficient_slice in layout:
         references[coefficient_slice] = mc.ci_solver.sub_solvers[state_index].evecs[
             :, root_in_state
         ]
-    assert mc.compute_ci_ci_hessian_vector_product(references) == pytest.approx(
+    assert compute_ci_ci_hessian_vector_product(mc, references) == pytest.approx(
         0.0, abs=1.0e-9
-    )
-
-    orbital_direction = np.arange(1, mc.orb_opt.nrot + 1, dtype=float)
-    orbital_direction /= np.linalg.norm(orbital_direction)
-    combined = mc.compute_ci_response_vector_product(orbital_direction, ci_direction)
-    assert combined == pytest.approx(
-        mc.compute_ci_orbital_hessian_vector_product(orbital_direction) + product,
-        abs=1.0e-11,
     )
 
 
@@ -720,10 +740,10 @@ def test_sa_casscf_orbital_response_b_vector_lih():
     symbols = ["Li", "H"]
     coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 3.0]])
     mc = _sa_casscf(symbols, coordinates)
-    layout = mc.get_ci_response_layout()
+    layout = get_ci_response_layout(mc)
     nci = layout[-1][-1].stop
 
-    b_vectors = [mc.compute_orbital_response_b_vector(root) for root in range(2)]
+    b_vectors = [compute_orbital_response_b_vector(mc, root) for root in range(2)]
     assert np.linalg.norm(b_vectors[0]) > 1.0e-3
 
     orbital_direction = np.arange(1, mc.orb_opt.nrot + 1, dtype=float)
@@ -746,8 +766,8 @@ def test_sa_casscf_orbital_response_b_vector_lih():
         half_reference[coefficient_slice] = (
             0.5 * mc.ci_solver.sub_solvers[state_index].evecs[:, root_in_state]
         )
-        assert mc.compute_orbital_ci_hessian_vector_product(
-            half_reference
+        assert compute_orbital_ci_hessian_vector_product(
+            mc, half_reference
         ) == pytest.approx(b_vector, abs=1.0e-10)
 
     weighted_average = sum(
@@ -756,7 +776,7 @@ def test_sa_casscf_orbital_response_b_vector_lih():
     assert weighted_average == pytest.approx(0.0, abs=1.0e-8)
 
     with pytest.raises(ValueError, match="target response root"):
-        mc.compute_orbital_response_b_vector(2)
+        compute_orbital_response_b_vector(mc, 2)
 
 
 def test_sa_casscf_ci_response_b_vector_lih():
@@ -764,12 +784,12 @@ def test_sa_casscf_ci_response_b_vector_lih():
     symbols = ["Li", "H"]
     coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 3.0]])
     mc = _sa_casscf(symbols, coordinates)
-    layout = mc.get_ci_response_layout()
+    layout = get_ci_response_layout(mc)
     nci = layout[-1][-1].stop
 
     hamiltonians = {}
     for target_root in range(2):
-        raw_b = mc._compute_raw_ci_response_b_vector(target_root, layout)
+        raw_b = _compute_raw_ci_response_b_vector(mc, target_root, layout)
         expected_raw = np.zeros(nci)
         _, state_index, root_in_state, coefficient_slice = layout[target_root]
         sub_solver = mc.ci_solver.sub_solvers[state_index]
@@ -794,13 +814,13 @@ def test_sa_casscf_ci_response_b_vector_lih():
                 solved_roots.T @ block
             )
 
-        b_vector = mc.compute_ci_response_b_vector(target_root)
+        b_vector = compute_ci_response_b_vector(mc, target_root)
         assert b_vector == pytest.approx(expected_projected, abs=1.0e-11)
         assert b_vector == pytest.approx(0.0, abs=1.0e-9)
 
     trial = np.arange(1, nci + 1, dtype=float)
-    projected = mc.project_ci_response_vector(trial)
-    assert mc.project_ci_response_vector(projected) == pytest.approx(
+    projected = _project_ci_response_vector(mc, trial, layout)
+    assert _project_ci_response_vector(mc, projected, layout) == pytest.approx(
         projected, abs=1.0e-11
     )
     for _, state_index, _, coefficient_slice in layout:
@@ -810,7 +830,7 @@ def test_sa_casscf_ci_response_b_vector_lih():
         )
 
     with pytest.raises(TypeError, match="target response root"):
-        mc.compute_ci_response_b_vector(0.0)
+        compute_ci_response_b_vector(mc, 0.0)
 
 
 def test_sa_casscf_solve_orbital_response_lih():
@@ -818,12 +838,12 @@ def test_sa_casscf_solve_orbital_response_lih():
     symbols = ["Li", "H"]
     coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 3.0]])
     mc = _sa_casscf(symbols, coordinates)
-    layout = mc.get_ci_response_layout()
+    layout = get_ci_response_layout(mc)
     nrot = mc.orb_opt.nrot
     nci = layout[-1][-1].stop
 
     orbital_work, density_work, hamiltonian_work = (
-        mc.orb_opt._build_coupled_response_intermediates()
+        _build_coupled_response_intermediates(mc.orb_opt)
     )
     B_ga = orbital_work[2]
     assert B_ga is density_work[1]
@@ -834,57 +854,44 @@ def test_sa_casscf_solve_orbital_response_lih():
         mc.mo_space.nactv,
     )
 
-    ci_projector = np.zeros((nci, nci))
-    for _, state_index, _, coefficient_slice in layout:
-        solved_roots = mc.ci_solver.sub_solvers[state_index].evecs
-        block_projector = np.eye(solved_roots.shape[0]) - (
-            solved_roots @ solved_roots.T
-        )
-        ci_projector[coefficient_slice, coefficient_slice] = block_projector
-    ci_complement = np.eye(nci) - ci_projector
-
-    orbital_orbital = mc.orb_opt.compute_orbital_hessian().T
-    orbital_ci = mc.compute_orbital_ci_hessian()
-    ci_orbital = mc.compute_ci_orbital_hessian()
-    ci_ci = mc.compute_ci_ci_hessian()
-    dense_operator = np.block(
-        [
-            [orbital_orbital, orbital_ci @ ci_projector],
-            [
-                ci_projector @ ci_orbital,
-                ci_projector @ ci_ci @ ci_projector + ci_complement,
-            ],
-        ]
-    )
-
     trial = np.arange(1, nrot + nci + 1, dtype=float)
-    orbital_product, ci_product = mc.compute_projected_response_vector_product(
-        trial[:nrot], trial[nrot:]
+    orbital_product, ci_product = compute_projected_response_vector_product(
+        mc, trial[:nrot], trial[nrot:]
     )
-    assert np.concatenate((orbital_product, ci_product)) == pytest.approx(
-        dense_operator @ trial, abs=1.0e-9
+    projected_ci = _project_ci_response_vector(mc, trial[nrot:], layout)
+    expected_orbital = compute_orbital_hessian_transpose_vector_product(
+        mc.orb_opt, trial[:nrot]
+    ) + compute_orbital_ci_hessian_vector_product(mc, projected_ci)
+    expected_ci = _project_ci_response_vector(
+        mc,
+        compute_ci_orbital_hessian_vector_product(mc, trial[:nrot])
+        + compute_ci_ci_hessian_vector_product(mc, projected_ci),
+        layout,
     )
+    expected_ci += trial[nrot:] - projected_ci
+    assert orbital_product == pytest.approx(expected_orbital, abs=1.0e-9)
+    assert ci_product == pytest.approx(expected_ci, abs=1.0e-9)
 
     solutions = []
     for root in range(2):
-        orbital_b = mc.compute_orbital_response_b_vector(root)
-        ci_b = mc.compute_ci_response_b_vector(root)
+        orbital_b = compute_orbital_response_b_vector(mc, root)
+        ci_b = compute_ci_response_b_vector(mc, root)
         rhs = -np.concatenate((orbital_b, ci_b))
-        dense_solution = np.linalg.solve(dense_operator, rhs)
 
-        orbital_response, ci_response = mc.solve_state_specific_response(
-            root, r_tol=1.0e-11
+        orbital_response, ci_response = solve_state_specific_response(
+            mc, root, r_tol=1.0e-11
         )
         solution = np.concatenate((orbital_response, ci_response))
-        assert solution == pytest.approx(dense_solution, abs=1.0e-8)
-        assert dense_operator @ solution == pytest.approx(rhs, abs=1.0e-9)
-        assert ci_projector @ ci_response == pytest.approx(ci_response, abs=1.0e-10)
+        response_product = compute_projected_response_vector_product(
+            mc, orbital_response, ci_response
+        )
+        assert np.concatenate(response_product) == pytest.approx(rhs, abs=1.0e-9)
+        assert _project_ci_response_vector(mc, ci_response, layout) == pytest.approx(
+            ci_response, abs=1.0e-10
+        )
         solutions.append(solution)
 
     assert solutions[0] == pytest.approx(-solutions[1], abs=1.0e-7)
-    assert mc.solve_orbital_response_vector(0, r_tol=1.0e-11) == pytest.approx(
-        solutions[0][:nrot], abs=1.0e-9
-    )
 
 
 def test_sa_casscf_response_omega_lih():
@@ -892,42 +899,42 @@ def test_sa_casscf_response_omega_lih():
     symbols = ["Li", "H"]
     coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 3.0]])
     mc = _sa_casscf(symbols, coordinates)
-    layout = mc.get_ci_response_layout()
+    layout = get_ci_response_layout(mc)
     orbital_optimizer = mc.orb_opt
 
-    density_intermediates = orbital_optimizer._build_ci_orbital_response_intermediates()
-    average_A = orbital_optimizer._build_orbital_lagrangian_from_rdms(
+    density_intermediates = _build_ci_orbital_response_intermediates(orbital_optimizer)
+    average_A = _build_orbital_lagrangian_from_rdms(
+        orbital_optimizer,
         1.0,
         mc.make_average_1rdm(),
         mc.make_average_2rdm(),
         density_intermediates,
     )
-    orbital_intermediates = orbital_optimizer._build_orbital_response_intermediates()
+    orbital_intermediates = _build_orbital_response_intermediates(orbital_optimizer)
 
     omegas = []
     for root in range(2):
-        orbital_response, ci_response = mc.solve_state_specific_response(
-            root, r_tol=1.0e-11
+        orbital_response, ci_response = solve_state_specific_response(
+            mc, root, r_tol=1.0e-11
         )
-        omega = mc.compute_omega(root, orbital_response, ci_response)
+        omega = compute_omega(mc, root, orbital_response, ci_response)
         assert omega.shape == (mc.mo_space.nmo, mc.mo_space.nmo)
         assert omega == pytest.approx(omega.T, abs=1.0e-13)
-        assert mc.compute_omega(root, r_tol=1.0e-11) == pytest.approx(
-            omega, abs=1.0e-10
-        )
 
-        target_A = orbital_optimizer._build_orbital_lagrangian_from_rdms(
+        target_A = _build_orbital_lagrangian_from_rdms(
+            orbital_optimizer,
             1.0,
             mc.make_sf_1rdm(root),
             mc.make_sf_2rdm(root),
             density_intermediates,
         )
-        ci_A = orbital_optimizer._build_orbital_lagrangian_from_rdms(
-            *mc._compute_ci_response_rdms(ci_response, layout),
+        ci_A = _build_orbital_lagrangian_from_rdms(
+            orbital_optimizer,
+            *_compute_ci_response_rdms(mc, ci_response, layout),
             density_intermediates,
         )
-        directional_A = orbital_optimizer._compute_orbital_lagrangian_response(
-            orbital_response, orbital_intermediates
+        directional_A = _compute_orbital_lagrangian_response(
+            orbital_optimizer, orbital_response, orbital_intermediates
         )
         Z = orbital_optimizer._vec_to_mat(orbital_response)
         orbital_A = directional_A + Z @ average_A - average_A @ Z

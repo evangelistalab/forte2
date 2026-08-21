@@ -9,6 +9,12 @@ from forte2.gradients import (
 )
 from forte2.gradients.validation import validate_df_gradient_system
 
+from .mc_optimizer_response import (
+    _compute_ci_response_rdms,
+    _get_ci_response_layout,
+    compute_omega,
+    solve_state_specific_response,
+)
 from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
 
 
@@ -104,10 +110,10 @@ def _compute_nonrel_sa_casscf_gradient(mc, C: NDArray, root: int) -> NDArray:
          +\sum_{PQ}W^\alpha_{PQ}(P|Q)^x.
 
     Here :math:`\omega_\alpha` is the symmetric relaxed orbital multiplier
-    returned by :meth:`MCOptimizer.compute_omega`.
+    returned by :func:`forte2.mcopt.mc_optimizer_response.compute_omega`.
     """
-    orbital_response, ci_response = mc.solve_state_specific_response(root)
-    omega = mc.compute_omega(root, orbital_response, ci_response)
+    orbital_response, ci_response = solve_state_specific_response(mc, root)
+    omega = compute_omega(mc, root, orbital_response, ci_response)
     D1, W2, W3 = _build_sa_casscf_relaxed_density_weights(
         mc, root, orbital_response, ci_response
     )
@@ -183,7 +189,7 @@ def _build_sa_casscf_relaxed_density_weights(
     W_3^{\mathrm{rel},\alpha})` without forming a four-index relaxed RDM.
     """
     nmo = mc.mo_space.nmo
-    layout, _ = mc._get_ci_response_layout()
+    layout, _ = _get_ci_response_layout(mc)
     core_indices = np.arange(nmo)[mc.mo_space.core]
     active_indices = np.arange(nmo)[mc.mo_space.actv]
     hole_indices = np.concatenate((core_indices, active_indices))
@@ -191,7 +197,7 @@ def _build_sa_casscf_relaxed_density_weights(
 
     target_g1 = mc.make_sf_1rdm(root)
     target_g2 = mc.make_sf_2rdm(root)
-    _, ci_g1, ci_g2 = mc._compute_ci_response_rdms(ci_response, layout)
+    _, ci_g1, ci_g2 = _compute_ci_response_rdms(mc, ci_response, layout)
     average_g1 = mc.make_average_1rdm()
     average_g2 = mc.make_average_2rdm()
     base_g1 = target_g1 + ci_g1

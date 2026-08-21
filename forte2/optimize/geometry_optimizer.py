@@ -293,9 +293,12 @@ class _GeometryObjective:
     def ensure(self, x, need_gradient=False):
         if self._cache_matches(x):
             if need_gradient and self.g is None:
-                self.g = np.asarray(
-                    _method_gradient(self.method, self.root), dtype=float
-                ).reshape(-1)
+                gradient = (
+                    self.method.gradient()
+                    if self.root is None
+                    else self.method.gradient(root=self.root)
+                )
+                self.g = np.asarray(gradient, dtype=float).reshape(-1)
                 self._record_progress()
             return
 
@@ -315,9 +318,12 @@ class _GeometryObjective:
         self.previous_method = self.method
 
         if need_gradient:
-            self.g = np.asarray(
-                _method_gradient(self.method, self.root), dtype=float
-            ).reshape(-1)
+            gradient = (
+                self.method.gradient()
+                if self.root is None
+                else self.method.gradient(root=self.root)
+            )
+            self.g = np.asarray(gradient, dtype=float).reshape(-1)
             self._record_progress()
 
     def _cache_matches(self, x):
@@ -490,25 +496,6 @@ def _method_energy(method, root):
             f"got {root}."
         )
     return float(energies[root])
-
-
-def _method_gradient(method, root):
-    r"""Return the gradient matching the selected optimization energy.
-
-    For nuclear coordinate :math:`x` and optional absolute root
-    :math:`\alpha`, the returned quantity is
-
-    .. math::
-
-        g^x_{\mathrm{opt}}=
-        \begin{cases}
-        dE/dx, & \alpha\text{ is omitted},\\
-        dE_\alpha/dx, & \alpha\text{ is specified}.
-        \end{cases}
-    """
-    if root is None:
-        return method.gradient()
-    return method.gradient(root=root)
 
 
 def _format_float(value):
