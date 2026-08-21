@@ -10,21 +10,7 @@ from forte2.lib.ci_helpers import CISigmaBuilder
 
 
 def _make_working_2rdm(g2):
-    r"""Convert a spin-free 2-RDM to the orbital-optimizer convention.
-
-    In the notation of the technical note, the returned tensor is
-
-    .. math::
-
-        \bar D_{tu,vw}
-        =\frac{1}{2}\left(
-          \bar\gamma^{tv}_{uw}+\bar\gamma^{uv}_{tw}
-        \right).
-
-    The same linear permutation is used for state-specific and transition
-    2-RDMs, with the bars replaced by the corresponding density label.
-    """
-    # '2RDM' defined as in [eq (6)]
+    r"""Return :math:`D_{tu,vw}=\tfrac12(\gamma^{tv}_{uw}+\gamma^{uv}_{tw})`."""
     return 0.5 * (np.einsum("prqs->pqrs", g2) + np.einsum("qrps->pqrs", g2))
 
 
@@ -83,28 +69,7 @@ def _validate_orbital_response_vector(orb_opt, vector):
 
 
 def _build_orbital_response_intermediates(orb_opt):
-    r"""Build fixed tensors shared by orbital-response applications.
-
-    .. math::
-
-        F_{\mathrm{C}}
-        &=C^{\mathsf T}\left(h+2J[P_{\mathrm{C}}]-K[P_{\mathrm{C}}]\right)C,\\
-        \bar F_{\mathrm{A}}
-        &=C^{\mathsf T}\left(J[\bar P_{\mathrm{A}}]
-          -\tfrac12K[\bar P_{\mathrm{A}}]\right)C,\\
-        B^P_{pu}
-        &=\sum_{\mu\nu}C_{\mu p}B^P_{\mu\nu}C_{\nu u}.
-
-    Here :math:`P_C=C_CC_C^{\mathsf T}` and
-    :math:`\bar P_A=C_A\bar\gamma C_A^{\mathsf T}`.  The workspace is
-    valid at the current orbitals and stores no full :math:`B^P_{pq}`.
-
-    Returns
-    -------
-    tuple[np.ndarray, np.ndarray, np.ndarray]
-        ``(Fcore_mo, Fact_mo, B_ga)`` with shapes ``(nmo, nmo)``,
-        ``(nmo, nmo)``, and ``(naux, nmo, nact)``.
-    """
+    r"""Return the fixed-RDM workspace :math:`(F_C,\bar F_A,B^P_{pu})`."""
     Fcore_ao = orb_opt.fock_builder.build_core_fock(orb_opt.Ccore, hcore=orb_opt.hcore)
     Fact_ao = orb_opt.fock_builder.build_active_fock(orb_opt.Cact, orb_opt.g1)
     Fcore_mo = orb_opt._transform_ao_operator(Fcore_ao, orb_opt.C)
@@ -114,21 +79,7 @@ def _build_orbital_response_intermediates(orb_opt):
 
 
 def _build_coupled_response_intermediates(orb_opt):
-    r"""Build one shared, active-index DF workspace for a response solve.
-
-    .. math::
-
-        \mathcal I_{\mathrm{coupled}}
-        =\left(
-          (F_{\mathrm C},\bar F_{\mathrm A},B^P_{pu}),
-          (F_{\mathrm C},B^P_{pu}),
-          (F_{\mathrm C}^{\mathrm{AO}},F_{\mathrm C},B^P_{pu})
-         \right),
-
-    The entries serve :math:`\mathcal A^{oo}`, :math:`\mathcal A^{oc}`,
-    and :math:`\mathcal A^{co}`, respectively.  Shared arrays alias the
-    same storage; no full :math:`B^P_{pq}` or four-index integral is kept.
-    """
+    r"""Return shared workspaces for :math:`A^{oo}`, :math:`A^{oc}`, and :math:`A^{co}`."""
     Fcore_ao = orb_opt.fock_builder.build_core_fock(orb_opt.Ccore, hcore=orb_opt.hcore)
     Fact_ao = orb_opt.fock_builder.build_active_fock(orb_opt.Cact, orb_opt.g1)
     Fcore_mo = orb_opt._transform_ao_operator(Fcore_ao, orb_opt.C)
@@ -142,15 +93,7 @@ def _build_coupled_response_intermediates(orb_opt):
 
 
 def _transform_df_block(orb_opt, left, right):
-    r"""Transform the AO DF tensor with two rectangular factors.
-
-    For input coefficient matrices :math:`L` and :math:`R`, this returns
-
-    .. math::
-
-        B^P_{ab}[L,R]
-        =\sum_{\mu\nu}L_{\mu a}B^P_{\mu\nu}R_{\nu b}.
-    """
+    r"""Return :math:`B^P_{ab}=\sum_{\mu\nu}L_{\mu a}B^P_{\mu\nu}R_{\nu b}`."""
     return np.einsum(
         "Pmn,mp,nq->Ppq",
         orb_opt.fock_builder.B_Pmn,
@@ -169,42 +112,9 @@ def _build_transition_fock_response(
     coulomb_factor,
     exchange_factor,
 ):
-    r"""Build a Fock response from a symmetric low-rank transition density.
-
-    Let :math:`C_L` and :math:`C_R` denote ``response_orbitals`` and
-    ``reference_orbitals``.  If a real symmetric ``metric`` :math:`G` is
-    supplied, the symmetrized metric
-    :math:`G_s=(G+G^{\mathsf T})/2` and its signed eigendecomposition
-    define
-
-    .. math::
-
-        G_s&=U\Lambda U^{\mathsf T},\\
-        L&=C_LU|\Lambda|^{1/2},\\
-        R&=C_RU\operatorname{sgn}(\Lambda)|\Lambda|^{1/2}.
-
-    With no metric, :math:`L=C_L` and :math:`R=C_R`.  The density and
-    returned AO Fock response are
-
-    .. math::
-
-        D&=LR^{\mathsf T}+RL^{\mathsf T},\\
-        \dot F^{\mathrm{AO}}[D]
-         &=c_JJ[D]-c_KK[D].
-
-    The exchange contraction is evaluated from the half transforms
-
-    .. math::
-
-        Y^{P,L}_{\mu a}&=\sum_\nu B^P_{\mu\nu}L_{\nu a},\\
-        Y^{P,R}_{\mu a}&=\sum_\nu B^P_{\mu\nu}R_{\nu a},\\
-        K[D]_{\mu\nu}
-         &=\sum_{Pa}\left(
-           Y^{P,L}_{\mu a}Y^{P,R}_{\nu a}
-          +Y^{P,R}_{\mu a}Y^{P,L}_{\nu a}\right),
-
-    so no three-general-index response tensor is formed.  The signed
-    factorization permits indefinite CI transition densities.
+    r"""Return :math:`c_JJ[D]-c_KK[D]` for
+    :math:`D=C_LG_sC_R^{\mathsf T}+C_RG_sC_L^{\mathsf T}` using signed
+    low-rank factors; :math:`G_s=I` when ``metric`` is omitted.
     """
     if metric is None:
         left = response_orbitals
@@ -234,67 +144,14 @@ def _build_transition_fock_response(
 
 
 def _compute_orbital_hessian_vector_product(orb_opt, vector, intermediates):
-    r"""Evaluate one fixed-RDM orbital Hessian--vector product.
-
-    .. math::
-
-        [\mathcal A^{\mathrm{oo}}\mathbf z]_I
-        =2\left[(\dot{\bar A})^{q_I}_{p_I}
-                -(\dot{\bar A})^{p_I}_{q_I}\right].
-
-    :func:`_compute_orbital_lagrangian_response` defines
-    :math:`\dot{\bar A}`.  The caller supplies a validated vector and
-    current-orbital intermediates; RDMs, AO integrals, and nuclei are fixed.
-
-    Parameters
-    ----------
-    vector : np.ndarray
-        Real orbital-rotation direction in ``nrr`` C-order.
-    intermediates : tuple[np.ndarray, np.ndarray, np.ndarray]
-        ``(Fcore_mo, Fact_mo, B_ga)`` returned by
-        :func:`_build_orbital_response_intermediates` at the same base point.
-
-    Returns
-    -------
-    np.ndarray
-        Fixed-RDM Hessian product in nonredundant-pair order.
-    """
+    r"""Return :math:`[A^{oo}z]_I=2(\dot{\bar A}^{q_I}_{p_I}-\dot{\bar A}^{p_I}_{q_I})`."""
     A_response = _compute_orbital_lagrangian_response(orb_opt, vector, intermediates)
     gradient_response = 2.0 * (A_response - A_response.T)
     return orb_opt._mat_to_vec(gradient_response)
 
 
 def _compute_orbital_lagrangian_response(orb_opt, vector, intermediates):
-    r"""Return the full MO Lagrangian response for an orbital direction.
-
-    .. math::
-
-        \dot{\bar A}^{m}_{p}
-        &=2(\dot F_{\mathrm C}+\dot{\bar F}_{\mathrm A})^{m}_{p},
-          &&m\in\mathbb C,\\
-        \dot{\bar A}^{u}_{p}
-        &=\sum_v(\dot F_{\mathrm C})^{v}_{p}\bar\gamma^{v}_{u}
-          +\sum_{tvw}\dot{\langle pv|tw\rangle}\bar D_{tu,vw},
-          &&u\in\mathbb A,\\
-        \dot{\bar A}^{e}_{p}&=0,
-          &&e\in\mathbb V.
-
-    The state-averaged RDMs are fixed. Hessian products use the
-    antisymmetric part.
-
-    Parameters
-    ----------
-    vector : np.ndarray
-        Validated real orbital direction with shape ``(nrot,)``.
-    intermediates : tuple[np.ndarray, np.ndarray, np.ndarray]
-        Base-point tensors from
-        :func:`_build_orbital_response_intermediates`.
-
-    Returns
-    -------
-    np.ndarray
-        Full MO Lagrangian response matrix with shape ``(nmo, nmo)``.
-    """
+    r"""Return :math:`\dot{\bar A}[z]=\left.d\bar A[Ce^{\epsilon Z}]/d\epsilon\right|_0` at fixed RDMs."""
     Fcore_mo, Fact_mo, B_ga = intermediates
     Z = orb_opt._vec_to_mat(vector)
     C_response = orb_opt.C @ Z
@@ -318,12 +175,7 @@ def _compute_orbital_lagrangian_response(orb_opt, vector, intermediates):
     )
 
     def transform_response(operator_mo, operator_ao_response):
-        r"""Transform an AO response while differentiating both MO legs.
-
-        .. math::
-
-            \dot F=Z^{\mathsf T}F+FZ+C^{\mathsf T}\dot F^{\mathrm{AO}}C.
-        """
+        r"""Return :math:`\dot F=Z^{\mathsf T}F+FZ+C^{\mathsf T}\dot F^{AO}C`."""
         return (
             Z.T @ operator_mo
             + operator_mo @ Z
@@ -359,19 +211,7 @@ def _compute_orbital_lagrangian_response(orb_opt, vector, intermediates):
 
 
 def _build_ci_orbital_response_intermediates(orb_opt):
-    r"""Build fixed tensors for the orbital--CI response block.
-
-    .. math::
-
-        F_{\mathrm C}=C^{\mathsf T}F_{\mathrm C}^{\mathrm{AO}}C,\qquad
-        B^P_{ru}=\sum_{\mu\nu}C_{\mu r}B^P_{\mu\nu}C_{\nu u}.
-
-    Returns
-    -------
-    tuple[np.ndarray, np.ndarray]
-        The pair (Fcore_mo, B_ga), with shapes (nmo, nmo) and
-        (naux, nmo, nact), respectively.
-    """
+    r"""Return :math:`(F_C,B^P_{pu})` for the orbital--CI response."""
     Fcore_ao = orb_opt.fock_builder.build_core_fock(orb_opt.Ccore, hcore=orb_opt.hcore)
     Fcore_mo = orb_opt._transform_ao_operator(Fcore_ao, orb_opt.C)
     B_ga = _transform_df_block(orb_opt, orb_opt.C, orb_opt.Cact)
@@ -379,24 +219,7 @@ def _build_ci_orbital_response_intermediates(orb_opt):
 
 
 def _build_orbital_ci_response_intermediates(orb_opt):
-    r"""Build fixed tensors for the orbital contribution to the CI row.
-
-    .. math::
-
-        F_{\mathrm C}^{\mathrm{AO}}
-        &=h+2J[P_{\mathrm C}]-K[P_{\mathrm C}],\\
-        F_{\mathrm C}&=C^{\mathsf T}F_{\mathrm C}^{\mathrm{AO}}C,\\
-        B^P_{pu}&=\sum_{\mu\nu}C_{\mu p}B^P_{\mu\nu}C_{\nu u}.
-
-    These base-point tensors are valid while the orbitals and AO integrals
-    remain unchanged.
-
-    Returns
-    -------
-    tuple[np.ndarray, np.ndarray, np.ndarray]
-        ``(Fcore_ao, Fcore_mo, B_ga)`` with shapes ``(nao, nao)``,
-        ``(nmo, nmo)``, and ``(naux, nmo, nact)``, respectively.
-    """
+    r"""Return :math:`(F_C^{AO},F_C,B^P_{pu})` for the CI--orbital response."""
     Fcore_ao = orb_opt.fock_builder.build_core_fock(orb_opt.Ccore, hcore=orb_opt.hcore)
     Fcore_mo = orb_opt._transform_ao_operator(Fcore_ao, orb_opt.C)
     B_ga = _transform_df_block(orb_opt, orb_opt.C, orb_opt.Cact)
@@ -404,38 +227,8 @@ def _build_orbital_ci_response_intermediates(orb_opt):
 
 
 def _compute_active_space_hamiltonian_response(orb_opt, vector, intermediates):
-    r"""Differentiate the active-space Hamiltonian along an orbital vector.
-
-    .. math::
-
-        \hat H[\mathbf z]
-        =\dot E_{\mathrm C}
-         +\sum_{uv}(\dot F_{\mathrm C})^{u}_{v}\hat E^{u}_{v}
-         +\frac12\sum_{uvtw}
-          \dot{\langle uv|tw\rangle}\hat E^{uv}_{tw}.
-
-    With :math:`\dot C=CZ`, the core Fock response is
-
-    .. math::
-
-        \dot F_{\mathrm C}^{\mathrm{AO}}
-        &=2J[\dot P_{\mathrm C}]-K[\dot P_{\mathrm C}],\\
-        \dot F_{\mathrm C}
-        &=Z^{\mathsf T}F_{\mathrm C}+F_{\mathrm C}Z
-          +C^{\mathsf T}\dot F_{\mathrm C}^{\mathrm{AO}}C,
-
-    :math:`\dot E_C` differentiates
-    :math:`\mathrm{Tr}[C_C^{\mathsf T}(h+F_C^{AO})C_C]`; the two-electron
-    term differentiates all active indices of
-    :math:`\langle uv|tw\rangle=\sum_PB^P_{ut}B^P_{vw}`.  The caller
-    supplies a validated vector and matching base-point intermediates.
-
-    Returns
-    -------
-    tuple[float, np.ndarray, np.ndarray]
-        Scalar core-energy response, active one-electron response, and
-        active two-electron response in the CI solver's physicists'
-        convention.
+    r"""Return :math:`\hat H[z]=\dot E_C+\dot F_C{}^u_v\hat E^u_v+
+    \tfrac12\dot{\langle uv|tw\rangle}\hat E^{uv}_{tw}`.
     """
     Fcore_ao, Fcore_mo, B_ga = intermediates
     Z = orb_opt._vec_to_mat(vector)
@@ -487,29 +280,7 @@ def _build_orbital_lagrangian_from_rdms(
     g2_response,
     intermediates,
 ):
-    r"""Build a full MO Lagrangian matrix from overlap and active RDMs.
-
-    .. math::
-
-        A^{m}_{p}[s,\gamma,D]
-        &=2\left[s(F_{\mathrm C})^{m}_{p}
-                 +(F_{\mathrm A}[\gamma])^{m}_{p}\right],
-          &&m\in\mathbb C,\\
-        A^{u}_{p}[s,\gamma,D]
-        &=\sum_v(F_{\mathrm C})^{v}_{p}\gamma^{v}_{u}
-          +\sum_{tvw}\langle pv|tw\rangle D_{tu,vw},
-          &&u\in\mathbb A,\\
-        A^{e}_{p}[s,\gamma,D]&=0,
-          &&e\in\mathbb V.
-
-    Inputs are :math:`(1,\gamma^\alpha,\Gamma^\alpha)` for a target state
-    or the root-summed transition quantities for a CI multiplier.
-
-    Returns
-    -------
-    np.ndarray
-        Full unsymmetrized MO Lagrangian matrix with shape ``(nmo, nmo)``.
-    """
+    r"""Return the MO orbital Lagrangian :math:`A[s,\gamma,D]`."""
     Fcore_mo, B_ga = intermediates
     Fact_ao_response = _build_transition_fock_response(
         orb_opt,
@@ -546,30 +317,7 @@ def _compute_ci_orbital_response_from_rdms(
     g2_response,
     intermediates,
 ):
-    r"""Map symmetrized transition RDMs to the orbital equation.
-
-    .. math::
-
-        (A^{\mathrm{oc}}[\mathbf x])^{m}_{p}
-        &=2\left[s[\mathbf x](F_{\mathrm C})^{m}_{p}
-                +(F_{\mathrm A}[\gamma[\mathbf x]])^{m}_{p}\right],\\
-        (A^{\mathrm{oc}}[\mathbf x])^{u}_{p}
-        &=\sum_v(F_{\mathrm C})^{v}_{p}\gamma^{v}_{u}[\mathbf x]
-          +\sum_{tvw}\langle pv|tw\rangle D_{tu,vw}[\mathbf x],\\
-        [\mathcal A^{\mathrm{oc}}\mathbf x]_I
-        &=2\left[(A^{\mathrm{oc}})^{q_I}_{p_I}
-                -(A^{\mathrm{oc}})^{p_I}_{q_I}\right].
-
-    Core and active columns use the first and second equations; virtual
-    columns vanish.  :math:`D[\mathbf x]` uses the permutation in
-    :func:`_make_working_2rdm`.
-
-    Returns
-    -------
-    np.ndarray
-        Orbital part of the orbital--CI action, with shape (nrot,) and
-        nrr C-order.
-    """
+    r"""Return :math:`[A^{oc}x]_I=2(A[x]^{q_I}_{p_I}-A[x]^{p_I}_{q_I})`."""
     A_response = _build_orbital_lagrangian_from_rdms(
         orb_opt,
         overlap_response,
@@ -582,19 +330,7 @@ def _compute_ci_orbital_response_from_rdms(
 
 
 def _get_ci_response_layout(mc):
-    r"""Construct the root-major coefficient layout and its dimension.
-
-    If root :math:`\alpha` contains :math:`n_\alpha` CSF coefficients,
-    the flattened response vector represented by the returned slices is
-
-    .. math::
-
-        \mathbf x
-        =\mathbf x_0\oplus\mathbf x_1\oplus\cdots
-         \oplus\mathbf x_{d-1},
-        \qquad
-        n_{\mathrm{CI}}=\sum_{\alpha=0}^{d-1}n_\alpha.
-    """
+    r"""Return root-major slices and :math:`n_{CI}=\sum_\alpha n_\alpha`."""
     layout = []
     start = 0
     for absolute_root, (state_index, root_in_state) in enumerate(
@@ -658,19 +394,7 @@ def _validate_ci_response_vector(mc, ci_vector):
 
 
 def _project_ci_response_vector(mc, ci_vector, layout):
-    r"""Project each root block out of its solved-state CI subspace.
-
-    For every state solver :math:`s`, this applies
-
-    .. math::
-
-        \mathbf Q_s\mathbf x_\alpha
-        =\left(\mathbf I_s-
-          \sum_{\gamma\in\mathcal R_s}
-          \mathbf c_\gamma\mathbf c_\gamma^{\mathsf T}\right)
-          \mathbf x_\alpha,
-        \qquad \alpha\in\mathcal R_s.
-    """
+    r"""Return :math:`Q_sx_\alpha=(I_s-\sum_{\gamma\in R_s}c_\gamma c_\gamma^T)x_\alpha`."""
     projected = np.empty_like(ci_vector)
     for _, state_index, _, coefficient_slice in layout:
         sub_solver = mc.ci_solver.sub_solvers[state_index]
@@ -683,28 +407,7 @@ def _project_ci_response_vector(mc, ci_vector, layout):
 
 
 def _compute_ci_response_rdms(mc, ci_vector, layout):
-    r"""Form root-summed overlap and transition-RDM responses.
-
-    For the root-major vector :math:`\mathbf x`, this returns
-
-    .. math::
-
-        s[\mathbf x]
-        &=\sum_{\alpha=0}^{d-1}\left(
-          S^{\mathbf x_\alpha,\mathbf c_\alpha}
-         +S^{\mathbf c_\alpha,\mathbf x_\alpha}\right),\\
-        \gamma^{u}_{v}[\mathbf x]
-        &=\sum_{\alpha=0}^{d-1}\left[
-          (\gamma^{u}_{v})^{\mathbf x_\alpha,\mathbf c_\alpha}
-         +(\gamma^{u}_{v})^{\mathbf c_\alpha,\mathbf x_\alpha}\right],\\
-        \gamma^{uv}_{wx}[\mathbf x]
-        &=\sum_{\alpha=0}^{d-1}\left[
-          (\gamma^{uv}_{wx})^{\mathbf x_\alpha,\mathbf c_\alpha}
-         +(\gamma^{uv}_{wx})^{\mathbf c_\alpha,\mathbf x_\alpha}\right].
-
-    The implementation evaluates both bra and ket transition densities
-    explicitly in the determinant basis.
-    """
+    r"""Return root sums of bra-plus-ket overlap, 1-RDM, and 2-RDM responses."""
     nact = mc.mo_space.nactv
     overlap_response = 0.0
     g1_response = np.zeros((nact,) * 2, dtype=float)
@@ -766,15 +469,7 @@ def compute_orbital_ci_hessian_vector_product(mc, ci_vector):
 def _compute_ci_orbital_hessian_vector_product(
     mc, orbital_vector, layout, intermediates
 ):
-    r"""Apply the CI--orbital block using a shared integral workspace.
-
-    .. math::
-
-        [\mathcal A^{\mathrm{co}}\mathbf z]_\alpha
-        =2w_\alpha\hat H[\mathbf z]\mathbf c_\alpha.
-
-    Inputs are validated by the caller; no CI projector is applied.
-    """
+    r"""Return :math:`[A^{co}z]_\alpha=2w_\alpha\hat H[z]c_\alpha`."""
     scalar_response, one_body_response, two_body_response = (
         _compute_active_space_hamiltonian_response(
             mc.orb_opt, orbital_vector, intermediates
@@ -809,17 +504,7 @@ def _compute_ci_orbital_hessian_vector_product(
 
 
 def _apply_ci_hamiltonian_to_csf(sub_solver, sigma_builder, vector):
-    r"""Apply a determinant-basis Hamiltonian to a real CSF vector.
-
-    If :math:`T` maps CSF coefficients to determinant coefficients, this
-    helper returns the CSF representation of the sigma vector
-
-    .. math::
-
-        \boldsymbol\sigma_{\mathrm{CSF}}
-        =T^{\mathsf T}\mathbf H_{\mathrm{det}}T\mathbf c_{\mathrm{CSF}}
-        \equiv\mathbf H_{\mathrm{CSF}}\mathbf c_{\mathrm{CSF}}.
-    """
+    r"""Return :math:`\sigma_{CSF}=T^{\mathsf T}H_{det}Tc_{CSF}`."""
     vector_det = sub_solver.csf_C_to_det_C(vector)
     sigma_det = np.empty(sub_solver.ndet, dtype=float)
     sigma_builder.Hamiltonian(vector_det, sigma_det)
@@ -861,16 +546,7 @@ def compute_ci_orbital_hessian_vector_product(mc, orbital_vector):
 
 
 def _compute_ci_ci_hessian_vector_product(mc, ci_vector, layout):
-    r"""Apply the raw CI--CI block to a validated vector.
-
-    .. math::
-
-        [\mathcal A^{\mathrm{cc}}\mathbf x]_\alpha
-        =2(\mathbf H_\alpha-E_\alpha\mathbf I_\alpha)
-         \mathbf x_\alpha.
-
-    Root slices are uncoupled; no SA weights or CI projectors are applied.
-    """
+    r"""Return :math:`[A^{cc}x]_\alpha=2(H_\alpha-E_\alpha I)x_\alpha`."""
     response = np.empty_like(ci_vector)
     for absolute_root, state_index, _, coefficient_slice in layout:
         sub_solver = mc.ci_solver.sub_solvers[state_index]
@@ -945,17 +621,7 @@ def compute_orbital_response_b_vector(mc, root):
 
 
 def _compute_raw_ci_response_b_vector(mc, root, layout):
-    r"""Build the unprojected real target-energy CI gradient.
-
-    For target absolute root :math:`\alpha`, this returns
-
-    .. math::
-
-        (\widetilde{\mathbf b}^{\mathrm c}_\alpha)_\beta
-        =2\delta_{\alpha\beta}\mathbf H_\beta\mathbf c_\beta.
-
-    The coefficient-space projector is deliberately not applied here.
-    """
+    r"""Return :math:`(\widetilde b^c_\alpha)_\beta=2\delta_{\alpha\beta}H_\beta c_\beta`."""
     _, state_index, root_in_state, coefficient_slice = layout[root]
     sub_solver = mc.ci_solver.sub_solvers[state_index]
     reference = sub_solver.evecs[:, root_in_state]
@@ -1032,13 +698,8 @@ def compute_projected_response_vector_product(mc, orbital_vector, ci_vector):
 def _compute_projected_response_vector_product(
     mc, orbital_vector, ci_vector, layout, intermediates
 ):
-    r"""Apply the projected response operator using a shared workspace.
-
-    .. math::
-
-        \mathbf y^{\mathrm o}=A_{oo}\mathbf z+A_{oc}Q\mathbf x,
-        \quad
-        \mathbf y^{\mathrm c}=Q(A_{co}\mathbf z+A_{cc}Q\mathbf x)+P\mathbf x.
+    r"""Return :math:`y^o=A_{oo}z+A_{oc}Qx` and
+    :math:`y^c=Q(A_{co}z+A_{cc}Qx)+Px` using shared intermediates.
     """
     projected_ci = _project_ci_response_vector(mc, ci_vector, layout)
 
@@ -1063,22 +724,7 @@ def _compute_projected_response_vector_product(
 
 
 def _invert_response_diagonal(diagonal):
-    r"""Return a sign-preserving, safely regularized inverse diagonal.
-
-    For :math:`s=\max(1,\lVert\mathbf d\rVert_\infty)` and
-    :math:`\epsilon=10^{-6}`, the returned entries are
-
-    .. math::
-
-        m_i&=\widetilde d_i^{-1},\\
-        \widetilde d_i&=
-        \begin{cases}
-          d_i,&|d_i|\ge\epsilon s,\\
-          \operatorname{sgn}_{+}(d_i)\epsilon s,&|d_i|<\epsilon s,
-        \end{cases}
-
-    where :math:`\operatorname{sgn}_{+}(0)=1`.
-    """
+    r"""Return :math:`1/\widetilde d_i` after sign-preserving :math:`10^{-6}\|d\|_\infty` flooring."""
     diagonal = np.asarray(diagonal, dtype=float)
     scale = max(1.0, float(np.max(np.abs(diagonal), initial=0.0)))
     floor = 1.0e-6 * scale
@@ -1088,24 +734,7 @@ def _invert_response_diagonal(diagonal):
 
 
 def _build_response_preconditioner(mc, layout, nrot, nci):
-    r"""Build a matrix-free block-Jacobi inverse for coupled GMRES.
-
-    .. math::
-
-        (d^{\mathrm c}_\alpha)_M
-        &=2[(H_\alpha)_{MM}-E_\alpha],\\
-        \mathcal M^{-1}
-        \binom{\mathbf v^{\mathrm o}}{\mathbf v^{\mathrm c}}
-        =
-        \begin{pmatrix}
-          (\widetilde D^{\mathrm o})^{-1}\mathbf v^{\mathrm o}\\
-          \mathcal Q_{\mathrm C}(\widetilde D^{\mathrm c})^{-1}
-          \mathcal Q_{\mathrm C}\mathbf v^{\mathrm c}
-          +\mathcal P_{\mathrm C}\mathbf v^{\mathrm c}
-        \end{pmatrix}.
-
-    Both inverse diagonals use :func:`_invert_response_diagonal`.
-    """
+    r"""Return the projected block-Jacobi :math:`M^{-1}` used by GMRES."""
     orbital_diagonal = mc.orb_opt._mat_to_vec(mc.orb_opt._compute_orbhess())
     orbital_inverse = _invert_response_diagonal(orbital_diagonal)
 
