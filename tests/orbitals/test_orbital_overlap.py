@@ -1,11 +1,12 @@
 import numpy as np
 
-from forte2 import System, RHF
+from forte2 import System, RHF, GHF
 from forte2.orbitals import mo_overlap, project_occupied_orbitals
 from forte2.helpers.comparisons import approx
+from forte2.base_classes import X2CParams
 
 
-def _system(delta, basis_set="cc-pvdz"):
+def _system(delta, basis_set="cc-pvdz", x2c=None):
     xyz = f"""
     O 0 0 {delta}
     H 0 0 1
@@ -15,11 +16,12 @@ def _system(delta, basis_set="cc-pvdz"):
         xyz=xyz,
         basis_set=basis_set,
         auxiliary_basis_set="cc-pvtz-jkfit",
+        x2c=x2c,
     )
     return sys
 
 
-def test_mo_overlap():
+def test_mo_overlap_rhf():
     sys_a = _system(0)
     hf_a = RHF(charge=0)(sys_a).run()
 
@@ -29,6 +31,19 @@ def test_mo_overlap():
     ovlp = mo_overlap(hf_a.C[0][:, :5], sys_a, hf_b.C[0][:, :5], sys_b)
     # <psi_a | psi_b> = det(S_alpha) det(S_beta) == det(S)^2 for RHF
     assert np.linalg.det(ovlp) ** 2 == approx(0.9918900343683039)
+
+
+def test_mo_overlap_ghf():
+    x2c = X2CParams(x2c_type="so", x2c_model="1e")
+    sys_a = _system(0, x2c=x2c)
+    hf_a = GHF(charge=0)(sys_a).run()
+
+    sys_b = _system(0.01, x2c=x2c)
+    hf_b = GHF(charge=0)(sys_b).run()
+
+    ovlp = mo_overlap(hf_a.C[0][:, :10], sys_a, hf_b.C[0][:, :10], sys_b)
+    # phrase is arbitrary, |det(S)| is the meaningful quantity
+    assert np.abs(np.linalg.det(ovlp)) == approx(0.9918884351285194)
 
 
 def test_project_occupied_orbitals():
