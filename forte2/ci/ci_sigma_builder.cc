@@ -217,6 +217,35 @@ void CISigmaBuilder::Hamiltonian(np_vector basis, np_vector sigma) const {
     build_count_++;
 }
 
+void CISigmaBuilder::sigma_one_electron(np_vector basis, np_vector sigma) const {
+    vector::zero<double>(sigma);
+    auto b_span = vector::as_span<double>(basis);
+    auto s_span = vector::as_span<double>(sigma);
+
+    H0(b_span, s_span);
+    if (algorithm_ == CIAlgorithm::Knowles_Handy) {
+        H1_kh(b_span, s_span, Spin::Alpha);
+        H1_kh(b_span, s_span, Spin::Beta);
+    } else {
+        H1_hz(b_span, s_span, Spin::Alpha, h_hz);
+        H1_hz(b_span, s_span, Spin::Beta, h_hz);
+    }
+}
+
+void CISigmaBuilder::sigma_two_electron(np_vector basis, np_vector sigma) const {
+    vector::zero<double>(sigma);
+    auto b_span = vector::as_span<double>(basis);
+    auto s_span = vector::as_span<double>(sigma);
+
+    if (algorithm_ == CIAlgorithm::Knowles_Handy) {
+        H2_kh(b_span, s_span);
+    } else {
+        H2_hz_opposite_spin(b_span, s_span);
+        H2_hz_same_spin(b_span, s_span, Spin::Alpha);
+        H2_hz_same_spin(b_span, s_span, Spin::Beta);
+    }
+}
+
 void CISigmaBuilder::H0(std::span<double> basis, std::span<double> sigma) const {
     add(basis.size(), E_, basis.data(), 1, sigma.data(), 1);
 }

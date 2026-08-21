@@ -105,6 +105,13 @@ void export_ci_sigma_builder_api(nb::module_& sub_m) {
         .def("slater_rules_csf", &CISigmaBuilder::slater_rules_csf, "dets"_a, "spin_adapter"_a,
              "I"_a, "J"_a)
         .def("Hamiltonian", &CISigmaBuilder::Hamiltonian, "basis"_a, "sigma"_a)
+        .def("sigma_one_electron", &CISigmaBuilder::sigma_one_electron, "basis"_a, "sigma"_a,
+             "Apply the scalar and one-electron part of the Hamiltonian to the wave function")
+        .def("sigma_two_electron", &CISigmaBuilder::sigma_two_electron, "basis"_a, "sigma"_a,
+             "Apply the two-electron part of the Hamiltonian to the wave function")
+        .def("set_Hamiltonian", &CISigmaBuilder::set_Hamiltonian, "E"_a, "H"_a, "V"_a,
+             "Swap in a new Hamiltonian with the same number of orbitals, without reallocating "
+             "scratch buffers")
         .def("make_sparse_state", &CISigmaBuilder::make_sparse_state, "C"_a, "threshold"_a = 1e-12,
              "Convert a CI vector to a sparse state")
         // Spin-free RDMs and cumulants
@@ -214,6 +221,13 @@ void export_rel_ci_sigma_builder_api(nb::module_& sub_m) {
         .def("form_Hdiag", &RelCISigmaBuilder::form_Hdiag, "dets"_a)
         .def("slater_rules", &RelCISigmaBuilder::slater_rules, "dets"_a, "I"_a, "J"_a)
         .def("Hamiltonian", &RelCISigmaBuilder::Hamiltonian, "basis"_a, "sigma"_a)
+        .def("sigma_one_electron", &RelCISigmaBuilder::sigma_one_electron, "basis"_a, "sigma"_a,
+             "Apply the scalar and one-electron part of the Hamiltonian to the wave function")
+        .def("sigma_two_electron", &RelCISigmaBuilder::sigma_two_electron, "basis"_a, "sigma"_a,
+             "Apply the two-electron part of the Hamiltonian to the wave function")
+        .def("set_Hamiltonian", &RelCISigmaBuilder::set_Hamiltonian, "E"_a, "H"_a, "V"_a,
+             "Swap in a new Hamiltonian with the same number of orbitals, without reallocating "
+             "scratch buffers")
         .def("so_1rdm", &RelCISigmaBuilder::compute_1rdm, "C_left"_a, "C_right"_a,
              "Compute the spin-orbital one-electron reduced density matrix")
         .def("so_2rdm", &RelCISigmaBuilder::compute_2rdm, "C_left"_a, "C_right"_a,
