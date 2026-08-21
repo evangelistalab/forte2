@@ -2,12 +2,10 @@ import numpy as np
 import pytest
 
 from forte2 import CISolver, GeometryOptimizer, MCOptimizer, State, System
-from forte2.base_classes.params import SelectedCIParams
-from forte2.orbitals import mo_overlap, project_occupied_orbitals
 from forte2.scf import RHF
-from forte2.sci import SelectedCISolver
 from forte2.system import BSE_AVAILABLE
 from forte2.gradients import FDGradient
+from forte2.dsrg import DSRG_MRPT2
 
 
 def test_geometry_optimizer_h2():
@@ -171,3 +169,44 @@ def test_fd_gradient_sa_casscf():
         max_step=0.5,
     )(fd)
     optimizer.run()
+
+
+@pytest.mark.slow
+def test_fd_gradient_dsrg_mrpt2():
+    system = System(
+        xyz="H 0 0 0\nH 0 0 2.0",
+        basis_set="6-31g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+    )
+    rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
+    ci_solver = CISolver(
+        State(system=system, multiplicity=1, ms=0.0),
+        active_orbitals=[0, 1],
+    )
+    mc = MCOptimizer(
+        ci_solver,
+        e_tol=1.0e-12,
+        g_tol=1.0e-10,
+        final_orbitals="semicanonical",
+    )(rhf)
+    dsrg = DSRG_MRPT2(flow_param=0.5, relax_reference=True)(mc)
+
+    fd = FDGradient(
+        step=1.0e-3,
+        npoints=4,
+        energy_accessor=lambda method: method.E_relaxed_ref,
+    )(dsrg)
+
+    optimizer = GeometryOptimizer(
+        maxiter=25,
+        g_tol=1.0e-7,
+        max_step=0.5,
+    )(fd)
+    optimizer.run()
+
+    bond_length = np.linalg.norm(optimizer.coordinates[1] - optimizer.coordinates[0])
+
+    assert optimizer.converged
+    assert optimizer.E == pytest.approx(-1.1492336391828861, abs=1.0e-7)
+    assert bond_length == pytest.approx(1.4140893807, abs=1.0e-6)

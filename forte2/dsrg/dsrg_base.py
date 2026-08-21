@@ -63,11 +63,15 @@ class DSRGBase(Method):
                 "Reference relaxation options not recognized, no relaxation will be performed."
             )
             self.nrelax = 0
+
+    def _startup(self):
+        # Reset per-run reference-relaxation state: run() mutates
+        # relax_eigvals_history in place (list -> ndarray by the end), so a
+        # rebound/rerun object needs these rebuilt fresh rather than reused.
         # [Edsrg(fixed_reference), Edsrg(relaxed_reference), Eref]
         self.relax_energies = np.zeros((self.nrelax + 1, 3))
         self.relax_eigvals_history = []
 
-    def _startup(self):
         if not self.parent_method.executed:
             self.parent_method.run()
 
