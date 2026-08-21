@@ -91,7 +91,7 @@ class GeometryOptimizer(Method):
 
         # Suppress the printing from the objective function
         current_verbosity = logger.get_verbosity_level()
-        logger.set_verbosity_level(min(current_verbosity - 1, 0))
+        logger.set_verbosity_level(max(current_verbosity - 1, 0))
 
         optimizer = LBFGS(
             epsilon=self.g_tol,

@@ -1,5 +1,3 @@
-"""Nuclear gradients by finite differences of the energy."""
-
 import time
 from dataclasses import dataclass, field
 from typing import Callable
@@ -173,7 +171,7 @@ class FDGradient(Method):
         # The upstream method runs once per displacement; let it report only if
         # the caller asked for more than the default detail.
         verbosity = logger.get_verbosity_level()
-        logger.set_verbosity_level(min(verbosity - 1, 0))
+        logger.set_verbosity_level(max(verbosity - 1, 0))
         start = time.monotonic()
         try:
             gradient = finite_difference(
@@ -222,7 +220,7 @@ class FDGradient(Method):
         """Extract the single energy to differentiate from `method`."""
         if self.energy_accessor is not None:
             value = self.energy_accessor(method)
-            if not np.isscalar(value):
+            if np.ndim(value) != 0:
                 raise ValueError(
                     f"energy_accessor on {type(method).__name__} returned a "
                     "non-scalar energy type"

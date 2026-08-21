@@ -140,8 +140,6 @@ class MCOptimizerBase(Method):
         self.ci_solver.run()
         self.mo_space = self.ci_solver.mo_space
         self.dtype = self.ci_solver.dtype
-        # point ci_solver's mos to self.mos, for _rotate_final_orbitals().
-        self.ci_solver.mos = self.mos
 
         # make the core, active, and virtual spaces contiguous
         # i.e., [core, gas1, gas2, ..., virt]
@@ -382,6 +380,8 @@ class MCOptimizerBase(Method):
             )
 
     def _rotate_final_orbitals(self) -> None:
+        # point ci_solver's mos to self.mos
+        self.ci_solver.mos = self.mos
         self.ci_solver._rotate_final_orbitals(self.final_orbitals)
 
         self.E_ci = np.array(self.ci_solver.E)
