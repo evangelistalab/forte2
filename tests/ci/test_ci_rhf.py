@@ -333,11 +333,13 @@ def test_ci_semicanonical_noncontiguous_mo_space():
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     mo_space = _lih_noncontiguous_mo_space(system)
 
-    ci_original = CI(State(nel=4, multiplicity=1, ms=0.0), mo_space=mo_space)(rhf)
+    ci_original = CI(State(nel=4, multiplicity=1, ms=0.0), mo_space_override=mo_space)(
+        rhf
+    )
     ci_original.run()
     ci_semicanonical = CI(
         State(nel=4, multiplicity=1, ms=0.0),
-        mo_space=mo_space,
+        mo_space_override=mo_space,
         final_orbitals="semicanonical",
     )(rhf)
     ci_semicanonical.run()
@@ -366,11 +368,13 @@ def test_ci_natural_noncontiguous_mo_space():
     rhf = RHF(charge=0, e_tol=1e-12)(system)
     mo_space = _lih_noncontiguous_mo_space(system)
 
-    ci_original = CI(State(nel=4, multiplicity=1, ms=0.0), mo_space=mo_space)(rhf)
+    ci_original = CI(State(nel=4, multiplicity=1, ms=0.0), mo_space_override=mo_space)(
+        rhf
+    )
     ci_original.run()
     ci_natural = CI(
         State(nel=4, multiplicity=1, ms=0.0),
-        mo_space=mo_space,
+        mo_space_override=mo_space,
         final_orbitals="natural",
     )(rhf)
     ci_natural.run()

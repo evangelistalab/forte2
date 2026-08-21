@@ -108,11 +108,11 @@ def test_rel_ci_semicanonical_noncontiguous_mo_space():
         frozen_virtual_orbitals=[6, 7],
     )
 
-    ci_original = RelCI(nel=4, mo_space=mo_space)(scf)
+    ci_original = RelCI(nel=4, mo_space_override=mo_space)(scf)
     ci_original.run()
     ci_semicanonical = RelCI(
         nel=4,
-        mo_space=mo_space,
+        mo_space_override=mo_space,
         final_orbitals="semicanonical",
     )(scf)
     ci_semicanonical.run()
@@ -160,11 +160,11 @@ def test_rel_ci_natural_noncontiguous_mo_space():
         frozen_virtual_orbitals=[6, 7],
     )
 
-    ci_original = RelCI(nel=4, mo_space=mo_space)(scf)
+    ci_original = RelCI(nel=4, mo_space_override=mo_space)(scf)
     ci_original.run()
     ci_natural = RelCI(
         nel=4,
-        mo_space=mo_space,
+        mo_space_override=mo_space,
         final_orbitals="natural",
     )(scf)
     ci_natural.run()

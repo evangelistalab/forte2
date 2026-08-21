@@ -1,4 +1,5 @@
 from dataclasses import fields
+from types import SimpleNamespace
 
 from forte2.orbitals.orbital_overlap import project_occupied_orbitals
 from .method import Method
@@ -110,69 +111,33 @@ def rebind_method_chain(method, new_system):
     return method
 
 
-class _OrbitalSnapshot:
-    """A frozen (system, MO coefficients) pair with the duck type that
-    `seed_chain_orbitals`/`project_occupied_orbitals` expect from a source
-    method: a `.system` and a `.mos.C`."""
-
-    __slots__ = ("system", "mos")
-
-    def __init__(self, system, C):
-        self.system = system
-        self.mos = _MOSnapshot(C)
-
-
-class _MOSnapshot:
-    __slots__ = ("C",)
-
-    def __init__(self, C):
-        self.C = C
-
-
 def snapshot_orbitals(method):
     """
-    Capture a method's current system and MO coefficients, decoupled from any
-    later mutation of `method` itself.
-
-    Needed to seed a rebound chain from what a source method looked like
-    *before* it gets reset and rebound to a new geometry, which matters once
-    the source and target are the same reused object.
+    Capture a method's current system and MO coefficients.
 
     Parameters
     ----------
     method : object
-        A method exposing `.system` and `.mos.C`.
+        A method exposing `.system` and `.mos`.
 
     Returns
     -------
     object | None
-        A snapshot usable anywhere a source method is expected, or None if
-        `method` has no orbitals yet.
+        A snapshot usable anywhere a source method is expected (it exposes
+        `.system` and `.mos.C`, matching `seed_chain_orbitals`/
+        `project_occupied_orbitals`), or None if `method` has no orbitals yet.
     """
     mos = getattr(method, "mos", None)
     if mos is None or mos.C is None:
         return None
-    return _OrbitalSnapshot(method.system, [C.copy() for C in mos.C])
+    return SimpleNamespace(system=method.system, mos=mos.copy())
 
 
 def _fresh_copy(obj):
     """
     Reconstruct a method object from its initialization options.
-
-    Some methods overwrite an initialization field with a value derived from the
-    others -- ``ActiveSpaceSolver.mo_space`` is built from the ``*_orbitals``
-    lists, ``RelActiveSpaceSolver.states`` from ``nel`` -- and replaying both the
-    derived value and the arguments it came from is rejected as ambiguous. Such a
-    class declares a ``_rebuild_kwargs()`` method returning the options the user
-    actually supplied; everything else is reconstructed from its current field
-    values.
     """
-    if hasattr(obj, "_rebuild_kwargs"):
-        kwargs = obj._rebuild_kwargs()
-    else:
-        kwargs = {
-            item.name: getattr(obj, item.name) for item in fields(obj) if item.init
-        }
+    kwargs = {item.name: getattr(obj, item.name) for item in fields(obj) if item.init}
     return type(obj)(**{name: _fresh_value(v) for name, v in kwargs.items()})
 
 

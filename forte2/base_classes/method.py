@@ -32,10 +32,7 @@ class Method(ABC):
     def reset(self):
         """
         Invalidate this stage's own run() results in place, without discarding
-        its configuration or its binding to the parent method. Subclasses that
-        overwrite an init field with a derived value (e.g. mo_space) or gate
-        re-derivation behind a flag (e.g. first_run) override this to restore
-        that state too.
+        its configuration or its binding to the parent method.
         """
         self.executed = False
         if hasattr(self, "converged"):

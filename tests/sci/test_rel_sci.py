@@ -208,11 +208,13 @@ def test_rel_sci_natural_noncontiguous_mo_space():
         pt2_threshold=0.0,
     )
 
-    sci_original = RelSelectedCI(nel=4, mo_space=mo_space, sci_params=sci_params)(scf)
+    sci_original = RelSelectedCI(
+        nel=4, mo_space_override=mo_space, sci_params=sci_params
+    )(scf)
     sci_original.run()
     sci_natural = RelSelectedCI(
         nel=4,
-        mo_space=mo_space,
+        mo_space_override=mo_space,
         sci_params=sci_params,
         final_orbitals="natural",
     )(scf)

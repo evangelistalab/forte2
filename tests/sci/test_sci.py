@@ -589,13 +589,13 @@ def test_sci_semicanonical_noncontiguous_mo_space():
 
     sci_original = SelectedCI(
         states=State(nel=4, multiplicity=1, ms=0.0),
-        mo_space=mo_space,
+        mo_space_override=mo_space,
         sci_params=sci_params,
     )(rhf)
     sci_original.run()
     sci_semicanonical = SelectedCI(
         states=State(nel=4, multiplicity=1, ms=0.0),
-        mo_space=mo_space,
+        mo_space_override=mo_space,
         sci_params=sci_params,
         final_orbitals="semicanonical",
     )(rhf)
@@ -615,13 +615,13 @@ def test_sci_natural_noncontiguous_mo_space():
 
     sci_original = SelectedCI(
         states=State(nel=4, multiplicity=1, ms=0.0),
-        mo_space=mo_space,
+        mo_space_override=mo_space,
         sci_params=sci_params,
     )(rhf)
     sci_original.run()
     sci_natural = SelectedCI(
         states=State(nel=4, multiplicity=1, ms=0.0),
-        mo_space=mo_space,
+        mo_space_override=mo_space,
         sci_params=sci_params,
         final_orbitals="natural",
     )(rhf)

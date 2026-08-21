@@ -115,19 +115,24 @@ def test_rebuild_replaces_nested_solver_objects():
     assert method.ci_solver.executed
 
 
-def test_rebuild_kwargs_drops_the_derived_mo_space():
+def test_rebuild_reconstructs_mo_space_from_active_orbitals():
     system = _h2()
     method = _casscf(system)
     method.run()
 
-    # _startup builds mo_space from active_orbitals and stores it on the init
-    # field; replaying both is rejected as ambiguous.
+    # mo_space is resolved from active_orbitals and is not an init field, so
+    # reconstruction replays active_orbitals rather than the resolved space.
     assert method.ci_solver.mo_space is not None
-    assert method.ci_solver._rebuild_kwargs()["mo_space"] is None
-    assert method.ci_solver._rebuild_kwargs()["active_orbitals"] == [0, 1]
+    assert method.ci_solver.mo_space_override is None
+
+    rebuilt = rebuild_method_chain(method, system.with_geometry(_DISPLACED))
+
+    assert rebuilt.ci_solver.mo_space is None
+    assert rebuilt.ci_solver.mo_space_override is None
+    assert rebuilt.ci_solver.active_orbitals == [0, 1]
 
 
-def test_rebuild_kwargs_keeps_a_user_provided_mo_space():
+def test_rebuild_preserves_a_user_provided_mo_space_override():
     system = _h2()
     rhf = _rhf(system)
     ci_solver = CISolver(
@@ -137,10 +142,12 @@ def test_rebuild_kwargs_keeps_a_user_provided_mo_space():
     mc.run()
 
     reused = CISolver(
-        State(system=system, multiplicity=1, ms=0.0), mo_space=mc.mo_space
-    )
+        State(system=system, multiplicity=1, ms=0.0), mo_space_override=mc.mo_space
+    )(rhf)
 
-    assert reused._rebuild_kwargs()["mo_space"] is mc.mo_space
+    rebuilt = rebuild_method_chain(reused, system.with_geometry(_DISPLACED))
+
+    assert rebuilt.mo_space_override is mc.mo_space
 
 
 def test_seed_chain_orbitals_installs_the_guess_on_the_chain_root():

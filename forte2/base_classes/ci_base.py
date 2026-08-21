@@ -113,7 +113,7 @@ class CIBase(ActiveSpaceSolver):
         rdm1 = np.zeros((self.norb,) * 2, dtype=self.dtype)
         for i, ci_solver in enumerate(self.sub_solvers):
             for j in range(ci_solver.nroot):
-                rdm1 += ci_solver.make_1rdm(j) * self.weights[i][j]
+                rdm1 += ci_solver.make_1rdm(j) * self.sa_info.weights[i][j]
         return rdm1
 
     def make_average_2rdm(self):
@@ -128,7 +128,7 @@ class CIBase(ActiveSpaceSolver):
         rdm2 = np.zeros((self.norb,) * 4, dtype=self.dtype)
         for i, ci_solver in enumerate(self.sub_solvers):
             for j in range(ci_solver.nroot):
-                rdm2 += ci_solver.make_2rdm(j) * self.weights[i][j]
+                rdm2 += ci_solver.make_2rdm(j) * self.sa_info.weights[i][j]
 
         return rdm2
 
@@ -144,7 +144,7 @@ class CIBase(ActiveSpaceSolver):
         rdm3 = np.zeros((self.norb,) * 6, dtype=self.dtype)
         for i, ci_solver in enumerate(self.sub_solvers):
             for j in range(ci_solver.nroot):
-                rdm3 += ci_solver.make_3rdm(j) * self.weights[i][j]
+                rdm3 += ci_solver.make_3rdm(j) * self.sa_info.weights[i][j]
 
         return rdm3
 
