@@ -38,6 +38,10 @@ def _rhf(system):
     return RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
 
 
+def _ghf(system):
+    return GHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
+
+
 def _casscf(system):
     ci_solver = CISolver(
         State(system=system, multiplicity=1, ms=0.0), active_orbitals=[0, 1]
@@ -187,36 +191,65 @@ def test_seeded_chain_converges_to_the_same_energy_as_an_unseeded_one():
     assert seeded.E == pytest.approx(unseeded.E, abs=1.0e-10)
 
 
-def test_project_scf_guess_declines_for_a_relativistic_chain():
-    # SpinorUpcaster marks the shared System two-component in place, so once a
-    # relativistic chain has run, its root reports two_component and the real
-    # orbital projection no longer applies. The rebuild still succeeds; it just
-    # starts from the default guess.
+def test_project_scf_guess_rejects_rel_to_non_rel():
     system = _h2()
     method = _rel_ci(system)
     method.run()
-    assert system.two_component
 
     rebuilt = rebuild_method_chain(method, system.with_geometry(_DISPLACED))
 
     assert not project_scf_guess(method, rebuilt)
+    # without a guess the rebuilt method can still run
     rebuilt.run()
-    assert rebuilt.executed
 
 
-def test_project_scf_guess_declines_when_projection_does_not_apply():
+def test_project_scf_guess_rejects_non_rel_to_rel():
     system = _h2()
     source = _rhf(system)
     source.run()
 
-    # GHF orbitals are not partitioned into alpha/beta occupied blocks, so the
-    # projection has no defined occupied count to project.
     target = rebuild_method_chain(
         GHF(charge=0)(system), system.with_geometry(_DISPLACED)
     )
 
     assert not project_scf_guess(source, target)
     assert getattr(target, "C", None) is None
+
+
+def test_project_scf_guess_for_a_relativistic_ghf_chain():
+    system = _h2()
+    method = _ghf(system)
+    method.run()
+
+    rebuilt = rebuild_method_chain(method, system.with_geometry(_DISPLACED))
+    applied = project_scf_guess(method, rebuilt)
+
+    root = list_method_chain(rebuilt)[0]
+    assert applied
+    assert root.C is not None
+
+    new_system = root.system
+    np.testing.assert_allclose(
+        mo_overlap(root.C[0], new_system, root.C[0]),
+        np.eye(root.C[0].shape[1]),
+        atol=1.0e-10,
+    )
+
+
+def test_seeded_ghf_chain_converges_to_the_same_energy_as_an_unseeded_one():
+    system = _h2()
+    method = _ghf(system)
+    method.run()
+    displaced_system = system.with_geometry(_DISPLACED)
+
+    seeded = rebuild_method_chain(method, displaced_system)
+    project_scf_guess(method, seeded)
+    seeded.run()
+
+    unseeded = rebuild_method_chain(method, displaced_system)
+    unseeded.run()
+
+    assert seeded.E == pytest.approx(unseeded.E, abs=1.0e-10)
 
 
 def test_reset_method_chain_invalidates_every_stage():

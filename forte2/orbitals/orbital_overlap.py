@@ -2,11 +2,14 @@ import numpy as np
 import scipy as sp
 
 import forte2.integrals as integrals
+from forte2.helpers import block_diag_2x2
 
 
 def mo_overlap(C_a, system_a, C_b, system_b=None):
     r"""
     Overlap between two sets of MO(-like) coefficients, :math:`C_a^\dagger S C_b`.
+    If system_a is two-component, then all other quantities are assumed
+    to have two-component dimensions.
 
     Parameters
     ----------
@@ -26,9 +29,11 @@ def mo_overlap(C_a, system_a, C_b, system_b=None):
         The overlap matrix, shape ``(n_a, n_b)``.
     """
     if system_b is None:
-        S = integrals.overlap(system_a)
+        S = system_a.ints_overlap()
     else:
         S = integrals.overlap(system_a, system_a.basis, system_b.basis)
+        if system_a.two_component:
+            S = block_diag_2x2(S)
     return C_a.T.conj() @ S @ C_b
 
 
@@ -115,7 +120,8 @@ def project_occupied_orbitals(source_method, method):
     -------
     list[NDArray] | None
         The projected MO coefficients, or None if the projection does not apply
-        (two-component systems, mismatched basis sets, unsupported references).
+        (mismatched representations between `source_method` and `method`,
+        unsupported references, or a numerically singular projection).
     """
     if not _can_project_orbitals(source_method, method):
         return None
@@ -135,12 +141,11 @@ def project_occupied_orbitals(source_method, method):
     return projected
 
 
-def _can_project_orbitals(source_method, method):
+def _can_project_orbitals(source_method, target_method):
     if getattr(source_method, "mos", None) is None:
         return False
-    if getattr(source_method.system, "two_component", False):
-        return False
-    if getattr(method.system, "two_component", False):
+    # check that source can provide the orbital shape that target wants
+    if source_method.mos.spinorbital != getattr(target_method, "two_component", False):
         return False
     if len(source_method.mos.C) not in [1, 2]:
         return False
@@ -152,9 +157,10 @@ def _occupied_counts(method):
         method._scf_type() if hasattr(method, "_scf_type") else type(method).__name__
     )
     if method_name == "GHF":
-        return None
+        return [method.nel] if hasattr(method, "nel") else None
     if not hasattr(method, "na") or not hasattr(method, "nb"):
         return None
     if method_name in ["UHF", "CUHF"]:
         return [method.na, method.nb]
+    # handles the RHF/ROHF cases
     return [max(method.na, method.nb)]
