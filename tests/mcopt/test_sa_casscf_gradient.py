@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from forte2 import CISolver, MCOptimizer, RHF, State, System, X2CParams
+from forte2.gradients import finite_difference
 from forte2.lib.ci_helpers import CISigmaBuilder
 from forte2.mcopt.mc_optimizer_response import (
     _build_ci_orbital_response_intermediates,
@@ -24,10 +25,7 @@ from forte2.mcopt.mc_optimizer_response import (
     solve_state_specific_response,
 )
 from forte2.mcopt.orbital_optimizer import OrbOptimizer
-from tests.gradient_test_utils import (
-    four_point_central_difference_gradient_component,
-    xyz_string,
-)
+from tests.gradient_test_utils import xyz_string
 
 
 def _sa_casscf(symbols, coordinates):
@@ -54,10 +52,6 @@ def _sa_casscf(symbols, coordinates):
     )(rhf)
     mc.run()
     return mc
-
-
-def _sa_casscf_root_energies(symbols, coordinates):
-    return _sa_casscf(symbols, coordinates).E_ci
 
 
 def _sa_casscf_mixed_spin(symbols, coordinates):
@@ -90,10 +84,6 @@ def _sa_casscf_mixed_spin(symbols, coordinates):
     return mc
 
 
-def _sa_casscf_mixed_spin_root_energies(symbols, coordinates):
-    return _sa_casscf_mixed_spin(symbols, coordinates).E_ci
-
-
 def _sa_casscf_c2_ccpvdz(symbols, coordinates):
     """Run a compact two-root C2 SA-CASSCF calculation in cc-pVDZ."""
     system = System(
@@ -119,10 +109,6 @@ def _sa_casscf_c2_ccpvdz(symbols, coordinates):
     )(rhf)
     mc.run()
     return mc
-
-
-def _sa_casscf_c2_ccpvdz_root_energies(symbols, coordinates):
-    return _sa_casscf_c2_ccpvdz(symbols, coordinates).E_ci
 
 
 def _sa_gasscf_h2_ccpvdz(symbols, coordinates, spin_free_x2c=False):
@@ -162,10 +148,6 @@ def _sa_gasscf_h2_ccpvdz(symbols, coordinates, spin_free_x2c=False):
     )(rhf)
     mc.run()
     return mc
-
-
-def _sa_gasscf_h2_ccpvdz_root_energies(symbols, coordinates, spin_free_x2c=False):
-    return _sa_gasscf_h2_ccpvdz(symbols, coordinates, spin_free_x2c).E_ci
 
 
 def _orbital_gradient_at_displacement(orbital_optimizer, displacement):
@@ -337,13 +319,13 @@ def test_sa_casscf_gradient_lih_finite_difference():
 
     mc = _sa_casscf(symbols, coordinates)
     gradients = np.array([mc.gradient(root=root) for root in range(2)])
-    numerical = four_point_central_difference_gradient_component(
-        _sa_casscf_root_energies,
-        symbols,
+    numerical = finite_difference(
+        lambda displaced: _sa_casscf(symbols, displaced).E_ci,
         coordinates,
-        1,
-        2,
-    )
+        step=1.0e-3,
+        npoints=4,
+        components=[(1, 2)],
+    )[0]
 
     assert gradients[:, 1, 2] == pytest.approx(numerical, abs=1.0e-7)
     assert numerical == pytest.approx(
@@ -381,13 +363,13 @@ def test_sa_casscf_gradient_mixed_spin_lih_finite_difference():
     assert ci_product.shape == ci_direction.shape
 
     gradients = np.array([mc.gradient(root=root) for root in range(2)])
-    numerical = four_point_central_difference_gradient_component(
-        _sa_casscf_mixed_spin_root_energies,
-        symbols,
+    numerical = finite_difference(
+        lambda displaced: _sa_casscf_mixed_spin(symbols, displaced).E_ci,
         coordinates,
-        1,
-        2,
-    )
+        step=1.0e-3,
+        npoints=4,
+        components=[(1, 2)],
+    )[0]
 
     assert gradients[:, 1, 2] == pytest.approx(numerical, abs=1.0e-7)
     assert numerical == pytest.approx(
@@ -404,13 +386,13 @@ def test_sa_casscf_gradient_c2_ccpvdz_finite_difference():
 
     mc = _sa_casscf_c2_ccpvdz(symbols, coordinates)
     gradient = mc.gradient(root=0)
-    numerical = four_point_central_difference_gradient_component(
-        _sa_casscf_c2_ccpvdz_root_energies,
-        symbols,
+    numerical = finite_difference(
+        lambda displaced: _sa_casscf_c2_ccpvdz(symbols, displaced).E_ci,
         coordinates,
-        1,
-        2,
-    )[0]
+        step=1.0e-3,
+        npoints=4,
+        components=[(1, 2)],
+    )[0, 0]
 
     assert mc.system.nbf == 28
     assert gradient[1, 2] == pytest.approx(numerical, abs=1.0e-7)
@@ -425,13 +407,13 @@ def test_sa_gasscf_gradient_h2_ccpvdz_finite_difference():
 
     mc = _sa_gasscf_h2_ccpvdz(symbols, coordinates)
     gradients = np.array([mc.gradient(root=root) for root in range(2)])
-    numerical = four_point_central_difference_gradient_component(
-        _sa_gasscf_h2_ccpvdz_root_energies,
-        symbols,
+    numerical = finite_difference(
+        lambda displaced: _sa_gasscf_h2_ccpvdz(symbols, displaced).E_ci,
         coordinates,
-        1,
-        2,
-    )
+        step=1.0e-3,
+        npoints=4,
+        components=[(1, 2)],
+    )[0]
 
     state = mc.ci_solver.sub_solvers[0].state
     assert mc.mo_space.ngas == 2
@@ -450,14 +432,15 @@ def test_sf_x2c_sa_gasscf_gradient_h2_ccpvdz_finite_difference():
 
     mc = _sa_gasscf_h2_ccpvdz(symbols, coordinates, spin_free_x2c=True)
     gradient = mc.gradient(root=1)
-    numerical = four_point_central_difference_gradient_component(
-        _sa_gasscf_h2_ccpvdz_root_energies,
-        symbols,
+    numerical = finite_difference(
+        lambda displaced: _sa_gasscf_h2_ccpvdz(
+            symbols, displaced, spin_free_x2c=True
+        ).E_ci,
         coordinates,
-        1,
-        2,
-        spin_free_x2c=True,
-    )[1]
+        step=1.0e-3,
+        npoints=4,
+        components=[(1, 2)],
+    )[0, 1]
 
     assert mc.system.x2c_type == "sf"
     assert mc.mo_space.ngas == 2
@@ -475,16 +458,16 @@ def test_sa_casscf_orbital_orbital_response_lih():
     direction /= np.linalg.norm(direction)
     product = compute_orbital_hessian_vector_product(orbital_optimizer, direction)
 
-    step = 1.0e-4
-    gradient_plus = _orbital_gradient_at_displacement(
-        orbital_optimizer, step * direction
+    numerical = finite_difference(
+        lambda scale: _orbital_gradient_at_displacement(
+            orbital_optimizer, scale * direction
+        ),
+        0.0,
+        step=1.0e-4,
+        npoints=2,
     )
-    gradient_minus = _orbital_gradient_at_displacement(
-        orbital_optimizer, -step * direction
-    )
-    finite_difference = (gradient_plus - gradient_minus) / (2.0 * step)
 
-    assert product == pytest.approx(finite_difference, abs=1.0e-7)
+    assert product == pytest.approx(numerical, abs=1.0e-7)
 
     probe = np.arange(orbital_optimizer.nrot, 0, -1, dtype=float)
     probe /= np.linalg.norm(probe)
@@ -513,22 +496,19 @@ def test_sa_casscf_orbital_ci_response_lih():
 
     ci_product = compute_orbital_ci_hessian_vector_product(mc, ci_direction)
 
-    step = 1.0e-5
     zero_orbital = np.zeros(orbital_optimizer.nrot)
-    gradient_plus = _orbital_gradient_at_wavefunction_displacement(
-        mc,
-        zero_orbital,
-        step * ci_direction,
-        state_averaged=False,
+    numerical = finite_difference(
+        lambda scale: _orbital_gradient_at_wavefunction_displacement(
+            mc,
+            zero_orbital,
+            scale * ci_direction,
+            state_averaged=False,
+        ),
+        0.0,
+        step=1.0e-5,
+        npoints=2,
     )
-    gradient_minus = _orbital_gradient_at_wavefunction_displacement(
-        mc,
-        zero_orbital,
-        -step * ci_direction,
-        state_averaged=False,
-    )
-    finite_difference = (gradient_plus - gradient_minus) / (2.0 * step)
-    assert ci_product == pytest.approx(finite_difference, abs=1.0e-8)
+    assert ci_product == pytest.approx(numerical, abs=1.0e-8)
 
     orbital_direction = np.arange(1, orbital_optimizer.nrot + 1, dtype=float)
     orbital_direction /= np.linalg.norm(orbital_direction)
@@ -536,20 +516,18 @@ def test_sa_casscf_orbital_ci_response_lih():
         compute_orbital_hessian_vector_product(orbital_optimizer, orbital_direction)
         + ci_product
     )
-    gradient_plus = _orbital_gradient_at_wavefunction_displacement(
-        mc,
-        step * orbital_direction,
-        step * ci_direction,
-        state_averaged=True,
+    numerical = finite_difference(
+        lambda scale: _orbital_gradient_at_wavefunction_displacement(
+            mc,
+            scale * orbital_direction,
+            scale * ci_direction,
+            state_averaged=True,
+        ),
+        0.0,
+        step=1.0e-5,
+        npoints=2,
     )
-    gradient_minus = _orbital_gradient_at_wavefunction_displacement(
-        mc,
-        -step * orbital_direction,
-        -step * ci_direction,
-        state_averaged=True,
-    )
-    finite_difference = (gradient_plus - gradient_minus) / (2.0 * step)
-    assert combined == pytest.approx(finite_difference, abs=1.0e-7)
+    assert combined == pytest.approx(numerical, abs=1.0e-7)
 
 
 def test_sa_casscf_ci_orbital_response_lih():
@@ -565,11 +543,15 @@ def test_sa_casscf_ci_orbital_response_lih():
     orbital_direction /= np.linalg.norm(orbital_direction)
     ci_product = compute_ci_orbital_hessian_vector_product(mc, orbital_direction)
 
-    step = 1.0e-5
-    gradient_plus = _ci_gradient_at_orbital_displacement(mc, step * orbital_direction)
-    gradient_minus = _ci_gradient_at_orbital_displacement(mc, -step * orbital_direction)
-    finite_difference = (gradient_plus - gradient_minus) / (2.0 * step)
-    assert ci_product == pytest.approx(finite_difference, abs=1.0e-8)
+    numerical = finite_difference(
+        lambda scale: _ci_gradient_at_orbital_displacement(
+            mc, scale * orbital_direction
+        ),
+        0.0,
+        step=1.0e-5,
+        npoints=2,
+    )
+    assert ci_product == pytest.approx(numerical, abs=1.0e-8)
 
     ci_direction = np.arange(1, nci + 1, dtype=float)
     ci_direction /= np.linalg.norm(ci_direction)
@@ -653,17 +635,17 @@ def test_sa_casscf_orbital_response_b_vector_lih():
 
     orbital_direction = np.arange(1, mc.orb_opt.nrot + 1, dtype=float)
     orbital_direction /= np.linalg.norm(orbital_direction)
-    step = 1.0e-5
     for root, b_vector in enumerate(b_vectors):
-        energy_plus = _root_energy_at_orbital_displacement(
-            mc, root, step * orbital_direction
+        numerical = finite_difference(
+            lambda scale: _root_energy_at_orbital_displacement(
+                mc, root, scale * orbital_direction
+            ),
+            0.0,
+            step=1.0e-5,
+            npoints=2,
         )
-        energy_minus = _root_energy_at_orbital_displacement(
-            mc, root, -step * orbital_direction
-        )
-        finite_difference = (energy_plus - energy_minus) / (2.0 * step)
         assert np.dot(b_vector, orbital_direction) == pytest.approx(
-            finite_difference, abs=1.0e-9
+            numerical, abs=1.0e-9
         )
 
         half_reference = np.zeros(nci)

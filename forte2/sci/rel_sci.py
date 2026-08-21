@@ -387,7 +387,7 @@ class RelSelectedCI(RelSelectedCISolver):
 
     def run(self):
         self._solve()
-        self._rotate_final_orbitals()
+        self._rotate_final_orbitals(self.final_orbitals)
         self._post_process()
         return self
 

@@ -6,3 +6,4 @@ User guide
     basics
     capabilities
     integrals
+    gradients

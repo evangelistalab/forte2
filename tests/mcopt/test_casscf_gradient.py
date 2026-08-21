@@ -2,11 +2,9 @@ import numpy as np
 import pytest
 
 from forte2 import System, RHF, MCOptimizer, State, CISolver, X2CParams
+from forte2.gradients import finite_difference
 from forte2.integrals import LIBCINT_AVAILABLE
-from tests.gradient_test_utils import (
-    four_point_central_difference_gradient_component,
-    xyz_string,
-)
+from tests.gradient_test_utils import xyz_string
 
 
 def _system(symbols, coordinates, **kwargs):
@@ -122,13 +120,14 @@ def test_casscf_gradient_h2_full_active_finite_difference_and_translation():
     kwargs = {"active_orbitals": 2}
 
     gradient = _casscf_gradient(symbols, coordinates, **kwargs)
+    numerical = finite_difference(
+        lambda displaced: _casscf_energy(symbols, displaced, **kwargs),
+        coordinates,
+        step=1.0e-3,
+        npoints=4,
+    )
 
-    for atom in range(2):
-        for cart in range(3):
-            numerical = four_point_central_difference_gradient_component(
-                _casscf_energy, symbols, coordinates, atom, cart, **kwargs
-            )
-            assert gradient[atom, cart] == pytest.approx(numerical, abs=1.0e-7)
+    assert gradient == pytest.approx(numerical, abs=1.0e-7)
 
     assert gradient.sum(axis=0) == pytest.approx(np.zeros(3), abs=1.0e-10)
 
@@ -140,9 +139,13 @@ def test_casscf_gradient_lih_core_active_selected_finite_difference():
     kwargs = {"core_orbitals": [0], "active_orbitals": [1, 2]}
 
     gradient = _casscf_gradient(symbols, coordinates, **kwargs)
-    numerical = four_point_central_difference_gradient_component(
-        _casscf_energy, symbols, coordinates, 1, 2, **kwargs
-    )
+    numerical = finite_difference(
+        lambda displaced: _casscf_energy(symbols, displaced, **kwargs),
+        coordinates,
+        step=1.0e-3,
+        npoints=4,
+        components=[(1, 2)],
+    )[0]
 
     assert gradient[1, 2] == pytest.approx(numerical, abs=1.0e-7)
     assert gradient.sum(axis=0) == pytest.approx(np.zeros(3), abs=1.0e-10)
@@ -160,13 +163,14 @@ def test_gasscf_gradient_h2_two_gas_finite_difference_and_translation():
     coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.7]])
 
     gradient = _gasscf_h2_gradient(symbols, coordinates)
+    numerical = finite_difference(
+        lambda displaced: _gasscf_h2_energy(symbols, displaced),
+        coordinates,
+        step=1.0e-3,
+        npoints=4,
+    )
 
-    for atom in range(2):
-        for cart in range(3):
-            numerical = four_point_central_difference_gradient_component(
-                _gasscf_h2_energy, symbols, coordinates, atom, cart
-            )
-            assert gradient[atom, cart] == pytest.approx(numerical, abs=1.0e-7)
+    assert gradient == pytest.approx(numerical, abs=1.0e-7)
 
     assert gradient.sum(axis=0) == pytest.approx(np.zeros(3), abs=1.0e-10)
 
@@ -193,9 +197,13 @@ def test_gasscf_gradient_n2_three_gas_selected_finite_difference():
     assert mc.ci_solver.sub_solvers[0].state.gas_max == [4, 4, 2]
     assert len(mc.ci_solver.sub_solvers[0].ci_strings.gas_occupations) > 1
 
-    numerical = four_point_central_difference_gradient_component(
-        _gasscf_n2_three_gas_energy, symbols, coordinates, 1, 2
-    )
+    numerical = finite_difference(
+        lambda displaced: _gasscf_n2_three_gas_energy(symbols, displaced),
+        coordinates,
+        step=1.0e-3,
+        npoints=4,
+        components=[(1, 2)],
+    )[0]
 
     assert gradient[1, 2] == pytest.approx(numerical, abs=1.0e-6)
     assert gradient.sum(axis=0) == pytest.approx(np.zeros(3), abs=1.0e-10)
@@ -392,13 +400,13 @@ def test_casscf_gradient_gaussian_nuclear_charges_finite_difference():
         return casscf(displaced[1, 2])
 
     gradient = casscf(coordinates[1, 2], gradient=True)
-    numerical = four_point_central_difference_gradient_component(
-        energy,
-        symbols,
+    numerical = finite_difference(
+        lambda displaced: energy(symbols, displaced),
         coordinates,
-        1,
-        2,
-    )
+        step=1.0e-3,
+        npoints=4,
+        components=[(1, 2)],
+    )[0]
 
     assert gradient[1, 2] == pytest.approx(numerical, abs=1.0e-8)
     assert gradient.sum(axis=0) == pytest.approx(np.zeros(3), abs=1.0e-10)
@@ -430,12 +438,11 @@ def test_sf_x2c_casscf_gradient_finite_difference():
         return mc.gradient()[1, 2] if gradient else mc.run().E
 
     analytical = casscf(coordinates[1, 2], gradient=True)
-    step = 1.0e-3
-    energies = [
-        casscf(coordinates[1, 2] + scale * step) for scale in (-2.0, -1.0, 1.0, 2.0)
-    ]
-    numerical = (energies[0] - 8.0 * energies[1] + 8.0 * energies[2] - energies[3]) / (
-        12.0 * step
+    numerical = finite_difference(
+        casscf,
+        coordinates[1, 2],
+        step=1.0e-3,
+        npoints=4,
     )
 
     assert analytical == pytest.approx(numerical, abs=1.0e-8)

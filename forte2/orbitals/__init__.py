@@ -13,6 +13,7 @@ from .orbital_blocks import OrbitalBlockBuilder
 from .aset import ASET
 from .iao import IAO, IBO
 from .converters import SpinorUpcaster
+from .orbital_overlap import mo_overlap, project_orbitals, project_occupied_orbitals
 
 # Backward compatibility: keep the old public name available
 Cube = CubeGenerator

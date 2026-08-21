@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar
 
 from .method import Method
@@ -11,12 +11,15 @@ class ActiveSpaceSolver(Method):
     states: State | list[State]
     nroots: int | list[int] = 1
     weights: list[float] | list[list[float]] = None
-    mo_space: MOSpace = None
+    mo_space_override: MOSpace = None
     frozen_core_orbitals: list[int] = None
     core_orbitals: list[int] = None
     active_orbitals: list[int] | list[list[int]] = None
     frozen_virtual_orbitals: list[int] = None
     die_if_not_converged: bool = False
+
+    # The actual mo_space built in _make_mo_space
+    mo_space: MOSpace = field(default=None, init=False)
 
     # Sanity-check tolerance for comparing energies before/after a final-orbital
     # rotation
@@ -25,16 +28,18 @@ class ActiveSpaceSolver(Method):
     def __post_init__(self):
         self.dtype = float
         self.sa_info = StateAverageInfo(
-            states=self.states,
+            states=self._resolve_states(),
             nroots=self.nroots,
             weights=self.weights,
         )
         self.ncis = self.sa_info.ncis
-        self.weights = self.sa_info.weights
         self.weights_flat = self.sa_info.weights_flat
         self.requires = {"system", "mos"}
         self.requires_attrs.update({"two_component": False})
         self.provides = {"system", "mos", "mo_space"}
+
+    def _resolve_states(self):
+        return self.states
 
     def _startup(self):
         if not self.parent_method.executed:
@@ -49,12 +54,12 @@ class ActiveSpaceSolver(Method):
         two_component = self.two_component
         # Ways of providing the MO space:
         # 1. Via the parent method (if it has mo_space).
-        # 2. Via the mo_space parameter.
+        # 2. Via the mo_space_override parameter.
         # 3. Via the *_orbitals parameters (core_orbitals, active_orbitals, frozen_core_orbitals, frozen_virtual_orbitals).
         # If any one of 2-3 is provided, then 1 is ignored.
         # If more than one of 2-3 is provided, then an error is raised.
         provided_via_parent = "mo_space" in self.parent_method.provides
-        provided_via_mo_space = self.mo_space is not None
+        provided_via_mo_space = self.mo_space_override is not None
         provided_via_orbitals = any(
             [
                 self.frozen_core_orbitals is not None,
@@ -69,14 +74,14 @@ class ActiveSpaceSolver(Method):
         if (not provided_via_parent) and (provided_via_args == 0):
             raise ValueError(
                 "Parent_method cannot provide MOSpace. "
-                "Either mo_space or the *_orbitals arguments "
+                "Either mo_space_override or the *_orbitals arguments "
                 "(core_orbitals, active_orbitals, frozen_core_orbitals, "
                 "frozen_virtual_orbitals) must be provided."
             )
 
         if provided_via_args > 1:
             raise ValueError(
-                "Only one of mo_space or the *_orbitals arguments "
+                "Only one of mo_space_override or the *_orbitals arguments "
                 "(core_orbitals, active_orbitals, frozen_core_orbitals, "
                 "frozen_virtual_orbitals) can be provided."
             )
@@ -85,6 +90,7 @@ class ActiveSpaceSolver(Method):
         if provided_via_args == 1:
             if provided_via_mo_space:
                 # mo_space is provided directly
+                self.mo_space = self.mo_space_override
                 logger.log_info1("ActiveSpaceSolver: Using provided mo_space.")
                 return
 
@@ -130,10 +136,13 @@ class RelActiveSpaceSolver(ActiveSpaceSolver):
             raise ValueError("Either nel or states must be provided.")
         if self.nel is not None and self.states is not None:
             raise ValueError("Only one of nel or states can be provided.")
-        if self.nel is not None:
-            mult = 1 if self.nel % 2 == 0 else 2
-            ms = 0.0 if mult == 1 else 0.5
-            self.states = State(nel=self.nel, multiplicity=mult, ms=ms)
         super().__post_init__()
         self.requires_attrs.update({"two_component": True})
         self.dtype = complex
+
+    def _resolve_states(self):
+        if self.nel is not None:
+            mult = 1 if self.nel % 2 == 0 else 2
+            ms = 0.0 if mult == 1 else 0.5
+            return State(nel=self.nel, multiplicity=mult, ms=ms)
+        return self.states

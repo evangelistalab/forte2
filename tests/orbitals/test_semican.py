@@ -9,7 +9,6 @@ from forte2 import (
     orbitals,
     State,
     MCOptimizer,
-    integrals,
     CISolver,
 )
 from forte2.helpers.comparisons import approx
@@ -18,6 +17,7 @@ from forte2.orbitals import (
     OrbitalBlockBuilder,
     Semicanonicalizer,
     make_natural_orbitals,
+    mo_overlap,
 )
 from forte2.base_classes import DavidsonLiuParams
 from forte2.state import EmbeddingMOSpace
@@ -213,9 +213,7 @@ def test_semican_embedding_gas_blocks():
     assert "gas" in spaces
     assert "actv" not in spaces
 
-    mixed = Semicanonicalizer(
-        system=DummySystem(), mo_space=mo_space, mix_active=True
-    )
+    mixed = Semicanonicalizer(system=DummySystem(), mo_space=mo_space, mix_active=True)
     spaces = mixed._semicanonical_spaces()
     assert "actv" in spaces
     assert "gas" not in spaces
@@ -340,8 +338,10 @@ def test_semican_orbitals():
     semi = Semicanonicalizer(mo_space=mc.mo_space, system=system)
     semi.semi_canonicalize(g1=mc.ci_solver.make_average_1rdm(), C_contig=mc.mos.C[0])
     c_semi = semi.C_semican.copy()
-    ovlp = integrals.overlap(system)
 
     assert np.allclose(
-        np.abs(c_mc.T @ ovlp @ c_semi), np.eye(c_mc.shape[1]), rtol=0, atol=1e-8
+        np.abs(mo_overlap(c_mc, system, c_semi)),
+        np.eye(c_mc.shape[1]),
+        rtol=0,
+        atol=1e-8,
     )

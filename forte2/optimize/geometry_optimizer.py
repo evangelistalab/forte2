@@ -1,15 +1,19 @@
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from typing import Callable
 
 import numpy as np
-import scipy as sp
 
-import forte2.integrals as integrals
 from forte2.base_classes import Method
+from forte2.base_classes.rebuild import (
+    rebind_method_chain,
+    rebuild_method_chain,
+    project_scf_guess,
+    snapshot_orbitals,
+)
 from forte2.data import Z_TO_ATOM_SYMBOL
 from forte2.helpers import LBFGS, logger
 from forte2.helpers.table import AsciiTable
-from forte2.system import ModelSystem, System
+from forte2.system import System
 
 
 @dataclass
@@ -77,7 +81,7 @@ class GeometryOptimizer(Method):
         Attach the optimizer to an upstream method.
 
         The upstream method supplies both the initial ``System`` and the method
-        configuration used to rebuild a fresh method object at each geometry.
+        configuration used to rebuild a fresh method chain at each geometry.
         """
         self._register_parent_method(method)
         return self
@@ -102,7 +106,7 @@ class GeometryOptimizer(Method):
 
         # Suppress the printing from the objective function
         current_verbosity = logger.get_verbosity_level()
-        logger.set_verbosity_level(min(current_verbosity - 1, 0))
+        logger.set_verbosity_level(max(current_verbosity - 1, 0))
 
         optimizer = LBFGS(
             epsilon=self.g_tol,
@@ -141,8 +145,13 @@ class GeometryOptimizer(Method):
                 self.parent_method.run()
 
             system = self.parent_method.system
-            _validate_system_for_optimization(system)
-            method_builder = _method_builder_from_template(self.parent_method)
+            template_method = self.parent_method
+            # scratch_chain is only built once and then reused for every iteration
+            scratch_chain = rebuild_method_chain(template_method, system)
+
+            def method_builder(new_system):
+                return rebind_method_chain(scratch_chain, new_system)
+
             objective = _GeometryObjective(
                 system,
                 method_builder,
@@ -162,7 +171,6 @@ class GeometryOptimizer(Method):
                     "system is required when GeometryOptimizer is used with "
                     "method_factory."
                 )
-            _validate_system_for_optimization(system)
             objective = _GeometryObjective(
                 system,
                 self.method_factory,
@@ -253,13 +261,8 @@ class _GeometryObjective:
         self.project_orbitals = project_orbitals
         self.previous_method = seed_method
         self.root = root
+        self.template_system = template_system
         self.atomic_numbers = np.asarray(template_system.atomic_charges, dtype=int)
-        self.init_kwargs = {
-            item.name: getattr(template_system, item.name)
-            for item in fields(System)
-            if item.init
-        }
-        self.init_kwargs["unit"] = "bohr"
 
         self.x = None
         self.system = None
@@ -302,15 +305,19 @@ class _GeometryObjective:
                 self._record_progress()
             return
 
-        self.x = np.asarray(x, dtype=float).copy()
-        self.system = self._build_system(self.x)
-        self.method = self.method_builder(self.system)
+        # Snapshot the projection source before method_builder runs: once the
+        # chain is reused in place (rebind_method_chain), self.previous_method
+        # and the about-to-be-rebuilt self.method are the same live object, so
+        # its orbitals must be captured now, not read back off it afterwards.
+        projection_source = None
         if self.project_orbitals and self.previous_method is not None:
-            projected = _project_previous_occupied_orbitals(
-                self.previous_method, self.method
-            )
-            if projected is not None:
-                self.method.C = projected
+            projection_source = snapshot_orbitals(self.previous_method)
+
+        self.x = np.asarray(x, dtype=float).copy()
+        self.system = self.template_system.with_geometry(self.x.reshape(-1, 3))
+        self.method = self.method_builder(self.system)
+        if projection_source is not None:
+            project_scf_guess(projection_source, self.method)
         if not self.method.executed:
             self.method.run()
         self.E = _method_energy(self.method, self.root)
@@ -328,11 +335,6 @@ class _GeometryObjective:
 
     def _cache_matches(self, x):
         return self.x is not None and np.array_equal(self.x, np.asarray(x, dtype=float))
-
-    def _build_system(self, x):
-        kwargs = dict(self.init_kwargs)
-        kwargs["xyz"] = _coords_to_xyz(self.atomic_numbers, x.reshape(-1, 3))
-        return System(**kwargs)
 
     def _record_progress(self):
         if self.g is None or self.E is None or self.x is None:
@@ -358,109 +360,6 @@ class _GeometryObjective:
         )
         self.logged_x = self.x.copy()
         self.logged_E = self.E
-
-
-def _method_builder_from_template(method):
-    if not isinstance(method, Method):
-        raise TypeError(
-            "GeometryOptimizer upstream methods must be dataclass instances so "
-            "their initialization options can be replayed at new geometries."
-        )
-    method_type = type(method)
-    method_kwargs = {
-        item.name: getattr(method, item.name) for item in fields(method) if item.init
-    }
-
-    def build(new_system):
-        return method_type(**method_kwargs)(new_system)
-
-    return build
-
-
-def _project_previous_occupied_orbitals(previous_method, method):
-    """
-    Project occupied orbitals from ``previous_method`` into ``method.system``.
-
-    The projection uses the cross-overlap between the new and old AO bases:
-
-    ``Q_occ = X_new^T S(new, old) C_occ_old``,
-
-    where ``X_new`` is the canonical orthogonalizer for the new AO basis. The
-    projected occupied subspace is orthonormalized, then completed with an
-    orthonormal virtual complement so the SCF object receives a full MO guess.
-    """
-    if not _can_project_orbitals(previous_method, method):
-        return None
-
-    occupied_counts = _occupied_counts(method)
-    if occupied_counts is None or len(occupied_counts) != len(previous_method.mos.C):
-        return None
-
-    projected = []
-    for C_old, nocc in zip(previous_method.mos.C, occupied_counts):
-        C_new = _project_mo_coefficients(
-            previous_method.system, method.system, C_old, nocc
-        )
-        if C_new is None:
-            return None
-        projected.append(C_new)
-
-    return projected
-
-
-def _can_project_orbitals(previous_method, method):
-    if getattr(previous_method, "mos", None) is None:
-        return False
-    if getattr(previous_method.system, "two_component", False):
-        return False
-    if getattr(method.system, "two_component", False):
-        return False
-    if previous_method.system.basis_set != method.system.basis_set:
-        return False
-    if len(previous_method.mos.C) not in [1, 2]:
-        return False
-    return True
-
-
-def _occupied_counts(method):
-    method_name = (
-        method._scf_type() if hasattr(method, "_scf_type") else type(method).__name__
-    )
-    if method_name == "GHF":
-        return None
-    if not hasattr(method, "na") or not hasattr(method, "nb"):
-        return None
-    if method_name in ["UHF", "CUHF"]:
-        return [method.na, method.nb]
-    return [max(method.na, method.nb)]
-
-
-def _project_mo_coefficients(old_system, new_system, C_old, nocc):
-    X_new = new_system.get_Xorth()
-    if nocc == 0:
-        return X_new.copy()
-    if nocc > C_old.shape[1] or nocc > X_new.shape[1]:
-        return None
-
-    S_cross = integrals.overlap(new_system, new_system.basis, old_system.basis)
-    Q_occ_raw = X_new.T.conj() @ S_cross @ C_old[:, :nocc]
-    singular_values = np.linalg.svd(Q_occ_raw, compute_uv=False)
-    if len(singular_values) < nocc or singular_values[-1] < 1.0e-8:
-        return None
-
-    Q_occ, _ = np.linalg.qr(Q_occ_raw, mode="reduced")
-    Q_occ = Q_occ[:, :nocc]
-
-    nvirt = X_new.shape[1] - nocc
-    if nvirt > 0:
-        Q_virt = sp.linalg.null_space(Q_occ.T.conj())
-        if Q_virt.shape[1] < nvirt:
-            return None
-        Q = np.hstack((Q_occ, Q_virt[:, :nvirt]))
-    else:
-        Q = Q_occ
-
-    return X_new @ Q
 
 
 def _method_name(method):
@@ -502,29 +401,3 @@ def _format_float(value):
     if value is None:
         return "-"
     return f"{value:.4e}"
-
-
-def _coords_to_xyz(atomic_numbers, coordinates):
-    lines = []
-    for atomic_number, xyz in zip(atomic_numbers, coordinates):
-        symbol = Z_TO_ATOM_SYMBOL[int(atomic_number)]
-        lines.append(f"{symbol} {xyz[0]:.16f} {xyz[1]:.16f} {xyz[2]:.16f}")
-    return "\n".join(lines)
-
-
-def _validate_system_for_optimization(system):
-    if isinstance(system, ModelSystem):
-        raise NotImplementedError(
-            "Geometry optimization is not implemented for ModelSystem."
-        )
-    if not isinstance(system, System):
-        raise TypeError("system must be a forte2.System instance.")
-    if system.symmetry:
-        raise NotImplementedError(
-            "Geometry optimization requires symmetry=False so Cartesian coordinates "
-            "are not reoriented during rebuilds."
-        )
-    if system.basis_set is None:
-        raise NotImplementedError(
-            "Geometry optimization requires a rebuildable System with basis_set defined."
-        )
