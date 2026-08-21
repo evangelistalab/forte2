@@ -115,10 +115,10 @@ class MutualCorrelationEnergyAnalysis:
                 )
 
         self.total_correlation = (
-            sum(self.M1.values())
-            + sum(self.M2.values())
-            + sum(self.M3.values())
-            + sum(self.M4.values())
+           # sum(self.M1.values())
+            sum(self.M2.values())
+           # + sum(self.M3.values())
+           # + sum(self.M4.values())
         )
 
     @property

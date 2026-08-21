@@ -118,10 +118,10 @@ class MutualCorrelationEnergyAnalysis:
                 )
 
         self.total_correlation = (
-            sum(self.M1.values())
-            + sum(self.M2.values())
-            + sum(self.M3.values())
-            + sum(self.M4.values())
+           # sum(self.M1.values())
+             sum(self.M2.values())
+           # + sum(self.M3.values())
+           # + sum(self.M4.values())
         )
 
     @property
@@ -180,7 +180,7 @@ class MutualCorrelationEnergyAnalysis:
     ):
 
         lines = [
-            f"Total Correlation Energy (Sum of the 2-Cumulant Terms): {self.total_correlation:16.10f}",
+            f"Total M2 Correlation Energy (Sum of the 2-Cumulant Terms): {self.total_correlation:16.10f}",
             "",
             f"M2 Terms (|value| > {print_threshold:.1e})",
             "------------------------------------------",
