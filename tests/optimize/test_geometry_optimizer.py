@@ -37,6 +37,56 @@ def test_geometry_optimizer_relaxes_stretched_h2():
     assert optimizer.method is not None
 
 
+def test_geometry_optimizer_selects_matching_root_energy_and_gradient():
+    """Use the same absolute root for both parts of an SA objective."""
+    system = System(
+        xyz="H 0 0 0\nH 0 0 1.4",
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        symmetry=False,
+    )
+    built_methods = []
+
+    class RootResolvedMethod:
+        def __init__(self, current_system):
+            self.system = current_system
+            self.executed = False
+            self.E = None
+            self.E_ci = None
+            self.gradient_roots = []
+
+        def run(self):
+            self.E = -1.0
+            self.E_ci = np.array([-0.9, -0.4])
+            self.executed = True
+            return self
+
+        def gradient(self, root=None):
+            self.gradient_roots.append(root)
+            return np.full((2, 3), float(root))
+
+    def build_method(current_system):
+        method = RootResolvedMethod(current_system)
+        built_methods.append(method)
+        return method
+
+    optimizer = GeometryOptimizer(
+        method_factory=build_method,
+        root=1,
+        project_orbitals=False,
+    )
+    objective, coordinates = optimizer._build_objective(system)
+
+    assert objective.evaluate(coordinates) == pytest.approx(-0.4)
+    assert objective.gradient(coordinates) == pytest.approx(np.ones(6))
+    assert built_methods[0].gradient_roots == [1]
+
+    with pytest.raises(TypeError, match="integer or None"):
+        GeometryOptimizer(root=True)
+    with pytest.raises(ValueError, match="nonnegative"):
+        GeometryOptimizer(root=-1)
+
+
 @pytest.mark.skipif(not BSE_AVAILABLE, reason="basis_set_exchange not installed")
 def test_geometry_optimizer_water_cc_pvdz():
     system = System(
