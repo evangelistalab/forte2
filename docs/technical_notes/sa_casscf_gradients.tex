@@ -917,6 +917,59 @@ The relaxed metric weight, called \texttt{W2}, is
 The response of both outer $C_h$ factors and of the internally transformed
 $Z^P_{ij}$ is therefore included exactly once.
 
+\subsection{Implemented contraction sequence}
+
+The relaxed-density implementation follows three explicit algebraic kernels.
+First, the AO one-particle density is assembled directly from the core and
+active blocks according to \cref{eq:nr-relaxed-ao-1rdm}.  Equivalently, if
+\begin{equation}
+ \mathcal D[C_{\core},C_{\act};\gamma]
+ =2C_{\core}C_{\core}^{\mathsf T}
+  +C_{\act}\gamma C_{\act}^{\mathsf T},
+\end{equation}
+then the implemented density is
+\begin{equation}
+ D^{\mathrm{rel},\alpha}
+ =\mathcal D[C_{\core},C_{\act};\gamma^{\mathrm b}]
+ +D_{\dot C}\mathcal D[C_{\core},C_{\act};\bar\gamma],
+ \label{eq:nr-implemented-relaxed-d1}
+\end{equation}
+where the directional derivative acts only on the coefficient matrices.
+
+Second, the AO metric-applied tensor is transformed to the hole space together
+with its orbital direction,
+\begin{equation}
+ (Z_h,\dot Z_h)
+ =\left(C_h^{\mathsf T}ZC_h,
+ \dot C_h^{\mathsf T}ZC_h+C_h^{\mathsf T}Z\dot C_h\right),
+ \label{eq:nr-implemented-hole-transform}
+\end{equation}
+which is \cref{eq:nr-hole-df,eq:nr-hole-df-response} written in matrix form for
+each auxiliary index.  The AO tensor $Z^P_{\mu\nu}$ is released immediately
+after this transformation.  Consequently it is not resident when the final
+AO-sized three-center weight $W^{P,\alpha}_{\mu\nu}$ is allocated.
+
+Third, the base and directional compact weights are back-transformed in one
+kernel according to \cref{eq:nr-relaxed-w3}.  In functional notation, with
+\begin{equation}
+ \mathcal B[C_h,U^h]^P=C_hU^{P,h}C_h^{\mathsf T},
+\end{equation}
+the implemented operation is
+\begin{equation}
+ W^{P,\alpha}
+ =\mathcal B[C_h,W^{P,h,\mathrm b}]
+ +D_{(\dot C_h,\dot{\bar W}^{P,h})}
+  \mathcal B[C_h,\bar W^{P,h}].
+ \label{eq:nr-implemented-w3-backtransform}
+\end{equation}
+The base hole density and cumulant are discarded before their state-averaged
+counterparts are formed.  After the directional compact weights are built,
+only the hole-space weights and coefficient blocks remain for the AO
+back-transformation.  This ordering retains the
+$O(N_{\mathrm{aux}}N_{\mathrm H}^2)$ compact representation until the last
+step and avoids overlapping the two
+$O(N_{\mathrm{aux}}N_{\mathrm{AO}}^2)$ tensors in memory.
+
 The common AO derivative-integral layer evaluates the two-electron part as
 \begin{equation}
  E^x_{2,\alpha}

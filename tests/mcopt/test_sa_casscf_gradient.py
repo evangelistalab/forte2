@@ -3,6 +3,11 @@ import pytest
 
 from forte2 import CISolver, MCOptimizer, RHF, State, System, X2CParams
 from forte2.gradients import finite_difference
+from forte2.mcopt.mc_optimizer_grad import (
+    _backtransform_df_hole_response,
+    _build_sa_casscf_relaxed_one_body_density,
+    _transform_df_hole_response,
+)
 from forte2.mcopt.mc_optimizer_response import (
     _build_ci_reference_det_vectors,
     _build_coupled_response_intermediates,
@@ -139,6 +144,97 @@ def _sa_gasscf_h2_ccpvdz(symbols, coordinates, spin_free_x2c=False):
     )(rhf)
     mc.run()
     return mc
+
+
+def test_sa_casscf_relaxed_one_body_density_kernel():
+    """Check the target density plus the average-density orbital response."""
+    rng = np.random.default_rng(7)
+    Ccore = rng.standard_normal((6, 2))
+    Cact = rng.standard_normal((6, 3))
+    Ccore_response = rng.standard_normal(Ccore.shape)
+    Cact_response = rng.standard_normal(Cact.shape)
+    base_g1 = rng.standard_normal((3, 3))
+    average_g1 = rng.standard_normal((3, 3))
+
+    actual = _build_sa_casscf_relaxed_one_body_density(
+        Ccore,
+        Cact,
+        Ccore_response,
+        Cact_response,
+        base_g1,
+        average_g1,
+    )
+    base = 2.0 * Ccore @ Ccore.T + Cact @ base_g1 @ Cact.T
+    response = finite_difference(
+        lambda scale: 2.0
+        * (Ccore + scale * Ccore_response)
+        @ (Ccore + scale * Ccore_response).T
+        + (Cact + scale * Cact_response)
+        @ average_g1
+        @ (Cact + scale * Cact_response).T,
+        0.0,
+        step=1.0e-5,
+        npoints=2,
+    )
+    assert actual == pytest.approx(base + response, abs=1.0e-9)
+
+
+def test_sa_casscf_df_hole_response_kernel():
+    """Check the directional hole-space transformation of the AO DF tensor."""
+    rng = np.random.default_rng(11)
+    Ch = rng.standard_normal((5, 3))
+    Ch_response = rng.standard_normal(Ch.shape)
+    Z_ao = rng.standard_normal((4, 5, 5))
+    Z_ao += Z_ao.transpose(0, 2, 1)
+
+    Z_h, Z_h_response = _transform_df_hole_response(Z_ao, Ch, Ch_response)
+    expected = np.einsum("mi,Pmn,nj->Pij", Ch, Z_ao, Ch, optimize=True)
+    expected_response = finite_difference(
+        lambda scale: np.einsum(
+            "mi,Pmn,nj->Pij",
+            Ch + scale * Ch_response,
+            Z_ao,
+            Ch + scale * Ch_response,
+            optimize=True,
+        ),
+        0.0,
+        step=1.0e-5,
+        npoints=2,
+    )
+    assert Z_h == pytest.approx(expected, abs=1.0e-12)
+    assert Z_h_response == pytest.approx(expected_response, abs=1.0e-9)
+
+
+def test_sa_casscf_df_hole_backtransform_kernel():
+    """Check all three product-rule terms in the relaxed AO DF weight."""
+    rng = np.random.default_rng(13)
+    Ch = rng.standard_normal((5, 3))
+    Ch_response = rng.standard_normal(Ch.shape)
+    W3_h_base = rng.standard_normal((4, 3, 3))
+    W3_h_average = rng.standard_normal((4, 3, 3))
+    W3_h_average_response = rng.standard_normal((4, 3, 3))
+
+    actual = _backtransform_df_hole_response(
+        Ch,
+        Ch_response,
+        W3_h_base,
+        W3_h_average,
+        W3_h_average_response,
+    )
+    base = np.einsum("mi,Pij,nj->Pmn", Ch, W3_h_base, Ch, optimize=True)
+    response = finite_difference(
+        lambda scale: np.einsum(
+            "mi,Pij,nj->Pmn",
+            Ch + scale * Ch_response,
+            W3_h_average + scale * W3_h_average_response,
+            Ch + scale * Ch_response,
+            optimize=True,
+        ),
+        0.0,
+        step=1.0e-5,
+        npoints=2,
+    )
+    assert actual == pytest.approx(base + response, abs=1.0e-9)
 
 
 def test_sa_casscf_gradient_lih_finite_difference():

@@ -127,6 +127,70 @@ def _compute_nonrel_sa_casscf_gradient(mc, C: NDArray, root: int) -> NDArray:
     )
 
 
+def _build_sa_casscf_relaxed_one_body_density(
+    Ccore,
+    Cact,
+    Ccore_response,
+    Cact_response,
+    base_g1,
+    average_g1,
+):
+    r"""Return the relaxed AO one-body density
+
+    .. math::
+
+        D^{\mathrm{rel}}_{\mu\nu}
+        &=2C_{\mu m}C_{\nu m}+C_{\mu u}\gamma^\mathrm{b}_{uv}C_{\nu v}\\
+        &\quad+2(\dot C_{\mu m}C_{\nu m}+C_{\mu m}\dot C_{\nu m})
+        +\dot C_{\mu u}\bar\gamma_{uv}C_{\nu v}
+        +C_{\mu u}\bar\gamma_{uv}\dot C_{\nu v}.
+    """
+    density = 2.0 * (Ccore @ Ccore.T) + Cact @ base_g1 @ Cact.T
+    density += 2.0 * (Ccore_response @ Ccore.T + Ccore @ Ccore_response.T)
+    density += Cact_response @ average_g1 @ Cact.T
+    density += Cact @ average_g1 @ Cact_response.T
+    return density
+
+
+def _transform_df_hole_response(Z_ao, Ch, Ch_response):
+    r"""Return the compact DF tensor and its orbital response
+
+    .. math::
+
+        Z^P_{ij}&=C_{\mu i}Z^P_{\mu\nu}C_{\nu j},\\
+        \dot Z^P_{ij}&=\dot C_{\mu i}Z^P_{\mu\nu}C_{\nu j}
+        +C_{\mu i}Z^P_{\mu\nu}\dot C_{\nu j}.
+    """
+    Z_h = np.einsum("mx,Pmn,ny->Pxy", Ch, Z_ao, Ch, optimize=True)
+    Z_h_response = np.einsum("mx,Pmn,ny->Pxy", Ch_response, Z_ao, Ch, optimize=True)
+    Z_h_response += np.einsum("mx,Pmn,ny->Pxy", Ch, Z_ao, Ch_response, optimize=True)
+    return Z_h, Z_h_response
+
+
+def _backtransform_df_hole_response(
+    Ch,
+    Ch_response,
+    W3_h_base,
+    W3_h_average,
+    W3_h_average_response,
+):
+    r"""Return the relaxed AO three-center weight
+
+    .. math::
+
+        W^P_{\mu\nu}
+        &=C_{\mu i}W^{P,h,\mathrm b}_{ij}C_{\nu j}
+        +\dot C_{\mu i}\bar W^{P,h}_{ij}C_{\nu j}
+        +C_{\mu i}\bar W^{P,h}_{ij}\dot C_{\nu j}
+        +C_{\mu i}\dot{\bar W}^{P,h}_{ij}C_{\nu j}.
+    """
+    W3 = np.einsum("mx,Pxy,ny->Pmn", Ch, W3_h_base, Ch, optimize=True)
+    W3 += np.einsum("mx,Pxy,ny->Pmn", Ch_response, W3_h_average, Ch, optimize=True)
+    W3 += np.einsum("mx,Pxy,ny->Pmn", Ch, W3_h_average, Ch_response, optimize=True)
+    W3 += np.einsum("mx,Pxy,ny->Pmn", Ch, W3_h_average_response, Ch, optimize=True)
+    return W3
+
+
 def _build_sa_casscf_relaxed_density_weights(
     mc,
     orbital_response: NDArray,
@@ -197,19 +261,22 @@ def _build_sa_casscf_relaxed_density_weights(
     Ccore_response = C_response[:, core_indices]
     Cact_response = C_response[:, active_indices]
     Ch_response = C_response[:, hole_indices]
+    del C, C_response, Z
 
-    # The projected CI multiplier is orthogonal to every solved root, so its
-    # transition overlap and hence its closed-core response are exactly zero.
-    D1 = 2.0 * (Ccore @ Ccore.T)
-    D1 += Cact @ base_g1 @ Cact.T
-    D1 += 2.0 * (Ccore_response @ Ccore.T + Ccore @ Ccore_response.T)
-    D1 += Cact_response @ average_g1 @ Cact.T
-    D1 += Cact @ average_g1 @ Cact_response.T
+    # The projected CI transition overlap, and hence its core response, is zero.
+    D1 = _build_sa_casscf_relaxed_one_body_density(
+        Ccore,
+        Cact,
+        Ccore_response,
+        Cact_response,
+        base_g1,
+        average_g1,
+    )
+    del Ccore, Cact, Ccore_response, Cact_response
 
     Z_ao = build_metric_inverted_three_center(mc.system)
-    Z_h = np.einsum("mx,Pmn,ny->Pxy", Ch, Z_ao, Ch, optimize=True)
-    Z_h_response = np.einsum("mx,Pmn,ny->Pxy", Ch_response, Z_ao, Ch, optimize=True)
-    Z_h_response += np.einsum("mx,Pmn,ny->Pxy", Ch, Z_ao, Ch_response, optimize=True)
+    Z_h, Z_h_response = _transform_df_hole_response(Z_ao, Ch, Ch_response)
+    del Z_ao
 
     nhole = ncore + base_g1.shape[0]
     gamma_h_base = np.zeros((nhole, nhole), dtype=float)
@@ -223,8 +290,7 @@ def _build_sa_casscf_relaxed_density_weights(
         ncore,
         exchange_factor=0.5,
     )
-
-    W3 = np.einsum("mx,Pxy,ny->Pmn", Ch, W3_h, Ch, optimize=True)
+    del gamma_h_base, lambda2_base
 
     gamma_h_average = np.zeros((nhole, nhole), dtype=float)
     gamma_h_average[:ncore, :ncore] = 2.0 * np.eye(ncore)
@@ -240,9 +306,14 @@ def _build_sa_casscf_relaxed_density_weights(
             exchange_factor=0.5,
         )
     )
-    W3 += np.einsum("mx,Pxy,ny->Pmn", Ch_response, W3_average, Ch, optimize=True)
-    W3 += np.einsum("mx,Pxy,ny->Pmn", Ch, W3_average, Ch_response, optimize=True)
-    W3 += np.einsum("mx,Pxy,ny->Pmn", Ch, W3_average_response, Ch, optimize=True)
+    del gamma_h_average, lambda2_average, Z_h, Z_h_response
+    W3 = _backtransform_df_hole_response(
+        Ch,
+        Ch_response,
+        W3_h,
+        W3_average,
+        W3_average_response,
+    )
     W2 += W2_response
     return D1.real, W2.real, W3.real
 
