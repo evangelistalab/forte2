@@ -385,4 +385,48 @@ inline np_tensor4_complex compute_aa_2rdm_complex(const SparseState& state_left,
     return g2;
 }
 
+/// @brief Compute the complex alpha-alpha-alpha 3-RDM between two SparseStates
+/// @return gamma3[p][q][r][s][t][u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R> as a complex
+///         (norb, norb, norb, norb, norb, norb) tensor (full, antisymmetric in p<->q<->r and
+///         s<->t<->u)
+inline np_tensor6_complex compute_aaa_3rdm_complex(const SparseState& state_left,
+                                                    const SparseState& state_right,
+                                                    std::size_t norb) {
+    auto g3 = make_zeros<nb::numpy, sparse_scalar_t, 6>({norb, norb, norb, norb, norb, norb});
+    auto g3_v = g3.view();
+
+    Determinant J;
+    for (std::size_t p{0}; p < norb; ++p) {
+        for (std::size_t q{0}; q < norb; ++q) {
+            for (std::size_t r{0}; r < norb; ++r) {
+                for (std::size_t s{0}; s < norb; ++s) {
+                    for (std::size_t t{0}; t < norb; ++t) {
+                        for (std::size_t u{0}; u < norb; ++u) {
+                            sparse_scalar_t rdm = 0.0;
+                            for (const auto& [I, c_I] : state_right) {
+                                J = I;
+                                double sign = 1.0;
+                                sign *= J.destroy_alpha(s);
+                                sign *= J.destroy_alpha(t);
+                                sign *= J.destroy_alpha(u);
+                                sign *= J.create_alpha(r);
+                                sign *= J.create_alpha(q);
+                                sign *= J.create_alpha(p);
+                                if (sign != 0) {
+                                    auto it = state_left.find(J);
+                                    if (it != state_left.end()) {
+                                        rdm += sign * std::conj(it->second) * c_I;
+                                    }
+                                }
+                            }
+                            g3_v(p, q, r, s, t, u) = rdm;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return g3;
+}
+
 } // namespace forte2

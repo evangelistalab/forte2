@@ -162,18 +162,6 @@ class CISigmaBuilder:
     def sf_1rdm(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """Compute the spin-free one-electron reduced density matrix"""
 
-    def sf_2rdm(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
-        """Compute the spin-free two-electron reduced density matrix"""
-
-    def sf_3rdm(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None, None, None))]:
-        """Compute the spin-free three-electron reduced density matrix"""
-
-    def sf_2cumulant(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
-        """Compute the spin-free two-electron cumulant"""
-
-    def sf_3cumulant(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None, None, None))]:
-        """Compute the spin-free three-electron cumulant"""
-
     def a_1rdm(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """Compute the alpha one-electron reduced density matrix"""
 
@@ -214,74 +202,6 @@ class CISigmaBuilder:
 
     def set_log_level(self, level: int) -> None:
         """Set the logging level for the class"""
-
-    def a_1rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))], alpha: bool) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]: ...
-
-    def aa_2rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))], alpha: bool) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
-        """
-        Compute the two-electron same-spin reduced density matrix for debugging purposes
-        """
-
-    def ab_2rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
-        """
-        Compute the two-electron mixed-spin reduced density matrix for debugging purposes
-        """
-
-    def aaa_3rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))], alpha: bool) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
-        """
-        Compute the three-electron same-spin reduced density matrix for debugging purposes
-        """
-
-    def aab_3rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
-        """
-        Compute the aab mixed-spin three-electron reduced density matrix for debugging purposes
-        """
-
-    def abb_3rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
-        """
-        Compute the abb mixed-spin three-electron reduced density matrix for debugging purposes
-        """
-
-    def aaaa_4rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))], alpha: bool) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
-        """
-        Compute the four-electron same-spin reduced density matrix for debugging purposes
-        """
-
-    def aaab_4rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
-        """
-        Compute the aaab mixed-spin four-electron reduced density matrix for debugging purposes
-        """
-
-    def aabb_4rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
-        """
-        Compute the aabb mixed-spin four-electron reduced density matrix for debugging purposes
-        """
-
-    def abbb_4rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
-        """
-        Compute the abbb mixed-spin four-electron reduced density matrix for debugging purposes
-        """
-
-    def sf_1rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
-        """
-        Compute the spin-free one-electron reduced density matrix for debugging purposes
-        """
-
-    def sf_2rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
-        """
-        Compute the spin-free two-electron reduced density matrix for debugging purposes
-        """
-
-    def sf_3rdm_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None, None, None))]:
-        """
-        Compute the spin-free three-electron reduced density matrix for debugging purposes
-        """
-
-    def sf_2cumulant_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
-        """Compute the spin-free two-electron cumulant for debugging purposes"""
-
-    def sf_3cumulant_debug(self, C_left: Annotated[NDArray[numpy.float64], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.float64], dict(shape=(None,))]) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None, None, None))]:
-        """Compute the spin-free three-electron cumulant for debugging purposes"""
 
 class CISpinAdapter:
     def __init__(self, twoS: int, twoMs: int, norb: int) -> None: ...
@@ -328,20 +248,8 @@ class RelCISigmaBuilder:
     def so_2rdm(self, C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))]:
         """Compute the spin-orbital two-electron reduced density matrix"""
 
-    def so_2cumulant(self, C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))]:
-        """Compute the spin-orbital two-electron cumulant"""
-
     def so_3rdm(self, C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None, None, None))]:
         """Compute the spin-orbital three-electron reduced density matrix"""
-
-    def so_3cumulant(self, C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None, None, None))]:
-        """Compute the spin-orbital three-electron cumulant"""
-
-    def so_1rdm_debug(self, C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None))]: ...
-
-    def so_2rdm_debug(self, C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None))]: ...
-
-    def so_3rdm_debug(self, C_left: Annotated[NDArray[numpy.complex128], dict(shape=(None,))], C_right: Annotated[NDArray[numpy.complex128], dict(shape=(None,))]) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None, None, None))]: ...
 
 class SelectedCIHelper:
     def __init__(self, norb: int, dets: DeterminantVector, c: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], E: float, H: Annotated[NDArray[numpy.float64], dict(shape=(None, None))], V: Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))], log_level: int = 3, screening_criterion: str = 'hbci', frozen_creation: Sequence[int] = [], frozen_annihilation: Sequence[int] = []) -> None:
@@ -416,9 +324,6 @@ class SelectedCIHelper:
 
     def ab_2rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
         """Compute the alpha-beta 2-RDM between two roots"""
-
-    def sf_2rdm(self, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None, None, None))]:
-        """Compute the spin-free 2-RDM between two roots"""
 
     def a_1trdm(self, right_helper: SelectedCIHelper, left_root: int, right_root: int) -> Annotated[NDArray[numpy.float64], dict(shape=(None, None))]:
         """

@@ -172,24 +172,6 @@ class CISigmaBuilder {
     ///        with p,r orbitals of spin alpha and q,s orbitals of spin beta
     np_tensor4 compute_ab_2rdm(np_vector C_left, np_vector C_right) const;
 
-    /// @brief Compute the spin-free two-electron reduced density matrix
-    /// @param C_left The left-hand side coefficients
-    /// @param C_right The right-hand side coefficients
-    /// @return The two-electron spin-free reduced density matrix stored as a tensor
-    ///        gamma[p][q][r][s] = gamma(aa)[p][q][r][s] +
-    ///                            gamma(bb)[p][q][r][s] +
-    ///                            gamma(ab)[p][q][r][s]
-    ///                            gamma(ab)[q][p][s][r]
-    np_tensor4 compute_sf_2rdm(np_vector C_left, np_vector C_right) const;
-
-    /// @brief Compute the cumulant of the spin-free two-electron reduced density matrix
-    /// @param C_left The left-hand side coefficients
-    /// @param C_right The right-hand side coefficients
-    /// @return The cumulant of the two-electron spin-free reduced density matrix stored as a tensor
-    ///        lambda[p][q][r][s] = gamma[p][q][r][s] - gamma[p][r] * gamma[q][s] +
-    ///                              0.5 * gamma[p][s] * gamma[q][r]
-    np_tensor4 compute_sf_2cumulant(np_vector C_left, np_vector C_right) const;
-
     /// @brief Compute the three-electron same-spin reduced density matrix
     /// @param C_left The left-hand side coefficients
     /// @param C_right The right-hand side coefficients
@@ -230,46 +212,6 @@ class CISigmaBuilder {
     ///        gamma[p][q>r][s][t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
     ///        with p and s are alpha spin orbitals and q > r and u > t are beta spin orbitals
     np_tensor4 compute_abb_3rdm(np_vector C_left, np_vector C_right) const;
-
-    /// @brief Compute the spin-free three-electron reduced density matrix
-    /// @param C_left The left-hand side coefficients
-    /// @param C_right The right-hand side coefficients
-    /// @return The three-electron spin-free reduced density matrix stored as a tensor
-    ///        gamma[p][q][r][s][t][u] = gamma(aaa)[p][q][r][s][t][u] +
-    ///                                  gamma(bbb)[p][q][r][s][t][u] + ...
-    np_tensor6 compute_sf_3rdm(np_vector C_left, np_vector C_right) const;
-
-    /// @brief Compute the cumulant of the spin-free three-electron reduced density matrix
-    /// @param C_left The left-hand side coefficients
-    /// @param C_right The right-hand side coefficients
-    /// @return The cumulant of the three-electron spin-free reduced density matrix stored as a
-    /// tensor
-    ///        lambda[p][q][r][s][t][u] = gamma[p][q][r][s][t][u] + ...
-    np_tensor6 compute_sf_3cumulant(np_vector C_left, np_vector C_right) const;
-
-    // == Debugging Functions ==
-    // The following are debugging functions that compute reduced density matrices that parallel
-    // the definition of the functions above.
-    np_matrix compute_a_1rdm_debug(np_vector C_left, np_vector C_right, bool alpha) const;
-
-    np_matrix compute_aa_2rdm_debug(np_vector C_left, np_vector C_right, bool alpha) const;
-    np_tensor4 compute_ab_2rdm_debug(np_vector C_left, np_vector C_right) const;
-
-    np_matrix compute_aaa_3rdm_debug(np_vector C_left, np_vector C_right, bool alpha) const;
-    np_tensor4 compute_aab_3rdm_debug(np_vector C_left, np_vector C_right) const;
-    np_tensor4 compute_abb_3rdm_debug(np_vector C_left, np_vector C_right) const;
-
-    np_matrix compute_aaaa_4rdm_debug(np_vector C_left, np_vector C_right, bool alpha) const;
-    np_tensor4 compute_aaab_4rdm_debug(np_vector C_left, np_vector C_right) const;
-    np_tensor4 compute_aabb_4rdm_debug(np_vector C_left, np_vector C_right) const;
-    np_tensor4 compute_abbb_4rdm_debug(np_vector C_left, np_vector C_right) const;
-
-    np_matrix compute_sf_1rdm_debug(np_vector C_left, np_vector C_right) const;
-    np_tensor4 compute_sf_2rdm_debug(np_vector C_left, np_vector C_right) const;
-    np_tensor6 compute_sf_3rdm_debug(np_vector C_left, np_vector C_right) const;
-
-    np_tensor4 compute_sf_2cumulant_debug(np_vector C_left, np_vector C_right) const;
-    np_tensor6 compute_sf_3cumulant_debug(np_vector C_left, np_vector C_right) const;
 
     np_matrix compute_s_1trdm(const CISigmaBuilder& sigmabuilder_right, np_vector C_left,
                               np_vector C_right, Spin spin) const;

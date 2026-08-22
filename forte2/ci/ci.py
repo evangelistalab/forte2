@@ -25,6 +25,7 @@ from .ci_utils import (
     pretty_print_ci_dets,
     pretty_print_ci_transition_props,
 )
+from .rdms import RDMs
 
 
 @dataclass
@@ -573,6 +574,35 @@ class _CISingleStateSolver:
         """
         return self.make_sf_3cumulant(left_root, right_root)
 
+    def _make_rdms(
+        self, left_root: int, right_root: int | None = None, max_order: int = 2
+    ) -> RDMs:
+        """
+        Compute the native spin-dependent RDM building blocks for two CI roots, up to
+        ``max_order``, and wrap them in an :class:`~forte2.ci.rdms.RDMs` container.
+        """
+        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
+        if right_root is None:
+            right_ci_vec_det = left_ci_vec_det
+        else:
+            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
+
+        sb = self.ci_sigma_builder
+        components = {}
+        if max_order >= 1:
+            components["g1_a"] = sb.a_1rdm(left_ci_vec_det, right_ci_vec_det)
+            components["g1_b"] = sb.b_1rdm(left_ci_vec_det, right_ci_vec_det)
+        if max_order >= 2:
+            components["g2_aa"] = sb.aa_2rdm(left_ci_vec_det, right_ci_vec_det)
+            components["g2_ab"] = sb.ab_2rdm(left_ci_vec_det, right_ci_vec_det)
+            components["g2_bb"] = sb.bb_2rdm(left_ci_vec_det, right_ci_vec_det)
+        if max_order >= 3:
+            components["g3_aaa"] = sb.aaa_3rdm(left_ci_vec_det, right_ci_vec_det)
+            components["g3_aab"] = sb.aab_3rdm(left_ci_vec_det, right_ci_vec_det)
+            components["g3_abb"] = sb.abb_3rdm(left_ci_vec_det, right_ci_vec_det)
+            components["g3_bbb"] = sb.bbb_3rdm(left_ci_vec_det, right_ci_vec_det)
+        return RDMs("sd", **components)
+
     def make_sd_1rdm(self, left_root: int, right_root: int | None = None):
         r"""
         Make the spin-dependent one-particle RDM for two CI roots.
@@ -589,14 +619,8 @@ class _CISingleStateSolver:
         tuple[NDArray, NDArray]:
             Spin-dependent one-particle RDMs (a, b).
         """
-        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
-        a = self.ci_sigma_builder.a_1rdm(left_ci_vec_det, right_ci_vec_det)
-        b = self.ci_sigma_builder.b_1rdm(left_ci_vec_det, right_ci_vec_det)
-        return a, b
+        rdms = self._make_rdms(left_root, right_root, max_order=1)
+        return rdms.g1_a, rdms.g1_b
 
     def make_sd_2rdm(self, left_root: int, right_root: int | None = None):
         """
@@ -614,15 +638,8 @@ class _CISingleStateSolver:
         tuple[NDArray, NDArray, NDArray]:
             Spin-dependent two-particle RDMs (aa, ab, bb).
         """
-        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
-        aa = self.ci_sigma_builder.aa_2rdm(left_ci_vec_det, right_ci_vec_det)
-        ab = self.ci_sigma_builder.ab_2rdm(left_ci_vec_det, right_ci_vec_det)
-        bb = self.ci_sigma_builder.bb_2rdm(left_ci_vec_det, right_ci_vec_det)
-        return aa, ab, bb
+        rdms = self._make_rdms(left_root, right_root, max_order=2)
+        return rdms.g2_aa, rdms.g2_ab, rdms.g2_bb
 
     def make_sd_3rdm(self, left_root: int, right_root: int | None = None):
         """
@@ -640,17 +657,8 @@ class _CISingleStateSolver:
         tuple[NDArray, NDArray, NDArray, NDArray]:
             Spin-dependent three-particle RDMs (aaa, aab, abb, bbb).
         """
-        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
-
-        aaa = self.ci_sigma_builder.aaa_3rdm(left_ci_vec_det, right_ci_vec_det)
-        aab = self.ci_sigma_builder.aab_3rdm(left_ci_vec_det, right_ci_vec_det)
-        abb = self.ci_sigma_builder.abb_3rdm(left_ci_vec_det, right_ci_vec_det)
-        bbb = self.ci_sigma_builder.bbb_3rdm(left_ci_vec_det, right_ci_vec_det)
-        return aaa, aab, abb, bbb
+        rdms = self._make_rdms(left_root, right_root, max_order=3)
+        return rdms.g3_aaa, rdms.g3_aab, rdms.g3_abb, rdms.g3_bbb
 
     def make_sf_1rdm(self, left_root: int, right_root: int | None = None):
         """
@@ -668,12 +676,7 @@ class _CISingleStateSolver:
         NDArray
             Spin-free one-particle RDM.
         """
-        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
-        return self.ci_sigma_builder.sf_1rdm(left_ci_vec_det, right_ci_vec_det)
+        return self._make_rdms(left_root, right_root, max_order=1).rdm1
 
     def make_sf_2rdm(self, left_root: int, right_root: int | None = None):
         """
@@ -691,12 +694,7 @@ class _CISingleStateSolver:
         NDArray
             Spin-free two-particle RDM.
         """
-        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
-        return self.ci_sigma_builder.sf_2rdm(left_ci_vec_det, right_ci_vec_det)
+        return self._make_rdms(left_root, right_root, max_order=2).rdm2
 
     def make_sf_3rdm(self, left_root: int, right_root: int | None = None):
         """
@@ -714,12 +712,7 @@ class _CISingleStateSolver:
         NDArray
             Spin-free three-particle RDM.
         """
-        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
-        return self.ci_sigma_builder.sf_3rdm(left_ci_vec_det, right_ci_vec_det)
+        return self._make_rdms(left_root, right_root, max_order=3).rdm3
 
     def make_sf_2cumulant(self, left_root: int, right_root: int | None = None):
         """
@@ -737,12 +730,7 @@ class _CISingleStateSolver:
         NDArray
             Spin-free cumulant of the two-particle RDM.
         """
-        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
-        return self.ci_sigma_builder.sf_2cumulant(left_ci_vec_det, right_ci_vec_det)
+        return self._make_rdms(left_root, right_root, max_order=2).cumulant2
 
     def make_sf_3cumulant(self, left_root: int, right_root: int | None = None):
         """
@@ -760,12 +748,7 @@ class _CISingleStateSolver:
         NDArray
             Spin-free cumulant of the three-particle RDM.
         """
-        left_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, left_root])
-        if right_root is None:
-            right_ci_vec_det = left_ci_vec_det
-        else:
-            right_ci_vec_det = self.csf_C_to_det_C(self.evecs[:, right_root])
-        return self.ci_sigma_builder.sf_3cumulant(left_ci_vec_det, right_ci_vec_det)
+        return self._make_rdms(left_root, right_root, max_order=3).cumulant3
 
     def compute_natural_occupation_numbers(self):
         """
@@ -910,39 +893,49 @@ class CISolver(CIBase):
             b_1trdm = left_sb.b_1trdm(right_sb, C_left, C_right)
             return a_1trdm, b_1trdm
 
+    def _make_same_state_rdm(
+        self,
+        method_name: str,
+        order: int,
+        left_root: int,
+        right_root: int | None = None,
+    ):
+        """
+        Resolve (``left_root``, ``right_root``) to a single sub-solver and call
+        ``method_name`` on it; cross-state requests raise since no backend supports
+        transition RDMs above order 1.
+        """
+        left_state, right_state, left_root_in_state, right_root_in_state = (
+            self._validate_rdm_inputs(left_root, right_root)
+        )
+        if left_state != right_state:
+            raise ValueError(
+                f"Cross-state {order}-RDMs are not supported. Got left_root in state "
+                f"{left_state} and right_root in state {right_state}."
+            )
+        return getattr(self.sub_solvers[left_state], method_name)(
+            left_root_in_state, right_root_in_state
+        )
+
     def make_sd_2rdm(
         self,
         left_root: int,
         right_root: int | None = None,
     ) -> tuple[NDArray, NDArray, NDArray]:
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-
-        if left_state != right_state:
-            raise ValueError(
-                f"Cross-state 2-RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
-            )
-        return self.sub_solvers[left_state].make_sd_2rdm(
-            left_root_in_state, right_root_in_state
-        )
+        """
+        Make the spin-dependent 2-RDMs
+        """
+        return self._make_same_state_rdm("make_sd_2rdm", 2, left_root, right_root)
 
     def make_sd_3rdm(
         self,
         left_root: int,
         right_root: int | None = None,
     ) -> tuple[NDArray, NDArray, NDArray, NDArray]:
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-
-        if left_state != right_state:
-            raise ValueError(
-                f"Cross-state 3-RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
-            )
-        return self.sub_solvers[left_state].make_sd_3rdm(
-            left_root_in_state, right_root_in_state
-        )
+        """
+        Make the spin-dependent 3-RDMs
+        """
+        return self._make_same_state_rdm("make_sd_3rdm", 3, left_root, right_root)
 
     def make_sf_1rdm(
         self,
@@ -974,18 +967,7 @@ class CISolver(CIBase):
         left_root: int,
         right_root: int | None = None,
     ) -> NDArray:
-        left_state, right_state, left_root_in_state, right_root_in_state = (
-            self._validate_rdm_inputs(left_root, right_root)
-        )
-
-        if left_state == right_state:
-            return self.sub_solvers[left_state].make_sf_2rdm(
-                left_root_in_state, right_root_in_state
-            )
-        else:
-            raise ValueError(
-                f"Cross-state 2-RDMs are not supported. Got left_root in state {left_state} and right_root in state {right_state}."
-            )
+        return self._make_same_state_rdm("make_sf_2rdm", 2, left_root, right_root)
 
     make_1rdm = make_sf_1rdm
     make_2rdm = make_sf_2rdm

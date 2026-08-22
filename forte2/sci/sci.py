@@ -23,6 +23,7 @@ from forte2.ci.ci_utils import (
     pretty_print_ci_transition_props,
     pretty_print_ci_nat_occ_numbers,
 )
+from forte2.ci.rdms import RDMs
 
 
 @dataclass
@@ -758,6 +759,26 @@ class _SelectedCISingleStateSolver:
                 f"RDMs for root {root} validated successfully.\n", self.log_level
             )
 
+    def _make_rdms(
+        self, left_root: int, right_root: int | None = None, max_order: int = 2
+    ) -> RDMs:
+        """
+        Compute the native spin-dependent RDM building blocks for two CI roots, up to
+        ``max_order``, and wrap them in an :class:`~forte2.ci.rdms.RDMs` container.
+        """
+        if right_root is None:
+            right_root = left_root
+        helper = self.sci_helper
+        components = {}
+        if max_order >= 1:
+            components["g1_a"] = helper.a_1rdm(left_root, right_root)
+            components["g1_b"] = helper.b_1rdm(left_root, right_root)
+        if max_order >= 2:
+            components["g2_aa"] = helper.aa_2rdm(left_root, right_root)
+            components["g2_ab"] = helper.ab_2rdm(left_root, right_root)
+            components["g2_bb"] = helper.bb_2rdm(left_root, right_root)
+        return RDMs("sd", **components)
+
     def make_sd_1rdm(self, left_root: int, right_root: int | None = None):
         r"""
         Make the spin-dependent one-particle RDM for two CI roots.
@@ -774,11 +795,8 @@ class _SelectedCISingleStateSolver:
         tuple[NDArray, NDArray]:
             Spin-dependent one-particle RDMs (a, b).
         """
-        if right_root is None:
-            right_root = left_root
-        a = self.sci_helper.a_1rdm(left_root, right_root)
-        b = self.sci_helper.b_1rdm(left_root, right_root)
-        return a, b
+        rdms = self._make_rdms(left_root, right_root, max_order=1)
+        return rdms.g1_a, rdms.g1_b
 
     def make_sd_2rdm(self, left_root: int, right_root: int | None = None):
         r"""
@@ -796,12 +814,8 @@ class _SelectedCISingleStateSolver:
         tuple[NDArray, NDArray, NDArray]:
             Spin-dependent two-particle RDMs (aa, ab, bb).
         """
-        if right_root is None:
-            right_root = left_root
-        aa = self.sci_helper.aa_2rdm(left_root, right_root)
-        ab = self.sci_helper.ab_2rdm(left_root, right_root)
-        bb = self.sci_helper.bb_2rdm(left_root, right_root)
-        return aa, ab, bb
+        rdms = self._make_rdms(left_root, right_root, max_order=2)
+        return rdms.g2_aa, rdms.g2_ab, rdms.g2_bb
 
     def make_sf_1rdm(self, left_root: int, right_root: int | None = None):
         """
@@ -819,9 +833,7 @@ class _SelectedCISingleStateSolver:
         NDArray
             Spin-free one-particle RDM.
         """
-        if right_root is None:
-            right_root = left_root
-        return self.sci_helper.sf_1rdm(left_root, right_root)
+        return self._make_rdms(left_root, right_root, max_order=1).rdm1
 
     def make_sf_2rdm(self, left_root: int, right_root: int | None = None):
         """
@@ -839,9 +851,7 @@ class _SelectedCISingleStateSolver:
         NDArray
             Spin-free two-particle RDM in chemist's notation.
         """
-        if right_root is None:
-            right_root = left_root
-        return self.sci_helper.sf_2rdm(left_root, right_root)
+        return self._make_rdms(left_root, right_root, max_order=2).rdm2
 
     # The state-averaged RDM machinery in CIBase calls make_{1,2}rdm on the sub-solvers.
     # Non-relativistic sCI returns spin-free RDMs.

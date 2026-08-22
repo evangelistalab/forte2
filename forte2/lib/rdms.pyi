@@ -59,3 +59,8 @@ def compute_aa_2rdm_complex(state_left: forte2.lib.sparse_ops.SparseState, state
     """
     Compute the complex alpha-alpha 2-RDM between two SparseStates (conjugates the bra)
     """
+
+def compute_aaa_3rdm_complex(state_left: forte2.lib.sparse_ops.SparseState, state_right: forte2.lib.sparse_ops.SparseState, norb: int) -> Annotated[NDArray[numpy.complex128], dict(shape=(None, None, None, None, None, None))]:
+    """
+    Compute the complex alpha-alpha-alpha 3-RDM between two SparseStates (conjugates the bra)
+    """

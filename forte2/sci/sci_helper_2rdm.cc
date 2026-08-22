@@ -1,6 +1,5 @@
 #include "helpers/indexing.hpp"
 #include "helpers/ndarray.h"
-#include "helpers/spin.h"
 
 #include "sci_helper.h"
 
@@ -97,57 +96,6 @@ np_tensor4 SelectedCIHelper::compute_ab_2rdm(size_t left_root, size_t right_root
         }
     }
     return rdm;
-}
-
-np_tensor4 SelectedCIHelper::compute_sf_2rdm(size_t left_root, size_t right_root) const {
-    auto rdm_sf = make_zeros<nb::numpy, double, 4>({norb_, norb_, norb_, norb_});
-
-    if (norb_ < 1) {
-        return rdm_sf; // No 2-RDM for less than 1 orbitals
-    }
-
-    auto rdm_sf_v = rdm_sf.view();
-    // Mixed-spin contribution (1 orbital or more)
-    {
-        auto rdm_ab = compute_ab_2rdm(left_root, right_root);
-        auto rdm_ab_v = rdm_ab.view();
-        for (size_t p{0}; p < norb_; ++p) {
-            for (size_t q{0}; q < norb_; ++q) {
-                for (size_t r{0}; r < norb_; ++r) {
-                    for (size_t s{0}; s < norb_; ++s) {
-                        rdm_sf_v(p, q, r, s) += rdm_ab_v(p, q, r, s) + rdm_ab_v(q, p, s, r);
-                    }
-                }
-            }
-        }
-    }
-
-    if (norb_ < 2) {
-        return rdm_sf; // No same-spin contributions to the 2-RDM for less than 2 orbitals
-    }
-
-    // To reduce the  memory footprint, we compute the aa and bb contributions in a packed
-    // format and one at a time.
-    for (auto spin : {Spin::Alpha, Spin::Beta}) {
-        auto rdm_ss = spin == Spin::Alpha ? compute_aa_2rdm(left_root, right_root)
-                                          : compute_bb_2rdm(left_root, right_root);
-        auto rdm_ss_v = rdm_ss.view();
-        for (size_t p{1}, pq{0}; p < norb_; ++p) {
-            for (size_t q{0}; q < p; ++q, ++pq) { // p > q
-                for (size_t r{1}, rs{0}; r < norb_; ++r) {
-                    for (size_t s{0}; s < r; ++s, ++rs) { // r > s
-                        auto element = rdm_ss_v(pq, rs);
-                        rdm_sf_v(p, q, r, s) += element;
-                        rdm_sf_v(q, p, r, s) -= element;
-                        rdm_sf_v(p, q, s, r) -= element;
-                        rdm_sf_v(q, p, s, r) += element;
-                    }
-                }
-            }
-        }
-    }
-
-    return rdm_sf;
 }
 
 } // namespace forte2

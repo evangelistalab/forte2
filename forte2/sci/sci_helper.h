@@ -182,13 +182,6 @@ class SelectedCIHelper {
     /// @note If the number of orbitals is 0, a tensor of shape (0, 0, 0, 0) is returned
     np_tensor4 compute_ab_2rdm(size_t left_root, size_t right_root) const;
 
-    /// @brief Compute the spin-free two-electron reduced density matrix
-    /// @param left_root The left-hand side root index
-    /// @param right_root The right-hand side root index
-    /// @return The spin-free two-electron reduced density matrix stored as
-    ///         Gamma_sf[p][q][r][s] = Gamma_aa[pq][rs] + Gamma_bb[pq][rs] + Gamma_ab[p][r][q][s]
-    np_tensor4 compute_sf_2rdm(size_t left_root, size_t right_root) const;
-
     /// @brief Compute the alpha transition one-electron reduced density matrix
     /// @param helper_right The right-hand side SelectedCIHelper
     /// @param left_root The left-hand side root index

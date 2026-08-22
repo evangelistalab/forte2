@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import ClassVar
 import numpy as np
 
-from forte2.lib import sparse_ops
+from forte2.lib import sparse_ops, rdms
 from forte2.lib.sparse_ops import SparseState
 from forte2.lib.ci_helpers import (
     CIStrings,
@@ -19,7 +19,10 @@ from .ci_utils import (
     pretty_print_ci_nat_occ_numbers,
     pretty_print_ci_dets,
     pretty_print_ci_transition_props,
+    make_2cumulant_so,
+    make_3cumulant_so,
 )
+from .ci_debug_rdms import sparse_state_from_ci_vector
 from .ci import _CISingleStateSolver
 
 
@@ -200,7 +203,8 @@ class _RelCISingleStateSolver(_CISingleStateSolver):
 
     def make_so_1rdm_debug(self, left_root: int, right_root: int = None):
         """
-        Make the one-particle RDM for two CI roots. For two-component CI only.
+        Make the one-particle RDM for two CI roots via the generic SparseState reference
+        implementation. For two-component CI only; used to validate ``make_so_1rdm``.
 
         Parameters
         ----------
@@ -216,17 +220,15 @@ class _RelCISingleStateSolver(_CISingleStateSolver):
         """
         if right_root is None:
             right_root = left_root
-        # copy to ensure contiguous arrays are passed to the sigma builder
-        rdm = self.ci_sigma_builder.so_1rdm_debug(
-            self.evecs[:, left_root].copy(),
-            self.evecs[:, right_root].copy(),
-        )
-
-        return rdm
+        left = sparse_state_from_ci_vector(self.dets, self.evecs[:, left_root])
+        right = sparse_state_from_ci_vector(self.dets, self.evecs[:, right_root])
+        return rdms.compute_a_1rdm_complex(left, right, self.norb)
 
     def make_so_2rdm_debug(self, left_root: int, right_root: int = None):
         """
-        Make the two-particle RDM for two CI roots. For two-component CI only.
+        Make the two-particle RDM for two CI roots via the generic SparseState reference
+        implementation. For two-component CI only; used to validate ``make_so_2rdm``.
+
         Parameters
         ----------
         left_root : int
@@ -241,13 +243,9 @@ class _RelCISingleStateSolver(_CISingleStateSolver):
         """
         if right_root is None:
             right_root = left_root
-        # copy to ensure contiguous arrays are passed to the sigma builder
-        rdm = self.ci_sigma_builder.so_2rdm_debug(
-            self.evecs[:, left_root].copy(),
-            self.evecs[:, right_root].copy(),
-        )
-
-        return rdm
+        left = sparse_state_from_ci_vector(self.dets, self.evecs[:, left_root])
+        right = sparse_state_from_ci_vector(self.dets, self.evecs[:, right_root])
+        return rdms.compute_aa_2rdm_complex(left, right, self.norb)
 
     def make_so_2cumulant(self, left_root: int, right_root: int = None):
         """
@@ -267,11 +265,9 @@ class _RelCISingleStateSolver(_CISingleStateSolver):
         """
         if right_root is None:
             right_root = left_root
-        lambda2 = self.ci_sigma_builder.so_2cumulant(
-            self.evecs[:, left_root].copy(),
-            self.evecs[:, right_root].copy(),
-        )
-        return lambda2
+        rdm1 = self.make_so_1rdm(left_root, right_root)
+        rdm2 = self.make_so_2rdm(left_root, right_root)
+        return make_2cumulant_so(rdm1, rdm2)
 
     def make_so_2rdm(self, left_root: int, right_root: int = None):
         """
@@ -319,23 +315,18 @@ class _RelCISingleStateSolver(_CISingleStateSolver):
             right_root = left_root
         rdm1 = self.make_so_1rdm_debug(left_root, right_root)
         rdm2 = self.make_so_2rdm_debug(left_root, right_root)
-        lambda2 = (
-            rdm2
-            - np.einsum("pr,qs->pqrs", rdm1, rdm1, optimize=True)
-            + np.einsum("ps,qr->pqrs", rdm1, rdm1, optimize=True)
-        )
-        return lambda2
+        return make_2cumulant_so(rdm1, rdm2)
 
     def make_so_3rdm_debug(self, left_root: int, right_root: int = None):
+        """
+        Make the three-particle RDM for two CI roots via the generic SparseState reference
+        implementation. For two-component CI only; used to validate ``make_so_3rdm``.
+        """
         if right_root is None:
             right_root = left_root
-        # copy to ensure contiguous arrays are passed to the sigma builder
-        rdm = self.ci_sigma_builder.so_3rdm_debug(
-            self.evecs[:, left_root].copy(),
-            self.evecs[:, right_root].copy(),
-        )
-
-        return rdm
+        left = sparse_state_from_ci_vector(self.dets, self.evecs[:, left_root])
+        right = sparse_state_from_ci_vector(self.dets, self.evecs[:, right_root])
+        return rdms.compute_aaa_3rdm_complex(left, right, self.norb)
 
     def make_so_3rdm(self, left_root: int, right_root: int = None):
         if right_root is None:
@@ -351,11 +342,10 @@ class _RelCISingleStateSolver(_CISingleStateSolver):
     def make_so_3cumulant(self, left_root: int, right_root: int = None):
         if right_root is None:
             right_root = left_root
-        lambda3 = self.ci_sigma_builder.so_3cumulant(
-            self.evecs[:, left_root].copy(),
-            self.evecs[:, right_root].copy(),
-        )
-        return lambda3
+        rdm1 = self.make_so_1rdm(left_root, right_root)
+        rdm2 = self.make_so_2rdm(left_root, right_root)
+        rdm3 = self.make_so_3rdm(left_root, right_root)
+        return make_3cumulant_so(rdm1, rdm2, rdm3)
 
     def make_sd_1rdm(self, *args, **kwargs):
         raise NotImplementedError(

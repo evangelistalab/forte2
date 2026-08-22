@@ -79,15 +79,6 @@ class RelCISigmaBuilder {
     ///        with p > q, and r > s spinor indices
     np_tensor4_complex compute_so_2rdm(np_vector_complex C_left, np_vector_complex C_right) const;
 
-    /// @brief Compute the cumulant of the spin-orbital two-electron reduced density matrix
-    /// @param C_left The left-hand side coefficients
-    /// @param C_right The right-hand side coefficients
-    /// @return The cumulant of the two-electron spin-orbital reduced density matrix stored as a
-    ///        tensor
-    ///        lambda[p][q][r][s] = gamma[p][q][r][s] - gamma[p][r] * gamma[q][s] +
-    ///                              gamma[p][s] * gamma[q][r]
-    np_tensor4_complex compute_2cumulant(np_vector_complex C_left, np_vector_complex C_right) const;
-
     /// @brief Compute the three-electron spin-orbital reduced density matrix
     /// @param C_left The left-hand side coefficients
     /// @param C_right The right-hand side coefficients
@@ -95,20 +86,6 @@ class RelCISigmaBuilder {
     ///        gamma[p>q>r][s>t>u] = <L| a^+_p a^+_q a^+_r a_u a_t a_s |R>
     ///        with p > q > r, and s > t > u spinor indices
     np_tensor6_complex compute_so_3rdm(np_vector_complex C_left, np_vector_complex C_right) const;
-
-    /// @brief Compute the cumulant of the spin-orbital three-electron reduced density matrix
-    /// @param C_left The left-hand side coefficients
-    /// @param C_right The right-hand side coefficients
-    /// @return The cumulant of the three-electron spin-orbital reduced density matrix stored as a
-    /// tensor
-    ///        lambda[p][q][r][s][t][u] = gamma[p][q][r][s][t][u] + ...
-    np_tensor6_complex compute_3cumulant(np_vector_complex C_left, np_vector_complex C_right) const;
-
-    np_matrix_complex compute_1rdm_debug(np_vector_complex C_left, np_vector_complex C_right) const;
-    np_tensor4_complex compute_2rdm_debug(np_vector_complex C_left,
-                                          np_vector_complex C_right) const;
-    np_tensor6_complex compute_3rdm_debug(np_vector_complex C_left,
-                                          np_vector_complex C_right) const;
 
   private:
     // == Class Private Variables ==

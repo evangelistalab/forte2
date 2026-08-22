@@ -107,17 +107,10 @@ void export_ci_sigma_builder_api(nb::module_& sub_m) {
         .def("Hamiltonian", &CISigmaBuilder::Hamiltonian, "basis"_a, "sigma"_a)
         .def("make_sparse_state", &CISigmaBuilder::make_sparse_state, "C"_a, "threshold"_a = 1e-12,
              "Convert a CI vector to a sparse state")
-        // Spin-free RDMs and cumulants
+        // Spin-free RDMs. Higher-order spin-free RDMs and cumulants are assembled from the
+        // spin-resolved building blocks below in Python (see forte2/ci/ci_utils.py).
         .def("sf_1rdm", &CISigmaBuilder::compute_sf_1rdm, "C_left"_a, "C_right"_a,
              "Compute the spin-free one-electron reduced density matrix")
-        .def("sf_2rdm", &CISigmaBuilder::compute_sf_2rdm, "C_left"_a, "C_right"_a,
-             "Compute the spin-free two-electron reduced density matrix")
-        .def("sf_3rdm", &CISigmaBuilder::compute_sf_3rdm, "C_left"_a, "C_right"_a,
-             "Compute the spin-free three-electron reduced density matrix")
-        .def("sf_2cumulant", &CISigmaBuilder::compute_sf_2cumulant, "C_left"_a, "C_right"_a,
-             "Compute the spin-free two-electron cumulant")
-        .def("sf_3cumulant", &CISigmaBuilder::compute_sf_3cumulant, "C_left"_a, "C_right"_a,
-             "Compute the spin-free three-electron cumulant")
         // Spinful RDMs
         .def("a_1rdm", &CISigmaBuilder::compute_a_1rdm, "C_left"_a, "C_right"_a,
              "Compute the alpha one-electron reduced density matrix")
@@ -145,46 +138,7 @@ void export_ci_sigma_builder_api(nb::module_& sub_m) {
              "C_right"_a, "Compute the spin-free one-electron transition reduced density matrix")
         .def("avg_build_time", &CISigmaBuilder::avg_build_time)
         .def("set_log_level", &CISigmaBuilder::set_log_level, "level"_a,
-             "Set the logging level for the class")
-        // RDMs debugging methods
-        .def("a_1rdm_debug", &CISigmaBuilder::compute_a_1rdm_debug, "C_left"_a, "C_right"_a,
-             "alpha"_a)
-        .def("aa_2rdm_debug", &CISigmaBuilder::compute_aa_2rdm_debug, "C_left"_a, "C_right"_a,
-             "alpha"_a,
-             "Compute the two-electron same-spin reduced density matrix for debugging purposes")
-        .def("ab_2rdm_debug", &CISigmaBuilder::compute_ab_2rdm_debug, "C_left"_a, "C_right"_a,
-             "Compute the two-electron mixed-spin reduced density matrix for debugging purposes")
-        .def("aaa_3rdm_debug", &CISigmaBuilder::compute_aaa_3rdm_debug, "C_left"_a, "C_right"_a,
-             "alpha"_a,
-             "Compute the three-electron same-spin reduced density matrix for debugging purposes")
-        .def("aab_3rdm_debug", &CISigmaBuilder::compute_aab_3rdm_debug, "C_left"_a, "C_right"_a,
-             "Compute the aab mixed-spin three-electron reduced density matrix for debugging "
-             "purposes")
-        .def("abb_3rdm_debug", &CISigmaBuilder::compute_abb_3rdm_debug, "C_left"_a, "C_right"_a,
-             "Compute the abb mixed-spin three-electron reduced density matrix for debugging "
-             "purposes")
-        .def("aaaa_4rdm_debug", &CISigmaBuilder::compute_aaaa_4rdm_debug, "C_left"_a, "C_right"_a,
-             "alpha"_a,
-             "Compute the four-electron same-spin reduced density matrix for debugging purposes")
-        .def("aaab_4rdm_debug", &CISigmaBuilder::compute_aaab_4rdm_debug, "C_left"_a, "C_right"_a,
-             "Compute the aaab mixed-spin four-electron reduced density matrix for debugging "
-             "purposes")
-        .def("aabb_4rdm_debug", &CISigmaBuilder::compute_aabb_4rdm_debug, "C_left"_a, "C_right"_a,
-             "Compute the aabb mixed-spin four-electron reduced density matrix for debugging "
-             "purposes")
-        .def("abbb_4rdm_debug", &CISigmaBuilder::compute_abbb_4rdm_debug, "C_left"_a, "C_right"_a,
-             "Compute the abbb mixed-spin four-electron reduced density matrix for debugging "
-             "purposes")
-        .def("sf_1rdm_debug", &CISigmaBuilder::compute_sf_1rdm_debug, "C_left"_a, "C_right"_a,
-             "Compute the spin-free one-electron reduced density matrix for debugging purposes")
-        .def("sf_2rdm_debug", &CISigmaBuilder::compute_sf_2rdm_debug, "C_left"_a, "C_right"_a,
-             "Compute the spin-free two-electron reduced density matrix for debugging purposes")
-        .def("sf_3rdm_debug", &CISigmaBuilder::compute_sf_3rdm_debug, "C_left"_a, "C_right"_a,
-             "Compute the spin-free three-electron reduced density matrix for debugging purposes")
-        .def("sf_2cumulant_debug", &CISigmaBuilder::compute_sf_2cumulant_debug, "C_left"_a,
-             "C_right"_a, "Compute the spin-free two-electron cumulant for debugging purposes")
-        .def("sf_3cumulant_debug", &CISigmaBuilder::compute_sf_3cumulant_debug, "C_left"_a,
-             "C_right"_a, "Compute the spin-free three-electron cumulant for debugging purposes");
+             "Set the logging level for the class");
 }
 
 void export_ci_spin_adapter_api(nb::module_& sub_m) {
@@ -214,19 +168,13 @@ void export_rel_ci_sigma_builder_api(nb::module_& sub_m) {
         .def("form_Hdiag", &RelCISigmaBuilder::form_Hdiag, "dets"_a)
         .def("slater_rules", &RelCISigmaBuilder::slater_rules, "dets"_a, "I"_a, "J"_a)
         .def("Hamiltonian", &RelCISigmaBuilder::Hamiltonian, "basis"_a, "sigma"_a)
+        // Cumulants are assembled in Python from these RDMs (see forte2/ci/ci_utils.py).
         .def("so_1rdm", &RelCISigmaBuilder::compute_so_1rdm, "C_left"_a, "C_right"_a,
              "Compute the spin-orbital one-electron reduced density matrix")
         .def("so_2rdm", &RelCISigmaBuilder::compute_so_2rdm, "C_left"_a, "C_right"_a,
              "Compute the spin-orbital two-electron reduced density matrix")
-        .def("so_2cumulant", &RelCISigmaBuilder::compute_2cumulant, "C_left"_a, "C_right"_a,
-             "Compute the spin-orbital two-electron cumulant")
         .def("so_3rdm", &RelCISigmaBuilder::compute_so_3rdm, "C_left"_a, "C_right"_a,
-             "Compute the spin-orbital three-electron reduced density matrix")
-        .def("so_3cumulant", &RelCISigmaBuilder::compute_3cumulant, "C_left"_a, "C_right"_a,
-             "Compute the spin-orbital three-electron cumulant")
-        .def("so_1rdm_debug", &RelCISigmaBuilder::compute_1rdm_debug, "C_left"_a, "C_right"_a)
-        .def("so_2rdm_debug", &RelCISigmaBuilder::compute_2rdm_debug, "C_left"_a, "C_right"_a)
-        .def("so_3rdm_debug", &RelCISigmaBuilder::compute_3rdm_debug, "C_left"_a, "C_right"_a);
+             "Compute the spin-orbital three-electron reduced density matrix");
 }
 
 void export_sci_helper_api(nb::module_& sub_m) {
@@ -278,8 +226,6 @@ void export_sci_helper_api(nb::module_& sub_m) {
              "Compute the beta-beta 2-RDM between two roots")
         .def("ab_2rdm", &SelectedCIHelper::compute_ab_2rdm, "left_root"_a, "right_root"_a,
              "Compute the alpha-beta 2-RDM between two roots")
-        .def("sf_2rdm", &SelectedCIHelper::compute_sf_2rdm, "left_root"_a, "right_root"_a,
-             "Compute the spin-free 2-RDM between two roots")
         .def("a_1trdm", &SelectedCIHelper::compute_a_1trdm, "right_helper"_a, "left_root"_a,
              "right_root"_a,
              "Compute the alpha-spin 1-transition RDM between two roots in different helpers")

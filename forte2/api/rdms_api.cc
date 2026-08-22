@@ -50,6 +50,10 @@ void export_rdms_api(nb::module_& m) {
         "compute_aa_2rdm_complex", &compute_aa_2rdm_complex, "state_left"_a, "state_right"_a,
         "norb"_a,
         "Compute the complex alpha-alpha 2-RDM between two SparseStates (conjugates the bra)");
+    sub_m.def("compute_aaa_3rdm_complex", &compute_aaa_3rdm_complex, "state_left"_a,
+              "state_right"_a, "norb"_a,
+              "Compute the complex alpha-alpha-alpha 3-RDM between two SparseStates "
+              "(conjugates the bra)");
 }
 
 } // namespace forte2
