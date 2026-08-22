@@ -14,48 +14,6 @@ def _make_working_2rdm(g2):
     return 0.5 * (np.einsum("prqs->pqrs", g2) + np.einsum("qrps->pqrs", g2))
 
 
-def compute_orbital_hessian_vector_product(orb_opt, vector):
-    r"""Apply the nonrelativistic orbital--orbital response matrix.
-
-    Let :math:`\mathbb K=((p_I,q_I))` contain the true entries of ``nrr``
-    in NumPy C order.  The direction is embedded as
-
-    .. math::
-
-        Z_{pq}(\mathbf z)
-        &=\sum_Iz_I(\delta_{pp_I}\delta_{qq_I}
-                     -\delta_{pq_I}\delta_{qp_I}),\\
-        [\mathcal A^{\mathrm{oo}}\mathbf z]_I
-        &=\left.\frac{d}{d\epsilon}
-          (\bar g_{\mathrm{F2}})^{q_I}_{p_I}
-          (Ce^{\epsilon Z(\mathbf z)};\bar\gamma,\bar D)
-          \right|_{\epsilon=0},
-
-    where :math:`(\bar g_{\mathrm{F2}})^q_p=
-    2(\bar A^q_p-\bar A^p_q)`.
-
-    Assumptions are real orthonormal restricted orbitals and one retained
-    orientation per pair.  RDMs, AO integrals, and nuclei are fixed; only
-    orbital-dependent quantities respond.  CI, nuclear, and numerical
-    gradient-screening responses are excluded.
-
-    Parameters
-    ----------
-    vector : np.ndarray
-        Real nonredundant orbital-rotation vector with shape ``(nrot,)``.
-
-    Returns
-    -------
-    np.ndarray
-        Product in the same ordered-pair basis.
-    """
-    vector = _validate_orbital_response_vector(orb_opt, vector)
-    intermediates = _build_orbital_response_intermediates(
-        orb_opt,
-    )
-    return _compute_orbital_hessian_vector_product(orb_opt, vector, intermediates)
-
-
 def _validate_orbital_response_vector(orb_opt, vector):
     vector = np.asarray(vector)
     if vector.shape != (orb_opt.nrot,):
@@ -66,16 +24,6 @@ def _validate_orbital_response_vector(orb_opt, vector):
     if np.iscomplexobj(vector):
         raise TypeError("The nonrelativistic orbital-response vector must be real.")
     return vector.astype(float, copy=False)
-
-
-def _build_orbital_response_intermediates(orb_opt):
-    r"""Return the fixed-RDM workspace :math:`(F_C,\bar F_A,B^P_{pu})`."""
-    Fcore_ao = orb_opt.fock_builder.build_core_fock(orb_opt.Ccore, hcore=orb_opt.hcore)
-    Fact_ao = orb_opt.fock_builder.build_active_fock(orb_opt.Cact, orb_opt.g1)
-    Fcore_mo = orb_opt._transform_ao_operator(Fcore_ao, orb_opt.C)
-    Fact_mo = orb_opt._transform_ao_operator(Fact_ao, orb_opt.C)
-    B_ga = _transform_df_block(orb_opt, orb_opt.C, orb_opt.Cact)
-    return Fcore_mo, Fact_mo, B_ga
 
 
 def _build_coupled_response_intermediates(orb_opt):
@@ -208,22 +156,6 @@ def _compute_orbital_lagrangian_response(orb_opt, vector, intermediates):
         "Prt,Ptu->ru", B_ga, contracted_response, optimize=True
     )
     return A_response
-
-
-def _build_ci_orbital_response_intermediates(orb_opt):
-    r"""Return :math:`(F_C,B^P_{pu})` for the orbital--CI response."""
-    Fcore_ao = orb_opt.fock_builder.build_core_fock(orb_opt.Ccore, hcore=orb_opt.hcore)
-    Fcore_mo = orb_opt._transform_ao_operator(Fcore_ao, orb_opt.C)
-    B_ga = _transform_df_block(orb_opt, orb_opt.C, orb_opt.Cact)
-    return Fcore_mo, B_ga
-
-
-def _build_orbital_ci_response_intermediates(orb_opt):
-    r"""Return :math:`(F_C^{AO},F_C,B^P_{pu})` for the CI--orbital response."""
-    Fcore_ao = orb_opt.fock_builder.build_core_fock(orb_opt.Ccore, hcore=orb_opt.hcore)
-    Fcore_mo = orb_opt._transform_ao_operator(Fcore_ao, orb_opt.C)
-    B_ga = _transform_df_block(orb_opt, orb_opt.C, orb_opt.Cact)
-    return Fcore_ao, Fcore_mo, B_ga
 
 
 def _compute_active_space_hamiltonian_response(orb_opt, vector, intermediates):
@@ -430,14 +362,37 @@ def _project_ci_response_vector(mc, ci_vector, layout):
     return projected
 
 
-def _compute_ci_response_rdms(mc, ci_vector, layout):
-    r"""Return root sums of bra-plus-ket overlap, 1-RDM, and 2-RDM responses."""
+def _build_ci_reference_det_vectors(mc, layout):
+    r"""Return fixed references
+    :math:`c_{\alpha,I}^{\mathrm{det}}=\sum_M T^\alpha_{IM}c_{\alpha,M}^{\mathrm{CSF}}`.
+    """
+    return tuple(
+        mc.ci_solver.sub_solvers[state_index].csf_C_to_det_C(
+            mc.ci_solver.sub_solvers[state_index].evecs[:, root_in_state]
+        )
+        for _, state_index, root_in_state, _ in layout
+    )
+
+
+def _compute_ci_response_rdms(mc, ci_vector, layout, reference_dets=None):
+    r"""Return the root sums
+
+    .. math::
+
+        s[\mathbf x]&=\sum_\alpha
+        (\mathbf x_\alpha^T\mathbf c_\alpha
+        +\mathbf c_\alpha^T\mathbf x_\alpha),\\
+        \gamma[\mathbf x]&=\sum_\alpha
+        (\gamma[Tx_\alpha,Tc_\alpha]+\gamma[Tc_\alpha,Tx_\alpha]),\\
+        \Gamma[\mathbf x]&=\sum_\alpha
+        (\Gamma[Tx_\alpha,Tc_\alpha]+\Gamma[Tc_\alpha,Tx_\alpha]).
+    """
     nact = mc.mo_space.nactv
     overlap_response = 0.0
     g1_response = np.zeros((nact,) * 2, dtype=float)
     g2_response = np.zeros((nact,) * 4, dtype=float)
 
-    for _, state_index, root_in_state, coefficient_slice in layout:
+    for index, (_, state_index, root_in_state, coefficient_slice) in enumerate(layout):
         response = ci_vector[coefficient_slice]
         if not np.any(response):
             continue
@@ -448,7 +403,11 @@ def _compute_ci_response_rdms(mc, ci_vector, layout):
         overlap_response += np.dot(reference, response)
 
         response_det = sub_solver.csf_C_to_det_C(response)
-        reference_det = sub_solver.csf_C_to_det_C(reference)
+        reference_det = (
+            sub_solver.csf_C_to_det_C(reference)
+            if reference_dets is None
+            else reference_dets[index]
+        )
         sigma_builder = sub_solver.ci_sigma_builder
         g1_response += sigma_builder.sf_1rdm(response_det, reference_det)
         g1_response += sigma_builder.sf_1rdm(reference_det, response_det)
@@ -456,38 +415,6 @@ def _compute_ci_response_rdms(mc, ci_vector, layout):
         g2_response += sigma_builder.sf_2rdm(reference_det, response_det)
 
     return overlap_response, g1_response, g2_response
-
-
-def compute_orbital_ci_hessian_vector_product(mc, ci_vector):
-    r"""Apply the CI contribution to the orbital response equation.
-
-    .. math::
-
-        [\mathcal A^{\mathrm{oc}}\mathbf x]_I
-        =2\left[
-          (A^{\mathrm{oc}}[\mathbf x])^{q_I}_{p_I}
-         -(A^{\mathrm{oc}}[\mathbf x])^{p_I}_{q_I}
-        \right].
-
-    Each root-major CSF block forms bra-plus-ket transition RDMs.  No SA
-    weight multiplies :math:`\mathbf x_\alpha` in this block.
-
-    Parameters
-    ----------
-    ci_vector : np.ndarray
-        Root-major flattened real CI multiplier vector.
-
-    Returns
-    -------
-    np.ndarray
-        Orbital response in nonredundant-pair order.
-    """
-    ci_vector, layout = _validate_ci_response_vector(mc, ci_vector)
-    responses = _compute_ci_response_rdms(mc, ci_vector, layout)
-    intermediates = _build_ci_orbital_response_intermediates(
-        mc.orb_opt,
-    )
-    return _compute_ci_orbital_response_from_rdms(mc.orb_opt, *responses, intermediates)
 
 
 def _compute_ci_orbital_hessian_vector_product(
@@ -537,38 +464,6 @@ def _apply_ci_hamiltonian_to_csf(sub_solver, sigma_builder, vector):
     return sigma_csf
 
 
-def compute_ci_orbital_hessian_vector_product(mc, orbital_vector):
-    r"""Apply the orbital contribution to the CI response equation.
-
-    .. math::
-
-        [\mathcal A^{\mathrm{co}}\mathbf z]_\alpha
-        =2w_\alpha\hat H[\mathbf z]\mathbf c_\alpha.
-
-    :math:`\hat H[\mathbf z]` is the active-space Hamiltonian derivative.
-    The result includes one SA weight and no CI projector.
-
-    Parameters
-    ----------
-    orbital_vector : np.ndarray
-        Real orbital-rotation direction with shape ``(nrot,)`` and the
-        same pair ordering as the orbital optimizer.
-
-    Returns
-    -------
-    np.ndarray
-        Root-major flattened CSF response vector with shape ``(nci,)``.
-    """
-    orbital_vector = _validate_orbital_response_vector(mc.orb_opt, orbital_vector)
-    layout, _ = _get_ci_response_layout(mc)
-    intermediates = _build_orbital_ci_response_intermediates(
-        mc.orb_opt,
-    )
-    return _compute_ci_orbital_hessian_vector_product(
-        mc, orbital_vector, layout, intermediates
-    )
-
-
 def _compute_ci_ci_hessian_vector_product(mc, ci_vector, layout):
     r"""Return :math:`[A^{cc}x]_\alpha=2(H_\alpha-E_\alpha I)x_\alpha`."""
     response = np.empty_like(ci_vector)
@@ -584,66 +479,6 @@ def _compute_ci_ci_hessian_vector_product(mc, ci_vector, layout):
     return response
 
 
-def compute_ci_ci_hessian_vector_product(mc, ci_vector):
-    r"""Apply the nonrelativistic CI--CI response block.
-
-    .. math::
-
-        [\mathcal A^{\mathrm{cc}}\mathbf x]_\alpha
-        =2(\mathbf H_\alpha-E_\alpha\mathbf I_\alpha)
-         \mathbf x_\alpha.
-
-    Root-major CSF blocks are independent and unweighted.  No CI projector
-    is applied, so each reference vector is a null direction.
-
-    Parameters
-    ----------
-    ci_vector : np.ndarray
-        Root-major flattened real CI response vector with shape
-        ``(nci,)``.
-
-    Returns
-    -------
-    np.ndarray
-        Root-major flattened CI response with shape ``(nci,)``.
-    """
-    ci_vector, layout = _validate_ci_response_vector(mc, ci_vector)
-    return _compute_ci_ci_hessian_vector_product(mc, ci_vector, layout)
-
-
-def compute_orbital_response_b_vector(mc, root):
-    r"""Build the target-state orbital ``b`` vector.
-
-    .. math::
-
-        (\mathbf b^{\mathrm o}_\alpha)_I
-        =(g^\alpha_{\mathrm{F2}})_I
-        =2[(A^\alpha)^{q_I}_{p_I}-(A^\alpha)^{p_I}_{q_I}].
-
-    Root-specific RDMs enter without an SA weight; the solver uses
-    :math:`-\mathbf b^{\mathrm o}_\alpha`.
-
-    Parameters
-    ----------
-    root : int
-        Absolute target-root index in state-average ordering.
-
-    Returns
-    -------
-    np.ndarray
-        Target-state orbital gradient in nonredundant-pair order.
-    """
-    root = _validate_response_root(mc, root)
-    g1 = mc.make_sf_1rdm(root)
-    g2 = mc.make_sf_2rdm(root)
-    intermediates = _build_ci_orbital_response_intermediates(
-        mc.orb_opt,
-    )
-    return _compute_ci_orbital_response_from_rdms(
-        mc.orb_opt, 1.0, g1, g2, intermediates
-    )
-
-
 def _compute_raw_ci_response_b_vector(mc, root, layout):
     r"""Return :math:`(\widetilde b^c_\alpha)_\beta=2\delta_{\alpha\beta}H_\beta c_\beta`."""
     _, state_index, root_in_state, coefficient_slice = layout[root]
@@ -655,35 +490,6 @@ def _compute_raw_ci_response_b_vector(mc, root, layout):
     raw_b = np.zeros(layout[-1][-1].stop, dtype=float)
     raw_b[coefficient_slice] = 2.0 * sigma
     return raw_b
-
-
-def compute_ci_response_b_vector(mc, root):
-    r"""Build the projected target-state CI ``b`` vector.
-
-    .. math::
-
-        \mathbf b^{\mathrm c}_\alpha
-        =Q(\widetilde{\mathbf b}^{\mathrm c}_\alpha),\qquad
-        (\widetilde{\mathbf b}^{\mathrm c}_\alpha)_\beta
-        =2\delta_{\alpha\beta}\mathbf H_\beta\mathbf c_\beta.
-
-    For converged CI roots this projected vector vanishes, although the
-    coupled orbital equation can still produce a nonzero CI multiplier.
-
-    Parameters
-    ----------
-    root : int
-        Absolute target-root index in state-average ordering.
-
-    Returns
-    -------
-    np.ndarray
-        Projected root-major CI ``b`` vector with shape ``(nci,)``.
-    """
-    root = _validate_response_root(mc, root)
-    layout, _ = _get_ci_response_layout(mc)
-    raw_b = _compute_raw_ci_response_b_vector(mc, root, layout)
-    return _project_ci_response_vector(mc, raw_b, layout)
 
 
 def compute_projected_response_vector_product(mc, orbital_vector, ci_vector):
@@ -720,7 +526,12 @@ def compute_projected_response_vector_product(mc, orbital_vector, ci_vector):
 
 
 def _compute_projected_response_vector_product(
-    mc, orbital_vector, ci_vector, layout, intermediates
+    mc,
+    orbital_vector,
+    ci_vector,
+    layout,
+    intermediates,
+    reference_dets=None,
 ):
     r"""Return :math:`y^o=A_{oo}z+A_{oc}Qx` and
     :math:`y^c=Q(A_{co}z+A_{cc}Qx)+Px` using shared intermediates.
@@ -733,7 +544,9 @@ def _compute_projected_response_vector_product(
     orbital_product = _compute_orbital_hessian_vector_product(
         mc.orb_opt, orbital_vector, orbital_intermediates
     )
-    density_response = _compute_ci_response_rdms(mc, projected_ci, layout)
+    density_response = _compute_ci_response_rdms(
+        mc, projected_ci, layout, reference_dets
+    )
     orbital_product += _compute_ci_orbital_response_from_rdms(
         mc.orb_opt, *density_response, density_intermediates
     )
@@ -808,6 +621,7 @@ def _solve_response(mc, root, *, r_tol, maxiter):
         raise ValueError(f"maxiter must be a positive integer, got {maxiter}.")
 
     layout, nci = _get_ci_response_layout(mc)
+    reference_dets = _build_ci_reference_det_vectors(mc, layout)
     nrot = mc.orb_opt.nrot
     dimension = nrot + nci
     mc.orb_opt.set_rdms(mc.make_average_1rdm(), mc.make_average_2rdm())
@@ -832,6 +646,7 @@ def _solve_response(mc, root, *, r_tol, maxiter):
             vector[nrot:],
             layout,
             intermediates,
+            reference_dets,
         )
         product = np.empty(dimension, dtype=float)
         product[:nrot] = orbital_product
@@ -859,7 +674,14 @@ def _solve_response(mc, root, *, r_tol, maxiter):
 
     orbital_response = solution[:nrot]
     ci_response = _project_ci_response_vector(mc, solution[nrot:], layout)
-    return orbital_response, ci_response, root, layout, intermediates
+    return (
+        orbital_response,
+        ci_response,
+        root,
+        layout,
+        intermediates,
+        reference_dets,
+    )
 
 
 def solve_state_specific_response(
@@ -908,7 +730,7 @@ def solve_state_specific_response(
     RuntimeError
         If GMRES does not converge.
     """
-    orbital_response, ci_response, _, _, _ = _solve_response(
+    orbital_response, ci_response, _, _, _, _ = _solve_response(
         mc, root, r_tol=r_tol, maxiter=maxiter
     )
     return orbital_response, ci_response
@@ -964,10 +786,17 @@ def _solve_state_specific_gradient_response(mc, root):
     \gamma^\alpha+\gamma[\mathbf x_\alpha],
     \Gamma^\alpha+\Gamma[\mathbf x_\alpha])`.
     """
-    orbital_response, ci_response, root, layout, intermediates = _solve_response(
-        mc, root, r_tol=1.0e-10, maxiter=None
+    (
+        orbital_response,
+        ci_response,
+        root,
+        layout,
+        intermediates,
+        reference_dets,
+    ) = _solve_response(mc, root, r_tol=1.0e-10, maxiter=None)
+    ci_overlap, ci_g1, ci_g2 = _compute_ci_response_rdms(
+        mc, ci_response, layout, reference_dets
     )
-    ci_overlap, ci_g1, ci_g2 = _compute_ci_response_rdms(mc, ci_response, layout)
     del ci_response
 
     base_g1 = mc.make_sf_1rdm(root)
