@@ -153,28 +153,18 @@ def compute_gradient(
 
 
 def build_metric_inverted_three_center(system):
-    r"""Computes the three-center integrals with the Coulomb metric inverse applied.
-
-    Compute the quantity :math:`Z^{P}_{\mu\nu}` defined as:
+    r"""Return the Fock builder's metric-inverted three-center tensor.
 
     .. math::
+
         Z^{P}_{\mu\nu}
         =
         \sum_{Q} M^{-1}_{PQ} (Q|\mu\nu).
 
-    Parameters
-    ----------
-    system : System
-        The system for which to compute the metric-inverted three-center integrals.
-
-    Returns
-    -------
-    NDArray
-        Metric-inverted three-center integrals with shape ``(naux, nbasis, nbasis)``.
+    This compatibility wrapper delegates metric ownership and reuse to the
+    system's Fock builder.
     """
-    J = integrals.coulomb_3c(system, system.auxiliary_basis, system.basis, system.basis)
-    M = integrals.coulomb_2c(system, system.auxiliary_basis, system.auxiliary_basis)
-    return apply_inverse_metric(system, M, J)
+    return system.fock_builder.build_metric_inverted_three_center()
 
 
 def apply_inverse_metric(system, M, J):

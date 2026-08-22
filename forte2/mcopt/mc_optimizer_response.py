@@ -325,14 +325,19 @@ def get_ci_response_layout(mc):
     return layout
 
 
-def _validate_response_root(mc, root):
-    if isinstance(root, bool) or not isinstance(root, (int, np.integer)):
-        raise TypeError("The target response root must be an integer.")
-    nroots = len(mc.ci_solver.sa_info.absolute_root_map)
-    if root < 0 or root >= nroots:
+def _resolve_absolute_root(mc, root, *, allow_single_root_default=False):
+    """Resolve an absolute state-average root index."""
+    nroots = mc.ci_solver.sa_info.nroots_sum
+    if root is None and allow_single_root_default:
+        if nroots == 1:
+            return 0
         raise ValueError(
-            f"Expected a target response root in [0, {nroots}), got {root}."
+            "An absolute root must be specified when more than one root is present."
         )
+    if isinstance(root, bool) or not isinstance(root, (int, np.integer)):
+        raise TypeError("The target root must be an integer.")
+    if root < 0 or root >= nroots:
+        raise ValueError(f"Expected a target root in [0, {nroots}), got {root}.")
     return int(root)
 
 
@@ -610,7 +615,7 @@ def _solve_response(mc, root, *, r_tol, maxiter):
     :math:`\mathscr A(\mathbf z_\alpha,\mathbf x_\alpha)^T
     =-(\mathbf b^o_\alpha,\mathbf b^c_\alpha)^T`, plus its workspace.
     """
-    root = _validate_response_root(mc, root)
+    root = _resolve_absolute_root(mc, root)
     if not np.isscalar(r_tol) or r_tol <= 0.0:
         raise ValueError(f"r_tol must be positive, got {r_tol}.")
     if maxiter is not None and (
@@ -856,7 +861,7 @@ def compute_omega(mc, root, orbital_response, ci_response):
         Real symmetric ``omega_alpha`` with shape ``(nmo, nmo)`` in the
         current MO basis.
     """
-    root = _validate_response_root(mc, root)
+    root = _resolve_absolute_root(mc, root)
     orbital_response = _validate_orbital_response_vector(mc.orb_opt, orbital_response)
     ci_response, layout = _validate_ci_response_vector(mc, ci_response)
     ci_response = _project_ci_response_vector(mc, ci_response, layout)

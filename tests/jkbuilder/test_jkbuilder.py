@@ -1,9 +1,57 @@
 import numpy as np
 import pytest
 
-from forte2 import System, jkbuilder, X2CParams
+from forte2 import System, integrals, jkbuilder, X2CParams
+from forte2.gradients import build_metric_inverted_three_center
 from forte2.lib.ints import Basis, Shell
 from forte2.jkbuilder.mointegrals import RestrictedMOIntegrals, SpinorbitalIntegrals
+
+
+@pytest.mark.parametrize("df_ortho_rtol", [None, 1.0e-8])
+def test_metric_inverted_three_center_reuses_in_core_builder(
+    monkeypatch, df_ortho_rtol
+):
+    """Reuse the stored metric factor and B tensor without integral calls."""
+    system = System(
+        xyz="H 0 0 0\nH 0 0 1.7",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        unit="bohr",
+        df_ortho_rtol=df_ortho_rtol,
+    )
+    M = integrals.coulomb_2c(system)
+    J = integrals.coulomb_3c(system)
+    expected = np.linalg.solve(M, J.reshape(system.naux, -1)).reshape(J.shape)
+    _ = system.fock_builder.B_Pmn
+
+    def unexpected_integral_call(*args, **kwargs):
+        raise AssertionError("The in-core Fock builder must reuse its DF tensors.")
+
+    monkeypatch.setattr(integrals, "coulomb_2c", unexpected_integral_call)
+    monkeypatch.setattr(integrals, "coulomb_3c", unexpected_integral_call)
+    actual = system.fock_builder.build_metric_inverted_three_center()
+    wrapped = build_metric_inverted_three_center(system)
+
+    assert actual == pytest.approx(expected, abs=1.0e-10)
+    assert wrapped == pytest.approx(expected, abs=1.0e-10)
+
+
+@pytest.mark.parametrize("df_ortho_rtol", [None, 1.0e-8])
+def test_metric_inverted_three_center_reuses_otf_metric(df_ortho_rtol):
+    """Reuse the on-the-fly builder's metric factor."""
+    system = System(
+        xyz="H 0 0 0\nH 0 0 1.7",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        unit="bohr",
+        df_ortho_rtol=df_ortho_rtol,
+    )
+    expected = system.fock_builder.build_metric_inverted_three_center()
+    builder = jkbuilder.FockBuilderOTF(system, jk_mem_thres_mb=10)
+
+    actual = builder.build_metric_inverted_three_center()
+
+    assert actual == pytest.approx(expected, abs=1.0e-10)
 
 
 @pytest.mark.parametrize(

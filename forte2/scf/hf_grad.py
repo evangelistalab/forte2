@@ -3,8 +3,6 @@ from collections.abc import Iterable
 import numpy as np
 from numpy.typing import NDArray
 
-from forte2.gradients import build_metric_inverted_three_center
-
 
 def _build_hf_df_deriv_weights(
     system,
@@ -62,7 +60,7 @@ def _build_hf_df_deriv_weights(
         ``(W2, W3)`` with shapes ``(naux, naux)`` and
         ``(naux, nbasis, nbasis)``.
     """
-    Z = build_metric_inverted_three_center(system)
+    Z = system.fock_builder.build_metric_inverted_three_center()
     rho = np.einsum("mn,Pmn->P", D1, Z, optimize=True)
 
     W2 = -0.5 * np.einsum("P,Q->PQ", rho, rho, optimize=True)
@@ -111,7 +109,7 @@ def _build_ghf_df_deriv_weights(
     Cocc_b = occupied_spinors[nbf:]
     D1 = Cocc_a @ Cocc_a.conj().T + Cocc_b @ Cocc_b.conj().T
 
-    Z = build_metric_inverted_three_center(system)
+    Z = system.fock_builder.build_metric_inverted_three_center()
     rho = np.einsum("mn,Pmn->P", D1, Z, optimize=True)
 
     Q = np.einsum("mi,Pmn,nj->Pij", Cocc_a.conj(), Z, Cocc_a, optimize=True)

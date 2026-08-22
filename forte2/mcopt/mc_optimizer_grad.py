@@ -4,12 +4,12 @@ from numpy.typing import NDArray
 from forte2.base_classes import RelCIBase
 from forte2.ci.ci_utils import make_2cumulant_so
 from forte2.gradients import (
-    build_metric_inverted_three_center,
     compute_gradient,
 )
 from forte2.gradients.validation import validate_df_gradient_system
 
 from .mc_optimizer_response import (
+    _resolve_absolute_root,
     _solve_state_specific_gradient_response,
 )
 from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
@@ -29,7 +29,7 @@ def _compute_casscf_gradient(mc, root=None) -> NDArray:
     orthogonality-multiplier conventions of the technical note.
     """
     _validate_casscf_gradient_request(mc)
-    root = _resolve_casscf_gradient_root(mc, root)
+    root = _resolve_absolute_root(mc, root, allow_single_root_default=True)
 
     if not mc.executed:
         mc.run()
@@ -274,7 +274,7 @@ def _build_sa_casscf_relaxed_density_weights(
     )
     del Ccore, Cact, Ccore_response, Cact_response
 
-    Z_ao = build_metric_inverted_three_center(mc.system)
+    Z_ao = mc.system.fock_builder.build_metric_inverted_three_center()
     Z_h, Z_h_response = _transform_df_hole_response(Z_ao, Ch, Ch_response)
     del Z_ao
 
@@ -736,7 +736,7 @@ def _build_casscf_df_deriv_weights(
     gamma_h[ncore:, ncore:] = gamma1_act
     lambda2_act = _build_casscf_active_cumulant(gamma1_act, gamma2_act)
 
-    Z_ao = build_metric_inverted_three_center(system)
+    Z_ao = system.fock_builder.build_metric_inverted_three_center()
     Z_h = np.einsum("mx,Pmn,ny->Pxy", Ch.conj(), Z_ao, Ch, optimize=True)
 
     W2, W3_h = _build_mc_df_hole_weights(
@@ -796,7 +796,7 @@ def _build_rel_casscf_df_deriv_weights(
     nbf = system.nbf
     Ch_a = Ch[:nbf]
     Ch_b = Ch[nbf:]
-    Z_ao = build_metric_inverted_three_center(system)
+    Z_ao = system.fock_builder.build_metric_inverted_three_center()
     Z_h = np.einsum("mx,Pmn,ny->Pxy", Ch_a.conj(), Z_ao, Ch_a, optimize=True)
     Z_h += np.einsum("mx,Pmn,ny->Pxy", Ch_b.conj(), Z_ao, Ch_b, optimize=True)
 
@@ -961,25 +961,6 @@ def _validate_converged_casscf_gradient(mc) -> None:
             "Relativistic CASSCF/GASSCF gradients require spinor AO coefficients "
             "with 2 * system.nbf rows."
         )
-
-
-def _resolve_casscf_gradient_root(mc, root) -> int:
-    """Validate and resolve the absolute root requested for a gradient."""
-    nroots = mc.ci_solver.sa_info.nroots_sum
-    if root is None:
-        if nroots != 1:
-            raise ValueError(
-                "An absolute root must be specified for an individual-root "
-                "SA-CASSCF gradient."
-            )
-        return 0
-    if isinstance(root, bool) or not isinstance(root, (int, np.integer)):
-        raise TypeError("The target gradient root must be an integer.")
-    if root < 0 or root >= nroots:
-        raise ValueError(
-            f"Expected a target gradient root in [0, {nroots}), got {root}."
-        )
-    return int(root)
 
 
 def _find_upstream_system(method):

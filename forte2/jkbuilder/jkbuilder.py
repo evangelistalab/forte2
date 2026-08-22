@@ -79,6 +79,32 @@ class FockBuilder:
             )
         return np.ascontiguousarray(self.B_Pmn.transpose((2, 0, 1)))
 
+    def build_metric_inverted_three_center(self):
+        r"""Return the metric-inverted three-center tensor.
+
+        .. math::
+
+            Z^P_{\mu\nu}
+            =\sum_Q(M^{-1})_{PQ}(Q|\mu\nu)
+            =\sum_Q X_{QP}B^Q_{\mu\nu},
+            \qquad B=XJ,\quad M^{-1}=X^{\mathsf T}X.
+
+        The density-fitting metric factor and B tensor are reused; no
+        two- or three-center integrals are recomputed.
+
+        Returns
+        -------
+        NDArray
+            The tensor ``Z`` with shape ``(naux, nbf, nbf)``.
+        """
+        if isinstance(self.system, forte2.ModelSystem) or self.system.cholesky_tei:
+            raise NotImplementedError(
+                "Metric-inverted three-center integrals require density fitting."
+            )
+        B = self.B_Pmn
+        Z = self.Mm12.T @ B.reshape(B.shape[0], -1)
+        return Z.reshape(B.shape)
+
     def _build_B_model_system(self):
         nbf = self.system.nbf
         eri = self.system.eri.reshape((nbf**2,) * 2)
@@ -148,6 +174,8 @@ class FockBuilder:
                 )
             # M^{-1/2} = L^{-T} L^{-1}, so L^{-1} can be considered as M^{-1/2}
             X = sp.linalg.solve_triangular(L, np.eye(naux), lower=True)
+
+        self.Mm12 = X
 
         # Compute the integrals (P|mn) with P in the auxiliary basis and m, n in the system basis
         Pmn = integrals.coulomb_3c(self.system, auxiliary_basis)
@@ -780,6 +808,31 @@ class FockBuilderOTF:
             return _compute_Am1y_eigh(self.sevecs, self.sevals, y)
         else:
             return _compute_Am1y_cholesky(self.L, y)
+
+    def build_metric_inverted_three_center(self):
+        r"""Return the metric-inverted three-center tensor.
+
+        .. math::
+
+            Z^P_{\mu\nu}=\sum_Q(M^{-1})_{PQ}(Q|\mu\nu).
+
+        The cached metric factor is reused. Raw three-center integrals are
+        regenerated in auxiliary-shell batches, consistent with the
+        on-the-fly builder's memory model.
+
+        Returns
+        -------
+        NDArray
+            The tensor ``Z`` with shape ``(naux, nbf, nbf)``.
+        """
+        Pmn = np.empty((self.naux, self.nbf, self.nbf))
+        pshell0 = 0
+        while pshell0 < self.nshaux:
+            pshell0, pshell1, pb0, pb1 = self._find_aux_shell_block(pshell0)
+            Pmn[pb0:pb1] = self._fill_Pmn_buffer(pshell0, pshell1)
+            pshell0 = pshell1
+        Z = self._apply_Mm1(Pmn.reshape(self.naux, -1))
+        return Z.reshape(Pmn.shape)
 
     def _find_aux_shell_block(self, pshell0):
         # find the block of auxiliary shells that fit in the buffer, starting from pshell0

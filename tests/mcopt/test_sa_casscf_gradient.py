@@ -80,6 +80,36 @@ def _sa_casscf_mixed_spin(symbols, coordinates):
     return mc
 
 
+def _sa_casscf_mixed_electron_number(symbols, coordinates):
+    """Run an equal-weight neutral/cation LiH SA-CASSCF calculation."""
+    system = System(
+        xyz=xyz_string(symbols, coordinates),
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+    )
+    rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
+    ci_solver = CISolver(
+        [
+            State(system=system, charge=0, multiplicity=1, ms=0.0),
+            State(system=system, charge=1, multiplicity=2, ms=0.5),
+        ],
+        core_orbitals=[0],
+        active_orbitals=[1, 2],
+        nroots=[1, 1],
+        weights=[[0.5], [0.5]],
+    )
+    mc = MCOptimizer(
+        ci_solver,
+        e_tol=1.0e-12,
+        g_tol=1.0e-9,
+        maxiter=30,
+        final_orbitals="original",
+    )(rhf)
+    mc.run()
+    return mc
+
+
 def _sa_casscf_c2_ccpvdz(symbols, coordinates):
     """Run a compact two-root C2 SA-CASSCF calculation in cc-pVDZ."""
     system = System(
@@ -260,10 +290,17 @@ def test_sa_casscf_gradient_lih_finite_difference():
     assert gradients.sum(axis=1) == pytest.approx(np.zeros((2, 3)), abs=1.0e-10)
     with pytest.raises(ValueError, match="root must be specified"):
         mc.gradient()
-    with pytest.raises(ValueError, match=r"root in \[0, 2\)"):
-        mc.gradient(root=2)
-    with pytest.raises(TypeError, match="root must be an integer"):
-        mc.gradient(root=0.0)
+    for invalid_root, error, message in (
+        (2, ValueError, r"root in \[0, 2\)"),
+        (-1, ValueError, r"root in \[0, 2\)"),
+        (0.0, TypeError, "root must be an integer"),
+        (False, TypeError, "root must be an integer"),
+    ):
+        with pytest.raises(error, match=message) as gradient_error:
+            mc.gradient(root=invalid_root)
+        with pytest.raises(error, match=message) as response_error:
+            solve_state_specific_response(mc, invalid_root)
+        assert str(gradient_error.value) == str(response_error.value)
 
 
 def test_sa_casscf_gradient_mixed_spin_lih_finite_difference():
@@ -294,6 +331,26 @@ def test_sa_casscf_gradient_mixed_spin_lih_finite_difference():
         np.array([0.006221111355472, -0.029709654781810]),
         abs=5.0e-8,
     )
+    assert gradients.sum(axis=1) == pytest.approx(np.zeros((2, 3)), abs=1.0e-10)
+
+
+def test_sa_casscf_gradient_mixed_electron_number_lih_finite_difference():
+    """Validate a state average spanning neutral and cationic LiH states."""
+    symbols = ["Li", "H"]
+    coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 3.0]])
+
+    mc = _sa_casscf_mixed_electron_number(symbols, coordinates)
+    gradients = np.array([mc.gradient(root=root) for root in range(2)])
+    numerical = finite_difference(
+        lambda displaced: _sa_casscf_mixed_electron_number(symbols, displaced).E_ci,
+        coordinates,
+        step=1.0e-3,
+        npoints=4,
+        components=[(1, 2)],
+    )[0]
+
+    assert [state.nel for state in mc.ci_solver.sa_info.states] == [4, 3]
+    assert gradients[:, 1, 2] == pytest.approx(numerical, abs=1.0e-7)
     assert gradients.sum(axis=1) == pytest.approx(np.zeros((2, 3)), abs=1.0e-10)
 
 
