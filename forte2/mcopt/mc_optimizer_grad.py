@@ -10,10 +10,7 @@ from forte2.gradients import (
 from forte2.gradients.validation import validate_df_gradient_system
 
 from .mc_optimizer_response import (
-    _compute_ci_response_rdms,
-    _get_ci_response_layout,
-    compute_omega,
-    solve_state_specific_response,
+    _solve_state_specific_gradient_response,
 )
 from .orbital_optimizer import OrbOptimizer, RelOrbOptimizer
 
@@ -99,10 +96,18 @@ def _compute_nonrel_sa_casscf_gradient(mc, C: NDArray, root: int) -> NDArray:
     Here :math:`\omega_\alpha` is the symmetric relaxed orbital multiplier
     returned by :func:`forte2.mcopt.mc_optimizer_response.compute_omega`.
     """
-    orbital_response, ci_response = solve_state_specific_response(mc, root)
-    omega = compute_omega(mc, root, orbital_response, ci_response)
+    orbital_response, omega, base_g1, base_g2 = _solve_state_specific_gradient_response(
+        mc, root
+    )
+    average_g1 = mc.orb_opt.g1
+    average_g2 = mc.make_average_2rdm()
     D1, W2, W3 = _build_sa_casscf_relaxed_density_weights(
-        mc, root, orbital_response, ci_response
+        mc,
+        orbital_response,
+        base_g1,
+        base_g2,
+        average_g1,
+        average_g2,
     )
 
     W1 = np.einsum("mp,pq,nq->mn", C, omega, C, optimize=True)
@@ -124,9 +129,11 @@ def _compute_nonrel_sa_casscf_gradient(mc, C: NDArray, root: int) -> NDArray:
 
 def _build_sa_casscf_relaxed_density_weights(
     mc,
-    root: int,
     orbital_response: NDArray,
-    ci_response: NDArray,
+    base_g1: NDArray,
+    base_g2: NDArray,
+    average_g1: NDArray,
+    average_g2: NDArray,
 ) -> tuple[NDArray, NDArray, NDArray]:
     r"""Build relaxed AO density and DF weights for a target SA-CASSCF root.
 
@@ -176,19 +183,10 @@ def _build_sa_casscf_relaxed_density_weights(
     W_3^{\mathrm{rel},\alpha})` without forming a four-index relaxed RDM.
     """
     nmo = mc.mo_space.nmo
-    layout, _ = _get_ci_response_layout(mc)
     core_indices = np.arange(nmo)[mc.mo_space.core]
     active_indices = np.arange(nmo)[mc.mo_space.actv]
     hole_indices = np.concatenate((core_indices, active_indices))
     ncore = core_indices.size
-
-    target_g1 = mc.make_sf_1rdm(root)
-    target_g2 = mc.make_sf_2rdm(root)
-    _, ci_g1, ci_g2 = _compute_ci_response_rdms(mc, ci_response, layout)
-    average_g1 = mc.make_average_1rdm()
-    average_g2 = mc.make_average_2rdm()
-    base_g1 = target_g1 + ci_g1
-    base_g2 = target_g2 + ci_g2
 
     C = mc.mos.C[0][:, mc.mo_space.orig_to_contig]
     Ccore = C[:, core_indices]

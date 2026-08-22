@@ -281,6 +281,31 @@ def _build_orbital_lagrangian_from_rdms(
     intermediates,
 ):
     r"""Return the MO orbital Lagrangian :math:`A[s,\gamma,D]`."""
+    return _build_orbital_lagrangian(
+        orb_opt,
+        overlap_response,
+        g1_response,
+        _make_working_2rdm(g2_response),
+        intermediates,
+    )
+
+
+def _build_orbital_lagrangian(
+    orb_opt,
+    overlap_response,
+    g1_response,
+    g2_working_response,
+    intermediates,
+):
+    r"""Return :math:`A[s,\gamma,D]` from a working-form 2-RDM:
+
+    .. math::
+
+        A^m_p&=2(sF_{C,p}^m+F_{A,p}^m[\gamma]),\\
+        A^u_p&=\sum_vF_{C,p}^v\gamma^v_u
+        +\sum_{tvw}\langle pv|tw\rangle D_{tu,vw},\\
+        A^e_p&=0.
+    """
     Fcore_mo, B_ga = intermediates
     Fact_ao_response = _build_transition_fock_response(
         orb_opt,
@@ -291,7 +316,6 @@ def _build_orbital_lagrangian_from_rdms(
         exchange_factor=0.5,
     )
     Fact_response = orb_opt._transform_ao_operator(Fact_ao_response, orb_opt.C)
-    g2_working_response = _make_working_2rdm(g2_response)
 
     A_response = np.zeros_like(Fcore_mo)
     A_response[:, orb_opt.core] = (
@@ -768,6 +792,76 @@ def _build_response_preconditioner(mc, layout, nrot, nci):
     return spla.LinearOperator((dimension, dimension), matvec=matvec, dtype=float)
 
 
+def _solve_response(mc, root, *, r_tol, maxiter):
+    r"""Return :math:`(\mathbf z_\alpha,\mathbf x_\alpha)` satisfying
+    :math:`\mathscr A(\mathbf z_\alpha,\mathbf x_\alpha)^T
+    =-(\mathbf b^o_\alpha,\mathbf b^c_\alpha)^T`, plus its workspace.
+    """
+    root = _validate_response_root(mc, root)
+    if not np.isscalar(r_tol) or r_tol <= 0.0:
+        raise ValueError(f"r_tol must be positive, got {r_tol}.")
+    if maxiter is not None and (
+        isinstance(maxiter, bool)
+        or not isinstance(maxiter, (int, np.integer))
+        or maxiter < 1
+    ):
+        raise ValueError(f"maxiter must be a positive integer, got {maxiter}.")
+
+    layout, nci = _get_ci_response_layout(mc)
+    nrot = mc.orb_opt.nrot
+    dimension = nrot + nci
+    mc.orb_opt.set_rdms(mc.make_average_1rdm(), mc.make_average_2rdm())
+    intermediates = _build_coupled_response_intermediates(mc.orb_opt)
+    _, density_intermediates, _ = intermediates
+    orbital_b = _compute_ci_orbital_response_from_rdms(
+        mc.orb_opt,
+        1.0,
+        mc.make_sf_1rdm(root),
+        mc.make_sf_2rdm(root),
+        density_intermediates,
+    )
+    raw_ci_b = _compute_raw_ci_response_b_vector(mc, root, layout)
+    ci_b = _project_ci_response_vector(mc, raw_ci_b, layout)
+    rhs = -np.concatenate((orbital_b, ci_b))
+
+    def matvec(vector):
+        r"""Apply :math:`\mathbf y=\mathscr A\mathbf v`."""
+        orbital_product, ci_product = _compute_projected_response_vector_product(
+            mc,
+            vector[:nrot],
+            vector[nrot:],
+            layout,
+            intermediates,
+        )
+        product = np.empty(dimension, dtype=float)
+        product[:nrot] = orbital_product
+        product[nrot:] = ci_product
+        return product
+
+    operator = spla.LinearOperator((dimension, dimension), matvec=matvec, dtype=float)
+    preconditioner = _build_response_preconditioner(mc, layout, nrot, nci)
+    solution, info = spla.gmres(
+        operator,
+        rhs,
+        rtol=float(r_tol),
+        atol=0.0,
+        restart=min(dimension, 50),
+        maxiter=maxiter,
+        M=preconditioner,
+    )
+    if info != 0:
+        reason = (
+            f"did not converge after {info} iterations"
+            if info > 0
+            else f"failed with status {info}"
+        )
+        raise RuntimeError(f"The coupled CASSCF response solve {reason}.")
+
+    orbital_response = solution[:nrot]
+    ci_response = _project_ci_response_vector(mc, solution[nrot:], layout)
+    return orbital_response, ci_response, root, layout, intermediates
+
+
 def solve_state_specific_response(
     mc,
     root,
@@ -814,67 +908,83 @@ def solve_state_specific_response(
     RuntimeError
         If GMRES does not converge.
     """
-    root = _validate_response_root(mc, root)
-    if not np.isscalar(r_tol) or r_tol <= 0.0:
-        raise ValueError(f"r_tol must be positive, got {r_tol}.")
-    if maxiter is not None and (
-        isinstance(maxiter, bool)
-        or not isinstance(maxiter, (int, np.integer))
-        or maxiter < 1
-    ):
-        raise ValueError(f"maxiter must be a positive integer, got {maxiter}.")
-
-    layout, nci = _get_ci_response_layout(mc)
-    nrot = mc.orb_opt.nrot
-    dimension = nrot + nci
-    mc.orb_opt.set_rdms(mc.make_average_1rdm(), mc.make_average_2rdm())
-    intermediates = _build_coupled_response_intermediates(
-        mc.orb_opt,
+    orbital_response, ci_response, _, _, _ = _solve_response(
+        mc, root, r_tol=r_tol, maxiter=maxiter
     )
-    _, density_intermediates, _ = intermediates
-    orbital_b = _compute_ci_orbital_response_from_rdms(
+    return orbital_response, ci_response
+
+
+def _compute_omega_from_intermediates(
+    mc,
+    orbital_response,
+    overlap_response,
+    g1_response,
+    g2_response,
+    intermediates,
+):
+    r"""Return the relaxed multiplier from combined target/CI RDMs:
+
+    .. math::
+
+        \Omega_\alpha
+        &=A[1+s[\mathbf x_\alpha],
+             \gamma^\alpha+\gamma[\mathbf x_\alpha],
+             \Gamma^\alpha+\Gamma[\mathbf x_\alpha]]
+          +\dot{\bar A}[\mathbf z_\alpha]
+          +Z_\alpha\bar A-\bar A Z_\alpha,\\
+        \omega_\alpha&=\tfrac12(\Omega_\alpha+\Omega_\alpha^T).
+    """
+    orbital_intermediates, density_intermediates, _ = intermediates
+    base_A = _build_orbital_lagrangian_from_rdms(
         mc.orb_opt,
-        1.0,
-        mc.make_sf_1rdm(root),
-        mc.make_sf_2rdm(root),
+        overlap_response,
+        g1_response,
+        g2_response,
         density_intermediates,
     )
-    raw_ci_b = _compute_raw_ci_response_b_vector(mc, root, layout)
-    ci_b = _project_ci_response_vector(mc, raw_ci_b, layout)
-    rhs = -np.concatenate((orbital_b, ci_b))
-
-    def matvec(vector):
-        r"""Apply :math:`\mathbf y=\mathscr A\mathbf v`."""
-        orbital_product, ci_product = _compute_projected_response_vector_product(
-            mc, vector[:nrot], vector[nrot:], layout, intermediates
-        )
-        product = np.empty(dimension, dtype=float)
-        product[:nrot] = orbital_product
-        product[nrot:] = ci_product
-        return product
-
-    operator = spla.LinearOperator((dimension, dimension), matvec=matvec, dtype=float)
-    preconditioner = _build_response_preconditioner(mc, layout, nrot, nci)
-    restart = min(dimension, 50)
-    solution, info = spla.gmres(
-        operator,
-        rhs,
-        rtol=float(r_tol),
-        atol=0.0,
-        restart=restart,
-        maxiter=maxiter,
-        M=preconditioner,
+    average_A = _build_orbital_lagrangian(
+        mc.orb_opt,
+        1.0,
+        mc.orb_opt.g1,
+        mc.orb_opt.g2,
+        density_intermediates,
     )
-    if info != 0:
-        if info > 0:
-            reason = f"did not converge after {info} iterations"
-        else:
-            reason = f"failed with status {info}"
-        raise RuntimeError(f"The coupled CASSCF response solve {reason}.")
+    orbital_A = _compute_orbital_lagrangian_response(
+        mc.orb_opt, orbital_response, orbital_intermediates
+    )
+    Z = mc.orb_opt._vec_to_mat(orbital_response)
+    orbital_A += Z @ average_A - average_A @ Z
+    Omega = base_A + orbital_A
+    return 0.5 * (Omega + Omega.T)
 
-    orbital_response = solution[:nrot]
-    ci_response = _project_ci_response_vector(mc, solution[nrot:], layout)
-    return orbital_response, ci_response
+
+def _solve_state_specific_gradient_response(mc, root):
+    r"""Return
+    :math:`(\mathbf z_\alpha,\omega_\alpha,
+    \gamma^\alpha+\gamma[\mathbf x_\alpha],
+    \Gamma^\alpha+\Gamma[\mathbf x_\alpha])`.
+    """
+    orbital_response, ci_response, root, layout, intermediates = _solve_response(
+        mc, root, r_tol=1.0e-10, maxiter=None
+    )
+    ci_overlap, ci_g1, ci_g2 = _compute_ci_response_rdms(mc, ci_response, layout)
+    del ci_response
+
+    base_g1 = mc.make_sf_1rdm(root)
+    base_g2 = mc.make_sf_2rdm(root)
+    base_g1 += ci_g1
+    base_g2 += ci_g2
+    del ci_g1, ci_g2
+
+    omega = _compute_omega_from_intermediates(
+        mc,
+        orbital_response,
+        1.0 + ci_overlap,
+        base_g1,
+        base_g2,
+        intermediates,
+    )
+    return orbital_response, omega, base_g1, base_g2
 
 
 def compute_omega(mc, root, orbital_response, ci_response):
@@ -921,39 +1031,19 @@ def compute_omega(mc, root, orbital_response, ci_response):
     orbital_response = _validate_orbital_response_vector(mc.orb_opt, orbital_response)
     ci_response, layout = _validate_ci_response_vector(mc, ci_response)
     ci_response = _project_ci_response_vector(mc, ci_response, layout)
-    (
-        orbital_intermediates,
-        density_intermediates,
-        _,
-    ) = _build_coupled_response_intermediates(
-        mc.orb_opt,
-    )
+    ci_overlap, ci_g1, ci_g2 = _compute_ci_response_rdms(mc, ci_response, layout)
+    base_g1 = mc.make_sf_1rdm(root)
+    base_g2 = mc.make_sf_2rdm(root)
+    base_g1 += ci_g1
+    base_g2 += ci_g2
 
-    target_A = _build_orbital_lagrangian_from_rdms(
-        mc.orb_opt,
-        1.0,
-        mc.make_sf_1rdm(root),
-        mc.make_sf_2rdm(root),
-        density_intermediates,
+    mc.orb_opt.set_rdms(mc.make_average_1rdm(), mc.make_average_2rdm())
+    intermediates = _build_coupled_response_intermediates(mc.orb_opt)
+    return _compute_omega_from_intermediates(
+        mc,
+        orbital_response,
+        1.0 + ci_overlap,
+        base_g1,
+        base_g2,
+        intermediates,
     )
-    ci_A = _build_orbital_lagrangian_from_rdms(
-        mc.orb_opt,
-        *_compute_ci_response_rdms(mc, ci_response, layout),
-        density_intermediates,
-    )
-    average_A = _build_orbital_lagrangian_from_rdms(
-        mc.orb_opt,
-        1.0,
-        mc.make_average_1rdm(),
-        mc.make_average_2rdm(),
-        density_intermediates,
-    )
-
-    orbital_A = _compute_orbital_lagrangian_response(
-        mc.orb_opt, orbital_response, orbital_intermediates
-    )
-    Z = mc.orb_opt._vec_to_mat(orbital_response)
-    orbital_A += Z @ average_A - average_A @ Z
-
-    Omega = target_A + ci_A + orbital_A
-    return 0.5 * (Omega + Omega.T)
