@@ -176,6 +176,33 @@ def _sa_gasscf_h2_ccpvdz(symbols, coordinates, spin_free_x2c=False):
     return mc
 
 
+def _sa_gasscf_lih_multistate(symbols, coordinates, state_options):
+    """Run a two-state LiH SA-GASSCF calculation with state-specific GAS rules."""
+    system = System(
+        xyz=xyz_string(symbols, coordinates),
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+    )
+    rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
+    ci_solver = CISolver(
+        [State(system=system, **options) for options in state_options],
+        core_orbitals=[0],
+        active_orbitals=[[1], [2, 3]],
+        nroots=[1, 1],
+        weights=[[0.5], [0.5]],
+    )
+    mc = MCOptimizer(
+        ci_solver,
+        e_tol=1.0e-11,
+        g_tol=1.0e-8,
+        maxiter=30,
+        final_orbitals="original",
+    )(rhf)
+    mc.run()
+    return mc
+
+
 def test_sa_casscf_relaxed_one_body_density_kernel():
     """Check the target density plus the average-density orbital response."""
     rng = np.random.default_rng(7)
@@ -397,6 +424,90 @@ def test_sa_gasscf_gradient_h2_ccpvdz_finite_difference():
     assert state.gas_max == [1]
     assert gradients[:, 1, 2] == pytest.approx(numerical, abs=1.0e-7)
     assert numerical == pytest.approx(np.array([-0.05776565, 0.11036714]), abs=1.0e-8)
+    assert gradients.sum(axis=1) == pytest.approx(np.zeros((2, 3)), abs=1.0e-10)
+
+
+def test_sa_gasscf_gradient_distinct_occupation_restrictions_lih():
+    """Validate an average over states with zero versus one electron in GAS1."""
+    symbols = ["Li", "H"]
+    coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 3.0]])
+    state_options = (
+        {
+            "multiplicity": 1,
+            "ms": 0.0,
+            "gas_min": [0],
+            "gas_max": [0],
+        },
+        {
+            "multiplicity": 1,
+            "ms": 0.0,
+            "gas_min": [1],
+            "gas_max": [1],
+        },
+    )
+
+    mc = _sa_gasscf_lih_multistate(symbols, coordinates, state_options)
+    gradients = np.array([mc.gradient(root=root) for root in range(2)])
+    numerical = finite_difference(
+        lambda displaced: _sa_gasscf_lih_multistate(
+            symbols, displaced, state_options
+        ).E_ci,
+        coordinates,
+        step=1.0e-3,
+        npoints=4,
+        components=[(1, 2)],
+    )[0]
+
+    states = mc.ci_solver.sa_info.states
+    assert [state.nel for state in states] == [4, 4]
+    assert [(state.gas_min, state.gas_max) for state in states] == [
+        ([0], [0]),
+        ([1], [1]),
+    ]
+    assert gradients[:, 1, 2] == pytest.approx(numerical, abs=1.0e-7)
+    assert gradients.sum(axis=1) == pytest.approx(np.zeros((2, 3)), abs=1.0e-10)
+
+
+def test_sa_gasscf_gradient_mixed_electron_number_lih():
+    """Validate an average over neutral LiH and doublet LiH+ GAS states."""
+    symbols = ["Li", "H"]
+    coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 3.0]])
+    state_options = (
+        {
+            "charge": 0,
+            "multiplicity": 1,
+            "ms": 0.0,
+            "gas_min": [1],
+            "gas_max": [1],
+        },
+        {
+            "charge": 1,
+            "multiplicity": 2,
+            "ms": 0.5,
+            "gas_min": [1],
+            "gas_max": [1],
+        },
+    )
+
+    mc = _sa_gasscf_lih_multistate(symbols, coordinates, state_options)
+    gradients = np.array([mc.gradient(root=root) for root in range(2)])
+    numerical = finite_difference(
+        lambda displaced: _sa_gasscf_lih_multistate(
+            symbols, displaced, state_options
+        ).E_ci,
+        coordinates,
+        step=1.0e-3,
+        npoints=4,
+        components=[(1, 2)],
+    )[0]
+
+    states = mc.ci_solver.sa_info.states
+    assert [state.nel for state in states] == [4, 3]
+    assert [(state.gas_min, state.gas_max) for state in states] == [
+        ([1], [1]),
+        ([1], [1]),
+    ]
+    assert gradients[:, 1, 2] == pytest.approx(numerical, abs=1.0e-7)
     assert gradients.sum(axis=1) == pytest.approx(np.zeros((2, 3)), abs=1.0e-10)
 
 
