@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from scipy.linalg import expm, logm
 
-from forte2 import System, RHF, CI, CISolver, MCOptimizer, State
+from forte2 import System, RHF, CI, CISolver, MCOptimizer, State, GHF, RelCI
 from forte2.helpers.comparisons import approx_abs
 from forte2.orbitals.orbital_overlap import mo_overlap
 from forte2.orbitals.wavefunction_overlap import (
@@ -11,6 +11,7 @@ from forte2.orbitals.wavefunction_overlap import (
     transform_ci_vector_direct,
     transform_ci_vector_sparse_ops,
     _one_body_sparse_operator,
+    _make_sparse_state,
 )
 
 BACKENDS = ["direct", "sparse_ops"]
@@ -315,3 +316,181 @@ def test_transform_ci_vector_direct_large_angle():
     # sanity: exp(-T) for an antisymmetric T is unitary, so it must preserve
     # the CI vector's norm.
     assert np.linalg.norm(result_direct) == pytest.approx(1.0, abs=1e-10)
+
+
+# -- Two-component (spinor) wavefunction overlap ----------------------------
+
+
+def _rel_lih_ci():
+    xyz = "Li 0.0 0.0 0.0\nH  0.0 0.0 3.0"
+    system = System(
+        xyz=xyz,
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        unit="bohr",
+    )
+    scf = GHF(charge=0, e_tol=1e-10)(system)
+    ci = RelCI(nel=4, core_orbitals=2, active_orbitals=8)(scf)
+    ci.run()
+    return system, ci
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_casscf_wavefunction_overlap_two_component_same_orbitals(backend):
+    system, ci = _rel_lih_ci()
+    ss = ci.sub_solvers[0]
+    ndocc, nactv = ci.mo_space.ncore, ci.mo_space.nactv
+    n = ndocc + nactv
+
+    C_det = ss.evecs[:, 0].copy()
+    C_docc_actv = ci.mos.C[0][:, ci.mo_space.orig_to_contig][:, :n]
+
+    S = casscf_wavefunction_overlap(
+        ss.ci_strings,
+        C_det,
+        C_docc_actv,
+        system,
+        ss.ci_strings,
+        C_det,
+        C_docc_actv,
+        system,
+        ndocc,
+        nactv,
+        backend=backend,
+    )
+    assert S == approx_abs(1.0, 1e-9)
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_casscf_wavefunction_overlap_two_component_docc_rotation(backend):
+    """
+    Rotate ONLY the docc spinors by a random unitary ``U_docc``, leaving the
+    active orbitals and the determinant-basis CI vector untouched. Two-component
+    docc spinors are singly (not doubly) occupied, so the biorthogonalized
+    overlap of the original wavefunction against this re-expressed one must
+    equal exactly ``det(U_docc)`` -- not ``det(U_docc)**2``, the nonrelativistic
+    power (see the docc_power note in casscf_wavefunction_overlap). This is a
+    sharp, closed-form check on that power: get it wrong and this test's
+    prediction misses by exactly a squaring.
+    """
+    system, ci = _rel_lih_ci()
+    ss = ci.sub_solvers[0]
+    ndocc, nactv = ci.mo_space.ncore, ci.mo_space.nactv
+    n = ndocc + nactv
+
+    C_det = ss.evecs[:, 0].copy()
+    C_docc_actv_1 = ci.mos.C[0][:, ci.mo_space.orig_to_contig][:, :n]
+
+    rng = np.random.default_rng(3)
+    A = rng.standard_normal((ndocc, ndocc)) + 1j * rng.standard_normal((ndocc, ndocc))
+    A = A - A.conj().T  # anti-Hermitian generator: U_docc is unitary
+    U_docc = expm(A)
+
+    C_docc_actv_2 = C_docc_actv_1.copy()
+    C_docc_actv_2[:, :ndocc] = C_docc_actv_1[:, :ndocc] @ U_docc
+
+    S = casscf_wavefunction_overlap(
+        ss.ci_strings,
+        C_det,
+        C_docc_actv_1,
+        system,
+        ss.ci_strings,
+        C_det,
+        C_docc_actv_2,
+        system,
+        ndocc,
+        nactv,
+        backend=backend,
+    )
+    assert S == approx_abs(np.linalg.det(U_docc), 1e-9)
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_casscf_wavefunction_overlap_two_component_rotated_active_orbitals(backend):
+    """
+    Two-component analog of test_casscf_wavefunction_overlap_rotated_active_orbitals:
+    rotate the active spinors by a random unitary R and independently build the
+    CI vector of the SAME physical wavefunction in the rotated basis (via
+    SparseExp/apply_op on the single-channel generator log(R), see
+    _one_body_sparse_operator's two_component branch). The biorthogonalized
+    overlap between the original and rotated representation must recover 1.
+    """
+    from forte2.lib.sparse_ops import SparseExp
+
+    system, ci = _rel_lih_ci()
+    ss = ci.sub_solvers[0]
+    ndocc, nactv = ci.mo_space.ncore, ci.mo_space.nactv
+    n = ndocc + nactv
+
+    C1_det = ss.evecs[:, 0].copy()
+    C_docc_actv_1 = ci.mos.C[0][:, ci.mo_space.orig_to_contig][:, :n]
+
+    rng = np.random.default_rng(0)
+    A = rng.standard_normal((nactv, nactv)) + 1j * rng.standard_normal((nactv, nactv))
+    A = A - A.conj().T  # anti-Hermitian generator: R is unitary
+    R = expm(A)
+    kappa = logm(R)
+
+    state1 = _make_sparse_state(ss.ci_strings, C1_det, 1e-14)
+    T_op = _one_body_sparse_operator(kappa, two_component=True)
+    state2_ref = SparseExp(32, 1e-14).apply_op(T_op, state1, scaling_factor=-1.0)
+
+    dets = ss.ci_strings.make_determinants()
+    C2_det = np.array(
+        [state2_ref[d] if d in state2_ref else 0.0 for d in dets], dtype=complex
+    )
+
+    C_docc_actv_2 = C_docc_actv_1.copy()
+    C_docc_actv_2[:, ndocc:] = C_docc_actv_1[:, ndocc:] @ R
+
+    S = casscf_wavefunction_overlap(
+        ss.ci_strings,
+        C1_det,
+        C_docc_actv_1,
+        system,
+        ss.ci_strings,
+        C2_det,
+        C_docc_actv_2,
+        system,
+        ndocc,
+        nactv,
+        backend=backend,
+    )
+    assert S == approx_abs(1.0, 1e-8)
+
+
+def test_transform_ci_vector_direct_matches_sparse_ops_two_component():
+    """
+    Two-component analog of test_transform_ci_vector_direct_matches_sparse_ops:
+    proves transform_ci_vector_direct's RelCISigmaBuilder-based path implements
+    the same math as transform_ci_vector_sparse_ops, for a random non-Hermitian
+    complex t_actv (the exact case our generator produces, a matrix logarithm,
+    not a physical Hamiltonian) and a genuinely complex CI vector.
+    """
+    _, ci = _rel_lih_ci()
+    ss = ci.sub_solvers[0]
+    nactv = ci.mo_space.nactv
+
+    C_det = ss.evecs[:, 0].copy()
+
+    rng = np.random.default_rng(7)
+    t_actv = (
+        rng.standard_normal((nactv, nactv)) + 1j * rng.standard_normal((nactv, nactv))
+    ) * 0.1  # not Hermitian
+
+    result_direct = transform_ci_vector_direct(
+        ss.ci_strings, C_det, t_actv, two_component=True
+    )
+    result_sparse_ops = transform_ci_vector_sparse_ops(
+        ss.ci_strings, C_det, t_actv, two_component=True
+    )
+
+    dets = ss.ci_strings.make_determinants()
+    result_sparse_ops_dense = np.array(
+        [result_sparse_ops[d] if d in result_sparse_ops else 0.0 for d in dets],
+        dtype=complex,
+    )
+
+    np.testing.assert_allclose(
+        result_direct, result_sparse_ops_dense, rtol=1e-9, atol=1e-9
+    )

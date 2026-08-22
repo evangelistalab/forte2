@@ -347,21 +347,30 @@ def _apply_orbital0_reflection(ci_strings, C: NDArray) -> NDArray:
 # Kept as a correctness reference; not optimized for large active spaces.
 
 
-def _one_body_sparse_operator(t: NDArray):
+def _one_body_sparse_operator(t: NDArray, two_component: bool = False):
     r"""
-    Build the spin-summed one-body second-quantized operator
-    :math:`\sum_{pq} t_{pq} E_{pq}`, :math:`E_{pq} = p_\alpha^\dagger q_\alpha
-    + p_\beta^\dagger q_\beta`, as a ``SparseOperator``.
+    Build the one-body second-quantized operator :math:`\sum_{pq} t_{pq}
+    E_{pq}` as a ``SparseOperator``.
+
+    For the nonrelativistic case, :math:`E_{pq} = p_\alpha^\dagger q_\alpha +
+    p_\beta^\dagger q_\beta` (spin-summed). For the two-component case, each
+    index already refers to a full spinor (no separate alpha/beta channels;
+    the beta string is always empty, see :func:`biorthogonalize_casscf_orbitals`
+    callers in the two-component path), so only the single spinor-channel
+    term :math:`p^\dagger q` is added.
 
     Parameters
     ----------
     t : NDArray
         The (active-space) one-body generator matrix, shape ``(nactv, nactv)``.
+    two_component : bool, optional
+        If True, build the single-channel (spinor) operator instead of the
+        spin-summed one.
 
     Returns
     -------
     forte2.lib.sparse_ops.SparseOperator
-        The corresponding spin-free one-body operator.
+        The corresponding one-body operator.
     """
     from forte2.lib.sparse_ops import SparseOperator
 
@@ -373,8 +382,37 @@ def _one_body_sparse_operator(t: NDArray):
             if coeff == 0:
                 continue
             sop.add([p], [], [q], [], coeff)
-            sop.add([], [p], [], [q], coeff)
+            if not two_component:
+                sop.add([], [p], [], [q], coeff)
     return sop
+
+
+def _make_sparse_state(ci_strings, C: NDArray, threshold: float = 1e-12):
+    r"""
+    Convert a dense CI vector to a ``SparseState``, screening out coefficients
+    at or below ``threshold``. Equivalent to ``CISigmaBuilder.make_sparse_state``,
+    reimplemented here in Python since that C++ method is only bound for
+    real (float64) CI vectors, and this needs to work for the two-component
+    (complex) case too.
+
+    Parameters
+    ----------
+    ci_strings : forte2.lib.ci_helpers.CIStrings
+        The determinant list ``C`` is expressed in.
+    C : NDArray
+        The CI vector, shape ``(ndet,)``.
+    threshold : float, optional
+        Coefficients with magnitude at or below this value are omitted.
+
+    Returns
+    -------
+    forte2.lib.sparse_ops.SparseState
+        The CI vector as a sparse state.
+    """
+    from forte2.lib.sparse_ops import SparseState
+
+    dets = ci_strings.make_determinants()
+    return SparseState({d: c for d, c in zip(dets, C) if abs(c) > threshold})
 
 
 def transform_ci_vector_sparse_ops(
@@ -384,6 +422,7 @@ def transform_ci_vector_sparse_ops(
     docc_scale: complex = 1.0,
     maxk: int = 32,
     screen_thresh: float = 1e-14,
+    two_component: bool = False,
 ):
     r"""
     Transform an active-space CI vector by a (possibly nonunitary) active-space
@@ -415,27 +454,20 @@ def transform_ci_vector_sparse_ops(
     maxk : int, optional
         Maximum Taylor expansion order, forwarded to ``SparseExp``.
     screen_thresh : float, optional
-        Screening threshold, forwarded to ``SparseExp`` and ``make_sparse_state``.
+        Screening threshold, forwarded to ``SparseExp`` and ``_make_sparse_state``.
+    two_component : bool, optional
+        If True, build the single-channel (spinor) generator operator instead
+        of the spin-summed one; see :func:`_one_body_sparse_operator`.
 
     Returns
     -------
     forte2.lib.sparse_ops.SparseState
         The transformed CI vector, as a sparse state in the biorthonormal basis.
     """
-    from forte2.lib.ci_helpers import CISigmaBuilder
     from forte2.lib.sparse_ops import SparseExp
 
-    nactv = t_actv.shape[0]
-    # make_sparse_state only depends on ci_strings, never on the Hamiltonian
-    # integrals, so any builder sharing this determinant list will do.
-    helper_builder = CISigmaBuilder(
-        ci_strings,
-        0.0,
-        np.zeros((nactv, nactv)),
-        np.zeros((nactv, nactv, nactv, nactv)),
-    )
-    state = helper_builder.make_sparse_state(np.asarray(C), screen_thresh)
-    T_op = _one_body_sparse_operator(t_actv)
+    state = _make_sparse_state(ci_strings, np.asarray(C), screen_thresh)
+    T_op = _one_body_sparse_operator(t_actv, two_component=two_component)
     new_state = SparseExp(maxk, screen_thresh).apply_op(
         T_op, state, scaling_factor=-1.0
     )
@@ -462,6 +494,7 @@ def transform_ci_vector_direct(
     max_taylor_order: int = 25,
     max_squarings: int = 10,
     scale_threshold: float = 0.5,
+    two_component: bool = False,
 ) -> NDArray:
     r"""
     Transform an active-space CI vector by a (possibly nonunitary) active-space
@@ -496,7 +529,8 @@ def transform_ci_vector_direct(
     t_actv : NDArray
         The active-active block of the one-body transformation generator,
         shape ``(nactv, nactv)``. Must be real (or have a negligible
-        imaginary part; see :func:`_real_generator`).
+        imaginary part; see :func:`_real_generator`), unless
+        ``two_component`` is True.
     docc_scale : complex, optional
         The scalar factor from the inactive-space part of the transformation.
     tol : float, optional
@@ -508,6 +542,10 @@ def transform_ci_vector_direct(
     scale_threshold : float, optional
         Target spectral norm for the scaled generator before the Taylor
         series is applied.
+    two_component : bool, optional
+        If True, treat ``C`` and ``t_actv`` as genuinely complex (two-component
+        spinor case) and build on ``RelCISigmaBuilder`` instead of
+        ``CISigmaBuilder``. Skips the real-only :func:`_real_generator` check.
 
     Returns
     -------
@@ -521,11 +559,18 @@ def transform_ci_vector_direct(
         If a small-angle Taylor series fails to converge within
         ``max_taylor_order`` terms even after scaling.
     """
-    from forte2.lib.ci_helpers import CISigmaBuilder
+    from forte2.lib.ci_helpers import CISigmaBuilder, RelCISigmaBuilder
 
-    t_actv = _real_generator(t_actv)
+    if two_component:
+        dtype = complex
+        builder_cls = RelCISigmaBuilder
+        t_actv = np.asarray(t_actv, dtype=complex)
+    else:
+        dtype = float
+        builder_cls = CISigmaBuilder
+        t_actv = _real_generator(t_actv)
     nactv = t_actv.shape[0]
-    V_zero = np.zeros((nactv, nactv, nactv, nactv))
+    V_zero = np.zeros((nactv, nactv, nactv, nactv), dtype=dtype)
 
     norm_t = np.linalg.norm(t_actv, ord=2) if nactv else 0.0
     if norm_t > scale_threshold:
@@ -535,7 +580,7 @@ def transform_ci_vector_direct(
         m = 0
     t_scaled = t_actv / (2**m)
 
-    builder = CISigmaBuilder(ci_strings, 0.0, t_scaled, V_zero)
+    builder = builder_cls(ci_strings, 0.0, t_scaled, V_zero)
 
     def apply_T(vec: NDArray) -> NDArray:
         sigma = np.empty_like(vec)
@@ -558,7 +603,7 @@ def transform_ci_vector_direct(
             )
         return total
 
-    vec = np.asarray(C, dtype=float)
+    vec = np.asarray(C, dtype=dtype)
     for _ in range(2**m):
         vec = taylor_exp_neg_T(vec)
 
@@ -570,15 +615,21 @@ def _apply_generator_steps(
     C: NDArray,
     M: NDArray,
     docc_scale: complex = 1.0,
+    two_component: bool = False,
     **transform_kwargs,
 ) -> NDArray:
     """
-    Apply the active-active orbital transformation ``M`` (real, invertible,
-    not necessarily orthogonal) to the CI vector ``C`` via
-    :func:`transform_ci_vector_direct`, decomposing ``M`` into a sequence of
-    real, well-behaved steps (see :func:`_robust_real_logm`) rather than
+    Apply the active-active orbital transformation ``M`` (invertible, not
+    necessarily orthogonal/unitary) to the CI vector ``C`` via
+    :func:`transform_ci_vector_direct`.
+
+    For the real (nonrelativistic) case, ``M`` is decomposed into a sequence
+    of real, well-behaved steps (see :func:`_robust_real_logm`) rather than
     exponentiating a single (possibly spuriously or genuinely complex)
-    ``logm(M)``.
+    ``logm(M)``. For the two-component case, no such decomposition is needed:
+    a complex matrix logarithm always exists for any invertible complex ``M``
+    (unlike the real case, where an improper rotation has no real logarithm
+    at all), so ``logm(M)`` is applied directly.
 
     Parameters
     ----------
@@ -592,6 +643,9 @@ def _apply_generator_steps(
     docc_scale : complex, optional
         The scalar factor from the inactive-space part of the transformation,
         applied once at the end.
+    two_component : bool, optional
+        If True, treat ``C`` and ``M`` as genuinely complex (two-component
+        spinor case); see :func:`transform_ci_vector_direct`.
     **transform_kwargs
         Forwarded to each :func:`transform_ci_vector_direct` call.
 
@@ -601,6 +655,17 @@ def _apply_generator_steps(
         The transformed CI vector, a dense array in the same determinant
         ordering as ``C``.
     """
+    if two_component:
+        t = logm(np.asarray(M, dtype=complex))
+        vec = transform_ci_vector_direct(
+            ci_strings,
+            np.asarray(C, dtype=complex),
+            t,
+            two_component=True,
+            **transform_kwargs,
+        )
+        return complex(docc_scale) * vec
+
     vec = np.asarray(C, dtype=float)
     for step in _robust_real_logm(M):
         if step[0] == "reflect":
@@ -651,7 +716,9 @@ def casscf_wavefunction_overlap(
         and 2, each of shape ``(nbf, ndocc + nactv)``.
     system_1, system_2 : forte2.System
         The systems that ``C_docc_actv_1`` and ``C_docc_actv_2`` are expressed
-        in the AO basis of. May be the same object.
+        in the AO basis of. May be the same object. Whether this is a
+        two-component (spinor, e.g. GHF/X2C) or nonrelativistic overlap is
+        read off ``system_1.two_component``; ``system_2`` must agree.
     ndocc, nactv : int
         The number of inactive and active orbitals, shared between the two
         states.
@@ -667,42 +734,72 @@ def casscf_wavefunction_overlap(
     complex
         The wavefunction overlap :math:`\langle \Psi_1 | \Psi_2 \rangle`.
     """
+    two_component = system_1.two_component
     S_XY = mo_overlap(C_docc_actv_1, system_1, C_docc_actv_2, system_2)
     C_XA, C_YB = biorthogonalize_casscf_orbitals(S_XY, ndocc, nactv)
 
     # Only the docc-docc and active-active diagonal blocks of the (ndocc+nactv)
-    # transformation act nontrivially on a CAS (docc-always-doubly-occupied) CI
+    # transformation act nontrivially on a CAS (docc-always-fully-occupied) CI
     # vector: any one-body term with a docc creation index p != q is Pauli-blocked
     # (p is already fully occupied), and the docc-active coupling block is
     # structurally zero (see biorthogonalize_casscf_orbitals). What remains from
     # the docc-docc block collapses to a single scalar, since
     # exp(-sum_i t_ii) = exp(-trace(logm(M))) = det(M)^-1 for the docc-docc block
-    # M, and each docc orbital is doubly occupied (hence the square).
-    docc_scale_1 = 1.0 / np.linalg.det(C_XA[:ndocc, :ndocc]) ** 2 if ndocc else 1.0
-    docc_scale_2 = 1.0 / np.linalg.det(C_YB[:ndocc, :ndocc]) ** 2 if ndocc else 1.0
+    # M, per occupied channel. Nonrelativistic docc orbitals are doubly occupied
+    # (alpha and beta strings both hold them, hence the square); two-component
+    # docc spinors are singly occupied (a single, spin-summed string; see
+    # rel_ci.py's "all active electrons live in the alpha (spinor) string"),
+    # so only one power applies.
+    docc_power = 1 if two_component else 2
+    docc_scale_1 = (
+        1.0 / np.linalg.det(C_XA[:ndocc, :ndocc]) ** docc_power if ndocc else 1.0
+    )
+    docc_scale_2 = (
+        1.0 / np.linalg.det(C_YB[:ndocc, :ndocc]) ** docc_power if ndocc else 1.0
+    )
 
     if backend == "direct":
-        # Real-valued backend: logm(M) may be spuriously (or genuinely)
-        # complex for a real M, so route through the robust step-sequence
-        # decomposition (see _robust_real_logm).
+        # Real-valued (nonrelativistic) backend: logm(M) may be spuriously
+        # (or genuinely) complex for a real M, so route through the robust
+        # step-sequence decomposition (see _robust_real_logm). The
+        # two-component path skips this; see _apply_generator_steps.
         state_A = _apply_generator_steps(
-            ci_strings_1, C1, C_XA[ndocc:, ndocc:], docc_scale_1, **backend_kwargs
+            ci_strings_1,
+            C1,
+            C_XA[ndocc:, ndocc:],
+            docc_scale_1,
+            two_component=two_component,
+            **backend_kwargs,
         )
         state_B = _apply_generator_steps(
-            ci_strings_2, C2, C_YB[ndocc:, ndocc:], docc_scale_2, **backend_kwargs
+            ci_strings_2,
+            C2,
+            C_YB[ndocc:, ndocc:],
+            docc_scale_2,
+            two_component=two_component,
+            **backend_kwargs,
         )
         return complex(np.vdot(state_A, state_B))
     elif backend == "sparse_ops":
-        # Complex-valued backend: a plain logm (possibly complex) is already
-        # correct here, since SparseOperator/SparseExp handle complex
-        # generators natively.
+        # A plain logm (possibly complex) is already correct here, since
+        # SparseOperator/SparseExp handle complex generators natively.
         t_actv_1 = logm(C_XA[ndocc:, ndocc:])
         t_actv_2 = logm(C_YB[ndocc:, ndocc:])
         state_A = transform_ci_vector_sparse_ops(
-            ci_strings_1, C1, t_actv_1, docc_scale_1, **backend_kwargs
+            ci_strings_1,
+            C1,
+            t_actv_1,
+            docc_scale_1,
+            two_component=two_component,
+            **backend_kwargs,
         )
         state_B = transform_ci_vector_sparse_ops(
-            ci_strings_2, C2, t_actv_2, docc_scale_2, **backend_kwargs
+            ci_strings_2,
+            C2,
+            t_actv_2,
+            docc_scale_2,
+            two_component=two_component,
+            **backend_kwargs,
         )
         return state_A.overlap(state_B)
     else:

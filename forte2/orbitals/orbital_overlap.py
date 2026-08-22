@@ -2,11 +2,16 @@ import numpy as np
 import scipy as sp
 
 import forte2.integrals as integrals
+from forte2.helpers.matrix_functions import block_diag_2x2
 
 
 def mo_overlap(C_a, system_a, C_b, system_b=None):
     r"""
     Overlap between two sets of MO(-like) coefficients, :math:`C_a^\dagger S C_b`.
+
+    If `system_a` is two-component (spinor-basis, e.g. GHF/X2C), the AO
+    overlap is expanded to the corresponding spin-doubled block-diagonal
+    form to match `C_a`'s/`C_b`'s spinor row dimension.
 
     Parameters
     ----------
@@ -29,6 +34,8 @@ def mo_overlap(C_a, system_a, C_b, system_b=None):
         S = integrals.overlap(system_a)
     else:
         S = integrals.overlap(system_a, system_a.basis, system_b.basis)
+    if system_a.two_component:
+        S = block_diag_2x2(S)
     return C_a.T.conj() @ S @ C_b
 
 
