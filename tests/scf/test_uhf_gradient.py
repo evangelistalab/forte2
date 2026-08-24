@@ -133,8 +133,9 @@ def test_uhf_gradient_with_df_ortho_rtol():
 
     When ``df_ortho_rtol`` is set, the DF metric inverse is built from a truncated
     eigenspace rather than the default full Cholesky solve. This is a test
-    for that branch of ``build_metric_inverted_three_center`` inside the gradient
-    assembly; the finite-difference tests cover the numerical gradient formula.
+    for that branch of ``build_metric_inverted_density_contraction``/
+    ``build_metric_inverted_mo_block`` inside the gradient assembly; the
+    finite-difference tests cover the numerical gradient formula.
     """
     system = _h2_system(df_ortho_rtol=1.0e-8)
     uhf = UHF(charge=1, ms=0.5, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)

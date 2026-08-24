@@ -55,14 +55,15 @@ class MCOptimizerBase(Method):
         Whether to compute and report transition dipole moments at the end of the optimization.
     final_orbitals : str, optional, default="semicanonical"
         Specify the type of final orbitals. Allowed values are:
+
         - "semicanonical": The average Fock matrix is diagonal within each orbital subspace.
         - "natural": Same as semicanonical, but the active orbitals are natural orbitals
-                     and diagonalize the spin- and state-averaged 1-RDM within the CAS
-                     subspace or within each of the GAS subspaces.
+          and diagonalize the spin- and state-averaged 1-RDM within the CAS
+          subspace or within each of the GAS subspaces.
         - "original": The orbitals are left in the original basis after the optimization.
-                      This option is only for debugging purposes and should generally be avoided
-                      as the active orbitals will not be uniquely defined and may not be suitable
-                      for subsequent calculations.
+          This option is only for debugging purposes and should generally be avoided
+          as the active orbitals will not be uniquely defined and may not be suitable
+          for subsequent calculations.
 
     Notes
     -----
@@ -539,17 +540,20 @@ class MCOptimizer(MCOptimizerBase):
     ) -> NDArray:
         return self.ci_solver.make_sf_2rdm(left_root, right_root)
 
-    def gradient(self) -> NDArray:
+    def gradient(self, root=None) -> NDArray:
         r"""
-        Compute a state-specific CASSCF/GASSCF analytic nuclear gradient.
+        Compute a target-root CASSCF/GASSCF analytic nuclear gradient.
 
         This implementation supports real nonrelativistic and complex
         two-component state-specific CASSCF/GASSCF wave functions, including
-        SF- and SO-X2C-1e Hamiltonians. State-averaged gradients, frozen-core
-        and frozen-virtual response, active-frozen rotations, frozen inter-GAS
-        rotations are not supported. Point and Gaussian nuclear charge
-        distributions are supported; Gaussian charges require libcint.
-        Requesting any unsupported feature raises ``NotImplementedError``.
+        SF- and SO-X2C-1e Hamiltonians. It also supports individual roots of
+        real nonrelativistic SA-CASSCF/GASSCF wave functions when
+        ``final_orbitals='original'``. Frozen-core, frozen-virtual,
+        active-frozen orbital, and frozen inter-GAS orbital response are not
+        supported.
+        Point and Gaussian nuclear charge distributions are supported; Gaussian
+        charges require libcint. Requesting any unsupported feature raises
+        ``NotImplementedError``.
         Both the orbital optimization and all CI roots must be converged; an
         unconverged wave function raises ``RuntimeError`` because the
         stationary-gradient expression does not apply.
@@ -566,11 +570,16 @@ class MCOptimizer(MCOptimizerBase):
             + W_{PQ}(P|Q)^x.
 
         Here :math:`\Gamma_{\mu\nu}` is the full spin-free one-particle
-        density, :math:`W^S_{\mu\nu}` is the AO representation of the
-        symmetric CASSCF/GASSCF orbital Lagrangian, and
+        density, :math:`W^S_{\mu\nu}` is the AO energy-weighted density, and
         :math:`W^P_{\mu\nu}` and :math:`W_{PQ}` are the density-fitted
         two-electron derivative weights defined in
         ``docs/technical_notes/df_gradients.tex``.
+
+        Parameters
+        ----------
+        root : int or None, optional
+            Absolute target-root index. Required for a state-averaged wave
+            function and otherwise defaults to zero.
 
         Returns
         -------
@@ -579,4 +588,4 @@ class MCOptimizer(MCOptimizerBase):
         """
         from .mc_optimizer_grad import _compute_casscf_gradient
 
-        return _compute_casscf_gradient(self)
+        return _compute_casscf_gradient(self, root=root)

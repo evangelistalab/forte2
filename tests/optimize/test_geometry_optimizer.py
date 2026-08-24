@@ -38,7 +38,6 @@ def test_geometry_optimizer_h2_fd():
         auxiliary_basis_set="def2-universal-JKFIT",
         unit="bohr",
     )
-    initial = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system).run().E
     rhf = RHF(charge=0, e_tol=1.0e-12, d_tol=1.0e-10, maxiter=100)(system)
     fd = FDGradient()(rhf)
 
@@ -54,6 +53,56 @@ def test_geometry_optimizer_h2_fd():
     assert optimizer.E == pytest.approx(-1.117530189001, abs=1.0e-8)
     assert bond_length == pytest.approx(1.34590756, abs=1.0e-6)
     assert np.linalg.norm(optimizer.gradient) < 5.0e-7
+
+
+def test_geometry_optimizer_selects_matching_root_energy_and_gradient():
+    """Use the same absolute root for both parts of an SA objective."""
+    system = System(
+        xyz="H 0 0 0\nH 0 0 1.4",
+        basis_set="sto-3g",
+        auxiliary_basis_set="def2-universal-JKFIT",
+        symmetry=False,
+    )
+    built_methods = []
+
+    class RootResolvedMethod:
+        def __init__(self, current_system):
+            self.system = current_system
+            self.executed = False
+            self.E = None
+            self.E_ci = None
+            self.gradient_roots = []
+
+        def run(self):
+            self.E = -1.0
+            self.E_ci = np.array([-0.9, -0.4])
+            self.executed = True
+            return self
+
+        def gradient(self, root=None):
+            self.gradient_roots.append(root)
+            return np.full((2, 3), float(root))
+
+    def build_method(current_system):
+        method = RootResolvedMethod(current_system)
+        built_methods.append(method)
+        return method
+
+    optimizer = GeometryOptimizer(
+        method_factory=build_method,
+        root=1,
+        project_orbitals=False,
+    )
+    objective, coordinates = optimizer._build_objective(system)
+
+    assert objective.evaluate(coordinates) == pytest.approx(-0.4)
+    assert objective.gradient(coordinates) == pytest.approx(np.ones(6))
+    assert built_methods[0].gradient_roots == [1]
+
+    with pytest.raises(TypeError, match="integer or None"):
+        GeometryOptimizer(root=True)
+    with pytest.raises(ValueError, match="nonnegative"):
+        GeometryOptimizer(root=-1)
 
 
 @pytest.mark.skipif(not BSE_AVAILABLE, reason="basis_set_exchange not installed")
@@ -138,7 +187,14 @@ def test_geometry_optimizer_casscf_fd():
     assert optimizer.E == pytest.approx(-1.137332707937, abs=1.0e-8)
 
 
-def test_fd_gradient_sa_casscf():
+@pytest.mark.parametrize("findiff", [True, False])
+def test_geometry_optimizer_sa_casscf_excited_root(findiff):
+    """Optimize an SA-CASSCF excited-root geometry with a fully active space.
+
+    active_orbitals=[0, 1] is FCI in sto-3g, so there are
+    no core or virtual orbitals, therefore nrot==0.
+    This regression-tests the SA-CASSCF gradient against that edge case.
+    """
     system = System(
         xyz="H 0 0 0\nH 0 0 2.0",
         basis_set="sto-3g",
@@ -155,20 +211,27 @@ def test_fd_gradient_sa_casscf():
         ci_solver, e_tol=1.0e-12, g_tol=1.0e-10, final_orbitals="original"
     )(rhf)
 
-    # optmize wrt to the second root
-    energy_to_differentiate = lambda method: method.ci_solver.E[1]
-    fd = FDGradient(
-        step=1.0e-3,
-        npoints=4,
-        energy_accessor=energy_to_differentiate,
-    )(mc)
+    if findiff:
+        fd = FDGradient(energy_accessor=lambda method: method.E_ci[1])(mc)
+        optimizer = GeometryOptimizer(
+            maxiter=25,
+            g_tol=1.0e-7,
+            max_step=0.5,
+        )(fd)
+        optimizer.run()
+    else:
+        optimizer = GeometryOptimizer(
+            maxiter=25,
+            root=1,
+            g_tol=1.0e-7,
+            max_step=0.5,
+        )(mc)
+        optimizer.run()
 
-    optimizer = GeometryOptimizer(
-        maxiter=25,
-        g_tol=1.0e-7,
-        max_step=0.5,
-    )(fd)
-    optimizer.run()
+    bond_length = np.linalg.norm(optimizer.coordinates[1] - optimizer.coordinates[0])
+
+    assert bond_length == pytest.approx(2.84454998, abs=1.0e-6)
+    assert optimizer.E == pytest.approx(-0.431722721239, abs=1.0e-8)
 
 
 @pytest.mark.slow

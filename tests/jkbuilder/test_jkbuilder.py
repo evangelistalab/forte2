@@ -1,9 +1,82 @@
 import numpy as np
 import pytest
 
-from forte2 import System, jkbuilder, X2CParams
+from forte2 import System, integrals, jkbuilder, X2CParams
 from forte2.lib.ints import Basis, Shell
 from forte2.jkbuilder.mointegrals import RestrictedMOIntegrals, SpinorbitalIntegrals
+
+
+@pytest.mark.parametrize("df_ortho_rtol", [None, 1.0e-8])
+def test_metric_inverted_three_center_reuses_in_core_builder(
+    monkeypatch, df_ortho_rtol
+):
+    """Reuse the stored metric factor and B tensor without integral calls."""
+    system = System(
+        xyz="H 0 0 0\nH 0 0 1.7",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        unit="bohr",
+        df_ortho_rtol=df_ortho_rtol,
+    )
+    M = integrals.coulomb_2c(system)
+    J = integrals.coulomb_3c(system)
+    Z = np.linalg.solve(M, J.reshape(system.naux, -1)).reshape(J.shape)
+    _ = system.fock_builder.B_Pmn
+
+    rng = np.random.default_rng(0)
+    D = rng.standard_normal((system.nbf, system.nbf))
+    C1 = rng.standard_normal((system.nbf, 3))
+    C2 = rng.standard_normal((system.nbf, 3))
+    expected_Z = Z
+    expected_rho = np.einsum("mn,Pmn->P", D, Z, optimize=True)
+    expected_mo_block = np.einsum(
+        "mi,Pmn,nj->Pij", C1, Z, C1, optimize=True
+    ) + np.einsum("mi,Pmn,nj->Pij", C2, Z, C2, optimize=True)
+
+    def unexpected_integral_call(*args, **kwargs):
+        raise AssertionError("The in-core Fock builder must reuse its DF tensors.")
+
+    monkeypatch.setattr(integrals, "coulomb_2c", unexpected_integral_call)
+    monkeypatch.setattr(integrals, "coulomb_3c", unexpected_integral_call)
+    fock_builder = system.fock_builder
+    actual_Z = np.einsum(
+        "QP,Qmn->Pmn", fock_builder.Mm12, fock_builder.B_Pmn, optimize=True
+    )
+    actual_rho = fock_builder.build_metric_inverted_density_contraction(D)
+    actual_mo_block = fock_builder.build_metric_inverted_mo_block((C1, C1), (C2, C2))
+
+    assert actual_Z == pytest.approx(expected_Z, abs=1.0e-10)
+    assert actual_rho == pytest.approx(expected_rho, abs=1.0e-10)
+    assert actual_mo_block == pytest.approx(expected_mo_block, abs=1.0e-10)
+
+
+@pytest.mark.parametrize("df_ortho_rtol", [None, 1.0e-8])
+def test_metric_inverted_otf_matches_in_core_without_full_tensor(df_ortho_rtol):
+    """The on-the-fly builder never materializes the full AO tensor, but its
+    density-contraction and MO-block methods must match the in-core builder,
+    which does form it as a reference."""
+    system = System(
+        xyz="H 0 0 0\nH 0 0 1.7",
+        basis_set="cc-pvdz",
+        auxiliary_basis_set="cc-pvtz-jkfit",
+        unit="bohr",
+        df_ortho_rtol=df_ortho_rtol,
+    )
+    rng = np.random.default_rng(1)
+    D = rng.standard_normal((system.nbf, system.nbf))
+    C1 = rng.standard_normal((system.nbf, 3))
+    C2 = rng.standard_normal((system.nbf, 3))
+
+    in_core = system.fock_builder
+    expected_rho = in_core.build_metric_inverted_density_contraction(D)
+    expected_mo_block = in_core.build_metric_inverted_mo_block((C1, C1), (C2, C2))
+
+    otf = jkbuilder.FockBuilderOTF(system, jk_mem_thres_mb=10)
+    actual_rho = otf.build_metric_inverted_density_contraction(D)
+    actual_mo_block = otf.build_metric_inverted_mo_block((C1, C1), (C2, C2))
+
+    assert actual_rho == pytest.approx(expected_rho, abs=1.0e-10)
+    assert actual_mo_block == pytest.approx(expected_mo_block, abs=1.0e-10)
 
 
 @pytest.mark.parametrize(
