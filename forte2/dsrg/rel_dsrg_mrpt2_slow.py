@@ -451,6 +451,100 @@ class RelDSRG_MRPT2_Slow(DSRGBase):
         )
         return E
 
+    def compute_unrelaxed_gamma_vv(self):
+        """
+        Virtual-virtual block of the unrelaxed second-order 1-RDM,
+        Gamma_ef = (1/2) <Phi0| [[E^e_f, Ahat], Ahat] |Phi0>, Ahat = (T1-T1^) + (T2-T2^),
+        with the reference's 3-body density cumulant (lambda3) dropped.
+        Used to build FNOs; see eq 8-9 and Appendix A of
+        Li, Mao, Huang, Evangelista, J. Chem. Theory Comput. 2024, 20, 4170-4181.
+        The reference (CASSCF) contribution to Gamma_ef is exactly zero, since
+        virtual orbitals are unoccupied in every determinant of the CAS reference.
+        Requires self.T1/self.T2 (i.e. solve_dsrg must have already run).
+        Derived with wickd; see forte2/dsrg/derive_fno_gamma_vv.py.
+        """
+        gamma1 = self.cumulants["gamma1"]
+        eta1 = self.cumulants["eta1"]
+        lambda2 = self.cumulants["lambda2"]
+        T1 = self.T1
+        T2 = self.T2
+
+        Gamma = np.zeros((self.nvirt, self.nvirt), dtype=complex)
+        Gamma += +1.000 * np.einsum(
+            "ia,ib->ab", T1["cv"], T1["cv"].conj(), optimize=True
+        )
+        Gamma += +1.000 * np.einsum(
+            "uv,va,ub->ab", gamma1, T1["av"], T1["av"].conj(), optimize=True
+        )
+        Gamma += -0.500 * np.einsum(
+            "uvwx,ub,wxva->ab", lambda2, T1["av"].conj(), T2["aaav"], optimize=True
+        )
+        Gamma += +0.500 * np.einsum(
+            "uv,ijua,ijvb->ab", eta1, T2["ccav"], T2["ccav"].conj(), optimize=True
+        )
+        Gamma += +1.000 * np.einsum(
+            "uv,wx,ixua,iwvb->ab",
+            eta1,
+            gamma1,
+            T2["caav"],
+            T2["caav"].conj(),
+            optimize=True,
+        )
+        Gamma += -1.000 * np.einsum(
+            "uvwx,iwva,iuxb->ab", lambda2, T2["caav"], T2["caav"].conj(), optimize=True
+        )
+        Gamma += -0.500 * np.einsum(
+            "uvwx,wa,uvxb->ab", lambda2, T1["av"], T2["aaav"].conj(), optimize=True
+        )
+        Gamma += +0.500 * np.einsum(
+            "uv,wx,yz,xzua,wyvb->ab",
+            eta1,
+            gamma1,
+            gamma1,
+            T2["aaav"],
+            T2["aaav"].conj(),
+            optimize=True,
+        )
+        Gamma += +0.250 * np.einsum(
+            "uv,wxyz,yzua,wxvb->ab",
+            eta1,
+            lambda2,
+            T2["aaav"],
+            T2["aaav"].conj(),
+            optimize=True,
+        )
+        Gamma += -1.000 * np.einsum(
+            "uv,wxyz,vyxa,uwzb->ab",
+            gamma1,
+            lambda2,
+            T2["aaav"],
+            T2["aaav"].conj(),
+            optimize=True,
+        )
+        Gamma += +0.500 * np.einsum(
+            "ijac,ijbc->ab", T2["ccvv"], T2["ccvv"].conj(), optimize=True
+        )
+        Gamma += +1.000 * np.einsum(
+            "uv,ivac,iubc->ab", gamma1, T2["cavv"], T2["cavv"].conj(), optimize=True
+        )
+        Gamma += +0.500 * np.einsum(
+            "uv,wx,vxac,uwbc->ab",
+            gamma1,
+            gamma1,
+            T2["aavv"],
+            T2["aavv"].conj(),
+            optimize=True,
+        )
+        Gamma += +0.250 * np.einsum(
+            "uvwx,wxac,uvbc->ab", lambda2, T2["aavv"], T2["aavv"].conj(), optimize=True
+        )
+
+        # defensive Hermitization: the sum above is Hermitian in exact arithmetic
+        # (each term pairs a tensor with its own conjugate against Hermitian
+        # cumulants), so this only removes floating-point roundoff.
+        Gamma = 0.5 * (Gamma + Gamma.conj().T)
+        return Gamma
+
     def _compute_Hbar_aaaa(self):
         _V = np.zeros((self.nact,) * 4, dtype=complex)
         _V += -0.500 * np.einsum(

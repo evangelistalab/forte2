@@ -321,6 +321,60 @@ def test_mrpt2_sh_with_slow():
     assert dsrg.E_dsrg == approx(dsrg_slow.E_dsrg)
 
 
+def test_mrpt2_gamma_vv_fast_vs_slow():
+    # Unrelaxed virtual-virtual 1-RDM (used to build FNOs): the on-the-fly
+    # (RelDSRG_MRPT2) and fully in-core (RelDSRG_MRPT2_Slow) implementations
+    # must agree, and the result must be Hermitian.
+    #
+    # Both DSRG objects are attached to the *same* mc/reference, with no
+    # reference relaxation. This is deliberate: raw, orbital-basis-dependent
+    # quantities like T1/T2 (and therefore Gamma_vv) are only defined up to an
+    # arbitrary rotation within any degenerate orbital subspace (e.g. Kramers
+    # pairs), so comparing them between two *independently re-optimized* mc
+    # objects is not meaningful even when the underlying physics agrees -- only
+    # gauge-invariant quantities like the DSRG energy are guaranteed to match
+    # in that case.
+    xyz = """
+    N 0.0 0.0 0.0
+    N 0.0 0.0 2.0
+    """
+
+    system = System(
+        xyz=xyz,
+        basis_set="cc-pVDZ",
+        auxiliary_basis_set="cc-pVTZ-JKFIT",
+        unit="bohr",
+    )
+    rhf = GHF(charge=0)(system)
+    rhf.run()
+    rng = np.random.default_rng(1234)
+    random_phase = np.diag(np.exp(1j * rng.uniform(-np.pi, np.pi, size=rhf.nmo * 2)))
+    rhf.C[0] = rhf.C[0] @ random_phase
+
+    ci_solver = RelCISolver(
+        nel=14,
+        core_orbitals=8,
+        active_orbitals=12,
+    )
+    mc = MCOptimizer(ci_solver)(rhf)
+    mc.run()
+
+    dsrg = RelDSRG_MRPT2(flow_param=0.5, frozen_core_orbitals=4)(mc)
+    dsrg.run()
+    dsrg_slow = RelDSRG_MRPT2_Slow(flow_param=0.5, frozen_core_orbitals=4)(mc)
+    dsrg_slow.run()
+
+    assert dsrg.E_dsrg == approx(dsrg_slow.E_dsrg)
+
+    Gamma_vv = dsrg.compute_unrelaxed_gamma_vv()
+    Gamma_vv_slow = dsrg_slow.compute_unrelaxed_gamma_vv()
+    assert Gamma_vv == approx(Gamma_vv_slow)
+    assert Gamma_vv == approx(Gamma_vv.conj().T)
+
+    evals = np.linalg.eigvalsh(Gamma_vv)
+    assert np.all(evals > -1e-10)
+
+
 def test_rel_mrpt2_all_active():
     xyz = f"""
     H 0.0 0.0 0.0
