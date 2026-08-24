@@ -1,4 +1,4 @@
-\documentclass[aip,preprint]{revtex4-1}
+\documentclass[aip,preprint,nofootinbib]{revtex4-1}
 
 \usepackage[utf8]{inputenc}
 \usepackage{amsmath}
@@ -261,11 +261,14 @@ For the ordered pair vector $\mathbf z$, define the antisymmetric embedding
       -\delta_{p q_I}\delta_{q p_I}\right).
  \label{eq:nr-vector-embedding}
 \end{equation}
-The corresponding orbital path and tangent are
+For any orbital-dependent quantity $Q$, define its first variation along
+$\mathbf z$ by
 \begin{equation}
- C(\epsilon)=C\exp(\epsilon Z),
+ \delta_{\mathbf z}Q
+ =\left.\frac{d}{d\epsilon}
+ Q\!\left(C\exp(\epsilon Z)\right)\right|_{\epsilon=0},
  \qquad
- \dot C=\left.\frac{dC(\epsilon)}{d\epsilon}\right|_0=CZ.
+ \delta_{\mathbf z}C=CZ.
  \label{eq:nr-orbital-direction}
 \end{equation}
 
@@ -279,8 +282,8 @@ integrals by
  \qquad
  [\mathcal A^{\mathrm{oo}}\mathbf z]_I
  =\left.\frac{d}{d\epsilon}\bar g_I(Ce^{\epsilon Z})\right|_0
- =2\left[(\dot{\bar A})^{q_I}_{p_I}
-         -(\dot{\bar A})^{p_I}_{q_I}\right]
+ =2\left[(\delta_{\mathbf z}\bar A)^{q_I}_{p_I}
+         -(\delta_{\mathbf z}\bar A)^{p_I}_{q_I}\right]
  }.
  \label{eq:nr-oo-action}
 \end{equation}
@@ -288,13 +291,13 @@ The active RDMs do not change in this partial derivative.  With
 $P_{\core}=C_{\core}C_{\core}^{\mathsf T}$ and
 $\bar P_{\act}=C_{\act}\bar\gamma C_{\act}^{\mathsf T}$,
 \begin{align}
- \dot P_{\core}
- &=\dot C_{\core}C_{\core}^{\mathsf T}
-  +C_{\core}\dot C_{\core}^{\mathsf T},
+ \delta_{\mathbf z}P_{\core}
+ &=(\delta_{\mathbf z}C_{\core})C_{\core}^{\mathsf T}
+  +C_{\core}(\delta_{\mathbf z}C_{\core})^{\mathsf T},
  \\
- \dot{\bar P}_{\act}
- &=\dot C_{\act}\bar\gamma C_{\act}^{\mathsf T}
-  +C_{\act}\bar\gamma\dot C_{\act}^{\mathsf T}.
+ \delta_{\mathbf z}\bar P_{\act}
+ &=(\delta_{\mathbf z}C_{\act})\bar\gamma C_{\act}^{\mathsf T}
+  +C_{\act}\bar\gamma(\delta_{\mathbf z}C_{\act})^{\mathsf T}.
  \label{eq:nr-density-response}
 \end{align}
 Introduce the linear DF Coulomb and exchange maps
@@ -309,18 +312,18 @@ Introduce the linear DF Coulomb and exchange maps
 \end{align}
 The AO Fock responses are
 \begin{align}
- \dot F_{\core}^{\mathrm{AO}}
- &=2J[\dot P_{\core}]-K[\dot P_{\core}],
+ \delta_{\mathbf z}F_{\core}^{\mathrm{AO}}
+ &=2J[\delta_{\mathbf z}P_{\core}]-K[\delta_{\mathbf z}P_{\core}],
  \\
- \dot{\bar F}_{\act}^{\mathrm{AO}}
- &=J[\dot{\bar P}_{\act}]
-  -\frac12K[\dot{\bar P}_{\act}].
+ \delta_{\mathbf z}\bar F_{\act}^{\mathrm{AO}}
+ &=J[\delta_{\mathbf z}\bar P_{\act}]
+  -\frac12K[\delta_{\mathbf z}\bar P_{\act}].
  \label{eq:nr-fock-response}
 \end{align}
 For $X\in\{\core,\act\}$, transformation to the moving MO frame gives
 \begin{equation}
- \dot F_X=Z^{\mathsf T}F_X+F_XZ
- +C^{\mathsf T}\dot F_X^{\mathrm{AO}}C.
+ \delta_{\mathbf z}F_X=Z^{\mathsf T}F_X+F_XZ
+ +C^{\mathsf T}(\delta_{\mathbf z}F_X^{\mathrm{AO}})C.
  \label{eq:nr-mo-fock-response}
 \end{equation}
 
@@ -353,9 +356,9 @@ the exact exchange response is
 \end{equation}
 The core and active tuples $(C_L,C_R,G;c_J,c_K)$ are, respectively,
 \begin{equation}
- (\dot C_{\core},C_{\core},I;2,1),
+ (\delta_{\mathbf z}C_{\core},C_{\core},I;2,1),
  \qquad
- (\dot C_{\act},C_{\act},\bar\gamma;1,1/2),
+ (\delta_{\mathbf z}C_{\act},C_{\act},\bar\gamma;1,1/2),
 \end{equation}
 where the returned Fock response is $c_JJ[D]-c_KK[D]$.  The directional
 exchange workspace is
@@ -369,35 +372,39 @@ Only the general--active transformed DF block is persistent:
 \end{equation}
 Its response is evaluated without a general--general DF tensor,
 \begin{equation}
- \dot B^P_{pu}
+ \delta_{\mathbf z}B^P_{pu}
  =\sum_rZ_{rp}B^P_{ru}
- +\sum_{\mu\nu}C_{\mu p}B^P_{\mu\nu}\dot C_{\nu u}.
+ +\sum_{\mu\nu}C_{\mu p}B^P_{\mu\nu}
+ (\delta_{\mathbf z}C)_{\nu u}.
  \label{eq:nr-general-active-df-response}
 \end{equation}
 The active two-particle contraction is
 \begin{align}
  T^P_{tu}&=\sum_{vw\in\mathbb A}B^P_{vw}\bar D_{tu,vw},
- &\dot T^P_{tu}&=\sum_{vw\in\mathbb A}\dot B^P_{vw}\bar D_{tu,vw},
+ &(\delta_{\mathbf z}T)^P_{tu}
+ &=\sum_{vw\in\mathbb A}(\delta_{\mathbf z}B)^P_{vw}\bar D_{tu,vw},
  \label{eq:nr-df-working-rdm}
  \\
- \left.\dot{\bar A}^{u}_{p}\right|_{2e}
- &=\sum_{Pt}\left(\dot B^P_{pt}T^P_{tu}
-                  +B^P_{pt}\dot T^P_{tu}\right).
+ \left.(\delta_{\mathbf z}\bar A)^{u}_{p}\right|_{2e}
+ &=\sum_{Pt}\left((\delta_{\mathbf z}B)^P_{pt}T^P_{tu}
+                  +B^P_{pt}(\delta_{\mathbf z}T)^P_{tu}\right).
  \label{eq:nr-df-lagrangian-response}
 \end{align}
 Together with the one-electron/Fock terms, the complete Lagrangian response is
 \begin{align}
- \dot{\bar A}^{m}_{p}
- &=2(\dot F_{\core}+\dot{\bar F}_{\act})^{m}_{p},
+ (\delta_{\mathbf z}\bar A)^{m}_{p}
+ &=2(\delta_{\mathbf z}F_{\core}
+     +\delta_{\mathbf z}\bar F_{\act})^{m}_{p},
  &&m\in\mathbb C,
  \\
- \dot{\bar A}^{u}_{p}
- &=\sum_{v\in\mathbb A}(\dot F_{\core})^{v}_{p}\bar\gamma^{v}_{u}
-  +\left.\dot{\bar A}^{u}_{p}\right|_{2e},
+ (\delta_{\mathbf z}\bar A)^{u}_{p}
+ &=\sum_{v\in\mathbb A}(\delta_{\mathbf z}F_{\core})^{v}_{p}
+   \bar\gamma^{v}_{u}
+  +\left.(\delta_{\mathbf z}\bar A)^{u}_{p}\right|_{2e},
  &&u\in\mathbb A,
  \label{eq:nr-lagrangian-response}
  \\
- \dot{\bar A}^{e}_{p}&=0,
+ (\delta_{\mathbf z}\bar A)^{e}_{p}&=0,
  &&e\in\mathbb V.
 \end{align}
 The matrix elements are defined by the matrix-free action,
@@ -525,34 +532,34 @@ appear in this block because it differentiates the unweighted CI residual in
 The transpose mixed block is expressed through the orbital derivative of the
 active-space Hamiltonian.  The inactive-core scalar response is
 \begin{align}
- \dot E_{\core}[\mathbf z]
- &=\Tr\!\left[\dot C_{\core}^{\mathsf T}
+ \delta_{\mathbf z}E_{\core}
+ &=\Tr\!\left[(\delta_{\mathbf z}C_{\core})^{\mathsf T}
  (h+F_{\core}^{\mathrm{AO}})C_{\core}\right]
  +\Tr\!\left[C_{\core}^{\mathsf T}
- (h+F_{\core}^{\mathrm{AO}})\dot C_{\core}\right]
+ (h+F_{\core}^{\mathrm{AO}})(\delta_{\mathbf z}C_{\core})\right]
  \nonumber\\
  &\quad+\Tr\!\left[C_{\core}^{\mathsf T}
- \dot F_{\core}^{\mathrm{AO}}C_{\core}\right].
+ (\delta_{\mathbf z}F_{\core}^{\mathrm{AO}})C_{\core}\right].
  \label{eq:nr-core-energy-response}
 \end{align}
 The nuclear-repulsion energy is fixed in this partial derivative.  Define
 \begin{equation}
  \hat H[\mathbf z]
- =\dot E_{\core}[\mathbf z]
- +\sum_{uv\in\mathbb A}(\dot F_{\core})^u_v[\mathbf z]\hat E^u_v
+ =\delta_{\mathbf z}E_{\core}
+ +\sum_{uv\in\mathbb A}(\delta_{\mathbf z}F_{\core})^u_v\hat E^u_v
  +\frac12\sum_{uvtw\in\mathbb A}
- \dot{\langle uv|tw\rangle}[\mathbf z]\hat E^{uv}_{tw}.
+ \delta_{\mathbf z}\langle uv|tw\rangle\hat E^{uv}_{tw}.
  \label{eq:nr-response-hamiltonian}
 \end{equation}
 Only active four-index response integrals are formed:
 \begin{align}
- \dot B^P_{uv}
+ (\delta_{\mathbf z}B)^P_{uv}
  &=\sum_{p\in\mathbb G}
  \left(Z_{pu}B^P_{pv}+B^P_{up}Z_{pv}\right),
  \\
- \dot{\langle uv|tw\rangle}
- &=\sum_P\left(\dot B^P_{ut}B^P_{vw}
-               +B^P_{ut}\dot B^P_{vw}\right).
+ \delta_{\mathbf z}\langle uv|tw\rangle
+ &=\sum_P\left((\delta_{\mathbf z}B)^P_{ut}B^P_{vw}
+               +B^P_{ut}(\delta_{\mathbf z}B)^P_{vw}\right).
  \label{eq:nr-active-df-h-response}
 \end{align}
 The existing CI sigma operation applies $\hat H[\mathbf z]$ to each reference
@@ -658,12 +665,13 @@ SA-CASSCF/GASSCF calculation and includes all inter-GAS rotations.
 \subsection{Orbital orthogonality multiplier}
 
 The orbital--orbital contribution to the energy-weighted density is not just
-$\dot{\bar A}[\mathbf z_\alpha]$, because that derivative is evaluated in a
-moving MO frame.  For a general variation $\dot C=CX$,
+$\delta_{\mathbf z_\alpha}\bar A$, because that derivative is evaluated in a
+moving MO frame.  For a general coefficient variation
+$\delta_XC=CX$,
 \begin{equation}
  D_X\left(\mathbf z_\alpha^{\mathsf T}\bar{\mathbf g}\right)
  =2\sum_{pq}X_{pq}
- \left[\dot{\bar A}[\mathbf z_\alpha]
+ \left[\delta_{\mathbf z_\alpha}\bar A
  +Z_\alpha\bar A-\bar A Z_\alpha\right]_{pq}.
  \label{eq:nr-full-coefficient-derivative}
 \end{equation}
@@ -673,7 +681,7 @@ out of the nonredundant response equation at convergence.  Define
  \boxed{
  \Omega_\alpha=A^\alpha
  +A^{\mathrm{oc}}[\mathbf x_\alpha]
- +\dot{\bar A}[\mathbf z_\alpha]
+ +\delta_{\mathbf z_\alpha}\bar A
  +Z_\alpha\bar A-\bar A Z_\alpha
  }.
  \label{eq:nr-relaxed-lagrangian}
@@ -704,6 +712,9 @@ Let $x$ denote a Cartesian nuclear displacement and let a superscript $x$
 denote a skeleton AO-integral derivative.  The target-root gradient requires
 the target densities, the CI-multiplier transition densities, and the orbital
 response of the state-average densities.
+For brevity in this section, write
+$\delta_\alpha\equiv\delta_{\mathbf z_\alpha}$; in particular,
+$\delta_\alpha C=CZ_\alpha$.
 
 For fixed full-MO RDMs, define the orbital-frame response generated by
 $Z_\alpha$ as
@@ -853,45 +864,47 @@ RDMs defines
 
 Apply the same compact equations to $(\bar\gamma,\bar\Gamma)$ to obtain
 $\bar R$, $\bar X$, $\bar L$, $\bar W^{P,h}$, and $\bar W_{PQ}$.  With
-$\dot C=CZ_\alpha$ and $\dot C_h$ its core and active columns, the transformed
+$\delta_\alpha C_h$ the core and active columns of $CZ_\alpha$, the transformed
 DF response at fixed AO $Z^P_{\mu\nu}$ is
 \begin{equation}
- \dot Z^P_{ij}
+ \delta_\alpha Z^P_{ij}
  =\sum_{\mu\nu}\left[
- (\dot C_h)_{\mu i}Z^P_{\mu\nu}(C_h)_{\nu j}
- +(C_h)_{\mu i}Z^P_{\mu\nu}(\dot C_h)_{\nu j}
+ (\delta_\alpha C_h)_{\mu i}Z^P_{\mu\nu}(C_h)_{\nu j}
+ +(C_h)_{\mu i}Z^P_{\mu\nu}(\delta_\alpha C_h)_{\nu j}
  \right].
  \label{eq:nr-hole-df-response}
 \end{equation}
 Holding the barred RDMs fixed gives
 \begin{align}
- \dot{\bar R}^{P}
- &=\sum_{ij}\bar\gamma^h_{ij}\dot Z^P_{ij},
+ \delta_\alpha\bar R^{P}
+ &=\sum_{ij}\bar\gamma^h_{ij}\delta_\alpha Z^P_{ij},
  \\
- \dot{\bar X}^{P}_{ij}
- &=\sum_{kl}\bar\gamma^h_{ik}\dot Z^P_{lk}\bar\gamma^h_{lj},
+ \delta_\alpha\bar X^{P}_{ij}
+ &=\sum_{kl}\bar\gamma^h_{ik}\delta_\alpha Z^P_{lk}\bar\gamma^h_{lj},
  \\
- \dot{\bar L}^{P}_{uw}
- &=\sum_{vt}\bar\Lambda^{\act}_{uv,wt}\dot Z^P_{vt},
+ \delta_\alpha\bar L^{P}_{uw}
+ &=\sum_{vt}\bar\Lambda^{\act}_{uv,wt}\delta_\alpha Z^P_{vt},
  \\
- \dot{\bar W}^{P,h}_{ij}
- &=\bar\gamma^h_{ij}\dot{\bar R}^{P}
- -\frac12\dot{\bar X}^{P}_{ij}
+ \delta_\alpha\bar W^{P,h}_{ij}
+ &=\bar\gamma^h_{ij}\delta_\alpha\bar R^{P}
+ -\frac12\delta_\alpha\bar X^{P}_{ij}
  +\sum_{uw\in\mathbb A}\delta_{iu}\delta_{jw}
-  \dot{\bar L}^{P}_{uw}.
+  \delta_\alpha\bar L^{P}_{uw}.
  \label{eq:nr-directional-w3}
 \end{align}
 Differentiating the metric weight gives
 \begin{align}
- \dot{\bar W}_{PQ}
- &=-\frac12\left(\dot{\bar R}^{P}\bar R^Q
-                  +\bar R^P\dot{\bar R}^{Q}\right)
+ \delta_\alpha\bar W_{PQ}
+ &=-\frac12\left((\delta_\alpha\bar R^{P})\bar R^Q
+                  +\bar R^P(\delta_\alpha\bar R^{Q})\right)
  \nonumber\\
  &\quad+\frac14\sum_{ij}\left(
- \dot Z^P_{ij}\bar X^Q_{ij}+Z^P_{ij}\dot{\bar X}^Q_{ij}\right)
+ (\delta_\alpha Z^P_{ij})\bar X^Q_{ij}
+ +Z^P_{ij}(\delta_\alpha\bar X^Q_{ij})\right)
  \nonumber\\
  &\quad-\frac12\sum_{uw}\left(
- \dot Z^P_{uw}\bar L^Q_{uw}+Z^P_{uw}\dot{\bar L}^Q_{uw}\right).
+ (\delta_\alpha Z^P_{uw})\bar L^Q_{uw}
+ +Z^P_{uw}(\delta_\alpha\bar L^Q_{uw})\right).
  \label{eq:nr-directional-w2}
 \end{align}
 
@@ -904,11 +917,12 @@ The relaxed AO one-particle density is
  +\sum_{uv\in\mathbb A}C_{\mu u}\gamma^{\mathrm b}_{uv}C_{\nu v}
  \nonumber\\
  &\quad+2\sum_{m\in\mathbb C}\left(
- \dot C_{\mu m}C_{\nu m}+C_{\mu m}\dot C_{\nu m}\right)
+ (\delta_\alpha C)_{\mu m}C_{\nu m}
+ +C_{\mu m}(\delta_\alpha C)_{\nu m}\right)
  \nonumber\\
  &\quad+\sum_{uv\in\mathbb A}\left(
- \dot C_{\mu u}\bar\gamma_{uv}C_{\nu v}
- +C_{\mu u}\bar\gamma_{uv}\dot C_{\nu v}\right).
+ (\delta_\alpha C)_{\mu u}\bar\gamma_{uv}C_{\nu v}
+ +C_{\mu u}\bar\gamma_{uv}(\delta_\alpha C)_{\nu v}\right).
  \label{eq:nr-relaxed-ao-1rdm}
 \end{align}
 The relaxed three-center weight, called \texttt{W3} in the implementation, is
@@ -917,17 +931,17 @@ The relaxed three-center weight, called \texttt{W3} in the implementation, is
  &=\sum_{ij}(C_h)_{\mu i}W^{P,h,\mathrm b}_{ij}(C_h)_{\nu j}
  \nonumber\\
  &\quad+\sum_{ij}\left[
- (\dot C_h)_{\mu i}\bar W^{P,h}_{ij}(C_h)_{\nu j}
- +(C_h)_{\mu i}\bar W^{P,h}_{ij}(\dot C_h)_{\nu j}
+ (\delta_\alpha C_h)_{\mu i}\bar W^{P,h}_{ij}(C_h)_{\nu j}
+ +(C_h)_{\mu i}\bar W^{P,h}_{ij}(\delta_\alpha C_h)_{\nu j}
  \right]
  \nonumber\\
  &\quad+\sum_{ij}(C_h)_{\mu i}
- \dot{\bar W}^{P,h}_{ij}(C_h)_{\nu j}.
+ (\delta_\alpha\bar W^{P,h}_{ij})(C_h)_{\nu j}.
  \label{eq:nr-relaxed-w3}
 \end{align}
 The relaxed metric weight, called \texttt{W2}, is
 \begin{equation}
- W^\alpha_{PQ}=W^{\mathrm b}_{PQ}+\dot{\bar W}_{PQ}.
+ W^\alpha_{PQ}=W^{\mathrm b}_{PQ}+\delta_\alpha\bar W_{PQ}.
  \label{eq:nr-relaxed-w2}
 \end{equation}
 The response of both outer $C_h$ factors and of the internally transformed
@@ -947,7 +961,7 @@ then the implemented density is
 \begin{equation}
  D^{\mathrm{rel},\alpha}
  =\mathcal D[C_{\core},C_{\act};\gamma^{\mathrm b}]
- +D_{\dot C}\mathcal D[C_{\core},C_{\act};\bar\gamma],
+ +D_{\delta_\alpha C}\mathcal D[C_{\core},C_{\act};\bar\gamma],
  \label{eq:nr-implemented-relaxed-d1}
 \end{equation}
 where the directional derivative acts only on the coefficient matrices.
@@ -955,9 +969,10 @@ where the directional derivative acts only on the coefficient matrices.
 Second, the AO metric-applied tensor is transformed to the hole space together
 with its orbital direction,
 \begin{equation}
- (Z_h,\dot Z_h)
+ (Z_h,\delta_\alpha Z_h)
  =\left(C_h^{\mathsf T}ZC_h,
- \dot C_h^{\mathsf T}ZC_h+C_h^{\mathsf T}Z\dot C_h\right),
+ (\delta_\alpha C_h)^{\mathsf T}ZC_h
+ +C_h^{\mathsf T}Z(\delta_\alpha C_h)\right),
  \label{eq:nr-implemented-hole-transform}
 \end{equation}
 which is \cref{eq:nr-hole-df,eq:nr-hole-df-response} written in matrix form for
@@ -977,7 +992,7 @@ the implemented operation is
 \begin{equation}
  W^{P,\alpha}
  =\mathcal B[C_h,W^{P,h,\mathrm b}]
- +D_{(\dot C_h,\dot{\bar W}^{P,h})}
+ +D_{(\delta_\alpha C_h,\delta_\alpha\bar W^{P,h})}
   \mathcal B[C_h,\bar W^{P,h}].
  \label{eq:nr-implemented-w3-backtransform}
 \end{equation}
