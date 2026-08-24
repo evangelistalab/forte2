@@ -577,6 +577,11 @@ def _invert_response_diagonal(diagonal):
 
 def _build_response_preconditioner(mc, layout, nrot, nci):
     r"""Return the projected block-Jacobi :math:`M^{-1}` used by GMRES."""
+    # _compute_orbhess reads self.Fock and self.A_pq, which only
+    # _compute_orbgrad populates; the L-BFGS driver always calls them in
+    # this order, but mc.orb_opt may not have run since convergence (e.g.
+    # when nrot == 0 skipped the macroiteration loop entirely).
+    mc.orb_opt._compute_orbgrad()
     orbital_diagonal = mc.orb_opt._mat_to_vec(mc.orb_opt._compute_orbhess())
     orbital_inverse = _invert_response_diagonal(orbital_diagonal)
 

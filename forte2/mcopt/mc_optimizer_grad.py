@@ -152,7 +152,7 @@ def _build_sa_casscf_relaxed_one_body_density(
     return density
 
 
-def _transform_df_hole_response(Z_ao, Ch, Ch_response):
+def _transform_df_hole_response(fock_builder, Ch, Ch_response):
     r"""Return the compact DF tensor and its orbital response
 
     .. math::
@@ -161,9 +161,10 @@ def _transform_df_hole_response(Z_ao, Ch, Ch_response):
         \dot Z^P_{ij}&=\dot C_{\mu i}Z^P_{\mu\nu}C_{\nu j}
         +C_{\mu i}Z^P_{\mu\nu}\dot C_{\nu j}.
     """
-    Z_h = np.einsum("mx,Pmn,ny->Pxy", Ch, Z_ao, Ch, optimize=True)
-    Z_h_response = np.einsum("mx,Pmn,ny->Pxy", Ch_response, Z_ao, Ch, optimize=True)
-    Z_h_response += np.einsum("mx,Pmn,ny->Pxy", Ch, Z_ao, Ch_response, optimize=True)
+    Z_h = fock_builder.build_metric_inverted_mo_block((Ch, Ch))
+    Z_h_response = fock_builder.build_metric_inverted_mo_block(
+        (Ch_response, Ch), (Ch, Ch_response)
+    )
     return Z_h, Z_h_response
 
 
@@ -274,9 +275,9 @@ def _build_sa_casscf_relaxed_density_weights(
     )
     del Ccore, Cact, Ccore_response, Cact_response
 
-    Z_ao = mc.system.fock_builder.build_metric_inverted_three_center()
-    Z_h, Z_h_response = _transform_df_hole_response(Z_ao, Ch, Ch_response)
-    del Z_ao
+    Z_h, Z_h_response = _transform_df_hole_response(
+        mc.system.fock_builder, Ch, Ch_response
+    )
 
     nhole = ncore + base_g1.shape[0]
     gamma_h_base = np.zeros((nhole, nhole), dtype=float)
@@ -736,8 +737,7 @@ def _build_casscf_df_deriv_weights(
     gamma_h[ncore:, ncore:] = gamma1_act
     lambda2_act = _build_casscf_active_cumulant(gamma1_act, gamma2_act)
 
-    Z_ao = system.fock_builder.build_metric_inverted_three_center()
-    Z_h = np.einsum("mx,Pmn,ny->Pxy", Ch.conj(), Z_ao, Ch, optimize=True)
+    Z_h = system.fock_builder.build_metric_inverted_mo_block((Ch.conj(), Ch))
 
     W2, W3_h = _build_mc_df_hole_weights(
         gamma_h,
@@ -796,9 +796,9 @@ def _build_rel_casscf_df_deriv_weights(
     nbf = system.nbf
     Ch_a = Ch[:nbf]
     Ch_b = Ch[nbf:]
-    Z_ao = system.fock_builder.build_metric_inverted_three_center()
-    Z_h = np.einsum("mx,Pmn,ny->Pxy", Ch_a.conj(), Z_ao, Ch_a, optimize=True)
-    Z_h += np.einsum("mx,Pmn,ny->Pxy", Ch_b.conj(), Z_ao, Ch_b, optimize=True)
+    Z_h = system.fock_builder.build_metric_inverted_mo_block(
+        (Ch_a.conj(), Ch_a), (Ch_b.conj(), Ch_b)
+    )
 
     W2, W3_h = _build_mc_df_hole_weights(
         gamma_h,

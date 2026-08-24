@@ -236,6 +236,23 @@ def test_sa_casscf_relaxed_one_body_density_kernel():
     assert actual == pytest.approx(base + response, abs=1.0e-9)
 
 
+class _FakeFockBuilder:
+    """Stand in for FockBuilder.build_metric_inverted_mo_block against a
+    fixed AO tensor, to unit test the product-rule combinatorics in
+    _transform_df_hole_response independent of any real metric inversion."""
+
+    def __init__(self, Z_ao):
+        self.Z_ao = Z_ao
+
+    def build_metric_inverted_mo_block(self, *pairs):
+        out = np.einsum(
+            "mi,Pmn,nj->Pij", pairs[0][0], self.Z_ao, pairs[0][1], optimize=True
+        )
+        for Cbra, Cket in pairs[1:]:
+            out += np.einsum("mi,Pmn,nj->Pij", Cbra, self.Z_ao, Cket, optimize=True)
+        return out
+
+
 def test_sa_casscf_df_hole_response_kernel():
     """Check the directional hole-space transformation of the AO DF tensor."""
     rng = np.random.default_rng(11)
@@ -244,7 +261,9 @@ def test_sa_casscf_df_hole_response_kernel():
     Z_ao = rng.standard_normal((4, 5, 5))
     Z_ao += Z_ao.transpose(0, 2, 1)
 
-    Z_h, Z_h_response = _transform_df_hole_response(Z_ao, Ch, Ch_response)
+    Z_h, Z_h_response = _transform_df_hole_response(
+        _FakeFockBuilder(Z_ao), Ch, Ch_response
+    )
     expected = np.einsum("mi,Pmn,nj->Pij", Ch, Z_ao, Ch, optimize=True)
     expected_response = finite_difference(
         lambda scale: np.einsum(

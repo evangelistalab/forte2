@@ -150,25 +150,3 @@ def compute_gradient(
     gradient += flat_to_atom_gradient(integrals.coulomb_3c_deriv(system, W3), natoms)
     gradient += flat_to_atom_gradient(integrals.coulomb_2c_deriv(system, W2), natoms)
     return gradient
-
-
-def build_metric_inverted_three_center(system):
-    r"""Return the Fock builder's metric-inverted three-center tensor.
-
-    .. math::
-
-        Z^{P}_{\mu\nu}
-        =
-        \sum_{Q} M^{-1}_{PQ} (Q|\mu\nu).
-
-    This compatibility wrapper delegates metric ownership and reuse to the
-    system's Fock builder.
-    """
-    return system.fock_builder.build_metric_inverted_three_center()
-
-
-def apply_inverse_metric(system, M, J):
-    """Apply the density fitting metric inverse to a three-center tensor."""
-    rhs = J.reshape(J.shape[0], -1)
-    result = compute_Am1y(M, rhs, system.df_ortho_rtol)
-    return result.reshape(J.shape)

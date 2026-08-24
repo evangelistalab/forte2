@@ -60,14 +60,14 @@ def _build_hf_df_deriv_weights(
         ``(W2, W3)`` with shapes ``(naux, naux)`` and
         ``(naux, nbasis, nbasis)``.
     """
-    Z = system.fock_builder.build_metric_inverted_three_center()
-    rho = np.einsum("mn,Pmn->P", D1, Z, optimize=True)
+    fock_builder = system.fock_builder
+    rho = fock_builder.build_metric_inverted_density_contraction(D1)
 
     W2 = -0.5 * np.einsum("P,Q->PQ", rho, rho, optimize=True)
     W3 = np.einsum("mn,P->Pmn", D1, rho, optimize=True)
 
     for Cocc in occupied_coefficients:
-        Z_oo = np.einsum("mi,Pmn,nj->Pij", Cocc, Z, Cocc, optimize=True)
+        Z_oo = fock_builder.build_metric_inverted_mo_block((Cocc, Cocc))
         W2 += 0.5 * np.einsum("Pij,Qji->PQ", Z_oo, Z_oo, optimize=True)
         W3 -= np.einsum("mi,nj,Pji->Pmn", Cocc, Cocc, Z_oo, optimize=True)
 
@@ -109,11 +109,11 @@ def _build_ghf_df_deriv_weights(
     Cocc_b = occupied_spinors[nbf:]
     D1 = Cocc_a @ Cocc_a.conj().T + Cocc_b @ Cocc_b.conj().T
 
-    Z = system.fock_builder.build_metric_inverted_three_center()
-    rho = np.einsum("mn,Pmn->P", D1, Z, optimize=True)
-
-    Q = np.einsum("mi,Pmn,nj->Pij", Cocc_a.conj(), Z, Cocc_a, optimize=True)
-    Q += np.einsum("mi,Pmn,nj->Pij", Cocc_b.conj(), Z, Cocc_b, optimize=True)
+    fock_builder = system.fock_builder
+    rho = fock_builder.build_metric_inverted_density_contraction(D1)
+    Q = fock_builder.build_metric_inverted_mo_block(
+        (Cocc_a.conj(), Cocc_a), (Cocc_b.conj(), Cocc_b)
+    )
 
     W2 = -0.5 * np.einsum("P,Q->PQ", rho, rho, optimize=True)
     W2 += 0.5 * np.einsum("Pij,Qji->PQ", Q, Q, optimize=True)
